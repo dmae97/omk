@@ -1189,6 +1189,12 @@ export function matchesKey(data: string, keyId: KeyId): boolean {
 			);
 		}
 
+		if (shift && !ctrl && !alt) {
+			// Legacy: shift+letter produces uppercase
+			if (data === key.toUpperCase()) return true;
+			return matchesKittySequence(data, codepoint, MODIFIERS.shift);
+		}
+
 		if (modifier !== 0) {
 			return (
 				matchesKittySequence(data, codepoint, modifier) ||
