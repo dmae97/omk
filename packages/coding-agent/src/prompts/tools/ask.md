@@ -13,9 +13,23 @@ Tips:
 - 2-5 concise, distinct options
 - Users can always select "Other" for custom input
 
+**Do NOT include an "Other" option in your options array.** The UI automatically adds "Other (type your own)" to every question. Adding your own creates duplicate "Other" options.
+
 <example>
 question: "Which authentication method should this API use?"
 options: [{"label": "JWT (Recommended)"}, {"label": "OAuth2"}, {"label": "Session cookies"}]
+</example>
+
+## Multi-part questions
+
+When you have multiple related questions, use the `questions` array instead of asking one at a time. Each question has its own id, options, and optional `multi` flag.
+
+<example>
+questions: [
+  {"id": "auth", "question": "Which auth method?", "options": [{"label": "JWT"}, {"label": "OAuth2"}]},
+  {"id": "cache", "question": "Enable caching?", "options": [{"label": "Yes"}, {"label": "No"}]},
+  {"id": "features", "question": "Which features to include?", "options": [{"label": "Logging"}, {"label": "Metrics"}, {"label": "Tracing"}], "multi": true}
+]
 </example>
 
 ## Critical: Resolve before asking

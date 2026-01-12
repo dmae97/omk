@@ -815,8 +815,8 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.extensionUiController.setHookStatus(key, text);
 	}
 
-	showHookSelector(title: string, options: string[]): Promise<string | undefined> {
-		return this.extensionUiController.showHookSelector(title, options);
+	showHookSelector(title: string, options: string[], initialIndex?: number): Promise<string | undefined> {
+		return this.extensionUiController.showHookSelector(title, options, initialIndex);
 	}
 
 	hideHookSelector(): void {

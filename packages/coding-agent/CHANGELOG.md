@@ -1,15 +1,19 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
+
 - Add `omp config` subcommand for managing settings (`list`, `get`, `set`, `reset`, `path`)
 - Add `todoCompletion` setting to warn agent when it stops with incomplete todos (up to 3 reminders)
+- Add multi-part questions support to `ask` tool via `questions` array parameter
 
 ### Changed
+
+- Updated multi-select cursor behavior in `ask` tool to stay on the toggled option instead of jumping to top
 - Single-file reads now render inline (e.g., `Read AGENTS.md:23`) instead of tree structure
 
 ### Fixed
+
 - Subagent model resolution now respects explicit provider prefix (e.g., `zai/glm-4.7` no longer matches `cerebras/zai-glm-4.7`)
 - Auto-compaction now skips to next model candidate when retry delay exceeds 30 seconds
 

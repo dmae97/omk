@@ -21,11 +21,12 @@ import { DynamicBorder } from "./dynamic-border";
 export interface HookSelectorOptions {
 	tui?: TUI;
 	timeout?: number;
+	initialIndex?: number;
 }
 
 export class HookSelectorComponent extends Container {
 	private options: string[];
-	private selectedIndex = 0;
+	private selectedIndex: number;
 	private listContainer: Container;
 	private onSelectCallback: (option: string) => void;
 	private onCancelCallback: () => void;
@@ -43,6 +44,7 @@ export class HookSelectorComponent extends Container {
 		super();
 
 		this.options = options;
+		this.selectedIndex = Math.min(opts?.initialIndex ?? 0, options.length - 1);
 		this.onSelectCallback = onSelect;
 		this.onCancelCallback = onCancel;
 		this.baseTitle = title;

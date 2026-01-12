@@ -46,6 +46,8 @@ export type { AppAction, KeybindingsManager } from "../keybindings";
 export interface ExtensionUIDialogOptions {
 	signal?: AbortSignal;
 	timeout?: number;
+	/** Initial cursor position for select dialogs (0-indexed) */
+	initialIndex?: number;
 }
 
 /**

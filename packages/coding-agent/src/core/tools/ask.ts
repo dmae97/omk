@@ -34,22 +34,47 @@ const OptionItem = Type.Object({
 	label: Type.String({ description: "Display label for this option" }),
 });
 
+const QuestionItem = Type.Object({
+	id: Type.String({ description: "Short identifier for this question (e.g., 'auth', 'cache')" }),
+	question: Type.String({ description: "The question text" }),
+	options: Type.Array(OptionItem, { description: "Options for this question" }),
+	multi: Type.Optional(Type.Boolean({ description: "Allow multiple selections for this question" })),
+});
+
 const askSchema = Type.Object({
-	question: Type.String({ description: "The question to ask the user" }),
-	options: Type.Array(OptionItem, { description: "Available options for the user to choose from." }),
+	question: Type.Optional(Type.String({ description: "The question to ask the user" })),
+	options: Type.Optional(Type.Array(OptionItem, { description: "Available options for the user to choose from." })),
 	multi: Type.Optional(
 		Type.Boolean({
 			description: "Allow multiple options to be selected (default: false)",
 		}),
 	),
+	questions: Type.Optional(
+		Type.Array(QuestionItem, {
+			description: "Multiple questions to ask in sequence, each with their own options",
+		}),
+	),
 });
 
-export interface AskToolDetails {
+/** Result for a single question */
+export interface QuestionResult {
+	id: string;
 	question: string;
 	options: string[];
 	multi: boolean;
 	selectedOptions: string[];
 	customInput?: string;
+}
+
+export interface AskToolDetails {
+	/** Single question mode (backwards compatible) */
+	question?: string;
+	options?: string[];
+	multi?: boolean;
+	selectedOptions?: string[];
+	customInput?: string;
+	/** Multi-part question mode */
+	results?: QuestionResult[];
 }
 
 // =============================================================================
@@ -62,8 +87,121 @@ function getDoneOptionLabel(): string {
 }
 
 // =============================================================================
+// Question Selection Logic
+// =============================================================================
+
+interface SelectionResult {
+	selectedOptions: string[];
+	customInput?: string;
+}
+
+interface UIContext {
+	select(prompt: string, options: string[], options_?: { initialIndex?: number }): Promise<string | undefined>;
+	input(prompt: string): Promise<string | undefined>;
+}
+
+async function askSingleQuestion(
+	ui: UIContext,
+	question: string,
+	optionLabels: string[],
+	multi: boolean,
+): Promise<SelectionResult> {
+	const doneLabel = getDoneOptionLabel();
+	let selectedOptions: string[] = [];
+	let customInput: string | undefined;
+
+	if (multi) {
+		const selected = new Set<string>();
+		let cursorIndex = 0;
+
+		while (true) {
+			const opts: string[] = [];
+
+			for (const opt of optionLabels) {
+				const checkbox = selected.has(opt) ? theme.checkbox.checked : theme.checkbox.unchecked;
+				opts.push(`${checkbox} ${opt}`);
+			}
+
+			// Done after options, before Other - so cursor stays on options after toggle
+			if (selected.size > 0) {
+				opts.push(doneLabel);
+			}
+			opts.push(OTHER_OPTION);
+
+			const prefix = selected.size > 0 ? `(${selected.size} selected) ` : "";
+			const choice = await ui.select(`${prefix}${question}`, opts, { initialIndex: cursorIndex });
+
+			if (choice === undefined || choice === doneLabel) break;
+
+			if (choice === OTHER_OPTION) {
+				const input = await ui.input("Enter your response:");
+				if (input) customInput = input;
+				break;
+			}
+
+			// Find which index was selected and update cursor position
+			const selectedIdx = opts.indexOf(choice);
+			if (selectedIdx >= 0) {
+				cursorIndex = selectedIdx;
+			}
+
+			const checkedPrefix = `${theme.checkbox.checked} `;
+			const uncheckedPrefix = `${theme.checkbox.unchecked} `;
+			let opt: string | undefined;
+			if (choice.startsWith(checkedPrefix)) {
+				opt = choice.slice(checkedPrefix.length);
+			} else if (choice.startsWith(uncheckedPrefix)) {
+				opt = choice.slice(uncheckedPrefix.length);
+			}
+			if (opt) {
+				if (selected.has(opt)) {
+					selected.delete(opt);
+				} else {
+					selected.add(opt);
+				}
+			}
+		}
+		selectedOptions = Array.from(selected);
+	} else {
+		const choice = await ui.select(question, [...optionLabels, OTHER_OPTION]);
+		if (choice === OTHER_OPTION) {
+			const input = await ui.input("Enter your response:");
+			if (input) customInput = input;
+		} else if (choice) {
+			selectedOptions = [choice];
+		}
+	}
+
+	return { selectedOptions, customInput };
+}
+
+function formatQuestionResult(result: QuestionResult): string {
+	if (result.customInput) {
+		return `${result.id}: "${result.customInput}"`;
+	}
+	if (result.selectedOptions.length > 0) {
+		return result.multi
+			? `${result.id}: [${result.selectedOptions.join(", ")}]`
+			: `${result.id}: ${result.selectedOptions[0]}`;
+	}
+	return `${result.id}: (cancelled)`;
+}
+
+// =============================================================================
 // Tool Implementation
 // =============================================================================
+
+interface AskParams {
+	question?: string;
+	options?: Array<{ label: string }>;
+	multi?: boolean;
+	questions?: Array<{
+		id: string;
+		question: string;
+		options: Array<{ label: string }>;
+		multi?: boolean;
+	}>;
+}
 
 export function createAskTool(session: ToolSession): null | AgentTool<typeof askSchema, AskToolDetails> {
 	if (!session.hasUI) {
@@ -77,98 +215,65 @@ export function createAskTool(session: ToolSession): null | AgentTool<typeof ask
 
 		async execute(
 			_toolCallId: string,
-			params: { question: string; options: Array<{ label: string }>; multi?: boolean },
+			params: AskParams,
 			_signal?: AbortSignal,
 			_onUpdate?: AgentToolUpdateCallback<AskToolDetails>,
 			context?: AgentToolContext,
 		) {
-			const { question, options, multi = false } = params;
-			const optionLabels = options.map((o) => o.label);
-			const doneLabel = getDoneOptionLabel();
-
-			// Headless fallback - return error if no UI available
+			// Headless fallback
 			if (!context?.hasUI || !context.ui) {
 				return {
-					content: [
-						{
-							type: "text" as const,
-							text: "Error: User prompt requires interactive mode",
-						},
-					],
-					details: {
-						question,
-						options: optionLabels,
-						multi,
-						selectedOptions: [],
-					},
+					content: [{ type: "text" as const, text: "Error: User prompt requires interactive mode" }],
+					details: {},
 				};
 			}
 
 			const { ui } = context;
-			let selectedOptions: string[] = [];
-			let customInput: string | undefined;
 
-			if (multi) {
-				// Multi-select: show checkboxes in the label to indicate selection state
-				const selected = new Set<string>();
+			// Multi-part questions mode
+			if (params.questions && params.questions.length > 0) {
+				const results: QuestionResult[] = [];
 
-				while (true) {
-					// Build options with checkbox indicators
-					const opts: string[] = [];
+				for (const q of params.questions) {
+					const optionLabels = q.options.map((o) => o.label);
+					const { selectedOptions, customInput } = await askSingleQuestion(
+						ui,
+						q.question,
+						optionLabels,
+						q.multi ?? false,
+					);
 
-					// Add "Done" option if any selected
-					if (selected.size > 0) {
-						opts.push(doneLabel);
-					}
-
-					// Add all options with checkbox prefix
-					for (const opt of optionLabels) {
-						const checkbox = selected.has(opt) ? theme.checkbox.checked : theme.checkbox.unchecked;
-						opts.push(`${checkbox} ${opt}`);
-					}
-
-					// Add "Other" option
-					opts.push(OTHER_OPTION);
-
-					const prefix = selected.size > 0 ? `(${selected.size} selected) ` : "";
-					const choice = await ui.select(`${prefix}${question}`, opts);
-
-					if (choice === undefined || choice === doneLabel) break;
-
-					if (choice === OTHER_OPTION) {
-						const input = await ui.input("Enter your response:");
-						if (input) customInput = input;
-						break;
-					}
-
-					// Toggle selection - extract the actual option name
-					const checkedPrefix = `${theme.checkbox.checked} `;
-					const uncheckedPrefix = `${theme.checkbox.unchecked} `;
-					let opt: string | undefined;
-					if (choice.startsWith(checkedPrefix)) {
-						opt = choice.slice(checkedPrefix.length);
-					} else if (choice.startsWith(uncheckedPrefix)) {
-						opt = choice.slice(uncheckedPrefix.length);
-					}
-					if (opt) {
-						if (selected.has(opt)) {
-							selected.delete(opt);
-						} else {
-							selected.add(opt);
-						}
-					}
+					results.push({
+						id: q.id,
+						question: q.question,
+						options: optionLabels,
+						multi: q.multi ?? false,
+						selectedOptions,
+						customInput,
+					});
 				}
-				selectedOptions = Array.from(selected);
-			} else {
-				// Single select with "Other" option
-				const choice = await ui.select(question, [...optionLabels, OTHER_OPTION]);
-				if (choice === OTHER_OPTION) {
-					const input = await ui.input("Enter your response:");
-					if (input) customInput = input;
-				} else if (choice) {
-					selectedOptions = [choice];
-				}
+
+				const details: AskToolDetails = { results };
+				const responseLines = results.map(formatQuestionResult);
+				const responseText = `User answers:\n${responseLines.join("\n")}`;
+
+				return { content: [{ type: "text" as const, text: responseText }], details };
 			}
+
+			// Single question mode (backwards compatible)
+			const question = params.question ?? "";
+			const options = params.options ?? [];
+			const multi = params.multi ?? false;
+			const optionLabels = options.map((o) => o.label);
+
+			if (!question || optionLabels.length === 0) {
+				return {
+					content: [{ type: "text" as const, text: "Error: question and options are required" }],
+					details: {},
+				};
+			}
+
+			const { selectedOptions, customInput } = await askSingleQuestion(ui, question, optionLabels, multi);
 
 			const details: AskToolDetails = {
 				question,
@@ -207,21 +312,59 @@ export const askTool = createAskTool({
 // =============================================================================
 
 interface AskRenderArgs {
-	question: string;
+	question?: string;
 	options?: Array<{ label: string }>;
 	multi?: boolean;
+	questions?: Array<{
+		id: string;
+		question: string;
+		options: Array<{ label: string }>;
+		multi?: boolean;
+	}>;
 }
 
 export const askToolRenderer = {
 	renderCall(args: AskRenderArgs, uiTheme: Theme): Component {
 		const ui = createToolUIKit(uiTheme);
+		const label = ui.title("Ask");
+
+		// Multi-part questions
+		if (args.questions && args.questions.length > 0) {
+			let text = `${label} ${uiTheme.fg("muted", `${args.questions.length} questions`)}`;
+
+			for (let i = 0; i < args.questions.length; i++) {
+				const q = args.questions[i];
+				const isLastQ = i === args.questions.length - 1;
+				const qBranch = isLastQ ? uiTheme.tree.last : uiTheme.tree.branch;
+				const continuation = isLastQ ? " " : uiTheme.tree.vertical;
+
+				// Question line with metadata
+				const meta: string[] = [];
+				if (q.multi) meta.push("multi");
+				if (q.options?.length) meta.push(`options:${q.options.length}`);
+				const metaStr = meta.length > 0 ? uiTheme.fg("dim", ` · ${meta.join(" · ")}`) : "";
+
+				text += `\n ${uiTheme.fg("dim", qBranch)} ${uiTheme.fg("dim", `[${q.id}]`)} ${uiTheme.fg("accent", q.question)}${metaStr}`;
+
+				// Options under question
+				if (q.options?.length) {
+					for (let j = 0; j < q.options.length; j++) {
+						const opt = q.options[j];
+						const isLastOpt = j === q.options.length - 1;
+						const optBranch = isLastOpt ? uiTheme.tree.last : uiTheme.tree.branch;
+						text += `\n ${uiTheme.fg("dim", continuation)}   ${uiTheme.fg("dim", optBranch)} ${uiTheme.fg("dim", uiTheme.checkbox.unchecked)} ${uiTheme.fg("muted", opt.label)}`;
+					}
+				}
+			}
+			return new Text(text, 0, 0);
+		}
+
+		// Single question
 		if (!args.question) {
 			return new Text(ui.errorMessage("No question provided"), 0, 0);
 		}
 
-		const label = ui.title("Ask");
 		let text = `${label} ${uiTheme.fg("accent", args.question)}`;
-
 		const meta: string[] = [];
 		if (args.multi) meta.push("multi");
 		if (args.options?.length) meta.push(`options:${args.options.length}`);
@@ -250,7 +393,47 @@ export const askToolRenderer = {
 			return new Text(txt?.type === "text" && txt.text ? txt.text : "", 0, 0);
 		}
 
-		const hasSelection = details.customInput || details.selectedOptions.length > 0;
+		// Multi-part results
+		if (details.results && details.results.length > 0) {
+			const lines: string[] = [];
+
+			for (const r of details.results) {
+				const hasSelection = r.customInput || r.selectedOptions.length > 0;
+				const statusIcon = hasSelection
+					? uiTheme.styledSymbol("status.success", "success")
+					: uiTheme.styledSymbol("status.warning", "warning");
+
+				lines.push(`${statusIcon} ${uiTheme.fg("dim", `[${r.id}]`)} ${uiTheme.fg("accent", r.question)}`);
+
+				if (r.customInput) {
+					lines.push(
+						` ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.success", "success")} ${uiTheme.fg("toolOutput", r.customInput)}`,
+					);
+				} else if (r.selectedOptions.length > 0) {
+					for (let j = 0; j < r.selectedOptions.length; j++) {
+						const isLast = j === r.selectedOptions.length - 1;
+						const branch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
+						lines.push(
+							` ${uiTheme.fg("dim", branch)} ${uiTheme.fg("success", uiTheme.checkbox.checked)} ${uiTheme.fg("toolOutput", r.selectedOptions[j])}`,
+						);
+					}
+				} else {
+					lines.push(
+						` ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.warning", "warning")} ${uiTheme.fg("warning", "Cancelled")}`,
+					);
+				}
+			}
+
+			return new Text(lines.join("\n"), 0, 0);
+		}
+
+		// Single question result
+		if (!details.question) {
+			const txt = result.content[0];
+			return new Text(txt?.type === "text" && txt.text ? txt.text : "", 0, 0);
+		}
+
+		const hasSelection = details.customInput || (details.selectedOptions && details.selectedOptions.length > 0);
 		const statusIcon = hasSelection
 			? uiTheme.styledSymbol("status.success", "success")
 			: uiTheme.styledSymbol("status.warning", "warning");
@@ -258,25 +441,15 @@ export const askToolRenderer = {
 		let text = `${statusIcon} ${uiTheme.fg("accent", details.question)}`;
 
 		if (details.customInput) {
-			text += `\n ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol(
-				"status.success",
-				"success",
-			)} ${uiTheme.fg("toolOutput", details.customInput)}`;
-		} else if (details.selectedOptions.length > 0) {
-			const selected = details.selectedOptions;
-			for (let i = 0; i < selected.length; i++) {
-				const isLast = i === selected.length - 1;
+			text += `\n ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.success", "success")} ${uiTheme.fg("toolOutput", details.customInput)}`;
+		} else if (details.selectedOptions && details.selectedOptions.length > 0) {
+			for (let i = 0; i < details.selectedOptions.length; i++) {
+				const isLast = i === details.selectedOptions.length - 1;
 				const branch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
-				text += `\n ${uiTheme.fg("dim", branch)} ${uiTheme.fg(
-					"success",
-					uiTheme.checkbox.checked,
-				)} ${uiTheme.fg("toolOutput", selected[i])}`;
+				text += `\n ${uiTheme.fg("dim", branch)} ${uiTheme.fg("success", uiTheme.checkbox.checked)} ${uiTheme.fg("toolOutput", details.selectedOptions[i])}`;
 			}
 		} else {
-			text += `\n ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol(
-				"status.warning",
-				"warning",
-			)} ${uiTheme.fg("warning", "Cancelled")}`;
+			text += `\n ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.warning", "warning")} ${uiTheme.fg("warning", "Cancelled")}`;
 		}
 
 		return new Text(text, 0, 0);

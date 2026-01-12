@@ -185,7 +185,7 @@ export interface InteractiveModeContext {
 	): Promise<void>;
 	setHookWidget(key: string, content: unknown): void;
 	setHookStatus(key: string, text: string | undefined): void;
-	showHookSelector(title: string, options: string[]): Promise<string | undefined>;
+	showHookSelector(title: string, options: string[], initialIndex?: number): Promise<string | undefined>;
 	hideHookSelector(): void;
 	showHookInput(title: string, placeholder?: string): Promise<string | undefined>;
 	hideHookInput(): void;

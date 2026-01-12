@@ -25,7 +25,7 @@ export class ExtensionUiController {
 	async initHooksAndCustomTools(): Promise<void> {
 		// Create and set hook & tool UI context
 		const uiContext: ExtensionUIContext = {
-			select: (title, options, _dialogOptions) => this.showHookSelector(title, options),
+			select: (title, options, dialogOptions) => this.showHookSelector(title, options, dialogOptions?.initialIndex),
 			confirm: (title, message, _dialogOptions) => this.showHookConfirm(title, message),
 			input: (title, placeholder, _dialogOptions) => this.showHookInput(title, placeholder),
 			notify: (message, type) => this.showHookNotify(message, type),
@@ -431,7 +431,7 @@ export class ExtensionUiController {
 	/**
 	 * Show a selector for hooks.
 	 */
-	showHookSelector(title: string, options: string[]): Promise<string | undefined> {
+	showHookSelector(title: string, options: string[], initialIndex?: number): Promise<string | undefined> {
 		return new Promise((resolve) => {
 			this.ctx.hookSelector = new HookSelectorComponent(
 				title,
@@ -444,6 +444,7 @@ export class ExtensionUiController {
 					this.hideHookSelector();
 					resolve(undefined);
 				},
+				{ initialIndex },
 			);
 
 			this.ctx.editorContainer.clear();
