@@ -9,6 +9,7 @@ Use it for any merge: single file, feature branch, or full release sync.
 **Date:** January 2026
 
 When starting a new sync, generate patches from this commit forward:
+
 ```bash
 git format-patch 6730b4fa..HEAD --stdout > changes.patch
 ```
@@ -237,64 +238,57 @@ Our fork has architectural decisions that differ from upstream. **Do not port th
 
 ### UI Architecture
 
-| Upstream | Our Fork | Reason |
-|----------|----------|--------|
-| `FooterDataProvider` class | `StatusLineComponent` | Simpler, integrated status line |
-| `ctx.ui.setHeader()` / `ctx.ui.setFooter()` | Removed | Not implemented; StatusLineComponent handles status |
-| `ctx.ui.setEditorComponent()` | Removed | Not implemented |
-| `InteractiveModeOptions` interface | Positional constructor args | Existing pattern works fine |
+| Upstream                                    | Our Fork                    | Reason                                              |
+| ------------------------------------------- | --------------------------- | --------------------------------------------------- |
+| `FooterDataProvider` class                  | `StatusLineComponent`       | Simpler, integrated status line                     |
+| `ctx.ui.setHeader()` / `ctx.ui.setFooter()` | Removed                     | Not implemented; StatusLineComponent handles status |
+| `ctx.ui.setEditorComponent()`               | Removed                     | Not implemented                                     |
+| `InteractiveModeOptions` interface          | Positional constructor args | Existing pattern works fine                         |
 
 ### Component Naming
 
-| Upstream | Our Fork |
-|----------|----------|
-| `extension-input.ts` | `hook-input.ts` |
-| `extension-selector.ts` | `hook-selector.ts` |
-| `ExtensionInputComponent` | `HookInputComponent` |
+| Upstream                     | Our Fork                |
+| ---------------------------- | ----------------------- |
+| `extension-input.ts`         | `hook-input.ts`         |
+| `extension-selector.ts`      | `hook-selector.ts`      |
+| `ExtensionInputComponent`    | `HookInputComponent`    |
 | `ExtensionSelectorComponent` | `HookSelectorComponent` |
 
 ### File Consolidation
 
-| Upstream | Our Fork | Reason |
-|----------|----------|--------|
-| `clipboard.ts` + `clipboard-image.ts` | `clipboard.ts` only | Merged with Bun-native implementation |
-| `@mariozechner/clipboard` dependency | Native platform commands | No external dependency needed |
+| Upstream                              | Our Fork                 | Reason                                |
+| ------------------------------------- | ------------------------ | ------------------------------------- |
+| `clipboard.ts` + `clipboard-image.ts` | `clipboard.ts` only      | Merged with Bun-native implementation |
+| `@mariozechner/clipboard` dependency  | Native platform commands | No external dependency needed         |
 
 ### Test Framework
 
-| Upstream | Our Fork |
-|----------|----------|
+| Upstream                  | Our Fork                      |
+| ------------------------- | ----------------------------- |
 | `vitest` with `vi.mock()` | `bun:test` with `vi` from bun |
-| `node:test` assertions | `expect()` matchers |
+| `node:test` assertions    | `expect()` matchers           |
 
 ### Tool Architecture
 
-| Upstream | Our Fork |
-|----------|----------|
-| `createTool(cwd: string, options?)` | `createTool(session: ToolSession)` |
-| Per-tool `*Operations` interfaces | Unified `FileOperations` in `ToolSession` |
-| Node.js `fs/promises` | Bun APIs (`Bun.file()`, `Bun.write()`) |
+| Upstream                            | Our Fork                                  |
+| ----------------------------------- | ----------------------------------------- |
+| `createTool(cwd: string, options?)` | `createTool(session: ToolSession)`        |
+| Per-tool `*Operations` interfaces   | Unified `FileOperations` in `ToolSession` |
+| Node.js `fs/promises`               | Bun APIs (`Bun.file()`, `Bun.write()`)    |
 
 ### Auth Storage
 
-| Upstream | Our Fork |
-|----------|----------|
-| `proper-lockfile` library | Native `O_EXCL` atomic file locking |
+| Upstream                       | Our Fork                                    |
+| ------------------------------ | ------------------------------------------- |
+| `proper-lockfile` library      | Native `O_EXCL` atomic file locking         |
 | Single credential per provider | Multi-credential with round-robin selection |
 
 ### Extensions
 
-| Upstream | Our Fork |
-|----------|----------|
-| `jiti` for TypeScript loading | Native Bun `import()` |
-| `pkg.pi` manifest field | `pkg.omp ?? pkg.pi` (prefer our namespace) |
-
-### Config Paths
-
-| Upstream | Our Fork |
-|----------|----------|
-| `~/.claude/` | `~/.omp/` (with fallback chain) |
-| Single config dir | Multi-config: `.omp`, `.pi`, `.claude`, `.codex`, `.gemini` |
+| Upstream                      | Our Fork                                   |
+| ----------------------------- | ------------------------------------------ |
+| `jiti` for TypeScript loading | Native Bun `import()`                      |
+| `pkg.pi` manifest field       | `pkg.omp ?? pkg.pi` (prefer our namespace) |
 
 ### Skip These Upstream Features
 
