@@ -40,7 +40,6 @@ describe("CombinedAutocompleteProvider", () => {
 
 			const result = provider.getForceFileSuggestions(lines, cursorLine, cursorCol);
 
-			console.log("Result:", result);
 			expect(result).toBe(null);
 		});
 
@@ -52,7 +51,6 @@ describe("CombinedAutocompleteProvider", () => {
 
 			const result = provider.getForceFileSuggestions(lines, cursorLine, cursorCol);
 
-			console.log("Result:", result);
 			expect(result).not.toBeNull();
 			if (result) {
 				expect(result.prefix).toBe("/");
