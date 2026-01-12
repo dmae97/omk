@@ -98,7 +98,7 @@ export class TodoDisplayComponent {
 		}
 
 		if (hasMore) {
-			lines.push(theme.fg("dim", `      ${theme.tree.hook} +${this.todos.length - 5} more (Ctrl+T to expand)`));
+			lines.push(theme.fg("dim", `        ${theme.tree.hook} +${this.todos.length - 5} more (Ctrl+T to expand)`));
 		}
 
 		return lines;

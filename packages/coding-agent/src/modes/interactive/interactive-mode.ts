@@ -446,7 +446,7 @@ export class InteractiveMode implements InteractiveModeContext {
 
 		if (!this.todoExpanded && visibleTodos.length < this.todoItems.length) {
 			const remaining = this.todoItems.length - visibleTodos.length;
-			lines.push(theme.fg("muted", `${indent}${hook} +${remaining} more (Ctrl+T to expand)`));
+			lines.push(theme.fg("muted", `${indent}  ${hook} +${remaining} more (Ctrl+T to expand)`));
 		}
 
 		this.todoContainer.addChild(new Text(lines.join("\n"), 1, 0));
