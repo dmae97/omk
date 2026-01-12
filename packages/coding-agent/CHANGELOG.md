@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-01-12
+
 ### Added
 
 - Implemented `xhigh` thinking level for Anthropic models with increased reasoning limits

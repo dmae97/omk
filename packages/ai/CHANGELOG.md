@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [5.0.0] - 2026-01-12
 ### Added
 
 - Added support for `xhigh` thinking level in `thinkingBudgets` configuration
