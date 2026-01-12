@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [5.0.1] - 2026-01-12
 ### Changed
 
 - Replaced wasm-vips with Photon for more stable WASM image processing
