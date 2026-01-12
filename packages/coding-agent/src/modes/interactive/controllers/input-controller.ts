@@ -309,7 +309,7 @@ export class InputController {
 					.then(async (title) => {
 						if (title) {
 							await this.ctx.sessionManager.setSessionTitle(title);
-							setTerminalTitle(`omp: ${title}`);
+							setTerminalTitle(`π: ${title}`);
 						}
 					})
 					.catch(() => {});
