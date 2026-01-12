@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Add `todoCompletion` setting to warn agent when it stops with incomplete todos (up to 3 reminders)
+
 ### Changed
 - Single-file reads now render inline (e.g., `Read AGENTS.md:23`) instead of tree structure
 

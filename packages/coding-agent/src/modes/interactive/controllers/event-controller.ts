@@ -3,6 +3,7 @@ import type { AgentSessionEvent } from "../../../core/agent-session";
 import { detectNotificationProtocol, isNotificationSuppressed, sendNotification } from "../../../core/terminal-notify";
 import { AssistantMessageComponent } from "../components/assistant-message";
 import { ReadToolGroupComponent } from "../components/read-tool-group";
+import { TodoReminderComponent } from "../components/todo-reminder";
 import { ToolExecutionComponent } from "../components/tool-execution";
 import { TtsrNotificationComponent } from "../components/ttsr-notification";
 import { getSymbolTheme, theme } from "../theme/theme";
@@ -370,6 +371,13 @@ export class EventController {
 			case "ttsr_triggered": {
 				const component = new TtsrNotificationComponent(event.rules);
 				component.setExpanded(this.ctx.toolOutputExpanded);
+				this.ctx.chatContainer.addChild(component);
+				this.ctx.ui.requestRender();
+				break;
+			}
+
+			case "todo_reminder": {
+				const component = new TodoReminderComponent(event.todos, event.attempt, event.maxAttempts);
 				this.ctx.chatContainer.addChild(component);
 				this.ctx.ui.requestRender();
 				break;

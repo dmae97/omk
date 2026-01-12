@@ -98,6 +98,15 @@ export const SETTINGS_DEFS: SettingDef[] = [
 		set: (sm, v) => sm.setBranchSummaryEnabled(v),
 	},
 	{
+		id: "todoCompletion",
+		tab: "config",
+		type: "boolean",
+		label: "Todo completion",
+		description: "Remind agent to complete todos before stopping (up to 3 reminders)",
+		get: (sm) => sm.getTodoCompletionEnabled(),
+		set: (sm, v) => sm.setTodoCompletionEnabled(v),
+	},
+	{
 		id: "showImages",
 		tab: "config",
 		type: "boolean",

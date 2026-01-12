@@ -124,6 +124,11 @@ export interface TtsrSettings {
 	repeatGap?: number; // default: 10
 }
 
+export interface TodoCompletionSettings {
+	enabled?: boolean; // default: false - warn agent when it stops with incomplete todos
+	maxReminders?: number; // default: 3 - maximum reminders before giving up
+}
+
 export interface VoiceSettings {
 	enabled?: boolean; // default: false
 	transcriptionModel?: string; // default: "whisper-1"
@@ -207,6 +212,7 @@ export interface Settings {
 	lsp?: LspSettings;
 	edit?: EditSettings;
 	ttsr?: TtsrSettings;
+	todoCompletion?: TodoCompletionSettings;
 	voice?: VoiceSettings;
 	providers?: ProviderSettings;
 	disabledProviders?: string[]; // Discovery provider IDs that are disabled
@@ -765,6 +771,37 @@ export class SettingsManager {
 			maxRetries: this.settings.retry?.maxRetries ?? 3,
 			baseDelayMs: this.settings.retry?.baseDelayMs ?? 2000,
 		};
+	}
+
+	getTodoCompletionSettings(): { enabled: boolean; maxReminders: number } {
+		return {
+			enabled: this.settings.todoCompletion?.enabled ?? false,
+			maxReminders: this.settings.todoCompletion?.maxReminders ?? 3,
+		};
+	}
+
+	getTodoCompletionEnabled(): boolean {
+		return this.settings.todoCompletion?.enabled ?? false;
+	}
+
+	async setTodoCompletionEnabled(enabled: boolean): Promise<void> {
+		if (!this.globalSettings.todoCompletion) {
+			this.globalSettings.todoCompletion = {};
+		}
+		this.globalSettings.todoCompletion.enabled = enabled;
+		await this.save();
+	}
+
+	getTodoCompletionMaxReminders(): number {
+		return this.settings.todoCompletion?.maxReminders ?? 3;
+	}
+
+	async setTodoCompletionMaxReminders(maxReminders: number): Promise<void> {
+		if (!this.globalSettings.todoCompletion) {
+			this.globalSettings.todoCompletion = {};
+		}
+		this.globalSettings.todoCompletion.maxReminders = maxReminders;
+		await this.save();
 	}
 
 	getThinkingBudgets(): ThinkingBudgetsSettings | undefined {

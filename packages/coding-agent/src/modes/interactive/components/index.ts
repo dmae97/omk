@@ -31,6 +31,7 @@ export { ShowImagesSelectorComponent } from "./show-images-selector";
 export { StatusLineComponent } from "./status-line";
 export { ThemeSelectorComponent } from "./theme-selector";
 export { ThinkingSelectorComponent } from "./thinking-selector";
+export { TodoReminderComponent } from "./todo-reminder";
 export { ToolExecutionComponent, type ToolExecutionHandle, type ToolExecutionOptions } from "./tool-execution";
 export { TreeSelectorComponent } from "./tree-selector";
 export { TtsrNotificationComponent } from "./ttsr-notification";

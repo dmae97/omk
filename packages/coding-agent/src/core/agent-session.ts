@@ -57,6 +57,8 @@ import { expandSlashCommand, type FileSlashCommand } from "./slash-commands";
 import { closeAllConnections } from "./ssh/connection-manager";
 import { unmountAll } from "./ssh/sshfs-mount";
 import type { BashOperations } from "./tools/bash";
+import { getArtifactsDir } from "./tools/task/artifacts";
+import type { TodoItem } from "./tools/todo-write";
 import type { TtsrManager } from "./ttsr";
 
 /** Session-specific events that extend the core AgentEvent */
@@ -66,7 +68,8 @@ export type AgentSessionEvent =
 	| { type: "auto_compaction_end"; result: CompactionResult | undefined; aborted: boolean; willRetry: boolean }
 	| { type: "auto_retry_start"; attempt: number; maxAttempts: number; delayMs: number; errorMessage: string }
 	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
-	| { type: "ttsr_triggered"; rules: Rule[] };
+	| { type: "ttsr_triggered"; rules: Rule[] }
+	| { type: "todo_reminder"; todos: TodoItem[]; attempt: number; maxAttempts: number };
 
 /** Listener function for agent session events */
 export type AgentSessionEventListener = (event: AgentSessionEvent) => void;
@@ -227,6 +230,9 @@ export class AgentSession {
 	private _retryAttempt = 0;
 	private _retryPromise: Promise<void> | undefined = undefined;
 	private _retryResolve: (() => void) | undefined = undefined;
+
+	// Todo completion reminder state
+	private _todoReminderCount = 0;
 
 	// Bash execution state
 	private _bashAbortController: AbortController | undefined = undefined;
@@ -442,6 +448,11 @@ export class AgentSession {
 			}
 
 			await this._checkCompaction(msg);
+
+			// Check for incomplete todos (unless there was an error or abort)
+			if (msg.stopReason !== "error" && msg.stopReason !== "aborted") {
+				await this._checkTodoCompletion();
+			}
 		}
 	};
 
@@ -756,6 +767,9 @@ export class AgentSession {
 
 		// Flush any pending bash messages before the new prompt
 		this._flushPendingBashMessages();
+
+		// Reset todo reminder count on new user prompt
+		this._todoReminderCount = 0;
 
 		// Validate model
 		if (!this.model) {
@@ -1218,6 +1232,7 @@ export class AgentSession {
 		this._steeringMessages = [];
 		this._followUpMessages = [];
 		this._pendingNextTurnMessages = [];
+		this._todoReminderCount = 0;
 		this._reconnectToAgent();
 
 		// Emit session_switch event with reason "new" to hooks
@@ -1700,6 +1715,83 @@ export class AgentSession {
 		if (shouldCompact(contextTokens, contextWindow, settings)) {
 			await this._runAutoCompaction("threshold", false);
 		}
+	}
+
+	/**
+	 * Check if agent stopped with incomplete todos and prompt to continue.
+	 */
+	private async _checkTodoCompletion(): Promise<void> {
+		const settings = this.settingsManager.getTodoCompletionSettings();
+		if (!settings.enabled) {
+			this._todoReminderCount = 0;
+			return;
+		}
+
+		const maxReminders = settings.maxReminders ?? 3;
+		if (this._todoReminderCount >= maxReminders) {
+			logger.debug("Todo completion: max reminders reached", { count: this._todoReminderCount });
+			return;
+		}
+
+		// Load current todos from artifacts
+		const sessionFile = this.sessionManager.getSessionFile();
+		if (!sessionFile) return;
+
+		const artifactsDir = getArtifactsDir(sessionFile);
+		if (!artifactsDir) return;
+
+		const todoPath = `${artifactsDir}/todos.json`;
+		const file = Bun.file(todoPath);
+		if (!(await file.exists())) {
+			this._todoReminderCount = 0;
+			return;
+		}
+
+		let todos: TodoItem[];
+		try {
+			const data = await file.json();
+			todos = data?.todos ?? [];
+		} catch {
+			return;
+		}
+
+		// Check for incomplete todos
+		const incomplete = todos.filter((t) => t.status !== "completed");
+		if (incomplete.length === 0) {
+			this._todoReminderCount = 0;
+			return;
+		}
+
+		// Build reminder message
+		this._todoReminderCount++;
+		const todoList = incomplete.map((t) => `- ${t.content}`).join("\n");
+		const reminder =
+			`<system_reminder>\n` +
+			`You stopped with ${incomplete.length} incomplete todo item(s):\n${todoList}\n\n` +
+			`Please continue working on these tasks or mark them complete if finished.\n` +
+			`(Reminder ${this._todoReminderCount}/${maxReminders})\n` +
+			`</system_reminder>`;
+
+		logger.debug("Todo completion: sending reminder", {
+			incomplete: incomplete.length,
+			attempt: this._todoReminderCount,
+		});
+
+		// Emit event for UI to render notification
+		this._emit({
+			type: "todo_reminder",
+			todos: incomplete,
+			attempt: this._todoReminderCount,
+			maxAttempts: maxReminders,
+		});
+
+		// Inject reminder and continue the conversation
+		this.agent.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: reminder }],
+			timestamp: Date.now(),
+		});
+		this.agent.continue().catch(() => {});
 	}
 
 	private _getModelKey(model: Model<any>): string {
