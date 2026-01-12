@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Move `sharp` to optional dependencies with all platform binaries to fix arm64 runtime errors
+
 ## [4.7.0] - 2026-01-12
 ### Added
 
