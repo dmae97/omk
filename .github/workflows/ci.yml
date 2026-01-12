@@ -27,7 +27,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lockb') }}
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
       - name: Install system deps
         run: |
           sudo apt-get update
@@ -60,38 +60,17 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lockb') }}
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
       - run: bun install --frozen-lockfile
-      - name: Build darwin-arm64
+      - name: Build binaries
         run: |
           cd packages/coding-agent
-          bun install --os darwin --cpu arm64
-          bun add --no-save @img/sharp-darwin-arm64@0.34.5 @img/sharp-libvips-darwin-arm64@1.2.4
+          mkdir -p binaries
           bun build --compile --target=bun-darwin-arm64 ./src/cli.ts --outfile binaries/omp-darwin-arm64
-      - name: Build darwin-x64
-        run: |
-          cd packages/coding-agent
-          bun install --os darwin --cpu x64
-          bun add --no-save @img/sharp-darwin-x64@0.34.5 @img/sharp-libvips-darwin-x64@1.2.4
           bun build --compile --target=bun-darwin-x64 ./src/cli.ts --outfile binaries/omp-darwin-x64
-      - name: Build linux-x64
-        run: |
-          cd packages/coding-agent
-          bun install --os linux --cpu x64
-          bun add --no-save @img/sharp-linux-x64@0.34.5 @img/sharp-libvips-linux-x64@1.2.4
           bun build --compile --target=bun-linux-x64 ./src/cli.ts --outfile binaries/omp-linux-x64
-      - name: Build linux-arm64
-        run: |
-          cd packages/coding-agent
-          bun install --os linux --cpu arm64
-          bun add --no-save @img/sharp-linux-arm64@0.34.5 @img/sharp-libvips-linux-arm64@1.2.4
           bun build --compile --target=bun-linux-arm64 ./src/cli.ts --outfile binaries/omp-linux-arm64
-      - name: Build win32-x64
-        run: |
-          cd packages/coding-agent
-          bun install --os win32 --cpu x64
-          bun add --no-save @img/sharp-win32-x64@0.34.5 @img/sharp-libvips-win32-x64@1.2.4
-          bun build --compile --target=bun-win32-x64 ./src/cli.ts --outfile binaries/omp-win32-x64
+          bun build --compile --target=bun-windows-x64 ./src/cli.ts --outfile binaries/omp-windows-x64.exe
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:

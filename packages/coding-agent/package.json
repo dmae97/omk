@@ -39,8 +39,8 @@
 		"prepublishOnly": "bun run generate-template && bun run clean && bun run build"
 	},
 	"dependencies": {
-		"@oh-my-pi/pi-ai": "workspace:*",
 		"@oh-my-pi/pi-agent-core": "workspace:*",
+		"@oh-my-pi/pi-ai": "workspace:*",
 		"@oh-my-pi/pi-git-tool": "workspace:*",
 		"@oh-my-pi/pi-tui": "workspace:*",
 		"@openai/agents": "^0.3.7",
@@ -60,6 +60,7 @@
 		"node-html-parser": "^6.1.13",
 		"smol-toml": "^1.6.0",
 		"strip-ansi": "^7.1.2",
+		"wasm-vips": "^0.0.16",
 		"winston": "^3.17.0",
 		"winston-daily-rotate-file": "^5.0.0",
 		"zod": "^4.3.5"
@@ -71,9 +72,7 @@
 		"@types/node": "^24.3.0",
 		"ms": "^2.1.3"
 	},
-	"optionalDependencies": {
-		"sharp": "^0.34.2"
-	},
+	
 	"keywords": [
 		"coding-agent",
 		"ai",

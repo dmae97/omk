@@ -29,18 +29,16 @@ const DEFAULT_OPTIONS: Required<ImageResizeOptions> = {
 };
 
 /**
- * Fallback resize using ImageMagick when sharp is unavailable.
+ * Fallback resize using ImageMagick when wasm-vips is unavailable.
  */
 async function resizeImageWithImageMagick(
 	img: ImageContent,
 	opts: Required<ImageResizeOptions>,
 ): Promise<ResizedImage> {
-	// Try to get dimensions first
 	const dims = await getImageDimensionsWithImageMagick(img.data);
 	const originalWidth = dims?.width ?? 0;
 	const originalHeight = dims?.height ?? 0;
 
-	// Try to resize
 	const result = await resizeWithImageMagick(
 		img.data,
 		img.mimeType,
@@ -62,7 +60,6 @@ async function resizeImageWithImageMagick(
 		};
 	}
 
-	// ImageMagick not available or resize not needed - return original
 	return {
 		data: img.data,
 		mimeType: img.mimeType,
@@ -76,18 +73,37 @@ async function resizeImageWithImageMagick(
 
 /** Helper to pick the smaller of two buffers */
 function pickSmaller(
-	a: { buffer: Buffer; mimeType: string },
-	b: { buffer: Buffer; mimeType: string },
-): { buffer: Buffer; mimeType: string } {
+	a: { buffer: Uint8Array; mimeType: string },
+	b: { buffer: Uint8Array; mimeType: string },
+): { buffer: Uint8Array; mimeType: string } {
 	return a.buffer.length <= b.buffer.length ? a : b;
+}
+
+// Cached vips instance
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let vipsInstance: any;
+let vipsLoadFailed = false;
+
+async function getVips() {
+	if (vipsLoadFailed) return undefined;
+	if (vipsInstance) return vipsInstance;
+
+	try {
+		const wasmVips = await import("wasm-vips");
+		const Vips = wasmVips.default ?? wasmVips;
+		vipsInstance = await Vips();
+		return vipsInstance;
+	} catch {
+		vipsLoadFailed = true;
+		return undefined;
+	}
 }
 
 /**
  * Resize an image to fit within the specified max dimensions and file size.
  * Returns the original image if it already fits within the limits.
  *
- * Uses sharp for image processing. If sharp is not available (e.g., in some
- * environments), returns the original image unchanged.
+ * Uses wasm-vips for image processing. Falls back to ImageMagick if unavailable.
  *
  * Strategy for staying under maxBytes:
  * 1. First resize to maxWidth/maxHeight
@@ -99,96 +115,79 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 	const opts = { ...DEFAULT_OPTIONS, ...options };
 	const buffer = Buffer.from(img.data, "base64");
 
-	let sharp: typeof import("sharp") | undefined;
-	try {
-		sharp = (await import("sharp")).default;
-	} catch {
-		// Sharp not available - try ImageMagick fallback
+	const vips = await getVips();
+	if (!vips) {
 		return resizeImageWithImageMagick(img, opts);
 	}
 
-	const sharpImg = sharp(buffer);
-	const metadata = await sharpImg.metadata();
+	let image: ReturnType<typeof vips.Image.newFromBuffer> | undefined;
+	try {
+		image = vips.Image.newFromBuffer(buffer);
+		const originalWidth = image.width;
+		const originalHeight = image.height;
+		const format = img.mimeType?.split("/")[1] ?? "png";
 
-	const originalWidth = metadata.width ?? 0;
-	const originalHeight = metadata.height ?? 0;
-	const format = metadata.format ?? img.mimeType?.split("/")[1] ?? "png";
+		// Check if already within all limits (dimensions AND size)
+		const originalSize = buffer.length;
+		if (originalWidth <= opts.maxWidth && originalHeight <= opts.maxHeight && originalSize <= opts.maxBytes) {
+			return {
+				data: img.data,
+				mimeType: img.mimeType ?? `image/${format}`,
+				originalWidth,
+				originalHeight,
+				width: originalWidth,
+				height: originalHeight,
+				wasResized: false,
+			};
+		}
 
-	// Check if already within all limits (dimensions AND size)
-	const originalSize = buffer.length;
-	if (originalWidth <= opts.maxWidth && originalHeight <= opts.maxHeight && originalSize <= opts.maxBytes) {
-		return {
-			data: img.data,
-			mimeType: img.mimeType ?? `image/${format}`,
-			originalWidth,
-			originalHeight,
-			width: originalWidth,
-			height: originalHeight,
-			wasResized: false,
-		};
-	}
+		// Calculate initial dimensions respecting max limits
+		let targetWidth = originalWidth;
+		let targetHeight = originalHeight;
 
-	// Calculate initial dimensions respecting max limits
-	let targetWidth = originalWidth;
-	let targetHeight = originalHeight;
+		if (targetWidth > opts.maxWidth) {
+			targetHeight = Math.round((targetHeight * opts.maxWidth) / targetWidth);
+			targetWidth = opts.maxWidth;
+		}
+		if (targetHeight > opts.maxHeight) {
+			targetWidth = Math.round((targetWidth * opts.maxHeight) / targetHeight);
+			targetHeight = opts.maxHeight;
+		}
 
-	if (targetWidth > opts.maxWidth) {
-		targetHeight = Math.round((targetHeight * opts.maxWidth) / targetWidth);
-		targetWidth = opts.maxWidth;
-	}
-	if (targetHeight > opts.maxHeight) {
-		targetWidth = Math.round((targetWidth * opts.maxHeight) / targetHeight);
-		targetHeight = opts.maxHeight;
-	}
+		// Helper to resize and encode in both formats, returning the smaller one
+		function tryBothFormats(
+			width: number,
+			height: number,
+			jpegQuality: number,
+		): { buffer: Uint8Array; mimeType: string } {
+			const scale = Math.min(width / originalWidth, height / originalHeight);
+			const resized = image!.resize(scale);
 
-	// Helper to resize and encode in both formats, returning the smaller one
-	async function tryBothFormats(
-		width: number,
-		height: number,
-		jpegQuality: number,
-	): Promise<{ buffer: Buffer; mimeType: string }> {
-		const resized = await sharp!(buffer)
-			.resize(width, height, { fit: "inside", withoutEnlargement: true })
-			.toBuffer();
+			const pngBuffer = resized.writeToBuffer(".png");
+			const jpegBuffer = resized.writeToBuffer(".jpg", { Q: jpegQuality });
 
-		const [pngBuffer, jpegBuffer] = await Promise.all([
-			sharp!(resized).png({ compressionLevel: 9 }).toBuffer(),
-			sharp!(resized).jpeg({ quality: jpegQuality }).toBuffer(),
-		]);
+			resized.delete();
 
-		return pickSmaller({ buffer: pngBuffer, mimeType: "image/png" }, { buffer: jpegBuffer, mimeType: "image/jpeg" });
-	}
+			return pickSmaller(
+				{ buffer: pngBuffer, mimeType: "image/png" },
+				{ buffer: jpegBuffer, mimeType: "image/jpeg" },
+			);
+		}
 
-	// Try to produce an image under maxBytes
-	const qualitySteps = [85, 70, 55, 40];
-	const scaleSteps = [1.0, 0.75, 0.5, 0.35, 0.25];
+		// Try to produce an image under maxBytes
+		const qualitySteps = [85, 70, 55, 40];
+		const scaleSteps = [1.0, 0.75, 0.5, 0.35, 0.25];
 
-	let best: { buffer: Buffer; mimeType: string };
-	let finalWidth = targetWidth;
-	let finalHeight = targetHeight;
+		let best: { buffer: Uint8Array; mimeType: string };
+		let finalWidth = targetWidth;
+		let finalHeight = targetHeight;
 
-	// First attempt: resize to target dimensions, try both formats
-	best = await tryBothFormats(targetWidth, targetHeight, opts.jpegQuality);
-
-	if (best.buffer.length <= opts.maxBytes) {
-		return {
-			data: best.buffer.toString("base64"),
-			mimeType: best.mimeType,
-			originalWidth,
-			originalHeight,
-			width: finalWidth,
-			height: finalHeight,
-			wasResized: true,
-		};
-	}
-
-	// Still too large - try JPEG with decreasing quality (and compare to PNG each time)
-	for (const quality of qualitySteps) {
-		best = await tryBothFormats(targetWidth, targetHeight, quality);
+		// First attempt: resize to target dimensions, try both formats
+		best = tryBothFormats(targetWidth, targetHeight, opts.jpegQuality);
 
 		if (best.buffer.length <= opts.maxBytes) {
 			return {
-				data: best.buffer.toString("base64"),
+				data: Buffer.from(best.buffer).toString("base64"),
 				mimeType: best.mimeType,
 				originalWidth,
 				originalHeight,
@@ -197,24 +196,14 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 				wasResized: true,
 			};
 		}
-	}
 
-	// Still too large - reduce dimensions progressively
-	for (const scale of scaleSteps) {
-		finalWidth = Math.round(targetWidth * scale);
-		finalHeight = Math.round(targetHeight * scale);
-
-		// Skip if dimensions are too small
-		if (finalWidth < 100 || finalHeight < 100) {
-			break;
-		}
-
+		// Still too large - try JPEG with decreasing quality
 		for (const quality of qualitySteps) {
-			best = await tryBothFormats(finalWidth, finalHeight, quality);
+			best = tryBothFormats(targetWidth, targetHeight, quality);
 
 			if (best.buffer.length <= opts.maxBytes) {
 				return {
-					data: best.buffer.toString("base64"),
+					data: Buffer.from(best.buffer).toString("base64"),
 					mimeType: best.mimeType,
 					originalWidth,
 					originalHeight,
@@ -224,19 +213,49 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 				};
 			}
 		}
-	}
 
-	// Last resort: return smallest version we produced even if over limit
-	// (the API will reject it, but at least we tried everything)
-	return {
-		data: best.buffer.toString("base64"),
-		mimeType: best.mimeType,
-		originalWidth,
-		originalHeight,
-		width: finalWidth,
-		height: finalHeight,
-		wasResized: true,
-	};
+		// Still too large - reduce dimensions progressively
+		for (const scale of scaleSteps) {
+			finalWidth = Math.round(targetWidth * scale);
+			finalHeight = Math.round(targetHeight * scale);
+
+			if (finalWidth < 100 || finalHeight < 100) {
+				break;
+			}
+
+			for (const quality of qualitySteps) {
+				best = tryBothFormats(finalWidth, finalHeight, quality);
+
+				if (best.buffer.length <= opts.maxBytes) {
+					return {
+						data: Buffer.from(best.buffer).toString("base64"),
+						mimeType: best.mimeType,
+						originalWidth,
+						originalHeight,
+						width: finalWidth,
+						height: finalHeight,
+						wasResized: true,
+					};
+				}
+			}
+		}
+
+		// Last resort: return smallest version we produced
+		return {
+			data: Buffer.from(best.buffer).toString("base64"),
+			mimeType: best.mimeType,
+			originalWidth,
+			originalHeight,
+			width: finalWidth,
+			height: finalHeight,
+			wasResized: true,
+		};
+	} catch {
+		// wasm-vips failed - try ImageMagick fallback
+		return resizeImageWithImageMagick(img, opts);
+	} finally {
+		image?.delete();
+	}
 }
 
 /**
