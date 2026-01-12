@@ -1,7 +1,7 @@
 import type { ImageContent } from "@oh-my-pi/pi-ai";
 import { logger } from "../core/logger";
 import { getImageDimensionsWithImageMagick, resizeWithImageMagick } from "./image-magick";
-import { Vips } from "./vips";
+import { getPhoton } from "./photon";
 
 export interface ImageResizeOptions {
 	maxWidth?: number; // Default: 2000
@@ -31,7 +31,7 @@ const DEFAULT_OPTIONS: Required<ImageResizeOptions> = {
 };
 
 /**
- * Fallback resize using ImageMagick when wasm-vips is unavailable.
+ * Fallback resize using ImageMagick when Photon is unavailable.
  */
 async function resizeImageWithImageMagick(
 	img: ImageContent,
@@ -85,7 +85,7 @@ function pickSmaller(
  * Resize an image to fit within the specified max dimensions and file size.
  * Returns the original image if it already fits within the limits.
  *
- * Uses wasm-vips for image processing. Falls back to ImageMagick if unavailable.
+ * Uses Photon (Rust/WASM) for image processing. Falls back to ImageMagick if unavailable.
  *
  * Strategy for staying under maxBytes:
  * 1. First resize to maxWidth/maxHeight
@@ -95,18 +95,19 @@ function pickSmaller(
  */
 export async function resizeImage(img: ImageContent, options?: ImageResizeOptions): Promise<ResizedImage> {
 	const opts = { ...DEFAULT_OPTIONS, ...options };
-	const buffer = Buffer.from(img.data, "base64");
+	const inputBuffer = Buffer.from(img.data, "base64");
 
 	try {
-		const { Image } = await Vips();
-		const image = Image.newFromBuffer(buffer);
+		const photon = await getPhoton();
+		const image = photon.PhotonImage.new_from_byteslice(new Uint8Array(inputBuffer));
+
 		try {
-			const originalWidth = image.width;
-			const originalHeight = image.height;
+			const originalWidth = image.get_width();
+			const originalHeight = image.get_height();
 			const format = img.mimeType?.split("/")[1] ?? "png";
 
 			// Check if already within all limits (dimensions AND size)
-			const originalSize = buffer.length;
+			const originalSize = inputBuffer.length;
 			if (originalWidth <= opts.maxWidth && originalHeight <= opts.maxHeight && originalSize <= opts.maxBytes) {
 				return {
 					data: img.data,
@@ -138,18 +139,19 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 				height: number,
 				jpegQuality: number,
 			): { buffer: Uint8Array; mimeType: string } {
-				const scale = Math.min(width / originalWidth, height / originalHeight);
-				const resized = image!.resize(scale);
+				const resized = photon.resize(image, width, height, photon.SamplingFilter.Lanczos3);
 
-				const pngBuffer = resized.writeToBuffer(".png");
-				const jpegBuffer = resized.writeToBuffer(".jpg", { Q: jpegQuality });
+				try {
+					const pngBuffer = resized.get_bytes();
+					const jpegBuffer = resized.get_bytes_jpeg(jpegQuality);
 
-				resized.delete();
-
-				return pickSmaller(
-					{ buffer: pngBuffer, mimeType: "image/png" },
-					{ buffer: jpegBuffer, mimeType: "image/jpeg" },
-				);
+					return pickSmaller(
+						{ buffer: pngBuffer, mimeType: "image/png" },
+						{ buffer: jpegBuffer, mimeType: "image/jpeg" },
+					);
+				} finally {
+					resized.free();
+				}
 			}
 
 			// Try to produce an image under maxBytes
@@ -229,10 +231,10 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 				wasResized: true,
 			};
 		} finally {
-			image.delete();
+			image.free();
 		}
 	} catch (error) {
-		logger.error("Failed to resize image with wasm-vips", {
+		logger.error("Failed to resize image with Photon", {
 			error: error instanceof Error ? error.message : String(error),
 		});
 		return resizeImageWithImageMagick(img, opts);

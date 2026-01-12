@@ -1,11 +1,11 @@
 import { logger } from "../core/logger";
 import { convertToPngWithImageMagick } from "./image-magick";
-import { Vips } from "./vips";
+import { getPhoton } from "./photon";
 
 /**
  * Convert image to PNG format for terminal display.
  * Kitty graphics protocol requires PNG format (f=100).
- * Uses wasm-vips if available, falls back to ImageMagick (magick/convert).
+ * Uses Photon (Rust/WASM) if available, falls back to ImageMagick.
  */
 export async function convertToPng(
 	base64Data: string,
@@ -17,20 +17,20 @@ export async function convertToPng(
 	}
 
 	try {
-		const { Image } = await Vips();
-		const image = Image.newFromBuffer(Buffer.from(base64Data, "base64"));
+		const photon = await getPhoton();
+		const image = photon.PhotonImage.new_from_byteslice(new Uint8Array(Buffer.from(base64Data, "base64")));
 		try {
-			const pngBuffer = image.writeToBuffer(".png");
+			const pngBuffer = image.get_bytes();
 			return {
 				data: Buffer.from(pngBuffer).toString("base64"),
 				mimeType: "image/png",
 			};
 		} finally {
-			image.delete();
+			image.free();
 		}
 	} catch (error) {
-		// wasm-vips failed, try ImageMagick fallback
-		logger.error("Failed to convert image to PNG with wasm-vips", {
+		// Photon failed, try ImageMagick fallback
+		logger.error("Failed to convert image to PNG with Photon", {
 			error: error instanceof Error ? error.message : String(error),
 		});
 	}

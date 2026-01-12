@@ -518,19 +518,27 @@ export function createReadTool(session: ToolSession): AgentTool<typeof readSchem
 							const base64 = Buffer.from(buffer).toString("base64");
 
 							if (autoResizeImages) {
-								// Resize image if needed
-								const resized = await resizeImage({ type: "image", data: base64, mimeType });
-								const dimensionNote = formatDimensionNote(resized);
+								// Resize image if needed - catch errors from WASM
+								try {
+									const resized = await resizeImage({ type: "image", data: base64, mimeType });
+									const dimensionNote = formatDimensionNote(resized);
 
-								let textNote = `Read image file [${resized.mimeType}]`;
-								if (dimensionNote) {
-									textNote += `\n${dimensionNote}`;
+									let textNote = `Read image file [${resized.mimeType}]`;
+									if (dimensionNote) {
+										textNote += `\n${dimensionNote}`;
+									}
+
+									content = [
+										{ type: "text", text: textNote },
+										{ type: "image", data: resized.data, mimeType: resized.mimeType },
+									];
+								} catch {
+									// Fall back to original image on resize failure
+									content = [
+										{ type: "text", text: `Read image file [${mimeType}]` },
+										{ type: "image", data: base64, mimeType },
+									];
 								}
-
-								content = [
-									{ type: "text", text: textNote },
-									{ type: "image", data: resized.data, mimeType: resized.mimeType },
-								];
 							} else {
 								content = [
 									{ type: "text", text: `Read image file [${mimeType}]` },

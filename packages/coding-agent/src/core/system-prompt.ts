@@ -632,6 +632,10 @@ export interface BuildSystemPromptOptions {
 
 /** Build the system prompt with tools, guidelines, and context */
 export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}): Promise<string> {
+	if (process.env.NULL_PROMPT === "true") {
+		return "";
+	}
+
 	const {
 		customPrompt,
 		tools,

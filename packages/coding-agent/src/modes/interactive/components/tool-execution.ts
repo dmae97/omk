@@ -261,15 +261,19 @@ export class ToolExecutionComponent extends Container {
 			if (img.mimeType === "image/png") continue;
 			if (this.convertedImages.has(i)) continue;
 
-			// Convert async
+			// Convert async - catch errors from WASM processing
 			const index = i;
-			convertToPng(img.data, img.mimeType).then((converted) => {
-				if (converted) {
-					this.convertedImages.set(index, converted);
-					this.updateDisplay();
-					this.ui.requestRender();
-				}
-			});
+			convertToPng(img.data, img.mimeType)
+				.then((converted) => {
+					if (converted) {
+						this.convertedImages.set(index, converted);
+						this.updateDisplay();
+						this.ui.requestRender();
+					}
+				})
+				.catch(() => {
+					// Ignore conversion failures - display will use original image format
+				});
 		}
 	}
 

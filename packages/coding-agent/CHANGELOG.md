@@ -1,6 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Replaced wasm-vips with Photon for more stable WASM image processing
+- Added graceful fallback to original images when image resizing fails
+- Added error handling for image conversion failures in interactive mode to prevent crashes
+- Replace wasm-vips with Photon for more stable WASM image processing (fixes worker thread crashes)
 
 ## [5.0.0] - 2026-01-12
 

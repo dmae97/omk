@@ -52,13 +52,22 @@ export async function processFileArguments(fileArgs: string[], options?: Process
 			let dimensionNote: string | undefined;
 
 			if (_autoResizeImages) {
-				const resized = await resizeImage({ type: "image", data: base64Content, mimeType });
-				dimensionNote = formatDimensionNote(resized);
-				attachment = {
-					type: "image",
-					mimeType: resized.mimeType,
-					data: resized.data,
-				};
+				try {
+					const resized = await resizeImage({ type: "image", data: base64Content, mimeType });
+					dimensionNote = formatDimensionNote(resized);
+					attachment = {
+						type: "image",
+						mimeType: resized.mimeType,
+						data: resized.data,
+					};
+				} catch {
+					// Fall back to original image on resize failure
+					attachment = {
+						type: "image",
+						mimeType,
+						data: base64Content,
+					};
+				}
 			} else {
 				attachment = {
 					type: "image",
