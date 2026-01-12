@@ -74,15 +74,23 @@ export class ReadToolGroupComponent extends Container implements ToolExecutionHa
 
 	private updateDisplay(): void {
 		const entries = [...this.entries.values()];
-		const header = `${theme.fg("toolTitle", theme.bold("Read"))}${
-			entries.length > 1 ? theme.fg("dim", ` (${entries.length})`) : ""
-		}`;
 
 		if (entries.length === 0) {
-			this.text.setText(` ${theme.format.bullet} ${header}`);
+			this.text.setText(` ${theme.format.bullet} ${theme.fg("toolTitle", theme.bold("Read"))}`);
 			return;
 		}
 
+		if (entries.length === 1) {
+			const entry = entries[0];
+			const statusSymbol = this.formatStatus(entry.status);
+			const pathDisplay = this.formatPath(entry);
+			this.text.setText(
+				` ${theme.format.bullet} ${statusSymbol} ${theme.fg("toolTitle", theme.bold("Read"))} ${pathDisplay}`.trimEnd(),
+			);
+			return;
+		}
+
+		const header = `${theme.fg("toolTitle", theme.bold("Read"))}${theme.fg("dim", ` (${entries.length})`)}`;
 		const lines = [` ${theme.format.bullet} ${header}`];
 		const total = entries.length;
 		for (const [index, entry] of entries.entries()) {

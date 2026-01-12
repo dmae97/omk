@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+- Single-file reads now render inline (e.g., `Read AGENTS.md:23`) instead of tree structure
+
+### Fixed
+- Subagent model resolution now respects explicit provider prefix (e.g., `zai/glm-4.7` no longer matches `cerebras/zai-glm-4.7`)
+
 ## [4.6.0] - 2026-01-12
 
 ### Added
