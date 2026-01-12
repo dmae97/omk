@@ -1,6 +1,6 @@
 {
 	"name": "@oh-my-pi/pi-coding-agent",
-	"version": "4.7.0",
+	"version": "4.8.0",
 	"description": "Coding agent CLI with read, bash, edit, write tools and session management",
 	"type": "module",
 	"ompConfig": {
@@ -58,7 +58,6 @@
 		"nanoid": "^5.1.6",
 		"ndjson": "^2.0.0",
 		"node-html-parser": "^6.1.13",
-		
 		"smol-toml": "^1.6.0",
 		"strip-ansi": "^7.1.2",
 		"winston": "^3.17.0",

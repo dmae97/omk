@@ -3,13 +3,13 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ["v*"]
   pull_request:
     branches: [main]
   workflow_dispatch:
     inputs:
       skip_npm:
-        description: 'Skip npm publish'
+        description: "Skip npm publish"
         type: boolean
         default: false
 
@@ -54,37 +54,44 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
       - name: Cache bun dependencies
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lockb') }}
       - run: bun install --frozen-lockfile
-      - name: Install cross-platform native bindings
-        run: |
-          # bun install only fetches optional deps for current platform (linux-x64)
-          # Explicitly install all platform binaries for bun cross-compilation
-          bun add --no-save \
-            @img/sharp-darwin-arm64@0.34.5 \
-            @img/sharp-darwin-x64@0.34.5 \
-            @img/sharp-linux-x64@0.34.5 \
-            @img/sharp-linux-arm64@0.34.5 \
-            @img/sharp-win32-x64@0.34.5 \
-            @img/sharp-libvips-darwin-arm64@1.2.4 \
-            @img/sharp-libvips-darwin-x64@1.2.4 \
-            @img/sharp-libvips-linux-x64@1.2.4 \
-            @img/sharp-libvips-linux-arm64@1.2.4
-      - name: Build binaries
+      - name: Build darwin-arm64
         run: |
           cd packages/coding-agent
-          mkdir -p binaries
+          bun install --os darwin --cpu arm64
+          bun add --no-save @img/sharp-darwin-arm64@0.34.5 @img/sharp-libvips-darwin-arm64@1.2.4
           bun build --compile --target=bun-darwin-arm64 ./src/cli.ts --outfile binaries/omp-darwin-arm64
+      - name: Build darwin-x64
+        run: |
+          cd packages/coding-agent
+          bun install --os darwin --cpu x64
+          bun add --no-save @img/sharp-darwin-x64@0.34.5 @img/sharp-libvips-darwin-x64@1.2.4
           bun build --compile --target=bun-darwin-x64 ./src/cli.ts --outfile binaries/omp-darwin-x64
+      - name: Build linux-x64
+        run: |
+          cd packages/coding-agent
+          bun install --os linux --cpu x64
+          bun add --no-save @img/sharp-linux-x64@0.34.5 @img/sharp-libvips-linux-x64@1.2.4
           bun build --compile --target=bun-linux-x64 ./src/cli.ts --outfile binaries/omp-linux-x64
+      - name: Build linux-arm64
+        run: |
+          cd packages/coding-agent
+          bun install --os linux --cpu arm64
+          bun add --no-save @img/sharp-linux-arm64@0.34.5 @img/sharp-libvips-linux-arm64@1.2.4
           bun build --compile --target=bun-linux-arm64 ./src/cli.ts --outfile binaries/omp-linux-arm64
-          bun build --compile --target=bun-windows-x64 ./src/cli.ts --outfile binaries/omp-windows-x64.exe
+      - name: Build win32-x64
+        run: |
+          cd packages/coding-agent
+          bun install --os win32 --cpu x64
+          bun add --no-save @img/sharp-win32-x64@0.34.5 @img/sharp-libvips-win32-x64@1.2.4
+          bun build --compile --target=bun-win32-x64 ./src/cli.ts --outfile binaries/omp-win32-x64
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
