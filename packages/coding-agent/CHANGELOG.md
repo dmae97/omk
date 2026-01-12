@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [4.7.0] - 2026-01-12
 ### Added
 
 - Add `omp config` subcommand for managing settings (`list`, `get`, `set`, `reset`, `path`)

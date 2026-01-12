@@ -7,16 +7,17 @@ import { visibleWidth } from "../src/utils";
 const chalk = new Chalk({ level: 3 });
 
 describe("TruncatedText component", () => {
-	it("pads output lines to exactly match width", () => {
+	it("applies horizontal padding without trailing spaces", () => {
 		const text = new TruncatedText("Hello world", 1, 0);
 		const lines = text.render(50);
 
 		// Should have exactly one content line (no vertical padding)
 		expect(lines.length).toBe(1);
 
-		// Line should be exactly 50 visible characters
+		// Line should be: leftPad(1) + "Hello world"(11) + rightPad(1) = 13
+		// No trailing padding to full width (avoids issues when copying)
 		const visibleLen = visibleWidth(lines[0]);
-		expect(visibleLen).toBe(50);
+		expect(visibleLen).toBe(13);
 	});
 
 	it("pads output with vertical padding lines to width", () => {
@@ -26,20 +27,25 @@ describe("TruncatedText component", () => {
 		// Should have 2 padding lines + 1 content line + 2 padding lines = 5 total
 		expect(lines.length).toBe(5);
 
-		// All lines should be exactly 40 characters
-		for (const line of lines) {
-			expect(visibleWidth(line)).toBe(40);
-		}
+		// Vertical padding lines are full width
+		expect(visibleWidth(lines[0])).toBe(40);
+		expect(visibleWidth(lines[1])).toBe(40);
+		expect(visibleWidth(lines[3])).toBe(40);
+		expect(visibleWidth(lines[4])).toBe(40);
+
+		// Content line is just the text (no horizontal padding specified)
+		expect(visibleWidth(lines[2])).toBe(5);
 	});
 
-	it("truncates long text and pads to width", () => {
+	it("truncates long text with ellipsis", () => {
 		const longText = "This is a very long piece of text that will definitely exceed the available width";
 		const text = new TruncatedText(longText, 1, 0);
 		const lines = text.render(30);
 
 		expect(lines.length).toBe(1);
 
-		// Should be exactly 30 characters
+		// availableWidth = 30 - 2*1 = 28, so truncated text is 28 chars
+		// plus padding: 1 + 28 + 1 = 30
 		expect(visibleWidth(lines[0])).toBe(30);
 
 		// Should contain ellipsis
@@ -47,15 +53,15 @@ describe("TruncatedText component", () => {
 		expect(stripped.includes("...")).toBeTruthy();
 	});
 
-	it("preserves ANSI codes in output and pads correctly", () => {
+	it("preserves ANSI codes in output", () => {
 		const styledText = `${chalk.red("Hello")} ${chalk.blue("world")}`;
 		const text = new TruncatedText(styledText, 1, 0);
 		const lines = text.render(40);
 
 		expect(lines.length).toBe(1);
 
-		// Should be exactly 40 visible characters (ANSI codes don't count)
-		expect(visibleWidth(lines[0])).toBe(40);
+		// "Hello world" = 11 chars + padding = 13
+		expect(visibleWidth(lines[0])).toBe(13);
 
 		// Should preserve the color codes
 		expect(lines[0].includes("\x1b[")).toBeTruthy();
@@ -68,21 +74,22 @@ describe("TruncatedText component", () => {
 
 		expect(lines.length).toBe(1);
 
-		// Should be exactly 20 visible characters
+		// availableWidth = 20 - 2 = 18, truncated to 18 + padding = 20
 		expect(visibleWidth(lines[0])).toBe(20);
 
 		// Should contain reset code before ellipsis
 		expect(lines[0].includes("\x1b[0m...")).toBeTruthy();
 	});
 
-	it("handles text that fits exactly", () => {
+	it("handles text that fits without truncation", () => {
 		// With paddingX=1, available width is 30-2=28
 		// "Hello world" is 11 chars, fits comfortably
 		const text = new TruncatedText("Hello world", 1, 0);
 		const lines = text.render(30);
 
 		expect(lines.length).toBe(1);
-		expect(visibleWidth(lines[0])).toBe(30);
+		// 1 + 11 + 1 = 13 (no trailing padding)
+		expect(visibleWidth(lines[0])).toBe(13);
 
 		// Should NOT contain ellipsis
 		const stripped = lines[0].replace(/\x1b\[[0-9;]*m/g, "");
@@ -94,7 +101,8 @@ describe("TruncatedText component", () => {
 		const lines = text.render(30);
 
 		expect(lines.length).toBe(1);
-		expect(visibleWidth(lines[0])).toBe(30);
+		// Just the padding: 1 + 0 + 1 = 2
+		expect(visibleWidth(lines[0])).toBe(2);
 	});
 
 	it("stops at newline and only shows first line", () => {
@@ -103,7 +111,8 @@ describe("TruncatedText component", () => {
 		const lines = text.render(40);
 
 		expect(lines.length).toBe(1);
-		expect(visibleWidth(lines[0])).toBe(40);
+		// "First line" = 10 + padding = 12
+		expect(visibleWidth(lines[0])).toBe(12);
 
 		// Should only contain "First line"
 		const stripped = lines[0].replace(/\x1b\[[0-9;]*m/g, "").trim();
@@ -118,6 +127,7 @@ describe("TruncatedText component", () => {
 		const lines = text.render(25);
 
 		expect(lines.length).toBe(1);
+		// availableWidth = 25 - 2 = 23, truncated to 23 + padding = 25
 		expect(visibleWidth(lines[0])).toBe(25);
 
 		// Should contain ellipsis and not second line

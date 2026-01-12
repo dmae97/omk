@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [4.7.0] - 2026-01-12
+
 ### Fixed
 - Remove trailing space padding from Text, Markdown, and TruncatedText components when no background color is set (fixes copied text including unwanted whitespace)
 
