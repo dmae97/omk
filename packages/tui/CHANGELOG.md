@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [4.6.0] - 2026-01-12
+
 ### Added
 - Add fuzzy matching module (`fuzzyMatch`, `fuzzyFilter`) for command autocomplete
 - Add `getExpandedText()` to editor for expanding paste markers

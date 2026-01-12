@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [4.6.0] - 2026-01-12
 ### Changed
 
 - Modified assistant message handling to split messages around tool results for improved readability when using Cursor tools

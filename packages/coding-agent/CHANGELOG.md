@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [4.6.0] - 2026-01-12
+
 ### Added
 - Add `/skill:name` slash commands for quick skill access (toggle via `skills.enableSkillCommands` setting)
 - Add `cwd` to SessionInfo for session list display

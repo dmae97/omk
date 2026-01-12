@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [4.6.0] - 2026-01-12
 ### Fixed
 
 - Fixed incorrect classification of thought signatures in Google Gemini responses—thought signatures are now correctly treated as metadata rather than thinking content indicators
