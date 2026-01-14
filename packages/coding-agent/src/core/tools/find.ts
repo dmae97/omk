@@ -218,7 +218,11 @@ export function createFindTool(session: ToolSession, options?: FindToolOptions):
 				// When pattern contains path separators (e.g. "reports/**"), use --full-path
 				// so fd matches against the full path, not just the filename.
 				// Also prepend **/ to anchor the pattern at any depth in the search path.
-				const hasPathSeparator = pattern.includes("/") || pattern.includes("\\");
+				// Note: "**/foo.rs" is a glob construct (filename at any depth), not a path.
+				// Only patterns with real path components like "foo/bar" or "foo/**/bar" need --full-path.
+				const patternWithoutLeadingStarStar = pattern.replace(/^\*\*\//, "");
+				const hasPathSeparator =
+					patternWithoutLeadingStarStar.includes("/") || patternWithoutLeadingStarStar.includes("\\");
 				const effectivePattern = hasPathSeparator && !pattern.startsWith("**/") ? `**/${pattern}` : pattern;
 				const args: string[] = [
 					"--glob", // Use glob pattern
