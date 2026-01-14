@@ -345,9 +345,8 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.ui.start();
 		this.isInitialized = true;
 
-		// Set terminal title
-		const cwdBasename = path.basename(process.cwd());
-		this.ui.terminal.setTitle(`pi - ${cwdBasename}`);
+		// Set initial terminal title (will be updated when session title is generated)
+		this.ui.terminal.setTitle("π");
 
 		// Initialize hooks with TUI-based UI context
 		await this.initHooksAndCustomTools();

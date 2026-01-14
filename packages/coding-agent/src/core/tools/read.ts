@@ -437,12 +437,7 @@ export function createReadTool(session: ToolSession): AgentTool<typeof readSchem
 		parameters: readSchema,
 		execute: async (
 			toolCallId: string,
-			{
-				path: readPath,
-				offset,
-				limit,
-				lines,
-			}: { path: string; offset?: number; limit?: number; lines?: boolean },
+			{ path: readPath, offset, limit, lines }: { path: string; offset?: number; limit?: number; lines?: boolean },
 			signal?: AbortSignal,
 		) => {
 			const absolutePath = resolveReadPath(readPath, session.cwd);
