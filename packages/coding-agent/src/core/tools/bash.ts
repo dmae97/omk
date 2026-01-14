@@ -1,7 +1,7 @@
 import { relative, resolve, sep } from "node:path";
 import type { AgentTool, AgentToolContext } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
-import { Text } from "@oh-my-pi/pi-tui";
+import { Text, truncateToWidth } from "@oh-my-pi/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { truncateToVisualLines } from "../../modes/interactive/components/visual-truncate";
 import type { Theme } from "../../modes/interactive/theme/theme";
@@ -293,16 +293,15 @@ export const bashToolRenderer = {
 				const outputLines: string[] = [];
 				if (cachedSkipped && cachedSkipped > 0) {
 					outputLines.push("");
-					outputLines.push(
-						uiTheme.fg(
-							"dim",
-							`${uiTheme.format.ellipsis} (${cachedSkipped} earlier lines, showing ${cachedLines.length} of ${cachedSkipped + cachedLines.length}) (ctrl+o to expand)`,
-						),
+					const skippedLine = uiTheme.fg(
+						"dim",
+						`${uiTheme.format.ellipsis} (${cachedSkipped} earlier lines, showing ${cachedLines.length} of ${cachedSkipped + cachedLines.length}) (ctrl+o to expand)`,
 					);
+					outputLines.push(truncateToWidth(skippedLine, width, uiTheme.fg("dim", uiTheme.format.ellipsis)));
 				}
 				outputLines.push(...cachedLines);
 				if (warningLine) {
-					outputLines.push(warningLine);
+					outputLines.push(truncateToWidth(warningLine, width, uiTheme.fg("warning", uiTheme.format.ellipsis)));
 				}
 				return outputLines;
 			},
