@@ -417,6 +417,7 @@ const readSchema = Type.Object({
 	path: Type.String({ description: "Path to the file to read (relative or absolute)" }),
 	offset: Type.Optional(Type.Number({ description: "Line number to start reading from (1-indexed)" })),
 	limit: Type.Optional(Type.Number({ description: "Maximum number of lines to read" })),
+	lines: Type.Optional(Type.Boolean({ description: "Prepend line numbers to output (default: true)" })),
 });
 
 export interface ReadToolDetails {
@@ -436,7 +437,12 @@ export function createReadTool(session: ToolSession): AgentTool<typeof readSchem
 		parameters: readSchema,
 		execute: async (
 			toolCallId: string,
-			{ path: readPath, offset, limit }: { path: string; offset?: number; limit?: number },
+			{
+				path: readPath,
+				offset,
+				limit,
+				lines,
+			}: { path: string; offset?: number; limit?: number; lines?: boolean },
 			signal?: AbortSignal,
 		) => {
 			const absolutePath = resolveReadPath(readPath, session.cwd);
@@ -599,6 +605,20 @@ export function createReadTool(session: ToolSession): AgentTool<typeof readSchem
 					// Apply truncation (respects both line and byte limits)
 					const truncation = truncateHead(selectedContent);
 
+					// Add line numbers if requested (default: true)
+					const shouldAddLineNumbers = lines !== false;
+					const prependLineNumbers = (text: string, startNum: number): string => {
+						const lines = text.split("\n");
+						const lastLineNum = startNum + lines.length - 1;
+						const padWidth = String(lastLineNum).length;
+						return lines
+							.map((line, i) => {
+								const lineNum = String(startNum + i).padStart(padWidth, " ");
+								return `${lineNum}\t${line}`;
+							})
+							.join("\n");
+					};
+
 					let outputText: string;
 
 					if (truncation.firstLineExceedsLimit) {
@@ -607,8 +627,8 @@ export function createReadTool(session: ToolSession): AgentTool<typeof readSchem
 						const snippet = truncateStringToBytesFromStart(firstLine, DEFAULT_MAX_BYTES);
 						const shownSize = formatSize(snippet.bytes);
 
-						outputText = snippet.text;
-						if (outputText.length > 0) {
+						outputText = shouldAddLineNumbers ? prependLineNumbers(snippet.text, startLineDisplay) : snippet.text;
+						if (snippet.text.length > 0) {
 							outputText += `\n\n[Line ${startLineDisplay} is ${formatSize(
 								firstLineBytes,
 							)}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Showing first ${shownSize} of the line.]`;
@@ -623,7 +643,9 @@ export function createReadTool(session: ToolSession): AgentTool<typeof readSchem
 						const endLineDisplay = startLineDisplay + truncation.outputLines - 1;
 						const nextOffset = endLineDisplay + 1;
 
-						outputText = truncation.content;
+						outputText = shouldAddLineNumbers
+							? prependLineNumbers(truncation.content, startLineDisplay)
+							: truncation.content;
 
 						if (truncation.truncatedBy === "lines") {
 							outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines}. Use offset=${nextOffset} to continue]`;
@@ -638,11 +660,15 @@ export function createReadTool(session: ToolSession): AgentTool<typeof readSchem
 						const remaining = allLines.length - (startLine + userLimitedLines);
 						const nextOffset = startLine + userLimitedLines + 1;
 
-						outputText = truncation.content;
+						outputText = shouldAddLineNumbers
+							? prependLineNumbers(truncation.content, startLineDisplay)
+							: truncation.content;
 						outputText += `\n\n[${remaining} more lines in file. Use offset=${nextOffset} to continue]`;
 					} else {
 						// No truncation, no user limit exceeded
-						outputText = truncation.content;
+						outputText = shouldAddLineNumbers
+							? prependLineNumbers(truncation.content, startLineDisplay)
+							: truncation.content;
 					}
 
 					content = [{ type: "text", text: outputText }];

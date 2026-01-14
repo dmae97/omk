@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `withLines` parameter to read tool for optional line number output (default: true, cat -n format)
+
+### Fixed
+
+- Fixed find tool not matching `**/filename` patterns (was incorrectly using `--full-path` for glob depth wildcards)
+
 ## [5.1.1] - 2026-01-14
 
 ### Fixed

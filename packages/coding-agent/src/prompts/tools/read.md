@@ -5,7 +5,7 @@ Usage:
 - By default, it reads up to {{DEFAULT_MAX_LINES}} lines starting from the beginning of the file
 - You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters
 - Any lines longer than 500 characters will be truncated
-- Results are returned using cat -n format, with line numbers starting at 1
+- By default, results include line numbers (cat -n format). Use `lines: false` to omit them
 - This tool allows Claude Code to read images (eg PNG, JPG, etc). When reading an image file the contents are presented visually as Claude Code is a multimodal LLM.
 - This tool can read PDF files (.pdf). PDFs are processed page by page, extracting both text and visual content for analysis.
 - This tool can read Jupyter notebooks (.ipynb files) and returns all cells with their outputs, combining code, text, and visualizations.
