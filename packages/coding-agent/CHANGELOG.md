@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [5.2.1] - 2026-01-14
 ### Fixed
 
 - Fixed stale diagnostic results by tracking diagnostic versions before file sync operations
