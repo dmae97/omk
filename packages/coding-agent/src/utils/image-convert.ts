@@ -1,11 +1,8 @@
-import { logger } from "../core/logger";
-import { convertToPngWithImageMagick } from "./image-magick";
-import { getPhoton } from "./photon";
+import photon from "@silvia-odwyer/photon-node";
 
 /**
  * Convert image to PNG format for terminal display.
  * Kitty graphics protocol requires PNG format (f=100).
- * Uses Photon (Rust/WASM) if available, falls back to ImageMagick.
  */
 export async function convertToPng(
 	base64Data: string,
@@ -17,7 +14,6 @@ export async function convertToPng(
 	}
 
 	try {
-		const photon = await getPhoton();
 		const image = photon.PhotonImage.new_from_byteslice(new Uint8Array(Buffer.from(base64Data, "base64")));
 		try {
 			const pngBuffer = image.get_bytes();
@@ -28,13 +24,8 @@ export async function convertToPng(
 		} finally {
 			image.free();
 		}
-	} catch (error) {
-		// Photon failed, try ImageMagick fallback
-		logger.error("Failed to convert image to PNG with Photon", {
-			error: error instanceof Error ? error.message : String(error),
-		});
+	} catch {
+		// Conversion failed
+		return null;
 	}
-
-	// Fall back to ImageMagick
-	return convertToPngWithImageMagick(base64Data, mimeType);
 }

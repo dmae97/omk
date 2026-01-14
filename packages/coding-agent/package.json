@@ -44,7 +44,7 @@
 		"@oh-my-pi/pi-git-tool": "workspace:*",
 		"@oh-my-pi/pi-tui": "workspace:*",
 		"@openai/agents": "^0.3.7",
-		"@silvia-odwyer/photon": "^0.3.3",
+		"@silvia-odwyer/photon-node": "^0.3.4",
 		"@sinclair/typebox": "^0.34.46",
 		"ajv": "^8.17.1",
 		"chalk": "^5.5.0",

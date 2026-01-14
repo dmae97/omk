@@ -1,7 +1,5 @@
 import type { ImageContent } from "@oh-my-pi/pi-ai";
-import { logger } from "../core/logger";
-import { getImageDimensionsWithImageMagick, resizeWithImageMagick } from "./image-magick";
-import { getPhoton } from "./photon";
+import photon from "@silvia-odwyer/photon-node";
 
 export interface ImageResizeOptions {
 	maxWidth?: number; // Default: 2000
@@ -30,49 +28,6 @@ const DEFAULT_OPTIONS: Required<ImageResizeOptions> = {
 	jpegQuality: 80,
 };
 
-/**
- * Fallback resize using ImageMagick when Photon is unavailable.
- */
-async function resizeImageWithImageMagick(
-	img: ImageContent,
-	opts: Required<ImageResizeOptions>,
-): Promise<ResizedImage> {
-	const dims = await getImageDimensionsWithImageMagick(img.data);
-	const originalWidth = dims?.width ?? 0;
-	const originalHeight = dims?.height ?? 0;
-
-	const result = await resizeWithImageMagick(
-		img.data,
-		img.mimeType,
-		opts.maxWidth,
-		opts.maxHeight,
-		opts.maxBytes,
-		opts.jpegQuality,
-	);
-
-	if (result) {
-		return {
-			data: result.data,
-			mimeType: result.mimeType,
-			originalWidth,
-			originalHeight,
-			width: result.width,
-			height: result.height,
-			wasResized: true,
-		};
-	}
-
-	return {
-		data: img.data,
-		mimeType: img.mimeType,
-		originalWidth,
-		originalHeight,
-		width: originalWidth,
-		height: originalHeight,
-		wasResized: false,
-	};
-}
-
 /** Helper to pick the smaller of two buffers */
 function pickSmaller(
 	a: { buffer: Uint8Array; mimeType: string },
@@ -85,7 +40,8 @@ function pickSmaller(
  * Resize an image to fit within the specified max dimensions and file size.
  * Returns the original image if it already fits within the limits.
  *
- * Uses Photon (Rust/WASM) for image processing. Falls back to ImageMagick if unavailable.
+ * Uses Photon (Rust/WASM) for image processing. If Photon is not available,
+ * returns the original image unchanged.
  *
  * Strategy for staying under maxBytes:
  * 1. First resize to maxWidth/maxHeight
@@ -97,73 +53,88 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 	const opts = { ...DEFAULT_OPTIONS, ...options };
 	const inputBuffer = Buffer.from(img.data, "base64");
 
+	let image: ReturnType<typeof photon.PhotonImage.new_from_byteslice> | undefined;
 	try {
-		const photon = await getPhoton();
-		const image = photon.PhotonImage.new_from_byteslice(new Uint8Array(inputBuffer));
+		image = photon.PhotonImage.new_from_byteslice(new Uint8Array(inputBuffer));
 
-		try {
-			const originalWidth = image.get_width();
-			const originalHeight = image.get_height();
-			const format = img.mimeType?.split("/")[1] ?? "png";
+		const originalWidth = image.get_width();
+		const originalHeight = image.get_height();
+		const format = img.mimeType?.split("/")[1] ?? "png";
 
-			// Check if already within all limits (dimensions AND size)
-			const originalSize = inputBuffer.length;
-			if (originalWidth <= opts.maxWidth && originalHeight <= opts.maxHeight && originalSize <= opts.maxBytes) {
-				return {
-					data: img.data,
-					mimeType: img.mimeType ?? `image/${format}`,
-					originalWidth,
-					originalHeight,
-					width: originalWidth,
-					height: originalHeight,
-					wasResized: false,
-				};
+		// Check if already within all limits (dimensions AND size)
+		const originalSize = inputBuffer.length;
+		if (originalWidth <= opts.maxWidth && originalHeight <= opts.maxHeight && originalSize <= opts.maxBytes) {
+			return {
+				data: img.data,
+				mimeType: img.mimeType ?? `image/${format}`,
+				originalWidth,
+				originalHeight,
+				width: originalWidth,
+				height: originalHeight,
+				wasResized: false,
+			};
+		}
+
+		// Calculate initial dimensions respecting max limits
+		let targetWidth = originalWidth;
+		let targetHeight = originalHeight;
+
+		if (targetWidth > opts.maxWidth) {
+			targetHeight = Math.round((targetHeight * opts.maxWidth) / targetWidth);
+			targetWidth = opts.maxWidth;
+		}
+		if (targetHeight > opts.maxHeight) {
+			targetWidth = Math.round((targetWidth * opts.maxHeight) / targetHeight);
+			targetHeight = opts.maxHeight;
+		}
+
+		// Helper to resize and encode in both formats, returning the smaller one
+		function tryBothFormats(
+			width: number,
+			height: number,
+			jpegQuality: number,
+		): { buffer: Uint8Array; mimeType: string } {
+			const resized = photon.resize(image!, width, height, photon.SamplingFilter.Lanczos3);
+
+			try {
+				const pngBuffer = resized.get_bytes();
+				const jpegBuffer = resized.get_bytes_jpeg(jpegQuality);
+
+				return pickSmaller(
+					{ buffer: pngBuffer, mimeType: "image/png" },
+					{ buffer: jpegBuffer, mimeType: "image/jpeg" },
+				);
+			} finally {
+				resized.free();
 			}
+		}
 
-			// Calculate initial dimensions respecting max limits
-			let targetWidth = originalWidth;
-			let targetHeight = originalHeight;
+		// Try to produce an image under maxBytes
+		const qualitySteps = [85, 70, 55, 40];
+		const scaleSteps = [1.0, 0.75, 0.5, 0.35, 0.25];
 
-			if (targetWidth > opts.maxWidth) {
-				targetHeight = Math.round((targetHeight * opts.maxWidth) / targetWidth);
-				targetWidth = opts.maxWidth;
-			}
-			if (targetHeight > opts.maxHeight) {
-				targetWidth = Math.round((targetWidth * opts.maxHeight) / targetHeight);
-				targetHeight = opts.maxHeight;
-			}
+		let best: { buffer: Uint8Array; mimeType: string };
+		let finalWidth = targetWidth;
+		let finalHeight = targetHeight;
 
-			// Helper to resize and encode in both formats, returning the smaller one
-			function tryBothFormats(
-				width: number,
-				height: number,
-				jpegQuality: number,
-			): { buffer: Uint8Array; mimeType: string } {
-				const resized = photon.resize(image, width, height, photon.SamplingFilter.Lanczos3);
+		// First attempt: resize to target dimensions, try both formats
+		best = tryBothFormats(targetWidth, targetHeight, opts.jpegQuality);
 
-				try {
-					const pngBuffer = resized.get_bytes();
-					const jpegBuffer = resized.get_bytes_jpeg(jpegQuality);
+		if (best.buffer.length <= opts.maxBytes) {
+			return {
+				data: Buffer.from(best.buffer).toString("base64"),
+				mimeType: best.mimeType,
+				originalWidth,
+				originalHeight,
+				width: finalWidth,
+				height: finalHeight,
+				wasResized: true,
+			};
+		}
 
-					return pickSmaller(
-						{ buffer: pngBuffer, mimeType: "image/png" },
-						{ buffer: jpegBuffer, mimeType: "image/jpeg" },
-					);
-				} finally {
-					resized.free();
-				}
-			}
-
-			// Try to produce an image under maxBytes
-			const qualitySteps = [85, 70, 55, 40];
-			const scaleSteps = [1.0, 0.75, 0.5, 0.35, 0.25];
-
-			let best: { buffer: Uint8Array; mimeType: string };
-			let finalWidth = targetWidth;
-			let finalHeight = targetHeight;
-
-			// First attempt: resize to target dimensions, try both formats
-			best = tryBothFormats(targetWidth, targetHeight, opts.jpegQuality);
+		// Still too large - try JPEG with decreasing quality
+		for (const quality of qualitySteps) {
+			best = tryBothFormats(targetWidth, targetHeight, quality);
 
 			if (best.buffer.length <= opts.maxBytes) {
 				return {
@@ -176,10 +147,19 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 					wasResized: true,
 				};
 			}
+		}
 
-			// Still too large - try JPEG with decreasing quality
+		// Still too large - reduce dimensions progressively
+		for (const scale of scaleSteps) {
+			finalWidth = Math.round(targetWidth * scale);
+			finalHeight = Math.round(targetHeight * scale);
+
+			if (finalWidth < 100 || finalHeight < 100) {
+				break;
+			}
+
 			for (const quality of qualitySteps) {
-				best = tryBothFormats(targetWidth, targetHeight, quality);
+				best = tryBothFormats(finalWidth, finalHeight, quality);
 
 				if (best.buffer.length <= opts.maxBytes) {
 					return {
@@ -193,51 +173,33 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 					};
 				}
 			}
+		}
 
-			// Still too large - reduce dimensions progressively
-			for (const scale of scaleSteps) {
-				finalWidth = Math.round(targetWidth * scale);
-				finalHeight = Math.round(targetHeight * scale);
-
-				if (finalWidth < 100 || finalHeight < 100) {
-					break;
-				}
-
-				for (const quality of qualitySteps) {
-					best = tryBothFormats(finalWidth, finalHeight, quality);
-
-					if (best.buffer.length <= opts.maxBytes) {
-						return {
-							data: Buffer.from(best.buffer).toString("base64"),
-							mimeType: best.mimeType,
-							originalWidth,
-							originalHeight,
-							width: finalWidth,
-							height: finalHeight,
-							wasResized: true,
-						};
-					}
-				}
-			}
-
-			// Last resort: return smallest version we produced
-			return {
-				data: Buffer.from(best.buffer).toString("base64"),
-				mimeType: best.mimeType,
-				originalWidth,
-				originalHeight,
-				width: finalWidth,
-				height: finalHeight,
-				wasResized: true,
-			};
-		} finally {
+		// Last resort: return smallest version we produced
+		return {
+			data: Buffer.from(best.buffer).toString("base64"),
+			mimeType: best.mimeType,
+			originalWidth,
+			originalHeight,
+			width: finalWidth,
+			height: finalHeight,
+			wasResized: true,
+		};
+	} catch {
+		// Failed to load image
+		return {
+			data: img.data,
+			mimeType: img.mimeType,
+			originalWidth: 0,
+			originalHeight: 0,
+			width: 0,
+			height: 0,
+			wasResized: false,
+		};
+	} finally {
+		if (image) {
 			image.free();
 		}
-	} catch (error) {
-		logger.error("Failed to resize image with Photon", {
-			error: error instanceof Error ? error.message : String(error),
-		});
-		return resizeImageWithImageMagick(img, opts);
 	}
 }
 
