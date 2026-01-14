@@ -689,6 +689,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			return activeModel ? formatModelString(activeModel) : undefined;
 		},
 		settings: settingsManager,
+		settingsManager,
 		authStorage,
 		modelRegistry,
 	};

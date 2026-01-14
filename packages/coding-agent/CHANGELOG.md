@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed "database is locked" SQLite errors when running subagents by serializing settings to workers instead of opening the database
+
 ## [5.0.1] - 2026-01-12
 ### Changed
 

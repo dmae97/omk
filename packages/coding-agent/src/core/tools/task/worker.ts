@@ -23,6 +23,7 @@ import { ModelRegistry } from "../../model-registry";
 import { parseModelPattern, parseModelString } from "../../model-resolver";
 import { createAgentSession, discoverAuthStorage, discoverModels } from "../../sdk";
 import { SessionManager } from "../../session-manager";
+import { SettingsManager } from "../../settings-manager";
 import { untilAborted } from "../../utils";
 import type {
 	MCPToolCallResponse,
@@ -296,6 +297,10 @@ async function runTask(runState: RunState, payload: SubagentWorkerStartPayload):
 			: SessionManager.inMemory(payload.cwd);
 		checkAbort();
 
+		// Use serialized settings if provided, otherwise use empty in-memory settings
+		// This avoids opening the SQLite database in worker threads
+		const settingsManager = SettingsManager.inMemory(payload.serializedSettings ?? {});
+
 		// Create agent session (equivalent to CLI's createAgentSession)
 		// Note: hasUI: false disables interactive features
 		const completionInstruction =
@@ -305,6 +310,7 @@ async function runTask(runState: RunState, payload: SubagentWorkerStartPayload):
 			cwd: payload.cwd,
 			authStorage,
 			modelRegistry,
+			settingsManager,
 			model,
 			thinkingLevel,
 			toolNames: payload.toolNames,

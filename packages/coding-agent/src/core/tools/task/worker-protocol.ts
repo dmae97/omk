@@ -1,6 +1,7 @@
 import type { AgentEvent, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { SerializedAuthStorage } from "../../auth-storage";
 import type { SerializedModelRegistry } from "../../model-registry";
+import type { Settings } from "../../settings-manager";
 
 /**
  * MCP tool metadata passed from parent to worker for proxy tool creation.
@@ -51,6 +52,7 @@ export interface SubagentWorkerStartPayload {
 	spawnsEnv?: string;
 	serializedAuth?: SerializedAuthStorage;
 	serializedModels?: SerializedModelRegistry;
+	serializedSettings?: Settings;
 	mcpTools?: MCPToolMetadata[];
 }
 

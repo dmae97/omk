@@ -507,6 +507,14 @@ export class SettingsManager {
 	}
 
 	/**
+	 * Serialize settings for passing to subagent workers.
+	 * Returns the merged settings (global + project + overrides).
+	 */
+	serialize(): Settings {
+		return { ...this.settings };
+	}
+
+	/**
 	 * Load settings from SQLite storage, applying any schema migrations.
 	 * @param storage - AgentStorage instance, or null for in-memory mode
 	 * @returns Parsed and migrated settings, or empty object if storage is null/empty

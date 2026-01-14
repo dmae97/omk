@@ -364,6 +364,7 @@ export async function createTaskTool(
 							},
 							authStorage: session.authStorage,
 							modelRegistry: session.modelRegistry,
+							settingsManager: session.settingsManager,
 							mcpManager: session.mcpManager,
 						});
 					},

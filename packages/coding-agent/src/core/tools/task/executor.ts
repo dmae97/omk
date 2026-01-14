@@ -52,6 +52,7 @@ export interface ExecutorOptions {
 	mcpManager?: MCPManager;
 	authStorage?: AuthStorage;
 	modelRegistry?: ModelRegistry;
+	settingsManager?: { serialize: () => import("../../settings-manager").Settings };
 }
 
 /**
@@ -600,6 +601,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			enableLsp,
 			serializedAuth: options.authStorage?.serialize(),
 			serializedModels: options.modelRegistry?.serialize(),
+			serializedSettings: options.settingsManager?.serialize(),
 			mcpTools: options.mcpManager ? extractMCPToolMetadata(options.mcpManager) : undefined,
 		},
 	};

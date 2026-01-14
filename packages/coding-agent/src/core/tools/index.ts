@@ -116,6 +116,8 @@ export interface ToolSession {
 	modelRegistry?: import("../model-registry").ModelRegistry;
 	/** MCP manager for proxying MCP calls through parent */
 	mcpManager?: import("../mcp/manager").MCPManager;
+	/** Settings manager for passing to subagents (avoids SQLite access in workers) */
+	settingsManager?: { serialize: () => import("../settings-manager").Settings };
 	/** Settings manager (optional) */
 	settings?: {
 		getImageAutoResize(): boolean;
