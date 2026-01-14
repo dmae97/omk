@@ -422,10 +422,11 @@ interface FindRenderArgs {
 const COLLAPSED_LIST_LIMIT = PREVIEW_LIMITS.COLLAPSED_ITEMS;
 
 export const findToolRenderer = {
+	inline: true,
 	renderCall(args: FindRenderArgs, uiTheme: Theme): Component {
 		const ui = createToolUIKit(uiTheme);
 		const label = ui.title("Find");
-		let text = `${label} ${uiTheme.fg("accent", args.pattern || "*")}`;
+		let text = `${uiTheme.format.bullet} ${label} ${uiTheme.fg("accent", args.pattern || "*")}`;
 
 		const meta: string[] = [];
 		if (args.path) meta.push(`in ${args.path}`);
@@ -440,15 +441,16 @@ export const findToolRenderer = {
 	},
 
 	renderResult(
-		result: { content: Array<{ type: string; text?: string }>; details?: FindToolDetails },
+		result: { content: Array<{ type: string; text?: string }>; details?: FindToolDetails; isError?: boolean },
 		{ expanded }: RenderResultOptions,
 		uiTheme: Theme,
 	): Component {
 		const ui = createToolUIKit(uiTheme);
 		const details = result.details;
 
-		if (details?.error) {
-			return new Text(ui.errorMessage(details.error), 0, 0);
+		if (result.isError || details?.error) {
+			const errorText = details?.error || result.content?.find((c) => c.type === "text")?.text || "Unknown error";
+			return new Text(`  ${ui.errorMessage(errorText)}`, 0, 0);
 		}
 
 		const hasDetailedData = details?.fileCount !== undefined;
@@ -456,7 +458,7 @@ export const findToolRenderer = {
 
 		if (!hasDetailedData) {
 			if (!textContent || textContent.includes("No files matching") || textContent.trim() === "") {
-				return new Text(ui.emptyMessage("No files found"), 0, 0);
+				return new Text(`  ${ui.emptyMessage("No files found")}`, 0, 0);
 			}
 
 			const lines = textContent.split("\n").filter((l) => l.trim());
@@ -468,15 +470,15 @@ export const findToolRenderer = {
 			const icon = uiTheme.styledSymbol("status.success", "success");
 			const summary = ui.count("file", lines.length);
 			const expandHint = ui.expandHint(expanded, hasMore);
-			let text = `${icon} ${uiTheme.fg("dim", summary)}${expandHint}`;
+			let text = `  ${icon} ${uiTheme.fg("dim", summary)}${expandHint}`;
 
 			for (let i = 0; i < displayLines.length; i++) {
 				const isLast = i === displayLines.length - 1 && remaining === 0;
 				const branch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
-				text += `\n ${uiTheme.fg("dim", branch)} ${uiTheme.fg("accent", displayLines[i])}`;
+				text += `\n  ${uiTheme.fg("dim", branch)} ${uiTheme.fg("accent", displayLines[i])}`;
 			}
 			if (remaining > 0) {
-				text += `\n ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg("muted", ui.moreItems(remaining, "file"))}`;
+				text += `\n  ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg("muted", ui.moreItems(remaining, "file"))}`;
 			}
 			return new Text(text, 0, 0);
 		}
@@ -486,7 +488,7 @@ export const findToolRenderer = {
 		const files = details?.files ?? [];
 
 		if (fileCount === 0) {
-			return new Text(ui.emptyMessage("No files found"), 0, 0);
+			return new Text(`  ${ui.emptyMessage("No files found")}`, 0, 0);
 		}
 
 		const icon = uiTheme.styledSymbol("status.success", "success");
@@ -496,7 +498,7 @@ export const findToolRenderer = {
 		const hasMoreFiles = files.length > maxFiles;
 		const expandHint = ui.expandHint(expanded, hasMoreFiles);
 
-		let text = `${icon} ${uiTheme.fg("dim", summaryText)}${ui.truncationSuffix(truncated)}${scopeLabel}${expandHint}`;
+		let text = `  ${icon} ${uiTheme.fg("dim", summaryText)}${ui.truncationSuffix(truncated)}${scopeLabel}${expandHint}`;
 
 		const truncationReasons: string[] = [];
 		if (details?.resultLimitReached) {
@@ -519,12 +521,12 @@ export const findToolRenderer = {
 				const entryIcon = isDir
 					? uiTheme.fg("accent", uiTheme.icon.folder)
 					: uiTheme.fg("muted", uiTheme.getLangIcon(lang));
-				text += `\n ${uiTheme.fg("dim", branch)} ${entryIcon} ${uiTheme.fg("accent", entry)}`;
+				text += `\n  ${uiTheme.fg("dim", branch)} ${entryIcon} ${uiTheme.fg("accent", entry)}`;
 			}
 
 			if (hasMoreFiles) {
 				const moreFilesBranch = hasTruncation ? uiTheme.tree.branch : uiTheme.tree.last;
-				text += `\n ${uiTheme.fg("dim", moreFilesBranch)} ${uiTheme.fg(
+				text += `\n  ${uiTheme.fg("dim", moreFilesBranch)} ${uiTheme.fg(
 					"muted",
 					ui.moreItems(files.length - maxFiles, "file"),
 				)}`;
@@ -532,7 +534,7 @@ export const findToolRenderer = {
 		}
 
 		if (hasTruncation) {
-			text += `\n ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg("warning", `truncated: ${truncationReasons.join(", ")}`)}`;
+			text += `\n  ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg("warning", `truncated: ${truncationReasons.join(", ")}`)}`;
 		}
 
 		return new Text(text, 0, 0);

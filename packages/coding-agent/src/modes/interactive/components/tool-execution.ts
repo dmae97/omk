@@ -390,7 +390,8 @@ export class ToolExecutionComponent extends Container {
 		} else if (this.toolName in toolRenderers) {
 			// Built-in tools with renderers
 			const renderer = toolRenderers[this.toolName];
-			this.contentBox.setBgFn(bgFn);
+			// Inline renderers skip background styling
+			this.contentBox.setBgFn(renderer.inline ? undefined : bgFn);
 			this.contentBox.clear();
 
 			const shouldRenderCall = !this.result || !renderer.mergeCallAndResult;

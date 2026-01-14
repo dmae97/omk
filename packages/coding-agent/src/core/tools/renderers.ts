@@ -34,6 +34,8 @@ type ToolRenderer = {
 		args?: unknown,
 	) => Component;
 	mergeCallAndResult?: boolean;
+	/** Render without background box, inline in the response flow */
+	inline?: boolean;
 };
 
 export const toolRenderers: Record<string, ToolRenderer> = {

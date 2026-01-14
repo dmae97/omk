@@ -13,6 +13,7 @@ import {
 	formatBytes,
 	formatCount,
 	formatEmptyMessage,
+	formatErrorMessage,
 	formatExpandHint,
 	formatMeta,
 	formatMoreItems,
@@ -205,9 +206,10 @@ interface LsRenderArgs {
 const COLLAPSED_LIST_LIMIT = PREVIEW_LIMITS.COLLAPSED_ITEMS;
 
 export const lsToolRenderer = {
+	inline: true,
 	renderCall(args: LsRenderArgs, uiTheme: Theme): Component {
 		const label = uiTheme.fg("toolTitle", uiTheme.bold("Ls"));
-		let text = `${label} ${uiTheme.fg("accent", args.path || ".")}`;
+		let text = `${uiTheme.format.bullet} ${label} ${uiTheme.fg("accent", args.path || ".")}`;
 
 		const meta: string[] = [];
 		if (args.limit !== undefined) meta.push(`limit:${args.limit}`);
@@ -217,18 +219,22 @@ export const lsToolRenderer = {
 	},
 
 	renderResult(
-		result: { content: Array<{ type: string; text?: string }>; details?: LsToolDetails },
+		result: { content: Array<{ type: string; text?: string }>; details?: LsToolDetails; isError?: boolean },
 		{ expanded }: RenderResultOptions,
 		uiTheme: Theme,
 	): Component {
 		const details = result.details;
 		const textContent = result.content?.find((c) => c.type === "text")?.text ?? "";
 
+		if (result.isError) {
+			return new Text(`  ${formatErrorMessage(textContent, uiTheme)}`, 0, 0);
+		}
+
 		if (
 			(!textContent || textContent.trim() === "" || textContent.trim() === "(empty directory)") &&
 			(!details?.entries || details.entries.length === 0)
 		) {
-			return new Text(formatEmptyMessage("Empty directory", uiTheme), 0, 0);
+			return new Text(`  ${formatEmptyMessage("Empty directory", uiTheme)}`, 0, 0);
 		}
 
 		let entries: string[] = details?.entries ? [...details.entries] : [];
@@ -238,7 +244,7 @@ export const lsToolRenderer = {
 		}
 
 		if (entries.length === 0) {
-			return new Text(formatEmptyMessage("Empty directory", uiTheme), 0, 0);
+			return new Text(`  ${formatEmptyMessage("Empty directory", uiTheme)}`, 0, 0);
 		}
 
 		let dirCount = details?.dirCount;
@@ -267,7 +273,7 @@ export const lsToolRenderer = {
 		const hasMoreEntries = entries.length > maxEntries;
 		const expandHint = formatExpandHint(uiTheme, expanded, hasMoreEntries);
 
-		let text = `${icon} ${uiTheme.fg("dim", summaryText)}${formatTruncationSuffix(truncated, uiTheme)}${expandHint}`;
+		let text = `  ${icon} ${uiTheme.fg("dim", summaryText)}${formatTruncationSuffix(truncated, uiTheme)}${expandHint}`;
 
 		const truncationReasons: string[] = [];
 		if (details?.entryLimitReached) {
@@ -290,19 +296,19 @@ export const lsToolRenderer = {
 				? uiTheme.fg("accent", uiTheme.icon.folder)
 				: uiTheme.fg("muted", uiTheme.getLangIcon(lang));
 			const entryColor = isDir ? "accent" : "toolOutput";
-			text += `\n ${uiTheme.fg("dim", branch)} ${entryIcon} ${uiTheme.fg(entryColor, entry)}`;
+			text += `\n  ${uiTheme.fg("dim", branch)} ${entryIcon} ${uiTheme.fg(entryColor, entry)}`;
 		}
 
 		if (hasMoreEntries) {
 			const moreEntriesBranch = hasTruncation ? uiTheme.tree.branch : uiTheme.tree.last;
-			text += `\n ${uiTheme.fg("dim", moreEntriesBranch)} ${uiTheme.fg(
+			text += `\n  ${uiTheme.fg("dim", moreEntriesBranch)} ${uiTheme.fg(
 				"muted",
 				formatMoreItems(entries.length - maxEntries, "entry", uiTheme),
 			)}`;
 		}
 
 		if (hasTruncation) {
-			text += `\n ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg(
+			text += `\n  ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg(
 				"warning",
 				`truncated: ${truncationReasons.join(", ")}`,
 			)}`;

@@ -6,6 +6,10 @@
 
 - Added `withLines` parameter to read tool for optional line number output (default: true, cat -n format)
 
+### Changed
+
+- Changed find/grep/ls tool output to render inline without background box for cleaner visual flow
+
 ### Fixed
 
 - Fixed TUI crash when bash output metadata lines exceed terminal width on narrow terminals

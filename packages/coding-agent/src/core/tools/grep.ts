@@ -621,10 +621,11 @@ const COLLAPSED_LIST_LIMIT = PREVIEW_LIMITS.COLLAPSED_ITEMS;
 const COLLAPSED_TEXT_LIMIT = PREVIEW_LIMITS.COLLAPSED_LINES * 2;
 
 export const grepToolRenderer = {
+	inline: true,
 	renderCall(args: GrepRenderArgs, uiTheme: Theme): Component {
 		const ui = createToolUIKit(uiTheme);
 		const label = ui.title("Grep");
-		let text = `${label} ${uiTheme.fg("accent", args.pattern || "?")}`;
+		let text = `${uiTheme.format.bullet} ${label} ${uiTheme.fg("accent", args.pattern || "?")}`;
 
 		const meta: string[] = [];
 		if (args.path) meta.push(`in ${args.path}`);
@@ -647,15 +648,16 @@ export const grepToolRenderer = {
 	},
 
 	renderResult(
-		result: { content: Array<{ type: string; text?: string }>; details?: GrepToolDetails },
+		result: { content: Array<{ type: string; text?: string }>; details?: GrepToolDetails; isError?: boolean },
 		{ expanded }: RenderResultOptions,
 		uiTheme: Theme,
 	): Component {
 		const ui = createToolUIKit(uiTheme);
 		const details = result.details;
 
-		if (details?.error) {
-			return new Text(ui.errorMessage(details.error), 0, 0);
+		if (result.isError || details?.error) {
+			const errorText = details?.error || result.content?.find((c) => c.type === "text")?.text || "Unknown error";
+			return new Text(`  ${ui.errorMessage(errorText)}`, 0, 0);
 		}
 
 		const hasDetailedData = details?.matchCount !== undefined || details?.fileCount !== undefined;
@@ -663,7 +665,7 @@ export const grepToolRenderer = {
 		if (!hasDetailedData) {
 			const textContent = result.content?.find((c) => c.type === "text")?.text;
 			if (!textContent || textContent === "No matches found") {
-				return new Text(ui.emptyMessage("No matches found"), 0, 0);
+				return new Text(`  ${ui.emptyMessage("No matches found")}`, 0, 0);
 			}
 
 			const lines = textContent.split("\n").filter((line) => line.trim() !== "");
@@ -675,16 +677,16 @@ export const grepToolRenderer = {
 			const icon = uiTheme.styledSymbol("status.success", "success");
 			const summary = ui.count("item", lines.length);
 			const expandHint = ui.expandHint(expanded, hasMore);
-			let text = `${icon} ${uiTheme.fg("dim", summary)}${expandHint}`;
+			let text = `  ${icon} ${uiTheme.fg("dim", summary)}${expandHint}`;
 
 			for (let i = 0; i < displayLines.length; i++) {
 				const isLast = i === displayLines.length - 1 && remaining === 0;
 				const branch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
-				text += `\n ${uiTheme.fg("dim", branch)} ${uiTheme.fg("toolOutput", displayLines[i])}`;
+				text += `\n  ${uiTheme.fg("dim", branch)} ${uiTheme.fg("toolOutput", displayLines[i])}`;
 			}
 
 			if (remaining > 0) {
-				text += `\n ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg("muted", ui.moreItems(remaining, "item"))}`;
+				text += `\n  ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg("muted", ui.moreItems(remaining, "item"))}`;
 			}
 
 			return new Text(text, 0, 0);
@@ -697,7 +699,7 @@ export const grepToolRenderer = {
 		const files = details?.files ?? [];
 
 		if (matchCount === 0) {
-			return new Text(ui.emptyMessage("No matches found"), 0, 0);
+			return new Text(`  ${ui.emptyMessage("No matches found")}`, 0, 0);
 		}
 
 		const icon = uiTheme.styledSymbol("status.success", "success");
@@ -715,7 +717,7 @@ export const grepToolRenderer = {
 		const hasMoreFiles = fileEntries.length > maxFiles;
 		const expandHint = ui.expandHint(expanded, hasMoreFiles);
 
-		let text = `${icon} ${uiTheme.fg("dim", summaryText)}${ui.truncationSuffix(truncated)}${scopeLabel}${expandHint}`;
+		let text = `  ${icon} ${uiTheme.fg("dim", summaryText)}${ui.truncationSuffix(truncated)}${scopeLabel}${expandHint}`;
 
 		const truncationReasons: string[] = [];
 		if (details?.matchLimitReached) {
@@ -748,12 +750,12 @@ export const grepToolRenderer = {
 					entry.count !== undefined
 						? ` ${uiTheme.fg("dim", `(${entry.count} match${entry.count !== 1 ? "es" : ""})`)}`
 						: "";
-				text += `\n ${uiTheme.fg("dim", branch)} ${entryIcon} ${uiTheme.fg("accent", entry.path)}${countLabel}`;
+				text += `\n  ${uiTheme.fg("dim", branch)} ${entryIcon} ${uiTheme.fg("accent", entry.path)}${countLabel}`;
 			}
 
 			if (hasMoreFiles) {
 				const moreFilesBranch = hasTruncation ? uiTheme.tree.branch : uiTheme.tree.last;
-				text += `\n ${uiTheme.fg("dim", moreFilesBranch)} ${uiTheme.fg(
+				text += `\n  ${uiTheme.fg("dim", moreFilesBranch)} ${uiTheme.fg(
 					"muted",
 					ui.moreItems(fileEntries.length - maxFiles, "file"),
 				)}`;
@@ -761,7 +763,7 @@ export const grepToolRenderer = {
 		}
 
 		if (hasTruncation) {
-			text += `\n ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg("warning", `truncated: ${truncationReasons.join(", ")}`)}`;
+			text += `\n  ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg("warning", `truncated: ${truncationReasons.join(", ")}`)}`;
 		}
 
 		return new Text(text, 0, 0);
