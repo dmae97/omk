@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-01-14
+
 ### Added
 
 - Added Amazon Bedrock provider with `bedrock-converse-stream` API for Claude models via AWS

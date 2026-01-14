@@ -50,7 +50,7 @@ describe("TruncatedText component", () => {
 
 		// Should contain ellipsis
 		const stripped = lines[0].replace(/\x1b\[[0-9;]*m/g, "");
-		expect(stripped.includes("...")).toBeTruthy();
+		expect(stripped.includes("…")).toBeTruthy();
 	});
 
 	it("preserves ANSI codes in output", () => {
@@ -78,7 +78,7 @@ describe("TruncatedText component", () => {
 		expect(visibleWidth(lines[0])).toBe(20);
 
 		// Should contain reset code before ellipsis
-		expect(lines[0].includes("\x1b[0m...")).toBeTruthy();
+		expect(lines[0].includes("\x1b[0m…")).toBeTruthy();
 	});
 
 	it("handles text that fits without truncation", () => {
@@ -93,7 +93,7 @@ describe("TruncatedText component", () => {
 
 		// Should NOT contain ellipsis
 		const stripped = lines[0].replace(/\x1b\[[0-9;]*m/g, "");
-		expect(!stripped.includes("...")).toBeTruthy();
+		expect(!stripped.includes("…")).toBeTruthy();
 	});
 
 	it("handles empty text", () => {
@@ -132,7 +132,7 @@ describe("TruncatedText component", () => {
 
 		// Should contain ellipsis and not second line
 		const stripped = lines[0].replace(/\x1b\[[0-9;]*m/g, "");
-		expect(stripped.includes("...")).toBeTruthy();
+		expect(stripped.includes("…")).toBeTruthy();
 		expect(!stripped.includes("Second line")).toBeTruthy();
 	});
 });

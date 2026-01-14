@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-01-14
+
 ### Added
 
 - Added `pageUp` and `pageDown` key support with `selectPageUp`/`selectPageDown` editor actions

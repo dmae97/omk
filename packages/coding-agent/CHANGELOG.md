@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-01-14
+
 ### Changed
 
 - Updated light theme colors for WCAG AA compliance (4.5:1 contrast against white background)
