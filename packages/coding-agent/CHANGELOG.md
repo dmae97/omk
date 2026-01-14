@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Fixed stale diagnostic results by tracking diagnostic versions before file sync operations
+- Fixed race condition where LSP diagnostics could return outdated results after file modifications
 
 ## [5.2.0] - 2026-01-14
 

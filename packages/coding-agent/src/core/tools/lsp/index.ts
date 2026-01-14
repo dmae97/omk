@@ -331,12 +331,14 @@ async function waitForDiagnostics(
 	uri: string,
 	timeoutMs = 3000,
 	signal?: AbortSignal,
+	minVersion?: number,
 ): Promise<Diagnostic[]> {
 	const start = Date.now();
 	while (Date.now() - start < timeoutMs) {
 		signal?.throwIfAborted();
 		const diagnostics = client.diagnostics.get(uri);
-		if (diagnostics !== undefined) return diagnostics;
+		const versionOk = minVersion === undefined || client.diagnosticsVersion > minVersion;
+		if (diagnostics !== undefined && versionOk) return diagnostics;
 		await sleep(100);
 	}
 	return client.diagnostics.get(uri) ?? [];
@@ -462,12 +464,35 @@ export interface FileDiagnosticsResult {
 	formatter?: FileFormatResult;
 }
 
+/** Captured diagnostic versions per server (before sync) */
+type DiagnosticVersions = Map<string, number>;
+
+/**
+ * Capture current diagnostic versions for all LSP servers.
+ * Call this BEFORE syncing content to detect stale diagnostics later.
+ */
+async function captureDiagnosticVersions(
+	cwd: string,
+	servers: Array<[string, ServerConfig]>,
+): Promise<DiagnosticVersions> {
+	const versions = new Map<string, number>();
+	await Promise.allSettled(
+		servers.map(async ([serverName, serverConfig]) => {
+			if (serverConfig.createClient) return;
+			const client = await getOrCreateClient(serverConfig, cwd);
+			versions.set(serverName, client.diagnosticsVersion);
+		}),
+	);
+	return versions;
+}
+
 /**
  * Get diagnostics for a file using LSP or custom linter client.
  *
  * @param absolutePath - Absolute path to the file
  * @param cwd - Working directory for LSP config resolution
  * @param servers - Servers to query diagnostics for
+ * @param minVersions - Minimum diagnostic versions per server (to detect stale results)
  * @returns Diagnostic results or undefined if no servers
  */
 async function getDiagnosticsForFile(
@@ -475,6 +500,7 @@ async function getDiagnosticsForFile(
 	cwd: string,
 	servers: Array<[string, ServerConfig]>,
 	signal?: AbortSignal,
+	minVersions?: DiagnosticVersions,
 ): Promise<FileDiagnosticsResult | undefined> {
 	if (servers.length === 0) {
 		return undefined;
@@ -499,8 +525,9 @@ async function getDiagnosticsForFile(
 			// Default: use LSP
 			const client = await getOrCreateClient(serverConfig, cwd);
 			signal?.throwIfAborted();
-			// Content already synced + didSave sent, just wait for diagnostics
-			const diagnostics = await waitForDiagnostics(client, uri, 3000, signal);
+			// Content already synced + didSave sent, wait for fresh diagnostics
+			const minVersion = minVersions?.get(serverName);
+			const diagnostics = await waitForDiagnostics(client, uri, 3000, signal, minVersion);
 			return { serverName, diagnostics };
 		}),
 	);
@@ -675,6 +702,9 @@ export function createLspWritethrough(cwd: string, options?: WritethroughOptions
 		const getWritePromise = once(() => writeContent(finalContent));
 		const useCustomFormatter = enableFormat && customLinterServers.length > 0;
 
+		// Capture diagnostic versions BEFORE syncing to detect stale diagnostics
+		const minVersions = enableDiagnostics ? await captureDiagnosticVersions(cwd, servers) : undefined;
+
 		let formatter: FileFormatResult | undefined;
 		let diagnostics: FileDiagnosticsResult | undefined;
 		try {
@@ -710,9 +740,9 @@ export function createLspWritethrough(cwd: string, options?: WritethroughOptions
 				// 5. Notify saved to LSP servers
 				await notifyFileSaved(dst, cwd, lspServers, operationSignal);
 
-				// 6. Get diagnostics from all servers
+				// 6. Get diagnostics from all servers (wait for fresh results)
 				if (enableDiagnostics) {
-					diagnostics = await getDiagnosticsForFile(dst, cwd, servers, operationSignal);
+					diagnostics = await getDiagnosticsForFile(dst, cwd, servers, operationSignal, minVersions);
 				}
 			});
 		} catch {
@@ -829,8 +859,9 @@ export function createLspTool(session: ToolSession): AgentTool<typeof lspSchema,
 								continue;
 							}
 							const client = await getOrCreateClient(serverConfig, session.cwd);
+							const minVersion = client.diagnosticsVersion;
 							await refreshFile(client, resolved);
-							const diagnostics = await waitForDiagnostics(client, uri);
+							const diagnostics = await waitForDiagnostics(client, uri, 3000, undefined, minVersion);
 							allDiagnostics.push(...diagnostics);
 						} catch {
 							// Server failed, continue with others
@@ -1091,8 +1122,9 @@ export function createLspTool(session: ToolSession): AgentTool<typeof lspSchema,
 							};
 						}
 
+						const actionsMinVersion = client.diagnosticsVersion;
 						await refreshFile(client, targetFile);
-						const diagnostics = await waitForDiagnostics(client, uri);
+						const diagnostics = await waitForDiagnostics(client, uri, 3000, undefined, actionsMinVersion);
 						const endLine = (end_line ?? line ?? 1) - 1;
 						const endCharacter = (end_character ?? column ?? 1) - 1;
 						const range = { start: position, end: { line: endLine, character: endCharacter } };
