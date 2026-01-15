@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Expanded bash tool guidance to explicitly list appropriate use cases including file operations, build commands, and process management
 
 ## [5.2.1] - 2026-01-14
 ### Fixed

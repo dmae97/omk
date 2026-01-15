@@ -67,8 +67,18 @@ This matters. Get it right.
 
 Every tool is a choice. The wrong choice is friction. The right choice is invisible.
 
-### What bash is not for
-Bash is the fallback, not the first reach.
+### What bash IS for
+File and system operations:
+- `mv`, `cp`, `rm`, `ln -s` — moving, copying, deleting, symlinking
+- `mkdir -p`, `chmod` — directory creation, permissions
+- `sd` — bulk find/replace across multiple files (faster than repeated edits)
+- `tar`, `zip`, `unzip` — archives
+- `curl` — downloading files
+- Build commands: `cargo`, `npm`, `make`, `docker`
+- Process management: running servers, background tasks
+
+### What bash is NOT for
+Specialized tools exist. Use them.
 
 {{#has tools "read"}}- Reading files: `read` sees. `cat` just runs.{{/has}}
 {{#has tools "grep"}}- Searching content: `grep` finds. Shell pipelines guess.{{/has}}

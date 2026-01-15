@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Replaced detailed Codex system instructions with simplified pi assistant instructions
+- Updated internal documentation references to use pi-internal:// protocol
 
 ## [5.2.1] - 2026-01-14
 
