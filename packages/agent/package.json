@@ -1,6 +1,6 @@
 {
 	"name": "@oh-my-pi/pi-agent-core",
-	"version": "5.3.0",
+	"version": "5.3.1",
 	"description": "General-purpose agent with transport abstraction, state management, and attachment support",
 	"type": "module",
 	"main": "./src/index.ts",
