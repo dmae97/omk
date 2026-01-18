@@ -168,7 +168,18 @@ async function runLoop(
 			newMessages.push(message);
 
 			if (message.stopReason === "error" || message.stopReason === "aborted") {
-				stream.push({ type: "turn_end", message, toolResults: [] });
+				// Create placeholder tool results for any tool calls in the aborted message
+				// This maintains the tool_use/tool_result pairing that the API requires
+				type ToolCallContent = Extract<AssistantMessage["content"][number], { type: "toolCall" }>;
+				const toolCalls = message.content.filter((c): c is ToolCallContent => c.type === "toolCall");
+				const toolResults: ToolResultMessage[] = [];
+				for (const toolCall of toolCalls) {
+					const result = createAbortedToolResult(toolCall, stream, message.stopReason);
+					currentContext.messages.push(result);
+					newMessages.push(result);
+					toolResults.push(result);
+				}
+				stream.push({ type: "turn_end", message, toolResults });
 				stream.push({ type: "agent_end", messages: newMessages });
 				stream.end(newMessages);
 				return;
@@ -455,6 +466,51 @@ function skipToolCall(
 ): ToolResultMessage {
 	const result: AgentToolResult<any> = {
 		content: [{ type: "text", text: "Skipped due to queued user message." }],
+		details: {},
+	};
+
+	stream.push({
+		type: "tool_execution_start",
+		toolCallId: toolCall.id,
+		toolName: toolCall.name,
+		args: toolCall.arguments,
+	});
+	stream.push({
+		type: "tool_execution_end",
+		toolCallId: toolCall.id,
+		toolName: toolCall.name,
+		result,
+		isError: true,
+	});
+
+	const toolResultMessage: ToolResultMessage = {
+		role: "toolResult",
+		toolCallId: toolCall.id,
+		toolName: toolCall.name,
+		content: result.content,
+		details: {},
+		isError: true,
+		timestamp: Date.now(),
+	};
+
+	stream.push({ type: "message_start", message: toolResultMessage });
+	stream.push({ type: "message_end", message: toolResultMessage });
+
+	return toolResultMessage;
+}
+
+/**
+ * Create a tool result for a tool call that was aborted or errored before execution.
+ * Maintains the tool_use/tool_result pairing required by the API.
+ */
+function createAbortedToolResult(
+	toolCall: Extract<AssistantMessage["content"][number], { type: "toolCall" }>,
+	stream: EventStream<AgentEvent, AgentMessage[]>,
+	reason: "aborted" | "error",
+): ToolResultMessage {
+	const message = reason === "aborted" ? "Tool execution was aborted." : "Tool execution failed due to an error.";
+	const result: AgentToolResult<any> = {
+		content: [{ type: "text", text: message }],
 		details: {},
 	};
 

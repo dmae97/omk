@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Added proper tool result messages for tool calls that are aborted or error out
+- Ensured tool_use/tool_result pairing is maintained when tool execution fails
 
 ## [5.5.0] - 2026-01-18
 
