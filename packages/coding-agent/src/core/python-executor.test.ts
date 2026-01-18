@@ -5,6 +5,7 @@ import {
 	executePythonWithKernel,
 	getPreludeDocs,
 	type PythonKernelExecutor,
+	resetPreludeDocsCache,
 	warmPythonEnvironment,
 } from "./python-executor";
 import { type KernelExecuteOptions, type KernelExecuteResult, type PreludeHelper, PythonKernel } from "./python-kernel";
@@ -138,6 +139,7 @@ describe("executePythonWithKernel", () => {
 
 afterEach(async () => {
 	await disposeAllKernelSessions();
+	resetPreludeDocsCache();
 	vi.restoreAllMocks();
 });
 

@@ -119,6 +119,10 @@ export function getPreludeDocs(): PreludeHelper[] {
 	return cachedPreludeDocs ?? [];
 }
 
+export function resetPreludeDocsCache(): void {
+	cachedPreludeDocs = null;
+}
+
 async function createKernelSession(sessionId: string, cwd: string, useSharedGateway?: boolean): Promise<KernelSession> {
 	const kernel = await PythonKernel.start({ cwd, useSharedGateway });
 	const session: KernelSession = {

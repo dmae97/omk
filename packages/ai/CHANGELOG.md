@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added automatic retry logic for OpenAI Codex responses with configurable delay and max retries
@@ -16,6 +15,8 @@
 
 ### Fixed
 
+- Fixed orphaned tool call handling to ensure proper tool_use/tool_result pairing for all assistant messages
+- Fixed message transformation to insert synthetic tool results for errored/aborted assistant messages with tool calls
 - Fixed tool prefix handling in Claude provider to use case-insensitive comparison
 - Fixed Gemini 3 model handling to treat unsigned tool calls as context-only with anti-mimicry context
 - Fixed message transformation to filter out empty error messages from conversation history

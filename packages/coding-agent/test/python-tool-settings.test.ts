@@ -20,6 +20,7 @@ function createSettings(overrides?: Partial<ToolSession["settings"]>): ToolSessi
 		getBashInterceptorRules: () => [],
 		getPythonToolMode: () => "ipy-only",
 		getPythonKernelMode: () => "session",
+		getPythonSharedGateway: () => true,
 		...overrides,
 	};
 }
@@ -81,7 +82,10 @@ describe("python tool settings", () => {
 
 		expect(executeSpy).toHaveBeenCalledWith(
 			"print(1)",
-			expect.objectContaining({ kernelMode: "per-call", sessionId: "session.json" }),
+			expect.objectContaining({
+				kernelMode: "per-call",
+				sessionId: `session:session.json:workdir:${testDir}`,
+			}),
 		);
 	});
 });

@@ -24,6 +24,7 @@ export interface MCPToolCallRequest {
 	callId: string;
 	toolName: string;
 	params: Record<string, unknown>;
+	timeoutMs?: number;
 }
 
 /**
@@ -43,6 +44,7 @@ export interface PythonToolCallRequest {
 	type: "python_tool_call";
 	callId: string;
 	params: Record<string, unknown>;
+	timeoutMs?: number;
 }
 
 export interface PythonToolCallResponse {
@@ -54,6 +56,12 @@ export interface PythonToolCallResponse {
 		isError?: boolean;
 	};
 	error?: string;
+}
+
+export interface PythonToolCallCancel {
+	type: "python_tool_cancel";
+	callId: string;
+	reason?: string;
 }
 
 export interface SubagentWorkerStartPayload {
@@ -78,10 +86,12 @@ export type SubagentWorkerRequest =
 	| { type: "start"; payload: SubagentWorkerStartPayload }
 	| { type: "abort" }
 	| MCPToolCallResponse
-	| PythonToolCallResponse;
+	| PythonToolCallResponse
+	| PythonToolCallCancel;
 
 export type SubagentWorkerResponse =
 	| { type: "event"; event: AgentEvent }
 	| { type: "done"; exitCode: number; durationMs: number; error?: string; aborted?: boolean }
 	| MCPToolCallRequest
-	| PythonToolCallRequest;
+	| PythonToolCallRequest
+	| PythonToolCallCancel;

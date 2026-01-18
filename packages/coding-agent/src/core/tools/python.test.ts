@@ -77,7 +77,8 @@ describe("python tool docs template", () => {
 		const tool = createPythonTool(createSession());
 
 		expect(tool.description).toContain("### File I/O");
-		expect(tool.description).toContain("- `read(path)` — Read file contents.");
+		expect(tool.description).toContain("read(path)");
+		expect(tool.description).toContain("Read file contents.");
 
 		spy.mockRestore();
 	});

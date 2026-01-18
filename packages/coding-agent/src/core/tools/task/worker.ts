@@ -19,6 +19,7 @@ import type { TSchema } from "@sinclair/typebox";
 import type { AgentSessionEvent } from "../../agent-session";
 import { AuthStorage } from "../../auth-storage";
 import type { CustomTool } from "../../custom-tools/types";
+import { logger } from "../../logger";
 import { ModelRegistry } from "../../model-registry";
 import { parseModelPattern, parseModelString } from "../../model-resolver";
 import { createAgentSession, discoverAuthStorage, discoverModels } from "../../sdk";
@@ -54,13 +55,12 @@ interface PendingMCPCall {
 interface PendingPythonCall {
 	resolve: (result: PythonToolCallResponse["result"]) => void;
 	reject: (error: Error) => void;
-	timeoutId: ReturnType<typeof setTimeout>;
+	timeoutId?: ReturnType<typeof setTimeout>;
 }
 
 const pendingMCPCalls = new Map<string, PendingMCPCall>();
 const pendingPythonCalls = new Map<string, PendingPythonCall>();
 const MCP_CALL_TIMEOUT_MS = 60_000;
-const PYTHON_CALL_TIMEOUT_MS = 300_000;
 let mcpCallIdCounter = 0;
 let pythonCallIdCounter = 0;
 
@@ -123,6 +123,7 @@ function callMCPToolViaParent(
 			callId,
 			toolName,
 			params,
+			timeoutMs,
 		} as SubagentWorkerResponse);
 	});
 }
@@ -130,7 +131,7 @@ function callMCPToolViaParent(
 function callPythonToolViaParent(
 	params: PythonToolParams,
 	signal?: AbortSignal,
-	timeoutMs = PYTHON_CALL_TIMEOUT_MS,
+	timeoutMs?: number,
 ): Promise<PythonToolCallResponse["result"]> {
 	return new Promise((resolve, reject) => {
 		const callId = generatePythonCallId();
@@ -139,13 +140,23 @@ function callPythonToolViaParent(
 			return;
 		}
 
-		const timeoutId = setTimeout(() => {
-			pendingPythonCalls.delete(callId);
-			reject(new Error(`Python call timed out after ${timeoutMs}ms`));
-		}, timeoutMs);
+		const sendCancel = (reason: string) => {
+			postMessageSafe({ type: "python_tool_cancel", callId, reason } as SubagentWorkerResponse);
+		};
+
+		const timeoutId =
+			typeof timeoutMs === "number" && Number.isFinite(timeoutMs)
+				? setTimeout(() => {
+						pendingPythonCalls.delete(callId);
+						sendCancel(`Python call timed out after ${timeoutMs}ms`);
+						reject(new Error(`Python call timed out after ${timeoutMs}ms`));
+					}, timeoutMs)
+				: undefined;
 
 		const cleanup = () => {
-			clearTimeout(timeoutId);
+			if (timeoutId) {
+				clearTimeout(timeoutId);
+			}
 			pendingPythonCalls.delete(callId);
 		};
 
@@ -154,6 +165,7 @@ function callPythonToolViaParent(
 				"abort",
 				() => {
 					cleanup();
+					sendCancel("Aborted");
 					reject(new Error("Aborted"));
 				},
 				{ once: true },
@@ -176,6 +188,7 @@ function callPythonToolViaParent(
 			type: "python_tool_call",
 			callId,
 			params,
+			timeoutMs,
 		} as SubagentWorkerResponse);
 	});
 }
@@ -197,6 +210,22 @@ function handlePythonToolResult(response: PythonToolCallResponse): void {
 		pending.reject(new Error(response.error));
 	} else {
 		pending.resolve(response.result);
+	}
+}
+
+function rejectPendingCalls(reason: string): void {
+	const error = new Error(reason);
+	const mcpCalls = Array.from(pendingMCPCalls.values());
+	const pythonCalls = Array.from(pendingPythonCalls.values());
+	pendingMCPCalls.clear();
+	pendingPythonCalls.clear();
+	for (const pending of mcpCalls) {
+		clearTimeout(pending.timeoutId);
+		pending.reject(error);
+	}
+	for (const pending of pythonCalls) {
+		clearTimeout(pending.timeoutId);
+		pending.reject(error);
 	}
 }
 
@@ -237,12 +266,12 @@ function createMCPProxyTool(metadata: MCPToolMetadata): CustomTool<TSchema> {
 	};
 }
 
-function getPythonCallTimeoutMs(params: PythonToolParams): number {
+function getPythonCallTimeoutMs(params: PythonToolParams): number | undefined {
 	const timeout = params.timeout;
 	if (typeof timeout === "number" && Number.isFinite(timeout) && timeout > 0) {
-		return timeout * 1000 + 5000;
+		return Math.max(1000, Math.round(timeout * 1000) + 1000);
 	}
-	return PYTHON_CALL_TIMEOUT_MS;
+	return undefined;
 }
 
 function createPythonProxyTool(): CustomTool<typeof pythonSchema> {
@@ -463,12 +492,16 @@ async function runTask(runState: RunState, payload: SubagentWorkerStartPayload):
 				{
 					sendMessage: (message, options) => {
 						session.sendCustomMessage(message, options).catch((e) => {
-							console.error(`Extension sendMessage failed: ${e instanceof Error ? e.message : String(e)}`);
+							logger.error("Extension sendMessage failed", {
+								error: e instanceof Error ? e.message : String(e),
+							});
 						});
 					},
 					sendUserMessage: (content, options) => {
 						session.sendUserMessage(content, options).catch((e) => {
-							console.error(`Extension sendUserMessage failed: ${e instanceof Error ? e.message : String(e)}`);
+							logger.error("Extension sendUserMessage failed", {
+								error: e instanceof Error ? e.message : String(e),
+							});
 						});
 					},
 					appendEntry: (customType, data) => {
@@ -508,7 +541,7 @@ async function runTask(runState: RunState, payload: SubagentWorkerStartPayload):
 				},
 			);
 			extensionRunner.onError((err) => {
-				console.error(`Extension error (${err.extensionPath}): ${err.error}`);
+				logger.error("Extension error", { path: err.extensionPath, error: err.error });
 			});
 			await extensionRunner.emit({ type: "session_start" });
 		}
@@ -570,6 +603,7 @@ Call complete now.`;
 		}
 
 		sessionAbortController.abort();
+		rejectPendingCalls("Worker finished");
 
 		if (runState.unsubscribe) {
 			try {
@@ -611,8 +645,10 @@ function handleAbort(): void {
 	const runState = activeRun;
 	if (!runState) {
 		pendingAbort = true;
+		rejectPendingCalls("Aborted");
 		return;
 	}
+	rejectPendingCalls("Aborted");
 	runState.abortController.abort();
 	if (runState.session) {
 		void runState.session.abort();

@@ -1,4 +1,16 @@
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+	closeSync,
+	existsSync,
+	mkdirSync,
+	openSync,
+	readdirSync,
+	readFileSync,
+	renameSync,
+	statSync,
+	unlinkSync,
+	utimesSync,
+	writeFileSync,
+} from "node:fs";
 import { createServer } from "node:net";
 import { delimiter, join } from "node:path";
 import type { Subprocess } from "bun";
@@ -10,11 +22,13 @@ import { logger } from "./logger";
 const GATEWAY_DIR_NAME = "python-gateway";
 const GATEWAY_INFO_FILE = "gateway.json";
 const GATEWAY_LOCK_FILE = "gateway.lock";
+const GATEWAY_CLIENT_PREFIX = "client-";
 const GATEWAY_STARTUP_TIMEOUT_MS = 30000;
 const GATEWAY_IDLE_TIMEOUT_MS = 30000;
-const GATEWAY_LOCK_TIMEOUT_MS = 5000;
+const GATEWAY_LOCK_TIMEOUT_MS = GATEWAY_STARTUP_TIMEOUT_MS + 5000;
 const GATEWAY_LOCK_RETRY_MS = 50;
-const GATEWAY_LOCK_STALE_MS = 30000;
+const GATEWAY_LOCK_STALE_MS = GATEWAY_STARTUP_TIMEOUT_MS * 2;
+const GATEWAY_LOCK_HEARTBEAT_MS = 5000;
 const HEALTH_CHECK_TIMEOUT_MS = 3000;
 
 const DEFAULT_ENV_ALLOWLIST = new Set([
@@ -43,6 +57,46 @@ const DEFAULT_ENV_ALLOWLIST = new Set([
 	"CONDA_DEFAULT_ENV",
 	"VIRTUAL_ENV",
 	"PYTHONPATH",
+	"SYSTEMROOT",
+	"COMSPEC",
+	"WINDIR",
+	"USERPROFILE",
+	"LOCALAPPDATA",
+	"APPDATA",
+	"PROGRAMDATA",
+	"PATHEXT",
+	"USERNAME",
+	"HOMEDRIVE",
+	"HOMEPATH",
+]);
+
+const WINDOWS_ENV_ALLOWLIST = new Set([
+	"APPDATA",
+	"COMPUTERNAME",
+	"COMSPEC",
+	"HOMEDRIVE",
+	"HOMEPATH",
+	"LOCALAPPDATA",
+	"NUMBER_OF_PROCESSORS",
+	"OS",
+	"PATH",
+	"PATHEXT",
+	"PROCESSOR_ARCHITECTURE",
+	"PROCESSOR_IDENTIFIER",
+	"PROGRAMDATA",
+	"PROGRAMFILES",
+	"PROGRAMFILES(X86)",
+	"PROGRAMW6432",
+	"SESSIONNAME",
+	"SYSTEMDRIVE",
+	"SYSTEMROOT",
+	"TEMP",
+	"TMP",
+	"USERDOMAIN",
+	"USERDOMAIN_ROAMINGPROFILE",
+	"USERPROFILE",
+	"USERNAME",
+	"WINDIR",
 ]);
 
 const DEFAULT_ENV_ALLOW_PREFIXES = ["LC_", "XDG_", "OMP_"];
@@ -59,6 +113,29 @@ const DEFAULT_ENV_DENYLIST = new Set([
 	"MISTRAL_API_KEY",
 ]);
 
+const CASE_INSENSITIVE_ENV = process.platform === "win32";
+const ACTIVE_ENV_ALLOWLIST = CASE_INSENSITIVE_ENV ? WINDOWS_ENV_ALLOWLIST : DEFAULT_ENV_ALLOWLIST;
+
+const NORMALIZED_ALLOWLIST = new Set(
+	Array.from(ACTIVE_ENV_ALLOWLIST, (key) => (CASE_INSENSITIVE_ENV ? key.toUpperCase() : key)),
+);
+const NORMALIZED_DENYLIST = new Set(
+	Array.from(DEFAULT_ENV_DENYLIST, (key) => (CASE_INSENSITIVE_ENV ? key.toUpperCase() : key)),
+);
+const NORMALIZED_ALLOW_PREFIXES = CASE_INSENSITIVE_ENV
+	? DEFAULT_ENV_ALLOW_PREFIXES.map((prefix) => prefix.toUpperCase())
+	: DEFAULT_ENV_ALLOW_PREFIXES;
+
+function normalizeEnvKey(key: string): string {
+	return CASE_INSENSITIVE_ENV ? key.toUpperCase() : key;
+}
+
+function resolvePathKey(env: Record<string, string | undefined>): string {
+	if (!CASE_INSENSITIVE_ENV) return "PATH";
+	const match = Object.keys(env).find((candidate) => candidate.toLowerCase() === "path");
+	return match ?? "PATH";
+}
+
 export interface GatewayInfo {
 	url: string;
 	pid: number;
@@ -67,6 +144,11 @@ export interface GatewayInfo {
 	cwd: string;
 	pythonPath?: string;
 	venvPath?: string | null;
+}
+
+interface GatewayLockInfo {
+	pid: number;
+	startedAt: number;
 }
 
 interface AcquireResult {
@@ -78,17 +160,19 @@ let localGatewayProcess: Subprocess | null = null;
 let localGatewayUrl: string | null = null;
 let idleShutdownTimer: ReturnType<typeof setTimeout> | null = null;
 let isCoordinatorInitialized = false;
+let localClientFile: string | null = null;
 
 function filterEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
 	const filtered: Record<string, string | undefined> = {};
 	for (const [key, value] of Object.entries(env)) {
 		if (value === undefined) continue;
-		if (DEFAULT_ENV_DENYLIST.has(key)) continue;
-		if (DEFAULT_ENV_ALLOWLIST.has(key)) {
+		const normalizedKey = normalizeEnvKey(key);
+		if (NORMALIZED_DENYLIST.has(normalizedKey)) continue;
+		if (NORMALIZED_ALLOWLIST.has(normalizedKey)) {
 			filtered[key] = value;
 			continue;
 		}
-		if (DEFAULT_ENV_ALLOW_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+		if (NORMALIZED_ALLOW_PREFIXES.some((prefix) => normalizedKey.startsWith(prefix))) {
 			filtered[key] = value;
 		}
 	}
@@ -114,7 +198,9 @@ async function resolvePythonRuntime(cwd: string, baseEnv: Record<string, string 
 		const binDir = process.platform === "win32" ? join(venvPath, "Scripts") : join(venvPath, "bin");
 		const pythonCandidate = join(binDir, process.platform === "win32" ? "python.exe" : "python");
 		if (await Bun.file(pythonCandidate).exists()) {
-			env.PATH = env.PATH ? `${binDir}${delimiter}${env.PATH}` : binDir;
+			const pathKey = resolvePathKey(env);
+			const currentPath = env[pathKey];
+			env[pathKey] = currentPath ? `${binDir}${delimiter}${currentPath}` : binDir;
 			return { pythonPath: pythonCandidate, env, venvPath };
 		}
 	}
@@ -162,6 +248,32 @@ function getGatewayLockPath(): string {
 	return join(getGatewayDir(), GATEWAY_LOCK_FILE);
 }
 
+function writeLockInfo(lockPath: string, fd: number): void {
+	const payload: GatewayLockInfo = { pid: process.pid, startedAt: Date.now() };
+	try {
+		writeFileSync(fd, JSON.stringify(payload));
+	} catch {
+		try {
+			writeFileSync(lockPath, JSON.stringify(payload));
+		} catch {
+			// Ignore lock write failures
+		}
+	}
+}
+
+function readLockInfo(lockPath: string): GatewayLockInfo | null {
+	try {
+		const raw = readFileSync(lockPath, "utf-8");
+		const parsed = JSON.parse(raw) as Partial<GatewayLockInfo>;
+		if (typeof parsed.pid === "number" && Number.isFinite(parsed.pid)) {
+			return { pid: parsed.pid, startedAt: typeof parsed.startedAt === "number" ? parsed.startedAt : 0 };
+		}
+	} catch {
+		// Ignore parse errors
+	}
+	return null;
+}
+
 function ensureGatewayDir(): void {
 	const dir = getGatewayDir();
 	if (!existsSync(dir)) {
@@ -176,9 +288,19 @@ async function withGatewayLock<T>(handler: () => Promise<T>): Promise<T> {
 	while (true) {
 		try {
 			const fd = openSync(lockPath, "wx");
+			const heartbeat = setInterval(() => {
+				try {
+					const now = new Date();
+					utimesSync(lockPath, now, now);
+				} catch {
+					// Ignore heartbeat errors
+				}
+			}, GATEWAY_LOCK_HEARTBEAT_MS);
 			try {
+				writeLockInfo(lockPath, fd);
 				return await handler();
 			} finally {
+				clearInterval(heartbeat);
 				try {
 					closeSync(fd);
 					unlinkSync(lockPath);
@@ -192,10 +314,16 @@ async function withGatewayLock<T>(handler: () => Promise<T>): Promise<T> {
 				let removedStale = false;
 				try {
 					const stat = statSync(lockPath);
-					if (Date.now() - stat.mtimeMs > GATEWAY_LOCK_STALE_MS) {
+					const lockInfo = readLockInfo(lockPath);
+					const lockPid = lockInfo?.pid;
+					const lockAgeMs = lockInfo?.startedAt ? Date.now() - lockInfo.startedAt : Date.now() - stat.mtimeMs;
+					const staleByTime = lockAgeMs > GATEWAY_LOCK_STALE_MS;
+					const staleByPid = lockPid !== undefined && !isPidRunning(lockPid);
+					const staleByMissingPid = lockPid === undefined && staleByTime;
+					if (staleByPid || staleByMissingPid) {
 						unlinkSync(lockPath);
 						removedStale = true;
-						logger.warn("Removed stale shared gateway lock", { path: lockPath });
+						logger.warn("Removed stale shared gateway lock", { path: lockPath, pid: lockPid });
 					}
 				} catch {
 					// Ignore stat errors; keep waiting
@@ -218,7 +346,24 @@ function readGatewayInfo(): GatewayInfo | null {
 	if (!existsSync(infoPath)) return null;
 	try {
 		const content = readFileSync(infoPath, "utf-8");
-		return JSON.parse(content) as GatewayInfo;
+		const parsed = JSON.parse(content) as Partial<GatewayInfo>;
+		if (!parsed || typeof parsed !== "object") return null;
+		if (typeof parsed.url !== "string" || typeof parsed.pid !== "number" || typeof parsed.startedAt !== "number") {
+			return null;
+		}
+		if (typeof parsed.cwd !== "string") return null;
+		const clients = pruneStaleClientInfos(listClientInfos());
+		const totalRefCount = clients.reduce((sum, client) => sum + client.info.refCount, 0);
+		const recoveredRefCount = clients.length > 0 ? totalRefCount : 0;
+		return {
+			url: parsed.url,
+			pid: parsed.pid,
+			startedAt: parsed.startedAt,
+			refCount: recoveredRefCount,
+			cwd: parsed.cwd,
+			pythonPath: typeof parsed.pythonPath === "string" ? parsed.pythonPath : undefined,
+			venvPath: typeof parsed.venvPath === "string" || parsed.venvPath === null ? parsed.venvPath : undefined,
+		};
 	} catch {
 		return null;
 	}
@@ -226,7 +371,9 @@ function readGatewayInfo(): GatewayInfo | null {
 
 function writeGatewayInfo(info: GatewayInfo): void {
 	const infoPath = getGatewayInfoPath();
-	writeFileSync(infoPath, JSON.stringify(info, null, 2));
+	const tempPath = `${infoPath}.tmp`;
+	writeFileSync(tempPath, JSON.stringify(info, null, 2));
+	renameSync(tempPath, infoPath);
 }
 
 function clearGatewayInfo(): void {
@@ -247,6 +394,103 @@ function isPidRunning(pid: number): boolean {
 	} catch {
 		return false;
 	}
+}
+
+interface GatewayClientInfo {
+	pid: number;
+	refCount: number;
+	updatedAt?: number;
+}
+
+function getClientFilePath(pid: number): string {
+	return join(getGatewayDir(), `${GATEWAY_CLIENT_PREFIX}${pid}.json`);
+}
+
+function readClientInfo(path: string): GatewayClientInfo | null {
+	try {
+		const raw = readFileSync(path, "utf-8");
+		const parsed = JSON.parse(raw) as GatewayClientInfo;
+		if (typeof parsed.pid !== "number" || typeof parsed.refCount !== "number") return null;
+		return parsed;
+	} catch {
+		return null;
+	}
+}
+
+function listClientInfos(): Array<{ path: string; info: GatewayClientInfo }> {
+	const dir = getGatewayDir();
+	if (!existsSync(dir)) return [];
+	const entries = readdirSync(dir);
+	const results: Array<{ path: string; info: GatewayClientInfo }> = [];
+	for (const entry of entries) {
+		if (!entry.startsWith(GATEWAY_CLIENT_PREFIX)) continue;
+		const path = join(dir, entry);
+		const info = readClientInfo(path);
+		if (!info) continue;
+		results.push({ path, info });
+	}
+	return results;
+}
+
+function pruneStaleClientInfos(
+	clients: Array<{ path: string; info: GatewayClientInfo }>,
+): Array<{ path: string; info: GatewayClientInfo }> {
+	const active: Array<{ path: string; info: GatewayClientInfo }> = [];
+	for (const client of clients) {
+		if (!isPidRunning(client.info.pid)) {
+			try {
+				unlinkSync(client.path);
+			} catch {
+				// Ignore cleanup errors
+			}
+			continue;
+		}
+		active.push(client);
+	}
+	return active;
+}
+
+function updateLocalClientRefCount(delta: number): { totalRefCount: number; localRefCount: number } {
+	ensureGatewayDir();
+	const clients = pruneStaleClientInfos(listClientInfos());
+	const localPath = localClientFile ?? getClientFilePath(process.pid);
+	const localEntry = clients.find((client) => client.info.pid === process.pid);
+	const baseCount = localEntry?.info.refCount ?? 0;
+	const nextCount = Math.max(0, baseCount + delta);
+	const otherClients = clients.filter((client) => client.info.pid !== process.pid);
+
+	if (nextCount <= 0) {
+		if (localEntry) {
+			try {
+				unlinkSync(localEntry.path);
+			} catch {
+				// Ignore cleanup errors
+			}
+		}
+		if (localClientFile === localPath) {
+			localClientFile = null;
+		}
+	} else {
+		const payload: GatewayClientInfo = { pid: process.pid, refCount: nextCount, updatedAt: Date.now() };
+		writeFileSync(localPath, JSON.stringify(payload, null, 2));
+		localClientFile = localPath;
+	}
+
+	const totalRefCount =
+		otherClients.reduce((sum, client) => sum + client.info.refCount, 0) + (nextCount > 0 ? nextCount : 0);
+	return { totalRefCount, localRefCount: nextCount };
+}
+
+function clearClientFiles(): void {
+	const clients = listClientInfos();
+	for (const client of clients) {
+		try {
+			unlinkSync(client.path);
+		} catch {
+			// Ignore cleanup errors
+		}
+	}
+	localClientFile = null;
 }
 
 async function isGatewayHealthy(url: string): Promise<boolean> {
@@ -355,22 +599,33 @@ function scheduleIdleShutdown(): void {
 		try {
 			await withGatewayLock(async () => {
 				const info = readGatewayInfo();
-				if (info && info.refCount === 0) {
-					logger.debug("Shutting down idle shared gateway", { pid: info.pid });
-					if (localGatewayProcess) {
-						shutdownLocalGateway();
-					} else if (isPidRunning(info.pid)) {
-						try {
-							killProcessTree(info.pid);
-						} catch (err) {
-							logger.warn("Failed to kill idle shared gateway", {
-								error: err instanceof Error ? err.message : String(err),
-								pid: info.pid,
-							});
-						}
-					}
-					clearGatewayInfo();
+				if (!info) {
+					clearClientFiles();
+					return;
 				}
+				const clients = pruneStaleClientInfos(listClientInfos());
+				const totalRefCount = clients.reduce((sum, client) => sum + client.info.refCount, 0);
+				if (totalRefCount > 0) {
+					if (info.refCount !== totalRefCount) {
+						writeGatewayInfo({ ...info, refCount: totalRefCount });
+					}
+					return;
+				}
+				logger.debug("Shutting down idle shared gateway", { pid: info.pid });
+				if (localGatewayProcess) {
+					shutdownLocalGateway();
+				} else if (isPidRunning(info.pid)) {
+					try {
+						killProcessTree(info.pid);
+					} catch (err) {
+						logger.warn("Failed to kill idle shared gateway", {
+							error: err instanceof Error ? err.message : String(err),
+							pid: info.pid,
+						});
+					}
+				}
+				clearGatewayInfo();
+				clearClientFiles();
 			});
 		} catch (err) {
 			logger.warn("Failed to shutdown idle shared gateway", {
@@ -433,7 +688,8 @@ export async function acquireSharedGateway(cwd: string): Promise<AcquireResult |
 					});
 					return null;
 				}
-				const updatedInfo = { ...existingInfo, refCount: existingInfo.refCount + 1 };
+				const { totalRefCount } = updateLocalClientRefCount(1);
+				const updatedInfo = { ...existingInfo, refCount: totalRefCount };
 				writeGatewayInfo(updatedInfo);
 				cancelIdleShutdown();
 				logger.debug("Reusing shared gateway", { url: existingInfo.url, refCount: updatedInfo.refCount });
@@ -454,14 +710,16 @@ export async function acquireSharedGateway(cwd: string): Promise<AcquireResult |
 					}
 				}
 				clearGatewayInfo();
+				clearClientFiles();
 			}
 
 			const { url, pid, pythonPath, venvPath } = await startGatewayProcess(cwd);
+			const { totalRefCount } = updateLocalClientRefCount(1);
 			const info: GatewayInfo = {
 				url,
 				pid,
 				startedAt: Date.now(),
-				refCount: 1,
+				refCount: totalRefCount,
 				cwd,
 				pythonPath,
 				venvPath,
@@ -484,10 +742,11 @@ export async function releaseSharedGateway(): Promise<void> {
 
 	try {
 		await withGatewayLock(async () => {
+			const { totalRefCount } = updateLocalClientRefCount(-1);
 			const info = readGatewayInfo();
 			if (!info) return;
 
-			const newRefCount = Math.max(0, info.refCount - 1);
+			const newRefCount = Math.max(0, totalRefCount);
 			if (newRefCount === 0) {
 				const updatedInfo = { ...info, refCount: 0 };
 				writeGatewayInfo(updatedInfo);
@@ -538,12 +797,15 @@ export function getGatewayStatus(): GatewayStatus {
 		};
 	}
 	const active = isPidRunning(info.pid);
+	const clients = pruneStaleClientInfos(listClientInfos());
+	const clientRefCount = clients.reduce((sum, client) => sum + client.info.refCount, 0);
+	const refCount = clientRefCount > 0 ? clientRefCount : info.refCount;
 	return {
 		active,
-		shared: active && info.refCount > 1,
+		shared: active && refCount > 1,
 		url: info.url,
 		pid: info.pid,
-		refCount: info.refCount,
+		refCount,
 		cwd: info.cwd,
 		uptime: Date.now() - info.startedAt,
 	};
@@ -551,10 +813,20 @@ export function getGatewayStatus(): GatewayStatus {
 
 export async function shutdownSharedGateway(): Promise<void> {
 	cancelIdleShutdown();
-	const info = readGatewayInfo();
-	if (info) {
-		clearGatewayInfo();
+	try {
+		await withGatewayLock(async () => {
+			const info = readGatewayInfo();
+			if (info) {
+				clearGatewayInfo();
+			}
+			clearClientFiles();
+		});
+	} catch (err) {
+		logger.warn("Failed to shutdown shared gateway", {
+			error: err instanceof Error ? err.message : String(err),
+		});
+	} finally {
+		shutdownLocalGateway();
+		isCoordinatorInitialized = false;
 	}
-	shutdownLocalGateway();
-	isCoordinatorInitialized = false;
 }

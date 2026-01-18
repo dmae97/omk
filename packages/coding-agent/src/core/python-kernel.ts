@@ -60,6 +60,56 @@ const DEFAULT_ENV_ALLOWLIST = new Set([
 	"CONDA_DEFAULT_ENV",
 	"VIRTUAL_ENV",
 	"PYTHONPATH",
+	"APPDATA",
+	"COMSPEC",
+	"COMPUTERNAME",
+	"HOMEDRIVE",
+	"HOMEPATH",
+	"LOCALAPPDATA",
+	"NUMBER_OF_PROCESSORS",
+	"OS",
+	"PATHEXT",
+	"PROCESSOR_ARCHITECTURE",
+	"PROCESSOR_IDENTIFIER",
+	"PROGRAMDATA",
+	"PROGRAMFILES",
+	"PROGRAMFILES(X86)",
+	"PROGRAMW6432",
+	"SYSTEMDRIVE",
+	"SYSTEMROOT",
+	"USERDOMAIN",
+	"USERPROFILE",
+	"USERNAME",
+	"WINDIR",
+]);
+
+const WINDOWS_ENV_ALLOWLIST = new Set([
+	"APPDATA",
+	"COMPUTERNAME",
+	"COMSPEC",
+	"HOMEDRIVE",
+	"HOMEPATH",
+	"LOCALAPPDATA",
+	"NUMBER_OF_PROCESSORS",
+	"OS",
+	"PATH",
+	"PATHEXT",
+	"PROCESSOR_ARCHITECTURE",
+	"PROCESSOR_IDENTIFIER",
+	"PROGRAMDATA",
+	"PROGRAMFILES",
+	"PROGRAMFILES(X86)",
+	"PROGRAMW6432",
+	"SESSIONNAME",
+	"SYSTEMDRIVE",
+	"SYSTEMROOT",
+	"TEMP",
+	"TMP",
+	"USERDOMAIN",
+	"USERDOMAIN_ROAMINGPROFILE",
+	"USERPROFILE",
+	"USERNAME",
+	"WINDIR",
 ]);
 
 const DEFAULT_ENV_ALLOW_PREFIXES = ["LC_", "XDG_", "OMP_"];
@@ -75,6 +125,30 @@ const DEFAULT_ENV_DENYLIST = new Set([
 	"AZURE_OPENAI_API_KEY",
 	"MISTRAL_API_KEY",
 ]);
+
+const CASE_INSENSITIVE_ENV = process.platform === "win32";
+const BASE_ENV_ALLOWLIST = CASE_INSENSITIVE_ENV
+	? new Set([...DEFAULT_ENV_ALLOWLIST, ...WINDOWS_ENV_ALLOWLIST])
+	: DEFAULT_ENV_ALLOWLIST;
+const NORMALIZED_ALLOWLIST = new Set(
+	Array.from(BASE_ENV_ALLOWLIST, (key) => (CASE_INSENSITIVE_ENV ? key.toUpperCase() : key)),
+);
+const NORMALIZED_DENYLIST = new Set(
+	Array.from(DEFAULT_ENV_DENYLIST, (key) => (CASE_INSENSITIVE_ENV ? key.toUpperCase() : key)),
+);
+const NORMALIZED_ALLOW_PREFIXES = CASE_INSENSITIVE_ENV
+	? DEFAULT_ENV_ALLOW_PREFIXES.map((prefix) => prefix.toUpperCase())
+	: DEFAULT_ENV_ALLOW_PREFIXES;
+
+function normalizeEnvKey(key: string): string {
+	return CASE_INSENSITIVE_ENV ? key.toUpperCase() : key;
+}
+
+function resolvePathKey(env: Record<string, string | undefined>): string {
+	if (!CASE_INSENSITIVE_ENV) return "PATH";
+	const match = Object.keys(env).find((candidate) => candidate.toLowerCase() === "path");
+	return match ?? "PATH";
+}
 
 export interface JupyterHeader {
 	msg_id: string;
@@ -149,12 +223,14 @@ function filterEnv(env: Record<string, string | undefined>): Record<string, stri
 	const filtered: Record<string, string | undefined> = {};
 	for (const [key, value] of Object.entries(env)) {
 		if (value === undefined) continue;
-		if (DEFAULT_ENV_DENYLIST.has(key)) continue;
-		if (DEFAULT_ENV_ALLOWLIST.has(key)) {
-			filtered[key] = value;
+		const normalizedKey = normalizeEnvKey(key);
+		if (NORMALIZED_DENYLIST.has(normalizedKey)) continue;
+		if (NORMALIZED_ALLOWLIST.has(normalizedKey)) {
+			const destKey = normalizedKey === "PATH" ? "PATH" : key;
+			filtered[destKey] = value;
 			continue;
 		}
-		if (DEFAULT_ENV_ALLOW_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+		if (NORMALIZED_ALLOW_PREFIXES.some((prefix) => normalizedKey.startsWith(prefix))) {
 			filtered[key] = value;
 		}
 	}
@@ -180,7 +256,9 @@ async function resolvePythonRuntime(cwd: string, baseEnv: Record<string, string 
 		const binDir = process.platform === "win32" ? join(venvPath, "Scripts") : join(venvPath, "bin");
 		const pythonCandidate = join(binDir, process.platform === "win32" ? "python.exe" : "python");
 		if (await Bun.file(pythonCandidate).exists()) {
-			env.PATH = env.PATH ? `${binDir}${delimiter}${env.PATH}` : binDir;
+			const pathKey = resolvePathKey(env);
+			const currentPath = env[pathKey];
+			env[pathKey] = currentPath ? `${binDir}${delimiter}${currentPath}` : binDir;
 			return { pythonPath: pythonCandidate, env };
 		}
 	}
@@ -396,6 +474,7 @@ export class PythonKernel {
 	#heartbeatFailures = 0;
 	#messageHandlers = new Map<string, (msg: JupyterMessage) => void>();
 	#channelHandlers = new Map<string, Set<(msg: JupyterMessage) => void>>();
+	#pendingExecutions = new Map<string, (reason: string) => void>();
 
 	private constructor(
 		id: string,
@@ -647,25 +726,47 @@ export class PythonKernel {
 		return new Promise((resolve, reject) => {
 			const ws = new WebSocket(wsUrl);
 			ws.binaryType = "arraybuffer";
+			let settled = false;
 
 			const timeout = setTimeout(() => {
 				ws.close();
-				reject(new Error("WebSocket connection timeout"));
+				if (!settled) {
+					settled = true;
+					reject(new Error("WebSocket connection timeout"));
+				}
 			}, 10000);
 
 			ws.onopen = () => {
+				if (settled) return;
+				settled = true;
 				clearTimeout(timeout);
 				this.#ws = ws;
 				resolve();
 			};
 
 			ws.onerror = (event) => {
-				clearTimeout(timeout);
-				reject(new Error(`WebSocket error: ${event}`));
+				const error = new Error(`WebSocket error: ${event}`);
+				if (!settled) {
+					settled = true;
+					clearTimeout(timeout);
+					reject(error);
+					return;
+				}
+				this.#alive = false;
+				this.#ws = null;
+				this.abortPendingExecutions(error.message);
 			};
 
 			ws.onclose = () => {
 				this.#alive = false;
+				this.#ws = null;
+				if (!settled) {
+					settled = true;
+					clearTimeout(timeout);
+					reject(new Error("WebSocket closed before connection"));
+					return;
+				}
+				this.abortPendingExecutions("WebSocket closed");
 			};
 
 			ws.onmessage = (event) => {
@@ -699,6 +800,16 @@ export class PythonKernel {
 				}
 			};
 		});
+	}
+
+	private abortPendingExecutions(reason: string): void {
+		if (this.#pendingExecutions.size === 0) return;
+		for (const cancel of this.#pendingExecutions.values()) {
+			cancel(reason);
+		}
+		this.#pendingExecutions.clear();
+		this.#messageHandlers.clear();
+		logger.warn("Aborted pending Python executions", { reason });
 	}
 
 	isAlive(): boolean {
@@ -742,26 +853,51 @@ export class PythonKernel {
 		let cancelled = false;
 		let timedOut = false;
 
-		using executionSignal = new ScopeSignal({ signal: options?.signal, timeout: options?.timeoutMs });
+		const executionSignal = new ScopeSignal({ signal: options?.signal, timeout: options?.timeoutMs });
 
 		return new Promise((resolve) => {
-			const cleanup = () => {
+			let resolved = false;
+			const finalize = () => {
+				if (resolved) return;
+				resolved = true;
 				this.#messageHandlers.delete(msgId);
+				this.#pendingExecutions.delete(msgId);
+				executionSignal[Symbol.dispose]();
 				resolve({ status, executionCount, error, cancelled, timedOut, stdinRequested });
 			};
 
 			const checkDone = () => {
 				if (replyReceived && idleReceived) {
-					cleanup();
+					finalize();
 				}
 			};
+
+			const cancelFromClose = (reason: string) => {
+				if (resolved) return;
+				cancelled = true;
+				timedOut = false;
+				if (options?.onChunk) {
+					void options.onChunk(`[kernel] ${reason}\n`);
+				}
+				finalize();
+			};
+
+			this.#pendingExecutions.set(msgId, cancelFromClose);
 
 			executionSignal.catch(async () => {
 				cancelled = true;
 				timedOut = executionSignal.timedOut();
-				await this.interrupt();
-				cleanup();
+				try {
+					await this.interrupt();
+				} finally {
+					finalize();
+				}
 			});
+
+			if (executionSignal.aborted) {
+				cancelFromClose("Execution aborted");
+				return;
+			}
 
 			this.#messageHandlers.set(msgId, async (response) => {
 				switch (response.header.msg_type) {
@@ -844,7 +980,12 @@ export class PythonKernel {
 				}
 			});
 
-			this.sendMessage(msg);
+			try {
+				this.sendMessage(msg);
+			} catch {
+				cancelled = true;
+				finalize();
+			}
 		});
 	}
 
@@ -909,6 +1050,7 @@ export class PythonKernel {
 		if (this.#disposed) return;
 		this.#disposed = true;
 		this.#alive = false;
+		this.abortPendingExecutions("Kernel shutdown");
 
 		if (this.#heartbeatTimer) {
 			clearInterval(this.#heartbeatTimer);

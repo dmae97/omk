@@ -1,7 +1,24 @@
 import { describe, expect, it } from "bun:test";
-import { createPythonTool } from "./tools/python";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { resetPreludeDocsCache, warmPythonEnvironment } from "./python-executor";
+import { createPythonTool, getPythonToolDescription } from "./tools/python";
 
-const pythonPath = Bun.which("python") ?? Bun.which("python3");
+const resolvePythonPath = (): string | null => {
+	const venvPath = process.env.VIRTUAL_ENV;
+	const candidates = [venvPath, join(process.cwd(), ".venv"), join(process.cwd(), "venv")].filter(Boolean) as string[];
+	for (const candidate of candidates) {
+		const binDir = process.platform === "win32" ? "Scripts" : "bin";
+		const exeName = process.platform === "win32" ? "python.exe" : "python";
+		const pythonCandidate = join(candidate, binDir, exeName);
+		if (existsSync(pythonCandidate)) {
+			return pythonCandidate;
+		}
+	}
+	return Bun.which("python") ?? Bun.which("python3");
+};
+
+const pythonPath = resolvePythonPath();
 const hasKernelDeps = (() => {
 	if (!pythonPath) return false;
 	const result = Bun.spawnSync(
@@ -31,12 +48,36 @@ describe.skipIf(!shouldRun)("PYTHON_PRELUDE integration", () => {
 			"mv",
 			"cp",
 			"ls",
+			"cat",
+			"touch",
 			"find",
 			"grep",
 			"rgrep",
 			"head",
 			"tail",
 			"replace",
+			"sed",
+			"rsed",
+			"wc",
+			"sort_lines",
+			"uniq",
+			"cols",
+			"tree",
+			"stat",
+			"diff",
+			"glob_files",
+			"batch",
+			"lines",
+			"delete_lines",
+			"delete_matching",
+			"insert_at",
+			"git_status",
+			"git_diff",
+			"git_log",
+			"git_show",
+			"git_file_at",
+			"git_branch",
+			"git_has_changes",
 			"run",
 			"sh",
 		];
@@ -63,15 +104,37 @@ describe.skipIf(!shouldRun)("PYTHON_PRELUDE integration", () => {
 
 		const tool = createPythonTool(session);
 		const code = `
-helpers = ${JSON.stringify(helpers)}
-missing = [name for name in helpers if name not in globals() or not callable(globals()[name])]
-print("HELPERS_OK=" + ("1" if not missing else "0"))
-if missing:
-    print("MISSING=" + ",".join(missing))
-`;
+	helpers = ${JSON.stringify(helpers)}
+	missing = [name for name in helpers if name not in globals() or not callable(globals()[name])]
+	docs = __omp_prelude_docs__()
+	doc_names = [d.get("name") for d in docs]
+	doc_categories = [d.get("category") for d in docs]
+	print("HELPERS_OK=" + ("1" if not missing else "0"))
+	print("DOCS_OK=" + ("1" if "pwd" in doc_names and "Navigation" in doc_categories else "0"))
+	if missing:
+	    print("MISSING=" + ",".join(missing))
+	`;
 
 		const result = await tool.execute("tool-call-1", { code });
 		const output = result.content.find((item) => item.type === "text")?.text ?? "";
 		expect(output).toContain("HELPERS_OK=1");
+		expect(output).toContain("DOCS_OK=1");
+	});
+
+	it("exposes prelude docs via warmup", async () => {
+		resetPreludeDocsCache();
+		const result = await warmPythonEnvironment(process.cwd(), undefined, false);
+		expect(result.ok).toBe(true);
+		const names = result.docs.map((doc) => doc.name);
+		expect(names).toContain("pwd");
+	});
+
+	it("renders prelude docs in python tool description", async () => {
+		resetPreludeDocsCache();
+		const result = await warmPythonEnvironment(process.cwd(), undefined, false);
+		expect(result.ok).toBe(true);
+		const description = getPythonToolDescription();
+		expect(description).toContain("pwd");
+		expect(description).not.toContain("Documentation unavailable");
 	});
 });

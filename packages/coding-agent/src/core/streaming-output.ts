@@ -12,10 +12,19 @@ interface OutputFileSink {
 
 export function createSanitizer(): TransformStream<Uint8Array, string> {
 	const decoder = new TextDecoder();
+	const sanitizeText = (text: string) => sanitizeBinaryOutput(stripAnsi(text)).replace(/\r/g, "");
 	return new TransformStream({
 		transform(chunk, controller) {
-			const text = sanitizeBinaryOutput(stripAnsi(decoder.decode(chunk, { stream: true }))).replace(/\r/g, "");
-			controller.enqueue(text);
+			const text = sanitizeText(decoder.decode(chunk, { stream: true }));
+			if (text) {
+				controller.enqueue(text);
+			}
+		},
+		flush(controller) {
+			const text = sanitizeText(decoder.decode());
+			if (text) {
+				controller.enqueue(text);
+			}
 		},
 	});
 }
@@ -40,7 +49,7 @@ export function createOutputSink(
 ): WritableStream<string> & {
 	dump: (annotation?: string) => { output: string; truncated: boolean; fullOutputPath?: string };
 } {
-	const chunks: string[] = [];
+	const chunks: Array<{ text: string; bytes: number }> = [];
 	let chunkBytes = 0;
 	let totalBytes = 0;
 	let fullOutputPath: string | undefined;
@@ -48,22 +57,26 @@ export function createOutputSink(
 
 	const sink = new WritableStream<string>({
 		write(text) {
-			totalBytes += text.length;
+			const bytes = Buffer.byteLength(text, "utf-8");
+			totalBytes += bytes;
 
 			if (totalBytes > spillThreshold && !fullOutputPath) {
 				fullOutputPath = join(tmpdir(), `omp-${nanoid()}.buffer`);
 				const stream = Bun.file(fullOutputPath).writer();
-				chunks.forEach((chunk) => {
-					stream.write(chunk);
-				});
+				for (const chunk of chunks) {
+					stream.write(chunk.text);
+				}
 				fullOutputStream = stream;
 			}
 			fullOutputStream?.write(text);
 
-			chunks.push(text);
-			chunkBytes += text.length;
+			chunks.push({ text, bytes });
+			chunkBytes += bytes;
 			while (chunkBytes > maxBuffer && chunks.length > 1) {
-				chunkBytes -= chunks.shift()!.length;
+				const removed = chunks.shift();
+				if (removed) {
+					chunkBytes -= removed.bytes;
+				}
 			}
 
 			onChunk?.(text);
@@ -76,9 +89,10 @@ export function createOutputSink(
 	return Object.assign(sink, {
 		dump(annotation?: string) {
 			if (annotation) {
-				chunks.push(`\n\n${annotation}`);
+				const text = `\n\n${annotation}`;
+				chunks.push({ text, bytes: Buffer.byteLength(text, "utf-8") });
 			}
-			const full = chunks.join("");
+			const full = chunks.map((chunk) => chunk.text).join("");
 			const { content, truncated } = truncateTail(full);
 			return { output: truncated ? content : full, truncated, fullOutputPath };
 		},

@@ -2,10 +2,10 @@ import { describe, expect, it } from "bun:test";
 import { SettingsManager } from "./settings-manager";
 
 describe("SettingsManager python settings", () => {
-	it("defaults to ipy-only and session", () => {
+	it("defaults to both and session", () => {
 		const settings = SettingsManager.inMemory();
 
-		expect(settings.getPythonToolMode()).toBe("ipy-only");
+		expect(settings.getPythonToolMode()).toBe("both");
 		expect(settings.getPythonKernelMode()).toBe("session");
 	});
 

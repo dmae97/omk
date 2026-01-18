@@ -54,7 +54,7 @@ describe("python tool execution", () => {
 			expect.objectContaining({
 				cwd: tempDir,
 				timeout: 5000,
-				sessionId: "session-file",
+				sessionId: `session:session-file:workdir:${tempDir}`,
 				kernelMode: "per-call",
 				reset: true,
 			}),

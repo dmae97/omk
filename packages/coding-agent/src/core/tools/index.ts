@@ -136,6 +136,7 @@ export interface ToolSession {
 		getBashInterceptorRules(): BashInterceptorRule[];
 		getPythonToolMode?(): "ipy-only" | "bash-only" | "both";
 		getPythonKernelMode?(): "session" | "per-call";
+		getPythonSharedGateway?(): boolean;
 	};
 }
 
@@ -221,13 +222,18 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 				reason: availability.reason,
 			});
 		} else if (!isTestEnv && getPreludeDocs().length === 0) {
-			void warmPythonEnvironment(session.cwd, session.getSessionFile?.() ?? `cwd:${session.cwd}`).catch((err) => {
-				logger.warn("Failed to warm Python environment", {
-					error: err instanceof Error ? err.message : String(err),
-				});
-			});
+			const sessionFile = session.getSessionFile?.() ?? undefined;
+			const warmSessionId = sessionFile ? `session:${sessionFile}:workdir:${session.cwd}` : `cwd:${session.cwd}`;
+			void warmPythonEnvironment(session.cwd, warmSessionId, session.settings?.getPythonSharedGateway?.()).catch(
+				(err) => {
+					logger.warn("Failed to warm Python environment", {
+						error: err instanceof Error ? err.message : String(err),
+					});
+				},
+			);
 		}
 	}
+
 	const effectiveMode = pythonAvailable ? pythonMode : "bash-only";
 	const allowBash = effectiveMode !== "ipy-only";
 	const allowPython = effectiveMode !== "bash-only";

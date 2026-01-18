@@ -270,6 +270,15 @@ export const SETTINGS_DEFS: SettingDef[] = [
 		set: (sm, v) => sm.setPythonKernelMode(v as PythonKernelMode),
 	},
 	{
+		id: "pythonSharedGateway",
+		tab: "tools",
+		type: "boolean",
+		label: "Python shared gateway",
+		description: "Share IPython kernel gateway across pi instances",
+		get: (sm) => sm.getPythonSharedGateway(),
+		set: (sm, v) => sm.setPythonSharedGateway(v),
+	},
+	{
 		id: "editFuzzyMatch",
 		tab: "tools",
 		type: "boolean",

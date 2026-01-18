@@ -178,4 +178,6 @@ export async function runPrintMode(session: AgentSession, options: PrintModeOpti
 			else resolve();
 		});
 	});
+
+	await session.dispose();
 }

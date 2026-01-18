@@ -119,19 +119,30 @@ export function transformMessages<TApi extends Api>(messages: Message[], model: 
 				existingToolResultIds = new Set();
 			}
 
-			// Track tool calls from this assistant message unless it errored
 			const assistantMsg = msg as AssistantMessage;
 			const isErroredAssistant = assistantMsg.stopReason === "error" || assistantMsg.stopReason === "aborted";
 			const toolCalls = assistantMsg.content.filter((b) => b.type === "toolCall") as ToolCall[];
-			if (!isErroredAssistant && toolCalls.length > 0) {
-				pendingToolCalls = toolCalls;
-				existingToolResultIds = new Set();
-			} else if (isErroredAssistant) {
-				pendingToolCalls = [];
-				existingToolResultIds = new Set();
-			}
 
 			result.push(msg);
+
+			// For errored/aborted messages with tool calls, insert synthetic results immediately
+			// to maintain tool_use/tool_result pairing required by the API
+			if (isErroredAssistant && toolCalls.length > 0) {
+				for (const tc of toolCalls) {
+					result.push({
+						role: "toolResult",
+						toolCallId: tc.id,
+						toolName: tc.name,
+						content: [{ type: "text", text: "Tool execution was aborted" }],
+						isError: true,
+						timestamp: Date.now(),
+					} as ToolResultMessage);
+				}
+			} else if (!isErroredAssistant && toolCalls.length > 0) {
+				// Track tool calls to check for orphaned calls later
+				pendingToolCalls = toolCalls;
+				existingToolResultIds = new Set();
+			}
 		} else if (msg.role === "toolResult") {
 			existingToolResultIds.add(msg.toolCallId);
 			result.push(msg);
@@ -156,6 +167,23 @@ export function transformMessages<TApi extends Api>(messages: Message[], model: 
 			result.push(msg);
 		} else {
 			result.push(msg);
+		}
+	}
+
+	// Handle orphaned tool calls at the end of the message array
+	// This can happen if the last message is an assistant with tool calls that never got results
+	if (pendingToolCalls.length > 0) {
+		for (const tc of pendingToolCalls) {
+			if (!existingToolResultIds.has(tc.id)) {
+				result.push({
+					role: "toolResult",
+					toolCallId: tc.id,
+					toolName: tc.name,
+					content: [{ type: "text", text: "No result provided" }],
+					isError: true,
+					timestamp: Date.now(),
+				} as ToolResultMessage);
+			}
 		}
 	}
 

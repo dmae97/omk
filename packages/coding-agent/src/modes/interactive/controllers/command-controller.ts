@@ -174,40 +174,37 @@ export class CommandController {
 		};
 
 		try {
-			const result = await new Promise<{ stdout: string; stderr: string; code: number | null }>((resolve) => {
-				proc = Bun.spawn(["gh", "gist", "create", "--public=false", tmpFile], {
-					stdout: "pipe",
-					stderr: "pipe",
-				});
-				let stdout = "";
-				let stderr = "";
-
-				const stdoutReader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
-				const stderrReader = (proc.stderr as ReadableStream<Uint8Array>).getReader();
-				const decoder = new TextDecoder();
-
-				(async () => {
-					try {
-						while (true) {
-							const { done, value } = await stdoutReader.read();
-							if (done) break;
-							stdout += decoder.decode(value);
-						}
-					} catch {}
-				})();
-
-				(async () => {
-					try {
-						while (true) {
-							const { done, value } = await stderrReader.read();
-							if (done) break;
-							stderr += decoder.decode(value);
-						}
-					} catch {}
-				})();
-
-				proc.exited.then((code) => resolve({ stdout, stderr, code }));
+			proc = Bun.spawn(["gh", "gist", "create", "--public=false", tmpFile], {
+				stdout: "pipe",
+				stderr: "pipe",
 			});
+
+			const readStream = async (stream: ReadableStream<Uint8Array> | null): Promise<string> => {
+				if (!stream) return "";
+				const reader = stream.getReader();
+				const decoder = new TextDecoder();
+				let output = "";
+				try {
+					while (true) {
+						const { done, value } = await reader.read();
+						if (done) break;
+						output += decoder.decode(value, { stream: true });
+					}
+				} catch {
+					// Ignore read errors
+				} finally {
+					output += decoder.decode();
+					reader.releaseLock();
+				}
+				return output;
+			};
+
+			const [stdout, stderr, code] = await Promise.all([
+				readStream(proc.stdout as ReadableStream<Uint8Array> | null),
+				readStream(proc.stderr as ReadableStream<Uint8Array> | null),
+				proc.exited.catch(() => 1),
+			]);
+			const result = { stdout, stderr, code };
 
 			if (loader.signal.aborted) return;
 

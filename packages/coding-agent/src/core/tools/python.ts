@@ -173,12 +173,15 @@ export function createPythonTool(
 				const jsonOutputs: unknown[] = [];
 				const images: ImageContent[] = [];
 
+				const sessionFile = session.getSessionFile?.() ?? undefined;
+				const sessionId = sessionFile ? `session:${sessionFile}:workdir:${commandCwd}` : `cwd:${commandCwd}`;
 				const executorOptions: PythonExecutorOptions = {
 					cwd: commandCwd,
 					timeout: timeout ? timeout * 1000 : undefined,
 					signal: controller.signal,
-					sessionId: session.getSessionFile?.() ?? `cwd:${session.cwd}`,
+					sessionId,
 					kernelMode: session.settings?.getPythonKernelMode?.() ?? "session",
+					useSharedGateway: session.settings?.getPythonSharedGateway?.() ?? true,
 					reset,
 					onChunk: (chunk) => {
 						const chunkBytes = Buffer.byteLength(chunk, "utf-8");
@@ -357,7 +360,7 @@ function formatStatusEvent(event: PythonStatusEvent, theme: Theme): string {
 			parts.push(`${data.chars} chars`);
 			break;
 		case "find":
-		case "rgrep":
+		case "glob":
 			parts.push(`${data.count} match${(data.count as number) !== 1 ? "es" : ""}`);
 			if (data.pattern) parts.push(`for "${truncate(String(data.pattern), 20, theme.format.ellipsis)}"`);
 			break;
@@ -365,12 +368,34 @@ function formatStatusEvent(event: PythonStatusEvent, theme: Theme): string {
 			parts.push(`${data.count} match${(data.count as number) !== 1 ? "es" : ""}`);
 			if (data.path) parts.push(`in ${shortenPath(String(data.path))}`);
 			break;
+		case "rgrep":
+			parts.push(`${data.count} match${(data.count as number) !== 1 ? "es" : ""}`);
+			if (data.pattern) parts.push(`for "${truncate(String(data.pattern), 20, theme.format.ellipsis)}"`);
+			break;
 		case "ls":
 			parts.push(`${data.count} entr${(data.count as number) !== 1 ? "ies" : "y"}`);
+			break;
+		case "env":
+			if (data.action === "set") {
+				parts.push(`set ${data.key}=${truncate(String(data.value ?? ""), 30, theme.format.ellipsis)}`);
+			} else if (data.action === "get") {
+				parts.push(`${data.key}=${truncate(String(data.value ?? ""), 30, theme.format.ellipsis)}`);
+			} else {
+				parts.push(`${data.count} variable${(data.count as number) !== 1 ? "s" : ""}`);
+			}
+			break;
+		case "stat":
+			if (data.is_dir) {
+				parts.push("directory");
+			} else {
+				parts.push(`${data.size} bytes`);
+			}
+			if (data.path) parts.push(shortenPath(String(data.path)));
 			break;
 		case "replace":
 		case "sed":
 			parts.push(`${data.count} replacement${(data.count as number) !== 1 ? "s" : ""}`);
+			if (data.path) parts.push(`in ${shortenPath(String(data.path))}`);
 			break;
 		case "rsed":
 			parts.push(`${data.count} replacement${(data.count as number) !== 1 ? "s" : ""}`);
@@ -419,6 +444,18 @@ function formatStatusEvent(event: PythonStatusEvent, theme: Theme): string {
 		case "insert_at":
 			parts.push(`${data.lines_inserted} line${(data.lines_inserted as number) !== 1 ? "s" : ""} inserted`);
 			break;
+		case "cd":
+		case "pwd":
+		case "mkdir":
+		case "touch":
+			if (data.path) parts.push(shortenPath(String(data.path)));
+			break;
+		case "rm":
+		case "mv":
+		case "cp":
+			if (data.src) parts.push(`${shortenPath(String(data.src))} → ${shortenPath(String(data.dst))}`);
+			else if (data.path) parts.push(shortenPath(String(data.path)));
+			break;
 		default:
 			// Generic formatting for other operations
 			if (data.count !== undefined) {
@@ -433,6 +470,102 @@ function formatStatusEvent(event: PythonStatusEvent, theme: Theme): string {
 	return `${icon} ${theme.fg("muted", op)}${desc ? ` ${theme.fg("dim", desc)}` : ""}`;
 }
 
+/** Format status event with expanded detail lines. */
+function formatStatusEventExpanded(event: PythonStatusEvent, theme: Theme): string[] {
+	const lines: string[] = [];
+	const { op, ...data } = event;
+
+	// Main status line
+	lines.push(formatStatusEvent(event, theme));
+
+	// Add detail lines for operations with list data
+	const addItems = (items: unknown[], formatter: (item: unknown) => string, max = 5) => {
+		const arr = Array.isArray(items) ? items : [];
+		for (let i = 0; i < Math.min(arr.length, max); i++) {
+			lines.push(`   ${theme.fg("dim", formatter(arr[i]))}`);
+		}
+		if (arr.length > max) {
+			lines.push(`   ${theme.fg("dim", `${theme.format.ellipsis} ${arr.length - max} more`)}`);
+		}
+	};
+
+	// Add preview lines (truncated content)
+	const addPreview = (preview: string, maxLines = 3) => {
+		const previewLines = String(preview).split("\n").slice(0, maxLines);
+		for (const line of previewLines) {
+			lines.push(`   ${theme.fg("toolOutput", truncate(line, 80, theme.format.ellipsis))}`);
+		}
+		const totalLines = String(preview).split("\n").length;
+		if (totalLines > maxLines) {
+			lines.push(`   ${theme.fg("dim", `${theme.format.ellipsis} ${totalLines - maxLines} more lines`)}`);
+		}
+	};
+
+	switch (op) {
+		case "find":
+		case "glob":
+			if (data.matches) addItems(data.matches as unknown[], (m) => String(m));
+			break;
+		case "ls":
+			if (data.items) addItems(data.items as unknown[], (m) => String(m));
+			break;
+		case "grep":
+			if (data.hits) {
+				addItems(data.hits as unknown[], (h) => {
+					const hit = h as { line: number; text: string };
+					return `${hit.line}: ${truncate(hit.text, 60, theme.format.ellipsis)}`;
+				});
+			}
+			break;
+		case "rgrep":
+			if (data.hits) {
+				addItems(data.hits as unknown[], (h) => {
+					const hit = h as { file: string; line: number; text: string };
+					return `${shortenPath(hit.file)}:${hit.line}: ${truncate(hit.text, 50, theme.format.ellipsis)}`;
+				});
+			}
+			break;
+		case "rsed":
+			if (data.changed) {
+				addItems(data.changed as unknown[], (c) => {
+					const change = c as { file: string; count: number };
+					return `${shortenPath(change.file)}: ${change.count} replacement${change.count !== 1 ? "s" : ""}`;
+				});
+			}
+			break;
+		case "env":
+			if (data.keys) addItems(data.keys as unknown[], (k) => String(k), 10);
+			break;
+		case "git_log":
+			if (data.entries) {
+				addItems(data.entries as unknown[], (e) => {
+					const entry = e as { sha: string; subject: string };
+					return `${entry.sha} ${truncate(entry.subject, 50, theme.format.ellipsis)}`;
+				});
+			}
+			break;
+		case "git_status":
+			if (data.files) addItems(data.files as unknown[], (f) => String(f));
+			break;
+		case "git_branch":
+			if (data.branches) addItems(data.branches as unknown[], (b) => String(b));
+			break;
+		case "read":
+		case "cat":
+		case "head":
+		case "tail":
+		case "tree":
+		case "diff":
+		case "lines":
+		case "git_diff":
+		case "sh":
+			if (data.preview) addPreview(String(data.preview));
+			break;
+	}
+
+	return lines;
+}
+
 /** Render status events as tree lines. */
 function renderStatusEvents(events: PythonStatusEvent[], theme: Theme, expanded: boolean): string[] {
 	if (events.length === 0) return [];
@@ -445,7 +578,18 @@ function renderStatusEvents(events: PythonStatusEvent[], theme: Theme, expanded:
 	for (let i = 0; i < displayCount; i++) {
 		const isLast = i === displayCount - 1 && (expanded || events.length <= maxCollapsed);
 		const branch = isLast ? theme.tree.last : theme.tree.branch;
-		lines.push(`${theme.fg("dim", branch)} ${formatStatusEvent(events[i], theme)}`);
+
+		if (expanded) {
+			// Show expanded details for each event
+			const eventLines = formatStatusEventExpanded(events[i], theme);
+			lines.push(`${theme.fg("dim", branch)} ${eventLines[0]}`);
+			const continueBranch = isLast ? "   " : `${theme.tree.vertical}  `;
+			for (let j = 1; j < eventLines.length; j++) {
+				lines.push(`${theme.fg("dim", continueBranch)}${eventLines[j]}`);
+			}
+		} else {
+			lines.push(`${theme.fg("dim", branch)} ${formatStatusEvent(events[i], theme)}`);
+		}
 	}
 
 	if (!expanded && events.length > maxCollapsed) {

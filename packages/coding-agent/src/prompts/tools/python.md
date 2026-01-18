@@ -1,4 +1,4 @@
-Executes Python code in a persistent IPython kernel with optional timeout.
+Executes Python code in an IPython kernel (session or per-call) with optional timeout.
 
 ## When to use Python
 
@@ -40,9 +40,12 @@ All helpers auto-print results and return values for chaining.
 {{#if categories.length}}
 {{#each categories}}
 ### {{name}}
+```
 {{#each functions}}
-- `{{name}}{{signature}}` — {{docstring}}
+{{name}}{{signature}}
+    {{docstring}}
 {{/each}}
+```
 
 {{/each}}
 {{else}}
@@ -71,8 +74,18 @@ cols(read("data.tsv"), 0, 2, sep="\t")
 ## Notes
 
 - Code executes as IPython cells; users see the full cell output (including rendered figures, tables, etc.)
-- Kernel persists for the session; use `reset: true` to clear state
+- Kernel persists for the session by default; per-call mode uses a fresh kernel each call. Use `reset: true` to clear state when session mode is active
 - Use `workdir` parameter instead of `os.chdir()` in tool call
 - Use `plt.show()` to display figures
 - Use `display()` from IPython.display for rich output (HTML, Markdown, images, etc.)
 - Output streams in real time, truncated after 50KB
+
+## Rich output rendering
+
+The user sees output like a Jupyter notebook—rich displays are fully rendered:
+- `display(JSON(data))` → interactive JSON tree
+- `display(HTML(...))` → rendered HTML
+- `display(Markdown(...))` → formatted markdown
+- `plt.show()` → inline figures
+
+**You will see object repr** (e.g., `<IPython.core.display.JSON object>`) **but the user sees the rendered output.** Trust that `display()` calls work correctly—do not assume the user sees only the repr.

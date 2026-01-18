@@ -31,6 +31,7 @@ import { resolvePromptInput } from "./core/system-prompt";
 import { printTimings, time } from "./core/timings";
 import { initializeWithSettings } from "./discovery";
 import { runMigrations, showDeprecationWarnings } from "./migrations";
+import { runAsyncCleanup } from "./modes/cleanup";
 import { InteractiveMode, installTerminalCrashHandlers, runPrintMode, runRpcMode } from "./modes/index";
 import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme";
 import { getChangelogPath, getNewEntries, parseChangelog } from "./utils/changelog";
@@ -731,7 +732,9 @@ export async function main(args: string[]) {
 			initialMessage,
 			initialImages,
 		});
+		await session.dispose();
 		stopThemeWatcher();
+		await runAsyncCleanup();
 		if (process.stdout.writableLength > 0) {
 			await new Promise<void>((resolve) => process.stdout.once("drain", resolve));
 		}

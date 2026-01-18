@@ -29,6 +29,7 @@ import {
 import type {
 	MCPToolCallRequest,
 	MCPToolMetadata,
+	PythonToolCallCancel,
 	PythonToolCallRequest,
 	SubagentWorkerRequest,
 	SubagentWorkerResponse,
@@ -60,6 +61,7 @@ export interface ExecutorOptions {
 		serialize: () => import("../../settings-manager").Settings;
 		getPythonToolMode?: () => "ipy-only" | "bash-only" | "both";
 		getPythonKernelMode?: () => "session" | "per-call";
+		getPythonSharedGateway?: () => boolean;
 	};
 }
 
@@ -295,8 +297,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 
 	// Resolve and add model
 	const resolvedModel = await resolveModelPattern(modelOverride || agent.model, availableModels, serializedSettings);
-	const parentSessionFile = options.sessionFile ?? null;
-	const sessionFile = subtaskSessionFile ?? parentSessionFile;
+	const sessionFile = subtaskSessionFile ?? null;
 	const spawnsEnv = agent.spawns === undefined ? "" : agent.spawns === "*" ? "*" : agent.spawns.join(",");
 
 	const pythonToolRequested = toolNames === undefined || toolNames.includes("python");
@@ -340,17 +341,49 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	let finalize: ((message: Extract<SubagentWorkerResponse, { type: "done" }>) => void) | null = null;
 	const listenerController = new AbortController();
 	const listenerSignal = listenerController.signal;
+	const withTimeout = async <T>(promise: Promise<T>, timeoutMs?: number): Promise<T> => {
+		if (timeoutMs === undefined) return promise;
+		let timeoutId: ReturnType<typeof setTimeout> | undefined;
+		try {
+			return await Promise.race([
+				promise,
+				new Promise<T>((_resolve, reject) => {
+					timeoutId = setTimeout(() => {
+						reject(new Error(`Tool call timed out after ${timeoutMs}ms`));
+					}, timeoutMs);
+				}),
+			]);
+		} finally {
+			if (timeoutId) clearTimeout(timeoutId);
+		}
+	};
 
+	const combineSignals = (signals: Array<AbortSignal | undefined>): AbortSignal | undefined => {
+		const filtered = signals.filter((value): value is AbortSignal => Boolean(value));
+		if (filtered.length === 0) return undefined;
+		if (filtered.length === 1) return filtered[0];
+		return AbortSignal.any(filtered);
+	};
+
+	const createTimeoutSignal = (timeoutMs?: number): AbortSignal | undefined => {
+		if (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+			return undefined;
+		}
+		return AbortSignal.timeout(timeoutMs);
+	};
+
+	const pythonSessionFile = sessionFile ?? `subtask:${taskId}`;
 	const pythonToolSession: ToolSession = {
 		cwd,
 		hasUI: false,
 		enableLsp: false,
-		getSessionFile: () => parentSessionFile,
+		getSessionFile: () => pythonSessionFile,
 		getSessionSpawns: () => spawnsEnv,
 		settings: options.settingsManager as ToolSession["settings"],
 		settingsManager: options.settingsManager,
 	};
 	const pythonTool = pythonProxyEnabled ? createPythonTool(pythonToolSession) : null;
+	const pythonCallControllers = new Map<string, AbortController>();
 
 	// Accumulate usage incrementally from message_end events (no memory for streaming events)
 	const accumulatedUsage = {
@@ -400,6 +433,10 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		if (resolved) return;
 		abortSent = true;
 		abortReason = reason;
+		for (const controller of pythonCallControllers.values()) {
+			controller.abort();
+		}
+		pythonCallControllers.clear();
 		const abortMessage: SubagentWorkerRequest = { type: "abort" };
 		try {
 			worker.postMessage(abortMessage);
@@ -683,7 +720,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				if (!parsed) throw new Error(`Invalid MCP tool name: ${request.toolName}`);
 				const connection = mcpManager.getConnection(parsed.serverName);
 				if (!connection) throw new Error(`MCP server not connected: ${parsed.serverName}`);
-				const result = await callTool(connection, parsed.toolName, request.params);
+				const result = await withTimeout(callTool(connection, parsed.toolName, request.params), request.timeoutMs);
 				worker.postMessage({
 					type: "mcp_tool_result",
 					callId: request.callId,
@@ -698,6 +735,14 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			}
 		};
 
+		const getPythonCallTimeoutMs = (params: { timeout?: number }): number | undefined => {
+			const timeout = params.timeout;
+			if (typeof timeout === "number" && Number.isFinite(timeout) && timeout > 0) {
+				return Math.max(1000, Math.round(timeout * 1000) + 1000);
+			}
+			return undefined;
+		};
+
 		const handlePythonCall = async (request: PythonToolCallRequest) => {
 			if (!pythonTool) {
 				worker.postMessage({
@@ -707,11 +752,16 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				});
 				return;
 			}
+			const callController = new AbortController();
+			pythonCallControllers.set(request.callId, callController);
+			const timeoutMs = getPythonCallTimeoutMs(request.params as { timeout?: number });
+			const timeoutSignal = createTimeoutSignal(timeoutMs);
+			const combinedSignal = combineSignals([signal, callController.signal, timeoutSignal]);
 			try {
 				const result = await pythonTool.execute(
 					request.callId,
 					request.params as { code: string; timeout?: number; workdir?: string; reset?: boolean },
-					signal,
+					combinedSignal,
 				);
 				worker.postMessage({
 					type: "python_tool_result",
@@ -719,11 +769,26 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 					result: { content: result.content ?? [], details: result.details },
 				});
 			} catch (error) {
+				const message =
+					timeoutSignal?.aborted && timeoutMs !== undefined
+						? `Python tool call timed out after ${timeoutMs}ms`
+						: error instanceof Error
+							? error.message
+							: String(error);
 				worker.postMessage({
 					type: "python_tool_result",
 					callId: request.callId,
-					error: error instanceof Error ? error.message : String(error),
+					error: message,
 				});
+			} finally {
+				pythonCallControllers.delete(request.callId);
+			}
+		};
+
+		const handlePythonCancel = (request: PythonToolCallCancel) => {
+			const controller = pythonCallControllers.get(request.callId);
+			if (controller) {
+				controller.abort();
 			}
 		};
 
@@ -736,6 +801,10 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			}
 			if (message.type === "python_tool_call") {
 				handlePythonCall(message as PythonToolCallRequest);
+				return;
+			}
+			if (message.type === "python_tool_cancel") {
+				handlePythonCancel(message as PythonToolCallCancel);
 				return;
 			}
 			if (message.type === "event") {

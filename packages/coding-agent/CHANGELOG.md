@@ -1,8 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added Python shared gateway setting to enable resource-efficient kernel reuse across sessions
+- Added Python tool cancellation support with proper timeout and cleanup handling
+- Added enhanced Python prelude helpers including file operations, text processing, and Git utilities
+- Added Python tool documentation rendering with categorized helper functions
+- Added session-scoped Python kernel isolation with workdir-aware session IDs
 - Added structured status events for Python prelude functions with TUI rendering
 - Added status event display system with operation icons and formatted descriptions
 - Added support for rich output using IPython.display.display() in Python tool
@@ -42,6 +48,12 @@
 
 ### Changed
 
+- Updated Python tool description to display categorized helper functions with improved formatting
+- Enhanced Python kernel startup to use shared gateway by default for better resource utilization
+- Improved Python prelude functions to emit structured status events instead of text output
+- Updated agent prompts to use bash tool instead of exec for git operations
+- Changed default Python tool mode from ipy-only to both to enable shell execution
+- Enhanced Python gateway coordination with Windows environment support and stale process cleanup
 - Updated Python prelude functions to emit structured status events instead of text output
 - Enhanced Python tool renderer to display status events alongside output
 - Improved Python tool output formatting with status event integration
@@ -67,18 +79,24 @@
 
 ### Fixed
 
-- Fixed Python prelude `sh()` function failing with exit code 2 due to double-shell invocation from `shell=True`
-- Fixed signal event listener handling in worker processes to prevent crashes when signal is not an EventTarget
-- Fixed Python tool proxy execution in worker processes to use proper tool creation pattern
-- Fixed Python tool session requirement when using proxy executor in worker processes
-- Fixed WebSocket message handling to support both binary and JSON message formats
-- Fixed Python gateway process cleanup and reference counting for shared instances
-- Fixed duplicate custom message rendering in event controller
-- Fixed --no-extensions flag handling
-- Fixed model selection to respect remembered model roles
-- Fixed auto-print mode detection when piped input is present
-- Fixed shutdown flow to wait for pending renders
-- Fixed auto-compaction failure handling to surface warnings instead of crashing
+- Fixed Python kernel cancellation handling and WebSocket cleanup for in-flight executions
+- Fixed Python tool session scoping to include workdir and honor sharedGateway settings
+- Fixed gist sharing output draining to avoid truncated URLs
+- Fixed streaming output byte accounting and UTF-8 decoder flushing
+- Fixed Python prelude integration tests to detect virtual environments and cover helper exports
+- Fixed Python kernel cancellation/timeout handling and WebSocket close cleanup for in-flight executions
+- Fixed Python output byte accounting and UTF-8 decoder flushing in streaming output
+- Fixed shared Python gateway coordination (Windows env allowlist, lock staleness, refcount recovery)
+- Fixed Python tool session scoping to include workdir and honor sharedGateway settings
+- Fixed subagent Python proxy session isolation and cancellation/timeout propagation
+- Fixed print-mode cleanup to dispose Python sessions before exit
+- Fixed gist share output draining to avoid truncated URLs
+- Fixed explore agent tool list to use bash for git operations
+- Fixed Python prelude integration tests to detect venv-only Python and cover helper exports
+
+### Security
+
+- Enhanced Python gateway environment filtering to exclude sensitive API keys and Windows system paths
 
 ## [5.5.0] - 2026-01-18
 ### Changed

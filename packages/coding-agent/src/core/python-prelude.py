@@ -19,14 +19,14 @@ if "__omp_prelude_loaded__" not in globals():
 
     @_category("Navigation")
     def pwd() -> Path:
-        """Print and return current working directory."""
+        """Return current working directory."""
         p = Path.cwd()
         _emit_status("pwd", path=str(p))
         return p
 
     @_category("Navigation")
     def cd(path: str | Path) -> Path:
-        """Change directory and print the new cwd."""
+        """Change directory."""
         p = Path(path).expanduser().resolve()
         os.chdir(p)
         _emit_status("cd", path=str(p))
@@ -37,9 +37,7 @@ if "__omp_prelude_loaded__" not in globals():
         """Get/set environment variables."""
         if key is None:
             items = dict(sorted(os.environ.items()))
-            for k, v in items.items():
-                print(f"{k}={v}")
-            _emit_status("env", count=len(items))
+            _emit_status("env", count=len(items), keys=list(items.keys())[:20])
             return items
         if value is not None:
             os.environ[key] = value
@@ -50,21 +48,23 @@ if "__omp_prelude_loaded__" not in globals():
         return val
 
     @_category("File I/O")
-    def read(path: str | Path, *, limit: int | None = None) -> str:
-        """Read file contents. Prints a short preview + length."""
+    def read(path: str | Path, *, offset: int = 1, limit: int | None = None) -> str:
+        """Read file contents. offset/limit are 1-indexed line numbers."""
         p = Path(path)
         data = p.read_text(encoding="utf-8")
-        if limit is not None:
-            preview = data[:limit]
-            print(preview)
-        else:
-            print(data)
-        _emit_status("read", path=str(p), chars=len(data))
+        lines = data.splitlines(keepends=True)
+        if offset > 1 or limit is not None:
+            start = max(0, offset - 1)
+            end = start + limit if limit else len(lines)
+            lines = lines[start:end]
+            data = "".join(lines)
+        preview = data[:500]
+        _emit_status("read", path=str(p), chars=len(data), preview=preview)
         return data
 
     @_category("File I/O")
     def write(path: str | Path, content: str) -> Path:
-        """Write file contents (create parents). Prints bytes written."""
+        """Write file contents (create parents)."""
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
@@ -73,7 +73,7 @@ if "__omp_prelude_loaded__" not in globals():
 
     @_category("File I/O")
     def append(path: str | Path, content: str) -> Path:
-        """Append to file. Prints bytes appended."""
+        """Append to file."""
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         with p.open("a", encoding="utf-8") as f:
@@ -134,68 +134,177 @@ if "__omp_prelude_loaded__" not in globals():
         """List directory contents."""
         p = Path(path)
         items = sorted(p.iterdir())
-        for item in items:
-            suffix = "/" if item.is_dir() else ""
-            print(f"{item.name}{suffix}")
-        _emit_status("ls", path=str(p), count=len(items))
+        _emit_status("ls", path=str(p), count=len(items), items=[i.name + ("/" if i.is_dir() else "") for i in items[:20]])
         return items
 
+    def _load_gitignore_patterns(base: Path) -> list[str]:
+        """Load .gitignore patterns from base directory and parents."""
+        patterns: list[str] = []
+        # Always exclude these
+        patterns.extend(["**/.git", "**/.git/**", "**/node_modules", "**/node_modules/**"])
+        # Walk up to find .gitignore files
+        current = base.resolve()
+        for _ in range(20):  # Limit depth
+            gitignore = current / ".gitignore"
+            if gitignore.exists():
+                try:
+                    for line in gitignore.read_text().splitlines():
+                        line = line.strip()
+                        if line and not line.startswith("#"):
+                            # Normalize pattern for fnmatch
+                            if line.startswith("/"):
+                                patterns.append(str(current / line[1:]))
+                            else:
+                                patterns.append(f"**/{line}")
+                except Exception:
+                    pass
+            parent = current.parent
+            if parent == current:
+                break
+            current = parent
+        return patterns
+
+    def _match_gitignore(path: Path, patterns: list[str], base: Path) -> bool:
+        """Check if path matches any gitignore pattern."""
+        import fnmatch
+        rel = str(path.relative_to(base)) if path.is_relative_to(base) else str(path)
+        abs_path = str(path.resolve())
+        for pat in patterns:
+            if pat.startswith("**/"):
+                # Match against any part of the path
+                if fnmatch.fnmatch(rel, pat) or fnmatch.fnmatch(rel, pat[3:]):
+                    return True
+                # Also check each path component
+                for part in path.parts:
+                    if fnmatch.fnmatch(part, pat[3:]):
+                        return True
+            elif fnmatch.fnmatch(abs_path, pat) or fnmatch.fnmatch(rel, pat):
+                return True
+        return False
+
     @_category("Search")
-    def find(pattern: str, path: str | Path = ".", *, files_only: bool = True) -> list[Path]:
-        """Recursive glob find. Defaults to files only."""
+    def find(
+        pattern: str,
+        path: str | Path = ".",
+        *,
+        type: str = "file",
+        limit: int = 1000,
+        hidden: bool = False,
+        sort_by_mtime: bool = False,
+    ) -> list[Path]:
+        """Recursive glob find. Respects .gitignore."""
         p = Path(path)
-        matches = []
+        ignore_patterns = _load_gitignore_patterns(p)
+        matches: list[Path] = []
         for m in p.rglob(pattern):
-            if files_only and m.is_dir():
+            if len(matches) >= limit:
+                break
+            # Skip hidden files unless requested
+            if not hidden and any(part.startswith(".") for part in m.parts):
+                continue
+            # Skip gitignored paths
+            if _match_gitignore(m, ignore_patterns, p):
+                continue
+            # Filter by type
+            if type == "file" and m.is_dir():
+                continue
+            if type == "dir" and not m.is_dir():
                 continue
             matches.append(m)
-        matches = sorted(matches)
-        for m in matches:
-            print(str(m))
-        _emit_status("find", pattern=pattern, path=str(p), count=len(matches))
+        if sort_by_mtime:
+            matches.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        else:
+            matches.sort()
+        _emit_status("find", pattern=pattern, path=str(p), count=len(matches), matches=[str(m) for m in matches[:20]])
         return matches
 
     @_category("Search")
-    def grep(pattern: str, path: str | Path, *, ignore_case: bool = False, context: int = 0) -> list[tuple[int, str]]:
-        """Grep a single file."""
-        flags = re.IGNORECASE if ignore_case else 0
-        rx = re.compile(pattern, flags)
+    def grep(
+        pattern: str,
+        path: str | Path,
+        *,
+        ignore_case: bool = False,
+        literal: bool = False,
+        context: int = 0,
+    ) -> list[tuple[int, str]]:
+        """Grep a single file. Returns (line_number, text) tuples."""
         p = Path(path)
         lines = p.read_text(encoding="utf-8").splitlines()
-        hits: list[tuple[int, str]] = []
+        if literal:
+            if ignore_case:
+                match_fn = lambda line: pattern.lower() in line.lower()
+            else:
+                match_fn = lambda line: pattern in line
+        else:
+            flags = re.IGNORECASE if ignore_case else 0
+            rx = re.compile(pattern, flags)
+            match_fn = lambda line: rx.search(line) is not None
+        
+        match_lines: set[int] = set()
         for i, line in enumerate(lines, 1):
-            if rx.search(line):
-                hits.append((i, line))
-                print(f"{i}: {line}")
-                if context:
-                    start = max(0, i - 1 - context)
-                    end = min(len(lines), i - 1 + context + 1)
-                    for j in range(start, end):
-                        if j + 1 == i:
-                            continue
-                        print(f"{j+1}- {lines[j]}")
-        _emit_status("grep", pattern=pattern, path=str(p), count=len(hits))
+            if match_fn(line):
+                match_lines.add(i)
+        
+        # Expand with context
+        if context > 0:
+            expanded: set[int] = set()
+            for ln in match_lines:
+                for offset in range(-context, context + 1):
+                    expanded.add(ln + offset)
+            output_lines = sorted(ln for ln in expanded if 1 <= ln <= len(lines))
+        else:
+            output_lines = sorted(match_lines)
+        
+        hits = [(ln, lines[ln - 1]) for ln in output_lines]
+        _emit_status("grep", pattern=pattern, path=str(p), count=len(match_lines), hits=[{"line": h[0], "text": h[1][:100]} for h in hits[:10]])
         return hits
 
     @_category("Search")
-    def rgrep(pattern: str, path: str | Path = ".", *, glob_pattern: str = "*", ignore_case: bool = False) -> list[tuple[Path, int, str]]:
-        """Recursive grep across files matching glob_pattern."""
-        flags = re.IGNORECASE if ignore_case else 0
-        rx = re.compile(pattern, flags)
+    def rgrep(
+        pattern: str,
+        path: str | Path = ".",
+        *,
+        glob_pattern: str = "*",
+        ignore_case: bool = False,
+        literal: bool = False,
+        limit: int = 100,
+        hidden: bool = False,
+    ) -> list[tuple[Path, int, str]]:
+        """Recursive grep across files matching glob_pattern. Respects .gitignore."""
+        if literal:
+            if ignore_case:
+                match_fn = lambda line: pattern.lower() in line.lower()
+            else:
+                match_fn = lambda line: pattern in line
+        else:
+            flags = re.IGNORECASE if ignore_case else 0
+            rx = re.compile(pattern, flags)
+            match_fn = lambda line: rx.search(line) is not None
+        
         base = Path(path)
+        ignore_patterns = _load_gitignore_patterns(base)
         hits: list[tuple[Path, int, str]] = []
         for file_path in base.rglob(glob_pattern):
+            if len(hits) >= limit:
+                break
             if file_path.is_dir():
+                continue
+            # Skip hidden files unless requested
+            if not hidden and any(part.startswith(".") for part in file_path.parts):
+                continue
+            # Skip gitignored paths
+            if _match_gitignore(file_path, ignore_patterns, base):
                 continue
             try:
                 lines = file_path.read_text(encoding="utf-8").splitlines()
             except Exception:
                 continue
             for i, line in enumerate(lines, 1):
-                if rx.search(line):
+                if len(hits) >= limit:
+                    break
+                if match_fn(line):
                     hits.append((file_path, i, line))
-                    print(f"{file_path}:{i}: {line}")
-        _emit_status("rgrep", pattern=pattern, path=str(base), count=len(hits))
+        _emit_status("rgrep", pattern=pattern, path=str(base), count=len(hits), hits=[{"file": str(h[0]), "line": h[1], "text": h[2][:80]} for h in hits[:10]])
         return hits
 
     @_category("Text")
@@ -203,8 +312,7 @@ if "__omp_prelude_loaded__" not in globals():
         """Return the first n lines of text."""
         lines = text.splitlines()[:n]
         out = "\n".join(lines)
-        print(out)
-        _emit_status("head", lines=len(lines))
+        _emit_status("head", lines=len(lines), preview=out[:500])
         return out
 
     @_category("Text")
@@ -212,8 +320,7 @@ if "__omp_prelude_loaded__" not in globals():
         """Return the last n lines of text."""
         lines = text.splitlines()[-n:]
         out = "\n".join(lines)
-        print(out)
-        _emit_status("tail", lines=len(lines))
+        _emit_status("tail", lines=len(lines), preview=out[:500])
         return out
 
     @_category("Find/Replace")
@@ -244,26 +351,49 @@ if "__omp_prelude_loaded__" not in globals():
         def __bool__(self):
             return self.code == 0
 
-    def _make_shell_result(proc: subprocess.CompletedProcess[str]) -> ShellResult:
-        """Create ShellResult and print output."""
-        if proc.stdout:
-            print(proc.stdout, end="" if proc.stdout.endswith("\n") else "\n")
-        if proc.stderr:
-            print(proc.stderr, end="" if proc.stderr.endswith("\n") else "\n")
+    def _make_shell_result(proc: subprocess.CompletedProcess[str], cmd: str) -> ShellResult:
+        """Create ShellResult and emit status."""
+        output = proc.stdout + proc.stderr if proc.stderr else proc.stdout
+        _emit_status("sh", cmd=cmd[:80], code=proc.returncode, output=output[:500])
         return ShellResult(proc.stdout, proc.stderr, proc.returncode)
+
+    import signal as _signal
+
+    def _run_with_interrupt(args: list[str], cwd: str | None, timeout: int | None, cmd: str) -> ShellResult:
+        """Run subprocess with proper interrupt handling."""
+        proc = subprocess.Popen(
+            args,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except KeyboardInterrupt:
+            os.killpg(proc.pid, _signal.SIGINT)
+            try:
+                stdout, stderr = proc.communicate(timeout=2)
+            except subprocess.TimeoutExpired:
+                os.killpg(proc.pid, _signal.SIGKILL)
+                stdout, stderr = proc.communicate()
+            result = subprocess.CompletedProcess(args, -_signal.SIGINT, stdout, stderr)
+            return _make_shell_result(result, cmd)
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, _signal.SIGKILL)
+            stdout, stderr = proc.communicate()
+            result = subprocess.CompletedProcess(args, -_signal.SIGKILL, stdout, stderr)
+            return _make_shell_result(result, cmd)
+        result = subprocess.CompletedProcess(args, proc.returncode, stdout, stderr)
+        return _make_shell_result(result, cmd)
 
     @_category("Shell")
     def run(cmd: str, *, cwd: str | Path | None = None, timeout: int | None = None) -> ShellResult:
-        """Run a shell command and print stdout/stderr."""
-        proc = subprocess.run(
-            cmd,
-            cwd=str(cwd) if cwd else None,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        return _make_shell_result(proc)
+        """Run a shell command."""
+        shell_path = shutil.which("bash") or shutil.which("sh") or "/bin/sh"
+        args = [shell_path, "-c", cmd]
+        return _run_with_interrupt(args, str(cwd) if cwd else None, timeout, cmd)
 
     @_category("Shell")
     def sh(cmd: str, *, cwd: str | Path | None = None, timeout: int | None = None) -> ShellResult:
@@ -272,7 +402,6 @@ if "__omp_prelude_loaded__" not in globals():
         prefix = f"source '{snapshot}' 2>/dev/null && " if snapshot else ""
         final = f"{prefix}{cmd}"
 
-        # Determine shell and args (mirroring shell.ts logic)
         shell_path = os.environ.get("SHELL")
         if not shell_path or not shutil.which(shell_path):
             shell_path = shutil.which("bash") or shutil.which("zsh") or shutil.which("sh")
@@ -286,32 +415,22 @@ if "__omp_prelude_loaded__" not in globals():
                     text=True,
                     timeout=timeout,
                 )
-                return _make_shell_result(proc)
+                return _make_shell_result(proc, cmd)
             raise RuntimeError("No suitable shell found")
 
         no_login = os.environ.get("OMP_BASH_NO_LOGIN") or os.environ.get("CLAUDE_BASH_NO_LOGIN")
         args = [shell_path, "-c", final] if no_login else [shell_path, "-l", "-c", final]
 
-        proc = subprocess.run(
-            args,
-            cwd=str(cwd) if cwd else None,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        return _make_shell_result(proc)
-
-    # --- Extended shell-like utilities ---
+        return _run_with_interrupt(args, str(cwd) if cwd else None, timeout, cmd)
 
     @_category("File I/O")
     def cat(*paths: str | Path, separator: str = "\n") -> str:
-        """Concatenate multiple files and print. Like shell cat."""
+        """Concatenate multiple files. Like shell cat."""
         parts = []
         for p in paths:
             parts.append(Path(p).read_text(encoding="utf-8"))
         out = separator.join(parts)
-        print(out)
-        _emit_status("cat", files=len(paths), chars=len(out))
+        _emit_status("cat", files=len(paths), chars=len(out), preview=out[:500])
         return out
 
     @_category("File I/O")
@@ -340,7 +459,6 @@ if "__omp_prelude_loaded__" not in globals():
             lines = list(dict.fromkeys(lines))
         lines = sorted(lines, reverse=reverse)
         out = "\n".join(lines)
-        print(out)
         _emit_status("sort_lines", lines=len(lines), unique=unique, reverse=reverse)
         return out
 
@@ -362,15 +480,10 @@ if "__omp_prelude_loaded__" not in globals():
             current = line
             current_count = 1
         groups.append((current_count, current))
+        _emit_status("uniq", groups=len(groups), count_mode=count)
         if count:
-            for c, l in groups:
-                print(f"{c:>4} {l}")
-            _emit_status("uniq", groups=len(groups), count_mode=True)
             return groups
-        out = "\n".join(line for _, line in groups)
-        print(out)
-        _emit_status("uniq", groups=len(groups))
-        return out
+        return "\n".join(line for _, line in groups)
 
     @_category("Text")
     def cols(text: str, *indices: int, sep: str | None = None) -> str:
@@ -381,13 +494,12 @@ if "__omp_prelude_loaded__" not in globals():
             selected = [parts[i] for i in indices if i < len(parts)]
             result_lines.append(" ".join(selected))
         out = "\n".join(result_lines)
-        print(out)
         _emit_status("cols", lines=len(result_lines), columns=list(indices))
         return out
 
     @_category("Navigation")
     def tree(path: str | Path = ".", *, max_depth: int = 3, show_hidden: bool = False) -> str:
-        """Print directory tree."""
+        """Return directory tree."""
         base = Path(path)
         lines = []
         def walk(p: Path, prefix: str, depth: int):
@@ -406,8 +518,7 @@ if "__omp_prelude_loaded__" not in globals():
         lines.append(str(base) + "/")
         walk(base, "", 1)
         out = "\n".join(lines)
-        print(out)
-        _emit_status("tree", path=str(base), entries=len(lines) - 1)
+        _emit_status("tree", path=str(base), entries=len(lines) - 1, preview=out[:1000])
         return out
 
     @_category("Navigation")
@@ -423,35 +534,37 @@ if "__omp_prelude_loaded__" not in globals():
             "mtime": datetime.fromtimestamp(s.st_mtime).isoformat(),
             "mode": oct(s.st_mode),
         }
-        for k, v in info.items():
-            print(f"{k}: {v}")
-        _emit_status("stat", path=str(p), size=s.st_size, is_dir=p.is_dir())
+        _emit_status("stat", path=str(p), size=s.st_size, is_dir=p.is_dir(), mtime=info["mtime"])
         return info
 
     @_category("Batch")
     def diff(a: str | Path, b: str | Path) -> str:
-        """Compare two files, print unified diff."""
+        """Compare two files, return unified diff."""
         import difflib
         path_a, path_b = Path(a), Path(b)
         lines_a = path_a.read_text(encoding="utf-8").splitlines(keepends=True)
         lines_b = path_b.read_text(encoding="utf-8").splitlines(keepends=True)
         result = difflib.unified_diff(lines_a, lines_b, fromfile=str(path_a), tofile=str(path_b))
         out = "".join(result)
-        if out:
-            print(out)
-            _emit_status("diff", file_a=str(path_a), file_b=str(path_b), identical=False)
-        else:
-            _emit_status("diff", file_a=str(path_a), file_b=str(path_b), identical=True)
+        _emit_status("diff", file_a=str(path_a), file_b=str(path_b), identical=not out, preview=out[:500])
         return out
 
     @_category("Search")
-    def glob_files(pattern: str, path: str | Path = ".") -> list[Path]:
-        """Non-recursive glob (use find() for recursive)."""
+    def glob_files(pattern: str, path: str | Path = ".", *, hidden: bool = False) -> list[Path]:
+        """Non-recursive glob (use find() for recursive). Respects .gitignore."""
         p = Path(path)
-        matches = sorted(p.glob(pattern))
-        for m in matches:
-            print(str(m))
-        _emit_status("glob", pattern=pattern, path=str(p), count=len(matches))
+        ignore_patterns = _load_gitignore_patterns(p)
+        matches: list[Path] = []
+        for m in p.glob(pattern):
+            # Skip hidden files unless requested
+            if not hidden and m.name.startswith("."):
+                continue
+            # Skip gitignored paths
+            if _match_gitignore(m, ignore_patterns, p):
+                continue
+            matches.append(m)
+        matches = sorted(matches)
+        _emit_status("glob", pattern=pattern, path=str(p), count=len(matches), matches=[str(m) for m in matches[:20]])
         return matches
 
     @_category("Batch")
@@ -475,28 +588,43 @@ if "__omp_prelude_loaded__" not in globals():
         return count
 
     @_category("Find/Replace")
-    def rsed(pattern: str, repl: str, path: str | Path = ".", *, glob_pattern: str = "*", flags: int = 0) -> int:
-        """Recursive sed across files matching glob_pattern."""
+    def rsed(
+        pattern: str,
+        repl: str,
+        path: str | Path = ".",
+        *,
+        glob_pattern: str = "*",
+        flags: int = 0,
+        hidden: bool = False,
+    ) -> int:
+        """Recursive sed across files matching glob_pattern. Respects .gitignore."""
         base = Path(path)
+        ignore_patterns = _load_gitignore_patterns(base)
         total = 0
         files_changed = 0
+        changed_files = []
         for file_path in base.rglob(glob_pattern):
             if file_path.is_dir():
+                continue
+            # Skip hidden files unless requested
+            if not hidden and any(part.startswith(".") for part in file_path.parts):
+                continue
+            # Skip gitignored paths
+            if _match_gitignore(file_path, ignore_patterns, base):
                 continue
             try:
                 data = file_path.read_text(encoding="utf-8")
                 new, count = re.subn(pattern, repl, data, flags=flags)
                 if count > 0:
                     file_path.write_text(new, encoding="utf-8")
-                    print(f"{file_path}: {count} replacements")
                     total += count
                     files_changed += 1
+                    if len(changed_files) < 10:
+                        changed_files.append({"file": str(file_path), "count": count})
             except Exception:
                 continue
-        _emit_status("rsed", path=str(base), count=total, files=files_changed)
+        _emit_status("rsed", path=str(base), count=total, files=files_changed, changed=changed_files)
         return total
-
-    # --- Line-based operations (sed-like) ---
 
     @_category("Line ops")
     def lines(path: str | Path, start: int = 1, end: int | None = None) -> str:
@@ -508,10 +636,9 @@ if "__omp_prelude_loaded__" not in globals():
         start = max(1, start)
         end = min(len(all_lines), end)
         selected = all_lines[start - 1 : end]
-        out = "\n".join(f"{start + i}: {line}" for i, line in enumerate(selected))
-        print(out)
-        _emit_status("lines", path=str(p), start=start, end=end, count=len(selected))
-        return "\n".join(selected)
+        out = "\n".join(selected)
+        _emit_status("lines", path=str(p), start=start, end=end, count=len(selected), preview=out[:500])
+        return out
 
     @_category("Line ops")
     def delete_lines(path: str | Path, start: int, end: int | None = None) -> int:
@@ -562,8 +689,6 @@ if "__omp_prelude_loaded__" not in globals():
         _emit_status("insert_at", path=str(p), line=line_num, lines_inserted=len(new_lines), position=pos)
         return p
 
-    # --- Git helpers ---
-
     def _git(*args: str, cwd: str | Path | None = None) -> tuple[int, str, str]:
         """Run git command, return (returncode, stdout, stderr)."""
         result = subprocess.run(
@@ -604,33 +729,8 @@ if "__omp_prelude_loaded__" not in globals():
             elif line.startswith("? "):
                 result["untracked"].append(line[2:])
 
-        # Pretty print
-        print(f"branch: {result['branch']}", end="")
-        if result["ahead"] or result["behind"]:
-            print(f" (+{result['ahead']}/-{result['behind']})", end="")
-        print()
-        if result["staged"]:
-            print(f"staged ({len(result['staged'])}):")
-            for f in result["staged"][:10]:
-                print(f"  + {f}")
-            if len(result["staged"]) > 10:
-                print(f"  ... and {len(result['staged']) - 10} more")
-        if result["modified"]:
-            print(f"modified ({len(result['modified'])}):")
-            for f in result["modified"][:10]:
-                print(f"  M {f}")
-            if len(result["modified"]) > 10:
-                print(f"  ... and {len(result['modified']) - 10} more")
-        if result["untracked"]:
-            print(f"untracked ({len(result['untracked'])}):")
-            for f in result["untracked"][:5]:
-                print(f"  ? {f}")
-            if len(result["untracked"]) > 5:
-                print(f"  ... and {len(result['untracked']) - 5} more")
         clean = not any([result["staged"], result["modified"], result["untracked"]])
-        if clean:
-            print("working tree clean")
-        _emit_status("git_status", branch=result["branch"], staged=len(result["staged"]), modified=len(result["modified"]), untracked=len(result["untracked"]), clean=clean)
+        _emit_status("git_status", branch=result["branch"], staged=len(result["staged"]), modified=len(result["modified"]), untracked=len(result["untracked"]), clean=clean, files=result["staged"][:5] + result["modified"][:5])
         return result
 
     @_category("Git")
@@ -656,9 +756,8 @@ if "__omp_prelude_loaded__" not in globals():
         if code != 0:
             _emit_status("git_diff", error=err.strip())
             return ""
-        print(out)
         lines_count = len(out.splitlines()) if out else 0
-        _emit_status("git_diff", staged=staged, ref=ref, lines=lines_count)
+        _emit_status("git_diff", staged=staged, ref=ref, lines=lines_count, preview=out[:500])
         return out
 
     @_category("Git")
@@ -689,11 +788,7 @@ if "__omp_prelude_loaded__" not in globals():
             if len(parts) >= 4:
                 commits.append({"sha": parts[0], "subject": parts[1], "author": parts[2], "date": parts[3]})
 
-        # Pretty print
-        for c in commits:
-            date_short = c["date"][:10]
-            print(f"{c['sha'][:8]} {date_short} {c['subject'][:60]}")
-        _emit_status("git_log", commits=len(commits))
+        _emit_status("git_log", commits=len(commits), entries=[{"sha": c["sha"][:8], "subject": c["subject"][:50]} for c in commits[:5]])
         return commits
 
     @_category("Git")
@@ -719,19 +814,7 @@ if "__omp_prelude_loaded__" not in globals():
             _, stat_out, _ = _git("show", ref, "--stat", "--format=", cwd=cwd)
             result["files"] = [l.strip() for l in stat_out.strip().splitlines() if l.strip()]
 
-        # Pretty print
-        print(f"commit {result['sha'][:12]}")
-        print(f"Author: {result['author']}")
-        print(f"Date:   {result['date']}")
-        print(f"\n    {result['subject']}")
-        if result["body"]:
-            for line in result["body"].splitlines()[:5]:
-                print(f"    {line}")
-        if result["files"]:
-            print()
-            for f in result["files"][-5:]:
-                print(f"  {f}")
-        _emit_status("git_show", ref=ref, sha=result["sha"][:12], files=len(result["files"]))
+        _emit_status("git_show", ref=ref, sha=result["sha"][:12], subject=result["subject"][:60], files=len(result["files"]))
         return result
 
     @_category("Git")
@@ -748,12 +831,10 @@ if "__omp_prelude_loaded__" not in globals():
             start = max(1, start)
             end = min(len(all_lines), end)
             selected = all_lines[start - 1 : end]
-            out = "\n".join(f"{start + i}: {line}" for i, line in enumerate(selected))
-            print(out)
+            out = "\n".join(selected)
             _emit_status("git_file_at", ref=ref, path=path, start=start, end=end, lines=len(selected))
-            return "\n".join(selected)
+            return out
 
-        print(out)
         _emit_status("git_file_at", ref=ref, path=path, chars=len(out))
         return out
 
@@ -779,13 +860,7 @@ if "__omp_prelude_loaded__" not in globals():
                 if is_current:
                     result["current"] = name
 
-        print(f"* {result['current']}")
-        for b in result["local"]:
-            if b != result["current"]:
-                print(f"  {b}")
-        if result["remote"]:
-            print(f"  ({len(result['remote'])} remote branches)")
-        _emit_status("git_branch", current=result["current"], local=len(result["local"]), remote=len(result["remote"]))
+        _emit_status("git_branch", current=result["current"], local=len(result["local"]), remote=len(result["remote"]), branches=result["local"][:10])
         return result
 
     @_category("Git")
