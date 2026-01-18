@@ -9,7 +9,7 @@
  * - Live preview shown in the actual status line above
  */
 
-import { Container, isArrowDown, isArrowUp, isEnter, isEscape, isShiftTab, isTab } from "@oh-my-pi/pi-tui";
+import { Container, matchesKey } from "@oh-my-pi/pi-tui";
 import type { StatusLineSegmentId } from "../../../core/settings-manager";
 import { theme } from "../theme/theme";
 import { ALL_SEGMENT_IDS } from "./status-line/segments";
@@ -109,7 +109,7 @@ export class StatusLineSegmentEditorComponent extends Container {
 	handleInput(data: string): void {
 		const columnSegments = this.getCurrentColumnSegments();
 
-		if (isArrowUp(data) || data === "k") {
+		if (matchesKey(data, "up") || data === "k") {
 			// Move selection up within column, or jump to previous column
 			if (this.selectedIndex > 0) {
 				this.selectedIndex--;
@@ -135,7 +135,7 @@ export class StatusLineSegmentEditorComponent extends Container {
 					}
 				}
 			}
-		} else if (isArrowDown(data) || data === "j") {
+		} else if (matchesKey(data, "down") || data === "j") {
 			// Move selection down within column, or jump to next column
 			if (this.selectedIndex < columnSegments.length - 1) {
 				this.selectedIndex++;
@@ -161,7 +161,7 @@ export class StatusLineSegmentEditorComponent extends Container {
 					}
 				}
 			}
-		} else if (isTab(data)) {
+		} else if (matchesKey(data, "tab")) {
 			// Cycle segment: left → right → disabled → left
 			const seg = columnSegments[this.selectedIndex];
 			if (seg) {
@@ -180,7 +180,7 @@ export class StatusLineSegmentEditorComponent extends Container {
 				this.recompactColumn(oldColumn);
 				this.triggerPreview();
 			}
-		} else if (isShiftTab(data)) {
+		} else if (matchesKey(data, "shift+tab")) {
 			// Reverse cycle: left ← right ← disabled ← left
 			const seg = columnSegments[this.selectedIndex];
 			if (seg) {
@@ -235,11 +235,11 @@ export class StatusLineSegmentEditorComponent extends Container {
 				this.selectedIndex++;
 				this.triggerPreview();
 			}
-		} else if (isEnter(data)) {
+		} else if (matchesKey(data, "enter") || matchesKey(data, "return") || data === "\n") {
 			const left = this.getSegmentsForColumn("left").map((s) => s.id);
 			const right = this.getSegmentsForColumn("right").map((s) => s.id);
 			this.callbacks.onSave(left, right);
-		} else if (isEscape(data)) {
+		} else if (matchesKey(data, "escape") || matchesKey(data, "esc")) {
 			this.callbacks.onCancel();
 		}
 	}

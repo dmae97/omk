@@ -1,5 +1,5 @@
 import { getOAuthProviders, type OAuthProviderInfo } from "@oh-my-pi/pi-ai";
-import { Container, isArrowDown, isArrowUp, isCtrlC, isEnter, isEscape, Spacer, TruncatedText } from "@oh-my-pi/pi-tui";
+import { Container, matchesKey, Spacer, TruncatedText } from "@oh-my-pi/pi-tui";
 import type { AuthStorage } from "../../../core/auth-storage";
 import { theme } from "../theme/theme";
 import { DynamicBorder } from "./dynamic-border";
@@ -101,7 +101,7 @@ export class OAuthSelectorComponent extends Container {
 
 	handleInput(keyData: string): void {
 		// Up arrow
-		if (isArrowUp(keyData)) {
+		if (matchesKey(keyData, "up")) {
 			if (this.allProviders.length > 0) {
 				this.selectedIndex = this.selectedIndex === 0 ? this.allProviders.length - 1 : this.selectedIndex - 1;
 			}
@@ -109,7 +109,7 @@ export class OAuthSelectorComponent extends Container {
 			this.updateList();
 		}
 		// Down arrow
-		else if (isArrowDown(keyData)) {
+		else if (matchesKey(keyData, "down")) {
 			if (this.allProviders.length > 0) {
 				this.selectedIndex = this.selectedIndex === this.allProviders.length - 1 ? 0 : this.selectedIndex + 1;
 			}
@@ -117,7 +117,7 @@ export class OAuthSelectorComponent extends Container {
 			this.updateList();
 		}
 		// Enter
-		else if (isEnter(keyData)) {
+		else if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
 			const selectedProvider = this.allProviders[this.selectedIndex];
 			if (selectedProvider?.available) {
 				this.statusMessage = undefined;
@@ -128,7 +128,7 @@ export class OAuthSelectorComponent extends Container {
 			}
 		}
 		// Escape or Ctrl+C
-		else if (isEscape(keyData) || isCtrlC(keyData)) {
+		else if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc") || matchesKey(keyData, "ctrl+c")) {
 			this.onCancelCallback();
 		}
 	}

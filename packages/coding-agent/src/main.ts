@@ -7,6 +7,7 @@
 
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createInterface } from "node:readline/promises";
 import { type ImageContent, supportsXhigh } from "@oh-my-pi/pi-ai";
 import chalk from "chalk";
 import { type Args, parseArgs, printHelp } from "./cli/args";
@@ -23,7 +24,7 @@ import type { ExtensionUIContext } from "./core/index";
 import type { ModelRegistry } from "./core/model-registry";
 import { parseModelPattern, parseModelString, resolveModelScope, type ScopedModel } from "./core/model-resolver";
 import { type CreateAgentSessionOptions, createAgentSession, discoverAuthStorage, discoverModels } from "./core/sdk";
-import { SessionManager } from "./core/session-manager";
+import { type SessionInfo, SessionManager } from "./core/session-manager";
 import { SettingsManager } from "./core/settings-manager";
 import { resolvePromptInput } from "./core/system-prompt";
 import { printTimings, time } from "./core/timings";
@@ -165,16 +166,9 @@ async function prepareInitialMessage(
 }
 
 /**
- * Resolve a session argument to a file path.
- * If it looks like a path, use as-is. Otherwise try to match as session ID prefix.
+ * Resolve a session argument to a local or global session match.
  */
-function resolveSessionPath(sessionArg: string, cwd: string, sessionDir?: string): string {
-	// If it looks like a file path, use as-is
-	if (sessionArg.includes("/") || sessionArg.includes("\\") || sessionArg.endsWith(".jsonl")) {
-		return sessionArg;
-	}
-
-	// Try to match as session ID (full or partial UUID)
+function resolveSessionMatch(sessionArg: string, cwd: string, sessionDir?: string): SessionInfo | undefined {
 	const sessions = SessionManager.list(cwd, sessionDir);
 	let matches = sessions.filter((session) => session.id.startsWith(sessionArg));
 
@@ -183,12 +177,21 @@ function resolveSessionPath(sessionArg: string, cwd: string, sessionDir?: string
 		matches = globalSessions.filter((session) => session.id.startsWith(sessionArg));
 	}
 
-	if (matches.length >= 1) {
-		return matches[0].path; // Already sorted by modified time (most recent first)
-	}
+	return matches[0];
+}
 
-	// No match - return original (will create new session)
-	return sessionArg;
+async function promptForkSession(session: SessionInfo): Promise<boolean> {
+	if (!process.stdin.isTTY) {
+		return false;
+	}
+	const message = `Session found in different project: ${session.cwd}. Fork into current directory? [y/N] `;
+	const rl = createInterface({ input: process.stdin, output: process.stdout });
+	try {
+		const answer = (await rl.question(message)).trim().toLowerCase();
+		return answer === "y" || answer === "yes";
+	} finally {
+		rl.close();
+	}
 }
 
 function getChangelogForDisplay(parsed: Args, settingsManager: SettingsManager): string | undefined {
@@ -221,8 +224,24 @@ async function createSessionManager(parsed: Args, cwd: string): Promise<SessionM
 		return SessionManager.inMemory();
 	}
 	if (parsed.session) {
-		const resolvedPath = resolveSessionPath(parsed.session, cwd, parsed.sessionDir);
-		return await SessionManager.open(resolvedPath, parsed.sessionDir);
+		const sessionArg = parsed.session;
+		if (sessionArg.includes("/") || sessionArg.includes("\\") || sessionArg.endsWith(".jsonl")) {
+			return await SessionManager.open(sessionArg, parsed.sessionDir);
+		}
+		const match = resolveSessionMatch(sessionArg, cwd, parsed.sessionDir);
+		if (!match) {
+			throw new Error(`Session "${sessionArg}" not found.`);
+		}
+		const normalizedCwd = resolve(cwd);
+		const normalizedMatchCwd = resolve(match.cwd || cwd);
+		if (normalizedCwd !== normalizedMatchCwd) {
+			const shouldFork = await promptForkSession(match);
+			if (!shouldFork) {
+				throw new Error(`Session "${sessionArg}" is in another project (${match.cwd}).`);
+			}
+			return await SessionManager.forkFrom(match.path, cwd, parsed.sessionDir);
+		}
+		return await SessionManager.open(match.path, parsed.sessionDir);
 	}
 	if (parsed.continue) {
 		return await SessionManager.continueRecent(cwd, parsed.sessionDir);

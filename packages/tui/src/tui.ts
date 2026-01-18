@@ -44,6 +44,30 @@ export interface Component {
 	invalidate(): void;
 }
 
+/**
+ * Interface for components that can receive focus and display a hardware cursor.
+ * When focused, the component should emit CURSOR_MARKER at the cursor position
+ * in its render output. TUI will find this marker and position the hardware
+ * cursor there for proper IME candidate window positioning.
+ */
+export interface Focusable {
+	/** Set by TUI when focus changes. Component should emit CURSOR_MARKER when true. */
+	focused: boolean;
+}
+
+/** Type guard to check if a component implements Focusable */
+export function isFocusable(component: Component | null): component is Component & Focusable {
+	return component !== null && "focused" in component;
+}
+
+/**
+ * Cursor position marker - APC (Application Program Command) sequence.
+ * This is a zero-width escape sequence that terminals ignore.
+ * Components emit this at the cursor position when focused.
+ * TUI finds and strips this marker, then positions the hardware cursor there.
+ */
+export const CURSOR_MARKER = "\x1b_pi:c\x07";
+
 export { visibleWidth };
 
 /**
@@ -199,10 +223,11 @@ export class TUI extends Container {
 	public onDebug?: () => void;
 	private renderRequested = false;
 	private rendering = false;
-	private cursorRow = 0; // Track where cursor is (0-indexed, relative to our first line)
-	private previousCursor: { row: number; col: number } | null = null;
+	private cursorRow = 0; // Logical cursor row (end of rendered content)
+	private hardwareCursorRow = 0; // Actual terminal cursor row (may differ due to IME positioning)
 	private inputBuffer = ""; // Buffer for parsing terminal responses
 	private cellSizeQueryPending = false;
+	private showHardwareCursor = process.env.PI_HARDWARE_CURSOR === "1";
 
 	// Overlay stack for modal components rendered on top of base content
 	private overlayStack: {
@@ -213,13 +238,39 @@ export class TUI extends Container {
 	}[] = [];
 	private inputQueue: string[] = []; // Queue input during cell size query to avoid interleaving
 
-	constructor(terminal: Terminal) {
+	constructor(terminal: Terminal, showHardwareCursor?: boolean) {
 		super();
 		this.terminal = terminal;
+		if (showHardwareCursor !== undefined) {
+			this.showHardwareCursor = showHardwareCursor;
+		}
+	}
+
+	getShowHardwareCursor(): boolean {
+		return this.showHardwareCursor;
+	}
+
+	setShowHardwareCursor(enabled: boolean): void {
+		if (this.showHardwareCursor === enabled) return;
+		this.showHardwareCursor = enabled;
+		if (!enabled) {
+			this.terminal.hideCursor();
+		}
+		this.requestRender();
 	}
 
 	setFocus(component: Component | null): void {
+		// Clear focused flag on old component
+		if (isFocusable(this.focusedComponent)) {
+			this.focusedComponent.focused = false;
+		}
+
 		this.focusedComponent = component;
+
+		// Set focused flag on new component
+		if (isFocusable(component)) {
+			component.focused = true;
+		}
 	}
 
 	/**
@@ -338,7 +389,7 @@ export class TUI extends Container {
 		// Move cursor to the end of the content to prevent overwriting/artifacts on exit
 		if (this.previousLines.length > 0) {
 			const targetRow = this.previousLines.length; // Line after the last content
-			const lineDiff = targetRow - this.cursorRow;
+			const lineDiff = targetRow - this.hardwareCursorRow;
 			if (lineDiff > 0) {
 				this.terminal.write(`\x1b[${lineDiff}B`);
 			} else if (lineDiff < 0) {
@@ -360,7 +411,7 @@ export class TUI extends Container {
 			this.previousLines = [];
 			this.previousWidth = -1; // -1 triggers widthChanged, forcing a full clear
 			this.cursorRow = 0;
-			this.previousCursor = null;
+			this.hardwareCursorRow = 0;
 		}
 		if (this.renderRequested) return;
 		this.renderRequested = true;
@@ -382,40 +433,6 @@ export class TUI extends Container {
 			};
 			check();
 		});
-	}
-
-	private areCursorsEqual(
-		left: { row: number; col: number } | null,
-		right: { row: number; col: number } | null,
-	): boolean {
-		if (!left && !right) return true;
-		if (!left || !right) return false;
-		return left.row === right.row && left.col === right.col;
-	}
-
-	private updateHardwareCursor(
-		width: number,
-		totalLines: number,
-		cursor: { row: number; col: number } | null,
-		currentCursorRow: number,
-	): void {
-		const safeTotalLines = Math.max(totalLines, 1);
-		const resolvedCursor = cursor ?? { row: safeTotalLines - 1, col: 0 };
-
-		const targetRow = Math.max(0, Math.min(resolvedCursor.row, safeTotalLines - 1));
-		const targetCol = Math.max(0, Math.min(resolvedCursor.col, width - 1));
-		const rowDelta = targetRow - currentCursorRow;
-
-		let buffer = "";
-		if (rowDelta > 0) {
-			buffer += `\x1b[${rowDelta}B`;
-		} else if (rowDelta < 0) {
-			buffer += `\x1b[${-rowDelta}A`;
-		}
-		buffer += `\r\x1b[${targetCol + 1}G`;
-		this.terminal.write(buffer);
-		this.cursorRow = targetRow;
-		this.terminal.showCursor();
 	}
 
 	private handleInput(data: string): void {
@@ -738,6 +755,67 @@ export class TUI extends Container {
 		return lines.map((line) => (this.containsImage(line) ? line : line + reset));
 	}
 
+	/**
+	 * Find and extract cursor position from rendered lines.
+	 * Searches for CURSOR_MARKER, calculates its position, and strips it from the output.
+	 * @returns Cursor position { row, col } or null if no marker found
+	 */
+	private extractCursorPosition(lines: string[]): { row: number; col: number } | null {
+		for (let row = 0; row < lines.length; row++) {
+			const line = lines[row];
+			const markerIndex = line.indexOf(CURSOR_MARKER);
+			if (markerIndex !== -1) {
+				// Calculate visual column (width of text before marker)
+				const beforeMarker = line.slice(0, markerIndex);
+				const col = visibleWidth(beforeMarker);
+
+				// Strip marker from the line
+				lines[row] = line.slice(0, markerIndex) + line.slice(markerIndex + CURSOR_MARKER.length);
+
+				return { row, col };
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Position the hardware cursor for IME candidate window.
+	 * @param cursorPos The cursor position extracted from rendered output, or null
+	 * @param totalLines Total number of rendered lines
+	 */
+	private positionHardwareCursor(cursorPos: { row: number; col: number } | null, totalLines: number): void {
+		if (!cursorPos || totalLines <= 0) {
+			this.terminal.hideCursor();
+			return;
+		}
+
+		// Clamp cursor position to valid range
+		const targetRow = Math.max(0, Math.min(cursorPos.row, totalLines - 1));
+		const targetCol = Math.max(0, cursorPos.col);
+
+		// Move cursor from current position to target
+		const rowDelta = targetRow - this.hardwareCursorRow;
+		let buffer = "";
+		if (rowDelta > 0) {
+			buffer += `\x1b[${rowDelta}B`; // Move down
+		} else if (rowDelta < 0) {
+			buffer += `\x1b[${-rowDelta}A`; // Move up
+		}
+		// Move to absolute column (1-indexed)
+		buffer += `\x1b[${targetCol + 1}G`;
+
+		if (buffer) {
+			this.terminal.write(buffer);
+		}
+
+		this.hardwareCursorRow = targetRow;
+		if (this.showHardwareCursor) {
+			this.terminal.showCursor();
+		} else {
+			this.terminal.hideCursor();
+		}
+	}
+
 	/** Splice overlay content into a base line at a specific column. Single-pass optimized. */
 	private compositeLineAt(
 		baseLine: string,
@@ -805,8 +883,6 @@ export class TUI extends Container {
 		// Capture terminal dimensions at start to ensure consistency throughout render
 		const width = this.terminal.columns;
 		const height = this.terminal.rows;
-		// Snapshot cursor position at start of render for consistent viewport calculations
-		const currentCursorRow = this.cursorRow;
 
 		// Render all components to get new lines
 		let newLines = this.render(width);
@@ -816,9 +892,10 @@ export class TUI extends Container {
 			newLines = this.compositeOverlays(newLines, width, height);
 		}
 
-		newLines = this.applyLineResets(newLines);
+		// Extract cursor position before applying line resets (marker must be found first)
+		const cursorPos = this.extractCursorPosition(newLines);
 
-		const cursorInfo = this.getCursorPosition(width);
+		newLines = this.applyLineResets(newLines);
 
 		// Width changed - need full re-render
 		const widthChanged = this.previousWidth !== 0 && this.previousWidth !== width;
@@ -832,10 +909,10 @@ export class TUI extends Container {
 			}
 			buffer += "\x1b[?2026l"; // End synchronized output
 			this.terminal.write(buffer);
-			// After rendering N lines, cursor is at end of last line (line N-1)
-			this.cursorRow = newLines.length - 1;
-			this.updateHardwareCursor(width, newLines.length, cursorInfo, this.cursorRow);
-			this.previousCursor = cursorInfo;
+			// After rendering N lines, cursor is at end of last line (clamp to 0 for empty)
+			this.cursorRow = Math.max(0, newLines.length - 1);
+			this.hardwareCursorRow = this.cursorRow;
+			this.positionHardwareCursor(cursorPos, newLines.length);
 			this.previousLines = newLines;
 			this.previousWidth = width;
 			return;
@@ -851,9 +928,9 @@ export class TUI extends Container {
 			}
 			buffer += "\x1b[?2026l"; // End synchronized output
 			this.terminal.write(buffer);
-			this.cursorRow = newLines.length - 1;
-			this.updateHardwareCursor(width, newLines.length, cursorInfo, this.cursorRow);
-			this.previousCursor = cursorInfo;
+			this.cursorRow = Math.max(0, newLines.length - 1);
+			this.hardwareCursorRow = this.cursorRow;
+			this.positionHardwareCursor(cursorPos, newLines.length);
 			this.previousLines = newLines;
 			this.previousWidth = width;
 			return;
@@ -875,12 +952,9 @@ export class TUI extends Container {
 			}
 		}
 
-		// No changes
+		// No changes - but still need to update hardware cursor position if it moved
 		if (firstChanged === -1) {
-			if (!this.areCursorsEqual(cursorInfo, this.previousCursor)) {
-				this.updateHardwareCursor(width, newLines.length, cursorInfo, currentCursorRow);
-				this.previousCursor = cursorInfo;
-			}
+			this.positionHardwareCursor(cursorPos, newLines.length);
 			return;
 		}
 
@@ -888,9 +962,9 @@ export class TUI extends Container {
 		if (firstChanged >= newLines.length) {
 			if (this.previousLines.length > newLines.length) {
 				let buffer = "\x1b[?2026h";
-				// Move to end of new content
-				const targetRow = newLines.length - 1;
-				const lineDiff = targetRow - currentCursorRow;
+				// Move to end of new content (clamp to 0 for empty content)
+				const targetRow = Math.max(0, newLines.length - 1);
+				const lineDiff = targetRow - this.hardwareCursorRow;
 				if (lineDiff > 0) buffer += `\x1b[${lineDiff}B`;
 				else if (lineDiff < 0) buffer += `\x1b[${-lineDiff}A`;
 				buffer += "\r";
@@ -902,18 +976,20 @@ export class TUI extends Container {
 				buffer += `\x1b[${extraLines}A`;
 				buffer += "\x1b[?2026l";
 				this.terminal.write(buffer);
-				this.cursorRow = newLines.length - 1;
+				this.cursorRow = targetRow;
+				this.hardwareCursorRow = targetRow;
 			}
+			this.positionHardwareCursor(cursorPos, newLines.length);
 			this.previousLines = newLines;
 			this.previousWidth = width;
 			return;
 		}
 
 		// Check if firstChanged is outside the viewport
-		// Use snapshotted cursor position for consistent viewport calculation
-		// Viewport shows lines from (currentCursorRow - height + 1) to currentCursorRow
+		// cursorRow is the line where cursor is (0-indexed)
+		// Viewport shows lines from (cursorRow - height + 1) to cursorRow
 		// If firstChanged < viewportTop, we need full re-render
-		const viewportTop = currentCursorRow - height + 1;
+		const viewportTop = this.cursorRow - height + 1;
 		if (firstChanged < viewportTop) {
 			// First change is above viewport - need full re-render
 			let buffer = "\x1b[?2026h"; // Begin synchronized output
@@ -924,9 +1000,9 @@ export class TUI extends Container {
 			}
 			buffer += "\x1b[?2026l"; // End synchronized output
 			this.terminal.write(buffer);
-			this.cursorRow = newLines.length - 1;
-			this.updateHardwareCursor(width, newLines.length, cursorInfo, this.cursorRow);
-			this.previousCursor = cursorInfo;
+			this.cursorRow = Math.max(0, newLines.length - 1);
+			this.hardwareCursorRow = this.cursorRow;
+			this.positionHardwareCursor(cursorPos, newLines.length);
 			this.previousLines = newLines;
 			this.previousWidth = width;
 			return;
@@ -936,8 +1012,8 @@ export class TUI extends Container {
 		// Build buffer with all updates wrapped in synchronized output
 		let buffer = "\x1b[?2026h"; // Begin synchronized output
 
-		// Move cursor to first changed line using snapshotted position
-		const lineDiff = firstChanged - currentCursorRow;
+		// Move cursor to first changed line (use hardwareCursorRow for actual position)
+		const lineDiff = firstChanged - this.hardwareCursorRow;
 		if (lineDiff > 0) {
 			buffer += `\x1b[${lineDiff}B`; // Move down
 		} else if (lineDiff < 0) {
@@ -1015,8 +1091,10 @@ export class TUI extends Container {
 
 		// Track cursor position for next render
 		this.cursorRow = finalCursorRow;
-		this.updateHardwareCursor(width, newLines.length, cursorInfo, this.cursorRow);
-		this.previousCursor = cursorInfo;
+		this.hardwareCursorRow = finalCursorRow;
+
+		// Position hardware cursor for IME
+		this.positionHardwareCursor(cursorPos, newLines.length);
 
 		this.previousLines = newLines;
 		this.previousWidth = width;

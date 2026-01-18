@@ -5,19 +5,18 @@
 
 - Added automatic retry logic for OpenAI Codex responses with configurable delay and max retries
 - Added tool call ID sanitization for Amazon Bedrock to ensure valid characters
-- Added support for Bedrock Claude thinking budget management with automatic token allocation
-- Added numeric string coercion in validation to handle string numbers in tool arguments
+- Added tool argument validation that coerces JSON-encoded strings for expected non-string types
 
 ### Changed
 
-- Improved error handling in stream processing with better message filtering
-- Enhanced validation to automatically convert numeric strings to numbers when appropriate
+- Adjusted Bedrock Claude thinking budgets to reserve output tokens when maxTokens is too low
 
 ### Fixed
 
 - Fixed tool prefix handling in Claude provider to use case-insensitive comparison
-- Fixed Gemini 3 model handling to treat unsigned tool calls as context-only
+- Fixed Gemini 3 model handling to treat unsigned tool calls as context-only with anti-mimicry context
 - Fixed message transformation to filter out empty error messages from conversation history
+- Fixed OpenAI completions provider compatibility detection to use provider metadata
 - Fixed OpenAI completions provider to avoid using developer role for opencode provider
 - Fixed orphaned tool call handling to skip synthetic results for errored assistant messages
 

@@ -1,37 +1,7 @@
 import type { AutocompleteProvider, CombinedAutocompleteProvider } from "../autocomplete";
-import {
-	isAltBackspace,
-	isAltEnter,
-	isAltLeft,
-	isAltRight,
-	isArrowDown,
-	isArrowLeft,
-	isArrowRight,
-	isArrowUp,
-	isBackspace,
-	isCtrlA,
-	isCtrlC,
-	isCtrlE,
-	isCtrlK,
-	isCtrlLeft,
-	isCtrlRight,
-	isCtrlU,
-	isCtrlW,
-	isCtrlY,
-	isDelete,
-	isEnd,
-	isEnter,
-	isEscape,
-	isHome,
-	isShiftBackspace,
-	isShiftDelete,
-	isShiftEnter,
-	isShiftSpace,
-	isTab,
-	matchesKey,
-} from "../keys";
+import { matchesKey } from "../keys";
 import type { SymbolTheme } from "../symbols";
-import type { Component } from "../tui";
+import { type Component, CURSOR_MARKER, type Focusable } from "../tui";
 import { getSegmenter, isPunctuationChar, isWhitespaceChar, truncateToWidth, visibleWidth } from "../utils";
 import { SelectList, type SelectListTheme } from "./select-list";
 
@@ -217,6 +187,44 @@ function wordWrapLine(line: string, maxWidth: number): TextChunk[] {
 	return chunks.length > 0 ? chunks : [{ text: "", startIndex: 0, endIndex: 0 }];
 }
 
+// Kitty CSI-u sequences for printable keys, including optional shifted/base codepoints.
+const KITTY_CSI_U_REGEX = /^\x1b\[(\d+)(?::(\d*))?(?::(\d+))?(?:;(\d+))?(?::(\d+))?u$/;
+const KITTY_MOD_SHIFT = 1;
+const KITTY_MOD_ALT = 2;
+const KITTY_MOD_CTRL = 4;
+
+// Decode a printable CSI-u sequence, preferring the shifted key when present.
+function decodeKittyPrintable(data: string): string | undefined {
+	const match = data.match(KITTY_CSI_U_REGEX);
+	if (!match) return undefined;
+
+	// CSI-u groups: <codepoint>[:<shifted>[:<base>]];<mod>u
+	const codepoint = Number.parseInt(match[1] ?? "", 10);
+	if (!Number.isFinite(codepoint)) return undefined;
+
+	const shiftedKey = match[2] && match[2].length > 0 ? Number.parseInt(match[2], 10) : undefined;
+	const modValue = match[4] ? Number.parseInt(match[4], 10) : 1;
+	// Modifiers are 1-indexed in CSI-u; normalize to our bitmask.
+	const modifier = Number.isFinite(modValue) ? modValue - 1 : 0;
+
+	// Ignore CSI-u sequences used for Alt/Ctrl shortcuts.
+	if (modifier & (KITTY_MOD_ALT | KITTY_MOD_CTRL)) return undefined;
+
+	// Prefer the shifted keycode when Shift is held.
+	let effectiveCodepoint = codepoint;
+	if (modifier & KITTY_MOD_SHIFT && typeof shiftedKey === "number") {
+		effectiveCodepoint = shiftedKey;
+	}
+	// Drop control characters or invalid codepoints.
+	if (!Number.isFinite(effectiveCodepoint) || effectiveCodepoint < 32) return undefined;
+
+	try {
+		return String.fromCodePoint(effectiveCodepoint);
+	} catch {
+		return undefined;
+	}
+}
+
 interface EditorState {
 	lines: string[];
 	cursorLine: number;
@@ -252,12 +260,15 @@ interface HistoryStorage {
 	getRecent(limit: number): HistoryEntry[];
 }
 
-export class Editor implements Component {
+export class Editor implements Component, Focusable {
 	private state: EditorState = {
 		lines: [""],
 		cursorLine: 0,
 		cursorCol: 0,
 	};
+
+	/** Focusable interface - set by TUI when focus changes */
+	focused: boolean = false;
 
 	private theme: EditorTheme;
 	private useTerminalCursor = false;
@@ -485,7 +496,10 @@ export class Editor implements Component {
 		}
 
 		// Render each layout line
+		// Emit hardware cursor marker only when focused and not showing autocomplete
+		const emitCursorMarker = this.focused && !this.isAutocompleting;
 		const lineContentWidth = contentAreaWidth;
+
 		for (const layoutLine of visibleLayoutLines) {
 			let displayText = layoutLine.text;
 			let displayWidth = visibleWidth(layoutLine.text);
@@ -495,6 +509,9 @@ export class Editor implements Component {
 				const before = displayText.slice(0, layoutLine.cursorPos);
 				const after = displayText.slice(layoutLine.cursorPos);
 
+				// Hardware cursor marker (zero-width, emitted before fake cursor for IME positioning)
+				const marker = emitCursorMarker ? CURSOR_MARKER : "";
+
 				if (after.length > 0) {
 					// Cursor is on a character (grapheme) - replace it with highlighted version
 					// Get the first grapheme from 'after'
@@ -502,13 +519,13 @@ export class Editor implements Component {
 					const firstGrapheme = afterGraphemes[0]?.segment || "";
 					const restAfter = after.slice(firstGrapheme.length);
 					const cursor = `\x1b[7m${firstGrapheme}\x1b[0m`;
-					displayText = before + cursor + restAfter;
+					displayText = before + marker + cursor + restAfter;
 					// displayWidth stays the same - we're replacing, not adding
 				} else {
 					// Cursor is at the end - add thin blinking bar cursor
 					const cursorChar = this.theme.symbols.inputCursor;
 					const cursor = `\x1b[5m${cursorChar}\x1b[0m`;
-					displayText = before + cursor;
+					displayText = before + marker + cursor;
 					displayWidth += visibleWidth(cursorChar);
 					if (displayWidth > lineContentWidth) {
 						// Line is at full width - use reverse video on last grapheme if possible
@@ -522,7 +539,7 @@ export class Editor implements Component {
 								.slice(0, -1)
 								.map((g) => g.segment)
 								.join("");
-							displayText = beforeWithoutLast + cursor;
+							displayText = beforeWithoutLast + marker + cursor;
 							displayWidth -= 1; // Back to original width (reverse video replaces, doesn't add)
 						}
 					}
@@ -649,27 +666,34 @@ export class Editor implements Component {
 		}
 
 		// Ctrl+C - Exit (let parent handle this)
-		if (isCtrlC(data)) {
+		if (matchesKey(data, "ctrl+c")) {
 			return;
 		}
 
 		// Handle autocomplete special keys first (but don't block other input)
 		if (this.isAutocompleting && this.autocompleteList) {
 			// Escape - cancel autocomplete
-			if (isEscape(data)) {
+			if (matchesKey(data, "escape") || matchesKey(data, "esc")) {
 				this.cancelAutocomplete(true);
 				return;
 			}
 			// Let the autocomplete list handle navigation and selection
-			else if (isArrowUp(data) || isArrowDown(data) || isEnter(data) || isTab(data)) {
+			else if (
+				matchesKey(data, "up") ||
+				matchesKey(data, "down") ||
+				matchesKey(data, "enter") ||
+				matchesKey(data, "return") ||
+				data === "\n" ||
+				matchesKey(data, "tab")
+			) {
 				// Only pass arrow keys to the list, not Enter/Tab (we handle those directly)
-				if (isArrowUp(data) || isArrowDown(data)) {
+				if (matchesKey(data, "up") || matchesKey(data, "down")) {
 					this.autocompleteList.handleInput(data);
 					return;
 				}
 
 				// If Tab was pressed, always apply the selection
-				if (isTab(data)) {
+				if (matchesKey(data, "tab")) {
 					const selected = this.autocompleteList.getSelectedItem();
 					if (selected && this.autocompleteProvider) {
 						const result = this.autocompleteProvider.applyCompletion(
@@ -694,7 +718,10 @@ export class Editor implements Component {
 				}
 
 				// If Enter was pressed on a slash command, apply completion and submit
-				if (isEnter(data) && this.autocompletePrefix.startsWith("/")) {
+				if (
+					(matchesKey(data, "enter") || matchesKey(data, "return") || data === "\n") &&
+					this.autocompletePrefix.startsWith("/")
+				) {
 					const selected = this.autocompleteList.getSelectedItem();
 					if (selected && this.autocompleteProvider) {
 						const result = this.autocompleteProvider.applyCompletion(
@@ -713,7 +740,7 @@ export class Editor implements Component {
 					// Don't return - fall through to submission logic
 				}
 				// If Enter was pressed on a file path, apply completion
-				else if (isEnter(data)) {
+				else if (matchesKey(data, "enter") || matchesKey(data, "return") || data === "\n") {
 					const selected = this.autocompleteList.getSelectedItem();
 					if (selected && this.autocompleteProvider) {
 						const result = this.autocompleteProvider.applyCompletion(
@@ -742,26 +769,26 @@ export class Editor implements Component {
 		}
 
 		// Tab key - context-aware completion (but not when already autocompleting)
-		if (isTab(data) && !this.isAutocompleting) {
+		if (matchesKey(data, "tab") && !this.isAutocompleting) {
 			this.handleTabCompletion();
 			return;
 		}
 
 		// Continue with rest of input handling
 		// Ctrl+K - Delete to end of line
-		if (isCtrlK(data)) {
+		if (matchesKey(data, "ctrl+k")) {
 			this.deleteToEndOfLine();
 		}
 		// Ctrl+U - Delete to start of line
-		else if (isCtrlU(data)) {
+		else if (matchesKey(data, "ctrl+u")) {
 			this.deleteToStartOfLine();
 		}
 		// Ctrl+W - Delete word backwards
-		else if (isCtrlW(data)) {
+		else if (matchesKey(data, "ctrl+w")) {
 			this.deleteWordBackwards();
 		}
 		// Option/Alt+Backspace - Delete word backwards
-		else if (isAltBackspace(data)) {
+		else if (matchesKey(data, "alt+backspace")) {
 			this.deleteWordBackwards();
 		}
 		// Option/Alt+D - Delete word forwards
@@ -769,19 +796,19 @@ export class Editor implements Component {
 			this.deleteWordForwards();
 		}
 		// Ctrl+Y - Yank from kill ring
-		else if (isCtrlY(data)) {
+		else if (matchesKey(data, "ctrl+y")) {
 			this.yankFromKillRing();
 		}
 		// Ctrl+A - Move to start of line
-		else if (isCtrlA(data)) {
+		else if (matchesKey(data, "ctrl+a")) {
 			this.moveToLineStart();
 		}
 		// Ctrl+E - Move to end of line
-		else if (isCtrlE(data)) {
+		else if (matchesKey(data, "ctrl+e")) {
 			this.moveToLineEnd();
 		}
 		// Alt+Enter - special handler if callback exists, otherwise new line
-		else if (isAltEnter(data)) {
+		else if (matchesKey(data, "alt+enter")) {
 			if (this.onAltEnter) {
 				this.onAltEnter(this.getText());
 			} else {
@@ -795,7 +822,7 @@ export class Editor implements Component {
 			data === "\x1b[27;5;13~" || // Ctrl+Enter (legacy format)
 			data === "\x1b\r" || // Option+Enter in some terminals (legacy)
 			data === "\x1b[13;2~" || // Shift+Enter in some terminals (legacy format)
-			isShiftEnter(data) || // Shift+Enter (Kitty protocol, handles lock bits)
+			matchesKey(data, "shift+enter") || // Shift+Enter (Kitty protocol, handles lock bits)
 			(data.length > 1 && data.includes("\x1b") && data.includes("\r")) ||
 			(data === "\n" && data.length === 1) || // Shift+Enter from iTerm2 mapping
 			data === "\\\r" // Shift+Enter in VS Code terminal
@@ -804,7 +831,7 @@ export class Editor implements Component {
 			this.addNewLine();
 		}
 		// Plain Enter - submit (handles both legacy \r and Kitty protocol with lock bits)
-		else if (isEnter(data)) {
+		else if (matchesKey(data, "enter") || matchesKey(data, "return") || data === "\n") {
 			// If submit is disabled, do nothing
 			if (this.disableSubmit) {
 				return;
@@ -842,31 +869,31 @@ export class Editor implements Component {
 			}
 		}
 		// Backspace (including Shift+Backspace)
-		else if (isBackspace(data) || isShiftBackspace(data)) {
+		else if (matchesKey(data, "backspace") || matchesKey(data, "shift+backspace")) {
 			this.handleBackspace();
 		}
 		// Line navigation shortcuts (Home/End keys)
-		else if (isHome(data)) {
+		else if (matchesKey(data, "home")) {
 			this.moveToLineStart();
-		} else if (isEnd(data)) {
+		} else if (matchesKey(data, "end")) {
 			this.moveToLineEnd();
 		}
 		// Forward delete (Fn+Backspace or Delete key, including Shift+Delete)
-		else if (isDelete(data) || isShiftDelete(data)) {
+		else if (matchesKey(data, "delete") || matchesKey(data, "shift+delete")) {
 			this.handleForwardDelete();
 		}
 		// Word navigation (Option/Alt + Arrow or Ctrl + Arrow)
-		else if (isAltLeft(data) || isCtrlLeft(data)) {
+		else if (matchesKey(data, "alt+left") || matchesKey(data, "ctrl+left")) {
 			// Word left
 			this.resetKillSequence();
 			this.moveWordBackwards();
-		} else if (isAltRight(data) || isCtrlRight(data)) {
+		} else if (matchesKey(data, "alt+right") || matchesKey(data, "ctrl+right")) {
 			// Word right
 			this.resetKillSequence();
 			this.moveWordForwards();
 		}
 		// Arrow keys
-		else if (isArrowUp(data)) {
+		else if (matchesKey(data, "up")) {
 			// Up - history navigation or cursor movement
 			if (this.isEditorEmpty()) {
 				this.navigateHistory(-1); // Start browsing history
@@ -875,27 +902,35 @@ export class Editor implements Component {
 			} else {
 				this.moveCursor(-1, 0); // Cursor movement (within text or history entry)
 			}
-		} else if (isArrowDown(data)) {
+		} else if (matchesKey(data, "down")) {
 			// Down - history navigation or cursor movement
 			if (this.historyIndex > -1 && this.isOnLastVisualLine()) {
 				this.navigateHistory(1); // Navigate to newer history entry or clear
 			} else {
 				this.moveCursor(1, 0); // Cursor movement (within text or history entry)
 			}
-		} else if (isArrowRight(data)) {
+		} else if (matchesKey(data, "right")) {
 			// Right
 			this.moveCursor(0, 1);
-		} else if (isArrowLeft(data)) {
+		} else if (matchesKey(data, "left")) {
 			// Left
 			this.moveCursor(0, -1);
 		}
 		// Shift+Space - insert regular space (Kitty protocol sends escape sequence)
-		else if (isShiftSpace(data)) {
+		else if (matchesKey(data, "shift+space")) {
 			this.insertCharacter(" ");
 		}
-		// Regular characters (printable characters and unicode, but not control characters)
-		else if (data.charCodeAt(0) >= 32) {
-			this.insertCharacter(data);
+		// Kitty CSI-u printable characters (shifted symbols like @, ?, {, })
+		else {
+			const kittyChar = decodeKittyPrintable(data);
+			if (kittyChar) {
+				this.insertText(kittyChar);
+				return;
+			}
+			// Regular characters (printable characters and unicode, but not control characters)
+			if (data.charCodeAt(0) >= 32) {
+				this.insertCharacter(data);
+			}
 		}
 	}
 
@@ -1275,7 +1310,6 @@ export class Editor implements Component {
 
 	private resetKillSequence(): void {
 		this.lastKillWasKillCommand = false;
-		this.killRingIndex = 0;
 	}
 
 	private recordKill(text: string, direction: "forward" | "backward"): void {
@@ -1289,7 +1323,6 @@ export class Editor implements Component {
 		} else {
 			this.killRing.unshift(text);
 		}
-		this.killRingIndex = 0;
 		this.lastKillWasKillCommand = true;
 	}
 

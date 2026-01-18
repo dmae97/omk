@@ -2,16 +2,6 @@ import {
 	type Component,
 	Container,
 	Input,
-	isArrowDown,
-	isArrowLeft,
-	isArrowRight,
-	isArrowUp,
-	isBackspace,
-	isCtrlC,
-	isCtrlO,
-	isEnter,
-	isEscape,
-	isShiftCtrlO,
 	matchesKey,
 	Spacer,
 	Text,
@@ -661,37 +651,37 @@ class TreeList implements Component {
 	}
 
 	handleInput(keyData: string): void {
-		if (isArrowUp(keyData)) {
+		if (matchesKey(keyData, "up")) {
 			this.selectedIndex = this.selectedIndex === 0 ? this.filteredNodes.length - 1 : this.selectedIndex - 1;
-		} else if (isArrowDown(keyData)) {
+		} else if (matchesKey(keyData, "down")) {
 			this.selectedIndex = this.selectedIndex === this.filteredNodes.length - 1 ? 0 : this.selectedIndex + 1;
-		} else if (isArrowLeft(keyData)) {
+		} else if (matchesKey(keyData, "left")) {
 			// Page up
 			this.selectedIndex = Math.max(0, this.selectedIndex - this.maxVisibleLines);
-		} else if (isArrowRight(keyData)) {
+		} else if (matchesKey(keyData, "right")) {
 			// Page down
 			this.selectedIndex = Math.min(this.filteredNodes.length - 1, this.selectedIndex + this.maxVisibleLines);
-		} else if (isEnter(keyData)) {
+		} else if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
 			const selected = this.filteredNodes[this.selectedIndex];
 			if (selected && this.onSelect) {
 				this.onSelect(selected.node.entry.id);
 			}
-		} else if (isEscape(keyData)) {
+		} else if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc")) {
 			if (this.searchQuery) {
 				this.searchQuery = "";
 				this.applyFilter();
 			} else {
 				this.onCancel?.();
 			}
-		} else if (isCtrlC(keyData)) {
+		} else if (matchesKey(keyData, "ctrl+c")) {
 			this.onCancel?.();
-		} else if (isShiftCtrlO(keyData)) {
+		} else if (matchesKey(keyData, "shift+ctrl+o") || matchesKey(keyData, "ctrl+shift+o")) {
 			// Cycle filter backwards
 			const modes: FilterMode[] = ["default", "no-tools", "user-only", "labeled-only", "all"];
 			const currentIndex = modes.indexOf(this.filterMode);
 			this.filterMode = modes[(currentIndex - 1 + modes.length) % modes.length];
 			this.applyFilter();
-		} else if (isCtrlO(keyData)) {
+		} else if (matchesKey(keyData, "ctrl+o")) {
 			// Cycle filter forwards: default → no-tools → user-only → labeled-only → all → default
 			const modes: FilterMode[] = ["default", "no-tools", "user-only", "labeled-only", "all"];
 			const currentIndex = modes.indexOf(this.filterMode);
@@ -712,7 +702,7 @@ class TreeList implements Component {
 		} else if (matchesKey(keyData, "alt+a")) {
 			this.filterMode = "all";
 			this.applyFilter();
-		} else if (isBackspace(keyData)) {
+		} else if (matchesKey(keyData, "backspace")) {
 			if (this.searchQuery.length > 0) {
 				this.searchQuery = this.searchQuery.slice(0, -1);
 				this.applyFilter();
@@ -780,10 +770,10 @@ class LabelInput implements Component {
 	}
 
 	handleInput(keyData: string): void {
-		if (isEnter(keyData)) {
+		if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
 			const value = this.input.getValue().trim();
 			this.onSubmit?.(this.entryId, value || undefined);
-		} else if (isEscape(keyData)) {
+		} else if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc")) {
 			this.onCancel?.();
 		} else {
 			this.input.handleInput(keyData);

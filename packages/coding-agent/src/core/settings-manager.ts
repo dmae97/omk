@@ -223,6 +223,7 @@ export interface Settings {
 	disabledProviders?: string[]; // Discovery provider IDs that are disabled
 	disabledExtensions?: string[]; // Individual extension IDs that are disabled (e.g., "skill:commit")
 	statusLine?: StatusLineSettings; // Status line configuration
+	showHardwareCursor?: boolean; // Show terminal cursor while still positioning it for IME
 }
 
 export const DEFAULT_BASH_INTERCEPTOR_RULES: BashInterceptorRule[] = [
@@ -1388,6 +1389,24 @@ export class SettingsManager {
 
 	async setDoubleEscapeAction(action: "branch" | "tree"): Promise<void> {
 		this.globalSettings.doubleEscapeAction = action;
+		await this.save();
+	}
+
+	getShowHardwareCursor(): boolean {
+		// Check settings first
+		if (this.settings.showHardwareCursor !== undefined) {
+			return this.settings.showHardwareCursor;
+		}
+		// Check env var override
+		const envVar = process.env.PI_HARDWARE_CURSOR?.toLowerCase();
+		if (envVar === "0" || envVar === "false") return false;
+		if (envVar === "1" || envVar === "true") return true;
+		// Default to true on Linux/macOS for IME support
+		return process.platform === "linux" || process.platform === "darwin";
+	}
+
+	async setShowHardwareCursor(show: boolean): Promise<void> {
+		this.globalSettings.showHardwareCursor = show;
 		await this.save();
 	}
 

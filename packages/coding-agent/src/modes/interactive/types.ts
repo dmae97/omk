@@ -3,6 +3,7 @@ import type { AssistantMessage, ImageContent, Message } from "@oh-my-pi/pi-ai";
 import type { Component, Container, Loader, Spacer, Text, TUI } from "@oh-my-pi/pi-tui";
 import type { AgentSession, AgentSessionEvent } from "../../core/agent-session";
 import type { ExtensionUIContext } from "../../core/extensions/index";
+import type { CompactOptions } from "../../core/extensions/types";
 import type { HistoryStorage } from "../../core/history-storage";
 import type { KeybindingsManager } from "../../core/keybindings";
 import type { SessionContext, SessionManager } from "../../core/session-manager";
@@ -141,7 +142,7 @@ export interface InteractiveModeContext {
 	handleArminSaysHi(): void;
 	handleBashCommand(command: string, excludeFromContext?: boolean): Promise<void>;
 	handleCompactCommand(customInstructions?: string): Promise<void>;
-	executeCompaction(customInstructions?: string, isAuto?: boolean): Promise<void>;
+	executeCompaction(customInstructionsOrOptions?: string | CompactOptions, isAuto?: boolean): Promise<void>;
 	openInBrowser(urlOrPath: string): void;
 
 	// Selector handling

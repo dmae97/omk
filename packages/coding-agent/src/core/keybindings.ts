@@ -29,7 +29,8 @@ export type AppAction =
 	| "externalEditor"
 	| "historySearch"
 	| "followUp"
-	| "dequeue";
+	| "dequeue"
+	| "pasteImage";
 
 /**
  * All configurable actions.
@@ -61,6 +62,7 @@ export const DEFAULT_APP_KEYBINDINGS: Record<AppAction, KeyId | KeyId[]> = {
 	externalEditor: "ctrl+g",
 	followUp: "ctrl+enter",
 	dequeue: "alt+up",
+	pasteImage: "ctrl+v",
 };
 
 /**
@@ -87,6 +89,7 @@ const APP_ACTIONS: AppAction[] = [
 	"externalEditor",
 	"followUp",
 	"dequeue",
+	"pasteImage",
 ];
 
 function isAppAction(action: string): action is AppAction {

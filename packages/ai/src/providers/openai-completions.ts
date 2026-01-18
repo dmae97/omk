@@ -460,7 +460,7 @@ function convertMessages(
 	const transformedMessages = transformMessages(context.messages, model);
 
 	if (context.systemPrompt) {
-		const useDeveloperRole = model.reasoning && compat.supportsDeveloperRole && model.provider !== "opencode";
+		const useDeveloperRole = model.reasoning && compat.supportsDeveloperRole;
 		const role = useDeveloperRole ? "developer" : "system";
 		params.push({ role: role, content: sanitizeSurrogates(context.systemPrompt) });
 	}
@@ -680,26 +680,33 @@ function mapStopReason(reason: ChatCompletionChunk.Choice["finish_reason"]): Sto
 }
 
 /**
- * Detect compatibility settings from baseUrl for known providers.
+ * Detect compatibility settings from provider and baseUrl for known providers.
+ * Provider takes precedence over URL-based detection since it's explicitly configured.
  * Returns a fully resolved OpenAICompat object with all fields set.
  */
-function detectCompatFromUrl(baseUrl: string): Required<OpenAICompat> {
-	const isZai = baseUrl.includes("api.z.ai");
-	const isOpencode = baseUrl.includes("opencode.ai");
+function detectCompat(model: Model<"openai-completions">): Required<OpenAICompat> {
+	const provider = model.provider;
+	const baseUrl = model.baseUrl;
+
+	const isZai = provider === "zai" || baseUrl.includes("api.z.ai");
 
 	const isNonStandard =
+		provider === "cerebras" ||
 		baseUrl.includes("cerebras.ai") ||
+		provider === "xai" ||
 		baseUrl.includes("api.x.ai") ||
+		provider === "mistral" ||
 		baseUrl.includes("mistral.ai") ||
 		baseUrl.includes("chutes.ai") ||
 		isZai ||
-		isOpencode;
+		provider === "opencode" ||
+		baseUrl.includes("opencode.ai");
 
-	const useMaxTokens = baseUrl.includes("mistral.ai") || baseUrl.includes("chutes.ai");
+	const useMaxTokens = provider === "mistral" || baseUrl.includes("mistral.ai") || baseUrl.includes("chutes.ai");
 
-	const isGrok = baseUrl.includes("api.x.ai");
+	const isGrok = provider === "xai" || baseUrl.includes("api.x.ai");
 
-	const isMistral = baseUrl.includes("mistral.ai");
+	const isMistral = provider === "mistral" || baseUrl.includes("mistral.ai");
 
 	return {
 		supportsStore: !isNonStandard,
@@ -717,10 +724,10 @@ function detectCompatFromUrl(baseUrl: string): Required<OpenAICompat> {
 
 /**
  * Get resolved compatibility settings for a model.
- * Uses explicit model.compat if provided, otherwise auto-detects from URL.
+ * Uses explicit model.compat if provided, otherwise auto-detects from provider/URL.
  */
 function getCompat(model: Model<"openai-completions">): Required<OpenAICompat> {
-	const detected = detectCompatFromUrl(model.baseUrl);
+	const detected = detectCompat(model);
 	if (!model.compat) return detected;
 
 	return {

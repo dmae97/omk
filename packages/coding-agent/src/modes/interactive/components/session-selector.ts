@@ -2,13 +2,7 @@ import {
 	type Component,
 	Container,
 	Input,
-	isArrowDown,
-	isArrowUp,
-	isCtrlC,
-	isEnter,
-	isEscape,
-	isPageDown,
-	isPageUp,
+	matchesKey,
 	Spacer,
 	Text,
 	truncateToWidth,
@@ -169,36 +163,36 @@ class SessionList implements Component {
 
 	handleInput(keyData: string): void {
 		// Up arrow
-		if (isArrowUp(keyData)) {
+		if (matchesKey(keyData, "up")) {
 			this.selectedIndex = Math.max(0, this.selectedIndex - 1);
 		}
 		// Down arrow
-		else if (isArrowDown(keyData)) {
+		else if (matchesKey(keyData, "down")) {
 			this.selectedIndex = Math.min(this.filteredSessions.length - 1, this.selectedIndex + 1);
 		}
 		// Page up - jump up by maxVisible items
-		else if (isPageUp(keyData)) {
+		else if (matchesKey(keyData, "pageUp")) {
 			this.selectedIndex = Math.max(0, this.selectedIndex - this.maxVisible);
 		}
 		// Page down - jump down by maxVisible items
-		else if (isPageDown(keyData)) {
+		else if (matchesKey(keyData, "pageDown")) {
 			this.selectedIndex = Math.min(this.filteredSessions.length - 1, this.selectedIndex + this.maxVisible);
 		}
 		// Enter
-		else if (isEnter(keyData)) {
+		else if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
 			const selected = this.filteredSessions[this.selectedIndex];
 			if (selected && this.onSelect) {
 				this.onSelect(selected.path);
 			}
 		}
 		// Escape - cancel
-		else if (isEscape(keyData)) {
+		else if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc")) {
 			if (this.onCancel) {
 				this.onCancel();
 			}
 		}
 		// Ctrl+C - exit
-		else if (isCtrlC(keyData)) {
+		else if (matchesKey(keyData, "ctrl+c")) {
 			this.onExit();
 		}
 		// Pass everything else to search input

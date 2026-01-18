@@ -321,7 +321,7 @@ function mapOptionsForApi<TApi extends Api>(
 				const adjustedBudget = Math.max(0, maxTokens - MIN_OUTPUT_TOKENS);
 				thinkingBudgets = { ...(thinkingBudgets ?? {}), [budgetInfo.level]: adjustedBudget };
 			}
-			return { ...bedrockBase, maxTokens, thinkingBudgets } satisfies BedrockOptions;
+			return { ...bedrockBase, maxTokens, thinkingBudgets } as OptionsForApi<TApi>;
 		}
 
 		case "openai-completions":

@@ -1,21 +1,4 @@
-import {
-	Editor,
-	isCapsLock,
-	isCtrlC,
-	isCtrlD,
-	isCtrlG,
-	isCtrlL,
-	isCtrlO,
-	isCtrlP,
-	isCtrlT,
-	isCtrlV,
-	isCtrlZ,
-	isEscape,
-	isShiftCtrlP,
-	isShiftTab,
-	type KeyId,
-	matchesKey,
-} from "@oh-my-pi/pi-tui";
+import { Editor, type KeyId, matchesKey, parseKittySequence } from "@oh-my-pi/pi-tui";
 
 /**
  * Custom editor that handles Escape and Ctrl+C keys for coding-agent
@@ -66,19 +49,21 @@ export class CustomEditor extends Editor {
 	}
 
 	handleInput(data: string): void {
-		if (isCapsLock(data) && this.onCapsLock) {
+		const parsed = parseKittySequence(data);
+		if (parsed && (parsed.modifier & 64) !== 0 && this.onCapsLock) {
+			// Caps Lock is modifier bit 64
 			this.onCapsLock();
 			return;
 		}
 
 		// Intercept Ctrl+V for image paste (async - fires and handles result)
-		if (isCtrlV(data) && this.onCtrlV) {
+		if (matchesKey(data, "ctrl+v") && this.onCtrlV) {
 			void this.onCtrlV();
 			return;
 		}
 
 		// Intercept Ctrl+G for external editor
-		if (isCtrlG(data) && this.onCtrlG) {
+		if (matchesKey(data, "ctrl+g") && this.onCtrlG) {
 			this.onCtrlG();
 			return;
 		}
@@ -90,19 +75,19 @@ export class CustomEditor extends Editor {
 		}
 
 		// Intercept Ctrl+Z for suspend
-		if (isCtrlZ(data) && this.onCtrlZ) {
+		if (matchesKey(data, "ctrl+z") && this.onCtrlZ) {
 			this.onCtrlZ();
 			return;
 		}
 
 		// Intercept Ctrl+T for thinking block visibility toggle
-		if (isCtrlT(data) && this.onCtrlT) {
+		if (matchesKey(data, "ctrl+t") && this.onCtrlT) {
 			this.onCtrlT();
 			return;
 		}
 
 		// Intercept Ctrl+L for model selector
-		if (isCtrlL(data) && this.onCtrlL) {
+		if (matchesKey(data, "ctrl+l") && this.onCtrlL) {
 			this.onCtrlL();
 			return;
 		}
@@ -114,44 +99,44 @@ export class CustomEditor extends Editor {
 		}
 
 		// Intercept Ctrl+O for tool output expansion
-		if (isCtrlO(data) && this.onCtrlO) {
+		if (matchesKey(data, "ctrl+o") && this.onCtrlO) {
 			this.onCtrlO();
 			return;
 		}
 
 		// Intercept Shift+Ctrl+P for backward model cycling (check before Ctrl+P)
-		if (isShiftCtrlP(data) && this.onShiftCtrlP) {
+		if ((matchesKey(data, "shift+ctrl+p") || matchesKey(data, "ctrl+shift+p")) && this.onShiftCtrlP) {
 			this.onShiftCtrlP();
 			return;
 		}
 
 		// Intercept Ctrl+P for model cycling
-		if (isCtrlP(data) && this.onCtrlP) {
+		if (matchesKey(data, "ctrl+p") && this.onCtrlP) {
 			this.onCtrlP();
 			return;
 		}
 
 		// Intercept Shift+Tab for thinking level cycling
-		if (isShiftTab(data) && this.onShiftTab) {
+		if (matchesKey(data, "shift+tab") && this.onShiftTab) {
 			this.onShiftTab();
 			return;
 		}
 
 		// Intercept Escape key - but only if autocomplete is NOT active
 		// (let parent handle escape for autocomplete cancellation)
-		if (isEscape(data) && this.onEscape && !this.isShowingAutocomplete()) {
+		if ((matchesKey(data, "escape") || matchesKey(data, "esc")) && this.onEscape && !this.isShowingAutocomplete()) {
 			this.onEscape();
 			return;
 		}
 
 		// Intercept Ctrl+C
-		if (isCtrlC(data) && this.onCtrlC) {
+		if (matchesKey(data, "ctrl+c") && this.onCtrlC) {
 			this.onCtrlC();
 			return;
 		}
 
 		// Intercept Ctrl+D (only when editor is empty)
-		if (isCtrlD(data)) {
+		if (matchesKey(data, "ctrl+d")) {
 			if (this.getText().length === 0 && this.onCtrlD) {
 				this.onCtrlD();
 			}

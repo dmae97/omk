@@ -6,15 +6,7 @@
  * master switch is off.
  */
 
-import {
-	type Component,
-	isArrowDown,
-	isArrowUp,
-	isBackspace,
-	isEnter,
-	truncateToWidth,
-	visibleWidth,
-} from "@oh-my-pi/pi-tui";
+import { type Component, matchesKey, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
 import { isProviderEnabled } from "../../../../discovery";
 import { theme } from "../../theme/theme";
 import { applyFilter } from "./state-manager";
@@ -404,12 +396,12 @@ export class ExtensionList implements Component {
 		const charCode = data.length === 1 ? data.charCodeAt(0) : -1;
 
 		// Navigation
-		if (isArrowUp(data) || data === "k") {
+		if (matchesKey(data, "up") || data === "k") {
 			this.moveSelectionUp();
 			return;
 		}
 
-		if (isArrowDown(data) || data === "j") {
+		if (matchesKey(data, "down") || data === "j") {
 			this.moveSelectionDown();
 			return;
 		}
@@ -431,7 +423,7 @@ export class ExtensionList implements Component {
 		}
 
 		// Enter: Same as space - toggle selected item
-		if (isEnter(data)) {
+		if (matchesKey(data, "enter") || matchesKey(data, "return") || data === "\n") {
 			const item = this.listItems[this.selectedIndex];
 			if (item?.type === "master") {
 				this.callbacks.onMasterToggle?.(item.providerId);
@@ -446,7 +438,7 @@ export class ExtensionList implements Component {
 		}
 
 		// Backspace: Delete from search query
-		if (isBackspace(data)) {
+		if (matchesKey(data, "backspace")) {
 			if (this.searchQuery.length > 0) {
 				this.setSearchQuery(this.searchQuery.slice(0, -1));
 			}

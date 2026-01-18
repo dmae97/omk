@@ -55,7 +55,8 @@ export interface BedrockOptions extends StreamOptions {
 type Block = (TextContent | ThinkingContent | ToolCall) & { index?: number; partialJson?: string };
 
 function sanitizeToolCallId(id: string): string {
-	return id.replace(/[^a-zA-Z0-9_-]/g, "_");
+	const sanitized = id.replace(/[^a-zA-Z0-9_-]/g, "_");
+	return sanitized.length > 64 ? sanitized.slice(0, 64) : sanitized;
 }
 
 export const streamBedrock: StreamFunction<"bedrock-converse-stream"> = (
@@ -294,6 +295,17 @@ function supportsPromptCaching(model: Model<"bedrock-converse-stream">): boolean
 	return false;
 }
 
+/**
+ * Check if the model supports thinking signatures in reasoningContent.
+ * Only Anthropic Claude models support the signature field.
+ * Other models (Nova, Titan, Mistral, Llama, etc.) reject it with:
+ * "This model doesn't support the reasoningContent.reasoningText.signature field"
+ */
+function supportsThinkingSignature(model: Model<"bedrock-converse-stream">): boolean {
+	const id = model.id.toLowerCase();
+	return id.includes("anthropic.claude") || id.includes("anthropic/claude");
+}
+
 function buildSystemPrompt(
 	systemPrompt: string | undefined,
 	model: Model<"bedrock-converse-stream">,
@@ -362,11 +374,22 @@ function convertMessages(context: Context, model: Model<"bedrock-converse-stream
 						case "thinking":
 							// Skip empty thinking blocks
 							if (c.thinking.trim().length === 0) continue;
-							contentBlocks.push({
-								reasoningContent: {
-									reasoningText: { text: sanitizeSurrogates(c.thinking), signature: c.thinkingSignature },
-								},
-							});
+							// Only Anthropic models support the signature field in reasoningText.
+							// For other models, we omit the signature to avoid errors like:
+							// "This model doesn't support the reasoningContent.reasoningText.signature field"
+							if (supportsThinkingSignature(model)) {
+								contentBlocks.push({
+									reasoningContent: {
+										reasoningText: { text: sanitizeSurrogates(c.thinking), signature: c.thinkingSignature },
+									},
+								});
+							} else {
+								contentBlocks.push({
+									reasoningContent: {
+										reasoningText: { text: sanitizeSurrogates(c.thinking) },
+									},
+								});
+							}
 							break;
 						default:
 							throw new Error("Unknown assistant content type");

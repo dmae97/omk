@@ -6,7 +6,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { Container, Editor, isCtrlG, isEscape, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
+import { Container, Editor, matchesKey, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
 import { nanoid } from "nanoid";
 import { getEditorTheme, theme } from "../theme/theme";
 import { DynamicBorder } from "./dynamic-border";
@@ -40,7 +40,6 @@ export class HookEditorComponent extends Container {
 
 		// Create editor
 		this.editor = new Editor(getEditorTheme());
-		this.editor.setUseTerminalCursor(true);
 		if (prefill) {
 			this.editor.setText(prefill);
 		}
@@ -69,13 +68,13 @@ export class HookEditorComponent extends Container {
 		}
 
 		// Escape to cancel
-		if (isEscape(keyData)) {
+		if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc")) {
 			this.onCancelCallback();
 			return;
 		}
 
 		// Ctrl+G for external editor
-		if (isCtrlG(keyData)) {
+		if (matchesKey(keyData, "ctrl+g")) {
 			this.openExternalEditor();
 			return;
 		}

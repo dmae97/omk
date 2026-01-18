@@ -2,7 +2,7 @@
  * Simple text input component for hooks.
  */
 
-import { Container, Input, isEnter, isEscape, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
+import { Container, Input, matchesKey, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
 import { theme } from "../theme/theme";
 import { CountdownTimer } from "./countdown-timer";
 import { DynamicBorder } from "./dynamic-border";
@@ -58,9 +58,9 @@ export class HookInputComponent extends Container {
 	}
 
 	handleInput(keyData: string): void {
-		if (isEnter(keyData) || keyData === "\n") {
+		if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
 			this.onSubmitCallback(this.input.getValue());
-		} else if (isEscape(keyData)) {
+		} else if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc")) {
 			this.onCancelCallback();
 		} else {
 			this.input.handleInput(keyData);

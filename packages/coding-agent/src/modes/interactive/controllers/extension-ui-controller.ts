@@ -87,6 +87,9 @@ export class ExtensionUiController {
 			appendEntry: (customType, data) => {
 				this.ctx.sessionManager.appendCustomEntry(customType, data);
 			},
+			setLabel: (targetId, label) => {
+				this.ctx.sessionManager.appendLabelChange(targetId, label);
+			},
 			getActiveTools: () => this.ctx.session.getActiveToolNames(),
 			getAllTools: () => this.ctx.session.getAllToolNames(),
 			setActiveTools: (toolNames) => this.ctx.session.setActiveToolsByName(toolNames),
@@ -107,8 +110,16 @@ export class ExtensionUiController {
 			shutdown: () => {
 				// Signal shutdown request (will be handled by main loop)
 			},
+			getContextUsage: () => this.ctx.session.getContextUsage(),
+			compact: async (instructionsOrOptions) => {
+				const instructions = typeof instructionsOrOptions === "string" ? instructionsOrOptions : undefined;
+				const options =
+					instructionsOrOptions && typeof instructionsOrOptions === "object" ? instructionsOrOptions : undefined;
+				await this.ctx.session.compact(instructions, options);
+			},
 		};
 		const commandActions: ExtensionCommandContextActions = {
+			getContextUsage: () => this.ctx.session.getContextUsage(),
 			waitForIdle: () => this.ctx.session.agent.waitForIdle(),
 			newSession: async (options) => {
 				// Stop any loading animation
@@ -178,12 +189,15 @@ export class ExtensionUiController {
 
 				return { cancelled: false };
 			},
-			compact: async (customInstructions) => {
+			compact: async (instructionsOrOptions) => {
+				const instructions = typeof instructionsOrOptions === "string" ? instructionsOrOptions : undefined;
+				const options =
+					instructionsOrOptions && typeof instructionsOrOptions === "object" ? instructionsOrOptions : undefined;
 				if (this.ctx.isBackgrounded) {
-					await this.ctx.session.compact(customInstructions);
+					await this.ctx.session.compact(instructions, options);
 					return;
 				}
-				await this.ctx.executeCompaction(customInstructions, false);
+				await this.ctx.executeCompaction(instructionsOrOptions, false);
 			},
 		};
 
@@ -242,6 +256,9 @@ export class ExtensionUiController {
 			appendEntry: (customType, data) => {
 				this.ctx.sessionManager.appendCustomEntry(customType, data);
 			},
+			setLabel: (targetId, label) => {
+				this.ctx.sessionManager.appendLabelChange(targetId, label);
+			},
 			getActiveTools: () => this.ctx.session.getActiveToolNames(),
 			getAllTools: () => this.ctx.session.getAllToolNames(),
 			setActiveTools: (toolNames) => this.ctx.session.setActiveToolsByName(toolNames),
@@ -262,8 +279,16 @@ export class ExtensionUiController {
 			shutdown: () => {
 				// Signal shutdown request (will be handled by main loop)
 			},
+			getContextUsage: () => this.ctx.session.getContextUsage(),
+			compact: async (instructionsOrOptions) => {
+				const instructions = typeof instructionsOrOptions === "string" ? instructionsOrOptions : undefined;
+				const options =
+					instructionsOrOptions && typeof instructionsOrOptions === "object" ? instructionsOrOptions : undefined;
+				await this.ctx.session.compact(instructions, options);
+			},
 		};
 		const commandActions: ExtensionCommandContextActions = {
+			getContextUsage: () => this.ctx.session.getContextUsage(),
 			waitForIdle: () => this.ctx.session.agent.waitForIdle(),
 			newSession: async (options) => {
 				if (this.ctx.isBackgrounded) {
@@ -342,12 +367,15 @@ export class ExtensionUiController {
 
 				return { cancelled: false };
 			},
-			compact: async (customInstructions) => {
+			compact: async (instructionsOrOptions) => {
+				const instructions = typeof instructionsOrOptions === "string" ? instructionsOrOptions : undefined;
+				const options =
+					instructionsOrOptions && typeof instructionsOrOptions === "object" ? instructionsOrOptions : undefined;
 				if (this.ctx.isBackgrounded) {
-					await this.ctx.session.compact(customInstructions);
+					await this.ctx.session.compact(instructions, options);
 					return;
 				}
-				await this.ctx.executeCompaction(customInstructions, false);
+				await this.ctx.executeCompaction(instructionsOrOptions, false);
 			},
 		};
 
@@ -396,6 +424,15 @@ export class ExtensionUiController {
 				try {
 					await registeredTool.definition.onSession(event, {
 						ui: uiContext,
+						getContextUsage: () => this.ctx.session.getContextUsage(),
+						compact: async (instructionsOrOptions) => {
+							const instructions = typeof instructionsOrOptions === "string" ? instructionsOrOptions : undefined;
+							const options =
+								instructionsOrOptions && typeof instructionsOrOptions === "object"
+									? instructionsOrOptions
+									: undefined;
+							await this.ctx.session.compact(instructions, options);
+						},
 						hasUI: !this.ctx.isBackgrounded,
 						cwd: this.ctx.sessionManager.getCwd(),
 						sessionManager: this.ctx.session.sessionManager,

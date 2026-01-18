@@ -5,6 +5,7 @@ import { Loader, Markdown, Spacer, Text, visibleWidth } from "@oh-my-pi/pi-tui";
 import { nanoid } from "nanoid";
 import { getDebugLogPath } from "../../../config";
 import { loadCustomShare } from "../../../core/custom-share";
+import type { CompactOptions } from "../../../core/extensions/types";
 import { createCompactionSummaryMessage } from "../../../core/messages";
 import type { TruncationResult } from "../../../core/tools/truncate";
 import { getChangelogPath, parseChangelog } from "../../../utils/changelog";
@@ -493,7 +494,7 @@ export class CommandController {
 		}
 	}
 
-	async executeCompaction(customInstructions?: string, isAuto = false): Promise<void> {
+	async executeCompaction(customInstructionsOrOptions?: string | CompactOptions, isAuto = false): Promise<void> {
 		if (this.ctx.loadingAnimation) {
 			this.ctx.loadingAnimation.stop();
 			this.ctx.loadingAnimation = undefined;
@@ -518,7 +519,12 @@ export class CommandController {
 		this.ctx.ui.requestRender();
 
 		try {
-			const result = await this.ctx.session.compact(customInstructions);
+			const instructions = typeof customInstructionsOrOptions === "string" ? customInstructionsOrOptions : undefined;
+			const options =
+				customInstructionsOrOptions && typeof customInstructionsOrOptions === "object"
+					? customInstructionsOrOptions
+					: undefined;
+			const result = await this.ctx.session.compact(instructions, options);
 
 			this.ctx.rebuildChatFromMessages();
 

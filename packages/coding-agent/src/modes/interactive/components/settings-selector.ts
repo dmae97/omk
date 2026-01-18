@@ -1,11 +1,7 @@
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import {
 	Container,
-	isArrowLeft,
-	isArrowRight,
-	isEscape,
-	isShiftTab,
-	isTab,
+	matchesKey,
 	type SelectItem,
 	SelectList,
 	type SettingItem,
@@ -524,13 +520,18 @@ export class SettingsSelectorComponent extends Container {
 
 	handleInput(data: string): void {
 		// Handle tab switching first (tab, shift+tab, or left/right arrows)
-		if (isTab(data) || isShiftTab(data) || isArrowLeft(data) || isArrowRight(data)) {
+		if (
+			matchesKey(data, "tab") ||
+			matchesKey(data, "shift+tab") ||
+			matchesKey(data, "left") ||
+			matchesKey(data, "right")
+		) {
 			this.tabBar.handleInput(data);
 			return;
 		}
 
 		// Escape at top level cancels
-		if (isEscape(data) && !this.currentSubmenu) {
+		if ((matchesKey(data, "escape") || matchesKey(data, "esc")) && !this.currentSubmenu) {
 			this.callbacks.onCancel();
 			return;
 		}

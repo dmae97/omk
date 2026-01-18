@@ -15,6 +15,7 @@ export { HookEditorComponent } from "./hook-editor";
 export { HookInputComponent, type HookInputOptions } from "./hook-input";
 export { HookMessageComponent } from "./hook-message";
 export { HookSelectorComponent } from "./hook-selector";
+export { appKey, appKeyHint, editorKey, keyHint, rawKeyHint } from "./keybinding-hints";
 export { LoginDialogComponent } from "./login-dialog";
 export { ModelSelectorComponent } from "./model-selector";
 export { OAuthSelectorComponent } from "./oauth-selector";

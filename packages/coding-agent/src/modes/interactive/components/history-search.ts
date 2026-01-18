@@ -2,10 +2,7 @@ import {
 	type Component,
 	Container,
 	Input,
-	isArrowDown,
-	isArrowUp,
-	isEnter,
-	isEscape,
+	matchesKey,
 	Spacer,
 	Text,
 	truncateToWidth,
@@ -116,21 +113,21 @@ export class HistorySearchComponent extends Container {
 	}
 
 	handleInput(keyData: string): void {
-		if (isArrowUp(keyData)) {
+		if (matchesKey(keyData, "up")) {
 			if (this.results.length === 0) return;
 			this.selectedIndex = Math.max(0, this.selectedIndex - 1);
 			this.resultsList.setSelectedIndex(this.selectedIndex);
 			return;
 		}
 
-		if (isArrowDown(keyData)) {
+		if (matchesKey(keyData, "down")) {
 			if (this.results.length === 0) return;
 			this.selectedIndex = Math.min(this.results.length - 1, this.selectedIndex + 1);
 			this.resultsList.setSelectedIndex(this.selectedIndex);
 			return;
 		}
 
-		if (isEnter(keyData)) {
+		if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
 			const selected = this.results[this.selectedIndex];
 			if (selected) {
 				this.onSelect(selected.prompt);
@@ -138,7 +135,7 @@ export class HistorySearchComponent extends Container {
 			return;
 		}
 
-		if (isEscape(keyData)) {
+		if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc")) {
 			this.onCancel();
 			return;
 		}

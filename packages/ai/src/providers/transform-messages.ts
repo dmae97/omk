@@ -14,7 +14,7 @@ export function transformMessages<TApi extends Api>(messages: Message[], model: 
 	const toolCallIdMap = new Map<string, string>();
 
 	// First pass: transform messages (thinking blocks, tool call ID normalization)
-	const transformed = messages.flatMap((msg) => {
+	const transformed = messages.flatMap<Message>((msg): Message[] => {
 		// User messages pass through unchanged
 		if (msg.role === "user") {
 			return [msg];

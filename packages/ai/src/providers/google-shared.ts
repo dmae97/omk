@@ -137,11 +137,10 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 				} else if (block.type === "toolCall") {
 					const thoughtSignature = resolveThoughtSignature(isSameProviderAndModel, block.thoughtSignature);
 					if (isGemini3Model(model.id) && !thoughtSignature) {
-						const args = JSON.stringify(block.arguments ?? {});
+						const argsStr = JSON.stringify(block.arguments, null, 2);
 						parts.push({
 							text: sanitizeSurrogates(
-								`Unsigned tool call from a previous model: ${block.name}(${args}). ` +
-									`Treat this as context only and do not attempt to mimic or execute the tool call.`,
+								`[Historical context: a different model called tool "${block.name}" with arguments: ${argsStr}. Do not mimic this format - use proper function calling.]`,
 							),
 						});
 						continue;

@@ -25,6 +25,7 @@ import {
 	calculateContextTokens,
 	collectEntriesForBranchSummary,
 	compact,
+	estimateTokens,
 	generateBranchSummary,
 	prepareCompaction,
 	shouldCompact,
@@ -43,6 +44,7 @@ import type {
 	TurnEndEvent,
 	TurnStartEvent,
 } from "./extensions";
+import type { CompactOptions, ContextUsage } from "./extensions/types";
 import { extractFileMentions, generateFileMentionMessages } from "./file-mentions";
 import type { HookCommandContext } from "./hooks/types";
 import { logger } from "./logger";
@@ -65,7 +67,13 @@ import type { TtsrManager } from "./ttsr";
 export type AgentSessionEvent =
 	| AgentEvent
 	| { type: "auto_compaction_start"; reason: "threshold" | "overflow" }
-	| { type: "auto_compaction_end"; result: CompactionResult | undefined; aborted: boolean; willRetry: boolean }
+	| {
+			type: "auto_compaction_end";
+			result: CompactionResult | undefined;
+			aborted: boolean;
+			willRetry: boolean;
+			errorMessage?: string;
+	  }
 	| { type: "auto_retry_start"; attempt: number; maxAttempts: number; delayMs: number; errorMessage: string }
 	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
 	| { type: "ttsr_triggered"; rules: Rule[] }
@@ -906,6 +914,7 @@ export class AgentSession {
 				process.exit(0);
 			},
 			hasQueuedMessages: () => this.queuedMessageCount > 0,
+			getContextUsage: () => this.getContextUsage(),
 			waitForIdle: () => this.agent.waitForIdle(),
 			newSession: async (options) => {
 				const success = await this.newSession({ parentSession: options?.parentSession });
@@ -924,6 +933,12 @@ export class AgentSession {
 			navigateTree: async (targetId, options) => {
 				const result = await this.navigateTree(targetId, { summarize: options?.summarize });
 				return { cancelled: result.cancelled };
+			},
+			compact: async (instructionsOrOptions) => {
+				const instructions = typeof instructionsOrOptions === "string" ? instructionsOrOptions : undefined;
+				const options =
+					instructionsOrOptions && typeof instructionsOrOptions === "object" ? instructionsOrOptions : undefined;
+				await this.compact(instructions, options);
 			},
 		};
 	}
@@ -1533,8 +1548,9 @@ export class AgentSession {
 	 * Manually compact the session context.
 	 * Aborts current agent operation first.
 	 * @param customInstructions Optional instructions for the compaction summary
+	 * @param options Optional callbacks for completion/error handling
 	 */
-	async compact(customInstructions?: string): Promise<CompactionResult> {
+	async compact(customInstructions?: string, options?: CompactOptions): Promise<CompactionResult> {
 		this._disconnectFromAgent();
 		await this.abort();
 		this._compactionAbortController = new AbortController();
@@ -1632,12 +1648,18 @@ export class AgentSession {
 				});
 			}
 
-			return {
+			const compactionResult: CompactionResult = {
 				summary,
 				firstKeptEntryId,
 				tokensBefore,
 				details,
 			};
+			options?.onComplete?.(compactionResult);
+			return compactionResult;
+		} catch (error) {
+			const err = error instanceof Error ? error : new Error(String(error));
+			options?.onError?.(err);
+			throw error;
 		} finally {
 			this._compactionAbortController = undefined;
 			this._reconnectToAgent();
@@ -2046,15 +2068,17 @@ export class AgentSession {
 				}, 100);
 			}
 		} catch (error) {
-			this._emit({ type: "auto_compaction_end", result: undefined, aborted: false, willRetry: false });
-
-			if (reason === "overflow") {
-				throw new Error(
-					`Context overflow: ${
-						error instanceof Error ? error.message : "compaction failed"
-					}. Your input may be too large for the context window.`,
-				);
-			}
+			const errorMessage = error instanceof Error ? error.message : "compaction failed";
+			this._emit({
+				type: "auto_compaction_end",
+				result: undefined,
+				aborted: false,
+				willRetry: false,
+				errorMessage:
+					reason === "overflow"
+						? `Context overflow recovery failed: ${errorMessage}`
+						: `Auto-compaction failed: ${errorMessage}`,
+			});
 		} finally {
 			this._autoCompactionAbortController = undefined;
 		}
@@ -2801,6 +2825,85 @@ export class AgentSession {
 				total: totalInput + totalOutput + totalCacheRead + totalCacheWrite,
 			},
 			cost: totalCost,
+		};
+	}
+
+	/**
+	 * Get current context usage statistics.
+	 * Uses the last assistant message's usage data when available,
+	 * otherwise estimates tokens for all messages.
+	 */
+	getContextUsage(): ContextUsage | undefined {
+		const model = this.model;
+		if (!model) return undefined;
+
+		const contextWindow = model.contextWindow ?? 0;
+		if (contextWindow <= 0) return undefined;
+
+		const estimate = this._estimateContextTokens();
+		const percent = (estimate.tokens / contextWindow) * 100;
+
+		return {
+			tokens: estimate.tokens,
+			contextWindow,
+			percent,
+			usageTokens: estimate.usageTokens,
+			trailingTokens: estimate.trailingTokens,
+			lastUsageIndex: estimate.lastUsageIndex,
+		};
+	}
+
+	/**
+	 * Estimate context tokens from messages, using the last assistant usage when available.
+	 */
+	private _estimateContextTokens(): {
+		tokens: number;
+		usageTokens: number;
+		trailingTokens: number;
+		lastUsageIndex: number | null;
+	} {
+		const messages = this.messages;
+
+		// Find last assistant message with usage
+		let lastUsageIndex: number | null = null;
+		let lastUsage: Usage | undefined;
+		for (let i = messages.length - 1; i >= 0; i--) {
+			const msg = messages[i];
+			if (msg.role === "assistant") {
+				const assistantMsg = msg as AssistantMessage;
+				if (assistantMsg.usage) {
+					lastUsage = assistantMsg.usage;
+					lastUsageIndex = i;
+					break;
+				}
+			}
+		}
+
+		if (!lastUsage || lastUsageIndex === null) {
+			// No usage data - estimate all messages
+			let estimated = 0;
+			for (const message of messages) {
+				estimated += estimateTokens(message);
+			}
+			return {
+				tokens: estimated,
+				usageTokens: 0,
+				trailingTokens: estimated,
+				lastUsageIndex: null,
+			};
+		}
+
+		const usageTokens = calculateContextTokens(lastUsage);
+		let trailingTokens = 0;
+		for (let i = lastUsageIndex + 1; i < messages.length; i++) {
+			trailingTokens += estimateTokens(messages[i]);
+		}
+
+		return {
+			tokens: usageTokens + trailingTokens,
+			usageTokens,
+			trailingTokens,
+			lastUsageIndex,
 		};
 	}
 

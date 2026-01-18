@@ -3,36 +3,37 @@
 ## [Unreleased]
 ### Added
 
-- Added support for input event handlers in extensions to intercept and modify user input
-- Added argument completion support for custom commands in extensions
-- Added compact() method to extension command context for programmatic session compaction
-- Added setLabel() method to extension API for custom display labels
+- Added extension input interception with source metadata and command argument completion
+- Added extension command context `compact()` helper plus context usage accessors
+- Added ExtensionAPI `setLabel()` for extension and entry labels
 - Added startup quiet setting to suppress welcome screen and startup messages
 - Added support for auto-discovering APPEND_SYSTEM.md files
-- Added support for piped input in non-interactive mode
-- Added global session listing across all project directories
-- Added enhanced session search including title, cwd, and path
-- Added key hint formatting utilities for UI labels
-- Added timeout display in bash tool output
-- Added fuzzy text normalization for improved diff matching
+- Added support for piped input in non-interactive mode (auto-print mode)
+- Added global session listing across all project directories with enhanced search metadata
+- Added session fork prompt when resolving sessions from other projects
+- Added key hint formatting utilities plus public exports for getShellConfig/getAgentDir/VERSION
+- Added bash tool timeout display in tool output
+- Added fuzzy text normalization for improved edit diff matching
 - Added $@ argument slicing syntax in prompt templates
 - Added configurable keybindings for expand tools and dequeue actions
+- Added process title update on CLI startup
 
 ### Changed
 
 - Improved error retry detection to include fetch failures
-- Enhanced session selector to search across more metadata fields
+- Enhanced session selector search and overflow handling
 - Updated skill command execution to include skill path metadata
-- Streamlined session file collection with shared utility function
-- Improved extension runner error handling and logging
-- Enhanced bash tool renderer to show timeout information
+- Surfaced loaded prompt templates during initialization
+- Updated compaction summarization to use serialized prompt text
 
 ### Fixed
 
 - Fixed duplicate custom message rendering in event controller
-- Fixed session selector width truncation for long text
+- Fixed --no-extensions flag handling
 - Fixed model selection to respect remembered model roles
 - Fixed auto-print mode detection when piped input is present
+- Fixed shutdown flow to wait for pending renders
+- Fixed auto-compaction failure handling to surface warnings instead of crashing
 
 ## [5.5.0] - 2026-01-18
 ### Changed

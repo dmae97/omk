@@ -1,4 +1,4 @@
-import { isEscape } from "../keys";
+import { matchesKey } from "../keys";
 import { Loader } from "./loader";
 
 /**
@@ -27,7 +27,7 @@ export class CancellableLoader extends Loader {
 	}
 
 	handleInput(data: string): void {
-		if (isEscape(data)) {
+		if (matchesKey(data, "escape") || matchesKey(data, "esc")) {
 			this.abortController.abort();
 			this.onAbort?.();
 		}

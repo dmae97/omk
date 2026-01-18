@@ -12,18 +12,7 @@
  * - Esc: Close dashboard (clears search first if active)
  */
 
-import {
-	type Component,
-	Container,
-	isCtrlC,
-	isEscape,
-	isShiftTab,
-	isTab,
-	Spacer,
-	Text,
-	truncateToWidth,
-	visibleWidth,
-} from "@oh-my-pi/pi-tui";
+import { type Component, Container, matchesKey, Spacer, Text, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
 import type { SettingsManager } from "../../../../core/settings-manager";
 import { theme } from "../../theme/theme";
 import { DynamicBorder } from "../dynamic-border";
@@ -239,13 +228,13 @@ export class ExtensionDashboard extends Container {
 
 	handleInput(data: string): void {
 		// Ctrl+C - close immediately
-		if (isCtrlC(data)) {
+		if (matchesKey(data, "ctrl+c")) {
 			this.onClose?.();
 			return;
 		}
 
 		// Escape - clear search first, then close
-		if (isEscape(data)) {
+		if (matchesKey(data, "escape") || matchesKey(data, "esc")) {
 			if (this.state.searchQuery.length > 0) {
 				this.state.searchQuery = "";
 				this.state.searchFiltered = this.state.tabFiltered;
@@ -259,11 +248,11 @@ export class ExtensionDashboard extends Container {
 		}
 
 		// Tab/Shift+Tab: Cycle through tabs
-		if (isTab(data)) {
+		if (matchesKey(data, "tab")) {
 			this.switchTab(1);
 			return;
 		}
-		if (isShiftTab(data)) {
+		if (matchesKey(data, "shift+tab")) {
 			this.switchTab(-1);
 			return;
 		}

@@ -138,7 +138,7 @@ export class InputController {
 			let inputImages = this.ctx.pendingImages.length > 0 ? [...this.ctx.pendingImages] : undefined;
 
 			if (runner?.hasHandlers("input")) {
-				const result = await runner.emitInput({ type: "input", text, images: inputImages });
+				const result = await runner.emitInput(text, inputImages, "interactive");
 				if (result?.handled) {
 					this.ctx.editor.setText("");
 					this.ctx.pendingImages = [];

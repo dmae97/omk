@@ -1723,6 +1723,32 @@ export class SessionManager {
 	}
 
 	/**
+	 * Fork a session into the current project directory.
+	 * Copies history from another session file while creating a new session file in the current sessionDir.
+	 */
+	static async forkFrom(
+		sourcePath: string,
+		cwd: string,
+		sessionDir?: string,
+		storage: SessionStorage = new FileSessionStorage(),
+	): Promise<SessionManager> {
+		const dir = sessionDir ?? getDefaultSessionDir(cwd, storage);
+		const manager = new SessionManager(cwd, dir, true, storage);
+		const forkEntries = structuredClone(loadEntriesFromFile(sourcePath, storage)) as FileEntry[];
+		migrateToCurrentVersion(forkEntries);
+		const sourceHeader = forkEntries.find((e) => e.type === "session") as SessionHeader | undefined;
+		const historyEntries = forkEntries.filter((entry) => entry.type !== "session") as SessionEntry[];
+		manager._newSessionSync({ parentSession: sourceHeader?.id });
+		const newHeader = manager.fileEntries[0] as SessionHeader;
+		newHeader.title = sourceHeader?.title;
+		manager.fileEntries = [newHeader, ...historyEntries];
+		manager.sessionTitle = newHeader.title;
+		manager._buildIndex();
+		await manager._rewriteFile();
+		return manager;
+	}
+
+	/**
 	 * Open a specific session file.
 	 * @param path Path to session file
 	 * @param sessionDir Optional session directory for /new or /branch. If omitted, derives from file's parent.

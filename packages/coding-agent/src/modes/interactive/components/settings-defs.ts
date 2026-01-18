@@ -211,6 +211,15 @@ export const SETTINGS_DEFS: SettingDef[] = [
 		set: (sm, v) => sm.setStartupQuiet(v),
 	},
 	{
+		id: "showHardwareCursor",
+		tab: "config",
+		type: "boolean",
+		label: "Hardware cursor",
+		description: "Show terminal cursor for IME support (default: on for Linux/macOS)",
+		get: (sm) => sm.getShowHardwareCursor(),
+		set: (sm, v) => sm.setShowHardwareCursor(v),
+	},
+	{
 		id: "doubleEscapeAction",
 		tab: "config",
 		type: "enum",

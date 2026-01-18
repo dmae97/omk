@@ -3,17 +3,7 @@
  * Displays a list of string options with keyboard navigation.
  */
 
-import {
-	Container,
-	isArrowDown,
-	isArrowUp,
-	isCtrlC,
-	isEnter,
-	isEscape,
-	Spacer,
-	Text,
-	type TUI,
-} from "@oh-my-pi/pi-tui";
+import { Container, matchesKey, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
 import { theme } from "../theme/theme";
 import { CountdownTimer } from "./countdown-timer";
 import { DynamicBorder } from "./dynamic-border";
@@ -87,16 +77,16 @@ export class HookSelectorComponent extends Container {
 	}
 
 	handleInput(keyData: string): void {
-		if (isArrowUp(keyData) || keyData === "k") {
+		if (matchesKey(keyData, "up") || keyData === "k") {
 			this.selectedIndex = Math.max(0, this.selectedIndex - 1);
 			this.updateList();
-		} else if (isArrowDown(keyData) || keyData === "j") {
+		} else if (matchesKey(keyData, "down") || keyData === "j") {
 			this.selectedIndex = Math.min(this.options.length - 1, this.selectedIndex + 1);
 			this.updateList();
-		} else if (isEnter(keyData) || keyData === "\n") {
+		} else if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
 			const selected = this.options[this.selectedIndex];
 			if (selected) this.onSelectCallback(selected);
-		} else if (isEscape(keyData) || isCtrlC(keyData)) {
+		} else if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc") || matchesKey(keyData, "ctrl+c")) {
 			this.onCancelCallback();
 		}
 	}

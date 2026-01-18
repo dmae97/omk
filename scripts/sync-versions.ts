@@ -1,12 +1,24 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 /**
  * Syncs ALL @oh-my-pi/* package dependency versions to match their current versions.
  * This ensures lockstep versioning across the monorepo.
  */
 
-import { readFileSync, writeFileSync, readdirSync } from "fs";
-import { join } from "path";
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
+
+interface PackageJson {
+	name: string;
+	version: string;
+	dependencies?: Record<string, string>;
+	devDependencies?: Record<string, string>;
+}
+
+interface PackageInfo {
+	path: string;
+	data: PackageJson;
+}
 
 const packagesDir = join(process.cwd(), "packages");
 const packageDirs = readdirSync(packagesDir, { withFileTypes: true })
@@ -14,17 +26,18 @@ const packageDirs = readdirSync(packagesDir, { withFileTypes: true })
 	.map((dirent) => dirent.name);
 
 // Read all package.json files and build version map
-const packages = {};
-const versionMap = {};
+const packages: Record<string, PackageInfo> = {};
+const versionMap: Record<string, string> = {};
 
 for (const dir of packageDirs) {
 	const pkgPath = join(packagesDir, dir, "package.json");
 	try {
-		const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+		const pkg = await Bun.file(pkgPath).json<PackageJson>();
 		packages[dir] = { path: pkgPath, data: pkg };
 		versionMap[pkg.name] = pkg.version;
 	} catch (e) {
-		console.error(`Failed to read ${pkgPath}:`, e.message);
+		const error = e as Error;
+		console.error(`Failed to read ${pkgPath}:`, error.message);
 	}
 }
 
@@ -85,7 +98,7 @@ for (const [dir, pkg] of Object.entries(packages)) {
 
 	// Write if updated
 	if (updated) {
-		writeFileSync(pkg.path, JSON.stringify(pkg.data, null, "\t") + "\n");
+		await Bun.write(pkg.path, JSON.stringify(pkg.data, null, "\t") + "\n");
 	}
 }
 

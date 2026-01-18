@@ -49,6 +49,7 @@ export function createExtensionRuntime(): ExtensionRuntime {
 		sendMessage: notInitialized,
 		sendUserMessage: notInitialized,
 		appendEntry: notInitialized,
+		setLabel: notInitialized,
 		getActiveTools: notInitialized,
 		getAllTools: notInitialized,
 		setActiveTools: notInitialized,

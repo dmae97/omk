@@ -19,6 +19,7 @@ import {
 import chalk from "chalk";
 import type { AgentSession, AgentSessionEvent } from "../../core/agent-session";
 import type { ExtensionUIContext } from "../../core/extensions/index";
+import type { CompactOptions } from "../../core/extensions/types";
 import { HistoryStorage } from "../../core/history-storage";
 import { KeybindingsManager } from "../../core/keybindings";
 import { logger } from "../../core/logger";
@@ -156,13 +157,12 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.toolUiContextSetter = setToolUIContext;
 		this.lspServers = lspServers;
 
-		this.ui = new TUI(new ProcessTerminal());
+		this.ui = new TUI(new ProcessTerminal(), this.settingsManager.getShowHardwareCursor());
 		this.chatContainer = new Container();
 		this.pendingMessagesContainer = new Container();
 		this.statusContainer = new Container();
 		this.todoContainer = new Container();
 		this.editor = new CustomEditor(getEditorTheme());
-		this.editor.setUseTerminalCursor(true);
 		this.editor.onAutocompleteCancel = () => {
 			this.ui.requestRender(true);
 		};
@@ -353,6 +353,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		// Start the UI
 		this.ui.start();
 		this.isInitialized = true;
+		this.ui.requestRender(true);
 
 		// Set initial terminal title (will be updated when session title is generated)
 		this.ui.terminal.setTitle("π");
@@ -676,8 +677,8 @@ export class InteractiveMode implements InteractiveModeContext {
 		return this.commandController.handleCompactCommand(customInstructions);
 	}
 
-	executeCompaction(customInstructions?: string, isAuto?: boolean): Promise<void> {
-		return this.commandController.executeCompaction(customInstructions, isAuto);
+	executeCompaction(customInstructionsOrOptions?: string | CompactOptions, isAuto?: boolean): Promise<void> {
+		return this.commandController.executeCompaction(customInstructionsOrOptions, isAuto);
 	}
 
 	openInBrowser(urlOrPath: string): void {

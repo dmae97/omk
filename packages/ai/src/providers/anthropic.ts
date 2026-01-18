@@ -60,6 +60,46 @@ export const stripClaudeToolPrefix = (name: string) => {
 	return name.slice(claudeToolPrefix.length);
 };
 
+// Claude Code 2.x tool names (canonical casing)
+// Source: https://cchistory.mariozechner.at/data/prompts-2.1.11.md
+// To update: https://github.com/badlogic/cchistory
+const claudeCodeTools = [
+	"Read",
+	"Write",
+	"Edit",
+	"Bash",
+	"Grep",
+	"Glob",
+	"AskUserQuestion",
+	"EnterPlanMode",
+	"ExitPlanMode",
+	"KillShell",
+	"NotebookEdit",
+	"Skill",
+	"Task",
+	"TaskOutput",
+	"TodoWrite",
+	"WebFetch",
+	"WebSearch",
+];
+
+const ccToolLookup = new Map(claudeCodeTools.map((t) => [t.toLowerCase(), t]));
+
+// Convert tool name to CC canonical casing if it matches (case-insensitive), fallback to prefix
+const toClaudeCodeName = (name: string) => ccToolLookup.get(name.toLowerCase()) ?? applyClaudeToolPrefix(name);
+
+// Convert CC tool name back to original, checking provided tools for case-insensitive match
+const fromClaudeCodeName = (name: string, tools?: Tool[]) => {
+	// First try to find by case-insensitive match in provided tools
+	if (tools && tools.length > 0) {
+		const lowerName = name.toLowerCase();
+		const matchedTool = tools.find((tool) => tool.name.toLowerCase() === lowerName);
+		if (matchedTool) return matchedTool.name;
+	}
+	// Fall back to stripping prefix if no match found
+	return stripClaudeToolPrefix(name);
+};
+
 /**
  * Convert content blocks to Anthropic API format
  */
@@ -191,7 +231,9 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 						const block: Block = {
 							type: "toolCall",
 							id: event.content_block.id,
-							name: isOAuthToken ? stripClaudeToolPrefix(event.content_block.name) : event.content_block.name,
+							name: isOAuthToken
+								? fromClaudeCodeName(event.content_block.name, context.tools)
+								: event.content_block.name,
 							arguments: event.content_block.input as Record<string, any>,
 							partialJson: "",
 							index: event.index,
@@ -635,7 +677,7 @@ function convertMessages(
 					blocks.push({
 						type: "tool_use",
 						id: sanitizeToolCallId(block.id),
-						name: isOAuthToken ? applyClaudeToolPrefix(block.name) : block.name,
+						name: isOAuthToken ? toClaudeCodeName(block.name) : block.name,
 						input: block.arguments,
 					});
 				}
@@ -708,7 +750,7 @@ function convertTools(tools: Tool[], isOAuthToken: boolean): Anthropic.Messages.
 		const jsonSchema = tool.parameters as any; // TypeBox already generates JSON Schema
 
 		return {
-			name: isOAuthToken ? applyClaudeToolPrefix(tool.name) : tool.name,
+			name: isOAuthToken ? toClaudeCodeName(tool.name) : tool.name,
 			description: tool.description,
 			input_schema: {
 				type: "object" as const,

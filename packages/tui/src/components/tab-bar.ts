@@ -9,7 +9,7 @@
  * - Shift+Tab / Arrow Left: Previous tab (wraps around)
  */
 
-import { isArrowLeft, isArrowRight, isShiftTab, isTab } from "../keys";
+import { matchesKey } from "../keys";
 import type { Component } from "../tui";
 
 /** Tab definition */
@@ -99,11 +99,11 @@ export class TabBar implements Component {
 	 * @returns true if the input was handled, false otherwise
 	 */
 	handleInput(data: string): boolean {
-		if (isTab(data) || isArrowRight(data)) {
+		if (matchesKey(data, "tab") || matchesKey(data, "right")) {
 			this.nextTab();
 			return true;
 		}
-		if (isShiftTab(data) || isArrowLeft(data)) {
+		if (matchesKey(data, "shift+tab") || matchesKey(data, "left")) {
 			this.prevTab();
 			return true;
 		}

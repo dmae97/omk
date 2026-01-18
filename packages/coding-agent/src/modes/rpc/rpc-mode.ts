@@ -289,6 +289,9 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				appendEntry: (customType, data) => {
 					session.sessionManager.appendCustomEntry(customType, data);
 				},
+				setLabel: (targetId, label) => {
+					session.sessionManager.appendLabelChange(targetId, label);
+				},
 				getActiveTools: () => session.getActiveToolNames(),
 				getAllTools: () => session.getAllToolNames(),
 				setActiveTools: (toolNames: string[]) => session.setActiveToolsByName(toolNames),
@@ -310,9 +313,19 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				shutdown: () => {
 					shutdownState.requested = true;
 				},
+				getContextUsage: () => session.getContextUsage(),
+				compact: async (instructionsOrOptions) => {
+					const instructions = typeof instructionsOrOptions === "string" ? instructionsOrOptions : undefined;
+					const options =
+						instructionsOrOptions && typeof instructionsOrOptions === "object"
+							? instructionsOrOptions
+							: undefined;
+					await session.compact(instructions, options);
+				},
 			},
 			// ExtensionCommandContextActions - commands invokable via prompt("/command")
 			{
+				getContextUsage: () => session.getContextUsage(),
 				waitForIdle: () => session.agent.waitForIdle(),
 				newSession: async (options) => {
 					const success = await session.newSession({ parentSession: options?.parentSession });
@@ -330,8 +343,13 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 					const result = await session.navigateTree(targetId, { summarize: options?.summarize });
 					return { cancelled: result.cancelled };
 				},
-				compact: async (customInstructions) => {
-					await session.compact(customInstructions);
+				compact: async (instructionsOrOptions) => {
+					const instructions = typeof instructionsOrOptions === "string" ? instructionsOrOptions : undefined;
+					const options =
+						instructionsOrOptions && typeof instructionsOrOptions === "object"
+							? instructionsOrOptions
+							: undefined;
+					await session.compact(instructions, options);
 				},
 			},
 			createExtensionUIContext(),

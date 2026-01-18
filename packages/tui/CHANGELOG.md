@@ -9,11 +9,12 @@
 - Added `Alt+D` keybinding to delete words forward
 - Added `Ctrl+Y` keybinding to yank from kill ring
 - Added `waitForRender()` method to await pending renders
+- Added Focusable interface and hardware cursor marker support for IME positioning
 - Added support for shifted symbol keys in keybindings
 
 ### Changed
 
-- Enhanced Kitty keyboard protocol support for better key detection
+- Expanded Kitty keyboard protocol coverage for non-Latin layouts and legacy Alt sequences
 - Improved cursor positioning with safer bounds checking
 - Updated editor layout to respect configurable padding
 - Refactored scrolling logic for better viewport management

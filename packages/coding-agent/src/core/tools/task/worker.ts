@@ -360,6 +360,9 @@ async function runTask(runState: RunState, payload: SubagentWorkerStartPayload):
 					appendEntry: (customType, data) => {
 						session.sessionManager.appendCustomEntry(customType, data);
 					},
+					setLabel: (targetId, label) => {
+						session.sessionManager.appendLabelChange(targetId, label);
+					},
 					getActiveTools: () => session.getActiveToolNames(),
 					getAllTools: () => session.getAllToolNames(),
 					setActiveTools: (toolNames: string[]) => session.setActiveToolsByName(toolNames),
@@ -379,6 +382,15 @@ async function runTask(runState: RunState, payload: SubagentWorkerStartPayload):
 					abort: () => session.abort(),
 					hasPendingMessages: () => session.queuedMessageCount > 0,
 					shutdown: () => {},
+					getContextUsage: () => session.getContextUsage(),
+					compact: async (instructionsOrOptions) => {
+						const instructions = typeof instructionsOrOptions === "string" ? instructionsOrOptions : undefined;
+						const options =
+							instructionsOrOptions && typeof instructionsOrOptions === "object"
+								? instructionsOrOptions
+								: undefined;
+						await session.compact(instructions, options);
+					},
 				},
 			);
 			extensionRunner.onError((err) => {

@@ -1,21 +1,5 @@
 import { type Model, modelsAreEqual } from "@oh-my-pi/pi-ai";
-import {
-	Container,
-	Input,
-	isArrowDown,
-	isArrowLeft,
-	isArrowRight,
-	isArrowUp,
-	isCtrlC,
-	isEnter,
-	isEscape,
-	isShiftTab,
-	isTab,
-	Spacer,
-	Text,
-	type TUI,
-	visibleWidth,
-} from "@oh-my-pi/pi-tui";
+import { Container, Input, matchesKey, Spacer, Text, type TUI, visibleWidth } from "@oh-my-pi/pi-tui";
 import type { ModelRegistry } from "../../../core/model-registry";
 import { parseModelString } from "../../../core/model-resolver";
 import type { SettingsManager } from "../../../core/settings-manager";
@@ -462,7 +446,7 @@ export class ModelSelectorComponent extends Container {
 		}
 
 		// Tab bar navigation: Left/Right arrows or Tab/Shift+Tab
-		if (isArrowLeft(keyData) || isShiftTab(keyData)) {
+		if (matchesKey(keyData, "left") || matchesKey(keyData, "shift+tab")) {
 			this.activeTabIndex = (this.activeTabIndex - 1 + this.providers.length) % this.providers.length;
 			this.updateTabBar();
 			this.selectedIndex = 0;
@@ -470,7 +454,7 @@ export class ModelSelectorComponent extends Container {
 			return;
 		}
 
-		if (isArrowRight(keyData) || isTab(keyData)) {
+		if (matchesKey(keyData, "right") || matchesKey(keyData, "tab")) {
 			this.activeTabIndex = (this.activeTabIndex + 1) % this.providers.length;
 			this.updateTabBar();
 			this.selectedIndex = 0;
@@ -479,7 +463,7 @@ export class ModelSelectorComponent extends Container {
 		}
 
 		// Up arrow - navigate list (wrap to bottom when at top)
-		if (isArrowUp(keyData)) {
+		if (matchesKey(keyData, "up")) {
 			if (this.filteredModels.length === 0) return;
 			this.selectedIndex = this.selectedIndex === 0 ? this.filteredModels.length - 1 : this.selectedIndex - 1;
 			this.updateList();
@@ -487,7 +471,7 @@ export class ModelSelectorComponent extends Container {
 		}
 
 		// Down arrow - navigate list (wrap to top when at bottom)
-		if (isArrowDown(keyData)) {
+		if (matchesKey(keyData, "down")) {
 			if (this.filteredModels.length === 0) return;
 			this.selectedIndex = this.selectedIndex === this.filteredModels.length - 1 ? 0 : this.selectedIndex + 1;
 			this.updateList();
@@ -495,7 +479,7 @@ export class ModelSelectorComponent extends Container {
 		}
 
 		// Enter - open context menu or select directly in temporary mode
-		if (isEnter(keyData)) {
+		if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
 			const selectedModel = this.filteredModels[this.selectedIndex];
 			if (selectedModel) {
 				if (this.temporaryOnly) {
@@ -509,7 +493,7 @@ export class ModelSelectorComponent extends Container {
 		}
 
 		// Escape or Ctrl+C - close selector
-		if (isEscape(keyData) || isCtrlC(keyData)) {
+		if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc") || matchesKey(keyData, "ctrl+c")) {
 			this.onCancelCallback();
 			return;
 		}
@@ -521,21 +505,21 @@ export class ModelSelectorComponent extends Container {
 
 	private handleMenuInput(keyData: string): void {
 		// Up arrow - navigate menu
-		if (isArrowUp(keyData)) {
+		if (matchesKey(keyData, "up")) {
 			this.menuSelectedIndex = (this.menuSelectedIndex - 1 + MENU_ACTIONS.length) % MENU_ACTIONS.length;
 			this.updateMenu();
 			return;
 		}
 
 		// Down arrow - navigate menu
-		if (isArrowDown(keyData)) {
+		if (matchesKey(keyData, "down")) {
 			this.menuSelectedIndex = (this.menuSelectedIndex + 1) % MENU_ACTIONS.length;
 			this.updateMenu();
 			return;
 		}
 
 		// Enter - confirm selection
-		if (isEnter(keyData)) {
+		if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
 			const selectedModel = this.filteredModels[this.selectedIndex];
 			const action = MENU_ACTIONS[this.menuSelectedIndex];
 			if (selectedModel && action) {
@@ -546,7 +530,7 @@ export class ModelSelectorComponent extends Container {
 		}
 
 		// Escape or Ctrl+C - close menu only
-		if (isEscape(keyData) || isCtrlC(keyData)) {
+		if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc") || matchesKey(keyData, "ctrl+c")) {
 			this.closeMenu();
 			return;
 		}

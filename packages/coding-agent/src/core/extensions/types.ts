@@ -125,12 +125,30 @@ export interface ExtensionUIContext {
 // Extension Context
 // ============================================================================
 
+export interface ContextUsage {
+	tokens: number;
+	contextWindow: number;
+	percent: number;
+	usageTokens: number;
+	trailingTokens: number;
+	lastUsageIndex: number | null;
+}
+
+export interface CompactOptions {
+	onComplete?: (result: CompactionResult) => void;
+	onError?: (error: Error) => void;
+}
+
 /**
  * Context passed to extension event handlers.
  */
 export interface ExtensionContext {
 	/** UI methods for user interaction */
 	ui: ExtensionUIContext;
+	/** Get current context usage for the active model. */
+	getContextUsage(): ContextUsage | undefined;
+	/** Compact the session context (interactive mode shows UI). */
+	compact(instructionsOrOptions?: string | CompactOptions): Promise<void>;
 	/** Whether UI is available (false in print/RPC mode) */
 	hasUI: boolean;
 	/** Current working directory */
@@ -158,6 +176,9 @@ export interface ExtensionContext {
  * Includes session control methods only safe in user-initiated commands.
  */
 export interface ExtensionCommandContext extends ExtensionContext {
+	/** Get current context usage for the active model. */
+	getContextUsage(): ContextUsage | undefined;
+
 	/** Wait for the agent to finish streaming */
 	waitForIdle(): Promise<void>;
 
@@ -174,7 +195,7 @@ export interface ExtensionCommandContext extends ExtensionContext {
 	navigateTree(targetId: string, options?: { summarize?: boolean }): Promise<{ cancelled: boolean }>;
 
 	/** Compact the session context (interactive mode shows UI). */
-	compact(customInstructions?: string): Promise<void>;
+	compact(instructionsOrOptions?: string | CompactOptions): Promise<void>;
 }
 
 // ============================================================================
@@ -394,6 +415,7 @@ export interface InputEvent {
 	type: "input";
 	text: string;
 	images?: ImageContent[];
+	source: "interactive" | "rpc" | "extension";
 }
 
 // ============================================================================
@@ -693,8 +715,8 @@ export interface ExtensionAPI {
 		},
 	): void;
 
-	/** Set the display label for this extension. */
-	setLabel(label: string): void;
+	/** Set the display label for this extension, or set a label on a specific entry. */
+	setLabel(entryIdOrLabel: string, label?: string | undefined): void;
 
 	/** Get the value of a registered CLI flag. */
 	getFlag(name: string): boolean | string | undefined;
@@ -813,6 +835,7 @@ export interface ExtensionActions {
 	sendMessage: SendMessageHandler;
 	sendUserMessage: SendUserMessageHandler;
 	appendEntry: AppendEntryHandler;
+	setLabel: (targetId: string, label: string | undefined) => void;
 	getActiveTools: GetActiveToolsHandler;
 	getAllTools: GetAllToolsHandler;
 	setActiveTools: SetActiveToolsHandler;
@@ -828,10 +851,13 @@ export interface ExtensionContextActions {
 	abort: () => void;
 	hasPendingMessages: () => boolean;
 	shutdown: () => void;
+	getContextUsage: () => ContextUsage | undefined;
+	compact: (instructionsOrOptions?: string | CompactOptions) => Promise<void>;
 }
 
 /** Actions for ExtensionCommandContext (ctx.* in command handlers). */
 export interface ExtensionCommandContextActions {
+	getContextUsage: () => ContextUsage | undefined;
 	waitForIdle: () => Promise<void>;
 	newSession: (options?: {
 		parentSession?: string;
@@ -839,7 +865,7 @@ export interface ExtensionCommandContextActions {
 	}) => Promise<{ cancelled: boolean }>;
 	branch: (entryId: string) => Promise<{ cancelled: boolean }>;
 	navigateTree: (targetId: string, options?: { summarize?: boolean }) => Promise<{ cancelled: boolean }>;
-	compact: (customInstructions?: string) => Promise<void>;
+	compact: (instructionsOrOptions?: string | CompactOptions) => Promise<void>;
 }
 
 /** Full runtime = state + actions. */
