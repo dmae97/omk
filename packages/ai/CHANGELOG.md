@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [5.6.77] - 2026-01-18
 ### Fixed
 
 - Prevented duplicate tool results for errored or aborted messages when results already exist
