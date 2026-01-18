@@ -12,6 +12,7 @@ import type { InteractiveModeContext, TodoItem } from "../types";
 export class EventController {
 	private lastReadGroup: ReadToolGroupComponent | undefined = undefined;
 	private lastThinkingCount = 0;
+	private renderedCustomMessages = new Set<string>();
 
 	constructor(private ctx: InteractiveModeContext) {}
 
@@ -73,6 +74,11 @@ export class EventController {
 
 			case "message_start":
 				if (event.message.role === "hookMessage" || event.message.role === "custom") {
+					const signature = `${event.message.role}:${event.message.customType}:${event.message.timestamp}`;
+					if (this.renderedCustomMessages.has(signature)) {
+						break;
+					}
+					this.renderedCustomMessages.add(signature);
 					this.resetReadGroup();
 					this.ctx.addMessageToChat(event.message);
 					this.ctx.ui.requestRender();
@@ -324,6 +330,8 @@ export class EventController {
 					});
 					this.ctx.statusLine.invalidate();
 					this.ctx.updateEditorTopBorder();
+				} else {
+					this.ctx.showWarning("Auto-compaction failed; continuing without compaction");
 				}
 				await this.ctx.flushCompactionQueue({ willRetry: event.willRetry });
 				this.ctx.ui.requestRender();

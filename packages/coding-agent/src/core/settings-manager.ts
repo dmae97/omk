@@ -46,6 +46,10 @@ export interface TerminalSettings {
 	showImages?: boolean; // default: true (only relevant if terminal supports images)
 }
 
+export interface StartupSettings {
+	quiet?: boolean; // default: false - suppress welcome screen and startup info
+}
+
 export interface ImageSettings {
 	autoResize?: boolean; // default: true (resize images to 2000x2000 max for better model compatibility)
 	blockImages?: boolean; // default: false - when true, prevents all images from being sent to LLM providers
@@ -194,6 +198,7 @@ export interface Settings {
 	hideThinkingBlock?: boolean;
 	shellPath?: string; // Custom shell path (e.g., for Cygwin users on Windows)
 	collapseChangelog?: boolean; // Show condensed changelog after update (use /changelog for full)
+	startup?: StartupSettings;
 	doubleEscapeAction?: "branch" | "tree"; // Action for double-escape with empty editor (default: "tree")
 	thinkingBudgets?: ThinkingBudgetsSettings; // Custom token budgets for thinking levels
 	/** Environment variables to set automatically on startup */
@@ -840,6 +845,18 @@ export class SettingsManager {
 
 	async setCollapseChangelog(collapse: boolean): Promise<void> {
 		this.globalSettings.collapseChangelog = collapse;
+		await this.save();
+	}
+
+	getStartupQuiet(): boolean {
+		return this.settings.startup?.quiet ?? false;
+	}
+
+	async setStartupQuiet(quiet: boolean): Promise<void> {
+		if (!this.globalSettings.startup) {
+			this.globalSettings.startup = {};
+		}
+		this.globalSettings.startup.quiet = quiet;
 		await this.save();
 	}
 

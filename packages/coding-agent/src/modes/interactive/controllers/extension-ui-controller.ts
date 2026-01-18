@@ -178,6 +178,13 @@ export class ExtensionUiController {
 
 				return { cancelled: false };
 			},
+			compact: async (customInstructions) => {
+				if (this.ctx.isBackgrounded) {
+					await this.ctx.session.compact(customInstructions);
+					return;
+				}
+				await this.ctx.executeCompaction(customInstructions, false);
+			},
 		};
 
 		extensionRunner.initialize(actions, contextActions, commandActions, uiContext);
@@ -334,6 +341,13 @@ export class ExtensionUiController {
 				this.ctx.showStatus("Navigated to selected point");
 
 				return { cancelled: false };
+			},
+			compact: async (customInstructions) => {
+				if (this.ctx.isBackgrounded) {
+					await this.ctx.session.compact(customInstructions);
+					return;
+				}
+				await this.ctx.executeCompaction(customInstructions, false);
 			},
 		};
 

@@ -94,6 +94,53 @@ function isAppAction(action: string): action is AppAction {
 }
 
 /**
+ * Key hint formatting utilities for UI labels.
+ */
+const MODIFIER_LABELS: Record<string, string> = {
+	ctrl: "Ctrl",
+	shift: "Shift",
+	alt: "Alt",
+};
+
+const KEY_LABELS: Record<string, string> = {
+	esc: "Esc",
+	escape: "Esc",
+	enter: "Enter",
+	return: "Enter",
+	space: "Space",
+	tab: "Tab",
+	backspace: "Backspace",
+	delete: "Delete",
+	home: "Home",
+	end: "End",
+	pageup: "PgUp",
+	pagedown: "PgDn",
+	up: "Up",
+	down: "Down",
+	left: "Left",
+	right: "Right",
+};
+
+function formatKeyPart(part: string): string {
+	const lower = part.toLowerCase();
+	const modifier = MODIFIER_LABELS[lower];
+	if (modifier) return modifier;
+	const label = KEY_LABELS[lower];
+	if (label) return label;
+	if (part.length === 1) return part.toUpperCase();
+	return `${part.charAt(0).toUpperCase()}${part.slice(1)}`;
+}
+
+export function formatKeyHint(key: KeyId): string {
+	return key.split("+").map(formatKeyPart).join("+");
+}
+
+export function formatKeyHints(keys: KeyId | KeyId[]): string {
+	const list = Array.isArray(keys) ? keys : [keys];
+	return list.map(formatKeyHint).join("/");
+}
+
+/**
  * Manages all keybindings (app + editor).
  */
 export class KeybindingsManager {

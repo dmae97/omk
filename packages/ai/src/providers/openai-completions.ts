@@ -460,7 +460,7 @@ function convertMessages(
 	const transformedMessages = transformMessages(context.messages, model);
 
 	if (context.systemPrompt) {
-		const useDeveloperRole = model.reasoning && compat.supportsDeveloperRole;
+		const useDeveloperRole = model.reasoning && compat.supportsDeveloperRole && model.provider !== "opencode";
 		const role = useDeveloperRole ? "developer" : "system";
 		params.push({ role: role, content: sanitizeSurrogates(context.systemPrompt) });
 	}
@@ -685,13 +685,15 @@ function mapStopReason(reason: ChatCompletionChunk.Choice["finish_reason"]): Sto
  */
 function detectCompatFromUrl(baseUrl: string): Required<OpenAICompat> {
 	const isZai = baseUrl.includes("api.z.ai");
+	const isOpencode = baseUrl.includes("opencode.ai");
 
 	const isNonStandard =
 		baseUrl.includes("cerebras.ai") ||
 		baseUrl.includes("api.x.ai") ||
 		baseUrl.includes("mistral.ai") ||
 		baseUrl.includes("chutes.ai") ||
-		isZai;
+		isZai ||
+		isOpencode;
 
 	const useMaxTokens = baseUrl.includes("mistral.ai") || baseUrl.includes("chutes.ai");
 

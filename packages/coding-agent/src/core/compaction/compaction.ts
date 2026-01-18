@@ -7,7 +7,7 @@
 
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, Model, Usage } from "@oh-my-pi/pi-ai";
-import { complete, completeSimple } from "@oh-my-pi/pi-ai";
+import { completeSimple } from "@oh-my-pi/pi-ai";
 import compactionSummaryPrompt from "../../prompts/compaction/compaction-summary.md" with { type: "text" };
 import compactionTurnPrefixPrompt from "../../prompts/compaction/compaction-turn-prefix.md" with { type: "text" };
 import compactionUpdateSummaryPrompt from "../../prompts/compaction/compaction-update-summary.md" with { type: "text" };
@@ -642,17 +642,22 @@ async function generateTurnPrefixSummary(
 ): Promise<string> {
 	const maxTokens = Math.floor(0.5 * reserveTokens); // Smaller budget for turn prefix
 
-	const transformedMessages = convertToLlm(messages);
+	const llmMessages = convertToLlm(messages);
+	const conversationText = serializeConversation(llmMessages);
+	const promptText = `<conversation>\n${conversationText}\n</conversation>\n\n${TURN_PREFIX_SUMMARIZATION_PROMPT}`;
 	const summarizationMessages = [
-		...transformedMessages,
 		{
 			role: "user" as const,
-			content: [{ type: "text" as const, text: TURN_PREFIX_SUMMARIZATION_PROMPT }],
+			content: [{ type: "text" as const, text: promptText }],
 			timestamp: Date.now(),
 		},
 	];
 
-	const response = await complete(model, { messages: summarizationMessages }, { maxTokens, signal, apiKey });
+	const response = await completeSimple(
+		model,
+		{ systemPrompt: SUMMARIZATION_SYSTEM_PROMPT, messages: summarizationMessages },
+		{ maxTokens, signal, apiKey, reasoning: "high" },
+	);
 
 	if (response.stopReason === "error") {
 		throw new Error(`Turn prefix summarization failed: ${response.errorMessage || "Unknown error"}`);

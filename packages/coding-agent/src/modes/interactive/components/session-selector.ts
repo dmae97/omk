@@ -51,11 +51,17 @@ class SessionList implements Component {
 	}
 
 	private filterSessions(query: string): void {
-		this.filteredSessions = fuzzyFilter(
-			this.allSessions,
-			query,
-			(session) => `${session.id} ${session.allMessagesText}`,
-		);
+		this.filteredSessions = fuzzyFilter(this.allSessions, query, (session) => {
+			const parts = [
+				session.id,
+				session.title ?? "",
+				session.cwd ?? "",
+				session.firstMessage ?? "",
+				session.allMessagesText,
+				session.path,
+			];
+			return parts.filter(Boolean).join(" ");
+		});
 		this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.filteredSessions.length - 1));
 	}
 
@@ -73,10 +79,16 @@ class SessionList implements Component {
 		if (this.filteredSessions.length === 0) {
 			if (this.showCwd) {
 				// "All" scope - no sessions anywhere that match filter
-				lines.push(theme.fg("muted", "  No sessions found"));
+				lines.push(truncateToWidth(theme.fg("muted", "  No sessions found"), width, theme.format.ellipsis));
 			} else {
 				// "Current folder" scope - hint to try "all"
-				lines.push(theme.fg("muted", "  No sessions in current folder. Press Tab to view all."));
+				lines.push(
+					truncateToWidth(
+						theme.fg("muted", "  No sessions in current folder. Press Tab to view all."),
+						width,
+						theme.format.ellipsis,
+					),
+				);
 			}
 			return lines;
 		}
@@ -139,7 +151,7 @@ class SessionList implements Component {
 			const modified = formatDate(session.modified);
 			const msgCount = `${session.messageCount} message${session.messageCount !== 1 ? "s" : ""}`;
 			const metadata = `  ${modified} ${theme.sep.dot} ${msgCount}`;
-			const metadataLine = theme.fg("dim", truncateToWidth(metadata, width, ""));
+			const metadataLine = theme.fg("dim", truncateToWidth(metadata, width, theme.format.ellipsis));
 
 			lines.push(metadataLine);
 			lines.push(""); // Blank line between sessions
@@ -148,7 +160,7 @@ class SessionList implements Component {
 		// Add scroll indicator if needed
 		if (startIndex > 0 || endIndex < this.filteredSessions.length) {
 			const scrollText = `  (${this.selectedIndex + 1}/${this.filteredSessions.length})`;
-			const scrollInfo = theme.fg("muted", truncateToWidth(scrollText, width, ""));
+			const scrollInfo = theme.fg("muted", truncateToWidth(scrollText, width, theme.format.ellipsis));
 			lines.push(scrollInfo);
 		}
 

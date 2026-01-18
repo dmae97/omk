@@ -45,6 +45,7 @@ export interface InteractiveModeContext {
 	session: AgentSession;
 	sessionManager: SessionManager;
 	settingsManager: SettingsManager;
+	keybindings: KeybindingsManager;
 	agent: AgentSession["agent"];
 	voiceSupervisor: VoiceSupervisor;
 	historyStorage?: HistoryStorage;

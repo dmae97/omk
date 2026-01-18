@@ -54,6 +54,8 @@ export type {
 	GetAllToolsHandler,
 	GetThinkingLevelHandler,
 	GrepToolResultEvent,
+	InputEvent,
+	InputEventResult,
 	KeybindingsManager,
 	LoadExtensionsResult,
 	LsToolResultEvent,

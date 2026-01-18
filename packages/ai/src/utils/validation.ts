@@ -29,6 +29,9 @@ import type { Tool, ToolCall } from "../types";
 /** Regex matching valid JSON number literals (integers, decimals, scientific notation) */
 const JSON_NUMBER_PATTERN = /^[+-]?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
 
+/** Regex matching numeric strings (allows leading zeros) */
+const NUMERIC_STRING_PATTERN = /^[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
+
 /**
  * Normalizes AJV's `params.type` into a consistent string array.
  * AJV may report the expected type as a single string or an array of strings
@@ -69,6 +72,28 @@ function matchesExpectedType(value: unknown, expectedTypes: string[]): boolean {
 	});
 }
 
+function tryParseNumberString(value: string, expectedTypes: string[]): { value: unknown; changed: boolean } {
+	if (!expectedTypes.includes("number") && !expectedTypes.includes("integer")) {
+		return { value, changed: false };
+	}
+
+	const trimmed = value.trim();
+	if (!trimmed || !NUMERIC_STRING_PATTERN.test(trimmed)) {
+		return { value, changed: false };
+	}
+
+	const parsed = Number(trimmed);
+	if (!Number.isFinite(parsed)) {
+		return { value, changed: false };
+	}
+
+	if (!matchesExpectedType(parsed, expectedTypes)) {
+		return { value, changed: false };
+	}
+
+	return { value: parsed, changed: true };
+}
+
 /**
  * Attempts to parse a string as JSON if it looks like a JSON literal and
  * the parsed result matches one of the expected types.
@@ -85,6 +110,11 @@ function matchesExpectedType(value: unknown, expectedTypes: string[]): boolean {
 function tryParseJsonForTypes(value: string, expectedTypes: string[]): { value: unknown; changed: boolean } {
 	const trimmed = value.trim();
 	if (!trimmed) return { value, changed: false };
+
+	const numberCoercion = tryParseNumberString(trimmed, expectedTypes);
+	if (numberCoercion.changed) {
+		return numberCoercion;
+	}
 
 	// Quick syntactic checks to avoid unnecessary parse attempts
 	const looksJsonObject = trimmed.startsWith("{") && trimmed.endsWith("}");

@@ -59,15 +59,27 @@ export class InputController {
 		this.ctx.ui.onDebug = () => this.ctx.handleDebugCommand();
 		this.ctx.editor.onCtrlL = () => this.ctx.showModelSelector();
 		this.ctx.editor.onCtrlR = () => this.ctx.showHistorySearch();
-		this.ctx.editor.onCtrlO = () => this.toggleToolOutputExpansion();
 		this.ctx.editor.onCtrlT = () => this.ctx.toggleTodoExpansion();
 		this.ctx.editor.onCtrlG = () => this.openExternalEditor();
 		this.ctx.editor.onQuestionMark = () => this.ctx.handleHotkeysCommand();
 		this.ctx.editor.onCtrlV = () => this.handleImagePaste();
-		this.ctx.editor.onAltUp = () => this.handleDequeue();
 
 		// Wire up extension shortcuts
 		this.registerExtensionShortcuts();
+
+		const expandToolsKeys = this.ctx.keybindings.getKeys("expandTools");
+		this.ctx.editor.onCtrlO = expandToolsKeys.includes("ctrl+o") ? () => this.toggleToolOutputExpansion() : undefined;
+		for (const key of expandToolsKeys) {
+			if (key === "ctrl+o") continue;
+			this.ctx.editor.setCustomKeyHandler(key, () => this.toggleToolOutputExpansion());
+		}
+
+		const dequeueKeys = this.ctx.keybindings.getKeys("dequeue");
+		this.ctx.editor.onAltUp = dequeueKeys.includes("alt+up") ? () => this.handleDequeue() : undefined;
+		for (const key of dequeueKeys) {
+			if (key === "alt+up") continue;
+			this.ctx.editor.setCustomKeyHandler(key, () => this.handleDequeue());
+		}
 
 		this.ctx.editor.onChange = (text: string) => {
 			const wasBashMode = this.ctx.isBashMode;
@@ -118,6 +130,26 @@ export class InputController {
 				// Abort current stream and let queued messages be processed
 				await this.ctx.session.abort();
 				return;
+			}
+
+			if (!text) return;
+
+			const runner = this.ctx.session.extensionRunner;
+			let inputImages = this.ctx.pendingImages.length > 0 ? [...this.ctx.pendingImages] : undefined;
+
+			if (runner?.hasHandlers("input")) {
+				const result = await runner.emitInput({ type: "input", text, images: inputImages });
+				if (result?.handled) {
+					this.ctx.editor.setText("");
+					this.ctx.pendingImages = [];
+					return;
+				}
+				if (result?.text !== undefined) {
+					text = result.text.trim();
+				}
+				if (result?.images !== undefined) {
+					inputImages = result.images;
+				}
 			}
 
 			if (!text) return;
@@ -246,7 +278,11 @@ export class InputController {
 					try {
 						const content = fs.readFileSync(skillPath, "utf-8");
 						const body = content.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
-						const message = args ? `${body}\n\n---\n\nUser: ${args}` : body;
+						const metaLines = [`Skill: ${skillPath}`];
+						if (args) {
+							metaLines.push(`User: ${args}`);
+						}
+						const message = `${body}\n\n---\n\n${metaLines.join("\n")}`;
 						await this.ctx.session.prompt(message);
 					} catch (err) {
 						this.ctx.showError(`Failed to load skill: ${err instanceof Error ? err.message : String(err)}`);
@@ -288,7 +324,7 @@ export class InputController {
 			if (this.ctx.session.isStreaming) {
 				this.ctx.editor.addToHistory(text);
 				this.ctx.editor.setText("");
-				const images = this.ctx.pendingImages.length > 0 ? [...this.ctx.pendingImages] : undefined;
+				const images = inputImages && inputImages.length > 0 ? [...inputImages] : undefined;
 				this.ctx.pendingImages = [];
 				await this.ctx.session.prompt(text, { streamingBehavior: "steer", images });
 				this.ctx.updatePendingMessagesDisplay();
@@ -317,7 +353,7 @@ export class InputController {
 
 			if (this.ctx.onInputCallback) {
 				// Include any pending images from clipboard paste
-				const images = this.ctx.pendingImages.length > 0 ? [...this.ctx.pendingImages] : undefined;
+				const images = inputImages && inputImages.length > 0 ? [...inputImages] : undefined;
 				this.ctx.pendingImages = [];
 				this.ctx.onInputCallback({ text, images });
 			}

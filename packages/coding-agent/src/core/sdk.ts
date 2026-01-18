@@ -726,7 +726,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 		// Log MCP errors
 		for (const { path, error } of mcpResult.errors) {
-			console.error(`MCP "${path}": ${error}`);
+			logger.error("MCP tool load failed", { path, error });
 		}
 
 		if (mcpResult.tools.length > 0) {
@@ -784,7 +784,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		);
 		time("discoverAndLoadExtensions");
 		for (const { path, error } of extensionsResult.errors) {
-			console.error(`Failed to load extension "${path}": ${error}`);
+			logger.error("Failed to load extension", { path, error });
 		}
 	}
 
@@ -804,10 +804,14 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	}
 
 	// Discover custom commands (TypeScript slash commands)
-	const customCommandsResult = await loadCustomCommandsInternal({ cwd, agentDir });
-	time("discoverCustomCommands");
-	for (const { path, error } of customCommandsResult.errors) {
-		console.error(`Failed to load custom command "${path}": ${error}`);
+	const customCommandsResult: CustomCommandsLoadResult = options.disableExtensionDiscovery
+		? { commands: [], errors: [] }
+		: await loadCustomCommandsInternal({ cwd, agentDir });
+	if (!options.disableExtensionDiscovery) {
+		time("discoverCustomCommands");
+		for (const { path, error } of customCommandsResult.errors) {
+			logger.error("Failed to load custom command", { path, error });
+		}
 	}
 
 	let extensionRunner: ExtensionRunner | undefined;

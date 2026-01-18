@@ -305,6 +305,7 @@ export class CommandController {
 	}
 
 	handleHotkeysCommand(): void {
+		const expandToolsKey = this.ctx.keybindings.getDisplayString("expandTools") || "Ctrl+O";
 		const hotkeys = `
 **Navigation**
 | Key | Action |
@@ -337,7 +338,7 @@ export class CommandController {
 | \`Alt+P\` | Select model (temporary) |
 | \`Ctrl+L\` | Select model (set roles) |
 | \`Ctrl+R\` | Search prompt history |
-| \`Ctrl+O\` | Toggle tool output expansion |
+| \`${expandToolsKey}\` | Toggle tool output expansion |
 | \`Ctrl+T\` | Toggle todo list expansion |
 | \`Ctrl+G\` | Edit message in external editor |
 | \`/\` | Slash commands |
@@ -481,7 +482,11 @@ export class CommandController {
 		try {
 			const content = fs.readFileSync(skillPath, "utf-8");
 			const body = content.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
-			const message = args ? `${body}\n\n---\n\nUser: ${args}` : body;
+			const metaLines = [`Skill: ${skillPath}`];
+			if (args) {
+				metaLines.push(`User: ${args}`);
+			}
+			const message = `${body}\n\n---\n\n${metaLines.join("\n")}`;
 			await this.ctx.session.prompt(message);
 		} catch (err) {
 			this.ctx.showError(`Failed to load skill: ${err instanceof Error ? err.message : String(err)}`);

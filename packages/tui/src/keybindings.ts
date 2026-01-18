@@ -1,4 +1,4 @@
-import { type KeyId, matchesKey } from "./keys";
+import { type KeyId, matchesKey, parseKey } from "./keys";
 
 /**
  * Editor actions that can be bound to keys.
@@ -77,6 +77,29 @@ export const DEFAULT_EDITOR_KEYBINDINGS: Required<EditorKeybindingsConfig> = {
 	copy: "ctrl+c",
 };
 
+const SHIFTED_SYMBOL_KEYS = new Set<string>([
+	"!",
+	"@",
+	"#",
+	"$",
+	"%",
+	"^",
+	"&",
+	"*",
+	"(",
+	")",
+	"_",
+	"+",
+	"{",
+	"}",
+	"|",
+	":",
+	"<",
+	">",
+	"?",
+	"~",
+]);
+
 /**
  * Manages keybindings for the editor.
  */
@@ -114,7 +137,12 @@ export class EditorKeybindingsManager {
 		for (const key of keys) {
 			if (matchesKey(data, key)) return true;
 		}
-		return false;
+
+		const parsed = parseKey(data);
+		if (!parsed || !parsed.startsWith("shift+")) return false;
+		const keyName = parsed.slice("shift+".length);
+		if (!SHIFTED_SYMBOL_KEYS.has(keyName)) return false;
+		return keys.includes(keyName as KeyId);
 	}
 
 	/**

@@ -335,6 +335,21 @@ export function substituteArgs(content: string, args: string[]): string {
 		return args[index] ?? "";
 	});
 
+	result = result.replace(/\$@\[(\d+)(?::(\d*)?)?\]/g, (_, startRaw: string, lengthRaw?: string) => {
+		const start = Number.parseInt(startRaw, 10);
+		if (!Number.isFinite(start) || start < 1) return "";
+		const startIndex = start - 1;
+		if (startIndex >= args.length) return "";
+
+		if (lengthRaw === undefined || lengthRaw === "") {
+			return args.slice(startIndex).join(" ");
+		}
+
+		const length = Number.parseInt(lengthRaw, 10);
+		if (!Number.isFinite(length) || length <= 0) return "";
+		return args.slice(startIndex, startIndex + length).join(" ");
+	});
+
 	// Pre-compute all args joined (optimization)
 	const allArgs = args.join(" ");
 

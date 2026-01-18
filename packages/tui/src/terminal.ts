@@ -136,7 +136,8 @@ export class ProcessTerminal implements Terminal {
 					// Enable Kitty keyboard protocol (push flags)
 					// Flag 1 = disambiguate escape codes
 					// Flag 2 = report event types (press/repeat/release)
-					process.stdout.write("\x1b[>3u");
+					// Flag 4 = report alternate keys
+					process.stdout.write("\x1b[>7u");
 					return; // Don't forward protocol response to TUI
 				}
 			}

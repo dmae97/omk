@@ -80,6 +80,13 @@ function computeRelativeIndentDepths(lines: string[]): number[] {
 	});
 }
 
+function normalizeFuzzyText(text: string): string {
+	return text
+		.replace(/[“”„‟«»]/g, '"')
+		.replace(/[‘’‚‛`´]/g, "'")
+		.replace(/[‐‑‒–—−]/g, "-");
+}
+
 function normalizeLinesForMatch(lines: string[], includeDepth = true): string[] {
 	const indentDepths = includeDepth ? computeRelativeIndentDepths(lines) : null;
 	return lines.map((line, index) => {
@@ -88,7 +95,8 @@ function normalizeLinesForMatch(lines: string[], includeDepth = true): string[] 
 		if (trimmed.length === 0) {
 			return prefix;
 		}
-		const collapsed = trimmed.replace(/[ \t]+/g, " ");
+		const normalized = normalizeFuzzyText(trimmed);
+		const collapsed = normalized.replace(/[ \t]+/g, " ");
 		return `${prefix}${collapsed}`;
 	});
 }

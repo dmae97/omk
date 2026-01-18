@@ -17,6 +17,7 @@ import {
 	isCtrlRight,
 	isCtrlU,
 	isCtrlW,
+	isCtrlY,
 	isDelete,
 	isEnd,
 	isEnter,
@@ -27,6 +28,7 @@ import {
 	isShiftEnter,
 	isShiftSpace,
 	isTab,
+	matchesKey,
 } from "../keys";
 import type { SymbolTheme } from "../symbols";
 import type { Component } from "../tui";
@@ -231,6 +233,7 @@ export interface EditorTheme {
 	borderColor: (str: string) => string;
 	selectList: SelectListTheme;
 	symbols: SymbolTheme;
+	editorPaddingX?: number;
 }
 
 export interface EditorTopBorder {
@@ -261,6 +264,12 @@ export class Editor implements Component {
 
 	// Store last render width for cursor navigation
 	private lastWidth: number = 80;
+	private maxHeight?: number;
+	private scrollOffset: number = 0;
+
+	// Emacs-style kill ring
+	private killRing: string[] = [];
+	private lastKillWasKillCommand: boolean = false;
 
 	// Border color (can be changed dynamically)
 	public borderColor: (str: string) => string;
@@ -318,6 +327,11 @@ export class Editor implements Component {
 		this.useTerminalCursor = useTerminalCursor;
 	}
 
+	setMaxHeight(maxHeight: number | undefined): void {
+		this.maxHeight = maxHeight;
+		this.scrollOffset = 0;
+	}
+
 	setHistoryStorage(storage: HistoryStorage): void {
 		this.historyStorage = storage;
 		const recent = storage.getRecent(100);
@@ -348,18 +362,21 @@ export class Editor implements Component {
 	}
 
 	private isOnFirstVisualLine(): boolean {
-		const visualLines = this.buildVisualLineMap(this.lastWidth);
+		const contentWidth = this.getContentWidth(this.lastWidth, this.getEditorPaddingX());
+		const visualLines = this.buildVisualLineMap(contentWidth);
 		const currentVisualLine = this.findCurrentVisualLine(visualLines);
 		return currentVisualLine === 0;
 	}
 
 	private isOnLastVisualLine(): boolean {
-		const visualLines = this.buildVisualLineMap(this.lastWidth);
+		const contentWidth = this.getContentWidth(this.lastWidth, this.getEditorPaddingX());
+		const visualLines = this.buildVisualLineMap(contentWidth);
 		const currentVisualLine = this.findCurrentVisualLine(visualLines);
 		return currentVisualLine === visualLines.length - 1;
 	}
 
 	private navigateHistory(direction: 1 | -1): void {
+		this.resetKillSequence();
 		if (this.history.length === 0) return;
 
 		const newIndex = this.historyIndex - direction; // Up(-1) increases index, Down(1) decreases
@@ -391,27 +408,65 @@ export class Editor implements Component {
 		// No cached state to invalidate currently
 	}
 
+	private getEditorPaddingX(): number {
+		const padding = this.theme.editorPaddingX ?? 2;
+		return Math.max(1, padding);
+	}
+
+	private getContentWidth(width: number, paddingX: number): number {
+		return Math.max(0, width - 2 * (paddingX + 1));
+	}
+
+	private getVisibleContentHeight(contentLines: number): number {
+		if (this.maxHeight === undefined) return contentLines;
+		return Math.max(1, this.maxHeight - 2);
+	}
+
+	private updateScrollOffset(contentWidth: number, layoutLines: LayoutLine[], visibleHeight: number): void {
+		if (layoutLines.length <= visibleHeight) {
+			this.scrollOffset = 0;
+			return;
+		}
+
+		const visualLines = this.buildVisualLineMap(contentWidth);
+		const cursorLine = this.findCurrentVisualLine(visualLines);
+		if (cursorLine < this.scrollOffset) {
+			this.scrollOffset = cursorLine;
+		} else if (cursorLine >= this.scrollOffset + visibleHeight) {
+			this.scrollOffset = cursorLine - visibleHeight + 1;
+		}
+
+		const maxOffset = Math.max(0, layoutLines.length - visibleHeight);
+		this.scrollOffset = Math.min(this.scrollOffset, maxOffset);
+	}
+
 	render(width: number): string[] {
 		// Store width for cursor navigation
 		this.lastWidth = width;
 
 		// Box-drawing characters for rounded corners
 		const box = this.theme.symbols.boxRound;
-		const topLeft = this.borderColor(`${box.topLeft}${box.horizontal}`);
-		const topRight = this.borderColor(`${box.horizontal}${box.topRight}`);
-		const bottomLeft = this.borderColor(`${box.bottomLeft}${box.horizontal}`);
-		const bottomRight = this.borderColor(`${box.horizontal}${box.bottomRight}`);
+		const paddingX = this.getEditorPaddingX();
+		const borderWidth = paddingX + 1;
+		const topLeft = this.borderColor(`${box.topLeft}${box.horizontal.repeat(paddingX)}`);
+		const topRight = this.borderColor(`${box.horizontal.repeat(paddingX)}${box.topRight}`);
+		const bottomLeft = this.borderColor(`${box.bottomLeft}${box.horizontal}${" ".repeat(Math.max(0, paddingX - 1))}`);
+		const bottomRight = this.borderColor(
+			`${" ".repeat(Math.max(0, paddingX - 1))}${box.horizontal}${box.bottomRight}`,
+		);
 		const horizontal = this.borderColor(box.horizontal);
 
-		// Layout the text - content area is width minus 6 for borders (3 left + 3 right)
-		const contentAreaWidth = width - 6;
+		// Layout the text
+		const contentAreaWidth = this.getContentWidth(width, paddingX);
 		const layoutLines = this.layoutText(contentAreaWidth);
+		const visibleContentHeight = this.getVisibleContentHeight(layoutLines.length);
+		this.updateScrollOffset(contentAreaWidth, layoutLines, visibleContentHeight);
+		const visibleLayoutLines = layoutLines.slice(this.scrollOffset, this.scrollOffset + visibleContentHeight);
 
 		const result: string[] = [];
 
 		// Render top border: ╭─ [status content] ────────────────╮
-		// Reserve: 2 for "╭─", 2 for "─╮" = 4 total for corners
-		const topFillWidth = width - 4;
+		const topFillWidth = width - borderWidth * 2;
 		if (this.topBorderContent) {
 			const { content, width: statusWidth } = this.topBorderContent;
 			if (statusWidth <= topFillWidth) {
@@ -430,9 +485,8 @@ export class Editor implements Component {
 		}
 
 		// Render each layout line
-		// Content area is width - 6 (for "│  " prefix and "  │" suffix borders)
-		const lineContentWidth = width - 6;
-		for (const layoutLine of layoutLines) {
+		const lineContentWidth = contentAreaWidth;
+		for (const layoutLine of visibleLayoutLines) {
 			let displayText = layoutLine.text;
 			let displayWidth = visibleWidth(layoutLine.text);
 
@@ -475,16 +529,15 @@ export class Editor implements Component {
 				}
 			}
 
-			// All lines have consistent 6-char borders (3 left + 3 right)
-			const isLastLine = layoutLine === layoutLines[layoutLines.length - 1];
+			// All lines have consistent borders based on padding
+			const isLastLine = layoutLine === visibleLayoutLines[visibleLayoutLines.length - 1];
 			const padding = " ".repeat(Math.max(0, lineContentWidth - displayWidth));
 
 			if (isLastLine) {
-				// Last line: "╰─ " (3) + content + padding + " ─╯" (3) = 6 chars border
-				result.push(`${bottomLeft} ${displayText}${padding} ${bottomRight}`);
+				result.push(`${bottomLeft}${displayText}${padding}${bottomRight}`);
 			} else {
-				const leftBorder = this.borderColor(`${box.vertical}  `);
-				const rightBorder = this.borderColor(`  ${box.vertical}`);
+				const leftBorder = this.borderColor(`${box.vertical}${" ".repeat(paddingX)}`);
+				const rightBorder = this.borderColor(`${" ".repeat(paddingX)}${box.vertical}`);
 				result.push(leftBorder + displayText + padding + rightBorder);
 			}
 		}
@@ -501,11 +554,17 @@ export class Editor implements Component {
 	getCursorPosition(width: number): { row: number; col: number } | null {
 		if (!this.useTerminalCursor) return null;
 
-		const contentWidth = width - 6;
+		const paddingX = this.getEditorPaddingX();
+		const borderWidth = paddingX + 1;
+		const contentWidth = this.getContentWidth(width, paddingX);
 		if (contentWidth <= 0) return null;
 
 		const layoutLines = this.layoutText(contentWidth);
+		const visibleContentHeight = this.getVisibleContentHeight(layoutLines.length);
+		this.updateScrollOffset(contentWidth, layoutLines, visibleContentHeight);
+
 		for (let i = 0; i < layoutLines.length; i++) {
+			if (i < this.scrollOffset || i >= this.scrollOffset + visibleContentHeight) continue;
 			const layoutLine = layoutLines[i];
 			if (!layoutLine || !layoutLine.hasCursor || layoutLine.cursorPos === undefined) continue;
 
@@ -516,13 +575,13 @@ export class Editor implements Component {
 				const graphemes = [...segmenter.segment(layoutLine.text)];
 				const lastGrapheme = graphemes[graphemes.length - 1]?.segment || "";
 				const lastWidth = visibleWidth(lastGrapheme) || 1;
-				const colOffset = 3 + Math.max(0, lineWidth - lastWidth);
-				return { row: 1 + i, col: colOffset };
+				const colOffset = borderWidth + Math.max(0, lineWidth - lastWidth);
+				return { row: 1 + i - this.scrollOffset, col: colOffset };
 			}
 
 			const before = layoutLine.text.slice(0, layoutLine.cursorPos);
-			const colOffset = 3 + visibleWidth(before);
-			return { row: 1 + i, col: colOffset };
+			const colOffset = borderWidth + visibleWidth(before);
+			return { row: 1 + i - this.scrollOffset, col: colOffset };
 		}
 
 		return null;
@@ -705,6 +764,14 @@ export class Editor implements Component {
 		else if (isAltBackspace(data)) {
 			this.deleteWordBackwards();
 		}
+		// Option/Alt+D - Delete word forwards
+		else if (matchesKey(data, "alt+d")) {
+			this.deleteWordForwards();
+		}
+		// Ctrl+Y - Yank from kill ring
+		else if (isCtrlY(data)) {
+			this.yankFromKillRing();
+		}
 		// Ctrl+A - Move to start of line
 		else if (isCtrlA(data)) {
 			this.moveToLineStart();
@@ -742,6 +809,8 @@ export class Editor implements Component {
 			if (this.disableSubmit) {
 				return;
 			}
+
+			this.resetKillSequence();
 
 			// Get text and substitute paste markers with actual content
 			let result = this.state.lines.join("\n").trim();
@@ -789,9 +858,11 @@ export class Editor implements Component {
 		// Word navigation (Option/Alt + Arrow or Ctrl + Arrow)
 		else if (isAltLeft(data) || isCtrlLeft(data)) {
 			// Word left
+			this.resetKillSequence();
 			this.moveWordBackwards();
 		} else if (isAltRight(data) || isCtrlRight(data)) {
 			// Word right
+			this.resetKillSequence();
 			this.moveWordForwards();
 		}
 		// Arrow keys
@@ -943,12 +1014,14 @@ export class Editor implements Component {
 
 	setText(text: string): void {
 		this.historyIndex = -1; // Exit history browsing mode
+		this.resetKillSequence();
 		this.setTextInternal(text);
 	}
 
 	/** Insert text at the current cursor position */
 	insertText(text: string): void {
 		this.historyIndex = -1;
+		this.resetKillSequence();
 
 		const line = this.state.lines[this.state.cursorLine] || "";
 		const before = line.slice(0, this.state.cursorCol);
@@ -965,6 +1038,7 @@ export class Editor implements Component {
 	// All the editor methods from before...
 	private insertCharacter(char: string): void {
 		this.historyIndex = -1; // Exit history browsing mode
+		this.resetKillSequence();
 
 		const line = this.state.lines[this.state.cursorLine] || "";
 
@@ -1014,6 +1088,7 @@ export class Editor implements Component {
 
 	private handlePaste(pastedText: string): void {
 		this.historyIndex = -1; // Exit history browsing mode
+		this.resetKillSequence();
 
 		// Clean the pasted text
 		const cleanText = pastedText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
@@ -1114,6 +1189,7 @@ export class Editor implements Component {
 
 	private addNewLine(): void {
 		this.historyIndex = -1; // Exit history browsing mode
+		this.resetKillSequence();
 
 		const currentLine = this.state.lines[this.state.cursorLine] || "";
 
@@ -1135,6 +1211,7 @@ export class Editor implements Component {
 
 	private handleBackspace(): void {
 		this.historyIndex = -1; // Exit history browsing mode
+		this.resetKillSequence();
 
 		if (this.state.cursorCol > 0) {
 			// Delete grapheme before cursor (handles emojis, combining characters, etc.)
@@ -1186,31 +1263,106 @@ export class Editor implements Component {
 	}
 
 	private moveToLineStart(): void {
+		this.resetKillSequence();
 		this.state.cursorCol = 0;
 	}
 
 	private moveToLineEnd(): void {
+		this.resetKillSequence();
 		const currentLine = this.state.lines[this.state.cursorLine] || "";
 		this.state.cursorCol = currentLine.length;
+	}
+
+	private resetKillSequence(): void {
+		this.lastKillWasKillCommand = false;
+		this.killRingIndex = 0;
+	}
+
+	private recordKill(text: string, direction: "forward" | "backward"): void {
+		if (!text) return;
+		if (this.lastKillWasKillCommand && this.killRing.length > 0) {
+			if (direction === "backward") {
+				this.killRing[0] = text + this.killRing[0];
+			} else {
+				this.killRing[0] = this.killRing[0] + text;
+			}
+		} else {
+			this.killRing.unshift(text);
+		}
+		this.killRingIndex = 0;
+		this.lastKillWasKillCommand = true;
+	}
+
+	private insertTextAtCursor(text: string): void {
+		this.historyIndex = -1;
+		this.resetKillSequence();
+
+		const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+		const lines = normalized.split("\n");
+
+		if (lines.length === 1) {
+			const line = this.state.lines[this.state.cursorLine] || "";
+			const before = line.slice(0, this.state.cursorCol);
+			const after = line.slice(this.state.cursorCol);
+			this.state.lines[this.state.cursorLine] = before + normalized + after;
+			this.state.cursorCol += normalized.length;
+		} else {
+			const currentLine = this.state.lines[this.state.cursorLine] || "";
+			const beforeCursor = currentLine.slice(0, this.state.cursorCol);
+			const afterCursor = currentLine.slice(this.state.cursorCol);
+
+			const newLines: string[] = [];
+			for (let i = 0; i < this.state.cursorLine; i++) {
+				newLines.push(this.state.lines[i] || "");
+			}
+
+			newLines.push(beforeCursor + (lines[0] || ""));
+			for (let i = 1; i < lines.length - 1; i++) {
+				newLines.push(lines[i] || "");
+			}
+			newLines.push((lines[lines.length - 1] || "") + afterCursor);
+
+			for (let i = this.state.cursorLine + 1; i < this.state.lines.length; i++) {
+				newLines.push(this.state.lines[i] || "");
+			}
+
+			this.state.lines = newLines;
+			this.state.cursorLine += lines.length - 1;
+			this.state.cursorCol = (lines[lines.length - 1] || "").length;
+		}
+
+		if (this.onChange) {
+			this.onChange(this.getText());
+		}
+	}
+
+	private yankFromKillRing(): void {
+		if (this.killRing.length === 0) return;
+		this.insertTextAtCursor(this.killRing[0] || "");
 	}
 
 	private deleteToStartOfLine(): void {
 		this.historyIndex = -1; // Exit history browsing mode
 
 		const currentLine = this.state.lines[this.state.cursorLine] || "";
+		let deletedText = "";
 
 		if (this.state.cursorCol > 0) {
 			// Delete from start of line up to cursor
+			deletedText = currentLine.slice(0, this.state.cursorCol);
 			this.state.lines[this.state.cursorLine] = currentLine.slice(this.state.cursorCol);
 			this.state.cursorCol = 0;
 		} else if (this.state.cursorLine > 0) {
 			// At start of line - merge with previous line
+			deletedText = "\n";
 			const previousLine = this.state.lines[this.state.cursorLine - 1] || "";
 			this.state.lines[this.state.cursorLine - 1] = previousLine + currentLine;
 			this.state.lines.splice(this.state.cursorLine, 1);
 			this.state.cursorLine--;
 			this.state.cursorCol = previousLine.length;
 		}
+
+		this.recordKill(deletedText, "backward");
 
 		if (this.onChange) {
 			this.onChange(this.getText());
@@ -1221,16 +1373,21 @@ export class Editor implements Component {
 		this.historyIndex = -1; // Exit history browsing mode
 
 		const currentLine = this.state.lines[this.state.cursorLine] || "";
+		let deletedText = "";
 
 		if (this.state.cursorCol < currentLine.length) {
 			// Delete from cursor to end of line
+			deletedText = currentLine.slice(this.state.cursorCol);
 			this.state.lines[this.state.cursorLine] = currentLine.slice(0, this.state.cursorCol);
 		} else if (this.state.cursorLine < this.state.lines.length - 1) {
 			// At end of line - merge with next line
 			const nextLine = this.state.lines[this.state.cursorLine + 1] || "";
+			deletedText = `\n${nextLine}`;
 			this.state.lines[this.state.cursorLine] = currentLine + nextLine;
 			this.state.lines.splice(this.state.cursorLine + 1, 1);
 		}
+
+		this.recordKill(deletedText, "forward");
 
 		if (this.onChange) {
 			this.onChange(this.getText());
@@ -1245,6 +1402,7 @@ export class Editor implements Component {
 		// If at start of line, behave like backspace at column 0 (merge with previous line)
 		if (this.state.cursorCol === 0) {
 			if (this.state.cursorLine > 0) {
+				this.recordKill("\n", "backward");
 				const previousLine = this.state.lines[this.state.cursorLine - 1] || "";
 				this.state.lines[this.state.cursorLine - 1] = previousLine + currentLine;
 				this.state.lines.splice(this.state.cursorLine, 1);
@@ -1257,9 +1415,39 @@ export class Editor implements Component {
 			const deleteFrom = this.state.cursorCol;
 			this.state.cursorCol = oldCursorCol;
 
+			const deletedText = currentLine.slice(deleteFrom, oldCursorCol);
 			this.state.lines[this.state.cursorLine] =
 				currentLine.slice(0, deleteFrom) + currentLine.slice(this.state.cursorCol);
 			this.state.cursorCol = deleteFrom;
+			this.recordKill(deletedText, "backward");
+		}
+
+		if (this.onChange) {
+			this.onChange(this.getText());
+		}
+	}
+
+	private deleteWordForwards(): void {
+		this.historyIndex = -1; // Exit history browsing mode
+
+		const currentLine = this.state.lines[this.state.cursorLine] || "";
+
+		if (this.state.cursorCol >= currentLine.length) {
+			if (this.state.cursorLine < this.state.lines.length - 1) {
+				this.recordKill("\n", "forward");
+				const nextLine = this.state.lines[this.state.cursorLine + 1] || "";
+				this.state.lines[this.state.cursorLine] = currentLine + nextLine;
+				this.state.lines.splice(this.state.cursorLine + 1, 1);
+			}
+		} else {
+			const oldCursorCol = this.state.cursorCol;
+			this.moveWordForwards();
+			const deleteTo = this.state.cursorCol;
+			this.state.cursorCol = oldCursorCol;
+
+			const deletedText = currentLine.slice(oldCursorCol, deleteTo);
+			this.state.lines[this.state.cursorLine] = currentLine.slice(0, oldCursorCol) + currentLine.slice(deleteTo);
+			this.recordKill(deletedText, "forward");
 		}
 
 		if (this.onChange) {
@@ -1269,6 +1457,7 @@ export class Editor implements Component {
 
 	private handleForwardDelete(): void {
 		this.historyIndex = -1; // Exit history browsing mode
+		this.resetKillSequence();
 
 		const currentLine = this.state.lines[this.state.cursorLine] || "";
 
@@ -1371,11 +1560,12 @@ export class Editor implements Component {
 	}
 
 	private moveCursor(deltaLine: number, deltaCol: number): void {
-		const width = this.lastWidth;
+		this.resetKillSequence();
+		const contentWidth = this.getContentWidth(this.lastWidth, this.getEditorPaddingX());
 
 		if (deltaLine !== 0) {
 			// Build visual line map for navigation
-			const visualLines = this.buildVisualLineMap(width);
+			const visualLines = this.buildVisualLineMap(contentWidth);
 			const currentVisualLine = this.findCurrentVisualLine(visualLines);
 
 			// Calculate column position within current visual line

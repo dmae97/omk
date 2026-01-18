@@ -1,6 +1,38 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added support for input event handlers in extensions to intercept and modify user input
+- Added argument completion support for custom commands in extensions
+- Added compact() method to extension command context for programmatic session compaction
+- Added setLabel() method to extension API for custom display labels
+- Added startup quiet setting to suppress welcome screen and startup messages
+- Added support for auto-discovering APPEND_SYSTEM.md files
+- Added support for piped input in non-interactive mode
+- Added global session listing across all project directories
+- Added enhanced session search including title, cwd, and path
+- Added key hint formatting utilities for UI labels
+- Added timeout display in bash tool output
+- Added fuzzy text normalization for improved diff matching
+- Added $@ argument slicing syntax in prompt templates
+- Added configurable keybindings for expand tools and dequeue actions
+
+### Changed
+
+- Improved error retry detection to include fetch failures
+- Enhanced session selector to search across more metadata fields
+- Updated skill command execution to include skill path metadata
+- Streamlined session file collection with shared utility function
+- Improved extension runner error handling and logging
+- Enhanced bash tool renderer to show timeout information
+
+### Fixed
+
+- Fixed duplicate custom message rendering in event controller
+- Fixed session selector width truncation for long text
+- Fixed model selection to respect remembered model roles
+- Fixed auto-print mode detection when piped input is present
 
 ## [5.5.0] - 2026-01-18
 ### Changed

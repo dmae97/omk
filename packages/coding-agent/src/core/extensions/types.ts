@@ -10,7 +10,7 @@
 
 import type { AgentMessage, AgentToolResult, AgentToolUpdateCallback, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Model, TextContent, ToolResultMessage } from "@oh-my-pi/pi-ai";
-import type { Component, EditorComponent, EditorTheme, KeyId, TUI } from "@oh-my-pi/pi-tui";
+import type { AutocompleteItem, Component, EditorComponent, EditorTheme, KeyId, TUI } from "@oh-my-pi/pi-tui";
 import type { Static, TSchema } from "@sinclair/typebox";
 import type * as piCodingAgent from "../../index";
 import type { Theme } from "../../modes/interactive/theme/theme";
@@ -172,6 +172,9 @@ export interface ExtensionCommandContext extends ExtensionContext {
 
 	/** Navigate to a different point in the session tree. */
 	navigateTree(targetId: string, options?: { summarize?: boolean }): Promise<{ cancelled: boolean }>;
+
+	/** Compact the session context (interactive mode shows UI). */
+	compact(customInstructions?: string): Promise<void>;
 }
 
 // ============================================================================
@@ -383,6 +386,17 @@ export interface UserBashEvent {
 }
 
 // ============================================================================
+// Input Events
+// ============================================================================
+
+/** Fired when the user submits input (interactive mode only). */
+export interface InputEvent {
+	type: "input";
+	text: string;
+	images?: ImageContent[];
+}
+
+// ============================================================================
 // Tool Events
 // ============================================================================
 
@@ -486,6 +500,7 @@ export type ExtensionEvent =
 	| TurnStartEvent
 	| TurnEndEvent
 	| UserBashEvent
+	| InputEvent
 	| ToolCallEvent
 	| ToolResultEvent;
 
@@ -500,6 +515,16 @@ export interface ContextEventResult {
 export interface ToolCallEventResult {
 	block?: boolean;
 	reason?: string;
+}
+
+/** Result from input event handler */
+export interface InputEventResult {
+	/** If true, the input was handled and should not continue through normal flow */
+	handled?: boolean;
+	/** Replace the input text */
+	text?: string;
+	/** Replace any pending images */
+	images?: ImageContent[];
 }
 
 /** Result from user_bash event handler */
@@ -565,6 +590,7 @@ export type MessageRenderer<T = unknown> = (
 export interface RegisteredCommand {
 	name: string;
 	description?: string;
+	getArgumentCompletions?: (argumentPrefix: string) => AutocompleteItem[] | null;
 	handler: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
 }
 
@@ -622,6 +648,7 @@ export interface ExtensionAPI {
 	on(event: "agent_end", handler: ExtensionHandler<AgentEndEvent>): void;
 	on(event: "turn_start", handler: ExtensionHandler<TurnStartEvent>): void;
 	on(event: "turn_end", handler: ExtensionHandler<TurnEndEvent>): void;
+	on(event: "input", handler: ExtensionHandler<InputEvent, InputEventResult>): void;
 	on(event: "tool_call", handler: ExtensionHandler<ToolCallEvent, ToolCallEventResult>): void;
 	on(event: "tool_result", handler: ExtensionHandler<ToolResultEvent, ToolResultEventResult>): void;
 	on(event: "user_bash", handler: ExtensionHandler<UserBashEvent, UserBashEventResult>): void;
@@ -638,7 +665,14 @@ export interface ExtensionAPI {
 	// =========================================================================
 
 	/** Register a custom command. */
-	registerCommand(name: string, options: { description?: string; handler: RegisteredCommand["handler"] }): void;
+	registerCommand(
+		name: string,
+		options: {
+			description?: string;
+			getArgumentCompletions?: RegisteredCommand["getArgumentCompletions"];
+			handler: RegisteredCommand["handler"];
+		},
+	): void;
 
 	/** Register a keyboard shortcut. */
 	registerShortcut(
@@ -658,6 +692,9 @@ export interface ExtensionAPI {
 			default?: boolean | string;
 		},
 	): void;
+
+	/** Set the display label for this extension. */
+	setLabel(label: string): void;
 
 	/** Get the value of a registered CLI flag. */
 	getFlag(name: string): boolean | string | undefined;
@@ -802,6 +839,7 @@ export interface ExtensionCommandContextActions {
 	}) => Promise<{ cancelled: boolean }>;
 	branch: (entryId: string) => Promise<{ cancelled: boolean }>;
 	navigateTree: (targetId: string, options?: { summarize?: boolean }) => Promise<{ cancelled: boolean }>;
+	compact: (customInstructions?: string) => Promise<void>;
 }
 
 /** Full runtime = state + actions. */
@@ -811,6 +849,7 @@ export interface ExtensionRuntime extends ExtensionRuntimeState, ExtensionAction
 export interface Extension {
 	path: string;
 	resolvedPath: string;
+	label?: string;
 	handlers: Map<string, HandlerFn[]>;
 	tools: Map<string, RegisteredTool>;
 	messageRenderers: Map<string, MessageRenderer>;

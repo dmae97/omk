@@ -456,8 +456,8 @@ export function loadEntriesFromFile(filePath: string, storage: SessionStorage = 
 
 	// Validate session header
 	if (entries.length === 0) return entries;
-	const header = entries[0];
-	if (header.type !== "session" || typeof (header as any).id !== "string") {
+	const header = entries[0] as SessionHeader;
+	if (header.type !== "session" || typeof header.id !== "string") {
 		return [];
 	}
 
@@ -832,6 +832,85 @@ function getTaskToolUsage(details: unknown): Usage | undefined {
 	const usage = record.usage;
 	if (!usage || typeof usage !== "object") return undefined;
 	return usage as Usage;
+}
+
+function extractTextFromContent(content: Message["content"]): string {
+	if (typeof content === "string") return content;
+	return content
+		.filter((block): block is TextContent => block.type === "text")
+		.map((block) => block.text)
+		.join(" ");
+}
+
+function collectSessionsFromFiles(files: string[], storage: SessionStorage): SessionInfo[] {
+	const sessions: SessionInfo[] = [];
+
+	for (const file of files) {
+		try {
+			const content = storage.readTextSync(file);
+			const lines = content.trim().split("\n");
+			if (lines.length === 0) continue;
+
+			// Check first line for valid session header
+			type SessionHeaderShape = { type: string; id: string; cwd?: string; title?: string; timestamp: string };
+			let header: SessionHeaderShape | null = null;
+			try {
+				const first = JSON.parse(lines[0]) as SessionHeaderShape;
+				if (first.type === "session" && first.id) {
+					header = first;
+				}
+			} catch {
+				// Not valid JSON
+			}
+			if (!header) continue;
+
+			const stats = storage.statSync(file);
+			let messageCount = 0;
+			let firstMessage = "";
+			const allMessages: string[] = [];
+
+			for (let i = 1; i < lines.length; i++) {
+				try {
+					const entry = JSON.parse(lines[i]) as { type?: string; message?: Message };
+
+					if (entry.type === "message" && entry.message) {
+						messageCount++;
+
+						if (entry.message.role === "user" || entry.message.role === "assistant") {
+							const textContent = extractTextFromContent(entry.message.content);
+
+							if (textContent) {
+								allMessages.push(textContent);
+
+								if (!firstMessage && entry.message.role === "user") {
+									firstMessage = textContent;
+								}
+							}
+						}
+					}
+				} catch {
+					// Skip malformed lines
+				}
+			}
+
+			sessions.push({
+				path: file,
+				id: header.id,
+				cwd: typeof header.cwd === "string" ? header.cwd : "",
+				title: header.title,
+				created: new Date(header.timestamp),
+				modified: stats.mtime,
+				messageCount,
+				firstMessage: firstMessage || "(no messages)",
+				allMessagesText: allMessages.join(" "),
+			});
+		} catch {
+			// Skip files that can't be read
+		}
+	}
+
+	sessions.sort((a, b) => b.modified.getTime() - a.modified.getTime());
+	return sessions;
 }
 
 export class SessionManager {
@@ -1699,82 +1778,26 @@ export class SessionManager {
 	 */
 	static list(cwd: string, sessionDir?: string, storage: SessionStorage = new FileSessionStorage()): SessionInfo[] {
 		const dir = sessionDir ?? getDefaultSessionDir(cwd, storage);
-		const sessions: SessionInfo[] = [];
-
 		try {
 			const files = storage.listFilesSync(dir, "*.jsonl");
-
-			for (const file of files) {
-				try {
-					const content = storage.readTextSync(file);
-					const lines = content.trim().split("\n");
-					if (lines.length === 0) continue;
-
-					// Check first line for valid session header
-					let header: { type: string; id: string; cwd?: string; title?: string; timestamp: string } | null = null;
-					try {
-						const first = JSON.parse(lines[0]);
-						if (first.type === "session" && first.id) {
-							header = first;
-						}
-					} catch {
-						// Not valid JSON
-					}
-					if (!header) continue;
-
-					const stats = storage.statSync(file);
-					let messageCount = 0;
-					let firstMessage = "";
-					const allMessages: string[] = [];
-
-					for (let i = 1; i < lines.length; i++) {
-						try {
-							const entry = JSON.parse(lines[i]);
-
-							if (entry.type === "message") {
-								messageCount++;
-
-								if (entry.message.role === "user" || entry.message.role === "assistant") {
-									const textContent = entry.message.content
-										.filter((c: any) => c.type === "text")
-										.map((c: any) => c.text)
-										.join(" ");
-
-									if (textContent) {
-										allMessages.push(textContent);
-
-										if (!firstMessage && entry.message.role === "user") {
-											firstMessage = textContent;
-										}
-									}
-								}
-							}
-						} catch {
-							// Skip malformed lines
-						}
-					}
-
-					sessions.push({
-						path: file,
-						id: header.id,
-						cwd: typeof header.cwd === "string" ? header.cwd : "",
-						title: header.title,
-						created: new Date(header.timestamp),
-						modified: stats.mtime,
-						messageCount,
-						firstMessage: firstMessage || "(no messages)",
-						allMessagesText: allMessages.join(" "),
-					});
-				} catch {
-					// Skip files that can't be read
-				}
-			}
-
-			sessions.sort((a, b) => b.modified.getTime() - a.modified.getTime());
+			return collectSessionsFromFiles(files, storage);
 		} catch {
-			// Return empty list on error
+			return [];
 		}
+	}
 
-		return sessions;
+	/**
+	 * List all sessions across all project directories.
+	 */
+	static listAll(storage: SessionStorage = new FileSessionStorage()): SessionInfo[] {
+		const sessionsRoot = join(getDefaultAgentDir(), "sessions");
+		try {
+			const files = Array.from(new Bun.Glob("**/*.jsonl").scanSync(sessionsRoot)).map((name) =>
+				join(sessionsRoot, name),
+			);
+			return collectSessionsFromFiles(files, storage);
+		} catch {
+			return [];
+		}
 	}
 }

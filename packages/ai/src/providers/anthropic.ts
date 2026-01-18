@@ -47,12 +47,16 @@ export const claudeCodeHeaders = {
 } as const;
 
 export const applyClaudeToolPrefix = (name: string) => {
-	if (!claudeToolPrefix || name.startsWith(claudeToolPrefix)) return name;
+	if (!claudeToolPrefix) return name;
+	const prefix = claudeToolPrefix.toLowerCase();
+	if (name.toLowerCase().startsWith(prefix)) return name;
 	return `${claudeToolPrefix}${name}`;
 };
 
 export const stripClaudeToolPrefix = (name: string) => {
-	if (!claudeToolPrefix || !name.startsWith(claudeToolPrefix)) return name;
+	if (!claudeToolPrefix) return name;
+	const prefix = claudeToolPrefix.toLowerCase();
+	if (!name.toLowerCase().startsWith(prefix)) return name;
 	return name.slice(claudeToolPrefix.length);
 };
 

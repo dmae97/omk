@@ -178,6 +178,8 @@ interface BashRenderContext {
 	expanded?: boolean;
 	/** Number of preview lines when collapsed */
 	previewLines?: number;
+	/** Timeout in seconds */
+	timeout?: number;
 }
 
 // Preview line limit when not expanded (matches tool-execution behavior)
@@ -236,6 +238,11 @@ export const bashToolRenderer = {
 		// Build truncation warning lines (static, doesn't depend on width)
 		const truncation = details?.truncation;
 		const fullOutputPath = details?.fullOutputPath;
+		const timeoutSeconds = renderContext?.timeout;
+		const timeoutLine =
+			typeof timeoutSeconds === "number"
+				? uiTheme.fg("dim", ui.wrapBrackets(`Timeout: ${timeoutSeconds}s`))
+				: undefined;
 		let warningLine: string | undefined;
 		if (fullOutputPath || (truncation?.truncated && !showingFullOutput)) {
 			const warnings: string[] = [];
@@ -258,7 +265,8 @@ export const bashToolRenderer = {
 
 		if (!displayOutput) {
 			// No output - just show warning if any
-			return new Text(warningLine ?? "", 0, 0);
+			const lines = [timeoutLine, warningLine].filter(Boolean) as string[];
+			return new Text(lines.join("\n"), 0, 0);
 		}
 
 		if (expanded) {
@@ -267,7 +275,7 @@ export const bashToolRenderer = {
 				.split("\n")
 				.map((line) => uiTheme.fg("toolOutput", line))
 				.join("\n");
-			const lines = warningLine ? [styledOutput, warningLine] : [styledOutput];
+			const lines = [styledOutput, timeoutLine, warningLine].filter(Boolean) as string[];
 			return new Text(lines.join("\n"), 0, 0);
 		}
 
@@ -300,6 +308,9 @@ export const bashToolRenderer = {
 					outputLines.push(truncateToWidth(skippedLine, width, uiTheme.fg("dim", uiTheme.format.ellipsis)));
 				}
 				outputLines.push(...cachedLines);
+				if (timeoutLine) {
+					outputLines.push(truncateToWidth(timeoutLine, width, uiTheme.fg("dim", uiTheme.format.ellipsis)));
+				}
 				if (warningLine) {
 					outputLines.push(truncateToWidth(warningLine, width, uiTheme.fg("warning", uiTheme.format.ellipsis)));
 				}

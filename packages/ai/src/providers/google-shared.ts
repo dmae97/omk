@@ -65,6 +65,10 @@ export function requiresToolCallId(modelId: string): boolean {
 	return modelId.startsWith("claude-");
 }
 
+function isGemini3Model(modelId: string): boolean {
+	return modelId.includes("gemini-3");
+}
+
 /**
  * Convert internal messages to Gemini Content[] format.
  */
@@ -131,6 +135,18 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 						});
 					}
 				} else if (block.type === "toolCall") {
+					const thoughtSignature = resolveThoughtSignature(isSameProviderAndModel, block.thoughtSignature);
+					if (isGemini3Model(model.id) && !thoughtSignature) {
+						const args = JSON.stringify(block.arguments ?? {});
+						parts.push({
+							text: sanitizeSurrogates(
+								`Unsigned tool call from a previous model: ${block.name}(${args}). ` +
+									`Treat this as context only and do not attempt to mimic or execute the tool call.`,
+							),
+						});
+						continue;
+					}
+
 					const part: Part = {
 						functionCall: {
 							name: block.name,
@@ -141,7 +157,6 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 					if (model.provider === "google-vertex" && part?.functionCall?.id) {
 						delete part.functionCall.id; // Vertex AI does not support 'id' in functionCall
 					}
-					const thoughtSignature = resolveThoughtSignature(isSameProviderAndModel, block.thoughtSignature);
 					if (thoughtSignature) {
 						part.thoughtSignature = thoughtSignature;
 					}

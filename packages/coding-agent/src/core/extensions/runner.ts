@@ -26,6 +26,8 @@ import type {
 	ExtensionRuntime,
 	ExtensionShortcut,
 	ExtensionUIContext,
+	InputEvent,
+	InputEventResult,
 	MessageRenderer,
 	RegisteredCommand,
 	RegisteredTool,
@@ -113,6 +115,7 @@ export class ExtensionRunner {
 	private newSessionHandler: NewSessionHandler = async () => ({ cancelled: false });
 	private branchHandler: BranchHandler = async () => ({ cancelled: false });
 	private navigateTreeHandler: NavigateTreeHandler = async () => ({ cancelled: false });
+	private compactHandler: (customInstructions?: string) => Promise<void> = async () => {};
 	private shutdownHandler: ShutdownHandler = () => {};
 
 	constructor(
@@ -160,6 +163,7 @@ export class ExtensionRunner {
 			this.newSessionHandler = commandContextActions.newSession;
 			this.branchHandler = commandContextActions.branch;
 			this.navigateTreeHandler = commandContextActions.navigateTree;
+			this.compactHandler = commandContextActions.compact;
 		}
 
 		this.uiContext = uiContext ?? noOpUIContext;
@@ -328,6 +332,7 @@ export class ExtensionRunner {
 			newSession: (options) => this.newSessionHandler(options),
 			branch: (entryId) => this.branchHandler(entryId),
 			navigateTree: (targetId, options) => this.navigateTreeHandler(targetId, options),
+			compact: (customInstructions) => this.compactHandler(customInstructions),
 		};
 	}
 
@@ -444,6 +449,53 @@ export class ExtensionRunner {
 		}
 
 		return undefined;
+	}
+
+	async emitInput(event: InputEvent): Promise<InputEventResult | undefined> {
+		const ctx = this.createContext();
+		let currentText = event.text;
+		let currentImages = event.images;
+		let changed = false;
+
+		for (const ext of this.extensions) {
+			const handlers = ext.handlers.get("input");
+			if (!handlers || handlers.length === 0) continue;
+
+			for (const handler of handlers) {
+				try {
+					const handlerResult = await handler({ type: "input", text: currentText, images: currentImages }, ctx);
+					if (handlerResult) {
+						const result = handlerResult as InputEventResult;
+						if (result.text !== undefined) {
+							currentText = result.text;
+							changed = true;
+						}
+						if (result.images !== undefined) {
+							currentImages = result.images;
+							changed = true;
+						}
+						if (result.handled) {
+							return { handled: true, text: currentText, images: currentImages };
+						}
+					}
+				} catch (err) {
+					const message = err instanceof Error ? err.message : String(err);
+					const stack = err instanceof Error ? err.stack : undefined;
+					this.emitError({
+						extensionPath: ext.path,
+						event: "input",
+						error: message,
+						stack,
+					});
+				}
+			}
+		}
+
+		if (!changed) {
+			return undefined;
+		}
+
+		return { text: currentText, images: currentImages };
 	}
 
 	async emitContext(messages: AgentMessage[]): Promise<AgentMessage[]> {

@@ -202,6 +202,15 @@ export const SETTINGS_DEFS: SettingDef[] = [
 		set: (sm, v) => sm.setCollapseChangelog(v),
 	},
 	{
+		id: "startupQuiet",
+		tab: "config",
+		type: "boolean",
+		label: "Startup quiet",
+		description: "Skip welcome screen and startup status messages",
+		get: (sm) => sm.getStartupQuiet(),
+		set: (sm, v) => sm.setStartupQuiet(v),
+	},
+	{
 		id: "doubleEscapeAction",
 		tab: "config",
 		type: "enum",

@@ -223,6 +223,25 @@ const GOOGLE_THINKING: Record<ThinkingLevel, number> = {
 	xhigh: 24575,
 };
 
+const BEDROCK_CLAUDE_THINKING: Record<ThinkingLevel, number> = {
+	minimal: 1024,
+	low: 2048,
+	medium: 8192,
+	high: 16384,
+	xhigh: 16384,
+};
+
+function resolveBedrockThinkingBudget(
+	model: Model<"bedrock-converse-stream">,
+	options?: SimpleStreamOptions,
+): { budget: number; level: ThinkingLevel } | null {
+	if (!options?.reasoning || !model.reasoning) return null;
+	if (!model.id.includes("anthropic.claude")) return null;
+	const level = options.reasoning === "xhigh" ? "high" : options.reasoning;
+	const budget = options.thinkingBudgets?.[level] ?? BEDROCK_CLAUDE_THINKING[level];
+	return { budget, level };
+}
+
 function mapOptionsForApi<TApi extends Api>(
 	model: Model<TApi>,
 	options?: SimpleStreamOptions,
@@ -282,12 +301,28 @@ function mapOptionsForApi<TApi extends Api>(
 			}
 		}
 
-		case "bedrock-converse-stream":
-			return {
+		case "bedrock-converse-stream": {
+			const bedrockBase: BedrockOptions = {
 				...base,
 				reasoning: options?.reasoning,
 				thinkingBudgets: options?.thinkingBudgets,
-			} satisfies BedrockOptions;
+			};
+			const budgetInfo = resolveBedrockThinkingBudget(model as Model<"bedrock-converse-stream">, options);
+			if (!budgetInfo) return bedrockBase as OptionsForApi<TApi>;
+			let maxTokens = bedrockBase.maxTokens ?? model.maxTokens;
+			let thinkingBudgets = bedrockBase.thinkingBudgets;
+			if (maxTokens <= budgetInfo.budget) {
+				const desiredMaxTokens = Math.min(model.maxTokens, budgetInfo.budget + MIN_OUTPUT_TOKENS);
+				if (desiredMaxTokens > maxTokens) {
+					maxTokens = desiredMaxTokens;
+				}
+			}
+			if (maxTokens <= budgetInfo.budget) {
+				const adjustedBudget = Math.max(0, maxTokens - MIN_OUTPUT_TOKENS);
+				thinkingBudgets = { ...(thinkingBudgets ?? {}), [budgetInfo.level]: adjustedBudget };
+			}
+			return { ...bedrockBase, maxTokens, thinkingBudgets } satisfies BedrockOptions;
+		}
 
 		case "openai-completions":
 			return {

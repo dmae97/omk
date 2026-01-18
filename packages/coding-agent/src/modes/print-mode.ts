@@ -96,6 +96,9 @@ export async function runPrintMode(session: AgentSession, options: PrintModeOpti
 					const result = await session.navigateTree(targetId, { summarize: options?.summarize });
 					return { cancelled: result.cancelled };
 				},
+				compact: async (customInstructions) => {
+					await session.compact(customInstructions);
+				},
 			},
 			// No UI context
 		);

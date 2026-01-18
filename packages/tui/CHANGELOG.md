@@ -1,6 +1,28 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added configurable editor padding via `editorPaddingX` theme option
+- Added `setMaxHeight()` method to limit editor height with scrolling
+- Added Emacs-style kill ring for text deletion operations
+- Added `Alt+D` keybinding to delete words forward
+- Added `Ctrl+Y` keybinding to yank from kill ring
+- Added `waitForRender()` method to await pending renders
+- Added support for shifted symbol keys in keybindings
+
+### Changed
+
+- Enhanced Kitty keyboard protocol support for better key detection
+- Improved cursor positioning with safer bounds checking
+- Updated editor layout to respect configurable padding
+- Refactored scrolling logic for better viewport management
+
+### Fixed
+
+- Fixed key detection for shifted symbol characters
+- Fixed backspace handling with additional codepoint support
+- Fixed Alt+letter key combinations for better recognition
 
 ## [5.5.0] - 2026-01-18
 

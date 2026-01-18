@@ -275,8 +275,11 @@ const CODEPOINTS = {
 	enter: 13,
 	space: 32,
 	backspace: 127,
+	backspaceCtrl: 8,
 	kpEnter: 57414, // Numpad Enter (Kitty protocol)
 } as const;
+
+const BACKSPACE_CODEPOINTS = new Set([CODEPOINTS.backspace, CODEPOINTS.backspaceCtrl]);
 
 const ARROW_CODEPOINTS = {
 	up: -1,
@@ -308,6 +311,8 @@ interface ParsedKittySequence {
 	codepoint: number;
 	modifier: number;
 	eventType: KeyEventType;
+	shiftedCodepoint?: number;
+	baseCodepoint?: number;
 }
 
 /**
@@ -374,14 +379,26 @@ function parseEventType(eventTypeStr: string | undefined): KeyEventType {
 	return "press";
 }
 
+function parseKittyKeyCodes(keyCodes: string): {
+	codepoint: number;
+	shiftedCodepoint?: number;
+	baseCodepoint?: number;
+} {
+	const parts = keyCodes.split(":");
+	const codepoint = parseInt(parts[0]!, 10);
+	const shiftedCodepoint = parts[1] ? parseInt(parts[1], 10) : undefined;
+	const baseCodepoint = parts.length > 2 && parts[2] ? parseInt(parts[2], 10) : undefined;
+	return { codepoint, shiftedCodepoint, baseCodepoint };
+}
+
 function parseKittySequence(data: string): ParsedKittySequence | null {
 	// CSI u format: \x1b[<num>u or \x1b[<num>;<mod>u or \x1b[<num>;<mod>:<event>u
-	const csiUMatch = data.match(/^\x1b\[(\d+)(?:;(\d+))?(?::(\d+))?u$/);
+	const csiUMatch = data.match(/^\x1b\[(\d+(?::\d+)*)(?:;(\d+))?(?::(\d+))?u$/);
 	if (csiUMatch) {
-		const codepoint = parseInt(csiUMatch[1]!, 10);
+		const { codepoint, shiftedCodepoint, baseCodepoint } = parseKittyKeyCodes(csiUMatch[1]!);
 		const modValue = csiUMatch[2] ? parseInt(csiUMatch[2], 10) : 1;
 		const eventType = parseEventType(csiUMatch[3]);
-		return { codepoint, modifier: modValue - 1, eventType };
+		return { codepoint, modifier: modValue - 1, eventType, shiftedCodepoint, baseCodepoint };
 	}
 
 	// Arrow keys with modifier: \x1b[1;<mod>A/B/C/D or \x1b[1;<mod>:<event>A/B/C/D
@@ -425,12 +442,21 @@ function parseKittySequence(data: string): ParsedKittySequence | null {
 	return null;
 }
 
+function getKittyCodepoints(parsed: ParsedKittySequence): number[] {
+	const codepoints = new Set<number>();
+	codepoints.add(parsed.codepoint);
+	if (parsed.shiftedCodepoint !== undefined) codepoints.add(parsed.shiftedCodepoint);
+	if (parsed.baseCodepoint !== undefined) codepoints.add(parsed.baseCodepoint);
+	return Array.from(codepoints.values());
+}
+
 function matchesKittySequence(data: string, expectedCodepoint: number, expectedModifier: number): boolean {
 	const parsed = parseKittySequence(data);
 	if (!parsed) return false;
 	const actualMod = parsed.modifier & ~LOCK_MASK;
 	const expectedMod = expectedModifier & ~LOCK_MASK;
-	return parsed.codepoint === expectedCodepoint && actualMod === expectedMod;
+	if (actualMod !== expectedMod) return false;
+	return getKittyCodepoints(parsed).includes(expectedCodepoint);
 }
 
 // =============================================================================
@@ -542,12 +568,25 @@ export function matchesKey(data: string, keyId: KeyId): boolean {
 
 		case "backspace":
 			if (alt && !ctrl && !shift) {
-				return data === "\x1b\x7f" || matchesKittySequence(data, CODEPOINTS.backspace, MODIFIERS.alt);
+				return (
+					data === "\x1b\x7f" ||
+					data === "\x1b\x08" ||
+					matchesKittySequence(data, CODEPOINTS.backspace, MODIFIERS.alt) ||
+					matchesKittySequence(data, CODEPOINTS.backspaceCtrl, MODIFIERS.alt)
+				);
 			}
 			if (modifier === 0) {
-				return data === "\x7f" || data === "\x08" || matchesKittySequence(data, CODEPOINTS.backspace, 0);
+				return (
+					data === "\x7f" ||
+					data === "\x08" ||
+					matchesKittySequence(data, CODEPOINTS.backspace, 0) ||
+					matchesKittySequence(data, CODEPOINTS.backspaceCtrl, 0)
+				);
 			}
-			return matchesKittySequence(data, CODEPOINTS.backspace, modifier);
+			return (
+				matchesKittySequence(data, CODEPOINTS.backspace, modifier) ||
+				matchesKittySequence(data, CODEPOINTS.backspaceCtrl, modifier)
+			);
 
 		case "delete":
 			if (modifier === 0) {
@@ -655,6 +694,10 @@ export function matchesKey(data: string, keyId: KeyId): boolean {
 			return matchesKittySequence(data, codepoint, MODIFIERS.shift);
 		}
 
+		if (alt && !ctrl && !shift && key >= "a" && key <= "z") {
+			return data === `\x1b${key}` || data === `\x1b${key.toUpperCase()}`;
+		}
+
 		if (modifier !== 0) {
 			return matchesKittySequence(data, codepoint, modifier);
 		}
@@ -663,6 +706,42 @@ export function matchesKey(data: string, keyId: KeyId): boolean {
 	}
 
 	return false;
+}
+
+function keyNameFromCodepoint(codepoint: number): string | undefined {
+	if (codepoint === CODEPOINTS.escape) return "escape";
+	if (codepoint === CODEPOINTS.tab) return "tab";
+	if (codepoint === CODEPOINTS.enter || codepoint === CODEPOINTS.kpEnter) return "enter";
+	if (codepoint === CODEPOINTS.space) return "space";
+	if (BACKSPACE_CODEPOINTS.has(codepoint)) return "backspace";
+	if (codepoint === FUNCTIONAL_CODEPOINTS.delete) return "delete";
+	if (codepoint === FUNCTIONAL_CODEPOINTS.home) return "home";
+	if (codepoint === FUNCTIONAL_CODEPOINTS.end) return "end";
+	if (codepoint === FUNCTIONAL_CODEPOINTS.pageUp) return "pageUp";
+	if (codepoint === FUNCTIONAL_CODEPOINTS.pageDown) return "pageDown";
+	if (codepoint === ARROW_CODEPOINTS.up) return "up";
+	if (codepoint === ARROW_CODEPOINTS.down) return "down";
+	if (codepoint === ARROW_CODEPOINTS.left) return "left";
+	if (codepoint === ARROW_CODEPOINTS.right) return "right";
+	if (codepoint >= 97 && codepoint <= 122) return String.fromCharCode(codepoint);
+	const char = String.fromCharCode(codepoint);
+	if (SYMBOL_KEYS.has(char)) return char;
+	return undefined;
+}
+
+function resolveKittyKeyName(parsed: ParsedKittySequence, effectiveMod: number): string | undefined {
+	if (effectiveMod & MODIFIERS.shift && parsed.shiftedCodepoint !== undefined) {
+		const keyName = keyNameFromCodepoint(parsed.shiftedCodepoint);
+		if (keyName) return keyName;
+	}
+	if (parsed.baseCodepoint !== undefined) {
+		const keyName = keyNameFromCodepoint(parsed.baseCodepoint);
+		if (keyName) return keyName;
+	}
+	const fallback = keyNameFromCodepoint(parsed.codepoint);
+	if (fallback) return fallback;
+	if (parsed.shiftedCodepoint !== undefined) return keyNameFromCodepoint(parsed.shiftedCodepoint);
+	return undefined;
 }
 
 /**
@@ -674,31 +753,14 @@ export function matchesKey(data: string, keyId: KeyId): boolean {
 export function parseKey(data: string): string | undefined {
 	const kitty = parseKittySequence(data);
 	if (kitty) {
-		const { codepoint, modifier } = kitty;
+		const { modifier } = kitty;
 		const mods: string[] = [];
 		const effectiveMod = modifier & ~LOCK_MASK;
 		if (effectiveMod & MODIFIERS.shift) mods.push("shift");
 		if (effectiveMod & MODIFIERS.ctrl) mods.push("ctrl");
 		if (effectiveMod & MODIFIERS.alt) mods.push("alt");
 
-		let keyName: string | undefined;
-		if (codepoint === CODEPOINTS.escape) keyName = "escape";
-		else if (codepoint === CODEPOINTS.tab) keyName = "tab";
-		else if (codepoint === CODEPOINTS.enter || codepoint === CODEPOINTS.kpEnter) keyName = "enter";
-		else if (codepoint === CODEPOINTS.space) keyName = "space";
-		else if (codepoint === CODEPOINTS.backspace) keyName = "backspace";
-		else if (codepoint === FUNCTIONAL_CODEPOINTS.delete) keyName = "delete";
-		else if (codepoint === FUNCTIONAL_CODEPOINTS.home) keyName = "home";
-		else if (codepoint === FUNCTIONAL_CODEPOINTS.end) keyName = "end";
-		else if (codepoint === FUNCTIONAL_CODEPOINTS.pageUp) keyName = "pageUp";
-		else if (codepoint === FUNCTIONAL_CODEPOINTS.pageDown) keyName = "pageDown";
-		else if (codepoint === ARROW_CODEPOINTS.up) keyName = "up";
-		else if (codepoint === ARROW_CODEPOINTS.down) keyName = "down";
-		else if (codepoint === ARROW_CODEPOINTS.left) keyName = "left";
-		else if (codepoint === ARROW_CODEPOINTS.right) keyName = "right";
-		else if (codepoint >= 97 && codepoint <= 122) keyName = String.fromCharCode(codepoint);
-		else if (SYMBOL_KEYS.has(String.fromCharCode(codepoint))) keyName = String.fromCharCode(codepoint);
-
+		const keyName = resolveKittyKeyName(kitty, effectiveMod);
 		if (keyName) {
 			return mods.length > 0 ? `${mods.join("+")}+${keyName}` : keyName;
 		}
@@ -720,7 +782,12 @@ export function parseKey(data: string): string | undefined {
 	if (data === "\x7f" || data === "\x08") return "backspace";
 	if (data === "\x1b[Z") return "shift+tab";
 	if (!kittyProtocolActive && data === "\x1b\r") return "alt+enter";
-	if (data === "\x1b\x7f") return "alt+backspace";
+	if (data === "\x1b\x7f" || data === "\x1b\x08") return "alt+backspace";
+	if (data.length === 2 && data.startsWith("\x1b")) {
+		const letter = data[1];
+		if (letter >= "a" && letter <= "z") return `alt+${letter}`;
+		if (letter >= "A" && letter <= "Z") return `alt+${letter.toLowerCase()}`;
+	}
 	if (data === "\x1b[A") return "up";
 	if (data === "\x1b[B") return "down";
 	if (data === "\x1b[C") return "right";

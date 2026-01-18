@@ -21,12 +21,13 @@ import type { AgentSession } from "./core/agent-session";
 import { exportFromFile } from "./core/export-html/index";
 import type { ExtensionUIContext } from "./core/index";
 import type { ModelRegistry } from "./core/model-registry";
-import { parseModelPattern, resolveModelScope, type ScopedModel } from "./core/model-resolver";
+import { parseModelPattern, parseModelString, resolveModelScope, type ScopedModel } from "./core/model-resolver";
 import { type CreateAgentSessionOptions, createAgentSession, discoverAuthStorage, discoverModels } from "./core/sdk";
 import { SessionManager } from "./core/session-manager";
 import { SettingsManager } from "./core/settings-manager";
 import { resolvePromptInput } from "./core/system-prompt";
 import { printTimings, time } from "./core/timings";
+import { initializeWithSettings } from "./discovery";
 import { runMigrations, showDeprecationWarnings } from "./migrations";
 import { InteractiveMode, installTerminalCrashHandlers, runPrintMode, runRpcMode } from "./modes/index";
 import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme";
@@ -45,6 +46,25 @@ async function checkForNewVersion(currentVersion: string): Promise<string | unde
 		}
 
 		return undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+const writeStdout = (message: string): void => {
+	process.stdout.write(`${message}\n`);
+};
+
+const writeStderr = (message: string): void => {
+	process.stderr.write(`${message}\n`);
+};
+
+async function readPipedInput(): Promise<string | undefined> {
+	if (process.stdin.isTTY !== false) return undefined;
+	try {
+		const text = await Bun.stdin.text();
+		if (text.trim().length === 0) return undefined;
+		return text;
 	} catch {
 		return undefined;
 	}
@@ -156,7 +176,12 @@ function resolveSessionPath(sessionArg: string, cwd: string, sessionDir?: string
 
 	// Try to match as session ID (full or partial UUID)
 	const sessions = SessionManager.list(cwd, sessionDir);
-	const matches = sessions.filter((session) => session.id.startsWith(sessionArg));
+	let matches = sessions.filter((session) => session.id.startsWith(sessionArg));
+
+	if (matches.length === 0 && !sessionDir) {
+		const globalSessions = SessionManager.listAll();
+		matches = globalSessions.filter((session) => session.id.startsWith(sessionArg));
+	}
 
 	if (matches.length >= 1) {
 		return matches[0].path; // Already sorted by modified time (most recent first)
@@ -279,6 +304,19 @@ function discoverSystemPromptFile(): string | undefined {
 	return undefined;
 }
 
+/** Discover APPEND_SYSTEM.md file if no CLI append system prompt was provided */
+function discoverAppendSystemPromptFile(): string | undefined {
+	const projectPath = findConfigFile("APPEND_SYSTEM.md", { user: false });
+	if (projectPath) {
+		return projectPath;
+	}
+	const globalPath = findConfigFile("APPEND_SYSTEM.md", { user: true });
+	if (globalPath) {
+		return globalPath;
+	}
+	return undefined;
+}
+
 async function buildSessionOptions(
 	parsed: Args,
 	scopedModels: ScopedModel[],
@@ -293,7 +331,8 @@ async function buildSessionOptions(
 	// Auto-discover SYSTEM.md if no CLI system prompt provided
 	const systemPromptSource = parsed.systemPrompt ?? discoverSystemPromptFile();
 	const resolvedSystemPrompt = resolvePromptInput(systemPromptSource, "system prompt");
-	const resolvedAppendPrompt = resolvePromptInput(parsed.appendSystemPrompt, "append system prompt");
+	const appendPromptSource = parsed.appendSystemPrompt ?? discoverAppendSystemPromptFile();
+	const resolvedAppendPrompt = resolvePromptInput(appendPromptSource, "append system prompt");
 
 	if (sessionManager) {
 		options.sessionManager = sessionManager;
@@ -304,10 +343,10 @@ async function buildSessionOptions(
 		const available = modelRegistry.getAvailable();
 		const { model, warning } = parseModelPattern(parsed.model, available);
 		if (warning) {
-			console.warn(chalk.yellow(`Warning: ${warning}`));
+			writeStderr(chalk.yellow(`Warning: ${warning}`));
 		}
 		if (!model) {
-			console.error(chalk.red(`Model "${parsed.model}" not found`));
+			writeStderr(chalk.red(`Model "${parsed.model}" not found`));
 			process.exit(1);
 		}
 		options.model = model;
@@ -315,7 +354,22 @@ async function buildSessionOptions(
 			modelRoles: { default: `${model.provider}/${model.id}` },
 		});
 	} else if (scopedModels.length > 0 && !parsed.continue && !parsed.resume) {
-		options.model = scopedModels[0].model;
+		const remembered = settingsManager.getModelRole("default");
+		if (remembered) {
+			const parsedModel = parseModelString(remembered);
+			const rememberedModel = parsedModel
+				? scopedModels.find(
+						(scopedModel) =>
+							scopedModel.model.provider === parsedModel.provider && scopedModel.model.id === parsedModel.id,
+					)
+				: scopedModels.find((scopedModel) => scopedModel.model.id.toLowerCase() === remembered.toLowerCase());
+			if (rememberedModel) {
+				options.model = rememberedModel.model;
+			}
+		}
+		if (!options.model) {
+			options.model = scopedModels[0].model;
+		}
 	}
 
 	// Thinking level
@@ -378,13 +432,14 @@ async function buildSessionOptions(
 	}
 
 	// Additional extension paths from CLI
-	const cliExtensionPaths = [...(parsed.extensions ?? []), ...(parsed.hooks ?? [])];
+	const cliExtensionPaths = parsed.noExtensions ? [] : [...(parsed.extensions ?? []), ...(parsed.hooks ?? [])];
 	if (cliExtensionPaths.length > 0) {
 		options.additionalExtensionPaths = cliExtensionPaths;
 	}
 
 	if (parsed.noExtensions) {
 		options.disableExtensionDiscovery = true;
+		options.additionalExtensionPaths = [];
 	}
 
 	return options;
@@ -443,7 +498,7 @@ export async function main(args: string[]) {
 	time("discoverModels");
 
 	if (parsed.version) {
-		console.log(VERSION);
+		writeStdout(VERSION);
 		return;
 	}
 
@@ -462,17 +517,17 @@ export async function main(args: string[]) {
 		try {
 			const outputPath = parsed.messages.length > 0 ? parsed.messages[0] : undefined;
 			const result = await exportFromFile(parsed.export, outputPath);
-			console.log(`Exported to: ${result}`);
+			writeStdout(`Exported to: ${result}`);
 			return;
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : "Failed to export session";
-			console.error(chalk.red(`Error: ${message}`));
+			writeStderr(chalk.red(`Error: ${message}`));
 			process.exit(1);
 		}
 	}
 
 	if (parsed.mode === "rpc" && parsed.fileArgs.length > 0) {
-		console.error(chalk.red("Error: @file arguments are not supported in RPC mode"));
+		writeStderr(chalk.red("Error: @file arguments are not supported in RPC mode"));
 		process.exit(1);
 	}
 
@@ -480,13 +535,17 @@ export async function main(args: string[]) {
 	const settingsManager = await SettingsManager.create(cwd);
 	settingsManager.applyEnvironmentVariables();
 	time("SettingsManager.create");
-	const { initialMessage, initialImages } = await prepareInitialMessage(parsed, settingsManager.getImageAutoResize());
+	const pipedInput = await readPipedInput();
+	let { initialMessage, initialImages } = await prepareInitialMessage(parsed, settingsManager.getImageAutoResize());
+	if (pipedInput) {
+		initialMessage = initialMessage ? `${initialMessage}\n${pipedInput}` : pipedInput;
+	}
 	time("prepareInitialMessage");
-	const isInteractive = !parsed.print && parsed.mode === undefined;
+	const autoPrint = pipedInput !== undefined && !parsed.print && parsed.mode === undefined;
+	const isInteractive = !parsed.print && !autoPrint && parsed.mode === undefined;
 	const mode = parsed.mode || "text";
 
 	// Initialize discovery system with settings for provider persistence
-	const { initializeWithSettings } = await import("./discovery");
 	initializeWithSettings(settingsManager);
 	time("initializeWithSettings");
 
@@ -524,13 +583,13 @@ export async function main(args: string[]) {
 		const sessions = SessionManager.list(cwd, parsed.sessionDir);
 		time("SessionManager.list");
 		if (sessions.length === 0) {
-			console.log(chalk.dim("No sessions found"));
+			writeStdout(chalk.dim("No sessions found"));
 			return;
 		}
 		const selectedPath = await selectSession(sessions);
 		time("selectSession");
 		if (!selectedPath) {
-			console.log(chalk.dim("No session selected"));
+			writeStdout(chalk.dim("No session selected"));
 			return;
 		}
 		sessionManager = await SessionManager.open(selectedPath);
@@ -551,7 +610,7 @@ export async function main(args: string[]) {
 	// Handle CLI --api-key as runtime override (not persisted)
 	if (parsed.apiKey) {
 		if (!sessionOptions.model) {
-			console.error(chalk.red("--api-key requires a model to be specified via --provider/--model or -m/--models"));
+			writeStderr(chalk.red("--api-key requires a model to be specified via --provider/--model or -m/--models"));
 			process.exit(1);
 		}
 		authStorage.setRuntimeApiKey(sessionOptions.model.provider, parsed.apiKey);
@@ -578,10 +637,10 @@ export async function main(args: string[]) {
 	time("applyExtensionFlags");
 
 	if (!isInteractive && !session.model) {
-		console.error(chalk.red("No models available."));
-		console.error(chalk.yellow("\nSet an API key environment variable:"));
-		console.error("  ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, etc.");
-		console.error(chalk.yellow(`\nOr create ${getModelsPath()}`));
+		writeStderr(chalk.red("No models available."));
+		writeStderr(chalk.yellow("\nSet an API key environment variable:"));
+		writeStderr("  ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, etc.");
+		writeStderr(chalk.yellow(`\nOr create ${getModelsPath()}`));
 		process.exit(1);
 	}
 
@@ -612,7 +671,7 @@ export async function main(args: string[]) {
 					return `${scopedModel.model.id}${thinkingStr}`;
 				})
 				.join(", ");
-			console.log(chalk.dim(`Model scope: ${modelList} ${chalk.gray("(Ctrl+P to cycle)")}`));
+			writeStdout(chalk.dim(`Model scope: ${modelList} ${chalk.gray("(Ctrl+P to cycle)")}`));
 		}
 
 		installTerminalCrashHandlers();

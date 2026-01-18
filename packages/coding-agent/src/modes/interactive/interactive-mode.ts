@@ -20,7 +20,7 @@ import chalk from "chalk";
 import type { AgentSession, AgentSessionEvent } from "../../core/agent-session";
 import type { ExtensionUIContext } from "../../core/extensions/index";
 import { HistoryStorage } from "../../core/history-storage";
-import type { KeybindingsManager } from "../../core/keybindings";
+import { KeybindingsManager } from "../../core/keybindings";
 import { logger } from "../../core/logger";
 import type { SessionContext, SessionManager } from "../../core/session-manager";
 import { getRecentSessions } from "../../core/session-manager";
@@ -71,6 +71,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	public session: AgentSession;
 	public sessionManager: SessionManager;
 	public settingsManager: SettingsManager;
+	public keybindings: KeybindingsManager;
 	public agent: AgentSession["agent"];
 	public voiceSupervisor: VoiceSupervisor;
 	public historyStorage?: HistoryStorage;
@@ -148,6 +149,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.session = session;
 		this.sessionManager = session.sessionManager;
 		this.settingsManager = session.settingsManager;
+		this.keybindings = KeybindingsManager.inMemory();
 		this.agent = session.agent;
 		this.version = version;
 		this.changelogMarkdown = changelogMarkdown;
@@ -226,6 +228,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		const hookCommands: SlashCommand[] = (this.session.extensionRunner?.getRegisteredCommands() ?? []).map((cmd) => ({
 			name: cmd.name,
 			description: cmd.description ?? "(hook command)",
+			getArgumentCompletions: cmd.getArgumentCompletions,
 		}));
 
 		// Convert custom commands (TypeScript) to SlashCommand format
@@ -258,6 +261,8 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	async init(): Promise<void> {
 		if (this.isInitialized) return;
+
+		this.keybindings = await KeybindingsManager.create();
 
 		// Register session manager flush for signal handlers (SIGINT, SIGTERM, SIGHUP)
 		this.cleanupUnsubscribe = registerAsyncCleanup(() => this.sessionManager.flush());
@@ -295,35 +300,39 @@ export class InteractiveMode implements InteractiveModeContext {
 				fileTypes: s.fileTypes,
 			})) ?? [];
 
-		// Add welcome header
-		const welcome = new WelcomeComponent(this.version, modelName, providerName, recentSessions, lspServerInfo);
+		const startupQuiet = this.settingsManager.getStartupQuiet();
+
+		if (!startupQuiet) {
+			// Add welcome header
+			const welcome = new WelcomeComponent(this.version, modelName, providerName, recentSessions, lspServerInfo);
+
+			// Setup UI layout
+			this.ui.addChild(new Spacer(1));
+			this.ui.addChild(welcome);
+			this.ui.addChild(new Spacer(1));
+
+			// Add changelog if provided
+			if (this.changelogMarkdown) {
+				this.ui.addChild(new DynamicBorder());
+				if (this.settingsManager.getCollapseChangelog()) {
+					const versionMatch = this.changelogMarkdown.match(/##\s+\[?(\d+\.\d+\.\d+)\]?/);
+					const latestVersion = versionMatch ? versionMatch[1] : this.version;
+					const condensedText = `Updated to v${latestVersion}. Use ${theme.bold("/changelog")} to view full changelog.`;
+					this.ui.addChild(new Text(condensedText, 1, 0));
+				} else {
+					this.ui.addChild(new Text(theme.bold(theme.fg("accent", "What's New")), 1, 0));
+					this.ui.addChild(new Spacer(1));
+					this.ui.addChild(new Markdown(this.changelogMarkdown.trim(), 1, 0, getMarkdownTheme()));
+					this.ui.addChild(new Spacer(1));
+				}
+				this.ui.addChild(new DynamicBorder());
+			}
+		}
 
 		// Set terminal title if session already has one (resumed session)
 		const existingTitle = this.sessionManager.getSessionTitle();
 		if (existingTitle) {
 			setTerminalTitle(`pi: ${existingTitle}`);
-		}
-
-		// Setup UI layout
-		this.ui.addChild(new Spacer(1));
-		this.ui.addChild(welcome);
-		this.ui.addChild(new Spacer(1));
-
-		// Add changelog if provided
-		if (this.changelogMarkdown) {
-			this.ui.addChild(new DynamicBorder());
-			if (this.settingsManager.getCollapseChangelog()) {
-				const versionMatch = this.changelogMarkdown.match(/##\s+\[?(\d+\.\d+\.\d+)\]?/);
-				const latestVersion = versionMatch ? versionMatch[1] : this.version;
-				const condensedText = `Updated to v${latestVersion}. Use ${theme.bold("/changelog")} to view full changelog.`;
-				this.ui.addChild(new Text(condensedText, 1, 0));
-			} else {
-				this.ui.addChild(new Text(theme.bold(theme.fg("accent", "What's New")), 1, 0));
-				this.ui.addChild(new Spacer(1));
-				this.ui.addChild(new Markdown(this.changelogMarkdown.trim(), 1, 0, getMarkdownTheme()));
-				this.ui.addChild(new Spacer(1));
-			}
-			this.ui.addChild(new DynamicBorder());
 		}
 
 		this.ui.addChild(this.chatContainer);
@@ -369,6 +378,15 @@ export class InteractiveMode implements InteractiveModeContext {
 
 		// Initial top border update
 		this.updateEditorTopBorder();
+
+		if (!startupQuiet) {
+			const templateNames = this.session.promptTemplates.map((template) => template.name).sort();
+			if (templateNames.length > 0) {
+				const preview = templateNames.slice(0, 3).join(", ");
+				const suffix = templateNames.length > 3 ? ` +${templateNames.length - 3} more` : "";
+				this.showStatus(`Loaded prompt templates: ${preview}${suffix}`);
+			}
+		}
 	}
 
 	async getUserInput(): Promise<{ text: string; images?: ImageContent[] }> {
@@ -509,6 +527,10 @@ export class InteractiveMode implements InteractiveModeContext {
 
 		// Emit shutdown event to hooks
 		await this.session.emitCustomToolSessionEvent("shutdown");
+
+		if (this.isInitialized) {
+			await this.ui.waitForRender();
+		}
 
 		this.stop();
 		process.exit(0);

@@ -5,6 +5,8 @@
  *
  * Test with: npx tsx src/cli-new.ts [args...]
  */
+import { APP_NAME } from "./config";
 import { main } from "./main";
 
+process.title = APP_NAME;
 main(process.argv.slice(2));

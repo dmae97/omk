@@ -5,6 +5,7 @@
 export { StringEnum } from "@oh-my-pi/pi-ai";
 // Re-export TUI components for custom tool rendering
 export { Container, Markdown, Spacer, Text } from "@oh-my-pi/pi-tui";
+export { getAgentDir, VERSION } from "./config";
 export {
 	AgentSession,
 	type AgentSessionConfig,
@@ -82,6 +83,8 @@ export type {
 	ExtensionShortcut,
 	ExtensionUIContext,
 	ExtensionUIDialogOptions,
+	InputEvent,
+	InputEventResult,
 	KeybindingsManager,
 	LoadExtensionsResult,
 	MessageRenderer,
@@ -107,6 +110,7 @@ export {
 } from "./core/extensions/index";
 // Hook system types (legacy re-export)
 export type * from "./core/hooks/index";
+export { formatKeyHint, formatKeyHints } from "./core/keybindings";
 // Logging
 export { type Logger, logger } from "./core/logger";
 export { convertToLlm } from "./core/messages";
@@ -269,3 +273,4 @@ export {
 	Theme,
 	type ThemeColor,
 } from "./modes/interactive/theme/theme";
+export { getShellConfig } from "./utils/shell";

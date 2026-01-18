@@ -50,6 +50,9 @@ export interface OpenAICodexResponsesOptions extends StreamOptions {
 }
 
 const CODEX_DEBUG = process.env.PI_CODEX_DEBUG === "1" || process.env.PI_CODEX_DEBUG === "true";
+const CODEX_MAX_RETRIES = 2;
+const CODEX_RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+const CODEX_RETRY_DELAY_MS = 500;
 
 export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"> = (
 	model: Model<"openai-codex-responses">,
@@ -134,12 +137,15 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 				headers: redactHeaders(headers),
 			});
 
-			const response = await fetch(url, {
-				method: "POST",
-				headers,
-				body: JSON.stringify(transformedBody),
-				signal: options?.signal,
-			});
+			const response = await fetchWithRetry(
+				url,
+				{
+					method: "POST",
+					headers,
+					body: JSON.stringify(transformedBody),
+				},
+				options?.signal,
+			);
 
 			logCodexDebug("codex response", {
 				url: response.url,
@@ -407,6 +413,43 @@ function logCodexDebug(message: string, details?: Record<string, unknown>): void
 		return;
 	}
 	console.error(`[codex] ${message}`);
+}
+
+function getRetryDelayMs(response: Response | null, attempt: number): number {
+	const retryAfter = response?.headers?.get("retry-after") || null;
+	if (retryAfter) {
+		const seconds = Number(retryAfter);
+		if (Number.isFinite(seconds)) {
+			return Math.max(0, seconds * 1000);
+		}
+		const parsedDate = Date.parse(retryAfter);
+		if (!Number.isNaN(parsedDate)) {
+			return Math.max(0, parsedDate - Date.now());
+		}
+	}
+	return CODEX_RETRY_DELAY_MS * (attempt + 1);
+}
+
+async function fetchWithRetry(url: string, init: RequestInit, signal?: AbortSignal): Promise<Response> {
+	let attempt = 0;
+	while (true) {
+		try {
+			const response = await fetch(url, { ...init, signal: signal ?? init.signal });
+			if (!CODEX_RETRYABLE_STATUS.has(response.status) || attempt >= CODEX_MAX_RETRIES) {
+				return response;
+			}
+			if (signal?.aborted) return response;
+			const delay = getRetryDelayMs(response, attempt);
+			await new Promise((resolve) => setTimeout(resolve, delay));
+		} catch (error) {
+			if (attempt >= CODEX_MAX_RETRIES || signal?.aborted) {
+				throw error;
+			}
+			const delay = CODEX_RETRY_DELAY_MS * (attempt + 1);
+			await new Promise((resolve) => setTimeout(resolve, delay));
+		}
+		attempt += 1;
+	}
 }
 
 function redactHeaders(headers: Headers): Record<string, string> {

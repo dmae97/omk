@@ -24,6 +24,26 @@ describe("substituteArgs", () => {
 		expect(substituteArgs("Test: $@", ["a", "b", "c"])).toBe("Test: a b c");
 	});
 
+	test("should support $@ slicing with start offset", () => {
+		expect(substituteArgs("Test: $@[2]", ["a", "b", "c"])).toBe("Test: b c");
+	});
+
+	test("should support $@ slicing with start and length", () => {
+		expect(substituteArgs("Test: $@[2:2]", ["a", "b", "c", "d"])).toBe("Test: b c");
+	});
+
+	test("should support $@ slicing with start and trailing colon", () => {
+		expect(substituteArgs("Test: $@[3:]", ["a", "b", "c", "d"])).toBe("Test: c d");
+	});
+
+	test("should handle out-of-range $@ slicing", () => {
+		expect(substituteArgs("Test: $@[5:]", ["a", "b"])).toBe("Test: ");
+	});
+
+	test("should treat non-positive $@ slicing as empty", () => {
+		expect(substituteArgs("Test: $@[0:]", ["a", "b"])).toBe("Test: ");
+	});
+
 	test("should replace $@ and $ARGUMENTS identically", () => {
 		const args = ["foo", "bar", "baz"];
 		expect(substituteArgs("Test: $@", args)).toBe(substituteArgs("Test: $ARGUMENTS", args));

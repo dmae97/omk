@@ -54,6 +54,10 @@ export interface BedrockOptions extends StreamOptions {
 
 type Block = (TextContent | ThinkingContent | ToolCall) & { index?: number; partialJson?: string };
 
+function sanitizeToolCallId(id: string): string {
+	return id.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
 export const streamBedrock: StreamFunction<"bedrock-converse-stream"> = (
 	model: Model<"bedrock-converse-stream">,
 	context: Context,
@@ -165,7 +169,7 @@ function handleContentBlockStart(
 	if (start?.toolUse) {
 		const block: Block = {
 			type: "toolCall",
-			id: start.toolUse.toolUseId || "",
+			id: sanitizeToolCallId(start.toolUse.toolUseId || ""),
 			name: start.toolUse.name || "",
 			arguments: {},
 			partialJson: "",
@@ -348,7 +352,11 @@ function convertMessages(context: Context, model: Model<"bedrock-converse-stream
 							break;
 						case "toolCall":
 							contentBlocks.push({
-								toolUse: { toolUseId: c.id, name: c.name, input: c.arguments },
+								toolUse: {
+									toolUseId: sanitizeToolCallId(c.id),
+									name: c.name,
+									input: c.arguments,
+								},
 							});
 							break;
 						case "thinking":
@@ -382,7 +390,7 @@ function convertMessages(context: Context, model: Model<"bedrock-converse-stream
 				// Add current tool result with all content blocks combined
 				toolResults.push({
 					toolResult: {
-						toolUseId: m.toolCallId,
+						toolUseId: sanitizeToolCallId(m.toolCallId),
 						content: m.content.map((c) =>
 							c.type === "image"
 								? { image: createImageBlock(c.mimeType, c.data) }
@@ -398,7 +406,7 @@ function convertMessages(context: Context, model: Model<"bedrock-converse-stream
 					const nextMsg = transformedMessages[j] as ToolResultMessage;
 					toolResults.push({
 						toolResult: {
-							toolUseId: nextMsg.toolCallId,
+							toolUseId: sanitizeToolCallId(nextMsg.toolCallId),
 							content: nextMsg.content.map((c) =>
 								c.type === "image"
 									? { image: createImageBlock(c.mimeType, c.data) }

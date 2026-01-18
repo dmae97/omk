@@ -967,7 +967,7 @@ export class AgentSession {
 				});
 			} else {
 				const message = err instanceof Error ? err.message : String(err);
-				console.error(`Custom command "${commandName}" failed: ${message}`);
+				logger.error("Custom command failed", { commandName, error: message });
 			}
 			return ""; // Command was handled (with error)
 		}
@@ -2092,8 +2092,8 @@ export class AgentSession {
 	}
 
 	private _isRetryableErrorMessage(errorMessage: string): boolean {
-		// Match: overloaded_error, rate limit, usage limit, 429, 500, 502, 503, 504, service unavailable, connection error
-		return /overloaded|rate.?limit|usage.?limit|too many requests|429|500|502|503|504|service.?unavailable|server error|internal error|connection.?error/i.test(
+		// Match: overloaded_error, rate limit, usage limit, 429, 500, 502, 503, 504, service unavailable, connection error, fetch failed
+		return /overloaded|rate.?limit|usage.?limit|too many requests|429|500|502|503|504|service.?unavailable|server error|internal error|connection.?error|fetch failed/i.test(
 			errorMessage,
 		);
 	}

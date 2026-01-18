@@ -14,19 +14,19 @@ export function transformMessages<TApi extends Api>(messages: Message[], model: 
 	const toolCallIdMap = new Map<string, string>();
 
 	// First pass: transform messages (thinking blocks, tool call ID normalization)
-	const transformed = messages.map((msg) => {
+	const transformed = messages.flatMap((msg) => {
 		// User messages pass through unchanged
 		if (msg.role === "user") {
-			return msg;
+			return [msg];
 		}
 
 		// Handle toolResult messages - normalize toolCallId if we have a mapping
 		if (msg.role === "toolResult") {
 			const normalizedId = toolCallIdMap.get(msg.toolCallId);
 			if (normalizedId && normalizedId !== msg.toolCallId) {
-				return { ...msg, toolCallId: normalizedId };
+				return [{ ...msg, toolCallId: normalizedId }];
 			}
-			return msg;
+			return [msg];
 		}
 
 		// Assistant messages need transformation check
@@ -35,7 +35,10 @@ export function transformMessages<TApi extends Api>(messages: Message[], model: 
 
 			// If message is from the same provider and API, keep as is
 			if (assistantMsg.provider === model.provider && assistantMsg.api === model.api) {
-				return msg;
+				if (assistantMsg.stopReason === "error" && assistantMsg.content.length === 0) {
+					return [];
+				}
+				return [msg];
 			}
 
 			// Check if we need to normalize tool call IDs
@@ -73,13 +76,19 @@ export function transformMessages<TApi extends Api>(messages: Message[], model: 
 				return block;
 			});
 
+			if (assistantMsg.stopReason === "error" && transformedContent.length === 0) {
+				return [];
+			}
+
 			// Return transformed assistant message
-			return {
-				...assistantMsg,
-				content: transformedContent,
-			};
+			return [
+				{
+					...assistantMsg,
+					content: transformedContent,
+				},
+			];
 		}
-		return msg;
+		return [msg];
 	});
 
 	// Second pass: insert synthetic empty tool results for orphaned tool calls
@@ -110,11 +119,15 @@ export function transformMessages<TApi extends Api>(messages: Message[], model: 
 				existingToolResultIds = new Set();
 			}
 
-			// Track tool calls from this assistant message
+			// Track tool calls from this assistant message unless it errored
 			const assistantMsg = msg as AssistantMessage;
+			const isErroredAssistant = assistantMsg.stopReason === "error" || assistantMsg.stopReason === "aborted";
 			const toolCalls = assistantMsg.content.filter((b) => b.type === "toolCall") as ToolCall[];
-			if (toolCalls.length > 0) {
+			if (!isErroredAssistant && toolCalls.length > 0) {
 				pendingToolCalls = toolCalls;
+				existingToolResultIds = new Set();
+			} else if (isErroredAssistant) {
+				pendingToolCalls = [];
 				existingToolResultIds = new Set();
 			}
 

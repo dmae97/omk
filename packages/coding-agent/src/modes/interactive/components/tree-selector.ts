@@ -12,6 +12,7 @@ import {
 	isEnter,
 	isEscape,
 	isShiftCtrlO,
+	matchesKey,
 	Spacer,
 	Text,
 	TruncatedText,
@@ -696,6 +697,21 @@ class TreeList implements Component {
 			const currentIndex = modes.indexOf(this.filterMode);
 			this.filterMode = modes[(currentIndex + 1) % modes.length];
 			this.applyFilter();
+		} else if (matchesKey(keyData, "alt+d")) {
+			this.filterMode = "default";
+			this.applyFilter();
+		} else if (matchesKey(keyData, "alt+t")) {
+			this.filterMode = "no-tools";
+			this.applyFilter();
+		} else if (matchesKey(keyData, "alt+u")) {
+			this.filterMode = "user-only";
+			this.applyFilter();
+		} else if (matchesKey(keyData, "alt+l")) {
+			this.filterMode = "labeled-only";
+			this.applyFilter();
+		} else if (matchesKey(keyData, "alt+a")) {
+			this.filterMode = "all";
+			this.applyFilter();
 		} else if (isBackspace(keyData)) {
 			if (this.searchQuery.length > 0) {
 				this.searchQuery = this.searchQuery.slice(0, -1);
@@ -815,7 +831,7 @@ export class TreeSelectorComponent extends Container {
 			new TruncatedText(
 				theme.fg(
 					"muted",
-					"  Up/Down: move. Left/Right: page. l: label. Ctrl+O/Shift+Ctrl+O: filter. Type to search",
+					"  Up/Down: move. Left/Right: page. l: label. Ctrl+O/Shift+Ctrl+O: filter. Alt+D/T/U/L/A: filter. Type to search",
 				),
 				0,
 				0,

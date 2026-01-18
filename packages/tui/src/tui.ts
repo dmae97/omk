@@ -370,6 +370,20 @@ export class TUI extends Container {
 		});
 	}
 
+	async waitForRender(): Promise<void> {
+		if (!this.renderRequested && !this.rendering) return;
+		await new Promise<void>((resolve) => {
+			const check = () => {
+				if (!this.renderRequested && !this.rendering) {
+					resolve();
+					return;
+				}
+				setTimeout(check, 0);
+			};
+			check();
+		});
+	}
+
 	private areCursorsEqual(
 		left: { row: number; col: number } | null,
 		right: { row: number; col: number } | null,
@@ -385,13 +399,11 @@ export class TUI extends Container {
 		cursor: { row: number; col: number } | null,
 		currentCursorRow: number,
 	): void {
-		if (!cursor || totalLines <= 0) {
-			this.terminal.hideCursor();
-			return;
-		}
+		const safeTotalLines = Math.max(totalLines, 1);
+		const resolvedCursor = cursor ?? { row: safeTotalLines - 1, col: 0 };
 
-		const targetRow = Math.max(0, Math.min(cursor.row, totalLines - 1));
-		const targetCol = Math.max(0, Math.min(cursor.col, width - 1));
+		const targetRow = Math.max(0, Math.min(resolvedCursor.row, safeTotalLines - 1));
+		const targetCol = Math.max(0, Math.min(resolvedCursor.col, width - 1));
 		const rowDelta = targetRow - currentCursorRow;
 
 		let buffer = "";

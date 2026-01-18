@@ -507,6 +507,7 @@ export class ToolExecutionComponent extends Container {
 			context.output = output;
 			context.expanded = this.expanded;
 			context.previewLines = BASH_DEFAULT_PREVIEW_LINES;
+			context.timeout = typeof this.args?.timeout === "number" ? this.args.timeout : undefined;
 		} else if (this.toolName === "edit") {
 			// Edit needs diff preview and renderDiff function
 			context.editDiffPreview = this.editDiffPreview;

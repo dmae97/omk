@@ -88,8 +88,19 @@ function createExtensionAPI(
 			});
 		},
 
-		registerCommand(name: string, options: { description?: string; handler: RegisteredCommand["handler"] }): void {
+		registerCommand(
+			name: string,
+			options: {
+				description?: string;
+				getArgumentCompletions?: RegisteredCommand["getArgumentCompletions"];
+				handler: RegisteredCommand["handler"];
+			},
+		): void {
 			extension.commands.set(name, { name, ...options });
+		},
+
+		setLabel(label: string): void {
+			extension.label = label;
 		},
 
 		registerShortcut(
