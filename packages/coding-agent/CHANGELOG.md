@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [5.6.70] - 2026-01-18
 ### Added
 
 - Added support for loading Python prelude extension modules from user and project directories
