@@ -98,6 +98,9 @@ async function login(provider: OAuthProvider): Promise<void> {
 					onProgress: (msg) => console.log(msg),
 				});
 				break;
+
+			default:
+				throw new Error(`Unknown provider: ${provider}`);
 		}
 
 		const auth = loadAuth();

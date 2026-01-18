@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Replaced external photon-node dependency with vendored WebAssembly implementation
+- Updated image processing to use local photon library for better performance
 
 ## [5.6.70] - 2026-01-18
 ### Added

@@ -35,6 +35,7 @@
 	"files": {
 		"includes": [
 			"packages/*/src/**/*.ts",
+			"!**/vendor/**/*",
 			"packages/*/test/**/*.ts",
 			"packages/coding-agent/examples/**/*.ts",
 			"packages/web-ui/src/**/*.ts",

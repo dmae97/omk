@@ -1,4 +1,4 @@
-import photon from "@silvia-odwyer/photon-node";
+import * as photon from "../vendor/photon";
 
 /**
  * Convert image to PNG format for terminal display.

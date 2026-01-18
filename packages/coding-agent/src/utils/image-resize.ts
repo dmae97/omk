@@ -1,5 +1,5 @@
 import type { ImageContent } from "@oh-my-pi/pi-ai";
-import photon from "@silvia-odwyer/photon-node";
+import * as photon from "../vendor/photon";
 
 export interface ImageResizeOptions {
 	maxWidth?: number; // Default: 2000
@@ -94,7 +94,7 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 			height: number,
 			jpegQuality: number,
 		): { buffer: Uint8Array; mimeType: string } {
-			const resized = photon.resize(image!, width, height, photon.SamplingFilter.Lanczos3);
+			const resized = photon!.resize(image!, width, height, photon!.SamplingFilter.Lanczos3);
 
 			try {
 				const pngBuffer = resized.get_bytes();
