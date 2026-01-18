@@ -226,10 +226,32 @@ if "__omp_prelude_loaded__" not in globals():
         print(f"[replace] {count} replacements in {p}")
         return count
 
+    class ShellResult:
+        """Result from shell command execution."""
+        __slots__ = ("stdout", "stderr", "code")
+        def __init__(self, stdout: str, stderr: str, code: int):
+            self.stdout = stdout
+            self.stderr = stderr
+            self.code = code
+        def __repr__(self):
+            if self.code == 0:
+                return ""
+            return f"exit code {self.code}"
+        def __bool__(self):
+            return self.code == 0
+
+    def _make_shell_result(proc: subprocess.CompletedProcess[str]) -> ShellResult:
+        """Create ShellResult and print output."""
+        if proc.stdout:
+            print(proc.stdout, end="" if proc.stdout.endswith("\n") else "\n")
+        if proc.stderr:
+            print(proc.stderr, end="" if proc.stderr.endswith("\n") else "\n")
+        return ShellResult(proc.stdout, proc.stderr, proc.returncode)
+
     @_category("Shell")
-    def run(cmd: str, *, cwd: str | Path | None = None, timeout: int | None = None) -> subprocess.CompletedProcess[str]:
+    def run(cmd: str, *, cwd: str | Path | None = None, timeout: int | None = None) -> ShellResult:
         """Run a shell command and print stdout/stderr."""
-        result = subprocess.run(
+        proc = subprocess.run(
             cmd,
             cwd=str(cwd) if cwd else None,
             shell=True,
@@ -237,32 +259,43 @@ if "__omp_prelude_loaded__" not in globals():
             text=True,
             timeout=timeout,
         )
-        if result.stdout:
-            print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
-        if result.stderr:
-            print(result.stderr, end="" if result.stderr.endswith("\n") else "\n")
-        print(f"[run] exit={result.returncode}")
-        return result
+        return _make_shell_result(proc)
 
     @_category("Shell")
-    def sh(cmd: str, *, cwd: str | Path | None = None, timeout: int | None = None) -> subprocess.CompletedProcess[str]:
-        """Run a shell command via bash when available; fallback when missing."""
+    def sh(cmd: str, *, cwd: str | Path | None = None, timeout: int | None = None) -> ShellResult:
+        """Run a shell command via user's login shell with environment snapshot."""
         snapshot = os.environ.get("OMP_SHELL_SNAPSHOT")
         prefix = f"source '{snapshot}' 2>/dev/null && " if snapshot else ""
         final = f"{prefix}{cmd}"
 
-        bash_path = shutil.which("bash")
-        if bash_path:
-            return run(f"{bash_path} -lc {json.dumps(final)}", cwd=cwd, timeout=timeout)
+        # Determine shell and args (mirroring shell.ts logic)
+        shell_path = os.environ.get("SHELL")
+        if not shell_path or not shutil.which(shell_path):
+            shell_path = shutil.which("bash") or shutil.which("zsh") or shutil.which("sh")
 
-        if sys.platform.startswith("win"):
-            return run(f"cmd /c {json.dumps(cmd)}", cwd=cwd, timeout=timeout)
+        if not shell_path:
+            if sys.platform.startswith("win"):
+                proc = subprocess.run(
+                    ["cmd", "/c", cmd],
+                    cwd=str(cwd) if cwd else None,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                )
+                return _make_shell_result(proc)
+            raise RuntimeError("No suitable shell found")
 
-        sh_path = shutil.which("sh")
-        if sh_path:
-            return run(f"{sh_path} -lc {json.dumps(cmd)}", cwd=cwd, timeout=timeout)
+        no_login = os.environ.get("OMP_BASH_NO_LOGIN") or os.environ.get("CLAUDE_BASH_NO_LOGIN")
+        args = [shell_path, "-c", final] if no_login else [shell_path, "-l", "-c", final]
 
-        raise RuntimeError("No suitable shell found for bash() bridge")
+        proc = subprocess.run(
+            args,
+            cwd=str(cwd) if cwd else None,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return _make_shell_result(proc)
 
     # --- Extended shell-like utilities ---
 

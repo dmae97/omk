@@ -59,8 +59,13 @@
 - Surfaced loaded prompt templates during initialization
 - Updated compaction summarization to use serialized prompt text
 
+### Changed
+
+- Cleaned up Python prelude `sh()` and `run()` output to only show stdout/stderr without noisy metadata
+
 ### Fixed
 
+- Fixed Python prelude `sh()` function failing with exit code 2 due to double-shell invocation from `shell=True`
 - Fixed signal event listener handling in worker processes to prevent crashes when signal is not an EventTarget
 - Fixed Python tool proxy execution in worker processes to use proper tool creation pattern
 - Fixed Python tool session requirement when using proxy executor in worker processes
