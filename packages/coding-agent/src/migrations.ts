@@ -10,26 +10,6 @@ import { AgentStorage } from "./core/agent-storage";
 import type { AuthCredential } from "./core/auth-storage";
 import { logger } from "./core/logger";
 
-/**
- * Migrate PI_* environment variables to OMP_* equivalents.
- * If PI_XX is set and OMP_XX is not, set OMP_XX to PI_XX's value.
- * This provides backwards compatibility for users with existing PI_* env vars.
- *
- * @returns Array of PI_* env var names that were migrated
- */
-export function migrateEnvVars(): string[] {
-	const migrated: string[] = [];
-	for (const [key, value] of Object.entries(process.env)) {
-		if (key.startsWith("PI_") && value !== undefined) {
-			const ompKey = `OMP_${key.slice(3)}`; // PI_FOO -> OMP_FOO
-			if (process.env[ompKey] === undefined) {
-				process.env[ompKey] = value;
-				migrated.push(key);
-			}
-		}
-	}
-	return migrated;
-}
 
 /**
  * Migrate legacy oauth.json and settings.json apiKeys to agent.db.
@@ -199,24 +179,12 @@ export async function runMigrations(_cwd: string): Promise<{
 	migratedAuthProviders: string[];
 	deprecationWarnings: string[];
 }> {
-	// First: migrate env vars (before anything else reads them)
-	const migratedEnvVars = migrateEnvVars();
-
 	// Then: run data migrations
 	const migratedAuthProviders = migrateAuthToAgentDb();
 	migrateSessionsFromAgentRoot();
 	migrateToolsToBin();
 
-	// Collect deprecation warnings
-	const deprecationWarnings: string[] = [];
-	if (migratedEnvVars.length > 0) {
-		for (const envVar of migratedEnvVars) {
-			const ompVar = `OMP_${envVar.slice(3)}`;
-			deprecationWarnings.push(`${envVar} is deprecated. Use ${ompVar} instead.`);
-		}
-	}
-
-	return { migratedAuthProviders, deprecationWarnings };
+	return { migratedAuthProviders, deprecationWarnings: [] };
 }
 
 /**

@@ -78,6 +78,23 @@ Download binaries directly from [GitHub Releases](https://github.com/can1357/oh-
 
 ---
 
+## + Python Tool (IPython Kernel)
+
+<p align="center">
+  <img src="https://github.com/can1357/oh-my-pi/blob/main/assets/python.webp?raw=true" alt="python">
+</p>
+
+Execute Python code with a persistent IPython kernel and 30+ shell-like helpers:
+
+- **Streaming output**: Real-time stdout/stderr with image and JSON rendering
+- **Prelude helpers**: `cat()`, `sed()`, `rsed()`, `find()`, `grep()`, `batch()`, `sh()`, `run()` and more
+- **Git utilities**: `git_status()`, `git_diff()`, `git_log()`, `git_show()` for repository operations
+- **Line operations**: `extract_lines()`, `delete_lines()`, `insert_lines()`, `lines_matching()` for text manipulation
+- **Shared gateway**: Resource-efficient kernel reuse across sessions (`python.sharedGateway` setting)
+- **Custom modules**: Load extensions from `.omp/modules/` and `.pi/modules/` directories
+- **Rich output**: Supports `display()` for HTML, Markdown, images, and interactive JSON trees
+- Install dependencies via `omp setup python`
+
 ## + LSP Integration (Language Server Protocol)
 
 <p align="center">
@@ -151,6 +168,16 @@ Configure different models for different purposes with automatic discovery:
 - CLI args (`--smol`, `--slow`) and env vars (`OMP_SMOL_MODEL`, `OMP_SLOW_MODEL`)
 - Configure via `/model` selector with keybindings (Enter=default, S=smol, L=slow)
 
+## + Todo Tool (Task Tracking)
+
+Structured task management with persistent visual tracking:
+
+- **`todo_write` tool**: Create and manage task lists during coding sessions
+- **Persistent panel**: Todo list displays above the editor with real-time progress
+- **Task states**: `pending`, `in_progress`, `completed` with automatic status updates
+- **Completion reminders**: Agent warned when stopping with incomplete todos (`todoCompletion` setting)
+- **Toggle visibility**: `Ctrl+T` expands/collapses the todo panel
+
 ## + Ask Tool (Interactive Questioning)
 
 <p align="center">
@@ -161,6 +188,7 @@ Structured user interaction with typed options:
 
 - **Multiple choice questions**: Present options with descriptions for user selection
 - **Multi-select support**: Allow multiple answers when choices aren't mutually exclusive
+- **Multi-part questions**: Ask multiple related questions in sequence via `questions` array parameter
 
 ## + Custom TypeScript Slash Commands
 
@@ -284,6 +312,7 @@ Modern terminal interface with smart session management:
 - **LSP status**: Shows which language servers are active and ready
 - **Hotkeys**: `?` displays shortcuts when editor empty
 - **Persistent prompt history**: SQLite-backed with `Ctrl+R` search across sessions
+- **Grouped tool display**: Consecutive Read calls shown in compact tree view
 - **Emergency terminal restore**: Crash handlers prevent terminal corruption
 
 ## + Edit Fuzzy Matching
@@ -296,6 +325,9 @@ Handles whitespace and indentation variance automatically:
 
 ## ... and many more
 
+- **`omp config` subcommand**: Manage settings from CLI (`list`, `get`, `set`, `reset`, `path`)
+- **`omp setup` subcommand**: Install optional dependencies (e.g., `omp setup python` for Jupyter kernel)
+- **`xhigh` thinking level**: Extended reasoning for Anthropic models with increased token budgets
 - **Background mode**: `/background` detaches UI and continues agent execution
 - **Completion notifications**: Configurable bell/OSC99/OSC9 when agent finishes
 - **Structured git tool**: Safety guards, caching, GitHub operations with typed output
@@ -314,7 +346,7 @@ Handles whitespace and indentation variance automatically:
 
 | Package                                                | Description                                                                   |
 | ------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| **[@oh-my-pi/pi-ai](packages/ai)**                     | Multi-provider LLM client (Anthropic, OpenAI, Gemini, Cursor, Codex, Copilot) |
+| **[@oh-my-pi/pi-ai](packages/ai)**                     | Multi-provider LLM client (Anthropic, OpenAI, Gemini, Bedrock, Cursor, Codex, Copilot) |
 | **[@oh-my-pi/pi-agent-core](packages/agent)**          | Agent runtime with tool calling and state management                          |
 | **[@oh-my-pi/pi-coding-agent](packages/coding-agent)** | Interactive coding agent CLI                                                  |
 | **[@oh-my-pi/pi-git-tool](packages/git-tool)**         | Structured Git tool with safety guards and typed output                       |
