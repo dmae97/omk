@@ -2,43 +2,11 @@
 
 ## [Unreleased]
 
-## [5.6.70] - 2026-01-18
-
 ## [5.6.7] - 2026-01-18
 ### Fixed
 
 - Added proper tool result messages for tool calls that are aborted or error out
 - Ensured tool_use/tool_result pairing is maintained when tool execution fails
-
-## [5.5.0] - 2026-01-18
-
-## [5.4.2] - 2026-01-16
-
-## [5.4.0] - 2026-01-15
-
-## [5.3.1] - 2026-01-15
-
-## [5.3.0] - 2026-01-15
-
-## [5.2.1] - 2026-01-14
-
-## [5.2.0] - 2026-01-14
-
-## [5.1.1] - 2026-01-14
-
-## [5.1.0] - 2026-01-14
-
-## [5.0.1] - 2026-01-12
-
-## [5.0.0] - 2026-01-12
-
-## [4.9.0] - 2026-01-12
-
-## [4.8.3] - 2026-01-12
-
-## [4.8.0] - 2026-01-12
-
-## [4.7.0] - 2026-01-12
 
 ## [4.6.0] - 2026-01-12
 ### Changed
@@ -49,39 +17,11 @@
 
 - Fixed tool result ordering in Cursor mode by buffering results and emitting them at the correct position within assistant messages
 
-## [4.5.0] - 2026-01-12
-
-## [4.4.9] - 2026-01-12
-
-## [4.4.8] - 2026-01-12
-
-## [4.4.6] - 2026-01-11
-
-## [4.4.5] - 2026-01-11
-
-## [4.4.4] - 2026-01-11
-
-## [4.3.2] - 2026-01-11
-
-## [4.3.1] - 2026-01-11
-
 ## [4.3.0] - 2026-01-11
 ### Added
 
 - Added `cursorExecHandlers` and `cursorOnToolResult` options for local tool execution with cursor-based streaming
 - Added `emitExternalEvent` method to allow external event injection into the agent state
-
-## [4.2.3] - 2026-01-11
-
-## [4.2.2] - 2026-01-11
-
-## [4.2.1] - 2026-01-11
-
-## [4.2.0] - 2026-01-10
-
-## [4.1.0] - 2026-01-10
-
-## [4.0.1] - 2026-01-10
 
 ## [4.0.0] - 2026-01-10
 ### Added
@@ -94,32 +34,12 @@
 
 - `minimal` thinking level now maps to `minimal` reasoning effort instead of being treated as `low`
 
-## [3.37.1] - 2026-01-10
-
-## [3.37.0] - 2026-01-10
-
-## [3.36.0] - 2026-01-10
-
-## [3.35.0] - 2026-01-09
-
-## [3.34.0] - 2026-01-09
-
 ## [3.33.0] - 2026-01-08
 
 ### Fixed
 
 - Ensured aborted assistant responses always include an error message for callers.
 - Filtered thinking blocks from Cerebras request context to keep multi-turn prompts compatible.
-
-## [3.32.0] - 2026-01-08
-
-## [3.31.0] - 2026-01-08
-
-## [3.30.0] - 2026-01-07
-
-## [3.25.0] - 2026-01-07
-
-## [3.24.0] - 2026-01-07
 
 ## [3.21.0] - 2026-01-06
 
@@ -131,8 +51,6 @@
 
 - Added `sessionId` option for provider caching (e.g., OpenAI Codex session-based prompt caching)
 - Added `sessionId` getter/setter on Agent class for runtime session switching
-
-## [3.20.1] - 2026-01-06
 
 ## [3.20.0] - 2026-01-06
 
@@ -150,24 +68,6 @@
 
 - `prompt()` and `continue()` now throw when the agent is already streaming; use steering or follow-up queues instead
 
-## [3.15.1] - 2026-01-05
-
-## [3.15.0] - 2026-01-05
-
-## [3.14.0] - 2026-01-04
-
-## [3.13.1337] - 2026-01-04
-
-## [3.9.1337] - 2026-01-04
-
-## [3.8.1337] - 2026-01-04
-
-## [3.7.1337] - 2026-01-04
-
-## [3.6.1337] - 2026-01-03
-
-## [3.5.1337] - 2026-01-03
-
 ## [3.4.1337] - 2026-01-03
 
 ### Added
@@ -179,22 +79,6 @@
 
 - Fixed abort handling to properly return aborted message state when stream is interrupted mid-response
 
-## [3.3.1337] - 2026-01-03
-
-## [3.1.1337] - 2026-01-03
-
-## [3.0.1337] - 2026-01-03
-
-## [2.3.1337] - 2026-01-03
-
-## [2.2.1337] - 2026-01-03
-
-## [2.1.1337] - 2026-01-03
-
-## [2.0.1337] - 2026-01-03
-
-## [1.500.0] - 2026-01-03
-
 ## [1.341.0] - 2026-01-03
 
 ### Added
@@ -203,8 +87,6 @@
 - Implemented "immediate" mode (default) to check queue after each tool and interrupt remaining tools.
 - Implemented "wait" mode to defer queue processing until the entire turn completes.
 - Added getter and setter methods for `interruptMode` on Agent class.
-
-## [1.338.0] - 2026-01-03
 
 ## [1.337.1] - 2026-01-02
 
@@ -215,8 +97,6 @@
 ## [1.337.0] - 2026-01-02
 
 Initial release under @oh-my-pi scope. See previous releases at [badlogic/pi-mono](https://github.com/badlogic/pi-mono).
-
-## [0.31.1] - 2026-01-02
 
 ## [0.31.0] - 2026-01-02
 

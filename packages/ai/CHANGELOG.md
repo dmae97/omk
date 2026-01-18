@@ -2,8 +2,6 @@
 
 ## [Unreleased]
 
-## [5.6.70] - 2026-01-18
-
 ## [5.6.7] - 2026-01-18
 ### Added
 
@@ -35,23 +33,11 @@
 - Simplified Codex system prompt instructions
 - Removed bridge text override from Codex system prompt builder
 
-## [5.4.2] - 2026-01-16
-
-## [5.4.0] - 2026-01-15
-
-## [5.3.1] - 2026-01-15
-
 ## [5.3.0] - 2026-01-15
 ### Changed
 
 - Replaced detailed Codex system instructions with simplified pi assistant instructions
 - Updated internal documentation references to use pi-internal:// protocol
-
-## [5.2.1] - 2026-01-14
-
-## [5.2.0] - 2026-01-14
-
-## [5.1.1] - 2026-01-14
 
 ## [5.1.0] - 2026-01-14
 
@@ -66,8 +52,6 @@
 - Fixed Gemini CLI provider retries with proper error handling, retry delays from headers, and empty stream retry logic
 - Fixed numbered list items showing "1." for all items when code blocks break list continuity (via `start` property)
 
-## [5.0.1] - 2026-01-12
-
 ## [5.0.0] - 2026-01-12
 ### Added
 
@@ -79,22 +63,12 @@
 - Changed Google thinking token budgets: minimal (1024), low (2048→4096), medium (8192), high (16384), xhigh (24575)
 - Changed `supportsXhigh()` to return true for all Anthropic models
 
-## [4.9.0] - 2026-01-12
-
-## [4.8.3] - 2026-01-12
-
-## [4.8.0] - 2026-01-12
-
-## [4.7.0] - 2026-01-12
-
 ## [4.6.0] - 2026-01-12
 ### Fixed
 
 - Fixed incorrect classification of thought signatures in Google Gemini responses—thought signatures are now correctly treated as metadata rather than thinking content indicators
 - Fixed thought signature handling in Google Gemini CLI and Vertex AI streaming to properly preserve signatures across text deltas
 - Fixed Google schema sanitization stripping property names that match schema keywords (e.g., "pattern", "format") from tool definitions
-
-## [4.5.0] - 2026-01-12
 
 ## [4.4.9] - 2026-01-12
 ### Fixed
@@ -128,10 +102,6 @@
 
 - Fixed Cursor todo updates to bridge update_todos tool calls to the local todo_write tool
 
-## [4.3.2] - 2026-01-11
-
-## [4.3.1] - 2026-01-11
-
 ## [4.3.0] - 2026-01-11
 
 ### Added
@@ -157,10 +127,6 @@
 
 - Fixed Cursor conversation history serialization so subagents retain task context and can call complete
 
-## [4.2.3] - 2026-01-11
-
-## [4.2.2] - 2026-01-11
-
 ## [4.2.1] - 2026-01-11
 ### Changed
 
@@ -171,12 +137,6 @@
 ### Fixed
 
 - Fixed Cloud Code Assist tool schema conversion to avoid unsupported `const` fields
-
-## [4.2.0] - 2026-01-10
-
-## [4.1.0] - 2026-01-10
-
-## [4.0.1] - 2026-01-10
 
 ## [4.0.0] - 2026-01-10
 ### Added
@@ -234,28 +194,16 @@
 
 - Enabled type coercion in JSON schema validation to automatically convert compatible types
 
-## [3.36.0] - 2026-01-10
-
 ## [3.35.0] - 2026-01-09
 ### Added
 
 - Enhanced error messages to include retry-after timing information from API rate limit headers
-
-## [3.34.0] - 2026-01-09
 
 ## [0.42.0] - 2026-01-09
 
 ### Added
 
 - Added OpenCode Zen provider support with 26 models (Claude, GPT, Gemini, Grok, Kimi, GLM, Qwen, etc.). Set `OPENCODE_API_KEY` env var to use.
-
-## [0.41.0] - 2026-01-09
-
-## [0.40.1] - 2026-01-09
-
-## [0.40.0] - 2026-01-08
-
-## [0.39.1] - 2026-01-08
 
 ## [0.39.0] - 2026-01-08
 
@@ -281,19 +229,11 @@
 - Fixed Codex SSE error events to surface message, code, and status. ([#551](https://github.com/badlogic/pi-mono/pull/551) by [@tmustier](https://github.com/tmustier))
 - Fixed context overflow detection for `context_length_exceeded` error codes.
 
-## [0.37.8] - 2026-01-07
-
-## [0.37.7] - 2026-01-07
-
 ## [0.37.6] - 2026-01-06
 
 ### Added
 
 - Exported OpenAI Codex utilities: `CacheMetadata`, `getCodexInstructions`, `getModelFamily`, `ModelFamily`, `buildCodexPiBridge`, `buildCodexSystemPrompt`, `CodexSystemPrompt` ([#510](https://github.com/badlogic/pi-mono/pull/510) by [@mitsuhiko](https://github.com/mitsuhiko))
-
-## [0.37.5] - 2026-01-06
-
-## [0.37.4] - 2026-01-06
 
 ## [0.37.3] - 2026-01-06
 
@@ -306,8 +246,6 @@
 ### Fixed
 
 - Codex provider now always includes `reasoning.encrypted_content` even when custom `include` options are passed ([#484](https://github.com/badlogic/pi-mono/pull/484) by [@kim0](https://github.com/kim0))
-
-## [0.37.1] - 2026-01-05
 
 ## [0.37.0] - 2026-01-05
 
@@ -334,25 +272,11 @@
 
 - Vertex AI dummy value for `getEnvApiKey()`: Returns `"<authenticated>"` when Application Default Credentials are configured (`~/.config/gcloud/application_default_credentials.json` exists) and both `GOOGLE_CLOUD_PROJECT` (or `GCLOUD_PROJECT`) and `GOOGLE_CLOUD_LOCATION` are set. This allows `streamSimple()` to work with Vertex AI without explicit `apiKey` option. The ADC credentials file existence check is cached per-process to avoid repeated filesystem access.
 
-## [0.35.0] - 2026-01-05
-
-## [0.34.2] - 2026-01-04
-
-## [0.34.1] - 2026-01-04
-
-## [0.34.0] - 2026-01-04
-
-## [0.33.0] - 2026-01-04
-
 ## [0.32.3] - 2026-01-03
 
 ### Fixed
 
 - Google Vertex AI models no longer appear in available models list without explicit authentication. Previously, `getEnvApiKey()` returned a dummy value for `google-vertex`, causing models to show up even when Google Cloud ADC was not configured.
-
-## [0.32.2] - 2026-01-03
-
-## [0.32.1] - 2026-01-03
 
 ## [0.32.0] - 2026-01-03
 
@@ -363,8 +287,6 @@
 ### Fixed
 
 - **Gemini CLI rate limit handling**: Added automatic retry with server-provided delay for 429 errors. Parses delay from error messages like "Your quota will reset after 39s" and waits accordingly. Falls back to exponential backoff for other transient errors. ([#370](https://github.com/badlogic/pi-mono/issues/370))
-
-## [0.31.1] - 2026-01-02
 
 ## [0.31.0] - 2026-01-02
 

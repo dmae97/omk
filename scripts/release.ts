@@ -56,6 +56,18 @@ async function watchCI(): Promise<boolean> {
 	}
 }
 
+function hasUnreleasedContent(content: string): boolean {
+	const unreleasedMatch = content.match(/## \[Unreleased\]\s*\n([\s\S]*?)(?=## \[\d|$)/);
+	if (!unreleasedMatch) return false;
+	const sectionContent = unreleasedMatch[1].trim();
+	return sectionContent.length > 0;
+}
+
+function removeEmptyVersionEntries(content: string): string {
+	// Remove version entries that have no content (just whitespace until next ## [ or EOF)
+	return content.replace(/## \[\d+\.\d+\.\d+\] - \d{4}-\d{2}-\d{2}\s*\n(?=## \[|\s*$)/g, "");
+}
+
 async function updateChangelogsForRelease(version: string): Promise<void> {
 	const date = new Date().toISOString().split("T")[0];
 
@@ -67,11 +79,14 @@ async function updateChangelogsForRelease(version: string): Promise<void> {
 			continue;
 		}
 
-		// Replace [Unreleased] with version and date
-		content = content.replace("## [Unreleased]", `## [${version}] - ${date}`);
+		// Only create version entry if [Unreleased] has content
+		if (hasUnreleasedContent(content)) {
+			content = content.replace("## [Unreleased]", `## [${version}] - ${date}`);
+			content = content.replace(/^(# Changelog\n\n)/, `$1## [Unreleased]\n\n`);
+		}
 
-		// Add new [Unreleased] section after # Changelog header
-		content = content.replace(/^(# Changelog\n\n)/, `$1## [Unreleased]\n\n`);
+		// Clean up any existing empty version entries
+		content = removeEmptyVersionEntries(content);
 
 		await Bun.write(changelog, content);
 		console.log(`  Updated ${changelog}`);

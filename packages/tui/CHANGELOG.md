@@ -2,8 +2,6 @@
 
 ## [Unreleased]
 
-## [5.6.70] - 2026-01-18
-
 ## [5.6.7] - 2026-01-18
 
 ### Added
@@ -31,24 +29,10 @@
 - Fixed backspace handling with additional codepoint support
 - Fixed Alt+letter key combinations for better recognition
 
-## [5.5.0] - 2026-01-18
-
-## [5.4.2] - 2026-01-16
-
-## [5.4.0] - 2026-01-15
-
 ## [5.3.1] - 2026-01-15
 ### Fixed
 
 - Fixed rendering issues on Windows by preventing re-entrant renders
-
-## [5.3.0] - 2026-01-15
-
-## [5.2.1] - 2026-01-14
-
-## [5.2.0] - 2026-01-14
-
-## [5.1.1] - 2026-01-14
 
 ## [5.1.0] - 2026-01-14
 
@@ -72,16 +56,6 @@
 - Fixed numbered list items showing "1." for all items when code blocks break list continuity
 - Fixed width overflow protection in overlay compositing to prevent TUI crashes
 
-## [5.0.1] - 2026-01-12
-
-## [5.0.0] - 2026-01-12
-
-## [4.9.0] - 2026-01-12
-
-## [4.8.3] - 2026-01-12
-
-## [4.8.0] - 2026-01-12
-
 ## [4.7.0] - 2026-01-12
 
 ### Fixed
@@ -100,30 +74,10 @@
 - Rendering optimizations: only re-render changed lines
 - Refactor input component to use keybindings manager
 
-## [4.5.0] - 2026-01-12
-
-## [4.4.9] - 2026-01-12
-
-## [4.4.8] - 2026-01-12
-
-## [4.4.6] - 2026-01-11
-
-## [4.4.5] - 2026-01-11
-
 ## [4.4.4] - 2026-01-11
 ### Fixed
 
 - Fixed Ctrl+Enter sequences to insert new lines in the editor
-
-## [4.3.2] - 2026-01-11
-
-## [4.3.1] - 2026-01-11
-
-## [4.3.0] - 2026-01-11
-
-## [4.2.3] - 2026-01-11
-
-## [4.2.2] - 2026-01-11
 
 ## [4.2.1] - 2026-01-11
 ### Changed
@@ -135,14 +89,10 @@
 - Fixed editor redraw glitch when canceling autocomplete suggestions
 - Fixed `fd` tool detection to automatically find `fd` or `fdfind` in PATH when not explicitly configured
 
-## [4.2.0] - 2026-01-10
-
 ## [4.1.0] - 2026-01-10
 ### Added
 
 - Added persistent prompt history storage support via `setHistoryStorage()` method, allowing history to be saved and restored across sessions
-
-## [4.0.1] - 2026-01-10
 
 ## [4.0.0] - 2026-01-10
 ### Added
@@ -168,35 +118,11 @@
 - `matchesKey()` now correctly matches Kitty protocol sequences for unmodified letter keys
 - Crash when pasting text with trailing whitespace exceeding terminal width through Markdown rendering
 
-## [3.37.1] - 2026-01-10
-
-## [3.37.0] - 2026-01-10
-
-## [3.36.0] - 2026-01-10
-
-## [3.35.0] - 2026-01-09
-
-## [3.34.0] - 2026-01-09
-
-## [3.33.0] - 2026-01-08
-
 ## [3.32.0] - 2026-01-08
 
 ### Fixed
 
 - Fixed text wrapping allowing long whitespace tokens to exceed line width
-
-## [3.31.0] - 2026-01-08
-
-## [3.30.0] - 2026-01-07
-
-## [3.25.0] - 2026-01-07
-
-## [3.24.0] - 2026-01-07
-
-## [3.21.0] - 2026-01-06
-
-## [3.20.1] - 2026-01-06
 
 ## [3.20.0] - 2026-01-06
 ### Added
@@ -229,10 +155,6 @@
 - Added `SymbolTheme` interface for customizing UI symbols including cursors, borders, spinners, and box-drawing characters
 - Added support for custom spinner frames in the Loader component
 
-## [3.14.0] - 2026-01-04
-
-## [3.13.1337] - 2026-01-04
-
 ## [3.9.1337] - 2026-01-04
 ### Added
 
@@ -245,38 +167,10 @@
 - Changed Editor component to use proper box borders with vertical side borders instead of horizontal-only borders
 - Changed cursor style from block to thin blinking bar (▏) at end of line
 
-## [3.8.1337] - 2026-01-04
-
-## [3.7.1337] - 2026-01-04
-
-## [3.6.1337] - 2026-01-03
-
-## [3.5.1337] - 2026-01-03
-
-## [3.4.1337] - 2026-01-03
-
-## [3.3.1337] - 2026-01-03
-
-## [3.1.1337] - 2026-01-03
-
-## [3.0.1337] - 2026-01-03
-
-## [2.3.1337] - 2026-01-03
-
-## [2.2.1337] - 2026-01-03
-
-## [2.1.1337] - 2026-01-03
-
-## [2.0.1337] - 2026-01-03
-
 ## [1.500.0] - 2026-01-03
 ### Added
 
 - Added `getText()` method to Text component for retrieving current text content
-
-## [1.341.0] - 2026-01-03
-
-## [1.338.0] - 2026-01-03
 
 ## [1.337.1] - 2026-01-02
 

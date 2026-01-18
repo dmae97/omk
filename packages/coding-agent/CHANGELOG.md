@@ -119,10 +119,6 @@
 - Improved system prompt guidance for position-addressed vs content-addressed file edits
 - Enhanced edit tool documentation with clear use cases for bash alternatives
 
-## [5.4.0] - 2026-01-15
-
-## [5.3.1] - 2026-01-15
-
 ## [5.3.0] - 2026-01-15
 ### Changed
 
@@ -185,8 +181,6 @@
 
 - Implemented `xhigh` thinking level for Anthropic models with increased reasoning limits
 
-## [4.9.0] - 2026-01-12
-
 ## [4.8.3] - 2026-01-12
 
 ### Changed
@@ -229,17 +223,11 @@
 - Component `invalidate()` now properly rebuilds content on theme changes
 - Force full re-render after returning from external editor
 
-## [4.5.0] - 2026-01-12
-
-## [4.4.9] - 2026-01-12
-
 ## [4.4.8] - 2026-01-12
 ### Changed
 
 - Changed review finding priority format from numeric (0-3) to string labels (P0-P3) for clearer severity indication
 - Replaced Type.Union with Type.Literal patterns with StringEnum helper across tool schemas for cleaner enum definitions
-
-## [4.4.6] - 2026-01-11
 
 ## [4.4.5] - 2026-01-11
 
@@ -520,8 +508,6 @@
 - Status bar shows correct git branch when running in a git worktree
 - Ctrl+V clipboard image paste works on Wayland sessions
 - Extension directories in `settings.json` respect `package.json` manifests
-
-## [3.37.1] - 2026-01-10
 
 ## [3.37.0] - 2026-01-10
 ### Changed
@@ -980,8 +966,6 @@
 
 - Changed status line to display usage statistics more efficiently by using centralized session statistics instead of recalculating from entries
 
-## [3.13.1337] - 2026-01-04
-
 ## [3.9.1337] - 2026-01-04
 
 ### Changed
@@ -1023,8 +1007,6 @@
 ### Fixed
 
 - Fixed potential text decoding issues in bash executor by using streaming TextDecoder instead of Buffer.toString()
-
-## [3.6.1337] - 2026-01-03
 
 ## [3.5.1337] - 2026-01-03
 
@@ -1103,10 +1085,6 @@
 - Changed config directory from `.pi` to `.omp` with fallback support for legacy paths
 - Renamed environment variables from `PI_*` to `OMP_*` prefix (e.g., `OMP_SMOL_MODEL`, `OMP_SLOW_MODEL`)
 - Changed model role alias prefix from `pi/` to `omp/` (e.g., `omp/slow` instead of `pi/slow`)
-
-## [2.3.1337] - 2026-01-03
-
-## [2.2.1337] - 2026-01-03
 
 ## [2.1.1337] - 2026-01-03
 
