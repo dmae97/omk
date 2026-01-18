@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [5.5.0] - 2026-01-18
 ### Changed
 
 - Updated User-Agent header from 'opencode' to 'pi' for OpenAI Codex requests

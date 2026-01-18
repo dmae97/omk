@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [5.5.0] - 2026-01-18
 ### Changed
 
 - Updated task execution guidelines to improve prompt framing and parallelization instructions
