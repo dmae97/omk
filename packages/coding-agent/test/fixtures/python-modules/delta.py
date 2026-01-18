@@ -1,0 +1,2 @@
+def delta():
+	return "delta"

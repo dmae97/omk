@@ -67,6 +67,39 @@ function decodeMessage(data: ArrayBuffer): JupyterMessage {
 	return JSON.parse(msgText) as JupyterMessage;
 }
 
+function sendOkExecution(ws: FakeWebSocket, msgId: string, executionCount = 1) {
+	const reply: JupyterMessage = {
+		channel: "shell",
+		header: {
+			msg_id: `reply-${msgId}`,
+			session: "session",
+			username: "omp",
+			date: new Date().toISOString(),
+			msg_type: "execute_reply",
+			version: "5.5",
+		},
+		parent_header: { msg_id: msgId },
+		metadata: {},
+		content: { status: "ok", execution_count: executionCount },
+	};
+	const status: JupyterMessage = {
+		channel: "iopub",
+		header: {
+			msg_id: `status-${msgId}`,
+			session: "session",
+			username: "omp",
+			date: new Date().toISOString(),
+			msg_type: "status",
+			version: "5.5",
+		},
+		parent_header: { msg_id: msgId },
+		metadata: {},
+		content: { execution_state: "idle" },
+	};
+	ws.onmessage?.({ data: encodeMessage(reply) });
+	ws.onmessage?.({ data: encodeMessage(status) });
+}
+
 class FakeWebSocket {
 	static OPEN = 1;
 	static CLOSED = 3;
@@ -149,106 +182,7 @@ describe("PythonKernel (external gateway)", () => {
 		});
 		globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-		const responseQueue: Array<(msgId: string, ws: FakeWebSocket) => void> = [];
-		responseQueue.push((msgId, ws) => {
-			const reply: JupyterMessage = {
-				channel: "shell",
-				header: {
-					msg_id: "reply-1",
-					session: "session",
-					username: "omp",
-					date: new Date().toISOString(),
-					msg_type: "execute_reply",
-					version: "5.5",
-				},
-				parent_header: { msg_id: msgId },
-				metadata: {},
-				content: { status: "ok", execution_count: 1 },
-			};
-			const status: JupyterMessage = {
-				channel: "iopub",
-				header: {
-					msg_id: "status-1",
-					session: "session",
-					username: "omp",
-					date: new Date().toISOString(),
-					msg_type: "status",
-					version: "5.5",
-				},
-				parent_header: { msg_id: msgId },
-				metadata: {},
-				content: { execution_state: "idle" },
-			};
-			ws.onmessage?.({ data: encodeMessage(reply) });
-			ws.onmessage?.({ data: encodeMessage(status) });
-		});
-		responseQueue.push((msgId, ws) => {
-			const stream: JupyterMessage = {
-				channel: "iopub",
-				header: {
-					msg_id: "stream-1",
-					session: "session",
-					username: "omp",
-					date: new Date().toISOString(),
-					msg_type: "stream",
-					version: "5.5",
-				},
-				parent_header: { msg_id: msgId },
-				metadata: {},
-				content: { text: "hello\n" },
-			};
-			const display: JupyterMessage = {
-				channel: "iopub",
-				header: {
-					msg_id: "display-1",
-					session: "session",
-					username: "omp",
-					date: new Date().toISOString(),
-					msg_type: "execute_result",
-					version: "5.5",
-				},
-				parent_header: { msg_id: msgId },
-				metadata: {},
-				content: {
-					data: {
-						"text/plain": "result",
-						"application/json": { answer: 42 },
-					},
-				},
-			};
-			const reply: JupyterMessage = {
-				channel: "shell",
-				header: {
-					msg_id: "reply-2",
-					session: "session",
-					username: "omp",
-					date: new Date().toISOString(),
-					msg_type: "execute_reply",
-					version: "5.5",
-				},
-				parent_header: { msg_id: msgId },
-				metadata: {},
-				content: { status: "ok", execution_count: 2 },
-			};
-			const status: JupyterMessage = {
-				channel: "iopub",
-				header: {
-					msg_id: "status-2",
-					session: "session",
-					username: "omp",
-					date: new Date().toISOString(),
-					msg_type: "status",
-					version: "5.5",
-				},
-				parent_header: { msg_id: msgId },
-				metadata: {},
-				content: { execution_state: "idle" },
-			};
-			ws.onmessage?.({ data: encodeMessage(stream) });
-			ws.onmessage?.({ data: encodeMessage(display) });
-			ws.onmessage?.({ data: encodeMessage(reply) });
-			ws.onmessage?.({ data: encodeMessage(status) });
-		});
+		let preludeSeen = false;
 
 		const kernelPromise = PythonKernel.start({ cwd: "/" });
 		await Bun.sleep(10);
@@ -256,11 +190,84 @@ describe("PythonKernel (external gateway)", () => {
 		if (!ws) throw new Error("WebSocket not initialized");
 		ws.setSendHandler((data) => {
 			const msg = typeof data === "string" ? (JSON.parse(data) as JupyterMessage) : decodeMessage(data);
-			const handler = responseQueue.shift();
-			if (!handler) {
-				throw new Error(`Unexpected message: ${msg.header.msg_type}`);
+			const code = String(msg.content.code ?? "");
+			if (!preludeSeen) {
+				expect(code).toBe(PYTHON_PRELUDE);
+				preludeSeen = true;
+				sendOkExecution(ws, msg.header.msg_id);
+				return;
 			}
-			handler(msg.header.msg_id, ws);
+
+			if (code === "print('hello')") {
+				const stream: JupyterMessage = {
+					channel: "iopub",
+					header: {
+						msg_id: "stream-1",
+						session: "session",
+						username: "omp",
+						date: new Date().toISOString(),
+						msg_type: "stream",
+						version: "5.5",
+					},
+					parent_header: { msg_id: msg.header.msg_id },
+					metadata: {},
+					content: { text: "hello\n" },
+				};
+				const display: JupyterMessage = {
+					channel: "iopub",
+					header: {
+						msg_id: "display-1",
+						session: "session",
+						username: "omp",
+						date: new Date().toISOString(),
+						msg_type: "execute_result",
+						version: "5.5",
+					},
+					parent_header: { msg_id: msg.header.msg_id },
+					metadata: {},
+					content: {
+						data: {
+							"text/plain": "result",
+							"application/json": { answer: 42 },
+						},
+					},
+				};
+				const reply: JupyterMessage = {
+					channel: "shell",
+					header: {
+						msg_id: "reply-2",
+						session: "session",
+						username: "omp",
+						date: new Date().toISOString(),
+						msg_type: "execute_reply",
+						version: "5.5",
+					},
+					parent_header: { msg_id: msg.header.msg_id },
+					metadata: {},
+					content: { status: "ok", execution_count: 2 },
+				};
+				const status: JupyterMessage = {
+					channel: "iopub",
+					header: {
+						msg_id: "status-2",
+						session: "session",
+						username: "omp",
+						date: new Date().toISOString(),
+						msg_type: "status",
+						version: "5.5",
+					},
+					parent_header: { msg_id: msg.header.msg_id },
+					metadata: {},
+					content: { execution_state: "idle" },
+				};
+				ws.onmessage?.({ data: encodeMessage(stream) });
+				ws.onmessage?.({ data: encodeMessage(display) });
+				ws.onmessage?.({ data: encodeMessage(reply) });
+				ws.onmessage?.({ data: encodeMessage(status) });
+				return;
+			}
+
+			sendOkExecution(ws, msg.header.msg_id);
 		});
 
 		const kernel = await kernelPromise;
@@ -300,40 +307,7 @@ describe("PythonKernel (external gateway)", () => {
 		});
 		globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-		const responseQueue: Array<(msgId: string, ws: FakeWebSocket) => void> = [
-			(msgId, ws) => {
-				const reply: JupyterMessage = {
-					channel: "shell",
-					header: {
-						msg_id: "reply-prelude",
-						session: "session",
-						username: "omp",
-						date: new Date().toISOString(),
-						msg_type: "execute_reply",
-						version: "5.5",
-					},
-					parent_header: { msg_id: msgId },
-					metadata: {},
-					content: { status: "ok", execution_count: 1 },
-				};
-				const status: JupyterMessage = {
-					channel: "iopub",
-					header: {
-						msg_id: "status-prelude",
-						session: "session",
-						username: "omp",
-						date: new Date().toISOString(),
-						msg_type: "status",
-						version: "5.5",
-					},
-					parent_header: { msg_id: msgId },
-					metadata: {},
-					content: { execution_state: "idle" },
-				};
-				ws.onmessage?.({ data: encodeMessage(reply) });
-				ws.onmessage?.({ data: encodeMessage(status) });
-			},
-		];
+		let preludeSeen = false;
 
 		const kernelPromise = PythonKernel.start({ cwd: "/" });
 		await Bun.sleep(10);
@@ -341,11 +315,12 @@ describe("PythonKernel (external gateway)", () => {
 		if (!ws) throw new Error("WebSocket not initialized");
 		ws.setSendHandler((data) => {
 			const msg = typeof data === "string" ? (JSON.parse(data) as JupyterMessage) : decodeMessage(data);
-			const handler = responseQueue.shift();
-			if (!handler) {
-				throw new Error(`Unexpected message: ${msg.header.msg_type}`);
+			const code = String(msg.content.code ?? "");
+			if (!preludeSeen) {
+				expect(code).toBe(PYTHON_PRELUDE);
+				preludeSeen = true;
 			}
-			handler(msg.header.msg_id, ws);
+			sendOkExecution(ws, msg.header.msg_id);
 		});
 
 		const kernel = await kernelPromise;
@@ -368,40 +343,7 @@ describe("PythonKernel (external gateway)", () => {
 		});
 		globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-		const responseQueue: Array<(msgId: string, ws: FakeWebSocket) => void> = [
-			(msgId, ws) => {
-				const reply: JupyterMessage = {
-					channel: "shell",
-					header: {
-						msg_id: "reply-prelude",
-						session: "session",
-						username: "omp",
-						date: new Date().toISOString(),
-						msg_type: "execute_reply",
-						version: "5.5",
-					},
-					parent_header: { msg_id: msgId },
-					metadata: {},
-					content: { status: "ok", execution_count: 1 },
-				};
-				const status: JupyterMessage = {
-					channel: "iopub",
-					header: {
-						msg_id: "status-prelude",
-						session: "session",
-						username: "omp",
-						date: new Date().toISOString(),
-						msg_type: "status",
-						version: "5.5",
-					},
-					parent_header: { msg_id: msgId },
-					metadata: {},
-					content: { execution_state: "idle" },
-				};
-				ws.onmessage?.({ data: encodeMessage(reply) });
-				ws.onmessage?.({ data: encodeMessage(status) });
-			},
-		];
+		let preludeSeen = false;
 
 		const kernelPromise = PythonKernel.start({ cwd: "/" });
 		await Bun.sleep(10);
@@ -409,12 +351,12 @@ describe("PythonKernel (external gateway)", () => {
 		if (!ws) throw new Error("WebSocket not initialized");
 		ws.setSendHandler((data) => {
 			const msg = typeof data === "string" ? (JSON.parse(data) as JupyterMessage) : decodeMessage(data);
-			const handler = responseQueue.shift();
-			if (!handler) {
-				throw new Error(`Unexpected message: ${msg.header.msg_type}`);
+			const code = String(msg.content.code ?? "");
+			if (!preludeSeen) {
+				expect(code).toBe(PYTHON_PRELUDE);
+				preludeSeen = true;
 			}
-			expect(msg.content.code).toBe(PYTHON_PRELUDE);
-			handler(msg.header.msg_id, ws);
+			sendOkExecution(ws, msg.header.msg_id);
 		});
 
 		const kernel = await kernelPromise;
@@ -441,40 +383,23 @@ describe("PythonKernel (external gateway)", () => {
 		];
 		const payload = JSON.stringify(docs);
 
-		const responseQueue: Array<(msgId: string, ws: FakeWebSocket) => void> = [
-			(msgId, ws) => {
-				const reply: JupyterMessage = {
-					channel: "shell",
-					header: {
-						msg_id: "reply-prelude",
-						session: "session",
-						username: "omp",
-						date: new Date().toISOString(),
-						msg_type: "execute_reply",
-						version: "5.5",
-					},
-					parent_header: { msg_id: msgId },
-					metadata: {},
-					content: { status: "ok", execution_count: 1 },
-				};
-				const status: JupyterMessage = {
-					channel: "iopub",
-					header: {
-						msg_id: "status-prelude",
-						session: "session",
-						username: "omp",
-						date: new Date().toISOString(),
-						msg_type: "status",
-						version: "5.5",
-					},
-					parent_header: { msg_id: msgId },
-					metadata: {},
-					content: { execution_state: "idle" },
-				};
-				ws.onmessage?.({ data: encodeMessage(reply) });
-				ws.onmessage?.({ data: encodeMessage(status) });
-			},
-			(msgId, ws) => {
+		let preludeSeen = false;
+
+		const kernelPromise = PythonKernel.start({ cwd: "/" });
+		await Bun.sleep(10);
+		const ws = FakeWebSocket.lastInstance;
+		if (!ws) throw new Error("WebSocket not initialized");
+		ws.setSendHandler((data) => {
+			const msg = typeof data === "string" ? (JSON.parse(data) as JupyterMessage) : decodeMessage(data);
+			const code = String(msg.content.code ?? "");
+			if (!preludeSeen) {
+				expect(code).toBe(PYTHON_PRELUDE);
+				preludeSeen = true;
+				sendOkExecution(ws, msg.header.msg_id);
+				return;
+			}
+
+			if (code.includes("__omp_prelude_docs__")) {
 				const stream: JupyterMessage = {
 					channel: "iopub",
 					header: {
@@ -485,7 +410,7 @@ describe("PythonKernel (external gateway)", () => {
 						msg_type: "stream",
 						version: "5.5",
 					},
-					parent_header: { msg_id: msgId },
+					parent_header: { msg_id: msg.header.msg_id },
 					metadata: {},
 					content: { text: `${payload}\n` },
 				};
@@ -499,7 +424,7 @@ describe("PythonKernel (external gateway)", () => {
 						msg_type: "execute_reply",
 						version: "5.5",
 					},
-					parent_header: { msg_id: msgId },
+					parent_header: { msg_id: msg.header.msg_id },
 					metadata: {},
 					content: { status: "ok", execution_count: 2 },
 				};
@@ -513,30 +438,17 @@ describe("PythonKernel (external gateway)", () => {
 						msg_type: "status",
 						version: "5.5",
 					},
-					parent_header: { msg_id: msgId },
+					parent_header: { msg_id: msg.header.msg_id },
 					metadata: {},
 					content: { execution_state: "idle" },
 				};
 				ws.onmessage?.({ data: encodeMessage(stream) });
 				ws.onmessage?.({ data: encodeMessage(reply) });
 				ws.onmessage?.({ data: encodeMessage(status) });
-			},
-		];
+				return;
+			}
 
-		const kernelPromise = PythonKernel.start({ cwd: "/" });
-		await Bun.sleep(10);
-		const ws = FakeWebSocket.lastInstance;
-		if (!ws) throw new Error("WebSocket not initialized");
-		ws.setSendHandler((data) => {
-			const msg = typeof data === "string" ? (JSON.parse(data) as JupyterMessage) : decodeMessage(data);
-			const handler = responseQueue.shift();
-			if (!handler) {
-				throw new Error(`Unexpected message: ${msg.header.msg_type}`);
-			}
-			if (msg.content.code !== PYTHON_PRELUDE) {
-				expect(String(msg.content.code)).toContain("__omp_prelude_docs__");
-			}
-			handler(msg.header.msg_id, ws);
+			sendOkExecution(ws, msg.header.msg_id);
 		});
 
 		const kernel = await kernelPromise;

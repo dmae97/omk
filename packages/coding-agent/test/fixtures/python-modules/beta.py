@@ -1,0 +1,2 @@
+def beta():
+	return "beta"

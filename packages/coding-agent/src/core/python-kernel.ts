@@ -6,6 +6,7 @@ import { getShellConfig, killProcessTree } from "../utils/shell";
 import { getOrCreateSnapshot } from "../utils/shell-snapshot";
 import { logger } from "./logger";
 import { acquireSharedGateway, releaseSharedGateway } from "./python-gateway-coordinator";
+import { loadPythonModules } from "./python-modules";
 import { PYTHON_PRELUDE } from "./python-prelude";
 import { htmlToBasicMarkdown } from "./tools/web-scrapers/types";
 import { ScopeSignal } from "./utils";
@@ -515,7 +516,7 @@ export class PythonKernel {
 
 		const externalConfig = getExternalGatewayConfig();
 		if (externalConfig) {
-			return PythonKernel.startWithExternalGateway(externalConfig);
+			return PythonKernel.startWithExternalGateway(externalConfig, options.cwd);
 		}
 
 		// Try shared gateway first (unless explicitly disabled)
@@ -535,7 +536,7 @@ export class PythonKernel {
 		return PythonKernel.startWithLocalGateway(options);
 	}
 
-	private static async startWithExternalGateway(config: ExternalGatewayConfig): Promise<PythonKernel> {
+	private static async startWithExternalGateway(config: ExternalGatewayConfig, cwd: string): Promise<PythonKernel> {
 		const headers: Record<string, string> = { "Content-Type": "application/json" };
 		if (config.token) {
 			headers.Authorization = `token ${config.token}`;
@@ -563,6 +564,7 @@ export class PythonKernel {
 			if (preludeResult.cancelled || preludeResult.status === "error") {
 				throw new Error("Failed to initialize Python kernel prelude");
 			}
+			await loadPythonModules(kernel, { cwd });
 			return kernel;
 		} catch (err: unknown) {
 			await kernel.shutdown();
@@ -570,7 +572,7 @@ export class PythonKernel {
 		}
 	}
 
-	private static async startWithSharedGateway(gatewayUrl: string, _cwd: string): Promise<PythonKernel> {
+	private static async startWithSharedGateway(gatewayUrl: string, cwd: string): Promise<PythonKernel> {
 		const createResponse = await fetch(`${gatewayUrl}/api/kernels`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -594,6 +596,7 @@ export class PythonKernel {
 			if (preludeResult.cancelled || preludeResult.status === "error") {
 				throw new Error("Failed to initialize Python kernel prelude");
 			}
+			await loadPythonModules(kernel, { cwd });
 			return kernel;
 		} catch (err: unknown) {
 			await kernel.shutdown();
@@ -709,6 +712,7 @@ export class PythonKernel {
 			if (preludeResult.cancelled || preludeResult.status === "error") {
 				throw new Error("Failed to initialize Python kernel prelude");
 			}
+			await loadPythonModules(kernel, { cwd: options.cwd });
 			return kernel;
 		} catch (err: unknown) {
 			await kernel.shutdown();

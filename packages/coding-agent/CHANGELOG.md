@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added support for loading Python prelude extension modules from user and project directories
+- Added automatic discovery of Python modules from `.omp/modules` and `.pi/modules` directories
+- Added prioritized module loading with project-level modules overriding user-level modules
 
 ## [5.6.7] - 2026-01-18
 

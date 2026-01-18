@@ -1,0 +1,2 @@
+def alpha():
+	return "alpha"
