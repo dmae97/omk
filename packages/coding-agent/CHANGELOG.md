@@ -1,9 +1,11 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added structured status events for Python prelude functions with TUI rendering
+- Added status event display system with operation icons and formatted descriptions
+- Added support for rich output using IPython.display.display() in Python tool
 - Added setup subcommand to install dependencies for optional features
 - Added Python setup component to install Jupyter kernel dependencies
 - Added setup command help with component and option documentation
@@ -40,6 +42,9 @@
 
 ### Changed
 
+- Updated Python prelude functions to emit structured status events instead of text output
+- Enhanced Python tool renderer to display status events alongside output
+- Improved Python tool output formatting with status event integration
 - Improved shared Python gateway coordination with environment validation and stale process cleanup
 - Updated Python prelude to rename `bash()` function to `sh()` for consistency
 - Changed default Python tool mode from "ipy-only" to "both" to enable both IPython and shell execution
@@ -58,9 +63,6 @@
 - Updated skill command execution to include skill path metadata
 - Surfaced loaded prompt templates during initialization
 - Updated compaction summarization to use serialized prompt text
-
-### Changed
-
 - Cleaned up Python prelude `sh()` and `run()` output to only show stdout/stderr without noisy metadata
 
 ### Fixed

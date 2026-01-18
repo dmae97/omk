@@ -94,7 +94,18 @@ export interface JupyterMessage {
 	buffers?: Uint8Array[];
 }
 
-export type KernelDisplayOutput = { type: "json"; data: unknown } | { type: "image"; data: string; mimeType: string };
+/** Status event emitted by prelude helpers for TUI rendering. */
+export interface PythonStatusEvent {
+	/** Operation name (e.g., "find", "read", "write") */
+	op: string;
+	/** Additional data fields (count, path, pattern, etc.) */
+	[key: string]: unknown;
+}
+
+export type KernelDisplayOutput =
+	| { type: "json"; data: unknown }
+	| { type: "image"; data: string; mimeType: string }
+	| { type: "status"; event: PythonStatusEvent };
 
 export interface KernelExecuteOptions {
 	signal?: AbortSignal;
@@ -968,6 +979,17 @@ export class PythonKernel {
 		if (!data) return { text: "", outputs: [] };
 
 		const outputs: KernelDisplayOutput[] = [];
+
+		// Handle status events (custom MIME type from prelude helpers)
+		if (data["application/x-omp-status"] !== undefined) {
+			const statusData = data["application/x-omp-status"];
+			if (statusData && typeof statusData === "object" && "op" in statusData) {
+				outputs.push({ type: "status", event: statusData as PythonStatusEvent });
+			}
+			// Status events don't produce text output
+			return { text: "", outputs };
+		}
+
 		if (typeof data["image/png"] === "string") {
 			outputs.push({ type: "image", data: data["image/png"] as string, mimeType: "image/png" });
 		}

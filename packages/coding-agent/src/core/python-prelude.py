@@ -4,6 +4,11 @@ if "__omp_prelude_loaded__" not in globals():
     from pathlib import Path
     import os, sys, re, json, shutil, subprocess, glob, textwrap, inspect
     from datetime import datetime
+    from IPython.display import display
+
+    def _emit_status(op: str, **data):
+        """Emit structured status event for TUI rendering."""
+        display({"application/x-omp-status": {"op": op, **data}}, raw=True)
 
     def _category(cat: str):
         """Decorator to tag a prelude function with its category."""
@@ -16,7 +21,7 @@ if "__omp_prelude_loaded__" not in globals():
     def pwd() -> Path:
         """Print and return current working directory."""
         p = Path.cwd()
-        print(str(p))
+        _emit_status("pwd", path=str(p))
         return p
 
     @_category("Navigation")
@@ -24,7 +29,7 @@ if "__omp_prelude_loaded__" not in globals():
         """Change directory and print the new cwd."""
         p = Path(path).expanduser().resolve()
         os.chdir(p)
-        print(str(p))
+        _emit_status("cd", path=str(p))
         return p
 
     @_category("Shell")
@@ -34,14 +39,14 @@ if "__omp_prelude_loaded__" not in globals():
             items = dict(sorted(os.environ.items()))
             for k, v in items.items():
                 print(f"{k}={v}")
-            print(f"[env] {len(items)} variables")
+            _emit_status("env", count=len(items))
             return items
         if value is not None:
             os.environ[key] = value
-            print(f"{key}={value}")
+            _emit_status("env", key=key, value=value, action="set")
             return value
         val = os.environ.get(key)
-        print(f"{key}={val}")
+        _emit_status("env", key=key, value=val, action="get")
         return val
 
     @_category("File I/O")
@@ -52,10 +57,9 @@ if "__omp_prelude_loaded__" not in globals():
         if limit is not None:
             preview = data[:limit]
             print(preview)
-            print(f"[read {len(data)} chars from {p}]")
         else:
             print(data)
-            print(f"[read {len(data)} chars from {p}]")
+        _emit_status("read", path=str(p), chars=len(data))
         return data
 
     @_category("File I/O")
@@ -64,7 +68,7 @@ if "__omp_prelude_loaded__" not in globals():
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
-        print(f"[wrote {len(content)} chars to {p}]")
+        _emit_status("write", path=str(p), chars=len(content))
         return p
 
     @_category("File I/O")
@@ -74,7 +78,7 @@ if "__omp_prelude_loaded__" not in globals():
         p.parent.mkdir(parents=True, exist_ok=True)
         with p.open("a", encoding="utf-8") as f:
             f.write(content)
-        print(f"[appended {len(content)} chars to {p}]")
+        _emit_status("append", path=str(p), chars=len(content))
         return p
 
     @_category("File ops")
@@ -82,7 +86,7 @@ if "__omp_prelude_loaded__" not in globals():
         """Create directory (parents=True)."""
         p = Path(path)
         p.mkdir(parents=True, exist_ok=True)
-        print(f"[mkdir] {p}")
+        _emit_status("mkdir", path=str(p))
         return p
 
     @_category("File ops")
@@ -92,15 +96,15 @@ if "__omp_prelude_loaded__" not in globals():
         if p.is_dir():
             if recursive:
                 shutil.rmtree(p)
-                print(f"[rm -r] {p}")
+                _emit_status("rm", path=str(p), recursive=True)
                 return
-            print(f"[rm] {p} (directory, use recursive=True)")
+            _emit_status("rm", path=str(p), error="directory, use recursive=True")
             return
         if p.exists():
             p.unlink()
-            print(f"[rm] {p}")
+            _emit_status("rm", path=str(p))
         else:
-            print(f"[rm] {p} (missing)")
+            _emit_status("rm", path=str(p), error="missing")
 
     @_category("File ops")
     def mv(src: str | Path, dst: str | Path) -> Path:
@@ -109,7 +113,7 @@ if "__omp_prelude_loaded__" not in globals():
         dst_p = Path(dst)
         dst_p.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(src_p), str(dst_p))
-        print(f"[mv] {src_p} -> {dst_p}")
+        _emit_status("mv", src=str(src_p), dst=str(dst_p))
         return dst_p
 
     @_category("File ops")
@@ -122,7 +126,7 @@ if "__omp_prelude_loaded__" not in globals():
             shutil.copytree(src_p, dst_p, dirs_exist_ok=True)
         else:
             shutil.copy2(src_p, dst_p)
-        print(f"[cp] {src_p} -> {dst_p}")
+        _emit_status("cp", src=str(src_p), dst=str(dst_p))
         return dst_p
 
     @_category("Navigation")
@@ -133,7 +137,7 @@ if "__omp_prelude_loaded__" not in globals():
         for item in items:
             suffix = "/" if item.is_dir() else ""
             print(f"{item.name}{suffix}")
-        print(f"[ls] {len(items)} entries in {p}")
+        _emit_status("ls", path=str(p), count=len(items))
         return items
 
     @_category("Search")
@@ -148,7 +152,7 @@ if "__omp_prelude_loaded__" not in globals():
         matches = sorted(matches)
         for m in matches:
             print(str(m))
-        print(f"[find] {len(matches)} matches for '{pattern}' in {p}")
+        _emit_status("find", pattern=pattern, path=str(p), count=len(matches))
         return matches
 
     @_category("Search")
@@ -170,7 +174,7 @@ if "__omp_prelude_loaded__" not in globals():
                         if j + 1 == i:
                             continue
                         print(f"{j+1}- {lines[j]}")
-        print(f"[grep] {len(hits)} matches in {p}")
+        _emit_status("grep", pattern=pattern, path=str(p), count=len(hits))
         return hits
 
     @_category("Search")
@@ -191,7 +195,7 @@ if "__omp_prelude_loaded__" not in globals():
                 if rx.search(line):
                     hits.append((file_path, i, line))
                     print(f"{file_path}:{i}: {line}")
-        print(f"[rgrep] {len(hits)} matches in {base}")
+        _emit_status("rgrep", pattern=pattern, path=str(base), count=len(hits))
         return hits
 
     @_category("Text")
@@ -200,7 +204,7 @@ if "__omp_prelude_loaded__" not in globals():
         lines = text.splitlines()[:n]
         out = "\n".join(lines)
         print(out)
-        print(f"[head] {len(lines)} lines")
+        _emit_status("head", lines=len(lines))
         return out
 
     @_category("Text")
@@ -209,7 +213,7 @@ if "__omp_prelude_loaded__" not in globals():
         lines = text.splitlines()[-n:]
         out = "\n".join(lines)
         print(out)
-        print(f"[tail] {len(lines)} lines")
+        _emit_status("tail", lines=len(lines))
         return out
 
     @_category("Find/Replace")
@@ -223,7 +227,7 @@ if "__omp_prelude_loaded__" not in globals():
             new = data.replace(pattern, repl)
             count = data.count(pattern)
         p.write_text(new, encoding="utf-8")
-        print(f"[replace] {count} replacements in {p}")
+        _emit_status("replace", path=str(p), count=count)
         return count
 
     class ShellResult:
@@ -307,7 +311,7 @@ if "__omp_prelude_loaded__" not in globals():
             parts.append(Path(p).read_text(encoding="utf-8"))
         out = separator.join(parts)
         print(out)
-        print(f"[cat] {len(paths)} files, {len(out)} chars")
+        _emit_status("cat", files=len(paths), chars=len(out))
         return out
 
     @_category("File I/O")
@@ -316,7 +320,7 @@ if "__omp_prelude_loaded__" not in globals():
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.touch()
-        print(f"[touch] {p}")
+        _emit_status("touch", path=str(p))
         return p
 
     @_category("Text")
@@ -325,7 +329,7 @@ if "__omp_prelude_loaded__" not in globals():
         lines = text.splitlines()
         words = text.split()
         result = {"lines": len(lines), "words": len(words), "chars": len(text)}
-        print(f"{result['lines']} lines, {result['words']} words, {result['chars']} chars")
+        _emit_status("wc", lines=result["lines"], words=result["words"], chars=result["chars"])
         return result
 
     @_category("Text")
@@ -337,6 +341,7 @@ if "__omp_prelude_loaded__" not in globals():
         lines = sorted(lines, reverse=reverse)
         out = "\n".join(lines)
         print(out)
+        _emit_status("sort_lines", lines=len(lines), unique=unique, reverse=reverse)
         return out
 
     @_category("Text")
@@ -344,6 +349,7 @@ if "__omp_prelude_loaded__" not in globals():
         """Remove duplicate adjacent lines (like uniq)."""
         lines = text.splitlines()
         if not lines:
+            _emit_status("uniq", groups=0)
             return [] if count else ""
         groups: list[tuple[int, str]] = []
         current = lines[0]
@@ -359,9 +365,11 @@ if "__omp_prelude_loaded__" not in globals():
         if count:
             for c, l in groups:
                 print(f"{c:>4} {l}")
+            _emit_status("uniq", groups=len(groups), count_mode=True)
             return groups
         out = "\n".join(line for _, line in groups)
         print(out)
+        _emit_status("uniq", groups=len(groups))
         return out
 
     @_category("Text")
@@ -374,6 +382,7 @@ if "__omp_prelude_loaded__" not in globals():
             result_lines.append(" ".join(selected))
         out = "\n".join(result_lines)
         print(out)
+        _emit_status("cols", lines=len(result_lines), columns=list(indices))
         return out
 
     @_category("Navigation")
@@ -398,6 +407,7 @@ if "__omp_prelude_loaded__" not in globals():
         walk(base, "", 1)
         out = "\n".join(lines)
         print(out)
+        _emit_status("tree", path=str(base), entries=len(lines) - 1)
         return out
 
     @_category("Navigation")
@@ -415,6 +425,7 @@ if "__omp_prelude_loaded__" not in globals():
         }
         for k, v in info.items():
             print(f"{k}: {v}")
+        _emit_status("stat", path=str(p), size=s.st_size, is_dir=p.is_dir())
         return info
 
     @_category("Batch")
@@ -428,8 +439,9 @@ if "__omp_prelude_loaded__" not in globals():
         out = "".join(result)
         if out:
             print(out)
+            _emit_status("diff", file_a=str(path_a), file_b=str(path_b), identical=False)
         else:
-            print("[diff] files are identical")
+            _emit_status("diff", file_a=str(path_a), file_b=str(path_b), identical=True)
         return out
 
     @_category("Search")
@@ -439,7 +451,7 @@ if "__omp_prelude_loaded__" not in globals():
         matches = sorted(p.glob(pattern))
         for m in matches:
             print(str(m))
-        print(f"[glob] {len(matches)} matches")
+        _emit_status("glob", pattern=pattern, path=str(p), count=len(matches))
         return matches
 
     @_category("Batch")
@@ -449,7 +461,7 @@ if "__omp_prelude_loaded__" not in globals():
         for p in paths:
             result = fn(Path(p))
             results.append(result)
-        print(f"[batch] processed {len(paths)} files")
+        _emit_status("batch", files=len(paths))
         return results
 
     @_category("Find/Replace")
@@ -459,7 +471,7 @@ if "__omp_prelude_loaded__" not in globals():
         data = p.read_text(encoding="utf-8")
         new, count = re.subn(pattern, repl, data, flags=flags)
         p.write_text(new, encoding="utf-8")
-        print(f"[sed] {count} replacements in {p}")
+        _emit_status("sed", path=str(p), count=count)
         return count
 
     @_category("Find/Replace")
@@ -467,6 +479,7 @@ if "__omp_prelude_loaded__" not in globals():
         """Recursive sed across files matching glob_pattern."""
         base = Path(path)
         total = 0
+        files_changed = 0
         for file_path in base.rglob(glob_pattern):
             if file_path.is_dir():
                 continue
@@ -477,9 +490,10 @@ if "__omp_prelude_loaded__" not in globals():
                     file_path.write_text(new, encoding="utf-8")
                     print(f"{file_path}: {count} replacements")
                     total += count
+                    files_changed += 1
             except Exception:
                 continue
-        print(f"[rsed] {total} total replacements")
+        _emit_status("rsed", path=str(base), count=total, files=files_changed)
         return total
 
     # --- Line-based operations (sed-like) ---
@@ -496,7 +510,7 @@ if "__omp_prelude_loaded__" not in globals():
         selected = all_lines[start - 1 : end]
         out = "\n".join(f"{start + i}: {line}" for i, line in enumerate(selected))
         print(out)
-        print(f"[lines] {start}-{end} ({len(selected)} lines) from {p}")
+        _emit_status("lines", path=str(p), start=start, end=end, count=len(selected))
         return "\n".join(selected)
 
     @_category("Line ops")
@@ -511,7 +525,7 @@ if "__omp_prelude_loaded__" not in globals():
         count = end - start + 1
         new_lines = all_lines[: start - 1] + all_lines[end:]
         p.write_text("\n".join(new_lines) + ("\n" if all_lines else ""), encoding="utf-8")
-        print(f"[delete_lines] removed lines {start}-{end} ({count} lines) from {p}")
+        _emit_status("delete_lines", path=str(p), start=start, end=end, count=count)
         return count
 
     @_category("Line ops")
@@ -526,7 +540,7 @@ if "__omp_prelude_loaded__" not in globals():
             new_lines = [l for l in all_lines if pattern not in l]
         count = len(all_lines) - len(new_lines)
         p.write_text("\n".join(new_lines) + ("\n" if all_lines else ""), encoding="utf-8")
-        print(f"[delete_matching] removed {count} lines matching '{pattern}' from {p}")
+        _emit_status("delete_matching", path=str(p), pattern=pattern, count=count)
         return count
 
     @_category("Line ops")
@@ -539,13 +553,13 @@ if "__omp_prelude_loaded__" not in globals():
         if after:
             idx = min(line_num, len(all_lines))
             all_lines = all_lines[:idx] + new_lines + all_lines[idx:]
-            pos = "after" if line_num <= len(all_lines) - len(new_lines) else "at end"
+            pos = "after"
         else:
             idx = line_num - 1
             all_lines = all_lines[:idx] + new_lines + all_lines[idx:]
             pos = "before"
         p.write_text("\n".join(all_lines) + "\n", encoding="utf-8")
-        print(f"[insert_at] inserted {len(new_lines)} lines {pos} line {line_num} in {p}")
+        _emit_status("insert_at", path=str(p), line=line_num, lines_inserted=len(new_lines), position=pos)
         return p
 
     # --- Git helpers ---
@@ -565,7 +579,7 @@ if "__omp_prelude_loaded__" not in globals():
         """Get structured git status: {branch, staged, modified, untracked, ahead, behind}."""
         code, out, err = _git("status", "--porcelain=v2", "--branch", cwd=cwd)
         if code != 0:
-            print(f"[git_status] error: {err.strip()}")
+            _emit_status("git_status", error=err.strip())
             return {}
 
         result: dict = {"branch": None, "staged": [], "modified": [], "untracked": [], "ahead": 0, "behind": 0}
@@ -613,8 +627,10 @@ if "__omp_prelude_loaded__" not in globals():
                 print(f"  ? {f}")
             if len(result["untracked"]) > 5:
                 print(f"  ... and {len(result['untracked']) - 5} more")
-        if not any([result["staged"], result["modified"], result["untracked"]]):
+        clean = not any([result["staged"], result["modified"], result["untracked"]])
+        if clean:
             print("working tree clean")
+        _emit_status("git_status", branch=result["branch"], staged=len(result["staged"]), modified=len(result["modified"]), untracked=len(result["untracked"]), clean=clean)
         return result
 
     @_category("Git")
@@ -638,9 +654,11 @@ if "__omp_prelude_loaded__" not in globals():
             args.extend(paths)
         code, out, err = _git(*args, cwd=cwd)
         if code != 0:
-            print(f"[git_diff] error: {err.strip()}")
+            _emit_status("git_diff", error=err.strip())
             return ""
         print(out)
+        lines_count = len(out.splitlines()) if out else 0
+        _emit_status("git_diff", staged=staged, ref=ref, lines=lines_count)
         return out
 
     @_category("Git")
@@ -662,7 +680,7 @@ if "__omp_prelude_loaded__" not in globals():
             args.extend(paths)
         code, out, err = _git(*args, cwd=cwd)
         if code != 0:
-            print(f"[git_log] error: {err.strip()}")
+            _emit_status("git_log", error=err.strip())
             return []
 
         commits = []
@@ -675,7 +693,7 @@ if "__omp_prelude_loaded__" not in globals():
         for c in commits:
             date_short = c["date"][:10]
             print(f"{c['sha'][:8]} {date_short} {c['subject'][:60]}")
-        print(f"[git_log] {len(commits)} commits")
+        _emit_status("git_log", commits=len(commits))
         return commits
 
     @_category("Git")
@@ -684,7 +702,7 @@ if "__omp_prelude_loaded__" not in globals():
         args = ["show", ref, "--format=%H%x00%s%x00%an%x00%aI%x00%b", "--no-patch"]
         code, out, err = _git(*args, cwd=cwd)
         if code != 0:
-            print(f"[git_show] error: {err.strip()}")
+            _emit_status("git_show", ref=ref, error=err.strip())
             return {}
 
         parts = out.strip().split("\x00")
@@ -713,6 +731,7 @@ if "__omp_prelude_loaded__" not in globals():
             print()
             for f in result["files"][-5:]:
                 print(f"  {f}")
+        _emit_status("git_show", ref=ref, sha=result["sha"][:12], files=len(result["files"]))
         return result
 
     @_category("Git")
@@ -720,7 +739,7 @@ if "__omp_prelude_loaded__" not in globals():
         """Get file content at ref. Optional lines=(start, end) for range (1-indexed)."""
         code, out, err = _git("show", f"{ref}:{path}", cwd=cwd)
         if code != 0:
-            print(f"[git_file_at] error: {err.strip()}")
+            _emit_status("git_file_at", ref=ref, path=path, error=err.strip())
             return ""
 
         if lines:
@@ -731,11 +750,11 @@ if "__omp_prelude_loaded__" not in globals():
             selected = all_lines[start - 1 : end]
             out = "\n".join(f"{start + i}: {line}" for i, line in enumerate(selected))
             print(out)
-            print(f"[git_file_at] {ref}:{path} lines {start}-{end}")
+            _emit_status("git_file_at", ref=ref, path=path, start=start, end=end, lines=len(selected))
             return "\n".join(selected)
 
         print(out)
-        print(f"[git_file_at] {ref}:{path} ({len(out)} chars)")
+        _emit_status("git_file_at", ref=ref, path=path, chars=len(out))
         return out
 
     @_category("Git")
@@ -743,6 +762,7 @@ if "__omp_prelude_loaded__" not in globals():
         """Get branches: {current, local, remote}."""
         code, out, _ = _git("branch", "-a", "--format=%(refname:short)%00%(HEAD)", cwd=cwd)
         if code != 0:
+            _emit_status("git_branch", error="failed to list branches")
             return {"current": None, "local": [], "remote": []}
 
         result: dict = {"current": None, "local": [], "remote": []}
@@ -765,6 +785,7 @@ if "__omp_prelude_loaded__" not in globals():
                 print(f"  {b}")
         if result["remote"]:
             print(f"  ({len(result['remote'])} remote branches)")
+        _emit_status("git_branch", current=result["current"], local=len(result["local"]), remote=len(result["remote"]))
         return result
 
     @_category("Git")
@@ -772,7 +793,7 @@ if "__omp_prelude_loaded__" not in globals():
         """Check if there are uncommitted changes (staged or unstaged)."""
         code, out, _ = _git("status", "--porcelain", cwd=cwd)
         has_changes = bool(out.strip())
-        print(f"[git_has_changes] {'yes' if has_changes else 'no'}")
+        _emit_status("git_has_changes", has_changes=has_changes)
         return has_changes
 
     def __omp_prelude_docs__() -> list[dict[str, str]]:

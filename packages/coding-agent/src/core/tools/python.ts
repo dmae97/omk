@@ -10,10 +10,10 @@ import pythonDescription from "../../prompts/tools/python.md" with { type: "text
 import type { RenderResultOptions } from "../custom-tools/types";
 import { renderPromptTemplate } from "../prompt-templates";
 import { executePython, getPreludeDocs, type PythonExecutorOptions } from "../python-executor";
-import type { PreludeHelper } from "../python-kernel";
+import type { PreludeHelper, PythonStatusEvent } from "../python-kernel";
 import type { ToolSession } from "./index";
 import { resolveToCwd } from "./path-utils";
-import { createToolUIKit, getTreeBranch, getTreeContinuePrefix } from "./render-utils";
+import { createToolUIKit, getTreeBranch, getTreeContinuePrefix, shortenPath, truncate } from "./render-utils";
 import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateTail } from "./truncate";
 
 export const PYTHON_DEFAULT_PREVIEW_LINES = 10;
@@ -62,6 +62,8 @@ export interface PythonToolDetails {
 	fullOutput?: string;
 	jsonOutputs?: unknown[];
 	images?: ImageContent[];
+	/** Structured status events from prelude helpers */
+	statusEvents?: PythonStatusEvent[];
 }
 
 function formatJsonScalar(value: unknown): string {
@@ -201,12 +203,16 @@ export function createPythonTool(
 
 				const result = await executePython(code, executorOptions);
 
+				const statusEvents: PythonStatusEvent[] = [];
 				for (const output of result.displayOutputs) {
 					if (output.type === "json") {
 						jsonOutputs.push(output.data);
 					}
 					if (output.type === "image") {
 						images.push({ type: "image", data: output.data, mimeType: output.mimeType });
+					}
+					if (output.type === "status") {
+						statusEvents.push(output.event);
 					}
 				}
 
@@ -226,6 +232,7 @@ export function createPythonTool(
 						fullOutputPath: result.fullOutputPath,
 						jsonOutputs: jsonOutputs,
 						images,
+						statusEvents: statusEvents.length > 0 ? statusEvents : undefined,
 					};
 
 					const startLine = truncation.totalLines - truncation.outputLines + 1;
@@ -241,8 +248,12 @@ export function createPythonTool(
 					}
 				}
 
-				if (!details && (jsonOutputs.length > 0 || images.length > 0)) {
-					details = { jsonOutputs: jsonOutputs, images };
+				if (!details && (jsonOutputs.length > 0 || images.length > 0 || statusEvents.length > 0)) {
+					details = {
+						jsonOutputs: jsonOutputs.length > 0 ? jsonOutputs : undefined,
+						images: images.length > 0 ? images : undefined,
+						statusEvents: statusEvents.length > 0 ? statusEvents : undefined,
+					};
 				}
 
 				if (result.exitCode !== 0 && result.exitCode !== undefined) {
@@ -269,6 +280,185 @@ interface PythonRenderContext {
 	expanded?: boolean;
 	previewLines?: number;
 	timeout?: number;
+}
+
+/** Format a status event as a single line for display. */
+function formatStatusEvent(event: PythonStatusEvent, theme: Theme): string {
+	const { op, ...data } = event;
+
+	// Map operations to available theme icons
+	type AvailableIcon = "icon.file" | "icon.folder" | "icon.git" | "icon.package";
+	const opIcons: Record<string, AvailableIcon> = {
+		// File I/O
+		read: "icon.file",
+		write: "icon.file",
+		append: "icon.file",
+		cat: "icon.file",
+		touch: "icon.file",
+		lines: "icon.file",
+		// Navigation/Directory
+		ls: "icon.folder",
+		cd: "icon.folder",
+		pwd: "icon.folder",
+		mkdir: "icon.folder",
+		tree: "icon.folder",
+		stat: "icon.folder",
+		// Search (use file icon since no search icon)
+		find: "icon.file",
+		grep: "icon.file",
+		rgrep: "icon.file",
+		glob: "icon.file",
+		// Edit operations (use file icon)
+		replace: "icon.file",
+		sed: "icon.file",
+		rsed: "icon.file",
+		delete_lines: "icon.file",
+		delete_matching: "icon.file",
+		insert_at: "icon.file",
+		// Git
+		git_status: "icon.git",
+		git_diff: "icon.git",
+		git_log: "icon.git",
+		git_show: "icon.git",
+		git_branch: "icon.git",
+		git_file_at: "icon.git",
+		git_has_changes: "icon.git",
+		// Shell/batch (use package icon)
+		run: "icon.package",
+		sh: "icon.package",
+		env: "icon.package",
+		batch: "icon.package",
+	};
+
+	const iconKey = opIcons[op] ?? "icon.file";
+	const icon = theme.styledSymbol(iconKey, "muted");
+
+	// Format the status message based on operation type
+	const parts: string[] = [];
+
+	// Error handling
+	if (data.error) {
+		return `${icon} ${theme.fg("warning", op)}: ${theme.fg("dim", String(data.error))}`;
+	}
+
+	// Build description based on common fields
+	switch (op) {
+		case "read":
+			parts.push(`${data.chars} chars`);
+			if (data.path) parts.push(`from ${shortenPath(String(data.path))}`);
+			break;
+		case "write":
+		case "append":
+			parts.push(`${data.chars} chars`);
+			if (data.path) parts.push(`to ${shortenPath(String(data.path))}`);
+			break;
+		case "cat":
+			parts.push(`${data.files} file${(data.files as number) !== 1 ? "s" : ""}`);
+			parts.push(`${data.chars} chars`);
+			break;
+		case "find":
+		case "rgrep":
+			parts.push(`${data.count} match${(data.count as number) !== 1 ? "es" : ""}`);
+			if (data.pattern) parts.push(`for "${truncate(String(data.pattern), 20, theme.format.ellipsis)}"`);
+			break;
+		case "grep":
+			parts.push(`${data.count} match${(data.count as number) !== 1 ? "es" : ""}`);
+			if (data.path) parts.push(`in ${shortenPath(String(data.path))}`);
+			break;
+		case "ls":
+			parts.push(`${data.count} entr${(data.count as number) !== 1 ? "ies" : "y"}`);
+			break;
+		case "replace":
+		case "sed":
+			parts.push(`${data.count} replacement${(data.count as number) !== 1 ? "s" : ""}`);
+			break;
+		case "rsed":
+			parts.push(`${data.count} replacement${(data.count as number) !== 1 ? "s" : ""}`);
+			if (data.files) parts.push(`in ${data.files} file${(data.files as number) !== 1 ? "s" : ""}`);
+			break;
+		case "git_status":
+			if (data.clean) {
+				parts.push("clean");
+			} else {
+				const statusParts: string[] = [];
+				if (data.staged) statusParts.push(`${data.staged} staged`);
+				if (data.modified) statusParts.push(`${data.modified} modified`);
+				if (data.untracked) statusParts.push(`${data.untracked} untracked`);
+				parts.push(statusParts.join(", ") || "unknown");
+			}
+			if (data.branch) parts.push(`on ${data.branch}`);
+			break;
+		case "git_log":
+			parts.push(`${data.commits} commit${(data.commits as number) !== 1 ? "s" : ""}`);
+			break;
+		case "git_diff":
+			parts.push(`${data.lines} line${(data.lines as number) !== 1 ? "s" : ""}`);
+			if (data.staged) parts.push("(staged)");
+			break;
+		case "diff":
+			if (data.identical) {
+				parts.push("files identical");
+			} else {
+				parts.push("files differ");
+			}
+			break;
+		case "batch":
+			parts.push(`${data.files} file${(data.files as number) !== 1 ? "s" : ""} processed`);
+			break;
+		case "wc":
+			parts.push(`${data.lines}L ${data.words}W ${data.chars}C`);
+			break;
+		case "lines":
+			parts.push(`${data.count} line${(data.count as number) !== 1 ? "s" : ""}`);
+			if (data.start && data.end) parts.push(`(${data.start}-${data.end})`);
+			break;
+		case "delete_lines":
+		case "delete_matching":
+			parts.push(`${data.count} line${(data.count as number) !== 1 ? "s" : ""} deleted`);
+			break;
+		case "insert_at":
+			parts.push(`${data.lines_inserted} line${(data.lines_inserted as number) !== 1 ? "s" : ""} inserted`);
+			break;
+		default:
+			// Generic formatting for other operations
+			if (data.count !== undefined) {
+				parts.push(String(data.count));
+			}
+			if (data.path) {
+				parts.push(shortenPath(String(data.path)));
+			}
+	}
+
+	const desc = parts.length > 0 ? parts.join(" · ") : "";
+	return `${icon} ${theme.fg("muted", op)}${desc ? ` ${theme.fg("dim", desc)}` : ""}`;
+}
+
+/** Render status events as tree lines. */
+function renderStatusEvents(events: PythonStatusEvent[], theme: Theme, expanded: boolean): string[] {
+	if (events.length === 0) return [];
+
+	const maxCollapsed = 3;
+	const maxExpanded = 10;
+	const displayCount = expanded ? Math.min(events.length, maxExpanded) : Math.min(events.length, maxCollapsed);
+
+	const lines: string[] = [];
+	for (let i = 0; i < displayCount; i++) {
+		const isLast = i === displayCount - 1 && (expanded || events.length <= maxCollapsed);
+		const branch = isLast ? theme.tree.last : theme.tree.branch;
+		lines.push(`${theme.fg("dim", branch)} ${formatStatusEvent(events[i], theme)}`);
+	}
+
+	if (!expanded && events.length > maxCollapsed) {
+		lines.push(
+			`${theme.fg("dim", theme.tree.last)} ${theme.fg("dim", `${theme.format.ellipsis} ${events.length - maxCollapsed} more`)}`,
+		);
+	} else if (expanded && events.length > maxExpanded) {
+		lines.push(
+			`${theme.fg("dim", theme.tree.last)} ${theme.fg("dim", `${theme.format.ellipsis} ${events.length - maxExpanded} more`)}`,
+		);
+	}
+
+	return lines;
 }
 
 export const pythonToolRenderer = {
@@ -322,6 +512,11 @@ export const pythonToolRenderer = {
 			const treeLines = renderJsonTree(value, uiTheme, expanded);
 			return [header, ...treeLines];
 		});
+
+		// Render status events
+		const statusEvents = details?.statusEvents ?? [];
+		const statusLines = renderStatusEvents(statusEvents, uiTheme, expanded);
+
 		const combinedOutput = [displayOutput, ...jsonLines].filter(Boolean).join("\n");
 
 		const truncation = details?.truncation;
@@ -351,8 +546,14 @@ export const pythonToolRenderer = {
 			}
 		}
 
-		if (!combinedOutput) {
+		if (!combinedOutput && statusLines.length === 0) {
 			const lines = [timeoutLine, warningLine].filter(Boolean) as string[];
+			return new Text(lines.join("\n"), 0, 0);
+		}
+
+		// If only status events (no text output), show them directly
+		if (!combinedOutput && statusLines.length > 0) {
+			const lines = [...statusLines, timeoutLine, warningLine].filter(Boolean) as string[];
 			return new Text(lines.join("\n"), 0, 0);
 		}
 
@@ -361,7 +562,7 @@ export const pythonToolRenderer = {
 				.split("\n")
 				.map((line) => uiTheme.fg("toolOutput", line))
 				.join("\n");
-			const lines = [styledOutput, timeoutLine, warningLine].filter(Boolean) as string[];
+			const lines = [styledOutput, ...statusLines, timeoutLine, warningLine].filter(Boolean) as string[];
 			return new Text(lines.join("\n"), 0, 0);
 		}
 
@@ -393,6 +594,10 @@ export const pythonToolRenderer = {
 					outputLines.push(truncateToWidth(skippedLine, width, uiTheme.fg("dim", uiTheme.format.ellipsis)));
 				}
 				outputLines.push(...cachedLines);
+				// Add status events below the output
+				for (const statusLine of statusLines) {
+					outputLines.push(truncateToWidth(statusLine, width, uiTheme.fg("dim", uiTheme.format.ellipsis)));
+				}
 				if (timeoutLine) {
 					outputLines.push(truncateToWidth(timeoutLine, width, uiTheme.fg("dim", uiTheme.format.ellipsis)));
 				}

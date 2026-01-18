@@ -74,4 +74,5 @@ cols(read("data.tsv"), 0, 2, sep="\t")
 - Kernel persists for the session; use `reset: true` to clear state
 - Use `workdir` parameter instead of `os.chdir()` in tool call
 - Use `plt.show()` to display figures
+- Use `display()` from IPython.display for rich output (HTML, Markdown, images, etc.)
 - Output streams in real time, truncated after 50KB
