@@ -160,7 +160,7 @@ export class InputController {
 				this.ctx.editor.setText("");
 				return;
 			}
-			if (text === "/model") {
+			if (text === "/model" || text === "/models") {
 				this.ctx.showModelSelector();
 				this.ctx.editor.setText("");
 				return;

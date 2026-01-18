@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added configurable editor padding via `editorPaddingX` theme option
@@ -14,6 +15,7 @@
 
 ### Changed
 
+- Updated tab bar rendering to wrap text across multiple lines when content exceeds available width
 - Expanded Kitty keyboard protocol coverage for non-Latin layouts and legacy Alt sequences
 - Improved cursor positioning with safer bounds checking
 - Updated editor layout to respect configurable padding

@@ -11,6 +11,7 @@
 
 import { matchesKey } from "../keys";
 import type { Component } from "../tui";
+import { wrapTextWithAnsi } from "../utils";
 
 /** Tab definition */
 export interface Tab {
@@ -110,8 +111,8 @@ export class TabBar implements Component {
 		return false;
 	}
 
-	/** Render the tab bar as a single line */
-	render(_width: number): string[] {
+	/** Render the tab bar, wrapping to multiple lines if needed */
+	render(width: number): string[] {
 		const parts: string[] = [];
 
 		// Label prefix
@@ -135,6 +136,8 @@ export class TabBar implements Component {
 		parts.push("  ");
 		parts.push(this.theme.hint("(tab to cycle)"));
 
-		return [parts.join("")];
+		const line = parts.join("");
+		const maxWidth = Math.max(1, width);
+		return wrapTextWithAnsi(line, maxWidth);
 	}
 }

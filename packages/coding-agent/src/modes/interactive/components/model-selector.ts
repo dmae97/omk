@@ -1,11 +1,28 @@
 import { type Model, modelsAreEqual } from "@oh-my-pi/pi-ai";
-import { Container, Input, matchesKey, Spacer, Text, type TUI, visibleWidth } from "@oh-my-pi/pi-tui";
+import {
+	Container,
+	Input,
+	matchesKey,
+	Spacer,
+	type Tab,
+	TabBar,
+	type TabBarTheme,
+	Text,
+	type TUI,
+	visibleWidth,
+} from "@oh-my-pi/pi-tui";
 import type { ModelRegistry } from "../../../core/model-registry";
 import { parseModelString } from "../../../core/model-resolver";
 import type { SettingsManager } from "../../../core/settings-manager";
 import { fuzzyFilter } from "../../../utils/fuzzy";
-import { theme } from "../theme/theme";
+import { type ThemeColor, theme } from "../theme/theme";
 import { DynamicBorder } from "./dynamic-border";
+
+function makeInvertedBadge(label: string, color: ThemeColor): string {
+	const fgAnsi = theme.getFgAnsi(color);
+	const bgAnsi = fgAnsi.replace(/\x1b\[38;/g, "\x1b[48;");
+	return `${bgAnsi}\x1b[30m ${label} \x1b[39m\x1b[49m`;
+}
 
 interface ModelItem {
 	provider: string;
@@ -33,6 +50,15 @@ const MENU_ACTIONS: MenuAction[] = [
 
 const ALL_TAB = "ALL";
 
+function getTabBarTheme(): TabBarTheme {
+	return {
+		label: (text: string) => theme.bold(theme.fg("accent", text)),
+		activeTab: (text: string) => theme.bold(theme.bg("selectedBg", theme.fg("text", text))),
+		inactiveTab: (text: string) => theme.fg("muted", text),
+		hint: (text: string) => theme.fg("dim", text),
+	};
+}
+
 /**
  * Component that renders a model selector with provider tabs and context menu.
  * - Tab/Arrow Left/Right: Switch between provider tabs
@@ -43,6 +69,7 @@ const ALL_TAB = "ALL";
 export class ModelSelectorComponent extends Container {
 	private searchInput: Input;
 	private headerContainer: Container;
+	private tabBar: TabBar | null = null;
 	private listContainer: Container;
 	private menuContainer: Container;
 	private allModels: ModelItem[] = [];
@@ -252,30 +279,15 @@ export class ModelSelectorComponent extends Container {
 	private updateTabBar(): void {
 		this.headerContainer.clear();
 
-		// Build tab bar line
-		const parts: string[] = [];
-		parts.push(theme.fg("muted", "Provider:"));
-		parts.push("  ");
-
-		for (let i = 0; i < this.providers.length; i++) {
-			const provider = this.providers[i]!;
-			const isActive = i === this.activeTabIndex;
-
-			if (isActive) {
-				parts.push(theme.fg("accent", `[ ${provider} ]`));
-			} else {
-				parts.push(theme.fg("muted", `  ${provider}  `));
-			}
-
-			if (i < this.providers.length - 1) {
-				parts.push(" ");
-			}
-		}
-
-		parts.push("  ");
-		parts.push(theme.fg("dim", `(${theme.nav.back}/${theme.nav.cursor} or Tab to switch)`));
-
-		this.headerContainer.addChild(new Text(parts.join(""), 0, 0));
+		const tabs: Tab[] = this.providers.map((provider) => ({ id: provider, label: provider }));
+		const tabBar = new TabBar("Models", tabs, getTabBarTheme(), this.activeTabIndex);
+		tabBar.onTabChange = (_tab, index) => {
+			this.activeTabIndex = index;
+			this.selectedIndex = 0;
+			this.applyTabFilter();
+		};
+		this.tabBar = tabBar;
+		this.headerContainer.addChild(tabBar);
 	}
 
 	private getActiveProvider(): string {
@@ -296,6 +308,10 @@ export class ModelSelectorComponent extends Container {
 			// If user is searching, auto-switch to ALL tab to show global results
 			if (activeProvider !== ALL_TAB) {
 				this.activeTabIndex = 0;
+				if (this.tabBar && this.tabBar.getActiveIndex() !== 0) {
+					this.tabBar.setActiveIndex(0);
+					return;
+				}
 				this.updateTabBar();
 				baseModels = this.allModels;
 			}
@@ -336,28 +352,27 @@ export class ModelSelectorComponent extends Container {
 			const isSmol = modelsAreEqual(this.smolModel, item.model);
 			const isSlow = modelsAreEqual(this.slowModel, item.model);
 
-			// Build role badges (right-aligned style)
+			// Build role badges (inverted: color as background, black text)
 			const badges: string[] = [];
-			if (isDefault) badges.push(theme.fg("success", `${theme.sep.pipe}DEFAULT${theme.sep.pipe}`));
-			if (isSmol) badges.push(theme.fg("warning", `${theme.sep.pipe}SMOL${theme.sep.pipe}`));
-			if (isSlow) badges.push(theme.fg("accent", `${theme.sep.pipe}SLOW${theme.sep.pipe}`));
+			if (isDefault) badges.push(makeInvertedBadge("DEFAULT", "success"));
+			if (isSmol) badges.push(makeInvertedBadge("SMOL", "warning"));
+			if (isSlow) badges.push(makeInvertedBadge("SLOW", "accent"));
 			const badgeText = badges.length > 0 ? ` ${badges.join(" ")}` : "";
 
 			let line = "";
 			if (isSelected) {
 				const prefix = theme.fg("accent", `${theme.nav.cursor} `);
-				const modelText = item.id;
 				if (showProvider) {
-					const providerBadge = theme.fg("muted", `[${item.provider}]`);
-					line = `${prefix}${theme.fg("accent", modelText)} ${providerBadge}${badgeText}`;
+					const providerPrefix = theme.fg("dim", `${item.provider}/`);
+					line = `${prefix}${providerPrefix}${theme.fg("accent", item.id)}${badgeText}`;
 				} else {
-					line = `${prefix}${theme.fg("accent", modelText)}${badgeText}`;
+					line = `${prefix}${theme.fg("accent", item.id)}${badgeText}`;
 				}
 			} else {
 				const prefix = "  ";
 				if (showProvider) {
-					const providerBadge = theme.fg("muted", `[${item.provider}]`);
-					line = `${prefix}${item.id} ${providerBadge}${badgeText}`;
+					const providerPrefix = theme.fg("dim", `${item.provider}/`);
+					line = `${prefix}${providerPrefix}${item.id}${badgeText}`;
 				} else {
 					line = `${prefix}${item.id}${badgeText}`;
 				}
@@ -445,20 +460,8 @@ export class ModelSelectorComponent extends Container {
 			return;
 		}
 
-		// Tab bar navigation: Left/Right arrows or Tab/Shift+Tab
-		if (matchesKey(keyData, "left") || matchesKey(keyData, "shift+tab")) {
-			this.activeTabIndex = (this.activeTabIndex - 1 + this.providers.length) % this.providers.length;
-			this.updateTabBar();
-			this.selectedIndex = 0;
-			this.applyTabFilter();
-			return;
-		}
-
-		if (matchesKey(keyData, "right") || matchesKey(keyData, "tab")) {
-			this.activeTabIndex = (this.activeTabIndex + 1) % this.providers.length;
-			this.updateTabBar();
-			this.selectedIndex = 0;
-			this.applyTabFilter();
+		// Tab bar navigation
+		if (this.tabBar?.handleInput(keyData)) {
 			return;
 		}
 

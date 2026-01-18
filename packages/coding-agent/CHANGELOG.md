@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added extension input interception with source metadata and command argument completion
@@ -20,6 +21,9 @@
 
 ### Changed
 
+- Updated model selector to use TabBar component for provider navigation
+- Changed role badges to inverted style with colored backgrounds
+- Added support for /models command alias in addition to /model
 - Improved error retry detection to include fetch failures
 - Enhanced session selector search and overflow handling
 - Updated skill command execution to include skill path metadata
