@@ -181,6 +181,12 @@ export function printHelp(): void {
 ${chalk.bold("Usage:")}
   ${APP_NAME} [options] [@files...] [messages...]
 
+${chalk.bold("Subcommands:")}
+  plugin    Manage plugins (install, uninstall, list, etc.)
+  update    Check for and install updates
+  config    Manage configuration settings
+  setup     Install dependencies for optional features
+
 ${chalk.bold("Options:")}
   --model <pattern>              Model to use (fuzzy match: "opus", "gpt-5.2", or "p-openai/gpt-5.2")
    --smol <id>                    Smol/fast model for lightweight tasks (or OMP_SMOL_MODEL env)
@@ -284,6 +290,7 @@ ${chalk.bold("Available Tools (all enabled by default):")}
   find       - Find files by glob pattern
   ls         - List directory contents
   lsp        - Language server protocol (code intelligence)
+  python     - Execute Python code (requires: ${APP_NAME} setup python)
   notebook   - Edit Jupyter notebooks
   task       - Launch sub-agents for parallel tasks
   web_fetch  - Fetch and process web pages

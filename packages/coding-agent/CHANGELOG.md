@@ -1,8 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added setup subcommand to install dependencies for optional features
+- Added Python setup component to install Jupyter kernel dependencies
+- Added setup command help with component and option documentation
+- Added Python tool dependency check in help output
 - Added file locking mechanism for shared Python gateway to prevent race conditions
 - Added Python gateway status monitoring with URL, PID, client count, and uptime information
 - Added comprehensive Git helpers to Python prelude including status, diff, log, show, branch, and file operations

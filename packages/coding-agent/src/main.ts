@@ -16,6 +16,7 @@ import { processFileArguments } from "./cli/file-processor";
 import { listModels } from "./cli/list-models";
 import { parsePluginArgs, printPluginHelp, runPluginCommand } from "./cli/plugin-cli";
 import { selectSession } from "./cli/session-picker";
+import { parseSetupArgs, printSetupHelp, runSetupCommand } from "./cli/setup-cli";
 import { parseUpdateArgs, printUpdateHelp, runUpdateCommand } from "./cli/update-cli";
 import { findConfigFile, getModelsPath, VERSION } from "./config";
 import type { AgentSession } from "./core/agent-session";
@@ -502,6 +503,17 @@ export async function main(args: string[]) {
 			return;
 		}
 		await runConfigCommand(configCmd);
+		return;
+	}
+
+	// Handle setup subcommand
+	const setupCmd = parseSetupArgs(args);
+	if (setupCmd) {
+		if (args.includes("--help") || args.includes("-h")) {
+			printSetupHelp();
+			return;
+		}
+		await runSetupCommand(setupCmd);
 		return;
 	}
 
