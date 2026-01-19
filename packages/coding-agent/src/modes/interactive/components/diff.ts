@@ -133,9 +133,7 @@ export function renderDiff(diffText: string, _options: RenderDiffOptions = {}): 
 			} else {
 				// Show all removed lines first, then all added lines
 				for (const removed of removedLines) {
-					result.push(
-						theme.fg("toolDiffRemoved", formatLine("-", removed.lineNum, replaceTabs(removed.content))),
-					);
+					result.push(theme.fg("toolDiffRemoved", formatLine("-", removed.lineNum, replaceTabs(removed.content))));
 				}
 				for (const added of addedLines) {
 					result.push(theme.fg("toolDiffAdded", formatLine("+", added.lineNum, replaceTabs(added.content))));

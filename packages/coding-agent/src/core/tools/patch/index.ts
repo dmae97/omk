@@ -204,7 +204,8 @@ export class EditTool implements AgentTool<typeof replaceEditSchema | typeof pat
 
 	constructor(session: ToolSession) {
 		this.session = session;
-		this.patchMode = session.settings?.getEditPatchMode?.() ?? true;
+		const envNoPatch = process.env.OMP_NO_PATCH;
+		this.patchMode = envNoPatch !== undefined ? envNoPatch !== "1" : (session.settings?.getEditPatchMode?.() ?? true);
 		this.allowFuzzy = session.settings?.getEditFuzzyMatch() ?? true;
 		this.fuzzyThreshold = session.settings?.getEditFuzzyThreshold?.() ?? DEFAULT_FUZZY_THRESHOLD;
 		const enableLsp = session.enableLsp ?? true;
