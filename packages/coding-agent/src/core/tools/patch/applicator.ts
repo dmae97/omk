@@ -6,7 +6,7 @@
  */
 
 import { mkdirSync, unlinkSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname } from "node:path";
 import { DEFAULT_FUZZY_THRESHOLD, findContextLine, findMatch, seekSequence } from "./fuzzy";
 import {
 	adjustIndentation,
@@ -17,6 +17,7 @@ import {
 	restoreLineEndings,
 	stripBom,
 } from "./normalize";
+import { resolveToCwd } from "../path-utils";
 import { normalizeCreateContent, parseHunks } from "./parser";
 import type { ApplyPatchOptions, ApplyPatchResult, ContextLineResult, DiffHunk, FileSystem, PatchInput } from "./types";
 import { ApplyPatchError } from "./types";
@@ -128,10 +129,11 @@ function getHunkHintIndex(hunk: DiffHunk, currentIndex: number): number | undefi
  * @returns The result from finding the final (innermost) context, or undefined if not found
  */
 function findHierarchicalContext(
-	lines: string[],
-	context: string,
-	startFrom: number,
-	lineHint: number | undefined,
+    lines: string[],
+    context: string,
+    startFrom: number,
+    lineHint: number | undefined,
+    allowFuzzy: boolean,
 ): ContextLineResult {
 	// Check for newline-separated hierarchical contexts (from nested @@ anchors)
 	if (context.includes("\n")) {
@@ -145,41 +147,72 @@ function findHierarchicalContext(
 			const part = parts[i];
 			const isLast = i === parts.length - 1;
 
-			// For intermediate contexts, we just need to find them and continue from there
-			// For the final context, we return the full result with match count
-			const result = findContextLine(lines, part, currentStart);
+			const result = findContextLine(lines, part, currentStart, { allowFuzzy });
 
-			if (result.index === undefined) {
-				// Try from beginning if not found from current position
-				const fromStartResult = findContextLine(lines, part, 0);
-				if (fromStartResult.index === undefined) {
-					return { index: undefined, confidence: 0 };
-				}
-				currentStart = fromStartResult.index + 1;
-				if (isLast) {
-					// Hierarchical matching narrows scope - treat as single match
-					return { ...fromStartResult, matchCount: 1 };
-				}
-			} else {
-				currentStart = result.index + 1;
-				if (isLast) {
-					// Hierarchical matching narrows scope - treat as single match
-					return { ...result, matchCount: 1 };
-				}
+   if (result.matchCount !== undefined && result.matchCount > 1) {
+       if (isLast && lineHint !== undefined) {
+           const hintStart = Math.max(0, lineHint - 1);
+           if (hintStart >= currentStart) {
+               const hintedResult = findContextLine(lines, part, hintStart, { allowFuzzy });
+               if (hintedResult.index !== undefined) {
+                   return { ...hintedResult, matchCount: 1 };
+               }
+           }
+       }
+       return { index: undefined, confidence: result.confidence, matchCount: result.matchCount };
+   }
+
+   if (result.index === undefined) {
+       if (isLast && lineHint !== undefined) {
+           const hintStart = Math.max(0, lineHint - 1);
+           if (hintStart >= currentStart) {
+               const hintedResult = findContextLine(lines, part, hintStart, { allowFuzzy });
+               if (hintedResult.index !== undefined) {
+                   return { ...hintedResult, matchCount: 1 };
+               }
+           }
+       }
+       return { index: undefined, confidence: result.confidence };
+   }
+
+			if (isLast) {
+				return result;
 			}
+			currentStart = result.index + 1;
 		}
 		return { index: undefined, confidence: 0 };
 	}
 
 	// Try literal context first
-	let result = findContextLine(lines, context, startFrom);
+	const spaceParts = context.split(/\s+/).filter((p) => p.length > 0);
+	const hasSignatureChars = /[(){}[\]]/.test(context);
+	if (!hasSignatureChars && spaceParts.length > 2) {
+		const outer = spaceParts.slice(0, -1).join(" ");
+		const inner = spaceParts[spaceParts.length - 1];
+		const outerResult = findContextLine(lines, outer, startFrom, { allowFuzzy });
+		if (outerResult.matchCount !== undefined && outerResult.matchCount > 1) {
+			return { index: undefined, confidence: outerResult.confidence, matchCount: outerResult.matchCount };
+		}
+		if (outerResult.index !== undefined) {
+			const innerResult = findContextLine(lines, inner, outerResult.index + 1, { allowFuzzy });
+			if (innerResult.index !== undefined) {
+				return innerResult.matchCount && innerResult.matchCount > 1
+					? { ...innerResult, matchCount: 1 }
+					: innerResult;
+			}
+			if (innerResult.matchCount !== undefined && innerResult.matchCount > 1) {
+				return { ...innerResult, matchCount: 1 };
+			}
+		}
+	}
+
+	const result = findContextLine(lines, context, startFrom, { allowFuzzy });
 
 	// If line hint exists and result is ambiguous or missing, try from hint
 	if ((result.index === undefined || (result.matchCount ?? 0) > 1) && lineHint !== undefined) {
 		const hintStart = Math.max(0, lineHint - 1);
-		const hintedResult = findContextLine(lines, context, hintStart);
+		const hintedResult = findContextLine(lines, context, hintStart, { allowFuzzy });
 		if (hintedResult.index !== undefined) {
-			// Line hint successfully found a match - treat as disambiguated
 			return { ...hintedResult, matchCount: 1 };
 		}
 	}
@@ -188,46 +221,44 @@ function findHierarchicalContext(
 	if (result.index !== undefined && (result.matchCount ?? 0) <= 1) {
 		return result;
 	}
+	if (result.matchCount !== undefined && result.matchCount > 1) {
+		return result;
+	}
 
-	// Try from beginning if not found
+	// Try from beginning if not found from current position
 	if (result.index === undefined && startFrom !== 0) {
-		result = findContextLine(lines, context, 0);
-		if (result.index !== undefined && (result.matchCount ?? 0) <= 1) {
-			return result;
+		const fromStartResult = findContextLine(lines, context, 0, { allowFuzzy });
+		if (fromStartResult.index !== undefined && (fromStartResult.matchCount ?? 0) <= 1) {
+			return fromStartResult;
+		}
+		if (fromStartResult.matchCount !== undefined && fromStartResult.matchCount > 1) {
+			return fromStartResult;
 		}
 	}
 
 	// Fallback: try space-separated hierarchical matching
 	// e.g., "class PatchTool constructor" -> find "class PatchTool", then "constructor" after it
-	const spaceParts = context.split(/\s+/).filter((p) => p.length > 0);
-	if (spaceParts.length > 1) {
-		let currentStart = startFrom;
+	if (!hasSignatureChars && spaceParts.length > 1) {
+		const outer = spaceParts.slice(0, -1).join(" ");
+		const inner = spaceParts[spaceParts.length - 1];
+		const outerResult = findContextLine(lines, outer, startFrom, { allowFuzzy });
 
-		for (let i = 0; i < spaceParts.length; i++) {
-			const part = spaceParts[i];
-			const isLast = i === spaceParts.length - 1;
+		if (outerResult.matchCount !== undefined && outerResult.matchCount > 1) {
+			return { index: undefined, confidence: outerResult.confidence, matchCount: outerResult.matchCount };
+		}
 
-			const partResult = findContextLine(lines, part, currentStart);
+		if (outerResult.index === undefined) {
+			return { index: undefined, confidence: outerResult.confidence };
+		}
 
-			if (partResult.index === undefined) {
-				// Try from beginning
-				const fromStartResult = findContextLine(lines, part, 0);
-				if (fromStartResult.index === undefined) {
-					// Space-separated fallback failed, return original result
-					return result;
-				}
-				currentStart = fromStartResult.index + 1;
-				if (isLast) {
-					// Hierarchical matching narrows scope - treat as single match
-					return { ...fromStartResult, matchCount: 1 };
-				}
-			} else {
-				currentStart = partResult.index + 1;
-				if (isLast) {
-					// Hierarchical matching narrows scope - treat as single match
-					return { ...partResult, matchCount: 1 };
-				}
-			}
+		const innerResult = findContextLine(lines, inner, outerResult.index + 1, { allowFuzzy });
+		if (innerResult.index !== undefined) {
+			return innerResult.matchCount && innerResult.matchCount > 1
+				? { ...innerResult, matchCount: 1 }
+				: innerResult;
+		}
+		if (innerResult.matchCount !== undefined && innerResult.matchCount > 1) {
+			return { ...innerResult, matchCount: 1 };
 		}
 	}
 
@@ -241,16 +272,26 @@ function findSequenceWithHint(
 	currentIndex: number,
 	hintIndex: number | undefined,
 	eof: boolean,
+	allowFuzzy: boolean,
 ): import("./types").SequenceSearchResult {
 	// Prefer content-based search starting from currentIndex
-	const primaryResult = seekSequence(lines, pattern, currentIndex, eof);
+	const primaryResult = seekSequence(lines, pattern, currentIndex, eof, { allowFuzzy });
+	if (primaryResult.matchCount && primaryResult.matchCount > 1 && hintIndex !== undefined && hintIndex !== currentIndex) {
+		const hintedResult = seekSequence(lines, pattern, hintIndex, eof, { allowFuzzy });
+		if (hintedResult.index !== undefined && (hintedResult.matchCount ?? 1) <= 1) {
+			return hintedResult;
+		}
+		if (hintedResult.matchCount && hintedResult.matchCount > 1) {
+			return hintedResult;
+		}
+	}
 	if (primaryResult.index !== undefined || (primaryResult.matchCount && primaryResult.matchCount > 1)) {
 		return primaryResult;
 	}
 
 	// Use line hint as a secondary bias only if needed
 	if (hintIndex !== undefined && hintIndex !== currentIndex) {
-		const hintedResult = seekSequence(lines, pattern, hintIndex, eof);
+		const hintedResult = seekSequence(lines, pattern, hintIndex, eof, { allowFuzzy });
 		if (hintedResult.index !== undefined || (hintedResult.matchCount && hintedResult.matchCount > 1)) {
 			return hintedResult;
 		}
@@ -258,7 +299,7 @@ function findSequenceWithHint(
 
 	// Last resort: search from beginning (handles out-of-order hunks)
 	if (currentIndex !== 0) {
-		const fromStartResult = seekSequence(lines, pattern, 0, eof);
+		const fromStartResult = seekSequence(lines, pattern, 0, eof, { allowFuzzy });
 		if (fromStartResult.index !== undefined || (fromStartResult.matchCount && fromStartResult.matchCount > 1)) {
 			return fromStartResult;
 		}
@@ -271,7 +312,13 @@ function findSequenceWithHint(
  * Apply a hunk using character-based fuzzy matching.
  * Used when the hunk contains only -/+ lines without context.
  */
-function applyCharacterMatch(originalContent: string, path: string, hunk: DiffHunk, fuzzyThreshold: number): string {
+function applyCharacterMatch(
+	originalContent: string,
+	path: string,
+	hunk: DiffHunk,
+	fuzzyThreshold: number,
+	allowFuzzy: boolean,
+): string {
 	const oldText = hunk.oldLines.join("\n");
 	const newText = hunk.newLines.join("\n");
 
@@ -279,7 +326,7 @@ function applyCharacterMatch(originalContent: string, path: string, hunk: DiffHu
 	const normalizedOldText = normalizeToLF(oldText);
 
 	const matchOutcome = findMatch(normalizedContent, normalizedOldText, {
-		allowFuzzy: true,
+		allowFuzzy,
 		threshold: fuzzyThreshold,
 	});
 
@@ -329,11 +376,22 @@ function applyTrailingNewlinePolicy(content: string, hadFinalNewline: boolean): 
 /**
  * Compute replacements needed to transform originalLines using the diff hunks.
  */
-function computeReplacements(originalLines: string[], path: string, hunks: DiffHunk[]): Replacement[] {
+function computeReplacements(
+	originalLines: string[],
+	path: string,
+	hunks: DiffHunk[],
+	allowFuzzy: boolean,
+): Replacement[] {
 	const replacements: Replacement[] = [];
 	let lineIndex = 0;
 
 	for (const hunk of hunks) {
+		if (hunk.oldStartLine !== undefined && hunk.oldStartLine < 1) {
+			throw new ApplyPatchError(`Line hint ${hunk.oldStartLine} is out of range for ${path} (line numbers start at 1)`);
+		}
+		if (hunk.newStartLine !== undefined && hunk.newStartLine < 1) {
+			throw new ApplyPatchError(`Line hint ${hunk.newStartLine} is out of range for ${path} (line numbers start at 1)`);
+		}
 		const lineHint = hunk.oldStartLine;
 		if (lineHint !== undefined && hunk.changeContext === undefined && !hunk.hasContextLines) {
 			lineIndex = Math.max(0, Math.min(lineHint - 1, originalLines.length - 1));
@@ -342,7 +400,7 @@ function computeReplacements(originalLines: string[], path: string, hunks: DiffH
 		// If hunk has a changeContext, find it and adjust lineIndex
 		if (hunk.changeContext !== undefined) {
 			// Use hierarchical context matching for nested @@ anchors and space-separated contexts
-			const result = findHierarchicalContext(originalLines, hunk.changeContext, lineIndex, lineHint);
+			const result = findHierarchicalContext(originalLines, hunk.changeContext, lineIndex, lineHint, allowFuzzy);
 
 			if (result.matchCount !== undefined && result.matchCount > 1) {
 				const displayContext = hunk.changeContext.includes("\n")
@@ -368,7 +426,9 @@ function computeReplacements(originalLines: string[], path: string, hunks: DiffH
 			const finalContext = hunk.changeContext.includes("\n")
 				? hunk.changeContext.split("\n").pop()?.trim()
 				: hunk.changeContext.trim();
-			if (firstOldLine !== undefined && firstOldLine.trim() === finalContext) {
+			const isHierarchicalContext =
+				hunk.changeContext.includes("\n") || hunk.changeContext.trim().split(/\s+/).length > 2;
+			if (firstOldLine !== undefined && (firstOldLine.trim() === finalContext || isHierarchicalContext)) {
 				lineIndex = idx;
 			} else {
 				lineIndex = idx + 1;
@@ -386,6 +446,12 @@ function computeReplacements(originalLines: string[], path: string, hunks: DiffH
 				if (lineHintForInsertion !== undefined) {
 					// Reject if line hint is out of range for insertion
 					// Valid insertion points are 1 to (file length + 1) for 1-indexed hints
+					if (lineHintForInsertion < 1) {
+						throw new ApplyPatchError(
+							`Line hint ${lineHintForInsertion} is out of range for insertion in ${path} ` +
+								`(line numbers start at 1)`,
+						);
+					}
 					if (lineHintForInsertion > originalLines.length + 1) {
 						throw new ApplyPatchError(
 							`Line hint ${lineHintForInsertion} is out of range for insertion in ${path} ` +
@@ -408,7 +474,14 @@ function computeReplacements(originalLines: string[], path: string, hunks: DiffH
 		// Try to find the old lines in the file
 		let pattern = [...hunk.oldLines];
 		const matchHint = getHunkHintIndex(hunk, lineIndex);
-		let searchResult = findSequenceWithHint(originalLines, pattern, lineIndex, matchHint, hunk.isEndOfFile);
+		let searchResult = findSequenceWithHint(
+			originalLines,
+			pattern,
+			lineIndex,
+			matchHint,
+			hunk.isEndOfFile,
+			allowFuzzy,
+		);
 		let newSlice = [...hunk.newLines];
 
 		// Retry without trailing empty line if present
@@ -417,10 +490,23 @@ function computeReplacements(originalLines: string[], path: string, hunks: DiffH
 			if (newSlice.length > 0 && newSlice[newSlice.length - 1] === "") {
 				newSlice = newSlice.slice(0, -1);
 			}
-			searchResult = findSequenceWithHint(originalLines, pattern, lineIndex, matchHint, hunk.isEndOfFile);
+			searchResult = findSequenceWithHint(
+				originalLines,
+				pattern,
+				lineIndex,
+				matchHint,
+				hunk.isEndOfFile,
+				allowFuzzy,
+			);
 		}
 
 		if (searchResult.index === undefined) {
+			if (searchResult.matchCount !== undefined && searchResult.matchCount > 1) {
+				throw new ApplyPatchError(
+					`Found ${searchResult.matchCount} matches for the text in ${path}. ` +
+						`Add more surrounding context or additional @@ anchors to make it unique.`,
+				);
+			}
 			throw new ApplyPatchError(`Failed to find expected lines in ${path}:\n${hunk.oldLines.join("\n")}`);
 		}
 
@@ -438,7 +524,7 @@ function computeReplacements(originalLines: string[], path: string, hunks: DiffH
 		// This ensures ambiguous replacements are rejected
 		// Skip this check if isEndOfFile is set (EOF marker provides disambiguation)
 		if (hunk.changeContext === undefined && !hunk.hasContextLines && !hunk.isEndOfFile && lineHint === undefined) {
-			const secondMatch = seekSequence(originalLines, pattern, found + 1, false);
+			const secondMatch = seekSequence(originalLines, pattern, found + 1, false, { allowFuzzy });
 			if (secondMatch.index !== undefined) {
 				throw new ApplyPatchError(
 					`Found 2 occurrences of the text in ${path}. ` +
@@ -480,7 +566,13 @@ function applyReplacements(lines: string[], replacements: Replacement[]): string
 /**
  * Apply diff hunks to file content.
  */
-function applyHunksToContent(originalContent: string, path: string, hunks: DiffHunk[], fuzzyThreshold: number): string {
+function applyHunksToContent(
+	originalContent: string,
+	path: string,
+	hunks: DiffHunk[],
+	fuzzyThreshold: number,
+	allowFuzzy: boolean,
+): string {
 	const hadFinalNewline = originalContent.endsWith("\n");
 
 	// Detect simple replace pattern: single hunk, no @@ context, no context lines, has old lines to match
@@ -494,7 +586,7 @@ function applyHunksToContent(originalContent: string, path: string, hunks: DiffH
 			hunk.oldStartLine === undefined && // No line hint to use for positioning
 			!hunk.isEndOfFile // No EOF targeting (prefer end of file)
 		) {
-			const content = applyCharacterMatch(originalContent, path, hunk, fuzzyThreshold);
+			const content = applyCharacterMatch(originalContent, path, hunk, fuzzyThreshold, allowFuzzy);
 			return applyTrailingNewlinePolicy(content, hadFinalNewline);
 		}
 	}
@@ -510,7 +602,7 @@ function applyHunksToContent(originalContent: string, path: string, hunks: DiffH
 		strippedTrailingEmpty = true;
 	}
 
-	const replacements = computeReplacements(originalLines, path, hunks);
+	const replacements = computeReplacements(originalLines, path, hunks, allowFuzzy);
 	const newLines = applyReplacements(originalLines, replacements);
 
 	// Restore the trailing empty element if we stripped it
@@ -538,28 +630,32 @@ function applyHunksToContent(originalContent: string, path: string, hunks: DiffH
  * Apply a patch operation to the filesystem.
  */
 export async function applyPatch(input: PatchInput, options: ApplyPatchOptions): Promise<ApplyPatchResult> {
-	const { cwd, dryRun = false, fs = defaultFileSystem, fuzzyThreshold = DEFAULT_FUZZY_THRESHOLD } = options;
+	const {
+		cwd,
+		dryRun = false,
+		fs = defaultFileSystem,
+		fuzzyThreshold = DEFAULT_FUZZY_THRESHOLD,
+		allowFuzzy = true,
+	} = options;
 
-	const resolvePath = (p: string): string => resolve(cwd, p);
-	const absolutePath = resolvePath(input.path);
+ const resolvePath = (p: string): string => resolveToCwd(p, cwd);
+ const absolutePath = resolvePath(input.path);
 
-	if (input.moveTo) {
-		const destPath = resolvePath(input.moveTo);
-		if (destPath === absolutePath) {
-			throw new ApplyPatchError("moveTo path is the same as source path");
-		}
-	}
+ if (input.moveTo) {
+     const destPath = resolvePath(input.moveTo);
+     if (destPath === absolutePath) {
+         throw new ApplyPatchError("moveTo path is the same as source path");
+     }
+ }
 
 	// Handle CREATE operation
 	if (input.operation === "create") {
 		if (!input.diff) {
 			throw new ApplyPatchError("Create operation requires diff (file content)");
 		}
-
-		// Strip + prefixes if present (handles diffs formatted as additions)
-		const normalizedContent = normalizeCreateContent(input.diff);
-		// Ensure content ends with newline
-		const content = normalizedContent.endsWith("\n") ? normalizedContent : `${normalizedContent}\n`;
+  // Strip + prefixes if present (handles diffs formatted as additions)
+  const normalizedContent = normalizeCreateContent(input.diff);
+  const content = normalizedContent.endsWith("\n") ? normalizedContent : `${normalizedContent}\n`;
 
 		if (!dryRun) {
 			const parentDir = dirname(absolutePath);
@@ -580,13 +676,13 @@ export async function applyPatch(input: PatchInput, options: ApplyPatchOptions):
 
 	// Handle DELETE operation
 	if (input.operation === "delete") {
-		let oldContent: string | undefined;
+		if (!(await fs.exists(absolutePath))) {
+			throw new ApplyPatchError(`File not found: ${input.path}`);
+		}
 
-		if (await fs.exists(absolutePath)) {
-			oldContent = await fs.read(absolutePath);
-			if (!dryRun) {
-				await fs.delete(absolutePath);
-			}
+		const oldContent = await fs.read(absolutePath);
+		if (!dryRun) {
+			await fs.delete(absolutePath);
 		}
 
 		return {
@@ -624,7 +720,7 @@ export async function applyPatch(input: PatchInput, options: ApplyPatchOptions):
 		throw new ApplyPatchError("Diff contains no hunks");
 	}
 
-	const newContent = applyHunksToContent(normalizedContent, input.path, hunks, fuzzyThreshold);
+	const newContent = applyHunksToContent(normalizedContent, input.path, hunks, fuzzyThreshold, allowFuzzy);
 	const finalContent = bom + restoreLineEndings(newContent, lineEnding);
 	const destPath = input.moveTo ? resolvePath(input.moveTo) : absolutePath;
 	const isMove = Boolean(input.moveTo) && destPath !== absolutePath;

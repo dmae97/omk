@@ -85,6 +85,7 @@ function formatArgsPreview(
 export interface ToolExecutionOptions {
 	showImages?: boolean; // default: true (only used if terminal supports images)
 	editFuzzyThreshold?: number;
+	editAllowFuzzy?: boolean;
 }
 
 export interface ToolExecutionHandle {
@@ -116,6 +117,7 @@ export class ToolExecutionComponent extends Container {
 	private expanded = false;
 	private showImages: boolean;
 	private editFuzzyThreshold: number | undefined;
+	private editAllowFuzzy: boolean | undefined;
 	private isPartial = true;
 	private tool?: AgentTool;
 	private ui: TUI;
@@ -148,6 +150,7 @@ export class ToolExecutionComponent extends Container {
 		this.args = args;
 		this.showImages = options.showImages ?? true;
 		this.editFuzzyThreshold = options.editFuzzyThreshold;
+		this.editAllowFuzzy = options.editAllowFuzzy;
 		this.tool = tool;
 		this.ui = ui;
 		this.cwd = cwd;
@@ -204,6 +207,7 @@ export class ToolExecutionComponent extends Container {
 
 			computePatchDiff({ path, operation, moveTo, diff }, this.cwd, {
 				fuzzyThreshold: this.editFuzzyThreshold,
+				allowFuzzy: this.editAllowFuzzy,
 			}).then((result) => {
 				if (this.editDiffArgsKey === argsKey) {
 					this.editDiffPreview = result;

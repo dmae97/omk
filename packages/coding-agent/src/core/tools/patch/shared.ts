@@ -204,16 +204,16 @@ export const editToolRenderer = {
 			if (errorText) {
 				text += `\n\n${uiTheme.fg("error", errorText)}`;
 			}
+		} else if (result.details?.diff) {
+			// Prefer actual diff after execution
+			text += renderDiffSection(result.details.diff, rawPath, expanded, uiTheme, ui, renderDiffFn);
 		} else if (editDiffPreview) {
-			// Use cached diff preview (works both before and after execution)
+			// Use cached diff preview when no actual diff is available
 			if ("error" in editDiffPreview) {
 				text += `\n\n${uiTheme.fg("error", editDiffPreview.error)}`;
 			} else if (editDiffPreview.diff) {
 				text += renderDiffSection(editDiffPreview.diff, rawPath, expanded, uiTheme, ui, renderDiffFn);
 			}
-		} else if (result.details?.diff) {
-			// Fallback to result details diff (patch mode)
-			text += renderDiffSection(result.details.diff, rawPath, expanded, uiTheme, ui, renderDiffFn);
 		}
 
 		// Show LSP diagnostics if available

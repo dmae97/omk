@@ -214,28 +214,37 @@ function parseOneHunk(lines: string[], lineNumber: number, allowMissingContext: 
 	let newStartLine: number | undefined;
 	let startIndex: number;
 
-	const headerLine = lines[0].trim();
-	const unifiedHeader = parseUnifiedHunkHeader(headerLine);
+	const headerLine = lines[0];
+	const headerTrimmed = headerLine.trimEnd();
+	const isHeaderLine = headerLine.startsWith("@@");
+	const unifiedHeader = isHeaderLine ? parseUnifiedHunkHeader(headerTrimmed) : undefined;
 
 	// Check for context marker
-	if (headerLine === EMPTY_CHANGE_CONTEXT_MARKER) {
+	if (isHeaderLine && headerTrimmed === EMPTY_CHANGE_CONTEXT_MARKER) {
 		startIndex = 1;
 	} else if (unifiedHeader) {
+		if (unifiedHeader.oldStartLine < 1 || unifiedHeader.newStartLine < 1) {
+			throw new ParseError("Line numbers in @@ header must be >= 1", lineNumber);
+		}
 		if (unifiedHeader.changeContext) {
 			changeContexts.push(unifiedHeader.changeContext);
 		}
 		oldStartLine = unifiedHeader.oldStartLine;
 		newStartLine = unifiedHeader.newStartLine;
 		startIndex = 1;
-	} else if (headerLine.startsWith(CHANGE_CONTEXT_MARKER)) {
-		const contextValue = headerLine.slice(CHANGE_CONTEXT_MARKER.length);
+	} else if (isHeaderLine && headerTrimmed.startsWith(CHANGE_CONTEXT_MARKER)) {
+		const contextValue = headerTrimmed.slice(CHANGE_CONTEXT_MARKER.length);
+		const trimmedContextValue = contextValue.trim();
 
 		// Check for @@ line N pattern (model-generated line hints)
-		const lineHintMatch = contextValue.match(LINE_HINT_REGEX);
+		const lineHintMatch = trimmedContextValue.match(LINE_HINT_REGEX);
 		if (lineHintMatch) {
 			oldStartLine = Number(lineHintMatch[1]);
 			newStartLine = oldStartLine;
-		} else {
+			if (oldStartLine < 1) {
+				throw new ParseError("Line hint must be >= 1", lineNumber);
+			}
+		} else if (trimmedContextValue.length > 0) {
 			changeContexts.push(contextValue);
 		}
 		startIndex = 1;
@@ -246,17 +255,29 @@ function parseOneHunk(lines: string[], lineNumber: number, allowMissingContext: 
 		startIndex = 0;
 	}
 
+	if (oldStartLine !== undefined && oldStartLine < 1) {
+		throw new ParseError(`Line numbers must be >= 1 (got ${oldStartLine})`, lineNumber);
+	}
+	if (newStartLine !== undefined && newStartLine < 1) {
+		throw new ParseError(`Line numbers must be >= 1 (got ${newStartLine})`, lineNumber);
+	}
+
 	// Check for nested @@ anchors on subsequent lines
 	// Format: @@ class Foo
 	//         @@   method
 	while (startIndex < lines.length) {
 		const nextLine = lines[startIndex];
-		const trimmed = nextLine.trim();
+		if (!nextLine.startsWith("@@")) {
+			break;
+		}
+		const trimmed = nextLine.trimEnd();
 
 		// Check if it's another @@ line (nested anchor)
 		if (trimmed.startsWith(CHANGE_CONTEXT_MARKER)) {
 			const nestedContext = trimmed.slice(CHANGE_CONTEXT_MARKER.length);
-			changeContexts.push(nestedContext);
+			if (nestedContext.trim().length > 0) {
+				changeContexts.push(nestedContext);
+			}
 			startIndex++;
 		} else if (trimmed === EMPTY_CHANGE_CONTEXT_MARKER) {
 			// Empty @@ as separator - skip it
@@ -289,7 +310,7 @@ function parseOneHunk(lines: string[], lineNumber: number, allowMissingContext: 
 	for (let i = startIndex; i < lines.length; i++) {
 		const line = lines[i];
 
-		if (line === EOF_MARKER) {
+		if (!isDiffContentLine(line) && line.trimEnd() === EOF_MARKER && line.startsWith(EOF_MARKER)) {
 			if (parsedLines === 0) {
 				throw new ParseError("Hunk does not contain any lines", lineNumber + 1);
 			}
@@ -345,7 +366,8 @@ const MULTI_FILE_MARKERS = ["*** Update File:", "*** Add File:", "*** Delete Fil
  * Only counts lines that are actual metadata (not diff content lines).
  */
 function countMultiFileMarkers(diff: string): number {
-	let count = 0;
+	const counts = new Map<string, number>();
+	const paths = new Set<string>();
 	const lines = diff.split("\n");
 	for (const line of lines) {
 		if (isDiffContentLine(line)) {
@@ -354,12 +376,44 @@ function countMultiFileMarkers(diff: string): number {
 		const trimmed = line.trim();
 		for (const marker of MULTI_FILE_MARKERS) {
 			if (trimmed.startsWith(marker)) {
-				count++;
+				const path = extractMarkerPath(trimmed);
+				if (path) {
+					paths.add(path);
+				}
+				counts.set(marker, (counts.get(marker) ?? 0) + 1);
 				break;
 			}
 		}
 	}
-	return count;
+	if (paths.size > 0) {
+		return paths.size;
+	}
+	let maxCount = 0;
+	for (const count of counts.values()) {
+		if (count > maxCount) {
+			maxCount = count;
+		}
+	}
+	return maxCount;
+}
+
+function extractMarkerPath(line: string): string | undefined {
+	if (line.startsWith("diff --git ")) {
+		const parts = line.split(/\s+/);
+		const candidate = parts[3] ?? parts[2];
+		if (!candidate) return undefined;
+		return candidate.replace(/^(a|b)\//, "");
+	}
+	if (line.startsWith("*** Update File:")) {
+		return line.slice("*** Update File:".length).trim();
+	}
+	if (line.startsWith("*** Add File:")) {
+		return line.slice("*** Add File:".length).trim();
+	}
+	if (line.startsWith("*** Delete File:")) {
+		return line.slice("*** Delete File:".length).trim();
+	}
+	return undefined;
 }
 
 /**

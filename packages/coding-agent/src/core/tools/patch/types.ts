@@ -122,6 +122,8 @@ export interface ApplyPatchOptions {
 	dryRun?: boolean;
 	/** Similarity threshold for fuzzy matching */
 	fuzzyThreshold?: number;
+	/** Allow fuzzy/partial matching when applying hunks */
+	allowFuzzy?: boolean;
 	/** File system abstraction (defaults to Bun-based implementation) */
 	fs?: FileSystem;
 }

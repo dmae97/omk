@@ -238,10 +238,18 @@ export class EditTool implements AgentTool<typeof replaceEditSchema | typeof pat
 			if (path.endsWith(".ipynb")) {
 				throw new Error("Cannot edit Jupyter notebooks with the Edit tool. Use the NotebookEdit tool instead.");
 			}
+			if (moveTo?.endsWith(".ipynb")) {
+				throw new Error("Cannot edit Jupyter notebooks with the Edit tool. Use the NotebookEdit tool instead.");
+			}
 
 			const input: PatchInput = { path, operation, moveTo, diff };
 			const fs = new LspFileSystem(this.writethrough, signal, batchRequest);
-			const result = await applyPatch(input, { cwd: this.session.cwd, fs, fuzzyThreshold: this.fuzzyThreshold });
+			const result = await applyPatch(input, {
+				cwd: this.session.cwd,
+				fs,
+				fuzzyThreshold: this.fuzzyThreshold,
+				allowFuzzy: this.allowFuzzy,
+			});
 			const effectiveMoveTo = result.change.newPath ? moveTo : undefined;
 
 			// Generate diff for display

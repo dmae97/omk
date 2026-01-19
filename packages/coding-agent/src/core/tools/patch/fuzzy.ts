@@ -303,7 +303,14 @@ function lineIncludesPattern(line: string, pattern: string): boolean {
  * @param start - Starting index for the search
  * @param eof - If true, prefer matching at end of file first
  */
-export function seekSequence(lines: string[], pattern: string[], start: number, eof: boolean): SequenceSearchResult {
+export function seekSequence(
+	lines: string[],
+	pattern: string[],
+	start: number,
+	eof: boolean,
+	options?: { allowFuzzy?: boolean },
+): SequenceSearchResult {
+	const allowFuzzy = options?.allowFuzzy ?? true;
 	// Empty pattern matches immediately
 	if (pattern.length === 0) {
 		return { index: start, confidence: 1.0 };
@@ -318,62 +325,86 @@ export function seekSequence(lines: string[], pattern: string[], start: number, 
 	const searchStart = eof && lines.length >= pattern.length ? lines.length - pattern.length : start;
 	const maxStart = lines.length - pattern.length;
 
-	// Pass 1: Exact match
-	for (let i = searchStart; i <= maxStart; i++) {
-		if (matchesAt(lines, pattern, i, (a, b) => a === b)) {
-			return { index: i, confidence: 1.0 };
-		}
-	}
-
-	// Pass 2: Trailing whitespace stripped
-	for (let i = searchStart; i <= maxStart; i++) {
-		if (matchesAt(lines, pattern, i, (a, b) => a.trimEnd() === b.trimEnd())) {
-			return { index: i, confidence: 0.99 };
-		}
-	}
-
-	// Pass 3: Both leading and trailing whitespace stripped
-	for (let i = searchStart; i <= maxStart; i++) {
-		if (matchesAt(lines, pattern, i, (a, b) => a.trim() === b.trim())) {
-			return { index: i, confidence: 0.98 };
-		}
-	}
-
-	// Pass 4: Normalize unicode punctuation
-	for (let i = searchStart; i <= maxStart; i++) {
-		if (matchesAt(lines, pattern, i, (a, b) => normalizeUnicode(a) === normalizeUnicode(b))) {
-			return { index: i, confidence: 0.97 };
-		}
-	}
-
-	// Pass 5: Partial line prefix match (track all matches for ambiguity detection)
-	{
-		let firstMatch: number | undefined;
-		let matchCount = 0;
-		for (let i = searchStart; i <= maxStart; i++) {
-			if (matchesAt(lines, pattern, i, lineStartsWithPattern)) {
-				if (firstMatch === undefined) firstMatch = i;
-				matchCount++;
+	const runExactPasses = (from: number, to: number): SequenceSearchResult | undefined => {
+		// Pass 1: Exact match
+		for (let i = from; i <= to; i++) {
+			if (matchesAt(lines, pattern, i, (a, b) => a === b)) {
+				return { index: i, confidence: 1.0 };
 			}
 		}
-		if (matchCount > 0) {
-			return { index: firstMatch, confidence: 0.965, matchCount };
+
+		// Pass 2: Trailing whitespace stripped
+		for (let i = from; i <= to; i++) {
+			if (matchesAt(lines, pattern, i, (a, b) => a.trimEnd() === b.trimEnd())) {
+				return { index: i, confidence: 0.99 };
+			}
+		}
+
+		// Pass 3: Both leading and trailing whitespace stripped
+		for (let i = from; i <= to; i++) {
+			if (matchesAt(lines, pattern, i, (a, b) => a.trim() === b.trim())) {
+				return { index: i, confidence: 0.98 };
+			}
+		}
+
+		// Pass 4: Normalize unicode punctuation
+		for (let i = from; i <= to; i++) {
+			if (matchesAt(lines, pattern, i, (a, b) => normalizeUnicode(a) === normalizeUnicode(b))) {
+				return { index: i, confidence: 0.97 };
+			}
+		}
+
+		if (!allowFuzzy) {
+			return undefined;
+		}
+
+		// Pass 5: Partial line prefix match (track all matches for ambiguity detection)
+		{
+			let firstMatch: number | undefined;
+			let matchCount = 0;
+			for (let i = from; i <= to; i++) {
+				if (matchesAt(lines, pattern, i, lineStartsWithPattern)) {
+					if (firstMatch === undefined) firstMatch = i;
+					matchCount++;
+				}
+			}
+			if (matchCount > 0) {
+				return { index: firstMatch, confidence: 0.965, matchCount };
+			}
+		}
+
+		// Pass 6: Partial line substring match (track all matches for ambiguity detection)
+		{
+			let firstMatch: number | undefined;
+			let matchCount = 0;
+			for (let i = from; i <= to; i++) {
+				if (matchesAt(lines, pattern, i, lineIncludesPattern)) {
+					if (firstMatch === undefined) firstMatch = i;
+					matchCount++;
+				}
+			}
+			if (matchCount > 0) {
+				return { index: firstMatch, confidence: 0.94, matchCount };
+			}
+		}
+
+		return undefined;
+	};
+
+	const primaryPassResult = runExactPasses(searchStart, maxStart);
+	if (primaryPassResult) {
+		return primaryPassResult;
+	}
+
+	if (eof && searchStart > start) {
+		const fromStartResult = runExactPasses(start, maxStart);
+		if (fromStartResult) {
+			return fromStartResult;
 		}
 	}
 
-	// Pass 6: Partial line substring match (track all matches for ambiguity detection)
-	{
-		let firstMatch: number | undefined;
-		let matchCount = 0;
-		for (let i = searchStart; i <= maxStart; i++) {
-			if (matchesAt(lines, pattern, i, lineIncludesPattern)) {
-				if (firstMatch === undefined) firstMatch = i;
-				matchCount++;
-			}
-		}
-		if (matchCount > 0) {
-			return { index: firstMatch, confidence: 0.94, matchCount };
-		}
+	if (!allowFuzzy) {
+		return { index: undefined, confidence: 0 };
 	}
 
 	// Pass 7: Fuzzy matching - find best match above threshold
@@ -439,7 +470,13 @@ export function seekSequence(lines: string[], pattern: string[], start: number, 
  * @param context - The context line to search for
  * @param startFrom - Starting index for the search
  */
-export function findContextLine(lines: string[], context: string, startFrom: number): ContextLineResult {
+export function findContextLine(
+	lines: string[],
+	context: string,
+	startFrom: number,
+	options?: { allowFuzzy?: boolean },
+): ContextLineResult {
+	const allowFuzzy = options?.allowFuzzy ?? true;
 	const trimmedContext = context.trim();
 
 	// Pass 1: Exact line match
@@ -486,6 +523,10 @@ export function findContextLine(lines: string[], context: string, startFrom: num
 		if (matchCount > 0) {
 			return { index: firstMatch, confidence: 0.98, matchCount };
 		}
+	}
+
+	if (!allowFuzzy) {
+		return { index: undefined, confidence: 0 };
 	}
 
 	// Pass 4: Prefix match (file line starts with context)

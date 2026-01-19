@@ -25,9 +25,15 @@ export function generateDiffString(oldContent: string, newContent: string, conte
 	const parts = Diff.diffLines(oldContent, newContent);
 	const output: string[] = [];
 
-	const oldLines = oldContent.split("\n");
-	const newLines = newContent.split("\n");
-	const maxLineNum = Math.max(oldLines.length, newLines.length);
+	const countLines = (content: string): number => {
+		const lines = content.split("\n");
+		if (lines.length > 1 && lines[lines.length - 1] === "") {
+			lines.pop();
+		}
+		return Math.max(1, lines.length);
+	};
+
+	const maxLineNum = Math.max(countLines(oldContent), countLines(newContent));
 	const lineNumWidth = String(maxLineNum).length;
 
 	let oldLineNum = 1;
@@ -191,18 +197,20 @@ export function replaceText(content: string, oldText: string, newText: string, o
 				threshold,
 			});
 
-			// In all mode, use closest match if it passes threshold
-			const match =
-				matchOutcome.match ||
-				(options.fuzzy && matchOutcome.closest && matchOutcome.closest.confidence >= threshold
-					? matchOutcome.closest
-					: undefined);
-
+			const shouldUseClosest =
+				options.fuzzy &&
+				matchOutcome.closest &&
+				matchOutcome.closest.confidence >= threshold &&
+				(matchOutcome.fuzzyMatches === undefined || matchOutcome.fuzzyMatches <= 1);
+			const match = matchOutcome.match || (shouldUseClosest ? matchOutcome.closest : undefined);
 			if (!match) {
 				break;
 			}
 
 			const adjustedNewText = adjustIndentation(normalizedOldText, match.actualText, normalizedNewText);
+			if (adjustedNewText === match.actualText) {
+				break;
+			}
 			normalizedContent =
 				normalizedContent.substring(0, match.startIndex) +
 				adjustedNewText +
@@ -332,10 +340,14 @@ export async function computeEditDiff(
 export async function computePatchDiff(
 	input: PatchInput,
 	cwd: string,
-	options?: { fuzzyThreshold?: number },
+	options?: { fuzzyThreshold?: number; allowFuzzy?: boolean },
 ): Promise<DiffResult | DiffError> {
 	try {
-		const result = await previewPatch(input, { cwd, fuzzyThreshold: options?.fuzzyThreshold });
+		const result = await previewPatch(input, {
+			cwd,
+			fuzzyThreshold: options?.fuzzyThreshold,
+			allowFuzzy: options?.allowFuzzy,
+		});
 		const oldContent = result.change.oldContent ?? "";
 		const newContent = result.change.newContent ?? "";
 		const normalizedOld = normalizeToLF(stripBom(oldContent).text);

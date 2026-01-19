@@ -1,8 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `allowFuzzy` option to control fuzzy matching behavior in patch operations
+- Added validation for line numbers to ensure they are >= 1 in patch headers and hints
 - Added unique substring acceptance for context matching - single matches are now accepted regardless of line length ratio
 - Added support for `@@ line N` syntax to use line numbers as positioning hints
 - Added support for nested `@@` anchors on multiple lines for hierarchical context matching
@@ -19,6 +22,11 @@
 
 ### Changed
 
+- Enhanced fuzzy matching algorithms to respect the `allowFuzzy` setting for more precise control
+- Improved hierarchical context matching to better handle ambiguous matches with line hints
+- Updated diff rendering to correctly count lines without trailing empty lines
+- Enhanced patch parser to better handle nested @@ anchors and multi-file patch markers
+- Improved error messages for out-of-range line hints and invalid line numbers
 - Improved diff rendering to handle optional line numbers in diff lines
 - Enhanced patch parser to accumulate multiple `@@` context lines for nested matching
 - Updated context search to treat hierarchical matching as single unique match
@@ -62,6 +70,10 @@
 
 ### Fixed
 
+- Fixed patch application to prefer actual diff over cached preview when displaying results
+- Fixed line number validation to properly reject zero and negative values in patch headers
+- Fixed hierarchical context matching to correctly handle space-separated contexts with signature characters
+- Fixed fuzzy matching to avoid infinite loops when `allowFuzzy` is disabled
 - Fixed patch parser to correctly interpret `@@ line 125` as line hint instead of literal context
 - Fixed hierarchical context matching to properly disambiguate between similar code structures
 - Fixed space-separated anchor parsing to handle multi-word contexts correctly

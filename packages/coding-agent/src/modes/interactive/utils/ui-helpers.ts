@@ -209,6 +209,7 @@ export class UiHelpers {
 						{
 							showImages: this.ctx.settingsManager.getShowImages(),
 							editFuzzyThreshold: this.ctx.settingsManager.getEditFuzzyThreshold(),
+							editAllowFuzzy: this.ctx.settingsManager.getEditFuzzyMatch(),
 						},
 						tool,
 						this.ctx.ui,
