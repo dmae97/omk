@@ -996,3 +996,82 @@ function process() {
 		expect(result).toContain("return 200;"); // process's helper changed
 	});
 });
+
+describe("regression: model edit attempt - unique substring on long line (session 2026-01-19 #2)", () => {
+	let tempDir: string;
+
+	beforeEach(() => {
+		tempDir = join(tmpdir(), `model-long-line-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		mkdirSync(tempDir, { recursive: true });
+	});
+
+	afterEach(() => {
+		rmSync(tempDir, { recursive: true, force: true });
+	});
+
+	test("@@ class ClassName matches long export line when unique", async () => {
+		const filePath = join(tempDir, "tool.ts");
+		// Real-world pattern: long line with export, implements, generics
+		await Bun.write(
+			filePath,
+			`import { Something } from "somewhere";
+
+export class EditTool implements AgentTool<typeof replaceEditSchema | typeof patchEditSchema, EditToolDetails> {
+	public readonly name = "edit";
+
+	constructor(session: ToolSession) {
+		this.session = session;
+		this.patchMode = false;
+	}
+}
+`,
+		);
+
+		// Model's actual attempt: used "class EditTool" which is only ~12% of line length
+		await applyPatch(
+			{
+				path: "tool.ts",
+				operation: "update",
+				diff: `@@ class EditTool
+ 	constructor(session: ToolSession) {
+ 		this.session = session;
+-		this.patchMode = false;
++		this.patchMode = true;
+ 	}`,
+			},
+			{ cwd: tempDir },
+		);
+
+		const result = readFileSync(filePath, "utf-8");
+		expect(result).toContain("this.patchMode = true;");
+	});
+
+	test("@@ class ClassName still rejects when multiple classes match", async () => {
+		const filePath = join(tempDir, "multi.ts");
+		await Bun.write(
+			filePath,
+			`export class EditTool implements AgentTool<Schema1, Details1> {
+	value = 1;
+}
+
+export class EditTool implements AgentTool<Schema2, Details2> {
+	value = 2;
+}
+`,
+		);
+
+		// Should reject because "class EditTool" matches two lines
+		await expect(
+			applyPatch(
+				{
+					path: "multi.ts",
+					operation: "update",
+					diff: `@@ class EditTool
+-	value = 1;
++	value = 100;`,
+				},
+				{ cwd: tempDir },
+			),
+		).rejects.toThrow(/2 matches/);
+	});
+});

@@ -3,6 +3,7 @@
 ## [Unreleased]
 ### Added
 
+- Added unique substring acceptance for context matching - single matches are now accepted regardless of line length ratio
 - Added support for `@@ line N` syntax to use line numbers as positioning hints
 - Added support for nested `@@` anchors on multiple lines for hierarchical context matching
 - Added support for space-separated hierarchical anchors like `@@ class PatchTool constructor`

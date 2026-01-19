@@ -506,21 +506,41 @@ export function findContextLine(lines: string[], context: string, startFrom: num
 	}
 
 	// Pass 5: Substring match (file line contains context)
+	// First pass: find all substring matches (ignoring ratio)
+	// If exactly one match exists, accept it (uniqueness is sufficient)
+	// If multiple matches, apply ratio filter to disambiguate
 	if (contextNorm.length >= PARTIAL_MATCH_MIN_LENGTH) {
-		let firstMatch: number | undefined;
-		let matchCount = 0;
+		const allSubstringMatches: Array<{ index: number; ratio: number }> = [];
 		for (let i = startFrom; i < lines.length; i++) {
 			const lineNorm = normalizeForFuzzy(lines[i]);
 			if (lineNorm.includes(contextNorm)) {
 				const ratio = contextNorm.length / Math.max(1, lineNorm.length);
-				if (ratio >= PARTIAL_MATCH_MIN_RATIO) {
-					if (firstMatch === undefined) firstMatch = i;
-					matchCount++;
-				}
+				allSubstringMatches.push({ index: i, ratio });
+			}
+		}
+
+		// If exactly one substring match, accept it regardless of ratio
+		if (allSubstringMatches.length === 1) {
+			return { index: allSubstringMatches[0].index, confidence: 0.94, matchCount: 1 };
+		}
+
+		// Multiple matches: filter by ratio to disambiguate
+		let firstMatch: number | undefined;
+		let matchCount = 0;
+		for (const match of allSubstringMatches) {
+			if (match.ratio >= PARTIAL_MATCH_MIN_RATIO) {
+				if (firstMatch === undefined) firstMatch = match.index;
+				matchCount++;
 			}
 		}
 		if (matchCount > 0) {
 			return { index: firstMatch, confidence: 0.94, matchCount };
+		}
+
+		// If we had substring matches but none passed ratio filter,
+		// return ambiguous result so caller knows matches exist
+		if (allSubstringMatches.length > 1) {
+			return { index: allSubstringMatches[0].index, confidence: 0.94, matchCount: allSubstringMatches.length };
 		}
 	}
 
