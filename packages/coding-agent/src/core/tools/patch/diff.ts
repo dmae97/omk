@@ -7,9 +7,10 @@
 
 import * as Diff from "diff";
 import { resolveToCwd } from "../path-utils";
+import { previewPatch } from "./applicator";
 import { DEFAULT_FUZZY_THRESHOLD, findMatch } from "./fuzzy";
 import { adjustIndentation, normalizeToLF, stripBom } from "./normalize";
-import type { DiffError, DiffResult } from "./types";
+import type { DiffError, DiffResult, PatchInput } from "./types";
 import { EditMatchError } from "./types";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -135,6 +136,32 @@ export interface ReplaceResult {
 }
 
 /**
+ * Generate a unified diff string without file headers.
+ * Returns both the diff string and the first changed line number (in the new file).
+ */
+export function generateUnifiedDiffString(oldContent: string, newContent: string, contextLines = 3): DiffResult {
+	const patch = Diff.structuredPatch("", "", oldContent, newContent, "", "", { context: contextLines });
+	const output: string[] = [];
+	let firstChangedLine: number | undefined;
+
+	for (const hunk of patch.hunks) {
+		output.push(`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`);
+		let newLine = hunk.newStart;
+		for (const line of hunk.lines) {
+			output.push(line);
+			if (firstChangedLine === undefined && (line.startsWith("+") || line.startsWith("-"))) {
+				firstChangedLine = newLine;
+			}
+			if (line.startsWith("+") || line.startsWith(" ")) {
+				newLine++;
+			}
+		}
+	}
+
+	return { diff: output.join("\n"), firstChangedLine };
+}
+
+/**
  * Find and replace text in content using fuzzy matching.
  */
 export function replaceText(content: string, oldText: string, newText: string, options: ReplaceOptions): ReplaceResult {
@@ -228,6 +255,7 @@ export async function computeEditDiff(
 	cwd: string,
 	fuzzy = true,
 	all = false,
+	threshold?: number,
 ): Promise<DiffResult | DiffError> {
 	if (oldText.length === 0) {
 		return { error: "oldText must not be empty." };
@@ -260,13 +288,14 @@ export async function computeEditDiff(
 		const result = replaceText(normalizedContent, normalizedOldText, normalizedNewText, {
 			fuzzy,
 			all,
+			threshold,
 		});
 
 		if (result.count === 0) {
 			// Get closest match for error message
 			const matchOutcome = findMatch(normalizedContent, normalizedOldText, {
 				allowFuzzy: fuzzy,
-				threshold: DEFAULT_FUZZY_THRESHOLD,
+				threshold: threshold ?? DEFAULT_FUZZY_THRESHOLD,
 			});
 
 			if (matchOutcome.occurrences && matchOutcome.occurrences > 1) {
@@ -278,7 +307,7 @@ export async function computeEditDiff(
 			return {
 				error: EditMatchError.formatMessage(path, normalizedOldText, matchOutcome.closest, {
 					allowFuzzy: fuzzy,
-					threshold: DEFAULT_FUZZY_THRESHOLD,
+					threshold: threshold ?? DEFAULT_FUZZY_THRESHOLD,
 					fuzzyMatches: matchOutcome.fuzzyMatches,
 				}),
 			};
@@ -291,6 +320,30 @@ export async function computeEditDiff(
 		}
 
 		return generateDiffString(normalizedContent, result.content);
+	} catch (err) {
+		return { error: err instanceof Error ? err.message : String(err) };
+	}
+}
+
+/**
+ * Compute the diff for a patch operation without applying it.
+ * Used for preview rendering in the TUI before patch-mode edits execute.
+ */
+export async function computePatchDiff(
+	input: PatchInput,
+	cwd: string,
+	options?: { fuzzyThreshold?: number },
+): Promise<DiffResult | DiffError> {
+	try {
+		const result = await previewPatch(input, { cwd, fuzzyThreshold: options?.fuzzyThreshold });
+		const oldContent = result.change.oldContent ?? "";
+		const newContent = result.change.newContent ?? "";
+		const normalizedOld = normalizeToLF(stripBom(oldContent).text);
+		const normalizedNew = normalizeToLF(stripBom(newContent).text);
+		if (!normalizedOld && !normalizedNew) {
+			return { diff: "", firstChangedLine: undefined };
+		}
+		return generateUnifiedDiffString(normalizedOld, normalizedNew);
 	} catch (err) {
 		return { error: err instanceof Error ? err.message : String(err) };
 	}

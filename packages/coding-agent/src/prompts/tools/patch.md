@@ -24,6 +24,9 @@ Within a hunk each line starts with:
 - `-` for removed lines
 - `+` for added lines
 
+Prefer replacing whole logical blocks (function/class/section) when possible instead of single-line edits.
+Line numbers are hints only; do not rely on them. Use semantic anchors via `@@` and surrounding context lines.
+
 For instructions on [context_before] and [context_after]:
 - By default, show 3 lines of code immediately above and 3 lines immediately below each change. If a change is within 3 lines of a previous change, do NOT duplicate the first change's [context_after] lines in the second change's [context_before] lines.
 - If 3 lines of context is insufficient to uniquely identify the snippet of code within the file, use the @@ operator to indicate the class or function to which the snippet belongs. For instance, we might have:
@@ -71,4 +74,5 @@ edit {"path": "obsolete.txt", "operation": "delete"}
 3. For update: provide hunks with context lines and +/- changes
 4. For delete: omit the `diff` field
 5. Use relative paths only
+6. If a context or change appears more than once, add more surrounding context or additional `@@` anchors to make it unique
 </rules>

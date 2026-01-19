@@ -173,4 +173,24 @@ describe("applyPatch adversarial inputs", () => {
 		const content = readFileSync(filePath, "utf-8");
 		expect(content).toBe("FOO\r\nbar\r\n");
 	});
+
+	test("preserves UTF-8 BOM and CRLF endings", async () => {
+		const filePath = join(tempDir, "bom.txt");
+		await Bun.write(filePath, "\uFEFFfoo\r\nbar\r\n");
+
+		await applyPatch({ path: "bom.txt", operation: "update", diff: "@@\n-foo\n+FOO" }, { cwd: tempDir });
+
+		const content = readFileSync(filePath, "utf-8");
+		expect(content).toBe("\uFEFFFOO\r\nbar\r\n");
+	});
+
+	test("preserves missing trailing newline", async () => {
+		const filePath = join(tempDir, "nonewline.txt");
+		await Bun.write(filePath, "foo\nbar");
+
+		await applyPatch({ path: "nonewline.txt", operation: "update", diff: "@@\n-bar\n+baz" }, { cwd: tempDir });
+
+		const content = readFileSync(filePath, "utf-8");
+		expect(content).toBe("foo\nbaz");
+	});
 });

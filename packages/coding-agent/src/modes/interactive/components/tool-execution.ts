@@ -12,7 +12,7 @@ import {
 } from "@oh-my-pi/pi-tui";
 import stripAnsi from "strip-ansi";
 import { BASH_DEFAULT_PREVIEW_LINES } from "../../../core/tools/bash";
-import { computeEditDiff, type EditDiffError, type EditDiffResult } from "../../../core/tools/patch";
+import { computeEditDiff, computePatchDiff, type EditDiffError, type EditDiffResult } from "../../../core/tools/patch";
 import { PYTHON_DEFAULT_PREVIEW_LINES } from "../../../core/tools/python";
 import { toolRenderers } from "../../../core/tools/renderers";
 import { convertToPng } from "../../../utils/image-convert";
@@ -85,6 +85,7 @@ function formatArgsPreview(
 
 export interface ToolExecutionOptions {
 	showImages?: boolean; // default: true (only used if terminal supports images)
+	editFuzzyThreshold?: number;
 }
 
 export interface ToolExecutionHandle {
@@ -115,6 +116,7 @@ export class ToolExecutionComponent extends Container {
 	private args: any;
 	private expanded = false;
 	private showImages: boolean;
+	private editFuzzyThreshold: number | undefined;
 	private isPartial = true;
 	private tool?: AgentTool;
 	private ui: TUI;
@@ -146,6 +148,7 @@ export class ToolExecutionComponent extends Container {
 		this.toolLabel = tool?.label ?? toolName;
 		this.args = args;
 		this.showImages = options.showImages ?? true;
+		this.editFuzzyThreshold = options.editFuzzyThreshold;
 		this.tool = tool;
 		this.ui = ui;
 		this.cwd = cwd;
@@ -189,6 +192,31 @@ export class ToolExecutionComponent extends Container {
 		if (this.toolName !== "edit") return;
 
 		const path = this.args?.path;
+		const operation = this.args?.operation;
+
+		if (operation) {
+			const diff = this.args?.diff;
+			const moveTo = this.args?.moveTo;
+			if (!path) return;
+
+			const argsKey = JSON.stringify({ path, operation, moveTo, diff });
+			if (this.editDiffArgsKey === argsKey) return;
+			this.editDiffArgsKey = argsKey;
+
+			computePatchDiff(
+				{ path, operation, moveTo, diff },
+				this.cwd,
+				{ fuzzyThreshold: this.editFuzzyThreshold },
+			).then((result) => {
+				if (this.editDiffArgsKey === argsKey) {
+					this.editDiffPreview = result;
+					this.updateDisplay();
+					this.ui.requestRender();
+				}
+			});
+			return;
+		}
+
 		const oldText = this.args?.oldText;
 		const newText = this.args?.newText;
 		const all = this.args?.all;
@@ -205,7 +233,7 @@ export class ToolExecutionComponent extends Container {
 		this.editDiffArgsKey = argsKey;
 
 		// Compute diff async
-		computeEditDiff(path, oldText, newText, this.cwd, true, all).then((result) => {
+		computeEditDiff(path, oldText, newText, this.cwd, true, all, this.editFuzzyThreshold).then((result) => {
 			// Only update if args haven't changed since we started
 			if (this.editDiffArgsKey === argsKey) {
 				this.editDiffPreview = result;

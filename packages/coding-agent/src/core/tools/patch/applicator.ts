@@ -33,6 +33,10 @@ export const defaultFileSystem: FileSystem = {
 	async read(path: string): Promise<string> {
 		return Bun.file(path).text();
 	},
+	async readBinary(path: string): Promise<Uint8Array> {
+		const buffer = await Bun.file(path).arrayBuffer();
+		return new Uint8Array(buffer);
+	},
 	async write(path: string, content: string): Promise<void> {
 		await Bun.write(path, content);
 	},
@@ -121,27 +125,36 @@ function findSequenceWithHint(
 	hintIndex: number | undefined,
 	eof: boolean,
 ): import("./types").SequenceSearchResult {
-	const primaryStart = hintIndex ?? currentIndex;
-	let result = seekSequence(lines, pattern, primaryStart, eof);
+	// Prefer content-based search starting from currentIndex
+	const primaryResult = seekSequence(lines, pattern, currentIndex, eof);
+	if (primaryResult.index !== undefined || (primaryResult.matchCount && primaryResult.matchCount > 1)) {
+		return primaryResult;
+	}
 
-	// Retry from currentIndex if hint failed
-	if (result.index === undefined && hintIndex !== undefined && hintIndex !== currentIndex) {
-		result = seekSequence(lines, pattern, currentIndex, eof);
+	// Use line hint as a secondary bias only if needed
+	if (hintIndex !== undefined && hintIndex !== currentIndex) {
+		const hintedResult = seekSequence(lines, pattern, hintIndex, eof);
+		if (hintedResult.index !== undefined || (hintedResult.matchCount && hintedResult.matchCount > 1)) {
+			return hintedResult;
+		}
 	}
 
 	// Last resort: search from beginning (handles out-of-order hunks)
-	if (result.index === undefined && primaryStart !== 0 && currentIndex !== 0) {
-		result = seekSequence(lines, pattern, 0, eof);
+	if (currentIndex !== 0) {
+		const fromStartResult = seekSequence(lines, pattern, 0, eof);
+		if (fromStartResult.index !== undefined || (fromStartResult.matchCount && fromStartResult.matchCount > 1)) {
+			return fromStartResult;
+		}
 	}
 
-	return result;
+	return primaryResult;
 }
 
 /**
  * Apply a hunk using character-based fuzzy matching.
  * Used when the hunk contains only -/+ lines without context.
  */
-function applyCharacterMatch(originalContent: string, path: string, hunk: DiffHunk): string {
+function applyCharacterMatch(originalContent: string, path: string, hunk: DiffHunk, fuzzyThreshold: number): string {
 	const oldText = hunk.oldLines.join("\n");
 	const newText = hunk.newLines.join("\n");
 
@@ -150,13 +163,20 @@ function applyCharacterMatch(originalContent: string, path: string, hunk: DiffHu
 
 	const matchOutcome = findMatch(normalizedContent, normalizedOldText, {
 		allowFuzzy: true,
-		threshold: DEFAULT_FUZZY_THRESHOLD,
+		threshold: fuzzyThreshold,
 	});
 
 	// Check for multiple exact occurrences
 	if (matchOutcome.occurrences && matchOutcome.occurrences > 1) {
 		throw new ApplyPatchError(
 			`Found ${matchOutcome.occurrences} occurrences of the text in ${path}. ` +
+				`The text must be unique. Please provide more context to make it unique.`,
+		);
+	}
+
+	if (matchOutcome.fuzzyMatches && matchOutcome.fuzzyMatches > 1) {
+		throw new ApplyPatchError(
+			`Found ${matchOutcome.fuzzyMatches} high-confidence matches in ${path}. ` +
 				`The text must be unique. Please provide more context to make it unique.`,
 		);
 	}
@@ -197,48 +217,50 @@ function computeReplacements(originalLines: string[], path: string, hunks: DiffH
 	let lineIndex = 0;
 
 	for (const hunk of hunks) {
-		const _hintIndex = getHunkHintIndex(hunk, lineIndex);
-
-		// Use line number hints if available from unified diff format
 		const lineHint = hunk.oldStartLine;
-		if (lineHint !== undefined && hunk.changeContext === undefined) {
+		if (lineHint !== undefined && hunk.changeContext === undefined && !hunk.hasContextLines) {
 			lineIndex = Math.max(0, Math.min(lineHint - 1, originalLines.length - 1));
 		}
 
 		// If hunk has a changeContext, find it and adjust lineIndex
 		if (hunk.changeContext !== undefined) {
 			// Use findContextLine for robust matching with substring/fuzzy fallback
-			// Start from lineHint if available, otherwise from current lineIndex
-			const searchStart = lineHint !== undefined ? Math.max(0, lineHint - 1) : lineIndex;
-			const result = findContextLine(originalLines, hunk.changeContext, searchStart);
+			let result = findContextLine(originalLines, hunk.changeContext, lineIndex);
+			let usedLineHint = false;
+
+			// If ambiguous or missing and a line hint exists, bias using the hint
+			if ((result.index === undefined || (result.matchCount ?? 0) > 1) && lineHint !== undefined) {
+				const hintStart = Math.max(0, lineHint - 1);
+				const hintedResult = findContextLine(originalLines, hunk.changeContext, hintStart);
+				if (hintedResult.index !== undefined) {
+					result = hintedResult;
+					usedLineHint = true;
+				}
+			}
+
+			if (!usedLineHint && result.matchCount !== undefined && result.matchCount > 1) {
+				throw new ApplyPatchError(
+					`Found ${result.matchCount} matches for context '${hunk.changeContext}' in ${path}. ` +
+						`Add more surrounding context or additional @@ anchors to make it unique.`,
+				);
+			}
 
 			// If search failed, try fallback strategies
 			let idx = result.index;
-			let matchCount = result.matchCount ?? 1;
-			if (idx === undefined && lineHint !== undefined && searchStart !== lineIndex) {
-				// Try from current lineIndex
-				const fallbackResult = findContextLine(originalLines, hunk.changeContext, lineIndex);
-				idx = fallbackResult.index;
-				matchCount = fallbackResult.matchCount ?? 1;
-			}
-			if (idx === undefined && searchStart !== 0) {
+			if (idx === undefined && lineIndex !== 0) {
 				// Last resort: search from beginning (handles out-of-order hunks)
 				const fromStartResult = findContextLine(originalLines, hunk.changeContext, 0);
+				if (fromStartResult.matchCount !== undefined && fromStartResult.matchCount > 1) {
+					throw new ApplyPatchError(
+						`Found ${fromStartResult.matchCount} matches for context '${hunk.changeContext}' in ${path}. ` +
+							`Add more surrounding context or additional @@ anchors to make it unique.`,
+					);
+				}
 				idx = fromStartResult.index;
-				matchCount = fromStartResult.matchCount ?? 1;
 			}
 
 			if (idx === undefined) {
 				throw new ApplyPatchError(`Failed to find context '${hunk.changeContext}' in ${path}`);
-			}
-
-			// Reject if context is ambiguous (multiple matches at same confidence)
-			// But only if there's no line hint to disambiguate
-			if (matchCount > 1 && lineHint === undefined) {
-				throw new ApplyPatchError(
-					`Found ${matchCount} matches for context '${hunk.changeContext}' in ${path}. ` +
-						`The context must be unique. Please provide more specific context.`,
-				);
 			}
 
 			// If oldLines[0] matches changeContext, start search at idx (not idx+1)
@@ -306,14 +328,14 @@ function computeReplacements(originalLines: string[], path: string, hunks: DiffH
 		if (searchResult.matchCount !== undefined && searchResult.matchCount > 1) {
 			throw new ApplyPatchError(
 				`Found ${searchResult.matchCount} matches for the text in ${path}. ` +
-					`The text must be unique. Please provide more context to make it unique.`,
+					`Add more surrounding context or additional @@ anchors to make it unique.`,
 			);
 		}
 
 		// For simple diffs (no context marker, no context lines), check for multiple occurrences
 		// This ensures ambiguous replacements are rejected
 		// Skip this check if isEndOfFile is set (EOF marker provides disambiguation)
-		if (hunk.changeContext === undefined && !hunk.hasContextLines && !hunk.isEndOfFile) {
+		if (hunk.changeContext === undefined && !hunk.hasContextLines && !hunk.isEndOfFile && lineHint === undefined) {
 			const secondMatch = seekSequence(originalLines, pattern, found + 1, false);
 			if (secondMatch.index !== undefined) {
 				throw new ApplyPatchError(
@@ -356,7 +378,7 @@ function applyReplacements(lines: string[], replacements: Replacement[]): string
 /**
  * Apply diff hunks to file content.
  */
-function applyHunksToContent(originalContent: string, path: string, hunks: DiffHunk[]): string {
+function applyHunksToContent(originalContent: string, path: string, hunks: DiffHunk[], fuzzyThreshold: number): string {
 	const hadFinalNewline = originalContent.endsWith("\n");
 
 	// Detect simple replace pattern: single hunk, no @@ context, no context lines, has old lines to match
@@ -370,7 +392,7 @@ function applyHunksToContent(originalContent: string, path: string, hunks: DiffH
 			hunk.oldStartLine === undefined && // No line hint to use for positioning
 			!hunk.isEndOfFile // No EOF targeting (prefer end of file)
 		) {
-			const content = applyCharacterMatch(originalContent, path, hunk);
+			const content = applyCharacterMatch(originalContent, path, hunk, fuzzyThreshold);
 			return applyTrailingNewlinePolicy(content, hadFinalNewline);
 		}
 	}
@@ -414,7 +436,7 @@ function applyHunksToContent(originalContent: string, path: string, hunks: DiffH
  * Apply a patch operation to the filesystem.
  */
 export async function applyPatch(input: PatchInput, options: ApplyPatchOptions): Promise<ApplyPatchResult> {
-	const { cwd, dryRun = false, fs = defaultFileSystem } = options;
+	const { cwd, dryRun = false, fs = defaultFileSystem, fuzzyThreshold = DEFAULT_FUZZY_THRESHOLD } = options;
 
 	const resolvePath = (p: string): string => resolve(cwd, p);
 	const absolutePath = resolvePath(input.path);
@@ -484,7 +506,14 @@ export async function applyPatch(input: PatchInput, options: ApplyPatchOptions):
 	}
 
 	const originalContent = await fs.read(absolutePath);
-	const { bom, text: strippedContent } = stripBom(originalContent);
+	const { bom: bomFromText, text: strippedContent } = stripBom(originalContent);
+	let bom = bomFromText;
+	if (!bom && fs.readBinary) {
+		const bytes = await fs.readBinary(absolutePath);
+		if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+			bom = "\uFEFF";
+		}
+	}
 	const lineEnding = detectLineEnding(strippedContent);
 	const normalizedContent = normalizeToLF(strippedContent);
 	const hunks = parseHunks(input.diff);
@@ -493,7 +522,7 @@ export async function applyPatch(input: PatchInput, options: ApplyPatchOptions):
 		throw new ApplyPatchError("Diff contains no hunks");
 	}
 
-	const newContent = applyHunksToContent(normalizedContent, input.path, hunks);
+	const newContent = applyHunksToContent(normalizedContent, input.path, hunks, fuzzyThreshold);
 	const finalContent = bom + restoreLineEndings(newContent, lineEnding);
 	const destPath = input.moveTo ? resolvePath(input.moveTo) : absolutePath;
 	const isMove = Boolean(input.moveTo) && destPath !== absolutePath;

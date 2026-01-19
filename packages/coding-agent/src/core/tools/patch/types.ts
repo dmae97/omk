@@ -10,6 +10,7 @@
 export interface FileSystem {
 	exists(path: string): Promise<boolean>;
 	read(path: string): Promise<string>;
+	readBinary?: (path: string) => Promise<Uint8Array>;
 	write(path: string, content: string): Promise<void>;
 	delete(path: string): Promise<void>;
 	mkdir(path: string): Promise<void>;
@@ -119,6 +120,8 @@ export interface ApplyPatchOptions {
 	cwd: string;
 	/** Dry run - compute changes without writing */
 	dryRun?: boolean;
+	/** Similarity threshold for fuzzy matching */
+	fuzzyThreshold?: number;
 	/** File system abstraction (defaults to Bun-based implementation) */
 	fs?: FileSystem;
 }

@@ -379,9 +379,13 @@ export function seekSequence(lines: string[], pattern: string[], start: number, 
 	// Pass 7: Fuzzy matching - find best match above threshold
 	let bestIndex: number | undefined;
 	let bestScore = 0;
+	let matchCount = 0;
 
 	for (let i = searchStart; i <= maxStart; i++) {
 		const score = fuzzyScoreAt(lines, pattern, i);
+		if (score >= SEQUENCE_FUZZY_THRESHOLD) {
+			matchCount++;
+		}
 		if (score > bestScore) {
 			bestScore = score;
 			bestIndex = i;
@@ -392,6 +396,9 @@ export function seekSequence(lines: string[], pattern: string[], start: number, 
 	if (eof && searchStart > start) {
 		for (let i = start; i < searchStart; i++) {
 			const score = fuzzyScoreAt(lines, pattern, i);
+			if (score >= SEQUENCE_FUZZY_THRESHOLD) {
+				matchCount++;
+			}
 			if (score > bestScore) {
 				bestScore = score;
 				bestIndex = i;
@@ -400,7 +407,7 @@ export function seekSequence(lines: string[], pattern: string[], start: number, 
 	}
 
 	if (bestIndex !== undefined && bestScore >= SEQUENCE_FUZZY_THRESHOLD) {
-		return { index: bestIndex, confidence: bestScore };
+		return { index: bestIndex, confidence: bestScore, matchCount };
 	}
 
 	// Pass 8: Character-based fuzzy matching via findMatch
@@ -417,10 +424,12 @@ export function seekSequence(lines: string[], pattern: string[], start: number, 
 		// Convert character index back to line index
 		const matchedContent = contentText.substring(0, matchOutcome.match.startIndex);
 		const lineIndex = start + matchedContent.split("\n").length - 1;
-		return { index: lineIndex, confidence: matchOutcome.match.confidence };
+		const fallbackMatchCount = matchOutcome.occurrences ?? matchOutcome.fuzzyMatches ?? 1;
+		return { index: lineIndex, confidence: matchOutcome.match.confidence, matchCount: fallbackMatchCount };
 	}
 
-	return { index: undefined, confidence: bestScore };
+	const fallbackMatchCount = matchOutcome.occurrences ?? matchOutcome.fuzzyMatches;
+	return { index: undefined, confidence: bestScore, matchCount: fallbackMatchCount };
 }
 
 /**
@@ -518,10 +527,14 @@ export function findContextLine(lines: string[], context: string, startFrom: num
 	// Pass 6: Fuzzy match using similarity
 	let bestIndex: number | undefined;
 	let bestScore = 0;
+	let matchCount = 0;
 
 	for (let i = startFrom; i < lines.length; i++) {
 		const lineNorm = normalizeForFuzzy(lines[i]);
 		const score = similarity(lineNorm, contextNorm);
+		if (score >= CONTEXT_FUZZY_THRESHOLD) {
+			matchCount++;
+		}
 		if (score > bestScore) {
 			bestScore = score;
 			bestIndex = i;
@@ -529,7 +542,7 @@ export function findContextLine(lines: string[], context: string, startFrom: num
 	}
 
 	if (bestIndex !== undefined && bestScore >= CONTEXT_FUZZY_THRESHOLD) {
-		return { index: bestIndex, confidence: bestScore, matchCount: 1 };
+		return { index: bestIndex, confidence: bestScore, matchCount };
 	}
 
 	return { index: undefined, confidence: bestScore };

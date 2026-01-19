@@ -1,9 +1,11 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added configurable fuzzy matching threshold for edit operations
+- Added edit fuzzy threshold setting with options from 0.85 (lenient) to 0.98 (strict)
+- Added binary file reading support for improved BOM detection in patch operations
 - Added comprehensive apply-patch mode for edit tool with support for create, update, delete, and rename operations
 - Added MCP tool caching for faster startup with cached tool definitions
 - Added deferred MCP tool loading to improve startup performance
@@ -11,6 +13,11 @@
 
 ### Changed
 
+- Enhanced patch application with better ambiguity detection and clearer error messages
+- Improved diff truncation algorithm to preserve context around changes more intelligently
+- Updated patch mode prompts to prefer larger semantic blocks over single-line edits
+- Enhanced fuzzy matching to track and report multiple high-confidence matches
+- Improved line ending and BOM preservation when applying patches
 - Converted edit tool from factory function to class-based implementation
 - Improved patch application with better ambiguity detection and error handling
 - Enhanced fuzzy matching algorithms to track multiple matches for disambiguation
@@ -33,6 +40,9 @@
 
 ### Fixed
 
+- Fixed BOM detection to check binary content when text-based detection fails
+- Fixed patch preview to use configured fuzzy threshold for consistent behavior
+- Fixed trailing newline preservation to maintain original file behavior
 - Fixed tool completion logic to only mark tools as complete when streaming is not aborted or in error state
 - Fixed MCP tool path formatting to correctly display provider information
 

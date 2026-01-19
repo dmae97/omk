@@ -289,6 +289,21 @@ export const SETTINGS_DEFS: SettingDef[] = [
 		set: (sm, v) => sm.setEditFuzzyMatch(v),
 	},
 	{
+		id: "editFuzzyThreshold",
+		tab: "tools",
+		type: "submenu",
+		label: "Edit fuzzy threshold",
+		description: "Similarity threshold for fuzzy matches (higher = stricter)",
+		get: (sm) => sm.getEditFuzzyThreshold().toFixed(2),
+		set: (sm, v) => sm.setEditFuzzyThreshold(Number(v)),
+		getOptions: () => [
+			{ value: "0.85", label: "0.85", description: "Lenient" },
+			{ value: "0.90", label: "0.90", description: "Moderate" },
+			{ value: "0.95", label: "0.95", description: "Default" },
+			{ value: "0.98", label: "0.98", description: "Strict" },
+		],
+	},
+	{
 		id: "editPatchMode",
 		tab: "tools",
 		type: "boolean",

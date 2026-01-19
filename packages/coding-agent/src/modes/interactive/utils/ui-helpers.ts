@@ -206,7 +206,10 @@ export class UiHelpers {
 					const component = new ToolExecutionComponent(
 						content.name,
 						content.arguments,
-						{ showImages: this.ctx.settingsManager.getShowImages() },
+						{
+							showImages: this.ctx.settingsManager.getShowImages(),
+							editFuzzyThreshold: this.ctx.settingsManager.getEditFuzzyThreshold(),
+						},
 						tool,
 						this.ctx.ui,
 						this.ctx.sessionManager.getCwd(),

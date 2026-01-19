@@ -123,6 +123,7 @@ export interface PythonSettings {
 
 export interface EditSettings {
 	fuzzyMatch?: boolean; // default: true (accept high-confidence fuzzy matches for whitespace/indentation)
+	fuzzyThreshold?: number; // default: 0.95 (similarity threshold for fuzzy matching)
 	patchMode?: boolean; // default: false (use codex-style apply-patch format instead of oldText/newText)
 }
 
@@ -319,7 +320,7 @@ const DEFAULT_SETTINGS: Settings = {
 	mcp: { enableProjectConfig: true },
 	lsp: { formatOnWrite: false, diagnosticsOnWrite: true, diagnosticsOnEdit: false },
 	python: { toolMode: "both", kernelMode: "session", sharedGateway: true },
-	edit: { fuzzyMatch: true },
+	edit: { fuzzyMatch: true, fuzzyThreshold: 0.95 },
 	ttsr: { enabled: true, contextMode: "discard", repeatMode: "once", repeatGap: 10 },
 	voice: {
 		enabled: false,
@@ -1271,6 +1272,18 @@ export class SettingsManager {
 			this.globalSettings.edit = {};
 		}
 		this.globalSettings.edit.fuzzyMatch = enabled;
+		await this.save();
+	}
+
+	getEditFuzzyThreshold(): number {
+		return this.settings.edit?.fuzzyThreshold ?? 0.95;
+	}
+
+	async setEditFuzzyThreshold(value: number): Promise<void> {
+		if (!this.globalSettings.edit) {
+			this.globalSettings.edit = {};
+		}
+		this.globalSettings.edit.fuzzyThreshold = value;
 		await this.save();
 	}
 

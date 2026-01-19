@@ -2,6 +2,7 @@ Performs string replacements in files with fuzzy whitespace matching.
 
 Usage:
 - Use the smallest edit that uniquely identifies the change. To toggle a checkbox: `- [ ] Task` → `- [x] Task`, not the entire line.
+- If the old text is not unique, expand the replacement to a larger block (function/class/section) so it is unique.
 - You must use your read tool at least once in the conversation before editing. This tool will error if you attempt an edit without reading the file.
 - Fuzzy matching handles minor whitespace/indentation differences automatically - you don't need to match indentation exactly.
 - ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.

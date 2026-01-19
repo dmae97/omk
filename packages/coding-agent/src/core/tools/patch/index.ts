@@ -23,7 +23,7 @@ import {
 } from "../lsp/index";
 import { resolveToCwd } from "../path-utils";
 import { applyPatch } from "./applicator";
-import { generateDiffString, replaceText } from "./diff";
+import { generateDiffString, generateUnifiedDiffString, replaceText } from "./diff";
 import { DEFAULT_FUZZY_THRESHOLD, findMatch } from "./fuzzy";
 import { detectLineEnding, normalizeToLF, restoreLineEndings, stripBom } from "./normalize";
 import { type EditToolDetails, getLspBatchRequest } from "./shared";
@@ -38,7 +38,7 @@ import { EditMatchError } from "./types";
 // Application
 export { applyPatch, defaultFileSystem, previewPatch } from "./applicator";
 // Diff generation
-export { computeEditDiff, generateDiffString, replaceText } from "./diff";
+export { computeEditDiff, computePatchDiff, generateDiffString, generateUnifiedDiffString, replaceText } from "./diff";
 
 // Fuzzy matching
 export {
@@ -155,6 +155,11 @@ class LspFileSystem implements FileSystem {
 		return this.#getFile(path).text();
 	}
 
+	async readBinary(path: string): Promise<Uint8Array> {
+		const buffer = await this.#getFile(path).arrayBuffer();
+		return new Uint8Array(buffer);
+	}
+
 	async write(path: string, content: string): Promise<void> {
 		const file = this.#getFile(path);
 		const result = await this.writethrough(path, content, this.signal, file, this.batchRequest);
@@ -194,12 +199,14 @@ export class EditTool implements AgentTool<typeof replaceEditSchema | typeof pat
 	private readonly session: ToolSession;
 	private readonly patchMode: boolean;
 	private readonly allowFuzzy: boolean;
+	private readonly fuzzyThreshold: number;
 	private readonly writethrough: WritethroughCallback;
 
 	constructor(session: ToolSession) {
 		this.session = session;
 		this.patchMode = session.settings?.getEditPatchMode?.() ?? false;
 		this.allowFuzzy = session.settings?.getEditFuzzyMatch() ?? true;
+		this.fuzzyThreshold = session.settings?.getEditFuzzyThreshold?.() ?? DEFAULT_FUZZY_THRESHOLD;
 		const enableLsp = session.enableLsp ?? true;
 		const enableDiagnostics = enableLsp ? (session.settings?.getLspDiagnosticsOnEdit() ?? false) : false;
 		const enableFormat = enableLsp ? (session.settings?.getLspFormatOnWrite() ?? true) : false;
@@ -233,13 +240,15 @@ export class EditTool implements AgentTool<typeof replaceEditSchema | typeof pat
 
 			const input: PatchInput = { path, operation, moveTo, diff };
 			const fs = new LspFileSystem(this.writethrough, signal, batchRequest);
-			const result = await applyPatch(input, { cwd: this.session.cwd, fs });
+			const result = await applyPatch(input, { cwd: this.session.cwd, fs, fuzzyThreshold: this.fuzzyThreshold });
 			const effectiveMoveTo = result.change.newPath ? moveTo : undefined;
 
 			// Generate diff for display
 			let diffResult = { diff: "", firstChangedLine: undefined as number | undefined };
 			if (result.change.type === "update" && result.change.oldContent && result.change.newContent) {
-				diffResult = generateDiffString(result.change.oldContent, result.change.newContent);
+				const normalizedOld = normalizeToLF(stripBom(result.change.oldContent).text);
+				const normalizedNew = normalizeToLF(stripBom(result.change.newContent).text);
+				diffResult = generateUnifiedDiffString(normalizedOld, normalizedNew);
 			}
 
 			let resultText: string;
@@ -303,13 +312,14 @@ export class EditTool implements AgentTool<typeof replaceEditSchema | typeof pat
 		const result = replaceText(normalizedContent, normalizedOldText, normalizedNewText, {
 			fuzzy: this.allowFuzzy,
 			all: all ?? false,
+			threshold: this.fuzzyThreshold,
 		});
 
 		if (result.count === 0) {
 			// Get error details
 			const matchOutcome = findMatch(normalizedContent, normalizedOldText, {
 				allowFuzzy: this.allowFuzzy,
-				threshold: DEFAULT_FUZZY_THRESHOLD,
+				threshold: this.fuzzyThreshold,
 			});
 
 			if (matchOutcome.occurrences && matchOutcome.occurrences > 1) {
@@ -320,7 +330,7 @@ export class EditTool implements AgentTool<typeof replaceEditSchema | typeof pat
 
 			throw new EditMatchError(path, normalizedOldText, matchOutcome.closest, {
 				allowFuzzy: this.allowFuzzy,
-				threshold: DEFAULT_FUZZY_THRESHOLD,
+				threshold: this.fuzzyThreshold,
 				fuzzyMatches: matchOutcome.fuzzyMatches,
 			});
 		}

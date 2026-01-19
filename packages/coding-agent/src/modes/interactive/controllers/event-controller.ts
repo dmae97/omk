@@ -134,6 +134,7 @@ export class EventController {
 								content.arguments,
 								{
 									showImages: this.ctx.settingsManager.getShowImages(),
+									editFuzzyThreshold: this.ctx.settingsManager.getEditFuzzyThreshold(),
 								},
 								tool,
 								this.ctx.ui,
@@ -206,6 +207,7 @@ export class EventController {
 						event.args,
 						{
 							showImages: this.ctx.settingsManager.getShowImages(),
+							editFuzzyThreshold: this.ctx.settingsManager.getEditFuzzyThreshold(),
 						},
 						tool,
 						this.ctx.ui,
