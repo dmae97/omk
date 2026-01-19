@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [6.2.0] - 2026-01-19
 ### Changed
 
 - Improved LSP batching to coalesce formatting and diagnostics for parallel edits
