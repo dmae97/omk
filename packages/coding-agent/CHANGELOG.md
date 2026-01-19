@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added comprehensive apply-patch mode for edit tool with support for create, update, delete, and rename operations
@@ -16,6 +17,7 @@
 
 ### Fixed
 
+- Fixed tool completion logic to only mark tools as complete when streaming is not aborted or in error state
 - Fixed MCP tool path formatting to correctly display provider information
 
 ## [6.2.0] - 2026-01-19

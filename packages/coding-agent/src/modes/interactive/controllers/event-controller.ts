@@ -174,26 +174,9 @@ export class EventController {
 					}
 
 					if (
-						this.ctx.streamingMessage.stopReason === "aborted" ||
-						this.ctx.streamingMessage.stopReason === "error"
+						this.ctx.streamingMessage.stopReason !== "aborted" &&
+						this.ctx.streamingMessage.stopReason !== "error"
 					) {
-						if (!this.ctx.session.isTtsrAbortPending) {
-							if (!errorMessage) {
-								errorMessage = this.ctx.streamingMessage.errorMessage || "Error";
-							}
-							for (const [toolCallId, component] of this.ctx.pendingTools.entries()) {
-								component.updateResult(
-									{
-										content: [{ type: "text", text: errorMessage }],
-										isError: true,
-									},
-									false,
-									toolCallId,
-								);
-							}
-						}
-						this.ctx.pendingTools.clear();
-					} else {
 						for (const [toolCallId, component] of this.ctx.pendingTools.entries()) {
 							component.setArgsComplete(toolCallId);
 						}
