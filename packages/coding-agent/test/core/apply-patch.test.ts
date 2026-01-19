@@ -8,8 +8,8 @@ import {
 	ParseError,
 	type PatchInput,
 	parseDiffHunks,
-} from "../../src/core/tools/edit/apply-patch";
-import { seekSequence } from "../../src/core/tools/edit/seek-sequence";
+	seekSequence,
+} from "../../src/core/tools/patch";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Legacy parser for test fixtures (*** Begin Patch format)
@@ -707,7 +707,7 @@ describe("simple replace mode", () => {
 
 describe("module exports", () => {
 	test("exports all expected types and functions", async () => {
-		const mod = await import("../../src/core/tools/edit/apply-patch");
+		const mod = await import("../../src/core/tools/patch");
 		expect(typeof mod.applyPatch).toBe("function");
 		expect(typeof mod.parseDiffHunks).toBe("function");
 		expect(typeof mod.previewPatch).toBe("function");

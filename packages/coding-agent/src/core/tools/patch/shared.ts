@@ -1,5 +1,5 @@
 /**
- * Shared utilities for edit tools (replace-mode and patch-mode).
+ * Shared utilities for edit tool TUI rendering.
  */
 
 import type { ToolCallContext } from "@oh-my-pi/pi-agent-core";
@@ -9,7 +9,7 @@ import { getLanguageFromPath, type Theme } from "../../../modes/interactive/them
 import type { RenderResultOptions } from "../../custom-tools/types";
 import type { FileDiagnosticsResult } from "../lsp/index";
 import { createToolUIKit, formatExpandHint, getDiffStats, shortenPath, truncateDiffByHunk } from "../render-utils";
-import type { EditDiffError, EditDiffResult } from "./diff";
+import type { DiffError, DiffResult, Operation } from "./types";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LSP Batching
@@ -43,7 +43,7 @@ export interface EditToolDetails {
 	/** Diagnostic result (if available) */
 	diagnostics?: FileDiagnosticsResult;
 	/** Operation type (patch mode only) */
-	operation?: "create" | "delete" | "update";
+	operation?: Operation;
 	/** New path after move/rename (patch mode only) */
 	moveTo?: string;
 }
@@ -60,7 +60,7 @@ interface EditRenderArgs {
 	patch?: string;
 	all?: boolean;
 	// Patch mode fields
-	operation?: "create" | "delete" | "update";
+	operation?: Operation;
 	moveTo?: string;
 	diff?: string;
 }
@@ -68,7 +68,7 @@ interface EditRenderArgs {
 /** Extended context for edit tool rendering */
 export interface EditRenderContext {
 	/** Pre-computed diff preview (computed before tool executes) */
-	editDiffPreview?: EditDiffResult | EditDiffError;
+	editDiffPreview?: DiffResult | DiffError;
 	/** Function to render diff text with syntax highlighting */
 	renderDiff?: (diffText: string, options?: { filePath?: string }) => string;
 }

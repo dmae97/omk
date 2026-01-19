@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { adjustNewTextIndentation, DEFAULT_FUZZY_THRESHOLD, findEditMatch } from "../src/core/tools/edit";
+import { adjustNewTextIndentation, DEFAULT_FUZZY_THRESHOLD, findEditMatch } from "../src/core/tools/patch";
 
 describe("findEditMatch", () => {
 	describe("exact matching", () => {
@@ -103,13 +103,13 @@ describe("findEditMatch", () => {
 			const target = "function bar() {}";
 			const strictResult = findEditMatch(content, target, {
 				allowFuzzy: true,
-				similarityThreshold: 0.99,
+				threshold: 0.99,
 			});
 			expect(strictResult.match).toBeUndefined();
 
 			const lenientResult = findEditMatch(content, target, {
 				allowFuzzy: true,
-				similarityThreshold: 0.7,
+				threshold: 0.7,
 			});
 			expect(lenientResult.match).toBeDefined();
 		});
@@ -119,7 +119,7 @@ describe("findEditMatch", () => {
 			const target = "  itemX";
 			const result = findEditMatch(content, target, {
 				allowFuzzy: true,
-				similarityThreshold: 0.7,
+				threshold: 0.7,
 			});
 			expect(result.fuzzyMatches).toBeGreaterThan(1);
 		});

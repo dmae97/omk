@@ -21,9 +21,8 @@ import type {
 	SessionEntry,
 	SessionManager,
 } from "../session-manager";
-
-import type { EditToolDetails } from "../tools/edit";
 import type { BashToolDetails, FindToolDetails, GrepToolDetails, LsToolDetails, ReadToolDetails } from "../tools/index";
+import type { EditToolDetails } from "../tools/patch";
 
 // Re-export for backward compatibility
 export type { ExecOptions, ExecResult } from "../exec";

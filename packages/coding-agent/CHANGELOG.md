@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added comprehensive apply-patch mode for edit tool with support for create, update, delete, and rename operations
@@ -11,6 +10,12 @@
 
 ### Changed
 
+- Refactored edit tool implementation with modular patch architecture
+- Moved edit tool implementation from `edit/` to `patch/` module
+- Updated import paths for EditToolDetails across core modules
+- Enhanced patch parsing with support for unified diff format and Codex-style patches
+- Improved fuzzy matching algorithms for more robust text location
+- Added comprehensive regression tests for patch application behaviors
 - Improved edit tool architecture with modular diff and apply-patch implementations
 - Enhanced MCP connection handling with waitForConnection for better reliability
 - Improved MCP startup by falling back to cached tool definitions after a short wait while connections complete in the background

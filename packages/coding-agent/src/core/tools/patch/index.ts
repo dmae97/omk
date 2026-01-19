@@ -8,67 +8,80 @@
  * The mode is determined by the `edit.patchMode` setting.
  */
 
-import { mkdirSync, unlinkSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import type { AgentTool, AgentToolContext } from "@oh-my-pi/pi-agent-core";
 import { Type } from "@sinclair/typebox";
-import applyPatchDescription from "../../../prompts/tools/apply-patch.md" with { type: "text" };
-import editDescription from "../../../prompts/tools/edit.md" with { type: "text" };
+import patchDescription from "../../../prompts/tools/patch.md" with { type: "text" };
+import replaceDescription from "../../../prompts/tools/replace.md" with { type: "text" };
 import { renderPromptTemplate } from "../../prompt-templates";
 import type { ToolSession } from "../index";
 import { createLspWritethrough, type FileDiagnosticsResult, writethroughNoop } from "../lsp/index";
 import { resolveToCwd } from "../path-utils";
-import { applyPatch, type FileSystem, type Operation, type PatchInput } from "./apply-patch";
-import {
-	adjustNewTextIndentation,
-	DEFAULT_FUZZY_THRESHOLD,
-	detectLineEnding,
-	EditMatchError,
-	findEditMatch,
-	generateDiffString,
-	normalizeToLF,
-	restoreLineEndings,
-	stripBom,
-} from "./diff";
+import { applyPatch } from "./applicator";
+import { generateDiffString, replaceText } from "./diff";
+import { DEFAULT_FUZZY_THRESHOLD, findMatch } from "./fuzzy";
+import { detectLineEnding, normalizeToLF, restoreLineEndings, stripBom } from "./normalize";
 import { type EditToolDetails, getLspBatchRequest } from "./shared";
+// Internal imports
+import type { FileSystem, Operation, PatchInput } from "./types";
+import { EditMatchError } from "./types";
 
-// Re-export apply-patch types and functions
-export {
-	ApplyPatchError,
-	type ApplyPatchOptions,
-	type ApplyPatchResult,
-	applyPatch,
-	defaultFileSystem,
-	type FileChange,
-	type FileSystem,
-	type Operation,
-	ParseError,
-	type PatchInput,
-	parseDiffHunks,
-	previewPatch,
-	type UpdateChunk,
-	type UpdateFileChunk,
-} from "./apply-patch";
+// ═══════════════════════════════════════════════════════════════════════════
+// Re-exports
+// ═══════════════════════════════════════════════════════════════════════════
 
-// Re-export diff utilities
+// Application
+export { applyPatch, defaultFileSystem, previewPatch } from "./applicator";
+// Diff generation
+export { computeEditDiff, generateDiffString, replaceText } from "./diff";
+
+// Fuzzy matching
 export {
-	adjustNewTextIndentation,
-	computeEditDiff,
 	DEFAULT_FUZZY_THRESHOLD,
+	findContextLine,
+	findMatch,
+	findMatch as findEditMatch,
+	seekSequence,
+} from "./fuzzy";
+
+// Normalization
+export {
+	adjustIndentation as adjustNewTextIndentation,
 	detectLineEnding,
-	type EditDiffError,
-	type EditDiffResult,
-	type EditMatch,
-	EditMatchError,
-	type EditMatchOutcome,
-	findEditMatch,
-	generateDiffString,
 	normalizeToLF,
 	restoreLineEndings,
 	stripBom,
-} from "./diff";
-export { type SeekSequenceResult, seekSequence } from "./seek-sequence";
-// Re-export shared utilities (renderer, LSP batching, types)
-export { type EditRenderContext, type EditToolDetails, editToolRenderer, getLspBatchRequest } from "./shared";
+} from "./normalize";
+
+// Parsing
+export { normalizeCreateContent, normalizeDiff, parseHunks as parseDiffHunks } from "./parser";
+// Rendering
+export type { EditRenderContext, EditToolDetails } from "./shared";
+export { editToolRenderer, getLspBatchRequest } from "./shared";
+// Types
+// Legacy aliases for backwards compatibility
+export type {
+	ApplyPatchOptions,
+	ApplyPatchResult,
+	ContextLineResult,
+	DiffError,
+	DiffError as EditDiffError,
+	DiffHunk,
+	DiffHunk as UpdateChunk,
+	DiffHunk as UpdateFileChunk,
+	DiffResult,
+	DiffResult as EditDiffResult,
+	FileChange,
+	FileSystem,
+	FuzzyMatch,
+	FuzzyMatch as EditMatch,
+	MatchOutcome,
+	MatchOutcome as EditMatchOutcome,
+	Operation,
+	PatchInput,
+	SequenceSearchResult,
+} from "./types";
+export { ApplyPatchError, EditMatchError, ParseError } from "./types";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Schemas
@@ -104,43 +117,58 @@ type PatchParams = { path: string; operation: Operation; moveTo?: string; diff?:
 // LSP FileSystem for patch mode
 // ═══════════════════════════════════════════════════════════════════════════
 
-function createLspFileSystem(
-	writethrough: (
-		dst: string,
-		content: string,
-		signal?: AbortSignal,
-		file?: import("bun").BunFile,
-		batch?: { id: string; flush: boolean },
-	) => Promise<FileDiagnosticsResult | undefined>,
-	signal?: AbortSignal,
-	batchRequest?: { id: string; flush: boolean },
-): FileSystem & { getDiagnostics: () => FileDiagnosticsResult | undefined } {
-	let lastDiagnostics: FileDiagnosticsResult | undefined;
+class LspFileSystem implements FileSystem {
+	private lastDiagnostics: FileDiagnosticsResult | undefined;
+	private fileCache: Record<string, Bun.BunFile> = {};
 
-	return {
-		async exists(path: string): Promise<boolean> {
-			return Bun.file(path).exists();
-		},
-		async read(path: string): Promise<string> {
-			return Bun.file(path).text();
-		},
-		async write(path: string, content: string): Promise<void> {
-			const file = Bun.file(path);
-			const result = await writethrough(path, content, signal, file, batchRequest);
-			if (result) {
-				lastDiagnostics = result;
-			}
-		},
-		async delete(path: string): Promise<void> {
-			unlinkSync(path);
-		},
-		async mkdir(path: string): Promise<void> {
-			mkdirSync(path, { recursive: true });
-		},
-		getDiagnostics(): FileDiagnosticsResult | undefined {
-			return lastDiagnostics;
-		},
-	};
+	constructor(
+		private readonly writethrough: (
+			dst: string,
+			content: string,
+			signal?: AbortSignal,
+			file?: import("bun").BunFile,
+			batch?: { id: string; flush: boolean },
+		) => Promise<FileDiagnosticsResult | undefined>,
+		private readonly signal?: AbortSignal,
+		private readonly batchRequest?: { id: string; flush: boolean },
+	) {}
+
+	#getFile(path: string): Bun.BunFile {
+		if (this.fileCache[path]) {
+			return this.fileCache[path];
+		}
+		const file = Bun.file(path);
+		this.fileCache[path] = file;
+		return file;
+	}
+
+	async exists(path: string): Promise<boolean> {
+		return this.#getFile(path).exists();
+	}
+
+	async read(path: string): Promise<string> {
+		return this.#getFile(path).text();
+	}
+
+	async write(path: string, content: string): Promise<void> {
+		const file = this.#getFile(path);
+		const result = await this.writethrough(path, content, this.signal, file, this.batchRequest);
+		if (result) {
+			this.lastDiagnostics = result;
+		}
+	}
+
+	async delete(path: string): Promise<void> {
+		await this.#getFile(path).unlink();
+	}
+
+	async mkdir(path: string): Promise<void> {
+		await mkdir(path, { recursive: true });
+	}
+
+	getDiagnostics(): FileDiagnosticsResult | undefined {
+		return this.lastDiagnostics;
+	}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -166,7 +194,7 @@ export function createEditTool(
 	return {
 		name: "edit",
 		label: "Edit",
-		description: patchMode ? renderPromptTemplate(applyPatchDescription) : renderPromptTemplate(editDescription),
+		description: patchMode ? renderPromptTemplate(patchDescription) : renderPromptTemplate(replaceDescription),
 		parameters: patchMode ? patchEditSchema : replaceEditSchema,
 		execute: async (
 			_toolCallId: string,
@@ -177,7 +205,9 @@ export function createEditTool(
 		) => {
 			const batchRequest = getLspBatchRequest(context?.toolCall);
 
+			// ─────────────────────────────────────────────────────────────────
 			// Patch mode execution
+			// ─────────────────────────────────────────────────────────────────
 			if ("operation" in params) {
 				const { path, operation, moveTo, diff } = params as PatchParams;
 
@@ -186,7 +216,7 @@ export function createEditTool(
 				}
 
 				const input: PatchInput = { path, operation, moveTo, diff };
-				const fs = createLspFileSystem(writethrough, signal, batchRequest);
+				const fs = new LspFileSystem(writethrough, signal, batchRequest);
 				const result = await applyPatch(input, { cwd: session.cwd, fs });
 
 				// Generate diff for display
@@ -226,7 +256,9 @@ export function createEditTool(
 				};
 			}
 
+			// ─────────────────────────────────────────────────────────────────
 			// Replace mode execution
+			// ─────────────────────────────────────────────────────────────────
 			const { path, oldText, newText, all } = params as ReplaceParams;
 
 			if (path.endsWith(".ipynb")) {
@@ -247,89 +279,44 @@ export function createEditTool(
 			const normalizedOldText = normalizeToLF(oldText);
 			const normalizedNewText = normalizeToLF(newText);
 
-			let normalizedNewContent: string;
-			let replacementCount = 0;
+			const result = replaceText(normalizedContent, normalizedOldText, normalizedNewText, {
+				fuzzy: allowFuzzy,
+				all: all ?? false,
+			});
 
-			if (all) {
-				normalizedNewContent = normalizedContent;
-				const exactCount = normalizedContent.split(normalizedOldText).length - 1;
-				if (exactCount > 0) {
-					normalizedNewContent = normalizedContent.split(normalizedOldText).join(normalizedNewText);
-					replacementCount = exactCount;
-				} else {
-					while (true) {
-						const matchOutcome = findEditMatch(normalizedNewContent, normalizedOldText, {
-							allowFuzzy,
-							similarityThreshold: DEFAULT_FUZZY_THRESHOLD,
-						});
-						const match =
-							matchOutcome.match ||
-							(allowFuzzy && matchOutcome.closest && matchOutcome.closest.confidence >= DEFAULT_FUZZY_THRESHOLD
-								? matchOutcome.closest
-								: undefined);
-						if (!match) {
-							if (replacementCount === 0) {
-								throw new EditMatchError(path, normalizedOldText, matchOutcome.closest, {
-									allowFuzzy,
-									similarityThreshold: DEFAULT_FUZZY_THRESHOLD,
-									fuzzyMatches: matchOutcome.fuzzyMatches,
-								});
-							}
-							break;
-						}
-						// Adjust newText indentation for each match (may vary across file)
-						const adjustedNewText = adjustNewTextIndentation(
-							normalizedOldText,
-							match.actualText,
-							normalizedNewText,
-						);
-						normalizedNewContent =
-							normalizedNewContent.substring(0, match.startIndex) +
-							adjustedNewText +
-							normalizedNewContent.substring(match.startIndex + match.actualText.length);
-						replacementCount++;
-					}
-				}
-			} else {
-				const matchOutcome = findEditMatch(normalizedContent, normalizedOldText, {
+			if (result.count === 0) {
+				// Get error details
+				const matchOutcome = findMatch(normalizedContent, normalizedOldText, {
 					allowFuzzy,
-					similarityThreshold: DEFAULT_FUZZY_THRESHOLD,
+					threshold: DEFAULT_FUZZY_THRESHOLD,
 				});
+
 				if (matchOutcome.occurrences && matchOutcome.occurrences > 1) {
 					throw new Error(
 						`Found ${matchOutcome.occurrences} occurrences of the text in ${path}. The text must be unique. Please provide more context to make it unique, or use all: true to replace all.`,
 					);
 				}
-				if (!matchOutcome.match) {
-					throw new EditMatchError(path, normalizedOldText, matchOutcome.closest, {
-						allowFuzzy,
-						similarityThreshold: DEFAULT_FUZZY_THRESHOLD,
-						fuzzyMatches: matchOutcome.fuzzyMatches,
-					});
-				}
-				const match = matchOutcome.match;
-				// Adjust newText indentation if fuzzy match found text at different indent level
-				const adjustedNewText = adjustNewTextIndentation(normalizedOldText, match.actualText, normalizedNewText);
-				normalizedNewContent =
-					normalizedContent.substring(0, match.startIndex) +
-					adjustedNewText +
-					normalizedContent.substring(match.startIndex + match.actualText.length);
-				replacementCount = 1;
+
+				throw new EditMatchError(path, normalizedOldText, matchOutcome.closest, {
+					allowFuzzy,
+					threshold: DEFAULT_FUZZY_THRESHOLD,
+					fuzzyMatches: matchOutcome.fuzzyMatches,
+				});
 			}
 
-			if (normalizedContent === normalizedNewContent) {
+			if (normalizedContent === result.content) {
 				throw new Error(
 					`No changes made to ${path}. The replacement produced identical content. This might indicate an issue with special characters or the text not existing as expected.`,
 				);
 			}
 
-			const finalContent = bom + restoreLineEndings(normalizedNewContent, originalEnding);
+			const finalContent = bom + restoreLineEndings(result.content, originalEnding);
 			const diagnostics = await writethrough(absolutePath, finalContent, signal, file, batchRequest);
-			const diffResult = generateDiffString(normalizedContent, normalizedNewContent);
+			const diffResult = generateDiffString(normalizedContent, result.content);
 
 			let resultText =
-				replacementCount > 1
-					? `Successfully replaced ${replacementCount} occurrences in ${path}.`
+				result.count > 1
+					? `Successfully replaced ${result.count} occurrences in ${path}.`
 					: `Successfully replaced text in ${path}.`;
 
 			if (diagnostics?.messages?.length) {

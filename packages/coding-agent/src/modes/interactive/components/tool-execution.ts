@@ -12,7 +12,7 @@ import {
 } from "@oh-my-pi/pi-tui";
 import stripAnsi from "strip-ansi";
 import { BASH_DEFAULT_PREVIEW_LINES } from "../../../core/tools/bash";
-import { computeEditDiff, type EditDiffError, type EditDiffResult } from "../../../core/tools/edit";
+import { computeEditDiff, type EditDiffError, type EditDiffResult } from "../../../core/tools/patch";
 import { PYTHON_DEFAULT_PREVIEW_LINES } from "../../../core/tools/python";
 import { toolRenderers } from "../../../core/tools/renderers";
 import { convertToPng } from "../../../utils/image-convert";

@@ -30,7 +30,7 @@ import type {
 } from "../session-manager";
 import type { BashToolDetails, FindToolDetails, GrepToolDetails, LsToolDetails, ReadToolDetails } from "../tools";
 import type { BashOperations } from "../tools/bash";
-import type { EditToolDetails } from "../tools/edit";
+import type { EditToolDetails } from "../tools/patch";
 
 export type { ExecOptions, ExecResult } from "../exec";
 export type { AgentToolResult, AgentToolUpdateCallback };

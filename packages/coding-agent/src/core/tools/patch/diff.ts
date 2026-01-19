@@ -1,0 +1,291 @@
+/**
+ * Diff generation and replace-mode utilities for the edit tool.
+ *
+ * Provides diff string generation and the replace-mode edit logic
+ * used when not in patch mode.
+ */
+
+import * as Diff from "diff";
+import { resolveToCwd } from "../path-utils";
+import { DEFAULT_FUZZY_THRESHOLD, findMatch } from "./fuzzy";
+import { adjustIndentation, normalizeToLF, stripBom } from "./normalize";
+import type { DiffError, DiffResult } from "./types";
+import { EditMatchError } from "./types";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Diff String Generation
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Generate a unified diff string with line numbers and context.
+ * Returns both the diff string and the first changed line number (in the new file).
+ */
+export function generateDiffString(oldContent: string, newContent: string, contextLines = 4): DiffResult {
+	const parts = Diff.diffLines(oldContent, newContent);
+	const output: string[] = [];
+
+	const oldLines = oldContent.split("\n");
+	const newLines = newContent.split("\n");
+	const maxLineNum = Math.max(oldLines.length, newLines.length);
+	const lineNumWidth = String(maxLineNum).length;
+
+	let oldLineNum = 1;
+	let newLineNum = 1;
+	let lastWasChange = false;
+	let firstChangedLine: number | undefined;
+
+	for (let i = 0; i < parts.length; i++) {
+		const part = parts[i];
+		const raw = part.value.split("\n");
+		if (raw[raw.length - 1] === "") {
+			raw.pop();
+		}
+
+		if (part.added || part.removed) {
+			// Capture the first changed line (in the new file)
+			if (firstChangedLine === undefined) {
+				firstChangedLine = newLineNum;
+			}
+
+			// Show the change
+			for (const line of raw) {
+				if (part.added) {
+					const lineNum = String(newLineNum).padStart(lineNumWidth, " ");
+					output.push(`+${lineNum} ${line}`);
+					newLineNum++;
+				} else {
+					const lineNum = String(oldLineNum).padStart(lineNumWidth, " ");
+					output.push(`-${lineNum} ${line}`);
+					oldLineNum++;
+				}
+			}
+			lastWasChange = true;
+		} else {
+			// Context lines - only show a few before/after changes
+			const nextPartIsChange = i < parts.length - 1 && (parts[i + 1].added || parts[i + 1].removed);
+
+			if (lastWasChange || nextPartIsChange) {
+				let linesToShow = raw;
+				let skipStart = 0;
+				let skipEnd = 0;
+
+				if (!lastWasChange) {
+					// Show only last N lines as leading context
+					skipStart = Math.max(0, raw.length - contextLines);
+					linesToShow = raw.slice(skipStart);
+				}
+
+				if (!nextPartIsChange && linesToShow.length > contextLines) {
+					// Show only first N lines as trailing context
+					skipEnd = linesToShow.length - contextLines;
+					linesToShow = linesToShow.slice(0, contextLines);
+				}
+
+				// Add ellipsis if we skipped lines at start
+				if (skipStart > 0) {
+					output.push(` ${"".padStart(lineNumWidth, " ")} ...`);
+					oldLineNum += skipStart;
+					newLineNum += skipStart;
+				}
+
+				for (const line of linesToShow) {
+					const lineNum = String(oldLineNum).padStart(lineNumWidth, " ");
+					output.push(` ${lineNum} ${line}`);
+					oldLineNum++;
+					newLineNum++;
+				}
+
+				// Add ellipsis if we skipped lines at end
+				if (skipEnd > 0) {
+					output.push(` ${"".padStart(lineNumWidth, " ")} ...`);
+					oldLineNum += skipEnd;
+					newLineNum += skipEnd;
+				}
+			} else {
+				// Skip these context lines entirely
+				oldLineNum += raw.length;
+				newLineNum += raw.length;
+			}
+
+			lastWasChange = false;
+		}
+	}
+
+	return { diff: output.join("\n"), firstChangedLine };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Replace Mode Logic
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface ReplaceOptions {
+	/** Allow fuzzy matching */
+	fuzzy: boolean;
+	/** Replace all occurrences */
+	all: boolean;
+	/** Similarity threshold for fuzzy matching */
+	threshold?: number;
+}
+
+export interface ReplaceResult {
+	/** The new content after replacements */
+	content: string;
+	/** Number of replacements made */
+	count: number;
+}
+
+/**
+ * Find and replace text in content using fuzzy matching.
+ */
+export function replaceText(content: string, oldText: string, newText: string, options: ReplaceOptions): ReplaceResult {
+	const threshold = options.threshold ?? DEFAULT_FUZZY_THRESHOLD;
+	let normalizedContent = normalizeToLF(content);
+	const normalizedOldText = normalizeToLF(oldText);
+	const normalizedNewText = normalizeToLF(newText);
+	let count = 0;
+
+	if (options.all) {
+		// Check for exact matches first
+		const exactCount = normalizedContent.split(normalizedOldText).length - 1;
+		if (exactCount > 0) {
+			return {
+				content: normalizedContent.split(normalizedOldText).join(normalizedNewText),
+				count: exactCount,
+			};
+		}
+
+		// No exact matches - try fuzzy matching iteratively
+		while (true) {
+			const matchOutcome = findMatch(normalizedContent, normalizedOldText, {
+				allowFuzzy: options.fuzzy,
+				threshold,
+			});
+
+			// In all mode, use closest match if it passes threshold
+			const match =
+				matchOutcome.match ||
+				(options.fuzzy && matchOutcome.closest && matchOutcome.closest.confidence >= threshold
+					? matchOutcome.closest
+					: undefined);
+
+			if (!match) {
+				break;
+			}
+
+			const adjustedNewText = adjustIndentation(normalizedOldText, match.actualText, normalizedNewText);
+			normalizedContent =
+				normalizedContent.substring(0, match.startIndex) +
+				adjustedNewText +
+				normalizedContent.substring(match.startIndex + match.actualText.length);
+			count++;
+		}
+
+		return { content: normalizedContent, count };
+	}
+
+	// Single replacement mode
+	const matchOutcome = findMatch(normalizedContent, normalizedOldText, {
+		allowFuzzy: options.fuzzy,
+		threshold,
+	});
+
+	if (matchOutcome.occurrences && matchOutcome.occurrences > 1) {
+		throw new Error(
+			`Found ${matchOutcome.occurrences} occurrences of the text. ` +
+				`The text must be unique. Please provide more context to make it unique, or use all: true to replace all.`,
+		);
+	}
+
+	if (!matchOutcome.match) {
+		return { content: normalizedContent, count: 0 };
+	}
+
+	const match = matchOutcome.match;
+	const adjustedNewText = adjustIndentation(normalizedOldText, match.actualText, normalizedNewText);
+	normalizedContent =
+		normalizedContent.substring(0, match.startIndex) +
+		adjustedNewText +
+		normalizedContent.substring(match.startIndex + match.actualText.length);
+
+	return { content: normalizedContent, count: 1 };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Preview/Diff Computation
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Compute the diff for an edit operation without applying it.
+ * Used for preview rendering in the TUI before the tool executes.
+ */
+export async function computeEditDiff(
+	path: string,
+	oldText: string,
+	newText: string,
+	cwd: string,
+	fuzzy = true,
+	all = false,
+): Promise<DiffResult | DiffError> {
+	const absolutePath = resolveToCwd(path, cwd);
+
+	try {
+		const file = Bun.file(absolutePath);
+		try {
+			if (!(await file.exists())) {
+				return { error: `File not found: ${path}` };
+			}
+		} catch {
+			return { error: `File not found: ${path}` };
+		}
+
+		let rawContent: string;
+		try {
+			rawContent = await file.text();
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return { error: message || `Unable to read ${path}` };
+		}
+
+		const { text: content } = stripBom(rawContent);
+		const normalizedContent = normalizeToLF(content);
+		const normalizedOldText = normalizeToLF(oldText);
+		const normalizedNewText = normalizeToLF(newText);
+
+		const result = replaceText(normalizedContent, normalizedOldText, normalizedNewText, {
+			fuzzy,
+			all,
+		});
+
+		if (result.count === 0) {
+			// Get closest match for error message
+			const matchOutcome = findMatch(normalizedContent, normalizedOldText, {
+				allowFuzzy: fuzzy,
+				threshold: DEFAULT_FUZZY_THRESHOLD,
+			});
+
+			if (matchOutcome.occurrences && matchOutcome.occurrences > 1) {
+				return {
+					error: `Found ${matchOutcome.occurrences} occurrences of the text in ${path}. The text must be unique. Please provide more context to make it unique, or use all: true to replace all.`,
+				};
+			}
+
+			return {
+				error: EditMatchError.formatMessage(path, normalizedOldText, matchOutcome.closest, {
+					allowFuzzy: fuzzy,
+					threshold: DEFAULT_FUZZY_THRESHOLD,
+					fuzzyMatches: matchOutcome.fuzzyMatches,
+				}),
+			};
+		}
+
+		if (normalizedContent === result.content) {
+			return {
+				error: `No changes would be made to ${path}. The replacement produces identical content.`,
+			};
+		}
+
+		return generateDiffString(normalizedContent, result.content);
+	} catch (err) {
+		return { error: err instanceof Error ? err.message : String(err) };
+	}
+}
