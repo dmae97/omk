@@ -96,23 +96,41 @@ export async function verifyExpectedFiles(
 	expectedDir: string,
 	actualDir: string,
 ): Promise<VerificationResult> {
+	return verifyExpectedFileSubset(expectedDir, actualDir);
+}
+
+export async function verifyExpectedFileSubset(
+	expectedDir: string,
+	actualDir: string,
+	files?: string[],
+): Promise<VerificationResult> {
 	const startTime = Date.now();
 	let totalIndentScore = 0;
 	let fileCount = 0;
 
 	try {
-		const expectedFiles = listFiles(expectedDir);
+		const expectedFixtureFiles = listFiles(expectedDir);
+		const expectedFiles = files?.length ? files.slice().sort() : expectedFixtureFiles;
 		const actualFiles = listFiles(actualDir);
 
 		const missingFiles = expectedFiles.filter((file) => !actualFiles.includes(file));
 		const extraFiles = actualFiles.filter((file) => !expectedFiles.includes(file));
+		const missingExpected = expectedFiles.filter((file) => !expectedFixtureFiles.includes(file));
 
-		if (missingFiles.length > 0 || extraFiles.length > 0) {
+		if (missingExpected.length > 0) {
+			return {
+				success: false,
+				error: `Expected files missing from fixture: ${formatFileList(missingExpected)}`,
+				duration: Date.now() - startTime,
+			};
+		}
+
+		if (missingFiles.length > 0 || (files === undefined && extraFiles.length > 0)) {
 			const parts: string[] = [];
 			if (missingFiles.length > 0) {
 				parts.push(`Missing files: ${formatFileList(missingFiles)}`);
 			}
-			if (extraFiles.length > 0) {
+			if (files === undefined && extraFiles.length > 0) {
 				parts.push(`Unexpected files: ${formatFileList(extraFiles)}`);
 			}
 
@@ -145,7 +163,6 @@ export async function verifyExpectedFiles(
 			if (!formattedEquivalent) {
 				const diffOutput = createCompactDiff(expectedFormatted.formatted, actualFormatted.formatted);
 				const diffStats = computeDiffStats(expectedFormatted.formatted, actualFormatted.formatted);
-
 				return {
 					success: false,
 					error: `File mismatch for ${file}`,

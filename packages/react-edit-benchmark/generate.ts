@@ -19,12 +19,12 @@
  * - nightmare: Long files where target line repeats, minimal info
  */
 
-import { mkdirSync, readdirSync, statSync, rmSync, existsSync } from "node:fs";
-import { join, relative, dirname, basename } from "node:path";
-import { createWriteStream } from "node:fs";
+import { $ } from "bun";
+import { createWriteStream, existsSync, mkdirSync, readdirSync } from "node:fs";
+import { basename, dirname, join, relative } from "node:path";
+import { parseArgs } from "node:util";
 import { createGzip } from "node:zlib";
 import { pack } from "tar-stream";
-import { parseArgs } from "node:util";
 import { ALL_MUTATIONS, CATEGORY_MAP, type Mutation, type MutationInfo } from "./mutations";
 
 const SCRIPT_DIR = import.meta.dir;
@@ -369,26 +369,25 @@ function getCandidatesForDifficulty(files: FileEntry[], difficulty: Difficulty):
 	}
 }
 
-function bunCheck(content: string, suffix: string): boolean {
-	const tempPath = `/tmp/bench-check-${Date.now()}${suffix}`;
+async function bunCheck(content: string, suffix: string): Promise<boolean> {
+	const tempPath = `/tmp/bench-check-${crypto.randomUUID()}${suffix}`;
 	try {
-		Bun.spawnSync(["rm", "-f", tempPath]);
+		await $`rm -f ${tempPath}`;
 		const file = Bun.file(tempPath);
-		Bun.write(file, content);
-
-		const result = Bun.spawnSync(["bun", "build", tempPath, "--no-bundle"], { timeout: 5000 });
+		await Bun.write(file, content);
+		const result = await $`timeout 5s bun build ${tempPath} --no-bundle`;
 		return result.exitCode === 0;
 	} catch {
-		return true;
+		return false;
 	} finally {
-		Bun.spawnSync(["rm", "-f", tempPath]);
+		await $`rm -f ${tempPath}`;
 	}
 }
 
-function isParsable(content: string, suffix: string): boolean {
+async function isParsable(content: string, suffix: string): Promise<boolean> {
 	if (content.includes("@flow")) return true;
 	try {
-		return bunCheck(content, suffix);
+		return await bunCheck(content, suffix);
 	} catch {
 		return true;
 	}
@@ -484,7 +483,7 @@ function createSeededRng(seed: number): () => number {
 	};
 }
 
-function generateCase(
+async function generateCase(
 	rng: () => number,
 	mutation: Mutation,
 	files: FileEntry[],
@@ -492,7 +491,7 @@ function generateCase(
 	difficulty: Difficulty,
 	minScore: number | null,
 	attemptLimit = 100,
-): CaseResult | null {
+): Promise<CaseResult | null> {
 	let candidates = getCandidatesForDifficulty(files, difficulty);
 	if (candidates.length === 0) candidates = files;
 
@@ -511,7 +510,7 @@ function generateCase(
 		if (!regionAvailable(usedLines, entry.path, info.lineNumber)) continue;
 
 		const suffix = "." + entry.path.split(".").pop();
-		if (!isParsable(mutatedContent, suffix)) continue;
+		if (!await isParsable(mutatedContent, suffix)) continue;
 
 		const diffScore = scoreDifficulty(entry, info.lineNumber);
 
@@ -677,12 +676,12 @@ async function main(): Promise<number> {
 
 		for (let index = 0; index < args.countPerType; index++) {
 			const difficulty = difficultiesForType[index];
-			let result = generateCase(rng, mutation, files, usedLines, difficulty, args.minScore);
+			let result = await generateCase(rng, mutation, files, usedLines, difficulty, args.minScore);
 
 			if (!result) {
 				for (const fallback of fallbackOrder) {
 					if (fallback === difficulty) continue;
-					result = generateCase(rng, mutation, files, usedLines, fallback, 0);
+					result = await generateCase(rng, mutation, files, usedLines, fallback, 0);
 					if (result) {
 						console.log(`Note: ${mutation.name} case ${index + 1} fell back from ${difficulty} to ${fallback}`);
 						break;
@@ -755,4 +754,4 @@ async function main(): Promise<number> {
 	return 0;
 }
 
-main().then((code) => process.exit(code));
+process.exit(await main());

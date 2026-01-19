@@ -20,15 +20,12 @@ describe("applyPatch adversarial inputs", () => {
 		}
 	});
 
-	test("rejects moveTo when it matches path", async () => {
+	test("rejects rename when it matches path", async () => {
 		const filePath = join(tempDir, "same.txt");
 		await Bun.write(filePath, "foo\n");
 
 		await expect(
-			applyPatch(
-				{ path: "same.txt", operation: "update", moveTo: "same.txt", diff: "@@\n-foo\n+bar" },
-				{ cwd: tempDir },
-			),
+			applyPatch({ path: "same.txt", op: "update", rename: "same.txt", diff: "@@\n-foo\n+bar" }, { cwd: tempDir }),
 		).rejects.toThrow(ApplyPatchError);
 
 		expect(readFileSync(filePath, "utf-8")).toBe("foo\n");
@@ -41,7 +38,7 @@ describe("applyPatch adversarial inputs", () => {
 		await applyPatch(
 			{
 				path: "add-context.ts",
-				operation: "update",
+				op: "update",
 				diff: "@@ function bar\n+  console.log('x');",
 			},
 			{ cwd: tempDir },
@@ -60,7 +57,7 @@ describe("applyPatch adversarial inputs", () => {
 			applyPatch(
 				{
 					path: "single.txt",
-					operation: "update",
+					op: "update",
 					diff: "*** Begin Patch\n*** Update File: single.txt\n@@\n-foo\n+FOO\n*** Update File: other.txt\n@@\n-bar\n+BAR\n*** End Patch",
 				},
 				{ cwd: tempDir },
@@ -75,7 +72,7 @@ describe("applyPatch adversarial inputs", () => {
 		await applyPatch(
 			{
 				path: "metadata-context.txt",
-				operation: "update",
+				op: "update",
 				diff: "@@\n diff --git a b\n-alpha\n+ALPHA",
 			},
 			{ cwd: tempDir },
@@ -91,7 +88,7 @@ describe("applyPatch adversarial inputs", () => {
 		await applyPatch(
 			{
 				path: "order.txt",
-				operation: "update",
+				op: "update",
 				diff: "@@ second\n-keep\n+KEEP2\n@@ first\n-keep\n+KEEP1",
 			},
 			{ cwd: tempDir },
@@ -108,7 +105,7 @@ describe("applyPatch adversarial inputs", () => {
 			applyPatch(
 				{
 					path: "ambiguous-context.ts",
-					operation: "update",
+					op: "update",
 					diff: "@@ return foo;\n-  return foo;\n+  return bar;",
 				},
 				{ cwd: tempDir },
@@ -124,7 +121,7 @@ describe("applyPatch adversarial inputs", () => {
 			applyPatch(
 				{
 					path: "ambiguous-prefix.ts",
-					operation: "update",
+					op: "update",
 					diff: "@@\n-const enabled = true\n+const enabled = false",
 				},
 				{ cwd: tempDir },
@@ -140,7 +137,7 @@ describe("applyPatch adversarial inputs", () => {
 			applyPatch(
 				{
 					path: "line-hint.txt",
-					operation: "update",
+					op: "update",
 					diff: "@@ -999,0 +999,1 @@\n+tail",
 				},
 				{ cwd: tempDir },
@@ -155,7 +152,7 @@ describe("applyPatch adversarial inputs", () => {
 		await applyPatch(
 			{
 				path: "blank-context.txt",
-				operation: "update",
+				op: "update",
 				diff: "@@\n section\n-value\n+VALUE\n ",
 			},
 			{ cwd: tempDir },
@@ -168,7 +165,7 @@ describe("applyPatch adversarial inputs", () => {
 		const filePath = join(tempDir, "crlf.txt");
 		await Bun.write(filePath, "foo\r\nbar\r\n");
 
-		await applyPatch({ path: "crlf.txt", operation: "update", diff: "@@\n-foo\n+FOO" }, { cwd: tempDir });
+		await applyPatch({ path: "crlf.txt", op: "update", diff: "@@\n-foo\n+FOO" }, { cwd: tempDir });
 
 		const content = readFileSync(filePath, "utf-8");
 		expect(content).toBe("FOO\r\nbar\r\n");
@@ -178,7 +175,7 @@ describe("applyPatch adversarial inputs", () => {
 		const filePath = join(tempDir, "bom.txt");
 		await Bun.write(filePath, "\uFEFFfoo\r\nbar\r\n");
 
-		await applyPatch({ path: "bom.txt", operation: "update", diff: "@@\n-foo\n+FOO" }, { cwd: tempDir });
+		await applyPatch({ path: "bom.txt", op: "update", diff: "@@\n-foo\n+FOO" }, { cwd: tempDir });
 
 		const content = readFileSync(filePath, "utf-8");
 		expect(content).toBe("\uFEFFFOO\r\nbar\r\n");
@@ -188,7 +185,7 @@ describe("applyPatch adversarial inputs", () => {
 		const filePath = join(tempDir, "nonewline.txt");
 		await Bun.write(filePath, "foo\nbar");
 
-		await applyPatch({ path: "nonewline.txt", operation: "update", diff: "@@\n-bar\n+baz" }, { cwd: tempDir });
+		await applyPatch({ path: "nonewline.txt", op: "update", diff: "@@\n-bar\n+baz" }, { cwd: tempDir });
 
 		const content = readFileSync(filePath, "utf-8");
 		expect(content).toBe("foo\nbaz");

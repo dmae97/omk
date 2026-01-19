@@ -194,18 +194,18 @@ export class ToolExecutionComponent extends Container {
 		if (this.toolName !== "edit") return;
 
 		const path = this.args?.path;
-		const operation = this.args?.operation;
+		const op = this.args?.op;
 
-		if (operation) {
+		if (op) {
 			const diff = this.args?.diff;
-			const moveTo = this.args?.moveTo;
+			const rename = this.args?.rename;
 			if (!path) return;
 
-			const argsKey = JSON.stringify({ path, operation, moveTo, diff });
+			const argsKey = JSON.stringify({ path, op, rename, diff });
 			if (this.editDiffArgsKey === argsKey) return;
 			this.editDiffArgsKey = argsKey;
 
-			computePatchDiff({ path, operation, moveTo, diff }, this.cwd, {
+			computePatchDiff({ path, op, rename, diff }, this.cwd, {
 				fuzzyThreshold: this.editFuzzyThreshold,
 				allowFuzzy: this.editAllowFuzzy,
 			}).then((result) => {

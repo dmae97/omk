@@ -59,6 +59,11 @@ interface Replacement {
 	newLines: string[];
 }
 
+interface HunkVariant {
+	oldLines: string[];
+	newLines: string[];
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Replacement Computation
 // ═══════════════════════════════════════════════════════════════════════════
@@ -69,27 +74,7 @@ function adjustLinesIndentation(patternLines: string[], actualLines: string[], n
 		return newLines;
 	}
 
-	let patternMin = Infinity;
-	for (const line of patternLines) {
-		if (line.trim().length > 0) {
-			patternMin = Math.min(patternMin, countLeadingWhitespace(line));
-		}
-	}
-	if (patternMin === Infinity) patternMin = 0;
-
-	let actualMin = Infinity;
-	for (const line of actualLines) {
-		if (line.trim().length > 0) {
-			actualMin = Math.min(actualMin, countLeadingWhitespace(line));
-		}
-	}
-	if (actualMin === Infinity) actualMin = 0;
-
-	const delta = actualMin - patternMin;
-	if (delta === 0) {
-		return newLines;
-	}
-
+	// Detect indent character from actual content
 	let indentChar = " ";
 	for (const line of actualLines) {
 		const ws = getLeadingWhitespace(line);
@@ -99,16 +84,230 @@ function adjustLinesIndentation(patternLines: string[], actualLines: string[], n
 		}
 	}
 
-	return newLines.map((line) => {
-		if (line.trim().length === 0) {
-			return line;
+	// Build a map from trimmed content to available (pattern index, actual index) pairs
+	// This lets us find context lines and their corresponding actual content
+	const contentToIndices = new Map<string, Array<{ patternIdx: number; actualIdx: number }>>();
+	for (let i = 0; i < Math.min(patternLines.length, actualLines.length); i++) {
+		const trimmed = patternLines[i].trim();
+		if (trimmed.length === 0) continue;
+		const arr = contentToIndices.get(trimmed);
+		if (arr) {
+			arr.push({ patternIdx: i, actualIdx: i });
+		} else {
+			contentToIndices.set(trimmed, [{ patternIdx: i, actualIdx: i }]);
 		}
-		if (delta > 0) {
-			return indentChar.repeat(delta) + line;
+	}
+
+	// Compute fallback delta from all non-empty lines (for truly new lines)
+	let totalDelta = 0;
+	let deltaCount = 0;
+	for (let i = 0; i < Math.min(patternLines.length, actualLines.length); i++) {
+		if (patternLines[i].trim().length > 0 && actualLines[i].trim().length > 0) {
+			const pIndent = countLeadingWhitespace(patternLines[i]);
+			const aIndent = countLeadingWhitespace(actualLines[i]);
+			totalDelta += aIndent - pIndent;
+			deltaCount++;
 		}
-		const toRemove = Math.min(-delta, countLeadingWhitespace(line));
-		return line.slice(toRemove);
+	}
+	const avgDelta = deltaCount > 0 ? Math.round(totalDelta / deltaCount) : 0;
+
+	// Track which indices we've used to handle duplicate content correctly
+	const usedIndices = new Set<number>();
+
+	return newLines.map((newLine) => {
+		if (newLine.trim().length === 0) {
+			return newLine;
+		}
+
+		const trimmed = newLine.trim();
+		const indices = contentToIndices.get(trimmed);
+
+		// Check if this is a context line (same trimmed content exists in pattern)
+		if (indices) {
+			for (const { patternIdx, actualIdx } of indices) {
+				if (!usedIndices.has(patternIdx)) {
+					usedIndices.add(patternIdx);
+					// Use actual file content directly for context lines
+					return actualLines[actualIdx];
+				}
+			}
+		}
+
+		// This is a new/added line - apply average delta
+		if (avgDelta > 0) {
+			return indentChar.repeat(avgDelta) + newLine;
+		}
+		if (avgDelta < 0) {
+			const toRemove = Math.min(-avgDelta, countLeadingWhitespace(newLine));
+			return newLine.slice(toRemove);
+		}
+		return newLine;
 	});
+}
+
+function trimCommonContext(oldLines: string[], newLines: string[]): HunkVariant | undefined {
+	let start = 0;
+	let endOld = oldLines.length;
+	let endNew = newLines.length;
+
+	while (start < endOld && start < endNew && oldLines[start] === newLines[start]) {
+		start++;
+	}
+
+	while (endOld > start && endNew > start && oldLines[endOld - 1] === newLines[endNew - 1]) {
+		endOld--;
+		endNew--;
+	}
+
+	if (start === 0 && endOld === oldLines.length && endNew === newLines.length) {
+		return undefined;
+	}
+
+	const trimmedOld = oldLines.slice(start, endOld);
+	const trimmedNew = newLines.slice(start, endNew);
+	if (trimmedOld.length === 0 && trimmedNew.length === 0) {
+		return undefined;
+	}
+	return { oldLines: trimmedOld, newLines: trimmedNew };
+}
+
+function collapseConsecutiveSharedLines(oldLines: string[], newLines: string[]): HunkVariant | undefined {
+	const shared = new Set(oldLines.filter((line) => newLines.includes(line)));
+	const collapse = (lines: string[]): string[] => {
+		const out: string[] = [];
+		let i = 0;
+		while (i < lines.length) {
+			const line = lines[i];
+			out.push(line);
+			let j = i + 1;
+			while (j < lines.length && lines[j] === line && shared.has(line)) {
+				j++;
+			}
+			i = j;
+		}
+		return out;
+	};
+
+	const collapsedOld = collapse(oldLines);
+	const collapsedNew = collapse(newLines);
+	if (collapsedOld.length === oldLines.length && collapsedNew.length === newLines.length) {
+		return undefined;
+	}
+	return { oldLines: collapsedOld, newLines: collapsedNew };
+}
+
+function collapseRepeatedBlocks(oldLines: string[], newLines: string[]): HunkVariant | undefined {
+	const shared = new Set(oldLines.filter((line) => newLines.includes(line)));
+	const collapse = (lines: string[]): string[] => {
+		const output = [...lines];
+		let changed = false;
+		let i = 0;
+		while (i < output.length) {
+			let collapsed = false;
+			for (let size = Math.floor((output.length - i) / 2); size >= 2; size--) {
+				const first = output.slice(i, i + size);
+				const second = output.slice(i + size, i + size * 2);
+				if (first.length !== second.length || first.length === 0) continue;
+				if (!first.every((line) => shared.has(line))) continue;
+				let same = true;
+				for (let idx = 0; idx < size; idx++) {
+					if (first[idx] !== second[idx]) {
+						same = false;
+						break;
+					}
+				}
+				if (same) {
+					output.splice(i + size, size);
+					changed = true;
+					collapsed = true;
+					break;
+				}
+			}
+			if (!collapsed) {
+				i++;
+			}
+		}
+		return changed ? output : lines;
+	};
+
+	const collapsedOld = collapse(oldLines);
+	const collapsedNew = collapse(newLines);
+	if (collapsedOld.length === oldLines.length && collapsedNew.length === newLines.length) {
+		return undefined;
+	}
+	return { oldLines: collapsedOld, newLines: collapsedNew };
+}
+
+function reduceToSingleLineChange(oldLines: string[], newLines: string[]): HunkVariant | undefined {
+	if (oldLines.length !== newLines.length || oldLines.length === 0) return undefined;
+	let changedIndex: number | undefined;
+	for (let i = 0; i < oldLines.length; i++) {
+		if (oldLines[i] !== newLines[i]) {
+			if (changedIndex !== undefined) return undefined;
+			changedIndex = i;
+		}
+	}
+	if (changedIndex === undefined) return undefined;
+	return { oldLines: [oldLines[changedIndex]], newLines: [newLines[changedIndex]] };
+}
+
+function buildFallbackVariants(hunk: DiffHunk): HunkVariant[] {
+	const variants: HunkVariant[] = [];
+	const base: HunkVariant = { oldLines: hunk.oldLines, newLines: hunk.newLines };
+
+	const trimmed = trimCommonContext(base.oldLines, base.newLines);
+	if (trimmed) variants.push(trimmed);
+
+	const deduped = collapseConsecutiveSharedLines(
+		trimmed?.oldLines ?? base.oldLines,
+		trimmed?.newLines ?? base.newLines,
+	);
+	if (deduped) variants.push(deduped);
+
+	const collapsed = collapseRepeatedBlocks(
+		deduped?.oldLines ?? trimmed?.oldLines ?? base.oldLines,
+		deduped?.newLines ?? trimmed?.newLines ?? base.newLines,
+	);
+	if (collapsed) variants.push(collapsed);
+
+	const singleLine = reduceToSingleLineChange(trimmed?.oldLines ?? base.oldLines, trimmed?.newLines ?? base.newLines);
+	if (singleLine) variants.push(singleLine);
+
+	const seen = new Set<string>();
+	return variants.filter((variant) => {
+		if (variant.oldLines.length === 0 && variant.newLines.length === 0) return false;
+		const key = `${variant.oldLines.join("\n")}||${variant.newLines.join("\n")}`;
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
+}
+
+function findContextRelativeMatch(
+	lines: string[],
+	patternLine: string,
+	contextIndex: number,
+	preferSecondForwardMatch: boolean,
+): number | undefined {
+	const trimmed = patternLine.trim();
+	const forwardMatches: number[] = [];
+	for (let i = contextIndex + 1; i < lines.length; i++) {
+		if (lines[i].trim() === trimmed) {
+			forwardMatches.push(i);
+		}
+	}
+	if (forwardMatches.length > 0) {
+		if (preferSecondForwardMatch && forwardMatches.length > 1) {
+			return forwardMatches[1];
+		}
+		return forwardMatches[0];
+	}
+	for (let i = contextIndex - 1; i >= 0; i--) {
+		if (lines[i].trim() === trimmed) {
+			return i;
+		}
+	}
+	return undefined;
 }
 
 /** Get hint index from hunk's line number */
@@ -311,6 +510,51 @@ function findSequenceWithHint(
 	return primaryResult;
 }
 
+function attemptSequenceFallback(
+	lines: string[],
+	hunk: DiffHunk,
+	currentIndex: number,
+	lineHint: number | undefined,
+	allowFuzzy: boolean,
+): number | undefined {
+	if (hunk.oldLines.length === 0) return undefined;
+	const matchHint = getHunkHintIndex(hunk, currentIndex);
+	const fallbackResult = findSequenceWithHint(
+		lines,
+		hunk.oldLines,
+		currentIndex,
+		matchHint ?? lineHint,
+		false,
+		allowFuzzy,
+	);
+	if (fallbackResult.index !== undefined && (fallbackResult.matchCount ?? 1) <= 1) {
+		const nextIndex = fallbackResult.index + 1;
+		if (nextIndex <= lines.length - hunk.oldLines.length) {
+			const secondMatch = seekSequence(lines, hunk.oldLines, nextIndex, false, { allowFuzzy });
+			if (secondMatch.index !== undefined) {
+				return undefined;
+			}
+		}
+		return fallbackResult.index;
+	}
+
+	for (const variant of buildFallbackVariants(hunk)) {
+		if (variant.oldLines.length === 0) continue;
+		const variantResult = findSequenceWithHint(
+			lines,
+			variant.oldLines,
+			currentIndex,
+			matchHint ?? lineHint,
+			false,
+			allowFuzzy,
+		);
+		if (variantResult.index !== undefined && (variantResult.matchCount ?? 1) <= 1) {
+			return variantResult.index;
+		}
+	}
+	return undefined;
+}
+
 /**
  * Apply a hunk using character-based fuzzy matching.
  * Used when the hunk contains only -/+ lines without context.
@@ -328,10 +572,22 @@ function applyCharacterMatch(
 	const normalizedContent = normalizeToLF(originalContent);
 	const normalizedOldText = normalizeToLF(oldText);
 
-	const matchOutcome = findMatch(normalizedContent, normalizedOldText, {
+	let matchOutcome = findMatch(normalizedContent, normalizedOldText, {
 		allowFuzzy,
 		threshold: fuzzyThreshold,
 	});
+	if (!matchOutcome.match && allowFuzzy) {
+		const relaxedThreshold = Math.min(fuzzyThreshold, 0.92);
+		if (relaxedThreshold < fuzzyThreshold) {
+			const relaxedOutcome = findMatch(normalizedContent, normalizedOldText, {
+				allowFuzzy,
+				threshold: relaxedThreshold,
+			});
+			if (relaxedOutcome.match) {
+				matchOutcome = relaxedOutcome;
+			}
+		}
+	}
 
 	// Check for multiple exact occurrences
 	if (matchOutcome.occurrences && matchOutcome.occurrences > 1) {
@@ -389,6 +645,7 @@ function computeReplacements(
 	let lineIndex = 0;
 
 	for (const hunk of hunks) {
+		let contextIndex: number | undefined;
 		if (hunk.oldStartLine !== undefined && hunk.oldStartLine < 1) {
 			throw new ApplyPatchError(
 				`Line hint ${hunk.oldStartLine} is out of range for ${path} (line numbers start at 1)`,
@@ -408,37 +665,41 @@ function computeReplacements(
 		if (hunk.changeContext !== undefined) {
 			// Use hierarchical context matching for nested @@ anchors and space-separated contexts
 			const result = findHierarchicalContext(originalLines, hunk.changeContext, lineIndex, lineHint, allowFuzzy);
-
-			if (result.matchCount !== undefined && result.matchCount > 1) {
-				const displayContext = hunk.changeContext.includes("\n")
-					? hunk.changeContext.split("\n").pop()
-					: hunk.changeContext;
-				throw new ApplyPatchError(
-					`Found ${result.matchCount} matches for context '${displayContext}' in ${path}. ` +
-						`Add more surrounding context or additional @@ anchors to make it unique.`,
-				);
-			}
-
 			const idx = result.index;
-			if (idx === undefined) {
-				const displayContext = hunk.changeContext.includes("\n")
-					? hunk.changeContext.split("\n").join(" > ")
-					: hunk.changeContext;
-				throw new ApplyPatchError(`Failed to find context '${displayContext}' in ${path}`);
-			}
+			contextIndex = idx;
 
-			// If oldLines[0] matches the final context, start search at idx (not idx+1)
-			// This handles the common case where @@ scope and first context line are identical
-			const firstOldLine = hunk.oldLines[0];
-			const finalContext = hunk.changeContext.includes("\n")
-				? hunk.changeContext.split("\n").pop()?.trim()
-				: hunk.changeContext.trim();
-			const isHierarchicalContext =
-				hunk.changeContext.includes("\n") || hunk.changeContext.trim().split(/\s+/).length > 2;
-			if (firstOldLine !== undefined && (firstOldLine.trim() === finalContext || isHierarchicalContext)) {
-				lineIndex = idx;
+			if (idx === undefined || (result.matchCount !== undefined && result.matchCount > 1)) {
+				const fallback = attemptSequenceFallback(originalLines, hunk, lineIndex, lineHint, allowFuzzy);
+				if (fallback !== undefined) {
+					lineIndex = fallback;
+				} else if (result.matchCount !== undefined && result.matchCount > 1) {
+					const displayContext = hunk.changeContext.includes("\n")
+						? hunk.changeContext.split("\n").pop()
+						: hunk.changeContext;
+					throw new ApplyPatchError(
+						`Found ${result.matchCount} matches for context '${displayContext}' in ${path}. ` +
+							`Add more surrounding context or additional @@ anchors to make it unique.`,
+					);
+				} else {
+					const displayContext = hunk.changeContext.includes("\n")
+						? hunk.changeContext.split("\n").join(" > ")
+						: hunk.changeContext;
+					throw new ApplyPatchError(`Failed to find context '${displayContext}' in ${path}`);
+				}
 			} else {
-				lineIndex = idx + 1;
+				// If oldLines[0] matches the final context, start search at idx (not idx+1)
+				// This handles the common case where @@ scope and first context line are identical
+				const firstOldLine = hunk.oldLines[0];
+				const finalContext = hunk.changeContext.includes("\n")
+					? hunk.changeContext.split("\n").pop()?.trim()
+					: hunk.changeContext.trim();
+				const isHierarchicalContext =
+					hunk.changeContext.includes("\n") || hunk.changeContext.trim().split(/\s+/).length > 2;
+				if (firstOldLine !== undefined && (firstOldLine.trim() === finalContext || isHierarchicalContext)) {
+					lineIndex = idx;
+				} else {
+					lineIndex = idx + 1;
+				}
 			}
 		}
 
@@ -505,6 +766,61 @@ function computeReplacements(
 				hunk.isEndOfFile,
 				allowFuzzy,
 			);
+		}
+
+		if (searchResult.index === undefined || (searchResult.matchCount ?? 0) > 1) {
+			for (const variant of buildFallbackVariants(hunk)) {
+				if (variant.oldLines.length === 0) continue;
+				const variantResult = findSequenceWithHint(
+					originalLines,
+					variant.oldLines,
+					lineIndex,
+					matchHint,
+					hunk.isEndOfFile,
+					allowFuzzy,
+				);
+				if (variantResult.index !== undefined && (variantResult.matchCount ?? 1) <= 1) {
+					pattern = variant.oldLines;
+					newSlice = variant.newLines;
+					searchResult = variantResult;
+					break;
+				}
+			}
+		}
+
+		if (searchResult.index === undefined && contextIndex !== undefined) {
+			for (const variant of buildFallbackVariants(hunk)) {
+				if (variant.oldLines.length !== 1 || variant.newLines.length !== 1) continue;
+				const removedLine = variant.oldLines[0];
+				const hasSharedDuplicate = hunk.newLines.some((line) => line.trim() === removedLine.trim());
+				const adjacentIndex = findContextRelativeMatch(
+					originalLines,
+					removedLine,
+					contextIndex,
+					hasSharedDuplicate,
+				);
+				if (adjacentIndex !== undefined) {
+					pattern = variant.oldLines;
+					newSlice = variant.newLines;
+					searchResult = { index: adjacentIndex, confidence: 0.95 };
+					break;
+				}
+			}
+		}
+
+		if (searchResult.index !== undefined && contextIndex !== undefined && pattern.length === 1) {
+			const trimmed = pattern[0].trim();
+			let occurrenceCount = 0;
+			for (const line of originalLines) {
+				if (line.trim() === trimmed) occurrenceCount++;
+			}
+			if (occurrenceCount > 1) {
+				const hasSharedDuplicate = hunk.newLines.some((line) => line.trim() === trimmed);
+				const contextMatch = findContextRelativeMatch(originalLines, pattern[0], contextIndex, hasSharedDuplicate);
+				if (contextMatch !== undefined) {
+					searchResult = { index: contextMatch, confidence: searchResult.confidence ?? 0.95 };
+				}
+			}
 		}
 
 		if (searchResult.index === undefined) {
@@ -648,15 +964,15 @@ export async function applyPatch(input: PatchInput, options: ApplyPatchOptions):
 	const resolvePath = (p: string): string => resolveToCwd(p, cwd);
 	const absolutePath = resolvePath(input.path);
 
-	if (input.moveTo) {
-		const destPath = resolvePath(input.moveTo);
+	if (input.rename) {
+		const destPath = resolvePath(input.rename);
 		if (destPath === absolutePath) {
-			throw new ApplyPatchError("moveTo path is the same as source path");
+			throw new ApplyPatchError("rename path is the same as source path");
 		}
 	}
 
 	// Handle CREATE operation
-	if (input.operation === "create") {
+	if (input.op === "create") {
 		if (!input.diff) {
 			throw new ApplyPatchError("Create operation requires diff (file content)");
 		}
@@ -682,7 +998,7 @@ export async function applyPatch(input: PatchInput, options: ApplyPatchOptions):
 	}
 
 	// Handle DELETE operation
-	if (input.operation === "delete") {
+	if (input.op === "delete") {
 		if (!(await fs.exists(absolutePath))) {
 			throw new ApplyPatchError(`File not found: ${input.path}`);
 		}
@@ -729,8 +1045,8 @@ export async function applyPatch(input: PatchInput, options: ApplyPatchOptions):
 
 	const newContent = applyHunksToContent(normalizedContent, input.path, hunks, fuzzyThreshold, allowFuzzy);
 	const finalContent = bom + restoreLineEndings(newContent, lineEnding);
-	const destPath = input.moveTo ? resolvePath(input.moveTo) : absolutePath;
-	const isMove = Boolean(input.moveTo) && destPath !== absolutePath;
+	const destPath = input.rename ? resolvePath(input.rename) : absolutePath;
+	const isMove = Boolean(input.rename) && destPath !== absolutePath;
 
 	if (!dryRun) {
 		if (isMove) {

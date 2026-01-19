@@ -286,6 +286,26 @@ function lineIncludesPattern(line: string, pattern: string): boolean {
 	return patternNorm.length / Math.max(1, lineNorm.length) >= PARTIAL_MATCH_MIN_RATIO;
 }
 
+function stripCommentPrefix(line: string): string {
+	let trimmed = line.trimStart();
+	if (trimmed.startsWith("/*")) {
+		trimmed = trimmed.slice(2);
+	} else if (trimmed.startsWith("*/")) {
+		trimmed = trimmed.slice(2);
+	} else if (trimmed.startsWith("//")) {
+		trimmed = trimmed.slice(2);
+	} else if (trimmed.startsWith("*")) {
+		trimmed = trimmed.slice(1);
+	} else if (trimmed.startsWith("#")) {
+		trimmed = trimmed.slice(1);
+	} else if (trimmed.startsWith(";")) {
+		trimmed = trimmed.slice(1);
+	} else if (trimmed.startsWith("/") && trimmed[1] === " ") {
+		trimmed = trimmed.slice(1);
+	}
+	return trimmed.trimStart();
+}
+
 /**
  * Find a sequence of pattern lines within content lines.
  *
@@ -344,6 +364,13 @@ export function seekSequence(
 		for (let i = from; i <= to; i++) {
 			if (matchesAt(lines, pattern, i, (a, b) => a.trim() === b.trim())) {
 				return { index: i, confidence: 0.98 };
+			}
+		}
+
+		// Pass 3b: Comment-prefix normalized match
+		for (let i = from; i <= to; i++) {
+			if (matchesAt(lines, pattern, i, (a, b) => stripCommentPrefix(a) === stripCommentPrefix(b))) {
+				return { index: i, confidence: 0.975 };
 			}
 		}
 
@@ -474,7 +501,7 @@ export function findContextLine(
 	lines: string[],
 	context: string,
 	startFrom: number,
-	options?: { allowFuzzy?: boolean },
+	options?: { allowFuzzy?: boolean; skipFunctionFallback?: boolean },
 ): ContextLineResult {
 	const allowFuzzy = options?.allowFuzzy ?? true;
 	const trimmedContext = context.trim();
@@ -604,6 +631,16 @@ export function findContextLine(
 
 	if (bestIndex !== undefined && bestScore >= CONTEXT_FUZZY_THRESHOLD) {
 		return { index: bestIndex, confidence: bestScore, matchCount };
+	}
+
+	if (!options?.skipFunctionFallback && trimmedContext.endsWith("()")) {
+		const withParen = trimmedContext.replace(/\(\)\s*$/u, "(");
+		const withoutParen = trimmedContext.replace(/\(\)\s*$/u, "");
+		const parenResult = findContextLine(lines, withParen, startFrom, { allowFuzzy, skipFunctionFallback: true });
+		if (parenResult.index !== undefined || (parenResult.matchCount ?? 0) > 0) {
+			return parenResult;
+		}
+		return findContextLine(lines, withoutParen, startFrom, { allowFuzzy, skipFunctionFallback: true });
 	}
 
 	return { index: undefined, confidence: bestScore };

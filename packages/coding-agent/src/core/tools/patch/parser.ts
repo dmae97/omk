@@ -21,8 +21,9 @@ const EMPTY_CHANGE_CONTEXT_MARKER = "@@";
 /** Regex to match unified diff hunk headers: @@ -OLD,COUNT +NEW,COUNT @@ optional-context */
 const UNIFIED_HUNK_HEADER_REGEX = /^@@\s*-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s*@@(?:\s*(.*))?$/;
 
-/** Regex to match @@ line N pattern (model-generated line hints) */
-const LINE_HINT_REGEX = /^line\s+(\d+)$/i;
+/** Regex to match @@ line/lines N or N-M pattern (model-generated line hints) */
+const LINE_HINT_REGEX = /^lines?\s+(\d+)(?:\s*-\s*(\d+))?(?:\s*@@)?$/i;
+const TOP_OF_FILE_REGEX = /^(top|start|beginning)\s+of\s+file$/i;
 
 /**
  * Check if a line is a diff content line (context, addition, or removal).
@@ -74,7 +75,15 @@ export function normalizeDiff(diff: string): string {
 	if (lines[0]?.trim().startsWith("*** Begin Patch")) {
 		lines = lines.slice(1);
 	}
+	// Also strip bare *** at the beginning (model hallucination)
+	if (lines[0]?.trim() === "***") {
+		lines = lines.slice(1);
+	}
 	if (lines.length > 0 && lines[lines.length - 1]?.trim().startsWith("*** End Patch")) {
+		lines = lines.slice(0, -1);
+	}
+	// Also strip bare *** terminator (model hallucination)
+	if (lines.length > 0 && lines[lines.length - 1]?.trim() === "***") {
 		lines = lines.slice(0, -1);
 	}
 
@@ -218,9 +227,10 @@ function parseOneHunk(lines: string[], lineNumber: number, allowMissingContext: 
 	const headerTrimmed = headerLine.trimEnd();
 	const isHeaderLine = headerLine.startsWith("@@");
 	const unifiedHeader = isHeaderLine ? parseUnifiedHunkHeader(headerTrimmed) : undefined;
+	const isEmptyContextMarker = /^@@\s*@@$/.test(headerTrimmed);
 
 	// Check for context marker
-	if (isHeaderLine && headerTrimmed === EMPTY_CHANGE_CONTEXT_MARKER) {
+	if (isHeaderLine && (headerTrimmed === EMPTY_CHANGE_CONTEXT_MARKER || isEmptyContextMarker)) {
 		startIndex = 1;
 	} else if (unifiedHeader) {
 		if (unifiedHeader.oldStartLine < 1 || unifiedHeader.newStartLine < 1) {
@@ -235,16 +245,25 @@ function parseOneHunk(lines: string[], lineNumber: number, allowMissingContext: 
 	} else if (isHeaderLine && headerTrimmed.startsWith(CHANGE_CONTEXT_MARKER)) {
 		const contextValue = headerTrimmed.slice(CHANGE_CONTEXT_MARKER.length);
 		const trimmedContextValue = contextValue.trim();
+		const normalizedContextValue = trimmedContextValue.replace(/^@@\s*/u, "");
 
-		// Check for @@ line N pattern (model-generated line hints)
-		const lineHintMatch = trimmedContextValue.match(LINE_HINT_REGEX);
+		const lineHintMatch = normalizedContextValue.match(LINE_HINT_REGEX);
 		if (lineHintMatch) {
 			oldStartLine = Number(lineHintMatch[1]);
 			newStartLine = oldStartLine;
 			if (oldStartLine < 1) {
 				throw new ParseError("Line hint must be >= 1", lineNumber);
 			}
+		} else if (TOP_OF_FILE_REGEX.test(normalizedContextValue)) {
+			oldStartLine = 1;
+			newStartLine = 1;
 		} else if (trimmedContextValue.length > 0) {
+			changeContexts.push(contextValue);
+		}
+		startIndex = 1;
+	} else if (isHeaderLine) {
+		const contextValue = headerTrimmed.slice(2).trim();
+		if (contextValue.length > 0) {
 			changeContexts.push(contextValue);
 		}
 		startIndex = 1;
@@ -309,6 +328,7 @@ function parseOneHunk(lines: string[], lineNumber: number, allowMissingContext: 
 
 	for (let i = startIndex; i < lines.length; i++) {
 		const line = lines[i];
+		const trimmed = line.trim();
 
 		if (!isDiffContentLine(line) && line.trimEnd() === EOF_MARKER && line.startsWith(EOF_MARKER)) {
 			if (parsedLines === 0) {
@@ -317,6 +337,12 @@ function parseOneHunk(lines: string[], lineNumber: number, allowMissingContext: 
 			hunk.isEndOfFile = true;
 			parsedLines++;
 			break;
+		}
+
+		if (trimmed === "..." || trimmed === "…") {
+			hunk.hasContextLines = true;
+			parsedLines++;
+			continue;
 		}
 
 		const firstChar = line[0];
@@ -337,6 +363,11 @@ function parseOneHunk(lines: string[], lineNumber: number, allowMissingContext: 
 		} else if (firstChar === "-") {
 			// Removed line
 			hunk.oldLines.push(line.slice(1));
+		} else if (!line.startsWith("@@")) {
+			// Implicit context line (model omitted leading space)
+			hunk.hasContextLines = true;
+			hunk.oldLines.push(line);
+			hunk.newLines.push(line);
 		} else {
 			if (parsedLines === 0) {
 				throw new ParseError(
@@ -354,7 +385,41 @@ function parseOneHunk(lines: string[], lineNumber: number, allowMissingContext: 
 		throw new ParseError("Hunk does not contain any lines", lineNumber + startIndex);
 	}
 
+	stripLineNumberPrefixes(hunk);
 	return { hunk, linesConsumed: parsedLines + startIndex };
+}
+
+function stripLineNumberPrefixes(hunk: DiffHunk): void {
+	const allLines = [...hunk.oldLines, ...hunk.newLines].filter((line) => line.trim().length > 0);
+	if (allLines.length < 2) return;
+
+	const numberMatches = allLines
+		.map((line) => line.match(/^\s*(\d{1,6})\s+(.+)$/u))
+		.filter((match): match is RegExpMatchArray => match !== null);
+
+	if (numberMatches.length < Math.max(2, Math.ceil(allLines.length * 0.6))) {
+		return;
+	}
+
+	const numbers = numberMatches.map((match) => Number(match[1]));
+	let sequential = 0;
+	for (let i = 1; i < numbers.length; i++) {
+		if (numbers[i] === numbers[i - 1] + 1) {
+			sequential++;
+		}
+	}
+
+	if (numbers.length >= 3 && sequential < Math.max(1, numbers.length - 2)) {
+		return;
+	}
+
+	const strip = (line: string): string => {
+		const match = line.match(/^\s*\d{1,6}\s+(.+)$/u);
+		return match ? match[1] : line;
+	};
+
+	hunk.oldLines = hunk.oldLines.map(strip);
+	hunk.newLines = hunk.newLines.map(strip);
 }
 
 /** Multi-file patch markers that indicate this is not a single-file patch */
@@ -450,7 +515,11 @@ export function parseHunks(diff: string): DiffHunk[] {
 			continue;
 		}
 
-		const { hunk, linesConsumed } = parseOneHunk(lines.slice(i), i + 1, hunks.length === 0);
+		if (trimmed.startsWith("@@") && lines.slice(i + 1).every((l) => l.trim() === "")) {
+			break;
+		}
+
+		const { hunk, linesConsumed } = parseOneHunk(lines.slice(i), i + 1, true);
 		hunks.push(hunk);
 		i += linesConsumed;
 	}

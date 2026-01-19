@@ -75,9 +75,9 @@ export interface PatchInput {
 	/** File path (relative or absolute) */
 	path: string;
 	/** Operation type */
-	operation: Operation;
+	op: Operation;
 	/** New path for rename (update only) */
-	moveTo?: string;
+	rename?: string;
 	/** File content (create) or diff hunks (update) */
 	diff?: string;
 }

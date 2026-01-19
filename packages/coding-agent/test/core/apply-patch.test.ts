@@ -145,12 +145,12 @@ function parseLegacyPatch(patch: string): LegacyParseResult {
 /** Convert legacy hunk to new PatchInput format */
 function legacyHunkToInput(hunk: LegacyHunk): PatchInput {
 	if (hunk.type === "add") {
-		return { path: hunk.path, operation: "create", diff: hunk.contents };
+		return { path: hunk.path, op: "create", diff: hunk.contents };
 	}
 	if (hunk.type === "delete") {
-		return { path: hunk.path, operation: "delete" };
+		return { path: hunk.path, op: "delete" };
 	}
-	return { path: hunk.path, operation: "update", moveTo: hunk.movePath, diff: hunk.diffBody };
+	return { path: hunk.path, op: "update", rename: hunk.movePath, diff: hunk.diffBody };
 }
 
 /** Apply a legacy format patch (for test fixtures) */
@@ -436,7 +436,7 @@ describe("applyPatch", () => {
 	});
 
 	test("create file", async () => {
-		const result = await applyPatch({ path: "add.txt", operation: "create", diff: "ab\ncd" }, { cwd: tempDir });
+		const result = await applyPatch({ path: "add.txt", op: "create", diff: "ab\ncd" }, { cwd: tempDir });
 
 		expect(result.change.type).toBe("create");
 		expect(readFileSync(join(tempDir, "add.txt"), "utf-8")).toBe("ab\ncd\n");
@@ -446,7 +446,7 @@ describe("applyPatch", () => {
 		const filePath = join(tempDir, "del.txt");
 		await Bun.write(filePath, "x");
 
-		const result = await applyPatch({ path: "del.txt", operation: "delete" }, { cwd: tempDir });
+		const result = await applyPatch({ path: "del.txt", op: "delete" }, { cwd: tempDir });
 
 		expect(result.change.type).toBe("delete");
 		expect(await Bun.file(filePath).exists()).toBe(false);
@@ -457,7 +457,7 @@ describe("applyPatch", () => {
 		await Bun.write(filePath, "foo\nbar\n");
 
 		const result = await applyPatch(
-			{ path: "update.txt", operation: "update", diff: "@@\n foo\n-bar\n+baz" },
+			{ path: "update.txt", op: "update", diff: "@@\n foo\n-bar\n+baz" },
 			{ cwd: tempDir },
 		);
 
@@ -470,7 +470,7 @@ describe("applyPatch", () => {
 		await Bun.write(srcPath, "line\n");
 
 		const result = await applyPatch(
-			{ path: "src.txt", operation: "update", moveTo: "dst.txt", diff: "@@\n-line\n+line2" },
+			{ path: "src.txt", op: "update", rename: "dst.txt", diff: "@@\n-line\n+line2" },
 			{ cwd: tempDir },
 		);
 
@@ -484,10 +484,7 @@ describe("applyPatch", () => {
 		const filePath = join(tempDir, "multi.txt");
 		await Bun.write(filePath, "foo\nbar\nbaz\nqux\n");
 
-		await applyPatch(
-			{ path: "multi.txt", operation: "update", diff: "@@\n-bar\n+BAR\n@@\n-qux\n+QUX" },
-			{ cwd: tempDir },
-		);
+		await applyPatch({ path: "multi.txt", op: "update", diff: "@@\n-bar\n+BAR\n@@\n-qux\n+QUX" }, { cwd: tempDir });
 
 		expect(readFileSync(filePath, "utf-8")).toBe("foo\nBAR\nbaz\nQUX\n");
 	});
@@ -499,7 +496,7 @@ describe("applyPatch", () => {
 		await applyPatch(
 			{
 				path: "scope.txt",
-				operation: "update",
+				op: "update",
 				diff: "@@ ## [Unreleased]\n ## [Unreleased]\n \n+### Added\n+\n+- New feature\n+\n ### Changed",
 			},
 			{ cwd: tempDir },
@@ -517,7 +514,7 @@ describe("applyPatch", () => {
 		await applyPatch(
 			{
 				path: "unicode.py",
-				operation: "update",
+				op: "update",
 				diff: "@@\n-import asyncio  # local import - avoids top-level dep\n+import asyncio  # HELLO",
 			},
 			{ cwd: tempDir },
@@ -531,7 +528,7 @@ describe("applyPatch", () => {
 		await Bun.write(filePath, "original\n");
 
 		const result = await applyPatch(
-			{ path: "dryrun.txt", operation: "update", diff: "@@\n-original\n+modified" },
+			{ path: "dryrun.txt", op: "update", diff: "@@\n-original\n+modified" },
 			{ cwd: tempDir, dryRun: true },
 		);
 
@@ -541,7 +538,7 @@ describe("applyPatch", () => {
 
 	test("missing file for update fails", async () => {
 		await expect(
-			applyPatch({ path: "nonexistent.txt", operation: "update", diff: "@@\n-foo\n+bar" }, { cwd: tempDir }),
+			applyPatch({ path: "nonexistent.txt", op: "update", diff: "@@\n-foo\n+bar" }, { cwd: tempDir }),
 		).rejects.toThrow(ApplyPatchError);
 	});
 
@@ -549,13 +546,11 @@ describe("applyPatch", () => {
 		const filePath = join(tempDir, "nodiff.txt");
 		await Bun.write(filePath, "content\n");
 
-		await expect(applyPatch({ path: "nodiff.txt", operation: "update" }, { cwd: tempDir })).rejects.toThrow(
-			"requires diff",
-		);
+		await expect(applyPatch({ path: "nodiff.txt", op: "update" }, { cwd: tempDir })).rejects.toThrow("requires diff");
 	});
 
 	test("creates parent directories for create", async () => {
-		await applyPatch({ path: "nested/deep/file.txt", operation: "create", diff: "content" }, { cwd: tempDir });
+		await applyPatch({ path: "nested/deep/file.txt", op: "create", diff: "content" }, { cwd: tempDir });
 
 		const filePath = join(tempDir, "nested/deep/file.txt");
 		expect(readFileSync(filePath, "utf-8")).toBe("content\n");
@@ -566,7 +561,7 @@ describe("applyPatch", () => {
 		await Bun.write(srcPath, "line\n");
 
 		await applyPatch(
-			{ path: "src.txt", operation: "update", moveTo: "nested/deep/dst.txt", diff: "@@\n-line\n+newline" },
+			{ path: "src.txt", op: "update", rename: "nested/deep/dst.txt", diff: "@@\n-line\n+newline" },
 			{ cwd: tempDir },
 		);
 
@@ -603,7 +598,7 @@ describe("simple replace mode", () => {
 		await applyPatch(
 			{
 				path: "fuzzy.txt",
-				operation: "update",
+				op: "update",
 				// No @@ marker, just -/+ lines
 				diff: '-console.log("Hello");\n+console.log("World");',
 			},
@@ -621,7 +616,7 @@ describe("simple replace mode", () => {
 		await applyPatch(
 			{
 				path: "indent.ts",
-				operation: "update",
+				op: "update",
 				// Diff uses 0 indentation, should be adjusted to 4 spaces
 				diff: "-const x = 1;\n+const x = 42;",
 			},
@@ -640,7 +635,7 @@ describe("simple replace mode", () => {
 		await applyPatch(
 			{
 				path: "context.txt",
-				operation: "update",
+				op: "update",
 				diff: "@@\n middle\n-foo\n+FOO",
 			},
 			{ cwd: tempDir },
@@ -658,7 +653,7 @@ describe("simple replace mode", () => {
 		await applyPatch(
 			{
 				path: "multi.txt",
-				operation: "update",
+				op: "update",
 				diff: "@@\n-bbb\n+BBB\n@@\n-ddd\n+DDD",
 			},
 			{ cwd: tempDir },
@@ -675,7 +670,7 @@ describe("simple replace mode", () => {
 		await applyPatch(
 			{
 				path: "scoped.txt",
-				operation: "update",
+				op: "update",
 				diff: "@@ class Foo {\n-    return 1;\n+    return 42;",
 			},
 			{ cwd: tempDir },
@@ -692,7 +687,7 @@ describe("simple replace mode", () => {
 			applyPatch(
 				{
 					path: "dupe.txt",
-					operation: "update",
+					op: "update",
 					diff: "-foo\n+FOO",
 				},
 				{ cwd: tempDir },

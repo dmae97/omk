@@ -9,36 +9,28 @@
  *   bun run bench:edit --fixtures fixtures.tar.gz
  */
 
-import { parseArgs } from "node:util";
-import { writeFile, mkdtemp, rm } from "node:fs/promises";
+import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { readdirSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
-import { loadTasks, loadTasksFromDir, validateFixtures, type EditTask } from "./tasks";
+import { parseArgs } from "node:util";
+import { generateJsonReport, generateReport } from "./report";
 import { runBenchmark, type BenchmarkConfig, type ProgressEvent } from "./runner";
-import { generateReport, generateJsonReport } from "./report";
+import { loadTasks, loadTasksFromDir, validateFixtures, type EditTask } from "./tasks";
 
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
 
 function generateReportFilename(config: BenchmarkConfig, format: "markdown" | "json"): string {
-	const modelName = config.model.replace(/[^a-zA-Z0-9-]/g, "_");
-	const variant = config.editVariant ?? "auto";
-	const fuzzyLabel = config.editFuzzy === true
-		? "fuzzy"
-		: config.editFuzzy === false
-			? "strict"
-			: "auto";
-	const thresholdLabel = typeof config.editFuzzyThreshold === "number"
-		? Math.round(config.editFuzzyThreshold * 100).toString()
-		: "auto";
-	const timestamp = new Date()
+	const modelName = config.model.replace(/[^a-zA-Z0-9-]/g, "_").split("/").pop()!;
+	const variant = config.editVariant ?? "replace";
+		const timestamp = new Date()
 		.toISOString()
 		.replace(/:/g, "-")
 		.replace(/\..+$/, "")
 		.replace(/Z$/, "Z");
 	const ext = format === "json" ? "json" : "md";
-	return `run_${modelName}_${variant}_${fuzzyLabel}_${thresholdLabel}_${timestamp}.${ext}`;
+	return `runs/${modelName}_${variant}_${timestamp}.${ext}`;
 }
 
 function printUsage(tasks?: EditTask[]): void {
@@ -325,7 +317,7 @@ async function main(): Promise<void> {
 	const report = formatType === "json" ? generateJsonReport(result) : generateReport(result);
 	const outputPath = values.output ?? generateReportFilename(config, formatType);
 
-	await writeFile(outputPath, report);
+	await Bun.write(outputPath, report);
 	console.log(`Report written to: ${outputPath}`);
 
 	if (cleanup) {

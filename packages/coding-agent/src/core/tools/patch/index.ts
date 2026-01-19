@@ -10,6 +10,7 @@
 
 import { mkdir } from "node:fs/promises";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
+import { StringEnum } from "@oh-my-pi/pi-ai";
 import { Type } from "@sinclair/typebox";
 import patchDescription from "../../../prompts/tools/patch.md" with { type: "text" };
 import replaceDescription from "../../../prompts/tools/replace.md" with { type: "text" };
@@ -45,8 +46,8 @@ export { computeEditDiff, computePatchDiff, generateDiffString, generateUnifiedD
 export {
 	DEFAULT_FUZZY_THRESHOLD,
 	findContextLine,
-	findMatch,
 	findMatch as findEditMatch,
+	findMatch,
 	seekSequence,
 } from "./fuzzy";
 
@@ -61,11 +62,9 @@ export {
 
 // Parsing
 export { normalizeCreateContent, normalizeDiff, parseHunks as parseDiffHunks } from "./parser";
-// Rendering
 export type { EditRenderContext, EditToolDetails } from "./shared";
+// Rendering
 export { editToolRenderer, getLspBatchRequest } from "./shared";
-// Types
-// Legacy aliases for backwards compatibility
 export type {
 	ApplyPatchOptions,
 	ApplyPatchResult,
@@ -79,14 +78,16 @@ export type {
 	DiffResult as EditDiffResult,
 	FileChange,
 	FileSystem,
-	FuzzyMatch,
 	FuzzyMatch as EditMatch,
-	MatchOutcome,
+	FuzzyMatch,
 	MatchOutcome as EditMatchOutcome,
+	MatchOutcome,
 	Operation,
 	PatchInput,
 	SequenceSearchResult,
 } from "./types";
+// Types
+// Legacy aliases for backwards compatibility
 export { ApplyPatchError, EditMatchError, ParseError } from "./types";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -103,21 +104,22 @@ const replaceEditSchema = Type.Object({
 });
 
 const patchEditSchema = Type.Object({
-	path: Type.String({ description: "Path to the file (relative or absolute)" }),
-	operation: Type.Union([Type.Literal("create"), Type.Literal("delete"), Type.Literal("update")], {
-		description: "Operation type: create new file, delete existing file, or update file content",
-	}),
-	moveTo: Type.Optional(Type.String({ description: "New path for rename (update only)" })),
+	path: Type.String({ description: "Path to the file" }),
+	op: Type.Optional(
+		StringEnum(["create", "delete", "update"], {
+			description: "The operation to perform (Defaults to 'update')",
+		}),
+	),
+	rename: Type.Optional(Type.String({ description: "New path, if moving" })),
 	diff: Type.Optional(
 		Type.String({
-			description:
-				"For create: full file content. For update: diff hunks with @@ markers, context lines, +/- changes",
+			description: "Diff hunk(s) for update. Full content for create.",
 		}),
 	),
 });
 
 type ReplaceParams = { path: string; oldText: string; newText: string; all?: boolean };
-type PatchParams = { path: string; operation: Operation; moveTo?: string; diff?: string };
+type PatchParams = { path: string; op?: string; rename?: string; diff?: string };
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LSP FileSystem for patch mode
@@ -276,17 +278,20 @@ export class EditTool implements AgentTool<typeof replaceEditSchema | typeof pat
 		// ─────────────────────────────────────────────────────────────────
 		// Patch mode execution
 		// ─────────────────────────────────────────────────────────────────
-		if ("operation" in params) {
-			const { path, operation, moveTo, diff } = params as PatchParams;
+		if (this.patchMode) {
+			const { path, op: rawOp, rename, diff } = params as PatchParams;
+
+			// Normalize unrecognized operations to "update"
+			const op: Operation = rawOp === "create" || rawOp === "delete" ? rawOp : "update";
 
 			if (path.endsWith(".ipynb")) {
 				throw new Error("Cannot edit Jupyter notebooks with the Edit tool. Use the NotebookEdit tool instead.");
 			}
-			if (moveTo?.endsWith(".ipynb")) {
+			if (rename?.endsWith(".ipynb")) {
 				throw new Error("Cannot edit Jupyter notebooks with the Edit tool. Use the NotebookEdit tool instead.");
 			}
 
-			const input: PatchInput = { path, operation, moveTo, diff };
+			const input: PatchInput = { path, op, rename, diff };
 			const fs = new LspFileSystem(this.writethrough, signal, batchRequest);
 			const result = await applyPatch(input, {
 				cwd: this.session.cwd,
@@ -294,7 +299,7 @@ export class EditTool implements AgentTool<typeof replaceEditSchema | typeof pat
 				fuzzyThreshold: this.fuzzyThreshold,
 				allowFuzzy: this.allowFuzzy,
 			});
-			const effectiveMoveTo = result.change.newPath ? moveTo : undefined;
+			const effRename = result.change.newPath ? rename : undefined;
 
 			// Generate diff for display
 			let diffResult = { diff: "", firstChangedLine: undefined as number | undefined };
@@ -313,12 +318,12 @@ export class EditTool implements AgentTool<typeof replaceEditSchema | typeof pat
 					resultText = `Deleted ${path}`;
 					break;
 				case "update":
-					resultText = effectiveMoveTo ? `Updated and moved ${path} to ${effectiveMoveTo}` : `Updated ${path}`;
+					resultText = effRename ? `Updated and moved ${path} to ${effRename}` : `Updated ${path}`;
 					break;
 			}
 
 			let diagnostics = fs.getDiagnostics();
-			if (operation === "delete" && batchRequest?.flush) {
+			if (op === "delete" && batchRequest?.flush) {
 				const flushedDiagnostics = await flushLspWritethroughBatch(batchRequest.id, this.session.cwd, signal);
 				diagnostics ??= flushedDiagnostics;
 			}
@@ -333,8 +338,8 @@ export class EditTool implements AgentTool<typeof replaceEditSchema | typeof pat
 					diff: diffResult.diff,
 					firstChangedLine: diffResult.firstChangedLine,
 					diagnostics,
-					operation,
-					moveTo: effectiveMoveTo,
+					op,
+					rename: effRename,
 				},
 			};
 		}

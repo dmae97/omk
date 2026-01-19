@@ -42,7 +42,7 @@ describe("regression: indentation adjustment for line-based replacements (2B)", 
 		await applyPatch(
 			{
 				path: "indent.ts",
-				operation: "update",
+				op: "update",
 				diff: `@@ constructor() {
 -this.value = 1;
 -this.name = "test";
@@ -76,7 +76,7 @@ describe("regression: indentation adjustment for line-based replacements (2B)", 
 		await applyPatch(
 			{
 				path: "multi-indent.ts",
-				operation: "update",
+				op: "update",
 				diff: `@@ function inner1() {
 -return 1;
 +return 10;
@@ -113,7 +113,7 @@ describe("regression: ambiguity detection for context-less hunks (2C)", () => {
 			applyPatch(
 				{
 					path: "dupe.txt",
-					operation: "update",
+					op: "update",
 					diff: "-foo\n+FOO",
 				},
 				{ cwd: tempDir },
@@ -131,7 +131,7 @@ describe("regression: ambiguity detection for context-less hunks (2C)", () => {
 			applyPatch(
 				{
 					path: "multi-dupe.txt",
-					operation: "update",
+					op: "update",
 					diff: "@@\n-aaa\n+AAA\n@@\n-ccc\n+CCC",
 				},
 				{ cwd: tempDir },
@@ -147,7 +147,7 @@ describe("regression: ambiguity detection for context-less hunks (2C)", () => {
 		await applyPatch(
 			{
 				path: "context-disambig.txt",
-				operation: "update",
+				op: "update",
 				diff: "@@\n middle\n-foo\n+FOO",
 			},
 			{ cwd: tempDir },
@@ -192,7 +192,7 @@ function process() {
 		await applyPatch(
 			{
 				path: "hints.txt",
-				operation: "update",
+				op: "update",
 				diff: `@@ -5,3 +5,3 @@ function process() {
  function process() {
 -    return 2;
@@ -226,7 +226,7 @@ def helper():
 		await applyPatch(
 			{
 				path: "hint-priority.txt",
-				operation: "update",
+				op: "update",
 				diff: `@@ -6,2 +6,2 @@ def helper():
  def helper():
 -    pass
@@ -262,7 +262,7 @@ describe("regression: insertion uses newStartLine fallback (2E)", () => {
 		await applyPatch(
 			{
 				path: "insert.txt",
-				operation: "update",
+				op: "update",
 				diff: `@@
  line1
 +inserted`,
@@ -281,7 +281,7 @@ describe("regression: insertion uses newStartLine fallback (2E)", () => {
 		await applyPatch(
 			{
 				path: "insert-hint.txt",
-				operation: "update",
+				op: "update",
 				diff: `@@ -2,1 +2,2 @@
  bbb
 +inserted after bbb`,
@@ -299,7 +299,7 @@ describe("regression: insertion uses newStartLine fallback (2E)", () => {
 		await applyPatch(
 			{
 				path: "append.txt",
-				operation: "update",
+				op: "update",
 				diff: `@@
 +appended line
 *** End of File`,
@@ -433,7 +433,7 @@ describe("plan: partial line matching for @@ context", () => {
 		await applyPatch(
 			{
 				path: "imports.ts",
-				operation: "update",
+				op: "update",
 				diff: `@@ import { mkdirSync, unlinkSync }
 
  function cleanup() {
@@ -461,7 +461,7 @@ describe("plan: partial line matching for @@ context", () => {
 		await applyPatch(
 			{
 				path: "funcs.ts",
-				operation: "update",
+				op: "update",
 				diff: `@@ function processItems(items
 -  return items.map(i => i.value);
 +  return items.filter(i => i.valid).map(i => i.value);`,
@@ -495,7 +495,7 @@ describe("plan: unified diff format line numbers", () => {
 		await applyPatch(
 			{
 				path: "lines.txt",
-				operation: "update",
+				op: "update",
 				diff: `@@ -10,3 +10,3 @@
  line 10
 -line 11
@@ -532,7 +532,7 @@ line 9
 		await applyPatch(
 			{
 				path: "repeat.txt",
-				operation: "update",
+				op: "update",
 				diff: `@@ -8,1 +8,1 @@
 -target line
 +MODIFIED TARGET`,
@@ -567,7 +567,7 @@ describe("plan: Codex-style wrapped patches", () => {
 		await applyPatch(
 			{
 				path: "wrapped.txt",
-				operation: "update",
+				op: "update",
 				diff: `*** Begin Patch
 @@
 -old content
@@ -588,7 +588,7 @@ describe("plan: Codex-style wrapped patches", () => {
 		await applyPatch(
 			{
 				path: "partial.txt",
-				operation: "update",
+				op: "update",
 				diff: `@@
 -original
 +modified
@@ -600,6 +600,68 @@ describe("plan: Codex-style wrapped patches", () => {
 		expect(readFileSync(filePath, "utf-8")).toBe("modified\n");
 	});
 
+	test("strips bare *** terminator (model hallucination)", async () => {
+		const filePath = join(tempDir, "bare-asterisk.txt");
+		await Bun.write(filePath, "line1\nline2\nline3\n");
+
+		// Model sometimes outputs just *** as end marker
+		await applyPatch(
+			{
+				path: "bare-asterisk.txt",
+				op: "update",
+				diff: `@@
+-line2
++LINE TWO
+***`,
+			},
+			{ cwd: tempDir },
+		);
+
+		expect(readFileSync(filePath, "utf-8")).toBe("line1\nLINE TWO\nline3\n");
+	});
+
+	test("strips bare *** terminator in multi-hunk diff", async () => {
+		const filePath = join(tempDir, "multi-hunk-asterisk.txt");
+		await Bun.write(filePath, "aaa\nbbb\nccc\nddd\n");
+
+		// Multiple hunks with *** terminator at end
+		await applyPatch(
+			{
+				path: "multi-hunk-asterisk.txt",
+				op: "update",
+				diff: `@@
+-aaa
++AAA
+@@
+-ccc
++CCC
+***`,
+			},
+			{ cwd: tempDir },
+		);
+
+		expect(readFileSync(filePath, "utf-8")).toBe("AAA\nbbb\nCCC\nddd\n");
+	});
+
+	test("strips bare *** at beginning of diff", async () => {
+		const filePath = join(tempDir, "leading-asterisk.txt");
+		await Bun.write(filePath, "old\n");
+
+		await applyPatch(
+			{
+				path: "leading-asterisk.txt",
+				op: "update",
+				diff: `***
+@@
+-old
++new`,
+			},
+			{ cwd: tempDir },
+		);
+
+		expect(readFileSync(filePath, "utf-8")).toBe("new\n");
+	});
+
 	test("strips unified diff metadata lines", async () => {
 		const filePath = join(tempDir, "unified-meta.txt");
 		await Bun.write(filePath, "first\nsecond\nthird\n");
@@ -608,7 +670,7 @@ describe("plan: Codex-style wrapped patches", () => {
 		await applyPatch(
 			{
 				path: "unified-meta.txt",
-				operation: "update",
+				op: "update",
 				diff: `diff --git a/unified-meta.txt b/unified-meta.txt
 index abc123..def456 100644
 --- a/unified-meta.txt
@@ -642,7 +704,7 @@ describe("plan: strip + prefix from file creation", () => {
 		await applyPatch(
 			{
 				path: "newfile.txt",
-				operation: "create",
+				op: "create",
 				diff: `+line one
 +line two
 +line three`,
@@ -657,7 +719,7 @@ describe("plan: strip + prefix from file creation", () => {
 		await applyPatch(
 			{
 				path: "spaced.txt",
-				operation: "create",
+				op: "create",
 				diff: `+ first line
 + second line`,
 			},
@@ -671,7 +733,7 @@ describe("plan: strip + prefix from file creation", () => {
 		await applyPatch(
 			{
 				path: "mixed.txt",
-				operation: "create",
+				op: "create",
 				diff: `+line one
 regular line
 +line three`,
@@ -703,7 +765,7 @@ describe("regression: *** End of File marker handling (2A/2G)", () => {
 		await applyPatch(
 			{
 				path: "eof.txt",
-				operation: "update",
+				op: "update",
 				diff: `@@
 -last line
 +modified last line
@@ -723,7 +785,7 @@ describe("regression: *** End of File marker handling (2A/2G)", () => {
 		await applyPatch(
 			{
 				path: "eof-target.txt",
-				operation: "update",
+				op: "update",
 				diff: `@@
 -item
 +FINAL ITEM
@@ -778,7 +840,7 @@ describe("regression: model edit attempt - @@ line N syntax (session 2026-01-19)
 		await applyPatch(
 			{
 				path: "settings.ts",
-				operation: "update",
+				op: "update",
 				diff: `@@ line 125
  	fuzzyMatch?: boolean; // default: true
  	fuzzyThreshold?: number; // default: 0.95
@@ -792,27 +854,6 @@ describe("regression: model edit attempt - @@ line N syntax (session 2026-01-19)
 		const result = readFileSync(filePath, "utf-8");
 		expect(result).toContain("patchMode?: boolean; // default: true");
 		expect(result).not.toContain("patchMode?: boolean; // default: false");
-	});
-
-	test("@@ line N works with various formats", async () => {
-		const filePath = join(tempDir, "code.ts");
-		const lines = Array.from({ length: 20 }, (_, i) => `content line ${i + 1}`);
-		lines[9] = "old value"; // line 10
-		await Bun.write(filePath, `${lines.join("\n")}\n`);
-
-		// Variations the model might produce
-		await applyPatch(
-			{
-				path: "code.ts",
-				operation: "update",
-				diff: `@@ line 10
--old value
-+new value`,
-			},
-			{ cwd: tempDir },
-		);
-
-		expect(readFileSync(filePath, "utf-8")).toContain("new value");
 	});
 });
 
@@ -853,7 +894,7 @@ class PatchTool {
 		await applyPatch(
 			{
 				path: "patch.ts",
-				operation: "update",
+				op: "update",
 				diff: `@@ class PatchTool
 @@   constructor
  	constructor(session: ToolSession) {
@@ -892,7 +933,7 @@ class Beta {
 		await applyPatch(
 			{
 				path: "multi-class.ts",
-				operation: "update",
+				op: "update",
 				diff: `@@ class Beta
 @@   process
  	process() {
@@ -943,7 +984,7 @@ class PatchTool {
 		await applyPatch(
 			{
 				path: "tool.ts",
-				operation: "update",
+				op: "update",
 				diff: `@@ class PatchTool constructor
  	constructor() {
 -		this.value = 2;
@@ -981,7 +1022,7 @@ function process() {
 		await applyPatch(
 			{
 				path: "funcs.ts",
-				operation: "update",
+				op: "update",
 				diff: `@@ function process helper
  	function helper() {
 -		return 2;
@@ -1031,7 +1072,7 @@ export class EditTool implements AgentTool<typeof replaceEditSchema | typeof pat
 		await applyPatch(
 			{
 				path: "tool.ts",
-				operation: "update",
+				op: "update",
 				diff: `@@ class EditTool
  	constructor(session: ToolSession) {
  		this.session = session;
@@ -1046,7 +1087,7 @@ export class EditTool implements AgentTool<typeof replaceEditSchema | typeof pat
 		expect(result).toContain("this.patchMode = true;");
 	});
 
-	test("@@ class ClassName still rejects when multiple classes match", async () => {
+	test("@@ class ClassName falls back to unique old lines when context is ambiguous", async () => {
 		const filePath = join(tempDir, "multi.ts");
 		await Bun.write(
 			filePath,
@@ -1060,18 +1101,451 @@ export class EditTool implements AgentTool<Schema2, Details2> {
 `,
 		);
 
-		// Should reject because "class EditTool" matches two lines
-		await expect(
-			applyPatch(
-				{
-					path: "multi.ts",
-					operation: "update",
-					diff: `@@ class EditTool
+		await applyPatch(
+			{
+				path: "multi.ts",
+				op: "update",
+				diff: `@@ class EditTool
 -	value = 1;
 +	value = 100;`,
-				},
-				{ cwd: tempDir },
-			),
-		).rejects.toThrow(/2 matches/);
+			},
+			{ cwd: tempDir },
+		);
+
+		const result = readFileSync(filePath, "utf-8");
+		expect(result).toContain("value = 100;");
+		expect(result).toContain("value = 2;");
+	});
+});
+
+describe("regression: bench edit failures (2026-01-19)", () => {
+	let tempDir: string;
+
+	beforeEach(() => {
+		tempDir = join(tmpdir(), `bench-regression-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		mkdirSync(tempDir, { recursive: true });
+	});
+
+	afterEach(() => {
+		rmSync(tempDir, { recursive: true, force: true });
+	});
+
+	test("@@ @@ is treated as empty context", async () => {
+		const filePath = join(tempDir, "empty-context.txt");
+		await Bun.write(filePath, "alpha\nbeta\ngamma\n");
+
+		await applyPatch(
+			{
+				path: "empty-context.txt",
+				op: "update",
+				diff: `@@ @@\n-beta\n+BETA`,
+			},
+			{ cwd: tempDir },
+		);
+
+		expect(readFileSync(filePath, "utf-8")).toBe("alpha\nBETA\ngamma\n");
+	});
+
+	test.each([
+		["@@ line 3 @@", 3],
+		["@@ lines 3-5", 3],
+		["@@ Line 3-5", 3],
+		["@@ line 3-5 @@", 3],
+		["@@ @@ line 3", 3],
+	])("line hint variants (%s) target the correct line", async (header, targetLine) => {
+		const filePath = join(tempDir, `line-hint-${targetLine}.txt`);
+		await Bun.write(filePath, "line 1\nline 2\nline 3\nline 4\nline 5\n");
+
+		await applyPatch(
+			{
+				path: `line-hint-${targetLine}.txt`,
+				op: "update",
+				diff: `${header}\n-line 3\n+LINE THREE`,
+			},
+			{ cwd: tempDir },
+		);
+
+		const lines = readFileSync(filePath, "utf-8").split("\n");
+		expect(lines[2]).toBe("LINE THREE");
+	});
+
+	test("top of file header anchors to line 1", async () => {
+		const filePath = join(tempDir, "top-of-file.txt");
+		await Bun.write(filePath, "first\nsecond\n");
+
+		await applyPatch(
+			{
+				path: "top-of-file.txt",
+				op: "update",
+				diff: "@@ top of file\n-first\n+FIRST",
+			},
+			{ cwd: tempDir },
+		);
+
+		expect(readFileSync(filePath, "utf-8")).toBe("FIRST\nsecond\n");
+	});
+
+	test("function name with empty params matches signature", async () => {
+		const filePath = join(tempDir, "functions.ts");
+		await Bun.write(
+			filePath,
+			`function retryIfBlockedOn(reason: string) {\n  return reason;\n}\n\nfunction describeNode(node: object) {\n  return String(node);\n}\n`,
+		);
+
+		await applyPatch(
+			{
+				path: "functions.ts",
+				op: "update",
+				diff: "@@ retryIfBlockedOn()\n-  return reason;\n+  return reason.toUpperCase();",
+			},
+			{ cwd: tempDir },
+		);
+
+		await applyPatch(
+			{
+				path: "functions.ts",
+				op: "update",
+				diff: "@@ describeNode()\n-  return String(node);\n+  return JSON.stringify(node);",
+			},
+			{ cwd: tempDir },
+		);
+
+		const result = readFileSync(filePath, "utf-8");
+		expect(result).toContain("return reason.toUpperCase();");
+		expect(result).toContain("return JSON.stringify(node);");
+	});
+
+	test("label context falls back to unique old lines", async () => {
+		const filePath = join(tempDir, "imports.js");
+		await Bun.write(
+			filePath,
+			`import { startLoggingProfilingEvents, stopLoggingProfilingEvents } from "../SchedulerProfiling";\n\nexport function run() {\n  return startLoggingProfilingEvents();\n}\n`,
+		);
+
+		await applyPatch(
+			{
+				path: "imports.js",
+				op: "update",
+				diff: '@@ import block\n-import { startLoggingProfilingEvents, stopLoggingProfilingEvents } from "../SchedulerProfiling";\n+import { stopLoggingProfilingEvents, startLoggingProfilingEvents } from "../SchedulerProfiling";',
+			},
+			{ cwd: tempDir },
+		);
+
+		expect(readFileSync(filePath, "utf-8")).toContain(
+			'import { stopLoggingProfilingEvents, startLoggingProfilingEvents } from "../SchedulerProfiling";',
+		);
+	});
+
+	test("ambiguous @@ context resolves via unique old lines", async () => {
+		const filePath = join(tempDir, "ambiguous.ts");
+		await Bun.write(
+			filePath,
+			`function getState() {\n  return 1;\n}\n\nfunction getState() {\n  return 2;\n}\n\nfunction getState() {\n  return 3;\n}\n`,
+		);
+
+		await applyPatch(
+			{
+				path: "ambiguous.ts",
+				op: "update",
+				diff: "@@ function getState() {\n-  return 2;\n+  return 200;",
+			},
+			{ cwd: tempDir },
+		);
+
+		const result = readFileSync(filePath, "utf-8");
+		expect(result).toContain("return 1;");
+		expect(result).toContain("return 200;");
+		expect(result).toContain("return 3;");
+	});
+
+	test("duplicate context lines collapse for matching", async () => {
+		const filePath = join(tempDir, "duplicate-context.txt");
+		await Bun.write(filePath, "alpha\nbeta\ngamma\n");
+
+		await applyPatch(
+			{
+				path: "duplicate-context.txt",
+				op: "update",
+				diff: "@@\n alpha\n beta\n beta\n-gamma\n+GAMMA",
+			},
+			{ cwd: tempDir },
+		);
+
+		expect(readFileSync(filePath, "utf-8")).toBe("alpha\nbeta\nGAMMA\n");
+	});
+
+	test("repeated context blocks collapse when duplicated", async () => {
+		const filePath = join(tempDir, "repeated-block.txt");
+		await Bun.write(filePath, "if (ready) {\n  handle();\n}\n");
+
+		await applyPatch(
+			{
+				path: "repeated-block.txt",
+				op: "update",
+				diff: "@@\n if (ready) {\n  handle();\n}\n if (ready) {\n  handle();\n}\n-  handle();\n+  handleNext();",
+			},
+			{ cwd: tempDir },
+		);
+
+		expect(readFileSync(filePath, "utf-8")).toBe("if (ready) {\n  handleNext();\n}\n");
+	});
+
+	test("shared prefix/suffix context is trimmed when mismatched", async () => {
+		const filePath = join(tempDir, "trim-context.txt");
+		await Bun.write(filePath, "function doThing() {\n  return 1;\n}\n");
+
+		await applyPatch(
+			{
+				path: "trim-context.txt",
+				op: "update",
+				diff: "@@\n // NOTE: helper\n function doThing() {\n-  return 1;\n+  return 2;\n }",
+			},
+			{ cwd: tempDir },
+		);
+
+		expect(readFileSync(filePath, "utf-8")).toBe("function doThing() {\n  return 2;\n}\n");
+	});
+
+	test("single-line change fallback uses the unique changed line", async () => {
+		const filePath = join(tempDir, "single-line-change.txt");
+		await Bun.write(filePath, "function getState() {\n  return 1;\n}\n\nfunction getState() {\n  return 2;\n}\n");
+
+		await applyPatch(
+			{
+				path: "single-line-change.txt",
+				op: "update",
+				diff: "@@ function getState() {\n  return 2;\n-  return 2;\n+  return 200;\n  return 2;",
+			},
+			{ cwd: tempDir },
+		);
+
+		const result = readFileSync(filePath, "utf-8");
+		expect(result).toContain("return 1;");
+		expect(result).toContain("return 200;");
+	});
+
+	test("implicit context lines without prefixes are accepted", async () => {
+		const filePath = join(tempDir, "implicit-context.ts");
+		await Bun.write(
+			filePath,
+			`function getMousePosition(\n  relativeContainer: null,\n  mouseEvent: SyntheticMouseEvent,\n) {\n  if (relativeContainer !== null) {\n    return initialTooltipState;\n  }\n}\n`,
+		);
+
+		await applyPatch(
+			{
+				path: "implicit-context.ts",
+				op: "update",
+				diff: `@@ function getMousePosition(\nrelativeContainer: null,\nmouseEvent: SyntheticMouseEvent,\n) {\n-  if (relativeContainer !== null) {\n+  if (relativeContainer === null) {\n     return initialTooltipState;\n   }`,
+			},
+			{ cwd: tempDir },
+		);
+
+		expect(readFileSync(filePath, "utf-8")).toContain("if (relativeContainer === null)");
+	});
+
+	test("context lines preserve original file indentation when fuzzy matched", async () => {
+		const filePath = join(tempDir, "context-indent.js");
+		// File has 4-space indentation throughout the table
+		await Bun.write(
+			filePath,
+			`export function describeWithPointerEvent(message, describeFn) {
+  const pointerEvent = 'PointerEvent';
+  const fallback = 'MouseEvent/TouchEvent';
+  describe.each\`
+    value    | name
+    $true  | $pointerEvent
+    $true | $fallback
+  \`(\`\${message}: $name\`, entry => {
+    const hasPointerEvents = entry.value;
+    setPointerEvent(hasPointerEvents);
+    describeFn(hasPointerEvents);
+  });
+}
+`,
+		);
+
+		// Model provides diff with 3-space indentation in context lines (one less than file)
+		// The changed line should be fixed, but context lines should NOT be modified
+		await applyPatch(
+			{
+				path: "context-indent.js",
+				op: "update",
+				diff: `@@ describe.each\`
+   value    | name
+   $true  | $pointerEvent
+-   $true | $fallback
++   $false | $fallback
+  \`(\`\${message}: $name\`, entry => {`,
+			},
+			{ cwd: tempDir },
+		);
+
+		const result = readFileSync(filePath, "utf-8");
+		// The changed line should have correct value (false instead of true)
+		expect(result).toContain("$false | $fallback");
+		// Context lines should preserve original 4-space indentation, not become 3-space
+		expect(result).toContain("    value    | name");
+		expect(result).toContain("    $true  | $pointerEvent");
+	});
+
+	test("duplicate context lines are resolved via adjacent match to @@ anchor", async () => {
+		const filePath = join(tempDir, "ReactFlightDOMClientNode.js");
+		await Bun.write(
+			filePath,
+			`const handleEnd = () => {
+  if (--streamEndedCount === 2) {
+    cleanup();
+  }
+  if (--streamEndedCount === 2) {
+    finalize();
+  }
+};
+`,
+		);
+
+		await applyPatch(
+			{
+				path: "ReactFlightDOMClientNode.js",
+				op: "update",
+				diff: `@@     const handleEnd = () => {
+       if (--streamEndedCount === 2) {
+-      if (--streamEndedCount === 2) {
++      if (++streamEndedCount === 2) {`,
+			},
+			{ cwd: tempDir },
+		);
+
+		const result = readFileSync(filePath, "utf-8");
+		const lines = result.split("\n");
+		expect(lines[1]).toContain("--streamEndedCount");
+		expect(lines[4]).toContain("++streamEndedCount");
+	});
+
+	test("strip line-number prefixes from diff content", async () => {
+		const filePath = join(tempDir, "line-numbers.txt");
+		await Bun.write(
+			filePath,
+			`Permission is hereby granted, free of charge\nA copy of this software and associated docs\nThe above copyright notice\n`,
+		);
+
+		await applyPatch(
+			{
+				path: "line-numbers.txt",
+				op: "update",
+				diff: "@@\n 1\tPermission is hereby granted, free of charge\n- 2\tA copy of this software and associated docs\n+ 2\tA copy of this software AND associated docs\n 3\tThe above copyright notice",
+			},
+			{ cwd: tempDir },
+		);
+
+		const result = readFileSync(filePath, "utf-8");
+		expect(result).toContain("A copy of this software AND associated docs");
+	});
+
+	test("ellipsis placeholder lines are ignored during matching", async () => {
+		const filePath = join(tempDir, "ellipsis.ts");
+		await Bun.write(
+			filePath,
+			`function progress(done: boolean, value: string) {\n  if (done) {\n    return;\n  }\n  const buffer = value;\n  return buffer;\n}\n`,
+		);
+
+		await applyPatch(
+			{
+				path: "ellipsis.ts",
+				op: "update",
+				diff: "@@ function progress\n  if (done) {\n    return;\n  }\n...\n-  const buffer = value;\n+  const buffer = value.toUpperCase();",
+			},
+			{ cwd: tempDir },
+		);
+
+		expect(readFileSync(filePath, "utf-8")).toContain("const buffer = value.toUpperCase();");
+	});
+
+	test("context anchor retryIfBlockedOn() matches signature without params", async () => {
+		const filePath = join(tempDir, "context-anchor.ts");
+		await Bun.write(filePath, `function retryIfBlockedOn(reason: string, blockedOn: mixed) {\n  return reason;\n}\n`);
+
+		await applyPatch(
+			{
+				path: "context-anchor.ts",
+				op: "update",
+				diff: "@@ retryIfBlockedOn()\n-  return reason;\n+  return reason.toUpperCase();",
+			},
+			{ cwd: tempDir },
+		);
+
+		expect(readFileSync(filePath, "utf-8")).toContain("return reason.toUpperCase();");
+	});
+
+	test("ambiguous context falls back to unique old lines", async () => {
+		const filePath = join(tempDir, "ambiguous-context.ts");
+		await Bun.write(
+			filePath,
+			`function getState() {\n  return 1;\n}\n\nfunction getState() {\n  return 2;\n}\n\nfunction getState() {\n  return 3;\n}\n`,
+		);
+
+		await applyPatch(
+			{
+				path: "ambiguous-context.ts",
+				op: "update",
+				diff: "@@ function getState() {\n-  return 2;\n+  return 200;",
+			},
+			{ cwd: tempDir },
+		);
+
+		const result = readFileSync(filePath, "utf-8");
+		expect(result).toContain("return 1;");
+		expect(result).toContain("return 200;");
+		expect(result).toContain("return 3;");
+	});
+
+	test("comment-prefix mismatches still match expected lines", async () => {
+		const filePath = join(tempDir, "comment-prefix.txt");
+		await Bun.write(
+			filePath,
+			`/*\n * LICENSE file in the root directory.\n * Copyright (c) Meta Platforms, Inc.\n */\n`,
+		);
+
+		await applyPatch(
+			{
+				path: "comment-prefix.txt",
+				op: "update",
+				diff: "@@\n-/ LICENSE file in the root directory.\n+ / LICENSE file in the root directory.\n",
+			},
+			{ cwd: tempDir },
+		);
+
+		expect(readFileSync(filePath, "utf-8")).toContain("/ LICENSE file in the root directory.");
+	});
+
+	test("context-less fuzzy match applies even with spacing differences", async () => {
+		const filePath = join(tempDir, "fuzzy-contextless.ts");
+		await Bun.write(filePath, "const value = computeTotal(items);\n");
+
+		await applyPatch(
+			{
+				path: "fuzzy-contextless.ts",
+				op: "update",
+				diff: "-const value=computeTotal(items);\n+const value = calculateTotal(items);",
+			},
+			{ cwd: tempDir },
+		);
+
+		expect(readFileSync(filePath, "utf-8")).toContain("calculateTotal");
+	});
+
+	test("@@ header without space is accepted", async () => {
+		const filePath = join(tempDir, "header-nospace.ts");
+		await Bun.write(filePath, `const value = 1;\nconst other = 2;\n`);
+
+		await applyPatch(
+			{
+				path: "header-nospace.ts",
+				op: "update",
+				diff: "@@const value = 1;\n-const value = 1;\n+const value = 100;",
+			},
+			{ cwd: tempDir },
+		);
+
+		expect(readFileSync(filePath, "utf-8")).toContain("const value = 100;");
 	});
 });

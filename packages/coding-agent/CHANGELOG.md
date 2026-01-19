@@ -1,8 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added fallback variant generation for patch matching with trimmed context, collapsed duplicates, and single-line reduction
+- Added comment-prefix normalization for improved fuzzy matching across different comment styles
+- Added support for ellipsis (...) and ellipsis character (…) as context placeholders in patch hunks
+- Added line number prefix stripping from diff content when sequential numbering is detected
+- Added support for 'top of file' and 'start of file' anchors in patch headers
+- Added function signature fallback matching for context anchors with empty parentheses
+- Added relaxed fuzzy threshold fallback when initial matching fails
+- Added context-relative matching for duplicate lines with preference for second forward match
 - Added `--no-title` flag to disable automatic session title generation
 - Added environment variable support for edit tool configuration (OMP_EDIT_VARIANT, OMP_EDIT_FUZZY, OMP_EDIT_FUZZY_THRESHOLD)
 - Added `allowFuzzy` option to control fuzzy matching behavior in patch operations
@@ -23,6 +32,12 @@
 
 ### Changed
 
+- Improved indentation adjustment to preserve original file context while fixing new lines
+- Enhanced patch parser to handle implicit context lines without space prefixes
+- Updated patch operation schema to use 'op' instead of 'operation' and 'rename' instead of 'moveTo'
+- Improved ambiguous context resolution by falling back to unique old lines when multiple matches occur
+- Enhanced fuzzy matching to try comment-prefix normalized matches before unicode normalization
+- Updated patch prompts with clearer anchor selection rules and context requirements
 - Changed default behavior of read tool to omit line numbers by default
 - Updated patch tool prompts to clarify verbatim context requirements and hunk formatting rules
 - Enhanced fuzzy matching algorithms to respect the `allowFuzzy` setting for more precise control
@@ -73,6 +88,12 @@
 
 ### Fixed
 
+- Fixed patch application to handle repeated context blocks by collapsing duplicates during matching
+- Fixed context line preservation to maintain original file indentation when fuzzy matched
+- Fixed ambiguous context matching to resolve duplicates using adjacent @@ anchor positioning
+- Fixed patch parser to correctly handle bare *** terminators and model hallucination markers
+- Fixed line hint parsing to support ranges (lines 3-5) and various format variations
+- Fixed function context matching to handle signatures with and without empty parentheses
 - Fixed session title generation to respect OMP_NO_TITLE environment variable
 - Fixed Python module discovery to use import.meta.dir for ES module compatibility
 - Fixed LSP writethrough batching to flush when delete operations complete a batch

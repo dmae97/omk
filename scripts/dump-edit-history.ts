@@ -14,9 +14,9 @@
  *   --compact      Compact output (no diff content)
  */
 
-import { readFileSync, existsSync } from "node:fs";
-import { basename } from "node:path";
 import { Glob } from "bun";
+import { existsSync, readFileSync } from "node:fs";
+import { basename } from "node:path";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
@@ -43,7 +43,7 @@ interface Message {
 interface EditAttempt {
 	id: string;
 	path: string;
-	operation: string;
+	op: string;
 	diff: string;
 	isError: boolean;
 	resultText: string;
@@ -90,7 +90,7 @@ function extractEditAttempts(sessionPath: string): EditAttempt[] {
 		for (const item of msgContent) {
 			if (item.type === "toolCall" && item.name === "edit") {
 				const toolId = item.id!;
-				const args = item.arguments as { path?: string; operation?: string; diff?: string };
+				const args = item.arguments as { path?: string; op?: string; diff?: string };
 
 				// Find result
 				let result: Message["message"] | null = null;
@@ -115,7 +115,7 @@ function extractEditAttempts(sessionPath: string): EditAttempt[] {
 				editAttempts.push({
 					id: toolId,
 					path: args.path ?? "",
-					operation: args.operation ?? "update",
+					op: args.op ?? "update",
 					diff: args.diff ?? "",
 					isError,
 					resultText,
@@ -170,7 +170,7 @@ function formatAttempt(attempt: EditAttempt, index: number, options: Options): s
 		``,
 		`${colorize(`### Attempt ${index}`, "bold")}: ${status}`,
 		`${colorize("Path:", "dim")} ${attempt.path}`,
-		`${colorize("Operation:", "dim")} ${attempt.operation}`,
+		`${colorize("Operation:", "dim")} ${attempt.op}`,
 	];
 
 	if (options.context && attempt.thinkingContext) {
@@ -258,7 +258,7 @@ function formatJson(results: SessionResult[]): string {
 			file: r.file,
 			attempts: r.attempts.map((a) => ({
 				path: a.path,
-				operation: a.operation,
+				op: a.op,
 				diff: a.diff,
 				isError: a.isError,
 				errorType: a.errorType,

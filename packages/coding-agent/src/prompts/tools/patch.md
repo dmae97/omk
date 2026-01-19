@@ -1,82 +1,76 @@
-<context>
-Performs patch operations on the file system. This is your primary tool for making changes to the codebase.
-</context>
+Performs patch operations on a file given a diff.
+This is your primary tool for making changes to existing files.
 
 <critical>
-**Read before editing.** Always fetch the target file first and copy context lines verbatim. Patch failures almost always stem from guessed or paraphrased context that doesn't match actual file content.
+- Always read the target file before editing.
+- Copy anchors + context lines verbatim (including whitespace).
+- Output the clean patch format below.
 </critical>
 
 <parameters>
-| Parameter | Description |
-|-----------|-------------|
-| `path` | Path to the file (relative or absolute) |
-| `operation` | `create` (new file), `delete` (remove file), or `update` (patch in place) |
-| `moveTo` | New path for rename (update only, optional) |
-| `diff` | For create: full file content. For update: diff hunks with context and changes |
+```ts
+type T = 
+   // Diff is one or more hunks, within the same file.
+   // - Each hunk begins with "@@" (optionally with an anchor).
+   // - Each hunk body contains only lines starting with: ' ' | '+' | '-'.
+   // - Each hunk must include at least one real change (+ or -). No no-op hunks.
+   | { path: string, op: "update", diff: string }
+   // Diff is the full file content, no prefixes.
+   | { path: string, op: "create", diff: string }
+   // Omit diff for delete operation.
+   | { path: string, op: "delete" }
+   // New path for update-and-move operation.
+   | { path: string, op: "update", rename: string, diff: string }
+```
 </parameters>
 
-<diff_format>
-For `create`, the `diff` field contains the full file content (no prefixes needed).
+<hunk_header>
+Allowed:
+- `@@`
+- `@@ $ANCHOR`
 
-For `update`, the `diff` field contains one or more "hunks", each introduced by @@ (optionally followed by a hunk header).
-If you include a hunk header, it must be **verbatim text from the file** (a full line or a unique substring of a line, e.g., a function signature). Do **not** use line numbers, ranges, or labels like "top of file"—those are treated as literal anchors and will fail to match. If unsure, omit the header entirely.
-Within a hunk each line starts with:
-- ` ` (space) for context lines
-- `-` for removed lines
-- `+` for added lines
+ANCHOR RULES:
+- `$ANCHOR` MUST be copied verbatim from the file as either:
+  - a full existing line, OR
+  - a unique substring of a single existing line.
+- NEVER use it as a comment:
+  - line numbers / ranges: `line 207`, `lines 26-37`
+  - location labels: `top of file`, `start`, `near imports`
+  - placeholders: `@@ @@`, `...`
+</hunk_header>
 
-Prefer replacing whole logical blocks (function/class/section) when possible instead of single-line edits.
-Line numbers are hints only; do not rely on them. Use semantic anchors via `@@` and surrounding context lines.
+<anchor_selection>
+ANCHOR SELECTION ALGORITHM (use in this order):
+1) If the surrounding context lines are already unique in the file, use bare `@@`.
+2) Else choose an anchor that is highly specific and stable, copied from the file, e.g.:
+   - full function signature line
+   - class declaration line
+   - a unique string literal / error message
+   - a config key with uncommon name
+3) If you get "Found multiple matches", escalate by:
+   - adding more context lines, OR
+   - using multiple hunks with separate nearby anchors, OR
+   - using a more specific anchor substring (longer, includes identifiers).
+NEVER use generic anchors like `import`, `export`, `describe`, `function`, `const`.
+</anchor_selection>
 
-For instructions on [context_before] and [context_after]:
-- By default, show 3 lines of code immediately above and 3 lines immediately below each change. If a change is within 3 lines of a previous change, do NOT duplicate the first change's [context_after] lines in the second change's [context_before] lines.
-- Context lines must be copied **verbatim**, including whitespace and punctuation. Avoid paraphrasing or reformatting.
-- If 3 lines of context is insufficient to uniquely identify the snippet of code within the file, use the @@ operator to indicate the class or function to which the snippet belongs. For instance, we might have:
-@@ class BaseClass
-[3 lines of pre-context]
-- [old_code]
-+ [new_code]
-[3 lines of post-context]
+<context_rules>
+- Include enough context lines (' ' prefixed) to make the match unique (usually 2–8 total).
+- Context lines must exist in the file exactly as written; preserve indentation/trailing spaces.
+</context_rules>
 
-- If a code block is repeated so many times in a class or function such that even a single `@@` statement and 3 lines of context cannot uniquely identify the snippet of code, use multiple `@@` statements plus **extra surrounding context** to make the match unique. For instance:
+<example name="create">
+edit {"path":"hello.txt","op":"create","diff":"Hello\n"}
+</example>
 
-@@ class BaseClass
-@@   def method():
-[3 lines of pre-context]
-- [old_code]
-+ [new_code]
-[3 lines of post-context]
-</diff_format>
+<example name="update">
+edit {"path":"src/app.py","op":"update","diff":"@@ def greet():\n def greet():\n-print('Hi')\n+print('Hello')\n"}
+</example>
 
-<examples>
-Create a new file:
-```
-edit {"path": "hello.txt", "operation": "create", "diff": "Hello world"}
-```
+<example name="rename">
+edit {"path":"src/app.py","op":"update","rename":"src/main.py","diff":"@@\n ...\n"}
+</example>
 
-Update a file:
-```
-edit {"path": "src/app.py", "operation": "update", "diff": "@@ def greet():\n-print(\"Hi\")\n+print(\"Hello, world!\")"}
-```
-
-Rename and update:
-```
-edit {"path": "src/app.py", "operation": "update", "moveTo": "src/main.py", "diff": "@@ def greet():\n-print(\"Hi\")\n+print(\"Hello, world!\")"}
-```
-
-Delete a file:
-```
-edit {"path": "obsolete.txt", "operation": "delete"}
-```
-</examples>
-
-<rules>
-1. Read the file before editing—copy context lines exactly as they appear
-2. For create: provide full file content in `diff`
-3. For update: provide hunks with context lines and +/- changes
-4. For delete: omit the `diff` field
-5. Use relative paths only
-6. If a context or change appears more than once, add more surrounding context or additional `@@` anchors to make it unique
-7. Do not include no-op edits (identical `-` and `+` lines). If nothing changes, omit the hunk
-8. Ensure each hunk starts with @@ and contains only valid diff lines (space/+/ -). No extra preamble text
-</rules>
+<example name="delete">
+edit {"path":"obsolete.txt","op":"delete"}
+</example>

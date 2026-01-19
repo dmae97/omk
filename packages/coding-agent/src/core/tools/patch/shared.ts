@@ -50,9 +50,9 @@ export interface EditToolDetails {
 	/** Diagnostic result (if available) */
 	diagnostics?: FileDiagnosticsResult;
 	/** Operation type (patch mode only) */
-	operation?: Operation;
+	op?: Operation;
 	/** New path after move/rename (patch mode only) */
-	moveTo?: string;
+	rename?: string;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -67,8 +67,8 @@ interface EditRenderArgs {
 	patch?: string;
 	all?: boolean;
 	// Patch mode fields
-	operation?: Operation;
-	moveTo?: string;
+	op?: Operation;
+	rename?: string;
 	diff?: string;
 }
 
@@ -145,12 +145,12 @@ export const editToolRenderer = {
 		let pathDisplay = filePath ? uiTheme.fg("accent", filePath) : uiTheme.fg("toolOutput", uiTheme.format.ellipsis);
 
 		// Add arrow for move/rename operations
-		if (args.moveTo) {
-			pathDisplay += ` ${uiTheme.fg("dim", "→")} ${uiTheme.fg("accent", shortenPath(args.moveTo))}`;
+		if (args.rename) {
+			pathDisplay += ` ${uiTheme.fg("dim", "→")} ${uiTheme.fg("accent", shortenPath(args.rename))}`;
 		}
 
 		// Show operation type for patch mode
-		const opTitle = args.operation === "create" ? "Create" : args.operation === "delete" ? "Delete" : "Edit";
+		const opTitle = args.op === "create" ? "Create" : args.op === "delete" ? "Delete" : "Edit";
 		const text = `${ui.title(opTitle)} ${editIcon} ${pathDisplay}`;
 		return new Text(text, 0, 0);
 	},
@@ -170,9 +170,9 @@ export const editToolRenderer = {
 		const editDiffPreview = renderContext?.editDiffPreview;
 		const renderDiffFn = renderContext?.renderDiff ?? ((t: string) => t);
 
-		// Get operation and moveTo from args or details
-		const operation = args?.operation || result.details?.operation;
-		const moveTo = args?.moveTo || result.details?.moveTo;
+		// Get op and rename from args or details
+		const op = args?.op || result.details?.op;
+		const rename = args?.rename || result.details?.rename;
 
 		// Build path display with line number if available
 		let pathDisplay = filePath ? uiTheme.fg("accent", filePath) : uiTheme.fg("toolOutput", uiTheme.format.ellipsis);
@@ -183,17 +183,17 @@ export const editToolRenderer = {
 			pathDisplay += uiTheme.fg("warning", `:${firstChangedLine}`);
 		}
 
-		// Add arrow for move/rename operations
-		if (moveTo) {
-			pathDisplay += ` ${uiTheme.fg("dim", "→")} ${uiTheme.fg("accent", shortenPath(moveTo))}`;
+		// Add arrow for rename operations
+		if (rename) {
+			pathDisplay += ` ${uiTheme.fg("dim", "→")} ${uiTheme.fg("accent", shortenPath(rename))}`;
 		}
 
 		// Show operation type for patch mode
-		const opTitle = operation === "create" ? "Create" : operation === "delete" ? "Delete" : "Edit";
+		const opTitle = op === "create" ? "Create" : op === "delete" ? "Delete" : "Edit";
 		let text = `${uiTheme.fg("toolTitle", uiTheme.bold(opTitle))} ${editIcon} ${pathDisplay}`;
 
 		// Skip metadata line for delete operations
-		if (operation !== "delete") {
+		if (op !== "delete") {
 			const editLineCount = countLines(args?.newText ?? args?.oldText ?? args?.diff ?? args?.patch ?? "");
 			text += `\n${formatMetadataLine(editLineCount, editLanguage, uiTheme)}`;
 		}
