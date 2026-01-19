@@ -66,6 +66,8 @@ jobs:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
       - run: bun install --frozen-lockfile
+      - name: Generate WASM base64
+        run: bun packages/coding-agent/scripts/generate-wasm-b64.ts
       - name: Build binaries
         run: |
           cd packages/coding-agent
@@ -75,6 +77,7 @@ jobs:
           bun build --compile --target=bun-linux-x64 ./src/cli.ts --outfile binaries/omp-linux-x64
           bun build --compile --target=bun-linux-arm64 ./src/cli.ts --outfile binaries/omp-linux-arm64
           bun build --compile --target=bun-windows-x64 ./src/cli.ts --outfile binaries/omp-windows-x64.exe
+          bun build --compile --target=bun-windows-arm64 ./src/cli.ts --outfile binaries/omp-windows-arm64.exe
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:

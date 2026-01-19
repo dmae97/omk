@@ -4453,7 +4453,29 @@ const cachedTextEncoder = new TextEncoder();
 
 let WASM_VECTOR_LEN = 0;
 
-const wasmUrl = new URL('photon_rs_bg.wasm', import.meta.url);
-const wasmInstantiated = await WebAssembly.instantiateStreaming(fetch(wasmUrl), __wbg_get_imports());
+// Load WASM - try each source until one instantiates successfully
+let wasmInstantiated;
+const imports = __wbg_get_imports();
+
+// Try .wasm file first (dev) - streaming is most efficient
+let streamingError;
+try {
+    const wasmPath = new URL("./photon_rs_bg.wasm", import.meta.url);
+    wasmInstantiated = await WebAssembly.instantiateStreaming(fetch(wasmPath), imports);
+} catch (e) {
+    streamingError = e;
+}
+
+// Fall back to base64 (compiled binary/npm)
+if (!wasmInstantiated) {
+    try {
+        const { default: wasmBase64 } = await import("./photon_rs_bg.wasm.b64.js");
+        const wasmBytes = Uint8Array.from(atob(wasmBase64), c => c.charCodeAt(0));
+        wasmInstantiated = await WebAssembly.instantiate(wasmBytes, imports);
+    } catch (b64Error) {
+        throw new Error(`Failed to load photon WASM:\n  streaming: ${streamingError?.message}\n  base64: ${b64Error.message}`);
+    }
+}
+
 const wasm = wasmInstantiated.instance.exports;
 wasm.__wbindgen_start();

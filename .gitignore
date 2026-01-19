@@ -43,3 +43,4 @@ packages/ai/test/.temp-images/
 changes/
 
 __pycache__/
+*.b64.js

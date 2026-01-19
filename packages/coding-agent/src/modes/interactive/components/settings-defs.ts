@@ -83,7 +83,8 @@ const THINKING_DESCRIPTIONS: Record<ThinkingLevel, string> = {
  * - behavior: Core agent behavior (compaction, modes, retries, notifications)
  * - tools: Tool-specific settings (bash, git, python, edit, MCP, skills)
  * - display: Visual/UI settings (theme, images, thinking)
- * - voice: Voice mode and TTSR settings
+ * - voice: Voice mode and TTS settings
+ * - ttsr: Time Traveling Stream Rules settings
  * - status: Status line configuration
  * - lsp: LSP integration settings
  * - exa: Exa search tool settings
@@ -443,7 +444,7 @@ export const SETTINGS_DEFS: SettingDef[] = [
 	},
 
 	// ═══════════════════════════════════════════════════════════════════════════
-	// Voice tab - Voice mode and TTSR settings
+	// Voice tab - Voice mode and TTS settings
 	// ═══════════════════════════════════════════════════════════════════════════
 	{
 		id: "voiceEnabled",
@@ -501,9 +502,13 @@ export const SETTINGS_DEFS: SettingDef[] = [
 			{ value: "flac", label: "FLAC", description: "Lossless compression" },
 		],
 	},
+
+	// ═══════════════════════════════════════════════════════════════════════════
+	// TTSR tab - Time Traveling Stream Rules
+	// ═══════════════════════════════════════════════════════════════════════════
 	{
 		id: "ttsrEnabled",
-		tab: "voice",
+		tab: "ttsr",
 		type: "boolean",
 		label: "TTSR enabled",
 		description: "Time Traveling Stream Rules: interrupt agent when output matches patterns",
@@ -512,7 +517,7 @@ export const SETTINGS_DEFS: SettingDef[] = [
 	},
 	{
 		id: "ttsrContextMode",
-		tab: "voice",
+		tab: "ttsr",
 		type: "enum",
 		label: "TTSR context mode",
 		description: "What to do with partial output when TTSR triggers",
@@ -522,7 +527,7 @@ export const SETTINGS_DEFS: SettingDef[] = [
 	},
 	{
 		id: "ttsrRepeatMode",
-		tab: "voice",
+		tab: "ttsr",
 		type: "enum",
 		label: "TTSR repeat mode",
 		description: "How rules can repeat: once per session or after a message gap",
@@ -532,7 +537,7 @@ export const SETTINGS_DEFS: SettingDef[] = [
 	},
 	{
 		id: "ttsrRepeatGap",
-		tab: "voice",
+		tab: "ttsr",
 		type: "submenu",
 		label: "TTSR repeat gap",
 		description: "Messages before a rule can trigger again (when repeat mode is after-gap)",

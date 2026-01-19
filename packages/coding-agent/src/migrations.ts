@@ -10,7 +10,6 @@ import { AgentStorage } from "./core/agent-storage";
 import type { AuthCredential } from "./core/auth-storage";
 import { logger } from "./core/logger";
 
-
 /**
  * Migrate legacy oauth.json and settings.json apiKeys to agent.db.
  *

@@ -1,6 +1,28 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added Windows ARM64 binary support
+
+### Fixed
+
+- Fixed TTSR abbreviation expansion from TTSR to Time Traveling Stream Rules
+
+## [5.8.0] - 2026-01-19
+### Changed
+
+- Updated WASM loading to use streaming for development environments with base64 fallback
+- Added scripts directory to published package files
+
+## [5.7.68] - 2026-01-18
+### Changed
+
+- Updated WASM loading to use base64-encoded WASM for better compatibility with compiled binaries
+
+### Fixed
+
+- Fixed WASM loading issues in compiled binary builds
 
 ## [5.7.67] - 2026-01-18
 ### Changed

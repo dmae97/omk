@@ -11,7 +11,7 @@ set -e
 #   -r <ref>       Shorthand for --ref
 
 REPO="can1357/oh-my-pi"
-PACKAGE="@oh-my-pi/omp-coding-agent"
+PACKAGE="@oh-my-pi/pi-coding-agent"
 INSTALL_DIR="${OMP_INSTALL_DIR:-$HOME/.local/bin}"
 
 # Parse arguments
@@ -38,6 +38,10 @@ while [ $# -gt 0 ]; do
             ;;
         --ref=*)
             REF="${1#*=}"
+            if [ -z "$REF" ]; then
+                echo "Missing value for --ref"
+                exit 1
+            fi
             shift
             ;;
         -r)
@@ -50,7 +54,8 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         *)
-            shift
+            echo "Unknown option: $1"
+            exit 1
             ;;
     esac
 done
@@ -73,9 +78,19 @@ has_git() {
 # Install bun
 install_bun() {
     echo "Installing bun..."
-    curl -fsSL https://bun.sh/install | bash
+    if command -v bash >/dev/null 2>&1; then
+        curl -fsSL https://bun.sh/install | bash
+    else
+        echo "bash not found; attempting install with sh..."
+        curl -fsSL https://bun.sh/install | sh
+    fi
     export BUN_INSTALL="$HOME/.bun"
     export PATH="$BUN_INSTALL/bin:$PATH"
+}
+
+# Check if git-lfs is available
+has_git_lfs() {
+    command -v git-lfs >/dev/null 2>&1
 }
 
 # Install via bun
@@ -97,14 +112,25 @@ install_via_bun() {
             (cd "$TMP_DIR" && git checkout "$REF")
         fi
 
+        # Pull LFS files
+        if has_git_lfs; then
+            (cd "$TMP_DIR" && git lfs pull)
+        fi
+
         if [ ! -d "$TMP_DIR/packages/coding-agent" ]; then
             echo "Expected package at ${TMP_DIR}/packages/coding-agent"
             exit 1
         fi
 
-        bun install -g "$TMP_DIR/packages/coding-agent"
+        bun install -g "$TMP_DIR/packages/coding-agent" || {
+            echo "Failed to install from source"
+            exit 1
+        }
     else
-        bun install -g "$PACKAGE"
+        bun install -g "$PACKAGE" || {
+            echo "Failed to install $PACKAGE"
+            exit 1
+        }
     fi
     echo ""
     echo "✓ Installed omp via bun"

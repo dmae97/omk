@@ -1,6 +1,6 @@
 {
 	"name": "@oh-my-pi/pi-coding-agent",
-	"version": "5.7.67",
+	"version": "5.8.0",
 	"description": "Coding agent CLI with read, bash, edit, write tools and session management",
 	"type": "module",
 	"ompConfig": {
@@ -24,6 +24,7 @@
 	},
 	"files": [
 		"src",
+		"scripts",
 		"docs",
 		"examples",
 		"CHANGELOG.md"
@@ -32,9 +33,10 @@
 		"check": "tsgo -p tsconfig.check.json",
 		"clean": "rm -rf dist",
 		"build": "tsgo -p tsconfig.build.json && chmod +x dist/cli.js",
-		"build:binary": "bun build --compile ./src/cli.ts --outfile dist/omp",
+		"build:binary": "bun run generate-wasm-b64 && bun build --compile ./src/cli.ts --outfile dist/omp",
+		"generate-wasm-b64": "bun scripts/generate-wasm-b64.ts",
 		"generate-template": "bun scripts/generate-template.ts",
-		"postinstall": "[ -f scripts/generate-template.ts ] && bun run generate-template || true",
+		"postinstall": "[ -f scripts/generate-wasm-b64.ts ] && bun run generate-wasm-b64 && bun run generate-template || true",
 		"test": "bun test",
 		"prepublishOnly": "bun run generate-template && bun run clean && bun run build"
 	},

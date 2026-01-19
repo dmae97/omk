@@ -52,29 +52,29 @@ Works on Linux, macOS, and Windows (requires bash; see [Windows Setup](#windows-
 **npm (recommended):**
 
 ```bash
-npm install -g @oh-my-pi/omp-coding-agent
+npm install -g @oh-my-pi/pi-coding-agent
 ```
 
 **Standalone binary:**
 
-Download from [GitHub Releases](https://github.com/badlogic/pi-mono/releases):
+Download from [GitHub Releases](https://github.com/can1357/oh-my-pi/releases):
 
-| Platform            | Archive                  |
+| Platform            | Binary                   |
 | ------------------- | ------------------------ |
-| macOS Apple Silicon | `omp-darwin-arm64.tar.gz` |
-| macOS Intel         | `omp-darwin-x64.tar.gz`   |
-| Linux x64           | `omp-linux-x64.tar.gz`    |
-| Linux ARM64         | `omp-linux-arm64.tar.gz`  |
-| Windows x64         | `omp-windows-x64.zip`     |
+| macOS Apple Silicon | `omp-darwin-arm64`       |
+| macOS Intel         | `omp-darwin-x64`         |
+| Linux x64           | `omp-linux-x64`          |
+| Linux ARM64         | `omp-linux-arm64`        |
+| Windows x64         | `omp-windows-x64.exe`    |
+| Windows ARM64       | `omp-windows-arm64.exe`  |
 
 ```bash
 # macOS/Linux
-tar -xzf omp-darwin-arm64.tar.gz
-./omp
+chmod +x omp-darwin-arm64
+./omp-darwin-arm64
 
 # Windows
-unzip omp-windows-x64.zip
-omp.exe
+omp-windows-x64.exe
 ```
 
 **macOS note:** The binary is unsigned. If blocked, run: `xattr -c ./omp`
@@ -133,24 +133,7 @@ return config
 
 ### API Keys & OAuth
 
-**Option 1: Auth file** (recommended)
-
-Add API keys to `~/.omp/agent/auth.json`:
-
-```json
-{
-	"anthropic": [
-		{ "type": "api_key", "key": "sk-ant-..." },
-		{ "type": "api_key", "key": "sk-ant-..." }
-	],
-	"openai": { "type": "api_key", "key": "sk-..." },
-	"google": { "type": "api_key", "key": "..." }
-}
-
-If a provider has multiple credentials, new sessions round robin across them and stay sticky per session.
-```
-
-**Option 2: Environment variables**
+**Option 1: Environment variables** (recommended)
 
 | Provider   | Auth Key     | Environment Variable |
 | ---------- | ------------ | -------------------- |
@@ -164,16 +147,16 @@ If a provider has multiple credentials, new sessions round robin across them and
 | OpenRouter | `openrouter` | `OPENROUTER_API_KEY` |
 | ZAI        | `zai`        | `ZAI_API_KEY`        |
 
-Auth file keys take priority over environment variables.
-
-**OAuth Providers:**
+**Option 2: OAuth**
 
 Use `/login` to authenticate with subscription-based or free-tier providers:
 
 | Provider                   | Models                                          | Cost                  |
 | -------------------------- | ----------------------------------------------- | --------------------- |
 | Anthropic (Claude Pro/Max) | Claude models via your subscription             | Subscription          |
+| Cursor                     | Claude, GPT-4o via Cursor Pro subscription      | Subscription          |
 | GitHub Copilot             | GPT-4o, Claude, Gemini via Copilot subscription | Subscription          |
+| OpenAI Codex               | o3, o4-mini via ChatGPT Plus/Pro subscription   | Subscription          |
 | Google Gemini CLI          | Gemini 2.0/2.5 models                           | Free (Google account) |
 | Google Antigravity         | Gemini 3, Claude, GPT-OSS                       | Free (Google account) |
 
@@ -182,7 +165,7 @@ omp
 /login  # Select provider, authorize in browser
 ```
 
-**Note:** `/login` replaces any existing API keys for that provider with OAuth credentials in `auth.json`. If OAuth credentials already exist, `/login` appends another entry.
+**Note:** `/login` replaces any existing API keys for that provider with OAuth credentials. If OAuth credentials already exist, `/login` appends another entry.
 
 **GitHub Copilot notes:**
 
@@ -196,7 +179,7 @@ omp
 - Both are free with any Google account, subject to rate limits
 - Paid Cloud Code Assist subscriptions: set `GOOGLE_CLOUD_PROJECT` or `GOOGLE_CLOUD_PROJECT_ID` env var to your project ID
 
-Credentials stored in `~/.omp/agent/auth.json`. Use `/logout` to clear.
+Credentials stored in `~/.omp/agent/agent.db`. Use `/logout` to clear.
 
 ### Quick Start
 
@@ -617,7 +600,7 @@ Select theme via `/settings` or set in `~/.omp/agent/settings.json`.
 
 ```bash
 mkdir -p ~/.omp/agent/themes
-cp $(npm root -g)/@oh-my-pi/omp-coding-agent/dist/theme/dark.json ~/.omp/agent/themes/my-theme.json
+cp $(npm root -g)/@oh-my-pi/pi-coding-agent/dist/theme/dark.json ~/.omp/agent/themes/my-theme.json
 ```
 
 Select with `/settings`, then edit the file. Changes apply on save.
@@ -740,7 +723,7 @@ Hooks are TypeScript modules that extend omp's behavior by subscribing to lifecy
 **Quick example** (permission gate):
 
 ```typescript
-import type { HookAPI } from "@oh-my-pi/omp-coding-agent/hooks";
+import type { HookAPI } from "@oh-my-pi/pi-coding-agent/hooks";
 
 export default function (omp: HookAPI) {
 	omp.on("tool_call", async (event, ctx) => {
@@ -759,7 +742,7 @@ Use `omp.sendMessage(message, triggerTurn?)` to inject messages into the session
 
 ```typescript
 import * as fs from "node:fs";
-import type { HookAPI } from "@oh-my-pi/omp-coding-agent/hooks";
+import type { HookAPI } from "@oh-my-pi/pi-coding-agent/hooks";
 
 export default function (omp: HookAPI) {
 	omp.on("session_start", async () => {
@@ -802,7 +785,7 @@ Custom tools let you extend the built-in toolset (read, write, edit, bash, ...) 
 
 ```typescript
 import { Type } from "@sinclair/typebox";
-import type { CustomToolFactory } from "@oh-my-pi/omp-coding-agent";
+import type { CustomToolFactory } from "@oh-my-pi/pi-coding-agent";
 
 const factory: CustomToolFactory = (omp) => ({
 	name: "greet",
@@ -970,7 +953,7 @@ For adding new tools, see [Custom Tools](#custom-tools) in the Configuration sec
 For embedding omp in Node.js/TypeScript applications, use the SDK:
 
 ```typescript
-import { createAgentSession, discoverAuthStorage, discoverModels, SessionManager } from "@oh-my-pi/omp-coding-agent";
+import { createAgentSession, discoverAuthStorage, discoverModels, SessionManager } from "@oh-my-pi/pi-coding-agent";
 
 const authStorage = discoverAuthStorage();
 const modelRegistry = discoverModels(authStorage);
