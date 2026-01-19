@@ -191,14 +191,26 @@ if "__omp_prelude_loaded__" not in globals():
         limit: int = 1000,
         hidden: bool = False,
         sort_by_mtime: bool = False,
+        maxdepth: int | None = None,
+        mindepth: int | None = None,
     ) -> list[Path]:
-        """Recursive glob find. Respects .gitignore."""
-        p = Path(path)
+        """Recursive glob find. Respects .gitignore.
+        
+        maxdepth/mindepth are relative to path (0 = path itself, 1 = direct children).
+        """
+        p = Path(path).resolve()
+        base_depth = len(p.parts)
         ignore_patterns = _load_gitignore_patterns(p)
         matches: list[Path] = []
         for m in p.rglob(pattern):
             if len(matches) >= limit:
                 break
+            # Check depth constraints
+            rel_depth = len(m.resolve().parts) - base_depth
+            if maxdepth is not None and rel_depth > maxdepth:
+                continue
+            if mindepth is not None and rel_depth < mindepth:
+                continue
             # Skip hidden files unless requested
             if not hidden and any(part.startswith(".") for part in m.parts):
                 continue
@@ -486,6 +498,30 @@ if "__omp_prelude_loaded__" not in globals():
         return "\n".join(line for _, line in groups)
 
     @_category("Text")
+    def counter(
+        items: str | list,
+        *,
+        limit: int | None = None,
+        reverse: bool = True,
+    ) -> list[tuple[int, str]]:
+        """Count occurrences and sort by frequency. Like sort | uniq -c | sort -rn.
+        
+        items: text (splits into lines) or list of strings
+        reverse: True for descending (most common first), False for ascending
+        Returns: [(count, item), ...] sorted by count
+        """
+        from collections import Counter
+        if isinstance(items, str):
+            items = items.splitlines()
+        counts = Counter(items)
+        sorted_items = sorted(counts.items(), key=lambda x: (x[1], x[0]), reverse=reverse)
+        if limit is not None:
+            sorted_items = sorted_items[:limit]
+        result = [(count, item) for item, count in sorted_items]
+        _emit_status("counter", unique=len(counts), total=sum(counts.values()), top=result[:10])
+        return result
+
+    @_category("Text")
     def cols(text: str, *indices: int, sep: str | None = None) -> str:
         """Extract columns from text (0-indexed). Like cut."""
         result_lines = []
@@ -496,6 +532,13 @@ if "__omp_prelude_loaded__" not in globals():
         out = "\n".join(result_lines)
         _emit_status("cols", lines=len(result_lines), columns=list(indices))
         return out
+
+    @_category("Navigation")
+    def basenames(paths: list[str | Path]) -> list[str]:
+        """Extract basename from each path. Like: sed 's|.*/||'."""
+        names = [Path(p).name for p in paths]
+        _emit_status("basenames", count=len(names), sample=names[:10])
+        return names
 
     @_category("Navigation")
     def tree(path: str | Path = ".", *, max_depth: int = 3, show_hidden: bool = False) -> str:

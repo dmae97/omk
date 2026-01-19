@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added maxdepth and mindepth parameters to find function for depth-controlled file search
+- Added counter function to count occurrences and sort by frequency
+- Added basenames function to extract base names from paths
 
 ## [6.0.0] - 2026-01-19
 
