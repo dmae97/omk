@@ -2,120 +2,91 @@
  * Anthropic OAuth flow (Claude Pro/Max)
  */
 
+import { OAuthCallbackFlow } from "./callback-server";
 import { generatePKCE } from "./pkce";
-import type { OAuthCredentials } from "./types";
+import type { OAuthController, OAuthCredentials } from "./types";
 
 const decode = (s: string) => atob(s);
 const CLIENT_ID = decode("OWQxYzI1MGEtZTYxYi00NGQ5LTg4ZWQtNTk0NGQxOTYyZjVl");
 const AUTHORIZE_URL = "https://claude.ai/oauth/authorize";
 const TOKEN_URL = "https://console.anthropic.com/v1/oauth/token";
-const REDIRECT_URI = "http://localhost:54545/callback";
+const CALLBACK_PORT = 54545;
+const CALLBACK_PATH = "/callback";
 const SCOPES = "org:create_api_key user:profile user:inference";
 
-function generateState(): string {
-	const bytes = new Uint8Array(16);
-	crypto.getRandomValues(bytes);
-	return Array.from(bytes)
-		.map((value) => value.toString(16).padStart(2, "0"))
-		.join("");
-}
+class AnthropicOAuthFlow extends OAuthCallbackFlow {
+	private verifier: string = "";
+	private challenge: string = "";
 
-function parseAuthCode(input: string): { code: string; state?: string } {
-	const trimmed = input.trim();
-	if (!trimmed) return { code: "" };
-
-	try {
-		const url = new URL(trimmed);
-		const code = url.searchParams.get("code") ?? "";
-		const state = url.searchParams.get("state") ?? undefined;
-		if (code) return { code, state };
-	} catch {
-		// Ignore invalid URL parsing and fall back to manual parsing.
+	constructor(ctrl: OAuthController) {
+		super(ctrl, CALLBACK_PORT, CALLBACK_PATH);
 	}
 
-	if (trimmed.includes("code=")) {
-		const params = new URLSearchParams(trimmed.replace(/^[?#]/, ""));
-		const code = params.get("code") ?? "";
-		const state = params.get("state") ?? undefined;
-		if (code) return { code, state };
+	protected async generateAuthUrl(
+		state: string,
+		redirectUri: string,
+	): Promise<{ url: string; instructions?: string }> {
+		const pkce = await generatePKCE();
+		this.verifier = pkce.verifier;
+		this.challenge = pkce.challenge;
+
+		const authParams = new URLSearchParams({
+			code: "true",
+			client_id: CLIENT_ID,
+			response_type: "code",
+			redirect_uri: redirectUri,
+			scope: SCOPES,
+			code_challenge: this.challenge,
+			code_challenge_method: "S256",
+			state,
+		});
+
+		const url = `${AUTHORIZE_URL}?${authParams.toString()}`;
+		return { url };
 	}
 
-	const [code, state] = trimmed.split("#");
-	return { code, state };
+	protected async exchangeToken(code: string, state: string, redirectUri: string): Promise<OAuthCredentials> {
+		const tokenResponse = await fetch(TOKEN_URL, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+			},
+			body: JSON.stringify({
+				grant_type: "authorization_code",
+				client_id: CLIENT_ID,
+				code,
+				state,
+				redirect_uri: redirectUri,
+				code_verifier: this.verifier,
+			}),
+		});
+
+		if (!tokenResponse.ok) {
+			const error = await tokenResponse.text();
+			throw new Error(`Token exchange failed: ${error}`);
+		}
+
+		const tokenData = (await tokenResponse.json()) as {
+			access_token: string;
+			refresh_token: string;
+			expires_in: number;
+		};
+
+		return {
+			refresh: tokenData.refresh_token,
+			access: tokenData.access_token,
+			expires: Date.now() + tokenData.expires_in * 1000 - 5 * 60 * 1000,
+		};
+	}
 }
 
 /**
- * Login with Anthropic OAuth (device code flow)
- *
- * @param onAuthUrl - Callback to handle the authorization URL (e.g., open browser)
- * @param onPromptCode - Callback to prompt user for the authorization code
+ * Login with Anthropic OAuth
  */
-export async function loginAnthropic(
-	onAuthUrl: (url: string) => void,
-	onPromptCode: () => Promise<string>,
-): Promise<OAuthCredentials> {
-	const { verifier, challenge } = await generatePKCE();
-	const state = generateState();
-
-	// Build authorization URL
-	const authParams = new URLSearchParams({
-		code: "true",
-		client_id: CLIENT_ID,
-		response_type: "code",
-		redirect_uri: REDIRECT_URI,
-		scope: SCOPES,
-		code_challenge: challenge,
-		code_challenge_method: "S256",
-		state,
-	});
-
-	const authUrl = `${AUTHORIZE_URL}?${authParams.toString()}`;
-
-	// Notify caller with URL to open
-	onAuthUrl(authUrl);
-
-	// Wait for user to paste authorization code (format: code#state)
-	const authCode = await onPromptCode();
-	const { code, state: parsedState } = parseAuthCode(authCode);
-	const requestState = parsedState ?? state;
-
-	// Exchange code for tokens
-	const tokenResponse = await fetch(TOKEN_URL, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			Accept: "application/json",
-		},
-		body: JSON.stringify({
-			grant_type: "authorization_code",
-			client_id: CLIENT_ID,
-			code,
-			state: requestState,
-			redirect_uri: REDIRECT_URI,
-			code_verifier: verifier,
-		}),
-	});
-
-	if (!tokenResponse.ok) {
-		const error = await tokenResponse.text();
-		throw new Error(`Token exchange failed: ${error}`);
-	}
-
-	const tokenData = (await tokenResponse.json()) as {
-		access_token: string;
-		refresh_token: string;
-		expires_in: number;
-	};
-
-	// Calculate expiry time (current time + expires_in seconds - 5 min buffer)
-	const expiresAt = Date.now() + tokenData.expires_in * 1000 - 5 * 60 * 1000;
-
-	// Save credentials
-	return {
-		refresh: tokenData.refresh_token,
-		access: tokenData.access_token,
-		expires: expiresAt,
-	};
+export async function loginAnthropic(ctrl: OAuthController): Promise<OAuthCredentials> {
+	const flow = new AnthropicOAuthFlow(ctrl);
+	return flow.login();
 }
 
 /**

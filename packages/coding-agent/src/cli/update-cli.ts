@@ -142,7 +142,7 @@ async function updateViaBun(): Promise<void> {
 	console.log(chalk.dim("Updating via bun..."));
 
 	try {
-		execSync(`bun update -g ${PACKAGE}`, { stdio: "inherit" });
+		execSync(`bun update --latest -g ${PACKAGE}`, { stdio: "inherit" });
 		console.log(chalk.green(`\n${theme.status.success} Update complete`));
 	} catch (error) {
 		throw new Error("bun update failed", { cause: error });

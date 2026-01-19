@@ -1,6 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Refactored authentication login method to use OAuthController interface instead of individual callbacks
+
+### Fixed
+
+- Added automatic regex pattern validation in grep tool to handle invalid patterns by switching to literal mode
 
 ## [6.7.67] - 2026-01-19
 ### Added

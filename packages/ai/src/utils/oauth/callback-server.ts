@@ -1,0 +1,245 @@
+/**
+ * Abstract base class for OAuth flows with local callback servers.
+ *
+ * Handles:
+ * - Port allocation (tries expected port, falls back to random)
+ * - Callback server setup and request handling
+ * - Common OAuth flow logic
+ *
+ * Providers extend this and implement:
+ * - generateAuthUrl(): Build provider-specific authorization URL
+ * - exchangeToken(): Exchange authorization code for tokens
+ */
+
+import templateHtml from "./oauth.html" with { type: "text" };
+import type { OAuthController, OAuthCredentials } from "./types";
+
+const DEFAULT_TIMEOUT = 120;
+const DEFAULT_HOSTNAME = "localhost";
+const CALLBACK_PATH = "/callback";
+
+export type CallbackResult = { code: string; state: string };
+
+/**
+ * Abstract base class for OAuth flows with local callback servers.
+ */
+export abstract class OAuthCallbackFlow {
+	protected ctrl: OAuthController;
+	protected preferredPort: number;
+	protected callbackPath: string;
+	private callbackResolve?: (result: CallbackResult) => void;
+	private callbackReject?: (error: string) => void;
+
+	constructor(ctrl: OAuthController, preferredPort: number, callbackPath: string = CALLBACK_PATH) {
+		this.ctrl = ctrl;
+		this.preferredPort = preferredPort;
+		this.callbackPath = callbackPath;
+	}
+
+	/**
+	 * Generate provider-specific authorization URL.
+	 * @param state - CSRF state token
+	 * @param redirectUri - The actual redirect URI to use (may differ from expected if port fallback occurred)
+	 * @returns Authorization URL and optional instructions
+	 */
+	protected abstract generateAuthUrl(
+		state: string,
+		redirectUri: string,
+	): Promise<{ url: string; instructions?: string }>;
+
+	/**
+	 * Exchange authorization code for OAuth tokens.
+	 * @param code - Authorization code from callback
+	 * @param state - CSRF state token
+	 * @param redirectUri - The actual redirect URI used (must match authorization request)
+	 * @returns OAuth credentials
+	 */
+	protected abstract exchangeToken(code: string, state: string, redirectUri: string): Promise<OAuthCredentials>;
+
+	/**
+	 * Generate CSRF state token. Override if provider needs custom state generation.
+	 */
+	protected generateState(): string {
+		const bytes = new Uint8Array(16);
+		crypto.getRandomValues(bytes);
+		return Array.from(bytes)
+			.map((value) => value.toString(16).padStart(2, "0"))
+			.join("");
+	}
+
+	/**
+	 * Execute the OAuth login flow.
+	 */
+	async login(): Promise<OAuthCredentials> {
+		const state = this.generateState();
+
+		// Start callback server first to get actual redirect URI
+		const { server, redirectUri } = await this.startCallbackServer(state);
+
+		try {
+			// Generate auth URL with the ACTUAL redirect URI (may differ from expected if port was busy)
+			const { url: authUrl, instructions } = await this.generateAuthUrl(state, redirectUri);
+
+			// Notify controller that auth is ready
+			this.ctrl.onAuth?.({ url: authUrl, instructions });
+			this.ctrl.onProgress?.("Waiting for browser authentication...");
+
+			// Wait for callback or manual input
+			const { code } = await this.waitForCallback(state);
+
+			this.ctrl.onProgress?.("Exchanging authorization code for tokens...");
+
+			return await this.exchangeToken(code, state, redirectUri);
+		} finally {
+			server.stop();
+		}
+	}
+
+	/**
+	 * Start callback server, trying preferred port first, falling back to random.
+	 */
+	private async startCallbackServer(
+		expectedState: string,
+	): Promise<{ server: Bun.Server<unknown>; redirectUri: string }> {
+		// Try preferred port first
+		try {
+			const redirectUri = `http://${DEFAULT_HOSTNAME}:${this.preferredPort}${this.callbackPath}`;
+			const server = this.createServer(this.preferredPort, expectedState);
+			return { server, redirectUri };
+		} catch {
+			// Port busy or unavailable, try random port
+			const randomPort = 0; // Let OS assign
+			const server = this.createServer(randomPort, expectedState);
+			const actualPort = server.port;
+			const redirectUri = `http://${DEFAULT_HOSTNAME}:${actualPort}${this.callbackPath}`;
+			this.ctrl.onProgress?.(`Preferred port ${this.preferredPort} unavailable, using port ${actualPort}`);
+			return { server, redirectUri };
+		}
+	}
+
+	/**
+	 * Create HTTP server for OAuth callback.
+	 */
+	private createServer(port: number, expectedState: string): Bun.Server<unknown> {
+		return Bun.serve({
+			hostname: DEFAULT_HOSTNAME,
+			port,
+			reusePort: false,
+			fetch: (req) => this.handleCallback(req, expectedState),
+		});
+	}
+
+	/**
+	 * Handle OAuth callback HTTP request.
+	 */
+	private handleCallback(req: Request, expectedState: string): Response {
+		const url = new URL(req.url);
+
+		if (url.pathname !== this.callbackPath) {
+			return new Response("Not Found", { status: 404 });
+		}
+
+		const code = url.searchParams.get("code");
+		const state = url.searchParams.get("state") || "";
+		const error = url.searchParams.get("error") || "";
+		const errorDescription = url.searchParams.get("error_description") || error;
+
+		type OkState = { ok: true; code: string; state: string };
+		type ErrorState = { ok?: false; error?: string };
+		let resultState: OkState | ErrorState;
+
+		if (error) {
+			resultState = { ok: false, error: `Authorization failed: ${errorDescription}` };
+		} else if (!code) {
+			resultState = { ok: false, error: "Missing authorization code" };
+		} else if (expectedState && state !== expectedState) {
+			resultState = { ok: false, error: "State mismatch - possible CSRF attack" };
+		} else {
+			resultState = { ok: true, code, state };
+		}
+
+		// Signal to waitForCallback
+		queueMicrotask(() => {
+			if (resultState.ok) {
+				this.callbackResolve?.({ code: resultState.code, state: resultState.state });
+			} else {
+				this.callbackReject?.(resultState.error ?? "Unknown error");
+			}
+		});
+
+		return new Response(
+			(templateHtml as unknown as string).replaceAll("__OAUTH_STATE__", JSON.stringify(resultState)),
+			{
+				status: resultState.ok ? 200 : 500,
+				headers: { "Content-Type": "text/html" },
+			},
+		);
+	}
+
+	/**
+	 * Wait for OAuth callback or manual input (whichever comes first).
+	 */
+	private waitForCallback(expectedState: string): Promise<CallbackResult> {
+		const timeoutSignal = AbortSignal.timeout(DEFAULT_TIMEOUT * 1000);
+		const signal = this.ctrl.signal ? AbortSignal.any([this.ctrl.signal, timeoutSignal]) : timeoutSignal;
+
+		const callbackPromise = new Promise<CallbackResult>((resolve, reject) => {
+			this.callbackResolve = resolve;
+			this.callbackReject = reject;
+
+			signal.addEventListener("abort", () => {
+				this.callbackResolve = undefined;
+				this.callbackReject = undefined;
+				reject(new Error(`OAuth callback cancelled: ${signal.reason}`));
+			});
+		});
+
+		// Manual input race (if supported)
+		if (this.ctrl.onManualCodeInput) {
+			const manualPromise = this.ctrl.onManualCodeInput().then((input): CallbackResult => {
+				const parsed = parseCallbackInput(input);
+				if (!parsed.code) {
+					throw new Error("No authorization code found in input");
+				}
+				if (expectedState && parsed.state && parsed.state !== expectedState) {
+					throw new Error("State mismatch - possible CSRF attack");
+				}
+				return { code: parsed.code, state: parsed.state ?? "" };
+			});
+
+			return Promise.race([callbackPromise, manualPromise]);
+		}
+
+		return callbackPromise;
+	}
+}
+
+/**
+ * Parse a redirect URL or code string to extract code and state.
+ */
+export function parseCallbackInput(input: string): { code?: string; state?: string } {
+	const value = input.trim();
+	if (!value) return {};
+
+	try {
+		const url = new URL(value);
+		return {
+			code: url.searchParams.get("code") ?? undefined,
+			state: url.searchParams.get("state") ?? undefined,
+		};
+	} catch {
+		// Not a URL - check for query string format
+	}
+
+	if (value.includes("code=")) {
+		const params = new URLSearchParams(value.replace(/^[?#]/, ""));
+		return {
+			code: params.get("code") ?? undefined,
+			state: params.get("state") ?? undefined,
+		};
+	}
+
+	// Assume raw code, possibly with state after #
+	const [code, state] = value.split("#", 2);
+	return { code, state };
+}

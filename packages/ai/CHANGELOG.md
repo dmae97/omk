@@ -1,6 +1,26 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `logout` command to CLI for OAuth provider logout
+- Added `status` command to show logged-in providers and token expiry
+- Added persistent credential storage using SQLite database
+- Added OAuth callback server with automatic port fallback
+- Added HTML callback page with success/error states
+- Added support for Cursor OAuth provider
+
+### Changed
+
+- Changed credential storage from auth.json to ~/.omp/agent/agent.db
+- Changed CLI command examples from npx to bunx
+- Refactored OAuth flows to use common callback server base class
+- Updated OAuth provider interfaces to use controller pattern
+
+### Fixed
+
+- Fixed OAuth callback handling with improved error states
+- Fixed token refresh for all OAuth providers
 
 ## [6.7.670] - 2026-01-19
 ### Changed

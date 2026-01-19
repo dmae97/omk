@@ -10,38 +10,38 @@ Unified LLM API with automatic model discovery, provider configuration, token an
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Tools](#tools)
-  - [Defining Tools](#defining-tools)
-  - [Handling Tool Calls](#handling-tool-calls)
-  - [Streaming Tool Calls with Partial JSON](#streaming-tool-calls-with-partial-json)
-  - [Validating Tool Arguments](#validating-tool-arguments)
-  - [Complete Event Reference](#complete-event-reference)
+   - [Defining Tools](#defining-tools)
+   - [Handling Tool Calls](#handling-tool-calls)
+   - [Streaming Tool Calls with Partial JSON](#streaming-tool-calls-with-partial-json)
+   - [Validating Tool Arguments](#validating-tool-arguments)
+   - [Complete Event Reference](#complete-event-reference)
 - [Image Input](#image-input)
 - [Thinking/Reasoning](#thinkingreasoning)
-  - [Unified Interface](#unified-interface-streamsimplecompletesimple)
-  - [Provider-Specific Options](#provider-specific-options-streamcomplete)
-  - [Streaming Thinking Content](#streaming-thinking-content)
+   - [Unified Interface](#unified-interface-streamsimplecompletesimple)
+   - [Provider-Specific Options](#provider-specific-options-streamcomplete)
+   - [Streaming Thinking Content](#streaming-thinking-content)
 - [Stop Reasons](#stop-reasons)
 - [Error Handling](#error-handling)
-  - [Aborting Requests](#aborting-requests)
-  - [Continuing After Abort](#continuing-after-abort)
+   - [Aborting Requests](#aborting-requests)
+   - [Continuing After Abort](#continuing-after-abort)
 - [APIs, Models, and Providers](#apis-models-and-providers)
-  - [Providers and Models](#providers-and-models)
-  - [Querying Providers and Models](#querying-providers-and-models)
-  - [Custom Models](#custom-models)
-  - [OpenAI Compatibility Settings](#openai-compatibility-settings)
-  - [Type Safety](#type-safety)
+   - [Providers and Models](#providers-and-models)
+   - [Querying Providers and Models](#querying-providers-and-models)
+   - [Custom Models](#custom-models)
+   - [OpenAI Compatibility Settings](#openai-compatibility-settings)
+   - [Type Safety](#type-safety)
 - [Cross-Provider Handoffs](#cross-provider-handoffs)
 - [Context Serialization](#context-serialization)
 - [Browser Usage](#browser-usage)
-  - [Environment Variables](#environment-variables-nodejs-only)
-  - [Checking Environment Variables](#checking-environment-variables)
+   - [Environment Variables](#environment-variables-nodejs-only)
+   - [Checking Environment Variables](#checking-environment-variables)
 - [OAuth Providers](#oauth-providers)
-  - [Vertex AI (ADC)](#vertex-ai-adc)
-  - [CLI Login](#cli-login)
-  - [Programmatic OAuth](#programmatic-oauth)
-  - [Login Flow Example](#login-flow-example)
-  - [Using OAuth Tokens](#using-oauth-tokens)
-  - [Provider Notes](#provider-notes)
+   - [Vertex AI (ADC)](#vertex-ai-adc)
+   - [CLI Login](#cli-login)
+   - [Programmatic OAuth](#programmatic-oauth)
+   - [Login Flow Example](#login-flow-example)
+   - [Using OAuth Tokens](#using-oauth-tokens)
+   - [Provider Notes](#provider-notes)
 - [License](#license)
 
 ## Supported Providers
@@ -156,7 +156,7 @@ for (const call of toolCalls) {
 					timeZone: call.arguments.timezone || "UTC",
 					dateStyle: "full",
 					timeStyle: "long",
-			  })
+				})
 			: "Unknown tool";
 
 	// Add tool result to context (supports text and images)
@@ -443,7 +443,7 @@ const response = await completeSimple(
 	},
 	{
 		reasoning: "medium", // 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' (xhigh maps to high on non-OpenAI providers)
-	}
+	},
 );
 
 // Access thinking and text blocks
@@ -563,7 +563,7 @@ const s = stream(
 	},
 	{
 		signal: controller.signal,
-	}
+	},
 );
 
 for await (const event of s) {
@@ -856,7 +856,7 @@ const response = await complete(
 	},
 	{
 		apiKey: "your-api-key",
-	}
+	},
 );
 ```
 
@@ -957,9 +957,9 @@ Official docs: [Application Default Credentials](https://cloud.google.com/docs/a
 The quickest way to authenticate:
 
 ```bash
-npx @oh-my-pi/pi-ai login              # interactive provider selection
-npx @oh-my-pi/pi-ai login anthropic    # login to specific provider
-npx @oh-my-pi/pi-ai list               # list available providers
+bunx @oh-my-pi/pi-ai login              # interactive provider selection
+bunx @oh-my-pi/pi-ai login anthropic    # login to specific provider
+bunx @oh-my-pi/pi-ai list               # list available providers
 ```
 
 Credentials are saved to `auth.json` in the current directory.
@@ -1035,7 +1035,7 @@ const response = await complete(
 	{
 		messages: [{ role: "user", content: "Hello!" }],
 	},
-	{ apiKey: result.apiKey }
+	{ apiKey: result.apiKey },
 );
 ```
 

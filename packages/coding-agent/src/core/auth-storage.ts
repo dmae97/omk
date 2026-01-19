@@ -13,6 +13,7 @@ import {
 	loginGeminiCli,
 	loginGitHubCopilot,
 	loginOpenAICodex,
+	type OAuthController,
 	type OAuthCredentials,
 	type OAuthProvider,
 } from "@oh-my-pi/pi-ai";
@@ -545,51 +546,40 @@ export class AuthStorage {
 	 */
 	async login(
 		provider: OAuthProvider,
-		callbacks: {
+		ctrl: OAuthController & {
+			/** onAuth is required by auth-storage but optional in OAuthController */
 			onAuth: (info: { url: string; instructions?: string }) => void;
+			/** onPrompt is required for some providers (github-copilot, openai-codex) */
 			onPrompt: (prompt: { message: string; placeholder?: string }) => Promise<string>;
-			onProgress?: (message: string) => void;
-			/** For providers with local callback servers (e.g., openai-codex), races with browser callback */
-			onManualCodeInput?: () => Promise<string>;
-			/** For cancellation support (e.g., github-copilot polling) */
-			signal?: AbortSignal;
 		},
 	): Promise<void> {
 		let credentials: OAuthCredentials;
 
 		switch (provider) {
 			case "anthropic":
-				credentials = await loginAnthropic(
-					(url) => callbacks.onAuth({ url }),
-					() => callbacks.onPrompt({ message: "Paste the authorization code:" }),
-				);
+				credentials = await loginAnthropic(ctrl);
 				break;
 			case "github-copilot":
 				credentials = await loginGitHubCopilot({
-					onAuth: (url, instructions) => callbacks.onAuth({ url, instructions }),
-					onPrompt: callbacks.onPrompt,
-					onProgress: callbacks.onProgress,
-					signal: callbacks.signal,
+					onAuth: (url, instructions) => ctrl.onAuth({ url, instructions }),
+					onPrompt: ctrl.onPrompt,
+					onProgress: ctrl.onProgress,
+					signal: ctrl.signal,
 				});
 				break;
 			case "google-gemini-cli":
-				credentials = await loginGeminiCli(callbacks.onAuth, callbacks.onProgress, callbacks.onManualCodeInput);
+				credentials = await loginGeminiCli(ctrl);
 				break;
 			case "google-antigravity":
-				credentials = await loginAntigravity(callbacks.onAuth, callbacks.onProgress, callbacks.onManualCodeInput);
+				credentials = await loginAntigravity(ctrl);
 				break;
 			case "openai-codex":
-				credentials = await loginOpenAICodex({
-					onAuth: callbacks.onAuth,
-					onPrompt: callbacks.onPrompt,
-					onProgress: callbacks.onProgress,
-					onManualCodeInput: callbacks.onManualCodeInput,
-				});
+				credentials = await loginOpenAICodex(ctrl);
 				break;
 			case "cursor":
 				credentials = await loginCursor(
-					(url) => callbacks.onAuth({ url }),
-					callbacks.onProgress ? () => callbacks.onProgress?.("Waiting for browser authentication...") : undefined,
+					(url) => ctrl.onAuth({ url }),
+					ctrl.onProgress ? () => ctrl.onProgress?.("Waiting for browser authentication...") : undefined,
 				);
 				break;
 			default:

@@ -118,10 +118,43 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 	private readonly session: ToolSession;
 	private readonly ops: GrepOperations;
 
+	private readonly rgPath: Promise<string | undefined>;
+
 	constructor(session: ToolSession, options?: GrepToolOptions) {
 		this.session = session;
 		this.ops = options?.operations ?? defaultGrepOperations;
 		this.description = renderPromptTemplate(grepDescription);
+		this.rgPath = ensureTool("rg", true);
+	}
+
+	/**
+	 * Validates a pattern against ripgrep's regex engine.
+	 * Uses a quick dry-run against /dev/null to check for parse errors.
+	 */
+	private async validateRegexPattern(pattern: string): Promise<{ valid: boolean; error?: string }> {
+		const rgPath = await this.rgPath;
+		if (!rgPath) {
+			return { valid: true }; // Can't validate, assume valid
+		}
+
+		// Run ripgrep against /dev/null with the pattern - this validates regex syntax
+		// without searching any files
+		const proc = Bun.spawn([rgPath, "--no-config", "--quiet", "--", pattern, "/dev/null"], {
+			stdin: "ignore",
+			stdout: "ignore",
+			stderr: "pipe",
+		});
+
+		const stderr = await new Response(proc.stderr).text();
+		const exitCode = await proc.exited;
+
+		// Exit code 1 = no matches (pattern is valid), 0 = matches found
+		// Exit code 2 = error (often regex parse error)
+		if (exitCode === 2 && stderr.includes("regex parse error")) {
+			return { valid: false, error: stderr.trim() };
+		}
+
+		return { valid: true };
 	}
 
 	public async execute(
@@ -148,7 +181,17 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 		} = params;
 
 		return untilAborted(signal, async () => {
-			const rgPath = await ensureTool("rg", true);
+			// Auto-detect invalid regex patterns and switch to literal mode
+			// This handles cases like "abort(" which would cause ripgrep regex parse errors
+			let useLiteral = literal ?? false;
+			if (!useLiteral) {
+				const validation = await this.validateRegexPattern(pattern);
+				if (!validation.valid) {
+					useLiteral = true;
+				}
+			}
+
+			const rgPath = await this.rgPath;
 			if (!rgPath) {
 				throw new Error("ripgrep (rg) is not available and could not be downloaded");
 			}
@@ -221,7 +264,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 				args.push("--multiline");
 			}
 
-			if (literal) {
+			if (useLiteral) {
 				args.push("--fixed-strings");
 			}
 

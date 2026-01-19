@@ -32,3 +32,11 @@ export interface OAuthProviderInfo {
 	name: string;
 	available: boolean;
 }
+
+export interface OAuthController {
+	onAuth?(info: { url: string; instructions?: string }): void;
+	onProgress?(message: string): void;
+	onManualCodeInput?(): Promise<string>;
+	onPrompt?(prompt: OAuthPrompt): Promise<string>;
+	signal?: AbortSignal;
+}
