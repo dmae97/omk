@@ -667,6 +667,7 @@ export type WritethroughCallback = (
 	content: string,
 	signal?: AbortSignal,
 	file?: BunFile,
+	batch?: LspWritethroughBatchRequest,
 ) => Promise<FileDiagnosticsResult | undefined>;
 
 /** No-op writethrough callback */
@@ -684,83 +685,241 @@ export async function writethroughNoop(
 	return undefined;
 }
 
+interface PendingWritethrough {
+	dst: string;
+	content: string;
+	file?: BunFile;
+}
+
+interface LspWritethroughBatchRequest {
+	id: string;
+	flush: boolean;
+}
+
+interface LspWritethroughBatchState {
+	entries: Map<string, PendingWritethrough>;
+	options: Required<WritethroughOptions>;
+}
+
+const writethroughBatches = new Map<string, LspWritethroughBatchState>();
+
+function getOrCreateWritethroughBatch(id: string, options: Required<WritethroughOptions>): LspWritethroughBatchState {
+	const existing = writethroughBatches.get(id);
+	if (existing) {
+		existing.options.enableFormat ||= options.enableFormat;
+		existing.options.enableDiagnostics ||= options.enableDiagnostics;
+		return existing;
+	}
+	const batch: LspWritethroughBatchState = {
+		entries: new Map<string, PendingWritethrough>(),
+		options: { ...options },
+	};
+	writethroughBatches.set(id, batch);
+	return batch;
+}
+
+function summarizeDiagnosticMessages(messages: string[]): { summary: string; errored: boolean } {
+	const counts = { error: 0, warning: 0, info: 0, hint: 0 };
+	for (const message of messages) {
+		const match = message.match(/\[(error|warning|info|hint)\]/i);
+		if (!match) continue;
+		const key = match[1].toLowerCase() as keyof typeof counts;
+		counts[key] += 1;
+	}
+
+	const parts: string[] = [];
+	if (counts.error > 0) parts.push(`${counts.error} error(s)`);
+	if (counts.warning > 0) parts.push(`${counts.warning} warning(s)`);
+	if (counts.info > 0) parts.push(`${counts.info} info(s)`);
+	if (counts.hint > 0) parts.push(`${counts.hint} hint(s)`);
+
+	return {
+		summary: parts.length > 0 ? parts.join(", ") : "no issues",
+		errored: counts.error > 0,
+	};
+}
+
+function mergeDiagnostics(
+	results: Array<FileDiagnosticsResult | undefined>,
+	options: Required<WritethroughOptions>,
+): FileDiagnosticsResult | undefined {
+	const messages: string[] = [];
+	const servers = new Set<string>();
+	let hasResults = false;
+	let hasFormatter = false;
+	let formatted = false;
+
+	for (const result of results) {
+		if (!result) continue;
+		hasResults = true;
+		if (result.server) {
+			for (const server of result.server.split(",")) {
+				const trimmed = server.trim();
+				if (trimmed) {
+					servers.add(trimmed);
+				}
+			}
+		}
+		if (result.messages.length > 0) {
+			messages.push(...result.messages);
+		}
+		if (result.formatter !== undefined) {
+			hasFormatter = true;
+			if (result.formatter === FileFormatResult.FORMATTED) {
+				formatted = true;
+			}
+		}
+	}
+
+	if (!hasResults && !hasFormatter) {
+		return undefined;
+	}
+
+	let summary = options.enableDiagnostics ? "no issues" : "OK";
+	let errored = false;
+	if (messages.length > 0) {
+		const summaryInfo = summarizeDiagnosticMessages(messages);
+		summary = summaryInfo.summary;
+		errored = summaryInfo.errored;
+	}
+	const formatter = hasFormatter ? (formatted ? FileFormatResult.FORMATTED : FileFormatResult.UNCHANGED) : undefined;
+
+	return {
+		server: servers.size > 0 ? Array.from(servers).join(", ") : undefined,
+		messages,
+		summary,
+		errored,
+		formatter,
+	};
+}
+
+async function runLspWritethrough(
+	dst: string,
+	content: string,
+	cwd: string,
+	options: Required<WritethroughOptions>,
+	signal?: AbortSignal,
+	file?: BunFile,
+): Promise<FileDiagnosticsResult | undefined> {
+	const { enableFormat, enableDiagnostics } = options;
+	const config = await getConfig(cwd);
+	const servers = getServersForFile(config, dst);
+	if (servers.length === 0) {
+		return writethroughNoop(dst, content, signal, file);
+	}
+	const { lspServers, customLinterServers } = splitServers(servers);
+
+	let finalContent = content;
+	const writeContent = async (value: string) => (file ? file.write(value) : Bun.write(dst, value));
+	const getWritePromise = once(() => writeContent(finalContent));
+	const useCustomFormatter = enableFormat && customLinterServers.length > 0;
+
+	// Capture diagnostic versions BEFORE syncing to detect stale diagnostics
+	const minVersions = enableDiagnostics ? await captureDiagnosticVersions(cwd, servers) : undefined;
+
+	let formatter: FileFormatResult | undefined;
+	let diagnostics: FileDiagnosticsResult | undefined;
+	try {
+		const timeoutSignal = AbortSignal.timeout(10_000);
+		const operationSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+		await untilAborted(operationSignal, async () => {
+			if (useCustomFormatter) {
+				// Custom linters (e.g. Biome CLI) require on-disk input.
+				await writeContent(content);
+				finalContent = await formatContent(dst, content, cwd, customLinterServers, operationSignal);
+				formatter = finalContent !== content ? FileFormatResult.FORMATTED : FileFormatResult.UNCHANGED;
+				await writeContent(finalContent);
+				await syncFileContent(dst, finalContent, cwd, lspServers, operationSignal);
+			} else {
+				// 1. Sync original content to LSP servers
+				await syncFileContent(dst, content, cwd, lspServers, operationSignal);
+
+				// 2. Format in-memory via LSP
+				if (enableFormat) {
+					finalContent = await formatContent(dst, content, cwd, lspServers, operationSignal);
+					formatter = finalContent !== content ? FileFormatResult.FORMATTED : FileFormatResult.UNCHANGED;
+				}
+
+				// 3. If formatted, sync formatted content to LSP servers
+				if (finalContent !== content) {
+					await syncFileContent(dst, finalContent, cwd, lspServers, operationSignal);
+				}
+
+				// 4. Write to disk
+				await getWritePromise();
+			}
+
+			// 5. Notify saved to LSP servers
+			await notifyFileSaved(dst, cwd, lspServers, operationSignal);
+
+			// 6. Get diagnostics from all servers (wait for fresh results)
+			if (enableDiagnostics) {
+				diagnostics = await getDiagnosticsForFile(dst, cwd, servers, operationSignal, minVersions);
+			}
+		});
+	} catch {
+		await getWritePromise();
+	}
+
+	if (formatter !== undefined) {
+		diagnostics ??= {
+			server: servers.map(([name]) => name).join(", "),
+			messages: [],
+			summary: "OK",
+			errored: false,
+		};
+		diagnostics.formatter = formatter;
+	}
+
+	return diagnostics;
+}
+
+async function flushWritethroughBatch(
+	batch: PendingWritethrough[],
+	cwd: string,
+	options: Required<WritethroughOptions>,
+	signal?: AbortSignal,
+): Promise<FileDiagnosticsResult | undefined> {
+	if (batch.length === 0) {
+		return undefined;
+	}
+	const results: Array<FileDiagnosticsResult | undefined> = [];
+	for (const entry of batch) {
+		results.push(await runLspWritethrough(entry.dst, entry.content, cwd, options, signal, entry.file));
+	}
+	return mergeDiagnostics(results, options);
+}
+
 /** Create a writethrough callback for LSP aware write operations */
 export function createLspWritethrough(cwd: string, options?: WritethroughOptions): WritethroughCallback {
-	const { enableFormat = false, enableDiagnostics = false } = options ?? {};
-	if (!enableFormat && !enableDiagnostics) {
+	const resolvedOptions: Required<WritethroughOptions> = {
+		enableFormat: options?.enableFormat ?? false,
+		enableDiagnostics: options?.enableDiagnostics ?? false,
+	};
+	if (!resolvedOptions.enableFormat && !resolvedOptions.enableDiagnostics) {
 		return writethroughNoop;
 	}
-	return async (dst: string, content: string, signal?: AbortSignal, file?: BunFile) => {
-		const config = await getConfig(cwd);
-		const servers = getServersForFile(config, dst);
-		if (servers.length === 0) {
-			return writethroughNoop(dst, content, signal, file);
-		}
-		const { lspServers, customLinterServers } = splitServers(servers);
-
-		let finalContent = content;
-		const writeContent = async (value: string) => (file ? file.write(value) : Bun.write(dst, value));
-		const getWritePromise = once(() => writeContent(finalContent));
-		const useCustomFormatter = enableFormat && customLinterServers.length > 0;
-
-		// Capture diagnostic versions BEFORE syncing to detect stale diagnostics
-		const minVersions = enableDiagnostics ? await captureDiagnosticVersions(cwd, servers) : undefined;
-
-		let formatter: FileFormatResult | undefined;
-		let diagnostics: FileDiagnosticsResult | undefined;
-		try {
-			const timeoutSignal = AbortSignal.timeout(10_000);
-			const operationSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
-			await untilAborted(operationSignal, async () => {
-				if (useCustomFormatter) {
-					// Custom linters (e.g. Biome CLI) require on-disk input.
-					await writeContent(content);
-					finalContent = await formatContent(dst, content, cwd, customLinterServers, operationSignal);
-					formatter = finalContent !== content ? FileFormatResult.FORMATTED : FileFormatResult.UNCHANGED;
-					await writeContent(finalContent);
-					await syncFileContent(dst, finalContent, cwd, lspServers, operationSignal);
-				} else {
-					// 1. Sync original content to LSP servers
-					await syncFileContent(dst, content, cwd, lspServers, operationSignal);
-
-					// 2. Format in-memory via LSP
-					if (enableFormat) {
-						finalContent = await formatContent(dst, content, cwd, lspServers, operationSignal);
-						formatter = finalContent !== content ? FileFormatResult.FORMATTED : FileFormatResult.UNCHANGED;
-					}
-
-					// 3. If formatted, sync formatted content to LSP servers
-					if (finalContent !== content) {
-						await syncFileContent(dst, finalContent, cwd, lspServers, operationSignal);
-					}
-
-					// 4. Write to disk
-					await getWritePromise();
-				}
-
-				// 5. Notify saved to LSP servers
-				await notifyFileSaved(dst, cwd, lspServers, operationSignal);
-
-				// 6. Get diagnostics from all servers (wait for fresh results)
-				if (enableDiagnostics) {
-					diagnostics = await getDiagnosticsForFile(dst, cwd, servers, operationSignal, minVersions);
-				}
-			});
-		} catch {
-			await getWritePromise();
+	return async (
+		dst: string,
+		content: string,
+		signal?: AbortSignal,
+		file?: BunFile,
+		batch?: LspWritethroughBatchRequest,
+	) => {
+		if (!batch) {
+			return runLspWritethrough(dst, content, cwd, resolvedOptions, signal, file);
 		}
 
-		if (formatter !== undefined) {
-			diagnostics ??= {
-				server: servers.map(([name]) => name).join(", "),
-				messages: [],
-				summary: "OK",
-				errored: false,
-			};
-			diagnostics.formatter = formatter;
+		const state = getOrCreateWritethroughBatch(batch.id, resolvedOptions);
+		state.entries.set(dst, { dst, content, file });
+
+		if (!batch.flush) {
+			await writethroughNoop(dst, content, signal, file);
+			return undefined;
 		}
 
-		return diagnostics;
+		writethroughBatches.delete(batch.id);
+		return flushWritethroughBatch(Array.from(state.entries.values()), cwd, state.options, signal);
 	};
 }
 

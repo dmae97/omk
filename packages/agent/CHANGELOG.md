@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Enhanced getToolContext to receive tool call batch information including batchId, index, total count, and tool call details
 
 ## [5.6.7] - 2026-01-18
 ### Fixed

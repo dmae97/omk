@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Improved LSP batching to coalesce formatting and diagnostics for parallel edits
+- Updated edit and write tools to support batched LSP operations
+
+### Fixed
+
+- Coalesced LSP formatting/diagnostics for parallel edits so only the final write triggers LSP across touched files
 
 ## [6.1.0] - 2026-01-19
 

@@ -1,4 +1,4 @@
-import type { AgentTool } from "@oh-my-pi/pi-agent-core";
+import type { AgentTool, AgentToolContext, ToolCallContext } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { Type } from "@sinclair/typebox";
@@ -41,6 +41,22 @@ export interface EditToolDetails {
 	diagnostics?: FileDiagnosticsResult;
 }
 
+const LSP_BATCH_TOOLS = new Set(["edit", "write"]);
+
+function getLspBatchRequest(toolCall: ToolCallContext | undefined): { id: string; flush: boolean } | undefined {
+	if (!toolCall) {
+		return undefined;
+	}
+	const hasOtherWrites = toolCall.toolCalls.some(
+		(call, index) => index !== toolCall.index && LSP_BATCH_TOOLS.has(call.name),
+	);
+	if (!hasOtherWrites) {
+		return undefined;
+	}
+	const hasLaterWrites = toolCall.toolCalls.slice(toolCall.index + 1).some((call) => LSP_BATCH_TOOLS.has(call.name));
+	return { id: toolCall.batchId, flush: !hasLaterWrites };
+}
+
 export function createEditTool(session: ToolSession): AgentTool<typeof editSchema> {
 	const allowFuzzy = session.settings?.getEditFuzzyMatch() ?? true;
 	const enableLsp = session.enableLsp ?? true;
@@ -58,6 +74,8 @@ export function createEditTool(session: ToolSession): AgentTool<typeof editSchem
 			_toolCallId: string,
 			{ path, oldText, newText, all }: { path: string; oldText: string; newText: string; all?: boolean },
 			signal?: AbortSignal,
+			_onUpdate?: unknown,
+			context?: AgentToolContext,
 		) => {
 			// Reject .ipynb files - use NotebookEdit tool instead
 			if (path.endsWith(".ipynb")) {
@@ -163,7 +181,8 @@ export function createEditTool(session: ToolSession): AgentTool<typeof editSchem
 			}
 
 			const finalContent = bom + restoreLineEndings(normalizedNewContent, originalEnding);
-			const diagnostics = await writethrough(absolutePath, finalContent, signal, file);
+			const batchRequest = getLspBatchRequest(context?.toolCall);
+			const diagnostics = await writethrough(absolutePath, finalContent, signal, file, batchRequest);
 
 			const diffResult = generateDiffString(normalizedContent, normalizedNewContent);
 

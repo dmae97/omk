@@ -9,7 +9,15 @@ import {
 import { Type } from "@sinclair/typebox";
 import { describe, expect, it } from "vitest";
 import { agentLoop, agentLoopContinue } from "../src/agent-loop";
-import type { AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, AgentTool } from "../src/types";
+import type {
+	AgentContext,
+	AgentEvent,
+	AgentLoopConfig,
+	AgentMessage,
+	AgentTool,
+	AgentToolContext,
+	ToolCallContext,
+} from "../src/types";
 
 // Mock stream for testing - mimics MockAssistantStream
 class MockAssistantStream extends EventStream<AssistantMessageEvent, AssistantMessage> {
@@ -234,6 +242,79 @@ describe("agentLoop with AgentMessage", () => {
 		expect(transformedMessages.length).toBe(2);
 		// Then convertToLlm receives the pruned messages
 		expect(convertedMessages.length).toBe(2);
+	});
+
+	it("provides tool call batch context", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		const contexts: ToolCallContext[] = [];
+		const tool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "echo",
+			label: "Echo",
+			description: "Echo tool",
+			parameters: toolSchema,
+			async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+				const toolCall = (ctx as { toolCall?: ToolCallContext })?.toolCall;
+				if (toolCall) {
+					contexts.push(toolCall);
+				}
+				return {
+					content: [{ type: "text", text: `echoed: ${params.value}` }],
+					details: { value: params.value },
+				};
+			},
+		};
+
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [tool],
+		};
+
+		const userPrompt: AgentMessage = createUserMessage("echo something");
+
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			getToolContext: (toolCall) => ({ toolCall }) as AgentToolContext,
+		};
+
+		let callIndex = 0;
+		const streamFn = () => {
+			const stream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					const message = createAssistantMessage(
+						[
+							{ type: "toolCall", id: "tool-1", name: "echo", arguments: { value: "hello" } },
+							{ type: "toolCall", id: "tool-2", name: "echo", arguments: { value: "world" } },
+						],
+						"toolUse",
+					);
+					stream.push({ type: "done", reason: "toolUse", message });
+				} else {
+					const message = createAssistantMessage([{ type: "text", text: "done" }]);
+					stream.push({ type: "done", reason: "stop", message });
+				}
+				callIndex++;
+			});
+			return stream;
+		};
+
+		const stream = agentLoop([userPrompt], context, config, undefined, streamFn);
+
+		for await (const _ of stream) {
+			// consume
+		}
+
+		expect(contexts).toHaveLength(2);
+		expect(contexts[0]?.batchId).toBe(contexts[1]?.batchId);
+		expect(contexts[0]?.total).toBe(2);
+		expect(contexts[0]?.toolCalls).toEqual([
+			{ id: "tool-1", name: "echo" },
+			{ id: "tool-2", name: "echo" },
+		]);
+		expect(contexts[0]?.index).toBe(0);
+		expect(contexts[1]?.index).toBe(1);
 	});
 
 	it("should handle tool calls and results", async () => {

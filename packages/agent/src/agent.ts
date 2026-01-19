@@ -27,6 +27,7 @@ import type {
 	AgentToolContext,
 	StreamFn,
 	ThinkingLevel,
+	ToolCallContext,
 } from "./types";
 
 /**
@@ -94,7 +95,7 @@ export interface AgentOptions {
 	 * Provides tool execution context, resolved per tool call.
 	 * Use for late-bound UI or session state access.
 	 */
-	getToolContext?: () => AgentToolContext | undefined;
+	getToolContext?: (toolCall?: ToolCallContext) => AgentToolContext | undefined;
 
 	/**
 	 * Cursor exec handlers for local tool execution.
@@ -139,7 +140,7 @@ export class Agent {
 	private _sessionId?: string;
 	private _thinkingBudgets?: ThinkingBudgets;
 	public getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
-	private getToolContext?: () => AgentToolContext | undefined;
+	private getToolContext?: (toolCall?: ToolCallContext) => AgentToolContext | undefined;
 	private cursorExecHandlers?: CursorExecHandlers;
 	private cursorOnToolResult?: CursorToolResultHandler;
 	private runningPrompt?: Promise<void>;

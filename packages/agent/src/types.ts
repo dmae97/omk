@@ -109,7 +109,14 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 * Provides tool execution context, resolved per tool call.
 	 * Use for late-bound UI or session state access.
 	 */
-	getToolContext?: () => AgentToolContext | undefined;
+	getToolContext?: (toolCall?: ToolCallContext) => AgentToolContext | undefined;
+}
+
+export interface ToolCallContext {
+	batchId: string;
+	index: number;
+	total: number;
+	toolCalls: Array<{ id: string; name: string }>;
 }
 
 /**

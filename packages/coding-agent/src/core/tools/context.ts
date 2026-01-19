@@ -1,4 +1,4 @@
-import type { AgentToolContext } from "@oh-my-pi/pi-agent-core";
+import type { AgentToolContext, ToolCallContext } from "@oh-my-pi/pi-agent-core";
 import type { CustomToolContext } from "../custom-tools/types";
 import type { ExtensionUIContext } from "../extensions/types";
 
@@ -7,11 +7,12 @@ declare module "@oh-my-pi/pi-agent-core" {
 		ui?: ExtensionUIContext;
 		hasUI?: boolean;
 		toolNames?: string[];
+		toolCall?: ToolCallContext;
 	}
 }
 
 export interface ToolContextStore {
-	getContext(): AgentToolContext;
+	getContext(toolCall?: ToolCallContext): AgentToolContext;
 	setUIContext(uiContext: ExtensionUIContext, hasUI: boolean): void;
 	setToolNames(names: string[]): void;
 }
@@ -22,11 +23,12 @@ export function createToolContextStore(getBaseContext: () => CustomToolContext):
 	let toolNames: string[] = [];
 
 	return {
-		getContext: () => ({
+		getContext: (toolCall) => ({
 			...getBaseContext(),
 			ui: uiContext,
 			hasUI,
 			toolNames,
+			toolCall,
 		}),
 		setUIContext: (context, uiAvailable) => {
 			uiContext = context;

@@ -1,4 +1,4 @@
-import type { AgentTool } from "@oh-my-pi/pi-agent-core";
+import type { AgentTool, AgentToolContext, ToolCallContext } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { Type } from "@sinclair/typebox";
@@ -22,6 +22,22 @@ export interface WriteToolDetails {
 	diagnostics?: FileDiagnosticsResult;
 }
 
+const LSP_BATCH_TOOLS = new Set(["edit", "write"]);
+
+function getLspBatchRequest(toolCall: ToolCallContext | undefined): { id: string; flush: boolean } | undefined {
+	if (!toolCall) {
+		return undefined;
+	}
+	const hasOtherWrites = toolCall.toolCalls.some(
+		(call, index) => index !== toolCall.index && LSP_BATCH_TOOLS.has(call.name),
+	);
+	if (!hasOtherWrites) {
+		return undefined;
+	}
+	const hasLaterWrites = toolCall.toolCalls.slice(toolCall.index + 1).some((call) => LSP_BATCH_TOOLS.has(call.name));
+	return { id: toolCall.batchId, flush: !hasLaterWrites };
+}
+
 export function createWriteTool(session: ToolSession): AgentTool<typeof writeSchema, WriteToolDetails> {
 	const enableLsp = session.enableLsp ?? true;
 	const enableFormat = enableLsp ? (session.settings?.getLspFormatOnWrite() ?? true) : false;
@@ -38,11 +54,14 @@ export function createWriteTool(session: ToolSession): AgentTool<typeof writeSch
 			_toolCallId: string,
 			{ path, content }: { path: string; content: string },
 			signal?: AbortSignal,
+			_onUpdate?: unknown,
+			context?: AgentToolContext,
 		) => {
 			return untilAborted(signal, async () => {
 				const absolutePath = resolveToCwd(path, session.cwd);
+				const batchRequest = getLspBatchRequest(context?.toolCall);
 
-				const diagnostics = await writethrough(absolutePath, content, signal);
+				const diagnostics = await writethrough(absolutePath, content, signal, undefined, batchRequest);
 
 				let resultText = `Successfully wrote ${content.length} bytes to ${path}`;
 				if (!diagnostics) {

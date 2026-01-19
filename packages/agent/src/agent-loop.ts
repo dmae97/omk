@@ -377,6 +377,8 @@ async function executeToolCalls(
 	const results: ToolResultMessage[] = [];
 	let steeringMessages: AgentMessage[] | undefined;
 	const shouldInterruptImmediately = interruptMode !== "wait";
+	const toolCallInfos = toolCalls.map((call) => ({ id: call.id, name: call.name }));
+	const batchId = `${assistantMessage.timestamp ?? Date.now()}_${toolCalls[0]?.id ?? "batch"}`;
 
 	for (let index = 0; index < toolCalls.length; index++) {
 		const toolCall = toolCalls[index];
@@ -397,7 +399,14 @@ async function executeToolCalls(
 
 			const validatedArgs = validateToolArguments(tool, toolCall);
 
-			const toolContext = getToolContext ? getToolContext() : undefined;
+			const toolContext = getToolContext
+				? getToolContext({
+						batchId,
+						index,
+						total: toolCalls.length,
+						toolCalls: toolCallInfos,
+					})
+				: undefined;
 			result = await tool.execute(
 				toolCall.id,
 				validatedArgs,
