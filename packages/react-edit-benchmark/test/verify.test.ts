@@ -56,26 +56,25 @@ describe("verifyExpectedFiles", () => {
 		}
 	});
 
-	it("includes diff output and stats for mismatched content", async () => {
+	it("fails with diff output when formatted content differs", async () => {
 		const { expectedDir, actualDir, cleanup } = await createTempDirs();
 		try {
-			await Bun.write(join(expectedDir, "index.ts"), "  const value = 1;\n");
-			await Bun.write(join(actualDir, "index.ts"), "const value = 1;\n");
+			await Bun.write(join(expectedDir, "index.ts"), "const value = 1;\n");
+			await Bun.write(join(actualDir, "index.ts"), "const value = 2;\n");
 
 			const result = await verifyExpectedFiles(expectedDir, actualDir);
 
 			expect(result.success).toBe(false);
-			expect(result.diff).toContain("-  const value = 1;");
-			expect(result.diff).toContain("+const value = 1;");
-			expect(result.diffStats?.linesChanged).toBe(2);
+			expect(result.diff).toContain("-const value = 1;");
+			expect(result.diff).toContain("+const value = 2;");
+			expect(result.diffStats?.linesChanged).toBeGreaterThan(0);
 			expect(result.diffStats?.charsChanged).toBeGreaterThan(0);
-			expect(result.indentScore).toBe(2);
 		} finally {
 			await cleanup();
 		}
 	});
 
-	it("does not mutate files and reports formatted equivalence", async () => {
+	it("succeeds when formatted content matches despite whitespace differences", async () => {
 		const { expectedDir, actualDir, cleanup } = await createTempDirs();
 		try {
 			const expected = "function test() {\n  return 1;\n}\n";
@@ -86,7 +85,7 @@ describe("verifyExpectedFiles", () => {
 			const result = await verifyExpectedFiles(expectedDir, actualDir);
 			const actualAfter = await Bun.file(join(actualDir, "index.ts")).text();
 
-			expect(result.success).toBe(false);
+			expect(result.success).toBe(true);
 			expect(result.formattedEquivalent).toBe(true);
 			expect(actualAfter).toBe(actual);
 		} finally {

@@ -1,117 +1,50 @@
 # Changelog
 
 ## [Unreleased]
+
+## [6.7.0] - 2026-01-19
+
 ### Added
 
-- Added normative patch generation to canonicalize edit tool output
-- Added tool call argument rewriting for session history persistence
-- Added comprehensive test coverage for tool call argument rewriting
-- Added fallback variant generation for patch matching with trimmed context, collapsed duplicates, and single-line reduction
-- Added comment-prefix normalization for improved fuzzy matching across different comment styles
-- Added support for ellipsis (...) and ellipsis character (…) as context placeholders in patch hunks
-- Added line number prefix stripping from diff content when sequential numbering is detected
-- Added support for 'top of file' and 'start of file' anchors in patch headers
-- Added function signature fallback matching for context anchors with empty parentheses
-- Added relaxed fuzzy threshold fallback when initial matching fails
-- Added context-relative matching for duplicate lines with preference for second forward match
+- Normative patch generation to canonicalize edit tool output with tool call argument rewriting for session history
+- Patch matching fallback variants: trimmed context, collapsed duplicates, single-line reduction, comment-prefix normalization
+- Extended anchor syntax: ellipsis placeholders, `top of file`/`start of file`, `@@ line N`, nested `@@` anchors, space-separated hierarchical contexts
+- Relaxed fuzzy threshold fallback and unique substring acceptance for context matching
 - Added `--no-title` flag to disable automatic session title generation
-- Added environment variable support for edit tool configuration (OMP_EDIT_VARIANT, OMP_EDIT_FUZZY, OMP_EDIT_FUZZY_THRESHOLD)
-- Added `allowFuzzy` option to control fuzzy matching behavior in patch operations
-- Added validation for line numbers to ensure they are >= 1 in patch headers and hints
-- Added unique substring acceptance for context matching - single matches are now accepted regardless of line length ratio
-- Added support for `@@ line N` syntax to use line numbers as positioning hints
-- Added support for nested `@@` anchors on multiple lines for hierarchical context matching
-- Added support for space-separated hierarchical anchors like `@@ class PatchTool constructor`
-- Enhanced context matching to handle hierarchical searches with nested anchors
-- Added comprehensive regression tests for model-generated patch formats
-- Added configurable fuzzy matching threshold for edit operations
-- Added edit fuzzy threshold setting with options from 0.85 (lenient) to 0.98 (strict)
-- Added binary file reading support for improved BOM detection in patch operations
-- Added comprehensive apply-patch mode for edit tool with support for create, update, delete, and rename operations
+- Environment variables for edit tool configuration (OMP_EDIT_VARIANT, OMP_EDIT_FUZZY, OMP_EDIT_FUZZY_THRESHOLD)
+- Configurable fuzzy matching threshold setting (0.85 lenient to 0.98 strict)
+- Apply-patch mode for edit tool (`edit.patchMode` setting) with create, update, delete, and rename operations
 - Added MCP tool caching for faster startup with cached tool definitions
-- Added deferred MCP tool loading to improve startup performance
-- Added apply-patch mode for edit tool (`edit.patchMode` setting) with support for adding, deleting, updating, and renaming files in a single patch operation
 
 ### Changed
 
-- Enhanced patch applicator to support normalized patch input processing
-- Updated edit tool to include normative patch data in tool results
-- Improved session manager with tool call argument rewriting capabilities
-- Improved indentation adjustment to preserve original file context while fixing new lines
-- Enhanced patch parser to handle implicit context lines without space prefixes
-- Updated patch operation schema to use 'op' instead of 'operation' and 'rename' instead of 'moveTo'
-- Improved ambiguous context resolution by falling back to unique old lines when multiple matches occur
-- Enhanced fuzzy matching to try comment-prefix normalized matches before unicode normalization
-- Updated patch prompts with clearer anchor selection rules and context requirements
+- Patch applicator now supports normalized input, implicit context lines, and improved indentation adjustment
+- Patch operation schema uses 'op' instead of 'operation' and 'rename' instead of 'moveTo'
+- Fuzzy matching tries comment-prefix normalized matches before unicode normalization
+- Updated patch prompts with clearer anchor selection rules and verbatim context requirements
 - Changed default behavior of read tool to omit line numbers by default
-- Updated patch tool prompts to clarify verbatim context requirements and hunk formatting rules
-- Enhanced fuzzy matching algorithms to respect the `allowFuzzy` setting for more precise control
-- Improved hierarchical context matching to better handle ambiguous matches with line hints
-- Updated diff rendering to correctly count lines without trailing empty lines
-- Enhanced patch parser to better handle nested @@ anchors and multi-file patch markers
-- Improved error messages for out-of-range line hints and invalid line numbers
-- Improved diff rendering to handle optional line numbers in diff lines
-- Enhanced patch parser to accumulate multiple `@@` context lines for nested matching
-- Updated context search to treat hierarchical matching as single unique match
-- Improved error messages to display hierarchical context with `>` separator for clarity
-- Refactored output sanitization logic into centralized streaming-output module
-- Converted voice recording from factory function to class-based implementation
-- Converted RPC extension UI context from factory function to class-based implementation
-- Converted task worker run state from object to class-based implementation
-- Updated SSH executor to use shared output streaming infrastructure
-- Improved text sanitization across Python executor and tool execution components
 - Changed default edit tool mode to use apply-patch format instead of oldText/newText
-- Converted tool implementations from factory functions to class-based architecture for better modularity
-- Updated tool exports to expose classes instead of factory functions
-- Refactored tool instantiation patterns across all built-in tools
-- Updated test files to use new class-based tool constructors
-- Modified SDK exports to provide tool classes for custom usage
-- Enhanced patch application with better ambiguity detection and clearer error messages
-- Improved diff truncation algorithm to preserve context around changes more intelligently
-- Updated patch mode prompts to prefer larger semantic blocks over single-line edits
-- Enhanced fuzzy matching to track and report multiple high-confidence matches
-- Improved line ending and BOM preservation when applying patches
-- Converted edit tool from factory function to class-based implementation
-- Improved patch application with better ambiguity detection and error handling
-- Enhanced fuzzy matching algorithms to track multiple matches for disambiguation
-- Improved line ending preservation and BOM handling in patch operations
-- Added support for out-of-order hunk processing with fallback search strategies
-- Enhanced context line matching with ambiguity rejection for non-unique matches
-- Improved diff parsing to preserve context lines that resemble metadata
-- Added validation for multi-file patch markers in single-file operations
-- Enhanced trailing newline policy to preserve original file behavior
-- Added validation for out-of-range line hints in insertion operations
-- Refactored edit tool implementation with modular patch architecture
-- Moved edit tool implementation from `edit/` to `patch/` module
-- Updated import paths for EditToolDetails across core modules
-- Enhanced patch parsing with support for unified diff format and Codex-style patches
-- Improved fuzzy matching algorithms for more robust text location
-- Added comprehensive regression tests for patch application behaviors
-- Improved edit tool architecture with modular diff and apply-patch implementations
-- Enhanced MCP connection handling with waitForConnection for better reliability
-- Improved MCP startup by falling back to cached tool definitions after a short wait while connections complete in the background
+- Converted tool implementations from factory functions to class-based architecture
+- Refactored edit tool with modular patch architecture (moved from `edit/` to `patch/` module)
+- Enhanced patch parsing: unified diff format, Codex-style patches, nested anchors, multi-file markers
+- Improved fuzzy matching with multiple match tracking, ambiguity detection, and out-of-order hunk processing
+- Better diff rendering: smarter truncation, optional line numbers, trailing newline preservation
+- Improved error messages with hierarchical context display using `>` separator
+- Centralized output sanitization in streaming-output module
+- Enhanced MCP startup with deferred tool loading and cached fallback
 
 ### Fixed
 
-- Fixed patch application to handle repeated context blocks by collapsing duplicates during matching
-- Fixed context line preservation to maintain original file indentation when fuzzy matched
-- Fixed ambiguous context matching to resolve duplicates using adjacent @@ anchor positioning
-- Fixed patch parser to correctly handle bare *** terminators and model hallucination markers
-- Fixed line hint parsing to support ranges (lines 3-5) and various format variations
-- Fixed function context matching to handle signatures with and without empty parentheses
+- Patch application handles repeated context blocks, preserves original indentation on fuzzy match
+- Ambiguous context matching resolves duplicates using adjacent @@ anchor positioning
+- Patch parser handles bare *** terminators, model hallucination markers, line hint ranges
+- Function context matching handles signatures with and without empty parentheses
 - Fixed session title generation to respect OMP_NO_TITLE environment variable
 - Fixed Python module discovery to use import.meta.dir for ES module compatibility
 - Fixed LSP writethrough batching to flush when delete operations complete a batch
-- Fixed patch application to prefer actual diff over cached preview when displaying results
-- Fixed line number validation to properly reject zero and negative values in patch headers
-- Fixed hierarchical context matching to correctly handle space-separated contexts with signature characters
+- Fixed line number validation, BOM detection, and trailing newline preservation in patches
+- Fixed hierarchical context matching and space-separated anchor parsing
 - Fixed fuzzy matching to avoid infinite loops when `allowFuzzy` is disabled
-- Fixed patch parser to correctly interpret `@@ line 125` as line hint instead of literal context
-- Fixed hierarchical context matching to properly disambiguate between similar code structures
-- Fixed space-separated anchor parsing to handle multi-word contexts correctly
-- Fixed BOM detection to check binary content when text-based detection fails
-- Fixed patch preview to use configured fuzzy threshold for consistent behavior
-- Fixed trailing newline preservation to maintain original file behavior
 - Fixed tool completion logic to only mark tools as complete when streaming is not aborted or in error state
 - Fixed MCP tool path formatting to correctly display provider information
 

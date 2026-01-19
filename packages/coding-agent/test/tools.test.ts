@@ -41,8 +41,13 @@ describe("Coding Agent Tools", () => {
 	let grepTool: GrepTool;
 	let findTool: FindTool;
 	let lsTool: LsTool;
+	let originalEditVariant: string | undefined;
 
 	beforeEach(() => {
+		// Force replace mode for edit tool tests using oldText/newText
+		originalEditVariant = process.env.OMP_EDIT_VARIANT;
+		process.env.OMP_EDIT_VARIANT = "replace";
+
 		// Create a unique temporary directory for each test
 		testDir = join(tmpdir(), `coding-agent-test-${nanoid()}`);
 		mkdirSync(testDir, { recursive: true });
@@ -61,6 +66,13 @@ describe("Coding Agent Tools", () => {
 	afterEach(() => {
 		// Clean up test directory
 		rmSync(testDir, { recursive: true, force: true });
+
+		// Restore original edit variant
+		if (originalEditVariant === undefined) {
+			delete process.env.OMP_EDIT_VARIANT;
+		} else {
+			process.env.OMP_EDIT_VARIANT = originalEditVariant;
+		}
 	});
 
 	describe("read tool", () => {
@@ -301,7 +313,7 @@ describe("Coding Agent Tools", () => {
 			expect(content).toBe("qux bar qux baz qux");
 		});
 
-		it("should replace all with fuzzy matching for multiline whitespace differences", async () => {
+		it("should reject all: true when multiple fuzzy matches are ambiguous", async () => {
 			const testFile = join(testDir, "edit-all-fuzzy.txt");
 			// File has two similar blocks with different indentation
 			writeFileSync(
@@ -319,17 +331,15 @@ function b() {
 `,
 			);
 
-			const result = await editTool.execute("test-all-fuzzy", {
-				path: testFile,
-				oldText: "if (x) {\n  doThing();\n}",
-				newText: "if (y) {\n  doOther();\n}",
-				all: true,
-			});
-
-			expect(getTextOutput(result)).toContain("Successfully replaced 2 occurrences");
-			const content = readFileSync(testFile, "utf-8");
-			expect(content).toContain("doOther");
-			expect(content).not.toContain("doThing");
+			// With multiple fuzzy matches, the tool rejects for safety to avoid ambiguous replacements
+			await expect(
+				editTool.execute("test-all-fuzzy", {
+					path: testFile,
+					oldText: "if (x) {\n  doThing();\n}",
+					newText: "if (y) {\n  doOther();\n}",
+					all: true,
+				}),
+			).rejects.toThrow(/Found 2 high-confidence matches/);
 		});
 
 		it("should fail with all: true if no matches found", async () => {
@@ -516,8 +526,13 @@ function b() {
 describe("edit tool CRLF handling", () => {
 	let testDir: string;
 	let editTool: EditTool;
+	let originalEditVariant: string | undefined;
 
 	beforeEach(() => {
+		// Force replace mode for edit tool tests using oldText/newText
+		originalEditVariant = process.env.OMP_EDIT_VARIANT;
+		process.env.OMP_EDIT_VARIANT = "replace";
+
 		testDir = join(tmpdir(), `coding-agent-crlf-test-${nanoid()}`);
 		mkdirSync(testDir, { recursive: true });
 		editTool = new EditTool(createTestToolSession(testDir));
@@ -525,6 +540,13 @@ describe("edit tool CRLF handling", () => {
 
 	afterEach(() => {
 		rmSync(testDir, { recursive: true, force: true });
+
+		// Restore original edit variant
+		if (originalEditVariant === undefined) {
+			delete process.env.OMP_EDIT_VARIANT;
+		} else {
+			process.env.OMP_EDIT_VARIANT = originalEditVariant;
+		}
 	});
 
 	it("should match LF oldText against CRLF file content", async () => {
