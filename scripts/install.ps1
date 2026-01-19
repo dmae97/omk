@@ -19,15 +19,7 @@ $ErrorActionPreference = "Stop"
 $Repo = "can1357/oh-my-pi"
 $Package = "@oh-my-pi/pi-coding-agent"
 $InstallDir = if ($env:OMP_INSTALL_DIR) { $env:OMP_INSTALL_DIR } else { "$env:LOCALAPPDATA\omp" }
-
-function Get-ArchitectureSuffix {
-    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-    switch ($arch) {
-        "X64" { return "x64" }
-        "Arm64" { throw "Windows ARM64 binaries are not available yet. Use -Source to install via bun instead." }
-        default { throw "Unsupported architecture: $arch" }
-    }
-}
+$BinaryName = "omp-windows-x64.exe"
 
 function Test-BunInstalled {
     try {
@@ -207,9 +199,6 @@ function Install-ViaBun {
 }
 
 function Install-Binary {
-    $archSuffix = Get-ArchitectureSuffix
-    $BinaryName = "omp-windows-$archSuffix.exe"
-
     if ($Ref) {
         Write-Host "Fetching release $Ref..."
         try {
