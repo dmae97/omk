@@ -255,7 +255,7 @@ export function buildAnthropicHeaders(auth: AnthropicAuthConfig): Record<string,
 		extraBetas: ["web-search-2025-03-05"],
 		stream: false,
 	});
-	}
+}
 
 /**
  * Builds the full API URL for Anthropic messages endpoint.

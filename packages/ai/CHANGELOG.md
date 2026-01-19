@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [6.7.670] - 2026-01-19
 ### Changed
 
 - Updated Claude Code compatibility headers and version

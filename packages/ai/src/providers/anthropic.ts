@@ -450,7 +450,7 @@ function createClient(
 	if (oauthToken || !isAnthropicBaseUrl(model.baseUrl)) {
 		clientOptions.apiKey = null;
 		clientOptions.authToken = apiKey;
-		} else {
+	} else {
 		clientOptions.apiKey = apiKey;
 	}
 
