@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [6.7.67] - 2026-01-19
 ### Added
 
 - Added normative rewrite setting to control tool call argument normalization in session history
