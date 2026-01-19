@@ -4,17 +4,8 @@
 		"args": [],
 		"fileTypes": [".rs"],
 		"rootMarkers": ["Cargo.toml", "rust-analyzer.toml"],
-		"initOptions": {
-			"checkOnSave": { "command": "clippy" },
-			"cargo": { "allFeatures": true },
-			"procMacro": { "enable": true }
-		},
-		"settings": {
-			"rust-analyzer": {
-				"diagnostics": { "enable": true },
-				"inlayHints": { "enable": true }
-			}
-		},
+		"initOptions": {},
+		"settings": {},
 		"capabilities": {
 			"flycheck": true,
 			"ssr": true,

@@ -12,6 +12,8 @@ import type { MCPManager } from "../../mcp/manager";
 import type { ModelRegistry } from "../../model-registry";
 import { checkPythonKernelAvailability } from "../../python-kernel";
 import type { ToolSession } from "..";
+import { createLspTool } from "../lsp/index";
+import type { LspParams } from "../lsp/types";
 import { createPythonTool } from "../python";
 import { ensureArtifactsDir, getArtifactPaths } from "./artifacts";
 import { resolveModelPattern } from "./model-resolver";
@@ -27,6 +29,7 @@ import {
 	TASK_SUBAGENT_PROGRESS_CHANNEL,
 } from "./types";
 import type {
+	LspToolCallRequest,
 	MCPToolCallRequest,
 	MCPToolMetadata,
 	PythonToolCallCancel,
@@ -307,6 +310,9 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		pythonProxyEnabled = availability.ok;
 	}
 
+	const lspEnabled = enableLsp ?? true;
+	const lspToolRequested = lspEnabled && (toolNames === undefined || toolNames.includes("lsp"));
+
 	let worker: Worker;
 	try {
 		worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
@@ -384,6 +390,17 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	};
 	const pythonTool = pythonProxyEnabled ? createPythonTool(pythonToolSession) : null;
 	const pythonCallControllers = new Map<string, AbortController>();
+
+	const lspToolSession: ToolSession = {
+		cwd,
+		hasUI: false,
+		enableLsp: lspEnabled,
+		getSessionFile: () => pythonSessionFile,
+		getSessionSpawns: () => spawnsEnv,
+		settings: options.settingsManager as ToolSession["settings"],
+		settingsManager: options.settingsManager,
+	};
+	const lspTool = lspToolRequested ? createLspTool(lspToolSession) : null;
 
 	// Accumulate usage incrementally from message_end events (no memory for streaming events)
 	const accumulatedUsage = {
@@ -678,12 +695,13 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			outputSchema,
 			sessionFile,
 			spawnsEnv,
-			enableLsp,
+			enableLsp: lspEnabled,
 			serializedAuth: options.authStorage?.serialize(),
 			serializedModels: options.modelRegistry?.serialize(),
 			serializedSettings,
 			mcpTools: options.mcpManager ? extractMCPToolMetadata(options.mcpManager) : undefined,
 			pythonToolProxy: pythonProxyEnabled,
+			lspToolProxy: Boolean(lspTool),
 		},
 	};
 
@@ -792,6 +810,40 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			}
 		};
 
+		const handleLspCall = async (request: LspToolCallRequest) => {
+			if (!lspTool) {
+				worker.postMessage({
+					type: "lsp_tool_result",
+					callId: request.callId,
+					error: "LSP proxy not available",
+				});
+				return;
+			}
+			try {
+				const result = await withTimeout(
+					lspTool.execute(request.callId, request.params as LspParams, signal),
+					request.timeoutMs,
+				);
+				worker.postMessage({
+					type: "lsp_tool_result",
+					callId: request.callId,
+					result: { content: result.content ?? [], details: result.details },
+				});
+			} catch (error) {
+				const message =
+					request.timeoutMs !== undefined && error instanceof Error && error.message.includes("timed out")
+						? `LSP tool call timed out after ${request.timeoutMs}ms`
+						: error instanceof Error
+							? error.message
+							: String(error);
+				worker.postMessage({
+					type: "lsp_tool_result",
+					callId: request.callId,
+					error: message,
+				});
+			}
+		};
+
 		const onMessage = (event: WorkerMessageEvent<SubagentWorkerResponse>) => {
 			const message = event.data;
 			if (!message || resolved) return;
@@ -805,6 +857,10 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			}
 			if (message.type === "python_tool_cancel") {
 				handlePythonCancel(message as PythonToolCallCancel);
+				return;
+			}
+			if (message.type === "lsp_tool_call") {
+				handleLspCall(message as LspToolCallRequest);
 				return;
 			}
 			if (message.type === "event") {

@@ -16,18 +16,22 @@
 import type { AgentEvent, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Api, Model } from "@oh-my-pi/pi-ai";
 import type { TSchema } from "@sinclair/typebox";
+import lspDescription from "../../../prompts/tools/lsp.md" with { type: "text" };
 import type { AgentSessionEvent } from "../../agent-session";
 import { AuthStorage } from "../../auth-storage";
 import type { CustomTool } from "../../custom-tools/types";
 import { logger } from "../../logger";
 import { ModelRegistry } from "../../model-registry";
 import { parseModelPattern, parseModelString } from "../../model-resolver";
+import { renderPromptTemplate } from "../../prompt-templates";
 import { createAgentSession, discoverAuthStorage, discoverModels } from "../../sdk";
 import { SessionManager } from "../../session-manager";
 import { SettingsManager } from "../../settings-manager";
 import { untilAborted } from "../../utils";
+import { type LspToolDetails, lspSchema } from "../lsp/types";
 import { getPythonToolDescription, type PythonToolDetails, type PythonToolParams, pythonSchema } from "../python";
 import type {
+	LspToolCallResponse,
 	MCPToolCallResponse,
 	MCPToolMetadata,
 	PythonToolCallResponse,
@@ -58,11 +62,19 @@ interface PendingPythonCall {
 	timeoutId?: ReturnType<typeof setTimeout>;
 }
 
+interface PendingLspCall {
+	resolve: (result: LspToolCallResponse["result"]) => void;
+	reject: (error: Error) => void;
+	timeoutId?: ReturnType<typeof setTimeout>;
+}
+
 const pendingMCPCalls = new Map<string, PendingMCPCall>();
 const pendingPythonCalls = new Map<string, PendingPythonCall>();
+const pendingLspCalls = new Map<string, PendingLspCall>();
 const MCP_CALL_TIMEOUT_MS = 60_000;
 let mcpCallIdCounter = 0;
 let pythonCallIdCounter = 0;
+let lspCallIdCounter = 0;
 
 function generateMCPCallId(): string {
 	return `mcp_${Date.now()}_${++mcpCallIdCounter}`;
@@ -70,6 +82,10 @@ function generateMCPCallId(): string {
 
 function generatePythonCallId(): string {
 	return `python_${Date.now()}_${++pythonCallIdCounter}`;
+}
+
+function generateLspCallId(): string {
+	return `lsp_${Date.now()}_${++lspCallIdCounter}`;
 }
 
 function callMCPToolViaParent(
@@ -193,6 +209,65 @@ function callPythonToolViaParent(
 	});
 }
 
+function callLspToolViaParent(
+	params: Record<string, unknown>,
+	signal?: AbortSignal,
+	timeoutMs?: number,
+): Promise<LspToolCallResponse["result"]> {
+	return new Promise((resolve, reject) => {
+		const callId = generateLspCallId();
+		if (signal?.aborted) {
+			reject(new Error("Aborted"));
+			return;
+		}
+
+		const timeoutId =
+			typeof timeoutMs === "number" && Number.isFinite(timeoutMs)
+				? setTimeout(() => {
+						pendingLspCalls.delete(callId);
+						reject(new Error(`LSP call timed out after ${timeoutMs}ms`));
+					}, timeoutMs)
+				: undefined;
+
+		const cleanup = () => {
+			if (timeoutId) {
+				clearTimeout(timeoutId);
+			}
+			pendingLspCalls.delete(callId);
+		};
+
+		if (typeof signal?.addEventListener === "function") {
+			signal.addEventListener(
+				"abort",
+				() => {
+					cleanup();
+					reject(new Error("Aborted"));
+				},
+				{ once: true },
+			);
+		}
+
+		pendingLspCalls.set(callId, {
+			resolve: (result) => {
+				cleanup();
+				resolve(result ?? { content: [] });
+			},
+			reject: (error) => {
+				cleanup();
+				reject(error);
+			},
+			timeoutId,
+		});
+
+		postMessageSafe({
+			type: "lsp_tool_call",
+			callId,
+			params,
+			timeoutMs,
+		} as SubagentWorkerResponse);
+	});
+}
+
 function handleMCPToolResult(response: MCPToolCallResponse): void {
 	const pending = pendingMCPCalls.get(response.callId);
 	if (!pending) return;
@@ -213,17 +288,33 @@ function handlePythonToolResult(response: PythonToolCallResponse): void {
 	}
 }
 
+function handleLspToolResult(response: LspToolCallResponse): void {
+	const pending = pendingLspCalls.get(response.callId);
+	if (!pending) return;
+	if (response.error) {
+		pending.reject(new Error(response.error));
+	} else {
+		pending.resolve(response.result);
+	}
+}
+
 function rejectPendingCalls(reason: string): void {
 	const error = new Error(reason);
 	const mcpCalls = Array.from(pendingMCPCalls.values());
 	const pythonCalls = Array.from(pendingPythonCalls.values());
+	const lspCalls = Array.from(pendingLspCalls.values());
 	pendingMCPCalls.clear();
 	pendingPythonCalls.clear();
+	pendingLspCalls.clear();
 	for (const pending of mcpCalls) {
 		clearTimeout(pending.timeoutId);
 		pending.reject(error);
 	}
 	for (const pending of pythonCalls) {
+		clearTimeout(pending.timeoutId);
+		pending.reject(error);
+	}
+	for (const pending of lspCalls) {
 		clearTimeout(pending.timeoutId);
 		pending.reject(error);
 	}
@@ -292,6 +383,40 @@ function createPythonProxyTool(): CustomTool<typeof pythonSchema> {
 					) ?? [],
 				details: result?.details as PythonToolDetails | undefined,
 			};
+		},
+	};
+}
+
+function createLspProxyTool(): CustomTool<typeof lspSchema> {
+	return {
+		name: "lsp",
+		label: "LSP",
+		description: renderPromptTemplate(lspDescription),
+		parameters: lspSchema,
+		execute: async (_toolCallId, params, _onUpdate, _ctx, signal) => {
+			try {
+				const result = await callLspToolViaParent(params as Record<string, unknown>, signal);
+				return {
+					content:
+						result?.content?.map((c) =>
+							c.type === "text"
+								? { type: "text" as const, text: c.text ?? "" }
+								: { type: "text" as const, text: JSON.stringify(c) },
+						) ?? [],
+					details: result?.details as LspToolDetails | undefined,
+				};
+			} catch (error) {
+				const { action } = params;
+				return {
+					content: [
+						{
+							type: "text" as const,
+							text: `LSP error: ${error instanceof Error ? error.message : String(error)}`,
+						},
+					],
+					details: { action, success: false } as LspToolDetails,
+				};
+			}
 		},
 	};
 }
@@ -423,12 +548,17 @@ async function runTask(runState: RunState, payload: SubagentWorkerStartPayload):
 			checkAbort();
 		}
 
-		// Create MCP/python proxy tools if provided
+		// Create MCP/python/LSP proxy tools if provided
 		const mcpProxyTools: CustomTool<TSchema>[] = payload.mcpTools?.map(createMCPProxyTool) ?? [];
 		const pythonProxyTools: CustomTool<TSchema>[] = payload.pythonToolProxy
 			? [createPythonProxyTool() as unknown as CustomTool<TSchema>]
 			: [];
-		const proxyTools = [...mcpProxyTools, ...pythonProxyTools];
+		const lspProxyTools: CustomTool<TSchema>[] = payload.lspToolProxy
+			? [createLspProxyTool() as unknown as CustomTool<TSchema>]
+			: [];
+		const proxyTools = [...mcpProxyTools, ...pythonProxyTools, ...lspProxyTools];
+		const enableLsp = payload.enableLsp ?? true;
+		const lspProxyEnabled = payload.lspToolProxy ?? false;
 
 		// Resolve model override (equivalent to CLI's parseModelPattern with --model)
 		const { model, thinkingLevel: modelThinkingLevel } = resolveModelOverride(payload.model, modelRegistry);
@@ -465,7 +595,7 @@ async function runTask(runState: RunState, payload: SubagentWorkerStartPayload):
 			hasUI: false,
 			// Pass spawn restrictions to nested tasks
 			spawns: payload.spawnsEnv,
-			enableLsp: payload.enableLsp ?? true,
+			enableLsp: enableLsp && !lspProxyEnabled,
 			// Disable local MCP discovery if using proxy tools
 			enableMCP: !payload.mcpTools,
 			// Add proxy tools
@@ -703,7 +833,7 @@ self.addEventListener("messageerror", () => {
 	reportFatal("Failed to deserialize parent message");
 });
 
-// Message handler - receives start/abort/mcp_tool_result commands from parent
+// Message handler - receives start/abort/tool_result commands from parent
 globalThis.addEventListener("message", (event: WorkerMessageEvent<SubagentWorkerRequest>) => {
 	const message = event.data;
 	if (!message) return;
@@ -720,6 +850,11 @@ globalThis.addEventListener("message", (event: WorkerMessageEvent<SubagentWorker
 
 	if (message.type === "python_tool_result") {
 		handlePythonToolResult(message);
+		return;
+	}
+
+	if (message.type === "lsp_tool_result") {
+		handleLspToolResult(message);
 		return;
 	}
 

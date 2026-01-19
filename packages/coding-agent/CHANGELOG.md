@@ -1,11 +1,19 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added lspmux integration for LSP server multiplexing to reduce startup time and memory usage
+- Added LSP tool proxy support for subagent workers
+- Updated LSP status command to show lspmux connection state
 - Added maxdepth and mindepth parameters to find function for depth-controlled file search
 - Added counter function to count occurrences and sort by frequency
 - Added basenames function to extract base names from paths
+
+### Changed
+
+- Simplified rust-analyzer default configuration by removing custom initOptions and settings
 
 ## [6.0.0] - 2026-01-19
 

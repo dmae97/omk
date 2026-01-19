@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import { logger } from "../../logger";
 import { applyWorkspaceEdit } from "./edits";
+import { getLspmuxCommand, isLspmuxSupported } from "./lspmux";
 import type {
 	Diagnostic,
 	LspClient,
@@ -400,13 +401,20 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string, initT
 
 	// Create new client with lock
 	const clientPromise = (async () => {
-		const args = config.args ?? [];
-		const command = config.resolvedCommand ?? config.command;
+		const baseCommand = config.resolvedCommand ?? config.command;
+		const baseArgs = config.args ?? [];
+
+		// Wrap with lspmux if available and supported
+		const { command, args, env } = isLspmuxSupported(baseCommand)
+			? await getLspmuxCommand(baseCommand, baseArgs)
+			: { command: baseCommand, args: baseArgs };
+
 		const proc = Bun.spawn([command, ...args], {
 			cwd,
 			stdin: "pipe",
 			stdout: "pipe",
 			stderr: "pipe",
+			env: env ? { ...process.env, ...env } : undefined,
 		});
 
 		const client: LspClient = {

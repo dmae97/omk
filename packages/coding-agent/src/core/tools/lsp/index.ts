@@ -25,6 +25,7 @@ import {
 import { getLinterClient } from "./clients";
 import { getServersForFile, hasCapability, type LspConfig, loadConfig } from "./config";
 import { applyTextEditsToString, applyWorkspaceEdit } from "./edits";
+import { detectLspmux } from "./lspmux";
 import { renderCall, renderResult } from "./render";
 import * as rustAnalyzer from "./rust-analyzer";
 import {
@@ -798,10 +799,19 @@ export function createLspTool(session: ToolSession): AgentTool<typeof lspSchema,
 			// Status action doesn't need a file
 			if (action === "status") {
 				const servers = Object.keys(config.servers);
-				const output =
+				const lspmuxState = await detectLspmux();
+				const lspmuxStatus = lspmuxState.available
+					? lspmuxState.running
+						? "lspmux: active (multiplexing enabled)"
+						: "lspmux: installed but server not running"
+					: "";
+
+				const serverStatus =
 					servers.length > 0
 						? `Active language servers: ${servers.join(", ")}`
 						: "No language servers configured for this project";
+
+				const output = lspmuxStatus ? `${serverStatus}\n${lspmuxStatus}` : serverStatus;
 				return {
 					content: [{ type: "text", text: output }],
 					details: { action, success: true },

@@ -64,6 +64,24 @@ export interface PythonToolCallCancel {
 	reason?: string;
 }
 
+export interface LspToolCallRequest {
+	type: "lsp_tool_call";
+	callId: string;
+	params: Record<string, unknown>;
+	timeoutMs?: number;
+}
+
+export interface LspToolCallResponse {
+	type: "lsp_tool_result";
+	callId: string;
+	result?: {
+		content: Array<{ type: string; text?: string; [key: string]: unknown }>;
+		details?: unknown;
+		isError?: boolean;
+	};
+	error?: string;
+}
+
 export interface SubagentWorkerStartPayload {
 	cwd: string;
 	task: string;
@@ -80,6 +98,7 @@ export interface SubagentWorkerStartPayload {
 	serializedSettings?: Settings;
 	mcpTools?: MCPToolMetadata[];
 	pythonToolProxy?: boolean;
+	lspToolProxy?: boolean;
 }
 
 export type SubagentWorkerRequest =
@@ -87,11 +106,13 @@ export type SubagentWorkerRequest =
 	| { type: "abort" }
 	| MCPToolCallResponse
 	| PythonToolCallResponse
-	| PythonToolCallCancel;
+	| PythonToolCallCancel
+	| LspToolCallResponse;
 
 export type SubagentWorkerResponse =
 	| { type: "event"; event: AgentEvent }
 	| { type: "done"; exitCode: number; durationMs: number; error?: string; aborted?: boolean }
 	| MCPToolCallRequest
 	| PythonToolCallRequest
-	| PythonToolCallCancel;
+	| PythonToolCallCancel
+	| LspToolCallRequest;
