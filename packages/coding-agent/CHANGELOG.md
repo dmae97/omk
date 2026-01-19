@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added configurable fuzzy matching threshold for edit operations
@@ -14,6 +13,7 @@
 
 ### Changed
 
+- Changed default edit tool mode to use apply-patch format instead of oldText/newText
 - Converted tool implementations from factory functions to class-based architecture for better modularity
 - Updated tool exports to expose classes instead of factory functions
 - Refactored tool instantiation patterns across all built-in tools

@@ -124,7 +124,7 @@ export interface PythonSettings {
 export interface EditSettings {
 	fuzzyMatch?: boolean; // default: true (accept high-confidence fuzzy matches for whitespace/indentation)
 	fuzzyThreshold?: number; // default: 0.95 (similarity threshold for fuzzy matching)
-	patchMode?: boolean; // default: false (use codex-style apply-patch format instead of oldText/newText)
+	patchMode?: boolean; // default: true (use codex-style apply-patch format instead of oldText/newText)
 }
 
 export type { SymbolPreset };
@@ -1288,7 +1288,7 @@ export class SettingsManager {
 	}
 
 	getEditPatchMode(): boolean {
-		return this.settings.edit?.patchMode ?? false;
+		return this.settings.edit?.patchMode ?? true;
 	}
 
 	async setEditPatchMode(enabled: boolean): Promise<void> {
