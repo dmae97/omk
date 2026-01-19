@@ -289,6 +289,15 @@ export const SETTINGS_DEFS: SettingDef[] = [
 		set: (sm, v) => sm.setEditFuzzyMatch(v),
 	},
 	{
+		id: "editPatchMode",
+		tab: "tools",
+		type: "boolean",
+		label: "Edit patch mode",
+		description: "Use codex-style apply-patch format instead of oldText/newText for edits",
+		get: (sm) => sm.getEditPatchMode(),
+		set: (sm, v) => sm.setEditPatchMode(v),
+	},
+	{
 		id: "mcpProjectConfig",
 		tab: "tools",
 		type: "boolean",

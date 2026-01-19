@@ -1,6 +1,22 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added comprehensive apply-patch mode for edit tool with support for create, update, delete, and rename operations
+- Added MCP tool caching for faster startup with cached tool definitions
+- Added deferred MCP tool loading to improve startup performance
+- Added apply-patch mode for edit tool (`edit.patchMode` setting) with support for adding, deleting, updating, and renaming files in a single patch operation
+
+### Changed
+
+- Improved edit tool architecture with modular diff and apply-patch implementations
+- Enhanced MCP connection handling with waitForConnection for better reliability
+- Improved MCP startup by falling back to cached tool definitions after a short wait while connections complete in the background
+
+### Fixed
+
+- Fixed MCP tool path formatting to correctly display provider information
 
 ## [6.2.0] - 2026-01-19
 ### Changed

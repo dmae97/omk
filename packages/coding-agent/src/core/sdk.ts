@@ -728,6 +728,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			enableProjectConfig: settingsManager.getMCPProjectConfigEnabled(),
 			// Always filter Exa - we have native integration
 			filterExa: true,
+			cacheStorage: settingsManager.getStorage(),
 		});
 		time("discoverAndLoadMCPTools");
 		mcpManager = mcpResult.manager;

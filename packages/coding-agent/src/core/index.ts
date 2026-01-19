@@ -35,6 +35,7 @@ export {
 	MCPManager,
 	type MCPServerConfig,
 	type MCPServerConnection,
+	MCPToolCache,
 	type MCPToolDefinition,
 	type MCPToolDetails,
 	type MCPToolsLoadResult,

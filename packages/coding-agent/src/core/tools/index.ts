@@ -130,6 +130,7 @@ export interface ToolSession {
 		getLspDiagnosticsOnWrite(): boolean;
 		getLspDiagnosticsOnEdit(): boolean;
 		getEditFuzzyMatch(): boolean;
+		getEditPatchMode?(): boolean;
 		getGitToolEnabled(): boolean;
 		getBashInterceptorEnabled(): boolean;
 		getBashInterceptorSimpleLsEnabled(): boolean;

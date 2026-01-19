@@ -736,9 +736,13 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			try {
 				const parsed = parseMCPToolName(request.toolName);
 				if (!parsed) throw new Error(`Invalid MCP tool name: ${request.toolName}`);
-				const connection = mcpManager.getConnection(parsed.serverName);
-				if (!connection) throw new Error(`MCP server not connected: ${parsed.serverName}`);
-				const result = await withTimeout(callTool(connection, parsed.toolName, request.params), request.timeoutMs);
+				const result = await withTimeout(
+					(async () => {
+						const connection = await mcpManager.waitForConnection(parsed.serverName);
+						return callTool(connection, parsed.toolName, request.params);
+					})(),
+					request.timeoutMs,
+				);
 				worker.postMessage({
 					type: "mcp_tool_result",
 					callId: request.callId,

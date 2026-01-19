@@ -4,9 +4,12 @@
  * Integrates MCP tool discovery with the custom tools system.
  */
 
+import { AgentStorage } from "../agent-storage";
 import type { LoadedCustomTool } from "../custom-tools/types";
+import { logger } from "../logger";
 import { type MCPLoadResult, MCPManager } from "./manager";
 import { parseMCPToolName } from "./tool-bridge";
+import { MCPToolCache } from "./tool-cache";
 
 /** Result from loading MCP tools */
 export interface MCPToolsLoadResult {
@@ -30,6 +33,19 @@ export interface MCPToolsLoadOptions {
 	enableProjectConfig?: boolean;
 	/** Whether to filter out Exa MCP servers (default: true) */
 	filterExa?: boolean;
+	/** SQLite storage for MCP tool cache (null disables cache) */
+	cacheStorage?: AgentStorage | null;
+}
+
+function resolveToolCache(storage: AgentStorage | null | undefined): MCPToolCache | null {
+	if (storage === null) return null;
+	try {
+		const resolved = storage ?? AgentStorage.open();
+		return new MCPToolCache(resolved);
+	} catch (error) {
+		logger.warn("MCP tool cache unavailable", { error: String(error) });
+		return null;
+	}
 }
 
 /**
@@ -40,7 +56,8 @@ export interface MCPToolsLoadOptions {
  * @returns MCP tools in LoadedCustomTool format for integration
  */
 export async function discoverAndLoadMCPTools(cwd: string, options?: MCPToolsLoadOptions): Promise<MCPToolsLoadResult> {
-	const manager = new MCPManager(cwd);
+	const toolCache = resolveToolCache(options?.cacheStorage);
+	const manager = new MCPManager(cwd, toolCache);
 
 	let result: MCPLoadResult;
 	try {
@@ -69,12 +86,13 @@ export async function discoverAndLoadMCPTools(cwd: string, options?: MCPToolsLoa
 
 		// Get provider info from manager's connection if available
 		const connection = serverName ? manager.getConnection(serverName) : undefined;
-		const provider = connection?._source?.provider;
+		const source = serverName ? manager.getSource(serverName) : undefined;
+		const providerName =
+			connection?._source?.providerName ?? source?.providerName ?? connection?._source?.provider ?? source?.provider;
 
 		// Format path with provider info if available
 		// Format: "mcp:serverName via providerName" (e.g., "mcp:agentx via Claude Code")
-		const path =
-			provider && serverName ? `mcp:${serverName} via ${connection._source!.providerName}` : `mcp:${tool.name}`;
+		const path = serverName && providerName ? `mcp:${serverName} via ${providerName}` : `mcp:${tool.name}`;
 
 		return {
 			path,

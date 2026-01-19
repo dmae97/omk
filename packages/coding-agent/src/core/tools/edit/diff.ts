@@ -4,7 +4,7 @@
  */
 
 import * as Diff from "diff";
-import { resolveToCwd } from "./path-utils";
+import { resolveToCwd } from "../path-utils";
 
 export function detectLineEnding(content: string): "\r\n" | "\n" {
 	const crlfIdx = content.indexOf("\r\n");
@@ -54,6 +54,79 @@ function countLeadingWhitespace(line: string): number {
 		}
 	}
 	return count;
+}
+
+function getLeadingWhitespace(line: string): string {
+	const count = countLeadingWhitespace(line);
+	return line.slice(0, count);
+}
+
+/**
+ * Compute the minimum indentation (in characters) of non-empty lines.
+ * Returns 0 if all lines are empty.
+ */
+function minIndentOfNonEmptyLines(text: string): number {
+	const lines = text.split("\n");
+	let min = Infinity;
+	for (const line of lines) {
+		if (line.trim().length > 0) {
+			min = Math.min(min, countLeadingWhitespace(line));
+		}
+	}
+	return min === Infinity ? 0 : min;
+}
+
+/**
+ * Detect the indentation character used in text (space or tab).
+ * Prefers the character used in the first non-empty line's leading whitespace.
+ */
+function detectIndentChar(text: string): string {
+	const lines = text.split("\n");
+	for (const line of lines) {
+		const ws = getLeadingWhitespace(line);
+		if (ws.length > 0) {
+			return ws[0];
+		}
+	}
+	return " ";
+}
+
+/**
+ * Adjust newText indentation to match the indentation delta between
+ * what was provided (oldText) and what was actually matched (actualText).
+ *
+ * If oldText has 0 indent but actualText has 12 spaces, we add 12 spaces
+ * to each line in newText.
+ */
+export function adjustNewTextIndentation(oldText: string, actualText: string, newText: string): string {
+	const oldMin = minIndentOfNonEmptyLines(oldText);
+	const actualMin = minIndentOfNonEmptyLines(actualText);
+	const delta = actualMin - oldMin;
+
+	if (delta === 0) {
+		return newText;
+	}
+
+	const indentChar = detectIndentChar(actualText);
+	const lines = newText.split("\n");
+
+	const adjusted = lines.map((line) => {
+		if (line.trim().length === 0) {
+			// Preserve empty/whitespace-only lines as-is
+			return line;
+		}
+
+		if (delta > 0) {
+			// Add indentation
+			return indentChar.repeat(delta) + line;
+		}
+
+		// Remove indentation (delta < 0)
+		const toRemove = Math.min(-delta, countLeadingWhitespace(line));
+		return line.slice(toRemove);
+	});
+
+	return adjusted.join("\n");
 }
 
 function computeRelativeIndentDepths(lines: string[]): number[] {
@@ -522,9 +595,10 @@ export async function computeEditDiff(
 						break;
 					}
 
+					const adjustedNewText = adjustNewTextIndentation(normalizedOldText, match.actualText, normalizedNewText);
 					normalizedNewContent =
 						normalizedNewContent.substring(0, match.startIndex) +
-						normalizedNewText +
+						adjustedNewText +
 						normalizedNewContent.substring(match.startIndex + match.actualText.length);
 					replacementCount++;
 				}
@@ -553,9 +627,10 @@ export async function computeEditDiff(
 			}
 
 			const match = matchOutcome.match;
+			const adjustedNewText = adjustNewTextIndentation(normalizedOldText, match.actualText, normalizedNewText);
 			normalizedNewContent =
 				normalizedContent.substring(0, match.startIndex) +
-				normalizedNewText +
+				adjustedNewText +
 				normalizedContent.substring(match.startIndex + match.actualText.length);
 		}
 

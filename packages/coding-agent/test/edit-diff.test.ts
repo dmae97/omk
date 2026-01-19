@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_FUZZY_THRESHOLD, findEditMatch } from "../src/core/tools/edit-diff";
+import { adjustNewTextIndentation, DEFAULT_FUZZY_THRESHOLD, findEditMatch } from "../src/core/tools/edit";
 
 describe("findEditMatch", () => {
 	describe("exact matching", () => {
@@ -146,5 +146,64 @@ describe("findEditMatch", () => {
 			const result = findEditMatch(content, target, { allowFuzzy: true });
 			expect(result.match).toBeUndefined();
 		});
+	});
+});
+
+describe("adjustNewTextIndentation", () => {
+	test("adds indentation when actualText is more indented than oldText", () => {
+		const oldText = "foo\nbar";
+		const actualText = "    foo\n    bar";
+		const newText = "foo\nbaz\nbar";
+		const result = adjustNewTextIndentation(oldText, actualText, newText);
+		expect(result).toBe("    foo\n    baz\n    bar");
+	});
+
+	test("removes indentation when actualText is less indented", () => {
+		const oldText = "        foo\n        bar";
+		const actualText = "    foo\n    bar";
+		const newText = "        foo\n        baz";
+		const result = adjustNewTextIndentation(oldText, actualText, newText);
+		expect(result).toBe("    foo\n    baz");
+	});
+
+	test("preserves empty lines", () => {
+		const oldText = "foo\n\nbar";
+		const actualText = "    foo\n\n    bar";
+		const newText = "foo\n\nbaz";
+		const result = adjustNewTextIndentation(oldText, actualText, newText);
+		expect(result).toBe("    foo\n\n    baz");
+	});
+
+	test("returns unchanged when indentation matches", () => {
+		const oldText = "    foo";
+		const actualText = "    foo";
+		const newText = "    bar";
+		const result = adjustNewTextIndentation(oldText, actualText, newText);
+		expect(result).toBe("    bar");
+	});
+
+	test("uses tab from actualText when adding indentation", () => {
+		const oldText = "foo";
+		const actualText = "\t\tfoo";
+		const newText = "bar";
+		const result = adjustNewTextIndentation(oldText, actualText, newText);
+		expect(result).toBe("\t\tbar");
+	});
+
+	test("handles mixed content with different indent levels", () => {
+		const oldText = "if (x) {\n  return y;\n}";
+		const actualText = "    if (x) {\n      return y;\n    }";
+		const newText = "if (x) {\n  return z;\n}";
+		const result = adjustNewTextIndentation(oldText, actualText, newText);
+		expect(result).toBe("    if (x) {\n      return z;\n    }");
+	});
+
+	test("does not go negative on removal", () => {
+		const oldText = "    foo";
+		const actualText = "foo";
+		const newText = "  bar";
+		const result = adjustNewTextIndentation(oldText, actualText, newText);
+		// Should remove up to 4 chars, but line only has 2, so remove 2
+		expect(result).toBe("bar");
 	});
 });

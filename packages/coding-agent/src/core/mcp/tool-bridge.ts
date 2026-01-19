@@ -5,6 +5,7 @@
  */
 
 import type { TSchema } from "@sinclair/typebox";
+import type { SourceMeta } from "../../capability/types";
 import type { CustomTool, CustomToolResult } from "../custom-tools/types";
 import { callTool } from "./client";
 import type { MCPContent, MCPServerConnection, MCPToolDefinition } from "./types";
@@ -143,6 +144,75 @@ export function createMCPTool(
 			}
 		},
 	};
+}
+
+export function createDeferredMCPTool(
+	serverName: string,
+	tool: MCPToolDefinition,
+	getConnection: () => Promise<MCPServerConnection>,
+	source?: SourceMeta,
+): CustomTool<TSchema, MCPToolDetails> {
+	const name = createMCPToolName(serverName, tool.name);
+	const schema = convertSchema(tool.inputSchema);
+	const fallbackProvider = source?.provider;
+	const fallbackProviderName = source?.providerName;
+
+	return {
+		name,
+		label: `${serverName}/${tool.name}`,
+		description: tool.description ?? `MCP tool from ${serverName}`,
+		parameters: schema,
+
+		async execute(_toolCallId, params, _onUpdate, _ctx, _signal): Promise<CustomToolResult<MCPToolDetails>> {
+			try {
+				const connection = await getConnection();
+				const result = await callTool(connection, tool.name, params as Record<string, unknown>);
+
+				const text = formatMCPContent(result.content);
+				const details: MCPToolDetails = {
+					serverName,
+					mcpToolName: tool.name,
+					isError: result.isError,
+					rawContent: result.content,
+					provider: connection._source?.provider ?? fallbackProvider,
+					providerName: connection._source?.providerName ?? fallbackProviderName,
+				};
+
+				if (result.isError) {
+					return {
+						content: [{ type: "text", text: `Error: ${text}` }],
+						details,
+					};
+				}
+
+				return {
+					content: [{ type: "text", text }],
+					details,
+				};
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				return {
+					content: [{ type: "text", text: `MCP error: ${message}` }],
+					details: {
+						serverName,
+						mcpToolName: tool.name,
+						isError: true,
+						provider: fallbackProvider,
+						providerName: fallbackProviderName,
+					},
+				};
+			}
+		},
+	};
+}
+
+export function createDeferredMCPTools(
+	serverName: string,
+	tools: MCPToolDefinition[],
+	getConnection: () => Promise<MCPServerConnection>,
+	source?: SourceMeta,
+): CustomTool<TSchema, MCPToolDetails>[] {
+	return tools.map((tool) => createDeferredMCPTool(serverName, tool, getConnection, source));
 }
 
 /**

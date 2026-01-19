@@ -26,6 +26,8 @@ export { createMCPManager, MCPManager } from "./manager";
 // Tool bridge
 export type { MCPToolDetails } from "./tool-bridge";
 export { createMCPTool, createMCPToolName, createMCPTools, parseMCPToolName } from "./tool-bridge";
+// Tool cache
+export { MCPToolCache } from "./tool-cache";
 // Transports
 export { createHttpTransport, HttpTransport } from "./transports/http";
 export { createStdioTransport, StdioTransport } from "./transports/stdio";

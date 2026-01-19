@@ -123,6 +123,7 @@ export interface PythonSettings {
 
 export interface EditSettings {
 	fuzzyMatch?: boolean; // default: true (accept high-confidence fuzzy matches for whitespace/indentation)
+	patchMode?: boolean; // default: false (use codex-style apply-patch format instead of oldText/newText)
 }
 
 export type { SymbolPreset };
@@ -548,6 +549,13 @@ export class SettingsManager {
 	 */
 	serialize(): Settings {
 		return { ...this.settings };
+	}
+
+	/**
+	 * Access the underlying agent storage (null for in-memory settings).
+	 */
+	getStorage(): AgentStorage | null {
+		return this.storage;
 	}
 
 	/**
@@ -1263,6 +1271,18 @@ export class SettingsManager {
 			this.globalSettings.edit = {};
 		}
 		this.globalSettings.edit.fuzzyMatch = enabled;
+		await this.save();
+	}
+
+	getEditPatchMode(): boolean {
+		return this.settings.edit?.patchMode ?? false;
+	}
+
+	async setEditPatchMode(enabled: boolean): Promise<void> {
+		if (!this.globalSettings.edit) {
+			this.globalSettings.edit = {};
+		}
+		this.globalSettings.edit.patchMode = enabled;
 		await this.save();
 	}
 
