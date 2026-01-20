@@ -1,6 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Fixed cache invalidation for streaming edits to prevent stale data
+- Fixed file existence check for prompt templates directory
+- Fixed bash output streaming to prevent premature stream closure
+- Fixed LSP client request handling when signal is already aborted
+- Fixed git apply operations with stdin input handling
+
+### Security
+
+- Updated Anthropic authentication to handle manual code input securely
 
 ## [6.8.1] - 2026-01-20
 

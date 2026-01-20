@@ -1,7 +1,7 @@
 export { type CollapseOptions, type CollapseResult, type CollapseStrategy, collapse } from "./collapse";
 export { WORKTREE_BASE } from "./constants";
 export { WorktreeError, WorktreeErrorCode } from "./errors";
-export { getRepoName, getRepoRoot, git, gitWithStdin } from "./git";
+export { getRepoName, getRepoRoot, git, gitWithInput as gitWithStdin } from "./git";
 export { create, find, list, prune, remove, type Worktree, which } from "./operations";
 export {
 	cleanupSessions,

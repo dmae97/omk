@@ -799,10 +799,11 @@ const reportFatal = async (message: string): Promise<void> => {
 	} catch {
 		// Ignore cleanup errors
 	}
+	const error = new Error(message);
 
 	const runState = activeRun;
 	if (runState) {
-		runState.abortController.abort();
+		runState.abortController.abort(error);
 		if (runState.session) {
 			void runState.session.abort();
 		}

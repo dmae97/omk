@@ -432,7 +432,7 @@ async function loadTemplatesFromDir(
 			}
 		}
 	} catch (error) {
-		if (!Bun.file(dir).exists()) {
+		if (!(await Bun.file(dir).exists())) {
 			return [];
 		}
 		logger.warn("Failed to scan prompt templates directory", { dir, error: String(error) });

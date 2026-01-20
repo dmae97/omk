@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import type { Subprocess } from "bun";
+import { ptree } from "@oh-my-pi/pi-utils";
 import { execCommand } from "../../core/exec";
 import { WorktreeError, WorktreeErrorCode } from "./errors";
 
@@ -7,32 +7,6 @@ export interface GitResult {
 	code: number;
 	stdout: string;
 	stderr: string;
-}
-
-type WritableLike = {
-	write: (chunk: string | Uint8Array) => unknown;
-	flush?: () => unknown;
-	end?: () => unknown;
-};
-
-const textEncoder = new TextEncoder();
-
-async function writeStdin(handle: unknown, stdin: string): Promise<void> {
-	if (!handle || typeof handle === "number") return;
-	if (typeof (handle as WritableStream<Uint8Array>).getWriter === "function") {
-		const writer = (handle as WritableStream<Uint8Array>).getWriter();
-		try {
-			await writer.write(textEncoder.encode(stdin));
-		} finally {
-			await writer.close();
-		}
-		return;
-	}
-
-	const sink = handle as WritableLike;
-	sink.write(stdin);
-	if (sink.flush) sink.flush();
-	if (sink.end) sink.end();
 }
 
 /**
@@ -50,23 +24,15 @@ export async function git(args: string[], cwd?: string): Promise<GitResult> {
  * Execute git command with stdin input.
  * Used for piping diffs to `git apply`.
  */
-export async function gitWithStdin(args: string[], stdin: string, cwd?: string): Promise<GitResult> {
-	const proc: Subprocess = Bun.spawn(["git", ...args], {
+export async function gitWithInput(args: string[], stdin: string, cwd?: string): Promise<GitResult> {
+	const proc = ptree.cspawn(["git", ...args], {
 		cwd: cwd ?? process.cwd(),
-		stdin: "pipe",
-		stdout: "pipe",
-		stderr: "pipe",
+		stdin: Buffer.from(stdin),
 	});
 
-	await writeStdin(proc.stdin, stdin);
+	const [stdout, stderr] = await Promise.all([proc.stdout.text(), proc.stderr.text()]);
 
-	const [stdout, stderr, exitCode] = await Promise.all([
-		(proc.stdout as ReadableStream<Uint8Array>).text(),
-		(proc.stderr as ReadableStream<Uint8Array>).text(),
-		proc.exited,
-	]);
-
-	return { code: exitCode ?? 0, stdout, stderr };
+	return { code: proc.exitCode ?? 0, stdout, stderr };
 }
 
 /**

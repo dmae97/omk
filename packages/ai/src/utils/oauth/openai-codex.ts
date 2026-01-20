@@ -2,7 +2,7 @@
  * OpenAI Codex (ChatGPT OAuth) flow
  */
 
-import { OAuthCallbackFlow, parseCallbackInput } from "./callback-server";
+import { OAuthCallbackFlow } from "./callback-server";
 import { generatePKCE } from "./pkce";
 import type { OAuthController, OAuthCredentials } from "./types";
 
@@ -125,28 +125,8 @@ async function exchangeCodeForToken(code: string, verifier: string, redirectUri:
 export async function loginOpenAICodex(ctrl: OAuthController): Promise<OAuthCredentials> {
 	const pkce = await generatePKCE();
 	const flow = new OpenAICodexOAuthFlow(ctrl, pkce);
-	const redirectUri = `http://localhost:${CALLBACK_PORT}${CALLBACK_PATH}`;
 
-	try {
-		return await flow.login();
-	} catch (error) {
-		if (!ctrl.onPrompt) {
-			throw error;
-		}
-
-		ctrl.onProgress?.("Callback server failed, falling back to manual input");
-
-		const input = await ctrl.onPrompt({
-			message: "Paste the authorization code (or full redirect URL):",
-		});
-
-		const parsed = parseCallbackInput(input);
-		if (!parsed.code) {
-			throw new Error("No authorization code found in input");
-		}
-
-		return exchangeCodeForToken(parsed.code, pkce.verifier, redirectUri);
-	}
+	return flow.login();
 }
 
 /**

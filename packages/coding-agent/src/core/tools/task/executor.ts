@@ -10,13 +10,13 @@ import type { EventBus } from "../../event-bus";
 import { callTool } from "../../mcp/client";
 import type { MCPManager } from "../../mcp/manager";
 import type { ModelRegistry } from "../../model-registry";
+import { formatModelString, parseModelPattern } from "../../model-resolver";
 import { checkPythonKernelAvailability } from "../../python-kernel";
 import type { ToolSession } from "..";
 import { LspTool } from "../lsp/index";
 import type { LspParams } from "../lsp/types";
 import { PythonTool } from "../python";
 import { ensureArtifactsDir, getArtifactPaths } from "./artifacts";
-import { resolveModelPattern } from "./model-resolver";
 import { subprocessToolRegistry } from "./subprocess-tool-registry";
 import {
 	type AgentDefinition,
@@ -296,10 +296,26 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	}
 
 	const serializedSettings = options.settingsManager?.serialize();
-	const availableModels = options.modelRegistry?.getAvailable().map((model) => `${model.provider}/${model.id}`);
+	const availableModels = options.modelRegistry?.getAvailable() ?? [];
 
-	// Resolve and add model
-	const resolvedModel = await resolveModelPattern(modelOverride || agent.model, availableModels, serializedSettings);
+	// Resolve model pattern to provider/modelId string
+	const modelPattern = modelOverride ?? agent.model;
+	let resolvedModel: string | undefined;
+	if (modelPattern) {
+		// Handle omp/<role> or pi/<role> aliases (e.g., "omp/slow", "pi/fast")
+		let effectivePattern = modelPattern;
+		const lower = modelPattern.toLowerCase();
+		if (lower.startsWith("omp/") || lower.startsWith("pi/")) {
+			const role = lower.startsWith("omp/") ? modelPattern.slice(4) : modelPattern.slice(3);
+			const roles = serializedSettings?.modelRoles as Record<string, string> | undefined;
+			const configured = roles?.[role] ?? roles?.[role.toLowerCase()];
+			if (configured) {
+				effectivePattern = configured;
+			}
+		}
+		const { model } = parseModelPattern(effectivePattern, availableModels);
+		resolvedModel = model ? formatModelString(model) : undefined;
+	}
 	const sessionFile = subtaskSessionFile ?? null;
 	const spawnsEnv = agent.spawns === undefined ? "" : agent.spawns === "*" ? "*" : agent.spawns.join(",");
 

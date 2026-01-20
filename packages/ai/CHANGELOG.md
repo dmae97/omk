@@ -1,6 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Improved error handling for aborted requests in Google Gemini CLI provider
+- Enhanced OAuth callback flow to handle manual input errors gracefully
+- Fixed login cancellation handling in GitHub Copilot OAuth flow
+- Removed fallback manual input from OpenAI Codex OAuth flow
+
+### Security
+
+- Hardened database file permissions to prevent credential leakage
+- Set secure directory permissions (0o700) for credential storage
 
 ## [6.8.0] - 2026-01-20
 

@@ -454,14 +454,18 @@ export class AgentSession {
 			}
 
 			if (event.message.role === "toolResult") {
-				const { $normative, toolCallId } = event.message as {
+				const { toolName, $normative, toolCallId, details } = event.message as {
 					toolName?: string;
 					toolCallId?: string;
-					details?: unknown;
+					details?: { path?: string };
 					$normative?: Record<string, unknown>;
 				};
 				if ($normative && toolCallId && this.settingsManager.getNormativeRewrite()) {
 					await this._rewriteToolCallArgs(toolCallId, $normative);
+				}
+				// Invalidate streaming edit cache when edit tool completes to prevent stale data
+				if (toolName === "edit" && details?.path) {
+					this._invalidateFileCacheForPath(details.path);
 				}
 			}
 		}
@@ -579,9 +583,14 @@ export class AgentSession {
 				this._streamingEditFileCache.set(resolvedPath, normalizeToLF(text));
 			}
 		} catch {
-			// Ignore errors - mark as empty string so we don't retry
-			this._streamingEditFileCache.set(resolvedPath, "");
+			// Don't cache on read errors - let the edit tool handle them
 		}
+	}
+
+	/** Invalidate cache for a file after an edit completes to prevent stale data */
+	private _invalidateFileCacheForPath(path: string): void {
+		const resolvedPath = resolveToCwd(path, this.sessionManager.getCwd());
+		this._streamingEditFileCache.delete(resolvedPath);
 	}
 
 	private _maybeAbortStreamingEdit(event: AgentEvent): void {

@@ -32,8 +32,6 @@ function selectPreferredImageMimeType(mimeTypes: string[]): string | null {
 }
 
 export async function copyToClipboard(text: string): Promise<void> {
-	const timeout = Bun.sleep(3000).then(() => Promise.reject(new Error("Clipboard operation timed out")));
-
 	let promise: Promise<void>;
 	try {
 		switch (platform()) {
@@ -56,11 +54,11 @@ export async function copyToClipboard(text: string): Promise<void> {
 		}
 	} catch (error) {
 		if (error instanceof Error) {
-			throw new Error(`Failed to copy to clipboard: ${error.message}`);
+			throw new Error(`Failed to copy to clipboard: ${error.message}`, { cause: error });
 		}
-		throw new Error(`Failed to copy to clipboard: ${String(error)}`);
+		throw new Error(`Failed to copy to clipboard: ${String(error)}`, { cause: error });
 	}
-	await Promise.race([promise, timeout]);
+	await Promise.race([promise, Bun.sleep(3000)]);
 }
 
 export interface ClipboardImage {

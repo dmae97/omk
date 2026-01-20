@@ -753,7 +753,12 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 
 				if (emptyAttempt > 0) {
 					const backoffMs = EMPTY_STREAM_BASE_DELAY_MS * 2 ** (emptyAttempt - 1);
-					await abortableSleep(backoffMs, options?.signal);
+					try {
+						await abortableSleep(backoffMs, options?.signal);
+					} catch {
+						// Normalize AbortError to expected message for consistent error handling
+						throw new Error("Request was aborted");
+					}
 
 					if (!requestUrl) {
 						throw new Error("Missing request URL");

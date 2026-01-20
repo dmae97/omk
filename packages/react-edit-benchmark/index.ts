@@ -11,9 +11,9 @@
 
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { createTempDir } from "@oh-my-pi/pi-utils";
-import { readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { rm } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { generateJsonReport, generateReport } from "./report";
 import { runBenchmark, type BenchmarkConfig, type ProgressEvent } from "./runner";

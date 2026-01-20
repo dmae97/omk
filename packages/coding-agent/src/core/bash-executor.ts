@@ -34,7 +34,7 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 	const prefixedCommand = prefix ? `${prefix} ${command}` : command;
 	const finalCommand = `${snapshotPrefix}${prefixedCommand}`;
 
-	const stream = new OutputSink({ onLine: options?.onChunk });
+	const stream = new OutputSink({ onChunk: options?.onChunk });
 
 	const child = cspawn([shell, ...args, finalCommand], {
 		cwd: options?.cwd,
@@ -44,6 +44,7 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 	});
 
 	// Pump streams - errors during abort/timeout are expected
+	// Use preventClose to avoid closing the shared sink when either stream finishes
 	await Promise.allSettled([
 		child.stdout.pipeTo(stream.createWritable()),
 		child.stderr.pipeTo(stream.createWritable()),
@@ -92,7 +93,7 @@ export async function executeBashWithOperations(
 	operations: BashOperations,
 	options?: BashExecutorOptions,
 ): Promise<BashResult> {
-	const stream = new OutputSink({ onLine: options?.onChunk });
+	const stream = new OutputSink({ onChunk: options?.onChunk });
 	const writable = stream.createWritable();
 	const writer = writable.getWriter();
 

@@ -4,7 +4,7 @@
  */
 
 import { Database } from "bun:sqlite";
-import { existsSync, mkdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { OAuthCredentials } from "./utils/oauth/types";
@@ -88,13 +88,19 @@ export class CliAuthStorage {
 	private deleteByProviderStmt: ReturnType<Database["prepare"]>;
 
 	constructor(dbPath: string = getAgentDbPath()) {
-		// Ensure directory exists
+		// Ensure directory exists with secure permissions
 		const dir = dirname(dbPath);
 		if (!existsSync(dir)) {
-			mkdirSync(dir, { recursive: true });
+			mkdirSync(dir, { recursive: true, mode: 0o700 });
 		}
 
 		this.db = new Database(dbPath);
+		// Harden database file permissions to prevent credential leakage
+		try {
+			chmodSync(dbPath, 0o600);
+		} catch {
+			// Ignore chmod failures (e.g., Windows)
+		}
 		this.initializeSchema();
 
 		this.insertStmt = this.db.prepare(

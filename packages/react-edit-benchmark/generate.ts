@@ -81,7 +81,7 @@ interface Args {
 function parseArguments(): Args {
 	const { values } = parseArgs({
 		options: {
-			"react-dir": { type: "string", default: DEFAULT_REACT_DIR },
+			"react-dir": { type: "string", default: DEFAULT_REACT_DIR.path },
 			output: { type: "string", default: DEFAULT_OUTPUT },
 			"count-per-type": { type: "string", default: "20" },
 			seed: { type: "string", default: "42" },
@@ -93,7 +93,7 @@ function parseArguments(): Args {
 	});
 
 	return {
-		reactDir: values["react-dir"] ?? DEFAULT_REACT_DIR,
+		reactDir: values["react-dir"] ?? DEFAULT_REACT_DIR.path,
 		output: values.output ?? DEFAULT_OUTPUT,
 		countPerType: parseInt(values["count-per-type"] ?? "20", 10),
 		seed: parseInt(values.seed ?? "42", 10),

@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import { WorktreeError, WorktreeErrorCode } from "./errors";
-import { git, gitWithStdin } from "./git";
+import { git, gitWithInput } from "./git";
 import { find, remove, type Worktree } from "./operations";
 
 export type CollapseStrategy = "simple" | "merge-base" | "rebase";
@@ -121,10 +121,10 @@ async function collapseRebase(src: Worktree, dst: Worktree): Promise<string> {
 }
 
 async function applyDiff(diff: string, targetPath: string): Promise<void> {
-	let result = await gitWithStdin(["apply"], diff, targetPath);
+	let result = await gitWithInput(["apply"], diff, targetPath);
 	if (result.code === 0) return;
 
-	result = await gitWithStdin(["apply", "--3way"], diff, targetPath);
+	result = await gitWithInput(["apply", "--3way"], diff, targetPath);
 	if (result.code === 0) return;
 
 	throw new WorktreeError(

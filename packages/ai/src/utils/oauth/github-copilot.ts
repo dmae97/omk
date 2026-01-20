@@ -174,20 +174,32 @@ async function pollForGitHubAccessToken(
 		if (raw && typeof raw === "object" && typeof (raw as DeviceTokenErrorResponse).error === "string") {
 			const err = (raw as DeviceTokenErrorResponse).error;
 			if (err === "authorization_pending") {
-				await abortableSleep(intervalMs, signal);
+				try {
+					await abortableSleep(intervalMs, signal);
+				} catch {
+					throw new Error("Login cancelled");
+				}
 				continue;
 			}
 
 			if (err === "slow_down") {
 				intervalMs += 5000;
-				await abortableSleep(intervalMs, signal);
+				try {
+					await abortableSleep(intervalMs, signal);
+				} catch {
+					throw new Error("Login cancelled");
+				}
 				continue;
 			}
 
 			throw new Error(`Device flow failed: ${err}`);
 		}
 
-		await abortableSleep(intervalMs, signal);
+		try {
+			await abortableSleep(intervalMs, signal);
+		} catch {
+			throw new Error("Login cancelled");
+		}
 	}
 
 	throw new Error("Device flow timed out");

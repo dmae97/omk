@@ -2,7 +2,6 @@ import { unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { cspawn } from "@oh-my-pi/pi-utils";
-import type { FileSink } from "bun";
 import { nanoid } from "nanoid";
 import { ensureTool } from "../../../utils/tools-manager";
 import type { RenderResult, SpecialHandler } from "./types";
@@ -16,59 +15,17 @@ async function exec(
 	args: string[],
 	options?: { timeout?: number; input?: string | Buffer; signal?: AbortSignal },
 ): Promise<{ stdout: string; stderr: string; ok: boolean; exitCode: number | null }> {
-	const controller = new AbortController();
-	const onAbort = () => controller.abort(options?.signal?.reason ?? new Error("Aborted"));
-	if (options?.signal) {
-		if (options.signal.aborted) {
-			onAbort();
-		} else {
-			options.signal.addEventListener("abort", onAbort, { once: true });
-		}
-	}
-	const timeoutId =
-		options?.timeout && options.timeout > 0
-			? setTimeout(() => controller.abort(new Error("Timeout")), options.timeout)
-			: undefined;
 	const proc = cspawn([cmd, ...args], {
-		signal: controller.signal,
+		signal: options?.signal,
+		timeout: options?.timeout,
+		stdin: options?.input ? Buffer.from(options.input) : undefined,
 	});
 
-	if (options?.input && proc.stdin) {
-		const stdin = proc.stdin as FileSink;
-		const payload = typeof options.input === "string" ? new TextEncoder().encode(options.input) : options.input;
-		stdin.write(payload);
-		const flushed = stdin.flush();
-		if (flushed instanceof Promise) {
-			await flushed;
-		}
-		const ended = stdin.end();
-		if (ended instanceof Promise) {
-			await ended;
-		}
-	}
-
 	const [stdout, stderr, exitResult] = await Promise.all([
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
-		(async () => {
-			try {
-				await proc.exited;
-				return proc.exitCode ?? 0;
-			} catch (err) {
-				if (err && typeof err === "object" && "exitCode" in err) {
-					const exitValue = (err as { exitCode?: number }).exitCode;
-					if (typeof exitValue === "number") {
-						return exitValue;
-					}
-				}
-				throw err instanceof Error ? err : new Error(String(err));
-			}
-		})(),
+		proc.stdout.text(),
+		proc.stderr.text(),
+		proc.exited.then(() => proc.exitCode ?? 0),
 	]);
-	if (timeoutId) clearTimeout(timeoutId);
-	if (options?.signal) {
-		options.signal.removeEventListener("abort", onAbort);
-	}
 
 	return {
 		stdout,

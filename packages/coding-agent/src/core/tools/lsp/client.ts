@@ -741,7 +741,7 @@ export async function sendRequest(
 		signal.addEventListener("abort", abortHandler, { once: true });
 		if (signal.aborted) {
 			abortHandler();
-			return;
+			return promise;
 		}
 	}
 

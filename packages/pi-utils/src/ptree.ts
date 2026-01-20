@@ -71,8 +71,8 @@ function registerManaged(child: PipedSubprocess): void {
 	});
 }
 
-// A Bun subprocess with stdin=Writable, stdout/stderr=pipe (for tracking/cleanup).
-type PipedSubprocess = Subprocess<"pipe" | null, "pipe", "pipe">;
+// A Bun subprocess with stdin=Writable/ignore, stdout/stderr=pipe (for tracking/cleanup).
+type PipedSubprocess = Subprocess<"pipe" | "ignore" | null, "pipe", "pipe">;
 
 /**
  * ChildProcess wraps a managed subprocess, capturing output, errors, and providing
@@ -343,7 +343,10 @@ export class TimeoutError extends AbortError {
 /**
  * Options for cspawn (child spawn). Always pipes stdout/stderr, allows signal.
  */
-type ChildSpawnOptions = Omit<Spawn.SpawnOptions<"pipe" | null, "pipe", "pipe">, "stdout" | "stderr"> & {
+type ChildSpawnOptions = Omit<
+	Spawn.SpawnOptions<"pipe" | "ignore" | Buffer | null, "pipe", "pipe">,
+	"stdout" | "stderr"
+> & {
 	signal?: AbortSignal;
 };
 
@@ -355,6 +358,7 @@ type ChildSpawnOptions = Omit<Spawn.SpawnOptions<"pipe" | null, "pipe", "pipe">,
 export function cspawn(cmd: string[], options?: ChildSpawnOptions): ChildProcess {
 	const { timeout, ...rest } = options ?? {};
 	const child = spawn(cmd, {
+		stdin: "ignore",
 		...rest,
 		stdout: "pipe",
 		stderr: "pipe",

@@ -560,7 +560,11 @@ export class AuthStorage {
 
 		switch (provider) {
 			case "anthropic":
-				credentials = await loginAnthropic(ctrl);
+				credentials = await loginAnthropic({
+					...ctrl,
+					onManualCodeInput: async () =>
+						ctrl.onPrompt({ message: "Paste the authorization code (or full redirect URL):" }),
+				});
 				break;
 			case "github-copilot":
 				credentials = await loginGitHubCopilot({
