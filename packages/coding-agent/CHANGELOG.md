@@ -1,13 +1,32 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Added streaming abort setting to control edit tool behavior when patch preview fails
+
 ### Changed
 
+- Replaced internal logger with @oh-my-pi/pi-utils logger across all modules
+- Updated process spawning to use cspawn and ptree utilities from pi-utils
+- Migrated file operations to use async fs/promises and Bun file APIs
+- Refactored promise handling to use Promise.withResolvers and utility functions
+- Updated timeout and abort handling to use standardized utility functions
 - Refactored authentication login method to use OAuthController interface instead of individual callbacks
 
 ### Fixed
 
+- Fixed Python package installation to handle async operations properly
+- Fixed streaming output truncation to use consistent column limits
+- Fixed shell command execution to properly handle process cleanup and timeouts
+- Fixed SSH connection management to properly await async operations
+- Fixed voice supervisor process cleanup to use proper async handling
 - Added automatic regex pattern validation in grep tool to handle invalid patterns by switching to literal mode
+
+### Security
+
+- Updated temporary file cleanup to use secure async removal methods
 
 ## [6.7.67] - 2026-01-19
 ### Added

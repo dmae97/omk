@@ -2,6 +2,7 @@
  * GitHub Copilot OAuth flow
  */
 
+import { abortableSleep } from "@oh-my-pi/pi-utils";
 import { getModels } from "../../models";
 import type { OAuthCredentials } from "./types";
 
@@ -134,29 +135,6 @@ async function startDeviceFlow(domain: string): Promise<DeviceCodeResponse> {
 		interval,
 		expires_in: expiresIn,
 	};
-}
-
-/**
- * Sleep that can be interrupted by an AbortSignal
- */
-function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
-	return new Promise((resolve, reject) => {
-		if (signal?.aborted) {
-			reject(new Error("Login cancelled"));
-			return;
-		}
-
-		const timeout = setTimeout(resolve, ms);
-
-		signal?.addEventListener(
-			"abort",
-			() => {
-				clearTimeout(timeout);
-				reject(new Error("Login cancelled"));
-			},
-			{ once: true },
-		);
-	});
 }
 
 async function pollForGitHubAccessToken(

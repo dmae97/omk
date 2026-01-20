@@ -10,12 +10,11 @@ import { getLanguageFromPath, type Theme } from "../../../modes/interactive/them
 import type { RenderResultOptions } from "../../custom-tools/types";
 import type { FileDiagnosticsResult } from "../lsp/index";
 import {
-	createToolUIKit,
 	formatExpandHint,
 	formatStatusIcon,
 	getDiffStats,
 	shortenPath,
-	type ToolUIKit,
+	ToolUIKit,
 	truncateDiffByHunk,
 } from "../render-utils";
 import type { RenderCallOptions } from "../renderers";
@@ -157,7 +156,7 @@ export const editToolRenderer = {
 	mergeCallAndResult: true,
 
 	renderCall(args: EditRenderArgs, uiTheme: Theme, options?: RenderCallOptions): Component {
-		const ui = createToolUIKit(uiTheme);
+		const ui = new ToolUIKit(uiTheme);
 		const rawPath = args.file_path || args.path || "";
 		const filePath = shortenPath(rawPath);
 		const editLanguage = getLanguageFromPath(rawPath) ?? "text";
@@ -190,7 +189,7 @@ export const editToolRenderer = {
 		uiTheme: Theme,
 		args?: EditRenderArgs,
 	): Component {
-		const ui = createToolUIKit(uiTheme);
+		const ui = new ToolUIKit(uiTheme);
 		const { expanded, renderContext } = options;
 		const rawPath = args?.file_path || args?.path || "";
 		const filePath = shortenPath(rawPath);

@@ -1,4 +1,5 @@
 // biome-ignore assist/source/organizeImports: biome is not smart
+export type { ReadonlySessionManager, UsageStatistics } from "../session-manager";
 export {
 	discoverAndLoadHooks,
 	loadHooks,
@@ -11,6 +12,5 @@ export {
 	type SendMessageHandler,
 } from "./loader";
 export { execCommand, HookRunner, type HookErrorListener } from "./runner";
-export { HookToolWrapper, wrapToolsWithHooks, wrapToolWithHooks } from "./tool-wrapper";
+export { HookToolWrapper } from "./tool-wrapper";
 export * from "./types";
-export type { UsageStatistics, ReadonlySessionManager } from "../session-manager";

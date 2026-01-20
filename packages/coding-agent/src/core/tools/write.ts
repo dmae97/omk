@@ -7,13 +7,13 @@ import type {
 } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
+import { untilAborted } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import { getLanguageFromPath, highlightCode, type Theme } from "../../modes/interactive/theme/theme";
 import writeDescription from "../../prompts/tools/write.md" with { type: "text" };
 import type { RenderResultOptions } from "../custom-tools/types";
 import { renderPromptTemplate } from "../prompt-templates";
 import type { ToolSession } from "../sdk";
-import { untilAborted } from "../utils";
 import {
 	createLspWritethrough,
 	type FileDiagnosticsResult,

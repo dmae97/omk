@@ -4,6 +4,7 @@
 
 import type { AgentTool, AgentToolContext, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
+import type { Static, TSchema } from "@sinclair/typebox";
 import type { Theme } from "../../modes/interactive/theme/theme";
 import type { ExtensionRunner } from "./runner";
 import type { RegisteredTool, ToolCallEventResult, ToolResultEventResult } from "./types";
@@ -70,16 +71,18 @@ export function wrapRegisteredTools(registeredTools: RegisteredTool[], runner: E
  * - Emits tool_call event before execution (can block)
  * - Emits tool_result event after execution (can modify result)
  */
-export class ExtensionToolWrapper<T> implements AgentTool<any, T> {
+export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetails = unknown>
+	implements AgentTool<TParameters, TDetails>
+{
 	name: string;
 	label: string;
 	description: string;
-	parameters: unknown;
-	renderCall?: AgentTool["renderCall"];
-	renderResult?: AgentTool["renderResult"];
+	parameters: TParameters;
+	renderCall?: AgentTool<TParameters, TDetails>["renderCall"];
+	renderResult?: AgentTool<TParameters, TDetails>["renderResult"];
 
 	constructor(
-		private tool: AgentTool<any, T>,
+		private tool: AgentTool<TParameters, TDetails>,
 		private runner: ExtensionRunner,
 	) {
 		this.name = tool.name;
@@ -92,9 +95,9 @@ export class ExtensionToolWrapper<T> implements AgentTool<any, T> {
 
 	async execute(
 		toolCallId: string,
-		params: Record<string, unknown>,
+		params: Static<TParameters>,
 		signal?: AbortSignal,
-		onUpdate?: AgentToolUpdateCallback<T>,
+		onUpdate?: AgentToolUpdateCallback<TDetails, TParameters>,
 		context?: AgentToolContext,
 	) {
 		// Emit tool_call event - extensions can block execution
@@ -104,7 +107,7 @@ export class ExtensionToolWrapper<T> implements AgentTool<any, T> {
 					type: "tool_call",
 					toolName: this.tool.name,
 					toolCallId,
-					input: params,
+					input: params as Record<string, unknown>,
 				})) as ToolCallEventResult | undefined;
 
 				if (callResult?.block) {
@@ -120,7 +123,7 @@ export class ExtensionToolWrapper<T> implements AgentTool<any, T> {
 		}
 
 		// Execute the actual tool
-		let result: { content: any; details?: T };
+		let result: { content: any; details?: TDetails };
 		let executionError: Error | undefined;
 
 		try {
@@ -129,7 +132,7 @@ export class ExtensionToolWrapper<T> implements AgentTool<any, T> {
 			executionError = err instanceof Error ? err : new Error(String(err));
 			result = {
 				content: [{ type: "text", text: executionError.message }],
-				details: undefined as T,
+				details: undefined as TDetails,
 			};
 		}
 
@@ -139,7 +142,7 @@ export class ExtensionToolWrapper<T> implements AgentTool<any, T> {
 				type: "tool_result",
 				toolName: this.tool.name,
 				toolCallId,
-				input: params,
+				input: params as Record<string, unknown>,
 				content: result.content,
 				details: result.details,
 				isError: !!executionError,
@@ -147,7 +150,7 @@ export class ExtensionToolWrapper<T> implements AgentTool<any, T> {
 
 			if (resultResult) {
 				const modifiedContent: (TextContent | ImageContent)[] = resultResult.content ?? result.content;
-				const modifiedDetails = (resultResult.details ?? result.details) as T;
+				const modifiedDetails = (resultResult.details ?? result.details) as TDetails;
 
 				// Extension can override error status
 				if (resultResult.isError === true && !executionError) {
@@ -175,12 +178,4 @@ export class ExtensionToolWrapper<T> implements AgentTool<any, T> {
 		}
 		return result;
 	}
-}
-
-/**
- * Wrap a tool with extension callbacks for interception.
- * @deprecated Use `new ExtensionToolWrapper()` directly
- */
-export function wrapToolWithExtensions<T>(tool: AgentTool<any, T>, runner: ExtensionRunner): AgentTool<any, T> {
-	return new ExtensionToolWrapper(tool, runner);
 }

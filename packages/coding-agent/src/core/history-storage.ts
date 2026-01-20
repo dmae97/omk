@@ -1,7 +1,8 @@
 import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { logger } from "@oh-my-pi/pi-utils";
 import { getAgentDir } from "../config";
-import { logger } from "./logger";
 
 export interface HistoryEntry {
 	id: number;
@@ -134,11 +135,7 @@ END;
 
 	private ensureDir(dbPath: string): void {
 		const dir = dirname(dbPath);
-		const result = Bun.spawnSync(["mkdir", "-p", dir]);
-		if (result.exitCode !== 0) {
-			const stderr = result.stderr ? new TextDecoder().decode(result.stderr) : "";
-			throw new Error(`Failed to create history directory: ${dir} ${stderr}`.trim());
-		}
+		mkdirSync(dir, { recursive: true });
 	}
 
 	private normalizeLimit(limit: number): number {

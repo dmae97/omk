@@ -1,7 +1,7 @@
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
+import { logger } from "@oh-my-pi/pi-utils";
 import { TOML } from "bun";
-import { logger } from "../../logger";
 
 /**
  * lspmux integration for LSP server multiplexing.

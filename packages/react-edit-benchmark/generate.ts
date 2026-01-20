@@ -19,6 +19,7 @@
  * - nightmare: Long files where target line repeats, minimal info
  */
 
+import { createTempDirSync } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
@@ -27,7 +28,7 @@ import { ALL_MUTATIONS, CATEGORY_MAP, type Mutation, type MutationInfo } from ".
 
 const SCRIPT_DIR = import.meta.dir;
 const SUPPORTED_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx"]);
-const DEFAULT_REACT_DIR = "/tmp/react-source";
+using DEFAULT_REACT_DIR = createTempDirSync("@react-source");
 const DEFAULT_OUTPUT = join(SCRIPT_DIR, "fixtures.tar.gz");
 const REACT_REPO_URL = "https://github.com/facebook/react.git";
 
@@ -103,7 +104,7 @@ function parseArguments(): Args {
 	};
 }
 
-function ensureReactSource(reactDir: string): void {
+async function ensureReactSource(reactDir: string): Promise<void> {
 	if (existsSync(reactDir)) {
 		const packagesDir = join(reactDir, "packages");
 		if (existsSync(packagesDir)) return;
@@ -112,9 +113,11 @@ function ensureReactSource(reactDir: string): void {
 
 	console.log(`Cloning React repository to ${reactDir}...`);
 	mkdirSync(dirname(reactDir), { recursive: true });
-	const result = Bun.spawnSync(["git", "clone", "--depth", "1", REACT_REPO_URL, reactDir]);
+	const result = await $`git clone --depth 1 ${REACT_REPO_URL} ${reactDir}`.quiet().nothrow();
 	if (result.exitCode !== 0) {
-		throw new Error(`Failed to clone React: ${result.stderr.toString()}`);
+		const decoder = new TextDecoder();
+		const stderr = result.stderr ? decoder.decode(result.stderr) : "";
+		throw new Error(`Failed to clone React: ${stderr.trim()}`);
 	}
 	console.log("Clone complete.");
 }
@@ -611,7 +614,7 @@ async function main(): Promise<number> {
 	const rng = createSeededRng(args.seed);
 	const reactDir = args.reactDir;
 
-	ensureReactSource(reactDir);
+	await ensureReactSource(reactDir);
 
 	const rawFiles = collectFiles(reactDir);
 	const files = await filterFiles(rawFiles);

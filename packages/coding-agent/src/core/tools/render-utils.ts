@@ -324,11 +324,6 @@ export class ToolUIKit {
 	}
 }
 
-/** @deprecated Use `new ToolUIKit(theme)` instead */
-export function createToolUIKit(theme: Theme): ToolUIKit {
-	return new ToolUIKit(theme);
-}
-
 interface ParsedDiagnostic {
 	filePath: string;
 	line: number;

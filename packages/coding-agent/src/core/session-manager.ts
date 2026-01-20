@@ -1,10 +1,10 @@
 import { basename, join, resolve } from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Message, TextContent, Usage } from "@oh-my-pi/pi-ai";
+import { logger } from "@oh-my-pi/pi-utils";
 import { nanoid } from "nanoid";
 import { getAgentDir as getDefaultAgentDir } from "../config";
 import { resizeImage } from "../utils/image-resize";
-import { logger } from "./logger";
 import {
 	type BashExecutionMessage,
 	type CustomMessage,

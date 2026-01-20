@@ -141,7 +141,7 @@ export interface InteractiveModeContext {
 	handleHotkeysCommand(): void;
 	handleDumpCommand(): Promise<void>;
 	handleClearCommand(): Promise<void>;
-	handleDebugCommand(): void;
+	handleDebugCommand(): Promise<void>;
 	handleArminSaysHi(): void;
 	handleBashCommand(command: string, excludeFromContext?: boolean): Promise<void>;
 	handleCompactCommand(customInstructions?: string): Promise<void>;

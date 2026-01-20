@@ -8,6 +8,7 @@
  */
 
 import { join } from "node:path";
+import { logger } from "@oh-my-pi/pi-utils";
 import { parse as parseToml } from "smol-toml";
 import type { ContextFile } from "../capability/context-file";
 import { contextFileCapability } from "../capability/context-file";
@@ -30,7 +31,6 @@ import type { CustomTool } from "../capability/tool";
 import { toolCapability } from "../capability/tool";
 import type { LoadContext, LoadResult } from "../capability/types";
 import { parseFrontmatter } from "../core/frontmatter";
-import { logger } from "../core/logger";
 import {
 	createSourceMeta,
 	discoverExtensionModulePaths,

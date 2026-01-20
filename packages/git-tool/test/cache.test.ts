@@ -1,30 +1,29 @@
-import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { gitTool } from "../src/git-tool";
 import type { StatusResult, ToolResult } from "../src/types";
-import { cleanupRepo, createTestRepo, runGit, writeFile } from "./helpers";
+import { createTestRepo, type TestRepo } from "./helpers";
 
-let repoDir: string;
+let repo: TestRepo;
 let previousCwd: string;
 
 beforeEach(() => {
 	previousCwd = process.cwd();
-	repoDir = createTestRepo();
-	process.chdir(repoDir);
+	repo = createTestRepo();
+	process.chdir(repo.path);
 });
 
 afterEach(() => {
 	process.chdir(previousCwd);
-	cleanupRepo(repoDir);
+	repo.remove();
 });
 
 describe("git-tool cache", () => {
 	it("invalidates status cache on write operations", async () => {
-		writeFile(join(repoDir, "file.txt"), "hello");
-		runGit(["add", "file.txt"], repoDir);
-		runGit(["commit", "-m", "initial"], repoDir);
+		repo.writeFile("file.txt", "hello");
+		repo.run("add", "file.txt");
+		repo.run("commit", "-m", "initial");
 
-		writeFile(join(repoDir, "file.txt"), "hello world");
+		repo.writeFile("file.txt", "hello world");
 
 		const status1 = (await gitTool({ operation: "status" })) as ToolResult<StatusResult>;
 		expect(status1.data.modified.map((file) => file.path)).toContain("file.txt");

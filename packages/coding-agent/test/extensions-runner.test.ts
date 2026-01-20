@@ -3,33 +3,32 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { createTempDirSync, logger } from "@oh-my-pi/pi-utils";
 import { AuthStorage } from "../src/core/auth-storage";
 import { discoverAndLoadExtensions } from "../src/core/extensions/loader";
 import { ExtensionRunner } from "../src/core/extensions/runner";
-import { logger } from "../src/core/logger";
 import { ModelRegistry } from "../src/core/model-registry";
 import { SessionManager } from "../src/core/session-manager";
 
 describe("ExtensionRunner", () => {
-	let tempDir: string;
+	let tempDir: ReturnType<typeof createTempDirSync>;
 	let extensionsDir: string;
 	let sessionManager: SessionManager;
 	let modelRegistry: ModelRegistry;
 
 	beforeEach(() => {
-		tempDir = mkdtempSync(join(tmpdir(), "pi-runner-test-"));
-		extensionsDir = join(tempDir, ".omp", "extensions");
+		tempDir = createTempDirSync("@pi-runner-test-");
+		extensionsDir = join(tempDir.path, ".omp", "extensions");
 		mkdirSync(extensionsDir, { recursive: true });
 		sessionManager = SessionManager.inMemory();
-		const authStorage = new AuthStorage(join(tempDir, "auth.json"));
+		const authStorage = new AuthStorage(join(tempDir.path, "auth.json"));
 		modelRegistry = new ModelRegistry(authStorage);
 	});
 
 	afterEach(() => {
-		rmSync(tempDir, { recursive: true, force: true });
+		tempDir.remove();
 	});
 
 	describe("shortcut conflicts", () => {
@@ -46,8 +45,14 @@ describe("ExtensionRunner", () => {
 
 			const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
 
-			const result = await discoverAndLoadExtensions([], tempDir);
-			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const result = await discoverAndLoadExtensions([], tempDir.path);
+			const runner = new ExtensionRunner(
+				result.extensions,
+				result.runtime,
+				tempDir.path,
+				sessionManager,
+				modelRegistry,
+			);
 			const shortcuts = runner.getShortcuts();
 
 			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("conflicts with built-in"), expect.any(Object));
@@ -79,8 +84,14 @@ describe("ExtensionRunner", () => {
 
 			const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
 
-			const result = await discoverAndLoadExtensions([], tempDir);
-			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const result = await discoverAndLoadExtensions([], tempDir.path);
+			const runner = new ExtensionRunner(
+				result.extensions,
+				result.runtime,
+				tempDir.path,
+				sessionManager,
+				modelRegistry,
+			);
 			const shortcuts = runner.getShortcuts();
 
 			expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("shortcut conflict"), expect.any(Object));
@@ -108,8 +119,14 @@ describe("ExtensionRunner", () => {
 			writeFileSync(join(extensionsDir, "tool-a.ts"), toolCode("tool_a"));
 			writeFileSync(join(extensionsDir, "tool-b.ts"), toolCode("tool_b"));
 
-			const result = await discoverAndLoadExtensions([], tempDir);
-			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const result = await discoverAndLoadExtensions([], tempDir.path);
+			const runner = new ExtensionRunner(
+				result.extensions,
+				result.runtime,
+				tempDir.path,
+				sessionManager,
+				modelRegistry,
+			);
 			const tools = runner.getAllRegisteredTools();
 
 			expect(tools.length).toBe(2);
@@ -130,8 +147,14 @@ describe("ExtensionRunner", () => {
 			writeFileSync(join(extensionsDir, "cmd-a.ts"), cmdCode("cmd-a"));
 			writeFileSync(join(extensionsDir, "cmd-b.ts"), cmdCode("cmd-b"));
 
-			const result = await discoverAndLoadExtensions([], tempDir);
-			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const result = await discoverAndLoadExtensions([], tempDir.path);
+			const runner = new ExtensionRunner(
+				result.extensions,
+				result.runtime,
+				tempDir.path,
+				sessionManager,
+				modelRegistry,
+			);
 			const commands = runner.getRegisteredCommands();
 
 			expect(commands.length).toBe(2);
@@ -149,8 +172,14 @@ describe("ExtensionRunner", () => {
 			`;
 			writeFileSync(join(extensionsDir, "cmd.ts"), cmdCode);
 
-			const result = await discoverAndLoadExtensions([], tempDir);
-			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const result = await discoverAndLoadExtensions([], tempDir.path);
+			const runner = new ExtensionRunner(
+				result.extensions,
+				result.runtime,
+				tempDir.path,
+				sessionManager,
+				modelRegistry,
+			);
 
 			const cmd = runner.getCommand("my-cmd");
 			expect(cmd).toBeDefined();
@@ -173,8 +202,14 @@ describe("ExtensionRunner", () => {
 			`;
 			writeFileSync(join(extensionsDir, "throws.ts"), extCode);
 
-			const result = await discoverAndLoadExtensions([], tempDir);
-			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const result = await discoverAndLoadExtensions([], tempDir.path);
+			const runner = new ExtensionRunner(
+				result.extensions,
+				result.runtime,
+				tempDir.path,
+				sessionManager,
+				modelRegistry,
+			);
 
 			const errors: Array<{ extensionPath: string; event: string; error: string }> = [];
 			runner.onError((err) => {
@@ -199,8 +234,14 @@ describe("ExtensionRunner", () => {
 			`;
 			writeFileSync(join(extensionsDir, "renderer.ts"), extCode);
 
-			const result = await discoverAndLoadExtensions([], tempDir);
-			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const result = await discoverAndLoadExtensions([], tempDir.path);
+			const runner = new ExtensionRunner(
+				result.extensions,
+				result.runtime,
+				tempDir.path,
+				sessionManager,
+				modelRegistry,
+			);
 
 			const renderer = runner.getMessageRenderer("my-type");
 			expect(renderer).toBeDefined();
@@ -222,8 +263,14 @@ describe("ExtensionRunner", () => {
 			`;
 			writeFileSync(join(extensionsDir, "with-flag.ts"), extCode);
 
-			const result = await discoverAndLoadExtensions([], tempDir);
-			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const result = await discoverAndLoadExtensions([], tempDir.path);
+			const runner = new ExtensionRunner(
+				result.extensions,
+				result.runtime,
+				tempDir.path,
+				sessionManager,
+				modelRegistry,
+			);
 			const flags = runner.getFlags();
 
 			expect(flags.has("--my-flag")).toBe(true);
@@ -240,8 +287,14 @@ describe("ExtensionRunner", () => {
 			`;
 			writeFileSync(join(extensionsDir, "flag.ts"), extCode);
 
-			const result = await discoverAndLoadExtensions([], tempDir);
-			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const result = await discoverAndLoadExtensions([], tempDir.path);
+			const runner = new ExtensionRunner(
+				result.extensions,
+				result.runtime,
+				tempDir.path,
+				sessionManager,
+				modelRegistry,
+			);
 
 			// Setting a flag value should not throw
 			runner.setFlagValue("--test-flag", true);
@@ -260,8 +313,14 @@ describe("ExtensionRunner", () => {
 			`;
 			writeFileSync(join(extensionsDir, "handler.ts"), extCode);
 
-			const result = await discoverAndLoadExtensions([], tempDir);
-			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const result = await discoverAndLoadExtensions([], tempDir.path);
+			const runner = new ExtensionRunner(
+				result.extensions,
+				result.runtime,
+				tempDir.path,
+				sessionManager,
+				modelRegistry,
+			);
 
 			expect(runner.hasHandlers("tool_call")).toBe(true);
 			expect(runner.hasHandlers("agent_end")).toBe(false);

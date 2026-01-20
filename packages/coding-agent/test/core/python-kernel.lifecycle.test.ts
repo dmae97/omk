@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { rmSync } from "node:fs";
+import { createTempDirSync, type SyncTempDir } from "@oh-my-pi/pi-utils";
 import type { Subprocess } from "bun";
 import { PythonKernel } from "../../src/core/python-kernel";
 
@@ -69,8 +68,6 @@ const createResponse = (options: { ok: boolean; status?: number; json?: unknown;
 	};
 };
 
-const createTempDir = () => mkdtempSync(join(tmpdir(), "omp-python-kernel-"));
-
 const createFakeProcess = (): Subprocess => {
 	const exited = new Promise<number>(() => undefined);
 	return { pid: 999999, exited } as Subprocess;
@@ -87,11 +84,11 @@ describe("PythonKernel gateway lifecycle", () => {
 	const originalGatewayToken = process.env.OMP_PYTHON_GATEWAY_TOKEN;
 	const originalBunEnv = process.env.BUN_ENV;
 
-	let tempDir: string;
+	let tempDir: SyncTempDir;
 	let env: MockEnvironment;
 
 	beforeEach(() => {
-		tempDir = createTempDir();
+		tempDir = createTempDirSync("@omp-python-kernel-");
 		env = { fetchCalls: [], spawnCalls: [] };
 
 		process.env.BUN_ENV = "test";
@@ -124,7 +121,7 @@ describe("PythonKernel gateway lifecycle", () => {
 
 	afterEach(() => {
 		if (tempDir) {
-			rmSync(tempDir, { recursive: true, force: true });
+			rmSync(tempDir.path, { recursive: true, force: true });
 		}
 
 		if (originalBunEnv === undefined) {
@@ -171,7 +168,7 @@ describe("PythonKernel gateway lifecycle", () => {
 			return createResponse({ ok: true }) as unknown as Response;
 		}) as typeof fetch;
 
-		const kernel = await PythonKernel.start({ cwd: tempDir, useSharedGateway: false });
+		const kernel = await PythonKernel.start({ cwd: tempDir.path, useSharedGateway: false });
 
 		expect(env.spawnCalls).toHaveLength(1);
 		expect(env.spawnCalls[0].cmd).toEqual(
@@ -214,7 +211,7 @@ describe("PythonKernel gateway lifecycle", () => {
 				return createResponse({ ok: true }) as unknown as Response;
 			}) as typeof fetch;
 
-			await expect(PythonKernel.start({ cwd: tempDir, useSharedGateway: false })).rejects.toThrow(
+			await expect(PythonKernel.start({ cwd: tempDir.path, useSharedGateway: false })).rejects.toThrow(
 				"Kernel gateway failed to start",
 			);
 			expect(env.spawnCalls).toHaveLength(3);
@@ -242,7 +239,7 @@ describe("PythonKernel gateway lifecycle", () => {
 			return createResponse({ ok: true }) as unknown as Response;
 		}) as typeof fetch;
 
-		const kernel = await PythonKernel.start({ cwd: tempDir });
+		const kernel = await PythonKernel.start({ cwd: tempDir.path });
 
 		await expect(kernel.shutdown()).resolves.toBeUndefined();
 	});

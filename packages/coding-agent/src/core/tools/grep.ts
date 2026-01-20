@@ -3,21 +3,22 @@ import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallb
 import { StringEnum } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
+import { ptree, readLines } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
-import type { Subprocess } from "bun";
+import { $ } from "bun";
 import { getLanguageFromPath, type Theme } from "../../modes/interactive/theme/theme";
 import grepDescription from "../../prompts/tools/grep.md" with { type: "text" };
 import { ensureTool } from "../../utils/tools-manager";
 import type { RenderResultOptions } from "../custom-tools/types";
 import { renderPromptTemplate } from "../prompt-templates";
-import { ScopeSignal, untilAborted } from "../utils";
+import { untilAborted } from "../utils";
 import type { ToolSession } from "./index";
 import { resolveToCwd } from "./path-utils";
-import { createToolUIKit, PREVIEW_LIMITS } from "./render-utils";
+import { PREVIEW_LIMITS, ToolUIKit } from "./render-utils";
 import {
 	DEFAULT_MAX_BYTES,
+	DEFAULT_MAX_COLUMN,
 	formatSize,
-	GREP_MAX_LINE_LENGTH,
 	type TruncationResult,
 	truncateHead,
 	truncateLine,
@@ -139,14 +140,9 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 
 		// Run ripgrep against /dev/null with the pattern - this validates regex syntax
 		// without searching any files
-		const proc = Bun.spawn([rgPath, "--no-config", "--quiet", "--", pattern, "/dev/null"], {
-			stdin: "ignore",
-			stdout: "ignore",
-			stderr: "pipe",
-		});
-
-		const stderr = await new Response(proc.stderr).text();
-		const exitCode = await proc.exited;
+		const result = await $`${rgPath} --no-config --quiet -- ${pattern} /dev/null`.quiet().nothrow();
+		const stderr = result.stderr?.toString() ?? "";
+		const exitCode = result.exitCode ?? 0;
 
 		// Exit code 1 = no matches (pattern is valid), 0 = matches found
 		// Exit code 2 = error (often regex parse error)
@@ -278,17 +274,11 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 
 			args.push("--", pattern, searchPath);
 
-			const child: Subprocess = Bun.spawn([rgPath, ...args], {
-				stdin: "ignore",
-				stdout: "pipe",
-				stderr: "pipe",
-			});
+			const child = ptree.cspawn([rgPath, ...args], { signal });
 
-			let stderr = "";
 			let matchCount = 0;
 			let matchLimitReached = false;
 			let linesTruncated = false;
-			let aborted = false;
 			let killedDueToLimit = false;
 			const outputLines: string[] = [];
 			const files = new Set<string>();
@@ -308,49 +298,18 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 				fileMatchCounts.set(relative, (fileMatchCounts.get(relative) ?? 0) + 1);
 			};
 
-			const stopChild = (dueToLimit: boolean = false) => {
-				killedDueToLimit = dueToLimit;
-				child.kill();
-			};
-
-			using signalScope = new ScopeSignal(signal ? { signal } : undefined);
-			signalScope.catch(() => {
-				aborted = true;
-				stopChild();
-			});
-
 			// For simple output modes (files_with_matches, count), process text directly
 			if (effectiveOutputMode === "files_with_matches" || effectiveOutputMode === "count") {
-				const stdoutReader = (child.stdout as ReadableStream<Uint8Array>).getReader();
-				const stderrReader = (child.stderr as ReadableStream<Uint8Array>).getReader();
-				const decoder = new TextDecoder();
-				let stdout = "";
+				const stdout = await child.text().catch((x) => {
+					if (x instanceof ptree.Exception && x.exitCode === 1) {
+						return "";
+					}
+					return Promise.reject(x);
+				});
 
-				await Promise.all([
-					(async () => {
-						while (true) {
-							const { done, value } = await stdoutReader.read();
-							if (done) break;
-							stdout += decoder.decode(value, { stream: true });
-						}
-					})(),
-					(async () => {
-						while (true) {
-							const { done, value } = await stderrReader.read();
-							if (done) break;
-							stderr += decoder.decode(value, { stream: true });
-						}
-					})(),
-				]);
-
-				const exitCode = await child.exited;
-
-				if (aborted) {
-					throw new Error("Operation aborted");
-				}
-
+				const exitCode = child.exitCode ?? 0;
 				if (exitCode !== 0 && exitCode !== 1) {
-					const errorMsg = stderr.trim() || `ripgrep exited with code ${exitCode}`;
+					const errorMsg = child.peekStderr().trim() || `ripgrep exited with code ${exitCode}`;
 					throw new Error(errorMsg);
 				}
 
@@ -527,57 +486,43 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 
 					if (matchCount >= effectiveLimit) {
 						matchLimitReached = true;
-						stopChild(true);
+						killedDueToLimit = true;
+						child.kill("SIGKILL");
 					}
 				}
 			};
 
-			// Read streams using Bun's ReadableStream API
-			const stdoutReader = (child.stdout as ReadableStream<Uint8Array>).getReader();
-			const stderrReader = (child.stderr as ReadableStream<Uint8Array>).getReader();
-			const decoder = new TextDecoder();
-			let stdoutBuffer = "";
-
-			await Promise.all([
-				// Process stdout line by line
-				(async () => {
-					while (true) {
-						const { done, value } = await stdoutReader.read();
-						if (done) break;
-
-						stdoutBuffer += decoder.decode(value, { stream: true });
-						const lines = stdoutBuffer.split("\n");
-						// Keep the last incomplete line in the buffer
-						stdoutBuffer = lines.pop() ?? "";
-
-						for (const line of lines) {
-							await processLine(line);
-						}
-					}
-					// Process any remaining content
-					if (stdoutBuffer.trim()) {
-						await processLine(stdoutBuffer);
-					}
-				})(),
-				// Collect stderr
-				(async () => {
-					while (true) {
-						const { done, value } = await stderrReader.read();
-						if (done) break;
-						stderr += decoder.decode(value, { stream: true });
-					}
-				})(),
-			]);
-
-			const exitCode = await child.exited;
-
-			if (aborted) {
-				throw new Error("Operation aborted");
+			// Process stdout line by line
+			try {
+				for await (const line of readLines(child.stdout)) {
+					await processLine(line);
+				}
+			} catch (err) {
+				if (err instanceof ptree.Exception && err.aborted) {
+					throw new Error("Operation aborted");
+				}
+				// Stream may close early if we killed due to limit - that's ok
+				if (!killedDueToLimit) {
+					throw err;
+				}
 			}
 
-			if (!killedDueToLimit && exitCode !== 0 && exitCode !== 1) {
-				const errorMsg = stderr.trim() || `ripgrep exited with code ${exitCode}`;
-				throw new Error(errorMsg);
+			// Wait for process to exit
+			try {
+				await child.exited;
+			} catch (err) {
+				if (err instanceof ptree.Exception) {
+					if (err.aborted) {
+						throw new Error("Operation aborted");
+					}
+					// Non-zero exit is ok if we killed due to limit or exit code 1 (no matches)
+					if (!killedDueToLimit && err.exitCode !== 1) {
+						const errorMsg = child.peekStderr().trim() || `ripgrep exited with code ${err.exitCode}`;
+						throw new Error(errorMsg);
+					}
+				} else {
+					throw err;
+				}
 			}
 
 			if (matchCount === 0) {
@@ -639,7 +584,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 			}
 
 			if (linesTruncated) {
-				notices.push(`Some lines truncated to ${GREP_MAX_LINE_LENGTH} chars. Use read tool to see full lines`);
+				notices.push(`Some lines truncated to ${DEFAULT_MAX_COLUMN} chars. Use read tool to see full lines`);
 				details.linesTruncated = true;
 			}
 
@@ -679,7 +624,7 @@ const COLLAPSED_TEXT_LIMIT = PREVIEW_LIMITS.COLLAPSED_LINES * 2;
 export const grepToolRenderer = {
 	inline: true,
 	renderCall(args: GrepRenderArgs, uiTheme: Theme): Component {
-		const ui = createToolUIKit(uiTheme);
+		const ui = new ToolUIKit(uiTheme);
 		const label = ui.title("Grep");
 		let text = `${uiTheme.format.bullet} ${label} ${uiTheme.fg("accent", args.pattern || "?")}`;
 
@@ -708,7 +653,7 @@ export const grepToolRenderer = {
 		{ expanded }: RenderResultOptions,
 		uiTheme: Theme,
 	): Component {
-		const ui = createToolUIKit(uiTheme);
+		const ui = new ToolUIKit(uiTheme);
 		const details = result.details;
 
 		if (result.isError || details?.error) {

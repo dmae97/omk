@@ -1,7 +1,5 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "bun:test";
+import { createTempDirSync } from "@oh-my-pi/pi-utils";
 import { streamOpenAICodexResponses } from "../src/providers/openai-codex-responses";
 import type { Context, Model } from "../src/types";
 
@@ -20,8 +18,8 @@ afterEach(() => {
 
 describe("openai-codex streaming", () => {
 	it("streams SSE responses into AssistantMessageEventStream", async () => {
-		const tempDir = mkdtempSync(join(tmpdir(), "pi-codex-stream-"));
-		process.env.OMP_CODING_AGENT_DIR = tempDir;
+		const tempDir = createTempDirSync("@pi-codex-stream-");
+		process.env.OMP_CODING_AGENT_DIR = tempDir.path;
 
 		const payload = Buffer.from(
 			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),
@@ -92,7 +90,7 @@ describe("openai-codex streaming", () => {
 			return new Response("not found", { status: 404 });
 		});
 
-		global.fetch = fetchMock as typeof fetch;
+		global.fetch = fetchMock as unknown as typeof fetch;
 
 		const model: Model<"openai-codex-responses"> = {
 			id: "gpt-5.1-codex",
@@ -131,8 +129,8 @@ describe("openai-codex streaming", () => {
 	});
 
 	it("sets conversation_id/session_id headers and prompt_cache_key when sessionId is provided", async () => {
-		const tempDir = mkdtempSync(join(tmpdir(), "pi-codex-stream-"));
-		process.env.OMP_CODING_AGENT_DIR = tempDir;
+		const tempDir = createTempDirSync("@pi-codex-stream-");
+		process.env.OMP_CODING_AGENT_DIR = tempDir.path;
 
 		const payload = Buffer.from(
 			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),
@@ -207,7 +205,7 @@ describe("openai-codex streaming", () => {
 			return new Response("not found", { status: 404 });
 		});
 
-		global.fetch = fetchMock as typeof fetch;
+		global.fetch = fetchMock as unknown as typeof fetch;
 
 		const model: Model<"openai-codex-responses"> = {
 			id: "gpt-5.1-codex",
@@ -232,8 +230,8 @@ describe("openai-codex streaming", () => {
 	});
 
 	it("does not set conversation_id/session_id headers when sessionId is not provided", async () => {
-		const tempDir = mkdtempSync(join(tmpdir(), "pi-codex-stream-"));
-		process.env.OMP_CODING_AGENT_DIR = tempDir;
+		const tempDir = createTempDirSync("@pi-codex-stream-");
+		process.env.OMP_CODING_AGENT_DIR = tempDir.path;
 
 		const payload = Buffer.from(
 			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),
@@ -302,7 +300,7 @@ describe("openai-codex streaming", () => {
 			return new Response("not found", { status: 404 });
 		});
 
-		global.fetch = fetchMock as typeof fetch;
+		global.fetch = fetchMock as unknown as typeof fetch;
 
 		const model: Model<"openai-codex-responses"> = {
 			id: "gpt-5.1-codex",

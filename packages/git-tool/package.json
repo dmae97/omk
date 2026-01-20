@@ -20,6 +20,9 @@
 		"build": "tsgo -p tsconfig.build.json",
 		"test": "vitest --run"
 	},
+	"dependencies": {
+		"@oh-my-pi/pi-utils": "workspace:*"
+	},
 	"devDependencies": {
 		"@types/node": "^24.3.0",
 		"vitest": "^3.2.4"

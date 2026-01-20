@@ -12,7 +12,6 @@ import type { Static, TSchema } from "@sinclair/typebox";
 import type { Theme } from "../../modes/interactive/theme/theme";
 import type { ExecOptions, ExecResult } from "../exec";
 import type { HookUIContext } from "../hooks/types";
-import type { Logger } from "../logger";
 import type { ModelRegistry } from "../model-registry";
 import type { ReadonlySessionManager } from "../session-manager";
 
@@ -36,7 +35,7 @@ export interface CustomToolAPI {
 	/** Whether UI is available (false in print/RPC mode) */
 	hasUI: boolean;
 	/** File logger for error/warning/debug messages */
-	logger: Logger;
+	logger: typeof import("@oh-my-pi/pi-utils").logger;
 	/** Injected @sinclair/typebox module */
 	typebox: typeof import("@sinclair/typebox");
 	/** Injected pi-coding-agent exports */

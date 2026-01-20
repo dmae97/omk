@@ -4,6 +4,7 @@ import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallb
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
+import { ptree, untilAborted } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import { CONFIG_DIR_NAME } from "../../config";
 import type { Theme } from "../../modes/interactive/theme/theme";
@@ -14,7 +15,7 @@ import { ensureTool } from "../../utils/tools-manager";
 import type { RenderResultOptions } from "../custom-tools/types";
 import { renderPromptTemplate } from "../prompt-templates";
 import type { ToolSession } from "../sdk";
-import { ScopeSignal, untilAborted } from "../utils";
+import { runFd } from "./find";
 import { LsTool } from "./ls";
 import { resolveReadPath, resolveToCwd } from "./path-utils";
 import { shortenPath, wrapBrackets } from "./render-utils";
@@ -153,53 +154,6 @@ function similarityScore(a: string, b: string): number {
 	return 1 - distance / maxLen;
 }
 
-async function captureCommandOutput(
-	command: string,
-	args: string[],
-	signal?: AbortSignal,
-): Promise<{ stdout: string; stderr: string; exitCode: number | null; aborted: boolean }> {
-	const child = Bun.spawn([command, ...args], {
-		stdin: "ignore",
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-
-	using scope = new ScopeSignal(signal ? { signal } : undefined);
-	scope.catch(() => {
-		child.kill();
-	});
-
-	const stdoutReader = (child.stdout as ReadableStream<Uint8Array>).getReader();
-	const stderrReader = (child.stderr as ReadableStream<Uint8Array>).getReader();
-	const stdoutDecoder = new TextDecoder();
-	const stderrDecoder = new TextDecoder();
-	let stdout = "";
-	let stderr = "";
-
-	await Promise.all([
-		(async () => {
-			while (true) {
-				const { done, value } = await stdoutReader.read();
-				if (done) break;
-				stdout += stdoutDecoder.decode(value, { stream: true });
-			}
-			stdout += stdoutDecoder.decode();
-		})(),
-		(async () => {
-			while (true) {
-				const { done, value } = await stderrReader.read();
-				if (done) break;
-				stderr += stderrDecoder.decode(value, { stream: true });
-			}
-			stderr += stderrDecoder.decode();
-		})(),
-	]);
-
-	const exitCode = await child.exited;
-
-	return { stdout, stderr, exitCode, aborted: scope.aborted };
-}
-
 async function listCandidateFiles(
 	searchRoot: string,
 	signal?: AbortSignal,
@@ -238,10 +192,7 @@ async function listCandidateFiles(
 			".git",
 			searchRoot,
 		];
-		const { stdout, aborted } = await captureCommandOutput(fdPath, gitignoreArgs, signal);
-		if (aborted) {
-			throw new Error("Operation aborted");
-		}
+		const { stdout } = await runFd(fdPath, gitignoreArgs, signal);
 		const output = stdout.trim();
 		if (output) {
 			const nestedGitignores = output
@@ -269,17 +220,11 @@ async function listCandidateFiles(
 
 	args.push(".", searchRoot);
 
-	const { stdout, stderr, exitCode, aborted } = await captureCommandOutput(fdPath, args, signal);
-
-	if (aborted) {
-		throw new Error("Operation aborted");
-	}
-
+	const { stdout, stderr, exitCode } = await runFd(fdPath, args, signal);
 	const output = stdout.trim();
 
 	if (exitCode !== 0 && !output) {
-		const errorMsg = stderr.trim() || `fd exited with code ${exitCode ?? -1}`;
-		return { files: [], truncated: false, error: errorMsg };
+		return { files: [], truncated: false, error: stderr.trim() || `fd exited with code ${exitCode ?? -1}` };
 	}
 
 	if (!output) {
@@ -400,17 +345,22 @@ async function convertWithMarkitdown(
 		return { content: "", ok: false, error: "markitdown not found (uv/pip unavailable)" };
 	}
 
-	const { stdout, stderr, exitCode, aborted } = await captureCommandOutput(cmd, [filePath], signal);
-
-	if (aborted) {
-		throw new Error("Operation aborted");
+	const child = ptree.cspawn([cmd, filePath], { signal });
+	let stdout: string;
+	try {
+		stdout = await child.nothrow().text();
+	} catch (err) {
+		if (err instanceof ptree.Exception && err.aborted) {
+			throw new Error("Operation aborted");
+		}
+		throw err;
 	}
 
-	if (exitCode === 0 && stdout.length > 0) {
+	if (child.exitCode === 0 && stdout.length > 0) {
 		return { content: stdout, ok: true };
 	}
 
-	return { content: "", ok: false, error: stderr.trim() || "Conversion failed" };
+	return { content: "", ok: false, error: child.peekStderr().trim() || "Conversion failed" };
 }
 
 const readSchema = Type.Object({

@@ -7,14 +7,15 @@
 
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { RpcClient } from "@oh-my-pi/pi-coding-agent";
-import { appendFile, cp, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { createTempDir } from "@oh-my-pi/pi-utils";
+import { appendFile, cp, mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { formatDirectory } from "./formatter";
 import { extractTaskFiles, type EditTask } from "./tasks";
 import { verifyExpectedFileSubset, verifyExpectedFiles } from "./verify";
 
-const TMP = await mkdtemp(join(tmpdir(), "reach-benchmark-"));
+const TMP_DIR = await createTempDir("@reach-benchmark-");
+const TMP = TMP_DIR.path;
 
 export interface BenchmarkConfig {
 	provider: string;
@@ -835,21 +836,21 @@ export async function runTask(
 	config: BenchmarkConfig,
 	onProgress?: (event: ProgressEvent) => void,
 ): Promise<TaskResult> {
-	const tempDirs: string[] = [];
+	const tempDirs: Array<Awaited<ReturnType<typeof createTempDir>>> = [];
 	const { dir: expectedDir, cleanup: cleanupExpected } = await getExpectedDir(task);
 
 	const cliPath = join(import.meta.dir, "../coding-agent/src/cli.ts");
 
 	try {
 		for (let i = 0; i < config.runsPerTask; i++) {
-			const tempDir = await mkdtemp(join(TMP, `${task.id}-`));
+			const tempDir = await createTempDir(join(TMP, `${task.id}-`));
 			tempDirs.push(tempDir);
-			await copyFixtures(task, tempDir);
+			await copyFixtures(task, tempDir.path);
 		}
 
-		const runPromises = tempDirs.map(async (workDir, index) => {
+		const runPromises = tempDirs.map(async (tempDirObj, index) => {
 			onProgress?.({ taskId: task.id, runIndex: index, status: "started" });
-			const result = await runSingleTask(task, index, config, workDir, expectedDir, cliPath);
+			const result = await runSingleTask(task, index, config, tempDirObj.path, expectedDir, cliPath);
 			onProgress?.({ taskId: task.id, runIndex: index, status: "completed", result });
 			return result;
 		});
@@ -858,9 +859,9 @@ export async function runTask(
 		return summarizeTaskRuns(task, runs);
 	} finally {
 		await cleanupExpected();
-		for (const dir of tempDirs) {
+		for (const tempDirObj of tempDirs) {
 			try {
-				await rm(dir, { recursive: true, force: true });
+				await tempDirObj.remove();
 			} catch {
 				// Ignore cleanup errors
 			}

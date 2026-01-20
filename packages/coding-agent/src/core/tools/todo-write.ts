@@ -5,12 +5,12 @@ import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallb
 import { StringEnum } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
+import { logger } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import chalk from "chalk";
 import type { Theme } from "../../modes/interactive/theme/theme";
 import todoWriteDescription from "../../prompts/tools/todo-write.md" with { type: "text" };
 import type { RenderResultOptions } from "../custom-tools/types";
-import { logger } from "../logger";
 import { renderPromptTemplate } from "../prompt-templates";
 import type { ToolSession } from "../sdk";
 import { ensureArtifactsDir, getArtifactsDir } from "./task/artifacts";

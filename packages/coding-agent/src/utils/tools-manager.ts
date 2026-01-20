@@ -1,7 +1,8 @@
-import { chmodSync, createWriteStream, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { chmod, mkdir, rename, rm } from "node:fs/promises";
 import { arch, platform } from "node:os";
 import { join } from "node:path";
-import chalk from "chalk";
+import { createTempDir, logger } from "@oh-my-pi/pi-utils";
+import { $ } from "bun";
 import { APP_NAME, getBinDir } from "../config";
 
 const TOOLS_DIR = getBinDir();
@@ -133,19 +134,14 @@ const PYTHON_TOOLS: Record<string, PythonToolConfig> = {
 	},
 };
 
-// Check if a command exists in PATH
-function commandExists(cmd: string): string | null {
-	return Bun.which(cmd);
-}
-
 export type ToolName = "fd" | "rg" | "sd" | "sg" | "yt-dlp" | "markitdown" | "html2text";
 
 // Get the path to a tool (system-wide or in our tools dir)
-export function getToolPath(tool: ToolName): string | null {
+export async function getToolPath(tool: ToolName): Promise<string | null> {
 	// Check Python tools first
 	const pythonConfig = PYTHON_TOOLS[tool];
 	if (pythonConfig) {
-		return commandExists(pythonConfig.binaryName);
+		return Bun.which(pythonConfig.binaryName);
 	}
 
 	const config = TOOLS[tool];
@@ -153,12 +149,12 @@ export function getToolPath(tool: ToolName): string | null {
 
 	// Check our tools directory first
 	const localPath = join(TOOLS_DIR, config.binaryName + (platform() === "win32" ? ".exe" : ""));
-	if (existsSync(localPath)) {
+	if (await Bun.file(localPath).exists()) {
 		return localPath;
 	}
 
 	// Check system PATH
-	return commandExists(config.binaryName);
+	return Bun.which(config.binaryName);
 }
 
 // Fetch latest release version from GitHub
@@ -178,27 +174,12 @@ async function getLatestVersion(repo: string): Promise<string> {
 // Download a file from URL
 async function downloadFile(url: string, dest: string): Promise<void> {
 	const response = await fetch(url);
-
 	if (!response.ok) {
 		throw new Error(`Failed to download: ${response.status}`);
-	}
-
-	if (!response.body) {
+	} else if (!response.body) {
 		throw new Error("No response body");
 	}
-
-	const fileStream = createWriteStream(dest);
-	const reader = response.body.getReader();
-	while (true) {
-		const { done, value } = await reader.read();
-		if (done) break;
-		fileStream.write(Buffer.from(value));
-	}
-	fileStream.end();
-	await new Promise<void>((resolve, reject) => {
-		fileStream.on("finish", resolve);
-		fileStream.on("error", reject);
-	});
+	await Bun.write(dest, response);
 }
 
 // Download and install a tool
@@ -219,7 +200,7 @@ async function downloadTool(tool: ToolName): Promise<string> {
 	}
 
 	// Create tools directory
-	mkdirSync(TOOLS_DIR, { recursive: true });
+	await mkdir(TOOLS_DIR, { recursive: true });
 
 	const downloadUrl = `https://github.com/${config.repo}/releases/download/${config.tagPrefix}${version}/${assetName}`;
 	const binaryExt = plat === "win32" ? ".exe" : "";
@@ -229,7 +210,7 @@ async function downloadTool(tool: ToolName): Promise<string> {
 	if (config.isDirectBinary) {
 		await downloadFile(downloadUrl, binaryPath);
 		if (plat !== "win32") {
-			chmodSync(binaryPath, 0o755);
+			await chmod(binaryPath, 0o755);
 		}
 		return binaryPath;
 	}
@@ -239,74 +220,62 @@ async function downloadTool(tool: ToolName): Promise<string> {
 	await downloadFile(downloadUrl, archivePath);
 
 	// Extract
-	const extractDir = join(TOOLS_DIR, "extract_tmp");
-	mkdirSync(extractDir, { recursive: true });
+	const tmp = await createTempDir("@omp-tools-extract-");
 
 	try {
 		if (assetName.endsWith(".tar.gz")) {
-			Bun.spawnSync(["tar", "xzf", archivePath, "-C", extractDir], {
-				stdin: "ignore",
-				stdout: "pipe",
-				stderr: "pipe",
-			});
+			const archive = new Bun.Archive(await Bun.file(archivePath).arrayBuffer());
+			const files = await archive.files();
+			for (const [path, file] of files) {
+				await Bun.write(join(tmp.path, path), file);
+			}
 		} else if (assetName.endsWith(".zip")) {
-			Bun.spawnSync(["unzip", "-o", archivePath, "-d", extractDir], {
-				stdin: "ignore",
-				stdout: "pipe",
-				stderr: "pipe",
-			});
+			await mkdir(tmp.path, { recursive: true });
+			await $`unzip -o ${archivePath} -d ${tmp.path}`.quiet().nothrow();
 		}
 
 		// Find the binary in extracted files
 		// ast-grep releases the binary directly in the zip, not in a subdirectory
 		let extractedBinary: string;
 		if (tool === "sg") {
-			extractedBinary = join(extractDir, config.binaryName + binaryExt);
+			extractedBinary = join(tmp.path, config.binaryName + binaryExt);
 		} else {
-			const extractedDir = join(extractDir, assetName.replace(/\.(tar\.gz|zip)$/, ""));
+			const extractedDir = join(tmp.path, assetName.replace(/\.(tar\.gz|zip)$/, ""));
 			extractedBinary = join(extractedDir, config.binaryName + binaryExt);
 		}
 
-		if (existsSync(extractedBinary)) {
-			renameSync(extractedBinary, binaryPath);
+		if (await Bun.file(extractedBinary).exists()) {
+			await rename(extractedBinary, binaryPath);
 		} else {
 			throw new Error(`Binary not found in archive: ${extractedBinary}`);
 		}
 
 		// Make executable (Unix only)
 		if (plat !== "win32") {
-			chmodSync(binaryPath, 0o755);
+			await chmod(binaryPath, 0o755);
 		}
 	} finally {
 		// Cleanup
-		rmSync(archivePath, { force: true });
-		rmSync(extractDir, { recursive: true, force: true });
+		await tmp.remove();
+		await rm(archivePath, { force: true });
 	}
 
 	return binaryPath;
 }
 
 // Install a Python package via uv (preferred) or pip
-function installPythonPackage(pkg: string): boolean {
+async function installPythonPackage(pkg: string): Promise<boolean> {
 	// Try uv first (faster, better isolation)
-	const uv = commandExists("uv");
+	const uv = Bun.which("uv");
 	if (uv) {
-		const result = Bun.spawnSync([uv, "tool", "install", pkg], {
-			stdin: "ignore",
-			stdout: "pipe",
-			stderr: "pipe",
-		});
+		const result = await $`${uv} tool install ${pkg}`.quiet().nothrow();
 		if (result.exitCode === 0) return true;
 	}
 
 	// Fall back to pip
-	const pip = commandExists("pip3") || commandExists("pip");
+	const pip = Bun.which("pip3") || Bun.which("pip");
 	if (pip) {
-		const result = Bun.spawnSync([pip, "install", "--user", pkg], {
-			stdin: "ignore",
-			stdout: "pipe",
-			stderr: "pipe",
-		});
+		const result = await $`${pip} install --user ${pkg}`.quiet().nothrow();
 		return result.exitCode === 0;
 	}
 
@@ -316,7 +285,7 @@ function installPythonPackage(pkg: string): boolean {
 // Ensure a tool is available, downloading if necessary
 // Returns the path to the tool, or null if unavailable
 export async function ensureTool(tool: ToolName, silent: boolean = false): Promise<string | undefined> {
-	const existingPath = getToolPath(tool);
+	const existingPath = await getToolPath(tool);
 	if (existingPath) {
 		return existingPath;
 	}
@@ -325,21 +294,21 @@ export async function ensureTool(tool: ToolName, silent: boolean = false): Promi
 	const pythonConfig = PYTHON_TOOLS[tool];
 	if (pythonConfig) {
 		if (!silent) {
-			console.log(chalk.dim(`${pythonConfig.name} not found. Installing via uv/pip...`));
+			logger.debug(`${pythonConfig.name} not found. Installing via uv/pip...`);
 		}
-		const success = installPythonPackage(pythonConfig.package);
+		const success = await installPythonPackage(pythonConfig.package);
 		if (success) {
 			// Re-check for the command after installation
-			const path = commandExists(pythonConfig.binaryName);
+			const path = Bun.which(pythonConfig.binaryName);
 			if (path) {
 				if (!silent) {
-					console.log(chalk.dim(`${pythonConfig.name} installed successfully`));
+					logger.debug(`${pythonConfig.name} installed successfully`);
 				}
 				return path;
 			}
 		}
 		if (!silent) {
-			console.log(chalk.yellow(`Failed to install ${pythonConfig.name}`));
+			logger.warn(`Failed to install ${pythonConfig.name}`);
 		}
 		return undefined;
 	}
@@ -349,18 +318,20 @@ export async function ensureTool(tool: ToolName, silent: boolean = false): Promi
 
 	// Tool not found - download it
 	if (!silent) {
-		console.log(chalk.dim(`${config.name} not found. Downloading...`));
+		logger.debug(`${config.name} not found. Downloading...`);
 	}
 
 	try {
 		const path = await downloadTool(tool);
 		if (!silent) {
-			console.log(chalk.dim(`${config.name} installed to ${path}`));
+			logger.debug(`${config.name} installed to ${path}`);
 		}
 		return path;
 	} catch (e) {
 		if (!silent) {
-			console.log(chalk.yellow(`Failed to download ${config.name}: ${e instanceof Error ? e.message : e}`));
+			logger.warn(`Failed to download ${config.name}`, {
+				error: e instanceof Error ? e.message : String(e),
+			});
 		}
 		return undefined;
 	}

@@ -5,8 +5,8 @@
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Model } from "@oh-my-pi/pi-ai";
 import type { KeyId } from "@oh-my-pi/pi-tui";
+import { logger } from "@oh-my-pi/pi-utils";
 import { type Theme, theme } from "../../modes/interactive/theme/theme";
-import { logger } from "../logger";
 import type { ModelRegistry } from "../model-registry";
 import type { SessionManager } from "../session-manager";
 import type {

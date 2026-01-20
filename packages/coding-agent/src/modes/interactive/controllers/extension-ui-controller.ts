@@ -1,5 +1,6 @@
 import type { Component, TUI } from "@oh-my-pi/pi-tui";
 import { Spacer, Text } from "@oh-my-pi/pi-tui";
+import { logger } from "@oh-my-pi/pi-utils";
 import type {
 	ExtensionActions,
 	ExtensionCommandContextActions,
@@ -8,7 +9,6 @@ import type {
 	ExtensionUIContext,
 } from "../../../core/extensions/index";
 import { KeybindingsManager } from "../../../core/keybindings";
-import { logger } from "../../../core/logger";
 import { setTerminalTitle } from "../../../core/title-generator";
 import { HookEditorComponent } from "../components/hook-editor";
 import { HookInputComponent } from "../components/hook-input";
@@ -483,26 +483,26 @@ export class ExtensionUiController {
 	 * Show a selector for hooks.
 	 */
 	showHookSelector(title: string, options: string[], initialIndex?: number): Promise<string | undefined> {
-		return new Promise((resolve) => {
-			this.ctx.hookSelector = new HookSelectorComponent(
-				title,
-				options,
-				(option) => {
-					this.hideHookSelector();
-					resolve(option);
-				},
-				() => {
-					this.hideHookSelector();
-					resolve(undefined);
-				},
-				{ initialIndex },
-			);
+		const { promise, resolve } = Promise.withResolvers<string | undefined>();
+		this.ctx.hookSelector = new HookSelectorComponent(
+			title,
+			options,
+			(option) => {
+				this.hideHookSelector();
+				resolve(option);
+			},
+			() => {
+				this.hideHookSelector();
+				resolve(undefined);
+			},
+			{ initialIndex },
+		);
 
-			this.ctx.editorContainer.clear();
-			this.ctx.editorContainer.addChild(this.ctx.hookSelector);
-			this.ctx.ui.setFocus(this.ctx.hookSelector);
-			this.ctx.ui.requestRender();
-		});
+		this.ctx.editorContainer.clear();
+		this.ctx.editorContainer.addChild(this.ctx.hookSelector);
+		this.ctx.ui.setFocus(this.ctx.hookSelector);
+		this.ctx.ui.requestRender();
+		return promise;
 	}
 
 	/**
@@ -528,25 +528,25 @@ export class ExtensionUiController {
 	 * Show a text input for hooks.
 	 */
 	showHookInput(title: string, placeholder?: string): Promise<string | undefined> {
-		return new Promise((resolve) => {
-			this.ctx.hookInput = new HookInputComponent(
-				title,
-				placeholder,
-				(value) => {
-					this.hideHookInput();
-					resolve(value);
-				},
-				() => {
-					this.hideHookInput();
-					resolve(undefined);
-				},
-			);
+		const { promise, resolve } = Promise.withResolvers<string | undefined>();
+		this.ctx.hookInput = new HookInputComponent(
+			title,
+			placeholder,
+			(value) => {
+				this.hideHookInput();
+				resolve(value);
+			},
+			() => {
+				this.hideHookInput();
+				resolve(undefined);
+			},
+		);
 
-			this.ctx.editorContainer.clear();
-			this.ctx.editorContainer.addChild(this.ctx.hookInput);
-			this.ctx.ui.setFocus(this.ctx.hookInput);
-			this.ctx.ui.requestRender();
-		});
+		this.ctx.editorContainer.clear();
+		this.ctx.editorContainer.addChild(this.ctx.hookInput);
+		this.ctx.ui.setFocus(this.ctx.hookInput);
+		this.ctx.ui.requestRender();
+		return promise;
 	}
 
 	/**
@@ -564,26 +564,26 @@ export class ExtensionUiController {
 	 * Show a multi-line editor for hooks (with Ctrl+G support).
 	 */
 	showHookEditor(title: string, prefill?: string): Promise<string | undefined> {
-		return new Promise((resolve) => {
-			this.ctx.hookEditor = new HookEditorComponent(
-				this.ctx.ui,
-				title,
-				prefill,
-				(value) => {
-					this.hideHookEditor();
-					resolve(value);
-				},
-				() => {
-					this.hideHookEditor();
-					resolve(undefined);
-				},
-			);
+		const { promise, resolve } = Promise.withResolvers<string | undefined>();
+		this.ctx.hookEditor = new HookEditorComponent(
+			this.ctx.ui,
+			title,
+			prefill,
+			(value) => {
+				this.hideHookEditor();
+				resolve(value);
+			},
+			() => {
+				this.hideHookEditor();
+				resolve(undefined);
+			},
+		);
 
-			this.ctx.editorContainer.clear();
-			this.ctx.editorContainer.addChild(this.ctx.hookEditor);
-			this.ctx.ui.setFocus(this.ctx.hookEditor);
-			this.ctx.ui.requestRender();
-		});
+		this.ctx.editorContainer.clear();
+		this.ctx.editorContainer.addChild(this.ctx.hookEditor);
+		this.ctx.ui.setFocus(this.ctx.hookEditor);
+		this.ctx.ui.requestRender();
+		return promise;
 	}
 
 	/**
@@ -624,27 +624,27 @@ export class ExtensionUiController {
 		const savedText = this.ctx.editor.getText();
 		const keybindings = KeybindingsManager.inMemory();
 
-		return new Promise((resolve) => {
-			let component: Component & { dispose?(): void };
+		const { promise, resolve } = Promise.withResolvers<T>();
+		let component: Component & { dispose?(): void };
 
-			const close = (result: T) => {
-				component.dispose?.();
-				this.ctx.editorContainer.clear();
-				this.ctx.editorContainer.addChild(this.ctx.editor);
-				this.ctx.editor.setText(savedText);
-				this.ctx.ui.setFocus(this.ctx.editor);
-				this.ctx.ui.requestRender();
-				resolve(result);
-			};
+		const close = (result: T) => {
+			component.dispose?.();
+			this.ctx.editorContainer.clear();
+			this.ctx.editorContainer.addChild(this.ctx.editor);
+			this.ctx.editor.setText(savedText);
+			this.ctx.ui.setFocus(this.ctx.editor);
+			this.ctx.ui.requestRender();
+			resolve(result);
+		};
 
-			Promise.resolve(factory(this.ctx.ui, theme, keybindings, close)).then((c) => {
-				component = c;
-				this.ctx.editorContainer.clear();
-				this.ctx.editorContainer.addChild(component);
-				this.ctx.ui.setFocus(component);
-				this.ctx.ui.requestRender();
-			});
+		Promise.try(() => factory(this.ctx.ui, theme, keybindings, close)).then((c) => {
+			component = c;
+			this.ctx.editorContainer.clear();
+			this.ctx.editorContainer.addChild(component);
+			this.ctx.ui.setFocus(component);
+			this.ctx.ui.requestRender();
 		});
+		return promise;
 	}
 
 	/**

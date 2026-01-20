@@ -20,46 +20,117 @@ This project uses Bun. Use Bun APIs where they provide a cleaner alternative; us
 
 **NEVER spawn shell commands for operations that have proper APIs** (e.g., `Bun.spawnSync(["mkdir", "-p", dir])` — use `mkdirSync` instead).
 
-### Where Bun Wins
+### Process Execution
 
-| Operation | Use | Not |
-|-----------|-----|-----|
-| File read/write | `Bun.file()`, `Bun.write()` | `readFileSync`, `writeFileSync` |
-| File exists | `await Bun.file(path).exists()` | `existsSync` |
-| Spawn process | `Bun.spawn()`, `Bun.spawnSync()` | `child_process` |
-| Binary lookup | `Bun.which("git")` | `spawnSync(["which", "git"])` |
-| HTTP server | `Bun.serve()` | `http.createServer()` |
-| SQLite | `bun:sqlite` | `better-sqlite3` |
-| Hashing | `Bun.hash()`, Web Crypto | `node:crypto` |
-| Path resolution | `import.meta.dir`, `import.meta.path` | `fileURLToPath` dance |
-
-### Where node:fs Is Correct
-
-Bun has no native API for directory operations. Use `node:fs`:
-
+**Prefer Bun Shell** (`$` template literals) for simple commands:
 ```typescript
-import { mkdirSync, readdirSync, rmdirSync } from "node:fs";
-mkdirSync(dir, { recursive: true });
+import { $ } from "bun";
+
+// Capture output
+const result = await $`git status`.cwd(dir).quiet().nothrow();
+if (result.exitCode === 0) {
+  const text = result.text();
+}
+
+// Fire and forget
+$`rm ${tmpFile}`.quiet().nothrow();
 ```
 
-### CLI and Scripts
+**Use `Bun.spawn`/`Bun.spawnSync`** only when:
+- Long-running processes (LSP servers, Python kernels, voice services)
+- Streaming stdin/stdout/stderr required (SSE, JSON-RPC)
+- Process control needed (signals, kill, complex lifecycle)
 
-Use `bun`/`bunx` instead of `node`/`npm`/`npx`. Bun auto-loads `.env` files (no dotenv needed).
+**Bun Shell methods:**
+- `.quiet()` - suppress output (stdout/stderr to null)
+- `.nothrow()` - don't throw on non-zero exit
+- `.text()` - get stdout as string
+- `.cwd(path)` - set working directory
+
+### Sleep
+
+**Prefer** `await Bun.sleep(ms)`  
+**Avoid** `new Promise((resolve) => setTimeout(resolve, ms))`
+
+### File I/O
+
+**Prefer Bun file APIs:**
+```typescript
+// Read
+const text = await Bun.file(path).text();
+const data = await Bun.file(path).json();
+const exists = await Bun.file(path).exists();
+
+// Write
+await Bun.write(path, data);
+```
+
+**Use `node:fs/promises`** for directories (Bun has no native directory APIs):
+```typescript
+import { mkdir, rm, readdir } from "node:fs/promises";
+
+await mkdir(path, { recursive: true });
+await rm(path, { recursive: true, force: true });
+const entries = await readdir(path);
+```
+
+**Avoid sync APIs** in async flows:
+- Don't use `existsSync`/`readFileSync`/`writeFileSync` when async is possible
+- Use sync only when required by a synchronous interface
+
+### Streams
+
+**Prefer centralized helpers:**
+```typescript
+import { readStream, readLines } from "./utils/stream";
+
+// Read entire stream
+const text = await readStream(child.stdout);
+
+// Line-by-line iteration
+for await (const line of readLines(stream)) {
+  // process line
+}
+```
+
+**Avoid manual reader loops** unless protocol requires it (SSE, streaming JSON-RPC).
+
+### Where Bun Wins
+
+| Operation       | Use                                   | Not                             |
+| --------------- | ------------------------------------- | ------------------------------- |
+| File read/write | `Bun.file()`, `Bun.write()`           | `readFileSync`, `writeFileSync` |
+| File exists     | `await Bun.file(path).exists()`       | `existsSync`                    |
+| Spawn process   | `$\`cmd\``, `Bun.spawn()`             | `child_process`                 |
+| Sleep           | `Bun.sleep(ms)`                       | `setTimeout` promise            |
+| Binary lookup   | `Bun.which("git")`                    | `spawnSync(["which", "git"])`   |
+| HTTP server     | `Bun.serve()`                         | `http.createServer()`           |
+| SQLite          | `bun:sqlite`                          | `better-sqlite3`                |
+| Hashing         | `Bun.hash()`, Web Crypto              | `node:crypto`                   |
+| Path resolution | `import.meta.dir`, `import.meta.path` | `fileURLToPath` dance           |
 
 ### Patterns
 
 **Subprocess streams** — cast when using pipe mode:
+
 ```typescript
 const child = Bun.spawn(["cmd"], { stdout: "pipe", stderr: "pipe" });
 const reader = (child.stdout as ReadableStream<Uint8Array>).getReader();
 ```
 
 **Password hashing** — built-in bcrypt/argon2:
+
 ```typescript
 const hash = await Bun.password.hash("password", "bcrypt");
 const valid = await Bun.password.verify("password", hash);
 ```
 
+### Anti-Patterns
+
+- `Bun.spawnSync([...])` for simple commands → use `$\`...\``
+- `new Promise((resolve) => setTimeout(resolve, ms))` → use `Bun.sleep(ms)`
+- `existsSync/readFileSync/writeFileSync` in async code → use `Bun.file()` APIs
+- Manual `child.stdout.getReader()` loops for non-streaming commands → use `readStream()` helper
 
 ## Logging
 
@@ -68,7 +139,7 @@ const valid = await Bun.password.verify("password", hash);
 Use the centralized logger instead:
 
 ```typescript
-import { logger } from "../core/logger";
+import { logger } from "@oh-my-pi/pi-utils";
 
 logger.error("MCP request failed", { url, method });
 logger.warn("Theme file invalid, using fallback", { path });

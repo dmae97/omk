@@ -440,13 +440,13 @@ async function fetchWithRetry(url: string, init: RequestInit, signal?: AbortSign
 			}
 			if (signal?.aborted) return response;
 			const delay = getRetryDelayMs(response, attempt);
-			await new Promise((resolve) => setTimeout(resolve, delay));
+			await Bun.sleep(delay);
 		} catch (error) {
 			if (attempt >= CODEX_MAX_RETRIES || signal?.aborted) {
 				throw error;
 			}
 			const delay = CODEX_RETRY_DELAY_MS * (attempt + 1);
-			await new Promise((resolve) => setTimeout(resolve, delay));
+			await Bun.sleep(delay);
 		}
 		attempt += 1;
 	}

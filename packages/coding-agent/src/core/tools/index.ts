@@ -62,8 +62,8 @@ export {
 export { WriteTool, type WriteToolDetails } from "./write";
 
 import type { AgentTool } from "@oh-my-pi/pi-agent-core";
+import { logger } from "@oh-my-pi/pi-utils";
 import type { EventBus } from "../event-bus";
-import { logger } from "../logger";
 import { getPreludeDocs, warmPythonEnvironment } from "../python-executor";
 import { checkPythonKernelAvailability } from "../python-kernel";
 import type { BashInterceptorRule } from "../settings-manager";

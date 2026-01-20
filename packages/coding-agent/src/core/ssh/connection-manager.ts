@@ -1,8 +1,9 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { logger } from "@oh-my-pi/pi-utils";
+import { $ } from "bun";
 import { CONFIG_DIR_NAME } from "../../config";
-import { logger } from "../logger";
 
 export interface SSHConnectionTarget {
 	name: string;
@@ -107,32 +108,17 @@ function buildCommonArgs(host: SSHConnectionTarget): string[] {
 	return args;
 }
 
-function decodeOutput(buffer?: Uint8Array): string {
-	if (!buffer || buffer.length === 0) return "";
-	return new TextDecoder().decode(buffer).trim();
+async function runSshSync(args: string[]): Promise<{ exitCode: number | null; stderr: string }> {
+	const result = await $`ssh ${args}`.nothrow();
+	return { exitCode: result.exitCode, stderr: result.stderr.toString().trim() };
 }
 
-function runSshSync(args: string[]): { exitCode: number | null; stderr: string } {
-	const result = Bun.spawnSync(["ssh", ...args], {
-		stdin: "ignore",
-		stdout: "ignore",
-		stderr: "pipe",
-	});
-
-	return { exitCode: result.exitCode, stderr: decodeOutput(result.stderr) };
-}
-
-function runSshCaptureSync(args: string[]): { exitCode: number | null; stdout: string; stderr: string } {
-	const result = Bun.spawnSync(["ssh", ...args], {
-		stdin: "ignore",
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-
+async function runSshCaptureSync(args: string[]): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
+	const result = await $`ssh ${args}`.nothrow();
 	return {
 		exitCode: result.exitCode,
-		stdout: decodeOutput(result.stdout),
-		stderr: decodeOutput(result.stderr),
+		stdout: result.stdout.toString().trim(),
+		stderr: result.stderr.toString().trim(),
 	};
 }
 
@@ -266,7 +252,7 @@ async function persistHostInfo(host: SSHConnectionTarget, info: SSHHostInfo): Pr
 
 async function probeHostInfo(host: SSHConnectionTarget): Promise<SSHHostInfo> {
 	const command = 'echo "$OSTYPE|$SHELL|$BASH_VERSION" 2>/dev/null || echo "%OS%|%COMSPEC%|"';
-	const result = runSshCaptureSync(buildRemoteCommand(host, command));
+	const result = await runSshCaptureSync(buildRemoteCommand(host, command));
 	if (result.exitCode !== 0 && !result.stdout) {
 		logger.debug("SSH host probe failed", { host: host.name, error: result.stderr });
 		const fallback: SSHHostInfo = {
@@ -329,11 +315,11 @@ async function probeHostInfo(host: SSHConnectionTarget): Promise<SSHHostInfo> {
 	const hasBash = !unexpandedPosixVars && (Boolean(bashVersion) || shell === "bash");
 	let compatShell: SSHHostInfo["compatShell"];
 	if (os === "windows" && host.compat !== false) {
-		const bashProbe = runSshCaptureSync(buildRemoteCommand(host, 'bash -lc "echo OMP_BASH_OK"'));
+		const bashProbe = await runSshCaptureSync(buildRemoteCommand(host, 'bash -lc "echo OMP_BASH_OK"'));
 		if (bashProbe.exitCode === 0 && bashProbe.stdout.includes("OMP_BASH_OK")) {
 			compatShell = "bash";
 		} else {
-			const shProbe = runSshCaptureSync(buildRemoteCommand(host, 'sh -lc "echo OMP_SH_OK"'));
+			const shProbe = await runSshCaptureSync(buildRemoteCommand(host, 'sh -lc "echo OMP_SH_OK"'));
 			if (shProbe.exitCode === 0 && shProbe.stdout.includes("OMP_SH_OK")) {
 				compatShell = "sh";
 			}
@@ -406,7 +392,7 @@ export async function ensureConnection(host: SSHConnectionTarget): Promise<void>
 		validateKeyPermissions(host.keyPath);
 
 		const target = buildSshTarget(host);
-		const check = runSshSync(["-O", "check", ...buildCommonArgs(host), target]);
+		const check = await runSshSync(["-O", "check", ...buildCommonArgs(host), target]);
 		if (check.exitCode === 0) {
 			activeHosts.set(key, host);
 			if (!hostInfoCache.has(key) && !loadHostInfoFromDisk(host)) {
@@ -415,7 +401,7 @@ export async function ensureConnection(host: SSHConnectionTarget): Promise<void>
 			return;
 		}
 
-		const start = runSshSync(["-M", "-N", "-f", ...buildCommonArgs(host), target]);
+		const start = await runSshSync(["-M", "-N", "-f", ...buildCommonArgs(host), target]);
 		if (start.exitCode !== 0) {
 			const detail = start.stderr ? `: ${start.stderr}` : "";
 			throw new Error(`Failed to start SSH master for ${target}${detail}`);
@@ -435,24 +421,24 @@ export async function ensureConnection(host: SSHConnectionTarget): Promise<void>
 	}
 }
 
-function closeConnectionInternal(host: SSHConnectionTarget): void {
+async function closeConnectionInternal(host: SSHConnectionTarget): Promise<void> {
 	const target = buildSshTarget(host);
-	runSshSync(["-O", "exit", ...buildCommonArgs(host), target]);
+	await runSshSync(["-O", "exit", ...buildCommonArgs(host), target]);
 }
 
 export async function closeConnection(hostName: string): Promise<void> {
 	const host = activeHosts.get(hostName);
 	if (!host) {
-		closeConnectionInternal({ name: hostName, host: hostName });
+		await closeConnectionInternal({ name: hostName, host: hostName });
 		return;
 	}
-	closeConnectionInternal(host);
+	await closeConnectionInternal(host);
 	activeHosts.delete(hostName);
 }
 
 export async function closeAllConnections(): Promise<void> {
 	for (const [name, host] of Array.from(activeHosts.entries())) {
-		closeConnectionInternal(host);
+		await closeConnectionInternal(host);
 		activeHosts.delete(name);
 	}
 }

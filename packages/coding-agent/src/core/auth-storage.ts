@@ -17,9 +17,9 @@ import {
 	type OAuthCredentials,
 	type OAuthProvider,
 } from "@oh-my-pi/pi-ai";
+import { logger } from "@oh-my-pi/pi-utils";
 import { getAgentDbPath, getAuthPath } from "../config";
 import { AgentStorage } from "./agent-storage";
-import { logger } from "./logger";
 import { migrateJsonStorage } from "./storage-migration";
 
 export type ApiKeyCredential = {

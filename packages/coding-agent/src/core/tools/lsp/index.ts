@@ -2,12 +2,11 @@ import type { Dirent } from "node:fs";
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
+import { logger, once, untilAborted } from "@oh-my-pi/pi-utils";
 import type { BunFile } from "bun";
 import { type Theme, theme } from "../../../modes/interactive/theme/theme";
 import lspDescription from "../../../prompts/tools/lsp.md" with { type: "text" };
-import { logger } from "../../logger";
 import { renderPromptTemplate } from "../../prompt-templates";
-import { once, untilAborted } from "../../utils";
 import type { ToolSession } from "../index";
 import { resolveToCwd } from "../path-utils";
 import {
@@ -57,7 +56,6 @@ import {
 	formatLocation,
 	formatSymbolInformation,
 	formatWorkspaceEdit,
-	sleep,
 	symbolKindToIcon,
 	uriToFile,
 } from "./utils";
@@ -340,7 +338,7 @@ async function waitForDiagnostics(
 		const diagnostics = client.diagnostics.get(uri);
 		const versionOk = minVersion === undefined || client.diagnosticsVersion > minVersion;
 		if (diagnostics !== undefined && versionOk) return diagnostics;
-		await sleep(100);
+		await Bun.sleep(100);
 	}
 	return client.diagnostics.get(uri) ?? [];
 }

@@ -13,7 +13,7 @@ import type { SSHHostInfo } from "../ssh/connection-manager";
 import { ensureHostInfo, getHostInfoForHost } from "../ssh/connection-manager";
 import { executeSSH } from "../ssh/ssh-executor";
 import type { ToolSession } from "./index";
-import { createToolUIKit } from "./render-utils";
+import { ToolUIKit } from "./render-utils";
 import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateTail } from "./truncate";
 
 const sshSchema = Type.Object({
@@ -245,7 +245,7 @@ interface SshRenderContext {
 
 export const sshToolRenderer = {
 	renderCall(args: SshRenderArgs, uiTheme: Theme): Component {
-		const ui = createToolUIKit(uiTheme);
+		const ui = new ToolUIKit(uiTheme);
 		const host = args.host || uiTheme.format.ellipsis;
 		const command = args.command || uiTheme.format.ellipsis;
 		const text = ui.title(`[${host}] $ ${command}`);
@@ -260,7 +260,7 @@ export const sshToolRenderer = {
 		options: RenderResultOptions & { renderContext?: SshRenderContext },
 		uiTheme: Theme,
 	): Component {
-		const ui = createToolUIKit(uiTheme);
+		const ui = new ToolUIKit(uiTheme);
 		const { expanded, renderContext } = options;
 		const details = result.details;
 		const lines: string[] = [];

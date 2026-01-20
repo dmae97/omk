@@ -1,4 +1,4 @@
-import { logger } from "./logger";
+import { logger, sanitizeText } from "@oh-my-pi/pi-utils";
 import {
 	checkPythonKernelAvailability,
 	type KernelDisplayOutput,
@@ -7,9 +7,7 @@ import {
 	type PreludeHelper,
 	PythonKernel,
 } from "./python-kernel";
-import { OutputSink, sanitizeText } from "./streaming-output";
-import { DEFAULT_MAX_BYTES } from "./tools/truncate";
-
+import { OutputSink } from "./streaming-output";
 export type PythonKernelMode = "session" | "per-call";
 
 export interface PythonExecutorOptions {
@@ -212,21 +210,30 @@ async function executeWithKernel(
 	code: string,
 	options: PythonExecutorOptions | undefined,
 ): Promise<PythonResult> {
-	const sink = new OutputSink(DEFAULT_MAX_BYTES, DEFAULT_MAX_BYTES * 2, options?.onChunk);
-	const writer = sink.getWriter();
+	const sink = new OutputSink({ onLine: options?.onChunk });
 	const displayOutputs: KernelDisplayOutput[] = [];
 
 	try {
-		const result = await kernel.execute(code, {
-			signal: options?.signal,
-			timeoutMs: options?.timeout,
-			onChunk: async (text) => {
-				await writer.write(sanitizeText(text));
-			},
-			onDisplay: async (output) => {
-				displayOutputs.push(output);
-			},
-		});
+		const writable = sink.createStringWritable();
+		const writer = writable.getWriter();
+		let result: KernelExecuteResult;
+		try {
+			result = await kernel.execute(code, {
+				signal: options?.signal,
+				timeoutMs: options?.timeout,
+				onChunk: (text) => {
+					writer.write(sanitizeText(text));
+				},
+				onDisplay: (output) => {
+					displayOutputs.push(output);
+				},
+			});
+		} catch (err) {
+			await writer.abort(err);
+			throw err;
+		} finally {
+			await writer.close().catch(() => {});
+		}
 
 		if (result.cancelled) {
 			const secs = options?.timeout ? Math.round(options.timeout / 1000) : undefined;
@@ -263,8 +270,6 @@ async function executeWithKernel(
 		const error = err instanceof Error ? err : new Error(String(err));
 		logger.error("Python execution failed", { error: error.message });
 		throw error;
-	} finally {
-		await writer.close();
 	}
 }
 

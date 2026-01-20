@@ -12,9 +12,9 @@ export class EventStream<T, R = T> implements AsyncIterable<T> {
 		private isComplete: (event: T) => boolean,
 		private extractResult: (event: T) => R,
 	) {
-		this.finalResultPromise = new Promise((resolve) => {
-			this.resolveFinalResult = resolve;
-		});
+		const { promise, resolve } = Promise.withResolvers<R>();
+		this.finalResultPromise = promise;
+		this.resolveFinalResult = resolve;
 	}
 
 	push(event: T): void {

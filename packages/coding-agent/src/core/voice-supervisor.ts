@@ -1,3 +1,4 @@
+import { logger, ptree } from "@oh-my-pi/pi-utils";
 import {
 	RealtimeAgent,
 	RealtimeSession,
@@ -6,10 +7,8 @@ import {
 	type TransportLayerAudio,
 	tool,
 } from "@openai/agents/realtime";
-import type { Subprocess } from "bun";
 import type { ReadableStreamDefaultReader as WebReadableStreamDefaultReader } from "stream/web";
 import { z } from "zod";
-import { logger } from "./logger";
 import type { ModelRegistry } from "./model-registry";
 
 const DEFAULT_REALTIME_MODEL = process.env.OMP_VOICE_REALTIME_MODEL ?? "gpt-realtime";
@@ -372,9 +371,9 @@ function rms16le(buffer: Uint8Array): number {
 
 export class VoiceSupervisor {
 	private session: RealtimeSession | undefined = undefined;
-	private captureProcess: Subprocess | undefined = undefined;
+	private captureProcess: ptree.ChildProcess | undefined = undefined;
 	private captureReader: WebReadableStreamDefaultReader<Uint8Array> | undefined = undefined;
-	private playbackProcess: Subprocess | undefined = undefined;
+	private playbackProcess: ptree.ChildProcess | undefined = undefined;
 	private playbackWriter:
 		| {
 				write: (chunk: Uint8Array) => Promise<void>;
@@ -744,15 +743,11 @@ export class VoiceSupervisor {
 
 		const { command, env: captureEnv } = captureResult;
 		logger.debug("voice-supervisor: starting mic capture", { command, env: captureEnv });
-		const proc = Bun.spawn(command, {
-			stdin: "ignore",
-			stdout: "pipe",
-			stderr: "pipe",
+		const proc = ptree.cspawn(command, {
 			env: captureEnv ? { ...process.env, ...captureEnv } : undefined,
 		});
 		this.captureProcess = proc;
-
-		const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
+		const reader = proc.stdout.getReader();
 		this.captureReader = reader;
 
 		(async () => {
@@ -812,7 +807,7 @@ export class VoiceSupervisor {
 		}
 		if (this.captureProcess) {
 			try {
-				this.captureProcess.kill();
+				this.captureProcess.kill("SIGINT");
 			} catch {
 				// ignore
 			}
@@ -829,14 +824,10 @@ export class VoiceSupervisor {
 		}
 
 		logger.debug("voice-supervisor: starting audio playback", { command });
-		const proc = Bun.spawn(command, {
+		const proc = ptree.cspawn(command, {
 			stdin: "pipe",
-			stdout: "ignore",
-			stderr: "pipe",
 		});
 		const startedAt = Date.now();
-		const stderrBuffer = { text: "" };
-		this.readStderr(proc.stderr, stderrBuffer);
 
 		this.playbackProcess = proc;
 		const stdin = proc.stdin;
@@ -876,17 +867,18 @@ export class VoiceSupervisor {
 		}
 
 		proc.exited
-			.then((code) => {
+			.then(() => {
+				const code = proc.exitCode;
 				if (this.playbackProcess === proc) {
 					this.playbackProcess = undefined;
 					this.playbackWriter = undefined;
 				}
-				const trimmed = stderrBuffer.text.trim();
+				const trimmed = proc.peekStderr().trim();
 				if (trimmed) {
 					logger.debug("voice-supervisor: playback stderr", { stderr: trimmed });
 				}
 				const elapsed = Date.now() - startedAt;
-				if (code !== 0 && elapsed < 2000 && this.active) {
+				if (code !== 0 && elapsed < 2000 && this.active && code !== null) {
 					this.maybeWarnPlaybackFailure(trimmed || `exit code ${code}`);
 				}
 			})
@@ -913,25 +905,6 @@ export class VoiceSupervisor {
 		}
 		this.playbackProcess = undefined;
 		this.playbackWriter = undefined;
-	}
-
-	private readStderr(stderr: Subprocess["stderr"], buffer: { text: string }): void {
-		if (!stderr || typeof stderr === "number") return;
-		const reader = (stderr as ReadableStream<Uint8Array>).getReader();
-		const decoder = new TextDecoder();
-		(async () => {
-			while (true) {
-				const { value, done } = await reader.read();
-				if (done || !value) break;
-				buffer.text += decoder.decode(value, { stream: true });
-				if (buffer.text.length > 4000) {
-					buffer.text = buffer.text.slice(0, 4000);
-					break;
-				}
-			}
-		})().catch(() => {
-			// ignore
-		});
 	}
 
 	private maybeWarnPlaybackFailure(message: string): void {

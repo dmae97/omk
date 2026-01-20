@@ -6,8 +6,8 @@
  * injected as a system reminder, and the request is retried.
  */
 
+import { logger } from "@oh-my-pi/pi-utils";
 import type { Rule } from "../capability/rule";
-import { logger } from "./logger";
 import type { TtsrSettings } from "./settings-manager";
 
 interface TtsrEntry {

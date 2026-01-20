@@ -158,9 +158,7 @@ export async function loadPage(url: string, options: LoadPageOptions = {}): Prom
 				}
 			}
 
-			const decoder = new TextDecoder();
-			const content = decoder.decode(Buffer.concat(chunks));
-
+			const content = Buffer.concat(chunks).toString("utf-8");
 			if (isBotBlocked(response.status, content) && attempt < USER_AGENTS.length - 1) {
 				continue;
 			}

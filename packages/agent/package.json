@@ -14,7 +14,8 @@
 	},
 	"dependencies": {
 		"@oh-my-pi/pi-ai": "workspace:*",
-		"@oh-my-pi/pi-tui": "workspace:*"
+		"@oh-my-pi/pi-tui": "workspace:*",
+		"@oh-my-pi/pi-utils": "workspace:*"
 	},
 	"keywords": [
 		"ai",
@@ -34,6 +35,7 @@
 		"bun": ">=1.0.0"
 	},
 	"devDependencies": {
+		"@sinclair/typebox": "^0.34.46",
 		"@types/node": "^24.3.0",
 		"vitest": "^3.2.4"
 	}

@@ -79,33 +79,33 @@ export interface Logger {
  *
  * @example
  * ```typescript
- * import { logger } from "../core/logger";
+ * import { logger } from "@oh-my-pi/pi-utils";
  *
  * logger.error("MCP request failed", { url, method });
  * logger.warn("Theme file invalid, using fallback", { path });
  * logger.debug("LSP fallback triggered", { reason });
  * ```
  */
-export const logger: Logger = {
-	error(message: string, context?: Record<string, unknown>): void {
-		try {
-			winstonLogger.error(message, context);
-		} catch {
-			// Silently ignore logging failures
-		}
-	},
-	warn(message: string, context?: Record<string, unknown>): void {
-		try {
-			winstonLogger.warn(message, context);
-		} catch {
-			// Silently ignore logging failures
-		}
-	},
-	debug(message: string, context?: Record<string, unknown>): void {
-		try {
-			winstonLogger.debug(message, context);
-		} catch {
-			// Silently ignore logging failures
-		}
-	},
-};
+export function error(message: string, context?: Record<string, unknown>): void {
+	try {
+		winstonLogger.error(message, context);
+	} catch {
+		// Silently ignore logging failures
+	}
+}
+
+export function warn(message: string, context?: Record<string, unknown>): void {
+	try {
+		winstonLogger.warn(message, context);
+	} catch {
+		// Silently ignore logging failures
+	}
+}
+
+export function debug(message: string, context?: Record<string, unknown>): void {
+	try {
+		winstonLogger.debug(message, context);
+	} catch {
+		// Silently ignore logging failures
+	}
+}

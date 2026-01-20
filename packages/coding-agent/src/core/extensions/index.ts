@@ -110,10 +110,4 @@ export {
 	isReadToolResult,
 	isWriteToolResult,
 } from "./types";
-export {
-	ExtensionToolWrapper,
-	RegisteredToolAdapter,
-	wrapRegisteredTool,
-	wrapRegisteredTools,
-	wrapToolWithExtensions,
-} from "./wrapper";
+export { ExtensionToolWrapper, RegisteredToolAdapter, wrapRegisteredTool, wrapRegisteredTools } from "./wrapper";

@@ -4,11 +4,11 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { logger } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { getAgentDbPath, getAgentDir, getBinDir } from "./config";
 import { AgentStorage } from "./core/agent-storage";
 import type { AuthCredential } from "./core/auth-storage";
-import { logger } from "./core/logger";
 
 /**
  * Migrate legacy oauth.json and settings.json apiKeys to agent.db.

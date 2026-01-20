@@ -16,13 +16,13 @@ import {
 	Text,
 	TUI,
 } from "@oh-my-pi/pi-tui";
+import { logger, postmortem } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import type { AgentSession, AgentSessionEvent } from "../../core/agent-session";
 import type { ExtensionUIContext } from "../../core/extensions/index";
 import type { CompactOptions } from "../../core/extensions/types";
 import { HistoryStorage } from "../../core/history-storage";
 import { KeybindingsManager } from "../../core/keybindings";
-import { logger } from "../../core/logger";
 import type { SessionContext, SessionManager } from "../../core/session-manager";
 import { getRecentSessions } from "../../core/session-manager";
 import type { SettingsManager } from "../../core/settings-manager";
@@ -30,7 +30,6 @@ import { loadSlashCommands } from "../../core/slash-commands";
 import { setTerminalTitle } from "../../core/title-generator";
 import { getArtifactsDir } from "../../core/tools/task/artifacts";
 import { VoiceSupervisor } from "../../core/voice-supervisor";
-import { registerAsyncCleanup } from "../cleanup";
 import type { AssistantMessageComponent } from "./components/assistant-message";
 import type { BashExecutionComponent } from "./components/bash-execution";
 import { CustomEditor } from "./components/custom-editor";
@@ -268,7 +267,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.keybindings = await KeybindingsManager.create();
 
 		// Register session manager flush for signal handlers (SIGINT, SIGTERM, SIGHUP)
-		this.cleanupUnsubscribe = registerAsyncCleanup(() => this.sessionManager.flush());
+		this.cleanupUnsubscribe = postmortem.register("session-manager-flush", () => this.sessionManager.flush());
 
 		// Load and convert file commands to SlashCommand format (async)
 		const fileCommands = await loadSlashCommands({ cwd: process.cwd() });
@@ -394,12 +393,12 @@ export class InteractiveMode implements InteractiveModeContext {
 	}
 
 	async getUserInput(): Promise<{ text: string; images?: ImageContent[] }> {
-		return new Promise((resolve) => {
-			this.onInputCallback = (input) => {
-				this.onInputCallback = undefined;
-				resolve(input);
-			};
-		});
+		const { promise, resolve } = Promise.withResolvers<{ text: string; images?: ImageContent[] }>();
+		this.onInputCallback = (input) => {
+			this.onInputCallback = undefined;
+			resolve(input);
+		};
+		return promise;
 	}
 
 	updateEditorBorderColor(): void {
@@ -664,8 +663,8 @@ export class InteractiveMode implements InteractiveModeContext {
 		return this.commandController.handleClearCommand();
 	}
 
-	handleDebugCommand(): void {
-		this.commandController.handleDebugCommand();
+	handleDebugCommand(): Promise<void> {
+		return this.commandController.handleDebugCommand();
 	}
 
 	handleArminSaysHi(): void {

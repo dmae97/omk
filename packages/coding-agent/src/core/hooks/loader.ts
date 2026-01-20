@@ -3,13 +3,13 @@
  */
 
 import * as path from "node:path";
+import { logger } from "@oh-my-pi/pi-utils";
 import * as typebox from "@sinclair/typebox";
 import { hookCapability } from "../../capability/hook";
 import type { Hook } from "../../discovery";
 import { loadCapability } from "../../discovery";
 import { expandPath } from "../../discovery/helpers";
 import * as piCodingAgent from "../../index";
-import { logger } from "../logger";
 import type { HookMessage } from "../messages";
 import type { SessionManager } from "../session-manager";
 import { execCommand } from "./runner";

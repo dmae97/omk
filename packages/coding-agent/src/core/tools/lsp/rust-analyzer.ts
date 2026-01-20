@@ -1,6 +1,6 @@
 import { sendNotification, sendRequest } from "./client";
 import type { Diagnostic, ExpandMacroResult, LspClient, RelatedTest, Runnable, WorkspaceEdit } from "./types";
-import { fileToUri, sleep } from "./utils";
+import { fileToUri } from "./utils";
 
 /**
  * Run flycheck (cargo check) and collect diagnostics.
@@ -39,7 +39,7 @@ export async function flycheck(client: LspClient, file?: string): Promise<Diagno
 	let stableIterations = 0;
 
 	for (let i = 0; i < maxPollIterations; i++) {
-		await sleep(pollIntervalMs);
+		await Bun.sleep(pollIntervalMs);
 
 		const currentDiagnosticsVersion = client.diagnosticsVersion;
 		const currentDiagnosticsCount = countDiagnostics(client.diagnostics);

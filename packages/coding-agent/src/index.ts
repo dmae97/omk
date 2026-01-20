@@ -5,6 +5,8 @@
 export { StringEnum } from "@oh-my-pi/pi-ai";
 // Re-export TUI components for custom tool rendering
 export { Container, Markdown, Spacer, Text } from "@oh-my-pi/pi-tui";
+// Logging
+export { logger } from "@oh-my-pi/pi-utils";
 export { getAgentDir, VERSION } from "./config";
 export {
 	AgentSession,
@@ -49,7 +51,6 @@ export type {
 	CustomCommandsLoadResult,
 	LoadedCustomCommand,
 } from "./core/custom-commands/types";
-// Custom tools
 export type {
 	AgentToolUpdateCallback,
 	CustomTool,
@@ -63,8 +64,8 @@ export type {
 	LoadedCustomTool,
 	RenderResultOptions,
 } from "./core/custom-tools/index";
+// Custom tools
 export { CustomToolLoader, discoverAndLoadCustomTools, loadCustomTools } from "./core/custom-tools/index";
-// Extension types and utilities
 export type {
 	AppAction,
 	Extension,
@@ -95,6 +96,7 @@ export type {
 	UserBashEvent,
 	UserBashEventResult,
 } from "./core/extensions/index";
+// Extension types and utilities
 export {
 	discoverAndLoadExtensions,
 	ExtensionRunner,
@@ -110,8 +112,6 @@ export {
 // Hook system types (legacy re-export)
 export type * from "./core/hooks/index";
 export { formatKeyHint, formatKeyHints } from "./core/keybindings";
-// Logging
-export { type Logger, logger } from "./core/logger";
 export { convertToLlm } from "./core/messages";
 export { ModelRegistry } from "./core/model-registry";
 // Prompt templates

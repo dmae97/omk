@@ -1,5 +1,5 @@
 import * as fs from "node:fs";
-import { logger } from "../../logger";
+import { logger } from "@oh-my-pi/pi-utils";
 import { applyWorkspaceEdit } from "./edits";
 import { getLspmuxCommand, isLspmuxSupported } from "./lspmux";
 import type {
@@ -711,63 +711,63 @@ export async function sendRequest(
 
 	client.lastActivity = Date.now();
 
-	return new Promise((resolve, reject) => {
-		let timeout: ReturnType<typeof setTimeout> | undefined;
-		const cleanup = () => {
-			if (signal) {
-				signal.removeEventListener("abort", abortHandler);
-			}
-		};
-		const abortHandler = () => {
-			if (client.pendingRequests.has(id)) {
-				client.pendingRequests.delete(id);
-			}
-			if (timeout) clearTimeout(timeout);
-			cleanup();
-			const reason = signal?.reason instanceof Error ? signal.reason : new Error("Operation aborted");
-			reject(reason);
-		};
-
-		// Set timeout
-		timeout = setTimeout(() => {
-			if (client.pendingRequests.has(id)) {
-				client.pendingRequests.delete(id);
-				const err = new Error(`LSP request ${method} timed out`);
-				cleanup();
-				reject(err);
-			}
-		}, timeoutMs);
+	const { promise, resolve, reject } = Promise.withResolvers<unknown>();
+	let timeout: ReturnType<typeof setTimeout> | undefined;
+	const cleanup = () => {
 		if (signal) {
-			signal.addEventListener("abort", abortHandler, { once: true });
-			if (signal.aborted) {
-				abortHandler();
-				return;
-			}
+			signal.removeEventListener("abort", abortHandler);
 		}
-
-		// Register pending request with timeout wrapper
-		client.pendingRequests.set(id, {
-			resolve: (result) => {
-				if (timeout) clearTimeout(timeout);
-				cleanup();
-				resolve(result);
-			},
-			reject: (err) => {
-				if (timeout) clearTimeout(timeout);
-				cleanup();
-				reject(err);
-			},
-			method,
-		});
-
-		// Write request
-		writeMessage(client.process.stdin as import("bun").FileSink, request).catch((err) => {
-			if (timeout) clearTimeout(timeout);
+	};
+	const abortHandler = () => {
+		if (client.pendingRequests.has(id)) {
 			client.pendingRequests.delete(id);
+		}
+		if (timeout) clearTimeout(timeout);
+		cleanup();
+		const reason = signal?.reason instanceof Error ? signal.reason : new Error("Operation aborted");
+		reject(reason);
+	};
+
+	// Set timeout
+	timeout = setTimeout(() => {
+		if (client.pendingRequests.has(id)) {
+			client.pendingRequests.delete(id);
+			const err = new Error(`LSP request ${method} timed out`);
 			cleanup();
 			reject(err);
-		});
+		}
+	}, timeoutMs);
+	if (signal) {
+		signal.addEventListener("abort", abortHandler, { once: true });
+		if (signal.aborted) {
+			abortHandler();
+			return;
+		}
+	}
+
+	// Register pending request with timeout wrapper
+	client.pendingRequests.set(id, {
+		resolve: (result) => {
+			if (timeout) clearTimeout(timeout);
+			cleanup();
+			resolve(result);
+		},
+		reject: (err) => {
+			if (timeout) clearTimeout(timeout);
+			cleanup();
+			reject(err);
+		},
+		method,
 	});
+
+	// Write request
+	writeMessage(client.process.stdin as import("bun").FileSink, request).catch((err) => {
+		if (timeout) clearTimeout(timeout);
+		client.pendingRequests.delete(id);
+		cleanup();
+		reject(err);
+	});
+	return promise;
 }
 
 /**

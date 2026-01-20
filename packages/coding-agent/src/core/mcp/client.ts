@@ -36,19 +36,19 @@ const CLIENT_INFO = {
 
 /** Wrap a promise with a timeout */
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
-	return new Promise((resolve, reject) => {
-		const timer = setTimeout(() => reject(new Error(message)), ms);
-		promise.then(
-			(value) => {
-				clearTimeout(timer);
-				resolve(value);
-			},
-			(error) => {
-				clearTimeout(timer);
-				reject(error);
-			},
-		);
-	});
+	const { promise: wrapped, resolve, reject } = Promise.withResolvers<T>();
+	const timer = setTimeout(() => reject(new Error(message)), ms);
+	promise.then(
+		(value) => {
+			clearTimeout(timer);
+			resolve(value);
+		},
+		(error) => {
+			clearTimeout(timer);
+			reject(error);
+		},
+	);
+	return wrapped;
 }
 
 /**

@@ -1,6 +1,6 @@
+import { logger } from "@oh-my-pi/pi-utils";
 import { Agent, run, setDefaultOpenAIKey } from "@openai/agents";
 import { z } from "zod";
-import { logger } from "./logger";
 import type { ModelRegistry } from "./model-registry";
 
 const DEFAULT_CONTROLLER_MODEL = process.env.OMP_VOICE_CONTROLLER_MODEL ?? "gpt-4o-mini";

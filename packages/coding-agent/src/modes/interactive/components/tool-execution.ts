@@ -10,7 +10,7 @@ import {
 	Text,
 	type TUI,
 } from "@oh-my-pi/pi-tui";
-import { sanitizeText } from "../../../core/streaming-output";
+import { sanitizeText } from "@oh-my-pi/pi-utils";
 import { BASH_DEFAULT_PREVIEW_LINES } from "../../../core/tools/bash";
 import { computeEditDiff, computePatchDiff, type EditDiffError, type EditDiffResult } from "../../../core/tools/patch";
 import { PYTHON_DEFAULT_PREVIEW_LINES } from "../../../core/tools/python";

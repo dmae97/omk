@@ -1,8 +1,8 @@
 import { join, resolve } from "node:path";
+import { logger } from "@oh-my-pi/pi-utils";
 import Handlebars from "handlebars";
 import { CONFIG_DIR_NAME, getPromptsDir } from "../config";
 import { parseFrontmatter } from "./frontmatter";
-import { logger } from "./logger";
 
 /**
  * Represents a prompt template loaded from a markdown file
@@ -371,14 +371,6 @@ async function loadTemplatesFromDir(
 	subdir: string = "",
 ): Promise<PromptTemplate[]> {
 	const templates: PromptTemplate[] = [];
-
-	try {
-		const stat = await Bun.file(`${dir}/.`).exists();
-		if (!stat) return templates;
-	} catch {
-		return templates;
-	}
-
 	try {
 		const glob = new Bun.Glob("**/*");
 		const entries = [];
@@ -440,6 +432,9 @@ async function loadTemplatesFromDir(
 			}
 		}
 	} catch (error) {
+		if (!Bun.file(dir).exists()) {
+			return [];
+		}
 		logger.warn("Failed to scan prompt templates directory", { dir, error: String(error) });
 	}
 

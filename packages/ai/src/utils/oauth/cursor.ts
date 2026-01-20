@@ -10,10 +10,6 @@ const POLL_BASE_DELAY = 1000;
 const POLL_MAX_DELAY = 10000;
 const POLL_BACKOFF_MULTIPLIER = 1.2;
 
-function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 export interface CursorAuthParams {
 	verifier: string;
 	challenge: string;
@@ -45,7 +41,7 @@ export async function pollCursorAuth(
 	let consecutiveErrors = 0;
 
 	for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
-		await sleep(delay);
+		await Bun.sleep(delay);
 
 		try {
 			const response = await fetch(`${CURSOR_POLL_URL}?uuid=${uuid}&verifier=${verifier}`);

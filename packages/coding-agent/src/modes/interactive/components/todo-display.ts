@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import { Text } from "@oh-my-pi/pi-tui";
-import { logger } from "../../../core/logger";
+import { logger } from "@oh-my-pi/pi-utils";
 import { getArtifactsDir } from "../../../core/tools/task/artifacts";
 import { theme } from "../theme/theme";
 import type { TodoItem } from "../types";

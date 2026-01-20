@@ -1,10 +1,10 @@
 import nodePath from "node:path";
 import type { AgentTool, AgentToolResult } from "@oh-my-pi/pi-agent-core";
 import { type Component, Text } from "@oh-my-pi/pi-tui";
+import { untilAborted } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import { getLanguageFromPath, type Theme } from "../../modes/interactive/theme/theme";
 import type { RenderResultOptions } from "../custom-tools/types";
-import { untilAborted } from "../utils";
 import type { ToolSession } from "./index";
 import { resolveToCwd } from "./path-utils";
 import {

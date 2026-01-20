@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { createTempDir } from "@oh-my-pi/pi-utils";
 import { verifyExpectedFiles } from "../verify";
 
 async function createTempDirs(): Promise<{
@@ -10,7 +10,8 @@ async function createTempDirs(): Promise<{
 	actualDir: string;
 	cleanup: () => Promise<void>;
 }> {
-	const root = await mkdtemp(join(tmpdir(), "reach-benchmark-verify-"));
+	const tempDir = await createTempDir("@reach-benchmark-verify-");
+	const root = tempDir.path;
 	const expectedDir = join(root, "expected");
 	const actualDir = join(root, "actual");
 	await mkdir(expectedDir, { recursive: true });
@@ -20,7 +21,7 @@ async function createTempDirs(): Promise<{
 		expectedDir,
 		actualDir,
 		cleanup: async () => {
-			await rm(root, { recursive: true, force: true });
+			await tempDir.remove();
 		},
 	};
 }

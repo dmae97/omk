@@ -5,9 +5,9 @@
  * Handles tool loading and lifecycle.
  */
 
+import { logger } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
 import type { CustomTool } from "../custom-tools/types";
-import { logger } from "../logger";
 import { connectToServer, disconnectServer, listTools } from "./client";
 import { loadAllMCPConfigs, validateServerConfig } from "./config";
 import type { MCPToolDetails } from "./tool-bridge";
@@ -47,7 +47,7 @@ function trackPromise<T>(promise: Promise<T>): TrackedPromise<T> {
 }
 
 function delay(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
+	return Bun.sleep(ms);
 }
 
 /** Result of loading MCP tools */

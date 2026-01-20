@@ -1,5 +1,6 @@
 import { getOAuthProviders } from "@oh-my-pi/pi-ai";
 import { Container, getEditorKeybindings, Input, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
+import { $ } from "bun";
 import { theme } from "../theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 
@@ -83,9 +84,21 @@ export class LoginDialogComponent extends Container {
 			this.contentContainer.addChild(new Text(theme.fg("warning", instructions), 1, 0));
 		}
 
-		// Try to open browser using Bun.spawn
-		const openCmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-		Bun.spawn([openCmd, url], { stdout: "ignore", stderr: "ignore" });
+		// Try to open browser using $
+		const openArgs =
+			process.platform === "darwin"
+				? ["open", url]
+				: process.platform === "win32"
+					? ["cmd", "/c", "start", "", url]
+					: ["xdg-open", url];
+		const [openCmd, ...openRest] = openArgs;
+		void (async () => {
+			try {
+				await $`${openCmd} ${openRest}`.quiet().nothrow();
+			} catch {
+				// Best-effort: browser opening is non-critical
+			}
+		})();
 
 		this.tui.requestRender();
 	}
@@ -100,10 +113,10 @@ export class LoginDialogComponent extends Container {
 		this.contentContainer.addChild(new Text(theme.fg("dim", "(Escape to cancel)"), 1, 0));
 		this.tui.requestRender();
 
-		return new Promise((resolve, reject) => {
-			this.inputResolver = resolve;
-			this.inputRejecter = reject;
-		});
+		const { promise, resolve, reject } = Promise.withResolvers<string>();
+		this.inputResolver = resolve;
+		this.inputRejecter = reject;
+		return promise;
 	}
 
 	/**
@@ -122,10 +135,10 @@ export class LoginDialogComponent extends Container {
 		this.input.setValue("");
 		this.tui.requestRender();
 
-		return new Promise((resolve, reject) => {
-			this.inputResolver = resolve;
-			this.inputRejecter = reject;
-		});
+		const { promise, resolve, reject } = Promise.withResolvers<string>();
+		this.inputResolver = resolve;
+		this.inputRejecter = reject;
+		return promise;
 	}
 
 	/**

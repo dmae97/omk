@@ -1,5 +1,7 @@
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
+import { $ } from "bun";
 import { nanoid } from "nanoid";
 import { ensureTool } from "../../../utils/tools-manager";
 import { createRequestSignal } from "./types";
@@ -13,18 +15,17 @@ interface ExecResult {
 	exitCode: number;
 }
 
-type SpawnSyncOptions = NonNullable<Parameters<typeof Bun.spawnSync>[1]>;
-
-function exec(cmd: string, args: string[], options?: { timeout?: number; input?: string | Buffer }): ExecResult {
-	const stdin = (options?.input ?? "ignore") as SpawnSyncOptions["stdin"];
-	const result = Bun.spawnSync([cmd, ...args], {
-		stdin,
-		stdout: "pipe",
-		stderr: "pipe",
-	});
+async function exec(
+	cmd: string,
+	args: string[],
+	options?: { timeout?: number; input?: string | Buffer },
+): Promise<ExecResult> {
+	void options;
+	const result = await $`${cmd} ${args}`.quiet().nothrow();
+	const decoder = new TextDecoder();
 	return {
-		stdout: result.stdout?.toString() ?? "",
-		stderr: result.stderr?.toString() ?? "",
+		stdout: result.stdout ? decoder.decode(result.stdout) : "",
+		stderr: result.stderr ? decoder.decode(result.stderr) : "",
 		ok: result.exitCode === 0,
 		exitCode: result.exitCode ?? -1,
 	};
@@ -71,7 +72,7 @@ export async function convertWithMarkitdown(
 
 	try {
 		await Bun.write(tmpFile, content);
-		const result = exec(markitdown, [tmpFile], { timeout });
+		const result = await exec(markitdown, [tmpFile], { timeout });
 		if (!result.ok) {
 			const stderr = result.stderr.trim();
 			return {
@@ -83,7 +84,7 @@ export async function convertWithMarkitdown(
 		return { content: result.stdout, ok: true };
 	} finally {
 		try {
-			await Bun.$`rm ${tmpFile}`.quiet();
+			await rm(tmpFile, { force: true });
 		} catch {}
 	}
 }

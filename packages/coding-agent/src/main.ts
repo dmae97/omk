@@ -9,6 +9,7 @@ import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { type ImageContent, supportsXhigh } from "@oh-my-pi/pi-ai";
+import { postmortem } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { type Args, parseArgs, printHelp } from "./cli/args";
 import { parseConfigArgs, printConfigHelp, runConfigCommand } from "./cli/config-cli";
@@ -31,8 +32,7 @@ import { resolvePromptInput } from "./core/system-prompt";
 import { printTimings, time } from "./core/timings";
 import { initializeWithSettings } from "./discovery";
 import { runMigrations, showDeprecationWarnings } from "./migrations";
-import { runAsyncCleanup } from "./modes/cleanup";
-import { InteractiveMode, installTerminalCrashHandlers, runPrintMode, runRpcMode } from "./modes/index";
+import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index";
 import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme";
 import { getChangelogPath, getNewEntries, parseChangelog } from "./utils/changelog";
 
@@ -352,9 +352,9 @@ async function buildSessionOptions(
 
 	// Auto-discover SYSTEM.md if no CLI system prompt provided
 	const systemPromptSource = parsed.systemPrompt ?? discoverSystemPromptFile();
-	const resolvedSystemPrompt = resolvePromptInput(systemPromptSource, "system prompt");
+	const resolvedSystemPrompt = await resolvePromptInput(systemPromptSource, "system prompt");
 	const appendPromptSource = parsed.appendSystemPrompt ?? discoverAppendSystemPromptFile();
-	const resolvedAppendPrompt = resolvePromptInput(appendPromptSource, "append system prompt");
+	const resolvedAppendPrompt = await resolvePromptInput(appendPromptSource, "append system prompt");
 
 	if (sessionManager) {
 		options.sessionManager = sessionManager;
@@ -708,7 +708,6 @@ export async function main(args: string[]) {
 			writeStdout(chalk.dim(`Model scope: ${modelList} ${chalk.gray("(Ctrl+P to cycle)")}`));
 		}
 
-		installTerminalCrashHandlers();
 		printTimings();
 		await runInteractiveMode(
 			session,
@@ -734,10 +733,6 @@ export async function main(args: string[]) {
 		});
 		await session.dispose();
 		stopThemeWatcher();
-		await runAsyncCleanup();
-		if (process.stdout.writableLength > 0) {
-			await new Promise<void>((resolve) => process.stdout.once("drain", resolve));
-		}
-		process.exit(0);
+		await postmortem.quit(0);
 	}
 }

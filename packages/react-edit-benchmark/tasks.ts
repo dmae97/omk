@@ -83,8 +83,8 @@ export async function loadTasksFromDir(fixturesDir: string): Promise<EditTask[]>
 		const expectedDir = join(challengeDir, "expected");
 		const metadataPath = join(challengeDir, "metadata.json");
 
-		const promptExists = await Bun.file(promptPath).exists();
-		if (!promptExists) {
+		const promptFile = Bun.file(promptPath);
+		if (!(await promptFile.exists())) {
 			throw new Error(`Missing prompt.md for ${entry.name}`);
 		}
 
@@ -96,7 +96,7 @@ export async function loadTasksFromDir(fixturesDir: string): Promise<EditTask[]>
 			throw new Error(`Missing expected directory for ${entry.name}`);
 		}
 
-		const prompt = (await Bun.file(promptPath).text()).trim();
+		const prompt = (await promptFile.text()).trim();
 		const files = listFiles(inputDir);
 		const metadata = await loadMetadata(metadataPath);
 
@@ -231,11 +231,12 @@ export async function validateFixturesFromDir(fixturesPath: string): Promise<Fix
 }
 
 async function loadMetadata(metadataPath: string): Promise<TaskMetadata | undefined> {
-	const exists = await Bun.file(metadataPath).exists();
+	const metadataFile = Bun.file(metadataPath);
+	const exists = await metadataFile.exists();
 	if (!exists) {
 		return undefined;
 	}
-	const raw = JSON.parse(await Bun.file(metadataPath).text()) as Record<string, unknown>;
+	const raw = (await metadataFile.json()) as Record<string, unknown>;
 	return parseTaskMetadata(raw);
 }
 

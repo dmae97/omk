@@ -1,7 +1,8 @@
-import * as fs from "node:fs";
+import { mkdir, rm } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Loader, Markdown, Spacer, Text, visibleWidth } from "@oh-my-pi/pi-tui";
+import { $ } from "bun";
 import { nanoid } from "nanoid";
 import { getDebugLogPath } from "../../../config";
 import { loadCustomShare } from "../../../core/custom-share";
@@ -22,17 +23,20 @@ export class CommandController {
 	constructor(private readonly ctx: InteractiveModeContext) {}
 
 	openInBrowser(urlOrPath: string): void {
-		try {
-			const args =
-				process.platform === "darwin"
-					? ["open", urlOrPath]
-					: process.platform === "win32"
-						? ["cmd", "/c", "start", "", urlOrPath]
-						: ["xdg-open", urlOrPath];
-			Bun.spawn(args, { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
-		} catch {
-			// Best-effort: browser opening is non-critical
-		}
+		const args =
+			process.platform === "darwin"
+				? ["open", urlOrPath]
+				: process.platform === "win32"
+					? ["cmd", "/c", "start", "", urlOrPath]
+					: ["xdg-open", urlOrPath];
+		const [cmd, ...cmdArgs] = args;
+		void (async () => {
+			try {
+				await $`${cmd} ${cmdArgs}`.quiet().nothrow();
+			} catch {
+				// Best-effort: browser opening is non-critical
+			}
+		})();
 	}
 
 	async handleExportCommand(text: string): Promise<void> {
@@ -69,6 +73,13 @@ export class CommandController {
 
 	async handleShareCommand(): Promise<void> {
 		const tmpFile = path.join(os.tmpdir(), `${nanoid()}.html`);
+		const cleanupTempFile = async () => {
+			try {
+				await rm(tmpFile, { force: true });
+			} catch {
+				// Ignore cleanup errors
+			}
+		};
 		try {
 			await this.ctx.session.exportToHtml(tmpFile);
 		} catch (error: unknown) {
@@ -85,21 +96,17 @@ export class CommandController {
 				this.ctx.ui.setFocus(loader);
 				this.ctx.ui.requestRender();
 
-				const restoreEditor = () => {
+				const restoreEditor = async () => {
 					loader.dispose();
 					this.ctx.editorContainer.clear();
 					this.ctx.editorContainer.addChild(this.ctx.editor);
 					this.ctx.ui.setFocus(this.ctx.editor);
-					try {
-						fs.unlinkSync(tmpFile);
-					} catch {
-						// Ignore cleanup errors
-					}
+					await cleanupTempFile();
 				};
 
 				try {
 					const result = await customShare.fn(tmpFile);
-					restoreEditor();
+					await restoreEditor();
 
 					if (typeof result === "string") {
 						this.ctx.showStatus(`Share URL: ${result}`);
@@ -115,34 +122,26 @@ export class CommandController {
 					}
 					return;
 				} catch (err) {
-					restoreEditor();
+					await restoreEditor();
 					this.ctx.showError(`Custom share failed: ${err instanceof Error ? err.message : String(err)}`);
 					return;
 				}
 			}
 		} catch (err) {
-			try {
-				fs.unlinkSync(tmpFile);
-			} catch {
-				// Ignore cleanup errors
-			}
+			await cleanupTempFile();
 			this.ctx.showError(err instanceof Error ? err.message : String(err));
 			return;
 		}
 
 		try {
-			const authResult = Bun.spawnSync(["gh", "auth", "status"]);
+			const authResult = await $`gh auth status`.quiet().nothrow();
 			if (authResult.exitCode !== 0) {
-				try {
-					fs.unlinkSync(tmpFile);
-				} catch {}
+				await cleanupTempFile();
 				this.ctx.showError("GitHub CLI is not logged in. Run 'gh auth login' first.");
 				return;
 			}
 		} catch {
-			try {
-				fs.unlinkSync(tmpFile);
-			} catch {}
+			await cleanupTempFile();
 			this.ctx.showError("GitHub CLI (gh) is not installed. Install it from https://cli.github.com/");
 			return;
 		}
@@ -153,71 +152,33 @@ export class CommandController {
 		this.ctx.ui.setFocus(loader);
 		this.ctx.ui.requestRender();
 
-		const restoreEditor = () => {
+		const restoreEditor = async () => {
 			loader.dispose();
 			this.ctx.editorContainer.clear();
 			this.ctx.editorContainer.addChild(this.ctx.editor);
 			this.ctx.ui.setFocus(this.ctx.editor);
-			try {
-				fs.unlinkSync(tmpFile);
-			} catch {
-				// Ignore cleanup errors
-			}
+			await cleanupTempFile();
 		};
 
-		let proc: ReturnType<typeof Bun.spawn> | null = null;
-
 		loader.onAbort = () => {
-			proc?.kill();
-			restoreEditor();
+			void restoreEditor();
 			this.ctx.showStatus("Share cancelled");
 		};
 
 		try {
-			proc = Bun.spawn(["gh", "gist", "create", "--public=false", tmpFile], {
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-
-			const readStream = async (stream: ReadableStream<Uint8Array> | null): Promise<string> => {
-				if (!stream) return "";
-				const reader = stream.getReader();
-				const decoder = new TextDecoder();
-				let output = "";
-				try {
-					while (true) {
-						const { done, value } = await reader.read();
-						if (done) break;
-						output += decoder.decode(value, { stream: true });
-					}
-				} catch {
-					// Ignore read errors
-				} finally {
-					output += decoder.decode();
-					reader.releaseLock();
-				}
-				return output;
-			};
-
-			const [stdout, stderr, code] = await Promise.all([
-				readStream(proc.stdout as ReadableStream<Uint8Array> | null),
-				readStream(proc.stderr as ReadableStream<Uint8Array> | null),
-				proc.exited.catch(() => 1),
-			]);
-			const result = { stdout, stderr, code };
-
+			const result = await $`gh gist create --public=false ${tmpFile}`.quiet().nothrow();
 			if (loader.signal.aborted) return;
 
-			restoreEditor();
+			await restoreEditor();
 
-			if (result.code !== 0) {
-				const errorMsg = result.stderr?.trim() || "Unknown error";
+			if (result.exitCode !== 0) {
+				const errorMsg = result.stderr.toString("utf-8").trim() || "Unknown error";
 				this.ctx.showError(`Failed to create gist: ${errorMsg}`);
 				return;
 			}
 
-			const gistUrl = result.stdout?.trim();
-			const gistId = gistUrl?.split("/").pop();
+			const gistUrl = result.stdout.toString("utf-8").trim();
+			const gistId = gistUrl.split("/").pop();
 			if (!gistId) {
 				this.ctx.showError("Failed to parse gist ID from gh output");
 				return;
@@ -228,7 +189,7 @@ export class CommandController {
 			this.openInBrowser(previewUrl);
 		} catch (error: unknown) {
 			if (!loader.signal.aborted) {
-				restoreEditor();
+				await restoreEditor();
 				this.ctx.showError(`Failed to create gist: ${error instanceof Error ? error.message : "Unknown error"}`);
 			}
 		}
@@ -420,7 +381,7 @@ export class CommandController {
 		this.ctx.ui.requestRender();
 	}
 
-	handleDebugCommand(): void {
+	async handleDebugCommand(): Promise<void> {
 		const width = this.ctx.ui.terminal.columns;
 		const allLines = this.ctx.ui.render(width);
 
@@ -442,8 +403,13 @@ export class CommandController {
 			"",
 		].join("\n");
 
-		fs.mkdirSync(path.dirname(debugLogPath), { recursive: true });
-		fs.writeFileSync(debugLogPath, debugData);
+		try {
+			await mkdir(path.dirname(debugLogPath), { recursive: true });
+			await Bun.write(debugLogPath, debugData);
+		} catch (error) {
+			this.ctx.showError(`Failed to write debug log: ${error instanceof Error ? error.message : String(error)}`);
+			return;
+		}
 
 		this.ctx.chatContainer.addChild(new Spacer(1));
 		this.ctx.chatContainer.addChild(
@@ -519,7 +485,7 @@ export class CommandController {
 
 	async handleSkillCommand(skillPath: string, args: string): Promise<void> {
 		try {
-			const content = fs.readFileSync(skillPath, "utf-8");
+			const content = await Bun.file(skillPath).text();
 			const body = content.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
 			const metaLines = [`Skill: ${skillPath}`];
 			if (args) {

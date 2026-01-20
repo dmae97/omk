@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { createInterface } from "readline";
-import "./utils/migrate-env";
 import { CliAuthStorage } from "./storage";
+import "./utils/migrate-env";
 import { loginAnthropic } from "./utils/oauth/anthropic";
 import { loginGitHubCopilot } from "./utils/oauth/github-copilot";
 import { loginAntigravity } from "./utils/oauth/google-antigravity";
@@ -13,7 +13,9 @@ import type { OAuthCredentials, OAuthProvider } from "./utils/oauth/types";
 const PROVIDERS = getOAuthProviders();
 
 function prompt(rl: ReturnType<typeof createInterface>, question: string): Promise<string> {
-	return new Promise((resolve) => rl.question(question, resolve));
+	const { promise, resolve } = Promise.withResolvers<string>();
+	rl.question(question, resolve);
+	return promise;
 }
 
 async function login(provider: OAuthProvider): Promise<void> {

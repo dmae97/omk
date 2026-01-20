@@ -1,9 +1,9 @@
 import { Database } from "bun:sqlite";
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { logger } from "@oh-my-pi/pi-utils";
 import { getAgentDbPath } from "../config";
 import type { AuthCredential } from "./auth-storage";
-import { logger } from "./logger";
 import type { Settings } from "./settings-manager";
 
 /** Prepared SQLite statement type from bun:sqlite */

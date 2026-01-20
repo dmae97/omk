@@ -11,6 +11,7 @@
  * - Extension UI: Extension UI requests are emitted, client responds with extension_ui_response
  */
 
+import { readLines } from "@oh-my-pi/pi-utils";
 import { nanoid } from "nanoid";
 import type { AgentSession } from "../../core/agent-session";
 import type { ExtensionUIContext, ExtensionUIDialogOptions } from "../../core/extensions/index";
@@ -86,37 +87,37 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			if (opts?.signal?.aborted) return Promise.resolve(defaultValue);
 
 			const id = nanoid();
-			return new Promise((resolve, reject) => {
-				let timeoutId: ReturnType<typeof setTimeout> | undefined;
+			const { promise, resolve, reject } = Promise.withResolvers<T>();
+			let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-				const cleanup = () => {
-					if (timeoutId) clearTimeout(timeoutId);
-					opts?.signal?.removeEventListener("abort", onAbort);
-					this.pendingRequests.delete(id);
-				};
+			const cleanup = () => {
+				if (timeoutId) clearTimeout(timeoutId);
+				opts?.signal?.removeEventListener("abort", onAbort);
+				this.pendingRequests.delete(id);
+			};
 
-				const onAbort = () => {
+			const onAbort = () => {
+				cleanup();
+				resolve(defaultValue);
+			};
+			opts?.signal?.addEventListener("abort", onAbort, { once: true });
+
+			if (opts?.timeout !== undefined) {
+				timeoutId = setTimeout(() => {
 					cleanup();
 					resolve(defaultValue);
-				};
-				opts?.signal?.addEventListener("abort", onAbort, { once: true });
+				}, opts.timeout);
+			}
 
-				if (opts?.timeout !== undefined) {
-					timeoutId = setTimeout(() => {
-						cleanup();
-						resolve(defaultValue);
-					}, opts.timeout);
-				}
-
-				this.pendingRequests.set(id, {
-					resolve: (response: RpcExtensionUIResponse) => {
-						cleanup();
-						resolve(parseResponse(response));
-					},
-					reject,
-				});
-				this.output({ type: "extension_ui_request", id, ...request } as RpcExtensionUIRequest);
+			this.pendingRequests.set(id, {
+				resolve: (response: RpcExtensionUIResponse) => {
+					cleanup();
+					resolve(parseResponse(response));
+				},
+				reject,
 			});
+			this.output({ type: "extension_ui_request", id, ...request } as RpcExtensionUIRequest);
+			return promise;
 		}
 
 		select(title: string, options: string[], dialogOptions?: ExtensionUIDialogOptions): Promise<string | undefined> {
@@ -242,28 +243,28 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 
 		async editor(title: string, prefill?: string): Promise<string | undefined> {
 			const id = nanoid();
-			return new Promise((resolve, reject) => {
-				this.pendingRequests.set(id, {
-					resolve: (response: RpcExtensionUIResponse) => {
-						this.pendingRequests.delete(id);
-						if ("cancelled" in response && response.cancelled) {
-							resolve(undefined);
-						} else if ("value" in response) {
-							resolve(response.value);
-						} else {
-							resolve(undefined);
-						}
-					},
-					reject,
-				});
-				this.output({
-					type: "extension_ui_request",
-					id,
-					method: "editor",
-					title,
-					prefill,
-				} as RpcExtensionUIRequest);
+			const { promise, resolve, reject } = Promise.withResolvers<string | undefined>();
+			this.pendingRequests.set(id, {
+				resolve: (response: RpcExtensionUIResponse) => {
+					this.pendingRequests.delete(id);
+					if ("cancelled" in response && response.cancelled) {
+						resolve(undefined);
+					} else if ("value" in response) {
+						resolve(response.value);
+					} else {
+						resolve(undefined);
+					}
+				},
+				reject,
 			});
+			this.output({
+				type: "extension_ui_request",
+				id,
+				method: "editor",
+				title,
+				prefill,
+			} as RpcExtensionUIRequest);
+			return promise;
 		}
 
 		get theme(): Theme {
@@ -620,40 +621,31 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 	}
 
 	// Listen for JSON input using Bun's stdin
-	const decoder = new TextDecoder();
-	let buffer = "";
+	for await (const line of readLines(Bun.stdin.stream())) {
+		if (!line.trim()) continue;
 
-	for await (const chunk of Bun.stdin.stream()) {
-		buffer += decoder.decode(chunk, { stream: true });
-		const lines = buffer.split("\n");
-		buffer = lines.pop() || "";
+		try {
+			const parsed = JSON.parse(line);
 
-		for (const line of lines) {
-			if (!line.trim()) continue;
-
-			try {
-				const parsed = JSON.parse(line);
-
-				// Handle extension UI responses
-				if (parsed.type === "extension_ui_response") {
-					const response = parsed as RpcExtensionUIResponse;
-					const pending = pendingExtensionRequests.get(response.id);
-					if (pending) {
-						pending.resolve(response);
-					}
-					continue;
+			// Handle extension UI responses
+			if (parsed.type === "extension_ui_response") {
+				const response = parsed as RpcExtensionUIResponse;
+				const pending = pendingExtensionRequests.get(response.id);
+				if (pending) {
+					pending.resolve(response);
 				}
-
-				// Handle regular commands
-				const command = parsed as RpcCommand;
-				const response = await handleCommand(command);
-				output(response);
-
-				// Check for deferred shutdown request (idle between commands)
-				await checkShutdownRequested();
-			} catch (e: any) {
-				output(error(undefined, "parse", `Failed to parse command: ${e.message}`));
+				continue;
 			}
+
+			// Handle regular commands
+			const command = parsed as RpcCommand;
+			const response = await handleCommand(command);
+			output(response);
+
+			// Check for deferred shutdown request (idle between commands)
+			await checkShutdownRequested();
+		} catch (e: any) {
+			output(error(undefined, "parse", `Failed to parse command: ${e.message}`));
 		}
 	}
 

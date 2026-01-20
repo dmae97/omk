@@ -27,11 +27,6 @@ describe("StdinBuffer", () => {
 		buffer.process(data);
 	}
 
-	// Helper to wait for async operations
-	async function wait(ms: number): Promise<void> {
-		return new Promise((resolve) => setTimeout(resolve, ms));
-	}
-
 	describe("Regular Characters", () => {
 		it("should pass through regular characters immediately", () => {
 			processInput("a");
@@ -128,7 +123,7 @@ describe("StdinBuffer", () => {
 			expect(emittedSequences).toEqual([]);
 
 			// Wait for timeout
-			await wait(15);
+			await Bun.sleep(15);
 
 			expect(emittedSequences).toEqual(["\x1b[<35"]);
 		});
@@ -273,7 +268,7 @@ describe("StdinBuffer", () => {
 			expect(emittedSequences).toEqual([]);
 
 			// After timeout, should emit
-			await wait(15);
+			await Bun.sleep(15);
 			expect(emittedSequences).toEqual(["\x1b"]);
 		});
 
@@ -315,7 +310,7 @@ describe("StdinBuffer", () => {
 			expect(emittedSequences).toEqual([]);
 
 			// Wait for timeout to flush
-			await wait(15);
+			await Bun.sleep(15);
 
 			expect(emittedSequences).toEqual(["\x1b[<35"]);
 		});
@@ -412,7 +407,7 @@ describe("StdinBuffer", () => {
 			buffer.destroy();
 
 			// Wait longer than timeout
-			await wait(15);
+			await Bun.sleep(15);
 
 			// Should not have emitted anything
 			expect(emittedSequences).toEqual([]);

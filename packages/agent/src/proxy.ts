@@ -14,6 +14,7 @@ import {
 	type ToolCall,
 } from "@oh-my-pi/pi-ai";
 import { parseStreamingJson } from "@oh-my-pi/pi-ai/src/utils/json-parse";
+import { readSseEvents } from "@oh-my-pi/pi-utils";
 
 // Create stream class matching ProxyMessageEventStream
 class ProxyMessageEventStream extends EventStream<AssistantMessageEvent, AssistantMessage> {
@@ -148,33 +149,17 @@ export function streamProxy(model: Model<any>, context: Context, options: ProxyS
 				throw new Error(errorMessage);
 			}
 
-			reader = response.body!.getReader() as ReadableStreamDefaultReader<Uint8Array>;
-			const decoder = new TextDecoder();
-			let buffer = "";
-
-			while (true) {
-				const { done, value } = await reader!.read();
-				if (done) break;
-
+			for await (const event of readSseEvents(response.body!)) {
 				if (options.signal?.aborted) {
 					throw new Error("Request aborted by user");
 				}
 
-				buffer += decoder.decode(value, { stream: true });
-				const lines = buffer.split("\n");
-				buffer = lines.pop() || "";
-
-				for (const line of lines) {
-					if (line.startsWith("data: ")) {
-						const data = line.slice(6).trim();
-						if (data) {
-							const proxyEvent = JSON.parse(data) as ProxyAssistantMessageEvent;
-							const event = processProxyEvent(proxyEvent, partial);
-							if (event) {
-								stream.push(event);
-							}
-						}
-					}
+				const data = event.data?.trim();
+				if (!data || data === "[DONE]") continue;
+				const proxyEvent = JSON.parse(data) as ProxyAssistantMessageEvent;
+				const parsedEvent = processProxyEvent(proxyEvent, partial);
+				if (parsedEvent) {
+					stream.push(parsedEvent);
 				}
 			}
 

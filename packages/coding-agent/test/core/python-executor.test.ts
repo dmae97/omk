@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
 import { rmSync } from "node:fs";
+import { createTempDirSync } from "@oh-my-pi/pi-utils";
 import {
 	disposeAllKernelSessions,
 	executePythonWithKernel,
@@ -152,6 +153,7 @@ describe("warmPythonEnvironment", () => {
 	it("caches prelude docs on warmup", async () => {
 		const previousSkip = process.env.OMP_PYTHON_SKIP_CHECK;
 		process.env.OMP_PYTHON_SKIP_CHECK = "1";
+		using tempDir = createTempDirSync("@python-executor-");
 		const docs: PreludeHelper[] = [
 			{
 				name: "read",
@@ -168,7 +170,7 @@ describe("warmPythonEnvironment", () => {
 		};
 		const startSpy = vi.spyOn(PythonKernel, "start").mockResolvedValue(kernel as unknown as PythonKernel);
 
-		const result = await warmPythonEnvironment("/tmp/test", "session-1");
+		const result = await warmPythonEnvironment(tempDir.path, "session-1");
 
 		expect(result.ok).toBe(true);
 		expect(result.docs).toEqual(docs);

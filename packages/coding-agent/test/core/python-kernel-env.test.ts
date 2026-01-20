@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { createTempDirSync } from "@oh-my-pi/pi-utils";
 import { PythonKernel } from "../../src/core/python-kernel";
 import { PYTHON_PRELUDE } from "../../src/core/python-prelude";
 import * as shell from "../../src/utils/shell";
@@ -98,7 +99,8 @@ describe("PythonKernel.start (local gateway)", () => {
 			.spyOn(PythonKernel.prototype, "execute")
 			.mockResolvedValue({ status: "ok", cancelled: false, timedOut: false, stdinRequested: false });
 
-		const kernel = await PythonKernel.start({ cwd: "/tmp/project", env: { CUSTOM_VAR: "ok" } });
+		using tempDir = createTempDirSync("@python-kernel-env-");
+		const kernel = await PythonKernel.start({ cwd: tempDir.path, env: { CUSTOM_VAR: "ok" } });
 
 		const createCall = fetchSpy.mock.calls.find(([input, init]) => {
 			const url = typeof input === "string" ? input : input.toString();
@@ -117,7 +119,7 @@ describe("PythonKernel.start (local gateway)", () => {
 		expect(spawnEnv?.CUSTOM_VAR).toBe("ok");
 		expect(spawnEnv?.OPENAI_API_KEY).toBeUndefined();
 		expect(spawnEnv?.UNSAFE_TOKEN).toBeUndefined();
-		expect(spawnEnv?.PYTHONPATH).toBe("/tmp/project");
+		expect(spawnEnv?.PYTHONPATH).toBe(tempDir.path);
 
 		expect(executeSpy).toHaveBeenCalledWith(
 			PYTHON_PRELUDE,

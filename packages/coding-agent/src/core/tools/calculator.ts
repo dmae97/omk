@@ -1,12 +1,12 @@
 import type { AgentTool, AgentToolResult } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
+import { untilAborted } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import type { Theme } from "../../modes/interactive/theme/theme";
 import calculatorDescription from "../../prompts/tools/calculator.md" with { type: "text" };
 import type { RenderResultOptions } from "../custom-tools/types";
 import { renderPromptTemplate } from "../prompt-templates";
-import { untilAborted } from "../utils";
 import type { ToolSession } from "./index";
 import {
 	formatCount,

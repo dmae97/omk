@@ -4,6 +4,7 @@
  * Handles `omp setup <component>` to install dependencies for optional features.
  */
 
+import { $ } from "bun";
 import chalk from "chalk";
 import { APP_NAME } from "../config";
 import { theme } from "../modes/interactive/theme/theme";
@@ -89,10 +90,8 @@ async function checkPythonSetup(): Promise<PythonCheckResult> {
 
 	for (const pkg of PYTHON_PACKAGES) {
 		const moduleName = pkg === "jupyter_kernel_gateway" ? "kernel_gateway" : pkg;
-		const check = Bun.spawnSync(
-			[pythonPath, "-c", `import importlib.util; exit(0 if importlib.util.find_spec('${moduleName}') else 1)`],
-			{ stdin: "ignore", stdout: "pipe", stderr: "pipe" },
-		);
+		const script = `import importlib.util; raise SystemExit(0 if importlib.util.find_spec('${moduleName}') else 1)`;
+		const check = await $`${pythonPath} -c ${script}`.quiet().nothrow();
 		if (check.exitCode === 0) {
 			result.installedPackages.push(pkg);
 		} else {
@@ -107,24 +106,16 @@ async function checkPythonSetup(): Promise<PythonCheckResult> {
 /**
  * Install Python packages using uv (preferred) or pip.
  */
-function installPythonPackages(packages: string[], uvPath?: string, pipPath?: string): boolean {
+async function installPythonPackages(packages: string[], uvPath?: string, pipPath?: string): Promise<boolean> {
 	if (uvPath) {
 		console.log(chalk.dim(`Installing via uv: ${packages.join(" ")}`));
-		const result = Bun.spawnSync([uvPath, "pip", "install", ...packages], {
-			stdin: "ignore",
-			stdout: "inherit",
-			stderr: "inherit",
-		});
+		const result = await $`${uvPath} pip install ${packages}`.nothrow();
 		return result.exitCode === 0;
 	}
 
 	if (pipPath) {
 		console.log(chalk.dim(`Installing via pip: ${packages.join(" ")}`));
-		const result = Bun.spawnSync([pipPath, "install", ...packages], {
-			stdin: "ignore",
-			stdout: "inherit",
-			stderr: "inherit",
-		});
+		const result = await $`${pipPath} install ${packages}`.nothrow();
 		return result.exitCode === 0;
 	}
 
@@ -188,7 +179,7 @@ async function handlePythonSetup(flags: { json?: boolean; check?: boolean }): Pr
 	}
 
 	console.log("");
-	const success = installPythonPackages(check.missingPackages, check.uvPath, check.pipPath);
+	const success = await installPythonPackages(check.missingPackages, check.uvPath, check.pipPath);
 
 	if (!success) {
 		console.error(chalk.red(`\n${theme.status.error} Installation failed`));

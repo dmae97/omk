@@ -1,15 +1,14 @@
 import { createServer } from "node:net";
 import { delimiter, join } from "node:path";
-import type { Subprocess } from "bun";
+import { logger } from "@oh-my-pi/pi-utils";
+import { $, type Subprocess } from "bun";
 import { nanoid } from "nanoid";
 import { getShellConfig, killProcessTree } from "../utils/shell";
 import { getOrCreateSnapshot } from "../utils/shell-snapshot";
-import { logger } from "./logger";
 import { acquireSharedGateway, releaseSharedGateway } from "./python-gateway-coordinator";
 import { loadPythonModules } from "./python-modules";
 import { PYTHON_PRELUDE } from "./python-prelude";
 import { htmlToBasicMarkdown } from "./tools/web-scrapers/types";
-import { ScopeSignal } from "./utils";
 
 const TEXT_ENCODER = new TextEncoder();
 const TEXT_DECODER = new TextDecoder();
@@ -285,14 +284,9 @@ export async function checkPythonKernelAvailability(cwd: string): Promise<Python
 		const { env } = await getShellConfig();
 		const baseEnv = filterEnv(env);
 		const runtime = await resolvePythonRuntime(cwd, baseEnv);
-		const result = Bun.spawnSync(
-			[
-				runtime.pythonPath,
-				"-c",
-				"import importlib.util,sys;sys.exit(0 if importlib.util.find_spec('kernel_gateway') and importlib.util.find_spec('ipykernel') else 1)",
-			],
-			{ cwd, env: runtime.env, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
-		);
+		const checkScript =
+			"import importlib.util,sys;sys.exit(0 if importlib.util.find_spec('kernel_gateway') and importlib.util.find_spec('ipykernel') else 1)";
+		const result = await $`${runtime.pythonPath} -c ${checkScript}`.quiet().nothrow().cwd(cwd).env(runtime.env);
 		if (result.exitCode === 0) {
 			return { ok: true, pythonPath: runtime.pythonPath };
 		}
@@ -354,27 +348,28 @@ async function checkExternalGatewayAvailability(config: ExternalGatewayConfig): 
 }
 
 async function allocatePort(): Promise<number> {
-	return await new Promise((resolve, reject) => {
-		const server = createServer();
-		server.unref();
-		server.on("error", reject);
-		server.listen(0, "127.0.0.1", () => {
-			const address = server.address();
-			if (address && typeof address === "object") {
-				const port = address.port;
-				server.close((err: Error | null | undefined) => {
-					if (err) {
-						reject(err);
-					} else {
-						resolve(port);
-					}
-				});
-			} else {
-				server.close();
-				reject(new Error("Failed to allocate port"));
-			}
-		});
+	const { promise, resolve, reject } = Promise.withResolvers<number>();
+	const server = createServer();
+	server.unref();
+	server.on("error", reject);
+	server.listen(0, "127.0.0.1", () => {
+		const address = server.address();
+		if (address && typeof address === "object") {
+			const port = address.port;
+			server.close((err: Error | null | undefined) => {
+				if (err) {
+					reject(err);
+				} else {
+					resolve(port);
+				}
+			});
+		} else {
+			server.close();
+			reject(new Error("Failed to allocate port"));
+		}
 	});
+
+	return promise;
 }
 
 function normalizeDisplayText(text: string): string {
@@ -681,7 +676,7 @@ export class PythonKernel {
 
 			if (gatewayProcess && gatewayUrl) break;
 
-			killProcessTree(candidateProcess.pid);
+			await killProcessTree(candidateProcess.pid);
 			lastError = exited ? "Kernel gateway process exited during startup" : "Kernel gateway failed to start";
 		}
 
@@ -696,7 +691,7 @@ export class PythonKernel {
 		});
 
 		if (!createResponse.ok) {
-			killProcessTree(gatewayProcess.pid);
+			await killProcessTree(gatewayProcess.pid);
 			throw new Error(`Failed to create kernel: ${await createResponse.text()}`);
 		}
 
@@ -727,83 +722,84 @@ export class PythonKernel {
 			wsUrl += `?token=${encodeURIComponent(this.#authToken)}`;
 		}
 
-		return new Promise((resolve, reject) => {
-			const ws = new WebSocket(wsUrl);
-			ws.binaryType = "arraybuffer";
-			let settled = false;
+		const { promise, resolve, reject } = Promise.withResolvers<void>();
+		const ws = new WebSocket(wsUrl);
+		ws.binaryType = "arraybuffer";
+		let settled = false;
 
-			const timeout = setTimeout(() => {
-				ws.close();
-				if (!settled) {
-					settled = true;
-					reject(new Error("WebSocket connection timeout"));
-				}
-			}, 10000);
+		const timeout = setTimeout(() => {
+			ws.close();
+			if (!settled) {
+				settled = true;
+				reject(new Error("WebSocket connection timeout"));
+			}
+		}, 10000);
 
-			ws.onopen = () => {
-				if (settled) return;
+		ws.onopen = () => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timeout);
+			this.#ws = ws;
+			resolve();
+		};
+
+		ws.onerror = (event) => {
+			const error = new Error(`WebSocket error: ${event}`);
+			if (!settled) {
 				settled = true;
 				clearTimeout(timeout);
-				this.#ws = ws;
-				resolve();
-			};
+				reject(error);
+				return;
+			}
+			this.#alive = false;
+			this.#ws = null;
+			this.abortPendingExecutions(error.message);
+		};
 
-			ws.onerror = (event) => {
-				const error = new Error(`WebSocket error: ${event}`);
-				if (!settled) {
-					settled = true;
-					clearTimeout(timeout);
-					reject(error);
+		ws.onclose = () => {
+			this.#alive = false;
+			this.#ws = null;
+			if (!settled) {
+				settled = true;
+				clearTimeout(timeout);
+				reject(new Error("WebSocket closed before connection"));
+				return;
+			}
+			this.abortPendingExecutions("WebSocket closed");
+		};
+
+		ws.onmessage = (event) => {
+			let msg: JupyterMessage | null = null;
+			if (event.data instanceof ArrayBuffer) {
+				msg = deserializeWebSocketMessage(event.data);
+			} else if (typeof event.data === "string") {
+				try {
+					msg = JSON.parse(event.data) as JupyterMessage;
+				} catch {
 					return;
 				}
-				this.#alive = false;
-				this.#ws = null;
-				this.abortPendingExecutions(error.message);
-			};
+			}
+			if (!msg) return;
 
-			ws.onclose = () => {
-				this.#alive = false;
-				this.#ws = null;
-				if (!settled) {
-					settled = true;
-					clearTimeout(timeout);
-					reject(new Error("WebSocket closed before connection"));
-					return;
-				}
-				this.abortPendingExecutions("WebSocket closed");
-			};
+			if (TRACE_IPC) {
+				logger.debug("Kernel IPC recv", { channel: msg.channel, msgType: msg.header.msg_type });
+			}
 
-			ws.onmessage = (event) => {
-				let msg: JupyterMessage | null = null;
-				if (event.data instanceof ArrayBuffer) {
-					msg = deserializeWebSocketMessage(event.data);
-				} else if (typeof event.data === "string") {
-					try {
-						msg = JSON.parse(event.data) as JupyterMessage;
-					} catch {
-						return;
-					}
-				}
-				if (!msg) return;
+			const parentId = (msg.parent_header as { msg_id?: string }).msg_id;
+			if (parentId) {
+				const handler = this.#messageHandlers.get(parentId);
+				if (handler) handler(msg);
+			}
 
-				if (TRACE_IPC) {
-					logger.debug("Kernel IPC recv", { channel: msg.channel, msgType: msg.header.msg_type });
+			const channelHandlers = this.#channelHandlers.get(msg.channel);
+			if (channelHandlers) {
+				for (const handler of channelHandlers) {
+					handler(msg);
 				}
+			}
+		};
 
-				const parentId = (msg.parent_header as { msg_id?: string }).msg_id;
-				if (parentId) {
-					const handler = this.#messageHandlers.get(parentId);
-					if (handler) handler(msg);
-				}
-
-				const channelHandlers = this.#channelHandlers.get(msg.channel);
-				if (channelHandlers) {
-					for (const handler of channelHandlers) {
-						handler(msg);
-					}
-				}
-			};
-		});
+		return promise;
 	}
 
 	private abortPendingExecutions(reason: string): void {
@@ -857,140 +853,163 @@ export class PythonKernel {
 		let cancelled = false;
 		let timedOut = false;
 
-		const executionSignal = new ScopeSignal({ signal: options?.signal, timeout: options?.timeoutMs });
+		const controller = new AbortController();
+		const onAbort = () => {
+			controller.abort(options?.signal?.reason ?? new Error("Aborted"));
+		};
+		if (options?.signal) {
+			if (options.signal.aborted) {
+				onAbort();
+			} else {
+				options.signal.addEventListener("abort", onAbort, { once: true });
+			}
+		}
+		const timeoutId =
+			typeof options?.timeoutMs === "number" && options.timeoutMs > 0
+				? setTimeout(() => {
+						timedOut = true;
+						controller.abort(new Error("Timeout"));
+					}, options.timeoutMs)
+				: undefined;
 
-		return new Promise((resolve) => {
-			let resolved = false;
-			const finalize = () => {
-				if (resolved) return;
-				resolved = true;
-				this.#messageHandlers.delete(msgId);
-				this.#pendingExecutions.delete(msgId);
-				executionSignal[Symbol.dispose]();
-				resolve({ status, executionCount, error, cancelled, timedOut, stdinRequested });
-			};
+		const { promise, resolve } = Promise.withResolvers<KernelExecuteResult>();
 
-			const checkDone = () => {
-				if (replyReceived && idleReceived) {
-					finalize();
-				}
-			};
+		let resolved = false;
+		const finalize = () => {
+			if (resolved) return;
+			resolved = true;
+			this.#messageHandlers.delete(msgId);
+			this.#pendingExecutions.delete(msgId);
+			if (timeoutId) clearTimeout(timeoutId);
+			if (options?.signal) {
+				options.signal.removeEventListener("abort", onAbort);
+			}
+			resolve({ status, executionCount, error, cancelled, timedOut, stdinRequested });
+		};
 
-			const cancelFromClose = (reason: string) => {
-				if (resolved) return;
-				cancelled = true;
-				timedOut = false;
-				if (options?.onChunk) {
-					void options.onChunk(`[kernel] ${reason}\n`);
-				}
+		const checkDone = () => {
+			if (replyReceived && idleReceived) {
 				finalize();
-			};
+			}
+		};
 
-			this.#pendingExecutions.set(msgId, cancelFromClose);
+		const cancelFromClose = (reason: string) => {
+			if (resolved) return;
+			cancelled = true;
+			timedOut = false;
+			if (options?.onChunk) {
+				void options.onChunk(`[kernel] ${reason}\n`);
+			}
+			finalize();
+		};
 
-			executionSignal.catch(async () => {
-				cancelled = true;
-				timedOut = executionSignal.timedOut();
+		this.#pendingExecutions.set(msgId, cancelFromClose);
+
+		const onExecutionAbort = () => {
+			cancelled = true;
+			void (async () => {
 				try {
 					await this.interrupt();
 				} finally {
 					finalize();
 				}
-			});
+			})();
+		};
+		controller.signal.addEventListener("abort", onExecutionAbort, { once: true });
 
-			if (executionSignal.aborted) {
-				cancelFromClose("Execution aborted");
-				return;
-			}
+		if (controller.signal.aborted) {
+			cancelFromClose("Execution aborted");
+			return promise;
+		}
 
-			this.#messageHandlers.set(msgId, async (response) => {
-				switch (response.header.msg_type) {
-					case "execute_reply": {
-						replyReceived = true;
-						const replyStatus = response.content.status;
-						status = replyStatus === "error" ? "error" : "ok";
-						if (typeof response.content.execution_count === "number") {
-							executionCount = response.content.execution_count;
-						}
-						checkDone();
-						break;
+		this.#messageHandlers.set(msgId, async (response) => {
+			switch (response.header.msg_type) {
+				case "execute_reply": {
+					replyReceived = true;
+					const replyStatus = response.content.status;
+					status = replyStatus === "error" ? "error" : "ok";
+					if (typeof response.content.execution_count === "number") {
+						executionCount = response.content.execution_count;
 					}
-					case "stream": {
-						const text = String(response.content.text ?? "");
-						if (text && options?.onChunk) {
-							await options.onChunk(text);
-						}
-						break;
-					}
-					case "execute_result":
-					case "display_data": {
-						const { text, outputs } = this.renderDisplay(response.content);
-						if (text && options?.onChunk) {
-							await options.onChunk(text);
-						}
-						if (outputs.length > 0 && options?.onDisplay) {
-							for (const output of outputs) {
-								await options.onDisplay(output);
-							}
-						}
-						break;
-					}
-					case "error": {
-						const traceback = Array.isArray(response.content.traceback)
-							? response.content.traceback.map((line: unknown) => String(line))
-							: [];
-						error = {
-							name: String(response.content.ename ?? "Error"),
-							value: String(response.content.evalue ?? ""),
-							traceback,
-						};
-						const text = traceback.length > 0 ? `${traceback.join("\n")}\n` : `${error.name}: ${error.value}\n`;
-						if (options?.onChunk) {
-							await options.onChunk(text);
-						}
-						break;
-					}
-					case "status": {
-						const state = response.content.execution_state;
-						if (state === "idle") {
-							idleReceived = true;
-							checkDone();
-						}
-						break;
-					}
-					case "input_request": {
-						stdinRequested = true;
-						if (options?.onChunk) {
-							await options.onChunk(
-								"[stdin] Kernel requested input. Interactive stdin is not supported; provide input programmatically.\n",
-							);
-						}
-						this.sendMessage({
-							channel: "stdin",
-							header: {
-								msg_id: nanoid(),
-								session: this.sessionId,
-								username: this.username,
-								date: new Date().toISOString(),
-								msg_type: "input_reply",
-								version: "5.5",
-							},
-							parent_header: response.header as unknown as Record<string, unknown>,
-							metadata: {},
-							content: { value: "" },
-						});
-						break;
-					}
+					checkDone();
+					break;
 				}
-			});
-
-			try {
-				this.sendMessage(msg);
-			} catch {
-				cancelled = true;
-				finalize();
+				case "stream": {
+					const text = String(response.content.text ?? "");
+					if (text && options?.onChunk) {
+						await options.onChunk(text);
+					}
+					break;
+				}
+				case "execute_result":
+				case "display_data": {
+					const { text, outputs } = this.renderDisplay(response.content);
+					if (text && options?.onChunk) {
+						await options.onChunk(text);
+					}
+					if (outputs.length > 0 && options?.onDisplay) {
+						for (const output of outputs) {
+							await options.onDisplay(output);
+						}
+					}
+					break;
+				}
+				case "error": {
+					const traceback = Array.isArray(response.content.traceback)
+						? response.content.traceback.map((line: unknown) => String(line))
+						: [];
+					error = {
+						name: String(response.content.ename ?? "Error"),
+						value: String(response.content.evalue ?? ""),
+						traceback,
+					};
+					const text = traceback.length > 0 ? `${traceback.join("\n")}\n` : `${error.name}: ${error.value}\n`;
+					if (options?.onChunk) {
+						await options.onChunk(text);
+					}
+					break;
+				}
+				case "status": {
+					const state = response.content.execution_state;
+					if (state === "idle") {
+						idleReceived = true;
+						checkDone();
+					}
+					break;
+				}
+				case "input_request": {
+					stdinRequested = true;
+					if (options?.onChunk) {
+						await options.onChunk(
+							"[stdin] Kernel requested input. Interactive stdin is not supported; provide input programmatically.\n",
+						);
+					}
+					this.sendMessage({
+						channel: "stdin",
+						header: {
+							msg_id: nanoid(),
+							session: this.sessionId,
+							username: this.username,
+							date: new Date().toISOString(),
+							msg_type: "input_reply",
+							version: "5.5",
+						},
+						parent_header: response.header as unknown as Record<string, unknown>,
+						metadata: {},
+						content: { value: "" },
+					});
+					break;
+				}
 			}
 		});
+
+		try {
+			this.sendMessage(msg);
+		} catch {
+			cancelled = true;
+			finalize();
+		}
+		return promise;
 	}
 
 	async introspectPrelude(): Promise<PreludeHelper[]> {
@@ -1079,7 +1098,7 @@ export class PythonKernel {
 			await releaseSharedGateway();
 		} else if (this.gatewayProcess) {
 			try {
-				killProcessTree(this.gatewayProcess.pid);
+				await killProcessTree(this.gatewayProcess.pid);
 			} catch (err: unknown) {
 				logger.warn("Failed to terminate gateway process", {
 					error: err instanceof Error ? err.message : String(err),

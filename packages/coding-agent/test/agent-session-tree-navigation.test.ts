@@ -192,7 +192,7 @@ describe.skipIf(!API_KEY)("AgentSession tree navigation e2e", () => {
 		const navigationPromise = session.navigateTree(rootNode.entry.id, { summarize: true });
 
 		// Abort after a short delay (let the LLM call start)
-		await new Promise((resolve) => setTimeout(resolve, 100));
+		await Bun.sleep(100);
 		session.abortBranchSummary();
 
 		const result = await navigationPromise;

@@ -10,9 +10,9 @@
  */
 
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import { createTempDir } from "@oh-my-pi/pi-utils";
 import { readdirSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { generateJsonReport, generateReport } from "./report";
@@ -95,12 +95,23 @@ function resolveExtractedDir(tempDir: string): string {
 }
 
 async function extractTarGz(archivePath: string): Promise<{ dir: string; cleanupDir: string }> {
-	const tempDir = await mkdtemp(join(tmpdir(), "reach-benchmark-fixtures-"));
-	const result = Bun.spawnSync(["tar", "-xzf", archivePath, "-C", tempDir]);
-	if (!result.success) {
-		await rm(tempDir, { recursive: true, force: true });
-		throw new Error(`Failed to extract archive: ${result.stderr.toString()}`);
+	const tempDirObj = await createTempDir("@reach-benchmark-fixtures-");
+	const tempDir = tempDirObj.path;
+	try {
+		const bytes = await Bun.file(archivePath).arrayBuffer();
+		const archive = new Bun.Archive(bytes);
+		const files = await archive.files();
+
+		for (const [path, file] of files) {
+			const destPath = join(tempDir, path);
+			await Bun.write(destPath, file);
+		}
+	} catch (error) {
+		await tempDirObj.remove();
+		const message = error instanceof Error ? error.message : String(error);
+		throw new Error(`Failed to extract archive: ${message}`, { cause: error });
 	}
+
 	return { dir: resolveExtractedDir(tempDir), cleanupDir: tempDir };
 }
 

@@ -6,6 +6,7 @@
 
 import { createHash } from "node:crypto";
 import type { Content, ThinkingConfig } from "@google/genai";
+import { abortableSleep } from "@oh-my-pi/pi-utils";
 import { calculateCost } from "../models";
 import type {
 	Api,
@@ -301,23 +302,6 @@ function extractErrorMessage(errorText: string): string {
 	return errorText;
 }
 
-/**
- * Sleep for a given number of milliseconds, respecting abort signal.
- */
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-	return new Promise((resolve, reject) => {
-		if (signal?.aborted) {
-			reject(new Error("Request was aborted"));
-			return;
-		}
-		const timeout = setTimeout(resolve, ms);
-		signal?.addEventListener("abort", () => {
-			clearTimeout(timeout);
-			reject(new Error("Request was aborted"));
-		});
-	});
-}
-
 interface CloudCodeAssistRequest {
 	project: string;
 	model: string;
@@ -468,7 +452,7 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 						// Use server-provided delay or exponential backoff
 						const serverDelay = extractRetryDelay(errorText, response);
 						const delayMs = serverDelay ?? BASE_DELAY_MS * 2 ** attempt;
-						await sleep(delayMs, options?.signal);
+						await abortableSleep(delayMs, options?.signal);
 						continue;
 					}
 
@@ -489,7 +473,7 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 					// Network errors are retryable
 					if (attempt < MAX_RETRIES) {
 						const delayMs = BASE_DELAY_MS * 2 ** attempt;
-						await sleep(delayMs, options?.signal);
+						await abortableSleep(delayMs, options?.signal);
 						continue;
 					}
 					throw lastError;
@@ -769,7 +753,7 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 
 				if (emptyAttempt > 0) {
 					const backoffMs = EMPTY_STREAM_BASE_DELAY_MS * 2 ** (emptyAttempt - 1);
-					await sleep(backoffMs, options?.signal);
+					await abortableSleep(backoffMs, options?.signal);
 
 					if (!requestUrl) {
 						throw new Error("Missing request URL");

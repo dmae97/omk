@@ -1,37 +1,37 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import * as os from "node:os";
+import { rm } from "node:fs/promises";
 import * as path from "node:path";
+import { type AsyncTempDir, createTempDir } from "@oh-my-pi/pi-utils";
 import { collapse } from "../../src/lib/worktree/collapse";
 import { WORKTREE_BASE } from "../../src/lib/worktree/constants";
 import { getRepoRoot, git } from "../../src/lib/worktree/git";
 import { create } from "../../src/lib/worktree/operations";
 
-let repoPath: string;
+let repoPath: AsyncTempDir;
 let originalCwd: string;
 
-async function createTestRepo(): Promise<string> {
-	const dir = await mkdtemp(path.join(os.tmpdir(), "wt-test-"));
-	await git(["init", "-b", "main"], dir);
-	await git(["config", "user.email", "test@example.com"], dir);
-	await git(["config", "user.name", "Test User"], dir);
-	await Bun.write(path.join(dir, "README.md"), "init");
-	await git(["add", "README.md"], dir);
-	await git(["commit", "-m", "init"], dir);
-	return dir;
+async function createTestRepo(): Promise<AsyncTempDir> {
+	const tempDir = await createTempDir("@wt-test-");
+	await git(["init", "-b", "main"], tempDir.path);
+	await git(["config", "user.email", "test@example.com"], tempDir.path);
+	await git(["config", "user.name", "Test User"], tempDir.path);
+	await Bun.write(path.join(tempDir.path, "README.md"), "init");
+	await git(["add", "README.md"], tempDir.path);
+	await git(["commit", "-m", "init"], tempDir.path);
+	return tempDir;
 }
 
-async function cleanupRepo(repoRoot: string): Promise<void> {
-	const repoName = path.basename(repoRoot);
+async function cleanupRepo(repoRoot: AsyncTempDir): Promise<void> {
+	const repoName = path.basename(repoRoot.path);
 	await rm(path.join(WORKTREE_BASE, repoName), { recursive: true, force: true });
-	await rm(repoRoot, { recursive: true, force: true });
+	await repoRoot.remove();
 }
 
 describe("collapse strategies", () => {
 	beforeEach(async () => {
 		originalCwd = process.cwd();
 		repoPath = await createTestRepo();
-		process.chdir(repoPath);
+		process.chdir(repoPath.path);
 	});
 
 	afterEach(async () => {

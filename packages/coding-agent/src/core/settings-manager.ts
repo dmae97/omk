@@ -1,11 +1,11 @@
-import { existsSync, readFileSync, renameSync } from "node:fs";
+import { rename } from "node:fs/promises";
 import { join } from "node:path";
+import { logger } from "@oh-my-pi/pi-utils";
 import { type Settings as SettingsItem, settingsCapability } from "../capability/settings";
 import { getAgentDbPath, getAgentDir } from "../config";
 import { loadCapability } from "../discovery";
 import type { SymbolPreset } from "../modes/interactive/theme/theme";
 import { AgentStorage } from "./agent-storage";
-import { logger } from "./logger";
 
 export interface CompactionSettings {
 	enabled?: boolean; // default: true
@@ -125,6 +125,7 @@ export interface EditSettings {
 	fuzzyMatch?: boolean; // default: true (accept high-confidence fuzzy matches for whitespace/indentation)
 	fuzzyThreshold?: number; // default: 0.95 (similarity threshold for fuzzy matching)
 	patchMode?: boolean; // default: true (use codex-style apply-patch format instead of oldText/newText)
+	streamingAbort?: boolean; // default: false (abort streaming edit tool calls when patch preview fails)
 }
 
 export type { SymbolPreset };
@@ -322,7 +323,7 @@ const DEFAULT_SETTINGS: Settings = {
 	mcp: { enableProjectConfig: true },
 	lsp: { formatOnWrite: false, diagnosticsOnWrite: true, diagnosticsOnEdit: false },
 	python: { toolMode: "both", kernelMode: "session", sharedGateway: true },
-	edit: { fuzzyMatch: true, fuzzyThreshold: 0.95 },
+	edit: { fuzzyMatch: true, fuzzyThreshold: 0.95, streamingAbort: false },
 	ttsr: { enabled: true, contextMode: "discard", repeatMode: "once", repeatGap: 10 },
 	voice: {
 		enabled: false,
@@ -514,7 +515,7 @@ export class SettingsManager {
 	 */
 	static async create(cwd: string = process.cwd(), agentDir: string = getAgentDir()): Promise<SettingsManager> {
 		const storage = AgentStorage.open(getAgentDbPath(agentDir));
-		SettingsManager.migrateLegacySettingsFile(storage, agentDir);
+		await SettingsManager.migrateLegacySettingsFile(storage, agentDir);
 
 		// Use capability API to load user-level settings from all providers
 		const result = await loadCapability(settingsCapability.id, { cwd });
@@ -577,21 +578,21 @@ export class SettingsManager {
 		return SettingsManager.migrateSettings(settings as Record<string, unknown>);
 	}
 
-	private static migrateLegacySettingsFile(storage: AgentStorage, agentDir: string): void {
+	private static async migrateLegacySettingsFile(storage: AgentStorage, agentDir: string): Promise<void> {
 		const settingsPath = join(agentDir, "settings.json");
-		if (!existsSync(settingsPath)) return;
+		const settingsFile = Bun.file(settingsPath);
+		if (!(await settingsFile.exists())) return;
 		if (storage.getSettings() !== null) return;
 
 		try {
-			const content = readFileSync(settingsPath, "utf-8");
-			const parsed = JSON.parse(content);
+			const parsed = JSON.parse(await settingsFile.text());
 			if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
 				return;
 			}
 			const migrated = SettingsManager.migrateSettings(parsed as Record<string, unknown>);
 			storage.saveSettings(migrated);
 			try {
-				renameSync(settingsPath, `${settingsPath}.bak`);
+				await rename(settingsPath, `${settingsPath}.bak`);
 			} catch (error) {
 				logger.warn("SettingsManager failed to backup settings.json", { error: String(error) });
 			}
@@ -1298,6 +1299,18 @@ export class SettingsManager {
 			this.globalSettings.edit = {};
 		}
 		this.globalSettings.edit.patchMode = enabled;
+		await this.save();
+	}
+
+	getEditStreamingAbort(): boolean {
+		return this.settings.edit?.streamingAbort ?? false;
+	}
+
+	async setEditStreamingAbort(enabled: boolean): Promise<void> {
+		if (!this.globalSettings.edit) {
+			this.globalSettings.edit = {};
+		}
+		this.globalSettings.edit.streamingAbort = enabled;
 		await this.save();
 	}
 

@@ -1,4 +1,4 @@
-import * as fs from "node:fs";
+import { rm } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
@@ -56,11 +56,11 @@ export class InputController {
 		this.ctx.editor.onAltP = () => this.ctx.showModelSelector({ temporaryOnly: true });
 
 		// Global debug handler on TUI (works regardless of focus)
-		this.ctx.ui.onDebug = () => this.ctx.handleDebugCommand();
+		this.ctx.ui.onDebug = () => void this.ctx.handleDebugCommand();
 		this.ctx.editor.onCtrlL = () => this.ctx.showModelSelector();
 		this.ctx.editor.onCtrlR = () => this.ctx.showHistorySearch();
 		this.ctx.editor.onCtrlT = () => this.ctx.toggleTodoExpansion();
-		this.ctx.editor.onCtrlG = () => this.openExternalEditor();
+		this.ctx.editor.onCtrlG = () => void this.openExternalEditor();
 		this.ctx.editor.onQuestionMark = () => this.ctx.handleHotkeysCommand();
 		this.ctx.editor.onCtrlV = () => this.handleImagePaste();
 
@@ -246,7 +246,7 @@ export class InputController {
 				return;
 			}
 			if (text === "/debug") {
-				this.ctx.handleDebugCommand();
+				void this.ctx.handleDebugCommand();
 				this.ctx.editor.setText("");
 				return;
 			}
@@ -276,7 +276,7 @@ export class InputController {
 					this.ctx.editor.addToHistory(text);
 					this.ctx.editor.setText("");
 					try {
-						const content = fs.readFileSync(skillPath, "utf-8");
+						const content = await Bun.file(skillPath).text();
 						const body = content.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
 						const metaLines = [`Skill: ${skillPath}`];
 						if (args) {
@@ -587,7 +587,7 @@ export class InputController {
 		this.ctx.showStatus(`Thinking blocks: ${this.ctx.hideThinkingBlock ? "hidden" : "visible"}`);
 	}
 
-	openExternalEditor(): void {
+	async openExternalEditor(): Promise<void> {
 		// Determine editor (respect $VISUAL, then $EDITOR)
 		const editorCmd = process.env.VISUAL || process.env.EDITOR;
 		if (!editorCmd) {
@@ -600,7 +600,7 @@ export class InputController {
 
 		try {
 			// Write current content to temp file
-			fs.writeFileSync(tmpFile, currentText, "utf-8");
+			await Bun.write(tmpFile, currentText);
 
 			// Stop TUI to release terminal
 			this.ctx.ui.stop();
@@ -609,22 +609,23 @@ export class InputController {
 			const [editor, ...editorArgs] = editorCmd.split(" ");
 
 			// Spawn editor synchronously with inherited stdio for interactive editing
-			const result = Bun.spawnSync([editor, ...editorArgs, tmpFile], {
+			const child = Bun.spawn([editor, ...editorArgs, tmpFile], {
 				stdin: "inherit",
 				stdout: "inherit",
 				stderr: "inherit",
 			});
+			const exitCode = await child.exited;
 
 			// On successful exit (exitCode 0), replace editor content
-			if (result.exitCode === 0) {
-				const newContent = fs.readFileSync(tmpFile, "utf-8").replace(/\n$/, "");
+			if (exitCode === 0) {
+				const newContent = (await Bun.file(tmpFile).text()).replace(/\n$/, "");
 				this.ctx.editor.setText(newContent);
 			}
 			// On non-zero exit, keep original text (no action needed)
 		} finally {
 			// Clean up temp file
 			try {
-				fs.unlinkSync(tmpFile);
+				await rm(tmpFile, { force: true });
 			} catch {
 				// Ignore cleanup errors
 			}

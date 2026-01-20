@@ -1,30 +1,28 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createTempDirSync } from "@oh-my-pi/pi-utils";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { checkSafety } from "../src/safety/guards";
-import { cleanupRepo, createTestRepo, runGit, writeFile } from "./helpers";
+import { createTestRepo, type TestRepo } from "./helpers";
 
-let repoDir: string;
+let repo: TestRepo;
 let previousCwd: string;
 
 beforeEach(() => {
 	previousCwd = process.cwd();
-	repoDir = createTestRepo();
-	process.chdir(repoDir);
+	repo = createTestRepo();
+	process.chdir(repo.path);
 });
 
 afterEach(() => {
 	process.chdir(previousCwd);
-	cleanupRepo(repoDir);
+	repo.remove();
 });
 
 describe("git-tool safety", () => {
 	it("blocks force push to protected branch", async () => {
-		writeFile(join(repoDir, "init.txt"), "init");
-		runGit(["add", "."], repoDir);
-		runGit(["commit", "-m", "init"], repoDir);
-		runGit(["branch", "-M", "main"], repoDir);
+		repo.writeFile("init.txt", "init");
+		repo.run("add", ".");
+		repo.run("commit", "-m", "init");
+		repo.run("branch", "-M", "main");
 		const result = await checkSafety("push", { force: true });
 		expect(result.blocked).toBe(true);
 	});
@@ -44,36 +42,32 @@ describe("git-tool safety", () => {
 	});
 
 	it("blocks amend when HEAD is pushed", async () => {
-		runGit(["branch", "-M", "main"], repoDir);
-		writeFile(join(repoDir, "file.txt"), "hello");
-		runGit(["add", "file.txt"], repoDir);
-		runGit(["commit", "-m", "initial"], repoDir);
+		repo.run("branch", "-M", "main");
+		repo.writeFile("file.txt", "hello");
+		repo.run("add", "file.txt");
+		repo.run("commit", "-m", "initial");
 
-		const remoteDir = mkdtempSync(join(tmpdir(), "git-tool-remote-"));
-		runGit(["init", "--bare"], remoteDir);
-		runGit(["remote", "add", "origin", remoteDir], repoDir);
-		runGit(["push", "-u", "origin", "main"], repoDir);
+		const remoteDir = createTempDirSync("@git-tool-remote-");
+		Bun.spawnSync(["git", "init", "--bare"], { cwd: remoteDir.path });
+		repo.run("remote", "add", "origin", remoteDir.path);
+		repo.run("push", "-u", "origin", "main");
 
 		const result = await checkSafety("commit", { amend: true });
 		expect(result.blocked).toBe(true);
-
-		cleanupRepo(remoteDir);
 	});
 
 	it("blocks rebase when HEAD is pushed", async () => {
-		runGit(["branch", "-M", "main"], repoDir);
-		writeFile(join(repoDir, "file.txt"), "hello");
-		runGit(["add", "file.txt"], repoDir);
-		runGit(["commit", "-m", "initial"], repoDir);
+		repo.run("branch", "-M", "main");
+		repo.writeFile("file.txt", "hello");
+		repo.run("add", "file.txt");
+		repo.run("commit", "-m", "initial");
 
-		const remoteDir = mkdtempSync(join(tmpdir(), "git-tool-remote-"));
-		runGit(["init", "--bare"], remoteDir);
-		runGit(["remote", "add", "origin", remoteDir], repoDir);
-		runGit(["push", "-u", "origin", "main"], repoDir);
+		const remoteDir = createTempDirSync("@git-tool-remote-");
+		Bun.spawnSync(["git", "init", "--bare"], { cwd: remoteDir.path });
+		repo.run("remote", "add", "origin", remoteDir.path);
+		repo.run("push", "-u", "origin", "main");
 
 		const result = await checkSafety("rebase", {});
 		expect(result.blocked).toBe(true);
-
-		cleanupRepo(remoteDir);
 	});
 });

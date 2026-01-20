@@ -6,11 +6,14 @@
  * shell experience.
  */
 
+import { unlinkSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { postmortem } from "@oh-my-pi/pi-utils";
+import { $ } from "bun";
 
 let cachedSnapshotPath: string | null = null;
-let cleanupRegistered = false;
 
 /**
  * Get the user's shell config file path.
@@ -129,32 +132,19 @@ export async function getOrCreateSnapshot(
 
 	// Create snapshot directory
 	const snapshotDir = join(tmpdir(), "omp-shell-snapshots");
-	const mkdirProc = Bun.spawnSync(["mkdir", "-p", snapshotDir]);
-	if (mkdirProc.exitCode !== 0) {
-		return null;
-	}
+	await mkdir(snapshotDir, { recursive: true });
 
 	// Generate unique snapshot path
-	const timestamp = Date.now();
-	const random = Math.random().toString(36).substring(2, 8);
 	const shellName = shell.includes("zsh") ? "zsh" : shell.includes("bash") ? "bash" : "sh";
-	const snapshotPath = join(snapshotDir, `snapshot-${shellName}-${timestamp}-${random}.sh`);
+	const snapshotPath = join(snapshotDir, `snapshot-${shellName}-${crypto.randomUUID()}.sh`);
 
 	// Generate and execute snapshot script
 	const script = await generateSnapshotScript(shell, snapshotPath, rcFile);
 
 	try {
-		const result = Bun.spawnSync([shell, "-l", "-c", script], {
-			stdin: "ignore",
-			stdout: "pipe",
-			stderr: "pipe",
-			env,
-			timeout: 10000, // 10 second timeout
-		});
-
-		if (result.exitCode === 0 && (await Bun.file(snapshotPath).exists())) {
+		await $`${shell} -l -c ${script}`.env(env).quiet().text();
+		if (await Bun.file(snapshotPath).exists()) {
 			cachedSnapshotPath = snapshotPath;
-			registerCleanup();
 			return snapshotPath;
 		}
 	} catch {
@@ -175,46 +165,8 @@ export function getSnapshotSourceCommand(snapshotPath: string | null): string {
 	return `source '${escaped}' 2>/dev/null && `;
 }
 
-/**
- * Register cleanup handler to delete snapshot on process exit.
- */
-function registerCleanup(): void {
-	if (cleanupRegistered) return;
-	cleanupRegistered = true;
-
-	const cleanup = async () => {
-		if (cachedSnapshotPath && (await Bun.file(cachedSnapshotPath).exists())) {
-			try {
-				Bun.spawnSync(["rm", cachedSnapshotPath]);
-			} catch {
-				// Ignore cleanup errors
-			}
-		}
-	};
-
-	process.on("exit", () => {
-		cleanup();
-	});
-	process.on("SIGINT", () => {
-		cleanup();
-		process.exit(130);
-	});
-	process.on("SIGTERM", () => {
-		cleanup();
-		process.exit(143);
-	});
-}
-
-/**
- * Clear the cached snapshot (for testing or forced refresh).
- */
-export async function clearSnapshotCache(): Promise<void> {
-	if (cachedSnapshotPath && (await Bun.file(cachedSnapshotPath).exists())) {
-		try {
-			Bun.spawnSync(["rm", cachedSnapshotPath]);
-		} catch {
-			// Ignore
-		}
+postmortem.register("shell-snapshot", () => {
+	if (cachedSnapshotPath) {
+		unlinkSync(cachedSnapshotPath);
 	}
-	cachedSnapshotPath = null;
-}
+});

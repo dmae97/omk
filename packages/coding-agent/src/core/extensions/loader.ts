@@ -7,6 +7,7 @@ import * as path from "node:path";
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Model, TextContent } from "@oh-my-pi/pi-ai";
 import type { KeyId } from "@oh-my-pi/pi-tui";
+import { logger } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
 import * as TypeBox from "@sinclair/typebox";
 import { type ExtensionModule, extensionModuleCapability } from "../../capability/extension-module";
@@ -16,7 +17,6 @@ import * as piCodingAgent from "../../index";
 import { EventBus } from "../event-bus";
 import type { ExecOptions } from "../exec";
 import { execCommand } from "../exec";
-import { logger } from "../logger";
 import type { CustomMessage } from "../messages";
 import type {
 	Extension,

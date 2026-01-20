@@ -1,5 +1,6 @@
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { type Component, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
+import { $ } from "bun";
 import { type FSWatcher, watch } from "fs";
 import { dirname, join } from "path";
 import type { AgentSession } from "../../../core/agent-session";
@@ -158,51 +159,51 @@ export class StatusLineComponent implements Component {
 			return this.cachedGitStatus;
 		}
 
-		try {
-			const result = Bun.spawnSync(["git", "status", "--porcelain"], {
-				stdout: "pipe",
-				stderr: "pipe",
-			});
+		// Fire async fetch, return cached value
+		(async () => {
+			try {
+				const result = await $`git status --porcelain`.quiet().nothrow();
 
-			if (!result.success) {
+				if (result.exitCode !== 0) {
+					this.cachedGitStatus = null;
+					this.gitStatusLastFetch = now;
+					return;
+				}
+
+				const output = result.stdout.toString();
+
+				let staged = 0;
+				let unstaged = 0;
+				let untracked = 0;
+
+				for (const line of output.split("\n")) {
+					if (!line) continue;
+					const x = line[0];
+					const y = line[1];
+
+					if (x === "?" && y === "?") {
+						untracked++;
+						continue;
+					}
+
+					if (x && x !== " " && x !== "?") {
+						staged++;
+					}
+
+					if (y && y !== " ") {
+						unstaged++;
+					}
+				}
+
+				this.cachedGitStatus = { staged, unstaged, untracked };
+				this.gitStatusLastFetch = now;
+			} catch {
 				this.cachedGitStatus = null;
 				this.gitStatusLastFetch = now;
-				return null;
 			}
+		})();
 
-			const output = result.stdout.toString("utf8");
-
-			let staged = 0;
-			let unstaged = 0;
-			let untracked = 0;
-
-			for (const line of output.split("\n")) {
-				if (!line) continue;
-				const x = line[0];
-				const y = line[1];
-
-				if (x === "?" && y === "?") {
-					untracked++;
-					continue;
-				}
-
-				if (x && x !== " " && x !== "?") {
-					staged++;
-				}
-
-				if (y && y !== " ") {
-					unstaged++;
-				}
-			}
-
-			this.cachedGitStatus = { staged, unstaged, untracked };
-			this.gitStatusLastFetch = now;
-			return this.cachedGitStatus;
-		} catch {
-			this.cachedGitStatus = null;
-			this.gitStatusLastFetch = now;
-			return null;
-		}
+		return this.cachedGitStatus;
 	}
 
 	private buildSegmentContext(width: number): SegmentContext {

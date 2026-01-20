@@ -8,34 +8,33 @@ import { SessionSelectorComponent } from "../modes/interactive/components/sessio
 
 /** Show TUI session selector and return selected session path or null if cancelled */
 export async function selectSession(sessions: SessionInfo[]): Promise<string | null> {
-	return new Promise((resolve) => {
-		const ui = new TUI(new ProcessTerminal());
-		let resolved = false;
-
-		const selector = new SessionSelectorComponent(
-			sessions,
-			(path: string) => {
-				if (!resolved) {
-					resolved = true;
-					ui.stop();
-					resolve(path);
-				}
-			},
-			() => {
-				if (!resolved) {
-					resolved = true;
-					ui.stop();
-					resolve(null);
-				}
-			},
-			() => {
+	const { promise, resolve } = Promise.withResolvers<string | null>();
+	const ui = new TUI(new ProcessTerminal());
+	let resolved = false;
+	const selector = new SessionSelectorComponent(
+		sessions,
+		(path: string) => {
+			if (!resolved) {
+				resolved = true;
 				ui.stop();
-				process.exit(0);
-			},
-		);
+				resolve(path);
+			}
+		},
+		() => {
+			if (!resolved) {
+				resolved = true;
+				ui.stop();
+				resolve(null);
+			}
+		},
+		() => {
+			ui.stop();
+			process.exit(0);
+		},
+	);
 
-		ui.addChild(selector);
-		ui.setFocus(selector.getSessionList());
-		ui.start();
-	});
+	ui.addChild(selector);
+	ui.setFocus(selector.getSessionList());
+	ui.start();
+	return promise;
 }

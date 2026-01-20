@@ -12,7 +12,7 @@ import { renderPromptTemplate } from "../prompt-templates";
 import { checkBashInterception, checkSimpleLsInterception } from "./bash-interceptor";
 import type { ToolSession } from "./index";
 import { resolveToCwd } from "./path-utils";
-import { createToolUIKit } from "./render-utils";
+import { ToolUIKit } from "./render-utils";
 import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateTail } from "./truncate";
 
 export const BASH_DEFAULT_PREVIEW_LINES = 10;
@@ -196,7 +196,7 @@ export const BASH_PREVIEW_LINES = 10;
 
 export const bashToolRenderer = {
 	renderCall(args: BashRenderArgs, uiTheme: Theme): Component {
-		const ui = createToolUIKit(uiTheme);
+		const ui = new ToolUIKit(uiTheme);
 		const command = args.command || uiTheme.format.ellipsis;
 		const prompt = uiTheme.fg("accent", "$");
 		const cwd = process.cwd();
@@ -231,7 +231,7 @@ export const bashToolRenderer = {
 		options: RenderResultOptions & { renderContext?: BashRenderContext },
 		uiTheme: Theme,
 	): Component {
-		const ui = createToolUIKit(uiTheme);
+		const ui = new ToolUIKit(uiTheme);
 		const { renderContext } = options;
 		const details = result.details;
 

@@ -15,19 +15,18 @@
 
 import type { AgentEvent, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Api, Model } from "@oh-my-pi/pi-ai";
+import { logger, untilAborted } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
 import lspDescription from "../../../prompts/tools/lsp.md" with { type: "text" };
 import type { AgentSessionEvent } from "../../agent-session";
 import { AuthStorage } from "../../auth-storage";
 import type { CustomTool } from "../../custom-tools/types";
-import { logger } from "../../logger";
 import { ModelRegistry } from "../../model-registry";
 import { parseModelPattern, parseModelString } from "../../model-resolver";
 import { renderPromptTemplate } from "../../prompt-templates";
 import { createAgentSession, discoverAuthStorage, discoverModels } from "../../sdk";
 import { SessionManager } from "../../session-manager";
 import { SettingsManager } from "../../settings-manager";
-import { untilAborted } from "../../utils";
 import { type LspToolDetails, lspSchema } from "../lsp/types";
 import { getPythonToolDescription, type PythonToolDetails, type PythonToolParams, pythonSchema } from "../python";
 import type {
@@ -94,54 +93,58 @@ function callMCPToolViaParent(
 	signal?: AbortSignal,
 	timeoutMs = MCP_CALL_TIMEOUT_MS,
 ): Promise<{ content: Array<{ type: string; text?: string; [key: string]: unknown }>; isError?: boolean }> {
-	return new Promise((resolve, reject) => {
-		const callId = generateMCPCallId();
-		if (signal?.aborted) {
-			reject(new Error("Aborted"));
-			return;
-		}
+	const { promise, resolve, reject } = Promise.withResolvers<{
+		content: Array<{ type: string; text?: string; [key: string]: unknown }>;
+		isError?: boolean;
+	}>();
+	const callId = generateMCPCallId();
+	if (signal?.aborted) {
+		reject(new Error("Aborted"));
+		return promise;
+	}
 
-		const timeoutId = setTimeout(() => {
-			pendingMCPCalls.delete(callId);
-			reject(new Error(`MCP call timed out after ${timeoutMs}ms`));
-		}, timeoutMs);
+	const timeoutId = setTimeout(() => {
+		pendingMCPCalls.delete(callId);
+		reject(new Error(`MCP call timed out after ${timeoutMs}ms`));
+	}, timeoutMs);
 
-		const cleanup = () => {
-			clearTimeout(timeoutId);
-			pendingMCPCalls.delete(callId);
-		};
+	const cleanup = () => {
+		clearTimeout(timeoutId);
+		pendingMCPCalls.delete(callId);
+	};
 
-		if (typeof signal?.addEventListener === "function") {
-			signal.addEventListener(
-				"abort",
-				() => {
-					cleanup();
-					reject(new Error("Aborted"));
-				},
-				{ once: true },
-			);
-		}
-
-		pendingMCPCalls.set(callId, {
-			resolve: (result) => {
+	if (typeof signal?.addEventListener === "function") {
+		signal.addEventListener(
+			"abort",
+			() => {
 				cleanup();
-				resolve(result ?? { content: [] });
+				reject(new Error("Aborted"));
 			},
-			reject: (error) => {
-				cleanup();
-				reject(error);
-			},
-			timeoutId,
-		});
+			{ once: true },
+		);
+	}
 
-		postMessageSafe({
-			type: "mcp_tool_call",
-			callId,
-			toolName,
-			params,
-			timeoutMs,
-		} as SubagentWorkerResponse);
+	pendingMCPCalls.set(callId, {
+		resolve: (result) => {
+			cleanup();
+			resolve(result ?? { content: [] });
+		},
+		reject: (error) => {
+			cleanup();
+			reject(error);
+		},
+		timeoutId,
 	});
+
+	postMessageSafe({
+		type: "mcp_tool_call",
+		callId,
+		toolName,
+		params,
+		timeoutMs,
+	} as SubagentWorkerResponse);
+
+	return promise;
 }
 
 function callPythonToolViaParent(
@@ -149,64 +152,65 @@ function callPythonToolViaParent(
 	signal?: AbortSignal,
 	timeoutMs?: number,
 ): Promise<PythonToolCallResponse["result"]> {
-	return new Promise((resolve, reject) => {
-		const callId = generatePythonCallId();
-		if (signal?.aborted) {
-			reject(new Error("Aborted"));
-			return;
+	const { promise, resolve, reject } = Promise.withResolvers<PythonToolCallResponse["result"]>();
+	const callId = generatePythonCallId();
+	if (signal?.aborted) {
+		reject(new Error("Aborted"));
+		return promise;
+	}
+
+	const sendCancel = (reason: string) => {
+		postMessageSafe({ type: "python_tool_cancel", callId, reason } as SubagentWorkerResponse);
+	};
+
+	const timeoutId =
+		typeof timeoutMs === "number" && Number.isFinite(timeoutMs)
+			? setTimeout(() => {
+					pendingPythonCalls.delete(callId);
+					sendCancel(`Python call timed out after ${timeoutMs}ms`);
+					reject(new Error(`Python call timed out after ${timeoutMs}ms`));
+				}, timeoutMs)
+			: undefined;
+
+	const cleanup = () => {
+		if (timeoutId) {
+			clearTimeout(timeoutId);
 		}
+		pendingPythonCalls.delete(callId);
+	};
 
-		const sendCancel = (reason: string) => {
-			postMessageSafe({ type: "python_tool_cancel", callId, reason } as SubagentWorkerResponse);
-		};
-
-		const timeoutId =
-			typeof timeoutMs === "number" && Number.isFinite(timeoutMs)
-				? setTimeout(() => {
-						pendingPythonCalls.delete(callId);
-						sendCancel(`Python call timed out after ${timeoutMs}ms`);
-						reject(new Error(`Python call timed out after ${timeoutMs}ms`));
-					}, timeoutMs)
-				: undefined;
-
-		const cleanup = () => {
-			if (timeoutId) {
-				clearTimeout(timeoutId);
-			}
-			pendingPythonCalls.delete(callId);
-		};
-
-		if (typeof signal?.addEventListener === "function") {
-			signal.addEventListener(
-				"abort",
-				() => {
-					cleanup();
-					sendCancel("Aborted");
-					reject(new Error("Aborted"));
-				},
-				{ once: true },
-			);
-		}
-
-		pendingPythonCalls.set(callId, {
-			resolve: (result) => {
+	if (typeof signal?.addEventListener === "function") {
+		signal.addEventListener(
+			"abort",
+			() => {
 				cleanup();
-				resolve(result ?? { content: [] });
+				sendCancel("Aborted");
+				reject(new Error("Aborted"));
 			},
-			reject: (error) => {
-				cleanup();
-				reject(error);
-			},
-			timeoutId,
-		});
+			{ once: true },
+		);
+	}
 
-		postMessageSafe({
-			type: "python_tool_call",
-			callId,
-			params,
-			timeoutMs,
-		} as SubagentWorkerResponse);
+	pendingPythonCalls.set(callId, {
+		resolve: (result) => {
+			cleanup();
+			resolve(result ?? { content: [] });
+		},
+		reject: (error) => {
+			cleanup();
+			reject(error);
+		},
+		timeoutId,
 	});
+
+	postMessageSafe({
+		type: "python_tool_call",
+		callId,
+		params,
+		timeoutMs,
+	} as SubagentWorkerResponse);
+
+	return promise;
 }
 
 function callLspToolViaParent(
@@ -214,58 +218,59 @@ function callLspToolViaParent(
 	signal?: AbortSignal,
 	timeoutMs?: number,
 ): Promise<LspToolCallResponse["result"]> {
-	return new Promise((resolve, reject) => {
-		const callId = generateLspCallId();
-		if (signal?.aborted) {
-			reject(new Error("Aborted"));
-			return;
+	const { promise, resolve, reject } = Promise.withResolvers<LspToolCallResponse["result"]>();
+	const callId = generateLspCallId();
+	if (signal?.aborted) {
+		reject(new Error("Aborted"));
+		return promise;
+	}
+
+	const timeoutId =
+		typeof timeoutMs === "number" && Number.isFinite(timeoutMs)
+			? setTimeout(() => {
+					pendingLspCalls.delete(callId);
+					reject(new Error(`LSP call timed out after ${timeoutMs}ms`));
+				}, timeoutMs)
+			: undefined;
+
+	const cleanup = () => {
+		if (timeoutId) {
+			clearTimeout(timeoutId);
 		}
+		pendingLspCalls.delete(callId);
+	};
 
-		const timeoutId =
-			typeof timeoutMs === "number" && Number.isFinite(timeoutMs)
-				? setTimeout(() => {
-						pendingLspCalls.delete(callId);
-						reject(new Error(`LSP call timed out after ${timeoutMs}ms`));
-					}, timeoutMs)
-				: undefined;
-
-		const cleanup = () => {
-			if (timeoutId) {
-				clearTimeout(timeoutId);
-			}
-			pendingLspCalls.delete(callId);
-		};
-
-		if (typeof signal?.addEventListener === "function") {
-			signal.addEventListener(
-				"abort",
-				() => {
-					cleanup();
-					reject(new Error("Aborted"));
-				},
-				{ once: true },
-			);
-		}
-
-		pendingLspCalls.set(callId, {
-			resolve: (result) => {
+	if (typeof signal?.addEventListener === "function") {
+		signal.addEventListener(
+			"abort",
+			() => {
 				cleanup();
-				resolve(result ?? { content: [] });
+				reject(new Error("Aborted"));
 			},
-			reject: (error) => {
-				cleanup();
-				reject(error);
-			},
-			timeoutId,
-		});
+			{ once: true },
+		);
+	}
 
-		postMessageSafe({
-			type: "lsp_tool_call",
-			callId,
-			params,
-			timeoutMs,
-		} as SubagentWorkerResponse);
+	pendingLspCalls.set(callId, {
+		resolve: (result) => {
+			cleanup();
+			resolve(result ?? { content: [] });
+		},
+		reject: (error) => {
+			cleanup();
+			reject(error);
+		},
+		timeoutId,
 	});
+
+	postMessageSafe({
+		type: "lsp_tool_call",
+		callId,
+		params,
+		timeoutMs,
+	} as SubagentWorkerResponse);
+
+	return promise;
 }
 
 function handleMCPToolResult(response: MCPToolCallResponse): void {

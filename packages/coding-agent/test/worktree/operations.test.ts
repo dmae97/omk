@@ -1,43 +1,35 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
-import { WORKTREE_BASE } from "../../src/lib/worktree/constants";
+import { type AsyncTempDir, createTempDir } from "@oh-my-pi/pi-utils";
 import { WorktreeError } from "../../src/lib/worktree/errors";
 import { git } from "../../src/lib/worktree/git";
 import { create, find, list, remove } from "../../src/lib/worktree/operations";
 
-let repoPath: string;
+let repoPath: AsyncTempDir;
 let originalCwd: string;
 
-async function createTestRepo(): Promise<string> {
-	const dir = await mkdtemp(path.join(os.tmpdir(), "wt-test-"));
-	await git(["init", "-b", "main"], dir);
-	await git(["config", "user.email", "test@example.com"], dir);
-	await git(["config", "user.name", "Test User"], dir);
-	await Bun.write(path.join(dir, "README.md"), "init");
-	await git(["add", "README.md"], dir);
-	await git(["commit", "-m", "init"], dir);
-	return dir;
-}
-
-async function cleanupRepo(repoRoot: string): Promise<void> {
-	const repoName = path.basename(repoRoot);
-	await rm(path.join(WORKTREE_BASE, repoName), { recursive: true, force: true });
-	await rm(repoRoot, { recursive: true, force: true });
+async function createTestRepo(): Promise<AsyncTempDir> {
+	const tempDir = await createTempDir("@omp-wt-test-");
+	await git(["init", "-b", "main"], tempDir.path);
+	await git(["config", "user.email", "test@example.com"], tempDir.path);
+	await git(["config", "user.name", "Test User"], tempDir.path);
+	await Bun.write(path.join(tempDir.path, "README.md"), "init");
+	await git(["add", "README.md"], tempDir.path);
+	await git(["commit", "-m", "init"], tempDir.path);
+	return tempDir;
 }
 
 describe("worktree operations", () => {
 	beforeEach(async () => {
 		originalCwd = process.cwd();
 		repoPath = await createTestRepo();
-		process.chdir(repoPath);
+		process.chdir(repoPath.path);
 	});
 
 	afterEach(async () => {
 		process.chdir(originalCwd);
-		await cleanupRepo(repoPath);
+		await repoPath.remove();
 	});
 
 	test("create worktree with new branch", async () => {
@@ -47,7 +39,7 @@ describe("worktree operations", () => {
 	});
 
 	test("create worktree with existing branch", async () => {
-		await git(["branch", "existing-branch"], repoPath);
+		await git(["branch", "existing-branch"], repoPath.path);
 		const wt = await create("existing-branch");
 		expect(wt.branch).toBe("existing-branch");
 	});

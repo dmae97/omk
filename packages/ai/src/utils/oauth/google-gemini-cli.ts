@@ -47,10 +47,6 @@ interface GoogleRpcErrorResponse {
 	};
 }
 
-function wait(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function getDefaultTier(allowedTiers?: Array<{ id?: string; isDefault?: boolean }>): { id?: string } {
 	if (!allowedTiers || allowedTiers.length === 0) return { id: TIER_LEGACY };
 	const defaultTier = allowedTiers.find((t) => t.isDefault);
@@ -74,7 +70,7 @@ async function pollOperation(
 	while (true) {
 		if (attempt > 0) {
 			onProgress?.(`Waiting for project provisioning (attempt ${attempt + 1})...`);
-			await wait(5000);
+			await Bun.sleep(5000);
 		}
 
 		const response = await fetch(`${CODE_ASSIST_ENDPOINT}/v1internal/${operationName}`, {

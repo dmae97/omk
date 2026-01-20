@@ -3,6 +3,7 @@ import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallb
 import { StringEnum } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
+import { ptree, untilAborted } from "@oh-my-pi/pi-utils";
 import type { Static } from "@sinclair/typebox";
 import { Type } from "@sinclair/typebox";
 import { getLanguageFromPath, type Theme } from "../../modes/interactive/theme/theme";
@@ -10,10 +11,9 @@ import findDescription from "../../prompts/tools/find.md" with { type: "text" };
 import { ensureTool } from "../../utils/tools-manager";
 import type { RenderResultOptions } from "../custom-tools/types";
 import { renderPromptTemplate } from "../prompt-templates";
-import { ScopeSignal, untilAborted } from "../utils";
 import type { ToolSession } from "./index";
 import { resolveToCwd } from "./path-utils";
-import { createToolUIKit, PREVIEW_LIMITS } from "./render-utils";
+import { PREVIEW_LIMITS, ToolUIKit } from "./render-utils";
 import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateHead } from "./truncate";
 
 const findSchema = Type.Object({
@@ -63,51 +63,35 @@ export interface FindToolOptions {
 	operations?: FindOperations;
 }
 
-async function captureCommandOutput(
-	command: string,
-	args: string[],
-	signal?: AbortSignal,
-): Promise<{ stdout: string; stderr: string; exitCode: number | null; aborted: boolean }> {
-	const child = Bun.spawn([command, ...args], {
-		stdin: "ignore",
-		stdout: "pipe",
-		stderr: "pipe",
-	});
+export interface FdResult {
+	stdout: string;
+	stderr: string;
+	exitCode: number | null;
+}
 
-	using scope = new ScopeSignal(signal ? { signal } : undefined);
-	scope.catch(() => {
-		child.kill();
-	});
+/**
+ * Run fd command and capture output.
+ *
+ * @throws Error with message "Operation aborted" if signal is aborted
+ */
+export async function runFd(fdPath: string, args: string[], signal?: AbortSignal): Promise<FdResult> {
+	const child = ptree.cspawn([fdPath, ...args], { signal });
 
-	const stdoutReader = (child.stdout as ReadableStream<Uint8Array>).getReader();
-	const stderrReader = (child.stderr as ReadableStream<Uint8Array>).getReader();
-	const stdoutDecoder = new TextDecoder();
-	const stderrDecoder = new TextDecoder();
-	let stdout = "";
-	let stderr = "";
+	let stdout: string;
+	try {
+		stdout = await child.nothrow().text();
+	} catch (err) {
+		if (err instanceof ptree.Exception && err.aborted) {
+			throw new Error("Operation aborted");
+		}
+		throw err;
+	}
 
-	await Promise.all([
-		(async () => {
-			while (true) {
-				const { done, value } = await stdoutReader.read();
-				if (done) break;
-				stdout += stdoutDecoder.decode(value, { stream: true });
-			}
-			stdout += stdoutDecoder.decode();
-		})(),
-		(async () => {
-			while (true) {
-				const { done, value } = await stderrReader.read();
-				if (done) break;
-				stderr += stderrDecoder.decode(value, { stream: true });
-			}
-			stderr += stderrDecoder.decode();
-		})(),
-	]);
-
-	const exitCode = await child.exited;
-
-	return { stdout, stderr, exitCode, aborted: scope.aborted };
+	return {
+		stdout,
+		stderr: child.peekStderr(),
+		exitCode: child.exitCode,
+	};
 }
 
 export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
@@ -263,24 +247,17 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 					"--absolute-path",
 					searchPath,
 				];
-				const { stdout: gitignoreStdout, aborted: gitignoreAborted } = await captureCommandOutput(
-					fdPath,
-					gitignoreArgs,
-					signal,
-				);
-				if (gitignoreAborted) {
-					throw new Error("Operation aborted");
-				}
+				const { stdout: gitignoreStdout } = await runFd(fdPath, gitignoreArgs, signal);
 				for (const rawLine of gitignoreStdout.split("\n")) {
 					const file = rawLine.trim();
 					if (!file) continue;
 					gitignoreFiles.add(file);
 				}
 			} catch (err) {
-				if (signal?.aborted) {
-					throw err instanceof Error ? err : new Error("Operation aborted");
+				if (err instanceof Error && err.message === "Operation aborted") {
+					throw err;
 				}
-				// Ignore lookup errors
+				// Ignore other lookup errors
 			}
 
 			for (const gitignorePath of gitignoreFiles) {
@@ -291,20 +268,11 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 			args.push(effectivePattern, searchPath);
 
 			// Run fd
-			const { stdout, stderr, exitCode, aborted } = await captureCommandOutput(fdPath, args, signal);
-
-			if (aborted) {
-				throw new Error("Operation aborted");
-			}
-
+			const { stdout, stderr, exitCode } = await runFd(fdPath, args, signal);
 			const output = stdout.trim();
 
-			if (exitCode !== 0) {
-				const errorMsg = stderr.trim() || `fd exited with code ${exitCode ?? -1}`;
-				// fd returns non-zero for some errors but may still have partial output
-				if (!output) {
-					throw new Error(errorMsg);
-				}
+			if (exitCode !== 0 && !output) {
+				throw new Error(stderr.trim() || `fd exited with code ${exitCode ?? -1}`);
 			}
 
 			if (!output) {
@@ -421,7 +389,7 @@ const COLLAPSED_LIST_LIMIT = PREVIEW_LIMITS.COLLAPSED_ITEMS;
 export const findToolRenderer = {
 	inline: true,
 	renderCall(args: FindRenderArgs, uiTheme: Theme): Component {
-		const ui = createToolUIKit(uiTheme);
+		const ui = new ToolUIKit(uiTheme);
 		const label = ui.title("Find");
 		let text = `${uiTheme.format.bullet} ${label} ${uiTheme.fg("accent", args.pattern || "*")}`;
 
@@ -442,7 +410,7 @@ export const findToolRenderer = {
 		{ expanded }: RenderResultOptions,
 		uiTheme: Theme,
 	): Component {
-		const ui = createToolUIKit(uiTheme);
+		const ui = new ToolUIKit(uiTheme);
 		const details = result.details;
 
 		if (result.isError || details?.error) {

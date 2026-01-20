@@ -30,14 +30,14 @@ import { join } from "node:path";
 import { Agent, type AgentEvent, type AgentMessage, type AgentTool, type ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { type Message, type Model, supportsXhigh } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
-import chalk from "chalk";
 // Import discovery to register all providers on startup
-import "../discovery";
+import { logger, postmortem } from "@oh-my-pi/pi-utils";
+import chalk from "chalk";
 import { loadCapability } from "../capability/index";
 import { type Rule, ruleCapability } from "../capability/rule";
 import { getAgentDir, getConfigDirPaths } from "../config";
+import "../discovery";
 import { initializeWithSettings } from "../discovery";
-import { registerAsyncCleanup } from "../modes/cleanup";
 import { AgentSession } from "./agent-session";
 import { AuthStorage } from "./auth-storage";
 import { CursorExecHandlers } from "./cursor/exec-bridge";
@@ -52,15 +52,14 @@ import {
 	type ExtensionContext,
 	type ExtensionFactory,
 	ExtensionRunner,
+	ExtensionToolWrapper,
 	type ExtensionUIContext,
 	type LoadExtensionsResult,
 	loadExtensionFromFactory,
 	loadExtensions,
 	type ToolDefinition,
 	wrapRegisteredTools,
-	wrapToolWithExtensions,
 } from "./extensions/index";
-import { logger } from "./logger";
 import { discoverAndLoadMCPTools, type MCPManager, type MCPToolsLoadResult } from "./mcp/index";
 import { convertToLlm } from "./messages";
 import { ModelRegistry } from "./model-registry";
@@ -212,12 +211,11 @@ export type { FileSlashCommand } from "./slash-commands";
 export type { Tool } from "./tools/index";
 
 export {
+	// Individual tool classes (for custom usage)
+	BashTool,
 	// Tool classes and factories
 	BUILTIN_TOOLS,
 	createTools,
-	type ToolSession,
-	// Individual tool classes (for custom usage)
-	BashTool,
 	EditTool,
 	FindTool,
 	GitTool,
@@ -227,6 +225,7 @@ export {
 	PythonTool,
 	ReadTool,
 	WriteTool,
+	type ToolSession,
 };
 
 // Helper Functions
@@ -441,7 +440,7 @@ async function cleanupSshResources(): Promise<void> {
 function registerSshCleanup(): void {
 	if (sshCleanupRegistered) return;
 	sshCleanupRegistered = true;
-	registerAsyncCleanup(() => cleanupSshResources());
+	postmortem.register("ssh-cleanup", cleanupSshResources);
 }
 
 let pythonCleanupRegistered = false;
@@ -449,9 +448,7 @@ let pythonCleanupRegistered = false;
 function registerPythonCleanup(): void {
 	if (pythonCleanupRegistered) return;
 	pythonCleanupRegistered = true;
-	registerAsyncCleanup(async () => {
-		await disposeAllKernelSessions();
-	});
+	postmortem.register("python-cleanup", disposeAllKernelSessions);
 }
 
 function customToolToDefinition(tool: CustomTool): ToolDefinition {
@@ -872,7 +869,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	}
 	if (extensionRunner) {
 		for (const tool of toolRegistry.values()) {
-			toolRegistry.set(tool.name, wrapToolWithExtensions(tool, extensionRunner));
+			toolRegistry.set(tool.name, new ExtensionToolWrapper(tool, extensionRunner));
 		}
 	}
 	if (model?.provider === "cursor") {

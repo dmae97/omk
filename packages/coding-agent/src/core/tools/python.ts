@@ -13,7 +13,7 @@ import { executePython, getPreludeDocs, type PythonExecutorOptions } from "../py
 import type { PreludeHelper, PythonStatusEvent } from "../python-kernel";
 import type { ToolSession } from "./index";
 import { resolveToCwd } from "./path-utils";
-import { createToolUIKit, getTreeBranch, getTreeContinuePrefix, shortenPath, truncate } from "./render-utils";
+import { getTreeBranch, getTreeContinuePrefix, shortenPath, ToolUIKit, truncate } from "./render-utils";
 import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateTail } from "./truncate";
 
 export const PYTHON_DEFAULT_PREVIEW_LINES = 10;
@@ -610,7 +610,7 @@ function renderStatusEvents(events: PythonStatusEvent[], theme: Theme, expanded:
 
 export const pythonToolRenderer = {
 	renderCall(args: PythonRenderArgs, uiTheme: Theme): Component {
-		const ui = createToolUIKit(uiTheme);
+		const ui = new ToolUIKit(uiTheme);
 		const code = args.code || uiTheme.format.ellipsis;
 		const prompt = uiTheme.fg("accent", ">>>");
 		const cwd = process.cwd();
@@ -642,7 +642,7 @@ export const pythonToolRenderer = {
 		options: RenderResultOptions & { renderContext?: PythonRenderContext },
 		uiTheme: Theme,
 	): Component {
-		const ui = createToolUIKit(uiTheme);
+		const ui = new ToolUIKit(uiTheme);
 		const { renderContext } = options;
 		const details = result.details;
 

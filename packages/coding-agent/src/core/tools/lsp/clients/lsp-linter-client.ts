@@ -84,7 +84,7 @@ export class LspLinterClient implements LinterClient {
 			if (diagnostics !== undefined) {
 				return diagnostics;
 			}
-			await new Promise((resolve) => setTimeout(resolve, 100));
+			await Bun.sleep(100);
 		}
 
 		return client.diagnostics.get(uri) ?? [];

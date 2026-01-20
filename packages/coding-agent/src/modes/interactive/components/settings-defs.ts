@@ -322,6 +322,15 @@ export const SETTINGS_DEFS: SettingDef[] = [
 		set: (sm, v) => sm.setEditPatchMode(v),
 	},
 	{
+		id: "editStreamingAbort",
+		tab: "tools",
+		type: "boolean",
+		label: "Edit streaming abort",
+		description: "Abort streaming edit tool calls when patch preview fails",
+		get: (sm) => sm.getEditStreamingAbort(),
+		set: (sm, v) => sm.setEditStreamingAbort(v),
+	},
+	{
 		id: "readLineNumbers",
 		tab: "tools",
 		type: "boolean",

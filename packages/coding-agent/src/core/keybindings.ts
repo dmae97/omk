@@ -9,8 +9,8 @@ import {
 	matchesKey,
 	setEditorKeybindings,
 } from "@oh-my-pi/pi-tui";
+import { logger } from "@oh-my-pi/pi-utils";
 import { getAgentDir } from "../config";
-import { logger } from "./logger";
 
 /**
  * Application-level actions (coding agent specific).

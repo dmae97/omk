@@ -12,19 +12,7 @@ function generateId(): string {
 	return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-/** Parse SSE data line */
-function parseSSELine(line: string): { event?: string; data?: string; id?: string } | null {
-	if (line.startsWith("data:")) {
-		return { data: line.slice(5).trim() };
-	}
-	if (line.startsWith("event:")) {
-		return { event: line.slice(6).trim() };
-	}
-	if (line.startsWith("id:")) {
-		return { id: line.slice(3).trim() };
-	}
-	return null;
-}
+import { readSseEvents } from "@oh-my-pi/pi-utils";
 
 /**
  * HTTP transport for MCP servers.
@@ -95,30 +83,17 @@ export class HttpTransport implements MCPTransport {
 			}
 
 			// Read SSE stream
-			const reader = response.body.getReader();
-			const decoder = new TextDecoder();
-			let buffer = "";
-
-			while (this._connected) {
-				const { done, value } = await reader.read();
-				if (done) break;
-
-				buffer += decoder.decode(value, { stream: true });
-				const lines = buffer.split("\n");
-				buffer = lines.pop() ?? "";
-
-				for (const line of lines) {
-					const parsed = parseSSELine(line);
-					if (parsed?.data && parsed.data !== "[DONE]") {
-						try {
-							const message = JSON.parse(parsed.data);
-							if ("method" in message && !("id" in message)) {
-								this.onNotification?.(message.method, message.params);
-							}
-						} catch {
-							// Ignore parse errors
-						}
+			for await (const event of readSseEvents(response.body)) {
+				if (!this._connected) break;
+				const data = event.data?.trim();
+				if (!data || data === "[DONE]") continue;
+				try {
+					const message = JSON.parse(data);
+					if ("method" in message && !("id" in message)) {
+						this.onNotification?.(message.method, message.params);
 					}
+				} catch {
+					// Ignore parse errors
 				}
 			}
 		} catch (error) {
@@ -192,44 +167,31 @@ export class HttpTransport implements MCPTransport {
 			throw new Error("No response body");
 		}
 
-		const reader = response.body.getReader();
-		const decoder = new TextDecoder();
-		let buffer = "";
 		let result: T | undefined;
 
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
+		for await (const event of readSseEvents(response.body)) {
+			const data = event.data?.trim();
+			if (!data || data === "[DONE]") continue;
+			try {
+				const message = JSON.parse(data) as JsonRpcResponse;
 
-			buffer += decoder.decode(value, { stream: true });
-			const lines = buffer.split("\n");
-			buffer = lines.pop() ?? "";
-
-			for (const line of lines) {
-				const parsed = parseSSELine(line);
-				if (parsed?.data && parsed.data !== "[DONE]") {
-					try {
-						const message = JSON.parse(parsed.data) as JsonRpcResponse;
-
-						// Handle our response
-						if ("id" in message && message.id === expectedId) {
-							if (message.error) {
-								throw new Error(`MCP error ${message.error.code}: ${message.error.message}`);
-							}
-							result = message.result as T;
-						}
-						// Handle notifications
-						else if ("method" in message && !("id" in message)) {
-							const notification = message as { method: string; params?: unknown };
-							this.onNotification?.(notification.method, notification.params);
-						}
-					} catch (error) {
-						if (error instanceof Error && error.message.startsWith("MCP error")) {
-							throw error;
-						}
-						// Ignore other parse errors
+				// Handle our response
+				if ("id" in message && message.id === expectedId) {
+					if (message.error) {
+						throw new Error(`MCP error ${message.error.code}: ${message.error.message}`);
 					}
+					result = message.result as T;
 				}
+				// Handle notifications
+				else if ("method" in message && !("id" in message)) {
+					const notification = message as { method: string; params?: unknown };
+					this.onNotification?.(notification.method, notification.params);
+				}
+			} catch (error) {
+				if (error instanceof Error && error.message.startsWith("MCP error")) {
+					throw error;
+				}
+				// Ignore other parse errors
 			}
 		}
 

@@ -33,8 +33,8 @@ import type { BashOperations } from "../tools/bash";
 import type { EditToolDetails } from "../tools/patch";
 
 export type { ExecOptions, ExecResult } from "../exec";
-export type { AgentToolResult, AgentToolUpdateCallback };
 export type { AppAction, KeybindingsManager } from "../keybindings";
+export type { AgentToolResult, AgentToolUpdateCallback };
 
 // ============================================================================
 // UI Context
@@ -633,7 +633,7 @@ export interface ExtensionAPI {
 	// =========================================================================
 
 	/** File logger for error/warning/debug messages */
-	logger: typeof import("../logger").logger;
+	logger: typeof import("@oh-my-pi/pi-utils").logger;
 
 	/** Injected @sinclair/typebox module for defining tool parameters */
 	typebox: typeof import("@sinclair/typebox");

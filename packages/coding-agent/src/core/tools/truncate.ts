@@ -11,7 +11,7 @@
 
 export const DEFAULT_MAX_LINES = 2000;
 export const DEFAULT_MAX_BYTES = 50 * 1024; // 50KB
-export const GREP_MAX_LINE_LENGTH = 500; // Max chars per grep match line
+export const DEFAULT_MAX_COLUMN = 1024; // Max chars per grep match line
 
 export interface TruncationResult {
 	/** The truncated content */
@@ -282,7 +282,7 @@ export function truncateStringToBytesFromStart(str: string, maxBytes: number): {
  */
 export function truncateLine(
 	line: string,
-	maxChars: number = GREP_MAX_LINE_LENGTH,
+	maxChars: number = DEFAULT_MAX_COLUMN,
 ): { text: string; wasTruncated: boolean } {
 	if (line.length <= maxChars) {
 		return { text: line, wasTruncated: false };

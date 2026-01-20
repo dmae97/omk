@@ -3,6 +3,7 @@
  * Handles data loading, tree building, filtering, and toggle persistence.
  */
 
+import { logger } from "@oh-my-pi/pi-utils";
 import type { ContextFile } from "../../../../capability/context-file";
 import type { ExtensionModule } from "../../../../capability/extension-module";
 import type { Hook } from "../../../../capability/hook";
@@ -13,7 +14,6 @@ import type { Skill } from "../../../../capability/skill";
 import type { SlashCommand } from "../../../../capability/slash-command";
 import type { CustomTool } from "../../../../capability/tool";
 import type { SourceMeta } from "../../../../capability/types";
-import { logger } from "../../../../core/logger";
 import {
 	disableProvider,
 	enableProvider,

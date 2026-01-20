@@ -4,9 +4,9 @@
  * Integrates MCP tool discovery with the custom tools system.
  */
 
+import { logger } from "@oh-my-pi/pi-utils";
 import { AgentStorage } from "../agent-storage";
 import type { LoadedCustomTool } from "../custom-tools/types";
-import { logger } from "../logger";
 import { type MCPLoadResult, MCPManager } from "./manager";
 import { parseMCPToolName } from "./tool-bridge";
 import { MCPToolCache } from "./tool-cache";

@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "bun:test";
+import { createTempDirSync, type SyncTempDir } from "@oh-my-pi/pi-utils";
 import * as pythonExecutor from "../../src/core/python-executor";
 import { createTools, type ToolSession } from "../../src/core/tools/index";
 import { PythonTool } from "../../src/core/tools/python";
 
 let previousSkipCheck: string | undefined;
-
+let tempDir: SyncTempDir;
 beforeAll(() => {
+	tempDir = createTempDirSync("@omp-python-test-");
 	previousSkipCheck = process.env.OMP_PYTHON_SKIP_CHECK;
 	process.env.OMP_PYTHON_SKIP_CHECK = "1";
 });
@@ -16,11 +18,12 @@ afterAll(() => {
 		return;
 	}
 	process.env.OMP_PYTHON_SKIP_CHECK = previousSkipCheck;
+	tempDir.remove();
 });
 
 function createSession(overrides: Partial<ToolSession> = {}): ToolSession {
 	return {
-		cwd: "/tmp/test",
+		cwd: tempDir.path,
 		hasUI: false,
 		getSessionFile: () => null,
 		getSessionSpawns: () => "*",

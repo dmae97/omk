@@ -24,7 +24,7 @@ import askDescription from "../../prompts/tools/ask.md" with { type: "text" };
 import type { RenderResultOptions } from "../custom-tools/types";
 import { renderPromptTemplate } from "../prompt-templates";
 import type { ToolSession } from "./index";
-import { createToolUIKit } from "./render-utils";
+import { ToolUIKit } from "./render-utils";
 
 // =============================================================================
 // Types
@@ -324,7 +324,7 @@ interface AskRenderArgs {
 
 export const askToolRenderer = {
 	renderCall(args: AskRenderArgs, uiTheme: Theme): Component {
-		const ui = createToolUIKit(uiTheme);
+		const ui = new ToolUIKit(uiTheme);
 		const label = ui.title("Ask");
 
 		// Multi-part questions

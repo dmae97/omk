@@ -1,9 +1,11 @@
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { type Static, Type } from "@sinclair/typebox";
+import { $ } from "bun";
 import { nanoid } from "nanoid";
 import { parse as parseHtml } from "node-html-parser";
 import { type Theme, theme } from "../../modes/interactive/theme/theme";
@@ -69,25 +71,21 @@ const CONVERTIBLE_EXTENSIONS = new Set([
 // Utilities
 // =============================================================================
 
-type SpawnSyncOptions = NonNullable<Parameters<typeof Bun.spawnSync>[1]>;
-
 /**
  * Execute a command and return stdout
  */
-function exec(
+
+async function exec(
 	cmd: string,
 	args: string[],
 	options?: { timeout?: number; input?: string | Buffer },
-): { stdout: string; stderr: string; ok: boolean } {
-	const stdin = (options?.input ?? "ignore") as SpawnSyncOptions["stdin"];
-	const result = Bun.spawnSync([cmd, ...args], {
-		stdin,
-		stdout: "pipe",
-		stderr: "pipe",
-	});
+): Promise<{ stdout: string; stderr: string; ok: boolean }> {
+	void options;
+	const result = await $`${cmd} ${args}`.quiet().nothrow();
+	const decoder = new TextDecoder();
 	return {
-		stdout: result.stdout?.toString() ?? "",
-		stderr: result.stderr?.toString() ?? "",
+		stdout: result.stdout ? decoder.decode(result.stdout) : "",
+		stderr: result.stderr ? decoder.decode(result.stderr) : "",
 		ok: result.exitCode === 0,
 	};
 }
@@ -420,7 +418,7 @@ async function renderHtmlToText(
 		if (lynx) {
 			const normalizedPath = tmpFile.replace(/\\/g, "/");
 			const fileUrl = normalizedPath.startsWith("/") ? `file://${normalizedPath}` : `file:///${normalizedPath}`;
-			const result = exec("lynx", ["-dump", "-nolist", "-width", "120", fileUrl], { timeout });
+			const result = await exec("lynx", ["-dump", "-nolist", "-width", "120", fileUrl], { timeout });
 			if (result.ok) {
 				return { content: result.stdout, ok: true, method: "lynx" };
 			}
@@ -429,7 +427,7 @@ async function renderHtmlToText(
 		// Fall back to html2text (auto-install via uv/pip)
 		const html2text = await ensureTool("html2text", true);
 		if (html2text) {
-			const result = exec(html2text, [tmpFile], { timeout });
+			const result = await exec(html2text, [tmpFile], { timeout });
 			if (result.ok) {
 				return { content: result.stdout, ok: true, method: "html2text" };
 			}
@@ -438,7 +436,7 @@ async function renderHtmlToText(
 		return { content: "", ok: false, method: "none" };
 	} finally {
 		try {
-			await Bun.$`rm ${tmpFile}`.quiet();
+			await rm(tmpFile, { force: true });
 		} catch {}
 	}
 }

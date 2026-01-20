@@ -5,7 +5,7 @@
  * without maintaining persistent connections.
  */
 
-import { logger } from "../logger";
+import { logger } from "@oh-my-pi/pi-utils";
 
 /** Parse SSE response format (lines starting with "data: ") */
 export function parseSSE(text: string): unknown {

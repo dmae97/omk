@@ -1,9 +1,9 @@
 import { homedir } from "node:os";
 import { basename, extname, join } from "node:path";
+import { logger } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 import { globSync } from "glob";
 import { getConfigDirPaths } from "../../../config";
-import { logger } from "../../logger";
 import { BiomeClient } from "./clients/biome-client";
 import DEFAULTS from "./defaults.json" with { type: "json" };
 import type { ServerConfig } from "./types";

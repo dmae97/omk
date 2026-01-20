@@ -508,20 +508,6 @@ export function extractHoverText(
 // =============================================================================
 
 /**
- * Sleep for the specified number of milliseconds.
- */
-export function sleep(ms: number): Promise<void> {
-	return Bun.sleep(ms);
-}
-
-/**
- * Check if a command exists in PATH.
- */
-export async function commandExists(command: string): Promise<boolean> {
-	return Bun.which(command) !== null;
-}
-
-/**
  * Truncate a string to a maximum length with ellipsis.
  */
 export function truncate(str: string, maxLength: number): string {

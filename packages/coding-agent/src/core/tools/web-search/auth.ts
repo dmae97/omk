@@ -11,10 +11,10 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import { buildAnthropicHeaders as buildProviderAnthropicHeaders } from "@oh-my-pi/pi-ai";
+import { logger } from "@oh-my-pi/pi-utils";
 import { getAgentDbPath, getConfigDirPaths } from "../../../config";
 import { AgentStorage } from "../../agent-storage";
 import type { AuthCredential, AuthCredentialEntry, AuthStorageData } from "../../auth-storage";
-import { logger } from "../../logger";
 import { migrateJsonStorage } from "../../storage-migration";
 import type { AnthropicAuthConfig, AnthropicOAuthCredential, ModelsJson } from "./types";
 

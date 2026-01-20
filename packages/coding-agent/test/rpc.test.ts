@@ -53,7 +53,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		expect(messageEndEvents.length).toBeGreaterThanOrEqual(2); // user + assistant
 
 		// Wait for file writes
-		await new Promise((resolve) => setTimeout(resolve, 200));
+		await Bun.sleep(200);
 
 		// Verify session file
 		const sessionsPath = join(sessionDir, "sessions");
@@ -96,7 +96,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		expect(result.tokensBefore).toBeGreaterThan(0);
 
 		// Wait for file writes
-		await new Promise((resolve) => setTimeout(resolve, 200));
+		await Bun.sleep(200);
 
 		// Verify compaction in session file
 		const sessionsPath = join(sessionDir, "sessions");
@@ -134,7 +134,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		await client.bash(`echo ${uniqueValue}`);
 
 		// Wait for file writes
-		await new Promise((resolve) => setTimeout(resolve, 200));
+		await Bun.sleep(200);
 
 		// Verify bash message in session
 		const sessionsPath = join(sessionDir, "sessions");

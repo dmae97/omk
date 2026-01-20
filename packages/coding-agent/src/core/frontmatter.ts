@@ -1,5 +1,5 @@
+import { logger } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
-import { logger } from "./logger";
 
 function stripHtmlComments(content: string): string {
 	return content.replace(/<!--[\s\S]*?-->/g, "");

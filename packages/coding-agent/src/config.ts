@@ -1,9 +1,9 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { logger } from "@oh-my-pi/pi-utils";
 // Embed package.json at build time for config
 import packageJson from "../package.json" with { type: "json" };
-import { logger } from "./core/logger";
 
 // =============================================================================
 // App Config (from embedded package.json)

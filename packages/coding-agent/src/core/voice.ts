@@ -2,9 +2,9 @@ import { unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { completeSimple, type Model } from "@oh-my-pi/pi-ai";
+import { logger } from "@oh-my-pi/pi-utils";
 import { nanoid } from "nanoid";
 import voiceSummaryPrompt from "../prompts/voice-summary.md" with { type: "text" };
-import { logger } from "./logger";
 import type { ModelRegistry } from "./model-registry";
 import { findSmolModel } from "./model-resolver";
 import { renderPromptTemplate } from "./prompt-templates";
@@ -141,13 +141,6 @@ function buildRecordingCommand(filePath: string, sampleRate: number, channels: n
 	}
 
 	return null;
-}
-
-/**
- * @deprecated Use `new VoiceRecording(settings)` instead.
- */
-export function startVoiceRecording(settings: VoiceSettings): VoiceRecordingHandle {
-	return new VoiceRecording(settings);
 }
 
 export async function transcribeAudio(

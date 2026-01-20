@@ -11,6 +11,7 @@
  *   - "omp/slow" or "pi/slow" → configured slow model from settings
  */
 
+import { $ } from "bun";
 import { type Settings as SettingsFile, settingsCapability } from "../../../capability/settings";
 import { loadCapability } from "../../../discovery";
 import type { Settings as SettingsData } from "../../settings-manager";
@@ -29,7 +30,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
  * Returns models in "provider/modelId" format.
  * Caches the result for performance.
  */
-export function getAvailableModels(): string[] {
+export async function getAvailableModels(): Promise<string[]> {
 	const now = Date.now();
 	if (cachedModels !== null && now < cacheExpiry) {
 		return cachedModels;
@@ -37,20 +38,17 @@ export function getAvailableModels(): string[] {
 
 	try {
 		const ompCommand = resolveOmpCommand();
-		const result = Bun.spawnSync([ompCommand.cmd, ...ompCommand.args, "--list-models"], {
-			stdin: "ignore",
-			stdout: "pipe",
-			stderr: "pipe",
-		});
+		const result = await $`${ompCommand.cmd} ${ompCommand.args} --list-models`.quiet().nothrow();
+		const stdout = result.stdout?.toString() ?? "";
 
-		if (result.exitCode !== 0 || !result.stdout) {
+		if (result.exitCode !== 0 || !stdout.trim()) {
 			cachedModels = [];
 			cacheExpiry = now + CACHE_TTL_MS;
 			return cachedModels;
 		}
 
 		// Parse output: skip header line, extract provider/model
-		const lines = result.stdout.toString().trim().split("\n");
+		const lines = stdout.trim().split("\n");
 		cachedModels = lines
 			.slice(1) // Skip header
 			.map((line) => {
@@ -151,7 +149,7 @@ export async function resolveModelPattern(
 		return undefined;
 	}
 
-	const models = availableModels ?? getAvailableModels();
+	const models = availableModels ?? (await getAvailableModels());
 	if (models.length === 0) {
 		// Fallback: return pattern as-is if we can't get available models
 		return pattern;

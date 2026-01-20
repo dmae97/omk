@@ -6,15 +6,11 @@
 
 import type { AgentEvent, AgentMessage, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent } from "@oh-my-pi/pi-ai";
-import type { Subprocess } from "bun";
+import { createSanitizerStream, createSplitterStream, createTextDecoderStream, ptree } from "@oh-my-pi/pi-utils";
 import type { SessionStats } from "../../core/agent-session";
 import type { BashResult } from "../../core/bash-executor";
 import type { CompactionResult } from "../../core/compaction/index";
 import type { RpcCommand, RpcResponse, RpcSessionState } from "./rpc-types";
-
-// ============================================================================
-// Types
-// ============================================================================
 
 /** Distributive Omit that works with union types */
 type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
@@ -51,13 +47,12 @@ export type RpcEventListener = (event: AgentEvent) => void;
 // ============================================================================
 
 export class RpcClient {
-	private process: Subprocess | null = null;
-	private lineReader: ReadableStreamDefaultReader<string> | null = null;
+	private process: ptree.ChildProcess | null = null;
+	private lineReader: ReadableStream<string> | null = null;
 	private eventListeners: RpcEventListener[] = [];
 	private pendingRequests: Map<string, { resolve: (response: RpcResponse) => void; reject: (error: Error) => void }> =
 		new Map();
 	private requestId = 0;
-	private stderr = "";
 
 	constructor(private options: RpcClientOptions = {}) {}
 
@@ -82,65 +77,39 @@ export class RpcClient {
 			args.push(...this.options.args);
 		}
 
-		this.process = Bun.spawn(["bun", cliPath, ...args], {
+		this.process = ptree.cspawn(["bun", cliPath, ...args], {
 			cwd: this.options.cwd,
 			env: { ...process.env, ...this.options.env },
 			stdin: "pipe",
-			stdout: "pipe",
-			stderr: "pipe",
 		});
 
-		// Collect stderr for debugging
-		(async () => {
-			const reader = (this.process!.stderr as ReadableStream<Uint8Array>).getReader();
-			const decoder = new TextDecoder();
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) break;
-				this.stderr += decoder.decode(value);
-			}
-		})();
-
-		// Set up line reader for stdout
-		const textStream = (this.process.stdout as ReadableStream<Uint8Array>).pipeThrough(new TextDecoderStream());
-		this.lineReader = textStream
-			.pipeThrough(
-				new TransformStream<string, string>({
-					transform(chunk, controller) {
-						const lines = chunk.split("\n");
-						for (const line of lines) {
-							if (line.trim()) {
-								controller.enqueue(line);
-							}
-						}
-					},
-				}),
-			)
-			.getReader() as ReadableStreamDefaultReader<string>;
-
 		// Process lines in background
-		(async () => {
+		const lines = this.process.stdout
+			.pipeThrough(createTextDecoderStream())
+			.pipeThrough(createSanitizerStream())
+			.pipeThrough(createSplitterStream("\n"));
+		this.lineReader = lines;
+		void (async () => {
 			try {
-				while (true) {
-					const { done, value } = await this.lineReader!.read();
-					if (done) break;
-					this.handleLine(value);
+				for await (const line of lines) {
+					this.handleLine(line);
 				}
 			} catch {
 				// Stream closed
+			} finally {
+				lines.cancel();
 			}
 		})();
 
 		// Wait a moment for process to initialize
-		await new Promise((resolve) => setTimeout(resolve, 100));
+		await Bun.sleep(100);
 
 		try {
-			const exitCode = await Promise.race([
-				this.process.exited,
-				new Promise<null>((resolve) => setTimeout(() => resolve(null), 50)),
-			]);
+			const exitCode = await Promise.race([this.process.exited, Bun.sleep(50).then(() => null)]);
 			if (exitCode !== null) {
-				throw new Error(`Agent process exited immediately with code ${exitCode}. Stderr: ${this.stderr}`);
+				throw new Error(
+					`Agent process exited immediately with code ${exitCode}. Stderr: ${this.process.peekStderr()}`,
+				);
 			}
 		} catch {
 			// Process still running, which is what we want
@@ -154,22 +123,7 @@ export class RpcClient {
 		if (!this.process) return;
 
 		this.lineReader?.cancel();
-		this.process.kill();
-
-		// Wait for process to exit
-		await Promise.race([
-			this.process.exited,
-			new Promise<void>((resolve) => {
-				setTimeout(() => {
-					try {
-						this.process?.kill(9);
-					} catch {
-						// Already dead
-					}
-					resolve();
-				}, 1000);
-			}),
-		]);
+		await this.process.killAndWait();
 
 		this.process = null;
 		this.lineReader = null;
@@ -193,7 +147,7 @@ export class RpcClient {
 	 * Get collected stderr output (useful for debugging).
 	 */
 	getStderr(): string {
-		return this.stderr;
+		return this.process?.peekStderr() ?? "";
 	}
 
 	// =========================================================================
@@ -416,42 +370,50 @@ export class RpcClient {
 	 * Resolves when agent_end event is received.
 	 */
 	waitForIdle(timeout = 60000): Promise<void> {
-		return new Promise((resolve, reject) => {
-			const timer = setTimeout(() => {
+		const { promise, resolve, reject } = Promise.withResolvers<void>();
+		let settled = false;
+		const unsubscribe = this.onEvent((event) => {
+			if (event.type === "agent_end") {
+				settled = true;
 				unsubscribe();
-				reject(new Error(`Timeout waiting for agent to become idle. Stderr: ${this.stderr}`));
-			}, timeout);
-
-			const unsubscribe = this.onEvent((event) => {
-				if (event.type === "agent_end") {
-					clearTimeout(timer);
-					unsubscribe();
-					resolve();
-				}
-			});
+				resolve();
+			}
 		});
+
+		void (async () => {
+			await Bun.sleep(timeout);
+			if (settled) return;
+			settled = true;
+			unsubscribe();
+			reject(new Error(`Timeout waiting for agent to become idle. Stderr: ${this.process?.peekStderr() ?? ""}`));
+		})();
+		return promise;
 	}
 
 	/**
 	 * Collect events until agent becomes idle.
 	 */
 	collectEvents(timeout = 60000): Promise<AgentEvent[]> {
-		return new Promise((resolve, reject) => {
-			const events: AgentEvent[] = [];
-			const timer = setTimeout(() => {
+		const { promise, resolve, reject } = Promise.withResolvers<AgentEvent[]>();
+		const events: AgentEvent[] = [];
+		let settled = false;
+		const unsubscribe = this.onEvent((event) => {
+			events.push(event);
+			if (event.type === "agent_end") {
+				settled = true;
 				unsubscribe();
-				reject(new Error(`Timeout collecting events. Stderr: ${this.stderr}`));
-			}, timeout);
-
-			const unsubscribe = this.onEvent((event) => {
-				events.push(event);
-				if (event.type === "agent_end") {
-					clearTimeout(timer);
-					unsubscribe();
-					resolve(events);
-				}
-			});
+				resolve(events);
+			}
 		});
+
+		void (async () => {
+			await Bun.sleep(timeout);
+			if (settled) return;
+			settled = true;
+			unsubscribe();
+			reject(new Error(`Timeout collecting events. Stderr: ${this.process?.peekStderr() ?? ""}`));
+		})();
+		return promise;
 	}
 
 	/**
@@ -495,37 +457,45 @@ export class RpcClient {
 
 		const id = `req_${++this.requestId}`;
 		const fullCommand = { ...command, id } as RpcCommand;
+		const { promise, resolve, reject } = Promise.withResolvers<RpcResponse>();
+		let settled = false;
+		void (async () => {
+			await Bun.sleep(30000);
+			if (settled) return;
+			this.pendingRequests.delete(id);
+			settled = true;
+			reject(
+				new Error(`Timeout waiting for response to ${command.type}. Stderr: ${this.process?.peekStderr() ?? ""}`),
+			);
+		})();
 
-		return new Promise((resolve, reject) => {
-			const timeout = setTimeout(() => {
-				this.pendingRequests.delete(id);
-				reject(new Error(`Timeout waiting for response to ${command.type}. Stderr: ${this.stderr}`));
-			}, 30000);
-
-			this.pendingRequests.set(id, {
-				resolve: (response) => {
-					clearTimeout(timeout);
-					resolve(response);
-				},
-				reject: (error) => {
-					clearTimeout(timeout);
-					reject(error);
-				},
-			});
-
-			// Write to stdin after registering the handler
-			const stdin = this.process!.stdin as import("bun").FileSink;
-			stdin.write(new TextEncoder().encode(`${JSON.stringify(fullCommand)}\n`));
-			// flush() returns number | Promise<number> - handle both cases
-			const flushResult = stdin.flush();
-			if (flushResult instanceof Promise) {
-				flushResult.catch((err: Error) => {
-					this.pendingRequests.delete(id);
-					clearTimeout(timeout);
-					reject(err);
-				});
-			}
+		this.pendingRequests.set(id, {
+			resolve: (response) => {
+				if (settled) return;
+				settled = true;
+				resolve(response);
+			},
+			reject: (error) => {
+				if (settled) return;
+				settled = true;
+				reject(error);
+			},
 		});
+
+		// Write to stdin after registering the handler
+		const stdin = this.process!.stdin as import("bun").FileSink;
+		stdin.write(new TextEncoder().encode(`${JSON.stringify(fullCommand)}\n`));
+		// flush() returns number | Promise<number> - handle both cases
+		const flushResult = stdin.flush();
+		if (flushResult instanceof Promise) {
+			flushResult.catch((err: Error) => {
+				this.pendingRequests.delete(id);
+				if (settled) return;
+				settled = true;
+				reject(err);
+			});
+		}
+		return promise;
 	}
 
 	private getData<T>(response: RpcResponse): T {

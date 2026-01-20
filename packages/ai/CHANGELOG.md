@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `logout` command to CLI for OAuth provider logout
@@ -12,6 +13,11 @@
 
 ### Changed
 
+- Updated Promise.withResolvers usage for better compatibility
+- Replaced custom sleep implementations with Bun.sleep and abortableSleep
+- Simplified SSE stream parsing using readLines utility
+- Updated test framework from vitest to bun:test
+- Replaced temp directory creation with createTempDirSync utility
 - Changed credential storage from auth.json to ~/.omp/agent/agent.db
 - Changed CLI command examples from npx to bunx
 - Refactored OAuth flows to use common callback server base class

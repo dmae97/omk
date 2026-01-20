@@ -1,9 +1,5 @@
-import type { Subprocess } from "bun";
-import { killProcessTree } from "../../utils/shell";
-import { logger } from "../logger";
-import { OutputSink, pumpStream } from "../streaming-output";
-import { DEFAULT_MAX_BYTES } from "../tools/truncate";
-import { ScopeSignal } from "../utils";
+import { cspawn, logger, ptree } from "@oh-my-pi/pi-utils";
+import { OutputSink } from "../streaming-output";
 import { buildRemoteCommand, ensureConnection, ensureHostInfo, type SSHConnectionTarget } from "./connection-manager";
 import { hasSshfs, mountRemote } from "./sshfs-mount";
 
@@ -59,8 +55,6 @@ export async function executeSSH(
 		}
 	}
 
-	using signal = new ScopeSignal(options);
-
 	let resolvedCommand = command;
 	if (options?.compatEnabled) {
 		const info = await ensureHostInfo(host);
@@ -70,43 +64,53 @@ export async function executeSSH(
 			logger.warn("SSH compat enabled without detected compat shell", { host: host.name });
 		}
 	}
-	const child: Subprocess = Bun.spawn(["ssh", ...buildRemoteCommand(host, resolvedCommand)], {
-		stdin: "ignore",
-		stdout: "pipe",
-		stderr: "pipe",
+
+	const child = cspawn(["ssh", ...buildRemoteCommand(host, resolvedCommand)], {
+		signal: options?.signal,
+		timeout: options?.timeout,
 	});
 
-	signal.catch(() => {
-		killProcessTree(child.pid);
-	});
+	const sink = new OutputSink({ onLine: options?.onChunk });
 
-	const sink = new OutputSink(DEFAULT_MAX_BYTES, DEFAULT_MAX_BYTES * 2, options?.onChunk);
-
-	const writer = sink.getWriter();
 	try {
-		await Promise.all([
-			pumpStream(child.stdout as ReadableStream<Uint8Array>, writer),
-			pumpStream(child.stderr as ReadableStream<Uint8Array>, writer),
+		await Promise.allSettled([
+			child.stdout.pipeTo(sink.createWritable()),
+			child.stderr.pipeTo(sink.createWritable()),
 		]);
 	} finally {
-		await writer.close();
+		await sink.close();
 	}
 
-	const exitCode = await child.exited;
-	const cancelled = exitCode === null || (exitCode !== 0 && (options?.signal?.aborted ?? false));
-
-	if (signal.timedOut()) {
-		const secs = Math.round(options!.timeout! / 1000);
+	try {
+		await child.exited;
+		const exitCode = child.exitCode ?? 0;
 		return {
-			exitCode: undefined,
-			cancelled: true,
-			...sink.dump(`SSH command timed out after ${secs} seconds`),
+			exitCode,
+			cancelled: false,
+			...sink.dump(),
 		};
+	} catch (err) {
+		if (err instanceof ptree.Exception) {
+			if (err instanceof ptree.TimeoutError) {
+				return {
+					exitCode: undefined,
+					cancelled: true,
+					...sink.dump(`SSH command timed out after ${Math.round(options!.timeout! / 1000)} seconds`),
+				};
+			}
+			if (err.aborted) {
+				return {
+					exitCode: undefined,
+					cancelled: true,
+					...sink.dump(`SSH command aborted: ${err.message}`),
+				};
+			}
+			return {
+				exitCode: err.exitCode,
+				cancelled: false,
+				...sink.dump(`Unexpected error: ${err.message}`),
+			};
+		}
+		throw err;
 	}
-
-	return {
-		exitCode: cancelled ? undefined : exitCode,
-		cancelled,
-		...sink.dump(),
-	};
 }

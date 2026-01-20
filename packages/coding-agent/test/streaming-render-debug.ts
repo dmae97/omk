@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { ProcessTerminal, TUI } from "@oh-my-pi/pi-tui";
+import { sleep } from "bun";
 import { AssistantMessageComponent } from "../src/modes/interactive/components/assistant-message";
 import { initTheme } from "../src/modes/interactive/theme/theme";
 
@@ -31,10 +32,6 @@ if (!thinkingContent || thinkingContent.type !== "thinking") {
 
 const fullThinkingText = thinkingContent.thinking;
 const fullTextContent = textContent && textContent.type === "text" ? textContent.text : "";
-
-async function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 async function main() {
 	const terminal = new ProcessTerminal();

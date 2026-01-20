@@ -38,8 +38,9 @@ export async function installPlugin(packageName: string): Promise<InstalledPlugi
 
 	// Initialize package.json if it doesn't exist
 	const pkgJsonPath = join(PLUGINS_DIR, "package.json");
-	if (!(await Bun.file(pkgJsonPath).exists())) {
-		await Bun.write(pkgJsonPath, JSON.stringify({ name: "omp-plugins", private: true, dependencies: {} }, null, 2));
+	const pkgJson = Bun.file(pkgJsonPath);
+	if (!(await pkgJson.exists())) {
+		await pkgJson.write(JSON.stringify({ name: "omp-plugins", private: true, dependencies: {} }, null, 2));
 	}
 
 	// Run npm install in plugins directory
@@ -98,24 +99,25 @@ export async function uninstallPlugin(name: string): Promise<void> {
 }
 
 export async function listPlugins(): Promise<InstalledPlugin[]> {
-	const pkgJsonPath = join(PLUGINS_DIR, "package.json");
-	if (!(await Bun.file(pkgJsonPath).exists())) {
+	const pkgJsonPath = Bun.file(join(PLUGINS_DIR, "package.json"));
+	if (!(await pkgJsonPath.exists())) {
 		return [];
 	}
 
-	const pkg = await Bun.file(pkgJsonPath).json();
+	const pkg = await pkgJsonPath.json();
 	const deps = pkg.dependencies || {};
 
 	const plugins: InstalledPlugin[] = [];
 	for (const [name, _version] of Object.entries(deps)) {
-		const pluginPkgPath = join(PLUGINS_DIR, "node_modules", name, "package.json");
-		if (await Bun.file(pluginPkgPath).exists()) {
-			const pluginPkg = await Bun.file(pluginPkgPath).json();
+		const path = join(PLUGINS_DIR, "node_modules", name);
+		const fpkg = Bun.file(join(path, "package.json"));
+		if (await fpkg.exists()) {
+			const pkg = await fpkg.json();
 			plugins.push({
 				name,
-				version: pluginPkg.version,
-				path: join(PLUGINS_DIR, "node_modules", name),
-				manifest: pluginPkg.omp || pluginPkg.pi || { version: pluginPkg.version },
+				version: pkg.version,
+				path,
+				manifest: pkg.omp || pkg.pi || { version: pkg.version },
 				enabledFeatures: null,
 				enabled: true,
 			});

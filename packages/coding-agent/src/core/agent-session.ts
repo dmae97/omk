@@ -16,6 +16,7 @@
 import type { Agent, AgentEvent, AgentMessage, AgentState, AgentTool, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, ImageContent, Message, Model, TextContent, Usage } from "@oh-my-pi/pi-ai";
 import { isContextOverflow, modelsAreEqual, supportsXhigh } from "@oh-my-pi/pi-ai";
+import { abortableSleep, logger } from "@oh-my-pi/pi-utils";
 import type { Rule } from "../capability/rule";
 import { getAgentDbPath } from "../config";
 import { theme } from "../modes/interactive/theme/theme";
@@ -47,7 +48,6 @@ import type {
 import type { CompactOptions, ContextUsage } from "./extensions/types";
 import { extractFileMentions, generateFileMentionMessages } from "./file-mentions";
 import type { HookCommandContext } from "./hooks/types";
-import { logger } from "./logger";
 import type { BashExecutionMessage, CustomMessage } from "./messages";
 import type { ModelRegistry } from "./model-registry";
 import { parseModelString } from "./model-resolver";
@@ -59,6 +59,7 @@ import { expandSlashCommand, type FileSlashCommand } from "./slash-commands";
 import { closeAllConnections } from "./ssh/connection-manager";
 import { unmountAll } from "./ssh/sshfs-mount";
 import type { BashOperations } from "./tools/bash";
+import { normalizeDiff, ParseError, previewPatch } from "./tools/patch";
 import { getArtifactsDir } from "./tools/task/artifacts";
 import type { TodoItem } from "./tools/todo-write";
 import type { TtsrManager } from "./ttsr";
@@ -271,6 +272,9 @@ export class AgentSession {
 	private _pendingTtsrInjections: Rule[] = [];
 	private _ttsrAbortPending = false;
 
+	private _streamingEditAbortTriggered = false;
+	private _streamingEditCheckedLineCounts = new Map<string, number>();
+
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
 		this.sessionManager = config.sessionManager;
@@ -352,9 +356,10 @@ export class AgentSession {
 		// Notify all listeners
 		this._emit(event);
 
-		// TTSR: Reset buffer on turn start
-		if (event.type === "turn_start" && this._ttsrManager) {
-			this._ttsrManager.resetBuffer();
+		if (event.type === "turn_start") {
+			this._resetStreamingEditState();
+			// TTSR: Reset buffer on turn start
+			this._ttsrManager?.resetBuffer();
 		}
 
 		// TTSR: Increment message count on turn end (for repeat-after-gap tracking)
@@ -404,6 +409,10 @@ export class AgentSession {
 					return;
 				}
 			}
+		}
+
+		if (event.type === "message_update" && event.assistantMessageEvent.type === "toolcall_end") {
+			await this._maybeAbortStreamingEdit(event);
 		}
 
 		// Handle session persistence
@@ -523,6 +532,82 @@ export class AgentSession {
 			}
 		}
 		return undefined;
+	}
+
+	private _resetStreamingEditState(): void {
+		this._streamingEditAbortTriggered = false;
+		this._streamingEditCheckedLineCounts.clear();
+	}
+
+	private async _maybeAbortStreamingEdit(event: AgentEvent): Promise<void> {
+		if (!this.settingsManager.getEditStreamingAbort()) return;
+		if (this._streamingEditAbortTriggered) return;
+		if (event.type !== "message_update") return;
+		const assistantEvent = event.assistantMessageEvent;
+		if (assistantEvent.type !== "toolcall_end") return;
+		if (event.message.role !== "assistant") return;
+
+		const message = event.message as AssistantMessage;
+		if (!Array.isArray(message.content)) return;
+		const contentIndex = assistantEvent.contentIndex;
+		const block = message.content[contentIndex];
+		if (!block || typeof block !== "object") return;
+		if ((block as { type?: string }).type !== "toolCall") return;
+
+		const toolCall = block as {
+			id?: string;
+			name?: string;
+			arguments?: Record<string, unknown> | null;
+		};
+		if (toolCall.name !== "edit" || !toolCall.id) return;
+
+		const args = toolCall.arguments;
+		if (!args || typeof args !== "object" || Array.isArray(args)) return;
+		if ("oldText" in args || "newText" in args) return;
+
+		const path = typeof args.path === "string" ? args.path : undefined;
+		const diff = typeof args.diff === "string" ? args.diff : undefined;
+		const op = typeof args.op === "string" ? args.op : undefined;
+		if (!path || !diff) return;
+		if (op && op !== "update") return;
+
+		if (!diff.includes("\n")) return;
+		const lastNewlineIndex = diff.lastIndexOf("\n");
+		if (lastNewlineIndex < 0) return;
+		const diffForCheck = diff.endsWith("\n") ? diff : diff.slice(0, lastNewlineIndex + 1);
+		if (diffForCheck.trim().length === 0) return;
+
+		const normalizedDiff = normalizeDiff(diffForCheck);
+		if (!normalizedDiff) return;
+		const lines = normalizedDiff.split("\n");
+		const hasChangeLine = lines.some((line) => line.startsWith("+") || line.startsWith("-"));
+		if (!hasChangeLine) return;
+
+		const lineCount = lines.length;
+		const lastChecked = this._streamingEditCheckedLineCounts.get(toolCall.id);
+		if (lastChecked !== undefined && lineCount <= lastChecked) return;
+		this._streamingEditCheckedLineCounts.set(toolCall.id, lineCount);
+
+		const rename = typeof args.rename === "string" ? args.rename : undefined;
+		try {
+			await previewPatch(
+				{ path, op: "update", rename, diff: normalizedDiff },
+				{
+					cwd: this.sessionManager.getCwd(),
+					allowFuzzy: this.settingsManager.getEditFuzzyMatch(),
+					fuzzyThreshold: this.settingsManager.getEditFuzzyThreshold(),
+				},
+			);
+		} catch (error) {
+			if (error instanceof ParseError) return;
+			this._streamingEditAbortTriggered = true;
+			logger.warn("Streaming edit aborted due to patch preview failure", {
+				toolCallId: toolCall.id,
+				path,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			this.agent.abort();
+		}
 	}
 
 	/** Rewrite tool call arguments in agent state and persisted session history. */
@@ -2042,7 +2127,7 @@ export class AgentSession {
 								error: message,
 								model: `${candidate.provider}/${candidate.id}`,
 							});
-							await new Promise((resolve) => setTimeout(resolve, delayMs));
+							await Bun.sleep(delayMs);
 						}
 					}
 
@@ -2223,9 +2308,9 @@ export class AgentSession {
 		// Create retry promise on first attempt so waitForRetry() can await it
 		// Ensure only one promise exists (avoid orphaned promises from concurrent calls)
 		if (!this._retryPromise) {
-			this._retryPromise = new Promise((resolve) => {
-				this._retryResolve = resolve;
-			});
+			const { promise, resolve } = Promise.withResolvers<void>();
+			this._retryPromise = promise;
+			this._retryResolve = resolve;
 		}
 
 		if (this._retryAttempt > settings.maxRetries) {
@@ -2280,7 +2365,7 @@ export class AgentSession {
 		}
 		this._retryAbortController = new AbortController();
 		try {
-			await this._sleep(delayMs, this._retryAbortController.signal);
+			await abortableSleep(delayMs, this._retryAbortController.signal);
 		} catch {
 			// Aborted during sleep - emit end event so UI can clean up
 			const attempt = this._retryAttempt;
@@ -2305,25 +2390,6 @@ export class AgentSession {
 		}, 0);
 
 		return true;
-	}
-
-	/**
-	 * Sleep helper that respects abort signal.
-	 */
-	private _sleep(ms: number, signal?: AbortSignal): Promise<void> {
-		return new Promise((resolve, reject) => {
-			if (signal?.aborted) {
-				reject(new Error("Aborted"));
-				return;
-			}
-
-			const timeout = setTimeout(resolve, ms);
-
-			signal?.addEventListener("abort", () => {
-				clearTimeout(timeout);
-				reject(new Error("Aborted"));
-			});
-		});
 	}
 
 	/**

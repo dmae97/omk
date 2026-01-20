@@ -3,6 +3,7 @@
  */
 
 import type { AgentTool, AgentToolContext, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
+import type { Static, TSchema } from "@sinclair/typebox";
 import type { HookRunner } from "./runner";
 import type { ToolCallEventResult, ToolResultEventResult } from "./types";
 
@@ -14,16 +15,18 @@ import type { ToolCallEventResult, ToolResultEventResult } from "./types";
  * - Emits tool_result event after execution (can modify result)
  * - Forwards onUpdate callback to wrapped tool for progress streaming
  */
-export class HookToolWrapper<T> implements AgentTool<any, T> {
+export class HookToolWrapper<TParameters extends TSchema = TSchema, TDetails = unknown>
+	implements AgentTool<TParameters, TDetails>
+{
 	name: string;
 	label: string;
 	description: string;
-	parameters: unknown;
-	renderCall?: AgentTool["renderCall"];
-	renderResult?: AgentTool["renderResult"];
+	parameters: TParameters;
+	renderCall?: AgentTool<TParameters, TDetails>["renderCall"];
+	renderResult?: AgentTool<TParameters, TDetails>["renderResult"];
 
 	constructor(
-		private tool: AgentTool<any, T>,
+		private tool: AgentTool<TParameters, TDetails>,
 		private hookRunner: HookRunner,
 	) {
 		this.name = tool.name;
@@ -36,9 +39,9 @@ export class HookToolWrapper<T> implements AgentTool<any, T> {
 
 	async execute(
 		toolCallId: string,
-		params: Record<string, unknown>,
+		params: Static<TParameters>,
 		signal?: AbortSignal,
-		onUpdate?: AgentToolUpdateCallback<T>,
+		onUpdate?: AgentToolUpdateCallback<TDetails, TParameters>,
 		context?: AgentToolContext,
 	) {
 		// Emit tool_call event - hooks can block execution
@@ -49,7 +52,7 @@ export class HookToolWrapper<T> implements AgentTool<any, T> {
 					type: "tool_call",
 					toolName: this.tool.name,
 					toolCallId,
-					input: params,
+					input: params as Record<string, unknown>,
 				})) as ToolCallEventResult | undefined;
 
 				if (callResult?.block) {
@@ -75,7 +78,7 @@ export class HookToolWrapper<T> implements AgentTool<any, T> {
 					type: "tool_result",
 					toolName: this.tool.name,
 					toolCallId,
-					input: params,
+					input: params as Record<string, unknown>,
 					content: result.content,
 					details: result.details,
 					isError: false,
@@ -85,7 +88,7 @@ export class HookToolWrapper<T> implements AgentTool<any, T> {
 				if (resultResult) {
 					return {
 						content: resultResult.content ?? result.content,
-						details: (resultResult.details ?? result.details) as T,
+						details: (resultResult.details ?? result.details) as TDetails,
 					};
 				}
 			}
@@ -98,7 +101,7 @@ export class HookToolWrapper<T> implements AgentTool<any, T> {
 					type: "tool_result",
 					toolName: this.tool.name,
 					toolCallId,
-					input: params,
+					input: params as Record<string, unknown>,
 					content: [{ type: "text", text: err instanceof Error ? err.message : String(err) }],
 					details: undefined,
 					isError: true,
@@ -107,19 +110,4 @@ export class HookToolWrapper<T> implements AgentTool<any, T> {
 			throw err; // Re-throw original error for agent-loop
 		}
 	}
-}
-
-/**
- * Wrap all tools with hook callbacks.
- */
-export function wrapToolsWithHooks<T>(tools: AgentTool<any, T>[], hookRunner: HookRunner): AgentTool<any, T>[] {
-	return tools.map((tool) => new HookToolWrapper(tool, hookRunner));
-}
-
-/**
- * Backward compatibility alias - use HookToolWrapper directly.
- * @deprecated Use HookToolWrapper class instead
- */
-export function wrapToolWithHooks<T>(tool: AgentTool<any, T>, hookRunner: HookRunner): AgentTool<any, T> {
-	return new HookToolWrapper(tool, hookRunner);
 }

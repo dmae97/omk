@@ -3,7 +3,7 @@
  * Supports Ctrl+G for external editor.
  */
 
-import * as fs from "node:fs";
+import { rm } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Container, Editor, matchesKey, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
@@ -75,7 +75,7 @@ export class HookEditorComponent extends Container {
 
 		// Ctrl+G for external editor
 		if (matchesKey(keyData, "ctrl+g")) {
-			this.openExternalEditor();
+			void this.openExternalEditor();
 			return;
 		}
 
@@ -83,7 +83,7 @@ export class HookEditorComponent extends Container {
 		this.editor.handleInput(keyData);
 	}
 
-	private openExternalEditor(): void {
+	private async openExternalEditor(): Promise<void> {
 		const editorCmd = process.env.VISUAL || process.env.EDITOR;
 		if (!editorCmd) {
 			return;
@@ -93,21 +93,24 @@ export class HookEditorComponent extends Container {
 		const tmpFile = path.join(os.tmpdir(), `omp-hook-editor-${nanoid()}.md`);
 
 		try {
-			fs.writeFileSync(tmpFile, currentText, "utf-8");
+			await Bun.write(tmpFile, currentText);
 			this.tui.stop();
 
 			const [editor, ...editorArgs] = editorCmd.split(" ");
-			const result = Bun.spawnSync([editor, ...editorArgs, tmpFile], {
-				stdio: ["inherit", "inherit", "inherit"],
+			const child = Bun.spawn([editor, ...editorArgs, tmpFile], {
+				stdin: "inherit",
+				stdout: "inherit",
+				stderr: "inherit",
 			});
+			const exitCode = await child.exited;
 
-			if (result.exitCode === 0) {
-				const newContent = fs.readFileSync(tmpFile, "utf-8").replace(/\n$/, "");
+			if (exitCode === 0) {
+				const newContent = (await Bun.file(tmpFile).text()).replace(/\n$/, "");
 				this.editor.setText(newContent);
 			}
 		} finally {
 			try {
-				fs.unlinkSync(tmpFile);
+				await rm(tmpFile, { force: true });
 			} catch {
 				// Ignore cleanup errors
 			}

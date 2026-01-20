@@ -2,9 +2,10 @@
  * System prompt construction and project context loading
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { $ } from "bun";
 import chalk from "chalk";
 import { contextFileCapability } from "../capability/context-file";
 import { systemPromptCapability } from "../capability/system-prompt";
@@ -15,15 +16,6 @@ import { renderPromptTemplate } from "./prompt-templates";
 import type { SkillsSettings } from "./settings-manager";
 import { loadSkills, type Skill } from "./skills";
 import type { ToolName } from "./tools/index";
-
-/**
- * Execute a git command synchronously and return stdout or null on failure.
- */
-function execGit(args: string[], cwd: string): string | null {
-	const result = Bun.spawnSync(["git", ...args], { cwd, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
-	if (result.exitCode !== 0) return null;
-	return result.stdout.toString().trim() || null;
-}
 
 interface GitContext {
 	isRepo: boolean;
@@ -37,31 +29,36 @@ interface GitContext {
  * Load git context for the system prompt.
  * Returns structured git data or null if not in a git repo.
  */
-export function loadGitContext(cwd: string): GitContext | null {
+export async function loadGitContext(cwd: string): Promise<GitContext | null> {
+	const git = (...args: string[]) =>
+		$`git ${args}`
+			.cwd(cwd)
+			.quiet()
+			.text()
+			.catch(() => null)
+			.then((text) => text?.trim() ?? null);
+
 	// Check if inside a git repo
-	const isGitRepo = execGit(["rev-parse", "--is-inside-work-tree"], cwd);
+	const isGitRepo = await git("rev-parse", "--is-inside-work-tree");
 	if (isGitRepo !== "true") return null;
 
 	// Get current branch
-	const currentBranch = execGit(["rev-parse", "--abbrev-ref", "HEAD"], cwd);
+	const currentBranch = await git("rev-parse", "--abbrev-ref", "HEAD");
 	if (!currentBranch) return null;
 
 	// Detect main branch (check for 'main' first, then 'master')
 	let mainBranch = "main";
-	const mainExists = execGit(["rev-parse", "--verify", "main"], cwd);
+	const mainExists = await git("rev-parse", "--verify", "main");
 	if (mainExists === null) {
-		const masterExists = execGit(["rev-parse", "--verify", "master"], cwd);
+		const masterExists = await git("rev-parse", "--verify", "master");
 		if (masterExists !== null) mainBranch = "master";
 	}
 
 	// Get git status (porcelain format for parsing)
-	const gitStatus = execGit(["status", "--porcelain"], cwd);
-	const status = gitStatus?.trim() || "(clean)";
+	const status = (await git("status", "--porcelain")) || "(clean)";
 
 	// Get recent commits
-	const recentCommits = execGit(["log", "--oneline", "-5"], cwd);
-	const commits = recentCommits?.trim() || "(no commits)";
-
+	const commits = (await git("log", "--oneline", "-5")) || "(no commits)";
 	return {
 		isRepo: true,
 		currentBranch,
@@ -93,18 +90,6 @@ const toolDescriptions: Record<ToolName, string> = {
 	web_search: "Search the web for information",
 	report_finding: "Report a finding during code review",
 };
-
-function execCommand(args: string[]): string | null {
-	const result = Bun.spawnSync(args, { stdin: "ignore", stdout: "pipe", stderr: "pipe" });
-	if (result.exitCode !== 0) return null;
-	const output = result.stdout.toString().trim();
-	return output.length > 0 ? output : null;
-}
-
-function execIfExists(command: string, args: string[]): string | null {
-	if (!Bun.which(command)) return null;
-	return execCommand([command, ...args]);
-}
 
 function firstNonEmpty(values: Array<string | undefined | null>): string | null {
 	for (const value of values) {
@@ -209,18 +194,27 @@ function getOsName(): string {
 	}
 }
 
-function getKernelVersion(): string {
+async function getKernelVersion(): Promise<string> {
 	if (process.platform === "win32") {
-		return execCommand(["cmd", "/c", "ver"]) ?? "unknown";
+		return await $`ver`
+			.quiet()
+			.text()
+			.catch(() => "unknown");
+	} else {
+		return await $`uname -sr`
+			.quiet()
+			.text()
+			.catch(() => "unknown");
 	}
-
-	return execCommand(["uname", "-sr"]) ?? "unknown";
 }
 
-function getOsDistro(): string | null {
+async function getOsDistro(): Promise<string | null> {
 	switch (process.platform) {
 		case "win32": {
-			const output = execIfExists("wmic", ["os", "get", "Caption,Version", "/value"]);
+			const output = await $`wmic os get Caption,Version /value`
+				.quiet()
+				.text()
+				.catch(() => null);
 			if (!output) return null;
 			const parsed = parseKeyValueOutput(output);
 			const caption = parsed.Caption;
@@ -229,15 +223,32 @@ function getOsDistro(): string | null {
 			return caption ?? version ?? null;
 		}
 		case "darwin": {
-			const name = firstNonEmptyLine(execIfExists("sw_vers", ["-productName"]));
-			const version = firstNonEmptyLine(execIfExists("sw_vers", ["-productVersion"]));
+			const name = firstNonEmptyLine(
+				await $`sw_vers -productName`
+					.quiet()
+					.text()
+					.catch(() => null),
+			);
+			const version = firstNonEmptyLine(
+				await $`sw_vers -productVersion`
+					.quiet()
+					.text()
+					.catch(() => null),
+			);
 			if (name && version) return `${name} ${version}`.trim();
 			return name ?? version ?? null;
 		}
 		case "linux": {
-			const lsb = firstNonEmptyLine(execIfExists("lsb_release", ["-ds"]));
+			const lsb = firstNonEmptyLine(
+				await $`lsb_release -ds`
+					.quiet()
+					.text()
+					.catch(() => null),
+			);
 			if (lsb) return stripQuotes(lsb);
-			const osRelease = execIfExists("cat", ["/etc/os-release"]);
+			const osRelease = await Bun.file("/etc/os-release")
+				.text()
+				.catch(() => null);
 			if (!osRelease) return null;
 			const parsed = parseKeyValueOutput(osRelease);
 			const pretty = parsed.PRETTY_NAME ?? parsed.NAME;
@@ -255,17 +266,28 @@ function getCpuArch(): string {
 	return process.arch || "unknown";
 }
 
-function getCpuModel(): string | null {
+async function getCpuModel(): Promise<string | null> {
 	switch (process.platform) {
 		case "win32": {
-			const output = execIfExists("wmic", ["cpu", "get", "Name"]);
+			const output = await $`wmic cpu get Name`
+				.quiet()
+				.text()
+				.catch(() => null);
 			return output ? parseWmicTable(output, "Name") : null;
 		}
 		case "darwin": {
-			return firstNonEmptyLine(execIfExists("sysctl", ["-n", "machdep.cpu.brand_string"]));
+			return firstNonEmptyLine(
+				await $`sysctl -n machdep.cpu.brand_string`
+					.quiet()
+					.text()
+					.catch(() => null),
+			);
 		}
 		case "linux": {
-			const lscpu = execIfExists("lscpu", []);
+			const lscpu = await $`lscpu`
+				.quiet()
+				.text()
+				.catch(() => null);
 			if (lscpu) {
 				const match = lscpu
 					.split("\n")
@@ -273,7 +295,9 @@ function getCpuModel(): string | null {
 					.find((line) => line.toLowerCase().startsWith("model name:"));
 				if (match) return match.split(":").slice(1).join(":").trim();
 			}
-			const cpuInfo = execIfExists("cat", ["/proc/cpuinfo"]);
+			const cpuInfo = await Bun.file("/proc/cpuinfo")
+				.text()
+				.catch(() => null);
 			if (!cpuInfo) return null;
 			for (const line of cpuInfo.split("\n")) {
 				const [key, ...rest] = line.split(":");
@@ -290,14 +314,20 @@ function getCpuModel(): string | null {
 	}
 }
 
-function getGpuModel(): string | null {
+async function getGpuModel(): Promise<string | null> {
 	switch (process.platform) {
 		case "win32": {
-			const output = execIfExists("wmic", ["path", "win32_VideoController", "get", "name"]);
+			const output = await $`wmic path win32_VideoController get name`
+				.quiet()
+				.text()
+				.catch(() => null);
 			return output ? parseWmicTable(output, "Name") : null;
 		}
 		case "linux": {
-			const output = execIfExists("lspci", []);
+			const output = await $`lspci`
+				.quiet()
+				.text()
+				.catch(() => null);
 			if (!output) return null;
 			const gpus: Array<{ name: string; priority: number }> = [];
 			for (const line of output.split("\n")) {
@@ -426,39 +456,42 @@ function getSystemInfoCachePath(): string {
 	return join(homedir(), ".omp", "system_info.json");
 }
 
-function loadSystemInfoCache(): SystemInfoCache | null {
+async function loadSystemInfoCache(): Promise<SystemInfoCache | null> {
 	try {
 		const cachePath = getSystemInfoCachePath();
 		if (!existsSync(cachePath)) return null;
-		const content = readFileSync(cachePath, "utf-8");
-		return JSON.parse(content) as SystemInfoCache;
+		const content = await Bun.file(cachePath).json();
+		return content as SystemInfoCache;
 	} catch {
 		return null;
 	}
 }
 
-function saveSystemInfoCache(info: SystemInfoCache): void {
+async function saveSystemInfoCache(info: SystemInfoCache): Promise<void> {
 	try {
 		const cachePath = getSystemInfoCachePath();
-		const dir = join(homedir(), ".omp");
-		if (!existsSync(dir)) {
-			mkdirSync(dir, { recursive: true });
-		}
-		writeFileSync(cachePath, JSON.stringify(info, null, "\t"), "utf-8");
+		await Bun.write(cachePath, JSON.stringify(info, null, "\t"));
 	} catch {
 		// Silently ignore cache write failures
 	}
 }
 
-function collectSystemInfo(): SystemInfoCache {
+async function collectSystemInfo(): Promise<SystemInfoCache> {
+	const [distro, cpu, gpu, disk, kernel] = await Promise.all([
+		getOsDistro(),
+		getCpuModel(),
+		getGpuModel(),
+		getDiskInfo(),
+		getKernelVersion(),
+	]);
 	return {
 		os: getOsName(),
-		distro: getOsDistro() ?? "unknown",
-		kernel: getKernelVersion(),
+		distro: distro ?? "unknown",
+		kernel: kernel ?? "unknown",
 		arch: getCpuArch(),
-		cpu: getCpuModel() ?? "unknown",
-		gpu: getGpuModel() ?? "unknown",
-		disk: getDiskInfo() ?? "unknown",
+		cpu: cpu ?? "unknown",
+		gpu: gpu ?? "unknown",
+		disk: disk ?? "unknown",
 	};
 }
 
@@ -470,10 +503,13 @@ function formatBytes(bytes: number): string {
 	return `${(bytes / (1024 * 1024 * 1024 * 1024)).toFixed(1)}TB`;
 }
 
-function getDiskInfo(): string | null {
+async function getDiskInfo(): Promise<string | null> {
 	switch (process.platform) {
 		case "win32": {
-			const output = execIfExists("wmic", ["logicaldisk", "get", "Caption,Size,FreeSpace", "/format:csv"]);
+			const output = await $`wmic logicaldisk get Caption,Size,FreeSpace /format:csv`
+				.quiet()
+				.text()
+				.catch(() => null);
 			if (!output) return null;
 			const lines = output.split("\n").filter((l) => l.trim() && !l.startsWith("Node"));
 			const disks: string[] = [];
@@ -492,7 +528,10 @@ function getDiskInfo(): string | null {
 		}
 		case "linux":
 		case "darwin": {
-			const output = execIfExists("df", ["-h", "/"]);
+			const output = await $`df -h /`
+				.quiet()
+				.text()
+				.catch(() => null);
 			if (!output) return null;
 			const lines = output.split("\n");
 			if (lines.length < 2) return null;
@@ -508,12 +547,12 @@ function getDiskInfo(): string | null {
 	}
 }
 
-function getEnvironmentInfo(): Array<{ label: string; value: string }> {
+async function getEnvironmentInfo(): Promise<Array<{ label: string; value: string }>> {
 	// Load cached system info or collect fresh
-	let sysInfo = loadSystemInfoCache();
+	let sysInfo = await loadSystemInfoCache();
 	if (!sysInfo) {
-		sysInfo = collectSystemInfo();
-		saveSystemInfoCache(sysInfo);
+		sysInfo = await collectSystemInfo();
+		await saveSystemInfoCache(sysInfo);
 	}
 
 	return [
@@ -532,14 +571,15 @@ function getEnvironmentInfo(): Array<{ label: string; value: string }> {
 }
 
 /** Resolve input as file path or literal string */
-export function resolvePromptInput(input: string | undefined, description: string): string | undefined {
+export async function resolvePromptInput(input: string | undefined, description: string): Promise<string | undefined> {
 	if (!input) {
 		return undefined;
 	}
 
-	if (existsSync(input)) {
+	const file = Bun.file(input);
+	if (await file.exists()) {
 		try {
-			return readFileSync(input, "utf-8");
+			return await file.text();
 		} catch (error) {
 			console.error(chalk.yellow(`Warning: Could not read ${description} file ${input}: ${error}`));
 			return input;
@@ -649,8 +689,8 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		rules,
 	} = options;
 	const resolvedCwd = cwd ?? process.cwd();
-	const resolvedCustomPrompt = resolvePromptInput(customPrompt, "system prompt");
-	const resolvedAppendPrompt = resolvePromptInput(appendSystemPrompt, "append system prompt");
+	const resolvedCustomPrompt = await resolvePromptInput(customPrompt, "system prompt");
+	const resolvedAppendPrompt = await resolvePromptInput(appendSystemPrompt, "append system prompt");
 
 	// Load SYSTEM.md customization (prepended to prompt)
 	const systemPromptCustomization = await loadSystemPromptFiles({ cwd: resolvedCwd });
@@ -697,7 +737,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		(skillsSettings?.enabled !== false ? (await loadSkills({ ...skillsSettings, cwd: resolvedCwd })).skills : []);
 
 	// Get git context
-	const git = loadGitContext(resolvedCwd);
+	const git = await loadGitContext(resolvedCwd);
 
 	// Filter skills to only include those with read tool
 	const hasRead = tools?.has("read");
@@ -722,7 +762,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 	return renderPromptTemplate(systemPromptTemplate, {
 		tools: toolNamesArray,
 		toolDescriptions: toolDescriptionsArray,
-		environment: getEnvironmentInfo(),
+		environment: await getEnvironmentInfo(),
 		systemPromptCustomization: systemPromptCustomization ?? "",
 		contextFiles,
 		agentsMdSearch,

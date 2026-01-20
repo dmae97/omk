@@ -6,6 +6,7 @@
  */
 
 import * as path from "node:path";
+import { logger } from "@oh-my-pi/pi-utils";
 import * as typebox from "@sinclair/typebox";
 import { toolCapability } from "../../capability/tool";
 import { type CustomTool, loadCapability } from "../../discovery";
@@ -15,7 +16,6 @@ import { theme } from "../../modes/interactive/theme/theme";
 import type { ExecOptions } from "../exec";
 import { execCommand } from "../exec";
 import type { HookUIContext } from "../hooks/types";
-import { logger } from "../logger";
 import { getAllPluginToolPaths } from "../plugins/loader";
 import type { CustomToolAPI, CustomToolFactory, LoadedCustomTool, ToolLoadError } from "./types";
 

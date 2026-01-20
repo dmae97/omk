@@ -4,10 +4,10 @@
  * Original JSON files are backed up to .bak and removed after successful migration.
  */
 
+import { logger } from "@oh-my-pi/pi-utils";
 import { getAgentDbPath } from "../config";
 import { AgentStorage } from "./agent-storage";
 import type { AuthCredential, AuthCredentialEntry, AuthStorageData } from "./auth-storage";
-import { logger } from "./logger";
 import type { Settings } from "./settings-manager";
 
 /** Paths configuration for the storage migration process. */

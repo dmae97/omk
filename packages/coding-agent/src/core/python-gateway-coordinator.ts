@@ -13,11 +13,11 @@ import {
 } from "node:fs";
 import { createServer } from "node:net";
 import { delimiter, join } from "node:path";
+import { logger } from "@oh-my-pi/pi-utils";
 import type { Subprocess } from "bun";
 import { getAgentDir } from "../config";
 import { getShellConfig, killProcessTree } from "../utils/shell";
 import { getOrCreateSnapshot } from "../utils/shell-snapshot";
-import { logger } from "./logger";
 
 const GATEWAY_DIR_NAME = "python-gateway";
 const GATEWAY_INFO_FILE = "gateway.json";
@@ -213,27 +213,28 @@ async function resolvePythonRuntime(cwd: string, baseEnv: Record<string, string 
 }
 
 async function allocatePort(): Promise<number> {
-	return await new Promise((resolve, reject) => {
-		const server = createServer();
-		server.unref();
-		server.on("error", reject);
-		server.listen(0, "127.0.0.1", () => {
-			const address = server.address();
-			if (address && typeof address === "object") {
-				const port = address.port;
-				server.close((err: Error | null | undefined) => {
-					if (err) {
-						reject(err);
-					} else {
-						resolve(port);
-					}
-				});
-			} else {
-				server.close();
-				reject(new Error("Failed to allocate port"));
-			}
-		});
+	const { promise, resolve, reject } = Promise.withResolvers<number>();
+	const server = createServer();
+	server.unref();
+	server.on("error", reject);
+	server.listen(0, "127.0.0.1", () => {
+		const address = server.address();
+		if (address && typeof address === "object") {
+			const port = address.port;
+			server.close((err: Error | null | undefined) => {
+				if (err) {
+					reject(err);
+				} else {
+					resolve(port);
+				}
+			});
+		} else {
+			server.close();
+			reject(new Error("Failed to allocate port"));
+		}
 	});
+
+	return promise;
 }
 
 function getGatewayDir(): string {
@@ -587,7 +588,7 @@ async function startGatewayProcess(
 		await Bun.sleep(100);
 	}
 
-	killProcessTree(gatewayProcess.pid);
+	await killProcessTree(gatewayProcess.pid);
 	throw new Error("Gateway startup timeout");
 }
 
@@ -613,10 +614,10 @@ function scheduleIdleShutdown(): void {
 				}
 				logger.debug("Shutting down idle shared gateway", { pid: info.pid });
 				if (localGatewayProcess) {
-					shutdownLocalGateway();
+					await shutdownLocalGateway();
 				} else if (isPidRunning(info.pid)) {
 					try {
-						killProcessTree(info.pid);
+						await killProcessTree(info.pid);
 					} catch (err) {
 						logger.warn("Failed to kill idle shared gateway", {
 							error: err instanceof Error ? err.message : String(err),
@@ -644,10 +645,10 @@ function cancelIdleShutdown(): void {
 	}
 }
 
-function shutdownLocalGateway(): void {
+async function shutdownLocalGateway(): Promise<void> {
 	if (localGatewayProcess) {
 		try {
-			killProcessTree(localGatewayProcess.pid);
+			await killProcessTree(localGatewayProcess.pid);
 		} catch (err) {
 			logger.warn("Failed to kill shared gateway process", {
 				error: err instanceof Error ? err.message : String(err),
@@ -701,7 +702,7 @@ export async function acquireSharedGateway(cwd: string): Promise<AcquireResult |
 				logger.debug("Cleaning up stale gateway info", { pid: existingInfo.pid });
 				if (isPidRunning(existingInfo.pid)) {
 					try {
-						killProcessTree(existingInfo.pid);
+						await killProcessTree(existingInfo.pid);
 					} catch (err) {
 						logger.warn("Failed to kill stale shared gateway process", {
 							error: err instanceof Error ? err.message : String(err),
@@ -826,7 +827,7 @@ export async function shutdownSharedGateway(): Promise<void> {
 			error: err instanceof Error ? err.message : String(err),
 		});
 	} finally {
-		shutdownLocalGateway();
+		await shutdownLocalGateway();
 		isCoordinatorInitialized = false;
 	}
 }

@@ -6,9 +6,9 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { logger } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
 import type { CustomTool, CustomToolResult } from "../../custom-tools/types";
-import { logger } from "../../logger";
 import { callMCP } from "../../mcp/json-rpc";
 import type {
 	ExaRenderDetails,
