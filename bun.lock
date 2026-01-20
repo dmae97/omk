@@ -48,6 +48,7 @@
         "@connectrpc/connect-node": "^2.1.1",
         "@google/genai": "1.34.0",
         "@mistralai/mistralai": "1.10.0",
+        "@oh-my-pi/pi-utils": "workspace:*",
         "@sinclair/typebox": "^0.34.41",
         "ajv": "^8.17.1",
         "ajv-formats": "^3.0.1",
