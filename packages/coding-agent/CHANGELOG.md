@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [6.8.0] - 2026-01-20
+
 ### Added
 
 - Added streaming abort setting to control edit tool behavior when patch preview fails

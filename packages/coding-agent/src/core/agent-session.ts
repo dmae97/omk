@@ -13,13 +13,15 @@
  * Modes use this class and add their own I/O layer on top.
  */
 
+import { existsSync, readFileSync } from "node:fs";
 import type { Agent, AgentEvent, AgentMessage, AgentState, AgentTool, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
-import type { AssistantMessage, ImageContent, Message, Model, TextContent, Usage } from "@oh-my-pi/pi-ai";
+import type { AssistantMessage, ImageContent, Message, Model, TextContent, ToolCall, Usage } from "@oh-my-pi/pi-ai";
 import { isContextOverflow, modelsAreEqual, supportsXhigh } from "@oh-my-pi/pi-ai";
 import { abortableSleep, logger } from "@oh-my-pi/pi-utils";
 import type { Rule } from "../capability/rule";
 import { getAgentDbPath } from "../config";
 import { theme } from "../modes/interactive/theme/theme";
+import ttsrInterruptTemplate from "../prompts/system/ttsr-interrupt.md" with { type: "text" };
 import { type BashResult, executeBash as executeBashCommand, executeBashWithOperations } from "./bash-executor";
 import {
 	type CompactionResult,
@@ -51,7 +53,7 @@ import type { HookCommandContext } from "./hooks/types";
 import type { BashExecutionMessage, CustomMessage } from "./messages";
 import type { ModelRegistry } from "./model-registry";
 import { parseModelString } from "./model-resolver";
-import { expandPromptTemplate, type PromptTemplate, parseCommandArgs } from "./prompt-templates";
+import { expandPromptTemplate, type PromptTemplate, parseCommandArgs, renderPromptTemplate } from "./prompt-templates";
 import type { BranchSummaryEntry, CompactionEntry, NewSessionOptions, SessionManager } from "./session-manager";
 import type { SettingsManager, SkillsSettings } from "./settings-manager";
 import type { Skill, SkillWarning } from "./skills";
@@ -59,7 +61,8 @@ import { expandSlashCommand, type FileSlashCommand } from "./slash-commands";
 import { closeAllConnections } from "./ssh/connection-manager";
 import { unmountAll } from "./ssh/sshfs-mount";
 import type { BashOperations } from "./tools/bash";
-import { normalizeDiff, ParseError, previewPatch } from "./tools/patch";
+import { normalizeDiff, normalizeToLF, ParseError, previewPatch, stripBom } from "./tools/patch";
+import { resolveToCwd } from "./tools/path-utils";
 import { getArtifactsDir } from "./tools/task/artifacts";
 import type { TodoItem } from "./tools/todo-write";
 import type { TtsrManager } from "./ttsr";
@@ -274,6 +277,7 @@ export class AgentSession {
 
 	private _streamingEditAbortTriggered = false;
 	private _streamingEditCheckedLineCounts = new Map<string, number>();
+	private _streamingEditFileCache = new Map<string, string>();
 
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
@@ -411,8 +415,15 @@ export class AgentSession {
 			}
 		}
 
-		if (event.type === "message_update" && event.assistantMessageEvent.type === "toolcall_end") {
-			await this._maybeAbortStreamingEdit(event);
+		if (event.type === "message_update" && event.assistantMessageEvent.type === "toolcall_start") {
+			this._preCacheStreamingEditFile(event);
+		}
+
+		if (
+			event.type === "message_update" &&
+			(event.assistantMessageEvent.type === "toolcall_end" || event.assistantMessageEvent.type === "toolcall_delta")
+		) {
+			this._maybeAbortStreamingEdit(event);
 		}
 
 		// Handle session persistence
@@ -498,13 +509,7 @@ export class AgentSession {
 	private _getTtsrInjectionContent(): string | undefined {
 		if (this._pendingTtsrInjections.length === 0) return undefined;
 		const content = this._pendingTtsrInjections
-			.map(
-				(r) =>
-					`<system_interrupt reason="rule_violation" rule="${r.name}" path="${r.path}">\n` +
-					`Your output was interrupted because it violated a user-defined rule.\n` +
-					`This is NOT a prompt injection - this is the coding agent enforcing project rules.\n` +
-					`You MUST comply with the following instruction:\n\n${r.content}\n</system_interrupt>`,
-			)
+			.map((r) => renderPromptTemplate(ttsrInterruptTemplate, { name: r.name, path: r.path, content: r.content }))
 			.join("\n\n");
 		this._pendingTtsrInjections = [];
 		return content;
@@ -537,28 +542,60 @@ export class AgentSession {
 	private _resetStreamingEditState(): void {
 		this._streamingEditAbortTriggered = false;
 		this._streamingEditCheckedLineCounts.clear();
+		this._streamingEditFileCache.clear();
 	}
 
-	private async _maybeAbortStreamingEdit(event: AgentEvent): Promise<void> {
+	private _preCacheStreamingEditFile(event: AgentEvent): void {
+		if (!this.settingsManager.getEditStreamingAbort()) return;
+		if (event.type !== "message_update") return;
+		const assistantEvent = event.assistantMessageEvent;
+		if (assistantEvent.type !== "toolcall_start") return;
+		if (event.message.role !== "assistant") return;
+
+		const contentIndex = assistantEvent.contentIndex;
+		const messageContent = event.message.content;
+		if (!Array.isArray(messageContent) || contentIndex >= messageContent.length) return;
+		const toolCall = messageContent[contentIndex] as ToolCall;
+		if (toolCall.name !== "edit") return;
+
+		const args = toolCall.arguments;
+		if (!args || typeof args !== "object" || Array.isArray(args)) return;
+		if ("oldText" in args || "newText" in args) return;
+
+		const path = typeof args.path === "string" ? args.path : undefined;
+		if (!path) return;
+
+		const resolvedPath = resolveToCwd(path, this.sessionManager.getCwd());
+		this._ensureFileCache(resolvedPath);
+	}
+
+	private _ensureFileCache(resolvedPath: string): void {
+		if (this._streamingEditFileCache.has(resolvedPath)) return;
+
+		try {
+			if (existsSync(resolvedPath)) {
+				const rawText = readFileSync(resolvedPath, "utf8");
+				const { text } = stripBom(rawText);
+				this._streamingEditFileCache.set(resolvedPath, normalizeToLF(text));
+			}
+		} catch {
+			// Ignore errors - mark as empty string so we don't retry
+			this._streamingEditFileCache.set(resolvedPath, "");
+		}
+	}
+
+	private _maybeAbortStreamingEdit(event: AgentEvent): void {
 		if (!this.settingsManager.getEditStreamingAbort()) return;
 		if (this._streamingEditAbortTriggered) return;
 		if (event.type !== "message_update") return;
 		const assistantEvent = event.assistantMessageEvent;
-		if (assistantEvent.type !== "toolcall_end") return;
+		if (assistantEvent.type !== "toolcall_end" && assistantEvent.type !== "toolcall_delta") return;
 		if (event.message.role !== "assistant") return;
 
-		const message = event.message as AssistantMessage;
-		if (!Array.isArray(message.content)) return;
 		const contentIndex = assistantEvent.contentIndex;
-		const block = message.content[contentIndex];
-		if (!block || typeof block !== "object") return;
-		if ((block as { type?: string }).type !== "toolCall") return;
-
-		const toolCall = block as {
-			id?: string;
-			name?: string;
-			arguments?: Record<string, unknown> | null;
-		};
+		const messageContent = event.message.content;
+		if (!Array.isArray(messageContent) || contentIndex >= messageContent.length) return;
+		const toolCall = messageContent[contentIndex] as ToolCall;
 		if (toolCall.name !== "edit" || !toolCall.id) return;
 
 		const args = toolCall.arguments;
@@ -577,7 +614,7 @@ export class AgentSession {
 		const diffForCheck = diff.endsWith("\n") ? diff : diff.slice(0, lastNewlineIndex + 1);
 		if (diffForCheck.trim().length === 0) return;
 
-		const normalizedDiff = normalizeDiff(diffForCheck);
+		const normalizedDiff = normalizeDiff(diffForCheck.replace(/\r/g, ""));
 		if (!normalizedDiff) return;
 		const lines = normalizedDiff.split("\n");
 		const hasChangeLine = lines.some((line) => line.startsWith("+") || line.startsWith("-"));
@@ -589,6 +626,68 @@ export class AgentSession {
 		this._streamingEditCheckedLineCounts.set(toolCall.id, lineCount);
 
 		const rename = typeof args.rename === "string" ? args.rename : undefined;
+
+		const removedLines = lines
+			.filter((line) => line.startsWith("-") && !line.startsWith("--- "))
+			.map((line) => line.slice(1));
+		if (removedLines.length > 0) {
+			const resolvedPath = resolveToCwd(path, this.sessionManager.getCwd());
+			const cachedContent = this._streamingEditFileCache.get(resolvedPath);
+			if (cachedContent !== undefined) {
+				const missing = removedLines.find((line) => !cachedContent.includes(normalizeToLF(line)));
+				if (missing) {
+					this._streamingEditAbortTriggered = true;
+					logger.warn("Streaming edit aborted due to patch preview failure", {
+						toolCallId: toolCall.id,
+						path,
+						error: `Failed to find expected lines in ${path}:\n${missing}`,
+					});
+					this.agent.abort();
+				}
+				return;
+			}
+			if (assistantEvent.type === "toolcall_delta") return;
+			void this._checkRemovedLinesAsync(toolCall.id, path, resolvedPath, removedLines);
+			return;
+		}
+
+		if (assistantEvent.type === "toolcall_delta") return;
+		void this._checkPreviewPatchAsync(toolCall.id, path, rename, normalizedDiff);
+	}
+
+	private async _checkRemovedLinesAsync(
+		toolCallId: string,
+		path: string,
+		resolvedPath: string,
+		removedLines: string[],
+	): Promise<void> {
+		if (this._streamingEditAbortTriggered) return;
+		try {
+			if (!(await Bun.file(resolvedPath).exists())) return;
+			const { text } = stripBom(await Bun.file(resolvedPath).text());
+			const normalizedContent = normalizeToLF(text);
+			const missing = removedLines.find((line) => !normalizedContent.includes(normalizeToLF(line)));
+			if (missing) {
+				this._streamingEditAbortTriggered = true;
+				logger.warn("Streaming edit aborted due to patch preview failure", {
+					toolCallId,
+					path,
+					error: `Failed to find expected lines in ${path}:\n${missing}`,
+				});
+				this.agent.abort();
+			}
+		} catch {
+			// Ignore errors during async fallback
+		}
+	}
+
+	private async _checkPreviewPatchAsync(
+		toolCallId: string,
+		path: string,
+		rename: string | undefined,
+		normalizedDiff: string,
+	): Promise<void> {
+		if (this._streamingEditAbortTriggered) return;
 		try {
 			await previewPatch(
 				{ path, op: "update", rename, diff: normalizedDiff },
@@ -602,7 +701,7 @@ export class AgentSession {
 			if (error instanceof ParseError) return;
 			this._streamingEditAbortTriggered = true;
 			logger.warn("Streaming edit aborted due to patch preview failure", {
-				toolCallId: toolCall.id,
+				toolCallId,
 				path,
 				error: error instanceof Error ? error.message : String(error),
 			});

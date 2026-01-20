@@ -555,9 +555,20 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				const startLine = offset ? Math.max(0, offset - 1) : 0;
 				const startLineDisplay = startLine + 1; // For display (1-indexed)
 
-				// Check if offset is out of bounds
+				// Check if offset is out of bounds - return graceful message instead of throwing
 				if (startLine >= allLines.length) {
-					throw new Error(`Offset ${offset} is beyond end of file (${allLines.length} lines total)`);
+					const suggestion =
+						allLines.length === 0
+							? "The file is empty."
+							: `Use offset=1 to read from the start, or offset=${allLines.length} to read the last line.`;
+					return {
+						content: [
+							{
+								type: "text",
+								text: `Offset ${offset} is beyond end of file (${allLines.length} lines total). ${suggestion}`,
+							},
+						],
+					};
 				}
 
 				// If limit is specified by user, use it; otherwise we'll let truncateHead decide

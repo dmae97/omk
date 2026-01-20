@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [6.8.0] - 2026-01-20
+
 ### Added
 
 - Added `logout` command to CLI for OAuth provider logout

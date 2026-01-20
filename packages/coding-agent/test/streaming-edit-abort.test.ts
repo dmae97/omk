@@ -146,6 +146,7 @@ function createStreamForDiff(
 	chunks: string[],
 	abortSignalRef: { current?: AbortSignal },
 ): Agent["streamFn"] {
+	let callIndex = 0;
 	return (_model, _context, options) => {
 		abortSignalRef.current = options?.signal;
 		const stream = new MockAssistantStream();
@@ -169,6 +170,12 @@ function createStreamForDiff(
 		options?.signal?.addEventListener("abort", notifyAbort, { once: true });
 
 		queueMicrotask(async () => {
+			if (callIndex > 0) {
+				const finalMessage = createAssistantMessage([{ type: "text", text: "done" }], "stop");
+				stream.push({ type: "done", reason: "stop", message: finalMessage });
+				callIndex++;
+				return;
+			}
 			const startMessage = createAssistantMessage([], "stop");
 			stream.push({ type: "start", partial: startMessage });
 
@@ -194,6 +201,7 @@ function createStreamForDiff(
 			const finalMessage = createAssistantMessage([finalCall], "toolUse");
 			stream.push({ type: "toolcall_end", contentIndex: 0, toolCall: finalCall, partial: finalMessage });
 			stream.push({ type: "done", reason: "toolUse", message: finalMessage });
+			callIndex++;
 		});
 
 		return stream;

@@ -175,9 +175,11 @@ describe("Coding Agent Tools", () => {
 			const testFile = join(testDir, "short.txt");
 			writeFileSync(testFile, "Line 1\nLine 2\nLine 3");
 
-			await expect(readTool.execute("test-call-8", { path: testFile, offset: 100 })).rejects.toThrow(
-				/Offset 100 is beyond end of file \(3 lines total\)/,
-			);
+			const result = await readTool.execute("test-call-8", { path: testFile, offset: 100 });
+			const output = getTextOutput(result);
+
+			expect(output).toContain("Offset 100 is beyond end of file (3 lines total)");
+			expect(output).toContain("Use offset=1 to read from the start, or offset=3 to read the last line.");
 		});
 
 		it("should include truncation details when truncated", async () => {

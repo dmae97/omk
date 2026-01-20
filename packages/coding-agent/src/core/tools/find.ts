@@ -238,7 +238,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 					"--no-ignore",
 					"--type",
 					"f",
-					"--name",
+					"--glob",
 					".gitignore",
 					"--exclude",
 					".git",

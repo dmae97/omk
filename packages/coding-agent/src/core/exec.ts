@@ -41,12 +41,15 @@ export async function execCommand(
 		signal: options?.signal,
 		timeout: options?.timeout,
 	});
-	return proc.exited.then(async () => {
-		return {
-			stdout: await proc.stdout.text(),
-			stderr: await proc.stderr.text(),
-			code: proc.exitCode ?? 0,
-			killed: proc.exitReason instanceof ptree.AbortError,
-		};
-	});
+	try {
+		await proc.exited;
+	} catch {
+		// ChildProcess rejects on non-zero exit; we handle it below
+	}
+	return {
+		stdout: await proc.stdout.text(),
+		stderr: await proc.stderr.text(),
+		code: proc.exitCode ?? 0,
+		killed: proc.exitReason instanceof ptree.AbortError,
+	};
 }

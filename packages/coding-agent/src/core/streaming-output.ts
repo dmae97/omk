@@ -199,6 +199,8 @@ export class OutputSink {
 		if (!this.filePath) {
 			return { output, truncated: false };
 		}
+		this.fileSink!.write(this.buffer);
+		this.fileSink!.flush();
 		return {
 			output,
 			truncated: true,

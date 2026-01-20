@@ -122,7 +122,13 @@ describe("executePythonWithKernel", () => {
 	});
 
 	it("truncates large output and stores full output file", async () => {
-		const largeOutput = `${"x".repeat(DEFAULT_MAX_BYTES + 1024)}TAIL`;
+		const lineLength = 100;
+		const lineCount = Math.ceil((DEFAULT_MAX_BYTES * 1.5) / lineLength);
+		const lines = Array.from(
+			{ length: lineCount },
+			(_, i) => `line${i.toString().padStart(6, "0")}: ${"x".repeat(lineLength - 15)}`,
+		);
+		const largeOutput = `${lines.join("\n")}\nTAIL\n`;
 		const kernel = new FakeKernel(
 			{ status: "ok", cancelled: false, timedOut: false, stdinRequested: false },
 			(options) => {

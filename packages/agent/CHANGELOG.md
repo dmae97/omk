@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [6.8.0] - 2026-01-20
 ### Changed
 
 - Updated proxy stream processing to use utility function for reading lines
