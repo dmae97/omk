@@ -335,3 +335,62 @@ export function closeDb(): void {
 		db = null;
 	}
 }
+
+function rowToMessageStats(row: any): MessageStats {
+	return {
+		id: row.id,
+		sessionFile: row.session_file,
+		entryId: row.entry_id,
+		folder: row.folder,
+		model: row.model,
+		provider: row.provider,
+		api: row.api,
+		timestamp: row.timestamp,
+		duration: row.duration,
+		ttft: row.ttft,
+		stopReason: row.stop_reason as any,
+		errorMessage: row.error_message,
+		usage: {
+			input: row.input_tokens,
+			output: row.output_tokens,
+			cacheRead: row.cache_read_tokens,
+			cacheWrite: row.cache_write_tokens,
+			totalTokens: row.total_tokens,
+			cost: {
+				input: row.cost_input,
+				output: row.cost_output,
+				cacheRead: row.cost_cache_read,
+				cacheWrite: row.cost_cache_write,
+				total: row.cost_total,
+			},
+		},
+	};
+}
+
+export function getRecentRequests(limit = 100): MessageStats[] {
+	if (!db) return [];
+	const stmt = db.prepare(`
+		SELECT * FROM messages 
+		ORDER BY timestamp DESC 
+		LIMIT ?
+	`);
+	return (stmt.all(limit) as any[]).map(rowToMessageStats);
+}
+
+export function getRecentErrors(limit = 100): MessageStats[] {
+	if (!db) return [];
+	const stmt = db.prepare(`
+		SELECT * FROM messages 
+		WHERE stop_reason = 'error'
+		ORDER BY timestamp DESC 
+		LIMIT ?
+	`);
+	return (stmt.all(limit) as any[]).map(rowToMessageStats);
+}
+
+export function getMessageById(id: number): MessageStats | null {
+	if (!db) return null;
+	const stmt = db.prepare("SELECT * FROM messages WHERE id = ?");
+	const row = stmt.get(id);
+	return row ? rowToMessageStats(row) : null;
+}

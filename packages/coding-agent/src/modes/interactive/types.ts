@@ -15,6 +15,7 @@ import type { CustomEditor } from "./components/custom-editor";
 import type { HookEditorComponent } from "./components/hook-editor";
 import type { HookInputComponent } from "./components/hook-input";
 import type { HookSelectorComponent } from "./components/hook-selector";
+import type { PythonExecutionComponent } from "./components/python-execution";
 import type { StatusLineComponent } from "./components/status-line";
 import type { ToolExecutionHandle } from "./components/tool-execution";
 import type { Theme } from "./theme/theme";
@@ -64,6 +65,9 @@ export interface InteractiveModeContext {
 	pendingTools: Map<string, ToolExecutionHandle>;
 	pendingBashComponents: BashExecutionComponent[];
 	bashComponent: BashExecutionComponent | undefined;
+	pendingPythonComponents: PythonExecutionComponent[];
+	pythonComponent: PythonExecutionComponent | undefined;
+	isPythonMode: boolean;
 	streamingComponent: AssistantMessageComponent | undefined;
 	streamingMessage: AssistantMessage | undefined;
 	loadingAnimation: Loader | undefined;
@@ -137,6 +141,7 @@ export interface InteractiveModeContext {
 	handleDebugCommand(): Promise<void>;
 	handleArminSaysHi(): void;
 	handleBashCommand(command: string, excludeFromContext?: boolean): Promise<void>;
+	handlePythonCommand(code: string, excludeFromContext?: boolean): Promise<void>;
 	handleCompactCommand(customInstructions?: string): Promise<void>;
 	executeCompaction(customInstructionsOrOptions?: string | CompactOptions, isAuto?: boolean): Promise<void>;
 	openInBrowser(urlOrPath: string): void;

@@ -13,6 +13,7 @@ import {
 	createCustomMessage,
 	type FileMentionMessage,
 	type HookMessage,
+	type PythonExecutionMessage,
 } from "./messages";
 import type { SessionStorage, SessionStorageWriter } from "./session-storage";
 import { FileSessionStorage, MemorySessionStorage } from "./session-storage";
@@ -1306,7 +1307,15 @@ export class SessionManager {
 	 * so it is easier to find them.
 	 * These need to be appended via appendCompaction() and appendBranchSummary() methods.
 	 */
-	appendMessage(message: Message | CustomMessage | HookMessage | BashExecutionMessage | FileMentionMessage): string {
+	appendMessage(
+		message:
+			| Message
+			| CustomMessage
+			| HookMessage
+			| BashExecutionMessage
+			| PythonExecutionMessage
+			| FileMentionMessage,
+	): string {
 		const entry: SessionMessageEntry = {
 			type: "message",
 			id: generateId(this.byId),

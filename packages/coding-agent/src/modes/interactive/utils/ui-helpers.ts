@@ -10,6 +10,7 @@ import { BranchSummaryMessageComponent } from "../components/branch-summary-mess
 import { CompactionSummaryMessageComponent } from "../components/compaction-summary-message";
 import { CustomMessageComponent } from "../components/custom-message";
 import { DynamicBorder } from "../components/dynamic-border";
+import { PythonExecutionComponent } from "../components/python-execution";
 import { ReadToolGroupComponent } from "../components/read-tool-group";
 import { ToolExecutionComponent } from "../components/tool-execution";
 import { UserMessageComponent } from "../components/user-message";
@@ -71,6 +72,20 @@ export class UiHelpers {
 		switch (message.role) {
 			case "bashExecution": {
 				const component = new BashExecutionComponent(message.command, this.ctx.ui, message.excludeFromContext);
+				if (message.output) {
+					component.appendOutput(message.output);
+				}
+				component.setComplete(
+					message.exitCode,
+					message.cancelled,
+					message.truncated ? ({ truncated: true } as TruncationResult) : undefined,
+					message.fullOutputPath,
+				);
+				this.ctx.chatContainer.addChild(component);
+				break;
+			}
+			case "pythonExecution": {
+				const component = new PythonExecutionComponent(message.code, this.ctx.ui, message.excludeFromContext);
 				if (message.output) {
 					component.appendOutput(message.output);
 				}

@@ -35,6 +35,7 @@ import { DynamicBorder } from "./components/dynamic-border";
 import type { HookEditorComponent } from "./components/hook-editor";
 import type { HookInputComponent } from "./components/hook-input";
 import type { HookSelectorComponent } from "./components/hook-selector";
+import type { PythonExecutionComponent } from "./components/python-execution";
 import { StatusLineComponent } from "./components/status-line";
 import type { ToolExecutionHandle } from "./components/tool-execution";
 import { WelcomeComponent } from "./components/welcome";
@@ -93,6 +94,9 @@ export class InteractiveMode implements InteractiveModeContext {
 	public pendingTools = new Map<string, ToolExecutionHandle>();
 	public pendingBashComponents: BashExecutionComponent[] = [];
 	public bashComponent: BashExecutionComponent | undefined = undefined;
+	public pendingPythonComponents: PythonExecutionComponent[] = [];
+	public pythonComponent: PythonExecutionComponent | undefined = undefined;
+	public isPythonMode = false;
 	public streamingComponent: AssistantMessageComponent | undefined = undefined;
 	public streamingMessage: AssistantMessage | undefined = undefined;
 	public loadingAnimation: Loader | undefined = undefined;
@@ -629,6 +633,10 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	handleBashCommand(command: string, excludeFromContext?: boolean): Promise<void> {
 		return this.commandController.handleBashCommand(command, excludeFromContext);
+	}
+
+	handlePythonCommand(code: string, excludeFromContext?: boolean): Promise<void> {
+		return this.commandController.handlePythonCommand(code, excludeFromContext);
 	}
 
 	handleCompactCommand(customInstructions?: string): Promise<void> {

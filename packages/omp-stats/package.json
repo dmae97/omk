@@ -24,12 +24,21 @@
 	},
 	"files": [
 		"src",
-		"public"
+		"public",
+		"README.md"
+	],
+	"keywords": [
+		"ai",
+		"observability",
+		"metrics",
+		"dashboard",
+		"llm",
+		"statistics"
 	],
 	"scripts": {
 		"dev": "bun run src/index.ts",
-		"check": "tsgo --noEmit",
-		"build": "tsgo -p tsconfig.build.json"
+		"check": "tsgo --noEmit && tsgo --noEmit -p tsconfig.client.json",
+		"build": "bun run build.ts && tsgo -p tsconfig.build.json"
 	},
 	"author": "Can Bölük",
 	"license": "MIT",
@@ -39,10 +48,17 @@
 		"directory": "packages/omp-stats"
 	},
 	"dependencies": {
-		"@oh-my-pi/pi-ai": "workspace:*"
+		"@oh-my-pi/pi-ai": "workspace:*",
+		"date-fns": "^4.1.0",
+		"lucide-react": "^0.562.0",
+		"react": "^19.2.3",
+		"react-dom": "^19.2.3",
+		"recharts": "^3.6.0"
 	},
 	"devDependencies": {
-		"@types/node": "^24.3.0"
+		"@types/node": "^24.3.0",
+		"@types/react": "^19.2.9",
+		"@types/react-dom": "^19.2.3"
 	},
 	"engines": {
 		"bun": ">=1.0.0"

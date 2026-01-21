@@ -1,6 +1,9 @@
 import { stat } from "node:fs/promises";
 import {
+	getRecentErrors as dbGetRecentErrors,
+	getRecentRequests as dbGetRecentRequests,
 	getFileOffset,
+	getMessageById,
 	getMessageCount,
 	getOverallStats,
 	getStatsByFolder,
@@ -10,8 +13,8 @@ import {
 	insertMessageStats,
 	setFileOffset,
 } from "./db";
-import { listAllSessionFiles, parseSessionFile } from "./parser";
-import type { DashboardStats } from "./types";
+import { getSessionEntry, listAllSessionFiles, parseSessionFile } from "./parser";
+import type { DashboardStats, MessageStats, RequestDetails } from "./types";
 
 /**
  * Sync a single session file to the database.
@@ -81,6 +84,35 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 		byModel: getStatsByModel(),
 		byFolder: getStatsByFolder(),
 		timeSeries: getTimeSeries(24),
+	};
+}
+
+export async function getRecentRequests(limit?: number): Promise<MessageStats[]> {
+	await initDb();
+	return dbGetRecentRequests(limit);
+}
+
+export async function getRecentErrors(limit?: number): Promise<MessageStats[]> {
+	await initDb();
+	return dbGetRecentErrors(limit);
+}
+
+export async function getRequestDetails(id: number): Promise<RequestDetails | null> {
+	await initDb();
+	const msg = getMessageById(id);
+	if (!msg) return null;
+
+	const entry = await getSessionEntry(msg.sessionFile, msg.entryId);
+	if (!entry || entry.type !== "message") return null;
+
+	// TODO: Get parent/context messages?
+	// For now we return the single entry which contains the assistant response.
+	// The user prompt is likely the parent.
+
+	return {
+		...msg,
+		messages: [entry],
+		output: (entry as any).message,
 	};
 }
 

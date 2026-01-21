@@ -1,17 +1,39 @@
 import { join } from "node:path";
-import { getDashboardStats, getTotalMessageCount, syncAllSessions } from "./aggregator";
+import {
+	getDashboardStats,
+	getRecentErrors,
+	getRecentRequests,
+	getRequestDetails,
+	getTotalMessageCount,
+	syncAllSessions,
+} from "./aggregator";
 
-const STATIC_DIR = join(import.meta.dir, "..", "public");
+const STATIC_DIR = join(import.meta.dir, "..", "dist", "client");
 
 /**
  * Handle API requests.
  */
-async function handleApi(path: string): Promise<Response> {
+async function handleApi(req: Request): Promise<Response> {
+	const url = new URL(req.url);
+	const path = url.pathname;
+
 	// Sync sessions before returning stats
 	await syncAllSessions();
 
 	if (path === "/api/stats") {
 		const stats = await getDashboardStats();
+		return Response.json(stats);
+	}
+
+	if (path === "/api/stats/recent") {
+		const limit = url.searchParams.get("limit");
+		const stats = await getRecentRequests(limit ? parseInt(limit, 10) : undefined);
+		return Response.json(stats);
+	}
+
+	if (path === "/api/stats/errors") {
+		const limit = url.searchParams.get("limit");
+		const stats = await getRecentErrors(limit ? parseInt(limit, 10) : undefined);
 		return Response.json(stats);
 	}
 
@@ -28,6 +50,14 @@ async function handleApi(path: string): Promise<Response> {
 	if (path === "/api/stats/timeseries") {
 		const stats = await getDashboardStats();
 		return Response.json(stats.timeSeries);
+	}
+
+	if (path.startsWith("/api/request/")) {
+		const id = path.split("/").pop();
+		if (!id) return new Response("Bad Request", { status: 400 });
+		const details = await getRequestDetails(parseInt(id, 10));
+		if (!details) return new Response("Not Found", { status: 404 });
+		return Response.json(details);
 	}
 
 	if (path === "/api/sync") {
@@ -47,19 +77,17 @@ async function handleStatic(path: string): Promise<Response> {
 	const fullPath = join(STATIC_DIR, filePath);
 
 	const file = Bun.file(fullPath);
-	const exists = await file.exists();
-
-	if (!exists) {
-		// Try with .html extension
-		const htmlPath = `${fullPath}.html`;
-		const htmlFile = Bun.file(htmlPath);
-		if (await htmlFile.exists()) {
-			return new Response(htmlFile);
-		}
-		return new Response("Not Found", { status: 404 });
+	if (await file.exists()) {
+		return new Response(file);
 	}
 
-	return new Response(file);
+	// SPA fallback
+	const index = Bun.file(join(STATIC_DIR, "index.html"));
+	if (await index.exists()) {
+		return new Response(index);
+	}
+
+	return new Response("Not Found", { status: 404 });
 }
 
 /**
@@ -87,7 +115,7 @@ export function startServer(port = 3847): { port: number; stop: () => void } {
 				let response: Response;
 
 				if (path.startsWith("/api/")) {
-					response = await handleApi(path);
+					response = await handleApi(req);
 				} else {
 					response = await handleStatic(path);
 				}

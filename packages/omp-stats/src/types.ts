@@ -4,6 +4,8 @@ import type { AssistantMessage, StopReason, Usage } from "@oh-my-pi/pi-ai";
  * Extracted stats from an assistant message.
  */
 export interface MessageStats {
+	/** Database ID */
+	id?: number;
 	/** Session file path */
 	sessionFile: string;
 	/** Entry ID within the session */
@@ -28,6 +30,14 @@ export interface MessageStats {
 	errorMessage: string | null;
 	/** Token usage */
 	usage: Usage;
+}
+
+/**
+ * Full details of a request, including content.
+ */
+export interface RequestDetails extends MessageStats {
+	messages: any[]; // The full conversation history or just the last turn
+	output: any; // The model's response
 }
 
 /**

@@ -16,6 +16,7 @@ import { ArminComponent } from "../components/armin";
 import { BashExecutionComponent } from "../components/bash-execution";
 import { BorderedLoader } from "../components/bordered-loader";
 import { DynamicBorder } from "../components/dynamic-border";
+import { PythonExecutionComponent } from "../components/python-execution";
 import { getMarkdownTheme, getSymbolTheme, theme } from "../theme/theme";
 import type { InteractiveModeContext } from "../types";
 
@@ -344,6 +345,8 @@ export class CommandController {
 | \`/\` | Slash commands |
 | \`!\` | Run bash command |
 | \`!!\` | Run bash command (excluded from context) |
+| \`$\` | Run Python in shared kernel |
+| \`$$\` | Run Python (excluded from context) |
 `;
 		this.ctx.chatContainer.addChild(new Spacer(1));
 		this.ctx.chatContainer.addChild(new DynamicBorder());
@@ -468,6 +471,49 @@ export class CommandController {
 		}
 
 		this.ctx.bashComponent = undefined;
+		this.ctx.ui.requestRender();
+	}
+
+	async handlePythonCommand(code: string, excludeFromContext = false): Promise<void> {
+		const isDeferred = this.ctx.session.isStreaming;
+		this.ctx.pythonComponent = new PythonExecutionComponent(code, this.ctx.ui, excludeFromContext);
+
+		if (isDeferred) {
+			this.ctx.pendingMessagesContainer.addChild(this.ctx.pythonComponent);
+			this.ctx.pendingPythonComponents.push(this.ctx.pythonComponent);
+		} else {
+			this.ctx.chatContainer.addChild(this.ctx.pythonComponent);
+		}
+		this.ctx.ui.requestRender();
+
+		try {
+			const result = await this.ctx.session.executePython(
+				code,
+				(chunk) => {
+					if (this.ctx.pythonComponent) {
+						this.ctx.pythonComponent.appendOutput(chunk);
+						this.ctx.ui.requestRender();
+					}
+				},
+				{ excludeFromContext },
+			);
+
+			if (this.ctx.pythonComponent) {
+				this.ctx.pythonComponent.setComplete(
+					result.exitCode,
+					result.cancelled,
+					result.truncated ? ({ truncated: true, content: result.output } as TruncationResult) : undefined,
+					result.fullOutputPath,
+				);
+			}
+		} catch (error) {
+			if (this.ctx.pythonComponent) {
+				this.ctx.pythonComponent.setComplete(undefined, false);
+			}
+			this.ctx.showError(`Python execution failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+		}
+
+		this.ctx.pythonComponent = undefined;
 		this.ctx.ui.requestRender();
 	}
 

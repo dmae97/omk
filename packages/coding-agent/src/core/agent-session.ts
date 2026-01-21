@@ -50,10 +50,11 @@ import type {
 import type { CompactOptions, ContextUsage } from "./extensions/types";
 import { extractFileMentions, generateFileMentionMessages } from "./file-mentions";
 import type { HookCommandContext } from "./hooks/types";
-import type { BashExecutionMessage, CustomMessage } from "./messages";
+import type { BashExecutionMessage, CustomMessage, PythonExecutionMessage } from "./messages";
 import type { ModelRegistry } from "./model-registry";
 import { parseModelString } from "./model-resolver";
 import { expandPromptTemplate, type PromptTemplate, parseCommandArgs, renderPromptTemplate } from "./prompt-templates";
+import { executePython as executePythonCommand, type PythonResult } from "./python-executor";
 import type { BranchSummaryEntry, CompactionEntry, NewSessionOptions, SessionManager } from "./session-manager";
 import type { SettingsManager, SkillsSettings } from "./settings-manager";
 import type { Skill, SkillWarning } from "./skills";
@@ -247,6 +248,10 @@ export class AgentSession {
 	// Bash execution state
 	private _bashAbortController: AbortController | undefined = undefined;
 	private _pendingBashMessages: BashExecutionMessage[] = [];
+
+	// Python execution state
+	private _pythonAbortController: AbortController | undefined = undefined;
+	private _pendingPythonMessages: PythonExecutionMessage[] = [];
 
 	// Extension system
 	private _extensionRunner: ExtensionRunner | undefined = undefined;
@@ -1005,6 +1010,7 @@ export class AgentSession {
 
 		// Flush any pending bash messages before the new prompt
 		this._flushPendingBashMessages();
+		this._flushPendingPythonMessages();
 
 		// Reset todo reminder count on new user prompt
 		this._todoReminderCount = 0;
@@ -2629,6 +2635,102 @@ export class AgentSession {
 		}
 
 		this._pendingBashMessages = [];
+	}
+
+	// =========================================================================
+	// User-Initiated Python Execution
+	// =========================================================================
+
+	/**
+	 * Execute Python code in the shared kernel.
+	 * Uses the same kernel session as the agent's Python tool, allowing collaborative editing.
+	 * @param code The Python code to execute
+	 * @param onChunk Optional streaming callback for output
+	 * @param options.excludeFromContext If true, execution won't be sent to LLM ($$ prefix)
+	 */
+	async executePython(
+		code: string,
+		onChunk?: (chunk: string) => void,
+		options?: { excludeFromContext?: boolean },
+	): Promise<PythonResult> {
+		this._pythonAbortController = new AbortController();
+
+		try {
+			// Use the same session ID as the Python tool for kernel sharing
+			const sessionFile = this.sessionManager.getSessionFile();
+			const cwd = this.sessionManager.getCwd();
+			const sessionId = sessionFile ? `session:${sessionFile}:cwd:${cwd}` : `cwd:${cwd}`;
+
+			const result = await executePythonCommand(code, {
+				cwd,
+				sessionId,
+				kernelMode: this.settingsManager?.getPythonKernelMode?.() ?? "session",
+				useSharedGateway: this.settingsManager?.getPythonSharedGateway?.() ?? true,
+				onChunk,
+				signal: this._pythonAbortController.signal,
+			});
+
+			this.recordPythonResult(code, result, options);
+			return result;
+		} finally {
+			this._pythonAbortController = undefined;
+		}
+	}
+
+	/**
+	 * Record a Python execution result in session history.
+	 */
+	recordPythonResult(code: string, result: PythonResult, options?: { excludeFromContext?: boolean }): void {
+		const pythonMessage: PythonExecutionMessage = {
+			role: "pythonExecution",
+			code,
+			output: result.output,
+			exitCode: result.exitCode,
+			cancelled: result.cancelled,
+			truncated: result.truncated,
+			fullOutputPath: result.fullOutputPath,
+			timestamp: Date.now(),
+			excludeFromContext: options?.excludeFromContext,
+		};
+
+		// If agent is streaming, defer adding to avoid breaking tool_use/tool_result ordering
+		if (this.isStreaming) {
+			this._pendingPythonMessages.push(pythonMessage);
+		} else {
+			this.agent.appendMessage(pythonMessage);
+			this.sessionManager.appendMessage(pythonMessage);
+		}
+	}
+
+	/**
+	 * Cancel running Python execution.
+	 */
+	abortPython(): void {
+		this._pythonAbortController?.abort();
+	}
+
+	/** Whether a Python execution is currently running */
+	get isPythonRunning(): boolean {
+		return this._pythonAbortController !== undefined;
+	}
+
+	/** Whether there are pending Python messages waiting to be flushed */
+	get hasPendingPythonMessages(): boolean {
+		return this._pendingPythonMessages.length > 0;
+	}
+
+	/**
+	 * Flush pending Python messages to agent state and session.
+	 */
+	private _flushPendingPythonMessages(): void {
+		if (this._pendingPythonMessages.length === 0) return;
+
+		for (const pythonMessage of this._pendingPythonMessages) {
+			this.agent.appendMessage(pythonMessage);
+			this.sessionManager.appendMessage(pythonMessage);
+		}
+
+		this._pendingPythonMessages = [];
 	}
 
 	// =========================================================================

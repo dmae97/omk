@@ -145,3 +145,22 @@ export async function listAllSessionFiles(): Promise<string[]> {
 export function getSessionsDir(): string {
 	return SESSIONS_DIR;
 }
+
+/**
+ * Find a specific entry in a session file.
+ */
+export async function getSessionEntry(sessionPath: string, entryId: string): Promise<SessionEntry | null> {
+	const file = Bun.file(sessionPath);
+	if (!(await file.exists())) return null;
+
+	const text = await file.text();
+	const lines = text.split("\n");
+
+	for (const line of lines) {
+		const entry = parseLine(line);
+		if (entry && "id" in entry && entry.id === entryId) {
+			return entry;
+		}
+	}
+	return null;
+}
