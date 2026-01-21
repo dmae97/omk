@@ -14,9 +14,9 @@ export interface PythonExecutorOptions {
 	/** Working directory for command execution */
 	cwd?: string;
 	/** Timeout in milliseconds */
-	timeout?: number;
+	timeoutMs?: number;
 	/** Callback for streaming output chunks (already sanitized) */
-	onChunk?: (chunk: string) => void;
+	onChunk?: (chunk: string) => Promise<void> | void;
 	/** AbortSignal for cancellation */
 	signal?: AbortSignal;
 	/** Session identifier for kernel reuse */
@@ -216,17 +216,13 @@ async function executeWithKernel(
 	try {
 		const result = await kernel.execute(code, {
 			signal: options?.signal,
-			timeoutMs: options?.timeout,
-			onChunk: (text) => {
-				sink.push(text);
-			},
-			onDisplay: (output) => {
-				displayOutputs.push(output);
-			},
+			timeoutMs: options?.timeoutMs,
+			onChunk: (text) => sink.push(text),
+			onDisplay: (output) => void displayOutputs.push(output),
 		});
 
 		if (result.cancelled) {
-			const secs = options?.timeout ? Math.round(options.timeout / 1000) : undefined;
+			const secs = options?.timeoutMs ? Math.round(options.timeoutMs / 1000) : undefined;
 			const annotation =
 				result.timedOut && secs !== undefined ? `Command timed out after ${secs} seconds` : undefined;
 			return {

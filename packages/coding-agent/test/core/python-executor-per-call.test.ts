@@ -36,7 +36,7 @@ describe("executePython (per-call)", () => {
 		try {
 			const result = await executePython("sleep(10)", {
 				kernelMode: "per-call",
-				timeout: 2000,
+				timeoutMs: 2000,
 				cwd: tempDir.path,
 			});
 

@@ -26,7 +26,7 @@ describe("executePythonWithKernel result mapping", () => {
 			stdinRequested: false,
 		});
 
-		const result = await executePythonWithKernel(kernel, "sleep()", { timeout: 5000 });
+		const result = await executePythonWithKernel(kernel, "sleep()", { timeoutMs: 5000 });
 
 		expect(result.exitCode).toBeUndefined();
 		expect(result.cancelled).toBe(true);

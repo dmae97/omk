@@ -17,7 +17,7 @@ class FakeKernel implements PythonKernelExecutor {
 describe("executePythonWithKernel mapping", () => {
 	it("annotates timeout cancellations", async () => {
 		const kernel = new FakeKernel({ status: "ok", cancelled: true, timedOut: true, stdinRequested: false });
-		const result = await executePythonWithKernel(kernel, "sleep(10)", { timeout: 5000 });
+		const result = await executePythonWithKernel(kernel, "sleep(10)", { timeoutMs: 5000 });
 
 		expect(result.cancelled).toBe(true);
 		expect(result.exitCode).toBeUndefined();

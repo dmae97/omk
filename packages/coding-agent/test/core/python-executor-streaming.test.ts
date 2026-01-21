@@ -6,15 +6,15 @@ import { DEFAULT_MAX_BYTES } from "../../src/core/tools/truncate";
 
 class FakeKernel implements PythonKernelExecutor {
 	private result: KernelExecuteResult;
-	private onExecute: (options?: KernelExecuteOptions) => void;
+	private onExecute: (options?: KernelExecuteOptions) => Promise<void> | void;
 
-	constructor(result: KernelExecuteResult, onExecute: (options?: KernelExecuteOptions) => void) {
+	constructor(result: KernelExecuteResult, onExecute: (options?: KernelExecuteOptions) => Promise<void> | void) {
 		this.result = result;
 		this.onExecute = onExecute;
 	}
 
 	async execute(_code: string, options?: KernelExecuteOptions): Promise<KernelExecuteResult> {
-		this.onExecute(options);
+		await this.onExecute(options);
 		return this.result;
 	}
 }
@@ -37,9 +37,7 @@ describe("executePythonWithKernel streaming", () => {
 		const largeOutput = "a".repeat(DEFAULT_MAX_BYTES + 128);
 		const kernel = new FakeKernel(
 			{ status: "ok", cancelled: false, timedOut: false, stdinRequested: false },
-			(options) => {
-				options?.onChunk?.(largeOutput);
-			},
+			(options) => options?.onChunk?.(largeOutput),
 		);
 
 		const result = await executePythonWithKernel(kernel, "print('hi')");
@@ -55,7 +53,7 @@ describe("executePythonWithKernel streaming", () => {
 	it("annotates timed out runs", async () => {
 		const kernel = new FakeKernel({ status: "ok", cancelled: true, timedOut: true, stdinRequested: false }, () => {});
 
-		const result = await executePythonWithKernel(kernel, "sleep", { timeout: 2000 });
+		const result = await executePythonWithKernel(kernel, "sleep", { timeoutMs: 2000 });
 
 		expect(result.cancelled).toBe(true);
 		expect(result.exitCode).toBeUndefined();
@@ -65,9 +63,7 @@ describe("executePythonWithKernel streaming", () => {
 	it("sanitizes ANSI and carriage returns", async () => {
 		const kernel = new FakeKernel(
 			{ status: "ok", cancelled: false, timedOut: false, stdinRequested: false },
-			(options) => {
-				options?.onChunk?.("\u001b[31mhello\r\n");
-			},
+			(options) => options?.onChunk?.("\u001b[31mhello\r\n"),
 		);
 
 		const result = await executePythonWithKernel(kernel, "print('hello')");

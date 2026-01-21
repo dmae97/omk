@@ -33,8 +33,6 @@ export class OutputSink {
 		path: string;
 		sink: Bun.FileSink;
 	};
-	#bytesWritten: number = 0;
-	#pending: Promise<void> = Promise.resolve();
 
 	readonly #allocateFilePath: () => string;
 	readonly #spillThreshold: number;
@@ -54,15 +52,16 @@ export class OutputSink {
 
 	async #pushSanitized(data: string): Promise<void> {
 		this.#onChunk?.(data);
-		const dataBytes = Buffer.byteLength(data);
-		const overflow = dataBytes + this.#bytesWritten > this.#spillThreshold || this.#file != null;
+
+		const bufferOverflow = data.length + this.#buffer.length > this.#spillThreshold;
+		const overflow = this.#file || bufferOverflow;
 
 		const sink = overflow ? await this.#fileSink() : null;
 
 		this.#buffer += data;
 		await sink?.write(data);
 
-		if (this.#buffer.length > this.#spillThreshold) {
+		if (bufferOverflow) {
 			this.#buffer = this.#buffer.slice(-this.#spillThreshold);
 		}
 	}
@@ -81,28 +80,21 @@ export class OutputSink {
 
 	async push(chunk: string): Promise<void> {
 		chunk = sanitizeText(chunk);
-		const op = this.#pending.then(() => this.#pushSanitized(chunk));
-		this.#pending = op.catch(() => {});
-		await op;
+		await this.#pushSanitized(chunk);
 	}
 
 	createInput(): WritableStream<Uint8Array | string> {
-		let decoder: TextDecoder | undefined;
-		let finalize = async () => {};
+		const dec = new TextDecoder("utf-8", { ignoreBOM: true });
+		const finalize = async () => {
+			await this.push(dec.decode());
+		};
 
 		return new WritableStream<Uint8Array | string>({
 			write: async (chunk) => {
 				if (typeof chunk === "string") {
 					await this.push(chunk);
 				} else {
-					if (!decoder) {
-						const dec = new TextDecoder("utf-8", { ignoreBOM: true });
-						decoder = dec;
-						finalize = async () => {
-							await this.push(dec.decode());
-						};
-					}
-					await this.push(decoder.decode(chunk, { stream: true }));
+					await this.push(dec.decode(chunk, { stream: true }));
 				}
 			},
 			close: finalize,
@@ -111,7 +103,6 @@ export class OutputSink {
 	}
 
 	async dump(notice?: string): Promise<OutputResult> {
-		await this.#pending;
 		const noticeLine = notice ? `[${notice}]\n` : "";
 
 		if (this.#file) {

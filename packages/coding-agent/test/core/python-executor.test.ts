@@ -19,15 +19,15 @@ import { DEFAULT_MAX_BYTES } from "../../src/core/tools/truncate";
 
 class FakeKernel implements PythonKernelExecutor {
 	private result: KernelExecuteResult;
-	private onExecute: (options?: KernelExecuteOptions) => void;
+	private onExecute: (options?: KernelExecuteOptions) => Promise<void> | void;
 
-	constructor(result: KernelExecuteResult, onExecute: (options?: KernelExecuteOptions) => void) {
+	constructor(result: KernelExecuteResult, onExecute: (options?: KernelExecuteOptions) => Promise<void> | void) {
 		this.result = result;
 		this.onExecute = onExecute;
 	}
 
 	async execute(_code: string, options?: KernelExecuteOptions): Promise<KernelExecuteResult> {
-		this.onExecute(options);
+		await this.onExecute(options);
 		return this.result;
 	}
 }
@@ -98,7 +98,7 @@ describe("executePythonWithKernel", () => {
 			},
 		);
 
-		const result = await executePythonWithKernel(kernel, "while True: pass", { timeout: 4100 });
+		const result = await executePythonWithKernel(kernel, "while True: pass", { timeoutMs: 4100 });
 
 		expect(result.exitCode).toBeUndefined();
 		expect(result.cancelled).toBe(true);
@@ -131,8 +131,8 @@ describe("executePythonWithKernel", () => {
 		const largeOutput = `${lines.join("\n")}\nTAIL\n`;
 		const kernel = new FakeKernel(
 			{ status: "ok", cancelled: false, timedOut: false, stdinRequested: false },
-			(options) => {
-				options?.onChunk?.(largeOutput);
+			async (options) => {
+				await options?.onChunk?.(largeOutput);
 			},
 		);
 

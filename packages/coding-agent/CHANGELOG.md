@@ -1,6 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+### Breaking Changes
+
+- Changed timeout parameter from seconds to milliseconds in Python tool
+- Updated PythonExecutorOptions interface to use timeoutMs instead of timeout
+
+### Changed
+
+- Updated default timeout to 30000ms (30 seconds) for Python tool
+- Improved streaming output handling and buffer management
 
 ## [6.8.4] - 2026-01-21
 ### Changed

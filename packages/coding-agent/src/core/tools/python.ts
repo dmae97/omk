@@ -40,7 +40,7 @@ function groupPreludeHelpers(helpers: PreludeHelper[]): PreludeCategory[] {
 
 export const pythonSchema = Type.Object({
 	code: Type.String({ description: "Python code to execute" }),
-	timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (optional, no default timeout)" })),
+	timeoutMs: Type.Optional(Type.Number({ description: "Timeout in milliseconds (default: 30000)" })),
 	workdir: Type.Optional(
 		Type.String({ description: "Working directory for the command (default: current directory)" }),
 	),
@@ -151,7 +151,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 			throw new Error("Python tool requires a session when not using proxy executor");
 		}
 
-		const { code, timeout, workdir, reset } = params;
+		const { code, timeoutMs = 30000, workdir, reset } = params;
 		const controller = new AbortController();
 		const onAbort = () => controller.abort();
 		signal?.addEventListener("abort", onAbort, { once: true });
@@ -182,7 +182,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 			const sessionId = sessionFile ? `session:${sessionFile}:workdir:${commandCwd}` : `cwd:${commandCwd}`;
 			const executorOptions: PythonExecutorOptions = {
 				cwd: commandCwd,
-				timeout: timeout ? timeout * 1000 : undefined,
+				timeoutMs,
 				signal: controller.signal,
 				sessionId,
 				kernelMode: this.session.settings?.getPythonKernelMode?.() ?? "session",
