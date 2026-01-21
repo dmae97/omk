@@ -372,7 +372,6 @@ describe("tool schema validation (post-sanitization)", () => {
 			"ssh",
 			"edit",
 			"find",
-			"git",
 			"grep",
 			"ls",
 			"lsp",

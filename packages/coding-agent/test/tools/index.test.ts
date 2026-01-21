@@ -155,7 +155,6 @@ describe("createTools", () => {
 			"ssh",
 			"edit",
 			"find",
-			"git",
 			"grep",
 			"ls",
 			"lsp",

@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [6.9.0] - 2026-01-21
 ### Removed
 
 - Removed Git tool and all related functionality
