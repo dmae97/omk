@@ -243,6 +243,14 @@ function getLspServerForFile(config: LspConfig, filePath: string): [string, Serv
 
 const FILE_SEARCH_MAX_DEPTH = 5;
 const IGNORED_DIRS = new Set(["node_modules", "target", "dist", "build", ".git"]);
+const DIAGNOSTIC_MESSAGE_LIMIT = 50;
+
+function limitDiagnosticMessages(messages: string[]): string[] {
+	if (messages.length <= DIAGNOSTIC_MESSAGE_LIMIT) {
+		return messages;
+	}
+	return messages.slice(0, DIAGNOSTIC_MESSAGE_LIMIT);
+}
 
 function findFileByExtensions(baseDir: string, extensions: string[], maxDepth: number): string | null {
 	const normalized = extensions.map((ext) => ext.toLowerCase());
@@ -563,12 +571,13 @@ async function getDiagnosticsForFile(
 	}
 
 	const formatted = uniqueDiagnostics.map((d) => formatDiagnostic(d, relPath));
+	const limited = limitDiagnosticMessages(formatted);
 	const summary = formatDiagnosticsSummary(uniqueDiagnostics);
 	const hasErrors = uniqueDiagnostics.some((d) => d.severity === 1);
 
 	return {
 		server: serverNames.join(", "),
-		messages: formatted,
+		messages: limited,
 		summary,
 		errored: hasErrors,
 	};
@@ -788,16 +797,18 @@ function mergeDiagnostics(
 
 	let summary = options.enableDiagnostics ? "no issues" : "OK";
 	let errored = false;
+	let limitedMessages = messages;
 	if (messages.length > 0) {
 		const summaryInfo = summarizeDiagnosticMessages(messages);
 		summary = summaryInfo.summary;
 		errored = summaryInfo.errored;
+		limitedMessages = limitDiagnosticMessages(messages);
 	}
 	const formatter = hasFormatter ? (formatted ? FileFormatResult.FORMATTED : FileFormatResult.UNCHANGED) : undefined;
 
 	return {
 		server: servers.size > 0 ? Array.from(servers).join(", ") : undefined,
-		messages,
+		messages: limitedMessages,
 		summary,
 		errored,
 		formatter,

@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `output()` function to read task/agent outputs by ID with support for multiple formats and queries
@@ -11,6 +12,7 @@
 
 ### Changed
 
+- Limited diagnostic messages to 50 items to prevent overwhelming output when processing files with many issues
 - Changed `/dump` command to include complete agent context: system prompt, model config, available tools with schemas, and all message types (bash/python executions, custom messages, branch summaries, compaction summaries, file mentions)
 - Changed `/dump` format to use YAML instead of JSON for tool schemas and arguments (more readable)
 
