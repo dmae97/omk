@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `/usage` command to display provider usage and limits
@@ -16,6 +17,12 @@
 
 ### Changed
 
+- Updated system prompt structure and formatting for better readability
+- Reorganized tool hierarchy and discipline sections
+- Added parallel work guidance for task-based workflows
+- Enhanced verification and integration methodology sections
+- Updated skills and rules formatting for cleaner presentation
+- Added stronger emphasis on completeness and quality standards
 - Refactored usage tracking from Codex-specific to generic provider system
 - Updated usage limit detection to work with multiple provider APIs
 - Changed usage cache to use persistent storage instead of in-memory only
