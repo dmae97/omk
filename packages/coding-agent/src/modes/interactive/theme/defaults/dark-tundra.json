@@ -27,7 +27,6 @@
 		"dim": "dimIce",
 		"text": "",
 		"thinkingText": "mutedIce",
-
 		"selectedBg": "glacierBlue",
 		"userMessageBg": "iceCave",
 		"userMessageText": "",
@@ -39,7 +38,6 @@
 		"toolErrorBg": "#211415",
 		"toolTitle": "",
 		"toolOutput": "mutedIce",
-
 		"mdHeading": "iceWhite",
 		"mdLink": "auroraGreen",
 		"mdLinkUrl": "dimIce",
@@ -50,11 +48,9 @@
 		"mdQuoteBorder": "coldBorder",
 		"mdHr": "glacierBlue",
 		"mdListBullet": "auroraGreen",
-
 		"toolDiffAdded": "successGreen",
 		"toolDiffRemoved": "errorRed",
 		"toolDiffContext": "mutedIce",
-
 		"syntaxComment": "dimIce",
 		"syntaxKeyword": "auroraGreen",
 		"syntaxFunction": "warningGold",
@@ -64,16 +60,13 @@
 		"syntaxType": "auroraGreen",
 		"syntaxOperator": "mutedIce",
 		"syntaxPunctuation": "mutedIce",
-
 		"thinkingOff": "glacierBlue",
 		"thinkingMinimal": "dimIce",
 		"thinkingLow": "coldBorder",
 		"thinkingMedium": "auroraGreen",
 		"thinkingHigh": "iceWhite",
 		"thinkingXhigh": "warningGold",
-
 		"bashMode": "auroraGreen",
-
 		"statusLineBg": "#080B0E",
 		"statusLineSep": "coldBorder",
 		"statusLineModel": "iceWhite",
@@ -87,7 +80,8 @@
 		"statusLineUntracked": "iceWhite",
 		"statusLineOutput": "auroraGreen",
 		"statusLineCost": "warningGold",
-		"statusLineSubagents": "auroraGreen"
+		"statusLineSubagents": "auroraGreen",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#080B0E",

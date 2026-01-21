@@ -28,7 +28,6 @@
 		"dim": "soot",
 		"text": "",
 		"thinkingText": "soot",
-
 		"selectedBg": "#252932",
 		"userMessageBg": "#1a1511",
 		"userMessageText": "",
@@ -40,7 +39,6 @@
 		"toolErrorBg": "#221617",
 		"toolTitle": "",
 		"toolOutput": "ashGray",
-
 		"mdHeading": "ember",
 		"mdLink": "#6ba3d4",
 		"mdLinkUrl": "soot",
@@ -51,13 +49,10 @@
 		"mdQuoteBorder": "sootDark",
 		"mdHr": "steel",
 		"mdListBullet": "ember",
-
 		"toolDiffAdded": "success",
 		"toolDiffRemoved": "error",
 		"toolDiffContext": "soot",
-
 		"link": "#6ba3d4",
-
 		"syntaxComment": "#6b8099",
 		"syntaxKeyword": "#7ba8d4",
 		"syntaxFunction": "#e8a069",
@@ -67,16 +62,13 @@
 		"syntaxType": "#67b8a8",
 		"syntaxOperator": "#b8bfcc",
 		"syntaxPunctuation": "#9ca3b5",
-
 		"thinkingOff": "sootDark",
 		"thinkingMinimal": "soot",
 		"thinkingLow": "#5f7fa3",
 		"thinkingMedium": "#6ba3d4",
 		"thinkingHigh": "#c99a6e",
 		"thinkingXhigh": "#e8b089",
-
 		"bashMode": "#6ba3d4",
-
 		"statusLineBg": "#0f1114",
 		"statusLineSep": 240,
 		"statusLineModel": "#c99a6e",
@@ -90,7 +82,8 @@
 		"statusLineUntracked": 74,
 		"statusLineOutput": 173,
 		"statusLineCost": 173,
-		"statusLineSubagents": "ember"
+		"statusLineSubagents": "ember",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#121419",

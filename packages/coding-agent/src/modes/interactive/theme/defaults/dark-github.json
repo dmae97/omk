@@ -39,7 +39,6 @@
 		"dim": "textDim",
 		"text": "",
 		"thinkingText": "textMuted",
-
 		"selectedBg": "#1c2128",
 		"userMessageBg": "bgElevated",
 		"userMessageText": "",
@@ -52,7 +51,6 @@
 		"toolText": "",
 		"toolTitle": "",
 		"toolOutput": "textMuted",
-
 		"mdHeading": "blue",
 		"mdLink": "blue",
 		"mdLinkUrl": "textDim",
@@ -63,13 +61,10 @@
 		"mdQuoteBorder": "borderMuted",
 		"mdHr": "border",
 		"mdListBullet": "yellowLight",
-
 		"toolDiffAdded": "greenLight",
 		"toolDiffRemoved": "redLight",
 		"toolDiffContext": "textMuted",
-
 		"link": "blue",
-
 		"syntaxComment": "textMuted",
 		"syntaxKeyword": "redLight",
 		"syntaxFunction": "purple",
@@ -79,16 +74,13 @@
 		"syntaxType": "purple",
 		"syntaxOperator": "redLight",
 		"syntaxPunctuation": "text",
-
 		"thinkingOff": "borderMuted",
 		"thinkingMinimal": "textDim",
 		"thinkingLow": "blueMuted",
 		"thinkingMedium": "blue",
 		"thinkingHigh": "purple",
 		"thinkingXhigh": "#eddeff",
-
 		"bashMode": "blue",
-
 		"statusLineBg": "#010409",
 		"statusLineSep": "#30363d",
 		"statusLineModel": "purple",
@@ -102,7 +94,8 @@
 		"statusLineUntracked": "blue",
 		"statusLineOutput": "purple",
 		"statusLineCost": "purple",
-		"statusLineSubagents": "yellowLight"
+		"statusLineSubagents": "yellowLight",
+		"pythonMode": "yellow"
 	},
 	"export": {
 		"pageBg": "#010409",

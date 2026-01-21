@@ -27,7 +27,6 @@
 		"dim": "dimWolf",
 		"text": "",
 		"thinkingText": "wolfGray",
-
 		"selectedBg": "shadowPine",
 		"userMessageBg": "deepPine",
 		"userMessageText": "",
@@ -39,7 +38,6 @@
 		"toolErrorBg": "#201313",
 		"toolTitle": "",
 		"toolOutput": "wolfGray",
-
 		"mdHeading": "snowWhite",
 		"mdLink": "frostBlue",
 		"mdLinkUrl": "dimWolf",
@@ -50,11 +48,9 @@
 		"mdQuoteBorder": "spruce",
 		"mdHr": "shadowPine",
 		"mdListBullet": "auroraGreen",
-
 		"toolDiffAdded": "lichenGreen",
 		"toolDiffRemoved": "errorRed",
 		"toolDiffContext": "wolfGray",
-
 		"syntaxComment": "dimWolf",
 		"syntaxKeyword": "frostBlue",
 		"syntaxFunction": "emberAmber",
@@ -64,16 +60,13 @@
 		"syntaxType": "frostBlue",
 		"syntaxOperator": "wolfGray",
 		"syntaxPunctuation": "wolfGray",
-
 		"thinkingOff": "shadowPine",
 		"thinkingMinimal": "dimWolf",
 		"thinkingLow": "spruce",
 		"thinkingMedium": "frostBlue",
 		"thinkingHigh": "auroraGreen",
 		"thinkingXhigh": "snowWhite",
-
 		"bashMode": "auroraGreen",
-
 		"statusLineBg": "#080C0A",
 		"statusLineSep": "spruce",
 		"statusLineModel": "snowWhite",
@@ -87,7 +80,8 @@
 		"statusLineUntracked": "snowWhite",
 		"statusLineOutput": "frostBlue",
 		"statusLineCost": "emberAmber",
-		"statusLineSubagents": "auroraGreen"
+		"statusLineSubagents": "auroraGreen",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#080C0A",

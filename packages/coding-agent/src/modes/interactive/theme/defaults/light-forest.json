@@ -36,7 +36,6 @@
 		"text": "",
 		"thinkingText": "earthGray",
 		"selectedBg": "softMint",
-
 		"userMessageBg": "lightEarth",
 		"userMessageText": "",
 		"customMessageBg": "paleLeaf",
@@ -47,7 +46,6 @@
 		"toolErrorBg": "#f0e8e0",
 		"toolTitle": "forestShadow",
 		"toolOutput": "earthGray",
-
 		"mdHeading": "oliveBrown",
 		"mdLink": "fernGreen",
 		"mdLinkUrl": "bark",
@@ -58,13 +56,10 @@
 		"mdQuoteBorder": "lichen",
 		"mdHr": "lichen",
 		"mdListBullet": "sageGreen",
-
 		"toolDiffAdded": "sageGreen",
 		"toolDiffRemoved": "burnishedOrange",
 		"toolDiffContext": "earthGray",
-
 		"link": "fernGreen",
-
 		"syntaxComment": "#7a7466",
 		"syntaxKeyword": "#3d5a3c",
 		"syntaxFunction": "#636b2f",
@@ -74,16 +69,13 @@
 		"syntaxType": "#4f5c2e",
 		"syntaxOperator": "#3d5a3c",
 		"syntaxPunctuation": "#636b2f",
-
 		"thinkingOff": "lichen",
 		"thinkingMinimal": "#9caf88",
 		"thinkingLow": "#7e8c54",
 		"thinkingMedium": "#4f7942",
 		"thinkingHigh": "#3d5a3c",
 		"thinkingXhigh": "#2d4a2c",
-
 		"bashMode": "sageGreen",
-
 		"statusLineBg": "morningDew",
 		"statusLineSep": 144,
 		"statusLineModel": "deepOlive",
@@ -97,7 +89,8 @@
 		"statusLineUntracked": 65,
 		"statusLineOutput": 131,
 		"statusLineCost": 131,
-		"statusLineSubagents": "oliveBrown"
+		"statusLineSubagents": "oliveBrown",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#f5f3ed",

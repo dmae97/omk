@@ -31,7 +31,6 @@
 		"dim": "#6a5a78",
 		"text": "",
 		"thinkingText": "#8b7a99",
-
 		"selectedBg": "selectedBg",
 		"userMessageBg": "userMsgBg",
 		"userMessageText": "",
@@ -43,7 +42,6 @@
 		"toolErrorBg": "toolErrorBg",
 		"toolTitle": "",
 		"toolOutput": "#8b7a99",
-
 		"mdHeading": "amethyst",
 		"mdLink": "violet",
 		"mdLinkUrl": "#6a5a78",
@@ -54,13 +52,10 @@
 		"mdQuoteBorder": "crystalFacet",
 		"mdHr": "crystalFacet",
 		"mdListBullet": "amethyst",
-
 		"toolDiffAdded": "#8eb897",
 		"toolDiffRemoved": "#d96c75",
 		"toolDiffContext": "#8b7a99",
-
 		"link": "violet",
-
 		"syntaxComment": "#7a6b88",
 		"syntaxKeyword": "amethyst",
 		"syntaxFunction": "gold",
@@ -70,16 +65,13 @@
 		"syntaxType": "violet",
 		"syntaxOperator": "quartz",
 		"syntaxPunctuation": "#c0b0cf",
-
 		"thinkingOff": "crystalFacet",
 		"thinkingMinimal": "#6a5a78",
 		"thinkingLow": "deepPurple",
 		"thinkingMedium": "violet",
 		"thinkingHigh": "amethyst",
 		"thinkingXhigh": "lavender",
-
 		"bashMode": "amethyst",
-
 		"statusLineBg": "caveDeep",
 		"statusLineSep": 240,
 		"statusLineModel": "roseQuartz",
@@ -93,7 +85,8 @@
 		"statusLineUntracked": 183,
 		"statusLineOutput": 213,
 		"statusLineCost": 213,
-		"statusLineSubagents": "amethyst"
+		"statusLineSubagents": "amethyst",
+		"pythonMode": "gold"
 	},
 	"export": {
 		"pageBg": "caveDark",

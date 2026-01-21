@@ -27,7 +27,6 @@
 		"dim": "dimText",
 		"text": "",
 		"thinkingText": "mutedText",
-
 		"selectedBg": "wetlandElevated",
 		"userMessageBg": "wetlandSurface",
 		"userMessageText": "",
@@ -39,7 +38,6 @@
 		"toolErrorBg": "#F1E1DC",
 		"toolTitle": "",
 		"toolOutput": "mutedText",
-
 		"mdHeading": "cattailBrown",
 		"mdLink": "heronBlue",
 		"mdLinkUrl": "dimText",
@@ -50,11 +48,9 @@
 		"mdQuoteBorder": "wetlandBorder",
 		"mdHr": "wetlandBorder",
 		"mdListBullet": "marshGreen",
-
 		"toolDiffAdded": "marshGreen",
 		"toolDiffRemoved": "errorRed",
 		"toolDiffContext": "mutedText",
-
 		"syntaxComment": "dimText",
 		"syntaxKeyword": "heronBlue",
 		"syntaxFunction": "cattailBrown",
@@ -64,16 +60,13 @@
 		"syntaxType": "heronBlue",
 		"syntaxOperator": "mutedText",
 		"syntaxPunctuation": "mutedText",
-
 		"thinkingOff": "wetlandBorder",
 		"thinkingMinimal": "dimText",
 		"thinkingLow": "reedTan",
 		"thinkingMedium": "heronBlue",
 		"thinkingHigh": "marshGreen",
 		"thinkingXhigh": "warningGold",
-
 		"bashMode": "marshGreen",
-
 		"statusLineBg": "#E9F0EC",
 		"statusLineSep": "wetlandBorder",
 		"statusLineModel": "heronBlue",
@@ -87,7 +80,8 @@
 		"statusLineUntracked": "heronBlue",
 		"statusLineOutput": "heronBlue",
 		"statusLineCost": "warningGold",
-		"statusLineSubagents": "heronBlue"
+		"statusLineSubagents": "heronBlue",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#F1F5F3",

@@ -27,7 +27,6 @@
 		"dim": "dimLeaf",
 		"text": "",
 		"thinkingText": "mutedLeaf",
-
 		"selectedBg": "jungleGreen",
 		"userMessageBg": "deepGreen",
 		"userMessageText": "",
@@ -39,7 +38,6 @@
 		"toolErrorBg": "#231515",
 		"toolTitle": "",
 		"toolOutput": "mutedLeaf",
-
 		"mdHeading": "fireflyGold",
 		"mdLink": "orchidPurple",
 		"mdLinkUrl": "dimLeaf",
@@ -50,11 +48,9 @@
 		"mdQuoteBorder": "barkBorder",
 		"mdHr": "vineGreen",
 		"mdListBullet": "treefrogOrange",
-
 		"toolDiffAdded": "successGreen",
 		"toolDiffRemoved": "errorRed",
 		"toolDiffContext": "mutedLeaf",
-
 		"syntaxComment": "dimLeaf",
 		"syntaxKeyword": "orchidPurple",
 		"syntaxFunction": "treefrogOrange",
@@ -64,16 +60,13 @@
 		"syntaxType": "orchidPurple",
 		"syntaxOperator": "mutedLeaf",
 		"syntaxPunctuation": "mutedLeaf",
-
 		"thinkingOff": "vineGreen",
 		"thinkingMinimal": "dimLeaf",
 		"thinkingLow": "barkBorder",
 		"thinkingMedium": "orchidPurple",
 		"thinkingHigh": "treefrogOrange",
 		"thinkingXhigh": "fireflyGold",
-
 		"bashMode": "orchidPurple",
-
 		"statusLineBg": "#080C0A",
 		"statusLineSep": "barkBorder",
 		"statusLineModel": "orchidPurple",
@@ -87,7 +80,8 @@
 		"statusLineUntracked": "orchidPurple",
 		"statusLineOutput": "treefrogOrange",
 		"statusLineCost": "fireflyGold",
-		"statusLineSubagents": "orchidPurple"
+		"statusLineSubagents": "orchidPurple",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#080C0A",

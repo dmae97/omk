@@ -27,7 +27,6 @@
 		"dim": "dimText",
 		"text": "",
 		"thinkingText": "mutedText",
-
 		"selectedBg": "meadowPanel",
 		"userMessageBg": "meadowSurface",
 		"userMessageText": "",
@@ -39,7 +38,6 @@
 		"toolErrorBg": "#F4E3E3",
 		"toolTitle": "",
 		"toolOutput": "mutedText",
-
 		"mdHeading": "wildflowerPurple",
 		"mdLink": "skyTeal",
 		"mdLinkUrl": "dimText",
@@ -50,11 +48,9 @@
 		"mdQuoteBorder": "meadowBorder",
 		"mdHr": "meadowBorder",
 		"mdListBullet": "grassGreen",
-
 		"toolDiffAdded": "successGreen",
 		"toolDiffRemoved": "errorRed",
 		"toolDiffContext": "mutedText",
-
 		"syntaxComment": "dimText",
 		"syntaxKeyword": "wildflowerPurple",
 		"syntaxFunction": "skyTeal",
@@ -64,16 +60,13 @@
 		"syntaxType": "grassGreen",
 		"syntaxOperator": "mutedText",
 		"syntaxPunctuation": "mutedText",
-
 		"thinkingOff": "meadowBorder",
 		"thinkingMinimal": "dimText",
 		"thinkingLow": "grassGreen",
 		"thinkingMedium": "wildflowerPurple",
 		"thinkingHigh": "skyTeal",
 		"thinkingXhigh": "successGreen",
-
 		"bashMode": "grassGreen",
-
 		"statusLineBg": "#EEF4EB",
 		"statusLineSep": "meadowBorder",
 		"statusLineModel": "wildflowerPurple",
@@ -87,7 +80,8 @@
 		"statusLineUntracked": "skyTeal",
 		"statusLineOutput": "wildflowerPurple",
 		"statusLineCost": "warningGold",
-		"statusLineSubagents": "wildflowerPurple"
+		"statusLineSubagents": "wildflowerPurple",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#F3F7F1",

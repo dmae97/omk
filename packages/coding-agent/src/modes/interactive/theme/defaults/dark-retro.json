@@ -27,7 +27,6 @@
 		"dim": "phosphorVeryDim",
 		"text": "",
 		"thinkingText": "phosphorDim",
-
 		"selectedBg": "#1f1a10",
 		"userMessageBg": "crtDarkBg",
 		"userMessageText": "",
@@ -39,7 +38,6 @@
 		"toolErrorBg": "#1a0f0f",
 		"toolTitle": "phosphorBright",
 		"toolOutput": "phosphorDim",
-
 		"mdHeading": "phosphorBright",
 		"mdLink": "glowBlue",
 		"mdLinkUrl": "phosphorVeryDim",
@@ -50,13 +48,10 @@
 		"mdQuoteBorder": "phosphorVeryDim",
 		"mdHr": "phosphorVeryDim",
 		"mdListBullet": "phosphorBright",
-
 		"toolDiffAdded": "successGreen",
 		"toolDiffRemoved": "errorRed",
 		"toolDiffContext": "phosphorDim",
-
 		"link": "glowBlue",
-
 		"syntaxComment": "phosphorVeryDim",
 		"syntaxKeyword": "phosphorBright",
 		"syntaxFunction": "phosphor",
@@ -66,16 +61,13 @@
 		"syntaxType": "phosphor",
 		"syntaxOperator": "phosphorDim",
 		"syntaxPunctuation": "phosphorDim",
-
 		"thinkingOff": "phosphorVeryDim",
 		"thinkingMinimal": "phosphorVeryDim",
 		"thinkingLow": "phosphorDim",
 		"thinkingMedium": "phosphor",
 		"thinkingHigh": "phosphorBright",
 		"thinkingXhigh": "crtGlow",
-
 		"bashMode": "glowBlue",
-
 		"statusLineBg": "crtBlack",
 		"statusLineSep": 238,
 		"statusLineModel": "phosphorBright",
@@ -89,7 +81,8 @@
 		"statusLineUntracked": 39,
 		"statusLineOutput": 209,
 		"statusLineCost": 209,
-		"statusLineSubagents": "phosphorBright"
+		"statusLineSubagents": "phosphorBright",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "crtBlack",

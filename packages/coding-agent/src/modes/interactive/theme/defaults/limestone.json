@@ -30,7 +30,6 @@
 		"dim": "mutedSage",
 		"text": "",
 		"thinkingText": "mediumEarth",
-
 		"selectedBg": "selectedBg",
 		"userMessageBg": "userMsgBg",
 		"userMessageText": "",
@@ -42,7 +41,6 @@
 		"toolErrorBg": "toolErrorBg",
 		"toolTitle": "",
 		"toolOutput": "mediumEarth",
-
 		"mdHeading": "clay",
 		"mdLink": "warmBrown",
 		"mdLinkUrl": "mutedSage",
@@ -53,11 +51,9 @@
 		"mdQuoteBorder": "sediment",
 		"mdHr": "sediment",
 		"mdListBullet": "sage",
-
 		"toolDiffAdded": "sage",
 		"toolDiffRemoved": "#a85840",
 		"toolDiffContext": "mediumEarth",
-
 		"syntaxComment": "#708060",
 		"syntaxKeyword": "#886030",
 		"syntaxFunction": "#907050",
@@ -67,16 +63,13 @@
 		"syntaxType": "#a07840",
 		"syntaxOperator": "#302c24",
 		"syntaxPunctuation": "#302c24",
-
 		"thinkingOff": "sediment",
 		"thinkingMinimal": "#b0a890",
 		"thinkingLow": "#907050",
 		"thinkingMedium": "#a07840",
 		"thinkingHigh": "#886030",
 		"thinkingXhigh": "#704020",
-
 		"bashMode": "sage",
-
 		"statusLineBg": "#e8e4d8",
 		"statusLineSep": "#a0988c",
 		"statusLineModel": "#886030",
@@ -90,7 +83,8 @@
 		"statusLineUntracked": 94,
 		"statusLineOutput": 130,
 		"statusLineCost": 130,
-		"statusLineSubagents": "amber"
+		"statusLineSubagents": "amber",
+		"pythonMode": "amber"
 	},
 	"export": {
 		"pageBg": "#f5f1e8",

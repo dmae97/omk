@@ -30,7 +30,6 @@
 		"dim": "dimGray",
 		"text": "darkNavy",
 		"thinkingText": "cyberPurple",
-
 		"selectedBg": "purpleTint",
 		"userMessageBg": "pinkTint",
 		"userMessageText": "darkNavy",
@@ -43,7 +42,6 @@
 		"toolText": "darkNavy",
 		"toolTitle": "neonMagenta",
 		"toolOutput": "mediumGray",
-
 		"mdHeading": "neonMagenta",
 		"mdLink": "electricBlue",
 		"mdLinkUrl": "cyberPurple",
@@ -54,13 +52,10 @@
 		"mdQuoteBorder": "neonMagenta",
 		"mdHr": "electricBlue",
 		"mdListBullet": "acidGreen",
-
 		"toolDiffAdded": "acidGreen",
 		"toolDiffRemoved": "neonPink",
 		"toolDiffContext": "mediumGray",
-
 		"link": "electricBlue",
-
 		"syntaxComment": "#6B6B70",
 		"syntaxKeyword": "#D600FF",
 		"syntaxFunction": "#EA00D9",
@@ -70,16 +65,13 @@
 		"syntaxType": "#00BFFF",
 		"syntaxOperator": "#8E44AD",
 		"syntaxPunctuation": "#6B6B70",
-
 		"thinkingOff": "lightGray",
 		"thinkingMinimal": "dimGray",
 		"thinkingLow": "electricBlue",
 		"thinkingMedium": "cyberPurple",
 		"thinkingHigh": "neonMagenta",
 		"thinkingXhigh": "deepMagenta",
-
 		"bashMode": "acidGreen",
-
 		"statusLineBg": "lightGray",
 		"statusLineSep": "neonMagenta",
 		"statusLineModel": "deepMagenta",
@@ -93,7 +85,8 @@
 		"statusLineUntracked": "#00BFFF",
 		"statusLineOutput": "deepMagenta",
 		"statusLineCost": "neonPink",
-		"statusLineSubagents": "neonMagenta"
+		"statusLineSubagents": "neonMagenta",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "offWhite",

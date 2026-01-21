@@ -31,7 +31,6 @@
 		"dim": "mist",
 		"text": "",
 		"thinkingText": "stone",
-
 		"selectedBg": "#1E2E26",
 		"userMessageBg": "forest",
 		"userMessageText": "",
@@ -43,7 +42,6 @@
 		"toolErrorBg": "#2B1F1E",
 		"toolTitle": "",
 		"toolOutput": "stone",
-
 		"mdHeading": "amber",
 		"mdLink": "sage",
 		"mdLinkUrl": "mist",
@@ -54,13 +52,10 @@
 		"mdQuoteBorder": "shadow",
 		"mdHr": "shadow",
 		"mdListBullet": "moss",
-
 		"toolDiffAdded": "fern",
 		"toolDiffRemoved": "#C44C3C",
 		"toolDiffContext": "stone",
-
 		"link": "sage",
-
 		"syntaxComment": "#6B8E70",
 		"syntaxKeyword": "pine",
 		"syntaxFunction": "clay",
@@ -70,16 +65,13 @@
 		"syntaxType": "moss",
 		"syntaxOperator": "#9FA99A",
 		"syntaxPunctuation": "#9FA99A",
-
 		"thinkingOff": "shadow",
 		"thinkingMinimal": "mist",
 		"thinkingLow": "pine",
 		"thinkingMedium": "hunter",
 		"thinkingHigh": "fern",
 		"thinkingXhigh": "moss",
-
 		"bashMode": "sage",
-
 		"statusLineBg": "#0A120E",
 		"statusLineSep": "#3A4A40",
 		"statusLineModel": "clay",
@@ -93,7 +85,8 @@
 		"statusLineUntracked": "lichen",
 		"statusLineOutput": "walnut",
 		"statusLineCost": "earth",
-		"statusLineSubagents": "moss"
+		"statusLineSubagents": "moss",
+		"pythonMode": "amber"
 	},
 	"export": {
 		"pageBg": "#0A120E",

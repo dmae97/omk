@@ -27,7 +27,6 @@
 		"dim": "dimText",
 		"text": "",
 		"thinkingText": "mutedText",
-
 		"selectedBg": "sandMist",
 		"userMessageBg": "lagoonSurface",
 		"userMessageText": "",
@@ -39,7 +38,6 @@
 		"toolErrorBg": "#F2E2E0",
 		"toolTitle": "",
 		"toolOutput": "mutedText",
-
 		"mdHeading": "turquoise",
 		"mdLink": "lagoonTeal",
 		"mdLinkUrl": "dimText",
@@ -50,11 +48,9 @@
 		"mdQuoteBorder": "lagoonBorder",
 		"mdHr": "lagoonBorder",
 		"mdListBullet": "palmGreen",
-
 		"toolDiffAdded": "palmGreen",
 		"toolDiffRemoved": "errorRed",
 		"toolDiffContext": "mutedText",
-
 		"syntaxComment": "dimText",
 		"syntaxKeyword": "turquoise",
 		"syntaxFunction": "lagoonTeal",
@@ -64,16 +60,13 @@
 		"syntaxType": "turquoise",
 		"syntaxOperator": "mutedText",
 		"syntaxPunctuation": "mutedText",
-
 		"thinkingOff": "lagoonBorder",
 		"thinkingMinimal": "dimText",
 		"thinkingLow": "lagoonTeal",
 		"thinkingMedium": "turquoise",
 		"thinkingHigh": "palmGreen",
 		"thinkingXhigh": "coral",
-
 		"bashMode": "turquoise",
-
 		"statusLineBg": "#E7F1F4",
 		"statusLineSep": "lagoonBorder",
 		"statusLineModel": "turquoise",
@@ -87,7 +80,8 @@
 		"statusLineUntracked": "lagoonTeal",
 		"statusLineOutput": "turquoise",
 		"statusLineCost": "coral",
-		"statusLineSubagents": "turquoise"
+		"statusLineSubagents": "turquoise",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#EEF6F8",

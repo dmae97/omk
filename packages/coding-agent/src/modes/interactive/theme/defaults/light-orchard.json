@@ -27,7 +27,6 @@
 		"dim": "dimText",
 		"text": "",
 		"thinkingText": "mutedText",
-
 		"selectedBg": "orchardElevated",
 		"userMessageBg": "orchardSurface",
 		"userMessageText": "",
@@ -39,7 +38,6 @@
 		"toolErrorBg": "#F3E1DA",
 		"toolTitle": "",
 		"toolOutput": "mutedText",
-
 		"mdHeading": "blossomPink",
 		"mdLink": "plumPurple",
 		"mdLinkUrl": "dimText",
@@ -50,11 +48,9 @@
 		"mdQuoteBorder": "orchardBorder",
 		"mdHr": "orchardBorder",
 		"mdListBullet": "leafGreen",
-
 		"toolDiffAdded": "leafGreen",
 		"toolDiffRemoved": "errorRed",
 		"toolDiffContext": "mutedText",
-
 		"syntaxComment": "dimText",
 		"syntaxKeyword": "plumPurple",
 		"syntaxFunction": "blossomPink",
@@ -64,16 +60,13 @@
 		"syntaxType": "plumPurple",
 		"syntaxOperator": "mutedText",
 		"syntaxPunctuation": "mutedText",
-
 		"thinkingOff": "orchardBorder",
 		"thinkingMinimal": "dimText",
 		"thinkingLow": "plumPurple",
 		"thinkingMedium": "blossomPink",
 		"thinkingHigh": "leafGreen",
 		"thinkingXhigh": "honeyGold",
-
 		"bashMode": "leafGreen",
-
 		"statusLineBg": "#F1EBE1",
 		"statusLineSep": "orchardBorder",
 		"statusLineModel": "blossomPink",
@@ -87,7 +80,8 @@
 		"statusLineUntracked": "plumPurple",
 		"statusLineOutput": "blossomPink",
 		"statusLineCost": "honeyGold",
-		"statusLineSubagents": "blossomPink"
+		"statusLineSubagents": "blossomPink",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#F7F2E8",

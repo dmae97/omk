@@ -98,6 +98,8 @@ export type {
 	TurnStartEvent,
 	UserBashEvent,
 	UserBashEventResult,
+	UserPythonEvent,
+	UserPythonEventResult,
 	WriteToolResultEvent,
 } from "./types";
 // Type guards

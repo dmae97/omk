@@ -34,7 +34,6 @@
 		"dim": "mono3",
 		"text": "",
 		"thinkingText": "mono2",
-
 		"selectedBg": "selectedBg",
 		"userMessageBg": "userMsgBg",
 		"userMessageText": "",
@@ -47,7 +46,6 @@
 		"toolText": "",
 		"toolTitle": "",
 		"toolOutput": "mono2",
-
 		"mdHeading": "orange",
 		"mdLink": "blue",
 		"mdLinkUrl": "mono3",
@@ -58,11 +56,9 @@
 		"mdQuoteBorder": "mono2",
 		"mdHr": "mono2",
 		"mdListBullet": "green",
-
 		"toolDiffAdded": "green",
 		"toolDiffRemoved": "red",
 		"toolDiffContext": "mono2",
-
 		"syntaxComment": "mono3",
 		"syntaxKeyword": "purple",
 		"syntaxFunction": "blue",
@@ -72,16 +68,13 @@
 		"syntaxType": "orange2",
 		"syntaxOperator": "cyan",
 		"syntaxPunctuation": "mono1",
-
 		"thinkingOff": "mono3",
 		"thinkingMinimal": "#9E9E9E",
 		"thinkingLow": "blue",
 		"thinkingMedium": "cyan",
 		"thinkingHigh": "purple",
 		"thinkingXhigh": "#8B008B",
-
 		"bashMode": "green",
-
 		"statusLineBg": "gutter",
 		"statusLineSep": "mono3",
 		"statusLineModel": "purple",
@@ -95,7 +88,8 @@
 		"statusLineUntracked": "cyan",
 		"statusLineOutput": "purple",
 		"statusLineCost": "purple",
-		"statusLineSubagents": "cyan"
+		"statusLineSubagents": "cyan",
+		"pythonMode": "orange"
 	},
 	"export": {
 		"pageBg": "bg",

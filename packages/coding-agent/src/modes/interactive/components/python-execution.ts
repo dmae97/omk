@@ -34,7 +34,7 @@ export class PythonExecutionComponent extends Container {
 		this.code = code;
 		this.excludeFromContext = excludeFromContext;
 
-		const colorKey = excludeFromContext ? "dim" : "bashMode";
+		const colorKey = this.excludeFromContext ? "dim" : "pythonMode";
 		const borderColor = (str: string) => theme.fg(colorKey, str);
 
 		this.addChild(new Spacer(1));
@@ -114,7 +114,7 @@ export class PythonExecutionComponent extends Container {
 
 		this.contentContainer.clear();
 
-		const colorKey = this.excludeFromContext ? "dim" : "bashMode";
+		const colorKey = this.excludeFromContext ? "dim" : "pythonMode";
 		const header = new Text(theme.fg(colorKey, theme.bold(`>>> ${this.code}`)), 1, 0);
 		this.contentContainer.addChild(header);
 

@@ -33,7 +33,6 @@
 		"dim": "dimViolet",
 		"text": "",
 		"thinkingText": "duskGray",
-
 		"selectedBg": "#2d2436",
 		"userMessageBg": "#251a1f",
 		"userMessageText": "",
@@ -46,7 +45,6 @@
 		"toolText": "",
 		"toolTitle": "",
 		"toolOutput": "duskGray",
-
 		"mdHeading": "golden",
 		"mdLink": "violet",
 		"mdLinkUrl": "dimViolet",
@@ -57,13 +55,10 @@
 		"mdQuoteBorder": "twilightGray",
 		"mdHr": "twilightGray",
 		"mdListBullet": "accentGlow",
-
 		"toolDiffAdded": "#89d281",
 		"toolDiffRemoved": "emberRed",
 		"toolDiffContext": "duskGray",
-
 		"link": "violet",
-
 		"syntaxComment": "#7a6f85",
 		"syntaxKeyword": "violet",
 		"syntaxFunction": "golden",
@@ -73,16 +68,13 @@
 		"syntaxType": "magenta",
 		"syntaxOperator": "#c9bdd0",
 		"syntaxPunctuation": "#b3a8ba",
-
 		"thinkingOff": "twilightGray",
 		"thinkingMinimal": "dimViolet",
 		"thinkingLow": "deepPurple",
 		"thinkingMedium": "violet",
 		"thinkingHigh": "magenta",
 		"thinkingXhigh": "softPink",
-
 		"bashMode": "horizonGlow",
-
 		"statusLineBg": "#0f0a14",
 		"statusLineSep": 237,
 		"statusLineModel": "softPink",
@@ -96,7 +88,8 @@
 		"statusLineUntracked": 213,
 		"statusLineOutput": 205,
 		"statusLineCost": 205,
-		"statusLineSubagents": "golden"
+		"statusLineSubagents": "golden",
+		"pythonMode": "amber"
 	},
 	"export": {
 		"pageBg": "#120d18",

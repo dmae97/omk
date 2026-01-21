@@ -46,7 +46,6 @@
 		"dim": "comment",
 		"text": "",
 		"thinkingText": "comment",
-
 		"selectedBg": "bgVisual",
 		"userMessageBg": "bgDark",
 		"userMessageText": "",
@@ -58,7 +57,6 @@
 		"toolErrorBg": "diffDelete",
 		"toolTitle": "fg",
 		"toolOutput": "fgDark",
-
 		"mdHeading": "orange",
 		"mdLink": "blue",
 		"mdLinkUrl": "cyan",
@@ -69,13 +67,10 @@
 		"mdQuoteBorder": "border",
 		"mdHr": "border",
 		"mdListBullet": "teal",
-
 		"toolDiffAdded": "green",
 		"toolDiffRemoved": "red",
 		"toolDiffContext": "comment",
-
 		"link": "blue",
-
 		"syntaxComment": "comment",
 		"syntaxKeyword": "purple",
 		"syntaxFunction": "blue",
@@ -85,16 +80,13 @@
 		"syntaxType": "cyan",
 		"syntaxOperator": "magenta",
 		"syntaxPunctuation": "fgDark",
-
 		"thinkingOff": "fgGutter",
 		"thinkingMinimal": "comment",
 		"thinkingLow": "blue",
 		"thinkingMedium": "cyan",
 		"thinkingHigh": "purple",
 		"thinkingXhigh": "magenta",
-
 		"bashMode": "green",
-
 		"statusLineBg": "bgDark",
 		"statusLineSep": "border",
 		"statusLineModel": "purple",
@@ -108,7 +100,8 @@
 		"statusLineUntracked": "blue",
 		"statusLineOutput": "magenta",
 		"statusLineCost": "warning",
-		"statusLineSubagents": "teal"
+		"statusLineSubagents": "teal",
+		"pythonMode": "yellow"
 	},
 	"export": {
 		"pageBg": "bg",

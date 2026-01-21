@@ -31,7 +31,6 @@
 		"dim": "mutedSage",
 		"text": "",
 		"thinkingText": "warmGray",
-
 		"selectedBg": "selectedBg",
 		"userMessageBg": "userMsgBg",
 		"userMessageText": "",
@@ -43,7 +42,6 @@
 		"toolErrorBg": "toolErrorBg",
 		"toolTitle": "",
 		"toolOutput": "barkCharcoal",
-
 		"mdHeading": "#8a7050",
 		"mdLink": "#4a7060",
 		"mdLinkUrl": "warmGray",
@@ -54,11 +52,9 @@
 		"mdQuoteBorder": "barkStriation",
 		"mdHr": "barkStriation",
 		"mdListBullet": "lightMoss",
-
 		"toolDiffAdded": "lightMoss",
 		"toolDiffRemoved": "#b85a50",
 		"toolDiffContext": "warmGray",
-
 		"syntaxComment": "#7a8070",
 		"syntaxKeyword": "#4a7060",
 		"syntaxFunction": "#6a7a50",
@@ -68,16 +64,13 @@
 		"syntaxType": "#5a6a70",
 		"syntaxOperator": "barkCharcoal",
 		"syntaxPunctuation": "barkCharcoal",
-
 		"thinkingOff": "barkStriation",
 		"thinkingMinimal": "mutedSage",
 		"thinkingLow": "#6a8a70",
 		"thinkingMedium": "mossSage",
 		"thinkingHigh": "#5a7a60",
 		"thinkingXhigh": "#4a6050",
-
 		"bashMode": "lightMoss",
-
 		"statusLineBg": "#ebe7dc",
 		"statusLineSep": "barkStriation",
 		"statusLineModel": "#5a6a5a",
@@ -91,7 +84,8 @@
 		"statusLineUntracked": 31,
 		"statusLineOutput": 133,
 		"statusLineCost": 133,
-		"statusLineSubagents": "mossSage"
+		"statusLineSubagents": "mossSage",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#f9f7f1",

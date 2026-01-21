@@ -26,7 +26,6 @@
 		"dim": "dim",
 		"text": "",
 		"thinkingText": "muted",
-
 		"selectedBg": "#efe6d6",
 		"userMessageBg": "#fffaf3",
 		"userMessageText": "",
@@ -38,7 +37,6 @@
 		"toolErrorBg": "#f8ece8",
 		"toolTitle": "",
 		"toolOutput": "muted",
-
 		"mdHeading": "terracotta",
 		"mdLink": "sea",
 		"mdLinkUrl": "dim",
@@ -49,11 +47,9 @@
 		"mdQuoteBorder": "#d7cfc1",
 		"mdHr": "#d7cfc1",
 		"mdListBullet": "sun",
-
 		"toolDiffAdded": "success",
 		"toolDiffRemoved": "error",
 		"toolDiffContext": "muted",
-
 		"syntaxComment": "dim",
 		"syntaxKeyword": "sea",
 		"syntaxFunction": "terracotta",
@@ -63,16 +59,13 @@
 		"syntaxType": "olive",
 		"syntaxOperator": "ink",
 		"syntaxPunctuation": "ink",
-
 		"thinkingOff": "#e2dbcf",
 		"thinkingMinimal": "dim",
 		"thinkingLow": "olive",
 		"thinkingMedium": "sea",
 		"thinkingHigh": "terracotta",
 		"thinkingXhigh": "sun",
-
 		"bashMode": "sea",
-
 		"statusLineBg": "#f1ebe0",
 		"statusLineSep": "#cdbfae",
 		"statusLineModel": "terracotta",
@@ -86,7 +79,8 @@
 		"statusLineUntracked": "sea",
 		"statusLineOutput": "ink",
 		"statusLineCost": "sun",
-		"statusLineSubagents": "terracotta"
+		"statusLineSubagents": "terracotta",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#fbf7ef",

@@ -31,7 +31,6 @@
 		"dim": "nord3",
 		"text": "",
 		"thinkingText": "nord3",
-
 		"selectedBg": "nord1",
 		"userMessageBg": "nord1",
 		"userMessageText": "",
@@ -44,7 +43,6 @@
 		"toolText": "",
 		"toolTitle": "nord8",
 		"toolOutput": "nord3",
-
 		"mdHeading": "nord8",
 		"mdLink": "nord8",
 		"mdLinkUrl": "nord3",
@@ -55,13 +53,10 @@
 		"mdQuoteBorder": "nord3",
 		"mdHr": "nord2",
 		"mdListBullet": "nord9",
-
 		"toolDiffAdded": "nord14",
 		"toolDiffRemoved": "nord11",
 		"toolDiffContext": "nord3",
-
 		"link": "nord8",
-
 		"syntaxComment": "nord3",
 		"syntaxKeyword": "nord9",
 		"syntaxFunction": "nord8",
@@ -71,16 +66,13 @@
 		"syntaxType": "nord7",
 		"syntaxOperator": "nord9",
 		"syntaxPunctuation": "nord6",
-
 		"thinkingOff": "nord2",
 		"thinkingMinimal": "nord3",
 		"thinkingLow": "nord10",
 		"thinkingMedium": "nord9",
 		"thinkingHigh": "nord15",
 		"thinkingXhigh": "nord7",
-
 		"bashMode": "nord8",
-
 		"statusLineBg": "nord0",
 		"statusLineSep": "nord3",
 		"statusLineModel": "nord15",
@@ -94,7 +86,8 @@
 		"statusLineUntracked": "nord8",
 		"statusLineOutput": "nord12",
 		"statusLineCost": "nord12",
-		"statusLineSubagents": "nord8"
+		"statusLineSubagents": "nord8",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "nord0",

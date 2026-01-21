@@ -27,7 +27,6 @@
 		"dim": "dimSteel",
 		"text": "",
 		"thinkingText": "mutedSteel",
-
 		"selectedBg": "pressureBlue",
 		"userMessageBg": "trenchBlue",
 		"userMessageText": "",
@@ -39,7 +38,6 @@
 		"toolErrorBg": "#1A0F12",
 		"toolTitle": "",
 		"toolOutput": "mutedSteel",
-
 		"mdHeading": "warningAmber",
 		"mdLink": "abyssCyan",
 		"mdLinkUrl": "dimSteel",
@@ -50,11 +48,9 @@
 		"mdQuoteBorder": "slateBlue",
 		"mdHr": "pressureBlue",
 		"mdListBullet": "abyssCyan",
-
 		"toolDiffAdded": "kelpGreen",
 		"toolDiffRemoved": "errorRed",
 		"toolDiffContext": "mutedSteel",
-
 		"syntaxComment": "dimSteel",
 		"syntaxKeyword": "abyssCyan",
 		"syntaxFunction": "warningAmber",
@@ -64,16 +60,13 @@
 		"syntaxType": "glowCyan",
 		"syntaxOperator": "mutedSteel",
 		"syntaxPunctuation": "mutedSteel",
-
 		"thinkingOff": "pressureBlue",
 		"thinkingMinimal": "dimSteel",
 		"thinkingLow": "slateBlue",
 		"thinkingMedium": "abyssCyan",
 		"thinkingHigh": "glowCyan",
 		"thinkingXhigh": "crystalBlue",
-
 		"bashMode": "abyssCyan",
-
 		"statusLineBg": "#05070B",
 		"statusLineSep": "slateBlue",
 		"statusLineModel": "glowCyan",
@@ -87,7 +80,8 @@
 		"statusLineUntracked": "glowCyan",
 		"statusLineOutput": "crystalBlue",
 		"statusLineCost": "warningAmber",
-		"statusLineSubagents": "glowCyan"
+		"statusLineSubagents": "glowCyan",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#05070B",

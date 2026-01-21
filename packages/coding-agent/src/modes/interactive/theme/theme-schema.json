@@ -86,6 +86,7 @@
 				"thinkingHigh",
 				"thinkingXhigh",
 				"bashMode",
+				"pythonMode",
 				"statusLineBg",
 				"statusLineSep",
 				"statusLineModel",
@@ -305,6 +306,10 @@
 				"bashMode": {
 					"$ref": "#/$defs/colorValue",
 					"description": "Editor border color in bash mode"
+				},
+				"pythonMode": {
+					"$ref": "#/$defs/colorValue",
+					"description": "Editor border color in python mode"
 				},
 				"statusLineBg": {
 					"$ref": "#/$defs/colorValue",

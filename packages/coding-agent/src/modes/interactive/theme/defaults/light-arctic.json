@@ -96,7 +96,8 @@
 		"statusLineUntracked": 109,
 		"statusLineOutput": 139,
 		"statusLineCost": 139,
-		"statusLineSubagents": "frost1"
+		"statusLineSubagents": "frost1",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#FAFBFC",

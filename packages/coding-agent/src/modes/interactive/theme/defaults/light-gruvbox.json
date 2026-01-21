@@ -42,7 +42,6 @@
 		"dim": "gray",
 		"text": "",
 		"thinkingText": "fg3",
-
 		"selectedBg": "bg2",
 		"userMessageBg": "bg1",
 		"userMessageText": "",
@@ -55,7 +54,6 @@
 		"toolText": "",
 		"toolTitle": "",
 		"toolOutput": "fg3",
-
 		"mdHeading": "yellow",
 		"mdLink": "blue",
 		"mdLinkUrl": "gray",
@@ -66,13 +64,10 @@
 		"mdQuoteBorder": "fg3",
 		"mdHr": "fg3",
 		"mdListBullet": "green",
-
 		"toolDiffAdded": "green",
 		"toolDiffRemoved": "red",
 		"toolDiffContext": "fg3",
-
 		"link": "blue",
-
 		"syntaxComment": "gray",
 		"syntaxKeyword": "red",
 		"syntaxFunction": "greenBright",
@@ -82,16 +77,13 @@
 		"syntaxType": "yellow",
 		"syntaxOperator": "orange",
 		"syntaxPunctuation": "fg2",
-
 		"thinkingOff": "bg3",
 		"thinkingMinimal": "gray",
 		"thinkingLow": "blue",
 		"thinkingMedium": "aqua",
 		"thinkingHigh": "purple",
 		"thinkingXhigh": "purpleBright",
-
 		"bashMode": "green",
-
 		"statusLineBg": "bg2",
 		"statusLineSep": "fg3",
 		"statusLineModel": "purple",
@@ -105,7 +97,8 @@
 		"statusLineUntracked": "aqua",
 		"statusLineOutput": "purple",
 		"statusLineCost": "purple",
-		"statusLineSubagents": "aqua"
+		"statusLineSubagents": "aqua",
+		"pythonMode": "yellow"
 	},
 	"export": {
 		"pageBg": "bg0Hard",

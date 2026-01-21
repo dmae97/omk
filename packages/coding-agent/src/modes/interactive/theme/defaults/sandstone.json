@@ -31,7 +31,6 @@
 		"dim": "darkGray",
 		"text": "",
 		"thinkingText": "mediumGray",
-
 		"selectedBg": "selectedBg",
 		"userMessageBg": "userMsgBg",
 		"userMessageText": "",
@@ -43,7 +42,6 @@
 		"toolErrorBg": "toolErrorBg",
 		"toolTitle": "",
 		"toolOutput": "mediumGray",
-
 		"mdHeading": "amber",
 		"mdLink": "terracotta",
 		"mdLinkUrl": "mediumGray",
@@ -54,11 +52,9 @@
 		"mdQuoteBorder": "erosion",
 		"mdHr": "erosion",
 		"mdListBullet": "sage",
-
 		"toolDiffAdded": "sage",
 		"toolDiffRemoved": "rust",
 		"toolDiffContext": "mediumGray",
-
 		"syntaxComment": "#688058",
 		"syntaxKeyword": "#b86040",
 		"syntaxFunction": "#c87850",
@@ -68,16 +64,13 @@
 		"syntaxType": "#8a6848",
 		"syntaxOperator": "#302820",
 		"syntaxPunctuation": "#302820",
-
 		"thinkingOff": "erosion",
 		"thinkingMinimal": "#a89888",
 		"thinkingLow": "#c87850",
 		"thinkingMedium": "#b86040",
 		"thinkingHigh": "#a05030",
 		"thinkingXhigh": "#903020",
-
 		"bashMode": "sage",
-
 		"statusLineBg": "#ebe0d0",
 		"statusLineSep": "#9a8878",
 		"statusLineModel": "#a05030",
@@ -91,7 +84,8 @@
 		"statusLineUntracked": 95,
 		"statusLineOutput": 131,
 		"statusLineCost": 131,
-		"statusLineSubagents": "rust"
+		"statusLineSubagents": "rust",
+		"pythonMode": "amber"
 	},
 	"export": {
 		"pageBg": "#f5ede3",

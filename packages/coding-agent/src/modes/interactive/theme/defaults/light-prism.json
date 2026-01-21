@@ -26,7 +26,6 @@
 		"dim": "dim",
 		"text": "",
 		"thinkingText": "muted",
-
 		"selectedBg": "#f2f5fb",
 		"userMessageBg": "#ffffff",
 		"userMessageText": "",
@@ -38,7 +37,6 @@
 		"toolErrorBg": "#fceeee",
 		"toolTitle": "",
 		"toolOutput": "muted",
-
 		"mdHeading": "indigo",
 		"mdLink": "blue",
 		"mdLinkUrl": "dim",
@@ -49,11 +47,9 @@
 		"mdQuoteBorder": "#e1e4ea",
 		"mdHr": "#e1e4ea",
 		"mdListBullet": "cyan",
-
 		"toolDiffAdded": "green",
 		"toolDiffRemoved": "red",
 		"toolDiffContext": "muted",
-
 		"syntaxComment": "dim",
 		"syntaxKeyword": "indigo",
 		"syntaxFunction": "blue",
@@ -63,16 +59,13 @@
 		"syntaxType": "cyan",
 		"syntaxOperator": "slate",
 		"syntaxPunctuation": "slate",
-
 		"thinkingOff": "#e5e7ec",
 		"thinkingMinimal": "dim",
 		"thinkingLow": "blue",
 		"thinkingMedium": "cyan",
 		"thinkingHigh": "violet",
 		"thinkingXhigh": "indigo",
-
 		"bashMode": "blue",
-
 		"statusLineBg": "#f4f6fb",
 		"statusLineSep": "#cfd5df",
 		"statusLineModel": "violet",
@@ -86,7 +79,8 @@
 		"statusLineUntracked": "blue",
 		"statusLineOutput": "slate",
 		"statusLineCost": "yellow",
-		"statusLineSubagents": "violet"
+		"statusLineSubagents": "violet",
+		"pythonMode": "yellow"
 	},
 	"export": {
 		"pageBg": "#ffffff",
