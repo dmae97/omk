@@ -223,11 +223,11 @@ async function listCandidateFiles(
 	const { stdout, stderr, exitCode } = await runFd(fdPath, args, signal);
 	const output = stdout.trim();
 
-	if (exitCode !== 0 && !output) {
-		return { files: [], truncated: false, error: stderr.trim() || `fd exited with code ${exitCode ?? -1}` };
-	}
-
 	if (!output) {
+		// fd exit codes: 0 = found, 1 = no matches, other = error
+		if (exitCode !== 0 && exitCode !== 1) {
+			return { files: [], truncated: false, error: stderr.trim() || `fd failed (exit ${exitCode})` };
+		}
 		return { files: [], truncated: false };
 	}
 

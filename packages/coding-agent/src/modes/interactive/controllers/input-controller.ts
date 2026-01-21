@@ -143,6 +143,16 @@ export class InputController {
 
 			if (!text) return;
 
+			// Continue shortcuts: "." or "c" sends empty message (agent continues, no visible message)
+			if (text === "." || text === "c") {
+				if (this.ctx.onInputCallback) {
+					this.ctx.editor.setText("");
+					this.ctx.pendingImages = [];
+					this.ctx.onInputCallback({ text: "" });
+				}
+				return;
+			}
+
 			const runner = this.ctx.session.extensionRunner;
 			let inputImages = this.ctx.pendingImages.length > 0 ? [...this.ctx.pendingImages] : undefined;
 

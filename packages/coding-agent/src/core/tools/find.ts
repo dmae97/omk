@@ -271,11 +271,12 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 			const { stdout, stderr, exitCode } = await runFd(fdPath, args, signal);
 			const output = stdout.trim();
 
-			if (exitCode !== 0 && !output) {
-				throw new Error(stderr.trim() || `fd exited with code ${exitCode ?? -1}`);
-			}
-
+			// fd exit codes: 0 = found files, 1 = no matches, other = error
+			// Treat exit code 1 with no output as "no files found"
 			if (!output) {
+				if (exitCode !== 0 && exitCode !== 1) {
+					throw new Error(stderr.trim() || `fd failed (exit ${exitCode})`);
+				}
 				return {
 					content: [{ type: "text", text: "No files found matching pattern" }],
 					details: { scopePath, fileCount: 0, files: [], truncated: false },
