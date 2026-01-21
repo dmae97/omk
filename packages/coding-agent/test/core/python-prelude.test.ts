@@ -93,7 +93,6 @@ describe.skipIf(!shouldRun)("PYTHON_PRELUDE integration", () => {
 				getLspDiagnosticsOnWrite: () => false,
 				getLspDiagnosticsOnEdit: () => false,
 				getEditFuzzyMatch: () => true,
-				getGitToolEnabled: () => true,
 				getBashInterceptorEnabled: () => true,
 				getBashInterceptorSimpleLsEnabled: () => true,
 				getBashInterceptorRules: () => [],

@@ -38,7 +38,6 @@ function createSettings(toolMode: "ipy-only" | "bash-only" | "both") {
 		getLspDiagnosticsOnWrite: () => true,
 		getLspDiagnosticsOnEdit: () => false,
 		getEditFuzzyMatch: () => true,
-		getGitToolEnabled: () => true,
 		getBashInterceptorEnabled: () => true,
 		getBashInterceptorSimpleLsEnabled: () => true,
 		getBashInterceptorRules: () => [],

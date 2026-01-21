@@ -14,7 +14,6 @@ function createSettings(overrides?: Partial<ToolSession["settings"]>): ToolSessi
 		getLspDiagnosticsOnWrite: () => true,
 		getLspDiagnosticsOnEdit: () => false,
 		getEditFuzzyMatch: () => true,
-		getGitToolEnabled: () => false,
 		getBashInterceptorEnabled: () => false,
 		getBashInterceptorSimpleLsEnabled: () => true,
 		getBashInterceptorRules: () => [],

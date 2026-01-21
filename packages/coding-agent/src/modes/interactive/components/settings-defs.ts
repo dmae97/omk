@@ -83,7 +83,6 @@ const THINKING_DESCRIPTIONS: Record<ThinkingLevel, string> = {
  * - behavior: Core agent behavior (compaction, modes, retries, notifications)
  * - tools: Tool-specific settings (bash, git, python, edit, MCP, skills)
  * - display: Visual/UI settings (theme, images, thinking)
- * - voice: Voice mode and TTS settings
  * - ttsr: Time Traveling Stream Rules settings
  * - status: Status line configuration
  * - lsp: LSP integration settings
@@ -249,15 +248,6 @@ export const SETTINGS_DEFS: SettingDef[] = [
 		description: "Intercept bare ls commands (when bash interceptor is enabled)",
 		get: (sm) => sm.getBashInterceptorSimpleLsEnabled(),
 		set: (sm, v) => sm.setBashInterceptorSimpleLsEnabled(v),
-	},
-	{
-		id: "gitTool",
-		tab: "tools",
-		type: "boolean",
-		label: "Git tool",
-		description: "Enable structured Git tool",
-		get: (sm) => sm.getGitToolEnabled(),
-		set: (sm, v) => sm.setGitToolEnabled(v),
 	},
 	{
 		id: "pythonToolMode",
@@ -492,66 +482,6 @@ export const SETTINGS_DEFS: SettingDef[] = [
 		description: "Show terminal cursor for IME support (default: on for Linux/macOS)",
 		get: (sm) => sm.getShowHardwareCursor(),
 		set: (sm, v) => sm.setShowHardwareCursor(v),
-	},
-
-	// ═══════════════════════════════════════════════════════════════════════════
-	// Voice tab - Voice mode and TTS settings
-	// ═══════════════════════════════════════════════════════════════════════════
-	{
-		id: "voiceEnabled",
-		tab: "voice",
-		type: "boolean",
-		label: "Voice mode",
-		description: "Enable realtime voice input/output (Ctrl+Y toggle, auto-send on silence)",
-		get: (sm) => sm.getVoiceEnabled(),
-		set: (sm, v) => sm.setVoiceEnabled(v),
-	},
-	{
-		id: "voiceTtsModel",
-		tab: "voice",
-		type: "submenu",
-		label: "TTS model",
-		description: "Text-to-speech model for voice output",
-		get: (sm) => sm.getVoiceTtsModel(),
-		set: (sm, v) => sm.setVoiceTtsModel(v),
-		getOptions: () => [
-			{ value: "gpt-4o-mini-tts", label: "GPT-4o Mini TTS", description: "Fast and efficient" },
-			{ value: "tts-1", label: "TTS-1", description: "Standard quality" },
-			{ value: "tts-1-hd", label: "TTS-1 HD", description: "Higher quality" },
-		],
-	},
-	{
-		id: "voiceTtsVoice",
-		tab: "voice",
-		type: "submenu",
-		label: "TTS voice",
-		description: "Voice for text-to-speech output",
-		get: (sm) => sm.getVoiceTtsVoice(),
-		set: (sm, v) => sm.setVoiceTtsVoice(v),
-		getOptions: () => [
-			{ value: "alloy", label: "Alloy", description: "Neutral" },
-			{ value: "echo", label: "Echo", description: "Male" },
-			{ value: "fable", label: "Fable", description: "British" },
-			{ value: "onyx", label: "Onyx", description: "Deep male" },
-			{ value: "nova", label: "Nova", description: "Female" },
-			{ value: "shimmer", label: "Shimmer", description: "Female" },
-		],
-	},
-	{
-		id: "voiceTtsFormat",
-		tab: "voice",
-		type: "submenu",
-		label: "TTS format",
-		description: "Audio format for voice output",
-		get: (sm) => sm.getVoiceTtsFormat(),
-		set: (sm, v) => sm.setVoiceTtsFormat(v as "wav" | "mp3" | "opus" | "aac" | "flac"),
-		getOptions: () => [
-			{ value: "wav", label: "WAV", description: "Uncompressed, best quality" },
-			{ value: "mp3", label: "MP3", description: "Compressed, widely compatible" },
-			{ value: "opus", label: "Opus", description: "Efficient compression" },
-			{ value: "aac", label: "AAC", description: "Apple-friendly" },
-			{ value: "flac", label: "FLAC", description: "Lossless compression" },
-		],
 	},
 
 	// ═══════════════════════════════════════════════════════════════════════════

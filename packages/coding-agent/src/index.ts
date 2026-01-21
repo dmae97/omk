@@ -201,8 +201,6 @@ export {
 	type FindToolDetails,
 	type FindToolOptions,
 	formatSize,
-	GitTool,
-	type GitToolDetails,
 	type GrepOperations,
 	type GrepToolDetails,
 	type GrepToolOptions,

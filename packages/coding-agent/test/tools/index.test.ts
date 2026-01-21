@@ -20,7 +20,6 @@ function createBaseSettings(overrides: Partial<NonNullable<ToolSession["settings
 		getLspDiagnosticsOnWrite: () => true,
 		getLspDiagnosticsOnEdit: () => false,
 		getEditFuzzyMatch: () => true,
-		getGitToolEnabled: () => true,
 		getBashInterceptorEnabled: () => true,
 		getBashInterceptorSimpleLsEnabled: () => true,
 		getBashInterceptorRules: () => [],
@@ -135,34 +134,6 @@ describe("createTools", () => {
 		const names = tools.map((t) => t.name);
 
 		expect(names).toContain("ask");
-	});
-
-	it("excludes git tool when disabled in settings", async () => {
-		const session = createTestSession({
-			settings: createBaseSettings({ getGitToolEnabled: () => false }),
-		});
-		const tools = await createTools(session);
-		const names = tools.map((t) => t.name);
-
-		expect(names).not.toContain("git");
-	});
-
-	it("includes git tool when enabled in settings", async () => {
-		const session = createTestSession({
-			settings: createBaseSettings({ getGitToolEnabled: () => true }),
-		});
-		const tools = await createTools(session);
-		const names = tools.map((t) => t.name);
-
-		expect(names).toContain("git");
-	});
-
-	it("includes git tool when no settings provided (default enabled)", async () => {
-		const session = createTestSession({ settings: undefined });
-		const tools = await createTools(session);
-		const names = tools.map((t) => t.name);
-
-		expect(names).toContain("git");
 	});
 
 	it("always includes output tool when task tool is present", async () => {

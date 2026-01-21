@@ -36,8 +36,6 @@ import {
 	OPENAI_HEADERS,
 	URL_PATHS,
 } from "./openai-codex/constants";
-import { getCodexInstructions } from "./openai-codex/prompts/codex";
-import { buildCodexSystemPrompt } from "./openai-codex/prompts/system-prompt";
 import { type CodexRequestOptions, type RequestBody, transformRequestBody } from "./openai-codex/request-transformer";
 import { parseCodexError, parseCodexSseStream } from "./openai-codex/response-handler";
 import { transformMessages } from "./transform-messages";
@@ -48,6 +46,27 @@ export interface OpenAICodexResponsesOptions extends StreamOptions {
 	textVerbosity?: "low" | "medium" | "high";
 	include?: string[];
 	codexMode?: boolean;
+}
+
+export const CODEX_INSTRUCTIONS = `You are an expert coding assistant operating inside pi, a coding agent harness.`;
+
+export interface CodexSystemPrompt {
+	instructions: string;
+	developerMessages: string[];
+}
+
+export function buildCodexSystemPrompt(args: { userSystemPrompt?: string }): CodexSystemPrompt {
+	const { userSystemPrompt } = args;
+	const developerMessages: string[] = [];
+
+	if (userSystemPrompt && userSystemPrompt.trim().length > 0) {
+		developerMessages.push(userSystemPrompt.trim());
+	}
+
+	return {
+		instructions: CODEX_INSTRUCTIONS,
+		developerMessages,
+	};
 }
 
 const CODEX_DEBUG = process.env.OMP_CODEX_DEBUG === "1" || process.env.OMP_CODEX_DEBUG === "true";
@@ -135,9 +154,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 				params.tools = convertTools(context.tools);
 			}
 
-			const codexInstructions = getCodexInstructions();
 			const systemPrompt = buildCodexSystemPrompt({
-				codexInstructions,
 				userSystemPrompt: context.systemPrompt,
 			});
 

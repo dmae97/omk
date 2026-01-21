@@ -13,7 +13,6 @@ function createSession(overrides: Partial<ToolSession> = {}): ToolSession {
 			getLspDiagnosticsOnWrite: () => true,
 			getLspDiagnosticsOnEdit: () => false,
 			getEditFuzzyMatch: () => true,
-			getGitToolEnabled: () => true,
 			getBashInterceptorEnabled: () => true,
 			getBashInterceptorSimpleLsEnabled: () => true,
 			getBashInterceptorRules: () => [],

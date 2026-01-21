@@ -199,15 +199,6 @@ export class SelectorController {
 				this.ctx.ui.invalidate();
 				break;
 			}
-			case "voiceEnabled": {
-				if (!value) {
-					this.ctx.voiceAutoModeEnabled = false;
-					this.ctx.stopVoiceProgressTimer();
-					void this.ctx.voiceSupervisor.stop();
-					this.ctx.setVoiceStatus(undefined);
-				}
-				break;
-			}
 			case "statusLinePreset":
 			case "statusLineSeparator":
 			case "statusLineShowHooks":

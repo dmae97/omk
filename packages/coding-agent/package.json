@@ -42,7 +42,6 @@
 	"dependencies": {
 		"@oh-my-pi/pi-agent-core": "workspace:*",
 		"@oh-my-pi/pi-ai": "workspace:*",
-		"@oh-my-pi/pi-git-tool": "workspace:*",
 		"@oh-my-pi/pi-tui": "workspace:*",
 		"@oh-my-pi/pi-utils": "workspace:*",
 		"@openai/agents": "^0.3.7",

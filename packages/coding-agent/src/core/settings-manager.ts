@@ -98,10 +98,6 @@ export interface BashInterceptorSettings {
 	patterns?: BashInterceptorRule[]; // default: built-in rules
 }
 
-export interface GitSettings {
-	enabled?: boolean; // default: false (structured git tool; use bash for git commands when disabled)
-}
-
 export interface MCPSettings {
 	enableProjectConfig?: boolean; // default: true (load .mcp.json from project root)
 }
@@ -143,15 +139,6 @@ export interface TtsrSettings {
 export interface TodoCompletionSettings {
 	enabled?: boolean; // default: false - warn agent when it stops with incomplete todos
 	maxReminders?: number; // default: 3 - maximum reminders before giving up
-}
-
-export interface VoiceSettings {
-	enabled?: boolean; // default: false
-	transcriptionModel?: string; // default: "whisper-1"
-	transcriptionLanguage?: string; // optional language hint (e.g., "en")
-	ttsModel?: string; // default: "gpt-4o-mini-tts"
-	ttsVoice?: string; // default: "alloy"
-	ttsFormat?: "wav" | "mp3" | "opus" | "aac" | "flac"; // default: "wav"
 }
 
 export type StatusLineSegmentId =
@@ -224,14 +211,12 @@ export interface Settings {
 	enabledModels?: string[]; // Model patterns for cycling (same format as --models CLI flag)
 	exa?: ExaSettings;
 	bashInterceptor?: BashInterceptorSettings;
-	git?: GitSettings;
 	mcp?: MCPSettings;
 	lsp?: LspSettings;
 	python?: PythonSettings;
 	edit?: EditSettings;
 	ttsr?: TtsrSettings;
 	todoCompletion?: TodoCompletionSettings;
-	voice?: VoiceSettings;
 	providers?: ProviderSettings;
 	disabledProviders?: string[]; // Discovery provider IDs that are disabled
 	disabledExtensions?: string[]; // Individual extension IDs that are disabled (e.g., "skill:commit")
@@ -251,12 +236,6 @@ export const DEFAULT_BASH_INTERCEPTOR_RULES: BashInterceptorRule[] = [
 		pattern: "^\\s*(grep|rg|ripgrep|ag|ack)\\s+",
 		tool: "grep",
 		message: "Use the `grep` tool instead of grep/rg. It respects .gitignore and provides structured output.",
-	},
-	{
-		pattern: "^\\s*git(\\s+|$)",
-		tool: "git",
-		message:
-			"Use the `git` tool instead of running git in bash. It provides structured output and safety confirmations.",
 	},
 	{
 		pattern: "^\\s*(find|fd|locate)\\s+.*(-name|-iname|-type|--type|-glob)",
@@ -319,19 +298,11 @@ const DEFAULT_SETTINGS: Settings = {
 		enableWebsets: false,
 	},
 	bashInterceptor: DEFAULT_BASH_INTERCEPTOR_SETTINGS,
-	git: { enabled: false },
 	mcp: { enableProjectConfig: true },
 	lsp: { formatOnWrite: false, diagnosticsOnWrite: true, diagnosticsOnEdit: false },
 	python: { toolMode: "both", kernelMode: "session", sharedGateway: true },
 	edit: { fuzzyMatch: true, fuzzyThreshold: 0.95, streamingAbort: false },
 	ttsr: { enabled: true, contextMode: "discard", repeatMode: "once", repeatGap: 10 },
-	voice: {
-		enabled: false,
-		transcriptionModel: "whisper-1",
-		ttsModel: "gpt-4o-mini-tts",
-		ttsVoice: "alloy",
-		ttsFormat: "wav",
-	},
 	providers: { webSearch: "auto", image: "auto" },
 } satisfies Settings;
 
@@ -1170,10 +1141,6 @@ export class SettingsManager {
 		await this.save();
 	}
 
-	getGitToolEnabled(): boolean {
-		return this.settings.git?.enabled ?? false;
-	}
-
 	getPythonToolMode(): PythonToolMode {
 		return this.settings.python?.toolMode ?? "both";
 	}
@@ -1207,14 +1174,6 @@ export class SettingsManager {
 			this.globalSettings.python = {};
 		}
 		this.globalSettings.python.sharedGateway = enabled;
-		await this.save();
-	}
-
-	async setGitToolEnabled(enabled: boolean): Promise<void> {
-		if (!this.globalSettings.git) {
-			this.globalSettings.git = {};
-		}
-		this.globalSettings.git.enabled = enabled;
 		await this.save();
 	}
 
@@ -1427,70 +1386,6 @@ export class SettingsManager {
 			this.globalSettings.ttsr = {};
 		}
 		this.globalSettings.ttsr.repeatGap = gap;
-		await this.save();
-	}
-
-	getVoiceSettings(): Required<VoiceSettings> {
-		return {
-			enabled: this.settings.voice?.enabled ?? false,
-			transcriptionModel: this.settings.voice?.transcriptionModel ?? "whisper-1",
-			transcriptionLanguage: this.settings.voice?.transcriptionLanguage ?? "",
-			ttsModel: this.settings.voice?.ttsModel ?? "tts-1",
-			ttsVoice: this.settings.voice?.ttsVoice ?? "alloy",
-			ttsFormat: this.settings.voice?.ttsFormat ?? "wav",
-		};
-	}
-
-	async setVoiceSettings(settings: VoiceSettings): Promise<void> {
-		this.globalSettings.voice = { ...this.globalSettings.voice, ...settings };
-		await this.save();
-	}
-
-	getVoiceEnabled(): boolean {
-		return this.settings.voice?.enabled ?? false;
-	}
-
-	async setVoiceEnabled(enabled: boolean): Promise<void> {
-		if (!this.globalSettings.voice) {
-			this.globalSettings.voice = {};
-		}
-		this.globalSettings.voice.enabled = enabled;
-		await this.save();
-	}
-
-	getVoiceTtsModel(): string {
-		return this.settings.voice?.ttsModel ?? "gpt-4o-mini-tts";
-	}
-
-	async setVoiceTtsModel(model: string): Promise<void> {
-		if (!this.globalSettings.voice) {
-			this.globalSettings.voice = {};
-		}
-		this.globalSettings.voice.ttsModel = model;
-		await this.save();
-	}
-
-	getVoiceTtsVoice(): string {
-		return this.settings.voice?.ttsVoice ?? "alloy";
-	}
-
-	async setVoiceTtsVoice(voice: string): Promise<void> {
-		if (!this.globalSettings.voice) {
-			this.globalSettings.voice = {};
-		}
-		this.globalSettings.voice.ttsVoice = voice;
-		await this.save();
-	}
-
-	getVoiceTtsFormat(): "wav" | "mp3" | "opus" | "aac" | "flac" {
-		return this.settings.voice?.ttsFormat ?? "wav";
-	}
-
-	async setVoiceTtsFormat(format: "wav" | "mp3" | "opus" | "aac" | "flac"): Promise<void> {
-		if (!this.globalSettings.voice) {
-			this.globalSettings.voice = {};
-		}
-		this.globalSettings.voice.ttsFormat = format;
 		await this.save();
 	}
 

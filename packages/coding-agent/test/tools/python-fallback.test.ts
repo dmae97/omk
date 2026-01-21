@@ -20,7 +20,6 @@ function createBaseSettings(overrides: Partial<NonNullable<ToolSession["settings
 		getLspDiagnosticsOnWrite: () => true,
 		getLspDiagnosticsOnEdit: () => false,
 		getEditFuzzyMatch: () => true,
-		getGitToolEnabled: () => true,
 		getBashInterceptorEnabled: () => true,
 		getBashInterceptorSimpleLsEnabled: () => true,
 		getBashInterceptorRules: () => [],

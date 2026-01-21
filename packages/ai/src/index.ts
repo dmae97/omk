@@ -6,7 +6,6 @@ export * from "./providers/cursor";
 export * from "./providers/google";
 export * from "./providers/google-gemini-cli";
 export * from "./providers/google-vertex";
-export * from "./providers/openai-codex/index";
 export * from "./providers/openai-completions";
 export * from "./providers/openai-responses";
 export * from "./stream";

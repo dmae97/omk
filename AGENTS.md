@@ -37,7 +37,7 @@ $`rm ${tmpFile}`.quiet().nothrow();
 ```
 
 **Use `Bun.spawn`/`Bun.spawnSync`** only when:
-- Long-running processes (LSP servers, Python kernels, voice services)
+- Long-running processes (LSP servers, Python kernels)
 - Streaming stdin/stdout/stderr required (SSE, JSON-RPC)
 - Process control needed (signals, kill, complex lifecycle)
 

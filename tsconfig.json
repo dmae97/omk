@@ -11,8 +11,6 @@
 			"@oh-my-pi/pi-coding-agent": ["./packages/coding-agent/src/index.ts"],
 			"@oh-my-pi/pi-coding-agent/hooks": ["./packages/coding-agent/src/core/hooks/index.ts"],
 			"@oh-my-pi/pi-coding-agent/*": ["./packages/coding-agent/src/*"],
-			"@oh-my-pi/pi-git-tool": ["./packages/git-tool/src/index.ts"],
-			"@oh-my-pi/pi-git-tool/*": ["./packages/git-tool/src/*"],
 			"@sinclair/typebox": ["./node_modules/@sinclair/typebox"],
 			"@oh-my-pi/pi-mom": ["./packages/mom/src/index.ts"],
 			"@oh-my-pi/pi-mom/*": ["./packages/mom/src/*"],

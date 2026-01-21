@@ -283,25 +283,6 @@ Create images directly from the agent:
 - **Inline display**: Images render in terminals supporting Kitty/iTerm2 graphics
 - Saves to temp files and reports paths for further manipulation
 
-## + Voice Mode (Experimental)
-
-Real-time voice interaction using OpenAI Realtime API:
-
-- **Continuous streaming**: Mic input with semantic VAD turn detection
-- **Interruptible**: Speak over the assistant to redirect mid-response
-- **Echo suppression**: Filters out speaker playback during listening
-- **Progress updates**: Speaks partial results during long-running tasks
-- Toggle with `Ctrl+Y`, auto-sends on silence
-
-## + Worktree Management (Experimental)
-
-Git worktree operations with `/wt` command:
-
-- **Create/list/remove**: Manage worktrees directly from the agent
-- **Parallel operations**: Run commands across multiple worktrees simultaneously
-- **Collapse strategies**: Merge changes between worktrees (simple, merge-base, rebase)
-- **Session tracking**: Manages agent tasks across isolated worktrees
-
 ## + TUI Overhaul
 
 Modern terminal interface with smart session management:
@@ -330,7 +311,6 @@ Handles whitespace and indentation variance automatically:
 - **`xhigh` thinking level**: Extended reasoning for Anthropic models with increased token budgets
 - **Background mode**: `/background` detaches UI and continues agent execution
 - **Completion notifications**: Configurable bell/OSC99/OSC9 when agent finishes
-- **Structured git tool**: Safety guards, caching, GitHub operations with typed output
 - **65+ built-in themes**: Catppuccin, Dracula, Nord, Gruvbox, Tokyo Night, and material variants
 - **Auto environment detection**: OS, distro, kernel, CPU, GPU, shell, terminal, DE in system prompt
 - **Git context**: System prompt includes branch, status, recent commits
@@ -349,7 +329,6 @@ Handles whitespace and indentation variance automatically:
 | **[@oh-my-pi/pi-ai](packages/ai)**                     | Multi-provider LLM client (Anthropic, OpenAI, Gemini, Bedrock, Cursor, Codex, Copilot) |
 | **[@oh-my-pi/pi-agent-core](packages/agent)**          | Agent runtime with tool calling and state management                          |
 | **[@oh-my-pi/pi-coding-agent](packages/coding-agent)** | Interactive coding agent CLI                                                  |
-| **[@oh-my-pi/pi-git-tool](packages/git-tool)**         | Structured Git tool with safety guards and typed output                       |
 | **[@oh-my-pi/pi-tui](packages/tui)**                   | Terminal UI library with differential rendering                               |
 
 ---

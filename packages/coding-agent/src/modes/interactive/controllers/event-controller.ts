@@ -68,7 +68,6 @@ export class EventController {
 					getSymbolTheme().spinnerFrames,
 				);
 				this.ctx.statusContainer.addChild(this.ctx.loadingAnimation);
-				this.ctx.startVoiceProgressTimer();
 				this.ctx.ui.requestRender();
 				break;
 
@@ -250,7 +249,6 @@ export class EventController {
 			}
 
 			case "agent_end":
-				this.ctx.stopVoiceProgressTimer();
 				if (this.ctx.loadingAnimation) {
 					this.ctx.loadingAnimation.stop();
 					this.ctx.loadingAnimation = undefined;
@@ -262,15 +260,6 @@ export class EventController {
 					this.ctx.streamingMessage = undefined;
 				}
 				this.ctx.pendingTools.clear();
-				if (this.ctx.settingsManager.getVoiceEnabled() && this.ctx.voiceAutoModeEnabled) {
-					const lastAssistant = this.ctx.findLastAssistantMessage();
-					if (lastAssistant && lastAssistant.stopReason !== "aborted" && lastAssistant.stopReason !== "error") {
-						const text = this.ctx.extractAssistantText(lastAssistant);
-						if (text) {
-							this.ctx.voiceSupervisor.notifyResult(text);
-						}
-					}
-				}
 				this.ctx.ui.requestRender();
 				this.sendCompletionNotification();
 				break;

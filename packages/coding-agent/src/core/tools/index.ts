@@ -7,7 +7,6 @@ export { exaTools } from "./exa/index";
 export type { ExaRenderDetails, ExaSearchResponse, ExaSearchResult } from "./exa/types";
 export { type FindOperations, FindTool, type FindToolDetails, type FindToolOptions } from "./find";
 export { setPreferredImageProvider } from "./gemini-image";
-export { GitTool, type GitToolDetails } from "./git";
 export { type GrepOperations, GrepTool, type GrepToolDetails, type GrepToolOptions } from "./grep";
 export { type LsOperations, LsTool, type LsToolDetails, type LsToolOptions } from "./ls";
 export {
@@ -72,7 +71,6 @@ import { BashTool } from "./bash";
 import { CalculatorTool } from "./calculator";
 import { CompleteTool } from "./complete";
 import { FindTool } from "./find";
-import { GitTool } from "./git";
 import { GrepTool } from "./grep";
 import { LsTool } from "./ls";
 import { LspTool } from "./lsp/index";
@@ -132,7 +130,6 @@ export interface ToolSession {
 		getEditFuzzyMatch(): boolean;
 		getEditFuzzyThreshold?(): number;
 		getEditPatchMode?(): boolean;
-		getGitToolEnabled(): boolean;
 		getBashInterceptorEnabled(): boolean;
 		getBashInterceptorSimpleLsEnabled(): boolean;
 		getBashInterceptorRules(): BashInterceptorRule[];
@@ -152,7 +149,6 @@ export const BUILTIN_TOOLS: Record<string, ToolFactory> = {
 	ssh: loadSshTool,
 	edit: (s) => new EditTool(s),
 	find: (s) => new FindTool(s),
-	git: GitTool.createIf,
 	grep: (s) => new GrepTool(s),
 	ls: (s) => new LsTool(s),
 	lsp: LspTool.createIf,

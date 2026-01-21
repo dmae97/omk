@@ -28,7 +28,6 @@ import { getRecentSessions } from "../../core/session-manager";
 import type { SettingsManager } from "../../core/settings-manager";
 import { loadSlashCommands } from "../../core/slash-commands";
 import { setTerminalTitle } from "../../core/title-generator";
-import { VoiceSupervisor } from "../../core/voice-supervisor";
 import type { AssistantMessageComponent } from "./components/assistant-message";
 import type { BashExecutionComponent } from "./components/bash-execution";
 import { CustomEditor } from "./components/custom-editor";
@@ -48,7 +47,6 @@ import type { Theme } from "./theme/theme";
 import { getEditorTheme, getMarkdownTheme, onThemeChange, theme } from "./theme/theme";
 import type { CompactionQueuedMessage, InteractiveModeContext, TodoItem } from "./types";
 import { UiHelpers } from "./utils/ui-helpers";
-import { VoiceManager } from "./utils/voice-manager";
 
 const TODO_FILE_NAME = "todos.json";
 
@@ -72,7 +70,6 @@ export class InteractiveMode implements InteractiveModeContext {
 	public settingsManager: SettingsManager;
 	public keybindings: KeybindingsManager;
 	public agent: AgentSession["agent"];
-	public voiceSupervisor: VoiceSupervisor;
 	public historyStorage?: HistoryStorage;
 
 	public ui: TUI;
@@ -107,13 +104,8 @@ export class InteractiveMode implements InteractiveModeContext {
 	public onInputCallback?: (input: { text: string; images?: ImageContent[] }) => void;
 	public lastSigintTime = 0;
 	public lastEscapeTime = 0;
-	public lastVoiceInterruptAt = 0;
-	public voiceAutoModeEnabled = false;
 	public shutdownRequested = false;
 	private isShuttingDown = false;
-	public voiceProgressTimer: ReturnType<typeof setTimeout> | undefined = undefined;
-	public voiceProgressSpoken = false;
-	public voiceProgressLastLength = 0;
 	public hookSelector: HookSelectorComponent | undefined = undefined;
 	public hookInput: HookInputComponent | undefined = undefined;
 	public hookEditor: HookEditorComponent | undefined = undefined;
@@ -137,7 +129,6 @@ export class InteractiveMode implements InteractiveModeContext {
 	private readonly inputController: InputController;
 	private readonly selectorController: SelectorController;
 	private readonly uiHelpers: UiHelpers;
-	private readonly voiceManager: VoiceManager;
 
 	constructor(
 		session: AgentSession,
@@ -180,26 +171,6 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.editorContainer.addChild(this.editor);
 		this.statusLine = new StatusLineComponent(session);
 		this.statusLine.setAutoCompactEnabled(session.autoCompactionEnabled);
-		this.voiceSupervisor = new VoiceSupervisor(this.session.modelRegistry, {
-			onSendToAgent: async (text) => {
-				await this.submitVoiceText(text);
-			},
-			onInterruptAgent: async (reason) => {
-				await this.handleVoiceInterrupt(reason);
-			},
-			onStatus: (status) => {
-				this.setVoiceStatus(status);
-			},
-			onError: (error) => {
-				this.showError(error.message);
-				this.voiceAutoModeEnabled = false;
-				void this.voiceSupervisor.stop();
-				this.setVoiceStatus(undefined);
-			},
-			onWarning: (message) => {
-				this.showWarning(message);
-			},
-		});
 
 		this.hideThinkingBlock = this.settingsManager.getHideThinkingBlock();
 
@@ -255,7 +226,6 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.pendingSlashCommands = [...slashCommands, ...hookCommands, ...customCommands, ...skillCommandList];
 
 		this.uiHelpers = new UiHelpers(this);
-		this.voiceManager = new VoiceManager(this);
 		this.extensionUiController = new ExtensionUiController(this);
 		this.eventController = new EventController(this);
 		this.commandController = new CommandController(this);
@@ -510,9 +480,6 @@ export class InteractiveMode implements InteractiveModeContext {
 	async shutdown(): Promise<void> {
 		if (this.isShuttingDown) return;
 		this.isShuttingDown = true;
-
-		this.voiceAutoModeEnabled = false;
-		await this.voiceSupervisor.stop();
 
 		// Flush pending session writes before shutdown
 		await this.sessionManager.flush();
@@ -781,31 +748,6 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	registerExtensionShortcuts(): void {
 		this.inputController.registerExtensionShortcuts();
-	}
-
-	// Voice handling
-	setVoiceStatus(text: string | undefined): void {
-		this.voiceManager.setVoiceStatus(text);
-	}
-
-	handleVoiceInterrupt(reason?: string): Promise<void> {
-		return this.voiceManager.handleVoiceInterrupt(reason);
-	}
-
-	startVoiceProgressTimer(): void {
-		this.voiceManager.startVoiceProgressTimer();
-	}
-
-	stopVoiceProgressTimer(): void {
-		this.voiceManager.stopVoiceProgressTimer();
-	}
-
-	maybeSpeakProgress(): Promise<void> {
-		return this.voiceManager.maybeSpeakProgress();
-	}
-
-	submitVoiceText(text: string): Promise<void> {
-		return this.voiceManager.submitVoiceText(text);
 	}
 
 	// Hook UI methods

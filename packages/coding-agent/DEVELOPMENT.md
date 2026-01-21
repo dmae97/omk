@@ -31,7 +31,6 @@ The coding-agent is structured into distinct layers:
 │  @oh-my-pi/pi-agent-core (Agent core)                      │
 │  @oh-my-pi/pi-ai (models, providers)                   │
 │  @oh-my-pi/pi-tui (TUI components)                         │
-│  @oh-my-pi/pi-git-tool (Git tool)                          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -113,9 +112,6 @@ src/
 │   ├── title-generator.ts    # Session title generation
 │   ├── ttsr.ts               # Text-to-speech/speech-to-text utilities
 │   ├── utils.ts              # Generic utilities
-│   ├── voice.ts              # Voice input handling
-│   ├── voice-controller.ts   # Voice control logic
-│   ├── voice-supervisor.ts   # Voice supervision logic
 │   │
 │   ├── compaction/           # Context compaction system
 │   │   └── index.ts          # Compaction logic, summary generation
@@ -511,7 +507,6 @@ This is part of a monorepo with the following packages:
 - `@oh-my-pi/pi-coding-agent` (this package) - Main CLI and TUI
 - `@oh-my-pi/pi-agent-core` - Core agent implementation
 - `@oh-my-pi/pi-tui` - TUI components
-- `@oh-my-pi/pi-git-tool` - Git tool integration
 - `@oh-my-pi/pi-ai` - External AI provider library
 
 ## CLI Flags

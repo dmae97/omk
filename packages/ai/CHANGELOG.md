@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+### Removed
+
+- Removed openai-codex provider exports from main package index
+- Removed openai-codex prompt utilities and moved them inline
+- Removed vitest configuration file
 
 ## [6.8.4] - 2026-01-21
 ### Changed

@@ -16,7 +16,6 @@ function createSession(cwd: string): ToolSession {
 			getLspDiagnosticsOnWrite: () => true,
 			getLspDiagnosticsOnEdit: () => false,
 			getEditFuzzyMatch: () => true,
-			getGitToolEnabled: () => true,
 			getBashInterceptorEnabled: () => true,
 			getBashInterceptorSimpleLsEnabled: () => true,
 			getBashInterceptorRules: () => [],

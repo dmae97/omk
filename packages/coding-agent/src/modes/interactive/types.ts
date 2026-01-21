@@ -9,7 +9,6 @@ import type { KeybindingsManager } from "../../core/keybindings";
 import type { MCPManager } from "../../core/mcp/index";
 import type { SessionContext, SessionManager } from "../../core/session-manager";
 import type { SettingsManager } from "../../core/settings-manager";
-import type { VoiceSupervisor } from "../../core/voice-supervisor";
 import type { AssistantMessageComponent } from "./components/assistant-message";
 import type { BashExecutionComponent } from "./components/bash-execution";
 import type { CustomEditor } from "./components/custom-editor";
@@ -49,7 +48,6 @@ export interface InteractiveModeContext {
 	settingsManager: SettingsManager;
 	keybindings: KeybindingsManager;
 	agent: AgentSession["agent"];
-	voiceSupervisor: VoiceSupervisor;
 	historyStorage?: HistoryStorage;
 	mcpManager?: MCPManager;
 	lspServers?: Array<{ name: string; status: "ready" | "error"; fileTypes: string[] }>;
@@ -77,12 +75,7 @@ export interface InteractiveModeContext {
 	onInputCallback?: (input: { text: string; images?: ImageContent[] }) => void;
 	lastSigintTime: number;
 	lastEscapeTime: number;
-	lastVoiceInterruptAt: number;
-	voiceAutoModeEnabled: boolean;
 	shutdownRequested: boolean;
-	voiceProgressTimer: ReturnType<typeof setTimeout> | undefined;
-	voiceProgressSpoken: boolean;
-	voiceProgressLastLength: number;
 	hookSelector: HookSelectorComponent | undefined;
 	hookInput: HookInputComponent | undefined;
 	hookEditor: HookEditorComponent | undefined;
@@ -173,14 +166,6 @@ export interface InteractiveModeContext {
 	toggleThinkingBlockVisibility(): void;
 	openExternalEditor(): void;
 	registerExtensionShortcuts(): void;
-
-	// Voice handling
-	setVoiceStatus(text: string | undefined): void;
-	handleVoiceInterrupt(reason?: string): Promise<void>;
-	startVoiceProgressTimer(): void;
-	stopVoiceProgressTimer(): void;
-	maybeSpeakProgress(): Promise<void>;
-	submitVoiceText(text: string): Promise<void>;
 
 	// Hook UI methods
 	initHooksAndCustomTools(): Promise<void>;

@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Removed
+
+- Removed Git tool and all related functionality
+- Removed voice control and TTS features
+- Removed worktree management system
+- Removed bundled wt custom command
+- Removed voice-related settings and configuration options
+- Removed @oh-my-pi/pi-git-tool dependency
 
 ## [6.8.5] - 2026-01-21
 ### Breaking Changes

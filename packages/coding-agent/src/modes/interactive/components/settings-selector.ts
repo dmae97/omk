@@ -117,7 +117,6 @@ const SETTINGS_TABS: Tab[] = [
 	{ id: "behavior", label: "Behavior" },
 	{ id: "tools", label: "Tools" },
 	{ id: "display", label: "Display" },
-	{ id: "voice", label: "Voice" },
 	{ id: "ttsr", label: "TTSR" },
 	{ id: "status", label: "Status" },
 	{ id: "lsp", label: "LSP" },
