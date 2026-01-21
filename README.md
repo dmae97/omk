@@ -308,6 +308,7 @@ Handles whitespace and indentation variance automatically:
 
 - **`omp config` subcommand**: Manage settings from CLI (`list`, `get`, `set`, `reset`, `path`)
 - **`omp setup` subcommand**: Install optional dependencies (e.g., `omp setup python` for Jupyter kernel)
+- **`omp stats` subcommand**: Local observability dashboard for AI usage (requests, cost, cache rate, tokens/s)
 - **`xhigh` thinking level**: Extended reasoning for Anthropic models with increased token budgets
 - **Background mode**: `/background` detaches UI and continues agent execution
 - **Completion notifications**: Configurable bell/OSC99/OSC9 when agent finishes
@@ -330,6 +331,7 @@ Handles whitespace and indentation variance automatically:
 | **[@oh-my-pi/pi-agent-core](packages/agent)**          | Agent runtime with tool calling and state management                          |
 | **[@oh-my-pi/pi-coding-agent](packages/coding-agent)** | Interactive coding agent CLI                                                  |
 | **[@oh-my-pi/pi-tui](packages/tui)**                   | Terminal UI library with differential rendering                               |
+| **[@oh-my-pi/omp-stats](packages/omp-stats)**          | Local observability dashboard for AI usage statistics                         |
 
 ---
 

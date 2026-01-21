@@ -18,6 +18,7 @@ import { listModels } from "./cli/list-models";
 import { parsePluginArgs, printPluginHelp, runPluginCommand } from "./cli/plugin-cli";
 import { selectSession } from "./cli/session-picker";
 import { parseSetupArgs, printSetupHelp, runSetupCommand } from "./cli/setup-cli";
+import { parseStatsArgs, printStatsHelp, runStatsCommand } from "./cli/stats-cli";
 import { parseUpdateArgs, printUpdateHelp, runUpdateCommand } from "./cli/update-cli";
 import { findConfigFile, getModelsPath, VERSION } from "./config";
 import type { AgentSession } from "./core/agent-session";
@@ -517,6 +518,17 @@ export async function main(args: string[]) {
 			return;
 		}
 		await runSetupCommand(setupCmd);
+		return;
+	}
+
+	// Handle stats subcommand
+	const statsCmd = parseStatsArgs(args);
+	if (statsCmd) {
+		if (args.includes("--help") || args.includes("-h")) {
+			printStatsHelp();
+			return;
+		}
+		await runStatsCommand(statsCmd);
 		return;
 	}
 

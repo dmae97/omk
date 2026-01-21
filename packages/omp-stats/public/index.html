@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>AI Usage Statistics</title>
+	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+	<link rel="stylesheet" href="style.css">
+</head>
+<body>
+	<div class="container">
+		<header>
+			<h1>AI Usage Statistics</h1>
+			<div class="header-actions">
+				<span id="lastSync">Loading...</span>
+				<button onclick="refresh()">Refresh</button>
+			</div>
+		</header>
+
+		<section class="stats-grid">
+			<div class="stat-card">
+				<h3>Total Requests</h3>
+				<div class="stat-value" id="totalRequests">-</div>
+				<div class="stat-detail" id="requestDetails">-</div>
+			</div>
+			<div class="stat-card">
+				<h3>Total Cost</h3>
+				<div class="stat-value" id="totalCost">-</div>
+				<div class="stat-detail" id="avgCostPerRequest">-</div>
+			</div>
+			<div class="stat-card">
+				<h3>Cache Rate</h3>
+				<div class="stat-value" id="cacheRate">-</div>
+				<div class="stat-detail" id="cacheDetails">-</div>
+			</div>
+			<div class="stat-card">
+				<h3>Error Rate</h3>
+				<div class="stat-value" id="errorRate">-</div>
+				<div class="stat-detail" id="errorDetails">-</div>
+			</div>
+			<div class="stat-card">
+				<h3>Avg Duration</h3>
+				<div class="stat-value" id="avgDuration">-</div>
+				<div class="stat-detail" id="ttftDetail">-</div>
+			</div>
+			<div class="stat-card">
+				<h3>Tokens/Second</h3>
+				<div class="stat-value" id="tokensPerSecond">-</div>
+				<div class="stat-detail" id="totalTokens">-</div>
+			</div>
+		</section>
+
+		<section class="charts">
+			<div class="chart-container">
+				<h3>Requests Over Time</h3>
+				<canvas id="timeSeriesChart"></canvas>
+			</div>
+		</section>
+
+		<section class="tables">
+			<div class="table-container">
+				<h3>By Model</h3>
+				<table id="modelTable">
+					<thead>
+						<tr>
+							<th>Model</th>
+							<th>Provider</th>
+							<th>Requests</th>
+							<th>Cost</th>
+							<th>Cache Rate</th>
+							<th>Tokens/s</th>
+						</tr>
+					</thead>
+					<tbody></tbody>
+				</table>
+			</div>
+
+			<div class="table-container">
+				<h3>By Folder</h3>
+				<table id="folderTable">
+					<thead>
+						<tr>
+							<th>Folder</th>
+							<th>Requests</th>
+							<th>Cost</th>
+							<th>Error Rate</th>
+						</tr>
+					</thead>
+					<tbody></tbody>
+				</table>
+			</div>
+		</section>
+	</div>
+
+	<script src="app.js"></script>
+</body>
+</html>

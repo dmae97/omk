@@ -6,6 +6,17 @@ This repo contains multiple packages, but **`packages/coding-agent/`** is the pr
 
 **Terminology**: When the user says "agent" or asks "why is agent doing X", they mean the **coding-agent package implementation**, not you (the assistant). The coding-agent is a CLI tool that uses Claude—questions about its behavior refer to the code in `packages/coding-agent/`, not your current session.
 
+### Package Structure
+
+| Package | Description |
+|---------|-------------|
+| `packages/ai` | Multi-provider LLM client with streaming support |
+| `packages/agent` | Agent runtime with tool calling and state management |
+| `packages/coding-agent` | Main CLI application (primary focus) |
+| `packages/tui` | Terminal UI library with differential rendering |
+| `packages/omp-stats` | Local observability dashboard (`omp stats`) |
+| `packages/pi-utils` | Shared utilities (logger, streams, temp files) |
+
 ## Code Quality
 
 - No `any` types unless absolutely necessary

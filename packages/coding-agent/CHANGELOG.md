@@ -1,8 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `omp stats` command for viewing AI usage statistics dashboard
+- Added support for JSON output and console summary of usage statistics
+- Added configurable port option for stats dashboard server
 - Added multi-cell Python execution with sequential processing in persistent kernel
 - Added cell titles for better Python code organization and debugging
 

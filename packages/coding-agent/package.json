@@ -40,6 +40,7 @@
 		"prepublishOnly": "bun run generate-template && bun run clean && bun run build"
 	},
 	"dependencies": {
+		"@oh-my-pi/omp-stats": "workspace:*",
 		"@oh-my-pi/pi-agent-core": "workspace:*",
 		"@oh-my-pi/pi-ai": "workspace:*",
 		"@oh-my-pi/pi-tui": "workspace:*",
