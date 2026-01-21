@@ -11,27 +11,27 @@ const THEMES_DIR = join(process.cwd(), "packages/coding-agent/src/modes/interact
 const INDEX_FILE = join(THEMES_DIR, "index.ts");
 
 async function main() {
-    const files = await readdir(THEMES_DIR);
-    const jsonFiles = files.filter(f => f.endsWith(".json")).sort();
+	const files = await readdir(THEMES_DIR);
+	const jsonFiles = files.filter((f) => f.endsWith(".json")).sort();
 
-    const imports: string[] = [];
-    const exportEntries: string[] = [];
+	const imports: string[] = [];
+	const exportEntries: string[] = [];
 
-    for (const file of jsonFiles) {
-        const name = file.replace(".json", "");
-        const varName = name.replace(/-/g, "_");
-        
-        imports.push(`import ${varName} from "./${file}" with { type: "json" };`);
-        exportEntries.push(`	"${name}": ${varName},`);
-    }
+	for (const file of jsonFiles) {
+		const name = file.replace(".json", "");
+		const varName = name.replace(/-/g, "_");
 
-    let content = imports.join("\n");
-    content += "\n\nexport const defaultThemes = {\n";
-    content += exportEntries.join("\n");
-    content += "\n};\n";
+		imports.push(`import ${varName} from "./${file}" with { type: "json" };`);
+		exportEntries.push(`	"${name}": ${varName},`);
+	}
 
-    await Bun.write(INDEX_FILE, content);
-    console.log(`Updated ${INDEX_FILE} with ${jsonFiles.length} themes.`);
+	let content = imports.join("\n");
+	content += "\n\nexport const defaultThemes = {\n";
+	content += exportEntries.join("\n");
+	content += "\n};\n";
+
+	await Bun.write(INDEX_FILE, content);
+	console.log(`Updated ${INDEX_FILE} with ${jsonFiles.length} themes.`);
 }
 
 main().catch(console.error);

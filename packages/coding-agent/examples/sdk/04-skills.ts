@@ -8,7 +8,7 @@
 import { createAgentSession, discoverSkills, SessionManager, type Skill } from "@oh-my-pi/pi-coding-agent";
 
 // Discover all skills from cwd/.omp/skills, ~/.omp/agent/skills, etc.
-const allSkills = discoverSkills();
+const { skills: allSkills } = await discoverSkills();
 console.log(
 	"Discovered skills:",
 	allSkills.map((s) => s.name),

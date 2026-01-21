@@ -62,6 +62,11 @@ interface ClaudeUsageResponse {
 	seven_day_sonnet?: ClaudeUsageBucket | null;
 }
 
+type ClaudeUsagePayload = {
+	payload: ClaudeUsageResponse;
+	orgId?: string;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -94,6 +99,28 @@ function parseBucket(bucket: unknown): ParsedUsageBucket | undefined {
 	return { utilization, resetsAt };
 }
 
+function getPayloadString(payload: Record<string, unknown>, key: string): string | undefined {
+	const value = payload[key];
+	return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function extractUsageIdentity(payload: ClaudeUsageResponse, orgId?: string): { accountId?: string; email?: string } {
+	if (!isRecord(payload)) return { accountId: orgId };
+	const accountId =
+		getPayloadString(payload, "account_id") ??
+		getPayloadString(payload, "accountId") ??
+		getPayloadString(payload, "user_id") ??
+		getPayloadString(payload, "userId") ??
+		getPayloadString(payload, "org_id") ??
+		getPayloadString(payload, "orgId") ??
+		orgId;
+	const email =
+		getPayloadString(payload, "email") ??
+		getPayloadString(payload, "user_email") ??
+		getPayloadString(payload, "userEmail");
+	return { accountId, email };
+}
+
 function hasUsageData(payload: ClaudeUsageResponse): boolean {
 	return Boolean(payload.five_hour || payload.seven_day || payload.seven_day_opus || payload.seven_day_sonnet);
 }
@@ -103,8 +130,9 @@ async function fetchUsagePayload(
 	headers: Record<string, string>,
 	ctx: UsageFetchContext,
 	signal?: AbortSignal,
-): Promise<ClaudeUsageResponse | null> {
+): Promise<ClaudeUsagePayload | null> {
 	let lastPayload: ClaudeUsageResponse | null = null;
+	let lastOrgId: string | undefined;
 	for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
 		try {
 			const response = await ctx.fetch(url, { headers, signal });
@@ -114,8 +142,10 @@ async function fetchUsagePayload(
 			}
 			const payload = (await response.json()) as ClaudeUsageResponse;
 			lastPayload = payload;
+			const orgId = response.headers.get("anthropic-organization-id")?.trim() || undefined;
+			lastOrgId = orgId ?? lastOrgId;
 			if (payload && isRecord(payload) && hasUsageData(payload)) {
-				return payload;
+				return { payload, orgId };
 			}
 		} catch (error) {
 			ctx.logger?.warn("Claude usage fetch error", { error: String(error) });
@@ -127,7 +157,7 @@ async function fetchUsagePayload(
 		}
 	}
 
-	return lastPayload;
+	return lastPayload ? { payload: lastPayload, orgId: lastOrgId } : null;
 }
 
 function buildUsageAmount(utilization: number | undefined): UsageAmount | undefined {
@@ -240,8 +270,9 @@ async function fetchClaudeUsage(params: UsageFetchParams, ctx: UsageFetchContext
 		authorization: `Bearer ${credential.accessToken}`,
 	};
 
-	const payload = await fetchUsagePayload(url, headers, ctx, params.signal);
-	if (!payload || !isRecord(payload)) return cachedValue;
+	const payloadResult = await fetchUsagePayload(url, headers, ctx, params.signal);
+	if (!payloadResult || !isRecord(payloadResult.payload)) return cachedValue;
+	const { payload, orgId } = payloadResult;
 
 	const fiveHour = parseBucket(payload.five_hour);
 	const sevenDay = parseBucket(payload.seven_day);
@@ -296,14 +327,17 @@ async function fetchClaudeUsage(params: UsageFetchParams, ctx: UsageFetchContext
 	].filter((limit): limit is UsageLimit => limit !== null);
 
 	if (limits.length === 0) return cachedValue;
+	const identity = extractUsageIdentity(payload, orgId);
+	const accountId = identity.accountId ?? credential.accountId;
+	const email = identity.email ?? credential.email;
 
 	const report: UsageReport = {
 		provider: params.provider,
 		fetchedAt: now,
 		limits,
 		metadata: {
-			accountId: credential.accountId,
-			email: credential.email,
+			accountId,
+			email,
 			endpoint: url,
 		},
 		raw: payload,

@@ -801,6 +801,112 @@ export class AuthStorage {
 		};
 	}
 
+	private getUsageReportMetadataValue(report: UsageReport, key: string): string | undefined {
+		const metadata = report.metadata;
+		if (!metadata || typeof metadata !== "object") return undefined;
+		const value = metadata[key];
+		return typeof value === "string" ? value.trim() : undefined;
+	}
+
+	private getUsageReportScopeAccountId(report: UsageReport): string | undefined {
+		const ids = new Set<string>();
+		for (const limit of report.limits) {
+			const accountId = limit.scope.accountId?.trim();
+			if (accountId) ids.add(accountId);
+		}
+		if (ids.size === 1) return [...ids][0];
+		return undefined;
+	}
+
+	private getUsageReportIdentifiers(report: UsageReport): string[] {
+		const identifiers: string[] = [];
+		const email = this.getUsageReportMetadataValue(report, "email");
+		if (email) identifiers.push(`email:${email.toLowerCase()}`);
+		const accountId = this.getUsageReportMetadataValue(report, "accountId");
+		if (accountId) identifiers.push(`account:${accountId}`);
+		const account = this.getUsageReportMetadataValue(report, "account");
+		if (account) identifiers.push(`account:${account}`);
+		const user = this.getUsageReportMetadataValue(report, "user");
+		if (user) identifiers.push(`account:${user}`);
+		const username = this.getUsageReportMetadataValue(report, "username");
+		if (username) identifiers.push(`account:${username}`);
+		const scopeAccountId = this.getUsageReportScopeAccountId(report);
+		if (scopeAccountId) identifiers.push(`account:${scopeAccountId}`);
+		return identifiers.map((identifier) => `${report.provider}:${identifier.toLowerCase()}`);
+	}
+
+	private mergeUsageReportGroup(reports: UsageReport[]): UsageReport {
+		if (reports.length === 1) return reports[0];
+		const sorted = [...reports].sort((a, b) => {
+			const limitDiff = b.limits.length - a.limits.length;
+			if (limitDiff !== 0) return limitDiff;
+			return (b.fetchedAt ?? 0) - (a.fetchedAt ?? 0);
+		});
+		const base = sorted[0];
+		const mergedLimits = [...base.limits];
+		const limitIds = new Set(mergedLimits.map((limit) => limit.id));
+		const mergedMetadata: Record<string, unknown> = { ...(base.metadata ?? {}) };
+		let fetchedAt = base.fetchedAt;
+
+		for (const report of sorted.slice(1)) {
+			fetchedAt = Math.max(fetchedAt, report.fetchedAt);
+			for (const limit of report.limits) {
+				if (!limitIds.has(limit.id)) {
+					limitIds.add(limit.id);
+					mergedLimits.push(limit);
+				}
+			}
+			if (report.metadata) {
+				for (const [key, value] of Object.entries(report.metadata)) {
+					if (mergedMetadata[key] === undefined) {
+						mergedMetadata[key] = value;
+					}
+				}
+			}
+		}
+
+		return {
+			...base,
+			fetchedAt,
+			limits: mergedLimits,
+			metadata: Object.keys(mergedMetadata).length > 0 ? mergedMetadata : undefined,
+		};
+	}
+
+	private dedupeUsageReports(reports: UsageReport[]): UsageReport[] {
+		const groups: UsageReport[][] = [];
+		const idToGroup = new Map<string, number>();
+
+		for (const report of reports) {
+			const identifiers = this.getUsageReportIdentifiers(report);
+			let groupIndex: number | undefined;
+			for (const identifier of identifiers) {
+				const existing = idToGroup.get(identifier);
+				if (existing !== undefined) {
+					groupIndex = existing;
+					break;
+				}
+			}
+			if (groupIndex === undefined) {
+				groupIndex = groups.length;
+				groups.push([]);
+			}
+			groups[groupIndex].push(report);
+			for (const identifier of identifiers) {
+				idToGroup.set(identifier, groupIndex);
+			}
+		}
+
+		const deduped = groups.map((group) => this.mergeUsageReportGroup(group));
+		if (deduped.length !== reports.length) {
+			this.usageLogger?.debug("Usage reports deduped", {
+				before: reports.length,
+				after: deduped.length,
+			});
+		}
+		return deduped;
+	}
+
 	private isUsageLimitExhausted(limit: UsageLimit): boolean {
 		if (limit.status === "exhausted") return true;
 		const amount = limit.amount;
@@ -883,6 +989,9 @@ export class AuthStorage {
 			...this.data.keys(),
 			...DEFAULT_USAGE_PROVIDERS.map((provider) => provider.id),
 		]);
+		this.usageLogger?.debug("Usage fetch requested", {
+			providers: Array.from(providers).sort(),
+		});
 		for (const provider of providers) {
 			const providerImpl = resolver(provider as Provider);
 			if (!providerImpl) continue;
@@ -911,6 +1020,11 @@ export class AuthStorage {
 				if (providerImpl.supports && !providerImpl.supports(params)) {
 					continue;
 				}
+				this.usageLogger?.debug("Usage fetch queued", {
+					provider,
+					credentialType: "api_key",
+					baseUrl,
+				});
 				tasks.push(
 					providerImpl
 						.fetchUsage(params, {
@@ -946,6 +1060,14 @@ export class AuthStorage {
 					continue;
 				}
 
+				this.usageLogger?.debug("Usage fetch queued", {
+					provider,
+					credentialType: usageCredential.type,
+					baseUrl,
+					accountId: usageCredential.accountId,
+					email: usageCredential.email,
+				});
+
 				tasks.push(
 					providerImpl
 						.fetchUsage(params, {
@@ -967,7 +1089,25 @@ export class AuthStorage {
 
 		if (tasks.length === 0) return [];
 		const results = await Promise.all(tasks);
-		return results.filter((report): report is UsageReport => report !== null);
+		const reports = results.filter((report): report is UsageReport => report !== null);
+		const deduped = this.dedupeUsageReports(reports);
+		this.usageLogger?.debug("Usage fetch resolved", {
+			reports: deduped.map((report) => {
+				const accountLabel =
+					this.getUsageReportMetadataValue(report, "email") ??
+					this.getUsageReportMetadataValue(report, "accountId") ??
+					this.getUsageReportMetadataValue(report, "account") ??
+					this.getUsageReportMetadataValue(report, "user") ??
+					this.getUsageReportMetadataValue(report, "username") ??
+					this.getUsageReportScopeAccountId(report);
+				return {
+					provider: report.provider,
+					limits: report.limits.length,
+					account: accountLabel,
+				};
+			}),
+		});
+		return deduped;
 	}
 
 	/**
@@ -1093,7 +1233,16 @@ export class AuthStorage {
 			const result = await getOAuthApiKey(provider as OAuthProvider, oauthCreds);
 			if (!result) return undefined;
 
-			const updated: OAuthCredential = { type: "oauth", ...result.newCredentials };
+			const updated: OAuthCredential = {
+				type: "oauth",
+				access: result.newCredentials.access,
+				refresh: result.newCredentials.refresh,
+				expires: result.newCredentials.expires,
+				accountId: result.newCredentials.accountId ?? selection.credential.accountId,
+				email: result.newCredentials.email ?? selection.credential.email,
+				projectId: result.newCredentials.projectId ?? selection.credential.projectId,
+				enterpriseUrl: result.newCredentials.enterpriseUrl ?? selection.credential.enterpriseUrl,
+			};
 			this.replaceCredentialAt(provider, selection.index, updated);
 
 			if (checkUsage) {

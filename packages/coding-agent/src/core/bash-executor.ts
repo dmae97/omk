@@ -56,7 +56,7 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 			cancelled: false,
 			...(await sink.dump()),
 		};
-	} catch (err) {
+	} catch (err: unknown) {
 		// Exception covers NonZeroExitError, AbortError, TimeoutError
 		if (err instanceof Exception) {
 			if (err.aborted) {

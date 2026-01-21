@@ -684,6 +684,13 @@ function resolveFraction(limit: UsageLimit): number | undefined {
 	return undefined;
 }
 
+function resolveProviderUsageTotal(reports: UsageReport[]): number {
+	return reports
+		.flatMap((report) => report.limits)
+		.map((limit) => resolveFraction(limit) ?? 0)
+		.reduce((sum, value) => sum + value, 0);
+}
+
 function formatLimitTitle(limit: UsageLimit): string {
 	const tier = limit.scope.tier;
 	if (tier && !limit.label.toLowerCase().includes(tier.toLowerCase())) {
@@ -841,8 +848,18 @@ function renderUsageReports(reports: UsageReport[], uiTheme: typeof theme, nowMs
 		list.push(report);
 		grouped.set(report.provider, list);
 	}
+	const providerEntries = Array.from(grouped.entries())
+		.map(([provider, providerReports]) => ({
+			provider,
+			providerReports,
+			totalUsage: resolveProviderUsageTotal(providerReports),
+		}))
+		.sort((a, b) => {
+			if (a.totalUsage !== b.totalUsage) return a.totalUsage - b.totalUsage;
+			return a.provider.localeCompare(b.provider);
+		});
 
-	for (const [provider, providerReports] of grouped.entries()) {
+	for (const { provider, providerReports } of providerEntries) {
 		lines.push("");
 		const providerName = formatProviderName(provider);
 

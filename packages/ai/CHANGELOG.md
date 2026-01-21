@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added usage tracking system with normalized schema for provider quota/limit endpoints
@@ -12,8 +11,16 @@
 - Added OpenAI Codex usage provider for primary and secondary rate limit windows
 - Added ZAI usage provider for token and request quota tracking
 
+### Changed
+
+- Updated Claude usage provider to extract account identifiers from response headers
+- Updated GitHub Copilot usage provider to include account identifiers in usage reports
+- Updated Google Gemini CLI usage provider to handle missing reset time gracefully
+
 ### Fixed
 
+- Fixed GitHub Copilot usage provider to simplify token handling and improve reliability
+- Fixed GitHub Copilot usage provider to properly resolve account identifiers for OAuth credentials
 - Fixed API validation errors when sending empty user messages (resume with `.`) across all providers:
 - Google Cloud Code Assist (google-shared.ts)
 - OpenAI Responses API (openai-responses.ts)
@@ -21,6 +28,10 @@
 - Cursor (cursor.ts)
 - Amazon Bedrock (amazon-bedrock.ts)
 - Clamped OpenAI Codex reasoning effort "minimal" to "low" for gpt-5.2 models to avoid API errors
+- Fixed GitHub Copilot usage fallback to internal quota endpoints when billing usage is unavailable
+- Fixed GitHub Copilot usage metadata to include account identifiers for report dedupe
+- Fixed Anthropic usage metadata extraction to include account identifiers when provided by the usage endpoint
+- Fixed Gemini CLI usage windows to consistently label quota windows for display suppression
 
 ## [6.9.69] - 2026-01-21
 ### Added

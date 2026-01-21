@@ -73,10 +73,20 @@ function getModelTier(modelId: string): string | undefined {
 	return undefined;
 }
 
-function parseWindow(resetTime: string | undefined, now: number): UsageWindow | undefined {
-	if (!resetTime) return undefined;
+function parseWindow(resetTime: string | undefined, now: number): UsageWindow {
+	if (!resetTime) {
+		return {
+			id: "quota",
+			label: "Quota window",
+		};
+	}
 	const resetsAt = Date.parse(resetTime);
-	if (Number.isNaN(resetsAt)) return undefined;
+	if (Number.isNaN(resetsAt)) {
+		return {
+			id: "quota",
+			label: "Quota window",
+		};
+	}
 	return {
 		id: `reset-${resetsAt}`,
 		label: "Quota window",

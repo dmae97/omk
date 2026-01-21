@@ -49,11 +49,6 @@ type CopilotUsageResponse = {
 	quota_snapshots: CopilotQuotaSnapshots;
 };
 
-type CopilotTokenResponse = {
-	token: string;
-	expires_at: number;
-};
-
 type BillingUsageItem = {
 	product: string;
 	sku: string;
@@ -99,13 +94,6 @@ function resolveGitHubApiBaseUrl(params: UsageFetchParams): string {
 		return `https://${enterpriseUrl}`;
 	}
 	return `https://api.${enterpriseUrl}`;
-}
-
-function resolveCopilotApiBaseUrl(params: UsageFetchParams): string {
-	if (params.baseUrl) return params.baseUrl.replace(/\/$/, "");
-	const enterpriseUrl = params.credential.enterpriseUrl?.trim();
-	if (enterpriseUrl) return `https://api.${enterpriseUrl}`;
-	return "https://api.individual.githubcopilot.com";
 }
 
 function buildCacheKey(params: UsageFetchParams): string {
@@ -221,68 +209,21 @@ async function resolveGitHubUsername(
 	}
 }
 
-async function exchangeForCopilotToken(
-	ctx: UsageFetchContext,
-	baseUrl: string,
-	oauthToken: string,
-	signal?: AbortSignal,
-): Promise<CopilotTokenResponse | null> {
-	try {
-		const data = await fetchJson(ctx, `${baseUrl}/copilot_internal/v2/token`, {
-			headers: {
-				Accept: "application/json",
-				Authorization: `Bearer ${oauthToken}`,
-				...COPILOT_HEADERS,
-			},
-			signal,
-		});
-
-		if (!isRecord(data)) return null;
-		const token = typeof data.token === "string" ? data.token : undefined;
-		const expiresAt = toNumber(data.expires_at);
-		if (!token || !expiresAt) return null;
-		return { token, expires_at: expiresAt };
-	} catch {
-		return null;
-	}
-}
-
 async function fetchInternalUsage(
 	ctx: UsageFetchContext,
-	baseUrl: string,
-	oauthToken: string,
-	accessToken: string | undefined,
-	expiresAt: number | undefined,
+	githubApiBaseUrl: string,
+	token: string,
 	signal?: AbortSignal,
 ): Promise<CopilotUsageResponse> {
-	const requestWithToken = async (token: string, legacy: boolean) => {
-		const headers: Record<string, string> = {
-			"Content-Type": "application/json",
-			Accept: "application/json",
-			Authorization: legacy ? `token ${token}` : `Bearer ${token}`,
-			...COPILOT_HEADERS,
-		};
-		const data = await fetchJson(ctx, `${baseUrl}/copilot_internal/user`, { headers, signal });
-		if (!isRecord(data)) throw new Error("Invalid Copilot usage response");
-		return data as CopilotUsageResponse;
+	const headers: Record<string, string> = {
+		"Content-Type": "application/json",
+		Accept: "application/json",
+		Authorization: `Bearer ${token}`,
+		...COPILOT_HEADERS,
 	};
-
-	const now = ctx.now();
-	if (accessToken && expiresAt && accessToken !== oauthToken && expiresAt > now) {
-		try {
-			return await requestWithToken(accessToken, false);
-		} catch {
-			// Ignore and try other strategies.
-		}
-	}
-
-	try {
-		return await requestWithToken(oauthToken, true);
-	} catch {
-		const exchanged = await exchangeForCopilotToken(ctx, baseUrl, oauthToken, signal);
-		if (!exchanged) throw new Error("Copilot usage token exchange failed");
-		return requestWithToken(exchanged.token, false);
-	}
+	const data = await fetchJson(ctx, `${githubApiBaseUrl}/copilot_internal/user`, { headers, signal });
+	if (!isRecord(data)) throw new Error("Invalid Copilot usage response");
+	return data as CopilotUsageResponse;
 }
 
 async function fetchBillingUsage(
@@ -315,6 +256,7 @@ function buildLimitFromQuota(
 	quota: CopilotQuotaDetail,
 	plan: string,
 	window: UsageWindow | undefined,
+	accountId?: string,
 ): UsageLimit {
 	const used = quota.unlimited ? undefined : Math.max(0, quota.entitlement - quota.remaining);
 	const limit = quota.unlimited ? undefined : quota.entitlement;
@@ -329,6 +271,7 @@ function buildLimitFromQuota(
 		label,
 		scope: {
 			provider: "github-copilot",
+			accountId,
 			tier: plan,
 			windowId: window?.id,
 		},
@@ -342,21 +285,22 @@ function buildLimitFromQuota(
 function normalizeQuotaSnapshots(
 	data: CopilotUsageResponse,
 	now: number,
+	accountId?: string,
 ): { limits: UsageLimit[]; window?: UsageWindow } {
 	const window = buildWindow(data.quota_reset_date, now);
 	const snapshots = data.quota_snapshots ?? {};
 	const limits: UsageLimit[] = [];
 	const premium = parseQuotaDetail(snapshots.premium_interactions);
 	if (premium) {
-		limits.push(buildLimitFromQuota("premium", "Premium Requests", premium, data.copilot_plan, window));
+		limits.push(buildLimitFromQuota("premium", "Premium Requests", premium, data.copilot_plan, window, accountId));
 	}
 	const chat = parseQuotaDetail(snapshots.chat);
 	if (chat && !chat.unlimited) {
-		limits.push(buildLimitFromQuota("chat", "Chat Requests", chat, data.copilot_plan, window));
+		limits.push(buildLimitFromQuota("chat", "Chat Requests", chat, data.copilot_plan, window, accountId));
 	}
 	const completions = parseQuotaDetail(snapshots.completions);
 	if (completions && !completions.unlimited) {
-		limits.push(buildLimitFromQuota("completions", "Completions", completions, data.copilot_plan, window));
+		limits.push(buildLimitFromQuota("completions", "Completions", completions, data.copilot_plan, window, accountId));
 	}
 	return { limits, window };
 }
@@ -437,26 +381,36 @@ export const githubCopilotUsageProvider: UsageProvider = {
 		const cached = await ctx.cache.get(cacheKey);
 		if (cached && cached.expiresAt > now) return cached.value;
 
-		const baseUrl =
-			params.credential.type === "api_key" ? resolveGitHubApiBaseUrl(params) : resolveCopilotApiBaseUrl(params);
+		const githubApiBaseUrl = resolveGitHubApiBaseUrl(params);
 		let report: UsageReport | null = null;
 
 		if (params.credential.type === "api_key") {
-			let username =
+			let username: string | undefined;
+			const candidate =
 				params.credential.accountId || params.credential.metadata?.username || params.credential.metadata?.user;
-			if ((!username || typeof username !== "string" || !username.trim()) && params.credential.apiKey) {
-				username = await resolveGitHubUsername(ctx, baseUrl, params.credential.apiKey, params.signal);
+			if (typeof candidate === "string" && candidate.trim()) {
+				username = candidate.trim();
 			}
-			if (typeof username !== "string" || !username.trim()) {
+			if (!username && params.credential.apiKey) {
+				username = await resolveGitHubUsername(ctx, githubApiBaseUrl, params.credential.apiKey, params.signal);
+			}
+			if (!username) {
 				ctx.logger?.warn("Copilot usage requires username for billing API", { provider: params.provider });
 			} else if (params.credential.apiKey) {
 				try {
-					const billing = await fetchBillingUsage(ctx, baseUrl, username, params.credential.apiKey, params.signal);
+					const billing = await fetchBillingUsage(
+						ctx,
+						githubApiBaseUrl,
+						username,
+						params.credential.apiKey,
+						params.signal,
+					);
 					report = {
 						provider: "github-copilot",
 						fetchedAt: now,
 						limits: normalizeBillingUsage(billing),
 						metadata: {
+							accountId: billing.user,
 							account: billing.user,
 							period: billing.timePeriod,
 						},
@@ -465,26 +419,49 @@ export const githubCopilotUsageProvider: UsageProvider = {
 					ctx.logger?.warn("Copilot usage fetch failed", { error: String(error) });
 				}
 			}
+			if (!report && params.credential.apiKey) {
+				try {
+					const usage = await fetchInternalUsage(ctx, githubApiBaseUrl, params.credential.apiKey, params.signal);
+					const normalized = normalizeQuotaSnapshots(usage, now, username);
+					report = {
+						provider: "github-copilot",
+						fetchedAt: now,
+						limits: normalized.limits,
+						metadata: {
+							accountId: username,
+							plan: usage.copilot_plan,
+							quotaResetDate: usage.quota_reset_date,
+						},
+						raw: usage,
+					};
+				} catch (error) {
+					ctx.logger?.warn("Copilot usage fetch failed", { error: String(error) });
+				}
+			}
 		} else {
-			const { refreshToken, accessToken, expiresAt } = params.credential;
+			const { refreshToken, accessToken } = params.credential;
 			if (!refreshToken && !accessToken) return null;
 			const oauthToken = refreshToken || accessToken;
 			if (!oauthToken) return null;
+			const githubToken = refreshToken ?? accessToken;
+			if (!githubToken) return null;
 			try {
-				const usage = await fetchInternalUsage(
-					ctx,
-					baseUrl,
-					oauthToken,
-					accessToken ?? undefined,
-					expiresAt ?? undefined,
-					params.signal,
-				);
-				const normalized = normalizeQuotaSnapshots(usage, now);
+				const usage = await fetchInternalUsage(ctx, githubApiBaseUrl, githubToken, params.signal);
+				let accountId = params.credential.accountId;
+				if (!accountId && refreshToken) {
+					accountId = await resolveGitHubUsername(ctx, githubApiBaseUrl, refreshToken, params.signal);
+				}
+				if (!accountId && accessToken) {
+					accountId = await resolveGitHubUsername(ctx, githubApiBaseUrl, accessToken, params.signal);
+				}
+				const normalized = normalizeQuotaSnapshots(usage, now, accountId);
 				report = {
 					provider: "github-copilot",
 					fetchedAt: now,
 					limits: normalized.limits,
 					metadata: {
+						accountId,
+						email: params.credential.email,
 						plan: usage.copilot_plan,
 						quotaResetDate: usage.quota_reset_date,
 					},

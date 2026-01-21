@@ -113,7 +113,6 @@ cols(read("data.tsv"), 0, 2, sep="\t")
 
 - Code executes as IPython cells; users see the full cell output (including rendered figures, tables, etc.)
 - Kernel persists for the session by default; per-call mode uses a fresh kernel each call. Use `reset: true` to clear state when session mode is active
-- Use `cwd` parameter instead of `os.chdir()` in tool call
 - Use `plt.show()` to display figures
 - Use `display()` from IPython.display for rich output (HTML, Markdown, images, etc.)
 - Output streams in real time, truncated after 50KB

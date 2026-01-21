@@ -1,9 +1,15 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added usage report deduplication to prevent duplicate account entries
+- Added debug logging for usage fetch operations to aid diagnostics
+- Added provider sorting in usage display by total usage amount
+- Added `isolated` parameter to task tool for running each task in separate git worktrees
+- Added git worktree management for isolated task execution with patch generation
+- Added patch application system that applies changes only when all patches are valid
+- Added working directory information to environment info display
 - Added `/usage` command to display provider usage and limits
 - Added support for multiple usage providers beyond Codex
 - Added usage report caching with configurable TTL
@@ -14,9 +20,16 @@
 - Added support for jq-like queries when reading JSON outputs
 - Added offset and limit parameters for reading specific line ranges from outputs
 - Added "." and "c" shortcuts to continue agent without sending visible message
+- Added debug logging for usage fetch results to aid /usage diagnostics
 
 ### Changed
 
+- Updated discoverSkills function to return object with skills property
+- Enhanced usage report merging to combine limits and metadata from duplicate accounts
+- Improved OAuth credential handling to preserve existing fields when updating
+- Removed cd function from Python prelude to encourage using cwd parameter
+- Updated task tool to generate and apply patches when running in isolated mode
+- Enhanced task tool rendering to display isolated execution status and patch paths
 - Updated system prompt structure and formatting for better readability
 - Reorganized tool hierarchy and discipline sections
 - Added parallel work guidance for task-based workflows
@@ -32,12 +45,17 @@
 
 ### Fixed
 
+- Fixed TypeScript error in bash executor by properly typing caught exception
+- Fixed usage display ordering to show providers with lowest usage first
+- Fixed task tool result rendering to show fallback text when no results are available
 - Fixed external editor to work properly on Unix systems by correctly handling terminal I/O
 - Fixed external editor to show warning message when it fails to open instead of silently failing
 - Fixed find tool to properly handle no matches case without treating as error
 - Fixed find tool to wait for fd exit so error messages no longer report exit null
 - Fixed read tool to properly handle no matches case without treating as error
 - Fixed orphaned Python kernel gateway processes not being killed on process exit
+- Fixed /usage provider ordering to sort by aggregate usage (most used last)
+- Fixed /usage account dedupe to collapse identical accounts using usage metadata
 
 ## [6.9.69] - 2026-01-21
 
@@ -81,6 +99,7 @@
 - Fixed patch indentation normalization for fuzzy matches, tab/space diffs, and ambiguous context alignment
 
 ## [6.9.0] - 2026-01-21
+
 ### Removed
 
 - Removed Git tool and all related functionality
@@ -91,6 +110,7 @@
 - Removed @oh-my-pi/pi-git-tool dependency
 
 ## [6.8.5] - 2026-01-21
+
 ### Breaking Changes
 
 - Changed timeout parameter from seconds to milliseconds in Python tool
@@ -102,6 +122,7 @@
 - Improved streaming output handling and buffer management
 
 ## [6.8.4] - 2026-01-21
+
 ### Changed
 
 - Updated output sink to properly handle large outputs
@@ -183,6 +204,7 @@
 - Updated temporary file cleanup to use secure async removal methods
 
 ## [6.7.67] - 2026-01-19
+
 ### Added
 
 - Added normative rewrite setting to control tool call argument normalization in session history
@@ -231,7 +253,7 @@
 
 - Patch application handles repeated context blocks, preserves original indentation on fuzzy match
 - Ambiguous context matching resolves duplicates using adjacent @@ anchor positioning
-- Patch parser handles bare *** terminators, model hallucination markers, line hint ranges
+- Patch parser handles bare \*\*\* terminators, model hallucination markers, line hint ranges
 - Function context matching handles signatures with and without empty parentheses
 - Fixed session title generation to respect OMP_NO_TITLE environment variable
 - Fixed Python module discovery to use import.meta.dir for ES module compatibility
@@ -243,6 +265,7 @@
 - Fixed MCP tool path formatting to correctly display provider information
 
 ## [6.2.0] - 2026-01-19
+
 ### Changed
 
 - Improved LSP batching to coalesce formatting and diagnostics for parallel edits
@@ -280,12 +303,14 @@
 - Fixed TTSR abbreviation expansion from TTSR to Time Traveling Stream Rules
 
 ## [5.8.0] - 2026-01-19
+
 ### Changed
 
 - Updated WASM loading to use streaming for development environments with base64 fallback
 - Added scripts directory to published package files
 
 ## [5.7.68] - 2026-01-18
+
 ### Changed
 
 - Updated WASM loading to use base64-encoded WASM for better compatibility with compiled binaries
@@ -295,12 +320,14 @@
 - Fixed WASM loading issues in compiled binary builds
 
 ## [5.7.67] - 2026-01-18
+
 ### Changed
 
 - Replaced external photon-node dependency with vendored WebAssembly implementation
 - Updated image processing to use local photon library for better performance
 
 ## [5.6.70] - 2026-01-18
+
 ### Added
 
 - Added support for loading Python prelude extension modules from user and project directories
@@ -373,7 +400,7 @@
 - Enhanced Python kernel availability checking with faster validation
 - Optimized Python environment warming to avoid blocking during tool initialization
 - Reorganized settings interface into behavior, tools, display, voice, status, lsp, and exa tabs
-- Migrated environment variables from PI_ to OMP_ prefix with automatic migration
+- Migrated environment variables from PI* to OMP* prefix with automatic migration
 - Updated model selector to use TabBar component for provider navigation
 - Changed role badges to inverted style with colored backgrounds
 - Added support for /models command alias in addition to /model
@@ -406,11 +433,13 @@
 - Enhanced Python gateway environment filtering to exclude sensitive API keys and Windows system paths
 
 ## [5.5.0] - 2026-01-18
+
 ### Changed
 
 - Updated task execution guidelines to improve prompt framing and parallelization instructions
 
 ## [5.4.2] - 2026-01-16
+
 ### Changed
 
 - Updated model resolution to accept pre-serialized settings for better performance
@@ -418,11 +447,13 @@
 - Enhanced edit tool documentation with clear use cases for bash alternatives
 
 ## [5.3.0] - 2026-01-15
+
 ### Changed
 
 - Expanded bash tool guidance to explicitly list appropriate use cases including file operations, build commands, and process management
 
 ## [5.2.1] - 2026-01-14
+
 ### Fixed
 
 - Fixed stale diagnostic results by tracking diagnostic versions before file sync operations
@@ -466,6 +497,7 @@
 - Fixed session selector page up/down navigation
 
 ## [5.0.1] - 2026-01-12
+
 ### Changed
 
 - Replaced wasm-vips with Photon for more stable WASM image processing
@@ -492,6 +524,7 @@
 - Move `sharp` to optional dependencies with all platform binaries to fix arm64 runtime errors
 
 ## [4.7.0] - 2026-01-12
+
 ### Added
 
 - Add `omp config` subcommand for managing settings (`list`, `get`, `set`, `reset`, `path`)
@@ -511,6 +544,7 @@
 ## [4.6.0] - 2026-01-12
 
 ### Added
+
 - Add `/skill:name` slash commands for quick skill access (toggle via `skills.enableSkillCommands` setting)
 - Add `cwd` to SessionInfo for session list display
 - Add custom summarization instructions option in tree selector
@@ -518,10 +552,12 @@
 - Add `shutdownRequested` and `checkShutdownRequested()` for extension-initiated shutdown
 
 ### Fixed
+
 - Component `invalidate()` now properly rebuilds content on theme changes
 - Force full re-render after returning from external editor
 
 ## [4.4.8] - 2026-01-12
+
 ### Changed
 
 - Changed review finding priority format from numeric (0-3) to string labels (P0-P3) for clearer severity indication
@@ -541,6 +577,7 @@
 - Fixed frontmatter parsing to properly report source location when YAML parsing fails
 
 ## [4.4.4] - 2026-01-11
+
 ### Added
 
 - Added `todo_write` tool for creating and managing structured task lists during coding sessions
@@ -571,6 +608,7 @@
 - Fixed prompt template loading to strip leading HTML comment metadata blocks
 
 ## [4.3.2] - 2026-01-11
+
 ### Changed
 
 - Increased default bash output preview from 5 to 10 lines when collapsed
@@ -610,6 +648,7 @@
 - Fixed serialized auth storage initialization so OAuth refreshes in subagents don't crash
 
 ## [4.2.2] - 2026-01-11
+
 ### Added
 
 - Added persistent cache storage for Codex usage data that survives application restarts
@@ -630,6 +669,7 @@
 - Removed `planner` agent command template, consolidating planning functionality into the `plan` agent
 
 ## [4.2.1] - 2026-01-11
+
 ### Added
 
 - Added automatic discovery and listing of AGENTS.md files in the system prompt, providing agents with an authoritative list of project-specific instruction files without runtime searching
@@ -696,6 +736,7 @@
 - Hardened file permissions on agent database directory (700) and database file (600) to restrict access
 
 ## [4.1.0] - 2026-01-10
+
 ### Added
 
 - Added persistent prompt history with SQLite-backed storage and Ctrl+R search
@@ -705,6 +746,7 @@
 - Fixed credential blocking logic to correctly check for remaining available credentials instead of always returning true
 
 ## [4.0.1] - 2026-01-10
+
 ### Added
 
 - Added usage limit error detection to enable automatic credential switching when Codex accounts hit rate limits
@@ -808,11 +850,13 @@
 - Extension directories in `settings.json` respect `package.json` manifests
 
 ## [3.37.0] - 2026-01-10
+
 ### Changed
 
 - Improved bash command display to show relative paths for working directories within the current directory, and hide redundant `cd` prefix when working directory matches current directory
 
 ## [3.36.0] - 2026-01-10
+
 ### Added
 
 - Added `calc` tool for basic mathematical calculations with support for arithmetic operators, parentheses, and hex/binary/octal literals
@@ -831,6 +875,7 @@
 - Improved completion notification message to include session title when available
 
 ## [3.35.0] - 2026-01-09
+
 ### Added
 
 - Added retry logic with exponential backoff for auto-compaction failures
@@ -1908,15 +1953,14 @@ Total color count increased from 46 to 50. See [docs/theme.md](docs/theme.md) fo
 - **Credential storage refactored**: API keys and OAuth tokens are now stored in `~/.omp/agent/auth.json` instead of `oauth.json` and `settings.json`. Existing credentials are automatically migrated on first run. ([#296](https://github.com/badlogic/pi-mono/issues/296))
 
 - **SDK API changes** ([#296](https://github.com/badlogic/pi-mono/issues/296)):
-
-  - Added `AuthStorage` class for credential management (API keys and OAuth tokens)
-  - Added `ModelRegistry` class for model discovery and API key resolution
-  - Added `discoverAuthStorage()` and `discoverModels()` discovery functions
-  - `createAgentSession()` now accepts `authStorage` and `modelRegistry` options
-  - Removed `configureOAuthStorage()`, `defaultGetApiKey()`, `findModel()`, `discoverAvailableModels()`
-  - Removed `getApiKey` callback option (use `AuthStorage.setRuntimeApiKey()` for runtime overrides)
-  - Use `getModel()` from `@oh-my-pi/pi-ai` for built-in models, `modelRegistry.find()` for custom models + built-in models
-  - See updated [SDK documentation](docs/sdk.md) and [README](README.md)
+   - Added `AuthStorage` class for credential management (API keys and OAuth tokens)
+   - Added `ModelRegistry` class for model discovery and API key resolution
+   - Added `discoverAuthStorage()` and `discoverModels()` discovery functions
+   - `createAgentSession()` now accepts `authStorage` and `modelRegistry` options
+   - Removed `configureOAuthStorage()`, `defaultGetApiKey()`, `findModel()`, `discoverAvailableModels()`
+   - Removed `getApiKey` callback option (use `AuthStorage.setRuntimeApiKey()` for runtime overrides)
+   - Use `getModel()` from `@oh-my-pi/pi-ai` for built-in models, `modelRegistry.find()` for custom models + built-in models
+   - See updated [SDK documentation](docs/sdk.md) and [README](README.md)
 
 - **Settings changes**: Removed `apiKeys` from `settings.json`. Use `auth.json` instead. ([#296](https://github.com/badlogic/pi-mono/issues/296))
 
@@ -1947,16 +1991,15 @@ Total color count increased from 46 to 50. See [docs/theme.md](docs/theme.md) fo
 ### Added
 
 - **Compaction hook improvements**: The `before_compact` session event now includes:
-
-  - `previousSummary`: Summary from the last compaction (if any), so hooks can preserve accumulated context
-  - `messagesToKeep`: Messages that will be kept after the summary (recent turns), in addition to `messagesToSummarize`
-  - `resolveApiKey`: Function to resolve API keys for any model (checks settings, OAuth, env vars)
-  - Removed `apiKey` string in favor of `resolveApiKey` for more flexibility
+   - `previousSummary`: Summary from the last compaction (if any), so hooks can preserve accumulated context
+   - `messagesToKeep`: Messages that will be kept after the summary (recent turns), in addition to `messagesToSummarize`
+   - `resolveApiKey`: Function to resolve API keys for any model (checks settings, OAuth, env vars)
+   - Removed `apiKey` string in favor of `resolveApiKey` for more flexibility
 
 - **SessionManager API cleanup**:
-  - Renamed `loadSessionFromEntries()` to `buildSessionContext()` (builds LLM context from entries, handling compaction)
-  - Renamed `loadEntries()` to `getEntries()` (returns defensive copy of all session entries)
-  - Added `buildSessionContext()` method to SessionManager
+   - Renamed `loadSessionFromEntries()` to `buildSessionContext()` (builds LLM context from entries, handling compaction)
+   - Renamed `loadEntries()` to `getEntries()` (returns defensive copy of all session entries)
+   - Added `buildSessionContext()` method to SessionManager
 
 ## [0.27.5] - 2025-12-24
 
@@ -2175,13 +2218,13 @@ Total color count increased from 46 to 50. See [docs/theme.md](docs/theme.md) fo
 - **Custom tools now require `index.ts` entry point**: Auto-discovered custom tools must be in a subdirectory with an `index.ts` file. The old pattern `~/.omp/agent/tools/mytool.ts` must become `~/.omp/agent/tools/mytool/index.ts`. This allows multi-file tools to import helper modules. Explicit paths via `--tool` or `settings.json` still work with any `.ts` file.
 
 - **Hook `tool_result` event restructured**: The `ToolResultEvent` now exposes full tool result data instead of just text. ([#233](https://github.com/badlogic/pi-mono/pull/233))
-  - Removed: `result: string` field
-  - Added: `content: (TextContent | ImageContent)[]` - full content array
-  - Added: `details: unknown` - tool-specific details (typed per tool via discriminated union on `toolName`)
-  - `ToolResultEventResult.result` renamed to `ToolResultEventResult.text` (removed), use `content` instead
-  - Hook handlers returning `{ result: "..." }` must change to `{ content: [{ type: "text", text: "..." }] }`
-  - Built-in tool details types exported: `BashToolDetails`, `ReadToolDetails`, `GrepToolDetails`, `FindToolDetails`, `LsToolDetails`, `TruncationResult`
-  - Type guards exported for narrowing: `isBashToolResult`, `isReadToolResult`, `isEditToolResult`, `isWriteToolResult`, `isGrepToolResult`, `isFindToolResult`, `isLsToolResult`
+   - Removed: `result: string` field
+   - Added: `content: (TextContent | ImageContent)[]` - full content array
+   - Added: `details: unknown` - tool-specific details (typed per tool via discriminated union on `toolName`)
+   - `ToolResultEventResult.result` renamed to `ToolResultEventResult.text` (removed), use `content` instead
+   - Hook handlers returning `{ result: "..." }` must change to `{ content: [{ type: "text", text: "..." }] }`
+   - Built-in tool details types exported: `BashToolDetails`, `ReadToolDetails`, `GrepToolDetails`, `FindToolDetails`, `LsToolDetails`, `TruncationResult`
+   - Type guards exported for narrowing: `isBashToolResult`, `isReadToolResult`, `isEditToolResult`, `isWriteToolResult`, `isGrepToolResult`, `isFindToolResult`, `isLsToolResult`
 
 ## [0.23.4] - 2025-12-18
 
@@ -2210,13 +2253,12 @@ Total color count increased from 46 to 50. See [docs/theme.md](docs/theme.md) fo
 - Improved system prompt documentation section with clearer pointers to specific doc files for custom models, themes, skills, hooks, custom tools, and RPC.
 
 - Cleaned up documentation:
-
-  - `theme.md`: Added missing color tokens (`thinkingXhigh`, `bashMode`)
-  - `skills.md`: Rewrote with better framing and examples
-  - `hooks.md`: Fixed timeout/error handling docs, added import aliases section
-  - `custom-tools.md`: Added intro with use cases and comparison table
-  - `rpc.md`: Added missing `hook_error` event documentation
-  - `README.md`: Complete settings table, condensed philosophy section, standardized OAuth docs
+   - `theme.md`: Added missing color tokens (`thinkingXhigh`, `bashMode`)
+   - `skills.md`: Rewrote with better framing and examples
+   - `hooks.md`: Fixed timeout/error handling docs, added import aliases section
+   - `custom-tools.md`: Added intro with use cases and comparison table
+   - `rpc.md`: Added missing `hook_error` event documentation
+   - `README.md`: Complete settings table, condensed philosophy section, standardized OAuth docs
 
 - Hooks loader now supports same import aliases as custom tools (`@sinclair/typebox`, `@oh-my-pi/pi-ai`, `@oh-my-pi/pi-tui`, `@oh-my-pi/pi-coding-agent`).
 
@@ -2473,12 +2515,12 @@ _Dedicated to Peter's shoulder ([@steipete](https://twitter.com/steipete))_
 ### Changed
 
 - **Tool output truncation**: All tools now enforce consistent truncation limits with actionable notices for the LLM. ([#134](https://github.com/badlogic/pi-mono/issues/134))
-  - **Limits**: 2000 lines OR 50KB (whichever hits first), never partial lines
-  - **read**: Shows `[Showing lines X-Y of Z. Use offset=N to continue]`. If first line exceeds 50KB, suggests bash command
-  - **bash**: Tail truncation with temp file. Shows `[Showing lines X-Y of Z. Full output: /tmp/...]`
-  - **grep**: Pre-truncates match lines to 500 chars. Shows match limit and line truncation notices
-  - **find/ls**: Shows result/entry limit notices
-  - TUI displays truncation warnings in yellow at bottom of tool output (visible even when collapsed)
+   - **Limits**: 2000 lines OR 50KB (whichever hits first), never partial lines
+   - **read**: Shows `[Showing lines X-Y of Z. Use offset=N to continue]`. If first line exceeds 50KB, suggests bash command
+   - **bash**: Tail truncation with temp file. Shows `[Showing lines X-Y of Z. Full output: /tmp/...]`
+   - **grep**: Pre-truncates match lines to 500 chars. Shows match limit and line truncation notices
+   - **find/ls**: Shows result/entry limit notices
+   - TUI displays truncation warnings in yellow at bottom of tool output (visible even when collapsed)
 
 ## [0.13.1] - 2025-12-06
 
@@ -2565,13 +2607,13 @@ _Dedicated to Peter's shoulder ([@steipete](https://twitter.com/steipete))_
 ### Added
 
 - **Context Compaction**: Long sessions can now be compacted to reduce context usage while preserving recent conversation history. ([#92](https://github.com/badlogic/pi-mono/issues/92), [docs](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/README.md#context-compaction))
-  - `/compact [instructions]`: Manually compact context with optional custom instructions for the summary
-  - `/autocompact`: Toggle automatic compaction when context exceeds threshold
-  - Compaction summarizes older messages while keeping recent messages (default 20k tokens) verbatim
-  - Auto-compaction triggers when context reaches `contextWindow - reserveTokens` (default 16k reserve)
-  - Compacted sessions show a collapsible summary in the TUI (toggle with `o` key)
-  - HTML exports include compaction summaries as collapsible sections
-  - RPC mode supports `{"type":"compact"}` command and auto-compaction (emits compaction events)
+   - `/compact [instructions]`: Manually compact context with optional custom instructions for the summary
+   - `/autocompact`: Toggle automatic compaction when context exceeds threshold
+   - Compaction summarizes older messages while keeping recent messages (default 20k tokens) verbatim
+   - Auto-compaction triggers when context reaches `contextWindow - reserveTokens` (default 16k reserve)
+   - Compacted sessions show a collapsible summary in the TUI (toggle with `o` key)
+   - HTML exports include compaction summaries as collapsible sections
+   - RPC mode supports `{"type":"compact"}` command and auto-compaction (emits compaction events)
 - **Branch Source Tracking**: Branched sessions now store `branchedFrom` in the session header, containing the path to the original session file. Useful for tracing session lineage.
 
 ## [0.12.5] - 2025-12-03
@@ -2608,11 +2650,11 @@ _Dedicated to Peter's shoulder ([@steipete](https://twitter.com/steipete))_
 ### Added
 
 - **Models**: Added support for OpenAI's new models:
-  - `gpt-4.1` (128K context)
-  - `gpt-4.1-mini` (128K context)
-  - `gpt-4.1-nano` (128K context)
-  - `o3` (200K context, reasoning model)
-  - `o4-mini` (200K context, reasoning model)
+   - `gpt-4.1` (128K context)
+   - `gpt-4.1-mini` (128K context)
+   - `gpt-4.1-nano` (128K context)
+   - `o3` (200K context, reasoning model)
+   - `o4-mini` (200K context, reasoning model)
 
 ## [0.12.0] - 2025-12-02
 

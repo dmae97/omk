@@ -24,14 +24,6 @@ if "__omp_prelude_loaded__" not in globals():
         _emit_status("pwd", path=str(p))
         return p
 
-    @_category("Navigation")
-    def cd(path: str | Path) -> Path:
-        """Change directory."""
-        p = Path(path).expanduser().resolve()
-        os.chdir(p)
-        _emit_status("cd", path=str(p))
-        return p
-
     @_category("Shell")
     def env(key: str | None = None, value: str | None = None):
         """Get/set environment variables."""
