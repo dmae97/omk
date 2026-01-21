@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { createServer } from "node:net";
 import { delimiter, join } from "node:path";
-import { logger } from "@oh-my-pi/pi-utils";
+import { logger, postmortem } from "@oh-my-pi/pi-utils";
 import type { Subprocess } from "bun";
 import { getAgentDir } from "../config";
 import { getShellConfig, killProcessTree } from "../utils/shell";
@@ -161,6 +161,58 @@ let localGatewayUrl: string | null = null;
 let idleShutdownTimer: ReturnType<typeof setTimeout> | null = null;
 let isCoordinatorInitialized = false;
 let localClientFile: string | null = null;
+let postmortemRegistered = false;
+
+/**
+ * Register cleanup handler for process exit. Called lazily on first gateway acquisition.
+ * Ensures the gateway process we spawned is killed when omp exits, preventing orphaned processes.
+ */
+function ensurePostmortemCleanup(): void {
+	if (postmortemRegistered) return;
+	postmortemRegistered = true;
+
+	postmortem.register("shared-gateway", async () => {
+		cancelIdleShutdown();
+
+		// Clean up our client file first so refcount is accurate
+		if (localClientFile) {
+			try {
+				unlinkSync(localClientFile);
+			} catch {
+				// Ignore cleanup errors
+			}
+			localClientFile = null;
+		}
+
+		// If we spawned the gateway, kill it only if no other clients remain
+		if (localGatewayProcess) {
+			const clients = pruneStaleClientInfos(listClientInfos());
+			const remainingRefs = clients.reduce((sum, c) => sum + c.info.refCount, 0);
+
+			if (remainingRefs === 0) {
+				logger.debug("Cleaning up shared gateway on process exit", { pid: localGatewayProcess.pid });
+				try {
+					await killProcessTree(localGatewayProcess.pid);
+				} catch (err) {
+					logger.warn("Failed to kill shared gateway on exit", {
+						error: err instanceof Error ? err.message : String(err),
+					});
+				}
+				clearGatewayInfo();
+			} else {
+				logger.debug("Leaving shared gateway running for other clients", {
+					pid: localGatewayProcess.pid,
+					remainingRefs,
+				});
+			}
+
+			localGatewayProcess = null;
+			localGatewayUrl = null;
+		}
+
+		isCoordinatorInitialized = false;
+	});
+}
 
 function filterEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
 	const filtered: Record<string, string | undefined> = {};
@@ -664,6 +716,8 @@ export async function acquireSharedGateway(cwd: string): Promise<AcquireResult |
 	if (process.env.BUN_ENV === "test" || process.env.NODE_ENV === "test") {
 		return null;
 	}
+
+	ensurePostmortemCleanup();
 
 	try {
 		return await withGatewayLock(async () => {

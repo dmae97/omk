@@ -9,6 +9,7 @@
 
 - Fixed find tool to properly handle no matches case without treating as error
 - Fixed read tool to properly handle no matches case without treating as error
+- Fixed orphaned Python kernel gateway processes not being killed on process exit
 
 ## [6.9.69] - 2026-01-21
 
