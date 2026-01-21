@@ -62,6 +62,9 @@ export const streamGoogleVertex: StreamFunction<"google-vertex"> = (
 	const stream = new AssistantMessageEventStream();
 
 	(async () => {
+		const startTime = Date.now();
+		let firstTokenTime: number | undefined;
+
 		const output: AssistantMessage = {
 			role: "assistant",
 			content: [],
@@ -97,6 +100,7 @@ export const streamGoogleVertex: StreamFunction<"google-vertex"> = (
 				if (candidate?.content?.parts) {
 					for (const part of candidate.content.parts) {
 						if (part.text !== undefined) {
+							if (!firstTokenTime) firstTokenTime = Date.now();
 							const isThinking = isThinkingPart(part);
 							if (
 								!currentBlock ||
@@ -258,6 +262,8 @@ export const streamGoogleVertex: StreamFunction<"google-vertex"> = (
 				throw new Error("An unknown error occurred");
 			}
 
+			output.duration = Date.now() - startTime;
+			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "done", reason: output.stopReason, message: output });
 			stream.end();
 		} catch (error) {
@@ -269,6 +275,8 @@ export const streamGoogleVertex: StreamFunction<"google-vertex"> = (
 			}
 			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
 			output.errorMessage = formatErrorMessageWithRetryAfter(error);
+			output.duration = Date.now() - startTime;
+			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "error", reason: output.stopReason, error: output });
 			stream.end();
 		}

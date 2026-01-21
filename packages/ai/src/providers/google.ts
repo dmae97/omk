@@ -53,6 +53,9 @@ export const streamGoogle: StreamFunction<"google-generative-ai"> = (
 	const stream = new AssistantMessageEventStream();
 
 	(async () => {
+		const startTime = Date.now();
+		let firstTokenTime: number | undefined;
+
 		const output: AssistantMessage = {
 			role: "assistant",
 			content: [],
@@ -88,6 +91,7 @@ export const streamGoogle: StreamFunction<"google-generative-ai"> = (
 					for (const part of candidate.content.parts) {
 						if (part.text !== undefined) {
 							const isThinking = isThinkingPart(part);
+							if (!firstTokenTime) firstTokenTime = Date.now();
 							if (
 								!currentBlock ||
 								(isThinking && currentBlock.type !== "thinking") ||
@@ -245,6 +249,8 @@ export const streamGoogle: StreamFunction<"google-generative-ai"> = (
 				throw new Error("An unkown error ocurred");
 			}
 
+			output.duration = Date.now() - startTime;
+			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "done", reason: output.stopReason, message: output });
 			stream.end();
 		} catch (error) {
@@ -256,6 +262,8 @@ export const streamGoogle: StreamFunction<"google-generative-ai"> = (
 			}
 			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
 			output.errorMessage = formatErrorMessageWithRetryAfter(error);
+			output.duration = Date.now() - startTime;
+			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "error", reason: output.stopReason, error: output });
 			stream.end();
 		}

@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added duration and time-to-first-token (ttft) metrics to all AI provider responses
+- Added performance tracking for streaming responses across all providers
 
 ## [6.9.0] - 2026-01-21
 ### Removed

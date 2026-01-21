@@ -81,6 +81,9 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 	const stream = new AssistantMessageEventStream();
 
 	(async () => {
+		const startTime = Date.now();
+		let firstTokenTime: number | undefined;
+
 		const output: AssistantMessage = {
 			role: "assistant",
 			content: [],
@@ -178,6 +181,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 						choice.delta.content !== undefined &&
 						choice.delta.content.length > 0
 					) {
+						if (!firstTokenTime) firstTokenTime = Date.now();
 						if (!currentBlock || currentBlock.type !== "text") {
 							finishCurrentBlock(currentBlock);
 							currentBlock = { type: "text", text: "" };
@@ -303,6 +307,8 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 				throw new Error("An unkown error ocurred");
 			}
 
+			output.duration = Date.now() - startTime;
+			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "done", reason: output.stopReason, message: output });
 			stream.end();
 		} catch (error) {
@@ -312,6 +318,8 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 			// Some providers via OpenRouter include extra details here.
 			const rawMetadata = (error as { error?: { metadata?: { raw?: string } } })?.error?.metadata?.raw;
 			if (rawMetadata) output.errorMessage += `\n${rawMetadata}`;
+			output.duration = Date.now() - startTime;
+			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "error", reason: output.stopReason, error: output });
 			stream.end();
 		}

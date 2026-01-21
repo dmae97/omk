@@ -67,6 +67,9 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream"> = (
 	const stream = new AssistantMessageEventStream();
 
 	(async () => {
+		const startTime = Date.now();
+		let firstTokenTime: number | undefined;
+
 		const output: AssistantMessage = {
 			role: "assistant",
 			content: [],
@@ -113,8 +116,10 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream"> = (
 					}
 					stream.push({ type: "start", partial: output });
 				} else if (item.contentBlockStart) {
+					if (!firstTokenTime) firstTokenTime = Date.now();
 					handleContentBlockStart(item.contentBlockStart, blocks, output, stream);
 				} else if (item.contentBlockDelta) {
+					if (!firstTokenTime) firstTokenTime = Date.now();
 					handleContentBlockDelta(item.contentBlockDelta, blocks, output, stream);
 				} else if (item.contentBlockStop) {
 					handleContentBlockStop(item.contentBlockStop, blocks, output, stream);
@@ -143,6 +148,8 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream"> = (
 				throw new Error("An unknown error occurred");
 			}
 
+			output.duration = Date.now() - startTime;
+			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "done", reason: output.stopReason, message: output });
 			stream.end();
 		} catch (error) {
@@ -152,6 +159,8 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream"> = (
 			}
 			output.stopReason = options.signal?.aborted ? "aborted" : "error";
 			output.errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
+			output.duration = Date.now() - startTime;
+			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "error", reason: output.stopReason, error: output });
 			stream.end();
 		}

@@ -69,6 +69,9 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 
 	// Start async processing
 	(async () => {
+		const startTime = Date.now();
+		let firstTokenTime: number | undefined;
+
 		const output: AssistantMessage = {
 			role: "assistant",
 			content: [],
@@ -107,6 +110,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			for await (const event of openaiStream) {
 				// Handle output item start
 				if (event.type === "response.output_item.added") {
+					if (!firstTokenTime) firstTokenTime = Date.now();
 					const item = event.item;
 					if (item.type === "reasoning") {
 						currentItem = item;
@@ -309,12 +313,16 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 				throw new Error("An unkown error ocurred");
 			}
 
+			output.duration = Date.now() - startTime;
+			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "done", reason: output.stopReason, message: output });
 			stream.end();
 		} catch (error) {
 			for (const block of output.content) delete (block as any).index;
 			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
 			output.errorMessage = formatErrorMessageWithRetryAfter(error);
+			output.duration = Date.now() - startTime;
+			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "error", reason: output.stopReason, error: output });
 			stream.end();
 		}

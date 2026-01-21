@@ -193,6 +193,8 @@ export interface AssistantMessage {
 	stopReason: StopReason;
 	errorMessage?: string;
 	timestamp: number; // Unix timestamp in milliseconds
+	duration?: number; // Request duration in milliseconds
+	ttft?: number; // Time to first token in milliseconds
 }
 
 export interface ToolResultMessage<TDetails = any, TInput = unknown> {

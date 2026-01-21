@@ -294,6 +294,9 @@ export const streamCursor: StreamFunction<"cursor-agent"> = (
 	const stream = new AssistantMessageEventStream();
 
 	(async () => {
+		const startTime = Date.now();
+		let firstTokenTime: number | undefined;
+
 		const output: AssistantMessage = {
 			role: "assistant",
 			content: [],
@@ -369,6 +372,9 @@ export const streamCursor: StreamFunction<"cursor-agent"> = (
 				get currentToolCall() {
 					return currentToolCall;
 				},
+				get firstTokenTime() {
+					return firstTokenTime;
+				},
 				setTextBlock: (b) => {
 					currentTextBlock = b;
 				},
@@ -377,6 +383,9 @@ export const streamCursor: StreamFunction<"cursor-agent"> = (
 				},
 				setToolCall: (t) => {
 					currentToolCall = t;
+				},
+				setFirstTokenTime: () => {
+					if (!firstTokenTime) firstTokenTime = Date.now();
 				},
 			};
 
@@ -502,6 +511,8 @@ export const streamCursor: StreamFunction<"cursor-agent"> = (
 
 			calculateCost(model, output.usage);
 
+			output.duration = Date.now() - startTime;
+			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({
 				type: "done",
 				reason: output.stopReason as "stop" | "length" | "toolUse",
@@ -511,6 +522,8 @@ export const streamCursor: StreamFunction<"cursor-agent"> = (
 		} catch (error) {
 			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
 			output.errorMessage = formatErrorMessageWithRetryAfter(error);
+			output.duration = Date.now() - startTime;
+			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "error", reason: output.stopReason, error: output });
 			stream.end();
 		} finally {
@@ -532,9 +545,11 @@ interface BlockState {
 	currentTextBlock: (TextContent & { index: number }) | null;
 	currentThinkingBlock: (ThinkingContent & { index: number }) | null;
 	currentToolCall: ToolCallState | null;
+	firstTokenTime: number | undefined;
 	setTextBlock: (b: (TextContent & { index: number }) | null) => void;
 	setThinkingBlock: (b: (ThinkingContent & { index: number }) | null) => void;
 	setToolCall: (t: ToolCallState | null) => void;
+	setFirstTokenTime: () => void;
 }
 
 interface UsageState {
@@ -1645,6 +1660,7 @@ function processInteractionUpdate(
 	log("interactionUpdate", updateCase, update.message?.value);
 
 	if (updateCase === "textDelta") {
+		state.setFirstTokenTime();
 		const delta = update.message.value.text || "";
 		if (!state.currentTextBlock) {
 			const block: TextContent & { index: number } = {
@@ -1660,6 +1676,7 @@ function processInteractionUpdate(
 		const idx = output.content.indexOf(state.currentTextBlock!);
 		stream.push({ type: "text_delta", contentIndex: idx, delta, partial: output });
 	} else if (updateCase === "thinkingDelta") {
+		state.setFirstTokenTime();
 		const delta = update.message.value.text || "";
 		if (!state.currentThinkingBlock) {
 			const block: ThinkingContent & { index: number } = {

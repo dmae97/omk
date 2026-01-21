@@ -365,6 +365,9 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 	const stream = new AssistantMessageEventStream();
 
 	(async () => {
+		const startTime = Date.now();
+		let firstTokenTime: number | undefined;
+
 		const output: AssistantMessage = {
 			role: "assistant",
 			content: [],
@@ -489,6 +492,7 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 			let started = false;
 			const ensureStarted = () => {
 				if (!started) {
+					if (!firstTokenTime) firstTokenTime = Date.now();
 					stream.push({ type: "start", partial: output });
 					started = true;
 				}
@@ -802,6 +806,8 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 				throw new Error("An unknown error occurred");
 			}
 
+			output.duration = Date.now() - startTime;
+			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "done", reason: output.stopReason, message: output });
 			stream.end();
 		} catch (error) {
@@ -812,6 +818,8 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 			}
 			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
 			output.errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
+			output.duration = Date.now() - startTime;
+			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "error", reason: output.stopReason, error: output });
 			stream.end();
 		}
