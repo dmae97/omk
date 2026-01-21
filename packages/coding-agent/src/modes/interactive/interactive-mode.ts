@@ -28,7 +28,6 @@ import { getRecentSessions } from "../../core/session-manager";
 import type { SettingsManager } from "../../core/settings-manager";
 import { loadSlashCommands } from "../../core/slash-commands";
 import { setTerminalTitle } from "../../core/title-generator";
-import { getArtifactsDir } from "../../core/tools/task/artifacts";
 import { VoiceSupervisor } from "../../core/voice-supervisor";
 import type { AssistantMessageComponent } from "./components/assistant-message";
 import type { BashExecutionComponent } from "./components/bash-execution";
@@ -481,11 +480,7 @@ export class InteractiveMode implements InteractiveModeContext {
 			this.renderTodoList();
 			return;
 		}
-		const artifactsDir = getArtifactsDir(sessionFile);
-		if (!artifactsDir) {
-			this.renderTodoList();
-			return;
-		}
+		const artifactsDir = sessionFile.slice(0, -6);
 		const todoPath = path.join(artifactsDir, TODO_FILE_NAME);
 		const file = Bun.file(todoPath);
 		if (!(await file.exists())) {

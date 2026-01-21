@@ -153,7 +153,8 @@ export interface SingleResult {
 	aborted?: boolean;
 	/** Aggregated usage from the subprocess, accumulated incrementally from message_end events. */
 	usage?: Usage;
-	artifactPaths?: { inputPath: string; outputPath: string; jsonlPath?: string };
+	/** Output path for the task result */
+	outputPath?: string;
 	/** Data extracted by registered subprocess tool handlers (keyed by tool name) */
 	extractedToolData?: Record<string, unknown[]>;
 	/** Output metadata for Output tool integration */

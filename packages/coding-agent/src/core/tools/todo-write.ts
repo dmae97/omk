@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
 import path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
@@ -13,7 +12,6 @@ import todoWriteDescription from "../../prompts/tools/todo-write.md" with { type
 import type { RenderResultOptions } from "../custom-tools/types";
 import { renderPromptTemplate } from "../prompt-templates";
 import type { ToolSession } from "../sdk";
-import { ensureArtifactsDir, getArtifactsDir } from "./task/artifacts";
 
 const todoWriteSchema = Type.Object({
 	todos: Type.Array(
@@ -135,10 +133,6 @@ async function loadTodoFile(filePath: string): Promise<TodoFile | null> {
 	}
 }
 
-async function saveTodoFile(filePath: string, data: TodoFile): Promise<void> {
-	await Bun.write(filePath, JSON.stringify(data, null, 2));
-}
-
 function formatTodoSummary(todos: TodoItem[]): string {
 	if (todos.length === 0) return "Todo list cleared.";
 	const completed = todos.filter((t) => t.status === "completed").length;
@@ -200,24 +194,14 @@ export class TodoWriteTool implements AgentTool<typeof todoWriteSchema, TodoWrit
 			};
 		}
 
-		const artifactsDir = getArtifactsDir(sessionFile);
-		if (!artifactsDir) {
-			return {
-				content: [{ type: "text", text: formatTodoSummary(todos) }],
-				details: { todos, updatedAt, storage: "memory" },
-			};
-		}
-
-		ensureArtifactsDir(artifactsDir);
-		const todoPath = path.join(artifactsDir, TODO_FILE_NAME);
+		const todoPath = path.join(sessionFile.slice(0, -6), TODO_FILE_NAME);
 		const existing = await loadTodoFile(todoPath);
 		const storedTodos = existing?.todos ?? [];
 		const merged = todos.length > 0 ? todos : [];
 		const fileData: TodoFile = { updatedAt, todos: merged };
 
 		try {
-			mkdirSync(artifactsDir, { recursive: true });
-			await saveTodoFile(todoPath, fileData);
+			await Bun.write(todoPath, JSON.stringify(fileData, null, 2));
 		} catch (error) {
 			logger.error("Failed to write todo file", { path: todoPath, error: String(error) });
 			return {

@@ -13,13 +13,17 @@
  *   - Session artifacts for debugging
  */
 
+import { mkdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Usage } from "@oh-my-pi/pi-ai";
+import { nanoid } from "nanoid";
 import type { Theme } from "../../../modes/interactive/theme/theme";
 import taskDescriptionTemplate from "../../../prompts/tools/task.md" with { type: "text" };
 import { renderPromptTemplate } from "../../prompt-templates";
+import type { ToolSession } from "..";
 import { formatDuration } from "../render-utils";
-import { cleanupTempDir, createTempArtifactsDir, getArtifactsDir } from "./artifacts";
 import { discoverAgents, getAgent } from "./discovery";
 import { runSubprocess } from "./executor";
 import { mapWithConcurrencyLimit } from "./parallel";
@@ -36,7 +40,6 @@ import {
 
 // Import review tools for side effects (registers subagent tool handlers)
 import "../review";
-import type { ToolSession } from "..";
 
 /** Format byte count for display */
 function formatBytes(bytes: number): string {
@@ -276,9 +279,10 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 
 		// Derive artifacts directory
 		const sessionFile = this.session.getSessionFile();
-		const artifactsDir = sessionFile ? getArtifactsDir(sessionFile) : null;
-		const tempArtifactsDir = artifactsDir ? null : createTempArtifactsDir();
+		const artifactsDir = sessionFile ? sessionFile.slice(0, -6) : null;
+		const tempArtifactsDir = artifactsDir ? null : path.join(tmpdir(), `omp-task-${nanoid()}`);
 		const effectiveArtifactsDir = artifactsDir || tempArtifactsDir!;
+		await mkdir(effectiveArtifactsDir, { recursive: true });
 
 		// Initialize progress tracking
 		const progressMap = new Map<number, AgentProgress>();
@@ -435,8 +439,8 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 			// Collect output paths (artifacts already written by executor in real-time)
 			const outputPaths: string[] = [];
 			for (const result of results) {
-				if (result.artifactPaths) {
-					outputPaths.push(result.artifactPaths.outputPath);
+				if (result.outputPath) {
+					outputPaths.push(result.outputPath);
 				}
 			}
 
@@ -468,7 +472,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 
 			// Cleanup temp directory if used
 			if (tempArtifactsDir) {
-				await cleanupTempDir(tempArtifactsDir);
+				await rm(tempArtifactsDir, { recursive: true, force: true });
 			}
 
 			return {
@@ -482,11 +486,6 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 				},
 			};
 		} catch (err) {
-			// Cleanup temp directory on error
-			if (tempArtifactsDir) {
-				await cleanupTempDir(tempArtifactsDir);
-			}
-
 			return {
 				content: [{ type: "text", text: `Task execution failed: ${err}` }],
 				details: {

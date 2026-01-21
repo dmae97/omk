@@ -4,6 +4,7 @@
  * Runs each subagent in a Bun Worker and forwards AgentEvents for progress tracking.
  */
 
+import path from "node:path";
 import type { AgentEvent, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { AuthStorage } from "../../auth-storage";
 import type { EventBus } from "../../event-bus";
@@ -16,7 +17,6 @@ import type { ToolSession } from "..";
 import { LspTool } from "../lsp/index";
 import type { LspParams } from "../lsp/types";
 import { PythonTool } from "../python";
-import { ensureArtifactsDir, getArtifactPaths } from "./artifacts";
 import { subprocessToolRegistry } from "./subprocess-tool-registry";
 import {
 	type AgentDefinition,
@@ -256,20 +256,9 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	const fullTask = context ? `${context}\n\n${task}` : task;
 
 	// Set up artifact paths and write input file upfront if artifacts dir provided
-	let artifactPaths: { inputPath: string; outputPath: string; jsonlPath: string } | undefined;
 	let subtaskSessionFile: string | undefined;
-
 	if (options.artifactsDir) {
-		ensureArtifactsDir(options.artifactsDir);
-		artifactPaths = getArtifactPaths(options.artifactsDir, taskId);
-		subtaskSessionFile = artifactPaths.jsonlPath;
-
-		// Write input file immediately (real-time visibility)
-		try {
-			await Bun.write(artifactPaths.inputPath, fullTask);
-		} catch {
-			// Non-fatal, continue without input artifact
-		}
+		subtaskSessionFile = path.join(options.artifactsDir, `${taskId}.jsonl`);
 	}
 
 	// Add tools if specified
@@ -1042,9 +1031,11 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	// Write output artifact (input and jsonl already written in real-time)
 	// Compute output metadata for Output tool integration
 	let outputMeta: { lineCount: number; charCount: number } | undefined;
-	if (artifactPaths) {
+	let outputPath: string | undefined;
+	if (options.artifactsDir) {
+		outputPath = path.join(options.artifactsDir, `${taskId}.md`);
 		try {
-			await Bun.write(artifactPaths.outputPath, rawOutput);
+			await Bun.write(outputPath, rawOutput);
 			outputMeta = {
 				lineCount: rawOutput.split("\n").length,
 				charCount: rawOutput.length,
@@ -1076,7 +1067,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		error: exitCode !== 0 && stderr ? stderr : undefined,
 		aborted: wasAborted,
 		usage: hasUsage ? accumulatedUsage : undefined,
-		artifactPaths,
+		outputPath,
 		extractedToolData: progress.extractedToolData,
 		outputMeta,
 	};

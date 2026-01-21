@@ -63,7 +63,6 @@ import { unmountAll } from "./ssh/sshfs-mount";
 import type { BashOperations } from "./tools/bash";
 import { normalizeDiff, normalizeToLF, ParseError, previewPatch, stripBom } from "./tools/patch";
 import { resolveToCwd } from "./tools/path-utils";
-import { getArtifactsDir } from "./tools/task/artifacts";
 import type { TodoItem } from "./tools/todo-write";
 import type { TtsrManager } from "./ttsr";
 
@@ -1991,10 +1990,7 @@ export class AgentSession {
 		const sessionFile = this.sessionManager.getSessionFile();
 		if (!sessionFile) return;
 
-		const artifactsDir = getArtifactsDir(sessionFile);
-		if (!artifactsDir) return;
-
-		const todoPath = `${artifactsDir}/todos.json`;
+		const todoPath = `${sessionFile.slice(0, -6)}/todos.json`;
 		const file = Bun.file(todoPath);
 		if (!(await file.exists())) {
 			this._todoReminderCount = 0;

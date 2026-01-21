@@ -1,6 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Changed output file extension from `.out.md` to `.md` for artifacts
+
+### Removed
+
+- Removed bundled worktree command from custom commands loader
+
+### Fixed
+
+- Fixed task artifact path handling and simplified file structure
 
 ## [6.8.2] - 2026-01-21
 

@@ -1,7 +1,6 @@
 import * as path from "node:path";
 import { Text } from "@oh-my-pi/pi-tui";
 import { logger } from "@oh-my-pi/pi-utils";
-import { getArtifactsDir } from "../../../core/tools/task/artifacts";
 import { theme } from "../theme/theme";
 import type { TodoItem } from "../types";
 
@@ -40,13 +39,7 @@ export class TodoDisplayComponent {
 			return;
 		}
 
-		const artifactsDir = getArtifactsDir(this.sessionFile);
-		if (!artifactsDir) {
-			this.todos = [];
-			this.visible = false;
-			return;
-		}
-
+		const artifactsDir = this.sessionFile.slice(0, -6); // strip .jsonl extension
 		const todoPath = path.join(artifactsDir, TODO_FILE_NAME);
 		const data = await loadTodoFile(todoPath);
 		this.todos = data?.todos ?? [];

@@ -32,33 +32,40 @@ function selectPreferredImageMimeType(mimeTypes: string[]): string | null {
 }
 
 export async function copyToClipboard(text: string): Promise<void> {
-	let promise: Promise<void>;
+	const p = platform();
+	const timeout = 5000;
+
 	try {
-		switch (platform()) {
-			case "darwin":
-				promise = $`pbcopy ${text}`.quiet().then(() => void 0);
-				break;
-			case "win32":
-				promise = $`clip ${text}`.quiet().then(() => void 0);
-				break;
-			case "linux":
-				if (isWaylandSession()) {
-					$`wl-copy ${text}`.quiet(); // fire and forget
+		if (p === "darwin") {
+			await Bun.spawn(["pbcopy"], { stdin: Buffer.from(text), timeout }).exited;
+		} else if (p === "win32") {
+			await Bun.spawn(["clip"], { stdin: Buffer.from(text), timeout }).exited;
+		} else {
+			const wayland = isWaylandSession();
+			if (wayland) {
+				const wlCopyPath = Bun.which("wl-copy");
+				if (wlCopyPath) {
+					// Fire-and-forget: wl-copy may not exit promptly, so we unref to avoid blocking
+					void Bun.spawn([wlCopyPath], { stdin: Buffer.from(text), timeout }).unref();
 					return;
-				} else {
-					promise = $`xclip -selection clipboard -t text/plain -i ${text}`.quiet().then(() => void 0);
 				}
-				break;
-			default:
-				throw new Error(`Unsupported platform: ${platform()}`);
+			}
+
+			// Linux - try xclip first, fall back to xsel
+			try {
+				await Bun.spawn(["xclip", "-selection", "clipboard"], { stdin: Buffer.from(text), timeout }).exited;
+			} catch {
+				await Bun.spawn(["xsel", "--clipboard", "--input"], { stdin: Buffer.from(text), timeout }).exited;
+			}
 		}
 	} catch (error) {
-		if (error instanceof Error) {
-			throw new Error(`Failed to copy to clipboard: ${error.message}`, { cause: error });
+		const msg = error instanceof Error ? error.message : String(error);
+		if (p === "linux") {
+			const tools = isWaylandSession() ? "wl-copy, xclip, or xsel" : "xclip or xsel";
+			throw new Error(`Failed to copy to clipboard. Install ${tools}: ${msg}`);
 		}
-		throw new Error(`Failed to copy to clipboard: ${String(error)}`, { cause: error });
+		throw new Error(`Failed to copy to clipboard: ${msg}`);
 	}
-	await Promise.race([promise, Bun.sleep(3000)]);
 }
 
 export interface ClipboardImage {

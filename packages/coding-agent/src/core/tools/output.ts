@@ -25,7 +25,6 @@ import {
 	TRUNCATE_LENGTHS,
 	truncate,
 } from "./render-utils";
-import { getArtifactsDir } from "./task/artifacts";
 
 const outputSchema = Type.Object({
 	ids: Type.Array(Type.String(), {
@@ -164,7 +163,7 @@ function applyQuery(data: unknown, query: string): unknown {
 function listAvailableOutputs(artifactsDir: string): string[] {
 	try {
 		const files = fs.readdirSync(artifactsDir);
-		return files.filter((f) => f.endsWith(".out.md")).map((f) => f.replace(".out.md", ""));
+		return files.filter((f) => f.endsWith(".md")).map((f) => f.replace(".md", ""));
 	} catch {
 		return [];
 	}
@@ -274,8 +273,8 @@ export class OutputTool implements AgentTool<typeof outputSchema, OutputToolDeta
 			};
 		}
 
-		const artifactsDir = getArtifactsDir(sessionFile);
-		if (!artifactsDir || !fs.existsSync(artifactsDir)) {
+		const artifactsDir = sessionFile.slice(0, -6); // strip .jsonl extension
+		if (!fs.existsSync(artifactsDir)) {
 			return {
 				content: [{ type: "text", text: "No artifacts directory found" }],
 				details: { outputs: [], notFound: params.ids },
@@ -296,14 +295,14 @@ export class OutputTool implements AgentTool<typeof outputSchema, OutputToolDeta
 		const queryResults: Array<{ id: string; value: unknown }> = [];
 
 		for (const id of params.ids) {
-			const outputPath = path.join(artifactsDir, `${id}.out.md`);
-
-			if (!fs.existsSync(outputPath)) {
+			const outputPath = path.join(artifactsDir, `${id}.md`);
+			const file = Bun.file(outputPath);
+			if (!(await file.exists())) {
 				notFound.push(id);
 				continue;
 			}
 
-			const rawContent = fs.readFileSync(outputPath, "utf-8");
+			const rawContent = await file.text();
 			const rawLines = rawContent.split("\n");
 			const totalLines = rawLines.length;
 			const totalChars = rawContent.length;

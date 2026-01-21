@@ -13,7 +13,6 @@ import { getAgentDir, getConfigDirs } from "../../config";
 import * as piCodingAgent from "../../index";
 import { execCommand } from "../exec";
 import { ReviewCommand } from "./bundled/review";
-import { WorktreeCommand } from "./bundled/wt";
 import type {
 	CustomCommand,
 	CustomCommandAPI,
@@ -150,13 +149,6 @@ function loadBundledCommands(sharedApi: CustomCommandAPI): LoadedCustomCommand[]
 		path: "bundled:review",
 		resolvedPath: "bundled:review",
 		command: new ReviewCommand(sharedApi),
-		source: "bundled",
-	});
-
-	bundled.push({
-		path: "bundled:wt",
-		resolvedPath: "bundled:wt",
-		command: new WorktreeCommand(sharedApi),
 		source: "bundled",
 	});
 
