@@ -14,14 +14,15 @@ describe("buildSystemPrompt", () => {
 			expect(prompt).toContain("<tools>\n(none)\n</tools>");
 		});
 
-		test("shows file paths guideline even with no tools", async () => {
+		test("includes core principles even with no tools", async () => {
 			const prompt = await buildSystemPrompt({
 				toolNames: [],
 				contextFiles: [],
 				skills: [],
 			});
 
-			expect(prompt).toContain("Show file paths clearly");
+			// Core <field> principles are always present regardless of tools
+			expect(prompt).toContain("Code is frozen thought");
 		});
 	});
 

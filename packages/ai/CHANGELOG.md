@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [7.0.0] - 2026-01-21
 ### Added
 
 - Added usage tracking system with normalized schema for provider quota/limit endpoints

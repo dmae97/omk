@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [7.0.0] - 2026-01-21
 ### Added
 
 - Added usage report deduplication to prevent duplicate account entries
