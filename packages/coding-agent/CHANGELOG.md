@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [6.8.5] - 2026-01-21
 ### Breaking Changes
 
 - Changed timeout parameter from seconds to milliseconds in Python tool
