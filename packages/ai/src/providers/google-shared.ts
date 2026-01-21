@@ -79,6 +79,8 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 	for (const msg of transformedMessages) {
 		if (msg.role === "user") {
 			if (typeof msg.content === "string") {
+				// Skip empty user messages
+				if (!msg.content || msg.content.trim() === "") continue;
 				contents.push({
 					role: "user",
 					parts: [{ text: sanitizeSurrogates(msg.content) }],
@@ -96,7 +98,14 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 						};
 					}
 				});
-				const filteredParts = !model.input.includes("image") ? parts.filter((p) => p.text !== undefined) : parts;
+				// Filter out images if model doesn't support them, and empty text blocks
+				let filteredParts = !model.input.includes("image") ? parts.filter((p) => p.text !== undefined) : parts;
+				filteredParts = filteredParts.filter((p) => {
+					if (p.text !== undefined) {
+						return p.text.trim().length > 0;
+					}
+					return true; // Keep non-text parts (images)
+				});
 				if (filteredParts.length === 0) continue;
 				contents.push({
 					role: "user",

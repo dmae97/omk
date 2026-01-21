@@ -342,22 +342,39 @@ function convertMessages(context: Context, model: Model<"bedrock-converse-stream
 
 		switch (m.role) {
 			case "user":
-				result.push({
-					role: ConversationRole.USER,
-					content:
-						typeof m.content === "string"
-							? [{ text: sanitizeSurrogates(m.content) }]
-							: m.content.map((c) => {
-									switch (c.type) {
-										case "text":
-											return { text: sanitizeSurrogates(c.text) };
-										case "image":
-											return { image: createImageBlock(c.mimeType, c.data) };
-										default:
-											throw new Error("Unknown user content type");
-									}
-								}),
-				});
+				if (typeof m.content === "string") {
+					// Skip empty user messages
+					if (!m.content || m.content.trim() === "") continue;
+					result.push({
+						role: ConversationRole.USER,
+						content: [{ text: sanitizeSurrogates(m.content) }],
+					});
+				} else {
+					const contentBlocks = m.content
+						.map((c) => {
+							switch (c.type) {
+								case "text":
+									return { text: sanitizeSurrogates(c.text) };
+								case "image":
+									return { image: createImageBlock(c.mimeType, c.data) };
+								default:
+									throw new Error("Unknown user content type");
+							}
+						})
+						.filter((block) => {
+							// Filter out empty text blocks
+							if ("text" in block && block.text) {
+								return block.text.trim().length > 0;
+							}
+							return true; // Keep non-text blocks (images)
+						});
+					// Skip message if all blocks filtered out
+					if (contentBlocks.length === 0) continue;
+					result.push({
+						role: ConversationRole.USER,
+						content: contentBlocks,
+					});
+				}
 				break;
 			case "assistant": {
 				// Skip assistant messages with empty content (e.g., from aborted requests)

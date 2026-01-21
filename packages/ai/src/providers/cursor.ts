@@ -1838,11 +1838,12 @@ function buildMcpToolDefinitions(tools: Tool[] | undefined): McpToolDefinition[]
 function extractUserMessageText(msg: Message): string {
 	if (msg.role !== "user") return "";
 	const content = msg.content;
-	if (typeof content === "string") return content;
-	return content
+	if (typeof content === "string") return content.trim();
+	const text = content
 		.filter((c): c is TextContent => c.type === "text")
 		.map((c) => c.text)
 		.join("\n");
+	return text.trim();
 }
 
 /**
@@ -1891,7 +1892,7 @@ function buildConversationTurns(messages: Message[]): Uint8Array[] {
 
 		// Create and serialize user message
 		const userText = extractUserMessageText(msg);
-		if (!userText) {
+		if (!userText || userText.length === 0) {
 			i++;
 			continue;
 		}
@@ -1982,9 +1983,14 @@ function buildGrpcRequest(
 	const userText =
 		lastMessage?.role === "user"
 			? typeof lastMessage.content === "string"
-				? lastMessage.content
+				? lastMessage.content.trim()
 				: extractText(lastMessage.content)
 			: "";
+
+	// Validate that we have non-empty user text for the action
+	if (!userText || userText.trim().length === 0) {
+		throw new Error("Cannot send empty user message to Cursor API");
+	}
 
 	const userMessage = create(UserMessageSchema, {
 		text: userText,

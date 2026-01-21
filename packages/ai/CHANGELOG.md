@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Fixed API validation errors when sending empty user messages (resume with `.`) across all providers:
+  - Google Cloud Code Assist (google-shared.ts)
+  - OpenAI Responses API (openai-responses.ts)
+  - OpenAI Codex Responses API (openai-codex-responses.ts)
+  - Cursor (cursor.ts)
+  - Amazon Bedrock (amazon-bedrock.ts)
 
 ## [6.9.69] - 2026-01-21
 ### Added

@@ -571,6 +571,8 @@ function convertMessages(model: Model<"openai-codex-responses">, context: Contex
 	for (const msg of transformedMessages) {
 		if (msg.role === "user") {
 			if (typeof msg.content === "string") {
+				// Skip empty user messages
+				if (!msg.content || msg.content.trim() === "") continue;
 				messages.push({
 					role: "user",
 					content: [{ type: "input_text", text: sanitizeSurrogates(msg.content) }],
@@ -589,9 +591,16 @@ function convertMessages(model: Model<"openai-codex-responses">, context: Contex
 						image_url: `data:${item.mimeType};base64,${item.data}`,
 					} satisfies ResponseInputImage;
 				});
-				const filteredContent = !model.input.includes("image")
+				// Filter out images if model doesn't support them, and empty text blocks
+				let filteredContent = !model.input.includes("image")
 					? content.filter((c) => c.type !== "input_image")
 					: content;
+				filteredContent = filteredContent.filter((c) => {
+					if (c.type === "input_text") {
+						return c.text.trim().length > 0;
+					}
+					return true; // Keep non-text content (images)
+				});
 				if (filteredContent.length === 0) continue;
 				messages.push({
 					role: "user",
