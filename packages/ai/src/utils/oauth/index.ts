@@ -30,6 +30,7 @@ export {
 export { loginAntigravity, refreshAntigravityToken } from "./google-antigravity";
 // Google Gemini CLI
 export { loginGeminiCli, refreshGoogleCloudToken } from "./google-gemini-cli";
+export type { OpenAICodexLoginOptions } from "./openai-codex";
 // OpenAI Codex (ChatGPT OAuth)
 export { loginOpenAICodex, refreshOpenAICodexToken } from "./openai-codex";
 

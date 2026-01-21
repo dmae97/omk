@@ -1,6 +1,28 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `headers` option to all providers for custom request headers
+- Added `onPayload` hook to observe provider request payloads before sending
+- Added `strictResponsesPairing` option for Azure OpenAI Responses API compatibility
+- Added `originator` option to `loginOpenAICodex` for custom OAuth flow identification
+- Added per-request `headers` and `onPayload` hooks to `StreamOptions`
+- Added `originator` option to `loginOpenAICodex`
+
+### Fixed
+
+- Fixed tool call ID normalization for OpenAI Responses API cross-provider handoffs
+- Skipped errored or aborted assistant messages during cross-provider transforms
+- Detected AWS ECS/IRSA credentials for Bedrock authentication checks
+- Detected AWS ECS/IRSA credentials for Bedrock authentication checks
+- Normalized Responses API tool call IDs during handoffs and refreshed handoff tests
+- Enforced strict tool call/result pairing for Azure OpenAI Responses API
+- Skipped errored or aborted assistant messages during cross-provider transforms
+
+### Security
+
+- Enhanced AWS credential detection to support ECS task roles and IRSA web identity tokens
 
 ## [6.8.2] - 2026-01-21
 ### Fixed

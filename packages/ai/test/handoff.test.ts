@@ -190,7 +190,7 @@ const providerContexts = {
 				},
 				{
 					type: "toolCall",
-					id: "call_789_item_012", // Anthropic requires alphanumeric, dash, and underscore only
+					id: "call_789|item_012",
 					name: "get_weather",
 					arguments: { location: "Sydney" },
 				},
@@ -210,7 +210,7 @@ const providerContexts = {
 		} satisfies AssistantMessage,
 		toolResult: {
 			role: "toolResult" as const,
-			toolCallId: "call_789_item_012", // Match the updated ID format
+			toolCallId: "call_789|item_012",
 			toolName: "get_weather",
 			content: [{ type: "text", text: "Weather in Sydney: 25°C, clear" }],
 			isError: false,
@@ -273,35 +273,8 @@ async function testProviderHandoff<TApi extends Api>(
 	sourceContext: (typeof providerContexts)[keyof typeof providerContexts],
 ): Promise<boolean> {
 	// Build conversation context
-	let assistantMessage: AssistantMessage = sourceContext.message;
-	let toolResult: ToolResultMessage | undefined | null = sourceContext.toolResult;
-
-	// If target is Mistral, convert tool call IDs to Mistral format
-	if (targetModel.provider === "mistral" && assistantMessage.content.some((c) => c.type === "toolCall")) {
-		// Clone the message to avoid mutating the original
-		assistantMessage = {
-			...assistantMessage,
-			content: assistantMessage.content.map((content) => {
-				if (content.type === "toolCall") {
-					// Generate a Mistral-style tool call ID (uppercase letters and numbers)
-					const mistralId = "T7TcP5RVB"; // Using the format we know works
-					return {
-						...content,
-						id: mistralId,
-					};
-				}
-				return content;
-			}),
-		} as AssistantMessage;
-
-		// Also update the tool result if present
-		if (toolResult) {
-			toolResult = {
-				...toolResult,
-				toolCallId: "T7TcP5RVB", // Match the tool call ID
-			};
-		}
-	}
+	const assistantMessage: AssistantMessage = sourceContext.message;
+	const toolResult: ToolResultMessage | undefined | null = sourceContext.toolResult;
 
 	const messages: Message[] = [
 		{

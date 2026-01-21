@@ -93,14 +93,16 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream"> = (
 				profile: options.profile,
 			});
 
-			const command = new ConverseStreamCommand({
+			const commandInput = {
 				modelId: model.id,
 				messages: convertMessages(context, model),
 				system: buildSystemPrompt(context.systemPrompt, model),
 				inferenceConfig: { maxTokens: options.maxTokens, temperature: options.temperature },
 				toolConfig: convertToolConfig(context.tools, options.toolChoice),
 				additionalModelRequestFields: buildAdditionalModelRequestFields(model, options),
-			});
+			};
+			options?.onPayload?.(commandInput);
+			const command = new ConverseStreamCommand(commandInput);
 
 			const response = await client.send(command, { abortSignal: options.signal });
 

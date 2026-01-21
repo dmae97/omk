@@ -2027,6 +2027,8 @@ function buildGrpcRequest(
 		conversationId: state.conversationId,
 	});
 
+	options?.onPayload?.(runRequest);
+
 	// Tools are sent later via requestContext (exec handshake)
 
 	if (options?.customSystemPrompt) {

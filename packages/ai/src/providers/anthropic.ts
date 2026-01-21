@@ -161,8 +161,9 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 		try {
 			const apiKey = options?.apiKey ?? getEnvApiKey(model.provider) ?? "";
 			const extraBetas = normalizeExtraBetas(options?.betas);
-			const { client, isOAuthToken } = createClient(model, apiKey, extraBetas, true);
+			const { client, isOAuthToken } = createClient(model, apiKey, extraBetas, true, options?.headers);
 			const params = buildParams(model, context, isOAuthToken, options);
+			options?.onPayload?.(params);
 			const anthropicStream = client.messages.stream({ ...params, stream: true }, { signal: options?.signal });
 			stream.push({ type: "start", partial: output });
 
@@ -420,6 +421,7 @@ function createClient(
 	apiKey: string,
 	extraBetas: string[],
 	stream: boolean,
+	extraHeaders?: Record<string, string>,
 ): { client: Anthropic; isOAuthToken: boolean } {
 	const oauthToken = isOAuthToken(apiKey);
 
@@ -438,7 +440,7 @@ function createClient(
 		isOAuth: oauthToken,
 		extraBetas: mergedBetas,
 		stream,
-		modelHeaders: model.headers,
+		modelHeaders: { ...(model.headers ?? {}), ...(extraHeaders ?? {}) },
 	});
 
 	const clientOptions: ConstructorParameters<typeof Anthropic>[0] = {

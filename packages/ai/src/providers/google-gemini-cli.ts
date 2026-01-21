@@ -410,6 +410,7 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 			const endpoints = baseUrl ? [baseUrl] : isAntigravity ? ANTIGRAVITY_ENDPOINT_FALLBACKS : [DEFAULT_ENDPOINT];
 
 			const requestBody = buildRequest(model, context, projectId, options, isAntigravity);
+			options?.onPayload?.(requestBody);
 			const headers = isAntigravity ? ANTIGRAVITY_HEADERS : GEMINI_CLI_HEADERS;
 
 			const requestHeaders = {
@@ -418,6 +419,7 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 				Accept: "text/event-stream",
 				...headers,
 				...(isClaudeThinkingModel(model.id) ? { "anthropic-beta": CLAUDE_THINKING_BETA_HEADER } : {}),
+				...(options?.headers ?? {}),
 			};
 			const requestBodyJson = JSON.stringify(requestBody);
 

@@ -50,6 +50,11 @@ export interface OpenAIResponsesOptions extends StreamOptions {
 	reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
 	reasoningSummary?: "auto" | "detailed" | "concise" | null;
 	serviceTier?: ResponseCreateParamsStreaming["service_tier"];
+	/**
+	 * Enforce strict tool call/result pairing when building Responses API inputs.
+	 * Azure OpenAI Responses API requires tool results to have a matching tool call.
+	 */
+	strictResponsesPairing?: boolean;
 }
 
 /**
@@ -85,8 +90,9 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 		try {
 			// Create OpenAI client
 			const apiKey = options?.apiKey || getEnvApiKey(model.provider) || "";
-			const client = createClient(model, context, apiKey);
+			const client = createClient(model, context, apiKey, options?.headers);
 			const params = buildParams(model, context, options);
+			options?.onPayload?.(params);
 			const openaiStream = await client.responses.create(
 				params,
 				options?.signal ? { signal: options.signal } : undefined,
@@ -317,7 +323,12 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 	return stream;
 };
 
-function createClient(model: Model<"openai-responses">, context: Context, apiKey?: string) {
+function createClient(
+	model: Model<"openai-responses">,
+	context: Context,
+	apiKey?: string,
+	extraHeaders?: Record<string, string>,
+) {
 	if (!apiKey) {
 		if (!process.env.OPENAI_API_KEY) {
 			throw new Error(
@@ -327,7 +338,7 @@ function createClient(model: Model<"openai-responses">, context: Context, apiKey
 		apiKey = process.env.OPENAI_API_KEY;
 	}
 
-	const headers = { ...model.headers };
+	const headers = { ...(model.headers ?? {}), ...(extraHeaders ?? {}) };
 	if (model.provider === "github-copilot") {
 		// Copilot expects X-Initiator to indicate whether the request is user-initiated
 		// or agent-initiated (e.g. follow-up after assistant/tool messages). If there is
@@ -362,7 +373,8 @@ function createClient(model: Model<"openai-responses">, context: Context, apiKey
 }
 
 function buildParams(model: Model<"openai-responses">, context: Context, options?: OpenAIResponsesOptions) {
-	const messages = convertMessages(model, context);
+	const strictResponsesPairing = options?.strictResponsesPairing ?? isAzureOpenAIBaseUrl(model.baseUrl ?? "");
+	const messages = convertMessages(model, context, strictResponsesPairing);
 
 	const params: ResponseCreateParamsStreaming = {
 		model: model.id,
@@ -413,8 +425,26 @@ function buildParams(model: Model<"openai-responses">, context: Context, options
 	return params;
 }
 
-function convertMessages(model: Model<"openai-responses">, context: Context): ResponseInput {
+function normalizeResponsesToolCallId(id: string): { callId: string; itemId: string } {
+	const [callId, itemId] = id.split("|");
+	if (callId && itemId) {
+		return { callId, itemId };
+	}
+	const hash = shortHash(id);
+	return { callId: `call_${hash}`, itemId: `item_${hash}` };
+}
+
+function isAzureOpenAIBaseUrl(baseUrl: string): boolean {
+	return baseUrl.includes(".openai.azure.com") || baseUrl.includes("azure.com/openai");
+}
+
+function convertMessages(
+	model: Model<"openai-responses">,
+	context: Context,
+	strictResponsesPairing: boolean,
+): ResponseInput {
 	const messages: ResponseInput = [];
+	const knownCallIds = new Set<string>();
 
 	const transformedMessages = transformMessages(context.messages, model);
 
@@ -487,10 +517,12 @@ function convertMessages(model: Model<"openai-responses">, context: Context): Re
 					// Do not submit toolcall blocks if the completion had an error (i.e. abort)
 				} else if (block.type === "toolCall" && msg.stopReason !== "error") {
 					const toolCall = block as ToolCall;
+					const normalized = normalizeResponsesToolCallId(toolCall.id);
+					knownCallIds.add(normalized.callId);
 					output.push({
 						type: "function_call",
-						id: toolCall.id.split("|")[1],
-						call_id: toolCall.id.split("|")[0],
+						id: normalized.itemId,
+						call_id: normalized.callId,
 						name: toolCall.name,
 						arguments: JSON.stringify(toolCall.arguments),
 					});
@@ -505,12 +537,16 @@ function convertMessages(model: Model<"openai-responses">, context: Context): Re
 				.map((c) => (c as any).text)
 				.join("\n");
 			const hasImages = msg.content.some((c) => c.type === "image");
+			const normalized = normalizeResponsesToolCallId(msg.toolCallId);
+			if (strictResponsesPairing && !knownCallIds.has(normalized.callId)) {
+				continue;
+			}
 
 			// Always send function_call_output with text (or placeholder if only images)
 			const hasText = textResult.length > 0;
 			messages.push({
 				type: "function_call_output",
-				call_id: msg.toolCallId.split("|")[0],
+				call_id: normalized.callId,
 				output: sanitizeSurrogates(hasText ? textResult : "(see attached image)"),
 			});
 

@@ -79,10 +79,17 @@ export function getEnvApiKey(provider: any): string | undefined {
 		// 1. AWS_PROFILE - named profile from ~/.aws/credentials
 		// 2. AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY - standard IAM keys
 		// 3. AWS_BEARER_TOKEN_BEDROCK - Bedrock API keys (bearer token)
+		// 4. AWS_CONTAINER_CREDENTIALS_* - ECS/Task IAM role credentials
+		// 5. AWS_WEB_IDENTITY_TOKEN_FILE + AWS_ROLE_ARN - IRSA (EKS) web identity
+		const hasEcsCredentials =
+			!!process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || !!process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI;
+		const hasWebIdentity = !!process.env.AWS_WEB_IDENTITY_TOKEN_FILE && !!process.env.AWS_ROLE_ARN;
 		if (
 			process.env.AWS_PROFILE ||
 			(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ||
-			process.env.AWS_BEARER_TOKEN_BEDROCK
+			process.env.AWS_BEARER_TOKEN_BEDROCK ||
+			hasEcsCredentials ||
+			hasWebIdentity
 		) {
 			return "<authenticated>";
 		}
@@ -252,7 +259,9 @@ function mapOptionsForApi<TApi extends Api>(
 		maxTokens: options?.maxTokens || Math.min(model.maxTokens, 32000),
 		signal: options?.signal,
 		apiKey: apiKey || options?.apiKey,
+		headers: options?.headers,
 		sessionId: options?.sessionId,
+		onPayload: options?.onPayload,
 		execHandlers: options?.execHandlers,
 	};
 

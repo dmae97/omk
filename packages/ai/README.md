@@ -607,6 +607,28 @@ context.messages.push({ role: "user", content: "Please continue" });
 const continuation = await complete(model, context);
 ```
 
+### Common Stream Options
+
+All providers accept the base `StreamOptions` (in addition to provider-specific options):
+
+- `apiKey`: Override the provider API key
+- `headers`: Extra request headers merged on top of model-defined headers
+- `sessionId`: Provider-specific session identifier (prompt caching/routing)
+- `signal`: Abort in-flight requests
+- `onPayload`: Callback invoked with the provider request payload just before sending
+
+Example:
+
+```typescript
+const response = await complete(model, context, {
+	apiKey: "sk-live",
+	headers: { "X-Debug-Trace": "true" },
+	onPayload: (payload) => {
+		console.log("request payload", payload);
+	},
+});
+```
+
 ## APIs, Models, and Providers
 
 The library implements 4 API interfaces, each with its own streaming function and options:
@@ -985,6 +1007,15 @@ import {
 	type OAuthProvider, // 'anthropic' | 'openai-codex' | 'github-copilot' | 'google-gemini-cli' | 'google-antigravity'
 	type OAuthCredentials,
 } from "@oh-my-pi/pi-ai";
+```
+
+`loginOpenAICodex` accepts an optional `originator` value used in the OAuth flow:
+
+```typescript
+await loginOpenAICodex({
+	onAuth: ({ url }) => console.log(url),
+	originator: "my-cli",
+});
 ```
 
 ### Login Flow Example

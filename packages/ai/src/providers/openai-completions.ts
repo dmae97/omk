@@ -101,8 +101,9 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 
 		try {
 			const apiKey = options?.apiKey || getEnvApiKey(model.provider) || "";
-			const client = createClient(model, context, apiKey);
+			const client = createClient(model, context, apiKey, options?.headers);
 			const params = buildParams(model, context, options);
+			options?.onPayload?.(params);
 			const openaiStream = await client.chat.completions.create(params, { signal: options?.signal });
 			stream.push({ type: "start", partial: output });
 
@@ -319,7 +320,12 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 	return stream;
 };
 
-function createClient(model: Model<"openai-completions">, context: Context, apiKey?: string) {
+function createClient(
+	model: Model<"openai-completions">,
+	context: Context,
+	apiKey?: string,
+	extraHeaders?: Record<string, string>,
+) {
 	if (!apiKey) {
 		if (!process.env.OPENAI_API_KEY) {
 			throw new Error(
@@ -329,7 +335,7 @@ function createClient(model: Model<"openai-completions">, context: Context, apiK
 		apiKey = process.env.OPENAI_API_KEY;
 	}
 
-	const headers = { ...model.headers };
+	const headers = { ...(model.headers ?? {}), ...(extraHeaders ?? {}) };
 	if (model.provider === "github-copilot") {
 		// Copilot expects X-Initiator to indicate whether the request is user-initiated
 		// or agent-initiated (e.g. follow-up after assistant/tool messages). If there is

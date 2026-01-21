@@ -49,6 +49,7 @@ class OpenAICodexOAuthFlow extends OAuthCallbackFlow {
 	constructor(
 		ctrl: OAuthController,
 		private readonly pkce: PKCE,
+		private readonly originator: string,
 	) {
 		super(ctrl, CALLBACK_PORT, CALLBACK_PATH);
 	}
@@ -67,7 +68,7 @@ class OpenAICodexOAuthFlow extends OAuthCallbackFlow {
 			state,
 			id_token_add_organizations: "true",
 			codex_cli_simplified_flow: "true",
-			originator: "opencode",
+			originator: this.originator,
 		});
 
 		const url = `${AUTHORIZE_URL}?${searchParams.toString()}`;
@@ -122,9 +123,15 @@ async function exchangeCodeForToken(code: string, verifier: string, redirectUri:
 /**
  * Login with OpenAI Codex OAuth
  */
-export async function loginOpenAICodex(ctrl: OAuthController): Promise<OAuthCredentials> {
+export type OpenAICodexLoginOptions = OAuthController & {
+	/** Optional originator value for OpenAI Codex OAuth. Default: "opencode". */
+	originator?: string;
+};
+
+export async function loginOpenAICodex(options: OpenAICodexLoginOptions): Promise<OAuthCredentials> {
 	const pkce = await generatePKCE();
-	const flow = new OpenAICodexOAuthFlow(ctrl, pkce);
+	const originator = options.originator?.trim() || "opencode";
+	const flow = new OpenAICodexOAuthFlow(options, pkce, originator);
 
 	return flow.login();
 }

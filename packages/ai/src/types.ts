@@ -97,11 +97,21 @@ export interface StreamOptions {
 	signal?: AbortSignal;
 	apiKey?: string;
 	/**
+	 * Additional headers to include in provider requests.
+	 * These are merged on top of model-defined headers.
+	 */
+	headers?: Record<string, string>;
+	/**
 	 * Optional session identifier for providers that support session-based caching.
 	 * Providers can use this to enable prompt caching, request routing, or other
 	 * session-aware features. Ignored by providers that don't support it.
 	 */
 	sessionId?: string;
+	/**
+	 * Optional hook to observe the provider request payload before it is sent.
+	 * The payload format is provider-specific.
+	 */
+	onPayload?: (payload: unknown) => void;
 	/** Cursor exec/MCP tool handlers (cursor-agent only). */
 	execHandlers?: CursorExecHandlers;
 }

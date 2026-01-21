@@ -55,6 +55,29 @@ const CODEX_MAX_RETRIES = 2;
 const CODEX_RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 const CODEX_RETRY_DELAY_MS = 500;
 
+/** Fast deterministic hash to shorten long strings */
+function shortHash(str: string): string {
+	let h1 = 0xdeadbeef;
+	let h2 = 0x41c6ce57;
+	for (let i = 0; i < str.length; i++) {
+		const ch = str.charCodeAt(i);
+		h1 = Math.imul(h1 ^ ch, 2654435761);
+		h2 = Math.imul(h2 ^ ch, 1597334677);
+	}
+	h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+	h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+	return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
+}
+
+function normalizeResponsesToolCallId(id: string): { callId: string; itemId: string } {
+	const [callId, itemId] = id.split("|");
+	if (callId && itemId) {
+		return { callId, itemId };
+	}
+	const hash = shortHash(id);
+	return { callId: `call_${hash}`, itemId: `item_${hash}` };
+}
+
 export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"> = (
 	model: Model<"openai-codex-responses">,
 	context: Context,
@@ -128,9 +151,15 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 			};
 
 			const transformedBody = await transformRequestBody(params, codexOptions, systemPrompt);
+			options?.onPayload?.(transformedBody);
 
 			const reasoningEffort = transformedBody.reasoning?.effort ?? null;
-			const headers = createCodexHeaders(model.headers, accountId, apiKey, options?.sessionId);
+			const headers = createCodexHeaders(
+				{ ...(model.headers ?? {}), ...(options?.headers ?? {}) },
+				accountId,
+				apiKey,
+				options?.sessionId,
+			);
 			logCodexDebug("codex request", {
 				url,
 				model: params.model,
@@ -508,19 +537,6 @@ function getAccountId(accessToken: string): string {
 	return accountId;
 }
 
-function shortHash(str: string): string {
-	let h1 = 0xdeadbeef;
-	let h2 = 0x41c6ce57;
-	for (let i = 0; i < str.length; i++) {
-		const ch = str.charCodeAt(i);
-		h1 = Math.imul(h1 ^ ch, 2654435761);
-		h2 = Math.imul(h2 ^ ch, 1597334677);
-	}
-	h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-	h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-	return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
-}
-
 function convertMessages(model: Model<"openai-codex-responses">, context: Context): ResponseInput {
 	const messages: ResponseInput = [];
 
@@ -583,10 +599,11 @@ function convertMessages(model: Model<"openai-codex-responses">, context: Contex
 					} satisfies ResponseOutputMessage);
 				} else if (block.type === "toolCall" && msg.stopReason !== "error") {
 					const toolCall = block as ToolCall;
+					const normalized = normalizeResponsesToolCallId(toolCall.id);
 					output.push({
 						type: "function_call",
-						id: toolCall.id.split("|")[1],
-						call_id: toolCall.id.split("|")[0],
+						id: normalized.itemId,
+						call_id: normalized.callId,
 						name: toolCall.name,
 						arguments: JSON.stringify(toolCall.arguments),
 					});
@@ -600,11 +617,12 @@ function convertMessages(model: Model<"openai-codex-responses">, context: Contex
 				.map((c) => (c as { text: string }).text)
 				.join("\n");
 			const hasImages = msg.content.some((c) => c.type === "image");
+			const normalized = normalizeResponsesToolCallId(msg.toolCallId);
 
 			const hasText = textResult.length > 0;
 			messages.push({
 				type: "function_call_output",
-				call_id: msg.toolCallId.split("|")[0],
+				call_id: normalized.callId,
 				output: sanitizeSurrogates(hasText ? textResult : "(see attached image)"),
 			});
 

@@ -9,9 +9,34 @@ function normalizeToolCallId(id: string): string {
 	return id.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40);
 }
 
+/** Fast deterministic hash to shorten long strings */
+function shortHash(str: string): string {
+	let h1 = 0xdeadbeef;
+	let h2 = 0x41c6ce57;
+	for (let i = 0; i < str.length; i++) {
+		const ch = str.charCodeAt(i);
+		h1 = Math.imul(h1 ^ ch, 2654435761);
+		h2 = Math.imul(h2 ^ ch, 1597334677);
+	}
+	h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+	h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+	return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
+}
+
+function normalizeResponsesToolCallId(id: string): string {
+	const [callId, itemId] = id.split("|");
+	if (callId && itemId) {
+		return id;
+	}
+	const hash = shortHash(id);
+	return `call_${hash}|item_${hash}`;
+}
+
 export function transformMessages<TApi extends Api>(messages: Message[], model: Model<TApi>): Message[] {
 	// Build a map of original tool call IDs to normalized IDs for github-copilot cross-API switches
 	const toolCallIdMap = new Map<string, string>();
+	const skippedToolCallIds = new Set<string>();
+	const needsResponsesToolCallIds = model.api === "openai-responses" || model.api === "openai-codex-responses";
 
 	// First pass: transform messages (thinking blocks, tool call ID normalization)
 	const transformed = messages.flatMap<Message>((msg): Message[] => {
@@ -22,9 +47,15 @@ export function transformMessages<TApi extends Api>(messages: Message[], model: 
 
 		// Handle toolResult messages - normalize toolCallId if we have a mapping
 		if (msg.role === "toolResult") {
+			if (skippedToolCallIds.has(msg.toolCallId)) {
+				return [];
+			}
 			const normalizedId = toolCallIdMap.get(msg.toolCallId);
 			if (normalizedId && normalizedId !== msg.toolCallId) {
 				return [{ ...msg, toolCallId: normalizedId }];
+			}
+			if (needsResponsesToolCallIds) {
+				return [{ ...msg, toolCallId: normalizeResponsesToolCallId(msg.toolCallId) }];
 			}
 			return [msg];
 		}
@@ -32,10 +63,23 @@ export function transformMessages<TApi extends Api>(messages: Message[], model: 
 		// Assistant messages need transformation check
 		if (msg.role === "assistant") {
 			const assistantMsg = msg as AssistantMessage;
+			const isSameProviderApi = assistantMsg.provider === model.provider && assistantMsg.api === model.api;
+			const isErroredAssistant = assistantMsg.stopReason === "error" || assistantMsg.stopReason === "aborted";
+			if (!isSameProviderApi && isErroredAssistant) {
+				for (const block of assistantMsg.content) {
+					if (block.type === "toolCall") {
+						skippedToolCallIds.add(block.id);
+					}
+				}
+				return [];
+			}
 
 			// If message is from the same provider and API, keep as is
-			if (assistantMsg.provider === model.provider && assistantMsg.api === model.api) {
-				if (assistantMsg.stopReason === "error" && assistantMsg.content.length === 0) {
+			if (isSameProviderApi) {
+				if (
+					(assistantMsg.stopReason === "error" || assistantMsg.stopReason === "aborted") &&
+					assistantMsg.content.length === 0
+				) {
 					return [];
 				}
 				return [msg];
@@ -64,12 +108,20 @@ export function transformMessages<TApi extends Api>(messages: Message[], model: 
 					};
 				}
 				// Normalize tool call IDs when target API requires strict format
-				if (block.type === "toolCall" && needsToolCallIdNormalization) {
+				if (block.type === "toolCall") {
 					const toolCall = block as ToolCall;
-					const normalizedId = normalizeToolCallId(toolCall.id);
-					if (normalizedId !== toolCall.id) {
-						toolCallIdMap.set(toolCall.id, normalizedId);
-						return { ...toolCall, id: normalizedId };
+					if (needsResponsesToolCallIds) {
+						const normalizedId = normalizeResponsesToolCallId(toolCall.id);
+						if (normalizedId !== toolCall.id) {
+							toolCallIdMap.set(toolCall.id, normalizedId);
+							return { ...toolCall, id: normalizedId };
+						}
+					} else if (needsToolCallIdNormalization) {
+						const normalizedId = normalizeToolCallId(toolCall.id);
+						if (normalizedId !== toolCall.id) {
+							toolCallIdMap.set(toolCall.id, normalizedId);
+							return { ...toolCall, id: normalizedId };
+						}
 					}
 				}
 				// All other blocks pass through unchanged
