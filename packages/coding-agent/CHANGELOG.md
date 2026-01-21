@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [6.9.69] - 2026-01-21
+
 ### Added
 
 - Added cell-by-cell status tracking with duration and exit code for Python execution

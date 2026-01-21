@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [6.9.69] - 2026-01-21
 ### Added
 
 - Added duration and time-to-first-token (ttft) metrics to all AI provider responses
