@@ -56,11 +56,11 @@ describe("python tool schema", () => {
 		};
 
 		expect(schema.type).toBe("object");
-		expect(schema.properties.code.type).toBe("string");
+		expect(schema.properties.cells.type).toBe("array");
 		expect(schema.properties.timeoutMs.type).toBe("number");
-		expect(schema.properties.workdir.type).toBe("string");
+		expect(schema.properties.cwd.type).toBe("string");
 		expect(schema.properties.reset.type).toBe("boolean");
-		expect(schema.required).toEqual(["code"]);
+		expect(schema.required).toEqual(["cells"]);
 	});
 });
 

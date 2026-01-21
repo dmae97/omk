@@ -1,6 +1,20 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added multi-cell Python execution with sequential processing in persistent kernel
+- Added cell titles for better Python code organization and debugging
+
+### Changed
+
+- Changed Python tool to use `cells` array instead of single `code` parameter
+- Renamed `workdir` parameter to `cwd` in Bash and Python tools for consistency
+- Updated Python tool to display cell-by-cell output when multiple cells are provided
+
+### Fixed
+
+- Fixed indentation adjustment logic to handle edge cases with mixed indentation levels
 
 ## [6.9.0] - 2026-01-21
 ### Removed

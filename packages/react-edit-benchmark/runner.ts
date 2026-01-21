@@ -162,7 +162,7 @@ async function runSingleTask(
 	task: EditTask,
 	runIndex: number,
 	config: BenchmarkConfig,
-	workDir: string,
+	cwd: string,
 	expectedDir: string,
 	cliPath: string,
 ): Promise<TaskRunResult> {
@@ -193,7 +193,7 @@ async function runSingleTask(
 	};
 
 	try {
-		await appendFile(logFile, `{"type":"meta","task":"${task.id}","run":${runIndex},"workDir":"${workDir}"}\n`);
+		await appendFile(logFile, `{"type":"meta","task":"${task.id}","run":${runIndex},"workDir":"${cwd}"}\n`);
 
 		const env: Record<string, string> = { OMP_NO_TITLE: "1" };
 		if (config.editVariant !== undefined) {
@@ -209,7 +209,7 @@ async function runSingleTask(
 
 		client = new RpcClient({
 			cliPath,
-			cwd: workDir,
+			cwd,
 			provider: config.provider,
 			model: config.model,
 			args: ["--tools", "read,edit,write,ls"],
@@ -323,9 +323,9 @@ ${
 
 		patchApplied = toolStats.edit > 0;
 
-		const verification = await verifyExpectedFiles(expectedDir, workDir);
+		const verification = await verifyExpectedFiles(expectedDir, cwd);
 		if (config.autoFormat) {
-			await formatDirectory(workDir);
+			await formatDirectory(cwd);
 		}
 
 		verificationPassed = verification.success;
@@ -382,7 +382,7 @@ ${
 async function runBatchedTask(
 	item: TaskRunItem,
 	config: BenchmarkConfig,
-	workDir: string,
+	cwd: string,
 	expectedDir: string,
 	client: RpcClient,
 ): Promise<TaskRunResult> {
@@ -416,7 +416,7 @@ async function runBatchedTask(
 	try {
 		await appendFile(
 			logFile,
-			`{"type":"meta","task":"${task.id}","run":${runIndex},"workDir":"${workDir}","batched":true}\n`,
+			`{"type":"meta","task":"${task.id}","run":${runIndex},"workDir":"${cwd}","batched":true}\n`,
 		);
 
 		const promptWithContext = buildPrompt(task, config);
@@ -465,9 +465,9 @@ async function runBatchedTask(
 		patchApplied = toolStats.edit > 0;
 
 		const filesToVerify = task.files.length > 0 ? task.files : undefined;
-		const verification = await verifyExpectedFileSubset(expectedDir, workDir, filesToVerify);
+		const verification = await verifyExpectedFileSubset(expectedDir, cwd, filesToVerify);
 		if (config.autoFormat) {
-			await formatDirectory(workDir);
+			await formatDirectory(cwd);
 		}
 
 		verificationPassed = verification.success;

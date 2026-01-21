@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { adjustNewTextIndentation, DEFAULT_FUZZY_THRESHOLD, findEditMatch } from "../src/core/tools/patch";
+import { adjustIndentation, DEFAULT_FUZZY_THRESHOLD, findEditMatch } from "../src/core/tools/patch";
 
 describe("findEditMatch", () => {
 	describe("exact matching", () => {
@@ -149,12 +149,12 @@ describe("findEditMatch", () => {
 	});
 });
 
-describe("adjustNewTextIndentation", () => {
+describe("adjustIndentation", () => {
 	test("adds indentation when actualText is more indented than oldText", () => {
 		const oldText = "foo\nbar";
 		const actualText = "    foo\n    bar";
 		const newText = "foo\nbaz\nbar";
-		const result = adjustNewTextIndentation(oldText, actualText, newText);
+		const result = adjustIndentation(oldText, actualText, newText);
 		expect(result).toBe("    foo\n    baz\n    bar");
 	});
 
@@ -162,7 +162,7 @@ describe("adjustNewTextIndentation", () => {
 		const oldText = "        foo\n        bar";
 		const actualText = "    foo\n    bar";
 		const newText = "        foo\n        baz";
-		const result = adjustNewTextIndentation(oldText, actualText, newText);
+		const result = adjustIndentation(oldText, actualText, newText);
 		expect(result).toBe("    foo\n    baz");
 	});
 
@@ -170,7 +170,7 @@ describe("adjustNewTextIndentation", () => {
 		const oldText = "foo\n\nbar";
 		const actualText = "    foo\n\n    bar";
 		const newText = "foo\n\nbaz";
-		const result = adjustNewTextIndentation(oldText, actualText, newText);
+		const result = adjustIndentation(oldText, actualText, newText);
 		expect(result).toBe("    foo\n\n    baz");
 	});
 
@@ -178,7 +178,7 @@ describe("adjustNewTextIndentation", () => {
 		const oldText = "    foo";
 		const actualText = "    foo";
 		const newText = "    bar";
-		const result = adjustNewTextIndentation(oldText, actualText, newText);
+		const result = adjustIndentation(oldText, actualText, newText);
 		expect(result).toBe("    bar");
 	});
 
@@ -186,7 +186,7 @@ describe("adjustNewTextIndentation", () => {
 		const oldText = "foo";
 		const actualText = "\t\tfoo";
 		const newText = "bar";
-		const result = adjustNewTextIndentation(oldText, actualText, newText);
+		const result = adjustIndentation(oldText, actualText, newText);
 		expect(result).toBe("\t\tbar");
 	});
 
@@ -194,7 +194,7 @@ describe("adjustNewTextIndentation", () => {
 		const oldText = "if (x) {\n  return y;\n}";
 		const actualText = "    if (x) {\n      return y;\n    }";
 		const newText = "if (x) {\n  return z;\n}";
-		const result = adjustNewTextIndentation(oldText, actualText, newText);
+		const result = adjustIndentation(oldText, actualText, newText);
 		expect(result).toBe("    if (x) {\n      return z;\n    }");
 	});
 
@@ -202,7 +202,7 @@ describe("adjustNewTextIndentation", () => {
 		const oldText = "    foo";
 		const actualText = "foo";
 		const newText = "  bar";
-		const result = adjustNewTextIndentation(oldText, actualText, newText);
+		const result = adjustIndentation(oldText, actualText, newText);
 		// Should remove up to 4 chars, but line only has 2, so remove 2
 		expect(result).toBe("bar");
 	});

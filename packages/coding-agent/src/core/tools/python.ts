@@ -39,15 +39,26 @@ function groupPreludeHelpers(helpers: PreludeHelper[]): PreludeCategory[] {
 }
 
 export const pythonSchema = Type.Object({
-	code: Type.String({ description: "Python code to execute" }),
-	timeoutMs: Type.Optional(Type.Number({ description: "Timeout in milliseconds (default: 30000)" })),
-	workdir: Type.Optional(
-		Type.String({ description: "Working directory for the command (default: current directory)" }),
+	cells: Type.Array(
+		Type.Object({
+			code: Type.String({
+				description:
+					"Python code for this cell. Keep it focused (imports, helper, test, use). No narrative text—put explanations in the assistant message or in the cell title.",
+			}),
+			title: Type.Optional(
+				Type.String({ description: "Short label for the cell (e.g., 'imports', 'parse helper')." }),
+			),
+		}),
+		{
+			description:
+				"Python cells to execute sequentially. Each cell runs in the same kernel—imports and variables persist. Keep cells small: one logical step each (import, define, test, use). If a cell fails, fix only that cell; earlier cells' state remains.",
+		},
 	),
+	timeoutMs: Type.Optional(Type.Number({ description: "Timeout in milliseconds (default: 30000)" })),
+	cwd: Type.Optional(Type.String({ description: "Working directory for the command (default: current directory)" })),
 	reset: Type.Optional(Type.Boolean({ description: "Restart the kernel before executing this code" })),
 });
-
-export type PythonToolParams = { code: string; timeout?: number; workdir?: string; reset?: boolean };
+export type PythonToolParams = Static<typeof pythonSchema>;
 
 export type PythonToolResult = {
 	content: Array<{ type: "text"; text: string }>;
@@ -151,7 +162,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 			throw new Error("Python tool requires a session when not using proxy executor");
 		}
 
-		const { code, timeoutMs = 30000, workdir, reset } = params;
+		const { cells, timeoutMs = 30000, cwd, reset } = params;
 		const controller = new AbortController();
 		const onAbort = () => controller.abort();
 		signal?.addEventListener("abort", onAbort, { once: true });
@@ -161,7 +172,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 				throw new Error("Aborted");
 			}
 
-			const commandCwd = workdir ? resolveToCwd(workdir, this.session.cwd) : this.session.cwd;
+			const commandCwd = cwd ? resolveToCwd(cwd, this.session.cwd) : this.session.cwd;
 			let cwdStat: Awaited<ReturnType<Bun.BunFile["stat"]>>;
 			try {
 				cwdStat = await Bun.file(commandCwd).stat();
@@ -179,15 +190,14 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 			const images: ImageContent[] = [];
 
 			const sessionFile = this.session.getSessionFile?.() ?? undefined;
-			const sessionId = sessionFile ? `session:${sessionFile}:workdir:${commandCwd}` : `cwd:${commandCwd}`;
-			const executorOptions: PythonExecutorOptions = {
+			const sessionId = sessionFile ? `session:${sessionFile}:cwd:${commandCwd}` : `cwd:${commandCwd}`;
+			const baseExecutorOptions: Omit<PythonExecutorOptions, "reset"> = {
 				cwd: commandCwd,
 				timeoutMs,
 				signal: controller.signal,
 				sessionId,
 				kernelMode: this.session.settings?.getPythonKernelMode?.() ?? "session",
 				useSharedGateway: this.session.settings?.getPythonSharedGateway?.() ?? true,
-				reset,
 				onChunk: (chunk) => {
 					const chunkBytes = Buffer.byteLength(chunk, "utf-8");
 					tailChunks.push({ text: chunk, bytes: chunkBytes });
@@ -209,26 +219,65 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 				},
 			};
 
-			const result = await executePython(code, executorOptions);
-
 			const statusEvents: PythonStatusEvent[] = [];
-			for (const output of result.displayOutputs) {
-				if (output.type === "json") {
-					jsonOutputs.push(output.data);
+			const cellOutputs: string[] = [];
+			let lastFullOutputPath: string | undefined;
+
+			for (let i = 0; i < cells.length; i++) {
+				const cell = cells[i];
+				const isFirstCell = i === 0;
+				const executorOptions: PythonExecutorOptions = {
+					...baseExecutorOptions,
+					reset: isFirstCell ? reset : false,
+				};
+
+				const result = await executePython(cell.code, executorOptions);
+
+				for (const output of result.displayOutputs) {
+					if (output.type === "json") {
+						jsonOutputs.push(output.data);
+					}
+					if (output.type === "image") {
+						images.push({ type: "image", data: output.data, mimeType: output.mimeType });
+					}
+					if (output.type === "status") {
+						statusEvents.push(output.event);
+					}
 				}
-				if (output.type === "image") {
-					images.push({ type: "image", data: output.data, mimeType: output.mimeType });
+
+				if (result.fullOutputPath) {
+					lastFullOutputPath = result.fullOutputPath;
 				}
-				if (output.type === "status") {
-					statusEvents.push(output.event);
+
+				const cellOutput = result.output.trim();
+				if (cells.length > 1) {
+					const cellHeader = `[${i + 1}/${cells.length}]`;
+					const cellTitle = cell.title ? ` ${cell.title}` : "";
+					if (cellOutput) {
+						cellOutputs.push(`${cellHeader}${cellTitle}\n${cellOutput}`);
+					} else {
+						cellOutputs.push(`${cellHeader}${cellTitle} (ok)`);
+					}
+				} else if (cellOutput) {
+					cellOutputs.push(cellOutput);
+				}
+				if (result.cancelled) {
+					const errorMsg = result.output || "Command aborted";
+					throw new Error(cells.length > 1 ? `Cell ${i + 1} aborted: ${errorMsg}` : errorMsg);
+				}
+
+				if (result.exitCode !== 0 && result.exitCode !== undefined) {
+					const combinedOutput = cellOutputs.join("\n\n");
+					throw new Error(
+						cells.length > 1
+							? `${combinedOutput}\n\nCell ${i + 1} failed (exit code ${result.exitCode}). Earlier cells succeeded—their state persists. Fix only cell ${i + 1}.`
+							: `${combinedOutput}\n\nCommand exited with code ${result.exitCode}`,
+					);
 				}
 			}
 
-			if (result.cancelled) {
-				throw new Error(result.output || "Command aborted");
-			}
-
-			const truncation = truncateTail(result.output);
+			const combinedOutput = cellOutputs.join("\n\n");
+			const truncation = truncateTail(combinedOutput);
 			let outputText =
 				truncation.content || (jsonOutputs.length > 0 || images.length > 0 ? "(no text output)" : "(no output)");
 			let details: PythonToolDetails | undefined;
@@ -236,14 +285,14 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 			if (truncation.truncated) {
 				details = {
 					truncation,
-					fullOutputPath: result.fullOutputPath,
+					fullOutputPath: lastFullOutputPath,
 					jsonOutputs: jsonOutputs,
 					images,
 					statusEvents: statusEvents.length > 0 ? statusEvents : undefined,
 				};
 				outputText += formatTailTruncationNotice(truncation, {
-					fullOutputPath: result.fullOutputPath,
-					originalContent: result.output,
+					fullOutputPath: lastFullOutputPath,
+					originalContent: combinedOutput,
 				});
 			}
 
@@ -255,11 +304,6 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 				};
 			}
 
-			if (result.exitCode !== 0 && result.exitCode !== undefined) {
-				outputText += `\n\nCommand exited with code ${result.exitCode}`;
-				throw new Error(outputText);
-			}
-
 			return { content: [{ type: "text", text: outputText }], details };
 		} finally {
 			signal?.removeEventListener("abort", onAbort);
@@ -268,9 +312,9 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 }
 
 interface PythonRenderArgs {
-	code?: string;
+	cells?: Array<{ code: string; title?: string }>;
 	timeout?: number;
-	workdir?: string;
+	cwd?: string;
 }
 
 interface PythonRenderContext {
@@ -603,10 +647,10 @@ function renderStatusEvents(events: PythonStatusEvent[], theme: Theme, expanded:
 export const pythonToolRenderer = {
 	renderCall(args: PythonRenderArgs, uiTheme: Theme): Component {
 		const ui = new ToolUIKit(uiTheme);
-		const code = args.code || uiTheme.format.ellipsis;
+		const cells = args.cells ?? [];
 		const prompt = uiTheme.fg("accent", ">>>");
 		const cwd = process.cwd();
-		let displayWorkdir = args.workdir;
+		let displayWorkdir = args.cwd;
 
 		if (displayWorkdir) {
 			const resolvedCwd = resolve(cwd);
@@ -622,11 +666,29 @@ export const pythonToolRenderer = {
 			}
 		}
 
-		const cmdText = displayWorkdir
-			? `${prompt} ${uiTheme.fg("dim", `cd ${displayWorkdir} &&`)} ${code}`
-			: `${prompt} ${code}`;
-		const text = ui.title(cmdText);
-		return new Text(text, 0, 0);
+		const workdirPrefix = displayWorkdir ? uiTheme.fg("dim", `cd ${displayWorkdir} && `) : "";
+
+		if (cells.length === 0) {
+			const text = ui.title(`${prompt} ${workdirPrefix}${uiTheme.format.ellipsis}`);
+			return new Text(text, 0, 0);
+		}
+
+		if (cells.length === 1) {
+			const cell = cells[0];
+			const label = cell.title ? `${cell.title}: ` : "";
+			const text = ui.title(`${prompt} ${workdirPrefix}${label}${cell.code}`);
+			return new Text(text, 0, 0);
+		}
+
+		// Multiple cells: show each with index
+		const lines: string[] = [];
+		for (let i = 0; i < cells.length; i++) {
+			const cellPrompt = uiTheme.fg("accent", `[${i + 1}]`);
+			const prefix = i === 0 ? workdirPrefix : "";
+			const label = cells[i].title ? `${cells[i].title}: ` : "";
+			lines.push(ui.title(`${cellPrompt} ${prefix}${label}${cells[i].code}`));
+		}
+		return new Text(lines.join("\n"), 0, 0);
 	},
 
 	renderResult(

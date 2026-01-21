@@ -16,7 +16,7 @@ import { checkPythonKernelAvailability } from "../../python-kernel";
 import type { ToolSession } from "..";
 import { LspTool } from "../lsp/index";
 import type { LspParams } from "../lsp/types";
-import { PythonTool } from "../python";
+import { PythonTool, type PythonToolParams } from "../python";
 import { subprocessToolRegistry } from "./subprocess-tool-registry";
 import {
 	type AgentDefinition,
@@ -789,11 +789,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			const timeoutSignal = createTimeoutSignal(timeoutMs);
 			const combinedSignal = combineSignals([signal, callController.signal, timeoutSignal]);
 			try {
-				const result = await pythonTool.execute(
-					request.callId,
-					request.params as { code: string; timeout?: number; workdir?: string; reset?: boolean },
-					combinedSignal,
-				);
+				const result = await pythonTool.execute(request.callId, request.params as PythonToolParams, combinedSignal);
 				postMessageSafe({
 					type: "python_tool_result",
 					callId: request.callId,

@@ -193,9 +193,18 @@ export function normalizeForFuzzy(line: string): string {
 export function adjustIndentation(oldText: string, actualText: string, newText: string): string {
 	const oldMin = minIndent(oldText);
 	const actualMin = minIndent(actualText);
+	const newMin = minIndent(newText);
 	const delta = actualMin - oldMin;
 
 	if (delta === 0) {
+		return newText;
+	}
+
+	if (newMin === actualMin) {
+		return newText;
+	}
+
+	if (newMin !== oldMin) {
 		return newText;
 	}
 

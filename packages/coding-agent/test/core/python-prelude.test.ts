@@ -114,7 +114,7 @@ describe.skipIf(!shouldRun)("PYTHON_PRELUDE integration", () => {
 	    print("MISSING=" + ",".join(missing))
 	`;
 
-		const result = await tool.execute("tool-call-1", { code });
+		const result = await tool.execute("tool-call-1", { cells: [{ code }] });
 		const output = result.content.find((item) => item.type === "text")?.text ?? "";
 		expect(output).toContain("HELPERS_OK=1");
 		expect(output).toContain("DOCS_OK=1");

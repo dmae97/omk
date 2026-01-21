@@ -40,7 +40,7 @@ describe("python tool execution", () => {
 		const tool = new PythonTool(createSession(tempDir.path));
 		const result = await tool.execute(
 			"call-id",
-			{ code: "print('hi')", timeoutMs: 5000, workdir: tempDir.path, reset: true },
+			{ cells: [{ code: "print('hi')" }], timeoutMs: 5000, cwd: tempDir.path, reset: true },
 			undefined,
 			undefined,
 			undefined,
@@ -51,7 +51,7 @@ describe("python tool execution", () => {
 			expect.objectContaining({
 				cwd: tempDir.path,
 				timeoutMs: 5000,
-				sessionId: `session:session-file:workdir:${tempDir.path}`,
+				sessionId: `session:session-file:cwd:${tempDir.path}`,
 				kernelMode: "per-call",
 				reset: true,
 			}),

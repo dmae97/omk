@@ -20,9 +20,7 @@ export const BASH_DEFAULT_PREVIEW_LINES = 10;
 const bashSchema = Type.Object({
 	command: Type.String({ description: "Bash command to execute" }),
 	timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (optional, no default timeout)" })),
-	workdir: Type.Optional(
-		Type.String({ description: "Working directory for the command (default: current directory)" }),
-	),
+	cwd: Type.Optional(Type.String({ description: "Working directory for the command (default: current directory)" })),
 });
 
 export interface BashToolDetails {
@@ -53,7 +51,7 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 
 	public async execute(
 		_toolCallId: string,
-		{ command, timeout, workdir }: { command: string; timeout?: number; workdir?: string },
+		{ command, timeout, cwd }: { command: string; timeout?: number; cwd?: string },
 		signal?: AbortSignal,
 		onUpdate?: AgentToolUpdateCallback<BashToolDetails>,
 		ctx?: AgentToolContext,
@@ -73,7 +71,7 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 			}
 		}
 
-		const commandCwd = workdir ? resolveToCwd(workdir, this.session.cwd) : this.session.cwd;
+		const commandCwd = cwd ? resolveToCwd(cwd, this.session.cwd) : this.session.cwd;
 		let cwdStat: Awaited<ReturnType<Bun.BunFile["stat"]>>;
 		try {
 			cwdStat = await Bun.file(commandCwd).stat();
@@ -143,7 +141,7 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 interface BashRenderArgs {
 	command?: string;
 	timeout?: number;
-	workdir?: string;
+	cwd?: string;
 }
 
 interface BashRenderContext {
@@ -166,7 +164,7 @@ export const bashToolRenderer = {
 		const command = args.command || uiTheme.format.ellipsis;
 		const prompt = uiTheme.fg("accent", "$");
 		const cwd = process.cwd();
-		let displayWorkdir = args.workdir;
+		let displayWorkdir = args.cwd;
 
 		if (displayWorkdir) {
 			const resolvedCwd = resolve(cwd);

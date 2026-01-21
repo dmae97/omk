@@ -1,4 +1,42 @@
-Executes Python code in an IPython kernel (session or per-call) with optional timeout.
+Executes Python cells sequentially in a persistent IPython kernel.
+
+## How to use (REPL discipline)
+
+The kernel persists between calls and between cells. **Imports, variables, and functions survive.** Use this.
+
+**Work incrementally:**
+- One logical step per cell (imports, define a function, test it, use it)
+- Pass multiple small cells in one call—they execute sequentially
+- Define small functions you can reuse and debug individually
+- Put explanations in the assistant message or cell title, **not** inside code
+
+**When something fails:**
+- The error tells you which cell failed (e.g., "Cell 3 failed")
+- Earlier cells already ran—their state persists in the kernel
+- Resubmit with only the fixed cell (or the fixed cell + remaining cells)
+- Do NOT rewrite working cells or re-import modules
+
+**Anti-patterns to avoid:**
+- Putting everything in one giant cell
+- Re-importing modules you already imported
+- Rewriting working code when only one part failed
+- Large functions that are hard to debug piece by piece
+
+```python
+# BAD: One giant cell
+cells: [{
+    "title": "all-in-one",
+    "code": "import json\nfrom pathlib import Path\ndef process_all_files():\n    # 50 lines...\n    pass\nresult = process_all_files()"
+}]
+
+# GOOD: Multiple small cells
+cells: [
+    {"title": "imports", "code": "import json\nfrom pathlib import Path"},
+    {"title": "parse helper", "code": "def parse_config(path):\n    return json.loads(Path(path).read_text())"},
+    {"title": "test helper", "code": "parse_config('config.json')"},
+    {"title": "use helper", "code": "configs = [parse_config(p) for p in Path('.').glob('*.json')]"}
+]
+```
 
 ## When to use Python
 
@@ -75,7 +113,7 @@ cols(read("data.tsv"), 0, 2, sep="\t")
 
 - Code executes as IPython cells; users see the full cell output (including rendered figures, tables, etc.)
 - Kernel persists for the session by default; per-call mode uses a fresh kernel each call. Use `reset: true` to clear state when session mode is active
-- Use `workdir` parameter instead of `os.chdir()` in tool call
+- Use `cwd` parameter instead of `os.chdir()` in tool call
 - Use `plt.show()` to display figures
 - Use `display()` from IPython.display for rich output (HTML, Markdown, images, etc.)
 - Output streams in real time, truncated after 50KB

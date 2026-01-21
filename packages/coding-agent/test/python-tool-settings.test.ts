@@ -77,13 +77,13 @@ describe("python tool settings", () => {
 		const session = createSession(testDir, { getPythonKernelMode: () => "per-call" });
 		const pythonTool = new PythonTool(session);
 
-		await pythonTool.execute("tool-call", { code: "print(1)" });
+		await pythonTool.execute("tool-call", { cells: [{ code: "print(1)" }] });
 
 		expect(executeSpy).toHaveBeenCalledWith(
 			"print(1)",
 			expect.objectContaining({
 				kernelMode: "per-call",
-				sessionId: `session:session.json:workdir:${testDir}`,
+				sessionId: `session:session.json:cwd:${testDir}`,
 			}),
 		);
 	});

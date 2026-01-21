@@ -48,7 +48,7 @@ export { DEFAULT_FUZZY_THRESHOLD, findContextLine, findMatch as findEditMatch, f
 
 // Normalization
 export {
-	adjustIndentation as adjustNewTextIndentation,
+	adjustIndentation,
 	detectLineEnding,
 	normalizeToLF,
 	restoreLineEndings,

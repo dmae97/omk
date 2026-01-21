@@ -221,7 +221,7 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 			});
 		} else if (!isTestEnv && getPreludeDocs().length === 0) {
 			const sessionFile = session.getSessionFile?.() ?? undefined;
-			const warmSessionId = sessionFile ? `session:${sessionFile}:workdir:${session.cwd}` : `cwd:${session.cwd}`;
+			const warmSessionId = sessionFile ? `session:${sessionFile}:cwd:${session.cwd}` : `cwd:${session.cwd}`;
 			void warmPythonEnvironment(session.cwd, warmSessionId, session.settings?.getPythonSharedGateway?.()).catch(
 				(err) => {
 					logger.warn("Failed to warm Python environment", {
