@@ -6,6 +6,7 @@
  * allow reliably releasing resources or shutting down subprocesses, files, sockets, etc.
  */
 
+import inspector from "node:inspector";
 import { isMainThread } from "node:worker_threads";
 import { logger } from ".";
 
@@ -65,11 +66,20 @@ function runCleanup(reason: Reason): Promise<void> {
 // Register signal and error event handlers to trigger cleanup before exit.
 // Main thread: full signal handling (SIGINT, SIGTERM, SIGHUP) + exceptions + exit
 // Worker thread: exit only (workers use self.addEventListener for exceptions)
+let inspectorOpened = false;
+
 if (isMainThread) {
 	process
 		.on("SIGINT", async () => {
 			await runCleanup(Reason.SIGINT);
 			process.exit(130); // 128 + SIGINT (2)
+		})
+		.on("SIGUSR1", () => {
+			if (inspectorOpened) return;
+			inspectorOpened = true;
+			inspector.open(undefined, undefined, false);
+			const url = inspector.url();
+			process.stderr.write(`Inspector opened: ${url}\n`);
 		})
 		.on("uncaughtException", async (err) => {
 			logger.error("Uncaught exception", { err, stack: err.stack });
