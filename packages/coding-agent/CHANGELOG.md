@@ -1,8 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added cell-by-cell status tracking with duration and exit code for Python execution
+- Added syntax highlighting for Python code in execution display
+- Added template system with {{placeholders}} for task tool context
+- Added task variables support for filling context placeholders
+- Added enhanced task progress display with variable values
+- Added concurrent work handling guidance in system prompt
 - Added extension system support for user Python execution events
 - Added Python mode border color theming across all themes
 - Added Python execution indicator to welcome screen help text
@@ -16,6 +23,11 @@
 
 ### Changed
 
+- Updated Python execution to display cells in bordered blocks with status indicators
+- Changed task tool to use template-based context instead of simple concatenation
+- Enhanced Python execution component with proper syntax highlighting
+- Improved patch applicator to preserve exact indentation when intended
+- Updated task tool schema to require vars instead of task field
 - Updated Python execution component to use pythonMode theming instead of bashMode
 - Enhanced UI helpers to handle pending Python components properly
 - Changed Python tool to use `cells` array instead of single `code` parameter
@@ -24,6 +36,8 @@
 
 ### Fixed
 
+- Fixed indentation preservation for exact matches and indentation-only patches
+- Fixed Python execution status updates to show real-time cell progress
 - Fixed indentation adjustment logic to handle edge cases with mixed indentation levels
 - Fixed patch indentation normalization for fuzzy matches, tab/space diffs, and ambiguous context alignment
 

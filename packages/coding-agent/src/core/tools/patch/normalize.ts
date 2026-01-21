@@ -299,6 +299,27 @@ export function normalizeForFuzzy(line: string): string {
  * to each line in newText.
  */
 export function adjustIndentation(oldText: string, actualText: string, newText: string): string {
+	// If old text already matches actual text exactly, preserve agent's intended indentation
+	if (oldText === actualText) {
+		return newText;
+	}
+
+	// If the patch is purely an indentation change (same trimmed content), apply exactly as specified
+	const oldLines = oldText.split("\n");
+	const newLines = newText.split("\n");
+	if (oldLines.length === newLines.length) {
+		let indentationOnly = true;
+		for (let i = 0; i < oldLines.length; i++) {
+			if (oldLines[i].trim() !== newLines[i].trim()) {
+				indentationOnly = false;
+				break;
+			}
+		}
+		if (indentationOnly) {
+			return newText;
+		}
+	}
+
 	const oldProfile = buildIndentProfile(oldText);
 	const actualProfile = buildIndentProfile(actualText);
 	const newProfile = buildIndentProfile(newText);

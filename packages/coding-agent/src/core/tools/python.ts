@@ -2,10 +2,10 @@ import { relative, resolve, sep } from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
-import { Text, truncateToWidth } from "@oh-my-pi/pi-tui";
+import { Text, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
 import { type Static, Type } from "@sinclair/typebox";
 import { truncateToVisualLines } from "../../modes/interactive/components/visual-truncate";
-import type { Theme } from "../../modes/interactive/theme/theme";
+import { highlightCode, type Theme } from "../../modes/interactive/theme/theme";
 import pythonDescription from "../../prompts/tools/python.md" with { type: "text" };
 import type { RenderResultOptions } from "../custom-tools/types";
 import { renderPromptTemplate } from "../prompt-templates";
@@ -67,7 +67,19 @@ export type PythonToolResult = {
 
 export type PythonProxyExecutor = (params: PythonToolParams, signal?: AbortSignal) => Promise<PythonToolResult>;
 
+export interface PythonCellResult {
+	index: number;
+	title?: string;
+	code: string;
+	output: string;
+	status: "pending" | "running" | "complete" | "error";
+	durationMs?: number;
+	exitCode?: number;
+	statusEvents?: PythonStatusEvent[];
+}
+
 export interface PythonToolDetails {
+	cells?: PythonCellResult[];
 	truncation?: TruncationResult;
 	fullOutputPath?: string;
 	fullOutput?: string;
@@ -188,6 +200,65 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 			let tailBytes = 0;
 			const jsonOutputs: unknown[] = [];
 			const images: ImageContent[] = [];
+			const statusEvents: PythonStatusEvent[] = [];
+
+			const cellResults: PythonCellResult[] = cells.map((cell, index) => ({
+				index,
+				title: cell.title,
+				code: cell.code,
+				output: "",
+				status: "pending",
+			}));
+			const cellOutputs: string[] = [];
+			let lastFullOutputPath: string | undefined;
+
+			const appendTail = (text: string) => {
+				if (!text) return;
+				const chunkBytes = Buffer.byteLength(text, "utf-8");
+				tailChunks.push({ text, bytes: chunkBytes });
+				tailBytes += chunkBytes;
+				while (tailBytes > maxTailBytes && tailChunks.length > 1) {
+					const removed = tailChunks.shift();
+					if (removed) {
+						tailBytes -= removed.bytes;
+					}
+				}
+			};
+
+			const buildUpdateDetails = (truncation?: TruncationResult): PythonToolDetails => {
+				const details: PythonToolDetails = {
+					cells: cellResults.map((cell) => ({
+						...cell,
+						statusEvents: cell.statusEvents ? [...cell.statusEvents] : undefined,
+					})),
+				};
+				if (truncation) {
+					details.truncation = truncation;
+				}
+				if (lastFullOutputPath) {
+					details.fullOutputPath = lastFullOutputPath;
+				}
+				if (jsonOutputs.length > 0) {
+					details.jsonOutputs = jsonOutputs;
+				}
+				if (images.length > 0) {
+					details.images = images;
+				}
+				if (statusEvents.length > 0) {
+					details.statusEvents = statusEvents;
+				}
+				return details;
+			};
+
+			const pushUpdate = () => {
+				if (!onUpdate) return;
+				const tailText = tailChunks.map((entry) => entry.text).join("");
+				const truncation = truncateTail(tailText);
+				onUpdate({
+					content: [{ type: "text", text: truncation.content || "" }],
+					details: buildUpdateDetails(truncation.truncated ? truncation : undefined),
+				});
+			};
 
 			const sessionFile = this.session.getSessionFile?.() ?? undefined;
 			const sessionId = sessionFile ? `session:${sessionFile}:cwd:${commandCwd}` : `cwd:${commandCwd}`;
@@ -198,41 +269,29 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 				sessionId,
 				kernelMode: this.session.settings?.getPythonKernelMode?.() ?? "session",
 				useSharedGateway: this.session.settings?.getPythonSharedGateway?.() ?? true,
-				onChunk: (chunk) => {
-					const chunkBytes = Buffer.byteLength(chunk, "utf-8");
-					tailChunks.push({ text: chunk, bytes: chunkBytes });
-					tailBytes += chunkBytes;
-					while (tailBytes > maxTailBytes && tailChunks.length > 1) {
-						const removed = tailChunks.shift();
-						if (removed) {
-							tailBytes -= removed.bytes;
-						}
-					}
-					if (onUpdate) {
-						const tailText = tailChunks.map((entry) => entry.text).join("");
-						const truncation = truncateTail(tailText);
-						onUpdate({
-							content: [{ type: "text", text: truncation.content || "" }],
-							details: truncation.truncated ? { truncation } : undefined,
-						});
-					}
-				},
 			};
-
-			const statusEvents: PythonStatusEvent[] = [];
-			const cellOutputs: string[] = [];
-			let lastFullOutputPath: string | undefined;
 
 			for (let i = 0; i < cells.length; i++) {
 				const cell = cells[i];
 				const isFirstCell = i === 0;
+				const cellResult = cellResults[i];
+				cellResult.status = "running";
+				cellResult.output = "";
+				cellResult.statusEvents = undefined;
+				cellResult.exitCode = undefined;
+				cellResult.durationMs = undefined;
+				pushUpdate();
+
 				const executorOptions: PythonExecutorOptions = {
 					...baseExecutorOptions,
 					reset: isFirstCell ? reset : false,
 				};
 
+				const startTime = Date.now();
 				const result = await executePython(cell.code, executorOptions);
+				const durationMs = Date.now() - startTime;
 
+				const cellStatusEvents: PythonStatusEvent[] = [];
 				for (const output of result.displayOutputs) {
 					if (output.type === "json") {
 						jsonOutputs.push(output.data);
@@ -242,6 +301,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 					}
 					if (output.type === "status") {
 						statusEvents.push(output.event);
+						cellStatusEvents.push(output.event);
 					}
 				}
 
@@ -250,23 +310,41 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 				}
 
 				const cellOutput = result.output.trim();
+				cellResult.output = cellOutput;
+				cellResult.exitCode = result.exitCode;
+				cellResult.durationMs = durationMs;
+				cellResult.statusEvents = cellStatusEvents.length > 0 ? cellStatusEvents : undefined;
+
+				let combinedCellOutput = "";
 				if (cells.length > 1) {
 					const cellHeader = `[${i + 1}/${cells.length}]`;
 					const cellTitle = cell.title ? ` ${cell.title}` : "";
 					if (cellOutput) {
-						cellOutputs.push(`${cellHeader}${cellTitle}\n${cellOutput}`);
+						combinedCellOutput = `${cellHeader}${cellTitle}\n${cellOutput}`;
 					} else {
-						cellOutputs.push(`${cellHeader}${cellTitle} (ok)`);
+						combinedCellOutput = `${cellHeader}${cellTitle} (ok)`;
 					}
+					cellOutputs.push(combinedCellOutput);
 				} else if (cellOutput) {
-					cellOutputs.push(cellOutput);
+					combinedCellOutput = cellOutput;
+					cellOutputs.push(combinedCellOutput);
 				}
+
+				if (combinedCellOutput) {
+					const prefix = cellOutputs.length > 1 ? "\n\n" : "";
+					appendTail(`${prefix}${combinedCellOutput}`);
+				}
+
 				if (result.cancelled) {
+					cellResult.status = "error";
+					pushUpdate();
 					const errorMsg = result.output || "Command aborted";
 					throw new Error(cells.length > 1 ? `Cell ${i + 1} aborted: ${errorMsg}` : errorMsg);
 				}
 
 				if (result.exitCode !== 0 && result.exitCode !== undefined) {
+					cellResult.status = "error";
+					pushUpdate();
 					const combinedOutput = cellOutputs.join("\n\n");
 					throw new Error(
 						cells.length > 1
@@ -274,34 +352,30 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 							: `${combinedOutput}\n\nCommand exited with code ${result.exitCode}`,
 					);
 				}
+
+				cellResult.status = "complete";
+				pushUpdate();
 			}
 
 			const combinedOutput = cellOutputs.join("\n\n");
 			const truncation = truncateTail(combinedOutput);
 			let outputText =
 				truncation.content || (jsonOutputs.length > 0 || images.length > 0 ? "(no text output)" : "(no output)");
-			let details: PythonToolDetails | undefined;
+
+			const details: PythonToolDetails = {
+				cells: cellResults,
+				fullOutputPath: lastFullOutputPath,
+				jsonOutputs: jsonOutputs.length > 0 ? jsonOutputs : undefined,
+				images: images.length > 0 ? images : undefined,
+				statusEvents: statusEvents.length > 0 ? statusEvents : undefined,
+			};
 
 			if (truncation.truncated) {
-				details = {
-					truncation,
-					fullOutputPath: lastFullOutputPath,
-					jsonOutputs: jsonOutputs,
-					images,
-					statusEvents: statusEvents.length > 0 ? statusEvents : undefined,
-				};
+				details.truncation = truncation;
 				outputText += formatTailTruncationNotice(truncation, {
 					fullOutputPath: lastFullOutputPath,
 					originalContent: combinedOutput,
 				});
-			}
-
-			if (!details && (jsonOutputs.length > 0 || images.length > 0 || statusEvents.length > 0)) {
-				details = {
-					jsonOutputs: jsonOutputs.length > 0 ? jsonOutputs : undefined,
-					images: images.length > 0 ? images : undefined,
-					statusEvents: statusEvents.length > 0 ? statusEvents : undefined,
-				};
 			}
 
 			return { content: [{ type: "text", text: outputText }], details };
@@ -644,11 +718,173 @@ function renderStatusEvents(events: PythonStatusEvent[], theme: Theme, expanded:
 	return lines;
 }
 
+function applyCellBackground(line: string, width: number, bgFn?: (text: string) => string): string {
+	if (!bgFn) return line;
+	if (width <= 0) return bgFn(line);
+	const paddingNeeded = Math.max(0, width - visibleWidth(line));
+	const padded = line + " ".repeat(paddingNeeded);
+	return bgFn(padded);
+}
+
+function highlightPythonCode(code?: string): string[] {
+	return highlightCode(code ?? "", "python");
+}
+
+function formatCellStatus(cell: PythonCellResult, ui: ToolUIKit, spinnerFrame?: number): string | undefined {
+	switch (cell.status) {
+		case "pending":
+			return `${ui.statusIcon("pending")} ${ui.theme.fg("muted", "pending")}`;
+		case "running":
+			return `${ui.statusIcon("running", spinnerFrame)} ${ui.theme.fg("muted", "running")}`;
+		case "complete":
+			return ui.statusIcon("success");
+		case "error":
+			return ui.statusIcon("error");
+	}
+}
+
+function formatCellHeader(
+	cell: PythonCellResult,
+	index: number,
+	total: number,
+	ui: ToolUIKit,
+	spinnerFrame?: number,
+	workdirLabel?: string,
+): string {
+	const indexLabel = ui.theme.fg("accent", `[${index + 1}/${total}]`);
+	const title = cell.title ? ` ${cell.title}` : "";
+	const metaParts: string[] = [];
+	if (workdirLabel) {
+		metaParts.push(ui.theme.fg("dim", workdirLabel));
+	}
+	if (cell.durationMs !== undefined) {
+		metaParts.push(ui.theme.fg("dim", `(${ui.formatDuration(cell.durationMs)})`));
+	}
+	const statusLabel = formatCellStatus(cell, ui, spinnerFrame);
+	if (statusLabel) {
+		metaParts.push(statusLabel);
+	}
+	const meta = metaParts.length > 0 ? ` ${metaParts.join(ui.theme.fg("dim", ui.theme.sep.dot))}` : "";
+	return `${indexLabel}${title}${meta}`;
+}
+
+function formatCellOutputLines(
+	cell: PythonCellResult,
+	expanded: boolean,
+	previewLines: number,
+	theme: Theme,
+): { lines: string[]; hiddenCount: number } {
+	const rawLines = cell.output ? cell.output.split("\n") : [];
+	const displayLines = expanded ? rawLines : rawLines.slice(-previewLines);
+	const hiddenCount = rawLines.length - displayLines.length;
+	const outputLines = displayLines.map((line) => theme.fg("toolOutput", line));
+
+	if (outputLines.length === 0) {
+		return { lines: [], hiddenCount: 0 };
+	}
+
+	return { lines: outputLines, hiddenCount };
+}
+
+function renderCellBlock(
+	cell: PythonCellResult,
+	index: number,
+	total: number,
+	ui: ToolUIKit,
+	options: {
+		expanded: boolean;
+		previewLines: number;
+		spinnerFrame?: number;
+		showOutput: boolean;
+		workdirLabel?: string;
+		width: number;
+		bgFn?: (text: string) => string;
+	},
+): string[] {
+	const { expanded, previewLines, spinnerFrame, showOutput, workdirLabel, width, bgFn } = options;
+	const h = ui.theme.boxSharp.horizontal;
+	const v = ui.theme.boxSharp.vertical;
+	const cap = h.repeat(3);
+	const border = (text: string) => ui.theme.fg("dim", text);
+	const lineWidth = Math.max(0, width);
+
+	const buildBarLine = (leftChar: string, label?: string): string => {
+		const left = border(`${leftChar}${cap}`);
+		if (lineWidth <= 0) return left;
+		const rawLabel = label ? ` ${label} ` : " ";
+		const maxLabelWidth = Math.max(0, lineWidth - visibleWidth(left));
+		const trimmedLabel = truncateToWidth(rawLabel, maxLabelWidth, ui.theme.format.ellipsis);
+		const fillCount = Math.max(0, lineWidth - visibleWidth(left + trimmedLabel));
+		return `${left}${trimmedLabel}${border(h.repeat(fillCount))}`;
+	};
+
+	const lines: string[] = [];
+	lines.push(
+		applyCellBackground(
+			buildBarLine(ui.theme.boxSharp.topLeft, formatCellHeader(cell, index, total, ui, spinnerFrame, workdirLabel)),
+			lineWidth,
+			bgFn,
+		),
+	);
+
+	const codePrefix = border(`${v} `);
+	const codeWidth = Math.max(0, lineWidth - visibleWidth(codePrefix));
+	const codeLines = highlightPythonCode(cell.code);
+	for (const line of codeLines) {
+		const text = truncateToWidth(line, codeWidth, ui.theme.format.ellipsis);
+		lines.push(applyCellBackground(`${codePrefix}${text}`, lineWidth, bgFn));
+	}
+
+	const statusLines = renderStatusEvents(cell.statusEvents ?? [], ui.theme, expanded);
+	const outputContent = formatCellOutputLines(cell, expanded, previewLines, ui.theme);
+	const hasOutput = outputContent.lines.length > 0;
+	const hasStatus = statusLines.length > 0;
+	const showOutputSection = showOutput && (hasOutput || hasStatus);
+
+	if (showOutputSection) {
+		lines.push(
+			applyCellBackground(
+				buildBarLine(ui.theme.boxSharp.teeRight, ui.theme.fg("toolTitle", "Output")),
+				lineWidth,
+				bgFn,
+			),
+		);
+
+		for (const line of outputContent.lines) {
+			const text = truncateToWidth(line, codeWidth, ui.theme.format.ellipsis);
+			lines.push(applyCellBackground(`${codePrefix}${text}`, lineWidth, bgFn));
+		}
+		if (!expanded && outputContent.hiddenCount > 0) {
+			const hint = ui.theme.fg(
+				"dim",
+				`${ui.theme.format.ellipsis} ${outputContent.hiddenCount} more lines (ctrl+o to expand)`,
+			);
+			lines.push(
+				applyCellBackground(
+					`${codePrefix}${truncateToWidth(hint, codeWidth, ui.theme.format.ellipsis)}`,
+					lineWidth,
+					bgFn,
+				),
+			);
+		}
+
+		for (const line of statusLines) {
+			const text = truncateToWidth(line, codeWidth, ui.theme.format.ellipsis);
+			lines.push(applyCellBackground(`${codePrefix}${text}`, lineWidth, bgFn));
+		}
+	}
+
+	const bottomLeft = border(`${ui.theme.boxSharp.bottomLeft}${cap}`);
+	const bottomFillCount = Math.max(0, lineWidth - visibleWidth(bottomLeft));
+	const bottomLine = `${bottomLeft}${border(h.repeat(bottomFillCount))}`;
+	lines.push(applyCellBackground(bottomLine, lineWidth, bgFn));
+	return lines;
+}
+
 export const pythonToolRenderer = {
 	renderCall(args: PythonRenderArgs, uiTheme: Theme): Component {
 		const ui = new ToolUIKit(uiTheme);
 		const cells = args.cells ?? [];
-		const prompt = uiTheme.fg("accent", ">>>");
 		const cwd = process.cwd();
 		let displayWorkdir = args.cwd;
 
@@ -666,29 +902,44 @@ export const pythonToolRenderer = {
 			}
 		}
 
-		const workdirPrefix = displayWorkdir ? uiTheme.fg("dim", `cd ${displayWorkdir} && `) : "";
-
+		const workdirLabel = displayWorkdir ? `cd ${displayWorkdir}` : undefined;
 		if (cells.length === 0) {
-			const text = ui.title(`${prompt} ${workdirPrefix}${uiTheme.format.ellipsis}`);
+			const prompt = uiTheme.fg("accent", ">>>");
+			const prefix = workdirLabel ? `${uiTheme.fg("dim", `${workdirLabel} && `)}` : "";
+			const text = ui.title(`${prompt} ${prefix}${uiTheme.format.ellipsis}`);
 			return new Text(text, 0, 0);
 		}
 
-		if (cells.length === 1) {
-			const cell = cells[0];
-			const label = cell.title ? `${cell.title}: ` : "";
-			const text = ui.title(`${prompt} ${workdirPrefix}${label}${cell.code}`);
-			return new Text(text, 0, 0);
-		}
-
-		// Multiple cells: show each with index
-		const lines: string[] = [];
-		for (let i = 0; i < cells.length; i++) {
-			const cellPrompt = uiTheme.fg("accent", `[${i + 1}]`);
-			const prefix = i === 0 ? workdirPrefix : "";
-			const label = cells[i].title ? `${cells[i].title}: ` : "";
-			lines.push(ui.title(`${cellPrompt} ${prefix}${label}${cells[i].code}`));
-		}
-		return new Text(lines.join("\n"), 0, 0);
+		return {
+			render: (width: number): string[] => {
+				const lines: string[] = [];
+				for (let i = 0; i < cells.length; i++) {
+					const cell = cells[i];
+					const cellResult: PythonCellResult = {
+						index: i,
+						title: cell.title,
+						code: cell.code,
+						output: "",
+						status: "pending",
+					};
+					lines.push(
+						...renderCellBlock(cellResult, i, cells.length, ui, {
+							expanded: true,
+							previewLines: PYTHON_DEFAULT_PREVIEW_LINES,
+							showOutput: false,
+							workdirLabel: i === 0 ? workdirLabel : undefined,
+							width,
+							bgFn: (text: string) => uiTheme.bg("toolPendingBg", text),
+						}),
+					);
+					if (i < cells.length - 1) {
+						lines.push("");
+					}
+				}
+				return lines;
+			},
+			invalidate: () => {},
+		};
 	},
 
 	renderResult(
@@ -704,7 +955,6 @@ export const pythonToolRenderer = {
 		const previewLines = renderContext?.previewLines ?? PYTHON_DEFAULT_PREVIEW_LINES;
 		const output = renderContext?.output ?? (result.content?.find((c) => c.type === "text")?.text ?? "").trim();
 		const fullOutput = details?.fullOutput;
-		const displayOutput = expanded ? (fullOutput ?? output) : output;
 		const showingFullOutput = expanded && fullOutput !== undefined;
 
 		const jsonOutputs = details?.jsonOutputs ?? [];
@@ -713,12 +963,6 @@ export const pythonToolRenderer = {
 			const treeLines = renderJsonTree(value, uiTheme, expanded);
 			return [header, ...treeLines];
 		});
-
-		// Render status events
-		const statusEvents = details?.statusEvents ?? [];
-		const statusLines = renderStatusEvents(statusEvents, uiTheme, expanded);
-
-		const combinedOutput = [displayOutput, ...jsonLines].filter(Boolean).join("\n");
 
 		const truncation = details?.truncation;
 		const fullOutputPath = details?.fullOutputPath;
@@ -747,12 +991,63 @@ export const pythonToolRenderer = {
 			}
 		}
 
+		const cellResults = details?.cells;
+		if (cellResults && cellResults.length > 0) {
+			return {
+				render: (width: number): string[] => {
+					const lines: string[] = [];
+					for (let i = 0; i < cellResults.length; i++) {
+						const cell = cellResults[i];
+						const showOutput = cell.status !== "pending";
+						const bgColor =
+							cell.status === "error"
+								? "toolErrorBg"
+								: cell.status === "complete"
+									? "toolSuccessBg"
+									: "toolPendingBg";
+						lines.push(
+							...renderCellBlock(cell, i, cellResults.length, ui, {
+								expanded,
+								previewLines,
+								spinnerFrame: options.spinnerFrame,
+								showOutput,
+								width,
+								bgFn: (text: string) => uiTheme.bg(bgColor, text),
+							}),
+						);
+						if (i < cellResults.length - 1) {
+							lines.push("");
+						}
+					}
+					if (jsonLines.length > 0) {
+						if (lines.length > 0) {
+							lines.push("");
+						}
+						lines.push(...jsonLines);
+					}
+					if (timeoutLine) {
+						lines.push(timeoutLine);
+					}
+					if (warningLine) {
+						lines.push(warningLine);
+					}
+					return lines;
+				},
+				invalidate: () => {},
+			};
+		}
+
+		const displayOutput = expanded ? (fullOutput ?? output) : output;
+		const combinedOutput = [displayOutput, ...jsonLines].filter(Boolean).join("\n");
+
+		const statusEvents = details?.statusEvents ?? [];
+		const statusLines = renderStatusEvents(statusEvents, uiTheme, expanded);
+
 		if (!combinedOutput && statusLines.length === 0) {
 			const lines = [timeoutLine, warningLine].filter(Boolean) as string[];
 			return new Text(lines.join("\n"), 0, 0);
 		}
 
-		// If only status events (no text output), show them directly
 		if (!combinedOutput && statusLines.length > 0) {
 			const lines = [...statusLines, timeoutLine, warningLine].filter(Boolean) as string[];
 			return new Text(lines.join("\n"), 0, 0);
@@ -795,7 +1090,6 @@ export const pythonToolRenderer = {
 					outputLines.push(truncateToWidth(skippedLine, width, uiTheme.fg("dim", uiTheme.format.ellipsis)));
 				}
 				outputLines.push(...cachedLines);
-				// Add status events below the output
 				for (const statusLine of statusLines) {
 					outputLines.push(truncateToWidth(statusLine, width, uiTheme.fg("dim", uiTheme.format.ellipsis)));
 				}
@@ -814,4 +1108,6 @@ export const pythonToolRenderer = {
 			},
 		};
 	},
+	mergeCallAndResult: true,
+	inline: true,
 };

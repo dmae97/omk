@@ -83,6 +83,34 @@ function adjustLinesIndentation(patternLines: string[], actualLines: string[], n
 		return newLines;
 	}
 
+	// If pattern already matches actual exactly (including indentation), preserve agent's intended changes
+	if (patternLines.length === actualLines.length) {
+		let exactMatch = true;
+		for (let i = 0; i < patternLines.length; i++) {
+			if (patternLines[i] !== actualLines[i]) {
+				exactMatch = false;
+				break;
+			}
+		}
+		if (exactMatch) {
+			return newLines;
+		}
+	}
+
+	// If the patch is purely an indentation change (same trimmed content), apply exactly as specified
+	if (patternLines.length === newLines.length) {
+		let indentationOnly = true;
+		for (let i = 0; i < patternLines.length; i++) {
+			if (patternLines[i].trim() !== newLines[i].trim()) {
+				indentationOnly = false;
+				break;
+			}
+		}
+		if (indentationOnly) {
+			return newLines;
+		}
+	}
+
 	// Detect indent character from actual content
 	let indentChar = " ";
 	for (const line of actualLines) {

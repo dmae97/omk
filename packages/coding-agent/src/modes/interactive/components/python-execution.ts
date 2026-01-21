@@ -11,7 +11,7 @@ import {
 	type TruncationResult,
 	truncateTail,
 } from "../../../core/tools/truncate";
-import { getSymbolTheme, theme } from "../theme/theme";
+import { getSymbolTheme, highlightCode, theme } from "../theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 import { truncateToVisualLines } from "./visual-truncate";
 
@@ -29,6 +29,16 @@ export class PythonExecutionComponent extends Container {
 	private contentContainer: Container;
 	private excludeFromContext: boolean;
 
+	private formatHeader(colorKey: "dim" | "pythonMode"): Text {
+		const prompt = theme.fg(colorKey, theme.bold(">>>"));
+		const continuation = theme.fg(colorKey, "    ");
+		const codeLines = highlightCode(this.code, "python");
+		const headerLines = codeLines.map((line, index) =>
+			index === 0 ? `${prompt} ${line}` : `${continuation}${line}`,
+		);
+		return new Text(headerLines.join("\n"), 1, 0);
+	}
+
 	constructor(code: string, ui: TUI, excludeFromContext = false) {
 		super();
 		this.code = code;
@@ -42,9 +52,7 @@ export class PythonExecutionComponent extends Container {
 
 		this.contentContainer = new Container();
 		this.addChild(this.contentContainer);
-
-		const header = new Text(theme.fg(colorKey, theme.bold(`>>> ${code}`)), 1, 0);
-		this.contentContainer.addChild(header);
+		this.contentContainer.addChild(this.formatHeader(colorKey));
 
 		this.loader = new Loader(
 			ui,
@@ -115,8 +123,7 @@ export class PythonExecutionComponent extends Container {
 		this.contentContainer.clear();
 
 		const colorKey = this.excludeFromContext ? "dim" : "pythonMode";
-		const header = new Text(theme.fg(colorKey, theme.bold(`>>> ${this.code}`)), 1, 0);
-		this.contentContainer.addChild(header);
+		this.contentContainer.addChild(this.formatHeader(colorKey));
 
 		if (availableLines.length > 0) {
 			if (this.expanded) {

@@ -46,8 +46,10 @@ export const taskItemSchema = Type.Object({
 		description: "Short task identifier for display (max 32 chars, CamelCase, e.g. 'SessionStore', 'WebFetchFix')",
 		maxLength: 32,
 	}),
-	task: Type.String({ description: "Task description for the agent" }),
 	description: Type.String({ description: "Short description for UI display" }),
+	vars: Type.Record(Type.String(), Type.String(), {
+		description: "Template variables to fill {{placeholders}} in context",
+	}),
 });
 
 export type TaskItem = Static<typeof taskItemSchema>;
@@ -55,7 +57,7 @@ export type TaskItem = Static<typeof taskItemSchema>;
 /** Task tool parameters */
 export const taskSchema = Type.Object({
 	agent: Type.String({ description: "Agent type to use for all tasks" }),
-	context: Type.String({ description: "Shared context prepended to all task prompts" }),
+	context: Type.String({ description: "Template with {{placeholders}} filled by task vars" }),
 	model: Type.Optional(
 		Type.String({
 			description: "Model override for all tasks (fuzzy matching, e.g. 'sonnet', 'opus')",
@@ -120,6 +122,7 @@ export interface AgentProgress {
 	agentSource: AgentSource;
 	status: "pending" | "running" | "completed" | "failed" | "aborted";
 	task: string;
+	vars?: Record<string, string>;
 	description?: string;
 	currentTool?: string;
 	currentToolArgs?: string;
@@ -141,6 +144,7 @@ export interface SingleResult {
 	agent: string;
 	agentSource: AgentSource;
 	task: string;
+	vars?: Record<string, string>;
 	description?: string;
 	exitCode: number;
 	output: string;

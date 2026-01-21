@@ -67,9 +67,12 @@ function formatFindingSummary(findings: ReportFindingDetails[], theme: Theme): s
 	return `${theme.fg("dim", "Findings:")} ${parts.join(theme.sep.dot)}`;
 }
 
-function formatJsonScalar(value: unknown): string {
+function formatJsonScalar(value: unknown, theme: Theme): string {
 	if (value === null) return "null";
-	if (typeof value === "string") return `"${value}"`;
+	if (typeof value === "string") {
+		const trimmed = truncate(value, 70, theme.format.ellipsis);
+		return `"${trimmed}"`;
+	}
 	if (typeof value === "number" || typeof value === "boolean") return String(value);
 	return "";
 }
@@ -108,7 +111,7 @@ function renderJsonTreeLines(
 
 		const connector = isLast ? theme.tree.last : theme.tree.branch;
 		const prefix = `${buildTreePrefix(ancestors, theme)}${theme.fg("dim", connector)} `;
-		const scalar = formatJsonScalar(val);
+		const scalar = formatJsonScalar(val, theme);
 
 		if (scalar) {
 			const label = key ? theme.fg("muted", key) : theme.fg("muted", "value");
@@ -186,7 +189,33 @@ function renderJsonTreeLines(
 		pushLine(`${prefix}${iconScalar} ${label}: ${theme.fg("dim", String(val))}`);
 	};
 
-	renderNode(value, undefined, [], true, 0);
+	const renderRoot = (val: unknown) => {
+		if (Array.isArray(val)) {
+			for (let i = 0; i < val.length; i++) {
+				renderNode(val[i], `[${i}]`, [], i === val.length - 1, 1);
+				if (lines.length >= maxLines) {
+					truncated = true;
+					return;
+				}
+			}
+			return;
+		}
+		if (val && typeof val === "object") {
+			const entries = Object.entries(val as Record<string, unknown>);
+			for (let i = 0; i < entries.length; i++) {
+				const [childKey, child] = entries[i];
+				renderNode(child, childKey, [], i === entries.length - 1, 1);
+				if (lines.length >= maxLines) {
+					truncated = true;
+					return;
+				}
+			}
+			return;
+		}
+		renderNode(val, undefined, [], true, 0);
+	};
+
+	renderRoot(value);
 
 	return { lines, truncated };
 }
@@ -203,11 +232,18 @@ function renderOutputSection(
 	const trimmedOutput = output.trim();
 	if (!trimmedOutput) return lines;
 
-	lines.push(`${continuePrefix}${theme.fg("dim", "Output")}`);
-
 	if (trimmedOutput.startsWith("{") || trimmedOutput.startsWith("[")) {
 		try {
 			const parsed = JSON.parse(trimmedOutput);
+
+			// Collapsed: inline format like Vars
+			if (!expanded) {
+				lines.push(`${continuePrefix}${theme.fg("dim", formatOutputInline(parsed, theme))}`);
+				return lines;
+			}
+
+			// Expanded: tree format
+			lines.push(`${continuePrefix}${theme.fg("dim", "Output")}`);
 			const tree = renderJsonTreeLines(parsed, theme, expanded ? 6 : 2, expanded ? 24 : 6);
 			if (tree.lines.length > 0) {
 				for (const line of tree.lines) {
@@ -222,6 +258,8 @@ function renderOutputSection(
 			// Fall back to raw output
 		}
 	}
+
+	lines.push(`${continuePrefix}${theme.fg("dim", "Output")}`);
 
 	const outputLines = output.split("\n").filter((line) => line.trim());
 	const previewCount = expanded ? maxExpanded : maxCollapsed;
@@ -238,6 +276,92 @@ function renderOutputSection(
 	return lines;
 }
 
+function formatVarsInline(vars: Record<string, string>, theme: Theme): string {
+	const entries = Object.entries(vars);
+	if (entries.length === 0) return "Vars: none";
+	const pairs = entries.map(([key, value]) => `${key}=${truncate(value, 24, theme.format.ellipsis)}`);
+	return `Vars: ${pairs.join(", ")}`;
+}
+
+function formatScalarInline(value: unknown, maxLen: number, theme: Theme): string {
+	if (value === null) return "null";
+	if (value === undefined) return "undefined";
+	if (typeof value === "boolean") return String(value);
+	if (typeof value === "number") return String(value);
+	if (typeof value === "string") return `"${truncate(value, maxLen, theme.format.ellipsis)}"`;
+	if (Array.isArray(value)) return `[${value.length} items]`;
+	if (typeof value === "object") {
+		const keys = Object.keys(value);
+		return `{${keys.length} keys}`;
+	}
+	return String(value);
+}
+
+function formatOutputInline(data: unknown, theme: Theme, maxWidth = 80): string {
+	if (data === null || data === undefined) return "Output: none";
+
+	// For scalars, show directly
+	if (typeof data !== "object") {
+		return `Output: ${formatScalarInline(data, 60, theme)}`;
+	}
+
+	// For arrays, show count and first element preview
+	if (Array.isArray(data)) {
+		if (data.length === 0) return "Output: []";
+		const preview = formatScalarInline(data[0], 40, theme);
+		return `Output: [${data.length} items] ${preview}${data.length > 1 ? theme.format.ellipsis : ""}`;
+	}
+
+	// For objects, show key=value pairs inline
+	const entries = Object.entries(data as Record<string, unknown>);
+	if (entries.length === 0) return "Output: {}";
+
+	const pairs: string[] = [];
+	let totalLen = "Output: ".length;
+
+	for (const [key, value] of entries) {
+		const valueStr = formatScalarInline(value, 24, theme);
+		const pairStr = `${key}=${valueStr}`;
+		const addLen = pairs.length > 0 ? pairStr.length + 2 : pairStr.length; // +2 for ", "
+
+		if (totalLen + addLen > maxWidth && pairs.length > 0) {
+			pairs.push(theme.format.ellipsis);
+			break;
+		}
+
+		pairs.push(pairStr);
+		totalLen += addLen;
+	}
+
+	return `Output: ${pairs.join(", ")}`;
+}
+
+function renderVarsSection(
+	vars: Record<string, string> | undefined,
+	continuePrefix: string,
+	expanded: boolean,
+	theme: Theme,
+): string[] {
+	if (!vars || Object.keys(vars).length === 0) return [];
+	const lines: string[] = [];
+
+	if (!expanded) {
+		lines.push(`${continuePrefix}${theme.fg("dim", formatVarsInline(vars, theme))}`);
+		return lines;
+	}
+
+	lines.push(`${continuePrefix}${theme.fg("dim", "Vars")}`);
+	const tree = renderJsonTreeLines(vars, theme, 4, 16);
+	for (const line of tree.lines) {
+		lines.push(`${continuePrefix}  ${line}`);
+	}
+	if (tree.truncated) {
+		lines.push(`${continuePrefix}  ${theme.fg("dim", theme.format.ellipsis)}`);
+	}
+
+	return lines;
+}
+
 /**
  * Render the tool call arguments.
  */
@@ -247,24 +371,29 @@ export function renderCall(args: TaskParams, theme: Theme): Component {
 		theme.fg("dim", `${theme.format.bracketLeft}${args.agent}${theme.format.bracketRight}`),
 	);
 
-	if (args.tasks.length === 1) {
-		// Single task - show description preview
-		const task = args.tasks[0];
-		const summary = task.description.trim() || task.task;
-		const taskPreview = truncate(summary, 50, theme.format.ellipsis);
-		return new Text(`${label} ${agentTag} ${theme.fg("muted", taskPreview)}`, 0, 0);
+	const lines: string[] = [];
+	lines.push(`${label} ${agentTag}`);
+
+	const contextTemplate = args.context ?? "";
+	const context = contextTemplate.trim();
+	const hasContext = context.length > 0;
+	const branch = theme.fg("dim", theme.tree.branch);
+	const last = theme.fg("dim", theme.tree.last);
+	const vertical = theme.fg("dim", theme.tree.vertical);
+
+	if (hasContext) {
+		lines.push(` ${branch} ${theme.fg("dim", "Context")}`);
+		for (const line of context.split("\n")) {
+			const content = line ? theme.fg("muted", line) : "";
+			lines.push(` ${vertical}  ${content}`);
+		}
+		lines.push(` ${last} ${theme.fg("dim", "Tasks")}: ${theme.fg("muted", `${args.tasks.length} agents`)}`);
+		return new Text(lines.join("\n"), 0, 0);
 	}
 
-	// Multiple tasks - show count and descriptions
-	const descriptions = args.tasks.map((t) => t.description.trim()).join(", ");
-	return new Text(
-		`${label} ${agentTag} ${args.tasks.length} agents: ${theme.fg(
-			"muted",
-			truncate(descriptions, 50, theme.format.ellipsis),
-		)}`,
-		0,
-		0,
-	);
+	lines.push(`${theme.fg("dim", "Tasks")}: ${theme.fg("muted", `${args.tasks.length} agents`)}`);
+
+	return new Text(lines.join("\n"), 0, 0);
 }
 
 /**
@@ -278,8 +407,8 @@ function renderAgentProgress(
 	spinnerFrame?: number,
 ): string[] {
 	const lines: string[] = [];
-	const prefix = isLast ? theme.tree.last : theme.tree.branch;
-	const continuePrefix = isLast ? "   " : `${theme.tree.vertical}  `;
+	const prefix = isLast ? theme.fg("dim", theme.tree.last) : theme.fg("dim", theme.tree.branch);
+	const continuePrefix = isLast ? "   " : `${theme.fg("dim", theme.tree.vertical)}  `;
 
 	const icon = getStatusIcon(progress.status, theme, spinnerFrame);
 	const iconColor =
@@ -315,6 +444,8 @@ function renderAgentProgress(
 	}
 
 	lines.push(statusLine);
+
+	lines.push(...renderVarsSection(progress.vars, continuePrefix, expanded, theme));
 
 	// Current tool (if running) or most recent completed tool
 	if (progress.status === "running") {
@@ -498,8 +629,8 @@ function renderFindings(
  */
 function renderAgentResult(result: SingleResult, isLast: boolean, expanded: boolean, theme: Theme): string[] {
 	const lines: string[] = [];
-	const prefix = isLast ? theme.tree.last : theme.tree.branch;
-	const continuePrefix = isLast ? "   " : `${theme.tree.vertical}  `;
+	const prefix = isLast ? theme.fg("dim", theme.tree.last) : theme.fg("dim", theme.tree.branch);
+	const continuePrefix = isLast ? "   " : `${theme.fg("dim", theme.tree.vertical)}  `;
 
 	const aborted = result.aborted ?? false;
 	const success = !aborted && result.exitCode === 0;
@@ -525,6 +656,7 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 	}
 
 	lines.push(statusLine);
+	lines.push(...renderVarsSection(result.vars, continuePrefix, expanded, theme));
 
 	// Check for review result (complete with review schema + report_finding)
 	const completeData = result.extractedToolData?.complete as Array<{ data: unknown }> | undefined;
@@ -634,7 +766,7 @@ export function renderResult(
 		const abortedCount = details.results.filter((r) => r.aborted).length;
 		const successCount = details.results.filter((r) => !r.aborted && r.exitCode === 0).length;
 		const failCount = details.results.length - successCount - abortedCount;
-		let summary = `\n${theme.fg("dim", "Total:")} `;
+		let summary = `${theme.fg("dim", "Total:")} `;
 		if (abortedCount > 0) {
 			summary += theme.fg("error", `${abortedCount} aborted`);
 			if (successCount > 0 || failCount > 0) summary += theme.sep.dot;
@@ -656,7 +788,8 @@ export function renderResult(
 		return new Text(theme.fg("dim", "No results"), 0, 0);
 	}
 
-	return new Text(lines.join("\n"), 0, 0);
+	const indented = lines.map((line) => (line.trim() ? `   ${line}` : ""));
+	return new Text(indented.join("\n"), 0, 0);
 }
 
 export const taskToolRenderer = {

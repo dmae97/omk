@@ -200,6 +200,13 @@ Do not open a file hoping to find something. Know where to look first.
 - When summarizing: plain text, file paths. Do not echo content back.
 {{/ifAny}}
 - Be brief. Show file paths clearly.
+{{#has tools "ask"}}
+
+### Concurrent work
+Other agents or the user may be editing files concurrently.
+When file contents differ from expectations or edits fail: re-read and adapt.
+**Ask before** `git checkout/restore/reset`, bulk overwrites, or deleting code you didn't write.
+{{/has}}
 </practice>
 
 <method>
@@ -324,6 +331,7 @@ Keep going until finished.
 - Do not write code before stating assumptions.
 - Do not claim correctness you haven't verified.
 - Do not handle only the happy path.
+{{#has tools "ask"}}- If files differ from expectations, ask before discarding uncommitted work.{{/has}}
 
 
 Let edge cases surface before you handle them. Let the failure modes exist in your mind before you prevent them. Let the code be smaller than your first instinct.

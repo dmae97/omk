@@ -28,12 +28,14 @@ import { discoverAgents, getAgent } from "./discovery";
 import { runSubprocess } from "./executor";
 import { mapWithConcurrencyLimit } from "./parallel";
 import { renderCall, renderResult } from "./render";
+import { renderTemplate, validateTaskTemplate } from "./template";
 import {
 	type AgentProgress,
 	MAX_AGENTS_IN_DESCRIPTION,
 	MAX_CONCURRENCY,
 	MAX_PARALLEL_TASKS,
 	type SingleResult,
+	type TaskParams,
 	type TaskToolDetails,
 	taskSchema,
 } from "./types";
@@ -111,14 +113,6 @@ async function buildDescription(cwd: string): Promise<string> {
 // ═══════════════════════════════════════════════════════════════════════════
 // Tool Class
 // ═══════════════════════════════════════════════════════════════════════════
-
-type TaskParams = {
-	agent: string;
-	context?: string;
-	model?: string;
-	output?: unknown;
-	tasks: Array<{ id: string; task: string; description: string }>;
-};
 
 /**
  * Task tool - Delegate tasks to specialized agents.
@@ -201,7 +195,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 				content: [
 					{
 						type: "text",
-						text: `No tasks provided. Use: { agent, context, tasks: [{id, task, description}, ...] }`,
+						text: `No tasks provided. Use: { agent, context, tasks: [{id, description, vars}, ...] }`,
 					},
 				],
 				details: {
@@ -277,6 +271,18 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 			};
 		}
 
+		const templateError = validateTaskTemplate(context, tasks);
+		if (templateError) {
+			return {
+				content: [{ type: "text", text: templateError }],
+				details: {
+					projectAgentsDir,
+					results: [],
+					totalDurationMs: 0,
+				},
+			};
+		}
+
 		// Derive artifacts directory
 		const sessionFile = this.session.getSessionFile();
 		const artifactsDir = sessionFile ? sessionFile.slice(0, -6) : null;
@@ -341,10 +347,12 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 			}
 
 			// Build full prompts with context prepended
+			const contextTemplate = context ?? "";
 			const tasksWithContext = tasks.map((t) => ({
-				task: context ? `${context}\n\n${t.task}` : t.task,
+				task: renderTemplate(contextTemplate, t.vars),
 				description: t.description,
 				taskId: t.id,
+				vars: t.vars,
 			}));
 
 			// Initialize progress for all tasks
@@ -357,6 +365,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 					agentSource: agent.source,
 					status: "pending",
 					task: t.task,
+					vars: t.vars,
 					recentTools: [],
 					recentOutput: [],
 					toolCount: 0,
@@ -391,7 +400,10 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 						signal,
 						eventBus: undefined,
 						onProgress: (progress) => {
-							progressMap.set(index, structuredClone(progress));
+							progressMap.set(index, {
+								...structuredClone(progress),
+								vars: tasksWithContext[index]?.vars,
+							});
 							emitProgress();
 						},
 						authStorage: this.session.authStorage,
@@ -405,7 +417,12 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 
 			// Fill in skipped tasks (undefined entries from abort) with placeholder results
 			const results: SingleResult[] = partialResults.map((result, index) => {
-				if (result !== undefined) return result;
+				if (result !== undefined) {
+					return {
+						...result,
+						vars: tasksWithContext[index]?.vars,
+					};
+				}
 				const task = tasksWithContext[index];
 				return {
 					index,
@@ -413,6 +430,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 					agent: agentName,
 					agentSource: agent.source,
 					task: task.task,
+					vars: task.vars,
 					description: task.description,
 					exitCode: 1,
 					output: "",

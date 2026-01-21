@@ -49,12 +49,12 @@ Agents with "Output: structured" have a fixed schema enforced via frontmatter; y
 ## Parameters
 
 - `agent`: Agent type to use for all tasks
-- `context`: **Required context from conversation** - include ALL relevant info: requirements, schemas, decisions, constraints. Subagents cannot see chat history.
-- `model`: (optional) Model override (fuzzy matching, e.g., "sonnet", "opus")
-- `tasks`: Array of `{id, task, description}` - tasks to run in parallel (max {{MAX_PARALLEL_TASKS}}, {{MAX_CONCURRENCY}} concurrent)
+- `context`: Template with `{{placeholders}}` for multi-task. Each placeholder is filled from task vars.
+- `model`: (optional) Model override for all tasks (fuzzy matching, e.g., "sonnet", "opus")
+- `tasks`: Array of `{id, description, vars}` - tasks to run in parallel (max {{MAX_PARALLEL_TASKS}}, {{MAX_CONCURRENCY}} concurrent)
   - `id`: Short CamelCase identifier for display (max 20 chars, e.g., "SessionStore", "LspRefactor")
-  - `task`: The task prompt for the agent
   - `description`: Short human-readable description of what the task does
+  - `vars`: Object with keys matching `{{placeholders}}` in context
 - `output`: (optional) JTD schema for structured subagent output (used by the complete tool)
 
 ## Example
@@ -65,7 +65,7 @@ assistant: I'll execute the refactoring plan.
 assistant: Uses the Task tool:
 {
   "agent": "task",
-  "context": "Refactoring the auth module into separate concerns.\n\nPlan:\n1. AuthProvider - Extract React context and provider from src/auth/index.tsx\n2. AuthApi - Extract API calls to src/auth/api.ts, use existing fetchJson helper\n3. AuthTypes - Move types to src/auth/types.ts, re-export from index\n\nConstraints:\n- Preserve all existing exports from src/auth/index.tsx\n- Use project's fetchJson (src/utils/http.ts), don't use raw fetch\n- No new dependencies",
+  "context": "Refactoring the auth module into separate concerns.\n\nPlan:\n1. AuthProvider - Extract React context and provider from src/auth/index.tsx\n2. AuthApi - Extract API calls to src/auth/api.ts, use existing fetchJson helper\n3. AuthTypes - Move types to types.ts, re-export from index\n\nConstraints:\n- Preserve all existing exports from src/auth/index.tsx\n- Use project's fetchJson (src/utils/http.ts), don't use raw fetch\n- No new dependencies\n\nTask: {{step}}\n\nFiles: {{files}}",
   "output": {
     "properties": {
       "summary": { "type": "string" },
@@ -74,14 +74,9 @@ assistant: Uses the Task tool:
     }
   },
   "tasks": [
-    { "id": "AuthProvider", "task": "Execute step 1: Extract AuthProvider and AuthContext", "description": "Extract React context" },
-    { "id": "AuthApi", "task": "Execute step 2: Extract API calls to api.ts", "description": "Extract API layer" },
-    { "id": "AuthTypes", "task": "Execute step 3: Move types to types.ts", "description": "Extract types" }
+    { "id": "AuthProvider", "description": "Extract React context", "vars": { "step": "Execute step 1: Extract AuthProvider and AuthContext", "files": "src/auth/index.tsx" } },
+    { "id": "AuthApi", "description": "Extract API layer", "vars": { "step": "Execute step 2: Extract API calls to api.ts", "files": "src/auth/api.ts" } },
+    { "id": "AuthTypes", "description": "Extract types", "vars": { "step": "Execute step 3: Move types to types.ts", "files": "src/auth/types.ts" } }
   ]
 }
 </example>
-
-Key points:
-- **Plan in context**: The full plan is written once; each task references its step without repeating shared constraints
-- **Parallel execution**: 3 agents run concurrently, each owning one step - no duplicated work
-- **Structured output**: JTD schema ensures consistent reporting across all agents
