@@ -1,5 +1,5 @@
 export { AskTool, type AskToolDetails } from "./ask";
-export { type BashOperations, BashTool, type BashToolDetails, type BashToolOptions } from "./bash";
+export { BashTool, type BashToolDetails, type BashToolOptions } from "./bash";
 export { CalculatorTool, type CalculatorToolDetails } from "./calculator";
 export { CompleteTool } from "./complete";
 // Exa MCP tools (22 tools)

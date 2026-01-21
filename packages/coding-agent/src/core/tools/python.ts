@@ -14,7 +14,7 @@ import type { PreludeHelper, PythonStatusEvent } from "../python-kernel";
 import type { ToolSession } from "./index";
 import { resolveToCwd } from "./path-utils";
 import { getTreeBranch, getTreeContinuePrefix, shortenPath, ToolUIKit, truncate } from "./render-utils";
-import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateTail } from "./truncate";
+import { DEFAULT_MAX_BYTES, formatTailTruncationNotice, type TruncationResult, truncateTail } from "./truncate";
 
 export const PYTHON_DEFAULT_PREVIEW_LINES = 10;
 
@@ -234,7 +234,6 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 			let details: PythonToolDetails | undefined;
 
 			if (truncation.truncated) {
-				const fullOutputSuffix = result.fullOutputPath ? ` Full output: ${result.fullOutputPath}` : "";
 				details = {
 					truncation,
 					fullOutputPath: result.fullOutputPath,
@@ -242,18 +241,10 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 					images,
 					statusEvents: statusEvents.length > 0 ? statusEvents : undefined,
 				};
-
-				const startLine = truncation.totalLines - truncation.outputLines + 1;
-				const endLine = truncation.totalLines;
-
-				if (truncation.lastLinePartial) {
-					const lastLineSize = formatSize(Buffer.byteLength(result.output.split("\n").pop() || "", "utf-8"));
-					outputText += `\n\n[Showing last ${formatSize(truncation.outputBytes)} of line ${endLine} (line is ${lastLineSize})${fullOutputSuffix}]`;
-				} else if (truncation.truncatedBy === "lines") {
-					outputText += `\n\n[Showing lines ${startLine}-${endLine} of ${truncation.totalLines}${fullOutputSuffix}]`;
-				} else {
-					outputText += `\n\n[Showing lines ${startLine}-${endLine} of ${truncation.totalLines} (${formatSize(DEFAULT_MAX_BYTES)} limit)${fullOutputSuffix}]`;
-				}
+				outputText += formatTailTruncationNotice(truncation, {
+					fullOutputPath: result.fullOutputPath,
+					originalContent: result.output,
+				});
 			}
 
 			if (!details && (jsonOutputs.length > 0 || images.length > 0 || statusEvents.length > 0)) {
@@ -685,7 +676,7 @@ export const pythonToolRenderer = {
 					warnings.push(`Truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines`);
 				} else {
 					warnings.push(
-						`Truncated: ${truncation.outputLines} lines shown (${ui.formatBytes(truncation.maxBytes ?? DEFAULT_MAX_BYTES)} limit)`,
+						`Truncated: ${truncation.outputLines} lines shown (${ui.formatBytes(truncation.maxBytes)} limit)`,
 					);
 				}
 			}

@@ -1,4 +1,4 @@
-import { logger, sanitizeText } from "@oh-my-pi/pi-utils";
+import { logger } from "@oh-my-pi/pi-utils";
 import {
 	checkPythonKernelAvailability,
 	type KernelDisplayOutput,
@@ -210,30 +210,20 @@ async function executeWithKernel(
 	code: string,
 	options: PythonExecutorOptions | undefined,
 ): Promise<PythonResult> {
-	const sink = new OutputSink({ onLine: options?.onChunk });
+	const sink = new OutputSink({ onChunk: options?.onChunk });
 	const displayOutputs: KernelDisplayOutput[] = [];
 
 	try {
-		const writable = sink.createStringWritable();
-		const writer = writable.getWriter();
-		let result: KernelExecuteResult;
-		try {
-			result = await kernel.execute(code, {
-				signal: options?.signal,
-				timeoutMs: options?.timeout,
-				onChunk: (text) => {
-					writer.write(sanitizeText(text));
-				},
-				onDisplay: (output) => {
-					displayOutputs.push(output);
-				},
-			});
-		} catch (err) {
-			await writer.abort(err);
-			throw err;
-		} finally {
-			await writer.close().catch(() => {});
-		}
+		const result = await kernel.execute(code, {
+			signal: options?.signal,
+			timeoutMs: options?.timeout,
+			onChunk: (text) => {
+				sink.push(text);
+			},
+			onDisplay: (output) => {
+				displayOutputs.push(output);
+			},
+		});
 
 		if (result.cancelled) {
 			const secs = options?.timeout ? Math.round(options.timeout / 1000) : undefined;
@@ -244,7 +234,7 @@ async function executeWithKernel(
 				cancelled: true,
 				displayOutputs,
 				stdinRequested: result.stdinRequested,
-				...sink.dump(annotation),
+				...(await sink.dump(annotation)),
 			};
 		}
 
@@ -254,7 +244,7 @@ async function executeWithKernel(
 				cancelled: false,
 				displayOutputs,
 				stdinRequested: true,
-				...sink.dump("Kernel requested stdin; interactive input is not supported."),
+				...(await sink.dump("Kernel requested stdin; interactive input is not supported.")),
 			};
 		}
 
@@ -264,7 +254,7 @@ async function executeWithKernel(
 			cancelled: false,
 			displayOutputs,
 			stdinRequested: false,
-			...sink.dump(),
+			...(await sink.dump()),
 		};
 	} catch (err) {
 		const error = err instanceof Error ? err : new Error(String(err));

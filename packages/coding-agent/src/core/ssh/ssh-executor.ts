@@ -70,16 +70,11 @@ export async function executeSSH(
 		timeout: options?.timeout,
 	});
 
-	const sink = new OutputSink({ onLine: options?.onChunk });
+	const sink = new OutputSink({ onChunk: options?.onChunk });
 
-	try {
-		await Promise.allSettled([
-			child.stdout.pipeTo(sink.createWritable()),
-			child.stderr.pipeTo(sink.createWritable()),
-		]);
-	} finally {
-		await sink.close();
-	}
+	await Promise.allSettled([child.stdout.pipeTo(sink.createInput()), child.stderr.pipeTo(sink.createInput())]).catch(
+		() => {},
+	);
 
 	try {
 		await child.exited;
@@ -87,7 +82,7 @@ export async function executeSSH(
 		return {
 			exitCode,
 			cancelled: false,
-			...sink.dump(),
+			...(await sink.dump()),
 		};
 	} catch (err) {
 		if (err instanceof ptree.Exception) {
@@ -95,20 +90,20 @@ export async function executeSSH(
 				return {
 					exitCode: undefined,
 					cancelled: true,
-					...sink.dump(`SSH: ${err.message}`),
+					...(await sink.dump(`SSH: ${err.message}`)),
 				};
 			}
 			if (err.aborted) {
 				return {
 					exitCode: undefined,
 					cancelled: true,
-					...sink.dump(`SSH command aborted: ${err.message}`),
+					...(await sink.dump(`Command aborted: ${err.message}`)),
 				};
 			}
 			return {
 				exitCode: err.exitCode,
 				cancelled: false,
-				...sink.dump(`Unexpected error: ${err.message}`),
+				...(await sink.dump(`Unexpected error: ${err.message}`)),
 			};
 		}
 		throw err;

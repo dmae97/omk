@@ -142,7 +142,7 @@ export class ChildProcess {
 	#stderrStream?: ReadableStream<Uint8Array>;
 	#exitReason?: Exception;
 	#exitReasonPending?: Exception;
-	#exited: Promise<void>;
+	#exited: Promise<number>;
 	#resolveExited: (ex?: PromiseLike<Exception> | Exception) => void;
 
 	constructor(proc: PipedSubprocess) {
@@ -221,7 +221,7 @@ export class ChildProcess {
 		const { promise, resolve } = Promise.withResolvers<Exception | undefined>();
 
 		this.#exited = promise.then((ex?: Exception) => {
-			if (!ex) return; // success, no exception
+			if (!ex) return proc.exitCode ?? -1337; // success, no exception
 			if (proc.killed && this.#exitReasonPending) {
 				ex = this.#exitReasonPending; // propagate reason if killed
 			}
@@ -245,7 +245,7 @@ export class ChildProcess {
 	get pid(): number | undefined {
 		return this.#proc.pid;
 	}
-	get exited(): Promise<void> {
+	get exited(): Promise<number> {
 		return this.#exited;
 	}
 	get exitCode(): number | null {

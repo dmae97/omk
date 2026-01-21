@@ -289,3 +289,95 @@ export function truncateLine(
 	}
 	return { text: `${line.slice(0, maxChars)}... [truncated]`, wasTruncated: true };
 }
+
+// =============================================================================
+// Truncation notice formatting
+// =============================================================================
+
+export interface TailTruncationNoticeOptions {
+	/** Path to full output file (e.g., from bash/python executor) */
+	fullOutputPath?: string;
+	/** Original content for computing last line size when lastLinePartial */
+	originalContent?: string;
+	/** Additional suffix to append inside the brackets */
+	suffix?: string;
+}
+
+/**
+ * Format a truncation notice for tail-truncated output (bash, python, ssh).
+ * Returns empty string if not truncated.
+ *
+ * Examples:
+ * - "[Showing last 50KB of line 1000 (line is 2.1MB). Full output: /tmp/out.txt]"
+ * - "[Showing lines 500-1000 of 1000. Full output: /tmp/out.txt]"
+ * - "[Showing lines 500-1000 of 1000 (50KB limit). Full output: /tmp/out.txt]"
+ */
+export function formatTailTruncationNotice(
+	truncation: TruncationResult,
+	options: TailTruncationNoticeOptions = {},
+): string {
+	if (!truncation.truncated) {
+		return "";
+	}
+
+	const { fullOutputPath, originalContent, suffix = "" } = options;
+	const startLine = truncation.totalLines - truncation.outputLines + 1;
+	const endLine = truncation.totalLines;
+	const fullOutputPart = fullOutputPath ? `. Full output: ${fullOutputPath}` : "";
+
+	let notice: string;
+
+	if (truncation.lastLinePartial) {
+		let lastLineSizePart = "";
+		if (originalContent) {
+			const lastLine = originalContent.split("\n").pop() || "";
+			lastLineSizePart = ` (line is ${formatSize(Buffer.byteLength(lastLine, "utf-8"))})`;
+		}
+		notice = `[Showing last ${formatSize(truncation.outputBytes)} of line ${endLine}${lastLineSizePart}${fullOutputPart}${suffix}]`;
+	} else if (truncation.truncatedBy === "lines") {
+		notice = `[Showing lines ${startLine}-${endLine} of ${truncation.totalLines}${fullOutputPart}${suffix}]`;
+	} else {
+		notice = `[Showing lines ${startLine}-${endLine} of ${truncation.totalLines} (${formatSize(truncation.maxBytes)} limit)${fullOutputPart}${suffix}]`;
+	}
+
+	return `\n\n${notice}`;
+}
+
+export interface HeadTruncationNoticeOptions {
+	/** 1-indexed start line number (default: 1) */
+	startLine?: number;
+	/** Total lines in the original file (for "of N" display) */
+	totalFileLines?: number;
+}
+
+/**
+ * Format a truncation notice for head-truncated output (read tool).
+ * Returns empty string if not truncated.
+ *
+ * Examples:
+ * - "[Showing lines 1-2000 of 5000. Use offset=2001 to continue]"
+ * - "[Showing lines 100-2099 of 5000 (50KB limit). Use offset=2100 to continue]"
+ */
+export function formatHeadTruncationNotice(
+	truncation: TruncationResult,
+	options: HeadTruncationNoticeOptions = {},
+): string {
+	if (!truncation.truncated) {
+		return "";
+	}
+
+	const startLineDisplay = options.startLine ?? 1;
+	const totalFileLines = options.totalFileLines ?? truncation.totalLines;
+	const endLineDisplay = startLineDisplay + truncation.outputLines - 1;
+	const nextOffset = endLineDisplay + 1;
+
+	let notice: string;
+
+	if (truncation.truncatedBy === "lines") {
+		notice = `[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines}. Use offset=${nextOffset} to continue]`;
+	} else {
+		notice = `[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines} (${formatSize(truncation.maxBytes)} limit). Use offset=${nextOffset} to continue]`;
+	}
+
+	return `\n\n${notice}`;
+}

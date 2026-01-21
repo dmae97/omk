@@ -22,7 +22,7 @@ import type { Rule } from "../capability/rule";
 import { getAgentDbPath } from "../config";
 import { theme } from "../modes/interactive/theme/theme";
 import ttsrInterruptTemplate from "../prompts/system/ttsr-interrupt.md" with { type: "text" };
-import { type BashResult, executeBash as executeBashCommand, executeBashWithOperations } from "./bash-executor";
+import { type BashResult, executeBash as executeBashCommand } from "./bash-executor";
 import {
 	type CompactionResult,
 	calculateContextTokens,
@@ -60,7 +60,6 @@ import type { Skill, SkillWarning } from "./skills";
 import { expandSlashCommand, type FileSlashCommand } from "./slash-commands";
 import { closeAllConnections } from "./ssh/connection-manager";
 import { unmountAll } from "./ssh/sshfs-mount";
-import type { BashOperations } from "./tools/bash";
 import { normalizeDiff, normalizeToLF, ParseError, previewPatch, stripBom } from "./tools/patch";
 import { resolveToCwd } from "./tools/path-utils";
 import type { TodoItem } from "./tools/todo-write";
@@ -2546,25 +2545,19 @@ export class AgentSession {
 	 * @param command The bash command to execute
 	 * @param onChunk Optional streaming callback for output
 	 * @param options.excludeFromContext If true, command output won't be sent to LLM (!! prefix)
-	 * @param options.operations Custom BashOperations for remote execution
 	 */
 	async executeBash(
 		command: string,
 		onChunk?: (chunk: string) => void,
-		options?: { excludeFromContext?: boolean; operations?: BashOperations },
+		options?: { excludeFromContext?: boolean },
 	): Promise<BashResult> {
 		this._bashAbortController = new AbortController();
 
 		try {
-			const result = options?.operations
-				? await executeBashWithOperations(command, process.cwd(), options.operations, {
-						onChunk,
-						signal: this._bashAbortController.signal,
-					})
-				: await executeBashCommand(command, {
-						onChunk,
-						signal: this._bashAbortController.signal,
-					});
+			const result = await executeBashCommand(command, {
+				onChunk,
+				signal: this._bashAbortController.signal,
+			});
 
 			this.recordBashResult(command, result, options);
 			return result;

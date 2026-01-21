@@ -324,6 +324,7 @@ const myExtension: ExtensionFactory = async (pi) => {
 ```
 
 Key extension events:
+
 - `before_agent_start`: Receives `systemPrompt` and can return full replacement (not just append)
 - `user_bash`: Intercept `!`/`!!` commands for custom execution (e.g., remote SSH)
 - `session_shutdown`: Cleanup notification before exit
@@ -409,32 +410,6 @@ bun test --testNamePattern="RPC"
 
 # Run RPC example interactively
 bun test/rpc-example.ts
-```
-
-### Pluggable Tool Operations
-
-Built-in tools support pluggable operations for remote execution:
-
-- **BashOperations**: Execute commands on remote systems
-- **LsOperations**: Remote directory listing
-- **GrepOperations**: Remote content search
-- **FindOperations**: Remote file search
-
-Example: SSH extension overriding bash execution:
-
-```typescript
-pi.on("user_bash", async (event) => {
-  if (shouldRunRemotely()) {
-    return {
-      operations: {
-        exec: async (cmd, cwd, opts) => {
-          // Execute via SSH
-          return { exitCode: 0 };
-        },
-      },
-    };
-  }
-});
 ```
 
 ### Managed Binaries

@@ -6,14 +6,14 @@ import { Type } from "@sinclair/typebox";
 import { truncateToVisualLines } from "../../modes/interactive/components/visual-truncate";
 import type { Theme } from "../../modes/interactive/theme/theme";
 import bashDescription from "../../prompts/tools/bash.md" with { type: "text" };
-import { type BashExecutorOptions, executeBash, executeBashWithOperations } from "../bash-executor";
+import { type BashExecutorOptions, executeBash } from "../bash-executor";
 import type { RenderResultOptions } from "../custom-tools/types";
 import { renderPromptTemplate } from "../prompt-templates";
 import { checkBashInterception, checkSimpleLsInterception } from "./bash-interceptor";
 import type { ToolSession } from "./index";
 import { resolveToCwd } from "./path-utils";
 import { ToolUIKit } from "./render-utils";
-import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateTail } from "./truncate";
+import { formatTailTruncationNotice, type TruncationResult, truncateTail } from "./truncate";
 
 export const BASH_DEFAULT_PREVIEW_LINES = 10;
 
@@ -31,32 +31,12 @@ export interface BashToolDetails {
 	fullOutput?: string;
 }
 
-/**
- * Pluggable operations for bash execution.
- * Override to delegate command execution to remote systems.
- */
-export interface BashOperations {
-	exec: (
-		command: string,
-		cwd: string,
-		options: {
-			onData: (data: Buffer) => void;
-			signal?: AbortSignal;
-			timeout?: number;
-		},
-	) => Promise<{ exitCode: number | null }>;
-}
-
-export interface BashToolOptions {
-	/** Custom operations for command execution. Default: local shell */
-	operations?: BashOperations;
-}
+export interface BashToolOptions {}
 
 /**
  * Bash tool implementation.
  *
  * Executes bash commands with optional timeout and working directory.
- * Supports custom operations for remote execution.
  */
 export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 	public readonly name = "bash";
@@ -65,11 +45,9 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 	public readonly parameters = bashSchema;
 
 	private readonly session: ToolSession;
-	private readonly options?: BashToolOptions;
 
-	constructor(session: ToolSession, options?: BashToolOptions) {
+	constructor(session: ToolSession) {
 		this.session = session;
-		this.options = options;
 		this.description = renderPromptTemplate(bashDescription);
 	}
 
@@ -125,12 +103,8 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 			},
 		};
 
-		// Use custom operations if provided, otherwise use default local executor
-		const result = this.options?.operations
-			? await executeBashWithOperations(command, commandCwd, this.options.operations, executorOptions)
-			: await executeBash(command, executorOptions);
-
 		// Handle errors
+		const result = await executeBash(command, executorOptions);
 		if (result.cancelled) {
 			throw new Error(result.output || "Command aborted");
 		}
@@ -147,18 +121,10 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 				fullOutputPath: result.fullOutputPath,
 				fullOutput: currentOutput,
 			};
-
-			const startLine = truncation.totalLines - truncation.outputLines + 1;
-			const endLine = truncation.totalLines;
-
-			if (truncation.lastLinePartial) {
-				const lastLineSize = formatSize(Buffer.byteLength(result.output.split("\n").pop() || "", "utf-8"));
-				outputText += `\n\n[Showing last ${formatSize(truncation.outputBytes)} of line ${endLine} (line is ${lastLineSize}). Full output: ${result.fullOutputPath}]`;
-			} else if (truncation.truncatedBy === "lines") {
-				outputText += `\n\n[Showing lines ${startLine}-${endLine} of ${truncation.totalLines}. Full output: ${result.fullOutputPath}]`;
-			} else {
-				outputText += `\n\n[Showing lines ${startLine}-${endLine} of ${truncation.totalLines} (${formatSize(DEFAULT_MAX_BYTES)} limit). Full output: ${result.fullOutputPath}]`;
-			}
+			outputText += formatTailTruncationNotice(truncation, {
+				fullOutputPath: result.fullOutputPath,
+				originalContent: result.output,
+			});
 		}
 
 		if (result.exitCode !== 0 && result.exitCode !== undefined) {
@@ -263,7 +229,7 @@ export const bashToolRenderer = {
 					warnings.push(`Truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines`);
 				} else {
 					warnings.push(
-						`Truncated: ${truncation.outputLines} lines shown (${ui.formatBytes(truncation.maxBytes ?? DEFAULT_MAX_BYTES)} limit)`,
+						`Truncated: ${truncation.outputLines} lines shown (${ui.formatBytes(truncation.maxBytes)} limit)`,
 					);
 				}
 			}

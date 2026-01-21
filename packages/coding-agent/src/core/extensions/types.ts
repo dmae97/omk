@@ -29,7 +29,6 @@ import type {
 	SessionManager,
 } from "../session-manager";
 import type { BashToolDetails, FindToolDetails, GrepToolDetails, LsToolDetails, ReadToolDetails } from "../tools";
-import type { BashOperations } from "../tools/bash";
 import type { EditToolDetails } from "../tools/patch";
 
 export type { ExecOptions, ExecResult } from "../exec";
@@ -551,8 +550,6 @@ export interface InputEventResult {
 
 /** Result from user_bash event handler */
 export interface UserBashEventResult {
-	/** Custom operations to use for execution */
-	operations?: BashOperations;
 	/** Full replacement: extension handled execution, use this result */
 	result?: BashResult;
 }

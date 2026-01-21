@@ -24,7 +24,9 @@ import { convertWithMarkitdown, fetchBinary } from "./web-scrapers/utils";
 // Types and Constants
 // =============================================================================
 
-const DEFAULT_TIMEOUT = 20;
+const MIN_TIMEOUT = 1_000;
+const DEFAULT_TIMEOUT = 20_000;
+const MAX_TIMEOUT = 45_000;
 
 // Convertible document types (markitdown supported)
 const CONVERTIBLE_MIMES = new Set([
@@ -109,7 +111,7 @@ async function exec(
 ): Promise<{ stdout: string; stderr: string; ok: boolean }> {
 	const proc = ptree.cspawn([cmd, ...args], {
 		stdin: options?.input ? "pipe" : null,
-		timeout: options?.timeout,
+		timeout: options?.timeout ? options.timeout * 1000 : undefined,
 	});
 
 	if (options?.input) {
@@ -244,7 +246,7 @@ async function tryMdSuffix(url: string, timeout: number, signal?: AbortSignal): 
 		if (signal?.aborted) {
 			return null;
 		}
-		const result = await loadPage(candidate, { timeout: Math.min(timeout, 5), signal });
+		const result = await loadPage(candidate, { timeout: Math.min(timeout, MAX_TIMEOUT), signal });
 		if (result.ok && result.content.trim().length > 100 && !looksLikeHtml(result.content)) {
 			return result.content;
 		}
@@ -910,7 +912,7 @@ export class WebFetchTool implements AgentTool<typeof webFetchSchema, WebFetchTo
 		}
 
 		// Clamp timeout
-		const effectiveTimeout = Math.min(Math.max(timeout, 1), 120);
+		const effectiveTimeout = Math.min(Math.max(timeout, MIN_TIMEOUT), MAX_TIMEOUT);
 
 		const result = await renderUrl(url, effectiveTimeout, raw, signal);
 

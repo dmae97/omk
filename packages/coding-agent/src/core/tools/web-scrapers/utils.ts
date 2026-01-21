@@ -1,35 +1,12 @@
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
-import { $ } from "bun";
+import { ptree } from "@oh-my-pi/pi-utils";
 import { nanoid } from "nanoid";
 import { ensureTool } from "../../../utils/tools-manager";
 import { createRequestSignal } from "./types";
 
 const MAX_BYTES = 50 * 1024 * 1024; // 50MB for binary files
-
-interface ExecResult {
-	stdout: string;
-	stderr: string;
-	ok: boolean;
-	exitCode: number;
-}
-
-async function exec(
-	cmd: string,
-	args: string[],
-	options?: { timeout?: number; input?: string | Buffer },
-): Promise<ExecResult> {
-	void options;
-	const result = await $`${cmd} ${args}`.quiet().nothrow();
-	const decoder = new TextDecoder();
-	return {
-		stdout: result.stdout ? decoder.decode(result.stdout) : "",
-		stderr: result.stderr ? decoder.decode(result.stderr) : "",
-		ok: result.exitCode === 0,
-		exitCode: result.exitCode ?? -1,
-	};
-}
 
 export interface ConvertResult {
 	content: string;
@@ -72,16 +49,16 @@ export async function convertWithMarkitdown(
 
 	try {
 		await Bun.write(tmpFile, content);
-		const result = await exec(markitdown, [tmpFile], { timeout });
-		if (!result.ok) {
-			const stderr = result.stderr.trim();
+		const result = await ptree.cspawn([markitdown, tmpFile], { timeout });
+		const [stdout, stderr, exitCode] = await Promise.all([result.stdout.text(), result.stderr.text(), result.exited]);
+		if (exitCode !== 0) {
 			return {
-				content: result.stdout,
+				content: stdout,
 				ok: false,
-				error: stderr.length > 0 ? stderr : `markitdown failed (exit ${result.exitCode})`,
+				error: stderr.length > 0 ? stderr : `markitdown failed (exit ${exitCode})`,
 			};
 		}
-		return { content: result.stdout, ok: true };
+		return { content: stdout, ok: true };
 	} finally {
 		try {
 			await rm(tmpFile, { force: true });

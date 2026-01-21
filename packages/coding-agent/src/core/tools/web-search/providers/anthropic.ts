@@ -64,7 +64,6 @@ function buildSystemBlocks(
 
 	return buildAnthropicSystemBlocks(systemPrompt, {
 		includeClaudeCodeInstruction: includeClaudeCode,
-		includeCacheControl: auth.isOAuth,
 		extraInstructions,
 	});
 }

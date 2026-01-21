@@ -194,7 +194,6 @@ export {
 export { type FileSlashCommand, loadSlashCommands as discoverSlashCommands } from "./core/slash-commands";
 // Tools (detail types and utilities)
 export {
-	type BashOperations,
 	type BashToolDetails,
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,

@@ -14,7 +14,7 @@ import { ensureHostInfo, getHostInfoForHost } from "../ssh/connection-manager";
 import { executeSSH } from "../ssh/ssh-executor";
 import type { ToolSession } from "./index";
 import { ToolUIKit } from "./render-utils";
-import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateTail } from "./truncate";
+import { formatTailTruncationNotice, type TruncationResult, truncateTail } from "./truncate";
 
 const sshSchema = Type.Object({
 	host: Type.String({ description: "Host name from ssh.json or .ssh.json" }),
@@ -193,18 +193,10 @@ export class SshTool implements AgentTool<typeof sshSchema, SSHToolDetails> {
 				truncation,
 				fullOutputPath: result.fullOutputPath,
 			};
-
-			const startLine = truncation.totalLines - truncation.outputLines + 1;
-			const endLine = truncation.totalLines;
-
-			if (truncation.lastLinePartial) {
-				const lastLineSize = formatSize(Buffer.byteLength(result.output.split("\n").pop() || "", "utf-8"));
-				outputText += `\n\n[Showing last ${formatSize(truncation.outputBytes)} of line ${endLine} (line is ${lastLineSize}). Full output: ${result.fullOutputPath}]`;
-			} else if (truncation.truncatedBy === "lines") {
-				outputText += `\n\n[Showing lines ${startLine}-${endLine} of ${truncation.totalLines}. Full output: ${result.fullOutputPath}]`;
-			} else {
-				outputText += `\n\n[Showing lines ${startLine}-${endLine} of ${truncation.totalLines} (${formatSize(DEFAULT_MAX_BYTES)} limit). Full output: ${result.fullOutputPath}]`;
-			}
+			outputText += formatTailTruncationNotice(truncation, {
+				fullOutputPath: result.fullOutputPath,
+				originalContent: result.output,
+			});
 		}
 
 		if (result.exitCode !== 0 && result.exitCode !== undefined) {
@@ -311,7 +303,7 @@ export const sshToolRenderer = {
 					warnings.push(`Truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines`);
 				} else {
 					warnings.push(
-						`Truncated: ${truncation.outputLines} lines shown (${ui.formatBytes(truncation.maxBytes ?? DEFAULT_MAX_BYTES)} limit)`,
+						`Truncated: ${truncation.outputLines} lines shown (${ui.formatBytes(truncation.maxBytes)} limit)`,
 					);
 				}
 			}

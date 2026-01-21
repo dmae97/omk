@@ -1,6 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Updated output sink to properly handle large outputs
+- Improved error message formatting in SSH executor
+- Updated web fetch timeout bounds and conversion
+
+### Fixed
+
+- Fixed output truncation handling in streaming output
+- Fixed timeout handling in web fetch tool
+- Fixed async stream dumping in executors
 
 ## [6.8.3] - 2026-01-21
 
