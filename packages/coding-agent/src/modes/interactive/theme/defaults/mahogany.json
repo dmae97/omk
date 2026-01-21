@@ -32,7 +32,6 @@
 		"dim": "dimCream",
 		"text": "",
 		"thinkingText": "mutedCream",
-
 		"selectedBg": "selectedBg",
 		"userMessageBg": "userMsgBg",
 		"userMessageText": "",
@@ -44,7 +43,6 @@
 		"toolErrorBg": "toolErrorBg",
 		"toolTitle": "",
 		"toolOutput": "mutedCream",
-
 		"mdHeading": "brass",
 		"mdLink": "cedar",
 		"mdLinkUrl": "dimCream",
@@ -55,13 +53,10 @@
 		"mdQuoteBorder": "darkGrain",
 		"mdHr": "grain",
 		"mdListBullet": "brass",
-
 		"toolDiffAdded": "forest",
 		"toolDiffRemoved": "burgundy",
 		"toolDiffContext": "mutedCream",
-
 		"link": "cedar",
-
 		"syntaxComment": "#7a6e63",
 		"syntaxKeyword": "burgundy",
 		"syntaxFunction": "brass",
@@ -71,16 +66,13 @@
 		"syntaxType": "amber",
 		"syntaxOperator": "mutedCream",
 		"syntaxPunctuation": "mutedCream",
-
 		"thinkingOff": "darkGrain",
 		"thinkingMinimal": "dimCream",
 		"thinkingLow": "grain",
 		"thinkingMedium": "cedar",
 		"thinkingHigh": "brass",
 		"thinkingXhigh": "amber",
-
 		"bashMode": "brass",
-
 		"statusLineBg": "woodBase",
 		"statusLineSep": 237,
 		"statusLineModel": "cedar",
@@ -94,7 +86,8 @@
 		"statusLineUntracked": 179,
 		"statusLineOutput": 138,
 		"statusLineCost": 138,
-		"statusLineSubagents": "brass"
+		"statusLineSubagents": "brass",
+		"pythonMode": "amber"
 	},
 	"export": {
 		"pageBg": "#181210",

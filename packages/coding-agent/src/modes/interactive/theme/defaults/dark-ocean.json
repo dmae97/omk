@@ -35,7 +35,6 @@
 		"dim": "dimTeal",
 		"text": "",
 		"thinkingText": "mutedTeal",
-
 		"selectedBg": "midWater",
 		"userMessageBg": "userMsgBg",
 		"userMessageText": "",
@@ -48,7 +47,6 @@
 		"toolText": "",
 		"toolTitle": "",
 		"toolOutput": "mutedTeal",
-
 		"mdHeading": "coral",
 		"mdLink": "aquamarine",
 		"mdLinkUrl": "dimTeal",
@@ -59,13 +57,10 @@
 		"mdQuoteBorder": "darkBorder",
 		"mdHr": "darkBorder",
 		"mdListBullet": "coral",
-
 		"toolDiffAdded": "seafoamGreen",
 		"toolDiffRemoved": "brightCoral",
 		"toolDiffContext": "mutedTeal",
-
 		"link": "aquamarine",
-
 		"syntaxComment": "#5A7B99",
 		"syntaxKeyword": "#6FFFE9",
 		"syntaxFunction": "#FFD166",
@@ -75,16 +70,13 @@
 		"syntaxType": "#5BC0BE",
 		"syntaxOperator": "#778DA9",
 		"syntaxPunctuation": "#778DA9",
-
 		"thinkingOff": "darkBorder",
 		"thinkingMinimal": "dimTeal",
 		"thinkingLow": "oceanBlue",
 		"thinkingMedium": "teal",
 		"thinkingHigh": "aquamarine",
 		"thinkingXhigh": "#D4A5FF",
-
 		"bashMode": "aquamarine",
-
 		"statusLineBg": "abyssBlack",
 		"statusLineSep": 236,
 		"statusLineModel": "coral",
@@ -98,7 +90,8 @@
 		"statusLineUntracked": 87,
 		"statusLineOutput": 204,
 		"statusLineCost": 204,
-		"statusLineSubagents": "coral"
+		"statusLineSubagents": "coral",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "abyssBlack",

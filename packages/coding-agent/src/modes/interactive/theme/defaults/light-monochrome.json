@@ -90,7 +90,8 @@
 		"statusLineUntracked": "gray500",
 		"statusLineOutput": "gray600",
 		"statusLineCost": "gray700",
-		"statusLineSubagents": "accent"
+		"statusLineSubagents": "accent",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#fafafa",

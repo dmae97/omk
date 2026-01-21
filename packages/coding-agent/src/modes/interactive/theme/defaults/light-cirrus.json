@@ -26,7 +26,6 @@
 		"dim": "dim",
 		"text": "",
 		"thinkingText": "slate",
-
 		"selectedBg": "#edf1f7",
 		"userMessageBg": "#ffffff",
 		"userMessageText": "",
@@ -38,7 +37,6 @@
 		"toolErrorBg": "#f9eeee",
 		"toolTitle": "",
 		"toolOutput": "slate",
-
 		"mdHeading": "blue",
 		"mdLink": "sky",
 		"mdLinkUrl": "dim",
@@ -49,11 +47,9 @@
 		"mdQuoteBorder": "mist",
 		"mdHr": "mist",
 		"mdListBullet": "sky",
-
 		"toolDiffAdded": "success",
 		"toolDiffRemoved": "error",
 		"toolDiffContext": "slate",
-
 		"syntaxComment": "dim",
 		"syntaxKeyword": "blue",
 		"syntaxFunction": "charcoal",
@@ -63,16 +59,13 @@
 		"syntaxType": "success",
 		"syntaxOperator": "charcoal",
 		"syntaxPunctuation": "charcoal",
-
 		"thinkingOff": "#dde3ec",
 		"thinkingMinimal": "dim",
 		"thinkingLow": "silver",
 		"thinkingMedium": "sky",
 		"thinkingHigh": "blue",
 		"thinkingXhigh": "#1f5f9e",
-
 		"bashMode": "blue",
-
 		"statusLineBg": "#eef2f7",
 		"statusLineSep": "#c7d0dc",
 		"statusLineModel": "blue",
@@ -86,7 +79,8 @@
 		"statusLineUntracked": "sky",
 		"statusLineOutput": "charcoal",
 		"statusLineCost": "blue",
-		"statusLineSubagents": "blue"
+		"statusLineSubagents": "blue",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#fafbfd",

@@ -21,6 +21,7 @@ import type { ExecOptions, ExecResult } from "../exec";
 import type { KeybindingsManager } from "../keybindings";
 import type { CustomMessage } from "../messages";
 import type { ModelRegistry } from "../model-registry";
+import type { PythonResult } from "../python-executor";
 import type {
 	BranchSummaryEntry,
 	CompactionEntry,
@@ -406,6 +407,21 @@ export interface UserBashEvent {
 }
 
 // ============================================================================
+// User Python Events
+// ============================================================================
+
+/** Fired when user executes Python code via $ or $$ prefix */
+export interface UserPythonEvent {
+	type: "user_python";
+	/** The Python code to execute */
+	code: string;
+	/** True if $$ prefix was used (excluded from LLM context) */
+	excludeFromContext: boolean;
+	/** Current working directory */
+	cwd: string;
+}
+
+// ============================================================================
 // Input Events
 // ============================================================================
 
@@ -521,6 +537,7 @@ export type ExtensionEvent =
 	| TurnStartEvent
 	| TurnEndEvent
 	| UserBashEvent
+	| UserPythonEvent
 	| InputEvent
 	| ToolCallEvent
 	| ToolResultEvent;
@@ -552,6 +569,12 @@ export interface InputEventResult {
 export interface UserBashEventResult {
 	/** Full replacement: extension handled execution, use this result */
 	result?: BashResult;
+}
+
+/** Result from user_python event handler */
+export interface UserPythonEventResult {
+	/** Full replacement: extension handled execution, use this result */
+	result?: PythonResult;
 }
 
 export interface ToolResultEventResult {
@@ -671,6 +694,7 @@ export interface ExtensionAPI {
 	on(event: "tool_call", handler: ExtensionHandler<ToolCallEvent, ToolCallEventResult>): void;
 	on(event: "tool_result", handler: ExtensionHandler<ToolResultEvent, ToolResultEventResult>): void;
 	on(event: "user_bash", handler: ExtensionHandler<UserBashEvent, UserBashEventResult>): void;
+	on(event: "user_python", handler: ExtensionHandler<UserPythonEvent, UserPythonEventResult>): void;
 
 	// =========================================================================
 	// Tool Registration

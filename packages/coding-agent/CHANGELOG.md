@@ -1,17 +1,23 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added extension system support for user Python execution events
+- Added Python mode border color theming across all themes
+- Added Python execution indicator to welcome screen help text
 - Added `omp stats` command for viewing AI usage statistics dashboard
 - Added support for JSON output and console summary of usage statistics
 - Added configurable port option for stats dashboard server
 - Added multi-cell Python execution with sequential processing in persistent kernel
 - Added cell titles for better Python code organization and debugging
+- Added `$` command prefix for user-initiated Python execution in shared kernel
+- Added `$$` prefix variant for Python execution excluded from LLM context
 
 ### Changed
 
+- Updated Python execution component to use pythonMode theming instead of bashMode
+- Enhanced UI helpers to handle pending Python components properly
 - Changed Python tool to use `cells` array instead of single `code` parameter
 - Renamed `workdir` parameter to `cwd` in Bash and Python tools for consistency
 - Updated Python tool to display cell-by-cell output when multiple cells are provided

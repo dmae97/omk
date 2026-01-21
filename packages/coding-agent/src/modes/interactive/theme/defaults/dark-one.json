@@ -35,7 +35,6 @@
 		"text": "",
 		"thinkingText": "mono2",
 		"selectedBg": "selectedBg",
-
 		"userMessageBg": "userMsgBg",
 		"userMessageText": "",
 		"customMessageBg": "customMsgBg",
@@ -47,7 +46,6 @@
 		"toolText": "",
 		"toolTitle": "",
 		"toolOutput": "mono2",
-
 		"mdHeading": "hue62",
 		"mdLink": "hue2",
 		"mdLinkUrl": "mono3",
@@ -58,13 +56,10 @@
 		"mdQuoteBorder": "mono3",
 		"mdHr": "mono3",
 		"mdListBullet": "hue62",
-
 		"toolDiffAdded": "hue4",
 		"toolDiffRemoved": "hue5",
 		"toolDiffContext": "mono2",
-
 		"link": "hue2",
-
 		"syntaxComment": "mono3",
 		"syntaxKeyword": "hue3",
 		"syntaxFunction": "hue2",
@@ -74,16 +69,13 @@
 		"syntaxType": "hue62",
 		"syntaxOperator": "hue1",
 		"syntaxPunctuation": "mono1",
-
 		"thinkingOff": "mono3",
 		"thinkingMinimal": "mono2",
 		"thinkingLow": "hue2",
 		"thinkingMedium": "syntaxAccent",
 		"thinkingHigh": "hue3",
 		"thinkingXhigh": "#e5b9ff",
-
 		"bashMode": "hue1",
-
 		"statusLineBg": "#1e2227",
 		"statusLineSep": "#3e4451",
 		"statusLineModel": "hue3",
@@ -97,7 +89,8 @@
 		"statusLineUntracked": "hue2",
 		"statusLineOutput": "hue3",
 		"statusLineCost": "hue5",
-		"statusLineSubagents": "hue62"
+		"statusLineSubagents": "hue62",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#1e2227",

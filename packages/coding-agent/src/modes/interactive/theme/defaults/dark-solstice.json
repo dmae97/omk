@@ -26,7 +26,6 @@
 		"dim": "dim",
 		"text": "",
 		"thinkingText": "muted",
-
 		"selectedBg": "#10182b",
 		"userMessageBg": "#0c1222",
 		"userMessageText": "",
@@ -38,7 +37,6 @@
 		"toolErrorBg": "#1a1016",
 		"toolTitle": "",
 		"toolOutput": "muted",
-
 		"mdHeading": "ice",
 		"mdLink": "frost",
 		"mdLinkUrl": "dim",
@@ -49,11 +47,9 @@
 		"mdQuoteBorder": "deepBlue",
 		"mdHr": "deepBlue",
 		"mdListBullet": "aurora",
-
 		"toolDiffAdded": "success",
 		"toolDiffRemoved": "error",
 		"toolDiffContext": "muted",
-
 		"syntaxComment": "dim",
 		"syntaxKeyword": "violet",
 		"syntaxFunction": "ice",
@@ -63,16 +59,13 @@
 		"syntaxType": "success",
 		"syntaxOperator": "ice",
 		"syntaxPunctuation": "ice",
-
 		"thinkingOff": "midnight",
 		"thinkingMinimal": "dim",
 		"thinkingLow": "frost",
 		"thinkingMedium": "aurora",
 		"thinkingHigh": "ice",
 		"thinkingXhigh": "#e4edf9",
-
 		"bashMode": "aurora",
-
 		"statusLineBg": "#0a101f",
 		"statusLineSep": "#2a334a",
 		"statusLineModel": "violet",
@@ -86,7 +79,8 @@
 		"statusLineUntracked": "frost",
 		"statusLineOutput": "ice",
 		"statusLineCost": "aurora",
-		"statusLineSubagents": "aurora"
+		"statusLineSubagents": "aurora",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#0a0f1c",

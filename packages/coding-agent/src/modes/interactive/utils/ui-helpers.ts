@@ -476,6 +476,11 @@ export class UiHelpers {
 			this.ctx.chatContainer.addChild(component);
 		}
 		this.ctx.pendingBashComponents = [];
+		for (const component of this.ctx.pendingPythonComponents) {
+			this.ctx.pendingMessagesContainer.removeChild(component);
+			this.ctx.chatContainer.addChild(component);
+		}
+		this.ctx.pendingPythonComponents = [];
 	}
 
 	findLastAssistantMessage(): AssistantMessage | undefined {

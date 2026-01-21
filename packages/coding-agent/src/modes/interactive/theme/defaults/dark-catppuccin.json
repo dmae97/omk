@@ -96,7 +96,8 @@
 		"statusLineUntracked": "sky",
 		"statusLineOutput": "maroon",
 		"statusLineCost": "maroon",
-		"statusLineSubagents": "peach"
+		"statusLineSubagents": "peach",
+		"pythonMode": "yellow"
 	},
 	"export": {
 		"pageBg": "base",

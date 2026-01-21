@@ -33,7 +33,6 @@
 		"dim": "dimGray",
 		"text": "",
 		"thinkingText": "mediumGray",
-
 		"selectedBg": "selectedBg",
 		"userMessageBg": "cardBg",
 		"userMessageText": "",
@@ -45,7 +44,6 @@
 		"toolErrorBg": "toolErrorBg",
 		"toolTitle": "",
 		"toolOutput": "mediumGray",
-
 		"mdHeading": "retroPink",
 		"mdLink": "neonCyan",
 		"mdLinkUrl": "dimGray",
@@ -56,13 +54,10 @@
 		"mdQuoteBorder": "retroPink",
 		"mdHr": "lightGray",
 		"mdListBullet": "mintGreen",
-
 		"toolDiffAdded": "mintGreen",
 		"toolDiffRemoved": "#ff2975",
 		"toolDiffContext": "mediumGray",
-
 		"link": "neonCyan",
-
 		"syntaxComment": "#9b7ab8",
 		"syntaxKeyword": "#b967ff",
 		"syntaxFunction": "#ff71ce",
@@ -72,16 +67,13 @@
 		"syntaxType": "#01cdfe",
 		"syntaxOperator": "#c77dff",
 		"syntaxPunctuation": "#6b5a7a",
-
 		"thinkingOff": "lightGray",
 		"thinkingMinimal": "#d4c2e0",
 		"thinkingLow": "#b3a0c7",
 		"thinkingMedium": "#c77dff",
 		"thinkingHigh": "#b967ff",
 		"thinkingXhigh": "#8c1eff",
-
 		"bashMode": "mintGreen",
-
 		"statusLineBg": "#fffbff",
 		"statusLineSep": "#d4c2e0",
 		"statusLineModel": "#ff71ce",
@@ -95,7 +87,8 @@
 		"statusLineUntracked": "#ff71ce",
 		"statusLineOutput": "#f222ff",
 		"statusLineCost": "#f222ff",
-		"statusLineSubagents": "retroPink"
+		"statusLineSubagents": "retroPink",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#fef6ff",

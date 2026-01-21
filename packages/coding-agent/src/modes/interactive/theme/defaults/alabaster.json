@@ -29,7 +29,6 @@
 		"dim": "#909098",
 		"text": "",
 		"thinkingText": "carvedDepth",
-
 		"selectedBg": "selectedBg",
 		"userMessageBg": "userMsgBg",
 		"userMessageText": "",
@@ -41,7 +40,6 @@
 		"toolErrorBg": "toolErrorBg",
 		"toolTitle": "",
 		"toolOutput": "carvedDepth",
-
 		"mdHeading": "chiseledBlack",
 		"mdLink": "shadowGray",
 		"mdLinkUrl": "carvedDepth",
@@ -52,11 +50,9 @@
 		"mdQuoteBorder": "subtleShadow",
 		"mdHr": "subtleShadow",
 		"mdListBullet": "shadowGray",
-
 		"toolDiffAdded": "#405840",
 		"toolDiffRemoved": "#704040",
 		"toolDiffContext": "carvedDepth",
-
 		"syntaxComment": "#707880",
 		"syntaxKeyword": "#303840",
 		"syntaxFunction": "chiseledBlack",
@@ -66,16 +62,13 @@
 		"syntaxType": "#303840",
 		"syntaxOperator": "#404850",
 		"syntaxPunctuation": "#505860",
-
 		"thinkingOff": "#c0c0c8",
 		"thinkingMinimal": "#a0a0a8",
 		"thinkingLow": "#808090",
 		"thinkingMedium": "#606870",
 		"thinkingHigh": "#505860",
 		"thinkingXhigh": "#303840",
-
 		"bashMode": "#405840",
-
 		"statusLineBg": "#ececf0",
 		"statusLineSep": "#a0a0a8",
 		"statusLineModel": "#505860",
@@ -89,7 +82,8 @@
 		"statusLineUntracked": 31,
 		"statusLineOutput": 133,
 		"statusLineCost": 133,
-		"statusLineSubagents": "shadowGray"
+		"statusLineSubagents": "shadowGray",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#fdfcfb",

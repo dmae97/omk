@@ -27,7 +27,6 @@
 		"dim": "dimText",
 		"text": "",
 		"thinkingText": "mutedText",
-
 		"selectedBg": "savannaPanel",
 		"userMessageBg": "savannaSurface",
 		"userMessageText": "",
@@ -39,7 +38,6 @@
 		"toolErrorBg": "#F4E0DA",
 		"toolTitle": "",
 		"toolOutput": "mutedText",
-
 		"mdHeading": "sunsetOrange",
 		"mdLink": "riverBlue",
 		"mdLinkUrl": "dimText",
@@ -50,11 +48,9 @@
 		"mdQuoteBorder": "savannaBorder",
 		"mdHr": "savannaBorder",
 		"mdListBullet": "acaciaGreen",
-
 		"toolDiffAdded": "acaciaGreen",
 		"toolDiffRemoved": "errorRed",
 		"toolDiffContext": "mutedText",
-
 		"syntaxComment": "dimText",
 		"syntaxKeyword": "sunsetOrange",
 		"syntaxFunction": "riverBlue",
@@ -64,16 +60,13 @@
 		"syntaxType": "riverBlue",
 		"syntaxOperator": "mutedText",
 		"syntaxPunctuation": "mutedText",
-
 		"thinkingOff": "savannaBorder",
 		"thinkingMinimal": "dimText",
 		"thinkingLow": "strawYellow",
 		"thinkingMedium": "sunsetOrange",
 		"thinkingHigh": "riverBlue",
 		"thinkingXhigh": "acaciaGreen",
-
 		"bashMode": "acaciaGreen",
-
 		"statusLineBg": "#F3EBDD",
 		"statusLineSep": "savannaBorder",
 		"statusLineModel": "sunsetOrange",
@@ -87,7 +80,8 @@
 		"statusLineUntracked": "riverBlue",
 		"statusLineOutput": "sunsetOrange",
 		"statusLineCost": "warningOrange",
-		"statusLineSubagents": "sunsetOrange"
+		"statusLineSubagents": "sunsetOrange",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#F8F1E6",

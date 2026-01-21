@@ -29,7 +29,6 @@
 		"dim": "#807880",
 		"text": "",
 		"thinkingText": "pearlGray",
-
 		"selectedBg": "selectedBg",
 		"userMessageBg": "userMsgBg",
 		"userMessageText": "",
@@ -41,7 +40,6 @@
 		"toolErrorBg": "toolErrorBg",
 		"toolTitle": "",
 		"toolOutput": "pearlGray",
-
 		"mdHeading": "#a08060",
 		"mdLink": "oysterBlue",
 		"mdLinkUrl": "#807880",
@@ -52,11 +50,9 @@
 		"mdQuoteBorder": "pearlGray",
 		"mdHr": "pearlGray",
 		"mdListBullet": "#709070",
-
 		"toolDiffAdded": "#709070",
 		"toolDiffRemoved": "#a06060",
 		"toolDiffContext": "pearlGray",
-
 		"syntaxComment": "#608060",
 		"syntaxKeyword": "#6070a0",
 		"syntaxFunction": "#805070",
@@ -66,16 +62,13 @@
 		"syntaxType": "#507090",
 		"syntaxOperator": "#404040",
 		"syntaxPunctuation": "#404040",
-
 		"thinkingOff": "shellLayer",
 		"thinkingMinimal": "#a09ca8",
 		"thinkingLow": "#7080a0",
 		"thinkingMedium": "#9070a0",
 		"thinkingHigh": "#a06090",
 		"thinkingXhigh": "#b05090",
-
 		"bashMode": "#709070",
-
 		"statusLineBg": "#ece8f0",
 		"statusLineSep": "#908898",
 		"statusLineModel": "#9070a0",
@@ -89,7 +82,8 @@
 		"statusLineUntracked": 67,
 		"statusLineOutput": 133,
 		"statusLineCost": 133,
-		"statusLineSubagents": "nacrePink"
+		"statusLineSubagents": "nacrePink",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#f9f9fc",

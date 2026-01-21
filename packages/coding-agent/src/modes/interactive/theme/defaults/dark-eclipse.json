@@ -27,7 +27,6 @@
 		"dim": "dim",
 		"text": "",
 		"thinkingText": "muted",
-
 		"selectedBg": "#1a1724",
 		"userMessageBg": "#0f0d14",
 		"userMessageText": "",
@@ -39,7 +38,6 @@
 		"toolErrorBg": "#1b0f12",
 		"toolTitle": "",
 		"toolOutput": "muted",
-
 		"mdHeading": "corona",
 		"mdLink": "astral",
 		"mdLinkUrl": "dim",
@@ -50,11 +48,9 @@
 		"mdQuoteBorder": "obsidian",
 		"mdHr": "obsidian",
 		"mdListBullet": "corona",
-
 		"toolDiffAdded": "success",
 		"toolDiffRemoved": "error",
 		"toolDiffContext": "muted",
-
 		"syntaxComment": "dim",
 		"syntaxKeyword": "violet",
 		"syntaxFunction": "corona",
@@ -64,16 +60,13 @@
 		"syntaxType": "success",
 		"syntaxOperator": "silver",
 		"syntaxPunctuation": "silver",
-
 		"thinkingOff": "obsidian",
 		"thinkingMinimal": "dim",
 		"thinkingLow": "astral",
 		"thinkingMedium": "violet",
 		"thinkingHigh": "ember",
 		"thinkingXhigh": "corona",
-
 		"bashMode": "astral",
-
 		"statusLineBg": "#0b0b10",
 		"statusLineSep": "#2a2635",
 		"statusLineModel": "violet",
@@ -87,7 +80,8 @@
 		"statusLineUntracked": "astral",
 		"statusLineOutput": "silver",
 		"statusLineCost": "corona",
-		"statusLineSubagents": "corona"
+		"statusLineSubagents": "corona",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#08070d",

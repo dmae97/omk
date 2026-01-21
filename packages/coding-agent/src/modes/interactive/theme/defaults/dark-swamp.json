@@ -26,7 +26,6 @@
 		"dim": "dimMoss",
 		"text": "",
 		"thinkingText": "mossLight",
-
 		"selectedBg": "peatGreen",
 		"userMessageBg": "bogGreen",
 		"userMessageText": "",
@@ -38,7 +37,6 @@
 		"toolErrorBg": "#221313",
 		"toolTitle": "",
 		"toolOutput": "mossLight",
-
 		"mdHeading": "fireflyGold",
 		"mdLink": "swampCyan",
 		"mdLinkUrl": "dimMoss",
@@ -49,11 +47,9 @@
 		"mdQuoteBorder": "mossGray",
 		"mdHr": "peatGreen",
 		"mdListBullet": "fireflyGold",
-
 		"toolDiffAdded": "algaeGreen",
 		"toolDiffRemoved": "errorRed",
 		"toolDiffContext": "mossLight",
-
 		"syntaxComment": "dimMoss",
 		"syntaxKeyword": "swampCyan",
 		"syntaxFunction": "fireflyGold",
@@ -63,16 +59,13 @@
 		"syntaxType": "swampCyan",
 		"syntaxOperator": "mossLight",
 		"syntaxPunctuation": "mossLight",
-
 		"thinkingOff": "peatGreen",
 		"thinkingMinimal": "dimMoss",
 		"thinkingLow": "mossGray",
 		"thinkingMedium": "swampCyan",
 		"thinkingHigh": "fireflyGold",
 		"thinkingXhigh": "algaeGreen",
-
 		"bashMode": "swampCyan",
-
 		"statusLineBg": "#080D0C",
 		"statusLineSep": "mossGray",
 		"statusLineModel": "fireflyGold",
@@ -86,7 +79,8 @@
 		"statusLineUntracked": "mossLight",
 		"statusLineOutput": "swampCyan",
 		"statusLineCost": "fireflyGold",
-		"statusLineSubagents": "fireflyGold"
+		"statusLineSubagents": "fireflyGold",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#080D0C",

@@ -38,7 +38,6 @@
 		"dim": "polarNight2",
 		"text": "",
 		"thinkingText": "polarNight3",
-
 		"selectedBg": "polarNight1",
 		"userMessageBg": "userMsgBg",
 		"userMessageText": "",
@@ -51,7 +50,6 @@
 		"toolText": "",
 		"toolTitle": "",
 		"toolOutput": "polarNight3",
-
 		"mdHeading": "frost1",
 		"mdLink": "frost2",
 		"mdLinkUrl": "polarNight3",
@@ -62,13 +60,10 @@
 		"mdQuoteBorder": "polarNight2",
 		"mdHr": "polarNight2",
 		"mdListBullet": "iceBlue",
-
 		"toolDiffAdded": "auroraGreen",
 		"toolDiffRemoved": "auroraRed",
 		"toolDiffContext": "polarNight3",
-
 		"link": "frost2",
-
 		"syntaxComment": "#616e88",
 		"syntaxKeyword": "frost3",
 		"syntaxFunction": "frost1",
@@ -78,16 +73,13 @@
 		"syntaxType": "frost0",
 		"syntaxOperator": "frost2",
 		"syntaxPunctuation": "snowStorm1",
-
 		"thinkingOff": "polarNight2",
 		"thinkingMinimal": "polarNight3",
 		"thinkingLow": "frost3",
 		"thinkingMedium": "frost2",
 		"thinkingHigh": "auroraPurple",
 		"thinkingXhigh": "#c8a0d1",
-
 		"bashMode": "iceBlue",
-
 		"statusLineBg": "#1a1f2b",
 		"statusLineSep": 240,
 		"statusLineModel": "auroraPurple",
@@ -101,7 +93,8 @@
 		"statusLineUntracked": 109,
 		"statusLineOutput": 139,
 		"statusLineCost": 139,
-		"statusLineSubagents": "iceBlue"
+		"statusLineSubagents": "iceBlue",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#1a1f2b",

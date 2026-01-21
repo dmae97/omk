@@ -27,7 +27,6 @@
 		"dim": "coolLead",
 		"text": "",
 		"thinkingText": "smudgeGray",
-
 		"selectedBg": "selectedStroke",
 		"userMessageBg": "#1a1c1f",
 		"userMessageText": "",
@@ -39,7 +38,6 @@
 		"toolErrorBg": "#28232a",
 		"toolTitle": "",
 		"toolOutput": "smudgeGray",
-
 		"mdHeading": "pencilYellow",
 		"mdLink": "lightSmudge",
 		"mdLinkUrl": "coolLead",
@@ -50,13 +48,10 @@
 		"mdQuoteBorder": "faintStroke",
 		"mdHr": "pencilStroke",
 		"mdListBullet": "pencilYellow",
-
 		"toolDiffAdded": "#85a882",
 		"toolDiffRemoved": "#d88989",
 		"toolDiffContext": "smudgeGray",
-
 		"link": "lightSmudge",
-
 		"syntaxComment": "#6b7080",
 		"syntaxKeyword": "lightSmudge",
 		"syntaxFunction": "pencilYellow",
@@ -66,16 +61,13 @@
 		"syntaxType": "coolLead",
 		"syntaxOperator": "#c0c4ca",
 		"syntaxPunctuation": "#a8adb8",
-
 		"thinkingOff": "faintStroke",
 		"thinkingMinimal": "smudgeGray",
 		"thinkingLow": "coolLead",
 		"thinkingMedium": "lightSmudge",
 		"thinkingHigh": "warmLead",
 		"thinkingXhigh": "pencilYellow",
-
 		"bashMode": "lightSmudge",
-
 		"statusLineBg": "#18191c",
 		"statusLineSep": 240,
 		"statusLineModel": "#9098a8",
@@ -89,7 +81,8 @@
 		"statusLineUntracked": 246,
 		"statusLineOutput": 222,
 		"statusLineCost": 222,
-		"statusLineSubagents": "pencilYellow"
+		"statusLineSubagents": "pencilYellow",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#1c1e22",

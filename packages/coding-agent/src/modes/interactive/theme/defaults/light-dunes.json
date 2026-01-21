@@ -27,7 +27,6 @@
 		"dim": "dimText",
 		"text": "",
 		"thinkingText": "mutedText",
-
 		"selectedBg": "dunesPanel",
 		"userMessageBg": "dunesSurface",
 		"userMessageText": "",
@@ -39,7 +38,6 @@
 		"toolErrorBg": "#F4E0DB",
 		"toolTitle": "",
 		"toolOutput": "mutedText",
-
 		"mdHeading": "sunBakedOrange",
 		"mdLink": "seaBlue",
 		"mdLinkUrl": "dimText",
@@ -50,11 +48,9 @@
 		"mdQuoteBorder": "dunesBorder",
 		"mdHr": "dunesBorder",
 		"mdListBullet": "seaFoam",
-
 		"toolDiffAdded": "successGreen",
 		"toolDiffRemoved": "errorRed",
 		"toolDiffContext": "mutedText",
-
 		"syntaxComment": "dimText",
 		"syntaxKeyword": "sunBakedOrange",
 		"syntaxFunction": "seaBlue",
@@ -64,16 +60,13 @@
 		"syntaxType": "seaFoam",
 		"syntaxOperator": "mutedText",
 		"syntaxPunctuation": "mutedText",
-
 		"thinkingOff": "dunesBorder",
 		"thinkingMinimal": "dimText",
 		"thinkingLow": "seaFoam",
 		"thinkingMedium": "sunBakedOrange",
 		"thinkingHigh": "seaBlue",
 		"thinkingXhigh": "successGreen",
-
 		"bashMode": "seaFoam",
-
 		"statusLineBg": "#F4EBDD",
 		"statusLineSep": "dunesBorder",
 		"statusLineModel": "sunBakedOrange",
@@ -87,7 +80,8 @@
 		"statusLineUntracked": "seaBlue",
 		"statusLineOutput": "sunBakedOrange",
 		"statusLineCost": "warningGold",
-		"statusLineSubagents": "seaFoam"
+		"statusLineSubagents": "seaFoam",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#FBF3E6",

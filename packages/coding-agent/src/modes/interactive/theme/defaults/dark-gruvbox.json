@@ -46,7 +46,6 @@
 		"dim": "bg4",
 		"text": "",
 		"thinkingText": "gray",
-
 		"selectedBg": "selectedBg",
 		"userMessageBg": "userMsgBg",
 		"userMessageText": "",
@@ -59,7 +58,6 @@
 		"toolText": "",
 		"toolTitle": "",
 		"toolOutput": "gray",
-
 		"mdHeading": "yellow",
 		"mdLink": "aqua",
 		"mdLinkUrl": "bg4",
@@ -70,13 +68,10 @@
 		"mdQuoteBorder": "bg2",
 		"mdHr": "bg2",
 		"mdListBullet": "orange",
-
 		"toolDiffAdded": "green",
 		"toolDiffRemoved": "red",
 		"toolDiffContext": "gray",
-
 		"link": "aqua",
-
 		"syntaxComment": "gray",
 		"syntaxKeyword": "red",
 		"syntaxFunction": "yellow",
@@ -86,16 +81,13 @@
 		"syntaxType": "aqua",
 		"syntaxOperator": "orange",
 		"syntaxPunctuation": "fg2",
-
 		"thinkingOff": "bg2",
 		"thinkingMinimal": "bg4",
 		"thinkingLow": "neutralBlue",
 		"thinkingMedium": "blue",
 		"thinkingHigh": "neutralPurple",
 		"thinkingXhigh": "purple",
-
 		"bashMode": "aqua",
-
 		"statusLineBg": "#1d2021",
 		"statusLineSep": "bg3",
 		"statusLineModel": "purple",
@@ -109,7 +101,8 @@
 		"statusLineUntracked": "blue",
 		"statusLineOutput": "purple",
 		"statusLineCost": "purple",
-		"statusLineSubagents": "orange"
+		"statusLineSubagents": "orange",
+		"pythonMode": "yellow"
 	},
 	"export": {
 		"pageBg": "#1d2021",

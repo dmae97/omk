@@ -28,7 +28,6 @@
 		"dim": "gray5",
 		"text": "",
 		"thinkingText": "gray5",
-
 		"selectedBg": "gray3",
 		"userMessageBg": "gray2",
 		"userMessageText": "",
@@ -41,7 +40,6 @@
 		"toolText": "",
 		"toolTitle": "gray8",
 		"toolOutput": "gray6",
-
 		"mdHeading": "gray9",
 		"mdLink": "accent",
 		"mdLinkUrl": "gray5",
@@ -52,13 +50,10 @@
 		"mdQuoteBorder": "gray4",
 		"mdHr": "gray4",
 		"mdListBullet": "accent",
-
 		"toolDiffAdded": "successGreen",
 		"toolDiffRemoved": "errorRed",
 		"toolDiffContext": "gray6",
-
 		"link": "accent",
-
 		"syntaxComment": "gray5",
 		"syntaxKeyword": "gray8",
 		"syntaxFunction": "gray9",
@@ -68,16 +63,13 @@
 		"syntaxType": "gray8",
 		"syntaxOperator": "gray7",
 		"syntaxPunctuation": "gray6",
-
 		"thinkingOff": "gray3",
 		"thinkingMinimal": "gray4",
 		"thinkingLow": "gray5",
 		"thinkingMedium": "gray6",
 		"thinkingHigh": "gray7",
 		"thinkingXhigh": "gray8",
-
 		"bashMode": "accent",
-
 		"statusLineBg": "#0d0d0d",
 		"statusLineSep": "gray4",
 		"statusLineModel": "gray7",
@@ -91,7 +83,8 @@
 		"statusLineUntracked": "gray6",
 		"statusLineOutput": "gray7",
 		"statusLineCost": "gray7",
-		"statusLineSubagents": "accent"
+		"statusLineSubagents": "accent",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#0d0d0d",

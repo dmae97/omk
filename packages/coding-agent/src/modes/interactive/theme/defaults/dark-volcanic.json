@@ -27,7 +27,6 @@
 		"dim": "dimAsh",
 		"text": "",
 		"thinkingText": "ashGray",
-
 		"selectedBg": "lavaRock",
 		"userMessageBg": "craterDark",
 		"userMessageText": "",
@@ -39,7 +38,6 @@
 		"toolErrorBg": "#24100E",
 		"toolTitle": "",
 		"toolOutput": "ashGray",
-
 		"mdHeading": "emberGold",
 		"mdLink": "magmaOrange",
 		"mdLinkUrl": "dimAsh",
@@ -50,11 +48,9 @@
 		"mdQuoteBorder": "emberBorder",
 		"mdHr": "lavaRock",
 		"mdListBullet": "magmaOrange",
-
 		"toolDiffAdded": "mossGreen",
 		"toolDiffRemoved": "fireRed",
 		"toolDiffContext": "ashGray",
-
 		"syntaxComment": "dimAsh",
 		"syntaxKeyword": "magmaOrange",
 		"syntaxFunction": "emberGold",
@@ -64,16 +60,13 @@
 		"syntaxType": "obsidianBlue",
 		"syntaxOperator": "ashGray",
 		"syntaxPunctuation": "ashGray",
-
 		"thinkingOff": "lavaRock",
 		"thinkingMinimal": "dimAsh",
 		"thinkingLow": "emberBorder",
 		"thinkingMedium": "magmaOrange",
 		"thinkingHigh": "sulfurYellow",
 		"thinkingXhigh": "emberGold",
-
 		"bashMode": "magmaOrange",
-
 		"statusLineBg": "#0B0706",
 		"statusLineSep": "emberBorder",
 		"statusLineModel": "emberGold",
@@ -87,7 +80,8 @@
 		"statusLineUntracked": "obsidianBlue",
 		"statusLineOutput": "emberGold",
 		"statusLineCost": "sulfurYellow",
-		"statusLineSubagents": "magmaOrange"
+		"statusLineSubagents": "magmaOrange",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#0B0706",

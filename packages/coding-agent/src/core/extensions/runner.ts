@@ -40,6 +40,8 @@ import type {
 	ToolResultEventResult,
 	UserBashEvent,
 	UserBashEventResult,
+	UserPythonEvent,
+	UserPythonEventResult,
 } from "./types";
 
 /** Combined result from all before_agent_start handlers */
@@ -451,6 +453,35 @@ export class ExtensionRunner {
 					this.emitError({
 						extensionPath: ext.path,
 						event: "user_bash",
+						error: message,
+						stack,
+					});
+				}
+			}
+		}
+
+		return undefined;
+	}
+
+	async emitUserPython(event: UserPythonEvent): Promise<UserPythonEventResult | undefined> {
+		const ctx = this.createContext();
+
+		for (const ext of this.extensions) {
+			const handlers = ext.handlers.get("user_python");
+			if (!handlers || handlers.length === 0) continue;
+
+			for (const handler of handlers) {
+				try {
+					const handlerResult = await handler(event, ctx);
+					if (handlerResult) {
+						return handlerResult as UserPythonEventResult;
+					}
+				} catch (err) {
+					const message = err instanceof Error ? err.message : String(err);
+					const stack = err instanceof Error ? err.stack : undefined;
+					this.emitError({
+						extensionPath: ext.path,
+						event: "user_python",
 						error: message,
 						stack,
 					});

@@ -27,7 +27,6 @@
 		"dim": "dimSea",
 		"text": "",
 		"thinkingText": "mutedSea",
-
 		"selectedBg": "reefBlue",
 		"userMessageBg": "abyssBlue",
 		"userMessageText": "",
@@ -39,7 +38,6 @@
 		"toolErrorBg": "#231418",
 		"toolTitle": "",
 		"toolOutput": "mutedSea",
-
 		"mdHeading": "fishYellow",
 		"mdLink": "coralPink",
 		"mdLinkUrl": "dimSea",
@@ -50,11 +48,9 @@
 		"mdQuoteBorder": "borderBlue",
 		"mdHr": "reefBlue",
 		"mdListBullet": "coralPink",
-
 		"toolDiffAdded": "kelpGreen",
 		"toolDiffRemoved": "errorRed",
 		"toolDiffContext": "mutedSea",
-
 		"syntaxComment": "dimSea",
 		"syntaxKeyword": "anemonePurple",
 		"syntaxFunction": "coralPink",
@@ -64,16 +60,13 @@
 		"syntaxType": "anemonePurple",
 		"syntaxOperator": "mutedSea",
 		"syntaxPunctuation": "mutedSea",
-
 		"thinkingOff": "reefBlue",
 		"thinkingMinimal": "dimSea",
 		"thinkingLow": "borderBlue",
 		"thinkingMedium": "anemonePurple",
 		"thinkingHigh": "coralPink",
 		"thinkingXhigh": "fishYellow",
-
 		"bashMode": "coralPink",
-
 		"statusLineBg": "#070B10",
 		"statusLineSep": "borderBlue",
 		"statusLineModel": "anemonePurple",
@@ -87,7 +80,8 @@
 		"statusLineUntracked": "anemonePurple",
 		"statusLineOutput": "coralPink",
 		"statusLineCost": "fishYellow",
-		"statusLineSubagents": "anemonePurple"
+		"statusLineSubagents": "anemonePurple",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#070B10",

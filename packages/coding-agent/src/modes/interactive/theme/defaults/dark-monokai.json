@@ -32,7 +32,6 @@
 		"dim": "monokaiComment",
 		"text": "",
 		"thinkingText": "monokaiComment",
-
 		"selectedBg": "monokaiDarkGray",
 		"userMessageBg": "userMsgBg",
 		"userMessageText": "",
@@ -45,7 +44,6 @@
 		"toolText": "",
 		"toolTitle": "monokaiOrange",
 		"toolOutput": "monokaiGray",
-
 		"mdHeading": "monokaiOrange",
 		"mdLink": "monokaiCyan",
 		"mdLinkUrl": "monokaiComment",
@@ -56,13 +54,10 @@
 		"mdQuoteBorder": "monokaiDarkGray",
 		"mdHr": "monokaiDarkGray",
 		"mdListBullet": "monokaiOrange",
-
 		"toolDiffAdded": "monokaiGreen",
 		"toolDiffRemoved": "monokaiPink",
 		"toolDiffContext": "monokaiGray",
-
 		"link": "monokaiCyan",
-
 		"syntaxComment": "monokaiComment",
 		"syntaxKeyword": "monokaiPink",
 		"syntaxFunction": "monokaiGreen",
@@ -72,16 +67,13 @@
 		"syntaxType": "monokaiCyan",
 		"syntaxOperator": "monokaiPink",
 		"syntaxPunctuation": "monokaiText",
-
 		"thinkingOff": "monokaiDarkGray",
 		"thinkingMinimal": "monokaiComment",
 		"thinkingLow": "monokaiCyan",
 		"thinkingMedium": "monokaiPurple",
 		"thinkingHigh": "monokaiPink",
 		"thinkingXhigh": "monokaiOrange",
-
 		"bashMode": "monokaiGreen",
-
 		"statusLineBg": "#1a1b17",
 		"statusLineSep": "#49483e",
 		"statusLineModel": "monokaiPurple",
@@ -95,7 +87,8 @@
 		"statusLineUntracked": "monokaiCyan",
 		"statusLineOutput": "monokaiPink",
 		"statusLineCost": "monokaiPink",
-		"statusLineSubagents": "monokaiOrange"
+		"statusLineSubagents": "monokaiOrange",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#1a1b17",

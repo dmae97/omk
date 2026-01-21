@@ -33,7 +33,6 @@
 		"dim": "driftwood",
 		"text": "",
 		"thinkingText": "slate",
-
 		"selectedBg": "selectedBg",
 		"userMessageBg": "userMsgBg",
 		"userMessageText": "",
@@ -46,7 +45,6 @@
 		"toolText": "",
 		"toolTitle": "",
 		"toolOutput": "slate",
-
 		"mdHeading": "oceanDeep",
 		"mdLink": "oceanTeal",
 		"mdLinkUrl": "driftwood",
@@ -57,13 +55,10 @@
 		"mdQuoteBorder": "shell",
 		"mdHr": "shell",
 		"mdListBullet": "oceanTeal",
-
 		"toolDiffAdded": "seaGreen",
 		"toolDiffRemoved": "coral",
 		"toolDiffContext": "slate",
-
 		"link": "oceanTeal",
-
 		"syntaxComment": "#80cbc4",
 		"syntaxKeyword": "#0288d1",
 		"syntaxFunction": "#00796b",
@@ -73,16 +68,13 @@
 		"syntaxType": "#0277bd",
 		"syntaxOperator": "#455a64",
 		"syntaxPunctuation": "#546e7a",
-
 		"thinkingOff": "shell",
 		"thinkingMinimal": "#b0bec5",
 		"thinkingLow": "#4dd0e1",
 		"thinkingMedium": "#26c6da",
 		"thinkingHigh": "#00acc1",
 		"thinkingXhigh": "#0097a7",
-
 		"bashMode": "seaGreen",
-
 		"statusLineBg": "foam",
 		"statusLineSep": "#90a4ae",
 		"statusLineModel": "#00838f",
@@ -96,7 +88,8 @@
 		"statusLineUntracked": 45,
 		"statusLineOutput": 110,
 		"statusLineCost": 173,
-		"statusLineSubagents": "oceanTeal"
+		"statusLineSubagents": "oceanTeal",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "lightSand",

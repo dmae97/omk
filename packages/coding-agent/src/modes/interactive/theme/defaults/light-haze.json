@@ -26,7 +26,6 @@
 		"dim": "dim",
 		"text": "",
 		"thinkingText": "muted",
-
 		"selectedBg": "#f1e7d7",
 		"userMessageBg": "#fffaf3",
 		"userMessageText": "",
@@ -38,7 +37,6 @@
 		"toolErrorBg": "#f8eeee",
 		"toolTitle": "",
 		"toolOutput": "muted",
-
 		"mdHeading": "honey",
 		"mdLink": "sky",
 		"mdLinkUrl": "dim",
@@ -49,11 +47,9 @@
 		"mdQuoteBorder": "#e0d6c8",
 		"mdHr": "#e0d6c8",
 		"mdListBullet": "sun",
-
 		"toolDiffAdded": "success",
 		"toolDiffRemoved": "error",
 		"toolDiffContext": "muted",
-
 		"syntaxComment": "dim",
 		"syntaxKeyword": "sky",
 		"syntaxFunction": "honey",
@@ -63,16 +59,13 @@
 		"syntaxType": "sage",
 		"syntaxOperator": "ink",
 		"syntaxPunctuation": "ink",
-
 		"thinkingOff": "#e4dacc",
 		"thinkingMinimal": "dim",
 		"thinkingLow": "sage",
 		"thinkingMedium": "sky",
 		"thinkingHigh": "honey",
 		"thinkingXhigh": "sun",
-
 		"bashMode": "sky",
-
 		"statusLineBg": "#f2eadf",
 		"statusLineSep": "#cdbfaa",
 		"statusLineModel": "honey",
@@ -86,7 +79,8 @@
 		"statusLineUntracked": "sky",
 		"statusLineOutput": "ink",
 		"statusLineCost": "sun",
-		"statusLineSubagents": "honey"
+		"statusLineSubagents": "honey",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#fbf6ee",

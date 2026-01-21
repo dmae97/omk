@@ -29,7 +29,6 @@
 		"dim": "#9a968f",
 		"text": "",
 		"thinkingText": "warmGray",
-
 		"selectedBg": "selectedBg",
 		"userMessageBg": "userMsgBg",
 		"userMessageText": "",
@@ -41,7 +40,6 @@
 		"toolErrorBg": "toolErrorBg",
 		"toolTitle": "",
 		"toolOutput": "warmGray",
-
 		"mdHeading": "#8b6f47",
 		"mdLink": "deepNavy",
 		"mdLinkUrl": "warmGray",
@@ -52,11 +50,9 @@
 		"mdQuoteBorder": "marbleVein",
 		"mdHr": "marbleVein",
 		"mdListBullet": "forestGreen",
-
 		"toolDiffAdded": "forestGreen",
 		"toolDiffRemoved": "burgundy",
 		"toolDiffContext": "warmGray",
-
 		"syntaxComment": "#4a6741",
 		"syntaxKeyword": "#2c3e50",
 		"syntaxFunction": "#6a5d7a",
@@ -66,16 +62,13 @@
 		"syntaxType": "#2c3e50",
 		"syntaxOperator": "#2a2826",
 		"syntaxPunctuation": "#7a766f",
-
 		"thinkingOff": "lightVein",
 		"thinkingMinimal": "#9a968f",
 		"thinkingLow": "#5a6878",
 		"thinkingMedium": "#6a5d7a",
 		"thinkingHigh": "#8b6f47",
 		"thinkingXhigh": "#8b4049",
-
 		"bashMode": "forestGreen",
-
 		"statusLineBg": "#ede9e6",
 		"statusLineSep": "#9a968f",
 		"statusLineModel": "#6a5d7a",
@@ -89,7 +82,8 @@
 		"statusLineUntracked": 31,
 		"statusLineOutput": 133,
 		"statusLineCost": 133,
-		"statusLineSubagents": "veinGray"
+		"statusLineSubagents": "veinGray",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#f9f7f5",

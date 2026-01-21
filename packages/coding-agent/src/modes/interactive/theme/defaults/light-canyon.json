@@ -27,7 +27,6 @@
 		"dim": "dimBrown",
 		"text": "",
 		"thinkingText": "mesaBrown",
-
 		"selectedBg": "canyonElevated",
 		"userMessageBg": "canyonSurface",
 		"userMessageText": "",
@@ -39,7 +38,6 @@
 		"toolErrorBg": "#F1E0DA",
 		"toolTitle": "",
 		"toolOutput": "mesaBrown",
-
 		"mdHeading": "ironRed",
 		"mdLink": "riverTeal",
 		"mdLinkUrl": "dimBrown",
@@ -50,11 +48,9 @@
 		"mdQuoteBorder": "canyonBorder",
 		"mdHr": "canyonBorder",
 		"mdListBullet": "pinonGreen",
-
 		"toolDiffAdded": "pinonGreen",
 		"toolDiffRemoved": "errorRed",
 		"toolDiffContext": "mesaBrown",
-
 		"syntaxComment": "dimBrown",
 		"syntaxKeyword": "ironRed",
 		"syntaxFunction": "riverTeal",
@@ -64,16 +60,13 @@
 		"syntaxType": "riverTeal",
 		"syntaxOperator": "mesaBrown",
 		"syntaxPunctuation": "mesaBrown",
-
 		"thinkingOff": "canyonBorder",
 		"thinkingMinimal": "dimBrown",
 		"thinkingLow": "sunsetOrange",
 		"thinkingMedium": "ironRed",
 		"thinkingHigh": "riverTeal",
 		"thinkingXhigh": "pinonGreen",
-
 		"bashMode": "pinonGreen",
-
 		"statusLineBg": "#F2E8DD",
 		"statusLineSep": "canyonBorder",
 		"statusLineModel": "ironRed",
@@ -87,7 +80,8 @@
 		"statusLineUntracked": "riverTeal",
 		"statusLineOutput": "ironRed",
 		"statusLineCost": "sunsetOrange",
-		"statusLineSubagents": "ironRed"
+		"statusLineSubagents": "ironRed",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#F8F1EA",

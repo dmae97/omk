@@ -27,7 +27,6 @@
 		"dim": "dimGray",
 		"text": "",
 		"thinkingText": "mutedGray",
-
 		"selectedBg": "stoneMid",
 		"userMessageBg": "limestoneDark",
 		"userMessageText": "",
@@ -39,7 +38,6 @@
 		"toolErrorBg": "#221416",
 		"toolTitle": "",
 		"toolOutput": "mutedGray",
-
 		"mdHeading": "amber",
 		"mdLink": "crystalBlue",
 		"mdLinkUrl": "dimGray",
@@ -50,11 +48,9 @@
 		"mdQuoteBorder": "stalactite",
 		"mdHr": "stoneMid",
 		"mdListBullet": "amber",
-
 		"toolDiffAdded": "mineralGreen",
 		"toolDiffRemoved": "errorRed",
 		"toolDiffContext": "mutedGray",
-
 		"syntaxComment": "dimGray",
 		"syntaxKeyword": "crystalBlue",
 		"syntaxFunction": "amber",
@@ -64,16 +60,13 @@
 		"syntaxType": "crystalBlue",
 		"syntaxOperator": "mutedGray",
 		"syntaxPunctuation": "mutedGray",
-
 		"thinkingOff": "stoneMid",
 		"thinkingMinimal": "dimGray",
 		"thinkingLow": "stalactite",
 		"thinkingMedium": "crystalBlue",
 		"thinkingHigh": "veinBlue",
 		"thinkingXhigh": "amber",
-
 		"bashMode": "crystalBlue",
-
 		"statusLineBg": "#0B0D10",
 		"statusLineSep": "stalactite",
 		"statusLineModel": "amber",
@@ -87,7 +80,8 @@
 		"statusLineUntracked": "veinBlue",
 		"statusLineOutput": "crystalBlue",
 		"statusLineCost": "amber",
-		"statusLineSubagents": "crystalBlue"
+		"statusLineSubagents": "crystalBlue",
+		"pythonMode": "amber"
 	},
 	"export": {
 		"pageBg": "#0B0D10",

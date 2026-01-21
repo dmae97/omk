@@ -104,7 +104,8 @@
 		"statusLineUntracked": "untrackedColor",
 		"statusLineOutput": "outputColor",
 		"statusLineCost": "costColor",
-		"statusLineSubagents": "subagentsColor"
+		"statusLineSubagents": "subagentsColor",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#f6f8fa",

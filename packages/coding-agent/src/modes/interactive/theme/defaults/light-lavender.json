@@ -84,7 +84,8 @@
 		"statusLineUntracked": 39,
 		"statusLineOutput": 205,
 		"statusLineCost": 205,
-		"statusLineSubagents": "accent"
+		"statusLineSubagents": "accent",
+		"pythonMode": "yellow"
 	},
 	"export": {
 		"pageBg": "#f3e5f5",

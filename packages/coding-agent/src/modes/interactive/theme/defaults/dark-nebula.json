@@ -26,7 +26,6 @@
 		"dim": "dim",
 		"text": "",
 		"thinkingText": "muted",
-
 		"selectedBg": "#1b1427",
 		"userMessageBg": "#0f0b18",
 		"userMessageText": "",
@@ -38,7 +37,6 @@
 		"toolErrorBg": "#1c1115",
 		"toolTitle": "",
 		"toolOutput": "muted",
-
 		"mdHeading": "star",
 		"mdLink": "teal",
 		"mdLinkUrl": "dim",
@@ -49,11 +47,9 @@
 		"mdQuoteBorder": "nebula",
 		"mdHr": "nebula",
 		"mdListBullet": "magenta",
-
 		"toolDiffAdded": "success",
 		"toolDiffRemoved": "error",
 		"toolDiffContext": "muted",
-
 		"syntaxComment": "dim",
 		"syntaxKeyword": "violet",
 		"syntaxFunction": "magenta",
@@ -63,16 +59,13 @@
 		"syntaxType": "success",
 		"syntaxOperator": "star",
 		"syntaxPunctuation": "star",
-
 		"thinkingOff": "nebula",
 		"thinkingMinimal": "dim",
 		"thinkingLow": "teal",
 		"thinkingMedium": "violet",
 		"thinkingHigh": "magenta",
 		"thinkingXhigh": "star",
-
 		"bashMode": "teal",
-
 		"statusLineBg": "#0a0a13",
 		"statusLineSep": "#2a2336",
 		"statusLineModel": "magenta",
@@ -86,7 +79,8 @@
 		"statusLineUntracked": "teal",
 		"statusLineOutput": "star",
 		"statusLineCost": "magenta",
-		"statusLineSubagents": "magenta"
+		"statusLineSubagents": "magenta",
+		"pythonMode": "#f0c040"
 	},
 	"export": {
 		"pageBg": "#0a0912",

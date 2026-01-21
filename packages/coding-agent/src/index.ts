@@ -95,6 +95,8 @@ export type {
 	TurnStartEvent,
 	UserBashEvent,
 	UserBashEventResult,
+	UserPythonEvent,
+	UserPythonEventResult,
 } from "./core/extensions/index";
 // Extension types and utilities
 export {
