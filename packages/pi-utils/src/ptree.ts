@@ -16,6 +16,59 @@ const isWindows = process.platform === "win32";
 // Set of live children for managed termination/cleanup on shutdown.
 const managedChildren = new Set<PipedSubprocess>();
 
+class AsyncQueue<T> {
+	#items: T[] = [];
+	#resolvers: Array<(result: IteratorResult<T>) => void> = [];
+	#closed = false;
+
+	push(item: T): void {
+		if (this.#closed) return;
+		const resolver = this.#resolvers.shift();
+		if (resolver) {
+			resolver({ value: item, done: false });
+			return;
+		}
+		this.#items.push(item);
+	}
+
+	close(): void {
+		if (this.#closed) return;
+		this.#closed = true;
+		while (this.#resolvers.length > 0) {
+			const resolver = this.#resolvers.shift();
+			if (resolver) {
+				resolver({ value: undefined, done: true });
+			}
+		}
+	}
+
+	async next(): Promise<IteratorResult<T>> {
+		if (this.#items.length > 0) {
+			return { value: this.#items.shift() as T, done: false };
+		}
+		if (this.#closed) {
+			return { value: undefined, done: true };
+		}
+		return await new Promise<IteratorResult<T>>((resolve) => {
+			this.#resolvers.push(resolve);
+		});
+	}
+}
+
+function createProcessStream(queue: AsyncQueue<Uint8Array>): ReadableStream<Uint8Array> {
+	const stream = new ReadableStream<Uint8Array>({
+		pull: async (controller) => {
+			const result = await queue.next();
+			if (result.done) {
+				controller.close();
+				return;
+			}
+			controller.enqueue(result.value);
+		},
+	});
+	return stream;
+}
+
 /**
  * Kill a child process and its descendents.
  * - Windows: uses taskkill for tree and forceful kill (/T /F)
@@ -82,8 +135,11 @@ export class ChildProcess {
 	#proc: PipedSubprocess;
 	#detached = false;
 	#nothrow = false;
-	#stderrTee: ReadableStream<Uint8Array<ArrayBuffer>>;
 	#stderrBuffer = "";
+	#stdoutQueue = new AsyncQueue<Uint8Array>();
+	#stderrQueue = new AsyncQueue<Uint8Array>();
+	#stdoutStream?: ReadableStream<Uint8Array>;
+	#stderrStream?: ReadableStream<Uint8Array>;
 	#exitReason?: Exception;
 	#exitReasonPending?: Exception;
 	#exited: Promise<void>;
@@ -92,23 +148,75 @@ export class ChildProcess {
 	constructor(proc: PipedSubprocess) {
 		registerManaged(proc);
 
-		const [left, right] = proc.stderr.tee();
-		this.#stderrTee = right;
+		const exitSettled = proc.exited.then(
+			() => {},
+			() => {},
+		);
+
+		// Capture stdout at all times. Close the passthrough when the process exits.
+		void (async () => {
+			const reader = proc.stdout.getReader();
+			try {
+				while (true) {
+					const result = await Promise.race([
+						reader.read(),
+						exitSettled.then(() => ({ done: true, value: undefined as Uint8Array | undefined })),
+					]);
+					if (result.done) break;
+					if (!result.value) continue;
+					this.#stdoutQueue.push(result.value);
+				}
+			} catch {
+				// ignore
+			} finally {
+				try {
+					await reader.cancel();
+				} catch {}
+				try {
+					reader.releaseLock();
+				} catch {}
+				this.#stdoutQueue.close();
+			}
+		})().catch(() => {
+			this.#stdoutQueue.close();
+		});
 
 		// Capture stderr at all times, with a capped buffer for errors.
 		const decoder = new TextDecoder();
 		void (async () => {
-			for await (const chunk of left) {
-				this.#stderrBuffer += decoder.decode(chunk, { stream: true });
+			const reader = proc.stderr.getReader();
+			try {
+				while (true) {
+					const result = await Promise.race([
+						reader.read(),
+						exitSettled.then(() => ({ done: true, value: undefined as Uint8Array | undefined })),
+					]);
+					if (result.done) break;
+					if (!result.value) continue;
+					this.#stderrQueue.push(result.value);
+					this.#stderrBuffer += decoder.decode(result.value, { stream: true });
+					if (this.#stderrBuffer.length > NonZeroExitError.MAX_TRACE) {
+						this.#stderrBuffer = this.#stderrBuffer.slice(-NonZeroExitError.MAX_TRACE);
+					}
+				}
+			} catch {
+				// ignore
+			} finally {
+				this.#stderrBuffer += decoder.decode();
 				if (this.#stderrBuffer.length > NonZeroExitError.MAX_TRACE) {
 					this.#stderrBuffer = this.#stderrBuffer.slice(-NonZeroExitError.MAX_TRACE);
 				}
+				try {
+					await reader.cancel();
+				} catch {}
+				try {
+					reader.releaseLock();
+				} catch {}
+				this.#stderrQueue.close();
 			}
-			this.#stderrBuffer += decoder.decode();
-			if (this.#stderrBuffer.length > NonZeroExitError.MAX_TRACE) {
-				this.#stderrBuffer = this.#stderrBuffer.slice(-NonZeroExitError.MAX_TRACE);
-			}
-		})().catch(() => {});
+		})().catch(() => {
+			this.#stderrQueue.close();
+		});
 
 		const { promise, resolve } = Promise.withResolvers<Exception | undefined>();
 
@@ -152,11 +260,17 @@ export class ChildProcess {
 	get stdin(): FileSink | undefined {
 		return this.#proc.stdin;
 	}
-	get stdout(): ReadableStream<Uint8Array<ArrayBuffer>> {
-		return this.#proc.stdout;
+	get stdout(): ReadableStream<Uint8Array> {
+		if (!this.#stdoutStream) {
+			this.#stdoutStream = createProcessStream(this.#stdoutQueue);
+		}
+		return this.#stdoutStream;
 	}
-	get stderr(): ReadableStream<Uint8Array<ArrayBuffer>> {
-		return this.#stderrTee;
+	get stderr(): ReadableStream<Uint8Array> {
+		if (!this.#stderrStream) {
+			this.#stderrStream = createProcessStream(this.#stderrQueue);
+		}
+		return this.#stderrStream;
 	}
 
 	/**
@@ -227,7 +341,7 @@ export class ChildProcess {
 	async blob() {
 		const { promise, resolve, reject } = Promise.withResolvers<Blob>();
 
-		const blob = this.#proc.stdout.blob();
+		const blob = this.stdout.blob();
 		if (!this.#nothrow) {
 			this.#exited.catch((ex: Exception) => {
 				reject(ex);

@@ -1,8 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Fixed
 
+- Improved error messages when multiple text occurrences are found by showing line previews and context
+- Enhanced patch application to better handle duplicate content in context lines
+- Added occurrence previews to help users disambiguate between multiple matches
 - Fixed cache invalidation for streaming edits to prevent stale data
 - Fixed file existence check for prompt templates directory
 - Fixed bash output streaming to prevent premature stream closure

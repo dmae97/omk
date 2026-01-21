@@ -92,17 +92,17 @@ function adjustLinesIndentation(patternLines: string[], actualLines: string[], n
 		}
 	}
 
-	// Build a map from trimmed content to available (pattern index, actual index) pairs
-	// This lets us find context lines and their corresponding actual content
-	const contentToIndices = new Map<string, Array<{ patternIdx: number; actualIdx: number }>>();
-	for (let i = 0; i < Math.min(patternLines.length, actualLines.length); i++) {
-		const trimmed = patternLines[i].trim();
+	// Build a map from trimmed content to actual lines (by content, not position)
+	// This handles fuzzy matches where pattern and actual may not be positionally aligned
+	const contentToActualLines = new Map<string, string[]>();
+	for (const line of actualLines) {
+		const trimmed = line.trim();
 		if (trimmed.length === 0) continue;
-		const arr = contentToIndices.get(trimmed);
+		const arr = contentToActualLines.get(trimmed);
 		if (arr) {
-			arr.push({ patternIdx: i, actualIdx: i });
+			arr.push(line);
 		} else {
-			contentToIndices.set(trimmed, [{ patternIdx: i, actualIdx: i }]);
+			contentToActualLines.set(trimmed, [line]);
 		}
 	}
 
@@ -119,8 +119,8 @@ function adjustLinesIndentation(patternLines: string[], actualLines: string[], n
 	}
 	const avgDelta = deltaCount > 0 ? Math.round(totalDelta / deltaCount) : 0;
 
-	// Track which indices we've used to handle duplicate content correctly
-	const usedIndices = new Set<number>();
+	// Track which actual lines we've used to handle duplicate content correctly
+	const usedActualLines = new Map<string, number>(); // trimmed content -> count used
 
 	return newLines.map((newLine) => {
 		if (newLine.trim().length === 0) {
@@ -128,16 +128,15 @@ function adjustLinesIndentation(patternLines: string[], actualLines: string[], n
 		}
 
 		const trimmed = newLine.trim();
-		const indices = contentToIndices.get(trimmed);
+		const matchingActualLines = contentToActualLines.get(trimmed);
 
-		// Check if this is a context line (same trimmed content exists in pattern)
-		if (indices) {
-			for (const { patternIdx, actualIdx } of indices) {
-				if (!usedIndices.has(patternIdx)) {
-					usedIndices.add(patternIdx);
-					// Use actual file content directly for context lines
-					return actualLines[actualIdx];
-				}
+		// Check if this is a context line (same trimmed content exists in actual)
+		if (matchingActualLines && matchingActualLines.length > 0) {
+			const usedCount = usedActualLines.get(trimmed) ?? 0;
+			if (usedCount < matchingActualLines.length) {
+				usedActualLines.set(trimmed, usedCount + 1);
+				// Use actual file content directly for context lines
+				return matchingActualLines[usedCount];
 			}
 		}
 
@@ -599,9 +598,11 @@ function applyCharacterMatch(
 
 	// Check for multiple exact occurrences
 	if (matchOutcome.occurrences && matchOutcome.occurrences > 1) {
+		const previews = matchOutcome.occurrencePreviews?.join("\n\n") ?? "";
+		const moreMsg = matchOutcome.occurrences > 5 ? ` (showing first 5 of ${matchOutcome.occurrences})` : "";
 		throw new ApplyPatchError(
-			`Found ${matchOutcome.occurrences} occurrences of the text in ${path}. ` +
-				`The text must be unique. Please provide more context to make it unique.`,
+			`Found ${matchOutcome.occurrences} occurrences in ${path}${moreMsg}:\n\n${previews}\n\n` +
+				`Add more context lines to disambiguate.`,
 		);
 	}
 
@@ -857,9 +858,22 @@ function computeReplacements(
 		if (hunk.changeContext === undefined && !hunk.hasContextLines && !hunk.isEndOfFile && lineHint === undefined) {
 			const secondMatch = seekSequence(originalLines, pattern, found + 1, false, { allowFuzzy });
 			if (secondMatch.index !== undefined) {
+				// Extract 3-line previews for each match
+				const formatPreview = (startIdx: number) => {
+					const lines = originalLines.slice(startIdx, startIdx + 3);
+					return lines
+						.map((line, i) => {
+							const num = startIdx + i + 1;
+							const truncated = line.length > 60 ? `${line.slice(0, 57)}...` : line;
+							return `  ${num} | ${truncated}`;
+						})
+						.join("\n");
+				};
+				const preview1 = formatPreview(found);
+				const preview2 = formatPreview(secondMatch.index);
 				throw new ApplyPatchError(
-					`Found 2 occurrences of the text in ${path}. ` +
-						`The text must be unique. Please provide more context to make it unique.`,
+					`Found 2 occurrences in ${path}:\n\n${preview1}\n\n${preview2}\n\n` +
+						`Add more context lines to disambiguate.`,
 				);
 			}
 		}

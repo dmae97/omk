@@ -390,8 +390,11 @@ export class EditTool implements AgentTool<TInput> {
 			});
 
 			if (matchOutcome.occurrences && matchOutcome.occurrences > 1) {
+				const previews = matchOutcome.occurrencePreviews?.join("\n\n") ?? "";
+				const moreMsg = matchOutcome.occurrences > 5 ? ` (showing first 5 of ${matchOutcome.occurrences})` : "";
 				throw new Error(
-					`Found ${matchOutcome.occurrences} occurrences of the text in ${path}. The text must be unique. Please provide more context to make it unique, or use all: true to replace all.`,
+					`Found ${matchOutcome.occurrences} occurrences in ${path}${moreMsg}:\n\n${previews}\n\n` +
+						`Add more context lines to disambiguate.`,
 				);
 			}
 

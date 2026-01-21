@@ -40,6 +40,10 @@ export interface MatchOutcome {
 	closest?: FuzzyMatch;
 	/** Number of occurrences if multiple exact matches found */
 	occurrences?: number;
+	/** Line numbers where occurrences were found (1-indexed) */
+	occurrenceLines?: number[];
+	/** Preview snippets for each occurrence (up to 5) */
+	occurrencePreviews?: string[];
 	/** Number of fuzzy matches above threshold */
 	fuzzyMatches?: number;
 }

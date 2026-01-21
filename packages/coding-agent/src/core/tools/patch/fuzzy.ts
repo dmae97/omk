@@ -215,7 +215,25 @@ export function findMatch(
 	if (exactIndex !== -1) {
 		const occurrences = content.split(target).length - 1;
 		if (occurrences > 1) {
-			return { occurrences };
+			// Find line numbers and previews for each occurrence (up to 5)
+			const contentLines = content.split("\n");
+			const occurrenceLines: number[] = [];
+			const occurrencePreviews: string[] = [];
+			let searchStart = 0;
+			for (let i = 0; i < 5; i++) {
+				const idx = content.indexOf(target, searchStart);
+				if (idx === -1) break;
+				const lineNumber = content.slice(0, idx).split("\n").length;
+				occurrenceLines.push(lineNumber);
+				// Extract 3 lines starting from match (0-indexed)
+				const previewLines = contentLines.slice(lineNumber - 1, lineNumber + 2);
+				const preview = previewLines
+					.map((line, i) => `  ${lineNumber + i} | ${line.length > 60 ? `${line.slice(0, 57)}...` : line}`)
+					.join("\n");
+				occurrencePreviews.push(preview);
+				searchStart = idx + 1;
+			}
+			return { occurrences, occurrenceLines, occurrencePreviews };
 		}
 		const startLine = content.slice(0, exactIndex).split("\n").length;
 		return {
