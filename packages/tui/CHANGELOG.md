@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [6.8.3] - 2026-01-21
 ### Added
 
 - Added undo support in the editor via `Ctrl+-`

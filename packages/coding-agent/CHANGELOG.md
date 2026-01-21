@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [6.8.3] - 2026-01-21
+
 ### Changed
 
 - Updated keybinding system to normalize key IDs to lowercase
