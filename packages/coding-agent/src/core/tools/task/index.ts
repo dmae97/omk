@@ -32,7 +32,6 @@ import { renderCall, renderResult } from "./render";
 import { renderTemplate, validateTaskTemplate } from "./template";
 import {
 	type AgentProgress,
-	MAX_AGENTS_IN_DESCRIPTION,
 	MAX_CONCURRENCY,
 	MAX_PARALLEL_TASKS,
 	type SingleResult,
@@ -112,8 +111,7 @@ async function buildDescription(cwd: string): Promise<string> {
 	const { agents } = await discoverAgents(cwd);
 
 	return renderPromptTemplate(taskDescriptionTemplate, {
-		agents: agents.slice(0, MAX_AGENTS_IN_DESCRIPTION),
-		moreAgents: agents.length > MAX_AGENTS_IN_DESCRIPTION ? agents.length - MAX_AGENTS_IN_DESCRIPTION : 0,
+		agents,
 		MAX_PARALLEL_TASKS,
 		MAX_CONCURRENCY,
 	});

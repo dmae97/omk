@@ -1,11 +1,12 @@
+# SSH
+
 Execute commands on remote SSH hosts.
 
-## Critical: Match Commands to Host Shell
-
+<critical>
 Each host runs a specific shell. **You MUST use commands native to that shell.**
+</critical>
 
-### Command Reference
-
+<commands>
 **linux/bash, linux/zsh, macos/bash, macos/zsh** — Unix-like systems:
 - Files: `ls`, `cat`, `head`, `tail`, `grep`, `find`
 - System: `ps`, `top`, `df`, `uname`, `free` (Linux), `df`, `uname`, `top` (macOS)
@@ -26,49 +27,48 @@ Each host runs a specific shell. **You MUST use commands native to that shell.**
 - Files: `dir`, `type`, `findstr`, `where`
 - System: `tasklist`, `systeminfo`
 - Navigation: `cd`, `echo %CD%`
+</commands>
 
-## Execution Pattern
-
+<instruction>
 1. Check the host's shell type from "Available hosts" below
 2. Use ONLY commands for that shell type
 3. Construct your command using the reference above
+</instruction>
 
-## Examples
-
-<example>
+<example name="linux">
 Task: List files in /home/user on host "server1"
 Host: server1 (10.0.0.1) | linux/bash
 Command: `ls -la /home/user`
 </example>
 
-<example>
+<example name="windows-cmd">
 Task: Show running processes on host "winbox"
 Host: winbox (192.168.1.5) | windows/cmd
 Command: `tasklist /v`
 </example>
 
-<example>
+<example name="windows-wsl">
 Task: Check disk usage on host "wsl-dev"
 Host: wsl-dev (192.168.1.10) | windows/bash
 Command: `df -h`
 Note: Windows host with WSL — use Unix commands
 </example>
 
-<example>
+<example name="macos">
 Task: Get system info on host "macbook"
 Host: macbook (10.0.0.20) | macos/zsh
 Command: `uname -a && sw_vers`
 </example>
 
-## Parameters
-
+<parameters>
 - **host**: Host name from "Available hosts" below
 - **command**: Command to execute (see Command Reference above)
 - **cwd**: Working directory (optional)
 - **timeout**: Timeout in seconds (optional)
+</parameters>
 
-## Output
-
+<important>
 Truncated at 50KB. Exit codes captured.
 
 **Before executing: verify host shell type below and use matching commands.**
+</important>

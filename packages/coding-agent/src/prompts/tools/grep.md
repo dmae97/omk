@@ -1,12 +1,16 @@
-A powerful search tool built on ripgrep
+# Grep
 
-Usage:
-  - ALWAYS use Grep for search tasks. NEVER invoke `grep` or `rg` as a Bash command. The Grep tool has been optimized for correct permissions and access.
-  - Supports full regex syntax (e.g., "log.*Error", "function\\s+\\w+")
-  - Filter files with glob parameter (e.g., "*.js", "**/*.tsx") or type parameter (e.g., "js", "py", "rust")
-  - Output modes: "content" shows matching lines, "files_with_matches" shows only file paths (default), "count" shows match counts
-  - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use `interface\\{\\}` to find `interface{}` in Go code)
-  - Multiline matching: By default patterns match within single lines only. For cross-line patterns like `struct \\{[\\s\\S]*?field`, use `multiline: true`
+A powerful search tool built on ripgrep.
 
-Important:
-  - ALWAYS Use Task tool with explore subagent over this for open-ended searches requiring multiple rounds
+<instruction>
+- ALWAYS use Grep for search tasks. NEVER invoke `grep` or `rg` as a Bash command. The Grep tool has been optimized for correct permissions and access.
+- Supports full regex syntax (e.g., "log.*Error", "function\\s+\\w+")
+- Filter files with glob parameter (e.g., "*.js", "**/*.tsx") or type parameter (e.g., "js", "py", "rust")
+- Output modes: "content" shows matching lines, "files_with_matches" shows only file paths (default), "count" shows match counts
+- Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use `interface\\{\\}` to find `interface{}` in Go code)
+- Multiline matching: By default patterns match within single lines only. For cross-line patterns like `struct \\{[\\s\\S]*?field`, use `multiline: true`
+</instruction>
+
+<important>
+- ALWAYS use Task tool with explore subagent over this for open-ended searches requiring multiple rounds
+</important>

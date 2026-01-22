@@ -12,7 +12,6 @@
 {{else}}
 _No files to review._
 {{/if}}
-
 {{#if excluded.length}}
 ### Excluded Files ({{len excluded}})
 

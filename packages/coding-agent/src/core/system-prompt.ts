@@ -68,29 +68,6 @@ export async function loadGitContext(cwd: string): Promise<GitContext | null> {
 	};
 }
 
-/** Tool descriptions for system prompt */
-const toolDescriptions: Record<ToolName, string> = {
-	ask: "Ask user for input or clarification",
-	read: "Read file contents",
-	bash: "Execute bash commands (npm, docker, etc.)",
-	python: "Execute Python code via a session-backed IPython kernel",
-	calc: "{ calculations: array of { expression: string, prefix: string, suffix: string } } Basic calculations.",
-	ssh: "Execute commands on remote hosts via SSH",
-	edit: "Make surgical edits to files (find exact text and replace)",
-	write: "Create or overwrite files",
-	grep: "Search file contents for patterns (respects .gitignore)",
-	find: "Find files by glob pattern (respects .gitignore)",
-	git: "Structured Git operations with safety guards (status, diff, log, commit, push, pr, etc.)",
-	ls: "List directory contents",
-	lsp: "PREFERRED for semantic code queries: go-to-definition, find-all-references, hover (type info), call hierarchy. Returns precise, deterministic results. Use BEFORE grep for symbol lookups.",
-	notebook: "Edit Jupyter notebook cells",
-	output: "Output structured data to the user (bypasses tool result formatting)",
-	task: "Spawn a sub-agent to handle complex tasks",
-	web_fetch: "Fetch and render URLs into clean text for LLM consumption",
-	web_search: "Search the web for information",
-	report_finding: "Report a finding during code review",
-};
-
 function firstNonEmpty(values: Array<string | undefined | null>): string | null {
 	for (const value of values) {
 		const trimmed = value?.trim();
@@ -726,10 +703,6 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		// Use defaults
 		toolNamesArray = defaultToolNames;
 	}
-	const toolDescriptionsArray = toolNamesArray.map((name) => ({
-		name,
-		description: toolDescriptions[name as ToolName] ?? "",
-	}));
 
 	// Resolve skills: use provided or discover
 	const skills =
@@ -750,7 +723,6 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 			appendPrompt: resolvedAppendPrompt ?? "",
 			contextFiles,
 			agentsMdSearch,
-			toolDescriptions: toolDescriptionsArray,
 			git,
 			skills: filteredSkills,
 			rules: rules ?? [],
@@ -761,7 +733,6 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 
 	return renderPromptTemplate(systemPromptTemplate, {
 		tools: toolNamesArray,
-		toolDescriptions: toolDescriptionsArray,
 		environment: await getEnvironmentInfo(),
 		systemPromptCustomization: systemPromptCustomization ?? "",
 		contextFiles,

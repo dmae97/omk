@@ -1,8 +1,12 @@
+# Calculator
+
 Basic calculations.
 
-Input:
-  - calculations: array of { expression: string, prefix: string, suffix: string }
+<parameters>
+- calculations: array of { expression: string, prefix: string, suffix: string }
+</parameters>
 
-Notes:
-  - Supports +, -, *, /, %, ** and parentheses.
-  - Supports decimal, hex (0x), binary (0b), and octal (0o) literals.
+<important>
+- Supports +, -, *, /, %, ** and parentheses.
+- Supports decimal, hex (0x), binary (0b), and octal (0o) literals.
+</important>

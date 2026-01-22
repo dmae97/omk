@@ -3,6 +3,7 @@ name: init
 description: Generate AGENTS.md documentation for the current codebase
 ---
 
+<task>
 Analyze this codebase and generate an AGENTS.md file that documents:
 
 1. **Project Overview**: Brief description of what this project does
@@ -13,11 +14,13 @@ Analyze this codebase and generate an AGENTS.md file that documents:
 6. **Important Files**: Entry points, config files, key modules
 7. **Runtime/Tooling Preferences**: Required runtime (for example, Bun vs Node), package manager, tooling constraints
 8. **Testing & QA**: Test frameworks, how to run tests, any coverage expectations
+</task>
 
-Parallel exploration requirement:
-- Launch multiple `explore` agents in parallel (via the `task` tool) to scan different areas (e.g., core src, tests, configs/build, scripts/docs), then synthesize results.
+<parallel>
+Launch multiple `explore` agents in parallel (via the `task` tool) to scan different areas (e.g., core src, tests, configs/build, scripts/docs), then synthesize results.
+</parallel>
 
-Guidelines:
+<directives>
 - Title the document "Repository Guidelines"
 - Use Markdown headings (#, ##, etc.) for structure
 - Be concise and practical
@@ -26,5 +29,8 @@ Guidelines:
 - Include file paths where relevant
 - Call out architectural structure and common code patterns explicitly
 - Don't include information that's obvious from the code structure
+</directives>
 
+<output>
 After analysis, write the AGENTS.md file to the project root.
+</output>

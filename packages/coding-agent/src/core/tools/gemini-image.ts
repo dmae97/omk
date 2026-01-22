@@ -39,9 +39,65 @@ const inputImageSchema = Type.Object(
 	{ additionalProperties: false },
 );
 
-export const geminiImageSchema = Type.Object(
+const baseImageSchema = Type.Object(
 	{
-		prompt: Type.String({ description: "Text prompt for image generation or editing." }),
+		subject: Type.String({
+			description:
+				"Main subject with key descriptors (e.g., 'A stoic robot barista with glowing blue optics', 'A weathered lighthouse on a rocky cliff').",
+		}),
+		action: Type.Optional(
+			Type.String({
+				description: "What the subject is doing (e.g., 'pouring latte art', 'standing against crashing waves').",
+			}),
+		),
+		scene: Type.Optional(
+			Type.String({
+				description:
+					"Location or environment (e.g., 'in a futuristic café on Mars', 'during a violent thunderstorm at dusk').",
+			}),
+		),
+		composition: Type.Optional(
+			Type.String({
+				description:
+					"Camera angle, framing, depth of field (e.g., 'low-angle close-up, shallow depth of field', 'wide establishing shot').",
+			}),
+		),
+		lighting: Type.Optional(
+			Type.String({
+				description:
+					"Lighting setup and mood (e.g., 'warm rim lighting', 'golden hour backlight', 'hard noon shadows').",
+			}),
+		),
+		style: Type.Optional(
+			Type.String({
+				description:
+					"Artistic style, mood, color grading (e.g., 'film noir mood, cinematic color grading', 'Studio Ghibli watercolor', 'photorealistic').",
+			}),
+		),
+		camera: Type.Optional(
+			Type.String({
+				description:
+					"Lens and camera specs (e.g., 'Shot on 35mm, f/1.8', 'macro lens, extreme close-up', '85mm portrait lens').",
+			}),
+		),
+		text: Type.Optional(
+			Type.String({
+				description:
+					"Text to render in image with specs: exact wording in quotes, font style, color, placement (e.g., 'Headline \"URBAN EXPLORER\" in bold white sans-serif at top center').",
+			}),
+		),
+		changes: Type.Optional(
+			Type.Array(Type.String(), {
+				description:
+					"For edits: specific changes to make (e.g., ['Change the tie to green', 'Remove the car in background']). Use with input_images.",
+			}),
+		),
+		preserve: Type.Optional(
+			Type.String({
+				description:
+					"For edits: what to keep unchanged (e.g., 'identity, face, hairstyle, lighting'). Use with input_images and changes.",
+			}),
+		),
 		model: Type.Optional(
 			Type.String({
 				description: `Image model. Default: ${DEFAULT_MODEL} (direct Gemini) or ${DEFAULT_OPENROUTER_MODEL} (OpenRouter).`,
@@ -65,8 +121,48 @@ export const geminiImageSchema = Type.Object(
 	{ additionalProperties: false },
 );
 
+export const geminiImageSchema = baseImageSchema;
 export type GeminiImageParams = Static<typeof geminiImageSchema>;
 export type GeminiResponseModality = Static<typeof responseModalitySchema>;
+
+/**
+ * Assembles a structured prompt from the provided parameters.
+ * For generation: builds "subject, action, scene. composition. lighting. camera. style."
+ * For edits: appends change instructions and preserve directives.
+ */
+function assemblePrompt(params: GeminiImageParams): string {
+	const parts: string[] = [];
+
+	// Core subject line: subject + action + scene
+	const subjectParts = [params.subject];
+	if (params.action) subjectParts.push(params.action);
+	if (params.scene) subjectParts.push(params.scene);
+	parts.push(subjectParts.join(", "));
+
+	// Technical details as separate sentences
+	if (params.composition) parts.push(params.composition);
+	if (params.lighting) parts.push(params.lighting);
+	if (params.camera) parts.push(params.camera);
+	if (params.style) parts.push(params.style);
+
+	// Join with periods for sentence structure
+	let prompt = `${parts.map((p) => p.replace(/[.!,;:]+$/, "")).join(". ")}.`;
+
+	// Text rendering specs
+	if (params.text) {
+		prompt += `\n\nText: ${params.text}`;
+	}
+
+	// Edit mode: changes and preserve directives
+	if (params.changes?.length) {
+		prompt += `\n\nChanges:\n${params.changes.map((c) => `- ${c}`).join("\n")}`;
+		if (params.preserve) {
+			prompt += `\n\nPreserve: ${params.preserve}`;
+		}
+	}
+
+	return prompt;
+}
 
 interface GeminiInlineData {
 	data?: string;
@@ -393,7 +489,8 @@ export const geminiImageTool: CustomTool<typeof geminiImageSchema, GeminiImageTo
 			const requestSignal = createRequestSignal(signal, timeoutSeconds);
 
 			if (provider === "openrouter") {
-				const contentParts: OpenRouterContentPart[] = [{ type: "text", text: params.prompt }];
+				const prompt = assemblePrompt(params);
+				const contentParts: OpenRouterContentPart[] = [{ type: "text", text: prompt }];
 				for (const image of resolvedImages) {
 					contentParts.push({ type: "image_url", image_url: { url: toDataUrl(image) } });
 				}
@@ -468,7 +565,7 @@ export const geminiImageTool: CustomTool<typeof geminiImageSchema, GeminiImageTo
 			for (const image of resolvedImages) {
 				parts.push({ inlineData: image });
 			}
-			parts.push({ text: params.prompt });
+			parts.push({ text: assemblePrompt(params) });
 
 			const generationConfig: {
 				responseModalities: GeminiResponseModality[];

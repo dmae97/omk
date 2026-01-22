@@ -1,21 +1,20 @@
+# Output
+
 Retrieves complete output from background tasks spawned with the Task tool.
 
-## When to Use
-
+<instruction>
 Use TaskOutput when:
-
 - Task tool returns truncated preview with "Output truncated" message
 - You need full output to debug errors or analyze detailed results
 - Task tool's summary shows substantial line/character counts but preview is incomplete
 - You're analyzing multi-step task output requiring full context
 
 Do NOT use when:
-
 - Task preview already shows complete output (no truncation indicator)
 - Summary alone answers your question
+</instruction>
 
-## Parameters
-
+<parameters>
 - `ids`: Array of output IDs from Task results (e.g., `["ApiAudit", "DbAudit"]`)
 - `format` (optional):
   - `"raw"` (default): Full output with ANSI codes preserved
@@ -26,9 +25,9 @@ Do NOT use when:
 - `limit` (optional): Maximum number of lines to read
 
 Use offset/limit for line ranges to reduce context usage on large outputs. Use `query` for structured agent outputs (agents that call `complete` with `output`).
+</parameters>
 
-## Query Examples
-
+<query_examples>
 For agents returning structured data via `complete`, use `query` to extract specific fields:
 
 ```
@@ -45,3 +44,4 @@ Query paths:
 - `[0]` - array index
 - `.foo.bar[0].baz` - chained access
 - `["special-key"]` - properties with special characters
+</query_examples>

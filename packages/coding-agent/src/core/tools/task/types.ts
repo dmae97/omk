@@ -31,9 +31,6 @@ export const MAX_OUTPUT_BYTES = getEnv("OMP_TASK_MAX_OUTPUT_BYTES", 500_000);
 /** Maximum output lines per agent */
 export const MAX_OUTPUT_LINES = getEnv("OMP_TASK_MAX_OUTPUT_LINES", 5000);
 
-/** Maximum agents to show in description */
-export const MAX_AGENTS_IN_DESCRIPTION = getEnv("OMP_TASK_MAX_AGENTS_IN_DESCRIPTION", 10);
-
 /** EventBus channel for raw subagent events */
 export const TASK_SUBAGENT_EVENT_CHANNEL = "task:subagent:event";
 

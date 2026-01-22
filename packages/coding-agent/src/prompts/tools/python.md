@@ -1,7 +1,8 @@
+# Python
+
 Executes Python cells sequentially in a persistent IPython kernel.
 
-## How to use (REPL discipline)
-
+<protocol>
 The kernel persists between calls and between cells. **Imports, variables, and functions survive.** Use this.
 
 **Work incrementally:**
@@ -21,14 +22,20 @@ The kernel persists between calls and between cells. **Imports, variables, and f
 - Re-importing modules you already imported
 - Rewriting working code when only one part failed
 - Large functions that are hard to debug piece by piece
+</protocol>
 
+<example name="bad">
 ```python
 # BAD: One giant cell
 cells: [{
     "title": "all-in-one",
     "code": "import json\nfrom pathlib import Path\ndef process_all_files():\n    # 50 lines...\n    pass\nresult = process_all_files()"
 }]
+```
+</example>
 
+<example name="good">
+```python
 # GOOD: Multiple small cells
 cells: [
     {"title": "imports", "code": "import json\nfrom pathlib import Path"},
@@ -37,9 +44,9 @@ cells: [
     {"title": "use helper", "code": "configs = [parse_config(p) for p in Path('.').glob('*.json')]"}
 ]
 ```
+</example>
 
-## When to use Python
-
+<instruction>
 **Use Python for user-facing operations:**
 - Displaying, concatenating, or merging files → `cat(*paths)`
 - Batch transformations across files → `batch(paths, fn)`, `rsed()`
@@ -70,9 +77,9 @@ run("cargo build --release")
 import subprocess
 subprocess.run(["bun", "run", "check"], ...)
 ```
+</instruction>
 
-## Prelude helpers
-
+<prelude>
 All helpers auto-print results and return values for chaining.
 
 {{#if categories.length}}
@@ -89,9 +96,9 @@ All helpers auto-print results and return values for chaining.
 {{else}}
 (Documentation unavailable — Python kernel failed to start)
 {{/if}}
+</prelude>
 
-## Examples
-
+<examples>
 ```python
 # Concatenate all markdown files in docs/
 cat(*find("*.md", "docs"))
@@ -108,17 +115,17 @@ sort_lines(read("data.txt"), unique=True)
 # Extract columns 0 and 2 from TSV
 cols(read("data.tsv"), 0, 2, sep="\t")
 ```
+</examples>
 
-## Notes
-
+<important>
 - Code executes as IPython cells; users see the full cell output (including rendered figures, tables, etc.)
 - Kernel persists for the session by default; per-call mode uses a fresh kernel each call. Use `reset: true` to clear state when session mode is active
 - Use `plt.show()` to display figures
 - Use `display()` from IPython.display for rich output (HTML, Markdown, images, etc.)
 - Output streams in real time, truncated after 50KB
+</important>
 
-## Rich output rendering
-
+<rich_output>
 The user sees output like a Jupyter notebook—rich displays are fully rendered:
 - `display(JSON(data))` → interactive JSON tree
 - `display(HTML(...))` → rendered HTML
@@ -126,3 +133,4 @@ The user sees output like a Jupyter notebook—rich displays are fully rendered:
 - `plt.show()` → inline figures
 
 **You will see object repr** (e.g., `<IPython.core.display.JSON object>`) **but the user sees the rendered output.** Trust that `display()` calls work correctly—do not assume the user sees only the repr.
+</rich_output>

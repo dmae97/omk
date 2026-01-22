@@ -1,14 +1,11 @@
 {{#if systemPromptCustomization}}
 {{systemPromptCustomization}}
-
 {{/if}}
 {{customPrompt}}
 {{#if appendPrompt}}
-
 {{appendPrompt}}
 {{/if}}
 {{#if contextFiles.length}}
-
 # Project Context
 
 <project_context_files>
@@ -19,14 +16,7 @@
 {{/list}}
 </project_context_files>
 {{/if}}
-{{#if toolDescriptions.length}}
-
-# Tools
-
-{{#list toolDescriptions prefix="- " join="\n"}}{{name}}: {{description}}{{/list}}
-{{/if}}
 {{#if git.isRepo}}
-
 # Git Status
 
 This is the git status at the start of the conversation. Note that this status is a snapshot in time, and will not update during the conversation.
@@ -40,7 +30,6 @@ Recent commits:
 {{git.commits}}
 {{/if}}
 {{#if skills.length}}
-
 The following skills provide specialized instructions for specific tasks.
 Use the read tool to load a skill's file when the task matches its description.
 
@@ -55,7 +44,6 @@ Use the read tool to load a skill's file when the task matches its description.
 </available_skills>
 {{/if}}
 {{#if rules.length}}
-
 The following rules define project-specific guidelines and constraints:
 
 <rules>

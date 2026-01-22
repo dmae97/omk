@@ -1,40 +1,43 @@
+# Task
+
 Launch a new agent to handle complex, multi-step tasks autonomously.
 
 The Task tool launches specialized agents (workers) that autonomously handle complex tasks. Each agent type has specific capabilities and tools available to it.
 
-**CRITICAL: Subagents have NO access to conversation history.** They only see:
+<critical>
+**Subagents have NO access to conversation history.** They only see:
 1. Their agent-specific system prompt
 2. The `context` string you provide
 3. The `task` string you provide
 
 If you discussed requirements, plans, schemas, or decisions with the user, you MUST include that information in `context`. Subagents cannot see prior messages - they start fresh with only what you explicitly pass them.
+</critical>
 
-## Available Agents
-
-{{#list agents prefix="- " join="\n"}}
-{{name}}: {{description}} (Tools: {{default (join tools ", ") "All tools"}}{{#if output}}, Output: structured{{/if}})
+<agents>
+{{#list agents join="\n"}}
+<agent name="{{name}}"{{#if output}} output="structured"{{/if}}>
+<description>{{description}}</description>
+<tools>{{default (join tools ", ") "All tools"}}</tools>
+</agent>
 {{/list}}
-{{#if moreAgents}}
-  ...and {{moreAgents}} more agents
-{{/if}}
 
-Agents with "Output: structured" have a fixed schema enforced via frontmatter; your `output` parameter will be ignored for these agents.
+Agents with `output="structured"` have a fixed schema enforced via frontmatter; your `output` parameter will be ignored for these agents.
+</agents>
 
-## When NOT to Use
-
+<prohibited>
 - Reading a specific file path → Use Read tool instead
 - Finding files by pattern/name → Use Find tool instead
 - Searching for a specific class/function definition → Use Grep tool instead
 - Searching code within 2-3 specific files → Use Read tool instead
 - Tasks unrelated to the agent descriptions above
+</prohibited>
 
-## Usage Notes
-
+<directives>
 - Always include a short description of the task in the task parameter
 - **Plan-then-execute**: Put shared constraints in `context`, keep each task focused, specify acceptance criteria; use `output` when you need structured output
 - **Ask open-ended questions**: For exploration tasks, frame prompts to elicit factual discovery, not confirmation. Avoid yes/no questions that are easy to hallucinate.
-  - Bad: "Is there rate limiting?" or "Does the API validate tokens?" → Binary answers invite hallucination
-  - Good: "Find and describe how rate limiting is implemented" or "How does the API handle token validation?" → Forces investigation and factual reporting
+    - Bad: "Is there rate limiting?" or "Does the API validate tokens?" → Binary answers invite hallucination
+    - Good: "Find and describe how rate limiting is implemented" or "How does the API handle token validation?" → Forces investigation and factual reporting
   - The subagent should report *what exists*, then YOU verify if it meets requirements
 - **Minimize tool chatter**: Avoid repeating large context; use Output tool with output ids for full logs
 - **Structured completion**: If `output` is provided, subagents must call `complete` to finish
@@ -45,20 +48,19 @@ Agents with "Output: structured" have a fixed schema enforced via frontmatter; y
 - **Trust outputs**: Agent results should generally be trusted
 - **Clarify intent**: Tell the agent whether you expect code changes or just research (search, file reads, web fetches)
 - **Proactive use**: If an agent description says to use it proactively, do so without waiting for explicit user request
+</directives>
 
-## Parameters
-
+<parameters>
 - `agent`: Agent type to use for all tasks
 - `context`: Template with `{{placeholders}}` for multi-task. Each placeholder is filled from task vars.
 - `model`: (optional) Model override for all tasks (fuzzy matching, e.g., "sonnet", "opus")
 - `isolated`: (optional) Run each task in its own git worktree and return patches; patches are applied only if all apply cleanly.
 - `tasks`: Array of `{id, description, vars}` - tasks to run in parallel (max {{MAX_PARALLEL_TASKS}}, {{MAX_CONCURRENCY}} concurrent)
-  - `id`: Short CamelCase identifier for display (max 20 chars, e.g., "SessionStore", "LspRefactor")
-  - `description`: Short human-readable description of what the task does
-  - `vars`: Object with keys matching `{{placeholders}}` in context
+    - `id`: Short CamelCase identifier for display (max 20 chars, e.g., "SessionStore", "LspRefactor")
+    - `description`: Short human-readable description of what the task does
+    - `vars`: Object with keys matching `{{placeholders}}` in context
 - `output`: (optional) JTD schema for structured subagent output (used by the complete tool)
-
-## Example
+</parameters>
 
 <example>
 user: "Looks good, execute the plan"

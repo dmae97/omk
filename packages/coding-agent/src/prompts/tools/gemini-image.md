@@ -1,8 +1,19 @@
-Generate or edit images using Gemini image models directly or via OpenRouter.
+# Gemini Image
 
-Provide a text prompt and optional input images. Use response modalities to request image-only output,
-set aspect ratio or image size, and choose the model explicitly when needed.
+Generate or edit images using Gemini image models.
 
-Prompt tips:
-- Describe subject, composition, style, and lighting in full sentences.
-- For edits, reference the input image and specify the exact changes.
+Provide structured parameters for best results. The tool assembles them into an optimized prompt.
+
+<multi_image>
+When using multiple `input_images`, describe each image's role in the **subject** or **scene** field:
+- "Use Image 1 for the character's face and outfit, Image 2 for the pose, Image 3 for the background environment"
+- "Match the color palette from Image 1, apply the lighting style from Image 2"
+</multi_image>
+
+<important>
+- For photoreal: add "ultra-detailed, realistic, natural skin texture" to style
+- For posters/cards: use 9:16 aspect ratio with negative space for text placement
+- For iteration: use `changes` to make targeted adjustments rather than regenerating from scratch
+- For text: add "sharp, legible, correctly spelled" for important text; keep text short
+- For diagrams: include "scientifically accurate" in style and provide facts explicitly
+</important>

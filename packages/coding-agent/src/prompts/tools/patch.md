@@ -1,3 +1,5 @@
+# Patch
+
 Performs patch operations on a file given a diff.
 This is your primary tool for making changes to existing files.
 
