@@ -5,6 +5,7 @@ import { logger } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 import { type Settings as SettingsItem, settingsCapability } from "$c/capability/settings";
 import { getAgentDbPath, getAgentDir, getConfigPath } from "$c/config";
+import { withFileLock } from "$c/config/file-lock";
 import { loadCapability } from "$c/discovery";
 import type { SymbolPreset } from "$c/modes/theme/theme";
 import { AgentStorage } from "$c/session/agent-storage";
@@ -682,23 +683,23 @@ export class SettingsManager {
 
 	/**
 	 * Persist current global settings to config.yml and rebuild merged settings.
-	 * Merges with any concurrent changes in config file before saving.
+	 * Uses file locking to prevent concurrent write races.
 	 */
 	private async save(): Promise<void> {
 		if (this.persist && this.configPath) {
+			const configPath = this.configPath;
 			try {
-				// Read current settings from file to merge with any concurrent changes
-				const currentSettings = SettingsManager.loadFromYaml(this.configPath);
-				const mergedSettings = deepMergeSettings(currentSettings, this.globalSettings);
-				this.globalSettings = mergedSettings;
-				// Write YAML
-				await Bun.write(this.configPath, YAML.stringify(this.globalSettings, null, 2));
+				await withFileLock(configPath, async () => {
+					const currentSettings = SettingsManager.loadFromYaml(configPath);
+					const mergedSettings = deepMergeSettings(currentSettings, this.globalSettings);
+					this.globalSettings = mergedSettings;
+					await Bun.write(configPath, YAML.stringify(this.globalSettings, null, 2));
+				});
 			} catch (error) {
 				logger.warn("SettingsManager save failed", { error: String(error) });
 			}
 		}
 
-		// Always re-merge to update active settings (needed for both file and inMemory modes)
 		const projectSettings = await this.loadProjectSettings();
 		this.rebuildSettings(projectSettings);
 	}
