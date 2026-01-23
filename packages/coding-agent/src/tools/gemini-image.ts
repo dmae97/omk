@@ -4,6 +4,7 @@ import { StringEnum } from "@oh-my-pi/pi-ai";
 import { untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { nanoid } from "nanoid";
+import type { ModelRegistry } from "$c/config/model-registry";
 import { renderPromptTemplate } from "$c/config/prompt-templates";
 import type { CustomTool } from "$c/extensibility/custom-tools/types";
 import geminiImageDescription from "$c/prompts/tools/gemini-image.md" with { type: "text" };
@@ -13,13 +14,28 @@ import { resolveReadPath } from "./path-utils";
 
 const DEFAULT_MODEL = "gemini-3-pro-image-preview";
 const DEFAULT_OPENROUTER_MODEL = "google/gemini-3-pro-image-preview";
+const DEFAULT_ANTIGRAVITY_MODEL = "gemini-3-pro-image";
 const DEFAULT_TIMEOUT_SECONDS = 120;
 const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
 
-type ImageProvider = "gemini" | "openrouter";
+const ANTIGRAVITY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
+const ANTIGRAVITY_HEADERS = {
+	"User-Agent": "antigravity/1.11.5 darwin/arm64",
+	"X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
+	"Client-Metadata": JSON.stringify({
+		ideType: "IDE_UNSPECIFIED",
+		platform: "PLATFORM_UNSPECIFIED",
+		pluginType: "GEMINI",
+	}),
+};
+const IMAGE_SYSTEM_INSTRUCTION =
+	"You are an AI image generator. Generate images based on user descriptions. Focus on creating high-quality, visually appealing images that match the user's request.";
+
+type ImageProvider = "antigravity" | "gemini" | "openrouter";
 interface ImageApiKey {
 	provider: ImageProvider;
 	apiKey: string;
+	projectId?: string;
 }
 
 const responseModalitySchema = StringEnum(["Image", "Text"]);
@@ -212,6 +228,39 @@ interface OpenRouterResponse {
 	choices?: OpenRouterChoice[];
 }
 
+interface AntigravityRequest {
+	project: string;
+	model: string;
+	request: {
+		contents: Array<{ role: "user"; parts: Array<{ text?: string; inlineData?: InlineImageData }> }>;
+		systemInstruction?: { parts: Array<{ text: string }> };
+		generationConfig?: {
+			responseModalities?: GeminiResponseModality[];
+			imageConfig?: { aspectRatio?: string; imageSize?: string };
+			candidateCount?: number;
+		};
+		safetySettings?: Array<{ category: string; threshold: string }>;
+	};
+	requestType?: string;
+	userAgent?: string;
+	requestId?: string;
+}
+
+interface AntigravityResponseChunk {
+	response?: {
+		candidates?: Array<{
+			content?: {
+				role: string;
+				parts?: Array<{
+					text?: string;
+					inlineData?: { mimeType?: string; data?: string };
+				}>;
+			};
+		}>;
+		usageMetadata?: GeminiUsageMetadata;
+	};
+}
+
 interface GeminiImageToolDetails {
 	provider: ImageProvider;
 	model: string;
@@ -320,8 +369,44 @@ export function setPreferredImageProvider(provider: ImageProvider | "auto"): voi
 	preferredImageProvider = provider;
 }
 
-async function findImageApiKey(): Promise<ImageApiKey | null> {
+interface ParsedAntigravityCredentials {
+	accessToken: string;
+	projectId: string;
+}
+
+function parseAntigravityCredentials(raw: string): ParsedAntigravityCredentials | null {
+	try {
+		const parsed = JSON.parse(raw) as { token?: string; projectId?: string };
+		if (parsed.token && parsed.projectId) {
+			return { accessToken: parsed.token, projectId: parsed.projectId };
+		}
+	} catch {
+		// Invalid JSON
+	}
+	return null;
+}
+
+async function findAntigravityCredentials(modelRegistry: ModelRegistry): Promise<ImageApiKey | null> {
+	const apiKey = await modelRegistry.getApiKeyForProvider("google-antigravity");
+	if (!apiKey) return null;
+
+	const parsed = parseAntigravityCredentials(apiKey);
+	if (!parsed) return null;
+
+	return {
+		provider: "antigravity",
+		apiKey: parsed.accessToken,
+		projectId: parsed.projectId,
+	};
+}
+
+async function findImageApiKey(modelRegistry?: ModelRegistry): Promise<ImageApiKey | null> {
 	// If a specific provider is preferred, try it first
+	if (preferredImageProvider === "antigravity" && modelRegistry) {
+		const antigravity = await findAntigravityCredentials(modelRegistry);
+		if (antigravity) return antigravity;
+		// Fall through to auto-detect if preferred provider key not found
+	}
 	if (preferredImageProvider === "gemini") {
 		const geminiKey = await getEnv("GEMINI_API_KEY");
 		if (geminiKey) return { provider: "gemini", apiKey: geminiKey };
@@ -334,7 +419,12 @@ async function findImageApiKey(): Promise<ImageApiKey | null> {
 		// Fall through to auto-detect if preferred provider key not found
 	}
 
-	// Auto-detect: OpenRouter takes priority
+	// Auto-detect: Antigravity takes priority, then OpenRouter, then Gemini
+	if (modelRegistry) {
+		const antigravity = await findAntigravityCredentials(modelRegistry);
+		if (antigravity) return antigravity;
+	}
+
 	const openRouterKey = await getEnv("OPENROUTER_API_KEY");
 	if (openRouterKey) return { provider: "openrouter", apiKey: openRouterKey };
 
@@ -408,8 +498,13 @@ async function saveImagesToTemp(images: InlineImageData[]): Promise<string[]> {
 	return Promise.all(images.map(saveImageToTemp));
 }
 
-function buildResponseSummary(model: string, imagePaths: string[], responseText: string | undefined): string {
-	const lines = [`Model: ${model}`, `Generated ${imagePaths.length} image(s):`];
+function buildResponseSummary(
+	provider: ImageProvider,
+	model: string,
+	imagePaths: string[],
+	responseText: string | undefined,
+): string {
+	const lines = [`Provider: ${provider}`, `Model: ${model}`, `Generated ${imagePaths.length} image(s):`];
 	for (const p of imagePaths) {
 		lines.push(`  ${p}`);
 	}
@@ -450,6 +545,121 @@ function createRequestSignal(signal: AbortSignal | undefined, timeoutSeconds: nu
 	return signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 }
 
+function buildAntigravityRequest(
+	prompt: string,
+	model: string,
+	projectId: string,
+	aspectRatio: string | undefined,
+	imageSize: string | undefined,
+	inputImages: InlineImageData[],
+): AntigravityRequest {
+	const parts: Array<{ text?: string; inlineData?: InlineImageData }> = [];
+	for (const image of inputImages) {
+		parts.push({ inlineData: image });
+	}
+	parts.push({ text: prompt });
+
+	const imageConfig = aspectRatio || imageSize ? { aspectRatio: aspectRatio, imageSize: imageSize } : undefined;
+
+	return {
+		project: projectId,
+		model,
+		request: {
+			contents: [{ role: "user", parts }],
+			systemInstruction: { parts: [{ text: IMAGE_SYSTEM_INSTRUCTION }] },
+			generationConfig: {
+				responseModalities: ["Image"],
+				imageConfig,
+				candidateCount: 1,
+			},
+			safetySettings: [
+				{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+				{ category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+				{ category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+				{ category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" },
+				{ category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_ONLY_HIGH" },
+			],
+		},
+		requestType: "agent",
+		requestId: `agent-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+		userAgent: "antigravity",
+	};
+}
+
+interface AntigravitySseResult {
+	images: InlineImageData[];
+	text: string[];
+	usage?: GeminiUsageMetadata;
+}
+
+async function parseAntigravitySseForImage(response: Response, signal?: AbortSignal): Promise<AntigravitySseResult> {
+	if (!response.body) {
+		throw new Error("No response body");
+	}
+
+	const reader = response.body.getReader();
+	const decoder = new TextDecoder();
+	let buffer = "";
+	const textParts: string[] = [];
+	const images: InlineImageData[] = [];
+	let usage: GeminiUsageMetadata | undefined;
+
+	try {
+		while (true) {
+			if (signal?.aborted) {
+				throw new Error("Request was aborted");
+			}
+
+			const { done, value } = await reader.read();
+			if (done) break;
+
+			buffer += decoder.decode(value, { stream: true });
+			const lines = buffer.split("\n");
+			buffer = lines.pop() ?? "";
+
+			for (const line of lines) {
+				if (!line.startsWith("data:")) continue;
+				const jsonStr = line.slice(5).trim();
+				if (!jsonStr) continue;
+
+				let chunk: AntigravityResponseChunk;
+				try {
+					chunk = JSON.parse(jsonStr);
+				} catch {
+					continue;
+				}
+
+				const responseData = chunk.response;
+				if (!responseData?.candidates) continue;
+
+				if (responseData.usageMetadata) {
+					usage = responseData.usageMetadata;
+				}
+
+				for (const candidate of responseData.candidates) {
+					const parts = candidate.content?.parts;
+					if (!parts) continue;
+					for (const part of parts) {
+						if (part.text) {
+							textParts.push(part.text);
+						}
+						if (part.inlineData?.data && part.inlineData?.mimeType) {
+							images.push({
+								data: part.inlineData.data,
+								mimeType: part.inlineData.mimeType,
+							});
+						}
+					}
+				}
+			}
+		}
+	} finally {
+		reader.releaseLock();
+	}
+
+	return { images, text: textParts, usage };
+}
+
 export const geminiImageTool: CustomTool<typeof geminiImageSchema, GeminiImageToolDetails> = {
 	name: "generate_image",
 	label: "GenerateImage",
@@ -457,13 +667,20 @@ export const geminiImageTool: CustomTool<typeof geminiImageSchema, GeminiImageTo
 	parameters: geminiImageSchema,
 	async execute(_toolCallId, params, _onUpdate, ctx, signal) {
 		return untilAborted(signal, async () => {
-			const apiKey = await findImageApiKey();
+			const apiKey = await findImageApiKey(ctx.modelRegistry);
 			if (!apiKey) {
-				throw new Error("OPENROUTER_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY not found.");
+				throw new Error(
+					"No image API credentials found. Login with google-antigravity, or set OPENROUTER_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY.",
+				);
 			}
 
 			const provider = apiKey.provider;
-			const model = provider === "openrouter" ? DEFAULT_OPENROUTER_MODEL : DEFAULT_MODEL;
+			const model =
+				provider === "antigravity"
+					? DEFAULT_ANTIGRAVITY_MODEL
+					: provider === "openrouter"
+						? DEFAULT_OPENROUTER_MODEL
+						: DEFAULT_MODEL;
 			const resolvedModel = provider === "openrouter" ? resolveOpenRouterModel(model) : model;
 			const cwd = ctx.sessionManager.getCwd();
 
@@ -480,6 +697,80 @@ export const geminiImageTool: CustomTool<typeof geminiImageSchema, GeminiImageTo
 			// Clamp to reasonable range: 1s - 600s (10 min)
 			timeoutSeconds = Math.max(1, Math.min(600, timeoutSeconds));
 			const requestSignal = createRequestSignal(signal, timeoutSeconds);
+
+			if (provider === "antigravity") {
+				if (!apiKey.projectId) {
+					throw new Error("Missing projectId in antigravity credentials");
+				}
+
+				const prompt = assemblePrompt(params);
+				const requestBody = buildAntigravityRequest(
+					prompt,
+					model,
+					apiKey.projectId,
+					params.aspect_ratio,
+					params.image_size,
+					resolvedImages,
+				);
+
+				const response = await fetch(`${ANTIGRAVITY_ENDPOINT}/v1internal:streamGenerateContent?alt=sse`, {
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${apiKey.apiKey}`,
+						"Content-Type": "application/json",
+						Accept: "text/event-stream",
+						...ANTIGRAVITY_HEADERS,
+					},
+					body: JSON.stringify(requestBody),
+					signal: requestSignal,
+				});
+
+				if (!response.ok) {
+					const errorText = await response.text();
+					let message = errorText;
+					try {
+						const parsed = JSON.parse(errorText) as { error?: { message?: string } };
+						message = parsed.error?.message ?? message;
+					} catch {
+						// Keep raw text.
+					}
+					throw new Error(`Antigravity image request failed (${response.status}): ${message}`);
+				}
+
+				const parsed = await parseAntigravitySseForImage(response, requestSignal);
+				const responseText = parsed.text.length > 0 ? parsed.text.join(" ") : undefined;
+
+				if (parsed.images.length === 0) {
+					const messageText = responseText ? `\n\n${responseText}` : "";
+					return {
+						content: [{ type: "text", text: `No image data returned.${messageText}` }],
+						details: {
+							provider,
+							model,
+							imageCount: 0,
+							imagePaths: [],
+							images: [],
+							responseText,
+							usage: parsed.usage,
+						},
+					};
+				}
+
+				const imagePaths = await saveImagesToTemp(parsed.images);
+
+				return {
+					content: [{ type: "text", text: buildResponseSummary(provider, model, imagePaths, responseText) }],
+					details: {
+						provider,
+						model,
+						imageCount: parsed.images.length,
+						imagePaths,
+						images: parsed.images,
+						responseText,
+						usage: parsed.usage,
+					},
+				};
+			}
 
 			if (provider === "openrouter") {
 				const prompt = assemblePrompt(params);
@@ -542,7 +833,9 @@ export const geminiImageTool: CustomTool<typeof geminiImageSchema, GeminiImageTo
 				const imagePaths = await saveImagesToTemp(inlineImages);
 
 				return {
-					content: [{ type: "text", text: buildResponseSummary(resolvedModel, imagePaths, responseText) }],
+					content: [
+						{ type: "text", text: buildResponseSummary(provider, resolvedModel, imagePaths, responseText) },
+					],
 					details: {
 						provider,
 						model: resolvedModel,
@@ -631,7 +924,7 @@ export const geminiImageTool: CustomTool<typeof geminiImageSchema, GeminiImageTo
 			const imagePaths = await saveImagesToTemp(inlineImages);
 
 			return {
-				content: [{ type: "text", text: buildResponseSummary(model, imagePaths, responseText) }],
+				content: [{ type: "text", text: buildResponseSummary(provider, model, imagePaths, responseText) }],
 				details: {
 					provider,
 					model,
@@ -651,6 +944,14 @@ export async function getGeminiImageTools(): Promise<
 	Array<CustomTool<typeof geminiImageSchema, GeminiImageToolDetails>>
 > {
 	const apiKey = await findImageApiKey();
+	if (!apiKey) return [];
+	return [geminiImageTool];
+}
+
+export async function getGeminiImageToolsWithRegistry(
+	modelRegistry: ModelRegistry,
+): Promise<Array<CustomTool<typeof geminiImageSchema, GeminiImageToolDetails>>> {
+	const apiKey = await findImageApiKey(modelRegistry);
 	if (!apiKey) return [];
 	return [geminiImageTool];
 }

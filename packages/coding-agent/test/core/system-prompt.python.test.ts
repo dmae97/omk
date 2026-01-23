@@ -11,7 +11,7 @@ describe("buildSystemPrompt", () => {
 			rules: [],
 		});
 
-		expect(prompt).toContain("**python:** stateful scripting and REPL work");
-		expect(prompt).toContain("What python IS for");
+		expect(prompt).toContain("The Python prelude has helpers for file I/O");
+		expect(prompt).toContain("Do not run bash then read output then run more bash. Just use Python.");
 	});
 });

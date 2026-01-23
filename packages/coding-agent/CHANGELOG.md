@@ -1,8 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added antigravity provider support for image generation with Google Cloud authentication
+- Added support for google-antigravity API credentials in model registry
+- Added antigravity-specific request handling with SSE streaming
+- Added projectId parameter to antigravity credentials parsing
+- Added antigravity provider to preferred image provider selection
 - Added list-limit utility for consistent result limiting across tools
 - Added output-utils module with tail buffer and artifact allocation helpers
 - Added tool-result module for standardized tool result construction
