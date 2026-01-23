@@ -26,15 +26,15 @@
  * ```
  */
 
+import { existsSync } from "node:fs";
+import { rename } from "node:fs/promises";
+import { join } from "node:path";
 import { Agent, type AgentEvent, type AgentMessage, type AgentTool, type ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { type Message, type Model, supportsXhigh } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { logger, postmortem } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 import chalk from "chalk";
-import { existsSync } from "node:fs";
-import { rename } from "node:fs/promises";
-import { join } from "node:path";
 // Import discovery to register all providers on startup
 import { loadCapability } from "$c/capability/index";
 import { type Rule, ruleCapability } from "$c/capability/rule";
@@ -62,9 +62,9 @@ import {
 	ExtensionRunner,
 	ExtensionToolWrapper,
 	type ExtensionUIContext,
+	type LoadExtensionsResult,
 	loadExtensionFromFactory,
 	loadExtensions,
-	type LoadExtensionsResult,
 	type ToolDefinition,
 	wrapRegisteredTools,
 } from "./extensibility/extensions/index";
@@ -96,18 +96,18 @@ import {
 	createTools,
 	EditTool,
 	FindTool,
-	getWebSearchTools,
 	GrepTool,
-	loadSshTool,
+	getWebSearchTools,
 	LsTool,
+	loadSshTool,
 	PythonTool,
 	ReadTool,
 	setPreferredImageProvider,
 	setPreferredWebSearchProvider,
 	type Tool,
 	type ToolSession,
-	warmupLspServers,
 	WriteTool,
+	warmupLspServers,
 } from "./tools/index";
 import { wrapToolsWithMetaNotice } from "./tools/output-meta";
 import { EventBus } from "./utils/event-bus";

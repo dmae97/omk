@@ -14,9 +14,10 @@ import { ensureHostInfo, getHostInfoForHost } from "$c/ssh/connection-manager";
 import { executeSSH } from "$c/ssh/ssh-executor";
 import type { OutputMeta } from "$c/tools/output-meta";
 import { ToolError } from "$c/tools/tool-errors";
+import { renderOutputBlock, renderStatusLine } from "$c/tui";
 import type { ToolSession } from "./index";
 import { allocateOutputArtifact, createTailBuffer } from "./output-utils";
-import { ToolUIKit } from "./render-utils";
+import { formatBytes, wrapBrackets } from "./render-utils";
 import { toolResult } from "./tool-result";
 import { DEFAULT_MAX_BYTES } from "./truncate";
 
@@ -237,10 +238,9 @@ interface SshRenderContext {
 
 export const sshToolRenderer = {
 	renderCall(args: SshRenderArgs, uiTheme: Theme): Component {
-		const ui = new ToolUIKit(uiTheme);
 		const host = args.host || uiTheme.format.ellipsis;
 		const command = args.command || uiTheme.format.ellipsis;
-		const text = ui.title(`[${host}] $ ${command}`);
+		const text = renderStatusLine({ icon: "pending", title: "SSH", description: `[${host}] $ ${command}` }, uiTheme);
 		return new Text(text, 0, 0);
 	},
 
@@ -252,41 +252,38 @@ export const sshToolRenderer = {
 		options: RenderResultOptions & { renderContext?: SshRenderContext },
 		uiTheme: Theme,
 	): Component {
-		const ui = new ToolUIKit(uiTheme);
 		const { expanded, renderContext } = options;
 		const details = result.details;
-		const lines: string[] = [];
+		const header = renderStatusLine({ icon: "success", title: "SSH" }, uiTheme);
+		const outputLines: string[] = [];
 
 		const textContent = result.content?.find((c) => c.type === "text")?.text ?? "";
 		const output = textContent.trim();
 
 		if (output) {
 			if (expanded) {
-				const styledOutput = output
-					.split("\n")
-					.map((line) => uiTheme.fg("toolOutput", line))
-					.join("\n");
-				lines.push(styledOutput);
+				outputLines.push(...output.split("\n").map((line) => uiTheme.fg("toolOutput", line)));
 			} else if (renderContext?.visualLines) {
 				const { visualLines, skippedCount = 0, totalVisualLines = visualLines.length } = renderContext;
 				if (skippedCount > 0) {
-					lines.push(
+					outputLines.push(
 						uiTheme.fg(
 							"dim",
 							`${uiTheme.format.ellipsis} (${skippedCount} earlier lines, showing ${visualLines.length} of ${totalVisualLines}) (ctrl+o to expand)`,
 						),
 					);
 				}
-				lines.push(...visualLines);
+				outputLines.push(...visualLines);
 			} else {
-				const outputLines = output.split("\n");
+				const outputLinesRaw = output.split("\n");
 				const maxLines = 5;
-				const displayLines = outputLines.slice(0, maxLines);
-				const remaining = outputLines.length - maxLines;
-
-				lines.push(...displayLines.map((line) => uiTheme.fg("toolOutput", line)));
+				const displayLines = outputLinesRaw.slice(0, maxLines);
+				const remaining = outputLinesRaw.length - maxLines;
+				outputLines.push(...displayLines.map((line) => uiTheme.fg("toolOutput", line)));
 				if (remaining > 0) {
-					lines.push(uiTheme.fg("dim", `${uiTheme.format.ellipsis} (${remaining} more lines) (ctrl+o to expand)`));
+					outputLines.push(
+						uiTheme.fg("dim", `${uiTheme.format.ellipsis} (${remaining} more lines) (ctrl+o to expand)`),
+					);
 				}
 			}
 		}
@@ -301,12 +298,24 @@ export const sshToolRenderer = {
 				warnings.push(`Truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines`);
 			} else {
 				warnings.push(
-					`Truncated: ${truncation.outputLines} lines shown (${ui.formatBytes(truncation.outputBytes)} limit)`,
+					`Truncated: ${truncation.outputLines} lines shown (${formatBytes(truncation.outputBytes)} limit)`,
 				);
 			}
-			lines.push(uiTheme.fg("warning", ui.wrapBrackets(warnings.join(". "))));
+			outputLines.push(uiTheme.fg("warning", wrapBrackets(warnings.join(". "), uiTheme)));
 		}
 
-		return new Text(lines.join("\n"), 0, 0);
+		return {
+			render: (width: number) =>
+				renderOutputBlock(
+					{
+						header,
+						state: "success",
+						sections: [{ label: uiTheme.fg("toolTitle", "Output"), lines: outputLines }],
+						width,
+					},
+					uiTheme,
+				),
+			invalidate: () => {},
+		};
 	},
 };

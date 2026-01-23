@@ -8,16 +8,17 @@ import type { Static } from "@sinclair/typebox";
 import { Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "$c/config/prompt-templates";
 import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
-import { getLanguageFromPath, type Theme } from "$c/modes/theme/theme";
+import type { Theme } from "$c/modes/theme/theme";
 import findDescription from "$c/prompts/tools/find.md" with { type: "text" };
 import type { OutputMeta } from "$c/tools/output-meta";
 import { ToolAbortError, ToolError, throwIfAborted } from "$c/tools/tool-errors";
+import { renderFileList, renderStatusLine, renderTreeList } from "$c/tui";
 import { ensureTool } from "$c/utils/tools-manager";
 
 import type { ToolSession } from "./index";
 import { applyListLimit } from "./list-limit";
 import { resolveToCwd } from "./path-utils";
-import { PREVIEW_LIMITS, ToolUIKit } from "./render-utils";
+import { formatCount, formatEmptyMessage, formatErrorMessage, PREVIEW_LIMITS } from "./render-utils";
 import { toolResult } from "./tool-result";
 import { type TruncationResult, truncateHead } from "./truncate";
 
@@ -371,10 +372,6 @@ const COLLAPSED_LIST_LIMIT = PREVIEW_LIMITS.COLLAPSED_ITEMS;
 export const findToolRenderer = {
 	inline: true,
 	renderCall(args: FindRenderArgs, uiTheme: Theme): Component {
-		const ui = new ToolUIKit(uiTheme);
-		const label = ui.title("Find");
-		let text = `${uiTheme.format.bullet} ${label} ${uiTheme.fg("accent", args.pattern || "*")}`;
-
 		const meta: string[] = [];
 		if (args.path) meta.push(`in ${args.path}`);
 		if (args.type && args.type !== "all") meta.push(`type:${args.type}`);
@@ -382,8 +379,10 @@ export const findToolRenderer = {
 		if (args.sortByMtime) meta.push("sort:mtime");
 		if (args.limit !== undefined) meta.push(`limit:${args.limit}`);
 
-		text += ui.meta(meta);
-
+		const text = renderStatusLine(
+			{ icon: "pending", title: "Find", description: args.pattern || "*", meta },
+			uiTheme,
+		);
 		return new Text(text, 0, 0);
 	},
 
@@ -392,12 +391,11 @@ export const findToolRenderer = {
 		{ expanded }: RenderResultOptions,
 		uiTheme: Theme,
 	): Component {
-		const ui = new ToolUIKit(uiTheme);
 		const details = result.details;
 
 		if (result.isError || details?.error) {
 			const errorText = details?.error || result.content?.find((c) => c.type === "text")?.text || "Unknown error";
-			return new Text(`  ${ui.errorMessage(errorText)}`, 0, 0);
+			return new Text(formatErrorMessage(errorText, uiTheme), 0, 0);
 		}
 
 		const hasDetailedData = details?.fileCount !== undefined;
@@ -405,29 +403,25 @@ export const findToolRenderer = {
 
 		if (!hasDetailedData) {
 			if (!textContent || textContent.includes("No files matching") || textContent.trim() === "") {
-				return new Text(`  ${ui.emptyMessage("No files found")}`, 0, 0);
+				return new Text(formatEmptyMessage("No files found", uiTheme), 0, 0);
 			}
 
 			const lines = textContent.split("\n").filter((l) => l.trim());
-			const maxLines = expanded ? lines.length : Math.min(lines.length, COLLAPSED_LIST_LIMIT);
-			const displayLines = lines.slice(0, maxLines);
-			const remaining = lines.length - maxLines;
-			const hasMore = remaining > 0;
-
-			const icon = uiTheme.styledSymbol("status.success", "success");
-			const summary = ui.count("file", lines.length);
-			const expandHint = ui.expandHint(expanded, hasMore);
-			let text = `  ${icon} ${uiTheme.fg("dim", summary)}${expandHint}`;
-
-			for (let i = 0; i < displayLines.length; i++) {
-				const isLast = i === displayLines.length - 1 && remaining === 0;
-				const branch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
-				text += `\n  ${uiTheme.fg("dim", branch)} ${uiTheme.fg("accent", displayLines[i])}`;
-			}
-			if (remaining > 0) {
-				text += `\n  ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg("muted", ui.moreItems(remaining, "file"))}`;
-			}
-			return new Text(text, 0, 0);
+			const header = renderStatusLine(
+				{ icon: "success", title: "Find", meta: [formatCount("file", lines.length)] },
+				uiTheme,
+			);
+			const listLines = renderTreeList(
+				{
+					items: lines,
+					expanded,
+					maxCollapsed: COLLAPSED_LIST_LIMIT,
+					itemType: "file",
+					renderItem: (line) => uiTheme.fg("accent", line),
+				},
+				uiTheme,
+			);
+			return new Text([header, ...listLines].join("\n"), 0, 0);
 		}
 
 		const fileCount = details?.fileCount ?? 0;
@@ -439,58 +433,32 @@ export const findToolRenderer = {
 		const files = details?.files ?? [];
 
 		if (fileCount === 0) {
-			return new Text(`  ${ui.emptyMessage("No files found")}`, 0, 0);
+			return new Text(formatEmptyMessage("No files found", uiTheme), 0, 0);
 		}
+		const meta: string[] = [formatCount("file", fileCount)];
+		if (details?.scopePath) meta.push(`in ${details.scopePath}`);
+		if (truncated) meta.push(uiTheme.fg("warning", "truncated"));
+		const header = renderStatusLine({ icon: truncated ? "warning" : "success", title: "Find", meta }, uiTheme);
 
-		const icon = uiTheme.styledSymbol("status.success", "success");
-		const summaryText = ui.count("file", fileCount);
-		const scopeLabel = ui.scope(details?.scopePath);
-		const maxFiles = expanded ? files.length : Math.min(files.length, COLLAPSED_LIST_LIMIT);
-		const hasMoreFiles = files.length > maxFiles;
-		const expandHint = ui.expandHint(expanded, hasMoreFiles);
-
-		let text = `  ${icon} ${uiTheme.fg("dim", summaryText)}${ui.truncationSuffix(truncated)}${scopeLabel}${expandHint}`;
+		const fileLines = renderFileList(
+			{
+				files: files.map((entry) => ({ path: entry, isDirectory: entry.endsWith("/") })),
+				expanded,
+				maxCollapsed: COLLAPSED_LIST_LIMIT,
+			},
+			uiTheme,
+		);
 
 		const truncationReasons: string[] = [];
-		if (limits?.resultLimit) {
-			truncationReasons.push(`limit ${limits.resultLimit.reached} results`);
-		}
-		if (truncation) {
-			truncationReasons.push(truncation.truncatedBy === "lines" ? "line limit" : "size limit");
-		}
-		if (truncation?.artifactId) {
-			truncationReasons.push(`full output: artifact://${truncation.artifactId}`);
-		}
+		if (limits?.resultLimit) truncationReasons.push(`limit ${limits.resultLimit.reached} results`);
+		if (truncation) truncationReasons.push(truncation.truncatedBy === "lines" ? "line limit" : "size limit");
+		if (truncation?.artifactId) truncationReasons.push(`full output: artifact://${truncation.artifactId}`);
 
-		const hasTruncation = truncationReasons.length > 0;
-
-		if (files.length > 0) {
-			for (let i = 0; i < maxFiles; i++) {
-				const isLast = i === maxFiles - 1 && !hasMoreFiles && !hasTruncation;
-				const branch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
-				const entry = files[i];
-				const isDir = entry.endsWith("/");
-				const entryPath = isDir ? entry.slice(0, -1) : entry;
-				const lang = isDir ? undefined : getLanguageFromPath(entryPath);
-				const entryIcon = isDir
-					? uiTheme.fg("accent", uiTheme.icon.folder)
-					: uiTheme.fg("muted", uiTheme.getLangIcon(lang));
-				text += `\n  ${uiTheme.fg("dim", branch)} ${entryIcon} ${uiTheme.fg("accent", entry)}`;
-			}
-
-			if (hasMoreFiles) {
-				const moreFilesBranch = hasTruncation ? uiTheme.tree.branch : uiTheme.tree.last;
-				text += `\n  ${uiTheme.fg("dim", moreFilesBranch)} ${uiTheme.fg(
-					"muted",
-					ui.moreItems(files.length - maxFiles, "file"),
-				)}`;
-			}
+		const extraLines: string[] = [];
+		if (truncationReasons.length > 0) {
+			extraLines.push(uiTheme.fg("warning", `truncated: ${truncationReasons.join(", ")}`));
 		}
 
-		if (hasTruncation) {
-			text += `\n  ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg("warning", `truncated: ${truncationReasons.join(", ")}`)}`;
-		}
-
-		return new Text(text, 0, 0);
+		return new Text([header, ...fileLines, ...extraLines].join("\n"), 0, 0);
 	},
 };

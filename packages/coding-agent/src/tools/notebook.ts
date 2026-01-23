@@ -7,15 +7,9 @@ import { type Static, Type } from "@sinclair/typebox";
 import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
 import type { Theme } from "$c/modes/theme/theme";
 import type { ToolSession } from "$c/sdk";
+import { renderCodeCell, renderStatusLine } from "$c/tui";
 import { resolveToCwd } from "./path-utils";
-import {
-	formatCount,
-	formatErrorMessage,
-	formatExpandHint,
-	formatMeta,
-	formatMoreItems,
-	PREVIEW_LIMITS,
-} from "./render-utils";
+import { formatCount, formatErrorMessage, PREVIEW_LIMITS } from "./render-utils";
 
 const notebookSchema = Type.Object({
 	action: StringEnum(["edit", "insert", "delete"], {
@@ -208,49 +202,17 @@ interface NotebookRenderArgs {
 
 const COLLAPSED_TEXT_LIMIT = PREVIEW_LIMITS.COLLAPSED_LINES * 2;
 
-function normalizeCellLines(lines: string[]): string[] {
-	return lines.map((line) => (line.endsWith("\n") ? line.slice(0, -1) : line));
-}
-
-function renderCellPreview(lines: string[], expanded: boolean, uiTheme: Theme): string {
-	const normalized = normalizeCellLines(lines);
-	if (normalized.length === 0) {
-		return `\n ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg("muted", "(empty cell)")}`;
-	}
-
-	const maxLines = expanded ? normalized.length : Math.min(normalized.length, COLLAPSED_TEXT_LIMIT);
-	let text = "";
-
-	for (let i = 0; i < maxLines; i++) {
-		const isLast = i === maxLines - 1 && (expanded || normalized.length <= maxLines);
-		const branch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
-		const line = normalized[i];
-		text += `\n ${uiTheme.fg("dim", branch)} ${uiTheme.fg("toolOutput", line)}`;
-	}
-
-	const remaining = normalized.length - maxLines;
-	if (remaining > 0) {
-		text += `\n ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg(
-			"muted",
-			formatMoreItems(remaining, "line", uiTheme),
-		)}`;
-	}
-
-	return text;
-}
-
 export const notebookToolRenderer = {
 	renderCall(args: NotebookRenderArgs, uiTheme: Theme): Component {
-		const label = uiTheme.fg("toolTitle", uiTheme.bold("Notebook"));
-		let text = `${label} ${uiTheme.fg("accent", args.action || "?")}`;
-
 		const meta: string[] = [];
 		meta.push(`in ${args.notebookPath || "?"}`);
 		if (args.cellNumber !== undefined) meta.push(`cell:${args.cellNumber}`);
 		if (args.cellType) meta.push(`type:${args.cellType}`);
 
-		text += formatMeta(meta, uiTheme);
-
+		const text = renderStatusLine(
+			{ icon: "pending", title: "Notebook", description: args.action || "?", meta },
+			uiTheme,
+		);
 		return new Text(text, 0, 0);
 	},
 
@@ -269,25 +231,35 @@ export const notebookToolRenderer = {
 		const cellIndex = details?.cellIndex;
 		const cellType = details?.cellType;
 		const totalCells = details?.totalCells;
-		const cellSource = details?.cellSource;
-		const lineCount = cellSource?.length;
-		const canExpand = cellSource !== undefined && cellSource.length > COLLAPSED_TEXT_LIMIT;
+		const cellSource = details?.cellSource ?? [];
+		const lineCount = cellSource.length;
 
-		const icon = uiTheme.styledSymbol("status.success", "success");
 		const actionLabel = action === "insert" ? "Inserted" : action === "delete" ? "Deleted" : "Edited";
 		const cellLabel = cellType || "cell";
-		const summaryParts = [`${actionLabel} ${cellLabel} at index ${cellIndex ?? "?"}`];
-		if (lineCount !== undefined) summaryParts.push(formatCount("line", lineCount));
+		const summaryParts = [`${actionLabel} ${cellLabel} ${cellIndex ?? "?"}`];
+		if (lineCount > 0) summaryParts.push(formatCount("line", lineCount));
 		if (totalCells !== undefined) summaryParts.push(`${totalCells} total`);
-		const summaryText = summaryParts.join(uiTheme.sep.dot);
 
-		const expandHint = expanded || !canExpand ? "" : formatExpandHint(uiTheme);
-		let text = `${icon} ${uiTheme.fg("dim", summaryText)}${expandHint}`;
+		const outputLines = summaryParts.map((part) => uiTheme.fg("dim", part));
+		const codeText = cellSource.join("");
+		const language = cellType === "markdown" ? "markdown" : undefined;
 
-		if (cellSource) {
-			text += renderCellPreview(cellSource, expanded, uiTheme);
-		}
-
-		return new Text(text, 0, 0);
+		return {
+			render: (width: number) =>
+				renderCodeCell(
+					{
+						code: codeText,
+						language,
+						title: "Notebook",
+						status: "complete",
+						output: outputLines.join("\n"),
+						codeMaxLines: expanded ? Number.POSITIVE_INFINITY : COLLAPSED_TEXT_LIMIT,
+						expanded,
+						width,
+					},
+					uiTheme,
+				),
+			invalidate: () => {},
+		};
 	},
 };

@@ -7,17 +7,9 @@ import { renderPromptTemplate } from "$c/config/prompt-templates";
 import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
 import type { Theme } from "$c/modes/theme/theme";
 import calculatorDescription from "$c/prompts/tools/calculator.md" with { type: "text" };
+import { renderStatusLine, renderTreeList } from "$c/tui";
 import type { ToolSession } from "./index";
-import {
-	formatCount,
-	formatEmptyMessage,
-	formatExpandHint,
-	formatMeta,
-	formatMoreItems,
-	PREVIEW_LIMITS,
-	TRUNCATE_LENGTHS,
-	truncate,
-} from "./render-utils";
+import { formatCount, formatEmptyMessage, PREVIEW_LIMITS, TRUNCATE_LENGTHS, truncate } from "./render-utils";
 
 // =============================================================================
 // Token Types
@@ -453,16 +445,11 @@ export const calculatorToolRenderer = {
 	 * Format: "Calc <expression> (N calcs)"
 	 */
 	renderCall(args: CalculatorRenderArgs, uiTheme: Theme): Component {
-		const label = uiTheme.fg("toolTitle", uiTheme.bold("Calc"));
 		const count = args.calculations?.length ?? 0;
 		const firstExpression = args.calculations?.[0]?.expression;
-		let text = label;
-		if (firstExpression) {
-			text += ` ${uiTheme.fg("accent", truncate(firstExpression, TRUNCATE_LENGTHS.TITLE, "..."))}`;
-		}
-		const meta: string[] = [];
-		if (count > 0) meta.push(formatCount("calc", count));
-		text += formatMeta(meta, uiTheme);
+		const description = firstExpression ? truncate(firstExpression, TRUNCATE_LENGTHS.TITLE, "...") : undefined;
+		const meta = count > 0 ? [formatCount("calc", count)] : [];
+		const text = renderStatusLine({ icon: "pending", title: "Calc", description, meta }, uiTheme);
 		return new Text(text, 0, 0);
 	},
 
@@ -488,29 +475,21 @@ export const calculatorToolRenderer = {
 			return new Text(formatEmptyMessage("No results", uiTheme), 0, 0);
 		}
 
-		// Limit visible items in collapsed mode
-		const maxItems = expanded ? outputs.length : Math.min(outputs.length, COLLAPSED_LIST_LIMIT);
-		const hasMore = outputs.length > maxItems;
-		const icon = uiTheme.styledSymbol("status.success", "success");
-		const summary = uiTheme.fg("dim", formatCount("result", outputs.length));
-		const expandHint = formatExpandHint(uiTheme, expanded, hasMore);
-		let text = `${icon} ${summary}${expandHint}`;
+		const header = renderStatusLine(
+			{ icon: "success", title: "Calc", meta: [formatCount("result", outputs.length)] },
+			uiTheme,
+		);
+		const lines = renderTreeList(
+			{
+				items: outputs,
+				expanded,
+				maxCollapsed: COLLAPSED_LIST_LIMIT,
+				itemType: "result",
+				renderItem: (output) => uiTheme.fg("toolOutput", output),
+			},
+			uiTheme,
+		);
 
-		// Render each result as a tree branch
-		for (let i = 0; i < maxItems; i += 1) {
-			const isLast = i === maxItems - 1 && !hasMore;
-			const branch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
-			text += `\n ${uiTheme.fg("dim", branch)} ${uiTheme.fg("toolOutput", outputs[i])}`;
-		}
-
-		// Show overflow indicator for collapsed mode
-		if (hasMore) {
-			text += `\n ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg(
-				"muted",
-				formatMoreItems(outputs.length - maxItems, "result", uiTheme),
-			)}`;
-		}
-
-		return new Text(text, 0, 0);
+		return new Text([header, ...lines].join("\n"), 0, 0);
 	},
 };

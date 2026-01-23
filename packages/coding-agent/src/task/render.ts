@@ -25,6 +25,7 @@ import {
 	type ReportFindingDetails,
 	type SubmitReviewDetails,
 } from "$c/tools/review";
+import { renderStatusLine } from "$c/tui";
 import { subprocessToolRegistry } from "./subprocess-tool-registry";
 import type { AgentProgress, SingleResult, TaskParams, TaskToolDetails } from "./types";
 
@@ -395,13 +396,8 @@ function renderArgsSection(
  * Render the tool call arguments.
  */
 export function renderCall(args: TaskParams, theme: Theme): Component {
-	const label = theme.fg("toolTitle", theme.bold("Task"));
-	const agentTag = theme.italic(
-		theme.fg("dim", `${theme.format.bracketLeft}${args.agent}${theme.format.bracketRight}`),
-	);
-
 	const lines: string[] = [];
-	lines.push(`${label} ${agentTag}`);
+	lines.push(renderStatusLine({ icon: "pending", title: "Task", description: args.agent }, theme));
 
 	const contextTemplate = args.context ?? "";
 	const context = contextTemplate.trim();

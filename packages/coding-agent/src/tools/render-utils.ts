@@ -7,6 +7,7 @@
 
 import { homedir } from "node:os";
 import type { Theme } from "$c/modes/theme/theme";
+import { getTreeBranch } from "$c/tui/utils";
 
 // =============================================================================
 // Standardized Display Constants
@@ -667,21 +668,6 @@ function pluralize(label: string, count: number): string {
 // =============================================================================
 // Tree Rendering Utilities
 // =============================================================================
-
-/**
- * Get the branch character for a tree item.
- */
-export function getTreeBranch(isLast: boolean, theme: Theme): string {
-	return isLast ? theme.tree.last : theme.tree.branch;
-}
-
-/**
- * Get the continuation prefix for nested content under a tree item.
- */
-export function getTreeContinuePrefix(isLast: boolean, theme: Theme): string {
-	return isLast ? "   " : `${theme.tree.vertical}  `;
-}
-
 /**
  * Render a list of items with tree branches, handling truncation.
  *

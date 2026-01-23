@@ -12,6 +12,7 @@ import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
 import type { Theme } from "$c/modes/theme/theme";
 import todoWriteDescription from "$c/prompts/tools/todo-write.md" with { type: "text" };
 import type { ToolSession } from "$c/sdk";
+import { renderStatusLine, renderTreeList } from "$c/tui";
 
 const todoWriteSchema = Type.Object({
 	todos: Type.Array(
@@ -217,8 +218,9 @@ interface TodoWriteRenderArgs {
 export const todoWriteToolRenderer = {
 	renderCall(args: TodoWriteRenderArgs, uiTheme: Theme): Component {
 		const count = args.todos?.length ?? 0;
-		const summary = count > 0 ? uiTheme.fg("accent", `${count} items`) : uiTheme.fg("toolOutput", "empty");
-		return new Text(`${uiTheme.fg("toolTitle", uiTheme.bold("Todo Write"))} ${summary}`, 0, 0);
+		const meta = count > 0 ? [`${count} items`] : ["empty"];
+		const text = renderStatusLine({ icon: "pending", title: "Todo Write", meta }, uiTheme);
+		return new Text(text, 0, 0);
 	},
 
 	renderResult(
@@ -228,18 +230,18 @@ export const todoWriteToolRenderer = {
 		_args?: TodoWriteRenderArgs,
 	): Component {
 		const todos = result.details?.todos ?? [];
-		const indent = "  ";
-		const hook = uiTheme.tree.hook;
-		const lines = [indent + uiTheme.bold(uiTheme.fg("accent", "Todos"))];
+		const header = renderStatusLine({ icon: "success", title: "Todos", meta: [`${todos.length} items`] }, uiTheme);
+		const lines = renderTreeList(
+			{
+				items: todos,
+				expanded: true,
+				maxCollapsed: todos.length,
+				itemType: "todo",
+				renderItem: (todo) => formatTodoLine(todo, uiTheme, ""),
+			},
+			uiTheme,
+		);
 
-		if (todos.length > 0) {
-			const visibleTodos = todos;
-			visibleTodos.forEach((todo, index) => {
-				const prefix = `${indent}${index === 0 ? hook : " "} `;
-				lines.push(formatTodoLine(todo, uiTheme, prefix));
-			});
-		}
-
-		return new Text(lines.join("\n"), 0, 0);
+		return new Text([header, ...lines].join("\n"), 0, 0);
 	},
 };

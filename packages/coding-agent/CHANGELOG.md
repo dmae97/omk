@@ -6,9 +6,29 @@
 - Added `omp commit` command to generate conventional commits with changelog updates
 - Added configurable settings for map-reduce analysis including concurrency, timeout, file thresholds, and token limits
 - Added support for excluding YAML lock files (`.lock.yml`, `.lock.yaml`, `-lock.yml`, `-lock.yaml`) from commit analysis
+- Added new TUI component library with reusable rendering utilities including code cells, file lists, tree lists, status lines, and output blocks
+- Added renderCodeCell component for displaying code with optional output sections, supporting syntax highlighting and status indicators
+- Added renderFileList component for rendering file/directory listings with language icons and metadata
+- Added renderTreeList component for hierarchical tree-based item rendering with expand/collapse support
+- Added renderStatusLine component for standardized tool status headers with icons, descriptions, and metadata
+- Added renderOutputBlock component for bordered output containers with structured sections
+- Added renderOutputBlock to Bash tool for improved output formatting with status indicators
 
 ### Changed
 - Changed changelog diff truncation limit to be configurable via settings
+- Changed tool result rendering to use new TUI component library across multiple tools (bash, calculator, fetch, find, grep, ls, notebook, python, read, ssh, write, lsp, web search) for consistent output formatting
+- Changed Bash tool output rendering to use renderOutputBlock with proper section handling and width-aware truncation
+- Changed Python tool output rendering to use renderCodeCell component for code cell display with status indicators
+- Changed Read tool output rendering to use renderCodeCell with syntax highlighting and warnings display
+- Changed Write tool output rendering to use renderCodeCell for code display with streaming preview support
+- Changed Fetch tool output rendering to use renderOutputBlock with metadata and content preview sections
+- Changed LSP tool output rendering to use renderStatusLine and renderOutputBlock for structured output display
+- Changed Web Search result rendering to use renderOutputBlock with answer, sources, related questions, and metadata sections
+- Changed Find, Grep, and Ls tools to use renderFileList and renderTreeList for consistent file/item listing
+- Changed Calculator tool result rendering to use renderTreeList for result item display
+- Changed Notebook and TodoWrite tools to use new TUI rendering components for consistent output format
+- Refactored render-utils to move tree-related utilities to TUI module (getTreeBranch, getTreeContinuePrefix)
+- Changed import organization in sdk.ts for consistency
 ## [8.0.0] - 2026-01-23
 ### Added
 

@@ -4,9 +4,10 @@ import { type Component, Text } from "@oh-my-pi/pi-tui";
 import { untilAborted } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
-import { getLanguageFromPath, type Theme } from "$c/modes/theme/theme";
+import type { Theme } from "$c/modes/theme/theme";
 import type { OutputMeta } from "$c/tools/output-meta";
 import { ToolError, throwIfAborted } from "$c/tools/tool-errors";
+import { renderFileList, renderStatusLine } from "$c/tui";
 import type { ToolSession } from "./index";
 import { applyListLimit } from "./list-limit";
 import { resolveToCwd } from "./path-utils";
@@ -16,10 +17,6 @@ import {
 	formatCount,
 	formatEmptyMessage,
 	formatErrorMessage,
-	formatExpandHint,
-	formatMeta,
-	formatMoreItems,
-	formatTruncationSuffix,
 	PREVIEW_LIMITS,
 } from "./render-utils";
 import { toolResult } from "./tool-result";
@@ -214,13 +211,9 @@ const COLLAPSED_LIST_LIMIT = PREVIEW_LIMITS.COLLAPSED_ITEMS;
 export const lsToolRenderer = {
 	inline: true,
 	renderCall(args: LsRenderArgs, uiTheme: Theme): Component {
-		const label = uiTheme.fg("toolTitle", uiTheme.bold("Ls"));
-		let text = `${uiTheme.format.bullet} ${label} ${uiTheme.fg("accent", args.path || ".")}`;
-
 		const meta: string[] = [];
 		if (args.limit !== undefined) meta.push(`limit:${args.limit}`);
-		text += formatMeta(meta, uiTheme);
-
+		const text = renderStatusLine({ icon: "pending", title: "Ls", description: args.path || ".", meta }, uiTheme);
 		return new Text(text, 0, 0);
 	},
 
@@ -233,14 +226,14 @@ export const lsToolRenderer = {
 		const textContent = result.content?.find((c) => c.type === "text")?.text ?? "";
 
 		if (result.isError) {
-			return new Text(`  ${formatErrorMessage(textContent, uiTheme)}`, 0, 0);
+			return new Text(formatErrorMessage(textContent, uiTheme), 0, 0);
 		}
 
 		if (
 			(!textContent || textContent.trim() === "" || textContent.trim() === "(empty directory)") &&
 			(!details?.entries || details.entries.length === 0)
 		) {
-			return new Text(`  ${formatEmptyMessage("Empty directory", uiTheme)}`, 0, 0);
+			return new Text(formatEmptyMessage("Empty directory", uiTheme), 0, 0);
 		}
 
 		let entries: string[] = details?.entries ? [...details.entries] : [];
@@ -272,62 +265,32 @@ export const lsToolRenderer = {
 		const truncation = details?.meta?.truncation;
 		const limits = details?.meta?.limits;
 		const truncated = Boolean(details?.entryLimitReached || truncation || limits?.resultLimit || limits?.headLimit);
-		const icon = truncated
-			? uiTheme.styledSymbol("status.warning", "warning")
-			: uiTheme.styledSymbol("status.success", "success");
-
 		const summaryText = [formatCount("dir", dirCount ?? 0), formatCount("file", fileCount ?? 0)].join(
 			uiTheme.sep.dot,
 		);
-		const maxEntries = expanded ? entries.length : Math.min(entries.length, COLLAPSED_LIST_LIMIT);
-		const hasMoreEntries = entries.length > maxEntries;
-		const expandHint = formatExpandHint(uiTheme, expanded, hasMoreEntries);
+		const meta = truncated ? [summaryText, uiTheme.fg("warning", "truncated")] : [summaryText];
+		const header = renderStatusLine({ icon: truncated ? "warning" : "success", title: "Ls", meta }, uiTheme);
 
-		let text = `  ${icon} ${uiTheme.fg("dim", summaryText)}${formatTruncationSuffix(truncated, uiTheme)}${expandHint}`;
+		const fileLines = renderFileList(
+			{
+				files: entries.map((entry, index) => ({
+					path: entry,
+					isDirectory: (rawEntries?.[index] ?? entry).endsWith("/"),
+				})),
+				expanded,
+				maxCollapsed: COLLAPSED_LIST_LIMIT,
+			},
+			uiTheme,
+		);
 
 		const truncationReasons: string[] = [];
-		if (limits?.resultLimit) {
-			truncationReasons.push(`entry limit ${limits.resultLimit.reached}`);
-		}
-		if (truncation) {
-			truncationReasons.push(`output cap ${formatBytes(truncation.outputBytes)}`);
-		}
-		if (truncation?.artifactId) {
-			truncationReasons.push(`full output: artifact://${truncation.artifactId}`);
-		}
+		if (limits?.resultLimit) truncationReasons.push(`entry limit ${limits.resultLimit.reached}`);
+		if (truncation) truncationReasons.push(`output cap ${formatBytes(truncation.outputBytes)}`);
+		if (truncation?.artifactId) truncationReasons.push(`full output: artifact://${truncation.artifactId}`);
 
-		const hasTruncation = truncationReasons.length > 0;
+		const extraLines =
+			truncationReasons.length > 0 ? [uiTheme.fg("warning", `truncated: ${truncationReasons.join(", ")}`)] : [];
 
-		for (let i = 0; i < maxEntries; i++) {
-			const entry = entries[i];
-			const rawEntry = rawEntries?.[i] ?? entry;
-			const isLast = i === maxEntries - 1 && !hasMoreEntries && !hasTruncation;
-			const branch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
-			const isDir = rawEntry.endsWith("/");
-			const entryPath = isDir ? rawEntry.slice(0, -1) : rawEntry;
-			const lang = isDir ? undefined : getLanguageFromPath(entryPath);
-			const entryIcon = isDir
-				? uiTheme.fg("accent", uiTheme.icon.folder)
-				: uiTheme.fg("muted", uiTheme.getLangIcon(lang));
-			const entryColor = isDir ? "accent" : "toolOutput";
-			text += `\n  ${uiTheme.fg("dim", branch)} ${entryIcon} ${uiTheme.fg(entryColor, entry)}`;
-		}
-
-		if (hasMoreEntries) {
-			const moreEntriesBranch = hasTruncation ? uiTheme.tree.branch : uiTheme.tree.last;
-			text += `\n  ${uiTheme.fg("dim", moreEntriesBranch)} ${uiTheme.fg(
-				"muted",
-				formatMoreItems(entries.length - maxEntries, "entry", uiTheme),
-			)}`;
-		}
-
-		if (hasTruncation) {
-			text += `\n  ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg(
-				"warning",
-				`truncated: ${truncationReasons.join(", ")}`,
-			)}`;
-		}
-
-		return new Text(text, 0, 0);
+		return new Text([header, ...fileLines, ...extraLines].join("\n"), 0, 0);
 	},
 };

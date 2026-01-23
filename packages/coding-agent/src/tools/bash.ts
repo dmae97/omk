@@ -1,7 +1,7 @@
 import { relative, resolve, sep } from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
-import { Text, truncateToWidth } from "@oh-my-pi/pi-tui";
+import { Text } from "@oh-my-pi/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "$c/config/prompt-templates";
 import { type BashExecutorOptions, executeBash } from "$c/exec/bash-executor";
@@ -11,12 +11,13 @@ import type { Theme } from "$c/modes/theme/theme";
 import bashDescription from "$c/prompts/tools/bash.md" with { type: "text" };
 import type { OutputMeta } from "$c/tools/output-meta";
 import { ToolError } from "$c/tools/tool-errors";
+import { renderOutputBlock, renderStatusLine } from "$c/tui";
 
 import { checkBashInterception, checkSimpleLsInterception } from "./bash-interceptor";
 import type { ToolSession } from "./index";
 import { allocateOutputArtifact, createTailBuffer } from "./output-utils";
 import { resolveToCwd } from "./path-utils";
-import { ToolUIKit } from "./render-utils";
+import { formatBytes, wrapBrackets } from "./render-utils";
 import { toolResult } from "./tool-result";
 import { DEFAULT_MAX_BYTES } from "./truncate";
 
@@ -163,9 +164,8 @@ export const BASH_PREVIEW_LINES = 10;
 
 export const bashToolRenderer = {
 	renderCall(args: BashRenderArgs, uiTheme: Theme): Component {
-		const ui = new ToolUIKit(uiTheme);
 		const command = args.command || uiTheme.format.ellipsis;
-		const prompt = uiTheme.fg("accent", "$");
+		const prompt = "$";
 		const cwd = process.cwd();
 		let displayWorkdir = args.cwd;
 
@@ -183,10 +183,8 @@ export const bashToolRenderer = {
 			}
 		}
 
-		const cmdText = displayWorkdir
-			? `${prompt} ${uiTheme.fg("dim", `cd ${displayWorkdir} &&`)} ${command}`
-			: `${prompt} ${command}`;
-		const text = ui.title(cmdText);
+		const cmdText = displayWorkdir ? `${prompt} cd ${displayWorkdir} && ${command}` : `${prompt} ${command}`;
+		const text = renderStatusLine({ icon: "pending", title: "Bash", description: cmdText }, uiTheme);
 		return new Text(text, 0, 0);
 	},
 
@@ -198,7 +196,7 @@ export const bashToolRenderer = {
 		options: RenderResultOptions & { renderContext?: BashRenderContext },
 		uiTheme: Theme,
 	): Component {
-		const ui = new ToolUIKit(uiTheme);
+		const header = renderStatusLine({ icon: "success", title: "Bash" }, uiTheme);
 		const { renderContext } = options;
 		const details = result.details;
 		const expanded = renderContext?.expanded ?? options.expanded;
@@ -214,7 +212,10 @@ export const bashToolRenderer = {
 		const timeoutSeconds = renderContext?.timeout;
 		const timeoutLine =
 			typeof timeoutSeconds === "number"
-				? uiTheme.fg("dim", ui.wrapBrackets(`Timeout: ${timeoutSeconds}s`))
+				? uiTheme.fg(
+						"dim",
+						`${uiTheme.format.bracketLeft}Timeout: ${timeoutSeconds}s${uiTheme.format.bracketRight}`,
+					)
 				: undefined;
 		let warningLine: string | undefined;
 		if (truncation && !showingFullOutput) {
@@ -226,72 +227,52 @@ export const bashToolRenderer = {
 				warnings.push(`Truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines`);
 			} else {
 				warnings.push(
-					`Truncated: ${truncation.outputLines} lines shown (${ui.formatBytes(truncation.outputBytes)} limit)`,
+					`Truncated: ${truncation.outputLines} lines shown (${formatBytes(truncation.outputBytes)} limit)`,
 				);
 			}
 			if (warnings.length > 0) {
-				warningLine = uiTheme.fg("warning", ui.wrapBrackets(warnings.join(". ")));
+				warningLine = uiTheme.fg("warning", wrapBrackets(warnings.join(". "), uiTheme));
 			}
 		}
 
-		if (!displayOutput) {
-			// No output - just show warning if any
-			const lines = [timeoutLine, warningLine].filter(Boolean) as string[];
-			return new Text(lines.join("\n"), 0, 0);
-		}
-
-		if (expanded) {
-			// Show all lines when expanded
-			const styledOutput = displayOutput
-				.split("\n")
-				.map((line) => uiTheme.fg("toolOutput", line))
-				.join("\n");
-			const lines = [styledOutput, timeoutLine, warningLine].filter(Boolean) as string[];
-			return new Text(lines.join("\n"), 0, 0);
-		}
-
-		// Collapsed: use width-aware caching component
-		const styledOutput = displayOutput
-			.split("\n")
-			.map((line) => uiTheme.fg("toolOutput", line))
-			.join("\n");
-		const textContent = `\n${styledOutput}`;
-
-		let cachedWidth: number | undefined;
-		let cachedLines: string[] | undefined;
-		let cachedSkipped: number | undefined;
-
 		return {
 			render: (width: number): string[] => {
-				if (cachedLines === undefined || cachedWidth !== width) {
-					const result = truncateToVisualLines(textContent, previewLines, width);
-					cachedLines = result.visualLines;
-					cachedSkipped = result.skippedCount;
-					cachedWidth = width;
-				}
 				const outputLines: string[] = [];
-				if (cachedSkipped && cachedSkipped > 0) {
-					outputLines.push("");
-					const skippedLine = uiTheme.fg(
-						"dim",
-						`${uiTheme.format.ellipsis} (${cachedSkipped} earlier lines, showing ${cachedLines.length} of ${cachedSkipped + cachedLines.length}) (ctrl+o to expand)`,
-					);
-					outputLines.push(truncateToWidth(skippedLine, width, uiTheme.fg("dim", uiTheme.format.ellipsis)));
+				if (displayOutput) {
+					if (expanded) {
+						outputLines.push(...displayOutput.split("\n").map((line) => uiTheme.fg("toolOutput", line)));
+					} else {
+						const styledOutput = displayOutput
+							.split("\n")
+							.map((line) => uiTheme.fg("toolOutput", line))
+							.join("\n");
+						const textContent = `\n${styledOutput}`;
+						const result = truncateToVisualLines(textContent, previewLines, width);
+						if (result.skippedCount > 0) {
+							outputLines.push(
+								uiTheme.fg(
+									"dim",
+									`${uiTheme.format.ellipsis} (${result.skippedCount} earlier lines, showing ${result.visualLines.length} of ${result.skippedCount + result.visualLines.length}) (ctrl+o to expand)`,
+								),
+							);
+						}
+						outputLines.push(...result.visualLines);
+					}
 				}
-				outputLines.push(...cachedLines);
-				if (timeoutLine) {
-					outputLines.push(truncateToWidth(timeoutLine, width, uiTheme.fg("dim", uiTheme.format.ellipsis)));
-				}
-				if (warningLine) {
-					outputLines.push(truncateToWidth(warningLine, width, uiTheme.fg("warning", uiTheme.format.ellipsis)));
-				}
-				return outputLines;
+				if (timeoutLine) outputLines.push(timeoutLine);
+				if (warningLine) outputLines.push(warningLine);
+
+				return renderOutputBlock(
+					{
+						header,
+						state: "success",
+						sections: [{ label: uiTheme.fg("toolTitle", "Output"), lines: outputLines }],
+						width,
+					},
+					uiTheme,
+				);
 			},
-			invalidate: () => {
-				cachedWidth = undefined;
-				cachedLines = undefined;
-				cachedSkipped = undefined;
-			},
+			invalidate: () => {},
 		};
 	},
 };

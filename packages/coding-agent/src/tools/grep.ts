@@ -8,16 +8,17 @@ import { Type } from "@sinclair/typebox";
 import { $ } from "bun";
 import { renderPromptTemplate } from "$c/config/prompt-templates";
 import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
-import { getLanguageFromPath, type Theme } from "$c/modes/theme/theme";
+import type { Theme } from "$c/modes/theme/theme";
 import grepDescription from "$c/prompts/tools/grep.md" with { type: "text" };
 import type { OutputMeta } from "$c/tools/output-meta";
 import { ToolAbortError, ToolError } from "$c/tools/tool-errors";
+import { renderFileList, renderStatusLine, renderTreeList } from "$c/tui";
 import { ensureTool } from "$c/utils/tools-manager";
 import { untilAborted } from "$c/utils/utils";
 import type { ToolSession } from "./index";
 import { applyListLimit } from "./list-limit";
 import { resolveToCwd } from "./path-utils";
-import { PREVIEW_LIMITS, ToolUIKit } from "./render-utils";
+import { formatCount, formatEmptyMessage, formatErrorMessage, PREVIEW_LIMITS } from "./render-utils";
 import { toolResult } from "./tool-result";
 import { DEFAULT_MAX_COLUMN, type TruncationResult, truncateHead, truncateLine } from "./truncate";
 
@@ -600,10 +601,6 @@ const COLLAPSED_TEXT_LIMIT = PREVIEW_LIMITS.COLLAPSED_LINES * 2;
 export const grepToolRenderer = {
 	inline: true,
 	renderCall(args: GrepRenderArgs, uiTheme: Theme): Component {
-		const ui = new ToolUIKit(uiTheme);
-		const label = ui.title("Grep");
-		let text = `${uiTheme.format.bullet} ${label} ${uiTheme.fg("accent", args.pattern || "?")}`;
-
 		const meta: string[] = [];
 		if (args.path) meta.push(`in ${args.path}`);
 		if (args.glob) meta.push(`glob:${args.glob}`);
@@ -619,8 +616,10 @@ export const grepToolRenderer = {
 		if (args.context !== undefined) meta.push(`context:${args.context}`);
 		if (args.limit !== undefined) meta.push(`limit:${args.limit}`);
 
-		text += ui.meta(meta);
-
+		const text = renderStatusLine(
+			{ icon: "pending", title: "Grep", description: args.pattern || "?", meta },
+			uiTheme,
+		);
 		return new Text(text, 0, 0);
 	},
 
@@ -629,12 +628,11 @@ export const grepToolRenderer = {
 		{ expanded }: RenderResultOptions,
 		uiTheme: Theme,
 	): Component {
-		const ui = new ToolUIKit(uiTheme);
 		const details = result.details;
 
 		if (result.isError || details?.error) {
 			const errorText = details?.error || result.content?.find((c) => c.type === "text")?.text || "Unknown error";
-			return new Text(`  ${ui.errorMessage(errorText)}`, 0, 0);
+			return new Text(formatErrorMessage(errorText, uiTheme), 0, 0);
 		}
 
 		const hasDetailedData = details?.matchCount !== undefined || details?.fileCount !== undefined;
@@ -642,31 +640,24 @@ export const grepToolRenderer = {
 		if (!hasDetailedData) {
 			const textContent = result.content?.find((c) => c.type === "text")?.text;
 			if (!textContent || textContent === "No matches found") {
-				return new Text(`  ${ui.emptyMessage("No matches found")}`, 0, 0);
+				return new Text(formatEmptyMessage("No matches found", uiTheme), 0, 0);
 			}
-
 			const lines = textContent.split("\n").filter((line) => line.trim() !== "");
-			const maxLines = expanded ? lines.length : Math.min(lines.length, COLLAPSED_TEXT_LIMIT);
-			const displayLines = lines.slice(0, maxLines);
-			const remaining = lines.length - maxLines;
-			const hasMore = remaining > 0;
-
-			const icon = uiTheme.styledSymbol("status.success", "success");
-			const summary = ui.count("item", lines.length);
-			const expandHint = ui.expandHint(expanded, hasMore);
-			let text = `  ${icon} ${uiTheme.fg("dim", summary)}${expandHint}`;
-
-			for (let i = 0; i < displayLines.length; i++) {
-				const isLast = i === displayLines.length - 1 && remaining === 0;
-				const branch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
-				text += `\n  ${uiTheme.fg("dim", branch)} ${uiTheme.fg("toolOutput", displayLines[i])}`;
-			}
-
-			if (remaining > 0) {
-				text += `\n  ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg("muted", ui.moreItems(remaining, "item"))}`;
-			}
-
-			return new Text(text, 0, 0);
+			const header = renderStatusLine(
+				{ icon: "success", title: "Grep", meta: [formatCount("item", lines.length)] },
+				uiTheme,
+			);
+			const listLines = renderTreeList(
+				{
+					items: lines,
+					expanded,
+					maxCollapsed: COLLAPSED_TEXT_LIMIT,
+					itemType: "item",
+					renderItem: (line) => uiTheme.fg("toolOutput", line),
+				},
+				uiTheme,
+			);
+			return new Text([header, ...listLines].join("\n"), 0, 0);
 		}
 
 		const matchCount = details?.matchCount ?? 0;
@@ -685,79 +676,45 @@ export const grepToolRenderer = {
 		const files = details?.files ?? [];
 
 		if (matchCount === 0) {
-			return new Text(`  ${ui.emptyMessage("No matches found")}`, 0, 0);
+			return new Text(formatEmptyMessage("No matches found", uiTheme), 0, 0);
 		}
 
-		const icon = uiTheme.styledSymbol("status.success", "success");
 		const summaryParts =
 			mode === "files_with_matches"
-				? [ui.count("file", fileCount)]
-				: [ui.count("match", matchCount), ui.count("file", fileCount)];
-		const summaryText = summaryParts.join(uiTheme.sep.dot);
-		const scopeLabel = ui.scope(details?.scopePath);
+				? [formatCount("file", fileCount)]
+				: [formatCount("match", matchCount), formatCount("file", fileCount)];
+		const meta = [...summaryParts];
+		if (details?.scopePath) meta.push(`in ${details.scopePath}`);
+		if (truncated) meta.push(uiTheme.fg("warning", "truncated"));
+		const header = renderStatusLine({ icon: truncated ? "warning" : "success", title: "Grep", meta }, uiTheme);
 
 		const fileEntries: Array<{ path: string; count?: number }> = details?.fileMatches?.length
 			? details.fileMatches.map((entry) => ({ path: entry.path, count: entry.count }))
 			: files.map((path) => ({ path }));
-		const maxFiles = expanded ? fileEntries.length : Math.min(fileEntries.length, COLLAPSED_LIST_LIMIT);
-		const hasMoreFiles = fileEntries.length > maxFiles;
-		const expandHint = ui.expandHint(expanded, hasMoreFiles);
-
-		let text = `  ${icon} ${uiTheme.fg("dim", summaryText)}${ui.truncationSuffix(truncated)}${scopeLabel}${expandHint}`;
+		const fileLines = renderFileList(
+			{
+				files: fileEntries.map((entry) => ({
+					path: entry.path,
+					isDirectory: entry.path.endsWith("/"),
+					meta: entry.count !== undefined ? `(${entry.count} match${entry.count !== 1 ? "es" : ""})` : undefined,
+				})),
+				expanded,
+				maxCollapsed: COLLAPSED_LIST_LIMIT,
+			},
+			uiTheme,
+		);
 
 		const truncationReasons: string[] = [];
-		if (limits?.matchLimit) {
-			truncationReasons.push(`limit ${limits.matchLimit.reached} matches`);
-		}
-		if (limits?.resultLimit) {
-			truncationReasons.push(`limit ${limits.resultLimit.reached} results`);
-		}
-		if (limits?.headLimit) {
-			truncationReasons.push(`head limit ${limits.headLimit.reached}`);
-		}
-		if (truncation) {
-			truncationReasons.push(truncation.truncatedBy === "lines" ? "line limit" : "size limit");
-		}
-		if (limits?.columnTruncated) {
-			truncationReasons.push(`line length ${limits.columnTruncated.maxColumn}`);
-		}
-		if (truncation?.artifactId) {
-			truncationReasons.push(`full output: artifact://${truncation.artifactId}`);
-		}
+		if (limits?.matchLimit) truncationReasons.push(`limit ${limits.matchLimit.reached} matches`);
+		if (limits?.resultLimit) truncationReasons.push(`limit ${limits.resultLimit.reached} results`);
+		if (limits?.headLimit) truncationReasons.push(`head limit ${limits.headLimit.reached}`);
+		if (truncation) truncationReasons.push(truncation.truncatedBy === "lines" ? "line limit" : "size limit");
+		if (limits?.columnTruncated) truncationReasons.push(`line length ${limits.columnTruncated.maxColumn}`);
+		if (truncation?.artifactId) truncationReasons.push(`full output: artifact://${truncation.artifactId}`);
 
-		const hasTruncation = truncationReasons.length > 0;
+		const extraLines =
+			truncationReasons.length > 0 ? [uiTheme.fg("warning", `truncated: ${truncationReasons.join(", ")}`)] : [];
 
-		if (fileEntries.length > 0) {
-			for (let i = 0; i < maxFiles; i++) {
-				const entry = fileEntries[i];
-				const isLast = i === maxFiles - 1 && !hasMoreFiles && !hasTruncation;
-				const branch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
-				const isDir = entry.path.endsWith("/");
-				const entryPath = isDir ? entry.path.slice(0, -1) : entry.path;
-				const lang = isDir ? undefined : getLanguageFromPath(entryPath);
-				const entryIcon = isDir
-					? uiTheme.fg("accent", uiTheme.icon.folder)
-					: uiTheme.fg("muted", uiTheme.getLangIcon(lang));
-				const countLabel =
-					entry.count !== undefined
-						? ` ${uiTheme.fg("dim", `(${entry.count} match${entry.count !== 1 ? "es" : ""})`)}`
-						: "";
-				text += `\n  ${uiTheme.fg("dim", branch)} ${entryIcon} ${uiTheme.fg("accent", entry.path)}${countLabel}`;
-			}
-
-			if (hasMoreFiles) {
-				const moreFilesBranch = hasTruncation ? uiTheme.tree.branch : uiTheme.tree.last;
-				text += `\n  ${uiTheme.fg("dim", moreFilesBranch)} ${uiTheme.fg(
-					"muted",
-					ui.moreItems(fileEntries.length - maxFiles, "file"),
-				)}`;
-			}
-		}
-
-		if (hasTruncation) {
-			text += `\n  ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg("warning", `truncated: ${truncationReasons.join(", ")}`)}`;
-		}
-
-		return new Text(text, 0, 0);
+		return new Text([header, ...fileLines, ...extraLines].join("\n"), 0, 0);
 	},
 };

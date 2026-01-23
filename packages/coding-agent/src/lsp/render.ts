@@ -9,10 +9,11 @@
  */
 
 import type { AgentToolResult, RenderResultOptions } from "@oh-my-pi/pi-agent-core";
-import { Text } from "@oh-my-pi/pi-tui";
+import { type Component, Text } from "@oh-my-pi/pi-tui";
 import { highlight, supportsLanguage } from "cli-highlight";
 import { getLanguageFromPath, type Theme } from "$c/modes/theme/theme";
 import { formatExpandHint, formatMoreItems, TRUNCATE_LENGTHS, truncate } from "$c/tools/render-utils";
+import { renderOutputBlock, renderStatusLine } from "$c/tui";
 import type { LspParams, LspToolDetails } from "./types";
 
 // =============================================================================
@@ -25,16 +26,13 @@ import type { LspParams, LspToolDetails } from "./types";
  */
 export function renderCall(args: unknown, theme: Theme): Text {
 	const p = args as LspParams & { file?: string; files?: string[] };
-
-	let text = theme.fg("toolTitle", theme.bold("LSP"));
-	text += ` ${theme.fg("accent", p.action || "?")}`;
-
+	const meta: string[] = [];
 	if (p.file) {
-		text += ` ${theme.fg("muted", p.file)}`;
+		meta.push(p.file);
 	} else if (p.files?.length) {
-		text += ` ${theme.fg("muted", `${p.files.length} file(s)`)}`;
+		meta.push(`${p.files.length} file(s)`);
 	}
-
+	const text = renderStatusLine({ icon: "pending", title: "LSP", description: p.action || "?", meta }, theme);
 	return new Text(text, 0, 0);
 }
 
@@ -50,7 +48,7 @@ export function renderResult(
 	result: AgentToolResult<LspToolDetails>,
 	options: RenderResultOptions,
 	theme: Theme,
-): Text {
+): Component {
 	const content = result.content?.[0];
 	if (!content || content.type !== "text" || !("text" in content) || !content.text) {
 		return new Text(theme.fg("error", "No result"), 0, 0);
@@ -60,30 +58,55 @@ export function renderResult(
 	const lines = text.split("\n").filter((l) => l.trim());
 	const expanded = options.expanded;
 
-	// Detect result type and render accordingly
+	let label = "Result";
+	let state: "success" | "warning" | "error" = "success";
+	let bodyLines: string[] = [];
+
 	const codeBlockMatch = text.match(/```(\w*)\n([\s\S]*?)```/);
 	if (codeBlockMatch) {
-		return renderHover(codeBlockMatch, text, lines, expanded, theme);
+		label = "Hover";
+		bodyLines = renderHover(codeBlockMatch, text, lines, expanded, theme);
+	} else {
+		const errorMatch = text.match(/(\d+)\s+error\(s\)/);
+		const warningMatch = text.match(/(\d+)\s+warning\(s\)/);
+		if (errorMatch || warningMatch || text.includes(theme.status.error)) {
+			label = "Diagnostics";
+			const errorCount = errorMatch ? Number.parseInt(errorMatch[1], 10) : 0;
+			const warnCount = warningMatch ? Number.parseInt(warningMatch[1], 10) : 0;
+			state = errorCount > 0 ? "error" : warnCount > 0 ? "warning" : "success";
+			bodyLines = renderDiagnostics(errorMatch, warningMatch, lines, expanded, theme);
+		} else {
+			const refMatch = text.match(/(\d+)\s+reference\(s\)/);
+			if (refMatch) {
+				label = "References";
+				bodyLines = renderReferences(refMatch, lines, expanded, theme);
+			} else {
+				const symbolsMatch = text.match(/Symbols in (.+):/);
+				if (symbolsMatch) {
+					label = "Symbols";
+					bodyLines = renderSymbols(symbolsMatch, lines, expanded, theme);
+				} else {
+					label = "Response";
+					bodyLines = renderGeneric(text, lines, expanded, theme);
+				}
+			}
+		}
 	}
 
-	const errorMatch = text.match(/(\d+)\s+error\(s\)/);
-	const warningMatch = text.match(/(\d+)\s+warning\(s\)/);
-	if (errorMatch || warningMatch || text.includes(theme.status.error)) {
-		return renderDiagnostics(errorMatch, warningMatch, lines, expanded, theme);
-	}
-
-	const refMatch = text.match(/(\d+)\s+reference\(s\)/);
-	if (refMatch) {
-		return renderReferences(refMatch, lines, expanded, theme);
-	}
-
-	const symbolsMatch = text.match(/Symbols in (.+):/);
-	if (symbolsMatch) {
-		return renderSymbols(symbolsMatch, lines, expanded, theme);
-	}
-
-	// Default fallback rendering
-	return renderGeneric(text, lines, expanded, theme);
+	const header = renderStatusLine({ icon: state, title: "LSP", description: label }, theme);
+	return {
+		render: (width: number) =>
+			renderOutputBlock(
+				{
+					header,
+					state,
+					sections: [{ label: theme.fg("toolTitle", label), lines: bodyLines }],
+					width,
+				},
+				theme,
+			),
+		invalidate: () => {},
+	};
 }
 
 // =============================================================================
@@ -99,7 +122,7 @@ function renderHover(
 	_lines: string[],
 	expanded: boolean,
 	theme: Theme,
-): Text {
+): string[] {
 	const lang = codeBlockMatch[1] || "";
 	const code = codeBlockMatch[2].trim();
 	const afterCode = fullText.slice(fullText.indexOf("```", 3) + 3).trim();
@@ -122,7 +145,7 @@ function renderHover(
 		if (afterCode) {
 			output += `\n ${theme.fg("muted", afterCode)}`;
 		}
-		return new Text(output, 0, 0);
+		return output.split("\n");
 	}
 
 	// Collapsed view
@@ -150,7 +173,7 @@ function renderHover(
 		output += `\n ${theme.fg("mdCodeBlockBorder", bottom)}`;
 	}
 
-	return new Text(output, 0, 0);
+	return output.split("\n");
 }
 
 /**
@@ -201,7 +224,7 @@ function renderDiagnostics(
 	lines: string[],
 	expanded: boolean,
 	theme: Theme,
-): Text {
+): string[] {
 	const errorCount = errorMatch ? Number.parseInt(errorMatch[1], 10) : 0;
 	const warnCount = warningMatch ? Number.parseInt(warningMatch[1], 10) : 0;
 
@@ -248,7 +271,7 @@ function renderDiagnostics(
 				)}`;
 			}
 		}
-		return new Text(output, 0, 0);
+		return output.split("\n");
 	}
 
 	// Collapsed view
@@ -280,7 +303,7 @@ function renderDiagnostics(
 		)}`;
 	}
 
-	return new Text(output, 0, 0);
+	return output.split("\n");
 }
 
 // =============================================================================
@@ -290,7 +313,7 @@ function renderDiagnostics(
 /**
  * Render references grouped by file.
  */
-function renderReferences(refMatch: RegExpMatchArray, lines: string[], expanded: boolean, theme: Theme): Text {
+function renderReferences(refMatch: RegExpMatchArray, lines: string[], expanded: boolean, theme: Theme): string[] {
 	const refCount = Number.parseInt(refMatch[1], 10);
 	const icon =
 		refCount > 0 ? theme.styledSymbol("status.success", "success") : theme.styledSymbol("status.warning", "warning");
@@ -364,10 +387,10 @@ function renderReferences(refMatch: RegExpMatchArray, lines: string[], expanded:
 	};
 
 	if (expanded) {
-		return new Text(renderGrouped(files.length, 3, false), 0, 0);
+		return renderGrouped(files.length, 3, false).split("\n");
 	}
 
-	return new Text(renderGrouped(3, 1, true), 0, 0);
+	return renderGrouped(3, 1, true).split("\n");
 }
 
 // =============================================================================
@@ -377,7 +400,7 @@ function renderReferences(refMatch: RegExpMatchArray, lines: string[], expanded:
 /**
  * Render document symbols in a hierarchical tree.
  */
-function renderSymbols(symbolsMatch: RegExpMatchArray, lines: string[], expanded: boolean, theme: Theme): Text {
+function renderSymbols(symbolsMatch: RegExpMatchArray, lines: string[], expanded: boolean, theme: Theme): string[] {
 	const fileName = symbolsMatch[1];
 	const icon = theme.styledSymbol("status.info", "accent");
 
@@ -445,7 +468,7 @@ function renderSymbols(symbolsMatch: RegExpMatchArray, lines: string[], expanded
 			output += `\n${prefix}${theme.fg("dim", branch)} ${theme.fg("accent", sym.icon)} ${theme.fg("accent", sym.name)}`;
 			output += `\n${prefix}${theme.fg("dim", detailPrefix)}${theme.fg("muted", `line ${sym.line}`)}`;
 		}
-		return new Text(output, 0, 0);
+		return output.split("\n");
 	}
 
 	// Collapsed: show first 3 top-level symbols
@@ -469,7 +492,7 @@ function renderSymbols(symbolsMatch: RegExpMatchArray, lines: string[], expanded
 		)}`;
 	}
 
-	return new Text(output, 0, 0);
+	return output.split("\n");
 }
 
 // =============================================================================
@@ -479,7 +502,7 @@ function renderSymbols(symbolsMatch: RegExpMatchArray, lines: string[], expanded
 /**
  * Generic fallback rendering for unknown result types.
  */
-function renderGeneric(text: string, lines: string[], expanded: boolean, theme: Theme): Text {
+function renderGeneric(text: string, lines: string[], expanded: boolean, theme: Theme): string[] {
 	const hasError = text.includes("Error:") || text.includes(theme.status.error);
 	const hasSuccess = text.includes(theme.status.success) || text.includes("Applied");
 
@@ -497,7 +520,7 @@ function renderGeneric(text: string, lines: string[], expanded: boolean, theme: 
 			const branch = isLast ? theme.tree.last : theme.tree.branch;
 			output += `\n ${theme.fg("dim", branch)} ${lines[i]}`;
 		}
-		return new Text(output, 0, 0);
+		return output.split("\n");
 	}
 
 	const firstLine = lines[0] || "No output";
@@ -525,7 +548,7 @@ function renderGeneric(text: string, lines: string[], expanded: boolean, theme: 
 		}
 	}
 
-	return new Text(output, 0, 0);
+	return output.split("\n");
 }
 
 // =============================================================================

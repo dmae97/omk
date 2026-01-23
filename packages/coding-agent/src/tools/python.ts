@@ -2,22 +2,23 @@ import { relative, resolve, sep } from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
-import { Text, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
+import { Text, truncateToWidth } from "@oh-my-pi/pi-tui";
 import { type Static, Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "$c/config/prompt-templates";
 import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
 import { executePython, getPreludeDocs, type PythonExecutorOptions } from "$c/ipy/executor";
 import type { PreludeHelper, PythonStatusEvent } from "$c/ipy/kernel";
 import { truncateToVisualLines } from "$c/modes/components/visual-truncate";
-import { highlightCode, type Theme } from "$c/modes/theme/theme";
+import type { Theme } from "$c/modes/theme/theme";
 import pythonDescription from "$c/prompts/tools/python.md" with { type: "text" };
 import { OutputSink, type OutputSummary } from "$c/session/streaming-output";
 import type { OutputMeta } from "$c/tools/output-meta";
 import { ToolAbortError, ToolError } from "$c/tools/tool-errors";
+import { getTreeBranch, getTreeContinuePrefix, renderCodeCell } from "$c/tui";
 import type { ToolSession } from "./index";
 import { allocateOutputArtifact, createTailBuffer } from "./output-utils";
 import { resolveToCwd } from "./path-utils";
-import { getTreeBranch, getTreeContinuePrefix, shortenPath, ToolUIKit, truncate } from "./render-utils";
+import { shortenPath, ToolUIKit, truncate } from "./render-utils";
 import { toolResult } from "./tool-result";
 import { DEFAULT_MAX_BYTES } from "./truncate";
 
@@ -740,56 +741,6 @@ function renderStatusEvents(events: PythonStatusEvent[], theme: Theme, expanded:
 	return lines;
 }
 
-function applyCellBackground(line: string, width: number, bgFn?: (text: string) => string): string {
-	if (!bgFn) return line;
-	if (width <= 0) return bgFn(line);
-	const paddingNeeded = Math.max(0, width - visibleWidth(line));
-	const padded = line + " ".repeat(paddingNeeded);
-	return bgFn(padded);
-}
-
-function highlightPythonCode(code?: string): string[] {
-	return highlightCode(code ?? "", "python");
-}
-
-function formatCellStatus(cell: PythonCellResult, ui: ToolUIKit, spinnerFrame?: number): string | undefined {
-	switch (cell.status) {
-		case "pending":
-			return `${ui.statusIcon("pending")} ${ui.theme.fg("muted", "pending")}`;
-		case "running":
-			return `${ui.statusIcon("running", spinnerFrame)} ${ui.theme.fg("muted", "running")}`;
-		case "complete":
-			return ui.statusIcon("success");
-		case "error":
-			return ui.statusIcon("error");
-	}
-}
-
-function formatCellHeader(
-	cell: PythonCellResult,
-	index: number,
-	total: number,
-	ui: ToolUIKit,
-	spinnerFrame?: number,
-	workdirLabel?: string,
-): string {
-	const indexLabel = ui.theme.fg("accent", `[${index + 1}/${total}]`);
-	const title = cell.title ? ` ${cell.title}` : "";
-	const metaParts: string[] = [];
-	if (workdirLabel) {
-		metaParts.push(ui.theme.fg("dim", workdirLabel));
-	}
-	if (cell.durationMs !== undefined) {
-		metaParts.push(ui.theme.fg("dim", `(${ui.formatDuration(cell.durationMs)})`));
-	}
-	const statusLabel = formatCellStatus(cell, ui, spinnerFrame);
-	if (statusLabel) {
-		metaParts.push(statusLabel);
-	}
-	const meta = metaParts.length > 0 ? ` ${metaParts.join(ui.theme.fg("dim", ui.theme.sep.dot))}` : "";
-	return `${indexLabel}${title}${meta}`;
-}
-
 function formatCellOutputLines(
 	cell: PythonCellResult,
 	expanded: boolean,
@@ -806,101 +757,6 @@ function formatCellOutputLines(
 	}
 
 	return { lines: outputLines, hiddenCount };
-}
-
-function renderCellBlock(
-	cell: PythonCellResult,
-	index: number,
-	total: number,
-	ui: ToolUIKit,
-	options: {
-		expanded: boolean;
-		previewLines: number;
-		spinnerFrame?: number;
-		showOutput: boolean;
-		workdirLabel?: string;
-		width: number;
-		bgFn?: (text: string) => string;
-	},
-): string[] {
-	const { expanded, previewLines, spinnerFrame, showOutput, workdirLabel, width, bgFn } = options;
-	const h = ui.theme.boxSharp.horizontal;
-	const v = ui.theme.boxSharp.vertical;
-	const cap = h.repeat(3);
-	const border = (text: string) => ui.theme.fg("dim", text);
-	const lineWidth = Math.max(0, width);
-
-	const buildBarLine = (leftChar: string, label?: string): string => {
-		const left = border(`${leftChar}${cap}`);
-		if (lineWidth <= 0) return left;
-		const rawLabel = label ? ` ${label} ` : " ";
-		const maxLabelWidth = Math.max(0, lineWidth - visibleWidth(left));
-		const trimmedLabel = truncateToWidth(rawLabel, maxLabelWidth, ui.theme.format.ellipsis);
-		const fillCount = Math.max(0, lineWidth - visibleWidth(left + trimmedLabel));
-		return `${left}${trimmedLabel}${border(h.repeat(fillCount))}`;
-	};
-
-	const lines: string[] = [];
-	lines.push(
-		applyCellBackground(
-			buildBarLine(ui.theme.boxSharp.topLeft, formatCellHeader(cell, index, total, ui, spinnerFrame, workdirLabel)),
-			lineWidth,
-			bgFn,
-		),
-	);
-
-	const codePrefix = border(`${v} `);
-	const codeWidth = Math.max(0, lineWidth - visibleWidth(codePrefix));
-	const codeLines = highlightPythonCode(cell.code);
-	for (const line of codeLines) {
-		const text = truncateToWidth(line, codeWidth, ui.theme.format.ellipsis);
-		lines.push(applyCellBackground(`${codePrefix}${text}`, lineWidth, bgFn));
-	}
-
-	const statusLines = renderStatusEvents(cell.statusEvents ?? [], ui.theme, expanded);
-	const outputContent = formatCellOutputLines(cell, expanded, previewLines, ui.theme);
-	const hasOutput = outputContent.lines.length > 0;
-	const hasStatus = statusLines.length > 0;
-	const showOutputSection = showOutput && (hasOutput || hasStatus);
-
-	if (showOutputSection) {
-		lines.push(
-			applyCellBackground(
-				buildBarLine(ui.theme.boxSharp.teeRight, ui.theme.fg("toolTitle", "Output")),
-				lineWidth,
-				bgFn,
-			),
-		);
-
-		for (const line of outputContent.lines) {
-			const text = truncateToWidth(line, codeWidth, ui.theme.format.ellipsis);
-			lines.push(applyCellBackground(`${codePrefix}${text}`, lineWidth, bgFn));
-		}
-		if (!expanded && outputContent.hiddenCount > 0) {
-			const hint = ui.theme.fg(
-				"dim",
-				`${ui.theme.format.ellipsis} ${outputContent.hiddenCount} more lines (ctrl+o to expand)`,
-			);
-			lines.push(
-				applyCellBackground(
-					`${codePrefix}${truncateToWidth(hint, codeWidth, ui.theme.format.ellipsis)}`,
-					lineWidth,
-					bgFn,
-				),
-			);
-		}
-
-		for (const line of statusLines) {
-			const text = truncateToWidth(line, codeWidth, ui.theme.format.ellipsis);
-			lines.push(applyCellBackground(`${codePrefix}${text}`, lineWidth, bgFn));
-		}
-	}
-
-	const bottomLeft = border(`${ui.theme.boxSharp.bottomLeft}${cap}`);
-	const bottomFillCount = Math.max(0, lineWidth - visibleWidth(bottomLeft));
-	const bottomLine = `${bottomLeft}${border(h.repeat(bottomFillCount))}`;
-	lines.push(applyCellBackground(bottomLine, lineWidth, bgFn));
-	return lines;
 }
 
 export const pythonToolRenderer = {
@@ -937,23 +793,21 @@ export const pythonToolRenderer = {
 				const lines: string[] = [];
 				for (let i = 0; i < cells.length; i++) {
 					const cell = cells[i];
-					const cellResult: PythonCellResult = {
-						index: i,
-						title: cell.title,
-						code: cell.code,
-						output: "",
-						status: "pending",
-					};
-					lines.push(
-						...renderCellBlock(cellResult, i, cells.length, ui, {
-							expanded: true,
-							previewLines: PYTHON_DEFAULT_PREVIEW_LINES,
-							showOutput: false,
-							workdirLabel: i === 0 ? workdirLabel : undefined,
+					const cellLines = renderCodeCell(
+						{
+							code: cell.code,
+							language: "python",
+							index: i,
+							total: cells.length,
+							title: cell.title,
+							status: "pending",
 							width,
-							bgFn: (text: string) => uiTheme.bg("toolPendingBg", text),
-						}),
+							codeMaxLines: PYTHON_DEFAULT_PREVIEW_LINES,
+							expanded: true,
+						},
+						uiTheme,
 					);
+					lines.push(...cellLines);
 					if (i < cells.length - 1) {
 						lines.push("");
 					}
@@ -1015,23 +869,37 @@ export const pythonToolRenderer = {
 					const lines: string[] = [];
 					for (let i = 0; i < cellResults.length; i++) {
 						const cell = cellResults[i];
-						const showOutput = cell.status !== "pending";
-						const bgColor =
-							cell.status === "error"
-								? "toolErrorBg"
-								: cell.status === "complete"
-									? "toolSuccessBg"
-									: "toolPendingBg";
-						lines.push(
-							...renderCellBlock(cell, i, cellResults.length, ui, {
-								expanded,
-								previewLines,
+						const statusLines = renderStatusEvents(cell.statusEvents ?? [], uiTheme, expanded);
+						const outputContent = formatCellOutputLines(cell, expanded, previewLines, uiTheme);
+						const outputLines = [...outputContent.lines];
+						if (!expanded && outputContent.hiddenCount > 0) {
+							outputLines.push(
+								uiTheme.fg(
+									"dim",
+									`${uiTheme.format.ellipsis} ${outputContent.hiddenCount} more lines (ctrl+o to expand)`,
+								),
+							);
+						}
+						outputLines.push(...statusLines);
+						const cellLines = renderCodeCell(
+							{
+								code: cell.code,
+								language: "python",
+								index: i,
+								total: cellResults.length,
+								title: cell.title,
+								status: cell.status,
 								spinnerFrame: options.spinnerFrame,
-								showOutput,
+								duration: cell.durationMs,
+								output: outputLines.length > 0 ? outputLines.join("\n") : undefined,
+								outputMaxLines: previewLines,
+								codeMaxLines: expanded ? Number.POSITIVE_INFINITY : PYTHON_DEFAULT_PREVIEW_LINES,
+								expanded,
 								width,
-								bgFn: (text: string) => uiTheme.bg(bgColor, text),
-							}),
+							},
+							uiTheme,
 						);
+						lines.push(...cellLines);
 						if (i < cellResults.length - 1) {
 							lines.push("");
 						}

@@ -9,11 +9,12 @@ import { Type } from "@sinclair/typebox";
 import { CONFIG_DIR_NAME } from "$c/config";
 import { renderPromptTemplate } from "$c/config/prompt-templates";
 import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
-import type { Theme } from "$c/modes/theme/theme";
+import { getLanguageFromPath, type Theme } from "$c/modes/theme/theme";
 import readDescription from "$c/prompts/tools/read.md" with { type: "text" };
 import type { ToolSession } from "$c/sdk";
 import type { OutputMeta } from "$c/tools/output-meta";
 import { ToolAbortError, ToolError, throwIfAborted } from "$c/tools/tool-errors";
+import { renderCodeCell, renderStatusLine } from "$c/tui";
 import { formatDimensionNote, resizeImage } from "$c/utils/image-resize";
 import { detectSupportedImageMimeTypeFromFile } from "$c/utils/mime";
 import { ensureTool } from "$c/utils/tools-manager";
@@ -837,14 +838,14 @@ export const readToolRenderer = {
 		const offset = args.offset;
 		const limit = args.limit;
 
-		let pathDisplay = filePath ? uiTheme.fg("accent", filePath) : uiTheme.fg("toolOutput", uiTheme.format.ellipsis);
+		let pathDisplay = filePath || uiTheme.format.ellipsis;
 		if (offset !== undefined || limit !== undefined) {
 			const startLine = offset ?? 1;
 			const endLine = limit !== undefined ? startLine + limit - 1 : "";
-			pathDisplay += uiTheme.fg("warning", `:${startLine}${endLine ? `-${endLine}` : ""}`);
+			pathDisplay += `:${startLine}${endLine ? `-${endLine}` : ""}`;
 		}
 
-		const text = `${uiTheme.fg("toolTitle", uiTheme.bold("Read"))} ${pathDisplay}`;
+		const text = renderStatusLine({ icon: "pending", title: "Read", description: pathDisplay }, uiTheme);
 		return new Text(text, 0, 0);
 	},
 
@@ -852,13 +853,15 @@ export const readToolRenderer = {
 		result: { content: Array<{ type: string; text?: string }>; details?: ReadToolDetails },
 		_options: RenderResultOptions,
 		uiTheme: Theme,
-		_args?: ReadRenderArgs,
+		args?: ReadRenderArgs,
 	): Component {
 		const details = result.details;
-		const lines: string[] = [];
+		const contentText = result.content?.find((c) => c.type === "text")?.text ?? "";
+		const rawPath = args?.file_path || args?.path || "";
+		const filePath = shortenPath(rawPath);
+		const lang = getLanguageFromPath(rawPath);
 
-		lines.push(uiTheme.fg("dim", "Content hidden"));
-
+		const warningLines: string[] = [];
 		const truncation = details?.meta?.truncation;
 		const fallback = details?.truncation;
 		if (truncation) {
@@ -874,9 +877,25 @@ export const readToolRenderer = {
 			if (truncation.artifactId) {
 				warning += `. Full output: artifact://${truncation.artifactId}`;
 			}
-			lines.push(uiTheme.fg("warning", wrapBrackets(warning, uiTheme)));
+			warningLines.push(uiTheme.fg("warning", wrapBrackets(warning, uiTheme)));
 		}
 
-		return new Text(lines.join("\n"), 0, 0);
+		const title = filePath ? `Read ${filePath}` : "Read";
+		return {
+			render: (width: number) =>
+				renderCodeCell(
+					{
+						code: contentText,
+						language: lang,
+						title,
+						status: "complete",
+						output: warningLines.length > 0 ? warningLines.join("\n") : undefined,
+						expanded: true,
+						width,
+					},
+					uiTheme,
+				),
+			invalidate: () => {},
+		};
 	},
 };

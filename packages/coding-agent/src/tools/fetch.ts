@@ -13,6 +13,7 @@ import { type Theme, theme } from "$c/modes/theme/theme";
 import fetchDescription from "$c/prompts/tools/fetch.md" with { type: "text" };
 import type { OutputMeta } from "$c/tools/output-meta";
 import { ToolAbortError } from "$c/tools/tool-errors";
+import { renderOutputBlock, renderStatusLine } from "$c/tui";
 import { ensureTool } from "$c/utils/tools-manager";
 import { specialHandlers } from "$c/web/scrapers/index";
 import type { RenderResult } from "$c/web/scrapers/types";
@@ -993,8 +994,11 @@ export function renderFetchCall(
 ): Component {
 	const domain = getDomain(args.url);
 	const path = truncate(args.url.replace(/^https?:\/\/[^/]+/, ""), 50, uiTheme.format.ellipsis);
-	const icon = uiTheme.styledSymbol("status.pending", "muted");
-	const text = `${icon} ${uiTheme.fg("toolTitle", "Fetch")} ${uiTheme.fg("accent", domain)}${uiTheme.fg("dim", path)}`;
+	const description = `${domain}${path ? ` ${path}` : ""}`.trim();
+	const meta: string[] = [];
+	if (args.raw) meta.push("raw");
+	if (args.timeout !== undefined) meta.push(`timeout:${args.timeout}s`);
+	const text = renderStatusLine({ icon: "pending", title: "Fetch", description, meta }, uiTheme);
 	return new Text(text, 0, 0);
 }
 
@@ -1016,16 +1020,18 @@ export function renderFetchResult(
 	const hasNotes = details.notes.length > 0;
 	const truncation = details.meta?.truncation;
 	const truncated = Boolean(details.truncated || truncation);
-	const statusIcon = truncated
-		? uiTheme.styledSymbol("status.warning", "warning")
-		: uiTheme.styledSymbol("status.success", "success");
-	const expandHint = formatExpandHint(uiTheme, expanded);
-	const expandSuffix = expandHint ? ` ${expandHint}` : "";
-	let text = `${statusIcon} ${uiTheme.fg("accent", `(${domain})`)}${uiTheme.sep.dot}${uiTheme.fg("dim", details.method)}${expandSuffix}`;
 
-	// Get content text
+	const header = renderStatusLine(
+		{
+			icon: truncated ? "warning" : "success",
+			title: "Fetch",
+			description: domain,
+			meta: [details.method],
+		},
+		uiTheme,
+	);
+
 	const contentText = result.content[0]?.text ?? "";
-	// Extract just the content part (after the --- separator)
 	const contentBody = contentText.includes("---\n\n")
 		? contentText.split("---\n\n").slice(1).join("---\n\n")
 		: contentText;
@@ -1033,101 +1039,57 @@ export function renderFetchResult(
 	const charCount = contentBody.trim().length;
 	const contentLines = contentBody.split("\n").filter((l) => l.trim());
 
-	if (!expanded) {
-		// Collapsed view: metadata + preview
-		const metaLines: string[] = [
-			`${uiTheme.fg("muted", "Content-Type:")} ${details.contentType || "unknown"}`,
-			`${uiTheme.fg("muted", "Method:")} ${details.method}`,
-		];
-		if (hasRedirect) {
-			metaLines.push(`${uiTheme.fg("muted", "Final URL:")} ${uiTheme.fg("mdLinkUrl", details.finalUrl)}`);
-		}
-		if (truncated) {
-			metaLines.push(uiTheme.fg("warning", `${uiTheme.status.warning} Output truncated`));
-			if (truncation?.artifactId) {
-				metaLines.push(uiTheme.fg("warning", `Full output: artifact://${truncation.artifactId}`));
-			}
-		}
-		if (hasNotes) {
-			metaLines.push(`${uiTheme.fg("muted", "Notes:")} ${details.notes.join("; ")}`);
-		}
-
-		const previewLimit = 3;
-		const previewList = applyListLimit(contentLines, { headLimit: previewLimit });
-		const previewLines = previewList.items.map((line) => truncate(line.trim(), 100, uiTheme.format.ellipsis));
-		const detailLines: string[] = [...metaLines];
-
-		if (previewLines.length === 0) {
-			detailLines.push(uiTheme.fg("dim", "(no content)"));
-		} else {
-			for (const line of previewLines) {
-				detailLines.push(uiTheme.fg("dim", line));
-			}
-		}
-
-		const remaining = Math.max(0, contentLines.length - previewLines.length);
-		if (remaining > 0) {
-			detailLines.push(uiTheme.fg("muted", `${uiTheme.format.ellipsis} ${remaining} more lines`));
-		} else {
-			const lineLabel = `${lineCount} line${lineCount === 1 ? "" : "s"}`;
-			detailLines.push(uiTheme.fg("muted", `${lineLabel}${uiTheme.sep.dot}${charCount} chars`));
-		}
-
-		for (let i = 0; i < detailLines.length; i++) {
-			const isLast = i === detailLines.length - 1;
-			const branch = isLast ? uiTheme.tree.last : uiTheme.tree.vertical;
-			text += `\n ${uiTheme.fg("dim", branch)}  ${detailLines[i]}`;
-		}
-	} else {
-		// Expanded view: structured metadata + bounded content preview
-		const metaLines: string[] = [
-			`${uiTheme.fg("muted", "Content-Type:")} ${details.contentType || "unknown"}`,
-			`${uiTheme.fg("muted", "Method:")} ${details.method}`,
-		];
-		if (hasRedirect) {
-			metaLines.push(`${uiTheme.fg("muted", "Final URL:")} ${uiTheme.fg("mdLinkUrl", details.finalUrl)}`);
-		}
-		const lineLabel = `${lineCount} line${lineCount === 1 ? "" : "s"}`;
-		metaLines.push(`${uiTheme.fg("muted", "Lines:")} ${lineLabel}`);
-		metaLines.push(`${uiTheme.fg("muted", "Chars:")} ${charCount}`);
-		if (truncated) {
-			metaLines.push(uiTheme.fg("warning", `${uiTheme.status.warning} Output truncated`));
-			if (truncation?.artifactId) {
-				metaLines.push(uiTheme.fg("warning", `Full output: artifact://${truncation.artifactId}`));
-			}
-		}
-		if (hasNotes) {
-			metaLines.push(`${uiTheme.fg("muted", "Notes:")} ${details.notes.join("; ")}`);
-		}
-
-		text += `\n ${uiTheme.fg("dim", uiTheme.tree.branch)} ${uiTheme.fg("accent", "Metadata")}`;
-		for (let i = 0; i < metaLines.length; i++) {
-			const isLast = i === metaLines.length - 1;
-			const branch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
-			text += `\n ${uiTheme.fg("dim", uiTheme.tree.vertical)}  ${uiTheme.fg("dim", branch)} ${metaLines[i]}`;
-		}
-
-		text += `\n ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.fg("accent", "Content Preview")}`;
-		const previewLimit = 12;
-		const previewList = applyListLimit(contentLines, { headLimit: previewLimit });
-		const previewLines = previewList.items.map((line) => truncate(line.trim(), 120, uiTheme.format.ellipsis));
-		const remaining = Math.max(0, contentLines.length - previewLines.length);
-		const contentPrefix = uiTheme.fg("dim", " ");
-
-		if (previewLines.length === 0) {
-			text += `\n ${contentPrefix}   ${uiTheme.fg("dim", "(no content)")}`;
-		} else {
-			for (const line of previewLines) {
-				text += `\n ${contentPrefix}   ${uiTheme.fg("dim", line)}`;
-			}
-		}
-
-		if (remaining > 0) {
-			text += `\n ${contentPrefix}   ${uiTheme.fg("muted", `${uiTheme.format.ellipsis} ${remaining} more lines`)}`;
+	const metadataLines: string[] = [
+		`${uiTheme.fg("muted", "Content-Type:")} ${details.contentType || "unknown"}`,
+		`${uiTheme.fg("muted", "Method:")} ${details.method}`,
+	];
+	if (hasRedirect) {
+		metadataLines.push(`${uiTheme.fg("muted", "Final URL:")} ${uiTheme.fg("mdLinkUrl", details.finalUrl)}`);
+	}
+	const lineLabel = `${lineCount} line${lineCount === 1 ? "" : "s"}`;
+	metadataLines.push(`${uiTheme.fg("muted", "Lines:")} ${lineLabel}`);
+	metadataLines.push(`${uiTheme.fg("muted", "Chars:")} ${charCount}`);
+	if (truncated) {
+		metadataLines.push(uiTheme.fg("warning", `${uiTheme.status.warning} Output truncated`));
+		if (truncation?.artifactId) {
+			metadataLines.push(uiTheme.fg("warning", `Full output: artifact://${truncation.artifactId}`));
 		}
 	}
+	if (hasNotes) {
+		metadataLines.push(`${uiTheme.fg("muted", "Notes:")} ${details.notes.join("; ")}`);
+	}
 
-	return new Text(text, 0, 0);
+	const previewLimit = expanded ? 12 : 3;
+	const previewList = applyListLimit(contentLines, { headLimit: previewLimit });
+	const previewLines = previewList.items.map((line) => truncate(line.trim(), 120, uiTheme.format.ellipsis));
+	const remaining = Math.max(0, contentLines.length - previewLines.length);
+	const contentPreviewLines =
+		previewLines.length > 0
+			? previewLines.map((line) => uiTheme.fg("dim", line))
+			: [uiTheme.fg("dim", "(no content)")];
+	if (remaining > 0) {
+		const hint = formatExpandHint(uiTheme, expanded, true);
+		contentPreviewLines.push(
+			uiTheme.fg("muted", `${uiTheme.format.ellipsis} ${remaining} more lines${hint ? ` ${hint}` : ""}`),
+		);
+	}
+
+	return {
+		render: (width: number) =>
+			renderOutputBlock(
+				{
+					header,
+					state: truncated ? "warning" : "success",
+					sections: [
+						{ label: uiTheme.fg("toolTitle", "Metadata"), lines: metadataLines },
+						{ label: uiTheme.fg("toolTitle", "Content Preview"), lines: contentPreviewLines },
+					],
+					width,
+				},
+				uiTheme,
+			),
+		invalidate: () => {},
+	};
 }
 
 export const fetchToolRenderer = {

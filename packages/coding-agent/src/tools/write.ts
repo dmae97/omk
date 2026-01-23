@@ -17,12 +17,13 @@ import {
 	type WritethroughCallback,
 	writethroughNoop,
 } from "$c/lsp/index";
-import { getLanguageFromPath, highlightCode, type Theme } from "$c/modes/theme/theme";
+import { getLanguageFromPath, type Theme } from "$c/modes/theme/theme";
 import writeDescription from "$c/prompts/tools/write.md" with { type: "text" };
 import type { ToolSession } from "$c/sdk";
 import { type OutputMeta, outputMeta } from "$c/tools/output-meta";
+import { renderCodeCell, renderStatusLine } from "$c/tui";
 import { resolveToCwd } from "./path-utils";
-import { formatDiagnostics, formatExpandHint, formatStatusIcon, replaceTabs, shortenPath } from "./render-utils";
+import { formatDiagnostics, shortenPath } from "./render-utils";
 import type { RenderCallOptions } from "./renderers";
 
 const writeSchema = Type.Object({
@@ -134,27 +135,6 @@ function countLines(text: string): number {
 	return text.split("\n").length;
 }
 
-function formatStreamingContent(content: string, rawPath: string, uiTheme: Theme): string {
-	if (!content) return "";
-	const lang = getLanguageFromPath(rawPath);
-	const lines = content.split("\n");
-	const total = lines.length;
-	const displayLines = lines.slice(-WRITE_STREAMING_PREVIEW_LINES);
-	const hidden = total - displayLines.length;
-
-	const formattedLines = lang
-		? highlightCode(replaceTabs(displayLines.join("\n")), lang)
-		: displayLines.map((line: string) => uiTheme.fg("toolOutput", replaceTabs(line)));
-
-	let text = "\n\n";
-	if (hidden > 0) {
-		text += uiTheme.fg("dim", `${uiTheme.format.ellipsis} (${hidden} earlier lines)\n`);
-	}
-	text += formattedLines.join("\n");
-	text += uiTheme.fg("dim", `\n${uiTheme.format.ellipsis} (streaming)`);
-	return text;
-}
-
 function formatMetadataLine(lineCount: number | null, language: string | undefined, uiTheme: Theme): string {
 	const icon = uiTheme.getLangIcon(language);
 	if (lineCount !== null) {
@@ -167,16 +147,40 @@ export const writeToolRenderer = {
 	renderCall(args: WriteRenderArgs, uiTheme: Theme, options?: RenderCallOptions): Component {
 		const rawPath = args.file_path || args.path || "";
 		const filePath = shortenPath(rawPath);
-		const pathDisplay = filePath ? uiTheme.fg("accent", filePath) : uiTheme.fg("toolOutput", uiTheme.format.ellipsis);
-		const spinner =
-			options?.spinnerFrame !== undefined ? formatStatusIcon("running", uiTheme, options.spinnerFrame) : "";
-		let text = `${uiTheme.fg("toolTitle", uiTheme.bold("Write"))} ${spinner ? `${spinner} ` : ""}${pathDisplay}`;
+		const pathDisplay = filePath || uiTheme.format.ellipsis;
+		const status = options?.spinnerFrame !== undefined ? "running" : "pending";
 
-		// Show streaming preview of content
 		if (args.content) {
-			text += formatStreamingContent(args.content, rawPath, uiTheme);
+			const contentLines = args.content.split("\n");
+			const displayLines = contentLines.slice(-WRITE_STREAMING_PREVIEW_LINES);
+			const hidden = contentLines.length - displayLines.length;
+			const outputLines: string[] = [];
+			if (hidden > 0) {
+				outputLines.push(uiTheme.fg("dim", `${uiTheme.format.ellipsis} (${hidden} earlier lines)`));
+			}
+			outputLines.push(uiTheme.fg("dim", `${uiTheme.format.ellipsis} (streaming)`));
+
+			return {
+				render: (width: number) =>
+					renderCodeCell(
+						{
+							code: displayLines.join("\n"),
+							language: getLanguageFromPath(rawPath),
+							title: filePath ? `Write ${filePath}` : "Write",
+							status,
+							spinnerFrame: options?.spinnerFrame,
+							output: outputLines.join("\n"),
+							codeMaxLines: WRITE_STREAMING_PREVIEW_LINES,
+							expanded: true,
+							width,
+						},
+						uiTheme,
+					),
+				invalidate: () => {},
+			};
 		}
 
+		const text = renderStatusLine({ icon: status, title: "Write", description: pathDisplay }, uiTheme);
 		return new Text(text, 0, 0);
 	},
 
@@ -187,48 +191,38 @@ export const writeToolRenderer = {
 		args?: WriteRenderArgs,
 	): Component {
 		const rawPath = args?.file_path || args?.path || "";
+		const filePath = shortenPath(rawPath);
 		const fileContent = args?.content || "";
 		const lang = getLanguageFromPath(rawPath);
-		const contentLines = fileContent
-			? lang
-				? highlightCode(replaceTabs(fileContent), lang)
-				: fileContent.split("\n")
-			: [];
-		const totalLines = contentLines.length;
 		const outputLines: string[] = [];
 
 		outputLines.push(formatMetadataLine(countLines(fileContent), lang ?? "text", uiTheme));
 
-		if (fileContent) {
-			const maxLines = expanded ? contentLines.length : 10;
-			const displayLines = contentLines.slice(0, maxLines);
-			const remaining = contentLines.length - maxLines;
-
-			outputLines.push(
-				"",
-				...displayLines.map((line: string) =>
-					lang ? replaceTabs(line) : uiTheme.fg("toolOutput", replaceTabs(line)),
-				),
+		if (result.details?.diagnostics) {
+			const diagText = formatDiagnostics(result.details.diagnostics, expanded, uiTheme, (fp) =>
+				uiTheme.getLangIcon(getLanguageFromPath(fp)),
 			);
-			if (remaining > 0) {
-				outputLines.push(
-					uiTheme.fg(
-						"toolOutput",
-						`${uiTheme.format.ellipsis} (${remaining} more lines, ${totalLines} total) ${formatExpandHint(uiTheme)}`,
-					),
-				);
+			if (diagText.trim()) {
+				outputLines.push(...diagText.split("\n"));
 			}
 		}
 
-		// Show LSP diagnostics if available
-		if (result.details?.diagnostics) {
-			outputLines.push(
-				formatDiagnostics(result.details.diagnostics, expanded, uiTheme, (fp) =>
-					uiTheme.getLangIcon(getLanguageFromPath(fp)),
+		return {
+			render: (width: number) =>
+				renderCodeCell(
+					{
+						code: fileContent,
+						language: lang,
+						title: filePath ? `Write ${filePath}` : "Write",
+						status: "complete",
+						output: outputLines.join("\n"),
+						codeMaxLines: expanded ? Number.POSITIVE_INFINITY : 10,
+						expanded,
+						width,
+					},
+					uiTheme,
 				),
-			);
-		}
-
-		return new Text(outputLines.join("\n"), 0, 0);
+			invalidate: () => {},
+		};
 	},
 };
