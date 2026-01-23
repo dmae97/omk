@@ -3,9 +3,12 @@
 ## [Unreleased]
 
 ### Added
-
 - Added `omp commit` command to generate conventional commits with changelog updates
+- Added configurable settings for map-reduce analysis including concurrency, timeout, file thresholds, and token limits
+- Added support for excluding YAML lock files (`.lock.yml`, `.lock.yaml`, `-lock.yml`, `-lock.yaml`) from commit analysis
 
+### Changed
+- Changed changelog diff truncation limit to be configurable via settings
 ## [8.0.0] - 2026-01-23
 ### Added
 

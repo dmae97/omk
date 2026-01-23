@@ -1,23 +1,24 @@
 import { relative } from "node:path";
 import type { Api, Model } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
-import typesDescriptionPrompt from "$c/commit/prompts/types-description.md" with { type: "text" };
-import { parseModelPattern, parseModelString, SMOL_MODEL_PRIORITY } from "$c/config/model-resolver";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
-import { SettingsManager } from "$c/config/settings-manager";
-import { discoverAuthStorage, discoverModels } from "$c/sdk";
-import { loadProjectContextFiles } from "$c/system-prompt";
 import {
 	extractScopeCandidates,
 	generateConventionalAnalysis,
 	generateSummary,
 	validateAnalysis,
 	validateSummary,
-} from "./analysis";
-import { runChangelogFlow } from "./changelog";
-import { ControlledGit } from "./git";
-import { runMapReduceAnalysis, shouldUseMapReduce } from "./map-reduce";
-import type { CommitCommandArgs, ConventionalAnalysis } from "./types";
+} from "$c/commit/analysis";
+import { runChangelogFlow } from "$c/commit/changelog";
+import { ControlledGit } from "$c/commit/git";
+import { runMapReduceAnalysis, shouldUseMapReduce } from "$c/commit/map-reduce";
+import summaryRetryPrompt from "$c/commit/prompts/summary-retry.md" with { type: "text" };
+import typesDescriptionPrompt from "$c/commit/prompts/types-description.md" with { type: "text" };
+import type { CommitCommandArgs, ConventionalAnalysis } from "$c/commit/types";
+import { parseModelPattern, parseModelString, SMOL_MODEL_PRIORITY } from "$c/config/model-resolver";
+import { renderPromptTemplate } from "$c/config/prompt-templates";
+import { SettingsManager } from "$c/config/settings-manager";
+import { discoverAuthStorage, discoverModels } from "$c/sdk";
+import { loadProjectContextFiles } from "$c/system-prompt";
 
 const SUMMARY_MAX_CHARS = 72;
 const RECENT_COMMITS_COUNT = 8;
@@ -29,6 +30,7 @@ const TYPES_DESCRIPTION = renderPromptTemplate(typesDescriptionPrompt);
 export async function runCommitCommand(args: CommitCommandArgs): Promise<void> {
 	const cwd = process.cwd();
 	const settingsManager = await SettingsManager.create(cwd);
+	const commitSettings = settingsManager.getCommitSettings();
 	const authStorage = await discoverAuthStorage();
 	const modelRegistry = await discoverModels(authStorage);
 
@@ -64,6 +66,7 @@ export async function runCommitCommand(args: CommitCommandArgs): Promise<void> {
 			apiKey: primaryApiKey,
 			stagedFiles,
 			dryRun: args.dryRun,
+			maxDiffChars: commitSettings.changelogMaxDiffChars,
 		});
 	}
 
@@ -89,6 +92,7 @@ export async function runCommitCommand(args: CommitCommandArgs): Promise<void> {
 		primaryApiKey,
 		smolModel,
 		smolApiKey,
+		commitSettings,
 	});
 
 	const analysisValidation = validateAnalysis(analysis);
@@ -131,8 +135,22 @@ async function generateAnalysis(input: {
 	primaryApiKey: string;
 	smolModel: Model<Api>;
 	smolApiKey: string;
+	commitSettings: {
+		mapReduceEnabled: boolean;
+		mapReduceMinFiles: number;
+		mapReduceMaxFileTokens: number;
+		mapReduceTimeoutMs: number;
+		mapReduceMaxConcurrency: number;
+		changelogMaxDiffChars: number;
+	};
 }): Promise<ConventionalAnalysis> {
-	if (shouldUseMapReduce(input.diff)) {
+	if (
+		shouldUseMapReduce(input.diff, {
+			enabled: input.commitSettings.mapReduceEnabled,
+			minFiles: input.commitSettings.mapReduceMinFiles,
+			maxFileTokens: input.commitSettings.mapReduceMaxFileTokens,
+		})
+	) {
 		writeStdout("Large diff detected, using map-reduce analysis...");
 		return runMapReduceAnalysis({
 			model: input.primaryModel,
@@ -143,6 +161,13 @@ async function generateAnalysis(input: {
 			stat: input.stat,
 			scopeCandidates: input.scopeCandidates,
 			typesDescription: TYPES_DESCRIPTION,
+			settings: {
+				enabled: input.commitSettings.mapReduceEnabled,
+				minFiles: input.commitSettings.mapReduceMinFiles,
+				maxFileTokens: input.commitSettings.mapReduceMaxFileTokens,
+				maxConcurrency: input.commitSettings.mapReduceMaxConcurrency,
+				timeoutMs: input.commitSettings.mapReduceTimeoutMs,
+			},
 		});
 	}
 
@@ -191,8 +216,10 @@ async function generateSummaryWithRetry(input: {
 }
 
 function buildRetryContext(base: string | undefined, errors: string[]): string {
-	const parts = [base, `Previous summary failed validation: ${errors.join("; ")}`].filter(Boolean);
-	return parts.join("\n");
+	return renderPromptTemplate(summaryRetryPrompt, {
+		base_context: base,
+		errors: errors.join("; "),
+	});
 }
 
 function formatCommitMessage(analysis: ConventionalAnalysis, summary: string): string {

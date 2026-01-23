@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import type { CommitCommandArgs } from "./types";
+import type { CommitCommandArgs } from "$c/commit/types";
 
 const FLAG_ALIASES = new Map<string, string>([
 	["-c", "--context"],

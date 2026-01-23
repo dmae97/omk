@@ -1,13 +1,13 @@
+import { existsSync, readFileSync } from "node:fs";
+import { rename } from "node:fs/promises";
+import { join } from "node:path";
+import { logger } from "@oh-my-pi/pi-utils";
+import { YAML } from "bun";
 import { type Settings as SettingsItem, settingsCapability } from "$c/capability/settings";
 import { getAgentDbPath, getAgentDir, getConfigPath } from "$c/config";
 import { loadCapability } from "$c/discovery";
 import type { SymbolPreset } from "$c/modes/theme/theme";
 import { AgentStorage } from "$c/session/agent-storage";
-import { logger } from "@oh-my-pi/pi-utils";
-import { YAML } from "bun";
-import { existsSync, readFileSync } from "node:fs";
-import { rename } from "node:fs/promises";
-import { join } from "node:path";
 
 export interface CompactionSettings {
 	enabled?: boolean; // default: true

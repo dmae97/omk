@@ -1,5 +1,6 @@
 import { logger } from "@oh-my-pi/pi-utils";
 import { parseFileDiffs, parseNumstat } from "$c/commit/git/diff";
+import { GitError } from "$c/commit/git/errors";
 import { commit, push, runGitCommand, stageFiles } from "$c/commit/git/operations";
 import type { FileDiff, NumstatEntry } from "$c/commit/types";
 
@@ -86,7 +87,7 @@ export class ControlledGit {
 	private ensureSuccess(result: { exitCode: number; stderr: string }, label: string): void {
 		if (result.exitCode !== 0) {
 			logger.error("commit git command failed", { label, stderr: result.stderr });
-			throw new Error(`${label} failed: ${result.stderr || "unknown error"}`);
+			throw new GitError(label, result.stderr);
 		}
 	}
 }

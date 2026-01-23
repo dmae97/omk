@@ -8,7 +8,7 @@ import type { ControlledGit } from "$c/commit/git";
 
 const CHANGELOG_SECTIONS = ["Breaking Changes", "Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"];
 
-const MAX_DIFF_CHARS = 120_000;
+const DEFAULT_MAX_DIFF_CHARS = 120_000;
 
 export interface ChangelogFlowInput {
 	git: ControlledGit;
@@ -17,6 +17,7 @@ export interface ChangelogFlowInput {
 	apiKey: string;
 	stagedFiles: string[];
 	dryRun: boolean;
+	maxDiffChars?: number;
 }
 
 /**
@@ -29,6 +30,7 @@ export async function runChangelogFlow({
 	apiKey,
 	stagedFiles,
 	dryRun,
+	maxDiffChars,
 }: ChangelogFlowInput): Promise<string[]> {
 	if (stagedFiles.length === 0) return [];
 	const boundaries = await detectChangelogBoundaries(cwd, stagedFiles);
@@ -39,7 +41,7 @@ export async function runChangelogFlow({
 		const diff = await git.getDiffForFiles(boundary.files, true);
 		if (!diff.trim()) continue;
 		const stat = await git.getStatForFiles(boundary.files, true);
-		const diffForPrompt = truncateDiff(diff, MAX_DIFF_CHARS);
+		const diffForPrompt = truncateDiff(diff, maxDiffChars ?? DEFAULT_MAX_DIFF_CHARS);
 		const changelogContent = await Bun.file(boundary.changelogPath).text();
 		let unreleased: { startLine: number; endLine: number; entries: Record<string, string[]> };
 		try {

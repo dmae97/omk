@@ -18,12 +18,24 @@ export interface MapPhaseInput {
 	model: Model<Api>;
 	apiKey: string;
 	files: FileDiff[];
+	config?: {
+		maxFileTokens?: number;
+		maxConcurrency?: number;
+		timeoutMs?: number;
+		maxRetries?: number;
+		retryBackoffMs?: number;
+	};
 }
 
-export async function runMapPhase({ model, apiKey, files }: MapPhaseInput): Promise<FileObservation[]> {
+export async function runMapPhase({ model, apiKey, files, config }: MapPhaseInput): Promise<FileObservation[]> {
 	const filtered = files.filter((file) => !isExcludedFile(file.filename));
 	const systemPrompt = renderPromptTemplate(fileObserverSystemPrompt);
-	return runWithConcurrency(filtered, MAX_CONCURRENCY, async (file) => {
+	const maxFileTokens = config?.maxFileTokens ?? MAX_FILE_TOKENS;
+	const maxConcurrency = config?.maxConcurrency ?? MAX_CONCURRENCY;
+	const timeoutMs = config?.timeoutMs ?? MAP_PHASE_TIMEOUT_MS;
+	const maxRetries = config?.maxRetries ?? MAX_RETRIES;
+	const retryBackoffMs = config?.retryBackoffMs ?? RETRY_BACKOFF_MS;
+	return runWithConcurrency(filtered, maxConcurrency, async (file) => {
 		if (file.isBinary) {
 			return {
 				file: file.filename,
@@ -34,29 +46,33 @@ export async function runMapPhase({ model, apiKey, files }: MapPhaseInput): Prom
 		}
 
 		const contextHeader = generateContextHeader(filtered, file.filename);
-		const truncated = truncateToTokenLimit(file.content, MAX_FILE_TOKENS);
+		const truncated = truncateToTokenLimit(file.content, maxFileTokens);
 		const prompt = renderPromptTemplate(fileObserverUserPrompt, {
 			filename: file.filename,
 			diff: truncated,
 			context_header: contextHeader,
 		});
 
-		const response = await withRetry(async () => {
-			const controller = new AbortController();
-			const timeout = setTimeout(() => controller.abort(), MAP_PHASE_TIMEOUT_MS);
-			try {
-				return await completeSimple(
-					model,
-					{
-						systemPrompt: systemPrompt,
-						messages: [{ role: "user", content: prompt, timestamp: Date.now() }],
-					},
-					{ apiKey, maxTokens: 400, signal: controller.signal },
-				);
-			} finally {
-				clearTimeout(timeout);
-			}
-		}, MAX_RETRIES);
+		const response = await withRetry(
+			async () => {
+				const controller = new AbortController();
+				const timeout = setTimeout(() => controller.abort(), timeoutMs);
+				try {
+					return await completeSimple(
+						model,
+						{
+							systemPrompt: systemPrompt,
+							messages: [{ role: "user", content: prompt, timestamp: Date.now() }],
+						},
+						{ apiKey, maxTokens: 400, signal: controller.signal },
+					);
+				} finally {
+					clearTimeout(timeout);
+				}
+			},
+			maxRetries,
+			retryBackoffMs,
+		);
 
 		const observations = parseObservations(response);
 		return {
@@ -157,7 +173,7 @@ async function runWithConcurrency<T, R>(
 	return results;
 }
 
-async function withRetry<T>(fn: () => Promise<T>, attempts: number): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, attempts: number, backoffMs: number): Promise<T> {
 	let lastError: unknown;
 	for (let attempt = 0; attempt < attempts; attempt += 1) {
 		try {
@@ -165,7 +181,7 @@ async function withRetry<T>(fn: () => Promise<T>, attempts: number): Promise<T> 
 		} catch (error) {
 			lastError = error;
 			if (attempt < attempts - 1) {
-				await Bun.sleep(RETRY_BACKOFF_MS * (attempt + 1));
+				await Bun.sleep(backoffMs * (attempt + 1));
 			}
 		}
 	}
