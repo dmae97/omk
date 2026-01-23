@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { processFileArguments } from "../src/cli/file-processor";
-import { SettingsManager } from "../src/core/settings-manager";
-import type { ToolSession } from "../src/core/tools/index";
-import { ReadTool } from "../src/core/tools/read";
+import { processFileArguments } from "$c/cli/file-processor";
+import { SettingsManager } from "$c/core/settings-manager";
+import type { ToolSession } from "$c/core/tools/index";
+import { ReadTool } from "$c/core/tools/read";
 
 // 1x1 red PNG image as base64 (smallest valid PNG)
 const TINY_PNG_BASE64 =

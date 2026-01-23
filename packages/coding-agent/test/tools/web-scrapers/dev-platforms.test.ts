@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { handleDevTo } from "../../../src/core/tools/web-scrapers/devto";
-import { handleGitLab } from "../../../src/core/tools/web-scrapers/gitlab";
-import { handleHackerNews } from "../../../src/core/tools/web-scrapers/hackernews";
-import { handleLobsters } from "../../../src/core/tools/web-scrapers/lobsters";
+import { handleDevTo } from "$c/core/tools/web-scrapers/devto";
+import { handleGitLab } from "$c/core/tools/web-scrapers/gitlab";
+import { handleHackerNews } from "$c/core/tools/web-scrapers/hackernews";
+import { handleLobsters } from "$c/core/tools/web-scrapers/lobsters";
 
 const SKIP = !process.env.WEB_FETCH_INTEGRATION;
 

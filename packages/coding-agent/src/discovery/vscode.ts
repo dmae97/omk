@@ -5,10 +5,10 @@
  * Supports MCP server discovery from `mcp.json` with nested `mcp.servers` structure.
  */
 
-import { readFile } from "../capability/fs";
-import { registerProvider } from "../capability/index";
-import { type MCPServer, mcpCapability } from "../capability/mcp";
-import type { LoadContext, LoadResult } from "../capability/types";
+import { readFile } from "$c/capability/fs";
+import { registerProvider } from "$c/capability/index";
+import { type MCPServer, mcpCapability } from "$c/capability/mcp";
+import type { LoadContext, LoadResult } from "$c/capability/types";
 import { createSourceMeta, expandEnvVarsDeep, getProjectPath, parseJSON } from "./helpers";
 
 const PROVIDER_ID = "vscode";

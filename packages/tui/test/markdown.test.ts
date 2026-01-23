@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Chalk } from "chalk";
-import { Markdown } from "../src/components/markdown";
+import { Markdown } from "$tui/components/markdown";
 import { defaultMarkdownTheme } from "./test-themes";
 
 // Force full color in CI so ANSI assertions are deterministic

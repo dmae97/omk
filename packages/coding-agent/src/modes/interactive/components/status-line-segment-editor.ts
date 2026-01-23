@@ -10,8 +10,8 @@
  */
 
 import { Container, matchesKey } from "@oh-my-pi/pi-tui";
-import type { StatusLineSegmentId } from "../../../core/settings-manager";
-import { theme } from "../theme/theme";
+import type { StatusLineSegmentId } from "$c/core/settings-manager";
+import { theme } from "$c/modes/interactive/theme/theme";
 import { ALL_SEGMENT_IDS } from "./status-line/segments";
 
 // Segment display names and short descriptions

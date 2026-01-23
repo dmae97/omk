@@ -9,9 +9,9 @@ import { type Dirent, existsSync, readdirSync } from "node:fs";
 import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import * as typebox from "@sinclair/typebox";
-import { getAgentDir, getConfigDirs } from "../../config";
-import * as piCodingAgent from "../../index";
-import { execCommand } from "../exec";
+import { getAgentDir, getConfigDirs } from "$c/config";
+import { execCommand } from "$c/core/exec";
+import * as piCodingAgent from "$c/index";
 import { ReviewCommand } from "./bundled/review";
 import type {
 	CustomCommand,

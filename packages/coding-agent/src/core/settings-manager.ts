@@ -1,10 +1,10 @@
 import { rename } from "node:fs/promises";
 import { join } from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
-import { type Settings as SettingsItem, settingsCapability } from "../capability/settings";
-import { getAgentDbPath, getAgentDir } from "../config";
-import { loadCapability } from "../discovery";
-import type { SymbolPreset } from "../modes/interactive/theme/theme";
+import { type Settings as SettingsItem, settingsCapability } from "$c/capability/settings";
+import { getAgentDbPath, getAgentDir } from "$c/config";
+import { loadCapability } from "$c/discovery";
+import type { SymbolPreset } from "$c/modes/interactive/theme/theme";
 import { AgentStorage } from "./agent-storage";
 
 export interface CompactionSettings {

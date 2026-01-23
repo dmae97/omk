@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { $ } from "bun";
-import { SettingsManager } from "../core/settings-manager";
+import { SettingsManager } from "$c/core/settings-manager";
 
 export interface ShellConfig {
 	shell: string;

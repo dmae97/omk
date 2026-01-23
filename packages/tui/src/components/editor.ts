@@ -1,8 +1,8 @@
-import type { AutocompleteProvider, CombinedAutocompleteProvider } from "../autocomplete";
-import { matchesKey } from "../keys";
-import type { SymbolTheme } from "../symbols";
-import { type Component, CURSOR_MARKER, type Focusable } from "../tui";
-import { getSegmenter, isPunctuationChar, isWhitespaceChar, truncateToWidth, visibleWidth } from "../utils";
+import type { AutocompleteProvider, CombinedAutocompleteProvider } from "$tui/autocomplete";
+import { matchesKey } from "$tui/keys";
+import type { SymbolTheme } from "$tui/symbols";
+import { type Component, CURSOR_MARKER, type Focusable } from "$tui/tui";
+import { getSegmenter, isPunctuationChar, isWhitespaceChar, truncateToWidth, visibleWidth } from "$tui/utils";
 import { SelectList, type SelectListTheme } from "./select-list";
 
 const segmenter = getSegmenter();

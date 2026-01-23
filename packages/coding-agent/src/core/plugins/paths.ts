@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { CONFIG_DIR_NAME, getConfigDirPaths } from "../../config";
+import { CONFIG_DIR_NAME, getConfigDirPaths } from "$c/config";
 
 // =============================================================================
 // Plugin Directory Paths

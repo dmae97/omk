@@ -2,22 +2,22 @@ import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { OAuthProvider } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Input, Loader, Spacer, Text } from "@oh-my-pi/pi-tui";
-import { getAgentDbPath } from "../../../config";
-import { SessionManager } from "../../../core/session-manager";
-import { setPreferredImageProvider, setPreferredWebSearchProvider } from "../../../core/tools/index";
-import { disableProvider, enableProvider } from "../../../discovery";
-import { AssistantMessageComponent } from "../components/assistant-message";
-import { ExtensionDashboard } from "../components/extensions";
-import { HistorySearchComponent } from "../components/history-search";
-import { ModelSelectorComponent } from "../components/model-selector";
-import { OAuthSelectorComponent } from "../components/oauth-selector";
-import { SessionSelectorComponent } from "../components/session-selector";
-import { SettingsSelectorComponent } from "../components/settings-selector";
-import { ToolExecutionComponent } from "../components/tool-execution";
-import { TreeSelectorComponent } from "../components/tree-selector";
-import { UserMessageSelectorComponent } from "../components/user-message-selector";
-import { getAvailableThemes, getSymbolTheme, setSymbolPreset, setTheme, theme } from "../theme/theme";
-import type { InteractiveModeContext } from "../types";
+import { getAgentDbPath } from "$c/config";
+import { SessionManager } from "$c/core/session-manager";
+import { setPreferredImageProvider, setPreferredWebSearchProvider } from "$c/core/tools/index";
+import { disableProvider, enableProvider } from "$c/discovery";
+import { AssistantMessageComponent } from "$c/modes/interactive/components/assistant-message";
+import { ExtensionDashboard } from "$c/modes/interactive/components/extensions";
+import { HistorySearchComponent } from "$c/modes/interactive/components/history-search";
+import { ModelSelectorComponent } from "$c/modes/interactive/components/model-selector";
+import { OAuthSelectorComponent } from "$c/modes/interactive/components/oauth-selector";
+import { SessionSelectorComponent } from "$c/modes/interactive/components/session-selector";
+import { SettingsSelectorComponent } from "$c/modes/interactive/components/settings-selector";
+import { ToolExecutionComponent } from "$c/modes/interactive/components/tool-execution";
+import { TreeSelectorComponent } from "$c/modes/interactive/components/tree-selector";
+import { UserMessageSelectorComponent } from "$c/modes/interactive/components/user-message-selector";
+import { getAvailableThemes, getSymbolTheme, setSymbolPreset, setTheme, theme } from "$c/modes/interactive/theme/theme";
+import type { InteractiveModeContext } from "$c/modes/interactive/types";
 
 export class SelectorController {
 	constructor(private ctx: InteractiveModeContext) {}

@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { createTempDirSync } from "@oh-my-pi/pi-utils";
-import { PythonKernel } from "../../src/core/python-kernel";
-import { PYTHON_PRELUDE } from "../../src/core/python-prelude";
-import * as shell from "../../src/utils/shell";
-import * as shellSnapshot from "../../src/utils/shell-snapshot";
+import { PythonKernel } from "$c/core/python-kernel";
+import { PYTHON_PRELUDE } from "$c/core/python-prelude";
+import * as shell from "$c/utils/shell";
+import * as shellSnapshot from "$c/utils/shell-snapshot";
 
 class FakeWebSocket {
 	static OPEN = 1;

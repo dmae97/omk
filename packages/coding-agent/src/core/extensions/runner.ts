@@ -6,9 +6,9 @@ import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Model } from "@oh-my-pi/pi-ai";
 import type { KeyId } from "@oh-my-pi/pi-tui";
 import { logger } from "@oh-my-pi/pi-utils";
-import { type Theme, theme } from "../../modes/interactive/theme/theme";
-import type { ModelRegistry } from "../model-registry";
-import type { SessionManager } from "../session-manager";
+import type { ModelRegistry } from "$c/core/model-registry";
+import type { SessionManager } from "$c/core/session-manager";
+import { type Theme, theme } from "$c/modes/interactive/theme/theme";
 import type {
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,

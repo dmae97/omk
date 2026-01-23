@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as pythonExecutor from "../src/core/python-executor";
-import * as pythonKernel from "../src/core/python-kernel";
-import { createTools, type ToolSession } from "../src/core/tools/index";
-import { PythonTool } from "../src/core/tools/python";
+import * as pythonExecutor from "$c/core/python-executor";
+import * as pythonKernel from "$c/core/python-kernel";
+import { createTools, type ToolSession } from "$c/core/tools/index";
+import { PythonTool } from "$c/core/tools/python";
 
 function createSettings(overrides?: Partial<ToolSession["settings"]>): ToolSession["settings"] {
 	return {

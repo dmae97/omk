@@ -4,15 +4,15 @@
  * Agents are embedded at build time via Bun's import with { type: "text" }.
  */
 
-import { parseFrontmatter } from "../../../core/frontmatter";
-import { parseAgentFields } from "../../../discovery/helpers";
-import exploreMd from "../../../prompts/agents/explore.md" with { type: "text" };
+import { parseFrontmatter } from "$c/core/frontmatter";
+import { renderPromptTemplate } from "$c/core/prompt-templates";
+import { parseAgentFields } from "$c/discovery/helpers";
+import exploreMd from "$c/prompts/agents/explore.md" with { type: "text" };
 // Embed agent markdown files at build time
-import agentFrontmatterTemplate from "../../../prompts/agents/frontmatter.md" with { type: "text" };
-import planMd from "../../../prompts/agents/plan.md" with { type: "text" };
-import reviewerMd from "../../../prompts/agents/reviewer.md" with { type: "text" };
-import taskMd from "../../../prompts/agents/task.md" with { type: "text" };
-import { renderPromptTemplate } from "../../prompt-templates";
+import agentFrontmatterTemplate from "$c/prompts/agents/frontmatter.md" with { type: "text" };
+import planMd from "$c/prompts/agents/plan.md" with { type: "text" };
+import reviewerMd from "$c/prompts/agents/reviewer.md" with { type: "text" };
+import taskMd from "$c/prompts/agents/task.md" with { type: "text" };
 import type { AgentDefinition, AgentSource } from "./types";
 
 interface AgentFrontmatter {

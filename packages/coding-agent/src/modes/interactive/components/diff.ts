@@ -1,5 +1,5 @@
 import * as Diff from "diff";
-import { theme } from "../theme/theme";
+import { theme } from "$c/modes/interactive/theme/theme";
 
 /**
  * Parse diff line to extract prefix, line number, and content.

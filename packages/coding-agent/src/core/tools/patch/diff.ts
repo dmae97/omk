@@ -6,7 +6,7 @@
  */
 
 import * as Diff from "diff";
-import { resolveToCwd } from "../path-utils";
+import { resolveToCwd } from "$c/core/tools/path-utils";
 import { previewPatch } from "./applicator";
 import { DEFAULT_FUZZY_THRESHOLD, findMatch } from "./fuzzy";
 import { adjustIndentation, normalizeToLF, stripBom } from "./normalize";

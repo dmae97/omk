@@ -35,10 +35,10 @@ import "./agents-md";
 import "./mcp-json";
 import "./ssh";
 
-export type { ContextFile } from "../capability/context-file";
-export type { Extension, ExtensionManifest } from "../capability/extension";
-export type { ExtensionModule } from "../capability/extension-module";
-export type { Hook } from "../capability/hook";
+export type { ContextFile } from "$c/capability/context-file";
+export type { Extension, ExtensionManifest } from "$c/capability/extension";
+export type { ExtensionModule } from "$c/capability/extension-module";
+export type { Hook } from "$c/capability/hook";
 // Re-export the main API from capability registry
 export {
 	cacheStats,
@@ -62,18 +62,18 @@ export {
 	// Cache management
 	reset,
 	setDisabledProviders,
-} from "../capability/index";
-export type { Instruction } from "../capability/instruction";
+} from "$c/capability/index";
+export type { Instruction } from "$c/capability/instruction";
 // Re-export capability item types
-export type { MCPServer } from "../capability/mcp";
-export type { Prompt } from "../capability/prompt";
-export type { Rule, RuleFrontmatter } from "../capability/rule";
-export type { Settings } from "../capability/settings";
-export type { Skill, SkillFrontmatter } from "../capability/skill";
-export type { SlashCommand } from "../capability/slash-command";
-export type { SSHHost } from "../capability/ssh";
-export type { SystemPrompt } from "../capability/system-prompt";
-export type { CustomTool } from "../capability/tool";
+export type { MCPServer } from "$c/capability/mcp";
+export type { Prompt } from "$c/capability/prompt";
+export type { Rule, RuleFrontmatter } from "$c/capability/rule";
+export type { Settings } from "$c/capability/settings";
+export type { Skill, SkillFrontmatter } from "$c/capability/skill";
+export type { SlashCommand } from "$c/capability/slash-command";
+export type { SSHHost } from "$c/capability/ssh";
+export type { SystemPrompt } from "$c/capability/system-prompt";
+export type { CustomTool } from "$c/capability/tool";
 // Re-export types
 export type {
 	Capability,
@@ -85,4 +85,4 @@ export type {
 	Provider,
 	ProviderInfo,
 	SourceMeta,
-} from "../capability/types";
+} from "$c/capability/types";

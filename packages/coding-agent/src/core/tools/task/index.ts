@@ -20,11 +20,11 @@ import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "@oh-my
 import type { Usage } from "@oh-my-pi/pi-ai";
 import { $ } from "bun";
 import { nanoid } from "nanoid";
-import type { Theme } from "../../../modes/interactive/theme/theme";
-import taskDescriptionTemplate from "../../../prompts/tools/task.md" with { type: "text" };
-import { renderPromptTemplate } from "../../prompt-templates";
+import { renderPromptTemplate } from "$c/core/prompt-templates";
+import { formatDuration } from "$c/core/tools/render-utils";
+import type { Theme } from "$c/modes/interactive/theme/theme";
+import taskDescriptionTemplate from "$c/prompts/tools/task.md" with { type: "text" };
 import type { ToolSession } from "..";
-import { formatDuration } from "../render-utils";
 import { discoverAgents, getAgent } from "./discovery";
 import { runSubprocess } from "./executor";
 import { mapWithConcurrencyLimit } from "./parallel";

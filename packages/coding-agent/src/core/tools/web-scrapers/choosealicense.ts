@@ -1,4 +1,4 @@
-import { parseFrontmatter } from "../../../core/frontmatter";
+import { parseFrontmatter } from "$c/core/frontmatter";
 import type { RenderResult, SpecialHandler } from "./types";
 import { finalizeOutput, loadPage } from "./types";
 

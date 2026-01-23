@@ -8,7 +8,7 @@ import {
 } from "@oh-my-pi/pi-ai";
 import { Type } from "@sinclair/typebox";
 import { describe, expect, it } from "vitest";
-import { agentLoop, agentLoopContinue } from "../src/agent-loop";
+import { agentLoop, agentLoopContinue } from "$agent/agent-loop";
 import type {
 	AgentContext,
 	AgentEvent,
@@ -17,7 +17,7 @@ import type {
 	AgentTool,
 	AgentToolContext,
 	ToolCallContext,
-} from "../src/types";
+} from "$agent/types";
 
 // Mock stream for testing - mimics MockAssistantStream
 class MockAssistantStream extends EventStream<AssistantMessageEvent, AssistantMessage> {

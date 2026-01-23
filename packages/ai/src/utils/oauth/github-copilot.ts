@@ -3,7 +3,7 @@
  */
 
 import { abortableSleep } from "@oh-my-pi/pi-utils";
-import { getModels } from "../../models";
+import { getModels } from "$ai/models";
 import type { OAuthCredentials } from "./types";
 
 const decode = (s: string) => atob(s);

@@ -5,7 +5,7 @@
  */
 
 import { logger } from "@oh-my-pi/pi-utils";
-import { getAgentDbPath } from "../config";
+import { getAgentDbPath } from "$c/config";
 import { AgentStorage } from "./agent-storage";
 import type { AuthCredential, AuthCredentialEntry, AuthStorageData } from "./auth-storage";
 import type { Settings } from "./settings-manager";

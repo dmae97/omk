@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
-import { CONFIG_DIR_NAME } from "../../config";
+import { CONFIG_DIR_NAME } from "$c/config";
 import { getControlDir, getControlPathTemplate, type SSHConnectionTarget } from "./connection-manager";
 
 const REMOTE_DIR = join(homedir(), CONFIG_DIR_NAME, "remote");

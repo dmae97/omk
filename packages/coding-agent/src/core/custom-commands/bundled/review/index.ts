@@ -12,10 +12,10 @@
  * multiple reviewer agents based on diff weight and locality.
  */
 
-import reviewRequestTemplate from "../../../../prompts/review-request.md" with { type: "text" };
-import type { HookCommandContext } from "../../../hooks/types";
-import { renderPromptTemplate } from "../../../prompt-templates";
-import type { CustomCommand, CustomCommandAPI } from "../../types";
+import type { CustomCommand, CustomCommandAPI } from "$c/core/custom-commands/types";
+import type { HookCommandContext } from "$c/core/hooks/types";
+import { renderPromptTemplate } from "$c/core/prompt-templates";
+import reviewRequestTemplate from "$c/prompts/review-request.md" with { type: "text" };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types

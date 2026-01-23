@@ -1,0 +1,26 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"baseUrl": ".",
+		"paths": {
+			"$ai/*": ["./src/*"],
+			"$c/*": ["../coding-agent/src/*"],
+			"$tui/*": ["../tui/src/*"],
+			"$agent/*": ["../agent/src/*"],
+			"$stats/*": ["../omp-stats/src/*"],
+			"@oh-my-pi/pi-ai": ["./src/index.ts"],
+			"@oh-my-pi/pi-ai/*": ["./src/*"],
+			"@oh-my-pi/pi-agent-core": ["../agent/src/index.ts"],
+			"@oh-my-pi/pi-agent-core/*": ["../agent/src/*"],
+			"@oh-my-pi/pi-utils": ["../pi-utils/src/index.ts"],
+			"@oh-my-pi/pi-utils/*": ["../pi-utils/src/*"],
+			"@oh-my-pi/pi-coding-agent": ["../coding-agent/src/index.ts"],
+			"@oh-my-pi/pi-coding-agent/*": ["../coding-agent/src/*"],
+			"@oh-my-pi/pi-tui": ["../tui/src/index.ts"],
+			"@oh-my-pi/pi-tui/*": ["../tui/src/*"]
+		}
+	},
+	"include": ["src/**/*.ts"],
+	"exclude": ["node_modules", "dist"]
+}

@@ -7,9 +7,9 @@
 import type { AgentEvent, AgentMessage, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent } from "@oh-my-pi/pi-ai";
 import { createSanitizerStream, createSplitterStream, createTextDecoderStream, ptree } from "@oh-my-pi/pi-utils";
-import type { SessionStats } from "../../core/agent-session";
-import type { BashResult } from "../../core/bash-executor";
-import type { CompactionResult } from "../../core/compaction/index";
+import type { SessionStats } from "$c/core/agent-session";
+import type { BashResult } from "$c/core/bash-executor";
+import type { CompactionResult } from "$c/core/compaction/index";
 import type { RpcCommand, RpcResponse, RpcSessionState } from "./rpc-types";
 
 /** Distributive Omit that works with union types */

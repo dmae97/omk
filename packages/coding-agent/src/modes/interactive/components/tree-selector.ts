@@ -8,9 +8,9 @@ import {
 	TruncatedText,
 	truncateToWidth,
 } from "@oh-my-pi/pi-tui";
-import type { SessionTreeNode } from "../../../core/session-manager";
-import { shortenPath } from "../../../core/tools/render-utils";
-import { theme } from "../theme/theme";
+import type { SessionTreeNode } from "$c/core/session-manager";
+import { shortenPath } from "$c/core/tools/render-utils";
+import { theme } from "$c/modes/interactive/theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 
 /** Gutter info: position (displayIndent where connector was) and whether to show │ */

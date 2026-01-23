@@ -9,8 +9,8 @@
  * - 14 websets tools (CRUD, items, search, enrichment, monitor)
  */
 
-import type { CustomTool } from "../../custom-tools/types";
-import type { ExaSettings } from "../../settings-manager";
+import type { CustomTool } from "$c/core/custom-tools/types";
+import type { ExaSettings } from "$c/core/settings-manager";
 import { companyTool } from "./company";
 import { linkedinTool } from "./linkedin";
 import { researcherTools } from "./researcher";

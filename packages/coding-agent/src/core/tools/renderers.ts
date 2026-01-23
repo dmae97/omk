@@ -5,8 +5,8 @@
  */
 
 import type { Component } from "@oh-my-pi/pi-tui";
-import type { Theme } from "../../modes/interactive/theme/theme";
-import type { RenderResultOptions } from "../custom-tools/types";
+import type { RenderResultOptions } from "$c/core/custom-tools/types";
+import type { Theme } from "$c/modes/interactive/theme/theme";
 import { askToolRenderer } from "./ask";
 import { bashToolRenderer } from "./bash";
 import { calculatorToolRenderer } from "./calculator";

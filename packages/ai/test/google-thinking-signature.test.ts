@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isThinkingPart, retainThoughtSignature } from "../src/providers/google-shared";
+import { isThinkingPart, retainThoughtSignature } from "$ai/providers/google-shared";
 
 describe("Google thinking detection (thoughtSignature)", () => {
 	it("treats part.thought === true as thinking", () => {

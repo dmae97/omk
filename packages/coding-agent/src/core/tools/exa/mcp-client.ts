@@ -8,8 +8,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { logger } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
-import type { CustomTool, CustomToolResult } from "../../custom-tools/types";
-import { callMCP } from "../../mcp/json-rpc";
+import type { CustomTool, CustomToolResult } from "$c/core/custom-tools/types";
+import { callMCP } from "$c/core/mcp/json-rpc";
 import type {
 	ExaRenderDetails,
 	ExaSearchResponse,

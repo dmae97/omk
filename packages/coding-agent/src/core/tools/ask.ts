@@ -19,10 +19,10 @@ import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallb
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { type Theme, theme } from "../../modes/interactive/theme/theme";
-import askDescription from "../../prompts/tools/ask.md" with { type: "text" };
-import type { RenderResultOptions } from "../custom-tools/types";
-import { renderPromptTemplate } from "../prompt-templates";
+import type { RenderResultOptions } from "$c/core/custom-tools/types";
+import { renderPromptTemplate } from "$c/core/prompt-templates";
+import { type Theme, theme } from "$c/modes/interactive/theme/theme";
+import askDescription from "$c/prompts/tools/ask.md" with { type: "text" };
 import type { ToolSession } from "./index";
 import { ToolUIKit } from "./render-utils";
 

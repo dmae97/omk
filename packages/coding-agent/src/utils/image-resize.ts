@@ -1,5 +1,5 @@
 import type { ImageContent } from "@oh-my-pi/pi-ai";
-import * as photon from "../vendor/photon";
+import * as photon from "$c/vendor/photon";
 
 export interface ImageResizeOptions {
 	maxWidth?: number; // Default: 2000

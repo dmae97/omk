@@ -3,7 +3,7 @@
  */
 
 import { Container, Input, matchesKey, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
-import { theme } from "../theme/theme";
+import { theme } from "$c/modes/interactive/theme/theme";
 import { CountdownTimer } from "./countdown-timer";
 import { DynamicBorder } from "./dynamic-border";
 

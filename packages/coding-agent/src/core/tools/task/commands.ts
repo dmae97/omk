@@ -5,13 +5,12 @@
  */
 
 import * as path from "node:path";
-import { type SlashCommand, slashCommandCapability } from "../../../capability/slash-command";
-import { parseFrontmatter } from "../../../core/frontmatter";
-import { loadCapability } from "../../../discovery";
-
+import { type SlashCommand, slashCommandCapability } from "$c/capability/slash-command";
+import { parseFrontmatter } from "$c/core/frontmatter";
+import { renderPromptTemplate } from "$c/core/prompt-templates";
+import { loadCapability } from "$c/discovery";
 // Embed command markdown files at build time
-import initMd from "../../../prompts/agents/init.md" with { type: "text" };
-import { renderPromptTemplate } from "../../prompt-templates";
+import initMd from "$c/prompts/agents/init.md" with { type: "text" };
 
 const EMBEDDED_COMMANDS: { name: string; content: string }[] = [
 	{ name: "init.md", content: renderPromptTemplate(initMd) },

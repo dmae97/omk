@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import { logger } from "@oh-my-pi/pi-utils";
-import { ToolAbortError, throwIfAborted } from "../../tool-errors";
+import { ToolAbortError, throwIfAborted } from "$c/core/tool-errors";
 import { applyWorkspaceEdit } from "./edits";
 import { getLspmuxCommand, isLspmuxSupported } from "./lspmux";
 import type {

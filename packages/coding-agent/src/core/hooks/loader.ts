@@ -5,13 +5,13 @@
 import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import * as typebox from "@sinclair/typebox";
-import { hookCapability } from "../../capability/hook";
-import type { Hook } from "../../discovery";
-import { loadCapability } from "../../discovery";
-import { expandPath } from "../../discovery/helpers";
-import * as piCodingAgent from "../../index";
-import type { HookMessage } from "../messages";
-import type { SessionManager } from "../session-manager";
+import { hookCapability } from "$c/capability/hook";
+import type { HookMessage } from "$c/core/messages";
+import type { SessionManager } from "$c/core/session-manager";
+import type { Hook } from "$c/discovery";
+import { loadCapability } from "$c/discovery";
+import { expandPath } from "$c/discovery/helpers";
+import * as piCodingAgent from "$c/index";
 import { execCommand } from "./runner";
 import type { ExecOptions, HookAPI, HookFactory, HookMessageRenderer, RegisteredCommand } from "./types";
 

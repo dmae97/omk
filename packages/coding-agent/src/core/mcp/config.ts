@@ -4,9 +4,9 @@
  * Uses the capability system to load MCP servers from multiple sources.
  */
 
-import { mcpCapability } from "../../capability/mcp";
-import type { MCPServer } from "../../discovery";
-import { loadCapability } from "../../discovery";
+import { mcpCapability } from "$c/capability/mcp";
+import type { MCPServer } from "$c/discovery";
+import { loadCapability } from "$c/discovery";
 import type { MCPServerConfig } from "./types";
 
 /** Options for loading MCP configs */

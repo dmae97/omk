@@ -10,7 +10,7 @@ import type { AgentTool } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Container, Text } from "@oh-my-pi/pi-tui";
 import { Type } from "@sinclair/typebox";
-import type { Theme, ThemeColor } from "../../modes/interactive/theme/theme";
+import type { Theme, ThemeColor } from "$c/modes/interactive/theme/theme";
 
 export type FindingPriority = "P0" | "P1" | "P2" | "P3";
 

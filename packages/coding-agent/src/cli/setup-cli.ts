@@ -6,8 +6,8 @@
 
 import { $ } from "bun";
 import chalk from "chalk";
-import { APP_NAME } from "../config";
-import { theme } from "../modes/interactive/theme/theme";
+import { APP_NAME } from "$c/config";
+import { theme } from "$c/modes/interactive/theme/theme";
 
 export type SetupComponent = "python";
 

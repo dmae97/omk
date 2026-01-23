@@ -1,6 +1,6 @@
-import { getEditorKeybindings } from "../keybindings";
-import { type Component, CURSOR_MARKER, type Focusable } from "../tui";
-import { getSegmenter, isPunctuationChar, isWhitespaceChar, visibleWidth } from "../utils";
+import { getEditorKeybindings } from "$tui/keybindings";
+import { type Component, CURSOR_MARKER, type Focusable } from "$tui/tui";
+import { getSegmenter, isPunctuationChar, isWhitespaceChar, visibleWidth } from "$tui/utils";
 
 const segmenter = getSegmenter();
 

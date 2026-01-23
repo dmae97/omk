@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseArgs } from "../src/cli/args";
+import { parseArgs } from "$c/cli/args";
 
 describe("parseArgs", () => {
 	describe("--version flag", () => {

@@ -28,10 +28,10 @@ import type {
 import { isContextOverflow, modelsAreEqual, supportsXhigh } from "@oh-my-pi/pi-ai";
 import { abortableSleep, logger } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
-import type { Rule } from "../capability/rule";
-import { getAgentDbPath } from "../config";
-import { theme } from "../modes/interactive/theme/theme";
-import ttsrInterruptTemplate from "../prompts/system/ttsr-interrupt.md" with { type: "text" };
+import type { Rule } from "$c/capability/rule";
+import { getAgentDbPath } from "$c/config";
+import { theme } from "$c/modes/interactive/theme/theme";
+import ttsrInterruptTemplate from "$c/prompts/system/ttsr-interrupt.md" with { type: "text" };
 import { type BashResult, executeBash as executeBashCommand } from "./bash-executor";
 import {
 	type CompactionResult,

@@ -3,15 +3,15 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { nanoid } from "nanoid";
-import { BashTool } from "../src/core/tools/bash";
-import { FindTool } from "../src/core/tools/find";
-import { GrepTool } from "../src/core/tools/grep";
-import type { ToolSession } from "../src/core/tools/index";
-import { LsTool } from "../src/core/tools/ls";
-import { EditTool } from "../src/core/tools/patch";
-import { ReadTool } from "../src/core/tools/read";
-import { WriteTool } from "../src/core/tools/write";
-import * as shellModule from "../src/utils/shell";
+import { BashTool } from "$c/core/tools/bash";
+import { FindTool } from "$c/core/tools/find";
+import { GrepTool } from "$c/core/tools/grep";
+import type { ToolSession } from "$c/core/tools/index";
+import { LsTool } from "$c/core/tools/ls";
+import { EditTool } from "$c/core/tools/patch";
+import { ReadTool } from "$c/core/tools/read";
+import { WriteTool } from "$c/core/tools/write";
+import * as shellModule from "$c/utils/shell";
 
 // Helper to extract text from content blocks
 function getTextOutput(result: any): string {

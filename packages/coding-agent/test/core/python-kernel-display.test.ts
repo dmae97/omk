@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { type KernelDisplayOutput, PythonKernel } from "../../src/core/python-kernel";
+import { type KernelDisplayOutput, PythonKernel } from "$c/core/python-kernel";
 
 const renderDisplay = (
 	PythonKernel as unknown as {

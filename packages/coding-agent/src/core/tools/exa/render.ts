@@ -7,8 +7,7 @@
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { logger } from "@oh-my-pi/pi-utils";
-import type { Theme } from "../../../modes/interactive/theme/theme";
-import type { RenderResultOptions } from "../../custom-tools/types";
+import type { RenderResultOptions } from "$c/core/custom-tools/types";
 import {
 	formatCount,
 	formatExpandHint,
@@ -19,7 +18,8 @@ import {
 	PREVIEW_LIMITS,
 	TRUNCATE_LENGTHS,
 	truncate,
-} from "../render-utils";
+} from "$c/core/tools/render-utils";
+import type { Theme } from "$c/modes/interactive/theme/theme";
 import type { ExaRenderDetails } from "./types";
 
 const COLLAPSED_PREVIEW_LINES = PREVIEW_LIMITS.COLLAPSED_LINES;

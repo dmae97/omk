@@ -14,15 +14,15 @@
  * - settings: From settings.json if present
  */
 
-import { readFile } from "../capability/fs";
-import { registerProvider } from "../capability/index";
-import { type MCPServer, mcpCapability } from "../capability/mcp";
-import type { Rule } from "../capability/rule";
-import { ruleCapability } from "../capability/rule";
-import type { Settings } from "../capability/settings";
-import { settingsCapability } from "../capability/settings";
-import type { LoadContext, LoadResult } from "../capability/types";
-import { parseFrontmatter } from "../core/frontmatter";
+import { readFile } from "$c/capability/fs";
+import { registerProvider } from "$c/capability/index";
+import { type MCPServer, mcpCapability } from "$c/capability/mcp";
+import type { Rule } from "$c/capability/rule";
+import { ruleCapability } from "$c/capability/rule";
+import type { Settings } from "$c/capability/settings";
+import { settingsCapability } from "$c/capability/settings";
+import type { LoadContext, LoadResult } from "$c/capability/types";
+import { parseFrontmatter } from "$c/core/frontmatter";
 import {
 	createSourceMeta,
 	expandEnvVarsDeep,

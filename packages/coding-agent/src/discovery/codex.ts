@@ -10,27 +10,27 @@
 import { join } from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import { parse as parseToml } from "smol-toml";
-import type { ContextFile } from "../capability/context-file";
-import { contextFileCapability } from "../capability/context-file";
-import { type ExtensionModule, extensionModuleCapability } from "../capability/extension-module";
-import { readFile } from "../capability/fs";
-import type { Hook } from "../capability/hook";
-import { hookCapability } from "../capability/hook";
-import { registerProvider } from "../capability/index";
-import type { MCPServer } from "../capability/mcp";
-import { mcpCapability } from "../capability/mcp";
-import type { Prompt } from "../capability/prompt";
-import { promptCapability } from "../capability/prompt";
-import type { Settings } from "../capability/settings";
-import { settingsCapability } from "../capability/settings";
-import type { Skill } from "../capability/skill";
-import { skillCapability } from "../capability/skill";
-import type { SlashCommand } from "../capability/slash-command";
-import { slashCommandCapability } from "../capability/slash-command";
-import type { CustomTool } from "../capability/tool";
-import { toolCapability } from "../capability/tool";
-import type { LoadContext, LoadResult } from "../capability/types";
-import { parseFrontmatter } from "../core/frontmatter";
+import type { ContextFile } from "$c/capability/context-file";
+import { contextFileCapability } from "$c/capability/context-file";
+import { type ExtensionModule, extensionModuleCapability } from "$c/capability/extension-module";
+import { readFile } from "$c/capability/fs";
+import type { Hook } from "$c/capability/hook";
+import { hookCapability } from "$c/capability/hook";
+import { registerProvider } from "$c/capability/index";
+import type { MCPServer } from "$c/capability/mcp";
+import { mcpCapability } from "$c/capability/mcp";
+import type { Prompt } from "$c/capability/prompt";
+import { promptCapability } from "$c/capability/prompt";
+import type { Settings } from "$c/capability/settings";
+import { settingsCapability } from "$c/capability/settings";
+import type { Skill } from "$c/capability/skill";
+import { skillCapability } from "$c/capability/skill";
+import type { SlashCommand } from "$c/capability/slash-command";
+import { slashCommandCapability } from "$c/capability/slash-command";
+import type { CustomTool } from "$c/capability/tool";
+import { toolCapability } from "$c/capability/tool";
+import type { LoadContext, LoadResult } from "$c/capability/types";
+import { parseFrontmatter } from "$c/core/frontmatter";
 import {
 	createSourceMeta,
 	discoverExtensionModulePaths,

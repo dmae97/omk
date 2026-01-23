@@ -4,8 +4,8 @@ import {
 	type ImageDimensions,
 	imageFallback,
 	renderImage,
-} from "../terminal-image";
-import type { Component } from "../tui";
+} from "$tui/terminal-image";
+import type { Component } from "$tui/tui";
 
 export interface ImageTheme {
 	fallbackColor: (str: string) => string;

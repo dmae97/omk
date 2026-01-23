@@ -1,6 +1,6 @@
-import { slashCommandCapability } from "../capability/slash-command";
-import type { SlashCommand } from "../discovery";
-import { loadCapability } from "../discovery";
+import { slashCommandCapability } from "$c/capability/slash-command";
+import type { SlashCommand } from "$c/discovery";
+import { loadCapability } from "$c/discovery";
 import { parseFrontmatter } from "./frontmatter";
 import { renderPromptTemplate } from "./prompt-templates";
 import { EMBEDDED_COMMAND_TEMPLATES } from "./tools/task/commands";

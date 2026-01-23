@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { handleReddit } from "../../../src/core/tools/web-scrapers/reddit";
-import { handleStackOverflow } from "../../../src/core/tools/web-scrapers/stackoverflow";
-import { handleTwitter } from "../../../src/core/tools/web-scrapers/twitter";
+import { handleReddit } from "$c/core/tools/web-scrapers/reddit";
+import { handleStackOverflow } from "$c/core/tools/web-scrapers/stackoverflow";
+import { handleTwitter } from "$c/core/tools/web-scrapers/twitter";
 
 const SKIP = !process.env.WEB_FETCH_INTEGRATION;
 

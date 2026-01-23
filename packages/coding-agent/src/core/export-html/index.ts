@@ -1,9 +1,9 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { basename } from "node:path";
 import type { AgentState } from "@oh-my-pi/pi-agent-core";
-import { APP_NAME } from "../../config";
-import { getResolvedThemeColors, getThemeExportColors } from "../../modes/interactive/theme/theme";
-import { SessionManager } from "../session-manager";
+import { APP_NAME } from "$c/config";
+import { SessionManager } from "$c/core/session-manager";
+import { getResolvedThemeColors, getThemeExportColors } from "$c/modes/interactive/theme/theme";
 
 // Pre-generated template (created by scripts/generate-template.ts at publish time)
 import { TEMPLATE } from "./template.generated";

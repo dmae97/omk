@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { CODEX_BASE_URL } from "../providers/openai-codex/constants";
+import { CODEX_BASE_URL } from "$ai/providers/openai-codex/constants";
 import type {
 	UsageAmount,
 	UsageCache,
@@ -9,7 +9,7 @@ import type {
 	UsageProvider,
 	UsageReport,
 	UsageWindow,
-} from "../usage";
+} from "$ai/usage";
 
 const CODEX_USAGE_PATH = "wham/usage";
 const DEFAULT_CACHE_TTL_MS = 60_000;

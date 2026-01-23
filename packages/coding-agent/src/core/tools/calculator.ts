@@ -3,10 +3,10 @@ import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { untilAborted } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
-import type { Theme } from "../../modes/interactive/theme/theme";
-import calculatorDescription from "../../prompts/tools/calculator.md" with { type: "text" };
-import type { RenderResultOptions } from "../custom-tools/types";
-import { renderPromptTemplate } from "../prompt-templates";
+import type { RenderResultOptions } from "$c/core/custom-tools/types";
+import { renderPromptTemplate } from "$c/core/prompt-templates";
+import type { Theme } from "$c/modes/interactive/theme/theme";
+import calculatorDescription from "$c/prompts/tools/calculator.md" with { type: "text" };
 import type { ToolSession } from "./index";
 import {
 	formatCount,

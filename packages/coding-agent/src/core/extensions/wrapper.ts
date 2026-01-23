@@ -5,7 +5,7 @@
 import type { AgentTool, AgentToolContext, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
 import type { Static, TSchema } from "@sinclair/typebox";
-import type { Theme } from "../../modes/interactive/theme/theme";
+import type { Theme } from "$c/modes/interactive/theme/theme";
 import type { ExtensionRunner } from "./runner";
 import type { RegisteredTool, ToolCallEventResult, ToolResultEventResult } from "./types";
 

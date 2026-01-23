@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Type } from "@sinclair/typebox";
-import type { Tool, ToolCall } from "../src/types";
-import { validateToolArguments } from "../src/utils/validation";
+import type { Tool, ToolCall } from "$ai/types";
+import { validateToolArguments } from "$ai/utils/validation";
 
 describe("Tool argument coercion", () => {
 	it("coerces numeric strings when schema expects number", () => {

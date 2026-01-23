@@ -4,10 +4,10 @@ import { StringEnum } from "@oh-my-pi/pi-ai";
 import { untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { nanoid } from "nanoid";
-import geminiImageDescription from "../../prompts/tools/gemini-image.md" with { type: "text" };
-import { detectSupportedImageMimeTypeFromFile } from "../../utils/mime";
-import type { CustomTool } from "../custom-tools/types";
-import { renderPromptTemplate } from "../prompt-templates";
+import type { CustomTool } from "$c/core/custom-tools/types";
+import { renderPromptTemplate } from "$c/core/prompt-templates";
+import geminiImageDescription from "$c/prompts/tools/gemini-image.md" with { type: "text" };
+import { detectSupportedImageMimeTypeFromFile } from "$c/utils/mime";
 import { resolveReadPath } from "./path-utils";
 import { getEnv } from "./web-search/auth";
 

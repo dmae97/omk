@@ -3,10 +3,10 @@ import { readFileSync } from "node:fs";
 import { Type } from "@sinclair/typebox";
 import { join } from "path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getModel } from "../src/models";
-import { complete, stream } from "../src/stream";
-import type { Api, Context, ImageContent, Model, OptionsForApi, Tool, ToolResultMessage } from "../src/types";
-import { StringEnum } from "../src/utils/typebox-helpers";
+import { getModel } from "$ai/models";
+import { complete, stream } from "$ai/stream";
+import type { Api, Context, ImageContent, Model, OptionsForApi, Tool, ToolResultMessage } from "$ai/types";
+import { StringEnum } from "$ai/utils/typebox-helpers";
 import { resolveApiKey } from "./oauth";
 
 // Resolve OAuth tokens at module level (async, runs before tests)

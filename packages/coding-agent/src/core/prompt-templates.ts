@@ -1,7 +1,7 @@
 import { join, resolve } from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import Handlebars from "handlebars";
-import { CONFIG_DIR_NAME, getPromptsDir } from "../config";
+import { CONFIG_DIR_NAME, getPromptsDir } from "$c/config";
 import { parseFrontmatter } from "./frontmatter";
 
 /**

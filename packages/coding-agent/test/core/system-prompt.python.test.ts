@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { buildSystemPrompt } from "../../src/core/system-prompt";
+import { buildSystemPrompt } from "$c/core/system-prompt";
 
 describe("buildSystemPrompt", () => {
 	it("includes python tool details when enabled", async () => {

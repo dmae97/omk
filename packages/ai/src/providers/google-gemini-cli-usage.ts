@@ -6,8 +6,8 @@ import type {
 	UsageProvider,
 	UsageReport,
 	UsageWindow,
-} from "../usage";
-import { refreshGoogleCloudToken } from "../utils/oauth/google-gemini-cli";
+} from "$ai/usage";
+import { refreshGoogleCloudToken } from "$ai/utils/oauth/google-gemini-cli";
 
 const DEFAULT_ENDPOINT = "https://cloudcode-pa.googleapis.com";
 const CACHE_TTL_MS = 60_000;

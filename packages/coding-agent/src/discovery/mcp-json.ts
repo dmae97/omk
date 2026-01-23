@@ -8,10 +8,10 @@
  */
 
 import { join } from "node:path";
-import { readFile } from "../capability/fs";
-import { registerProvider } from "../capability/index";
-import { type MCPServer, mcpCapability } from "../capability/mcp";
-import type { LoadContext, LoadResult, SourceMeta } from "../capability/types";
+import { readFile } from "$c/capability/fs";
+import { registerProvider } from "$c/capability/index";
+import { type MCPServer, mcpCapability } from "$c/capability/mcp";
+import type { LoadContext, LoadResult, SourceMeta } from "$c/capability/types";
 import { createSourceMeta, expandEnvVarsDeep, parseJSON } from "./helpers";
 
 const PROVIDER_ID = "mcp-json";

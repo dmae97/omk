@@ -4,23 +4,17 @@
  */
 
 import { logger } from "@oh-my-pi/pi-utils";
-import type { ContextFile } from "../../../../capability/context-file";
-import type { ExtensionModule } from "../../../../capability/extension-module";
-import type { Hook } from "../../../../capability/hook";
-import type { MCPServer } from "../../../../capability/mcp";
-import type { Prompt } from "../../../../capability/prompt";
-import type { Rule } from "../../../../capability/rule";
-import type { Skill } from "../../../../capability/skill";
-import type { SlashCommand } from "../../../../capability/slash-command";
-import type { CustomTool } from "../../../../capability/tool";
-import type { SourceMeta } from "../../../../capability/types";
-import {
-	disableProvider,
-	enableProvider,
-	getAllProvidersInfo,
-	isProviderEnabled,
-	loadCapability,
-} from "../../../../discovery";
+import type { ContextFile } from "$c/capability/context-file";
+import type { ExtensionModule } from "$c/capability/extension-module";
+import type { Hook } from "$c/capability/hook";
+import type { MCPServer } from "$c/capability/mcp";
+import type { Prompt } from "$c/capability/prompt";
+import type { Rule } from "$c/capability/rule";
+import type { Skill } from "$c/capability/skill";
+import type { SlashCommand } from "$c/capability/slash-command";
+import type { CustomTool } from "$c/capability/tool";
+import type { SourceMeta } from "$c/capability/types";
+import { disableProvider, enableProvider, getAllProvidersInfo, isProviderEnabled, loadCapability } from "$c/discovery";
 import type {
 	DashboardState,
 	Extension,

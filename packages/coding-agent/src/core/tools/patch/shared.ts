@@ -5,11 +5,9 @@
 import type { ToolCallContext } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
-import { renderDiff as renderDiffColored } from "../../../modes/interactive/components/diff";
-import { getLanguageFromPath, type Theme } from "../../../modes/interactive/theme/theme";
-import type { RenderResultOptions } from "../../custom-tools/types";
-import type { OutputMeta } from "../../output-meta";
-import type { FileDiagnosticsResult } from "../lsp/index";
+import type { RenderResultOptions } from "$c/core/custom-tools/types";
+import type { OutputMeta } from "$c/core/output-meta";
+import type { FileDiagnosticsResult } from "$c/core/tools/lsp/index";
 import {
 	formatExpandHint,
 	formatStatusIcon,
@@ -17,8 +15,10 @@ import {
 	shortenPath,
 	ToolUIKit,
 	truncateDiffByHunk,
-} from "../render-utils";
-import type { RenderCallOptions } from "../renderers";
+} from "$c/core/tools/render-utils";
+import type { RenderCallOptions } from "$c/core/tools/renderers";
+import { renderDiff as renderDiffColored } from "$c/modes/interactive/components/diff";
+import { getLanguageFromPath, type Theme } from "$c/modes/interactive/theme/theme";
 import type { DiffError, DiffResult, Operation } from "./types";
 
 // ═══════════════════════════════════════════════════════════════════════════

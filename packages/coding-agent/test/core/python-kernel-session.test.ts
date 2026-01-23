@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { createTempDirSync } from "@oh-my-pi/pi-utils";
-import { disposeAllKernelSessions, executePython } from "../../src/core/python-executor";
-import type { KernelExecuteOptions, KernelExecuteResult } from "../../src/core/python-kernel";
-import { PythonKernel } from "../../src/core/python-kernel";
+import { disposeAllKernelSessions, executePython } from "$c/core/python-executor";
+import type { KernelExecuteOptions, KernelExecuteResult } from "$c/core/python-kernel";
+import { PythonKernel } from "$c/core/python-kernel";
 
 class FakeKernel {
 	executeCalls = 0;

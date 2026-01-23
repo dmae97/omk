@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { getModel } from "../src/models";
-import { stream } from "../src/stream";
-import type { Api, Context, Model, OptionsForApi } from "../src/types";
+import { getModel } from "$ai/models";
+import { stream } from "$ai/stream";
+import type { Api, Context, Model, OptionsForApi } from "$ai/types";
 import { resolveApiKey } from "./oauth";
 
 // Resolve OAuth tokens at module level (async, runs before tests)

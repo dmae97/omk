@@ -8,8 +8,8 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@oh-my-pi/pi-tui";
-import type { HistoryEntry, HistoryStorage } from "../../../core/history-storage";
-import { theme } from "../theme/theme";
+import type { HistoryEntry, HistoryStorage } from "$c/core/history-storage";
+import { theme } from "$c/modes/interactive/theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 
 class HistoryResultsList implements Component {

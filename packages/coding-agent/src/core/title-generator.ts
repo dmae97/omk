@@ -5,7 +5,7 @@
 import type { Api, Model } from "@oh-my-pi/pi-ai";
 import { completeSimple } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
-import titleSystemPrompt from "../prompts/system/title-system.md" with { type: "text" };
+import titleSystemPrompt from "$c/prompts/system/title-system.md" with { type: "text" };
 import type { ModelRegistry } from "./model-registry";
 import { parseModelString, SMOL_MODEL_PRIORITY } from "./model-resolver";
 import { renderPromptTemplate } from "./prompt-templates";

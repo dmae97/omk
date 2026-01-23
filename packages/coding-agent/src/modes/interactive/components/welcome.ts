@@ -1,6 +1,6 @@
 import { type Component, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
-import { APP_NAME } from "../../../config";
-import { theme } from "../theme/theme";
+import { APP_NAME } from "$c/config";
+import { theme } from "$c/modes/interactive/theme/theme";
 
 export interface RecentSession {
 	name: string;

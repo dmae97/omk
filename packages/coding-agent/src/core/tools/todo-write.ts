@@ -7,11 +7,11 @@ import { Text } from "@oh-my-pi/pi-tui";
 import { logger } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import chalk from "chalk";
-import type { Theme } from "../../modes/interactive/theme/theme";
-import todoWriteDescription from "../../prompts/tools/todo-write.md" with { type: "text" };
-import type { RenderResultOptions } from "../custom-tools/types";
-import { renderPromptTemplate } from "../prompt-templates";
-import type { ToolSession } from "../sdk";
+import type { RenderResultOptions } from "$c/core/custom-tools/types";
+import { renderPromptTemplate } from "$c/core/prompt-templates";
+import type { ToolSession } from "$c/core/sdk";
+import type { Theme } from "$c/modes/interactive/theme/theme";
+import todoWriteDescription from "$c/prompts/tools/todo-write.md" with { type: "text" };
 
 const todoWriteSchema = Type.Object({
 	todos: Type.Array(

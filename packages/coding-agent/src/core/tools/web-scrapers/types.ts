@@ -2,7 +2,7 @@
  * Shared types and utilities for web-fetch handlers
  */
 
-import { ToolAbortError } from "../../tool-errors";
+import { ToolAbortError } from "$c/core/tool-errors";
 
 export interface RenderResult {
 	url: string;

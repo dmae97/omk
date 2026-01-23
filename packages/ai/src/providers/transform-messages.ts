@@ -1,4 +1,4 @@
-import type { Api, AssistantMessage, Message, Model, ToolCall, ToolResultMessage } from "../types";
+import type { Api, AssistantMessage, Message, Model, ToolCall, ToolResultMessage } from "$ai/types";
 
 /**
  * Normalize tool call ID for cross-provider compatibility.

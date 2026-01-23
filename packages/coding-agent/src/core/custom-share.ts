@@ -7,7 +7,7 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { getAgentDir } from "../config";
+import { getAgentDir } from "$c/config";
 
 export interface CustomShareResult {
 	/** URL to display/open (optional - script may handle everything itself) */

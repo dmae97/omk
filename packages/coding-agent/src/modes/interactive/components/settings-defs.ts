@@ -20,7 +20,7 @@ import type {
 	StatusLineSeparatorStyle,
 	SymbolPreset,
 	WebSearchProviderOption,
-} from "../../../core/settings-manager";
+} from "$c/core/settings-manager";
 import { getPreset } from "./status-line/presets";
 
 // Setting value types

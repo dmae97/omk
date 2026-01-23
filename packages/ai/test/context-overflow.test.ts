@@ -14,10 +14,10 @@
 import type { ChildProcess } from "node:child_process";
 import { execSync, spawn } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getModel } from "../src/models";
-import { complete } from "../src/stream";
-import type { AssistantMessage, Context, Model, Usage } from "../src/types";
-import { isContextOverflow } from "../src/utils/overflow";
+import { getModel } from "$ai/models";
+import { complete } from "$ai/stream";
+import type { AssistantMessage, Context, Model, Usage } from "$ai/types";
+import { isContextOverflow } from "$ai/utils/overflow";
 import { resolveApiKey } from "./oauth";
 
 // Resolve OAuth tokens at module level (async, runs before tests)

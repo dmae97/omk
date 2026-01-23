@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Type } from "@sinclair/typebox";
 import { describe, expect, it } from "vitest";
-import type { Api, Context, Model, Tool, ToolResultMessage } from "../src/index";
-import { complete, getModel } from "../src/index";
-import type { OptionsForApi } from "../src/types";
+import type { Api, Context, Model, Tool, ToolResultMessage } from "$ai/index";
+import { complete, getModel } from "$ai/index";
+import type { OptionsForApi } from "$ai/types";
 import { resolveApiKey } from "./oauth";
 
 // Resolve OAuth tokens at module level (async, runs before tests)

@@ -61,12 +61,12 @@ export { WriteTool, type WriteToolDetails } from "./write";
 
 import type { AgentTool } from "@oh-my-pi/pi-agent-core";
 import { logger } from "@oh-my-pi/pi-utils";
-import type { ArtifactManager } from "../artifacts";
-import type { EventBus } from "../event-bus";
-import type { InternalUrlRouter } from "../internal-urls";
-import { getPreludeDocs, warmPythonEnvironment } from "../python-executor";
-import { checkPythonKernelAvailability } from "../python-kernel";
-import type { BashInterceptorRule } from "../settings-manager";
+import type { ArtifactManager } from "$c/core/artifacts";
+import type { EventBus } from "$c/core/event-bus";
+import type { InternalUrlRouter } from "$c/core/internal-urls";
+import { getPreludeDocs, warmPythonEnvironment } from "$c/core/python-executor";
+import { checkPythonKernelAvailability } from "$c/core/python-kernel";
+import type { BashInterceptorRule } from "$c/core/settings-manager";
 import { AskTool } from "./ask";
 import { BashTool } from "./bash";
 import { CalculatorTool } from "./calculator";

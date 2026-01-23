@@ -8,8 +8,7 @@
 import path from "node:path";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Container, Text } from "@oh-my-pi/pi-tui";
-import type { Theme } from "../../../modes/interactive/theme/theme";
-import type { RenderResultOptions } from "../../custom-tools/types";
+import type { RenderResultOptions } from "$c/core/custom-tools/types";
 import {
 	formatBadge,
 	formatDuration,
@@ -17,14 +16,15 @@ import {
 	formatStatusIcon,
 	formatTokens,
 	truncate,
-} from "../render-utils";
+} from "$c/core/tools/render-utils";
 import {
 	type FindingPriority,
 	getPriorityInfo,
 	PRIORITY_LABELS,
 	type ReportFindingDetails,
 	type SubmitReviewDetails,
-} from "../review";
+} from "$c/core/tools/review";
+import type { Theme } from "$c/modes/interactive/theme/theme";
 import { subprocessToolRegistry } from "./subprocess-tool-registry";
 import type { AgentProgress, SingleResult, TaskParams, TaskToolDetails } from "./types";
 

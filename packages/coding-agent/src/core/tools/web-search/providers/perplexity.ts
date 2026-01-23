@@ -12,8 +12,8 @@ import type {
 	WebSearchCitation,
 	WebSearchResponse,
 	WebSearchSource,
-} from "../types";
-import { WebSearchProviderError } from "../types";
+} from "$c/core/tools/web-search/types";
+import { WebSearchProviderError } from "$c/core/tools/web-search/types";
 
 const PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions";
 

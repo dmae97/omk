@@ -71,9 +71,9 @@ import { execSync } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getModel } from "../src/models";
-import { complete } from "../src/stream";
-import type { Api, Context, ImageContent, Model, OptionsForApi, UserMessage } from "../src/types";
+import { getModel } from "$ai/models";
+import { complete } from "$ai/stream";
+import type { Api, Context, ImageContent, Model, OptionsForApi, UserMessage } from "$ai/types";
 
 const TEMP_DIR = join(import.meta.dir, ".temp-images");
 

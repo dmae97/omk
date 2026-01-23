@@ -1,4 +1,4 @@
-import { ArtifactManager } from "../artifacts";
+import { ArtifactManager } from "$c/core/artifacts";
 import type { ToolSession } from "./index";
 
 export interface TailBuffer {

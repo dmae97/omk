@@ -4,7 +4,7 @@
  */
 
 import path from "node:path";
-import type { Diagnostic, DiagnosticSeverity, LinterClient, ServerConfig } from "../types";
+import type { Diagnostic, DiagnosticSeverity, LinterClient, ServerConfig } from "$c/core/tools/lsp/types";
 
 // =============================================================================
 // Biome JSON Output Types

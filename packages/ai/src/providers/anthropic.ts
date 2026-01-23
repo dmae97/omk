@@ -4,8 +4,8 @@ import type {
 	MessageCreateParamsStreaming,
 	MessageParam,
 } from "@anthropic-ai/sdk/resources/messages";
-import { calculateCost } from "../models";
-import { getEnvApiKey, OUTPUT_FALLBACK_BUFFER } from "../stream";
+import { calculateCost } from "$ai/models";
+import { getEnvApiKey, OUTPUT_FALLBACK_BUFFER } from "$ai/stream";
 import type {
 	Api,
 	AssistantMessage,
@@ -21,11 +21,11 @@ import type {
 	Tool,
 	ToolCall,
 	ToolResultMessage,
-} from "../types";
-import { AssistantMessageEventStream } from "../utils/event-stream";
-import { parseStreamingJson } from "../utils/json-parse";
-import { formatErrorMessageWithRetryAfter } from "../utils/retry-after";
-import { sanitizeSurrogates } from "../utils/sanitize-unicode";
+} from "$ai/types";
+import { AssistantMessageEventStream } from "$ai/utils/event-stream";
+import { parseStreamingJson } from "$ai/utils/json-parse";
+import { formatErrorMessageWithRetryAfter } from "$ai/utils/retry-after";
+import { sanitizeSurrogates } from "$ai/utils/sanitize-unicode";
 
 import { transformMessages } from "./transform-messages";
 

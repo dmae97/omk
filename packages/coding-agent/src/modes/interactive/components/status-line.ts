@@ -3,9 +3,9 @@ import { type Component, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui"
 import { $ } from "bun";
 import { type FSWatcher, watch } from "fs";
 import { dirname, join } from "path";
-import type { AgentSession } from "../../../core/agent-session";
-import type { StatusLineSegmentOptions, StatusLineSettings } from "../../../core/settings-manager";
-import { theme } from "../theme/theme";
+import type { AgentSession } from "$c/core/agent-session";
+import type { StatusLineSegmentOptions, StatusLineSettings } from "$c/core/settings-manager";
+import { theme } from "$c/modes/interactive/theme/theme";
 import { getPreset } from "./status-line/presets";
 import { renderSegment, type SegmentContext } from "./status-line/segments";
 import { getSeparator } from "./status-line/separators";

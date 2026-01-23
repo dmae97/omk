@@ -1,20 +1,20 @@
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, Message } from "@oh-my-pi/pi-ai";
 import { Spacer, Text, TruncatedText } from "@oh-my-pi/pi-tui";
-import type { CustomMessage } from "../../../core/messages";
-import type { SessionContext } from "../../../core/session-manager";
-import { AssistantMessageComponent } from "../components/assistant-message";
-import { BashExecutionComponent } from "../components/bash-execution";
-import { BranchSummaryMessageComponent } from "../components/branch-summary-message";
-import { CompactionSummaryMessageComponent } from "../components/compaction-summary-message";
-import { CustomMessageComponent } from "../components/custom-message";
-import { DynamicBorder } from "../components/dynamic-border";
-import { PythonExecutionComponent } from "../components/python-execution";
-import { ReadToolGroupComponent } from "../components/read-tool-group";
-import { ToolExecutionComponent } from "../components/tool-execution";
-import { UserMessageComponent } from "../components/user-message";
-import { theme } from "../theme/theme";
-import type { CompactionQueuedMessage, InteractiveModeContext } from "../types";
+import type { CustomMessage } from "$c/core/messages";
+import type { SessionContext } from "$c/core/session-manager";
+import { AssistantMessageComponent } from "$c/modes/interactive/components/assistant-message";
+import { BashExecutionComponent } from "$c/modes/interactive/components/bash-execution";
+import { BranchSummaryMessageComponent } from "$c/modes/interactive/components/branch-summary-message";
+import { CompactionSummaryMessageComponent } from "$c/modes/interactive/components/compaction-summary-message";
+import { CustomMessageComponent } from "$c/modes/interactive/components/custom-message";
+import { DynamicBorder } from "$c/modes/interactive/components/dynamic-border";
+import { PythonExecutionComponent } from "$c/modes/interactive/components/python-execution";
+import { ReadToolGroupComponent } from "$c/modes/interactive/components/read-tool-group";
+import { ToolExecutionComponent } from "$c/modes/interactive/components/tool-execution";
+import { UserMessageComponent } from "$c/modes/interactive/components/user-message";
+import { theme } from "$c/modes/interactive/theme/theme";
+import type { CompactionQueuedMessage, InteractiveModeContext } from "$c/modes/interactive/types";
 
 type TextBlock = { type: "text"; text: string };
 

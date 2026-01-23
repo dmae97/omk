@@ -6,7 +6,7 @@
  * the specialized tools instead.
  */
 
-import { type BashInterceptorRule, DEFAULT_BASH_INTERCEPTOR_RULES } from "../settings-manager";
+import { type BashInterceptorRule, DEFAULT_BASH_INTERCEPTOR_RULES } from "$c/core/settings-manager";
 
 export interface InterceptionResult {
 	/** If true, the bash command should be blocked */

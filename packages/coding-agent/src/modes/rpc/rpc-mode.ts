@@ -13,9 +13,9 @@
 
 import { readLines } from "@oh-my-pi/pi-utils";
 import { nanoid } from "nanoid";
-import type { AgentSession } from "../../core/agent-session";
-import type { ExtensionUIContext, ExtensionUIDialogOptions } from "../../core/extensions/index";
-import { type Theme, theme } from "../interactive/theme/theme";
+import type { AgentSession } from "$c/core/agent-session";
+import type { ExtensionUIContext, ExtensionUIDialogOptions } from "$c/core/extensions/index";
+import { type Theme, theme } from "$c/modes/interactive/theme/theme";
 import type {
 	RpcCommand,
 	RpcExtensionUIRequest,

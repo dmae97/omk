@@ -9,12 +9,12 @@ import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { untilAborted } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
-import { getLanguageFromPath, highlightCode, type Theme } from "../../modes/interactive/theme/theme";
-import writeDescription from "../../prompts/tools/write.md" with { type: "text" };
-import type { RenderResultOptions } from "../custom-tools/types";
-import { type OutputMeta, outputMeta } from "../output-meta";
-import { renderPromptTemplate } from "../prompt-templates";
-import type { ToolSession } from "../sdk";
+import type { RenderResultOptions } from "$c/core/custom-tools/types";
+import { type OutputMeta, outputMeta } from "$c/core/output-meta";
+import { renderPromptTemplate } from "$c/core/prompt-templates";
+import type { ToolSession } from "$c/core/sdk";
+import { getLanguageFromPath, highlightCode, type Theme } from "$c/modes/interactive/theme/theme";
+import writeDescription from "$c/prompts/tools/write.md" with { type: "text" };
 import {
 	createLspWritethrough,
 	type FileDiagnosticsResult,

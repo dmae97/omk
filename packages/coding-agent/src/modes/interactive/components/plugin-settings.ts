@@ -18,9 +18,9 @@ import {
 	Spacer,
 	Text,
 } from "@oh-my-pi/pi-tui";
-import { PluginManager } from "../../../core/plugins/manager";
-import type { InstalledPlugin, PluginSettingSchema } from "../../../core/plugins/types";
-import { getSelectListTheme, getSettingsListTheme, theme } from "../theme/theme";
+import { PluginManager } from "$c/core/plugins/manager";
+import type { InstalledPlugin, PluginSettingSchema } from "$c/core/plugins/types";
+import { getSelectListTheme, getSettingsListTheme, theme } from "$c/modes/interactive/theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 
 // =============================================================================

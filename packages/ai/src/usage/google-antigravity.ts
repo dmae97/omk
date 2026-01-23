@@ -7,8 +7,8 @@ import type {
 	UsageReport,
 	UsageStatus,
 	UsageWindow,
-} from "../usage";
-import { refreshAntigravityToken } from "../utils/oauth/google-antigravity";
+} from "$ai/usage";
+import { refreshAntigravityToken } from "$ai/utils/oauth/google-antigravity";
 
 interface AntigravityQuotaInfo {
 	remainingFraction?: number;

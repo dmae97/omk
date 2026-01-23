@@ -5,7 +5,7 @@
  */
 
 import chalk from "chalk";
-import { APP_NAME } from "../config";
+import { APP_NAME } from "$c/config";
 
 // =============================================================================
 // Types

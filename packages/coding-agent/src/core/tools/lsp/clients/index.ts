@@ -8,7 +8,7 @@
 export { BiomeClient } from "./biome-client";
 export { LspLinterClient } from "./lsp-linter-client";
 
-import type { LinterClient, ServerConfig } from "../types";
+import type { LinterClient, ServerConfig } from "$c/core/tools/lsp/types";
 import { LspLinterClient } from "./lsp-linter-client";
 
 // Cache of linter clients by server name + cwd

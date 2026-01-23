@@ -5,8 +5,8 @@
  */
 
 import { cspawn, Exception, ptree } from "@oh-my-pi/pi-utils";
-import { getShellConfig } from "../utils/shell";
-import { getOrCreateSnapshot, getSnapshotSourceCommand } from "../utils/shell-snapshot";
+import { getShellConfig } from "$c/utils/shell";
+import { getOrCreateSnapshot, getSnapshotSourceCommand } from "$c/utils/shell-snapshot";
 import { OutputSink } from "./streaming-output";
 
 export interface BashExecutorOptions {

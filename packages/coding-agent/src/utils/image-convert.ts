@@ -1,4 +1,4 @@
-import * as photon from "../vendor/photon";
+import * as photon from "$c/vendor/photon";
 
 /**
  * Convert image to PNG format for terminal display.

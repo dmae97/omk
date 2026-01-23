@@ -2,10 +2,10 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
-import { skillCapability } from "../capability/skill";
-import type { SourceMeta } from "../capability/types";
-import type { Skill as CapabilitySkill, SkillFrontmatter as ImportedSkillFrontmatter } from "../discovery";
-import { loadCapability } from "../discovery";
+import { skillCapability } from "$c/capability/skill";
+import type { SourceMeta } from "$c/capability/types";
+import type { Skill as CapabilitySkill, SkillFrontmatter as ImportedSkillFrontmatter } from "$c/discovery";
+import { loadCapability } from "$c/discovery";
 import { parseFrontmatter } from "./frontmatter";
 import type { SkillsSettings } from "./settings-manager";
 

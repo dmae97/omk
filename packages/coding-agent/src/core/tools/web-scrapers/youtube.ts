@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { cspawn } from "@oh-my-pi/pi-utils";
 import { nanoid } from "nanoid";
-import { ensureTool } from "../../../utils/tools-manager";
-import { throwIfAborted } from "../../tool-errors";
+import { throwIfAborted } from "$c/core/tool-errors";
+import { ensureTool } from "$c/utils/tools-manager";
 import type { RenderResult, SpecialHandler } from "./types";
 import { finalizeOutput } from "./types";
 
