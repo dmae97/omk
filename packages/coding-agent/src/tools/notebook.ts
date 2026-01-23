@@ -220,6 +220,7 @@ export const notebookToolRenderer = {
 		result: { content: Array<{ type: string; text?: string }>; details?: NotebookToolDetails },
 		{ expanded }: RenderResultOptions,
 		uiTheme: Theme,
+		args?: NotebookRenderArgs,
 	): Component {
 		const content = result.content?.[0];
 		if (content?.type === "text" && content.text?.startsWith("Error:")) {
@@ -244,13 +245,14 @@ export const notebookToolRenderer = {
 		const codeText = cellSource.join("");
 		const language = cellType === "markdown" ? "markdown" : undefined;
 
+		const notebookLabel = args?.notebookPath ? `${actionLabel} ${args.notebookPath}` : "Notebook";
 		return {
 			render: (width: number) =>
 				renderCodeCell(
 					{
 						code: codeText,
 						language,
-						title: "Notebook",
+						title: notebookLabel,
 						status: "complete",
 						output: outputLines.join("\n"),
 						codeMaxLines: expanded ? Number.POSITIVE_INFINITY : COLLAPSED_TEXT_LIMIT,
@@ -262,4 +264,5 @@ export const notebookToolRenderer = {
 			invalidate: () => {},
 		};
 	},
+	mergeCallAndResult: true,
 };

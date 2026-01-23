@@ -461,6 +461,7 @@ export const calculatorToolRenderer = {
 		result: { content: Array<{ type: string; text?: string }>; details?: CalculatorToolDetails },
 		{ expanded }: RenderResultOptions,
 		uiTheme: Theme,
+		args?: CalculatorRenderArgs,
 	): Component {
 		const details = result.details;
 		const textContent = result.content?.find((c) => c.type === "text")?.text ?? "";
@@ -475,8 +476,11 @@ export const calculatorToolRenderer = {
 			return new Text(formatEmptyMessage("No results", uiTheme), 0, 0);
 		}
 
+		const description = args?.calculations?.[0]?.expression
+			? truncate(args.calculations[0].expression, TRUNCATE_LENGTHS.TITLE, "...")
+			: undefined;
 		const header = renderStatusLine(
-			{ icon: "success", title: "Calc", meta: [formatCount("result", outputs.length)] },
+			{ icon: "success", title: "Calc", description, meta: [formatCount("result", outputs.length)] },
 			uiTheme,
 		);
 		const lines = renderTreeList(
@@ -492,4 +496,5 @@ export const calculatorToolRenderer = {
 
 		return new Text([header, ...lines].join("\n"), 0, 0);
 	},
+	mergeCallAndResult: true,
 };

@@ -244,4 +244,5 @@ export const todoWriteToolRenderer = {
 
 		return new Text([header, ...lines].join("\n"), 0, 0);
 	},
+	mergeCallAndResult: true,
 };

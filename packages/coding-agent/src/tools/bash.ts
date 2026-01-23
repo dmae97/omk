@@ -159,31 +159,35 @@ interface BashRenderContext {
 	timeout?: number;
 }
 
+function formatBashCommand(args: BashRenderArgs, uiTheme: Theme): string {
+	const command = args.command || uiTheme.format.ellipsis;
+	const prompt = "$";
+	const cwd = process.cwd();
+	let displayWorkdir = args.cwd;
+
+	if (displayWorkdir) {
+		const resolvedCwd = resolve(cwd);
+		const resolvedWorkdir = resolve(displayWorkdir);
+		if (resolvedWorkdir === resolvedCwd) {
+			displayWorkdir = undefined;
+		} else {
+			const relativePath = relative(resolvedCwd, resolvedWorkdir);
+			const isWithinCwd = relativePath && !relativePath.startsWith("..") && !relativePath.startsWith(`..${sep}`);
+			if (isWithinCwd) {
+				displayWorkdir = relativePath;
+			}
+		}
+	}
+
+	return displayWorkdir ? `${prompt} cd ${displayWorkdir} && ${command}` : `${prompt} ${command}`;
+}
+
 // Preview line limit when not expanded (matches tool-execution behavior)
 export const BASH_PREVIEW_LINES = 10;
 
 export const bashToolRenderer = {
 	renderCall(args: BashRenderArgs, uiTheme: Theme): Component {
-		const command = args.command || uiTheme.format.ellipsis;
-		const prompt = "$";
-		const cwd = process.cwd();
-		let displayWorkdir = args.cwd;
-
-		if (displayWorkdir) {
-			const resolvedCwd = resolve(cwd);
-			const resolvedWorkdir = resolve(displayWorkdir);
-			if (resolvedWorkdir === resolvedCwd) {
-				displayWorkdir = undefined;
-			} else {
-				const relativePath = relative(resolvedCwd, resolvedWorkdir);
-				const isWithinCwd = relativePath && !relativePath.startsWith("..") && !relativePath.startsWith(`..${sep}`);
-				if (isWithinCwd) {
-					displayWorkdir = relativePath;
-				}
-			}
-		}
-
-		const cmdText = displayWorkdir ? `${prompt} cd ${displayWorkdir} && ${command}` : `${prompt} ${command}`;
+		const cmdText = formatBashCommand(args, uiTheme);
 		const text = renderStatusLine({ icon: "pending", title: "Bash", description: cmdText }, uiTheme);
 		return new Text(text, 0, 0);
 	},
@@ -195,7 +199,9 @@ export const bashToolRenderer = {
 		},
 		options: RenderResultOptions & { renderContext?: BashRenderContext },
 		uiTheme: Theme,
+		args?: BashRenderArgs,
 	): Component {
+		const cmdText = args ? formatBashCommand(args, uiTheme) : undefined;
 		const header = renderStatusLine({ icon: "success", title: "Bash" }, uiTheme);
 		const { renderContext } = options;
 		const details = result.details;
@@ -238,6 +244,9 @@ export const bashToolRenderer = {
 		return {
 			render: (width: number): string[] => {
 				const outputLines: string[] = [];
+				if (cmdText) {
+					outputLines.push(uiTheme.fg("dim", cmdText));
+				}
 				if (displayOutput) {
 					if (expanded) {
 						outputLines.push(...displayOutput.split("\n").map((line) => uiTheme.fg("toolOutput", line)));
@@ -246,7 +255,7 @@ export const bashToolRenderer = {
 							.split("\n")
 							.map((line) => uiTheme.fg("toolOutput", line))
 							.join("\n");
-						const textContent = `\n${styledOutput}`;
+						const textContent = styledOutput;
 						const result = truncateToVisualLines(textContent, previewLines, width);
 						if (result.skippedCount > 0) {
 							outputLines.push(
@@ -275,4 +284,5 @@ export const bashToolRenderer = {
 			invalidate: () => {},
 		};
 	},
+	mergeCallAndResult: true,
 };

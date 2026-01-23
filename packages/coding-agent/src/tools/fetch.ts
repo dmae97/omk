@@ -1095,4 +1095,5 @@ export function renderFetchResult(
 export const fetchToolRenderer = {
 	renderCall: renderFetchCall,
 	renderResult: renderFetchResult,
+	mergeCallAndResult: true,
 };

@@ -71,6 +71,7 @@ export function renderWebSearchResult(
 	result: { content: Array<{ type: string; text?: string }>; details?: WebSearchRenderDetails },
 	options: RenderResultOptions,
 	theme: Theme,
+	args?: { query?: string; provider?: string },
 ): Component {
 	const { expanded } = options;
 	const details = result.details;
@@ -116,12 +117,13 @@ export function renderWebSearchResult(
 				: provider === "exa"
 					? "Exa"
 					: "Unknown";
+	const queryPreview = args?.query ? truncate(args.query, 80, theme.format.ellipsis) : undefined;
 	const header = renderStatusLine(
 		{
 			icon: sourceCount > 0 ? "success" : "warning",
 			title: "Web Search",
-			description: providerLabel,
-			meta: [formatCount("source", sourceCount)],
+			description: queryPreview ?? providerLabel,
+			meta: queryPreview ? [providerLabel, formatCount("source", sourceCount)] : [formatCount("source", sourceCount)],
 		},
 		theme,
 	);
@@ -271,4 +273,5 @@ export function renderWebSearchCall(
 export const webSearchToolRenderer = {
 	renderCall: renderWebSearchCall,
 	renderResult: renderWebSearchResult,
+	mergeCallAndResult: true,
 };

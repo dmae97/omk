@@ -880,7 +880,12 @@ export const readToolRenderer = {
 			warningLines.push(uiTheme.fg("warning", wrapBrackets(warning, uiTheme)));
 		}
 
-		const title = filePath ? `Read ${filePath}` : "Read";
+		let title = filePath ? `Read ${filePath}` : "Read";
+		if (args?.offset !== undefined || args?.limit !== undefined) {
+			const startLine = args.offset ?? 1;
+			const endLine = args.limit !== undefined ? startLine + args.limit - 1 : "";
+			title += `:${startLine}${endLine ? `-${endLine}` : ""}`;
+		}
 		return {
 			render: (width: number) =>
 				renderCodeCell(
@@ -898,4 +903,5 @@ export const readToolRenderer = {
 			invalidate: () => {},
 		};
 	},
+	mergeCallAndResult: true,
 };

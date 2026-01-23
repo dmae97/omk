@@ -48,6 +48,7 @@ export function renderResult(
 	result: AgentToolResult<LspToolDetails>,
 	options: RenderResultOptions,
 	theme: Theme,
+	args?: LspParams & { file?: string; files?: string[] },
 ): Component {
 	const content = result.content?.[0];
 	if (!content || content.type !== "text" || !("text" in content) || !content.text) {
@@ -93,7 +94,14 @@ export function renderResult(
 		}
 	}
 
-	const header = renderStatusLine({ icon: state, title: "LSP", description: label }, theme);
+	const meta: string[] = [];
+	if (args?.action) meta.push(args.action);
+	if (args?.file) {
+		meta.push(args.file);
+	} else if (args?.files?.length) {
+		meta.push(`${args.files.length} file(s)`);
+	}
+	const header = renderStatusLine({ icon: state, title: "LSP", description: label, meta }, theme);
 	return {
 		render: (width: number) =>
 			renderOutputBlock(
@@ -592,4 +600,5 @@ function severityToColor(severity: string): "error" | "warning" | "accent" | "di
 export const lspToolRenderer = {
 	renderCall,
 	renderResult,
+	mergeCallAndResult: true,
 };

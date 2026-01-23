@@ -627,6 +627,7 @@ export const grepToolRenderer = {
 		result: { content: Array<{ type: string; text?: string }>; details?: GrepToolDetails; isError?: boolean },
 		{ expanded }: RenderResultOptions,
 		uiTheme: Theme,
+		args?: GrepRenderArgs,
 	): Component {
 		const details = result.details;
 
@@ -643,8 +644,9 @@ export const grepToolRenderer = {
 				return new Text(formatEmptyMessage("No matches found", uiTheme), 0, 0);
 			}
 			const lines = textContent.split("\n").filter((line) => line.trim() !== "");
+			const description = args?.pattern ?? undefined;
 			const header = renderStatusLine(
-				{ icon: "success", title: "Grep", meta: [formatCount("item", lines.length)] },
+				{ icon: "success", title: "Grep", description, meta: [formatCount("item", lines.length)] },
 				uiTheme,
 			);
 			const listLines = renderTreeList(
@@ -686,7 +688,11 @@ export const grepToolRenderer = {
 		const meta = [...summaryParts];
 		if (details?.scopePath) meta.push(`in ${details.scopePath}`);
 		if (truncated) meta.push(uiTheme.fg("warning", "truncated"));
-		const header = renderStatusLine({ icon: truncated ? "warning" : "success", title: "Grep", meta }, uiTheme);
+		const description = args?.pattern ?? undefined;
+		const header = renderStatusLine(
+			{ icon: truncated ? "warning" : "success", title: "Grep", description, meta },
+			uiTheme,
+		);
 
 		const fileEntries: Array<{ path: string; count?: number }> = details?.fileMatches?.length
 			? details.fileMatches.map((entry) => ({ path: entry.path, count: entry.count }))
@@ -717,4 +723,5 @@ export const grepToolRenderer = {
 
 		return new Text([header, ...fileLines, ...extraLines].join("\n"), 0, 0);
 	},
+	mergeCallAndResult: true,
 };

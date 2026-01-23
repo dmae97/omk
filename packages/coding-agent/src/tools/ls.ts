@@ -221,6 +221,7 @@ export const lsToolRenderer = {
 		result: { content: Array<{ type: string; text?: string }>; details?: LsToolDetails; isError?: boolean },
 		{ expanded }: RenderResultOptions,
 		uiTheme: Theme,
+		args?: LsRenderArgs,
 	): Component {
 		const details = result.details;
 		const textContent = result.content?.find((c) => c.type === "text")?.text ?? "";
@@ -269,7 +270,10 @@ export const lsToolRenderer = {
 			uiTheme.sep.dot,
 		);
 		const meta = truncated ? [summaryText, uiTheme.fg("warning", "truncated")] : [summaryText];
-		const header = renderStatusLine({ icon: truncated ? "warning" : "success", title: "Ls", meta }, uiTheme);
+		const header = renderStatusLine(
+			{ icon: truncated ? "warning" : "success", title: "Ls", description: args?.path || ".", meta },
+			uiTheme,
+		);
 
 		const fileLines = renderFileList(
 			{
@@ -293,4 +297,5 @@ export const lsToolRenderer = {
 
 		return new Text([header, ...fileLines, ...extraLines].join("\n"), 0, 0);
 	},
+	mergeCallAndResult: true,
 };

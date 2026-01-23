@@ -29,6 +29,9 @@
 - Changed Notebook and TodoWrite tools to use new TUI rendering components for consistent output format
 - Refactored render-utils to move tree-related utilities to TUI module (getTreeBranch, getTreeContinuePrefix)
 - Changed import organization in sdk.ts for consistency
+- Changed tool result rendering to merge call and result displays, showing tool arguments (command, pattern, query, path) in result headers for Bash, Calculator, Fetch, Find, Grep, Ls, LSP, Notebook, Read, SSH, TodoWrite, Web Search, and Write tools
+- Changed Read tool title to display line range when offset or limit arguments are provided
+- Changed worker instantiation to use direct URL import instead of pre-bundled worker files
 ## [8.0.0] - 2026-01-23
 ### Added
 

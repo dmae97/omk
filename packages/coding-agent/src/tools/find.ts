@@ -390,6 +390,7 @@ export const findToolRenderer = {
 		result: { content: Array<{ type: string; text?: string }>; details?: FindToolDetails; isError?: boolean },
 		{ expanded }: RenderResultOptions,
 		uiTheme: Theme,
+		args?: FindRenderArgs,
 	): Component {
 		const details = result.details;
 
@@ -408,7 +409,12 @@ export const findToolRenderer = {
 
 			const lines = textContent.split("\n").filter((l) => l.trim());
 			const header = renderStatusLine(
-				{ icon: "success", title: "Find", meta: [formatCount("file", lines.length)] },
+				{
+					icon: "success",
+					title: "Find",
+					description: args?.pattern,
+					meta: [formatCount("file", lines.length)],
+				},
 				uiTheme,
 			);
 			const listLines = renderTreeList(
@@ -438,7 +444,10 @@ export const findToolRenderer = {
 		const meta: string[] = [formatCount("file", fileCount)];
 		if (details?.scopePath) meta.push(`in ${details.scopePath}`);
 		if (truncated) meta.push(uiTheme.fg("warning", "truncated"));
-		const header = renderStatusLine({ icon: truncated ? "warning" : "success", title: "Find", meta }, uiTheme);
+		const header = renderStatusLine(
+			{ icon: truncated ? "warning" : "success", title: "Find", description: args?.pattern, meta },
+			uiTheme,
+		);
 
 		const fileLines = renderFileList(
 			{
@@ -461,4 +470,5 @@ export const findToolRenderer = {
 
 		return new Text([header, ...fileLines, ...extraLines].join("\n"), 0, 0);
 	},
+	mergeCallAndResult: true,
 };

@@ -251,10 +251,16 @@ export const sshToolRenderer = {
 		},
 		options: RenderResultOptions & { renderContext?: SshRenderContext },
 		uiTheme: Theme,
+		args?: SshRenderArgs,
 	): Component {
 		const { expanded, renderContext } = options;
 		const details = result.details;
-		const header = renderStatusLine({ icon: "success", title: "SSH" }, uiTheme);
+		const host = args?.host || uiTheme.format.ellipsis;
+		const command = args?.command || uiTheme.format.ellipsis;
+		const header = renderStatusLine(
+			{ icon: "success", title: "SSH", description: `[${host}] $ ${command}` },
+			uiTheme,
+		);
 		const outputLines: string[] = [];
 
 		const textContent = result.content?.find((c) => c.type === "text")?.text ?? "";
@@ -318,4 +324,5 @@ export const sshToolRenderer = {
 			invalidate: () => {},
 		};
 	},
+	mergeCallAndResult: true,
 };
