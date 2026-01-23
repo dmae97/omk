@@ -120,7 +120,7 @@ export interface PythonSettings {
 export interface EditSettings {
 	fuzzyMatch?: boolean; // default: true (accept high-confidence fuzzy matches for whitespace/indentation)
 	fuzzyThreshold?: number; // default: 0.95 (similarity threshold for fuzzy matching)
-	patchMode?: boolean; // default: true (use codex-style apply-patch format instead of oldText/newText)
+	patchMode?: boolean; // default: true (use codex-style apply-patch format instead of old_text/new_text)
 	streamingAbort?: boolean; // default: false (abort streaming edit tool calls when patch preview fails)
 }
 

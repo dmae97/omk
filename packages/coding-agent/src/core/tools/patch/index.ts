@@ -91,8 +91,8 @@ export { ApplyPatchError, EditMatchError, ParseError } from "./types";
 
 const replaceEditSchema = Type.Object({
 	path: Type.String({ description: "File path (relative or absolute)" }),
-	oldText: Type.String({ description: "Text to find (fuzzy whitespace matching enabled)" }),
-	newText: Type.String({ description: "Replacement text" }),
+	old_text: Type.String({ description: "Text to find (fuzzy whitespace matching enabled)" }),
+	new_text: Type.String({ description: "Replacement text" }),
 	all: Type.Optional(Type.Boolean({ description: "Replace all occurrences (default: unique match required)" })),
 });
 
@@ -107,7 +107,7 @@ const patchEditSchema = Type.Object({
 	diff: Type.Optional(Type.String({ description: "Diff hunks (update) or full content (create)" })),
 });
 
-export type ReplaceParams = { path: string; oldText: string; newText: string; all?: boolean };
+export type ReplaceParams = { path: string; old_text: string; new_text: string; all?: boolean };
 export type PatchParams = { path: string; op?: string; rename?: string; diff?: string };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -346,14 +346,14 @@ export class EditTool implements AgentTool<TInput> {
 		// ─────────────────────────────────────────────────────────────────
 		// Replace mode execution
 		// ─────────────────────────────────────────────────────────────────
-		const { path, oldText, newText, all } = params as ReplaceParams;
+		const { path, old_text, new_text, all } = params as ReplaceParams;
 
 		if (path.endsWith(".ipynb")) {
 			throw new Error("Cannot edit Jupyter notebooks with the Edit tool. Use the NotebookEdit tool instead.");
 		}
 
-		if (oldText.length === 0) {
-			throw new Error("oldText must not be empty.");
+		if (old_text.length === 0) {
+			throw new Error("old_text must not be empty.");
 		}
 
 		const absolutePath = resolveToCwd(path, this.session.cwd);
@@ -367,8 +367,8 @@ export class EditTool implements AgentTool<TInput> {
 		const { bom, text: content } = stripBom(rawContent);
 		const originalEnding = detectLineEnding(content);
 		const normalizedContent = normalizeToLF(content);
-		const normalizedOldText = normalizeToLF(oldText);
-		const normalizedNewText = normalizeToLF(newText);
+		const normalizedOldText = normalizeToLF(old_text);
+		const normalizedNewText = normalizeToLF(new_text);
 
 		const result = replaceText(normalizedContent, normalizedOldText, normalizedNewText, {
 			fuzzy: this.allowFuzzy,

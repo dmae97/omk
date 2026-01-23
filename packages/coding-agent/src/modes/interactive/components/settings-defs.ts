@@ -307,7 +307,7 @@ export const SETTINGS_DEFS: SettingDef[] = [
 		tab: "tools",
 		type: "boolean",
 		label: "Edit patch mode",
-		description: "Use codex-style apply-patch format instead of oldText/newText for edits",
+		description: "Use codex-style apply-patch format instead of old_text/new_text for edits",
 		get: (sm) => sm.getEditPatchMode(),
 		set: (sm, v) => sm.setEditPatchMode(v),
 	},

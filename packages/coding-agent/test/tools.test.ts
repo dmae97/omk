@@ -44,7 +44,7 @@ describe("Coding Agent Tools", () => {
 	let originalEditVariant: string | undefined;
 
 	beforeEach(() => {
-		// Force replace mode for edit tool tests using oldText/newText
+		// Force replace mode for edit tool tests using old_text/new_text
 		originalEditVariant = process.env.OMP_EDIT_VARIANT;
 		process.env.OMP_EDIT_VARIANT = "replace";
 
@@ -260,8 +260,8 @@ describe("Coding Agent Tools", () => {
 
 			const result = await editTool.execute("test-call-5", {
 				path: testFile,
-				oldText: "world",
-				newText: "testing",
+				old_text: "world",
+				new_text: "testing",
 			});
 
 			expect(getTextOutput(result)).toContain("Successfully replaced");
@@ -279,8 +279,8 @@ describe("Coding Agent Tools", () => {
 			await expect(
 				editTool.execute("test-call-6", {
 					path: testFile,
-					oldText: "nonexistent",
-					newText: "testing",
+					old_text: "nonexistent",
+					new_text: "testing",
 				}),
 			).rejects.toThrow(/Could not find/);
 		});
@@ -293,8 +293,8 @@ describe("Coding Agent Tools", () => {
 			await expect(
 				editTool.execute("test-call-7", {
 					path: testFile,
-					oldText: "foo",
-					newText: "bar",
+					old_text: "foo",
+					new_text: "bar",
 				}),
 			).rejects.toThrow(/Found 3 occurrences/);
 		});
@@ -305,8 +305,8 @@ describe("Coding Agent Tools", () => {
 
 			const result = await editTool.execute("test-all-1", {
 				path: testFile,
-				oldText: "foo",
-				newText: "qux",
+				old_text: "foo",
+				new_text: "qux",
 				all: true,
 			});
 
@@ -337,8 +337,8 @@ function b() {
 			await expect(
 				editTool.execute("test-all-fuzzy", {
 					path: testFile,
-					oldText: "if (x) {\n  doThing();\n}",
-					newText: "if (y) {\n  doOther();\n}",
+					old_text: "if (x) {\n  doThing();\n}",
+					new_text: "if (y) {\n  doOther();\n}",
 					all: true,
 				}),
 			).rejects.toThrow(/Found 2 high-confidence matches/);
@@ -351,8 +351,8 @@ function b() {
 			await expect(
 				editTool.execute("test-all-nomatch", {
 					path: testFile,
-					oldText: "nonexistent",
-					newText: "bar",
+					old_text: "nonexistent",
+					new_text: "bar",
 					all: true,
 				}),
 			).rejects.toThrow(/Could not find/);
@@ -364,8 +364,8 @@ function b() {
 
 			const result = await editTool.execute("test-all-multiline", {
 				path: testFile,
-				oldText: "foo\nbar",
-				newText: "replaced",
+				old_text: "foo\nbar",
+				new_text: "replaced",
 				all: true,
 			});
 
@@ -380,8 +380,8 @@ function b() {
 
 			const result = await editTool.execute("test-all-single", {
 				path: testFile,
-				oldText: "world",
-				newText: "universe",
+				old_text: "world",
+				new_text: "universe",
 				all: true,
 			});
 
@@ -531,7 +531,7 @@ describe("edit tool CRLF handling", () => {
 	let originalEditVariant: string | undefined;
 
 	beforeEach(() => {
-		// Force replace mode for edit tool tests using oldText/newText
+		// Force replace mode for edit tool tests using old_text/new_text
 		originalEditVariant = process.env.OMP_EDIT_VARIANT;
 		process.env.OMP_EDIT_VARIANT = "replace";
 
@@ -551,15 +551,15 @@ describe("edit tool CRLF handling", () => {
 		}
 	});
 
-	it("should match LF oldText against CRLF file content", async () => {
+	it("should match LF old_text against CRLF file content", async () => {
 		const testFile = join(testDir, "crlf-test.txt");
 
 		writeFileSync(testFile, "line one\r\nline two\r\nline three\r\n");
 
 		const result = await editTool.execute("test-crlf-1", {
 			path: testFile,
-			oldText: "line two\n",
-			newText: "replaced line\n",
+			old_text: "line two\n",
+			new_text: "replaced line\n",
 		});
 
 		expect(getTextOutput(result)).toContain("Successfully replaced");
@@ -571,8 +571,8 @@ describe("edit tool CRLF handling", () => {
 
 		await editTool.execute("test-crlf-2", {
 			path: testFile,
-			oldText: "second\n",
-			newText: "REPLACED\n",
+			old_text: "second\n",
+			new_text: "REPLACED\n",
 		});
 
 		const content = readFileSync(testFile, "utf-8");
@@ -585,8 +585,8 @@ describe("edit tool CRLF handling", () => {
 
 		await editTool.execute("test-lf-1", {
 			path: testFile,
-			oldText: "second\n",
-			newText: "REPLACED\n",
+			old_text: "second\n",
+			new_text: "REPLACED\n",
 		});
 
 		const content = readFileSync(testFile, "utf-8");
@@ -601,8 +601,8 @@ describe("edit tool CRLF handling", () => {
 		await expect(
 			editTool.execute("test-crlf-dup", {
 				path: testFile,
-				oldText: "hello\nworld\n",
-				newText: "replaced\n",
+				old_text: "hello\nworld\n",
+				new_text: "replaced\n",
 			}),
 		).rejects.toThrow(/Found 2 occurrences/);
 	});
@@ -614,8 +614,8 @@ describe("edit tool CRLF handling", () => {
 
 		await editTool.execute("test-bom", {
 			path: testFile,
-			oldText: "second\n",
-			newText: "REPLACED\n",
+			old_text: "second\n",
+			new_text: "REPLACED\n",
 		});
 
 		const content = readFileSync(testFile, "utf-8");

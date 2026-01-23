@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `isolated` option to run tasks in isolated git worktrees
@@ -9,6 +10,12 @@
 
 ### Changed
 
+- Updated edit tool parameters from camelCase to snake_case (oldText → old_text, newText → new_text)
+- Updated grep tool parameters from camelCase to snake_case (ignoreCase → ignore_case, caseSensitive → case_sensitive, outputMode → output_mode, headLimit → head_limit)
+- Updated python tool parameters from camelCase to snake_case (timeoutMs → timeout_ms)
+- Updated todo-write tool parameters from camelCase to snake_case (activeForm → active_form)
+- Updated MCP tool name parsing to handle redundant server name prefixes
+- Marked read tool as non-abortable to improve performance
 - Simplified tool parameter descriptions across all tools for brevity
 - Updated find tool to always sort results by modification time
 - Changed web-fetch timeout default from 20s to 45s maximum

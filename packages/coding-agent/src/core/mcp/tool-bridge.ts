@@ -66,21 +66,38 @@ function formatMCPContent(content: MCPContent[]): string {
 
 /**
  * Create a unique tool name for an MCP tool.
- * Prefixes with server name to avoid conflicts.
+ *
+ * Prefixes with server name to avoid conflicts. If the tool name already
+ * starts with the server name (e.g., server "puppeteer" with tool
+ * "puppeteer_screenshot"), strips the redundant prefix to produce
+ * "mcp_puppeteer_screenshot" instead of "mcp_puppeteer_puppeteer_screenshot".
  */
 export function createMCPToolName(serverName: string, toolName: string): string {
-	// Use underscore separator since tool names can't have special chars
-	return `mcp_${serverName}_${toolName}`;
+	// Strip redundant server name prefix from tool name if present
+	const prefixWithUnderscore = `${serverName}_`;
+	const prefixWithHyphen = `${serverName}-`;
+
+	let normalizedToolName = toolName;
+	if (toolName.startsWith(prefixWithUnderscore)) {
+		normalizedToolName = toolName.slice(prefixWithUnderscore.length);
+	} else if (toolName.startsWith(prefixWithHyphen)) {
+		normalizedToolName = toolName.slice(prefixWithHyphen.length);
+	}
+
+	return `mcp_${serverName}_${normalizedToolName}`;
 }
 
 /**
  * Parse an MCP tool name back to server and tool components.
+ *
+ * Note: This returns the normalized tool name (with server prefix stripped).
+ * The original MCP tool name may have had the server name as a prefix.
  */
 export function parseMCPToolName(name: string): { serverName: string; toolName: string } | null {
 	if (!name.startsWith("mcp_")) return null;
 
 	const rest = name.slice(4);
-	const underscoreIdx = rest.lastIndexOf("_");
+	const underscoreIdx = rest.indexOf("_");
 	if (underscoreIdx === -1) return null;
 
 	return {

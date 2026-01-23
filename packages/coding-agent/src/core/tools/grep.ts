@@ -29,18 +29,18 @@ const grepSchema = Type.Object({
 	path: Type.Optional(Type.String({ description: "Directory or file to search (default: cwd)" })),
 	glob: Type.Optional(Type.String({ description: "Glob filter, e.g. '*.ts', '**/*.spec.ts'" })),
 	type: Type.Optional(Type.String({ description: "File type filter, e.g. 'ts', 'py', 'rust'" })),
-	ignoreCase: Type.Optional(Type.Boolean({ description: "Force case-insensitive (default: smart-case)" })),
-	caseSensitive: Type.Optional(Type.Boolean({ description: "Force case-sensitive (default: smart-case)" })),
+	ignore_case: Type.Optional(Type.Boolean({ description: "Force case-insensitive (default: smart-case)" })),
+	case_sensitive: Type.Optional(Type.Boolean({ description: "Force case-sensitive (default: smart-case)" })),
 	literal: Type.Optional(Type.Boolean({ description: "Treat pattern as literal, not regex (default: false)" })),
 	multiline: Type.Optional(Type.Boolean({ description: "Match across line boundaries (default: false)" })),
 	context: Type.Optional(Type.Number({ description: "Lines of context before/after match (default: 0)" })),
 	limit: Type.Optional(Type.Number({ description: "Max matches to return (default: 100)" })),
-	outputMode: Type.Optional(
+	output_mode: Type.Optional(
 		StringEnum(["content", "files_with_matches", "count"], {
 			description: "Output format (default: content)",
 		}),
 	),
-	headLimit: Type.Optional(Type.Number({ description: "Truncate output to first N results" })),
+	head_limit: Type.Optional(Type.Number({ description: "Truncate output to first N results" })),
 	offset: Type.Optional(Type.Number({ description: "Skip first N results (default: 0)" })),
 });
 
@@ -88,14 +88,14 @@ interface GrepParams {
 	path?: string;
 	glob?: string;
 	type?: string;
-	ignoreCase?: boolean;
-	caseSensitive?: boolean;
+	ignore_case?: boolean;
+	case_sensitive?: boolean;
 	literal?: boolean;
 	multiline?: boolean;
 	context?: number;
 	limit?: number;
-	outputMode?: "content" | "files_with_matches" | "count";
-	headLimit?: number;
+	output_mode?: "content" | "files_with_matches" | "count";
+	head_limit?: number;
 	offset?: number;
 }
 
@@ -154,14 +154,14 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 			path: searchDir,
 			glob,
 			type,
-			ignoreCase,
-			caseSensitive,
+			ignore_case,
+			case_sensitive,
 			literal,
 			multiline,
 			context,
 			limit,
-			outputMode,
-			headLimit,
+			output_mode,
+			head_limit,
 			offset,
 		} = params;
 
@@ -195,9 +195,9 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 			}
 			const contextValue = context && context > 0 ? context : 0;
 			const effectiveLimit = Math.max(1, limit ?? DEFAULT_LIMIT);
-			const effectiveOutputMode = outputMode ?? "content";
+			const effectiveOutputMode = output_mode ?? "content";
 			const effectiveOffset = offset && offset > 0 ? offset : 0;
-			const hasHeadLimit = headLimit !== undefined && headLimit > 0;
+			const hasHeadLimit = head_limit !== undefined && head_limit > 0;
 
 			const formatPath = (filePath: string): string => {
 				if (isDirectory) {
@@ -237,9 +237,9 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 				args.push("--json", "--line-number", "--color=never", "--hidden");
 			}
 
-			if (caseSensitive) {
+			if (case_sensitive) {
 				args.push("--case-sensitive");
-			} else if (ignoreCase) {
+			} else if (ignore_case) {
 				args.push("--ignore-case");
 			} else {
 				args.push("--smart-case");
@@ -321,13 +321,13 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 					};
 				}
 
-				// Apply offset and headLimit
+				// Apply offset and head_limit
 				let processedLines = lines;
 				if (effectiveOffset > 0) {
 					processedLines = processedLines.slice(effectiveOffset);
 				}
 				if (hasHeadLimit) {
-					processedLines = processedLines.slice(0, headLimit);
+					processedLines = processedLines.slice(0, head_limit);
 				}
 
 				let simpleMatchCount = 0;
@@ -395,7 +395,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 							})),
 							mode: effectiveOutputMode,
 							truncated: truncatedByHeadLimit,
-							headLimitReached: truncatedByHeadLimit ? headLimit : undefined,
+							headLimitReached: truncatedByHeadLimit ? head_limit : undefined,
 						},
 					};
 				}
@@ -412,7 +412,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 						files: simpleFileList,
 						mode: effectiveOutputMode,
 						truncated: truncatedByHeadLimit,
-						headLimitReached: truncatedByHeadLimit ? headLimit : undefined,
+						headLimitReached: truncatedByHeadLimit ? head_limit : undefined,
 					},
 				};
 			}
@@ -528,13 +528,13 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 				};
 			}
 
-			// Apply offset and headLimit to output lines
+			// Apply offset and head_limit to output lines
 			let processedLines = outputLines;
 			if (effectiveOffset > 0) {
 				processedLines = processedLines.slice(effectiveOffset);
 			}
 			if (hasHeadLimit) {
-				processedLines = processedLines.slice(0, headLimit);
+				processedLines = processedLines.slice(0, head_limit);
 			}
 
 			// Apply byte truncation (no line limit since we already have match limit)
@@ -554,7 +554,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 				})),
 				mode: effectiveOutputMode,
 				truncated: matchLimitReached || truncation.truncated || truncatedByHeadLimit,
-				headLimitReached: truncatedByHeadLimit ? headLimit : undefined,
+				headLimitReached: truncatedByHeadLimit ? head_limit : undefined,
 			};
 
 			// Build notices
@@ -598,13 +598,13 @@ interface GrepRenderArgs {
 	path?: string;
 	glob?: string;
 	type?: string;
-	ignoreCase?: boolean;
-	caseSensitive?: boolean;
+	ignore_case?: boolean;
+	case_sensitive?: boolean;
 	literal?: boolean;
 	multiline?: boolean;
 	context?: number;
 	limit?: number;
-	outputMode?: string;
+	output_mode?: string;
 }
 
 const COLLAPSED_LIST_LIMIT = PREVIEW_LIMITS.COLLAPSED_ITEMS;
@@ -621,10 +621,10 @@ export const grepToolRenderer = {
 		if (args.path) meta.push(`in ${args.path}`);
 		if (args.glob) meta.push(`glob:${args.glob}`);
 		if (args.type) meta.push(`type:${args.type}`);
-		if (args.outputMode && args.outputMode !== "files_with_matches") meta.push(`mode:${args.outputMode}`);
-		if (args.caseSensitive) {
+		if (args.output_mode && args.output_mode !== "files_with_matches") meta.push(`mode:${args.output_mode}`);
+		if (args.case_sensitive) {
 			meta.push("case:sensitive");
-		} else if (args.ignoreCase) {
+		} else if (args.ignore_case) {
 			meta.push("case:insensitive");
 		}
 		if (args.literal) meta.push("literal");

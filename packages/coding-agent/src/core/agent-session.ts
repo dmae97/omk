@@ -587,7 +587,7 @@ export class AgentSession {
 
 		const args = toolCall.arguments;
 		if (!args || typeof args !== "object" || Array.isArray(args)) return;
-		if ("oldText" in args || "newText" in args) return;
+		if ("old_text" in args || "new_text" in args) return;
 
 		const path = typeof args.path === "string" ? args.path : undefined;
 		if (!path) return;
@@ -632,7 +632,7 @@ export class AgentSession {
 
 		const args = toolCall.arguments;
 		if (!args || typeof args !== "object" || Array.isArray(args)) return;
-		if ("oldText" in args || "newText" in args) return;
+		if ("old_text" in args || "new_text" in args) return;
 
 		const path = typeof args.path === "string" ? args.path : undefined;
 		const diff = typeof args.diff === "string" ? args.diff : undefined;

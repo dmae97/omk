@@ -223,8 +223,8 @@ export class ToolExecutionComponent extends Container {
 			return;
 		}
 
-		const oldText = this.args?.oldText;
-		const newText = this.args?.newText;
+		const oldText = this.args?.old_text;
+		const newText = this.args?.new_text;
 		const all = this.args?.all;
 
 		// Need all three params to compute diff

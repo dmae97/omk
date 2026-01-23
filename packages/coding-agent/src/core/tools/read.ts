@@ -4,7 +4,7 @@ import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallb
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
-import { ptree, untilAborted } from "@oh-my-pi/pi-utils";
+import { ptree } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import { CONFIG_DIR_NAME } from "../../config";
 import type { Theme } from "../../modes/interactive/theme/theme";
@@ -388,6 +388,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 	public readonly label = "Read";
 	public readonly description: string;
 	public readonly parameters = readSchema;
+	public readonly nonAbortable = true;
 
 	private readonly session: ToolSession;
 	private readonly autoResizeImages: boolean;
@@ -414,248 +415,236 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		const { path: readPath, offset, limit, lines } = params;
 		const absolutePath = resolveReadPath(readPath, this.session.cwd);
 
-		return untilAborted(signal, async () => {
-			let isDirectory = false;
-			let fileSize = 0;
-			try {
-				const stat = await Bun.file(absolutePath).stat();
-				fileSize = stat.size;
-				isDirectory = stat.isDirectory();
-			} catch (error) {
-				if (isNotFoundError(error)) {
-					let message = `File not found: ${readPath}`;
+		let isDirectory = false;
+		let fileSize = 0;
+		try {
+			const stat = await Bun.file(absolutePath).stat();
+			fileSize = stat.size;
+			isDirectory = stat.isDirectory();
+		} catch (error) {
+			if (isNotFoundError(error)) {
+				let message = `File not found: ${readPath}`;
 
-					// Skip fuzzy matching for remote mounts (sshfs) to avoid hangs
-					if (!isRemoteMountPath(absolutePath)) {
-						const suggestions = await findReadPathSuggestions(readPath, this.session.cwd, signal);
+				// Skip fuzzy matching for remote mounts (sshfs) to avoid hangs
+				if (!isRemoteMountPath(absolutePath)) {
+					const suggestions = await findReadPathSuggestions(readPath, this.session.cwd, signal);
 
-						if (suggestions?.suggestions.length) {
-							const scopeLabel = suggestions.scopeLabel ? ` in ${suggestions.scopeLabel}` : "";
-							message += `\n\nClosest matches${scopeLabel}:\n${suggestions.suggestions.map((match) => `- ${match}`).join("\n")}`;
-							if (suggestions.truncated) {
-								message += `\n[Search truncated to first ${MAX_FUZZY_CANDIDATES} paths. Refine the path if the match isn't listed.]`;
-							}
-						} else if (suggestions?.error) {
-							message += `\n\nFuzzy match failed: ${suggestions.error}`;
-						} else if (suggestions?.scopeLabel) {
-							message += `\n\nNo similar paths found in ${suggestions.scopeLabel}.`;
+					if (suggestions?.suggestions.length) {
+						const scopeLabel = suggestions.scopeLabel ? ` in ${suggestions.scopeLabel}` : "";
+						message += `\n\nClosest matches${scopeLabel}:\n${suggestions.suggestions.map((match) => `- ${match}`).join("\n")}`;
+						if (suggestions.truncated) {
+							message += `\n[Search truncated to first ${MAX_FUZZY_CANDIDATES} paths. Refine the path if the match isn't listed.]`;
 						}
+					} else if (suggestions?.error) {
+						message += `\n\nFuzzy match failed: ${suggestions.error}`;
+					} else if (suggestions?.scopeLabel) {
+						message += `\n\nNo similar paths found in ${suggestions.scopeLabel}.`;
 					}
-
-					throw new Error(message);
 				}
-				throw error;
+
+				throw new Error(message);
 			}
+			throw error;
+		}
 
-			if (isDirectory) {
-				const lsResult = await this.lsTool.execute(toolCallId, { path: readPath, limit }, signal);
-				return {
-					content: lsResult.content,
-					details: { redirectedTo: "ls", truncation: lsResult.details?.truncation },
-				};
-			}
+		if (isDirectory) {
+			const lsResult = await this.lsTool.execute(toolCallId, { path: readPath, limit }, signal);
+			return {
+				content: lsResult.content,
+				details: { redirectedTo: "ls", truncation: lsResult.details?.truncation },
+			};
+		}
 
-			const mimeType = await detectSupportedImageMimeTypeFromFile(absolutePath);
-			const ext = path.extname(absolutePath).toLowerCase();
+		const mimeType = await detectSupportedImageMimeTypeFromFile(absolutePath);
+		const ext = path.extname(absolutePath).toLowerCase();
 
-			// Read the file based on type
-			let content: (TextContent | ImageContent)[];
-			let details: ReadToolDetails | undefined;
+		// Read the file based on type
+		let content: (TextContent | ImageContent)[];
+		let details: ReadToolDetails | undefined;
 
-			if (mimeType) {
-				if (fileSize > MAX_IMAGE_SIZE) {
-					const sizeStr = formatSize(fileSize);
+		if (mimeType) {
+			if (fileSize > MAX_IMAGE_SIZE) {
+				const sizeStr = formatSize(fileSize);
+				const maxStr = formatSize(MAX_IMAGE_SIZE);
+				throw new Error(`Image file too large: ${sizeStr} exceeds ${maxStr} limit.`);
+			} else {
+				// Read as image (binary)
+				const file = Bun.file(absolutePath);
+				const buffer = await file.arrayBuffer();
+
+				// Check actual buffer size after reading to prevent OOM during serialization
+				if (buffer.byteLength > MAX_IMAGE_SIZE) {
+					const sizeStr = formatSize(buffer.byteLength);
 					const maxStr = formatSize(MAX_IMAGE_SIZE);
-					content = [
-						{
-							type: "text",
-							text: `[Image file too large: ${sizeStr} exceeds ${maxStr} limit. Use an image viewer or resize the image.]`,
-						},
-					];
+					throw new Error(`Image file too large: ${sizeStr} exceeds ${maxStr} limit.`);
 				} else {
-					// Read as image (binary)
-					const file = Bun.file(absolutePath);
-					const buffer = await file.arrayBuffer();
+					const base64 = Buffer.from(buffer).toString("base64");
 
-					// Check actual buffer size after reading to prevent OOM during serialization
-					if (buffer.byteLength > MAX_IMAGE_SIZE) {
-						const sizeStr = formatSize(buffer.byteLength);
-						const maxStr = formatSize(MAX_IMAGE_SIZE);
-						content = [
-							{
-								type: "text",
-								text: `[Image file too large: ${sizeStr} exceeds ${maxStr} limit. Use an image viewer or resize the image.]`,
-							},
-						];
-					} else {
-						const base64 = Buffer.from(buffer).toString("base64");
+					if (this.autoResizeImages) {
+						// Resize image if needed - catch errors from WASM
+						try {
+							const resized = await resizeImage({ type: "image", data: base64, mimeType });
+							const dimensionNote = formatDimensionNote(resized);
 
-						if (this.autoResizeImages) {
-							// Resize image if needed - catch errors from WASM
-							try {
-								const resized = await resizeImage({ type: "image", data: base64, mimeType });
-								const dimensionNote = formatDimensionNote(resized);
-
-								let textNote = `Read image file [${resized.mimeType}]`;
-								if (dimensionNote) {
-									textNote += `\n${dimensionNote}`;
-								}
-
-								content = [
-									{ type: "text", text: textNote },
-									{ type: "image", data: resized.data, mimeType: resized.mimeType },
-								];
-							} catch {
-								// Fall back to original image on resize failure
-								content = [
-									{ type: "text", text: `Read image file [${mimeType}]` },
-									{ type: "image", data: base64, mimeType },
-								];
+							let textNote = `Read image file [${resized.mimeType}]`;
+							if (dimensionNote) {
+								textNote += `\n${dimensionNote}`;
 							}
-						} else {
+
+							content = [
+								{ type: "text", text: textNote },
+								{ type: "image", data: resized.data, mimeType: resized.mimeType },
+							];
+						} catch {
+							// Fall back to original image on resize failure
 							content = [
 								{ type: "text", text: `Read image file [${mimeType}]` },
 								{ type: "image", data: base64, mimeType },
 							];
 						}
-					}
-				}
-			} else if (CONVERTIBLE_EXTENSIONS.has(ext)) {
-				// Convert document via markitdown
-				const result = await convertWithMarkitdown(absolutePath, signal);
-				if (result.ok) {
-					// Apply truncation to converted content
-					const truncation = truncateHead(result.content);
-					let outputText = truncation.content;
-
-					if (truncation.truncated) {
-						outputText += `\n\n[Document converted via markitdown. Output truncated to ${formatSize(DEFAULT_MAX_BYTES)}]`;
-						details = { truncation };
-					}
-
-					content = [{ type: "text", text: outputText }];
-				} else if (result.error) {
-					// markitdown not available or failed
-					const errorMsg =
-						result.error === "markitdown not found"
-							? `markitdown not installed. Install with: pip install markitdown`
-							: result.error || "conversion failed";
-					content = [{ type: "text", text: `[Cannot read ${ext} file: ${errorMsg}]` }];
-				} else {
-					content = [{ type: "text", text: `[Cannot read ${ext} file: conversion failed]` }];
-				}
-			} else {
-				// Read as text
-				const file = Bun.file(absolutePath);
-				const textContent = await file.text();
-				const allLines = textContent.split("\n");
-				const totalFileLines = allLines.length;
-
-				// Apply offset if specified (1-indexed to 0-indexed)
-				const startLine = offset ? Math.max(0, offset - 1) : 0;
-				const startLineDisplay = startLine + 1; // For display (1-indexed)
-
-				// Check if offset is out of bounds - return graceful message instead of throwing
-				if (startLine >= allLines.length) {
-					const suggestion =
-						allLines.length === 0
-							? "The file is empty."
-							: `Use offset=1 to read from the start, or offset=${allLines.length} to read the last line.`;
-					return {
-						content: [
-							{
-								type: "text",
-								text: `Offset ${offset} is beyond end of file (${allLines.length} lines total). ${suggestion}`,
-							},
-						],
-					};
-				}
-
-				// If limit is specified by user, use it; otherwise we'll let truncateHead decide
-				let selectedContent: string;
-				let userLimitedLines: number | undefined;
-				if (limit !== undefined) {
-					const endLine = Math.min(startLine + limit, allLines.length);
-					selectedContent = allLines.slice(startLine, endLine).join("\n");
-					userLimitedLines = endLine - startLine;
-				} else {
-					selectedContent = allLines.slice(startLine).join("\n");
-				}
-
-				// Apply truncation (respects both line and byte limits)
-				const truncation = truncateHead(selectedContent);
-
-				// Add line numbers if requested (uses setting default if not specified)
-				const shouldAddLineNumbers = lines ?? this.defaultLineNumbers;
-				const prependLineNumbers = (text: string, startNum: number): string => {
-					const textLines = text.split("\n");
-					const lastLineNum = startNum + textLines.length - 1;
-					const padWidth = String(lastLineNum).length;
-					return textLines
-						.map((line, i) => {
-							const lineNum = String(startNum + i).padStart(padWidth, " ");
-							return `${lineNum}\t${line}`;
-						})
-						.join("\n");
-				};
-
-				let outputText: string;
-
-				if (truncation.firstLineExceedsLimit) {
-					const firstLine = allLines[startLine] ?? "";
-					const firstLineBytes = Buffer.byteLength(firstLine, "utf-8");
-					const snippet = truncateStringToBytesFromStart(firstLine, DEFAULT_MAX_BYTES);
-					const shownSize = formatSize(snippet.bytes);
-
-					outputText = shouldAddLineNumbers ? prependLineNumbers(snippet.text, startLineDisplay) : snippet.text;
-					if (snippet.text.length > 0) {
-						outputText += `\n\n[Line ${startLineDisplay} is ${formatSize(
-							firstLineBytes,
-						)}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Showing first ${shownSize} of the line.]`;
 					} else {
-						outputText = `[Line ${startLineDisplay} is ${formatSize(
-							firstLineBytes,
-						)}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Unable to display a valid UTF-8 snippet.]`;
+						content = [
+							{ type: "text", text: `Read image file [${mimeType}]` },
+							{ type: "image", data: base64, mimeType },
+						];
 					}
+				}
+			}
+		} else if (CONVERTIBLE_EXTENSIONS.has(ext)) {
+			// Convert document via markitdown
+			const result = await convertWithMarkitdown(absolutePath, signal);
+			if (result.ok) {
+				// Apply truncation to converted content
+				const truncation = truncateHead(result.content);
+				let outputText = truncation.content;
+
+				if (truncation.truncated) {
+					outputText += `\n\n[Document converted via markitdown. Output truncated to ${formatSize(DEFAULT_MAX_BYTES)}]`;
 					details = { truncation };
-				} else if (truncation.truncated) {
-					// Truncation occurred - build actionable notice
-					const endLineDisplay = startLineDisplay + truncation.outputLines - 1;
-					const nextOffset = endLineDisplay + 1;
-
-					outputText = shouldAddLineNumbers
-						? prependLineNumbers(truncation.content, startLineDisplay)
-						: truncation.content;
-
-					if (truncation.truncatedBy === "lines") {
-						outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines}. Use offset=${nextOffset} to continue]`;
-					} else {
-						outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines} (${formatSize(
-							DEFAULT_MAX_BYTES,
-						)} limit). Use offset=${nextOffset} to continue]`;
-					}
-					details = { truncation };
-				} else if (userLimitedLines !== undefined && startLine + userLimitedLines < allLines.length) {
-					// User specified limit, there's more content, but no truncation
-					const remaining = allLines.length - (startLine + userLimitedLines);
-					const nextOffset = startLine + userLimitedLines + 1;
-
-					outputText = shouldAddLineNumbers
-						? prependLineNumbers(truncation.content, startLineDisplay)
-						: truncation.content;
-					outputText += `\n\n[${remaining} more lines in file. Use offset=${nextOffset} to continue]`;
-				} else {
-					// No truncation, no user limit exceeded
-					outputText = shouldAddLineNumbers
-						? prependLineNumbers(truncation.content, startLineDisplay)
-						: truncation.content;
 				}
 
 				content = [{ type: "text", text: outputText }];
+			} else if (result.error) {
+				// markitdown not available or failed
+				const errorMsg =
+					result.error === "markitdown not found"
+						? `markitdown not installed. Install with: pip install markitdown`
+						: result.error || "conversion failed";
+				content = [{ type: "text", text: `[Cannot read ${ext} file: ${errorMsg}]` }];
+			} else {
+				content = [{ type: "text", text: `[Cannot read ${ext} file: conversion failed]` }];
+			}
+		} else {
+			// Read as text
+			const file = Bun.file(absolutePath);
+			const textContent = await file.text();
+			const allLines = textContent.split("\n");
+			const totalFileLines = allLines.length;
+
+			// Apply offset if specified (1-indexed to 0-indexed)
+			const startLine = offset ? Math.max(0, offset - 1) : 0;
+			const startLineDisplay = startLine + 1; // For display (1-indexed)
+
+			// Check if offset is out of bounds - return graceful message instead of throwing
+			if (startLine >= allLines.length) {
+				const suggestion =
+					allLines.length === 0
+						? "The file is empty."
+						: `Use offset=1 to read from the start, or offset=${allLines.length} to read the last line.`;
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Offset ${offset} is beyond end of file (${allLines.length} lines total). ${suggestion}`,
+						},
+					],
+				};
 			}
 
-			return { content, details };
-		});
+			// If limit is specified by user, use it; otherwise we'll let truncateHead decide
+			let selectedContent: string;
+			let userLimitedLines: number | undefined;
+			if (limit !== undefined) {
+				const endLine = Math.min(startLine + limit, allLines.length);
+				selectedContent = allLines.slice(startLine, endLine).join("\n");
+				userLimitedLines = endLine - startLine;
+			} else {
+				selectedContent = allLines.slice(startLine).join("\n");
+			}
+
+			// Apply truncation (respects both line and byte limits)
+			const truncation = truncateHead(selectedContent);
+
+			// Add line numbers if requested (uses setting default if not specified)
+			const shouldAddLineNumbers = lines ?? this.defaultLineNumbers;
+			const prependLineNumbers = (text: string, startNum: number): string => {
+				const textLines = text.split("\n");
+				const lastLineNum = startNum + textLines.length - 1;
+				const padWidth = String(lastLineNum).length;
+				return textLines
+					.map((line, i) => {
+						const lineNum = String(startNum + i).padStart(padWidth, " ");
+						return `${lineNum}\t${line}`;
+					})
+					.join("\n");
+			};
+
+			let outputText: string;
+
+			if (truncation.firstLineExceedsLimit) {
+				const firstLine = allLines[startLine] ?? "";
+				const firstLineBytes = Buffer.byteLength(firstLine, "utf-8");
+				const snippet = truncateStringToBytesFromStart(firstLine, DEFAULT_MAX_BYTES);
+				const shownSize = formatSize(snippet.bytes);
+
+				outputText = shouldAddLineNumbers ? prependLineNumbers(snippet.text, startLineDisplay) : snippet.text;
+				if (snippet.text.length > 0) {
+					outputText += `\n\n[Line ${startLineDisplay} is ${formatSize(
+						firstLineBytes,
+					)}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Showing first ${shownSize} of the line.]`;
+				} else {
+					outputText = `[Line ${startLineDisplay} is ${formatSize(
+						firstLineBytes,
+					)}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Unable to display a valid UTF-8 snippet.]`;
+				}
+				details = { truncation };
+			} else if (truncation.truncated) {
+				// Truncation occurred - build actionable notice
+				const endLineDisplay = startLineDisplay + truncation.outputLines - 1;
+				const nextOffset = endLineDisplay + 1;
+
+				outputText = shouldAddLineNumbers
+					? prependLineNumbers(truncation.content, startLineDisplay)
+					: truncation.content;
+
+				if (truncation.truncatedBy === "lines") {
+					outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines}. Use offset=${nextOffset} to continue]`;
+				} else {
+					outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines} (${formatSize(
+						DEFAULT_MAX_BYTES,
+					)} limit). Use offset=${nextOffset} to continue]`;
+				}
+				details = { truncation };
+			} else if (userLimitedLines !== undefined && startLine + userLimitedLines < allLines.length) {
+				// User specified limit, there's more content, but no truncation
+				const remaining = allLines.length - (startLine + userLimitedLines);
+				const nextOffset = startLine + userLimitedLines + 1;
+
+				outputText = shouldAddLineNumbers
+					? prependLineNumbers(truncation.content, startLineDisplay)
+					: truncation.content;
+				outputText += `\n\n[${remaining} more lines in file. Use offset=${nextOffset} to continue]`;
+			} else {
+				// No truncation, no user limit exceeded
+				outputText = shouldAddLineNumbers
+					? prependLineNumbers(truncation.content, startLineDisplay)
+					: truncation.content;
+			}
+
+			content = [{ type: "text", text: outputText }];
+		}
+
+		return { content, details };
 	}
 }
 

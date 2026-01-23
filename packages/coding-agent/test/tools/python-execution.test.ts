@@ -40,7 +40,7 @@ describe("python tool execution", () => {
 		const tool = new PythonTool(createSession(tempDir.path));
 		const result = await tool.execute(
 			"call-id",
-			{ cells: [{ code: "print('hi')" }], timeoutMs: 5000, cwd: tempDir.path, reset: true },
+			{ cells: [{ code: "print('hi')" }], timeout_ms: 5000, cwd: tempDir.path, reset: true },
 			undefined,
 			undefined,
 			undefined,

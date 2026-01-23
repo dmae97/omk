@@ -4,7 +4,7 @@ Performs string replacements in files with fuzzy whitespace matching.
 
 <instruction>
 - Use the smallest edit that uniquely identifies the change
-- If `oldText` is not unique, expand to include more context or use `all: true` to replace all occurrences
+- If `old_text` is not unique, expand to include more context or use `all: true` to replace all occurrences
 - You must use your read tool at least once in the conversation before editing. This tool will error if you attempt an edit without reading the file.
 - Fuzzy matching handles minor whitespace/indentation differences automatically
 - Prefer editing existing files over creating new ones

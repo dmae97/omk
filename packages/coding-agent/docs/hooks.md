@@ -345,10 +345,10 @@ Tool inputs:
 - `bash`: `{ command, timeout? }`
 - `read`: `{ path, offset?, limit? }`
 - `write`: `{ path, content }`
-- `edit`: `{ path, oldText, newText }`
+- `edit`: `{ path, old_text, new_text }`
 - `ls`: `{ path?, limit? }`
 - `find`: `{ pattern, path?, limit? }`
-- `grep`: `{ pattern, path?, glob?, ignoreCase?, literal?, context?, limit? }`
+- `grep`: `{ pattern, path?, glob?, ignore_case?, literal?, context?, limit? }`
 
 #### tool_result
 
