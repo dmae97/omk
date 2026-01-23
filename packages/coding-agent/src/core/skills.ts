@@ -2,7 +2,6 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
-import { minimatch } from "minimatch";
 import { skillCapability } from "../capability/skill";
 import type { SourceMeta } from "../capability/types";
 import type { Skill as CapabilitySkill, SkillFrontmatter as ImportedSkillFrontmatter } from "../discovery";
@@ -169,45 +168,6 @@ function scanDirectoryForSkills(dir: string): LoadSkillsResult {
 	return { skills, warnings };
 }
 
-/**
- * Format skills for inclusion in a system prompt.
- * Uses XML format per Agent Skills standard.
- * See: https://agentskills.io/integrate-skills
- */
-export function formatSkillsForPrompt(skills: Skill[]): string {
-	if (skills.length === 0) {
-		return "";
-	}
-
-	const lines = [
-		"\n\nThe following skills provide specialized instructions for specific tasks.",
-		"Use the read tool to load a skill's file when the task matches its description.",
-		"",
-		"<available_skills>",
-	];
-
-	for (const skill of skills) {
-		lines.push("  <skill>");
-		lines.push(`    <name>${escapeXml(skill.name)}</name>`);
-		lines.push(`    <description>${escapeXml(skill.description)}</description>`);
-		lines.push(`    <location>${escapeXml(skill.filePath)}</location>`);
-		lines.push("  </skill>");
-	}
-
-	lines.push("</available_skills>");
-
-	return lines.join("\n");
-}
-
-function escapeXml(str: string): string {
-	return str
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;")
-		.replace(/'/g, "&apos;");
-}
-
 export interface LoadSkillsOptions extends SkillsSettings {
 	/** Working directory for project-local skills. Default: process.cwd() */
 	cwd?: string;
@@ -258,13 +218,13 @@ export async function loadSkills(options: LoadSkillsOptions = {}): Promise<LoadS
 	// Check if skill name matches any of the include patterns
 	function matchesIncludePatterns(name: string): boolean {
 		if (includeSkills.length === 0) return true;
-		return includeSkills.some((pattern) => minimatch(name, pattern));
+		return includeSkills.some((pattern) => new Bun.Glob(pattern).match(name));
 	}
 
 	// Check if skill name matches any of the ignore patterns
 	function matchesIgnorePatterns(name: string): boolean {
 		if (ignoredSkills.length === 0) return false;
-		return ignoredSkills.some((pattern) => minimatch(name, pattern));
+		return ignoredSkills.some((pattern) => new Bun.Glob(pattern).match(name));
 	}
 
 	// Filter skills by source and patterns first

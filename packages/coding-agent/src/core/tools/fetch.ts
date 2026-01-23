@@ -888,7 +888,10 @@ export class FetchTool implements AgentTool<typeof fetchSchema, FetchToolDetails
 	public readonly description: string;
 	public readonly parameters = fetchSchema;
 
-	constructor(_session: ToolSession) {
+	private readonly session: ToolSession;
+
+	constructor(session: ToolSession) {
+		this.session = session;
 		this.description = renderPromptTemplate(fetchDescription);
 	}
 
@@ -900,6 +903,46 @@ export class FetchTool implements AgentTool<typeof fetchSchema, FetchToolDetails
 		_context?: AgentToolContext,
 	): Promise<AgentToolResult<FetchToolDetails>> {
 		const { url, timeout: rawTimeout = 20, raw = false } = params;
+
+		// Handle internal URLs (agent://, skill://)
+		const internalRouter = this.session.internalRouter;
+		if (internalRouter?.canHandle(url)) {
+			const resource = await internalRouter.resolve(url);
+			const formattedContent =
+				resource.contentType === "application/json" ? formatJson(resource.content) : resource.content;
+			const outputContent = finalizeOutput(formattedContent);
+
+			// Format output similar to external URLs
+			let output = "";
+			output += `URL: ${resource.url}\n`;
+			output += `Content-Type: ${resource.contentType}\n`;
+			output += `Method: internal\n`;
+			if (outputContent.truncated) {
+				output += "Warning: Output was truncated\n";
+			}
+			if (resource.notes && resource.notes.length > 0) {
+				output += `Notes: ${resource.notes.join("; ")}\n`;
+			}
+			if (resource.sourcePath) {
+				output += `Resolved path: ${resource.sourcePath}\n`;
+			}
+			output += `\n---\n\n`;
+			output += outputContent.content;
+
+			const details: FetchToolDetails = {
+				url: resource.url,
+				finalUrl: resource.url,
+				contentType: resource.contentType,
+				method: "internal",
+				truncated: outputContent.truncated,
+				notes: resource.notes ?? [],
+			};
+
+			return {
+				content: [{ type: "text", text: output }],
+				details,
+			};
+		}
 
 		// Auto-convert milliseconds to seconds if value > 1000 (16+ min is unreasonable)
 		const timeoutSec = rawTimeout > 1000 ? rawTimeout / 1000 : rawTimeout;

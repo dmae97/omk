@@ -287,7 +287,7 @@ Scan descriptions against your task domain. If a skill covers what you're produc
 {{#list skills join="\n"}}
 <skill name="{{name}}">
 {{description}}
-<path>{{filePath}}</path>
+<path>skill://{{name}}</path>
 </skill>
 {{/list}}
 </skills>
@@ -299,7 +299,7 @@ Scan descriptions against your task domain. If a skill covers what you're produc
   <rule name="{{name}}">
     {{description}}
 {{#list globs join="\n"}}<glob>{{this}}</glob>{{/list}}
-    <path>{{path}}</path>
+    <path>rule://{{name}}</path>
   </rule>
 {{/list}}
 </rules>

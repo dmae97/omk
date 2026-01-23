@@ -22,7 +22,6 @@ export {
 	warmupLspServers,
 } from "./lsp/index";
 export { NotebookTool, type NotebookToolDetails } from "./notebook";
-export { OutputTool, type OutputToolDetails } from "./output";
 export { EditTool, type EditToolDetails } from "./patch";
 export { PythonTool, type PythonToolDetails, type PythonToolOptions } from "./python";
 export { ReadTool, type ReadToolDetails } from "./read";
@@ -63,6 +62,7 @@ export { WriteTool, type WriteToolDetails } from "./write";
 import type { AgentTool } from "@oh-my-pi/pi-agent-core";
 import { logger } from "@oh-my-pi/pi-utils";
 import type { EventBus } from "../event-bus";
+import type { InternalUrlRouter } from "../internal-urls";
 import { getPreludeDocs, warmPythonEnvironment } from "../python-executor";
 import { checkPythonKernelAvailability } from "../python-kernel";
 import type { BashInterceptorRule } from "../settings-manager";
@@ -76,7 +76,6 @@ import { GrepTool } from "./grep";
 import { LsTool } from "./ls";
 import { LspTool } from "./lsp/index";
 import { NotebookTool } from "./notebook";
-import { OutputTool } from "./output";
 import { EditTool } from "./patch";
 import { PythonTool } from "./python";
 import { ReadTool } from "./read";
@@ -118,6 +117,8 @@ export interface ToolSession {
 	modelRegistry?: import("../model-registry").ModelRegistry;
 	/** MCP manager for proxying MCP calls through parent */
 	mcpManager?: import("../mcp/manager").MCPManager;
+	/** Internal URL router for agent:// and skill:// URLs */
+	internalRouter?: InternalUrlRouter;
 	/** Settings manager for passing to subagents (avoids SQLite access in workers) */
 	settingsManager?: { serialize: () => import("../settings-manager").Settings };
 	/** Settings manager (optional) */
@@ -153,7 +154,6 @@ export const BUILTIN_TOOLS: Record<string, ToolFactory> = {
 	ls: (s) => new LsTool(s),
 	lsp: LspTool.createIf,
 	notebook: (s) => new NotebookTool(s),
-	output: (s) => new OutputTool(s),
 	read: (s) => new ReadTool(s),
 	task: TaskTool.create,
 	todo_write: (s) => new TodoWriteTool(s),

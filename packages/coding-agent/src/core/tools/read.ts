@@ -413,6 +413,13 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		_context?: AgentToolContext,
 	): Promise<AgentToolResult<ReadToolDetails>> {
 		const { path: readPath, offset, limit, lines } = params;
+
+		// Handle internal URLs (agent://, skill://)
+		const internalRouter = this.session.internalRouter;
+		if (internalRouter?.canHandle(readPath)) {
+			return this.handleInternalUrl(readPath, offset, limit, lines);
+		}
+
 		const absolutePath = resolveReadPath(readPath, this.session.cwd);
 
 		let isDirectory = false;
@@ -645,6 +652,161 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		}
 
 		return { content, details };
+	}
+
+	/**
+	 * Handle internal URLs (agent://, skill://).
+	 * Supports pagination via offset/limit but rejects them when query extraction is used.
+	 */
+	private async handleInternalUrl(
+		url: string,
+		offset?: number,
+		limit?: number,
+		lines?: boolean,
+	): Promise<AgentToolResult<ReadToolDetails>> {
+		const internalRouter = this.session.internalRouter!;
+
+		// Check if URL has query extraction (agent:// only)
+		let parsed: URL;
+		try {
+			parsed = new URL(url);
+		} catch {
+			throw new Error(`Invalid URL: ${url}`);
+		}
+		const scheme = parsed.protocol.replace(/:$/, "").toLowerCase();
+		const hasPathExtraction = parsed.pathname && parsed.pathname !== "/" && parsed.pathname !== "";
+		const queryParam = parsed.searchParams.get("q");
+		const hasQueryExtraction = queryParam !== null && queryParam !== "";
+		const hasExtraction = scheme === "agent" && (hasPathExtraction || hasQueryExtraction);
+
+		if (scheme !== "agent" && hasQueryExtraction) {
+			throw new Error("Only agent:// URLs support ?q= query extraction");
+		}
+
+		// Reject offset/limit with query extraction
+		if (hasExtraction && (offset !== undefined || limit !== undefined)) {
+			throw new Error("Cannot combine query extraction with offset/limit");
+		}
+
+		// Resolve the internal URL
+		const resource = await internalRouter.resolve(url);
+
+		// If extraction was used, return directly (no pagination)
+		if (hasExtraction) {
+			let text = resource.content;
+			if (resource.sourcePath) {
+				text += `\n\n[Resolved path: ${resource.sourcePath}]`;
+			}
+			return {
+				content: [{ type: "text", text }],
+			};
+		}
+
+		// Apply pagination similar to file reading
+		const allLines = resource.content.split("\n");
+		const totalLines = allLines.length;
+
+		const startLine = offset ? Math.max(0, offset - 1) : 0;
+		const startLineDisplay = startLine + 1;
+
+		if (startLine >= allLines.length) {
+			const suggestion =
+				allLines.length === 0
+					? "The resource is empty."
+					: `Use offset=1 to read from the start, or offset=${allLines.length} to read the last line.`;
+			return {
+				content: [
+					{
+						type: "text",
+						text: `Offset ${offset} is beyond end of resource (${allLines.length} lines total). ${suggestion}`,
+					},
+				],
+			};
+		}
+
+		let selectedContent: string;
+		let userLimitedLines: number | undefined;
+		if (limit !== undefined) {
+			const endLine = Math.min(startLine + limit, allLines.length);
+			selectedContent = allLines.slice(startLine, endLine).join("\n");
+			userLimitedLines = endLine - startLine;
+		} else {
+			selectedContent = allLines.slice(startLine).join("\n");
+		}
+
+		// Apply truncation
+		const truncation = truncateHead(selectedContent);
+
+		// Add line numbers if requested
+		const shouldAddLineNumbers = lines ?? this.defaultLineNumbers;
+		const prependLineNumbers = (text: string, startNum: number): string => {
+			const textLines = text.split("\n");
+			const lastLineNum = startNum + textLines.length - 1;
+			const padWidth = String(lastLineNum).length;
+			return textLines
+				.map((line, i) => {
+					const lineNum = String(startNum + i).padStart(padWidth, " ");
+					return `${lineNum}\t${line}`;
+				})
+				.join("\n");
+		};
+
+		let outputText: string;
+		let details: ReadToolDetails | undefined;
+
+		if (truncation.firstLineExceedsLimit) {
+			const firstLine = allLines[startLine] ?? "";
+			const firstLineBytes = Buffer.byteLength(firstLine, "utf-8");
+			const snippet = truncateStringToBytesFromStart(firstLine, DEFAULT_MAX_BYTES);
+			const shownSize = formatSize(snippet.bytes);
+
+			outputText = shouldAddLineNumbers ? prependLineNumbers(snippet.text, startLineDisplay) : snippet.text;
+			if (snippet.text.length > 0) {
+				outputText += `\n\n[Line ${startLineDisplay} is ${formatSize(
+					firstLineBytes,
+				)}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Showing first ${shownSize} of the line.]`;
+			} else {
+				outputText = `[Line ${startLineDisplay} is ${formatSize(
+					firstLineBytes,
+				)}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Unable to display a valid UTF-8 snippet.]`;
+			}
+			details = { truncation };
+		} else if (truncation.truncated) {
+			const endLineDisplay = startLineDisplay + truncation.outputLines - 1;
+			const nextOffset = endLineDisplay + 1;
+
+			outputText = shouldAddLineNumbers
+				? prependLineNumbers(truncation.content, startLineDisplay)
+				: truncation.content;
+
+			if (truncation.truncatedBy === "lines") {
+				outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalLines}. Use offset=${nextOffset} to continue]`;
+			} else {
+				outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalLines} (${formatSize(
+					DEFAULT_MAX_BYTES,
+				)} limit). Use offset=${nextOffset} to continue]`;
+			}
+			details = { truncation };
+		} else if (userLimitedLines !== undefined && startLine + userLimitedLines < allLines.length) {
+			const remaining = allLines.length - (startLine + userLimitedLines);
+			const nextOffset = startLine + userLimitedLines + 1;
+
+			outputText = shouldAddLineNumbers
+				? prependLineNumbers(truncation.content, startLineDisplay)
+				: truncation.content;
+			outputText += `\n\n[${remaining} more lines in resource. Use offset=${nextOffset} to continue]`;
+		} else {
+			outputText = shouldAddLineNumbers
+				? prependLineNumbers(truncation.content, startLineDisplay)
+				: truncation.content;
+		}
+
+		// Append resolved path notice
+		if (resource.sourcePath) {
+			outputText += `\n\n[Resolved path: ${resource.sourcePath}]`;
+		}
+
+		return { content: [{ type: "text", text: outputText }], details };
 	}
 }
 

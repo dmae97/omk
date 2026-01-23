@@ -60,6 +60,7 @@ import {
 	type ToolDefinition,
 	wrapRegisteredTools,
 } from "./extensions/index";
+import { AgentProtocolHandler, InternalUrlRouter, RuleProtocolHandler, SkillProtocolHandler } from "./internal-urls";
 import { discoverAndLoadMCPTools, type MCPManager, type MCPToolsLoadResult } from "./mcp/index";
 import { convertToLlm } from "./messages";
 import { ModelRegistry } from "./model-registry";
@@ -702,6 +703,28 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		authStorage,
 		modelRegistry,
 	};
+
+	// Initialize internal URL router for agent:// and skill:// URLs
+	const internalRouter = new InternalUrlRouter();
+	internalRouter.register(
+		new AgentProtocolHandler({
+			getArtifactsDir: () => {
+				const sessionFile = sessionManager.getSessionFile();
+				return sessionFile ? sessionFile.slice(0, -6) : null; // strip .jsonl
+			},
+		}),
+	);
+	internalRouter.register(
+		new SkillProtocolHandler({
+			getSkills: () => skills,
+		}),
+	);
+	internalRouter.register(
+		new RuleProtocolHandler({
+			getRules: () => rulebookRules,
+		}),
+	);
+	toolSession.internalRouter = internalRouter;
 
 	const builtinTools = await createTools(toolSession, options.toolNames);
 	time("createAllTools");

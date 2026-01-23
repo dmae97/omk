@@ -183,7 +183,6 @@ export {
 } from "./core/settings-manager";
 // Skills
 export {
-	formatSkillsForPrompt,
 	type LoadSkillsFromDirOptions,
 	type LoadSkillsResult,
 	loadSkills,

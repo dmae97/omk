@@ -5,7 +5,6 @@
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { type Api, type KnownProvider, type Model, modelsAreEqual } from "@oh-my-pi/pi-ai";
 import chalk from "chalk";
-import { minimatch } from "minimatch";
 import { isValidThinkingLevel } from "../cli/args";
 import type { ModelRegistry } from "./model-registry";
 
@@ -229,7 +228,8 @@ export async function resolveModelScope(patterns: string[], modelRegistry: Model
 			// This allows "*sonnet*" to match without requiring "anthropic/*sonnet*"
 			const matchingModels = availableModels.filter((m) => {
 				const fullId = `${m.provider}/${m.id}`;
-				return minimatch(fullId, globPattern, { nocase: true }) || minimatch(m.id, globPattern, { nocase: true });
+				const glob = new Bun.Glob(globPattern.toLowerCase());
+				return glob.match(fullId.toLowerCase()) || glob.match(m.id.toLowerCase());
 			});
 
 			if (matchingModels.length === 0) {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { formatSkillsForPrompt, loadSkills, loadSkillsFromDir, type Skill } from "../src/core/skills";
+import { loadSkills, loadSkillsFromDir, type Skill } from "../src/core/skills";
 
 const fixturesDir = resolve(__dirname, "fixtures/skills");
 const collisionFixturesDir = resolve(__dirname, "fixtures/skills-collision");
@@ -128,96 +128,6 @@ describe("skills", () => {
 
 			expect(skills).toHaveLength(1);
 			expect(skills[0].name).toBe("valid-skill");
-		});
-	});
-
-	describe("formatSkillsForPrompt", () => {
-		it("should return empty string for no skills", () => {
-			const result = formatSkillsForPrompt([]);
-			expect(result).toBe("");
-		});
-
-		it("should format skills as XML", () => {
-			const skills: Skill[] = [
-				{
-					name: "test-skill",
-					description: "A test skill.",
-					filePath: "/path/to/skill/SKILL.md",
-					baseDir: "/path/to/skill",
-					source: "test",
-				},
-			];
-
-			const result = formatSkillsForPrompt(skills);
-
-			expect(result).toContain("<available_skills>");
-			expect(result).toContain("</available_skills>");
-			expect(result).toContain("<skill>");
-			expect(result).toContain("<name>test-skill</name>");
-			expect(result).toContain("<description>A test skill.</description>");
-			expect(result).toContain("<location>/path/to/skill/SKILL.md</location>");
-		});
-
-		it("should include intro text before XML", () => {
-			const skills: Skill[] = [
-				{
-					name: "test-skill",
-					description: "A test skill.",
-					filePath: "/path/to/skill/SKILL.md",
-					baseDir: "/path/to/skill",
-					source: "test",
-				},
-			];
-
-			const result = formatSkillsForPrompt(skills);
-			const xmlStart = result.indexOf("<available_skills>");
-			const introText = result.substring(0, xmlStart);
-
-			expect(introText).toContain("The following skills provide specialized instructions");
-			expect(introText).toContain("Use the read tool to load a skill's file");
-		});
-
-		it("should escape XML special characters", () => {
-			const skills: Skill[] = [
-				{
-					name: "test-skill",
-					description: 'A skill with <special> & "characters".',
-					filePath: "/path/to/skill/SKILL.md",
-					baseDir: "/path/to/skill",
-					source: "test",
-				},
-			];
-
-			const result = formatSkillsForPrompt(skills);
-
-			expect(result).toContain("&lt;special&gt;");
-			expect(result).toContain("&amp;");
-			expect(result).toContain("&quot;characters&quot;");
-		});
-
-		it("should format multiple skills", () => {
-			const skills: Skill[] = [
-				{
-					name: "skill-one",
-					description: "First skill.",
-					filePath: "/path/one/SKILL.md",
-					baseDir: "/path/one",
-					source: "test",
-				},
-				{
-					name: "skill-two",
-					description: "Second skill.",
-					filePath: "/path/two/SKILL.md",
-					baseDir: "/path/two",
-					source: "test",
-				},
-			];
-
-			const result = formatSkillsForPrompt(skills);
-
-			expect(result).toContain("<name>skill-one</name>");
-			expect(result).toContain("<name>skill-two</name>");
-			expect((result.match(/<skill>/g) || []).length).toBe(2);
 		});
 	});
 

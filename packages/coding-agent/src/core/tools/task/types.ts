@@ -151,7 +151,7 @@ export interface SingleResult {
 	patchPath?: string;
 	/** Data extracted by registered subprocess tool handlers (keyed by tool name) */
 	extractedToolData?: Record<string, unknown[]>;
-	/** Output metadata for Output tool integration */
+	/** Output metadata for agent:// URL integration */
 	outputMeta?: { lineCount: number; charCount: number };
 }
 

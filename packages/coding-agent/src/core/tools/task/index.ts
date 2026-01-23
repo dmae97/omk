@@ -649,7 +649,9 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 
 			const outputIds = results.filter((r) => !r.aborted || r.output.trim()).map((r) => r.taskId);
 			const outputHint =
-				outputIds.length > 0 ? `\n\nUse output tool for full logs: output ids ${outputIds.join(", ")}` : "";
+				outputIds.length > 0
+					? `\n\nUse read/fetch with agent:// for full logs: ${outputIds.map((id) => `agent://${id}`).join(", ")}`
+					: "";
 			const schemaNote = schemaOverridden
 				? `\n\nNote: Agent '${agentName}' has a fixed output schema; your 'output' parameter was ignored.\nRequired schema: ${JSON.stringify(agent.output)}`
 				: "";

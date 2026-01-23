@@ -47,7 +47,6 @@ describe("createTools", () => {
 		expect(names).toContain("notebook");
 		expect(names).toContain("task");
 		expect(names).toContain("todo_write");
-		expect(names).toContain("output");
 		expect(names).toContain("fetch");
 		expect(names).toContain("web_search");
 	});
@@ -136,16 +135,6 @@ describe("createTools", () => {
 		expect(names).toContain("ask");
 	});
 
-	it("always includes output tool when task tool is present", async () => {
-		const session = createTestSession();
-		const tools = await createTools(session);
-		const names = tools.map((t) => t.name);
-
-		// Both should be present together
-		expect(names).toContain("task");
-		expect(names).toContain("output");
-	});
-
 	it("BUILTIN_TOOLS contains all expected tools", () => {
 		const expectedTools = [
 			"ask",
@@ -159,7 +148,6 @@ describe("createTools", () => {
 			"ls",
 			"lsp",
 			"notebook",
-			"output",
 			"read",
 			"task",
 			"todo_write",

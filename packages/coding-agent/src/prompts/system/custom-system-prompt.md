@@ -38,7 +38,7 @@ Use the read tool to load a skill's file when the task matches its description.
   <skill>
     <name>{{escapeXml name}}</name>
     <description>{{escapeXml description}}</description>
-    <location>{{escapeXml filePath}}</location>
+    <location>skill://{{escapeXml name}}</location>
   </skill>
 {{/list}}
 </available_skills>
@@ -58,7 +58,7 @@ The following rules define project-specific guidelines and constraints:
 {{/list}}
     </globs>
 {{/if}}
-    <location>{{escapeXml path}}</location>
+    <location>rule://{{escapeXml name}}</location>
   </rule>
 {{/list}}
 </rules>
