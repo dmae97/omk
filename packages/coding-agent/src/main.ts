@@ -542,7 +542,7 @@ export async function main(args: string[]) {
 			return;
 		}
 		await runCommitCommand(commitCmd);
-		return;
+		process.exit(0);
 	}
 
 	const parsed = parseArgs(args);

@@ -63,10 +63,12 @@
 - Changed split commit to support hunk selectors (all, indices, or line ranges) instead of whole-file staging
 - Changed `analyze_file` tool to `analyze_files` for batch parallel analysis of multiple files
 - Switched agentic commit from auto-generated changelogs to agent-proposed entries with validation and retry logic
+- Commit agent now resolves a separate smaller model for commit generation instead of reusing the primary model
 
 ### Fixed
 - Fixed database busy errors during concurrent access by adding retry logic with exponential backoff when opening storage
 - Find tool now rejects searches from root directory and enforces a 5-second timeout on fd operations
+- Commit command now exits cleanly with exit code 0 on success
 ## [8.0.0] - 2026-01-23
 ### Added
 

@@ -7,7 +7,7 @@ import { applyChangelogProposals } from "$c/commit/changelog";
 import { detectChangelogBoundaries } from "$c/commit/changelog/detect";
 import { ControlledGit } from "$c/commit/git";
 import { formatCommitMessage } from "$c/commit/message";
-import { resolvePrimaryModel } from "$c/commit/model-selection";
+import { resolvePrimaryModel, resolveSmolModel } from "$c/commit/model-selection";
 import type { CommitCommandArgs, ConventionalAnalysis } from "$c/commit/types";
 import { renderPromptTemplate } from "$c/config/prompt-templates";
 import { SettingsManager } from "$c/config/settings-manager";
@@ -26,12 +26,19 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	const modelRegistry = await discoverModels(authStorage);
 
 	writeStdout("● Resolving model...");
-	const { model: primaryModel } = await resolvePrimaryModel(
+	const { model: primaryModel, apiKey: primaryApiKey } = await resolvePrimaryModel(
 		args.model,
 		settingsManager,
 		modelRegistry,
 	);
 	writeStdout(`  └─ ${primaryModel.name}`);
+
+	const { model: agentModel } = await resolveSmolModel(
+		settingsManager,
+		modelRegistry,
+		primaryModel,
+		primaryApiKey,
+	);
 
 	const git = new ControlledGit(cwd);
 	let stagedFiles = await git.getStagedFiles();
@@ -75,7 +82,7 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	const commitState = await runCommitAgentSession({
 		cwd,
 		git,
-		model: primaryModel,
+		model: agentModel,
 		settingsManager,
 		modelRegistry,
 		authStorage,
