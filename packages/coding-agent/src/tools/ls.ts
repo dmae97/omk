@@ -50,6 +50,8 @@ export interface LsToolOptions {
 
 export interface LsToolDetails {
 	entries?: string[];
+	/** Raw entry names (with / suffix for dirs) without age suffix, for icon detection */
+	rawEntries?: string[];
 	dirCount?: number;
 	fileCount?: number;
 	truncation?: TruncationResult;
@@ -125,6 +127,7 @@ export class LsTool implements AgentTool<typeof lsSchema, LsToolDetails> {
 
 			// Format entries with directory indicators
 			const results: string[] = [];
+			const rawResults: string[] = [];
 			let dirCount = 0;
 			let fileCount = 0;
 
@@ -153,6 +156,7 @@ export class LsTool implements AgentTool<typeof lsSchema, LsToolDetails> {
 				// Format: "name/ (2d ago)" or "name (just now)"
 				const line = age ? `${entry}${suffix} (${age})` : entry + suffix;
 				results.push(line);
+				rawResults.push(entry + suffix);
 			}
 
 			if (results.length === 0) {
@@ -166,6 +170,7 @@ export class LsTool implements AgentTool<typeof lsSchema, LsToolDetails> {
 			const output = truncation.content;
 			const details: LsToolDetails = {
 				entries: results,
+				rawEntries: rawResults,
 				dirCount,
 				fileCount,
 			};
@@ -239,9 +244,11 @@ export const lsToolRenderer = {
 		}
 
 		let entries: string[] = details?.entries ? [...details.entries] : [];
+		let rawEntries: string[] | undefined = details?.rawEntries;
 		if (entries.length === 0) {
 			const rawLines = textContent.split("\n").filter((l: string) => l.trim());
 			entries = rawLines.filter((line) => !/^\[.*\]$/.test(line.trim()));
+			rawEntries = undefined; // Can't reliably extract raw paths from text
 		}
 
 		if (entries.length === 0) {
@@ -293,10 +300,11 @@ export const lsToolRenderer = {
 
 		for (let i = 0; i < maxEntries; i++) {
 			const entry = entries[i];
+			const rawEntry = rawEntries?.[i] ?? entry;
 			const isLast = i === maxEntries - 1 && !hasMoreEntries && !hasTruncation;
 			const branch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
-			const isDir = entry.endsWith("/");
-			const entryPath = isDir ? entry.slice(0, -1) : entry;
+			const isDir = rawEntry.endsWith("/");
+			const entryPath = isDir ? rawEntry.slice(0, -1) : rawEntry;
 			const lang = isDir ? undefined : getLanguageFromPath(entryPath);
 			const entryIcon = isDir
 				? uiTheme.fg("accent", uiTheme.icon.folder)

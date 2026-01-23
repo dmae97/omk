@@ -119,6 +119,9 @@ export class OutputSink {
 				};
 				await this.#file.sink.write(this.#buffer);
 			} catch {
+				try {
+					await this.#file?.sink?.end();
+				} catch {}
 				this.#file = undefined;
 				return null;
 			}

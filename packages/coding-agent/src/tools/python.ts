@@ -254,7 +254,14 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 			const sessionFile = this.session.getSessionFile?.() ?? undefined;
 			const artifactsDir = this.session.getArtifactsDir?.() ?? undefined;
 			const { artifactPath, artifactId } = await allocateOutputArtifact(this.session, "python");
-			outputSink = new OutputSink({ artifactPath, artifactId });
+			outputSink = new OutputSink({
+				artifactPath,
+				artifactId,
+				onChunk: (chunk) => {
+					appendTail(chunk);
+					pushUpdate();
+				},
+			});
 			const sessionId = sessionFile ? `session:${sessionFile}:cwd:${commandCwd}` : `cwd:${commandCwd}`;
 			const baseExecutorOptions: Omit<PythonExecutorOptions, "reset"> = {
 				cwd: commandCwd,

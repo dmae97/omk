@@ -242,7 +242,7 @@ src/
 │   ├── session-manager.ts    # SessionManager class - JSONL persistence
 │   ├── session-storage.ts    # Session storage utilities
 │   ├── storage-migration.ts  # Storage migration
-│   ├── streaming-output.ts   # Streaming output handling
+│   ├── streaming-output.ts   # OutputSink with spill-to-disk for large outputs
 │   └── compaction/           # Context compaction system
 │       └── index.ts          # Compaction logic, summary generation
 
@@ -276,8 +276,8 @@ src/
 │   ├── grep.ts               # Content search (regex/literal)
 │   ├── ls.ts                 # Directory listing
 │   ├── notebook.ts           # Jupyter notebook editing
-│   ├── output-meta.ts        # Output metadata
-│   ├── output-utils.ts       # Output utilities
+│   ├── output-meta.ts        # OutputMetaBuilder, wrapToolWithMetaNotice
+│   ├── output-utils.ts       # TailBuffer, allocateOutputArtifact helpers
 │   ├── path-utils.ts         # Path resolution utilities
 │   ├── python.ts             # Python tool (delegates to ipy/)
 │   ├── read.ts               # File reading (text and images)
@@ -287,7 +287,7 @@ src/
 │   ├── ssh.ts                # SSH tool (delegates to ssh/)
 │   ├── todo-write.ts         # Todo management
 │   ├── tool-errors.ts        # Tool error types
-│   ├── tool-result.ts        # Tool result utilities
+│   ├── tool-result.ts        # ToolResultBuilder fluent API
 │   ├── truncate.ts           # Output truncation utilities
 │   └── write.ts              # File writing
 
@@ -442,6 +442,99 @@ Unified extension system that discovers and loads capabilities from multiple sou
 
 See [docs/extensions.md](docs/extensions.md) for full documentation.
 
+### Tool Output Infrastructure (tools/)
+
+Standardized system for handling tool outputs with truncation, streaming, and artifact storage.
+
+#### Core Components
+
+**OutputSink** (`session/streaming-output.ts`): Line-buffered output collector with automatic spill-to-disk.
+
+- Tracks total lines/bytes as data flows through
+- Spills to artifact file when memory threshold exceeded
+- Produces `OutputSummary` with truncation metadata
+- Used by executors (bash, python, ssh) for streaming command output
+
+**TailBuffer** (`tools/output-utils.ts`): Simple rolling buffer keeping the last N bytes.
+
+- Used for UI preview during streaming
+- Handles UTF-8 boundaries correctly
+- Lightweight alternative to OutputSink for non-spilling tools
+
+**ToolResultBuilder** (`tools/tool-result.ts`): Fluent builder for constructing `AgentToolResult`.
+
+- Chains `.text()`, `.truncation*()`, `.limits()`, `.sourcePath()` methods
+- Automatically populates `details.meta` with structured metadata
+- Produces well-formed result via `.done()`
+
+**OutputMetaBuilder** (`tools/output-meta.ts`): Fluent builder for `OutputMeta` structure.
+
+- Methods for truncation info, limits, source paths, diagnostics
+- Accepts `TruncationResult` (from truncate.ts) or `OutputSummary` (from OutputSink)
+- Returns `undefined` if no metadata to report (empty case)
+
+**wrapToolWithMetaNotice** (`tools/output-meta.ts`): Tool wrapper applied to all built-in tools.
+
+- Automatically appends truncation/limit notices from `details.meta`
+- Catches exceptions and renders them via `ToolError.render()`
+
+#### Standard Pattern for Streaming Tools
+
+Tools that produce potentially large streaming output (bash, python, ssh):
+
+```typescript
+async execute(...): Promise<AgentToolResult<MyDetails>> {
+  // 1. Allocate artifact path for full output storage
+  const { artifactPath, artifactId } = await allocateOutputArtifact(this.session, "toolname");
+
+  // 2. Create tail buffer for UI preview
+  const tailBuffer = createTailBuffer(DEFAULT_MAX_BYTES);
+
+  // 3. Execute with streaming callback
+  const result = await executeCommand({
+    artifactPath,
+    artifactId,
+    onChunk: (chunk) => {
+      tailBuffer.append(chunk);
+      onUpdate?.({
+        content: [{ type: "text", text: tailBuffer.text() }],
+        details: {},
+      });
+    },
+  });
+
+  // 4. Build result with truncation metadata
+  return toolResult<MyDetails>({})
+    .text(result.output)
+    .truncationFromSummary(result, { direction: "tail" })
+    .done();
+}
+```
+
+#### Standard Pattern for Non-Streaming Tools
+
+Tools that produce output in one shot (grep, find, ls):
+
+```typescript
+async execute(...): Promise<AgentToolResult<MyDetails>> {
+  const { items, limitReached } = await doWork();
+  const output = formatItems(items);
+
+  return toolResult<MyDetails>({})
+    .text(output)
+    .limits({ resultLimit: limitReached ? effectiveLimit : undefined })
+    .done();
+}
+```
+
+#### Key Principles
+
+1. **Always allocate artifact before execution** — ensures path exists for spill
+2. **Pass onChunk to OutputSink/executor** — required for live UI updates during streaming
+3. **Use ToolResultBuilder for all results** — ensures consistent metadata structure
+4. **Close file sinks on error** — prevent descriptor leaks in failure paths
+5. **Truncation direction matters** — `"tail"` for command output (show recent), `"head"` for file reads (show beginning)
+
 ## Development Workflow
 
 ### Running in Development
@@ -514,6 +607,8 @@ Tools like `fd` and `rg` are auto-downloaded to `~/.omp/bin/` (migrated from `~/
 3. Add to `BUILTIN_TOOLS` map in `tools/index.ts`
 4. Add tool prompt template to `prompts/tools/` if needed
 5. Tool will automatically be included in system prompt
+6. Use `ToolResultBuilder` for results and `OutputMeta` for truncation/limit metadata (see "Tool Output Infrastructure" section)
+7. For streaming tools: use `allocateOutputArtifact()` + `createTailBuffer()` pattern with `onChunk` callback
 
 ### Adding a New Hook Event
 

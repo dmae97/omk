@@ -413,11 +413,8 @@ export function wrapToolWithMetaNotice<T extends AgentTool<any, any, any>>(tool:
 		try {
 			result = await originalExecute(toolCallId, params, signal, onUpdate, context);
 		} catch (e) {
-			// Use ToolError.render() if available
-			return {
-				content: [{ type: "text", text: renderError(e) }],
-				details: {},
-			};
+			// Re-throw with formatted message so agent-loop sets isError flag
+			throw new Error(renderError(e));
 		}
 
 		// Append notices from meta
