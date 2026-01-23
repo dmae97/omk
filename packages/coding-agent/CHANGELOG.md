@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `omp commit` command to generate conventional commits with changelog updates
+
 ## [8.0.0] - 2026-01-23
 ### Added
 

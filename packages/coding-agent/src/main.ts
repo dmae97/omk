@@ -21,6 +21,8 @@ import { selectSession } from "./cli/session-picker";
 import { parseSetupArgs, printSetupHelp, runSetupCommand } from "./cli/setup-cli";
 import { parseStatsArgs, printStatsHelp, runStatsCommand } from "./cli/stats-cli";
 import { parseUpdateArgs, printUpdateHelp, runUpdateCommand } from "./cli/update-cli";
+import { runCommitCommand } from "./commit";
+import { parseCommitArgs, printCommitHelp } from "./commit/cli";
 import { findConfigFile, getModelsPath, VERSION } from "./config";
 import type { ModelRegistry } from "./config/model-registry";
 import { parseModelPattern, parseModelString, resolveModelScope, type ScopedModel } from "./config/model-resolver";
@@ -529,6 +531,17 @@ export async function main(args: string[]) {
 			return;
 		}
 		await runStatsCommand(statsCmd);
+		return;
+	}
+
+	// Handle commit subcommand
+	const commitCmd = parseCommitArgs(args);
+	if (commitCmd) {
+		if (args.includes("--help") || args.includes("-h")) {
+			printCommitHelp();
+			return;
+		}
+		await runCommitCommand(commitCmd);
 		return;
 	}
 
