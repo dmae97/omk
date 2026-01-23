@@ -1,12 +1,12 @@
 {
 	"name": "@oh-my-pi/omp-stats",
-	"version": "8.0.0",
+	"version": "8.1.0",
 	"description": "Local observability dashboard for pi AI usage statistics",
 	"type": "module",
 	"main": "./src/index.ts",
 	"types": "./src/index.ts",
 	"bin": {
-		"omp-stats": "./src/index.ts"
+		"omp-stats": "./dist/index.js"
 	},
 	"exports": {
 		".": {
@@ -23,6 +23,7 @@
 		}
 	},
 	"files": [
+		"dist",
 		"src",
 		"public",
 		"README.md"
@@ -39,14 +40,14 @@
 		"dev": "bun run src/index.ts",
 		"check": "tsgo --noEmit && tsgo --noEmit -p tsconfig.client.json",
 		"build": "bun run build.ts && tsgo -p tsconfig.build.json",
-		"prepublishOnly": "cp tsconfig.publish.json tsconfig.json"
+		"prepublishOnly": "cp tsconfig.publish.json tsconfig.json && bun run build"
 	},
 	"author": "Can Bölük",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/can1357/oh-my-pi.git",
-		"directory": "packages/omp-stats"
+		"directory": "packages/stats"
 	},
 	"dependencies": {
 		"@oh-my-pi/pi-ai": "workspace:*",

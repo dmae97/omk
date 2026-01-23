@@ -9,7 +9,7 @@
 		"install:dev": "bun install && bun packages/coding-agent/scripts/generate-wasm-b64.ts && bun --cwd=packages/coding-agent link && bun --cwd=packages/ai link",
 		"dev": "bun packages/coding-agent/src/cli.ts",
 		"stats": "bun --cwd=packages/coding-agent src/cli.ts stats",
-		"check": "biome check --write . && bun --cwd=packages/coding-agent run check && bun --cwd=packages/omp-stats run check",
+		"check": "biome check --write . && bun --cwd=packages/coding-agent run check && bun --cwd=packages/stats run check",
 		"fix": "biome check --write --unsafe . && bun --cwd=packages/coding-agent run format-prompts",
 		"bench:gen-fixtures": "bun run packages/react-edit-benchmark/generate.ts --react-dir /tmp/react-source --count-per-type 3",
 		"bench:edit": "bun --cwd=packages/react-edit-benchmark run start",

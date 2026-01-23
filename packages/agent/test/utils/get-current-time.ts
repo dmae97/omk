@@ -1,5 +1,5 @@
+import type { AgentTool, AgentToolResult } from "@oh-my-pi/pi-agent-core/types";
 import { type Static, Type } from "@sinclair/typebox";
-import type { AgentTool, AgentToolResult } from "$agent/types";
 
 export interface GetCurrentTimeResult extends AgentToolResult<{ utcTimestamp: number }> {}
 

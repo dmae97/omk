@@ -1,6 +1,6 @@
-import { getEditorKeybindings } from "$tui/keybindings";
-import { type Component, CURSOR_MARKER, type Focusable } from "$tui/tui";
-import { getSegmenter, isPunctuationChar, isWhitespaceChar, visibleWidth } from "$tui/utils";
+import { getEditorKeybindings } from "@oh-my-pi/pi-tui/keybindings";
+import { type Component, CURSOR_MARKER, type Focusable } from "@oh-my-pi/pi-tui/tui";
+import { getSegmenter, isPunctuationChar, isWhitespaceChar, visibleWidth } from "@oh-my-pi/pi-tui/utils";
 
 const segmenter = getSegmenter();
 

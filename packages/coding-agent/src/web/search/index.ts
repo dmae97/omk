@@ -31,7 +31,7 @@ import type {
 import type { Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import webSearchSystemPrompt from "@oh-my-pi/pi-coding-agent/prompts/system/web-search.md" with { type: "text" };
 import webSearchDescription from "@oh-my-pi/pi-coding-agent/prompts/tools/web-search.md" with { type: "text" };
-import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools/index";
+import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { formatAge } from "@oh-my-pi/pi-coding-agent/tools/render-utils";
 import { Type } from "@sinclair/typebox";
 import { findAnthropicAuth } from "./auth";

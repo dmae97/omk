@@ -8,7 +8,7 @@ import { renderFileList, renderStatusLine } from "@oh-my-pi/pi-coding-agent/tui"
 import { type Component, Text } from "@oh-my-pi/pi-tui";
 import { untilAborted } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
-import type { ToolSession } from "./index";
+import type { ToolSession } from ".";
 import { applyListLimit } from "./list-limit";
 import { resolveToCwd } from "./path-utils";
 import {

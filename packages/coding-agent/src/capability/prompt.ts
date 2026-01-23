@@ -4,7 +4,7 @@
  * Reusable prompt templates (Codex format) available via /prompts: menu.
  */
 
-import { defineCapability } from "./index";
+import { defineCapability } from ".";
 import type { SourceMeta } from "./types";
 
 /**

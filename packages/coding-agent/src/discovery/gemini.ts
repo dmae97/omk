@@ -17,6 +17,7 @@
  */
 
 import { join, sep } from "node:path";
+import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability";
 import { type ContextFile, contextFileCapability } from "@oh-my-pi/pi-coding-agent/capability/context-file";
 import {
 	type Extension,
@@ -25,7 +26,6 @@ import {
 } from "@oh-my-pi/pi-coding-agent/capability/extension";
 import { type ExtensionModule, extensionModuleCapability } from "@oh-my-pi/pi-coding-agent/capability/extension-module";
 import { readDirEntries, readFile } from "@oh-my-pi/pi-coding-agent/capability/fs";
-import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability/index";
 import { type MCPServer, mcpCapability } from "@oh-my-pi/pi-coding-agent/capability/mcp";
 import { type Settings, settingsCapability } from "@oh-my-pi/pi-coding-agent/capability/settings";
 import { type SystemPrompt, systemPromptCapability } from "@oh-my-pi/pi-coding-agent/capability/system-prompt";

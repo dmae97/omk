@@ -24,7 +24,7 @@ import { renderStatusLine } from "@oh-my-pi/pi-coding-agent/tui";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { Type } from "@sinclair/typebox";
-import type { ToolSession } from "./index";
+import type { ToolSession } from ".";
 import { ToolUIKit } from "./render-utils";
 
 // =============================================================================

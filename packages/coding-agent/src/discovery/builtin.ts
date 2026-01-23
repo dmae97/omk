@@ -5,6 +5,7 @@
  * .pi is an alias for backwards compatibility.
  */
 
+import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability";
 import { type ContextFile, contextFileCapability } from "@oh-my-pi/pi-coding-agent/capability/context-file";
 import {
 	type Extension,
@@ -14,7 +15,6 @@ import {
 import { type ExtensionModule, extensionModuleCapability } from "@oh-my-pi/pi-coding-agent/capability/extension-module";
 import { readDirEntries, readFile } from "@oh-my-pi/pi-coding-agent/capability/fs";
 import { type Hook, hookCapability } from "@oh-my-pi/pi-coding-agent/capability/hook";
-import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability/index";
 import { type Instruction, instructionCapability } from "@oh-my-pi/pi-coding-agent/capability/instruction";
 import { type MCPServer, mcpCapability } from "@oh-my-pi/pi-coding-agent/capability/mcp";
 import { type Prompt, promptCapability } from "@oh-my-pi/pi-coding-agent/capability/prompt";

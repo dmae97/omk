@@ -12,7 +12,7 @@ import {
 	type FileDiagnosticsResult,
 	type WritethroughCallback,
 	writethroughNoop,
-} from "@oh-my-pi/pi-coding-agent/lsp/index";
+} from "@oh-my-pi/pi-coding-agent/lsp";
 import { getLanguageFromPath, type Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import writeDescription from "@oh-my-pi/pi-coding-agent/prompts/tools/write.md" with { type: "text" };
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/sdk";

@@ -79,16 +79,6 @@ export function getAuthPath(): string {
 	return join(getAgentDir(), "auth.json");
 }
 
-/** Get path to settings.json (legacy, use getConfigPath for config.yaml) */
-export function getLegacySettingsPath(): string {
-	return join(getAgentDir(), "settings.json");
-}
-
-/** Get path to config.yml (user settings) */
-export function getConfigPath(): string {
-	return join(getAgentDir(), "config.yml");
-}
-
 /**
  * Gets the path to agent.db (SQLite database for settings and auth storage).
  * @param agentDir - Base agent directory, defaults to ~/.omp/agent

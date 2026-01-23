@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools/index";
+import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 
 function createSession(overrides: Partial<ToolSession> = {}): ToolSession {
 	return {

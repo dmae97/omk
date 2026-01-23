@@ -13,7 +13,7 @@ import {
 	getLastAssistantUsage,
 	prepareCompaction,
 	shouldCompact,
-} from "@oh-my-pi/pi-coding-agent/session/compaction/index";
+} from "@oh-my-pi/pi-coding-agent/session/compaction";
 import {
 	buildSessionContext,
 	type CompactionEntry,

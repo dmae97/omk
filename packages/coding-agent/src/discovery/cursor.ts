@@ -14,8 +14,8 @@
  * - settings: From settings.json if present
  */
 
+import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability";
 import { readFile } from "@oh-my-pi/pi-coding-agent/capability/fs";
-import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability/index";
 import { type MCPServer, mcpCapability } from "@oh-my-pi/pi-coding-agent/capability/mcp";
 import type { Rule } from "@oh-my-pi/pi-coding-agent/capability/rule";
 import { ruleCapability } from "@oh-my-pi/pi-coding-agent/capability/rule";

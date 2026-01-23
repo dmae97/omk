@@ -7,9 +7,9 @@
  */
 
 import { dirname, join, sep } from "node:path";
+import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability";
 import { type ContextFile, contextFileCapability } from "@oh-my-pi/pi-coding-agent/capability/context-file";
 import { readFile } from "@oh-my-pi/pi-coding-agent/capability/fs";
-import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability/index";
 import type { LoadContext, LoadResult } from "@oh-my-pi/pi-coding-agent/capability/types";
 import { calculateDepth, createSourceMeta } from "./helpers";
 

@@ -4,11 +4,6 @@
 		"noEmit": true,
 		"baseUrl": ".",
 		"paths": {
-			"$agent/*": ["./src/*"],
-			"$ai/*": ["../ai/src/*"],
-			"$c/*": ["../coding-agent/src/*"],
-			"$tui/*": ["../tui/src/*"],
-			"$stats/*": ["../omp-stats/src/*"],
 			"@oh-my-pi/pi-agent-core": ["./src/index.ts"],
 			"@oh-my-pi/pi-agent-core/*": ["./src/*"],
 			"@oh-my-pi/pi-ai": ["../ai/src/index.ts"],

@@ -6,6 +6,7 @@
  */
 
 import * as path from "node:path";
+import * as piCodingAgent from "@oh-my-pi/pi-coding-agent";
 import { toolCapability } from "@oh-my-pi/pi-coding-agent/capability/tool";
 import { type CustomTool, loadCapability } from "@oh-my-pi/pi-coding-agent/discovery";
 import { expandPath } from "@oh-my-pi/pi-coding-agent/discovery/helpers";
@@ -13,7 +14,6 @@ import type { ExecOptions } from "@oh-my-pi/pi-coding-agent/exec/exec";
 import { execCommand } from "@oh-my-pi/pi-coding-agent/exec/exec";
 import type { HookUIContext } from "@oh-my-pi/pi-coding-agent/extensibility/hooks/types";
 import { getAllPluginToolPaths } from "@oh-my-pi/pi-coding-agent/extensibility/plugins/loader";
-import * as piCodingAgent from "@oh-my-pi/pi-coding-agent/index";
 import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { logger } from "@oh-my-pi/pi-utils";
 import * as typebox from "@sinclair/typebox";

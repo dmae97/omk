@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Api, Context, Model, Tool, ToolResultMessage } from "@oh-my-pi/pi-ai/index";
-import { complete, getModel } from "@oh-my-pi/pi-ai/index";
+import type { Api, Context, Model, Tool, ToolResultMessage } from "@oh-my-pi/pi-ai";
+import { complete, getModel } from "@oh-my-pi/pi-ai";
 import type { OptionsForApi } from "@oh-my-pi/pi-ai/types";
 import { Type } from "@sinclair/typebox";
 import { describe, expect, it } from "vitest";

@@ -18,10 +18,10 @@ import {
 	flushLspWritethroughBatch,
 	type WritethroughCallback,
 	writethroughNoop,
-} from "@oh-my-pi/pi-coding-agent/lsp/index";
+} from "@oh-my-pi/pi-coding-agent/lsp";
 import patchDescription from "@oh-my-pi/pi-coding-agent/prompts/tools/patch.md" with { type: "text" };
 import replaceDescription from "@oh-my-pi/pi-coding-agent/prompts/tools/replace.md" with { type: "text" };
-import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools/index";
+import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { outputMeta } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
 import { resolveToCwd } from "@oh-my-pi/pi-coding-agent/tools/path-utils";
 import { Type } from "@sinclair/typebox";
@@ -48,13 +48,7 @@ export { computeEditDiff, computePatchDiff, generateDiffString, generateUnifiedD
 export { DEFAULT_FUZZY_THRESHOLD, findContextLine, findMatch as findEditMatch, findMatch, seekSequence } from "./fuzzy";
 
 // Normalization
-export {
-	adjustIndentation,
-	detectLineEnding,
-	normalizeToLF,
-	restoreLineEndings,
-	stripBom,
-} from "./normalize";
+export { adjustIndentation, detectLineEnding, normalizeToLF, restoreLineEndings, stripBom } from "./normalize";
 
 // Parsing
 export { normalizeCreateContent, normalizeDiff, parseHunks as parseDiffHunks } from "./parser";

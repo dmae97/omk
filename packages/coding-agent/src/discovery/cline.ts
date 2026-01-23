@@ -6,8 +6,8 @@
  */
 
 import { dirname, resolve } from "node:path";
+import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability";
 import { readDirEntries, readFile } from "@oh-my-pi/pi-coding-agent/capability/fs";
-import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability/index";
 import type { Rule } from "@oh-my-pi/pi-coding-agent/capability/rule";
 import { ruleCapability } from "@oh-my-pi/pi-coding-agent/capability/rule";
 import type { LoadContext, LoadResult } from "@oh-my-pi/pi-coding-agent/capability/types";

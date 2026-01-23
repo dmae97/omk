@@ -15,7 +15,7 @@ import { getTreeBranch, getTreeContinuePrefix, renderCodeCell } from "@oh-my-pi/
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text, truncateToWidth } from "@oh-my-pi/pi-tui";
 import { type Static, Type } from "@sinclair/typebox";
-import type { ToolSession } from "./index";
+import type { ToolSession } from ".";
 import { allocateOutputArtifact, createTailBuffer } from "./output-utils";
 import { resolveToCwd } from "./path-utils";
 import { shortenPath, ToolUIKit, truncate } from "./render-utils";

@@ -6,7 +6,7 @@
  */
 
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { getOAuthApiKey } from "@oh-my-pi/pi-ai/utils/oauth/index";
+import { getOAuthApiKey } from "@oh-my-pi/pi-ai/utils/oauth";
 import type { OAuthCredentials, OAuthProvider } from "@oh-my-pi/pi-ai/utils/oauth/types";
 import { homedir } from "os";
 import { dirname, join } from "path";

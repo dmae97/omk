@@ -5,11 +5,7 @@
  */
 
 import { APP_NAME } from "@oh-my-pi/pi-coding-agent/config";
-import {
-	PluginManager,
-	parseSettingValue,
-	validateSetting,
-} from "@oh-my-pi/pi-coding-agent/extensibility/plugins/index";
+import { PluginManager, parseSettingValue, validateSetting } from "@oh-my-pi/pi-coding-agent/extensibility/plugins";
 import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import chalk from "chalk";
 

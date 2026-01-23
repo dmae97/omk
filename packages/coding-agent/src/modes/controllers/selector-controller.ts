@@ -21,7 +21,7 @@ import {
 } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
-import { setPreferredImageProvider, setPreferredWebSearchProvider } from "@oh-my-pi/pi-coding-agent/tools/index";
+import { setPreferredImageProvider, setPreferredWebSearchProvider } from "@oh-my-pi/pi-coding-agent/tools";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Input, Loader, Spacer, Text } from "@oh-my-pi/pi-tui";
 

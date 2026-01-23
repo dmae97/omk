@@ -4,7 +4,7 @@
  * Gemini-style extensions that provide MCP servers, tools, and context.
  */
 
-import { defineCapability } from "./index";
+import { defineCapability } from ".";
 import type { MCPServer } from "./mcp";
 import type { SourceMeta } from "./types";
 

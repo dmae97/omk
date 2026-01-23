@@ -1,3 +1,4 @@
+import { Agent } from "@oh-my-pi/pi-agent-core";
 import {
 	type AssistantMessage,
 	type AssistantMessageEvent,
@@ -7,7 +8,6 @@ import {
 	type Usage,
 } from "@oh-my-pi/pi-ai";
 import { describe, expect, it } from "vitest";
-import { Agent } from "$agent/index";
 
 class MockAssistantStream extends EventStream<AssistantMessageEvent, AssistantMessage> {
 	constructor() {

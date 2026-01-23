@@ -78,6 +78,18 @@ Download binaries directly from [GitHub Releases](https://github.com/can1357/oh-
 
 ---
 
+## + Commit Tool (AI-Powered Git Commits)
+
+AI-powered conventional commit generation with intelligent change analysis:
+
+- **Agentic mode**: Tool-based git inspection with `git-overview`, `git-file-diff`, `git-hunk` for fine-grained analysis
+- **Split commits**: Automatically separates unrelated changes into atomic commits with dependency ordering
+- **Hunk-level staging**: Stage individual hunks when changes span multiple concerns
+- **Changelog generation**: Proposes and applies changelog entries to `CHANGELOG.md` files
+- **Commit validation**: Detects filler words, meta phrases, and enforces conventional commit format
+- **Legacy mode**: `--legacy` flag for deterministic pipeline when preferred
+- Run via `omp commit` with options: `--push`, `--dry-run`, `--no-changelog`, `--context`
+
 ## + Python Tool (IPython Kernel)
 
 <p align="center">
@@ -93,6 +105,7 @@ Execute Python code with a persistent IPython kernel and 30+ shell-like helpers:
 - **Shared gateway**: Resource-efficient kernel reuse across sessions (`python.sharedGateway` setting)
 - **Custom modules**: Load extensions from `.omp/modules/` and `.pi/modules/` directories
 - **Rich output**: Supports `display()` for HTML, Markdown, images, and interactive JSON trees
+- **Mermaid diagrams**: Renders mermaid code blocks as inline graphics in iTerm2/Kitty terminals
 - Install dependencies via `omp setup python`
 
 ## + LSP Integration (Language Server Protocol)
@@ -151,6 +164,7 @@ Parallel execution framework with specialized agents and real-time streaming:
 - **Parallel exploration**: Reviewer agent can spawn explore agents for large codebase analysis
 - **Real-time artifact streaming**: Task outputs stream as they're created, not just at completion
 - **Output tool**: Read full agent outputs by ID when truncated previews aren't sufficient
+- **Isolated execution**: `isolated: true` runs tasks in git worktrees, generates patches, and applies cleanly
 - User-level (`~/.omp/agent/agents/`) and project-level (`.omp/agents/`) custom agents
 - Concurrency-limited batch execution with progress tracking
 
@@ -331,7 +345,7 @@ Handles whitespace and indentation variance automatically:
 | **[@oh-my-pi/pi-agent-core](packages/agent)**          | Agent runtime with tool calling and state management                          |
 | **[@oh-my-pi/pi-coding-agent](packages/coding-agent)** | Interactive coding agent CLI                                                  |
 | **[@oh-my-pi/pi-tui](packages/tui)**                   | Terminal UI library with differential rendering                               |
-| **[@oh-my-pi/omp-stats](packages/omp-stats)**          | Local observability dashboard for AI usage statistics                         |
+| **[@oh-my-pi/omp-stats](packages/stats)**          | Local observability dashboard for AI usage statistics                         |
 
 ---
 

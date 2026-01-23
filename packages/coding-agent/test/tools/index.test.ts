@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { BUILTIN_TOOLS, createTools, HIDDEN_TOOLS, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools/index";
+import { BUILTIN_TOOLS, createTools, HIDDEN_TOOLS, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 
 process.env.OMP_PYTHON_SKIP_CHECK = "1";
 

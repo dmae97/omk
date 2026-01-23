@@ -11,10 +11,7 @@
  * - Extension UI: Extension UI requests are emitted, client responds with extension_ui_response
  */
 
-import type {
-	ExtensionUIContext,
-	ExtensionUIDialogOptions,
-} from "@oh-my-pi/pi-coding-agent/extensibility/extensions/index";
+import type { ExtensionUIContext, ExtensionUIDialogOptions } from "@oh-my-pi/pi-coding-agent/extensibility/extensions";
 import { type Theme, theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { readLines } from "@oh-my-pi/pi-utils";

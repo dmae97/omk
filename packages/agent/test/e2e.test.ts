@@ -1,7 +1,7 @@
+import { Agent } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, Model, ToolResultMessage, UserMessage } from "@oh-my-pi/pi-ai";
 import { getModel } from "@oh-my-pi/pi-ai";
 import { describe, expect, it } from "vitest";
-import { Agent } from "$agent/index";
 import { calculateTool } from "./utils/calculate";
 
 async function basicPrompt(model: Model<any>) {

@@ -18,7 +18,7 @@ import { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manag
 import { AgentSession, type AgentSessionEvent } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
-import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools/index";
+import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { nanoid } from "nanoid";
 import { API_KEY } from "./utilities";
 

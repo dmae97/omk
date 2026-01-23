@@ -16,12 +16,12 @@ import {
 	type SessionBeforeCompactEvent,
 	type SessionCompactEvent,
 	type SessionEvent,
-} from "@oh-my-pi/pi-coding-agent/extensibility/hooks/index";
+} from "@oh-my-pi/pi-coding-agent/extensibility/hooks";
 import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
-import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools/index";
+import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { nanoid } from "nanoid";
 
 const API_KEY = process.env.ANTHROPIC_OAUTH_TOKEN || process.env.ANTHROPIC_API_KEY;

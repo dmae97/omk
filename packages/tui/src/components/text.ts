@@ -1,5 +1,5 @@
-import type { Component } from "$tui/tui";
-import { applyBackgroundToLine, wrapTextWithAnsi } from "$tui/utils";
+import type { Component } from "@oh-my-pi/pi-tui/tui";
+import { applyBackgroundToLine, wrapTextWithAnsi } from "@oh-my-pi/pi-tui/utils";
 
 /**
  * Text component - displays multi-line text with word wrapping

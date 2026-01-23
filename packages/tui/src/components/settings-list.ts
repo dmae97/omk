@@ -1,6 +1,6 @@
-import { matchesKey } from "$tui/keys";
-import type { Component } from "$tui/tui";
-import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "$tui/utils";
+import { matchesKey } from "@oh-my-pi/pi-tui/keys";
+import type { Component } from "@oh-my-pi/pi-tui/tui";
+import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-tui/utils";
 
 export interface SettingItem {
 	/** Unique identifier for this setting */
@@ -131,7 +131,7 @@ export class SettingsList implements Component {
 
 		// Add hint
 		lines.push("");
-		lines.push(this.theme.hint("  Enter/Space to change · Esc to cancel"));
+		lines.push(this.theme.hint("Enter/Space to change · Esc to cancel"));
 
 		return lines;
 	}

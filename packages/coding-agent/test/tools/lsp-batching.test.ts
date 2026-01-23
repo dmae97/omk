@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { join } from "node:path";
+import { createLspWritethrough } from "@oh-my-pi/pi-coding-agent/lsp";
 import * as lspConfig from "@oh-my-pi/pi-coding-agent/lsp/config";
-import { createLspWritethrough } from "@oh-my-pi/pi-coding-agent/lsp/index";
 import { createTempDirSync } from "@oh-my-pi/pi-utils";
 
 describe("createLspWritethrough batching", () => {

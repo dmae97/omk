@@ -4,7 +4,7 @@
 
 import type { ToolCallContext } from "@oh-my-pi/pi-agent-core";
 import type { RenderResultOptions } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
-import type { FileDiagnosticsResult } from "@oh-my-pi/pi-coding-agent/lsp/index";
+import type { FileDiagnosticsResult } from "@oh-my-pi/pi-coding-agent/lsp";
 import { renderDiff as renderDiffColored } from "@oh-my-pi/pi-coding-agent/modes/components/diff";
 import { getLanguageFromPath, type Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { OutputMeta } from "@oh-my-pi/pi-coding-agent/tools/output-meta";

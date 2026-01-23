@@ -5,7 +5,7 @@ import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallb
 import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
 import { type Theme, theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import lspDescription from "@oh-my-pi/pi-coding-agent/prompts/tools/lsp.md" with { type: "text" };
-import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools/index";
+import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { resolveToCwd } from "@oh-my-pi/pi-coding-agent/tools/path-utils";
 import { throwIfAborted } from "@oh-my-pi/pi-coding-agent/tools/tool-errors";
 import { logger, once, untilAborted } from "@oh-my-pi/pi-utils";

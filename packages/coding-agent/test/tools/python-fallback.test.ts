@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "bun:test";
 import * as pythonKernelModule from "@oh-my-pi/pi-coding-agent/ipy/kernel";
-import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools/index";
-import { createTools } from "@oh-my-pi/pi-coding-agent/tools/index";
+import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
+import { createTools } from "@oh-my-pi/pi-coding-agent/tools";
 
 function createTestSession(overrides: Partial<ToolSession> = {}): ToolSession {
 	return {

@@ -14,7 +14,7 @@ This repo contains multiple packages, but **`packages/coding-agent/`** is the pr
 | `packages/agent` | Agent runtime with tool calling and state management |
 | `packages/coding-agent` | Main CLI application (primary focus) |
 | `packages/tui` | Terminal UI library with differential rendering |
-| `packages/omp-stats` | Local observability dashboard (`omp stats`) |
+| `packages/stats` | Local observability dashboard (`omp stats`) |
 | `packages/pi-utils` | Shared utilities (logger, streams, temp files) |
 
 ## Code Quality

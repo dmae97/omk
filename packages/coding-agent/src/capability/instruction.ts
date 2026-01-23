@@ -4,7 +4,7 @@
  * GitHub Copilot-style instructions with optional file pattern matching.
  */
 
-import { defineCapability } from "./index";
+import { defineCapability } from ".";
 import type { SourceMeta } from "./types";
 
 /**

@@ -4,7 +4,7 @@
  * Skills provide specialized knowledge or workflows that extend agent capabilities.
  */
 
-import { defineCapability } from "./index";
+import { defineCapability } from ".";
 import type { SourceMeta } from "./types";
 
 /**

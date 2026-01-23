@@ -9,7 +9,7 @@ import type { AgentEvent, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { formatModelString, parseModelPattern } from "@oh-my-pi/pi-coding-agent/config/model-resolver";
 import { checkPythonKernelAvailability } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
-import { LspTool } from "@oh-my-pi/pi-coding-agent/lsp/index";
+import { LspTool } from "@oh-my-pi/pi-coding-agent/lsp";
 import type { LspParams } from "@oh-my-pi/pi-coding-agent/lsp/types";
 import { callTool } from "@oh-my-pi/pi-coding-agent/mcp/client";
 import type { MCPManager } from "@oh-my-pi/pi-coding-agent/mcp/manager";

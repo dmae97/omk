@@ -8,7 +8,7 @@ import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { untilAborted } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
-import type { ToolSession } from "./index";
+import type { ToolSession } from ".";
 import {
 	formatCount,
 	formatEmptyMessage,

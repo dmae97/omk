@@ -1,5 +1,5 @@
 import { ArtifactManager } from "@oh-my-pi/pi-coding-agent/session/artifacts";
-import type { ToolSession } from "./index";
+import type { ToolSession } from ".";
 
 export interface TailBuffer {
 	append(chunk: string): void;

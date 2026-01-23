@@ -4,7 +4,7 @@
 
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { APP_NAME, CONFIG_DIR_NAME, ENV_AGENT_DIR } from "@oh-my-pi/pi-coding-agent/config";
-import { BUILTIN_TOOLS } from "@oh-my-pi/pi-coding-agent/tools/index";
+import { BUILTIN_TOOLS } from "@oh-my-pi/pi-coding-agent/tools";
 import chalk from "chalk";
 
 export type Mode = "text" | "json" | "rpc";

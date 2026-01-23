@@ -1,5 +1,5 @@
 // Exa MCP tools (22 tools)
-export { exaTools } from "@oh-my-pi/pi-coding-agent/exa/index";
+export { exaTools } from "@oh-my-pi/pi-coding-agent/exa";
 export type { ExaRenderDetails, ExaSearchResponse, ExaSearchResult } from "@oh-my-pi/pi-coding-agent/exa/types";
 export {
 	type FileDiagnosticsResult,
@@ -11,9 +11,9 @@ export {
 	type LspWarmupOptions,
 	type LspWarmupResult,
 	warmupLspServers,
-} from "@oh-my-pi/pi-coding-agent/lsp/index";
+} from "@oh-my-pi/pi-coding-agent/lsp";
 export { EditTool, type EditToolDetails } from "@oh-my-pi/pi-coding-agent/patch";
-export { BUNDLED_AGENTS, TaskTool } from "@oh-my-pi/pi-coding-agent/task/index";
+export { BUNDLED_AGENTS, TaskTool } from "@oh-my-pi/pi-coding-agent/task";
 export {
 	companyWebSearchTools,
 	exaWebSearchTools,
@@ -31,7 +31,7 @@ export {
 	webSearchCustomTool,
 	webSearchDeepTool,
 	webSearchLinkedinTool,
-} from "@oh-my-pi/pi-coding-agent/web/search/index";
+} from "@oh-my-pi/pi-coding-agent/web/search";
 export { AskTool, type AskToolDetails } from "./ask";
 export { BashTool, type BashToolDetails, type BashToolOptions } from "./bash";
 export { CalculatorTool, type CalculatorToolDetails } from "./calculator";
@@ -64,13 +64,13 @@ import type { BashInterceptorRule } from "@oh-my-pi/pi-coding-agent/config/setti
 import type { InternalUrlRouter } from "@oh-my-pi/pi-coding-agent/internal-urls";
 import { getPreludeDocs, warmPythonEnvironment } from "@oh-my-pi/pi-coding-agent/ipy/executor";
 import { checkPythonKernelAvailability } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
-import { LspTool } from "@oh-my-pi/pi-coding-agent/lsp/index";
+import { LspTool } from "@oh-my-pi/pi-coding-agent/lsp";
 import { EditTool } from "@oh-my-pi/pi-coding-agent/patch";
 import type { ArtifactManager } from "@oh-my-pi/pi-coding-agent/session/artifacts";
-import { TaskTool } from "@oh-my-pi/pi-coding-agent/task/index";
+import { TaskTool } from "@oh-my-pi/pi-coding-agent/task";
 import type { AgentOutputManager } from "@oh-my-pi/pi-coding-agent/task/output-manager";
 import type { EventBus } from "@oh-my-pi/pi-coding-agent/utils/event-bus";
-import { WebSearchTool } from "@oh-my-pi/pi-coding-agent/web/search/index";
+import { WebSearchTool } from "@oh-my-pi/pi-coding-agent/web/search";
 import { logger } from "@oh-my-pi/pi-utils";
 import { AskTool } from "./ask";
 import { BashTool } from "./bash";

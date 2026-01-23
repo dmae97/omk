@@ -11,7 +11,7 @@ import type { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-regis
 import type { ExecOptions, ExecResult } from "@oh-my-pi/pi-coding-agent/exec/exec";
 import type { Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { EditToolDetails } from "@oh-my-pi/pi-coding-agent/patch";
-import type { CompactionPreparation, CompactionResult } from "@oh-my-pi/pi-coding-agent/session/compaction/index";
+import type { CompactionPreparation, CompactionResult } from "@oh-my-pi/pi-coding-agent/session/compaction";
 import type { HookMessage } from "@oh-my-pi/pi-coding-agent/session/messages";
 import type {
 	BranchSummaryEntry,
@@ -26,7 +26,7 @@ import type {
 	GrepToolDetails,
 	LsToolDetails,
 	ReadToolDetails,
-} from "@oh-my-pi/pi-coding-agent/tools/index";
+} from "@oh-my-pi/pi-coding-agent/tools";
 import type { Component, TUI } from "@oh-my-pi/pi-tui";
 
 // Re-export for backward compatibility
@@ -752,7 +752,7 @@ export interface HookAPI {
 	/** Injected @sinclair/typebox module */
 	typebox: typeof import("@sinclair/typebox");
 	/** Injected pi-coding-agent exports */
-	pi: typeof import("../../index");
+	pi: typeof import("../..");
 }
 
 /**

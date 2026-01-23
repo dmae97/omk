@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { processFileArguments } from "@oh-my-pi/pi-coding-agent/cli/file-processor";
 import { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
-import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools/index";
+import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { ReadTool } from "@oh-my-pi/pi-coding-agent/tools/read";
 
 // 1x1 red PNG image as base64 (smallest valid PNG)

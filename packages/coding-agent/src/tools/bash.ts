@@ -12,9 +12,8 @@ import { renderOutputBlock, renderStatusLine } from "@oh-my-pi/pi-coding-agent/t
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { Type } from "@sinclair/typebox";
-
+import type { ToolSession } from ".";
 import { checkBashInterception, checkSimpleLsInterception } from "./bash-interceptor";
-import type { ToolSession } from "./index";
 import { allocateOutputArtifact, createTailBuffer } from "./output-utils";
 import { resolveToCwd } from "./path-utils";
 import { formatBytes, wrapBrackets } from "./render-utils";

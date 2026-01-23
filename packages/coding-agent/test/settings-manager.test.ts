@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { getAgentDbPath } from "@oh-my-pi/pi-coding-agent/config";
 import { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
-import { AgentStorage } from "@oh-my-pi/pi-coding-agent/session/agent-storage";
+import { YAML } from "bun";
 
 describe("SettingsManager", () => {
 	let testDir: string;
@@ -23,6 +22,21 @@ describe("SettingsManager", () => {
 		mkdirSync(join(projectDir, ".pi"), { recursive: true });
 	});
 
+	const getConfigPath = () => join(agentDir, "config.yml");
+
+	const writeSettings = async (settings: Record<string, unknown>) => {
+		await Bun.write(getConfigPath(), YAML.stringify(settings, null, 2));
+	};
+
+	const readSettings = async (): Promise<Record<string, unknown>> => {
+		const file = Bun.file(getConfigPath());
+		if (!(await file.exists())) return {};
+		const content = await file.text();
+		const parsed = YAML.parse(content);
+		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+		return parsed as Record<string, unknown>;
+	};
+
 	afterEach(() => {
 		if (existsSync(testDir)) {
 			rmSync(testDir, { recursive: true });
@@ -33,9 +47,8 @@ describe("SettingsManager", () => {
 	// This ensures external edits (via AgentStorage directly) aren't lost when the app saves.
 	describe("preserves externally added settings", () => {
 		it("should preserve enabledModels when changing thinking level", async () => {
-			// Seed initial settings in DB
-			const storage = await AgentStorage.open(getAgentDbPath(agentDir));
-			storage.saveSettings({
+			// Seed initial settings in config.yml
+			await writeSettings({
 				theme: "dark",
 				modelRoles: { default: "claude-sonnet" },
 			});
@@ -44,60 +57,58 @@ describe("SettingsManager", () => {
 			const manager = await SettingsManager.create(projectDir, agentDir);
 
 			// Simulate external edit (e.g., user modifying DB directly or another process)
-			storage.saveSettings({
+			await writeSettings({
 				theme: "dark",
 				modelRoles: { default: "claude-sonnet" },
 				enabledModels: ["claude-opus-4-5", "gpt-5.2-codex"],
 			});
 
 			// Manager saves a change - should merge, not overwrite
-			manager.setDefaultThinkingLevel("high");
+			await manager.setDefaultThinkingLevel("high");
 
-			const savedSettings = storage.getSettings() ?? {};
+			const savedSettings = await readSettings();
 			expect(savedSettings.enabledModels).toEqual(["claude-opus-4-5", "gpt-5.2-codex"]);
 			expect(savedSettings.defaultThinkingLevel).toBe("high");
 			expect(savedSettings.theme).toBe("dark");
-			expect(savedSettings.modelRoles?.default).toBe("claude-sonnet");
+			expect((savedSettings.modelRoles as { default?: string } | undefined)?.default).toBe("claude-sonnet");
 		});
 
 		it("should preserve custom settings when changing theme", async () => {
-			const storage = await AgentStorage.open(getAgentDbPath(agentDir));
-			storage.saveSettings({
+			await writeSettings({
 				modelRoles: { default: "claude-sonnet" },
 			});
 
 			const manager = await SettingsManager.create(projectDir, agentDir);
 
-			storage.saveSettings({
+			await writeSettings({
 				modelRoles: { default: "claude-sonnet" },
 				shellPath: "/bin/zsh",
 				extensions: ["/path/to/extension.ts"],
 			});
 
-			manager.setTheme("light");
+			await manager.setTheme("light");
 
-			const savedSettings = storage.getSettings() ?? {};
+			const savedSettings = await readSettings();
 			expect(savedSettings.shellPath).toBe("/bin/zsh");
 			expect(savedSettings.extensions).toEqual(["/path/to/extension.ts"]);
 			expect(savedSettings.theme).toBe("light");
 		});
 
 		it("should let in-memory changes override file changes for same key", async () => {
-			const storage = await AgentStorage.open(getAgentDbPath(agentDir));
-			storage.saveSettings({
+			await writeSettings({
 				theme: "dark",
 			});
 
 			const manager = await SettingsManager.create(projectDir, agentDir);
 
-			storage.saveSettings({
+			await writeSettings({
 				theme: "dark",
 				defaultThinkingLevel: "low",
 			});
 
-			manager.setDefaultThinkingLevel("high");
+			await manager.setDefaultThinkingLevel("high");
 
-			const savedSettings = storage.getSettings() ?? {};
+			const savedSettings = await readSettings();
 			expect(savedSettings.defaultThinkingLevel).toBe("high");
 		});
 	});

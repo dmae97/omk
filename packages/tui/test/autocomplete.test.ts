@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { CombinedAutocompleteProvider } from "$tui/autocomplete";
+import { CombinedAutocompleteProvider } from "@oh-my-pi/pi-tui/autocomplete";
 
 describe("CombinedAutocompleteProvider", () => {
 	describe("extractPathPrefix", () => {

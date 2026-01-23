@@ -7,9 +7,9 @@
 
 import { type Dirent, existsSync, readdirSync } from "node:fs";
 import * as path from "node:path";
+import * as piCodingAgent from "@oh-my-pi/pi-coding-agent";
 import { getAgentDir, getConfigDirs } from "@oh-my-pi/pi-coding-agent/config";
 import { execCommand } from "@oh-my-pi/pi-coding-agent/exec/exec";
-import * as piCodingAgent from "@oh-my-pi/pi-coding-agent/index";
 import { logger } from "@oh-my-pi/pi-utils";
 import * as typebox from "@sinclair/typebox";
 import { ReviewCommand } from "./bundled/review";

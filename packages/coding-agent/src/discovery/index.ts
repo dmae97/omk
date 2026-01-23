@@ -17,28 +17,24 @@ import "../capability/rule";
 import "../capability/settings";
 import "../capability/skill";
 import "../capability/slash-command";
-import "../capability/system-prompt";
 import "../capability/ssh";
+import "../capability/system-prompt";
 import "../capability/tool";
 
 // Import providers (each registers itself on import)
+import "./agents-md";
 import "./builtin";
 import "./claude";
-import "./codex";
-import "./gemini";
-import "./cursor";
-import "./windsurf";
 import "./cline";
+import "./codex";
+import "./cursor";
+import "./gemini";
 import "./github";
-import "./vscode";
-import "./agents-md";
 import "./mcp-json";
 import "./ssh";
+import "./vscode";
+import "./windsurf";
 
-export type { ContextFile } from "@oh-my-pi/pi-coding-agent/capability/context-file";
-export type { Extension, ExtensionManifest } from "@oh-my-pi/pi-coding-agent/capability/extension";
-export type { ExtensionModule } from "@oh-my-pi/pi-coding-agent/capability/extension-module";
-export type { Hook } from "@oh-my-pi/pi-coding-agent/capability/hook";
 // Re-export the main API from capability registry
 export {
 	cacheStats,
@@ -62,7 +58,11 @@ export {
 	// Cache management
 	reset,
 	setDisabledProviders,
-} from "@oh-my-pi/pi-coding-agent/capability/index";
+} from "@oh-my-pi/pi-coding-agent/capability";
+export type { ContextFile } from "@oh-my-pi/pi-coding-agent/capability/context-file";
+export type { Extension, ExtensionManifest } from "@oh-my-pi/pi-coding-agent/capability/extension";
+export type { ExtensionModule } from "@oh-my-pi/pi-coding-agent/capability/extension-module";
+export type { Hook } from "@oh-my-pi/pi-coding-agent/capability/hook";
 export type { Instruction } from "@oh-my-pi/pi-coding-agent/capability/instruction";
 // Re-export capability item types
 export type { MCPServer } from "@oh-my-pi/pi-coding-agent/capability/mcp";

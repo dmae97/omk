@@ -5,7 +5,7 @@
  * persistent guidance to the agent.
  */
 
-import { defineCapability } from "./index";
+import { defineCapability } from ".";
 import type { SourceMeta } from "./types";
 
 /**

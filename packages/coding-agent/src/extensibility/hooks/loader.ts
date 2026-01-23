@@ -3,11 +3,11 @@
  */
 
 import * as path from "node:path";
+import * as piCodingAgent from "@oh-my-pi/pi-coding-agent";
 import { hookCapability } from "@oh-my-pi/pi-coding-agent/capability/hook";
 import type { Hook } from "@oh-my-pi/pi-coding-agent/discovery";
 import { loadCapability } from "@oh-my-pi/pi-coding-agent/discovery";
 import { expandPath } from "@oh-my-pi/pi-coding-agent/discovery/helpers";
-import * as piCodingAgent from "@oh-my-pi/pi-coding-agent/index";
 import type { HookMessage } from "@oh-my-pi/pi-coding-agent/session/messages";
 import type { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { logger } from "@oh-my-pi/pi-utils";

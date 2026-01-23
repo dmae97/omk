@@ -1,6 +1,6 @@
 {
 	"name": "@oh-my-pi/pi-ai",
-	"version": "8.0.0",
+	"version": "8.1.0",
 	"description": "Unified LLM API with automatic model discovery and provider configuration",
 	"type": "module",
 	"main": "./src/index.ts",
@@ -20,16 +20,18 @@
 		}
 	},
 	"bin": {
-		"pi-ai": "./src/cli.ts"
+		"pi-ai": "./dist/cli.js"
 	},
 	"files": [
+		"dist",
 		"src",
 		"README.md"
 	],
 	"scripts": {
+		"build": "tsgo -p tsconfig.build.json",
 		"generate-models": "bun scripts/generate-models.ts",
 		"test": "bun test",
-		"prepublishOnly": "cp tsconfig.publish.json tsconfig.json"
+		"prepublishOnly": "cp tsconfig.publish.json tsconfig.json && bun run build"
 	},
 	"dependencies": {
 		"@oh-my-pi/pi-utils": "workspace:*",

@@ -5,7 +5,7 @@
  * All providers translate their native format to this shape.
  */
 
-import { defineCapability } from "./index";
+import { defineCapability } from ".";
 import type { SourceMeta } from "./types";
 
 /**

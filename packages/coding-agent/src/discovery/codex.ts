@@ -8,13 +8,13 @@
  */
 
 import { join } from "node:path";
+import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability";
 import type { ContextFile } from "@oh-my-pi/pi-coding-agent/capability/context-file";
 import { contextFileCapability } from "@oh-my-pi/pi-coding-agent/capability/context-file";
 import { type ExtensionModule, extensionModuleCapability } from "@oh-my-pi/pi-coding-agent/capability/extension-module";
 import { readFile } from "@oh-my-pi/pi-coding-agent/capability/fs";
 import type { Hook } from "@oh-my-pi/pi-coding-agent/capability/hook";
 import { hookCapability } from "@oh-my-pi/pi-coding-agent/capability/hook";
-import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability/index";
 import type { MCPServer } from "@oh-my-pi/pi-coding-agent/capability/mcp";
 import { mcpCapability } from "@oh-my-pi/pi-coding-agent/capability/mcp";
 import type { Prompt } from "@oh-my-pi/pi-coding-agent/capability/prompt";

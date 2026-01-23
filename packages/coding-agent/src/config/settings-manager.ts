@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { rename } from "node:fs/promises";
 import { join } from "node:path";
 import { type Settings as SettingsItem, settingsCapability } from "@oh-my-pi/pi-coding-agent/capability/settings";
-import { getAgentDbPath, getAgentDir, getConfigPath } from "@oh-my-pi/pi-coding-agent/config";
+import { getAgentDbPath, getAgentDir } from "@oh-my-pi/pi-coding-agent/config";
 import { withFileLock } from "@oh-my-pi/pi-coding-agent/config/file-lock";
 import { loadCapability } from "@oh-my-pi/pi-coding-agent/discovery";
 import type { SymbolPreset } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
@@ -503,7 +503,7 @@ export class SettingsManager {
 	 * @returns Configured SettingsManager with merged global and user settings
 	 */
 	static async create(cwd: string = process.cwd(), agentDir: string = getAgentDir()): Promise<SettingsManager> {
-		const configPath = getConfigPath();
+		const configPath = join(agentDir, "config.yml");
 		const storage = await AgentStorage.open(getAgentDbPath(agentDir));
 
 		// Migrate from legacy storage if config.yml doesn't exist

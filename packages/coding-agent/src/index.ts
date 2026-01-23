@@ -3,7 +3,7 @@
 // TypeBox helper for string enums (convenience for custom tools)
 // Re-export from pi-ai which uses the correct enum-based schema format
 export { StringEnum } from "@oh-my-pi/pi-ai";
-export type { FileDiagnosticsResult } from "@oh-my-pi/pi-coding-agent/lsp/index";
+export type { FileDiagnosticsResult } from "@oh-my-pi/pi-coding-agent/lsp";
 // UI components for extensions
 export {
 	ArminComponent,
@@ -37,7 +37,7 @@ export {
 	UserMessageComponent,
 	UserMessageSelectorComponent,
 	type VisualTruncateResult,
-} from "@oh-my-pi/pi-coding-agent/modes/components/index";
+} from "@oh-my-pi/pi-coding-agent/modes/components";
 // Theme utilities for custom tools
 export {
 	getLanguageFromPath,
@@ -88,9 +88,9 @@ export type {
 	ExecResult,
 	LoadedCustomTool,
 	RenderResultOptions,
-} from "./extensibility/custom-tools/index";
+} from "./extensibility/custom-tools";
 // Custom tools
-export { CustomToolLoader, discoverAndLoadCustomTools, loadCustomTools } from "./extensibility/custom-tools/index";
+export { CustomToolLoader, discoverAndLoadCustomTools, loadCustomTools } from "./extensibility/custom-tools";
 export type {
 	AppAction,
 	Extension,
@@ -122,7 +122,7 @@ export type {
 	UserBashEventResult,
 	UserPythonEvent,
 	UserPythonEventResult,
-} from "./extensibility/extensions/index";
+} from "./extensibility/extensions";
 // Extension types and utilities
 export {
 	discoverAndLoadExtensions,
@@ -135,9 +135,9 @@ export {
 	isLsToolResult,
 	isReadToolResult,
 	isWriteToolResult,
-} from "./extensibility/extensions/index";
+} from "./extensibility/extensions";
 // Hook system types (legacy re-export)
-export type * from "./extensibility/hooks/index";
+export type * from "./extensibility/hooks";
 // Skills
 export {
 	type LoadSkillsFromDirOptions,
@@ -162,7 +162,7 @@ export {
 	type RpcEventListener,
 	runPrintMode,
 	runRpcMode,
-} from "./modes/index";
+} from "./modes";
 // SDK for programmatic usage
 export {
 	// Factory
@@ -228,7 +228,7 @@ export {
 	prepareBranchEntries,
 	serializeConversation,
 	shouldCompact,
-} from "./session/compaction/index";
+} from "./session/compaction";
 export { convertToLlm } from "./session/messages";
 export {
 	type BranchSummaryEntry,
@@ -275,5 +275,5 @@ export {
 	truncateLine,
 	truncateTail,
 	type WriteToolDetails,
-} from "./tools/index";
+} from "./tools";
 export { getShellConfig } from "./utils/shell";

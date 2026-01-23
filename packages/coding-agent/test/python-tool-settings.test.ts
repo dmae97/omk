@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as pythonExecutor from "@oh-my-pi/pi-coding-agent/ipy/executor";
 import * as pythonKernel from "@oh-my-pi/pi-coding-agent/ipy/kernel";
-import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools/index";
+import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { PythonTool } from "@oh-my-pi/pi-coding-agent/tools/python";
 
 function createSettings(overrides?: Partial<ToolSession["settings"]>): ToolSession["settings"] {

@@ -5,7 +5,7 @@
  * Distinct from context-files which are user instructions shown in conversation.
  */
 
-import { defineCapability } from "./index";
+import { defineCapability } from ".";
 import type { SourceMeta } from "./types";
 
 /**

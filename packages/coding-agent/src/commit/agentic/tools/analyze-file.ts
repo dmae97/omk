@@ -9,7 +9,7 @@ import type { CustomTool, CustomToolContext } from "@oh-my-pi/pi-coding-agent/ex
 import type { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { TaskTool } from "@oh-my-pi/pi-coding-agent/task";
 import type { TaskParams } from "@oh-my-pi/pi-coding-agent/task/types";
-import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools/index";
+import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { Type } from "@sinclair/typebox";
 
 const analyzeFileSchema = Type.Object({

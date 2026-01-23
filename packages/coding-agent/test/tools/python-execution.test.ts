@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "bun:test";
 import * as pythonExecutor from "@oh-my-pi/pi-coding-agent/ipy/executor";
-import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools/index";
+import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { PythonTool } from "@oh-my-pi/pi-coding-agent/tools/python";
 import { createTempDirSync } from "@oh-my-pi/pi-utils";
 

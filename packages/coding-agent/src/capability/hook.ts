@@ -4,7 +4,7 @@
  * Pre/post tool execution hooks defined as shell scripts.
  */
 
-import { defineCapability } from "./index";
+import { defineCapability } from ".";
 import type { SourceMeta } from "./types";
 
 /**

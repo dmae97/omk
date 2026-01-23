@@ -13,7 +13,7 @@ import {
 	type ContextFile,
 	loadCapability,
 	type SystemPrompt as SystemPromptFile,
-} from "@oh-my-pi/pi-coding-agent/discovery/index";
+} from "@oh-my-pi/pi-coding-agent/discovery";
 import { loadSkills, type Skill } from "@oh-my-pi/pi-coding-agent/extensibility/skills";
 import customSystemPromptTemplate from "@oh-my-pi/pi-coding-agent/prompts/system/custom-system-prompt.md" with {
 	type: "text",
@@ -21,7 +21,7 @@ import customSystemPromptTemplate from "@oh-my-pi/pi-coding-agent/prompts/system
 import systemPromptTemplate from "@oh-my-pi/pi-coding-agent/prompts/system/system-prompt.md" with { type: "text" };
 import { $ } from "bun";
 import chalk from "chalk";
-import type { ToolName } from "./tools/index";
+import type { ToolName } from "./tools";
 
 interface GitContext {
 	isRepo: boolean;

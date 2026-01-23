@@ -4,7 +4,7 @@
  * File-based slash commands defined as markdown files.
  */
 
-import { defineCapability } from "./index";
+import { defineCapability } from ".";
 import type { SourceMeta } from "./types";
 
 /**

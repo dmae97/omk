@@ -15,7 +15,7 @@ import { Text } from "@oh-my-pi/pi-tui";
 import { ptree, readLines } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import { $ } from "bun";
-import type { ToolSession } from "./index";
+import type { ToolSession } from ".";
 import { applyListLimit } from "./list-limit";
 import { resolveToCwd } from "./path-utils";
 import { formatCount, formatEmptyMessage, formatErrorMessage, PREVIEW_LIMITS } from "./render-utils";

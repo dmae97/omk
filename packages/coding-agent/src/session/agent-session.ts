@@ -38,9 +38,9 @@ import {
 } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
 import type { SettingsManager, SkillsSettings } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
 import { type BashResult, executeBash as executeBashCommand } from "@oh-my-pi/pi-coding-agent/exec/bash-executor";
-import { exportSessionToHtml } from "@oh-my-pi/pi-coding-agent/export/html/index";
+import { exportSessionToHtml } from "@oh-my-pi/pi-coding-agent/export/html";
 import type { TtsrManager } from "@oh-my-pi/pi-coding-agent/export/ttsr";
-import type { LoadedCustomCommand } from "@oh-my-pi/pi-coding-agent/extensibility/custom-commands/index";
+import type { LoadedCustomCommand } from "@oh-my-pi/pi-coding-agent/extensibility/custom-commands";
 import type {
 	ExtensionCommandContext,
 	ExtensionRunner,
@@ -78,7 +78,7 @@ import {
 	generateBranchSummary,
 	prepareCompaction,
 	shouldCompact,
-} from "./compaction/index";
+} from "./compaction";
 import {
 	type BashExecutionMessage,
 	type BranchSummaryMessage,

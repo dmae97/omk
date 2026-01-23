@@ -1,5 +1,5 @@
-import type { Component } from "$tui/tui";
-import { truncateToWidth } from "$tui/utils";
+import type { Component } from "@oh-my-pi/pi-tui/tui";
+import { truncateToWidth } from "@oh-my-pi/pi-tui/utils";
 
 /**
  * Text component that truncates to fit viewport width

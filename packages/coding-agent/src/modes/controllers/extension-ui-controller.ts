@@ -5,7 +5,7 @@ import type {
 	ExtensionContextActions,
 	ExtensionError,
 	ExtensionUIContext,
-} from "@oh-my-pi/pi-coding-agent/extensibility/extensions/index";
+} from "@oh-my-pi/pi-coding-agent/extensibility/extensions";
 import { HookEditorComponent } from "@oh-my-pi/pi-coding-agent/modes/components/hook-editor";
 import { HookInputComponent } from "@oh-my-pi/pi-coding-agent/modes/components/hook-input";
 import { HookSelectorComponent } from "@oh-my-pi/pi-coding-agent/modes/components/hook-selector";

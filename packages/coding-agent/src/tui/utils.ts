@@ -40,7 +40,7 @@ export function getStateIcon(icon: IconType, theme: Theme, spinnerFrame?: number
 	if (icon === "error") return theme.styledSymbol("status.error", "error");
 	if (icon === "warning") return theme.styledSymbol("status.warning", "warning");
 	if (icon === "info") return theme.styledSymbol("status.info", "accent");
-	if (icon === "pending") return theme.styledSymbol("status.pending", "muted");
+	if (icon === "pending") return theme.styledSymbol("status.pending", "accent");
 	if (spinnerFrame !== undefined) {
 		const frames = theme.spinnerFrames;
 		return frames[spinnerFrame % frames.length];

@@ -8,7 +8,7 @@ import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, ImageContent, Message, UsageReport } from "@oh-my-pi/pi-ai";
 import { KeybindingsManager } from "@oh-my-pi/pi-coding-agent/config/keybindings";
 import type { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
-import type { ExtensionUIContext } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/index";
+import type { ExtensionUIContext } from "@oh-my-pi/pi-coding-agent/extensibility/extensions";
 import type { CompactOptions } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
 import { loadSlashCommands } from "@oh-my-pi/pi-coding-agent/extensibility/slash-commands";
 import type { AgentSession, AgentSessionEvent } from "@oh-my-pi/pi-coding-agent/session/agent-session";
@@ -125,7 +125,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	private readonly changelogMarkdown: string | undefined;
 	public readonly lspServers: Array<{ name: string; status: "ready" | "error"; fileTypes: string[] }> | undefined =
 		undefined;
-	public mcpManager?: import("@oh-my-pi/pi-coding-agent/mcp/index").MCPManager;
+	public mcpManager?: import("@oh-my-pi/pi-coding-agent/mcp").MCPManager;
 	private readonly toolUiContextSetter: (uiContext: ExtensionUIContext, hasUI: boolean) => void;
 
 	private readonly commandController: CommandController;
@@ -141,7 +141,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		changelogMarkdown: string | undefined = undefined,
 		setToolUIContext: (uiContext: ExtensionUIContext, hasUI: boolean) => void = () => {},
 		lspServers: Array<{ name: string; status: "ready" | "error"; fileTypes: string[] }> | undefined = undefined,
-		mcpManager?: import("@oh-my-pi/pi-coding-agent/mcp/index").MCPManager,
+		mcpManager?: import("@oh-my-pi/pi-coding-agent/mcp").MCPManager,
 	) {
 		this.session = session;
 		this.sessionManager = session.sessionManager;

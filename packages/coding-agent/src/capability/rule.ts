@@ -5,7 +5,7 @@
  * Translated to a canonical shape regardless of source format.
  */
 
-import { defineCapability } from "./index";
+import { defineCapability } from ".";
 import type { SourceMeta } from "./types";
 
 /**

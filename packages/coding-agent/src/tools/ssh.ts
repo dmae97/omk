@@ -2,7 +2,7 @@ import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallb
 import type { SSHHost } from "@oh-my-pi/pi-coding-agent/capability/ssh";
 import { sshCapability } from "@oh-my-pi/pi-coding-agent/capability/ssh";
 import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
-import { loadCapability } from "@oh-my-pi/pi-coding-agent/discovery/index";
+import { loadCapability } from "@oh-my-pi/pi-coding-agent/discovery";
 import type { RenderResultOptions } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
 import type { Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import sshDescriptionBase from "@oh-my-pi/pi-coding-agent/prompts/tools/ssh.md" with { type: "text" };
@@ -15,7 +15,7 @@ import { renderOutputBlock, renderStatusLine } from "@oh-my-pi/pi-coding-agent/t
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { Type } from "@sinclair/typebox";
-import type { ToolSession } from "./index";
+import type { ToolSession } from ".";
 import { allocateOutputArtifact, createTailBuffer } from "./output-utils";
 import { formatBytes, wrapBrackets } from "./render-utils";
 import { toolResult } from "./tool-result";

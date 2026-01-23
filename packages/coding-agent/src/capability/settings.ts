@@ -4,7 +4,7 @@
  * Configuration settings from various sources (JSON, TOML, etc.)
  */
 
-import { defineCapability } from "./index";
+import { defineCapability } from ".";
 import type { SourceMeta } from "./types";
 
 /**

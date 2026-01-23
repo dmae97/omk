@@ -10,7 +10,7 @@ import { subprocessToolRegistry } from "@oh-my-pi/pi-coding-agent/task/subproces
 import type { Static, TObject } from "@sinclair/typebox";
 import { Type } from "@sinclair/typebox";
 import Ajv, { type ErrorObject, type ValidateFunction } from "ajv";
-import type { ToolSession } from "./index";
+import type { ToolSession } from ".";
 import { jtdToJsonSchema } from "./jtd-to-json-schema";
 
 export interface CompleteDetails {

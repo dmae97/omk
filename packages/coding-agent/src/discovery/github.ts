@@ -13,9 +13,9 @@
  */
 
 import { basename, dirname, sep } from "node:path";
+import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability";
 import { type ContextFile, contextFileCapability } from "@oh-my-pi/pi-coding-agent/capability/context-file";
 import { readFile } from "@oh-my-pi/pi-coding-agent/capability/fs";
-import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability/index";
 import { type Instruction, instructionCapability } from "@oh-my-pi/pi-coding-agent/capability/instruction";
 import type { LoadContext, LoadResult, SourceMeta } from "@oh-my-pi/pi-coding-agent/capability/types";
 import { parseFrontmatter } from "@oh-my-pi/pi-coding-agent/utils/frontmatter";

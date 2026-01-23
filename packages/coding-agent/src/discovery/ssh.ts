@@ -6,8 +6,8 @@
  */
 
 import { join } from "node:path";
+import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability";
 import { readFile } from "@oh-my-pi/pi-coding-agent/capability/fs";
-import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability/index";
 import { type SSHHost, sshCapability } from "@oh-my-pi/pi-coding-agent/capability/ssh";
 import type { LoadContext, LoadResult, SourceMeta } from "@oh-my-pi/pi-coding-agent/capability/types";
 import { createSourceMeta, expandEnvVarsDeep, parseJSON } from "./helpers";

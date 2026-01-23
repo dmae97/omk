@@ -28,10 +28,10 @@ import type { ModelRegistry } from "./config/model-registry";
 import { parseModelPattern, parseModelString, resolveModelScope, type ScopedModel } from "./config/model-resolver";
 import { SettingsManager } from "./config/settings-manager";
 import { initializeWithSettings } from "./discovery";
-import { exportFromFile } from "./export/html/index";
+import { exportFromFile } from "./export/html";
 import type { ExtensionUIContext } from "./extensibility/extensions/types";
 import { runMigrations, showDeprecationWarnings } from "./migrations";
-import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index";
+import { InteractiveMode, runPrintMode, runRpcMode } from "./modes";
 import { type CreateAgentSessionOptions, createAgentSession, discoverAuthStorage, discoverModels } from "./sdk";
 import type { AgentSession } from "./session/agent-session";
 import { type SessionInfo, SessionManager } from "./session/session-manager";
@@ -87,7 +87,7 @@ async function runInteractiveMode(
 	initialMessages: string[],
 	setExtensionUIContext: (uiContext: ExtensionUIContext, hasUI: boolean) => void,
 	lspServers: Array<{ name: string; status: "ready" | "error"; fileTypes: string[] }> | undefined,
-	mcpManager: import("./mcp/index").MCPManager | undefined,
+	mcpManager: import("./mcp").MCPManager | undefined,
 	initialMessage?: string,
 	initialImages?: ImageContent[],
 ): Promise<void> {

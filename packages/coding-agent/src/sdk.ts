@@ -32,7 +32,7 @@ import { join } from "node:path";
 import { Agent, type AgentEvent, type AgentMessage, type AgentTool, type ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { type Message, type Model, supportsXhigh } from "@oh-my-pi/pi-ai";
 // Import discovery to register all providers on startup
-import { loadCapability } from "@oh-my-pi/pi-coding-agent/capability/index";
+import { loadCapability } from "@oh-my-pi/pi-coding-agent/capability";
 import { type Rule, ruleCapability } from "@oh-my-pi/pi-coding-agent/capability/rule";
 import { getAgentDir, getConfigDirPaths } from "@oh-my-pi/pi-coding-agent/config";
 import { CursorExecHandlers } from "@oh-my-pi/pi-coding-agent/cursor";
@@ -53,7 +53,7 @@ import "./discovery";
 import {
 	type CustomCommandsLoadResult,
 	loadCustomCommands as loadCustomCommandsInternal,
-} from "./extensibility/custom-commands/index";
+} from "./extensibility/custom-commands";
 import type { CustomTool, CustomToolContext, CustomToolSessionEvent } from "./extensibility/custom-tools/types";
 import {
 	discoverAndLoadExtensions,
@@ -67,7 +67,7 @@ import {
 	loadExtensions,
 	type ToolDefinition,
 	wrapRegisteredTools,
-} from "./extensibility/extensions/index";
+} from "./extensibility/extensions";
 import { loadSkills as loadSkillsInternal, type Skill, type SkillWarning } from "./extensibility/skills";
 import { type FileSlashCommand, loadSlashCommands as loadSlashCommandsInternal } from "./extensibility/slash-commands";
 import {
@@ -77,7 +77,7 @@ import {
 	RuleProtocolHandler,
 	SkillProtocolHandler,
 } from "./internal-urls";
-import { discoverAndLoadMCPTools, type MCPManager, type MCPToolsLoadResult } from "./mcp/index";
+import { discoverAndLoadMCPTools, type MCPManager, type MCPToolsLoadResult } from "./mcp";
 import { AgentSession } from "./session/agent-session";
 import { AuthStorage } from "./session/auth-storage";
 import { convertToLlm } from "./session/messages";
@@ -88,8 +88,6 @@ import {
 	loadProjectContextFiles as loadContextFilesInternal,
 } from "./system-prompt";
 import { AgentOutputManager } from "./task/output-manager";
-import { ToolContextStore } from "./tools/context";
-import { getGeminiImageTools } from "./tools/gemini-image";
 import {
 	BashTool,
 	BUILTIN_TOOLS,
@@ -108,7 +106,9 @@ import {
 	type ToolSession,
 	WriteTool,
 	warmupLspServers,
-} from "./tools/index";
+} from "./tools";
+import { ToolContextStore } from "./tools/context";
+import { getGeminiImageTools } from "./tools/gemini-image";
 import { wrapToolsWithMetaNotice } from "./tools/output-meta";
 import { EventBus } from "./utils/event-bus";
 import { time } from "./utils/timings";
@@ -218,11 +218,11 @@ export type {
 	ExtensionContext,
 	ExtensionFactory,
 	ToolDefinition,
-} from "@oh-my-pi/pi-coding-agent/extensibility/extensions/index";
+} from "@oh-my-pi/pi-coding-agent/extensibility/extensions";
 export type { Skill } from "@oh-my-pi/pi-coding-agent/extensibility/skills";
 export type { FileSlashCommand } from "@oh-my-pi/pi-coding-agent/extensibility/slash-commands";
-export type { MCPManager, MCPServerConfig, MCPServerConnection, MCPToolsLoadResult } from "./mcp/index";
-export type { Tool } from "./tools/index";
+export type { MCPManager, MCPServerConfig, MCPServerConnection, MCPToolsLoadResult } from "./mcp";
+export type { Tool } from "./tools";
 
 export {
 	// Individual tool classes (for custom usage)

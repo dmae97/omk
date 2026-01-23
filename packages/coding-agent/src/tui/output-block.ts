@@ -21,8 +21,15 @@ export function renderOutputBlock(options: OutputBlockOptions, theme: Theme): st
 	const v = theme.boxSharp.vertical;
 	const cap = h.repeat(3);
 	const lineWidth = Math.max(0, width);
-	const borderColor =
-		state === "error" ? "error" : state === "success" ? "success" : state === "warning" ? "warning" : "dim";
+	// Border colors: running/pending use accent, success uses dim (gray), error/warning keep their colors
+	const borderColor: "error" | "warning" | "accent" | "dim" =
+		state === "error"
+			? "error"
+			: state === "warning"
+				? "warning"
+				: state === "running" || state === "pending"
+					? "accent"
+					: "dim";
 	const border = (text: string) => theme.fg(borderColor, text);
 	const bgFn = state ? (text: string) => theme.bg(getStateBgColor(state), text) : undefined;
 

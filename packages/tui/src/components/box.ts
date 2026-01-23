@@ -1,5 +1,5 @@
-import type { Component } from "$tui/tui";
-import { applyBackgroundToLine, visibleWidth } from "$tui/utils";
+import type { Component } from "@oh-my-pi/pi-tui/tui";
+import { applyBackgroundToLine, visibleWidth } from "@oh-my-pi/pi-tui/utils";
 
 /**
  * Box component - a container that applies padding and background to all children
