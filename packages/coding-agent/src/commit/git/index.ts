@@ -10,10 +10,7 @@ import type { FileDiff, FileHunks, NumstatEntry } from "$c/commit/types";
 
 export type HunkSelection = {
 	path: string;
-	hunks:
-		| { type: "all" }
-		| { type: "indices"; indices: number[] }
-		| { type: "lines"; start: number; end: number };
+	hunks: { type: "all" } | { type: "indices"; indices: number[] } | { type: "lines"; start: number; end: number };
 };
 
 export class ControlledGit {
@@ -114,10 +111,7 @@ export class ControlledGit {
 			}
 			if (fileDiff.isBinary) {
 				if (selection.hunks.type !== "all") {
-					throw new GitError(
-						"git apply --cached",
-						`Cannot select hunks for binary file ${selection.path}`,
-					);
+					throw new GitError("git apply --cached", `Cannot select hunks for binary file ${selection.path}`);
 				}
 				patchParts.push(fileDiff.content);
 				continue;

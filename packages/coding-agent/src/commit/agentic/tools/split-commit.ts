@@ -94,7 +94,7 @@ function normalizeDetails(
 
 export function createSplitCommitTool(
 	git: ControlledGit,
-state: CommitAgentState,
+	state: CommitAgentState,
 	changelogTargets: string[],
 ): CustomTool<typeof splitCommitSchema> {
 	return {

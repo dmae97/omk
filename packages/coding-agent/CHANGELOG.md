@@ -27,6 +27,12 @@
 - Added AGENTS.md context file discovery for commit generation
 - Added progress indicators during changelog generation and model resolution
 - Added propose_changelog tool for agent-provided changelog entries in agentic commit workflow
+- Added fallback commit generation when agentic mode fails, using file pattern analysis and heuristic-based type inference
+- Added trivial change detection to automatically classify whitespace-only and import-reorganization commits
+- Added support for pre-computed file observations in commit agent to skip redundant analyze_files calls
+- Added diff content caching with smart file prioritization to optimize token usage in large changesets
+- Added lock file filtering (17 patterns including Cargo.lock, package-lock.json, bun.lock) from commit analysis
+- Added changelog deletion support to remove outdated entries via the changelog proposal interface
 
 ### Changed
 - Changed changelog diff truncation limit to be configurable via settings
@@ -65,12 +71,18 @@
 - Switched agentic commit from auto-generated changelogs to agent-proposed entries with validation and retry logic
 - Commit agent now resolves a separate smaller model for commit generation instead of reusing the primary model
 - Normalized code formatting and indentation across tool renderers and UI components
+- Changed git-file-diff tool to prioritize files by type and respect token budget limits with intelligent truncation
+- Changed git-overview tool to filter and report excluded lock files separately from staged files
+- Changed analyze-file tool to include file type inference and enriched related files with line counts
+- Changed propose-changelog tool to support optional deletion entries for removing existing changelog items
+- Changed commit agent to accept pre-computed file observations and format them into session prompts
 
 ### Fixed
 - Fixed database busy errors during concurrent access by adding retry logic with exponential backoff when opening storage
 - Find tool now rejects searches from root directory and enforces a 5-second timeout on fd operations
 - Commit command now exits cleanly with exit code 0 on success
 - Handle undefined code parameter in code cell renderer
+- Fixed indentation formatting in split-commit tool function signature
 ## [8.0.0] - 2026-01-23
 ### Added
 

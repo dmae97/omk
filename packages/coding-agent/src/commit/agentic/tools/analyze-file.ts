@@ -1,5 +1,8 @@
 import { Type } from "@sinclair/typebox";
 import analyzeFilePrompt from "$c/commit/agentic/prompts/analyze-file.md" with { type: "text" };
+import type { CommitAgentState } from "$c/commit/agentic/state";
+import { getFilePriority } from "$c/commit/agentic/tools/git-file-diff";
+import type { NumstatEntry } from "$c/commit/types";
 import type { ModelRegistry } from "$c/config/model-registry";
 import { renderPromptTemplate } from "$c/config/prompt-templates";
 import type { SettingsManager } from "$c/config/settings-manager";
@@ -51,6 +54,7 @@ export function createAnalyzeFileTool(options: {
 	modelRegistry: ModelRegistry;
 	settingsManager: SettingsManager;
 	spawns: string;
+	state: CommitAgentState;
 }): CustomTool<typeof analyzeFileSchema> {
 	return {
 		name: "analyze_files",
@@ -61,8 +65,9 @@ export function createAnalyzeFileTool(options: {
 			const toolSession = buildToolSession(ctx, options);
 			const taskTool = await TaskTool.create(toolSession);
 			const context = "{{prompt}}";
+			const numstat = options.state.overview?.numstat ?? [];
 			const tasks = params.files.map((file, index) => {
-				const relatedFiles = formatRelatedFiles(params.files, file);
+				const relatedFiles = formatRelatedFiles(params.files, file, numstat);
 				const prompt = renderPromptTemplate(analyzeFilePrompt, {
 					file,
 					goal: params.goal,
@@ -85,8 +90,42 @@ export function createAnalyzeFileTool(options: {
 	};
 }
 
-function formatRelatedFiles(files: string[], currentFile: string): string | undefined {
+function inferFileType(path: string): string {
+	const priority = getFilePriority(path);
+	const lowerPath = path.toLowerCase();
+
+	if (priority === -100) return "binary file";
+	if (priority === 10) return "test file";
+	if (lowerPath.endsWith(".md") || lowerPath.endsWith(".txt")) return "documentation";
+	if (
+		lowerPath.endsWith(".json") ||
+		lowerPath.endsWith(".yaml") ||
+		lowerPath.endsWith(".yml") ||
+		lowerPath.endsWith(".toml")
+	)
+		return "configuration";
+	if (priority === 70) return "dependency manifest";
+	if (priority === 80) return "script";
+	if (priority === 100) return "implementation";
+
+	return "source file";
+}
+
+function formatRelatedFiles(files: string[], currentFile: string, numstat: NumstatEntry[]): string | undefined {
 	const others = files.filter((file) => file !== currentFile);
 	if (others.length === 0) return undefined;
-	return others.map((file) => `- ${file}`).join("\n");
+
+	const numstatMap = new Map(numstat.map((entry) => [entry.path, entry]));
+
+	const lines = others.map((file) => {
+		const entry = numstatMap.get(file);
+		const fileType = inferFileType(file);
+		if (entry) {
+			const lineCount = entry.additions + entry.deletions;
+			return `- ${file} (${lineCount} lines): ${fileType}`;
+		}
+		return `- ${file}: ${fileType}`;
+	});
+
+	return `OTHER FILES IN THIS CHANGE:\n${lines.join("\n")}`;
 }

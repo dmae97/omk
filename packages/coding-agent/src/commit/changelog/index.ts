@@ -24,7 +24,11 @@ export interface ChangelogFlowInput {
 export interface ChangelogProposalInput {
 	git: ControlledGit;
 	cwd: string;
-	proposals: Array<{ path: string; entries: Record<string, string[]> }>;
+	proposals: Array<{
+		path: string;
+		entries: Record<string, string[]>;
+		deletions?: Record<string, string[]>;
+	}>;
 	dryRun: boolean;
 	onProgress?: (message: string) => void;
 }
@@ -114,8 +118,9 @@ export async function applyChangelogProposals({
 			continue;
 		}
 		const normalized = normalizeEntries(proposal.entries);
-		if (Object.keys(normalized).length === 0) continue;
-		const updatedContent = applyChangelogEntries(changelogContent, unreleased, normalized);
+		const normalizedDeletions = proposal.deletions ? normalizeEntries(proposal.deletions) : undefined;
+		if (Object.keys(normalized).length === 0 && !normalizedDeletions) continue;
+		const updatedContent = applyChangelogEntries(changelogContent, unreleased, normalized, normalizedDeletions);
 		if (!dryRun) {
 			await Bun.write(proposal.path, updatedContent);
 			await git.stageFiles([relative(cwd, proposal.path)]);
@@ -148,14 +153,34 @@ function applyChangelogEntries(
 	content: string,
 	unreleased: { startLine: number; endLine: number; entries: Record<string, string[]> },
 	entries: Record<string, string[]>,
+	deletions?: Record<string, string[]>,
 ): string {
 	const lines = content.split("\n");
 	const before = lines.slice(0, unreleased.startLine + 1);
 	const after = lines.slice(unreleased.endLine);
 
-	const merged = mergeEntries(unreleased.entries, entries);
+	let base = unreleased.entries;
+	if (deletions) {
+		base = applyDeletions(base, deletions);
+	}
+	const merged = mergeEntries(base, entries);
 	const sectionLines = renderUnreleasedSections(merged);
 	return [...before, ...sectionLines, ...after].join("\n");
+}
+
+function applyDeletions(
+	existing: Record<string, string[]>,
+	deletions: Record<string, string[]>,
+): Record<string, string[]> {
+	const result: Record<string, string[]> = {};
+	for (const [section, items] of Object.entries(existing)) {
+		const toDelete = new Set((deletions[section] ?? []).map((d) => d.toLowerCase()));
+		const filtered = items.filter((item) => !toDelete.has(item.toLowerCase()));
+		if (filtered.length > 0) {
+			result[section] = filtered;
+		}
+	}
+	return result;
 }
 
 function mergeEntries(
@@ -196,9 +221,7 @@ function renderUnreleasedSections(entries: Record<string, string[]>): string[] {
 function normalizeEntries(entries: Record<string, string[]>): Record<string, string[]> {
 	const result: Record<string, string[]> = {};
 	for (const [section, items] of Object.entries(entries)) {
-		const trimmed = items
-			.map((item) => item.trim().replace(/\.$/, ""))
-			.filter((item) => item.length > 0);
+		const trimmed = items.map((item) => item.trim().replace(/\.$/, "")).filter((item) => item.length > 0);
 		if (trimmed.length === 0) continue;
 		result[section] = Array.from(new Set(trimmed.map((item) => item.trim())));
 	}

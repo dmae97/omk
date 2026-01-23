@@ -1,14 +1,20 @@
 import { createInterface } from "node:readline/promises";
 import { runCommitAgentSession } from "$c/commit/agentic/agent";
-import { computeDependencyOrder } from "$c/commit/agentic/topo-sort";
+import { generateFallbackProposal } from "$c/commit/agentic/fallback";
 import splitConfirmPrompt from "$c/commit/agentic/prompts/split-confirm.md" with { type: "text" };
-import type { CommitProposal, HunkSelector, SplitCommitPlan } from "$c/commit/agentic/state";
+import { detectTrivialChange } from "$c/commit/agentic/trivial";
+import type { CommitAgentState, CommitProposal, HunkSelector, SplitCommitPlan } from "$c/commit/agentic/state";
+import { computeDependencyOrder } from "$c/commit/agentic/topo-sort";
 import { applyChangelogProposals } from "$c/commit/changelog";
 import { detectChangelogBoundaries } from "$c/commit/changelog/detect";
 import { ControlledGit } from "$c/commit/git";
+import { parseFileDiffs } from "$c/commit/git/diff";
+import { runMapPhase } from "$c/commit/map-reduce/map-phase";
+import { shouldUseMapReduce } from "$c/commit/map-reduce";
 import { formatCommitMessage } from "$c/commit/message";
 import { resolvePrimaryModel, resolveSmolModel } from "$c/commit/model-selection";
-import type { CommitCommandArgs, ConventionalAnalysis } from "$c/commit/types";
+import type { CommitCommandArgs, ConventionalAnalysis, FileObservation } from "$c/commit/types";
+import { isExcludedFile } from "$c/commit/utils/exclusions";
 import { renderPromptTemplate } from "$c/config/prompt-templates";
 import { SettingsManager } from "$c/config/settings-manager";
 import { discoverAuthStorage, discoverContextFiles, discoverModels } from "$c/sdk";
@@ -33,12 +39,7 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	);
 	writeStdout(`  └─ ${primaryModel.name}`);
 
-	const { model: agentModel } = await resolveSmolModel(
-		settingsManager,
-		modelRegistry,
-		primaryModel,
-		primaryApiKey,
-	);
+	const { model: agentModel } = await resolveSmolModel(settingsManager, modelRegistry, primaryModel, primaryApiKey);
 
 	const git = new ControlledGit(cwd);
 	let stagedFiles = await git.getStagedFiles();
@@ -78,21 +79,78 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 		writeStdout("  └─ (none found)");
 	}
 
-	writeStdout("● Starting commit agent...");
-	const commitState = await runCommitAgentSession({
-		cwd,
-		git,
-		model: agentModel,
-		settingsManager,
-		modelRegistry,
-		authStorage,
-		userContext: args.context,
-		contextFiles,
-		changelogTargets,
-		requireChangelog: !args.noChangelog && changelogTargets.length > 0,
-	});
+	const numstat = await git.getNumstat(true);
+	const diff = await git.getDiff(true);
 
-	if (!args.noChangelog && changelogTargets.length > 0) {
+	const trivialChange = detectTrivialChange(diff);
+	if (trivialChange) {
+		writeStdout(`● Detected trivial change: ${trivialChange.summary}`);
+		const trivialProposal: CommitProposal = {
+			analysis: {
+				type: trivialChange.type,
+				scope: null,
+				details: [],
+				issueRefs: [],
+			},
+			summary: trivialChange.summary,
+			warnings: [],
+		};
+		await runSingleCommit(trivialProposal, { git, dryRun: args.dryRun, push: args.push });
+		return;
+	}
+
+	let preComputedObservations: FileObservation[] | undefined;
+	if (shouldUseMapReduce(diff, { minFiles: 4, maxFileTokens: 50_000 })) {
+		writeStdout("● Running parallel file analysis...");
+		const fileDiffs = parseFileDiffs(diff).filter((f) => !isExcludedFile(f.filename));
+		const { model: smolModel, apiKey: smolApiKey } = await resolveSmolModel(
+			settingsManager,
+			modelRegistry,
+			primaryModel,
+			primaryApiKey,
+		);
+		preComputedObservations = await runMapPhase({
+			model: smolModel,
+			apiKey: smolApiKey,
+			files: fileDiffs,
+		});
+		writeStdout(`  └─ Analyzed ${preComputedObservations.length} files`);
+	}
+
+	writeStdout("● Starting commit agent...");
+	let commitState: CommitAgentState;
+	let usedFallback = false;
+
+	try {
+		commitState = await runCommitAgentSession({
+			cwd,
+			git,
+			model: agentModel,
+			settingsManager,
+			modelRegistry,
+			authStorage,
+			userContext: args.context,
+			contextFiles,
+			changelogTargets,
+			requireChangelog: !args.noChangelog && changelogTargets.length > 0,
+			preComputedObservations,
+		});
+	} catch (error) {
+		writeStderr(`Agent error: ${error instanceof Error ? error.message : String(error)}`);
+		writeStdout("● Using fallback commit generation...");
+		commitState = { proposal: generateFallbackProposal(numstat) };
+		usedFallback = true;
+	}
+
+	if (!usedFallback && !commitState.proposal && !commitState.splitProposal) {
+		if (process.env.OMP_COMMIT_NO_FALLBACK?.toLowerCase() !== "true") {
+			writeStdout("● Agent did not provide proposal, using fallback...");
+			commitState.proposal = generateFallbackProposal(numstat);
+			usedFallback = true;
+		}
+	}
+
+	if (!args.noChangelog && changelogTargets.length > 0 && !usedFallback) {
 		if (!commitState.changelogProposal) {
 			writeStderr("Commit agent did not provide changelog entries.");
 			return;

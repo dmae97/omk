@@ -6,6 +6,11 @@ import type { CustomTool } from "$c/extensibility/custom-tools/types";
 const changelogEntrySchema = Type.Object({
 	path: Type.String(),
 	entries: Type.Record(Type.String(), Type.Array(Type.String())),
+	deletions: Type.Optional(
+		Type.Record(Type.String(), Type.Array(Type.String()), {
+			description: "Entries to remove from existing changelog sections (case-insensitive match)",
+		}),
+	),
 });
 
 const proposeChangelogSchema = Type.Object({
@@ -50,19 +55,37 @@ export function createProposeChangelogTool(
 						errors.push(`Unknown changelog category for ${entry.path}: ${category}`);
 						continue;
 					}
-					const items = values
-						.map((value) => value.trim().replace(/\.$/, ""))
-						.filter((value) => value.length > 0);
+					const items = values.map((value) => value.trim().replace(/\.$/, "")).filter((value) => value.length > 0);
 					if (items.length > 0) {
 						cleaned[category] = Array.from(new Set(items));
 					}
 				}
-				if (Object.keys(cleaned).length === 0) {
+
+				let cleanedDeletions: Record<string, string[]> | undefined;
+				if (entry.deletions) {
+					cleanedDeletions = {};
+					for (const [category, values] of Object.entries(entry.deletions)) {
+						if (!allowedCategories.has(category as ChangelogCategory)) {
+							errors.push(`Unknown deletion category for ${entry.path}: ${category}`);
+							continue;
+						}
+						const items = values.map((value) => value.trim()).filter((value) => value.length > 0);
+						if (items.length > 0) {
+							cleanedDeletions[category] = Array.from(new Set(items));
+						}
+					}
+					if (Object.keys(cleanedDeletions).length === 0) {
+						cleanedDeletions = undefined;
+					}
+				}
+
+				if (Object.keys(cleaned).length === 0 && !cleanedDeletions) {
 					warnings.push(`No changelog entries provided for ${entry.path}.`);
 				}
 				return {
 					path: entry.path,
 					entries: cleaned,
+					deletions: cleanedDeletions,
 				};
 			});
 

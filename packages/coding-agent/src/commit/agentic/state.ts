@@ -7,6 +7,7 @@ export interface GitOverviewSnapshot {
 	scopeCandidates: string;
 	isWideScope: boolean;
 	untrackedFiles?: string[];
+	excludedFiles?: string[];
 }
 
 export interface CommitProposal {
@@ -51,7 +52,11 @@ export interface SplitCommitPlan {
 }
 
 export interface ChangelogProposal {
-	entries: Array<{ path: string; entries: Record<string, string[]> }>;
+	entries: Array<{
+		path: string;
+		entries: Record<string, string[]>;
+		deletions?: Record<string, string[]>;
+	}>;
 }
 
 export interface CommitAgentState {
@@ -59,4 +64,5 @@ export interface CommitAgentState {
 	proposal?: CommitProposal;
 	splitProposal?: SplitCommitPlan;
 	changelogProposal?: ChangelogProposal;
+	diffCache?: Map<string, string>;
 }

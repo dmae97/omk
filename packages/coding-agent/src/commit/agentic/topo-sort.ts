@@ -1,8 +1,6 @@
 import type { SplitCommitGroup } from "$c/commit/agentic/state";
 
-export function computeDependencyOrder(
-	groups: SplitCommitGroup[],
-): number[] | { error: string } {
+export function computeDependencyOrder(groups: SplitCommitGroup[]): number[] | { error: string } {
 	const total = groups.length;
 	const inDegree = new Array<number>(total).fill(0);
 	const edges = Array.from({ length: total }, () => new Set<number>());
