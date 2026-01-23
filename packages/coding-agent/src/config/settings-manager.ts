@@ -1,8 +1,10 @@
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { rename } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
+import { YAML } from "bun";
 import { type Settings as SettingsItem, settingsCapability } from "$c/capability/settings";
-import { getAgentDbPath, getAgentDir } from "$c/config";
+import { getAgentDbPath, getAgentDir, getConfigPath } from "$c/config";
 import { loadCapability } from "$c/discovery";
 import type { SymbolPreset } from "$c/modes/theme/theme";
 import { AgentStorage } from "$c/session/agent-storage";
@@ -424,8 +426,10 @@ function deepMergeSettings(base: Settings, overrides: Settings): Settings {
 }
 
 export class SettingsManager {
-	/** SQLite storage for persisted settings (null for in-memory mode) */
+	/** SQLite storage for auth/cache (null for in-memory mode) */
 	private storage: AgentStorage | null;
+	/** Path to config.yml (null for in-memory mode) */
+	private configPath: string | null;
 	private cwd: string | null;
 	private globalSettings: Settings;
 	private overrides: Settings;
@@ -434,7 +438,8 @@ export class SettingsManager {
 
 	/**
 	 * Private constructor - use static factory methods instead.
-	 * @param storage - SQLite storage instance for persistence, or null for in-memory mode
+	 * @param storage - SQLite storage instance for auth/cache, or null for in-memory mode
+	 * @param configPath - Path to config.yml for persistence, or null for in-memory mode
 	 * @param cwd - Current working directory for project settings discovery
 	 * @param initialSettings - Initial global settings to use
 	 * @param persist - Whether to persist settings changes to storage
@@ -442,12 +447,14 @@ export class SettingsManager {
 	 */
 	private constructor(
 		storage: AgentStorage | null,
+		configPath: string | null,
 		cwd: string | null,
 		initialSettings: Settings,
 		persist: boolean,
 		projectSettings: Settings,
 	) {
 		this.storage = storage;
+		this.configPath = configPath;
 		this.cwd = cwd;
 		this.persist = persist;
 		this.globalSettings = initialSettings;
@@ -479,14 +486,17 @@ export class SettingsManager {
 	}
 
 	/**
-	 * Create a SettingsManager that loads from persistent SQLite storage.
+	 * Create a SettingsManager that loads from persistent config.yml.
 	 * @param cwd - Current working directory for project settings discovery
-	 * @param agentDir - Agent directory containing agent.db
+	 * @param agentDir - Agent directory containing config.yml
 	 * @returns Configured SettingsManager with merged global and user settings
 	 */
 	static async create(cwd: string = process.cwd(), agentDir: string = getAgentDir()): Promise<SettingsManager> {
+		const configPath = getConfigPath();
 		const storage = AgentStorage.open(getAgentDbPath(agentDir));
-		await SettingsManager.migrateLegacySettingsFile(storage, agentDir);
+
+		// Migrate from legacy storage if config.yml doesn't exist
+		await SettingsManager.migrateToYaml(storage, agentDir, configPath);
 
 		// Use capability API to load user-level settings from all providers
 		const result = await loadCapability(settingsCapability.id, { cwd });
@@ -499,14 +509,14 @@ export class SettingsManager {
 			}
 		}
 
-		// Load persisted settings from agent.db (legacy settings.json is migrated separately)
-		const storedSettings = SettingsManager.loadFromStorage(storage);
+		// Load persisted settings from config.yml
+		const storedSettings = SettingsManager.loadFromYaml(configPath);
 		globalSettings = deepMergeSettings(globalSettings, storedSettings);
 
 		// Load project settings before construction (constructor is sync)
 		const projectSettings = await SettingsManager.loadProjectSettingsStatic(cwd);
 
-		return new SettingsManager(storage, cwd, globalSettings, true, projectSettings);
+		return new SettingsManager(storage, configPath, cwd, globalSettings, true, projectSettings);
 	}
 
 	/**
@@ -515,7 +525,7 @@ export class SettingsManager {
 	 * @returns SettingsManager that won't persist changes to disk
 	 */
 	static inMemory(settings: Partial<Settings> = {}): SettingsManager {
-		return new SettingsManager(null, null, settings, false, {});
+		return new SettingsManager(null, null, null, settings, false, {});
 	}
 
 	/**
@@ -534,41 +544,83 @@ export class SettingsManager {
 	}
 
 	/**
-	 * Load settings from SQLite storage, applying any schema migrations.
-	 * @param storage - AgentStorage instance, or null for in-memory mode
-	 * @returns Parsed and migrated settings, or empty object if storage is null/empty
+	 * Load settings from config.yml, applying any schema migrations.
+	 * @param configPath - Path to config.yml, or null for in-memory mode
+	 * @returns Parsed and migrated settings, or empty object if file doesn't exist
 	 */
-	private static loadFromStorage(storage: AgentStorage | null): Settings {
-		if (!storage) {
+	private static loadFromYaml(configPath: string | null): Settings {
+		if (!configPath || !existsSync(configPath)) {
 			return {};
 		}
-		const settings = storage.getSettings();
-		if (!settings) {
+		try {
+			const content = readFileSync(configPath, "utf-8");
+			const parsed = YAML.parse(content);
+			if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+				return {};
+			}
+			return SettingsManager.migrateSettings(parsed as Record<string, unknown>);
+		} catch (error) {
+			logger.warn("SettingsManager failed to load config.yml", { path: configPath, error: String(error) });
 			return {};
 		}
-		return SettingsManager.migrateSettings(settings as Record<string, unknown>);
 	}
 
-	private static async migrateLegacySettingsFile(storage: AgentStorage, agentDir: string): Promise<void> {
-		const settingsPath = join(agentDir, "settings.json");
-		const settingsFile = Bun.file(settingsPath);
-		if (!(await settingsFile.exists())) return;
-		if (storage.getSettings() !== null) return;
+	/**
+	 * Migrate settings from legacy sources to config.yml.
+	 * Migration order: settings.json -> agent.db -> config.yml
+	 * Only migrates if config.yml doesn't exist.
+	 */
+	private static async migrateToYaml(storage: AgentStorage, agentDir: string, configPath: string): Promise<void> {
+		// Skip if config.yml already exists
+		if (existsSync(configPath)) return;
 
+		let settings: Settings = {};
+		let migrated = false;
+
+		// 1. Try to migrate from settings.json (oldest legacy format)
+		const settingsJsonPath = join(agentDir, "settings.json");
 		try {
-			const parsed = JSON.parse(await settingsFile.text());
-			if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-				return;
-			}
-			const migrated = SettingsManager.migrateSettings(parsed as Record<string, unknown>);
-			storage.saveSettings(migrated);
-			try {
-				await rename(settingsPath, `${settingsPath}.bak`);
-			} catch (error) {
-				logger.warn("SettingsManager failed to backup settings.json", { error: String(error) });
+			const settingsFile = Bun.file(settingsJsonPath);
+			if (await settingsFile.exists()) {
+				const parsed = JSON.parse(await settingsFile.text());
+				if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+					settings = deepMergeSettings(settings, SettingsManager.migrateSettings(parsed));
+					migrated = true;
+					// Backup settings.json
+					try {
+						await rename(settingsJsonPath, `${settingsJsonPath}.bak`);
+					} catch (error) {
+						logger.warn("SettingsManager failed to backup settings.json", { error: String(error) });
+					}
+				}
 			}
 		} catch (error) {
-			logger.warn("SettingsManager failed to migrate settings.json", { error: String(error) });
+			logger.warn("SettingsManager failed to read settings.json", { error: String(error) });
+		}
+
+		// 2. Migrate from agent.db settings table
+		try {
+			const dbSettings = storage.getSettings();
+			if (dbSettings) {
+				settings = deepMergeSettings(
+					settings,
+					SettingsManager.migrateSettings(dbSettings as Record<string, unknown>),
+				);
+				migrated = true;
+			}
+		} catch (error) {
+			logger.warn("SettingsManager failed to read agent.db settings", { error: String(error) });
+		}
+
+		// 3. Write merged settings to config.yml if we found any
+		if (migrated && Object.keys(settings).length > 0) {
+			try {
+				mkdirSync(dirname(configPath), { recursive: true });
+				await Bun.write(configPath, YAML.stringify(settings));
+				logger.debug("SettingsManager migrated settings to config.yml", { path: configPath });
+			} catch (error) {
+				logger.warn("SettingsManager failed to write config.yml", { path: configPath, error: String(error) });
+			}
 		}
 	}
 
@@ -620,16 +672,19 @@ export class SettingsManager {
 	}
 
 	/**
-	 * Persist current global settings to SQLite storage and rebuild merged settings.
-	 * Merges with any concurrent changes in storage before saving.
+	 * Persist current global settings to config.yml and rebuild merged settings.
+	 * Merges with any concurrent changes in config file before saving.
 	 */
 	private async save(): Promise<void> {
-		if (this.persist && this.storage) {
+		if (this.persist && this.configPath) {
 			try {
-				const currentSettings = this.storage.getSettings() ?? {};
+				// Read current settings from file to merge with any concurrent changes
+				const currentSettings = SettingsManager.loadFromYaml(this.configPath);
 				const mergedSettings = deepMergeSettings(currentSettings, this.globalSettings);
 				this.globalSettings = mergedSettings;
-				this.storage.saveSettings(this.globalSettings);
+				// Write YAML
+				mkdirSync(dirname(this.configPath), { recursive: true });
+				await Bun.write(this.configPath, YAML.stringify(this.globalSettings));
 			} catch (error) {
 				logger.warn("SettingsManager save failed", { error: String(error) });
 			}

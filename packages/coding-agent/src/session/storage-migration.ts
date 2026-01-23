@@ -1,12 +1,14 @@
 /**
- * Migrates legacy JSON storage (settings.json, auth.json) to SQLite-based agent.db.
- * Settings migrate only when the DB has no settings; auth merges per-provider when missing.
+ * Migrates legacy auth.json to SQLite-based agent.db.
+ * Auth credentials merge per-provider when missing.
  * Original JSON files are backed up to .bak and removed after successful migration.
+ *
+ * NOTE: Settings migration is now handled by SettingsManager.migrateToYaml(),
+ * which migrates from both settings.json and agent.db to config.yaml.
  */
 
 import { logger } from "@oh-my-pi/pi-utils";
 import { getAgentDbPath } from "$c/config";
-import type { Settings } from "$c/config/settings-manager";
 import { AgentStorage } from "./agent-storage";
 import type { AuthCredential, AuthCredentialEntry, AuthStorageData } from "./auth-storage";
 
@@ -14,7 +16,7 @@ import type { AuthCredential, AuthCredentialEntry, AuthStorageData } from "./aut
 type MigrationPaths = {
 	/** Directory containing agent.db */
 	agentDir: string;
-	/** Path to legacy settings.json file */
+	/** Path to legacy settings.json file (kept for API compatibility, no longer used) */
 	settingsPath: string;
 	/** Candidate paths to search for auth.json (checked in order) */
 	authPaths: string[];
@@ -22,7 +24,7 @@ type MigrationPaths = {
 
 /** Result of the JSON-to-SQLite storage migration. */
 export interface StorageMigrationResult {
-	/** Whether settings.json was migrated to agent.db */
+	/** Whether settings.json was migrated (always false - settings migration is handled elsewhere) */
 	migratedSettings: boolean;
 	/** Whether auth.json was migrated to agent.db */
 	migratedAuth: boolean;
@@ -37,20 +39,6 @@ export interface StorageMigrationResult {
  */
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return !!value && typeof value === "object" && !Array.isArray(value);
-}
-
-/**
- * Transforms legacy settings to current schema (e.g., queueMode -> steeringMode).
- * @param settings - Settings object potentially containing deprecated keys
- * @returns Settings with deprecated keys renamed to current equivalents
- */
-function migrateLegacySettings(settings: Settings): Settings {
-	const migrated = { ...settings } as Record<string, unknown>;
-	if ("queueMode" in migrated && !("steeringMode" in migrated)) {
-		migrated.steeringMode = migrated.queueMode;
-		delete migrated.queueMode;
-	}
-	return migrated as Settings;
 }
 
 /**
@@ -97,32 +85,6 @@ async function backupJson(path: string): Promise<void> {
 	} catch (error) {
 		logger.warn("Storage migration failed to backup JSON", { path, error: String(error) });
 	}
-}
-
-/**
- * Migrates settings.json to SQLite storage if DB is empty.
- * @param storage - AgentStorage instance to migrate into
- * @param settingsPath - Path to legacy settings.json
- * @param warnings - Array to collect non-fatal warnings
- * @returns True if migration was performed
- */
-async function migrateSettings(storage: AgentStorage, settingsPath: string, warnings: string[]): Promise<boolean> {
-	const settingsFile = Bun.file(settingsPath);
-	const settingsExists = await settingsFile.exists();
-	const hasDbSettings = storage.getSettings() !== null;
-
-	if (!settingsExists) return false;
-	if (hasDbSettings) {
-		warnings.push(`settings.json exists but agent.db is authoritative: ${settingsPath}`);
-		return false;
-	}
-
-	const settingsJson = await readJsonFile<Settings>(settingsPath);
-	if (!settingsJson) return false;
-
-	storage.saveSettings(migrateLegacySettings(settingsJson));
-	await backupJson(settingsPath);
-	return true;
 }
 
 /**
@@ -191,8 +153,8 @@ async function migrateAuth(storage: AgentStorage, authPaths: string[], warnings:
 }
 
 /**
- * Migrates legacy JSON files (settings.json, auth.json) to SQLite-based agent.db.
- * Settings migrate only when the DB has no settings; auth merges per-provider when missing.
+ * Migrates legacy auth.json to SQLite-based agent.db.
+ * Settings migration is handled separately by SettingsManager.migrateToYaml().
  * @param paths - Configuration specifying locations of legacy files and target DB
  * @returns Result indicating what was migrated and any warnings encountered
  */
@@ -200,10 +162,7 @@ export async function migrateJsonStorage(paths: MigrationPaths): Promise<Storage
 	const storage = AgentStorage.open(getAgentDbPath(paths.agentDir));
 	const warnings: string[] = [];
 
-	const [migratedSettings, migratedAuth] = await Promise.all([
-		migrateSettings(storage, paths.settingsPath, warnings),
-		migrateAuth(storage, paths.authPaths, warnings),
-	]);
+	const migratedAuth = await migrateAuth(storage, paths.authPaths, warnings);
 
 	if (warnings.length > 0) {
 		for (const warning of warnings) {
@@ -211,5 +170,5 @@ export async function migrateJsonStorage(paths: MigrationPaths): Promise<Storage
 		}
 	}
 
-	return { migratedSettings, migratedAuth, warnings };
+	return { migratedSettings: false, migratedAuth, warnings };
 }

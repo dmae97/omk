@@ -3,6 +3,7 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
+import { extname } from "node:path";
 import {
 	type Api,
 	getGitHubCopilotBaseUrl,
@@ -14,6 +15,7 @@ import {
 import { logger } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import AjvModule from "ajv";
+import { YAML } from "bun";
 import type { AuthStorage } from "$c/session/auth-storage";
 
 const Ajv = (AjvModule as any).default || AjvModule;
@@ -262,14 +264,21 @@ export class ModelRegistry {
 			});
 	}
 
-	private loadCustomModels(modelsJsonPath: string): CustomModelsResult {
-		if (!existsSync(modelsJsonPath)) {
+	private loadCustomModels(modelsPath: string): CustomModelsResult {
+		if (!existsSync(modelsPath)) {
 			return emptyCustomModelsResult();
 		}
 
 		try {
-			const content = readFileSync(modelsJsonPath, "utf-8");
-			const config: ModelsConfig = JSON.parse(content);
+			const content = readFileSync(modelsPath, "utf-8");
+			const ext = extname(modelsPath).toLowerCase();
+			let config: ModelsConfig;
+
+			if (ext === ".yaml" || ext === ".yml") {
+				config = YAML.parse(content) as ModelsConfig;
+			} else {
+				config = JSON.parse(content) as ModelsConfig;
+			}
 
 			// Validate schema
 			const ajv = new Ajv();
@@ -278,7 +287,7 @@ export class ModelRegistry {
 				const errors =
 					validate.errors?.map((e: any) => `  - ${e.instancePath || "root"}: ${e.message}`).join("\n") ||
 					"Unknown schema error";
-				return emptyCustomModelsResult(`Invalid models.json schema:\n${errors}\n\nFile: ${modelsJsonPath}`);
+				return emptyCustomModelsResult(`Invalid models config schema:\n${errors}\n\nFile: ${modelsPath}`);
 			}
 
 			// Additional validation
@@ -309,10 +318,10 @@ export class ModelRegistry {
 			return { models: this.parseModels(config), replacedProviders, overrides, error: undefined };
 		} catch (error) {
 			if (error instanceof SyntaxError) {
-				return emptyCustomModelsResult(`Failed to parse models.json: ${error.message}\n\nFile: ${modelsJsonPath}`);
+				return emptyCustomModelsResult(`Failed to parse models config: ${error.message}\n\nFile: ${modelsPath}`);
 			}
 			return emptyCustomModelsResult(
-				`Failed to load models.json: ${error instanceof Error ? error.message : error}\n\nFile: ${modelsJsonPath}`,
+				`Failed to load models config: ${error instanceof Error ? error.message : error}\n\nFile: ${modelsPath}`,
 			);
 		}
 	}

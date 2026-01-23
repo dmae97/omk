@@ -26,17 +26,19 @@
  * ```
  */
 
+import { existsSync } from "node:fs";
+import { rename } from "node:fs/promises";
 import { join } from "node:path";
 import { Agent, type AgentEvent, type AgentMessage, type AgentTool, type ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { type Message, type Model, supportsXhigh } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
-// Import discovery to register all providers on startup
 import { logger, postmortem } from "@oh-my-pi/pi-utils";
+import { YAML } from "bun";
 import chalk from "chalk";
+// Import discovery to register all providers on startup
 import { loadCapability } from "$c/capability/index";
 import { type Rule, ruleCapability } from "$c/capability/rule";
 import { getAgentDir, getConfigDirPaths } from "$c/config";
-import "./discovery";
 import { CursorExecHandlers } from "$c/cursor";
 import { initializeWithSettings } from "$c/discovery";
 import { TtsrManager } from "$c/export/ttsr";
@@ -47,6 +49,7 @@ import { ModelRegistry } from "./config/model-registry";
 import { formatModelString, parseModelString } from "./config/model-resolver";
 import { loadPromptTemplates as loadPromptTemplatesInternal, type PromptTemplate } from "./config/prompt-templates";
 import { type Settings, SettingsManager, type SkillsSettings } from "./config/settings-manager";
+import "./discovery";
 import {
 	type CustomCommandsLoadResult,
 	loadCustomCommands as loadCustomCommandsInternal,
@@ -269,22 +272,55 @@ export async function discoverAuthStorage(agentDir: string = getDefaultAgentDir(
 
 /**
  * Create a ModelRegistry with fallback support.
- * Reads from primary path first, then falls back to legacy paths (.pi, .claude).
+ * Prefers models.yml over models.json. Reads from primary path first,
+ * then falls back to legacy paths (.pi, .claude).
  */
 export async function discoverModels(
 	authStorage: AuthStorage,
 	agentDir: string = getDefaultAgentDir(),
 ): Promise<ModelRegistry> {
-	const primaryPath = join(agentDir, "models.json");
-	// Get all models.json paths (user-level only), excluding the primary
-	const allPaths = getConfigDirPaths("models.json", { project: false });
-	const fallbackPaths = allPaths.filter((p) => p !== primaryPath);
+	const yamlPath = join(agentDir, "models.yml");
+	const jsonPath = join(agentDir, "models.json");
+
+	// Migrate models.json to models.yml if yaml doesn't exist but json does
+	if (!existsSync(yamlPath) && existsSync(jsonPath)) {
+		await migrateModelsJsonToYaml(jsonPath, yamlPath);
+	}
+
+	// Prefer models.yml, fall back to models.json
+	const primaryPath = existsSync(yamlPath) ? yamlPath : jsonPath;
+
+	// Get all models config paths (user-level only), excluding the primary
+	const yamlPaths = getConfigDirPaths("models.yml", { project: false });
+	const jsonPaths = getConfigDirPaths("models.json", { project: false });
+	const allPaths = [...yamlPaths, ...jsonPaths];
+	const fallbackPaths = allPaths.filter((p) => p !== primaryPath && existsSync(p));
 
 	logger.debug("discoverModels", { primaryPath, fallbackPaths });
 
 	const registry = new ModelRegistry(authStorage, primaryPath, fallbackPaths);
-	await registry.refresh();
+	registry.refresh();
 	return registry;
+}
+
+/**
+ * Migrate models.json to models.yml.
+ * Creates models.yml from models.json and renames the json file to .bak.
+ */
+async function migrateModelsJsonToYaml(jsonPath: string, yamlPath: string): Promise<void> {
+	try {
+		const content = await Bun.file(jsonPath).text();
+		const parsed = JSON.parse(content);
+		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+			logger.warn("migrateModelsJsonToYaml: invalid models.json structure", { path: jsonPath });
+			return;
+		}
+		await Bun.write(yamlPath, YAML.stringify(parsed));
+		await rename(jsonPath, `${jsonPath}.bak`);
+		logger.debug("migrateModelsJsonToYaml: migrated models.json to models.yml", { from: jsonPath, to: yamlPath });
+	} catch (error) {
+		logger.warn("migrateModelsJsonToYaml: migration failed", { error: String(error) });
+	}
 }
 
 /**

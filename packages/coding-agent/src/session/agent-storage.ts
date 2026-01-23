@@ -116,8 +116,6 @@ export class AgentStorage {
 	private static instances = new Map<string, AgentStorage>();
 
 	private listSettingsStmt: Statement;
-	private insertSettingStmt: Statement;
-	private deleteSettingsStmt: Statement;
 	private getCacheStmt: Statement;
 	private upsertCacheStmt: Statement;
 	private deleteExpiredCacheStmt: Statement;
@@ -137,10 +135,6 @@ export class AgentStorage {
 		this.hardenPermissions(dbPath);
 
 		this.listSettingsStmt = this.db.prepare("SELECT key, value FROM settings");
-		this.insertSettingStmt = this.db.prepare(
-			"INSERT INTO settings (key, value, updated_at) VALUES (?, ?, unixepoch())",
-		);
-		this.deleteSettingsStmt = this.db.prepare("DELETE FROM settings");
 
 		this.getCacheStmt = this.db.prepare("SELECT value FROM cache WHERE key = ? AND expires_at > unixepoch()");
 		this.upsertCacheStmt = this.db.prepare(
@@ -276,8 +270,11 @@ CREATE TABLE settings (
 	}
 
 	/**
-	 * Retrieves all settings from storage.
+	 * Retrieves all settings from storage (legacy, for migration only).
+	 * Settings are now stored in config.yml. This method is only used
+	 * during migration from agent.db to config.yml.
 	 * @returns Settings object, or null if no settings are stored
+	 * @deprecated Use config.yml instead. This is only for migration.
 	 */
 	getSettings(): Settings | null {
 		const rows = (this.listSettingsStmt.all() as SettingsRow[]) ?? [];
@@ -297,26 +294,13 @@ CREATE TABLE settings (
 	}
 
 	/**
-	 * Atomically replaces all settings in storage.
-	 * Uses delete-then-insert within a transaction for consistency.
-	 * @param settings - Settings object to persist
+	 * @deprecated Settings are now stored in config.yml, not agent.db.
+	 * This method is kept for backward compatibility but does nothing.
 	 */
 	saveSettings(settings: Settings): void {
-		const entries = Object.entries(settings).filter(([, value]) => value !== undefined);
-		const replace = this.db.transaction((rows: Array<[string, unknown]>) => {
-			this.deleteSettingsStmt.run();
-			for (const [key, value] of rows) {
-				const serialized = JSON.stringify(value);
-				if (serialized === undefined) continue;
-				this.insertSettingStmt.run(key, serialized);
-			}
+		logger.warn("AgentStorage.saveSettings is deprecated - settings are now stored in config.yml", {
+			keys: Object.keys(settings),
 		});
-
-		try {
-			replace(entries);
-		} catch (error) {
-			logger.error("AgentStorage failed to save settings", { error: String(error) });
-		}
 	}
 
 	/**
