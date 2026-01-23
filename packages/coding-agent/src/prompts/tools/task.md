@@ -32,12 +32,12 @@ Agents with `output="structured"` have a fixed schema enforced via frontmatter; 
 
 <parameters>
 - `agent`: Agent type to use for all tasks
-- `context`: Template with `{{placeholders}}` for multi-task. Each placeholder is filled from task vars.
+- `context`: Template with `{{placeholders}}` for multi-task. Each placeholder is filled from task args. `{{id}}` and `{{description}}` are always available.
 - `isolated`: (optional) Run each task in its own git worktree and return patches; patches are applied only if all apply cleanly.
-- `tasks`: Array of `{id, description, vars}` - tasks to run in parallel
-    - `id`: Short CamelCase identifier (max 32 chars, e.g., "SessionStore", "LspRefactor")
-    - `description`: Short human-readable description of what the task does
-    - `vars`: Object with keys matching `{{placeholders}}` in context
+- `tasks`: Array of `{id, description, args}` - tasks to run in parallel
+		- `id`: Short CamelCase identifier (max 32 chars, e.g., "SessionStore", "LspRefactor")
+		- `description`: Short human-readable description of what the task does
+		- `args`: Object with keys matching `{{placeholders}}` in context (always include this, even if empty)
 - `output`: (optional) JTD schema for structured subagent output (used by the complete tool)
 </parameters>
 
@@ -74,9 +74,9 @@ assistant: Uses the Task tool:
     }
   },
   "tasks": [
-    { "id": "AuthProvider", "description": "Extract React context", "vars": { "step": "Execute step 1: Extract AuthProvider and AuthContext", "files": "src/auth/index.tsx" } },
-    { "id": "AuthApi", "description": "Extract API layer", "vars": { "step": "Execute step 2: Extract API calls to api.ts", "files": "src/auth/api.ts" } },
-    { "id": "AuthTypes", "description": "Extract types", "vars": { "step": "Execute step 3: Move types to types.ts", "files": "src/auth/types.ts" } }
+    { "id": "AuthProvider", "description": "Extract React context", "args": { "step": "Execute step 1: Extract AuthProvider and AuthContext", "files": "src/auth/index.tsx" } },
+    { "id": "AuthApi", "description": "Extract API layer", "args": { "step": "Execute step 2: Extract API calls to api.ts", "files": "src/auth/api.ts" } },
+    { "id": "AuthTypes", "description": "Extract types", "args": { "step": "Execute step 3: Move types to types.ts", "files": "src/auth/types.ts" } }
   ]
 }
 </example>

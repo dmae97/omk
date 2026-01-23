@@ -44,9 +44,11 @@ export const taskItemSchema = Type.Object({
 		maxLength: 32,
 	}),
 	description: Type.String({ description: "Short description for display" }),
-	vars: Type.Record(Type.String(), Type.String(), {
-		description: "Variables to fill {{placeholders}} in context",
-	}),
+	args: Type.Optional(
+		Type.Record(Type.String(), Type.String(), {
+			description: "Arguments to fill {{placeholders}} in context",
+		}),
+	),
 });
 
 export type TaskItem = Static<typeof taskItemSchema>;
@@ -54,7 +56,7 @@ export type TaskItem = Static<typeof taskItemSchema>;
 /** Task tool parameters */
 export const taskSchema = Type.Object({
 	agent: Type.String({ description: "Agent type for all tasks" }),
-	context: Type.String({ description: "Template with {{placeholders}} for vars" }),
+	context: Type.String({ description: "Template with {{placeholders}} for args" }),
 	isolated: Type.Optional(Type.Boolean({ description: "Run in isolated git worktree" })),
 	output: Type.Optional(
 		Type.Record(Type.String(), Type.Unknown(), { description: "JTD schema for structured output" }),
@@ -105,12 +107,12 @@ export interface AgentDefinition {
 /** Progress tracking for a single agent */
 export interface AgentProgress {
 	index: number;
-	taskId: string;
+	id: string;
 	agent: string;
 	agentSource: AgentSource;
 	status: "pending" | "running" | "completed" | "failed" | "aborted";
 	task: string;
-	vars?: Record<string, string>;
+	args?: Record<string, string>;
 	description?: string;
 	currentTool?: string;
 	currentToolArgs?: string;
@@ -128,11 +130,11 @@ export interface AgentProgress {
 /** Result from a single agent execution */
 export interface SingleResult {
 	index: number;
-	taskId: string;
+	id: string;
 	agent: string;
 	agentSource: AgentSource;
 	task: string;
-	vars?: Record<string, string>;
+	args?: Record<string, string>;
 	description?: string;
 	exitCode: number;
 	output: string;

@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added internal URL routing system with `agent://` and `skill://` protocol handlers
@@ -31,6 +30,14 @@
 
 ### Changed
 
+- Renamed task parameter from `vars` to `args` throughout task tool interface
+- Updated task template rendering to auto-append assignment block when no placeholders used
+- Simplified task template validation by removing strict placeholder requirements
+- Updated task progress and result interfaces to use `args` instead of `vars`
+- Modified task rendering to display `Args` instead of `Vars` in output
+- Enhanced task template to support built-in `{{id}}` and `{{description}}` placeholders
+- Removed mandatory CHECKPOINT step requirement for all tasks
+- Updated task tool documentation to reflect new `args` parameter structure
 - Removed internal URL handling from fetch tool to use read tool instead
 - Updated fetch tool documentation to remove internal URL references
 - Updated task tool documentation to reference read tool instead of fetch for agent:// URLs

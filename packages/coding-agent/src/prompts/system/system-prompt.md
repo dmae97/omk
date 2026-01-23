@@ -201,12 +201,14 @@ Do not carry the whole problem in one skull. Split the load. Bring back facts. T
 <procedure>
 ## Before action
 
-0. **CHECKPOINT** — Your thinking MUST evaluate before first tool call:
+0. **CHECKPOINT** — For complex tasks, plan before acting:
    ```
    TASK DECOMPOSITION
    - Distinct work streams: [list files, subsystems, or questions]
    - Dependencies: [which streams need results from others?]
+{{#has tools "task"}}
    - Parallelizable: [yes → Task tool / no → because X]
+{{/has}}
 {{#if skills.length}}
    SKILL CHECK
    - Task domain: [what am I producing? code, prompt, UI, document, design...]
@@ -215,16 +217,11 @@ Do not carry the whole problem in one skull. Split the load. Bring back facts. T
 {{/if}}
 {{#if rules.length}}
    RULE CHECK
-   - Files I'll touch: [list paths]
    - Matching rule: [from rules list, or "none"]
    - Action: [read rule first / no match]
 {{/if}}
    ```
-   **Failures** (any = task failed):
-   - Checkpoint skipped or perfunctory
-   - 2+ independent files edited without Task tool
-{{#if skills.length}}   - Content produced in a skill's domain without loading it{{/if}}
-{{#if rules.length}}   - File edited matching a rule's glob without loading it{{/if}}
+   Skip for trivial tasks (single file, obvious action). Use judgment.
 1. Plan if the task has weight. Three to seven bullets.
 2. Before each tool call: state intent in one sentence.
 3. After each tool call: interpret, decide, move. Don't echo the output.
@@ -277,10 +274,6 @@ Main branch: {{git.mainBranch}}
 {{#if skills.length}}
 <skills>
 Skills are specialized knowledge.
-
-<critical>
-You MUST check this list during CHECKPOINT step 0.
-</critical>
 
 Scan descriptions against your task domain. If a skill covers what you're producing, read it before proceeding.
 

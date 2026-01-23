@@ -236,7 +236,7 @@ function renderOutputSection(
 		try {
 			const parsed = JSON.parse(trimmedOutput);
 
-			// Collapsed: inline format like Vars
+			// Collapsed: inline format like Args
 			if (!expanded) {
 				lines.push(`${continuePrefix}${theme.fg("dim", formatOutputInline(parsed, theme))}`);
 				return lines;
@@ -276,9 +276,9 @@ function renderOutputSection(
 	return lines;
 }
 
-function formatVarsInline(vars: Record<string, string>, theme: Theme): string {
-	const entries = Object.entries(vars);
-	if (entries.length === 0) return "No variables";
+function formatArgsInline(args: Record<string, string>, theme: Theme): string {
+	const entries = Object.entries(args);
+	if (entries.length === 0) return "No arguments";
 
 	// Single variable: show inline as "Key: value" without tree structure
 	if (entries.length === 1) {
@@ -289,7 +289,7 @@ function formatVarsInline(vars: Record<string, string>, theme: Theme): string {
 	}
 
 	const pairs = entries.map(([key, value]) => `${key}=${truncate(value, 24, theme.format.ellipsis)}`);
-	return `Vars: ${pairs.join(", ")}`;
+	return `Args: ${pairs.join(", ")}`;
 }
 
 /** Convert snake_case or kebab-case to Title Case */
@@ -350,18 +350,23 @@ function formatOutputInline(data: unknown, theme: Theme, maxWidth = 80): string 
 	return `Output: ${pairs.join(", ")}`;
 }
 
-function renderVarsSection(
-	vars: Record<string, string> | undefined,
+function renderArgsSection(
+	args: Record<string, string> | undefined,
 	continuePrefix: string,
 	expanded: boolean,
 	theme: Theme,
 ): string[] {
-	if (!vars || Object.keys(vars).length === 0) return [];
+	if (!args) return [];
+	// Filter out auto-injected id and description
+	const filteredArgs = Object.fromEntries(
+		Object.entries(args).filter(([key]) => key !== "id" && key !== "description"),
+	);
+	if (Object.keys(filteredArgs).length === 0) return [];
 	const lines: string[] = [];
-	const entries = Object.entries(vars);
+	const entries = Object.entries(filteredArgs);
 
 	if (!expanded) {
-		lines.push(`${continuePrefix}${theme.fg("dim", formatVarsInline(vars, theme))}`);
+		lines.push(`${continuePrefix}${theme.fg("dim", formatArgsInline(filteredArgs, theme))}`);
 		return lines;
 	}
 
@@ -374,8 +379,8 @@ function renderVarsSection(
 		return lines;
 	}
 
-	lines.push(`${continuePrefix}${theme.fg("dim", "Vars")}`);
-	const tree = renderJsonTreeLines(vars, theme, 4, 16);
+	lines.push(`${continuePrefix}${theme.fg("dim", "Args")}`);
+	const tree = renderJsonTreeLines(filteredArgs, theme, 4, 16);
 	for (const line of tree.lines) {
 		lines.push(`${continuePrefix}  ${line}`);
 	}
@@ -450,9 +455,9 @@ function renderAgentProgress(
 				? "error"
 				: "accent";
 
-	// Main status line: taskId: description [status] · stats · ⟨agent⟩
+	// Main status line: id: description [status] · stats · ⟨agent⟩
 	const description = progress.description?.trim();
-	const titlePart = description ? `${theme.bold(progress.taskId)}: ${description}` : progress.taskId;
+	const titlePart = description ? `${theme.bold(progress.id)}: ${description}` : progress.id;
 	let statusLine = `${prefix} ${theme.fg(iconColor, icon)} ${theme.fg("accent", titlePart)}`;
 
 	// Only show badge for non-running states (spinner already indicates running)
@@ -477,7 +482,7 @@ function renderAgentProgress(
 
 	lines.push(statusLine);
 
-	lines.push(...renderVarsSection(progress.vars, continuePrefix, expanded, theme));
+	lines.push(...renderArgsSection(progress.args, continuePrefix, expanded, theme));
 
 	// Current tool (if running) or most recent completed tool
 	if (progress.status === "running") {
@@ -670,9 +675,9 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 	const iconColor = success ? "success" : "error";
 	const statusText = aborted ? "aborted" : success ? "done" : "failed";
 
-	// Main status line: taskId: description [status] · stats · ⟨agent⟩
+	// Main status line: id: description [status] · stats · ⟨agent⟩
 	const description = result.description?.trim();
-	const titlePart = description ? `${theme.bold(result.taskId)}: ${description}` : result.taskId;
+	const titlePart = description ? `${theme.bold(result.id)}: ${description}` : result.id;
 	let statusLine = `${prefix} ${theme.fg(iconColor, icon)} ${theme.fg("accent", titlePart)} ${formatBadge(
 		statusText,
 		iconColor,
@@ -688,7 +693,7 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 	}
 
 	lines.push(statusLine);
-	lines.push(...renderVarsSection(result.vars, continuePrefix, expanded, theme));
+	lines.push(...renderArgsSection(result.args, continuePrefix, expanded, theme));
 
 	// Check for review result (complete with review schema + report_finding)
 	const completeData = result.extractedToolData?.complete as Array<{ data: unknown }> | undefined;

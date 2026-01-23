@@ -27,10 +27,10 @@ export async function getRepoRoot(cwd: string): Promise<string> {
 	return repoRoot;
 }
 
-export async function ensureWorktree(baseCwd: string, taskId: string): Promise<string> {
+export async function ensureWorktree(baseCwd: string, id: string): Promise<string> {
 	const repoRoot = await getRepoRoot(baseCwd);
 	const encodedProject = getEncodedProjectName(repoRoot);
-	const worktreeDir = path.join(homedir(), ".omp", "wt", encodedProject, taskId);
+	const worktreeDir = path.join(homedir(), ".omp", "wt", encodedProject, id);
 	await mkdir(path.dirname(worktreeDir), { recursive: true });
 	await $`git worktree remove -f ${worktreeDir}`.cwd(repoRoot).quiet().nothrow();
 	await rm(worktreeDir, { recursive: true, force: true });

@@ -46,7 +46,7 @@ export interface ExecutorOptions {
 	task: string;
 	description?: string;
 	index: number;
-	taskId: string;
+	id: string;
 	context?: string;
 	modelOverride?: string;
 	thinkingLevel?: ThinkingLevel;
@@ -194,7 +194,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		agent,
 		task,
 		index,
-		taskId,
+		id,
 		worktree,
 		context,
 		modelOverride,
@@ -209,7 +209,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	// Initialize progress
 	const progress: AgentProgress = {
 		index,
-		taskId,
+		id,
 		agent: agent.name,
 		agentSource: agent.source,
 		status: "running",
@@ -227,7 +227,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	if (signal?.aborted) {
 		return {
 			index,
-			taskId,
+			id,
 			agent: agent.name,
 			agentSource: agent.source,
 			task,
@@ -249,7 +249,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	// Set up artifact paths and write input file upfront if artifacts dir provided
 	let subtaskSessionFile: string | undefined;
 	if (options.artifactsDir) {
-		subtaskSessionFile = path.join(options.artifactsDir, `${taskId}.jsonl`);
+		subtaskSessionFile = path.join(options.artifactsDir, `${id}.jsonl`);
 	}
 
 	// Add tools if specified
@@ -315,7 +315,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	} catch (err) {
 		return {
 			index,
-			taskId,
+			id,
 			agent: agent.name,
 			agentSource: agent.source,
 			task,
@@ -376,7 +376,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		return AbortSignal.timeout(timeoutMs);
 	};
 
-	const pythonSessionFile = sessionFile ?? `subtask:${taskId}`;
+	const pythonSessionFile = sessionFile ?? `subtask:${id}`;
 	const pythonToolSession: ToolSession = {
 		cwd,
 		hasUI: false,
@@ -1019,7 +1019,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	let outputMeta: { lineCount: number; charCount: number } | undefined;
 	let outputPath: string | undefined;
 	if (options.artifactsDir) {
-		outputPath = path.join(options.artifactsDir, `${taskId}.md`);
+		outputPath = path.join(options.artifactsDir, `${id}.md`);
 		try {
 			await Bun.write(outputPath, rawOutput);
 			outputMeta = {
@@ -1038,7 +1038,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 
 	return {
 		index,
-		taskId,
+		id,
 		agent: agent.name,
 		agentSource: agent.source,
 		task,

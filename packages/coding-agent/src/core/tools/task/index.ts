@@ -29,7 +29,7 @@ import { discoverAgents, getAgent } from "./discovery";
 import { runSubprocess } from "./executor";
 import { mapWithConcurrencyLimit } from "./parallel";
 import { renderCall, renderResult } from "./render";
-import { renderTemplate, validateTaskTemplate } from "./template";
+import { renderTemplate } from "./template";
 import {
 	type AgentProgress,
 	MAX_CONCURRENCY,
@@ -203,7 +203,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 				content: [
 					{
 						type: "text",
-						text: `No tasks provided. Use: { agent, context, tasks: [{id, description, vars}, ...] }`,
+						text: `No tasks provided. Use: { agent, context, tasks: [{id, description, args}, ...] }`,
 					},
 				],
 				details: {
@@ -271,18 +271,6 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 			}
 			return {
 				content: [{ type: "text", text: `Invalid tasks: ${problems.join(". ")}` }],
-				details: {
-					projectAgentsDir,
-					results: [],
-					totalDurationMs: 0,
-				},
-			};
-		}
-
-		const templateError = validateTaskTemplate(context, tasks);
-		if (templateError) {
-			return {
-				content: [{ type: "text", text: templateError }],
 				details: {
 					projectAgentsDir,
 					results: [],
@@ -379,25 +367,19 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 			}
 
 			// Build full prompts with context prepended
-			const contextTemplate = context ?? "";
-			const tasksWithContext = tasks.map((t) => ({
-				task: renderTemplate(contextTemplate, t.vars),
-				description: t.description,
-				taskId: t.id,
-				vars: t.vars,
-			}));
+			const tasksWithContext = tasks.map((t) => renderTemplate(context, t));
 
 			// Initialize progress for all tasks
 			for (let i = 0; i < tasksWithContext.length; i++) {
 				const t = tasksWithContext[i];
 				progressMap.set(i, {
 					index: i,
-					taskId: t.taskId,
+					id: t.id,
 					agent: agentName,
 					agentSource: agent.source,
 					status: "pending",
 					task: t.task,
-					vars: t.vars,
+					args: t.args,
 					recentTools: [],
 					recentOutput: [],
 					toolCount: 0,
@@ -417,7 +399,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 						task: task.task,
 						description: task.description,
 						index,
-						taskId: task.taskId,
+						id: task.id,
 						context: undefined, // Already prepended above
 						modelOverride,
 						thinkingLevel: thinkingLevelOverride,
@@ -431,7 +413,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 						onProgress: (progress) => {
 							progressMap.set(index, {
 								...structuredClone(progress),
-								vars: tasksWithContext[index]?.vars,
+								args: tasksWithContext[index]?.args,
 							});
 							emitProgress();
 						},
@@ -448,7 +430,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 					if (!repoRoot || !baseline) {
 						throw new Error("Isolated task execution not initialized.");
 					}
-					worktreeDir = await ensureWorktree(repoRoot, task.taskId);
+					worktreeDir = await ensureWorktree(repoRoot, task.id);
 					await applyBaseline(worktreeDir, baseline);
 					const result = await runSubprocess({
 						cwd: this.session.cwd,
@@ -457,7 +439,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 						task: task.task,
 						description: task.description,
 						index,
-						taskId: task.taskId,
+						id: task.id,
 						context: undefined, // Already prepended above
 						modelOverride,
 						thinkingLevel: thinkingLevelOverride,
@@ -471,7 +453,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 						onProgress: (progress) => {
 							progressMap.set(index, {
 								...structuredClone(progress),
-								vars: tasksWithContext[index]?.vars,
+								args: tasksWithContext[index]?.args,
 							});
 							emitProgress();
 						},
@@ -481,7 +463,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 						mcpManager: this.session.mcpManager,
 					});
 					const patch = await captureDeltaPatch(worktreeDir, baseline);
-					const patchPath = path.join(effectiveArtifactsDir, `${task.taskId}.patch`);
+					const patchPath = path.join(effectiveArtifactsDir, `${task.id}.patch`);
 					await Bun.write(patchPath, patch);
 					return {
 						...result,
@@ -491,7 +473,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 					const message = err instanceof Error ? err.message : String(err);
 					return {
 						index,
-						taskId: task.taskId,
+						id: task.id,
 						agent: agent.name,
 						agentSource: agent.source,
 						task: task.task,
@@ -525,17 +507,17 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 				if (result !== undefined) {
 					return {
 						...result,
-						vars: tasksWithContext[index]?.vars,
+						args: tasksWithContext[index]?.args,
 					};
 				}
 				const task = tasksWithContext[index];
 				return {
 					index,
-					taskId: task.taskId,
+					id: task.id,
 					agent: agentName,
 					agentSource: agent.source,
 					task: task.task,
-					vars: task.vars,
+					args: task.args,
 					description: task.description,
 					exitCode: 1,
 					output: "",
@@ -644,10 +626,10 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 				const meta = r.outputMeta
 					? ` [${r.outputMeta.lineCount} lines, ${formatBytes(r.outputMeta.charCount)}]`
 					: "";
-				return `[${r.agent}] ${status}${meta} ${r.taskId}\n${preview}`;
+				return `[${r.agent}] ${status}${meta} ${r.id}\n${preview}`;
 			});
 
-			const outputIds = results.filter((r) => !r.aborted || r.output.trim()).map((r) => r.taskId);
+			const outputIds = results.filter((r) => !r.aborted || r.output.trim()).map((r) => r.id);
 			const outputHint =
 				outputIds.length > 0
 					? `\n\nUse read with agent:// for full logs: ${outputIds.map((id) => `agent://${id}`).join(", ")}`

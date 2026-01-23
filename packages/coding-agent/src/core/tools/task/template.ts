@@ -1,37 +1,47 @@
-export function renderTemplate(template: string, vars: Record<string, string>): string {
-	return template.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => vars[key] ?? `{{${key}}}`);
-}
+import type { TaskItem } from "./types";
 
-export function extractPlaceholders(template: string): string[] {
-	return [...template.matchAll(/\{\{(\w+)\}\}/g)].map((match) => match[1]);
-}
+type RenderResult = {
+	task: string;
+	args: Record<string, string>;
+	id: string;
+	description: string;
+};
 
-export function validateTaskTemplate(
-	context: string | undefined,
-	tasks: Array<{ id: string; vars: Record<string, string> }>,
-): string | null {
-	const template = context ?? "";
-	const placeholders = extractPlaceholders(template);
+export function renderTemplate(template: string, task: TaskItem): RenderResult {
+	const { id, description, args } = task;
 
-	if (tasks.length > 1 && placeholders.length === 0) {
-		return "Multi-task invocations require {{placeholders}} in context";
-	}
-
-	if (placeholders.length > 0) {
-		for (const task of tasks) {
-			const missing = placeholders.filter((placeholder) => !(placeholder in task.vars));
-			if (missing.length > 0) {
-				return `Task "${task.id}" missing vars: ${missing.join(", ")}`;
-			}
+	let usedPlaceholder = false;
+	const unknownArguments: string[] = [];
+	let renderedTask = template.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => {
+		const value = args?.[key];
+		if (value) {
+			usedPlaceholder = true;
+			return value;
 		}
-	}
-
-	if (tasks.length > 1 && placeholders.length > 0) {
-		const withoutPlaceholders = template.replace(/\{\{\w+\}\}/g, "").trim();
-		if (withoutPlaceholders.length < 50) {
-			return "Context must contain instructions (50+ chars) around {{placeholders}}";
+		switch (key) {
+			case "id":
+				usedPlaceholder = true;
+				return id;
+			case "description":
+				usedPlaceholder = true;
+				return description;
+			default:
+				unknownArguments.push(key);
+				return `{{${key}}}`;
 		}
+	});
+
+	if (unknownArguments.length > 0) {
+		throw new Error(`Task "${id}" has unknown arguments: ${unknownArguments.join(", ")}`);
 	}
 
-	return null;
+	if (!usedPlaceholder) {
+		renderedTask += `\n----------------------\n# ${id}\n${description}`;
+	}
+	return {
+		task: renderedTask,
+		args: { id, description, ...args },
+		id,
+		description,
+	};
 }

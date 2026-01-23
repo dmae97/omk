@@ -1,56 +1,44 @@
 import { describe, expect, test } from "bun:test";
-import { extractPlaceholders, renderTemplate, validateTaskTemplate } from "../../src/core/tools/task/template";
+import { renderTemplate } from "../../src/core/tools/task/template";
 
-// ============================================================================
-// renderTemplate
-// ============================================================================
-
-describe("task template rendering", () => {
-	test("extracts placeholders", () => {
-		expect(extractPlaceholders("Do {{thing}} then {{thing}} with {{target}}")).toEqual(["thing", "thing", "target"]);
+describe("renderTemplate", () => {
+	test("renders explicit args", () => {
+		const result = renderTemplate("Hello {{name}}", { id: "Test", description: "A test", args: { name: "Ada" } });
+		expect(result.task).toBe("Hello Ada");
+		expect(result.args).toEqual({ id: "Test", description: "A test", name: "Ada" });
 	});
 
-	test("renders single placeholder", () => {
-		expect(renderTemplate("Hello {{name}}", { name: "Ada" })).toBe("Hello Ada");
+	test("renders id placeholder", () => {
+		const result = renderTemplate("Task: {{id}}", { id: "MyTask", description: "Does stuff" });
+		expect(result.task).toBe("Task: MyTask");
 	});
 
-	test("renders multiple placeholders", () => {
-		expect(renderTemplate("{{greet}} {{name}}", { greet: "Hi", name: "Ada" })).toBe("Hi Ada");
+	test("renders description placeholder", () => {
+		const result = renderTemplate("{{description}}", { id: "X", description: "The description" });
+		expect(result.task).toBe("The description");
 	});
 
-	test("leaves unknown placeholders intact", () => {
-		expect(renderTemplate("Hello {{name}} {{missing}}", { name: "Ada" })).toBe("Hello Ada {{missing}}");
-	});
-});
-
-// ============================================================================
-// validateTaskTemplate
-// ============================================================================
-
-describe("task template validation", () => {
-	test("requires placeholders for multi-task", () => {
-		const error = validateTaskTemplate("Just instructions", [
-			{ id: "One", vars: {} },
-			{ id: "Two", vars: {} },
-		]);
-		expect(error).toBe("Multi-task invocations require {{placeholders}} in context");
+	test("throws on unknown placeholders", () => {
+		expect(() => renderTemplate("{{unknown}}", { id: "Test", description: "A test" })).toThrow(
+			'Task "Test" has unknown arguments: unknown',
+		);
 	});
 
-	test("errors on missing vars", () => {
-		const error = validateTaskTemplate("Do {{thing}}", [{ id: "Only", vars: {} }]);
-		expect(error).toBe('Task "Only" missing vars: thing');
+	test("appends assignment block when no placeholders used", () => {
+		const result = renderTemplate("Do the thing", { id: "TaskA", description: "First task" });
+		expect(result.task).toContain("----------------------");
+		expect(result.task).toContain("# TaskA");
+		expect(result.task).toContain("First task");
 	});
 
-	test("errors on empty context around placeholders", () => {
-		const error = validateTaskTemplate("{{task}}", [
-			{ id: "A", vars: { task: "One" } },
-			{ id: "B", vars: { task: "Two" } },
-		]);
-		expect(error).toBe("Context must contain instructions (50+ chars) around {{placeholders}}");
+	test("does not append assignment block when placeholders used", () => {
+		const result = renderTemplate("Do {{id}}", { id: "TaskA", description: "First task" });
+		expect(result.task).toBe("Do TaskA");
+		expect(result.task).not.toContain("----------------------");
 	});
 
-	test("allows single-task without placeholders", () => {
-		const error = validateTaskTemplate("Just do the thing", [{ id: "Only", vars: {} }]);
-		expect(error).toBeNull();
+	test("explicit args override id/description", () => {
+		const result = renderTemplate("{{id}}", { id: "Real", description: "Real desc", args: { id: "Custom" } });
+		expect(result.task).toBe("Custom");
 	});
 });
