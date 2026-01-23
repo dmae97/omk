@@ -1,15 +1,23 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added fetch tool for URL content retrieval with enhanced processing capabilities
 - Added `isolated` option to run tasks in isolated git worktrees
 - Added automatic patch generation and application for isolated task execution
 - Added worktree management for isolated task execution with baseline capture and delta patching
 
 ### Changed
 
+- Renamed web_fetch tool to fetch for consistency and brevity
+- Updated output tool to automatically convert JSON to YAML for better readability
+- Removed format parameter from output tool to simplify usage
+- Improved bash tool output truncation to 50KB or 2000 lines
+- Updated python tool output truncation limit to 100KB
+- Enhanced grep tool documentation for different output modes
+- Updated read tool documentation to clarify supported file types
+- Improved write tool documentation to mention LSP auto-formatting
 - Simplified web-search tool parameters by removing advanced configuration options
 - Standardized web-search tool to use built-in system prompt for consistent response style
 - Updated web-search tool to use `recency` parameter instead of `search_recency_filter`
@@ -44,6 +52,10 @@
 - Removed model parameter from task tool to use session model by default
 - Removed model parameter from gemini-image tool to use provider defaults
 - Improved variable display in task output with humanized keys for single variables
+
+### Removed
+
+- Removed web_fetch tool (replaced by fetch tool)
 
 ### Fixed
 

@@ -1,6 +1,6 @@
-# Web Fetch
+# Fetch
 
-Fetches and analyzes web content by retrieving a URL.
+Retrieves content from a URL and returns it in a clean, readable format.
 
 <instruction>
 - Extract information from web pages (documentation, articles, API references)

@@ -48,7 +48,7 @@ describe("createTools", () => {
 		expect(names).toContain("task");
 		expect(names).toContain("todo_write");
 		expect(names).toContain("output");
-		expect(names).toContain("web_fetch");
+		expect(names).toContain("fetch");
 		expect(names).toContain("web_search");
 	});
 
@@ -163,7 +163,7 @@ describe("createTools", () => {
 			"read",
 			"task",
 			"todo_write",
-			"web_fetch",
+			"fetch",
 			"web_search",
 			"write",
 		];

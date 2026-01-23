@@ -938,7 +938,7 @@ All tools are enabled by default. Use `--tools <list>` to restrict to a subset.
 | `lsp`         | Language Server Protocol queries (go-to-definition, references, hover) |
 | `todo_write`  | Track task progress during sessions                   |
 | `web_search`  | Search the web                                        |
-| `web_fetch`   | Fetch and render URLs                                 |
+| `fetch`       | Fetch and process URLs                                |
 | `python`      | Execute Python code in IPython kernel                 |
 | `notebook`    | Edit Jupyter notebook cells                           |
 

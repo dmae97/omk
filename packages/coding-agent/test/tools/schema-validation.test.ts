@@ -381,7 +381,7 @@ describe("tool schema validation (post-sanitization)", () => {
 			"read",
 			"task",
 			"todo_write",
-			"web_fetch",
+			"fetch",
 			"web_search",
 			"write",
 		];

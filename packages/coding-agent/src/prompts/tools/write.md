@@ -8,7 +8,7 @@ Creates or overwrites a file at the specified path.
 </conditions>
 
 <output>
-Confirmation of file creation/write with path. Returns error if write fails (permissions, invalid path, disk full).
+Confirmation of file creation/write with path. When LSP is available, content may be auto-formatted before writing and diagnostics are returned. Returns error if write fails (permissions, invalid path, disk full).
 </output>
 
 <critical>

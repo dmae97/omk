@@ -296,7 +296,7 @@ ${chalk.bold("Available Tools (all enabled by default):")}
   python     - Execute Python code (requires: ${APP_NAME} setup python)
   notebook   - Edit Jupyter notebooks
   task       - Launch sub-agents for parallel tasks
-  web_fetch  - Fetch and process web pages
+  fetch      - Fetch and process URLs
   web_search - Search the web
   ask        - Ask user questions (interactive mode only)
 `);

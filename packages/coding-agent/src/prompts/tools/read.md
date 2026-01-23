@@ -6,7 +6,7 @@ Reads a file from the local filesystem.
 - Reads up to {{DEFAULT_MAX_LINES}} lines by default
 - Use `offset` and `limit` for large files
 - Use `lines: true` to include line numbers
-- Supports images (PNG, JPG), PDFs, and Jupyter notebooks
+- Supports images (PNG, JPG) and PDFs
 - For directories, use the ls tool instead
 - Parallelize reads when exploring related files
 </instruction>
@@ -14,7 +14,6 @@ Reads a file from the local filesystem.
 <output>
 - Returns file content as text
 - Images: returns visual content for analysis
-- PDFs/notebooks: returns extracted text/cells
-- Empty files: triggers a warning
+- PDFs: returns extracted text
 - Missing files: returns closest filename matches for correction
 </output>

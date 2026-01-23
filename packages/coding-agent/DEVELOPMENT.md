@@ -163,7 +163,7 @@ src/
 │       ├── review.ts         # Code review tools
 │       ├── rulebook.ts       # Rulebook tool
 │       ├── write.ts          # File writing
-│       ├── web-fetch.ts      # Web content fetching
+│       ├── fetch.ts          # URL content fetching
 │       ├── exa/              # Exa MCP tools (22 tools)
 │       ├── lsp/              # LSP integration tools
 │       ├── task/             # Task/subagent spawning

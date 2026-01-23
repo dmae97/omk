@@ -9,7 +9,7 @@ import { type Static, Type } from "@sinclair/typebox";
 import { nanoid } from "nanoid";
 import { parse as parseHtml } from "node-html-parser";
 import { type Theme, theme } from "../../modes/interactive/theme/theme";
-import webFetchDescription from "../../prompts/tools/web-fetch.md" with { type: "text" };
+import fetchDescription from "../../prompts/tools/fetch.md" with { type: "text" };
 import { ensureTool } from "../../utils/tools-manager";
 import type { RenderResultOptions } from "../custom-tools/types";
 import { renderPromptTemplate } from "../prompt-templates";
@@ -867,13 +867,13 @@ async function renderUrl(
 // Tool Definition
 // =============================================================================
 
-const webFetchSchema = Type.Object({
+const fetchSchema = Type.Object({
 	url: Type.String({ description: "URL to fetch" }),
 	timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (default: 20)" })),
 	raw: Type.Optional(Type.Boolean({ description: "Return raw HTML without transforms" })),
 });
 
-export interface WebFetchToolDetails {
+export interface FetchToolDetails {
 	url: string;
 	finalUrl: string;
 	contentType: string;
@@ -882,23 +882,23 @@ export interface WebFetchToolDetails {
 	notes: string[];
 }
 
-export class WebFetchTool implements AgentTool<typeof webFetchSchema, WebFetchToolDetails> {
-	public readonly name = "web_fetch";
-	public readonly label = "Web Fetch";
+export class FetchTool implements AgentTool<typeof fetchSchema, FetchToolDetails> {
+	public readonly name = "fetch";
+	public readonly label = "Fetch";
 	public readonly description: string;
-	public readonly parameters = webFetchSchema;
+	public readonly parameters = fetchSchema;
 
 	constructor(_session: ToolSession) {
-		this.description = renderPromptTemplate(webFetchDescription);
+		this.description = renderPromptTemplate(fetchDescription);
 	}
 
 	public async execute(
 		_toolCallId: string,
-		params: Static<typeof webFetchSchema>,
+		params: Static<typeof fetchSchema>,
 		signal?: AbortSignal,
-		_onUpdate?: AgentToolUpdateCallback<WebFetchToolDetails>,
+		_onUpdate?: AgentToolUpdateCallback<FetchToolDetails>,
 		_context?: AgentToolContext,
-	): Promise<AgentToolResult<WebFetchToolDetails>> {
+	): Promise<AgentToolResult<FetchToolDetails>> {
 		const { url, timeout: rawTimeout = 20, raw = false } = params;
 
 		// Auto-convert milliseconds to seconds if value > 1000 (16+ min is unreasonable)
@@ -927,7 +927,7 @@ export class WebFetchTool implements AgentTool<typeof webFetchSchema, WebFetchTo
 		output += `\n---\n\n`;
 		output += result.content;
 
-		const details: WebFetchToolDetails = {
+		const details: FetchToolDetails = {
 			url: result.url,
 			finalUrl: result.finalUrl,
 			contentType: result.contentType,
@@ -975,21 +975,21 @@ function countNonEmptyLines(text: string): number {
 	return text.split("\n").filter((l) => l.trim()).length;
 }
 
-/** Render web fetch call (URL preview) */
-export function renderWebFetchCall(
+/** Render fetch call (URL preview) */
+export function renderFetchCall(
 	args: { url: string; timeout?: number; raw?: boolean },
 	uiTheme: Theme = theme,
 ): Component {
 	const domain = getDomain(args.url);
 	const path = truncate(args.url.replace(/^https?:\/\/[^/]+/, ""), 50, uiTheme.format.ellipsis);
 	const icon = uiTheme.styledSymbol("status.pending", "muted");
-	const text = `${icon} ${uiTheme.fg("toolTitle", "Web Fetch")} ${uiTheme.fg("accent", domain)}${uiTheme.fg("dim", path)}`;
+	const text = `${icon} ${uiTheme.fg("toolTitle", "Fetch")} ${uiTheme.fg("accent", domain)}${uiTheme.fg("dim", path)}`;
 	return new Text(text, 0, 0);
 }
 
-/** Render web fetch result with tree-based layout */
-export function renderWebFetchResult(
-	result: { content: Array<{ type: string; text?: string }>; details?: WebFetchToolDetails },
+/** Render fetch result with tree-based layout */
+export function renderFetchResult(
+	result: { content: Array<{ type: string; text?: string }>; details?: FetchToolDetails },
 	options: RenderResultOptions,
 	uiTheme: Theme = theme,
 ): Component {
@@ -1106,7 +1106,7 @@ export function renderWebFetchResult(
 	return new Text(text, 0, 0);
 }
 
-export const webFetchToolRenderer = {
-	renderCall: renderWebFetchCall,
-	renderResult: renderWebFetchResult,
+export const fetchToolRenderer = {
+	renderCall: renderFetchCall,
+	renderResult: renderFetchResult,
 };

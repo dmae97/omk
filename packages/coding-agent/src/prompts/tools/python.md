@@ -58,7 +58,7 @@ All helpers auto-print results and return values for chaining.
 </prelude>
 
 <output>
-Output streams in real time, truncated after 50KB.
+Output streams in real time, truncated after 100KB.
 
 The user sees output like a Jupyter notebook—rich displays are fully rendered:
 - `display(JSON(data))` → interactive JSON tree

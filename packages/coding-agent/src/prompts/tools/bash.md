@@ -12,8 +12,8 @@ Executes a bash command in a shell session for terminal operations like git, bun
 
 <output>
 Returns stdout, stderr, and exit code from command execution.
-- Output truncated after 50KB; use `| head -n 50` or similar filters for large output
-- Exit codes and stderr are always captured
+- Output truncated after 50KB or 2000 lines (whichever comes first); use `| head -n 50` for large output
+- Exit codes shown on non-zero exit; stderr captured
 </output>
 
 <critical>

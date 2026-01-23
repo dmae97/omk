@@ -11,24 +11,15 @@ Retrieves complete output from background tasks spawned with the Task tool.
 
 <parameters>
 - `ids`: Array of output IDs from Task results (e.g., `["ApiAudit", "DbAudit"]`)
-- `format` (optional):
-	- `"raw"` (default): Full output with ANSI codes preserved
-	- `"json"`: Structured object with metadata
-	- `"stripped"`: Plain text with ANSI codes removed for parsing
-- `query` (optional): jq-like query for JSON outputs (e.g., `.endpoints[0].file`)
+- `query` (optional): jq-like query for structured outputs (e.g., `.endpoints[0].file`). Cannot combine with `offset`/`limit`.
 - `offset` (optional): Line number to start reading from (1-indexed)
 - `limit` (optional): Maximum number of lines to read
 
-Use offset/limit for line ranges to reduce context usage on large outputs. Use `query` for structured agent outputs (agents that call `complete` with `output`).
+Use `offset`/`limit` for pagination. Use `query` for structured agent outputs.
 </parameters>
 
 <output>
-Returns the requested task output content:
-- `raw`: Full output text with ANSI escape codes intact
-- `json`: Structured object with metadata (status, timing, structured data from `complete`)
-- `stripped`: Plain text with ANSI codes removed for easier parsing
-
-Output is truncated after 50KB.
+Returns task output content.
 </output>
 
 <example name="query syntax">

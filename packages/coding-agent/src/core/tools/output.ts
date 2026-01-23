@@ -7,10 +7,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
-import { StringEnum } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { Type } from "@sinclair/typebox";
+import { YAML } from "bun";
 import type { Theme } from "../../modes/interactive/theme/theme";
 import outputDescription from "../../prompts/tools/output.md" with { type: "text" };
 import type { RenderResultOptions } from "../custom-tools/types";
@@ -30,14 +30,9 @@ const outputSchema = Type.Object({
 	ids: Type.Array(Type.String(), {
 		description: "Agent output IDs to read (e.g., ['reviewer_0', 'explore_1'])",
 	}),
-	format: Type.Optional(
-		StringEnum(["raw", "json", "stripped"], {
-			description: "Output format: raw (default), json (structured), stripped (no ANSI)",
-		}),
-	),
 	query: Type.Optional(
 		Type.String({
-			description: "jq-like query for JSON outputs (e.g., .result.items[0].name). Requires JSON output.",
+			description: "jq-like query for JSON outputs (e.g., .result.items[0].name)",
 		}),
 	),
 	offset: Type.Optional(
@@ -81,11 +76,6 @@ export interface OutputToolDetails {
 	outputs: OutputEntry[];
 	notFound?: string[];
 	availableIds?: string[];
-}
-
-/** Strip ANSI escape codes from text */
-function stripAnsi(text: string): string {
-	return text.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
 function parseQuery(query: string): Array<string | number> {
@@ -233,7 +223,6 @@ function extractPreviewLines(content: string, maxLines: number): string[] {
 
 type OutputParams = {
 	ids: string[];
-	format?: "raw" | "json" | "stripped";
 	query?: string;
 	offset?: number;
 	limit?: number;
@@ -286,7 +275,6 @@ export class OutputTool implements AgentTool<typeof outputSchema, OutputToolDeta
 		const outputContentById = new Map<string, string>();
 		const query = params.query?.trim();
 		const wantsQuery = query !== undefined && query.length > 0;
-		const format = params.format ?? (wantsQuery ? "json" : "raw");
 
 		if (wantsQuery && (params.offset !== undefined || params.limit !== undefined)) {
 			throw new Error("query cannot be combined with offset/limit");
@@ -366,41 +354,29 @@ export class OutputTool implements AgentTool<typeof outputSchema, OutputToolDeta
 			};
 		}
 
-		// Success: build response based on format
-		let contentText: string;
+		// Build response - convert JSON to YAML for readability
+		const parts = outputs.map((o) => {
+			let content = outputContentById.get(o.id) ?? "";
 
-		if (format === "json") {
-			const jsonData = wantsQuery
-				? queryResults
-				: outputs.map((o) => ({
-						id: o.id,
-						lineCount: o.lineCount,
-						charCount: o.charCount,
-						provenance: o.provenance,
-						previewLines: o.previewLines,
-						range: o.range,
-						content: outputContentById.get(o.id) ?? "",
-					}));
-			contentText = JSON.stringify(jsonData, null, 2);
-		} else {
-			// raw or stripped
-			const parts = outputs.map((o) => {
-				let content = outputContentById.get(o.id) ?? "";
-				if (format === "stripped") {
-					content = stripAnsi(content);
-				}
-				if (o.range && o.range.endLine < o.range.totalLines) {
-					const nextOffset = o.range.endLine + 1;
-					content += `\n\n[Showing lines ${o.range.startLine}-${o.range.endLine} of ${o.range.totalLines}. Use offset=${nextOffset} to continue]`;
-				}
-				// Add header for multiple outputs
-				if (outputs.length > 1) {
-					return `=== ${o.id} (${o.lineCount} lines, ${formatBytes(o.charCount)}) ===\n${content}`;
-				}
-				return content;
-			});
-			contentText = parts.join("\n\n");
-		}
+			// Try to convert JSON to YAML for readability
+			try {
+				const parsed = JSON.parse(content);
+				content = YAML.stringify(parsed);
+			} catch {
+				// Not JSON, keep as-is
+			}
+
+			if (o.range && o.range.endLine < o.range.totalLines) {
+				const nextOffset = o.range.endLine + 1;
+				content += `\n[Showing lines ${o.range.startLine}-${o.range.endLine} of ${o.range.totalLines}. Use offset=${nextOffset} to continue]`;
+			}
+			// Add header for multiple outputs
+			if (outputs.length > 1) {
+				return `=== ${o.id} (${o.lineCount} lines, ${formatBytes(o.charCount)}) ===\n${content}`;
+			}
+			return content;
+		});
+		const contentText = parts.join("\n\n");
 
 		return {
 			content: [{ type: "text", text: contentText }],
@@ -415,7 +391,6 @@ export class OutputTool implements AgentTool<typeof outputSchema, OutputToolDeta
 
 interface OutputRenderArgs {
 	ids: string[];
-	format?: "raw" | "json" | "stripped";
 	query?: string;
 	offset?: number;
 	limit?: number;
@@ -444,7 +419,6 @@ export const outputToolRenderer = {
 		let text = `${label} ${uiTheme.fg("accent", ids)}`;
 
 		const meta: string[] = [];
-		if (args.format && args.format !== "raw") meta.push(`format:${args.format}`);
 		if (args.query) meta.push(`query:${args.query}`);
 		if (args.offset !== undefined) meta.push(`offset:${args.offset}`);
 		if (args.limit !== undefined) meta.push(`limit:${args.limit}`);

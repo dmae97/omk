@@ -5,6 +5,7 @@ export { CompleteTool } from "./complete";
 // Exa MCP tools (22 tools)
 export { exaTools } from "./exa/index";
 export type { ExaRenderDetails, ExaSearchResponse, ExaSearchResult } from "./exa/types";
+export { FetchTool, type FetchToolDetails } from "./fetch";
 export { type FindOperations, FindTool, type FindToolDetails, type FindToolOptions } from "./find";
 export { setPreferredImageProvider } from "./gemini-image";
 export { type GrepOperations, GrepTool, type GrepToolDetails, type GrepToolOptions } from "./grep";
@@ -39,7 +40,6 @@ export {
 	truncateLine,
 	truncateTail,
 } from "./truncate";
-export { WebFetchTool, type WebFetchToolDetails } from "./web-fetch";
 export {
 	companyWebSearchTools,
 	exaWebSearchTools,
@@ -70,6 +70,7 @@ import { AskTool } from "./ask";
 import { BashTool } from "./bash";
 import { CalculatorTool } from "./calculator";
 import { CompleteTool } from "./complete";
+import { FetchTool } from "./fetch";
 import { FindTool } from "./find";
 import { GrepTool } from "./grep";
 import { LsTool } from "./ls";
@@ -83,7 +84,6 @@ import { reportFindingTool } from "./review";
 import { loadSshTool } from "./ssh";
 import { TaskTool } from "./task/index";
 import { TodoWriteTool } from "./todo-write";
-import { WebFetchTool } from "./web-fetch";
 import { WebSearchTool } from "./web-search/index";
 import { WriteTool } from "./write";
 
@@ -157,7 +157,7 @@ export const BUILTIN_TOOLS: Record<string, ToolFactory> = {
 	read: (s) => new ReadTool(s),
 	task: TaskTool.create,
 	todo_write: (s) => new TodoWriteTool(s),
-	web_fetch: (s) => new WebFetchTool(s),
+	fetch: (s) => new FetchTool(s),
 	web_search: (s) => new WebSearchTool(s),
 	write: (s) => new WriteTool(s),
 };

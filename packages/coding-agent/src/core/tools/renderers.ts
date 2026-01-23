@@ -10,6 +10,7 @@ import type { RenderResultOptions } from "../custom-tools/types";
 import { askToolRenderer } from "./ask";
 import { bashToolRenderer } from "./bash";
 import { calculatorToolRenderer } from "./calculator";
+import { fetchToolRenderer } from "./fetch";
 import { findToolRenderer } from "./find";
 import { grepToolRenderer } from "./grep";
 import { lsToolRenderer } from "./ls";
@@ -22,7 +23,6 @@ import { readToolRenderer } from "./read";
 import { sshToolRenderer } from "./ssh";
 import { taskToolRenderer } from "./task/render";
 import { todoWriteToolRenderer } from "./todo-write";
-import { webFetchToolRenderer } from "./web-fetch";
 import { webSearchToolRenderer } from "./web-search/render";
 import { writeToolRenderer } from "./write";
 
@@ -59,7 +59,7 @@ export const toolRenderers: Record<string, ToolRenderer> = {
 	ssh: sshToolRenderer as ToolRenderer,
 	task: taskToolRenderer as ToolRenderer,
 	todo_write: todoWriteToolRenderer as ToolRenderer,
-	web_fetch: webFetchToolRenderer as ToolRenderer,
+	fetch: fetchToolRenderer as ToolRenderer,
 	web_search: webSearchToolRenderer as ToolRenderer,
 	write: writeToolRenderer as ToolRenderer,
 };

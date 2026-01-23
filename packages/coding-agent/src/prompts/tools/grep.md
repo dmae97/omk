@@ -15,7 +15,8 @@ Results depend on `output_mode`:
 - `files_with_matches`: File paths only (one per line)
 - `count`: Match counts per file
 
-Truncated at 100 matches by default (configurable via `limit`).
+In `content` mode, truncated at 100 matches by default (configurable via `limit`).
+For `files_with_matches` and `count` modes, use `head_limit` to truncate results.
 </output>
 
 <critical>

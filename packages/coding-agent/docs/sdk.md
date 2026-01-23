@@ -375,7 +375,7 @@ All tools are defined in `BUILTIN_TOOLS`:
 - `output` - Task output retrieval
 - `read` - File reading (text and images)
 - `task` - Subagent spawning
-- `web_fetch` - Web page fetching
+- `fetch` - URL fetching
 - `web_search` - Web search
 - `write` - File writing
 
