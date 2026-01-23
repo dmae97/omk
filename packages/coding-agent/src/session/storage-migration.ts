@@ -159,7 +159,7 @@ async function migrateAuth(storage: AgentStorage, authPaths: string[], warnings:
  * @returns Result indicating what was migrated and any warnings encountered
  */
 export async function migrateJsonStorage(paths: MigrationPaths): Promise<StorageMigrationResult> {
-	const storage = AgentStorage.open(getAgentDbPath(paths.agentDir));
+	const storage = await AgentStorage.open(getAgentDbPath(paths.agentDir));
 	const warnings: string[] = [];
 
 	const migratedAuth = await migrateAuth(storage, paths.authPaths, warnings);

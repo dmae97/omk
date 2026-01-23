@@ -61,6 +61,9 @@
 - Changed empty and error state rendering across multiple tools (Find, Grep, Ls, Notebook, Calculator, Ask) to include consistent status headers
 - Changed split commit to support hunk selectors (all, indices, or line ranges) instead of whole-file staging
 - Changed `analyze_file` tool to `analyze_files` for batch parallel analysis of multiple files
+
+### Fixed
+- Fixed database busy errors during concurrent access by adding retry logic with exponential backoff when opening storage
 ## [8.0.0] - 2026-01-23
 ### Added
 

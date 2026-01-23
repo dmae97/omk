@@ -504,7 +504,7 @@ export class SettingsManager {
 	 */
 	static async create(cwd: string = process.cwd(), agentDir: string = getAgentDir()): Promise<SettingsManager> {
 		const configPath = getConfigPath();
-		const storage = AgentStorage.open(getAgentDbPath(agentDir));
+		const storage = await AgentStorage.open(getAgentDbPath(agentDir));
 
 		// Migrate from legacy storage if config.yml doesn't exist
 		await SettingsManager.migrateToYaml(storage, agentDir, configPath);

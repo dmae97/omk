@@ -13,20 +13,24 @@ let activeTerminal: ProcessTerminal | null = null;
  * Resets terminal state without requiring access to the ProcessTerminal instance
  */
 export function emergencyTerminalRestore(): void {
-	const terminal = activeTerminal;
-	if (terminal) {
-		terminal.stop();
-		terminal.showCursor();
-	} else {
-		// Blind restore if no instance tracked - covers edge cases
-		process.stdout.write(
-			"\x1b[?2004l" + // Disable bracketed paste
-				"\x1b[<u" + // Pop kitty keyboard protocol
-				"\x1b[?25h", // Show cursor
-		);
-		if (process.stdin.setRawMode) {
-			process.stdin.setRawMode(false);
+	try {
+		const terminal = activeTerminal;
+		if (terminal) {
+			terminal.stop();
+			terminal.showCursor();
+		} else {
+			// Blind restore if no instance tracked - covers edge cases
+			process.stdout.write(
+				"\x1b[?2004l" + // Disable bracketed paste
+					"\x1b[<u" + // Pop kitty keyboard protocol
+					"\x1b[?25h", // Show cursor
+			);
+			if (process.stdin.setRawMode) {
+				process.stdin.setRawMode(false);
+			}
 		}
+	} catch {
+		// Terminal may already be dead during crash cleanup - ignore errors
 	}
 }
 export interface Terminal {
@@ -93,7 +97,7 @@ export class ProcessTerminal implements Terminal {
 		process.stdin.resume();
 
 		// Enable bracketed paste mode - terminal will wrap pastes in \x1b[200~ ... \x1b[201~
-		process.stdout.write("\x1b[?2004h");
+		this.safeWrite("\x1b[?2004h");
 
 		// Set up resize handler immediately
 		process.stdout.on("resize", this.resizeHandler);
@@ -137,7 +141,7 @@ export class ProcessTerminal implements Terminal {
 					// Flag 1 = disambiguate escape codes
 					// Flag 2 = report event types (press/repeat/release)
 					// Flag 4 = report alternate keys
-					process.stdout.write("\x1b[>7u");
+					this.safeWrite("\x1b[>7u");
 					return; // Don't forward protocol response to TUI
 				}
 			}
@@ -172,7 +176,7 @@ export class ProcessTerminal implements Terminal {
 	private queryAndEnableKittyProtocol(): void {
 		this.setupStdinBuffer();
 		process.stdin.on("data", this.stdinDataHandler!);
-		process.stdout.write("\x1b[?u");
+		this.safeWrite("\x1b[?u");
 	}
 
 	stop(): void {
@@ -182,11 +186,11 @@ export class ProcessTerminal implements Terminal {
 		}
 
 		// Disable bracketed paste mode
-		process.stdout.write("\x1b[?2004l");
+		this.safeWrite("\x1b[?2004l");
 
 		// Disable Kitty keyboard protocol (pop the flags we pushed) - only if we enabled it
 		if (this._kittyProtocolActive) {
-			process.stdout.write("\x1b[<u");
+			this.safeWrite("\x1b[<u");
 			this._kittyProtocolActive = false;
 			setKittyProtocolActive(false);
 		}
@@ -215,7 +219,19 @@ export class ProcessTerminal implements Terminal {
 	}
 
 	write(data: string): void {
-		process.stdout.write(data);
+		this.safeWrite(data);
+	}
+
+	private safeWrite(data: string): void {
+		try {
+			process.stdout.write(data);
+		} catch (err) {
+			// EIO means terminal is dead - exit gracefully instead of crashing
+			if (err && typeof err === "object" && (err as { code?: string }).code === "EIO") {
+				process.exit(1);
+			}
+			throw err;
+		}
 	}
 
 	get columns(): number {
@@ -229,36 +245,36 @@ export class ProcessTerminal implements Terminal {
 	moveBy(lines: number): void {
 		if (lines > 0) {
 			// Move down
-			process.stdout.write(`\x1b[${lines}B`);
+			this.safeWrite(`\x1b[${lines}B`);
 		} else if (lines < 0) {
 			// Move up
-			process.stdout.write(`\x1b[${-lines}A`);
+			this.safeWrite(`\x1b[${-lines}A`);
 		}
 		// lines === 0: no movement
 	}
 
 	hideCursor(): void {
-		process.stdout.write("\x1b[?25l");
+		this.safeWrite("\x1b[?25l");
 	}
 
 	showCursor(): void {
-		process.stdout.write("\x1b[?25h");
+		this.safeWrite("\x1b[?25h");
 	}
 
 	clearLine(): void {
-		process.stdout.write("\x1b[K");
+		this.safeWrite("\x1b[K");
 	}
 
 	clearFromCursor(): void {
-		process.stdout.write("\x1b[J");
+		this.safeWrite("\x1b[J");
 	}
 
 	clearScreen(): void {
-		process.stdout.write("\x1b[2J\x1b[H"); // Clear screen and move to home (1,1)
+		this.safeWrite("\x1b[2J\x1b[H"); // Clear screen and move to home (1,1)
 	}
 
 	setTitle(title: string): void {
 		// OSC 0;title BEL - set terminal window title
-		process.stdout.write(`\x1b]0;${title}\x07`);
+		this.safeWrite(`\x1b]0;${title}\x07`);
 	}
 }

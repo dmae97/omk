@@ -15,11 +15,11 @@ import { getAgentDbPath, getAgentDir, getBinDir } from "./config";
  *
  * @returns Array of provider names that were migrated
  */
-export function migrateAuthToAgentDb(): string[] {
+export async function migrateAuthToAgentDb(): Promise<string[]> {
 	const agentDir = getAgentDir();
 	const oauthPath = join(agentDir, "oauth.json");
 	const settingsPath = join(agentDir, "settings.json");
-	const storage = AgentStorage.open(getAgentDbPath(agentDir));
+	const storage = await AgentStorage.open(getAgentDbPath(agentDir));
 
 	const migrated: Record<string, AuthCredential[]> = {};
 	const providers: string[] = [];
@@ -179,7 +179,7 @@ export async function runMigrations(_cwd: string): Promise<{
 	deprecationWarnings: string[];
 }> {
 	// Then: run data migrations
-	const migratedAuthProviders = migrateAuthToAgentDb();
+	const migratedAuthProviders = await migrateAuthToAgentDb();
 	migrateSessionsFromAgentRoot();
 	migrateToolsToBin();
 

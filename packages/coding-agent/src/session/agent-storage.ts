@@ -258,15 +258,36 @@ CREATE TABLE settings (
 
 	/**
 	 * Returns singleton instance for the given database path, creating if needed.
+	 * Retries on SQLITE_BUSY with exponential backoff.
 	 * @param dbPath - Path to the SQLite database file (defaults to config path)
 	 * @returns AgentStorage instance for the given path
 	 */
-	static open(dbPath: string = getAgentDbPath()): AgentStorage {
+	static async open(dbPath: string = getAgentDbPath()): Promise<AgentStorage> {
 		const existing = AgentStorage.instances.get(dbPath);
 		if (existing) return existing;
-		const storage = new AgentStorage(dbPath);
-		AgentStorage.instances.set(dbPath, storage);
-		return storage;
+
+		const maxRetries = 3;
+		const baseDelayMs = 100;
+		let lastError: Error | undefined;
+
+		for (let attempt = 0; attempt < maxRetries; attempt++) {
+			try {
+				const storage = new AgentStorage(dbPath);
+				AgentStorage.instances.set(dbPath, storage);
+				return storage;
+			} catch (err) {
+				const isSqliteBusy =
+					err && typeof err === "object" && (err as { code?: string }).code === "SQLITE_BUSY";
+				if (!isSqliteBusy) {
+					throw err;
+				}
+				lastError = err as Error;
+				const delayMs = baseDelayMs * 2 ** attempt;
+				await Bun.sleep(delayMs);
+			}
+		}
+
+		throw lastError ?? new Error("Failed to open database after retries");
 	}
 
 	/**

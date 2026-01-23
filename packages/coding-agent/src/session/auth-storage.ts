@@ -162,17 +162,14 @@ export class AuthStorage {
 	private usageLogger?: UsageLogger;
 	private fallbackResolver?: (provider: string) => string | undefined;
 
-	/**
-	 * @param authPath - Legacy auth.json path used for migration and locating agent.db
-	 * @param fallbackPaths - Additional auth.json paths to migrate (legacy support)
-	 */
-	constructor(
+	private constructor(
 		private authPath: string,
 		private fallbackPaths: string[] = [],
+		storage: AgentStorage,
 		options: AuthStorageOptions = {},
 	) {
 		this.dbPath = AuthStorage.resolveDbPath(authPath);
-		this.storage = AgentStorage.open(this.dbPath);
+		this.storage = storage;
 		this.usageProviderResolver = options.usageProviderResolver ?? resolveDefaultUsageProvider;
 		this.usageCache = options.usageCache ?? new AuthStorageUsageCache(this.storage);
 		this.usageFetch = options.usageFetch ?? fetch;
@@ -186,16 +183,34 @@ export class AuthStorage {
 	}
 
 	/**
+	 * Create an AuthStorage instance.
+	 * @param authPath - Legacy auth.json path used for migration and locating agent.db
+	 * @param fallbackPaths - Additional auth.json paths to migrate (legacy support)
+	 */
+	static async create(
+		authPath: string,
+		fallbackPaths: string[] = [],
+		options: AuthStorageOptions = {},
+	): Promise<AuthStorage> {
+		const dbPath = AuthStorage.resolveDbPath(authPath);
+		const storage = await AgentStorage.open(dbPath);
+		return new AuthStorage(authPath, fallbackPaths, storage, options);
+	}
+
+	/**
 	 * Create an in-memory AuthStorage instance from serialized data.
 	 * Used by subagent workers to bypass discovery and use parent's credentials.
 	 */
-	static fromSerialized(data: SerializedAuthStorage, options: AuthStorageOptions = {}): AuthStorage {
-		const instance = Object.create(AuthStorage.prototype) as AuthStorage;
+	static async fromSerialized(data: SerializedAuthStorage, options: AuthStorageOptions = {}): Promise<AuthStorage> {
 		const authPath = data.authPath ?? data.dbPath ?? getAuthPath();
+		const dbPath = data.dbPath ?? AuthStorage.resolveDbPath(authPath);
+		const storage = await AgentStorage.open(dbPath);
+
+		const instance = Object.create(AuthStorage.prototype) as AuthStorage;
 		instance.authPath = authPath;
 		instance.fallbackPaths = [];
-		instance.dbPath = data.dbPath ?? AuthStorage.resolveDbPath(authPath);
-		instance.storage = AgentStorage.open(instance.dbPath);
+		instance.dbPath = dbPath;
+		instance.storage = storage;
 		instance.data = new Map();
 		instance.runtimeOverrides = new Map();
 		instance.providerRoundRobinIndex = new Map();

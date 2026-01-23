@@ -265,7 +265,7 @@ export async function discoverAuthStorage(agentDir: string = getDefaultAgentDir(
 		authPaths: [primaryPath, ...fallbackPaths],
 	});
 
-	const storage = new AuthStorage(primaryPath, fallbackPaths);
+	const storage = await AuthStorage.create(primaryPath, fallbackPaths);
 	await storage.reload();
 	return storage;
 }

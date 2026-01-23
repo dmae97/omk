@@ -36,10 +36,10 @@ export interface MCPToolsLoadOptions {
 	cacheStorage?: AgentStorage | null;
 }
 
-function resolveToolCache(storage: AgentStorage | null | undefined): MCPToolCache | null {
+async function resolveToolCache(storage: AgentStorage | null | undefined): Promise<MCPToolCache | null> {
 	if (storage === null) return null;
 	try {
-		const resolved = storage ?? AgentStorage.open();
+		const resolved = storage ?? (await AgentStorage.open());
 		return new MCPToolCache(resolved);
 	} catch (error) {
 		logger.warn("MCP tool cache unavailable", { error: String(error) });
@@ -55,7 +55,7 @@ function resolveToolCache(storage: AgentStorage | null | undefined): MCPToolCach
  * @returns MCP tools in LoadedCustomTool format for integration
  */
 export async function discoverAndLoadMCPTools(cwd: string, options?: MCPToolsLoadOptions): Promise<MCPToolsLoadResult> {
-	const toolCache = resolveToolCache(options?.cacheStorage);
+	const toolCache = await resolveToolCache(options?.cacheStorage);
 	const manager = new MCPManager(cwd, toolCache);
 
 	let result: MCPLoadResult;

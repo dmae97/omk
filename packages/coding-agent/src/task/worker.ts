@@ -547,7 +547,7 @@ async function runTask(runState: RunState, payload: SubagentWorkerStartPayload):
 		let modelRegistry: ModelRegistry;
 
 		if (payload.serializedAuth && payload.serializedModels) {
-			authStorage = AuthStorage.fromSerialized(payload.serializedAuth);
+			authStorage = await AuthStorage.fromSerialized(payload.serializedAuth);
 			modelRegistry = ModelRegistry.fromSerialized(payload.serializedModels, authStorage);
 		} else {
 			authStorage = await discoverAuthStorage();

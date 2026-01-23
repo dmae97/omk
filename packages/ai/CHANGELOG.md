@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+### Added
+- Added `isRetryableError` and `extractHttpStatusFromError` utility functions to identify transient errors suitable for retry (timeouts, 5xx, 408, 429, network failures)
 ## [8.0.0] - 2026-01-23
 
 ### Fixed

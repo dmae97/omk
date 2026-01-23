@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- Fixed crash when terminal becomes unavailable (EIO errors) by exiting gracefully instead of throwing
+- Fixed potential errors during emergency terminal restore when terminal is already dead
 ## [6.8.3] - 2026-01-21
 ### Added
 

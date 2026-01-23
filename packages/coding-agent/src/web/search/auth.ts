@@ -144,7 +144,7 @@ async function readAnthropicOAuthCredentials(configDir: string): Promise<Anthrop
 		authPaths: [path.join(configDir, "auth.json")],
 	});
 
-	const storage = AgentStorage.open(getAgentDbPath(configDir));
+	const storage = await AgentStorage.open(getAgentDbPath(configDir));
 	const records = storage.listAuthCredentials("anthropic");
 	const credentials: AnthropicOAuthCredential[] = [];
 	for (const record of records) {
