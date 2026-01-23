@@ -17,8 +17,7 @@ const todoWriteSchema = Type.Object({
 	todos: Type.Array(
 		Type.Object({
 			id: Type.Optional(Type.String({ description: "Stable todo id" })),
-			content: Type.String({ description: "Imperative task description (e.g., 'Run tests')" }),
-			active_form: Type.String({ description: "Present continuous form (e.g., 'Running tests')" }),
+			content: Type.String({ description: "Task description (e.g., 'Run tests')" }),
 			status: StringEnum(["pending", "in_progress", "completed"]),
 		}),
 		{ description: "The updated todo list" },
@@ -30,7 +29,6 @@ type TodoStatus = "pending" | "in_progress" | "completed";
 export interface TodoItem {
 	id: string;
 	content: string;
-	active_form: string;
 	status: TodoStatus;
 }
 
@@ -47,7 +45,7 @@ export interface TodoWriteToolDetails {
 
 const TODO_FILE_NAME = "todos.json";
 
-type TodoWriteParams = { todos: Array<{ id?: string; content?: string; active_form?: string; status?: string }> };
+type TodoWriteParams = { todos: Array<{ id?: string; content?: string; status?: string }> };
 
 function normalizeTodoStatus(status?: string): TodoStatus {
 	switch (status) {
@@ -62,25 +60,18 @@ function normalizeTodoStatus(status?: string): TodoStatus {
 	}
 }
 
-function normalizeTodos(
-	items: Array<{ id?: string; content?: string; active_form?: string; status?: string }>,
-): TodoItem[] {
+function normalizeTodos(items: Array<{ id?: string; content?: string; status?: string }>): TodoItem[] {
 	return items.map((item) => {
-		if (!item.content || !item.active_form) {
-			throw new Error("Todo content and active_form are required.");
+		if (!item.content) {
+			throw new Error("Todo content is required.");
 		}
 		const content = item.content.trim();
-		const active_form = item.active_form.trim();
 		if (!content) {
 			throw new Error("Todo content cannot be empty.");
-		}
-		if (!active_form) {
-			throw new Error("Todo active_form cannot be empty.");
 		}
 		return {
 			id: item.id && item.id.trim().length > 0 ? item.id : randomUUID(),
 			content,
-			active_form,
 			status: normalizeTodoStatus(item.status),
 		};
 	});
@@ -143,13 +134,11 @@ function formatTodoSummary(todos: TodoItem[]): string {
 
 function formatTodoLine(item: TodoItem, uiTheme: Theme, prefix: string): string {
 	const checkbox = uiTheme.checkbox;
-	const displayText =
-		item.status === "in_progress" && item.active_form !== item.content ? item.active_form : item.content;
 	switch (item.status) {
 		case "completed":
 			return uiTheme.fg("success", `${prefix}${checkbox.checked} ${chalk.strikethrough(item.content)}`);
 		case "in_progress":
-			return uiTheme.fg("accent", `${prefix}${checkbox.unchecked} ${displayText}`);
+			return uiTheme.fg("accent", `${prefix}${checkbox.unchecked} ${item.content}`);
 		default:
 			return uiTheme.fg("dim", `${prefix}${checkbox.unchecked} ${item.content}`);
 	}
@@ -222,7 +211,7 @@ export class TodoWriteTool implements AgentTool<typeof todoWriteSchema, TodoWrit
 // =============================================================================
 
 interface TodoWriteRenderArgs {
-	todos?: Array<{ id?: string; content?: string; active_form?: string; status?: string }>;
+	todos?: Array<{ id?: string; content?: string; status?: string }>;
 }
 
 export const todoWriteToolRenderer = {

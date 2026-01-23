@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added format-prompts script to standardize prompt file formatting with XML and Handlebars block rules
@@ -11,6 +12,9 @@
 
 ### Changed
 
+- Simplified todo-write tool by removing active_form parameter requirement
+- Updated todo-write tool to use single content field for task descriptions
+- Modified todo-write display logic to show content instead of active_form for in-progress tasks
 - Updated system prompt to use `<important>` and `<avoid>` tags instead of `<required>` and `<antipatterns>`
 - Enhanced prompt formatting by removing unnecessary blank lines after colons and around XML/Handlebars blocks
 - Improved system prompt structure with clearer critical sections for git operations and parallel processing

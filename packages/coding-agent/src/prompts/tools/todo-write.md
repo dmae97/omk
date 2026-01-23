@@ -15,38 +15,31 @@ Use this tool proactively in these scenarios:
 
 <protocol>
 1. **Task States**: Use these states to track progress:
-   - pending: Task not yet started
-   - in_progress: Currently working on (limit to ONE task at a time)
-   - completed: Task finished successfully
-
-   **IMPORTANT**: Task descriptions must have two forms:
-   - content: The imperative form describing what needs to be done (e.g., "Run tests", "Build the project")
-   - active_form: The present continuous form shown during execution (e.g., "Running tests", "Building the project")
+	 - pending: Task not yet started
+	 - in_progress: Currently working on (limit to ONE task at a time)
+	 - completed: Task finished successfully
 
 2. **Task Management**:
-   - Update task status in real-time as you work
-   - Mark tasks complete IMMEDIATELY after finishing (don't batch completions)
-   - Exactly ONE task must be in_progress at any time (not less, not more)
-   - Complete current tasks before starting new ones
-   - Remove tasks that are no longer relevant from the list entirely
+	 - Update task status in real-time as you work
+	 - Mark tasks complete IMMEDIATELY after finishing (don't batch completions)
+	 - Exactly ONE task must be in_progress at any time (not less, not more)
+	 - Complete current tasks before starting new ones
+	 - Remove tasks that are no longer relevant from the list entirely
 
 3. **Task Completion Requirements**:
-   - ONLY mark a task as completed when you have FULLY accomplished it
-   - If you encounter errors, blockers, or cannot finish, keep the task as in_progress
-   - When blocked, create a new task describing what needs to be resolved
-   - Never mark a task as completed if:
-     - Tests are failing
-     - Implementation is partial
-     - You encountered unresolved errors
-     - You couldn't find necessary files or dependencies
+	 - ONLY mark a task as completed when you have FULLY accomplished it
+	 - If you encounter errors, blockers, or cannot finish, keep the task as in_progress
+	 - When blocked, create a new task describing what needs to be resolved
+	 - Never mark a task as completed if:
+	   - Tests are failing
+	   - Implementation is partial
+	   - You encountered unresolved errors
+	   - You couldn't find necessary files or dependencies
 
 4. **Task Breakdown**:
-   - Create specific, actionable items
-   - Break complex tasks into smaller, manageable steps
-   - Use clear, descriptive task names
-   - Always provide both forms:
-     - content: "Fix authentication bug"
-     - active_form: "Fixing authentication bug"
+	 - Create specific, actionable items
+	 - Break complex tasks into smaller, manageable steps
+	 - Use clear, descriptive task names
 </protocol>
 
 <output>
