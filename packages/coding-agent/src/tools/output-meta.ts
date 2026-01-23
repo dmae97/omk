@@ -330,10 +330,10 @@ export function formatOutputNotice(meta: OutputMeta | undefined): string {
 			notice += ` (${formatSize(t.outputBytes)} limit)`;
 		}
 
-		if (t.artifactId != null) {
-			notice += `. Full: artifact://${t.artifactId}`;
-		} else if (t.nextOffset != null) {
+		if (t.nextOffset != null) {
 			notice += `. Use offset=${t.nextOffset} to continue`;
+		} else if (t.artifactId != null) {
+			notice += `. Full: artifact://${t.artifactId}`;
 		}
 
 		parts.push(notice);

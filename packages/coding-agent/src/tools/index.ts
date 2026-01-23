@@ -80,6 +80,7 @@ import { FindTool } from "./find";
 import { GrepTool } from "./grep";
 import { LsTool } from "./ls";
 import { NotebookTool } from "./notebook";
+import { wrapToolsWithMetaNotice } from "./output-meta";
 import { PythonTool } from "./python";
 import { ReadTool } from "./read";
 import { reportFindingTool } from "./review";
@@ -271,11 +272,12 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 				];
 	const results = await Promise.all(entries.map(([, factory]) => factory(session)));
 	const tools = results.filter((t): t is Tool => t !== null);
+	const wrappedTools = wrapToolsWithMetaNotice(tools);
 
 	if (filteredRequestedTools !== undefined) {
 		const allowed = new Set(filteredRequestedTools);
-		return tools.filter((tool) => allowed.has(tool.name));
+		return wrappedTools.filter((tool) => allowed.has(tool.name));
 	}
 
-	return tools;
+	return wrappedTools;
 }

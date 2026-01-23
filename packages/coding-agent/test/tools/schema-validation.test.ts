@@ -376,7 +376,6 @@ describe("tool schema validation (post-sanitization)", () => {
 			"ls",
 			"lsp",
 			"notebook",
-			"output",
 			"python",
 			"read",
 			"task",

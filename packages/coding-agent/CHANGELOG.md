@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added antigravity provider support for image generation with Google Cloud authentication
@@ -28,6 +27,11 @@
 
 ### Changed
 
+- Updated default line limit from 4000 to 3000 lines for output truncation
+- Reordered truncation notice to show offset continuation before artifact reference
+- Applied meta notice wrapper to all tools in createTools function
+- Updated test expectations to reflect new 3000 line limit
+- Removed output tool from schema validation test list
 - Replaced inline output truncation notices with structured metadata system across all tools
 - Updated bash, python, and ssh executors to track detailed output statistics (total lines/bytes vs output lines/bytes)
 - Modified artifact storage to use pre-allocated paths instead of inline file writing

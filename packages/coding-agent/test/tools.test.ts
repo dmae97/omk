@@ -9,6 +9,7 @@ import { FindTool } from "$c/tools/find";
 import { GrepTool } from "$c/tools/grep";
 import type { ToolSession } from "$c/tools/index";
 import { LsTool } from "$c/tools/ls";
+import { wrapToolWithMetaNotice } from "$c/tools/output-meta";
 import { ReadTool } from "$c/tools/read";
 import { WriteTool } from "$c/tools/write";
 import * as shellModule from "$c/utils/shell";
@@ -54,13 +55,13 @@ describe("Coding Agent Tools", () => {
 
 		// Create tools for this test directory
 		const session = createTestToolSession(testDir);
-		readTool = new ReadTool(session);
-		writeTool = new WriteTool(session);
-		editTool = new EditTool(session);
-		bashTool = new BashTool(session);
-		grepTool = new GrepTool(session);
-		findTool = new FindTool(session);
-		lsTool = new LsTool(session);
+		readTool = wrapToolWithMetaNotice(new ReadTool(session));
+		writeTool = wrapToolWithMetaNotice(new WriteTool(session));
+		editTool = wrapToolWithMetaNotice(new EditTool(session));
+		bashTool = wrapToolWithMetaNotice(new BashTool(session));
+		grepTool = wrapToolWithMetaNotice(new GrepTool(session));
+		findTool = wrapToolWithMetaNotice(new FindTool(session));
+		lsTool = wrapToolWithMetaNotice(new LsTool(session));
 	});
 
 	afterEach(() => {
@@ -86,7 +87,7 @@ describe("Coding Agent Tools", () => {
 			expect(getTextOutput(result)).toBe(content);
 			// No truncation message since file fits within limits
 			expect(getTextOutput(result)).not.toContain("Use offset=");
-			expect(result.details).toBeUndefined();
+			expect(result.details?.truncation).toBeUndefined();
 		});
 
 		it("should handle non-existent files", async () => {
@@ -97,22 +98,22 @@ describe("Coding Agent Tools", () => {
 
 		it("should truncate files exceeding line limit", async () => {
 			const testFile = join(testDir, "large.txt");
-			const lines = Array.from({ length: 2500 }, (_, i) => `Line ${i + 1}`);
+			const lines = Array.from({ length: 3500 }, (_, i) => `Line ${i + 1}`);
 			writeFileSync(testFile, lines.join("\n"));
 
 			const result = await readTool.execute("test-call-3", { path: testFile });
 			const output = getTextOutput(result);
 
 			expect(output).toContain("Line 1");
-			expect(output).toContain("Line 2000");
-			expect(output).not.toContain("Line 2001");
-			expect(output).toContain("[Showing lines 1-2000 of 2500. Use offset=2001 to continue]");
+			expect(output).toContain("Line 3000");
+			expect(output).not.toContain("Line 3001");
+			expect(output).toContain("[Showing lines 1-3000 of 3500. Use offset=3001 to continue]");
 		});
 
 		it("should truncate when byte limit exceeded", async () => {
 			const testFile = join(testDir, "large-bytes.txt");
-			// Create file that exceeds 50KB byte limit but has fewer than 2000 lines
-			const lines = Array.from({ length: 500 }, (_, i) => `Line ${i + 1}: ${"x".repeat(200)}`);
+			// Create file that exceeds 50KB byte limit but has fewer than 3000 lines
+			const lines = Array.from({ length: 1000 }, (_, i) => `Line ${i + 1}: ${"x".repeat(200)}`);
 			writeFileSync(testFile, lines.join("\n"));
 
 			const result = await readTool.execute("test-call-4", { path: testFile });
@@ -120,7 +121,9 @@ describe("Coding Agent Tools", () => {
 
 			expect(output).toContain("Line 1:");
 			// Should show byte limit message
-			expect(output).toMatch(/\[Showing lines 1-\d+ of 500 \(.* limit\)\. Use offset=\d+ to continue\]/);
+			expect(output).toMatch(
+				/\[Showing lines 1-\d+ of 1000 \(\d+(\.\d+)?\s*KB limit\)\. Use offset=\d+ to continue\]/,
+			);
 		});
 
 		it("should handle offset parameter", async () => {
@@ -184,7 +187,7 @@ describe("Coding Agent Tools", () => {
 
 		it("should include truncation details when truncated", async () => {
 			const testFile = join(testDir, "large-file.txt");
-			const lines = Array.from({ length: 2500 }, (_, i) => `Line ${i + 1}`);
+			const lines = Array.from({ length: 3500 }, (_, i) => `Line ${i + 1}`);
 			writeFileSync(testFile, lines.join("\n"));
 
 			const result = await readTool.execute("test-call-9", { path: testFile });
@@ -193,8 +196,8 @@ describe("Coding Agent Tools", () => {
 			expect(result.details?.truncation).toBeDefined();
 			expect(result.details?.truncation?.truncated).toBe(true);
 			expect(result.details?.truncation?.truncatedBy).toBe("lines");
-			expect(result.details?.truncation?.totalLines).toBe(2500);
-			expect(result.details?.truncation?.outputLines).toBe(2000);
+			expect(result.details?.truncation?.totalLines).toBe(3500);
+			expect(result.details?.truncation?.outputLines).toBe(3000);
 		});
 
 		it("should detect image MIME type from file magic (not extension)", async () => {
@@ -467,7 +470,7 @@ function b() {
 			expect(output).toContain("context.txt-1- before");
 			expect(output).toContain("context.txt:2: match one");
 			expect(output).toContain("context.txt-3- after");
-			expect(output).toContain("[1 matches limit reached. Use limit=2 for more, or refine pattern]");
+			expect(output).toContain("[1 matches limit reached. Use limit=2 for more]");
 			// Ensure second match is not present
 			expect(output).not.toContain("match two");
 		});
