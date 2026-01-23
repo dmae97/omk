@@ -16,6 +16,7 @@ import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallb
 import { StringEnum } from "@oh-my-pi/pi-ai";
 import { Type } from "@sinclair/typebox";
 import type { Theme } from "../../../modes/interactive/theme/theme";
+import webSearchSystemPrompt from "../../../prompts/system/web-search.md" with { type: "text" };
 import webSearchDescription from "../../../prompts/tools/web-search.md" with { type: "text" };
 import type { CustomTool, CustomToolContext, RenderResultOptions } from "../../custom-tools/types";
 import { renderPromptTemplate } from "../../prompt-templates";
@@ -34,58 +35,25 @@ import { WebSearchProviderError } from "./types";
 
 /** Web search parameters schema */
 export const webSearchSchema = Type.Object({
-	// Common
 	query: Type.String({ description: "Search query" }),
 	provider: Type.Optional(
 		StringEnum(["auto", "exa", "anthropic", "perplexity"], {
 			description: "Search provider (default: auto)",
 		}),
 	),
-	limit: Type.Optional(Type.Number({ description: "Max results to return" })),
-
-	// Common (Anthropic & Perplexity)
-	system_prompt: Type.Optional(Type.String({ description: "System prompt for response style" })),
-	max_tokens: Type.Optional(
-		Type.Number({
-			description: "Max tokens, 1-16384 (default: 4096, Anthropic only)",
-			minimum: 1,
-			maximum: 16384,
-		}),
-	),
-
-	// Perplexity-specific
-	model: Type.Optional(
-		StringEnum(["sonar", "sonar-pro"], {
-			description: "Perplexity model: sonar or sonar-pro",
-		}),
-	),
-	search_recency_filter: Type.Optional(
+	recency: Type.Optional(
 		StringEnum(["day", "week", "month", "year"], {
 			description: "Recency filter (Perplexity)",
 		}),
 	),
-	search_domain_filter: Type.Optional(
-		Type.Array(Type.String(), { description: "Domain filter, prefix - to exclude (Perplexity)" }),
-	),
-	search_context_size: Type.Optional(
-		StringEnum(["low", "medium", "high"], { description: "Context size (Perplexity)" }),
-	),
-	return_related_questions: Type.Optional(Type.Boolean({ description: "Include related questions (Perplexity)" })),
+	limit: Type.Optional(Type.Number({ description: "Max results to return" })),
 });
 
 export type WebSearchParams = {
 	query: string;
 	provider?: "auto" | "exa" | "anthropic" | "perplexity";
+	recency?: "day" | "week" | "month" | "year";
 	limit?: number;
-	// Anthropic
-	system_prompt?: string;
-	max_tokens?: number;
-	// Perplexity
-	model?: "sonar" | "sonar-pro";
-	search_recency_filter?: "day" | "week" | "month" | "year";
-	search_domain_filter?: string[];
-	search_context_size?: "low" | "medium" | "high";
-	return_related_questions?: boolean;
 };
 
 /** Preferred provider set via settings (default: auto) */
@@ -277,19 +245,14 @@ async function executeWebSearch(
 			} else if (provider === "anthropic") {
 				response = await searchAnthropic({
 					query: params.query,
-					system_prompt: params.system_prompt,
-					max_tokens: params.max_tokens,
+					system_prompt: webSearchSystemPrompt,
 					num_results: params.limit,
 				});
 			} else {
 				response = await searchPerplexity({
 					query: params.query,
-					model: params.model,
-					system_prompt: params.system_prompt,
-					search_recency_filter: params.search_recency_filter,
-					search_domain_filter: params.search_domain_filter,
-					search_context_size: params.search_context_size,
-					return_related_questions: params.return_related_questions,
+					system_prompt: webSearchSystemPrompt,
+					search_recency_filter: params.recency,
 					num_results: params.limit,
 				});
 			}

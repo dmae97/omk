@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `isolated` option to run tasks in isolated git worktrees
@@ -9,6 +10,10 @@
 
 ### Changed
 
+- Simplified web-search tool parameters by removing advanced configuration options
+- Standardized web-search tool to use built-in system prompt for consistent response style
+- Updated web-search tool to use `recency` parameter instead of `search_recency_filter`
+- Removed `max_tokens`, `model`, `search_domain_filter`, `search_context_size`, and `return_related_questions` parameters from web-search tool
 - Restructured tool documentation with standardized sections for better consistency
 - Added `<output>` sections to all tool documentation to clarify return values
 - Reorganized tool instructions with clearer `<instruction>`, `<critical>`, and `<avoid>` sections

@@ -35,7 +35,6 @@ const applySearchToolPrefix = (name: string, isOAuth: boolean): string => {
 export interface AnthropicSearchParams {
 	query: string;
 	system_prompt?: string;
-	max_tokens?: number;
 	num_results?: number;
 }
 
@@ -51,7 +50,7 @@ async function getModel(): Promise<string> {
  * Builds system instruction blocks for the Anthropic API request.
  * @param auth - Authentication configuration
  * @param model - Model identifier (affects whether Claude Code instruction is included)
- * @param systemPrompt - Optional custom system prompt
+ * @param systemPrompt - Optional system prompt for guiding response style
  * @returns Array of system blocks for the API request
  */
 function buildSystemBlocks(
@@ -73,8 +72,7 @@ function buildSystemBlocks(
  * @param auth - Authentication configuration (API key or OAuth)
  * @param model - Model identifier to use
  * @param query - Search query from the user
- * @param systemPrompt - Optional custom system prompt
- * @param maxTokens - Maximum tokens for the response
+ * @param systemPrompt - Optional system prompt for guiding response style
  * @returns Raw API response from Anthropic
  * @throws {WebSearchProviderError} If the API request fails
  */
@@ -83,7 +81,6 @@ async function callWebSearch(
 	model: string,
 	query: string,
 	systemPrompt?: string,
-	maxTokens?: number,
 ): Promise<AnthropicApiResponse> {
 	const url = buildAnthropicUrl(auth);
 	const headers = buildAnthropicHeaders(auth);
@@ -92,7 +89,7 @@ async function callWebSearch(
 
 	const body: Record<string, unknown> = {
 		model,
-		max_tokens: maxTokens ?? DEFAULT_MAX_TOKENS,
+		max_tokens: DEFAULT_MAX_TOKENS,
 		messages: [{ role: "user", content: query }],
 		tools: [
 			{
@@ -240,7 +237,7 @@ export async function searchAnthropic(params: AnthropicSearchParams): Promise<We
 	}
 
 	const model = await getModel();
-	const response = await callWebSearch(auth, model, params.query, params.system_prompt, params.max_tokens);
+	const response = await callWebSearch(auth, model, params.query, params.system_prompt);
 
 	const result = parseResponse(response);
 

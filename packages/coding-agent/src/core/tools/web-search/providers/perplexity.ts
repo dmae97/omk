@@ -19,12 +19,8 @@ const PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions";
 
 export interface PerplexitySearchParams {
 	query: string;
-	model?: "sonar" | "sonar-pro";
 	system_prompt?: string;
 	search_recency_filter?: "day" | "week" | "month" | "year";
-	search_domain_filter?: string[];
-	search_context_size?: "low" | "medium" | "high";
-	return_related_questions?: boolean;
 	num_results?: number;
 }
 
@@ -171,21 +167,13 @@ export async function searchPerplexity(params: PerplexitySearchParams): Promise<
 	messages.push({ role: "user", content: params.query });
 
 	const request: PerplexityRequest = {
-		model: params.model ?? "sonar",
+		model: "sonar",
 		messages,
-		// Default to true for related questions (unlike original which hardcoded false)
-		return_related_questions: params.return_related_questions ?? true,
+		return_related_questions: true,
 	};
 
-	// Add optional parameters
 	if (params.search_recency_filter) {
 		request.search_recency_filter = params.search_recency_filter;
-	}
-	if (params.search_domain_filter && params.search_domain_filter.length > 0) {
-		request.search_domain_filter = params.search_domain_filter;
-	}
-	if (params.search_context_size) {
-		request.search_context_size = params.search_context_size;
 	}
 
 	const response = await callPerplexity(apiKey, request);
