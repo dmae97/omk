@@ -7,6 +7,7 @@
 import { StringEnum } from "@oh-my-pi/pi-ai";
 import { Type } from "@sinclair/typebox";
 import type { CustomTool } from "../../custom-tools/types";
+import { callExaTool, findApiKey, formatSearchResults, isSearchResponse } from "./mcp-client";
 import type { ExaRenderDetails } from "./types";
 
 /** exa_search - Basic neural/keyword search */
@@ -82,9 +83,6 @@ Parameters:
 
 	async execute(_toolCallId, params, _onUpdate, _ctx, _signal) {
 		try {
-			// Dynamic imports to avoid circular dependencies
-			const { findApiKey, callExaTool, formatSearchResults, isSearchResponse } = await import("./mcp-client.js");
-
 			const apiKey = await findApiKey();
 			if (!apiKey) {
 				return {
@@ -179,8 +177,6 @@ Similar parameters to exa_search, optimized for research depth.`,
 
 	async execute(_toolCallId, params, _onUpdate, _ctx, _signal) {
 		try {
-			const { findApiKey, callExaTool, formatSearchResults, isSearchResponse } = await import("./mcp-client.js");
-
 			const apiKey = await findApiKey();
 			if (!apiKey) {
 				return {
@@ -236,8 +232,6 @@ Parameters:
 
 	async execute(_toolCallId, params, _onUpdate, _ctx, _signal) {
 		try {
-			const { findApiKey, callExaTool, formatSearchResults, isSearchResponse } = await import("./mcp-client.js");
-
 			const apiKey = await findApiKey();
 			if (!apiKey) {
 				return {
@@ -298,8 +292,6 @@ Parameters:
 
 	async execute(_toolCallId, params, _onUpdate, _ctx, _signal) {
 		try {
-			const { findApiKey, callExaTool, formatSearchResults, isSearchResponse } = await import("./mcp-client.js");
-
 			const apiKey = await findApiKey();
 			if (!apiKey) {
 				return {

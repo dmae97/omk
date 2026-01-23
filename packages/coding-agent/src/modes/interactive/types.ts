@@ -28,7 +28,6 @@ export type CompactionQueuedMessage = {
 export type TodoItem = {
 	id: string;
 	content: string;
-	activeForm: string;
 	status: "pending" | "in_progress" | "completed";
 };
 

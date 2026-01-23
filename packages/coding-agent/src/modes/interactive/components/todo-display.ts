@@ -80,8 +80,7 @@ export class TodoDisplayComponent {
 				text = theme.fg("success", `${prefix}${checkbox} ${theme.strikethrough(todo.content)}`);
 			} else if (todo.status === "in_progress") {
 				checkbox = theme.checkbox.unchecked;
-				const displayText = todo.activeForm !== todo.content ? todo.activeForm : todo.content;
-				text = theme.fg("accent", `${prefix}${checkbox} ${displayText}`);
+				text = theme.fg("accent", `${prefix}${checkbox} ${todo.content}`);
 			} else {
 				checkbox = theme.checkbox.unchecked;
 				text = theme.fg("dim", `${prefix}${checkbox} ${todo.content}`);

@@ -396,7 +396,7 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	private formatTodoLine(todo: TodoItem, prefix: string): string {
 		const checkbox = theme.checkbox;
-		const label = todo.status === "in_progress" ? todo.activeForm : todo.content;
+		const label = todo.content;
 		switch (todo.status) {
 			case "completed":
 				return theme.fg("success", `${prefix}${checkbox.checked} ${chalk.strikethrough(todo.content)}`);

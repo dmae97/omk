@@ -6,6 +6,7 @@
 
 import { Type } from "@sinclair/typebox";
 import type { CustomTool } from "../../custom-tools/types";
+import { callExaTool, findApiKey, formatSearchResults, isSearchResponse } from "./mcp-client";
 import type { ExaRenderDetails } from "./types";
 
 /** exa_linkedin - LinkedIn search */
@@ -25,8 +26,6 @@ Parameters:
 
 	async execute(_toolCallId, params, _onUpdate, _ctx, _signal) {
 		try {
-			const { findApiKey, callExaTool, formatSearchResults, isSearchResponse } = await import("./mcp-client.js");
-
 			const apiKey = await findApiKey();
 			if (!apiKey) {
 				return {

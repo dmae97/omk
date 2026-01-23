@@ -310,15 +310,6 @@ The extension system uses a shared runtime pattern:
 3. **ExtensionAPI**: Per-extension API that writes registrations to Extension and delegates actions to runtime
 4. **ExtensionRunner**: Orchestrates event dispatch and provides context to handlers
 
-Extension factories can now be async, enabling dynamic imports and lazy loading:
-
-```typescript
-const myExtension: ExtensionFactory = async (pi) => {
-  const dep = await import("heavy-dependency");
-  pi.registerTool({ ... });
-};
-```
-
 Key extension events:
 
 - `before_agent_start`: Receives `systemPrompt` and can return full replacement (not just append)

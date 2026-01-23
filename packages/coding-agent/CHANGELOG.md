@@ -1,171 +1,46 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
-- Added internal URL routing system with `agent://` and `skill://` protocol handlers
-- Added `agent://<id>` URLs to access agent output artifacts via read/fetch tools
-- Added `agent://<id>/<path>` and `agent://<id>?q=<query>` for JSON extraction from agent outputs
-- Added `skill://<name>` URLs to read skill files without exposing filesystem paths
-- Added `skill://<name>/<path>` to read relative paths within skill directories
-- Added `rule://<name>` URLs to read rule content without exposing filesystem paths
-- Internal URL resolution now includes filesystem path in output for bash/python interop
-- Added format-prompts script to standardize prompt file formatting with XML and Handlebars block rules
+- Added internal URL routing system with protocol handlers:
+  - `agent://<id>` - access agent output artifacts
+  - `agent://<id>/<path>` and `agent://<id>?q=<query>` - JSON extraction from agent outputs
+  - `skill://<name>` and `skill://<name>/<path>` - read skill files and relative paths
+  - `rule://<name>` - read rule content
+  - URL resolution includes filesystem path in output for bash/python interop
 - Added fetch tool for URL content retrieval with enhanced processing capabilities
-- Added `isolated` option to run tasks in isolated git worktrees
-- Added automatic patch generation and application for isolated task execution
-- Added worktree management for isolated task execution with baseline capture and delta patching
-- Added internal URL routing system with `agent://` and `skill://` protocol handlers
-- Added `agent://<id>` URLs to access agent output artifacts via read/fetch tools
-- Added `agent://<id>/<path>` and `agent://<id>?q=<query>` for JSON extraction from agent outputs
-- Added `skill://<name>` URLs to read skill files without exposing filesystem paths
-- Added `skill://<name>/<path>` to read relative paths within skill directories
-- Added `rule://<name>` URLs to read rule content without exposing filesystem paths
-- Internal URL resolution now includes filesystem path in output for bash/python interop
-- Added format-prompts script to standardize prompt file formatting with XML and Handlebars block rules
-- Added fetch tool for URL content retrieval with enhanced processing capabilities
-- Added `isolated` option to run tasks in isolated git worktrees
-- Added automatic patch generation and application for isolated task execution
-- Added worktree management for isolated task execution with baseline capture and delta patching
+- Added `isolated` option to task tool for git worktree execution with automatic patch generation and application
+- Added format-prompts script to standardize prompt file formatting
 
 ### Changed
 
-- Renamed task parameter from `vars` to `args` throughout task tool interface
-- Updated task template rendering to auto-append assignment block when no placeholders used
-- Simplified task template validation by removing strict placeholder requirements
-- Updated task progress and result interfaces to use `args` instead of `vars`
-- Modified task rendering to display `Args` instead of `Vars` in output
-- Enhanced task template to support built-in `{{id}}` and `{{description}}` placeholders
-- Removed mandatory CHECKPOINT step requirement for all tasks
-- Updated task tool documentation to reflect new `args` parameter structure
-- Removed internal URL handling from fetch tool to use read tool instead
-- Updated fetch tool documentation to remove internal URL references
-- Updated task tool documentation to reference read tool instead of fetch for agent:// URLs
-- Updated skill paths in system prompt to use `skill://` URLs instead of filesystem paths
-- Updated rule paths in system prompt to use `rule://` URLs instead of filesystem paths
-- Simplified todo-write tool by removing active_form parameter requirement
-- Updated todo-write tool to use single content field for task descriptions
-- Modified todo-write display logic to show content instead of active_form for in-progress tasks
-- Updated system prompt to use `<important>` and `<avoid>` tags instead of `<required>` and `<antipatterns>`
-- Enhanced prompt formatting by removing unnecessary blank lines after colons and around XML/Handlebars blocks
-- Improved system prompt structure with clearer critical sections for git operations and parallel processing
-- Standardized whitespace handling across all prompt files for better consistency
-- Updated task decomposition guidance with clearer triggers for using Task tool
-- Added mandatory CHECKPOINT step for task evaluation before first tool call
-- Enhanced skills and rules checking with explicit validation requirements
-- Improved task decomposition criteria with dependency analysis
-- Added failure conditions for checkpoint and parallel processing validation
-- Renamed web_fetch tool to fetch for consistency and brevity
-- Updated output tool to automatically convert JSON to YAML for better readability
-- Removed format parameter from output tool to simplify usage
-- Improved bash tool output truncation to 50KB or 2000 lines
-- Updated python tool output truncation limit to 100KB
-- Enhanced grep tool documentation for different output modes
-- Updated read tool documentation to clarify supported file types
-- Improved write tool documentation to mention LSP auto-formatting
-- Simplified web-search tool parameters by removing advanced configuration options
-- Standardized web-search tool to use built-in system prompt for consistent response style
-- Updated web-search tool to use `recency` parameter instead of `search_recency_filter`
-- Removed `max_tokens`, `model`, `search_domain_filter`, `search_context_size`, and `return_related_questions` parameters from web-search tool
-- Restructured tool documentation with standardized sections for better consistency
-- Added `<output>` sections to all tool documentation to clarify return values
-- Reorganized tool instructions with clearer `<instruction>`, `<critical>`, and `<avoid>` sections
-- Simplified tool parameter descriptions and examples for better readability
-- Standardized tool documentation format across all 18 tools
-- Improved tool guidance with more specific do/don't instructions
-- Enhanced tool examples with better formatting and clearer use cases
-- Updated bash tool timeout parameter to default 300 seconds with auto-conversion from milliseconds
-- Updated python tool timeout parameter from timeout_ms to timeout with default 30 seconds
-- Updated ssh tool timeout parameter to default 60 seconds with auto-conversion from milliseconds
-- Updated gemini-image tool timeout parameter from timeout_seconds to timeout with default 120 seconds
-- Updated web-fetch tool timeout parameter to remove maximum limit and improve handling
-- Updated web-search tool parameter from num_results to limit for result count
-- Improved task output formatting to display single variables inline without tree structure
-- Updated MCP tool name handling to use direct server and tool name properties instead of parsing normalized names
-- Improved MCP tool metadata extraction to use explicit mcpToolName and mcpServerName properties
-- Updated edit tool parameters from camelCase to snake_case (oldText → old_text, newText → new_text)
-- Updated grep tool parameters from camelCase to snake_case (ignoreCase → ignore_case, caseSensitive → case_sensitive, outputMode → output_mode, headLimit → head_limit)
-- Updated python tool parameters from camelCase to snake_case (timeoutMs → timeout_ms)
-- Updated todo-write tool parameters from camelCase to snake_case (activeForm → active_form)
-- Updated MCP tool name parsing to handle redundant server name prefixes
-- Marked read tool as non-abortable to improve performance
-- Simplified tool parameter descriptions across all tools for brevity
+- Renamed task parameter from `vars` to `args` throughout task tool interface and updated template rendering to support built-in `{{id}}` and `{{description}}` placeholders
+- Simplified todo-write tool by removing active_form parameter, using single content field for task descriptions
+- Updated system prompt structure with `<important>` and `<avoid>` tags, clearer critical sections, and standardized whitespace handling
+- Renamed web_fetch tool to fetch and removed internal URL handling (use read tool instead)
+- Standardized tool parameter names from camelCase to snake_case across edit, grep, python, and todo-write tools
+- Unified timeout parameters across all tools with auto-conversion from milliseconds and reasonable clamping (1s-3600s for bash/ssh, 1s-600s for python/gemini-image)
+- Simplified web-search tool by removing advanced parameters (`max_tokens`, `model`, `search_domain_filter`, `search_context_size`, `return_related_questions`) and using `recency` instead of `search_recency_filter`
+- Restructured tool documentation with standardized `<instruction>`, `<output>`, `<critical>`, and `<avoid>` sections across all 18 tools
 - Updated find tool to always sort results by modification time
-- Changed web-fetch timeout default from 20s to 45s maximum
 - Updated bash prompt to use `cwd` parameter instead of `workdir`
-- Simplified tool prompt documentation for better readability
-- Removed model parameter from task tool to use session model by default
-- Removed model parameter from gemini-image tool to use provider defaults
-- Improved variable display in task output with humanized keys for single variables
-- Updated skill paths in system prompt to use `skill://` URLs instead of filesystem paths
-- Updated rule paths in system prompt to use `rule://` URLs instead of filesystem paths
-- Simplified todo-write tool by removing active_form parameter requirement
-- Updated todo-write tool to use single content field for task descriptions
-- Modified todo-write display logic to show content instead of active_form for in-progress tasks
-- Updated system prompt to use `<important>` and `<avoid>` tags instead of `<required>` and `<antipatterns>`
-- Enhanced prompt formatting by removing unnecessary blank lines after colons and around XML/Handlebars blocks
-- Improved system prompt structure with clearer critical sections for git operations and parallel processing
-- Standardized whitespace handling across all prompt files for better consistency
-- Updated task decomposition guidance with clearer triggers for using Task tool
-- Added mandatory CHECKPOINT step for task evaluation before first tool call
-- Enhanced skills and rules checking with explicit validation requirements
-- Improved task decomposition criteria with dependency analysis
-- Added failure conditions for checkpoint and parallel processing validation
-- Renamed web_fetch tool to fetch for consistency and brevity
-- Updated output tool to automatically convert JSON to YAML for better readability
-- Removed format parameter from output tool to simplify usage
-- Improved bash tool output truncation to 50KB or 2000 lines
-- Updated python tool output truncation limit to 100KB
-- Enhanced grep tool documentation for different output modes
-- Updated read tool documentation to clarify supported file types
-- Improved write tool documentation to mention LSP auto-formatting
-- Simplified web-search tool parameters by removing advanced configuration options
-- Standardized web-search tool to use built-in system prompt for consistent response style
-- Updated web-search tool to use `recency` parameter instead of `search_recency_filter`
-- Removed `max_tokens`, `model`, `search_domain_filter`, `search_context_size`, and `return_related_questions` parameters from web-search tool
-- Restructured tool documentation with standardized sections for better consistency
-- Added `<output>` sections to all tool documentation to clarify return values
-- Reorganized tool instructions with clearer `<instruction>`, `<critical>`, and `<avoid>` sections
-- Simplified tool parameter descriptions and examples for better readability
-- Standardized tool documentation format across all 18 tools
-- Improved tool guidance with more specific do/don't instructions
-- Enhanced tool examples with better formatting and clearer use cases
-- Updated bash tool timeout parameter to default 300 seconds with auto-conversion from milliseconds
-- Updated python tool timeout parameter from timeout_ms to timeout with default 30 seconds
-- Updated ssh tool timeout parameter to default 60 seconds with auto-conversion from milliseconds
-- Updated gemini-image tool timeout parameter from timeout_seconds to timeout with default 120 seconds
-- Updated web-fetch tool timeout parameter to remove maximum limit and improve handling
-- Updated web-search tool parameter from num_results to limit for result count
-- Improved task output formatting to display single variables inline without tree structure
-- Updated MCP tool name handling to use direct server and tool name properties instead of parsing normalized names
-- Improved MCP tool metadata extraction to use explicit mcpToolName and mcpServerName properties
-- Updated edit tool parameters from camelCase to snake_case (oldText → old_text, newText → new_text)
-- Updated grep tool parameters from camelCase to snake_case (ignoreCase → ignore_case, caseSensitive → case_sensitive, outputMode → output_mode, headLimit → head_limit)
-- Updated python tool parameters from camelCase to snake_case (timeoutMs → timeout_ms)
-- Updated todo-write tool parameters from camelCase to snake_case (activeForm → active_form)
-- Updated MCP tool name parsing to handle redundant server name prefixes
+- Improved output truncation limits: bash to 50KB/2000 lines, python to 100KB
+- Removed model parameter from task and gemini-image tools to use session/provider defaults
+- Improved MCP tool name handling with explicit server and tool name properties
 - Marked read tool as non-abortable to improve performance
-- Simplified tool parameter descriptions across all tools for brevity
-- Updated find tool to always sort results by modification time
-- Changed web-fetch timeout default from 20s to 45s maximum
-- Updated bash prompt to use `cwd` parameter instead of `workdir`
-- Simplified tool prompt documentation for better readability
-- Removed model parameter from task tool to use session model by default
-- Removed model parameter from gemini-image tool to use provider defaults
-- Improved variable display in task output with humanized keys for single variables
+- Converted dynamic imports to static imports in installer and exa tools
 
 ### Removed
 
-- Removed output tool (replaced by `agent://` URLs via read/fetch tools)
-- Removed web_fetch tool (replaced by fetch tool)
-- Removed output tool (replaced by `agent://` URLs via read/fetch tools)
+- Removed output tool (replaced by `agent://` URLs via read tool)
 - Removed web_fetch tool (replaced by fetch tool)
 
 ### Fixed
 
+- Fixed timeout parameter handling to auto-convert milliseconds to seconds and clamp to reasonable ranges
 - Fixed whitespace formatting in json-query.ts comment
-- Added timeout clamping to reasonable ranges across all tools (1s to 3600s for bash/ssh, 1s to 600s for python/gemini-image)
-- Fixed timeout parameter handling to auto-convert milliseconds to seconds when value exceeds 1000
 
 ## [7.0.0] - 2026-01-21
 ### Added

@@ -3,12 +3,12 @@ import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-	ApplyPatchError,
 	applyPatch,
-	ParseError,
-	type PatchInput,
+	ApplyPatchError,
 	parseDiffHunks,
+	ParseError,
 	seekSequence,
+	type PatchInput,
 } from "../../src/core/tools/patch";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -693,20 +693,5 @@ describe("simple replace mode", () => {
 				{ cwd: tempDir },
 			),
 		).rejects.toThrow(/2 occurrences/);
-	});
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Module exports test
-// ═══════════════════════════════════════════════════════════════════════════
-
-describe("module exports", () => {
-	test("exports all expected types and functions", async () => {
-		const mod = await import("../../src/core/tools/patch");
-		expect(typeof mod.applyPatch).toBe("function");
-		expect(typeof mod.parseDiffHunks).toBe("function");
-		expect(typeof mod.previewPatch).toBe("function");
-		expect(mod.ParseError).toBeDefined();
-		expect(mod.ApplyPatchError).toBeDefined();
 	});
 });

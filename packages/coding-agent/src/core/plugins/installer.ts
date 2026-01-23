@@ -1,3 +1,4 @@
+import { lstatSync, symlinkSync, unlinkSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { getAgentDir } from "../../config";
@@ -176,7 +177,6 @@ export async function linkPlugin(localPath: string): Promise<void> {
 
 	// Remove existing if present
 	try {
-		const { unlinkSync, lstatSync } = await import("fs");
 		const stat = lstatSync(linkPath);
 		if (stat.isSymbolicLink() || stat.isDirectory()) {
 			unlinkSync(linkPath);
@@ -186,6 +186,5 @@ export async function linkPlugin(localPath: string): Promise<void> {
 	}
 
 	// Create symlink using fs instead of shell command
-	const { symlinkSync } = await import("fs");
 	symlinkSync(absolutePath, linkPath);
 }
