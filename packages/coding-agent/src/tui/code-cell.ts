@@ -75,7 +75,7 @@ export function renderCodeCell(options: CodeCellOptions, theme: Theme): string[]
 	const { title, meta } = formatHeader(options, theme);
 	const state = getState(options.status);
 
-	const rawCodeLines = highlightCode(replaceTabs(code), language);
+	const rawCodeLines = highlightCode(replaceTabs(code ?? ""), language);
 	const maxCodeLines = expanded ? rawCodeLines.length : Math.min(rawCodeLines.length, codeMaxLines);
 	const codeLines = rawCodeLines.slice(0, maxCodeLines);
 	const hiddenCodeLines = rawCodeLines.length - codeLines.length;

@@ -70,6 +70,7 @@
 - Fixed database busy errors during concurrent access by adding retry logic with exponential backoff when opening storage
 - Find tool now rejects searches from root directory and enforces a 5-second timeout on fd operations
 - Commit command now exits cleanly with exit code 0 on success
+- Handle undefined code parameter in code cell renderer
 ## [8.0.0] - 2026-01-23
 ### Added
 
