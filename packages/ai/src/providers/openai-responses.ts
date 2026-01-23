@@ -507,6 +507,15 @@ function convertMessages(
 			}
 		} else if (msg.role === "assistant") {
 			const output: ResponseInput = [];
+			const assistantMsg = msg as AssistantMessage;
+
+			// Check if this message is from a different model (same provider, different model ID).
+			// For such messages, tool call IDs with fc_ prefix need to be stripped to avoid
+			// OpenAI's reasoning/function_call pairing validation errors.
+			const isDifferentModel =
+				assistantMsg.model !== model.id &&
+				assistantMsg.provider === model.provider &&
+				assistantMsg.api === model.api;
 
 			for (const block of msg.content) {
 				// Do not submit thinking blocks if the completion had an error (i.e. abort)
@@ -535,11 +544,19 @@ function convertMessages(
 				} else if (block.type === "toolCall" && msg.stopReason !== "error") {
 					const toolCall = block as ToolCall;
 					const normalized = normalizeResponsesToolCallId(toolCall.id);
+					const callId = normalized.callId;
+					// For different-model messages, set id to undefined to avoid pairing validation.
+					// OpenAI tracks which fc_xxx IDs were paired with rs_xxx reasoning items.
+					// By omitting the id, we avoid triggering that validation (like cross-provider does).
+					let itemId: string | undefined = normalized.itemId;
+					if (isDifferentModel && itemId?.startsWith("fc_")) {
+						itemId = undefined;
+					}
 					knownCallIds.add(normalized.callId);
 					output.push({
 						type: "function_call",
-						id: normalized.itemId,
-						call_id: normalized.callId,
+						id: itemId,
+						call_id: callId,
 						name: toolCall.name,
 						arguments: JSON.stringify(toolCall.arguments),
 					});
