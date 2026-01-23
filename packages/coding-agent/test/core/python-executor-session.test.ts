@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
-import { disposeAllKernelSessions, executePython } from "../../src/core/python-executor";
-import * as pythonKernel from "../../src/core/python-kernel";
+import { disposeAllKernelSessions, executePython } from "$c/core/python-executor";
+import * as pythonKernel from "$c/core/python-kernel";
 
 class FakeKernel {
 	executeCalls = 0;

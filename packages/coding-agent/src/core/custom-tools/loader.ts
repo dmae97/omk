@@ -8,15 +8,15 @@
 import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import * as typebox from "@sinclair/typebox";
-import { toolCapability } from "../../capability/tool";
-import { type CustomTool, loadCapability } from "../../discovery";
-import { expandPath } from "../../discovery/helpers";
-import * as piCodingAgent from "../../index";
-import { theme } from "../../modes/interactive/theme/theme";
-import type { ExecOptions } from "../exec";
-import { execCommand } from "../exec";
-import type { HookUIContext } from "../hooks/types";
-import { getAllPluginToolPaths } from "../plugins/loader";
+import { toolCapability } from "$c/capability/tool";
+import type { ExecOptions } from "$c/core/exec";
+import { execCommand } from "$c/core/exec";
+import type { HookUIContext } from "$c/core/hooks/types";
+import { getAllPluginToolPaths } from "$c/core/plugins/loader";
+import { type CustomTool, loadCapability } from "$c/discovery";
+import { expandPath } from "$c/discovery/helpers";
+import * as piCodingAgent from "$c/index";
+import { theme } from "$c/modes/interactive/theme/theme";
 import type { CustomToolAPI, CustomToolFactory, LoadedCustomTool, ToolLoadError } from "./types";
 
 /**

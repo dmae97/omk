@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { transformMessages } from "../src/providers/transform-messages";
-import type { AssistantMessage, Model, ToolResultMessage } from "../src/types";
+import { transformMessages } from "$ai/providers/transform-messages";
+import type { AssistantMessage, Model, ToolResultMessage } from "$ai/types";
 
 /**
  * Regression test for: "each tool_use must have a single result. Found multiple tool_result blocks with id"

@@ -1,7 +1,7 @@
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Container, Text } from "@oh-my-pi/pi-tui";
-import { shortenPath } from "../../../core/tools/render-utils";
-import { theme } from "../theme/theme";
+import { shortenPath } from "$c/core/tools/render-utils";
+import { theme } from "$c/modes/interactive/theme/theme";
 import type { ToolExecutionHandle } from "./tool-execution";
 
 type ReadRenderArgs = {

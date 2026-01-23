@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { ptree } from "@oh-my-pi/pi-utils";
 import { nanoid } from "nanoid";
-import { ensureTool } from "../../../utils/tools-manager";
+import { ensureTool } from "$c/utils/tools-manager";
 import { createRequestSignal } from "./types";
 
 const MAX_BYTES = 50 * 1024 * 1024; // 50MB for binary files

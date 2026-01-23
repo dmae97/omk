@@ -9,7 +9,7 @@ import {
 	type PatchInput,
 	parseDiffHunks,
 	seekSequence,
-} from "../../src/core/tools/patch";
+} from "$c/core/tools/patch";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Legacy parser for test fixtures (*** Begin Patch format)

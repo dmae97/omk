@@ -15,16 +15,21 @@
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
 import { Type } from "@sinclair/typebox";
-import type { Theme } from "../../../modes/interactive/theme/theme";
-import webSearchSystemPrompt from "../../../prompts/system/web-search.md" with { type: "text" };
-import webSearchDescription from "../../../prompts/tools/web-search.md" with { type: "text" };
-import type { CustomTool, CustomToolContext, RenderResultOptions } from "../../custom-tools/types";
-import { renderPromptTemplate } from "../../prompt-templates";
-import { callExaTool, findApiKey as findExaKey, formatSearchResults, isSearchResponse } from "../exa/mcp-client";
-import { renderExaCall, renderExaResult } from "../exa/render";
-import type { ExaRenderDetails } from "../exa/types";
-import type { ToolSession } from "../index";
-import { formatAge } from "../render-utils";
+import type { CustomTool, CustomToolContext, RenderResultOptions } from "$c/core/custom-tools/types";
+import { renderPromptTemplate } from "$c/core/prompt-templates";
+import {
+	callExaTool,
+	findApiKey as findExaKey,
+	formatSearchResults,
+	isSearchResponse,
+} from "$c/core/tools/exa/mcp-client";
+import { renderExaCall, renderExaResult } from "$c/core/tools/exa/render";
+import type { ExaRenderDetails } from "$c/core/tools/exa/types";
+import type { ToolSession } from "$c/core/tools/index";
+import { formatAge } from "$c/core/tools/render-utils";
+import type { Theme } from "$c/modes/interactive/theme/theme";
+import webSearchSystemPrompt from "$c/prompts/system/web-search.md" with { type: "text" };
+import webSearchDescription from "$c/prompts/tools/web-search.md" with { type: "text" };
 import { findAnthropicAuth } from "./auth";
 import { searchAnthropic } from "./providers/anthropic";
 import { searchExa } from "./providers/exa";

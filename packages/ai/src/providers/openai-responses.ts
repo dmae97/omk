@@ -10,8 +10,8 @@ import type {
 	ResponseOutputMessage,
 	ResponseReasoningItem,
 } from "openai/resources/responses/responses";
-import { calculateCost } from "../models";
-import { getEnvApiKey } from "../stream";
+import { calculateCost } from "$ai/models";
+import { getEnvApiKey } from "$ai/stream";
 import type {
 	Api,
 	AssistantMessage,
@@ -24,11 +24,11 @@ import type {
 	ThinkingContent,
 	Tool,
 	ToolCall,
-} from "../types";
-import { AssistantMessageEventStream } from "../utils/event-stream";
-import { parseStreamingJson } from "../utils/json-parse";
-import { formatErrorMessageWithRetryAfter } from "../utils/retry-after";
-import { sanitizeSurrogates } from "../utils/sanitize-unicode";
+} from "$ai/types";
+import { AssistantMessageEventStream } from "$ai/utils/event-stream";
+import { parseStreamingJson } from "$ai/utils/json-parse";
+import { formatErrorMessageWithRetryAfter } from "$ai/utils/retry-after";
+import { sanitizeSurrogates } from "$ai/utils/sanitize-unicode";
 import { transformMessages } from "./transform-messages";
 
 /** Fast deterministic hash to shorten long strings */

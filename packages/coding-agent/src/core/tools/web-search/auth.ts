@@ -12,10 +12,10 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { buildAnthropicHeaders as buildProviderAnthropicHeaders } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
-import { getAgentDbPath, getConfigDirPaths } from "../../../config";
-import { AgentStorage } from "../../agent-storage";
-import type { AuthCredential, AuthCredentialEntry, AuthStorageData } from "../../auth-storage";
-import { migrateJsonStorage } from "../../storage-migration";
+import { getAgentDbPath, getConfigDirPaths } from "$c/config";
+import { AgentStorage } from "$c/core/agent-storage";
+import type { AuthCredential, AuthCredentialEntry, AuthStorageData } from "$c/core/auth-storage";
+import { migrateJsonStorage } from "$c/core/storage-migration";
 import type { AnthropicAuthConfig, AnthropicOAuthCredential, ModelsJson } from "./types";
 
 const DEFAULT_BASE_URL = "https://api.anthropic.com";

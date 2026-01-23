@@ -1,5 +1,5 @@
 // biome-ignore assist/source/organizeImports: biome is not smart
-export type { ReadonlySessionManager, UsageStatistics } from "../session-manager";
+export type { ReadonlySessionManager, UsageStatistics } from "$c/core/session-manager";
 export {
 	discoverAndLoadHooks,
 	loadHooks,

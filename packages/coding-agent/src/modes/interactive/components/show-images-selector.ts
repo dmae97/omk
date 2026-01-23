@@ -1,5 +1,5 @@
 import { Container, type SelectItem, SelectList } from "@oh-my-pi/pi-tui";
-import { getSelectListTheme } from "../theme/theme";
+import { getSelectListTheme } from "$c/modes/interactive/theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 
 /**

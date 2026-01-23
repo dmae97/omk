@@ -6,7 +6,7 @@
  */
 
 import { applyClaudeToolPrefix, buildAnthropicSystemBlocks, stripClaudeToolPrefix } from "@oh-my-pi/pi-ai";
-import { buildAnthropicHeaders, buildAnthropicUrl, findAnthropicAuth, getEnv } from "../auth";
+import { buildAnthropicHeaders, buildAnthropicUrl, findAnthropicAuth, getEnv } from "$c/core/tools/web-search/auth";
 import type {
 	AnthropicApiResponse,
 	AnthropicAuthConfig,
@@ -14,8 +14,8 @@ import type {
 	WebSearchCitation,
 	WebSearchResponse,
 	WebSearchSource,
-} from "../types";
-import { WebSearchProviderError } from "../types";
+} from "$c/core/tools/web-search/types";
+import { WebSearchProviderError } from "$c/core/tools/web-search/types";
 
 const DEFAULT_MODEL = "claude-haiku-4-5";
 const DEFAULT_MAX_TOKENS = 4096;

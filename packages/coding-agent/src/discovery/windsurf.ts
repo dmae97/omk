@@ -11,12 +11,12 @@
  * - Legacy .windsurfrules file
  */
 
-import { readFile } from "../capability/fs";
-import { registerProvider } from "../capability/index";
-import { type MCPServer, mcpCapability } from "../capability/mcp";
-import { type Rule, ruleCapability } from "../capability/rule";
-import type { LoadContext, LoadResult } from "../capability/types";
-import { parseFrontmatter } from "../core/frontmatter";
+import { readFile } from "$c/capability/fs";
+import { registerProvider } from "$c/capability/index";
+import { type MCPServer, mcpCapability } from "$c/capability/mcp";
+import { type Rule, ruleCapability } from "$c/capability/rule";
+import type { LoadContext, LoadResult } from "$c/capability/types";
+import { parseFrontmatter } from "$c/core/frontmatter";
 import {
 	createSourceMeta,
 	expandEnvVarsDeep,

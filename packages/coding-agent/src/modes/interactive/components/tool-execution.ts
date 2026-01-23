@@ -11,12 +11,12 @@ import {
 	type TUI,
 } from "@oh-my-pi/pi-tui";
 import { sanitizeText } from "@oh-my-pi/pi-utils";
-import { BASH_DEFAULT_PREVIEW_LINES } from "../../../core/tools/bash";
-import { computeEditDiff, computePatchDiff, type EditDiffError, type EditDiffResult } from "../../../core/tools/patch";
-import { PYTHON_DEFAULT_PREVIEW_LINES } from "../../../core/tools/python";
-import { toolRenderers } from "../../../core/tools/renderers";
-import { convertToPng } from "../../../utils/image-convert";
-import { theme } from "../theme/theme";
+import { BASH_DEFAULT_PREVIEW_LINES } from "$c/core/tools/bash";
+import { computeEditDiff, computePatchDiff, type EditDiffError, type EditDiffResult } from "$c/core/tools/patch";
+import { PYTHON_DEFAULT_PREVIEW_LINES } from "$c/core/tools/python";
+import { toolRenderers } from "$c/core/tools/renderers";
+import { theme } from "$c/modes/interactive/theme/theme";
+import { convertToPng } from "$c/utils/image-convert";
 import { renderDiff } from "./diff";
 
 // Preview line limit for bash when not expanded

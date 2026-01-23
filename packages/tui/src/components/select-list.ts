@@ -1,7 +1,7 @@
-import { matchesKey } from "../keys";
-import type { SymbolTheme } from "../symbols";
-import type { Component } from "../tui";
-import { truncateToWidth, visibleWidth } from "../utils";
+import { matchesKey } from "$tui/keys";
+import type { SymbolTheme } from "$tui/symbols";
+import type { Component } from "$tui/tui";
+import { truncateToWidth, visibleWidth } from "$tui/utils";
 
 export interface SelectItem {
 	value: string;

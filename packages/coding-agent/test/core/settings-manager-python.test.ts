@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { SettingsManager } from "../../src/core/settings-manager";
+import { SettingsManager } from "$c/core/settings-manager";
 
 describe("SettingsManager python settings", () => {
 	it("defaults to both and session", () => {

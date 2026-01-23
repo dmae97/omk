@@ -3,10 +3,10 @@
  * Uses the Language Server Protocol for formatting and diagnostics.
  */
 
-import { getOrCreateClient, notifySaved, sendRequest, syncContent } from "../client";
-import { applyTextEditsToString } from "../edits";
-import type { Diagnostic, LinterClient, LspClient, ServerConfig, TextEdit } from "../types";
-import { fileToUri } from "../utils";
+import { getOrCreateClient, notifySaved, sendRequest, syncContent } from "$c/core/tools/lsp/client";
+import { applyTextEditsToString } from "$c/core/tools/lsp/edits";
+import type { Diagnostic, LinterClient, LspClient, ServerConfig, TextEdit } from "$c/core/tools/lsp/types";
+import { fileToUri } from "$c/core/tools/lsp/utils";
 
 /** Default formatting options for LSP */
 const DEFAULT_FORMAT_OPTIONS = {

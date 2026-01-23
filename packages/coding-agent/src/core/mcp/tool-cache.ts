@@ -5,7 +5,7 @@
  */
 
 import { logger } from "@oh-my-pi/pi-utils";
-import type { AgentStorage } from "../agent-storage";
+import type { AgentStorage } from "$c/core/agent-storage";
 import type { MCPServerConfig, MCPToolDefinition } from "./types";
 
 const CACHE_VERSION = 1;

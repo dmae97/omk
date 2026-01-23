@@ -4,9 +4,9 @@
 
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { Message } from "@oh-my-pi/pi-ai";
-import fileOperationsTemplate from "../../prompts/system/file-operations.md" with { type: "text" };
-import summarizationSystemPrompt from "../../prompts/system/summarization-system.md" with { type: "text" };
-import { renderPromptTemplate } from "../prompt-templates";
+import { renderPromptTemplate } from "$c/core/prompt-templates";
+import fileOperationsTemplate from "$c/prompts/system/file-operations.md" with { type: "text" };
+import summarizationSystemPrompt from "$c/prompts/system/summarization-system.md" with { type: "text" };
 
 // ============================================================================
 // File Operation Tracking

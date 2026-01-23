@@ -11,11 +11,11 @@ import {
 	type TUI,
 	visibleWidth,
 } from "@oh-my-pi/pi-tui";
-import type { ModelRegistry } from "../../../core/model-registry";
-import { parseModelString } from "../../../core/model-resolver";
-import type { SettingsManager } from "../../../core/settings-manager";
-import { fuzzyFilter } from "../../../utils/fuzzy";
-import { type ThemeColor, theme } from "../theme/theme";
+import type { ModelRegistry } from "$c/core/model-registry";
+import { parseModelString } from "$c/core/model-resolver";
+import type { SettingsManager } from "$c/core/settings-manager";
+import { type ThemeColor, theme } from "$c/modes/interactive/theme/theme";
+import { fuzzyFilter } from "$c/utils/fuzzy";
 import { DynamicBorder } from "./dynamic-border";
 
 function makeInvertedBadge(label: string, color: ThemeColor): string {

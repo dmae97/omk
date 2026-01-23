@@ -1,8 +1,5 @@
 {
-	"extends": "../../tsconfig.base.json",
-	"compilerOptions": {
-		"noEmit": true
-	},
+	"extends": "../../tsconfig.json",
 	"include": ["src/**/*.ts", "test/**/*.ts", "src/bun-imports.d.ts"],
 	"exclude": ["node_modules", "dist"]
 }

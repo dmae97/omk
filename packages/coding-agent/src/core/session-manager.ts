@@ -3,8 +3,8 @@ import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Message, TextContent, Usage } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
 import { nanoid } from "nanoid";
-import { getAgentDir as getDefaultAgentDir } from "../config";
-import { resizeImage } from "../utils/image-resize";
+import { getAgentDir as getDefaultAgentDir } from "$c/config";
+import { resizeImage } from "$c/utils/image-resize";
 import {
 	type BashExecutionMessage,
 	type CustomMessage,

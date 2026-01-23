@@ -6,9 +6,9 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import type { ImageContent } from "@oh-my-pi/pi-ai";
 import chalk from "chalk";
-import { resolveReadPath } from "../core/tools/path-utils";
-import { formatDimensionNote, resizeImage } from "../utils/image-resize";
-import { detectSupportedImageMimeTypeFromFile } from "../utils/mime";
+import { resolveReadPath } from "$c/core/tools/path-utils";
+import { formatDimensionNote, resizeImage } from "$c/utils/image-resize";
+import { detectSupportedImageMimeTypeFromFile } from "$c/utils/mime";
 
 export interface ProcessedFiles {
 	text: string;

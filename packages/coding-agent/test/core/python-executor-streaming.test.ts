@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { executePythonWithKernel, type PythonKernelExecutor } from "../../src/core/python-executor";
-import type { KernelExecuteOptions, KernelExecuteResult } from "../../src/core/python-kernel";
-import { DEFAULT_MAX_BYTES } from "../../src/core/tools/truncate";
+import { executePythonWithKernel, type PythonKernelExecutor } from "$c/core/python-executor";
+import type { KernelExecuteOptions, KernelExecuteResult } from "$c/core/python-kernel";
+import { DEFAULT_MAX_BYTES } from "$c/core/tools/truncate";
 
 class FakeKernel implements PythonKernelExecutor {
 	private result: KernelExecuteResult;

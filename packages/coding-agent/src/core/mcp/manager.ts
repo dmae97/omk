@@ -7,7 +7,7 @@
 
 import { logger } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
-import type { CustomTool } from "../custom-tools/types";
+import type { CustomTool } from "$c/core/custom-tools/types";
 import { connectToServer, disconnectServer, listTools } from "./client";
 import { loadAllMCPConfigs, validateServerConfig } from "./config";
 import type { MCPToolDetails } from "./tool-bridge";

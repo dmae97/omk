@@ -4,9 +4,9 @@
 
 import { Container, Loader, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
 import stripAnsi from "strip-ansi";
-import type { TruncationMeta } from "../../../core/output-meta";
-import { formatSize } from "../../../core/tools/truncate";
-import { getSymbolTheme, theme } from "../theme/theme";
+import type { TruncationMeta } from "$c/core/output-meta";
+import { formatSize } from "$c/core/tools/truncate";
+import { getSymbolTheme, theme } from "$c/modes/interactive/theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 import { truncateToVisualLines } from "./visual-truncate";
 

@@ -13,9 +13,9 @@
  */
 
 import { type Component, Container, matchesKey, Spacer, Text, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
-import type { SettingsManager } from "../../../../core/settings-manager";
-import { theme } from "../../theme/theme";
-import { DynamicBorder } from "../dynamic-border";
+import type { SettingsManager } from "$c/core/settings-manager";
+import { DynamicBorder } from "$c/modes/interactive/components/dynamic-border";
+import { theme } from "$c/modes/interactive/theme/theme";
 import { ExtensionList } from "./extension-list";
 import { InspectorPanel } from "./inspector-panel";
 import { applyFilter, createInitialState, filterByProvider, refreshState, toggleProvider } from "./state-manager";

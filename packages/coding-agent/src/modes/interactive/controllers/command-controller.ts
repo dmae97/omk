@@ -5,21 +5,21 @@ import type { UsageLimit, UsageReport } from "@oh-my-pi/pi-ai";
 import { Loader, Markdown, Spacer, Text, visibleWidth } from "@oh-my-pi/pi-tui";
 import { $ } from "bun";
 import { nanoid } from "nanoid";
-import { getDebugLogPath } from "../../../config";
-import { loadCustomShare } from "../../../core/custom-share";
-import type { CompactOptions } from "../../../core/extensions/types";
-import { createCompactionSummaryMessage } from "../../../core/messages";
-import { outputMeta } from "../../../core/output-meta";
-import { getGatewayStatus } from "../../../core/python-gateway-coordinator";
-import { getChangelogPath, parseChangelog } from "../../../utils/changelog";
-import { copyToClipboard } from "../../../utils/clipboard";
-import { ArminComponent } from "../components/armin";
-import { BashExecutionComponent } from "../components/bash-execution";
-import { BorderedLoader } from "../components/bordered-loader";
-import { DynamicBorder } from "../components/dynamic-border";
-import { PythonExecutionComponent } from "../components/python-execution";
-import { getMarkdownTheme, getSymbolTheme, theme } from "../theme/theme";
-import type { InteractiveModeContext } from "../types";
+import { getDebugLogPath } from "$c/config";
+import { loadCustomShare } from "$c/core/custom-share";
+import type { CompactOptions } from "$c/core/extensions/types";
+import { createCompactionSummaryMessage } from "$c/core/messages";
+import { outputMeta } from "$c/core/output-meta";
+import { getGatewayStatus } from "$c/core/python-gateway-coordinator";
+import { ArminComponent } from "$c/modes/interactive/components/armin";
+import { BashExecutionComponent } from "$c/modes/interactive/components/bash-execution";
+import { BorderedLoader } from "$c/modes/interactive/components/bordered-loader";
+import { DynamicBorder } from "$c/modes/interactive/components/dynamic-border";
+import { PythonExecutionComponent } from "$c/modes/interactive/components/python-execution";
+import { getMarkdownTheme, getSymbolTheme, theme } from "$c/modes/interactive/theme/theme";
+import type { InteractiveModeContext } from "$c/modes/interactive/types";
+import { getChangelogPath, parseChangelog } from "$c/utils/changelog";
+import { copyToClipboard } from "$c/utils/clipboard";
 
 export class CommandController {
 	constructor(private readonly ctx: InteractiveModeContext) {}

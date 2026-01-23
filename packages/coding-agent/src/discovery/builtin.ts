@@ -6,23 +6,23 @@
  */
 
 import { dirname, isAbsolute, join, resolve } from "path";
-import { type ContextFile, contextFileCapability } from "../capability/context-file";
-import { type Extension, type ExtensionManifest, extensionCapability } from "../capability/extension";
-import { type ExtensionModule, extensionModuleCapability } from "../capability/extension-module";
-import { readDirEntries, readFile } from "../capability/fs";
-import { type Hook, hookCapability } from "../capability/hook";
-import { registerProvider } from "../capability/index";
-import { type Instruction, instructionCapability } from "../capability/instruction";
-import { type MCPServer, mcpCapability } from "../capability/mcp";
-import { type Prompt, promptCapability } from "../capability/prompt";
-import { type Rule, ruleCapability } from "../capability/rule";
-import { type Settings, settingsCapability } from "../capability/settings";
-import { type Skill, skillCapability } from "../capability/skill";
-import { type SlashCommand, slashCommandCapability } from "../capability/slash-command";
-import { type SystemPrompt, systemPromptCapability } from "../capability/system-prompt";
-import { type CustomTool, toolCapability } from "../capability/tool";
-import type { LoadContext, LoadResult } from "../capability/types";
-import { parseFrontmatter } from "../core/frontmatter";
+import { type ContextFile, contextFileCapability } from "$c/capability/context-file";
+import { type Extension, type ExtensionManifest, extensionCapability } from "$c/capability/extension";
+import { type ExtensionModule, extensionModuleCapability } from "$c/capability/extension-module";
+import { readDirEntries, readFile } from "$c/capability/fs";
+import { type Hook, hookCapability } from "$c/capability/hook";
+import { registerProvider } from "$c/capability/index";
+import { type Instruction, instructionCapability } from "$c/capability/instruction";
+import { type MCPServer, mcpCapability } from "$c/capability/mcp";
+import { type Prompt, promptCapability } from "$c/capability/prompt";
+import { type Rule, ruleCapability } from "$c/capability/rule";
+import { type Settings, settingsCapability } from "$c/capability/settings";
+import { type Skill, skillCapability } from "$c/capability/skill";
+import { type SlashCommand, slashCommandCapability } from "$c/capability/slash-command";
+import { type SystemPrompt, systemPromptCapability } from "$c/capability/system-prompt";
+import { type CustomTool, toolCapability } from "$c/capability/tool";
+import type { LoadContext, LoadResult } from "$c/capability/types";
+import { parseFrontmatter } from "$c/core/frontmatter";
 import {
 	createSourceMeta,
 	discoverExtensionModulePaths,

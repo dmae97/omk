@@ -12,19 +12,19 @@ import { mkdir } from "node:fs/promises";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
 import { Type } from "@sinclair/typebox";
-import patchDescription from "../../../prompts/tools/patch.md" with { type: "text" };
-import replaceDescription from "../../../prompts/tools/replace.md" with { type: "text" };
-import { outputMeta } from "../../output-meta";
-import { renderPromptTemplate } from "../../prompt-templates";
-import type { ToolSession } from "../index";
+import { outputMeta } from "$c/core/output-meta";
+import { renderPromptTemplate } from "$c/core/prompt-templates";
+import type { ToolSession } from "$c/core/tools/index";
 import {
 	createLspWritethrough,
 	type FileDiagnosticsResult,
 	flushLspWritethroughBatch,
 	type WritethroughCallback,
 	writethroughNoop,
-} from "../lsp/index";
-import { resolveToCwd } from "../path-utils";
+} from "$c/core/tools/lsp/index";
+import { resolveToCwd } from "$c/core/tools/path-utils";
+import patchDescription from "$c/prompts/tools/patch.md" with { type: "text" };
+import replaceDescription from "$c/prompts/tools/replace.md" with { type: "text" };
 import { applyPatch } from "./applicator";
 import { generateDiffString, generateUnifiedDiffString, replaceText } from "./diff";
 import { DEFAULT_FUZZY_THRESHOLD, findMatch } from "./fuzzy";

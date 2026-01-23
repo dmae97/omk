@@ -1,8 +1,8 @@
 import * as path from "node:path";
 import { Text } from "@oh-my-pi/pi-tui";
 import { logger } from "@oh-my-pi/pi-utils";
-import { theme } from "../theme/theme";
-import type { TodoItem } from "../types";
+import { theme } from "$c/modes/interactive/theme/theme";
+import type { TodoItem } from "$c/modes/interactive/types";
 
 const TODO_FILE_NAME = "todos.json";
 

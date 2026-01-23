@@ -5,9 +5,9 @@
  */
 
 import chalk from "chalk";
-import { APP_NAME } from "../config";
-import { PluginManager, parseSettingValue, validateSetting } from "../core/plugins/index";
-import { theme } from "../modes/interactive/theme/theme";
+import { APP_NAME } from "$c/config";
+import { PluginManager, parseSettingValue, validateSetting } from "$c/core/plugins/index";
+import { theme } from "$c/modes/interactive/theme/theme";
 
 // =============================================================================
 // Types

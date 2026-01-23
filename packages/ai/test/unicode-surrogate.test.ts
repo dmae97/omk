@@ -1,8 +1,8 @@
 import { Type } from "@sinclair/typebox";
 import { describe, expect, it } from "vitest";
-import { getModel } from "../src/models";
-import { complete } from "../src/stream";
-import type { Api, Context, Model, OptionsForApi, ToolResultMessage } from "../src/types";
+import { getModel } from "$ai/models";
+import { complete } from "$ai/stream";
+import type { Api, Context, Model, OptionsForApi, ToolResultMessage } from "$ai/types";
 import { resolveApiKey } from "./oauth";
 
 // Empty schema for test tools - must be proper OBJECT type for Cloud Code Assist

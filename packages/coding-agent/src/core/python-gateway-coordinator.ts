@@ -14,9 +14,9 @@ import { createServer } from "node:net";
 import { delimiter, join } from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import type { Subprocess } from "bun";
-import { getAgentDir } from "../config";
-import { getShellConfig, killProcessTree } from "../utils/shell";
-import { getOrCreateSnapshot } from "../utils/shell-snapshot";
+import { getAgentDir } from "$c/config";
+import { getShellConfig, killProcessTree } from "$c/utils/shell";
+import { getOrCreateSnapshot } from "$c/utils/shell-snapshot";
 
 const GATEWAY_DIR_NAME = "python-gateway";
 const GATEWAY_INFO_FILE = "gateway.json";

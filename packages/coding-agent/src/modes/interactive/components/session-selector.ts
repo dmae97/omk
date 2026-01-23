@@ -8,9 +8,9 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@oh-my-pi/pi-tui";
-import type { SessionInfo } from "../../../core/session-manager";
-import { fuzzyFilter } from "../../../utils/fuzzy";
-import { theme } from "../theme/theme";
+import type { SessionInfo } from "$c/core/session-manager";
+import { theme } from "$c/modes/interactive/theme/theme";
+import { fuzzyFilter } from "$c/utils/fuzzy";
 import { DynamicBorder } from "./dynamic-border";
 
 /**

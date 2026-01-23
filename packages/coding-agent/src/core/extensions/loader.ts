@@ -10,14 +10,14 @@ import type { KeyId } from "@oh-my-pi/pi-tui";
 import { logger } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
 import * as TypeBox from "@sinclair/typebox";
-import { type ExtensionModule, extensionModuleCapability } from "../../capability/extension-module";
-import { loadCapability } from "../../discovery";
-import { expandPath, getExtensionNameFromPath } from "../../discovery/helpers";
-import * as piCodingAgent from "../../index";
-import { EventBus } from "../event-bus";
-import type { ExecOptions } from "../exec";
-import { execCommand } from "../exec";
-import type { CustomMessage } from "../messages";
+import { type ExtensionModule, extensionModuleCapability } from "$c/capability/extension-module";
+import { EventBus } from "$c/core/event-bus";
+import type { ExecOptions } from "$c/core/exec";
+import { execCommand } from "$c/core/exec";
+import type { CustomMessage } from "$c/core/messages";
+import { loadCapability } from "$c/discovery";
+import { expandPath, getExtensionNameFromPath } from "$c/discovery/helpers";
+import * as piCodingAgent from "$c/index";
 import type {
 	Extension,
 	ExtensionAPI,

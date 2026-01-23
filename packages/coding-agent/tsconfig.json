@@ -1,7 +1,28 @@
 {
 	"extends": "../../tsconfig.base.json",
 	"compilerOptions": {
-		"noEmit": true
+		"noEmit": true,
+		"baseUrl": ".",
+		"paths": {
+			"$c/*": ["./src/*"],
+			"$ai/*": ["../ai/src/*"],
+			"$tui/*": ["../tui/src/*"],
+			"$agent/*": ["../agent/src/*"],
+			"$stats/*": ["../omp-stats/src/*"],
+			"@oh-my-pi/pi-ai": ["../ai/src/index.ts"],
+			"@oh-my-pi/pi-ai/*": ["../ai/src/*"],
+			"@oh-my-pi/pi-agent-core": ["../agent/src/index.ts"],
+			"@oh-my-pi/pi-agent-core/*": ["../agent/src/*"],
+			"@oh-my-pi/pi-utils": ["../pi-utils/src/index.ts"],
+			"@oh-my-pi/pi-utils/*": ["../pi-utils/src/*"],
+			"@oh-my-pi/pi-coding-agent": ["./src/index.ts"],
+			"@oh-my-pi/pi-coding-agent/hooks": ["./src/core/hooks/index.ts"],
+			"@oh-my-pi/pi-coding-agent/*": ["./src/*"],
+			"@oh-my-pi/pi-tui": ["../tui/src/index.ts"],
+			"@oh-my-pi/pi-tui/*": ["../tui/src/*"],
+			"@oh-my-pi/pi-mom": ["../mom/src/index.ts"],
+			"@oh-my-pi/pi-mom/*": ["../mom/src/*"]
+		}
 	},
 	"include": ["src/**/*.ts", "src/bun-imports.d.ts"],
 	"exclude": ["node_modules", "dist", "**/*.test.ts", "test/**"]

@@ -8,14 +8,14 @@ import {
 	type PythonKernelExecutor,
 	resetPreludeDocsCache,
 	warmPythonEnvironment,
-} from "../../src/core/python-executor";
+} from "$c/core/python-executor";
 import {
 	type KernelExecuteOptions,
 	type KernelExecuteResult,
 	type PreludeHelper,
 	PythonKernel,
-} from "../../src/core/python-kernel";
-import { DEFAULT_MAX_BYTES } from "../../src/core/tools/truncate";
+} from "$c/core/python-kernel";
+import { DEFAULT_MAX_BYTES } from "$c/core/tools/truncate";
 
 class FakeKernel implements PythonKernelExecutor {
 	private result: KernelExecuteResult;

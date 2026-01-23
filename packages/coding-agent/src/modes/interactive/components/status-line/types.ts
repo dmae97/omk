@@ -1,11 +1,11 @@
-import type { AgentSession } from "../../../../core/agent-session";
+import type { AgentSession } from "$c/core/agent-session";
 import type {
 	StatusLinePreset,
 	StatusLineSegmentId,
 	StatusLineSegmentOptions,
 	StatusLineSeparatorStyle,
 	StatusLineSettings,
-} from "../../../../core/settings-manager";
+} from "$c/core/settings-manager";
 
 // Re-export types from settings-manager (single source of truth)
 export type {

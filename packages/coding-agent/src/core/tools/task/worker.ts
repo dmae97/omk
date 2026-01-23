@@ -17,19 +17,24 @@ import type { AgentEvent, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Api, Model } from "@oh-my-pi/pi-ai";
 import { logger, postmortem, untilAborted } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
-import lspDescription from "../../../prompts/tools/lsp.md" with { type: "text" };
-import type { AgentSessionEvent } from "../../agent-session";
-import { AuthStorage } from "../../auth-storage";
-import type { CustomTool } from "../../custom-tools/types";
-import { ModelRegistry } from "../../model-registry";
-import { parseModelPattern, parseModelString } from "../../model-resolver";
-import { renderPromptTemplate } from "../../prompt-templates";
-import { createAgentSession, discoverAuthStorage, discoverModels } from "../../sdk";
-import { SessionManager } from "../../session-manager";
-import { SettingsManager } from "../../settings-manager";
-import { ToolAbortError } from "../../tool-errors";
-import { type LspToolDetails, lspSchema } from "../lsp/types";
-import { getPythonToolDescription, type PythonToolDetails, type PythonToolParams, pythonSchema } from "../python";
+import type { AgentSessionEvent } from "$c/core/agent-session";
+import { AuthStorage } from "$c/core/auth-storage";
+import type { CustomTool } from "$c/core/custom-tools/types";
+import { ModelRegistry } from "$c/core/model-registry";
+import { parseModelPattern, parseModelString } from "$c/core/model-resolver";
+import { renderPromptTemplate } from "$c/core/prompt-templates";
+import { createAgentSession, discoverAuthStorage, discoverModels } from "$c/core/sdk";
+import { SessionManager } from "$c/core/session-manager";
+import { SettingsManager } from "$c/core/settings-manager";
+import { ToolAbortError } from "$c/core/tool-errors";
+import { type LspToolDetails, lspSchema } from "$c/core/tools/lsp/types";
+import {
+	getPythonToolDescription,
+	type PythonToolDetails,
+	type PythonToolParams,
+	pythonSchema,
+} from "$c/core/tools/python";
+import lspDescription from "$c/prompts/tools/lsp.md" with { type: "text" };
 import type {
 	LspToolCallResponse,
 	MCPToolCallResponse,

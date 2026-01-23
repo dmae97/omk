@@ -12,28 +12,28 @@ import type { AgentMessage, AgentToolResult, AgentToolUpdateCallback, ThinkingLe
 import type { ImageContent, Model, TextContent, ToolResultMessage } from "@oh-my-pi/pi-ai";
 import type { AutocompleteItem, Component, EditorComponent, EditorTheme, KeyId, TUI } from "@oh-my-pi/pi-tui";
 import type { Static, TSchema } from "@sinclair/typebox";
-import type * as piCodingAgent from "../../index";
-import type { Theme } from "../../modes/interactive/theme/theme";
-import type { BashResult } from "../bash-executor";
-import type { CompactionPreparation, CompactionResult } from "../compaction";
-import type { EventBus } from "../event-bus";
-import type { ExecOptions, ExecResult } from "../exec";
-import type { KeybindingsManager } from "../keybindings";
-import type { CustomMessage } from "../messages";
-import type { ModelRegistry } from "../model-registry";
-import type { PythonResult } from "../python-executor";
+import type { BashResult } from "$c/core/bash-executor";
+import type { CompactionPreparation, CompactionResult } from "$c/core/compaction";
+import type { EventBus } from "$c/core/event-bus";
+import type { ExecOptions, ExecResult } from "$c/core/exec";
+import type { KeybindingsManager } from "$c/core/keybindings";
+import type { CustomMessage } from "$c/core/messages";
+import type { ModelRegistry } from "$c/core/model-registry";
+import type { PythonResult } from "$c/core/python-executor";
 import type {
 	BranchSummaryEntry,
 	CompactionEntry,
 	ReadonlySessionManager,
 	SessionEntry,
 	SessionManager,
-} from "../session-manager";
-import type { BashToolDetails, FindToolDetails, GrepToolDetails, LsToolDetails, ReadToolDetails } from "../tools";
-import type { EditToolDetails } from "../tools/patch";
+} from "$c/core/session-manager";
+import type { BashToolDetails, FindToolDetails, GrepToolDetails, LsToolDetails, ReadToolDetails } from "$c/core/tools";
+import type { EditToolDetails } from "$c/core/tools/patch";
+import type * as piCodingAgent from "$c/index";
+import type { Theme } from "$c/modes/interactive/theme/theme";
 
-export type { ExecOptions, ExecResult } from "../exec";
-export type { AppAction, KeybindingsManager } from "../keybindings";
+export type { ExecOptions, ExecResult } from "$c/core/exec";
+export type { AppAction, KeybindingsManager } from "$c/core/keybindings";
 export type { AgentToolResult, AgentToolUpdateCallback };
 
 // ============================================================================

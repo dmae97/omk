@@ -1,4 +1,4 @@
-import type { TUI } from "../tui";
+import type { TUI } from "$tui/tui";
 import { Text } from "./text";
 
 /**

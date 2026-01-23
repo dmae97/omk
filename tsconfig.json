@@ -3,6 +3,11 @@
 	"compilerOptions": {
 		"noEmit": true,
 		"paths": {
+			"$c/*": ["./packages/coding-agent/src/*"],
+			"$ai/*": ["./packages/ai/src/*"],
+			"$tui/*": ["./packages/tui/src/*"],
+			"$agent/*": ["./packages/agent/src/*"],
+			"$stats/*": ["./packages/omp-stats/src/*"],
 			"*": ["./*"],
 			"@oh-my-pi/pi-ai": ["./packages/ai/src/index.ts"],
 			"@oh-my-pi/pi-ai/*": ["./packages/ai/src/*"],
@@ -14,14 +19,8 @@
 			"@oh-my-pi/pi-coding-agent/hooks": ["./packages/coding-agent/src/core/hooks/index.ts"],
 			"@oh-my-pi/pi-coding-agent/*": ["./packages/coding-agent/src/*"],
 			"@sinclair/typebox": ["./node_modules/@sinclair/typebox"],
-			"@oh-my-pi/pi-mom": ["./packages/mom/src/index.ts"],
-			"@oh-my-pi/pi-mom/*": ["./packages/mom/src/*"],
 			"@oh-my-pi/pi-tui": ["./packages/tui/src/index.ts"],
-			"@oh-my-pi/pi-tui/*": ["./packages/tui/src/*"],
-			"@oh-my-pi/pi-web-ui": ["./packages/web-ui/src/index.ts"],
-			"@oh-my-pi/pi-web-ui/*": ["./packages/web-ui/src/*"],
-			"@oh-my-pi/pi-agent-old": ["./packages/agent-old/src/index.ts"],
-			"@oh-my-pi/pi-agent-old/*": ["./packages/agent-old/src/*"]
+			"@oh-my-pi/pi-tui/*": ["./packages/tui/src/*"]
 		}
 	},
 	"include": ["packages/*/src/**/*", "packages/*/test/**/*", "packages/coding-agent/examples/**/*"],

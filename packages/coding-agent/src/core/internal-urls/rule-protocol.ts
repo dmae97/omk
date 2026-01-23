@@ -7,7 +7,7 @@
  * - rule://<name> - Reads rule content
  */
 
-import type { Rule } from "../../capability/rule";
+import type { Rule } from "$c/capability/rule";
 import type { InternalResource, InternalUrl, ProtocolHandler } from "./types";
 
 export interface RuleProtocolOptions {

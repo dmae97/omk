@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { handleBluesky } from "../../../src/core/tools/web-scrapers/bluesky";
-import { handleMastodon } from "../../../src/core/tools/web-scrapers/mastodon";
+import { handleBluesky } from "$c/core/tools/web-scrapers/bluesky";
+import { handleMastodon } from "$c/core/tools/web-scrapers/mastodon";
 
 const SKIP = !process.env.WEB_FETCH_INTEGRATION;
 

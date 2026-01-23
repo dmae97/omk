@@ -8,23 +8,29 @@
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Message, Model, TextContent, ToolResultMessage } from "@oh-my-pi/pi-ai";
 import type { Component, TUI } from "@oh-my-pi/pi-tui";
-import type { Theme } from "../../modes/interactive/theme/theme";
-import type { CompactionPreparation, CompactionResult } from "../compaction/index";
-import type { ExecOptions, ExecResult } from "../exec";
-import type { HookMessage } from "../messages";
-import type { ModelRegistry } from "../model-registry";
+import type { CompactionPreparation, CompactionResult } from "$c/core/compaction/index";
+import type { ExecOptions, ExecResult } from "$c/core/exec";
+import type { HookMessage } from "$c/core/messages";
+import type { ModelRegistry } from "$c/core/model-registry";
 import type {
 	BranchSummaryEntry,
 	CompactionEntry,
 	ReadonlySessionManager,
 	SessionEntry,
 	SessionManager,
-} from "../session-manager";
-import type { BashToolDetails, FindToolDetails, GrepToolDetails, LsToolDetails, ReadToolDetails } from "../tools/index";
-import type { EditToolDetails } from "../tools/patch";
+} from "$c/core/session-manager";
+import type {
+	BashToolDetails,
+	FindToolDetails,
+	GrepToolDetails,
+	LsToolDetails,
+	ReadToolDetails,
+} from "$c/core/tools/index";
+import type { EditToolDetails } from "$c/core/tools/patch";
+import type { Theme } from "$c/modes/interactive/theme/theme";
 
 // Re-export for backward compatibility
-export type { ExecOptions, ExecResult } from "../exec";
+export type { ExecOptions, ExecResult } from "$c/core/exec";
 
 /**
  * UI context for hooks to request interactive UI from the harness.

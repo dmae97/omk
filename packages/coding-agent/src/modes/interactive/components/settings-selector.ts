@@ -12,8 +12,8 @@ import {
 	type TabBarTheme,
 	Text,
 } from "@oh-my-pi/pi-tui";
-import type { SettingsManager, StatusLineSettings } from "../../../core/settings-manager";
-import { getSelectListTheme, getSettingsListTheme, theme } from "../theme/theme";
+import type { SettingsManager, StatusLineSettings } from "$c/core/settings-manager";
+import { getSelectListTheme, getSettingsListTheme, theme } from "$c/modes/interactive/theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 import { PluginSettingsComponent } from "./plugin-settings";
 import { getSettingsForTab, type SettingDef } from "./settings-defs";

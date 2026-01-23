@@ -7,14 +7,20 @@ import type {
 	ExtensionContextActions,
 	ExtensionError,
 	ExtensionUIContext,
-} from "../../../core/extensions/index";
-import { KeybindingsManager } from "../../../core/keybindings";
-import { setTerminalTitle } from "../../../core/title-generator";
-import { HookEditorComponent } from "../components/hook-editor";
-import { HookInputComponent } from "../components/hook-input";
-import { HookSelectorComponent } from "../components/hook-selector";
-import { getAvailableThemesWithPaths, getThemeByName, setTheme, type Theme, theme } from "../theme/theme";
-import type { InteractiveModeContext } from "../types";
+} from "$c/core/extensions/index";
+import { KeybindingsManager } from "$c/core/keybindings";
+import { setTerminalTitle } from "$c/core/title-generator";
+import { HookEditorComponent } from "$c/modes/interactive/components/hook-editor";
+import { HookInputComponent } from "$c/modes/interactive/components/hook-input";
+import { HookSelectorComponent } from "$c/modes/interactive/components/hook-selector";
+import {
+	getAvailableThemesWithPaths,
+	getThemeByName,
+	setTheme,
+	type Theme,
+	theme,
+} from "$c/modes/interactive/theme/theme";
+import type { InteractiveModeContext } from "$c/modes/interactive/types";
 
 export class ExtensionUiController {
 	constructor(private ctx: InteractiveModeContext) {}

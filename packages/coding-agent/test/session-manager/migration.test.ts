@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { type FileEntry, migrateSessionEntries } from "../../src/core/session-manager";
+import { type FileEntry, migrateSessionEntries } from "$c/core/session-manager";
 
 describe("migrateSessionEntries", () => {
 	it("should add id/parentId to v1 entries", () => {

@@ -5,7 +5,13 @@
  * Based on MCP spec 2025-03-26.
  */
 
-import type { JsonRpcMessage, JsonRpcResponse, MCPHttpServerConfig, MCPSseServerConfig, MCPTransport } from "../types";
+import type {
+	JsonRpcMessage,
+	JsonRpcResponse,
+	MCPHttpServerConfig,
+	MCPSseServerConfig,
+	MCPTransport,
+} from "$c/core/mcp/types";
 
 /** Generate unique request ID */
 function generateId(): string {

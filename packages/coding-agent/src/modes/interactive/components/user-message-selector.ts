@@ -1,5 +1,5 @@
 import { type Component, Container, matchesKey, Spacer, Text, truncateToWidth } from "@oh-my-pi/pi-tui";
-import { theme } from "../theme/theme";
+import { theme } from "$c/modes/interactive/theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 
 interface UserMessageItem {

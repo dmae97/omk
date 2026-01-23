@@ -6,17 +6,17 @@
 
 import path from "node:path";
 import type { AgentEvent, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
-import type { AuthStorage } from "../../auth-storage";
-import type { EventBus } from "../../event-bus";
-import { callTool } from "../../mcp/client";
-import type { MCPManager } from "../../mcp/manager";
-import type { ModelRegistry } from "../../model-registry";
-import { formatModelString, parseModelPattern } from "../../model-resolver";
-import { checkPythonKernelAvailability } from "../../python-kernel";
+import type { AuthStorage } from "$c/core/auth-storage";
+import type { EventBus } from "$c/core/event-bus";
+import { callTool } from "$c/core/mcp/client";
+import type { MCPManager } from "$c/core/mcp/manager";
+import type { ModelRegistry } from "$c/core/model-registry";
+import { formatModelString, parseModelPattern } from "$c/core/model-resolver";
+import { checkPythonKernelAvailability } from "$c/core/python-kernel";
+import { LspTool } from "$c/core/tools/lsp/index";
+import type { LspParams } from "$c/core/tools/lsp/types";
+import { PythonTool, type PythonToolParams } from "$c/core/tools/python";
 import type { ToolSession } from "..";
-import { LspTool } from "../lsp/index";
-import type { LspParams } from "../lsp/types";
-import { PythonTool, type PythonToolParams } from "../python";
 import { subprocessToolRegistry } from "./subprocess-tool-registry";
 import {
 	type AgentDefinition,

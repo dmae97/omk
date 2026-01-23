@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
-import { getAgentDbPath } from "../config";
+import { getAgentDbPath } from "$c/config";
 import type { AuthCredential } from "./auth-storage";
 import type { Settings } from "./settings-manager";
 

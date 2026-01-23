@@ -2,7 +2,7 @@
  * Types for the Extension Control Center dashboard.
  */
 
-import type { SourceMeta } from "../../../../capability/types";
+import type { SourceMeta } from "$c/capability/types";
 
 /**
  * Extension kinds matching capability types.

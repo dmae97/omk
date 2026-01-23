@@ -5,7 +5,7 @@
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { type Api, type KnownProvider, type Model, modelsAreEqual } from "@oh-my-pi/pi-ai";
 import chalk from "chalk";
-import { isValidThinkingLevel } from "../cli/args";
+import { isValidThinkingLevel } from "$c/cli/args";
 import type { ModelRegistry } from "./model-registry";
 
 /** Default model IDs for each known provider */

@@ -7,7 +7,7 @@ import type {
 	UsageReport,
 	UsageStatus,
 	UsageWindow,
-} from "../usage";
+} from "$ai/usage";
 
 const DEFAULT_ENDPOINT = "https://api.anthropic.com/api/oauth";
 const DEFAULT_CACHE_TTL_MS = 60_000;

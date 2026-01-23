@@ -5,7 +5,7 @@
  */
 
 import { Type } from "@sinclair/typebox";
-import type { CustomTool } from "../../custom-tools/types";
+import type { CustomTool } from "$c/core/custom-tools/types";
 import { callExaTool, findApiKey, formatSearchResults, isSearchResponse } from "./mcp-client";
 import type { ExaRenderDetails } from "./types";
 

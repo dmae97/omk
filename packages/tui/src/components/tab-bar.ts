@@ -9,9 +9,9 @@
  * - Shift+Tab / Arrow Left: Previous tab (wraps around)
  */
 
-import { matchesKey } from "../keys";
-import type { Component } from "../tui";
-import { wrapTextWithAnsi } from "../utils";
+import { matchesKey } from "$tui/keys";
+import type { Component } from "$tui/tui";
+import { wrapTextWithAnsi } from "$tui/utils";
 
 /** Tab definition */
 export interface Tab {

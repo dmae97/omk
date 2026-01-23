@@ -4,12 +4,12 @@ import path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { logger, once, untilAborted } from "@oh-my-pi/pi-utils";
 import type { BunFile } from "bun";
-import { type Theme, theme } from "../../../modes/interactive/theme/theme";
-import lspDescription from "../../../prompts/tools/lsp.md" with { type: "text" };
-import { renderPromptTemplate } from "../../prompt-templates";
-import { throwIfAborted } from "../../tool-errors";
-import type { ToolSession } from "../index";
-import { resolveToCwd } from "../path-utils";
+import { renderPromptTemplate } from "$c/core/prompt-templates";
+import { throwIfAborted } from "$c/core/tool-errors";
+import type { ToolSession } from "$c/core/tools/index";
+import { resolveToCwd } from "$c/core/tools/path-utils";
+import { type Theme, theme } from "$c/modes/interactive/theme/theme";
+import lspDescription from "$c/prompts/tools/lsp.md" with { type: "text" };
 import {
 	ensureFileOpen,
 	getActiveClients,

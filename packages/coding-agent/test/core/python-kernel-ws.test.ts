@@ -1,9 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import {
-	deserializeWebSocketMessage,
-	type JupyterMessage,
-	serializeWebSocketMessage,
-} from "../../src/core/python-kernel";
+import { deserializeWebSocketMessage, type JupyterMessage, serializeWebSocketMessage } from "$c/core/python-kernel";
 
 const encoder = new TextEncoder();
 

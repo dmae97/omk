@@ -6,10 +6,10 @@
  */
 
 import chalk from "chalk";
-import { APP_NAME, getAgentDir } from "../config";
-import { SettingsManager } from "../core/settings-manager";
-import { SETTINGS_DEFS, type SettingDef } from "../modes/interactive/components/settings-defs";
-import { theme } from "../modes/interactive/theme/theme";
+import { APP_NAME, getAgentDir } from "$c/config";
+import { SettingsManager } from "$c/core/settings-manager";
+import { SETTINGS_DEFS, type SettingDef } from "$c/modes/interactive/components/settings-defs";
+import { theme } from "$c/modes/interactive/theme/theme";
 
 // =============================================================================
 // Types

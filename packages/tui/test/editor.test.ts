@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { stripVTControlCharacters } from "node:util";
-import { Editor } from "../src/components/editor";
-import { visibleWidth } from "../src/utils";
+import { Editor } from "$tui/components/editor";
+import { visibleWidth } from "$tui/utils";
 import { defaultEditorTheme } from "./test-themes";
 
 describe("Editor component", () => {

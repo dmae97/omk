@@ -14,9 +14,9 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { findAllNearestProjectConfigDirs, getConfigDirs } from "../../../config";
-import { parseFrontmatter } from "../../../core/frontmatter";
-import { parseAgentFields } from "../../../discovery/helpers";
+import { findAllNearestProjectConfigDirs, getConfigDirs } from "$c/config";
+import { parseFrontmatter } from "$c/core/frontmatter";
+import { parseAgentFields } from "$c/discovery/helpers";
 import { loadBundledAgents } from "./agents";
 import type { AgentDefinition, AgentSource } from "./types";
 

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { join } from "node:path";
 import { createTempDirSync } from "@oh-my-pi/pi-utils";
-import * as lspConfig from "../../src/core/tools/lsp/config";
-import { createLspWritethrough } from "../../src/core/tools/lsp/index";
+import * as lspConfig from "$c/core/tools/lsp/config";
+import { createLspWritethrough } from "$c/core/tools/lsp/index";
 
 describe("createLspWritethrough batching", () => {
 	let tempDir: ReturnType<typeof createTempDirSync>;

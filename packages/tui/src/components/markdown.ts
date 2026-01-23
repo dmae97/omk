@@ -1,7 +1,7 @@
 import { marked, type Token } from "marked";
-import type { SymbolTheme } from "../symbols";
-import type { Component } from "../tui";
-import { applyBackgroundToLine, visibleWidth, wrapTextWithAnsi } from "../utils";
+import type { SymbolTheme } from "$tui/symbols";
+import type { Component } from "$tui/tui";
+import { applyBackgroundToLine, visibleWidth, wrapTextWithAnsi } from "$tui/utils";
 
 /**
  * Default text styling for markdown content.

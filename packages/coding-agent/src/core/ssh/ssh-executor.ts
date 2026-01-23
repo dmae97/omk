@@ -1,5 +1,5 @@
 import { cspawn, logger, ptree } from "@oh-my-pi/pi-utils";
-import { OutputSink } from "../streaming-output";
+import { OutputSink } from "$c/core/streaming-output";
 import { buildRemoteCommand, ensureConnection, ensureHostInfo, type SSHConnectionTarget } from "./connection-manager";
 import { hasSshfs, mountRemote } from "./sshfs-mount";
 

@@ -1,8 +1,13 @@
 import type { AgentToolResult } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
-import type { OutputMeta, TruncationOptions, TruncationSummaryOptions, TruncationTextOptions } from "../output-meta";
-import { outputMeta } from "../output-meta";
-import type { OutputSummary } from "../streaming-output";
+import type {
+	OutputMeta,
+	TruncationOptions,
+	TruncationSummaryOptions,
+	TruncationTextOptions,
+} from "$c/core/output-meta";
+import { outputMeta } from "$c/core/output-meta";
+import type { OutputSummary } from "$c/core/streaming-output";
 import type { TruncationResult } from "./truncate";
 
 type ToolContent = Array<TextContent | ImageContent>;

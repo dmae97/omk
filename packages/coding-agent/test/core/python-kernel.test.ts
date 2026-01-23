@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
-import { type KernelDisplayOutput, PythonKernel } from "../../src/core/python-kernel";
-import { PYTHON_PRELUDE } from "../../src/core/python-prelude";
+import { type KernelDisplayOutput, PythonKernel } from "$c/core/python-kernel";
+import { PYTHON_PRELUDE } from "$c/core/python-prelude";
 
 type JupyterMessage = {
 	channel: string;

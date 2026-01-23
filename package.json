@@ -6,8 +6,8 @@
 		"packages/*"
 	],
 	"scripts": {
-		"install:dev": "bun install && bun --cwd=packages/coding-agent link && bun --cwd=packages/ai link && bun --cwd=packages/mom link",
-		"dev": "bun --cwd=packages/coding-agent src/cli.ts",
+		"install:dev": "bun install && bun --cwd=packages/coding-agent link && bun --cwd=packages/ai link",
+		"dev": "bun packages/coding-agent/src/cli.ts",
 		"stats": "bun --cwd=packages/coding-agent src/cli.ts stats",
 		"check": "biome check --write . && bun --cwd=packages/coding-agent run check && bun --cwd=packages/omp-stats run check",
 		"fix": "biome check --write --unsafe . && bun --cwd=packages/coding-agent run format-prompts",

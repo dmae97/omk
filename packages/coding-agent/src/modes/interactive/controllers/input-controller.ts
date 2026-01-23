@@ -5,12 +5,12 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import { nanoid } from "nanoid";
-import type { AgentSessionEvent } from "../../../core/agent-session";
-import { generateSessionTitle, setTerminalTitle } from "../../../core/title-generator";
-import { readImageFromClipboard } from "../../../utils/clipboard";
-import { resizeImage } from "../../../utils/image-resize";
-import { theme } from "../theme/theme";
-import type { InteractiveModeContext } from "../types";
+import type { AgentSessionEvent } from "$c/core/agent-session";
+import { generateSessionTitle, setTerminalTitle } from "$c/core/title-generator";
+import { theme } from "$c/modes/interactive/theme/theme";
+import type { InteractiveModeContext } from "$c/modes/interactive/types";
+import { readImageFromClipboard } from "$c/utils/clipboard";
+import { resizeImage } from "$c/utils/image-resize";
 
 interface Expandable {
 	setExpanded(expanded: boolean): void;

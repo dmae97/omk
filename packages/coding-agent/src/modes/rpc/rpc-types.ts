@@ -7,9 +7,9 @@
 
 import type { AgentMessage, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Model } from "@oh-my-pi/pi-ai";
-import type { SessionStats } from "../../core/agent-session";
-import type { BashResult } from "../../core/bash-executor";
-import type { CompactionResult } from "../../core/compaction/index";
+import type { SessionStats } from "$c/core/agent-session";
+import type { BashResult } from "$c/core/bash-executor";
+import type { CompactionResult } from "$c/core/compaction/index";
 
 // ============================================================================
 // RPC Commands (stdin)

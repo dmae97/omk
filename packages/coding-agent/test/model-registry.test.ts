@@ -3,8 +3,8 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { nanoid } from "nanoid";
-import { AuthStorage } from "../src/core/auth-storage";
-import { ModelRegistry } from "../src/core/model-registry";
+import { AuthStorage } from "$c/core/auth-storage";
+import { ModelRegistry } from "$c/core/model-registry";
 
 describe("ModelRegistry", () => {
 	let tempDir: string;

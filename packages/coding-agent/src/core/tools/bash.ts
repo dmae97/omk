@@ -3,14 +3,14 @@ import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallb
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text, truncateToWidth } from "@oh-my-pi/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { truncateToVisualLines } from "../../modes/interactive/components/visual-truncate";
-import type { Theme } from "../../modes/interactive/theme/theme";
-import bashDescription from "../../prompts/tools/bash.md" with { type: "text" };
-import { type BashExecutorOptions, executeBash } from "../bash-executor";
-import type { RenderResultOptions } from "../custom-tools/types";
-import type { OutputMeta } from "../output-meta";
-import { renderPromptTemplate } from "../prompt-templates";
-import { ToolError } from "../tool-errors";
+import { type BashExecutorOptions, executeBash } from "$c/core/bash-executor";
+import type { RenderResultOptions } from "$c/core/custom-tools/types";
+import type { OutputMeta } from "$c/core/output-meta";
+import { renderPromptTemplate } from "$c/core/prompt-templates";
+import { ToolError } from "$c/core/tool-errors";
+import { truncateToVisualLines } from "$c/modes/interactive/components/visual-truncate";
+import type { Theme } from "$c/modes/interactive/theme/theme";
+import bashDescription from "$c/prompts/tools/bash.md" with { type: "text" };
 
 import { checkBashInterception, checkSimpleLsInterception } from "./bash-interceptor";
 import type { ToolSession } from "./index";

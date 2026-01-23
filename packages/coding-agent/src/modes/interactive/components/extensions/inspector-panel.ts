@@ -6,7 +6,7 @@
 
 import { homedir } from "node:os";
 import { type Component, truncateToWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-tui";
-import { theme } from "../../theme/theme";
+import { theme } from "$c/modes/interactive/theme/theme";
 import type { Extension, ExtensionState } from "./types";
 
 export class InspectorPanel implements Component {

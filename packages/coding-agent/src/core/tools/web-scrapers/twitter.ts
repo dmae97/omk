@@ -1,5 +1,5 @@
 import { parse as parseHtml } from "node-html-parser";
-import { ToolAbortError } from "../../tool-errors";
+import { ToolAbortError } from "$c/core/tool-errors";
 import type { RenderResult, SpecialHandler } from "./types";
 import { finalizeOutput, loadPage } from "./types";
 

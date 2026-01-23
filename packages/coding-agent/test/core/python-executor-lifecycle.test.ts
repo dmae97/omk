@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
-import { disposeAllKernelSessions, executePython } from "../../src/core/python-executor";
-import type { KernelExecuteResult } from "../../src/core/python-kernel";
-import * as pythonKernel from "../../src/core/python-kernel";
+import { disposeAllKernelSessions, executePython } from "$c/core/python-executor";
+import type { KernelExecuteResult } from "$c/core/python-kernel";
+import * as pythonKernel from "$c/core/python-kernel";
 
 class FakeKernel {
 	execute = vi.fn(async () => this.result);

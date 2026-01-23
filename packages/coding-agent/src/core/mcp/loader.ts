@@ -5,8 +5,8 @@
  */
 
 import { logger } from "@oh-my-pi/pi-utils";
-import { AgentStorage } from "../agent-storage";
-import type { LoadedCustomTool } from "../custom-tools/types";
+import { AgentStorage } from "$c/core/agent-storage";
+import type { LoadedCustomTool } from "$c/core/custom-tools/types";
 import { type MCPLoadResult, MCPManager } from "./manager";
 import { MCPToolCache } from "./tool-cache";
 

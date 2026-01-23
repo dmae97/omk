@@ -6,7 +6,7 @@
  */
 
 import { homedir } from "node:os";
-import type { Theme } from "../../modes/interactive/theme/theme";
+import type { Theme } from "$c/modes/interactive/theme/theme";
 
 // =============================================================================
 // Standardized Display Constants

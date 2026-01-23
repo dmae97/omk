@@ -1,9 +1,9 @@
-import { Image } from "../src/components/image";
-import { Spacer } from "../src/components/spacer";
-import { Text } from "../src/components/text";
-import { ProcessTerminal } from "../src/terminal";
-import { getCapabilities, getImageDimensions } from "../src/terminal-image";
-import { TUI } from "../src/tui";
+import { Image } from "$tui/components/image";
+import { Spacer } from "$tui/components/spacer";
+import { Text } from "$tui/components/text";
+import { ProcessTerminal } from "$tui/terminal";
+import { getCapabilities, getImageDimensions } from "$tui/terminal-image";
+import { TUI } from "$tui/tui";
 
 const testImagePath = Bun.argv[2] || "/tmp/test-image.png";
 

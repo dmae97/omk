@@ -15,12 +15,12 @@ import { join } from "node:path";
 import { Agent, type ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { getModel, type Model } from "@oh-my-pi/pi-ai";
 import { nanoid } from "nanoid";
-import { AgentSession } from "../src/core/agent-session";
-import { AuthStorage } from "../src/core/auth-storage";
-import { ModelRegistry } from "../src/core/model-registry";
-import { SessionManager } from "../src/core/session-manager";
-import { SettingsManager } from "../src/core/settings-manager";
-import { createTools, type ToolSession } from "../src/core/tools/index";
+import { AgentSession } from "$c/core/agent-session";
+import { AuthStorage } from "$c/core/auth-storage";
+import { ModelRegistry } from "$c/core/model-registry";
+import { SessionManager } from "$c/core/session-manager";
+import { SettingsManager } from "$c/core/settings-manager";
+import { createTools, type ToolSession } from "$c/core/tools/index";
 import { API_KEY } from "./utilities";
 
 // Check for auth

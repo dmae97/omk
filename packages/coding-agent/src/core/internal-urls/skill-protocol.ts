@@ -9,7 +9,7 @@
  */
 
 import * as path from "node:path";
-import type { Skill } from "../skills";
+import type { Skill } from "$c/core/skills";
 import type { InternalResource, InternalUrl, ProtocolHandler } from "./types";
 
 export interface SkillProtocolOptions {

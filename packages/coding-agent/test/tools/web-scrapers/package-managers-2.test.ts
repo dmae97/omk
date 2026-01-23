@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { handleChocolatey } from "../../../src/core/tools/web-scrapers/chocolatey";
-import { handleDockerHub } from "../../../src/core/tools/web-scrapers/dockerhub";
-import { handleHackage } from "../../../src/core/tools/web-scrapers/hackage";
-import { handleMetaCPAN } from "../../../src/core/tools/web-scrapers/metacpan";
-import { handleRepology } from "../../../src/core/tools/web-scrapers/repology";
-import { handleTerraform } from "../../../src/core/tools/web-scrapers/terraform";
+import { handleChocolatey } from "$c/core/tools/web-scrapers/chocolatey";
+import { handleDockerHub } from "$c/core/tools/web-scrapers/dockerhub";
+import { handleHackage } from "$c/core/tools/web-scrapers/hackage";
+import { handleMetaCPAN } from "$c/core/tools/web-scrapers/metacpan";
+import { handleRepology } from "$c/core/tools/web-scrapers/repology";
+import { handleTerraform } from "$c/core/tools/web-scrapers/terraform";
 
 const SKIP = !process.env.WEB_FETCH_INTEGRATION;
 

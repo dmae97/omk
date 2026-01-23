@@ -9,8 +9,8 @@ import { join } from "node:path";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { ProcessTerminal, TUI } from "@oh-my-pi/pi-tui";
 import { sleep } from "bun";
-import { AssistantMessageComponent } from "../src/modes/interactive/components/assistant-message";
-import { initTheme } from "../src/modes/interactive/theme/theme";
+import { AssistantMessageComponent } from "$c/modes/interactive/components/assistant-message";
+import { initTheme } from "$c/modes/interactive/theme/theme";
 
 // Initialize dark theme with full color support
 process.env.COLORTERM = "truecolor";

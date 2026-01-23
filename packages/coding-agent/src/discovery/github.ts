@@ -13,12 +13,12 @@
  */
 
 import { basename, dirname, sep } from "node:path";
-import { type ContextFile, contextFileCapability } from "../capability/context-file";
-import { readFile } from "../capability/fs";
-import { registerProvider } from "../capability/index";
-import { type Instruction, instructionCapability } from "../capability/instruction";
-import type { LoadContext, LoadResult, SourceMeta } from "../capability/types";
-import { parseFrontmatter } from "../core/frontmatter";
+import { type ContextFile, contextFileCapability } from "$c/capability/context-file";
+import { readFile } from "$c/capability/fs";
+import { registerProvider } from "$c/capability/index";
+import { type Instruction, instructionCapability } from "$c/capability/instruction";
+import type { LoadContext, LoadResult, SourceMeta } from "$c/capability/types";
+import { parseFrontmatter } from "$c/core/frontmatter";
 import { calculateDepth, createSourceMeta, getProjectPath, loadFilesFromDir } from "./helpers";
 
 const PROVIDER_ID = "github";

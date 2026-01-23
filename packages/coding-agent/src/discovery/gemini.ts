@@ -17,15 +17,15 @@
  */
 
 import { join, sep } from "node:path";
-import { type ContextFile, contextFileCapability } from "../capability/context-file";
-import { type Extension, type ExtensionManifest, extensionCapability } from "../capability/extension";
-import { type ExtensionModule, extensionModuleCapability } from "../capability/extension-module";
-import { readDirEntries, readFile } from "../capability/fs";
-import { registerProvider } from "../capability/index";
-import { type MCPServer, mcpCapability } from "../capability/mcp";
-import { type Settings, settingsCapability } from "../capability/settings";
-import { type SystemPrompt, systemPromptCapability } from "../capability/system-prompt";
-import type { LoadContext, LoadResult } from "../capability/types";
+import { type ContextFile, contextFileCapability } from "$c/capability/context-file";
+import { type Extension, type ExtensionManifest, extensionCapability } from "$c/capability/extension";
+import { type ExtensionModule, extensionModuleCapability } from "$c/capability/extension-module";
+import { readDirEntries, readFile } from "$c/capability/fs";
+import { registerProvider } from "$c/capability/index";
+import { type MCPServer, mcpCapability } from "$c/capability/mcp";
+import { type Settings, settingsCapability } from "$c/capability/settings";
+import { type SystemPrompt, systemPromptCapability } from "$c/capability/system-prompt";
+import type { LoadContext, LoadResult } from "$c/capability/types";
 import {
 	calculateDepth,
 	createSourceMeta,

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { handleAur } from "../../../src/core/tools/web-scrapers/aur";
-import { handleBrew } from "../../../src/core/tools/web-scrapers/brew";
-import { handleMaven } from "../../../src/core/tools/web-scrapers/maven";
-import { handleNuGet } from "../../../src/core/tools/web-scrapers/nuget";
-import { handlePackagist } from "../../../src/core/tools/web-scrapers/packagist";
-import { handleRubyGems } from "../../../src/core/tools/web-scrapers/rubygems";
+import { handleAur } from "$c/core/tools/web-scrapers/aur";
+import { handleBrew } from "$c/core/tools/web-scrapers/brew";
+import { handleMaven } from "$c/core/tools/web-scrapers/maven";
+import { handleNuGet } from "$c/core/tools/web-scrapers/nuget";
+import { handlePackagist } from "$c/core/tools/web-scrapers/packagist";
+import { handleRubyGems } from "$c/core/tools/web-scrapers/rubygems";
 
 const SKIP = !process.env.WEB_FETCH_INTEGRATION;
 

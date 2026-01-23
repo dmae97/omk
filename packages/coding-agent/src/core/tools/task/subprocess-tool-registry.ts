@@ -8,7 +8,7 @@
  */
 
 import type { Component } from "@oh-my-pi/pi-tui";
-import type { Theme } from "../../../modes/interactive/theme/theme";
+import type { Theme } from "$c/modes/interactive/theme/theme";
 
 /** Event from subprocess tool execution (parsed from JSONL) */
 export interface SubprocessToolEvent {

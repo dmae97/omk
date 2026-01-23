@@ -11,8 +11,8 @@
 import type { AgentToolResult, RenderResultOptions } from "@oh-my-pi/pi-agent-core";
 import { Text } from "@oh-my-pi/pi-tui";
 import { highlight, supportsLanguage } from "cli-highlight";
-import { getLanguageFromPath, type Theme } from "../../../modes/interactive/theme/theme";
-import { formatExpandHint, formatMoreItems, TRUNCATE_LENGTHS, truncate } from "../render-utils";
+import { formatExpandHint, formatMoreItems, TRUNCATE_LENGTHS, truncate } from "$c/core/tools/render-utils";
+import { getLanguageFromPath, type Theme } from "$c/modes/interactive/theme/theme";
 import type { LspParams, LspToolDetails } from "./types";
 
 // =============================================================================

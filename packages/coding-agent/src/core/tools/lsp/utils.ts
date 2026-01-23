@@ -1,5 +1,5 @@
 import path from "node:path";
-import { type Theme, theme } from "../../../modes/interactive/theme/theme";
+import { type Theme, theme } from "$c/modes/interactive/theme/theme";
 import type {
 	Diagnostic,
 	DiagnosticSeverity,

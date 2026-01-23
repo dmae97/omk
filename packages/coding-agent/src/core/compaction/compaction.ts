@@ -8,12 +8,12 @@
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, Model, Usage } from "@oh-my-pi/pi-ai";
 import { completeSimple } from "@oh-my-pi/pi-ai";
-import compactionSummaryPrompt from "../../prompts/compaction/compaction-summary.md" with { type: "text" };
-import compactionTurnPrefixPrompt from "../../prompts/compaction/compaction-turn-prefix.md" with { type: "text" };
-import compactionUpdateSummaryPrompt from "../../prompts/compaction/compaction-update-summary.md" with { type: "text" };
-import { convertToLlm, createBranchSummaryMessage, createCustomMessage } from "../messages";
-import { renderPromptTemplate } from "../prompt-templates";
-import type { CompactionEntry, SessionEntry } from "../session-manager";
+import { convertToLlm, createBranchSummaryMessage, createCustomMessage } from "$c/core/messages";
+import { renderPromptTemplate } from "$c/core/prompt-templates";
+import type { CompactionEntry, SessionEntry } from "$c/core/session-manager";
+import compactionSummaryPrompt from "$c/prompts/compaction/compaction-summary.md" with { type: "text" };
+import compactionTurnPrefixPrompt from "$c/prompts/compaction/compaction-turn-prefix.md" with { type: "text" };
+import compactionUpdateSummaryPrompt from "$c/prompts/compaction/compaction-update-summary.md" with { type: "text" };
 import {
 	computeFileLists,
 	createFileOps,

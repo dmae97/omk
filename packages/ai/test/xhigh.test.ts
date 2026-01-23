@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { getModel } from "../src/models";
-import { stream } from "../src/stream";
-import type { Context, Model } from "../src/types";
+import { getModel } from "$ai/models";
+import { stream } from "$ai/stream";
+import type { Context, Model } from "$ai/types";
 
 function makeContext(): Context {
 	return {

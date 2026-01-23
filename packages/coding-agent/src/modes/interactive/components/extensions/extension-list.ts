@@ -7,8 +7,8 @@
  */
 
 import { type Component, matchesKey, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
-import { isProviderEnabled } from "../../../../discovery";
-import { theme } from "../../theme/theme";
+import { isProviderEnabled } from "$c/discovery";
+import { theme } from "$c/modes/interactive/theme/theme";
 import { applyFilter } from "./state-manager";
 import type { Extension, ExtensionKind, ExtensionState } from "./types";
 

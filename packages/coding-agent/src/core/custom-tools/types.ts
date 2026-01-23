@@ -9,11 +9,11 @@ import type { AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agen
 import type { Model } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import type { Static, TSchema } from "@sinclair/typebox";
-import type { Theme } from "../../modes/interactive/theme/theme";
-import type { ExecOptions, ExecResult } from "../exec";
-import type { HookUIContext } from "../hooks/types";
-import type { ModelRegistry } from "../model-registry";
-import type { ReadonlySessionManager } from "../session-manager";
+import type { ExecOptions, ExecResult } from "$c/core/exec";
+import type { HookUIContext } from "$c/core/hooks/types";
+import type { ModelRegistry } from "$c/core/model-registry";
+import type { ReadonlySessionManager } from "$c/core/session-manager";
+import type { Theme } from "$c/modes/interactive/theme/theme";
 
 /** Alias for clarity */
 export type CustomToolUIContext = HookUIContext;
@@ -22,7 +22,7 @@ export type CustomToolUIContext = HookUIContext;
 export type { AgentToolResult, AgentToolUpdateCallback };
 
 // Re-export for backward compatibility
-export type { ExecOptions, ExecResult } from "../exec";
+export type { ExecOptions, ExecResult } from "$c/core/exec";
 
 /** API passed to custom tool factory (stable across session changes) */
 export interface CustomToolAPI {

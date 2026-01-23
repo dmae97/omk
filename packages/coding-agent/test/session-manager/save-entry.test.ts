@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { type CustomEntry, SessionManager } from "../../src/core/session-manager";
+import { type CustomEntry, SessionManager } from "$c/core/session-manager";
 
 describe("SessionManager.saveCustomEntry", () => {
 	it("saves custom entries and includes them in tree traversal", () => {

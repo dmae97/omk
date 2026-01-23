@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { handleWikipedia } from "../../../src/core/tools/web-scrapers/wikipedia";
+import { handleWikipedia } from "$c/core/tools/web-scrapers/wikipedia";
 
 const SKIP = !process.env.WEB_FETCH_INTEGRATION;
 

@@ -5,7 +5,7 @@
 import type { AgentTool, AgentToolResult, AgentToolUpdateCallback, RenderResultOptions } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import type { Static, TSchema } from "@sinclair/typebox";
-import type { Theme } from "../../modes/interactive/theme/theme";
+import type { Theme } from "$c/modes/interactive/theme/theme";
 import type { CustomTool, CustomToolContext, LoadedCustomTool } from "./types";
 
 export class CustomToolAdapter<TParams extends TSchema = TSchema, TDetails = any, TTheme extends Theme = Theme>

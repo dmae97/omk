@@ -1,6 +1,6 @@
-import { matchesKey } from "../keys";
-import type { Component } from "../tui";
-import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "../utils";
+import { matchesKey } from "$tui/keys";
+import type { Component } from "$tui/tui";
+import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "$tui/utils";
 
 export interface SettingItem {
 	/** Unique identifier for this setting */

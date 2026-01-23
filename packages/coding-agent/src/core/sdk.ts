@@ -33,11 +33,11 @@ import type { Component } from "@oh-my-pi/pi-tui";
 // Import discovery to register all providers on startup
 import { logger, postmortem } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
-import { loadCapability } from "../capability/index";
-import { type Rule, ruleCapability } from "../capability/rule";
-import { getAgentDir, getConfigDirPaths } from "../config";
+import { loadCapability } from "$c/capability/index";
+import { type Rule, ruleCapability } from "$c/capability/rule";
+import { getAgentDir, getConfigDirPaths } from "$c/config";
 import "../discovery";
-import { initializeWithSettings } from "../discovery";
+import { initializeWithSettings } from "$c/discovery";
 import { AgentSession } from "./agent-session";
 import { AuthStorage } from "./auth-storage";
 import { CursorExecHandlers } from "./cursor/exec-bridge";

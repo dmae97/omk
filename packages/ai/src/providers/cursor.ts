@@ -4,7 +4,7 @@ import http2 from "node:http2";
 import { create, fromBinary, fromJson, type JsonValue, toBinary, toJson } from "@bufbuild/protobuf";
 import { ValueSchema } from "@bufbuild/protobuf/wkt";
 import JSON5 from "json5";
-import { calculateCost } from "../models";
+import { calculateCost } from "$ai/models";
 import type {
 	Api,
 	AssistantMessage,
@@ -23,10 +23,10 @@ import type {
 	Tool,
 	ToolCall,
 	ToolResultMessage,
-} from "../types";
-import { AssistantMessageEventStream } from "../utils/event-stream";
-import { parseStreamingJson } from "../utils/json-parse";
-import { formatErrorMessageWithRetryAfter } from "../utils/retry-after";
+} from "$ai/types";
+import { AssistantMessageEventStream } from "$ai/utils/event-stream";
+import { parseStreamingJson } from "$ai/utils/json-parse";
+import { formatErrorMessageWithRetryAfter } from "$ai/utils/retry-after";
 import type { McpToolDefinition } from "./cursor/gen/agent_pb";
 import {
 	AgentClientMessageSchema,

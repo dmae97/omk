@@ -6,12 +6,12 @@
  */
 
 import { dirname, resolve } from "node:path";
-import { readDirEntries, readFile } from "../capability/fs";
-import { registerProvider } from "../capability/index";
-import type { Rule } from "../capability/rule";
-import { ruleCapability } from "../capability/rule";
-import type { LoadContext, LoadResult } from "../capability/types";
-import { parseFrontmatter } from "../core/frontmatter";
+import { readDirEntries, readFile } from "$c/capability/fs";
+import { registerProvider } from "$c/capability/index";
+import type { Rule } from "$c/capability/rule";
+import { ruleCapability } from "$c/capability/rule";
+import type { LoadContext, LoadResult } from "$c/capability/types";
+import { parseFrontmatter } from "$c/core/frontmatter";
 import { createSourceMeta, loadFilesFromDir } from "./helpers";
 
 const PROVIDER_ID = "cline";

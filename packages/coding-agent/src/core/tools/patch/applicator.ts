@@ -7,7 +7,7 @@
 
 import { mkdirSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
-import { resolveToCwd } from "../path-utils";
+import { resolveToCwd } from "$c/core/tools/path-utils";
 import { DEFAULT_FUZZY_THRESHOLD, findContextLine, findMatch, seekSequence } from "./fuzzy";
 import {
 	adjustIndentation,
