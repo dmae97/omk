@@ -6,18 +6,18 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import * as path from "node:path";
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Model, TextContent } from "@oh-my-pi/pi-ai";
+import { type ExtensionModule, extensionModuleCapability } from "@oh-my-pi/pi-coding-agent/capability/extension-module";
+import { loadCapability } from "@oh-my-pi/pi-coding-agent/discovery";
+import { expandPath, getExtensionNameFromPath } from "@oh-my-pi/pi-coding-agent/discovery/helpers";
+import type { ExecOptions } from "@oh-my-pi/pi-coding-agent/exec/exec";
+import { execCommand } from "@oh-my-pi/pi-coding-agent/exec/exec";
+import * as piCodingAgent from "@oh-my-pi/pi-coding-agent/index";
+import type { CustomMessage } from "@oh-my-pi/pi-coding-agent/session/messages";
+import { EventBus } from "@oh-my-pi/pi-coding-agent/utils/event-bus";
 import type { KeyId } from "@oh-my-pi/pi-tui";
 import { logger } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
 import * as TypeBox from "@sinclair/typebox";
-import { type ExtensionModule, extensionModuleCapability } from "$c/capability/extension-module";
-import { loadCapability } from "$c/discovery";
-import { expandPath, getExtensionNameFromPath } from "$c/discovery/helpers";
-import type { ExecOptions } from "$c/exec/exec";
-import { execCommand } from "$c/exec/exec";
-import * as piCodingAgent from "$c/index";
-import type { CustomMessage } from "$c/session/messages";
-import { EventBus } from "$c/utils/event-bus";
 import type {
 	Extension,
 	ExtensionAPI,

@@ -1,5 +1,5 @@
 import path from "node:path";
-import { type Theme, theme } from "$c/modes/theme/theme";
+import { type Theme, theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type {
 	Diagnostic,
 	DiagnosticSeverity,

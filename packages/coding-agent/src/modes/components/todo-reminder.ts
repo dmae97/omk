@@ -1,6 +1,6 @@
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import type { TodoItem } from "@oh-my-pi/pi-coding-agent/tools/todo-write";
 import { Box, Container, Spacer, Text } from "@oh-my-pi/pi-tui";
-import { theme } from "$c/modes/theme/theme";
-import type { TodoItem } from "$c/tools/todo-write";
 
 /**
  * Component that renders a todo completion reminder notification.

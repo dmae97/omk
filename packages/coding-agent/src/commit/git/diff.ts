@@ -1,4 +1,4 @@
-import type { DiffHunk, FileDiff, FileHunks, NumstatEntry } from "$c/commit/types";
+import type { DiffHunk, FileDiff, FileHunks, NumstatEntry } from "@oh-my-pi/pi-coding-agent/commit/types";
 
 export function parseNumstat(output: string): NumstatEntry[] {
 	const entries: NumstatEntry[] = [];

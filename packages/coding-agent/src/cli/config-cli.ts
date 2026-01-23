@@ -5,11 +5,11 @@
  * Uses SETTINGS_DEFS as the source of truth for available settings.
  */
 
+import { APP_NAME, getAgentDir } from "@oh-my-pi/pi-coding-agent/config";
+import { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+import { SETTINGS_DEFS, type SettingDef } from "@oh-my-pi/pi-coding-agent/modes/components/settings-defs";
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import chalk from "chalk";
-import { APP_NAME, getAgentDir } from "$c/config";
-import { SettingsManager } from "$c/config/settings-manager";
-import { SETTINGS_DEFS, type SettingDef } from "$c/modes/components/settings-defs";
-import { theme } from "$c/modes/theme/theme";
 
 // =============================================================================
 // Types

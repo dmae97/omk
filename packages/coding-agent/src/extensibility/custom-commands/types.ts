@@ -6,7 +6,7 @@
  * arbitrary logic with full access to the hook context.
  */
 
-import type { ExecOptions, ExecResult, HookCommandContext } from "$c/extensibility/hooks/types";
+import type { ExecOptions, ExecResult, HookCommandContext } from "@oh-my-pi/pi-coding-agent/extensibility/hooks/types";
 
 // Re-export for custom commands to use
 export type { ExecOptions, ExecResult, HookCommandContext };

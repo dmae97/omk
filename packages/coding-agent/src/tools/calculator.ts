@@ -1,13 +1,13 @@
 import type { AgentTool, AgentToolResult } from "@oh-my-pi/pi-agent-core";
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import type { RenderResultOptions } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
+import type { Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import calculatorDescription from "@oh-my-pi/pi-coding-agent/prompts/tools/calculator.md" with { type: "text" };
+import { renderStatusLine, renderTreeList } from "@oh-my-pi/pi-coding-agent/tui";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { untilAborted } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
-import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
-import type { Theme } from "$c/modes/theme/theme";
-import calculatorDescription from "$c/prompts/tools/calculator.md" with { type: "text" };
-import { renderStatusLine, renderTreeList } from "$c/tui";
 import type { ToolSession } from "./index";
 import {
 	formatCount,

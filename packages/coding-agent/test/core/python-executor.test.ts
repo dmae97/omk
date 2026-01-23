@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
 import { join } from "node:path";
-import { createTempDirSync } from "@oh-my-pi/pi-utils";
 import {
 	disposeAllKernelSessions,
 	executePythonWithKernel,
@@ -8,9 +7,15 @@ import {
 	type PythonKernelExecutor,
 	resetPreludeDocsCache,
 	warmPythonEnvironment,
-} from "$c/ipy/executor";
-import { type KernelExecuteOptions, type KernelExecuteResult, type PreludeHelper, PythonKernel } from "$c/ipy/kernel";
-import { DEFAULT_MAX_BYTES } from "$c/tools/truncate";
+} from "@oh-my-pi/pi-coding-agent/ipy/executor";
+import {
+	type KernelExecuteOptions,
+	type KernelExecuteResult,
+	type PreludeHelper,
+	PythonKernel,
+} from "@oh-my-pi/pi-coding-agent/ipy/kernel";
+import { DEFAULT_MAX_BYTES } from "@oh-my-pi/pi-coding-agent/tools/truncate";
+import { createTempDirSync } from "@oh-my-pi/pi-utils";
 
 class FakeKernel implements PythonKernelExecutor {
 	private result: KernelExecuteResult;

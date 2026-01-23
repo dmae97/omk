@@ -12,11 +12,11 @@ import {
 } from "node:fs";
 import { createServer } from "node:net";
 import { delimiter, join } from "node:path";
+import { getAgentDir } from "@oh-my-pi/pi-coding-agent/config";
+import { getShellConfig, killProcessTree } from "@oh-my-pi/pi-coding-agent/utils/shell";
+import { getOrCreateSnapshot } from "@oh-my-pi/pi-coding-agent/utils/shell-snapshot";
 import { logger } from "@oh-my-pi/pi-utils";
 import type { Subprocess } from "bun";
-import { getAgentDir } from "$c/config";
-import { getShellConfig, killProcessTree } from "$c/utils/shell";
-import { getOrCreateSnapshot } from "$c/utils/shell-snapshot";
 
 const GATEWAY_DIR_NAME = "python-gateway";
 const GATEWAY_INFO_FILE = "gateway.json";

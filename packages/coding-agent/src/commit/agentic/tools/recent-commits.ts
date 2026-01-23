@@ -1,6 +1,6 @@
+import type { ControlledGit } from "@oh-my-pi/pi-coding-agent/commit/git";
+import type { CustomTool } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
 import { Type } from "@sinclair/typebox";
-import type { ControlledGit } from "$c/commit/git";
-import type { CustomTool } from "$c/extensibility/custom-tools/types";
 
 const recentCommitsSchema = Type.Object({
 	count: Type.Optional(Type.Number({ description: "Number of commits to fetch", minimum: 1, maximum: 50 })),

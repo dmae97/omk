@@ -3,18 +3,24 @@
  * Handles data loading, tree building, filtering, and toggle persistence.
  */
 
+import type { ContextFile } from "@oh-my-pi/pi-coding-agent/capability/context-file";
+import type { ExtensionModule } from "@oh-my-pi/pi-coding-agent/capability/extension-module";
+import type { Hook } from "@oh-my-pi/pi-coding-agent/capability/hook";
+import type { MCPServer } from "@oh-my-pi/pi-coding-agent/capability/mcp";
+import type { Prompt } from "@oh-my-pi/pi-coding-agent/capability/prompt";
+import type { Rule } from "@oh-my-pi/pi-coding-agent/capability/rule";
+import type { Skill } from "@oh-my-pi/pi-coding-agent/capability/skill";
+import type { SlashCommand } from "@oh-my-pi/pi-coding-agent/capability/slash-command";
+import type { CustomTool } from "@oh-my-pi/pi-coding-agent/capability/tool";
+import type { SourceMeta } from "@oh-my-pi/pi-coding-agent/capability/types";
+import {
+	disableProvider,
+	enableProvider,
+	getAllProvidersInfo,
+	isProviderEnabled,
+	loadCapability,
+} from "@oh-my-pi/pi-coding-agent/discovery";
 import { logger } from "@oh-my-pi/pi-utils";
-import type { ContextFile } from "$c/capability/context-file";
-import type { ExtensionModule } from "$c/capability/extension-module";
-import type { Hook } from "$c/capability/hook";
-import type { MCPServer } from "$c/capability/mcp";
-import type { Prompt } from "$c/capability/prompt";
-import type { Rule } from "$c/capability/rule";
-import type { Skill } from "$c/capability/skill";
-import type { SlashCommand } from "$c/capability/slash-command";
-import type { CustomTool } from "$c/capability/tool";
-import type { SourceMeta } from "$c/capability/types";
-import { disableProvider, enableProvider, getAllProvidersInfo, isProviderEnabled, loadCapability } from "$c/discovery";
 import type {
 	DashboardState,
 	Extension,

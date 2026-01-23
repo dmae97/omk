@@ -1,10 +1,14 @@
 import type { Api, AssistantMessage, Model, ToolCall } from "@oh-my-pi/pi-ai";
 import { completeSimple, validateToolCall } from "@oh-my-pi/pi-ai";
+import analysisSystemPrompt from "@oh-my-pi/pi-coding-agent/commit/prompts/analysis-system.md" with { type: "text" };
+import analysisUserPrompt from "@oh-my-pi/pi-coding-agent/commit/prompts/analysis-user.md" with { type: "text" };
+import type {
+	ChangelogCategory,
+	ConventionalAnalysis,
+	ConventionalDetail,
+} from "@oh-my-pi/pi-coding-agent/commit/types";
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
 import { Type } from "@sinclair/typebox";
-import analysisSystemPrompt from "$c/commit/prompts/analysis-system.md" with { type: "text" };
-import analysisUserPrompt from "$c/commit/prompts/analysis-user.md" with { type: "text" };
-import type { ChangelogCategory, ConventionalAnalysis, ConventionalDetail } from "$c/commit/types";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
 
 const ConventionalAnalysisTool = {
 	name: "create_conventional_analysis",

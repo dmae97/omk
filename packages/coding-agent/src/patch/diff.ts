@@ -5,8 +5,8 @@
  * used when not in patch mode.
  */
 
+import { resolveToCwd } from "@oh-my-pi/pi-coding-agent/tools/path-utils";
 import * as Diff from "diff";
-import { resolveToCwd } from "$c/tools/path-utils";
 import { previewPatch } from "./applicator";
 import { DEFAULT_FUZZY_THRESHOLD, findMatch } from "./fuzzy";
 import { adjustIndentation, normalizeToLF, stripBom } from "./normalize";

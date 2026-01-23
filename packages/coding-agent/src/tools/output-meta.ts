@@ -7,9 +7,9 @@
 
 import type { AgentTool, AgentToolResult } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
-import type { OutputSummary } from "$c/session/streaming-output";
-import type { TruncationResult } from "$c/tools/truncate";
-import { formatSize } from "$c/tools/truncate";
+import type { OutputSummary } from "@oh-my-pi/pi-coding-agent/session/streaming-output";
+import type { TruncationResult } from "@oh-my-pi/pi-coding-agent/tools/truncate";
+import { formatSize } from "@oh-my-pi/pi-coding-agent/tools/truncate";
 import { renderError } from "./tool-errors";
 
 /**

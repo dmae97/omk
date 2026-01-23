@@ -1,4 +1,6 @@
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import type { SettingsManager, StatusLineSettings } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+import { getSelectListTheme, getSettingsListTheme, theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import {
 	Container,
 	matchesKey,
@@ -12,8 +14,6 @@ import {
 	type TabBarTheme,
 	Text,
 } from "@oh-my-pi/pi-tui";
-import type { SettingsManager, StatusLineSettings } from "$c/config/settings-manager";
-import { getSelectListTheme, getSettingsListTheme, theme } from "$c/modes/theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 import { PluginSettingsComponent } from "./plugin-settings";
 import { getSettingsForTab, type SettingDef } from "./settings-defs";

@@ -1,3 +1,6 @@
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import type { SessionTreeNode } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+import { shortenPath } from "@oh-my-pi/pi-coding-agent/tools/render-utils";
 import {
 	type Component,
 	Container,
@@ -8,9 +11,6 @@ import {
 	TruncatedText,
 	truncateToWidth,
 } from "@oh-my-pi/pi-tui";
-import { theme } from "$c/modes/theme/theme";
-import type { SessionTreeNode } from "$c/session/session-manager";
-import { shortenPath } from "$c/tools/render-utils";
 import { DynamicBorder } from "./dynamic-border";
 
 /** Gutter info: position (displayIndent where connector was) and whether to show │ */

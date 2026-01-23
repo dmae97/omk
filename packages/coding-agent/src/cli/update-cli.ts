@@ -10,9 +10,9 @@ import { createWriteStream, existsSync, renameSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { APP_NAME, VERSION } from "@oh-my-pi/pi-coding-agent/config";
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import chalk from "chalk";
-import { APP_NAME, VERSION } from "$c/config";
-import { theme } from "$c/modes/theme/theme";
 
 /**
  * Detect if we're running as a Bun compiled binary.

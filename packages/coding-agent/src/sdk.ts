@@ -31,20 +31,20 @@ import { rename } from "node:fs/promises";
 import { join } from "node:path";
 import { Agent, type AgentEvent, type AgentMessage, type AgentTool, type ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { type Message, type Model, supportsXhigh } from "@oh-my-pi/pi-ai";
+// Import discovery to register all providers on startup
+import { loadCapability } from "@oh-my-pi/pi-coding-agent/capability/index";
+import { type Rule, ruleCapability } from "@oh-my-pi/pi-coding-agent/capability/rule";
+import { getAgentDir, getConfigDirPaths } from "@oh-my-pi/pi-coding-agent/config";
+import { CursorExecHandlers } from "@oh-my-pi/pi-coding-agent/cursor";
+import { initializeWithSettings } from "@oh-my-pi/pi-coding-agent/discovery";
+import { TtsrManager } from "@oh-my-pi/pi-coding-agent/export/ttsr";
+import { disposeAllKernelSessions } from "@oh-my-pi/pi-coding-agent/ipy/executor";
+import { closeAllConnections } from "@oh-my-pi/pi-coding-agent/ssh/connection-manager";
+import { unmountAll } from "@oh-my-pi/pi-coding-agent/ssh/sshfs-mount";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { logger, postmortem } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 import chalk from "chalk";
-// Import discovery to register all providers on startup
-import { loadCapability } from "$c/capability/index";
-import { type Rule, ruleCapability } from "$c/capability/rule";
-import { getAgentDir, getConfigDirPaths } from "$c/config";
-import { CursorExecHandlers } from "$c/cursor";
-import { initializeWithSettings } from "$c/discovery";
-import { TtsrManager } from "$c/export/ttsr";
-import { disposeAllKernelSessions } from "$c/ipy/executor";
-import { closeAllConnections } from "$c/ssh/connection-manager";
-import { unmountAll } from "$c/ssh/sshfs-mount";
 import { ModelRegistry } from "./config/model-registry";
 import { formatModelString, parseModelString } from "./config/model-resolver";
 import { loadPromptTemplates as loadPromptTemplatesInternal, type PromptTemplate } from "./config/prompt-templates";
@@ -205,19 +205,22 @@ export interface CreateAgentSessionResult {
 
 // Re-exports
 
-export type { PromptTemplate } from "$c/config/prompt-templates";
-export type { Settings, SkillsSettings } from "$c/config/settings-manager";
-export type { CustomCommand, CustomCommandFactory } from "$c/extensibility/custom-commands/types";
-export type { CustomTool, CustomToolFactory } from "$c/extensibility/custom-tools/types";
+export type { PromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+export type { Settings, SkillsSettings } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+export type {
+	CustomCommand,
+	CustomCommandFactory,
+} from "@oh-my-pi/pi-coding-agent/extensibility/custom-commands/types";
+export type { CustomTool, CustomToolFactory } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
 export type {
 	ExtensionAPI,
 	ExtensionCommandContext,
 	ExtensionContext,
 	ExtensionFactory,
 	ToolDefinition,
-} from "$c/extensibility/extensions/index";
-export type { Skill } from "$c/extensibility/skills";
-export type { FileSlashCommand } from "$c/extensibility/slash-commands";
+} from "@oh-my-pi/pi-coding-agent/extensibility/extensions/index";
+export type { Skill } from "@oh-my-pi/pi-coding-agent/extensibility/skills";
+export type { FileSlashCommand } from "@oh-my-pi/pi-coding-agent/extensibility/slash-commands";
 export type { MCPManager, MCPServerConfig, MCPServerConnection, MCPToolsLoadResult } from "./mcp/index";
 export type { Tool } from "./tools/index";
 

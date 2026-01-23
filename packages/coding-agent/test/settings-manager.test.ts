@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { getAgentDbPath } from "$c/config";
-import { SettingsManager } from "$c/config/settings-manager";
-import { AgentStorage } from "$c/session/agent-storage";
+import { getAgentDbPath } from "@oh-my-pi/pi-coding-agent/config";
+import { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+import { AgentStorage } from "@oh-my-pi/pi-coding-agent/session/agent-storage";
 
 describe("SettingsManager", () => {
 	let testDir: string;

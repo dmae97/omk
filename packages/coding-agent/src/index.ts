@@ -3,11 +3,7 @@
 // TypeBox helper for string enums (convenience for custom tools)
 // Re-export from pi-ai which uses the correct enum-based schema format
 export { StringEnum } from "@oh-my-pi/pi-ai";
-// Re-export TUI components for custom tool rendering
-export { Container, Markdown, Spacer, Text } from "@oh-my-pi/pi-tui";
-// Logging
-export { logger } from "@oh-my-pi/pi-utils";
-export type { FileDiagnosticsResult } from "$c/lsp/index";
+export type { FileDiagnosticsResult } from "@oh-my-pi/pi-coding-agent/lsp/index";
 // UI components for extensions
 export {
 	ArminComponent,
@@ -41,7 +37,7 @@ export {
 	UserMessageComponent,
 	UserMessageSelectorComponent,
 	type VisualTruncateResult,
-} from "$c/modes/components/index";
+} from "@oh-my-pi/pi-coding-agent/modes/components/index";
 // Theme utilities for custom tools
 export {
 	getLanguageFromPath,
@@ -52,7 +48,11 @@ export {
 	initTheme,
 	Theme,
 	type ThemeColor,
-} from "$c/modes/theme/theme";
+} from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+// Re-export TUI components for custom tool rendering
+export { Container, Markdown, Spacer, Text } from "@oh-my-pi/pi-tui";
+// Logging
+export { logger } from "@oh-my-pi/pi-utils";
 export { getAgentDir, VERSION } from "./config";
 export { formatKeyHint, formatKeyHints } from "./config/keybindings";
 export { ModelRegistry } from "./config/model-registry";

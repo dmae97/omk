@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildSystemPrompt } from "$c/system-prompt";
+import { buildSystemPrompt } from "@oh-my-pi/pi-coding-agent/system-prompt";
 
 describe("buildSystemPrompt", () => {
 	describe("empty tools", () => {

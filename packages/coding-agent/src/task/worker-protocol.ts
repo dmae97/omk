@@ -1,7 +1,7 @@
 import type { AgentEvent, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
-import type { SerializedModelRegistry } from "$c/config/model-registry";
-import type { Settings } from "$c/config/settings-manager";
-import type { SerializedAuthStorage } from "$c/session/auth-storage";
+import type { SerializedModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+import type { Settings } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+import type { SerializedAuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 
 /**
  * MCP tool metadata passed from parent to worker for proxy tool creation.

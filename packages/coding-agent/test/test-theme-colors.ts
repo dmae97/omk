@@ -1,4 +1,4 @@
-import { initTheme, theme } from "$c/modes/theme/theme";
+import { initTheme, theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 
 // Initialize with dark theme explicitly
 process.env.COLORTERM = "truecolor";

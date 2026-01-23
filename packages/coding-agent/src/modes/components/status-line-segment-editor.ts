@@ -9,9 +9,9 @@
  * - Live preview shown in the actual status line above
  */
 
+import type { StatusLineSegmentId } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { Container, matchesKey } from "@oh-my-pi/pi-tui";
-import type { StatusLineSegmentId } from "$c/config/settings-manager";
-import { theme } from "$c/modes/theme/theme";
 import { ALL_SEGMENT_IDS } from "./status-line/segments";
 
 // Segment display names and short descriptions

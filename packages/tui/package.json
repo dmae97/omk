@@ -5,7 +5,8 @@
 	"type": "module",
 	"main": "src/index.ts",
 	"scripts": {
-		"test": "bun test test/*.test.ts"
+		"test": "bun test test/*.test.ts",
+		"prepublishOnly": "cp tsconfig.publish.json tsconfig.json"
 	},
 	"files": [
 		"src/**/*",

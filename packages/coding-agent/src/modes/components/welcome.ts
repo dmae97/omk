@@ -1,6 +1,6 @@
+import { APP_NAME } from "@oh-my-pi/pi-coding-agent/config";
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { type Component, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
-import { APP_NAME } from "$c/config";
-import { theme } from "$c/modes/theme/theme";
 
 export interface RecentSession {
 	name: string;

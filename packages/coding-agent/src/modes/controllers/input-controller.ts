@@ -4,13 +4,13 @@ import { open, rm } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
+import type { AgentSessionEvent } from "@oh-my-pi/pi-coding-agent/session/agent-session";
+import { readImageFromClipboard } from "@oh-my-pi/pi-coding-agent/utils/clipboard";
+import { resizeImage } from "@oh-my-pi/pi-coding-agent/utils/image-resize";
+import { generateSessionTitle, setTerminalTitle } from "@oh-my-pi/pi-coding-agent/utils/title-generator";
 import { nanoid } from "nanoid";
-import { theme } from "$c/modes/theme/theme";
-import type { InteractiveModeContext } from "$c/modes/types";
-import type { AgentSessionEvent } from "$c/session/agent-session";
-import { readImageFromClipboard } from "$c/utils/clipboard";
-import { resizeImage } from "$c/utils/image-resize";
-import { generateSessionTitle, setTerminalTitle } from "$c/utils/title-generator";
 
 interface Expandable {
 	setExpanded(expanded: boolean): void;

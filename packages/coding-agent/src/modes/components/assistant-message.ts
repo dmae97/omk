@@ -1,7 +1,7 @@
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
+import { hasPendingMermaid, prerenderMermaid } from "@oh-my-pi/pi-coding-agent/modes/theme/mermaid-cache";
+import { getMarkdownTheme, theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { Container, getCapabilities, Markdown, Spacer, Text } from "@oh-my-pi/pi-tui";
-import { hasPendingMermaid, prerenderMermaid } from "$c/modes/theme/mermaid-cache";
-import { getMarkdownTheme, theme } from "$c/modes/theme/theme";
 
 /**
  * Component that renders a complete assistant message

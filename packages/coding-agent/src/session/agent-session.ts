@@ -26,23 +26,21 @@ import type {
 	UsageReport,
 } from "@oh-my-pi/pi-ai";
 import { isContextOverflow, modelsAreEqual, supportsXhigh } from "@oh-my-pi/pi-ai";
-import { abortableSleep, logger } from "@oh-my-pi/pi-utils";
-import { YAML } from "bun";
-import type { Rule } from "$c/capability/rule";
-import { getAgentDbPath } from "$c/config";
-import type { ModelRegistry } from "$c/config/model-registry";
-import { parseModelString } from "$c/config/model-resolver";
+import type { Rule } from "@oh-my-pi/pi-coding-agent/capability/rule";
+import { getAgentDbPath } from "@oh-my-pi/pi-coding-agent/config";
+import type { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+import { parseModelString } from "@oh-my-pi/pi-coding-agent/config/model-resolver";
 import {
 	expandPromptTemplate,
 	type PromptTemplate,
 	parseCommandArgs,
 	renderPromptTemplate,
-} from "$c/config/prompt-templates";
-import type { SettingsManager, SkillsSettings } from "$c/config/settings-manager";
-import { type BashResult, executeBash as executeBashCommand } from "$c/exec/bash-executor";
-import { exportSessionToHtml } from "$c/export/html/index";
-import type { TtsrManager } from "$c/export/ttsr";
-import type { LoadedCustomCommand } from "$c/extensibility/custom-commands/index";
+} from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import type { SettingsManager, SkillsSettings } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+import { type BashResult, executeBash as executeBashCommand } from "@oh-my-pi/pi-coding-agent/exec/bash-executor";
+import { exportSessionToHtml } from "@oh-my-pi/pi-coding-agent/export/html/index";
+import type { TtsrManager } from "@oh-my-pi/pi-coding-agent/export/ttsr";
+import type { LoadedCustomCommand } from "@oh-my-pi/pi-coding-agent/extensibility/custom-commands/index";
 import type {
 	ExtensionCommandContext,
 	ExtensionRunner,
@@ -54,21 +52,23 @@ import type {
 	TreePreparation,
 	TurnEndEvent,
 	TurnStartEvent,
-} from "$c/extensibility/extensions";
-import type { CompactOptions, ContextUsage } from "$c/extensibility/extensions/types";
-import type { HookCommandContext } from "$c/extensibility/hooks/types";
-import type { Skill, SkillWarning } from "$c/extensibility/skills";
-import { expandSlashCommand, type FileSlashCommand } from "$c/extensibility/slash-commands";
-import { executePython as executePythonCommand, type PythonResult } from "$c/ipy/executor";
-import { theme } from "$c/modes/theme/theme";
-import { normalizeDiff, normalizeToLF, ParseError, previewPatch, stripBom } from "$c/patch";
-import ttsrInterruptTemplate from "$c/prompts/system/ttsr-interrupt.md" with { type: "text" };
-import { closeAllConnections } from "$c/ssh/connection-manager";
-import { unmountAll } from "$c/ssh/sshfs-mount";
-import { outputMeta } from "$c/tools/output-meta";
-import { resolveToCwd } from "$c/tools/path-utils";
-import type { TodoItem } from "$c/tools/todo-write";
-import { extractFileMentions, generateFileMentionMessages } from "$c/utils/file-mentions";
+} from "@oh-my-pi/pi-coding-agent/extensibility/extensions";
+import type { CompactOptions, ContextUsage } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
+import type { HookCommandContext } from "@oh-my-pi/pi-coding-agent/extensibility/hooks/types";
+import type { Skill, SkillWarning } from "@oh-my-pi/pi-coding-agent/extensibility/skills";
+import { expandSlashCommand, type FileSlashCommand } from "@oh-my-pi/pi-coding-agent/extensibility/slash-commands";
+import { executePython as executePythonCommand, type PythonResult } from "@oh-my-pi/pi-coding-agent/ipy/executor";
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import { normalizeDiff, normalizeToLF, ParseError, previewPatch, stripBom } from "@oh-my-pi/pi-coding-agent/patch";
+import ttsrInterruptTemplate from "@oh-my-pi/pi-coding-agent/prompts/system/ttsr-interrupt.md" with { type: "text" };
+import { closeAllConnections } from "@oh-my-pi/pi-coding-agent/ssh/connection-manager";
+import { unmountAll } from "@oh-my-pi/pi-coding-agent/ssh/sshfs-mount";
+import { outputMeta } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
+import { resolveToCwd } from "@oh-my-pi/pi-coding-agent/tools/path-utils";
+import type { TodoItem } from "@oh-my-pi/pi-coding-agent/tools/todo-write";
+import { extractFileMentions, generateFileMentionMessages } from "@oh-my-pi/pi-coding-agent/utils/file-mentions";
+import { abortableSleep, logger } from "@oh-my-pi/pi-utils";
+import { YAML } from "bun";
 import {
 	type CompactionResult,
 	calculateContextTokens,

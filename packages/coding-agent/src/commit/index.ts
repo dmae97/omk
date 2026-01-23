@@ -2,4 +2,4 @@
  * Entry points for the omp commit command.
  */
 
-export { runCommitCommand } from "$c/commit/pipeline";
+export { runCommitCommand } from "@oh-my-pi/pi-coding-agent/commit/pipeline";

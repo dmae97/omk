@@ -12,10 +12,10 @@
  * multiple reviewer agents based on diff weight and locality.
  */
 
-import { renderPromptTemplate } from "$c/config/prompt-templates";
-import type { CustomCommand, CustomCommandAPI } from "$c/extensibility/custom-commands/types";
-import type { HookCommandContext } from "$c/extensibility/hooks/types";
-import reviewRequestTemplate from "$c/prompts/review-request.md" with { type: "text" };
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import type { CustomCommand, CustomCommandAPI } from "@oh-my-pi/pi-coding-agent/extensibility/custom-commands/types";
+import type { HookCommandContext } from "@oh-my-pi/pi-coding-agent/extensibility/hooks/types";
+import reviewRequestTemplate from "@oh-my-pi/pi-coding-agent/prompts/review-request.md" with { type: "text" };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types

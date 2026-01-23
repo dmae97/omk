@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
+import { streamOpenAICodexResponses } from "@oh-my-pi/pi-ai/providers/openai-codex-responses";
+import type { Context, Model } from "@oh-my-pi/pi-ai/types";
 import { createTempDirSync } from "@oh-my-pi/pi-utils";
-import { streamOpenAICodexResponses } from "$ai/providers/openai-codex-responses";
-import type { Context, Model } from "$ai/types";
 
 const originalFetch = global.fetch;
 const originalAgentDir = process.env.OMP_CODING_AGENT_DIR;

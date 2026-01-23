@@ -2,11 +2,16 @@ import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+	parseDiffHunks,
+	parseFileDiffs,
+	parseFileHunks,
+	parseNumstat,
+} from "@oh-my-pi/pi-coding-agent/commit/git/diff";
+import { GitError } from "@oh-my-pi/pi-coding-agent/commit/git/errors";
+import { commit, push, resetStaging, runGitCommand, stageFiles } from "@oh-my-pi/pi-coding-agent/commit/git/operations";
+import type { FileDiff, FileHunks, NumstatEntry } from "@oh-my-pi/pi-coding-agent/commit/types";
 import { logger } from "@oh-my-pi/pi-utils";
-import { parseDiffHunks, parseFileDiffs, parseFileHunks, parseNumstat } from "$c/commit/git/diff";
-import { GitError } from "$c/commit/git/errors";
-import { commit, push, resetStaging, runGitCommand, stageFiles } from "$c/commit/git/operations";
-import type { FileDiff, FileHunks, NumstatEntry } from "$c/commit/types";
 
 export type HunkSelection = {
 	path: string;

@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { discoverAndLoadExtensions, loadExtensions } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/loader";
 import { createTempDirSync } from "@oh-my-pi/pi-utils";
-import { discoverAndLoadExtensions, loadExtensions } from "$c/extensibility/extensions/loader";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

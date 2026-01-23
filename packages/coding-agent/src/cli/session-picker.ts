@@ -2,9 +2,9 @@
  * TUI session selector for --resume flag
  */
 
+import { SessionSelectorComponent } from "@oh-my-pi/pi-coding-agent/modes/components/session-selector";
+import type { SessionInfo } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { ProcessTerminal, TUI } from "@oh-my-pi/pi-tui";
-import { SessionSelectorComponent } from "$c/modes/components/session-selector";
-import type { SessionInfo } from "$c/session/session-manager";
 
 /** Show TUI session selector and return selected session path or null if cancelled */
 export async function selectSession(sessions: SessionInfo[]): Promise<string | null> {

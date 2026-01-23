@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { getModel } from "$ai/models";
-import { convertMessages } from "$ai/providers/openai-completions";
-import type { AssistantMessage, Context, Model, OpenAICompat, ToolResultMessage, Usage } from "$ai/types";
+import { getModel } from "@oh-my-pi/pi-ai/models";
+import { convertMessages } from "@oh-my-pi/pi-ai/providers/openai-completions";
+import type { AssistantMessage, Context, Model, OpenAICompat, ToolResultMessage, Usage } from "@oh-my-pi/pi-ai/types";
 
 const emptyUsage: Usage = {
 	input: 0,

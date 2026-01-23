@@ -3,8 +3,8 @@
  * Displays a list of string options with keyboard navigation.
  */
 
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { Container, matchesKey, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
-import { theme } from "$c/modes/theme/theme";
 import { CountdownTimer } from "./countdown-timer";
 import { DynamicBorder } from "./dynamic-border";
 

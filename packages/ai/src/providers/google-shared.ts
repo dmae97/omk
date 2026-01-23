@@ -3,8 +3,8 @@
  */
 
 import { type Content, FinishReason, FunctionCallingConfigMode, type Part, type Schema } from "@google/genai";
-import type { Context, ImageContent, Model, StopReason, TextContent, Tool } from "$ai/types";
-import { sanitizeSurrogates } from "$ai/utils/sanitize-unicode";
+import type { Context, ImageContent, Model, StopReason, TextContent, Tool } from "@oh-my-pi/pi-ai/types";
+import { sanitizeSurrogates } from "@oh-my-pi/pi-ai/utils/sanitize-unicode";
 import { transformMessages } from "./transform-messages";
 
 type GoogleApiType = "google-generative-ai" | "google-gemini-cli" | "google-vertex";

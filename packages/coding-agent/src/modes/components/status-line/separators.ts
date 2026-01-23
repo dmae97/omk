@@ -1,4 +1,4 @@
-import type { Theme } from "$c/modes/theme/theme";
+import type { Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { SeparatorDef, StatusLineSeparatorStyle } from "./types";
 
 function trimSep(value: string): string {

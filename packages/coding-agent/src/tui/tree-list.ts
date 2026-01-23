@@ -2,8 +2,8 @@
  * Hierarchical tree list rendering helper.
  */
 
-import type { Theme } from "$c/modes/theme/theme";
-import { formatMoreItems } from "$c/tools/render-utils";
+import type { Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import { formatMoreItems } from "@oh-my-pi/pi-coding-agent/tools/render-utils";
 import type { TreeContext } from "./types";
 import { getTreeBranch, getTreeContinuePrefix } from "./utils";
 

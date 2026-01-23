@@ -1,10 +1,10 @@
 import type { Api, AssistantMessage, Model, ToolCall } from "@oh-my-pi/pi-ai";
 import { completeSimple, validateToolCall } from "@oh-my-pi/pi-ai";
+import reduceSystemPrompt from "@oh-my-pi/pi-coding-agent/commit/prompts/reduce-system.md" with { type: "text" };
+import reduceUserPrompt from "@oh-my-pi/pi-coding-agent/commit/prompts/reduce-user.md" with { type: "text" };
+import type { ChangelogCategory, ConventionalAnalysis, FileObservation } from "@oh-my-pi/pi-coding-agent/commit/types";
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
 import { Type } from "@sinclair/typebox";
-import reduceSystemPrompt from "$c/commit/prompts/reduce-system.md" with { type: "text" };
-import reduceUserPrompt from "$c/commit/prompts/reduce-user.md" with { type: "text" };
-import type { ChangelogCategory, ConventionalAnalysis, FileObservation } from "$c/commit/types";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
 
 const ReduceTool = {
 	name: "create_conventional_analysis",

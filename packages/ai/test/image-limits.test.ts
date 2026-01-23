@@ -70,10 +70,10 @@
 import { execSync } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { getModel } from "@oh-my-pi/pi-ai/models";
+import { complete } from "@oh-my-pi/pi-ai/stream";
+import type { Api, Context, ImageContent, Model, OptionsForApi, UserMessage } from "@oh-my-pi/pi-ai/types";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getModel } from "$ai/models";
-import { complete } from "$ai/stream";
-import type { Api, Context, ImageContent, Model, OptionsForApi, UserMessage } from "$ai/types";
 
 const TEMP_DIR = join(import.meta.dir, ".temp-images");
 

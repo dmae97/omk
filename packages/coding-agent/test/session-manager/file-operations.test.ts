@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { findMostRecentSession, loadEntriesFromFile } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { nanoid } from "nanoid";
-import { findMostRecentSession, loadEntriesFromFile } from "$c/session/session-manager";
 
 describe("loadEntriesFromFile", () => {
 	let tempDir: string;

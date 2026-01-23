@@ -9,8 +9,8 @@
  * - 14 websets tools (CRUD, items, search, enrichment, monitor)
  */
 
-import type { ExaSettings } from "$c/config/settings-manager";
-import type { CustomTool } from "$c/extensibility/custom-tools/types";
+import type { ExaSettings } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+import type { CustomTool } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
 import { companyTool } from "./company";
 import { linkedinTool } from "./linkedin";
 import { researcherTools } from "./researcher";

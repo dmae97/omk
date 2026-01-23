@@ -1,4 +1,4 @@
-import { theme } from "$c/modes/theme/theme";
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { DoctorCheck } from "./types";
 
 export async function runDoctorChecks(): Promise<DoctorCheck[]> {

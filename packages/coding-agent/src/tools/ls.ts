@@ -1,13 +1,13 @@
 import nodePath from "node:path";
 import type { AgentTool, AgentToolResult } from "@oh-my-pi/pi-agent-core";
+import type { RenderResultOptions } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
+import type { Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import type { OutputMeta } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
+import { ToolError, throwIfAborted } from "@oh-my-pi/pi-coding-agent/tools/tool-errors";
+import { renderFileList, renderStatusLine } from "@oh-my-pi/pi-coding-agent/tui";
 import { type Component, Text } from "@oh-my-pi/pi-tui";
 import { untilAborted } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
-import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
-import type { Theme } from "$c/modes/theme/theme";
-import type { OutputMeta } from "$c/tools/output-meta";
-import { ToolError, throwIfAborted } from "$c/tools/tool-errors";
-import { renderFileList, renderStatusLine } from "$c/tui";
 import type { ToolSession } from "./index";
 import { applyListLimit } from "./list-limit";
 import { resolveToCwd } from "./path-utils";

@@ -1,5 +1,5 @@
+import { DEFAULT_MAX_BYTES } from "@oh-my-pi/pi-coding-agent/tools/truncate";
 import { sanitizeText } from "@oh-my-pi/pi-utils";
-import { DEFAULT_MAX_BYTES } from "$c/tools/truncate";
 
 export interface OutputSummary {
 	output: string;

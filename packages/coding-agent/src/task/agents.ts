@@ -4,15 +4,15 @@
  * Agents are embedded at build time via Bun's import with { type: "text" }.
  */
 
-import { renderPromptTemplate } from "$c/config/prompt-templates";
-import { parseAgentFields } from "$c/discovery/helpers";
-import exploreMd from "$c/prompts/agents/explore.md" with { type: "text" };
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import { parseAgentFields } from "@oh-my-pi/pi-coding-agent/discovery/helpers";
+import exploreMd from "@oh-my-pi/pi-coding-agent/prompts/agents/explore.md" with { type: "text" };
 // Embed agent markdown files at build time
-import agentFrontmatterTemplate from "$c/prompts/agents/frontmatter.md" with { type: "text" };
-import planMd from "$c/prompts/agents/plan.md" with { type: "text" };
-import reviewerMd from "$c/prompts/agents/reviewer.md" with { type: "text" };
-import taskMd from "$c/prompts/agents/task.md" with { type: "text" };
-import { parseFrontmatter } from "$c/utils/frontmatter";
+import agentFrontmatterTemplate from "@oh-my-pi/pi-coding-agent/prompts/agents/frontmatter.md" with { type: "text" };
+import planMd from "@oh-my-pi/pi-coding-agent/prompts/agents/plan.md" with { type: "text" };
+import reviewerMd from "@oh-my-pi/pi-coding-agent/prompts/agents/reviewer.md" with { type: "text" };
+import taskMd from "@oh-my-pi/pi-coding-agent/prompts/agents/task.md" with { type: "text" };
+import { parseFrontmatter } from "@oh-my-pi/pi-coding-agent/utils/frontmatter";
 import type { AgentDefinition, AgentSource } from "./types";
 
 interface AgentFrontmatter {

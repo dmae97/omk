@@ -13,7 +13,7 @@ import {
 	getLastAssistantUsage,
 	prepareCompaction,
 	shouldCompact,
-} from "$c/session/compaction/index";
+} from "@oh-my-pi/pi-coding-agent/session/compaction/index";
 import {
 	buildSessionContext,
 	type CompactionEntry,
@@ -23,7 +23,7 @@ import {
 	type SessionEntry,
 	type SessionMessageEntry,
 	type ThinkingLevelChangeEntry,
-} from "$c/session/session-manager";
+} from "@oh-my-pi/pi-coding-agent/session/session-manager";
 
 // ============================================================================
 // Test fixtures

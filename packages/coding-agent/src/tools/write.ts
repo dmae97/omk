@@ -5,23 +5,23 @@ import type {
 	AgentToolUpdateCallback,
 	ToolCallContext,
 } from "@oh-my-pi/pi-agent-core";
-import type { Component } from "@oh-my-pi/pi-tui";
-import { Text } from "@oh-my-pi/pi-tui";
-import { untilAborted } from "@oh-my-pi/pi-utils";
-import { Type } from "@sinclair/typebox";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
-import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import type { RenderResultOptions } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
 import {
 	createLspWritethrough,
 	type FileDiagnosticsResult,
 	type WritethroughCallback,
 	writethroughNoop,
-} from "$c/lsp/index";
-import { getLanguageFromPath, type Theme } from "$c/modes/theme/theme";
-import writeDescription from "$c/prompts/tools/write.md" with { type: "text" };
-import type { ToolSession } from "$c/sdk";
-import { type OutputMeta, outputMeta } from "$c/tools/output-meta";
-import { renderCodeCell, renderStatusLine } from "$c/tui";
+} from "@oh-my-pi/pi-coding-agent/lsp/index";
+import { getLanguageFromPath, type Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import writeDescription from "@oh-my-pi/pi-coding-agent/prompts/tools/write.md" with { type: "text" };
+import type { ToolSession } from "@oh-my-pi/pi-coding-agent/sdk";
+import { type OutputMeta, outputMeta } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
+import { renderCodeCell, renderStatusLine } from "@oh-my-pi/pi-coding-agent/tui";
+import type { Component } from "@oh-my-pi/pi-tui";
+import { Text } from "@oh-my-pi/pi-tui";
+import { untilAborted } from "@oh-my-pi/pi-utils";
+import { Type } from "@sinclair/typebox";
 import { resolveToCwd } from "./path-utils";
 import { formatDiagnostics, shortenPath } from "./render-utils";
 import type { RenderCallOptions } from "./renderers";

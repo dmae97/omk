@@ -4,10 +4,10 @@
  * Handles `omp setup <component>` to install dependencies for optional features.
  */
 
+import { APP_NAME } from "@oh-my-pi/pi-coding-agent/config";
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { $ } from "bun";
 import chalk from "chalk";
-import { APP_NAME } from "$c/config";
-import { theme } from "$c/modes/theme/theme";
 
 export type SetupComponent = "python";
 

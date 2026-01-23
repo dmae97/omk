@@ -1,4 +1,4 @@
-import type { AssistantMessage } from "$ai/types";
+import type { AssistantMessage } from "@oh-my-pi/pi-ai/types";
 
 /**
  * Regex patterns to detect context overflow errors from different providers.

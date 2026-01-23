@@ -1,19 +1,19 @@
 import path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import type { RenderResultOptions } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
+import type { Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import findDescription from "@oh-my-pi/pi-coding-agent/prompts/tools/find.md" with { type: "text" };
+import type { OutputMeta } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
+import { ToolAbortError, ToolError, throwIfAborted } from "@oh-my-pi/pi-coding-agent/tools/tool-errors";
+import { renderFileList, renderStatusLine, renderTreeList } from "@oh-my-pi/pi-coding-agent/tui";
+import { ensureTool } from "@oh-my-pi/pi-coding-agent/utils/tools-manager";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { ptree, untilAborted } from "@oh-my-pi/pi-utils";
 import type { Static } from "@sinclair/typebox";
 import { Type } from "@sinclair/typebox";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
-import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
-import type { Theme } from "$c/modes/theme/theme";
-import findDescription from "$c/prompts/tools/find.md" with { type: "text" };
-import type { OutputMeta } from "$c/tools/output-meta";
-import { ToolAbortError, ToolError, throwIfAborted } from "$c/tools/tool-errors";
-import { renderFileList, renderStatusLine, renderTreeList } from "$c/tui";
-import { ensureTool } from "$c/utils/tools-manager";
 
 import type { ToolSession } from "./index";
 import { applyListLimit } from "./list-limit";

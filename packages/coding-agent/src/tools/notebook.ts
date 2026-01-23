@@ -1,13 +1,13 @@
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
+import type { RenderResultOptions } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
+import type { Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import type { ToolSession } from "@oh-my-pi/pi-coding-agent/sdk";
+import { renderCodeCell, renderStatusLine } from "@oh-my-pi/pi-coding-agent/tui";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
-import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
-import type { Theme } from "$c/modes/theme/theme";
-import type { ToolSession } from "$c/sdk";
-import { renderCodeCell, renderStatusLine } from "$c/tui";
 import { resolveToCwd } from "./path-utils";
 import { formatCount, formatErrorMessage, PREVIEW_LIMITS } from "./render-utils";
 

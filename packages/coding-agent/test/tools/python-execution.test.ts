@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "bun:test";
+import * as pythonExecutor from "@oh-my-pi/pi-coding-agent/ipy/executor";
+import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools/index";
+import { PythonTool } from "@oh-my-pi/pi-coding-agent/tools/python";
 import { createTempDirSync } from "@oh-my-pi/pi-utils";
-import * as pythonExecutor from "$c/ipy/executor";
-import type { ToolSession } from "$c/tools/index";
-import { PythonTool } from "$c/tools/python";
 
 function createSession(cwd: string): ToolSession {
 	return {

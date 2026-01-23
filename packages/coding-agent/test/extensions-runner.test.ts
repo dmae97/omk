@@ -5,12 +5,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+import { discoverAndLoadExtensions } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/loader";
+import { ExtensionRunner } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/runner";
+import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
+import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { createTempDirSync, logger } from "@oh-my-pi/pi-utils";
-import { ModelRegistry } from "$c/config/model-registry";
-import { discoverAndLoadExtensions } from "$c/extensibility/extensions/loader";
-import { ExtensionRunner } from "$c/extensibility/extensions/runner";
-import { AuthStorage } from "$c/session/auth-storage";
-import { SessionManager } from "$c/session/session-manager";
 
 describe("ExtensionRunner", () => {
 	let tempDir: ReturnType<typeof createTempDirSync>;

@@ -11,12 +11,12 @@
  * - Legacy .windsurfrules file
  */
 
-import { readFile } from "$c/capability/fs";
-import { registerProvider } from "$c/capability/index";
-import { type MCPServer, mcpCapability } from "$c/capability/mcp";
-import { type Rule, ruleCapability } from "$c/capability/rule";
-import type { LoadContext, LoadResult } from "$c/capability/types";
-import { parseFrontmatter } from "$c/utils/frontmatter";
+import { readFile } from "@oh-my-pi/pi-coding-agent/capability/fs";
+import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability/index";
+import { type MCPServer, mcpCapability } from "@oh-my-pi/pi-coding-agent/capability/mcp";
+import { type Rule, ruleCapability } from "@oh-my-pi/pi-coding-agent/capability/rule";
+import type { LoadContext, LoadResult } from "@oh-my-pi/pi-coding-agent/capability/types";
+import { parseFrontmatter } from "@oh-my-pi/pi-coding-agent/utils/frontmatter";
 import {
 	createSourceMeta,
 	expandEnvVarsDeep,

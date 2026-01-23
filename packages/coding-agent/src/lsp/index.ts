@@ -2,14 +2,14 @@ import type { Dirent } from "node:fs";
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import { type Theme, theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import lspDescription from "@oh-my-pi/pi-coding-agent/prompts/tools/lsp.md" with { type: "text" };
+import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools/index";
+import { resolveToCwd } from "@oh-my-pi/pi-coding-agent/tools/path-utils";
+import { throwIfAborted } from "@oh-my-pi/pi-coding-agent/tools/tool-errors";
 import { logger, once, untilAborted } from "@oh-my-pi/pi-utils";
 import type { BunFile } from "bun";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
-import { type Theme, theme } from "$c/modes/theme/theme";
-import lspDescription from "$c/prompts/tools/lsp.md" with { type: "text" };
-import type { ToolSession } from "$c/tools/index";
-import { resolveToCwd } from "$c/tools/path-utils";
-import { throwIfAborted } from "$c/tools/tool-errors";
 import {
 	ensureFileOpen,
 	getActiveClients,

@@ -1,7 +1,7 @@
+import type { ControlledGit } from "@oh-my-pi/pi-coding-agent/commit/git";
+import type { DiffHunk, FileHunks } from "@oh-my-pi/pi-coding-agent/commit/types";
+import type { CustomTool } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
 import { Type } from "@sinclair/typebox";
-import type { ControlledGit } from "$c/commit/git";
-import type { DiffHunk, FileHunks } from "$c/commit/types";
-import type { CustomTool } from "$c/extensibility/custom-tools/types";
 
 const gitHunkSchema = Type.Object({
 	file: Type.String({ description: "File path" }),

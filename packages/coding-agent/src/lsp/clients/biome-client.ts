@@ -4,7 +4,7 @@
  */
 
 import path from "node:path";
-import type { Diagnostic, DiagnosticSeverity, LinterClient, ServerConfig } from "$c/lsp/types";
+import type { Diagnostic, DiagnosticSeverity, LinterClient, ServerConfig } from "@oh-my-pi/pi-coding-agent/lsp/types";
 
 // =============================================================================
 // Biome JSON Output Types

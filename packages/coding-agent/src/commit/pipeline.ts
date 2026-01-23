@@ -1,26 +1,28 @@
 import { relative } from "node:path";
 import type { Api, Model } from "@oh-my-pi/pi-ai";
-import { logger } from "@oh-my-pi/pi-utils";
-import { runAgenticCommit } from "$c/commit/agentic";
+import { runAgenticCommit } from "@oh-my-pi/pi-coding-agent/commit/agentic";
 import {
 	extractScopeCandidates,
 	generateConventionalAnalysis,
 	generateSummary,
 	validateAnalysis,
 	validateSummary,
-} from "$c/commit/analysis";
-import { runChangelogFlow } from "$c/commit/changelog";
-import { ControlledGit } from "$c/commit/git";
-import { runMapReduceAnalysis, shouldUseMapReduce } from "$c/commit/map-reduce";
-import { formatCommitMessage } from "$c/commit/message";
-import { resolvePrimaryModel, resolveSmolModel } from "$c/commit/model-selection";
-import summaryRetryPrompt from "$c/commit/prompts/summary-retry.md" with { type: "text" };
-import typesDescriptionPrompt from "$c/commit/prompts/types-description.md" with { type: "text" };
-import type { CommitCommandArgs, ConventionalAnalysis } from "$c/commit/types";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
-import { SettingsManager } from "$c/config/settings-manager";
-import { discoverAuthStorage, discoverModels } from "$c/sdk";
-import { loadProjectContextFiles } from "$c/system-prompt";
+} from "@oh-my-pi/pi-coding-agent/commit/analysis";
+import { runChangelogFlow } from "@oh-my-pi/pi-coding-agent/commit/changelog";
+import { ControlledGit } from "@oh-my-pi/pi-coding-agent/commit/git";
+import { runMapReduceAnalysis, shouldUseMapReduce } from "@oh-my-pi/pi-coding-agent/commit/map-reduce";
+import { formatCommitMessage } from "@oh-my-pi/pi-coding-agent/commit/message";
+import { resolvePrimaryModel, resolveSmolModel } from "@oh-my-pi/pi-coding-agent/commit/model-selection";
+import summaryRetryPrompt from "@oh-my-pi/pi-coding-agent/commit/prompts/summary-retry.md" with { type: "text" };
+import typesDescriptionPrompt from "@oh-my-pi/pi-coding-agent/commit/prompts/types-description.md" with {
+	type: "text",
+};
+import type { CommitCommandArgs, ConventionalAnalysis } from "@oh-my-pi/pi-coding-agent/commit/types";
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+import { discoverAuthStorage, discoverModels } from "@oh-my-pi/pi-coding-agent/sdk";
+import { loadProjectContextFiles } from "@oh-my-pi/pi-coding-agent/system-prompt";
+import { logger } from "@oh-my-pi/pi-utils";
 
 const SUMMARY_MAX_CHARS = 72;
 const RECENT_COMMITS_COUNT = 8;

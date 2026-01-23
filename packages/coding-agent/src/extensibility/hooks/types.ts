@@ -7,24 +7,30 @@
 
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Message, Model, TextContent, ToolResultMessage } from "@oh-my-pi/pi-ai";
-import type { Component, TUI } from "@oh-my-pi/pi-tui";
-import type { ModelRegistry } from "$c/config/model-registry";
-import type { ExecOptions, ExecResult } from "$c/exec/exec";
-import type { Theme } from "$c/modes/theme/theme";
-import type { EditToolDetails } from "$c/patch";
-import type { CompactionPreparation, CompactionResult } from "$c/session/compaction/index";
-import type { HookMessage } from "$c/session/messages";
+import type { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+import type { ExecOptions, ExecResult } from "@oh-my-pi/pi-coding-agent/exec/exec";
+import type { Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import type { EditToolDetails } from "@oh-my-pi/pi-coding-agent/patch";
+import type { CompactionPreparation, CompactionResult } from "@oh-my-pi/pi-coding-agent/session/compaction/index";
+import type { HookMessage } from "@oh-my-pi/pi-coding-agent/session/messages";
 import type {
 	BranchSummaryEntry,
 	CompactionEntry,
 	ReadonlySessionManager,
 	SessionEntry,
 	SessionManager,
-} from "$c/session/session-manager";
-import type { BashToolDetails, FindToolDetails, GrepToolDetails, LsToolDetails, ReadToolDetails } from "$c/tools/index";
+} from "@oh-my-pi/pi-coding-agent/session/session-manager";
+import type {
+	BashToolDetails,
+	FindToolDetails,
+	GrepToolDetails,
+	LsToolDetails,
+	ReadToolDetails,
+} from "@oh-my-pi/pi-coding-agent/tools/index";
+import type { Component, TUI } from "@oh-my-pi/pi-tui";
 
 // Re-export for backward compatibility
-export type { ExecOptions, ExecResult } from "$c/exec/exec";
+export type { ExecOptions, ExecResult } from "@oh-my-pi/pi-coding-agent/exec/exec";
 
 /**
  * UI context for hooks to request interactive UI from the harness.

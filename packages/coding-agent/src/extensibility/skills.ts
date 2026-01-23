@@ -1,13 +1,16 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { skillCapability } from "@oh-my-pi/pi-coding-agent/capability/skill";
+import type { SourceMeta } from "@oh-my-pi/pi-coding-agent/capability/types";
+import type { SkillsSettings } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+import type {
+	Skill as CapabilitySkill,
+	SkillFrontmatter as ImportedSkillFrontmatter,
+} from "@oh-my-pi/pi-coding-agent/discovery";
+import { loadCapability } from "@oh-my-pi/pi-coding-agent/discovery";
+import { parseFrontmatter } from "@oh-my-pi/pi-coding-agent/utils/frontmatter";
 import { logger } from "@oh-my-pi/pi-utils";
-import { skillCapability } from "$c/capability/skill";
-import type { SourceMeta } from "$c/capability/types";
-import type { SkillsSettings } from "$c/config/settings-manager";
-import type { Skill as CapabilitySkill, SkillFrontmatter as ImportedSkillFrontmatter } from "$c/discovery";
-import { loadCapability } from "$c/discovery";
-import { parseFrontmatter } from "$c/utils/frontmatter";
 
 // Re-export SkillFrontmatter for backward compatibility
 export type { ImportedSkillFrontmatter as SkillFrontmatter };

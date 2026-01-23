@@ -2,8 +2,8 @@
  * Shared helpers for tool-rendered UI components.
  */
 
+import type { Theme, ThemeBg } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { truncateToWidth as truncateToWidthBase, visibleWidth } from "@oh-my-pi/pi-tui";
-import type { Theme, ThemeBg } from "$c/modes/theme/theme";
 import type { IconType, State } from "./types";
 
 export function buildTreePrefix(ancestors: boolean[], theme: Theme): string {

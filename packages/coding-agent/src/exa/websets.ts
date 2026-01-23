@@ -4,8 +4,8 @@
  * CRUD operations for websets, items, searches, enrichments, and monitoring.
  */
 
+import type { CustomTool } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
 import { Type } from "@sinclair/typebox";
-import type { CustomTool } from "$c/extensibility/custom-tools/types";
 import { callWebsetsTool, findApiKey } from "./mcp-client";
 import type { ExaRenderDetails } from "./types";
 

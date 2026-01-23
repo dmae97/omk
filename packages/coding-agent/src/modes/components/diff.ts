@@ -1,5 +1,5 @@
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import * as Diff from "diff";
-import { theme } from "$c/modes/theme/theme";
 
 /**
  * Parse diff line to extract prefix, line number, and content.

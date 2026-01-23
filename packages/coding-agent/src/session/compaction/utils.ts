@@ -4,9 +4,11 @@
 
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { Message } from "@oh-my-pi/pi-ai";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
-import fileOperationsTemplate from "$c/prompts/system/file-operations.md" with { type: "text" };
-import summarizationSystemPrompt from "$c/prompts/system/summarization-system.md" with { type: "text" };
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import fileOperationsTemplate from "@oh-my-pi/pi-coding-agent/prompts/system/file-operations.md" with { type: "text" };
+import summarizationSystemPrompt from "@oh-my-pi/pi-coding-agent/prompts/system/summarization-system.md" with {
+	type: "text",
+};
 
 // ============================================================================
 // File Operation Tracking

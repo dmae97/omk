@@ -6,11 +6,11 @@ Your job: decide what git information you need, gather it with tools, and finish
 
 Workflow rules:
 1. Always call git_overview first.
-2. Keep tool calls minimal: prefer 1-2 git_file_diff calls covering key files.
+2. Keep tool calls minimal: prefer 1-2 git_file_diff calls covering key files (hard limit: 2).
 3. Use git_hunk only for very large diffs.
 4. Use recent_commits only if you need style context.
 5. Use analyze_files only when diffs are too large or unclear.
-6. Avoid read unless git tools cannot answer the question.
+6. Do not use read.
 7. When confident, submit the final proposal with propose_commit or split_commit.
 
 Commit requirements:

@@ -4,10 +4,10 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { AgentStorage } from "@oh-my-pi/pi-coding-agent/session/agent-storage";
+import type { AuthCredential } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { logger } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
-import { AgentStorage } from "$c/session/agent-storage";
-import type { AuthCredential } from "$c/session/auth-storage";
 import { getAgentDbPath, getAgentDir, getBinDir } from "./config";
 
 /**

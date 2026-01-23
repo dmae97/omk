@@ -7,8 +7,8 @@ import type {
 	UsageReport,
 	UsageStatus,
 	UsageWindow,
-} from "$ai/usage";
-import { refreshAntigravityToken } from "$ai/utils/oauth/google-antigravity";
+} from "@oh-my-pi/pi-ai/usage";
+import { refreshAntigravityToken } from "@oh-my-pi/pi-ai/utils/oauth/google-antigravity";
 
 interface AntigravityQuotaInfo {
 	remainingFraction?: number;

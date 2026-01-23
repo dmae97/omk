@@ -18,7 +18,8 @@
 	"scripts": {
 		"check": "tsgo --noEmit",
 		"build": "tsgo -p tsconfig.build.json",
-		"test": "vitest --run"
+		"test": "vitest --run",
+		"prepublishOnly": "cp tsconfig.publish.json tsconfig.json"
 	},
 	"author": "Can Bölük",
 	"license": "MIT",

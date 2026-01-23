@@ -4,9 +4,9 @@
 
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { Model } from "@oh-my-pi/pi-ai";
-import type { ModelRegistry } from "$c/config/model-registry";
-import { theme } from "$c/modes/theme/theme";
-import type { SessionManager } from "$c/session/session-manager";
+import type { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import type { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import type {
 	AppendEntryHandler,
 	BranchHandler,
@@ -40,7 +40,7 @@ import type {
 export type HookErrorListener = (error: HookError) => void;
 
 // Re-export execCommand for backward compatibility
-export { execCommand } from "$c/exec/exec";
+export { execCommand } from "@oh-my-pi/pi-coding-agent/exec/exec";
 
 /** No-op UI context used when no UI is available */
 const noOpUIContext: HookUIContext = {

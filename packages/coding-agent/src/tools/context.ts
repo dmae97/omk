@@ -1,6 +1,6 @@
 import type { AgentToolContext, ToolCallContext } from "@oh-my-pi/pi-agent-core";
-import type { CustomToolContext } from "$c/extensibility/custom-tools/types";
-import type { ExtensionUIContext } from "$c/extensibility/extensions/types";
+import type { CustomToolContext } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
+import type { ExtensionUIContext } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
 
 declare module "@oh-my-pi/pi-agent-core" {
 	interface AgentToolContext extends CustomToolContext {

@@ -1,4 +1,4 @@
-import type { ConventionalAnalysis } from "$c/commit/types";
+import type { ConventionalAnalysis } from "@oh-my-pi/pi-coding-agent/commit/types";
 
 export interface ValidationResult {
 	valid: boolean;

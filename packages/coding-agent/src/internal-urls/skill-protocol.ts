@@ -9,7 +9,7 @@
  */
 
 import * as path from "node:path";
-import type { Skill } from "$c/extensibility/skills";
+import type { Skill } from "@oh-my-pi/pi-coding-agent/extensibility/skills";
 import type { InternalResource, InternalUrl, ProtocolHandler } from "./types";
 
 export interface SkillProtocolOptions {

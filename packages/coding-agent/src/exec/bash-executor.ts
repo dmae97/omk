@@ -4,10 +4,10 @@
  * Provides unified bash execution for AgentSession.executeBash() and direct calls.
  */
 
+import { OutputSink } from "@oh-my-pi/pi-coding-agent/session/streaming-output";
+import { getShellConfig } from "@oh-my-pi/pi-coding-agent/utils/shell";
+import { getOrCreateSnapshot, getSnapshotSourceCommand } from "@oh-my-pi/pi-coding-agent/utils/shell-snapshot";
 import { cspawn, Exception, ptree } from "@oh-my-pi/pi-utils";
-import { OutputSink } from "$c/session/streaming-output";
-import { getShellConfig } from "$c/utils/shell";
-import { getOrCreateSnapshot, getSnapshotSourceCommand } from "$c/utils/shell-snapshot";
 
 export interface BashExecutorOptions {
 	cwd?: string;

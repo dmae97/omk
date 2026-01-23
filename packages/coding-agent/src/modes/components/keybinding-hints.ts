@@ -2,9 +2,9 @@
  * Utilities for formatting keybinding hints in the UI.
  */
 
+import type { AppAction, KeybindingsManager } from "@oh-my-pi/pi-coding-agent/config/keybindings";
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { type EditorAction, getEditorKeybindings, type KeyId } from "@oh-my-pi/pi-tui";
-import type { AppAction, KeybindingsManager } from "$c/config/keybindings";
-import { theme } from "$c/modes/theme/theme";
 
 /**
  * Format keys array as display string (e.g., ["ctrl+c", "escape"] -> "ctrl+c/escape").

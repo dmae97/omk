@@ -2,17 +2,17 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import type { RenderResultOptions } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
+import type { Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import todoWriteDescription from "@oh-my-pi/pi-coding-agent/prompts/tools/todo-write.md" with { type: "text" };
+import type { ToolSession } from "@oh-my-pi/pi-coding-agent/sdk";
+import { renderStatusLine, renderTreeList } from "@oh-my-pi/pi-coding-agent/tui";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { logger } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import chalk from "chalk";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
-import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
-import type { Theme } from "$c/modes/theme/theme";
-import todoWriteDescription from "$c/prompts/tools/todo-write.md" with { type: "text" };
-import type { ToolSession } from "$c/sdk";
-import { renderStatusLine, renderTreeList } from "$c/tui";
 import { PREVIEW_LIMITS } from "./render-utils";
 
 const todoWriteSchema = Type.Object({

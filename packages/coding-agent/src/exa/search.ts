@@ -5,8 +5,8 @@
  */
 
 import { StringEnum } from "@oh-my-pi/pi-ai";
+import type { CustomTool } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
 import { Type } from "@sinclair/typebox";
-import type { CustomTool } from "$c/extensibility/custom-tools/types";
 import { callExaTool, findApiKey, formatSearchResults, isSearchResponse } from "./mcp-client";
 import type { ExaRenderDetails } from "./types";
 

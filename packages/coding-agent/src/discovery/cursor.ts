@@ -14,15 +14,15 @@
  * - settings: From settings.json if present
  */
 
-import { readFile } from "$c/capability/fs";
-import { registerProvider } from "$c/capability/index";
-import { type MCPServer, mcpCapability } from "$c/capability/mcp";
-import type { Rule } from "$c/capability/rule";
-import { ruleCapability } from "$c/capability/rule";
-import type { Settings } from "$c/capability/settings";
-import { settingsCapability } from "$c/capability/settings";
-import type { LoadContext, LoadResult } from "$c/capability/types";
-import { parseFrontmatter } from "$c/utils/frontmatter";
+import { readFile } from "@oh-my-pi/pi-coding-agent/capability/fs";
+import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability/index";
+import { type MCPServer, mcpCapability } from "@oh-my-pi/pi-coding-agent/capability/mcp";
+import type { Rule } from "@oh-my-pi/pi-coding-agent/capability/rule";
+import { ruleCapability } from "@oh-my-pi/pi-coding-agent/capability/rule";
+import type { Settings } from "@oh-my-pi/pi-coding-agent/capability/settings";
+import { settingsCapability } from "@oh-my-pi/pi-coding-agent/capability/settings";
+import type { LoadContext, LoadResult } from "@oh-my-pi/pi-coding-agent/capability/types";
+import { parseFrontmatter } from "@oh-my-pi/pi-coding-agent/utils/frontmatter";
 import {
 	createSourceMeta,
 	expandEnvVarsDeep,

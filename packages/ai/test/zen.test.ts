@@ -1,7 +1,7 @@
+import { MODELS } from "@oh-my-pi/pi-ai/models.generated";
+import { complete } from "@oh-my-pi/pi-ai/stream";
+import type { Model } from "@oh-my-pi/pi-ai/types";
 import { describe, expect, it } from "vitest";
-import { MODELS } from "$ai/models.generated";
-import { complete } from "$ai/stream";
-import type { Model } from "$ai/types";
 
 describe.skipIf(!process.env.OPENCODE_API_KEY)("OpenCode Zen Models Smoke Test", () => {
 	const zenModels = Object.values(MODELS.opencode);

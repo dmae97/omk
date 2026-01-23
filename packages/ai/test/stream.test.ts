@@ -1,12 +1,12 @@
 import { type ChildProcess, execSync, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { getModel } from "@oh-my-pi/pi-ai/models";
+import { complete, stream } from "@oh-my-pi/pi-ai/stream";
+import type { Api, Context, ImageContent, Model, OptionsForApi, Tool, ToolResultMessage } from "@oh-my-pi/pi-ai/types";
+import { StringEnum } from "@oh-my-pi/pi-ai/utils/typebox-helpers";
 import { Type } from "@sinclair/typebox";
 import { join } from "path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getModel } from "$ai/models";
-import { complete, stream } from "$ai/stream";
-import type { Api, Context, ImageContent, Model, OptionsForApi, Tool, ToolResultMessage } from "$ai/types";
-import { StringEnum } from "$ai/utils/typebox-helpers";
 import { resolveApiKey } from "./oauth";
 
 // Resolve OAuth tokens at module level (async, runs before tests)

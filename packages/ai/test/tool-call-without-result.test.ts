@@ -1,8 +1,8 @@
+import { getModel } from "@oh-my-pi/pi-ai/models";
+import { complete } from "@oh-my-pi/pi-ai/stream";
+import type { Api, Context, Model, OptionsForApi, Tool } from "@oh-my-pi/pi-ai/types";
 import { Type } from "@sinclair/typebox";
 import { describe, expect, it } from "vitest";
-import { getModel } from "$ai/models";
-import { complete } from "$ai/stream";
-import type { Api, Context, Model, OptionsForApi, Tool } from "$ai/types";
 import { resolveApiKey } from "./oauth";
 
 // Resolve OAuth tokens at module level (async, runs before tests)

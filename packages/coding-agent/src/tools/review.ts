@@ -7,10 +7,10 @@
  */
 
 import type { AgentTool } from "@oh-my-pi/pi-agent-core";
+import type { Theme, ThemeColor } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Container, Text } from "@oh-my-pi/pi-tui";
 import { Type } from "@sinclair/typebox";
-import type { Theme, ThemeColor } from "$c/modes/theme/theme";
 
 export type FindingPriority = "P0" | "P1" | "P2" | "P3";
 
@@ -151,7 +151,7 @@ export type { ReportFindingDetails };
 
 import path from "node:path";
 import { StringEnum } from "@oh-my-pi/pi-ai";
-import { subprocessToolRegistry } from "$c/task/subprocess-tool-registry";
+import { subprocessToolRegistry } from "@oh-my-pi/pi-coding-agent/task/subprocess-tool-registry";
 
 // Register report_finding handler
 subprocessToolRegistry.register<ReportFindingDetails>("report_finding", {

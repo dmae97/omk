@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+### Changed
+- Updated TypeScript configuration for better publish-time configuration handling with tsconfig.publish.json
 ## [8.0.0] - 2026-01-23
 ### Added
 

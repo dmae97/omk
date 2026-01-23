@@ -5,8 +5,8 @@
  * Messages are newline-delimited JSON.
  */
 
+import type { JsonRpcResponse, MCPStdioServerConfig, MCPTransport } from "@oh-my-pi/pi-coding-agent/mcp/types";
 import { type Subprocess, spawn } from "bun";
-import type { JsonRpcResponse, MCPStdioServerConfig, MCPTransport } from "$c/mcp/types";
 
 /** Generate unique request ID */
 function generateId(): string {

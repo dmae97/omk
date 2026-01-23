@@ -1,8 +1,8 @@
 import { join, resolve } from "node:path";
+import { CONFIG_DIR_NAME, getPromptsDir } from "@oh-my-pi/pi-coding-agent/config";
+import { parseFrontmatter } from "@oh-my-pi/pi-coding-agent/utils/frontmatter";
 import { logger } from "@oh-my-pi/pi-utils";
 import Handlebars from "handlebars";
-import { CONFIG_DIR_NAME, getPromptsDir } from "$c/config";
-import { parseFrontmatter } from "$c/utils/frontmatter";
 
 /**
  * Represents a prompt template loaded from a markdown file

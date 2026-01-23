@@ -1,14 +1,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { rename } from "node:fs/promises";
 import { join } from "node:path";
+import { type Settings as SettingsItem, settingsCapability } from "@oh-my-pi/pi-coding-agent/capability/settings";
+import { getAgentDbPath, getAgentDir, getConfigPath } from "@oh-my-pi/pi-coding-agent/config";
+import { withFileLock } from "@oh-my-pi/pi-coding-agent/config/file-lock";
+import { loadCapability } from "@oh-my-pi/pi-coding-agent/discovery";
+import type { SymbolPreset } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import { AgentStorage } from "@oh-my-pi/pi-coding-agent/session/agent-storage";
 import { logger } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
-import { type Settings as SettingsItem, settingsCapability } from "$c/capability/settings";
-import { getAgentDbPath, getAgentDir, getConfigPath } from "$c/config";
-import { withFileLock } from "$c/config/file-lock";
-import { loadCapability } from "$c/discovery";
-import type { SymbolPreset } from "$c/modes/theme/theme";
-import { AgentStorage } from "$c/session/agent-storage";
 
 export interface CompactionSettings {
 	enabled?: boolean; // default: true

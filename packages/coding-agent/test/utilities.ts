@@ -7,13 +7,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@oh-my-pi/pi-agent-core";
 import { getModel } from "@oh-my-pi/pi-ai";
+import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+import { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
+import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
+import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools/index";
 import { nanoid } from "nanoid";
-import { ModelRegistry } from "$c/config/model-registry";
-import { SettingsManager } from "$c/config/settings-manager";
-import { AgentSession } from "$c/session/agent-session";
-import { AuthStorage } from "$c/session/auth-storage";
-import { SessionManager } from "$c/session/session-manager";
-import { createTools, type ToolSession } from "$c/tools/index";
 
 /**
  * API key for authenticated tests. Tests using this should be wrapped in

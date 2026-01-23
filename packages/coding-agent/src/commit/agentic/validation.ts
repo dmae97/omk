@@ -1,6 +1,6 @@
-import { stripTypePrefix } from "$c/commit/analysis/summary";
-import { validateSummary } from "$c/commit/analysis/validation";
-import type { CommitType, ConventionalDetail } from "$c/commit/types";
+import { stripTypePrefix } from "@oh-my-pi/pi-coding-agent/commit/analysis/summary";
+import { validateSummary } from "@oh-my-pi/pi-coding-agent/commit/analysis/validation";
+import type { CommitType, ConventionalDetail } from "@oh-my-pi/pi-coding-agent/commit/types";
 
 export const SUMMARY_MAX_CHARS = 72;
 export const MAX_DETAIL_ITEMS = 6;

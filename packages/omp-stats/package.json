@@ -38,7 +38,8 @@
 	"scripts": {
 		"dev": "bun run src/index.ts",
 		"check": "tsgo --noEmit && tsgo --noEmit -p tsconfig.client.json",
-		"build": "bun run build.ts && tsgo -p tsconfig.build.json"
+		"build": "bun run build.ts && tsgo -p tsconfig.build.json",
+		"prepublishOnly": "cp tsconfig.publish.json tsconfig.json"
 	},
 	"author": "Can Bölük",
 	"license": "MIT",

@@ -5,10 +5,10 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import type { ImageContent } from "@oh-my-pi/pi-ai";
+import { resolveReadPath } from "@oh-my-pi/pi-coding-agent/tools/path-utils";
+import { formatDimensionNote, resizeImage } from "@oh-my-pi/pi-coding-agent/utils/image-resize";
+import { detectSupportedImageMimeTypeFromFile } from "@oh-my-pi/pi-coding-agent/utils/mime";
 import chalk from "chalk";
-import { resolveReadPath } from "$c/tools/path-utils";
-import { formatDimensionNote, resizeImage } from "$c/utils/image-resize";
-import { detectSupportedImageMimeTypeFromFile } from "$c/utils/mime";
 
 export interface ProcessedFiles {
 	text: string;

@@ -1,20 +1,20 @@
 import { relative, resolve, sep } from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent } from "@oh-my-pi/pi-ai";
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import type { RenderResultOptions } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
+import { executePython, getPreludeDocs, type PythonExecutorOptions } from "@oh-my-pi/pi-coding-agent/ipy/executor";
+import type { PreludeHelper, PythonStatusEvent } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
+import { truncateToVisualLines } from "@oh-my-pi/pi-coding-agent/modes/components/visual-truncate";
+import type { Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import pythonDescription from "@oh-my-pi/pi-coding-agent/prompts/tools/python.md" with { type: "text" };
+import { OutputSink, type OutputSummary } from "@oh-my-pi/pi-coding-agent/session/streaming-output";
+import type { OutputMeta } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
+import { ToolAbortError, ToolError } from "@oh-my-pi/pi-coding-agent/tools/tool-errors";
+import { getTreeBranch, getTreeContinuePrefix, renderCodeCell } from "@oh-my-pi/pi-coding-agent/tui";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text, truncateToWidth } from "@oh-my-pi/pi-tui";
 import { type Static, Type } from "@sinclair/typebox";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
-import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
-import { executePython, getPreludeDocs, type PythonExecutorOptions } from "$c/ipy/executor";
-import type { PreludeHelper, PythonStatusEvent } from "$c/ipy/kernel";
-import { truncateToVisualLines } from "$c/modes/components/visual-truncate";
-import type { Theme } from "$c/modes/theme/theme";
-import pythonDescription from "$c/prompts/tools/python.md" with { type: "text" };
-import { OutputSink, type OutputSummary } from "$c/session/streaming-output";
-import type { OutputMeta } from "$c/tools/output-meta";
-import { ToolAbortError, ToolError } from "$c/tools/tool-errors";
-import { getTreeBranch, getTreeContinuePrefix, renderCodeCell } from "$c/tui";
 import type { ToolSession } from "./index";
 import { allocateOutputArtifact, createTailBuffer } from "./output-utils";
 import { resolveToCwd } from "./path-utils";
@@ -900,7 +900,7 @@ export const pythonToolRenderer = {
 								spinnerFrame: options.spinnerFrame,
 								duration: cell.durationMs,
 								output: outputLines.length > 0 ? outputLines.join("\n") : undefined,
-								outputMaxLines: previewLines,
+							outputMaxLines: outputLines.length,
 								codeMaxLines: expanded ? Number.POSITIVE_INFINITY : PYTHON_DEFAULT_PREVIEW_LINES,
 								expanded,
 								width,

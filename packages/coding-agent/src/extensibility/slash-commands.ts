@@ -1,9 +1,9 @@
-import { slashCommandCapability } from "$c/capability/slash-command";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
-import type { SlashCommand } from "$c/discovery";
-import { loadCapability } from "$c/discovery";
-import { EMBEDDED_COMMAND_TEMPLATES } from "$c/task/commands";
-import { parseFrontmatter } from "$c/utils/frontmatter";
+import { slashCommandCapability } from "@oh-my-pi/pi-coding-agent/capability/slash-command";
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import type { SlashCommand } from "@oh-my-pi/pi-coding-agent/discovery";
+import { loadCapability } from "@oh-my-pi/pi-coding-agent/discovery";
+import { EMBEDDED_COMMAND_TEMPLATES } from "@oh-my-pi/pi-coding-agent/task/commands";
+import { parseFrontmatter } from "@oh-my-pi/pi-coding-agent/utils/frontmatter";
 
 /**
  * Represents a custom slash command loaded from a file

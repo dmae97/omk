@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { rmSync } from "node:fs";
+import { PythonKernel } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
 import { createTempDirSync, type SyncTempDir } from "@oh-my-pi/pi-utils";
 import type { Subprocess } from "bun";
-import { PythonKernel } from "$c/ipy/kernel";
 
 type SpawnOptions = Parameters<typeof Bun.spawn>[1];
 

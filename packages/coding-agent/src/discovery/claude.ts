@@ -6,18 +6,18 @@
  */
 
 import { join, sep } from "node:path";
-import { type ContextFile, contextFileCapability } from "$c/capability/context-file";
-import { type ExtensionModule, extensionModuleCapability } from "$c/capability/extension-module";
-import { readFile } from "$c/capability/fs";
-import { type Hook, hookCapability } from "$c/capability/hook";
-import { registerProvider } from "$c/capability/index";
-import { type MCPServer, mcpCapability } from "$c/capability/mcp";
-import { type Settings, settingsCapability } from "$c/capability/settings";
-import { type Skill, skillCapability } from "$c/capability/skill";
-import { type SlashCommand, slashCommandCapability } from "$c/capability/slash-command";
-import { type SystemPrompt, systemPromptCapability } from "$c/capability/system-prompt";
-import { type CustomTool, toolCapability } from "$c/capability/tool";
-import type { LoadContext, LoadResult } from "$c/capability/types";
+import { type ContextFile, contextFileCapability } from "@oh-my-pi/pi-coding-agent/capability/context-file";
+import { type ExtensionModule, extensionModuleCapability } from "@oh-my-pi/pi-coding-agent/capability/extension-module";
+import { readFile } from "@oh-my-pi/pi-coding-agent/capability/fs";
+import { type Hook, hookCapability } from "@oh-my-pi/pi-coding-agent/capability/hook";
+import { registerProvider } from "@oh-my-pi/pi-coding-agent/capability/index";
+import { type MCPServer, mcpCapability } from "@oh-my-pi/pi-coding-agent/capability/mcp";
+import { type Settings, settingsCapability } from "@oh-my-pi/pi-coding-agent/capability/settings";
+import { type Skill, skillCapability } from "@oh-my-pi/pi-coding-agent/capability/skill";
+import { type SlashCommand, slashCommandCapability } from "@oh-my-pi/pi-coding-agent/capability/slash-command";
+import { type SystemPrompt, systemPromptCapability } from "@oh-my-pi/pi-coding-agent/capability/system-prompt";
+import { type CustomTool, toolCapability } from "@oh-my-pi/pi-coding-agent/capability/tool";
+import type { LoadContext, LoadResult } from "@oh-my-pi/pi-coding-agent/capability/types";
 import {
 	calculateDepth,
 	createSourceMeta,

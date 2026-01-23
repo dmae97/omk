@@ -1,5 +1,5 @@
+import { type RequestBody, transformRequestBody } from "@oh-my-pi/pi-ai/providers/openai-codex/request-transformer";
 import { describe, expect, it } from "vitest";
-import { type RequestBody, transformRequestBody } from "$ai/providers/openai-codex/request-transformer";
 
 describe("openai-codex include handling", () => {
 	it("always includes reasoning.encrypted_content when caller include is custom", async () => {

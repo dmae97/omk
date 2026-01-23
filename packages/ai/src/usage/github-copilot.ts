@@ -14,7 +14,7 @@ import type {
 	UsageReport,
 	UsageStatus,
 	UsageWindow,
-} from "$ai/usage";
+} from "@oh-my-pi/pi-ai/usage";
 
 const COPILOT_HEADERS = {
 	"User-Agent": "GitHubCopilotChat/0.35.0",

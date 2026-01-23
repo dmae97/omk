@@ -1,3 +1,6 @@
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import type { SessionInfo } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+import { fuzzyFilter } from "@oh-my-pi/pi-coding-agent/utils/fuzzy";
 import {
 	type Component,
 	Container,
@@ -8,9 +11,6 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@oh-my-pi/pi-tui";
-import { theme } from "$c/modes/theme/theme";
-import type { SessionInfo } from "$c/session/session-manager";
-import { fuzzyFilter } from "$c/utils/fuzzy";
 import { DynamicBorder } from "./dynamic-border";
 
 /**

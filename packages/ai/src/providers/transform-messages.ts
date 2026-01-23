@@ -1,4 +1,4 @@
-import type { Api, AssistantMessage, Message, Model, ToolCall, ToolResultMessage } from "$ai/types";
+import type { Api, AssistantMessage, Message, Model, ToolCall, ToolResultMessage } from "@oh-my-pi/pi-ai/types";
 
 /**
  * Normalize tool call ID for cross-provider compatibility.

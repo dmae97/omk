@@ -1,0 +1,11 @@
+{
+	"compilerOptions": {
+		"noEmit": true,
+		"baseUrl": ".",
+		"paths": {
+			"@oh-my-pi/pi-utils": ["./src/index.ts"],
+			"@oh-my-pi/pi-utils/*": ["./src/*"]
+		}
+	},
+	"include": ["src/**/*.ts"]
+}

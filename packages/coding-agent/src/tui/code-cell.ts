@@ -2,8 +2,13 @@
  * Render a code cell with optional output section.
  */
 
-import { highlightCode, type Theme } from "$c/modes/theme/theme";
-import { formatDuration, formatExpandHint, formatMoreItems, replaceTabs } from "$c/tools/render-utils";
+import { highlightCode, type Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import {
+	formatDuration,
+	formatExpandHint,
+	formatMoreItems,
+	replaceTabs,
+} from "@oh-my-pi/pi-coding-agent/tools/render-utils";
 import { renderOutputBlock } from "./output-block";
 import type { State } from "./types";
 import { getStateIcon } from "./utils";

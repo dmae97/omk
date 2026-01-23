@@ -1,6 +1,9 @@
-import { Type } from "@sinclair/typebox";
-import type { CommitAgentState, SplitCommitGroup, SplitCommitPlan } from "$c/commit/agentic/state";
-import { computeDependencyOrder } from "$c/commit/agentic/topo-sort";
+import type {
+	CommitAgentState,
+	SplitCommitGroup,
+	SplitCommitPlan,
+} from "@oh-my-pi/pi-coding-agent/commit/agentic/state";
+import { computeDependencyOrder } from "@oh-my-pi/pi-coding-agent/commit/agentic/topo-sort";
 import {
 	capDetails,
 	MAX_DETAIL_ITEMS,
@@ -8,11 +11,12 @@ import {
 	SUMMARY_MAX_CHARS,
 	validateSummaryRules,
 	validateTypeConsistency,
-} from "$c/commit/agentic/validation";
-import { validateScope } from "$c/commit/analysis/validation";
-import type { ControlledGit } from "$c/commit/git";
-import type { ConventionalDetail } from "$c/commit/types";
-import type { CustomTool } from "$c/extensibility/custom-tools/types";
+} from "@oh-my-pi/pi-coding-agent/commit/agentic/validation";
+import { validateScope } from "@oh-my-pi/pi-coding-agent/commit/analysis/validation";
+import type { ControlledGit } from "@oh-my-pi/pi-coding-agent/commit/git";
+import type { ConventionalDetail } from "@oh-my-pi/pi-coding-agent/commit/types";
+import type { CustomTool } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
+import { Type } from "@sinclair/typebox";
 
 const commitTypeSchema = Type.Union([
 	Type.Literal("feat"),

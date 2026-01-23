@@ -12,10 +12,10 @@
  * - Esc: Close dashboard (clears search first if active)
  */
 
+import type { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+import { DynamicBorder } from "@oh-my-pi/pi-coding-agent/modes/components/dynamic-border";
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { type Component, Container, matchesKey, Spacer, Text, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
-import type { SettingsManager } from "$c/config/settings-manager";
-import { DynamicBorder } from "$c/modes/components/dynamic-border";
-import { theme } from "$c/modes/theme/theme";
 import { ExtensionList } from "./extension-list";
 import { InspectorPanel } from "./inspector-panel";
 import { applyFilter, createInitialState, filterByProvider, refreshState, toggleProvider } from "./state-manager";

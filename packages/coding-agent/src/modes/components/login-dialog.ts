@@ -1,7 +1,7 @@
 import { getOAuthProviders } from "@oh-my-pi/pi-ai";
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { Container, getEditorKeybindings, Input, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
 import { $ } from "bun";
-import { theme } from "$c/modes/theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 
 /**

@@ -18,6 +18,9 @@
 			"@oh-my-pi/pi-coding-agent": ["./packages/coding-agent/src/index.ts"],
 			"@oh-my-pi/pi-coding-agent/hooks": ["./packages/coding-agent/src/extensibility/hooks/index.ts"],
 			"@oh-my-pi/pi-coding-agent/*": ["./packages/coding-agent/src/*"],
+			"@oh-my-pi/omp-stats": ["./packages/omp-stats/src/index.ts"],
+			"@oh-my-pi/omp-stats/src/*": ["./packages/omp-stats/src/*"],
+			"@oh-my-pi/omp-stats/*": ["./packages/omp-stats/src/*"],
 			"@sinclair/typebox": ["./node_modules/@sinclair/typebox"],
 			"@oh-my-pi/pi-tui": ["./packages/tui/src/index.ts"],
 			"@oh-my-pi/pi-tui/*": ["./packages/tui/src/*"]

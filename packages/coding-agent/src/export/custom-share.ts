@@ -7,7 +7,7 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { getAgentDir } from "$c/config";
+import { getAgentDir } from "@oh-my-pi/pi-coding-agent/config";
 
 export interface CustomShareResult {
 	/** URL to display/open (optional - script may handle everything itself) */

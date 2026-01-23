@@ -11,7 +11,7 @@ import type {
 	MCPHttpServerConfig,
 	MCPSseServerConfig,
 	MCPTransport,
-} from "$c/mcp/types";
+} from "@oh-my-pi/pi-coding-agent/mcp/types";
 
 /** Generate unique request ID */
 function generateId(): string {

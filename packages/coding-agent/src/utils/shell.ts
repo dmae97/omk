@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
+import { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
 import { $ } from "bun";
-import { SettingsManager } from "$c/config/settings-manager";
 
 export interface ShellConfig {
 	shell: string;

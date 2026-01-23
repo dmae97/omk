@@ -1,13 +1,13 @@
 import type { AgentToolResult } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
-import type { OutputSummary } from "$c/session/streaming-output";
+import type { OutputSummary } from "@oh-my-pi/pi-coding-agent/session/streaming-output";
 import type {
 	OutputMeta,
 	TruncationOptions,
 	TruncationSummaryOptions,
 	TruncationTextOptions,
-} from "$c/tools/output-meta";
-import { outputMeta } from "$c/tools/output-meta";
+} from "@oh-my-pi/pi-coding-agent/tools/output-meta";
+import { outputMeta } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
 import type { TruncationResult } from "./truncate";
 
 type ToolContent = Array<TextContent | ImageContent>;

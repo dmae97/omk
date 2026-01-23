@@ -1,10 +1,10 @@
 import { relative, resolve } from "node:path";
 import type { Api, Model } from "@oh-my-pi/pi-ai";
+import { detectChangelogBoundaries } from "@oh-my-pi/pi-coding-agent/commit/changelog/detect";
+import { generateChangelogEntries } from "@oh-my-pi/pi-coding-agent/commit/changelog/generate";
+import { parseUnreleasedSection } from "@oh-my-pi/pi-coding-agent/commit/changelog/parse";
+import type { ControlledGit } from "@oh-my-pi/pi-coding-agent/commit/git";
 import { logger } from "@oh-my-pi/pi-utils";
-import { detectChangelogBoundaries } from "$c/commit/changelog/detect";
-import { generateChangelogEntries } from "$c/commit/changelog/generate";
-import { parseUnreleasedSection } from "$c/commit/changelog/parse";
-import type { ControlledGit } from "$c/commit/git";
 
 const CHANGELOG_SECTIONS = ["Breaking Changes", "Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"];
 

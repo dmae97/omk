@@ -1,10 +1,10 @@
 import type { Api, AssistantMessage, Model, ToolCall } from "@oh-my-pi/pi-ai";
 import { completeSimple, validateToolCall } from "@oh-my-pi/pi-ai";
+import summarySystemPrompt from "@oh-my-pi/pi-coding-agent/commit/prompts/summary-system.md" with { type: "text" };
+import summaryUserPrompt from "@oh-my-pi/pi-coding-agent/commit/prompts/summary-user.md" with { type: "text" };
+import type { CommitSummary } from "@oh-my-pi/pi-coding-agent/commit/types";
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
 import { Type } from "@sinclair/typebox";
-import summarySystemPrompt from "$c/commit/prompts/summary-system.md" with { type: "text" };
-import summaryUserPrompt from "$c/commit/prompts/summary-user.md" with { type: "text" };
-import type { CommitSummary } from "$c/commit/types";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
 
 const SummaryTool = {
 	name: "create_commit_summary",

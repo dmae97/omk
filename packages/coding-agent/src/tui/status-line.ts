@@ -2,7 +2,7 @@
  * Standardized status header rendering for tool output.
  */
 
-import type { Theme, ThemeColor } from "$c/modes/theme/theme";
+import type { Theme, ThemeColor } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { IconType } from "./types";
 import { getStateIcon } from "./utils";
 

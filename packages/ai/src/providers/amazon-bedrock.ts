@@ -18,7 +18,7 @@ import {
 	ToolResultStatus,
 } from "@aws-sdk/client-bedrock-runtime";
 
-import { calculateCost } from "$ai/models";
+import { calculateCost } from "@oh-my-pi/pi-ai/models";
 import type {
 	Api,
 	AssistantMessage,
@@ -34,10 +34,10 @@ import type {
 	Tool,
 	ToolCall,
 	ToolResultMessage,
-} from "$ai/types";
-import { AssistantMessageEventStream } from "$ai/utils/event-stream";
-import { parseStreamingJson } from "$ai/utils/json-parse";
-import { sanitizeSurrogates } from "$ai/utils/sanitize-unicode";
+} from "@oh-my-pi/pi-ai/types";
+import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
+import { parseStreamingJson } from "@oh-my-pi/pi-ai/utils/json-parse";
+import { sanitizeSurrogates } from "@oh-my-pi/pi-ai/utils/sanitize-unicode";
 import { transformMessages } from "./transform-messages";
 
 export interface BedrockOptions extends StreamOptions {

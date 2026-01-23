@@ -4,13 +4,13 @@
  * These provide rich visualization for tool calls and results in the TUI.
  */
 
+import type { RenderResultOptions } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
+import { lspToolRenderer } from "@oh-my-pi/pi-coding-agent/lsp/render";
+import type { Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import { editToolRenderer } from "@oh-my-pi/pi-coding-agent/patch";
+import { taskToolRenderer } from "@oh-my-pi/pi-coding-agent/task/render";
+import { webSearchToolRenderer } from "@oh-my-pi/pi-coding-agent/web/search/render";
 import type { Component } from "@oh-my-pi/pi-tui";
-import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
-import { lspToolRenderer } from "$c/lsp/render";
-import type { Theme } from "$c/modes/theme/theme";
-import { editToolRenderer } from "$c/patch";
-import { taskToolRenderer } from "$c/task/render";
-import { webSearchToolRenderer } from "$c/web/search/render";
 import { askToolRenderer } from "./ask";
 import { bashToolRenderer } from "./bash";
 import { calculatorToolRenderer } from "./calculator";

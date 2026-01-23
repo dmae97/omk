@@ -6,9 +6,9 @@
 import { rm } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { getEditorTheme, theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { Container, Editor, matchesKey, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
 import { nanoid } from "nanoid";
-import { getEditorTheme, theme } from "$c/modes/theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 
 export class HookEditorComponent extends Container {

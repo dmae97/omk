@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { nanoid } from "nanoid";
-import { ModelRegistry } from "$c/config/model-registry";
-import { AuthStorage } from "$c/session/auth-storage";
 
 describe("ModelRegistry", () => {
 	let tempDir: string;

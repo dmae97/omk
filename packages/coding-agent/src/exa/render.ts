@@ -4,11 +4,8 @@
  * Tree-based rendering with collapsed/expanded states for Exa search results.
  */
 
-import type { Component } from "@oh-my-pi/pi-tui";
-import { Text } from "@oh-my-pi/pi-tui";
-import { logger } from "@oh-my-pi/pi-utils";
-import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
-import type { Theme } from "$c/modes/theme/theme";
+import type { RenderResultOptions } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
+import type { Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import {
 	formatCount,
 	formatExpandHint,
@@ -19,7 +16,10 @@ import {
 	PREVIEW_LIMITS,
 	TRUNCATE_LENGTHS,
 	truncate,
-} from "$c/tools/render-utils";
+} from "@oh-my-pi/pi-coding-agent/tools/render-utils";
+import type { Component } from "@oh-my-pi/pi-tui";
+import { Text } from "@oh-my-pi/pi-tui";
+import { logger } from "@oh-my-pi/pi-utils";
 import type { ExaRenderDetails } from "./types";
 
 const COLLAPSED_PREVIEW_LINES = PREVIEW_LIMITS.COLLAPSED_LINES;

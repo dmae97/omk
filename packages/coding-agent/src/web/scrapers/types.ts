@@ -2,7 +2,7 @@
  * Shared types and utilities for web-fetch handlers
  */
 
-import { ToolAbortError } from "$c/tools/tool-errors";
+import { ToolAbortError } from "@oh-my-pi/pi-coding-agent/tools/tool-errors";
 
 export interface RenderResult {
 	url: string;

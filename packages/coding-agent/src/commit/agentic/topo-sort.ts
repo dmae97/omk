@@ -1,4 +1,4 @@
-import type { SplitCommitGroup } from "$c/commit/agentic/state";
+import type { SplitCommitGroup } from "@oh-my-pi/pi-coding-agent/commit/agentic/state";
 
 export function computeDependencyOrder(groups: SplitCommitGroup[]): number[] | { error: string } {
 	const total = groups.length;

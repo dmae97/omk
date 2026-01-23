@@ -7,8 +7,8 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import type { WebSearchResponse, WebSearchSource } from "$c/web/search/types";
-import { WebSearchProviderError } from "$c/web/search/types";
+import type { WebSearchResponse, WebSearchSource } from "@oh-my-pi/pi-coding-agent/web/search/types";
+import { WebSearchProviderError } from "@oh-my-pi/pi-coding-agent/web/search/types";
 
 const EXA_API_URL = "https://api.exa.ai/search";
 

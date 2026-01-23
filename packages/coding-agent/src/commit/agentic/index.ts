@@ -1,21 +1,28 @@
 import { relative } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { type ExistingChangelogEntries, runCommitAgentSession } from "$c/commit/agentic/agent";
-import { generateFallbackProposal } from "$c/commit/agentic/fallback";
-import splitConfirmPrompt from "$c/commit/agentic/prompts/split-confirm.md" with { type: "text" };
-import type { CommitAgentState, CommitProposal, HunkSelector, SplitCommitPlan } from "$c/commit/agentic/state";
-import { computeDependencyOrder } from "$c/commit/agentic/topo-sort";
-import { detectTrivialChange } from "$c/commit/agentic/trivial";
-import { applyChangelogProposals } from "$c/commit/changelog";
-import { detectChangelogBoundaries } from "$c/commit/changelog/detect";
-import { parseUnreleasedSection } from "$c/commit/changelog/parse";
-import { ControlledGit } from "$c/commit/git";
-import { formatCommitMessage } from "$c/commit/message";
-import { resolvePrimaryModel, resolveSmolModel } from "$c/commit/model-selection";
-import type { CommitCommandArgs, ConventionalAnalysis } from "$c/commit/types";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
-import { SettingsManager } from "$c/config/settings-manager";
-import { discoverAuthStorage, discoverContextFiles, discoverModels } from "$c/sdk";
+import { type ExistingChangelogEntries, runCommitAgentSession } from "@oh-my-pi/pi-coding-agent/commit/agentic/agent";
+import { generateFallbackProposal } from "@oh-my-pi/pi-coding-agent/commit/agentic/fallback";
+import splitConfirmPrompt from "@oh-my-pi/pi-coding-agent/commit/agentic/prompts/split-confirm.md" with {
+	type: "text",
+};
+import type {
+	CommitAgentState,
+	CommitProposal,
+	HunkSelector,
+	SplitCommitPlan,
+} from "@oh-my-pi/pi-coding-agent/commit/agentic/state";
+import { computeDependencyOrder } from "@oh-my-pi/pi-coding-agent/commit/agentic/topo-sort";
+import { detectTrivialChange } from "@oh-my-pi/pi-coding-agent/commit/agentic/trivial";
+import { applyChangelogProposals } from "@oh-my-pi/pi-coding-agent/commit/changelog";
+import { detectChangelogBoundaries } from "@oh-my-pi/pi-coding-agent/commit/changelog/detect";
+import { parseUnreleasedSection } from "@oh-my-pi/pi-coding-agent/commit/changelog/parse";
+import { ControlledGit } from "@oh-my-pi/pi-coding-agent/commit/git";
+import { formatCommitMessage } from "@oh-my-pi/pi-coding-agent/commit/message";
+import { resolvePrimaryModel, resolveSmolModel } from "@oh-my-pi/pi-coding-agent/commit/model-selection";
+import type { CommitCommandArgs, ConventionalAnalysis } from "@oh-my-pi/pi-coding-agent/commit/types";
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+import { discoverAuthStorage, discoverContextFiles, discoverModels } from "@oh-my-pi/pi-coding-agent/sdk";
 
 interface CommitExecutionContext {
 	git: ControlledGit;

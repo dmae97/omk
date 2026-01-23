@@ -1,4 +1,4 @@
-import * as photon from "$c/vendor/photon";
+import * as photon from "@oh-my-pi/pi-coding-agent/vendor/photon";
 
 /**
  * Convert image to PNG format for terminal display.

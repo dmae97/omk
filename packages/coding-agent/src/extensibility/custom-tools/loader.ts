@@ -6,17 +6,17 @@
  */
 
 import * as path from "node:path";
+import { toolCapability } from "@oh-my-pi/pi-coding-agent/capability/tool";
+import { type CustomTool, loadCapability } from "@oh-my-pi/pi-coding-agent/discovery";
+import { expandPath } from "@oh-my-pi/pi-coding-agent/discovery/helpers";
+import type { ExecOptions } from "@oh-my-pi/pi-coding-agent/exec/exec";
+import { execCommand } from "@oh-my-pi/pi-coding-agent/exec/exec";
+import type { HookUIContext } from "@oh-my-pi/pi-coding-agent/extensibility/hooks/types";
+import { getAllPluginToolPaths } from "@oh-my-pi/pi-coding-agent/extensibility/plugins/loader";
+import * as piCodingAgent from "@oh-my-pi/pi-coding-agent/index";
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { logger } from "@oh-my-pi/pi-utils";
 import * as typebox from "@sinclair/typebox";
-import { toolCapability } from "$c/capability/tool";
-import { type CustomTool, loadCapability } from "$c/discovery";
-import { expandPath } from "$c/discovery/helpers";
-import type { ExecOptions } from "$c/exec/exec";
-import { execCommand } from "$c/exec/exec";
-import type { HookUIContext } from "$c/extensibility/hooks/types";
-import { getAllPluginToolPaths } from "$c/extensibility/plugins/loader";
-import * as piCodingAgent from "$c/index";
-import { theme } from "$c/modes/theme/theme";
 import type { CustomToolAPI, CustomToolFactory, LoadedCustomTool, ToolLoadError } from "./types";
 
 /**

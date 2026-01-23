@@ -35,10 +35,10 @@ import "./agents-md";
 import "./mcp-json";
 import "./ssh";
 
-export type { ContextFile } from "$c/capability/context-file";
-export type { Extension, ExtensionManifest } from "$c/capability/extension";
-export type { ExtensionModule } from "$c/capability/extension-module";
-export type { Hook } from "$c/capability/hook";
+export type { ContextFile } from "@oh-my-pi/pi-coding-agent/capability/context-file";
+export type { Extension, ExtensionManifest } from "@oh-my-pi/pi-coding-agent/capability/extension";
+export type { ExtensionModule } from "@oh-my-pi/pi-coding-agent/capability/extension-module";
+export type { Hook } from "@oh-my-pi/pi-coding-agent/capability/hook";
 // Re-export the main API from capability registry
 export {
 	cacheStats,
@@ -62,18 +62,18 @@ export {
 	// Cache management
 	reset,
 	setDisabledProviders,
-} from "$c/capability/index";
-export type { Instruction } from "$c/capability/instruction";
+} from "@oh-my-pi/pi-coding-agent/capability/index";
+export type { Instruction } from "@oh-my-pi/pi-coding-agent/capability/instruction";
 // Re-export capability item types
-export type { MCPServer } from "$c/capability/mcp";
-export type { Prompt } from "$c/capability/prompt";
-export type { Rule, RuleFrontmatter } from "$c/capability/rule";
-export type { Settings } from "$c/capability/settings";
-export type { Skill, SkillFrontmatter } from "$c/capability/skill";
-export type { SlashCommand } from "$c/capability/slash-command";
-export type { SSHHost } from "$c/capability/ssh";
-export type { SystemPrompt } from "$c/capability/system-prompt";
-export type { CustomTool } from "$c/capability/tool";
+export type { MCPServer } from "@oh-my-pi/pi-coding-agent/capability/mcp";
+export type { Prompt } from "@oh-my-pi/pi-coding-agent/capability/prompt";
+export type { Rule, RuleFrontmatter } from "@oh-my-pi/pi-coding-agent/capability/rule";
+export type { Settings } from "@oh-my-pi/pi-coding-agent/capability/settings";
+export type { Skill, SkillFrontmatter } from "@oh-my-pi/pi-coding-agent/capability/skill";
+export type { SlashCommand } from "@oh-my-pi/pi-coding-agent/capability/slash-command";
+export type { SSHHost } from "@oh-my-pi/pi-coding-agent/capability/ssh";
+export type { SystemPrompt } from "@oh-my-pi/pi-coding-agent/capability/system-prompt";
+export type { CustomTool } from "@oh-my-pi/pi-coding-agent/capability/tool";
 // Re-export types
 export type {
 	Capability,
@@ -85,4 +85,4 @@ export type {
 	Provider,
 	ProviderInfo,
 	SourceMeta,
-} from "$c/capability/types";
+} from "@oh-my-pi/pi-coding-agent/capability/types";

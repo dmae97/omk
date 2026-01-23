@@ -1,9 +1,9 @@
 import { chmod, mkdir, rename, rm } from "node:fs/promises";
 import { arch, platform } from "node:os";
 import { join } from "node:path";
+import { APP_NAME, getBinDir } from "@oh-my-pi/pi-coding-agent/config";
 import { createTempDir, logger } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
-import { APP_NAME, getBinDir } from "$c/config";
 
 const TOOLS_DIR = getBinDir();
 

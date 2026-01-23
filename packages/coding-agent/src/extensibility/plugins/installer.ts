@@ -1,7 +1,7 @@
 import { lstatSync, symlinkSync, unlinkSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { getAgentDir } from "$c/config";
+import { getAgentDir } from "@oh-my-pi/pi-coding-agent/config";
 import type { InstalledPlugin } from "./types";
 
 const PLUGINS_DIR = join(getAgentDir(), "plugins");

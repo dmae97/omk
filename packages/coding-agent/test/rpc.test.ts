@@ -3,8 +3,8 @@ import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "@oh-my-pi/pi-agent-core";
+import { RpcClient } from "@oh-my-pi/pi-coding-agent/modes/rpc/rpc-client";
 import { nanoid } from "nanoid";
-import { RpcClient } from "$c/modes/rpc/rpc-client";
 
 /**
  * RPC mode tests.

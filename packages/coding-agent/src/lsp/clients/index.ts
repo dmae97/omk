@@ -8,7 +8,7 @@
 export { BiomeClient } from "./biome-client";
 export { LspLinterClient } from "./lsp-linter-client";
 
-import type { LinterClient, ServerConfig } from "$c/lsp/types";
+import type { LinterClient, ServerConfig } from "@oh-my-pi/pi-coding-agent/lsp/types";
 import { LspLinterClient } from "./lsp-linter-client";
 
 // Cache of linter clients by server name + cwd

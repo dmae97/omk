@@ -8,7 +8,7 @@ import type {
 	AgentToolUpdateCallback,
 } from "@oh-my-pi/pi-agent-core";
 import type { CursorMcpCall, CursorExecHandlers as ICursorExecHandlers, ToolResultMessage } from "@oh-my-pi/pi-ai";
-import { resolveToCwd } from "$c/tools/path-utils";
+import { resolveToCwd } from "@oh-my-pi/pi-coding-agent/tools/path-utils";
 
 interface CursorExecBridgeOptions {
 	cwd: string;

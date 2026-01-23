@@ -12,11 +12,11 @@ import {
 	type Model,
 	normalizeDomain,
 } from "@oh-my-pi/pi-ai";
+import type { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { logger } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import AjvModule from "ajv";
 import { YAML } from "bun";
-import type { AuthStorage } from "$c/session/auth-storage";
 
 const Ajv = (AjvModule as any).default || AjvModule;
 

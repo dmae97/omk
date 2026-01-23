@@ -6,8 +6,7 @@
 
 import { createHash } from "node:crypto";
 import type { Content, ThinkingConfig } from "@google/genai";
-import { abortableSleep } from "@oh-my-pi/pi-utils";
-import { calculateCost } from "$ai/models";
+import { calculateCost } from "@oh-my-pi/pi-ai/models";
 import type {
 	Api,
 	AssistantMessage,
@@ -18,9 +17,10 @@ import type {
 	TextContent,
 	ThinkingContent,
 	ToolCall,
-} from "$ai/types";
-import { AssistantMessageEventStream } from "$ai/utils/event-stream";
-import { sanitizeSurrogates } from "$ai/utils/sanitize-unicode";
+} from "@oh-my-pi/pi-ai/types";
+import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
+import { sanitizeSurrogates } from "@oh-my-pi/pi-ai/utils/sanitize-unicode";
+import { abortableSleep } from "@oh-my-pi/pi-utils";
 import {
 	convertMessages,
 	convertTools,

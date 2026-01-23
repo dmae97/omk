@@ -1,6 +1,6 @@
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import { getSelectListTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { Container, type SelectItem, SelectList } from "@oh-my-pi/pi-tui";
-import { getSelectListTheme } from "$c/modes/theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 
 const LEVEL_DESCRIPTIONS: Record<ThinkingLevel, string> = {

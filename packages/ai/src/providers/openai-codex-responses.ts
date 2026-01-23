@@ -1,16 +1,6 @@
 import os from "node:os";
-import { abortableSleep } from "@oh-my-pi/pi-utils";
-import type {
-	ResponseFunctionToolCall,
-	ResponseInput,
-	ResponseInputContent,
-	ResponseInputImage,
-	ResponseInputText,
-	ResponseOutputMessage,
-	ResponseReasoningItem,
-} from "openai/resources/responses/responses";
-import { calculateCost } from "$ai/models";
-import { getEnvApiKey } from "$ai/stream";
+import { calculateCost } from "@oh-my-pi/pi-ai/models";
+import { getEnvApiKey } from "@oh-my-pi/pi-ai/stream";
 import type {
 	Api,
 	AssistantMessage,
@@ -23,11 +13,21 @@ import type {
 	ThinkingContent,
 	Tool,
 	ToolCall,
-} from "$ai/types";
-import { AssistantMessageEventStream } from "$ai/utils/event-stream";
-import { parseStreamingJson } from "$ai/utils/json-parse";
-import { formatErrorMessageWithRetryAfter } from "$ai/utils/retry-after";
-import { sanitizeSurrogates } from "$ai/utils/sanitize-unicode";
+} from "@oh-my-pi/pi-ai/types";
+import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
+import { parseStreamingJson } from "@oh-my-pi/pi-ai/utils/json-parse";
+import { formatErrorMessageWithRetryAfter } from "@oh-my-pi/pi-ai/utils/retry-after";
+import { sanitizeSurrogates } from "@oh-my-pi/pi-ai/utils/sanitize-unicode";
+import { abortableSleep } from "@oh-my-pi/pi-utils";
+import type {
+	ResponseFunctionToolCall,
+	ResponseInput,
+	ResponseInputContent,
+	ResponseInputImage,
+	ResponseInputText,
+	ResponseOutputMessage,
+	ResponseReasoningItem,
+} from "openai/resources/responses/responses";
 import packageJson from "../../package.json" with { type: "json" };
 import {
 	CODEX_BASE_URL,

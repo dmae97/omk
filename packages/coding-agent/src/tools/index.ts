@@ -1,6 +1,6 @@
 // Exa MCP tools (22 tools)
-export { exaTools } from "$c/exa/index";
-export type { ExaRenderDetails, ExaSearchResponse, ExaSearchResult } from "$c/exa/types";
+export { exaTools } from "@oh-my-pi/pi-coding-agent/exa/index";
+export type { ExaRenderDetails, ExaSearchResponse, ExaSearchResult } from "@oh-my-pi/pi-coding-agent/exa/types";
 export {
 	type FileDiagnosticsResult,
 	type FileFormatResult,
@@ -11,9 +11,9 @@ export {
 	type LspWarmupOptions,
 	type LspWarmupResult,
 	warmupLspServers,
-} from "$c/lsp/index";
-export { EditTool, type EditToolDetails } from "$c/patch";
-export { BUNDLED_AGENTS, TaskTool } from "$c/task/index";
+} from "@oh-my-pi/pi-coding-agent/lsp/index";
+export { EditTool, type EditToolDetails } from "@oh-my-pi/pi-coding-agent/patch";
+export { BUNDLED_AGENTS, TaskTool } from "@oh-my-pi/pi-coding-agent/task/index";
 export {
 	companyWebSearchTools,
 	exaWebSearchTools,
@@ -31,7 +31,7 @@ export {
 	webSearchCustomTool,
 	webSearchDeepTool,
 	webSearchLinkedinTool,
-} from "$c/web/search/index";
+} from "@oh-my-pi/pi-coding-agent/web/search/index";
 export { AskTool, type AskToolDetails } from "./ask";
 export { BashTool, type BashToolDetails, type BashToolOptions } from "./bash";
 export { CalculatorTool, type CalculatorToolDetails } from "./calculator";
@@ -60,18 +60,18 @@ export {
 export { WriteTool, type WriteToolDetails } from "./write";
 
 import type { AgentTool } from "@oh-my-pi/pi-agent-core";
+import type { BashInterceptorRule } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+import type { InternalUrlRouter } from "@oh-my-pi/pi-coding-agent/internal-urls";
+import { getPreludeDocs, warmPythonEnvironment } from "@oh-my-pi/pi-coding-agent/ipy/executor";
+import { checkPythonKernelAvailability } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
+import { LspTool } from "@oh-my-pi/pi-coding-agent/lsp/index";
+import { EditTool } from "@oh-my-pi/pi-coding-agent/patch";
+import type { ArtifactManager } from "@oh-my-pi/pi-coding-agent/session/artifacts";
+import { TaskTool } from "@oh-my-pi/pi-coding-agent/task/index";
+import type { AgentOutputManager } from "@oh-my-pi/pi-coding-agent/task/output-manager";
+import type { EventBus } from "@oh-my-pi/pi-coding-agent/utils/event-bus";
+import { WebSearchTool } from "@oh-my-pi/pi-coding-agent/web/search/index";
 import { logger } from "@oh-my-pi/pi-utils";
-import type { BashInterceptorRule } from "$c/config/settings-manager";
-import type { InternalUrlRouter } from "$c/internal-urls";
-import { getPreludeDocs, warmPythonEnvironment } from "$c/ipy/executor";
-import { checkPythonKernelAvailability } from "$c/ipy/kernel";
-import { LspTool } from "$c/lsp/index";
-import { EditTool } from "$c/patch";
-import type { ArtifactManager } from "$c/session/artifacts";
-import { TaskTool } from "$c/task/index";
-import type { AgentOutputManager } from "$c/task/output-manager";
-import type { EventBus } from "$c/utils/event-bus";
-import { WebSearchTool } from "$c/web/search/index";
 import { AskTool } from "./ask";
 import { BashTool } from "./bash";
 import { CalculatorTool } from "./calculator";
@@ -119,9 +119,9 @@ export interface ToolSession {
 	/** Get the current session model string, regardless of how it was chosen */
 	getActiveModelString?: () => string | undefined;
 	/** Auth storage for passing to subagents (avoids re-discovery) */
-	authStorage?: import("$c/session/auth-storage").AuthStorage;
+	authStorage?: import("@oh-my-pi/pi-coding-agent/session/auth-storage").AuthStorage;
 	/** Model registry for passing to subagents (avoids re-discovery) */
-	modelRegistry?: import("$c/config/model-registry").ModelRegistry;
+	modelRegistry?: import("@oh-my-pi/pi-coding-agent/config/model-registry").ModelRegistry;
 	/** MCP manager for proxying MCP calls through parent */
 	mcpManager?: import("../mcp/manager").MCPManager;
 	/** Internal URL router for agent:// and skill:// URLs */
@@ -129,7 +129,7 @@ export interface ToolSession {
 	/** Agent output manager for unique agent:// IDs across task invocations */
 	agentOutputManager?: AgentOutputManager;
 	/** Settings manager for passing to subagents (avoids SQLite access in workers) */
-	settingsManager?: { serialize: () => import("$c/config/settings-manager").Settings };
+	settingsManager?: { serialize: () => import("@oh-my-pi/pi-coding-agent/config/settings-manager").Settings };
 	/** Settings manager (optional) */
 	settings?: {
 		getImageAutoResize(): boolean;

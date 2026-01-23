@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { SettingsManager } from "$c/config/settings-manager";
+import { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
 
 describe("SettingsManager python settings", () => {
 	it("defaults to both and session", () => {

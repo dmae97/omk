@@ -15,21 +15,26 @@
 
 import type { AgentEvent, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Api, Model } from "@oh-my-pi/pi-ai";
+import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+import { parseModelPattern, parseModelString } from "@oh-my-pi/pi-coding-agent/config/model-resolver";
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+import type { CustomTool } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
+import { type LspToolDetails, lspSchema } from "@oh-my-pi/pi-coding-agent/lsp/types";
+import lspDescription from "@oh-my-pi/pi-coding-agent/prompts/tools/lsp.md" with { type: "text" };
+import { createAgentSession, discoverAuthStorage, discoverModels } from "@oh-my-pi/pi-coding-agent/sdk";
+import type { AgentSessionEvent } from "@oh-my-pi/pi-coding-agent/session/agent-session";
+import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
+import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+import {
+	getPythonToolDescription,
+	type PythonToolDetails,
+	type PythonToolParams,
+	pythonSchema,
+} from "@oh-my-pi/pi-coding-agent/tools/python";
+import { ToolAbortError } from "@oh-my-pi/pi-coding-agent/tools/tool-errors";
 import { logger, postmortem, untilAborted } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
-import { ModelRegistry } from "$c/config/model-registry";
-import { parseModelPattern, parseModelString } from "$c/config/model-resolver";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
-import { SettingsManager } from "$c/config/settings-manager";
-import type { CustomTool } from "$c/extensibility/custom-tools/types";
-import { type LspToolDetails, lspSchema } from "$c/lsp/types";
-import lspDescription from "$c/prompts/tools/lsp.md" with { type: "text" };
-import { createAgentSession, discoverAuthStorage, discoverModels } from "$c/sdk";
-import type { AgentSessionEvent } from "$c/session/agent-session";
-import { AuthStorage } from "$c/session/auth-storage";
-import { SessionManager } from "$c/session/session-manager";
-import { getPythonToolDescription, type PythonToolDetails, type PythonToolParams, pythonSchema } from "$c/tools/python";
-import { ToolAbortError } from "$c/tools/tool-errors";
 import type {
 	LspToolCallResponse,
 	MCPToolCallResponse,

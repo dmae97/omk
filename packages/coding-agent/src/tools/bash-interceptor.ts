@@ -6,7 +6,10 @@
  * the specialized tools instead.
  */
 
-import { type BashInterceptorRule, DEFAULT_BASH_INTERCEPTOR_RULES } from "$c/config/settings-manager";
+import {
+	type BashInterceptorRule,
+	DEFAULT_BASH_INTERCEPTOR_RULES,
+} from "@oh-my-pi/pi-coding-agent/config/settings-manager";
 
 export interface InterceptionResult {
 	/** If true, the bash command should be blocked */

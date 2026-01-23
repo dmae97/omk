@@ -1,0 +1,11 @@
+{
+	"compilerOptions": {
+		"noEmit": true,
+		"baseUrl": ".",
+		"paths": {
+			"@oh-my-pi/pi-agent-core": ["./src/index.ts"],
+			"@oh-my-pi/pi-agent-core/*": ["./src/*"]
+		}
+	},
+	"include": ["src/**/*.ts"]
+}

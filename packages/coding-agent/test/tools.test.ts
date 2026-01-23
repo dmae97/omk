@@ -2,17 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { EditTool } from "@oh-my-pi/pi-coding-agent/patch";
+import { BashTool } from "@oh-my-pi/pi-coding-agent/tools/bash";
+import { FindTool } from "@oh-my-pi/pi-coding-agent/tools/find";
+import { GrepTool } from "@oh-my-pi/pi-coding-agent/tools/grep";
+import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools/index";
+import { LsTool } from "@oh-my-pi/pi-coding-agent/tools/ls";
+import { wrapToolWithMetaNotice } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
+import { ReadTool } from "@oh-my-pi/pi-coding-agent/tools/read";
+import { WriteTool } from "@oh-my-pi/pi-coding-agent/tools/write";
+import * as shellModule from "@oh-my-pi/pi-coding-agent/utils/shell";
 import { nanoid } from "nanoid";
-import { EditTool } from "$c/patch";
-import { BashTool } from "$c/tools/bash";
-import { FindTool } from "$c/tools/find";
-import { GrepTool } from "$c/tools/grep";
-import type { ToolSession } from "$c/tools/index";
-import { LsTool } from "$c/tools/ls";
-import { wrapToolWithMetaNotice } from "$c/tools/output-meta";
-import { ReadTool } from "$c/tools/read";
-import { WriteTool } from "$c/tools/write";
-import * as shellModule from "$c/utils/shell";
 
 // Helper to extract text from content blocks
 function getTextOutput(result: any): string {

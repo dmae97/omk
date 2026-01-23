@@ -1,4 +1,4 @@
-import type { ConventionalAnalysis } from "$c/commit/types";
+import type { ConventionalAnalysis } from "@oh-my-pi/pi-coding-agent/commit/types";
 
 export function formatCommitMessage(analysis: ConventionalAnalysis, summary: string): string {
 	const scopePart = analysis.scope ? `(${analysis.scope})` : "";

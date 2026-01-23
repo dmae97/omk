@@ -1,17 +1,17 @@
 import { relative, resolve, sep } from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import { type BashExecutorOptions, executeBash } from "@oh-my-pi/pi-coding-agent/exec/bash-executor";
+import type { RenderResultOptions } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
+import { truncateToVisualLines } from "@oh-my-pi/pi-coding-agent/modes/components/visual-truncate";
+import type { Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import bashDescription from "@oh-my-pi/pi-coding-agent/prompts/tools/bash.md" with { type: "text" };
+import type { OutputMeta } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
+import { ToolError } from "@oh-my-pi/pi-coding-agent/tools/tool-errors";
+import { renderOutputBlock, renderStatusLine } from "@oh-my-pi/pi-coding-agent/tui";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
-import { type BashExecutorOptions, executeBash } from "$c/exec/bash-executor";
-import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
-import { truncateToVisualLines } from "$c/modes/components/visual-truncate";
-import type { Theme } from "$c/modes/theme/theme";
-import bashDescription from "$c/prompts/tools/bash.md" with { type: "text" };
-import type { OutputMeta } from "$c/tools/output-meta";
-import { ToolError } from "$c/tools/tool-errors";
-import { renderOutputBlock, renderStatusLine } from "$c/tui";
 
 import { checkBashInterception, checkSimpleLsInterception } from "./bash-interceptor";
 import type { ToolSession } from "./index";

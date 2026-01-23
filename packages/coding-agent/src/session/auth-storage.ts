@@ -32,8 +32,8 @@ import {
 	type UsageReport,
 	zaiUsageProvider,
 } from "@oh-my-pi/pi-ai";
+import { getAgentDbPath, getAuthPath } from "@oh-my-pi/pi-coding-agent/config";
 import { logger } from "@oh-my-pi/pi-utils";
-import { getAgentDbPath, getAuthPath } from "$c/config";
 import { AgentStorage } from "./agent-storage";
 import { migrateJsonStorage } from "./storage-migration";
 

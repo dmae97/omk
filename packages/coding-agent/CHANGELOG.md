@@ -44,6 +44,7 @@
 - Added two-level mermaid caching with pending deduplication to prevent redundant renders
 - Added Python kernel session pooling with MAX_KERNEL_SESSIONS limit and automatic eviction of oldest sessions
 - Added automatic idle kernel session cleanup timer (5-minute timeout, 30-second interval)
+- Added WASM binary generation script for photon module distribution
 
 ### Changed
 - Changed changelog diff truncation limit to be configurable via settings
@@ -96,6 +97,7 @@
 - Changed commit agent prompt to remove pre-computed observations guidance and encourage direct analyze_files usage
 - Changed AuthStorage from constructor-based instantiation to async factory method (AuthStorage.create())
 - Changed Python kernel resource management with gateway shutdown on session disposal
+- Updated TypeScript configuration for better publish-time configuration handling with tsconfig.publish.json
 
 ### Fixed
 - Fixed database busy errors during concurrent access by adding retry logic with exponential backoff when opening storage

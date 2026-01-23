@@ -7,6 +7,9 @@
 - Added terminal graphics encoding (iTerm2/Kitty) for mermaid diagrams with automatic width scaling
 - Added mermaid block extraction and deduplication utilities (extractMermaidBlocks)
 
+### Changed
+- Updated TypeScript configuration for better publish-time configuration handling with tsconfig.publish.json
+
 ### Fixed
 - Fixed crash when terminal becomes unavailable (EIO errors) by exiting gracefully instead of throwing
 - Fixed potential errors during emergency terminal restore when terminal is already dead

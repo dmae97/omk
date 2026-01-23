@@ -6,16 +6,16 @@
 
 import path from "node:path";
 import type { AgentEvent, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
-import type { ModelRegistry } from "$c/config/model-registry";
-import { formatModelString, parseModelPattern } from "$c/config/model-resolver";
-import { checkPythonKernelAvailability } from "$c/ipy/kernel";
-import { LspTool } from "$c/lsp/index";
-import type { LspParams } from "$c/lsp/types";
-import { callTool } from "$c/mcp/client";
-import type { MCPManager } from "$c/mcp/manager";
-import type { AuthStorage } from "$c/session/auth-storage";
-import { PythonTool, type PythonToolParams } from "$c/tools/python";
-import type { EventBus } from "$c/utils/event-bus";
+import type { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+import { formatModelString, parseModelPattern } from "@oh-my-pi/pi-coding-agent/config/model-resolver";
+import { checkPythonKernelAvailability } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
+import { LspTool } from "@oh-my-pi/pi-coding-agent/lsp/index";
+import type { LspParams } from "@oh-my-pi/pi-coding-agent/lsp/types";
+import { callTool } from "@oh-my-pi/pi-coding-agent/mcp/client";
+import type { MCPManager } from "@oh-my-pi/pi-coding-agent/mcp/manager";
+import type { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
+import { PythonTool, type PythonToolParams } from "@oh-my-pi/pi-coding-agent/tools/python";
+import type { EventBus } from "@oh-my-pi/pi-coding-agent/utils/event-bus";
 import type { ToolSession } from "..";
 import { subprocessToolRegistry } from "./subprocess-tool-registry";
 import {
@@ -62,7 +62,7 @@ export interface ExecutorOptions {
 	authStorage?: AuthStorage;
 	modelRegistry?: ModelRegistry;
 	settingsManager?: {
-		serialize: () => import("$c/config/settings-manager").Settings;
+		serialize: () => import("@oh-my-pi/pi-coding-agent/config/settings-manager").Settings;
 		getPythonToolMode?: () => "ipy-only" | "bash-only" | "both";
 		getPythonKernelMode?: () => "session" | "per-call";
 		getPythonSharedGateway?: () => boolean;

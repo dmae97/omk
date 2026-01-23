@@ -1,11 +1,11 @@
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
+import type { StatusLineSegmentOptions, StatusLineSettings } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import type { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { type Component, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
 import { $ } from "bun";
 import { type FSWatcher, watch } from "fs";
 import { dirname, join } from "path";
-import type { StatusLineSegmentOptions, StatusLineSettings } from "$c/config/settings-manager";
-import { theme } from "$c/modes/theme/theme";
-import type { AgentSession } from "$c/session/agent-session";
 import { getPreset } from "./status-line/presets";
 import { renderSegment, type SegmentContext } from "./status-line/segments";
 import { getSeparator } from "./status-line/separators";

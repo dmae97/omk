@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { getAgentDir } from "@oh-my-pi/pi-coding-agent/config";
 import {
 	DEFAULT_EDITOR_KEYBINDINGS,
 	type EditorAction,
@@ -10,7 +11,6 @@ import {
 	setEditorKeybindings,
 } from "@oh-my-pi/pi-tui";
 import { logger } from "@oh-my-pi/pi-utils";
-import { getAgentDir } from "$c/config";
 
 /**
  * Application-level actions (coding agent specific).

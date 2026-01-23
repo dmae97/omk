@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { executePythonWithKernel, type PythonKernelExecutor } from "$c/ipy/executor";
-import type { KernelExecuteOptions, KernelExecuteResult } from "$c/ipy/kernel";
-import { DEFAULT_MAX_BYTES } from "$c/tools/truncate";
+import { executePythonWithKernel, type PythonKernelExecutor } from "@oh-my-pi/pi-coding-agent/ipy/executor";
+import type { KernelExecuteOptions, KernelExecuteResult } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
+import { DEFAULT_MAX_BYTES } from "@oh-my-pi/pi-coding-agent/tools/truncate";
 
 class FakeKernel implements PythonKernelExecutor {
 	private result: KernelExecuteResult;

@@ -1,5 +1,5 @@
+import type { Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { CancellableLoader, Container, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
-import type { Theme } from "$c/modes/theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 
 /** Loader wrapped with borders for hook UI */

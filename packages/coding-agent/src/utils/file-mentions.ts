@@ -8,10 +8,15 @@
 
 import path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
-import type { FileMentionMessage } from "$c/session/messages";
-import { resolveReadPath } from "$c/tools/path-utils";
-import { formatAge } from "$c/tools/render-utils";
-import { DEFAULT_MAX_BYTES, formatSize, truncateHead, truncateStringToBytesFromStart } from "$c/tools/truncate";
+import type { FileMentionMessage } from "@oh-my-pi/pi-coding-agent/session/messages";
+import { resolveReadPath } from "@oh-my-pi/pi-coding-agent/tools/path-utils";
+import { formatAge } from "@oh-my-pi/pi-coding-agent/tools/render-utils";
+import {
+	DEFAULT_MAX_BYTES,
+	formatSize,
+	truncateHead,
+	truncateStringToBytesFromStart,
+} from "@oh-my-pi/pi-coding-agent/tools/truncate";
 
 /** Regex to match @filepath patterns in text */
 const FILE_MENTION_REGEX = /@([^\s@]+)/g;

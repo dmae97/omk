@@ -6,10 +6,10 @@
 
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
+import { subprocessToolRegistry } from "@oh-my-pi/pi-coding-agent/task/subprocess-tool-registry";
 import type { Static, TObject } from "@sinclair/typebox";
 import { Type } from "@sinclair/typebox";
 import Ajv, { type ErrorObject, type ValidateFunction } from "ajv";
-import { subprocessToolRegistry } from "$c/task/subprocess-tool-registry";
 import type { ToolSession } from "./index";
 import { jtdToJsonSchema } from "./jtd-to-json-schema";
 

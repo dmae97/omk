@@ -7,7 +7,7 @@
 
 import { mkdirSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
-import { resolveToCwd } from "$c/tools/path-utils";
+import { resolveToCwd } from "@oh-my-pi/pi-coding-agent/tools/path-utils";
 import { DEFAULT_FUZZY_THRESHOLD, findContextLine, findMatch, seekSequence } from "./fuzzy";
 import {
 	adjustIndentation,

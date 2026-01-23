@@ -1,9 +1,9 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { CONFIG_DIR_NAME } from "@oh-my-pi/pi-coding-agent/config";
 import { logger } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
-import { CONFIG_DIR_NAME } from "$c/config";
 
 export interface SSHConnectionTarget {
 	name: string;

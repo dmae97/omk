@@ -1,5 +1,5 @@
+import { ToolAbortError } from "@oh-my-pi/pi-coding-agent/tools/tool-errors";
 import { parse as parseHtml } from "node-html-parser";
-import { ToolAbortError } from "$c/tools/tool-errors";
 import type { RenderResult, SpecialHandler } from "./types";
 import { finalizeOutput, loadPage } from "./types";
 

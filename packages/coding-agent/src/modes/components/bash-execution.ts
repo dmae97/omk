@@ -2,11 +2,11 @@
  * Component for displaying bash command execution with streaming output.
  */
 
+import { getSymbolTheme, theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import type { TruncationMeta } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
+import { formatSize } from "@oh-my-pi/pi-coding-agent/tools/truncate";
 import { Container, Loader, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
 import stripAnsi from "strip-ansi";
-import { getSymbolTheme, theme } from "$c/modes/theme/theme";
-import type { TruncationMeta } from "$c/tools/output-meta";
-import { formatSize } from "$c/tools/truncate";
 import { DynamicBorder } from "./dynamic-border";
 import { truncateToVisualLines } from "./visual-truncate";
 

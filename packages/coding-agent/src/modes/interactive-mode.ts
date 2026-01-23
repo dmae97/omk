@@ -6,6 +6,16 @@
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, ImageContent, Message, UsageReport } from "@oh-my-pi/pi-ai";
+import { KeybindingsManager } from "@oh-my-pi/pi-coding-agent/config/keybindings";
+import type { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+import type { ExtensionUIContext } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/index";
+import type { CompactOptions } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";
+import { loadSlashCommands } from "@oh-my-pi/pi-coding-agent/extensibility/slash-commands";
+import type { AgentSession, AgentSessionEvent } from "@oh-my-pi/pi-coding-agent/session/agent-session";
+import { HistoryStorage } from "@oh-my-pi/pi-coding-agent/session/history-storage";
+import type { SessionContext, SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+import { getRecentSessions } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+import { setTerminalTitle } from "@oh-my-pi/pi-coding-agent/utils/title-generator";
 import type { Component, Loader, SlashCommand } from "@oh-my-pi/pi-tui";
 import {
 	CombinedAutocompleteProvider,
@@ -18,16 +28,6 @@ import {
 } from "@oh-my-pi/pi-tui";
 import { logger, postmortem } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
-import { KeybindingsManager } from "$c/config/keybindings";
-import type { SettingsManager } from "$c/config/settings-manager";
-import type { ExtensionUIContext } from "$c/extensibility/extensions/index";
-import type { CompactOptions } from "$c/extensibility/extensions/types";
-import { loadSlashCommands } from "$c/extensibility/slash-commands";
-import type { AgentSession, AgentSessionEvent } from "$c/session/agent-session";
-import { HistoryStorage } from "$c/session/history-storage";
-import type { SessionContext, SessionManager } from "$c/session/session-manager";
-import { getRecentSessions } from "$c/session/session-manager";
-import { setTerminalTitle } from "$c/utils/title-generator";
 import type { AssistantMessageComponent } from "./components/assistant-message";
 import type { BashExecutionComponent } from "./components/bash-execution";
 import { CustomEditor } from "./components/custom-editor";
@@ -125,7 +125,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	private readonly changelogMarkdown: string | undefined;
 	public readonly lspServers: Array<{ name: string; status: "ready" | "error"; fileTypes: string[] }> | undefined =
 		undefined;
-	public mcpManager?: import("$c/mcp/index").MCPManager;
+	public mcpManager?: import("@oh-my-pi/pi-coding-agent/mcp/index").MCPManager;
 	private readonly toolUiContextSetter: (uiContext: ExtensionUIContext, hasUI: boolean) => void;
 
 	private readonly commandController: CommandController;
@@ -141,7 +141,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		changelogMarkdown: string | undefined = undefined,
 		setToolUIContext: (uiContext: ExtensionUIContext, hasUI: boolean) => void = () => {},
 		lspServers: Array<{ name: string; status: "ready" | "error"; fileTypes: string[] }> | undefined = undefined,
-		mcpManager?: import("$c/mcp/index").MCPManager,
+		mcpManager?: import("@oh-my-pi/pi-coding-agent/mcp/index").MCPManager,
 	) {
 		this.session = session;
 		this.sessionManager = session.sessionManager;

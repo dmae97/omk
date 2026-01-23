@@ -1,11 +1,15 @@
 import type { Api, AssistantMessage, Model } from "@oh-my-pi/pi-ai";
 import { completeSimple } from "@oh-my-pi/pi-ai";
-import { truncateToTokenLimit } from "$c/commit/map-reduce/utils";
-import fileObserverSystemPrompt from "$c/commit/prompts/file-observer-system.md" with { type: "text" };
-import fileObserverUserPrompt from "$c/commit/prompts/file-observer-user.md" with { type: "text" };
-import type { FileDiff, FileObservation } from "$c/commit/types";
-import { isExcludedFile } from "$c/commit/utils/exclusions";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
+import { truncateToTokenLimit } from "@oh-my-pi/pi-coding-agent/commit/map-reduce/utils";
+import fileObserverSystemPrompt from "@oh-my-pi/pi-coding-agent/commit/prompts/file-observer-system.md" with {
+	type: "text",
+};
+import fileObserverUserPrompt from "@oh-my-pi/pi-coding-agent/commit/prompts/file-observer-user.md" with {
+	type: "text",
+};
+import type { FileDiff, FileObservation } from "@oh-my-pi/pi-coding-agent/commit/types";
+import { isExcludedFile } from "@oh-my-pi/pi-coding-agent/commit/utils/exclusions";
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
 
 const MAX_FILE_TOKENS = 50_000;
 const MAX_CONTEXT_FILES = 20;

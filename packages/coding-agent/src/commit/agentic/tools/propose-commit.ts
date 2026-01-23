@@ -1,5 +1,4 @@
-import { Type } from "@sinclair/typebox";
-import type { CommitAgentState } from "$c/commit/agentic/state";
+import type { CommitAgentState } from "@oh-my-pi/pi-coding-agent/commit/agentic/state";
 import {
 	capDetails,
 	MAX_DETAIL_ITEMS,
@@ -7,11 +6,12 @@ import {
 	SUMMARY_MAX_CHARS,
 	validateSummaryRules,
 	validateTypeConsistency,
-} from "$c/commit/agentic/validation";
-import { validateAnalysis } from "$c/commit/analysis/validation";
-import type { ControlledGit } from "$c/commit/git";
-import type { CommitType, ConventionalAnalysis, ConventionalDetail } from "$c/commit/types";
-import type { CustomTool } from "$c/extensibility/custom-tools/types";
+} from "@oh-my-pi/pi-coding-agent/commit/agentic/validation";
+import { validateAnalysis } from "@oh-my-pi/pi-coding-agent/commit/analysis/validation";
+import type { ControlledGit } from "@oh-my-pi/pi-coding-agent/commit/git";
+import type { CommitType, ConventionalAnalysis, ConventionalDetail } from "@oh-my-pi/pi-coding-agent/commit/types";
+import type { CustomTool } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
+import { Type } from "@sinclair/typebox";
 
 const commitTypeSchema = Type.Union([
 	Type.Literal("feat"),

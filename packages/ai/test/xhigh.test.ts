@@ -1,7 +1,7 @@
+import { getModel } from "@oh-my-pi/pi-ai/models";
+import { stream } from "@oh-my-pi/pi-ai/stream";
+import type { Context, Model } from "@oh-my-pi/pi-ai/types";
 import { describe, expect, it } from "vitest";
-import { getModel } from "$ai/models";
-import { stream } from "$ai/stream";
-import type { Context, Model } from "$ai/types";
 
 function makeContext(): Context {
 	return {

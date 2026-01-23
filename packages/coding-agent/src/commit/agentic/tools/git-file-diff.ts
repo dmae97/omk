@@ -1,7 +1,7 @@
+import type { CommitAgentState } from "@oh-my-pi/pi-coding-agent/commit/agentic/state";
+import type { ControlledGit } from "@oh-my-pi/pi-coding-agent/commit/git";
+import type { CustomTool } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
 import { Type } from "@sinclair/typebox";
-import type { CommitAgentState } from "$c/commit/agentic/state";
-import type { ControlledGit } from "$c/commit/git";
-import type { CustomTool } from "$c/extensibility/custom-tools/types";
 
 const TARGET_TOKENS = 30000;
 const CHARS_PER_TOKEN = 4;

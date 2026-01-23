@@ -6,10 +6,10 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
+import type { CustomTool, CustomToolResult } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
+import { callMCP } from "@oh-my-pi/pi-coding-agent/mcp/json-rpc";
 import { logger } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
-import type { CustomTool, CustomToolResult } from "$c/extensibility/custom-tools/types";
-import { callMCP } from "$c/mcp/json-rpc";
 import type {
 	ExaRenderDetails,
 	ExaSearchResponse,

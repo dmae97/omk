@@ -1,17 +1,17 @@
-import type { CommitAgentState } from "$c/commit/agentic/state";
-import { createAnalyzeFileTool } from "$c/commit/agentic/tools/analyze-file";
-import { createGitFileDiffTool } from "$c/commit/agentic/tools/git-file-diff";
-import { createGitHunkTool } from "$c/commit/agentic/tools/git-hunk";
-import { createGitOverviewTool } from "$c/commit/agentic/tools/git-overview";
-import { createProposeChangelogTool } from "$c/commit/agentic/tools/propose-changelog";
-import { createProposeCommitTool } from "$c/commit/agentic/tools/propose-commit";
-import { createRecentCommitsTool } from "$c/commit/agentic/tools/recent-commits";
-import { createSplitCommitTool } from "$c/commit/agentic/tools/split-commit";
-import type { ControlledGit } from "$c/commit/git";
-import type { ModelRegistry } from "$c/config/model-registry";
-import type { SettingsManager } from "$c/config/settings-manager";
-import type { CustomTool } from "$c/extensibility/custom-tools/types";
-import type { AuthStorage } from "$c/session/auth-storage";
+import type { CommitAgentState } from "@oh-my-pi/pi-coding-agent/commit/agentic/state";
+import { createAnalyzeFileTool } from "@oh-my-pi/pi-coding-agent/commit/agentic/tools/analyze-file";
+import { createGitFileDiffTool } from "@oh-my-pi/pi-coding-agent/commit/agentic/tools/git-file-diff";
+import { createGitHunkTool } from "@oh-my-pi/pi-coding-agent/commit/agentic/tools/git-hunk";
+import { createGitOverviewTool } from "@oh-my-pi/pi-coding-agent/commit/agentic/tools/git-overview";
+import { createProposeChangelogTool } from "@oh-my-pi/pi-coding-agent/commit/agentic/tools/propose-changelog";
+import { createProposeCommitTool } from "@oh-my-pi/pi-coding-agent/commit/agentic/tools/propose-commit";
+import { createRecentCommitsTool } from "@oh-my-pi/pi-coding-agent/commit/agentic/tools/recent-commits";
+import { createSplitCommitTool } from "@oh-my-pi/pi-coding-agent/commit/agentic/tools/split-commit";
+import type { ControlledGit } from "@oh-my-pi/pi-coding-agent/commit/git";
+import type { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+import type { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+import type { CustomTool } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
+import type { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 
 export interface CommitToolOptions {
 	cwd: string;

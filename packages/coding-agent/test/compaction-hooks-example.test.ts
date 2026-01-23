@@ -3,7 +3,11 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import type { HookAPI, SessionBeforeCompactEvent, SessionCompactEvent } from "$c/extensibility/hooks/index";
+import type {
+	HookAPI,
+	SessionBeforeCompactEvent,
+	SessionCompactEvent,
+} from "@oh-my-pi/pi-coding-agent/extensibility/hooks/index";
 
 describe("Documentation example", () => {
 	it("custom compaction example should type-check correctly", () => {

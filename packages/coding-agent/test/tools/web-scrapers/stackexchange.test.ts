@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { handleStackOverflow } from "$c/web/scrapers/stackoverflow";
+import { handleStackOverflow } from "@oh-my-pi/pi-coding-agent/web/scrapers/stackoverflow";
 
 const SKIP = !process.env.WEB_FETCH_INTEGRATION;
 

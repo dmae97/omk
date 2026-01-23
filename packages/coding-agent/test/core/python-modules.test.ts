@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
+import {
+	discoverPythonModules,
+	loadPythonModules,
+	type PythonModuleExecutor,
+} from "@oh-my-pi/pi-coding-agent/ipy/modules";
 import { createTempDirSync } from "@oh-my-pi/pi-utils";
-import { discoverPythonModules, loadPythonModules, type PythonModuleExecutor } from "$c/ipy/modules";
 
 const fixturesDir = resolve(import.meta.dir, "../../test/fixtures/python-modules");
 

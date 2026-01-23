@@ -1,6 +1,6 @@
 import { basename } from "node:path";
-import type { CommitProposal } from "$c/commit/agentic/state";
-import type { CommitType, ConventionalAnalysis, NumstatEntry } from "$c/commit/types";
+import type { CommitProposal } from "@oh-my-pi/pi-coding-agent/commit/agentic/state";
+import type { CommitType, ConventionalAnalysis, NumstatEntry } from "@oh-my-pi/pi-coding-agent/commit/types";
 
 const TEST_PATTERNS = ["/test/", "/tests/", "/__tests__/", "_test.", ".test.", ".spec.", "_spec."];
 const DOC_EXTENSIONS = new Set([".md", ".txt", ".rst", ".adoc"]);

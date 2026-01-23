@@ -1,6 +1,6 @@
+import { transformMessages } from "@oh-my-pi/pi-ai/providers/transform-messages";
+import type { AssistantMessage, Model, ToolResultMessage } from "@oh-my-pi/pi-ai/types";
 import { describe, expect, it } from "vitest";
-import { transformMessages } from "$ai/providers/transform-messages";
-import type { AssistantMessage, Model, ToolResultMessage } from "$ai/types";
 
 /**
  * Regression test for: "each tool_use must have a single result. Found multiple tool_result blocks with id"

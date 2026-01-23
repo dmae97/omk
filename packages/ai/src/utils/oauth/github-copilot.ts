@@ -2,8 +2,8 @@
  * GitHub Copilot OAuth flow
  */
 
+import { getModels } from "@oh-my-pi/pi-ai/models";
 import { abortableSleep } from "@oh-my-pi/pi-utils";
-import { getModels } from "$ai/models";
 import type { OAuthCredentials } from "./types";
 
 const decode = (s: string) => atob(s);

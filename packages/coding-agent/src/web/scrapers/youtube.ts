@@ -1,10 +1,10 @@
 import { unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { throwIfAborted } from "@oh-my-pi/pi-coding-agent/tools/tool-errors";
+import { ensureTool } from "@oh-my-pi/pi-coding-agent/utils/tools-manager";
 import { cspawn } from "@oh-my-pi/pi-utils";
 import { nanoid } from "nanoid";
-import { throwIfAborted } from "$c/tools/tool-errors";
-import { ensureTool } from "$c/utils/tools-manager";
 import type { RenderResult, SpecialHandler } from "./types";
 import { finalizeOutput } from "./types";
 

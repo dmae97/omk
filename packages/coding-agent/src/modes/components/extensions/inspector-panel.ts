@@ -5,8 +5,8 @@
  */
 
 import { homedir } from "node:os";
+import { theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { type Component, truncateToWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-tui";
-import { theme } from "$c/modes/theme/theme";
 import type { Extension, ExtensionState } from "./types";
 
 export class InspectorPanel implements Component {

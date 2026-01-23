@@ -11,11 +11,14 @@
  * - Extension UI: Extension UI requests are emitted, client responds with extension_ui_response
  */
 
+import type {
+	ExtensionUIContext,
+	ExtensionUIDialogOptions,
+} from "@oh-my-pi/pi-coding-agent/extensibility/extensions/index";
+import { type Theme, theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import type { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { readLines } from "@oh-my-pi/pi-utils";
 import { nanoid } from "nanoid";
-import type { ExtensionUIContext, ExtensionUIDialogOptions } from "$c/extensibility/extensions/index";
-import { type Theme, theme } from "$c/modes/theme/theme";
-import type { AgentSession } from "$c/session/agent-session";
 import type {
 	RpcCommand,
 	RpcExtensionUIRequest,

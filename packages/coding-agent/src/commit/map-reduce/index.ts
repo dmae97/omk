@@ -1,10 +1,10 @@
 import type { Api, Model } from "@oh-my-pi/pi-ai";
-import { parseFileDiffs } from "$c/commit/git/diff";
-import { runMapPhase } from "$c/commit/map-reduce/map-phase";
-import { runReducePhase } from "$c/commit/map-reduce/reduce-phase";
-import { estimateTokens } from "$c/commit/map-reduce/utils";
-import type { ConventionalAnalysis } from "$c/commit/types";
-import { isExcludedFile } from "$c/commit/utils/exclusions";
+import { parseFileDiffs } from "@oh-my-pi/pi-coding-agent/commit/git/diff";
+import { runMapPhase } from "@oh-my-pi/pi-coding-agent/commit/map-reduce/map-phase";
+import { runReducePhase } from "@oh-my-pi/pi-coding-agent/commit/map-reduce/reduce-phase";
+import { estimateTokens } from "@oh-my-pi/pi-coding-agent/commit/map-reduce/utils";
+import type { ConventionalAnalysis } from "@oh-my-pi/pi-coding-agent/commit/types";
+import { isExcludedFile } from "@oh-my-pi/pi-coding-agent/commit/utils/exclusions";
 
 const MIN_FILES_FOR_MAP_REDUCE = 4;
 const MAX_FILE_TOKENS = 50_000;

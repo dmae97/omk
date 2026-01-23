@@ -7,8 +7,8 @@
 
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Message, TextContent } from "@oh-my-pi/pi-ai";
-import type { OutputMeta } from "$c/tools/output-meta";
-import { formatOutputNotice } from "$c/tools/output-meta";
+import type { OutputMeta } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
+import { formatOutputNotice } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
 
 export const COMPACTION_SUMMARY_PREFIX = `The conversation history before this point was compacted into the following summary:
 

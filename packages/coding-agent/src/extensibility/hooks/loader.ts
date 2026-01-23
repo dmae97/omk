@@ -3,15 +3,15 @@
  */
 
 import * as path from "node:path";
+import { hookCapability } from "@oh-my-pi/pi-coding-agent/capability/hook";
+import type { Hook } from "@oh-my-pi/pi-coding-agent/discovery";
+import { loadCapability } from "@oh-my-pi/pi-coding-agent/discovery";
+import { expandPath } from "@oh-my-pi/pi-coding-agent/discovery/helpers";
+import * as piCodingAgent from "@oh-my-pi/pi-coding-agent/index";
+import type { HookMessage } from "@oh-my-pi/pi-coding-agent/session/messages";
+import type { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { logger } from "@oh-my-pi/pi-utils";
 import * as typebox from "@sinclair/typebox";
-import { hookCapability } from "$c/capability/hook";
-import type { Hook } from "$c/discovery";
-import { loadCapability } from "$c/discovery";
-import { expandPath } from "$c/discovery/helpers";
-import * as piCodingAgent from "$c/index";
-import type { HookMessage } from "$c/session/messages";
-import type { SessionManager } from "$c/session/session-manager";
 import { execCommand } from "./runner";
 import type { ExecOptions, HookAPI, HookFactory, HookMessageRenderer, RegisteredCommand } from "./types";
 

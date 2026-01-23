@@ -5,7 +5,7 @@ import addFormatsModule from "ajv-formats";
 const Ajv = (AjvModule as any).default || AjvModule;
 const addFormats = (addFormatsModule as any).default || addFormatsModule;
 
-import type { Tool, ToolCall } from "$ai/types";
+import type { Tool, ToolCall } from "@oh-my-pi/pi-ai/types";
 
 // ============================================================================
 // Type Coercion Utilities

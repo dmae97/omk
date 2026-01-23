@@ -1,11 +1,11 @@
 import { createServer } from "node:net";
 import { delimiter, join } from "node:path";
+import { getShellConfig, killProcessTree } from "@oh-my-pi/pi-coding-agent/utils/shell";
+import { getOrCreateSnapshot } from "@oh-my-pi/pi-coding-agent/utils/shell-snapshot";
+import { htmlToBasicMarkdown } from "@oh-my-pi/pi-coding-agent/web/scrapers/types";
 import { logger } from "@oh-my-pi/pi-utils";
 import { $, type Subprocess } from "bun";
 import { nanoid } from "nanoid";
-import { getShellConfig, killProcessTree } from "$c/utils/shell";
-import { getOrCreateSnapshot } from "$c/utils/shell-snapshot";
-import { htmlToBasicMarkdown } from "$c/web/scrapers/types";
 import { acquireSharedGateway, releaseSharedGateway } from "./gateway-coordinator";
 import { loadPythonModules } from "./modules";
 import { PYTHON_PRELUDE } from "./prelude";

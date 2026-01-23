@@ -1,4 +1,4 @@
-import { parseFrontmatter } from "$c/utils/frontmatter";
+import { parseFrontmatter } from "@oh-my-pi/pi-coding-agent/utils/frontmatter";
 import type { RenderResult, SpecialHandler } from "./types";
 import { finalizeOutput, loadPage } from "./types";
 

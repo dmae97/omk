@@ -1,6 +1,10 @@
 import type { Api, Model } from "@oh-my-pi/pi-ai";
-import { parseModelPattern, parseModelString, SMOL_MODEL_PRIORITY } from "$c/config/model-resolver";
-import type { SettingsManager } from "$c/config/settings-manager";
+import {
+	parseModelPattern,
+	parseModelString,
+	SMOL_MODEL_PRIORITY,
+} from "@oh-my-pi/pi-coding-agent/config/model-resolver";
+import type { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
 
 export async function resolvePrimaryModel(
 	override: string | undefined,
@@ -12,7 +16,7 @@ export async function resolvePrimaryModel(
 ): Promise<{ model: Model<Api>; apiKey: string }> {
 	const available = modelRegistry.getAvailable();
 	const model = override
-		? resolveModelFromString(override, available)
+		? resolveModelFromString(expandRoleAlias(override, settingsManager), available)
 		: resolveModelFromSettings(settingsManager, available);
 	if (!model) {
 		throw new Error("No model available for commit generation");
@@ -52,9 +56,14 @@ export async function resolveSmolModel(
 }
 
 function resolveModelFromSettings(settingsManager: SettingsManager, available: Model<Api>[]): Model<Api> | undefined {
-	const configured = settingsManager.getModelRole("default");
-	if (!configured) return available[0];
-	return resolveModelFromString(configured, available) ?? available[0];
+	const roles = ["commit", "smol", "default"];
+	for (const role of roles) {
+		const configured = settingsManager.getModelRole(role);
+		if (!configured) continue;
+		const resolved = resolveModelFromString(expandRoleAlias(configured, settingsManager), available);
+		if (resolved) return resolved;
+	}
+	return available[0];
 }
 
 function resolveModelFromString(value: string, available: Model<Api>[]): Model<Api> | undefined {
@@ -63,4 +72,13 @@ function resolveModelFromString(value: string, available: Model<Api>[]): Model<A
 		return available.find((model) => model.provider === parsed.provider && model.id === parsed.id);
 	}
 	return parseModelPattern(value, available).model;
+}
+
+function expandRoleAlias(value: string, settingsManager: SettingsManager): string {
+	const lower = value.toLowerCase();
+	if (lower.startsWith("pi/") || lower.startsWith("omp/")) {
+		const role = lower.startsWith("pi/") ? value.slice(3) : value.slice(4);
+		return settingsManager.getModelRole(role) ?? value;
+	}
+	return value;
 }

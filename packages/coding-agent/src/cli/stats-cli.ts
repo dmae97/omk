@@ -4,8 +4,8 @@
  * Handles `omp stats` subcommand for viewing AI usage statistics.
  */
 
+import { APP_NAME } from "@oh-my-pi/pi-coding-agent/config";
 import chalk from "chalk";
-import { APP_NAME } from "$c/config";
 
 // =============================================================================
 // Types

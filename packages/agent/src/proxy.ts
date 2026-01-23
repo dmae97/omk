@@ -13,7 +13,7 @@ import {
 	type StopReason,
 	type ToolCall,
 } from "@oh-my-pi/pi-ai";
-import { parseStreamingJson } from "@oh-my-pi/pi-ai/src/utils/json-parse";
+import { parseStreamingJson } from "@oh-my-pi/pi-ai/utils/json-parse";
 import { readSseEvents } from "@oh-my-pi/pi-utils";
 
 // Create stream class matching ProxyMessageEventStream

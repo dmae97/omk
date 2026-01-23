@@ -2,8 +2,8 @@
  * Bordered output container with optional header and sections.
  */
 
+import type { Theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { visibleWidth } from "@oh-my-pi/pi-tui";
-import type { Theme } from "$c/modes/theme/theme";
 import type { State } from "./types";
 import { getStateBgColor, padToWidth, truncateToWidth } from "./utils";
 

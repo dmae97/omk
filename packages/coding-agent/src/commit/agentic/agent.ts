@@ -1,19 +1,21 @@
 import type { Api, Model } from "@oh-my-pi/pi-ai";
+import agentUserPrompt from "@oh-my-pi/pi-coding-agent/commit/agentic/prompts/session-user.md" with { type: "text" };
+import agentSystemPrompt from "@oh-my-pi/pi-coding-agent/commit/agentic/prompts/system.md" with { type: "text" };
+import type { CommitAgentState } from "@oh-my-pi/pi-coding-agent/commit/agentic/state";
+import { createCommitTools } from "@oh-my-pi/pi-coding-agent/commit/agentic/tools";
+import type { ControlledGit } from "@oh-my-pi/pi-coding-agent/commit/git";
+import typesDescriptionPrompt from "@oh-my-pi/pi-coding-agent/commit/prompts/types-description.md" with {
+	type: "text",
+};
+import type { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import type { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
+import { getMarkdownTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import { createAgentSession } from "@oh-my-pi/pi-coding-agent/sdk";
+import type { AgentSessionEvent } from "@oh-my-pi/pi-coding-agent/session/agent-session";
+import type { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { Markdown } from "@oh-my-pi/pi-tui";
 import chalk from "chalk";
-import agentUserPrompt from "$c/commit/agentic/prompts/session-user.md" with { type: "text" };
-import agentSystemPrompt from "$c/commit/agentic/prompts/system.md" with { type: "text" };
-import type { CommitAgentState } from "$c/commit/agentic/state";
-import { createCommitTools } from "$c/commit/agentic/tools";
-import type { ControlledGit } from "$c/commit/git";
-import typesDescriptionPrompt from "$c/commit/prompts/types-description.md" with { type: "text" };
-import type { ModelRegistry } from "$c/config/model-registry";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
-import type { SettingsManager } from "$c/config/settings-manager";
-import { getMarkdownTheme } from "$c/modes/theme/theme";
-import { createAgentSession } from "$c/sdk";
-import type { AgentSessionEvent } from "$c/session/agent-session";
-import type { AuthStorage } from "$c/session/auth-storage";
 
 export interface CommitAgentInput {
 	cwd: string;
@@ -66,7 +68,7 @@ export async function runCommitAgentSession(input: CommitAgentInput): Promise<Co
 		enableMCP: false,
 		hasUI: false,
 		spawns,
-		toolNames: ["read"],
+		toolNames: ["__none__"],
 		contextFiles: input.contextFiles,
 		disableExtensionDiscovery: true,
 		skills: [],

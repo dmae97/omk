@@ -1,0 +1,12 @@
+{
+	"compilerOptions": {
+		"noEmit": true,
+		"baseUrl": ".",
+		"paths": {
+			"@oh-my-pi/pi-coding-agent": ["./src/index.ts"],
+			"@oh-my-pi/pi-coding-agent/hooks": ["./src/extensibility/hooks/index.ts"],
+			"@oh-my-pi/pi-coding-agent/*": ["./src/*"]
+		}
+	},
+	"include": ["src/**/*.ts", "src/bun-imports.d.ts"]
+}

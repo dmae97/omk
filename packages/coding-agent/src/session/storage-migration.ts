@@ -7,8 +7,8 @@
  * which migrates from both settings.json and agent.db to config.yaml.
  */
 
+import { getAgentDbPath } from "@oh-my-pi/pi-coding-agent/config";
 import { logger } from "@oh-my-pi/pi-utils";
-import { getAgentDbPath } from "$c/config";
 import { AgentStorage } from "./agent-storage";
 import type { AuthCredential, AuthCredentialEntry, AuthStorageData } from "./auth-storage";
 

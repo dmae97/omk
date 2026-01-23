@@ -3,8 +3,8 @@
  */
 
 import type { Api, Model } from "@oh-my-pi/pi-ai";
-import type { ModelRegistry } from "$c/config/model-registry";
-import { fuzzyFilter } from "$c/utils/fuzzy";
+import type { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+import { fuzzyFilter } from "@oh-my-pi/pi-coding-agent/utils/fuzzy";
 
 /**
  * Format a number as human-readable (e.g., 200000 -> "200K", 1000000 -> "1M")

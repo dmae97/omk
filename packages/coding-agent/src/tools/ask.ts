@@ -16,14 +16,14 @@
  */
 
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
+import { renderPromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import type { RenderResultOptions } from "@oh-my-pi/pi-coding-agent/extensibility/custom-tools/types";
+import { type Theme, theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import askDescription from "@oh-my-pi/pi-coding-agent/prompts/tools/ask.md" with { type: "text" };
+import { renderStatusLine } from "@oh-my-pi/pi-coding-agent/tui";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
-import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
-import { type Theme, theme } from "$c/modes/theme/theme";
-import askDescription from "$c/prompts/tools/ask.md" with { type: "text" };
-import { renderStatusLine } from "$c/tui";
 import type { ToolSession } from "./index";
 import { ToolUIKit } from "./render-utils";
 

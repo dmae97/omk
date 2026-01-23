@@ -68,7 +68,7 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
       - run: bun install --frozen-lockfile
       - name: Generate WASM base64
-        run: printf 'export default "%s";\n' "$(base64 -w0 packages/coding-agent/src/vendor/photon/photon_rs_bg.wasm)" > packages/coding-agent/src/vendor/photon/photon_rs_bg.wasm.b64.js
+        run: bun packages/coding-agent/scripts/generate-wasm-b64.ts
       - name: Build binaries
         run: |
           cd packages/coding-agent

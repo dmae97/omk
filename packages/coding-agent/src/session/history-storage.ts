@@ -1,8 +1,8 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { getAgentDir } from "@oh-my-pi/pi-coding-agent/config";
 import { logger } from "@oh-my-pi/pi-utils";
-import { getAgentDir } from "$c/config";
 
 export interface HistoryEntry {
 	id: number;
