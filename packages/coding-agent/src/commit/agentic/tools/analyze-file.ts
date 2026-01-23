@@ -10,7 +10,7 @@ import type { TaskParams } from "$c/task/types";
 import type { ToolSession } from "$c/tools/index";
 
 const analyzeFileSchema = Type.Object({
-	file: Type.String({ description: "File path" }),
+	files: Type.Array(Type.String({ description: "File path" }), { minItems: 1 }),
 	goal: Type.Optional(Type.String({ description: "Optional analysis focus" })),
 });
 
@@ -53,29 +53,40 @@ export function createAnalyzeFileTool(options: {
 	spawns: string;
 }): CustomTool<typeof analyzeFileSchema> {
 	return {
-		name: "analyze_file",
-		label: "Analyze File",
-		description: "Spawn a quick_task agent to analyze a file.",
+		name: "analyze_files",
+		label: "Analyze Files",
+		description: "Spawn quick_task agents to analyze files.",
 		parameters: analyzeFileSchema,
 		async execute(toolCallId, params, onUpdate, ctx, signal) {
 			const toolSession = buildToolSession(ctx, options);
 			const taskTool = await TaskTool.create(toolSession);
-			const context = renderPromptTemplate(analyzeFilePrompt, {
-				file: params.file,
-				goal: params.goal,
+			const context = "{{prompt}}";
+			const tasks = params.files.map((file, index) => {
+				const relatedFiles = formatRelatedFiles(params.files, file);
+				const prompt = renderPromptTemplate(analyzeFilePrompt, {
+					file,
+					goal: params.goal,
+					related_files: relatedFiles,
+				});
+				return {
+					id: `AnalyzeFile${index + 1}`,
+					description: `Analyze ${file}`,
+					args: { prompt },
+				};
 			});
 			const taskParams: TaskParams = {
 				agent: "quick_task",
 				context,
 				output: analyzeFileOutputSchema,
-				tasks: [
-					{
-						id: "AnalyzeFile",
-						description: "Analyze file",
-					},
-				],
+				tasks,
 			};
 			return taskTool.execute(toolCallId, taskParams, signal, onUpdate);
 		},
 	};
+}
+
+function formatRelatedFiles(files: string[], currentFile: string): string | undefined {
+	const others = files.filter((file) => file !== currentFile);
+	if (others.length === 0) return undefined;
+	return others.map((file) => `- ${file}`).join("\n");
 }

@@ -23,6 +23,7 @@ export interface CommitAgentInput {
 	modelRegistry: ModelRegistry;
 	authStorage: AuthStorage;
 	userContext?: string;
+	contextFiles?: Array<{ path: string; content: string }>;
 }
 
 export async function runCommitAgentSession(input: CommitAgentInput): Promise<CommitAgentState> {
@@ -55,6 +56,7 @@ export async function runCommitAgentSession(input: CommitAgentInput): Promise<Co
 		hasUI: false,
 		spawns,
 		toolNames: ["read"],
+		contextFiles: input.contextFiles,
 	});
 	let toolCalls = 0;
 	let messageCount = 0;

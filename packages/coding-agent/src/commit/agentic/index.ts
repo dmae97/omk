@@ -1,7 +1,8 @@
 import { createInterface } from "node:readline/promises";
 import { runCommitAgentSession } from "$c/commit/agentic/agent";
+import { computeDependencyOrder } from "$c/commit/agentic/topo-sort";
 import splitConfirmPrompt from "$c/commit/agentic/prompts/split-confirm.md" with { type: "text" };
-import type { CommitProposal, SplitCommitPlan } from "$c/commit/agentic/state";
+import type { CommitProposal, HunkSelector, SplitCommitPlan } from "$c/commit/agentic/state";
 import { runChangelogFlow } from "$c/commit/changelog";
 import { ControlledGit } from "$c/commit/git";
 import { formatCommitMessage } from "$c/commit/message";
@@ -9,7 +10,7 @@ import { resolvePrimaryModel } from "$c/commit/model-selection";
 import type { CommitCommandArgs, ConventionalAnalysis } from "$c/commit/types";
 import { renderPromptTemplate } from "$c/config/prompt-templates";
 import { SettingsManager } from "$c/config/settings-manager";
-import { discoverAuthStorage, discoverModels } from "$c/sdk";
+import { discoverAuthStorage, discoverContextFiles, discoverModels } from "$c/sdk";
 
 interface CommitExecutionContext {
 	git: ControlledGit;
@@ -24,11 +25,13 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	const authStorage = await discoverAuthStorage();
 	const modelRegistry = await discoverModels(authStorage);
 
+	writeStdout("● Resolving model...");
 	const { model: primaryModel, apiKey: primaryApiKey } = await resolvePrimaryModel(
 		args.model,
 		settingsManager,
 		modelRegistry,
 	);
+	writeStdout(`  └─ ${primaryModel.name}`);
 
 	const git = new ControlledGit(cwd);
 	let stagedFiles = await git.getStagedFiles();
@@ -43,7 +46,8 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	}
 
 	if (!args.noChangelog) {
-		await runChangelogFlow({
+		writeStdout("● Updating changelog...");
+		const updated = await runChangelogFlow({
 			git,
 			cwd,
 			model: primaryModel,
@@ -51,9 +55,31 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 			stagedFiles,
 			dryRun: args.dryRun,
 			maxDiffChars: commitSettings.changelogMaxDiffChars,
+			onProgress: (message) => {
+				writeStdout(`  ├─ ${message}`);
+			},
 		});
+		if (updated.length > 0) {
+			for (const path of updated) {
+				writeStdout(`  └─ ${path}`);
+			}
+		} else {
+			writeStdout("  └─ (no changes)");
+		}
 	}
 
+	writeStdout("● Discovering context files...");
+	const contextFiles = await discoverContextFiles(cwd);
+	const agentsMdFiles = contextFiles.filter((file) => file.path.endsWith("AGENTS.md"));
+	if (agentsMdFiles.length > 0) {
+		for (const file of agentsMdFiles) {
+			writeStdout(`  └─ ${file.path}`);
+		}
+	} else {
+		writeStdout("  └─ (none found)");
+	}
+
+	writeStdout("● Starting commit agent...");
 	const commitState = await runCommitAgentSession({
 		cwd,
 		git,
@@ -62,6 +88,7 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 		modelRegistry,
 		authStorage,
 		userContext: args.context,
+		contextFiles,
 	});
 
 	if (commitState.proposal) {
@@ -100,7 +127,7 @@ async function runSplitCommit(plan: SplitCommitPlan, ctx: CommitExecutionContext
 		writeStdout(formatWarnings(plan.warnings));
 	}
 	const stagedFiles = await ctx.git.getStagedFiles();
-	const plannedFiles = new Set(plan.commits.flatMap((commit) => commit.files));
+	const plannedFiles = new Set(plan.commits.flatMap((commit) => commit.changes.map((change) => change.path)));
 	const missingFiles = stagedFiles.filter((file) => !plannedFiles.has(file));
 	if (missingFiles.length > 0) {
 		writeStderr(`Split commit plan missing staged files: ${missingFiles.join(", ")}`);
@@ -118,7 +145,10 @@ async function runSplitCommit(plan: SplitCommitPlan, ctx: CommitExecutionContext
 			};
 			const message = formatCommitMessage(analysis, commit.summary);
 			writeStdout(`Commit ${index + 1}:\n${message}\n`);
-			writeStdout(`Files: ${commit.files.join(", ")}\n`);
+			const changeSummary = commit.changes
+				.map((change) => formatFileChangeSummary(change.path, change.hunks))
+				.join(", ");
+			writeStdout(`Changes: ${changeSummary}\n`);
 		}
 		return;
 	}
@@ -128,9 +158,15 @@ async function runSplitCommit(plan: SplitCommitPlan, ctx: CommitExecutionContext
 		return;
 	}
 
+	const order = computeDependencyOrder(plan.commits);
+	if ("error" in order) {
+		throw new Error(order.error);
+	}
+
 	await ctx.git.resetStaging();
-	for (const commit of plan.commits) {
-		await ctx.git.stageFiles(commit.files);
+	for (const commitIndex of order) {
+		const commit = plan.commits[commitIndex];
+		await ctx.git.stageHunks(commit.changes);
 		const analysis: ConventionalAnalysis = {
 			type: commit.type,
 			scope: commit.scope,
@@ -172,4 +208,14 @@ function writeStdout(message: string): void {
 
 function writeStderr(message: string): void {
 	process.stderr.write(`${message}\n`);
+}
+
+function formatFileChangeSummary(path: string, hunks: HunkSelector): string {
+	if (hunks.type === "all") {
+		return `${path} (all)`;
+	}
+	if (hunks.type === "indices") {
+		return `${path} (hunks ${hunks.indices.join(", ")})`;
+	}
+	return `${path} (lines ${hunks.start}-${hunks.end})`;
 }

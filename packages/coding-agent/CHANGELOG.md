@@ -20,6 +20,12 @@
 - Added commit message validation with filler word and meta phrase detection
 - Added automatic unicode normalization in commit summaries
 - Added real-time progress output to agentic commit mode showing thinking status, tool calls, and completion summary
+- Added hunk-level staging support in split commits allowing partial file changes per commit
+- Added dependency ordering for split commits ensuring commits are applied in correct sequence
+- Added circular dependency detection with validation errors for split commit plans
+- Added parallel file analysis with cross-file context awareness via `analyze_files` tool
+- Added AGENTS.md context file discovery for commit generation
+- Added progress indicators during changelog generation and model resolution
 
 ### Changed
 - Changed changelog diff truncation limit to be configurable via settings
@@ -53,6 +59,8 @@
 - Changed Todo Write tool to respect expanded/collapsed state and use standard preview limits
 - Changed Web Search related questions to respect expanded/collapsed state instead of always showing all items
 - Changed empty and error state rendering across multiple tools (Find, Grep, Ls, Notebook, Calculator, Ask) to include consistent status headers
+- Changed split commit to support hunk selectors (all, indices, or line ranges) instead of whole-file staging
+- Changed `analyze_file` tool to `analyze_files` for batch parallel analysis of multiple files
 ## [8.0.0] - 2026-01-23
 ### Added
 

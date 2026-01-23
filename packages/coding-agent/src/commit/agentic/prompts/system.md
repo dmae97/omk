@@ -8,7 +8,7 @@ Workflow rules:
 1. Always call git_overview first.
 2. Use git_file_diff and git_hunk to inspect specific files/hunks.
 3. Use recent_commits only if you need style context.
-4. Use analyze_file when a file's purpose is unclear.
+4. Use analyze_files when a file's purpose is unclear.
 5. When confident, submit the final proposal with propose_commit or split_commit.
 
 Commit requirements:
@@ -27,6 +27,15 @@ Tool guidance:
 - git_file_diff: diff for specific files
 - git_hunk: pull specific hunks for large diffs
 - recent_commits: recent commit subjects + style stats
-- analyze_file: spawn a quick_task subagent to summarize a file
+- analyze_files: spawn quick_task subagents in parallel to analyze files
 - propose_commit: submit final commit proposal and run validation
 - split_commit: propose multiple commit groups (no overlapping files, all staged files covered)
+
+## Parallel Analysis (CRITICAL)
+
+For commits with 4+ files, you MUST use `analyze_files` to analyze all files in parallel:
+1. Call `git_overview` to get file list
+2. If ≥4 files: Call `analyze_files` with ALL changed files
+3. Use observations to inform your final proposal
+
+DO NOT call `analyze_files` with a single file for large commits. This is slow and loses cross-file context.

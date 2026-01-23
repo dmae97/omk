@@ -18,6 +18,7 @@ export interface ChangelogFlowInput {
 	stagedFiles: string[];
 	dryRun: boolean;
 	maxDiffChars?: number;
+	onProgress?: (message: string) => void;
 }
 
 /**
@@ -31,13 +32,16 @@ export async function runChangelogFlow({
 	stagedFiles,
 	dryRun,
 	maxDiffChars,
+	onProgress,
 }: ChangelogFlowInput): Promise<string[]> {
 	if (stagedFiles.length === 0) return [];
+	onProgress?.("Detecting changelog boundaries...");
 	const boundaries = await detectChangelogBoundaries(cwd, stagedFiles);
 	if (boundaries.length === 0) return [];
 
 	const updated: string[] = [];
 	for (const boundary of boundaries) {
+		onProgress?.(`Generating entries for ${boundary.changelogPath}...`);
 		const diff = await git.getDiffForFiles(boundary.files, true);
 		if (!diff.trim()) continue;
 		const stat = await git.getStatForFiles(boundary.files, true);
