@@ -1016,6 +1016,7 @@ export function renderFetchResult(
 	}
 
 	const domain = getDomain(details.finalUrl);
+	const path = truncate(details.finalUrl.replace(/^https?:\/\/[^/]+/, ""), 50, uiTheme.format.ellipsis);
 	const hasRedirect = details.url !== details.finalUrl;
 	const hasNotes = details.notes.length > 0;
 	const truncation = details.meta?.truncation;
@@ -1025,8 +1026,7 @@ export function renderFetchResult(
 		{
 			icon: truncated ? "warning" : "success",
 			title: "Fetch",
-			description: domain,
-			meta: [details.method],
+			description: `${domain}${path ? ` ${path}` : ""}`,
 		},
 		uiTheme,
 	);
@@ -1061,7 +1061,7 @@ export function renderFetchResult(
 
 	const previewLimit = expanded ? 12 : 3;
 	const previewList = applyListLimit(contentLines, { headLimit: previewLimit });
-	const previewLines = previewList.items.map((line) => truncate(line.trim(), 120, uiTheme.format.ellipsis));
+	const previewLines = previewList.items.map((line) => truncate(line.trimEnd(), 120, uiTheme.format.ellipsis));
 	const remaining = Math.max(0, contentLines.length - previewLines.length);
 	const contentPreviewLines =
 		previewLines.length > 0

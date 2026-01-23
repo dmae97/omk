@@ -128,6 +128,8 @@ interface WriteRenderArgs {
 	content?: string;
 }
 
+const WRITE_STREAMING_PREVIEW_LINES = 12;
+
 function countLines(text: string): number {
 	if (!text) return 0;
 	return text.split("\n").length;
@@ -147,14 +149,46 @@ export const writeToolRenderer = {
 		const filePath = shortenPath(rawPath);
 		const pathDisplay = filePath || uiTheme.format.ellipsis;
 		const status = options?.spinnerFrame !== undefined ? "running" : "pending";
+		const text = renderStatusLine(
+			{ icon: status, title: "Write", description: pathDisplay, spinnerFrame: options?.spinnerFrame },
+			uiTheme,
+		);
+		if (!args.content) {
+			return new Text(text, 0, 0);
+		}
 
-		const text = renderStatusLine({ icon: status, title: "Write", description: pathDisplay }, uiTheme);
-		return new Text(text, 0, 0);
+		const contentLines = args.content.split("\n");
+		const displayLines = contentLines.slice(-WRITE_STREAMING_PREVIEW_LINES);
+		const hidden = contentLines.length - displayLines.length;
+		const outputLines: string[] = [];
+		if (hidden > 0) {
+			outputLines.push(uiTheme.fg("dim", `${uiTheme.format.ellipsis} (${hidden} earlier lines)`));
+		}
+		outputLines.push(uiTheme.fg("dim", `${uiTheme.format.ellipsis} (streaming)`));
+
+		return {
+			render: (width: number) =>
+				renderCodeCell(
+					{
+						code: displayLines.join("\n"),
+						language: getLanguageFromPath(rawPath),
+						title: filePath ? `Write ${filePath}` : "Write",
+						status,
+						spinnerFrame: options?.spinnerFrame,
+						output: outputLines.join("\n"),
+						codeMaxLines: WRITE_STREAMING_PREVIEW_LINES,
+						expanded: true,
+						width,
+					},
+					uiTheme,
+					),
+			invalidate: () => {},
+		};
 	},
 
 	renderResult(
 		result: { content: Array<{ type: string; text?: string }>; details?: WriteToolDetails },
-		{ expanded }: RenderResultOptions,
+		{ expanded, isPartial, spinnerFrame }: RenderResultOptions,
 		uiTheme: Theme,
 		args?: WriteRenderArgs,
 	): Component {
@@ -163,15 +197,47 @@ export const writeToolRenderer = {
 		const fileContent = args?.content || "";
 		const lang = getLanguageFromPath(rawPath);
 		const outputLines: string[] = [];
+		const lineCount = countLines(fileContent);
 
-		outputLines.push(formatMetadataLine(countLines(fileContent), lang ?? "text", uiTheme));
+		outputLines.push(formatMetadataLine(lineCount, lang ?? "text", uiTheme));
+
+		if (isPartial && fileContent) {
+			const contentLines = fileContent.split("\n");
+			const displayLines = contentLines.slice(-WRITE_STREAMING_PREVIEW_LINES);
+			const hidden = contentLines.length - displayLines.length;
+			if (hidden > 0) {
+				outputLines.push(uiTheme.fg("dim", `${uiTheme.format.ellipsis} (${hidden} earlier lines)`));
+			}
+			outputLines.push(uiTheme.fg("dim", `${uiTheme.format.ellipsis} (streaming)`));
+
+			return {
+				render: (width: number) =>
+					renderCodeCell(
+						{
+							code: displayLines.join("\n"),
+							language: lang,
+							title: filePath ? `Write ${filePath}` : "Write",
+							status: spinnerFrame !== undefined ? "running" : "pending",
+							spinnerFrame,
+							output: outputLines.join("\n"),
+							codeMaxLines: WRITE_STREAMING_PREVIEW_LINES,
+							expanded: true,
+							width,
+						},
+						uiTheme,
+					),
+				invalidate: () => {},
+			};
+		}
 
 		if (result.details?.diagnostics) {
 			const diagText = formatDiagnostics(result.details.diagnostics, expanded, uiTheme, (fp) =>
 				uiTheme.getLangIcon(getLanguageFromPath(fp)),
 			);
 			if (diagText.trim()) {
-				outputLines.push(...diagText.split("\n"));
+				const diagLines = diagText.split("\n");
+				const firstNonEmpty = diagLines.findIndex((line) => line.trim());
+				outputLines.push(...(firstNonEmpty >= 0 ? diagLines.slice(firstNonEmpty) : []));
 			}
 		}
 

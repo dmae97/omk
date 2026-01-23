@@ -678,7 +678,11 @@ export const grepToolRenderer = {
 		const files = details?.files ?? [];
 
 		if (matchCount === 0) {
-			return new Text(formatEmptyMessage("No matches found", uiTheme), 0, 0);
+			const header = renderStatusLine(
+				{ icon: "warning", title: "Grep", description: args?.pattern, meta: ["0 matches"] },
+				uiTheme,
+			);
+			return new Text([header, formatEmptyMessage("No matches found", uiTheme)].join("\n"), 0, 0);
 		}
 
 		const summaryParts =
@@ -693,6 +697,22 @@ export const grepToolRenderer = {
 			{ icon: truncated ? "warning" : "success", title: "Grep", description, meta },
 			uiTheme,
 		);
+
+		if (mode === "content") {
+			const textContent = result.content?.find((c) => c.type === "text")?.text ?? "";
+			const contentLines = textContent.split("\n").filter((line) => line.trim().length > 0);
+			const matchLines = renderTreeList(
+				{
+					items: contentLines,
+					expanded,
+					maxCollapsed: COLLAPSED_TEXT_LIMIT,
+					itemType: "match",
+					renderItem: (line) => uiTheme.fg("toolOutput", line),
+				},
+				uiTheme,
+			);
+			return new Text([header, ...matchLines].join("\n"), 0, 0);
+		}
 
 		const fileEntries: Array<{ path: string; count?: number }> = details?.fileMatches?.length
 			? details.fileMatches.map((entry) => ({ path: entry.path, count: entry.count }))

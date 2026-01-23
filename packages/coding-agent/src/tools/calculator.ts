@@ -9,7 +9,7 @@ import type { Theme } from "$c/modes/theme/theme";
 import calculatorDescription from "$c/prompts/tools/calculator.md" with { type: "text" };
 import { renderStatusLine, renderTreeList } from "$c/tui";
 import type { ToolSession } from "./index";
-import { formatCount, formatEmptyMessage, PREVIEW_LIMITS, TRUNCATE_LENGTHS, truncate } from "./render-utils";
+import { formatCount, formatEmptyMessage, formatErrorMessage, PREVIEW_LIMITS, TRUNCATE_LENGTHS, truncate } from "./render-utils";
 
 // =============================================================================
 // Token Types
@@ -458,22 +458,33 @@ export const calculatorToolRenderer = {
 	 * Collapsed mode shows first N items with expand hint; expanded shows all.
 	 */
 	renderResult(
-		result: { content: Array<{ type: string; text?: string }>; details?: CalculatorToolDetails },
+		result: { content: Array<{ type: string; text?: string }>; details?: CalculatorToolDetails; isError?: boolean },
 		{ expanded }: RenderResultOptions,
 		uiTheme: Theme,
 		args?: CalculatorRenderArgs,
 	): Component {
 		const details = result.details;
 		const textContent = result.content?.find((c) => c.type === "text")?.text ?? "";
+		if (result.isError) {
+			const header = renderStatusLine({ icon: "error", title: "Calc" }, uiTheme);
+			return new Text([header, formatErrorMessage(textContent, uiTheme)].join("\n"), 0, 0);
+		}
 
 		// Prefer structured details; fall back to parsing text content
-		let outputs = details?.results?.map((entry) => entry.output) ?? [];
+		let outputs = details?.results?.map((entry) => `${entry.expression} = ${entry.output}`) ?? [];
 		if (outputs.length === 0 && textContent.trim()) {
-			outputs = textContent.split("\n").filter((line) => line.trim().length > 0);
+			const rawOutputs = textContent.split("\n").filter((line) => line.trim().length > 0);
+			const expressions = args?.calculations?.map((calc) => calc.expression) ?? [];
+			if (expressions.length === rawOutputs.length && expressions.length > 0) {
+				outputs = rawOutputs.map((output, index) => `${expressions[index]} = ${output}`);
+			} else {
+				outputs = rawOutputs;
+			}
 		}
 
 		if (outputs.length === 0) {
-			return new Text(formatEmptyMessage("No results", uiTheme), 0, 0);
+			const header = renderStatusLine({ icon: "warning", title: "Calc" }, uiTheme);
+			return new Text([header, formatEmptyMessage("No results", uiTheme)].join("\n"), 0, 0);
 		}
 
 		const description = args?.calculations?.[0]?.expression

@@ -25,6 +25,7 @@ import { type Theme, theme } from "$c/modes/theme/theme";
 import askDescription from "$c/prompts/tools/ask.md" with { type: "text" };
 import type { ToolSession } from "./index";
 import { ToolUIKit } from "./render-utils";
+import { renderStatusLine } from "$c/tui";
 
 // =============================================================================
 // Types
@@ -381,36 +382,52 @@ export const askToolRenderer = {
 		const { details } = result;
 		if (!details) {
 			const txt = result.content[0];
-			return new Text(txt?.type === "text" && txt.text ? txt.text : "", 0, 0);
+			const fallback = txt?.type === "text" && txt.text ? txt.text : "";
+			const header = renderStatusLine({ icon: "warning", title: "Ask" }, uiTheme);
+			return new Text([header, uiTheme.fg("dim", fallback)].join("\n"), 0, 0);
 		}
 
 		// Multi-part results
 		if (details.results && details.results.length > 0) {
 			const lines: string[] = [];
+			const hasAnySelection = details.results.some(
+				(r) => r.customInput || (r.selectedOptions && r.selectedOptions.length > 0),
+			);
+			const header = renderStatusLine(
+				{ icon: hasAnySelection ? "success" : "warning", title: "Ask", meta: [`${details.results.length} questions`] },
+				uiTheme,
+			);
+			lines.push(header);
 
-			for (const r of details.results) {
+			for (let i = 0; i < details.results.length; i++) {
+				const r = details.results[i];
+				const isLastQuestion = i === details.results.length - 1;
+				const branch = isLastQuestion ? uiTheme.tree.last : uiTheme.tree.branch;
+				const continuation = isLastQuestion ? "   " : `${uiTheme.fg("dim", uiTheme.tree.vertical)}  `;
 				const hasSelection = r.customInput || r.selectedOptions.length > 0;
 				const statusIcon = hasSelection
 					? uiTheme.styledSymbol("status.success", "success")
 					: uiTheme.styledSymbol("status.warning", "warning");
 
-				lines.push(`${statusIcon} ${uiTheme.fg("dim", `[${r.id}]`)} ${uiTheme.fg("accent", r.question)}`);
+				lines.push(
+					` ${uiTheme.fg("dim", branch)} ${statusIcon} ${uiTheme.fg("dim", `[${r.id}]`)} ${uiTheme.fg("accent", r.question)}`,
+				);
 
 				if (r.customInput) {
 					lines.push(
-						` ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.success", "success")} ${uiTheme.fg("toolOutput", r.customInput)}`,
+						`${continuation}${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.success", "success")} ${uiTheme.fg("toolOutput", r.customInput)}`,
 					);
 				} else if (r.selectedOptions.length > 0) {
 					for (let j = 0; j < r.selectedOptions.length; j++) {
 						const isLast = j === r.selectedOptions.length - 1;
-						const branch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
+						const optBranch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
 						lines.push(
-							` ${uiTheme.fg("dim", branch)} ${uiTheme.fg("success", uiTheme.checkbox.checked)} ${uiTheme.fg("toolOutput", r.selectedOptions[j])}`,
+							`${continuation}${uiTheme.fg("dim", optBranch)} ${uiTheme.fg("success", uiTheme.checkbox.checked)} ${uiTheme.fg("toolOutput", r.selectedOptions[j])}`,
 						);
 					}
 				} else {
 					lines.push(
-						` ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.warning", "warning")} ${uiTheme.fg("warning", "Cancelled")}`,
+						`${continuation}${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.warning", "warning")} ${uiTheme.fg("warning", "Cancelled")}`,
 					);
 				}
 			}
@@ -425,11 +442,12 @@ export const askToolRenderer = {
 		}
 
 		const hasSelection = details.customInput || (details.selectedOptions && details.selectedOptions.length > 0);
-		const statusIcon = hasSelection
-			? uiTheme.styledSymbol("status.success", "success")
-			: uiTheme.styledSymbol("status.warning", "warning");
+		const header = renderStatusLine(
+			{ icon: hasSelection ? "success" : "warning", title: "Ask", description: details.question },
+			uiTheme,
+		);
 
-		let text = `${statusIcon} ${uiTheme.fg("accent", details.question)}`;
+		let text = header;
 
 		if (details.customInput) {
 			text += `\n ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.success", "success")} ${uiTheme.fg("toolOutput", details.customInput)}`;

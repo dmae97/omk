@@ -13,6 +13,7 @@ import type { Theme } from "$c/modes/theme/theme";
 import todoWriteDescription from "$c/prompts/tools/todo-write.md" with { type: "text" };
 import type { ToolSession } from "$c/sdk";
 import { renderStatusLine, renderTreeList } from "$c/tui";
+import { PREVIEW_LIMITS } from "./render-utils";
 
 const todoWriteSchema = Type.Object({
 	todos: Type.Array(
@@ -225,17 +226,25 @@ export const todoWriteToolRenderer = {
 
 	renderResult(
 		result: { content: Array<{ type: string; text?: string }>; details?: TodoWriteToolDetails },
-		_options: RenderResultOptions,
+		options: RenderResultOptions,
 		uiTheme: Theme,
 		_args?: TodoWriteRenderArgs,
 	): Component {
+		const { expanded } = options;
 		const todos = result.details?.todos ?? [];
-		const header = renderStatusLine({ icon: "success", title: "Todos", meta: [`${todos.length} items`] }, uiTheme);
+		const header = renderStatusLine(
+			{ icon: "success", title: "Todo Write", meta: [`${todos.length} items`] },
+			uiTheme,
+		);
+		if (todos.length === 0) {
+			const fallback = result.content?.find((c) => c.type === "text")?.text ?? "No todos";
+			return new Text([header, uiTheme.fg("dim", fallback)].join("\n"), 0, 0);
+		}
 		const lines = renderTreeList(
 			{
 				items: todos,
-				expanded: true,
-				maxCollapsed: todos.length,
+				expanded,
+				maxCollapsed: PREVIEW_LIMITS.COLLAPSED_ITEMS,
 				itemType: "todo",
 				renderItem: (todo) => formatTodoLine(todo, uiTheme, ""),
 			},

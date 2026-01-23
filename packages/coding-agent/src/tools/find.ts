@@ -403,7 +403,12 @@ export const findToolRenderer = {
 		const textContent = result.content?.find((c) => c.type === "text")?.text;
 
 		if (!hasDetailedData) {
-			if (!textContent || textContent.includes("No files matching") || textContent.trim() === "") {
+			if (
+				!textContent ||
+				textContent.includes("No files matching") ||
+				textContent.includes("No files found") ||
+				textContent.trim() === ""
+			) {
 				return new Text(formatEmptyMessage("No files found", uiTheme), 0, 0);
 			}
 
@@ -431,15 +436,17 @@ export const findToolRenderer = {
 		}
 
 		const fileCount = details?.fileCount ?? 0;
-		const truncation = details?.meta?.truncation;
+		const truncation = details?.truncation ?? details?.meta?.truncation;
 		const limits = details?.meta?.limits;
-		const truncated = Boolean(
-			details?.truncated || truncation || limits?.resultLimit || limits?.headLimit || limits?.matchLimit,
-		);
+		const truncated = Boolean(details?.truncated || truncation || details?.resultLimitReached || limits?.resultLimit);
 		const files = details?.files ?? [];
 
 		if (fileCount === 0) {
-			return new Text(formatEmptyMessage("No files found", uiTheme), 0, 0);
+			const header = renderStatusLine(
+				{ icon: "warning", title: "Find", description: args?.pattern, meta: ["0 files"] },
+				uiTheme,
+			);
+			return new Text([header, formatEmptyMessage("No files found", uiTheme)].join("\n"), 0, 0);
 		}
 		const meta: string[] = [formatCount("file", fileCount)];
 		if (details?.scopePath) meta.push(`in ${details.scopePath}`);
@@ -459,9 +466,11 @@ export const findToolRenderer = {
 		);
 
 		const truncationReasons: string[] = [];
+		if (details?.resultLimitReached) truncationReasons.push(`limit ${details.resultLimitReached} results`);
 		if (limits?.resultLimit) truncationReasons.push(`limit ${limits.resultLimit.reached} results`);
 		if (truncation) truncationReasons.push(truncation.truncatedBy === "lines" ? "line limit" : "size limit");
-		if (truncation?.artifactId) truncationReasons.push(`full output: artifact://${truncation.artifactId}`);
+		const artifactId = truncation && "artifactId" in truncation ? truncation.artifactId : undefined;
+		if (artifactId) truncationReasons.push(`full output: artifact://${artifactId}`);
 
 		const extraLines: string[] = [];
 		if (truncationReasons.length > 0) {

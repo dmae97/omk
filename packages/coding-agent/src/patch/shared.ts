@@ -19,6 +19,7 @@ import {
 	truncateDiffByHunk,
 } from "$c/tools/render-utils";
 import type { RenderCallOptions } from "$c/tools/renderers";
+import { renderStatusLine } from "$c/tui";
 import type { DiffError, DiffResult, Operation } from "./types";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -178,9 +179,28 @@ export const editToolRenderer = {
 		let text = `${ui.title(opTitle)} ${spinner ? `${spinner} ` : ""}${editIcon} ${pathDisplay}`;
 
 		// Show streaming preview of diff/content
-		const streamingContent = args.diff ?? args.newText ?? args.patch;
-		if (streamingContent) {
-			text += formatStreamingDiff(streamingContent, rawPath, uiTheme);
+		if (args.diff && args.op) {
+			text += formatStreamingDiff(args.diff, rawPath, uiTheme);
+		} else if (args.diff) {
+		const previewLines = args.diff.split("\n");
+			const maxLines = 6;
+			text += "\n\n";
+		for (const line of previewLines.slice(0, maxLines)) {
+			text += `${uiTheme.fg("toolOutput", ui.truncate(line, 80))}\n`;
+		}
+		if (previewLines.length > maxLines) {
+			text += uiTheme.fg("dim", `${uiTheme.format.ellipsis} ${previewLines.length - maxLines} more lines`);
+		}
+		} else if (args.newText || args.patch) {
+			const previewLines = (args.newText ?? args.patch ?? "").split("\n");
+			const maxLines = 6;
+			text += "\n\n";
+			for (const line of previewLines.slice(0, maxLines)) {
+				text += `${uiTheme.fg("toolOutput", ui.truncate(line, 80))}\n`;
+			}
+			if (previewLines.length > maxLines) {
+				text += uiTheme.fg("dim", `${uiTheme.format.ellipsis} ${previewLines.length - maxLines} more lines`);
+			}
 		}
 
 		return new Text(text, 0, 0);
@@ -221,7 +241,15 @@ export const editToolRenderer = {
 
 		// Show operation type for patch mode
 		const opTitle = op === "create" ? "Create" : op === "delete" ? "Delete" : "Edit";
-		let text = `${uiTheme.fg("toolTitle", uiTheme.bold(opTitle))} ${editIcon} ${pathDisplay}`;
+		const header = renderStatusLine(
+			{
+				icon: result.isError ? "error" : "success",
+				title: opTitle,
+				description: `${editIcon} ${pathDisplay}`,
+			},
+			uiTheme,
+		);
+		let text = header;
 
 		// Skip metadata line for delete operations
 		if (op !== "delete") {

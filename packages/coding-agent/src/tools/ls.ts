@@ -227,14 +227,22 @@ export const lsToolRenderer = {
 		const textContent = result.content?.find((c) => c.type === "text")?.text ?? "";
 
 		if (result.isError) {
-			return new Text(formatErrorMessage(textContent, uiTheme), 0, 0);
+			const header = renderStatusLine(
+				{ icon: "error", title: "Ls", description: args?.path || "." },
+				uiTheme,
+			);
+			return new Text([header, formatErrorMessage(textContent, uiTheme)].join("\n"), 0, 0);
 		}
 
 		if (
 			(!textContent || textContent.trim() === "" || textContent.trim() === "(empty directory)") &&
 			(!details?.entries || details.entries.length === 0)
 		) {
-			return new Text(formatEmptyMessage("Empty directory", uiTheme), 0, 0);
+			const header = renderStatusLine(
+				{ icon: "warning", title: "Ls", description: args?.path || "." },
+				uiTheme,
+			);
+			return new Text([header, formatEmptyMessage("Empty directory", uiTheme)].join("\n"), 0, 0);
 		}
 
 		let entries: string[] = details?.entries ? [...details.entries] : [];
@@ -246,7 +254,11 @@ export const lsToolRenderer = {
 		}
 
 		if (entries.length === 0) {
-			return new Text(`  ${formatEmptyMessage("Empty directory", uiTheme)}`, 0, 0);
+			const header = renderStatusLine(
+				{ icon: "warning", title: "Ls", description: args?.path || "." },
+				uiTheme,
+			);
+			return new Text([header, formatEmptyMessage("Empty directory", uiTheme)].join("\n"), 0, 0);
 		}
 
 		let dirCount = details?.dirCount;
@@ -254,8 +266,11 @@ export const lsToolRenderer = {
 		if (dirCount === undefined || fileCount === undefined) {
 			dirCount = 0;
 			fileCount = 0;
-			for (const entry of entries) {
-				if (entry.endsWith("/")) {
+			for (let i = 0; i < entries.length; i++) {
+				const entry = entries[i];
+				const raw = rawEntries?.[i] ?? entry;
+				const name = raw.split(" (")[0];
+				if (name.endsWith("/")) {
 					dirCount += 1;
 				} else {
 					fileCount += 1;

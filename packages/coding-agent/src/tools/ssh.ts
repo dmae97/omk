@@ -264,7 +264,7 @@ export const sshToolRenderer = {
 		const outputLines: string[] = [];
 
 		const textContent = result.content?.find((c) => c.type === "text")?.text ?? "";
-		const output = textContent.trim();
+		const output = textContent.trimEnd();
 
 		if (output) {
 			if (expanded) {
@@ -279,7 +279,10 @@ export const sshToolRenderer = {
 						),
 					);
 				}
-				outputLines.push(...visualLines);
+				const styledVisual = visualLines.map((line) =>
+					line.includes("\x1b[") ? line : uiTheme.fg("toolOutput", line),
+				);
+				outputLines.push(...styledVisual);
 			} else {
 				const outputLinesRaw = output.split("\n");
 				const maxLines = 5;

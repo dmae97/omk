@@ -196,21 +196,23 @@ export const bashToolRenderer = {
 		result: {
 			content: Array<{ type: string; text?: string }>;
 			details?: BashToolDetails;
+			isError?: boolean;
 		},
 		options: RenderResultOptions & { renderContext?: BashRenderContext },
 		uiTheme: Theme,
 		args?: BashRenderArgs,
 	): Component {
 		const cmdText = args ? formatBashCommand(args, uiTheme) : undefined;
-		const header = renderStatusLine({ icon: "success", title: "Bash" }, uiTheme);
+		const isError = result.isError === true;
+		const header = renderStatusLine({ icon: isError ? "error" : "success", title: "Bash" }, uiTheme);
 		const { renderContext } = options;
 		const details = result.details;
 		const expanded = renderContext?.expanded ?? options.expanded;
 		const previewLines = renderContext?.previewLines ?? BASH_DEFAULT_PREVIEW_LINES;
 
 		// Get output from context (preferred) or fall back to result content
-		const output = renderContext?.output ?? (result.content?.find((c) => c.type === "text")?.text ?? "").trim();
-		const displayOutput = output;
+		const output = renderContext?.output ?? (result.content?.find((c) => c.type === "text")?.text ?? "");
+		const displayOutput = output.trimEnd();
 		const showingFullOutput = expanded && renderContext?.isFullOutput === true;
 
 		// Build truncation warning lines (static, doesn't depend on width)
@@ -244,10 +246,8 @@ export const bashToolRenderer = {
 		return {
 			render: (width: number): string[] => {
 				const outputLines: string[] = [];
-				if (cmdText) {
-					outputLines.push(uiTheme.fg("dim", cmdText));
-				}
-				if (displayOutput) {
+				const hasOutput = displayOutput.trim().length > 0;
+				if (hasOutput) {
 					if (expanded) {
 						outputLines.push(...displayOutput.split("\n").map((line) => uiTheme.fg("toolOutput", line)));
 					} else {
@@ -274,8 +274,11 @@ export const bashToolRenderer = {
 				return renderOutputBlock(
 					{
 						header,
-						state: "success",
-						sections: [{ label: uiTheme.fg("toolTitle", "Output"), lines: outputLines }],
+						state: isError ? "error" : "success",
+						sections: [
+							{ lines: cmdText ? [uiTheme.fg("dim", cmdText)] : [] },
+							{ label: uiTheme.fg("toolTitle", "Output"), lines: outputLines },
+						],
 						width,
 					},
 					uiTheme,

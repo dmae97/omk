@@ -14,7 +14,7 @@ import readDescription from "$c/prompts/tools/read.md" with { type: "text" };
 import type { ToolSession } from "$c/sdk";
 import type { OutputMeta } from "$c/tools/output-meta";
 import { ToolAbortError, ToolError, throwIfAborted } from "$c/tools/tool-errors";
-import { renderCodeCell, renderStatusLine } from "$c/tui";
+import { renderCodeCell, renderOutputBlock, renderStatusLine } from "$c/tui";
 import { formatDimensionNote, resizeImage } from "$c/utils/image-resize";
 import { detectSupportedImageMimeTypeFromFile } from "$c/utils/mime";
 import { ensureTool } from "$c/utils/tools-manager";
@@ -379,6 +379,7 @@ const readSchema = Type.Object({
 export interface ReadToolDetails {
 	truncation?: TruncationResult;
 	redirectedTo?: "ls";
+	resolvedPath?: string;
 	meta?: OutputMeta;
 }
 
@@ -709,11 +710,11 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 
 		// If extraction was used, return directly (no pagination)
 		if (hasExtraction) {
-			let text = resource.content;
+			const details: ReadToolDetails = {};
 			if (resource.sourcePath) {
-				text += `\n\n[Resolved path: ${resource.sourcePath}]`;
+				details.resolvedPath = resource.sourcePath;
 			}
-			return toolResult<ReadToolDetails>().text(text).sourceInternal(url).done();
+			return toolResult(details).text(resource.content).sourceInternal(url).done();
 		}
 
 		// Apply pagination similar to file reading
@@ -807,9 +808,8 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			details = {};
 		}
 
-		// Append resolved path notice
 		if (resource.sourcePath) {
-			outputText += `\n\n[Resolved path: ${resource.sourcePath}]`;
+			details.resolvedPath = resource.sourcePath;
 		}
 
 		const resultBuilder = toolResult(details).text(outputText).sourceInternal(url);
@@ -857,6 +857,7 @@ export const readToolRenderer = {
 	): Component {
 		const details = result.details;
 		const contentText = result.content?.find((c) => c.type === "text")?.text ?? "";
+		const imageContent = result.content?.find((c) => c.type === "image");
 		const rawPath = args?.file_path || args?.path || "";
 		const filePath = shortenPath(rawPath);
 		const lang = getLanguageFromPath(rawPath);
@@ -864,6 +865,12 @@ export const readToolRenderer = {
 		const warningLines: string[] = [];
 		const truncation = details?.meta?.truncation;
 		const fallback = details?.truncation;
+		if (details?.redirectedTo) {
+			warningLines.push(uiTheme.fg("warning", wrapBrackets(`Redirected to ${details.redirectedTo}`, uiTheme)));
+		}
+		if (details?.resolvedPath) {
+			warningLines.push(uiTheme.fg("dim", wrapBrackets(`Resolved path: ${details.resolvedPath}`, uiTheme)));
+		}
 		if (truncation) {
 			let warning: string;
 			if (fallback?.firstLineExceedsLimit) {
@@ -878,6 +885,33 @@ export const readToolRenderer = {
 				warning += `. Full output: artifact://${truncation.artifactId}`;
 			}
 			warningLines.push(uiTheme.fg("warning", wrapBrackets(warning, uiTheme)));
+		}
+
+		if (imageContent) {
+			const header = renderStatusLine(
+				{ icon: "success", title: "Read", description: filePath || rawPath || "image" },
+				uiTheme,
+			);
+			const detailLines = contentText ? contentText.split("\n").map((line) => uiTheme.fg("toolOutput", line)) : [];
+			const lines = [...detailLines, ...warningLines];
+			return {
+				render: (width: number) =>
+					renderOutputBlock(
+						{
+							header,
+							state: "success",
+							sections: [
+								{
+									label: uiTheme.fg("toolTitle", "Details"),
+									lines: lines.length > 0 ? lines : [uiTheme.fg("dim", "(image)")],
+								},
+							],
+							width,
+						},
+						uiTheme,
+					),
+				invalidate: () => {},
+			};
 		}
 
 		let title = filePath ? `Read ${filePath}` : "Read";

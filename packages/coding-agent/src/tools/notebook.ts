@@ -194,9 +194,12 @@ export class NotebookTool implements AgentTool<typeof notebookSchema, NotebookTo
 
 interface NotebookRenderArgs {
 	action: string;
-	notebookPath: string;
+	notebookPath?: string;
+	notebook_path?: string;
 	cellNumber?: number;
+	cell_index?: number;
 	cellType?: string;
+	cell_type?: string;
 	content?: string;
 }
 
@@ -205,9 +208,12 @@ const COLLAPSED_TEXT_LIMIT = PREVIEW_LIMITS.COLLAPSED_LINES * 2;
 export const notebookToolRenderer = {
 	renderCall(args: NotebookRenderArgs, uiTheme: Theme): Component {
 		const meta: string[] = [];
-		meta.push(`in ${args.notebookPath || "?"}`);
-		if (args.cellNumber !== undefined) meta.push(`cell:${args.cellNumber}`);
-		if (args.cellType) meta.push(`type:${args.cellType}`);
+		const notebookPath = args.notebookPath ?? args.notebook_path;
+		const cellNumber = args.cellNumber ?? args.cell_index;
+		const cellType = args.cellType ?? args.cell_type;
+		meta.push(`in ${notebookPath || "?"}`);
+		if (cellNumber !== undefined) meta.push(`cell:${cellNumber}`);
+		if (cellType) meta.push(`type:${cellType}`);
 
 		const text = renderStatusLine(
 			{ icon: "pending", title: "Notebook", description: args.action || "?", meta },
@@ -224,7 +230,12 @@ export const notebookToolRenderer = {
 	): Component {
 		const content = result.content?.[0];
 		if (content?.type === "text" && content.text?.startsWith("Error:")) {
-			return new Text(formatErrorMessage(content.text, uiTheme), 0, 0);
+			const notebookPath = args?.notebookPath ?? args?.notebook_path ?? "?";
+			const header = renderStatusLine(
+				{ icon: "error", title: "Notebook", description: notebookPath },
+				uiTheme,
+			);
+			return new Text([header, formatErrorMessage(content.text, uiTheme)].join("\n"), 0, 0);
 		}
 
 		const details = result.details;
@@ -245,7 +256,8 @@ export const notebookToolRenderer = {
 		const codeText = cellSource.join("");
 		const language = cellType === "markdown" ? "markdown" : undefined;
 
-		const notebookLabel = args?.notebookPath ? `${actionLabel} ${args.notebookPath}` : "Notebook";
+		const notebookPath = args?.notebookPath ?? args?.notebook_path;
+		const notebookLabel = notebookPath ? `${actionLabel} ${notebookPath}` : "Notebook";
 		return {
 			render: (width: number) =>
 				renderCodeCell(

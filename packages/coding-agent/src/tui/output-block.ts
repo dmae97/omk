@@ -21,7 +21,8 @@ export function renderOutputBlock(options: OutputBlockOptions, theme: Theme): st
 	const v = theme.boxSharp.vertical;
 	const cap = h.repeat(3);
 	const lineWidth = Math.max(0, width);
-	const border = (text: string) => theme.fg("dim", text);
+	const borderColor = state === "error" ? "error" : state === "success" ? "success" : state === "warning" ? "warning" : "dim";
+	const border = (text: string) => theme.fg(borderColor, text);
 	const bgFn = state ? (text: string) => theme.bg(getStateBgColor(state), text) : undefined;
 
 	const buildBarLine = (leftChar: string, label?: string, meta?: string): string => {

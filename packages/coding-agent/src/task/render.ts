@@ -230,7 +230,7 @@ function renderOutputSection(
 	maxExpanded = 10,
 ): string[] {
 	const lines: string[] = [];
-	const trimmedOutput = output.trim();
+	const trimmedOutput = output.trimEnd();
 	if (!trimmedOutput) return lines;
 
 	if (trimmedOutput.startsWith("{") || trimmedOutput.startsWith("[")) {
@@ -262,7 +262,7 @@ function renderOutputSection(
 
 	lines.push(`${continuePrefix}${theme.fg("dim", "Output")}`);
 
-	const outputLines = output.split("\n").filter((line) => line.trim());
+	const outputLines = output.trimEnd().split("\n");
 	const previewCount = expanded ? maxExpanded : maxCollapsed;
 	for (const line of outputLines.slice(0, previewCount)) {
 		lines.push(`${continuePrefix}  ${theme.fg("dim", truncate(line, 70, theme.format.ellipsis))}`);
@@ -730,13 +730,12 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 			if (handler?.renderFinal && (dataArray as unknown[]).length > 0) {
 				hasCustomRendering = true;
 				const component = handler.renderFinal(dataArray as unknown[], theme, expanded);
+				lines.push(`${continuePrefix}${theme.fg("dim", `Tool: ${toolName}`)}`);
 				if (component instanceof Text) {
 					// Prefix each line with continuePrefix
 					const text = component.getText();
 					for (const line of text.split("\n")) {
-						if (line.trim()) {
-							lines.push(`${continuePrefix}${line}`);
-						}
+						lines.push(`${continuePrefix}${line}`);
 					}
 				} else if (component instanceof Container) {
 					// For containers, render each child
@@ -841,7 +840,7 @@ export function renderResult(
 		}
 	}
 
-	const indented = lines.map((line) => (line.trim() ? `   ${line}` : ""));
+	const indented = lines.map((line) => (line.length > 0 ? `   ${line}` : ""));
 	return new Text(indented.join("\n"), 0, 0);
 }
 

@@ -793,13 +793,18 @@ export const pythonToolRenderer = {
 				const lines: string[] = [];
 				for (let i = 0; i < cells.length; i++) {
 					const cell = cells[i];
+					const cellTitle = cell.title;
+					const combinedTitle =
+						cellTitle && workdirLabel
+							? `${workdirLabel} · ${cellTitle}`
+							: cellTitle ?? workdirLabel;
 					const cellLines = renderCodeCell(
 						{
 							code: cell.code,
 							language: "python",
 							index: i,
 							total: cells.length,
-							title: cell.title,
+							title: combinedTitle,
 							status: "pending",
 							width,
 							codeMaxLines: PYTHON_DEFAULT_PREVIEW_LINES,
@@ -829,7 +834,8 @@ export const pythonToolRenderer = {
 
 		const expanded = renderContext?.expanded ?? options.expanded;
 		const previewLines = renderContext?.previewLines ?? PYTHON_DEFAULT_PREVIEW_LINES;
-		const output = renderContext?.output ?? (result.content?.find((c) => c.type === "text")?.text ?? "").trim();
+		const output =
+			renderContext?.output ?? (result.content?.find((c) => c.type === "text")?.text ?? "").trimEnd();
 
 		const jsonOutputs = details?.jsonOutputs ?? [];
 		const jsonLines = jsonOutputs.flatMap((value, index) => {
@@ -880,7 +886,12 @@ export const pythonToolRenderer = {
 								),
 							);
 						}
-						outputLines.push(...statusLines);
+						if (statusLines.length > 0) {
+							if (outputLines.length > 0) {
+								outputLines.push(uiTheme.fg("dim", "Status"));
+							}
+							outputLines.push(...statusLines);
+						}
 						const cellLines = renderCodeCell(
 							{
 								code: cell.code,
@@ -934,7 +945,9 @@ export const pythonToolRenderer = {
 		}
 
 		if (!combinedOutput && statusLines.length > 0) {
-			const lines = [...statusLines, timeoutLine, warningLine].filter(Boolean) as string[];
+			const lines = [uiTheme.fg("dim", "Status"), ...statusLines, timeoutLine, warningLine].filter(
+				Boolean,
+			) as string[];
 			return new Text(lines.join("\n"), 0, 0);
 		}
 
@@ -943,7 +956,12 @@ export const pythonToolRenderer = {
 				.split("\n")
 				.map((line) => uiTheme.fg("toolOutput", line))
 				.join("\n");
-			const lines = [styledOutput, ...statusLines, timeoutLine, warningLine].filter(Boolean) as string[];
+			const lines = [
+				styledOutput,
+				...(statusLines.length > 0 ? [uiTheme.fg("dim", "Status"), ...statusLines] : []),
+				timeoutLine,
+				warningLine,
+			].filter(Boolean) as string[];
 			return new Text(lines.join("\n"), 0, 0);
 		}
 
@@ -975,8 +993,11 @@ export const pythonToolRenderer = {
 					outputLines.push(truncateToWidth(skippedLine, width, uiTheme.fg("dim", uiTheme.format.ellipsis)));
 				}
 				outputLines.push(...cachedLines);
-				for (const statusLine of statusLines) {
-					outputLines.push(truncateToWidth(statusLine, width, uiTheme.fg("dim", uiTheme.format.ellipsis)));
+				if (statusLines.length > 0) {
+					outputLines.push(truncateToWidth(uiTheme.fg("dim", "Status"), width, uiTheme.fg("dim", uiTheme.format.ellipsis)));
+					for (const statusLine of statusLines) {
+						outputLines.push(truncateToWidth(statusLine, width, uiTheme.fg("dim", uiTheme.format.ellipsis)));
+					}
 				}
 				if (timeoutLine) {
 					outputLines.push(truncateToWidth(timeoutLine, width, uiTheme.fg("dim", uiTheme.format.ellipsis)));

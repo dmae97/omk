@@ -374,12 +374,14 @@ export class ToolExecutionComponent extends Container {
 		// Check for custom tool rendering
 		if (this.tool && (this.tool.renderCall || this.tool.renderResult)) {
 			const tool = this.tool;
+			const mergeCallAndResult = Boolean((tool as { mergeCallAndResult?: boolean }).mergeCallAndResult);
 			// Custom tools use Box for flexible component rendering
 			this.contentBox.setBgFn(bgFn);
 			this.contentBox.clear();
 
 			// Render call component
-			if (tool.renderCall) {
+			const shouldRenderCall = !this.result || !mergeCallAndResult;
+			if (shouldRenderCall && tool.renderCall) {
 				try {
 					const callComponent = tool.renderCall(this.args, theme);
 					if (callComponent) {
@@ -547,13 +549,13 @@ export class ToolExecutionComponent extends Container {
 
 		if (this.toolName === "bash" && this.result) {
 			// Pass raw output and expanded state - renderer handles width-aware truncation
-			const output = this.getTextOutput().trim();
+			const output = this.getTextOutput().trimEnd();
 			context.output = output;
 			context.expanded = this.expanded;
 			context.previewLines = BASH_DEFAULT_PREVIEW_LINES;
 			context.timeout = typeof this.args?.timeout === "number" ? this.args.timeout : undefined;
 		} else if (this.toolName === "python" && this.result) {
-			const output = this.getTextOutput().trim();
+			const output = this.getTextOutput().trimEnd();
 			context.output = output;
 			context.expanded = this.expanded;
 			context.previewLines = PYTHON_DEFAULT_PREVIEW_LINES;

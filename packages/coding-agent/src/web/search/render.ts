@@ -28,7 +28,7 @@ const MAX_EXPANDED_ANSWER_LINES = PREVIEW_LIMITS.EXPANDED_LINES;
 const MAX_ANSWER_LINE_LEN = TRUNCATE_LENGTHS.LINE;
 const MAX_SNIPPET_LINES = 2;
 const MAX_SNIPPET_LINE_LEN = TRUNCATE_LENGTHS.LINE;
-const MAX_RELATED_QUESTIONS = 6;
+const MAX_COLLAPSED_ITEMS = PREVIEW_LIMITS.COLLAPSED_ITEMS;
 const MAX_QUERY_PREVIEW = 2;
 const MAX_QUERY_LEN = 90;
 const MAX_REQUEST_ID_LEN = 36;
@@ -117,13 +117,19 @@ export function renderWebSearchResult(
 				: provider === "exa"
 					? "Exa"
 					: "Unknown";
-	const queryPreview = args?.query ? truncate(args.query, 80, theme.format.ellipsis) : undefined;
+	const queryPreview = args?.query
+		? truncate(args.query, 80, theme.format.ellipsis)
+		: searchQueries[0]
+			? truncate(searchQueries[0], 80, theme.format.ellipsis)
+			: undefined;
 	const header = renderStatusLine(
 		{
 			icon: sourceCount > 0 ? "success" : "warning",
 			title: "Web Search",
 			description: queryPreview ?? providerLabel,
-			meta: queryPreview ? [providerLabel, formatCount("source", sourceCount)] : [formatCount("source", sourceCount)],
+			meta: queryPreview
+				? [providerLabel, formatCount("source", sourceCount)]
+				: [providerLabel, formatCount("source", sourceCount)],
 		},
 		theme,
 	);
@@ -148,7 +154,7 @@ export function renderWebSearchResult(
 		{
 			items: sources,
 			expanded,
-			maxCollapsed: MAX_RELATED_QUESTIONS,
+			maxCollapsed: MAX_COLLAPSED_ITEMS,
 			itemType: "source",
 			renderItem: (src) => {
 				const titleText =
@@ -191,16 +197,18 @@ export function renderWebSearchResult(
 	const relatedTree = renderTreeList(
 		{
 			items: relatedLines,
-			expanded: true,
-			maxCollapsed: MAX_RELATED_QUESTIONS,
+			expanded,
+			maxCollapsed: MAX_COLLAPSED_ITEMS,
 			itemType: "question",
 			renderItem: (line) =>
 				theme.fg("muted", line === "No related questions" ? line : `${theme.format.dash} ${line}`),
 		},
 		theme,
 	);
-	if (relatedCount > MAX_RELATED_QUESTIONS) {
-		relatedTree.push(theme.fg("muted", formatMoreItems(relatedCount - MAX_RELATED_QUESTIONS, "question", theme)));
+	if (!expanded && relatedCount > MAX_COLLAPSED_ITEMS) {
+		relatedTree.push(
+			theme.fg("muted", formatMoreItems(relatedCount - MAX_COLLAPSED_ITEMS, "question", theme)),
+		);
 	}
 
 	const metaLines: string[] = [];

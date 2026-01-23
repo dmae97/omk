@@ -43,6 +43,16 @@
 - Changed agentic commit progress output to show real-time thinking previews and structured tool argument details
 - Changed agentic commit progress output to display full multi-line assistant messages and render tool arguments with tree-style formatting for improved readability
 - Changed agentic commit progress output to render assistant messages as formatted Markdown with proper word wrapping
+- Changed output block border color to reflect state (error, success, warning) for improved visual feedback
+- Changed LSP hover rendering to display documentation text before code blocks in both collapsed and expanded views
+- Changed Write tool to show streaming preview of content being written with syntax highlighting
+- Changed Read tool to display resolved path information when reading from URLs or symlinks
+- Changed Calculator tool result display to show both expression and output (e.g., `2+2 = 4`) instead of just the result
+- Changed Python tool output to group status information under a labeled section for clearer organization
+- Changed SSH tool output to apply consistent styling to non-ANSI output lines
+- Changed Todo Write tool to respect expanded/collapsed state and use standard preview limits
+- Changed Web Search related questions to respect expanded/collapsed state instead of always showing all items
+- Changed empty and error state rendering across multiple tools (Find, Grep, Ls, Notebook, Calculator, Ask) to include consistent status headers
 ## [8.0.0] - 2026-01-23
 ### Added
 

@@ -52,11 +52,12 @@ export function renderResult(
 ): Component {
 	const content = result.content?.[0];
 	if (!content || content.type !== "text" || !("text" in content) || !content.text) {
-		return new Text(theme.fg("error", "No result"), 0, 0);
+		const header = renderStatusLine({ icon: "warning", title: "LSP", description: "No result" }, theme);
+		return new Text([header, theme.fg("dim", "No result")].join("\n"), 0, 0);
 	}
 
 	const text = content.text;
-	const lines = text.split("\n").filter((l) => l.trim());
+	const lines = text.split("\n");
 	const expanded = options.expanded;
 
 	let label = "Result";
@@ -133,6 +134,8 @@ function renderHover(
 ): string[] {
 	const lang = codeBlockMatch[1] || "";
 	const code = codeBlockMatch[2].trim();
+	const codeStart = codeBlockMatch.index ?? 0;
+	const beforeCode = fullText.slice(0, codeStart).trimEnd();
 	const afterCode = fullText.slice(fullText.indexOf("```", 3) + 3).trim();
 
 	const codeLines = highlightCode(code, lang, theme);
@@ -145,6 +148,11 @@ function renderHover(
 		const top = `${theme.boxSharp.topLeft}${h.repeat(3)}`;
 		const bottom = `${theme.boxSharp.bottomLeft}${h.repeat(3)}`;
 		let output = `${icon}${langLabel}`;
+		if (beforeCode) {
+		for (const line of beforeCode.split("\n")) {
+			output += `\n ${theme.fg("muted", line)}`;
+		}
+		}
 		output += `\n ${theme.fg("mdCodeBlockBorder", top)}`;
 		for (const line of codeLines) {
 			output += `\n ${theme.fg("mdCodeBlockBorder", v)} ${line}`;
@@ -158,10 +166,14 @@ function renderHover(
 
 	// Collapsed view
 	const firstCodeLine = codeLines[0] || "";
-	const hasMore = codeLines.length > 1 || Boolean(afterCode);
+	const hasMore = codeLines.length > 1 || Boolean(afterCode) || Boolean(beforeCode);
 	const expandHint = formatExpandHint(theme, expanded, hasMore);
 
 	let output = `${icon}${langLabel}${expandHint}`;
+	if (beforeCode) {
+		const preview = truncate(beforeCode, TRUNCATE_LENGTHS.TITLE, theme.format.ellipsis);
+		output += `\n ${theme.fg("dim", theme.tree.branch)} ${theme.fg("muted", preview)}`;
+	}
 	const h = theme.boxSharp.horizontal;
 	const v = theme.boxSharp.vertical;
 	const bottom = `${theme.boxSharp.bottomLeft}${h.repeat(3)}`;
