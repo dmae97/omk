@@ -24,6 +24,9 @@ This repo contains multiple packages, but **`packages/coding-agent/`** is the pr
 - **NEVER use inline imports** - no `await import("./foo.js")`, no `import("pkg").Type` in type positions, no dynamic imports for types. Always use standard top-level imports.
 - NEVER remove or downgrade code to fix type errors from outdated dependencies; upgrade the dependency instead
 - Always ask before removing functionality or code that appears to be intentional
+- **NEVER use relative parent imports** (`../xxx`) — always use configured path aliases (e.g., `@/utils`, `~/components`)
+- **NEVER build prompts in code** — no inline strings, no template literals, no string concatenation. Prompts live in static `.md` files; use Handlebars for any dynamic content.
+- **Import static text files via Bun** — use `import content from "./prompt.md" with { type: "text" }` instead of `readFileSync`
 
 ## Bun Over Node
 
