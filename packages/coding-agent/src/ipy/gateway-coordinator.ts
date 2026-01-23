@@ -1,19 +1,9 @@
-import {
-	closeSync,
-	existsSync,
-	mkdirSync,
-	openSync,
-	readFileSync,
-	renameSync,
-	statSync,
-	unlinkSync,
-	utimesSync,
-	writeFileSync,
-} from "node:fs";
+import * as fs from "node:fs";
 import { createServer } from "node:net";
-import { delimiter, join } from "node:path";
-import { logger } from "@oh-my-pi/pi-utils";
+import * as path from "node:path";
+import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import type { Subprocess } from "bun";
+
 import { getAgentDir } from "../config";
 import { getShellConfig, killProcessTree } from "../utils/shell";
 import { getOrCreateSnapshot } from "../utils/shell-snapshot";
@@ -175,7 +165,7 @@ function filterEnv(env: Record<string, string | undefined>): Record<string, stri
 
 async function resolveVenvPath(cwd: string): Promise<string | null> {
 	if (process.env.VIRTUAL_ENV) return process.env.VIRTUAL_ENV;
-	const candidates = [join(cwd, ".venv"), join(cwd, "venv")];
+	const candidates = [path.join(cwd, ".venv"), path.join(cwd, "venv")];
 	for (const candidate of candidates) {
 		if (await Bun.file(candidate).exists()) {
 			return candidate;
@@ -189,12 +179,12 @@ async function resolvePythonRuntime(cwd: string, baseEnv: Record<string, string 
 	const venvPath = env.VIRTUAL_ENV ?? (await resolveVenvPath(cwd));
 	if (venvPath) {
 		env.VIRTUAL_ENV = venvPath;
-		const binDir = process.platform === "win32" ? join(venvPath, "Scripts") : join(venvPath, "bin");
-		const pythonCandidate = join(binDir, process.platform === "win32" ? "python.exe" : "python");
+		const binDir = process.platform === "win32" ? path.join(venvPath, "Scripts") : path.join(venvPath, "bin");
+		const pythonCandidate = path.join(binDir, process.platform === "win32" ? "python.exe" : "python");
 		if (await Bun.file(pythonCandidate).exists()) {
 			const pathKey = resolvePathKey(env);
 			const currentPath = env[pathKey];
-			env[pathKey] = currentPath ? `${binDir}${delimiter}${currentPath}` : binDir;
+			env[pathKey] = currentPath ? `${binDir}${path.delimiter}${currentPath}` : binDir;
 			return { pythonPath: pythonCandidate, env, venvPath };
 		}
 	}
@@ -232,33 +222,29 @@ async function allocatePort(): Promise<number> {
 }
 
 function getGatewayDir(): string {
-	return join(getAgentDir(), GATEWAY_DIR_NAME);
+	return path.join(getAgentDir(), GATEWAY_DIR_NAME);
 }
 
 function getGatewayInfoPath(): string {
-	return join(getGatewayDir(), GATEWAY_INFO_FILE);
+	return path.join(getGatewayDir(), GATEWAY_INFO_FILE);
 }
 
 function getGatewayLockPath(): string {
-	return join(getGatewayDir(), GATEWAY_LOCK_FILE);
+	return path.join(getGatewayDir(), GATEWAY_LOCK_FILE);
 }
 
-function writeLockInfo(lockPath: string, fd: number): void {
+async function writeLockInfo(lockPath: string): Promise<void> {
 	const payload: GatewayLockInfo = { pid: process.pid, startedAt: Date.now() };
 	try {
-		writeFileSync(fd, JSON.stringify(payload));
+		await Bun.write(lockPath, JSON.stringify(payload));
 	} catch {
-		try {
-			writeFileSync(lockPath, JSON.stringify(payload));
-		} catch {
-			// Ignore lock write failures
-		}
+		// Ignore lock write failures
 	}
 }
 
-function readLockInfo(lockPath: string): GatewayLockInfo | null {
+async function readLockInfo(lockPath: string): Promise<GatewayLockInfo | null> {
 	try {
-		const raw = readFileSync(lockPath, "utf-8");
+		const raw = await Bun.file(lockPath).text();
 		const parsed = JSON.parse(raw) as Partial<GatewayLockInfo>;
 		if (typeof parsed.pid === "number" && Number.isFinite(parsed.pid)) {
 			return { pid: parsed.pid, startedAt: typeof parsed.startedAt === "number" ? parsed.startedAt : 0 };
@@ -269,36 +255,41 @@ function readLockInfo(lockPath: string): GatewayLockInfo | null {
 	return null;
 }
 
-function ensureGatewayDir(): void {
+async function ensureGatewayDir(): Promise<void> {
 	const dir = getGatewayDir();
-	if (!existsSync(dir)) {
-		mkdirSync(dir, { recursive: true });
-	}
+	await fs.promises.mkdir(dir, { recursive: true });
 }
 
 async function withGatewayLock<T>(handler: () => Promise<T>): Promise<T> {
-	ensureGatewayDir();
+	await ensureGatewayDir();
 	const lockPath = getGatewayLockPath();
 	const start = Date.now();
 	while (true) {
+		let fd: fs.promises.FileHandle | undefined;
 		try {
-			const fd = openSync(lockPath, "wx");
-			const heartbeat = setInterval(() => {
-				try {
-					const now = new Date();
-					utimesSync(lockPath, now, now);
-				} catch {
-					// Ignore heartbeat errors
+			fd = await fs.promises.open(lockPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL);
+			let heartbeatRunning = true;
+			const heartbeat = (async () => {
+				while (heartbeatRunning) {
+					await Bun.sleep(GATEWAY_LOCK_HEARTBEAT_MS);
+					if (!heartbeatRunning) break;
+					try {
+						const now = new Date();
+						await fs.promises.utimes(lockPath, now, now);
+					} catch {
+						// Ignore heartbeat errors
+					}
 				}
-			}, GATEWAY_LOCK_HEARTBEAT_MS);
+			})();
 			try {
-				writeLockInfo(lockPath, fd);
+				await writeLockInfo(lockPath);
 				return await handler();
 			} finally {
-				clearInterval(heartbeat);
+				heartbeatRunning = false;
+				void heartbeat.catch(() => {}); // Don't await - let it die naturally
 				try {
-					closeSync(fd);
-					unlinkSync(lockPath);
+					await fd.close();
+					await fs.promises.unlink(lockPath);
 				} catch {
 					// Ignore lock cleanup errors
 				}
@@ -308,15 +299,15 @@ async function withGatewayLock<T>(handler: () => Promise<T>): Promise<T> {
 			if (error.code === "EEXIST") {
 				let removedStale = false;
 				try {
-					const stat = statSync(lockPath);
-					const lockInfo = readLockInfo(lockPath);
+					const lockStat = await fs.promises.stat(lockPath);
+					const lockInfo = await readLockInfo(lockPath);
 					const lockPid = lockInfo?.pid;
-					const lockAgeMs = lockInfo?.startedAt ? Date.now() - lockInfo.startedAt : Date.now() - stat.mtimeMs;
+					const lockAgeMs = lockInfo?.startedAt ? Date.now() - lockInfo.startedAt : Date.now() - lockStat.mtimeMs;
 					const staleByTime = lockAgeMs > GATEWAY_LOCK_STALE_MS;
 					const staleByPid = lockPid !== undefined && !isPidRunning(lockPid);
 					const staleByMissingPid = lockPid === undefined && staleByTime;
 					if (staleByPid || staleByMissingPid) {
-						unlinkSync(lockPath);
+						await fs.promises.unlink(lockPath);
 						removedStale = true;
 						logger.warn("Removed stale shared gateway lock", { path: lockPath, pid: lockPid });
 					}
@@ -336,14 +327,12 @@ async function withGatewayLock<T>(handler: () => Promise<T>): Promise<T> {
 	}
 }
 
-function readGatewayInfo(): GatewayInfo | null {
+async function readGatewayInfo(): Promise<GatewayInfo | null> {
 	const infoPath = getGatewayInfoPath();
-	if (!existsSync(infoPath)) return null;
-
 	try {
-		const content = readFileSync(infoPath, "utf-8");
+		const content = await Bun.file(infoPath).text();
 		const parsed = JSON.parse(content) as Partial<GatewayInfo>;
-		if (!parsed || typeof parsed !== "object") return null;
+
 		if (typeof parsed.url !== "string" || typeof parsed.pid !== "number" || typeof parsed.startedAt !== "number") {
 			return null;
 		}
@@ -354,26 +343,25 @@ function readGatewayInfo(): GatewayInfo | null {
 			pythonPath: typeof parsed.pythonPath === "string" ? parsed.pythonPath : undefined,
 			venvPath: typeof parsed.venvPath === "string" || parsed.venvPath === null ? parsed.venvPath : undefined,
 		};
-	} catch {
+	} catch (err) {
+		if (isEnoent(err)) return null;
 		return null;
 	}
 }
 
-function writeGatewayInfo(info: GatewayInfo): void {
+async function writeGatewayInfo(info: GatewayInfo): Promise<void> {
 	const infoPath = getGatewayInfoPath();
 	const tempPath = `${infoPath}.tmp`;
-	writeFileSync(tempPath, JSON.stringify(info, null, 2));
-	renameSync(tempPath, infoPath);
+	await Bun.write(tempPath, JSON.stringify(info, null, 2));
+	await fs.promises.rename(tempPath, infoPath);
 }
 
-function clearGatewayInfo(): void {
+async function clearGatewayInfo(): Promise<void> {
 	const infoPath = getGatewayInfoPath();
-	if (existsSync(infoPath)) {
-		try {
-			unlinkSync(infoPath);
-		} catch {
-			// Ignore errors on cleanup
-		}
+	try {
+		await fs.promises.unlink(infoPath);
+	} catch {
+		// Ignore errors on cleanup (file may not exist)
 	}
 }
 
@@ -388,12 +376,9 @@ function isPidRunning(pid: number): boolean {
 
 async function isGatewayHealthy(url: string): Promise<boolean> {
 	try {
-		const controller = new AbortController();
-		const timeout = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
 		const response = await fetch(`${url}/api/kernelspecs`, {
-			signal: controller.signal,
+			signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
 		});
-		clearTimeout(timeout);
 		return response.ok;
 	} catch {
 		return false;
@@ -497,7 +482,7 @@ export async function acquireSharedGateway(cwd: string): Promise<AcquireResult |
 
 	try {
 		return await withGatewayLock(async () => {
-			const existingInfo = readGatewayInfo();
+			const existingInfo = await readGatewayInfo();
 			if (existingInfo) {
 				if (await isGatewayAlive(existingInfo)) {
 					localGatewayUrl = existingInfo.url;
@@ -510,7 +495,7 @@ export async function acquireSharedGateway(cwd: string): Promise<AcquireResult |
 				if (isPidRunning(existingInfo.pid)) {
 					await killGateway(existingInfo.pid, "stale");
 				}
-				clearGatewayInfo();
+				await clearGatewayInfo();
 			}
 
 			const { url, pid, pythonPath, venvPath } = await startGatewayProcess(cwd);
@@ -521,7 +506,7 @@ export async function acquireSharedGateway(cwd: string): Promise<AcquireResult |
 				pythonPath,
 				venvPath,
 			};
-			writeGatewayInfo(info);
+			await writeGatewayInfo(info);
 			isCoordinatorInitialized = true;
 			logger.debug("Started global Python gateway", { url, pid });
 			return { url, isShared: true };
@@ -538,13 +523,13 @@ export async function releaseSharedGateway(): Promise<void> {
 	if (!isCoordinatorInitialized) return;
 }
 
-export function getSharedGatewayUrl(): string | null {
+export async function getSharedGatewayUrl(): Promise<string | null> {
 	if (localGatewayUrl) return localGatewayUrl;
-	return readGatewayInfo()?.url ?? null;
+	return (await readGatewayInfo())?.url ?? null;
 }
 
-export function isSharedGatewayActive(): boolean {
-	return getGatewayStatus().active;
+export async function isSharedGatewayActive(): Promise<boolean> {
+	return (await getGatewayStatus()).active;
 }
 
 export interface GatewayStatus {
@@ -556,8 +541,8 @@ export interface GatewayStatus {
 	venvPath: string | null;
 }
 
-export function getGatewayStatus(): GatewayStatus {
-	const info = readGatewayInfo();
+export async function getGatewayStatus(): Promise<GatewayStatus> {
+	const info = await readGatewayInfo();
 	if (!info) {
 		return {
 			active: false,
@@ -582,12 +567,12 @@ export function getGatewayStatus(): GatewayStatus {
 export async function shutdownSharedGateway(): Promise<void> {
 	try {
 		await withGatewayLock(async () => {
-			const info = readGatewayInfo();
+			const info = await readGatewayInfo();
 			if (!info) return;
 			if (isPidRunning(info.pid)) {
 				await killGateway(info.pid, "shutdown");
 			}
-			clearGatewayInfo();
+			await clearGatewayInfo();
 		});
 	} catch (err) {
 		logger.warn("Failed to shutdown shared gateway", {

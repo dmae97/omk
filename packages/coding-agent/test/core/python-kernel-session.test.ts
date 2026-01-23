@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { disposeAllKernelSessions, executePython } from "@oh-my-pi/pi-coding-agent/ipy/executor";
 import type { KernelExecuteOptions, KernelExecuteResult } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
 import { PythonKernel } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
-import { createTempDirSync } from "@oh-my-pi/pi-utils";
+import { TempDir } from "@oh-my-pi/pi-utils";
 
 class FakeKernel {
 	executeCalls = 0;
@@ -57,18 +57,18 @@ describe("executePython kernel reuse", () => {
 	});
 
 	it("reuses kernels for session mode", async () => {
-		using tempDir = createTempDirSync("@python-kernel-session-");
-		await executePython("print('one')", { cwd: tempDir.path, sessionId: "session-a", kernelMode: "session" });
-		await executePython("print('two')", { cwd: tempDir.path, sessionId: "session-a", kernelMode: "session" });
+		using tempDir = TempDir.createSync("@python-kernel-session-");
+		await executePython("print('one')", { cwd: tempDir.path(), sessionId: "session-a", kernelMode: "session" });
+		await executePython("print('two')", { cwd: tempDir.path(), sessionId: "session-a", kernelMode: "session" });
 
 		expect(startCalls).toBe(1);
 		expect(kernels[0]?.executeCalls).toBe(2);
 	});
 
 	it("creates and disposes per-call kernels", async () => {
-		using tempDir = createTempDirSync("@python-kernel-session-");
-		await executePython("print('one')", { cwd: tempDir.path, kernelMode: "per-call" });
-		await executePython("print('two')", { cwd: tempDir.path, kernelMode: "per-call" });
+		using tempDir = TempDir.createSync("@python-kernel-session-");
+		await executePython("print('one')", { cwd: tempDir.path(), kernelMode: "per-call" });
+		await executePython("print('two')", { cwd: tempDir.path(), kernelMode: "per-call" });
 
 		expect(startCalls).toBe(2);
 		expect(kernels[0]?.shutdownCalls).toBe(1);
@@ -76,10 +76,10 @@ describe("executePython kernel reuse", () => {
 	});
 
 	it("resets the session kernel when requested", async () => {
-		using tempDir = createTempDirSync("@python-kernel-session-");
-		await executePython("print('one')", { cwd: tempDir.path, sessionId: "session-b", kernelMode: "session" });
+		using tempDir = TempDir.createSync("@python-kernel-session-");
+		await executePython("print('one')", { cwd: tempDir.path(), sessionId: "session-b", kernelMode: "session" });
 		await executePython("print('two')", {
-			cwd: tempDir.path,
+			cwd: tempDir.path(),
 			sessionId: "session-b",
 			kernelMode: "session",
 			reset: true,

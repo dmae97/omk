@@ -12,12 +12,11 @@
  * Agent files use markdown with YAML frontmatter.
  */
 
-import * as fs from "node:fs";
+import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { logger } from "@oh-my-pi/pi-utils";
 import { findAllNearestProjectConfigDirs, getConfigDirs } from "../config";
-import { parseAgentFields } from "../discovery/helpers";
-import { parseFrontmatter } from "../utils/frontmatter";
-import { loadBundledAgents } from "./agents";
+import { loadBundledAgents, parseAgent } from "./agents";
 import type { AgentDefinition, AgentSource } from "./types";
 
 /** Result of agent discovery */
@@ -29,55 +28,23 @@ export interface DiscoveryResult {
 /**
  * Load agents from a directory.
  */
-function loadAgentsFromDir(dir: string, source: AgentSource): AgentDefinition[] {
-	const agents: AgentDefinition[] = [];
-
-	if (!fs.existsSync(dir)) {
-		return agents;
-	}
-
-	let entries: fs.Dirent[];
-	try {
-		entries = fs.readdirSync(dir, { withFileTypes: true });
-	} catch {
-		return agents;
-	}
-
-	for (const entry of entries) {
-		if (!entry.name.endsWith(".md")) continue;
-
-		const filePath = path.resolve(dir, entry.name);
-
-		// Handle both regular files and symlinks
-		try {
-			if (!fs.statSync(filePath).isFile()) continue;
-		} catch {
-			continue;
-		}
-
-		let content: string;
-		try {
-			content = fs.readFileSync(filePath, "utf-8");
-		} catch {
-			continue;
-		}
-
-		const { frontmatter, body } = parseFrontmatter(content, { source: filePath });
-		const fields = parseAgentFields(frontmatter);
-
-		if (!fields) {
-			continue;
-		}
-
-		agents.push({
-			...fields,
-			systemPrompt: body,
-			source,
-			filePath,
+async function loadAgentsFromDir(dir: string, source: AgentSource): Promise<AgentDefinition[]> {
+	const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+	const files = entries
+		.filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+		.sort((a, b) => a.name.localeCompare(b.name))
+		.map((file) => {
+			const filePath = path.join(dir, file.name);
+			return fs
+				.readFile(filePath, "utf-8")
+				.then((content) => parseAgent(filePath, content, source, "warn"))
+				.catch((error) => {
+					logger.warn("Failed to read agent file", { filePath, error });
+					return null;
+				});
 		});
-	}
 
-	return agents;
+	return (await Promise.all(files)).filter(Boolean) as AgentDefinition[];
 }
 
 /**
@@ -120,26 +87,24 @@ export async function discoverAgents(cwd: string): Promise<DiscoveryResult> {
 		if (user) orderedDirs.push({ dir: user.path, source: "user" });
 	}
 
-	const agents: AgentDefinition[] = [];
 	const seen = new Set<string>();
-
-	for (const { dir, source } of orderedDirs) {
-		for (const agent of loadAgentsFromDir(dir, source)) {
-			if (seen.has(agent.name)) continue;
-			agents.push(agent);
+	const loadedAgents = (await Promise.all(orderedDirs.map(({ dir, source }) => loadAgentsFromDir(dir, source))))
+		.flat()
+		.filter((agent) => {
+			if (seen.has(agent.name)) return false;
 			seen.add(agent.name);
-		}
-	}
+			return true;
+		});
 
-	for (const agent of loadBundledAgents()) {
-		if (seen.has(agent.name)) continue;
-		agents.push(agent);
+	const bundledAgents = loadBundledAgents().filter((agent) => {
+		if (seen.has(agent.name)) return false;
 		seen.add(agent.name);
-	}
+		return true;
+	});
 
 	const projectAgentsDir = projectDirs.length > 0 ? projectDirs[0].path : null;
 
-	return { agents, projectAgentsDir };
+	return { agents: [...loadedAgents, ...bundledAgents], projectAgentsDir };
 }
 
 /**

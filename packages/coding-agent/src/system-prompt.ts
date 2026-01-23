@@ -2,9 +2,8 @@
  * System prompt construction and project context loading
  */
 
-import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import { $ } from "bun";
 import chalk from "chalk";
 import { contextFileCapability } from "./capability/context-file";
@@ -430,14 +429,15 @@ interface SystemInfoCache {
 }
 
 function getSystemInfoCachePath(): string {
-	return join(homedir(), ".omp", "system_info.json");
+	return path.join(homedir(), ".omp", "system_info.json");
 }
 
 async function loadSystemInfoCache(): Promise<SystemInfoCache | null> {
 	try {
 		const cachePath = getSystemInfoCachePath();
-		if (!existsSync(cachePath)) return null;
-		const content = await Bun.file(cachePath).json();
+		const file = Bun.file(cachePath);
+		if (!(await file.exists())) return null;
+		const content = await file.json();
 		return content as SystemInfoCache;
 	} catch {
 		return null;

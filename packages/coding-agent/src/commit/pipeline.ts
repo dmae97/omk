@@ -1,4 +1,4 @@
-import { relative } from "node:path";
+import * as path from "node:path";
 import type { Api, Model } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
 import { renderPromptTemplate } from "../config/prompt-templates";
@@ -86,7 +86,7 @@ async function runLegacyCommitCommand(args: CommitCommandArgs): Promise<void> {
 	const recentCommits = await git.getRecentCommits(RECENT_COMMITS_COUNT);
 	const contextFiles = await loadProjectContextFiles({ cwd });
 	const formattedContextFiles = contextFiles.map((file) => ({
-		path: relative(cwd, file.path),
+		path: path.relative(cwd, file.path),
 		content: file.content,
 	}));
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
-import { createTempDir } from "@oh-my-pi/pi-utils";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import { TempDir } from "@oh-my-pi/pi-utils";
 import { verifyExpectedFiles } from "../verify";
 
 async function createTempDirs(): Promise<{
@@ -10,14 +10,13 @@ async function createTempDirs(): Promise<{
 	actualDir: string;
 	cleanup: () => Promise<void>;
 }> {
-	const tempDir = await createTempDir("@reach-benchmark-verify-");
-	const root = tempDir.path;
-	const expectedDir = join(root, "expected");
-	const actualDir = join(root, "actual");
-	await mkdir(expectedDir, { recursive: true });
-	await mkdir(actualDir, { recursive: true });
+	const tempDir = await TempDir.create("@reach-benchmark-verify-");
+	const expectedDir = tempDir.join("expected");
+	const actualDir = tempDir.join("actual");
+	await fs.mkdir(expectedDir, { recursive: true });
+	await fs.mkdir(actualDir, { recursive: true });
 	return {
-		root,
+		root: tempDir.absolute(),
 		expectedDir,
 		actualDir,
 		cleanup: async () => {
@@ -30,7 +29,7 @@ describe("verifyExpectedFiles", () => {
 	it("reports missing files", async () => {
 		const { expectedDir, actualDir, cleanup } = await createTempDirs();
 		try {
-			await Bun.write(join(expectedDir, "index.ts"), "export const value = 1;\n");
+			await Bun.write(path.join(expectedDir, "index.ts"), "export const value = 1;\n");
 
 			const result = await verifyExpectedFiles(expectedDir, actualDir);
 
@@ -44,9 +43,9 @@ describe("verifyExpectedFiles", () => {
 	it("reports unexpected files", async () => {
 		const { expectedDir, actualDir, cleanup } = await createTempDirs();
 		try {
-			await Bun.write(join(expectedDir, "index.ts"), "export const value = 1;\n");
-			await Bun.write(join(actualDir, "index.ts"), "export const value = 1;\n");
-			await Bun.write(join(actualDir, "extra.ts"), "export const extra = true;\n");
+			await Bun.write(path.join(expectedDir, "index.ts"), "export const value = 1;\n");
+			await Bun.write(path.join(actualDir, "index.ts"), "export const value = 1;\n");
+			await Bun.write(path.join(actualDir, "extra.ts"), "export const extra = true;\n");
 
 			const result = await verifyExpectedFiles(expectedDir, actualDir);
 
@@ -60,8 +59,8 @@ describe("verifyExpectedFiles", () => {
 	it("fails with diff output when formatted content differs", async () => {
 		const { expectedDir, actualDir, cleanup } = await createTempDirs();
 		try {
-			await Bun.write(join(expectedDir, "index.ts"), "const value = 1;\n");
-			await Bun.write(join(actualDir, "index.ts"), "const value = 2;\n");
+			await Bun.write(path.join(expectedDir, "index.ts"), "const value = 1;\n");
+			await Bun.write(path.join(actualDir, "index.ts"), "const value = 2;\n");
 
 			const result = await verifyExpectedFiles(expectedDir, actualDir);
 
@@ -80,11 +79,11 @@ describe("verifyExpectedFiles", () => {
 		try {
 			const expected = "function test() {\n  return 1;\n}\n";
 			const actual = "function test(){\nreturn 1;\n}\n";
-			await Bun.write(join(expectedDir, "index.ts"), expected);
-			await Bun.write(join(actualDir, "index.ts"), actual);
+			await Bun.write(path.join(expectedDir, "index.ts"), expected);
+			await Bun.write(path.join(actualDir, "index.ts"), actual);
 
 			const result = await verifyExpectedFiles(expectedDir, actualDir);
-			const actualAfter = await Bun.file(join(actualDir, "index.ts")).text();
+			const actualAfter = await Bun.file(path.join(actualDir, "index.ts")).text();
 
 			expect(result.success).toBe(true);
 			expect(result.formattedEquivalent).toBe(true);
@@ -97,8 +96,8 @@ describe("verifyExpectedFiles", () => {
 	it("normalizes line endings before comparison", async () => {
 		const { expectedDir, actualDir, cleanup } = await createTempDirs();
 		try {
-			await Bun.write(join(expectedDir, "index.ts"), "export const value = 1;\r\n");
-			await Bun.write(join(actualDir, "index.ts"), "export const value = 1;\n");
+			await Bun.write(path.join(expectedDir, "index.ts"), "export const value = 1;\r\n");
+			await Bun.write(path.join(actualDir, "index.ts"), "export const value = 1;\n");
 
 			const result = await verifyExpectedFiles(expectedDir, actualDir);
 

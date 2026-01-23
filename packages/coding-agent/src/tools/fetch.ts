@@ -1,4 +1,4 @@
-import { mkdir, rm } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
@@ -450,7 +450,7 @@ async function renderHtmlToText(
 	timeout: number,
 	scratchDir: string,
 ): Promise<{ content: string; ok: boolean; method: string }> {
-	await mkdir(scratchDir, { recursive: true });
+	await fs.mkdir(scratchDir, { recursive: true });
 	const tmpFile = path.join(scratchDir, `omp-${nanoid()}.html`);
 
 	try {
@@ -479,7 +479,7 @@ async function renderHtmlToText(
 		return { content: "", ok: false, method: "none" };
 	} finally {
 		try {
-			await rm(tmpFile, { force: true });
+			await fs.rm(tmpFile, { force: true });
 		} catch {}
 	}
 }

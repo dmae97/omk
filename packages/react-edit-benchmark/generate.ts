@@ -19,16 +19,16 @@
  * - nightmare: Long files where target line repeats, minimal info
  */
 
-import { createTempDirSync } from "@oh-my-pi/pi-utils";
+import { TempDir } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import * as fs from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 import { parseArgs } from "node:util";
 import { ALL_MUTATIONS, CATEGORY_MAP, type Mutation, type MutationInfo } from "./mutations";
 
 const SCRIPT_DIR = import.meta.dir;
 const SUPPORTED_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx"]);
-using DEFAULT_REACT_DIR = createTempDirSync("@react-source");
+using DEFAULT_REACT_DIR = TempDir.createSync("@react-source");
 const DEFAULT_OUTPUT = join(SCRIPT_DIR, "fixtures.tar.gz");
 const REACT_REPO_URL = "https://github.com/facebook/react.git";
 
@@ -81,7 +81,7 @@ interface Args {
 function parseArguments(): Args {
 	const { values } = parseArgs({
 		options: {
-			"react-dir": { type: "string", default: DEFAULT_REACT_DIR.path },
+			"react-dir": { type: "string", default: DEFAULT_REACT_DIR.path() },
 			output: { type: "string", default: DEFAULT_OUTPUT },
 			"count-per-type": { type: "string", default: "20" },
 			seed: { type: "string", default: "42" },
@@ -93,7 +93,7 @@ function parseArguments(): Args {
 	});
 
 	return {
-		reactDir: values["react-dir"] ?? DEFAULT_REACT_DIR.path,
+		reactDir: values["react-dir"] ?? DEFAULT_REACT_DIR.path(),
 		output: values.output ?? DEFAULT_OUTPUT,
 		countPerType: parseInt(values["count-per-type"] ?? "20", 10),
 		seed: parseInt(values.seed ?? "42", 10),
@@ -105,14 +105,14 @@ function parseArguments(): Args {
 }
 
 async function ensureReactSource(reactDir: string): Promise<void> {
-	if (existsSync(reactDir)) {
+	if (fs.existsSync(reactDir)) {
 		const packagesDir = join(reactDir, "packages");
-		if (existsSync(packagesDir)) return;
+		if (fs.existsSync(packagesDir)) return;
 		throw new Error(`Directory exists but missing packages/: ${reactDir}`);
 	}
 
 	console.log(`Cloning React repository to ${reactDir}...`);
-	mkdirSync(dirname(reactDir), { recursive: true });
+	fs.mkdirSync(dirname(reactDir), { recursive: true });
 	const result = await $`git clone --depth 1 ${REACT_REPO_URL} ${reactDir}`.quiet().nothrow();
 	if (result.exitCode !== 0) {
 		const decoder = new TextDecoder();
@@ -138,17 +138,17 @@ function hasStructure(content: string): boolean {
 	return ["function ", "class ", "export ", "=>"].some((token) => content.includes(token));
 }
 
-function collectFiles(reactDir: string): string[] {
+async function collectFiles(reactDir: string): Promise<string[]> {
 	const packagesDir = join(reactDir, "packages");
 	const candidates: string[] = [];
 
-	function walk(dir: string): void {
+	async function walk(dir: string): Promise<void> {
 		if (isExcluded(dir)) return;
-		const entries = readdirSync(dir, { withFileTypes: true });
+		const entries = await fs.promises.readdir(dir, { withFileTypes: true });
 		for (const entry of entries) {
 			const fullPath = join(dir, entry.name);
 			if (entry.isDirectory()) {
-				walk(fullPath);
+				await walk(fullPath);
 			} else if (entry.isFile()) {
 				const ext = "." + entry.name.split(".").pop();
 				if (SUPPORTED_EXTENSIONS.has(ext) && !isExcluded(fullPath)) {
@@ -158,7 +158,7 @@ function collectFiles(reactDir: string): string[] {
 		}
 	}
 
-	walk(packagesDir);
+	await walk(packagesDir);
 	return candidates.sort();
 }
 
@@ -367,17 +367,14 @@ function getCandidatesForDifficulty(files: FileEntry[], difficulty: Difficulty):
 }
 
 async function bunCheck(content: string, suffix: string): Promise<boolean> {
-	const tempPath = `/tmp/bench-check-${crypto.randomUUID()}${suffix}`;
+	await using tempPath = await TempDir.create("@rb-bench-check-");
 	try {
-		await $`rm -f ${tempPath}`;
-		const file = Bun.file(tempPath);
-		await Bun.write(file, content);
-		const result = await $`timeout 5s bun build ${tempPath} --no-bundle`;
+		const absPath = join(tempPath.path(), suffix);
+		await Bun.write(absPath, content);
+		const result = await $`timeout 5s bun build ${absPath} --no-bundle`;
 		return result.exitCode === 0;
 	} catch {
 		return false;
-	} finally {
-		await $`rm -f ${tempPath}`;
 	}
 }
 
@@ -616,7 +613,7 @@ async function main(): Promise<number> {
 
 	await ensureReactSource(reactDir);
 
-	const rawFiles = collectFiles(reactDir);
+	const rawFiles = await collectFiles(reactDir);
 	const files = await filterFiles(rawFiles);
 	if (files.length === 0) {
 		console.error("No eligible files found.");

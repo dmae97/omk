@@ -5,8 +5,8 @@
  * accessible via artifact:// URLs or the $ARTIFACTS environment variable.
  */
 
-import { mkdir, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 
 /**
  * Manages artifact storage for a session.
@@ -38,7 +38,7 @@ export class ArtifactManager {
 
 	async #ensureDir(): Promise<void> {
 		if (!this.#dirCreated) {
-			await mkdir(this.#dir, { recursive: true });
+			await fs.mkdir(this.#dir, { recursive: true });
 			this.#dirCreated = true;
 		}
 		if (!this.#initialized) {
@@ -82,7 +82,7 @@ export class ArtifactManager {
 		await this.#ensureDir();
 		const id = String(this.allocateId());
 		const filename = `${id}.${toolType}.log`;
-		return { id, path: join(this.#dir, filename) };
+		return { id, path: path.join(this.#dir, filename) };
 	}
 
 	/**
@@ -113,7 +113,7 @@ export class ArtifactManager {
 	 */
 	async listFiles(): Promise<string[]> {
 		try {
-			return await readdir(this.#dir);
+			return await fs.readdir(this.#dir);
 		} catch {
 			return [];
 		}
@@ -128,6 +128,6 @@ export class ArtifactManager {
 	async getPath(id: string): Promise<string | null> {
 		const files = await this.listFiles();
 		const match = files.find((f) => f.startsWith(`${id}.`));
-		return match ? join(this.#dir, match) : null;
+		return match ? path.join(this.#dir, match) : null;
 	}
 }

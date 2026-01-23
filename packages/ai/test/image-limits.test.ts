@@ -69,30 +69,30 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { execSync } from "node:child_process";
-import { mkdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { getModel } from "@oh-my-pi/pi-ai/models";
 import { complete } from "@oh-my-pi/pi-ai/stream";
 import type { Api, Context, ImageContent, Model, OptionsForApi, UserMessage } from "@oh-my-pi/pi-ai/types";
 import { e2eApiKey } from "./oauth";
 
-const TEMP_DIR = join(import.meta.dir, ".temp-images");
+const TEMP_DIR = path.join(import.meta.dir, ".temp-images");
 
 /**
  * Generate a valid PNG image of specified dimensions using ImageMagick
  */
-function generateImage(width: number, height: number, filename: string): string {
-	const filepath = join(TEMP_DIR, filename);
+async function generateImage(width: number, height: number, filename: string): Promise<string> {
+	const filepath = path.join(TEMP_DIR, filename);
 	execSync(`magick -size ${width}x${height} xc:red "${filepath}"`, { stdio: "ignore" });
-	const buffer = require("fs").readFileSync(filepath);
+	const buffer = await fs.promises.readFile(filepath);
 	return buffer.toString("base64");
 }
 
 /**
  * Generate a valid PNG image of approximately the specified size in bytes
  */
-function generateImageWithSize(targetBytes: number, filename: string): string {
-	const filepath = join(TEMP_DIR, filename);
+async function generateImageWithSize(targetBytes: number, filename: string): Promise<string> {
+	const filepath = path.join(TEMP_DIR, filename);
 	// Use uncompressed PNG to get predictable sizes
 	// Each pixel is 3 bytes (RGB), plus PNG overhead (~100 bytes)
 	// For a square image: side = sqrt(targetBytes / 3)
@@ -101,16 +101,16 @@ function generateImageWithSize(targetBytes: number, filename: string): string {
 	execSync(`magick -size ${side}x${side} xc: +noise Random -depth 8 PNG24:"${filepath}"`, { stdio: "ignore" });
 
 	// Check actual size and adjust if needed
-	const stats = require("fs").statSync(filepath);
-	if (stats.size < targetBytes * 0.8) {
+	const { size } = await Bun.file(filepath).stat();
+	if (size < targetBytes * 0.8) {
 		// If too small, increase dimensions
-		const newSide = Math.ceil(side * Math.sqrt(targetBytes / stats.size));
+		const newSide = Math.ceil(side * Math.sqrt(targetBytes / size));
 		execSync(`magick -size ${newSide}x${newSide} xc: +noise Random -depth 8 PNG24:"${filepath}"`, {
 			stdio: "ignore",
 		});
 	}
 
-	const buffer = require("fs").readFileSync(filepath);
+	const buffer = await fs.promises.readFile(filepath);
 	return buffer.toString("base64");
 }
 
@@ -260,17 +260,17 @@ async function findLimit(
 describe("Image Limits E2E Tests", () => {
 	let smallImage: string; // 100x100 for count tests
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		// Create temp directory
-		mkdirSync(TEMP_DIR, { recursive: true });
+		fs.mkdirSync(TEMP_DIR, { recursive: true });
 
 		// Generate small test image for count tests
-		smallImage = generateImage(100, 100, "small.png");
+		smallImage = await generateImage(100, 100, "small.png");
 	});
 
 	afterAll(() => {
 		// Clean up temp directory
-		rmSync(TEMP_DIR, { recursive: true, force: true });
+		fs.rmSync(TEMP_DIR, { recursive: true, force: true });
 	});
 
 	// -------------------------------------------------------------------------
@@ -314,7 +314,7 @@ describe("Image Limits E2E Tests", () => {
 
 				for (const sizeMB of sizes) {
 					console.log(`  Testing size: ${sizeMB}MB...`);
-					const imageBase64 = generateImageWithSize(sizeMB * MB, `size-${sizeMB}mb.png`);
+					const imageBase64 = await generateImageWithSize(sizeMB * MB, `size-${sizeMB}mb.png`);
 					const result = await testImageSize(model, imageBase64);
 					if (result.success) {
 						lastSuccess = sizeMB;
@@ -343,7 +343,7 @@ describe("Image Limits E2E Tests", () => {
 
 				for (const dim of dimensions) {
 					console.log(`  Testing dimension: ${dim}x${dim}...`);
-					const imageBase64 = generateImage(dim, dim, `dim-${dim}.png`);
+					const imageBase64 = await generateImage(dim, dim, `dim-${dim}.png`);
 					const result = await testImageDimensions(model, imageBase64);
 					if (result.success) {
 						lastSuccess = dim;
@@ -404,7 +404,7 @@ describe("Image Limits E2E Tests", () => {
 
 				for (const sizeMB of sizes) {
 					console.log(`  Testing size: ${sizeMB}MB...`);
-					const imageBase64 = generateImageWithSize(sizeMB * MB, `size-${sizeMB}mb.png`);
+					const imageBase64 = await generateImageWithSize(sizeMB * MB, `size-${sizeMB}mb.png`);
 					const result = await testImageSize(model, imageBase64);
 					if (result.success) {
 						lastSuccess = sizeMB;
@@ -432,7 +432,7 @@ describe("Image Limits E2E Tests", () => {
 
 				for (const dim of dimensions) {
 					console.log(`  Testing dimension: ${dim}x${dim}...`);
-					const imageBase64 = generateImage(dim, dim, `dim-${dim}.png`);
+					const imageBase64 = await generateImage(dim, dim, `dim-${dim}.png`);
 					const result = await testImageDimensions(model, imageBase64);
 					if (result.success) {
 						lastSuccess = dim;
@@ -491,7 +491,7 @@ describe("Image Limits E2E Tests", () => {
 
 				for (const sizeMB of sizes) {
 					console.log(`  Testing size: ${sizeMB}MB...`);
-					const imageBase64 = generateImageWithSize(sizeMB * MB, `size-${sizeMB}mb.png`);
+					const imageBase64 = await generateImageWithSize(sizeMB * MB, `size-${sizeMB}mb.png`);
 					const result = await testImageSize(model, imageBase64);
 					if (result.success) {
 						lastSuccess = sizeMB;
@@ -519,7 +519,7 @@ describe("Image Limits E2E Tests", () => {
 
 				for (const dim of dimensions) {
 					console.log(`  Testing dimension: ${dim}x${dim}...`);
-					const imageBase64 = generateImage(dim, dim, `dim-${dim}.png`);
+					const imageBase64 = await generateImage(dim, dim, `dim-${dim}.png`);
 					const result = await testImageDimensions(model, imageBase64);
 					if (result.success) {
 						lastSuccess = dim;
@@ -572,7 +572,7 @@ describe("Image Limits E2E Tests", () => {
 
 				for (const sizeMB of sizes) {
 					console.log(`  Testing size: ${sizeMB}MB...`);
-					const imageBase64 = generateImageWithSize(sizeMB * MB, `size-${sizeMB}mb.png`);
+					const imageBase64 = await generateImageWithSize(sizeMB * MB, `size-${sizeMB}mb.png`);
 					const result = await testImageSize(model, imageBase64);
 					if (result.success) {
 						lastSuccess = sizeMB;
@@ -600,7 +600,7 @@ describe("Image Limits E2E Tests", () => {
 
 				for (const dim of dimensions) {
 					console.log(`  Testing dimension: ${dim}x${dim}...`);
-					const imageBase64 = generateImage(dim, dim, `dim-${dim}.png`);
+					const imageBase64 = await generateImage(dim, dim, `dim-${dim}.png`);
 					const result = await testImageDimensions(model, imageBase64);
 					if (result.success) {
 						lastSuccess = dim;
@@ -658,7 +658,7 @@ describe("Image Limits E2E Tests", () => {
 
 				for (const sizeMB of sizes) {
 					console.log(`  Testing size: ${sizeMB}MB...`);
-					const imageBase64 = generateImageWithSize(sizeMB * MB, `size-${sizeMB}mb.png`);
+					const imageBase64 = await generateImageWithSize(sizeMB * MB, `size-${sizeMB}mb.png`);
 					const result = await testImageSize(model, imageBase64);
 					if (result.success) {
 						lastSuccess = sizeMB;
@@ -686,7 +686,7 @@ describe("Image Limits E2E Tests", () => {
 
 				for (const dim of dimensions) {
 					console.log(`  Testing dimension: ${dim}x${dim}...`);
-					const imageBase64 = generateImage(dim, dim, `dim-${dim}.png`);
+					const imageBase64 = await generateImage(dim, dim, `dim-${dim}.png`);
 					const result = await testImageDimensions(model, imageBase64);
 					if (result.success) {
 						lastSuccess = dim;
@@ -742,7 +742,7 @@ describe("Image Limits E2E Tests", () => {
 
 				for (const sizeMB of sizes) {
 					console.log(`  Testing size: ${sizeMB}MB...`);
-					const imageBase64 = generateImageWithSize(sizeMB * MB, `size-${sizeMB}mb.png`);
+					const imageBase64 = await generateImageWithSize(sizeMB * MB, `size-${sizeMB}mb.png`);
 					const result = await testImageSize(model, imageBase64);
 					if (result.success) {
 						lastSuccess = sizeMB;
@@ -770,7 +770,7 @@ describe("Image Limits E2E Tests", () => {
 
 				for (const dim of dimensions) {
 					console.log(`  Testing dimension: ${dim}x${dim}...`);
-					const imageBase64 = generateImage(dim, dim, `dim-${dim}.png`);
+					const imageBase64 = await generateImage(dim, dim, `dim-${dim}.png`);
 					const result = await testImageDimensions(model, imageBase64);
 					if (result.success) {
 						lastSuccess = dim;
@@ -821,7 +821,7 @@ describe("Image Limits E2E Tests", () => {
 
 				for (const sizeMB of sizes) {
 					console.log(`  Testing size: ${sizeMB}MB...`);
-					const imageBase64 = generateImageWithSize(sizeMB * MB, `size-${sizeMB}mb.png`);
+					const imageBase64 = await generateImageWithSize(sizeMB * MB, `size-${sizeMB}mb.png`);
 					const result = await testImageSize(model, imageBase64);
 					if (result.success) {
 						lastSuccess = sizeMB;
@@ -849,7 +849,7 @@ describe("Image Limits E2E Tests", () => {
 
 				for (const dim of dimensions) {
 					console.log(`  Testing dimension: ${dim}x${dim}...`);
-					const imageBase64 = generateImage(dim, dim, `dim-${dim}.png`);
+					const imageBase64 = await generateImage(dim, dim, `dim-${dim}.png`);
 					const result = await testImageDimensions(model, imageBase64);
 					if (result.success) {
 						lastSuccess = dim;
@@ -905,7 +905,7 @@ describe("Image Limits E2E Tests", () => {
 
 				for (const sizeMB of sizes) {
 					console.log(`  Testing size: ${sizeMB}MB...`);
-					const imageBase64 = generateImageWithSize(sizeMB * MB, `size-${sizeMB}mb.png`);
+					const imageBase64 = await generateImageWithSize(sizeMB * MB, `size-${sizeMB}mb.png`);
 					const result = await testImageSize(model, imageBase64);
 					if (result.success) {
 						lastSuccess = sizeMB;
@@ -933,7 +933,7 @@ describe("Image Limits E2E Tests", () => {
 
 				for (const dim of dimensions) {
 					console.log(`  Testing dimension: ${dim}x${dim}...`);
-					const imageBase64 = generateImage(dim, dim, `dim-${dim}.png`);
+					const imageBase64 = await generateImage(dim, dim, `dim-${dim}.png`);
 					const result = await testImageDimensions(model, imageBase64);
 					if (result.success) {
 						lastSuccess = dim;
@@ -966,12 +966,12 @@ describe("Image Limits E2E Tests", () => {
 		// Generate images at specific sizes for each provider's limit
 		const imageCache: Map<number, string> = new Map();
 
-		function getImageAtSize(targetMB: number): string {
+		async function getImageAtSize(targetMB: number): Promise<string> {
 			if (imageCache.has(targetMB)) {
 				return imageCache.get(targetMB)!;
 			}
 			console.log(`  Generating ~${targetMB}MB noise image...`);
-			const imageBase64 = generateImageWithSize(targetMB * 1024 * 1024, `stress-${targetMB}mb.png`);
+			const imageBase64 = await generateImageWithSize(targetMB * 1024 * 1024, `stress-${targetMB}mb.png`);
 			const actualSize = Buffer.from(imageBase64, "base64").length;
 			console.log(`    Actual size: ${(actualSize / 1024 / 1024).toFixed(2)}MB`);
 			imageCache.set(targetMB, imageBase64);
@@ -984,7 +984,7 @@ describe("Image Limits E2E Tests", () => {
 			"Anthropic: max ~3MB images before rejection",
 			async () => {
 				const model = getModel("anthropic", "claude-3-5-haiku-20241022");
-				const image3mb = getImageAtSize(3);
+				const image3mb = await getImageAtSize(3);
 				// 32MB total limit / ~4MB actual = ~8 images
 				const counts = [1, 2, 4, 6, 8, 10, 12];
 
@@ -1016,7 +1016,7 @@ describe("Image Limits E2E Tests", () => {
 			"OpenAI: max ~15MB images before rejection",
 			async () => {
 				const model = getModel("openai", "gpt-4o-mini");
-				const image15mb = getImageAtSize(15);
+				const image15mb = await getImageAtSize(15);
 				// Test progressively
 				const counts = [1, 2, 5, 10, 20];
 
@@ -1048,7 +1048,7 @@ describe("Image Limits E2E Tests", () => {
 			"Gemini: max ~20MB images before rejection",
 			async () => {
 				const model = getModel("google", "gemini-2.5-flash");
-				const image20mb = getImageAtSize(20);
+				const image20mb = await getImageAtSize(20);
 				// Test progressively
 				const counts = [1, 2, 5, 10, 20, 50];
 
@@ -1080,7 +1080,7 @@ describe("Image Limits E2E Tests", () => {
 			"Mistral: max ~10MB images before rejection",
 			async () => {
 				const model = getModel("mistral", "pixtral-12b");
-				const image10mb = getImageAtSize(10);
+				const image10mb = await getImageAtSize(10);
 				// Known limit is 8 images
 				const counts = [1, 2, 4, 6, 8, 9];
 
@@ -1112,7 +1112,7 @@ describe("Image Limits E2E Tests", () => {
 			"xAI: max ~20MB images before rejection",
 			async () => {
 				const model = getModel("xai", "grok-2-vision");
-				const image20mb = getImageAtSize(20);
+				const image20mb = await getImageAtSize(20);
 				// Test progressively
 				const counts = [1, 2, 5, 10, 20];
 
@@ -1146,7 +1146,7 @@ describe("Image Limits E2E Tests", () => {
 				const model = getModel("groq", "meta-llama/llama-4-scout-17b-16e-instruct");
 				// Generate 5760x5760 image (33177600 pixels = Groq's limit)
 				console.log("  Generating 5760x5760 test image for Groq...");
-				const image5760 = generateImage(5760, 5760, "stress-5760.png");
+				const image5760 = await generateImage(5760, 5760, "stress-5760.png");
 
 				// Known limit is 5 images
 				const counts = [1, 2, 3, 4, 5, 6];
@@ -1179,7 +1179,7 @@ describe("Image Limits E2E Tests", () => {
 			"zAI: max ~15MB images before rejection",
 			async () => {
 				const model = getModel("zai", "glm-4.5v");
-				const image15mb = getImageAtSize(15);
+				const image15mb = await getImageAtSize(15);
 				// Context-limited, test progressively
 				const counts = [1, 2, 5, 10, 20];
 
@@ -1211,7 +1211,7 @@ describe("Image Limits E2E Tests", () => {
 			"OpenRouter: max ~5MB images before rejection",
 			async () => {
 				const model = getModel("openrouter", "z-ai/glm-4.5v");
-				const image5mb = getImageAtSize(5);
+				const image5mb = await getImageAtSize(5);
 				// Context-limited, test progressively
 				const counts = [1, 2, 5, 10, 20];
 

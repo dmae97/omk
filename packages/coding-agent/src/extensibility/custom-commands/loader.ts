@@ -5,10 +5,10 @@
  * to avoid import resolution issues with custom commands loaded from user directories.
  */
 
-import { type Dirent, existsSync, readdirSync } from "node:fs";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import * as piCodingAgent from "@oh-my-pi/pi-coding-agent";
-import { logger } from "@oh-my-pi/pi-utils";
+import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import * as typebox from "@sinclair/typebox";
 import { getAgentDir, getConfigDirs } from "../../config";
 import { execCommand } from "../../exec/exec";
@@ -77,7 +77,9 @@ export interface DiscoverCustomCommandsResult {
  * Discover custom command modules (TypeScript slash commands).
  * Markdown slash commands are handled by core/slash-commands.ts.
  */
-export function discoverCustomCommands(options: DiscoverCustomCommandsOptions = {}): DiscoverCustomCommandsResult {
+export async function discoverCustomCommands(
+	options: DiscoverCustomCommandsOptions = {},
+): Promise<DiscoverCustomCommandsResult> {
 	const cwd = options.cwd ?? process.cwd();
 	const agentDir = options.agentDir ?? getAgentDir();
 	const paths: Array<{ path: string; source: CustomCommandSource }> = [];
@@ -93,7 +95,7 @@ export function discoverCustomCommands(options: DiscoverCustomCommandsOptions = 
 	const commandDirs: Array<{ path: string; source: CustomCommandSource }> = [];
 	if (agentDir) {
 		const userCommandsDir = path.join(agentDir, "commands");
-		if (existsSync(userCommandsDir)) {
+		if (fs.existsSync(userCommandsDir)) {
 			commandDirs.push({ path: userCommandsDir, source: "user" });
 		}
 	}
@@ -107,11 +109,13 @@ export function discoverCustomCommands(options: DiscoverCustomCommandsOptions = 
 
 	const indexCandidates = ["index.ts", "index.js", "index.mjs", "index.cjs"];
 	for (const { path: commandsDir, source } of commandDirs) {
-		let entries: Dirent[];
+		let entries: fs.Dirent[];
 		try {
-			entries = readdirSync(commandsDir, { withFileTypes: true });
+			entries = await fs.promises.readdir(commandsDir, { withFileTypes: true });
 		} catch (error) {
-			logger.warn("Failed to read custom commands directory", { path: commandsDir, error: String(error) });
+			if (!isEnoent(error)) {
+				logger.warn("Failed to read custom commands directory", { path: commandsDir, error: String(error) });
+			}
 			continue;
 		}
 		for (const entry of entries) {
@@ -120,7 +124,7 @@ export function discoverCustomCommands(options: DiscoverCustomCommandsOptions = 
 
 			for (const filename of indexCandidates) {
 				const candidate = path.join(commandDir, filename);
-				if (existsSync(candidate)) {
+				if (fs.existsSync(candidate)) {
 					addPath(candidate, source);
 					break;
 				}
@@ -162,7 +166,7 @@ export async function loadCustomCommands(options: LoadCustomCommandsOptions = {}
 	const cwd = options.cwd ?? process.cwd();
 	const agentDir = options.agentDir ?? getAgentDir();
 
-	const { paths } = discoverCustomCommands({ cwd, agentDir });
+	const { paths } = await discoverCustomCommands({ cwd, agentDir });
 
 	const commands: LoadedCustomCommand[] = [];
 	const errors: Array<{ path: string; error: string }> = [];

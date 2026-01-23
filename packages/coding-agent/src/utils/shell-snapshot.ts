@@ -6,10 +6,9 @@
  * shell experience.
  */
 
-import { unlinkSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import * as fs from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import { postmortem } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
 
@@ -20,9 +19,9 @@ let cachedSnapshotPath: string | null = null;
  */
 function getShellConfigFile(shell: string): string {
 	const home = homedir();
-	if (shell.includes("zsh")) return join(home, ".zshrc");
-	if (shell.includes("bash")) return join(home, ".bashrc");
-	return join(home, ".profile");
+	if (shell.includes("zsh")) return path.join(home, ".zshrc");
+	if (shell.includes("bash")) return path.join(home, ".bashrc");
+	return path.join(home, ".profile");
 }
 
 /**
@@ -131,12 +130,12 @@ export async function getOrCreateSnapshot(
 	const rcFile = getShellConfigFile(shell);
 
 	// Create snapshot directory
-	const snapshotDir = join(tmpdir(), "omp-shell-snapshots");
-	await mkdir(snapshotDir, { recursive: true });
+	const snapshotDir = path.join(tmpdir(), "omp-shell-snapshots");
+	await fs.promises.mkdir(snapshotDir, { recursive: true });
 
 	// Generate unique snapshot path
 	const shellName = shell.includes("zsh") ? "zsh" : shell.includes("bash") ? "bash" : "sh";
-	const snapshotPath = join(snapshotDir, `snapshot-${shellName}-${crypto.randomUUID()}.sh`);
+	const snapshotPath = path.join(snapshotDir, `snapshot-${shellName}-${crypto.randomUUID()}.sh`);
 
 	// Generate and execute snapshot script
 	const script = await generateSnapshotScript(shell, snapshotPath, rcFile);
@@ -167,6 +166,6 @@ export function getSnapshotSourceCommand(snapshotPath: string | null): string {
 
 postmortem.register("shell-snapshot", () => {
 	if (cachedSnapshotPath) {
-		unlinkSync(cachedSnapshotPath);
+		fs.unlinkSync(cachedSnapshotPath);
 	}
 });

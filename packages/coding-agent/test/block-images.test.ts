@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import { processFileArguments } from "@oh-my-pi/pi-coding-agent/cli/file-processor";
 import { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
@@ -56,18 +56,18 @@ describe("blockImages setting", () => {
 		let testDir: string;
 
 		beforeEach(() => {
-			testDir = join(tmpdir(), `block-images-test-${Date.now()}-${Math.random()}`);
-			mkdirSync(testDir, { recursive: true });
+			testDir = path.join(tmpdir(), `block-images-test-${Date.now()}-${Math.random()}`);
+			fs.mkdirSync(testDir, { recursive: true });
 		});
 
 		afterEach(() => {
-			rmSync(testDir, { recursive: true, force: true });
+			fs.rmSync(testDir, { recursive: true, force: true });
 		});
 
 		it("should always read images (filtering happens at convertToLlm layer)", async () => {
 			// Create test image
-			const imagePath = join(testDir, "test.png");
-			writeFileSync(imagePath, Buffer.from(TINY_PNG_BASE64, "base64"));
+			const imagePath = path.join(testDir, "test.png");
+			fs.writeFileSync(imagePath, Buffer.from(TINY_PNG_BASE64, "base64"));
 
 			const tool = new ReadTool(createTestToolSession(testDir));
 			const result = await tool.execute("test-1", { path: imagePath });
@@ -80,8 +80,8 @@ describe("blockImages setting", () => {
 
 		it("should read text files normally", async () => {
 			// Create test text file
-			const textPath = join(testDir, "test.txt");
-			writeFileSync(textPath, "Hello, world!");
+			const textPath = path.join(testDir, "test.txt");
+			fs.writeFileSync(textPath, "Hello, world!");
 
 			const tool = new ReadTool(createTestToolSession(testDir));
 			const result = await tool.execute("test-2", { path: textPath });
@@ -97,18 +97,18 @@ describe("blockImages setting", () => {
 		let testDir: string;
 
 		beforeEach(() => {
-			testDir = join(tmpdir(), `block-images-process-test-${Date.now()}-${Math.random()}`);
-			mkdirSync(testDir, { recursive: true });
+			testDir = path.join(tmpdir(), `block-images-process-test-${Date.now()}-${Math.random()}`);
+			fs.mkdirSync(testDir, { recursive: true });
 		});
 
 		afterEach(() => {
-			rmSync(testDir, { recursive: true, force: true });
+			fs.rmSync(testDir, { recursive: true, force: true });
 		});
 
 		it("should always process images (filtering happens at convertToLlm layer)", async () => {
 			// Create test image
-			const imagePath = join(testDir, "test.png");
-			writeFileSync(imagePath, Buffer.from(TINY_PNG_BASE64, "base64"));
+			const imagePath = path.join(testDir, "test.png");
+			fs.writeFileSync(imagePath, Buffer.from(TINY_PNG_BASE64, "base64"));
 
 			const result = await processFileArguments([imagePath]);
 
@@ -118,8 +118,8 @@ describe("blockImages setting", () => {
 
 		it("should process text files normally", async () => {
 			// Create test text file
-			const textPath = join(testDir, "test.txt");
-			writeFileSync(textPath, "Hello, world!");
+			const textPath = path.join(testDir, "test.txt");
+			fs.writeFileSync(textPath, "Hello, world!");
 
 			const result = await processFileArguments([textPath]);
 

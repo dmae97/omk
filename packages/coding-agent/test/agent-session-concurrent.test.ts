@@ -3,9 +3,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import { Agent } from "@oh-my-pi/pi-agent-core";
 import { type AssistantMessage, type AssistantMessageEvent, EventStream, getModel } from "@oh-my-pi/pi-ai";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
@@ -54,16 +54,16 @@ describe("AgentSession concurrent prompt guard", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `pi-concurrent-test-${nanoid()}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `pi-concurrent-test-${nanoid()}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(async () => {
 		if (session) {
 			session.dispose();
 		}
-		if (tempDir && existsSync(tempDir)) {
-			rmSync(tempDir, { recursive: true });
+		if (tempDir && fs.existsSync(tempDir)) {
+			fs.rmSync(tempDir, { recursive: true });
 		}
 	});
 
@@ -99,7 +99,7 @@ describe("AgentSession concurrent prompt guard", () => {
 
 		const sessionManager = SessionManager.inMemory();
 		const settingsManager = await SettingsManager.create(tempDir, tempDir);
-		const authStorage = await AuthStorage.create(join(tempDir, "auth.json"));
+		const authStorage = await AuthStorage.create(path.join(tempDir, "auth.json"));
 		const modelRegistry = new ModelRegistry(authStorage, tempDir);
 		// Set a runtime API key so validation passes
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
@@ -190,7 +190,7 @@ describe("AgentSession concurrent prompt guard", () => {
 
 		const sessionManager = SessionManager.inMemory();
 		const settingsManager = await SettingsManager.create(tempDir, tempDir);
-		const authStorage = await AuthStorage.create(join(tempDir, "auth.json"));
+		const authStorage = await AuthStorage.create(path.join(tempDir, "auth.json"));
 		const modelRegistry = new ModelRegistry(authStorage, tempDir);
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 

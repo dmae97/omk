@@ -1,9 +1,10 @@
 import { Container, type SelectItem, SelectList } from "@oh-my-pi/pi-tui";
-import { getAvailableThemes, getSelectListTheme } from "../../modes/theme/theme";
+import { getSelectListTheme } from "../../modes/theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 
 /**
- * Component that renders a theme selector
+ * Component that renders a theme selector.
+ * Themes must be pre-loaded and passed to the constructor.
  */
 export class ThemeSelectorComponent extends Container {
 	private selectList: SelectList;
@@ -11,6 +12,7 @@ export class ThemeSelectorComponent extends Container {
 
 	constructor(
 		currentTheme: string,
+		themes: string[],
 		onSelect: (themeName: string) => void,
 		onCancel: () => void,
 		onPreview: (themeName: string) => void,
@@ -18,8 +20,7 @@ export class ThemeSelectorComponent extends Container {
 		super();
 		this.onPreview = onPreview;
 
-		// Get available themes and create select items
-		const themes = getAvailableThemes();
+		// Create select items from provided themes
 		const themeItems: SelectItem[] = themes.map((name) => ({
 			value: name,
 			label: name,

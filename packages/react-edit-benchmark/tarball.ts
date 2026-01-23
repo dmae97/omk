@@ -3,8 +3,8 @@
  * Uses Bun.Archive for native tar.gz handling.
  */
 
-import { mkdir } from "node:fs/promises";
-import { join, dirname, basename } from "node:path";
+import * as fs from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 
 export interface TarballTask {
 	id: string;
@@ -39,7 +39,7 @@ export async function readTarball(tarballPath: string): Promise<TarballEntry[]> 
 
 	const entries: TarballEntry[] = [];
 	for (const [path, file] of files) {
-		const content = Buffer.from(await file.arrayBuffer());
+		const content = Buffer.from(await file.bytes());
 		entries.push({ path, content });
 	}
 
@@ -189,7 +189,7 @@ export async function extractTaskFiles(
 		if (!relativePath) continue;
 
 		const destPath = join(destDir, relativePath);
-		await mkdir(dirname(destPath), { recursive: true });
+		await fs.mkdir(dirname(destPath), { recursive: true });
 		await Bun.write(destPath, await file.arrayBuffer());
 	}
 }

@@ -1,8 +1,7 @@
-import type { Dirent } from "node:fs";
-import { existsSync, statSync } from "node:fs";
+import * as fs from "node:fs";
 import path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
-import { logger, once, untilAborted } from "@oh-my-pi/pi-utils";
+import { isEnoent, logger, once, untilAborted } from "@oh-my-pi/pi-utils";
 import type { BunFile } from "bun";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import { type Theme, theme } from "../modes/theme/theme";
@@ -257,18 +256,18 @@ function findFileByExtensions(baseDir: string, extensions: string[], maxDepth: n
 	const normalized = extensions.map((ext) => ext.toLowerCase());
 	const search = (dir: string, depth: number): string | null => {
 		if (depth > maxDepth) return null;
-		const entries: Dirent[] = [];
+		const entries: fs.Dirent[] = [];
 		try {
 			const names = Array.from(new Bun.Glob("*").scanSync({ cwd: dir, onlyFiles: false }));
 			for (const name of names) {
 				const fullPath = path.join(dir, name);
 				let isDir = false;
 				try {
-					isDir = statSync(fullPath).isDirectory();
+					isDir = fs.statSync(fullPath).isDirectory();
 				} catch {
 					continue;
 				}
-				entries.push({ name, isFile: () => !isDir, isDirectory: () => isDir } as Dirent);
+				entries.push({ name, isFile: () => !isDir, isDirectory: () => isDir } as fs.Dirent);
 			}
 		} catch {
 			return null;
@@ -359,25 +358,38 @@ interface ProjectType {
 	description: string;
 }
 
+async function fileExists(filePath: string): Promise<boolean> {
+	try {
+		await fs.promises.stat(filePath);
+		return true;
+	} catch (err) {
+		if (isEnoent(err)) return false;
+		throw err;
+	}
+}
+
 /** Detect project type from root markers */
-function detectProjectType(cwd: string): ProjectType {
+async function detectProjectType(cwd: string): Promise<ProjectType> {
 	// Check for Rust (Cargo.toml)
-	if (existsSync(path.join(cwd, "Cargo.toml"))) {
+	if (await fileExists(path.join(cwd, "Cargo.toml"))) {
 		return { type: "rust", command: ["cargo", "check", "--message-format=short"], description: "Rust (cargo check)" };
 	}
 
 	// Check for TypeScript (tsconfig.json)
-	if (existsSync(path.join(cwd, "tsconfig.json"))) {
+	if (await fileExists(path.join(cwd, "tsconfig.json"))) {
 		return { type: "typescript", command: ["npx", "tsc", "--noEmit"], description: "TypeScript (tsc --noEmit)" };
 	}
 
 	// Check for Go (go.mod)
-	if (existsSync(path.join(cwd, "go.mod"))) {
+	if (await fileExists(path.join(cwd, "go.mod"))) {
 		return { type: "go", command: ["go", "build", "./..."], description: "Go (go build)" };
 	}
 
 	// Check for Python (pyproject.toml or pyrightconfig.json)
-	if (existsSync(path.join(cwd, "pyproject.toml")) || existsSync(path.join(cwd, "pyrightconfig.json"))) {
+	if (
+		(await fileExists(path.join(cwd, "pyproject.toml"))) ||
+		(await fileExists(path.join(cwd, "pyrightconfig.json")))
+	) {
 		return { type: "python", command: ["pyright"], description: "Python (pyright)" };
 	}
 
@@ -389,7 +401,7 @@ async function runWorkspaceDiagnostics(
 	cwd: string,
 	config: LspConfig,
 ): Promise<{ output: string; projectType: ProjectType }> {
-	const projectType = detectProjectType(cwd);
+	const projectType = await detectProjectType(cwd);
 
 	// For Rust, use flycheck via rust-analyzer if available
 	if (projectType.type === "rust") {

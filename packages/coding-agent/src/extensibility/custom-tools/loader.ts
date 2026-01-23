@@ -223,7 +223,7 @@ export async function discoverAndLoadCustomTools(configuredPaths: string[], cwd:
 	}
 
 	// 2. Plugin tools: ~/.omp/plugins/node_modules/*/
-	for (const pluginPath of getAllPluginToolPaths(cwd)) {
+	for (const pluginPath of await getAllPluginToolPaths(cwd)) {
 		addPath(pluginPath, { provider: "plugin", providerName: "Plugin", level: "user" });
 	}
 

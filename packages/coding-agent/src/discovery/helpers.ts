@@ -3,7 +3,7 @@
  */
 
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import * as path from "node:path";
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { readDirEntries, readFile } from "../capability/fs";
 import type { Skill, SkillFrontmatter } from "../capability/skill";
@@ -26,10 +26,10 @@ export function normalizeUnicodeSpaces(str: string): string {
 export function expandPath(p: string): string {
 	const normalized = normalizeUnicodeSpaces(p);
 	if (normalized.startsWith("~/")) {
-		return join(homedir(), normalized.slice(2));
+		return path.join(homedir(), normalized.slice(2));
 	}
 	if (normalized.startsWith("~")) {
-		return join(homedir(), normalized.slice(1));
+		return path.join(homedir(), normalized.slice(1));
 	}
 	return normalized;
 }
@@ -94,7 +94,7 @@ export type SourceId = keyof typeof SOURCE_PATHS;
 export function getUserPath(ctx: LoadContext, source: SourceId, subpath: string): string | null {
 	const paths = SOURCE_PATHS[source];
 	if (!paths.userAgent) return null;
-	return join(ctx.home, paths.userAgent, subpath);
+	return path.join(ctx.home, paths.userAgent, subpath);
 }
 
 /**
@@ -104,17 +104,17 @@ export function getProjectPath(ctx: LoadContext, source: SourceId, subpath: stri
 	const paths = SOURCE_PATHS[source];
 	if (!paths.projectDir) return null;
 
-	return join(ctx.cwd, paths.projectDir, subpath);
+	return path.join(ctx.cwd, paths.projectDir, subpath);
 }
 
 /**
  * Create source metadata for an item.
  */
-export function createSourceMeta(provider: string, path: string, level: "user" | "project"): SourceMeta {
+export function createSourceMeta(provider: string, filePath: string, level: "user" | "project"): SourceMeta {
 	return {
 		provider,
 		providerName: "", // Filled in by registry
-		path: resolve(path),
+		path: path.resolve(filePath),
 		level,
 	};
 }
@@ -229,7 +229,7 @@ export async function loadSkillsFromDir(
 
 	const results = await Promise.all(
 		skillDirs.map(async (entry) => {
-			const skillFile = join(dir, entry.name, "SKILL.md");
+			const skillFile = path.join(dir, entry.name, "SKILL.md");
 			const content = await readFile(skillFile);
 			if (!content) {
 				return { item: null as Skill | null, warning: null as string | null };
@@ -326,12 +326,14 @@ export async function loadFilesFromDir<T>(
 		});
 
 	const [subResults, fileResults] = await Promise.all([
-		Promise.all(directories.map((entry) => loadFilesFromDir(_ctx, join(dir, entry.name), provider, level, options))),
+		Promise.all(
+			directories.map((entry) => loadFilesFromDir(_ctx, path.join(dir, entry.name), provider, level, options)),
+		),
 		Promise.all(
 			files.map(async (entry) => {
-				const path = join(dir, entry.name);
-				const content = await readFile(path);
-				return { entry, path, content };
+				const filePath = path.join(dir, entry.name);
+				const content = await readFile(filePath);
+				return { entry, path: filePath, content };
 			}),
 		),
 	]);
@@ -427,7 +429,7 @@ export async function discoverExtensionModulePaths(ctx: LoadContext, dir: string
 	for (const entry of entries) {
 		if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
 
-		const entryPath = join(dir, entry.name);
+		const entryPath = path.join(dir, entry.name);
 
 		// 1. Direct files: *.ts or *.js
 		if (entry.isFile() && isExtensionModuleFile(entry.name)) {
@@ -442,11 +444,11 @@ export async function discoverExtensionModulePaths(ctx: LoadContext, dir: string
 
 			// Check for package.json with "omp"/"pi" field first
 			if (subFileNames.has("package.json")) {
-				const packageJsonPath = join(entryPath, "package.json");
+				const packageJsonPath = path.join(entryPath, "package.json");
 				const manifest = await readExtensionModuleManifest(ctx, packageJsonPath);
 				if (manifest?.extensions && Array.isArray(manifest.extensions)) {
 					for (const extPath of manifest.extensions) {
-						const resolvedExtPath = resolve(entryPath, extPath);
+						const resolvedExtPath = path.resolve(entryPath, extPath);
 						const content = await readFile(resolvedExtPath);
 						if (content !== null) {
 							discovered.push(resolvedExtPath);
@@ -458,9 +460,9 @@ export async function discoverExtensionModulePaths(ctx: LoadContext, dir: string
 
 			// Check for index.ts or index.js
 			if (subFileNames.has("index.ts")) {
-				discovered.push(join(entryPath, "index.ts"));
+				discovered.push(path.join(entryPath, "index.ts"));
 			} else if (subFileNames.has("index.js")) {
-				discovered.push(join(entryPath, "index.js"));
+				discovered.push(path.join(entryPath, "index.js"));
 			}
 		}
 	}

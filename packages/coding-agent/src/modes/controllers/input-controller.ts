@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
-import type { FileHandle } from "node:fs/promises";
-import { open, rm } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
@@ -207,7 +206,7 @@ export class InputController {
 				return;
 			}
 			if (text === "/session") {
-				this.ctx.handleSessionCommand();
+				await this.ctx.handleSessionCommand();
 				this.ctx.editor.setText("");
 				return;
 			}
@@ -217,7 +216,7 @@ export class InputController {
 				return;
 			}
 			if (text === "/changelog") {
-				this.ctx.handleChangelogCommand();
+				await this.ctx.handleChangelogCommand();
 				this.ctx.editor.setText("");
 				return;
 			}
@@ -638,13 +637,13 @@ export class InputController {
 		return "/dev/tty";
 	}
 
-	private async openEditorTerminalHandle(): Promise<FileHandle | null> {
+	private async openEditorTerminalHandle(): Promise<fs.FileHandle | null> {
 		const terminalPath = this.getEditorTerminalPath();
 		if (!terminalPath) {
 			return null;
 		}
 		try {
-			return await open(terminalPath, "r+");
+			return await fs.open(terminalPath, "r+");
 		} catch {
 			return null;
 		}
@@ -661,7 +660,7 @@ export class InputController {
 		const currentText = this.ctx.editor.getText();
 		const tmpFile = path.join(os.tmpdir(), `omp-editor-${nanoid()}.omp.md`);
 
-		let ttyHandle: FileHandle | null = null;
+		let ttyHandle: fs.FileHandle | null = null;
 		try {
 			// Write current content to temp file
 			await Bun.write(tmpFile, currentText);
@@ -696,7 +695,7 @@ export class InputController {
 		} finally {
 			// Clean up temp file
 			try {
-				await rm(tmpFile, { force: true });
+				await fs.rm(tmpFile, { force: true });
 			} catch {
 				// Ignore cleanup errors
 			}

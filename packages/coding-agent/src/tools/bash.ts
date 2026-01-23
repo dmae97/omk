@@ -1,4 +1,4 @@
-import { relative, resolve, sep } from "node:path";
+import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
@@ -165,13 +165,14 @@ function formatBashCommand(args: BashRenderArgs, uiTheme: Theme): string {
 	let displayWorkdir = args.cwd;
 
 	if (displayWorkdir) {
-		const resolvedCwd = resolve(cwd);
-		const resolvedWorkdir = resolve(displayWorkdir);
+		const resolvedCwd = path.resolve(cwd);
+		const resolvedWorkdir = path.resolve(displayWorkdir);
 		if (resolvedWorkdir === resolvedCwd) {
 			displayWorkdir = undefined;
 		} else {
-			const relativePath = relative(resolvedCwd, resolvedWorkdir);
-			const isWithinCwd = relativePath && !relativePath.startsWith("..") && !relativePath.startsWith(`..${sep}`);
+			const relativePath = path.relative(resolvedCwd, resolvedWorkdir);
+			const isWithinCwd =
+				relativePath && !relativePath.startsWith("..") && !relativePath.startsWith(`..${path.sep}`);
 			if (isWithinCwd) {
 				displayWorkdir = relativePath;
 			}

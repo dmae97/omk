@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import type { AgentEvent } from "@oh-my-pi/pi-agent-core";
 import { RpcClient } from "@oh-my-pi/pi-coding-agent/modes/rpc/rpc-client";
 import { nanoid } from "nanoid";
@@ -14,10 +14,10 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 	let sessionDir: string;
 
 	beforeEach(() => {
-		sessionDir = join(tmpdir(), `omp-rpc-test-${nanoid()}`);
+		sessionDir = path.join(tmpdir(), `omp-rpc-test-${nanoid()}`);
 		client = new RpcClient({
-			cliPath: join(import.meta.dir, "..", "dist", "cli.js"),
-			cwd: join(import.meta.dir, ".."),
+			cliPath: path.join(import.meta.dir, "..", "dist", "cli.js"),
+			cwd: path.join(import.meta.dir, ".."),
 			env: { OMP_CODING_AGENT_DIR: sessionDir },
 			provider: "anthropic",
 			model: "claude-sonnet-4-5",
@@ -26,8 +26,8 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 
 	afterEach(async () => {
 		await client.stop();
-		if (sessionDir && existsSync(sessionDir)) {
-			rmSync(sessionDir, { recursive: true });
+		if (sessionDir && fs.existsSync(sessionDir)) {
+			fs.rmSync(sessionDir, { recursive: true });
 		}
 	});
 
@@ -56,21 +56,18 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		await Bun.sleep(200);
 
 		// Verify session file
-		const sessionsPath = join(sessionDir, "sessions");
-		expect(existsSync(sessionsPath)).toBe(true);
+		const sessionsPath = path.join(sessionDir, "sessions");
+		expect(fs.existsSync(sessionsPath)).toBe(true);
 
-		const sessionDirs = readdirSync(sessionsPath);
+		const sessionDirs = fs.readdirSync(sessionsPath);
 		expect(sessionDirs.length).toBeGreaterThan(0);
 
-		const cwdSessionDir = join(sessionsPath, sessionDirs[0]);
-		const sessionFiles = readdirSync(cwdSessionDir).filter((f) => f.endsWith(".jsonl"));
+		const cwdSessionDir = path.join(sessionsPath, sessionDirs[0]);
+		const sessionFiles = fs.readdirSync(cwdSessionDir).filter((f) => f.endsWith(".jsonl"));
 		expect(sessionFiles.length).toBe(1);
 
-		const sessionContent = readFileSync(join(cwdSessionDir, sessionFiles[0]), "utf8");
-		const entries = sessionContent
-			.trim()
-			.split("\n")
-			.map((line) => JSON.parse(line));
+		const sessionContent = await Bun.file(path.join(cwdSessionDir, sessionFiles[0])).text();
+		const entries = sessionContent.split("\n").map((line) => JSON.parse(line));
 
 		// First entry should be session header
 		expect(entries[0].type).toBe("session");
@@ -99,11 +96,11 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		await Bun.sleep(200);
 
 		// Verify compaction in session file
-		const sessionsPath = join(sessionDir, "sessions");
-		const sessionDirs = readdirSync(sessionsPath);
-		const cwdSessionDir = join(sessionsPath, sessionDirs[0]);
-		const sessionFiles = readdirSync(cwdSessionDir).filter((f) => f.endsWith(".jsonl"));
-		const sessionContent = readFileSync(join(cwdSessionDir, sessionFiles[0]), "utf8");
+		const sessionsPath = path.join(sessionDir, "sessions");
+		const sessionDirs = fs.readdirSync(sessionsPath);
+		const cwdSessionDir = path.join(sessionsPath, sessionDirs[0]);
+		const sessionFiles = fs.readdirSync(cwdSessionDir).filter((f) => f.endsWith(".jsonl"));
+		const sessionContent = await Bun.file(path.join(cwdSessionDir, sessionFiles[0])).text();
 		const entries = sessionContent
 			.trim()
 			.split("\n")
@@ -137,11 +134,11 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		await Bun.sleep(200);
 
 		// Verify bash message in session
-		const sessionsPath = join(sessionDir, "sessions");
-		const sessionDirs = readdirSync(sessionsPath);
-		const cwdSessionDir = join(sessionsPath, sessionDirs[0]);
-		const sessionFiles = readdirSync(cwdSessionDir).filter((f) => f.endsWith(".jsonl"));
-		const sessionContent = readFileSync(join(cwdSessionDir, sessionFiles[0]), "utf8");
+		const sessionsPath = path.join(sessionDir, "sessions");
+		const sessionDirs = fs.readdirSync(sessionsPath);
+		const cwdSessionDir = path.join(sessionsPath, sessionDirs[0]);
+		const sessionFiles = fs.readdirSync(cwdSessionDir).filter((f) => f.endsWith(".jsonl"));
+		const sessionContent = await Bun.file(path.join(cwdSessionDir, sessionFiles[0])).text();
 		const entries = sessionContent
 			.trim()
 			.split("\n")
@@ -263,7 +260,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		const result = await client.exportHtml();
 		expect(result.path).toBeDefined();
 		expect(result.path.endsWith(".html")).toBe(true);
-		expect(existsSync(result.path)).toBe(true);
+		expect(fs.existsSync(result.path)).toBe(true);
 	}, 90000);
 
 	test("should get last assistant text", async () => {

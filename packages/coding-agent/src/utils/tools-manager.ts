@@ -1,7 +1,7 @@
-import { chmod, mkdir, rename, rm } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import { arch, platform } from "node:os";
-import { join } from "node:path";
-import { createTempDir, logger } from "@oh-my-pi/pi-utils";
+import * as path from "node:path";
+import { logger, TempDir } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
 import { APP_NAME, getBinDir } from "../config";
 
@@ -148,7 +148,7 @@ export async function getToolPath(tool: ToolName): Promise<string | null> {
 	if (!config) return null;
 
 	// Check our tools directory first
-	const localPath = join(TOOLS_DIR, config.binaryName + (platform() === "win32" ? ".exe" : ""));
+	const localPath = path.join(TOOLS_DIR, config.binaryName + (platform() === "win32" ? ".exe" : ""));
 	if (await Bun.file(localPath).exists()) {
 		return localPath;
 	}
@@ -200,64 +200,64 @@ async function downloadTool(tool: ToolName): Promise<string> {
 	}
 
 	// Create tools directory
-	await mkdir(TOOLS_DIR, { recursive: true });
+	await fs.mkdir(TOOLS_DIR, { recursive: true });
 
 	const downloadUrl = `https://github.com/${config.repo}/releases/download/${config.tagPrefix}${version}/${assetName}`;
 	const binaryExt = plat === "win32" ? ".exe" : "";
-	const binaryPath = join(TOOLS_DIR, config.binaryName + binaryExt);
+	const binaryPath = path.join(TOOLS_DIR, config.binaryName + binaryExt);
 
 	// Handle direct binary downloads (no archive extraction needed)
 	if (config.isDirectBinary) {
 		await downloadFile(downloadUrl, binaryPath);
 		if (plat !== "win32") {
-			await chmod(binaryPath, 0o755);
+			await fs.chmod(binaryPath, 0o755);
 		}
 		return binaryPath;
 	}
 
 	// Download archive
-	const archivePath = join(TOOLS_DIR, assetName);
+	const archivePath = path.join(TOOLS_DIR, assetName);
 	await downloadFile(downloadUrl, archivePath);
 
 	// Extract
-	const tmp = await createTempDir("@omp-tools-extract-");
+	const tmp = await TempDir.create("@omp-tools-extract-");
 
 	try {
 		if (assetName.endsWith(".tar.gz")) {
 			const archive = new Bun.Archive(await Bun.file(archivePath).arrayBuffer());
 			const files = await archive.files();
-			for (const [path, file] of files) {
-				await Bun.write(join(tmp.path, path), file);
+			for (const [filePath, file] of files) {
+				await Bun.write(path.join(tmp.path(), filePath), file);
 			}
 		} else if (assetName.endsWith(".zip")) {
-			await mkdir(tmp.path, { recursive: true });
-			await $`unzip -o ${archivePath} -d ${tmp.path}`.quiet().nothrow();
+			await fs.mkdir(tmp.path(), { recursive: true });
+			await $`unzip -o ${archivePath} -d ${tmp.path()}`.quiet().nothrow();
 		}
 
 		// Find the binary in extracted files
 		// ast-grep releases the binary directly in the zip, not in a subdirectory
 		let extractedBinary: string;
 		if (tool === "sg") {
-			extractedBinary = join(tmp.path, config.binaryName + binaryExt);
+			extractedBinary = path.join(tmp.path(), config.binaryName + binaryExt);
 		} else {
-			const extractedDir = join(tmp.path, assetName.replace(/\.(tar\.gz|zip)$/, ""));
-			extractedBinary = join(extractedDir, config.binaryName + binaryExt);
+			const extractedDir = path.join(tmp.path(), assetName.replace(/\.(tar\.gz|zip)$/, ""));
+			extractedBinary = path.join(extractedDir, config.binaryName + binaryExt);
 		}
 
 		if (await Bun.file(extractedBinary).exists()) {
-			await rename(extractedBinary, binaryPath);
+			await fs.rename(extractedBinary, binaryPath);
 		} else {
 			throw new Error(`Binary not found in archive: ${extractedBinary}`);
 		}
 
 		// Make executable (Unix only)
 		if (plat !== "win32") {
-			await chmod(binaryPath, 0o755);
+			await fs.chmod(binaryPath, 0o755);
 		}
 	} finally {
 		// Cleanup
 		await tmp.remove();
-		await rm(archivePath, { force: true });
+		await fs.rm(archivePath, { force: true });
 	}
 
 	return binaryPath;

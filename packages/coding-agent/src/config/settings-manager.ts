@@ -1,7 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
-import { rename } from "node:fs/promises";
-import { join } from "node:path";
-import { logger } from "@oh-my-pi/pi-utils";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 import { type Settings as SettingsItem, settingsCapability } from "../capability/settings";
 import { getAgentDbPath, getAgentDir } from "../config";
@@ -203,6 +202,7 @@ export interface Settings {
 	interruptMode?: "immediate" | "wait";
 	theme?: string;
 	symbolPreset?: SymbolPreset; // default: uses theme's preset or "unicode"
+	colorBlindMode?: boolean; // default: false (use blue instead of green for diff additions)
 	compaction?: CompactionSettings;
 	branchSummary?: BranchSummarySettings;
 	retry?: RetrySettings;
@@ -503,7 +503,7 @@ export class SettingsManager {
 	 * @returns Configured SettingsManager with merged global and user settings
 	 */
 	static async create(cwd: string = process.cwd(), agentDir: string = getAgentDir()): Promise<SettingsManager> {
-		const configPath = join(agentDir, "config.yml");
+		const configPath = path.join(agentDir, "config.yml");
 		const storage = await AgentStorage.open(getAgentDbPath(agentDir));
 
 		// Migrate from legacy storage if config.yml doesn't exist
@@ -521,7 +521,7 @@ export class SettingsManager {
 		}
 
 		// Load persisted settings from config.yml
-		const storedSettings = SettingsManager.loadFromYaml(configPath);
+		const storedSettings = await SettingsManager.loadFromYaml(configPath);
 		globalSettings = deepMergeSettings(globalSettings, storedSettings);
 
 		// Load project settings before construction (constructor is sync)
@@ -559,18 +559,19 @@ export class SettingsManager {
 	 * @param configPath - Path to config.yml, or null for in-memory mode
 	 * @returns Parsed and migrated settings, or empty object if file doesn't exist
 	 */
-	private static loadFromYaml(configPath: string | null): Settings {
-		if (!configPath || !existsSync(configPath)) {
+	private static async loadFromYaml(configPath: string | null): Promise<Settings> {
+		if (!configPath) {
 			return {};
 		}
 		try {
-			const content = readFileSync(configPath, "utf-8");
+			const content = await Bun.file(configPath).text();
 			const parsed = YAML.parse(content);
 			if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
 				return {};
 			}
 			return SettingsManager.migrateSettings(parsed as Record<string, unknown>);
 		} catch (error) {
+			if (isEnoent(error)) return {};
 			logger.warn("SettingsManager failed to load config.yml", { path: configPath, error: String(error) });
 			return {};
 		}
@@ -582,31 +583,34 @@ export class SettingsManager {
 	 * Only migrates if config.yml doesn't exist.
 	 */
 	private static async migrateToYaml(storage: AgentStorage, agentDir: string, configPath: string): Promise<void> {
-		// Skip if config.yml already exists
-		if (existsSync(configPath)) return;
+		try {
+			await Bun.file(configPath).text();
+			return;
+		} catch (err) {
+			if (!isEnoent(err)) throw err;
+		}
 
 		let settings: Settings = {};
 		let migrated = false;
 
 		// 1. Try to migrate from settings.json (oldest legacy format)
-		const settingsJsonPath = join(agentDir, "settings.json");
+		const settingsJsonPath = path.join(agentDir, "settings.json");
 		try {
-			const settingsFile = Bun.file(settingsJsonPath);
-			if (await settingsFile.exists()) {
-				const parsed = JSON.parse(await settingsFile.text());
-				if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-					settings = deepMergeSettings(settings, SettingsManager.migrateSettings(parsed));
-					migrated = true;
-					// Backup settings.json
-					try {
-						await rename(settingsJsonPath, `${settingsJsonPath}.bak`);
-					} catch (error) {
-						logger.warn("SettingsManager failed to backup settings.json", { error: String(error) });
-					}
+			const parsed = JSON.parse(await Bun.file(settingsJsonPath).text());
+			if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+				settings = deepMergeSettings(settings, SettingsManager.migrateSettings(parsed));
+				migrated = true;
+				// Backup settings.json
+				try {
+					await fs.rename(settingsJsonPath, `${settingsJsonPath}.bak`);
+				} catch (error) {
+					logger.warn("SettingsManager failed to backup settings.json", { error: String(error) });
 				}
 			}
 		} catch (error) {
-			logger.warn("SettingsManager failed to read settings.json", { error: String(error) });
+			if (!isEnoent(error)) {
+				logger.warn("SettingsManager failed to read settings.json", { error: String(error) });
+			}
 		}
 
 		// 2. Migrate from agent.db settings table
@@ -690,7 +694,7 @@ export class SettingsManager {
 			const configPath = this.configPath;
 			try {
 				await withFileLock(configPath, async () => {
-					const currentSettings = SettingsManager.loadFromYaml(configPath);
+					const currentSettings = await SettingsManager.loadFromYaml(configPath);
 					const mergedSettings = deepMergeSettings(currentSettings, this.globalSettings);
 					this.globalSettings = mergedSettings;
 					await Bun.write(configPath, YAML.stringify(this.globalSettings, null, 2));
@@ -785,6 +789,15 @@ export class SettingsManager {
 
 	async setSymbolPreset(preset: SymbolPreset): Promise<void> {
 		this.globalSettings.symbolPreset = preset;
+		await this.save();
+	}
+
+	getColorBlindMode(): boolean {
+		return this.settings.colorBlindMode ?? false;
+	}
+
+	async setColorBlindMode(enabled: boolean): Promise<void> {
+		this.globalSettings.colorBlindMode = enabled;
 		await this.save();
 	}
 

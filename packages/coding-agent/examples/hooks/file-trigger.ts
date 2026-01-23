@@ -15,9 +15,9 @@ export default function (pi: HookAPI) {
 	pi.on("session_start", async (_event, ctx) => {
 		const triggerFile = "/tmp/agent-trigger.txt";
 
-		fs.watch(triggerFile, () => {
+		fs.watch(triggerFile, async () => {
 			try {
-				const content = fs.readFileSync(triggerFile, "utf-8").trim();
+				const content = (await Bun.file(triggerFile).text()).trim();
 				if (content) {
 					pi.sendMessage(
 						{
@@ -27,7 +27,7 @@ export default function (pi: HookAPI) {
 						},
 						true, // triggerTurn - get LLM to respond
 					);
-					fs.writeFileSync(triggerFile, ""); // Clear after reading
+					await Bun.write(triggerFile, ""); // Clear after reading
 				}
 			} catch {
 				// File might not exist yet

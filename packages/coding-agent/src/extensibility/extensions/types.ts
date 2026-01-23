@@ -112,13 +112,13 @@ export interface ExtensionUIContext {
 	readonly theme: Theme;
 
 	/** Get all available themes with names and paths. */
-	getAllThemes(): { name: string; path: string | undefined }[];
+	getAllThemes(): Promise<{ name: string; path: string | undefined }[]>;
 
 	/** Load a theme by name without switching to it. */
-	getTheme(name: string): Theme | undefined;
+	getTheme(name: string): Promise<Theme | undefined>;
 
 	/** Set the current theme by name or Theme object. */
-	setTheme(theme: string | Theme): { success: boolean; error?: string };
+	setTheme(theme: string | Theme): Promise<{ success: boolean; error?: string }>;
 }
 
 // ============================================================================

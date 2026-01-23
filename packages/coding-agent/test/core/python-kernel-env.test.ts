@@ -3,7 +3,7 @@ import { PythonKernel } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
 import { PYTHON_PRELUDE } from "@oh-my-pi/pi-coding-agent/ipy/prelude";
 import * as shell from "@oh-my-pi/pi-coding-agent/utils/shell";
 import * as shellSnapshot from "@oh-my-pi/pi-coding-agent/utils/shell-snapshot";
-import { createTempDirSync } from "@oh-my-pi/pi-utils";
+import { TempDir } from "@oh-my-pi/pi-utils";
 
 class FakeWebSocket {
 	static OPEN = 1;
@@ -99,8 +99,8 @@ describe("PythonKernel.start (local gateway)", () => {
 			.spyOn(PythonKernel.prototype, "execute")
 			.mockResolvedValue({ status: "ok", cancelled: false, timedOut: false, stdinRequested: false });
 
-		using tempDir = createTempDirSync("@python-kernel-env-");
-		const kernel = await PythonKernel.start({ cwd: tempDir.path, env: { CUSTOM_VAR: "ok" } });
+		using tempDir = TempDir.createSync("@python-kernel-env-");
+		const kernel = await PythonKernel.start({ cwd: tempDir.path(), env: { CUSTOM_VAR: "ok" } });
 
 		const createCall = fetchSpy.mock.calls.find(([input, init]: [string | URL, RequestInit?]) => {
 			const url = typeof input === "string" ? input : input.toString();
@@ -119,7 +119,7 @@ describe("PythonKernel.start (local gateway)", () => {
 		expect(spawnEnv?.CUSTOM_VAR).toBe("ok");
 		expect(spawnEnv?.OPENAI_API_KEY).toBeUndefined();
 		expect(spawnEnv?.UNSAFE_TOKEN).toBeUndefined();
-		expect(spawnEnv?.PYTHONPATH).toBe(tempDir.path);
+		expect(spawnEnv?.PYTHONPATH).toBe(tempDir.path());
 
 		expect(executeSpy).toHaveBeenCalledWith(
 			PYTHON_PRELUDE,

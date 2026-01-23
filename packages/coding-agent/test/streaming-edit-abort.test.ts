@@ -3,9 +3,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdirSync, rmSync } from "node:fs";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import { Agent, type AgentTool } from "@oh-my-pi/pi-agent-core";
 import {
 	type AssistantMessage,
@@ -110,7 +110,7 @@ async function createSession(tempDir: string, streamFn: Agent["streamFn"], tool:
 
 	const sessionManager = SessionManager.inMemory(tempDir);
 	const settingsManager = SettingsManager.inMemory({ edit: { streamingAbort: true } });
-	const authStorage = await AuthStorage.create(join(tempDir, "auth.json"));
+	const authStorage = await AuthStorage.create(path.join(tempDir, "auth.json"));
 	authStorage.setRuntimeApiKey("anthropic", "test-key");
 	const modelRegistry = new ModelRegistry(authStorage, tempDir);
 
@@ -214,18 +214,18 @@ describe("streaming edit abort", () => {
 	const seeds = [7, 21, 42, 84, 128];
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `pi-streaming-edit-${nanoid()}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `pi-streaming-edit-${nanoid()}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(async () => {
 		if (tempDir) {
-			rmSync(tempDir, { recursive: true, force: true });
+			fs.rmSync(tempDir, { recursive: true, force: true });
 		}
 	});
 
 	it("does not abort for successful patches across random streams", async () => {
-		await Bun.write(join(tempDir, "sample.txt"), "alpha\nbeta\ngamma\n");
+		await Bun.write(path.join(tempDir, "sample.txt"), "alpha\nbeta\ngamma\n");
 		const diff = "@@\n-beta\n+beta2\n";
 
 		for (const seed of seeds) {
@@ -244,7 +244,7 @@ describe("streaming edit abort", () => {
 	});
 
 	it("aborts for failing patches across random streams", async () => {
-		await Bun.write(join(tempDir, "sample.txt"), "alpha\nbeta\ngamma\n");
+		await Bun.write(path.join(tempDir, "sample.txt"), "alpha\nbeta\ngamma\n");
 		const diff = "@@\n-omega\n+beta2\n";
 
 		for (const seed of seeds) {

@@ -337,7 +337,7 @@ async function handleFeatures(
 
 	// Handle modifications
 	if (flags.enable || flags.disable || flags.set) {
-		let currentFeatures = new Set(manager.getEnabledFeatures(pluginName) ?? []);
+		let currentFeatures = new Set((await manager.getEnabledFeatures(pluginName)) ?? []);
 
 		if (flags.set) {
 			// --set replaces all features
@@ -371,7 +371,7 @@ async function handleFeatures(
 	}
 
 	// Display current state
-	const updatedFeatures = manager.getEnabledFeatures(pluginName);
+	const updatedFeatures = await manager.getEnabledFeatures(pluginName);
 
 	if (flags.json) {
 		console.log(
@@ -442,7 +442,7 @@ async function handleConfig(
 
 	switch (subcommand) {
 		case "list": {
-			const settings = manager.getPluginSettings(pluginName);
+			const settings = await manager.getPluginSettings(pluginName);
 			const schema = plugin.manifest.settings || {};
 
 			if (flags.json) {
@@ -477,7 +477,7 @@ async function handleConfig(
 				process.exit(1);
 			}
 
-			const settings = manager.getPluginSettings(pluginName);
+			const settings = await manager.getPluginSettings(pluginName);
 			const schema = plugin.manifest.settings?.[key];
 			const value = settings[key] ?? schema?.default;
 
@@ -512,7 +512,7 @@ async function handleConfig(
 				}
 			}
 
-			manager.setPluginSetting(pluginName, key, value);
+			await manager.setPluginSetting(pluginName, key, value);
 			console.log(chalk.green(`${theme.status.success} Set ${key}`));
 			break;
 		}
@@ -523,7 +523,7 @@ async function handleConfig(
 				process.exit(1);
 			}
 
-			manager.deletePluginSetting(pluginName, key);
+			await manager.deletePluginSetting(pluginName, key);
 			console.log(chalk.green(`${theme.status.success} Deleted ${key}`));
 			break;
 		}
@@ -540,7 +540,7 @@ async function handleConfigValidate(manager: PluginManager, flags: { json?: bool
 	const results: Array<{ plugin: string; key: string; error: string }> = [];
 
 	for (const plugin of plugins) {
-		const settings = manager.getPluginSettings(plugin.name);
+		const settings = await manager.getPluginSettings(plugin.name);
 		const schema = plugin.manifest.settings || {};
 
 		for (const [key, s] of Object.entries(schema)) {

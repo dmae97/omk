@@ -1,6 +1,6 @@
-import { mkdir, rm } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import { $ } from "bun";
 
 export interface MermaidImage {
@@ -31,12 +31,12 @@ export async function renderMermaidToPng(
 		return null;
 	}
 
-	const tmpDir = join(tmpdir(), `mermaid-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-	const inputPath = join(tmpDir, "input.mmd");
-	const outputPath = join(tmpDir, "output.png");
+	const tmpDir = path.join(tmpdir(), `mermaid-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+	const inputPath = path.join(tmpDir, "input.mmd");
+	const outputPath = path.join(tmpDir, "output.png");
 
 	try {
-		await mkdir(tmpDir, { recursive: true });
+		await fs.mkdir(tmpDir, { recursive: true });
 		await Bun.write(inputPath, source);
 
 		const args: string[] = ["-i", inputPath, "-o", outputPath, "-q"];
@@ -64,7 +64,7 @@ export async function renderMermaidToPng(
 			return null;
 		}
 
-		const buffer = Buffer.from(await outputFile.arrayBuffer());
+		const buffer = Buffer.from(await outputFile.bytes());
 		const base64 = buffer.toString("base64");
 
 		const dims = parsePngDimensions(buffer);
@@ -80,7 +80,7 @@ export async function renderMermaidToPng(
 	} catch {
 		return null;
 	} finally {
-		await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+		await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
 	}
 }
 

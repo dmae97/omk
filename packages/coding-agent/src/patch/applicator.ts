@@ -5,8 +5,8 @@
  * for robust handling of whitespace and formatting differences.
  */
 
-import { mkdirSync, unlinkSync } from "node:fs";
-import { dirname } from "node:path";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { resolveToCwd } from "../tools/path-utils";
 import { DEFAULT_FUZZY_THRESHOLD, findContextLine, findMatch, seekSequence } from "./fuzzy";
 import {
@@ -51,10 +51,10 @@ export const defaultFileSystem: FileSystem = {
 		await Bun.write(path, content);
 	},
 	async delete(path: string): Promise<void> {
-		unlinkSync(path);
+		await fs.unlink(path);
 	},
 	async mkdir(path: string): Promise<void> {
-		mkdirSync(path, { recursive: true });
+		await fs.mkdir(path, { recursive: true });
 	},
 };
 
@@ -1113,7 +1113,7 @@ async function applyNormalizedPatch(
 		const content = normalizedContent.endsWith("\n") ? normalizedContent : `${normalizedContent}\n`;
 
 		if (!dryRun) {
-			const parentDir = dirname(absolutePath);
+			const parentDir = path.dirname(absolutePath);
 			if (parentDir && parentDir !== ".") {
 				await fs.mkdir(parentDir);
 			}
@@ -1182,7 +1182,7 @@ async function applyNormalizedPatch(
 
 	if (!dryRun) {
 		if (isMove) {
-			const parentDir = dirname(destPath);
+			const parentDir = path.dirname(destPath);
 			if (parentDir && parentDir !== ".") {
 				await fs.mkdir(parentDir);
 			}

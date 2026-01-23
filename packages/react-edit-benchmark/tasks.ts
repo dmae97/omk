@@ -8,7 +8,7 @@
 
 /// <reference types="./bun-imports.d.ts" />
 
-import { readdirSync, statSync } from "node:fs";
+import * as fs from "node:fs/promises";
 import { basename, join } from "node:path";
 import {
 	extractTaskFiles,
@@ -49,19 +49,19 @@ function titleize(id: string): string {
 		.join(" ");
 }
 
-function listFiles(rootDir: string, subPath = ""): string[] {
-	const entries = readdirSync(join(rootDir, subPath), { withFileTypes: true });
+async function listFiles(rootDir: string, subPath = ""): Promise<string[]> {
+	const entries = await fs.readdir(join(rootDir, subPath), { withFileTypes: true });
 	const files: string[] = [];
 
 	for (const entry of entries) {
 		const relativePath = join(subPath, entry.name);
 		const absolutePath = join(rootDir, relativePath);
 		if (entry.isDirectory()) {
-			files.push(...listFiles(rootDir, relativePath));
+			files.push(...(await listFiles(rootDir, relativePath)));
 		} else if (entry.isFile()) {
 			files.push(relativePath);
 		} else if (entry.isSymbolicLink()) {
-			const stats = statSync(absolutePath, { throwIfNoEntry: false });
+			const stats = await fs.stat(absolutePath).catch(() => null);
 			if (stats?.isFile()) {
 				files.push(relativePath);
 			}
@@ -72,7 +72,7 @@ function listFiles(rootDir: string, subPath = ""): string[] {
 }
 
 export async function loadTasksFromDir(fixturesDir: string): Promise<EditTask[]> {
-	const entries = readdirSync(fixturesDir, { withFileTypes: true });
+	const entries = await fs.readdir(fixturesDir, { withFileTypes: true });
 	const tasks: EditTask[] = [];
 
 	for (const entry of entries) {
@@ -88,16 +88,18 @@ export async function loadTasksFromDir(fixturesDir: string): Promise<EditTask[]>
 			throw new Error(`Missing prompt.md for ${entry.name}`);
 		}
 
-		if (!statSync(inputDir, { throwIfNoEntry: false })?.isDirectory()) {
+		const inputDirStat = await fs.stat(inputDir).catch(() => null);
+		if (!inputDirStat?.isDirectory()) {
 			throw new Error(`Missing input directory for ${entry.name}`);
 		}
 
-		if (!statSync(expectedDir, { throwIfNoEntry: false })?.isDirectory()) {
+		const expectedDirStat = await fs.stat(expectedDir).catch(() => null);
+		if (!expectedDirStat?.isDirectory()) {
 			throw new Error(`Missing expected directory for ${entry.name}`);
 		}
 
 		const prompt = (await promptFile.text()).trim();
-		const files = listFiles(inputDir);
+		const files = await listFiles(inputDir);
 		const metadata = await loadMetadata(metadataPath);
 
 		tasks.push({
@@ -143,7 +145,7 @@ export async function validateFixtures(fixturesPath?: string): Promise<FixtureVa
 }
 
 export async function validateFixturesFromDir(fixturesPath: string): Promise<FixtureValidationIssue[]> {
-	const entries = readdirSync(fixturesPath, { withFileTypes: true });
+	const entries = await fs.readdir(fixturesPath, { withFileTypes: true });
 	const issues: FixtureValidationIssue[] = [];
 
 	for (const entry of entries) {
@@ -162,17 +164,17 @@ export async function validateFixturesFromDir(fixturesPath: string): Promise<Fix
 			issues.push({ taskId, message: "prompt.md is empty" });
 		}
 
-		if (!statSync(inputDir, { throwIfNoEntry: false })?.isDirectory()) {
+		const inputDirStat = await fs.stat(inputDir).catch(() => null);
+		if (!inputDirStat?.isDirectory()) {
 			issues.push({ taskId, message: "input directory is missing" });
 		}
-		if (!statSync(expectedDir, { throwIfNoEntry: false })?.isDirectory()) {
+		const expectedDirStat = await fs.stat(expectedDir).catch(() => null);
+		if (!expectedDirStat?.isDirectory()) {
 			issues.push({ taskId, message: "expected directory is missing" });
 		}
 
-		const inputFiles = statSync(inputDir, { throwIfNoEntry: false })?.isDirectory() ? listFiles(inputDir) : [];
-		const expectedFiles = statSync(expectedDir, { throwIfNoEntry: false })?.isDirectory()
-			? listFiles(expectedDir)
-			: [];
+		const inputFiles = inputDirStat?.isDirectory() ? await listFiles(inputDir) : [];
+		const expectedFiles = expectedDirStat?.isDirectory() ? await listFiles(expectedDir) : [];
 
 		if (inputFiles.length === 0) {
 			issues.push({ taskId, message: "input directory is empty" });

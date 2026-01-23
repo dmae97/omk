@@ -2,10 +2,12 @@
  * One-time migrations that run on startup.
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { logger } from "@oh-my-pi/pi-utils";
+import * as fs from "node:fs";
+import * as path from "node:path";
+
+import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
+
 import { getAgentDbPath, getAgentDir, getBinDir } from "./config";
 import { AgentStorage } from "./session/agent-storage";
 import type { AuthCredential } from "./session/auth-storage";
@@ -17,16 +19,16 @@ import type { AuthCredential } from "./session/auth-storage";
  */
 export async function migrateAuthToAgentDb(): Promise<string[]> {
 	const agentDir = getAgentDir();
-	const oauthPath = join(agentDir, "oauth.json");
-	const settingsPath = join(agentDir, "settings.json");
+	const oauthPath = path.join(agentDir, "oauth.json");
+	const settingsPath = path.join(agentDir, "settings.json");
 	const storage = await AgentStorage.open(getAgentDbPath(agentDir));
 
 	const migrated: Record<string, AuthCredential[]> = {};
 	const providers: string[] = [];
 
-	if (existsSync(oauthPath)) {
+	try {
+		const oauth = await Bun.file(oauthPath).json();
 		try {
-			const oauth = JSON.parse(readFileSync(oauthPath, "utf-8"));
 			for (const [provider, cred] of Object.entries(oauth)) {
 				if (storage.listAuthCredentials(provider).length > 0) {
 					continue;
@@ -34,16 +36,19 @@ export async function migrateAuthToAgentDb(): Promise<string[]> {
 				migrated[provider] = [{ type: "oauth", ...(cred as object) } as AuthCredential];
 				providers.push(provider);
 			}
-			renameSync(oauthPath, `${oauthPath}.migrated`);
+			await fs.promises.rename(oauthPath, `${oauthPath}.migrated`);
 		} catch (error) {
 			logger.warn("Failed to migrate oauth.json", { path: oauthPath, error: String(error) });
 		}
+	} catch (err) {
+		if (!isEnoent(err)) {
+			logger.warn("Failed to read oauth.json", { path: oauthPath, error: String(err) });
+		}
 	}
 
-	if (existsSync(settingsPath)) {
+	try {
+		const settings = await Bun.file(settingsPath).json();
 		try {
-			const content = readFileSync(settingsPath, "utf-8");
-			const settings = JSON.parse(content);
 			if (settings.apiKeys && typeof settings.apiKeys === "object") {
 				for (const [provider, key] of Object.entries(settings.apiKeys)) {
 					if (typeof key !== "string") continue;
@@ -53,10 +58,14 @@ export async function migrateAuthToAgentDb(): Promise<string[]> {
 					providers.push(provider);
 				}
 				delete settings.apiKeys;
-				writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+				await Bun.write(settingsPath, JSON.stringify(settings, null, 2));
 			}
 		} catch (error) {
 			logger.warn("Failed to migrate settings.json apiKeys", { path: settingsPath, error: String(error) });
+		}
+	} catch (err) {
+		if (!isEnoent(err)) {
+			logger.warn("Failed to read settings.json", { path: settingsPath, error: String(err) });
 		}
 	}
 
@@ -76,15 +85,14 @@ export async function migrateAuthToAgentDb(): Promise<string[]> {
  *
  * See: https://github.com/badlogic/pi-mono/issues/320
  */
-export function migrateSessionsFromAgentRoot(): void {
+export async function migrateSessionsFromAgentRoot(): Promise<void> {
 	const agentDir = getAgentDir();
 
 	// Find all .jsonl files directly in agentDir (not in subdirectories)
 	let files: string[];
 	try {
-		files = readdirSync(agentDir)
-			.filter((f) => f.endsWith(".jsonl"))
-			.map((f) => join(agentDir, f));
+		const entries = await fs.promises.readdir(agentDir);
+		files = entries.filter((f) => f.endsWith(".jsonl")).map((f) => path.join(agentDir, f));
 	} catch (error) {
 		logger.warn("Failed to read agent directory for session migration", { path: agentDir, error: String(error) });
 		return;
@@ -95,7 +103,13 @@ export function migrateSessionsFromAgentRoot(): void {
 	for (const file of files) {
 		try {
 			// Read first line to get session header
-			const content = readFileSync(file, "utf8");
+			let content: string;
+			try {
+				content = await Bun.file(file).text();
+			} catch (err) {
+				if (isEnoent(err)) continue;
+				throw err;
+			}
 			const firstLine = content.split("\n")[0];
 			if (!firstLine?.trim()) continue;
 
@@ -106,18 +120,18 @@ export function migrateSessionsFromAgentRoot(): void {
 
 			// Compute the correct session directory (same encoding as session-manager.ts)
 			const safePath = `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
-			const correctDir = join(agentDir, "sessions", safePath);
+			const correctDir = path.join(agentDir, "sessions", safePath);
 
 			// Create directory if needed
-			mkdirSync(correctDir, { recursive: true });
+			await fs.promises.mkdir(correctDir, { recursive: true });
 
 			// Move the file
 			const fileName = file.split("/").pop() || file.split("\\").pop();
-			const newPath = join(correctDir, fileName!);
+			const newPath = path.join(correctDir, fileName!);
 
-			if (existsSync(newPath)) continue; // Skip if target exists
+			if (fs.existsSync(newPath)) continue; // Skip if target exists
 
-			renameSync(file, newPath);
+			await fs.promises.rename(file, newPath);
 		} catch (error) {
 			logger.warn("Failed to migrate session file", { path: file, error: String(error) });
 		}
@@ -127,38 +141,38 @@ export function migrateSessionsFromAgentRoot(): void {
 /**
  * Move fd/rg binaries from tools/ to bin/ if they exist.
  */
-function migrateToolsToBin(): void {
+async function migrateToolsToBin(): Promise<void> {
 	const agentDir = getAgentDir();
-	const toolsDir = join(agentDir, "tools");
+	const toolsDir = path.join(agentDir, "tools");
 	const binDir = getBinDir();
 
-	if (!existsSync(toolsDir)) return;
+	if (!fs.existsSync(toolsDir)) return;
 
 	const binaries = ["fd", "rg", "fd.exe", "rg.exe"];
 	let movedAny = false;
 
 	for (const bin of binaries) {
-		const oldPath = join(toolsDir, bin);
-		const newPath = join(binDir, bin);
+		const oldPath = path.join(toolsDir, bin);
+		const newPath = path.join(binDir, bin);
+		if (!fs.existsSync(oldPath)) continue;
 
-		if (existsSync(oldPath)) {
-			if (!existsSync(binDir)) {
-				mkdirSync(binDir, { recursive: true });
+		if (!fs.existsSync(binDir)) {
+			await fs.promises.mkdir(binDir, { recursive: true });
+		}
+
+		if (!fs.existsSync(newPath)) {
+			try {
+				await fs.promises.rename(oldPath, newPath);
+				movedAny = true;
+			} catch (error) {
+				logger.warn("Failed to migrate binary", { from: oldPath, to: newPath, error: String(error) });
 			}
-			if (!existsSync(newPath)) {
-				try {
-					renameSync(oldPath, newPath);
-					movedAny = true;
-				} catch (error) {
-					logger.warn("Failed to migrate binary", { from: oldPath, to: newPath, error: String(error) });
-				}
-			} else {
-				// Target exists, just delete the old one
-				try {
-					rmSync(oldPath, { force: true });
-				} catch {
-					// Ignore
-				}
+		} else {
+			// Target exists, just delete the old one
+			try {
+				await fs.promises.rm(oldPath, { force: true });
+			} catch {
+				// Ignore
 			}
 		}
 	}
@@ -180,8 +194,8 @@ export async function runMigrations(_cwd: string): Promise<{
 }> {
 	// Then: run data migrations
 	const migratedAuthProviders = await migrateAuthToAgentDb();
-	migrateSessionsFromAgentRoot();
-	migrateToolsToBin();
+	await migrateSessionsFromAgentRoot();
+	await migrateToolsToBin();
 
 	return { migratedAuthProviders, deprecationWarnings: [] };
 }

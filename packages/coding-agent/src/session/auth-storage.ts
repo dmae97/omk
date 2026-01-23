@@ -4,7 +4,7 @@
  */
 
 import { Buffer } from "node:buffer";
-import { dirname, join } from "node:path";
+import * as path from "node:path";
 import {
 	antigravityUsageProvider,
 	claudeUsageProvider,
@@ -282,7 +282,7 @@ export class AuthStorage {
 		if (authPath.endsWith(".db")) {
 			return authPath;
 		}
-		return getAgentDbPath(dirname(authPath));
+		return getAgentDbPath(path.dirname(authPath));
 	}
 
 	/**
@@ -313,10 +313,10 @@ export class AuthStorage {
 	 * Migrates legacy auth.json/settings.json on first load.
 	 */
 	async reload(): Promise<void> {
-		const agentDir = dirname(this.dbPath);
+		const agentDir = path.dirname(this.dbPath);
 		await migrateJsonStorage({
 			agentDir,
-			settingsPath: join(agentDir, "settings.json"),
+			settingsPath: path.join(agentDir, "settings.json"),
 			authPaths: [this.authPath, ...this.fallbackPaths],
 		});
 

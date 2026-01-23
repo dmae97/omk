@@ -1,4 +1,4 @@
-import { relative, resolve } from "node:path";
+import * as path from "node:path";
 import type { Api, Model } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
 import type { ControlledGit } from "../../commit/git";
@@ -67,7 +67,7 @@ export async function runChangelogFlow({
 			continue;
 		}
 		const existingEntries = formatExistingEntries(unreleased.entries);
-		const isPackageChangelog = resolve(boundary.changelogPath) !== resolve(cwd, "CHANGELOG.md");
+		const isPackageChangelog = path.resolve(boundary.changelogPath) !== path.resolve(cwd, "CHANGELOG.md");
 		const generated = await generateChangelogEntries({
 			model,
 			apiKey,
@@ -82,7 +82,7 @@ export async function runChangelogFlow({
 		const updatedContent = applyChangelogEntries(changelogContent, unreleased, generated.entries);
 		if (!dryRun) {
 			await Bun.write(boundary.changelogPath, updatedContent);
-			await git.stageFiles([relative(cwd, boundary.changelogPath)]);
+			await git.stageFiles([path.relative(cwd, boundary.changelogPath)]);
 		}
 		updated.push(boundary.changelogPath);
 	}
@@ -127,7 +127,7 @@ export async function applyChangelogProposals({
 		const updatedContent = applyChangelogEntries(changelogContent, unreleased, normalized, normalizedDeletions);
 		if (!dryRun) {
 			await Bun.write(proposal.path, updatedContent);
-			await git.stageFiles([relative(cwd, proposal.path)]);
+			await git.stageFiles([path.relative(cwd, proposal.path)]);
 		}
 		updated.push(proposal.path);
 	}

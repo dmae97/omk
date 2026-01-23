@@ -1,4 +1,4 @@
-import { relative } from "node:path";
+import * as path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { applyChangelogProposals } from "../../commit/changelog";
 import { detectChangelogBoundaries } from "../../commit/changelog/detect";
@@ -165,10 +165,10 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 				writeStdout(`  ├─ ${message}`);
 			},
 		});
-		updatedChangelogFiles = updated.map((path) => relative(cwd, path));
+		updatedChangelogFiles = updated.map((filePath) => path.relative(cwd, filePath));
 		if (updated.length > 0) {
-			for (const path of updated) {
-				writeStdout(`  └─ ${path}`);
+			for (const filePath of updated) {
+				writeStdout(`  └─ ${filePath}`);
 			}
 		} else {
 			writeStdout("  └─ (no changes)");

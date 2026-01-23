@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
-import { chmodSync, existsSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import { getAgentDbPath } from "../config";
 import type { Settings } from "../config/settings-manager";
@@ -484,20 +484,20 @@ CREATE TABLE settings (
 	 * @param dbPath - Path to the database file
 	 */
 	private ensureDir(dbPath: string): void {
-		mkdirSync(dirname(dbPath), { recursive: true });
+		fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 	}
 
 	private hardenPermissions(dbPath: string): void {
-		const dir = dirname(dbPath);
+		const dir = path.dirname(dbPath);
 		try {
-			chmodSync(dir, 0o700);
+			fs.chmodSync(dir, 0o700);
 		} catch (error) {
 			logger.warn("AgentStorage failed to chmod agent dir", { path: dir, error: String(error) });
 		}
 
-		if (!existsSync(dbPath)) return;
+		if (!fs.existsSync(dbPath)) return;
 		try {
-			chmodSync(dbPath, 0o600);
+			fs.chmodSync(dbPath, 0o600);
 		} catch (error) {
 			logger.warn("AgentStorage failed to chmod db file", { path: dbPath, error: String(error) });
 		}

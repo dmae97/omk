@@ -1,10 +1,10 @@
-import { readdir } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import * as path from "node:path";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import type { MessageStats, SessionEntry, SessionMessageEntry } from "./types";
 
-const SESSIONS_DIR = join(homedir(), ".omp", "agent", "sessions");
+const SESSIONS_DIR = path.join(homedir(), ".omp", "agent", "sessions");
 
 /**
  * Extract folder name from session filename.
@@ -12,7 +12,7 @@ const SESSIONS_DIR = join(homedir(), ".omp", "agent", "sessions");
  * The folder part uses -- as path separator.
  */
 function extractFolderFromPath(sessionPath: string): string {
-	const dir = basename(sessionPath.replace(/\/[^/]+\.jsonl$/, ""));
+	const dir = path.basename(sessionPath.replace(/\/[^/]+\.jsonl$/, ""));
 	// Convert --work--pi-- to /work/pi
 	return dir.replace(/^--/, "/").replace(/--/g, "/");
 }
@@ -105,8 +105,8 @@ export async function parseSessionFile(
  */
 export async function listSessionFolders(): Promise<string[]> {
 	try {
-		const entries = await readdir(SESSIONS_DIR, { withFileTypes: true });
-		return entries.filter((e) => e.isDirectory()).map((e) => join(SESSIONS_DIR, e.name));
+		const entries = await fs.readdir(SESSIONS_DIR, { withFileTypes: true });
+		return entries.filter((e) => e.isDirectory()).map((e) => path.join(SESSIONS_DIR, e.name));
 	} catch {
 		return [];
 	}
@@ -117,8 +117,8 @@ export async function listSessionFolders(): Promise<string[]> {
  */
 export async function listSessionFiles(folderPath: string): Promise<string[]> {
 	try {
-		const entries = await readdir(folderPath, { withFileTypes: true });
-		return entries.filter((e) => e.isFile() && e.name.endsWith(".jsonl")).map((e) => join(folderPath, e.name));
+		const entries = await fs.readdir(folderPath, { withFileTypes: true });
+		return entries.filter((e) => e.isFile() && e.name.endsWith(".jsonl")).map((e) => path.join(folderPath, e.name));
 	} catch {
 		return [];
 	}

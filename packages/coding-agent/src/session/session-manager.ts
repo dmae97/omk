@@ -1,7 +1,7 @@
-import { basename, join, resolve } from "node:path";
+import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Message, TextContent, Usage } from "@oh-my-pi/pi-ai";
-import { logger } from "@oh-my-pi/pi-utils";
+import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { nanoid } from "nanoid";
 import { getAgentDir as getDefaultAgentDir } from "../config";
 import { resizeImage } from "../utils/image-resize";
@@ -432,16 +432,24 @@ export function buildSessionContext(
  */
 function getDefaultSessionDir(cwd: string, storage: SessionStorage): string {
 	const safePath = `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
-	const sessionDir = join(getDefaultAgentDir(), "sessions", safePath);
+	const sessionDir = path.join(getDefaultAgentDir(), "sessions", safePath);
 	storage.ensureDirSync(sessionDir);
 	return sessionDir;
 }
 
 /** Exported for testing */
-export function loadEntriesFromFile(filePath: string, storage: SessionStorage = new FileSessionStorage()): FileEntry[] {
-	if (!storage.existsSync(filePath)) return [];
+export async function loadEntriesFromFile(
+	filePath: string,
+	storage: SessionStorage = new FileSessionStorage(),
+): Promise<FileEntry[]> {
+	let content: string;
+	try {
+		content = await storage.readText(filePath);
+	} catch (err) {
+		if (isEnoent(err)) return [];
+		throw err;
+	}
 
-	const content = storage.readTextSync(filePath);
 	const entries: FileEntry[] = [];
 	const lines = content.trim().split("\n");
 
@@ -555,15 +563,13 @@ function extractFirstUserPrompt(lines: string[]): string | undefined {
  * Uses low-level file I/O to efficiently read only the first 4KB of each file
  * to extract the JSON header and first user message without loading entire session logs into memory.
  */
-function getSortedSessions(sessionDir: string, storage: SessionStorage): RecentSessionInfo[] {
+async function getSortedSessions(sessionDir: string, storage: SessionStorage): Promise<RecentSessionInfo[]> {
 	try {
-		const buf = Buffer.alloc(4096);
 		const files: string[] = storage.listFilesSync(sessionDir, "*.jsonl");
-		return files
-			.map((path: string) => {
+		const results = await Promise.all(
+			files.map(async (path: string) => {
 				try {
-					const length = storage.readTextPrefixSync(path, buf);
-					const content = buf.toString("utf-8", 0, length);
+					const content = await storage.readTextPrefix(path, 4096);
 					const lines = content.split("\n");
 					const firstLine = lines[0];
 					if (!firstLine || !firstLine.trim()) return null;
@@ -575,20 +581,20 @@ function getSortedSessions(sessionDir: string, storage: SessionStorage): RecentS
 				} catch {
 					return null;
 				}
-			})
-			.filter((item): item is RecentSessionInfo => item !== null)
-			.sort((a, b) => b.mtime - a.mtime);
+			}),
+		);
+		return results.filter((item): item is RecentSessionInfo => item !== null).sort((a, b) => b.mtime - a.mtime);
 	} catch {
 		return [];
 	}
 }
 
 /** Exported for testing */
-export function findMostRecentSession(
+export async function findMostRecentSession(
 	sessionDir: string,
 	storage: SessionStorage = new FileSessionStorage(),
-): string | null {
-	const sessions = getSortedSessions(sessionDir, storage);
+): Promise<string | null> {
+	const sessions = await getSortedSessions(sessionDir, storage);
 	return sessions[0]?.path || null;
 }
 
@@ -843,12 +849,13 @@ class NdjsonFileWriter {
 }
 
 /** Get recent sessions for display in welcome screen */
-export function getRecentSessions(
+export async function getRecentSessions(
 	sessionDir: string,
 	limit = 3,
 	storage: SessionStorage = new FileSessionStorage(),
-): RecentSessionInfo[] {
-	return getSortedSessions(sessionDir, storage).slice(0, limit);
+): Promise<RecentSessionInfo[]> {
+	const sessions = await getSortedSessions(sessionDir, storage);
+	return sessions.slice(0, limit);
 }
 
 /**
@@ -886,12 +893,12 @@ function extractTextFromContent(content: Message["content"]): string {
 		.join(" ");
 }
 
-function collectSessionsFromFiles(files: string[], storage: SessionStorage): SessionInfo[] {
+async function collectSessionsFromFiles(files: string[], storage: SessionStorage): Promise<SessionInfo[]> {
 	const sessions: SessionInfo[] = [];
 
 	for (const file of files) {
 		try {
-			const content = storage.readTextSync(file);
+			const content = await storage.readText(file);
 			const lines = content.trim().split("\n");
 			if (lines.length === 0) continue;
 
@@ -1003,9 +1010,9 @@ export class SessionManager {
 		await this._closePersistWriter();
 		this.persistError = undefined;
 		this.persistErrorReported = false;
-		this.sessionFile = resolve(sessionFile);
-		if (this.storage.existsSync(this.sessionFile)) {
-			this.fileEntries = loadEntriesFromFile(this.sessionFile!, this.storage);
+		this.sessionFile = path.resolve(sessionFile);
+		this.fileEntries = await loadEntriesFromFile(this.sessionFile, this.storage);
+		if (this.fileEntries.length > 0) {
 			const header = this.fileEntries.find((e) => e.type === "session") as SessionHeader | undefined;
 			this.sessionId = header?.id ?? nanoid();
 			this.sessionTitle = header?.title;
@@ -1053,7 +1060,7 @@ export class SessionManager {
 
 		if (this.persist) {
 			const fileTimestamp = timestamp.replace(/[:.]/g, "-");
-			this.sessionFile = join(this.getSessionDir(), `${fileTimestamp}_${this.sessionId}.jsonl`);
+			this.sessionFile = path.join(this.getSessionDir(), `${fileTimestamp}_${this.sessionId}.jsonl`);
 		}
 		return this.sessionFile;
 	}
@@ -1154,8 +1161,8 @@ export class SessionManager {
 
 	private async _writeEntriesAtomically(entries: FileEntry[]): Promise<void> {
 		if (!this.sessionFile) return;
-		const dir = resolve(this.sessionFile, "..");
-		const tempPath = join(dir, `.${basename(this.sessionFile)}.${nanoid(6)}.tmp`);
+		const dir = path.resolve(this.sessionFile, "..");
+		const tempPath = path.join(dir, `.${path.basename(this.sessionFile)}.${nanoid(6)}.tmp`);
 		const writer = new NdjsonFileWriter(this.storage, tempPath, { flags: "w" });
 		try {
 			for (const entry of entries) {
@@ -1709,18 +1716,18 @@ export class SessionManager {
 	 * Returns the new session file path, or undefined if not persisting.
 	 */
 	createBranchedSession(leafId: string): string | undefined {
-		const path = this.getBranch(leafId);
-		if (path.length === 0) {
+		const branchPath = this.getBranch(leafId);
+		if (branchPath.length === 0) {
 			throw new Error(`Entry ${leafId} not found`);
 		}
 
 		// Filter out LabelEntry from path - we'll recreate them from the resolved map
-		const pathWithoutLabels = path.filter((e) => e.type !== "label");
+		const pathWithoutLabels = branchPath.filter((e) => e.type !== "label");
 
 		const newSessionId = nanoid();
 		const timestamp = new Date().toISOString();
 		const fileTimestamp = timestamp.replace(/[:.]/g, "-");
-		const newSessionFile = join(this.getSessionDir(), `${fileTimestamp}_${newSessionId}.jsonl`);
+		const newSessionFile = path.join(this.getSessionDir(), `${fileTimestamp}_${newSessionId}.jsonl`);
 
 		const header: SessionHeader = {
 			type: "session",
@@ -1816,7 +1823,7 @@ export class SessionManager {
 	): Promise<SessionManager> {
 		const dir = sessionDir ?? getDefaultSessionDir(cwd, storage);
 		const manager = new SessionManager(cwd, dir, true, storage);
-		const forkEntries = structuredClone(loadEntriesFromFile(sourcePath, storage)) as FileEntry[];
+		const forkEntries = structuredClone(await loadEntriesFromFile(sourcePath, storage)) as FileEntry[];
 		migrateToCurrentVersion(forkEntries);
 		const sourceHeader = forkEntries.find((e) => e.type === "session") as SessionHeader | undefined;
 		const historyEntries = forkEntries.filter((entry) => entry.type !== "session") as SessionEntry[];
@@ -1836,18 +1843,18 @@ export class SessionManager {
 	 * @param sessionDir Optional session directory for /new or /branch. If omitted, derives from file's parent.
 	 */
 	static async open(
-		path: string,
+		filePath: string,
 		sessionDir?: string,
 		storage: SessionStorage = new FileSessionStorage(),
 	): Promise<SessionManager> {
 		// Extract cwd from session header if possible, otherwise use process.cwd()
-		const entries = loadEntriesFromFile(path, storage);
+		const entries = await loadEntriesFromFile(filePath, storage);
 		const header = entries.find((e) => e.type === "session") as SessionHeader | undefined;
 		const cwd = header?.cwd ?? process.cwd();
 		// If no sessionDir provided, derive from file's parent directory
-		const dir = sessionDir ?? resolve(path, "..");
+		const dir = sessionDir ?? path.resolve(filePath, "..");
 		const manager = new SessionManager(cwd, dir, true, storage);
-		await manager._initSessionFile(path);
+		await manager._initSessionFile(filePath);
 		return manager;
 	}
 
@@ -1862,7 +1869,7 @@ export class SessionManager {
 		storage: SessionStorage = new FileSessionStorage(),
 	): Promise<SessionManager> {
 		const dir = sessionDir ?? getDefaultSessionDir(cwd, storage);
-		const mostRecent = findMostRecentSession(dir, storage);
+		const mostRecent = await findMostRecentSession(dir, storage);
 		const manager = new SessionManager(cwd, dir, true, storage);
 		if (mostRecent) {
 			await manager._initSessionFile(mostRecent);
@@ -1884,11 +1891,15 @@ export class SessionManager {
 	 * @param cwd Working directory (used to compute default session directory)
 	 * @param sessionDir Optional session directory. If omitted, uses default (~/.omp/agent/sessions/<encoded-cwd>/).
 	 */
-	static list(cwd: string, sessionDir?: string, storage: SessionStorage = new FileSessionStorage()): SessionInfo[] {
+	static async list(
+		cwd: string,
+		sessionDir?: string,
+		storage: SessionStorage = new FileSessionStorage(),
+	): Promise<SessionInfo[]> {
 		const dir = sessionDir ?? getDefaultSessionDir(cwd, storage);
 		try {
 			const files = storage.listFilesSync(dir, "*.jsonl");
-			return collectSessionsFromFiles(files, storage);
+			return await collectSessionsFromFiles(files, storage);
 		} catch {
 			return [];
 		}
@@ -1897,13 +1908,13 @@ export class SessionManager {
 	/**
 	 * List all sessions across all project directories.
 	 */
-	static listAll(storage: SessionStorage = new FileSessionStorage()): SessionInfo[] {
-		const sessionsRoot = join(getDefaultAgentDir(), "sessions");
+	static async listAll(storage: SessionStorage = new FileSessionStorage()): Promise<SessionInfo[]> {
+		const sessionsRoot = path.join(getDefaultAgentDir(), "sessions");
 		try {
 			const files = Array.from(new Bun.Glob("**/*.jsonl").scanSync(sessionsRoot)).map((name) =>
-				join(sessionsRoot, name),
+				path.join(sessionsRoot, name),
 			);
-			return collectSessionsFromFiles(files, storage);
+			return await collectSessionsFromFiles(files, storage);
 		} catch {
 			return [];
 		}

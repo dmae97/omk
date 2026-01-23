@@ -5,7 +5,7 @@
  * Priority: 80 (tool-specific, below builtin but above shared standards)
  */
 
-import { join, sep } from "node:path";
+import * as path from "node:path";
 import { registerProvider } from "../capability";
 import { type ContextFile, contextFileCapability } from "../capability/context-file";
 import { type ExtensionModule, extensionModuleCapability } from "../capability/extension-module";
@@ -38,14 +38,14 @@ const CONFIG_DIR = ".claude";
  * Get user-level .claude path.
  */
 function getUserClaude(ctx: LoadContext): string {
-	return join(ctx.home, CONFIG_DIR);
+	return path.join(ctx.home, CONFIG_DIR);
 }
 
 /**
  * Get project-level .claude path (cwd only).
  */
 function getProjectClaude(ctx: LoadContext): string {
-	return join(ctx.cwd, CONFIG_DIR);
+	return path.join(ctx.cwd, CONFIG_DIR);
 }
 
 // =============================================================================
@@ -57,12 +57,12 @@ async function loadMCPServers(ctx: LoadContext): Promise<LoadResult<MCPServer>> 
 	const warnings: string[] = [];
 
 	const userBase = getUserClaude(ctx);
-	const userClaudeJson = join(ctx.home, ".claude.json");
-	const userMcpJson = join(userBase, "mcp.json");
+	const userClaudeJson = path.join(ctx.home, ".claude.json");
+	const userMcpJson = path.join(userBase, "mcp.json");
 
-	const projectBase = join(ctx.cwd, CONFIG_DIR);
-	const projectMcpJson = join(projectBase, ".mcp.json");
-	const projectMcpJsonAlt = join(projectBase, "mcp.json");
+	const projectBase = path.join(ctx.cwd, CONFIG_DIR);
+	const projectMcpJson = path.join(projectBase, ".mcp.json");
+	const projectMcpJsonAlt = path.join(projectBase, "mcp.json");
 
 	const userPaths = [
 		{ path: userClaudeJson, level: "user" as const },
@@ -126,7 +126,7 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 	const warnings: string[] = [];
 
 	const userBase = getUserClaude(ctx);
-	const userClaudeMd = join(userBase, "CLAUDE.md");
+	const userClaudeMd = path.join(userBase, "CLAUDE.md");
 
 	const userContent = await readFile(userClaudeMd);
 	if (userContent !== null) {
@@ -139,10 +139,10 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 	}
 
 	const projectBase = getProjectClaude(ctx);
-	const projectClaudeMd = join(projectBase, "CLAUDE.md");
+	const projectClaudeMd = path.join(projectBase, "CLAUDE.md");
 	const projectContent = await readFile(projectClaudeMd);
 	if (projectContent !== null) {
-		const depth = calculateDepth(ctx.cwd, projectBase, sep);
+		const depth = calculateDepth(ctx.cwd, projectBase, path.sep);
 		items.push({
 			path: projectClaudeMd,
 			content: projectContent,
@@ -160,8 +160,8 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 // =============================================================================
 
 async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
-	const userSkillsDir = join(getUserClaude(ctx), "skills");
-	const projectSkillsDir = join(getProjectClaude(ctx), "skills");
+	const userSkillsDir = path.join(getUserClaude(ctx), "skills");
+	const projectSkillsDir = path.join(getProjectClaude(ctx), "skills");
 
 	const results = await Promise.all([
 		loadSkillsFromDir(ctx, { dir: userSkillsDir, providerId: PROVIDER_ID, level: "user" }),
@@ -183,8 +183,8 @@ async function loadExtensionModules(ctx: LoadContext): Promise<LoadResult<Extens
 	const warnings: string[] = [];
 
 	const userBase = getUserClaude(ctx);
-	const userExtensionsDir = join(userBase, "extensions");
-	const projectExtensionsDir = join(ctx.cwd, CONFIG_DIR, "extensions");
+	const userExtensionsDir = path.join(userBase, "extensions");
+	const projectExtensionsDir = path.join(ctx.cwd, CONFIG_DIR, "extensions");
 
 	const dirsToDiscover: { dir: string; level: "user" | "project" }[] = [
 		{ dir: userExtensionsDir, level: "user" },
@@ -221,7 +221,7 @@ async function loadSlashCommands(ctx: LoadContext): Promise<LoadResult<SlashComm
 	const warnings: string[] = [];
 
 	const userBase = getUserClaude(ctx);
-	const userCommandsDir = join(userBase, "commands");
+	const userCommandsDir = path.join(userBase, "commands");
 
 	const userResult = await loadFilesFromDir<SlashCommand>(ctx, userCommandsDir, PROVIDER_ID, "user", {
 		extensions: ["md"],
@@ -240,7 +240,7 @@ async function loadSlashCommands(ctx: LoadContext): Promise<LoadResult<SlashComm
 	items.push(...userResult.items);
 	if (userResult.warnings) warnings.push(...userResult.warnings);
 
-	const projectCommandsDir = join(ctx.cwd, CONFIG_DIR, "commands");
+	const projectCommandsDir = path.join(ctx.cwd, CONFIG_DIR, "commands");
 
 	const projectResult = await loadFilesFromDir<SlashCommand>(ctx, projectCommandsDir, PROVIDER_ID, "project", {
 		extensions: ["md"],
@@ -271,18 +271,18 @@ async function loadHooks(ctx: LoadContext): Promise<LoadResult<Hook>> {
 	const warnings: string[] = [];
 
 	const userBase = getUserClaude(ctx);
-	const userHooksDir = join(userBase, "hooks");
+	const userHooksDir = path.join(userBase, "hooks");
 	const projectBase = getProjectClaude(ctx);
-	const projectHooksDir = join(projectBase, "hooks");
+	const projectHooksDir = path.join(projectBase, "hooks");
 
 	const hookTypes = ["pre", "post"] as const;
 
 	const loadTasks: { dir: string; hookType: "pre" | "post"; level: "user" | "project" }[] = [];
 	for (const hookType of hookTypes) {
-		loadTasks.push({ dir: join(userHooksDir, hookType), hookType, level: "user" });
+		loadTasks.push({ dir: path.join(userHooksDir, hookType), hookType, level: "user" });
 	}
 	for (const hookType of hookTypes) {
-		loadTasks.push({ dir: join(projectHooksDir, hookType), hookType, level: "project" });
+		loadTasks.push({ dir: path.join(projectHooksDir, hookType), hookType, level: "project" });
 	}
 
 	const results = await Promise.all(
@@ -320,7 +320,7 @@ async function loadTools(ctx: LoadContext): Promise<LoadResult<CustomTool>> {
 	const warnings: string[] = [];
 
 	const userBase = getUserClaude(ctx);
-	const userToolsDir = join(userBase, "tools");
+	const userToolsDir = path.join(userBase, "tools");
 
 	const userResult = await loadFilesFromDir<CustomTool>(ctx, userToolsDir, PROVIDER_ID, "user", {
 		transform: (name, _content, path, source) => {
@@ -339,7 +339,7 @@ async function loadTools(ctx: LoadContext): Promise<LoadResult<CustomTool>> {
 	if (userResult.warnings) warnings.push(...userResult.warnings);
 
 	const projectBase = getProjectClaude(ctx);
-	const projectToolsDir = join(projectBase, "tools");
+	const projectToolsDir = path.join(projectBase, "tools");
 
 	const projectResult = await loadFilesFromDir<CustomTool>(ctx, projectToolsDir, PROVIDER_ID, "project", {
 		transform: (name, _content, path, source) => {
@@ -369,7 +369,7 @@ async function loadSystemPrompts(ctx: LoadContext): Promise<LoadResult<SystemPro
 	const warnings: string[] = [];
 
 	const userBase = getUserClaude(ctx);
-	const userSystemMd = join(userBase, "SYSTEM.md");
+	const userSystemMd = path.join(userBase, "SYSTEM.md");
 
 	const content = await readFile(userSystemMd);
 	if (content !== null) {
@@ -393,7 +393,7 @@ async function loadSettings(ctx: LoadContext): Promise<LoadResult<Settings>> {
 	const warnings: string[] = [];
 
 	const userBase = getUserClaude(ctx);
-	const userSettingsJson = join(userBase, "settings.json");
+	const userSettingsJson = path.join(userBase, "settings.json");
 
 	const userContent = await readFile(userSettingsJson);
 	if (userContent) {
@@ -411,7 +411,7 @@ async function loadSettings(ctx: LoadContext): Promise<LoadResult<Settings>> {
 	}
 
 	const projectBase = getProjectClaude(ctx);
-	const projectSettingsJson = join(projectBase, "settings.json");
+	const projectSettingsJson = path.join(projectBase, "settings.json");
 	const projectContent = await readFile(projectSettingsJson);
 	if (projectContent) {
 		const data = parseJSON<Record<string, unknown>>(projectContent);

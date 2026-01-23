@@ -39,14 +39,14 @@ export class ExtensionUiController {
 			get theme() {
 				return theme;
 			},
-			getAllThemes: () => getAvailableThemesWithPaths().map((t) => ({ name: t.name, path: t.path })),
+			getAllThemes: async () => (await getAvailableThemesWithPaths()).map((t) => ({ name: t.name, path: t.path })),
 			getTheme: (name) => getThemeByName(name),
-			setTheme: (themeArg) => {
+			setTheme: async (themeArg) => {
 				if (typeof themeArg === "string") {
-					return setTheme(themeArg, true);
+					return await setTheme(themeArg, true);
 				}
 				// Theme object passed directly - not supported in current implementation
-				return { success: false, error: "Direct theme object not supported" };
+				return Promise.resolve({ success: false, error: "Direct theme object not supported" });
 			},
 			setFooter: () => {},
 			setHeader: () => {},
@@ -398,9 +398,9 @@ export class ExtensionUiController {
 			get theme() {
 				return theme;
 			},
-			getAllThemes: () => [],
-			getTheme: () => undefined,
-			setTheme: () => ({ success: false, error: "Background mode" }),
+			getAllThemes: () => Promise.resolve([]),
+			getTheme: () => Promise.resolve(undefined),
+			setTheme: () => Promise.resolve({ success: false, error: "Background mode" }),
 			setFooter: () => {},
 			setHeader: () => {},
 			setEditorComponent: () => {},

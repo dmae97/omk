@@ -1,8 +1,10 @@
-import { existsSync, type FSWatcher, readFileSync, watch } from "node:fs";
+import * as fs from "node:fs";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { type Component, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
+import { isEnoent } from "@oh-my-pi/pi-utils";
 import { dirname, join } from "path";
 import { theme } from "../../modes/theme/theme";
+
 import type { AgentSession } from "../../session/agent-session";
 import { shortenPath } from "../../tools/render-utils";
 
@@ -18,20 +20,19 @@ function sanitizeStatusText(text: string): string {
 		.trim();
 }
 
-/**
- * Find the git root directory by walking up from cwd.
- * Returns the path to .git/HEAD if found, null otherwise.
- */
-function findGitHeadPath(): string | null {
+/** Find the git root by walking up from cwd. Returns path and content of .git/HEAD if found. */
+async function findGitHeadPath(): Promise<{ path: string; content: string } | null> {
 	let dir = process.cwd();
 	while (true) {
 		const gitHeadPath = join(dir, ".git", "HEAD");
-		if (existsSync(gitHeadPath)) {
-			return gitHeadPath;
+		try {
+			const content = await Bun.file(gitHeadPath).text();
+			return { path: gitHeadPath, content };
+		} catch (err) {
+			if (!isEnoent(err)) throw err;
 		}
 		const parent = dirname(dir);
 		if (parent === dir) {
-			// Reached filesystem root
 			return null;
 		}
 		dir = parent;
@@ -44,7 +45,7 @@ function findGitHeadPath(): string | null {
 export class FooterComponent implements Component {
 	private session: AgentSession;
 	private cachedBranch: string | null | undefined = undefined; // undefined = not checked yet, null = not in git repo, string = branch name
-	private gitWatcher: FSWatcher | null = null;
+	private gitWatcher: fs.FSWatcher | null = null;
 	private onBranchChange: (() => void) | null = null;
 	private autoCompactEnabled: boolean = true;
 	private extensionStatuses: Map<string, string> = new Map();
@@ -88,21 +89,22 @@ export class FooterComponent implements Component {
 			this.gitWatcher = null;
 		}
 
-		const gitHeadPath = findGitHeadPath();
-		if (!gitHeadPath) {
-			return;
-		}
+		findGitHeadPath().then((result) => {
+			if (!result) {
+				return;
+			}
 
-		try {
-			this.gitWatcher = watch(gitHeadPath, () => {
-				this.cachedBranch = undefined; // Invalidate cache
-				if (this.onBranchChange) {
-					this.onBranchChange();
-				}
-			});
-		} catch {
-			// Silently fail if we can't watch
-		}
+			try {
+				this.gitWatcher = fs.watch(result.path, () => {
+					this.cachedBranch = undefined; // Invalidate cache
+					if (this.onBranchChange) {
+						this.onBranchChange();
+					}
+				});
+			} catch {
+				// Silently fail if we can't watch
+			}
+		});
 	}
 
 	/**
@@ -130,27 +132,24 @@ export class FooterComponent implements Component {
 			return this.cachedBranch;
 		}
 
-		try {
-			const gitHeadPath = findGitHeadPath();
-			if (!gitHeadPath) {
+		// Note: fire-and-forget async call - will return undefined on first call
+		// This is acceptable since it's a cached value that will update on next render
+		findGitHeadPath().then((result) => {
+			if (!result) {
 				this.cachedBranch = null;
-				return null;
+				return;
 			}
-			const content = readFileSync(gitHeadPath, "utf8").trim();
+			const content = result.content.trim();
 
 			if (content.startsWith("ref: refs/heads/")) {
-				// Normal branch: extract branch name
 				this.cachedBranch = content.slice(16);
 			} else {
-				// Detached HEAD state
 				this.cachedBranch = "detached";
 			}
-		} catch {
-			// Not in a git repo or error reading file
-			this.cachedBranch = null;
-		}
+		});
 
-		return this.cachedBranch;
+		// Return undefined while loading (will show on next render once loaded)
+		return null;
 	}
 
 	render(width: number): string[] {

@@ -1,9 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
-### Fixed
-- Fixed orphaned tool result handling by tracking skipped tool call IDs in message conversion to prevent dangling references
 ## [8.0.0] - 2026-01-23
 
 ### Fixed
@@ -119,7 +116,7 @@
 - Replaced custom sleep implementations with Bun.sleep and abortableSleep
 - Simplified SSE stream parsing using readLines utility
 - Updated test framework from vitest to bun:test
-- Replaced temp directory creation with createTempDirSync utility
+- Replaced temp directory creation with TempDir API
 - Changed credential storage from auth.json to ~/.omp/agent/agent.db
 - Changed CLI command examples from npx to bunx
 - Refactored OAuth flows to use common callback server base class

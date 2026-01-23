@@ -46,6 +46,9 @@
 - Added automatic idle kernel session cleanup timer (5-minute timeout, 30-second interval)
 - Added types/assets/index.d.ts for global TypeScript module declarations supporting `.md`, `.py`, and `.wasm?raw` imports
 - Added bunfig.toml loader configuration for importing markdown, Python, and WASM files as text modules
+- Added color manipulation utilities (hexToHsv, hsvToHex, shiftHue) to pi-utils for accessible theme adjustments
+- Added color-blind mode setting for improved accessibility
+- Added filesystem error type guards (isEnoent, isEacces, isPerm, isEnotempty, isFsError, hasFsCode) to pi-utils for safe error handling
 
 ### Changed
 - Changed changelog diff truncation limit to be configurable via settings
@@ -102,6 +105,11 @@
 - Updated TypeScript and Bun configuration for monorepo-wide build consistency and reduced boilerplate
 - Removed WASM base64 encoding build script; imports now use Bun loader with `wasm?raw` query parameter
 - Unified TypeScript checking pipeline with tsgo-based configuration instead of per-package tsconfig.publish.json boilerplate
+- Migrated file system operations from synchronous to asynchronous APIs in skills loading, agent discovery, and file processing for improved performance
+- Refactored scanDirectoryForSkills to use async/await with concurrent directory scanning via Promise.all
+- Migrated file system operations from synchronous to asynchronous APIs across plugins, settings, extensions, and config modules
+- Updated import organization in model-registry.ts and other modules for consistency
+- Changed FilesystemError handling to use new pi-utils type guards for safer error checking
 
 ### Fixed
 - Fixed database busy errors during concurrent access by adding retry logic with exponential backoff when opening storage

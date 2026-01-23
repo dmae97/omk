@@ -1,73 +1,77 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
-import { join, sep } from "node:path";
+import * as path from "node:path";
 
-export interface AsyncTempDir {
-	path: string;
-	remove(): Promise<void>;
-	toString(): string;
-	[Symbol.asyncDispose](): Promise<void>;
-}
+export class TempDir {
+	#path: string;
+	private constructor(path: string) {
+		this.#path = path;
+	}
 
-export interface SyncTempDir {
-	path: string;
-	remove(): void;
-	toString(): string;
-	[Symbol.dispose](): void;
+	static createSync(prefix?: string): TempDir {
+		return new TempDir(fs.mkdtempSync(normalizePrefix(prefix)));
+	}
+
+	static async create(prefix?: string): Promise<TempDir> {
+		return new TempDir(await fs.promises.mkdtemp(normalizePrefix(prefix)));
+	}
+
+	#removePromise: Promise<void> | null = null;
+
+	path(): string {
+		return this.#path;
+	}
+
+	absolute(): string {
+		return path.resolve(this.#path);
+	}
+
+	remove(): Promise<void> {
+		if (this.#removePromise) {
+			return this.#removePromise;
+		}
+		const removePromise = fs.promises.rm(this.#path, { recursive: true, force: true });
+		this.#removePromise = removePromise;
+		return removePromise;
+	}
+
+	removeSync(): void {
+		fs.rmSync(this.#path, { recursive: true, force: true });
+		this.#removePromise = Promise.resolve();
+	}
+
+	toString(): string {
+		return this.#path;
+	}
+
+	join(...paths: string[]): string {
+		return path.join(this.#path, ...paths);
+	}
+
+	async [Symbol.asyncDispose](): Promise<void> {
+		try {
+			await this.remove();
+		} catch {
+			// Ignore cleanup errors
+		}
+	}
+
+	[Symbol.dispose](): void {
+		try {
+			this.removeSync();
+		} catch {
+			// Ignore cleanup errors
+		}
+	}
 }
 
 const kTempDir = tmpdir();
 
 function normalizePrefix(prefix?: string): string {
 	if (!prefix) {
-		return `${kTempDir}${sep}pi-temp-`;
+		return `${kTempDir}${path.sep}pi-temp-`;
 	} else if (prefix.startsWith("@")) {
-		return join(kTempDir, prefix.slice(1));
+		return path.join(kTempDir, prefix.slice(1));
 	}
 	return prefix;
-}
-
-export async function createTempDir(prefix?: string): Promise<AsyncTempDir> {
-	const path = await mkdtemp(normalizePrefix(prefix));
-
-	let promise: Promise<void> | null = null;
-	const remove = () => {
-		if (promise) {
-			return promise;
-		}
-		promise = rm(path, { recursive: true, force: true }).catch(() => {});
-		return promise;
-	};
-
-	return {
-		path: path!,
-		remove,
-		toString: () => path,
-		[Symbol.asyncDispose]: remove,
-	};
-}
-
-export function createTempDirSync(prefix?: string): SyncTempDir {
-	const path = mkdtempSync(normalizePrefix(prefix));
-
-	let done = false;
-	const remove = () => {
-		if (done) {
-			return;
-		}
-		done = true;
-		try {
-			rmSync(path, { recursive: true, force: true });
-		} catch {
-			// Ignore cleanup errors
-		}
-	};
-
-	return {
-		path,
-		toString: () => path,
-		remove,
-		[Symbol.dispose]: remove,
-	};
 }

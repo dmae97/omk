@@ -1,5 +1,4 @@
-import { constants } from "node:fs";
-import { access } from "node:fs/promises";
+import * as fs from "node:fs";
 import { $ } from "bun";
 import { SettingsManager } from "../config/settings-manager";
 
@@ -17,7 +16,7 @@ let cachedShellConfig: ShellConfig | null = null;
  */
 async function isExecutable(path: string): Promise<boolean> {
 	try {
-		await access(path, constants.X_OK);
+		await fs.promises.access(path, fs.constants.X_OK);
 		return true;
 	} catch {
 		return false;

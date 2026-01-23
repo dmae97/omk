@@ -9,9 +9,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import { Agent, type ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { getModel, type Model } from "@oh-my-pi/pi-ai";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
@@ -32,16 +32,16 @@ describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigra
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `pi-thinking-compaction-test-${nanoid()}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `pi-thinking-compaction-test-${nanoid()}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(async () => {
 		if (session) {
 			session.dispose();
 		}
-		if (tempDir && existsSync(tempDir)) {
-			rmSync(tempDir, { recursive: true });
+		if (tempDir && fs.existsSync(tempDir)) {
+			fs.rmSync(tempDir, { recursive: true });
 		}
 	});
 
@@ -75,7 +75,7 @@ describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigra
 		const sessionManager = SessionManager.inMemory();
 		const settingsManager = await SettingsManager.create(tempDir, tempDir);
 
-		const authStorage = await AuthStorage.create(join(tempDir, "auth.json"));
+		const authStorage = await AuthStorage.create(path.join(tempDir, "auth.json"));
 		const modelRegistry = new ModelRegistry(authStorage);
 
 		session = new AgentSession({
@@ -142,16 +142,16 @@ describe.skipIf(!HAS_ANTHROPIC_AUTH)("Compaction with thinking models (Anthropic
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `pi-thinking-compaction-anthropic-test-${nanoid()}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `pi-thinking-compaction-anthropic-test-${nanoid()}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(async () => {
 		if (session) {
 			session.dispose();
 		}
-		if (tempDir && existsSync(tempDir)) {
-			rmSync(tempDir, { recursive: true });
+		if (tempDir && fs.existsSync(tempDir)) {
+			fs.rmSync(tempDir, { recursive: true });
 		}
 	});
 
@@ -177,7 +177,7 @@ describe.skipIf(!HAS_ANTHROPIC_AUTH)("Compaction with thinking models (Anthropic
 		const sessionManager = SessionManager.inMemory();
 		const settingsManager = await SettingsManager.create(tempDir, tempDir);
 
-		const authStorage = await AuthStorage.create(join(tempDir, "auth.json"));
+		const authStorage = await AuthStorage.create(path.join(tempDir, "auth.json"));
 		const modelRegistry = new ModelRegistry(authStorage);
 
 		session = new AgentSession({

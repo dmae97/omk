@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { nanoid } from "nanoid";
@@ -12,15 +12,15 @@ describe("ModelRegistry", () => {
 	let authStorage: AuthStorage;
 
 	beforeEach(async () => {
-		tempDir = join(tmpdir(), `pi-test-model-registry-${nanoid()}`);
-		mkdirSync(tempDir, { recursive: true });
-		modelsJsonPath = join(tempDir, "models.json");
-		authStorage = await AuthStorage.create(join(tempDir, "auth.json"));
+		tempDir = path.join(tmpdir(), `pi-test-model-registry-${nanoid()}`);
+		fs.mkdirSync(tempDir, { recursive: true });
+		modelsJsonPath = path.join(tempDir, "models.json");
+		authStorage = await AuthStorage.create(path.join(tempDir, "auth.json"));
 	});
 
 	afterEach(() => {
-		if (tempDir && existsSync(tempDir)) {
-			rmSync(tempDir, { recursive: true });
+		if (tempDir && fs.existsSync(tempDir)) {
+			fs.rmSync(tempDir, { recursive: true });
 		}
 	});
 
@@ -47,7 +47,7 @@ describe("ModelRegistry", () => {
 	}
 
 	function writeModelsJson(providers: Record<string, ReturnType<typeof providerConfig>>) {
-		writeFileSync(modelsJsonPath, JSON.stringify({ providers }));
+		fs.writeFileSync(modelsJsonPath, JSON.stringify({ providers }));
 	}
 
 	function getModelsForProvider(registry: ModelRegistry, provider: string) {
@@ -61,7 +61,7 @@ describe("ModelRegistry", () => {
 
 	/** Write raw providers config (for mixed override/replacement scenarios) */
 	function writeRawModelsJson(providers: Record<string, unknown>) {
-		writeFileSync(modelsJsonPath, JSON.stringify({ providers }));
+		fs.writeFileSync(modelsJsonPath, JSON.stringify({ providers }));
 	}
 
 	describe("baseUrl override (no custom models)", () => {

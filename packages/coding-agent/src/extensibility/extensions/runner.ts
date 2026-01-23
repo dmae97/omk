@@ -98,9 +98,9 @@ const noOpUIContext: ExtensionUIContext = {
 	get theme() {
 		return theme;
 	},
-	getAllThemes: () => [],
-	getTheme: () => undefined,
-	setTheme: (_theme: string | Theme) => ({ success: false, error: "UI not available" }),
+	getAllThemes: () => Promise.resolve([]),
+	getTheme: () => Promise.resolve(undefined),
+	setTheme: (_theme: string | Theme) => Promise.resolve({ success: false, error: "UI not available" }),
 };
 
 export class ExtensionRunner {

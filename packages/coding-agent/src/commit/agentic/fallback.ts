@@ -1,4 +1,4 @@
-import { basename } from "node:path";
+import * as path from "node:path";
 import type { CommitType, ConventionalAnalysis, NumstatEntry } from "../../commit/types";
 import type { CommitProposal } from "./state";
 
@@ -40,8 +40,8 @@ function inferTypeFromFiles(numstat: NumstatEntry[]): CommitType {
 	return "refactor";
 }
 
-function getExtension(path: string): string {
-	const name = basename(path);
+function getExtension(filePath: string): string {
+	const name = path.basename(filePath);
 	const dotIndex = name.lastIndexOf(".");
 	return dotIndex >= 0 ? name.slice(dotIndex).toLowerCase() : "";
 }
@@ -49,7 +49,7 @@ function getExtension(path: string): string {
 export function generateFallbackAnalysis(numstat: NumstatEntry[]): ConventionalAnalysis {
 	const type = inferTypeFromFiles(numstat);
 	const details = numstat.slice(0, 3).map((e) => ({
-		text: `Updated ${basename(e.path)}`,
+		text: `Updated ${path.basename(e.path)}`,
 		userVisible: false,
 	}));
 
@@ -76,7 +76,7 @@ export function generateFallbackSummary(type: CommitType, numstat: NumstatEntry[
 		revert: "reverted changes in",
 	};
 	const verb = verbMap[type] ?? "updated";
-	const file = basename(numstat[0]?.path ?? "files");
+	const file = path.basename(numstat[0]?.path ?? "files");
 
 	if (numstat.length === 1) {
 		return `${verb} ${file}`;

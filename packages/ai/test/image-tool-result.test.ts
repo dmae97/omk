@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import type { Api, Context, Model, Tool, ToolResultMessage } from "@oh-my-pi/pi-ai";
 import { complete, getModel } from "@oh-my-pi/pi-ai";
 import type { OptionsForApi } from "@oh-my-pi/pi-ai/types";
@@ -32,8 +32,8 @@ async function handleToolWithImageResult<TApi extends Api>(model: Model<TApi>, o
 	}
 
 	// Read the test image
-	const imagePath = join(import.meta.dir, "data", "red-circle.png");
-	const imageBuffer = readFileSync(imagePath);
+	const imagePath = path.join(import.meta.dir, "data", "red-circle.png");
+	const imageBuffer = await fs.readFile(imagePath);
 	const base64Image = imageBuffer.toString("base64");
 
 	// Define a tool that returns only an image (no text)
@@ -120,8 +120,8 @@ async function handleToolWithTextAndImageResult<TApi extends Api>(model: Model<T
 	}
 
 	// Read the test image
-	const imagePath = join(import.meta.dir, "data", "red-circle.png");
-	const imageBuffer = readFileSync(imagePath);
+	const imagePath = path.join(import.meta.dir, "data", "red-circle.png");
+	const imageBuffer = await fs.readFile(imagePath);
 	const base64Image = imageBuffer.toString("base64");
 
 	// Define a tool that returns both text and an image

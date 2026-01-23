@@ -1,5 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import * as path from "node:path";
 import {
 	DEFAULT_EDITOR_KEYBINDINGS,
 	type EditorAction,
@@ -162,7 +161,7 @@ export class KeybindingsManager {
 	 * Create from config file and set up editor keybindings.
 	 */
 	static async create(agentDir: string = getAgentDir()): Promise<KeybindingsManager> {
-		const configPath = join(agentDir, "keybindings.json");
+		const configPath = path.join(agentDir, "keybindings.json");
 		const config = await KeybindingsManager.loadFromFile(configPath);
 		const manager = new KeybindingsManager(config);
 
@@ -186,9 +185,8 @@ export class KeybindingsManager {
 	}
 
 	private static async loadFromFile(path: string): Promise<KeybindingsConfig> {
-		if (!existsSync(path)) return {};
 		try {
-			return JSON.parse(readFileSync(path, "utf-8"));
+			return await Bun.file(path).json();
 		} catch (error) {
 			logger.warn("Failed to parse keybindings config", { path, error: String(error) });
 			return {};

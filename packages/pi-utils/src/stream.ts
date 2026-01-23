@@ -87,7 +87,7 @@ export function createSanitizerStream(): TransformStream<string, string> {
  * Create a transform stream that decodes text.
  */
 export function createTextDecoderStream(): TransformStream<Uint8Array, string> {
-	return new TextDecoderStream("utf-8", { ignoreBOM: true });
+	return new TextDecoderStream("utf-8", { ignoreBOM: true }) as TransformStream<Uint8Array, string>;
 }
 
 /**

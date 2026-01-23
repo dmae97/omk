@@ -1,6 +1,6 @@
-import { existsSync } from "node:fs";
+import * as fs from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import { supportsXhigh } from "./models";
 import { type BedrockOptions, streamBedrock } from "./providers/amazon-bedrock";
 import { type AnthropicOptions, streamAnthropic } from "./providers/anthropic";
@@ -34,10 +34,10 @@ function hasVertexAdcCredentials(): boolean {
 	if (cachedVertexAdcCredentialsExists === null) {
 		const gacPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
 		if (gacPath) {
-			cachedVertexAdcCredentialsExists = existsSync(gacPath);
+			cachedVertexAdcCredentialsExists = fs.existsSync(gacPath);
 		} else {
-			cachedVertexAdcCredentialsExists = existsSync(
-				join(homedir(), ".config", "gcloud", "application_default_credentials.json"),
+			cachedVertexAdcCredentialsExists = fs.existsSync(
+				path.join(homedir(), ".config", "gcloud", "application_default_credentials.json"),
 			);
 		}
 	}

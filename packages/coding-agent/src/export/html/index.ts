@@ -1,6 +1,6 @@
-import { existsSync, writeFileSync } from "node:fs";
-import { basename } from "node:path";
+import * as path from "node:path";
 import type { AgentState } from "@oh-my-pi/pi-agent-core";
+import { isEnoent } from "@oh-my-pi/pi-utils";
 import { APP_NAME } from "../../config";
 import { getResolvedThemeColors, getThemeExportColors } from "../../modes/theme/theme";
 import { SessionManager } from "../../session/session-manager";
@@ -74,14 +74,14 @@ function deriveExportColors(baseColor: string): { pageBg: string; cardBg: string
 }
 
 /** Generate CSS custom properties for theme. */
-function generateThemeVars(themeName?: string): string {
-	const colors = getResolvedThemeColors(themeName);
+async function generateThemeVars(themeName?: string): Promise<string> {
+	const colors = await getResolvedThemeColors(themeName);
 	const lines: string[] = [];
 	for (const [key, value] of Object.entries(colors)) {
 		lines.push(`--${key}: ${value};`);
 	}
 
-	const themeExport = getThemeExportColors(themeName);
+	const themeExport = await getThemeExportColors(themeName);
 	const userMessageBg = colors.userMessageBg || "#343541";
 	const derived = deriveExportColors(userMessageBg);
 
@@ -101,8 +101,8 @@ interface SessionData {
 }
 
 /** Generate HTML from bundled template with runtime substitutions. */
-function generateHtml(sessionData: SessionData, themeName?: string): string {
-	const themeVars = generateThemeVars(themeName);
+async function generateHtml(sessionData: SessionData, themeName?: string): Promise<string> {
+	const themeVars = await generateThemeVars(themeName);
 	const sessionDataBase64 = Buffer.from(JSON.stringify(sessionData)).toString("base64");
 
 	return TEMPLATE.replace("<theme-vars/>", `<style>:root { ${themeVars} }</style>`).replace(
@@ -121,7 +121,6 @@ export async function exportSessionToHtml(
 
 	const sessionFile = sm.getSessionFile();
 	if (!sessionFile) throw new Error("Cannot export in-memory session to HTML");
-	if (!existsSync(sessionFile)) throw new Error("Nothing to export yet - start a conversation first");
 
 	const sessionData: SessionData = {
 		header: sm.getHeader(),
@@ -131,10 +130,10 @@ export async function exportSessionToHtml(
 		tools: state?.tools?.map((t) => ({ name: t.name, description: t.description })),
 	};
 
-	const html = generateHtml(sessionData, opts.themeName);
-	const outputPath = opts.outputPath || `${APP_NAME}-session-${basename(sessionFile, ".jsonl")}.html`;
+	const html = await generateHtml(sessionData, opts.themeName);
+	const outputPath = opts.outputPath || `${APP_NAME}-session-${path.basename(sessionFile, ".jsonl")}.html`;
 
-	writeFileSync(outputPath, html, "utf8");
+	await Bun.write(outputPath, html);
 	return outputPath;
 }
 
@@ -142,18 +141,23 @@ export async function exportSessionToHtml(
 export async function exportFromFile(inputPath: string, options?: ExportOptions | string): Promise<string> {
 	const opts: ExportOptions = typeof options === "string" ? { outputPath: options } : options || {};
 
-	if (!existsSync(inputPath)) throw new Error(`File not found: ${inputPath}`);
+	let sm: SessionManager;
+	try {
+		sm = await SessionManager.open(inputPath);
+	} catch (err) {
+		if (isEnoent(err)) throw new Error(`File not found: ${inputPath}`);
+		throw err;
+	}
 
-	const sm = await SessionManager.open(inputPath);
 	const sessionData: SessionData = {
 		header: sm.getHeader(),
 		entries: sm.getEntries(),
 		leafId: sm.getLeafId(),
 	};
 
-	const html = generateHtml(sessionData, opts.themeName);
-	const outputPath = opts.outputPath || `${APP_NAME}-session-${basename(inputPath, ".jsonl")}.html`;
+	const html = await generateHtml(sessionData, opts.themeName);
+	const outputPath = opts.outputPath || `${APP_NAME}-session-${path.basename(inputPath, ".jsonl")}.html`;
 
-	writeFileSync(outputPath, html, "utf8");
+	await Bun.write(outputPath, html);
 	return outputPath;
 }

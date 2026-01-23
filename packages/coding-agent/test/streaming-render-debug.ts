@@ -4,8 +4,7 @@
  * Run with: npx tsx test/streaming-render-debug.ts
  */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import * as path from "node:path";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { AssistantMessageComponent } from "@oh-my-pi/pi-coding-agent/modes/components/assistant-message";
 import { initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
@@ -16,24 +15,24 @@ import { sleep } from "bun";
 process.env.COLORTERM = "truecolor";
 initTheme("dark");
 
-// Load the real fixture that caused the bug
-const fixtureMessage: AssistantMessage = JSON.parse(
-	readFileSync(join(import.meta.dir, "fixtures/assistant-message-with-thinking-code.json"), "utf-8"),
-);
-
-// Extract thinking and text content
-const thinkingContent = fixtureMessage.content.find((c) => c.type === "thinking");
-const textContent = fixtureMessage.content.find((c) => c.type === "text");
-
-if (!thinkingContent || thinkingContent.type !== "thinking") {
-	console.error("No thinking content in fixture");
-	process.exit(1);
-}
-
-const fullThinkingText = thinkingContent.thinking;
-const fullTextContent = textContent && textContent.type === "text" ? textContent.text : "";
-
 async function main() {
+	// Load the real fixture that caused the bug
+	const fixtureMessage: AssistantMessage = JSON.parse(
+		await Bun.file(path.join(import.meta.dir, "fixtures/assistant-message-with-thinking-code.json")).text(),
+	);
+
+	// Extract thinking and text content
+	const thinkingContent = fixtureMessage.content.find((c) => c.type === "thinking");
+	const textContent = fixtureMessage.content.find((c) => c.type === "text");
+
+	if (!thinkingContent || thinkingContent.type !== "thinking") {
+		console.error("No thinking content in fixture");
+		process.exit(1);
+	}
+
+	const fullThinkingText = thinkingContent.thinking;
+	const fullTextContent = textContent && textContent.type === "text" ? textContent.text : "";
+
 	const terminal = new ProcessTerminal();
 	const tui = new TUI(terminal);
 

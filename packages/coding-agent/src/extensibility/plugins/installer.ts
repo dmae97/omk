@@ -1,10 +1,10 @@
-import { lstatSync, symlinkSync, unlinkSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import { isEnoent } from "@oh-my-pi/pi-utils";
 import { getAgentDir } from "../../config";
 import type { InstalledPlugin } from "./types";
 
-const PLUGINS_DIR = join(getAgentDir(), "plugins");
+const PLUGINS_DIR = path.join(getAgentDir(), "plugins");
 
 // Valid npm package name pattern (scoped and unscoped)
 const VALID_PACKAGE_NAME = /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*(@[a-z0-9-._^~>=<]+)?$/i;
@@ -26,8 +26,8 @@ function validatePackageName(name: string): void {
  * Ensure the plugins directory exists
  */
 async function ensurePluginsDir(): Promise<void> {
-	await mkdir(PLUGINS_DIR, { recursive: true });
-	await mkdir(join(PLUGINS_DIR, "node_modules"), { recursive: true });
+	await fs.mkdir(PLUGINS_DIR, { recursive: true });
+	await fs.mkdir(path.join(PLUGINS_DIR, "node_modules"), { recursive: true });
 }
 
 export async function installPlugin(packageName: string): Promise<InstalledPlugin> {
@@ -38,7 +38,7 @@ export async function installPlugin(packageName: string): Promise<InstalledPlugi
 	await ensurePluginsDir();
 
 	// Initialize package.json if it doesn't exist
-	const pkgJsonPath = join(PLUGINS_DIR, "package.json");
+	const pkgJsonPath = path.join(PLUGINS_DIR, "package.json");
 	const pkgJson = Bun.file(pkgJsonPath);
 	if (!(await pkgJson.exists())) {
 		await pkgJson.write(JSON.stringify({ name: "omp-plugins", private: true, dependencies: {} }, null, 2));
@@ -62,7 +62,7 @@ export async function installPlugin(packageName: string): Promise<InstalledPlugi
 	const actualName = packageName.replace(/@[^/]+$/, "").replace(/^(@[^/]+\/[^@]+).*$/, "$1");
 
 	// Read the installed package's package.json
-	const pkgPath = join(PLUGINS_DIR, "node_modules", actualName, "package.json");
+	const pkgPath = path.join(PLUGINS_DIR, "node_modules", actualName, "package.json");
 	const pkgFile = Bun.file(pkgPath);
 	if (!(await pkgFile.exists())) {
 		throw new Error(`Package installed but package.json not found at ${pkgPath}`);
@@ -73,7 +73,7 @@ export async function installPlugin(packageName: string): Promise<InstalledPlugi
 	return {
 		name: pkg.name,
 		version: pkg.version,
-		path: join(PLUGINS_DIR, "node_modules", actualName),
+		path: path.join(PLUGINS_DIR, "node_modules", actualName),
 		manifest: pkg.omp || pkg.pi || { version: pkg.version },
 		enabledFeatures: null,
 		enabled: true,
@@ -100,7 +100,7 @@ export async function uninstallPlugin(name: string): Promise<void> {
 }
 
 export async function listPlugins(): Promise<InstalledPlugin[]> {
-	const pkgJsonPath = Bun.file(join(PLUGINS_DIR, "package.json"));
+	const pkgJsonPath = Bun.file(path.join(PLUGINS_DIR, "package.json"));
 	if (!(await pkgJsonPath.exists())) {
 		return [];
 	}
@@ -110,14 +110,14 @@ export async function listPlugins(): Promise<InstalledPlugin[]> {
 
 	const plugins: InstalledPlugin[] = [];
 	for (const [name, _version] of Object.entries(deps)) {
-		const path = join(PLUGINS_DIR, "node_modules", name);
-		const fpkg = Bun.file(join(path, "package.json"));
+		const pluginPath = path.join(PLUGINS_DIR, "node_modules", name);
+		const fpkg = Bun.file(path.join(pluginPath, "package.json"));
 		if (await fpkg.exists()) {
 			const pkg = await fpkg.json();
 			plugins.push({
 				name,
 				version: pkg.version,
-				path,
+				path: pluginPath,
 				manifest: pkg.omp || pkg.pi || { version: pkg.version },
 				enabledFeatures: null,
 				enabled: true,
@@ -130,17 +130,17 @@ export async function listPlugins(): Promise<InstalledPlugin[]> {
 
 export async function linkPlugin(localPath: string): Promise<void> {
 	const cwd = process.cwd();
-	const absolutePath = resolve(cwd, localPath);
+	const absolutePath = path.resolve(cwd, localPath);
 
 	// Validate that resolved path is within cwd to prevent path traversal
-	const normalizedCwd = resolve(cwd);
-	const normalizedPath = resolve(absolutePath);
+	const normalizedCwd = path.resolve(cwd);
+	const normalizedPath = path.resolve(absolutePath);
 	if (!normalizedPath.startsWith(`${normalizedCwd}/`) && normalizedPath !== normalizedCwd) {
 		throw new Error(`Invalid path: ${localPath} resolves outside working directory`);
 	}
 
 	// Validate package.json exists
-	const pkgFile = Bun.file(join(absolutePath, "package.json"));
+	const pkgFile = Bun.file(path.join(absolutePath, "package.json"));
 	if (!(await pkgFile.exists())) {
 		throw new Error(`package.json not found at ${absolutePath}`);
 	}
@@ -167,24 +167,24 @@ export async function linkPlugin(localPath: string): Promise<void> {
 	await ensurePluginsDir();
 
 	// Create symlink in plugins/node_modules
-	const linkPath = join(PLUGINS_DIR, "node_modules", pkg.name);
+	const linkPath = path.join(PLUGINS_DIR, "node_modules", pkg.name);
 
 	// For scoped packages, ensure the scope directory exists
 	if (pkg.name.startsWith("@")) {
-		const scopeDir = join(PLUGINS_DIR, "node_modules", pkg.name.split("/")[0]);
-		await mkdir(scopeDir, { recursive: true });
+		const scopeDir = path.join(PLUGINS_DIR, "node_modules", pkg.name.split("/")[0]);
+		await fs.mkdir(scopeDir, { recursive: true });
 	}
 
 	// Remove existing if present
 	try {
-		const stat = lstatSync(linkPath);
-		if (stat.isSymbolicLink() || stat.isDirectory()) {
-			unlinkSync(linkPath);
+		const stats = await fs.lstat(linkPath);
+		if (stats.isSymbolicLink() || stats.isDirectory()) {
+			await fs.unlink(linkPath);
 		}
-	} catch {
-		// Doesn't exist, that's fine
+	} catch (err) {
+		if (!isEnoent(err)) throw err;
 	}
 
 	// Create symlink using fs instead of shell command
-	symlinkSync(absolutePath, linkPath);
+	await fs.symlink(absolutePath, linkPath);
 }

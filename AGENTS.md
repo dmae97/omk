@@ -8,14 +8,14 @@ This repo contains multiple packages, but **`packages/coding-agent/`** is the pr
 
 ### Package Structure
 
-| Package | Description |
-|---------|-------------|
-| `packages/ai` | Multi-provider LLM client with streaming support |
-| `packages/agent` | Agent runtime with tool calling and state management |
-| `packages/coding-agent` | Main CLI application (primary focus) |
-| `packages/tui` | Terminal UI library with differential rendering |
-| `packages/stats` | Local observability dashboard (`omp stats`) |
-| `packages/pi-utils` | Shared utilities (logger, streams, temp files) |
+| Package                 | Description                                          |
+| ----------------------- | ---------------------------------------------------- |
+| `packages/ai`           | Multi-provider LLM client with streaming support     |
+| `packages/agent`        | Agent runtime with tool calling and state management |
+| `packages/coding-agent` | Main CLI application (primary focus)                 |
+| `packages/tui`          | Terminal UI library with differential rendering      |
+| `packages/stats`        | Local observability dashboard (`omp stats`)          |
+| `packages/pi-utils`     | Shared utilities (logger, streams, temp files)       |
 
 ## Code Quality
 
@@ -37,25 +37,28 @@ This project uses Bun. Use Bun APIs where they provide a cleaner alternative; us
 ### Process Execution
 
 **Prefer Bun Shell** (`$` template literals) for simple commands:
+
 ```typescript
 import { $ } from "bun";
 
 // Capture output
 const result = await $`git status`.cwd(dir).quiet().nothrow();
 if (result.exitCode === 0) {
-  const text = result.text();
+	const text = result.text();
 }
 
 // Fire and forget
-$`rm ${tmpFile}`.quiet().nothrow();
+$`do-stuff ${tmpFile}`.quiet().nothrow();
 ```
 
 **Use `Bun.spawn`/`Bun.spawnSync`** only when:
+
 - Long-running processes (LSP servers, Python kernels)
 - Streaming stdin/stdout/stderr required (SSE, JSON-RPC)
 - Process control needed (signals, kill, complex lifecycle)
 
 **Bun Shell methods:**
+
 - `.quiet()` - suppress output (stdout/stderr to null)
 - `.nothrow()` - don't throw on non-zero exit
 - `.text()` - get stdout as string
@@ -66,9 +69,43 @@ $`rm ${tmpFile}`.quiet().nothrow();
 **Prefer** `await Bun.sleep(ms)`  
 **Avoid** `new Promise((resolve) => setTimeout(resolve, ms))`
 
+### Node Module Imports
+
+**NEVER use named imports from `node:fs` or `node:path`** — always use namespace imports:
+
+```typescript
+// BAD: Named imports
+import { readdir, stat } from "node:fs/promises";
+import { join, resolve } from "node:path";
+
+// GOOD: Namespace imports
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+
+// Then use: fs.readdir(), path.join(), etc.
+```
+
+**Choosing between `node:fs` and `node:fs/promises`:**
+
+- **Async-only file** → `import * as fs from "node:fs/promises"`
+- **Needs both sync and async** → `import * as fs from "node:fs"`, use `fs.promises.xxx` for async
+
+```typescript
+// File with only async operations
+import * as fs from "node:fs/promises";
+await fs.readdir(dir);
+await fs.stat(path);
+
+// File mixing sync and async (e.g., sync in constructor, async in methods)
+import * as fs from "node:fs";
+fs.existsSync(path);           // sync
+await fs.promises.readdir(dir); // async
+```
+
 ### File I/O
 
 **Prefer Bun file APIs:**
+
 ```typescript
 // Read
 const text = await Bun.file(path).text();
@@ -79,22 +116,129 @@ const exists = await Bun.file(path).exists();
 await Bun.write(path, data);
 ```
 
-**Use `node:fs/promises`** for directories (Bun has no native directory APIs):
-```typescript
-import { mkdir, rm, readdir } from "node:fs/promises";
+**`Bun.write()` is smart** — it auto-creates parent directories and uses optimal syscalls:
 
-await mkdir(path, { recursive: true });
-await rm(path, { recursive: true, force: true });
-const entries = await readdir(path);
+```typescript
+// BAD: Redundant mkdir before write
+await mkdir(dirname(path), { recursive: true });
+await Bun.write(path, data);
+
+// GOOD: Bun.write handles it
+await Bun.write(path, data); // Creates parent dirs automatically
+```
+
+**Use `node:fs/promises`** for directories (Bun has no native directory APIs):
+
+```typescript
+import * as fs from "node:fs/promises";
+
+await fs.mkdir(path, { recursive: true });
+await fs.rm(path, { recursive: true, force: true });
+const entries = await fs.readdir(path);
 ```
 
 **Avoid sync APIs** in async flows:
+
 - Don't use `existsSync`/`readFileSync`/`writeFileSync` when async is possible
 - Use sync only when required by a synchronous interface
+
+### File I/O Anti-Patterns
+
+**NEVER check `.exists()` before reading** — use try-catch with error code:
+
+```typescript
+// BAD: Two syscalls, race condition
+if (await Bun.file(path).exists()) {
+	return await Bun.file(path).json();
+}
+
+// BAD: Even with handle reuse, still two syscalls
+const file = Bun.file(path);
+if (await file.exists()) {
+	return await file.json();
+}
+
+// GOOD: One syscall, atomic, type-safe error handling
+import { isEnoent } from "@anthropic/pi-utils";
+
+try {
+	return await Bun.file(path).json();
+} catch (err) {
+	if (isEnoent(err)) return null;
+	throw err;
+}
+```
+
+**NEVER use `Bun.file().exists()` for directories** — it doesn't distinguish files from dirs:
+
+```typescript
+// BAD: Bun.file is for files, not directories
+if (await Bun.file(dirPath).exists()) { ... }
+
+// GOOD: Use fs.stat for directories
+import * as fs from "node:fs/promises";
+
+try {
+	const s = await fs.stat(dirPath);
+	if (s.isDirectory()) { ... }
+} catch (err) {
+	if (isEnoent(err)) { /* doesn't exist */ }
+}
+```
+
+**NEVER create multiple handles to the same path**:
+
+```typescript
+// BAD: Creates two file handles
+if (await Bun.file(path).exists()) {
+	const content = await Bun.file(path).text();
+}
+
+// BAD: Still wasteful even in separate functions
+async function checkConfig() {
+	return await Bun.file(configPath).exists();
+}
+async function loadConfig() {
+	return await Bun.file(configPath).json(); // second handle
+}
+```
+
+**NEVER use `Buffer.from(await Bun.file(x).arrayBuffer())`** — just use `readFile`:
+
+```typescript
+// BAD: Unnecessary conversion
+const buffer = Buffer.from(await Bun.file(path).arrayBuffer());
+
+// GOOD: Direct buffer read
+import * as fs from "node:fs/promises";
+const buffer = await fs.readFile(path);
+```
+
+**NEVER mix redundant existence checks with try-catch**:
+
+```typescript
+// BAD: Existence check is pointless when you have try-catch
+if (await file.exists()) {
+	try {
+		return await file.json();
+	} catch {
+		return null;
+	}
+}
+
+// GOOD: Let try-catch handle missing files
+try {
+	return await Bun.file(path).json();
+} catch (err) {
+	if (isEnoent(err)) return null;
+	throw err;
+}
+```
 
 ### Streams
 
 **Prefer centralized helpers:**
+
 ```typescript
 import { readStream, readLines } from "./utils/stream";
 
@@ -103,7 +247,7 @@ const text = await readStream(child.stdout);
 
 // Line-by-line iteration
 for await (const line of readLines(stream)) {
-  // process line
+	// process line
 }
 ```
 
@@ -114,7 +258,6 @@ for await (const line of readLines(stream)) {
 | Operation       | Use                                   | Not                             |
 | --------------- | ------------------------------------- | ------------------------------- |
 | File read/write | `Bun.file()`, `Bun.write()`           | `readFileSync`, `writeFileSync` |
-| File exists     | `await Bun.file(path).exists()`       | `existsSync`                    |
 | Spawn process   | `$\`cmd\``, `Bun.spawn()`             | `child_process`                 |
 | Sleep           | `Bun.sleep(ms)`                       | `setTimeout` promise            |
 | Binary lookup   | `Bun.which("git")`                    | `spawnSync(["which", "git"])`   |

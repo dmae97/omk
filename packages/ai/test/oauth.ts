@@ -7,7 +7,8 @@
  * E2E tests are disabled by default. Set E2E=1 environment variable to enable.
  */
 
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import * as fs from "node:fs/promises";
+import { isEnoent } from "@oh-my-pi/pi-utils";
 
 /**
  * E2E tests require explicit opt-in via E2E=1 environment variable.
@@ -44,25 +45,21 @@ type AuthCredential = ApiKeyCredential | OAuthCredentialEntry;
 
 type AuthStorage = Record<string, AuthCredential>;
 
-function loadAuthStorage(): AuthStorage {
-	if (!existsSync(AUTH_PATH)) {
-		return {};
-	}
+async function loadAuthStorage(): Promise<AuthStorage> {
 	try {
-		const content = readFileSync(AUTH_PATH, "utf-8");
+		const content = await Bun.file(AUTH_PATH).text();
 		return JSON.parse(content);
-	} catch {
-		return {};
+	} catch (err) {
+		if (isEnoent(err)) return {};
+		throw err;
 	}
 }
 
-function saveAuthStorage(storage: AuthStorage): void {
+async function saveAuthStorage(storage: AuthStorage): Promise<void> {
 	const configDir = dirname(AUTH_PATH);
-	if (!existsSync(configDir)) {
-		mkdirSync(configDir, { recursive: true, mode: 0o700 });
-	}
-	writeFileSync(AUTH_PATH, JSON.stringify(storage, null, 2), "utf-8");
-	chmodSync(AUTH_PATH, 0o600);
+	await fs.mkdir(configDir, { recursive: true, mode: 0o700 });
+	await Bun.write(AUTH_PATH, JSON.stringify(storage, null, 2));
+	await fs.chmod(AUTH_PATH, 0o600);
 }
 
 /**
@@ -76,7 +73,7 @@ function saveAuthStorage(storage: AuthStorage): void {
 export async function resolveApiKey(provider: string): Promise<string | undefined> {
 	if (!E2E_ENABLED) return undefined;
 
-	const storage = loadAuthStorage();
+	const storage = await loadAuthStorage();
 	const entry = storage[provider];
 
 	if (!entry) return undefined;
@@ -100,7 +97,7 @@ export async function resolveApiKey(provider: string): Promise<string | undefine
 
 		// Save refreshed credentials back to auth.json
 		storage[provider] = { type: "oauth", ...result.newCredentials };
-		saveAuthStorage(storage);
+		await saveAuthStorage(storage);
 
 		return result.apiKey;
 	}

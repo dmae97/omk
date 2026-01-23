@@ -4,10 +4,10 @@
  * Client for interacting with Exa MCP servers.
  */
 
-import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { logger } from "@oh-my-pi/pi-utils";
+import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
+
 import type { CustomTool, CustomToolResult } from "../extensibility/custom-tools/types";
 import { callMCP } from "../mcp/json-rpc";
 import type {
@@ -34,15 +34,15 @@ export async function findApiKey(): Promise<string | null> {
 	for (const dir of [cwd, home]) {
 		const envPath = `${dir}/.env`;
 		try {
-			if (existsSync(envPath)) {
-				const content = readFileSync(envPath, "utf-8");
-				const match = content.match(/^EXA_API_KEY=(.+)$/m);
-				if (match?.[1]) {
-					return match[1].trim().replace(/^["']|["']$/g, "");
-				}
+			const content = await Bun.file(envPath).text();
+			const match = content.match(/^EXA_API_KEY=(.+)$/m);
+			if (match?.[1]) {
+				return match[1].trim().replace(/^["']|["']$/g, "");
 			}
-		} catch {
-			// Ignore read errors
+		} catch (err) {
+			if (!isEnoent(err)) {
+				logger.debug("Error reading .env file", { path: envPath, error: String(err) });
+			}
 		}
 	}
 

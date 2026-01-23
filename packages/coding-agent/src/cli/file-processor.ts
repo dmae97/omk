@@ -2,9 +2,10 @@
  * Process @file CLI arguments into text content and image attachments
  */
 
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { resolve } from "node:path";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import type { ImageContent } from "@oh-my-pi/pi-ai";
+import { isEnoent } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { resolveReadPath } from "../tools/path-utils";
 import { formatDimensionNote, resizeImage } from "../utils/image-resize";
@@ -28,16 +29,20 @@ export async function processFileArguments(fileArgs: string[], options?: Process
 
 	for (const fileArg of fileArgs) {
 		// Expand and resolve path (handles ~ expansion and macOS screenshot Unicode spaces)
-		const absolutePath = resolve(resolveReadPath(fileArg, process.cwd()));
+		const absolutePath = path.resolve(resolveReadPath(fileArg, process.cwd()));
 
-		// Check if file exists and is not empty
-		if (!existsSync(absolutePath)) {
-			console.error(chalk.red(`Error: File not found: ${absolutePath}`));
-			process.exit(1);
+		// Read file, handling not-found gracefully
+		let buffer: Buffer;
+		try {
+			buffer = await fs.readFile(absolutePath);
+		} catch (err) {
+			if (isEnoent(err)) {
+				console.error(chalk.red(`Error: File not found: ${absolutePath}`));
+				process.exit(1);
+			}
+			throw err;
 		}
-		const stats = statSync(absolutePath);
-		if (stats.size === 0) {
-			// Skip empty files
+		if (buffer.length === 0) {
 			continue;
 		}
 
@@ -45,9 +50,7 @@ export async function processFileArguments(fileArgs: string[], options?: Process
 
 		if (mimeType) {
 			// Handle image file
-			const buffer = readFileSync(absolutePath);
 			const base64Content = buffer.toString("base64");
-
 			let attachment: ImageContent;
 			let dimensionNote: string | undefined;
 
@@ -87,7 +90,7 @@ export async function processFileArguments(fileArgs: string[], options?: Process
 		} else {
 			// Handle text file
 			try {
-				const content = readFileSync(absolutePath, "utf-8");
+				const content = buffer.toString("utf-8");
 				text += `<file name="${absolutePath}">\n${content}\n</file>\n`;
 			} catch (error: unknown) {
 				const message = error instanceof Error ? error.message : String(error);

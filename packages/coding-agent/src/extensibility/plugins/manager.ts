@@ -1,5 +1,6 @@
-import { existsSync, lstatSync, mkdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { isEnoent } from "@oh-my-pi/pi-utils";
 import { extractPackageName, parsePluginSpec } from "./parser";
 import {
 	getPluginsDir,
@@ -46,44 +47,47 @@ function validatePackageName(name: string): void {
 // =============================================================================
 
 export class PluginManager {
-	private runtimeConfig: PluginRuntimeConfig;
+	private runtimeConfig: PluginRuntimeConfig | null = null;
 	private cwd: string;
 
 	constructor(cwd: string = process.cwd()) {
 		this.cwd = cwd;
-		this.runtimeConfig = this.loadRuntimeConfig();
 	}
 
 	// ==========================================================================
 	// Runtime Config Management
 	// ==========================================================================
 
-	private loadRuntimeConfig(): PluginRuntimeConfig {
+	private async loadRuntimeConfig(): Promise<PluginRuntimeConfig> {
 		const lockPath = getPluginsLockfile();
-		if (!existsSync(lockPath)) {
-			return { plugins: {}, settings: {} };
-		}
 		try {
-			return JSON.parse(readFileSync(lockPath, "utf-8"));
-		} catch {
-			return { plugins: {}, settings: {} };
+			return await Bun.file(lockPath).json();
+		} catch (err) {
+			if (isEnoent(err)) return { plugins: {}, settings: {} };
+			throw err;
 		}
 	}
 
-	private saveRuntimeConfig(): void {
-		this.ensurePluginsDir();
-		writeFileSync(getPluginsLockfile(), JSON.stringify(this.runtimeConfig, null, 2));
+	private async ensureConfigLoaded(): Promise<PluginRuntimeConfig> {
+		if (!this.runtimeConfig) {
+			this.runtimeConfig = await this.loadRuntimeConfig();
+		}
+		return this.runtimeConfig;
 	}
 
-	private loadProjectOverrides(): ProjectPluginOverrides {
+	private async saveRuntimeConfig(): Promise<void> {
+		await this.ensureConfigLoaded();
+		await this.ensurePluginsDir();
+		await Bun.write(getPluginsLockfile(), JSON.stringify(this.runtimeConfig, null, 2));
+	}
+
+	private async loadProjectOverrides(): Promise<ProjectPluginOverrides> {
 		const overridesPath = getProjectPluginOverrides(this.cwd);
-		if (!existsSync(overridesPath)) {
-			return {};
-		}
 		try {
-			return JSON.parse(readFileSync(overridesPath, "utf-8"));
-		} catch {
-			return {};
+			return await Bun.file(overridesPath).json();
+		} catch (err) {
+			if (isEnoent(err)) return {};
+			throw err;
 		}
 	}
 
@@ -91,33 +95,33 @@ export class PluginManager {
 	// Directory Management
 	// ==========================================================================
 
-	private ensurePluginsDir(): void {
-		const dir = getPluginsDir();
-		if (!existsSync(dir)) {
-			mkdirSync(dir, { recursive: true });
-		}
-		const nodeModules = getPluginsNodeModules();
-		if (!existsSync(nodeModules)) {
-			mkdirSync(nodeModules, { recursive: true });
-		}
+	private async ensurePluginsDir(): Promise<void> {
+		await fs.promises.mkdir(getPluginsDir(), { recursive: true });
+		await fs.promises.mkdir(getPluginsNodeModules(), { recursive: true });
 	}
 
-	private ensurePackageJson(): void {
-		this.ensurePluginsDir();
+	private async ensurePackageJson(): Promise<void> {
+		await this.ensurePluginsDir();
 		const pkgJsonPath = getPluginsPackageJson();
-		if (!existsSync(pkgJsonPath)) {
-			writeFileSync(
-				pkgJsonPath,
-				JSON.stringify(
-					{
-						name: "omp-plugins",
-						private: true,
-						dependencies: {},
-					},
-					null,
-					2,
-				),
-			);
+		try {
+			await Bun.file(pkgJsonPath).json();
+		} catch (err) {
+			if (isEnoent(err)) {
+				await Bun.write(
+					pkgJsonPath,
+					JSON.stringify(
+						{
+							name: "omp-plugins",
+							private: true,
+							dependencies: {},
+						},
+						null,
+						2,
+					),
+				);
+				return;
+			}
+			throw err;
 		}
 	}
 
@@ -136,7 +140,7 @@ export class PluginManager {
 		const spec = parsePluginSpec(specString);
 		validatePackageName(spec.packageName);
 
-		this.ensurePackageJson();
+		await this.ensurePackageJson();
 
 		if (options.dryRun) {
 			return {
@@ -165,13 +169,17 @@ export class PluginManager {
 
 		// Resolve actual package name (strip version specifier)
 		const actualName = extractPackageName(spec.packageName);
-		const pkgPath = join(getPluginsNodeModules(), actualName, "package.json");
+		const pkgPath = path.join(getPluginsNodeModules(), actualName, "package.json");
 
-		if (!existsSync(pkgPath)) {
-			throw new Error(`Package installed but package.json not found at ${pkgPath}`);
+		let pkg: { name: string; version: string; omp?: PluginManifest; pi?: PluginManifest };
+		try {
+			pkg = await Bun.file(pkgPath).json();
+		} catch (err) {
+			if (isEnoent(err)) {
+				throw new Error(`Package installed but package.json not found at ${pkgPath}`);
+			}
+			throw err;
 		}
-
-		const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
 		const manifest: PluginManifest = pkg.omp || pkg.pi || { version: pkg.version };
 		manifest.version = pkg.version;
 
@@ -201,17 +209,18 @@ export class PluginManager {
 		// null = use defaults
 
 		// Update runtime config
-		this.runtimeConfig.plugins[pkg.name] = {
+		const config = await this.ensureConfigLoaded();
+		config.plugins[pkg.name] = {
 			version: pkg.version,
 			enabledFeatures,
 			enabled: true,
 		};
-		this.saveRuntimeConfig();
+		await this.saveRuntimeConfig();
 
 		return {
 			name: pkg.name,
 			version: pkg.version,
-			path: join(getPluginsNodeModules(), actualName),
+			path: path.join(getPluginsNodeModules(), actualName),
 			manifest,
 			enabledFeatures,
 			enabled: true,
@@ -223,7 +232,7 @@ export class PluginManager {
 	 */
 	async uninstall(name: string): Promise<void> {
 		validatePackageName(name);
-		this.ensurePackageJson();
+		await this.ensurePackageJson();
 
 		const proc = Bun.spawn(["npm", "uninstall", name], {
 			cwd: getPluginsDir(),
@@ -238,9 +247,10 @@ export class PluginManager {
 		}
 
 		// Remove from runtime config
-		delete this.runtimeConfig.plugins[name];
-		delete this.runtimeConfig.settings[name];
-		this.saveRuntimeConfig();
+		const config = await this.ensureConfigLoaded();
+		delete config.plugins[name];
+		delete config.settings[name];
+		await this.saveRuntimeConfig();
 	}
 
 	/**
@@ -248,41 +258,49 @@ export class PluginManager {
 	 */
 	async list(): Promise<InstalledPlugin[]> {
 		const pkgJsonPath = getPluginsPackageJson();
-		if (!existsSync(pkgJsonPath)) {
-			return [];
+		let pkg: { dependencies?: Record<string, string> };
+		try {
+			pkg = await Bun.file(pkgJsonPath).json();
+		} catch (err) {
+			if (isEnoent(err)) return [];
+			throw err;
 		}
 
-		const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf-8"));
 		const deps = pkg.dependencies || {};
-		const projectOverrides = this.loadProjectOverrides();
+		const projectOverrides = await this.loadProjectOverrides();
+		const config = await this.ensureConfigLoaded();
 		const plugins: InstalledPlugin[] = [];
 
 		for (const [name] of Object.entries(deps)) {
-			const pluginPkgPath = join(getPluginsNodeModules(), name, "package.json");
-			if (existsSync(pluginPkgPath)) {
-				const pluginPkg = JSON.parse(readFileSync(pluginPkgPath, "utf-8"));
-				const manifest: PluginManifest = pluginPkg.omp || pluginPkg.pi || { version: pluginPkg.version };
-				manifest.version = pluginPkg.version;
-
-				const runtimeState = this.runtimeConfig.plugins[name] || {
-					version: pluginPkg.version,
-					enabledFeatures: null,
-					enabled: true,
-				};
-
-				// Apply project overrides
-				const isDisabledInProject = projectOverrides.disabled?.includes(name) ?? false;
-				const projectFeatures = projectOverrides.features?.[name];
-
-				plugins.push({
-					name,
-					version: pluginPkg.version,
-					path: join(getPluginsNodeModules(), name),
-					manifest,
-					enabledFeatures: projectFeatures ?? runtimeState.enabledFeatures,
-					enabled: runtimeState.enabled && !isDisabledInProject,
-				});
+			const pluginPkgPath = path.join(getPluginsNodeModules(), name, "package.json");
+			let pluginPkg: { version: string; omp?: PluginManifest; pi?: PluginManifest };
+			try {
+				pluginPkg = await Bun.file(pluginPkgPath).json();
+			} catch (err) {
+				if (isEnoent(err)) continue;
+				throw err;
 			}
+			const manifest: PluginManifest = pluginPkg.omp || pluginPkg.pi || { version: pluginPkg.version };
+			manifest.version = pluginPkg.version;
+
+			const runtimeState = config.plugins[name] || {
+				version: pluginPkg.version,
+				enabledFeatures: null,
+				enabled: true,
+			};
+
+			// Apply project overrides
+			const isDisabledInProject = projectOverrides.disabled?.includes(name) ?? false;
+			const projectFeatures = projectOverrides.features?.[name];
+
+			plugins.push({
+				name,
+				version: pluginPkg.version,
+				path: path.join(getPluginsNodeModules(), name),
+				manifest,
+				enabledFeatures: projectFeatures ?? runtimeState.enabledFeatures,
+				enabled: runtimeState.enabled && !isDisabledInProject,
+			});
 		}
 
 		return plugins;
@@ -292,52 +310,53 @@ export class PluginManager {
 	 * Link a local plugin for development.
 	 */
 	async link(localPath: string): Promise<InstalledPlugin> {
-		const absolutePath = resolve(this.cwd, localPath);
+		const absolutePath = path.resolve(this.cwd, localPath);
 
-		const pkgFile = join(absolutePath, "package.json");
-		if (!existsSync(pkgFile)) {
-			throw new Error(`package.json not found at ${absolutePath}`);
+		const pkgFilePath = path.join(absolutePath, "package.json");
+		let pkg: { name?: string; version: string; omp?: PluginManifest; pi?: PluginManifest };
+		try {
+			pkg = await Bun.file(pkgFilePath).json();
+		} catch (err) {
+			if (isEnoent(err)) throw new Error(`package.json not found at ${absolutePath}`);
+			throw err;
 		}
-
-		const pkg = JSON.parse(readFileSync(pkgFile, "utf-8"));
 		if (!pkg.name) {
 			throw new Error("package.json must have a name field");
 		}
 
-		this.ensurePluginsDir();
+		await this.ensurePluginsDir();
 
-		const linkPath = join(getPluginsNodeModules(), pkg.name);
+		const linkPath = path.join(getPluginsNodeModules(), pkg.name);
 
 		// Handle scoped packages
 		if (pkg.name.startsWith("@")) {
-			const scopeDir = join(getPluginsNodeModules(), pkg.name.split("/")[0]);
-			if (!existsSync(scopeDir)) {
-				mkdirSync(scopeDir, { recursive: true });
-			}
+			const scopeDir = path.join(getPluginsNodeModules(), pkg.name.split("/")[0]);
+			await fs.promises.mkdir(scopeDir, { recursive: true });
 		}
 
 		// Remove existing
 		try {
-			const stat = lstatSync(linkPath);
-			if (stat.isSymbolicLink() || stat.isDirectory()) {
-				unlinkSync(linkPath);
+			const stats = await fs.promises.lstat(linkPath);
+			if (stats.isSymbolicLink() || stats.isDirectory()) {
+				await fs.promises.unlink(linkPath);
 			}
-		} catch {
-			// Doesn't exist
+		} catch (err) {
+			if (!isEnoent(err)) throw err;
 		}
 
-		symlinkSync(absolutePath, linkPath);
+		await fs.promises.symlink(absolutePath, linkPath);
 
 		const manifest: PluginManifest = pkg.omp || pkg.pi || { version: pkg.version };
 		manifest.version = pkg.version;
 
 		// Add to runtime config
-		this.runtimeConfig.plugins[pkg.name] = {
+		const config = await this.ensureConfigLoaded();
+		config.plugins[pkg.name] = {
 			version: pkg.version,
 			enabledFeatures: null,
 			enabled: true,
 		};
-		this.saveRuntimeConfig();
+		await this.saveRuntimeConfig();
 
 		return {
 			name: pkg.name,
@@ -357,11 +376,12 @@ export class PluginManager {
 	 * Enable or disable a plugin globally.
 	 */
 	async setEnabled(name: string, enabled: boolean): Promise<void> {
-		if (!this.runtimeConfig.plugins[name]) {
+		const config = await this.ensureConfigLoaded();
+		if (!config.plugins[name]) {
 			throw new Error(`Plugin ${name} not found in runtime config`);
 		}
-		this.runtimeConfig.plugins[name].enabled = enabled;
-		this.saveRuntimeConfig();
+		config.plugins[name].enabled = enabled;
+		await this.saveRuntimeConfig();
 	}
 
 	// ==========================================================================
@@ -371,15 +391,17 @@ export class PluginManager {
 	/**
 	 * Get enabled features for a plugin.
 	 */
-	getEnabledFeatures(name: string): string[] | null {
-		return this.runtimeConfig.plugins[name]?.enabledFeatures ?? null;
+	async getEnabledFeatures(name: string): Promise<string[] | null> {
+		const config = await this.ensureConfigLoaded();
+		return config.plugins[name]?.enabledFeatures ?? null;
 	}
 
 	/**
 	 * Set enabled features for a plugin.
 	 */
 	async setEnabledFeatures(name: string, features: string[] | null): Promise<void> {
-		if (!this.runtimeConfig.plugins[name]) {
+		const config = await this.ensureConfigLoaded();
+		if (!config.plugins[name]) {
 			throw new Error(`Plugin ${name} not found in runtime config`);
 		}
 
@@ -398,8 +420,8 @@ export class PluginManager {
 			}
 		}
 
-		this.runtimeConfig.plugins[name].enabledFeatures = features;
-		this.saveRuntimeConfig();
+		config.plugins[name].enabledFeatures = features;
+		await this.saveRuntimeConfig();
 	}
 
 	// ==========================================================================
@@ -409,9 +431,10 @@ export class PluginManager {
 	/**
 	 * Get all settings for a plugin.
 	 */
-	getPluginSettings(name: string): Record<string, unknown> {
-		const global = this.runtimeConfig.settings[name] || {};
-		const projectOverrides = this.loadProjectOverrides();
+	async getPluginSettings(name: string): Promise<Record<string, unknown>> {
+		const config = await this.ensureConfigLoaded();
+		const global = config.settings[name] || {};
+		const projectOverrides = await this.loadProjectOverrides();
 		const project = projectOverrides.settings?.[name] || {};
 
 		// Project settings override global
@@ -421,21 +444,23 @@ export class PluginManager {
 	/**
 	 * Set a plugin setting value.
 	 */
-	setPluginSetting(name: string, key: string, value: unknown): void {
-		if (!this.runtimeConfig.settings[name]) {
-			this.runtimeConfig.settings[name] = {};
+	async setPluginSetting(name: string, key: string, value: unknown): Promise<void> {
+		const config = await this.ensureConfigLoaded();
+		if (!config.settings[name]) {
+			config.settings[name] = {};
 		}
-		this.runtimeConfig.settings[name][key] = value;
-		this.saveRuntimeConfig();
+		config.settings[name][key] = value;
+		await this.saveRuntimeConfig();
 	}
 
 	/**
 	 * Delete a plugin setting.
 	 */
-	deletePluginSetting(name: string, key: string): void {
-		if (this.runtimeConfig.settings[name]) {
-			delete this.runtimeConfig.settings[name][key];
-			this.saveRuntimeConfig();
+	async deletePluginSetting(name: string, key: string): Promise<void> {
+		const config = await this.ensureConfigLoaded();
+		if (config.settings[name]) {
+			delete config.settings[name][key];
+			await this.saveRuntimeConfig();
 		}
 	}
 
@@ -451,15 +476,27 @@ export class PluginManager {
 
 		// Check 1: Plugins directory exists
 		const pluginsDir = getPluginsDir();
+		const pluginsDirExists = fs.existsSync(pluginsDir);
 		checks.push({
 			name: "plugins_directory",
-			status: existsSync(pluginsDir) ? "ok" : "warning",
-			message: existsSync(pluginsDir) ? `Found at ${pluginsDir}` : "Not created yet",
+			status: pluginsDirExists ? "ok" : "warning",
+			message: pluginsDirExists ? `Found at ${pluginsDir}` : "Not created yet",
 		});
 
 		// Check 2: package.json exists
 		const pkgJsonPath = getPluginsPackageJson();
-		const hasPkgJson = existsSync(pkgJsonPath);
+		let pkg: { dependencies?: Record<string, string> };
+		let hasPkgJson = true;
+		try {
+			pkg = await Bun.file(pkgJsonPath).json();
+		} catch (err) {
+			if (isEnoent(err)) {
+				hasPkgJson = false;
+				pkg = {};
+			} else {
+				throw err;
+			}
+		}
 		checks.push({
 			name: "package_manifest",
 			status: hasPkgJson ? "ok" : "warning",
@@ -468,7 +505,7 @@ export class PluginManager {
 
 		// Check 3: node_modules exists
 		const nodeModulesPath = getPluginsNodeModules();
-		const hasNodeModules = existsSync(nodeModulesPath);
+		const hasNodeModules = fs.existsSync(nodeModulesPath);
 		checks.push({
 			name: "node_modules",
 			status: hasNodeModules ? "ok" : hasPkgJson ? "error" : "warning",
@@ -478,36 +515,37 @@ export class PluginManager {
 		if (!hasPkgJson) {
 			return checks;
 		}
-
-		// Check each installed plugin
-		const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf-8"));
 		const deps = pkg.dependencies || {};
+		const config = await this.ensureConfigLoaded();
 
 		for (const [name] of Object.entries(deps)) {
-			const pluginPath = join(nodeModulesPath, name);
-			const pluginPkgPath = join(pluginPath, "package.json");
+			const pluginPath = path.join(nodeModulesPath, name);
+			const pluginPkgPath = path.join(pluginPath, "package.json");
 
-			if (!existsSync(pluginPath)) {
-				const fixed = options.fix ? await this.fixMissingPlugin() : false;
-				checks.push({
-					name: `plugin:${name}`,
-					status: "error",
-					message: "Missing from node_modules",
-					fixed,
-				});
-				continue;
+			let pluginPkg: { version: string; description?: string; omp?: PluginManifest; pi?: PluginManifest };
+			try {
+				pluginPkg = await Bun.file(pluginPkgPath).json();
+			} catch (err) {
+				if (isEnoent(err)) {
+					if (!fs.existsSync(pluginPath)) {
+						const fixed = options.fix ? await this.fixMissingPlugin() : false;
+						checks.push({
+							name: `plugin:${name}`,
+							status: "error",
+							message: "Missing from node_modules",
+							fixed,
+						});
+					} else {
+						checks.push({
+							name: `plugin:${name}`,
+							status: "error",
+							message: "Missing package.json",
+						});
+					}
+					continue;
+				}
+				throw err;
 			}
-
-			if (!existsSync(pluginPkgPath)) {
-				checks.push({
-					name: `plugin:${name}`,
-					status: "error",
-					message: "Missing package.json",
-				});
-				continue;
-			}
-
-			const pluginPkg = JSON.parse(readFileSync(pluginPkgPath, "utf-8"));
 			const hasManifest = !!(pluginPkg.omp || pluginPkg.pi);
 			const manifest: PluginManifest | undefined = pluginPkg.omp || pluginPkg.pi;
 
@@ -521,8 +559,8 @@ export class PluginManager {
 
 			// Check tools path exists if specified
 			if (manifest?.tools) {
-				const toolsPath = join(pluginPath, manifest.tools);
-				if (!existsSync(toolsPath)) {
+				const toolsPath = path.join(pluginPath, manifest.tools);
+				if (!fs.existsSync(toolsPath)) {
 					checks.push({
 						name: `plugin:${name}:tools`,
 						status: "error",
@@ -533,8 +571,8 @@ export class PluginManager {
 
 			// Check hooks path exists if specified
 			if (manifest?.hooks) {
-				const hooksPath = join(pluginPath, manifest.hooks);
-				if (!existsSync(hooksPath)) {
+				const hooksPath = path.join(pluginPath, manifest.hooks);
+				if (!fs.existsSync(hooksPath)) {
 					checks.push({
 						name: `plugin:${name}:hooks`,
 						status: "error",
@@ -544,11 +582,11 @@ export class PluginManager {
 			}
 
 			// Check enabled features exist in manifest
-			const runtimeState = this.runtimeConfig.plugins[name];
+			const runtimeState = config.plugins[name];
 			if (runtimeState?.enabledFeatures && manifest?.features) {
 				for (const feat of runtimeState.enabledFeatures) {
 					if (!(feat in manifest.features)) {
-						const fixed = options.fix ? this.removeInvalidFeature(name, feat) : false;
+						const fixed = options.fix ? await this.removeInvalidFeature(name, feat) : false;
 						checks.push({
 							name: `plugin:${name}:feature:${feat}`,
 							status: "warning",
@@ -561,9 +599,9 @@ export class PluginManager {
 		}
 
 		// Check for orphaned runtime config entries
-		for (const name of Object.keys(this.runtimeConfig.plugins)) {
+		for (const name of Object.keys(config.plugins)) {
 			if (!(name in deps)) {
-				const fixed = options.fix ? this.removeOrphanedConfig(name) : false;
+				const fixed = options.fix ? await this.removeOrphanedConfig(name) : false;
 				checks.push({
 					name: `orphan:${name}`,
 					status: "warning",
@@ -590,20 +628,22 @@ export class PluginManager {
 		}
 	}
 
-	private removeInvalidFeature(name: string, feat: string): boolean {
-		const state = this.runtimeConfig.plugins[name];
+	private async removeInvalidFeature(name: string, feat: string): Promise<boolean> {
+		const config = await this.ensureConfigLoaded();
+		const state = config.plugins[name];
 		if (state?.enabledFeatures) {
 			state.enabledFeatures = state.enabledFeatures.filter((f) => f !== feat);
-			this.saveRuntimeConfig();
+			await this.saveRuntimeConfig();
 			return true;
 		}
 		return false;
 	}
 
-	private removeOrphanedConfig(name: string): boolean {
-		delete this.runtimeConfig.plugins[name];
-		delete this.runtimeConfig.settings[name];
-		this.saveRuntimeConfig();
+	private async removeOrphanedConfig(name: string): Promise<boolean> {
+		const config = await this.ensureConfigLoaded();
+		delete config.plugins[name];
+		delete config.settings[name];
+		await this.saveRuntimeConfig();
 		return true;
 	}
 }

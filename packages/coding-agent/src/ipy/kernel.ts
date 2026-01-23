@@ -1,5 +1,5 @@
 import { createServer } from "node:net";
-import { delimiter, join } from "node:path";
+import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import { $, type Subprocess } from "bun";
 import { nanoid } from "nanoid";
@@ -239,7 +239,7 @@ function filterEnv(env: Record<string, string | undefined>): Record<string, stri
 
 async function resolveVenvPath(cwd: string): Promise<string | null> {
 	if (process.env.VIRTUAL_ENV) return process.env.VIRTUAL_ENV;
-	const candidates = [join(cwd, ".venv"), join(cwd, "venv")];
+	const candidates = [path.join(cwd, ".venv"), path.join(cwd, "venv")];
 	for (const candidate of candidates) {
 		if (await Bun.file(candidate).exists()) {
 			return candidate;
@@ -253,12 +253,12 @@ async function resolvePythonRuntime(cwd: string, baseEnv: Record<string, string 
 	const venvPath = env.VIRTUAL_ENV ?? (await resolveVenvPath(cwd));
 	if (venvPath) {
 		env.VIRTUAL_ENV = venvPath;
-		const binDir = process.platform === "win32" ? join(venvPath, "Scripts") : join(venvPath, "bin");
-		const pythonCandidate = join(binDir, process.platform === "win32" ? "python.exe" : "python");
+		const binDir = process.platform === "win32" ? path.join(venvPath, "Scripts") : path.join(venvPath, "bin");
+		const pythonCandidate = path.join(binDir, process.platform === "win32" ? "python.exe" : "python");
 		if (await Bun.file(pythonCandidate).exists()) {
 			const pathKey = resolvePathKey(env);
 			const currentPath = env[pathKey];
-			env[pathKey] = currentPath ? `${binDir}${delimiter}${currentPath}` : binDir;
+			env[pathKey] = currentPath ? `${binDir}${path.delimiter}${currentPath}` : binDir;
 			return { pythonPath: pythonCandidate, env };
 		}
 	}
@@ -309,13 +309,11 @@ async function checkExternalGatewayAvailability(config: ExternalGatewayConfig): 
 		}
 
 		const controller = new AbortController();
-		const timeout = setTimeout(() => controller.abort(), 5000);
 
 		const response = await fetch(`${config.url}/api/kernelspecs`, {
 			headers,
-			signal: controller.signal,
+			signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]),
 		});
-		clearTimeout(timeout);
 
 		if (response.ok) {
 			return { ok: true };
@@ -627,7 +625,7 @@ export class PythonKernel {
 			OMP_SHELL_SNAPSHOT: snapshotPath ?? undefined,
 		};
 
-		const pythonPathParts = [options.cwd, kernelEnv.PYTHONPATH].filter(Boolean).join(delimiter);
+		const pythonPathParts = [options.cwd, kernelEnv.PYTHONPATH].filter(Boolean).join(path.delimiter);
 		if (pythonPathParts) {
 			kernelEnv.PYTHONPATH = pythonPathParts;
 		}
@@ -1064,14 +1062,11 @@ export class PythonKernel {
 
 	async interrupt(): Promise<void> {
 		try {
-			const controller = new AbortController();
-			const timeout = setTimeout(() => controller.abort(), 2000);
 			await fetch(`${this.gatewayUrl}/api/kernels/${this.kernelId}/interrupt`, {
 				method: "POST",
 				headers: this.#authHeaders(),
-				signal: controller.signal,
+				signal: AbortSignal.timeout(2000),
 			});
-			clearTimeout(timeout);
 		} catch (err: unknown) {
 			logger.warn("Failed to interrupt kernel via API", { error: err instanceof Error ? err.message : String(err) });
 		}
@@ -1138,13 +1133,10 @@ export class PythonKernel {
 	async ping(timeoutMs: number = HEARTBEAT_TIMEOUT_MS): Promise<boolean> {
 		if (!this.isAlive()) return false;
 		try {
-			const controller = new AbortController();
-			const timeout = setTimeout(() => controller.abort(), timeoutMs);
 			const response = await fetch(`${this.gatewayUrl}/api/kernels/${this.kernelId}`, {
-				signal: controller.signal,
+				signal: AbortSignal.timeout(timeoutMs),
 				headers: this.#authHeaders(),
 			});
-			clearTimeout(timeout);
 			if (response.ok) {
 				this.#heartbeatFailures = 0;
 				return true;

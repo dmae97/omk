@@ -38,7 +38,9 @@ export class FrontmatterError extends Error {
 }
 
 export interface FrontmatterOptions {
-	/** Source of the content */
+	/** Source of the content (alias: source) */
+	location?: unknown;
+	/** Source of the content (alias for location) */
 	source?: unknown;
 	/** Fallback frontmatter values */
 	fallback?: Record<string, unknown>;
@@ -56,7 +58,8 @@ export function parseFrontmatter(
 	content: string,
 	options?: FrontmatterOptions,
 ): { frontmatter: Record<string, unknown>; body: string } {
-	const { source, fallback, normalize = true, level = "warn" } = options ?? {};
+	const { location, source, fallback, normalize = true, level = "warn" } = options ?? {};
+	const loc = location ?? source;
 	const frontmatter: Record<string, unknown> = Object.assign({}, fallback);
 
 	const normalized = normalize ? stripHtmlComments(content.replace(/\r\n/g, "\n").replace(/\r/g, "\n")) : content;
@@ -77,7 +80,7 @@ export function parseFrontmatter(
 		const loaded = YAML.parse(metadata.replaceAll("\t", "  ")) as Record<string, unknown> | null;
 		return { frontmatter: Object.assign(frontmatter, loaded), body: body };
 	} catch (error) {
-		const err = new FrontmatterError(toError(error), source ?? `Inline '${truncate(content, 64)}'`);
+		const err = new FrontmatterError(toError(error), loc ?? `Inline '${truncate(content, 64)}'`);
 		if (level === "warn" || level === "fatal") {
 			logger.warn("Failed to parse YAML frontmatter", { err: err.toString() });
 		}

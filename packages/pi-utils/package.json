@@ -32,7 +32,7 @@
 		"strip-ansi": "^7.1.2"
 	},
 	"devDependencies": {
-		"@types/node": "^24.3.0"
+		"@types/node": "^25.0.10"
 	},
 	"engines": {
 		"bun": ">=1.0.0"

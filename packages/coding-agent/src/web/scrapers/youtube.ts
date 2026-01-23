@@ -1,4 +1,4 @@
-import { unlinkSync } from "node:fs";
+import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { cspawn } from "@oh-my-pi/pi-utils";
@@ -302,15 +302,10 @@ export const handleYouTube: SpecialHandler = async (
 			}
 		}
 	} finally {
-		// Cleanup temp files using sync unlink to avoid leaving handles open
-		try {
-			const tmpFiles = await Array.fromAsync(new Bun.Glob(`${tmpBase}*`).scan({ absolute: true }));
-			for (const f of tmpFiles) {
-				try {
-					unlinkSync(f);
-				} catch {}
-			}
-		} catch {}
+		// Cleanup temp files (fire-and-forget with error suppression)
+		Array.fromAsync(new Bun.Glob(`${tmpBase}*`).scan({ absolute: true }))
+			.then((tmpFiles) => Promise.all(tmpFiles.map((f) => fs.unlink(f).catch(() => {}))))
+			.catch(() => {});
 	}
 
 	// Build markdown output

@@ -423,6 +423,15 @@ export const SETTINGS_DEFS: SettingDef[] = [
 		],
 	},
 	{
+		id: "colorBlindMode",
+		tab: "display",
+		type: "boolean",
+		label: "Color blind mode",
+		description: "Use blue instead of green for diff additions (red-green color blindness)",
+		get: (sm) => sm.getColorBlindMode(),
+		set: (sm, v) => sm.setColorBlindMode(v),
+	},
+	{
 		id: "thinkingLevel",
 		tab: "display",
 		type: "submenu",

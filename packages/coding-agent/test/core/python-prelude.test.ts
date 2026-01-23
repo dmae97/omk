@@ -1,17 +1,19 @@
 import { describe, expect, it } from "bun:test";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { resetPreludeDocsCache, warmPythonEnvironment } from "@oh-my-pi/pi-coding-agent/ipy/executor";
 import { getPythonToolDescription, PythonTool } from "@oh-my-pi/pi-coding-agent/tools/python";
 
 const resolvePythonPath = (): string | null => {
 	const venvPath = process.env.VIRTUAL_ENV;
-	const candidates = [venvPath, join(process.cwd(), ".venv"), join(process.cwd(), "venv")].filter(Boolean) as string[];
+	const candidates = [venvPath, path.join(process.cwd(), ".venv"), path.join(process.cwd(), "venv")].filter(
+		Boolean,
+	) as string[];
 	for (const candidate of candidates) {
 		const binDir = process.platform === "win32" ? "Scripts" : "bin";
 		const exeName = process.platform === "win32" ? "python.exe" : "python";
-		const pythonCandidate = join(candidate, binDir, exeName);
-		if (existsSync(pythonCandidate)) {
+		const pythonCandidate = path.join(candidate, binDir, exeName);
+		if (fs.existsSync(pythonCandidate)) {
 			return pythonCandidate;
 		}
 	}

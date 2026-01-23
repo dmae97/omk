@@ -5,8 +5,9 @@
  * based on manifest entries and enabled features.
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { isEnoent } from "@oh-my-pi/pi-utils";
 import {
 	getAllProjectPluginOverridePaths,
 	getPluginsLockfile,
@@ -22,29 +23,26 @@ import type { InstalledPlugin, PluginManifest, PluginRuntimeConfig, ProjectPlugi
 /**
  * Load plugin runtime config from lock file.
  */
-function loadRuntimeConfig(): PluginRuntimeConfig {
+async function loadRuntimeConfig(): Promise<PluginRuntimeConfig> {
 	const lockPath = getPluginsLockfile();
-	if (!existsSync(lockPath)) {
-		return { plugins: {}, settings: {} };
-	}
 	try {
-		return JSON.parse(readFileSync(lockPath, "utf-8"));
-	} catch {
-		return { plugins: {}, settings: {} };
+		return await Bun.file(lockPath).json();
+	} catch (err) {
+		if (isEnoent(err)) return { plugins: {}, settings: {} };
+		throw err;
 	}
 }
 
 /**
  * Load project-local plugin overrides (checks .omp and .pi directories).
  */
-function loadProjectOverrides(cwd: string): ProjectPluginOverrides {
+async function loadProjectOverrides(cwd: string): Promise<ProjectPluginOverrides> {
 	for (const overridesPath of getAllProjectPluginOverridePaths(cwd)) {
-		if (existsSync(overridesPath)) {
-			try {
-				return JSON.parse(readFileSync(overridesPath, "utf-8"));
-			} catch {
-				// Continue to next path
-			}
+		try {
+			return await Bun.file(overridesPath).json();
+		} catch (err) {
+			if (isEnoent(err)) continue;
+			// JSON parse error - continue to next path
 		}
 	}
 	return {};
@@ -58,30 +56,36 @@ function loadProjectOverrides(cwd: string): ProjectPluginOverrides {
  * Get list of enabled plugins with their resolved configurations.
  * Respects both global runtime config and project overrides.
  */
-export function getEnabledPlugins(cwd: string): InstalledPlugin[] {
+export async function getEnabledPlugins(cwd: string): Promise<InstalledPlugin[]> {
 	const pkgJsonPath = getPluginsPackageJson();
-	if (!existsSync(pkgJsonPath)) {
-		return [];
+	let pkg: { dependencies?: Record<string, string> };
+	try {
+		pkg = await Bun.file(pkgJsonPath).json();
+	} catch (err) {
+		if (isEnoent(err)) return [];
+		throw err;
 	}
 
 	const nodeModulesPath = getPluginsNodeModules();
-	if (!existsSync(nodeModulesPath)) {
+	if (!fs.existsSync(nodeModulesPath)) {
 		return [];
 	}
 
-	const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf-8"));
 	const deps = pkg.dependencies || {};
-	const runtimeConfig = loadRuntimeConfig();
-	const projectOverrides = loadProjectOverrides(cwd);
+	const runtimeConfig = await loadRuntimeConfig();
+	const projectOverrides = await loadProjectOverrides(cwd);
 	const plugins: InstalledPlugin[] = [];
 
 	for (const [name] of Object.entries(deps)) {
-		const pluginPkgPath = join(nodeModulesPath, name, "package.json");
-		if (!existsSync(pluginPkgPath)) {
-			continue;
+		const pluginPkgPath = path.join(nodeModulesPath, name, "package.json");
+		let pluginPkg: { version: string; omp?: PluginManifest; pi?: PluginManifest };
+		try {
+			pluginPkg = await Bun.file(pluginPkgPath).json();
+		} catch (err) {
+			if (isEnoent(err)) continue;
+			throw err;
 		}
 
-		const pluginPkg = JSON.parse(readFileSync(pluginPkgPath, "utf-8"));
 		const manifest: PluginManifest | undefined = pluginPkg.omp || pluginPkg.pi;
 
 		if (!manifest) {
@@ -109,7 +113,7 @@ export function getEnabledPlugins(cwd: string): InstalledPlugin[] {
 		plugins.push({
 			name,
 			version: pluginPkg.version,
-			path: join(nodeModulesPath, name),
+			path: path.join(nodeModulesPath, name),
 			manifest,
 			enabledFeatures,
 			enabled: true,
@@ -133,8 +137,8 @@ export function resolvePluginToolPaths(plugin: InstalledPlugin): string[] {
 
 	// Base tools entry (always included if exists)
 	if (manifest.tools) {
-		const toolPath = join(plugin.path, manifest.tools);
-		if (existsSync(toolPath)) {
+		const toolPath = path.join(plugin.path, manifest.tools);
+		if (fs.existsSync(toolPath)) {
 			paths.push(toolPath);
 		}
 	}
@@ -148,8 +152,8 @@ export function resolvePluginToolPaths(plugin: InstalledPlugin): string[] {
 
 			if (feat.tools) {
 				for (const toolEntry of feat.tools) {
-					const toolPath = join(plugin.path, toolEntry);
-					if (existsSync(toolPath)) {
+					const toolPath = path.join(plugin.path, toolEntry);
+					if (fs.existsSync(toolPath)) {
 						paths.push(toolPath);
 					}
 				}
@@ -162,8 +166,8 @@ export function resolvePluginToolPaths(plugin: InstalledPlugin): string[] {
 
 			if (feat.tools) {
 				for (const toolEntry of feat.tools) {
-					const toolPath = join(plugin.path, toolEntry);
-					if (existsSync(toolPath)) {
+					const toolPath = path.join(plugin.path, toolEntry);
+					if (fs.existsSync(toolPath)) {
 						paths.push(toolPath);
 					}
 				}
@@ -184,8 +188,8 @@ export function resolvePluginHookPaths(plugin: InstalledPlugin): string[] {
 
 	// Base hooks entry (always included if exists)
 	if (manifest.hooks) {
-		const hookPath = join(plugin.path, manifest.hooks);
-		if (existsSync(hookPath)) {
+		const hookPath = path.join(plugin.path, manifest.hooks);
+		if (fs.existsSync(hookPath)) {
 			paths.push(hookPath);
 		}
 	}
@@ -199,8 +203,8 @@ export function resolvePluginHookPaths(plugin: InstalledPlugin): string[] {
 
 			if (feat.hooks) {
 				for (const hookEntry of feat.hooks) {
-					const hookPath = join(plugin.path, hookEntry);
-					if (existsSync(hookPath)) {
+					const hookPath = path.join(plugin.path, hookEntry);
+					if (fs.existsSync(hookPath)) {
 						paths.push(hookPath);
 					}
 				}
@@ -213,8 +217,8 @@ export function resolvePluginHookPaths(plugin: InstalledPlugin): string[] {
 
 			if (feat.hooks) {
 				for (const hookEntry of feat.hooks) {
-					const hookPath = join(plugin.path, hookEntry);
-					if (existsSync(hookPath)) {
+					const hookPath = path.join(plugin.path, hookEntry);
+					if (fs.existsSync(hookPath)) {
 						paths.push(hookPath);
 					}
 				}
@@ -236,8 +240,8 @@ export function resolvePluginCommandPaths(plugin: InstalledPlugin): string[] {
 	// Base commands (always included if exists)
 	if (manifest.commands) {
 		for (const cmdEntry of manifest.commands) {
-			const cmdPath = join(plugin.path, cmdEntry);
-			if (existsSync(cmdPath)) {
+			const cmdPath = path.join(plugin.path, cmdEntry);
+			if (fs.existsSync(cmdPath)) {
 				paths.push(cmdPath);
 			}
 		}
@@ -252,8 +256,8 @@ export function resolvePluginCommandPaths(plugin: InstalledPlugin): string[] {
 
 			if (feat.commands) {
 				for (const cmdEntry of feat.commands) {
-					const cmdPath = join(plugin.path, cmdEntry);
-					if (existsSync(cmdPath)) {
+					const cmdPath = path.join(plugin.path, cmdEntry);
+					if (fs.existsSync(cmdPath)) {
 						paths.push(cmdPath);
 					}
 				}
@@ -266,8 +270,8 @@ export function resolvePluginCommandPaths(plugin: InstalledPlugin): string[] {
 
 			if (feat.commands) {
 				for (const cmdEntry of feat.commands) {
-					const cmdPath = join(plugin.path, cmdEntry);
-					if (existsSync(cmdPath)) {
+					const cmdPath = path.join(plugin.path, cmdEntry);
+					if (fs.existsSync(cmdPath)) {
 						paths.push(cmdPath);
 					}
 				}
@@ -285,8 +289,8 @@ export function resolvePluginCommandPaths(plugin: InstalledPlugin): string[] {
 /**
  * Get all tool paths from all enabled plugins.
  */
-export function getAllPluginToolPaths(cwd: string): string[] {
-	const plugins = getEnabledPlugins(cwd);
+export async function getAllPluginToolPaths(cwd: string): Promise<string[]> {
+	const plugins = await getEnabledPlugins(cwd);
 	const paths: string[] = [];
 
 	for (const plugin of plugins) {
@@ -299,8 +303,8 @@ export function getAllPluginToolPaths(cwd: string): string[] {
 /**
  * Get all hook paths from all enabled plugins.
  */
-export function getAllPluginHookPaths(cwd: string): string[] {
-	const plugins = getEnabledPlugins(cwd);
+export async function getAllPluginHookPaths(cwd: string): Promise<string[]> {
+	const plugins = await getEnabledPlugins(cwd);
 	const paths: string[] = [];
 
 	for (const plugin of plugins) {
@@ -313,8 +317,8 @@ export function getAllPluginHookPaths(cwd: string): string[] {
 /**
  * Get all command paths from all enabled plugins.
  */
-export function getAllPluginCommandPaths(cwd: string): string[] {
-	const plugins = getEnabledPlugins(cwd);
+export async function getAllPluginCommandPaths(cwd: string): Promise<string[]> {
+	const plugins = await getEnabledPlugins(cwd);
 	const paths: string[] = [];
 
 	for (const plugin of plugins) {
@@ -328,9 +332,9 @@ export function getAllPluginCommandPaths(cwd: string): string[] {
  * Get plugin settings for use in tool/hook contexts.
  * Merges global settings with project overrides.
  */
-export function getPluginSettings(pluginName: string, cwd: string): Record<string, unknown> {
-	const runtimeConfig = loadRuntimeConfig();
-	const projectOverrides = loadProjectOverrides(cwd);
+export async function getPluginSettings(pluginName: string, cwd: string): Promise<Record<string, unknown>> {
+	const runtimeConfig = await loadRuntimeConfig();
+	const projectOverrides = await loadProjectOverrides(cwd);
 
 	const global = runtimeConfig.settings[pluginName] || {};
 	const project = projectOverrides.settings?.[pluginName] || {};

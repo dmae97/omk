@@ -5,8 +5,8 @@
  * that will be used instead of the default GitHub Gist sharing.
  */
 
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { getAgentDir } from "../config";
 
 export interface CustomShareResult {
@@ -32,8 +32,8 @@ export function getCustomSharePath(): string | null {
 	const agentDir = getAgentDir();
 
 	for (const candidate of SHARE_SCRIPT_CANDIDATES) {
-		const scriptPath = join(agentDir, candidate);
-		if (existsSync(scriptPath)) {
+		const scriptPath = path.join(agentDir, candidate);
+		if (fs.existsSync(scriptPath)) {
 			return scriptPath;
 		}
 	}

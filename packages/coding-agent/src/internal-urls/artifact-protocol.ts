@@ -10,8 +10,9 @@
  * Pagination is handled by the read tool via offset/limit parameters.
  */
 
-import * as fs from "node:fs";
+import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { isEnoent } from "@oh-my-pi/pi-utils";
 import type { InternalResource, InternalUrl, ProtocolHandler } from "./types";
 
 export interface ArtifactProtocolOptions {
@@ -24,9 +25,9 @@ export interface ArtifactProtocolOptions {
 /**
  * List available artifact IDs in the directory.
  */
-function listAvailableArtifacts(artifactsDir: string): string[] {
+async function listAvailableArtifacts(artifactsDir: string): Promise<string[]> {
 	try {
-		const files = fs.readdirSync(artifactsDir);
+		const files = await fs.readdir(artifactsDir);
 		return files
 			.filter((f) => /^\d+\./.test(f))
 			.map((f) => f.split(".")[0])
@@ -64,17 +65,21 @@ export class ArtifactProtocolHandler implements ProtocolHandler {
 			throw new Error(`artifact:// ID must be numeric, got: ${id}`);
 		}
 
-		// Check directory exists
-		if (!fs.existsSync(artifactsDir)) {
-			throw new Error("No artifacts directory found");
+		// Check directory exists and find file matching ID prefix
+		let files: string[];
+		try {
+			files = await fs.readdir(artifactsDir);
+		} catch (err) {
+			if (isEnoent(err)) {
+				throw new Error("No artifacts directory found");
+			}
+			throw err;
 		}
 
-		// Find file matching ID prefix
-		const files = fs.readdirSync(artifactsDir);
 		const match = files.find((f) => f.startsWith(`${id}.`));
 
 		if (!match) {
-			const available = listAvailableArtifacts(artifactsDir);
+			const available = await listAvailableArtifacts(artifactsDir);
 			const availableStr = available.length > 0 ? available.join(", ") : "none";
 			throw new Error(`Artifact ${id} not found. Available: ${availableStr}`);
 		}

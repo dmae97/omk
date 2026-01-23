@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
 import { YAML } from "bun";
 
@@ -11,18 +11,18 @@ describe("SettingsManager", () => {
 
 	beforeEach(() => {
 		// Use random UUID to isolate parallel test runs (SQLite files can't be shared)
-		testDir = join(process.cwd(), "test-settings-tmp", crypto.randomUUID());
-		agentDir = join(testDir, "agent");
-		projectDir = join(testDir, "project");
+		testDir = path.join(process.cwd(), "test-settings-tmp", crypto.randomUUID());
+		agentDir = path.join(testDir, "agent");
+		projectDir = path.join(testDir, "project");
 
-		if (existsSync(testDir)) {
-			rmSync(testDir, { recursive: true });
+		if (fs.existsSync(testDir)) {
+			fs.rmSync(testDir, { recursive: true });
 		}
-		mkdirSync(agentDir, { recursive: true });
-		mkdirSync(join(projectDir, ".pi"), { recursive: true });
+		fs.mkdirSync(agentDir, { recursive: true });
+		fs.mkdirSync(path.join(projectDir, ".pi"), { recursive: true });
 	});
 
-	const getConfigPath = () => join(agentDir, "config.yml");
+	const getConfigPath = () => path.join(agentDir, "config.yml");
 
 	const writeSettings = async (settings: Record<string, unknown>) => {
 		await Bun.write(getConfigPath(), YAML.stringify(settings, null, 2));
@@ -38,8 +38,8 @@ describe("SettingsManager", () => {
 	};
 
 	afterEach(() => {
-		if (existsSync(testDir)) {
-			rmSync(testDir, { recursive: true });
+		if (fs.existsSync(testDir)) {
+			fs.rmSync(testDir, { recursive: true });
 		}
 	});
 

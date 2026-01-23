@@ -15,8 +15,9 @@
  */
 
 import { Glob } from "bun";
-import { existsSync, readFileSync } from "node:fs";
+
 import { basename } from "node:path";
+import { isEnoent } from "@oh-my-pi/pi-utils";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
@@ -70,8 +71,8 @@ function classifyError(resultText: string): string {
 	return "unknown";
 }
 
-function extractEditAttempts(sessionPath: string): EditAttempt[] {
-	const content = readFileSync(sessionPath, "utf-8");
+async function extractEditAttempts(sessionPath: string): Promise<EditAttempt[]> {
+	const content = await Bun.file(sessionPath).text();
 	const lines = content.trim().split("\n");
 	const messages: Message[] = lines.map((line) => JSON.parse(line));
 
@@ -316,8 +317,13 @@ async function expandGlobs(patterns: string[]): Promise<string[]> {
 			for await (const file of glob.scan({ absolute: true })) {
 				files.push(file);
 			}
-		} else if (existsSync(pattern)) {
-			files.push(pattern);
+		} else {
+			try {
+				await Bun.file(pattern).text();
+				files.push(pattern);
+			} catch (err) {
+				if (!isEnoent(err)) throw err;
+			}
 		}
 	}
 	return files;
@@ -354,7 +360,7 @@ Examples:
 
 	for (const file of files) {
 		try {
-			let attempts = extractEditAttempts(file);
+			let attempts = await extractEditAttempts(file);
 
 			// Filter
 			if (options.failures) attempts = attempts.filter((a) => a.isError);

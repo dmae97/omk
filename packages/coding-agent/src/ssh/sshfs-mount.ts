@@ -1,25 +1,21 @@
-import { chmodSync, existsSync, mkdirSync } from "node:fs";
+import * as fs from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
-import { logger } from "@oh-my-pi/pi-utils";
+import * as path from "node:path";
 import { $ } from "bun";
 import { CONFIG_DIR_NAME } from "../config";
 import { getControlDir, getControlPathTemplate, type SSHConnectionTarget } from "./connection-manager";
 
-const REMOTE_DIR = join(homedir(), CONFIG_DIR_NAME, "remote");
+const REMOTE_DIR = path.join(homedir(), CONFIG_DIR_NAME, "remote");
 const CONTROL_DIR = getControlDir();
 const CONTROL_PATH = getControlPathTemplate();
 
 const mountedPaths = new Set<string>();
 
-function ensureDir(path: string, mode = 0o700): void {
-	if (!existsSync(path)) {
-		mkdirSync(path, { recursive: true, mode });
-	}
+async function ensureDir(path: string, mode = 0o700): Promise<void> {
 	try {
-		chmodSync(path, mode);
-	} catch (err) {
-		logger.debug("SSHFS dir chmod failed", { path, error: String(err) });
+		await fs.promises.mkdir(path, { recursive: true, mode });
+	} catch {
+		await fs.promises.chmod(path, mode).catch((e) => void e);
 	}
 }
 
@@ -30,7 +26,7 @@ function getMountName(host: SSHConnectionTarget): string {
 }
 
 function getMountPath(host: SSHConnectionTarget): string {
-	return join(REMOTE_DIR, getMountName(host));
+	return path.join(REMOTE_DIR, getMountName(host));
 }
 
 function buildSshTarget(host: SSHConnectionTarget): string {
@@ -95,11 +91,8 @@ export async function isMounted(path: string): Promise<boolean> {
 export async function mountRemote(host: SSHConnectionTarget, remotePath = "/"): Promise<string | undefined> {
 	if (!hasSshfs()) return undefined;
 
-	ensureDir(REMOTE_DIR);
-	ensureDir(CONTROL_DIR);
-
 	const mountPath = getMountPath(host);
-	ensureDir(mountPath);
+	await Promise.all([ensureDir(REMOTE_DIR), ensureDir(CONTROL_DIR), ensureDir(mountPath)]);
 
 	if (await isMounted(mountPath)) {
 		mountedPaths.add(mountPath);

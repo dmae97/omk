@@ -7,7 +7,7 @@
  * User directory: ~/.codex
  */
 
-import { join } from "node:path";
+import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import { parse as parseToml } from "smol-toml";
 import { registerProvider } from "../capability";
@@ -45,7 +45,7 @@ const DISPLAY_NAME = "OpenAI Codex";
 const PRIORITY = 70;
 
 function getProjectCodexDir(ctx: LoadContext): string {
-	return join(ctx.cwd, ".codex");
+	return path.join(ctx.cwd, ".codex");
 }
 
 // =============================================================================
@@ -57,7 +57,7 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 	const warnings: string[] = [];
 
 	// User level only: ~/.codex/AGENTS.md
-	const agentsMd = join(ctx.home, SOURCE_PATHS.codex.userBase, "AGENTS.md");
+	const agentsMd = path.join(ctx.home, SOURCE_PATHS.codex.userBase, "AGENTS.md");
 	const agentsContent = await readFile(agentsMd);
 	if (agentsContent) {
 		items.push({
@@ -78,9 +78,9 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 async function loadMCPServers(ctx: LoadContext): Promise<LoadResult<MCPServer>> {
 	const warnings: string[] = [];
 
-	const userConfigPath = join(ctx.home, SOURCE_PATHS.codex.userBase, "config.toml");
+	const userConfigPath = path.join(ctx.home, SOURCE_PATHS.codex.userBase, "config.toml");
 	const codexDir = getProjectCodexDir(ctx);
-	const projectConfigPath = join(codexDir, "config.toml");
+	const projectConfigPath = path.join(codexDir, "config.toml");
 
 	const [userConfig, projectConfig] = await Promise.all([
 		loadTomlConfig(ctx, userConfigPath),
@@ -210,9 +210,9 @@ function extractMCPServersFromToml(toml: Record<string, unknown>): Record<string
 // =============================================================================
 
 async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
-	const userSkillsDir = join(ctx.home, SOURCE_PATHS.codex.userBase, "skills");
+	const userSkillsDir = path.join(ctx.home, SOURCE_PATHS.codex.userBase, "skills");
 	const codexDir = getProjectCodexDir(ctx);
-	const projectSkillsDir = join(codexDir, "skills");
+	const projectSkillsDir = path.join(codexDir, "skills");
 
 	const results = await Promise.all([
 		loadSkillsFromDir(ctx, {
@@ -240,9 +240,9 @@ async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
 async function loadExtensionModules(ctx: LoadContext): Promise<LoadResult<ExtensionModule>> {
 	const warnings: string[] = [];
 
-	const userExtensionsDir = join(ctx.home, SOURCE_PATHS.codex.userBase, "extensions");
+	const userExtensionsDir = path.join(ctx.home, SOURCE_PATHS.codex.userBase, "extensions");
 	const codexDir = getProjectCodexDir(ctx);
-	const projectExtensionsDir = join(codexDir, "extensions");
+	const projectExtensionsDir = path.join(codexDir, "extensions");
 
 	const [userPaths, projectPaths] = await Promise.all([
 		discoverExtensionModulePaths(ctx, userExtensionsDir),
@@ -272,9 +272,9 @@ async function loadExtensionModules(ctx: LoadContext): Promise<LoadResult<Extens
 // =============================================================================
 
 async function loadSlashCommands(ctx: LoadContext): Promise<LoadResult<SlashCommand>> {
-	const userCommandsDir = join(ctx.home, SOURCE_PATHS.codex.userBase, "commands");
+	const userCommandsDir = path.join(ctx.home, SOURCE_PATHS.codex.userBase, "commands");
 	const codexDir = getProjectCodexDir(ctx);
-	const projectCommandsDir = join(codexDir, "commands");
+	const projectCommandsDir = path.join(codexDir, "commands");
 
 	const transformCommand =
 		(level: "user" | "project") =>
@@ -312,9 +312,9 @@ async function loadSlashCommands(ctx: LoadContext): Promise<LoadResult<SlashComm
 // =============================================================================
 
 async function loadPrompts(ctx: LoadContext): Promise<LoadResult<Prompt>> {
-	const userPromptsDir = join(ctx.home, SOURCE_PATHS.codex.userBase, "prompts");
+	const userPromptsDir = path.join(ctx.home, SOURCE_PATHS.codex.userBase, "prompts");
 	const codexDir = getProjectCodexDir(ctx);
-	const projectPromptsDir = join(codexDir, "prompts");
+	const projectPromptsDir = path.join(codexDir, "prompts");
 
 	const transformPrompt = (
 		name: string,
@@ -355,9 +355,9 @@ async function loadPrompts(ctx: LoadContext): Promise<LoadResult<Prompt>> {
 // =============================================================================
 
 async function loadHooks(ctx: LoadContext): Promise<LoadResult<Hook>> {
-	const userHooksDir = join(ctx.home, SOURCE_PATHS.codex.userBase, "hooks");
+	const userHooksDir = path.join(ctx.home, SOURCE_PATHS.codex.userBase, "hooks");
 	const codexDir = getProjectCodexDir(ctx);
-	const projectHooksDir = join(codexDir, "hooks");
+	const projectHooksDir = path.join(codexDir, "hooks");
 
 	const transformHook =
 		(level: "user" | "project") =>
@@ -398,9 +398,9 @@ async function loadHooks(ctx: LoadContext): Promise<LoadResult<Hook>> {
 // =============================================================================
 
 async function loadTools(ctx: LoadContext): Promise<LoadResult<CustomTool>> {
-	const userToolsDir = join(ctx.home, SOURCE_PATHS.codex.userBase, "tools");
+	const userToolsDir = path.join(ctx.home, SOURCE_PATHS.codex.userBase, "tools");
 	const codexDir = getProjectCodexDir(ctx);
-	const projectToolsDir = join(codexDir, "tools");
+	const projectToolsDir = path.join(codexDir, "tools");
 
 	const transformTool =
 		(level: "user" | "project") =>
@@ -438,9 +438,9 @@ async function loadTools(ctx: LoadContext): Promise<LoadResult<CustomTool>> {
 async function loadSettings(ctx: LoadContext): Promise<LoadResult<Settings>> {
 	const warnings: string[] = [];
 
-	const userConfigPath = join(ctx.home, SOURCE_PATHS.codex.userBase, "config.toml");
+	const userConfigPath = path.join(ctx.home, SOURCE_PATHS.codex.userBase, "config.toml");
 	const codexDir = getProjectCodexDir(ctx);
-	const projectConfigPath = join(codexDir, "config.toml");
+	const projectConfigPath = path.join(codexDir, "config.toml");
 
 	const [userConfig, projectConfig] = await Promise.all([
 		loadTomlConfig(ctx, userConfigPath),

@@ -14,7 +14,14 @@ import { SettingsSelectorComponent } from "../../modes/components/settings-selec
 import { ToolExecutionComponent } from "../../modes/components/tool-execution";
 import { TreeSelectorComponent } from "../../modes/components/tree-selector";
 import { UserMessageSelectorComponent } from "../../modes/components/user-message-selector";
-import { getAvailableThemes, getSymbolTheme, setSymbolPreset, setTheme, theme } from "../../modes/theme/theme";
+import {
+	getAvailableThemes,
+	getSymbolTheme,
+	setColorBlindMode,
+	setSymbolPreset,
+	setTheme,
+	theme,
+} from "../../modes/theme/theme";
 import type { InteractiveModeContext } from "../../modes/types";
 import { SessionManager } from "../../session/session-manager";
 import { setPreferredImageProvider, setPreferredWebSearchProvider } from "../../tools";
@@ -40,49 +47,52 @@ export class SelectorController {
 	}
 
 	showSettingsSelector(): void {
-		this.showSelector((done) => {
-			const selector = new SettingsSelectorComponent(
-				this.ctx.settingsManager,
-				{
-					availableThinkingLevels: this.ctx.session.getAvailableThinkingLevels(),
-					thinkingLevel: this.ctx.session.thinkingLevel,
-					availableThemes: getAvailableThemes(),
-					cwd: process.cwd(),
-				},
-				{
-					onChange: (id, value) => this.handleSettingChange(id, value),
-					onThemePreview: (themeName) => {
-						const result = setTheme(themeName, true);
-						if (result.success) {
-							this.ctx.ui.invalidate();
+		getAvailableThemes().then((availableThemes) => {
+			this.showSelector((done) => {
+				const selector = new SettingsSelectorComponent(
+					this.ctx.settingsManager,
+					{
+						availableThinkingLevels: this.ctx.session.getAvailableThinkingLevels(),
+						thinkingLevel: this.ctx.session.thinkingLevel,
+						availableThemes,
+						cwd: process.cwd(),
+					},
+					{
+						onChange: (id, value) => this.handleSettingChange(id, value),
+						onThemePreview: (themeName) => {
+							setTheme(themeName, true).then((result) => {
+								if (result.success) {
+									this.ctx.ui.invalidate();
+									this.ctx.ui.requestRender();
+								}
+							});
+						},
+						onStatusLinePreview: (settings) => {
+							// Update status line with preview settings
+							const currentSettings = this.ctx.settingsManager.getStatusLineSettings();
+							this.ctx.statusLine.updateSettings({ ...currentSettings, ...settings });
+							this.ctx.updateEditorTopBorder();
 							this.ctx.ui.requestRender();
-						}
+						},
+						getStatusLinePreview: () => {
+							// Return the rendered status line for inline preview
+							const width = this.ctx.ui.getWidth();
+							return this.ctx.statusLine.getTopBorder(width).content;
+						},
+						onPluginsChanged: () => {
+							this.ctx.ui.requestRender();
+						},
+						onCancel: () => {
+							done();
+							// Restore status line to saved settings
+							this.ctx.statusLine.updateSettings(this.ctx.settingsManager.getStatusLineSettings());
+							this.ctx.updateEditorTopBorder();
+							this.ctx.ui.requestRender();
+						},
 					},
-					onStatusLinePreview: (settings) => {
-						// Update status line with preview settings
-						const currentSettings = this.ctx.settingsManager.getStatusLineSettings();
-						this.ctx.statusLine.updateSettings({ ...currentSettings, ...settings });
-						this.ctx.updateEditorTopBorder();
-						this.ctx.ui.requestRender();
-					},
-					getStatusLinePreview: () => {
-						// Return the rendered status line for inline preview
-						const width = this.ctx.ui.getWidth();
-						return this.ctx.statusLine.getTopBorder(width).content;
-					},
-					onPluginsChanged: () => {
-						this.ctx.ui.requestRender();
-					},
-					onCancel: () => {
-						done();
-						// Restore status line to saved settings
-						this.ctx.statusLine.updateSettings(this.ctx.settingsManager.getStatusLineSettings());
-						this.ctx.updateEditorTopBorder();
-						this.ctx.ui.requestRender();
-					},
-				},
-			);
-			return { component: selector, focus: selector };
+				);
+				return { component: selector, focus: selector };
+			});
 		});
 	}
 
@@ -183,20 +193,28 @@ export class SelectorController {
 				this.ctx.rebuildChatFromMessages();
 				break;
 			case "theme": {
-				const result = setTheme(value as string, true);
-				this.ctx.statusLine.invalidate();
-				this.ctx.updateEditorTopBorder();
-				this.ctx.ui.invalidate();
-				if (!result.success) {
-					this.ctx.showError(`Failed to load theme "${value}": ${result.error}\nFell back to dark theme.`);
-				}
+				setTheme(value as string, true).then((result) => {
+					this.ctx.statusLine.invalidate();
+					this.ctx.updateEditorTopBorder();
+					this.ctx.ui.invalidate();
+					if (!result.success) {
+						this.ctx.showError(`Failed to load theme "${value}": ${result.error}\nFell back to dark theme.`);
+					}
+				});
 				break;
 			}
 			case "symbolPreset": {
-				setSymbolPreset(value as "unicode" | "nerd" | "ascii");
-				this.ctx.statusLine.invalidate();
-				this.ctx.updateEditorTopBorder();
-				this.ctx.ui.invalidate();
+				setSymbolPreset(value as "unicode" | "nerd" | "ascii").then(() => {
+					this.ctx.statusLine.invalidate();
+					this.ctx.updateEditorTopBorder();
+					this.ctx.ui.invalidate();
+				});
+				break;
+			}
+			case "colorBlindMode": {
+				setColorBlindMode(value === "true" || value === true).then(() => {
+					this.ctx.ui.invalidate();
+				});
 				break;
 			}
 			case "statusLinePreset":
@@ -447,12 +465,12 @@ export class SelectorController {
 		});
 	}
 
-	showSessionSelector(): void {
+	async showSessionSelector(): Promise<void> {
+		const sessions = await SessionManager.list(
+			this.ctx.sessionManager.getCwd(),
+			this.ctx.sessionManager.getSessionDir(),
+		);
 		this.showSelector((done) => {
-			const sessions = SessionManager.list(
-				this.ctx.sessionManager.getCwd(),
-				this.ctx.sessionManager.getSessionDir(),
-			);
 			const selector = new SessionSelectorComponent(
 				sessions,
 				async (sessionPath) => {

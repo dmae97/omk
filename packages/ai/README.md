@@ -551,10 +551,9 @@ The abort signal allows you to cancel in-progress requests. Aborted requests hav
 import { getModel, stream } from "@oh-my-pi/pi-ai";
 
 const model = getModel("openai", "gpt-4o-mini");
-const controller = new AbortController();
 
 // Abort after 2 seconds
-setTimeout(() => controller.abort(), 2000);
+const signal = AbortSignal.timeout(2000);
 
 const s = stream(
 	model,
@@ -562,7 +561,7 @@ const s = stream(
 		messages: [{ role: "user", content: "Write a long story" }],
 	},
 	{
-		signal: controller.signal,
+		signal,
 	},
 );
 

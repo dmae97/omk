@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { EditorTheme, MarkdownTheme, SelectListTheme, SymbolTheme } from "@oh-my-pi/pi-tui";
-import { logger } from "@oh-my-pi/pi-utils";
+import { adjustHsv, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { TypeCompiler } from "@sinclair/typebox/compiler";
 import chalk from "chalk";
@@ -1600,16 +1600,18 @@ function getBuiltinThemes(): Record<string, ThemeJson> {
 	return BUILTIN_THEMES;
 }
 
-export function getAvailableThemes(): string[] {
+export async function getAvailableThemes(): Promise<string[]> {
 	const themes = new Set<string>(Object.keys(getBuiltinThemes()));
 	const customThemesDir = getCustomThemesDir();
-	if (fs.existsSync(customThemesDir)) {
-		const files = fs.readdirSync(customThemesDir);
+	try {
+		const files = await fs.promises.readdir(customThemesDir);
 		for (const file of files) {
 			if (file.endsWith(".json")) {
 				themes.add(file.slice(0, -5));
 			}
 		}
+	} catch {
+		// Directory doesn't exist or isn't readable
 	}
 	return Array.from(themes).sort();
 }
@@ -1619,7 +1621,7 @@ export interface ThemeInfo {
 	path: string | undefined;
 }
 
-export function getAvailableThemesWithPaths(): ThemeInfo[] {
+export async function getAvailableThemesWithPaths(): Promise<ThemeInfo[]> {
 	const result: ThemeInfo[] = [];
 
 	// Built-in themes (embedded, no file path)
@@ -1629,8 +1631,9 @@ export function getAvailableThemesWithPaths(): ThemeInfo[] {
 
 	// Custom themes
 	const customThemesDir = getCustomThemesDir();
-	if (fs.existsSync(customThemesDir)) {
-		for (const file of fs.readdirSync(customThemesDir)) {
+	try {
+		const files = await fs.promises.readdir(customThemesDir);
+		for (const file of files) {
 			if (file.endsWith(".json")) {
 				const name = file.slice(0, -5);
 				if (!result.some((themeInfo) => themeInfo.name === name)) {
@@ -1638,22 +1641,27 @@ export function getAvailableThemesWithPaths(): ThemeInfo[] {
 				}
 			}
 		}
+	} catch {
+		// Directory doesn't exist or isn't readable
 	}
 
 	return result.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function loadThemeJson(name: string): ThemeJson {
+async function loadThemeJson(name: string): Promise<ThemeJson> {
 	const builtinThemes = getBuiltinThemes();
 	if (name in builtinThemes) {
 		return builtinThemes[name];
 	}
 	const customThemesDir = getCustomThemesDir();
 	const themePath = path.join(customThemesDir, `${name}.json`);
-	if (!fs.existsSync(themePath)) {
-		throw new Error(`Theme not found: ${name}`);
+	let content: string;
+	try {
+		content = await Bun.file(themePath).text();
+	} catch (err) {
+		if (isEnoent(err)) throw new Error(`Theme not found: ${name}`);
+		throw err;
 	}
-	const content = fs.readFileSync(themePath, "utf-8");
 	let json: unknown;
 	try {
 		json = JSON.parse(content);
@@ -1691,9 +1699,27 @@ function loadThemeJson(name: string): ThemeJson {
 	return json as ThemeJson;
 }
 
-function createTheme(themeJson: ThemeJson, mode?: ColorMode, symbolPresetOverride?: SymbolPreset): Theme {
+interface CreateThemeOptions {
+	mode?: ColorMode;
+	symbolPresetOverride?: SymbolPreset;
+	colorBlindMode?: boolean;
+}
+
+/** HSV adjustment to shift green toward blue for colorblind mode (red-green colorblindness) */
+const COLORBLIND_ADJUSTMENT = { h: 60, s: 0.71 };
+
+function createTheme(themeJson: ThemeJson, options: CreateThemeOptions = {}): Theme {
+	const { mode, symbolPresetOverride, colorBlindMode } = options;
 	const colorMode = mode ?? detectColorMode();
 	const resolvedColors = resolveThemeColors(themeJson.colors, themeJson.vars);
+
+	if (colorBlindMode) {
+		const added = resolvedColors.toolDiffAdded;
+		if (typeof added === "string" && added.startsWith("#")) {
+			resolvedColors.toolDiffAdded = adjustHsv(added, COLORBLIND_ADJUSTMENT);
+		}
+	}
+
 	const fgColors: Record<ThemeColor, string | number> = {} as Record<ThemeColor, string | number>;
 	const bgColors: Record<ThemeBg, string | number> = {} as Record<ThemeBg, string | number>;
 	const bgColorKeys: Set<string> = new Set([
@@ -1718,14 +1744,14 @@ function createTheme(themeJson: ThemeJson, mode?: ColorMode, symbolPresetOverrid
 	return new Theme(fgColors, bgColors, colorMode, symbolPreset, symbolOverrides);
 }
 
-function loadTheme(name: string, mode?: ColorMode, symbolPresetOverride?: SymbolPreset): Theme {
-	const themeJson = loadThemeJson(name);
-	return createTheme(themeJson, mode, symbolPresetOverride);
+async function loadTheme(name: string, options: CreateThemeOptions = {}): Promise<Theme> {
+	const themeJson = await loadThemeJson(name);
+	return createTheme(themeJson, options);
 }
 
-export function getThemeByName(name: string): Theme | undefined {
+export async function getThemeByName(name: string): Promise<Theme | undefined> {
 	try {
-		return loadTheme(name);
+		return await loadTheme(name);
 	} catch {
 		return undefined;
 	}
@@ -1757,32 +1783,49 @@ function getDefaultTheme(): string {
 export let theme: Theme;
 let currentThemeName: string | undefined;
 let currentSymbolPresetOverride: SymbolPreset | undefined;
+let currentColorBlindMode: boolean = false;
 let themeWatcher: fs.FSWatcher | undefined;
 let onThemeChangeCallback: (() => void) | undefined;
 
-export function initTheme(themeName?: string, enableWatcher: boolean = false, symbolPreset?: SymbolPreset): void {
+function getCurrentThemeOptions(): CreateThemeOptions {
+	return {
+		symbolPresetOverride: currentSymbolPresetOverride,
+		colorBlindMode: currentColorBlindMode,
+	};
+}
+
+export async function initTheme(
+	themeName?: string,
+	enableWatcher: boolean = false,
+	symbolPreset?: SymbolPreset,
+	colorBlindMode?: boolean,
+): Promise<void> {
 	const name = themeName ?? getDefaultTheme();
 	currentThemeName = name;
 	currentSymbolPresetOverride = symbolPreset;
+	currentColorBlindMode = colorBlindMode ?? false;
 	try {
-		theme = loadTheme(name, undefined, symbolPreset);
+		theme = await loadTheme(name, getCurrentThemeOptions());
 		if (enableWatcher) {
-			startThemeWatcher();
+			await startThemeWatcher();
 		}
 	} catch (err) {
 		logger.debug("Theme loading failed, falling back to dark theme", { error: String(err) });
 		currentThemeName = "dark";
-		theme = loadTheme("dark", undefined, symbolPreset);
+		theme = await loadTheme("dark", getCurrentThemeOptions());
 		// Don't start watcher for fallback theme
 	}
 }
 
-export function setTheme(name: string, enableWatcher: boolean = false): { success: boolean; error?: string } {
+export async function setTheme(
+	name: string,
+	enableWatcher: boolean = false,
+): Promise<{ success: boolean; error?: string }> {
 	currentThemeName = name;
 	try {
-		theme = loadTheme(name, undefined, currentSymbolPresetOverride);
+		theme = await loadTheme(name, getCurrentThemeOptions());
 		if (enableWatcher) {
-			startThemeWatcher();
+			await startThemeWatcher();
 		}
 		if (onThemeChangeCallback) {
 			onThemeChangeCallback();
@@ -1791,7 +1834,7 @@ export function setTheme(name: string, enableWatcher: boolean = false): { succes
 	} catch (error) {
 		// Theme is invalid - fall back to dark theme
 		currentThemeName = "dark";
-		theme = loadTheme("dark", undefined, currentSymbolPresetOverride);
+		theme = await loadTheme("dark", getCurrentThemeOptions());
 		// Don't start watcher for fallback theme
 		return {
 			success: false,
@@ -1812,14 +1855,14 @@ export function setThemeInstance(themeInstance: Theme): void {
 /**
  * Set the symbol preset override, recreating the theme with the new preset.
  */
-export function setSymbolPreset(preset: SymbolPreset): void {
+export async function setSymbolPreset(preset: SymbolPreset): Promise<void> {
 	currentSymbolPresetOverride = preset;
 	if (currentThemeName) {
 		try {
-			theme = loadTheme(currentThemeName, undefined, preset);
+			theme = await loadTheme(currentThemeName, getCurrentThemeOptions());
 		} catch {
 			// Fall back to dark theme with new preset
-			theme = loadTheme("dark", undefined, preset);
+			theme = await loadTheme("dark", getCurrentThemeOptions());
 		}
 		if (onThemeChangeCallback) {
 			onThemeChangeCallback();
@@ -1832,6 +1875,32 @@ export function setSymbolPreset(preset: SymbolPreset): void {
  */
 export function getSymbolPresetOverride(): SymbolPreset | undefined {
 	return currentSymbolPresetOverride;
+}
+
+/**
+ * Set color blind mode, recreating the theme with the new setting.
+ * When enabled, uses blue instead of green for diff additions.
+ */
+export async function setColorBlindMode(enabled: boolean): Promise<void> {
+	currentColorBlindMode = enabled;
+	if (currentThemeName) {
+		try {
+			theme = await loadTheme(currentThemeName, getCurrentThemeOptions());
+		} catch {
+			// Fall back to dark theme
+			theme = await loadTheme("dark", getCurrentThemeOptions());
+		}
+		if (onThemeChangeCallback) {
+			onThemeChangeCallback();
+		}
+	}
+}
+
+/**
+ * Get the current color blind mode setting.
+ */
+export function getColorBlindMode(): boolean {
+	return currentColorBlindMode;
 }
 
 export function onThemeChange(callback: () => void): void {
@@ -1852,7 +1921,7 @@ export function isValidSymbolPreset(preset: string): preset is SymbolPreset {
 	return preset === "unicode" || preset === "nerd" || preset === "ascii";
 }
 
-function startThemeWatcher(): void {
+async function startThemeWatcher(): Promise<void> {
 	// Stop existing watcher if any
 	if (themeWatcher) {
 		themeWatcher.close();
@@ -1877,29 +1946,35 @@ function startThemeWatcher(): void {
 			if (eventType === "change") {
 				// Debounce rapid changes
 				setTimeout(() => {
-					try {
-						// Reload the theme with current symbol preset override
-						theme = loadTheme(currentThemeName!, undefined, currentSymbolPresetOverride);
-						// Notify callback (to invalidate UI)
-						if (onThemeChangeCallback) {
-							onThemeChangeCallback();
-						}
-					} catch (err) {
-						logger.debug("Theme reload error during file change", { error: String(err) });
-					}
+					loadTheme(currentThemeName!, getCurrentThemeOptions())
+						.then((loadedTheme) => {
+							theme = loadedTheme;
+							if (onThemeChangeCallback) {
+								onThemeChangeCallback();
+							}
+						})
+						.catch((err) => {
+							logger.debug("Theme reload error during file change", { error: String(err) });
+						});
 				}, 100);
 			} else if (eventType === "rename") {
 				// File was deleted or renamed - fall back to default theme
 				setTimeout(() => {
 					if (!fs.existsSync(themeFile)) {
 						currentThemeName = "dark";
-						theme = loadTheme("dark");
+						loadTheme("dark", getCurrentThemeOptions())
+							.then((loadedTheme) => {
+								theme = loadedTheme;
+								if (onThemeChangeCallback) {
+									onThemeChangeCallback();
+								}
+							})
+							.catch((err) => {
+								logger.debug("Theme reload error during rename fallback", { error: String(err) });
+							});
 						if (themeWatcher) {
 							themeWatcher.close();
 							themeWatcher = undefined;
-						}
-						if (onThemeChangeCallback) {
-							onThemeChangeCallback();
 						}
 					}
 				}, 100);
@@ -1971,10 +2046,10 @@ function ansi256ToHex(index: number): string {
  * Get resolved theme colors as CSS-compatible hex strings.
  * Used by HTML export to generate CSS custom properties.
  */
-export function getResolvedThemeColors(themeName?: string): Record<string, string> {
+export async function getResolvedThemeColors(themeName?: string): Promise<Record<string, string>> {
 	const name = themeName ?? getDefaultTheme();
 	const isLight = name === "light";
-	const themeJson = loadThemeJson(name);
+	const themeJson = await loadThemeJson(name);
 	const resolved = resolveThemeColors(themeJson.colors, themeJson.vars);
 
 	// Default text color for empty values (terminal uses default fg color)
@@ -2006,14 +2081,14 @@ export function isLightTheme(themeName?: string): boolean {
  * Get explicit export colors from theme JSON, if specified.
  * Returns undefined for each color that isn't explicitly set.
  */
-export function getThemeExportColors(themeName?: string): {
+export async function getThemeExportColors(themeName?: string): Promise<{
 	pageBg?: string;
 	cardBg?: string;
 	infoBg?: string;
-} {
+}> {
 	const name = themeName ?? getDefaultTheme();
 	try {
-		const themeJson = loadThemeJson(name);
+		const themeJson = await loadThemeJson(name);
 		const exportSection = themeJson.export;
 		if (!exportSection) return {};
 

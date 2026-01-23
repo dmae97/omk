@@ -1,5 +1,5 @@
-import { existsSync } from "node:fs";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import * as fs from "node:fs/promises";
+import { isEnoent } from "@oh-my-pi/pi-utils";
 
 export interface FileLockOptions {
 	staleMs?: number;
@@ -29,7 +29,7 @@ async function writeLockInfo(lockPath: string): Promise<void> {
 
 async function readLockInfo(lockPath: string): Promise<LockInfo | null> {
 	try {
-		const content = await readFile(`${lockPath}/info`, "utf-8");
+		const content = await fs.readFile(`${lockPath}/info`, "utf-8");
 		return JSON.parse(content) as LockInfo;
 	} catch {
 		return null;
@@ -58,7 +58,7 @@ async function isLockStale(lockPath: string, staleMs: number): Promise<boolean> 
 
 async function tryAcquireLock(lockPath: string): Promise<boolean> {
 	try {
-		await mkdir(lockPath);
+		await fs.mkdir(lockPath);
 		await writeLockInfo(lockPath);
 		return true;
 	} catch (error) {
@@ -71,9 +71,19 @@ async function tryAcquireLock(lockPath: string): Promise<boolean> {
 
 async function releaseLock(lockPath: string): Promise<void> {
 	try {
-		await rm(lockPath, { recursive: true });
+		await fs.rm(lockPath, { recursive: true });
 	} catch {
 		// Ignore errors on release
+	}
+}
+
+async function lockExists(lockPath: string): Promise<boolean> {
+	try {
+		await fs.stat(lockPath);
+		return true;
+	} catch (err) {
+		if (isEnoent(err)) return false;
+		throw err;
 	}
 }
 
@@ -86,7 +96,7 @@ async function acquireLock(filePath: string, options: FileLockOptions = {}): Pro
 			return () => releaseLock(lockPath);
 		}
 
-		if (existsSync(lockPath) && (await isLockStale(lockPath, opts.staleMs))) {
+		if ((await lockExists(lockPath)) && (await isLockStale(lockPath, opts.staleMs))) {
 			await releaseLock(lockPath);
 			continue;
 		}

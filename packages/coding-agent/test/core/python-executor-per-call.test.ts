@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { executePython } from "@oh-my-pi/pi-coding-agent/ipy/executor";
 import type { KernelExecuteOptions, KernelExecuteResult } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
 import { PythonKernel } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
-import { createTempDirSync } from "@oh-my-pi/pi-utils";
+import { TempDir } from "@oh-my-pi/pi-utils";
 
 interface KernelStub {
 	execute: (code: string, options?: KernelExecuteOptions) => Promise<KernelExecuteResult>;
@@ -12,7 +12,7 @@ interface KernelStub {
 describe("executePython (per-call)", () => {
 	it("shuts down kernel on timed-out cancellation", async () => {
 		process.env.OMP_PYTHON_SKIP_CHECK = "1";
-		using tempDir = createTempDirSync("@omp-python-executor-per-call-");
+		using tempDir = TempDir.createSync("@omp-python-executor-per-call-");
 
 		let shutdownCalls = 0;
 		const kernel: KernelStub = {
@@ -37,7 +37,7 @@ describe("executePython (per-call)", () => {
 			const result = await executePython("sleep(10)", {
 				kernelMode: "per-call",
 				timeoutMs: 2000,
-				cwd: tempDir.path,
+				cwd: tempDir.path(),
 			});
 
 			expect(result.cancelled).toBe(true);

@@ -3,7 +3,7 @@
  * Supports Ctrl+G for external editor.
  */
 
-import { rm } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Container, Editor, matchesKey, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
@@ -110,7 +110,7 @@ export class HookEditorComponent extends Container {
 			}
 		} finally {
 			try {
-				await rm(tmpFile, { force: true });
+				await fs.rm(tmpFile, { force: true });
 			} catch {
 				// Ignore cleanup errors
 			}

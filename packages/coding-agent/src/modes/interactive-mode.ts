@@ -16,7 +16,7 @@ import {
 	Text,
 	TUI,
 } from "@oh-my-pi/pi-tui";
-import { logger, postmortem } from "@oh-my-pi/pi-utils";
+import { isEnoent, logger, postmortem } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { KeybindingsManager } from "../config/keybindings";
 import type { SettingsManager } from "../config/settings-manager";
@@ -268,7 +268,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		const providerName = this.session.model?.provider ?? "Unknown";
 
 		// Get recent sessions
-		const recentSessions = getRecentSessions(this.sessionManager.getSessionDir()).map((s) => ({
+		const recentSessions = (await getRecentSessions(this.sessionManager.getSessionDir())).map((s) => ({
 			name: s.name,
 			timeAgo: s.timeAgo,
 		}));
@@ -452,17 +452,16 @@ export class InteractiveMode implements InteractiveModeContext {
 		}
 		const artifactsDir = sessionFile.slice(0, -6);
 		const todoPath = path.join(artifactsDir, TODO_FILE_NAME);
-		const file = Bun.file(todoPath);
-		if (!(await file.exists())) {
-			this.renderTodoList();
-			return;
-		}
 		try {
-			const data = (await file.json()) as { todos?: TodoItem[] };
+			const data = (await Bun.file(todoPath).json()) as { todos?: TodoItem[] };
 			if (data?.todos && Array.isArray(data.todos)) {
 				this.todoItems = data.todos;
 			}
 		} catch (error) {
+			if (isEnoent(error)) {
+				this.renderTodoList();
+				return;
+			}
 			logger.warn("Failed to load todos", { path: todoPath, error: String(error) });
 		}
 		this.renderTodoList();
@@ -612,16 +611,16 @@ export class InteractiveMode implements InteractiveModeContext {
 		return this.commandController.handleCopyCommand();
 	}
 
-	handleSessionCommand(): void {
-		this.commandController.handleSessionCommand();
+	handleSessionCommand(): Promise<void> {
+		return this.commandController.handleSessionCommand();
 	}
 
 	handleUsageCommand(reports?: UsageReport[] | null): Promise<void> {
 		return this.commandController.handleUsageCommand(reports);
 	}
 
-	handleChangelogCommand(): void {
-		this.commandController.handleChangelogCommand();
+	async handleChangelogCommand(): Promise<void> {
+		await this.commandController.handleChangelogCommand();
 	}
 
 	handleHotkeysCommand(): void {

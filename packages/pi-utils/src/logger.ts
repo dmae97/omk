@@ -5,22 +5,22 @@
  * Each log entry includes process.pid for traceability.
  */
 
-import { existsSync, mkdirSync } from "node:fs";
+import * as fs from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import winston from "winston";
 import DailyRotateFile from "winston-daily-rotate-file";
 
 /** Get the logs directory (~/.omp/logs/) */
 function getLogsDir(): string {
-	return join(homedir(), ".omp", "logs");
+	return path.join(homedir(), ".omp", "logs");
 }
 
 /** Ensure logs directory exists */
 function ensureLogsDir(): string {
 	const logsDir = getLogsDir();
-	if (!existsSync(logsDir)) {
-		mkdirSync(logsDir, { recursive: true });
+	if (!fs.existsSync(logsDir)) {
+		fs.mkdirSync(logsDir, { recursive: true });
 	}
 	return logsDir;
 }

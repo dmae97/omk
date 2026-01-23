@@ -74,25 +74,51 @@ const EMBEDDED_AGENTS: { name: string; content: string }[] = EMBEDDED_AGENT_DEFS
 	content: buildAgentContent(def),
 }));
 
+export class AgentParsingError extends Error {
+	constructor(
+		error: Error,
+		public readonly source?: unknown,
+	) {
+		super(`Failed to parse agent: ${error.message}`, { cause: error });
+		this.name = "AgentParsingError";
+	}
+
+	toString(): string {
+		const details: string[] = [this.message];
+		if (this.source !== undefined) {
+			details.push(`Source: ${JSON.stringify(this.source)}`);
+		}
+		if (this.cause && typeof this.cause === "object" && "stack" in this.cause && this.cause.stack) {
+			details.push(`Stack:\n${this.cause.stack}`);
+		} else if (this.stack) {
+			details.push(`Stack:\n${this.stack}`);
+		}
+		return details.join("\n\n");
+	}
+}
+
 /**
  * Parse an agent from embedded content.
  */
-function parseAgent(fileName: string, content: string, source: AgentSource): AgentDefinition | null {
+export function parseAgent(
+	filePath: string,
+	content: string,
+	source: AgentSource,
+	level: "fatal" | "warn" | "off" = "fatal",
+): AgentDefinition {
 	const { frontmatter, body } = parseFrontmatter(content, {
-		source: `embedded:${fileName}`,
-		level: "fatal",
+		location: filePath,
+		level,
 	});
 	const fields = parseAgentFields(frontmatter);
-
 	if (!fields) {
-		return null;
+		throw new AgentParsingError(new Error("Invalid agent fields"), filePath);
 	}
-
 	return {
 		...fields,
 		systemPrompt: body,
 		source,
-		filePath: `embedded:${fileName}`,
+		filePath,
 	};
 }
 
@@ -107,18 +133,8 @@ export function loadBundledAgents(): AgentDefinition[] {
 	if (bundledAgentsCache !== null) {
 		return bundledAgentsCache;
 	}
-
-	const agents: AgentDefinition[] = [];
-
-	for (const { name, content } of EMBEDDED_AGENTS) {
-		const agent = parseAgent(name, content, "bundled");
-		if (agent) {
-			agents.push(agent);
-		}
-	}
-
-	bundledAgentsCache = agents;
-	return agents;
+	bundledAgentsCache = EMBEDDED_AGENTS.map(({ name, content }) => parseAgent(`embedded:${name}`, content, "bundled"));
+	return bundledAgentsCache;
 }
 
 /**

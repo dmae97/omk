@@ -13,7 +13,7 @@
  *   - Session artifacts for debugging
  */
 
-import { mkdir, rm, stat } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
@@ -310,7 +310,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 		const artifactsDir = sessionFile ? sessionFile.slice(0, -6) : null;
 		const tempArtifactsDir = artifactsDir ? null : path.join(tmpdir(), `omp-task-${nanoid()}`);
 		const effectiveArtifactsDir = artifactsDir || tempArtifactsDir!;
-		await mkdir(effectiveArtifactsDir, { recursive: true });
+		await fs.mkdir(effectiveArtifactsDir, { recursive: true });
 
 		// Initialize progress tracking
 		const progressMap = new Map<number, AgentProgress>();
@@ -573,7 +573,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 					const patchStats = await Promise.all(
 						patchesInOrder.map(async (patchPath) => ({
 							patchPath,
-							size: (await stat(patchPath)).size,
+							size: (await fs.stat(patchPath)).size,
 						})),
 					);
 					const nonEmptyPatches = patchStats.filter((patch) => patch.size > 0).map((patch) => patch.patchPath);
@@ -604,7 +604,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 									patchesApplied = applyResult.exitCode === 0;
 								}
 							} finally {
-								await rm(combinedPatchPath, { force: true });
+								await fs.rm(combinedPatchPath, { force: true });
 							}
 						}
 					}
@@ -655,7 +655,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 			const shouldCleanupTempArtifacts =
 				tempArtifactsDir && (!isIsolated || patchesApplied === true || patchesApplied === null);
 			if (shouldCleanupTempArtifacts) {
-				await rm(tempArtifactsDir, { recursive: true, force: true });
+				await fs.rm(tempArtifactsDir, { recursive: true, force: true });
 			}
 
 			return {

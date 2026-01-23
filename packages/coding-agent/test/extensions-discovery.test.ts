@@ -3,22 +3,22 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { discoverAndLoadExtensions, loadExtensions } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/loader";
-import { createTempDirSync } from "@oh-my-pi/pi-utils";
+import { TempDir } from "@oh-my-pi/pi-utils";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 describe("extensions discovery", () => {
-	let tempDir: ReturnType<typeof createTempDirSync>;
+	let tempDir: TempDir;
 	let extensionsDir: string;
 
 	beforeEach(() => {
-		tempDir = createTempDirSync("@pi-ext-test-");
-		extensionsDir = path.join(tempDir.path, ".omp", "extensions");
+		tempDir = TempDir.createSync("@pi-ext-test-");
+		extensionsDir = path.join(tempDir.path(), ".omp", "extensions");
 		fs.mkdirSync(extensionsDir, { recursive: true });
 	});
 
 	afterEach(() => {
-		tempDir.remove();
+		tempDir.removeSync();
 	});
 
 	const extensionCode = `
@@ -44,7 +44,7 @@ describe("extensions discovery", () => {
 		fs.writeFileSync(path.join(extensionsDir, "foo.ts"), extensionCode);
 		fs.writeFileSync(path.join(extensionsDir, "bar.ts"), extensionCode);
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(2);
@@ -54,7 +54,7 @@ describe("extensions discovery", () => {
 	it("discovers direct .js files in extensions/", async () => {
 		fs.writeFileSync(path.join(extensionsDir, "foo.js"), extensionCode);
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -66,7 +66,7 @@ describe("extensions discovery", () => {
 		fs.mkdirSync(subdir);
 		fs.writeFileSync(path.join(subdir, "index.ts"), extensionCode);
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -79,7 +79,7 @@ describe("extensions discovery", () => {
 		fs.mkdirSync(subdir);
 		fs.writeFileSync(path.join(subdir, "index.js"), extensionCode);
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -92,7 +92,7 @@ describe("extensions discovery", () => {
 		fs.writeFileSync(path.join(subdir, "index.ts"), extensionCode);
 		fs.writeFileSync(path.join(subdir, "index.js"), extensionCode);
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -115,7 +115,7 @@ describe("extensions discovery", () => {
 			}),
 		);
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -138,7 +138,7 @@ describe("extensions discovery", () => {
 			}),
 		);
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(2);
@@ -159,7 +159,7 @@ describe("extensions discovery", () => {
 			}),
 		);
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -181,7 +181,7 @@ describe("extensions discovery", () => {
 			}),
 		);
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -194,7 +194,7 @@ describe("extensions discovery", () => {
 		fs.writeFileSync(path.join(subdir, "helper.ts"), extensionCode);
 		fs.writeFileSync(path.join(subdir, "utils.ts"), extensionCode);
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(0);
@@ -208,7 +208,7 @@ describe("extensions discovery", () => {
 		fs.writeFileSync(path.join(nested, "index.ts"), extensionCode);
 		// No index.ts or package.json in container/
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(0);
@@ -229,7 +229,7 @@ describe("extensions discovery", () => {
 		fs.writeFileSync(path.join(subdir2, "entry.ts"), extensionCode);
 		fs.writeFileSync(path.join(subdir2, "package.json"), JSON.stringify({ pi: { extensions: ["./entry.ts"] } }));
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(3);
@@ -248,7 +248,7 @@ describe("extensions discovery", () => {
 			}),
 		);
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -258,7 +258,7 @@ describe("extensions discovery", () => {
 	it("loads extensions and registers commands", async () => {
 		fs.writeFileSync(path.join(extensionsDir, "with-command.ts"), extensionCode);
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -268,7 +268,7 @@ describe("extensions discovery", () => {
 	it("loads extensions and registers tools", async () => {
 		fs.writeFileSync(path.join(extensionsDir, "with-tool.ts"), extensionCodeWithTool("my-tool"));
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -278,7 +278,7 @@ describe("extensions discovery", () => {
 	it("reports errors for invalid extension code", async () => {
 		fs.writeFileSync(path.join(extensionsDir, "invalid.ts"), "this is not valid typescript export");
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(1);
 		expect(result.errors[0].path).toContain("invalid.ts");
@@ -286,11 +286,11 @@ describe("extensions discovery", () => {
 	});
 
 	it("handles explicitly configured paths", async () => {
-		const customPath = path.join(tempDir.path, "custom-location", "my-ext.ts");
+		const customPath = path.join(tempDir.path(), "custom-location", "my-ext.ts");
 		fs.mkdirSync(path.dirname(customPath), { recursive: true });
 		fs.writeFileSync(customPath, extensionCode);
 
-		const result = await discoverAndLoadExtensions([customPath], tempDir.path);
+		const result = await discoverAndLoadExtensions([customPath], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -301,7 +301,7 @@ describe("extensions discovery", () => {
 		// Load the real chalk-logger extension from examples
 		const chalkLoggerPath = path.resolve(__dirname, "../examples/extensions/chalk-logger.ts");
 
-		const result = await discoverAndLoadExtensions([chalkLoggerPath], tempDir.path);
+		const result = await discoverAndLoadExtensions([chalkLoggerPath], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -314,7 +314,7 @@ describe("extensions discovery", () => {
 		// Load extension that has its own package.json and node_modules with 'ms' package
 		const extPath = path.resolve(__dirname, "../examples/extensions/with-deps");
 
-		const result = await discoverAndLoadExtensions([extPath], tempDir.path);
+		const result = await discoverAndLoadExtensions([extPath], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -333,7 +333,7 @@ describe("extensions discovery", () => {
 		`;
 		fs.writeFileSync(path.join(extensionsDir, "with-renderer.ts"), extCode);
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -348,7 +348,7 @@ describe("extensions discovery", () => {
 		`;
 		fs.writeFileSync(path.join(extensionsDir, "throws.ts"), extCode);
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(1);
 		expect(result.errors[0].error).toContain("Initialization failed!");
@@ -363,7 +363,7 @@ describe("extensions discovery", () => {
 		`;
 		fs.writeFileSync(path.join(extensionsDir, "no-default.ts"), extCode);
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(1);
 		expect(result.errors[0].error).toContain("does not export a valid factory function");
@@ -374,7 +374,7 @@ describe("extensions discovery", () => {
 		fs.writeFileSync(path.join(extensionsDir, "tool-a.ts"), extensionCodeWithTool("tool-a"));
 		fs.writeFileSync(path.join(extensionsDir, "tool-b.ts"), extensionCodeWithTool("tool-b"));
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(2);
@@ -399,7 +399,7 @@ describe("extensions discovery", () => {
 		`;
 		fs.writeFileSync(path.join(extensionsDir, "with-handlers.ts"), extCode);
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -419,7 +419,7 @@ describe("extensions discovery", () => {
 		`;
 		fs.writeFileSync(path.join(extensionsDir, "with-shortcut.ts"), extCode);
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -437,7 +437,7 @@ describe("extensions discovery", () => {
 		`;
 		fs.writeFileSync(path.join(extensionsDir, "with-flag.ts"), extCode);
 
-		const result = await discoverAndLoadExtensions([], tempDir.path);
+		const result = await discoverAndLoadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -449,11 +449,11 @@ describe("extensions discovery", () => {
 		fs.writeFileSync(path.join(extensionsDir, "discovered.ts"), extensionCodeWithTool("discovered"));
 
 		// Create explicit extension outside discovery path
-		const explicitPath = path.join(tempDir.path, "explicit.ts");
+		const explicitPath = path.join(tempDir.path(), "explicit.ts");
 		fs.writeFileSync(explicitPath, extensionCodeWithTool("explicit"));
 
 		// Use loadExtensions directly to skip discovery
-		const result = await loadExtensions([explicitPath], tempDir.path);
+		const result = await loadExtensions([explicitPath], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
@@ -466,7 +466,7 @@ describe("extensions discovery", () => {
 		fs.writeFileSync(path.join(extensionsDir, "discovered.ts"), extensionCode);
 
 		// Use loadExtensions directly with empty paths
-		const result = await loadExtensions([], tempDir.path);
+		const result = await loadExtensions([], tempDir.path());
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(0);

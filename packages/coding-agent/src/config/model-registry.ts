@@ -2,8 +2,8 @@
  * Model registry - manages built-in and custom models, provides API key resolution.
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import { extname } from "node:path";
+import * as path from "node:path";
+
 import {
 	type Api,
 	getGitHubCopilotBaseUrl,
@@ -12,7 +12,8 @@ import {
 	type Model,
 	normalizeDomain,
 } from "@oh-my-pi/pi-ai";
-import { logger } from "@oh-my-pi/pi-utils";
+
+import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import AjvModule from "ajv";
 import { YAML } from "bun";
@@ -104,10 +105,12 @@ interface CustomModelsResult {
 	/** Providers with only baseUrl/headers override (no custom models) */
 	overrides: Map<string, ProviderOverride>;
 	error: string | undefined;
+	/** Whether the file was found (true) or didn't exist (false) */
+	found: boolean;
 }
 
 function emptyCustomModelsResult(error?: string): CustomModelsResult {
-	return { models: [], replacedProviders: new Set(), overrides: new Map(), error };
+	return { models: [], replacedProviders: new Set(), overrides: new Map(), error, found: false };
 }
 
 /**
@@ -146,8 +149,6 @@ export class ModelRegistry {
 			}
 			return undefined;
 		});
-		// Load models synchronously in constructor
-		this.loadModels();
 	}
 
 	/**
@@ -190,10 +191,10 @@ export class ModelRegistry {
 	/**
 	 * Reload models from disk (built-in + custom from models.json).
 	 */
-	refresh(): void {
+	async refresh(): Promise<void> {
 		this.customProviderApiKeys.clear();
 		this.loadError = undefined;
-		this.loadModels();
+		await this.loadModels();
 	}
 
 	/**
@@ -203,7 +204,7 @@ export class ModelRegistry {
 		return this.loadError;
 	}
 
-	private loadModels(): void {
+	private async loadModels(): Promise<void> {
 		// Load custom models from models.json first (to know which providers to skip/override)
 		let customModels: Model<Api>[] = [];
 		let replacedProviders: Set<string> = new Set();
@@ -215,19 +216,20 @@ export class ModelRegistry {
 		}
 
 		for (const modelsPath of pathsToCheck) {
-			if (existsSync(modelsPath)) {
-				logger.debug("ModelRegistry.loadModels loading", { path: modelsPath });
-				const result = this.loadCustomModels(modelsPath);
-				if (result.error) {
-					this.loadError = result.error;
-					// Keep built-in models even if custom models failed to load
-				} else {
-					customModels = result.models;
-					replacedProviders = result.replacedProviders;
-					overrides = result.overrides;
-				}
-				break; // Use first existing file
+			const result = await this.loadCustomModels(modelsPath);
+			if (!result.found) {
+				continue; // File doesn't exist, try next path
 			}
+			logger.debug("ModelRegistry.loadModels loading", { path: modelsPath });
+			if (result.error) {
+				this.loadError = result.error;
+				// Keep built-in models even if custom models failed to load
+			} else {
+				customModels = result.models;
+				replacedProviders = result.replacedProviders;
+				overrides = result.overrides;
+			}
+			break; // Use first existing file
 		}
 
 		const builtInModels = this.loadBuiltInModels(replacedProviders, overrides);
@@ -264,14 +266,24 @@ export class ModelRegistry {
 			});
 	}
 
-	private loadCustomModels(modelsPath: string): CustomModelsResult {
-		if (!existsSync(modelsPath)) {
-			return emptyCustomModelsResult();
+	private async loadCustomModels(modelsPath: string): Promise<CustomModelsResult> {
+		let content: string;
+		try {
+			content = await Bun.file(modelsPath).text();
+		} catch (error) {
+			if (isEnoent(error)) {
+				return emptyCustomModelsResult();
+			}
+			return {
+				...emptyCustomModelsResult(
+					`Failed to load models config: ${error instanceof Error ? error.message : error}\n\nFile: ${modelsPath}`,
+				),
+				found: true,
+			};
 		}
 
 		try {
-			const content = readFileSync(modelsPath, "utf-8");
-			const ext = extname(modelsPath).toLowerCase();
+			const ext = path.extname(modelsPath).toLowerCase();
 			let config: ModelsConfig;
 
 			if (ext === ".yaml" || ext === ".yml") {
@@ -315,14 +327,20 @@ export class ModelRegistry {
 				}
 			}
 
-			return { models: this.parseModels(config), replacedProviders, overrides, error: undefined };
+			return { models: this.parseModels(config), replacedProviders, overrides, error: undefined, found: true };
 		} catch (error) {
 			if (error instanceof SyntaxError) {
-				return emptyCustomModelsResult(`Failed to parse models config: ${error.message}\n\nFile: ${modelsPath}`);
+				return {
+					...emptyCustomModelsResult(`Failed to parse models config: ${error.message}\n\nFile: ${modelsPath}`),
+					found: true,
+				};
 			}
-			return emptyCustomModelsResult(
-				`Failed to load models config: ${error instanceof Error ? error.message : error}\n\nFile: ${modelsPath}`,
-			);
+			return {
+				...emptyCustomModelsResult(
+					`Failed to load models config: ${error instanceof Error ? error.message : error}\n\nFile: ${modelsPath}`,
+				),
+				found: true,
+			};
 		}
 	}
 

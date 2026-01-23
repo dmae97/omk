@@ -7,7 +7,7 @@
  * This enables reliable agent:// URL resolution and prevents artifact collisions.
  */
 
-import { readdir } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 
 /**
  * Manages agent output ID allocation to ensure uniqueness.
@@ -37,7 +37,7 @@ export class AgentOutputManager {
 
 		let files: string[];
 		try {
-			files = await readdir(dir);
+			files = await fs.readdir(dir);
 		} catch {
 			return; // Directory doesn't exist yet
 		}

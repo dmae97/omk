@@ -16,7 +16,7 @@
  * - settings: From settings.json
  */
 
-import { join, sep } from "node:path";
+import * as path from "node:path";
 import { registerProvider } from "../capability";
 import { type ContextFile, contextFileCapability } from "../capability/context-file";
 import { type Extension, type ExtensionManifest, extensionCapability } from "../capability/extension";
@@ -146,7 +146,7 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 		const content = await readFile(projectGeminiMd);
 		if (content) {
 			const projectBase = getProjectPath(ctx, "gemini", "");
-			const depth = projectBase ? calculateDepth(ctx.cwd, projectBase, sep) : 0;
+			const depth = projectBase ? calculateDepth(ctx.cwd, projectBase, path.sep) : 0;
 
 			items.push({
 				path: projectGeminiMd,
@@ -194,8 +194,8 @@ async function loadExtensionsFromDir(extensionsDir: string, level: "user" | "pro
 
 	const results = await Promise.all(
 		dirEntries.map(async (entry) => {
-			const extPath = join(extensionsDir, entry.name);
-			const manifestPath = join(extPath, "gemini-extension.json");
+			const extPath = path.join(extensionsDir, entry.name);
+			const manifestPath = path.join(extPath, "gemini-extension.json");
 			const content = await readFile(manifestPath);
 			return { entry, extPath, manifestPath, content };
 		}),

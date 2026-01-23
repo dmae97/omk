@@ -9,8 +9,9 @@
  * - agent://<id>?q=<query> - JSON extraction via query form
  */
 
-import * as fs from "node:fs";
+import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { isEnoent } from "@oh-my-pi/pi-utils";
 import { applyQuery, pathToQuery } from "./json-query";
 import type { InternalResource, InternalUrl, ProtocolHandler } from "./types";
 
@@ -25,9 +26,9 @@ export interface AgentProtocolOptions {
 /**
  * List available output IDs in artifacts directory.
  */
-function listAvailableOutputs(artifactsDir: string): string[] {
+async function listAvailableOutputs(artifactsDir: string): Promise<string[]> {
 	try {
-		const files = fs.readdirSync(artifactsDir);
+		const files = await fs.readdir(artifactsDir);
 		return files.filter((f) => f.endsWith(".md")).map((f) => f.replace(".md", ""));
 	} catch {
 		return [];
@@ -51,8 +52,13 @@ export class AgentProtocolHandler implements ProtocolHandler {
 			throw new Error("No session - agent outputs unavailable");
 		}
 
-		if (!fs.existsSync(artifactsDir)) {
-			throw new Error("No artifacts directory found");
+		try {
+			await fs.stat(artifactsDir);
+		} catch (err) {
+			if (isEnoent(err)) {
+				throw new Error("No artifacts directory found");
+			}
+			throw err;
 		}
 
 		// Extract output ID from host
@@ -73,10 +79,15 @@ export class AgentProtocolHandler implements ProtocolHandler {
 
 		// Load the output file
 		const outputPath = path.join(artifactsDir, `${outputId}.md`);
-		if (!fs.existsSync(outputPath)) {
-			const available = listAvailableOutputs(artifactsDir);
-			const availableStr = available.length > 0 ? available.join(", ") : "none";
-			throw new Error(`Not found: ${outputId}\nAvailable: ${availableStr}`);
+		try {
+			await fs.stat(outputPath);
+		} catch (err) {
+			if (isEnoent(err)) {
+				const available = await listAvailableOutputs(artifactsDir);
+				const availableStr = available.length > 0 ? available.join(", ") : "none";
+				throw new Error(`Not found: ${outputId}\nAvailable: ${availableStr}`);
+			}
+			throw err;
 		}
 
 		const rawContent = await Bun.file(outputPath).text();

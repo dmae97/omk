@@ -1,4 +1,4 @@
-import { unlink } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import { platform } from "node:os";
 import { $ } from "bun";
 import { nanoid } from "nanoid";
@@ -207,7 +207,7 @@ async function readImageMacOS(): Promise<ClipboardImage | null> {
 		const file = Bun.file(tempFile);
 		if (await file.exists()) {
 			const buffer = await file.bytes();
-			await unlink(tempFile).catch(() => {});
+			await fs.unlink(tempFile).catch(() => {});
 
 			if (buffer.length > 0) {
 				return {

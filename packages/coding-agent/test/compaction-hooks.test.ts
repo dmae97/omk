@@ -3,9 +3,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import { Agent } from "@oh-my-pi/pi-agent-core";
 import { getModel } from "@oh-my-pi/pi-ai";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
@@ -33,8 +33,8 @@ describe.skipIf(!API_KEY)("Compaction hooks", () => {
 	let capturedEvents: SessionEvent[];
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `omp-compaction-hooks-test-${nanoid()}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `omp-compaction-hooks-test-${nanoid()}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 		capturedEvents = [];
 	});
 
@@ -42,8 +42,8 @@ describe.skipIf(!API_KEY)("Compaction hooks", () => {
 		if (session) {
 			session.dispose();
 		}
-		if (tempDir && existsSync(tempDir)) {
-			rmSync(tempDir, { recursive: true });
+		if (tempDir && fs.existsSync(tempDir)) {
+			fs.rmSync(tempDir, { recursive: true });
 		}
 	});
 
@@ -104,7 +104,7 @@ describe.skipIf(!API_KEY)("Compaction hooks", () => {
 
 		const sessionManager = SessionManager.create(tempDir);
 		const settingsManager = await SettingsManager.create(tempDir, tempDir);
-		const authStorage = await AuthStorage.create(join(tempDir, "auth.json"));
+		const authStorage = await AuthStorage.create(path.join(tempDir, "auth.json"));
 		const modelRegistry = new ModelRegistry(authStorage);
 
 		hookRunner = new HookRunner(hooks, tempDir, sessionManager, modelRegistry);

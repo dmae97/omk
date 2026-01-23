@@ -23,7 +23,7 @@ async function login(provider: OAuthProvider): Promise<void> {
 	const rl = createInterface({ input: process.stdin, output: process.stdout });
 
 	const promptFn = (msg: string) => prompt(rl, `${msg} `);
-	const storage = new CliAuthStorage();
+	const storage = await CliAuthStorage.create();
 
 	try {
 		let credentials: OAuthCredentials;
@@ -145,7 +145,7 @@ Examples:
 	}
 
 	if (command === "status") {
-		const storage = new CliAuthStorage();
+		const storage = await CliAuthStorage.create();
 		try {
 			const providers = storage.listProviders();
 			if (providers.length === 0) {
@@ -179,7 +179,7 @@ Examples:
 
 	if (command === "logout") {
 		let provider = args[1] as OAuthProvider | undefined;
-		const storage = new CliAuthStorage();
+		const storage = await CliAuthStorage.create();
 
 		try {
 			if (!provider) {

@@ -76,7 +76,7 @@ export async function executeSSH(
 		}
 	}
 
-	const child = cspawn(["ssh", ...buildRemoteCommand(host, resolvedCommand)], {
+	const child = cspawn(["ssh", ...(await buildRemoteCommand(host, resolvedCommand))], {
 		signal: options?.signal,
 		timeout: options?.timeout,
 	});

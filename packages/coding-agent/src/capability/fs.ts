@@ -1,16 +1,15 @@
-import type { Dirent } from "node:fs";
-import { readdir } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 const contentCache = new Map<string, string | null>();
-const dirCache = new Map<string, Dirent[]>();
+const dirCache = new Map<string, fs.Dirent[]>();
 
-function resolvePath(path: string): string {
-	return resolve(path);
+function resolvePath(filePath: string): string {
+	return path.resolve(filePath);
 }
 
-export async function readFile(path: string): Promise<string | null> {
-	const abs = resolvePath(path);
+export async function readFile(filePath: string): Promise<string | null> {
+	const abs = resolvePath(filePath);
 	if (contentCache.has(abs)) {
 		return contentCache.get(abs) ?? null;
 	}
@@ -25,14 +24,14 @@ export async function readFile(path: string): Promise<string | null> {
 	}
 }
 
-export async function readDirEntries(path: string): Promise<Dirent[]> {
-	const abs = resolvePath(path);
+export async function readDirEntries(dirPath: string): Promise<fs.Dirent[]> {
+	const abs = resolvePath(dirPath);
 	if (dirCache.has(abs)) {
 		return dirCache.get(abs) ?? [];
 	}
 
 	try {
-		const entries = await readdir(abs, { withFileTypes: true });
+		const entries = await fs.promises.readdir(abs, { withFileTypes: true });
 		dirCache.set(abs, entries);
 		return entries;
 	} catch {
@@ -41,8 +40,8 @@ export async function readDirEntries(path: string): Promise<Dirent[]> {
 	}
 }
 
-export async function readDir(path: string): Promise<string[]> {
-	const entries = await readDirEntries(path);
+export async function readDir(dirPath: string): Promise<string[]> {
+	const entries = await readDirEntries(dirPath);
 	return entries.map((entry) => entry.name);
 }
 
@@ -58,10 +57,10 @@ export async function walkUp(
 		const entries = await readDirEntries(current);
 		const entry = entries.find((e) => e.name === name);
 		if (entry) {
-			if (file && entry.isFile()) return join(current, name);
-			if (dir && entry.isDirectory()) return join(current, name);
+			if (file && entry.isFile()) return path.join(current, name);
+			if (dir && entry.isDirectory()) return path.join(current, name);
 		}
-		const parent = dirname(current);
+		const parent = path.dirname(current);
 		if (parent === current) return null;
 		current = parent;
 	}
@@ -79,11 +78,11 @@ export function clearCache(): void {
 	dirCache.clear();
 }
 
-export function invalidate(path: string): void {
-	const abs = resolvePath(path);
+export function invalidate(filePath: string): void {
+	const abs = resolvePath(filePath);
 	contentCache.delete(abs);
 	dirCache.delete(abs);
-	const parent = dirname(abs);
+	const parent = path.dirname(abs);
 	if (parent !== abs) {
 		dirCache.delete(parent);
 	}

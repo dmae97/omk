@@ -1,6 +1,6 @@
-import { accessSync, constants } from "node:fs";
+import * as fs from "node:fs";
 import * as os from "node:os";
-import { isAbsolute, resolve as resolvePath } from "node:path";
+import * as path from "node:path";
 
 const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
 const NARROW_NO_BREAK_SPACE = "\u202F";
@@ -15,7 +15,7 @@ function tryMacOSScreenshotPath(filePath: string): string {
 
 function fileExists(filePath: string): boolean {
 	try {
-		accessSync(filePath, constants.F_OK);
+		fs.accessSync(filePath, fs.constants.F_OK);
 		return true;
 	} catch {
 		return false;
@@ -39,10 +39,10 @@ export function expandPath(filePath: string): string {
  */
 export function resolveToCwd(filePath: string, cwd: string): string {
 	const expanded = expandPath(filePath);
-	if (isAbsolute(expanded)) {
+	if (path.isAbsolute(expanded)) {
 		return expanded;
 	}
-	return resolvePath(cwd, expanded);
+	return path.resolve(cwd, expanded);
 }
 
 export function resolveReadPath(filePath: string, cwd: string): string {

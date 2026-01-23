@@ -5,7 +5,7 @@
  * Priority: 5 (low, project-level only)
  */
 
-import { join } from "node:path";
+import * as path from "node:path";
 import { registerProvider } from "../capability";
 import { readFile } from "../capability/fs";
 import { type SSHHost, sshCapability } from "../capability/ssh";
@@ -134,7 +134,7 @@ async function loadSshJsonFile(_ctx: LoadContext, path: string): Promise<LoadRes
 
 async function load(ctx: LoadContext): Promise<LoadResult<SSHHost>> {
 	const filenames = ["ssh.json", ".ssh.json"];
-	const results = await Promise.all(filenames.map((filename) => loadSshJsonFile(ctx, join(ctx.cwd, filename))));
+	const results = await Promise.all(filenames.map((filename) => loadSshJsonFile(ctx, path.join(ctx.cwd, filename))));
 
 	const allItems = results.flatMap((r) => r.items);
 	const allWarnings = results.flatMap((r) => r.warnings ?? []);

@@ -7,15 +7,15 @@
 
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { RpcClient } from "@oh-my-pi/pi-coding-agent";
-import { createTempDir } from "@oh-my-pi/pi-utils";
-import { appendFile, cp, mkdir, readdir, rm } from "node:fs/promises";
+import { TempDir } from "@oh-my-pi/pi-utils";
+import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import { formatDirectory } from "./formatter";
 import { extractTaskFiles, type EditTask } from "./tasks";
 import { verifyExpectedFileSubset, verifyExpectedFiles } from "./verify";
 
-const TMP_DIR = await createTempDir("@reach-benchmark-");
-const TMP = TMP_DIR.path;
+const TMP_DIR = await TempDir.create("@reach-benchmark-");
+const TMP = TMP_DIR.path();
 
 export interface BenchmarkConfig {
 	provider: string;
@@ -131,9 +131,11 @@ async function copyFixtures(task: EditTask, destDir: string): Promise<void> {
 	if (task.tarballPath) {
 		await extractTaskFiles(task.tarballPath, task.id, destDir, "input");
 	} else if (task.inputDir) {
-		const entries = await readdir(task.inputDir, { withFileTypes: true });
+		const entries = await fs.readdir(task.inputDir, { withFileTypes: true });
 		await Promise.all(
-			entries.map((entry) => cp(join(task.inputDir!, entry.name), join(destDir, entry.name), { recursive: true })),
+			entries.map((entry) =>
+				fs.cp(join(task.inputDir!, entry.name), join(destDir, entry.name), { recursive: true }),
+			),
 		);
 	} else {
 		throw new Error(`Task ${task.id} has neither tarballPath nor inputDir`);
@@ -146,12 +148,12 @@ async function getExpectedDir(task: EditTask): Promise<{ dir: string; cleanup: (
 	}
 	if (task.tarballPath) {
 		const tempDir = join(TMP, `expected-${task.id}-${crypto.randomUUID()}`);
-		await mkdir(tempDir, { recursive: true });
+		await fs.mkdir(tempDir, { recursive: true });
 		await extractTaskFiles(task.tarballPath, task.id, tempDir, "expected");
 		return {
 			dir: tempDir,
 			cleanup: async () => {
-				await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+				await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
 			},
 		};
 	}
@@ -189,11 +191,11 @@ async function runSingleTask(
 
 	const logFile = join(TMP, `run-${task.id}-${runIndex}.jsonl`);
 	const logEvent = async (event: unknown) => {
-		await appendFile(logFile, JSON.stringify(event) + "\n");
+		await fs.appendFile(logFile, JSON.stringify(event) + "\n");
 	};
 
 	try {
-		await appendFile(logFile, `{"type":"meta","task":"${task.id}","run":${runIndex},"workDir":"${cwd}"}\n`);
+		await fs.appendFile(logFile, `{"type":"meta","task":"${task.id}","run":${runIndex},"workDir":"${cwd}"}\n`);
 
 		const env: Record<string, string> = { OMP_NO_TITLE: "1" };
 		if (config.editVariant !== undefined) {
@@ -237,7 +239,7 @@ ${
 		: "Read the relevant files first, then use the edit tool to apply the fix."
 }`;
 
-		await appendFile(logFile, `{"type":"prompt","message":${JSON.stringify(promptWithContext)}}\n`);
+		await fs.appendFile(logFile, `{"type":"prompt","message":${JSON.stringify(promptWithContext)}}\n`);
 
 		// Collect events with logging
 		const events: Array<{ type: string; [key: string]: unknown }> = [];
@@ -410,17 +412,17 @@ async function runBatchedTask(
 
 	const logFile = join(TMP, `run-${task.id}-${runIndex}.jsonl`);
 	const logEvent = async (event: unknown) => {
-		await appendFile(logFile, JSON.stringify(event) + "\n");
+		await fs.appendFile(logFile, JSON.stringify(event) + "\n");
 	};
 
 	try {
-		await appendFile(
+		await fs.appendFile(
 			logFile,
 			`{"type":"meta","task":"${task.id}","run":${runIndex},"workDir":"${cwd}","batched":true}\n`,
 		);
 
 		const promptWithContext = buildPrompt(task, config);
-		await appendFile(logFile, `{"type":"prompt","message":${JSON.stringify(promptWithContext)}}\n`);
+		await fs.appendFile(logFile, `{"type":"prompt","message":${JSON.stringify(promptWithContext)}}\n`);
 
 		const statsBefore = await client.getSessionStats();
 		const events = await collectPromptEvents(client, promptWithContext, config, logEvent);
@@ -746,7 +748,7 @@ async function runBatch(
 	onProgress?: (event: ProgressEvent) => void,
 ): Promise<Array<{ task: EditTask; result: TaskRunResult }>> {
 	const workDir = join(TMP, `batch-${crypto.randomUUID()}`);
-	await mkdir(workDir, { recursive: true });
+	await fs.mkdir(workDir, { recursive: true });
 	const results: Array<{ task: EditTask; result: TaskRunResult }> = [];
 	let client: RpcClient | null = null;
 	const expectedDirs = new Map<string, { dir: string; cleanup: () => Promise<void> }>();
@@ -822,7 +824,7 @@ async function runBatch(
 			}
 		}
 		try {
-			await rm(workDir, { recursive: true, force: true });
+			await fs.rm(workDir, { recursive: true, force: true });
 		} catch {
 			// Ignore cleanup errors
 		}
@@ -836,21 +838,21 @@ export async function runTask(
 	config: BenchmarkConfig,
 	onProgress?: (event: ProgressEvent) => void,
 ): Promise<TaskResult> {
-	const tempDirs: Array<Awaited<ReturnType<typeof createTempDir>>> = [];
+	const tempDirs: TempDir[] = [];
 	const { dir: expectedDir, cleanup: cleanupExpected } = await getExpectedDir(task);
 
 	const cliPath = join(import.meta.dir, "../coding-agent/src/cli.ts");
 
 	try {
 		for (let i = 0; i < config.runsPerTask; i++) {
-			const tempDir = await createTempDir(join(TMP, `${task.id}-`));
+			const tempDir = await TempDir.create(join(TMP, `${task.id}-`));
 			tempDirs.push(tempDir);
-			await copyFixtures(task, tempDir.path);
+			await copyFixtures(task, tempDir.path());
 		}
 
 		const runPromises = tempDirs.map(async (tempDirObj, index) => {
 			onProgress?.({ taskId: task.id, runIndex: index, status: "started" });
-			const result = await runSingleTask(task, index, config, tempDirObj.path, expectedDir, cliPath);
+			const result = await runSingleTask(task, index, config, tempDirObj.path(), expectedDir, cliPath);
 			onProgress?.({ taskId: task.id, runIndex: index, status: "completed", result });
 			return result;
 		});

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { appendFile } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import http2 from "node:http2";
 import { create, fromBinary, fromJson, type JsonValue, toBinary, toJson } from "@bufbuild/protobuf";
 import { ValueSchema } from "@bufbuild/protobuf/wkt";
@@ -142,7 +142,7 @@ async function appendCursorDebugLog(entry: CursorLogEntry): Promise<void> {
 	const logPath = process.env.DEBUG_CURSOR_LOG;
 	if (!logPath) return;
 	try {
-		await appendFile(logPath, `${JSON.stringify(entry, debugReplacer)}\n`);
+		await fs.appendFile(logPath, `${JSON.stringify(entry, debugReplacer)}\n`);
 	} catch {
 		// Ignore debug log failures
 	}

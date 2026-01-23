@@ -8,7 +8,7 @@
  * The mode is determined by the `edit.patchMode` setting.
  */
 
-import { mkdir } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
 import { Type } from "@sinclair/typebox";
@@ -160,7 +160,7 @@ class LspFileSystem implements FileSystem {
 	}
 
 	async mkdir(path: string): Promise<void> {
-		await mkdir(path, { recursive: true });
+		await fs.mkdir(path, { recursive: true });
 	}
 
 	getDiagnostics(): FileDiagnosticsResult | undefined {

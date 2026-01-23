@@ -5,7 +5,7 @@
  * Project-only (no user-level config).
  */
 
-import { dirname, resolve } from "node:path";
+import * as path from "node:path";
 import { registerProvider } from "../capability";
 import { readDirEntries, readFile } from "../capability/fs";
 import type { Rule } from "../capability/rule";
@@ -19,18 +19,18 @@ const DISPLAY_NAME = "Cline";
 const PRIORITY = 40;
 
 async function findClinerules(startDir: string): Promise<{ path: string; isDir: boolean } | null> {
-	let current = resolve(startDir);
+	let current = path.resolve(startDir);
 
 	while (true) {
 		const entries = await readDirEntries(current);
 		const entry = entries.find((e) => e.name === ".clinerules");
 		if (entry) {
 			return {
-				path: resolve(current, ".clinerules"),
+				path: path.resolve(current, ".clinerules"),
 				isDir: entry.isDirectory(),
 			};
 		}
-		const parent = dirname(current);
+		const parent = path.dirname(current);
 		if (parent === current) return null;
 		current = parent;
 	}

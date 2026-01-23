@@ -13,7 +13,6 @@
  * Modes use this class and add their own I/O layer on top.
  */
 
-import { existsSync, readFileSync } from "node:fs";
 import type { Agent, AgentEvent, AgentMessage, AgentState, AgentTool, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type {
 	AssistantMessage,
@@ -26,7 +25,7 @@ import type {
 	UsageReport,
 } from "@oh-my-pi/pi-ai";
 import { isContextOverflow, modelsAreEqual, supportsXhigh } from "@oh-my-pi/pi-ai";
-import { abortableSleep, logger } from "@oh-my-pi/pi-utils";
+import { abortableSleep, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 import type { Rule } from "../capability/rule";
 import { getAgentDbPath } from "../config";
@@ -214,9 +213,9 @@ const noOpUIContext: ExtensionUIContext = {
 	get theme() {
 		return theme;
 	},
-	getAllThemes: () => [],
-	getTheme: () => undefined,
-	setTheme: (_theme) => ({ success: false, error: "UI not available" }),
+	getAllThemes: () => Promise.resolve([]),
+	getTheme: () => Promise.resolve(undefined),
+	setTheme: (_theme) => Promise.resolve({ success: false, error: "UI not available" }),
 	setFooter: () => {},
 	setHeader: () => {},
 	setEditorComponent: () => {},
@@ -599,20 +598,18 @@ export class AgentSession {
 		if (!path) return;
 
 		const resolvedPath = resolveToCwd(path, this.sessionManager.getCwd());
-		this._ensureFileCache(resolvedPath);
+		void this._ensureFileCache(resolvedPath);
 	}
 
-	private _ensureFileCache(resolvedPath: string): void {
+	private async _ensureFileCache(resolvedPath: string): Promise<void> {
 		if (this._streamingEditFileCache.has(resolvedPath)) return;
 
 		try {
-			if (existsSync(resolvedPath)) {
-				const rawText = readFileSync(resolvedPath, "utf8");
-				const { text } = stripBom(rawText);
-				this._streamingEditFileCache.set(resolvedPath, normalizeToLF(text));
-			}
+			const rawText = await Bun.file(resolvedPath).text();
+			const { text } = stripBom(rawText);
+			this._streamingEditFileCache.set(resolvedPath, normalizeToLF(text));
 		} catch {
-			// Don't cache on read errors - let the edit tool handle them
+			// Don't cache on read errors (including ENOENT) - let the edit tool handle them
 		}
 	}
 
@@ -701,7 +698,6 @@ export class AgentSession {
 	): Promise<void> {
 		if (this._streamingEditAbortTriggered) return;
 		try {
-			if (!(await Bun.file(resolvedPath).exists())) return;
 			const { text } = stripBom(await Bun.file(resolvedPath).text());
 			const normalizedContent = normalizeToLF(text);
 			const missing = removedLines.find((line) => !normalizedContent.includes(normalizeToLF(line)));
@@ -714,8 +710,12 @@ export class AgentSession {
 				});
 				this.agent.abort();
 			}
-		} catch {
-			// Ignore errors during async fallback
+		} catch (err) {
+			// Ignore ENOENT (file not found) - let the edit tool handle missing files
+			// Also ignore other errors during async fallback
+			if (!isEnoent(err)) {
+				// Log unexpected errors but don't abort
+			}
 		}
 	}
 
@@ -2022,17 +2022,15 @@ export class AgentSession {
 		if (!sessionFile) return;
 
 		const todoPath = `${sessionFile.slice(0, -6)}/todos.json`;
-		const file = Bun.file(todoPath);
-		if (!(await file.exists())) {
-			this._todoReminderCount = 0;
-			return;
-		}
 
 		let todos: TodoItem[];
 		try {
-			const data = await file.json();
+			const data = await Bun.file(todoPath).json();
 			todos = data?.todos ?? [];
-		} catch {
+		} catch (err) {
+			if (isEnoent(err)) {
+				this._todoReminderCount = 0;
+			}
 			return;
 		}
 

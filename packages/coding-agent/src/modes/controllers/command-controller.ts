@@ -1,4 +1,4 @@
-import { mkdir, rm } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { UsageLimit, UsageReport } from "@oh-my-pi/pi-ai";
@@ -77,7 +77,7 @@ export class CommandController {
 		const tmpFile = path.join(os.tmpdir(), `${nanoid()}.html`);
 		const cleanupTempFile = async () => {
 			try {
-				await rm(tmpFile, { force: true });
+				await fs.rm(tmpFile, { force: true });
 			} catch {
 				// Ignore cleanup errors
 			}
@@ -212,7 +212,7 @@ export class CommandController {
 		}
 	}
 
-	handleSessionCommand(): void {
+	async handleSessionCommand(): Promise<void> {
 		const stats = this.ctx.session.getSessionStats();
 
 		let info = `${theme.bold("Session Info")}\n\n`;
@@ -240,7 +240,7 @@ export class CommandController {
 			info += `${theme.fg("dim", "Total:")} ${stats.cost.toFixed(4)}\n`;
 		}
 
-		const gateway = getGatewayStatus();
+		const gateway = await getGatewayStatus();
 		info += `\n${theme.bold("Python Gateway")}\n`;
 		if (gateway.active) {
 			info += `${theme.fg("dim", "Status:")} ${theme.fg("success", "Active (Global)")}\n`;
@@ -316,9 +316,9 @@ export class CommandController {
 		this.ctx.ui.requestRender();
 	}
 
-	handleChangelogCommand(): void {
+	async handleChangelogCommand(): Promise<void> {
 		const changelogPath = getChangelogPath();
-		const allEntries = parseChangelog(changelogPath);
+		const allEntries = await parseChangelog(changelogPath);
 
 		const changelogMarkdown =
 			allEntries.length > 0
@@ -439,7 +439,7 @@ export class CommandController {
 		].join("\n");
 
 		try {
-			await mkdir(path.dirname(debugLogPath), { recursive: true });
+			await fs.mkdir(path.dirname(debugLogPath), { recursive: true });
 			await Bun.write(debugLogPath, debugData);
 		} catch (error) {
 			this.ctx.showError(`Failed to write debug log: ${error instanceof Error ? error.message : String(error)}`);

@@ -2,12 +2,12 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "bun:test";
 import * as pythonExecutor from "@oh-my-pi/pi-coding-agent/ipy/executor";
 import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { PythonTool } from "@oh-my-pi/pi-coding-agent/tools/python";
-import { createTempDirSync, type SyncTempDir } from "@oh-my-pi/pi-utils";
+import { TempDir } from "@oh-my-pi/pi-utils";
 
 let previousSkipCheck: string | undefined;
-let tempDir: SyncTempDir;
+let tempDir: TempDir;
 beforeAll(() => {
-	tempDir = createTempDirSync("@omp-python-test-");
+	tempDir = TempDir.createSync("@omp-python-test-");
 	previousSkipCheck = process.env.OMP_PYTHON_SKIP_CHECK;
 	process.env.OMP_PYTHON_SKIP_CHECK = "1";
 });
@@ -18,12 +18,12 @@ afterAll(() => {
 		return;
 	}
 	process.env.OMP_PYTHON_SKIP_CHECK = previousSkipCheck;
-	tempDir.remove();
+	tempDir.removeSync();
 });
 
 function createSession(overrides: Partial<ToolSession> = {}): ToolSession {
 	return {
-		cwd: tempDir.path,
+		cwd: tempDir.path(),
 		hasUI: false,
 		getSessionFile: () => null,
 		getSessionSpawns: () => "*",

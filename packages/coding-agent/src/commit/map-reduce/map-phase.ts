@@ -1,4 +1,4 @@
-import type { Api, AssistantMessage, Model } from "@oh-my-pi/pi-ai";
+import type { Api, AssistantMessage, Message, Model } from "@oh-my-pi/pi-ai";
 import { completeSimple } from "@oh-my-pi/pi-ai";
 import fileObserverSystemPrompt from "../../commit/prompts/file-observer-system.md" with { type: "text" };
 import fileObserverUserPrompt from "../../commit/prompts/file-observer-user.md" with { type: "text" };
@@ -52,24 +52,13 @@ export async function runMapPhase({ model, apiKey, files, config }: MapPhaseInpu
 			diff: truncated,
 			context_header: contextHeader,
 		});
+		const request = {
+			systemPrompt,
+			messages: [{ role: "user", content: prompt, timestamp: Date.now() }] as Message[],
+		};
 
 		const response = await withRetry(
-			async () => {
-				const controller = new AbortController();
-				const timeout = setTimeout(() => controller.abort(), timeoutMs);
-				try {
-					return await completeSimple(
-						model,
-						{
-							systemPrompt: systemPrompt,
-							messages: [{ role: "user", content: prompt, timestamp: Date.now() }],
-						},
-						{ apiKey, maxTokens: 400, signal: controller.signal },
-					);
-				} finally {
-					clearTimeout(timeout);
-				}
-			},
+			() => completeSimple(model, request, { apiKey, maxTokens: 400, signal: AbortSignal.timeout(timeoutMs) }),
 			maxRetries,
 			retryBackoffMs,
 		);

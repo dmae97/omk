@@ -4,8 +4,8 @@
  * Compares output files against expected fixtures with byte-for-byte equality.
  */
 
-import { readdirSync } from "node:fs";
-import { join } from "node:path";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { formatContent } from "./formatter";
 import { diffLines } from "diff";
 
@@ -24,14 +24,14 @@ export interface DiffStats {
 	charsChanged: number;
 }
 
-function listFiles(rootDir: string, subPath = ""): string[] {
-	const entries = readdirSync(join(rootDir, subPath), { withFileTypes: true });
+async function listFiles(rootDir: string, subPath = ""): Promise<string[]> {
+	const entries = await fs.readdir(path.join(rootDir, subPath), { withFileTypes: true });
 	const files: string[] = [];
 
 	for (const entry of entries) {
-		const relativePath = join(subPath, entry.name);
+		const relativePath = path.join(subPath, entry.name);
 		if (entry.isDirectory()) {
-			files.push(...listFiles(rootDir, relativePath));
+			files.push(...(await listFiles(rootDir, relativePath)));
 		} else if (entry.isFile()) {
 			files.push(relativePath);
 		}
@@ -106,9 +106,9 @@ export async function verifyExpectedFileSubset(
 	let fileCount = 0;
 
 	try {
-		const expectedFixtureFiles = listFiles(expectedDir);
+		const expectedFixtureFiles = await listFiles(expectedDir);
 		const expectedFiles = files?.length ? files.slice().sort() : expectedFixtureFiles;
-		const actualFiles = listFiles(actualDir);
+		const actualFiles = await listFiles(actualDir);
 
 		const missingFiles = expectedFiles.filter((file) => !actualFiles.includes(file));
 		const extraFiles = actualFiles.filter((file) => !expectedFiles.includes(file));
@@ -139,8 +139,8 @@ export async function verifyExpectedFileSubset(
 		}
 
 		for (const file of expectedFiles) {
-			const expectedPath = join(expectedDir, file);
-			const actualPath = join(actualDir, file);
+			const expectedPath = path.join(expectedDir, file);
+			const actualPath = path.join(actualDir, file);
 			const expectedRaw = await Bun.file(expectedPath).text();
 			const actualRaw = await Bun.file(actualPath).text();
 			const expectedNormalized = normalizeLineEndings(expectedRaw);

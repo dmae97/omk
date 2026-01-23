@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 
 export interface ChangelogEntry {
 	major: number;
@@ -11,13 +11,9 @@ export interface ChangelogEntry {
  * Parse changelog entries from CHANGELOG.md
  * Scans for ## lines and collects content until next ## or EOF
  */
-export function parseChangelog(changelogPath: string): ChangelogEntry[] {
-	if (!existsSync(changelogPath)) {
-		return [];
-	}
-
+export async function parseChangelog(changelogPath: string): Promise<ChangelogEntry[]> {
 	try {
-		const content = readFileSync(changelogPath, "utf-8");
+		const content = await Bun.file(changelogPath).text();
 		const lines = content.split("\n");
 		const entries: ChangelogEntry[] = [];
 
@@ -65,7 +61,10 @@ export function parseChangelog(changelogPath: string): ChangelogEntry[] {
 
 		return entries;
 	} catch (error) {
-		console.error(`Warning: Could not parse changelog: ${error}`);
+		if (isEnoent(error)) {
+			return [];
+		}
+		logger.error(`Warning: Could not parse changelog: ${error}`);
 		return [];
 	}
 }

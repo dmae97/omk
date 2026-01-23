@@ -2,9 +2,9 @@
  * Shared test utilities for coding-agent tests.
  */
 
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import { Agent } from "@oh-my-pi/pi-agent-core";
 import { getModel } from "@oh-my-pi/pi-ai";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
@@ -78,8 +78,8 @@ export interface TestSessionContext {
  * Use this for e2e tests that need real LLM calls.
  */
 export async function createTestSession(options: TestSessionOptions = {}): Promise<TestSessionContext> {
-	const tempDir = join(tmpdir(), `omp-test-${nanoid()}`);
-	mkdirSync(tempDir, { recursive: true });
+	const tempDir = path.join(tmpdir(), `omp-test-${nanoid()}`);
+	fs.mkdirSync(tempDir, { recursive: true });
 
 	const toolSession: ToolSession = {
 		cwd: tempDir,
@@ -106,7 +106,7 @@ export async function createTestSession(options: TestSessionOptions = {}): Promi
 		settingsManager.applyOverrides(options.settingsOverrides);
 	}
 
-	const authStorage = await AuthStorage.create(join(tempDir, "auth.json"));
+	const authStorage = await AuthStorage.create(path.join(tempDir, "auth.json"));
 	const modelRegistry = new ModelRegistry(authStorage, tempDir);
 
 	const session = new AgentSession({
@@ -121,8 +121,8 @@ export async function createTestSession(options: TestSessionOptions = {}): Promi
 
 	const cleanup = () => {
 		session.dispose();
-		if (tempDir && existsSync(tempDir)) {
-			rmSync(tempDir, { recursive: true });
+		if (tempDir && fs.existsSync(tempDir)) {
+			fs.rmSync(tempDir, { recursive: true });
 		}
 	};
 

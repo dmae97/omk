@@ -310,6 +310,9 @@ export class Editor implements Component, Focusable {
 	private undoStack: EditorState[] = [];
 	private suspendUndo = false;
 
+	// Debounce timer for autocomplete updates
+	private autocompleteTimeout: ReturnType<typeof setTimeout> | null = null;
+
 	public onSubmit?: (text: string) => void;
 	public onAltEnter?: (text: string) => void;
 	public onChange?: (text: string) => void;
@@ -1119,8 +1122,8 @@ export class Editor implements Component, Focusable {
 					this.tryTriggerAutocomplete();
 				}
 			}
-			// Also auto-trigger when typing letters in a slash command context
-			else if (/[a-zA-Z0-9.\-_]/.test(char)) {
+			// Also auto-trigger when typing letters/path chars in a slash command context
+			else if (/[a-zA-Z0-9.\-_/]/.test(char)) {
 				const currentLine = this.state.lines[this.state.cursorLine] || "";
 				const textBeforeCursor = currentLine.slice(0, this.state.cursorCol);
 				// Check if we're in a slash command (with or without space for arguments)
@@ -1133,7 +1136,7 @@ export class Editor implements Component, Focusable {
 				}
 			}
 		} else {
-			this.updateAutocomplete();
+			this.debouncedUpdateAutocomplete();
 		}
 	}
 
@@ -1296,7 +1299,7 @@ export class Editor implements Component, Focusable {
 
 		// Update or re-trigger autocomplete after backspace
 		if (this.isAutocompleting) {
-			this.updateAutocomplete();
+			this.debouncedUpdateAutocomplete();
 		} else {
 			// If autocomplete was cancelled (no matches), re-trigger if we're in a completable context
 			const currentLine = this.state.lines[this.state.cursorLine] || "";
@@ -1382,7 +1385,7 @@ export class Editor implements Component, Focusable {
 		}
 
 		if (this.isAutocompleting) {
-			this.updateAutocomplete();
+			this.debouncedUpdateAutocomplete();
 		} else {
 			const currentLine = this.state.lines[this.state.cursorLine] || "";
 			const textBeforeCursor = currentLine.slice(0, this.state.cursorCol);
@@ -1607,7 +1610,7 @@ export class Editor implements Component, Focusable {
 
 		// Update or re-trigger autocomplete after forward delete
 		if (this.isAutocompleting) {
-			this.updateAutocomplete();
+			this.debouncedUpdateAutocomplete();
 		} else {
 			const currentLine = this.state.lines[this.state.cursorLine] || "";
 			const textBeforeCursor = currentLine.slice(0, this.state.cursorCol);
@@ -1835,7 +1838,7 @@ export class Editor implements Component, Focusable {
 	}
 
 	// Autocomplete methods
-	private tryTriggerAutocomplete(explicitTab: boolean = false): void {
+	private async tryTriggerAutocomplete(explicitTab: boolean = false): Promise<void> {
 		if (!this.autocompleteProvider) return;
 
 		// Check if we should trigger file completion on Tab
@@ -1849,7 +1852,7 @@ export class Editor implements Component, Focusable {
 			}
 		}
 
-		const suggestions = this.autocompleteProvider.getSuggestions(
+		const suggestions = await this.autocompleteProvider.getSuggestions(
 			this.state.lines,
 			this.state.cursorLine,
 			this.state.cursorCol,
@@ -1859,8 +1862,10 @@ export class Editor implements Component, Focusable {
 			this.autocompletePrefix = suggestions.prefix;
 			this.autocompleteList = new SelectList(suggestions.items, 5, this.theme.selectList);
 			this.isAutocompleting = true;
+			this.onAutocompleteUpdate?.();
 		} else {
 			this.cancelAutocomplete();
+			this.onAutocompleteUpdate?.();
 		}
 	}
 
@@ -1887,7 +1892,7 @@ https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19536643416/job/
 17 this job fails with https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19
 536643416/job/55932288317 havea  look at .gi
     */
-	private forceFileAutocomplete(): void {
+	private async forceFileAutocomplete(): Promise<void> {
 		if (!this.autocompleteProvider) return;
 
 		// Check if provider supports force file suggestions via runtime check
@@ -1895,11 +1900,11 @@ https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19536643416/job/
 			getForceFileSuggestions?: CombinedAutocompleteProvider["getForceFileSuggestions"];
 		};
 		if (typeof provider.getForceFileSuggestions !== "function") {
-			this.tryTriggerAutocomplete(true);
+			await this.tryTriggerAutocomplete(true);
 			return;
 		}
 
-		const suggestions = provider.getForceFileSuggestions(
+		const suggestions = await provider.getForceFileSuggestions(
 			this.state.lines,
 			this.state.cursorLine,
 			this.state.cursorCol,
@@ -1909,13 +1914,16 @@ https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19536643416/job/
 			this.autocompletePrefix = suggestions.prefix;
 			this.autocompleteList = new SelectList(suggestions.items, 5, this.theme.selectList);
 			this.isAutocompleting = true;
+			this.onAutocompleteUpdate?.();
 		} else {
 			this.cancelAutocomplete();
+			this.onAutocompleteUpdate?.();
 		}
 	}
 
 	private cancelAutocomplete(notifyCancel: boolean = false): void {
 		const wasAutocompleting = this.isAutocompleting;
+		this.clearAutocompleteTimeout();
 		this.isAutocompleting = false;
 		this.autocompleteList = undefined;
 		this.autocompletePrefix = "";
@@ -1928,10 +1936,10 @@ https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19536643416/job/
 		return this.isAutocompleting;
 	}
 
-	private updateAutocomplete(): void {
+	private async updateAutocomplete(): Promise<void> {
 		if (!this.isAutocompleting || !this.autocompleteProvider) return;
 
-		const suggestions = this.autocompleteProvider.getSuggestions(
+		const suggestions = await this.autocompleteProvider.getSuggestions(
 			this.state.lines,
 			this.state.cursorLine,
 			this.state.cursorCol,
@@ -1941,8 +1949,27 @@ https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19536643416/job/
 			this.autocompletePrefix = suggestions.prefix;
 			// Always create new SelectList to ensure update
 			this.autocompleteList = new SelectList(suggestions.items, 5, this.theme.selectList);
+			this.onAutocompleteUpdate?.();
 		} else {
 			this.cancelAutocomplete();
+			this.onAutocompleteUpdate?.();
+		}
+	}
+
+	private debouncedUpdateAutocomplete(): void {
+		if (this.autocompleteTimeout) {
+			clearTimeout(this.autocompleteTimeout);
+		}
+		this.autocompleteTimeout = setTimeout(() => {
+			this.updateAutocomplete();
+			this.autocompleteTimeout = null;
+		}, 100);
+	}
+
+	private clearAutocompleteTimeout(): void {
+		if (this.autocompleteTimeout) {
+			clearTimeout(this.autocompleteTimeout);
+			this.autocompleteTimeout = null;
 		}
 	}
 }

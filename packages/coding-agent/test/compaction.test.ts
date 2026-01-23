@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, Usage } from "@oh-my-pi/pi-ai";
 import { getModel } from "@oh-my-pi/pi-ai";
@@ -29,9 +28,9 @@ import {
 // Test fixtures
 // ============================================================================
 
-function loadLargeSessionEntries(): SessionEntry[] {
-	const sessionPath = join(__dirname, "fixtures/large-session.jsonl");
-	const content = readFileSync(sessionPath, "utf-8");
+async function loadLargeSessionEntries(): Promise<SessionEntry[]> {
+	const sessionPath = path.join(__dirname, "fixtures/large-session.jsonl");
+	const content = await Bun.file(sessionPath).text();
 	const entries = parseSessionEntries(content);
 	migrateSessionEntries(entries); // Add id/parentId for v1 fixtures
 	return entries.filter((e): e is SessionEntry => e.type !== "session");
@@ -362,16 +361,16 @@ describe("buildSessionContext", () => {
 // ============================================================================
 
 describe("Large session fixture", () => {
-	it("should parse the large session", () => {
-		const entries = loadLargeSessionEntries();
+	it("should parse the large session", async () => {
+		const entries = await loadLargeSessionEntries();
 		expect(entries.length).toBeGreaterThan(100);
 
 		const messageCount = entries.filter((e) => e.type === "message").length;
 		expect(messageCount).toBeGreaterThan(100);
 	});
 
-	it("should find cut point in large session", () => {
-		const entries = loadLargeSessionEntries();
+	it("should find cut point in large session", async () => {
+		const entries = await loadLargeSessionEntries();
 		const result = findCutPoint(entries, 0, entries.length, DEFAULT_COMPACTION_SETTINGS.keepRecentTokens);
 
 		// Cut point should be at a message entry (user or assistant)
@@ -380,8 +379,8 @@ describe("Large session fixture", () => {
 		expect(role === "user" || role === "assistant").toBe(true);
 	});
 
-	it("should load session correctly", () => {
-		const entries = loadLargeSessionEntries();
+	it("should load session correctly", async () => {
+		const entries = await loadLargeSessionEntries();
 		const loaded = buildSessionContext(entries);
 
 		expect(loaded.messages.length).toBeGreaterThan(100);
@@ -395,7 +394,7 @@ describe("Large session fixture", () => {
 
 describe.skipIf(!process.env.ANTHROPIC_OAUTH_TOKEN)("LLM summarization", () => {
 	it("should generate a compaction result for the large session", async () => {
-		const entries = loadLargeSessionEntries();
+		const entries = await loadLargeSessionEntries();
 		const model = getModel("anthropic", "claude-sonnet-4-5")!;
 
 		const preparation = prepareCompaction(entries, DEFAULT_COMPACTION_SETTINGS);
@@ -415,7 +414,7 @@ describe.skipIf(!process.env.ANTHROPIC_OAUTH_TOKEN)("LLM summarization", () => {
 	}, 60000);
 
 	it("should produce valid session after compaction", async () => {
-		const entries = loadLargeSessionEntries();
+		const entries = await loadLargeSessionEntries();
 		const loaded = buildSessionContext(entries);
 		const model = getModel("anthropic", "claude-sonnet-4-5")!;
 

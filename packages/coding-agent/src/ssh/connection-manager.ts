@@ -1,8 +1,9 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import * as fs from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
-import { logger } from "@oh-my-pi/pi-utils";
+import * as path from "node:path";
+import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
+
 import { CONFIG_DIR_NAME } from "../config";
 
 export interface SSHConnectionTarget {
@@ -25,32 +26,28 @@ export interface SSHHostInfo {
 	compatEnabled: boolean;
 }
 
-const CONTROL_DIR = join(homedir(), CONFIG_DIR_NAME, "ssh-control");
-const CONTROL_PATH = join(CONTROL_DIR, "%h.sock");
-const HOST_INFO_DIR = join(homedir(), CONFIG_DIR_NAME, "remote-host");
+const CONTROL_DIR = path.join(homedir(), CONFIG_DIR_NAME, "ssh-control");
+const CONTROL_PATH = path.join(CONTROL_DIR, "%h.sock");
+const HOST_INFO_DIR = path.join(homedir(), CONFIG_DIR_NAME, "remote-host");
 const HOST_INFO_VERSION = 2;
 
 const activeHosts = new Map<string, SSHConnectionTarget>();
 const pendingConnections = new Map<string, Promise<void>>();
 const hostInfoCache = new Map<string, SSHHostInfo>();
 
-function ensureControlDir(): void {
-	if (!existsSync(CONTROL_DIR)) {
-		mkdirSync(CONTROL_DIR, { recursive: true, mode: 0o700 });
-	}
+async function ensureControlDir(): Promise<void> {
+	await fs.mkdir(CONTROL_DIR, { recursive: true, mode: 0o700 });
 	try {
-		chmodSync(CONTROL_DIR, 0o700);
+		await fs.chmod(CONTROL_DIR, 0o700);
 	} catch (err) {
 		logger.debug("SSH control dir chmod failed", { path: CONTROL_DIR, error: String(err) });
 	}
 }
 
-function ensureHostInfoDir(): void {
-	if (!existsSync(HOST_INFO_DIR)) {
-		mkdirSync(HOST_INFO_DIR, { recursive: true, mode: 0o700 });
-	}
+async function ensureHostInfoDir(): Promise<void> {
+	await fs.mkdir(HOST_INFO_DIR, { recursive: true, mode: 0o700 });
 	try {
-		chmodSync(HOST_INFO_DIR, 0o700);
+		await fs.chmod(HOST_INFO_DIR, 0o700);
 	} catch (err) {
 		logger.debug("SSH host info dir chmod failed", { path: HOST_INFO_DIR, error: String(err) });
 	}
@@ -62,15 +59,20 @@ function sanitizeHostName(name: string): string {
 }
 
 function getHostInfoPath(name: string): string {
-	return join(HOST_INFO_DIR, `${sanitizeHostName(name)}.json`);
+	return path.join(HOST_INFO_DIR, `${sanitizeHostName(name)}.json`);
 }
 
-function validateKeyPermissions(keyPath?: string): void {
+async function validateKeyPermissions(keyPath?: string): Promise<void> {
 	if (!keyPath) return;
-	if (!existsSync(keyPath)) {
-		throw new Error(`SSH key not found: ${keyPath}`);
+	let stats: Awaited<ReturnType<typeof fs.stat>>;
+	try {
+		stats = await fs.stat(keyPath);
+	} catch (err) {
+		if (isEnoent(err)) {
+			throw new Error(`SSH key not found: ${keyPath}`);
+		}
+		throw err;
 	}
-	const stats = statSync(keyPath);
 	if (!stats.isFile()) {
 		throw new Error(`SSH key is not a file: ${keyPath}`);
 	}
@@ -208,31 +210,31 @@ function shouldRefreshHostInfo(host: SSHConnectionTarget, info: SSHHostInfo): bo
 	return false;
 }
 
-function loadHostInfoFromDisk(host: SSHConnectionTarget): SSHHostInfo | undefined {
+async function loadHostInfoFromDisk(host: SSHConnectionTarget): Promise<SSHHostInfo | undefined> {
 	const path = getHostInfoPath(host.name);
-	if (!existsSync(path)) return undefined;
 	try {
-		const raw = readFileSync(path, "utf-8");
+		const raw = await fs.readFile(path, "utf-8");
 		const parsed = parseHostInfo(JSON.parse(raw));
 		if (!parsed) return undefined;
 		const resolved = applyCompatOverride(host, parsed);
 		hostInfoCache.set(host.name, resolved);
 		return resolved;
 	} catch (err) {
+		if (isEnoent(err)) return undefined;
 		logger.warn("Failed to load SSH host info", { host: host.name, error: String(err) });
 		return undefined;
 	}
 }
 
-function loadHostInfoFromDiskByName(hostName: string): SSHHostInfo | undefined {
+async function loadHostInfoFromDiskByName(hostName: string): Promise<SSHHostInfo | undefined> {
 	const path = getHostInfoPath(hostName);
-	if (!existsSync(path)) return undefined;
 	try {
-		const raw = readFileSync(path, "utf-8");
+		const raw = await fs.readFile(path, "utf-8");
 		const parsed = parseHostInfo(JSON.parse(raw));
 		if (!parsed) return undefined;
 		return parsed;
 	} catch (err) {
+		if (isEnoent(err)) return undefined;
 		logger.warn("Failed to load SSH host info", { host: hostName, error: String(err) });
 		return undefined;
 	}
@@ -240,7 +242,7 @@ function loadHostInfoFromDiskByName(hostName: string): SSHHostInfo | undefined {
 
 async function persistHostInfo(host: SSHConnectionTarget, info: SSHHostInfo): Promise<void> {
 	try {
-		ensureHostInfoDir();
+		await ensureHostInfoDir();
 		const path = getHostInfoPath(host.name);
 		const payload = { ...info, version: HOST_INFO_VERSION };
 		hostInfoCache.set(host.name, payload);
@@ -252,7 +254,7 @@ async function persistHostInfo(host: SSHConnectionTarget, info: SSHHostInfo): Pr
 
 async function probeHostInfo(host: SSHConnectionTarget): Promise<SSHHostInfo> {
 	const command = 'echo "$OSTYPE|$SHELL|$BASH_VERSION" 2>/dev/null || echo "%OS%|%COMSPEC%|"';
-	const result = await runSshCaptureSync(buildRemoteCommand(host, command));
+	const result = await runSshCaptureSync(await buildRemoteCommand(host, command));
 	if (result.exitCode !== 0 && !result.stdout) {
 		logger.debug("SSH host probe failed", { host: host.name, error: result.stderr });
 		const fallback: SSHHostInfo = {
@@ -315,11 +317,11 @@ async function probeHostInfo(host: SSHConnectionTarget): Promise<SSHHostInfo> {
 	const hasBash = !unexpandedPosixVars && (Boolean(bashVersion) || shell === "bash");
 	let compatShell: SSHHostInfo["compatShell"];
 	if (os === "windows" && host.compat !== false) {
-		const bashProbe = await runSshCaptureSync(buildRemoteCommand(host, 'bash -lc "echo OMP_BASH_OK"'));
+		const bashProbe = await runSshCaptureSync(await buildRemoteCommand(host, 'bash -lc "echo OMP_BASH_OK"'));
 		if (bashProbe.exitCode === 0 && bashProbe.stdout.includes("OMP_BASH_OK")) {
 			compatShell = "bash";
 		} else {
-			const shProbe = await runSshCaptureSync(buildRemoteCommand(host, 'sh -lc "echo OMP_SH_OK"'));
+			const shProbe = await runSshCaptureSync(await buildRemoteCommand(host, 'sh -lc "echo OMP_SH_OK"'));
 			if (shProbe.exitCode === 0 && shProbe.stdout.includes("OMP_SH_OK")) {
 				compatShell = "sh";
 			}
@@ -344,18 +346,20 @@ async function probeHostInfo(host: SSHConnectionTarget): Promise<SSHHostInfo> {
 	return info;
 }
 
-export function getHostInfo(hostName: string): SSHHostInfo | undefined {
-	return hostInfoCache.get(hostName) ?? loadHostInfoFromDiskByName(hostName);
+export async function getHostInfo(hostName: string): Promise<SSHHostInfo | undefined> {
+	const cached = hostInfoCache.get(hostName);
+	if (cached) return cached;
+	return loadHostInfoFromDiskByName(hostName);
 }
 
-export function getHostInfoForHost(host: SSHConnectionTarget): SSHHostInfo | undefined {
+export async function getHostInfoForHost(host: SSHConnectionTarget): Promise<SSHHostInfo | undefined> {
 	const cached = hostInfoCache.get(host.name);
 	if (cached) {
 		const resolved = applyCompatOverride(host, cached);
 		if (resolved !== cached) hostInfoCache.set(host.name, resolved);
 		return resolved;
 	}
-	return loadHostInfoFromDisk(host);
+	return await loadHostInfoFromDisk(host);
 }
 
 export async function ensureHostInfo(host: SSHConnectionTarget): Promise<SSHHostInfo> {
@@ -365,7 +369,7 @@ export async function ensureHostInfo(host: SSHConnectionTarget): Promise<SSHHost
 		hostInfoCache.set(host.name, resolved);
 		if (!shouldRefreshHostInfo(host, resolved)) return resolved;
 	}
-	const fromDisk = loadHostInfoFromDisk(host);
+	const fromDisk = await loadHostInfoFromDisk(host);
 	if (fromDisk && !shouldRefreshHostInfo(host, fromDisk)) return fromDisk;
 	await ensureConnection(host);
 	const current = hostInfoCache.get(host.name);
@@ -373,8 +377,8 @@ export async function ensureHostInfo(host: SSHConnectionTarget): Promise<SSHHost
 	return probeHostInfo(host);
 }
 
-export function buildRemoteCommand(host: SSHConnectionTarget, command: string): string[] {
-	validateKeyPermissions(host.keyPath);
+export async function buildRemoteCommand(host: SSHConnectionTarget, command: string): Promise<string[]> {
+	await validateKeyPermissions(host.keyPath);
 	return [...buildCommonArgs(host), buildSshTarget(host), command];
 }
 
@@ -388,14 +392,14 @@ export async function ensureConnection(host: SSHConnectionTarget): Promise<void>
 
 	const promise = (async () => {
 		ensureSshBinary();
-		ensureControlDir();
-		validateKeyPermissions(host.keyPath);
+		await ensureControlDir();
+		await validateKeyPermissions(host.keyPath);
 
 		const target = buildSshTarget(host);
 		const check = await runSshSync(["-O", "check", ...buildCommonArgs(host), target]);
 		if (check.exitCode === 0) {
 			activeHosts.set(key, host);
-			if (!hostInfoCache.has(key) && !loadHostInfoFromDisk(host)) {
+			if (!hostInfoCache.has(key) && !(await loadHostInfoFromDisk(host))) {
 				await probeHostInfo(host);
 			}
 			return;
@@ -408,7 +412,7 @@ export async function ensureConnection(host: SSHConnectionTarget): Promise<void>
 		}
 
 		activeHosts.set(key, host);
-		if (!hostInfoCache.has(key) && !loadHostInfoFromDisk(host)) {
+		if (!hostInfoCache.has(key) && !(await loadHostInfoFromDisk(host))) {
 			await probeHostInfo(host);
 		}
 	})();

@@ -2,8 +2,8 @@
  * Prettier formatting utilities for edit benchmarks.
  */
 
-import { readdirSync } from "node:fs";
-import { join, extname } from "node:path";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import * as prettier from "prettier";
 
 export const PRETTIER_OPTIONS: prettier.Options = {
@@ -36,14 +36,14 @@ const parsersByExtension: Record<string, prettier.BuiltInParserName[]> = {
 	".html": ["html"],
 };
 
-function listFiles(rootDir: string, subPath = ""): string[] {
-	const entries = readdirSync(join(rootDir, subPath), { withFileTypes: true });
+async function listFiles(rootDir: string, subPath = ""): Promise<string[]> {
+	const entries = await fs.readdir(path.join(rootDir, subPath), { withFileTypes: true });
 	const files: string[] = [];
 
 	for (const entry of entries) {
-		const relativePath = join(subPath, entry.name);
+		const relativePath = path.join(subPath, entry.name);
 		if (entry.isDirectory()) {
-			files.push(...listFiles(rootDir, relativePath));
+			files.push(...(await listFiles(rootDir, relativePath)));
 		} else if (entry.isFile()) {
 			files.push(relativePath);
 		}
@@ -58,7 +58,7 @@ export interface FormatResult {
 }
 
 export async function formatContent(filePath: string, content: string): Promise<FormatResult> {
-	const parsers = parsersByExtension[extname(filePath).toLowerCase()];
+	const parsers = parsersByExtension[path.extname(filePath).toLowerCase()];
 	if (!parsers) {
 		return { formatted: content, didFormat: false };
 	}
@@ -76,10 +76,10 @@ export async function formatContent(filePath: string, content: string): Promise<
 }
 
 export async function formatDirectory(rootDir: string): Promise<void> {
-	const files = listFiles(rootDir);
+	const files = await listFiles(rootDir);
 
 	for (const file of files) {
-		const fullPath = join(rootDir, file);
+		const fullPath = path.join(rootDir, file);
 		const content = await Bun.file(fullPath).text();
 		const result = await formatContent(fullPath, content);
 		if (result.didFormat && result.formatted !== content) {

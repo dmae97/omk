@@ -10,10 +10,9 @@
  */
 
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
-import { createTempDir } from "@oh-my-pi/pi-utils";
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
-import { rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { TempDir } from "@oh-my-pi/pi-utils";
+import * as fs from "node:fs";
+import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { generateJsonReport, generateReport } from "./report";
 import { runBenchmark, type BenchmarkConfig, type ProgressEvent } from "./runner";
@@ -84,8 +83,8 @@ Examples:
 `);
 }
 
-function resolveExtractedDir(tempDir: string): string {
-	const entries = readdirSync(tempDir, { withFileTypes: true });
+async function resolveExtractedDir(tempDir: string): Promise<string> {
+	const entries = await fs.promises.readdir(tempDir, { withFileTypes: true });
 	const dirs = entries.filter((entry) => entry.isDirectory());
 	const files = entries.filter((entry) => entry.isFile());
 	if (dirs.length === 1 && files.length === 0) {
@@ -95,8 +94,8 @@ function resolveExtractedDir(tempDir: string): string {
 }
 
 async function extractTarGz(archivePath: string): Promise<{ dir: string; cleanupDir: string }> {
-	const tempDirObj = await createTempDir("@reach-benchmark-fixtures-");
-	const tempDir = tempDirObj.path;
+	const tempDirObj = await TempDir.create("@reach-benchmark-fixtures-");
+	const tempDir = tempDirObj.path();
 	try {
 		const bytes = await Bun.file(archivePath).arrayBuffer();
 		const archive = new Bun.Archive(bytes);
@@ -112,7 +111,7 @@ async function extractTarGz(archivePath: string): Promise<{ dir: string; cleanup
 		throw new Error(`Failed to extract archive: ${message}`, { cause: error });
 	}
 
-	return { dir: resolveExtractedDir(tempDir), cleanupDir: tempDir };
+	return { dir: await resolveExtractedDir(tempDir), cleanupDir: tempDir };
 }
 
 async function resolveFixtures(fixturesArg?: string): Promise<{ tasks: EditTask[]; cleanup?: () => Promise<void> }> {
@@ -124,7 +123,7 @@ async function resolveFixtures(fixturesArg?: string): Promise<{ tasks: EditTask[
 		const extracted = await extractTarGz(fixturesArg);
 		return {
 			tasks: await loadTasksFromDir(extracted.dir),
-			cleanup: () => rm(extracted.cleanupDir, { recursive: true, force: true }),
+			cleanup: () => fs.promises.rm(extracted.cleanupDir, { recursive: true, force: true }),
 		};
 	}
 

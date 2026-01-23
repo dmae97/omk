@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { ptree } from "@oh-my-pi/pi-utils";
@@ -61,7 +61,7 @@ export async function convertWithMarkitdown(
 		return { content: stdout, ok: true };
 	} finally {
 		try {
-			await rm(tmpFile, { force: true });
+			await fs.rm(tmpFile, { force: true });
 		} catch {}
 	}
 }

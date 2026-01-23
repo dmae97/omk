@@ -1,6 +1,6 @@
-import { readdir } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import * as path from "node:path";
 
 export type PythonModuleSource = "user" | "project";
 
@@ -38,12 +38,12 @@ interface ModuleCandidate {
 
 async function listModuleCandidates(dir: string, source: PythonModuleSource): Promise<ModuleCandidate[]> {
 	try {
-		const entries = await readdir(dir, { withFileTypes: true });
+		const entries = await fs.readdir(dir, { withFileTypes: true });
 		return entries
 			.filter((entry) => entry.isFile() && entry.name.endsWith(".py"))
 			.map((entry) => ({
 				name: entry.name,
-				path: resolve(dir, entry.name),
+				path: path.resolve(dir, entry.name),
 				source,
 			}));
 	} catch {
@@ -68,8 +68,8 @@ export async function discoverPythonModules(options: DiscoverPythonModulesOption
 	const cwd = options.cwd ?? process.cwd();
 	const homeDir = options.homeDir ?? homedir();
 
-	const userDirs = [join(homeDir, ".omp", "agent", "modules"), join(homeDir, ".pi", "agent", "modules")];
-	const projectDirs = [resolve(cwd, ".omp", "modules"), resolve(cwd, ".pi", "modules")];
+	const userDirs = [path.join(homeDir, ".omp", "agent", "modules"), path.join(homeDir, ".pi", "agent", "modules")];
+	const projectDirs = [path.resolve(cwd, ".omp", "modules"), path.resolve(cwd, ".pi", "modules")];
 
 	const userCandidates = (await Promise.all(userDirs.map((dir) => listModuleCandidates(dir, "user")))).flat();
 	const projectCandidates = (await Promise.all(projectDirs.map((dir) => listModuleCandidates(dir, "project")))).flat();

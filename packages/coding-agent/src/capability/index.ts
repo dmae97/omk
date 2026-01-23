@@ -8,7 +8,7 @@
  */
 
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import * as path from "node:path";
 import { clearCache as clearFsCache, cacheStats as fsCacheStats, invalidate as invalidateFs } from "./fs";
 import type {
 	Capability,
@@ -399,10 +399,10 @@ export function reset(): void {
 
 /**
  * Invalidate cache for a specific path.
- * @param path - Absolute or relative path to invalidate
+ * @param filePath - Absolute or relative path to invalidate
  */
-export function invalidate(path: string, cwd?: string): void {
-	const resolved = cwd ? resolve(cwd, path) : path;
+export function invalidate(filePath: string, cwd?: string): void {
+	const resolved = cwd ? path.resolve(cwd, filePath) : filePath;
 	invalidateFs(resolved);
 }
 

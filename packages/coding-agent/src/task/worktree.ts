@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { cp, mkdir, rm } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { $ } from "bun";
@@ -31,9 +31,9 @@ export async function ensureWorktree(baseCwd: string, id: string): Promise<strin
 	const repoRoot = await getRepoRoot(baseCwd);
 	const encodedProject = getEncodedProjectName(repoRoot);
 	const worktreeDir = path.join(homedir(), ".omp", "wt", encodedProject, id);
-	await mkdir(path.dirname(worktreeDir), { recursive: true });
+	await fs.mkdir(path.dirname(worktreeDir), { recursive: true });
 	await $`git worktree remove -f ${worktreeDir}`.cwd(repoRoot).quiet().nothrow();
-	await rm(worktreeDir, { recursive: true, force: true });
+	await fs.rm(worktreeDir, { recursive: true, force: true });
 	await $`git worktree add --detach ${worktreeDir} HEAD`.cwd(repoRoot).quiet();
 	return worktreeDir;
 }
@@ -76,7 +76,7 @@ async function applyPatch(
 		}
 		await runner;
 	} finally {
-		await rm(tempPath, { force: true });
+		await fs.rm(tempPath, { force: true });
 	}
 }
 
@@ -90,8 +90,8 @@ export async function applyBaseline(worktreeDir: string, baseline: WorktreeBasel
 		const destination = path.join(worktreeDir, entry);
 		const exists = await Bun.file(source).exists();
 		if (!exists) continue;
-		await mkdir(path.dirname(destination), { recursive: true });
-		await cp(source, destination, { recursive: true });
+		await fs.mkdir(path.dirname(destination), { recursive: true });
+		await fs.cp(source, destination, { recursive: true });
 	}
 }
 
@@ -106,7 +106,7 @@ async function applyPatchToIndex(cwd: string, patch: string, indexFile: string):
 			})
 			.quiet();
 	} finally {
-		await rm(tempPath, { force: true });
+		await fs.rm(tempPath, { force: true });
 	}
 }
 
@@ -147,7 +147,7 @@ export async function captureDeltaPatch(worktreeDir: string, baseline: WorktreeB
 		);
 		return `${diff}${diff && !diff.endsWith("\n") ? "\n" : ""}${untrackedDiffs.join("\n")}`;
 	} finally {
-		await rm(tempIndex, { force: true });
+		await fs.rm(tempIndex, { force: true });
 	}
 }
 
@@ -161,6 +161,6 @@ export async function cleanupWorktree(dir: string): Promise<void> {
 			await $`git worktree remove -f ${dir}`.cwd(repoRoot).quiet().nothrow();
 		}
 	} finally {
-		await rm(dir, { recursive: true, force: true });
+		await fs.rm(dir, { recursive: true, force: true });
 	}
 }

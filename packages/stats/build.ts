@@ -1,7 +1,7 @@
-import { rm } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 
 // Clean dist
-await rm("./dist/client", { recursive: true, force: true });
+await fs.rm("./dist/client", { recursive: true, force: true });
 
 // Build React app
 const result = await Bun.build({

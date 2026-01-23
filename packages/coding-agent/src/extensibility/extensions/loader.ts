@@ -2,13 +2,14 @@
  * Extension loader - loads TypeScript extension modules using native Bun import.
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import type * as fs1 from "node:fs";
+import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Model, TextContent } from "@oh-my-pi/pi-ai";
 import * as piCodingAgent from "@oh-my-pi/pi-coding-agent";
 import type { KeyId } from "@oh-my-pi/pi-tui";
-import { logger } from "@oh-my-pi/pi-utils";
+import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
 import * as TypeBox from "@sinclair/typebox";
 import { type ExtensionModule, extensionModuleCapability } from "../../capability/extension-module";
@@ -316,10 +317,9 @@ interface ExtensionManifest {
 	skills?: string[];
 }
 
-function readExtensionManifest(packageJsonPath: string): ExtensionManifest | null {
+async function readExtensionManifest(packageJsonPath: string): Promise<ExtensionManifest | null> {
 	try {
-		const content = readFileSync(packageJsonPath, "utf-8");
-		const pkg = JSON.parse(content) as { omp?: ExtensionManifest; pi?: ExtensionManifest };
+		const pkg = (await Bun.file(packageJsonPath).json()) as { omp?: ExtensionManifest; pi?: ExtensionManifest };
 		const manifest = pkg.omp ?? pkg.pi;
 		if (manifest && typeof manifest === "object") {
 			return manifest;
@@ -338,31 +338,38 @@ function isExtensionFile(name: string): boolean {
 /**
  * Resolve extension entry points from a directory.
  */
-function resolveExtensionEntries(dir: string): string[] | null {
+async function resolveExtensionEntries(dir: string): Promise<string[] | null> {
 	const packageJsonPath = path.join(dir, "package.json");
-	if (existsSync(packageJsonPath)) {
-		const manifest = readExtensionManifest(packageJsonPath);
-		if (manifest?.extensions?.length) {
-			const entries: string[] = [];
-			for (const extPath of manifest.extensions) {
-				const resolvedExtPath = path.resolve(dir, extPath);
-				if (existsSync(resolvedExtPath)) {
-					entries.push(resolvedExtPath);
-				}
+	const manifest = await readExtensionManifest(packageJsonPath);
+	if (manifest?.extensions?.length) {
+		const entries: string[] = [];
+		for (const extPath of manifest.extensions) {
+			const resolvedExtPath = path.resolve(dir, extPath);
+			try {
+				await fs.stat(resolvedExtPath);
+				entries.push(resolvedExtPath);
+			} catch (err) {
+				if (!isEnoent(err)) throw err;
 			}
-			if (entries.length > 0) {
-				return entries;
-			}
+		}
+		if (entries.length > 0) {
+			return entries;
 		}
 	}
 
 	const indexTs = path.join(dir, "index.ts");
 	const indexJs = path.join(dir, "index.js");
-	if (existsSync(indexTs)) {
+	try {
+		await fs.stat(indexTs);
 		return [indexTs];
+	} catch (err) {
+		if (!isEnoent(err)) throw err;
 	}
-	if (existsSync(indexJs)) {
+	try {
+		await fs.stat(indexJs);
 		return [indexJs];
+	} catch (err) {
+		if (!isEnoent(err)) throw err;
 	}
 
 	return null;
@@ -378,36 +385,32 @@ function resolveExtensionEntries(dir: string): string[] | null {
  *
  * No recursion beyond one level. Complex packages must use package.json manifest.
  */
-function discoverExtensionsInDir(dir: string): string[] {
-	if (!existsSync(dir)) {
+async function discoverExtensionsInDir(dir: string): Promise<string[]> {
+	const discovered: string[] = [];
+
+	let entries: fs1.Dirent[];
+	try {
+		entries = await fs.readdir(dir, { withFileTypes: true });
+	} catch (err) {
+		if (isEnoent(err)) return [];
+		logger.warn("Failed to discover extensions in directory", { path: dir, error: String(err) });
 		return [];
 	}
 
-	const discovered: string[] = [];
+	for (const entry of entries) {
+		const entryPath = path.join(dir, entry.name);
 
-	try {
-		const entries = readdirSync(dir, { withFileTypes: true });
+		if ((entry.isFile() || entry.isSymbolicLink()) && isExtensionFile(entry.name)) {
+			discovered.push(entryPath);
+			continue;
+		}
 
-		for (const entry of entries) {
-			const entryPath = path.join(dir, entry.name);
-
-			// 1. Direct files: *.ts or *.js
-			if ((entry.isFile() || entry.isSymbolicLink()) && isExtensionFile(entry.name)) {
-				discovered.push(entryPath);
-				continue;
-			}
-
-			// 2 & 3. Subdirectories
-			if (entry.isDirectory() || entry.isSymbolicLink()) {
-				const entries = resolveExtensionEntries(entryPath);
-				if (entries) {
-					discovered.push(...entries);
-				}
+		if (entry.isDirectory() || entry.isSymbolicLink()) {
+			const resolved = await resolveExtensionEntries(entryPath);
+			if (resolved) {
+				discovered.push(...resolved);
 			}
 		}
-	} catch (error) {
-		logger.warn("Failed to discover extensions in directory", { path: dir, error: String(error) });
-		return [];
 	}
 
 	return discovered;
@@ -454,14 +457,22 @@ export async function discoverAndLoadExtensions(
 	// 2. Explicitly configured paths
 	for (const configuredPath of configuredPaths) {
 		const resolved = resolvePath(configuredPath, cwd);
-		if (existsSync(resolved) && statSync(resolved).isDirectory()) {
-			const entries = resolveExtensionEntries(resolved);
+
+		let stat: fs1.Stats | null = null;
+		try {
+			stat = await fs.stat(resolved);
+		} catch (err) {
+			if (!isEnoent(err)) throw err;
+		}
+
+		if (stat?.isDirectory()) {
+			const entries = await resolveExtensionEntries(resolved);
 			if (entries) {
 				addPaths(entries);
 				continue;
 			}
 
-			const discovered = discoverExtensionsInDir(resolved);
+			const discovered = await discoverExtensionsInDir(resolved);
 			if (discovered.length > 0) {
 				addPaths(discovered);
 			}

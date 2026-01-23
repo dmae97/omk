@@ -1,19 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
-import { join } from "node:path";
+import * as path from "node:path";
 import { createLspWritethrough } from "@oh-my-pi/pi-coding-agent/lsp";
 import * as lspConfig from "@oh-my-pi/pi-coding-agent/lsp/config";
-import { createTempDirSync } from "@oh-my-pi/pi-utils";
+import { TempDir } from "@oh-my-pi/pi-utils";
 
 describe("createLspWritethrough batching", () => {
-	let tempDir: ReturnType<typeof createTempDirSync>;
+	let tempDir: TempDir;
 
 	beforeEach(() => {
-		tempDir = createTempDirSync("@omp-lsp-batch-");
+		tempDir = TempDir.createSync("@omp-lsp-batch-");
 	});
 
 	afterEach(() => {
 		vi.restoreAllMocks();
-		tempDir.remove();
+		tempDir.removeSync();
 	});
 
 	it("defers LSP work until the batch flush", async () => {
@@ -21,10 +21,10 @@ describe("createLspWritethrough batching", () => {
 			.spyOn(lspConfig, "loadConfig")
 			.mockResolvedValue({ servers: {}, idleTimeoutMs: undefined });
 		const getServersSpy = vi.spyOn(lspConfig, "getServersForFile").mockReturnValue([]);
-		const writethrough = createLspWritethrough(tempDir.path, { enableFormat: true, enableDiagnostics: true });
+		const writethrough = createLspWritethrough(tempDir.path(), { enableFormat: true, enableDiagnostics: true });
 
-		const fileA = join(tempDir.path, "a.ts");
-		const fileB = join(tempDir.path, "b.ts");
+		const fileA = path.join(tempDir.path(), "a.ts");
+		const fileB = path.join(tempDir.path(), "b.ts");
 		const batchId = `batch-${Date.now()}`;
 
 		const firstResult = await writethrough(fileA, "const a = 1;\n", undefined, undefined, {
@@ -54,9 +54,9 @@ describe("createLspWritethrough batching", () => {
 			.spyOn(lspConfig, "loadConfig")
 			.mockResolvedValue({ servers: {}, idleTimeoutMs: undefined });
 		const getServersSpy = vi.spyOn(lspConfig, "getServersForFile").mockReturnValue([]);
-		const writethrough = createLspWritethrough(tempDir.path, { enableFormat: true, enableDiagnostics: true });
+		const writethrough = createLspWritethrough(tempDir.path(), { enableFormat: true, enableDiagnostics: true });
 
-		const filePath = join(tempDir.path, "single.ts");
+		const filePath = path.join(tempDir.path(), "single.ts");
 		const result = await writethrough(filePath, "const single = true;\n");
 
 		expect(result).toBeUndefined();

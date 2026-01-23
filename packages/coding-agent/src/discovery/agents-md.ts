@@ -6,7 +6,7 @@
  * like .codex/ or .gemini/, which are handled by their respective providers).
  */
 
-import { dirname, join, sep } from "node:path";
+import * as path from "node:path";
 import { registerProvider } from "../capability";
 import { type ContextFile, contextFileCapability } from "../capability/context-file";
 import { readFile } from "../capability/fs";
@@ -29,16 +29,16 @@ async function loadAgentsMd(ctx: LoadContext): Promise<LoadResult<ContextFile>> 
 	let depth = 0;
 
 	while (depth < MAX_DEPTH) {
-		const candidate = join(current, "AGENTS.md");
+		const candidate = path.join(current, "AGENTS.md");
 		const content = await readFile(candidate);
 
 		if (content !== null) {
-			const parent = dirname(candidate);
-			const baseName = parent.split(sep).pop() ?? "";
+			const parent = path.dirname(candidate);
+			const baseName = parent.split(path.sep).pop() ?? "";
 
 			if (!baseName.startsWith(".")) {
-				const fileDir = dirname(candidate);
-				const calculatedDepth = calculateDepth(ctx.cwd, fileDir, sep);
+				const fileDir = path.dirname(candidate);
+				const calculatedDepth = calculateDepth(ctx.cwd, fileDir, path.sep);
 
 				items.push({
 					path: candidate,
@@ -51,7 +51,7 @@ async function loadAgentsMd(ctx: LoadContext): Promise<LoadResult<ContextFile>> 
 		}
 
 		// Move to parent directory
-		const parent = dirname(current);
+		const parent = path.dirname(current);
 		if (parent === current) break; // Reached filesystem root
 		current = parent;
 		depth++;

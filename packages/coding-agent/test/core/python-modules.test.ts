@@ -1,50 +1,50 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import {
 	discoverPythonModules,
 	loadPythonModules,
 	type PythonModuleExecutor,
 } from "@oh-my-pi/pi-coding-agent/ipy/modules";
-import { createTempDirSync } from "@oh-my-pi/pi-utils";
+import { TempDir } from "@oh-my-pi/pi-utils";
 
-const fixturesDir = resolve(import.meta.dir, "../../test/fixtures/python-modules");
+const fixturesDir = path.resolve(import.meta.dir, "../../test/fixtures/python-modules");
 
-const readFixture = (name: string): string => readFileSync(join(fixturesDir, name), "utf-8");
+const readFixture = (name: string): Promise<string> => Bun.file(path.join(fixturesDir, name)).text();
 
-const writeModule = (dir: string, name: string, tag: string) => {
-	mkdirSync(dir, { recursive: true });
-	const base = readFixture(name);
-	writeFileSync(join(dir, name), `${base}\n# ${tag}`);
+const writeModule = async (dir: string, name: string, tag: string) => {
+	await fs.mkdir(dir, { recursive: true });
+	const base = await readFixture(name);
+	await Bun.write(path.join(dir, name), `${base}\n# ${tag}`);
 };
 
 describe("python modules", () => {
-	let tempRoot: ReturnType<typeof createTempDirSync> | null = null;
+	let tempRoot: TempDir | null = null;
 
 	afterEach(() => {
 		if (tempRoot) {
-			tempRoot.remove();
+			tempRoot.removeSync();
 		}
 		tempRoot = null;
 	});
 
 	it("discovers modules with project override and sorted order", async () => {
-		tempRoot = createTempDirSync("@omp-python-modules-");
-		const homeDir = join(tempRoot.path, "home");
-		const cwd = join(tempRoot.path, "project");
+		tempRoot = TempDir.createSync("@omp-python-modules-");
+		const homeDir = path.join(tempRoot.path(), "home");
+		const cwd = path.join(tempRoot.path(), "project");
 
-		writeModule(join(homeDir, ".omp", "agent", "modules"), "alpha.py", "user-omp");
-		writeModule(join(homeDir, ".pi", "agent", "modules"), "beta.py", "user-pi");
-		writeModule(join(homeDir, ".pi", "agent", "modules"), "delta.py", "user-pi");
+		await writeModule(path.join(homeDir, ".omp", "agent", "modules"), "alpha.py", "user-omp");
+		await writeModule(path.join(homeDir, ".pi", "agent", "modules"), "beta.py", "user-pi");
+		await writeModule(path.join(homeDir, ".pi", "agent", "modules"), "delta.py", "user-pi");
 
-		writeModule(join(cwd, ".omp", "modules"), "alpha.py", "project-omp");
-		writeModule(join(cwd, ".omp", "modules"), "beta.py", "project-omp");
-		writeModule(join(cwd, ".pi", "modules"), "gamma.py", "project-pi");
+		await writeModule(path.join(cwd, ".omp", "modules"), "alpha.py", "project-omp");
+		await writeModule(path.join(cwd, ".omp", "modules"), "beta.py", "project-omp");
+		await writeModule(path.join(cwd, ".pi", "modules"), "gamma.py", "project-pi");
 
 		const modules = await discoverPythonModules({ cwd, homeDir });
-		const names = modules.map((module) => basename(module.path));
+		const names = modules.map((module) => path.basename(module.path));
 		expect(names).toEqual(["alpha.py", "beta.py", "delta.py", "gamma.py"]);
-		expect(modules.map((module) => ({ name: basename(module.path), source: module.source }))).toEqual([
+		expect(modules.map((module) => ({ name: path.basename(module.path), source: module.source }))).toEqual([
 			{ name: "alpha.py", source: "project" },
 			{ name: "beta.py", source: "project" },
 			{ name: "delta.py", source: "user" },
@@ -55,12 +55,12 @@ describe("python modules", () => {
 	});
 
 	it("loads modules in sorted order with silent execution", async () => {
-		tempRoot = createTempDirSync("@omp-python-modules-");
-		const homeDir = join(tempRoot.path, "home");
-		const cwd = join(tempRoot.path, "project");
+		tempRoot = TempDir.createSync("@omp-python-modules-");
+		const homeDir = path.join(tempRoot.path(), "home");
+		const cwd = path.join(tempRoot.path(), "project");
 
-		writeModule(join(homeDir, ".omp", "agent", "modules"), "beta.py", "user-omp");
-		writeModule(join(homeDir, ".omp", "agent", "modules"), "alpha.py", "user-omp");
+		await writeModule(path.join(homeDir, ".omp", "agent", "modules"), "beta.py", "user-omp");
+		await writeModule(path.join(homeDir, ".omp", "agent", "modules"), "alpha.py", "user-omp");
 
 		const calls: Array<{ name: string; options?: { silent?: boolean; storeHistory?: boolean } }> = [];
 		const executor: PythonModuleExecutor = {
@@ -79,12 +79,12 @@ describe("python modules", () => {
 	});
 
 	it("fails fast when a module fails to execute", async () => {
-		tempRoot = createTempDirSync("@omp-python-modules-");
-		const homeDir = join(tempRoot.path, "home");
-		const cwd = join(tempRoot.path, "project");
+		tempRoot = TempDir.createSync("@omp-python-modules-");
+		const homeDir = path.join(tempRoot.path(), "home");
+		const cwd = path.join(tempRoot.path(), "project");
 
-		writeModule(join(homeDir, ".omp", "agent", "modules"), "alpha.py", "user-omp");
-		writeModule(join(cwd, ".omp", "modules"), "beta.py", "project-omp");
+		await writeModule(path.join(homeDir, ".omp", "agent", "modules"), "alpha.py", "user-omp");
+		await writeModule(path.join(cwd, ".omp", "modules"), "beta.py", "project-omp");
 
 		const executor: PythonModuleExecutor = {
 			execute: async (code: string) => {

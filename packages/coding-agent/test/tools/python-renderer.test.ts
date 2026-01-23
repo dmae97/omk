@@ -4,8 +4,8 @@ import { pythonToolRenderer } from "@oh-my-pi/pi-coding-agent/tools/python";
 import stripAnsi from "strip-ansi";
 
 describe("pythonToolRenderer", () => {
-	it("renders truncated output when collapsed and full output when expanded", () => {
-		const theme = getThemeByName("dark");
+	it("renders truncated output when collapsed and full output when expanded", async () => {
+		const theme = await getThemeByName("dark");
 		expect(theme).toBeDefined();
 		const uiTheme = theme!;
 

@@ -1,7 +1,7 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import * as fs from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { logger } from "@oh-my-pi/pi-utils";
+import * as path from "node:path";
+import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 // Embed package.json at build time for config
 import packageJson from "../package.json" with { type: "json" };
 
@@ -35,11 +35,11 @@ export const ENV_AGENT_DIR = `${APP_NAME.toUpperCase()}_CODING_AGENT_DIR`;
  */
 export function getPackageDir(): string {
 	let dir = import.meta.dir;
-	while (dir !== dirname(dir)) {
-		if (existsSync(join(dir, "package.json"))) {
+	while (dir !== path.dirname(dir)) {
+		if (fs.existsSync(path.join(dir, "package.json"))) {
 			return dir;
 		}
-		dir = dirname(dir);
+		dir = path.dirname(dir);
 	}
 	// Fallback to cwd (docs/examples won't be found, but that's fine)
 	return process.cwd();
@@ -47,7 +47,7 @@ export function getPackageDir(): string {
 
 /** Get path to CHANGELOG.md (optional, may not exist in binary) */
 export function getChangelogPath(): string {
-	return resolve(join(getPackageDir(), "CHANGELOG.md"));
+	return path.resolve(path.join(getPackageDir(), "CHANGELOG.md"));
 }
 
 // =============================================================================
@@ -56,27 +56,27 @@ export function getChangelogPath(): string {
 
 /** Get the agent config directory (e.g., ~/.omp/agent/) */
 export function getAgentDir(): string {
-	return process.env[ENV_AGENT_DIR] || join(homedir(), CONFIG_DIR_NAME, "agent");
+	return process.env[ENV_AGENT_DIR] || path.join(homedir(), CONFIG_DIR_NAME, "agent");
 }
 
 /** Get path to user's custom themes directory */
 export function getCustomThemesDir(): string {
-	return join(getAgentDir(), "themes");
+	return path.join(getAgentDir(), "themes");
 }
 
 /** Get path to models.json */
 export function getModelsPath(): string {
-	return join(getAgentDir(), "models.json");
+	return path.join(getAgentDir(), "models.json");
 }
 
 /** Get path to models.yml (preferred over models.json) */
 export function getModelsYamlPath(): string {
-	return join(getAgentDir(), "models.yml");
+	return path.join(getAgentDir(), "models.yml");
 }
 
 /** Get path to auth.json */
 export function getAuthPath(): string {
-	return join(getAgentDir(), "auth.json");
+	return path.join(getAgentDir(), "auth.json");
 }
 
 /**
@@ -85,37 +85,37 @@ export function getAuthPath(): string {
  * @returns Absolute path to the agent.db file
  */
 export function getAgentDbPath(agentDir: string = getAgentDir()): string {
-	return join(agentDir, "agent.db");
+	return path.join(agentDir, "agent.db");
 }
 
 /** Get path to tools directory */
 export function getToolsDir(): string {
-	return join(getAgentDir(), "tools");
+	return path.join(getAgentDir(), "tools");
 }
 
 /** Get path to managed binaries directory (fd, rg) */
 export function getBinDir(): string {
-	return join(getAgentDir(), "bin");
+	return path.join(getAgentDir(), "bin");
 }
 
 /** Get path to slash commands directory */
 export function getCommandsDir(): string {
-	return join(getAgentDir(), "commands");
+	return path.join(getAgentDir(), "commands");
 }
 
 /** Get path to prompts directory */
 export function getPromptsDir(): string {
-	return join(getAgentDir(), "prompts");
+	return path.join(getAgentDir(), "prompts");
 }
 
 /** Get path to sessions directory */
 export function getSessionsDir(): string {
-	return join(getAgentDir(), "sessions");
+	return path.join(getAgentDir(), "sessions");
 }
 
 /** Get path to debug log file */
 export function getDebugLogPath(): string {
-	return join(getAgentDir(), `${APP_NAME}-debug.log`);
+	return path.join(getAgentDir(), `${APP_NAME}-debug.log`);
 }
 
 // =============================================================================
@@ -128,7 +128,7 @@ export function getDebugLogPath(): string {
  * Project-level: .omp, .pi, .claude, .codex, .gemini
  */
 const USER_CONFIG_BASES = priorityList.map(({ dir, globalAgentDir }) => ({
-	base: () => join(homedir(), globalAgentDir ?? dir),
+	base: () => path.join(homedir(), globalAgentDir ?? dir),
 	name: dir,
 }));
 
@@ -177,9 +177,9 @@ export function getConfigDirs(subpath: string, options: GetConfigDirsOptions = {
 	// User-level directories (highest priority)
 	if (user) {
 		for (const { base, name } of USER_CONFIG_BASES) {
-			const path = join(base(), subpath);
-			if (!existingOnly || existsSync(path)) {
-				results.push({ path, source: name, level: "user" });
+			const resolvedPath = path.resolve(base(), subpath);
+			if (!existingOnly || fs.existsSync(resolvedPath)) {
+				results.push({ path: resolvedPath, source: name, level: "user" });
 			}
 		}
 	}
@@ -187,9 +187,9 @@ export function getConfigDirs(subpath: string, options: GetConfigDirsOptions = {
 	// Project-level directories
 	if (project) {
 		for (const { base, name } of PROJECT_CONFIG_BASES) {
-			const path = resolve(cwd, base, subpath);
-			if (!existingOnly || existsSync(path)) {
-				results.push({ path, source: name, level: "project" });
+			const resolvedPath = path.resolve(cwd, base, subpath);
+			if (!existingOnly || fs.existsSync(resolvedPath)) {
+				results.push({ path: resolvedPath, source: name, level: "project" });
 			}
 		}
 	}
@@ -226,25 +226,24 @@ export interface ConfigFileResult<T> {
  *   console.log(result.content);
  * }
  */
-export function readConfigFile<T = unknown>(
+export async function readConfigFile<T = unknown>(
 	subpath: string,
 	options: GetConfigDirsOptions = {},
-): ConfigFileResult<T> | undefined {
+): Promise<ConfigFileResult<T> | undefined> {
 	const dirs = getConfigDirs("", { ...options, existingOnly: false });
 
 	for (const { path: base, source, level } of dirs) {
-		const filePath = join(base, subpath);
+		const filePath = path.join(base, subpath);
 		try {
-			if (existsSync(filePath)) {
-				const content = readFileSync(filePath, "utf-8");
-				return {
-					path: filePath,
-					source,
-					level,
-					content: JSON.parse(content) as T,
-				};
-			}
+			const content = await Bun.file(filePath).text();
+			return {
+				path: filePath,
+				source,
+				level,
+				content: JSON.parse(content) as T,
+			};
 		} catch (error) {
+			if (isEnoent(error)) continue;
 			logger.warn("Failed to parse config file", { path: filePath, error: String(error) });
 		}
 	}
@@ -256,26 +255,25 @@ export function readConfigFile<T = unknown>(
  * Get all existing config files for a subpath (for merging scenarios).
  * Returns in priority order (highest first).
  */
-export function readAllConfigFiles<T = unknown>(
+export async function readAllConfigFiles<T = unknown>(
 	subpath: string,
 	options: GetConfigDirsOptions = {},
-): ConfigFileResult<T>[] {
+): Promise<ConfigFileResult<T>[]> {
 	const dirs = getConfigDirs("", { ...options, existingOnly: false });
 	const results: ConfigFileResult<T>[] = [];
 
 	for (const { path: base, source, level } of dirs) {
-		const filePath = join(base, subpath);
+		const filePath = path.join(base, subpath);
 		try {
-			if (existsSync(filePath)) {
-				const content = readFileSync(filePath, "utf-8");
-				results.push({
-					path: filePath,
-					source,
-					level,
-					content: JSON.parse(content) as T,
-				});
-			}
+			const content = await Bun.file(filePath).text();
+			results.push({
+				path: filePath,
+				source,
+				level,
+				content: JSON.parse(content) as T,
+			});
 		} catch (error) {
+			if (isEnoent(error)) continue;
 			logger.warn("Failed to parse config file", { path: filePath, error: String(error) });
 		}
 	}
@@ -291,8 +289,8 @@ export function findConfigFile(subpath: string, options: GetConfigDirsOptions = 
 	const dirs = getConfigDirs("", { ...options, existingOnly: false });
 
 	for (const { path: base } of dirs) {
-		const filePath = join(base, subpath);
-		if (existsSync(filePath)) {
+		const filePath = path.join(base, subpath);
+		if (fs.existsSync(filePath)) {
 			return filePath;
 		}
 	}
@@ -310,8 +308,8 @@ export function findConfigFileWithMeta(
 	const dirs = getConfigDirs("", { ...options, existingOnly: false });
 
 	for (const { path: base, source, level } of dirs) {
-		const filePath = join(base, subpath);
-		if (existsSync(filePath)) {
+		const filePath = path.join(base, subpath);
+		if (fs.existsSync(filePath)) {
 			return { path: filePath, source, level };
 		}
 	}
@@ -325,7 +323,7 @@ export function findConfigFileWithMeta(
 
 async function isDirectory(p: string): Promise<boolean> {
 	try {
-		return existsSync(p) && statSync(p).isDirectory();
+		return (await fs.promises.stat(p)).isDirectory();
 	} catch {
 		return false;
 	}
@@ -348,14 +346,14 @@ export async function findNearestProjectConfigDir(
 	while (true) {
 		// Check all config bases at this level, in priority order
 		for (const { base, name } of PROJECT_CONFIG_BASES) {
-			const candidate = join(currentDir, base, subpath);
+			const candidate = path.join(currentDir, base, subpath);
 			if (await isDirectory(candidate)) {
 				return { path: candidate, source: name, level: "project" };
 			}
 		}
 
 		// Move up one directory
-		const parentDir = dirname(currentDir);
+		const parentDir = path.dirname(currentDir);
 		if (parentDir === currentDir) break; // Reached root
 		currentDir = parentDir;
 	}
@@ -381,14 +379,14 @@ export async function findAllNearestProjectConfigDirs(
 		for (const { base, name } of PROJECT_CONFIG_BASES) {
 			if (foundBases.has(name)) continue;
 
-			const candidate = join(currentDir, base, subpath);
+			const candidate = path.join(currentDir, base, subpath);
 			if (await isDirectory(candidate)) {
 				results.push({ path: candidate, source: name, level: "project" });
 				foundBases.add(name);
 			}
 		}
 
-		const parentDir = dirname(currentDir);
+		const parentDir = path.dirname(currentDir);
 		if (parentDir === currentDir) break;
 		currentDir = parentDir;
 	}

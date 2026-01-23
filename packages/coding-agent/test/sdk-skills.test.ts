@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import type { Skill } from "@oh-my-pi/pi-coding-agent/sdk";
 import { createAgentSession } from "@oh-my-pi/pi-coding-agent/sdk";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
@@ -11,14 +11,14 @@ describe("createAgentSession skills option", () => {
 	let skillsDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `pi-sdk-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(tmpdir(), `pi-sdk-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		// Create skill in .omp/skills/ for native project-level discovery
-		skillsDir = join(tempDir, ".omp", "skills", "test-skill");
-		mkdirSync(skillsDir, { recursive: true });
+		skillsDir = path.join(tempDir, ".omp", "skills", "test-skill");
+		fs.mkdirSync(skillsDir, { recursive: true });
 
 		// Create a test skill in the pi skills directory
-		writeFileSync(
-			join(skillsDir, "SKILL.md"),
+		fs.writeFileSync(
+			path.join(skillsDir, "SKILL.md"),
 			`---
 name: test-skill
 description: A test skill for SDK tests.
@@ -33,7 +33,7 @@ This is a test skill.
 
 	afterEach(() => {
 		if (tempDir) {
-			rmSync(tempDir, { recursive: true, force: true });
+			fs.rmSync(tempDir, { recursive: true, force: true });
 		}
 	});
 

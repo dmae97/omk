@@ -6,10 +6,11 @@
  */
 
 import { execSync, spawnSync } from "node:child_process";
-import { createWriteStream, existsSync, renameSync, unlinkSync } from "node:fs";
-import { dirname } from "node:path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { isEnoent } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { APP_NAME, VERSION } from "../config";
 import { theme } from "../modes/theme/theme";
@@ -161,7 +162,7 @@ async function updateViaBinary(release: ReleaseInfo): Promise<void> {
 	}
 
 	const execPath = process.execPath;
-	const _execDir = dirname(execPath);
+	const _execDir = path.dirname(execPath);
 	const tempPath = `${execPath}.new`;
 	const backupPath = `${execPath}.bak`;
 
@@ -173,7 +174,7 @@ async function updateViaBinary(release: ReleaseInfo): Promise<void> {
 		throw new Error(`Download failed: ${response.statusText}`);
 	}
 
-	const fileStream = createWriteStream(tempPath, { mode: 0o755 });
+	const fileStream = fs.createWriteStream(tempPath, { mode: 0o755 });
 	const nodeStream = Readable.fromWeb(response.body as import("stream/web").ReadableStream);
 	await pipeline(nodeStream, fileStream);
 
@@ -181,27 +182,30 @@ async function updateViaBinary(release: ReleaseInfo): Promise<void> {
 	console.log(chalk.dim("Installing update..."));
 
 	try {
-		// Backup current binary
-		if (existsSync(backupPath)) {
-			unlinkSync(backupPath);
+		try {
+			await fs.promises.unlink(backupPath);
+		} catch (err) {
+			if (!isEnoent(err)) throw err;
 		}
-		renameSync(execPath, backupPath);
+		await fs.promises.rename(execPath, backupPath);
 
-		// Move new binary into place
-		renameSync(tempPath, execPath);
+		await fs.promises.rename(tempPath, execPath);
 
-		// Clean up backup
-		unlinkSync(backupPath);
+		await fs.promises.unlink(backupPath);
 
 		console.log(chalk.green(`\n${theme.status.success} Updated to ${release.version}`));
 		console.log(chalk.dim(`Restart ${APP_NAME} to use the new version`));
 	} catch (err) {
-		// Restore from backup if possible
-		if (existsSync(backupPath) && !existsSync(execPath)) {
-			renameSync(backupPath, execPath);
+		const [backupExists, execExists, tempExists] = await Promise.all([
+			Bun.file(backupPath).exists(),
+			Bun.file(execPath).exists(),
+			Bun.file(tempPath).exists(),
+		]);
+		if (backupExists && !execExists) {
+			await fs.promises.rename(backupPath, execPath);
 		}
-		if (existsSync(tempPath)) {
-			unlinkSync(tempPath);
+		if (tempExists) {
+			await fs.promises.unlink(tempPath);
 		}
 		throw err;
 	}

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
-import { mkdirSync, rmSync } from "node:fs";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import * as pythonExecutor from "@oh-my-pi/pi-coding-agent/ipy/executor";
 import * as pythonKernel from "@oh-my-pi/pi-coding-agent/ipy/kernel";
 import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
@@ -38,13 +38,13 @@ describe("python tool settings", () => {
 	let testDir: string;
 
 	beforeEach(() => {
-		testDir = join(tmpdir(), `python-tool-settings-${crypto.randomUUID()}`);
-		mkdirSync(testDir, { recursive: true });
+		testDir = path.join(tmpdir(), `python-tool-settings-${crypto.randomUUID()}`);
+		fs.mkdirSync(testDir, { recursive: true });
 	});
 
 	afterEach(() => {
 		vi.restoreAllMocks();
-		rmSync(testDir, { recursive: true, force: true });
+		fs.rmSync(testDir, { recursive: true, force: true });
 	});
 
 	it("exposes python tool when kernel is available", async () => {

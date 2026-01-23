@@ -8,9 +8,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import { Agent } from "@oh-my-pi/pi-agent-core";
 import { getModel } from "@oh-my-pi/pi-ai";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
@@ -29,16 +29,16 @@ describe.skipIf(!API_KEY)("AgentSession branching", () => {
 
 	beforeEach(() => {
 		// Create temp directory for session files
-		tempDir = join(tmpdir(), `pi-branching-test-${nanoid()}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `pi-branching-test-${nanoid()}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(async () => {
 		if (session) {
 			session.dispose();
 		}
-		if (tempDir && existsSync(tempDir)) {
-			rmSync(tempDir, { recursive: true });
+		if (tempDir && fs.existsSync(tempDir)) {
+			fs.rmSync(tempDir, { recursive: true });
 		}
 	});
 
@@ -63,7 +63,7 @@ describe.skipIf(!API_KEY)("AgentSession branching", () => {
 
 		sessionManager = noSession ? SessionManager.inMemory() : SessionManager.create(tempDir);
 		const settingsManager = await SettingsManager.create(tempDir, tempDir);
-		const authStorage = await AuthStorage.create(join(tempDir, "auth.json"));
+		const authStorage = await AuthStorage.create(path.join(tempDir, "auth.json"));
 		const modelRegistry = new ModelRegistry(authStorage, tempDir);
 
 		session = new AgentSession({
@@ -101,7 +101,7 @@ describe.skipIf(!API_KEY)("AgentSession branching", () => {
 
 		// Session file should exist (new branch)
 		expect(session.sessionFile).not.toBeNull();
-		expect(existsSync(session.sessionFile!)).toBe(true);
+		expect(fs.existsSync(session.sessionFile!)).toBe(true);
 	});
 
 	it("should support in-memory branching in --no-session mode", async () => {

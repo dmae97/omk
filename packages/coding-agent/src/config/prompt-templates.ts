@@ -1,4 +1,4 @@
-import { join, resolve } from "node:path";
+import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import Handlebars from "handlebars";
 import { CONFIG_DIR_NAME, getPromptsDir } from "../config";
@@ -382,7 +382,7 @@ async function loadTemplatesFromDir(
 		entries.sort((a, b) => a.split("/").length - b.split("/").length);
 
 		for (const entry of entries) {
-			const fullPath = join(dir, entry);
+			const fullPath = path.join(dir, entry);
 			const file = Bun.file(fullPath);
 
 			try {
@@ -461,11 +461,11 @@ export async function loadPromptTemplates(options: LoadPromptTemplatesOptions = 
 
 	// 1. Load global templates from agentDir/prompts/
 	// Note: if agentDir is provided, it should be the agent dir, not the prompts dir
-	const globalPromptsDir = options.agentDir ? join(options.agentDir, "prompts") : resolvedAgentDir;
+	const globalPromptsDir = options.agentDir ? path.join(options.agentDir, "prompts") : resolvedAgentDir;
 	templates.push(...(await loadTemplatesFromDir(globalPromptsDir, "user")));
 
 	// 2. Load project templates from cwd/{CONFIG_DIR_NAME}/prompts/
-	const projectPromptsDir = resolve(resolvedCwd, CONFIG_DIR_NAME, "prompts");
+	const projectPromptsDir = path.resolve(resolvedCwd, CONFIG_DIR_NAME, "prompts");
 	templates.push(...(await loadTemplatesFromDir(projectPromptsDir, "project")));
 
 	return templates;

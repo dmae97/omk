@@ -1,16 +1,16 @@
 import { describe, expect, it } from "bun:test";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import * as path from "node:path";
 import { loadSkills, loadSkillsFromDir, type Skill } from "@oh-my-pi/pi-coding-agent/extensibility/skills";
 
-const fixturesDir = resolve(__dirname, "fixtures/skills");
-const collisionFixturesDir = resolve(__dirname, "fixtures/skills-collision");
+const fixturesDir = path.resolve(__dirname, "fixtures/skills");
+const collisionFixturesDir = path.resolve(__dirname, "fixtures/skills-collision");
 
 describe("skills", () => {
 	describe("loadSkillsFromDir", () => {
-		it("should load a valid skill", () => {
-			const { skills, warnings } = loadSkillsFromDir({
-				dir: join(fixturesDir, "valid-skill"),
+		it("should load a valid skill", async () => {
+			const { skills, warnings } = await loadSkillsFromDir({
+				dir: path.join(fixturesDir, "valid-skill"),
 				source: "test",
 			});
 
@@ -21,9 +21,9 @@ describe("skills", () => {
 			expect(warnings).toHaveLength(0);
 		});
 
-		it("should load skill when name doesn't match parent directory", () => {
-			const { skills } = loadSkillsFromDir({
-				dir: join(fixturesDir, "name-mismatch"),
+		it("should load skill when name doesn't match parent directory", async () => {
+			const { skills } = await loadSkillsFromDir({
+				dir: path.join(fixturesDir, "name-mismatch"),
 				source: "test",
 			});
 
@@ -31,45 +31,45 @@ describe("skills", () => {
 			expect(skills[0].name).toBe("different-name");
 		});
 
-		it("should load skill with invalid name characters", () => {
-			const { skills } = loadSkillsFromDir({
-				dir: join(fixturesDir, "invalid-name-chars"),
+		it("should load skill with invalid name characters", async () => {
+			const { skills } = await loadSkillsFromDir({
+				dir: path.join(fixturesDir, "invalid-name-chars"),
 				source: "test",
 			});
 
 			expect(skills).toHaveLength(1);
 		});
 
-		it("should load skill when name exceeds 64 characters", () => {
-			const { skills } = loadSkillsFromDir({
-				dir: join(fixturesDir, "long-name"),
+		it("should load skill when name exceeds 64 characters", async () => {
+			const { skills } = await loadSkillsFromDir({
+				dir: path.join(fixturesDir, "long-name"),
 				source: "test",
 			});
 
 			expect(skills).toHaveLength(1);
 		});
 
-		it("should skip skill when description is missing", () => {
-			const { skills } = loadSkillsFromDir({
-				dir: join(fixturesDir, "missing-description"),
+		it("should skip skill when description is missing", async () => {
+			const { skills } = await loadSkillsFromDir({
+				dir: path.join(fixturesDir, "missing-description"),
 				source: "test",
 			});
 
 			expect(skills).toHaveLength(0);
 		});
 
-		it("should load skill with unknown frontmatter fields", () => {
-			const { skills } = loadSkillsFromDir({
-				dir: join(fixturesDir, "unknown-field"),
+		it("should load skill with unknown frontmatter fields", async () => {
+			const { skills } = await loadSkillsFromDir({
+				dir: path.join(fixturesDir, "unknown-field"),
 				source: "test",
 			});
 
 			expect(skills).toHaveLength(1);
 		});
 
-		it("should load nested skills recursively", () => {
-			const { skills } = loadSkillsFromDir({
-				dir: join(fixturesDir, "nested"),
+		it("should load nested skills recursively", async () => {
+			const { skills } = await loadSkillsFromDir({
+				dir: path.join(fixturesDir, "nested"),
 				source: "test",
 			});
 
@@ -77,9 +77,9 @@ describe("skills", () => {
 			expect(skills[0].name).toBe("child-skill");
 		});
 
-		it("should skip files without frontmatter description", () => {
-			const { skills } = loadSkillsFromDir({
-				dir: join(fixturesDir, "no-frontmatter"),
+		it("should skip files without frontmatter description", async () => {
+			const { skills } = await loadSkillsFromDir({
+				dir: path.join(fixturesDir, "no-frontmatter"),
 				source: "test",
 			});
 
@@ -87,17 +87,17 @@ describe("skills", () => {
 			expect(skills).toHaveLength(0);
 		});
 
-		it("should load skill with consecutive hyphens in name", () => {
-			const { skills } = loadSkillsFromDir({
-				dir: join(fixturesDir, "consecutive-hyphens"),
+		it("should load skill with consecutive hyphens in name", async () => {
+			const { skills } = await loadSkillsFromDir({
+				dir: path.join(fixturesDir, "consecutive-hyphens"),
 				source: "test",
 			});
 
 			expect(skills).toHaveLength(1);
 		});
 
-		it("should load all skills from fixture directory", () => {
-			const { skills } = loadSkillsFromDir({
+		it("should load all skills from fixture directory", async () => {
+			const { skills } = await loadSkillsFromDir({
 				dir: fixturesDir,
 				source: "test",
 			});
@@ -108,8 +108,8 @@ describe("skills", () => {
 			expect(skills.length).toBeGreaterThanOrEqual(6);
 		});
 
-		it("should return empty for non-existent directory", () => {
-			const { skills } = loadSkillsFromDir({
+		it("should return empty for non-existent directory", async () => {
+			const { skills } = await loadSkillsFromDir({
 				dir: "/non/existent/path",
 				source: "test",
 			});
@@ -117,12 +117,12 @@ describe("skills", () => {
 			expect(skills).toHaveLength(0);
 		});
 
-		it("should use parent directory name when name not in frontmatter", () => {
+		it("should use parent directory name when name not in frontmatter", async () => {
 			// The no-frontmatter fixture has no name in frontmatter, so it should use "no-frontmatter"
 			// But it also has no description, so it won't load
 			// Let's test with a valid skill that relies on directory name
-			const { skills } = loadSkillsFromDir({
-				dir: join(fixturesDir, "valid-skill"),
+			const { skills } = await loadSkillsFromDir({
+				dir: path.join(fixturesDir, "valid-skill"),
 				source: "test",
 			});
 
@@ -153,7 +153,7 @@ describe("skills", () => {
 				enableClaudeProject: false,
 				enablePiUser: false,
 				enablePiProject: false,
-				customDirectories: [join(fixturesDir, "valid-skill")],
+				customDirectories: [path.join(fixturesDir, "valid-skill")],
 				ignoredSkills: ["valid-skill"],
 			});
 			expect(skills).toHaveLength(0);
@@ -188,7 +188,7 @@ describe("skills", () => {
 		});
 
 		it("should expand ~ in customDirectories", async () => {
-			const homeSkillsDir = join(homedir(), ".omp/agent/skills");
+			const homeSkillsDir = path.join(homedir(), ".omp/agent/skills");
 			const { skills: withTilde } = await loadSkills({
 				enableCodexUser: false,
 				enableClaudeUser: false,
@@ -282,15 +282,15 @@ describe("skills", () => {
 	});
 
 	describe("collision handling", () => {
-		it("should detect name collisions and keep first skill", () => {
+		it("should detect name collisions and keep first skill", async () => {
 			// Load from first directory
-			const first = loadSkillsFromDir({
-				dir: join(collisionFixturesDir, "first"),
+			const first = await loadSkillsFromDir({
+				dir: path.join(collisionFixturesDir, "first"),
 				source: "first",
 			});
 
-			const second = loadSkillsFromDir({
-				dir: join(collisionFixturesDir, "second"),
+			const second = await loadSkillsFromDir({
+				dir: path.join(collisionFixturesDir, "second"),
 				source: "second",
 			});
 

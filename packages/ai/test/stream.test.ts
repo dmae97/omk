@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { type ChildProcess, execSync, spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import * as fs from "node:fs/promises";
 import { getModel } from "@oh-my-pi/pi-ai/models";
 import { complete, stream } from "@oh-my-pi/pi-ai/stream";
 import type { Api, Context, ImageContent, Model, OptionsForApi, Tool, ToolResultMessage } from "@oh-my-pi/pi-ai/types";
@@ -219,7 +219,7 @@ async function handleImage<TApi extends Api>(model: Model<TApi>, options?: Optio
 
 	// Read the test image
 	const imagePath = join(import.meta.dir, "data", "red-circle.png");
-	const imageBuffer = readFileSync(imagePath);
+	const imageBuffer = await fs.readFile(imagePath);
 	const base64Image = imageBuffer.toString("base64");
 
 	const imageContent: ImageContent = {

@@ -9,6 +9,7 @@
 
 ### Changed
 - Updated TypeScript configuration for better publish-time configuration handling with tsconfig.publish.json
+- Migrated file system operations from synchronous to asynchronous APIs in autocomplete provider for non-blocking I/O
 
 ### Fixed
 - Fixed crash when terminal becomes unavailable (EIO errors) by exiting gracefully instead of throwing

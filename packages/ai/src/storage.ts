@@ -4,9 +4,9 @@
  */
 
 import { Database } from "bun:sqlite";
-import { chmodSync, existsSync, mkdirSync } from "node:fs";
+import * as fs from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import * as path from "node:path";
 import type { OAuthCredentials } from "./utils/oauth/types";
 
 type AuthCredential = { type: "api_key"; key: string } | ({ type: "oauth" } & OAuthCredentials);
@@ -24,7 +24,7 @@ type AuthRow = {
  * Get the agent config directory (e.g., ~/.omp/agent/)
  */
 function getAgentDir(): string {
-	const configDir = process.env.OMP_CODING_AGENT_DIR || join(homedir(), ".omp", "agent");
+	const configDir = process.env.OMP_CODING_AGENT_DIR || path.join(homedir(), ".omp", "agent");
 	return configDir;
 }
 
@@ -32,7 +32,7 @@ function getAgentDir(): string {
  * Get path to agent.db
  */
 function getAgentDbPath(): string {
-	return join(getAgentDir(), "agent.db");
+	return path.join(getAgentDir(), "agent.db");
 }
 
 function serializeCredential(credential: AuthCredential): { credentialType: string; data: string } | null {
@@ -79,6 +79,8 @@ function deserializeCredential(row: AuthRow): AuthCredential | null {
 
 /**
  * Simple storage class for CLI auth credentials.
+ *
+ * Use `CliAuthStorage.create()` to instantiate (async initialization).
  */
 export class CliAuthStorage {
 	private db: Database;
@@ -87,20 +89,8 @@ export class CliAuthStorage {
 	private listAllStmt: ReturnType<Database["prepare"]>;
 	private deleteByProviderStmt: ReturnType<Database["prepare"]>;
 
-	constructor(dbPath: string = getAgentDbPath()) {
-		// Ensure directory exists with secure permissions
-		const dir = dirname(dbPath);
-		if (!existsSync(dir)) {
-			mkdirSync(dir, { recursive: true, mode: 0o700 });
-		}
-
-		this.db = new Database(dbPath);
-		// Harden database file permissions to prevent credential leakage
-		try {
-			chmodSync(dbPath, 0o600);
-		} catch {
-			// Ignore chmod failures (e.g., Windows)
-		}
+	private constructor(db: Database) {
+		this.db = db;
 		this.initializeSchema();
 
 		this.insertStmt = this.db.prepare(
@@ -109,6 +99,26 @@ export class CliAuthStorage {
 		this.listByProviderStmt = this.db.prepare("SELECT * FROM auth_credentials WHERE provider = ?");
 		this.listAllStmt = this.db.prepare("SELECT * FROM auth_credentials");
 		this.deleteByProviderStmt = this.db.prepare("DELETE FROM auth_credentials WHERE provider = ?");
+	}
+
+	static async create(dbPath: string = getAgentDbPath()): Promise<CliAuthStorage> {
+		const dir = path.dirname(dbPath);
+		const dirExists = await fs
+			.stat(dir)
+			.then((s) => s.isDirectory())
+			.catch(() => false);
+		if (!dirExists) {
+			await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+		}
+
+		const db = new Database(dbPath);
+		try {
+			await fs.chmod(dbPath, 0o600);
+		} catch {
+			// Ignore chmod failures (e.g., Windows)
+		}
+
+		return new CliAuthStorage(db);
 	}
 
 	private initializeSchema(): void {

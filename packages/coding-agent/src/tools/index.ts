@@ -72,6 +72,7 @@ import type { ArtifactManager } from "../session/artifacts";
 import { TaskTool } from "../task";
 import type { AgentOutputManager } from "../task/output-manager";
 import type { EventBus } from "../utils/event-bus";
+import { time } from "../utils/timings";
 import { WebSearchTool } from "../web/search";
 import { AskTool } from "./ask";
 import { BashTool } from "./bash";
@@ -213,6 +214,7 @@ function getPythonModeFromEnv(): PythonToolMode | null {
  * Create tools from BUILTIN_TOOLS registry.
  */
 export async function createTools(session: ToolSession, toolNames?: string[]): Promise<Tool[]> {
+	time("createTools:start");
 	const includeComplete = session.requireCompleteTool === true;
 	const enableLsp = session.enableLsp ?? true;
 	const requestedTools = toolNames && toolNames.length > 0 ? [...new Set(toolNames)] : undefined;
@@ -222,18 +224,21 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 		pythonMode !== "bash-only" &&
 		(requestedTools === undefined || requestedTools.includes("python") || pythonMode === "ipy-only");
 	const isTestEnv = process.env.BUN_ENV === "test" || process.env.NODE_ENV === "test";
+	const skipPythonWarm = isTestEnv || process.env.OMP_PYTHON_SKIP_CHECK === "1";
 	if (shouldCheckPython) {
 		const availability = await checkPythonKernelAvailability(session.cwd);
+		time("createTools:pythonCheck");
 		pythonAvailable = availability.ok;
 		if (!availability.ok) {
 			logger.warn("Python kernel unavailable, falling back to bash", {
 				reason: availability.reason,
 			});
-		} else if (!isTestEnv && getPreludeDocs().length === 0) {
+		} else if (!skipPythonWarm && getPreludeDocs().length === 0) {
 			const sessionFile = session.getSessionFile?.() ?? undefined;
 			const warmSessionId = sessionFile ? `session:${sessionFile}:cwd:${session.cwd}` : `cwd:${session.cwd}`;
 			try {
 				await warmPythonEnvironment(session.cwd, warmSessionId, session.settings?.getPythonSharedGateway?.());
+				time("createTools:warmPython");
 			} catch (err) {
 				logger.warn("Failed to warm Python environment", {
 					error: err instanceof Error ? err.message : String(err),
@@ -274,8 +279,24 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 					...Object.entries(BUILTIN_TOOLS).filter(([name]) => isToolAllowed(name)),
 					...(includeComplete ? ([["complete", HIDDEN_TOOLS.complete]] as const) : []),
 				];
-	const results = await Promise.all(entries.map(([, factory]) => factory(session)));
-	const tools = results.filter((t): t is Tool => t !== null);
+	time("createTools:beforeFactories");
+	const slowTools: Array<{ name: string; ms: number }> = [];
+	const results = await Promise.all(
+		entries.map(async ([name, factory]) => {
+			const start = performance.now();
+			const tool = await factory(session);
+			const elapsed = performance.now() - start;
+			if (elapsed > 5) {
+				slowTools.push({ name, ms: Math.round(elapsed) });
+			}
+			return { name, tool };
+		}),
+	);
+	time("createTools:afterFactories");
+	if (slowTools.length > 0 && process.env.OMP_TIMING === "1") {
+		console.error(`  [slow tools: ${slowTools.map((t) => `${t.name}=${t.ms}ms`).join(", ")}]`);
+	}
+	const tools = results.filter((r) => r.tool !== null).map((r) => r.tool as Tool);
 	const wrappedTools = wrapToolsWithMetaNotice(tools);
 
 	if (filteredRequestedTools !== undefined) {

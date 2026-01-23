@@ -5,8 +5,9 @@
  * createAgentSession() options. The SDK does the heavy lifting.
  */
 
+import * as fs from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import * as path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { type ImageContent, supportsXhigh } from "@oh-my-pi/pi-ai";
 import { postmortem } from "@oh-my-pi/pi-utils";
@@ -14,6 +15,7 @@ import chalk from "chalk";
 import { type Args, parseArgs, printHelp } from "./cli/args";
 import { parseConfigArgs, printConfigHelp, runConfigCommand } from "./cli/config-cli";
 import { processFileArguments } from "./cli/file-processor";
+import { parseJupyterArgs, printJupyterHelp, runJupyterCommand } from "./cli/jupyter-cli";
 import { listModels } from "./cli/list-models";
 import { parsePluginArgs, printPluginHelp, runPluginCommand } from "./cli/plugin-cli";
 import { selectSession } from "./cli/session-picker";
@@ -176,12 +178,16 @@ async function prepareInitialMessage(
 /**
  * Resolve a session argument to a local or global session match.
  */
-function resolveSessionMatch(sessionArg: string, cwd: string, sessionDir?: string): SessionInfo | undefined {
-	const sessions = SessionManager.list(cwd, sessionDir);
+async function resolveSessionMatch(
+	sessionArg: string,
+	cwd: string,
+	sessionDir?: string,
+): Promise<SessionInfo | undefined> {
+	const sessions = await SessionManager.list(cwd, sessionDir);
 	let matches = sessions.filter((session) => session.id.startsWith(sessionArg));
 
 	if (matches.length === 0 && !sessionDir) {
-		const globalSessions = SessionManager.listAll();
+		const globalSessions = await SessionManager.listAll();
 		matches = globalSessions.filter((session) => session.id.startsWith(sessionArg));
 	}
 
@@ -202,14 +208,14 @@ async function promptForkSession(session: SessionInfo): Promise<boolean> {
 	}
 }
 
-function getChangelogForDisplay(parsed: Args, settingsManager: SettingsManager): string | undefined {
+async function getChangelogForDisplay(parsed: Args, settingsManager: SettingsManager): Promise<string | undefined> {
 	if (parsed.continue || parsed.resume) {
 		return undefined;
 	}
 
 	const lastVersion = settingsManager.getLastChangelogVersion();
 	const changelogPath = getChangelogPath();
-	const entries = parseChangelog(changelogPath);
+	const entries = await parseChangelog(changelogPath);
 
 	if (!lastVersion) {
 		if (entries.length > 0) {
@@ -236,12 +242,12 @@ async function createSessionManager(parsed: Args, cwd: string): Promise<SessionM
 		if (sessionArg.includes("/") || sessionArg.includes("\\") || sessionArg.endsWith(".jsonl")) {
 			return await SessionManager.open(sessionArg, parsed.sessionDir);
 		}
-		const match = resolveSessionMatch(sessionArg, cwd, parsed.sessionDir);
+		const match = await resolveSessionMatch(sessionArg, cwd, parsed.sessionDir);
 		if (!match) {
 			throw new Error(`Session "${sessionArg}" not found.`);
 		}
-		const normalizedCwd = resolve(cwd);
-		const normalizedMatchCwd = resolve(match.cwd || cwd);
+		const normalizedCwd = path.resolve(cwd);
+		const normalizedMatchCwd = path.resolve(match.cwd || cwd);
 		if (normalizedCwd !== normalizedMatchCwd) {
 			const shouldFork = await promptForkSession(match);
 			if (!shouldFork) {
@@ -274,7 +280,7 @@ async function maybeAutoChdir(parsed: Args): Promise<void> {
 	}
 
 	const normalizePath = (value: string) => {
-		const resolved = resolve(value);
+		const resolved = path.resolve(value);
 		return process.platform === "win32" ? resolved.toLowerCase() : resolved;
 	};
 
@@ -284,16 +290,16 @@ async function maybeAutoChdir(parsed: Args): Promise<void> {
 		return;
 	}
 
-	const isDirectory = async (path: string) => {
+	const isDirectory = async (p: string) => {
 		try {
-			const stat = await Bun.file(path).stat();
-			return stat.isDirectory();
+			const s = await fs.stat(p);
+			return s.isDirectory();
 		} catch {
 			return false;
 		}
 	};
 
-	const candidates = [join(home, "tmp"), "/tmp", "/var/tmp"];
+	const candidates = [path.join(home, "tmp"), "/tmp", "/var/tmp"];
 	for (const candidate of candidates) {
 		try {
 			if (!(await isDirectory(candidate))) {
@@ -477,7 +483,7 @@ export async function main(args: string[]) {
 
 	// Initialize theme early with defaults (CLI commands need symbols)
 	// Will be re-initialized with user preferences later
-	initTheme();
+	await initTheme();
 
 	// Handle plugin subcommand before regular parsing
 	const pluginCmd = parsePluginArgs(args);
@@ -520,6 +526,17 @@ export async function main(args: string[]) {
 			return;
 		}
 		await runSetupCommand(setupCmd);
+		return;
+	}
+
+	// Handle jupyter subcommand
+	const jupyterCmd = parseJupyterArgs(args);
+	if (jupyterCmd) {
+		if (args.includes("--help") || args.includes("-h")) {
+			printJupyterHelp();
+			return;
+		}
+		await runJupyterCommand(jupyterCmd);
 		return;
 	}
 
@@ -619,7 +636,12 @@ export async function main(args: string[]) {
 		settingsManager.applyOverrides({ modelRoles: roleOverrides });
 	}
 
-	initTheme(settingsManager.getTheme(), isInteractive, settingsManager.getSymbolPreset());
+	await initTheme(
+		settingsManager.getTheme(),
+		isInteractive,
+		settingsManager.getSymbolPreset(),
+		settingsManager.getColorBlindMode(),
+	);
 	time("initTheme");
 
 	// Show deprecation warnings in interactive mode
@@ -640,7 +662,7 @@ export async function main(args: string[]) {
 
 	// Handle --resume: show session picker
 	if (parsed.resume) {
-		const sessions = SessionManager.list(cwd, parsed.sessionDir);
+		const sessions = await SessionManager.list(cwd, parsed.sessionDir);
 		time("SessionManager.list");
 		if (sessions.length === 0) {
 			writeStdout(chalk.dim("No sessions found"));
@@ -722,7 +744,7 @@ export async function main(args: string[]) {
 		await runRpcMode(session);
 	} else if (isInteractive) {
 		const versionCheckPromise = checkForNewVersion(VERSION).catch(() => undefined);
-		const changelogMarkdown = getChangelogForDisplay(parsed, settingsManager);
+		const changelogMarkdown = await getChangelogForDisplay(parsed, settingsManager);
 
 		const scopedModelsForDisplay = sessionOptions.scopedModels ?? scopedModels;
 		if (scopedModelsForDisplay.length > 0) {

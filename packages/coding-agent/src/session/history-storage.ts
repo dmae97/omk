@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
-import { mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import { getAgentDir } from "../config";
 
@@ -81,7 +81,7 @@ END;
 		this.lastPromptCache = last?.prompt ?? null;
 	}
 
-	static open(dbPath: string = join(getAgentDir(), "history.db")): HistoryStorage {
+	static open(dbPath: string = path.join(getAgentDir(), "history.db")): HistoryStorage {
 		if (!HistoryStorage.instance) {
 			HistoryStorage.instance = new HistoryStorage(dbPath);
 		}
@@ -134,8 +134,8 @@ END;
 	}
 
 	private ensureDir(dbPath: string): void {
-		const dir = dirname(dbPath);
-		mkdirSync(dir, { recursive: true });
+		const dir = path.dirname(dbPath);
+		fs.mkdirSync(dir, { recursive: true });
 	}
 
 	private normalizeLimit(limit: number): number {

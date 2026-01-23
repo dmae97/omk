@@ -1,5 +1,5 @@
-import { rm } from "node:fs/promises";
-import { join } from "node:path";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import {
 	getDashboardStats,
 	getRecentErrors,
@@ -9,17 +9,17 @@ import {
 	syncAllSessions,
 } from "./aggregator";
 
-const CLIENT_DIR = join(import.meta.dir, "client");
-const STATIC_DIR = join(import.meta.dir, "..", "dist", "client");
+const CLIENT_DIR = path.join(import.meta.dir, "client");
+const STATIC_DIR = path.join(import.meta.dir, "..", "dist", "client");
 
 const ensureClientBuild = async () => {
-	const indexFile = Bun.file(join(STATIC_DIR, "index.html"));
+	const indexFile = Bun.file(path.join(STATIC_DIR, "index.html"));
 	if (await indexFile.exists()) return;
 
-	await rm(STATIC_DIR, { recursive: true, force: true });
+	await fs.rm(STATIC_DIR, { recursive: true, force: true });
 
 	const result = await Bun.build({
-		entrypoints: [join(CLIENT_DIR, "index.tsx")],
+		entrypoints: [path.join(CLIENT_DIR, "index.tsx")],
 		outdir: STATIC_DIR,
 		minify: true,
 		naming: "[dir]/[name].[ext]",
@@ -69,7 +69,7 @@ const ensureClientBuild = async () => {
 </body>
 </html>`;
 
-	await Bun.write(join(STATIC_DIR, "index.html"), indexHtml);
+	await Bun.write(path.join(STATIC_DIR, "index.html"), indexHtml);
 };
 
 /**
@@ -134,9 +134,9 @@ async function handleApi(req: Request): Promise<Response> {
 /**
  * Handle static file requests.
  */
-async function handleStatic(path: string): Promise<Response> {
-	const filePath = path === "/" ? "/index.html" : path;
-	const fullPath = join(STATIC_DIR, filePath);
+async function handleStatic(requestPath: string): Promise<Response> {
+	const filePath = requestPath === "/" ? "/index.html" : requestPath;
+	const fullPath = path.join(STATIC_DIR, filePath);
 
 	const file = Bun.file(fullPath);
 	if (await file.exists()) {
@@ -144,7 +144,7 @@ async function handleStatic(path: string): Promise<Response> {
 	}
 
 	// SPA fallback
-	const index = Bun.file(join(STATIC_DIR, "index.html"));
+	const index = Bun.file(path.join(STATIC_DIR, "index.html"));
 	if (await index.exists()) {
 		return new Response(index);
 	}

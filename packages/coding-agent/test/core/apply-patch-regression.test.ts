@@ -7,25 +7,25 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, rmSync } from "node:fs";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import { applyPatch, findContextLine, seekSequence } from "@oh-my-pi/pi-coding-agent/patch";
 
 describe("regression: indentation adjustment for line-based replacements (2B)", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `regression-2b-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `regression-2b-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(() => {
-		rmSync(tempDir, { recursive: true, force: true });
+		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
 	test("line-based patch adjusts indentation when fuzzy matching at different indent level", async () => {
-		const filePath = join(tempDir, "indent.ts");
+		const filePath = path.join(tempDir, "indent.ts");
 		// File has 4-space indentation
 		await Bun.write(
 			filePath,
@@ -52,13 +52,13 @@ describe("regression: indentation adjustment for line-based replacements (2B)", 
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		expect(result).toContain("        this.value = 42;");
 		expect(result).toContain('        this.name = "updated";');
 	});
 
 	test("multi-hunk patch adjusts indentation independently per hunk", async () => {
-		const filePath = join(tempDir, "multi-indent.ts");
+		const filePath = path.join(tempDir, "multi-indent.ts");
 		await Bun.write(
 			filePath,
 			`function outer() {
@@ -87,7 +87,7 @@ describe("regression: indentation adjustment for line-based replacements (2B)", 
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		expect(result).toContain("    return 10;"); // 4 spaces for inner1
 		expect(result).toContain("      return 20;"); // 6 spaces for inner2
 	});
@@ -97,16 +97,16 @@ describe("regression: ambiguity detection for context-less hunks (2C)", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `regression-2c-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `regression-2c-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(() => {
-		rmSync(tempDir, { recursive: true, force: true });
+		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
 	test("single-hunk simple diff rejects multiple occurrences", async () => {
-		const filePath = join(tempDir, "dupe.txt");
+		const filePath = path.join(tempDir, "dupe.txt");
 		await Bun.write(filePath, "foo\nbar\nfoo\nbaz\n");
 
 		await expect(
@@ -122,7 +122,7 @@ describe("regression: ambiguity detection for context-less hunks (2C)", () => {
 	});
 
 	test("multi-hunk context-less diff rejects ambiguous patterns", async () => {
-		const filePath = join(tempDir, "multi-dupe.txt");
+		const filePath = path.join(tempDir, "multi-dupe.txt");
 		// Each pattern appears twice
 		await Bun.write(filePath, "aaa\nbbb\naaa\nccc\nbbb\nddd\n");
 
@@ -140,7 +140,7 @@ describe("regression: ambiguity detection for context-less hunks (2C)", () => {
 	});
 
 	test("context lines disambiguate otherwise ambiguous patterns", async () => {
-		const filePath = join(tempDir, "context-disambig.txt");
+		const filePath = path.join(tempDir, "context-disambig.txt");
 		await Bun.write(filePath, "header\nfoo\nbar\nmiddle\nfoo\nbaz\nfooter\n");
 
 		// Context line "middle" disambiguates which "foo" to change
@@ -153,7 +153,7 @@ describe("regression: ambiguity detection for context-less hunks (2C)", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("header\nfoo\nbar\nmiddle\nFOO\nbaz\nfooter\n");
+		expect(await Bun.file(filePath).text()).toBe("header\nfoo\nbar\nmiddle\nFOO\nbaz\nfooter\n");
 	});
 });
 
@@ -161,16 +161,16 @@ describe("regression: context search uses line hints (2D)", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `regression-2d-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `regression-2d-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(() => {
-		rmSync(tempDir, { recursive: true, force: true });
+		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
 	test("unified diff line numbers help locate correct position", async () => {
-		const filePath = join(tempDir, "hints.txt");
+		const filePath = path.join(tempDir, "hints.txt");
 		// File with repeated function definitions
 		await Bun.write(
 			filePath,
@@ -202,14 +202,14 @@ function process() {
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		expect(result).toContain("return 1;"); // First unchanged
 		expect(result).toContain("return 200;"); // Second changed
 		expect(result).toContain("return 3;"); // Third unchanged
 	});
 
 	test("line hint overrides context-only search when appropriate", async () => {
-		const filePath = join(tempDir, "hint-priority.txt");
+		const filePath = path.join(tempDir, "hint-priority.txt");
 		await Bun.write(
 			filePath,
 			`# Section A
@@ -235,7 +235,7 @@ def helper():
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		const lines = result.split("\n");
 		expect(lines[2]).toBe("    pass"); // Section A unchanged
 		expect(lines[6]).toBe("    return True"); // Section B changed
@@ -246,16 +246,16 @@ describe("regression: insertion uses newStartLine fallback (2E)", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `regression-2e-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `regression-2e-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(() => {
-		rmSync(tempDir, { recursive: true, force: true });
+		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
 	test("pure addition with context uses context to find insertion point", async () => {
-		const filePath = join(tempDir, "insert.txt");
+		const filePath = path.join(tempDir, "insert.txt");
 		await Bun.write(filePath, "line1\nline2\nline3\n");
 
 		// Insert after line1 using context
@@ -270,11 +270,11 @@ describe("regression: insertion uses newStartLine fallback (2E)", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("line1\ninserted\nline2\nline3\n");
+		expect(await Bun.file(filePath).text()).toBe("line1\ninserted\nline2\nline3\n");
 	});
 
 	test("pure addition with line hint inserts at correct position", async () => {
-		const filePath = join(tempDir, "insert-hint.txt");
+		const filePath = path.join(tempDir, "insert-hint.txt");
 		await Bun.write(filePath, "aaa\nbbb\nccc\n");
 
 		// Use unified diff format line hints to insert at specific location
@@ -289,11 +289,11 @@ describe("regression: insertion uses newStartLine fallback (2E)", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("aaa\nbbb\ninserted after bbb\nccc\n");
+		expect(await Bun.file(filePath).text()).toBe("aaa\nbbb\ninserted after bbb\nccc\n");
 	});
 
 	test("insertion at end of file works correctly", async () => {
-		const filePath = join(tempDir, "append.txt");
+		const filePath = path.join(tempDir, "append.txt");
 		await Bun.write(filePath, "first\nsecond\n");
 
 		await applyPatch(
@@ -307,7 +307,7 @@ describe("regression: insertion uses newStartLine fallback (2E)", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("first\nsecond\nappended line\n");
+		expect(await Bun.file(filePath).text()).toBe("first\nsecond\nappended line\n");
 	});
 });
 
@@ -413,16 +413,16 @@ describe("plan: partial line matching for @@ context", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `plan-partial-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `plan-partial-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(() => {
-		rmSync(tempDir, { recursive: true, force: true });
+		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
 	test("@@ context matches when actual line contains it as substring", async () => {
-		const filePath = join(tempDir, "imports.ts");
+		const filePath = path.join(tempDir, "imports.ts");
 		// Actual line has more content than the @@ context
 		await Bun.write(
 			filePath,
@@ -443,12 +443,12 @@ describe("plan: partial line matching for @@ context", () => {
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		expect(result).toContain('rmSync("temp", { recursive: true });');
 	});
 
 	test("@@ context matches function signature even with trailing content", async () => {
-		const filePath = join(tempDir, "funcs.ts");
+		const filePath = path.join(tempDir, "funcs.ts");
 		await Bun.write(
 			filePath,
 			`function processItems(items: Item[], options?: Options): Result {
@@ -469,7 +469,7 @@ describe("plan: partial line matching for @@ context", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toContain("filter(i => i.valid)");
+		expect(await Bun.file(filePath).text()).toContain("filter(i => i.valid)");
 	});
 });
 
@@ -477,16 +477,16 @@ describe("plan: unified diff format line numbers", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `plan-unified-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `plan-unified-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(() => {
-		rmSync(tempDir, { recursive: true, force: true });
+		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
 	test("@@ -10,6 +10,7 @@ is parsed as line numbers not literal text", async () => {
-		const filePath = join(tempDir, "lines.txt");
+		const filePath = path.join(tempDir, "lines.txt");
 		// Create file with 15 lines
 		const lines = Array.from({ length: 15 }, (_, i) => `line ${i + 1}`);
 		await Bun.write(filePath, `${lines.join("\n")}\n`);
@@ -505,14 +505,14 @@ describe("plan: unified diff format line numbers", () => {
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		expect(result).toContain("LINE ELEVEN");
 		expect(result).toContain("line 10"); // unchanged
 		expect(result).toContain("line 12"); // unchanged
 	});
 
 	test("unified diff line numbers take precedence over context search", async () => {
-		const filePath = join(tempDir, "repeat.txt");
+		const filePath = path.join(tempDir, "repeat.txt");
 		// Same pattern appears at lines 3 and 8
 		await Bun.write(
 			filePath,
@@ -540,7 +540,7 @@ line 9
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		const lines = result.split("\n");
 		expect(lines[2]).toBe("target line"); // First unchanged
 		expect(lines[7]).toBe("MODIFIED TARGET"); // Second changed
@@ -551,16 +551,16 @@ describe("plan: Codex-style wrapped patches", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `plan-codex-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `plan-codex-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(() => {
-		rmSync(tempDir, { recursive: true, force: true });
+		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
 	test("strips *** Begin Patch / *** End Patch wrapper", async () => {
-		const filePath = join(tempDir, "wrapped.txt");
+		const filePath = path.join(tempDir, "wrapped.txt");
 		await Bun.write(filePath, "old content\n");
 
 		// Full Codex-style wrapper - the diff inside should be extracted
@@ -577,11 +577,11 @@ describe("plan: Codex-style wrapped patches", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("new content\n");
+		expect(await Bun.file(filePath).text()).toBe("new content\n");
 	});
 
 	test("strips partial wrapper (only *** End Patch)", async () => {
-		const filePath = join(tempDir, "partial.txt");
+		const filePath = path.join(tempDir, "partial.txt");
 		await Bun.write(filePath, "original\n");
 
 		// Only end marker present
@@ -597,11 +597,11 @@ describe("plan: Codex-style wrapped patches", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("modified\n");
+		expect(await Bun.file(filePath).text()).toBe("modified\n");
 	});
 
 	test("strips bare *** terminator (model hallucination)", async () => {
-		const filePath = join(tempDir, "bare-asterisk.txt");
+		const filePath = path.join(tempDir, "bare-asterisk.txt");
 		await Bun.write(filePath, "line1\nline2\nline3\n");
 
 		// Model sometimes outputs just *** as end marker
@@ -617,11 +617,11 @@ describe("plan: Codex-style wrapped patches", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("line1\nLINE TWO\nline3\n");
+		expect(await Bun.file(filePath).text()).toBe("line1\nLINE TWO\nline3\n");
 	});
 
 	test("strips bare *** terminator in multi-hunk diff", async () => {
-		const filePath = join(tempDir, "multi-hunk-asterisk.txt");
+		const filePath = path.join(tempDir, "multi-hunk-asterisk.txt");
 		await Bun.write(filePath, "aaa\nbbb\nccc\nddd\n");
 
 		// Multiple hunks with *** terminator at end
@@ -640,11 +640,11 @@ describe("plan: Codex-style wrapped patches", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("AAA\nbbb\nCCC\nddd\n");
+		expect(await Bun.file(filePath).text()).toBe("AAA\nbbb\nCCC\nddd\n");
 	});
 
 	test("strips bare *** at beginning of diff", async () => {
-		const filePath = join(tempDir, "leading-asterisk.txt");
+		const filePath = path.join(tempDir, "leading-asterisk.txt");
 		await Bun.write(filePath, "old\n");
 
 		await applyPatch(
@@ -659,11 +659,11 @@ describe("plan: Codex-style wrapped patches", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("new\n");
+		expect(await Bun.file(filePath).text()).toBe("new\n");
 	});
 
 	test("strips unified diff metadata lines", async () => {
-		const filePath = join(tempDir, "unified-meta.txt");
+		const filePath = path.join(tempDir, "unified-meta.txt");
 		await Bun.write(filePath, "first\nsecond\nthird\n");
 
 		// Full unified diff format with metadata
@@ -684,7 +684,7 @@ index abc123..def456 100644
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("first\nSECOND\nthird\n");
+		expect(await Bun.file(filePath).text()).toBe("first\nSECOND\nthird\n");
 	});
 });
 
@@ -692,12 +692,12 @@ describe("plan: strip + prefix from file creation", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `plan-create-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `plan-create-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(() => {
-		rmSync(tempDir, { recursive: true, force: true });
+		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
 	test("create file strips + prefix when all lines have it", async () => {
@@ -712,7 +712,7 @@ describe("plan: strip + prefix from file creation", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(join(tempDir, "newfile.txt"), "utf-8")).toBe("line one\nline two\nline three\n");
+		expect(await Bun.file(path.join(tempDir, "newfile.txt")).text()).toBe("line one\nline two\nline three\n");
 	});
 
 	test("create file strips + space prefix", async () => {
@@ -726,7 +726,7 @@ describe("plan: strip + prefix from file creation", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(join(tempDir, "spaced.txt"), "utf-8")).toBe("first line\nsecond line\n");
+		expect(await Bun.file(path.join(tempDir, "spaced.txt")).text()).toBe("first line\nsecond line\n");
 	});
 
 	test("create file preserves content when not all lines have + prefix", async () => {
@@ -742,7 +742,7 @@ regular line
 		);
 
 		// Should preserve as-is since not all lines have +
-		expect(readFileSync(join(tempDir, "mixed.txt"), "utf-8")).toBe("+line one\nregular line\n+line three\n");
+		expect(await Bun.file(path.join(tempDir, "mixed.txt")).text()).toBe("+line one\nregular line\n+line three\n");
 	});
 });
 
@@ -750,16 +750,16 @@ describe("regression: *** End of File marker handling (2A/2G)", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `regression-eof-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `regression-eof-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(() => {
-		rmSync(tempDir, { recursive: true, force: true });
+		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
 	test("*** End of File marker is preserved in hunk parsing", async () => {
-		const filePath = join(tempDir, "eof.txt");
+		const filePath = path.join(tempDir, "eof.txt");
 		await Bun.write(filePath, "line1\nline2\nlast line\n");
 
 		await applyPatch(
@@ -774,11 +774,11 @@ describe("regression: *** End of File marker handling (2A/2G)", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("line1\nline2\nmodified last line\n");
+		expect(await Bun.file(filePath).text()).toBe("line1\nline2\nmodified last line\n");
 	});
 
 	test("EOF marker targets end of file for pattern matching", async () => {
-		const filePath = join(tempDir, "eof-target.txt");
+		const filePath = path.join(tempDir, "eof-target.txt");
 		// Pattern appears twice - EOF should target the last one
 		await Bun.write(filePath, "item\nmore content\nitem\n");
 
@@ -794,7 +794,7 @@ describe("regression: *** End of File marker handling (2A/2G)", () => {
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		expect(result).toBe("item\nmore content\nFINAL ITEM\n");
 	});
 });
@@ -809,16 +809,16 @@ describe("regression: model edit attempt - @@ line N syntax (session 2026-01-19)
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `model-line-n-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `model-line-n-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(() => {
-		rmSync(tempDir, { recursive: true, force: true });
+		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
 	test("@@ line 125 is parsed as line hint, not literal context search", async () => {
-		const filePath = join(tempDir, "settings.ts");
+		const filePath = path.join(tempDir, "settings.ts");
 		// Create file with enough lines - the target is around line 125
 		const lines: string[] = [];
 		for (let i = 1; i <= 130; i++) {
@@ -851,7 +851,7 @@ describe("regression: model edit attempt - @@ line N syntax (session 2026-01-19)
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		expect(result).toContain("patchMode?: boolean; // default: true");
 		expect(result).not.toContain("patchMode?: boolean; // default: false");
 	});
@@ -861,16 +861,16 @@ describe("regression: model edit attempt - nested @@ anchors (session 2026-01-19
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `model-nested-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `model-nested-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(() => {
-		rmSync(tempDir, { recursive: true, force: true });
+		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
 	test("@@ class X followed by @@   method on next line is parsed as nested anchors", async () => {
-		const filePath = join(tempDir, "patch.ts");
+		const filePath = path.join(tempDir, "patch.ts");
 		await Bun.write(
 			filePath,
 			`class OtherTool {
@@ -906,14 +906,14 @@ class PatchTool {
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		// Should change PatchTool's constructor, not OtherTool's
 		expect(result).toContain("this.patchMode = session.settings?.getEditPatchMode?.() ?? true;");
 		expect(result).toContain("this.mode = false;"); // OtherTool unchanged
 	});
 
 	test("nested @@ anchors disambiguate between multiple matching methods", async () => {
-		const filePath = join(tempDir, "multi-class.ts");
+		const filePath = path.join(tempDir, "multi-class.ts");
 		await Bun.write(
 			filePath,
 			`class Alpha {
@@ -944,7 +944,7 @@ class Beta {
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		expect(result).toContain('return "alpha"'); // Alpha unchanged
 		expect(result).toContain('return "BETA"'); // Beta changed
 	});
@@ -954,16 +954,16 @@ describe("regression: model edit attempt - space-separated anchors (session 2026
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `model-space-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `model-space-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(() => {
-		rmSync(tempDir, { recursive: true, force: true });
+		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
 	test("@@ class PatchTool constructor is parsed as hierarchical anchors", async () => {
-		const filePath = join(tempDir, "tool.ts");
+		const filePath = path.join(tempDir, "tool.ts");
 		await Bun.write(
 			filePath,
 			`class OtherTool {
@@ -994,13 +994,13 @@ class PatchTool {
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		expect(result).toContain("this.value = 1;"); // OtherTool unchanged
 		expect(result).toContain("this.value = 200;"); // PatchTool changed
 	});
 
 	test("space-separated anchors work with function keyword", async () => {
-		const filePath = join(tempDir, "funcs.ts");
+		const filePath = path.join(tempDir, "funcs.ts");
 		await Bun.write(
 			filePath,
 			`function outer() {
@@ -1032,7 +1032,7 @@ function process() {
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		expect(result).toContain("return 1;"); // outer's helper unchanged
 		expect(result).toContain("return 200;"); // process's helper changed
 	});
@@ -1042,16 +1042,16 @@ describe("regression: model edit attempt - unique substring on long line (sessio
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `model-long-line-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `model-long-line-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(() => {
-		rmSync(tempDir, { recursive: true, force: true });
+		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
 	test("@@ class ClassName matches long export line when unique", async () => {
-		const filePath = join(tempDir, "tool.ts");
+		const filePath = path.join(tempDir, "tool.ts");
 		// Real-world pattern: long line with export, implements, generics
 		await Bun.write(
 			filePath,
@@ -1083,12 +1083,12 @@ export class EditTool implements AgentTool<typeof replaceEditSchema | typeof pat
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		expect(result).toContain("this.patchMode = true;");
 	});
 
 	test("@@ class ClassName falls back to unique old lines when context is ambiguous", async () => {
-		const filePath = join(tempDir, "multi.ts");
+		const filePath = path.join(tempDir, "multi.ts");
 		await Bun.write(
 			filePath,
 			`export class EditTool implements AgentTool<Schema1, Details1> {
@@ -1112,7 +1112,7 @@ export class EditTool implements AgentTool<Schema2, Details2> {
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		expect(result).toContain("value = 100;");
 		expect(result).toContain("value = 2;");
 	});
@@ -1122,16 +1122,16 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `bench-regression-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `bench-regression-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(() => {
-		rmSync(tempDir, { recursive: true, force: true });
+		fs.rmSync(tempDir, { recursive: true, force: true });
 	});
 
 	test("@@ @@ is treated as empty context", async () => {
-		const filePath = join(tempDir, "empty-context.txt");
+		const filePath = path.join(tempDir, "empty-context.txt");
 		await Bun.write(filePath, "alpha\nbeta\ngamma\n");
 
 		await applyPatch(
@@ -1143,7 +1143,7 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("alpha\nBETA\ngamma\n");
+		expect(await Bun.file(filePath).text()).toBe("alpha\nBETA\ngamma\n");
 	});
 
 	test.each([
@@ -1153,7 +1153,7 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 		["@@ line 3-5 @@", 3],
 		["@@ @@ line 3", 3],
 	])("line hint variants (%s) target the correct line", async (header: string, targetLine: number) => {
-		const filePath = join(tempDir, `line-hint-${targetLine}.txt`);
+		const filePath = path.join(tempDir, `line-hint-${targetLine}.txt`);
 		await Bun.write(filePath, "line 1\nline 2\nline 3\nline 4\nline 5\n");
 
 		await applyPatch(
@@ -1165,12 +1165,12 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		const lines = readFileSync(filePath, "utf-8").split("\n");
+		const lines = (await Bun.file(filePath).text()).split("\n");
 		expect(lines[2]).toBe("LINE THREE");
 	});
 
 	test("top of file header anchors to line 1", async () => {
-		const filePath = join(tempDir, "top-of-file.txt");
+		const filePath = path.join(tempDir, "top-of-file.txt");
 		await Bun.write(filePath, "first\nsecond\n");
 
 		await applyPatch(
@@ -1182,11 +1182,11 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("FIRST\nsecond\n");
+		expect(await Bun.file(filePath).text()).toBe("FIRST\nsecond\n");
 	});
 
 	test("function name with empty params matches signature", async () => {
-		const filePath = join(tempDir, "functions.ts");
+		const filePath = path.join(tempDir, "functions.ts");
 		await Bun.write(
 			filePath,
 			`function retryIfBlockedOn(reason: string) {\n  return reason;\n}\n\nfunction describeNode(node: object) {\n  return String(node);\n}\n`,
@@ -1210,13 +1210,13 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		expect(result).toContain("return reason.toUpperCase();");
 		expect(result).toContain("return JSON.stringify(node);");
 	});
 
 	test("label context falls back to unique old lines", async () => {
-		const filePath = join(tempDir, "imports.js");
+		const filePath = path.join(tempDir, "imports.js");
 		await Bun.write(
 			filePath,
 			`import { startLoggingProfilingEvents, stopLoggingProfilingEvents } from "../SchedulerProfiling";\n\nexport function run() {\n  return startLoggingProfilingEvents();\n}\n`,
@@ -1231,13 +1231,13 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toContain(
+		expect(await Bun.file(filePath).text()).toContain(
 			'import { stopLoggingProfilingEvents, startLoggingProfilingEvents } from "../SchedulerProfiling";',
 		);
 	});
 
 	test("ambiguous @@ context resolves via unique old lines", async () => {
-		const filePath = join(tempDir, "ambiguous.ts");
+		const filePath = path.join(tempDir, "ambiguous.ts");
 		await Bun.write(
 			filePath,
 			`function getState() {\n  return 1;\n}\n\nfunction getState() {\n  return 2;\n}\n\nfunction getState() {\n  return 3;\n}\n`,
@@ -1252,14 +1252,14 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		expect(result).toContain("return 1;");
 		expect(result).toContain("return 200;");
 		expect(result).toContain("return 3;");
 	});
 
 	test("duplicate context lines collapse for matching", async () => {
-		const filePath = join(tempDir, "duplicate-context.txt");
+		const filePath = path.join(tempDir, "duplicate-context.txt");
 		await Bun.write(filePath, "alpha\nbeta\ngamma\n");
 
 		await applyPatch(
@@ -1271,11 +1271,11 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("alpha\nbeta\nGAMMA\n");
+		expect(await Bun.file(filePath).text()).toBe("alpha\nbeta\nGAMMA\n");
 	});
 
 	test("repeated context blocks collapse when duplicated", async () => {
-		const filePath = join(tempDir, "repeated-block.txt");
+		const filePath = path.join(tempDir, "repeated-block.txt");
 		await Bun.write(filePath, "if (ready) {\n  handle();\n}\n");
 
 		await applyPatch(
@@ -1287,11 +1287,11 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("if (ready) {\n  handleNext();\n}\n");
+		expect(await Bun.file(filePath).text()).toBe("if (ready) {\n  handleNext();\n}\n");
 	});
 
 	test("shared prefix/suffix context is trimmed when mismatched", async () => {
-		const filePath = join(tempDir, "trim-context.txt");
+		const filePath = path.join(tempDir, "trim-context.txt");
 		await Bun.write(filePath, "function doThing() {\n  return 1;\n}\n");
 
 		await applyPatch(
@@ -1303,11 +1303,11 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("function doThing() {\n  return 2;\n}\n");
+		expect(await Bun.file(filePath).text()).toBe("function doThing() {\n  return 2;\n}\n");
 	});
 
 	test("single-line change fallback uses the unique changed line", async () => {
-		const filePath = join(tempDir, "single-line-change.txt");
+		const filePath = path.join(tempDir, "single-line-change.txt");
 		await Bun.write(filePath, "function getState() {\n  return 1;\n}\n\nfunction getState() {\n  return 2;\n}\n");
 
 		await applyPatch(
@@ -1319,13 +1319,13 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		expect(result).toContain("return 1;");
 		expect(result).toContain("return 200;");
 	});
 
 	test("implicit context lines without prefixes are accepted", async () => {
-		const filePath = join(tempDir, "implicit-context.ts");
+		const filePath = path.join(tempDir, "implicit-context.ts");
 		await Bun.write(
 			filePath,
 			`function getMousePosition(\n  relativeContainer: null,\n  mouseEvent: SyntheticMouseEvent,\n) {\n  if (relativeContainer !== null) {\n    return initialTooltipState;\n  }\n}\n`,
@@ -1340,11 +1340,11 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toContain("if (relativeContainer === null)");
+		expect(await Bun.file(filePath).text()).toContain("if (relativeContainer === null)");
 	});
 
 	test("context lines preserve original file indentation when fuzzy matched", async () => {
-		const filePath = join(tempDir, "context-indent.js");
+		const filePath = path.join(tempDir, "context-indent.js");
 		// File has 4-space indentation throughout the table
 		await Bun.write(
 			filePath,
@@ -1380,7 +1380,7 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		// The changed line should have correct value (false instead of true)
 		expect(result).toContain("$false | $fallback");
 		// Context lines should preserve original 4-space indentation, not become 3-space
@@ -1389,7 +1389,7 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 	});
 
 	test("duplicate context lines are resolved via adjacent match to @@ anchor", async () => {
-		const filePath = join(tempDir, "ReactFlightDOMClientNode.js");
+		const filePath = path.join(tempDir, "ReactFlightDOMClientNode.js");
 		await Bun.write(
 			filePath,
 			`const handleEnd = () => {
@@ -1415,14 +1415,14 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		const lines = result.split("\n");
 		expect(lines[1]).toContain("--streamEndedCount");
 		expect(lines[4]).toContain("++streamEndedCount");
 	});
 
 	test("strip line-number prefixes from diff content", async () => {
-		const filePath = join(tempDir, "line-numbers.txt");
+		const filePath = path.join(tempDir, "line-numbers.txt");
 		await Bun.write(
 			filePath,
 			`Permission is hereby granted, free of charge\nA copy of this software and associated docs\nThe above copyright notice\n`,
@@ -1437,12 +1437,12 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		expect(result).toContain("A copy of this software AND associated docs");
 	});
 
 	test("ellipsis placeholder lines are ignored during matching", async () => {
-		const filePath = join(tempDir, "ellipsis.ts");
+		const filePath = path.join(tempDir, "ellipsis.ts");
 		await Bun.write(
 			filePath,
 			`function progress(done: boolean, value: string) {\n  if (done) {\n    return;\n  }\n  const buffer = value;\n  return buffer;\n}\n`,
@@ -1457,11 +1457,11 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toContain("const buffer = value.toUpperCase();");
+		expect(await Bun.file(filePath).text()).toContain("const buffer = value.toUpperCase();");
 	});
 
 	test("context anchor retryIfBlockedOn() matches signature without params", async () => {
-		const filePath = join(tempDir, "context-anchor.ts");
+		const filePath = path.join(tempDir, "context-anchor.ts");
 		await Bun.write(filePath, `function retryIfBlockedOn(reason: string, blockedOn: mixed) {\n  return reason;\n}\n`);
 
 		await applyPatch(
@@ -1473,11 +1473,11 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toContain("return reason.toUpperCase();");
+		expect(await Bun.file(filePath).text()).toContain("return reason.toUpperCase();");
 	});
 
 	test("ambiguous context falls back to unique old lines", async () => {
-		const filePath = join(tempDir, "ambiguous-context.ts");
+		const filePath = path.join(tempDir, "ambiguous-context.ts");
 		await Bun.write(
 			filePath,
 			`function getState() {\n  return 1;\n}\n\nfunction getState() {\n  return 2;\n}\n\nfunction getState() {\n  return 3;\n}\n`,
@@ -1492,14 +1492,14 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		const result = readFileSync(filePath, "utf-8");
+		const result = await Bun.file(filePath).text();
 		expect(result).toContain("return 1;");
 		expect(result).toContain("return 200;");
 		expect(result).toContain("return 3;");
 	});
 
 	test("comment-prefix mismatches still match expected lines", async () => {
-		const filePath = join(tempDir, "comment-prefix.txt");
+		const filePath = path.join(tempDir, "comment-prefix.txt");
 		await Bun.write(
 			filePath,
 			`/*\n * LICENSE file in the root directory.\n * Copyright (c) Meta Platforms, Inc.\n */\n`,
@@ -1514,11 +1514,11 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toContain("/ LICENSE file in the root directory.");
+		expect(await Bun.file(filePath).text()).toContain("/ LICENSE file in the root directory.");
 	});
 
 	test("context-less fuzzy match applies even with spacing differences", async () => {
-		const filePath = join(tempDir, "fuzzy-contextless.ts");
+		const filePath = path.join(tempDir, "fuzzy-contextless.ts");
 		await Bun.write(filePath, "const value = computeTotal(items);\n");
 
 		await applyPatch(
@@ -1530,11 +1530,11 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toContain("calculateTotal");
+		expect(await Bun.file(filePath).text()).toContain("calculateTotal");
 	});
 
 	test("@@ header without space is accepted", async () => {
-		const filePath = join(tempDir, "header-nospace.ts");
+		const filePath = path.join(tempDir, "header-nospace.ts");
 		await Bun.write(filePath, `const value = 1;\nconst other = 2;\n`);
 
 		await applyPatch(
@@ -1546,6 +1546,6 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toContain("const value = 100;");
+		expect(await Bun.file(filePath).text()).toContain("const value = 100;");
 	});
 });

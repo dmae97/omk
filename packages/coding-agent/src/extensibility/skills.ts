@@ -1,6 +1,5 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { realpath } from "node:fs/promises";
-import { basename, join } from "node:path";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import { skillCapability } from "../capability/skill";
 import type { SourceMeta } from "../capability/types";
@@ -44,15 +43,15 @@ export interface LoadSkillsFromDirOptions {
  * Skills are directories containing a SKILL.md file with frontmatter including a description.
  * @deprecated Use loadSync("skills") from discovery API instead
  */
-export function loadSkillsFromDir(options: LoadSkillsFromDirOptions): LoadSkillsResult {
+export async function loadSkillsFromDir(options: LoadSkillsFromDirOptions): Promise<LoadSkillsResult> {
 	const skills: Skill[] = [];
 	const warnings: SkillWarning[] = [];
 	const seenPaths = new Set<string>();
 
-	function addSkill(skillFile: string, skillDir: string, dirName: string) {
+	async function addSkill(skillFile: string, skillDir: string, dirName: string): Promise<void> {
 		if (seenPaths.has(skillFile)) return;
 		try {
-			const content = readFileSync(skillFile, "utf-8");
+			const content = await fs.readFile(skillFile, "utf-8");
 			const { frontmatter } = parseFrontmatter(content, { source: skillFile });
 			const name = (frontmatter.name as string) || dirName;
 			const description = frontmatter.description as string;
@@ -72,34 +71,42 @@ export function loadSkillsFromDir(options: LoadSkillsFromDirOptions): LoadSkills
 		}
 	}
 
-	function scanDir(dir: string) {
+	async function scanDir(dir: string): Promise<void> {
 		try {
-			const entries = readdirSync(dir, { withFileTypes: true });
+			const entries = await fs.readdir(dir, { withFileTypes: true });
+			const tasks: Promise<void>[] = [];
+
 			for (const entry of entries) {
 				if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
 
-				const fullPath = join(dir, entry.name);
+				const fullPath = path.join(dir, entry.name);
 				if (entry.isDirectory()) {
-					const skillFile = join(fullPath, "SKILL.md");
-					try {
-						const stat = statSync(skillFile);
-						if (stat.isFile()) {
-							addSkill(skillFile, fullPath, entry.name);
-						}
-					} catch {
-						// No SKILL.md in this directory
-					}
-					scanDir(fullPath);
+					const skillFile = path.join(fullPath, "SKILL.md");
+					tasks.push(
+						fs
+							.stat(skillFile)
+							.then((s) => {
+								if (s.isFile()) {
+									return addSkill(skillFile, fullPath, entry.name);
+								}
+							})
+							.catch(() => {
+								// No SKILL.md in this directory
+							}),
+					);
+					tasks.push(scanDir(fullPath));
 				} else if (entry.isFile() && entry.name === "SKILL.md") {
-					addSkill(fullPath, dir, basename(dir));
+					tasks.push(addSkill(fullPath, dir, path.basename(dir)));
 				}
 			}
+
+			await Promise.all(tasks);
 		} catch (err) {
 			warnings.push({ skillPath: dir, message: `Failed to read directory: ${err}` });
 		}
 	}
 
-	scanDir(options.dir);
+	await scanDir(options.dir);
 
 	return { skills, warnings };
 }
@@ -108,15 +115,15 @@ export function loadSkillsFromDir(options: LoadSkillsFromDirOptions): LoadSkills
  * Scan a directory for SKILL.md files recursively.
  * Used internally by loadSkills for custom directories.
  */
-function scanDirectoryForSkills(dir: string): LoadSkillsResult {
+async function scanDirectoryForSkills(dir: string): Promise<LoadSkillsResult> {
 	const skills: Skill[] = [];
 	const warnings: SkillWarning[] = [];
 	const seenPaths = new Set<string>();
 
-	function addSkill(skillFile: string, skillDir: string, dirName: string) {
+	async function addSkill(skillFile: string, skillDir: string, dirName: string): Promise<void> {
 		if (seenPaths.has(skillFile)) return;
 		try {
-			const content = readFileSync(skillFile, "utf-8");
+			const content = await fs.readFile(skillFile, "utf-8");
 			const { frontmatter } = parseFrontmatter(content, { source: skillFile });
 			const name = (frontmatter.name as string) || dirName;
 			const description = frontmatter.description as string;
@@ -136,34 +143,42 @@ function scanDirectoryForSkills(dir: string): LoadSkillsResult {
 		}
 	}
 
-	function scanDir(currentDir: string) {
+	async function scanDir(currentDir: string): Promise<void> {
 		try {
-			const entries = readdirSync(currentDir, { withFileTypes: true });
+			const entries = await fs.readdir(currentDir, { withFileTypes: true });
+			const tasks: Promise<void>[] = [];
+
 			for (const entry of entries) {
 				if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
 
-				const fullPath = join(currentDir, entry.name);
+				const fullPath = path.join(currentDir, entry.name);
 				if (entry.isDirectory()) {
-					const skillFile = join(fullPath, "SKILL.md");
-					try {
-						const stat = statSync(skillFile);
-						if (stat.isFile()) {
-							addSkill(skillFile, fullPath, entry.name);
-						}
-					} catch {
-						// No SKILL.md in this directory
-					}
-					scanDir(fullPath);
+					const skillFile = path.join(fullPath, "SKILL.md");
+					tasks.push(
+						fs
+							.stat(skillFile)
+							.then((s) => {
+								if (s.isFile()) {
+									return addSkill(skillFile, fullPath, entry.name);
+								}
+							})
+							.catch(() => {
+								// No SKILL.md in this directory
+							}),
+					);
+					tasks.push(scanDir(fullPath));
 				} else if (entry.isFile() && entry.name === "SKILL.md") {
-					addSkill(fullPath, currentDir, basename(currentDir));
+					tasks.push(addSkill(fullPath, currentDir, path.basename(currentDir)));
 				}
 			}
+
+			await Promise.all(tasks);
 		} catch (err) {
 			warnings.push({ skillPath: currentDir, message: `Failed to read directory: ${err}` });
 		}
 	}
 
-	scanDir(dir);
+	await scanDir(dir);
 
 	return { skills, warnings };
 }
@@ -239,7 +254,7 @@ export async function loadSkills(options: LoadSkillsOptions = {}): Promise<LoadS
 	const realPaths = await Promise.all(
 		filteredSkills.map(async (capSkill) => {
 			try {
-				return await realpath(capSkill.path);
+				return await fs.realpath(capSkill.path);
 			} catch {
 				return capSkill.path;
 			}
@@ -279,8 +294,8 @@ export async function loadSkills(options: LoadSkillsOptions = {}): Promise<LoadS
 
 	// Process custom directories - scan directly without using full provider system
 	const allCustomSkills: Array<{ skill: Skill; path: string }> = [];
-	for (const dir of customDirectories) {
-		const customSkills = scanDirectoryForSkills(dir);
+	const customScanResults = await Promise.all(customDirectories.map((dir) => scanDirectoryForSkills(dir)));
+	for (const customSkills of customScanResults) {
 		for (const s of customSkills.skills) {
 			if (matchesIgnorePatterns(s.name)) continue;
 			if (!matchesIncludePatterns(s.name)) continue;
@@ -303,7 +318,7 @@ export async function loadSkills(options: LoadSkillsOptions = {}): Promise<LoadS
 	const customRealPaths = await Promise.all(
 		allCustomSkills.map(async ({ path }) => {
 			try {
-				return await realpath(path);
+				return await fs.realpath(path);
 			} catch {
 				return path;
 			}

@@ -12,7 +12,7 @@
  * - instructions: *.instructions.md in .github/instructions/ with applyTo frontmatter
  */
 
-import { basename, dirname, sep } from "node:path";
+import * as path from "node:path";
 import { registerProvider } from "../capability";
 import { type ContextFile, contextFileCapability } from "../capability/context-file";
 import { readFile } from "../capability/fs";
@@ -37,8 +37,8 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 	if (copilotInstructionsPath) {
 		const content = await readFile(copilotInstructionsPath);
 		if (content) {
-			const fileDir = dirname(copilotInstructionsPath);
-			const depth = calculateDepth(ctx.cwd, fileDir, sep);
+			const fileDir = path.dirname(copilotInstructionsPath);
+			const depth = calculateDepth(ctx.cwd, fileDir, path.sep);
 
 			items.push({
 				path: copilotInstructionsPath,
@@ -74,23 +74,23 @@ async function loadInstructions(ctx: LoadContext): Promise<LoadResult<Instructio
 	return { items, warnings };
 }
 
-function transformInstruction(name: string, content: string, path: string, source: SourceMeta): Instruction | null {
+function transformInstruction(name: string, content: string, filePath: string, source: SourceMeta): Instruction | null {
 	// Only process .instructions.md files
 	if (!name.endsWith(".instructions.md")) {
 		return null;
 	}
 
-	const { frontmatter, body } = parseFrontmatter(content, { source: path });
+	const { frontmatter, body } = parseFrontmatter(content, { source: filePath });
 
 	// Extract applyTo glob pattern from frontmatter
 	const applyTo = typeof frontmatter.applyTo === "string" ? frontmatter.applyTo : undefined;
 
 	// Derive name from filename (strip .instructions.md suffix)
-	const instructionName = basename(name, ".instructions.md");
+	const instructionName = path.basename(name, ".instructions.md");
 
 	return {
 		name: instructionName,
-		path,
+		path: filePath,
 		content: body,
 		applyTo,
 		_source: source,

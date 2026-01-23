@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import {
 	ApplyPatchError,
 	applyPatch,
@@ -332,62 +332,63 @@ describe("parseDiffHunks", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("apply-patch scenarios", () => {
-	const fixturesDir = join(import.meta.dir, "../fixtures/apply-patch/scenarios");
+	const fixturesDir = path.join(import.meta.dir, "../fixtures/apply-patch/scenarios");
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `apply-patch-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `apply-patch-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(() => {
 		try {
-			rmSync(tempDir, { recursive: true, force: true });
+			fs.rmSync(tempDir, { recursive: true, force: true });
 		} catch {
 			// Ignore cleanup errors
 		}
 	});
 
-	function snapshotDir(dir: string): Map<string, string | "dir"> {
+	async function snapshotDir(dir: string): Promise<Map<string, string | "dir">> {
 		const entries = new Map<string, string | "dir">();
-		if (!readdirSync(dir, { withFileTypes: true }).length) {
+		if (!fs.readdirSync(dir, { withFileTypes: true }).length) {
 			return entries;
 		}
 
-		function walk(currentDir: string, relativePath: string) {
-			for (const entry of readdirSync(currentDir, { withFileTypes: true })) {
-				const fullPath = join(currentDir, entry.name);
+		async function walk(currentDir: string, relativePath: string) {
+			for (const entry of fs.readdirSync(currentDir, { withFileTypes: true })) {
+				const fullPath = path.join(currentDir, entry.name);
 				const relPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
 
 				if (entry.isDirectory()) {
 					entries.set(relPath, "dir");
-					walk(fullPath, relPath);
+					await walk(fullPath, relPath);
 				} else if (entry.isFile()) {
-					entries.set(relPath, readFileSync(fullPath, "utf-8"));
+					entries.set(relPath, await Bun.file(fullPath).text());
 				}
 			}
 		}
 
-		walk(dir, "");
+		await walk(dir, "");
 		return entries;
 	}
 
 	function copyDirRecursive(src: string, dst: string) {
-		cpSync(src, dst, { recursive: true });
+		fs.cpSync(src, dst, { recursive: true });
 	}
 
 	// Get all scenario directories
-	const scenarioDirs = readdirSync(fixturesDir, { withFileTypes: true })
+	const scenarioDirs = fs
+		.readdirSync(fixturesDir, { withFileTypes: true })
 		.filter((d) => d.isDirectory())
 		.map((d) => d.name)
 		.sort();
 
 	for (const scenarioName of scenarioDirs) {
 		test(scenarioName, async () => {
-			const scenarioDir = join(fixturesDir, scenarioName);
+			const scenarioDir = path.join(fixturesDir, scenarioName);
 
 			// Copy input files to temp directory
-			const inputDir = join(scenarioDir, "input");
+			const inputDir = path.join(scenarioDir, "input");
 			try {
 				copyDirRecursive(inputDir, tempDir);
 			} catch {
@@ -395,8 +396,8 @@ describe("apply-patch scenarios", () => {
 			}
 
 			// Read the patch
-			const patchPath = join(scenarioDir, "patch.txt");
-			const patch = readFileSync(patchPath, "utf-8");
+			const patchPath = path.join(scenarioDir, "patch.txt");
+			const patch = await Bun.file(patchPath).text();
 
 			// Apply the patch using legacy parser (catching errors for rejection tests)
 			try {
@@ -406,9 +407,9 @@ describe("apply-patch scenarios", () => {
 			}
 
 			// Compare final state to expected
-			const expectedDir = join(scenarioDir, "expected");
-			const expectedSnapshot = snapshotDir(expectedDir);
-			const actualSnapshot = snapshotDir(tempDir);
+			const expectedDir = path.join(scenarioDir, "expected");
+			const expectedSnapshot = await snapshotDir(expectedDir);
+			const actualSnapshot = await snapshotDir(tempDir);
 
 			expect(actualSnapshot).toEqual(expectedSnapshot);
 		});
@@ -423,13 +424,13 @@ describe("applyPatch", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `apply-patch-unit-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `apply-patch-unit-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(() => {
 		try {
-			rmSync(tempDir, { recursive: true, force: true });
+			fs.rmSync(tempDir, { recursive: true, force: true });
 		} catch {
 			// Ignore cleanup errors
 		}
@@ -439,11 +440,11 @@ describe("applyPatch", () => {
 		const result = await applyPatch({ path: "add.txt", op: "create", diff: "ab\ncd" }, { cwd: tempDir });
 
 		expect(result.change.type).toBe("create");
-		expect(readFileSync(join(tempDir, "add.txt"), "utf-8")).toBe("ab\ncd\n");
+		expect(await Bun.file(path.join(tempDir, "add.txt")).text()).toBe("ab\ncd\n");
 	});
 
 	test("delete file", async () => {
-		const filePath = join(tempDir, "del.txt");
+		const filePath = path.join(tempDir, "del.txt");
 		await Bun.write(filePath, "x");
 
 		const result = await applyPatch({ path: "del.txt", op: "delete" }, { cwd: tempDir });
@@ -453,7 +454,7 @@ describe("applyPatch", () => {
 	});
 
 	test("update file", async () => {
-		const filePath = join(tempDir, "update.txt");
+		const filePath = path.join(tempDir, "update.txt");
 		await Bun.write(filePath, "foo\nbar\n");
 
 		const result = await applyPatch(
@@ -462,11 +463,11 @@ describe("applyPatch", () => {
 		);
 
 		expect(result.change.type).toBe("update");
-		expect(readFileSync(filePath, "utf-8")).toBe("foo\nbaz\n");
+		expect(await Bun.file(filePath).text()).toBe("foo\nbaz\n");
 	});
 
 	test("update with move", async () => {
-		const srcPath = join(tempDir, "src.txt");
+		const srcPath = path.join(tempDir, "src.txt");
 		await Bun.write(srcPath, "line\n");
 
 		const result = await applyPatch(
@@ -475,22 +476,22 @@ describe("applyPatch", () => {
 		);
 
 		expect(result.change.type).toBe("update");
-		expect(result.change.newPath).toBe(join(tempDir, "dst.txt"));
+		expect(result.change.newPath).toBe(path.join(tempDir, "dst.txt"));
 		expect(await Bun.file(srcPath).exists()).toBe(false);
-		expect(readFileSync(join(tempDir, "dst.txt"), "utf-8")).toBe("line2\n");
+		expect(await Bun.file(path.join(tempDir, "dst.txt")).text()).toBe("line2\n");
 	});
 
 	test("multiple hunks in single update", async () => {
-		const filePath = join(tempDir, "multi.txt");
+		const filePath = path.join(tempDir, "multi.txt");
 		await Bun.write(filePath, "foo\nbar\nbaz\nqux\n");
 
 		await applyPatch({ path: "multi.txt", op: "update", diff: "@@\n-bar\n+BAR\n@@\n-qux\n+QUX" }, { cwd: tempDir });
 
-		expect(readFileSync(filePath, "utf-8")).toBe("foo\nBAR\nbaz\nQUX\n");
+		expect(await Bun.file(filePath).text()).toBe("foo\nBAR\nbaz\nQUX\n");
 	});
 
 	test("@@ scope and first context line can be identical", async () => {
-		const filePath = join(tempDir, "scope.txt");
+		const filePath = path.join(tempDir, "scope.txt");
 		await Bun.write(filePath, "## [Unreleased]\n\n### Changed\n\n- Old entry\n");
 
 		await applyPatch(
@@ -502,13 +503,13 @@ describe("applyPatch", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe(
+		expect(await Bun.file(filePath).text()).toBe(
 			"## [Unreleased]\n\n### Added\n\n- New feature\n\n### Changed\n\n- Old entry\n",
 		);
 	});
 
 	test("unicode dash matching", async () => {
-		const filePath = join(tempDir, "unicode.py");
+		const filePath = path.join(tempDir, "unicode.py");
 		await Bun.write(filePath, "import asyncio  # local import \u2013 avoids top\u2011level dep\n");
 
 		await applyPatch(
@@ -520,11 +521,11 @@ describe("applyPatch", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("import asyncio  # HELLO\n");
+		expect(await Bun.file(filePath).text()).toBe("import asyncio  # HELLO\n");
 	});
 
 	test("dry run does not modify files", async () => {
-		const filePath = join(tempDir, "dryrun.txt");
+		const filePath = path.join(tempDir, "dryrun.txt");
 		await Bun.write(filePath, "original\n");
 
 		const result = await applyPatch(
@@ -533,7 +534,7 @@ describe("applyPatch", () => {
 		);
 
 		expect(result.change.newContent).toBe("modified\n");
-		expect(readFileSync(filePath, "utf-8")).toBe("original\n");
+		expect(await Bun.file(filePath).text()).toBe("original\n");
 	});
 
 	test("missing file for update fails", async () => {
@@ -543,7 +544,7 @@ describe("applyPatch", () => {
 	});
 
 	test("update without diff fails", async () => {
-		const filePath = join(tempDir, "nodiff.txt");
+		const filePath = path.join(tempDir, "nodiff.txt");
 		await Bun.write(filePath, "content\n");
 
 		await expect(applyPatch({ path: "nodiff.txt", op: "update" }, { cwd: tempDir })).rejects.toThrow("requires diff");
@@ -552,12 +553,12 @@ describe("applyPatch", () => {
 	test("creates parent directories for create", async () => {
 		await applyPatch({ path: "nested/deep/file.txt", op: "create", diff: "content" }, { cwd: tempDir });
 
-		const filePath = join(tempDir, "nested/deep/file.txt");
-		expect(readFileSync(filePath, "utf-8")).toBe("content\n");
+		const filePath = path.join(tempDir, "nested/deep/file.txt");
+		expect(await Bun.file(filePath).text()).toBe("content\n");
 	});
 
 	test("creates parent directories for move", async () => {
-		const srcPath = join(tempDir, "src.txt");
+		const srcPath = path.join(tempDir, "src.txt");
 		await Bun.write(srcPath, "line\n");
 
 		await applyPatch(
@@ -565,8 +566,8 @@ describe("applyPatch", () => {
 			{ cwd: tempDir },
 		);
 
-		const dstPath = join(tempDir, "nested/deep/dst.txt");
-		expect(readFileSync(dstPath, "utf-8")).toBe("newline\n");
+		const dstPath = path.join(tempDir, "nested/deep/dst.txt");
+		expect(await Bun.file(dstPath).text()).toBe("newline\n");
 	});
 });
 
@@ -578,20 +579,20 @@ describe("simple replace mode", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `simple-replace-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `simple-replace-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(() => {
 		try {
-			rmSync(tempDir, { recursive: true, force: true });
+			fs.rmSync(tempDir, { recursive: true, force: true });
 		} catch {
 			// Ignore cleanup errors
 		}
 	});
 
 	test("simple -/+ only diff uses character-based fuzzy matching", async () => {
-		const filePath = join(tempDir, "fuzzy.txt");
+		const filePath = path.join(tempDir, "fuzzy.txt");
 		// File has smart quotes, diff uses ASCII quotes
 		await Bun.write(filePath, 'console.log("Hello");\n');
 
@@ -605,11 +606,11 @@ describe("simple replace mode", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe('console.log("World");\n');
+		expect(await Bun.file(filePath).text()).toBe('console.log("World");\n');
 	});
 
 	test("simple diff adjusts indentation to match actual content", async () => {
-		const filePath = join(tempDir, "indent.ts");
+		const filePath = path.join(tempDir, "indent.ts");
 		// File content is indented with 4 spaces
 		await Bun.write(filePath, "function test() {\n    const x = 1;\n    return x;\n}\n");
 
@@ -623,11 +624,11 @@ describe("simple replace mode", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("function test() {\n    const x = 42;\n    return x;\n}\n");
+		expect(await Bun.file(filePath).text()).toBe("function test() {\n    const x = 42;\n    return x;\n}\n");
 	});
 
 	test("diff with context lines falls back to line-based matching", async () => {
-		const filePath = join(tempDir, "context.txt");
+		const filePath = path.join(tempDir, "context.txt");
 		// Create a file with repeated patterns that need context to disambiguate
 		await Bun.write(filePath, "header\nfoo\nbar\nmiddle\nfoo\nbaz\nfooter\n");
 
@@ -642,11 +643,11 @@ describe("simple replace mode", () => {
 		);
 
 		// Only the second "foo" should be changed
-		expect(readFileSync(filePath, "utf-8")).toBe("header\nfoo\nbar\nmiddle\nFOO\nbaz\nfooter\n");
+		expect(await Bun.file(filePath).text()).toBe("header\nfoo\nbar\nmiddle\nFOO\nbaz\nfooter\n");
 	});
 
 	test("multiple chunks use line-based matching", async () => {
-		const filePath = join(tempDir, "multi.txt");
+		const filePath = path.join(tempDir, "multi.txt");
 		await Bun.write(filePath, "aaa\nbbb\nccc\nddd\n");
 
 		// Multiple chunks in a single diff
@@ -659,11 +660,11 @@ describe("simple replace mode", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("aaa\nBBB\nccc\nDDD\n");
+		expect(await Bun.file(filePath).text()).toBe("aaa\nBBB\nccc\nDDD\n");
 	});
 
 	test("simple diff with @@ context uses line-based matching", async () => {
-		const filePath = join(tempDir, "scoped.txt");
+		const filePath = path.join(tempDir, "scoped.txt");
 		await Bun.write(filePath, "class Foo {\n  method() {\n    return 1;\n  }\n}\n");
 
 		// Even without context lines, @@ marker triggers line-based mode
@@ -676,11 +677,11 @@ describe("simple replace mode", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("class Foo {\n  method() {\n    return 42;\n  }\n}\n");
+		expect(await Bun.file(filePath).text()).toBe("class Foo {\n  method() {\n    return 42;\n  }\n}\n");
 	});
 
 	test("simple diff rejects multiple occurrences", async () => {
-		const filePath = join(tempDir, "dupe.txt");
+		const filePath = path.join(tempDir, "dupe.txt");
 		await Bun.write(filePath, "foo\nbar\nfoo\n");
 
 		await expect(

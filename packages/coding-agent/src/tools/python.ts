@@ -1,4 +1,4 @@
-import { relative, resolve, sep } from "node:path";
+import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
@@ -177,9 +177,8 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 		// Clamp to reasonable range: 1s - 600s (10 min)
 		timeoutSec = Math.max(1, Math.min(600, timeoutSec));
 		const timeoutMs = timeoutSec * 1000;
-		const controller = new AbortController();
-		const onAbort = () => controller.abort();
-		signal?.addEventListener("abort", onAbort, { once: true });
+		const timeoutSignal = AbortSignal.timeout(timeoutMs);
+		const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 		let outputSink: OutputSink | undefined;
 		let outputSummary: OutputSummary | undefined;
 		let outputDumped = false;
@@ -267,7 +266,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 			const baseExecutorOptions: Omit<PythonExecutorOptions, "reset"> = {
 				cwd: commandCwd,
 				timeoutMs,
-				signal: controller.signal,
+				signal: combinedSignal,
 				sessionId,
 				kernelMode: this.session.settings?.getPythonKernelMode?.() ?? "session",
 				useSharedGateway: this.session.settings?.getPythonSharedGateway?.() ?? true,
@@ -398,7 +397,6 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 
 			return resultBuilder.done();
 		} finally {
-			signal?.removeEventListener("abort", onAbort);
 			if (!outputDumped) {
 				try {
 					await finalizeOutput();
@@ -767,13 +765,14 @@ export const pythonToolRenderer = {
 		let displayWorkdir = args.cwd;
 
 		if (displayWorkdir) {
-			const resolvedCwd = resolve(cwd);
-			const resolvedWorkdir = resolve(displayWorkdir);
+			const resolvedCwd = path.resolve(cwd);
+			const resolvedWorkdir = path.resolve(displayWorkdir);
 			if (resolvedWorkdir === resolvedCwd) {
 				displayWorkdir = undefined;
 			} else {
-				const relativePath = relative(resolvedCwd, resolvedWorkdir);
-				const isWithinCwd = relativePath && !relativePath.startsWith("..") && !relativePath.startsWith(`..${sep}`);
+				const relativePath = path.relative(resolvedCwd, resolvedWorkdir);
+				const isWithinCwd =
+					relativePath && !relativePath.startsWith("..") && !relativePath.startsWith(`..${path.sep}`);
 				if (isWithinCwd) {
 					displayWorkdir = relativePath;
 				}

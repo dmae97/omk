@@ -5,7 +5,6 @@
  * Returns structured search results with optional content extraction.
  */
 
-import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import type { WebSearchResponse, WebSearchSource } from "../../../web/search/types";
 import { WebSearchProviderError } from "../../../web/search/types";
@@ -30,9 +29,7 @@ export interface ExaSearchParams {
 async function parseEnvFile(filePath: string): Promise<Record<string, string>> {
 	const result: Record<string, string> = {};
 	try {
-		if (!existsSync(filePath)) return result;
-
-		const content = readFileSync(filePath, "utf-8");
+		const content = await Bun.file(filePath).text();
 		for (const line of content.split("\n")) {
 			let trimmed = line.trim();
 			if (!trimmed || trimmed.startsWith("#")) continue;
@@ -54,7 +51,7 @@ async function parseEnvFile(filePath: string): Promise<Record<string, string>> {
 			result[key] = value;
 		}
 	} catch {
-		// Ignore read errors
+		// Ignore read errors (including ENOENT for missing files)
 	}
 	return result;
 }

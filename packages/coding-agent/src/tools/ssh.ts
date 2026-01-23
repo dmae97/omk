@@ -32,8 +32,8 @@ export interface SSHToolDetails {
 	meta?: OutputMeta;
 }
 
-function formatHostEntry(host: SSHHost): string {
-	const info = getHostInfoForHost(host);
+async function formatHostEntry(host: SSHHost): Promise<string> {
+	const info = await getHostInfoForHost(host);
 
 	let shell: string;
 	if (!info) {
@@ -58,12 +58,12 @@ function formatHostEntry(host: SSHHost): string {
 	return `- ${host.name} (${host.host}) | ${shell}`;
 }
 
-function formatDescription(hosts: SSHHost[]): string {
+async function formatDescription(hosts: SSHHost[]): Promise<string> {
 	const baseDescription = renderPromptTemplate(sshDescriptionBase);
 	if (hosts.length === 0) {
 		return baseDescription;
 	}
-	const hostList = hosts.map(formatHostEntry).join("\n");
+	const hostList = (await Promise.all(hosts.map(formatHostEntry))).join("\n");
 	return `${baseDescription}\n\nAvailable hosts:\n${hostList}`;
 }
 
@@ -135,17 +135,12 @@ export class SshTool implements AgentTool<typeof sshSchema, SSHToolDetails> {
 	private readonly hostsByName: Map<string, SSHHost>;
 	private readonly hostNames: string[];
 
-	constructor(session: ToolSession, hostNames: string[], hostsByName: Map<string, SSHHost>) {
+	constructor(session: ToolSession, hostNames: string[], hostsByName: Map<string, SSHHost>, description: string) {
 		this.session = session;
 		this.hostNames = hostNames;
 		this.hostsByName = hostsByName;
 		this.allowedHosts = new Set(hostNames);
-
-		const descriptionHosts = hostNames
-			.map((name) => hostsByName.get(name))
-			.filter((host): host is SSHHost => host !== undefined);
-
-		this.description = formatDescription(descriptionHosts);
+		this.description = description;
 	}
 
 	public async execute(
@@ -214,7 +209,13 @@ export async function loadSshTool(session: ToolSession): Promise<SshTool | null>
 	if (hostNames.length === 0) {
 		return null;
 	}
-	return new SshTool(session, hostNames, hostsByName);
+
+	const descriptionHosts = hostNames
+		.map((name) => hostsByName.get(name))
+		.filter((host): host is SSHHost => host !== undefined);
+	const description = await formatDescription(descriptionHosts);
+
+	return new SshTool(session, hostNames, hostsByName, description);
 }
 
 // =============================================================================

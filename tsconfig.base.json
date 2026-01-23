@@ -36,8 +36,10 @@
 			"@oh-my-pi/omp-stats/*": ["./packages/stats/src/*"],
 			"@oh-my-pi/pi-tui": ["./packages/tui/src/index.ts"],
 			"@oh-my-pi/pi-tui/*": ["./packages/tui/src/*"],
-		"@sinclair/typebox": ["./node_modules/@sinclair/typebox/build/esm/index.d.mts"],
-		"@sinclair/typebox/*": ["./node_modules/@sinclair/typebox/build/esm/*"]
+			"@oh-my-pi/react-edit-benchmark": ["./packages/react-edit-benchmark/src/index.ts"],
+			"@oh-my-pi/react-edit-benchmark/*": ["./packages/react-edit-benchmark/src/*"],
+			"@sinclair/typebox": ["./node_modules/@sinclair/typebox/build/esm/index.d.mts"],
+			"@sinclair/typebox/*": ["./node_modules/@sinclair/typebox/build/esm/*"]
 		}
 	},
 	"files": ["./types/assets/index.d.ts"]

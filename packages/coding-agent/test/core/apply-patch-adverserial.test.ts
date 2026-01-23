@@ -1,38 +1,38 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, rmSync } from "node:fs";
+import * as fs from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import { ApplyPatchError, applyPatch } from "@oh-my-pi/pi-coding-agent/patch";
 
 describe("applyPatch adversarial inputs", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `apply-patch-adversarial-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		tempDir = path.join(tmpdir(), `apply-patch-adversarial-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
 	afterEach(() => {
 		try {
-			rmSync(tempDir, { recursive: true, force: true });
+			fs.rmSync(tempDir, { recursive: true, force: true });
 		} catch {
 			// Ignore cleanup errors
 		}
 	});
 
 	test("rejects rename when it matches path", async () => {
-		const filePath = join(tempDir, "same.txt");
+		const filePath = path.join(tempDir, "same.txt");
 		await Bun.write(filePath, "foo\n");
 
 		await expect(
 			applyPatch({ path: "same.txt", op: "update", rename: "same.txt", diff: "@@\n-foo\n+bar" }, { cwd: tempDir }),
 		).rejects.toThrow(ApplyPatchError);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("foo\n");
+		expect(await Bun.file(filePath).text()).toBe("foo\n");
 	});
 
 	test("respects changeContext for pure additions", async () => {
-		const filePath = join(tempDir, "add-context.ts");
+		const filePath = path.join(tempDir, "add-context.ts");
 		await Bun.write(filePath, "function foo() {\n  return 1;\n}\nfunction bar() {\n  return 2;\n}\n");
 
 		await applyPatch(
@@ -44,13 +44,13 @@ describe("applyPatch adversarial inputs", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe(
+		expect(await Bun.file(filePath).text()).toBe(
 			"function foo() {\n  return 1;\n}\nfunction bar() {\n  console.log('x');\n  return 2;\n}\n",
 		);
 	});
 
 	test("rejects multi-file patch markers in a single-file update", async () => {
-		const filePath = join(tempDir, "single.txt");
+		const filePath = path.join(tempDir, "single.txt");
 		await Bun.write(filePath, "foo\nbar\n");
 
 		await expect(
@@ -66,7 +66,7 @@ describe("applyPatch adversarial inputs", () => {
 	});
 
 	test("preserves context lines that look like diff metadata", async () => {
-		const filePath = join(tempDir, "metadata-context.txt");
+		const filePath = path.join(tempDir, "metadata-context.txt");
 		await Bun.write(filePath, "diff --git a b\nalpha\nmid\ndiff --git a b\nalpha\n");
 
 		await applyPatch(
@@ -78,11 +78,11 @@ describe("applyPatch adversarial inputs", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("diff --git a b\nALPHA\nmid\ndiff --git a b\nalpha\n");
+		expect(await Bun.file(filePath).text()).toBe("diff --git a b\nALPHA\nmid\ndiff --git a b\nalpha\n");
 	});
 
 	test("applies hunks regardless of order", async () => {
-		const filePath = join(tempDir, "order.txt");
+		const filePath = path.join(tempDir, "order.txt");
 		await Bun.write(filePath, "first\nkeep\nsecond\nkeep\n");
 
 		await applyPatch(
@@ -94,11 +94,11 @@ describe("applyPatch adversarial inputs", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("first\nKEEP1\nsecond\nKEEP2\n");
+		expect(await Bun.file(filePath).text()).toBe("first\nKEEP1\nsecond\nKEEP2\n");
 	});
 
 	test("rejects ambiguous changeContext matches", async () => {
-		const filePath = join(tempDir, "ambiguous-context.ts");
+		const filePath = path.join(tempDir, "ambiguous-context.ts");
 		await Bun.write(filePath, "if (a) {\n  return foo;\n}\nif (b) {\n  return foo;\n}\n");
 
 		await expect(
@@ -114,7 +114,7 @@ describe("applyPatch adversarial inputs", () => {
 	});
 
 	test("rejects ambiguous prefix/substring matches", async () => {
-		const filePath = join(tempDir, "ambiguous-prefix.ts");
+		const filePath = path.join(tempDir, "ambiguous-prefix.ts");
 		await Bun.write(filePath, "const enabled = true;\nconst enabled = true; // secondary\n");
 
 		await expect(
@@ -130,7 +130,7 @@ describe("applyPatch adversarial inputs", () => {
 	});
 
 	test("rejects out-of-range line hints for insertions", async () => {
-		const filePath = join(tempDir, "line-hint.txt");
+		const filePath = path.join(tempDir, "line-hint.txt");
 		await Bun.write(filePath, "a\nb\n");
 
 		await expect(
@@ -146,7 +146,7 @@ describe("applyPatch adversarial inputs", () => {
 	});
 
 	test("retains trailing blank context lines for disambiguation", async () => {
-		const filePath = join(tempDir, "blank-context.txt");
+		const filePath = path.join(tempDir, "blank-context.txt");
 		await Bun.write(filePath, "section\nvalue\nx\nsection\nvalue\n\n");
 
 		await applyPatch(
@@ -158,11 +158,11 @@ describe("applyPatch adversarial inputs", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe("section\nvalue\nx\nsection\nVALUE\n\n");
+		expect(await Bun.file(filePath).text()).toBe("section\nvalue\nx\nsection\nVALUE\n\n");
 	});
 
 	test("fuzzy under-indented context can shift indentation", async () => {
-		const filePath = join(tempDir, "under-indent.ts");
+		const filePath = path.join(tempDir, "under-indent.ts");
 		await Bun.write(
 			filePath,
 			"function sum(values, offset) {\n" +
@@ -194,7 +194,7 @@ describe("applyPatch adversarial inputs", () => {
 			{ cwd: tempDir },
 		);
 
-		expect(readFileSync(filePath, "utf-8")).toBe(
+		expect(await Bun.file(filePath).text()).toBe(
 			"function sum(values, offset) {\n" +
 				"  let total = 0;\n" +
 				'  const tag = "sum";\n' +
@@ -208,37 +208,37 @@ describe("applyPatch adversarial inputs", () => {
 	});
 
 	test("preserves CRLF endings and trailing newline", async () => {
-		const filePath = join(tempDir, "crlf.txt");
+		const filePath = path.join(tempDir, "crlf.txt");
 		await Bun.write(filePath, "foo\r\nbar\r\n");
 
 		await applyPatch({ path: "crlf.txt", op: "update", diff: "@@\n-foo\n+FOO" }, { cwd: tempDir });
 
-		const content = readFileSync(filePath, "utf-8");
+		const content = await Bun.file(filePath).text();
 		expect(content).toBe("FOO\r\nbar\r\n");
 	});
 
 	test("preserves UTF-8 BOM and CRLF endings", async () => {
-		const filePath = join(tempDir, "bom.txt");
+		const filePath = path.join(tempDir, "bom.txt");
 		await Bun.write(filePath, "\uFEFFfoo\r\nbar\r\n");
 
 		await applyPatch({ path: "bom.txt", op: "update", diff: "@@\n-foo\n+FOO" }, { cwd: tempDir });
 
-		const content = readFileSync(filePath, "utf-8");
+		const content = await Bun.file(filePath).text();
 		expect(content).toBe("\uFEFFFOO\r\nbar\r\n");
 	});
 
 	test("preserves missing trailing newline", async () => {
-		const filePath = join(tempDir, "nonewline.txt");
+		const filePath = path.join(tempDir, "nonewline.txt");
 		await Bun.write(filePath, "foo\nbar");
 
 		await applyPatch({ path: "nonewline.txt", op: "update", diff: "@@\n-bar\n+baz" }, { cwd: tempDir });
 
-		const content = readFileSync(filePath, "utf-8");
+		const content = await Bun.file(filePath).text();
 		expect(content).toBe("foo\nbaz");
 	});
 
 	test("normalizes tab-indented diff to space-indented file", async () => {
-		const filePath = join(tempDir, "tabs-to-spaces.js");
+		const filePath = path.join(tempDir, "tabs-to-spaces.js");
 		// File uses 4-space indentation
 		await Bun.write(
 			filePath,
@@ -261,7 +261,7 @@ describe("applyPatch adversarial inputs", () => {
 			{ cwd: tempDir },
 		);
 
-		const content = readFileSync(filePath, "utf-8");
+		const content = await Bun.file(filePath).text();
 		// Added line should use spaces, not tabs
 		expect(content).toBe(`class Foo {
     method() {
@@ -276,7 +276,7 @@ describe("applyPatch adversarial inputs", () => {
 	});
 
 	test("preserves indentation when trailing context has less indent than additions", async () => {
-		const filePath = join(tempDir, "dedent-context.js");
+		const filePath = path.join(tempDir, "dedent-context.js");
 		await Bun.write(
 			filePath,
 			`class Foo {
@@ -296,7 +296,7 @@ describe("applyPatch adversarial inputs", () => {
 			{ cwd: tempDir },
 		);
 
-		const content = readFileSync(filePath, "utf-8");
+		const content = await Bun.file(filePath).text();
 		// The closing brace of other() should have 4-space indent, not 0
 		expect(content).toBe(`class Foo {
     method() {

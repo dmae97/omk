@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "bun:test";
-import { join } from "node:path";
+import * as path from "node:path";
 import {
 	disposeAllKernelSessions,
 	executePythonWithKernel,
@@ -15,7 +15,7 @@ import {
 	PythonKernel,
 } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
 import { DEFAULT_MAX_BYTES } from "@oh-my-pi/pi-coding-agent/tools/truncate";
-import { createTempDirSync } from "@oh-my-pi/pi-utils";
+import { TempDir } from "@oh-my-pi/pi-utils";
 
 class FakeKernel implements PythonKernelExecutor {
 	private result: KernelExecuteResult;
@@ -135,8 +135,8 @@ describe("executePythonWithKernel", () => {
 				await options?.onChunk?.(largeOutput);
 			},
 		);
-		using tempDir = createTempDirSync("@python-executor-artifacts-");
-		const artifactPath = join(tempDir.path, "0.python.txt");
+		using tempDir = TempDir.createSync("@python-executor-artifacts-");
+		const artifactPath = path.join(tempDir.path(), "0.python.txt");
 
 		const result = await executePythonWithKernel(kernel, "print('big')", {
 			artifactPath,
@@ -162,7 +162,7 @@ describe("warmPythonEnvironment", () => {
 	it("caches prelude docs on warmup", async () => {
 		const previousSkip = process.env.OMP_PYTHON_SKIP_CHECK;
 		process.env.OMP_PYTHON_SKIP_CHECK = "1";
-		using tempDir = createTempDirSync("@python-executor-");
+		using tempDir = TempDir.createSync("@python-executor-");
 		const docs: PreludeHelper[] = [
 			{
 				name: "read",
@@ -179,7 +179,7 @@ describe("warmPythonEnvironment", () => {
 		};
 		const startSpy = vi.spyOn(PythonKernel, "start").mockResolvedValue(kernel as unknown as PythonKernel);
 
-		const result = await warmPythonEnvironment(tempDir.path, "session-1");
+		const result = await warmPythonEnvironment(tempDir.path(), "session-1");
 
 		expect(result.ok).toBe(true);
 		expect(result.docs).toEqual(docs);

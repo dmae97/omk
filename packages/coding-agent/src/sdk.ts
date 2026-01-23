@@ -26,9 +26,8 @@
  * ```
  */
 
-import { existsSync } from "node:fs";
-import { rename } from "node:fs/promises";
-import { join } from "node:path";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { Agent, type AgentEvent, type AgentMessage, type AgentTool, type ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { type Message, type Model, supportsXhigh } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
@@ -44,12 +43,9 @@ import { formatModelString, parseModelString } from "./config/model-resolver";
 import { loadPromptTemplates as loadPromptTemplatesInternal, type PromptTemplate } from "./config/prompt-templates";
 import { type Settings, SettingsManager, type SkillsSettings } from "./config/settings-manager";
 import { CursorExecHandlers } from "./cursor";
+import "./discovery";
 import { initializeWithSettings } from "./discovery";
 import { TtsrManager } from "./export/ttsr";
-import { disposeAllKernelSessions } from "./ipy/executor";
-import { closeAllConnections } from "./ssh/connection-manager";
-import { unmountAll } from "./ssh/sshfs-mount";
-import "./discovery";
 import {
 	type CustomCommandsLoadResult,
 	loadCustomCommands as loadCustomCommandsInternal,
@@ -77,12 +73,15 @@ import {
 	RuleProtocolHandler,
 	SkillProtocolHandler,
 } from "./internal-urls";
+import { disposeAllKernelSessions } from "./ipy/executor";
 import { discoverAndLoadMCPTools, type MCPManager, type MCPToolsLoadResult } from "./mcp";
 import { AgentSession } from "./session/agent-session";
 import { AuthStorage } from "./session/auth-storage";
 import { convertToLlm } from "./session/messages";
 import { SessionManager } from "./session/session-manager";
 import { migrateJsonStorage } from "./session/storage-migration";
+import { closeAllConnections } from "./ssh/connection-manager";
+import { unmountAll } from "./ssh/sshfs-mount";
 import {
 	buildSystemPrompt as buildSystemPromptInternal,
 	loadProjectContextFiles as loadContextFilesInternal,
@@ -207,10 +206,7 @@ export interface CreateAgentSessionResult {
 
 export type { PromptTemplate } from "./config/prompt-templates";
 export type { Settings, SkillsSettings } from "./config/settings-manager";
-export type {
-	CustomCommand,
-	CustomCommandFactory,
-} from "./extensibility/custom-commands/types";
+export type { CustomCommand, CustomCommandFactory } from "./extensibility/custom-commands/types";
 export type { CustomTool, CustomToolFactory } from "./extensibility/custom-tools/types";
 export type {
 	ExtensionAPI,
@@ -254,7 +250,7 @@ function getDefaultAgentDir(): string {
  * Reads from primary path first, then falls back to legacy paths (.pi, .claude).
  */
 export async function discoverAuthStorage(agentDir: string = getDefaultAgentDir()): Promise<AuthStorage> {
-	const primaryPath = join(agentDir, "auth.json");
+	const primaryPath = path.join(agentDir, "auth.json");
 	// Get all auth.json paths (user-level only), excluding the primary
 	const allPaths = getConfigDirPaths("auth.json", { project: false });
 	const fallbackPaths = allPaths.filter((p) => p !== primaryPath);
@@ -264,7 +260,7 @@ export async function discoverAuthStorage(agentDir: string = getDefaultAgentDir(
 	// Migrate legacy JSON files (settings.json, auth.json) to SQLite before loading
 	await migrateJsonStorage({
 		agentDir,
-		settingsPath: join(agentDir, "settings.json"),
+		settingsPath: path.join(agentDir, "settings.json"),
 		authPaths: [primaryPath, ...fallbackPaths],
 	});
 
@@ -282,27 +278,37 @@ export async function discoverModels(
 	authStorage: AuthStorage,
 	agentDir: string = getDefaultAgentDir(),
 ): Promise<ModelRegistry> {
-	const yamlPath = join(agentDir, "models.yml");
-	const jsonPath = join(agentDir, "models.json");
+	const yamlPath = path.join(agentDir, "models.yml");
+	const jsonPath = path.join(agentDir, "models.json");
+
+	// Check existence of yaml and json files
+	const [yamlExists, jsonExists] = await Promise.all([Bun.file(yamlPath).exists(), Bun.file(jsonPath).exists()]);
 
 	// Migrate models.json to models.yml if yaml doesn't exist but json does
-	if (!existsSync(yamlPath) && existsSync(jsonPath)) {
+	if (!yamlExists && jsonExists) {
 		await migrateModelsJsonToYaml(jsonPath, yamlPath);
 	}
 
 	// Prefer models.yml, fall back to models.json
-	const primaryPath = existsSync(yamlPath) ? yamlPath : jsonPath;
+	const primaryPath = yamlExists ? yamlPath : jsonPath;
 
 	// Get all models config paths (user-level only), excluding the primary
 	const yamlPaths = getConfigDirPaths("models.yml", { project: false });
 	const jsonPaths = getConfigDirPaths("models.json", { project: false });
 	const allPaths = [...yamlPaths, ...jsonPaths];
-	const fallbackPaths = allPaths.filter((p) => p !== primaryPath && existsSync(p));
+	const existenceResults = await Promise.all(
+		allPaths.map((p) =>
+			Bun.file(p)
+				.exists()
+				.then((exists) => ({ p, exists })),
+		),
+	);
+	const fallbackPaths = existenceResults.filter(({ p, exists }) => p !== primaryPath && exists).map(({ p }) => p);
 
 	logger.debug("discoverModels", { primaryPath, fallbackPaths });
 
 	const registry = new ModelRegistry(authStorage, primaryPath, fallbackPaths);
-	registry.refresh();
+	await registry.refresh();
 	return registry;
 }
 
@@ -319,7 +325,7 @@ async function migrateModelsJsonToYaml(jsonPath: string, yamlPath: string): Prom
 			return;
 		}
 		await Bun.write(yamlPath, YAML.stringify(parsed, null, 2));
-		await rename(jsonPath, `${jsonPath}.bak`);
+		await fs.rename(jsonPath, `${jsonPath}.bak`);
 		logger.debug("migrateModelsJsonToYaml: migrated models.json to models.yml", { from: jsonPath, to: yamlPath });
 	} catch (error) {
 		logger.warn("migrateModelsJsonToYaml: migration failed", { error: String(error) });

@@ -271,17 +271,17 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			return theme;
 		}
 
-		getAllThemes(): { name: string; path: string | undefined }[] {
-			return [];
+		getAllThemes(): Promise<{ name: string; path: string | undefined }[]> {
+			return Promise.resolve([]);
 		}
 
-		getTheme(_name: string): Theme | undefined {
-			return undefined;
+		getTheme(_name: string): Promise<Theme | undefined> {
+			return Promise.resolve(undefined);
 		}
 
-		setTheme(_theme: string | Theme): { success: boolean; error?: string } {
+		setTheme(_theme: string | Theme): Promise<{ success: boolean; error?: string }> {
 			// Theme switching not supported in RPC mode
-			return { success: false, error: "Theme switching not supported in RPC mode" };
+			return Promise.resolve({ success: false, error: "Theme switching not supported in RPC mode" });
 		}
 
 		setEditorComponent(): void {

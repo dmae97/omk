@@ -132,10 +132,10 @@ export class PluginDetailComponent extends Container {
 		this.manager = manager;
 		this.callbacks = callbacks;
 
-		this.rebuild();
+		void this.rebuild();
 	}
 
-	private rebuild(): void {
+	private async rebuild(): Promise<void> {
 		this.clear();
 
 		const plugin = this.plugin;
@@ -184,7 +184,7 @@ export class PluginDetailComponent extends Container {
 
 		// Config settings
 		if (manifest.settings && Object.keys(manifest.settings).length > 0) {
-			const settings = this.manager.getPluginSettings(plugin.name);
+			const settings = await this.manager.getPluginSettings(plugin.name);
 
 			for (const [key, schema] of Object.entries(manifest.settings)) {
 				const currentValue = settings[key] ?? schema.default;
@@ -456,7 +456,7 @@ export class PluginSettingsComponent extends Container {
 				this.callbacks.onPluginChanged();
 			},
 			onFeatureChange: async (feature, enabled) => {
-				const current = new Set(this.manager.getEnabledFeatures(plugin.name) ?? []);
+				const current = new Set((await this.manager.getEnabledFeatures(plugin.name)) ?? []);
 				if (enabled) {
 					current.add(feature);
 				} else {
@@ -465,8 +465,8 @@ export class PluginSettingsComponent extends Container {
 				await this.manager.setEnabledFeatures(plugin.name, [...current]);
 				this.callbacks.onPluginChanged();
 			},
-			onConfigChange: (key, value) => {
-				this.manager.setPluginSetting(plugin.name, key, value);
+			onConfigChange: async (key, value) => {
+				await this.manager.setPluginSetting(plugin.name, key, value);
 				this.callbacks.onPluginChanged();
 			},
 			onBack: () => this.showPluginList(),

@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { basename, extname, join } from "node:path";
+import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 import { globSync } from "glob";
@@ -30,7 +30,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function parseConfigContent(content: string, filePath: string): unknown {
-	const extension = extname(filePath).toLowerCase();
+	const extension = path.extname(filePath).toLowerCase();
 	if (extension === ".yaml" || extension === ".yml") {
 		return YAML.parse(content) as unknown;
 	}
@@ -160,7 +160,7 @@ export async function hasRootMarkers(cwd: string, markers: string[]): Promise<bo
 		// Handle glob-like patterns (e.g., "*.cabal")
 		if (marker.includes("*")) {
 			try {
-				const matches = globSync(join(cwd, marker));
+				const matches = globSync(path.join(cwd, marker));
 				if (matches.length > 0) {
 					return true;
 				}
@@ -169,7 +169,7 @@ export async function hasRootMarkers(cwd: string, markers: string[]): Promise<bo
 			}
 			continue;
 		}
-		const filePath = join(cwd, marker);
+		const filePath = path.join(cwd, marker);
 		if (await Bun.file(filePath).exists()) {
 			return true;
 		}
@@ -211,7 +211,7 @@ export async function resolveCommand(command: string, cwd: string): Promise<stri
 	// Check local bin directories based on project markers
 	for (const { markers, binDir } of LOCAL_BIN_PATHS) {
 		if (await hasRootMarkers(cwd, markers)) {
-			const localPath = join(cwd, binDir, command);
+			const localPath = path.join(cwd, binDir, command);
 			if (await Bun.file(localPath).exists()) {
 				return localPath;
 			}
@@ -232,14 +232,14 @@ function getConfigPaths(cwd: string): string[] {
 
 	// Project root files (highest priority)
 	for (const filename of filenames) {
-		paths.push(join(cwd, filename));
+		paths.push(path.join(cwd, filename));
 	}
 
 	// Project config directories (.omp/, .pi/, .claude/)
 	const projectDirs = getConfigDirPaths("", { user: false, project: true, cwd });
 	for (const dir of projectDirs) {
 		for (const filename of filenames) {
-			paths.push(join(dir, filename));
+			paths.push(path.join(dir, filename));
 		}
 	}
 
@@ -247,13 +247,13 @@ function getConfigPaths(cwd: string): string[] {
 	const userDirs = getConfigDirPaths("", { user: true, project: false });
 	for (const dir of userDirs) {
 		for (const filename of filenames) {
-			paths.push(join(dir, filename));
+			paths.push(path.join(dir, filename));
 		}
 	}
 
 	// User home root files (lowest priority fallback)
 	for (const filename of filenames) {
-		paths.push(join(homedir(), filename));
+		paths.push(path.join(homedir(), filename));
 	}
 
 	return paths;
@@ -352,8 +352,8 @@ export async function loadConfig(cwd: string): Promise<LspConfig> {
  * Returns servers sorted with primary (non-linter) servers first.
  */
 export function getServersForFile(config: LspConfig, filePath: string): Array<[string, ServerConfig]> {
-	const ext = extname(filePath).toLowerCase();
-	const fileName = basename(filePath).toLowerCase();
+	const ext = path.extname(filePath).toLowerCase();
+	const fileName = path.basename(filePath).toLowerCase();
 	const matches: Array<[string, ServerConfig]> = [];
 
 	for (const [name, serverConfig] of Object.entries(config.servers)) {

@@ -1,5 +1,5 @@
 import { homedir, platform } from "node:os";
-import { join } from "node:path";
+import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import { TOML } from "bun";
 
@@ -66,11 +66,11 @@ function getConfigPath(): string {
 	const home = homedir();
 	switch (platform()) {
 		case "win32":
-			return join(process.env.APPDATA ?? join(home, "AppData", "Roaming"), "lspmux", "config.toml");
+			return path.join(process.env.APPDATA ?? path.join(home, "AppData", "Roaming"), "lspmux", "config.toml");
 		case "darwin":
-			return join(home, "Library", "Application Support", "lspmux", "config.toml");
+			return path.join(home, "Library", "Application Support", "lspmux", "config.toml");
 		default:
-			return join(process.env.XDG_CONFIG_HOME ?? join(home, ".config"), "lspmux", "config.toml");
+			return path.join(process.env.XDG_CONFIG_HOME ?? path.join(home, ".config"), "lspmux", "config.toml");
 	}
 }
 

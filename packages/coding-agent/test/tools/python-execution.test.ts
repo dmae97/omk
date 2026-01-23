@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "bun:test";
 import * as pythonExecutor from "@oh-my-pi/pi-coding-agent/ipy/executor";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { PythonTool } from "@oh-my-pi/pi-coding-agent/tools/python";
-import { createTempDirSync } from "@oh-my-pi/pi-utils";
+import { TempDir } from "@oh-my-pi/pi-utils";
 
 function createSession(cwd: string): ToolSession {
 	return {
@@ -27,7 +27,7 @@ function createSession(cwd: string): ToolSession {
 
 describe("python tool execution", () => {
 	it("passes kernel options from settings and args", async () => {
-		const tempDir = createTempDirSync("@python-tool-");
+		const tempDir = TempDir.createSync("@python-tool-");
 		const executeSpy = vi.spyOn(pythonExecutor, "executePython").mockResolvedValue({
 			output: "ok",
 			exitCode: 0,
@@ -41,10 +41,10 @@ describe("python tool execution", () => {
 			stdinRequested: false,
 		});
 
-		const tool = new PythonTool(createSession(tempDir.path));
+		const tool = new PythonTool(createSession(tempDir.path()));
 		const result = await tool.execute(
 			"call-id",
-			{ cells: [{ code: "print('hi')" }], timeout: 5, cwd: tempDir.path, reset: true },
+			{ cells: [{ code: "print('hi')" }], timeout: 5, cwd: tempDir.path(), reset: true },
 			undefined,
 			undefined,
 			undefined,
@@ -53,9 +53,9 @@ describe("python tool execution", () => {
 		expect(executeSpy).toHaveBeenCalledWith(
 			"print('hi')",
 			expect.objectContaining({
-				cwd: tempDir.path,
+				cwd: tempDir.path(),
 				timeoutMs: 5000,
-				sessionId: `session:session-file:cwd:${tempDir.path}`,
+				sessionId: `session:session-file:cwd:${tempDir.path()}`,
 				kernelMode: "per-call",
 				reset: true,
 			}),
@@ -64,6 +64,6 @@ describe("python tool execution", () => {
 		expect(text).toBe("ok");
 
 		executeSpy.mockRestore();
-		tempDir.remove();
+		tempDir.removeSync();
 	});
 });

@@ -1,5 +1,4 @@
-import * as fs from "node:fs";
-import { logger } from "@oh-my-pi/pi-utils";
+import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { ToolAbortError, throwIfAborted } from "../tools/tool-errors";
 import { applyWorkspaceEdit } from "./edits";
 import { getLspmuxCommand, isLspmuxSupported } from "./lspmux";
@@ -512,7 +511,13 @@ export async function ensureFileOpen(client: LspClient, filePath: string): Promi
 			return;
 		}
 
-		const content = fs.readFileSync(filePath, "utf-8");
+		let content: string;
+		try {
+			content = await Bun.file(filePath).text();
+		} catch (err) {
+			if (isEnoent(err)) return;
+			throw err;
+		}
 		const languageId = detectLanguageId(filePath);
 
 		await sendNotification(client, "textDocument/didOpen", {
@@ -634,7 +639,13 @@ export async function refreshFile(client: LspClient, filePath: string): Promise<
 			return;
 		}
 
-		const content = fs.readFileSync(filePath, "utf-8");
+		let content: string;
+		try {
+			content = await Bun.file(filePath).text();
+		} catch (err) {
+			if (isEnoent(err)) return;
+			throw err;
+		}
 		const version = ++info.version;
 
 		await sendNotification(client, "textDocument/didChange", {
