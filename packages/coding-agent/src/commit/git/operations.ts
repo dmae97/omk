@@ -29,14 +29,10 @@ export async function push(cwd: string): Promise<GitResult> {
 export async function commit(cwd: string, message: string): Promise<GitResult> {
 	const child = Bun.spawn(["git", "commit", "-F", "-"], {
 		cwd,
-		stdin: "pipe",
+		stdin: Buffer.from(message),
 		stdout: "pipe",
 		stderr: "pipe",
 	});
-
-	const writer = child.stdin.getWriter();
-	await writer.write(new TextEncoder().encode(message));
-	await writer.close();
 
 	const [stdout, stderr, exitCode] = await Promise.all([
 		new Response(child.stdout).text(),

@@ -4,6 +4,7 @@
  * Runs each subagent in a Bun Worker and forwards AgentEvents for progress tracking.
  */
 
+import { homedir } from "node:os";
 import path from "node:path";
 import type { AgentEvent, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { ModelRegistry } from "$c/config/model-registry";
@@ -37,6 +38,21 @@ import type {
 	SubagentWorkerRequest,
 	SubagentWorkerResponse,
 } from "./worker-protocol";
+
+const workerBundlePromise: Promise<string> = (async () => {
+	const workerSrc = path.join(import.meta.dir, "worker.ts");
+	const bundlePath = path.join(homedir(), ".omp", "worker-bundle.js");
+	const result = await Bun.build({
+		entrypoints: [workerSrc],
+		target: "bun",
+		format: "esm",
+	});
+	if (!result.success) {
+		throw new Error(`Failed to bundle worker: ${result.logs.map((l) => l.message).join("\n")}`);
+	}
+	await Bun.write(bundlePath, await result.outputs[0].text());
+	return bundlePath;
+})();
 
 /** Options for worker execution */
 export interface ExecutorOptions {
@@ -311,7 +327,8 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 
 	let worker: Worker;
 	try {
-		worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+		const workerPath = await workerBundlePromise;
+		worker = new Worker(workerPath, { type: "module" });
 	} catch (err) {
 		return {
 			index,

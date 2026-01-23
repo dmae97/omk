@@ -1,12 +1,12 @@
 import { relative } from "node:path";
 import type { Api, Model } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
-import { renderPromptTemplate } from "$c/config/prompt-templates";
+import typesDescriptionPrompt from "$c/commit/prompts/types-description.md" with { type: "text" };
 import { parseModelPattern, parseModelString, SMOL_MODEL_PRIORITY } from "$c/config/model-resolver";
+import { renderPromptTemplate } from "$c/config/prompt-templates";
 import { SettingsManager } from "$c/config/settings-manager";
 import { discoverAuthStorage, discoverModels } from "$c/sdk";
 import { loadProjectContextFiles } from "$c/system-prompt";
-import typesDescriptionPrompt from "$c/commit/prompts/types-description.md" with { type: "text" };
 import {
 	extractScopeCandidates,
 	generateConventionalAnalysis,
