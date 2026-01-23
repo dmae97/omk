@@ -88,7 +88,8 @@ function generateLspCallId(): string {
 }
 
 function callMCPToolViaParent(
-	toolName: string,
+	serverName: string,
+	mcpToolName: string,
 	params: Record<string, unknown>,
 	signal?: AbortSignal,
 	timeoutMs = MCP_CALL_TIMEOUT_MS,
@@ -139,7 +140,8 @@ function callMCPToolViaParent(
 	postMessageSafe({
 		type: "mcp_tool_call",
 		callId,
-		toolName,
+		serverName,
+		mcpToolName,
 		params,
 		timeoutMs,
 	} as SubagentWorkerResponse);
@@ -334,7 +336,8 @@ function createMCPProxyTool(metadata: MCPToolMetadata): CustomTool<TSchema> {
 		execute: async (_toolCallId, params, _onUpdate, _ctx, signal) => {
 			try {
 				const result = await callMCPToolViaParent(
-					metadata.name,
+					metadata.serverName,
+					metadata.mcpToolName,
 					params as Record<string, unknown>,
 					signal,
 					metadata.timeoutMs,

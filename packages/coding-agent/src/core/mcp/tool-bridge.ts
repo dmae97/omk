@@ -114,6 +114,10 @@ export class MCPTool implements CustomTool<TSchema, MCPToolDetails> {
 	public readonly label: string;
 	public readonly description: string;
 	public readonly parameters: TSchema;
+	/** Original MCP tool name (before normalization) */
+	public readonly mcpToolName: string;
+	/** Server name */
+	public readonly mcpServerName: string;
 
 	/** Create MCPTool instances for all tools from an MCP server connection */
 	static fromTools(connection: MCPServerConnection, tools: MCPToolDefinition[]): MCPTool[] {
@@ -128,6 +132,8 @@ export class MCPTool implements CustomTool<TSchema, MCPToolDetails> {
 		this.label = `${connection.name}/${tool.name}`;
 		this.description = tool.description ?? `MCP tool from ${connection.name}`;
 		this.parameters = convertSchema(tool.inputSchema);
+		this.mcpToolName = tool.name;
+		this.mcpServerName = connection.name;
 	}
 
 	async execute(
@@ -185,6 +191,10 @@ export class DeferredMCPTool implements CustomTool<TSchema, MCPToolDetails> {
 	public readonly label: string;
 	public readonly description: string;
 	public readonly parameters: TSchema;
+	/** Original MCP tool name (before normalization) */
+	public readonly mcpToolName: string;
+	/** Server name */
+	public readonly mcpServerName: string;
 	private readonly fallbackProvider: string | undefined;
 	private readonly fallbackProviderName: string | undefined;
 
@@ -208,6 +218,8 @@ export class DeferredMCPTool implements CustomTool<TSchema, MCPToolDetails> {
 		this.label = `${serverName}/${tool.name}`;
 		this.description = tool.description ?? `MCP tool from ${serverName}`;
 		this.parameters = convertSchema(tool.inputSchema);
+		this.mcpToolName = tool.name;
+		this.mcpServerName = serverName;
 		this.fallbackProvider = source?.provider;
 		this.fallbackProviderName = source?.providerName;
 	}

@@ -8,7 +8,6 @@ import { logger } from "@oh-my-pi/pi-utils";
 import { AgentStorage } from "../agent-storage";
 import type { LoadedCustomTool } from "../custom-tools/types";
 import { type MCPLoadResult, MCPManager } from "./manager";
-import { parseMCPToolName } from "./tool-bridge";
 import { MCPToolCache } from "./tool-cache";
 
 /** Result from loading MCP tools */
@@ -80,9 +79,9 @@ export async function discoverAndLoadMCPTools(cwd: string, options?: MCPToolsLoa
 
 	// Convert MCP tools to LoadedCustomTool format
 	const loadedTools: LoadedCustomTool[] = result.tools.map((tool) => {
-		// Parse the MCP tool name to get server name
-		const parsed = parseMCPToolName(tool.name);
-		const serverName = parsed?.serverName;
+		// MCPTool and DeferredMCPTool have these properties
+		const mcpTool = tool as { mcpServerName?: string };
+		const serverName = mcpTool.mcpServerName;
 
 		// Get provider info from manager's connection if available
 		const connection = serverName ? manager.getConnection(serverName) : undefined;

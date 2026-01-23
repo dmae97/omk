@@ -164,34 +164,23 @@ function getUsageTokens(usage: unknown): number {
 }
 
 /**
- * Parse MCP tool name to extract server and tool names.
- * Format: mcp_<serverName>_<toolName>
- * Note: Uses lastIndexOf to handle server names with underscores.
- */
-function parseMCPToolName(fullName: string): { serverName: string; toolName: string } | undefined {
-	if (!fullName.startsWith("mcp_")) return undefined;
-	const rest = fullName.slice(4);
-	const underscoreIndex = rest.lastIndexOf("_");
-	if (underscoreIndex === -1) return undefined;
-	return {
-		serverName: rest.slice(0, underscoreIndex),
-		toolName: rest.slice(underscoreIndex + 1),
-	};
-}
-
-/**
  * Extract MCP tool metadata from MCPManager for passing to worker.
+ *
+ * MCPTool and DeferredMCPTool expose mcpToolName (original MCP tool name)
+ * and mcpServerName properties. We use these directly when available,
+ * falling back to empty strings if not.
  */
 function extractMCPToolMetadata(mcpManager: MCPManager): MCPToolMetadata[] {
 	return mcpManager.getTools().map((tool) => {
-		const parsed = parseMCPToolName(tool.name);
+		// MCPTool and DeferredMCPTool have these properties
+		const mcpTool = tool as { mcpToolName?: string; mcpServerName?: string };
 		return {
 			name: tool.name,
 			label: tool.label ?? tool.name,
 			description: tool.description ?? "",
 			parameters: tool.parameters,
-			serverName: parsed?.serverName ?? "",
-			mcpToolName: parsed?.toolName ?? "",
+			serverName: mcpTool.mcpServerName ?? "",
+			mcpToolName: mcpTool.mcpToolName ?? "",
 		};
 	});
 }
@@ -746,12 +735,10 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				return;
 			}
 			try {
-				const parsed = parseMCPToolName(request.toolName);
-				if (!parsed) throw new Error(`Invalid MCP tool name: ${request.toolName}`);
 				const result = await withTimeout(
 					(async () => {
-						const connection = await mcpManager.waitForConnection(parsed.serverName);
-						return callTool(connection, parsed.toolName, request.params);
+						const connection = await mcpManager.waitForConnection(request.serverName);
+						return callTool(connection, request.mcpToolName, request.params);
 					})(),
 					request.timeoutMs,
 				);

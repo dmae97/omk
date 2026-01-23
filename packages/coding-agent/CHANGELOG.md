@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `isolated` option to run tasks in isolated git worktrees
@@ -10,6 +9,8 @@
 
 ### Changed
 
+- Updated MCP tool name handling to use direct server and tool name properties instead of parsing normalized names
+- Improved MCP tool metadata extraction to use explicit mcpToolName and mcpServerName properties
 - Updated edit tool parameters from camelCase to snake_case (oldText → old_text, newText → new_text)
 - Updated grep tool parameters from camelCase to snake_case (ignoreCase → ignore_case, caseSensitive → case_sensitive, outputMode → output_mode, headLimit → head_limit)
 - Updated python tool parameters from camelCase to snake_case (timeoutMs → timeout_ms)

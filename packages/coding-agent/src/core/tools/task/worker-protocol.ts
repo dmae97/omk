@@ -22,7 +22,10 @@ export interface MCPToolMetadata {
 export interface MCPToolCallRequest {
 	type: "mcp_tool_call";
 	callId: string;
-	toolName: string;
+	/** Server name for routing to correct connection */
+	serverName: string;
+	/** Original MCP tool name (as expected by the MCP server) */
+	mcpToolName: string;
 	params: Record<string, unknown>;
 	timeoutMs?: number;
 }
