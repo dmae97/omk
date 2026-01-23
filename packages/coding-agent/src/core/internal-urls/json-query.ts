@@ -95,7 +95,7 @@ export function applyQuery(data: unknown, query: string): unknown {
  * Path form: /foo/bar/0 -> .foo.bar[0]
  * Trailing slash is normalized (ignored).
  *
-	 * Segments that are not valid identifiers use bracket notation: ['segment']
+ * Segments that are not valid identifiers use bracket notation: ['segment']
  */
 export function pathToQuery(urlPath: string): string {
 	if (!urlPath || urlPath === "/") return "";

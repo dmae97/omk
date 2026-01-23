@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added internal URL routing system with `agent://` and `skill://` protocol handlers
@@ -30,6 +31,9 @@
 
 ### Changed
 
+- Removed internal URL handling from fetch tool to use read tool instead
+- Updated fetch tool documentation to remove internal URL references
+- Updated task tool documentation to reference read tool instead of fetch for agent:// URLs
 - Updated skill paths in system prompt to use `skill://` URLs instead of filesystem paths
 - Updated rule paths in system prompt to use `rule://` URLs instead of filesystem paths
 - Simplified todo-write tool by removing active_form parameter requirement
@@ -152,6 +156,7 @@
 
 ### Fixed
 
+- Fixed whitespace formatting in json-query.ts comment
 - Added timeout clamping to reasonable ranges across all tools (1s to 3600s for bash/ssh, 1s to 600s for python/gemini-image)
 - Fixed timeout parameter handling to auto-convert milliseconds to seconds when value exceeds 1000
 

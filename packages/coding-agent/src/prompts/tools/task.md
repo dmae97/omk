@@ -20,7 +20,7 @@ Agents with `output="structured"` have a fixed schema enforced via frontmatter; 
     - Bad: "Is there rate limiting?" or "Does the API validate tokens?" → Binary answers invite hallucination
     - Good: "Find and describe how rate limiting is implemented" or "How does the API handle token validation?" → Forces investigation and factual reporting
   - The subagent should report *what exists*, then YOU verify if it meets requirements
-- **Minimize tool chatter**: Avoid repeating large context; use `read agent://<id>` or `fetch agent://<id>` for full logs
+- **Minimize tool chatter**: Avoid repeating large context; use `read agent://<id>` for full logs
 - **Structured completion**: If `output` is provided, subagents must call `complete` to finish
 - **Parallelize**: Launch multiple agents whenever possible. You MUST use a single Task call with multiple entries in the `tasks` array to do this.
 - **Isolate file scopes**: Assign each task distinct files or directories so agents don't conflict
