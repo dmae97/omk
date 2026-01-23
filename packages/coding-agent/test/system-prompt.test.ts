@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildSystemPrompt } from "$c/core/system-prompt";
+import { buildSystemPrompt } from "$c/system-prompt";
 
 describe("buildSystemPrompt", () => {
 	describe("empty tools", () => {

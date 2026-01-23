@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { disposeAllKernelSessions, executePython } from "$c/core/python-executor";
-import { type KernelExecuteOptions, type KernelExecuteResult, PythonKernel } from "$c/core/python-kernel";
+import { disposeAllKernelSessions, executePython } from "$c/ipy/executor";
+import { type KernelExecuteOptions, type KernelExecuteResult, PythonKernel } from "$c/ipy/kernel";
 
 process.env.OMP_PYTHON_SKIP_CHECK = "1";
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { handleYouTube } from "$c/core/tools/web-scrapers/youtube";
+import { handleYouTube } from "$c/web/scrapers/youtube";
 
 const SKIP = !process.env.WEB_FETCH_INTEGRATION;
 

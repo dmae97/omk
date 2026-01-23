@@ -3,8 +3,8 @@
  */
 
 import { ProcessTerminal, TUI } from "@oh-my-pi/pi-tui";
-import type { SessionInfo } from "$c/core/session-manager";
-import { SessionSelectorComponent } from "$c/modes/interactive/components/session-selector";
+import { SessionSelectorComponent } from "$c/modes/components/session-selector";
+import type { SessionInfo } from "$c/session/session-manager";
 
 /** Show TUI session selector and return selected session path or null if cancelled */
 export async function selectSession(sessions: SessionInfo[]): Promise<string | null> {

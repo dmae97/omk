@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { parseCommandArgs, substituteArgs } from "$c/core/prompt-templates";
+import { parseCommandArgs, substituteArgs } from "$c/config/prompt-templates";
 
 // ============================================================================
 // substituteArgs

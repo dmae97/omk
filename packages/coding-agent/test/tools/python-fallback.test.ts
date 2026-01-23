@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "bun:test";
-import * as pythonKernelModule from "$c/core/python-kernel";
-import type { ToolSession } from "$c/core/tools/index";
-import { createTools } from "$c/core/tools/index";
+import * as pythonKernelModule from "$c/ipy/kernel";
+import type { ToolSession } from "$c/tools/index";
+import { createTools } from "$c/tools/index";
 
 function createTestSession(overrides: Partial<ToolSession> = {}): ToolSession {
 	return {

@@ -2,14 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-	ApplyPatchError,
-	applyPatch,
-	ParseError,
-	type PatchInput,
-	parseDiffHunks,
-	seekSequence,
-} from "$c/core/tools/patch";
+import { ApplyPatchError, applyPatch, ParseError, type PatchInput, parseDiffHunks, seekSequence } from "$c/patch";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Legacy parser for test fixtures (*** Begin Patch format)

@@ -18,7 +18,7 @@ import { readFile } from "$c/capability/fs";
 import { registerProvider } from "$c/capability/index";
 import { type Instruction, instructionCapability } from "$c/capability/instruction";
 import type { LoadContext, LoadResult, SourceMeta } from "$c/capability/types";
-import { parseFrontmatter } from "$c/core/frontmatter";
+import { parseFrontmatter } from "$c/utils/frontmatter";
 import { calculateDepth, createSourceMeta, getProjectPath, loadFilesFromDir } from "./helpers";
 
 const PROVIDER_ID = "github";

@@ -8,7 +8,7 @@ import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { readDirEntries, readFile } from "$c/capability/fs";
 import type { Skill, SkillFrontmatter } from "$c/capability/skill";
 import type { LoadContext, LoadResult, SourceMeta } from "$c/capability/types";
-import { parseFrontmatter } from "$c/core/frontmatter";
+import { parseFrontmatter } from "$c/utils/frontmatter";
 
 const VALID_THINKING_LEVELS: readonly string[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
 const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;

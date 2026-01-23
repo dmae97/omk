@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createTools, type ToolSession } from "$c/core/tools/index";
+import { createTools, type ToolSession } from "$c/tools/index";
 
 function createSession(overrides: Partial<ToolSession> = {}): ToolSession {
 	return {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { sanitizeSchemaForGoogle } from "@oh-my-pi/pi-ai";
-import { BUILTIN_TOOLS, createTools, HIDDEN_TOOLS, type ToolSession } from "$c/core/tools/index";
+import { BUILTIN_TOOLS, createTools, HIDDEN_TOOLS, type ToolSession } from "$c/tools/index";
 
 /**
  * Problematic JSON Schema features that cause issues with various providers.

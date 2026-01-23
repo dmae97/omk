@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { handleNvd } from "$c/core/tools/web-scrapers/nvd";
-import { handleOsv } from "$c/core/tools/web-scrapers/osv";
+import { handleNvd } from "$c/web/scrapers/nvd";
+import { handleOsv } from "$c/web/scrapers/osv";
 
 const SKIP = !process.env.WEB_FETCH_INTEGRATION;
 

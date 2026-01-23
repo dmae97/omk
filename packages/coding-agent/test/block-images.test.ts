@@ -3,9 +3,9 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { processFileArguments } from "$c/cli/file-processor";
-import { SettingsManager } from "$c/core/settings-manager";
-import type { ToolSession } from "$c/core/tools/index";
-import { ReadTool } from "$c/core/tools/read";
+import { SettingsManager } from "$c/config/settings-manager";
+import type { ToolSession } from "$c/tools/index";
+import { ReadTool } from "$c/tools/read";
 
 // 1x1 red PNG image as base64 (smallest valid PNG)
 const TINY_PNG_BASE64 =

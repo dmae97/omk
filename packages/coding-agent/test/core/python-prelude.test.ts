@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { resetPreludeDocsCache, warmPythonEnvironment } from "$c/core/python-executor";
-import { getPythonToolDescription, PythonTool } from "$c/core/tools/python";
+import { resetPreludeDocsCache, warmPythonEnvironment } from "$c/ipy/executor";
+import { getPythonToolDescription, PythonTool } from "$c/tools/python";
 
 const resolvePythonPath = (): string | null => {
 	const venvPath = process.env.VIRTUAL_ENV;

@@ -15,14 +15,14 @@ The coding-agent is structured into distinct layers:
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                       Mode Layer                            │
-│  modes/interactive/   modes/print-mode.ts   modes/rpc/     │
+│  modes/interactive-mode.ts   modes/print-mode.ts   modes/rpc/│
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                       Core Layer                            │
-│  core/agent-session.ts, core/sdk.ts (SDK wrapper)          │
-│  core/session-manager.ts, core/model-resolver.ts, etc.     │
+│  session/agent-session.ts, sdk.ts (SDK wrapper)            │
+│  session/session-manager.ts, config/model-resolver.ts, etc.│
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -43,6 +43,9 @@ src/
 ├── index.ts                  # Public API exports (SDK)
 ├── config.ts                 # APP_NAME, VERSION, paths (getAgentDir, etc.)
 ├── migrations.ts             # Session/config migration logic
+├── sdk.ts                    # SDK wrapper for programmatic usage
+├── system-prompt.ts          # buildSystemPrompt(), loadProjectContextFiles()
+├── cursor.ts                 # Cursor exec bridge (flattened from execution/cursor/)
 
 ├── cli/                      # CLI-specific utilities
 │   ├── args.ts               # parseArgs(), printHelp(), Args interface
@@ -66,6 +69,13 @@ src/
 │   ├── system-prompt.ts      # System prompt capability
 │   └── tool.ts               # Tool capability
 
+├── config/                   # Configuration management
+│   ├── keybindings.ts        # Keybinding configuration
+│   ├── model-registry.ts     # Model registry and configuration
+│   ├── model-resolver.ts     # resolveModelScope(), restoreModelFromSession()
+│   ├── prompt-templates.ts   # Prompt template loading and rendering
+│   └── settings-manager.ts   # SettingsManager class - user preferences
+
 ├── discovery/                # Extension discovery from multiple sources
 │   ├── index.ts              # Main discovery orchestration
 │   ├── builtin.ts            # Built-in extensions
@@ -80,41 +90,30 @@ src/
 │   ├── windsurf.ts           # Windsurf discovery
 │   └── helpers.ts            # Discovery helper functions
 
-├── prompts/                  # Prompt templates
-│   ├── system-prompt.md      # Main system prompt
-│   ├── task.md               # Task agent prompt
-│   ├── init.md               # Initialization prompt
-│   ├── compaction-*.md       # Compaction prompts
-│   └── tools/                # Tool-specific prompts
+├── exa/                      # Exa MCP tools (22 tools)
+│   ├── index.ts              # Exa tools exports
+│   ├── company.ts            # Company search
+│   ├── linkedin.ts           # LinkedIn search
+│   ├── mcp-client.ts         # MCP client for Exa
+│   ├── render.ts             # Exa result rendering
+│   ├── researcher.ts         # Research tools
+│   ├── search.ts             # Search tools
+│   ├── types.ts              # Exa types
+│   └── websets.ts            # Websets tools
 
-├── core/                     # Core business logic (mode-agnostic)
-│   ├── index.ts              # Core exports
-│   ├── agent-session.ts      # AgentSession class - THE central abstraction
-│   ├── sdk.ts                # SDK wrapper for programmatic usage
-│   ├── auth-storage.ts       # AuthStorage class - API keys and OAuth tokens
+├── exec/                     # Bash/shell execution
 │   ├── bash-executor.ts      # executeBash() with streaming, abort
-│   ├── event-bus.ts          # Event bus for tool communication
-│   ├── exec.ts               # Process execution utilities
-│   ├── file-mentions.ts      # File mention detection
-│   ├── keybindings.ts        # Keybinding configuration
-│   ├── logger.ts             # Winston-based logging
-│   ├── messages.ts           # BashExecutionMessage, messageTransformer
-│   ├── model-registry.ts     # Model registry and configuration
-│   ├── model-resolver.ts     # resolveModelScope(), restoreModelFromSession()
-│   ├── prompt-templates.ts   # Prompt template loading and rendering
-│   ├── session-manager.ts    # SessionManager class - JSONL persistence
-│   ├── settings-manager.ts   # SettingsManager class - user preferences
-│   ├── skills.ts             # loadSkills(), skill discovery from multiple locations
-│   ├── slash-commands.ts     # loadSlashCommands() from ~/.omp/agent/commands/
-│   ├── system-prompt.ts      # buildSystemPrompt(), loadProjectContextFiles()
-│   ├── terminal-notify.ts    # Terminal notification utilities
-│   ├── timings.ts            # Performance timing utilities
-│   ├── title-generator.ts    # Session title generation
+│   └── exec.ts               # Process execution utilities
+
+├── export/                   # Export functionality
+│   ├── custom-share.ts       # Custom sharing
 │   ├── ttsr.ts               # Text-to-speech/speech-to-text utilities
-│   ├── utils.ts              # Generic utilities
-│   │
-│   ├── compaction/           # Context compaction system
-│   │   └── index.ts          # Compaction logic, summary generation
+│   └── html/                 # Session export to HTML
+│       └── index.ts          # HTML export logic
+
+├── extensibility/            # Extension and customization systems
+│   ├── skills.ts             # loadSkills(), skill discovery
+│   ├── slash-commands.ts     # loadSlashCommands()
 │   │
 │   ├── custom-commands/      # Custom command loading system
 │   │   └── types.ts          # CustomCommand types
@@ -122,114 +121,213 @@ src/
 │   ├── custom-tools/         # Custom tool loading system
 │   │   ├── index.ts          # Custom tool exports
 │   │   ├── types.ts          # CustomToolFactory, CustomToolDefinition
-│   │   ├── loader.ts         # loadCustomTools() from multiple locations
+│   │   ├── loader.ts         # loadCustomTools()
 │   │   └── wrapper.ts        # Tool wrapper utilities
 │   │
-│   ├── export-html/          # Session export to HTML
-│   │   └── (export logic)
-│   │
 │   ├── extensions/           # Extension system
-│   │   └── (extension loading and execution)
+│   │   ├── index.ts          # Extension exports
+│   │   ├── types.ts          # Extension types
+│   │   ├── loader.ts         # Extension loading
+│   │   ├── runner.ts         # Extension event dispatch
+│   │   └── wrapper.ts        # Extension wrappers
 │   │
-│   ├── hooks/                # Hook system for extending behavior
+│   ├── hooks/                # Hook system
 │   │   ├── index.ts          # Hook exports
 │   │   ├── types.ts          # HookAPI, HookContext, event types
-│   │   ├── loader.ts         # loadHooks() from multiple locations
-│   │   ├── runner.ts         # runHook() event dispatch
-│   │   └── tool-wrapper.ts   # wrapToolsWithHooks() for tool_call events
+│   │   ├── loader.ts         # loadHooks()
+│   │   └── runner.ts         # runHook() event dispatch
 │   │
-│   ├── mcp/                  # MCP (Model Context Protocol) integration
-│   │   └── (MCP client/server logic)
-│   │
-│   ├── plugins/              # Plugin system
-│   │   └── (plugin loading and management)
-│   │
-│   └── tools/                # Built-in tool implementations
-│       ├── index.ts          # Tool exports, BUILTIN_TOOLS, createTools
-│       ├── ask.ts            # User input tool
-│       ├── bash.ts           # Bash command execution
-│       ├── bash-interceptor.ts # Bash command interception
-│       ├── context.ts        # Tool context utilities
-│       ├── edit.ts           # Surgical file editing
-│       ├── edit-diff.ts      # Diff-based editing
-│       ├── find.ts           # File search by glob
-│       ├── gemini-image.ts   # Gemini image generation
-│       ├── git.ts            # Git operations
-│       ├── grep.ts           # Content search (regex/literal)
-│       ├── ls.ts             # Directory listing
-│       ├── notebook.ts       # Jupyter notebook editing
-│       ├── output.ts         # Output/logging tool
-│       ├── read.ts           # File reading (text and images)
-│       ├── review.ts         # Code review tools
-│       ├── rulebook.ts       # Rulebook tool
-│       ├── write.ts          # File writing
-│       ├── fetch.ts          # URL content fetching
-│       ├── exa/              # Exa MCP tools (22 tools)
-│       ├── lsp/              # LSP integration tools
-│       ├── task/             # Task/subagent spawning
-│       ├── web-search/       # Web search tools
-│       ├── path-utils.ts     # Path resolution utilities
-│       ├── renderers.ts      # Tool output renderers
-│       ├── render-utils.ts   # Rendering utilities
-│       └── truncate.ts       # Output truncation utilities
+│   └── plugins/              # Plugin system
+│       └── (plugin loading and management)
+
+├── internal-urls/            # Internal URL protocol handlers
+│   ├── index.ts              # Router and exports
+│   ├── rule-protocol.ts      # Rule protocol handler
+│   └── skill-protocol.ts     # Skill protocol handler
+
+├── ipy/                      # Python/Jupyter execution
+│   ├── executor.ts           # executePython(), kernel execution
+│   ├── gateway-coordinator.ts # Gateway coordination
+│   ├── kernel.ts             # PythonKernel class
+│   ├── modules.ts            # Python module discovery
+│   ├── prelude.ts            # Python prelude (TS bindings)
+│   └── prelude.py            # Python prelude script
+
+├── lsp/                      # LSP integration
+│   ├── index.ts              # LSP exports
+│   ├── client.ts             # LSP client
+│   ├── config.ts             # LSP configuration
+│   ├── render.ts             # LSP result rendering
+│   ├── utils.ts              # LSP utilities
+│   └── clients/              # Language-specific clients
+│       ├── index.ts          # Client exports
+│       ├── biome-client.ts   # Biome LSP
+│       └── lsp-linter-client.ts # Generic linter
+
+├── mcp/                      # MCP (Model Context Protocol) integration
+│   ├── index.ts              # MCP exports
+│   ├── config.ts             # MCP configuration
+│   ├── loader.ts             # MCP server loading
+│   ├── manager.ts            # MCPManager class
+│   ├── tool-bridge.ts        # Tool bridging
+│   ├── tool-cache.ts         # Tool caching
+│   ├── types.ts              # MCP types
+│   └── transports/           # MCP transports
+│       ├── http.ts           # HTTP transport
+│       └── stdio.ts          # Stdio transport
 
 ├── modes/                    # Run mode implementations
-│   ├── index.ts              # Re-exports InteractiveMode, runPrintMode, runRpcMode, RpcClient
-│   ├── print-mode.ts         # Non-interactive: process messages, print output, exit
+│   ├── index.ts              # Re-exports InteractiveMode, runPrintMode, runRpcMode
+│   ├── interactive-mode.ts   # InteractiveMode class (main TUI)
+│   ├── print-mode.ts         # Non-interactive mode
+│   ├── types.ts              # Mode types
 │   │
-│   ├── rpc/                  # RPC mode for programmatic control
-│   │   ├── rpc-mode.ts       # runRpcMode() - JSON stdin/stdout protocol
-│   │   ├── rpc-types.ts      # RpcCommand, RpcResponse, RpcSessionState types
-│   │   └── rpc-client.ts     # RpcClient class for spawning/controlling agent
+│   ├── components/           # TUI components
+│   │   ├── index.ts          # Component exports
+│   │   ├── assistant-message.ts    # Agent response rendering
+│   │   ├── bash-execution.ts       # Bash output display
+│   │   ├── custom-editor.ts        # Multi-line input editor
+│   │   ├── dynamic-border.ts       # Adaptive border rendering
+│   │   ├── footer.ts               # Status bar / footer
+│   │   ├── hook-input.ts           # Hook input dialog
+│   │   ├── hook-selector.ts        # Hook selection UI
+│   │   ├── login-dialog.ts         # OAuth login dialog
+│   │   ├── model-selector.ts       # Model picker
+│   │   ├── session-selector.ts     # Session browser for --resume
+│   │   ├── theme-selector.ts       # Theme picker
+│   │   ├── thinking-selector.ts    # Thinking level picker
+│   │   ├── tool-execution.ts       # Tool call/result rendering
+│   │   ├── user-message.ts         # User message rendering
+│   │   ├── status-line/            # Status line components
+│   │   └── extensions/             # Extension UI components
 │   │
-│   └── interactive/          # Interactive TUI mode
-│       ├── interactive-mode.ts   # InteractiveMode class
-│       │
-│       ├── components/           # TUI components
-│       │   ├── assistant-message.ts    # Agent response rendering
-│       │   ├── bash-execution.ts       # Bash output display
-│       │   ├── compaction.ts           # Compaction status display
-│       │   ├── countdown-timer.ts      # Reusable countdown for dialogs
-│       │   ├── custom-editor.ts        # Multi-line input editor
-│       │   ├── dynamic-border.ts       # Adaptive border rendering
-│       │   ├── footer.ts               # Status bar / footer
-│       │   ├── hook-input.ts           # Hook input dialog
-│       │   ├── hook-selector.ts        # Hook selection UI
-│       │   ├── index.ts                # Component exports
-│       │   ├── login-dialog.ts         # OAuth login dialog
-│       │   ├── model-selector.ts       # Model picker
-│       │   ├── oauth-selector.ts       # OAuth provider picker
-│       │   ├── queue-mode-selector.ts  # Message queue mode picker
-│       │   ├── session-selector.ts     # Session browser for --resume
-│       │   ├── show-images-selector.ts # Image display toggle
-│       │   ├── theme-selector.ts       # Theme picker
-│       │   ├── thinking-selector.ts    # Thinking level picker
-│       │   ├── tool-execution.ts       # Tool call/result rendering
-│       │   ├── user-message-selector.ts # Message selector for /branch
-│       │   └── user-message.ts         # User message rendering
-│       │
-│       └── theme/
-│           ├── theme.ts      # Theme loading, getEditorTheme(), etc.
-│           ├── dark.json
-│           ├── light.json
-│           └── theme-schema.json
+│   ├── controllers/          # TUI controllers
+│   │   ├── command-controller.ts   # Command handling
+│   │   ├── event-controller.ts     # Event handling
+│   │   ├── input-controller.ts     # Input handling
+│   │   └── selector-controller.ts  # Selector handling
+│   │
+│   ├── theme/                # Theme system
+│   │   ├── theme.ts          # Theme loading, getEditorTheme()
+│   │   └── defaults/         # Default themes
+│   │
+│   ├── utils/                # Mode utilities
+│   │   └── ui-helpers.ts     # UI helper functions
+│   │
+│   └── rpc/                  # RPC mode for programmatic control
+│       ├── rpc-mode.ts       # runRpcMode() - JSON stdin/stdout protocol
+│       ├── rpc-types.ts      # RpcCommand, RpcResponse types
+│       └── rpc-client.ts     # RpcClient class
 
-└── utils/                    # Generic utilities
-    ├── changelog.ts          # parseChangelog(), getNewEntries()
-    ├── clipboard.ts          # copyToClipboard()
-    ├── fuzzy.ts              # Fuzzy string matching
-    ├── image-convert.ts      # Image format conversion
-    ├── image-magick.ts       # ImageMagick integration
-    ├── image-resize.ts       # Image resizing utilities
-    ├── mime.ts               # MIME type detection
-    ├── shell.ts              # getShellConfig()
-    ├── shell-snapshot.ts     # Shell state snapshotting
-    └── tools-manager.ts      # ensureTool() - download fd, etc.
+├── patch/                    # File patching/editing
+│   ├── index.ts              # EditTool and exports
+│   ├── applicator.ts         # Patch application
+│   ├── diff.ts               # Diff utilities
+│   ├── shared.ts             # Shared utilities
+│   └── render.ts             # Patch rendering
+
+├── prompts/                  # Prompt templates
+│   ├── system/               # System prompts
+│   ├── agents/               # Agent-specific prompts
+│   ├── compaction/           # Compaction prompts
+│   └── tools/                # Tool-specific prompts
+
+├── session/                  # Session management
+│   ├── agent-session.ts      # AgentSession class - THE central abstraction
+│   ├── agent-storage.ts      # Agent storage utilities
+│   ├── auth-storage.ts       # AuthStorage class - API keys and OAuth
+│   ├── artifacts.ts          # Artifact management
+│   ├── history-storage.ts    # History storage
+│   ├── messages.ts           # Message types and transformers
+│   ├── session-manager.ts    # SessionManager class - JSONL persistence
+│   ├── session-storage.ts    # Session storage utilities
+│   ├── storage-migration.ts  # Storage migration
+│   ├── streaming-output.ts   # Streaming output handling
+│   └── compaction/           # Context compaction system
+│       └── index.ts          # Compaction logic, summary generation
+
+├── ssh/                      # SSH execution
+│   ├── connection-manager.ts # SSH connection management
+│   ├── ssh-executor.ts       # executeSSH() with streaming
+│   └── sshfs-mount.ts        # SSHFS mounting
+
+├── task/                     # Task/subagent spawning
+│   ├── index.ts              # TaskTool exports
+│   ├── agents.ts             # Agent definitions
+│   ├── commands.ts           # Task commands
+│   ├── discovery.ts          # Task discovery
+│   ├── executor.ts           # Task execution
+│   ├── render.ts             # Task rendering
+│   ├── subprocess-tool-registry.ts # Subprocess tool registry
+│   ├── worker-protocol.ts    # Worker protocol
+│   └── worker.ts             # Task worker
+
+├── tools/                    # Built-in tool implementations
+│   ├── index.ts              # Tool exports, BUILTIN_TOOLS, createTools
+│   ├── ask.ts                # User input tool
+│   ├── bash.ts               # Bash command execution
+│   ├── bash-interceptor.ts   # Bash command interception
+│   ├── calculator.ts         # Calculator tool
+│   ├── complete.ts           # Completion tool
+│   ├── context.ts            # Tool context utilities
+│   ├── fetch.ts              # URL content fetching
+│   ├── find.ts               # File search by glob
+│   ├── gemini-image.ts       # Gemini image generation
+│   ├── grep.ts               # Content search (regex/literal)
+│   ├── ls.ts                 # Directory listing
+│   ├── notebook.ts           # Jupyter notebook editing
+│   ├── output-meta.ts        # Output metadata
+│   ├── output-utils.ts       # Output utilities
+│   ├── path-utils.ts         # Path resolution utilities
+│   ├── python.ts             # Python tool (delegates to ipy/)
+│   ├── read.ts               # File reading (text and images)
+│   ├── renderers.ts          # Tool output renderers
+│   ├── render-utils.ts       # Rendering utilities
+│   ├── review.ts             # Code review tools
+│   ├── ssh.ts                # SSH tool (delegates to ssh/)
+│   ├── todo-write.ts         # Todo management
+│   ├── tool-errors.ts        # Tool error types
+│   ├── tool-result.ts        # Tool result utilities
+│   ├── truncate.ts           # Output truncation utilities
+│   └── write.ts              # File writing
+
+├── utils/                    # Generic utilities
+│   ├── changelog.ts          # parseChangelog(), getNewEntries()
+│   ├── event-bus.ts          # Event bus for tool communication
+│   ├── file-mentions.ts      # File mention detection
+│   ├── frontmatter.ts        # Frontmatter parsing
+│   ├── image-convert.ts      # Image format conversion
+│   ├── image-resize.ts       # Image resizing utilities
+│   ├── mime.ts               # MIME type detection
+│   ├── shell.ts              # getShellConfig()
+│   ├── terminal-notify.ts    # Terminal notification utilities
+│   ├── timings.ts            # Performance timing utilities
+│   ├── title-generator.ts    # Session title generation
+│   ├── tools-manager.ts      # ensureTool() - download fd, etc.
+│   └── utils.ts              # Generic utilities
+
+├── vendor/                   # Vendored dependencies
+│   └── photon/               # Photon image processing
+
+└── web/                      # Web tools (merged web-scrapers + web-search)
+    ├── scrapers/             # Web scraping
+    │   ├── index.ts          # Scraper exports
+    │   ├── types.ts          # Scraper types
+    │   ├── utils.ts          # Scraper utilities
+    │   └── (domain-specific scrapers)
+    └── search/               # Web search
+        ├── index.ts          # WebSearchTool exports
+        ├── auth.ts           # Search auth
+        ├── render.ts         # Search result rendering
+        └── providers/        # Search providers
+            ├── anthropic.ts  # Anthropic search
+            ├── exa.ts        # Exa search
+            └── perplexity.ts # Perplexity search
 ```
 
 ## Key Abstractions
 
-### AgentSession (core/agent-session.ts)
+### AgentSession (session/agent-session.ts)
 
 The central abstraction that wraps the SDK Agent with:
 
@@ -245,11 +343,11 @@ The central abstraction that wraps the SDK Agent with:
 
 All three modes (interactive, print, rpc) use AgentSession.
 
-### SDK (core/sdk.ts)
+### SDK (sdk.ts)
 
 Wrapper around `@oh-my-pi/pi-agent-core` that provides a simplified interface for creating and managing agents programmatically. Used by AgentSession and available as a public API through index.ts exports.
 
-### InteractiveMode (modes/interactive/interactive-mode.ts)
+### InteractiveMode (modes/interactive-mode.ts)
 
 Handles TUI rendering and user interaction:
 
@@ -268,7 +366,7 @@ Headless operation via JSON protocol over stdin/stdout:
 
 The RPC mode exposes the full AgentSession API via JSON commands. See [docs/rpc.md](docs/rpc.md) for protocol documentation.
 
-### SessionManager (core/session-manager.ts)
+### SessionManager (session/session-manager.ts)
 
 Handles session persistence:
 
@@ -277,7 +375,7 @@ Handles session persistence:
 - Message loading/saving
 - Model/thinking level persistence
 
-### SettingsManager (core/settings-manager.ts)
+### SettingsManager (config/settings-manager.ts)
 
 Handles user preferences:
 
@@ -290,13 +388,12 @@ Handles user preferences:
 - Thinking budgets (`thinkingBudgets` setting for custom token budgets per level)
 - Image blocking (`blockImages` setting to prevent images from being sent to LLM)
 
-### Hook System (core/hooks/)
+### Hook System (extensibility/hooks/)
 
 Extensibility layer for intercepting agent behavior:
 
 - **loader.ts**: Discovers and loads hooks from `~/.omp/agent/hooks/`, `.omp/hooks/`, and CLI
 - **runner.ts**: Dispatches events to registered hooks
-- **tool-wrapper.ts**: Wraps tools to emit `tool_call` and `tool_result` events
 - **types.ts**: Event types (`session`, `tool_call`, `tool_result`, `message`, `error`, `user_bash`)
 
 See [docs/hooks.md](docs/hooks.md) for full documentation.
@@ -305,7 +402,7 @@ See [docs/hooks.md](docs/hooks.md) for full documentation.
 
 The extension system uses a shared runtime pattern:
 
-1. **ExtensionRuntime** (`core/extensions/types.ts`): Shared state and action handlers for all extensions
+1. **ExtensionRuntime** (`extensibility/extensions/types.ts`): Shared state and action handlers for all extensions
 2. **Extension**: Per-extension registration data (handlers, tools, commands, shortcuts)
 3. **ExtensionAPI**: Per-extension API that writes registrations to Extension and delegates actions to runtime
 4. **ExtensionRunner**: Orchestrates event dispatch and provides context to handlers
@@ -316,7 +413,7 @@ Key extension events:
 - `user_bash`: Intercept `!`/`!!` commands for custom execution (e.g., remote SSH)
 - `session_shutdown`: Cleanup notification before exit
 
-### Custom Tools (core/custom-tools/)
+### Custom Tools (extensibility/custom-tools/)
 
 System for adding LLM-callable tools:
 
@@ -325,7 +422,7 @@ System for adding LLM-callable tools:
 
 See [docs/custom-tools.md](docs/custom-tools.md) for full documentation.
 
-### Skills (core/skills.ts)
+### Skills (extensibility/skills.ts)
 
 On-demand capability packages:
 
@@ -412,15 +509,15 @@ Tools like `fd` and `rg` are auto-downloaded to `~/.omp/bin/` (migrated from `~/
 
 ### Adding a New Tool
 
-1. Create tool factory in `core/tools/` following existing patterns (e.g., `createMyTool(session: ToolSession)`)
-2. Export factory and types from `core/tools/index.ts`
-3. Add to `BUILTIN_TOOLS` map in `core/tools/index.ts`
+1. Create tool factory in `tools/` following existing patterns (e.g., `createMyTool(session: ToolSession)`)
+2. Export factory and types from `tools/index.ts`
+3. Add to `BUILTIN_TOOLS` map in `tools/index.ts`
 4. Add tool prompt template to `prompts/tools/` if needed
 5. Tool will automatically be included in system prompt
 
 ### Adding a New Hook Event
 
-1. Add event type to hook event types in `core/hooks/types.ts`
+1. Add event type to hook event types in `extensibility/hooks/types.ts`
 2. Add emission point in relevant code (AgentSession, tool wrapper, etc.)
 3. Update `docs/hooks.md` with the new event type
 
@@ -434,7 +531,7 @@ Tools like `fd` and `rg` are auto-downloaded to `~/.omp/bin/` (migrated from `~/
 
 ### Adding a New Selector
 
-1. Create component in `modes/interactive/components/`
+1. Create component in `modes/components/`
 2. Use `showSelector()` helper in `interactive-mode.ts`:
 
 ```typescript
@@ -474,7 +571,7 @@ private showMySelector(): void {
 
 ### Adding a New Keybinding
 
-1. Add the action name to `AppAction` type in `core/keybindings.ts`
+1. Add the action name to `AppAction` type in `config/keybindings.ts`
 2. Add default binding to `DEFAULT_APP_KEYBINDINGS`
 3. Add to `APP_ACTIONS` array
 4. Handle the action in `CustomEditor` or `InteractiveMode`

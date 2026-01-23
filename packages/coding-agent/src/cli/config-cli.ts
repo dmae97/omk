@@ -7,9 +7,9 @@
 
 import chalk from "chalk";
 import { APP_NAME, getAgentDir } from "$c/config";
-import { SettingsManager } from "$c/core/settings-manager";
-import { SETTINGS_DEFS, type SettingDef } from "$c/modes/interactive/components/settings-defs";
-import { theme } from "$c/modes/interactive/theme/theme";
+import { SettingsManager } from "$c/config/settings-manager";
+import { SETTINGS_DEFS, type SettingDef } from "$c/modes/components/settings-defs";
+import { theme } from "$c/modes/theme/theme";
 
 // =============================================================================
 // Types

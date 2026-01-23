@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { nanoid } from "nanoid";
-import { findMostRecentSession, loadEntriesFromFile } from "$c/core/session-manager";
+import { findMostRecentSession, loadEntriesFromFile } from "$c/session/session-manager";
 
 describe("loadEntriesFromFile", () => {
 	let tempDir: string;

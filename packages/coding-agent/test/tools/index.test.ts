@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { BUILTIN_TOOLS, createTools, HIDDEN_TOOLS, type ToolSession } from "$c/core/tools/index";
+import { BUILTIN_TOOLS, createTools, HIDDEN_TOOLS, type ToolSession } from "$c/tools/index";
 
 process.env.OMP_PYTHON_SKIP_CHECK = "1";
 

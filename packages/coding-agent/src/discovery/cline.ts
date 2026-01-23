@@ -11,7 +11,7 @@ import { registerProvider } from "$c/capability/index";
 import type { Rule } from "$c/capability/rule";
 import { ruleCapability } from "$c/capability/rule";
 import type { LoadContext, LoadResult } from "$c/capability/types";
-import { parseFrontmatter } from "$c/core/frontmatter";
+import { parseFrontmatter } from "$c/utils/frontmatter";
 import { createSourceMeta, loadFilesFromDir } from "./helpers";
 
 const PROVIDER_ID = "cline";

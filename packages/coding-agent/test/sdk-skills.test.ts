@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Skill } from "$c/core/sdk";
-import { createAgentSession } from "$c/core/sdk";
-import { SessionManager } from "$c/core/session-manager";
+import type { Skill } from "$c/sdk";
+import { createAgentSession } from "$c/sdk";
+import { SessionManager } from "$c/session/session-manager";
 
 describe("createAgentSession skills option", () => {
 	let tempDir: string;

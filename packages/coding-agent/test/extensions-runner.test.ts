@@ -6,11 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createTempDirSync, logger } from "@oh-my-pi/pi-utils";
-import { AuthStorage } from "$c/core/auth-storage";
-import { discoverAndLoadExtensions } from "$c/core/extensions/loader";
-import { ExtensionRunner } from "$c/core/extensions/runner";
-import { ModelRegistry } from "$c/core/model-registry";
-import { SessionManager } from "$c/core/session-manager";
+import { ModelRegistry } from "$c/config/model-registry";
+import { discoverAndLoadExtensions } from "$c/extensibility/extensions/loader";
+import { ExtensionRunner } from "$c/extensibility/extensions/runner";
+import { AuthStorage } from "$c/session/auth-storage";
+import { SessionManager } from "$c/session/session-manager";
 
 describe("ExtensionRunner", () => {
 	let tempDir: ReturnType<typeof createTempDirSync>;

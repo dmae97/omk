@@ -9,20 +9,20 @@ import { join } from "node:path";
 import { Agent } from "@oh-my-pi/pi-agent-core";
 import { getModel } from "@oh-my-pi/pi-ai";
 import { nanoid } from "nanoid";
-import { AgentSession } from "$c/core/agent-session";
-import { AuthStorage } from "$c/core/auth-storage";
+import { ModelRegistry } from "$c/config/model-registry";
+import { SettingsManager } from "$c/config/settings-manager";
 import {
 	HookRunner,
 	type LoadedHook,
 	type SessionBeforeCompactEvent,
 	type SessionCompactEvent,
 	type SessionEvent,
-} from "$c/core/hooks/index";
-import { ModelRegistry } from "$c/core/model-registry";
-import { SessionManager } from "$c/core/session-manager";
-import { SettingsManager } from "$c/core/settings-manager";
-import { createTools, type ToolSession } from "$c/core/tools/index";
-import { theme } from "$c/modes/interactive/theme/theme";
+} from "$c/extensibility/hooks/index";
+import { theme } from "$c/modes/theme/theme";
+import { AgentSession } from "$c/session/agent-session";
+import { AuthStorage } from "$c/session/auth-storage";
+import { SessionManager } from "$c/session/session-manager";
+import { createTools, type ToolSession } from "$c/tools/index";
 
 const API_KEY = process.env.ANTHROPIC_OAUTH_TOKEN || process.env.ANTHROPIC_API_KEY;
 

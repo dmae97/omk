@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { handleOpenCorporates } from "$c/core/tools/web-scrapers/opencorporates";
-import { handleSecEdgar } from "$c/core/tools/web-scrapers/sec-edgar";
+import { handleOpenCorporates } from "$c/web/scrapers/opencorporates";
+import { handleSecEdgar } from "$c/web/scrapers/sec-edgar";
 
 const SKIP = !process.env.WEB_FETCH_INTEGRATION;
 

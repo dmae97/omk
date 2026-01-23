@@ -11,6 +11,7 @@ import { createInterface } from "node:readline/promises";
 import { type ImageContent, supportsXhigh } from "@oh-my-pi/pi-ai";
 import { postmortem } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
+import { initTheme, stopThemeWatcher } from "$c/modes/theme/theme";
 import { type Args, parseArgs, printHelp } from "./cli/args";
 import { parseConfigArgs, printConfigHelp, runConfigCommand } from "./cli/config-cli";
 import { processFileArguments } from "./cli/file-processor";
@@ -21,21 +22,20 @@ import { parseSetupArgs, printSetupHelp, runSetupCommand } from "./cli/setup-cli
 import { parseStatsArgs, printStatsHelp, runStatsCommand } from "./cli/stats-cli";
 import { parseUpdateArgs, printUpdateHelp, runUpdateCommand } from "./cli/update-cli";
 import { findConfigFile, getModelsPath, VERSION } from "./config";
-import type { AgentSession } from "./core/agent-session";
-import { exportFromFile } from "./core/export-html/index";
-import type { ExtensionUIContext } from "./core/index";
-import type { ModelRegistry } from "./core/model-registry";
-import { parseModelPattern, parseModelString, resolveModelScope, type ScopedModel } from "./core/model-resolver";
-import { type CreateAgentSessionOptions, createAgentSession, discoverAuthStorage, discoverModels } from "./core/sdk";
-import { type SessionInfo, SessionManager } from "./core/session-manager";
-import { SettingsManager } from "./core/settings-manager";
-import { resolvePromptInput } from "./core/system-prompt";
-import { printTimings, time } from "./core/timings";
+import type { ModelRegistry } from "./config/model-registry";
+import { parseModelPattern, parseModelString, resolveModelScope, type ScopedModel } from "./config/model-resolver";
+import { SettingsManager } from "./config/settings-manager";
 import { initializeWithSettings } from "./discovery";
+import { exportFromFile } from "./export/html/index";
+import type { ExtensionUIContext } from "./extensibility/extensions/types";
 import { runMigrations, showDeprecationWarnings } from "./migrations";
 import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index";
-import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme";
+import { type CreateAgentSessionOptions, createAgentSession, discoverAuthStorage, discoverModels } from "./sdk";
+import type { AgentSession } from "./session/agent-session";
+import { type SessionInfo, SessionManager } from "./session/session-manager";
+import { resolvePromptInput } from "./system-prompt";
 import { getChangelogPath, getNewEntries, parseChangelog } from "./utils/changelog";
+import { printTimings, time } from "./utils/timings";
 
 async function checkForNewVersion(currentVersion: string): Promise<string | undefined> {
 	try {
@@ -85,7 +85,7 @@ async function runInteractiveMode(
 	initialMessages: string[],
 	setExtensionUIContext: (uiContext: ExtensionUIContext, hasUI: boolean) => void,
 	lspServers: Array<{ name: string; status: "ready" | "error"; fileTypes: string[] }> | undefined,
-	mcpManager: import("./core/mcp/index").MCPManager | undefined,
+	mcpManager: import("./mcp/index").MCPManager | undefined,
 	initialMessage?: string,
 	initialImages?: ImageContent[],
 ): Promise<void> {

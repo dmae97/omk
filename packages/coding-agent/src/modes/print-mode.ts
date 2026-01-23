@@ -7,7 +7,7 @@
  */
 
 import type { AssistantMessage, ImageContent } from "@oh-my-pi/pi-ai";
-import type { AgentSession } from "$c/core/agent-session";
+import type { AgentSession } from "$c/session/agent-session";
 
 /**
  * Options for print mode.

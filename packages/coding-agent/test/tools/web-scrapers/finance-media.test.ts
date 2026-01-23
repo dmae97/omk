@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { handleArtifactHub } from "$c/core/tools/web-scrapers/artifacthub";
-import { handleCoinGecko } from "$c/core/tools/web-scrapers/coingecko";
-import { handleDiscogs } from "$c/core/tools/web-scrapers/discogs";
+import { handleArtifactHub } from "$c/web/scrapers/artifacthub";
+import { handleCoinGecko } from "$c/web/scrapers/coingecko";
+import { handleDiscogs } from "$c/web/scrapers/discogs";
 
 const SKIP = !process.env.WEB_FETCH_INTEGRATION;
 

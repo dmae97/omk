@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTempDirSync } from "@oh-my-pi/pi-utils";
-import { discoverAndLoadExtensions, loadExtensions } from "$c/core/extensions/loader";
+import { discoverAndLoadExtensions, loadExtensions } from "$c/extensibility/extensions/loader";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

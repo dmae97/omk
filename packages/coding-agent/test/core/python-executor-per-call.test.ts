@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { createTempDirSync } from "@oh-my-pi/pi-utils";
-import { executePython } from "$c/core/python-executor";
-import type { KernelExecuteOptions, KernelExecuteResult } from "$c/core/python-kernel";
-import { PythonKernel } from "$c/core/python-kernel";
+import { executePython } from "$c/ipy/executor";
+import type { KernelExecuteOptions, KernelExecuteResult } from "$c/ipy/kernel";
+import { PythonKernel } from "$c/ipy/kernel";
 
 interface KernelStub {
 	execute: (code: string, options?: KernelExecuteOptions) => Promise<KernelExecuteResult>;

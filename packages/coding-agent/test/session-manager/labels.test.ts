@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { type LabelEntry, SessionManager } from "$c/core/session-manager";
+import { type LabelEntry, SessionManager } from "$c/session/session-manager";
 
 describe("SessionManager labels", () => {
 	it("sets and gets labels", () => {

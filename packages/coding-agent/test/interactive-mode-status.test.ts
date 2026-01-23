@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, test, vi } from "bun:test";
 import { Container } from "@oh-my-pi/pi-tui";
-import { InteractiveMode } from "$c/modes/interactive/interactive-mode";
-import { initTheme } from "$c/modes/interactive/theme/theme";
-import { UiHelpers } from "$c/modes/interactive/utils/ui-helpers";
+import { InteractiveMode } from "$c/modes/interactive-mode";
+import { initTheme } from "$c/modes/theme/theme";
+import { UiHelpers } from "$c/modes/utils/ui-helpers";
 
 function renderLastLine(container: Container, width = 120): string {
 	const last = container.children[container.children.length - 1];

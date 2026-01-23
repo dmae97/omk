@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { loadSkills, loadSkillsFromDir, type Skill } from "$c/core/skills";
+import { loadSkills, loadSkillsFromDir, type Skill } from "$c/extensibility/skills";
 
 const fixturesDir = resolve(__dirname, "fixtures/skills");
 const collisionFixturesDir = resolve(__dirname, "fixtures/skills-collision");

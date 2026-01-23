@@ -5,7 +5,7 @@
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import chalk from "chalk";
 import { APP_NAME, CONFIG_DIR_NAME, ENV_AGENT_DIR } from "$c/config";
-import { BUILTIN_TOOLS } from "$c/core/tools/index";
+import { BUILTIN_TOOLS } from "$c/tools/index";
 
 export type Mode = "text" | "json" | "rpc";
 

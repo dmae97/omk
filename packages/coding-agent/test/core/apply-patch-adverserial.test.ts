@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ApplyPatchError, applyPatch } from "$c/core/tools/patch";
+import { ApplyPatchError, applyPatch } from "$c/patch";
 
 describe("applyPatch adversarial inputs", () => {
 	let tempDir: string;

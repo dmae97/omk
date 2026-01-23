@@ -22,7 +22,7 @@ import { type SlashCommand, slashCommandCapability } from "$c/capability/slash-c
 import { type SystemPrompt, systemPromptCapability } from "$c/capability/system-prompt";
 import { type CustomTool, toolCapability } from "$c/capability/tool";
 import type { LoadContext, LoadResult } from "$c/capability/types";
-import { parseFrontmatter } from "$c/core/frontmatter";
+import { parseFrontmatter } from "$c/utils/frontmatter";
 import {
 	createSourceMeta,
 	discoverExtensionModulePaths,

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { rmSync } from "node:fs";
 import { createTempDirSync, type SyncTempDir } from "@oh-my-pi/pi-utils";
 import type { Subprocess } from "bun";
-import { PythonKernel } from "$c/core/python-kernel";
+import { PythonKernel } from "$c/ipy/kernel";
 
 type SpawnOptions = Parameters<typeof Bun.spawn>[1];
 

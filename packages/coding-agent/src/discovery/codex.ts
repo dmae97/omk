@@ -30,7 +30,7 @@ import { slashCommandCapability } from "$c/capability/slash-command";
 import type { CustomTool } from "$c/capability/tool";
 import { toolCapability } from "$c/capability/tool";
 import type { LoadContext, LoadResult } from "$c/capability/types";
-import { parseFrontmatter } from "$c/core/frontmatter";
+import { parseFrontmatter } from "$c/utils/frontmatter";
 import {
 	createSourceMeta,
 	discoverExtensionModulePaths,

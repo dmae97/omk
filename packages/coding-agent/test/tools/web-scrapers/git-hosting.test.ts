@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { handleGitHub } from "$c/core/tools/web-scrapers/github";
-import { handleGitHubGist } from "$c/core/tools/web-scrapers/github-gist";
+import { handleGitHub } from "$c/web/scrapers/github";
+import { handleGitHubGist } from "$c/web/scrapers/github-gist";
 
 const SKIP = !process.env.WEB_FETCH_INTEGRATION;
 

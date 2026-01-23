@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { renderTemplate } from "$c/core/tools/task/template";
+import { renderTemplate } from "$c/task/template";
 
 describe("renderTemplate", () => {
 	test("renders explicit args", () => {

@@ -22,7 +22,7 @@ import { ruleCapability } from "$c/capability/rule";
 import type { Settings } from "$c/capability/settings";
 import { settingsCapability } from "$c/capability/settings";
 import type { LoadContext, LoadResult } from "$c/capability/types";
-import { parseFrontmatter } from "$c/core/frontmatter";
+import { parseFrontmatter } from "$c/utils/frontmatter";
 import {
 	createSourceMeta,
 	expandEnvVarsDeep,

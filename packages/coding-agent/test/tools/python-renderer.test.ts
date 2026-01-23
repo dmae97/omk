@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import stripAnsi from "strip-ansi";
-import { pythonToolRenderer } from "$c/core/tools/python";
-import { getThemeByName } from "$c/modes/interactive/theme/theme";
+import { getThemeByName } from "$c/modes/theme/theme";
+import { pythonToolRenderer } from "$c/tools/python";
 
 describe("pythonToolRenderer", () => {
 	it("renders truncated output when collapsed and full output when expanded", () => {

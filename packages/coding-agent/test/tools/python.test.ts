@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "bun:test";
 import { createTempDirSync, type SyncTempDir } from "@oh-my-pi/pi-utils";
-import * as pythonExecutor from "$c/core/python-executor";
-import { createTools, type ToolSession } from "$c/core/tools/index";
-import { PythonTool } from "$c/core/tools/python";
+import * as pythonExecutor from "$c/ipy/executor";
+import { createTools, type ToolSession } from "$c/tools/index";
+import { PythonTool } from "$c/tools/python";
 
 let previousSkipCheck: string | undefined;
 let tempDir: SyncTempDir;

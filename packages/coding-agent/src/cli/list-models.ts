@@ -3,7 +3,7 @@
  */
 
 import type { Api, Model } from "@oh-my-pi/pi-ai";
-import type { ModelRegistry } from "$c/core/model-registry";
+import type { ModelRegistry } from "$c/config/model-registry";
 import { fuzzyFilter } from "$c/utils/fuzzy";
 
 /**

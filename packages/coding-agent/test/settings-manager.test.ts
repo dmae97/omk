@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentDbPath } from "$c/config";
-import { AgentStorage } from "$c/core/agent-storage";
-import { SettingsManager } from "$c/core/settings-manager";
+import { SettingsManager } from "$c/config/settings-manager";
+import { AgentStorage } from "$c/session/agent-storage";
 
 describe("SettingsManager", () => {
 	let testDir: string;

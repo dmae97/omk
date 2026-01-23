@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { handleBiorxiv } from "$c/core/tools/web-scrapers/biorxiv";
-import { handleOpenLibrary } from "$c/core/tools/web-scrapers/openlibrary";
-import { handleWikidata } from "$c/core/tools/web-scrapers/wikidata";
+import { handleBiorxiv } from "$c/web/scrapers/biorxiv";
+import { handleOpenLibrary } from "$c/web/scrapers/openlibrary";
+import { handleWikidata } from "$c/web/scrapers/wikidata";
 
 const SKIP = !process.env.WEB_FETCH_INTEGRATION;
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { handleArxiv } from "$c/core/tools/web-scrapers/arxiv";
-import { handleIacr } from "$c/core/tools/web-scrapers/iacr";
-import { handlePubMed } from "$c/core/tools/web-scrapers/pubmed";
-import { handleSemanticScholar } from "$c/core/tools/web-scrapers/semantic-scholar";
+import { handleArxiv } from "$c/web/scrapers/arxiv";
+import { handleIacr } from "$c/web/scrapers/iacr";
+import { handlePubMed } from "$c/web/scrapers/pubmed";
+import { handleSemanticScholar } from "$c/web/scrapers/semantic-scholar";
 
 const SKIP = !process.env.WEB_FETCH_INTEGRATION;
 

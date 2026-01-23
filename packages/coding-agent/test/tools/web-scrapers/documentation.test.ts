@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { handleMDN } from "$c/core/tools/web-scrapers/mdn";
-import { handleReadTheDocs } from "$c/core/tools/web-scrapers/readthedocs";
+import { handleMDN } from "$c/web/scrapers/mdn";
+import { handleReadTheDocs } from "$c/web/scrapers/readthedocs";
 
 const SKIP = !process.env.WEB_FETCH_INTEGRATION;
 

@@ -13,7 +13,7 @@ import {
 	getLastAssistantUsage,
 	prepareCompaction,
 	shouldCompact,
-} from "$c/core/compaction/index";
+} from "$c/session/compaction/index";
 import {
 	buildSessionContext,
 	type CompactionEntry,
@@ -23,7 +23,7 @@ import {
 	type SessionEntry,
 	type SessionMessageEntry,
 	type ThinkingLevelChangeEntry,
-} from "$c/core/session-manager";
+} from "$c/session/session-manager";
 
 // ============================================================================
 // Test fixtures

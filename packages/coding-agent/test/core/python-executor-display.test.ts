@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { executePythonWithKernel, type PythonKernelExecutor } from "$c/core/python-executor";
-import type { KernelDisplayOutput, KernelExecuteOptions, KernelExecuteResult } from "$c/core/python-kernel";
+import { executePythonWithKernel, type PythonKernelExecutor } from "$c/ipy/executor";
+import type { KernelDisplayOutput, KernelExecuteOptions, KernelExecuteResult } from "$c/ipy/kernel";
 
 class FakeKernel implements PythonKernelExecutor {
 	private result: KernelExecuteResult;

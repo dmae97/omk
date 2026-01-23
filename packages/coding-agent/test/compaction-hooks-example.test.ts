@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import type { HookAPI, SessionBeforeCompactEvent, SessionCompactEvent } from "$c/core/hooks/index";
+import type { HookAPI, SessionBeforeCompactEvent, SessionCompactEvent } from "$c/extensibility/hooks/index";
 
 describe("Documentation example", () => {
 	it("custom compaction example should type-check correctly", () => {

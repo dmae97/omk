@@ -9,11 +9,11 @@ import { join } from "node:path";
 import { Agent } from "@oh-my-pi/pi-agent-core";
 import { type AssistantMessage, type AssistantMessageEvent, EventStream, getModel } from "@oh-my-pi/pi-ai";
 import { nanoid } from "nanoid";
-import { AgentSession } from "$c/core/agent-session";
-import { AuthStorage } from "$c/core/auth-storage";
-import { ModelRegistry } from "$c/core/model-registry";
-import { SessionManager } from "$c/core/session-manager";
-import { SettingsManager } from "$c/core/settings-manager";
+import { ModelRegistry } from "$c/config/model-registry";
+import { SettingsManager } from "$c/config/settings-manager";
+import { AgentSession } from "$c/session/agent-session";
+import { AuthStorage } from "$c/session/auth-storage";
+import { SessionManager } from "$c/session/session-manager";
 
 // Mock stream that mimics AssistantMessageEventStream
 class MockAssistantStream extends EventStream<AssistantMessageEvent, AssistantMessage> {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { handleHuggingFace } from "$c/core/tools/web-scrapers/huggingface";
-import { handleSpotify } from "$c/core/tools/web-scrapers/spotify";
-import { handleVimeo } from "$c/core/tools/web-scrapers/vimeo";
+import { handleHuggingFace } from "$c/web/scrapers/huggingface";
+import { handleSpotify } from "$c/web/scrapers/spotify";
+import { handleVimeo } from "$c/web/scrapers/vimeo";
 
 const SKIP = !process.env.WEB_FETCH_INTEGRATION;
 

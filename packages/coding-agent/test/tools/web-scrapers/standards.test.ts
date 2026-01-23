@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { handleCheatSh } from "$c/core/tools/web-scrapers/cheatsh";
-import { handleRfc } from "$c/core/tools/web-scrapers/rfc";
-import { handleTldr } from "$c/core/tools/web-scrapers/tldr";
+import { handleCheatSh } from "$c/web/scrapers/cheatsh";
+import { handleRfc } from "$c/web/scrapers/rfc";
+import { handleTldr } from "$c/web/scrapers/tldr";
 
 const SKIP = !process.env.WEB_FETCH_INTEGRATION;
 

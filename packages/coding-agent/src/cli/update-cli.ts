@@ -12,7 +12,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import chalk from "chalk";
 import { APP_NAME, VERSION } from "$c/config";
-import { theme } from "$c/modes/interactive/theme/theme";
+import { theme } from "$c/modes/theme/theme";
 
 /**
  * Detect if we're running as a Bun compiled binary.
