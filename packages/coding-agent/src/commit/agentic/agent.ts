@@ -94,9 +94,10 @@ export async function runCommitAgentSession(input: CommitAgentInput): Promise<Co
 					messageCount += 1;
 					isThinking = false;
 					clearThinkingLine();
-					const preview = extractMessagePreview(event.message?.content ?? []);
-					const label = preview ? `● ${preview}` : `● agent message ${messageCount}`;
-					writeStdout(label);
+					const messageText = extractMessageText(event.message?.content ?? []);
+					if (messageText) {
+						writeAssistantMessage(messageText);
+					}
 				}
 				break;
 			}
@@ -107,9 +108,9 @@ export async function runCommitAgentSession(input: CommitAgentInput): Promise<Co
 				const toolLabel = formatToolLabel(stored.name);
 				const symbol = event.isError ? "" : "";
 				writeStdout(`${symbol} ${toolLabel}`);
-				const argsText = formatToolArgs(stored.args);
-				if (argsText) {
-					writeStdout(formatToolArgsBlock(argsText));
+				const argsLines = formatToolArgs(stored.args);
+				if (argsLines.length > 0) {
+					writeStdout(formatToolArgsBlock(argsLines));
 				}
 				break;
 			}
@@ -148,6 +149,23 @@ function extractMessagePreview(content: Array<{ type: string; text?: string }>):
 	return truncateToolArg(combined);
 }
 
+function extractMessageText(content: Array<{ type: string; text?: string }>): string | null {
+	const textBlocks = content
+		.filter((block) => block.type === "text" && typeof block.text === "string")
+		.map((block) => block.text ?? "")
+		.filter((value) => value.trim().length > 0);
+	if (textBlocks.length === 0) return null;
+	return textBlocks.join("\n").trim();
+}
+
+function writeAssistantMessage(message: string): void {
+	const lines = message.split("\n");
+	for (const [index, line] of lines.entries()) {
+		const prefix = index === 0 ? "● " : "  ";
+		writeStdout(`${prefix}${line}`);
+	}
+}
+
 function formatToolLabel(toolName: string): string {
 	const displayName = toolName
 		.split(/[_-]/)
@@ -156,47 +174,57 @@ function formatToolLabel(toolName: string): string {
 	return displayName;
 }
 
-function formatToolArgs(args?: Record<string, unknown>): string | null {
-	if (!args || Object.keys(args).length === 0) return null;
-	const textParts: string[] = [];
-	const pushIf = (key: string, label = key) => {
-		const value = args[key];
-		if (typeof value === "string" && value.trim()) {
-			textParts.push(`${label}: ${value.trim()}`);
+function formatToolArgs(args?: Record<string, unknown>): string[] {
+	if (!args || Object.keys(args).length === 0) return [];
+	const lines: string[] = [];
+	const visit = (value: unknown, keyPath: string) => {
+		if (value === null || value === undefined) return;
+		if (Array.isArray(value)) {
+			if (value.length === 0) return;
+			const rendered = value.map((item) => renderPrimitive(item)).filter(Boolean);
+			if (rendered.length > 0) {
+				lines.push(`${keyPath}: ${rendered.join(", ")}`);
+			}
+			return;
+		}
+		if (typeof value === "object") {
+			const entries = Object.entries(value as Record<string, unknown>);
+			if (entries.length === 0) return;
+			for (const [childKey, childValue] of entries) {
+				visit(childValue, `${keyPath}.${childKey}`);
+			}
+			return;
+		}
+		const rendered = renderPrimitive(value);
+		if (rendered) {
+			lines.push(`${keyPath}: ${rendered}`);
 		}
 	};
-	pushIf("summary");
-	pushIf("type");
-	pushIf("scope");
-	pushIf("file");
-	pushIf("path");
-	pushIf("pattern");
-	pushIf("query");
-	pushIf("url");
-	pushIf("command");
-	const files = args.files;
-	if (Array.isArray(files) && files.length > 0) {
-		const list = files.map((file) => String(file));
-		textParts.push(`files: ${list.join(", ")}`);
+	for (const [key, value] of Object.entries(args)) {
+		visit(value, key);
 	}
-	const hunks = args.hunks;
-	if (Array.isArray(hunks) && hunks.length > 0) {
-		textParts.push(`hunks: ${hunks.join(", ")}`);
-	}
-	if (textParts.length > 0) {
-		return textParts.join("\n");
-	}
-	try {
-		return JSON.stringify(args, null, 2);
-	} catch {
-		return String(args);
-	}
+	return lines;
 }
 
-function formatToolArgsBlock(text: string): string {
-	const lines = text.split("\n");
+function renderPrimitive(value: unknown): string | null {
+	if (value === null || value === undefined) return null;
+	if (typeof value === "string") {
+		const trimmed = value.trim();
+		return trimmed.length > 0 ? trimmed : null;
+	}
+	if (typeof value === "number" || typeof value === "boolean") {
+		return String(value);
+	}
+	return null;
+}
+
+function formatToolArgsBlock(lines: string[]): string {
 	return lines
-		.map((line, index) => (index === 0 ? `  ⎿ ${line}` : `    ${line}`))
+		.map((line, index) => {
+			if (index === 0) return `  ⎿ ${line}`;
+			const branch = index === lines.length - 1 ? "└" : "├";
+			return `    ${branch} ${line}`;
+		})
 		.join("\n");
 }
 

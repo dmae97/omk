@@ -41,6 +41,7 @@
 - Changed worker instantiation to use direct URL import instead of pre-bundled worker files
 - Changed `omp commit` to use agentic mode by default with tool-based git inspection
 - Changed agentic commit progress output to show real-time thinking previews and structured tool argument details
+- Changed agentic commit progress output to display full multi-line assistant messages and render tool arguments with tree-style formatting for improved readability
 ## [8.0.0] - 2026-01-23
 ### Added
 
