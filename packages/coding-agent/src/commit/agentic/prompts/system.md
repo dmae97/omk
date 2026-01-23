@@ -34,9 +34,11 @@ Tool guidance:
 
 ## Parallel Analysis (CRITICAL)
 
-For commits with 4+ files, you MUST use `analyze_files` to analyze all files in parallel:
+If pre-analyzed observations are provided in the user prompt, DO NOT call `analyze_files`.
+
+Otherwise, for commits with 4+ files, you MUST use `analyze_files` to analyze all files in parallel:
 1. Call `git_overview` to get file list
-2. If ≥4 files: Call `analyze_files` with ALL changed files
+2. If 4+ files: Call `analyze_files` with ALL changed files
 3. Use observations to inform your final proposal
 
 DO NOT call `analyze_files` with a single file for large commits. This is slow and loses cross-file context.

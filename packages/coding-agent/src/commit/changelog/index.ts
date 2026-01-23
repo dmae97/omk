@@ -102,7 +102,11 @@ export async function applyChangelogProposals({
 }: ChangelogProposalInput): Promise<string[]> {
 	const updated: string[] = [];
 	for (const proposal of proposals) {
-		if (Object.keys(proposal.entries).length === 0) continue;
+		if (
+			Object.keys(proposal.entries).length === 0 &&
+			(!proposal.deletions || Object.keys(proposal.deletions).length === 0)
+		)
+			continue;
 		onProgress?.(`Applying entries for ${proposal.path}...`);
 		const exists = await Bun.file(proposal.path).exists();
 		if (!exists) {

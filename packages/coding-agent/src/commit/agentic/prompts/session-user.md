@@ -10,6 +10,19 @@ Changelog targets (you must call propose_changelog for these files):
 {{changelog_targets}}
 {{/if}}
 
+{{#if existing_changelog_entries}}
+## Existing Unreleased Changelog Entries
+You may include entries from this list in the propose_changelog `deletions` field if they should be removed.
+{{#each existing_changelog_entries}}
+### {{path}}
+{{#each sections}}
+{{name}}:
+{{#list items prefix="- " join="\n"}}{{this}}{{/list}}
+{{/each}}
+
+{{/each}}
+{{/if}}
+
 {{#if pre_computed_observations}}
 ## Pre-analyzed File Observations
 

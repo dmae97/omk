@@ -33,6 +33,10 @@
 - Added diff content caching with smart file prioritization to optimize token usage in large changesets
 - Added lock file filtering (17 patterns including Cargo.lock, package-lock.json, bun.lock) from commit analysis
 - Added changelog deletion support to remove outdated entries via the changelog proposal interface
+- Added support for pre-computed changelog entries in commit agent to display existing unreleased sections for potential deletion
+- Added `ExistingChangelogEntries` interface to track changelog sections by path for changelog proposal context
+- Added conditional `analyze_files` skipping in commit agent when pre-analyzed observations are provided
+- Added guidance to commit agent prompts instructing subagents to write files directly instead of returning changes for manual application
 
 ### Changed
 - Changed changelog diff truncation limit to be configurable via settings
@@ -76,6 +80,9 @@
 - Changed analyze-file tool to include file type inference and enriched related files with line counts
 - Changed propose-changelog tool to support optional deletion entries for removing existing changelog items
 - Changed commit agent to accept pre-computed file observations and format them into session prompts
+- Changed changelog skip condition in `applyChangelogProposals` to also check for empty deletions object
+- Changed `createCommitTools()` to build tools array incrementally with conditional `analyze_files` inclusion based on `enableAnalyzeFiles` flag
+- Changed system prompt guidance to clarify that pre-computed observations prevent redundant `analyze_files` calls
 
 ### Fixed
 - Fixed database busy errors during concurrent access by adding retry logic with exponential backoff when opening storage
@@ -83,6 +90,7 @@
 - Commit command now exits cleanly with exit code 0 on success
 - Handle undefined code parameter in code cell renderer
 - Fixed indentation formatting in split-commit tool function signature
+- Fixed changelog application to process proposals containing only deletion entries without additions
 ## [8.0.0] - 2026-01-23
 ### Added
 

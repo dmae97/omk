@@ -28,6 +28,12 @@ export interface CommitAgentInput {
 	changelogTargets: string[];
 	requireChangelog: boolean;
 	preComputedObservations?: FileObservation[];
+	existingChangelogEntries?: ExistingChangelogEntries[];
+}
+
+export interface ExistingChangelogEntries {
+	path: string;
+	sections: Array<{ name: string; items: string[] }>;
 }
 
 export async function runCommitAgentSession(input: CommitAgentInput): Promise<CommitAgentState> {
@@ -46,6 +52,7 @@ export async function runCommitAgentSession(input: CommitAgentInput): Promise<Co
 		spawns,
 		state,
 		changelogTargets: input.changelogTargets,
+		enableAnalyzeFiles: !input.preComputedObservations || input.preComputedObservations.length === 0,
 	});
 
 	const { session } = await createAgentSession({
@@ -139,6 +146,7 @@ export async function runCommitAgentSession(input: CommitAgentInput): Promise<Co
 			user_context: input.userContext,
 			changelog_targets: input.changelogTargets.length > 0 ? input.changelogTargets.join("\n") : undefined,
 			pre_computed_observations: formatObservations(input.preComputedObservations),
+			existing_changelog_entries: input.existingChangelogEntries,
 		});
 		const MAX_RETRIES = 3;
 		let retryCount = 0;

@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline/promises";
-import { runCommitAgentSession } from "$c/commit/agentic/agent";
+import { runCommitAgentSession, type ExistingChangelogEntries } from "$c/commit/agentic/agent";
 import { generateFallbackProposal } from "$c/commit/agentic/fallback";
 import splitConfirmPrompt from "$c/commit/agentic/prompts/split-confirm.md" with { type: "text" };
 import { detectTrivialChange } from "$c/commit/agentic/trivial";
@@ -7,6 +7,7 @@ import type { CommitAgentState, CommitProposal, HunkSelector, SplitCommitPlan } 
 import { computeDependencyOrder } from "$c/commit/agentic/topo-sort";
 import { applyChangelogProposals } from "$c/commit/changelog";
 import { detectChangelogBoundaries } from "$c/commit/changelog/detect";
+import { parseUnreleasedSection } from "$c/commit/changelog/parse";
 import { ControlledGit } from "$c/commit/git";
 import { parseFileDiffs } from "$c/commit/git/diff";
 import { runMapPhase } from "$c/commit/map-reduce/map-phase";
@@ -81,6 +82,13 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 
 	const numstat = await git.getNumstat(true);
 	const diff = await git.getDiff(true);
+	const forceFallback = process.env.OMP_COMMIT_TEST_FALLBACK?.toLowerCase() === "true";
+	if (forceFallback) {
+		writeStdout("● Forcing fallback commit generation...");
+		const fallbackProposal = generateFallbackProposal(numstat);
+		await runSingleCommit(fallbackProposal, { git, dryRun: args.dryRun, push: args.push });
+		return;
+	}
 
 	const trivialChange = detectTrivialChange(diff);
 	if (trivialChange) {
@@ -100,6 +108,13 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	}
 
 	let preComputedObservations: FileObservation[] | undefined;
+	let existingChangelogEntries: ExistingChangelogEntries[] | undefined;
+	if (!args.noChangelog && changelogTargets.length > 0) {
+		existingChangelogEntries = await loadExistingChangelogEntries(changelogTargets);
+		if (existingChangelogEntries.length === 0) {
+			existingChangelogEntries = undefined;
+		}
+	}
 	if (shouldUseMapReduce(diff, { minFiles: 4, maxFileTokens: 50_000 })) {
 		writeStdout("● Running parallel file analysis...");
 		const fileDiffs = parseFileDiffs(diff).filter((f) => !isExcludedFile(f.filename));
@@ -134,6 +149,7 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 			changelogTargets,
 			requireChangelog: !args.noChangelog && changelogTargets.length > 0,
 			preComputedObservations,
+			existingChangelogEntries,
 		});
 	} catch (error) {
 		writeStderr(`Agent error: ${error instanceof Error ? error.message : String(error)}`);
@@ -301,4 +317,24 @@ function formatFileChangeSummary(path: string, hunks: HunkSelector): string {
 		return `${path} (hunks ${hunks.indices.join(", ")})`;
 	}
 	return `${path} (lines ${hunks.start}-${hunks.end})`;
+}
+
+async function loadExistingChangelogEntries(paths: string[]): Promise<ExistingChangelogEntries[]> {
+	const entries: ExistingChangelogEntries[] = [];
+	for (const path of paths) {
+		const exists = await Bun.file(path).exists();
+		if (!exists) continue;
+		const content = await Bun.file(path).text();
+		try {
+			const unreleased = parseUnreleasedSection(content);
+			const sections = Object.entries(unreleased.entries)
+				.filter(([, items]) => items.length > 0)
+				.map(([name, items]) => ({ name, items }));
+			if (sections.length > 0) {
+				entries.push({ path, sections });
+			}
+		} catch {
+		}
+	}
+	return entries;
 }

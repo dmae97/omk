@@ -22,24 +22,35 @@ export interface CommitToolOptions {
 	spawns: string;
 	state: CommitAgentState;
 	changelogTargets: string[];
+	enableAnalyzeFiles?: boolean;
 }
 
 export function createCommitTools(options: CommitToolOptions): Array<CustomTool<any, any>> {
-	return [
+	const tools: Array<CustomTool<any, any>> = [
 		createGitOverviewTool(options.git, options.state),
 		createGitFileDiffTool(options.git, options.state),
 		createGitHunkTool(options.git),
 		createRecentCommitsTool(options.git),
-		createAnalyzeFileTool({
-			cwd: options.cwd,
-			authStorage: options.authStorage,
-			modelRegistry: options.modelRegistry,
-			settingsManager: options.settingsManager,
-			spawns: options.spawns,
-			state: options.state,
-		}),
+	];
+
+	if (options.enableAnalyzeFiles ?? true) {
+		tools.push(
+			createAnalyzeFileTool({
+				cwd: options.cwd,
+				authStorage: options.authStorage,
+				modelRegistry: options.modelRegistry,
+				settingsManager: options.settingsManager,
+				spawns: options.spawns,
+				state: options.state,
+			}),
+		);
+	}
+
+	tools.push(
 		createProposeChangelogTool(options.state, options.changelogTargets),
 		createProposeCommitTool(options.git, options.state),
 		createSplitCommitTool(options.git, options.state, options.changelogTargets),
-	];
+	);
+
+	return tools;
 }
