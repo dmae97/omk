@@ -181,7 +181,7 @@ export const writeToolRenderer = {
 						width,
 					},
 					uiTheme,
-					),
+				),
 			invalidate: () => {},
 		};
 	},

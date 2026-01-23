@@ -182,15 +182,15 @@ export const editToolRenderer = {
 		if (args.diff && args.op) {
 			text += formatStreamingDiff(args.diff, rawPath, uiTheme);
 		} else if (args.diff) {
-		const previewLines = args.diff.split("\n");
+			const previewLines = args.diff.split("\n");
 			const maxLines = 6;
 			text += "\n\n";
-		for (const line of previewLines.slice(0, maxLines)) {
-			text += `${uiTheme.fg("toolOutput", ui.truncate(line, 80))}\n`;
-		}
-		if (previewLines.length > maxLines) {
-			text += uiTheme.fg("dim", `${uiTheme.format.ellipsis} ${previewLines.length - maxLines} more lines`);
-		}
+			for (const line of previewLines.slice(0, maxLines)) {
+				text += `${uiTheme.fg("toolOutput", ui.truncate(line, 80))}\n`;
+			}
+			if (previewLines.length > maxLines) {
+				text += uiTheme.fg("dim", `${uiTheme.format.ellipsis} ${previewLines.length - maxLines} more lines`);
+			}
 		} else if (args.newText || args.patch) {
 			const previewLines = (args.newText ?? args.patch ?? "").split("\n");
 			const maxLines = 6;

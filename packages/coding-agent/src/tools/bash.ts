@@ -211,7 +211,7 @@ export const bashToolRenderer = {
 		const previewLines = renderContext?.previewLines ?? BASH_DEFAULT_PREVIEW_LINES;
 
 		// Get output from context (preferred) or fall back to result content
-		const output = renderContext?.output ?? (result.content?.find((c) => c.type === "text")?.text ?? "");
+		const output = renderContext?.output ?? result.content?.find((c) => c.type === "text")?.text ?? "";
 		const displayOutput = output.trimEnd();
 		const showingFullOutput = expanded && renderContext?.isFullOutput === true;
 

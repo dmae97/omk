@@ -64,6 +64,7 @@
 - Changed `analyze_file` tool to `analyze_files` for batch parallel analysis of multiple files
 - Switched agentic commit from auto-generated changelogs to agent-proposed entries with validation and retry logic
 - Commit agent now resolves a separate smaller model for commit generation instead of reusing the primary model
+- Normalized code formatting and indentation across tool renderers and UI components
 
 ### Fixed
 - Fixed database busy errors during concurrent access by adding retry logic with exponential backoff when opening storage

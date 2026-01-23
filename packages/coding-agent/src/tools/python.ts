@@ -795,9 +795,7 @@ export const pythonToolRenderer = {
 					const cell = cells[i];
 					const cellTitle = cell.title;
 					const combinedTitle =
-						cellTitle && workdirLabel
-							? `${workdirLabel} · ${cellTitle}`
-							: cellTitle ?? workdirLabel;
+						cellTitle && workdirLabel ? `${workdirLabel} · ${cellTitle}` : (cellTitle ?? workdirLabel);
 					const cellLines = renderCodeCell(
 						{
 							code: cell.code,
@@ -834,8 +832,7 @@ export const pythonToolRenderer = {
 
 		const expanded = renderContext?.expanded ?? options.expanded;
 		const previewLines = renderContext?.previewLines ?? PYTHON_DEFAULT_PREVIEW_LINES;
-		const output =
-			renderContext?.output ?? (result.content?.find((c) => c.type === "text")?.text ?? "").trimEnd();
+		const output = renderContext?.output ?? (result.content?.find((c) => c.type === "text")?.text ?? "").trimEnd();
 
 		const jsonOutputs = details?.jsonOutputs ?? [];
 		const jsonLines = jsonOutputs.flatMap((value, index) => {
@@ -994,7 +991,9 @@ export const pythonToolRenderer = {
 				}
 				outputLines.push(...cachedLines);
 				if (statusLines.length > 0) {
-					outputLines.push(truncateToWidth(uiTheme.fg("dim", "Status"), width, uiTheme.fg("dim", uiTheme.format.ellipsis)));
+					outputLines.push(
+						truncateToWidth(uiTheme.fg("dim", "Status"), width, uiTheme.fg("dim", uiTheme.format.ellipsis)),
+					);
 					for (const statusLine of statusLines) {
 						outputLines.push(truncateToWidth(statusLine, width, uiTheme.fg("dim", uiTheme.format.ellipsis)));
 					}

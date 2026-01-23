@@ -206,9 +206,7 @@ export function renderWebSearchResult(
 		theme,
 	);
 	if (!expanded && relatedCount > MAX_COLLAPSED_ITEMS) {
-		relatedTree.push(
-			theme.fg("muted", formatMoreItems(relatedCount - MAX_COLLAPSED_ITEMS, "question", theme)),
-		);
+		relatedTree.push(theme.fg("muted", formatMoreItems(relatedCount - MAX_COLLAPSED_ITEMS, "question", theme)));
 	}
 
 	const metaLines: string[] = [];

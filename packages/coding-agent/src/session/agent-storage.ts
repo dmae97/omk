@@ -276,8 +276,7 @@ CREATE TABLE settings (
 				AgentStorage.instances.set(dbPath, storage);
 				return storage;
 			} catch (err) {
-				const isSqliteBusy =
-					err && typeof err === "object" && (err as { code?: string }).code === "SQLITE_BUSY";
+				const isSqliteBusy = err && typeof err === "object" && (err as { code?: string }).code === "SQLITE_BUSY";
 				if (!isSqliteBusy) {
 					throw err;
 				}

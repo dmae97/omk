@@ -149,9 +149,9 @@ function renderHover(
 		const bottom = `${theme.boxSharp.bottomLeft}${h.repeat(3)}`;
 		let output = `${icon}${langLabel}`;
 		if (beforeCode) {
-		for (const line of beforeCode.split("\n")) {
-			output += `\n ${theme.fg("muted", line)}`;
-		}
+			for (const line of beforeCode.split("\n")) {
+				output += `\n ${theme.fg("muted", line)}`;
+			}
 		}
 		output += `\n ${theme.fg("mdCodeBlockBorder", top)}`;
 		for (const line of codeLines) {

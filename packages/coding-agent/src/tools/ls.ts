@@ -227,10 +227,7 @@ export const lsToolRenderer = {
 		const textContent = result.content?.find((c) => c.type === "text")?.text ?? "";
 
 		if (result.isError) {
-			const header = renderStatusLine(
-				{ icon: "error", title: "Ls", description: args?.path || "." },
-				uiTheme,
-			);
+			const header = renderStatusLine({ icon: "error", title: "Ls", description: args?.path || "." }, uiTheme);
 			return new Text([header, formatErrorMessage(textContent, uiTheme)].join("\n"), 0, 0);
 		}
 
@@ -238,10 +235,7 @@ export const lsToolRenderer = {
 			(!textContent || textContent.trim() === "" || textContent.trim() === "(empty directory)") &&
 			(!details?.entries || details.entries.length === 0)
 		) {
-			const header = renderStatusLine(
-				{ icon: "warning", title: "Ls", description: args?.path || "." },
-				uiTheme,
-			);
+			const header = renderStatusLine({ icon: "warning", title: "Ls", description: args?.path || "." }, uiTheme);
 			return new Text([header, formatEmptyMessage("Empty directory", uiTheme)].join("\n"), 0, 0);
 		}
 
@@ -254,10 +248,7 @@ export const lsToolRenderer = {
 		}
 
 		if (entries.length === 0) {
-			const header = renderStatusLine(
-				{ icon: "warning", title: "Ls", description: args?.path || "." },
-				uiTheme,
-			);
+			const header = renderStatusLine({ icon: "warning", title: "Ls", description: args?.path || "." }, uiTheme);
 			return new Text([header, formatEmptyMessage("Empty directory", uiTheme)].join("\n"), 0, 0);
 		}
 

@@ -9,7 +9,14 @@ import type { Theme } from "$c/modes/theme/theme";
 import calculatorDescription from "$c/prompts/tools/calculator.md" with { type: "text" };
 import { renderStatusLine, renderTreeList } from "$c/tui";
 import type { ToolSession } from "./index";
-import { formatCount, formatEmptyMessage, formatErrorMessage, PREVIEW_LIMITS, TRUNCATE_LENGTHS, truncate } from "./render-utils";
+import {
+	formatCount,
+	formatEmptyMessage,
+	formatErrorMessage,
+	PREVIEW_LIMITS,
+	TRUNCATE_LENGTHS,
+	truncate,
+} from "./render-utils";
 
 // =============================================================================
 // Token Types

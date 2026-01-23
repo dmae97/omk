@@ -23,9 +23,9 @@ import { renderPromptTemplate } from "$c/config/prompt-templates";
 import type { RenderResultOptions } from "$c/extensibility/custom-tools/types";
 import { type Theme, theme } from "$c/modes/theme/theme";
 import askDescription from "$c/prompts/tools/ask.md" with { type: "text" };
+import { renderStatusLine } from "$c/tui";
 import type { ToolSession } from "./index";
 import { ToolUIKit } from "./render-utils";
-import { renderStatusLine } from "$c/tui";
 
 // =============================================================================
 // Types
@@ -394,7 +394,11 @@ export const askToolRenderer = {
 				(r) => r.customInput || (r.selectedOptions && r.selectedOptions.length > 0),
 			);
 			const header = renderStatusLine(
-				{ icon: hasAnySelection ? "success" : "warning", title: "Ask", meta: [`${details.results.length} questions`] },
+				{
+					icon: hasAnySelection ? "success" : "warning",
+					title: "Ask",
+					meta: [`${details.results.length} questions`],
+				},
 				uiTheme,
 			);
 			lines.push(header);

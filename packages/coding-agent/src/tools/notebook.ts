@@ -231,10 +231,7 @@ export const notebookToolRenderer = {
 		const content = result.content?.[0];
 		if (content?.type === "text" && content.text?.startsWith("Error:")) {
 			const notebookPath = args?.notebookPath ?? args?.notebook_path ?? "?";
-			const header = renderStatusLine(
-				{ icon: "error", title: "Notebook", description: notebookPath },
-				uiTheme,
-			);
+			const header = renderStatusLine({ icon: "error", title: "Notebook", description: notebookPath }, uiTheme);
 			return new Text([header, formatErrorMessage(content.text, uiTheme)].join("\n"), 0, 0);
 		}
 
