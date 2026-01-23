@@ -35,6 +35,7 @@ const findSchema = Type.Object({
 });
 
 const DEFAULT_LIMIT = 1000;
+const FD_TIMEOUT_MS = 5000;
 
 export interface FindToolDetails {
 	truncation?: TruncationResult;
@@ -133,6 +134,11 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 
 		return untilAborted(signal, async () => {
 			const searchPath = resolveToCwd(searchDir || ".", this.session.cwd);
+
+			if (searchPath === "/") {
+				throw new ToolError("Searching from root directory '/' is not allowed");
+			}
+
 			const scopePath = (() => {
 				const relative = path.relative(this.session.cwd, searchPath).replace(/\\/g, "/");
 				return relative.length === 0 ? "." : relative;
@@ -247,7 +253,9 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 					"--absolute-path",
 					searchPath,
 				];
-				const { stdout: gitignoreStdout } = await runFd(fdPath, gitignoreArgs, signal);
+				const timeoutSignal = AbortSignal.timeout(FD_TIMEOUT_MS);
+				const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+				const { stdout: gitignoreStdout } = await runFd(fdPath, gitignoreArgs, combinedSignal);
 				for (const rawLine of gitignoreStdout.split("\n")) {
 					const file = rawLine.trim();
 					if (!file) continue;
@@ -267,8 +275,10 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 			// Pattern and path
 			args.push(effectivePattern, searchPath);
 
-			// Run fd
-			const { stdout, stderr, exitCode } = await runFd(fdPath, args, signal);
+			// Run fd with timeout
+			const mainTimeoutSignal = AbortSignal.timeout(FD_TIMEOUT_MS);
+			const mainCombinedSignal = signal ? AbortSignal.any([signal, mainTimeoutSignal]) : mainTimeoutSignal;
+			const { stdout, stderr, exitCode } = await runFd(fdPath, args, mainCombinedSignal);
 			const output = stdout.trim();
 
 			// fd exit codes: 0 = found files, 1 = no matches, other = error

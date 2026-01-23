@@ -66,6 +66,7 @@
 
 ### Fixed
 - Fixed database busy errors during concurrent access by adding retry logic with exponential backoff when opening storage
+- Find tool now rejects searches from root directory and enforces a 5-second timeout on fd operations
 ## [8.0.0] - 2026-01-23
 ### Added
 
