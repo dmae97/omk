@@ -4,7 +4,7 @@
  * This avoids the Bun macro restriction in node_modules.
  */
 
-const dir = new URL("../src/core/export-html/", import.meta.url).pathname;
+const dir = new URL("../src/export/html/", import.meta.url).pathname;
 
 // Read all files
 const html = await Bun.file(`${dir}template.html`).text();

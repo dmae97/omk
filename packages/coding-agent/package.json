@@ -1,6 +1,6 @@
 {
 	"name": "@oh-my-pi/pi-coding-agent",
-	"version": "7.0.0",
+	"version": "8.0.0",
 	"description": "Coding agent CLI with read, bash, edit, write tools and session management",
 	"type": "module",
 	"ompConfig": {
@@ -18,8 +18,8 @@
 			"import": "./src/index.ts"
 		},
 		"./hooks": {
-			"types": "./src/core/hooks/index.ts",
-			"import": "./src/core/hooks/index.ts"
+			"types": "./src/extensibility/hooks/index.ts",
+			"import": "./src/extensibility/hooks/index.ts"
 		}
 	},
 	"files": [
@@ -38,7 +38,7 @@
 		"generate-template": "bun scripts/generate-template.ts",
 		"postinstall": "bun run generate-template || true",
 		"test": "bun test",
-		"prepublishOnly": "bun run generate-template && bun run clean && bun run build"
+		"prepublishOnly": "bun run generate-template"
 	},
 	"dependencies": {
 		"@oh-my-pi/omp-stats": "workspace:*",

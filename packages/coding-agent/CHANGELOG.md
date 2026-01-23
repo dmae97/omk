@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [8.0.0] - 2026-01-23
 ### Added
 
 - Added antigravity provider support for image generation with Google Cloud authentication

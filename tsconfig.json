@@ -16,7 +16,7 @@
 			"@oh-my-pi/pi-utils": ["./packages/pi-utils/src/index.ts"],
 			"@oh-my-pi/pi-utils/*": ["./packages/pi-utils/src/*"],
 			"@oh-my-pi/pi-coding-agent": ["./packages/coding-agent/src/index.ts"],
-			"@oh-my-pi/pi-coding-agent/hooks": ["./packages/coding-agent/src/core/hooks/index.ts"],
+			"@oh-my-pi/pi-coding-agent/hooks": ["./packages/coding-agent/src/extensibility/hooks/index.ts"],
 			"@oh-my-pi/pi-coding-agent/*": ["./packages/coding-agent/src/*"],
 			"@sinclair/typebox": ["./node_modules/@sinclair/typebox"],
 			"@oh-my-pi/pi-tui": ["./packages/tui/src/index.ts"],

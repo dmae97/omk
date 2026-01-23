@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [8.0.0] - 2026-01-23
+
 ### Fixed
 
 - Fixed OpenAI Responses API 400 error "function_call without required reasoning item" when switching between models (same provider, different model). The fix omits the `id` field for function_calls from different models to avoid triggering OpenAI's reasoning/function_call pairing validation
