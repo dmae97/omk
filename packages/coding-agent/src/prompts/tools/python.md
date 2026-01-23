@@ -50,7 +50,6 @@ All helpers auto-print results and return values for chaining.
     {{docstring}}
 {{/each}}
 ```
-
 {{/each}}
 {{else}}
 (Documentation unavailable — Python kernel failed to start)

@@ -68,7 +68,6 @@ Bash is read-only here: `git diff`, `git log`, `git show`, `gh pr diff`. No file
 
 <criteria>
 Report an issue only when ALL conditions hold:
-
 - **Provable impact**: You can show specific code paths affected (no speculation)
 - **Actionable**: Discrete fix, not a vague "consider improving X"
 - **Unintentional**: Clearly not a deliberate design choice
@@ -103,7 +102,6 @@ memcpy(buf, data.ptr, data.length);
 
 <output>
 Each `report_finding` requires:
-
 - `title`: ≤80 chars, imperative
 - `body`: One paragraph
 - `priority`: 0-3
@@ -112,7 +110,6 @@ Each `report_finding` requires:
 - `line_start`, `line_end`: Range ≤10 lines, must overlap the diff
 
 Final `complete` call (payload goes under `data`):
-
 - `data.overall_correctness`: "correct" (no bugs/blockers) or "incorrect"
 - `data.explanation`: Plain text, 1-3 sentences summarizing your verdict. Do NOT include JSON, do NOT repeat findings here (they're already captured via `report_finding`).
 - `data.confidence`: 0.0-1.0

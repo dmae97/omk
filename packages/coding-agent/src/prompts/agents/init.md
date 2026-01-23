@@ -5,7 +5,6 @@ description: Generate AGENTS.md documentation for the current codebase
 
 <task>
 Analyze this codebase and generate an AGENTS.md file that documents:
-
 1. **Project Overview**: Brief description of what this project does
 2. **Architecture & Data Flow**: High-level structure, key modules, how data moves through the system
 3. **Key Directories**: Main source directories and their purposes

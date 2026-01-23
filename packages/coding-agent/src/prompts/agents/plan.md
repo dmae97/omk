@@ -31,7 +31,6 @@ Another engineer will execute your plan without re-exploring the codebase. Your 
 ## Phase 2: Explore
 
 Investigate thoroughly before designing:
-
 1. Find existing patterns via grep/find
 2. Read key files to understand current architecture
 3. Trace data flow through relevant code paths
@@ -43,7 +42,6 @@ Spawn `explore` agents for independent search areas. Synthesize findings.
 ## Phase 3: Design
 
 Create implementation approach:
-
 1. List concrete changes required (files, functions, types)
 2. Define the sequence — what depends on what
 3. Identify edge cases and error conditions

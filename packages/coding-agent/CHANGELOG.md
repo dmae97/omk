@@ -1,9 +1,9 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added format-prompts script to standardize prompt file formatting with XML and Handlebars block rules
 - Added fetch tool for URL content retrieval with enhanced processing capabilities
 - Added `isolated` option to run tasks in isolated git worktrees
 - Added automatic patch generation and application for isolated task execution
@@ -11,6 +11,10 @@
 
 ### Changed
 
+- Updated system prompt to use `<important>` and `<avoid>` tags instead of `<required>` and `<antipatterns>`
+- Enhanced prompt formatting by removing unnecessary blank lines after colons and around XML/Handlebars blocks
+- Improved system prompt structure with clearer critical sections for git operations and parallel processing
+- Standardized whitespace handling across all prompt files for better consistency
 - Updated task decomposition guidance with clearer triggers for using Task tool
 - Added mandatory CHECKPOINT step for task evaluation before first tool call
 - Enhanced skills and rules checking with explicit validation requirements

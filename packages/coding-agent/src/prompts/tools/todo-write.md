@@ -4,7 +4,6 @@ Create and manage a structured task list for your current coding session.
 
 <conditions>
 Use this tool proactively in these scenarios:
-
 1. Complex multi-step tasks - When a task requires 3 or more distinct steps or actions
 2. Non-trivial and complex tasks - Tasks that require careful planning or multiple operations
 3. User explicitly requests todo list - When the user directly asks you to use the todo list
@@ -16,18 +15,15 @@ Use this tool proactively in these scenarios:
 
 <protocol>
 1. **Task States**: Use these states to track progress:
-
    - pending: Task not yet started
    - in_progress: Currently working on (limit to ONE task at a time)
    - completed: Task finished successfully
 
    **IMPORTANT**: Task descriptions must have two forms:
-
    - content: The imperative form describing what needs to be done (e.g., "Run tests", "Build the project")
    - active_form: The present continuous form shown during execution (e.g., "Running tests", "Building the project")
 
 2. **Task Management**:
-
    - Update task status in real-time as you work
    - Mark tasks complete IMMEDIATELY after finishing (don't batch completions)
    - Exactly ONE task must be in_progress at any time (not less, not more)
@@ -35,7 +31,6 @@ Use this tool proactively in these scenarios:
    - Remove tasks that are no longer relevant from the list entirely
 
 3. **Task Completion Requirements**:
-
    - ONLY mark a task as completed when you have FULLY accomplished it
    - If you encounter errors, blockers, or cannot finish, keep the task as in_progress
    - When blocked, create a new task describing what needs to be resolved
@@ -79,7 +74,6 @@ User: Run npm install / Add a comment to this function / What does git status do
 
 <avoid>
 Skip using this tool when:
-
 1. There is only a single, straightforward task
 2. The task is trivial and tracking it provides no organizational benefit
 3. The task can be completed in less than 3 trivial steps

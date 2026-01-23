@@ -31,6 +31,7 @@
 	],
 	"scripts": {
 		"check": "tsgo -p tsconfig.check.json",
+		"format-prompts": "bun scripts/format-prompts.ts",
 		"clean": "rm -rf dist",
 		"build": "tsgo -p tsconfig.build.json && chmod +x dist/cli.js",
 		"build:binary": "bun run generate-wasm-b64 && bun build --compile ./src/cli.ts --outfile dist/omp",
