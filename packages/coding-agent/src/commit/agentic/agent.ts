@@ -1,4 +1,5 @@
 import type { Api, Model } from "@oh-my-pi/pi-ai";
+import { Markdown } from "@oh-my-pi/pi-tui";
 import chalk from "chalk";
 import agentUserPrompt from "$c/commit/agentic/prompts/session-user.md" with { type: "text" };
 import agentSystemPrompt from "$c/commit/agentic/prompts/system.md" with { type: "text" };
@@ -8,6 +9,7 @@ import type { ControlledGit } from "$c/commit/git";
 import typesDescriptionPrompt from "$c/commit/prompts/types-description.md" with { type: "text" };
 import type { ModelRegistry } from "$c/config/model-registry";
 import { renderPromptTemplate } from "$c/config/prompt-templates";
+import { getMarkdownTheme } from "$c/modes/theme/theme";
 import type { SettingsManager } from "$c/config/settings-manager";
 import { createAgentSession } from "$c/sdk";
 import type { AuthStorage } from "$c/session/auth-storage";
@@ -159,11 +161,22 @@ function extractMessageText(content: Array<{ type: string; text?: string }>): st
 }
 
 function writeAssistantMessage(message: string): void {
-	const lines = message.split("\n");
-	for (const [index, line] of lines.entries()) {
-		const prefix = index === 0 ? "● " : "  ";
-		writeStdout(`${prefix}${line}`);
+	const lines = renderMarkdownLines(message);
+	if (lines.length === 0) return;
+	let firstContentIndex = lines.findIndex((line) => line.trim().length > 0);
+	if (firstContentIndex === -1) {
+		firstContentIndex = 0;
 	}
+	for (const [index, line] of lines.entries()) {
+		const prefix = index === firstContentIndex ? "● " : "  ";
+		writeStdout(`${prefix}${line}`.trimEnd());
+	}
+}
+
+function renderMarkdownLines(message: string): string[] {
+	const width = Math.max(40, process.stdout.columns ?? 100);
+	const markdown = new Markdown(message, 0, 0, getMarkdownTheme());
+	return markdown.render(width);
 }
 
 function formatToolLabel(toolName: string): string {
