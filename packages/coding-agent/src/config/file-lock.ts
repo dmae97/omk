@@ -1,5 +1,5 @@
-import { mkdir, readFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { mkdir, readFile, rm } from "node:fs/promises";
 
 export interface FileLockOptions {
 	staleMs?: number;

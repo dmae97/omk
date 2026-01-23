@@ -22,6 +22,11 @@ export async function stageFiles(cwd: string, files: string[]): Promise<GitResul
 	return runGitCommand(cwd, args);
 }
 
+export async function resetStaging(cwd: string, files: string[]): Promise<GitResult> {
+	const args = files.length === 0 ? ["reset"] : ["reset", "--", ...files];
+	return runGitCommand(cwd, args);
+}
+
 export async function push(cwd: string): Promise<GitResult> {
 	return runGitCommand(cwd, ["push"]);
 }

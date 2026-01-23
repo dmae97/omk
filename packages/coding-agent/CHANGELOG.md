@@ -4,6 +4,7 @@
 
 ### Added
 - Added `omp commit` command to generate conventional commits with changelog updates
+- Added agentic commit mode with commit-specific tools and `--legacy` fallback
 - Added configurable settings for map-reduce analysis including concurrency, timeout, file thresholds, and token limits
 - Added support for excluding YAML lock files (`.lock.yml`, `.lock.yaml`, `-lock.yml`, `-lock.yaml`) from commit analysis
 - Added new TUI component library with reusable rendering utilities including code cells, file lists, tree lists, status lines, and output blocks
@@ -13,6 +14,11 @@
 - Added renderStatusLine component for standardized tool status headers with icons, descriptions, and metadata
 - Added renderOutputBlock component for bordered output containers with structured sections
 - Added renderOutputBlock to Bash tool for improved output formatting with status indicators
+- Added `--legacy` flag to `omp commit` for using the deterministic pipeline instead of agentic mode
+- Added split commit support to automatically create multiple atomic commits for unrelated changes
+- Added git hunk inspection tools for fine-grained diff analysis in commit generation
+- Added commit message validation with filler word and meta phrase detection
+- Added automatic unicode normalization in commit summaries
 
 ### Changed
 - Changed changelog diff truncation limit to be configurable via settings
@@ -32,6 +38,7 @@
 - Changed tool result rendering to merge call and result displays, showing tool arguments (command, pattern, query, path) in result headers for Bash, Calculator, Fetch, Find, Grep, Ls, LSP, Notebook, Read, SSH, TodoWrite, Web Search, and Write tools
 - Changed Read tool title to display line range when offset or limit arguments are provided
 - Changed worker instantiation to use direct URL import instead of pre-bundled worker files
+- Changed `omp commit` to use agentic mode by default with tool-based git inspection
 ## [8.0.0] - 2026-01-23
 ### Added
 

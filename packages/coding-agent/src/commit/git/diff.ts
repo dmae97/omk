@@ -1,4 +1,4 @@
-import type { FileDiff, NumstatEntry } from "$c/commit/types";
+import type { DiffHunk, FileDiff, FileHunks, NumstatEntry } from "$c/commit/types";
 
 export function parseNumstat(output: string): NumstatEntry[] {
 	const entries: NumstatEntry[] = [];
@@ -50,6 +50,59 @@ export function parseFileDiffs(diff: string): FileDiff[] {
 	return sections;
 }
 
+export function parseDiffHunks(diff: string): FileHunks[] {
+	const files = parseFileDiffs(diff);
+	return files.map((file) => parseFileHunks(file));
+}
+
+export function parseFileHunks(fileDiff: FileDiff): FileHunks {
+	if (fileDiff.isBinary) {
+		return { filename: fileDiff.filename, isBinary: true, hunks: [] };
+	}
+
+	const lines = fileDiff.content.split("\n");
+	const hunks: DiffHunk[] = [];
+	let current: DiffHunk | null = null;
+	let buffer: string[] = [];
+	let index = 0;
+
+	for (const line of lines) {
+		if (line.startsWith("@@")) {
+			if (current) {
+				current.content = buffer.join("\n");
+				hunks.push(current);
+			}
+			const headerData = parseHunkHeader(line);
+			current = {
+				index,
+				header: line,
+				oldStart: headerData.oldStart,
+				oldLines: headerData.oldLines,
+				newStart: headerData.newStart,
+				newLines: headerData.newLines,
+				content: "",
+			};
+			buffer = [line];
+			index += 1;
+			continue;
+		}
+		if (current) {
+			buffer.push(line);
+		}
+	}
+
+	if (current) {
+		current.content = buffer.join("\n");
+		hunks.push(current);
+	}
+
+	return {
+		filename: fileDiff.filename,
+		isBinary: fileDiff.isBinary,
+		hunks,
+	};
+}
+
 function extractPathFromRename(pathPart: string): string {
 	const braceStart = pathPart.indexOf("{");
 	if (braceStart !== -1) {
@@ -70,4 +123,26 @@ function extractPathFromRename(pathPart: string): string {
 	}
 
 	return pathPart.trim();
+}
+
+function parseHunkHeader(line: string): {
+	oldStart: number;
+	oldLines: number;
+	newStart: number;
+	newLines: number;
+} {
+	const match = line.match(/@@\s-([0-9]+)(?:,([0-9]+))?\s\+([0-9]+)(?:,([0-9]+))?\s@@/);
+	if (!match) {
+		return { oldStart: 0, oldLines: 0, newStart: 0, newLines: 0 };
+	}
+	const oldStart = Number.parseInt(match[1] ?? "0", 10);
+	const oldLines = Number.parseInt(match[2] ?? "1", 10);
+	const newStart = Number.parseInt(match[3] ?? "0", 10);
+	const newLines = Number.parseInt(match[4] ?? "1", 10);
+	return {
+		oldStart: Number.isNaN(oldStart) ? 0 : oldStart,
+		oldLines: Number.isNaN(oldLines) ? 0 : oldLines,
+		newStart: Number.isNaN(newStart) ? 0 : newStart,
+		newLines: Number.isNaN(newLines) ? 0 : newLines,
+	};
 }

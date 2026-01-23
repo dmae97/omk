@@ -31,6 +31,8 @@ export interface CommitCommandArgs {
 	dryRun: boolean;
 	/** Skip changelog updates */
 	noChangelog: boolean;
+	/** Use legacy deterministic pipeline */
+	legacy?: boolean;
 	/** Additional user context for the model */
 	context?: string;
 	/** Override the model selection */
@@ -73,6 +75,22 @@ export interface FileDiff {
 	additions: number;
 	deletions: number;
 	isBinary: boolean;
+}
+
+export interface DiffHunk {
+	index: number;
+	header: string;
+	oldStart: number;
+	oldLines: number;
+	newStart: number;
+	newLines: number;
+	content: string;
+}
+
+export interface FileHunks {
+	filename: string;
+	isBinary: boolean;
+	hunks: DiffHunk[];
 }
 
 export interface ChangelogBoundary {
