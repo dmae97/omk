@@ -57,15 +57,33 @@ export async function runCommitAgentSession(input: CommitAgentInput): Promise<Co
 	let toolCalls = 0;
 	let messageCount = 0;
 	let isThinking = false;
+	let thinkingLineActive = false;
 	const toolArgsById = new Map<string, { name: string; args?: Record<string, unknown> }>();
+	const writeThinkingLine = (text: string) => {
+		const line = chalk.dim(`… ${text}`);
+		process.stdout.write(`\r\x1b[2K${line}`);
+		thinkingLineActive = true;
+	};
+	const clearThinkingLine = () => {
+		if (!thinkingLineActive) return;
+		process.stdout.write("\r\x1b[2K");
+		thinkingLineActive = false;
+	};
 	const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
 		switch (event.type) {
 			case "message_start":
 				if (event.message.role === "assistant") {
 					isThinking = true;
-					writeStdout(chalk.dim("… thinking"));
+					thinkingLineActive = false;
 				}
 				break;
+			case "message_update": {
+				if (event.message?.role !== "assistant") break;
+				const preview = extractMessagePreview(event.message?.content ?? []);
+				if (!preview) break;
+				writeThinkingLine(preview);
+				break;
+			}
 			case "tool_execution_start":
 				toolCalls += 1;
 				toolArgsById.set(event.toolCallId, { name: event.toolName, args: event.args });
@@ -75,16 +93,24 @@ export async function runCommitAgentSession(input: CommitAgentInput): Promise<Co
 				if (role === "assistant") {
 					messageCount += 1;
 					isThinking = false;
-					writeStdout(`● agent message ${messageCount}`);
+					clearThinkingLine();
+					const preview = extractMessagePreview(event.message?.content ?? []);
+					const label = preview ? `● ${preview}` : `● agent message ${messageCount}`;
+					writeStdout(label);
 				}
 				break;
 			}
 			case "tool_execution_end": {
 				const stored = toolArgsById.get(event.toolCallId) ?? { name: event.toolName };
 				toolArgsById.delete(event.toolCallId);
-				const toolLabel = formatToolLabel(stored.name, stored.args);
+				clearThinkingLine();
+				const toolLabel = formatToolLabel(stored.name);
 				const symbol = event.isError ? "" : "";
 				writeStdout(`${symbol} ${toolLabel}`);
+				const argsText = formatToolArgs(stored.args);
+				if (argsText) {
+					writeStdout(formatToolArgsBlock(argsText));
+				}
 				break;
 			}
 			case "agent_end":
@@ -112,32 +138,66 @@ function writeStdout(message: string): void {
 	process.stdout.write(`${message}\n`);
 }
 
-function formatToolLabel(toolName: string, args?: Record<string, unknown>): string {
+function extractMessagePreview(content: Array<{ type: string; text?: string }>): string | null {
+	const textBlocks = content
+		.filter((block) => block.type === "text" && typeof block.text === "string")
+		.map((block) => block.text?.trim())
+		.filter((value): value is string => Boolean(value));
+	if (textBlocks.length === 0) return null;
+	const combined = textBlocks.join(" ").replace(/\s+/g, " ").trim();
+	return truncateToolArg(combined);
+}
+
+function formatToolLabel(toolName: string): string {
 	const displayName = toolName
 		.split(/[_-]/)
 		.map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
 		.join("");
-	if (!args) return displayName;
-	const argValue = extractToolArgument(args);
-	if (!argValue) return displayName;
-	return `${displayName}(${argValue})`;
+	return displayName;
 }
 
-function extractToolArgument(args: Record<string, unknown>): string | null {
-	const candidates = ["path", "file", "pattern", "query", "url", "command"];
-	for (const key of candidates) {
+function formatToolArgs(args?: Record<string, unknown>): string | null {
+	if (!args || Object.keys(args).length === 0) return null;
+	const textParts: string[] = [];
+	const pushIf = (key: string, label = key) => {
 		const value = args[key];
 		if (typeof value === "string" && value.trim()) {
-			return truncateToolArg(value);
+			textParts.push(`${label}: ${value.trim()}`);
 		}
-	}
+	};
+	pushIf("summary");
+	pushIf("type");
+	pushIf("scope");
+	pushIf("file");
+	pushIf("path");
+	pushIf("pattern");
+	pushIf("query");
+	pushIf("url");
+	pushIf("command");
 	const files = args.files;
 	if (Array.isArray(files) && files.length > 0) {
-		const first = typeof files[0] === "string" ? files[0] : String(files[0]);
-		const suffix = files.length > 1 ? ` +${files.length - 1}` : "";
-		return truncateToolArg(`${first}${suffix}`);
+		const list = files.map((file) => String(file));
+		textParts.push(`files: ${list.join(", ")}`);
 	}
-	return null;
+	const hunks = args.hunks;
+	if (Array.isArray(hunks) && hunks.length > 0) {
+		textParts.push(`hunks: ${hunks.join(", ")}`);
+	}
+	if (textParts.length > 0) {
+		return textParts.join("\n");
+	}
+	try {
+		return JSON.stringify(args, null, 2);
+	} catch {
+		return String(args);
+	}
+}
+
+function formatToolArgsBlock(text: string): string {
+	const lines = text.split("\n");
+	return lines
+		.map((line, index) => (index === 0 ? `  ⎿ ${line}` : `    ${line}`))
+		.join("\n");
 }
 
 function truncateToolArg(value: string): string {
