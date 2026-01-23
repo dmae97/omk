@@ -499,7 +499,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		}
 
 		this.stop();
-		process.exit(0);
+		await postmortem.quit(0);
 	}
 
 	async checkShutdownRequested(): Promise<void> {

@@ -18,6 +18,14 @@
 
 ### Changed
 
+- Updated Python environment warming to use await instead of void for proper error handling
+- Updated interactive mode shutdown to use postmortem.quit instead of process.exit
+- Updated bash tool documentation to clarify specialized tool usage
+- Updated task tool documentation to escape placeholder syntax in examples
+- Updated Python environment warming to use await instead of void for proper error handling
+- Updated interactive mode shutdown to use postmortem.quit instead of process.exit
+- Updated bash tool documentation to clarify specialized tool usage
+- Updated task tool documentation to escape placeholder syntax in examples
 - Updated all tools to use structured metadata instead of inline notices for truncation, limits, and diagnostics
 - Replaced manual error formatting with ToolError.render() and standardized error handling
 - Enhanced bash and python executors to save full output as artifacts when truncated
@@ -48,6 +56,8 @@
 - Fixed inconsistent error formatting across tools by standardizing on ToolError types
 - Fixed timeout parameter handling to auto-convert milliseconds to seconds and clamp to reasonable ranges
 - Fixed whitespace formatting in json-query.ts comment
+- Fixed interactive shutdown to await postmortem cleanup so Python kernel gateways are terminated
+- Fixed shared Python gateway reuse across working directories by initializing kernel cwd and env per kernel
 
 ## [7.0.0] - 2026-01-21
 ### Added

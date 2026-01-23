@@ -17,10 +17,10 @@ Returns stdout, stderr, and exit code from command execution.
 </output>
 
 <critical>
-Do NOT use Bash for file operations—specialized tools exist:
+Do NOT use Bash for these operations—specialized tools exist:
 - Reading file contents → Read tool
 - Searching file contents → Grep tool
 - Finding files by pattern → Find tool
-- Editing files → Edit tool
+- Content-addressed edits → Edit tool
 - Writing new files → Write tool
 </critical>

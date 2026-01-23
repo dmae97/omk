@@ -32,12 +32,12 @@ Agents with `output="structured"` have a fixed schema enforced via frontmatter; 
 
 <parameters>
 - `agent`: Agent type to use for all tasks
-- `context`: Template with `{{placeholders}}` for multi-task. Each placeholder is filled from task args. `{{id}}` and `{{description}}` are always available.
+- `context`: Template with `\{{placeholders}}` for multi-task. Each placeholder is filled from task args. `\{{id}}` and `\{{description}}` are always available.
 - `isolated`: (optional) Run each task in its own git worktree and return patches; patches are applied only if all apply cleanly.
 - `tasks`: Array of `{id, description, args}` - tasks to run in parallel
 		- `id`: Short CamelCase identifier (max 32 chars, e.g., "SessionStore", "LspRefactor")
 		- `description`: Short human-readable description of what the task does
-		- `args`: Object with keys matching `{{placeholders}}` in context (always include this, even if empty)
+		- `args`: Object with keys matching `\{{placeholders}}` in context (always include this, even if empty)
 - `output`: (optional) JTD schema for structured subagent output (used by the complete tool)
 </parameters>
 
@@ -65,7 +65,7 @@ assistant: I'll execute the refactoring plan.
 assistant: Uses the Task tool:
 {
   "agent": "task",
-  "context": "Refactoring the auth module into separate concerns.\n\nPlan:\n1. AuthProvider - Extract React context and provider from src/auth/index.tsx\n2. AuthApi - Extract API calls to src/auth/api.ts, use existing fetchJson helper\n3. AuthTypes - Move types to types.ts, re-export from index\n\nConstraints:\n- Preserve all existing exports from src/auth/index.tsx\n- Use project's fetchJson (src/utils/http.ts), don't use raw fetch\n- No new dependencies\n\nTask: {{step}}\n\nFiles: {{files}}",
+  "context": "Refactoring the auth module into separate concerns.\n\nPlan:\n1. AuthProvider - Extract React context and provider from src/auth/index.tsx\n2. AuthApi - Extract API calls to src/auth/api.ts, use existing fetchJson helper\n3. AuthTypes - Move types to types.ts, re-export from index\n\nConstraints:\n- Preserve all existing exports from src/auth/index.tsx\n- Use project's fetchJson (src/utils/http.ts), don't use raw fetch\n- No new dependencies\n\nTask: \{{step}}\n\nFiles: \{{files}}",
   "output": {
     "properties": {
       "summary": { "type": "string" },
