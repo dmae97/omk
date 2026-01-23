@@ -23,6 +23,7 @@ import { nanoid } from "nanoid";
 import { renderPromptTemplate } from "$c/config/prompt-templates";
 import type { Theme } from "$c/modes/theme/theme";
 import taskDescriptionTemplate from "$c/prompts/tools/task.md" with { type: "text" };
+import { AgentOutputManager } from "$c/task/output-manager";
 import { formatDuration } from "$c/tools/render-utils";
 import type { ToolSession } from "..";
 import { discoverAgents, getAgent } from "./discovery";
@@ -101,6 +102,7 @@ function addUsageTotals(target: Usage, usage: Partial<Usage>): void {
 export { loadBundledAgents as BUNDLED_AGENTS } from "./agents";
 export { discoverCommands, expandCommand, getCommand } from "./commands";
 export { discoverAgents, getAgent } from "./discovery";
+export { AgentOutputManager } from "./output-manager";
 export type { AgentDefinition, AgentProgress, SingleResult, TaskParams, TaskToolDetails } from "./types";
 export { taskSchema } from "./types";
 
@@ -367,7 +369,14 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 			}
 
 			// Build full prompts with context prepended
-			const tasksWithContext = tasks.map((t) => renderTemplate(context, t));
+			// Allocate unique IDs across the session to prevent artifact collisions
+			const outputManager =
+				this.session.agentOutputManager ?? new AgentOutputManager(this.session.getArtifactsDir ?? (() => null));
+			const uniqueIds = await outputManager.allocateBatch(tasks.map((t) => t.id));
+			const tasksWithUniqueIds = tasks.map((t, i) => ({ ...t, id: uniqueIds[i] }));
+
+			// Build full prompts with context prepended
+			const tasksWithContext = tasksWithUniqueIds.map((t) => renderTemplate(context, t));
 
 			// Initialize progress for all tasks
 			for (let i = 0; i < tasksWithContext.length; i++) {

@@ -84,6 +84,7 @@ import {
 	buildSystemPrompt as buildSystemPromptInternal,
 	loadProjectContextFiles as loadContextFilesInternal,
 } from "./system-prompt";
+import { AgentOutputManager } from "./task/output-manager";
 import { ToolContextStore } from "./tools/context";
 import { getGeminiImageTools } from "./tools/gemini-image";
 import {
@@ -731,6 +732,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	);
 	toolSession.internalRouter = internalRouter;
 	toolSession.getArtifactsDir = getArtifactsDir;
+	toolSession.agentOutputManager = new AgentOutputManager(getArtifactsDir);
 
 	// Create and wrap tools with meta notice formatting
 	const rawBuiltinTools = await createTools(toolSession, options.toolNames);

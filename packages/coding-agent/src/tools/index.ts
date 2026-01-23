@@ -69,6 +69,7 @@ import { LspTool } from "$c/lsp/index";
 import { EditTool } from "$c/patch";
 import type { ArtifactManager } from "$c/session/artifacts";
 import { TaskTool } from "$c/task/index";
+import type { AgentOutputManager } from "$c/task/output-manager";
 import type { EventBus } from "$c/utils/event-bus";
 import { WebSearchTool } from "$c/web/search/index";
 import { AskTool } from "./ask";
@@ -125,6 +126,8 @@ export interface ToolSession {
 	mcpManager?: import("../mcp/manager").MCPManager;
 	/** Internal URL router for agent:// and skill:// URLs */
 	internalRouter?: InternalUrlRouter;
+	/** Agent output manager for unique agent:// IDs across task invocations */
+	agentOutputManager?: AgentOutputManager;
 	/** Settings manager for passing to subagents (avoids SQLite access in workers) */
 	settingsManager?: { serialize: () => import("$c/config/settings-manager").Settings };
 	/** Settings manager (optional) */

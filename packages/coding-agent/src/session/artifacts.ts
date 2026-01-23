@@ -18,6 +18,7 @@ export class ArtifactManager {
 	#nextId = 0;
 	readonly #dir: string;
 	#dirCreated = false;
+	#initialized = false;
 
 	/**
 	 * @param sessionFile Path to the session .jsonl file
@@ -40,6 +41,28 @@ export class ArtifactManager {
 			await mkdir(this.#dir, { recursive: true });
 			this.#dirCreated = true;
 		}
+		if (!this.#initialized) {
+			await this.#scanExistingIds();
+			this.#initialized = true;
+		}
+	}
+
+	/**
+	 * Scan existing artifact files to find the next available ID.
+	 * This ensures we don't overwrite artifacts when resuming a session.
+	 */
+	async #scanExistingIds(): Promise<void> {
+		const files = await this.listFiles();
+		let maxId = -1;
+		for (const file of files) {
+			// Files are named: {id}.{toolType}.log
+			const match = file.match(/^(\d+)\..*\.log$/);
+			if (match) {
+				const id = parseInt(match[1], 10);
+				if (id > maxId) maxId = id;
+			}
+		}
+		this.#nextId = maxId + 1;
 	}
 
 	/**
@@ -58,7 +81,7 @@ export class ArtifactManager {
 	async allocatePath(toolType: string): Promise<{ id: string; path: string }> {
 		await this.#ensureDir();
 		const id = String(this.allocateId());
-		const filename = `${id}.${toolType}.txt`;
+		const filename = `${id}.${toolType}.log`;
 		return { id, path: join(this.#dir, filename) };
 	}
 
