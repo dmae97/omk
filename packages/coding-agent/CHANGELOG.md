@@ -19,6 +19,7 @@
 - Added git hunk inspection tools for fine-grained diff analysis in commit generation
 - Added commit message validation with filler word and meta phrase detection
 - Added automatic unicode normalization in commit summaries
+- Added real-time progress output to agentic commit mode showing thinking status, tool calls, and completion summary
 
 ### Changed
 - Changed changelog diff truncation limit to be configurable via settings
