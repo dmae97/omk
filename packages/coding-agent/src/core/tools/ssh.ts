@@ -8,13 +8,14 @@ import { loadCapability } from "../../discovery/index";
 import type { Theme } from "../../modes/interactive/theme/theme";
 import sshDescriptionBase from "../../prompts/tools/ssh.md" with { type: "text" };
 import type { RenderResultOptions } from "../custom-tools/types";
+import { type OutputMeta, outputMeta } from "../output-meta";
 import { renderPromptTemplate } from "../prompt-templates";
 import type { SSHHostInfo } from "../ssh/connection-manager";
 import { ensureHostInfo, getHostInfoForHost } from "../ssh/connection-manager";
 import { executeSSH } from "../ssh/ssh-executor";
 import type { ToolSession } from "./index";
 import { ToolUIKit } from "./render-utils";
-import { formatTailTruncationNotice, type TruncationResult, truncateTail } from "./truncate";
+import { type TruncationResult, truncateTail } from "./truncate";
 
 const sshSchema = Type.Object({
 	host: Type.String({ description: "Host name from ssh.json or .ssh.json" }),
@@ -26,6 +27,7 @@ const sshSchema = Type.Object({
 export interface SSHToolDetails {
 	truncation?: TruncationResult;
 	fullOutputPath?: string;
+	meta?: OutputMeta;
 }
 
 function formatHostEntry(host: SSHHost): string {
@@ -191,27 +193,23 @@ export class SshTool implements AgentTool<typeof sshSchema, SSHToolDetails> {
 		}
 
 		const truncation = truncateTail(result.output);
-		let outputText = truncation.content || "(no output)";
+		const outputText = truncation.content || "(no output)";
 
-		let details: SSHToolDetails | undefined;
+		const details: SSHToolDetails = {};
 
 		if (truncation.truncated) {
-			details = {
-				truncation,
-				fullOutputPath: result.fullOutputPath,
-			};
-			outputText += formatTailTruncationNotice(truncation, {
-				fullOutputPath: result.fullOutputPath,
-				originalContent: result.output,
-			});
+			details.truncation = truncation;
+			details.fullOutputPath = result.fullOutputPath;
+
+			const startLine = truncation.totalLines - truncation.outputLines + 1;
+			details.meta = outputMeta().truncation(truncation, { direction: "tail", startLine }).get();
 		}
 
 		if (result.exitCode !== 0 && result.exitCode !== undefined) {
-			outputText += `\n\nCommand exited with code ${result.exitCode}`;
-			throw new Error(outputText);
+			throw new Error(`${outputText}\n\nCommand exited with code ${result.exitCode}`);
 		}
 
-		return { content: [{ type: "text", text: outputText }], details: details ?? {} };
+		return { content: [{ type: "text", text: outputText }], details };
 	}
 }
 

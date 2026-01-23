@@ -12,12 +12,14 @@ import { type Theme, theme } from "../../modes/interactive/theme/theme";
 import fetchDescription from "../../prompts/tools/fetch.md" with { type: "text" };
 import { ensureTool } from "../../utils/tools-manager";
 import type { RenderResultOptions } from "../custom-tools/types";
+import { type OutputMeta, outputMeta } from "../output-meta";
 import { renderPromptTemplate } from "../prompt-templates";
+import { ToolAbortError } from "../tool-errors";
 import type { ToolSession } from "./index";
 import { formatExpandHint } from "./render-utils";
 import { specialHandlers } from "./web-scrapers/index";
 import type { RenderResult } from "./web-scrapers/types";
-import { finalizeOutput, loadPage } from "./web-scrapers/types";
+import { finalizeOutput, loadPage, MAX_OUTPUT_CHARS } from "./web-scrapers/types";
 import { convertWithMarkitdown, fetchBinary } from "./web-scrapers/utils";
 
 // =============================================================================
@@ -528,7 +530,7 @@ function formatJson(content: string): string {
 async function handleSpecialUrls(url: string, timeout: number, signal?: AbortSignal): Promise<RenderResult | null> {
 	for (const handler of specialHandlers) {
 		if (signal?.aborted) {
-			throw new Error("Operation aborted");
+			throw new ToolAbortError();
 		}
 		const result = await handler(url, timeout, signal);
 		if (result) return result;
@@ -552,7 +554,7 @@ async function renderUrl(
 	const notes: string[] = [];
 	const fetchedAt = new Date().toISOString();
 	if (signal?.aborted) {
-		throw new Error("Operation aborted");
+		throw new ToolAbortError();
 	}
 
 	// Handle internal protocol URLs (e.g., pi-internal://) - return empty
@@ -582,7 +584,7 @@ async function renderUrl(
 	// Step 2: Fetch page
 	const response = await loadPage(url, { timeout, signal });
 	if (signal?.aborted) {
-		throw new Error("Operation aborted");
+		throw new ToolAbortError();
 	}
 	if (!response.ok) {
 		return {
@@ -783,7 +785,7 @@ async function renderUrl(
 		}
 
 		if (signal?.aborted) {
-			throw new Error("Operation aborted");
+			throw new ToolAbortError();
 		}
 
 		// Step 6: Render HTML with lynx or html2text
@@ -880,6 +882,7 @@ export interface FetchToolDetails {
 	method: string;
 	truncated: boolean;
 	notes: string[];
+	meta?: OutputMeta;
 }
 
 export class FetchTool implements AgentTool<typeof fetchSchema, FetchToolDetails> {
@@ -908,7 +911,7 @@ export class FetchTool implements AgentTool<typeof fetchSchema, FetchToolDetails
 		const effectiveTimeout = Math.min(Math.max(timeoutSec, 1), 45);
 
 		if (signal?.aborted) {
-			throw new Error("Operation aborted");
+			throw new ToolAbortError();
 		}
 
 		const result = await renderUrl(url, effectiveTimeout, raw, signal);
@@ -918,14 +921,35 @@ export class FetchTool implements AgentTool<typeof fetchSchema, FetchToolDetails
 		output += `URL: ${result.finalUrl}\n`;
 		output += `Content-Type: ${result.contentType}\n`;
 		output += `Method: ${result.method}\n`;
-		if (result.truncated) {
-			output += `Warning: Output was truncated\n`;
-		}
 		if (result.notes.length > 0) {
 			output += `Notes: ${result.notes.join("; ")}\n`;
 		}
 		output += `\n---\n\n`;
 		output += result.content;
+
+		// Build OutputMeta using fluent builder
+		const metaBuilder = outputMeta().sourceUrl(result.finalUrl);
+		if (result.truncated) {
+			const outputBytes = result.content.length;
+			const outputLines = result.content.split("\n").length;
+			// Create a synthetic TruncationResult for the builder
+			metaBuilder.truncation(
+				{
+					truncated: true,
+					truncatedBy: "bytes",
+					totalLines: outputLines + 1,
+					totalBytes: MAX_OUTPUT_CHARS + 1,
+					outputLines,
+					outputBytes,
+					content: result.content,
+					lastLinePartial: false,
+					firstLineExceedsLimit: false,
+					maxLines: Number.MAX_SAFE_INTEGER,
+					maxBytes: MAX_OUTPUT_CHARS,
+				},
+				{ direction: "tail" },
+			);
+		}
 
 		const details: FetchToolDetails = {
 			url: result.url,
@@ -934,6 +958,7 @@ export class FetchTool implements AgentTool<typeof fetchSchema, FetchToolDetails
 			method: result.method,
 			truncated: result.truncated,
 			notes: result.notes,
+			meta: metaBuilder.get(),
 		};
 
 		return {

@@ -5,6 +5,8 @@ import { untilAborted } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import { getLanguageFromPath, type Theme } from "../../modes/interactive/theme/theme";
 import type { RenderResultOptions } from "../custom-tools/types";
+import { type OutputMeta, outputMeta } from "../output-meta";
+import { throwIfAborted } from "../tool-errors";
 import type { ToolSession } from "./index";
 import { resolveToCwd } from "./path-utils";
 import {
@@ -19,7 +21,7 @@ import {
 	formatTruncationSuffix,
 	PREVIEW_LIMITS,
 } from "./render-utils";
-import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateHead } from "./truncate";
+import { type TruncationResult, truncateHead } from "./truncate";
 
 const lsSchema = Type.Object({
 	path: Type.Optional(Type.String({ description: "Directory to list (default: current directory)" })),
@@ -51,6 +53,7 @@ export interface LsToolDetails {
 	truncation?: TruncationResult;
 	truncationReasons?: Array<"entryLimit" | "byteLimit">;
 	entryLimitReached?: number;
+	meta?: OutputMeta;
 }
 
 /** Default operations using Bun APIs */
@@ -121,7 +124,7 @@ export class LsTool implements AgentTool<typeof lsSchema, LsToolDetails> {
 			let fileCount = 0;
 
 			for (const entry of entries) {
-				signal?.throwIfAborted();
+				throwIfAborted(signal);
 				if (results.length >= effectiveLimit) {
 					entryLimitReached = true;
 					break;
@@ -160,7 +163,7 @@ export class LsTool implements AgentTool<typeof lsSchema, LsToolDetails> {
 			const rawOutput = results.join("\n");
 			const truncation = truncateHead(rawOutput, { maxLines: Number.MAX_SAFE_INTEGER });
 
-			let output = truncation.content;
+			const output = truncation.content;
 			const details: LsToolDetails = {
 				entries: results,
 				dirCount,
@@ -168,17 +171,12 @@ export class LsTool implements AgentTool<typeof lsSchema, LsToolDetails> {
 			};
 			const truncationReasons: Array<"entryLimit" | "byteLimit"> = [];
 
-			// Build notices
-			const notices: string[] = [];
-
 			if (entryLimitReached) {
-				notices.push(`${effectiveLimit} entries limit reached. Use limit=${effectiveLimit * 2} for more`);
 				details.entryLimitReached = effectiveLimit;
 				truncationReasons.push("entryLimit");
 			}
 
 			if (truncation.truncated) {
-				notices.push(`${formatSize(DEFAULT_MAX_BYTES)} limit reached`);
 				details.truncation = truncation;
 				truncationReasons.push("byteLimit");
 			}
@@ -187,9 +185,10 @@ export class LsTool implements AgentTool<typeof lsSchema, LsToolDetails> {
 				details.truncationReasons = truncationReasons;
 			}
 
-			if (notices.length > 0) {
-				output += `\n\n[${notices.join(". ")}]`;
-			}
+			details.meta = outputMeta()
+				.resultLimit(entryLimitReached ? effectiveLimit : 0)
+				.truncation(truncation, { direction: "head" })
+				.get();
 
 			return {
 				content: [{ type: "text", text: output }],

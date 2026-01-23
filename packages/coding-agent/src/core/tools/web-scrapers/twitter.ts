@@ -1,4 +1,5 @@
 import { parse as parseHtml } from "node-html-parser";
+import { ToolAbortError } from "../../tool-errors";
 import type { RenderResult, SpecialHandler } from "./types";
 import { finalizeOutput, loadPage } from "./types";
 
@@ -73,12 +74,12 @@ export const handleTwitter: SpecialHandler = async (
 		}
 	} catch {
 		if (signal?.aborted) {
-			return null;
+			throw new ToolAbortError();
 		}
 	}
 
 	if (signal?.aborted) {
-		return null;
+		throw new ToolAbortError();
 	}
 
 	// X.com blocks all bots - return a helpful error instead of falling through

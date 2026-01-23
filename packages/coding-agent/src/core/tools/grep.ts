@@ -10,19 +10,14 @@ import { getLanguageFromPath, type Theme } from "../../modes/interactive/theme/t
 import grepDescription from "../../prompts/tools/grep.md" with { type: "text" };
 import { ensureTool } from "../../utils/tools-manager";
 import type { RenderResultOptions } from "../custom-tools/types";
+import { type OutputMeta, outputMeta } from "../output-meta";
 import { renderPromptTemplate } from "../prompt-templates";
+import { ToolAbortError } from "../tool-errors";
 import { untilAborted } from "../utils";
 import type { ToolSession } from "./index";
 import { resolveToCwd } from "./path-utils";
 import { PREVIEW_LIMITS, ToolUIKit } from "./render-utils";
-import {
-	DEFAULT_MAX_BYTES,
-	DEFAULT_MAX_COLUMN,
-	formatSize,
-	type TruncationResult,
-	truncateHead,
-	truncateLine,
-} from "./truncate";
+import { DEFAULT_MAX_COLUMN, type TruncationResult, truncateHead, truncateLine } from "./truncate";
 
 const grepSchema = Type.Object({
 	pattern: Type.String({ description: "Search pattern (regex)" }),
@@ -51,6 +46,7 @@ export interface GrepToolDetails {
 	matchLimitReached?: number;
 	headLimitReached?: number;
 	linesTruncated?: boolean;
+	meta?: OutputMeta;
 	// Fields for TUI rendering
 	scopePath?: string;
 	matchCount?: number;
@@ -488,7 +484,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 				}
 			} catch (err) {
 				if (err instanceof ptree.Exception && err.aborted) {
-					throw new Error("Operation aborted");
+					throw new ToolAbortError();
 				}
 				// Stream may close early if we killed due to limit - that's ok
 				if (!killedDueToLimit) {
@@ -502,7 +498,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 			} catch (err) {
 				if (err instanceof ptree.Exception) {
 					if (err.aborted) {
-						throw new Error("Operation aborted");
+						throw new ToolAbortError();
 					}
 					// Non-zero exit is ok if we killed due to limit or exit code 1 (no matches)
 					if (!killedDueToLimit && err.exitCode !== 1) {
@@ -541,7 +537,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 			const rawOutput = processedLines.join("\n");
 			const truncation = truncateHead(rawOutput, { maxLines: Number.MAX_SAFE_INTEGER });
 
-			let output = truncation.content;
+			const output = truncation.content;
 			const truncatedByHeadLimit = hasHeadLimit && processedLines.length < outputLines.length;
 			const details: GrepToolDetails = {
 				scopePath,
@@ -557,29 +553,17 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 				headLimitReached: truncatedByHeadLimit ? head_limit : undefined,
 			};
 
-			// Build notices
-			const notices: string[] = [];
+			// Build OutputMeta using fluent builder
+			details.meta = outputMeta()
+				.matchLimit(matchLimitReached ? effectiveLimit : 0)
+				.truncation(truncation, { direction: "head" })
+				.columnTruncated(linesTruncated ? DEFAULT_MAX_COLUMN : 0)
+				.get();
 
-			if (matchLimitReached) {
-				notices.push(
-					`${effectiveLimit} matches limit reached. Use limit=${effectiveLimit * 2} for more, or refine pattern`,
-				);
-				details.matchLimitReached = effectiveLimit;
-			}
-
-			if (truncation.truncated) {
-				notices.push(`${formatSize(DEFAULT_MAX_BYTES)} limit reached`);
-				details.truncation = truncation;
-			}
-
-			if (linesTruncated) {
-				notices.push(`Some lines truncated to ${DEFAULT_MAX_COLUMN} chars. Use read tool to see full lines`);
-				details.linesTruncated = true;
-			}
-
-			if (notices.length > 0) {
-				output += `\n\n[${notices.join(". ")}]`;
-			}
+			// Keep TUI compatibility fields
+			if (matchLimitReached) details.matchLimitReached = effectiveLimit;
+			if (truncation.truncated) details.truncation = truncation;
+			if (linesTruncated) details.linesTruncated = true;
 
 			return {
 				content: [{ type: "text", text: output }],

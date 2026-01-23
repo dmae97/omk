@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import { logger } from "@oh-my-pi/pi-utils";
+import { ToolAbortError, throwIfAborted } from "../../tool-errors";
 import { applyWorkspaceEdit } from "./edits";
 import { getLspmuxCommand, isLspmuxSupported } from "./lspmux";
 import type {
@@ -547,7 +548,7 @@ export async function syncContent(
 ): Promise<void> {
 	const uri = fileToUri(filePath);
 	const lockKey = `${client.name}:${uri}`;
-	signal?.throwIfAborted();
+	throwIfAborted(signal);
 
 	const existingLock = fileOperationLocks.get(lockKey);
 	if (existingLock) {
@@ -563,7 +564,7 @@ export async function syncContent(
 		if (!info) {
 			// Open file with provided content instead of reading from disk
 			const languageId = detectLanguageId(filePath);
-			signal?.throwIfAborted();
+			throwIfAborted(signal);
 			await sendNotification(client, "textDocument/didOpen", {
 				textDocument: {
 					uri,
@@ -578,7 +579,7 @@ export async function syncContent(
 		}
 
 		const version = ++info.version;
-		signal?.throwIfAborted();
+		throwIfAborted(signal);
 		await sendNotification(client, "textDocument/didChange", {
 			textDocument: { uri, version },
 			contentChanges: [{ text: content }],
@@ -603,7 +604,7 @@ export async function notifySaved(client: LspClient, filePath: string, signal?: 
 	const info = client.openFiles.get(uri);
 	if (!info) return; // File not open, nothing to notify
 
-	signal?.throwIfAborted();
+	throwIfAborted(signal);
 	await sendNotification(client, "textDocument/didSave", {
 		textDocument: { uri },
 	});
@@ -698,7 +699,7 @@ export async function sendRequest(
 	// Atomically increment and capture request ID
 	const id = ++client.requestId;
 	if (signal?.aborted) {
-		const reason = signal.reason instanceof Error ? signal.reason : new Error("Operation aborted");
+		const reason = signal.reason instanceof Error ? signal.reason : new ToolAbortError();
 		return Promise.reject(reason);
 	}
 
@@ -724,7 +725,7 @@ export async function sendRequest(
 		}
 		if (timeout) clearTimeout(timeout);
 		cleanup();
-		const reason = signal?.reason instanceof Error ? signal.reason : new Error("Operation aborted");
+		const reason = signal?.reason instanceof Error ? signal.reason : new ToolAbortError();
 		reject(reason);
 	};
 

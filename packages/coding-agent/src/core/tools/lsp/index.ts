@@ -7,6 +7,7 @@ import type { BunFile } from "bun";
 import { type Theme, theme } from "../../../modes/interactive/theme/theme";
 import lspDescription from "../../../prompts/tools/lsp.md" with { type: "text" };
 import { renderPromptTemplate } from "../../prompt-templates";
+import { throwIfAborted } from "../../tool-errors";
 import type { ToolSession } from "../index";
 import { resolveToCwd } from "../path-utils";
 import {
@@ -152,15 +153,15 @@ async function syncFileContent(
 	servers: Array<[string, ServerConfig]>,
 	signal?: AbortSignal,
 ): Promise<void> {
-	signal?.throwIfAborted();
+	throwIfAborted(signal);
 	await Promise.allSettled(
 		servers.map(async ([_serverName, serverConfig]) => {
-			signal?.throwIfAborted();
+			throwIfAborted(signal);
 			if (serverConfig.createClient) {
 				return;
 			}
 			const client = await getOrCreateClient(serverConfig, cwd);
-			signal?.throwIfAborted();
+			throwIfAborted(signal);
 			await syncContent(client, absolutePath, content, signal);
 		}),
 	);
@@ -180,10 +181,10 @@ async function notifyFileSaved(
 	servers: Array<[string, ServerConfig]>,
 	signal?: AbortSignal,
 ): Promise<void> {
-	signal?.throwIfAborted();
+	throwIfAborted(signal);
 	await Promise.allSettled(
 		servers.map(async ([_serverName, serverConfig]) => {
-			signal?.throwIfAborted();
+			throwIfAborted(signal);
 			if (serverConfig.createClient) {
 				return;
 			}
@@ -342,7 +343,7 @@ async function waitForDiagnostics(
 ): Promise<Diagnostic[]> {
 	const start = Date.now();
 	while (Date.now() - start < timeoutMs) {
-		signal?.throwIfAborted();
+		throwIfAborted(signal);
 		const diagnostics = client.diagnostics.get(uri);
 		const versionOk = minVersion === undefined || client.diagnosticsVersion > minVersion;
 		if (diagnostics !== undefined && versionOk) return diagnostics;
@@ -521,7 +522,7 @@ async function getDiagnosticsForFile(
 	// Wait for diagnostics from all servers in parallel
 	const results = await Promise.allSettled(
 		servers.map(async ([serverName, serverConfig]) => {
-			signal?.throwIfAborted();
+			throwIfAborted(signal);
 			// Use custom linter client if configured
 			if (serverConfig.createClient) {
 				const linterClient = getLinterClient(serverName, serverConfig, cwd);
@@ -531,7 +532,7 @@ async function getDiagnosticsForFile(
 
 			// Default: use LSP
 			const client = await getOrCreateClient(serverConfig, cwd);
-			signal?.throwIfAborted();
+			throwIfAborted(signal);
 			// Content already synced + didSave sent, wait for fresh diagnostics
 			const minVersion = minVersions?.get(serverName);
 			const diagnostics = await waitForDiagnostics(client, uri, 3000, signal, minVersion);
@@ -621,7 +622,7 @@ async function formatContent(
 
 	for (const [serverName, serverConfig] of servers) {
 		try {
-			signal?.throwIfAborted();
+			throwIfAborted(signal);
 			// Use custom linter client if configured
 			if (serverConfig.createClient) {
 				const linterClient = getLinterClient(serverName, serverConfig, cwd);
@@ -630,7 +631,7 @@ async function formatContent(
 
 			// Default: use LSP
 			const client = await getOrCreateClient(serverConfig, cwd);
-			signal?.throwIfAborted();
+			throwIfAborted(signal);
 
 			const caps = client.serverCapabilities;
 			if (!caps?.documentFormattingProvider) {

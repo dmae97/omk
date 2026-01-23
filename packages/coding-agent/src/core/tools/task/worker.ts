@@ -27,6 +27,7 @@ import { renderPromptTemplate } from "../../prompt-templates";
 import { createAgentSession, discoverAuthStorage, discoverModels } from "../../sdk";
 import { SessionManager } from "../../session-manager";
 import { SettingsManager } from "../../settings-manager";
+import { ToolAbortError } from "../../tool-errors";
 import { type LspToolDetails, lspSchema } from "../lsp/types";
 import { getPythonToolDescription, type PythonToolDetails, type PythonToolParams, pythonSchema } from "../python";
 import type {
@@ -100,7 +101,7 @@ function callMCPToolViaParent(
 	}>();
 	const callId = generateMCPCallId();
 	if (signal?.aborted) {
-		reject(new Error("Aborted"));
+		reject(new ToolAbortError());
 		return promise;
 	}
 
@@ -119,7 +120,7 @@ function callMCPToolViaParent(
 			"abort",
 			() => {
 				cleanup();
-				reject(new Error("Aborted"));
+				reject(new ToolAbortError());
 			},
 			{ once: true },
 		);
@@ -157,7 +158,7 @@ function callPythonToolViaParent(
 	const { promise, resolve, reject } = Promise.withResolvers<PythonToolCallResponse["result"]>();
 	const callId = generatePythonCallId();
 	if (signal?.aborted) {
-		reject(new Error("Aborted"));
+		reject(new ToolAbortError());
 		return promise;
 	}
 
@@ -187,7 +188,7 @@ function callPythonToolViaParent(
 			() => {
 				cleanup();
 				sendCancel("Aborted");
-				reject(new Error("Aborted"));
+				reject(new ToolAbortError());
 			},
 			{ once: true },
 		);
@@ -223,7 +224,7 @@ function callLspToolViaParent(
 	const { promise, resolve, reject } = Promise.withResolvers<LspToolCallResponse["result"]>();
 	const callId = generateLspCallId();
 	if (signal?.aborted) {
-		reject(new Error("Aborted"));
+		reject(new ToolAbortError());
 		return promise;
 	}
 
@@ -247,7 +248,7 @@ function callLspToolViaParent(
 			"abort",
 			() => {
 				cleanup();
-				reject(new Error("Aborted"));
+				reject(new ToolAbortError());
 			},
 			{ once: true },
 		);
@@ -533,7 +534,7 @@ async function runTask(runState: RunState, payload: SubagentWorkerStartPayload):
 		if (signal.aborted) {
 			aborted = true;
 			exitCode = 1;
-			throw new Error("Aborted");
+			throw new ToolAbortError();
 		}
 	};
 

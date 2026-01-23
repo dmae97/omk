@@ -1,21 +1,27 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added artifact storage system for truncated tool outputs with artifact:// URL protocol
+- Added structured output metadata system with fluent OutputMetaBuilder for consistent notices
+- Added standardized tool error types (ToolError, MultiError, ToolAbortError) for better error handling
 - Added internal URL routing system with protocol handlers:
-  - `agent://<id>` - access agent output artifacts
-  - `agent://<id>/<path>` and `agent://<id>?q=<query>` - JSON extraction from agent outputs
-  - `skill://<name>` and `skill://<name>/<path>` - read skill files and relative paths
-  - `rule://<name>` - read rule content
-  - URL resolution includes filesystem path in output for bash/python interop
+- `agent://<id>` - access agent output artifacts
+- `agent://<id>/<path>` and `agent://<id>?q=<query>` - JSON extraction from agent outputs
+- `skill://<name>` and `skill://<name>/<path>` - read skill files and relative paths
+- `rule://<name>` - read rule content
+- URL resolution includes filesystem path in output for bash/python interop
 - Added fetch tool for URL content retrieval with enhanced processing capabilities
 - Added `isolated` option to task tool for git worktree execution with automatic patch generation and application
 - Added format-prompts script to standardize prompt file formatting
 
 ### Changed
 
+- Updated all tools to use structured metadata instead of inline notices for truncation, limits, and diagnostics
+- Replaced manual error formatting with ToolError.render() and standardized error handling
+- Enhanced bash and python executors to save full output as artifacts when truncated
+- Improved abort signal handling across all tools with consistent ToolAbortError
 - Renamed task parameter from `vars` to `args` throughout task tool interface and updated template rendering to support built-in `{{id}}` and `{{description}}` placeholders
 - Simplified todo-write tool by removing active_form parameter, using single content field for task descriptions
 - Updated system prompt structure with `<important>` and `<avoid>` tags, clearer critical sections, and standardized whitespace handling
@@ -39,6 +45,7 @@
 
 ### Fixed
 
+- Fixed inconsistent error formatting across tools by standardizing on ToolError types
 - Fixed timeout parameter handling to auto-convert milliseconds to seconds and clamp to reasonable ranges
 - Fixed whitespace formatting in json-query.ts comment
 

@@ -1,3 +1,5 @@
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import {
 	checkPythonKernelAvailability,
@@ -29,6 +31,8 @@ export interface PythonExecutorOptions {
 	useSharedGateway?: boolean;
 	/** Session file path for accessing task outputs */
 	sessionFile?: string;
+	/** Artifacts directory for $ARTIFACTS env var and artifact storage */
+	artifactsDir?: string;
 }
 
 export interface PythonKernelExecutor {
@@ -46,6 +50,8 @@ export interface PythonResult {
 	truncated: boolean;
 	/** Path to temp file containing full output (if output exceeded truncation threshold) */
 	fullOutputPath?: string;
+	/** Artifact ID if full output was saved to artifact storage */
+	artifactId?: string;
 	/** Rich display outputs captured from display_data/execute_result */
 	displayOutputs: KernelDisplayOutput[];
 	/** Whether stdin was requested */
@@ -124,8 +130,15 @@ async function createKernelSession(
 	cwd: string,
 	useSharedGateway?: boolean,
 	sessionFile?: string,
+	artifactsDir?: string,
 ): Promise<KernelSession> {
-	const env = sessionFile ? { OMP_SESSION_FILE: sessionFile } : undefined;
+	const env: Record<string, string> | undefined =
+		sessionFile || artifactsDir
+			? {
+					...(sessionFile ? { OMP_SESSION_FILE: sessionFile } : {}),
+					...(artifactsDir ? { ARTIFACTS: artifactsDir } : {}),
+				}
+			: undefined;
 	const kernel = await PythonKernel.start({ cwd, useSharedGateway, env });
 	const session: KernelSession = {
 		id: sessionId,
@@ -152,6 +165,7 @@ async function restartKernelSession(
 	cwd: string,
 	useSharedGateway?: boolean,
 	sessionFile?: string,
+	artifactsDir?: string,
 ): Promise<void> {
 	session.restartCount += 1;
 	if (session.restartCount > 1) {
@@ -162,7 +176,13 @@ async function restartKernelSession(
 	} catch (err) {
 		logger.warn("Failed to shutdown crashed kernel", { error: err instanceof Error ? err.message : String(err) });
 	}
-	const env = sessionFile ? { OMP_SESSION_FILE: sessionFile } : undefined;
+	const env: Record<string, string> | undefined =
+		sessionFile || artifactsDir
+			? {
+					...(sessionFile ? { OMP_SESSION_FILE: sessionFile } : {}),
+					...(artifactsDir ? { ARTIFACTS: artifactsDir } : {}),
+				}
+			: undefined;
 	const kernel = await PythonKernel.start({ cwd, useSharedGateway, env });
 	session.kernel = kernel;
 	session.dead = false;
@@ -187,17 +207,18 @@ async function withKernelSession<T>(
 	handler: (kernel: PythonKernel) => Promise<T>,
 	useSharedGateway?: boolean,
 	sessionFile?: string,
+	artifactsDir?: string,
 ): Promise<T> {
 	let session = kernelSessions.get(sessionId);
 	if (!session) {
-		session = await createKernelSession(sessionId, cwd, useSharedGateway, sessionFile);
+		session = await createKernelSession(sessionId, cwd, useSharedGateway, sessionFile, artifactsDir);
 		kernelSessions.set(sessionId, session);
 	}
 
 	const run = async (): Promise<T> => {
 		session!.lastUsedAt = Date.now();
 		if (session!.dead || !session!.kernel.isAlive()) {
-			await restartKernelSession(session!, cwd, useSharedGateway, sessionFile);
+			await restartKernelSession(session!, cwd, useSharedGateway, sessionFile, artifactsDir);
 		}
 		try {
 			const result = await handler(session!.kernel);
@@ -207,7 +228,7 @@ async function withKernelSession<T>(
 			if (!session!.dead && session!.kernel.isAlive()) {
 				throw err;
 			}
-			await restartKernelSession(session!, cwd, useSharedGateway, sessionFile);
+			await restartKernelSession(session!, cwd, useSharedGateway, sessionFile, artifactsDir);
 			const result = await handler(session!.kernel);
 			session!.restartCount = 0;
 			return result;
@@ -227,7 +248,18 @@ async function executeWithKernel(
 	code: string,
 	options: PythonExecutorOptions | undefined,
 ): Promise<PythonResult> {
-	const sink = new OutputSink({ onChunk: options?.onChunk });
+	let artifactIdCounter = 0;
+	const saveArtifact = options?.artifactsDir
+		? async (content: string): Promise<string> => {
+				const id = String(artifactIdCounter++);
+				await mkdir(options.artifactsDir!, { recursive: true });
+				const filename = `${id}.python.txt`;
+				await Bun.write(join(options.artifactsDir!, filename), content);
+				return id;
+			}
+		: undefined;
+
+	const sink = new OutputSink({ onChunk: options?.onChunk, saveArtifact });
 	const displayOutputs: KernelDisplayOutput[] = [];
 
 	try {
@@ -291,9 +323,16 @@ export async function executePython(code: string, options?: PythonExecutorOption
 	const kernelMode = options?.kernelMode ?? "session";
 	const useSharedGateway = options?.useSharedGateway;
 	const sessionFile = options?.sessionFile;
+	const artifactsDir = options?.artifactsDir;
 
 	if (kernelMode === "per-call") {
-		const env = sessionFile ? { OMP_SESSION_FILE: sessionFile } : undefined;
+		const env: Record<string, string> | undefined =
+			sessionFile || artifactsDir
+				? {
+						...(sessionFile ? { OMP_SESSION_FILE: sessionFile } : {}),
+						...(artifactsDir ? { ARTIFACTS: artifactsDir } : {}),
+					}
+				: undefined;
 		const kernel = await PythonKernel.start({ cwd, useSharedGateway, env });
 		try {
 			return await executeWithKernel(kernel, code, options);
@@ -315,5 +354,6 @@ export async function executePython(code: string, options?: PythonExecutorOption
 		async (kernel) => executeWithKernel(kernel, code, options),
 		useSharedGateway,
 		sessionFile,
+		artifactsDir,
 	);
 }

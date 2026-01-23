@@ -105,6 +105,8 @@ export interface ToolSession {
 	requireCompleteTool?: boolean;
 	/** Get session file */
 	getSessionFile: () => string | null;
+	/** Get artifacts directory for artifact:// URLs and $ARTIFACTS env var */
+	getArtifactsDir?: () => string | null;
 	/** Get session spawns */
 	getSessionSpawns: () => string | null;
 	/** Get resolved model string if explicitly set for this session */

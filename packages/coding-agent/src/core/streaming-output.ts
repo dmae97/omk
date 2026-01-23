@@ -7,14 +7,25 @@ import { DEFAULT_MAX_BYTES } from "./tools/truncate";
 export interface OutputResult {
 	output: string;
 	truncated: boolean;
+	/** Filesystem path to full output (for RPC backwards compatibility) */
 	fullOutputPath?: string;
+	/** Artifact ID for internal URL access (artifact://<id>) */
+	artifactId?: string;
 }
+
+/**
+ * Function to save content as an artifact.
+ * Returns the artifact ID.
+ */
+export type ArtifactSaver = (content: string) => Promise<string>;
 
 export interface OutputSinkOptions {
 	allocateFilePath?: () => string;
 	spillThreshold?: number;
 	maxColumn?: number;
 	onChunk?: (chunk: string) => void;
+	/** Function to save full output as artifact when truncated */
+	saveArtifact?: ArtifactSaver;
 }
 
 function defaultFilePathAllocator(): string {
@@ -37,17 +48,20 @@ export class OutputSink {
 	readonly #allocateFilePath: () => string;
 	readonly #spillThreshold: number;
 	readonly #onChunk?: (chunk: string) => void;
+	readonly #saveArtifact?: ArtifactSaver;
 
 	constructor(options?: OutputSinkOptions) {
 		const {
 			allocateFilePath = defaultFilePathAllocator,
 			spillThreshold = DEFAULT_MAX_BYTES,
 			onChunk,
+			saveArtifact,
 		} = options ?? {};
 
 		this.#allocateFilePath = allocateFilePath;
 		this.#spillThreshold = spillThreshold;
 		this.#onChunk = onChunk;
+		this.#saveArtifact = saveArtifact;
 	}
 
 	async #pushSanitized(data: string): Promise<void> {
@@ -107,7 +121,24 @@ export class OutputSink {
 
 		if (this.#file) {
 			await this.#file.sink.end();
-			return { output: `${noticeLine}...${this.#buffer}`, truncated: true, fullOutputPath: this.#file.path };
+
+			// Save to artifact if saver is provided
+			let artifactId: string | undefined;
+			if (this.#saveArtifact) {
+				try {
+					const fullContent = await Bun.file(this.#file.path).text();
+					artifactId = await this.#saveArtifact(fullContent);
+				} catch {
+					// Artifact save failed, continue without it
+				}
+			}
+
+			return {
+				output: `${noticeLine}...${this.#buffer}`,
+				truncated: true,
+				fullOutputPath: this.#file.path,
+				artifactId,
+			};
 		} else {
 			return { output: `${noticeLine}${this.#buffer}`, truncated: false };
 		}

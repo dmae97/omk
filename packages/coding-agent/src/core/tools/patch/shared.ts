@@ -8,6 +8,7 @@ import { Text } from "@oh-my-pi/pi-tui";
 import { renderDiff as renderDiffColored } from "../../../modes/interactive/components/diff";
 import { getLanguageFromPath, type Theme } from "../../../modes/interactive/theme/theme";
 import type { RenderResultOptions } from "../../custom-tools/types";
+import type { OutputMeta } from "../../output-meta";
 import type { FileDiagnosticsResult } from "../lsp/index";
 import {
 	formatExpandHint,
@@ -55,6 +56,8 @@ export interface EditToolDetails {
 	op?: Operation;
 	/** New path after move/rename (patch mode only) */
 	rename?: string;
+	/** Structured output metadata */
+	meta?: OutputMeta;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

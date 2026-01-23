@@ -7,13 +7,17 @@
 import { cspawn, Exception, ptree } from "@oh-my-pi/pi-utils";
 import { getShellConfig } from "../utils/shell";
 import { getOrCreateSnapshot, getSnapshotSourceCommand } from "../utils/shell-snapshot";
-import { OutputSink } from "./streaming-output";
+import { type ArtifactSaver, OutputSink } from "./streaming-output";
 
 export interface BashExecutorOptions {
 	cwd?: string;
 	timeout?: number;
 	onChunk?: (chunk: string) => void;
 	signal?: AbortSignal;
+	/** Additional environment variables to inject */
+	env?: Record<string, string>;
+	/** Function to save full output as artifact when truncated */
+	saveArtifact?: ArtifactSaver;
 }
 
 export interface BashResult {
@@ -22,10 +26,14 @@ export interface BashResult {
 	cancelled: boolean;
 	truncated: boolean;
 	fullOutputPath?: string;
+	artifactId?: string;
 }
 
 export async function executeBash(command: string, options?: BashExecutorOptions): Promise<BashResult> {
 	const { shell, args, env, prefix } = await getShellConfig();
+
+	// Merge additional env vars if provided
+	const finalEnv = options?.env ? { ...env, ...options.env } : env;
 
 	const snapshotPath = await getOrCreateSnapshot(shell, env);
 	const snapshotPrefix = getSnapshotSourceCommand(snapshotPath);
@@ -33,11 +41,11 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 	const prefixedCommand = prefix ? `${prefix} ${command}` : command;
 	const finalCommand = `${snapshotPrefix}${prefixedCommand}`;
 
-	const sink = new OutputSink({ onChunk: options?.onChunk });
+	const sink = new OutputSink({ onChunk: options?.onChunk, saveArtifact: options?.saveArtifact });
 
 	const child = cspawn([shell, ...args, finalCommand], {
 		cwd: options?.cwd,
-		env,
+		env: finalEnv,
 		signal: options?.signal,
 		timeout: options?.timeout,
 	});

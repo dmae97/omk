@@ -14,6 +14,7 @@ import { StringEnum } from "@oh-my-pi/pi-ai";
 import { Type } from "@sinclair/typebox";
 import patchDescription from "../../../prompts/tools/patch.md" with { type: "text" };
 import replaceDescription from "../../../prompts/tools/replace.md" with { type: "text" };
+import { outputMeta } from "../../output-meta";
 import { renderPromptTemplate } from "../../prompt-templates";
 import type { ToolSession } from "../index";
 import {
@@ -325,10 +326,10 @@ export class EditTool implements AgentTool<TInput> {
 				const flushedDiagnostics = await flushLspWritethroughBatch(batchRequest.id, this.session.cwd, signal);
 				diagnostics ??= flushedDiagnostics;
 			}
-			if (diagnostics?.messages?.length) {
-				resultText += `\n\nLSP Diagnostics (${diagnostics.summary}):\n`;
-				resultText += diagnostics.messages.map((d) => `  ${d}`).join("\n");
-			}
+
+			const meta = outputMeta()
+				.diagnostics(diagnostics?.summary ?? "", diagnostics?.messages ?? [])
+				.get();
 
 			return {
 				content: [{ type: "text", text: resultText }],
@@ -338,6 +339,7 @@ export class EditTool implements AgentTool<TInput> {
 					diagnostics,
 					op,
 					rename: effRename,
+					meta,
 				},
 				$normative: normative,
 			};
@@ -409,19 +411,18 @@ export class EditTool implements AgentTool<TInput> {
 		const diagnostics = await this.writethrough(absolutePath, finalContent, signal, file, batchRequest);
 		const diffResult = generateDiffString(normalizedContent, result.content);
 
-		let resultText =
+		const resultText =
 			result.count > 1
 				? `Successfully replaced ${result.count} occurrences in ${path}.`
 				: `Successfully replaced text in ${path}.`;
 
-		if (diagnostics?.messages?.length) {
-			resultText += `\n\nLSP Diagnostics (${diagnostics.summary}):\n`;
-			resultText += diagnostics.messages.map((d) => `  ${d}`).join("\n");
-		}
+		const meta = outputMeta()
+			.diagnostics(diagnostics?.summary ?? "", diagnostics?.messages ?? [])
+			.get();
 
 		return {
 			content: [{ type: "text", text: resultText }],
-			details: { diff: diffResult.diff, firstChangedLine: diffResult.firstChangedLine, diagnostics },
+			details: { diff: diffResult.diff, firstChangedLine: diffResult.firstChangedLine, diagnostics, meta },
 		};
 	}
 }

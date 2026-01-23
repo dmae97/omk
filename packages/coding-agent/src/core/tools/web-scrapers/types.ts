@@ -2,6 +2,8 @@
  * Shared types and utilities for web-fetch handlers
  */
 
+import { ToolAbortError } from "../../tool-errors";
+
 export interface RenderResult {
 	url: string;
 	finalUrl: string;
@@ -109,7 +111,7 @@ export async function loadPage(url: string, options: LoadPageOptions = {}): Prom
 
 	for (let attempt = 0; attempt < USER_AGENTS.length; attempt++) {
 		if (signal?.aborted) {
-			return { content: "", contentType: "", finalUrl: url, ok: false };
+			throw new ToolAbortError();
 		}
 
 		const userAgent = USER_AGENTS[attempt];
@@ -170,7 +172,7 @@ export async function loadPage(url: string, options: LoadPageOptions = {}): Prom
 			return { content, contentType, finalUrl, ok: true, status: response.status };
 		} catch {
 			if (signal?.aborted) {
-				return { content: "", contentType: "", finalUrl: url, ok: false };
+				throw new ToolAbortError();
 			}
 			if (attempt === USER_AGENTS.length - 1) {
 				return { content: "", contentType: "", finalUrl: url, ok: false };

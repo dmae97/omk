@@ -8,13 +8,15 @@ import { truncateToVisualLines } from "../../modes/interactive/components/visual
 import { highlightCode, type Theme } from "../../modes/interactive/theme/theme";
 import pythonDescription from "../../prompts/tools/python.md" with { type: "text" };
 import type { RenderResultOptions } from "../custom-tools/types";
+import { type OutputMeta, outputMeta } from "../output-meta";
 import { renderPromptTemplate } from "../prompt-templates";
 import { executePython, getPreludeDocs, type PythonExecutorOptions } from "../python-executor";
 import type { PreludeHelper, PythonStatusEvent } from "../python-kernel";
+import { ToolAbortError } from "../tool-errors";
 import type { ToolSession } from "./index";
 import { resolveToCwd } from "./path-utils";
 import { getTreeBranch, getTreeContinuePrefix, shortenPath, ToolUIKit, truncate } from "./render-utils";
-import { DEFAULT_MAX_BYTES, formatTailTruncationNotice, type TruncationResult, truncateTail } from "./truncate";
+import { DEFAULT_MAX_BYTES, type TruncationResult, truncateTail } from "./truncate";
 
 export const PYTHON_DEFAULT_PREVIEW_LINES = 10;
 
@@ -80,6 +82,8 @@ export interface PythonToolDetails {
 	/** Structured status events from prelude helpers */
 	statusEvents?: PythonStatusEvent[];
 	isError?: boolean;
+	/** Structured output metadata for notices */
+	meta?: OutputMeta;
 }
 
 function formatJsonScalar(value: unknown): string {
@@ -178,7 +182,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 
 		try {
 			if (signal?.aborted) {
-				throw new Error("Aborted");
+				throw new ToolAbortError();
 			}
 
 			const commandCwd = cwd ? resolveToCwd(cwd, this.session.cwd) : this.session.cwd;
@@ -208,6 +212,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 			}));
 			const cellOutputs: string[] = [];
 			let lastFullOutputPath: string | undefined;
+			let lastArtifactId: string | undefined;
 
 			const appendTail = (text: string) => {
 				if (!text) return;
@@ -258,6 +263,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 			};
 
 			const sessionFile = this.session.getSessionFile?.() ?? undefined;
+			const artifactsDir = this.session.getArtifactsDir?.() ?? undefined;
 			const sessionId = sessionFile ? `session:${sessionFile}:cwd:${commandCwd}` : `cwd:${commandCwd}`;
 			const baseExecutorOptions: Omit<PythonExecutorOptions, "reset"> = {
 				cwd: commandCwd,
@@ -267,6 +273,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 				kernelMode: this.session.settings?.getPythonKernelMode?.() ?? "session",
 				useSharedGateway: this.session.settings?.getPythonSharedGateway?.() ?? true,
 				sessionFile: sessionFile ?? undefined,
+				artifactsDir: artifactsDir ?? undefined,
 			};
 
 			for (let i = 0; i < cells.length; i++) {
@@ -305,6 +312,9 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 
 				if (result.fullOutputPath) {
 					lastFullOutputPath = result.fullOutputPath;
+				}
+				if (result.artifactId) {
+					lastArtifactId = result.artifactId;
 				}
 
 				const cellOutput = result.output.trim();
@@ -357,7 +367,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 
 			const combinedOutput = cellOutputs.join("\n\n");
 			const truncation = truncateTail(combinedOutput);
-			let outputText =
+			const outputText =
 				truncation.content || (jsonOutputs.length > 0 || images.length > 0 ? "(no text output)" : "(no output)");
 
 			const details: PythonToolDetails = {
@@ -370,11 +380,8 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 
 			if (truncation.truncated) {
 				details.truncation = truncation;
-				outputText += formatTailTruncationNotice(truncation, {
-					fullOutputPath: lastFullOutputPath,
-					originalContent: combinedOutput,
-				});
 			}
+			details.meta = outputMeta().truncation(truncation, { direction: "tail", artifactId: lastArtifactId }).get();
 
 			return { content: [{ type: "text", text: outputText }], details };
 		} finally {

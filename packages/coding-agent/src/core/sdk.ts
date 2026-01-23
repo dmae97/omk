@@ -60,11 +60,18 @@ import {
 	type ToolDefinition,
 	wrapRegisteredTools,
 } from "./extensions/index";
-import { AgentProtocolHandler, InternalUrlRouter, RuleProtocolHandler, SkillProtocolHandler } from "./internal-urls";
+import {
+	AgentProtocolHandler,
+	ArtifactProtocolHandler,
+	InternalUrlRouter,
+	RuleProtocolHandler,
+	SkillProtocolHandler,
+} from "./internal-urls";
 import { discoverAndLoadMCPTools, type MCPManager, type MCPToolsLoadResult } from "./mcp/index";
 import { convertToLlm } from "./messages";
 import { ModelRegistry } from "./model-registry";
 import { formatModelString, parseModelString } from "./model-resolver";
+import { wrapToolsWithMetaNotice } from "./output-meta";
 import { loadPromptTemplates as loadPromptTemplatesInternal, type PromptTemplate } from "./prompt-templates";
 import { disposeAllKernelSessions } from "./python-executor";
 import { SessionManager } from "./session-manager";
@@ -706,14 +713,12 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	// Initialize internal URL router for agent:// and skill:// URLs
 	const internalRouter = new InternalUrlRouter();
-	internalRouter.register(
-		new AgentProtocolHandler({
-			getArtifactsDir: () => {
-				const sessionFile = sessionManager.getSessionFile();
-				return sessionFile ? sessionFile.slice(0, -6) : null; // strip .jsonl
-			},
-		}),
-	);
+	const getArtifactsDir = () => {
+		const sessionFile = sessionManager.getSessionFile();
+		return sessionFile ? sessionFile.slice(0, -6) : null; // strip .jsonl
+	};
+	internalRouter.register(new AgentProtocolHandler({ getArtifactsDir }));
+	internalRouter.register(new ArtifactProtocolHandler({ getArtifactsDir }));
 	internalRouter.register(
 		new SkillProtocolHandler({
 			getSkills: () => skills,
@@ -725,8 +730,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		}),
 	);
 	toolSession.internalRouter = internalRouter;
+	toolSession.getArtifactsDir = getArtifactsDir;
 
-	const builtinTools = await createTools(toolSession, options.toolNames);
+	// Create and wrap tools with meta notice formatting
+	const rawBuiltinTools = await createTools(toolSession, options.toolNames);
+	const builtinTools = wrapToolsWithMetaNotice(rawBuiltinTools);
 	time("createAllTools");
 
 	// Discover MCP tools from .mcp.json files

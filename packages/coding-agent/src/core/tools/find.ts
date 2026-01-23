@@ -10,11 +10,14 @@ import { getLanguageFromPath, type Theme } from "../../modes/interactive/theme/t
 import findDescription from "../../prompts/tools/find.md" with { type: "text" };
 import { ensureTool } from "../../utils/tools-manager";
 import type { RenderResultOptions } from "../custom-tools/types";
+import { type OutputMeta, outputMeta } from "../output-meta";
 import { renderPromptTemplate } from "../prompt-templates";
+import { ToolAbortError, throwIfAborted } from "../tool-errors";
+
 import type { ToolSession } from "./index";
 import { resolveToCwd } from "./path-utils";
 import { PREVIEW_LIMITS, ToolUIKit } from "./render-utils";
-import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateHead } from "./truncate";
+import { type TruncationResult, truncateHead } from "./truncate";
 
 const findSchema = Type.Object({
 	pattern: Type.String({ description: "Glob pattern, e.g. '*.ts', '**/*.json'" }),
@@ -33,6 +36,7 @@ const DEFAULT_LIMIT = 1000;
 export interface FindToolDetails {
 	truncation?: TruncationResult;
 	resultLimitReached?: number;
+	meta?: OutputMeta;
 	// Fields for TUI rendering
 	scopePath?: string;
 	fileCount?: number;
@@ -66,7 +70,7 @@ export interface FdResult {
 /**
  * Run fd command and capture output.
  *
- * @throws Error with message "Operation aborted" if signal is aborted
+ * @throws ToolAbortError if signal is aborted
  */
 export async function runFd(fdPath: string, args: string[], signal?: AbortSignal): Promise<FdResult> {
 	const child = ptree.cspawn([fdPath, ...args], { signal });
@@ -76,7 +80,7 @@ export async function runFd(fdPath: string, args: string[], signal?: AbortSignal
 		stdout = await child.nothrow().text();
 	} catch (err) {
 		if (err instanceof ptree.Exception && err.aborted) {
-			throw new Error("Operation aborted");
+			throw new ToolAbortError();
 		}
 		throw err;
 	}
@@ -87,7 +91,7 @@ export async function runFd(fdPath: string, args: string[], signal?: AbortSignal
 	} catch (err) {
 		exitError = err;
 		if (err instanceof ptree.Exception && err.aborted) {
-			throw new Error("Operation aborted");
+			throw new ToolAbortError();
 		}
 	}
 
@@ -164,33 +168,21 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				const rawOutput = relativized.join("\n");
 				const truncation = truncateHead(rawOutput, { maxLines: Number.MAX_SAFE_INTEGER });
 
-				let resultOutput = truncation.content;
 				const details: FindToolDetails = {
 					scopePath,
 					fileCount: relativized.length,
 					files: relativized,
 					truncated: resultLimitReached || truncation.truncated,
+					resultLimitReached: resultLimitReached ? effectiveLimit : undefined,
+					truncation: truncation.truncated ? truncation : undefined,
+					meta: outputMeta()
+						.resultLimit(resultLimitReached ? effectiveLimit : 0)
+						.truncation(truncation, { direction: "head" })
+						.get(),
 				};
-				const notices: string[] = [];
-
-				if (resultLimitReached) {
-					notices.push(
-						`${effectiveLimit} results limit reached. Use limit=${effectiveLimit * 2} for more, or refine pattern`,
-					);
-					details.resultLimitReached = effectiveLimit;
-				}
-
-				if (truncation.truncated) {
-					notices.push(`${formatSize(DEFAULT_MAX_BYTES)} limit reached`);
-					details.truncation = truncation;
-				}
-
-				if (notices.length > 0) {
-					resultOutput += `\n\n[${notices.join(". ")}]`;
-				}
 
 				return {
-					content: [{ type: "text", text: resultOutput }],
+					content: [{ type: "text", text: truncation.content }],
 					details,
 				};
 			}
@@ -259,7 +251,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 					gitignoreFiles.add(file);
 				}
 			} catch (err) {
-				if (err instanceof Error && err.message === "Operation aborted") {
+				if (err instanceof ToolAbortError) {
 					throw err;
 				}
 				// Ignore other lookup errors
@@ -293,7 +285,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 			const mtimes: number[] = [];
 
 			for (const rawLine of lines) {
-				signal?.throwIfAborted();
+				throwIfAborted(signal);
 				const line = rawLine.replace(/\r$/, "").trim();
 				if (!line) {
 					continue;
@@ -338,32 +330,19 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 			const rawOutput = relativized.join("\n");
 			const truncation = truncateHead(rawOutput, { maxLines: Number.MAX_SAFE_INTEGER });
 
-			let resultOutput = truncation.content;
+			const resultOutput = truncation.content;
 			const details: FindToolDetails = {
 				scopePath,
 				fileCount: relativized.length,
 				files: relativized,
 				truncated: resultLimitReached || truncation.truncated,
+				resultLimitReached: resultLimitReached ? effectiveLimit : undefined,
+				truncation: truncation.truncated ? truncation : undefined,
+				meta: outputMeta()
+					.resultLimit(resultLimitReached ? effectiveLimit : 0)
+					.truncation(truncation, { direction: "head" })
+					.get(),
 			};
-
-			// Build notices
-			const notices: string[] = [];
-
-			if (resultLimitReached) {
-				notices.push(
-					`${effectiveLimit} results limit reached. Use limit=${effectiveLimit * 2} for more, or refine pattern`,
-				);
-				details.resultLimitReached = effectiveLimit;
-			}
-
-			if (truncation.truncated) {
-				notices.push(`${formatSize(DEFAULT_MAX_BYTES)} limit reached`);
-				details.truncation = truncation;
-			}
-
-			if (notices.length > 0) {
-				resultOutput += `\n\n[${notices.join(". ")}]`;
-			}
 
 			return {
 				content: [{ type: "text", text: resultOutput }],

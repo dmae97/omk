@@ -12,6 +12,7 @@ import { Type } from "@sinclair/typebox";
 import { getLanguageFromPath, highlightCode, type Theme } from "../../modes/interactive/theme/theme";
 import writeDescription from "../../prompts/tools/write.md" with { type: "text" };
 import type { RenderResultOptions } from "../custom-tools/types";
+import { type OutputMeta, outputMeta } from "../output-meta";
 import { renderPromptTemplate } from "../prompt-templates";
 import type { ToolSession } from "../sdk";
 import {
@@ -32,6 +33,7 @@ const writeSchema = Type.Object({
 /** Details returned by the write tool for TUI rendering */
 export interface WriteToolDetails {
 	diagnostics?: FileDiagnosticsResult;
+	meta?: OutputMeta;
 }
 
 const LSP_BATCH_TOOLS = new Set(["edit", "write"]);
@@ -94,7 +96,7 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 
 			const diagnostics = await this.writethrough(absolutePath, content, signal, undefined, batchRequest);
 
-			let resultText = `Successfully wrote ${content.length} bytes to ${path}`;
+			const resultText = `Successfully wrote ${content.length} bytes to ${path}`;
 			if (!diagnostics) {
 				return {
 					content: [{ type: "text", text: resultText }],
@@ -102,14 +104,14 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 				};
 			}
 
-			const messages = diagnostics?.messages;
-			if (messages && messages.length > 0) {
-				resultText += `\n\nLSP Diagnostics (${diagnostics.summary}):\n`;
-				resultText += messages.map((d) => `  ${d}`).join("\n");
-			}
 			return {
 				content: [{ type: "text", text: resultText }],
-				details: { diagnostics },
+				details: {
+					diagnostics,
+					meta: outputMeta()
+						.diagnostics(diagnostics.summary, diagnostics.messages ?? [])
+						.get(),
+				},
 			};
 		});
 	}

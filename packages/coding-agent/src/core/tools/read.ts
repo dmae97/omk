@@ -13,8 +13,10 @@ import { formatDimensionNote, resizeImage } from "../../utils/image-resize";
 import { detectSupportedImageMimeTypeFromFile } from "../../utils/mime";
 import { ensureTool } from "../../utils/tools-manager";
 import type { RenderResultOptions } from "../custom-tools/types";
+import { type OutputMeta, outputMeta } from "../output-meta";
 import { renderPromptTemplate } from "../prompt-templates";
 import type { ToolSession } from "../sdk";
+import { ToolAbortError, throwIfAborted } from "../tool-errors";
 import { runFd } from "./find";
 import { LsTool } from "./ls";
 import { resolveReadPath, resolveToCwd } from "./path-utils";
@@ -69,7 +71,7 @@ async function findExistingDirectory(startDir: string, signal?: AbortSignal): Pr
 	const root = path.parse(startDir).root;
 
 	while (true) {
-		signal?.throwIfAborted();
+		throwIfAborted(signal);
 		try {
 			const stat = await Bun.file(current).stat();
 			if (stat.isDirectory()) {
@@ -208,7 +210,7 @@ async function listCandidateFiles(
 			}
 		}
 	} catch (error) {
-		if (error instanceof Error && error.message === "Operation aborted") {
+		if (error instanceof ToolAbortError) {
 			throw error;
 		}
 		// Ignore gitignore scan errors.
@@ -283,7 +285,7 @@ async function findReadPathSuggestions(
 	const seen = new Set<string>();
 
 	for (const file of files) {
-		signal?.throwIfAborted();
+		throwIfAborted(signal);
 		const cleaned = file.replace(/\r$/, "").trim();
 		if (!cleaned) continue;
 
@@ -351,7 +353,7 @@ async function convertWithMarkitdown(
 		stdout = await child.nothrow().text();
 	} catch (err) {
 		if (err instanceof ptree.Exception && err.aborted) {
-			throw new Error("Operation aborted");
+			throw new ToolAbortError();
 		}
 		throw err;
 	}
@@ -373,6 +375,7 @@ const readSchema = Type.Object({
 export interface ReadToolDetails {
 	truncation?: TruncationResult;
 	redirectedTo?: "ls";
+	meta?: OutputMeta;
 }
 
 type ReadParams = { path: string; offset?: number; limit?: number; lines?: boolean };
@@ -502,18 +505,21 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 								{ type: "text", text: textNote },
 								{ type: "image", data: resized.data, mimeType: resized.mimeType },
 							];
+							details = { meta: outputMeta().sourcePath(absolutePath).get() };
 						} catch {
 							// Fall back to original image on resize failure
 							content = [
 								{ type: "text", text: `Read image file [${mimeType}]` },
 								{ type: "image", data: base64, mimeType },
 							];
+							details = { meta: outputMeta().sourcePath(absolutePath).get() };
 						}
 					} else {
 						content = [
 							{ type: "text", text: `Read image file [${mimeType}]` },
 							{ type: "image", data: base64, mimeType },
 						];
+						details = { meta: outputMeta().sourcePath(absolutePath).get() };
 					}
 				}
 			}
@@ -523,12 +529,15 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			if (result.ok) {
 				// Apply truncation to converted content
 				const truncation = truncateHead(result.content);
-				let outputText = truncation.content;
+				const outputText = truncation.content;
 
-				if (truncation.truncated) {
-					outputText += `\n\n[Document converted via markitdown. Output truncated to ${formatSize(DEFAULT_MAX_BYTES)}]`;
-					details = { truncation };
-				}
+				details = {
+					truncation,
+					meta: outputMeta()
+						.truncation(truncation, { direction: "head", startLine: 1 })
+						.sourcePath(absolutePath)
+						.get(),
+				};
 
 				content = [{ type: "text", text: outputText }];
 			} else if (result.error) {
@@ -602,38 +611,32 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				const firstLine = allLines[startLine] ?? "";
 				const firstLineBytes = Buffer.byteLength(firstLine, "utf-8");
 				const snippet = truncateStringToBytesFromStart(firstLine, DEFAULT_MAX_BYTES);
-				const shownSize = formatSize(snippet.bytes);
 
 				outputText = shouldAddLineNumbers ? prependLineNumbers(snippet.text, startLineDisplay) : snippet.text;
-				if (snippet.text.length > 0) {
-					outputText += `\n\n[Line ${startLineDisplay} is ${formatSize(
-						firstLineBytes,
-					)}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Showing first ${shownSize} of the line.]`;
-				} else {
+				if (snippet.text.length === 0) {
 					outputText = `[Line ${startLineDisplay} is ${formatSize(
 						firstLineBytes,
 					)}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Unable to display a valid UTF-8 snippet.]`;
 				}
-				details = { truncation };
+				details = {
+					truncation,
+					meta: outputMeta()
+						.truncation(truncation, { direction: "head", startLine: startLineDisplay, totalFileLines })
+						.sourcePath(absolutePath)
+						.get(),
+				};
 			} else if (truncation.truncated) {
-				// Truncation occurred - build actionable notice
-				const endLineDisplay = startLineDisplay + truncation.outputLines - 1;
-				const nextOffset = endLineDisplay + 1;
-
 				outputText = shouldAddLineNumbers
 					? prependLineNumbers(truncation.content, startLineDisplay)
 					: truncation.content;
-
-				if (truncation.truncatedBy === "lines") {
-					outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines}. Use offset=${nextOffset} to continue]`;
-				} else {
-					outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalFileLines} (${formatSize(
-						DEFAULT_MAX_BYTES,
-					)} limit). Use offset=${nextOffset} to continue]`;
-				}
-				details = { truncation };
+				details = {
+					truncation,
+					meta: outputMeta()
+						.truncation(truncation, { direction: "head", startLine: startLineDisplay, totalFileLines })
+						.sourcePath(absolutePath)
+						.get(),
+				};
 			} else if (userLimitedLines !== undefined && startLine + userLimitedLines < allLines.length) {
-				// User specified limit, there's more content, but no truncation
 				const remaining = allLines.length - (startLine + userLimitedLines);
 				const nextOffset = startLine + userLimitedLines + 1;
 
@@ -641,11 +644,13 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 					? prependLineNumbers(truncation.content, startLineDisplay)
 					: truncation.content;
 				outputText += `\n\n[${remaining} more lines in file. Use offset=${nextOffset} to continue]`;
+				details = { meta: outputMeta().sourcePath(absolutePath).get() };
 			} else {
 				// No truncation, no user limit exceeded
 				outputText = shouldAddLineNumbers
 					? prependLineNumbers(truncation.content, startLineDisplay)
 					: truncation.content;
+				details = { meta: outputMeta().sourcePath(absolutePath).get() };
 			}
 
 			content = [{ type: "text", text: outputText }];
@@ -699,6 +704,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			}
 			return {
 				content: [{ type: "text", text }],
+				details: { meta: outputMeta().sourceInternal(url).get() },
 			};
 		}
 
@@ -752,41 +758,37 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		};
 
 		let outputText: string;
-		let details: ReadToolDetails | undefined;
+		let details: ReadToolDetails;
 
 		if (truncation.firstLineExceedsLimit) {
 			const firstLine = allLines[startLine] ?? "";
 			const firstLineBytes = Buffer.byteLength(firstLine, "utf-8");
 			const snippet = truncateStringToBytesFromStart(firstLine, DEFAULT_MAX_BYTES);
-			const shownSize = formatSize(snippet.bytes);
 
 			outputText = shouldAddLineNumbers ? prependLineNumbers(snippet.text, startLineDisplay) : snippet.text;
-			if (snippet.text.length > 0) {
-				outputText += `\n\n[Line ${startLineDisplay} is ${formatSize(
-					firstLineBytes,
-				)}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Showing first ${shownSize} of the line.]`;
-			} else {
+			if (snippet.text.length === 0) {
 				outputText = `[Line ${startLineDisplay} is ${formatSize(
 					firstLineBytes,
 				)}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Unable to display a valid UTF-8 snippet.]`;
 			}
-			details = { truncation };
+			details = {
+				truncation,
+				meta: outputMeta()
+					.truncation(truncation, { direction: "head", startLine: startLineDisplay, totalFileLines: totalLines })
+					.sourceInternal(url)
+					.get(),
+			};
 		} else if (truncation.truncated) {
-			const endLineDisplay = startLineDisplay + truncation.outputLines - 1;
-			const nextOffset = endLineDisplay + 1;
-
 			outputText = shouldAddLineNumbers
 				? prependLineNumbers(truncation.content, startLineDisplay)
 				: truncation.content;
-
-			if (truncation.truncatedBy === "lines") {
-				outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalLines}. Use offset=${nextOffset} to continue]`;
-			} else {
-				outputText += `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${totalLines} (${formatSize(
-					DEFAULT_MAX_BYTES,
-				)} limit). Use offset=${nextOffset} to continue]`;
-			}
-			details = { truncation };
+			details = {
+				truncation,
+				meta: outputMeta()
+					.truncation(truncation, { direction: "head", startLine: startLineDisplay, totalFileLines: totalLines })
+					.sourceInternal(url)
+					.get(),
+			};
 		} else if (userLimitedLines !== undefined && startLine + userLimitedLines < allLines.length) {
 			const remaining = allLines.length - (startLine + userLimitedLines);
 			const nextOffset = startLine + userLimitedLines + 1;
@@ -795,10 +797,12 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				? prependLineNumbers(truncation.content, startLineDisplay)
 				: truncation.content;
 			outputText += `\n\n[${remaining} more lines in resource. Use offset=${nextOffset} to continue]`;
+			details = { meta: outputMeta().sourceInternal(url).get() };
 		} else {
 			outputText = shouldAddLineNumbers
 				? prependLineNumbers(truncation.content, startLineDisplay)
 				: truncation.content;
+			details = { meta: outputMeta().sourceInternal(url).get() };
 		}
 
 		// Append resolved path notice

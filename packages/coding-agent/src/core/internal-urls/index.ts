@@ -20,6 +20,7 @@
  */
 
 export { AgentProtocolHandler, type AgentProtocolOptions } from "./agent-protocol";
+export { ArtifactProtocolHandler, type ArtifactProtocolOptions } from "./artifact-protocol";
 export { applyQuery, parseQuery, pathToQuery } from "./json-query";
 export { InternalUrlRouter } from "./router";
 export { RuleProtocolHandler, type RuleProtocolOptions } from "./rule-protocol";

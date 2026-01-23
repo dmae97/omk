@@ -8,12 +8,14 @@ import type { Theme } from "../../modes/interactive/theme/theme";
 import bashDescription from "../../prompts/tools/bash.md" with { type: "text" };
 import { type BashExecutorOptions, executeBash } from "../bash-executor";
 import type { RenderResultOptions } from "../custom-tools/types";
+import { type OutputMeta, outputMeta } from "../output-meta";
 import { renderPromptTemplate } from "../prompt-templates";
+
 import { checkBashInterception, checkSimpleLsInterception } from "./bash-interceptor";
 import type { ToolSession } from "./index";
 import { resolveToCwd } from "./path-utils";
 import { ToolUIKit } from "./render-utils";
-import { formatTailTruncationNotice, type TruncationResult, truncateTail } from "./truncate";
+import { type TruncationResult, truncateTail } from "./truncate";
 
 export const BASH_DEFAULT_PREVIEW_LINES = 10;
 
@@ -27,6 +29,7 @@ export interface BashToolDetails {
 	truncation?: TruncationResult;
 	fullOutputPath?: string;
 	fullOutput?: string;
+	meta?: OutputMeta;
 }
 
 export interface BashToolOptions {}
@@ -91,10 +94,27 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 		// Track output for streaming updates
 		let currentOutput = "";
 
+		// Set up artifacts environment and save callback
+		const artifactsDir = this.session.getArtifactsDir?.();
+		const extraEnv = artifactsDir ? { ARTIFACTS: artifactsDir } : undefined;
+		let savedArtifactId: string | undefined;
+		const saveArtifact = artifactsDir
+			? async (content: string) => {
+					const { ArtifactManager } = await import("../artifacts");
+					const sessionFile = this.session.getSessionFile();
+					if (!sessionFile) throw new Error("No session file");
+					const manager = new ArtifactManager(sessionFile);
+					savedArtifactId = await manager.save(content, "bash");
+					return savedArtifactId;
+				}
+			: undefined;
+
 		const executorOptions: BashExecutorOptions = {
 			cwd: commandCwd,
 			timeout: timeoutMs,
 			signal,
+			env: extraEnv,
+			saveArtifact,
 			onChunk: (chunk) => {
 				currentOutput += chunk;
 				if (onUpdate) {
@@ -115,7 +135,7 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 
 		// Apply tail truncation for final output
 		const truncation = truncateTail(result.output);
-		let outputText = truncation.content || "(no output)";
+		const outputText = truncation.content || "(no output)";
 
 		let details: BashToolDetails | undefined;
 
@@ -124,16 +144,14 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 				truncation,
 				fullOutputPath: result.fullOutputPath,
 				fullOutput: currentOutput,
+				meta: outputMeta()
+					.truncation(truncation, { direction: "tail", artifactId: result.artifactId ?? savedArtifactId })
+					.get(),
 			};
-			outputText += formatTailTruncationNotice(truncation, {
-				fullOutputPath: result.fullOutputPath,
-				originalContent: result.output,
-			});
 		}
 
 		if (result.exitCode !== 0 && result.exitCode !== undefined) {
-			outputText += `\n\nCommand exited with code ${result.exitCode}`;
-			throw new Error(outputText);
+			throw new Error(`${outputText}\n\nCommand exited with code ${result.exitCode}`);
 		}
 
 		return { content: [{ type: "text", text: outputText }], details };

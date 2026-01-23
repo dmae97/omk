@@ -3,12 +3,12 @@ import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-	applyPatch,
 	ApplyPatchError,
-	parseDiffHunks,
+	applyPatch,
 	ParseError,
-	seekSequence,
 	type PatchInput,
+	parseDiffHunks,
+	seekSequence,
 } from "../../src/core/tools/patch";
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -11,6 +11,7 @@ export {
 	type PromptOptions,
 	type SessionStats,
 } from "./agent-session";
+export { ArtifactManager } from "./artifacts";
 export { type BashExecutorOptions, type BashResult, executeBash } from "./bash-executor";
 export type { CompactionResult } from "./compaction/index";
 export {
@@ -42,6 +43,18 @@ export {
 	type MCPTransport,
 } from "./mcp/index";
 export {
+	type DiagnosticMeta,
+	type LimitsMeta,
+	type OutputMeta,
+	OutputMetaBuilder,
+	outputMeta,
+	type SourceMeta,
+	type TruncationMeta,
+	type TruncationOptions,
+	wrapToolsWithMetaNotice,
+	wrapToolWithMetaNotice,
+} from "./output-meta";
+export {
 	buildRemoteCommand,
 	closeAllConnections,
 	closeConnection,
@@ -52,5 +65,7 @@ export {
 } from "./ssh/connection-manager";
 export { executeSSH, type SSHExecutorOptions, type SSHResult } from "./ssh/ssh-executor";
 export { hasSshfs, isMounted, mountRemote, unmountAll, unmountRemote } from "./ssh/sshfs-mount";
+export { type ArtifactSaver, type OutputResult, OutputSink, type OutputSinkOptions } from "./streaming-output";
+export { type ErrorEntry, MultiError, renderError, ToolError } from "./tool-errors";
 
 export * as utils from "./utils";
