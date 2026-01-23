@@ -57,7 +57,7 @@ describe("python tool schema", () => {
 
 		expect(schema.type).toBe("object");
 		expect(schema.properties.cells.type).toBe("array");
-		expect(schema.properties.timeout_ms.type).toBe("number");
+		expect(schema.properties.timeout.type).toBe("number");
 		expect(schema.properties.cwd.type).toBe("string");
 		expect(schema.properties.reset.type).toBe("boolean");
 		expect(schema.required).toEqual(["cells"]);

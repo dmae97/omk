@@ -11,7 +11,7 @@ describe("buildSystemPrompt", () => {
 			rules: [],
 		});
 
-		expect(prompt).toContain("python: Execute Python code via a session-backed IPython kernel");
+		expect(prompt).toContain("**python:** stateful scripting and REPL work");
 		expect(prompt).toContain("What python IS for");
 	});
 });

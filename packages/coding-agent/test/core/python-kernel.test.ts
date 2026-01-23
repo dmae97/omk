@@ -182,6 +182,7 @@ describe("PythonKernel (external gateway)", () => {
 		});
 		globalThis.fetch = fetchMock as unknown as typeof fetch;
 
+		let initSeen = false;
 		let preludeSeen = false;
 
 		const kernelPromise = PythonKernel.start({ cwd: "/" });
@@ -191,6 +192,12 @@ describe("PythonKernel (external gateway)", () => {
 		ws.setSendHandler((data) => {
 			const msg = typeof data === "string" ? (JSON.parse(data) as JupyterMessage) : decodeMessage(data);
 			const code = String(msg.content.code ?? "");
+			if (!initSeen) {
+				// First execution is kernel environment init
+				initSeen = true;
+				sendOkExecution(ws, msg.header.msg_id);
+				return;
+			}
 			if (!preludeSeen) {
 				expect(code).toBe(PYTHON_PRELUDE);
 				preludeSeen = true;
@@ -307,6 +314,7 @@ describe("PythonKernel (external gateway)", () => {
 		});
 		globalThis.fetch = fetchMock as unknown as typeof fetch;
 
+		let initSeen = false;
 		let preludeSeen = false;
 
 		const kernelPromise = PythonKernel.start({ cwd: "/" });
@@ -316,6 +324,11 @@ describe("PythonKernel (external gateway)", () => {
 		ws.setSendHandler((data) => {
 			const msg = typeof data === "string" ? (JSON.parse(data) as JupyterMessage) : decodeMessage(data);
 			const code = String(msg.content.code ?? "");
+			if (!initSeen) {
+				initSeen = true;
+				sendOkExecution(ws, msg.header.msg_id);
+				return;
+			}
 			if (!preludeSeen) {
 				expect(code).toBe(PYTHON_PRELUDE);
 				preludeSeen = true;
@@ -343,6 +356,7 @@ describe("PythonKernel (external gateway)", () => {
 		});
 		globalThis.fetch = fetchMock as unknown as typeof fetch;
 
+		let initSeen = false;
 		let preludeSeen = false;
 
 		const kernelPromise = PythonKernel.start({ cwd: "/" });
@@ -352,6 +366,11 @@ describe("PythonKernel (external gateway)", () => {
 		ws.setSendHandler((data) => {
 			const msg = typeof data === "string" ? (JSON.parse(data) as JupyterMessage) : decodeMessage(data);
 			const code = String(msg.content.code ?? "");
+			if (!initSeen) {
+				initSeen = true;
+				sendOkExecution(ws, msg.header.msg_id);
+				return;
+			}
 			if (!preludeSeen) {
 				expect(code).toBe(PYTHON_PRELUDE);
 				preludeSeen = true;
@@ -383,6 +402,7 @@ describe("PythonKernel (external gateway)", () => {
 		];
 		const payload = JSON.stringify(docs);
 
+		let initSeen = false;
 		let preludeSeen = false;
 
 		const kernelPromise = PythonKernel.start({ cwd: "/" });
@@ -392,6 +412,11 @@ describe("PythonKernel (external gateway)", () => {
 		ws.setSendHandler((data) => {
 			const msg = typeof data === "string" ? (JSON.parse(data) as JupyterMessage) : decodeMessage(data);
 			const code = String(msg.content.code ?? "");
+			if (!initSeen) {
+				initSeen = true;
+				sendOkExecution(ws, msg.header.msg_id);
+				return;
+			}
 			if (!preludeSeen) {
 				expect(code).toBe(PYTHON_PRELUDE);
 				preludeSeen = true;

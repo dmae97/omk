@@ -511,7 +511,7 @@ export class PythonKernel {
 
 		const externalConfig = getExternalGatewayConfig();
 		if (externalConfig) {
-			return PythonKernel.startWithExternalGateway(externalConfig, options.cwd);
+			return PythonKernel.startWithExternalGateway(externalConfig, options.cwd, options.env);
 		}
 
 		// Try shared gateway first (unless explicitly disabled)
@@ -519,7 +519,7 @@ export class PythonKernel {
 			try {
 				const sharedResult = await acquireSharedGateway(options.cwd);
 				if (sharedResult) {
-					return PythonKernel.startWithSharedGateway(sharedResult.url, options.cwd);
+					return PythonKernel.startWithSharedGateway(sharedResult.url, options.cwd, options.env);
 				}
 			} catch (err) {
 				logger.warn("Failed to acquire shared gateway, falling back to local", {
@@ -531,7 +531,11 @@ export class PythonKernel {
 		return PythonKernel.startWithLocalGateway(options);
 	}
 
-	private static async startWithExternalGateway(config: ExternalGatewayConfig, cwd: string): Promise<PythonKernel> {
+	private static async startWithExternalGateway(
+		config: ExternalGatewayConfig,
+		cwd: string,
+		env?: Record<string, string | undefined>,
+	): Promise<PythonKernel> {
 		const headers: Record<string, string> = { "Content-Type": "application/json" };
 		if (config.token) {
 			headers.Authorization = `token ${config.token}`;
@@ -554,6 +558,7 @@ export class PythonKernel {
 
 		try {
 			await kernel.connectWebSocket();
+			await kernel.initializeKernelEnvironment(cwd, env);
 			kernel.startHeartbeat();
 			const preludeResult = await kernel.execute(PYTHON_PRELUDE, { silent: true, storeHistory: false });
 			if (preludeResult.cancelled || preludeResult.status === "error") {
@@ -567,7 +572,11 @@ export class PythonKernel {
 		}
 	}
 
-	private static async startWithSharedGateway(gatewayUrl: string, cwd: string): Promise<PythonKernel> {
+	private static async startWithSharedGateway(
+		gatewayUrl: string,
+		cwd: string,
+		env?: Record<string, string | undefined>,
+	): Promise<PythonKernel> {
 		const createResponse = await fetch(`${gatewayUrl}/api/kernels`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -586,6 +595,7 @@ export class PythonKernel {
 
 		try {
 			await kernel.connectWebSocket();
+			await kernel.initializeKernelEnvironment(cwd, env);
 			kernel.startHeartbeat();
 			const preludeResult = await kernel.execute(PYTHON_PRELUDE, { silent: true, storeHistory: false });
 			if (preludeResult.cancelled || preludeResult.status === "error") {
@@ -702,6 +712,7 @@ export class PythonKernel {
 
 		try {
 			await kernel.connectWebSocket();
+			await kernel.initializeKernelEnvironment(options.cwd, options.env);
 			kernel.startHeartbeat();
 			const preludeResult = await kernel.execute(PYTHON_PRELUDE, { silent: true, storeHistory: false });
 			if (preludeResult.cancelled || preludeResult.status === "error") {
@@ -800,6 +811,23 @@ export class PythonKernel {
 		};
 
 		return promise;
+	}
+
+	private async initializeKernelEnvironment(cwd: string, env?: Record<string, string | undefined>): Promise<void> {
+		const envEntries = Object.entries(env ?? {}).filter(([, value]) => value !== undefined);
+		const envPayload = Object.fromEntries(envEntries);
+		const initScript = [
+			"import os, sys",
+			`__omp_cwd = ${JSON.stringify(cwd)}`,
+			"os.chdir(__omp_cwd)",
+			`__omp_env = ${JSON.stringify(envPayload)}`,
+			"for __omp_key, __omp_val in __omp_env.items():\n    os.environ[__omp_key] = __omp_val",
+			"if __omp_cwd not in sys.path:\n    sys.path.insert(0, __omp_cwd)",
+		].join("\n");
+		const result = await this.execute(initScript, { silent: true, storeHistory: false });
+		if (result.cancelled || result.status === "error") {
+			throw new Error("Failed to initialize Python kernel environment");
+		}
 	}
 
 	private abortPendingExecutions(reason: string): void {

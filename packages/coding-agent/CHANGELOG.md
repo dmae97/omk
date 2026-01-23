@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added artifact storage system for truncated tool outputs with artifact:// URL protocol
@@ -18,6 +19,11 @@
 
 ### Changed
 
+- Simplified Python gateway coordination by removing reference counting and client tracking
+- Updated Python gateway to use global shared instance instead of per-process coordination
+- Modified Python kernel initialization to set working directory and environment per kernel
+- Updated interactive status display to show Python and venv paths instead of client count
+- Changed system prompt to clarify CHECKPOINT step 0 timing
 - Updated Python environment warming to use await instead of void for proper error handling
 - Updated interactive mode shutdown to use postmortem.quit instead of process.exit
 - Updated bash tool documentation to clarify specialized tool usage
@@ -53,11 +59,14 @@
 
 ### Fixed
 
+- Fixed Python kernel environment initialization for external and shared gateways
+- Fixed gateway status reporting to include Python and virtual environment paths
 - Fixed inconsistent error formatting across tools by standardizing on ToolError types
 - Fixed timeout parameter handling to auto-convert milliseconds to seconds and clamp to reasonable ranges
 - Fixed whitespace formatting in json-query.ts comment
 - Fixed interactive shutdown to await postmortem cleanup so Python kernel gateways are terminated
 - Fixed shared Python gateway reuse across working directories by initializing kernel cwd and env per kernel
+- Fixed Python gateway coordination to use a single global gateway without ref counting
 
 ## [7.0.0] - 2026-01-21
 ### Added

@@ -243,11 +243,15 @@ export class CommandController {
 		const gateway = getGatewayStatus();
 		info += `\n${theme.bold("Python Gateway")}\n`;
 		if (gateway.active) {
-			const mode = gateway.shared ? "Shared" : "Local";
-			info += `${theme.fg("dim", "Status:")} ${theme.fg("success", `Active (${mode})`)}\n`;
+			info += `${theme.fg("dim", "Status:")} ${theme.fg("success", "Active (Global)")}\n`;
 			info += `${theme.fg("dim", "URL:")} ${gateway.url}\n`;
 			info += `${theme.fg("dim", "PID:")} ${gateway.pid}\n`;
-			info += `${theme.fg("dim", "Clients:")} ${gateway.refCount}\n`;
+			if (gateway.pythonPath) {
+				info += `${theme.fg("dim", "Python:")} ${gateway.pythonPath}\n`;
+			}
+			if (gateway.venvPath) {
+				info += `${theme.fg("dim", "Venv:")} ${gateway.venvPath}\n`;
+			}
 			if (gateway.uptime !== null) {
 				const uptimeSec = Math.floor(gateway.uptime / 1000);
 				const mins = Math.floor(uptimeSec / 60);

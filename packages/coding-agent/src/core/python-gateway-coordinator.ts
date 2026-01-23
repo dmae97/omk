@@ -3,7 +3,6 @@ import {
 	existsSync,
 	mkdirSync,
 	openSync,
-	readdirSync,
 	readFileSync,
 	renameSync,
 	statSync,
@@ -13,7 +12,7 @@ import {
 } from "node:fs";
 import { createServer } from "node:net";
 import { delimiter, join } from "node:path";
-import { logger, postmortem } from "@oh-my-pi/pi-utils";
+import { logger } from "@oh-my-pi/pi-utils";
 import type { Subprocess } from "bun";
 import { getAgentDir } from "../config";
 import { getShellConfig, killProcessTree } from "../utils/shell";
@@ -22,9 +21,7 @@ import { getOrCreateSnapshot } from "../utils/shell-snapshot";
 const GATEWAY_DIR_NAME = "python-gateway";
 const GATEWAY_INFO_FILE = "gateway.json";
 const GATEWAY_LOCK_FILE = "gateway.lock";
-const GATEWAY_CLIENT_PREFIX = "client-";
 const GATEWAY_STARTUP_TIMEOUT_MS = 30000;
-const GATEWAY_IDLE_TIMEOUT_MS = 30000;
 const GATEWAY_LOCK_TIMEOUT_MS = GATEWAY_STARTUP_TIMEOUT_MS + 5000;
 const GATEWAY_LOCK_RETRY_MS = 50;
 const GATEWAY_LOCK_STALE_MS = GATEWAY_STARTUP_TIMEOUT_MS * 2;
@@ -140,8 +137,6 @@ export interface GatewayInfo {
 	url: string;
 	pid: number;
 	startedAt: number;
-	refCount: number;
-	cwd: string;
 	pythonPath?: string;
 	venvPath?: string | null;
 }
@@ -158,61 +153,7 @@ interface AcquireResult {
 
 let localGatewayProcess: Subprocess | null = null;
 let localGatewayUrl: string | null = null;
-let idleShutdownTimer: ReturnType<typeof setTimeout> | null = null;
 let isCoordinatorInitialized = false;
-let localClientFile: string | null = null;
-let postmortemRegistered = false;
-
-/**
- * Register cleanup handler for process exit. Called lazily on first gateway acquisition.
- * Ensures the gateway process we spawned is killed when omp exits, preventing orphaned processes.
- */
-function ensurePostmortemCleanup(): void {
-	if (postmortemRegistered) return;
-	postmortemRegistered = true;
-
-	postmortem.register("shared-gateway", async () => {
-		cancelIdleShutdown();
-
-		// Clean up our client file first so refcount is accurate
-		if (localClientFile) {
-			try {
-				unlinkSync(localClientFile);
-			} catch {
-				// Ignore cleanup errors
-			}
-			localClientFile = null;
-		}
-
-		// If we spawned the gateway, kill it only if no other clients remain
-		if (localGatewayProcess) {
-			const clients = pruneStaleClientInfos(listClientInfos());
-			const remainingRefs = clients.reduce((sum, c) => sum + c.info.refCount, 0);
-
-			if (remainingRefs === 0) {
-				logger.debug("Cleaning up shared gateway on process exit", { pid: localGatewayProcess.pid });
-				try {
-					await killProcessTree(localGatewayProcess.pid);
-				} catch (err) {
-					logger.warn("Failed to kill shared gateway on exit", {
-						error: err instanceof Error ? err.message : String(err),
-					});
-				}
-				clearGatewayInfo();
-			} else {
-				logger.debug("Leaving shared gateway running for other clients", {
-					pid: localGatewayProcess.pid,
-					remainingRefs,
-				});
-			}
-
-			localGatewayProcess = null;
-			localGatewayUrl = null;
-		}
-
-		isCoordinatorInitialized = false;
-	});
-}
 
 function filterEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
 	const filtered: Record<string, string | undefined> = {};
@@ -398,6 +339,7 @@ async function withGatewayLock<T>(handler: () => Promise<T>): Promise<T> {
 function readGatewayInfo(): GatewayInfo | null {
 	const infoPath = getGatewayInfoPath();
 	if (!existsSync(infoPath)) return null;
+
 	try {
 		const content = readFileSync(infoPath, "utf-8");
 		const parsed = JSON.parse(content) as Partial<GatewayInfo>;
@@ -405,16 +347,10 @@ function readGatewayInfo(): GatewayInfo | null {
 		if (typeof parsed.url !== "string" || typeof parsed.pid !== "number" || typeof parsed.startedAt !== "number") {
 			return null;
 		}
-		if (typeof parsed.cwd !== "string") return null;
-		const clients = pruneStaleClientInfos(listClientInfos());
-		const totalRefCount = clients.reduce((sum, client) => sum + client.info.refCount, 0);
-		const recoveredRefCount = clients.length > 0 ? totalRefCount : 0;
 		return {
 			url: parsed.url,
 			pid: parsed.pid,
 			startedAt: parsed.startedAt,
-			refCount: recoveredRefCount,
-			cwd: parsed.cwd,
 			pythonPath: typeof parsed.pythonPath === "string" ? parsed.pythonPath : undefined,
 			venvPath: typeof parsed.venvPath === "string" || parsed.venvPath === null ? parsed.venvPath : undefined,
 		};
@@ -448,103 +384,6 @@ function isPidRunning(pid: number): boolean {
 	} catch {
 		return false;
 	}
-}
-
-interface GatewayClientInfo {
-	pid: number;
-	refCount: number;
-	updatedAt?: number;
-}
-
-function getClientFilePath(pid: number): string {
-	return join(getGatewayDir(), `${GATEWAY_CLIENT_PREFIX}${pid}.json`);
-}
-
-function readClientInfo(path: string): GatewayClientInfo | null {
-	try {
-		const raw = readFileSync(path, "utf-8");
-		const parsed = JSON.parse(raw) as GatewayClientInfo;
-		if (typeof parsed.pid !== "number" || typeof parsed.refCount !== "number") return null;
-		return parsed;
-	} catch {
-		return null;
-	}
-}
-
-function listClientInfos(): Array<{ path: string; info: GatewayClientInfo }> {
-	const dir = getGatewayDir();
-	if (!existsSync(dir)) return [];
-	const entries = readdirSync(dir);
-	const results: Array<{ path: string; info: GatewayClientInfo }> = [];
-	for (const entry of entries) {
-		if (!entry.startsWith(GATEWAY_CLIENT_PREFIX)) continue;
-		const path = join(dir, entry);
-		const info = readClientInfo(path);
-		if (!info) continue;
-		results.push({ path, info });
-	}
-	return results;
-}
-
-function pruneStaleClientInfos(
-	clients: Array<{ path: string; info: GatewayClientInfo }>,
-): Array<{ path: string; info: GatewayClientInfo }> {
-	const active: Array<{ path: string; info: GatewayClientInfo }> = [];
-	for (const client of clients) {
-		if (!isPidRunning(client.info.pid)) {
-			try {
-				unlinkSync(client.path);
-			} catch {
-				// Ignore cleanup errors
-			}
-			continue;
-		}
-		active.push(client);
-	}
-	return active;
-}
-
-function updateLocalClientRefCount(delta: number): { totalRefCount: number; localRefCount: number } {
-	ensureGatewayDir();
-	const clients = pruneStaleClientInfos(listClientInfos());
-	const localPath = localClientFile ?? getClientFilePath(process.pid);
-	const localEntry = clients.find((client) => client.info.pid === process.pid);
-	const baseCount = localEntry?.info.refCount ?? 0;
-	const nextCount = Math.max(0, baseCount + delta);
-	const otherClients = clients.filter((client) => client.info.pid !== process.pid);
-
-	if (nextCount <= 0) {
-		if (localEntry) {
-			try {
-				unlinkSync(localEntry.path);
-			} catch {
-				// Ignore cleanup errors
-			}
-		}
-		if (localClientFile === localPath) {
-			localClientFile = null;
-		}
-	} else {
-		const payload: GatewayClientInfo = { pid: process.pid, refCount: nextCount, updatedAt: Date.now() };
-		writeFileSync(localPath, JSON.stringify(payload, null, 2));
-		localClientFile = localPath;
-	}
-
-	const totalRefCount =
-		otherClients.reduce((sum, client) => sum + client.info.refCount, 0) + (nextCount > 0 ? nextCount : 0);
-	return { totalRefCount, localRefCount: nextCount };
-}
-
-function clearClientFiles(): void {
-	const clients = listClientInfos();
-	for (const client of clients) {
-		try {
-			unlinkSync(client.path);
-		} catch {
-			// Ignore cleanup errors
-		}
-	}
-	localClientFile = null;
 }
 
 async function isGatewayHealthy(url: string): Promise<boolean> {
@@ -585,11 +424,6 @@ async function startGatewayProcess(
 		OMP_SHELL_SNAPSHOT: snapshotPath ?? undefined,
 	};
 
-	const pythonPathParts = [cwd, kernelEnv.PYTHONPATH].filter(Boolean).join(delimiter);
-	if (pythonPathParts) {
-		kernelEnv.PYTHONPATH = pythonPathParts;
-	}
-
 	const gatewayPort = await allocatePort();
 	const gatewayUrl = `http://127.0.0.1:${gatewayPort}`;
 
@@ -622,7 +456,6 @@ async function startGatewayProcess(
 			exited = true;
 		});
 
-	// Wait for gateway to become healthy
 	const startTime = Date.now();
 	while (Date.now() - startTime < GATEWAY_STARTUP_TIMEOUT_MS) {
 		if (exited) {
@@ -645,70 +478,15 @@ async function startGatewayProcess(
 	throw new Error("Gateway startup timeout");
 }
 
-function scheduleIdleShutdown(): void {
-	if (idleShutdownTimer) {
-		clearTimeout(idleShutdownTimer);
-	}
-	idleShutdownTimer = setTimeout(async () => {
-		try {
-			await withGatewayLock(async () => {
-				const info = readGatewayInfo();
-				if (!info) {
-					clearClientFiles();
-					return;
-				}
-				const clients = pruneStaleClientInfos(listClientInfos());
-				const totalRefCount = clients.reduce((sum, client) => sum + client.info.refCount, 0);
-				if (totalRefCount > 0) {
-					if (info.refCount !== totalRefCount) {
-						writeGatewayInfo({ ...info, refCount: totalRefCount });
-					}
-					return;
-				}
-				logger.debug("Shutting down idle shared gateway", { pid: info.pid });
-				if (localGatewayProcess) {
-					await shutdownLocalGateway();
-				} else if (isPidRunning(info.pid)) {
-					try {
-						await killProcessTree(info.pid);
-					} catch (err) {
-						logger.warn("Failed to kill idle shared gateway", {
-							error: err instanceof Error ? err.message : String(err),
-							pid: info.pid,
-						});
-					}
-				}
-				clearGatewayInfo();
-				clearClientFiles();
-			});
-		} catch (err) {
-			logger.warn("Failed to shutdown idle shared gateway", {
-				error: err instanceof Error ? err.message : String(err),
-			});
-		} finally {
-			idleShutdownTimer = null;
-		}
-	}, GATEWAY_IDLE_TIMEOUT_MS);
-}
-
-function cancelIdleShutdown(): void {
-	if (idleShutdownTimer) {
-		clearTimeout(idleShutdownTimer);
-		idleShutdownTimer = null;
-	}
-}
-
-async function shutdownLocalGateway(): Promise<void> {
-	if (localGatewayProcess) {
-		try {
-			await killProcessTree(localGatewayProcess.pid);
-		} catch (err) {
-			logger.warn("Failed to kill shared gateway process", {
-				error: err instanceof Error ? err.message : String(err),
-			});
-		}
-		localGatewayProcess = null;
-		localGatewayUrl = null;
+async function killGateway(pid: number, context: string): Promise<void> {
+	try {
+		await killProcessTree(pid);
+	} catch (err) {
+		logger.warn("Failed to kill shared gateway process", {
+			error: err instanceof Error ? err.message : String(err),
+			pid,
+			context,
+		});
 	}
 }
 
@@ -717,72 +495,35 @@ export async function acquireSharedGateway(cwd: string): Promise<AcquireResult |
 		return null;
 	}
 
-	ensurePostmortemCleanup();
-
 	try {
 		return await withGatewayLock(async () => {
 			const existingInfo = readGatewayInfo();
-			if (existingInfo && (await isGatewayAlive(existingInfo))) {
-				const { env } = await getShellConfig();
-				const filteredEnv = filterEnv(env);
-				const runtime = await resolvePythonRuntime(cwd, filteredEnv);
-				const existingVenv = existingInfo.venvPath ?? null;
-				const runtimeVenv = runtime.venvPath ?? null;
-				if (
-					existingInfo.cwd !== cwd ||
-					!existingInfo.pythonPath ||
-					existingInfo.pythonPath !== runtime.pythonPath ||
-					existingVenv !== runtimeVenv
-				) {
-					logger.debug("Shared gateway metadata mismatch", {
-						existingCwd: existingInfo.cwd,
-						requestedCwd: cwd,
-						existingPython: existingInfo.pythonPath,
-						runtimePython: runtime.pythonPath,
-						existingVenv,
-						runtimeVenv,
-					});
-					return null;
-				}
-				const { totalRefCount } = updateLocalClientRefCount(1);
-				const updatedInfo = { ...existingInfo, refCount: totalRefCount };
-				writeGatewayInfo(updatedInfo);
-				cancelIdleShutdown();
-				logger.debug("Reusing shared gateway", { url: existingInfo.url, refCount: updatedInfo.refCount });
-				isCoordinatorInitialized = true;
-				return { url: existingInfo.url, isShared: true };
-			}
-
 			if (existingInfo) {
+				if (await isGatewayAlive(existingInfo)) {
+					localGatewayUrl = existingInfo.url;
+					isCoordinatorInitialized = true;
+					logger.debug("Reusing global Python gateway", { url: existingInfo.url });
+					return { url: existingInfo.url, isShared: true };
+				}
+
 				logger.debug("Cleaning up stale gateway info", { pid: existingInfo.pid });
 				if (isPidRunning(existingInfo.pid)) {
-					try {
-						await killProcessTree(existingInfo.pid);
-					} catch (err) {
-						logger.warn("Failed to kill stale shared gateway process", {
-							error: err instanceof Error ? err.message : String(err),
-							pid: existingInfo.pid,
-						});
-					}
+					await killGateway(existingInfo.pid, "stale");
 				}
 				clearGatewayInfo();
-				clearClientFiles();
 			}
 
 			const { url, pid, pythonPath, venvPath } = await startGatewayProcess(cwd);
-			const { totalRefCount } = updateLocalClientRefCount(1);
 			const info: GatewayInfo = {
 				url,
 				pid,
 				startedAt: Date.now(),
-				refCount: totalRefCount,
-				cwd,
 				pythonPath,
 				venvPath,
 			};
 			writeGatewayInfo(info);
 			isCoordinatorInitialized = true;
-			logger.debug("Started shared gateway", { url, pid });
+			logger.debug("Started global Python gateway", { url, pid });
 			return { url, isShared: true };
 		});
 	} catch (err) {
@@ -795,48 +536,24 @@ export async function acquireSharedGateway(cwd: string): Promise<AcquireResult |
 
 export async function releaseSharedGateway(): Promise<void> {
 	if (!isCoordinatorInitialized) return;
-
-	try {
-		await withGatewayLock(async () => {
-			const { totalRefCount } = updateLocalClientRefCount(-1);
-			const info = readGatewayInfo();
-			if (!info) return;
-
-			const newRefCount = Math.max(0, totalRefCount);
-			if (newRefCount === 0) {
-				const updatedInfo = { ...info, refCount: 0 };
-				writeGatewayInfo(updatedInfo);
-				scheduleIdleShutdown();
-				logger.debug("Scheduled idle shutdown for shared gateway", { pid: info.pid });
-				return;
-			}
-			const updatedInfo = { ...info, refCount: newRefCount };
-			writeGatewayInfo(updatedInfo);
-			logger.debug("Released shared gateway reference", { url: info.url, refCount: newRefCount });
-		});
-	} catch (err) {
-		logger.warn("Failed to release shared gateway", {
-			error: err instanceof Error ? err.message : String(err),
-		});
-	}
 }
 
 export function getSharedGatewayUrl(): string | null {
-	return localGatewayUrl;
+	if (localGatewayUrl) return localGatewayUrl;
+	return readGatewayInfo()?.url ?? null;
 }
 
 export function isSharedGatewayActive(): boolean {
-	return localGatewayProcess !== null && localGatewayUrl !== null;
+	return getGatewayStatus().active;
 }
 
 export interface GatewayStatus {
 	active: boolean;
-	shared: boolean;
 	url: string | null;
 	pid: number | null;
-	refCount: number;
-	cwd: string | null;
 	uptime: number | null;
+	pythonPath: string | null;
+	venvPath: string | null;
 }
 
 export function getGatewayStatus(): GatewayStatus {
@@ -844,45 +561,44 @@ export function getGatewayStatus(): GatewayStatus {
 	if (!info) {
 		return {
 			active: false,
-			shared: false,
 			url: null,
 			pid: null,
-			refCount: 0,
-			cwd: null,
 			uptime: null,
+			pythonPath: null,
+			venvPath: null,
 		};
 	}
 	const active = isPidRunning(info.pid);
-	const clients = pruneStaleClientInfos(listClientInfos());
-	const clientRefCount = clients.reduce((sum, client) => sum + client.info.refCount, 0);
-	const refCount = clientRefCount > 0 ? clientRefCount : info.refCount;
 	return {
 		active,
-		shared: active && refCount > 1,
 		url: info.url,
 		pid: info.pid,
-		refCount,
-		cwd: info.cwd,
-		uptime: Date.now() - info.startedAt,
+		uptime: active ? Date.now() - info.startedAt : null,
+		pythonPath: info.pythonPath ?? null,
+		venvPath: info.venvPath ?? null,
 	};
 }
 
 export async function shutdownSharedGateway(): Promise<void> {
-	cancelIdleShutdown();
 	try {
 		await withGatewayLock(async () => {
 			const info = readGatewayInfo();
-			if (info) {
-				clearGatewayInfo();
+			if (!info) return;
+			if (isPidRunning(info.pid)) {
+				await killGateway(info.pid, "shutdown");
 			}
-			clearClientFiles();
+			clearGatewayInfo();
 		});
 	} catch (err) {
 		logger.warn("Failed to shutdown shared gateway", {
 			error: err instanceof Error ? err.message : String(err),
 		});
 	} finally {
-		await shutdownLocalGateway();
+		if (localGatewayProcess) {
+			await killGateway(localGatewayProcess.pid, "shutdown-local");
+		}
+		localGatewayProcess = null;
+		localGatewayUrl = null;
 		isCoordinatorInitialized = false;
 	}
 }

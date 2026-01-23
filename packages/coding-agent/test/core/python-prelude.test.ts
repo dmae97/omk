@@ -38,7 +38,6 @@ describe.skipIf(!shouldRun)("PYTHON_PRELUDE integration", () => {
 	it("exposes prelude helpers via python tool", async () => {
 		const helpers = [
 			"pwd",
-			"cd",
 			"env",
 			"read",
 			"write",
