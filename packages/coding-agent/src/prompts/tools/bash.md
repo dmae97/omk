@@ -1,16 +1,6 @@
 # Bash
 
-Executes a given bash command in a shell session with optional timeout.
-This tool is for terminal operations like git, bun, cargo, python, etc. DO NOT use it for file operations.
-
-<critical>
-Do NOT use Bash for:
-- Reading file contents → Use Read tool instead
-- Searching file contents → Use Grep tool instead
-- Finding files by pattern → Use Find tool instead
-- Editing files → Use Edit tool instead
-- Writing new files → Use Write tool instead
-</critical>
+Executes a bash command in a shell session for terminal operations like git, bun, cargo, python.
 
 <instruction>
 - Use `cwd` parameter to set working directory instead of `cd dir && ...`
@@ -20,7 +10,17 @@ Do NOT use Bash for:
 - Use `;` only when later commands should run regardless of earlier failures
 </instruction>
 
-<important>
-- Truncated after 50KB; filter with `| head -n 50` for large output
-- Exit codes and stderr captured
-</important>
+<output>
+Returns stdout, stderr, and exit code from command execution.
+- Output truncated after 50KB; use `| head -n 50` or similar filters for large output
+- Exit codes and stderr are always captured
+</output>
+
+<critical>
+Do NOT use Bash for file operations—specialized tools exist:
+- Reading file contents → Read tool
+- Searching file contents → Grep tool
+- Finding files by pattern → Find tool
+- Editing files → Edit tool
+- Writing new files → Write tool
+</critical>

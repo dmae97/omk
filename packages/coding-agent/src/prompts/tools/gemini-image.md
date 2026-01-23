@@ -2,13 +2,17 @@
 
 Generate or edit images using Gemini image models.
 
+<instruction>
 Provide structured parameters for best results. The tool assembles them into an optimized prompt.
 
-<multi_image>
-When using multiple `input_images`, describe each image's role in the **subject** or **scene** field:
+When using multiple `input_images`, describe each image's role in the `subject` or `scene` field:
 - "Use Image 1 for the character's face and outfit, Image 2 for the pose, Image 3 for the background environment"
 - "Match the color palette from Image 1, apply the lighting style from Image 2"
-</multi_image>
+</instruction>
+
+<output>
+Returns the generated image saved to disk. The response includes the file path where the image was written.
+</output>
 
 <important>
 - For photoreal: add "ultra-detailed, realistic, natural skin texture" to style

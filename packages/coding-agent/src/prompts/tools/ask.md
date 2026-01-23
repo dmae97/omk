@@ -9,27 +9,20 @@ Ask the user a question when you need clarification or input during task executi
 - Offer meaningful choices about task direction
 </conditions>
 
-<important>
+<instruction>
 - Place recommended option first with " (Recommended)" suffix
-- 2-5 concise, distinct options
-- Users can always select "Other" for custom input
-- **Do NOT include an "Other" option in your options array.** The UI automatically adds "Other (type your own)" to every question. Adding your own creates duplicate "Other" options.
+- Use `questions` array for multiple related questions instead of asking one at a time
+- Set `multi: true` on a question to allow multiple selections
+</instruction>
+
+<output>
+Returns user's selected option(s) as text. For multi-part questions, returns a map of question IDs to selected values.
+</output>
+
+<important>
+- Provide 2-5 concise, distinct options
+- Users can always select "Other" for custom input (UI adds this automatically)
 </important>
-
-<example name="single">
-question: "Which authentication method should this API use?"
-options: [{"label": "JWT (Recommended)"}, {"label": "OAuth2"}, {"label": "Session cookies"}]
-</example>
-
-<example name="multi-part">
-When you have multiple related questions, use the `questions` array instead of asking one at a time. Each question has its own id, options, and optional `multi` flag.
-
-questions: [
-  {"id": "auth", "question": "Which auth method?", "options": [{"label": "JWT"}, {"label": "OAuth2"}]},
-  {"id": "cache", "question": "Enable caching?", "options": [{"label": "Yes"}, {"label": "No"}]},
-  {"id": "features", "question": "Which features to include?", "options": [{"label": "Logging"}, {"label": "Metrics"}, {"label": "Tracing"}], "multi": true}
-]
-</example>
 
 <critical>
 **Exhaust all other options before asking.** Questions interrupt user flow.
@@ -40,4 +33,19 @@ questions: [
 4. **Implementation approach?** → Choose based on codebase patterns. Ask only for genuinely novel architectural decisions.
 
 If you can make a reasonable inference from the user's request, **do it**. Users communicate intent, not specifications—your job is to translate intent into correct implementation.
+
+**Do NOT include an "Other" option in your options array.** The UI automatically adds "Other (type your own)" to every question. Adding your own creates duplicates.
 </critical>
+
+<example name="single">
+question: "Which authentication method should this API use?"
+options: [{"label": "JWT (Recommended)"}, {"label": "OAuth2"}, {"label": "Session cookies"}]
+</example>
+
+<example name="multi-part">
+questions: [
+  {"id": "auth", "question": "Which auth method?", "options": [{"label": "JWT"}, {"label": "OAuth2"}]},
+  {"id": "cache", "question": "Enable caching?", "options": [{"label": "Yes"}, {"label": "No"}]},
+  {"id": "features", "question": "Which features to include?", "options": [{"label": "Logging"}, {"label": "Metrics"}, {"label": "Tracing"}], "multi": true}
+]
+</example>

@@ -11,8 +11,10 @@ Reads a file from the local filesystem.
 - Parallelize reads when exploring related files
 </instruction>
 
-<important>
-- Read before editing (required in current session)
-- Empty files trigger a warning
-- Missing files return closest matches
-</important>
+<output>
+- Returns file content as text
+- Images: returns visual content for analysis
+- PDFs/notebooks: returns extracted text/cells
+- Empty files: triggers a warning
+- Missing files: returns closest filename matches for correction
+</output>

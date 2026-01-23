@@ -5,13 +5,20 @@ Performs string replacements in files with fuzzy whitespace matching.
 <instruction>
 - Use the smallest edit that uniquely identifies the change
 - If `old_text` is not unique, expand to include more context or use `all: true` to replace all occurrences
-- You must use your read tool at least once in the conversation before editing. This tool will error if you attempt an edit without reading the file.
 - Fuzzy matching handles minor whitespace/indentation differences automatically
 - Prefer editing existing files over creating new ones
 </instruction>
 
+<output>
+Returns success/failure status. On success, the file is modified in place with the replacement applied. On failure (e.g., `old_text` not found or matches multiple locations without `all: true`), returns an error describing the issue.
+</output>
+
+<critical>
+- You must read the file at least once in the conversation before editing. The tool will error if you attempt an edit without reading the file first.
+</critical>
+
 <bash_alternatives>
-Edit is for content-addressed changes—you identify *what* to change by its text.
+Replace is for content-addressed changes—you identify *what* to change by its text.
 
 For position-addressed or pattern-addressed changes, bash is more efficient:
 
@@ -26,6 +33,6 @@ For position-addressed or pattern-addressed changes, bash is more efficient:
 | Copy lines N-M to another file | `sed -n 'N,Mp' src >> dest` |
 | Move lines N-M to another file | `sed -n 'N,Mp' src >> dest && sed -i 'N,Md' src` |
 
-Use Edit when the *content itself* identifies the location.
+Use Replace when the *content itself* identifies the location.
 Use bash when *position* or *pattern* identifies what to change.
 </bash_alternatives>

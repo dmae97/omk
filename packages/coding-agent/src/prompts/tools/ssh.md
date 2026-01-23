@@ -2,9 +2,11 @@
 
 Execute commands on remote SSH hosts.
 
-<critical>
-Each host runs a specific shell. **You MUST use commands native to that shell.**
-</critical>
+<instruction>
+1. Check the host's shell type from "Available hosts" below
+2. Use ONLY commands for that shell type
+3. Construct your command using the reference below
+</instruction>
 
 <commands>
 **linux/bash, linux/zsh, macos/bash, macos/zsh** — Unix-like systems:
@@ -29,11 +31,14 @@ Each host runs a specific shell. **You MUST use commands native to that shell.**
 - Navigation: `cd`, `echo %CD%`
 </commands>
 
-<instruction>
-1. Check the host's shell type from "Available hosts" below
-2. Use ONLY commands for that shell type
-3. Construct your command using the reference above
-</instruction>
+<output>
+Command output (stdout/stderr combined), truncated at 50KB. Exit code is captured.
+</output>
+
+<critical>
+Each host runs a specific shell. You MUST use commands native to that shell.
+Verify host shell type from "Available hosts" and use matching commands.
+</critical>
 
 <example name="linux">
 Task: List files in /home/user on host "server1"
@@ -59,16 +64,3 @@ Task: Get system info on host "macbook"
 Host: macbook (10.0.0.20) | macos/zsh
 Command: `uname -a && sw_vers`
 </example>
-
-<parameters>
-- **host**: Host name from "Available hosts" below
-- **command**: Command to execute (see Command Reference above)
-- **cwd**: Working directory (optional)
-- **timeout**: Timeout in seconds (optional)
-</parameters>
-
-<important>
-Truncated at 50KB. Exit codes captured.
-
-**Before executing: verify host shell type below and use matching commands.**
-</important>

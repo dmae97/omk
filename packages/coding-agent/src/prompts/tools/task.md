@@ -1,17 +1,6 @@
 # Task
 
-Launch a new agent to handle complex, multi-step tasks autonomously.
-
-The Task tool launches specialized agents (workers) that autonomously handle complex tasks. Each agent type has specific capabilities and tools available to it.
-
-<critical>
-**Subagents have NO access to conversation history.** They only see:
-1. Their agent-specific system prompt
-2. The `context` string you provide
-3. The `task` string you provide
-
-If you discussed requirements, plans, schemas, or decisions with the user, you MUST include that information in `context`. Subagents cannot see prior messages - they start fresh with only what you explicitly pass them.
-</critical>
+Launch a new agent to handle complex, multi-step tasks autonomously. Each agent type has specific capabilities and tools available to it.
 
 <agents>
 {{#list agents join="\n"}}
@@ -24,15 +13,7 @@ If you discussed requirements, plans, schemas, or decisions with the user, you M
 Agents with `output="structured"` have a fixed schema enforced via frontmatter; your `output` parameter will be ignored for these agents.
 </agents>
 
-<prohibited>
-- Reading a specific file path → Use Read tool instead
-- Finding files by pattern/name → Use Find tool instead
-- Searching for a specific class/function definition → Use Grep tool instead
-- Searching code within 2-3 specific files → Use Read tool instead
-- Tasks unrelated to the agent descriptions above
-</prohibited>
-
-<directives>
+<instruction>
 - Always include a short description of the task in the task parameter
 - **Plan-then-execute**: Put shared constraints in `context`, keep each task focused, specify acceptance criteria; use `output` when you need structured output
 - **Ask open-ended questions**: For exploration tasks, frame prompts to elicit factual discovery, not confirmation. Avoid yes/no questions that are easy to hallucinate.
@@ -44,11 +25,10 @@ Agents with `output="structured"` have a fixed schema enforced via frontmatter; 
 - **Parallelize**: Launch multiple agents whenever possible. You MUST use a single Task call with multiple entries in the `tasks` array to do this.
 - **Isolate file scopes**: Assign each task distinct files or directories so agents don't conflict
 - **Results are intermediate data**: Agent findings provide context for YOU to perform actual work. Do not treat agent reports as "task complete" signals.
-- **Stateless invocations**: Subagents have zero memory of your conversation. Pass ALL relevant context: requirements discussed, decisions made, schemas agreed upon, file paths mentioned. If you reference something from earlier discussion without including it, the subagent will fail.
 - **Trust outputs**: Agent results should generally be trusted
 - **Clarify intent**: Tell the agent whether you expect code changes or just research (search, file reads, web fetches)
 - **Proactive use**: If an agent description says to use it proactively, do so without waiting for explicit user request
-</directives>
+</instruction>
 
 <parameters>
 - `agent`: Agent type to use for all tasks
@@ -60,6 +40,24 @@ Agents with `output="structured"` have a fixed schema enforced via frontmatter; 
     - `vars`: Object with keys matching `{{placeholders}}` in context
 - `output`: (optional) JTD schema for structured subagent output (used by the complete tool)
 </parameters>
+
+<output>
+Returns task results for each spawned agent:
+- Truncated preview of agent output (use Output tool for full content if truncated)
+- Summary with line/character counts
+- For agents with `output` schema: structured JSON accessible via Output tool with `format: "json"`
+
+Results are keyed by task `id` (e.g., "AuthProvider", "AuthApi").
+</output>
+
+<critical>
+**Subagents have NO access to conversation history.** They only see:
+1. Their agent-specific system prompt
+2. The `context` string you provide
+3. The `task` string you provide
+
+If you discussed requirements, plans, schemas, or decisions with the user, you MUST include that information in `context`. Subagents cannot see prior messages—they start fresh with only what you explicitly pass them.
+</critical>
 
 <example>
 user: "Looks good, execute the plan"
@@ -82,3 +80,11 @@ assistant: Uses the Task tool:
   ]
 }
 </example>
+
+<avoid>
+- Reading a specific file path → Use Read tool instead
+- Finding files by pattern/name → Use Find tool instead
+- Searching for a specific class/function definition → Use Grep tool instead
+- Searching code within 2-3 specific files → Use Read tool instead
+- Tasks unrelated to the agent descriptions above
+</avoid>

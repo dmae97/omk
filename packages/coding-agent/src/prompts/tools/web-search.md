@@ -1,19 +1,30 @@
 # Web Search
 
-Search the web and use the results to inform responses.
+Search the web for up-to-date information beyond Claude's knowledge cutoff.
 
 <instruction>
-- Provides up-to-date information for current events and recent data
-- Returns search result information formatted as search result blocks, including links as markdown hyperlinks
-- Use this tool for accessing information beyond Claude's knowledge cutoff
-- Searches are performed automatically within a single API call
 - Prefer primary sources (papers, official docs) and corroborate key claims with multiple sources
 - Include links for cited sources in the final response
 </instruction>
 
 <parameters>
-Common: system_prompt (guides response style)
-Anthropic-specific: max_tokens
-Perplexity-specific: model (sonar/sonar-pro), search_recency_filter, search_domain_filter, search_context_size, return_related_questions
-Exa-specific: num_results
+- `system_prompt`: Guides response style (all providers)
+- `max_tokens`: Response length limit (Anthropic only)
+- `model`: `sonar` or `sonar-pro` (Perplexity only)
+- `search_recency_filter`: `day`, `week`, `month`, `year` (Perplexity only)
+- `search_domain_filter`: Domain allowlist/blocklist (Perplexity only)
+- `search_context_size`: Amount of context to retrieve (Perplexity only)
+- `return_related_questions`: Include follow-up suggestions (Perplexity only)
+- `num_results`: Number of results to return (Exa only)
 </parameters>
+
+<output>
+Returns search results formatted as blocks with:
+- Result summaries and relevant excerpts
+- Links as markdown hyperlinks for citation
+- Provider-dependent structure based on selected backend
+</output>
+
+<important>
+Searches are performed automatically within a single API call—no pagination or follow-up requests needed.
+</important>

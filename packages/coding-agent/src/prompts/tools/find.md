@@ -1,11 +1,16 @@
 # Find
 
-Fast file pattern matching tool that works with any codebase size.
+Fast file pattern matching that works with any codebase size.
 
 <instruction>
 - Supports glob patterns like "**/*.js" or "src/**/*.ts"
-- Returns matching file paths sorted by modification time
-- Use this tool when you need to find files by name patterns
-- When you are doing an open ended search that may require multiple rounds of globbing and grepping, use the Agent tool instead
-- You can call multiple tools in a single response. It is always better to speculatively perform multiple searches in parallel if they are potentially useful.
+- Speculatively perform multiple searches in parallel when potentially useful
 </instruction>
+
+<output>
+Matching file paths sorted by modification time (most recent first). Results truncated at 1000 entries or 50KB.
+</output>
+
+<avoid>
+Open-ended searches requiring multiple rounds of globbing and grepping — use Task tool instead.
+</avoid>

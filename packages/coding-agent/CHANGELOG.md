@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `isolated` option to run tasks in isolated git worktrees
@@ -10,6 +9,13 @@
 
 ### Changed
 
+- Restructured tool documentation with standardized sections for better consistency
+- Added `<output>` sections to all tool documentation to clarify return values
+- Reorganized tool instructions with clearer `<instruction>`, `<critical>`, and `<avoid>` sections
+- Simplified tool parameter descriptions and examples for better readability
+- Standardized tool documentation format across all 18 tools
+- Improved tool guidance with more specific do/don't instructions
+- Enhanced tool examples with better formatting and clearer use cases
 - Updated bash tool timeout parameter to default 300 seconds with auto-conversion from milliseconds
 - Updated python tool timeout parameter from timeout_ms to timeout with default 30 seconds
 - Updated ssh tool timeout parameter to default 60 seconds with auto-conversion from milliseconds
