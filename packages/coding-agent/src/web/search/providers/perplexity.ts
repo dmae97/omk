@@ -167,9 +167,10 @@ export async function searchPerplexity(params: PerplexitySearchParams): Promise<
 	messages.push({ role: "user", content: params.query });
 
 	const request: PerplexityRequest = {
-		model: "sonar",
+		model: "sonar-pro",
 		messages,
 		return_related_questions: true,
+		search_context_size: "high",
 	};
 
 	if (params.search_recency_filter) {
