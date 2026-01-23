@@ -102,7 +102,7 @@ export function createProposeCommitTool(
 			const summaryValidation = validateSummaryRules(summary);
 			const analysisValidation = validateAnalysis(analysis);
 			const stagedFiles = state.overview?.files ?? (await git.getStagedFiles());
-			const diffText = await git.getDiff(true);
+			const diffText = state.diffText ?? (await git.getDiff(true));
 			const typeValidation = validateTypeConsistency(params.type, stagedFiles, {
 				diffText,
 				summary,

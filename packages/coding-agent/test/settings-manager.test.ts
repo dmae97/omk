@@ -34,7 +34,7 @@ describe("SettingsManager", () => {
 	describe("preserves externally added settings", () => {
 		it("should preserve enabledModels when changing thinking level", async () => {
 			// Seed initial settings in DB
-			const storage = AgentStorage.open(getAgentDbPath(agentDir));
+			const storage = await AgentStorage.open(getAgentDbPath(agentDir));
 			storage.saveSettings({
 				theme: "dark",
 				modelRoles: { default: "claude-sonnet" },
@@ -61,7 +61,7 @@ describe("SettingsManager", () => {
 		});
 
 		it("should preserve custom settings when changing theme", async () => {
-			const storage = AgentStorage.open(getAgentDbPath(agentDir));
+			const storage = await AgentStorage.open(getAgentDbPath(agentDir));
 			storage.saveSettings({
 				modelRoles: { default: "claude-sonnet" },
 			});
@@ -83,7 +83,7 @@ describe("SettingsManager", () => {
 		});
 
 		it("should let in-memory changes override file changes for same key", async () => {
-			const storage = AgentStorage.open(getAgentDbPath(agentDir));
+			const storage = await AgentStorage.open(getAgentDbPath(agentDir));
 			storage.saveSettings({
 				theme: "dark",
 			});

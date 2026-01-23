@@ -44,6 +44,7 @@ import { EventController } from "./controllers/event-controller";
 import { ExtensionUiController } from "./controllers/extension-ui-controller";
 import { InputController } from "./controllers/input-controller";
 import { SelectorController } from "./controllers/selector-controller";
+import { setMermaidRenderCallback } from "./theme/mermaid-cache";
 import type { Theme } from "./theme/theme";
 import { getEditorTheme, getMarkdownTheme, onThemeChange, theme } from "./theme/theme";
 import type { CompactionQueuedMessage, InteractiveModeContext, TodoItem } from "./types";
@@ -154,6 +155,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.mcpManager = mcpManager;
 
 		this.ui = new TUI(new ProcessTerminal(), this.settingsManager.getShowHardwareCursor());
+		setMermaidRenderCallback(() => this.ui.requestRender());
 		this.chatContainer = new Container();
 		this.pendingMessagesContainer = new Container();
 		this.statusContainer = new Container();

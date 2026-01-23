@@ -11,11 +11,11 @@ describe("ModelRegistry", () => {
 	let modelsJsonPath: string;
 	let authStorage: AuthStorage;
 
-	beforeEach(() => {
+	beforeEach(async () => {
 		tempDir = join(tmpdir(), `pi-test-model-registry-${nanoid()}`);
 		mkdirSync(tempDir, { recursive: true });
 		modelsJsonPath = join(tempDir, "models.json");
-		authStorage = new AuthStorage(join(tempDir, "auth.json"));
+		authStorage = await AuthStorage.create(join(tempDir, "auth.json"));
 	});
 
 	afterEach(() => {

@@ -1,5 +1,7 @@
 import { marked, type Token } from "marked";
+import type { MermaidImage } from "$tui/mermaid";
 import type { SymbolTheme } from "$tui/symbols";
+import { encodeITerm2, encodeKitty, getCapabilities, getCellDimensions } from "$tui/terminal-image";
 import type { Component } from "$tui/tui";
 import { applyBackgroundToLine, visibleWidth, wrapTextWithAnsi } from "$tui/utils";
 
@@ -42,6 +44,12 @@ export interface MarkdownTheme {
 	strikethrough: (text: string) => string;
 	underline: (text: string) => string;
 	highlightCode?: (code: string, lang?: string) => string[];
+	/**
+	 * Lookup a pre-rendered mermaid image by source hash.
+	 * Hash is computed as `Bun.hash(source.trim()).toString(16)`.
+	 * Return null to fall back to text rendering.
+	 */
+	getMermaidImage?: (sourceHash: string) => MermaidImage | null;
 	symbols: SymbolTheme;
 }
 
@@ -125,7 +133,12 @@ export class Markdown implements Component {
 		// Wrap lines (NO padding, NO background yet)
 		const wrappedLines: string[] = [];
 		for (const line of renderedLines) {
-			wrappedLines.push(...wrapTextWithAnsi(line, contentWidth));
+			// Skip wrapping for image protocol lines (would corrupt escape sequences)
+			if (this.containsImage(line)) {
+				wrappedLines.push(line);
+			} else {
+				wrappedLines.push(...wrapTextWithAnsi(line, contentWidth));
+			}
 		}
 
 		// Add margins and background to each wrapped line
@@ -135,6 +148,12 @@ export class Markdown implements Component {
 		const contentLines: string[] = [];
 
 		for (const line of wrappedLines) {
+			// Image lines must be output raw - no margins or background
+			if (this.containsImage(line)) {
+				contentLines.push(line);
+				continue;
+			}
+
 			const lineWithMargins = leftMargin + line + rightMargin;
 
 			if (bgFn) {
@@ -267,6 +286,24 @@ export class Markdown implements Component {
 			}
 
 			case "code": {
+				// Handle mermaid diagrams with image rendering when available
+				if (token.lang === "mermaid" && this.theme.getMermaidImage) {
+					const hash = Bun.hash(token.text.trim()).toString(16);
+					const image = this.theme.getMermaidImage(hash);
+					const caps = getCapabilities();
+
+					if (image && caps.images) {
+						const imageLines = this.renderMermaidImage(image, width);
+						if (imageLines) {
+							lines.push(...imageLines);
+							if (nextTokenType !== "space") {
+								lines.push("");
+							}
+							break;
+						}
+					}
+				}
+
 				const codeIndent = " ".repeat(this.codeBlockIndent);
 				lines.push(this.theme.codeBlockBorder(`\`\`\`${token.lang || ""}`));
 				if (this.theme.highlightCode) {
@@ -656,6 +693,65 @@ export class Markdown implements Component {
 		lines.push(`${t.bottomLeft}${h}${bottomBorderCells.join(`${h}${t.teeUp}${h}`)}${h}${t.bottomRight}`);
 
 		lines.push(""); // Add spacing after table
+		return lines;
+	}
+
+	private containsImage(line: string): boolean {
+		return line.includes("\x1b_G") || line.includes("\x1b]1337;File=");
+	}
+
+	/**
+	 * Render a mermaid image using terminal graphics protocol.
+	 * Returns array of lines (image placeholder rows) or null if rendering fails.
+	 */
+	private renderMermaidImage(image: MermaidImage, availableWidth: number): string[] | null {
+		const caps = getCapabilities();
+		if (!caps.images) return null;
+
+		const cellDims = getCellDimensions();
+		const scale = 0.5; // Render at 50% of natural size
+
+		// Calculate natural size in cells (don't scale up, only down if needed)
+		const naturalColumns = Math.ceil((image.widthPx * scale) / cellDims.widthPx);
+		const naturalRows = Math.ceil((image.heightPx * scale) / cellDims.heightPx);
+
+		// Use natural size, but cap to available width
+		const columns = Math.min(naturalColumns, availableWidth);
+
+		// If we had to shrink width, calculate proportional height
+		let rows: number;
+		if (columns < naturalColumns) {
+			// Scaled down - recalculate height
+			const scale = columns / naturalColumns;
+			rows = Math.max(1, Math.ceil(naturalRows * scale));
+		} else {
+			// Natural size
+			rows = naturalRows;
+		}
+
+		let sequence: string;
+		if (caps.images === "kitty") {
+			sequence = encodeKitty(image.base64, { columns, rows });
+		} else if (caps.images === "iterm2") {
+			sequence = encodeITerm2(image.base64, {
+				width: columns,
+				height: "auto",
+				preserveAspectRatio: true,
+			});
+		} else {
+			return null;
+		}
+
+		// Reserve space with empty lines, then output image with cursor-up
+		// This ensures TUI accounts for image height in layout
+		const lines: string[] = [];
+		for (let i = 0; i < rows - 1; i++) {
+			lines.push("");
+		}
+		// Move cursor up to first row, then output image
+		const moveUp = rows > 1 ? `\x1b[${rows - 1}A` : "";
+		lines.push(moveUp + sequence);
+
 		return lines;
 	}
 }

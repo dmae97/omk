@@ -1,4 +1,5 @@
 import { logger } from "@oh-my-pi/pi-utils";
+import { shutdownSharedGateway } from "$c/ipy/gateway-coordinator";
 import {
 	checkPythonKernelAvailability,
 	type KernelDisplayOutput,
@@ -8,6 +9,11 @@ import {
 	PythonKernel,
 } from "$c/ipy/kernel";
 import { OutputSink } from "$c/session/streaming-output";
+
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_KERNEL_SESSIONS = 4;
+const CLEANUP_INTERVAL_MS = 30 * 1000; // 30 seconds
+
 export type PythonKernelMode = "session" | "per-call";
 
 export interface PythonExecutorOptions {
@@ -77,8 +83,58 @@ interface KernelSession {
 
 const kernelSessions = new Map<string, KernelSession>();
 let cachedPreludeDocs: PreludeHelper[] | null = null;
+let cleanupTimer: NodeJS.Timeout | null = null;
+
+function startCleanupTimer(): void {
+	if (cleanupTimer) return;
+	cleanupTimer = setInterval(() => {
+		void cleanupIdleSessions();
+	}, CLEANUP_INTERVAL_MS);
+	cleanupTimer.unref();
+}
+
+function stopCleanupTimer(): void {
+	if (cleanupTimer) {
+		clearInterval(cleanupTimer);
+		cleanupTimer = null;
+	}
+}
+
+async function cleanupIdleSessions(): Promise<void> {
+	const now = Date.now();
+	const toDispose: KernelSession[] = [];
+
+	for (const session of kernelSessions.values()) {
+		if (session.dead || now - session.lastUsedAt > IDLE_TIMEOUT_MS) {
+			toDispose.push(session);
+		}
+	}
+
+	if (toDispose.length > 0) {
+		logger.debug("Cleaning up idle kernel sessions", { count: toDispose.length });
+		await Promise.allSettled(toDispose.map((session) => disposeKernelSession(session)));
+	}
+
+	if (kernelSessions.size === 0) {
+		stopCleanupTimer();
+	}
+}
+
+async function evictOldestSession(): Promise<void> {
+	let oldest: KernelSession | null = null;
+	for (const session of kernelSessions.values()) {
+		if (!oldest || session.lastUsedAt < oldest.lastUsedAt) {
+			oldest = session;
+		}
+	}
+	if (oldest) {
+		logger.debug("Evicting oldest kernel session", { id: oldest.id });
+		await disposeKernelSession(oldest);
+	}
+}
 
 export async function disposeAllKernelSessions(): Promise<void> {
+	stopCleanupTimer();
 	const sessions = Array.from(kernelSessions.values());
 	await Promise.allSettled(sessions.map((session) => disposeKernelSession(session)));
 }
@@ -132,12 +188,36 @@ export function resetPreludeDocsCache(): void {
 	cachedPreludeDocs = null;
 }
 
+function isResourceExhaustionError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return (
+		message.includes("Too many open files") ||
+		message.includes("EMFILE") ||
+		message.includes("ENFILE") ||
+		message.includes("resource temporarily unavailable")
+	);
+}
+
+async function recoverFromResourceExhaustion(): Promise<void> {
+	logger.warn("Resource exhaustion detected, recovering by restarting shared gateway");
+	stopCleanupTimer();
+	const sessions = Array.from(kernelSessions.values());
+	for (const session of sessions) {
+		if (session.heartbeatTimer) {
+			clearInterval(session.heartbeatTimer);
+		}
+		kernelSessions.delete(session.id);
+	}
+	await shutdownSharedGateway();
+}
+
 async function createKernelSession(
 	sessionId: string,
 	cwd: string,
 	useSharedGateway?: boolean,
 	sessionFile?: string,
 	artifactsDir?: string,
+	isRetry?: boolean,
 ): Promise<KernelSession> {
 	const env: Record<string, string> | undefined =
 		sessionFile || artifactsDir
@@ -146,7 +226,18 @@ async function createKernelSession(
 					...(artifactsDir ? { ARTIFACTS: artifactsDir } : {}),
 				}
 			: undefined;
-	const kernel = await PythonKernel.start({ cwd, useSharedGateway, env });
+
+	let kernel: PythonKernel;
+	try {
+		kernel = await PythonKernel.start({ cwd, useSharedGateway, env });
+	} catch (err) {
+		if (!isRetry && isResourceExhaustionError(err)) {
+			await recoverFromResourceExhaustion();
+			return createKernelSession(sessionId, cwd, useSharedGateway, sessionFile, artifactsDir, true);
+		}
+		throw err;
+	}
+
 	const session: KernelSession = {
 		id: sessionId,
 		kernel,
@@ -218,8 +309,13 @@ async function withKernelSession<T>(
 ): Promise<T> {
 	let session = kernelSessions.get(sessionId);
 	if (!session) {
+		// Evict oldest session if at capacity
+		if (kernelSessions.size >= MAX_KERNEL_SESSIONS) {
+			await evictOldestSession();
+		}
 		session = await createKernelSession(sessionId, cwd, useSharedGateway, sessionFile, artifactsDir);
 		kernelSessions.set(sessionId, session);
+		startCleanupTimer();
 	}
 
 	const run = async (): Promise<T> => {

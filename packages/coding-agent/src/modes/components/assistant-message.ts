@@ -1,5 +1,6 @@
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
-import { Container, Markdown, Spacer, Text } from "@oh-my-pi/pi-tui";
+import { Container, getCapabilities, Markdown, Spacer, Text } from "@oh-my-pi/pi-tui";
+import { hasPendingMermaid, prerenderMermaid } from "$c/modes/theme/mermaid-cache";
 import { getMarkdownTheme, theme } from "$c/modes/theme/theme";
 
 /**
@@ -9,6 +10,7 @@ export class AssistantMessageComponent extends Container {
 	private contentContainer: Container;
 	private hideThinkingBlock: boolean;
 	private lastMessage?: AssistantMessage;
+	private prerenderInFlight = false;
 
 	constructor(message?: AssistantMessage, hideThinkingBlock = false) {
 		super();
@@ -35,11 +37,37 @@ export class AssistantMessageComponent extends Container {
 		this.hideThinkingBlock = hide;
 	}
 
+	private triggerMermaidPrerender(message: AssistantMessage): void {
+		const caps = getCapabilities();
+		if (!caps.images || this.prerenderInFlight) return;
+
+		// Check if any text content has pending mermaid blocks
+		const hasPending = message.content.some((c) => c.type === "text" && c.text.trim() && hasPendingMermaid(c.text));
+		if (!hasPending) return;
+
+		this.prerenderInFlight = true;
+
+		// Fire off background prerender
+		(async () => {
+			for (const content of message.content) {
+				if (content.type === "text" && content.text.trim() && hasPendingMermaid(content.text)) {
+					await prerenderMermaid(content.text);
+				}
+			}
+			this.prerenderInFlight = false;
+			// Invalidate to re-render with cached images
+			this.invalidate();
+		})();
+	}
+
 	updateContent(message: AssistantMessage): void {
 		this.lastMessage = message;
 
 		// Clear content container
 		this.contentContainer.clear();
+
+		// Trigger background mermaid pre-rendering if needed
+		this.triggerMermaidPrerender(message);
 
 		const hasVisibleContent = message.content.some(
 			(c) => (c.type === "text" && c.text.trim()) || (c.type === "thinking" && c.thinking.trim()),

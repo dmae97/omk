@@ -37,6 +37,13 @@
 - Added `ExistingChangelogEntries` interface to track changelog sections by path for changelog proposal context
 - Added conditional `analyze_files` skipping in commit agent when pre-analyzed observations are provided
 - Added guidance to commit agent prompts instructing subagents to write files directly instead of returning changes for manual application
+- Added mermaid diagram rendering with terminal graphics support (Kitty/iTerm2) for markdown output
+- Added renderMermaidToPng utility for converting mermaid code blocks to terminal-displayable PNG images via mmdc CLI
+- Added mermaid block extraction with content-addressed hashing for deduplication and cache lookup
+- Added background mermaid pre-rendering in assistant messages for responsive diagram display
+- Added two-level mermaid caching with pending deduplication to prevent redundant renders
+- Added Python kernel session pooling with MAX_KERNEL_SESSIONS limit and automatic eviction of oldest sessions
+- Added automatic idle kernel session cleanup timer (5-minute timeout, 30-second interval)
 
 ### Changed
 - Changed changelog diff truncation limit to be configurable via settings
@@ -83,6 +90,12 @@
 - Changed changelog skip condition in `applyChangelogProposals` to also check for empty deletions object
 - Changed `createCommitTools()` to build tools array incrementally with conditional `analyze_files` inclusion based on `enableAnalyzeFiles` flag
 - Changed system prompt guidance to clarify that pre-computed observations prevent redundant `analyze_files` calls
+- Removed map-reduce preprocessing phase from commit agent for faster iteration
+- Changed commit agent to process full diff text directly instead of pre-computed file observations
+- Changed commit agent initialization to load settingsManager, authStorage, modelRegistry, and stagedFiles in parallel
+- Changed commit agent prompt to remove pre-computed observations guidance and encourage direct analyze_files usage
+- Changed AuthStorage from constructor-based instantiation to async factory method (AuthStorage.create())
+- Changed Python kernel resource management with gateway shutdown on session disposal
 
 ### Fixed
 - Fixed database busy errors during concurrent access by adding retry logic with exponential backoff when opening storage

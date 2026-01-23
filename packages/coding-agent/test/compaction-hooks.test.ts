@@ -104,7 +104,7 @@ describe.skipIf(!API_KEY)("Compaction hooks", () => {
 
 		const sessionManager = SessionManager.create(tempDir);
 		const settingsManager = await SettingsManager.create(tempDir, tempDir);
-		const authStorage = new AuthStorage(join(tempDir, "auth.json"));
+		const authStorage = await AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = new ModelRegistry(authStorage);
 
 		hookRunner = new HookRunner(hooks, tempDir, sessionManager, modelRegistry);

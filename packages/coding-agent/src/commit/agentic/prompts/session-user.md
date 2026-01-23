@@ -23,12 +23,4 @@ You may include entries from this list in the propose_changelog `deletions` fiel
 {{/each}}
 {{/if}}
 
-{{#if pre_computed_observations}}
-## Pre-analyzed File Observations
-
-The following file analyses have already been performed. Use these observations directly instead of calling analyze_files for these files:
-
-{{pre_computed_observations}}
-{{/if}}
-
-Use the git_* tools to inspect changes and finish by calling propose_commit or split_commit.
+Use the git_* tools to inspect changes. Call analyze_files to spawn parallel file analysis if you need deeper per-file summaries. Finish by calling propose_commit or split_commit.

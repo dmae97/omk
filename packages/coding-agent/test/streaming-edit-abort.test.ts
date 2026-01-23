@@ -110,7 +110,7 @@ async function createSession(tempDir: string, streamFn: Agent["streamFn"], tool:
 
 	const sessionManager = SessionManager.inMemory(tempDir);
 	const settingsManager = SettingsManager.inMemory({ edit: { streamingAbort: true } });
-	const authStorage = new AuthStorage(join(tempDir, "auth.json"));
+	const authStorage = await AuthStorage.create(join(tempDir, "auth.json"));
 	authStorage.setRuntimeApiKey("anthropic", "test-key");
 	const modelRegistry = new ModelRegistry(authStorage, tempDir);
 

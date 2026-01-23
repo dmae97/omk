@@ -7,7 +7,6 @@ import type { CommitAgentState } from "$c/commit/agentic/state";
 import { createCommitTools } from "$c/commit/agentic/tools";
 import type { ControlledGit } from "$c/commit/git";
 import typesDescriptionPrompt from "$c/commit/prompts/types-description.md" with { type: "text" };
-import type { FileObservation } from "$c/commit/types";
 import type { ModelRegistry } from "$c/config/model-registry";
 import { renderPromptTemplate } from "$c/config/prompt-templates";
 import type { SettingsManager } from "$c/config/settings-manager";
@@ -27,7 +26,7 @@ export interface CommitAgentInput {
 	contextFiles?: Array<{ path: string; content: string }>;
 	changelogTargets: string[];
 	requireChangelog: boolean;
-	preComputedObservations?: FileObservation[];
+	diffText?: string;
 	existingChangelogEntries?: ExistingChangelogEntries[];
 }
 
@@ -41,7 +40,7 @@ export async function runCommitAgentSession(input: CommitAgentInput): Promise<Co
 	const systemPrompt = renderPromptTemplate(agentSystemPrompt, {
 		types_description: typesDescription,
 	});
-	const state: CommitAgentState = {};
+	const state: CommitAgentState = { diffText: input.diffText };
 	const spawns = "quick_task";
 	const tools = createCommitTools({
 		cwd: input.cwd,
@@ -52,7 +51,7 @@ export async function runCommitAgentSession(input: CommitAgentInput): Promise<Co
 		spawns,
 		state,
 		changelogTargets: input.changelogTargets,
-		enableAnalyzeFiles: !input.preComputedObservations || input.preComputedObservations.length === 0,
+		enableAnalyzeFiles: true,
 	});
 
 	const { session } = await createAgentSession({
@@ -69,6 +68,10 @@ export async function runCommitAgentSession(input: CommitAgentInput): Promise<Co
 		spawns,
 		toolNames: ["read"],
 		contextFiles: input.contextFiles,
+		disableExtensionDiscovery: true,
+		skills: [],
+		promptTemplates: [],
+		slashCommands: [],
 	});
 	let toolCalls = 0;
 	let messageCount = 0;
@@ -145,7 +148,6 @@ export async function runCommitAgentSession(input: CommitAgentInput): Promise<Co
 		const prompt = renderPromptTemplate(agentUserPrompt, {
 			user_context: input.userContext,
 			changelog_targets: input.changelogTargets.length > 0 ? input.changelogTargets.join("\n") : undefined,
-			pre_computed_observations: formatObservations(input.preComputedObservations),
 			existing_changelog_entries: input.existingChangelogEntries,
 		});
 		const MAX_RETRIES = 3;
@@ -302,18 +304,4 @@ Call the missing tool(s) now.
 function truncateToolArg(value: string): string {
 	if (value.length <= 40) return value;
 	return `${value.slice(0, 37)}...`;
-}
-
-function formatObservations(observations?: FileObservation[]): string | undefined {
-	if (!observations || observations.length === 0) return undefined;
-
-	const lines: string[] = [];
-	for (const obs of observations) {
-		lines.push(`### ${obs.file} (+${obs.additions}/-${obs.deletions})`);
-		for (const note of obs.observations) {
-			lines.push(`- ${note}`);
-		}
-		lines.push("");
-	}
-	return lines.join("\n").trimEnd();
 }

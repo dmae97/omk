@@ -106,7 +106,7 @@ export async function createTestSession(options: TestSessionOptions = {}): Promi
 		settingsManager.applyOverrides(options.settingsOverrides);
 	}
 
-	const authStorage = new AuthStorage(join(tempDir, "auth.json"));
+	const authStorage = await AuthStorage.create(join(tempDir, "auth.json"));
 	const modelRegistry = new ModelRegistry(authStorage, tempDir);
 
 	const session = new AgentSession({

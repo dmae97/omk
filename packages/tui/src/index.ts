@@ -47,6 +47,14 @@ export {
 	parseKittySequence,
 	setKittyProtocolActive,
 } from "./keys";
+// Mermaid diagram support
+export {
+	extractMermaidBlocks,
+	type MermaidImage,
+	type MermaidRenderOptions,
+	prerenderMermaidBlocks,
+	renderMermaidToPng,
+} from "./mermaid";
 // Input buffering for batch splitting
 export { StdinBuffer, type StdinBufferEventMap, type StdinBufferOptions } from "./stdin-buffer";
 export type { BoxSymbols, SymbolTheme } from "./symbols";

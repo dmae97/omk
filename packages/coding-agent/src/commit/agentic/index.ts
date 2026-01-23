@@ -1,21 +1,18 @@
+import { relative } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { runCommitAgentSession, type ExistingChangelogEntries } from "$c/commit/agentic/agent";
+import { type ExistingChangelogEntries, runCommitAgentSession } from "$c/commit/agentic/agent";
 import { generateFallbackProposal } from "$c/commit/agentic/fallback";
 import splitConfirmPrompt from "$c/commit/agentic/prompts/split-confirm.md" with { type: "text" };
-import { detectTrivialChange } from "$c/commit/agentic/trivial";
 import type { CommitAgentState, CommitProposal, HunkSelector, SplitCommitPlan } from "$c/commit/agentic/state";
 import { computeDependencyOrder } from "$c/commit/agentic/topo-sort";
+import { detectTrivialChange } from "$c/commit/agentic/trivial";
 import { applyChangelogProposals } from "$c/commit/changelog";
 import { detectChangelogBoundaries } from "$c/commit/changelog/detect";
 import { parseUnreleasedSection } from "$c/commit/changelog/parse";
 import { ControlledGit } from "$c/commit/git";
-import { parseFileDiffs } from "$c/commit/git/diff";
-import { runMapPhase } from "$c/commit/map-reduce/map-phase";
-import { shouldUseMapReduce } from "$c/commit/map-reduce";
 import { formatCommitMessage } from "$c/commit/message";
 import { resolvePrimaryModel, resolveSmolModel } from "$c/commit/model-selection";
-import type { CommitCommandArgs, ConventionalAnalysis, FileObservation } from "$c/commit/types";
-import { isExcludedFile } from "$c/commit/utils/exclusions";
+import type { CommitCommandArgs, ConventionalAnalysis } from "$c/commit/types";
 import { renderPromptTemplate } from "$c/config/prompt-templates";
 import { SettingsManager } from "$c/config/settings-manager";
 import { discoverAuthStorage, discoverContextFiles, discoverModels } from "$c/sdk";
@@ -28,27 +25,29 @@ interface CommitExecutionContext {
 
 export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	const cwd = process.cwd();
-	const settingsManager = await SettingsManager.create(cwd);
-	const authStorage = await discoverAuthStorage();
-	const modelRegistry = await discoverModels(authStorage);
+	const git = new ControlledGit(cwd);
+	const [settingsManager, authStorage] = await Promise.all([SettingsManager.create(cwd), discoverAuthStorage()]);
+	const modelRegistryPromise = discoverModels(authStorage);
 
 	writeStdout("● Resolving model...");
-	const { model: primaryModel, apiKey: primaryApiKey } = await resolvePrimaryModel(
-		args.model,
-		settingsManager,
-		modelRegistry,
-	);
+	const stagedFilesPromise = (async () => {
+		let stagedFiles = await git.getStagedFiles();
+		if (stagedFiles.length === 0) {
+			writeStdout("No staged changes detected, staging all changes...");
+			await git.stageAll();
+			stagedFiles = await git.getStagedFiles();
+		}
+		return stagedFiles;
+	})();
+
+	const modelRegistry = await modelRegistryPromise;
+	const primaryModelPromise = resolvePrimaryModel(args.model, settingsManager, modelRegistry);
+	const [primaryModelResult, stagedFiles] = await Promise.all([primaryModelPromise, stagedFilesPromise]);
+	const { model: primaryModel, apiKey: primaryApiKey } = primaryModelResult;
 	writeStdout(`  └─ ${primaryModel.name}`);
 
 	const { model: agentModel } = await resolveSmolModel(settingsManager, modelRegistry, primaryModel, primaryApiKey);
 
-	const git = new ControlledGit(cwd);
-	let stagedFiles = await git.getStagedFiles();
-	if (stagedFiles.length === 0) {
-		writeStdout("No staged changes detected, staging all changes...");
-		await git.stageAll();
-		stagedFiles = await git.getStagedFiles();
-	}
 	if (stagedFiles.length === 0) {
 		writeStderr("No changes to commit.");
 		return;
@@ -57,7 +56,12 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	if (!args.noChangelog) {
 		writeStdout("● Detecting changelog targets...");
 	}
-	const changelogBoundaries = args.noChangelog ? [] : await detectChangelogBoundaries(cwd, stagedFiles);
+	const [changelogBoundaries, contextFiles, numstat, diff] = await Promise.all([
+		args.noChangelog ? [] : detectChangelogBoundaries(cwd, stagedFiles),
+		discoverContextFiles(cwd),
+		git.getNumstat(true),
+		git.getDiff(true),
+	]);
 	const changelogTargets = changelogBoundaries.map((boundary) => boundary.changelogPath);
 	if (!args.noChangelog) {
 		if (changelogTargets.length > 0) {
@@ -70,7 +74,6 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	}
 
 	writeStdout("● Discovering context files...");
-	const contextFiles = await discoverContextFiles(cwd);
 	const agentsMdFiles = contextFiles.filter((file) => file.path.endsWith("AGENTS.md"));
 	if (agentsMdFiles.length > 0) {
 		for (const file of agentsMdFiles) {
@@ -79,9 +82,6 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	} else {
 		writeStdout("  └─ (none found)");
 	}
-
-	const numstat = await git.getNumstat(true);
-	const diff = await git.getDiff(true);
 	const forceFallback = process.env.OMP_COMMIT_TEST_FALLBACK?.toLowerCase() === "true";
 	if (forceFallback) {
 		writeStdout("● Forcing fallback commit generation...");
@@ -107,29 +107,12 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 		return;
 	}
 
-	let preComputedObservations: FileObservation[] | undefined;
 	let existingChangelogEntries: ExistingChangelogEntries[] | undefined;
 	if (!args.noChangelog && changelogTargets.length > 0) {
 		existingChangelogEntries = await loadExistingChangelogEntries(changelogTargets);
 		if (existingChangelogEntries.length === 0) {
 			existingChangelogEntries = undefined;
 		}
-	}
-	if (shouldUseMapReduce(diff, { minFiles: 4, maxFileTokens: 50_000 })) {
-		writeStdout("● Running parallel file analysis...");
-		const fileDiffs = parseFileDiffs(diff).filter((f) => !isExcludedFile(f.filename));
-		const { model: smolModel, apiKey: smolApiKey } = await resolveSmolModel(
-			settingsManager,
-			modelRegistry,
-			primaryModel,
-			primaryApiKey,
-		);
-		preComputedObservations = await runMapPhase({
-			model: smolModel,
-			apiKey: smolApiKey,
-			files: fileDiffs,
-		});
-		writeStdout(`  └─ Analyzed ${preComputedObservations.length} files`);
 	}
 
 	writeStdout("● Starting commit agent...");
@@ -148,7 +131,7 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 			contextFiles,
 			changelogTargets,
 			requireChangelog: !args.noChangelog && changelogTargets.length > 0,
-			preComputedObservations,
+			diffText: diff,
 			existingChangelogEntries,
 		});
 	} catch (error) {
@@ -166,6 +149,7 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 		}
 	}
 
+	let updatedChangelogFiles: string[] = [];
 	if (!args.noChangelog && changelogTargets.length > 0 && !usedFallback) {
 		if (!commitState.changelogProposal) {
 			writeStderr("Commit agent did not provide changelog entries.");
@@ -181,6 +165,7 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 				writeStdout(`  ├─ ${message}`);
 			},
 		});
+		updatedChangelogFiles = updated.map((path) => relative(cwd, path));
 		if (updated.length > 0) {
 			for (const path of updated) {
 				writeStdout(`  └─ ${path}`);
@@ -196,7 +181,12 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	}
 
 	if (commitState.splitProposal) {
-		await runSplitCommit(commitState.splitProposal, { git, dryRun: args.dryRun, push: args.push });
+		await runSplitCommit(commitState.splitProposal, {
+			git,
+			dryRun: args.dryRun,
+			push: args.push,
+			additionalFiles: updatedChangelogFiles,
+		});
 		return;
 	}
 
@@ -221,9 +211,15 @@ async function runSingleCommit(proposal: CommitProposal, ctx: CommitExecutionCon
 	}
 }
 
-async function runSplitCommit(plan: SplitCommitPlan, ctx: CommitExecutionContext): Promise<void> {
+async function runSplitCommit(
+	plan: SplitCommitPlan,
+	ctx: CommitExecutionContext & { additionalFiles?: string[] },
+): Promise<void> {
 	if (plan.warnings.length > 0) {
 		writeStdout(formatWarnings(plan.warnings));
+	}
+	if (ctx.additionalFiles && ctx.additionalFiles.length > 0) {
+		appendFilesToLastCommit(plan, ctx.additionalFiles);
 	}
 	const stagedFiles = await ctx.git.getStagedFiles();
 	const plannedFiles = new Set(plan.commits.flatMap((commit) => commit.changes.map((change) => change.path)));
@@ -283,6 +279,17 @@ async function runSplitCommit(plan: SplitCommitPlan, ctx: CommitExecutionContext
 	}
 }
 
+function appendFilesToLastCommit(plan: SplitCommitPlan, files: string[]): void {
+	if (plan.commits.length === 0) return;
+	const planned = new Set(plan.commits.flatMap((commit) => commit.changes.map((change) => change.path)));
+	const targetCommit = plan.commits[plan.commits.length - 1];
+	for (const file of files) {
+		if (planned.has(file)) continue;
+		targetCommit.changes.push({ path: file, hunks: { type: "all" } });
+		planned.add(file);
+	}
+}
+
 async function confirmSplitCommitPlan(plan: SplitCommitPlan): Promise<boolean> {
 	if (!process.stdin.isTTY || !process.stdout.isTTY) {
 		return true;
@@ -320,21 +327,26 @@ function formatFileChangeSummary(path: string, hunks: HunkSelector): string {
 }
 
 async function loadExistingChangelogEntries(paths: string[]): Promise<ExistingChangelogEntries[]> {
-	const entries: ExistingChangelogEntries[] = [];
-	for (const path of paths) {
-		const exists = await Bun.file(path).exists();
-		if (!exists) continue;
-		const content = await Bun.file(path).text();
-		try {
-			const unreleased = parseUnreleasedSection(content);
-			const sections = Object.entries(unreleased.entries)
-				.filter(([, items]) => items.length > 0)
-				.map(([name, items]) => ({ name, items }));
-			if (sections.length > 0) {
-				entries.push({ path, sections });
+	const entries = await Promise.all(
+		paths.map(async (path) => {
+			const file = Bun.file(path);
+			if (!(await file.exists())) {
+				return null;
 			}
-		} catch {
-		}
-	}
-	return entries;
+			const content = await file.text();
+			try {
+				const unreleased = parseUnreleasedSection(content);
+				const sections = Object.entries(unreleased.entries)
+					.filter(([, items]) => items.length > 0)
+					.map(([name, items]) => ({ name, items }));
+				if (sections.length > 0) {
+					return { path, sections };
+				}
+			} catch {
+				return null;
+			}
+			return null;
+		}),
+	);
+	return entries.filter((entry): entry is ExistingChangelogEntries => entry !== null);
 }

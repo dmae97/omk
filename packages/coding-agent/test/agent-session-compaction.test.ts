@@ -69,7 +69,7 @@ describe.skipIf(!API_KEY)("AgentSession compaction e2e", () => {
 		const settingsManager = await SettingsManager.create(tempDir, tempDir);
 		// Use minimal keepRecentTokens so small test conversations have something to summarize
 		settingsManager.applyOverrides({ compaction: { keepRecentTokens: 1 } });
-		const authStorage = new AuthStorage(join(tempDir, "auth.json"));
+		const authStorage = await AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = new ModelRegistry(authStorage);
 
 		session = new AgentSession({

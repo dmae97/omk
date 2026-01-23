@@ -65,4 +65,5 @@ export interface CommitAgentState {
 	splitProposal?: SplitCommitPlan;
 	changelogProposal?: ChangelogProposal;
 	diffCache?: Map<string, string>;
+	diffText?: string;
 }

@@ -63,7 +63,7 @@ describe.skipIf(!API_KEY)("AgentSession branching", () => {
 
 		sessionManager = noSession ? SessionManager.inMemory() : SessionManager.create(tempDir);
 		const settingsManager = await SettingsManager.create(tempDir, tempDir);
-		const authStorage = new AuthStorage(join(tempDir, "auth.json"));
+		const authStorage = await AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = new ModelRegistry(authStorage, tempDir);
 
 		session = new AgentSession({

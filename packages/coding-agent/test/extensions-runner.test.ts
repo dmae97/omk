@@ -18,12 +18,12 @@ describe("ExtensionRunner", () => {
 	let sessionManager: SessionManager;
 	let modelRegistry: ModelRegistry;
 
-	beforeEach(() => {
+	beforeEach(async () => {
 		tempDir = createTempDirSync("@pi-runner-test-");
 		extensionsDir = join(tempDir.path, ".omp", "extensions");
 		mkdirSync(extensionsDir, { recursive: true });
 		sessionManager = SessionManager.inMemory();
-		const authStorage = new AuthStorage(join(tempDir.path, "auth.json"));
+		const authStorage = await AuthStorage.create(join(tempDir.path, "auth.json"));
 		modelRegistry = new ModelRegistry(authStorage);
 	});
 
