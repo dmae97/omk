@@ -55,11 +55,6 @@ export type TaskItem = Static<typeof taskItemSchema>;
 export const taskSchema = Type.Object({
 	agent: Type.String({ description: "Agent type to use for all tasks" }),
 	context: Type.String({ description: "Template with {{placeholders}} filled by task vars" }),
-	model: Type.Optional(
-		Type.String({
-			description: "Model override for all tasks (fuzzy matching, e.g. 'sonnet', 'opus')",
-		}),
-	),
 	isolated: Type.Optional(
 		Type.Boolean({
 			description: "Run each task in an isolated git worktree",

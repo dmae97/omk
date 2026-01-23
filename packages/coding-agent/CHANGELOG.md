@@ -1,11 +1,18 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `isolated` option to run tasks in isolated git worktrees
 - Added automatic patch generation and application for isolated task execution
 - Added worktree management for isolated task execution with baseline capture and delta patching
+
+### Changed
+
+- Removed model parameter from task tool to use session model by default
+- Removed model parameter from gemini-image tool to use provider defaults
+- Improved variable display in task output with humanized keys for single variables
 
 ## [7.0.0] - 2026-01-21
 ### Added

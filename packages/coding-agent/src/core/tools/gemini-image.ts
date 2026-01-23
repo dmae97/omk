@@ -98,11 +98,6 @@ const baseImageSchema = Type.Object(
 					"For edits: what to keep unchanged (e.g., 'identity, face, hairstyle, lighting'). Use with input_images and changes.",
 			}),
 		),
-		model: Type.Optional(
-			Type.String({
-				description: `Image model. Default: ${DEFAULT_MODEL} (direct Gemini) or ${DEFAULT_OPENROUTER_MODEL} (OpenRouter).`,
-			}),
-		),
 		aspect_ratio: Type.Optional(aspectRatioSchema),
 		image_size: Type.Optional(imageSizeSchema),
 		input_images: Type.Optional(
@@ -474,7 +469,7 @@ export const geminiImageTool: CustomTool<typeof geminiImageSchema, GeminiImageTo
 			}
 
 			const provider = apiKey.provider;
-			const model = params.model ?? (provider === "openrouter" ? DEFAULT_OPENROUTER_MODEL : DEFAULT_MODEL);
+			const model = provider === "openrouter" ? DEFAULT_OPENROUTER_MODEL : DEFAULT_MODEL;
 			const resolvedModel = provider === "openrouter" ? resolveOpenRouterModel(model) : model;
 			const cwd = ctx.sessionManager.getCwd();
 

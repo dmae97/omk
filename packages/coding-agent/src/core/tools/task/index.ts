@@ -160,7 +160,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 	): Promise<AgentToolResult<TaskToolDetails>> {
 		const startTime = Date.now();
 		const { agents, projectAgentsDir } = await discoverAgents(this.session.cwd);
-		const { agent: agentName, context, model, output: outputSchema, isolated } = params;
+		const { agent: agentName, context, output: outputSchema, isolated } = params;
 		const isIsolated = isolated === true;
 
 		const isDefaultModelAlias = (value: string | undefined): boolean => {
@@ -188,9 +188,9 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 			};
 		}
 
-		const shouldInheritSessionModel = model === undefined && isDefaultModelAlias(agent.model);
-		const sessionModel = shouldInheritSessionModel ? this.session.getActiveModelString?.() : undefined;
-		const modelOverride = model ?? sessionModel ?? this.session.getModelString?.();
+		const effectiveAgentModel = isDefaultModelAlias(agent.model) ? undefined : agent.model;
+		const modelOverride =
+			effectiveAgentModel ?? this.session.getActiveModelString?.() ?? this.session.getModelString?.();
 		const thinkingLevelOverride = agent.thinkingLevel;
 
 		// Output schema priority: agent frontmatter > params > inherited from parent session

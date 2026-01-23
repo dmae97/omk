@@ -283,6 +283,11 @@ function formatVarsInline(vars: Record<string, string>, theme: Theme): string {
 	return `Vars: ${pairs.join(", ")}`;
 }
 
+/** Convert snake_case or kebab-case to Title Case */
+function humanizeKey(key: string): string {
+	return key.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function formatScalarInline(value: unknown, maxLen: number, theme: Theme): string {
 	if (value === null) return "null";
 	if (value === undefined) return "undefined";
@@ -344,9 +349,19 @@ function renderVarsSection(
 ): string[] {
 	if (!vars || Object.keys(vars).length === 0) return [];
 	const lines: string[] = [];
+	const entries = Object.entries(vars);
 
 	if (!expanded) {
 		lines.push(`${continuePrefix}${theme.fg("dim", formatVarsInline(vars, theme))}`);
+		return lines;
+	}
+
+	// Single variable: show inline as "Key: value" without tree structure
+	if (entries.length === 1) {
+		const [key, value] = entries[0];
+		const humanKey = humanizeKey(key);
+		const displayValue = `"${truncate(value, 60, theme.format.ellipsis)}"`;
+		lines.push(`${continuePrefix}${theme.fg("dim", `${humanKey}: ${displayValue}`)}`);
 		return lines;
 	}
 
