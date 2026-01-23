@@ -3,7 +3,8 @@ import { runCommitAgentSession } from "$c/commit/agentic/agent";
 import { computeDependencyOrder } from "$c/commit/agentic/topo-sort";
 import splitConfirmPrompt from "$c/commit/agentic/prompts/split-confirm.md" with { type: "text" };
 import type { CommitProposal, HunkSelector, SplitCommitPlan } from "$c/commit/agentic/state";
-import { runChangelogFlow } from "$c/commit/changelog";
+import { applyChangelogProposals } from "$c/commit/changelog";
+import { detectChangelogBoundaries } from "$c/commit/changelog/detect";
 import { ControlledGit } from "$c/commit/git";
 import { formatCommitMessage } from "$c/commit/message";
 import { resolvePrimaryModel } from "$c/commit/model-selection";
@@ -21,12 +22,11 @@ interface CommitExecutionContext {
 export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	const cwd = process.cwd();
 	const settingsManager = await SettingsManager.create(cwd);
-	const commitSettings = settingsManager.getCommitSettings();
 	const authStorage = await discoverAuthStorage();
 	const modelRegistry = await discoverModels(authStorage);
 
 	writeStdout("● Resolving model...");
-	const { model: primaryModel, apiKey: primaryApiKey } = await resolvePrimaryModel(
+	const { model: primaryModel } = await resolvePrimaryModel(
 		args.model,
 		settingsManager,
 		modelRegistry,
@@ -46,25 +46,17 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	}
 
 	if (!args.noChangelog) {
-		writeStdout("● Updating changelog...");
-		const updated = await runChangelogFlow({
-			git,
-			cwd,
-			model: primaryModel,
-			apiKey: primaryApiKey,
-			stagedFiles,
-			dryRun: args.dryRun,
-			maxDiffChars: commitSettings.changelogMaxDiffChars,
-			onProgress: (message) => {
-				writeStdout(`  ├─ ${message}`);
-			},
-		});
-		if (updated.length > 0) {
-			for (const path of updated) {
+		writeStdout("● Detecting changelog targets...");
+	}
+	const changelogBoundaries = args.noChangelog ? [] : await detectChangelogBoundaries(cwd, stagedFiles);
+	const changelogTargets = changelogBoundaries.map((boundary) => boundary.changelogPath);
+	if (!args.noChangelog) {
+		if (changelogTargets.length > 0) {
+			for (const path of changelogTargets) {
 				writeStdout(`  └─ ${path}`);
 			}
 		} else {
-			writeStdout("  └─ (no changes)");
+			writeStdout("  └─ (none found)");
 		}
 	}
 
@@ -89,7 +81,33 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 		authStorage,
 		userContext: args.context,
 		contextFiles,
+		changelogTargets,
+		requireChangelog: !args.noChangelog && changelogTargets.length > 0,
 	});
+
+	if (!args.noChangelog && changelogTargets.length > 0) {
+		if (!commitState.changelogProposal) {
+			writeStderr("Commit agent did not provide changelog entries.");
+			return;
+		}
+		writeStdout("● Applying changelog entries...");
+		const updated = await applyChangelogProposals({
+			git,
+			cwd,
+			proposals: commitState.changelogProposal.entries,
+			dryRun: args.dryRun,
+			onProgress: (message) => {
+				writeStdout(`  ├─ ${message}`);
+			},
+		});
+		if (updated.length > 0) {
+			for (const path of updated) {
+				writeStdout(`  └─ ${path}`);
+			}
+		} else {
+			writeStdout("  └─ (no changes)");
+		}
+	}
 
 	if (commitState.proposal) {
 		await runSingleCommit(commitState.proposal, { git, dryRun: args.dryRun, push: args.push });

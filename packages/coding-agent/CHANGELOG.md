@@ -26,6 +26,7 @@
 - Added parallel file analysis with cross-file context awareness via `analyze_files` tool
 - Added AGENTS.md context file discovery for commit generation
 - Added progress indicators during changelog generation and model resolution
+- Added propose_changelog tool for agent-provided changelog entries in agentic commit workflow
 
 ### Changed
 - Changed changelog diff truncation limit to be configurable via settings
@@ -61,6 +62,7 @@
 - Changed empty and error state rendering across multiple tools (Find, Grep, Ls, Notebook, Calculator, Ask) to include consistent status headers
 - Changed split commit to support hunk selectors (all, indices, or line ranges) instead of whole-file staging
 - Changed `analyze_file` tool to `analyze_files` for batch parallel analysis of multiple files
+- Switched agentic commit from auto-generated changelogs to agent-proposed entries with validation and retry logic
 
 ### Fixed
 - Fixed database busy errors during concurrent access by adding retry logic with exponential backoff when opening storage

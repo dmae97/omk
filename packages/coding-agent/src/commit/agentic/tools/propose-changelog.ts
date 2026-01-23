@@ -1,0 +1,105 @@
+import { Type } from "@sinclair/typebox";
+import type { CommitAgentState } from "$c/commit/agentic/state";
+import type { ChangelogCategory } from "$c/commit/types";
+import type { CustomTool } from "$c/extensibility/custom-tools/types";
+
+const changelogEntrySchema = Type.Object({
+	path: Type.String(),
+	entries: Type.Record(Type.String(), Type.Array(Type.String())),
+});
+
+const proposeChangelogSchema = Type.Object({
+	entries: Type.Array(changelogEntrySchema),
+});
+
+interface ChangelogResponse {
+	valid: boolean;
+	errors: string[];
+	warnings: string[];
+}
+
+const allowedCategories = new Set<ChangelogCategory>([
+	"Breaking Changes",
+	"Added",
+	"Changed",
+	"Deprecated",
+	"Removed",
+	"Fixed",
+	"Security",
+]);
+
+export function createProposeChangelogTool(
+	state: CommitAgentState,
+	changelogTargets: string[],
+): CustomTool<typeof proposeChangelogSchema> {
+	return {
+		name: "propose_changelog",
+		label: "Propose Changelog",
+		description: "Provide changelog entries for targeted CHANGELOG.md files.",
+		parameters: proposeChangelogSchema,
+		async execute(_toolCallId, params) {
+			const errors: string[] = [];
+			const warnings: string[] = [];
+			const targets = new Set(changelogTargets);
+			const seen = new Set<string>();
+
+			const normalized = params.entries.map((entry) => {
+				const cleaned: Record<string, string[]> = {};
+				for (const [category, values] of Object.entries(entry.entries ?? {})) {
+					if (!allowedCategories.has(category as ChangelogCategory)) {
+						errors.push(`Unknown changelog category for ${entry.path}: ${category}`);
+						continue;
+					}
+					const items = values
+						.map((value) => value.trim().replace(/\.$/, ""))
+						.filter((value) => value.length > 0);
+					if (items.length > 0) {
+						cleaned[category] = Array.from(new Set(items));
+					}
+				}
+				if (Object.keys(cleaned).length === 0) {
+					warnings.push(`No changelog entries provided for ${entry.path}.`);
+				}
+				return {
+					path: entry.path,
+					entries: cleaned,
+				};
+			});
+
+			for (const entry of normalized) {
+				if (targets.size > 0 && !targets.has(entry.path)) {
+					errors.push(`Changelog not expected: ${entry.path}`);
+					continue;
+				}
+				if (seen.has(entry.path)) {
+					errors.push(`Duplicate changelog entry for ${entry.path}`);
+					continue;
+				}
+				seen.add(entry.path);
+			}
+
+			if (targets.size > 0) {
+				for (const target of targets) {
+					if (!seen.has(target)) {
+						errors.push(`Missing changelog entries for ${target}`);
+					}
+				}
+			}
+
+			const response: ChangelogResponse = {
+				valid: errors.length === 0,
+				errors,
+				warnings,
+			};
+
+			if (response.valid) {
+				state.changelogProposal = { entries: normalized };
+			}
+
+			return {
+				content: [{ type: "text", text: JSON.stringify(response, null, 2) }],
+				details: response,
+			};
+		},
+	};
+}

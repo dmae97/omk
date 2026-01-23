@@ -24,6 +24,8 @@ export interface CommitAgentInput {
 	authStorage: AuthStorage;
 	userContext?: string;
 	contextFiles?: Array<{ path: string; content: string }>;
+	changelogTargets: string[];
+	requireChangelog: boolean;
 }
 
 export async function runCommitAgentSession(input: CommitAgentInput): Promise<CommitAgentState> {
@@ -41,6 +43,7 @@ export async function runCommitAgentSession(input: CommitAgentInput): Promise<Co
 		settingsManager: input.settingsManager,
 		spawns,
 		state,
+		changelogTargets: input.changelogTargets,
 	});
 
 	const { session } = await createAgentSession({
@@ -130,8 +133,21 @@ export async function runCommitAgentSession(input: CommitAgentInput): Promise<Co
 	});
 
 	try {
-		const prompt = renderPromptTemplate(agentUserPrompt, { user_context: input.userContext });
+		const prompt = renderPromptTemplate(agentUserPrompt, {
+			user_context: input.userContext,
+			changelog_targets: input.changelogTargets.length > 0 ? input.changelogTargets.join("\n") : undefined,
+		});
+		const MAX_RETRIES = 3;
+		let retryCount = 0;
+		const needsChangelog = input.requireChangelog && input.changelogTargets.length > 0;
+
 		await session.prompt(prompt, { expandPromptTemplates: false });
+		while (retryCount < MAX_RETRIES && !isProposalComplete(state, needsChangelog)) {
+			retryCount += 1;
+			const reminder = buildReminderMessage(state, needsChangelog, retryCount, MAX_RETRIES);
+			await session.prompt(reminder, { expandPromptTemplates: false });
+		}
+
 		return state;
 	} finally {
 		unsubscribe();
@@ -241,6 +257,35 @@ function formatToolArgsBlock(lines: string[]): string {
 			return `    ${branch} ${line}`;
 		})
 		.join("\n");
+}
+
+function isProposalComplete(state: CommitAgentState, requireChangelog: boolean): boolean {
+	const hasCommit = Boolean(state.proposal ?? state.splitProposal);
+	const hasChangelog = !requireChangelog || Boolean(state.changelogProposal);
+	return hasCommit && hasChangelog;
+}
+
+function buildReminderMessage(
+	state: CommitAgentState,
+	requireChangelog: boolean,
+	retryCount: number,
+	maxRetries: number,
+): string {
+	const missing: string[] = [];
+	if (!state.proposal && !state.splitProposal) {
+		missing.push("commit proposal (propose_commit or split_commit)");
+	}
+	if (requireChangelog && !state.changelogProposal) {
+		missing.push("changelog entries (propose_changelog)");
+	}
+	return `<system-reminder>
+CRITICAL: You must call the required tools before finishing.
+
+Missing: ${missing.join(", ") || "none"}.
+Reminder ${retryCount} of ${maxRetries}.
+
+Call the missing tool(s) now.
+</system-reminder>`;
 }
 
 function truncateToolArg(value: string): string {

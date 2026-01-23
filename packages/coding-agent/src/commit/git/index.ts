@@ -8,10 +8,13 @@ import { GitError } from "$c/commit/git/errors";
 import { commit, push, resetStaging, runGitCommand, stageFiles } from "$c/commit/git/operations";
 import type { FileDiff, FileHunks, NumstatEntry } from "$c/commit/types";
 
-export type HunkSelection =
-	| { path: string; hunks: { type: "all" } }
-	| { path: string; hunks: { type: "indices"; indices: number[] } }
-	| { path: string; hunks: { type: "lines"; start: number; end: number } };
+export type HunkSelection = {
+	path: string;
+	hunks:
+		| { type: "all" }
+		| { type: "indices"; indices: number[] }
+		| { type: "lines"; start: number; end: number };
+};
 
 export class ControlledGit {
 	constructor(private readonly cwd: string) {}

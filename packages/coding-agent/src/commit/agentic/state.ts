@@ -50,8 +50,13 @@ export interface SplitCommitPlan {
 	warnings: string[];
 }
 
+export interface ChangelogProposal {
+	entries: Array<{ path: string; entries: Record<string, string[]> }>;
+}
+
 export interface CommitAgentState {
 	overview?: GitOverviewSnapshot;
 	proposal?: CommitProposal;
 	splitProposal?: SplitCommitPlan;
+	changelogProposal?: ChangelogProposal;
 }

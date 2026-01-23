@@ -21,6 +21,14 @@ export interface ChangelogFlowInput {
 	onProgress?: (message: string) => void;
 }
 
+export interface ChangelogProposalInput {
+	git: ControlledGit;
+	cwd: string;
+	proposals: Array<{ path: string; entries: Record<string, string[]> }>;
+	dryRun: boolean;
+	onProgress?: (message: string) => void;
+}
+
 /**
  * Update CHANGELOG.md entries for staged changes.
  */
@@ -73,6 +81,46 @@ export async function runChangelogFlow({
 			await git.stageFiles([relative(cwd, boundary.changelogPath)]);
 		}
 		updated.push(boundary.changelogPath);
+	}
+
+	return updated;
+}
+
+/**
+ * Apply changelog entries provided by the commit agent.
+ */
+export async function applyChangelogProposals({
+	git,
+	cwd,
+	proposals,
+	dryRun,
+	onProgress,
+}: ChangelogProposalInput): Promise<string[]> {
+	const updated: string[] = [];
+	for (const proposal of proposals) {
+		if (Object.keys(proposal.entries).length === 0) continue;
+		onProgress?.(`Applying entries for ${proposal.path}...`);
+		const exists = await Bun.file(proposal.path).exists();
+		if (!exists) {
+			logger.warn("commit changelog path missing", { path: proposal.path });
+			continue;
+		}
+		const changelogContent = await Bun.file(proposal.path).text();
+		let unreleased: { startLine: number; endLine: number; entries: Record<string, string[]> };
+		try {
+			unreleased = parseUnreleasedSection(changelogContent);
+		} catch (error) {
+			logger.warn("commit changelog parse skipped", { path: proposal.path, error: String(error) });
+			continue;
+		}
+		const normalized = normalizeEntries(proposal.entries);
+		if (Object.keys(normalized).length === 0) continue;
+		const updatedContent = applyChangelogEntries(changelogContent, unreleased, normalized);
+		if (!dryRun) {
+			await Bun.write(proposal.path, updatedContent);
+			await git.stageFiles([relative(cwd, proposal.path)]);
+		}
+		updated.push(proposal.path);
 	}
 
 	return updated;
@@ -143,4 +191,16 @@ function renderUnreleasedSections(entries: Record<string, string[]>): string[] {
 		lines.pop();
 	}
 	return lines;
+}
+
+function normalizeEntries(entries: Record<string, string[]>): Record<string, string[]> {
+	const result: Record<string, string[]> = {};
+	for (const [section, items] of Object.entries(entries)) {
+		const trimmed = items
+			.map((item) => item.trim().replace(/\.$/, ""))
+			.filter((item) => item.length > 0);
+		if (trimmed.length === 0) continue;
+		result[section] = Array.from(new Set(trimmed.map((item) => item.trim())));
+	}
+	return result;
 }

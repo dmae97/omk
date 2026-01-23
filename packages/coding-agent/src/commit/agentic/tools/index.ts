@@ -4,6 +4,7 @@ import { createGitFileDiffTool } from "$c/commit/agentic/tools/git-file-diff";
 import { createGitHunkTool } from "$c/commit/agentic/tools/git-hunk";
 import { createGitOverviewTool } from "$c/commit/agentic/tools/git-overview";
 import { createProposeCommitTool } from "$c/commit/agentic/tools/propose-commit";
+import { createProposeChangelogTool } from "$c/commit/agentic/tools/propose-changelog";
 import { createRecentCommitsTool } from "$c/commit/agentic/tools/recent-commits";
 import { createSplitCommitTool } from "$c/commit/agentic/tools/split-commit";
 import type { ControlledGit } from "$c/commit/git";
@@ -20,6 +21,7 @@ export interface CommitToolOptions {
 	settingsManager: SettingsManager;
 	spawns: string;
 	state: CommitAgentState;
+	changelogTargets: string[];
 }
 
 export function createCommitTools(options: CommitToolOptions): Array<CustomTool<any, any>> {
@@ -35,7 +37,8 @@ export function createCommitTools(options: CommitToolOptions): Array<CustomTool<
 			settingsManager: options.settingsManager,
 			spawns: options.spawns,
 		}),
+		createProposeChangelogTool(options.state, options.changelogTargets),
 		createProposeCommitTool(options.git, options.state),
-		createSplitCommitTool(options.git, options.state),
+		createSplitCommitTool(options.git, options.state, options.changelogTargets),
 	];
 }

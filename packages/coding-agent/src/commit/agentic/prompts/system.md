@@ -28,6 +28,7 @@ Tool guidance:
 - git_hunk: pull specific hunks for large diffs
 - recent_commits: recent commit subjects + style stats
 - analyze_files: spawn quick_task subagents in parallel to analyze files
+- propose_changelog: provide changelog entries for each changelog target
 - propose_commit: submit final commit proposal and run validation
 - split_commit: propose multiple commit groups (no overlapping files, all staged files covered)
 
@@ -39,3 +40,8 @@ For commits with 4+ files, you MUST use `analyze_files` to analyze all files in 
 3. Use observations to inform your final proposal
 
 DO NOT call `analyze_files` with a single file for large commits. This is slow and loses cross-file context.
+
+## Changelog Requirements
+
+If changelog targets are provided, you MUST call `propose_changelog` before finishing.
+If you propose a split commit plan, include changelog target files in the relevant commit changes.

@@ -94,7 +94,8 @@ function normalizeDetails(
 
 export function createSplitCommitTool(
 	git: ControlledGit,
-	state: CommitAgentState,
+state: CommitAgentState,
+	changelogTargets: string[],
 ): CustomTool<typeof splitCommitSchema> {
 	return {
 		name: "split_commit",
@@ -104,6 +105,7 @@ export function createSplitCommitTool(
 		async execute(_toolCallId, params) {
 			const stagedFiles = state.overview?.files ?? (await git.getStagedFiles());
 			const stagedSet = new Set(stagedFiles);
+			const changelogSet = new Set(changelogTargets);
 			const usedFiles = new Set<string>();
 			const errors: string[] = [];
 			const warnings: string[] = [];
@@ -163,7 +165,7 @@ export function createSplitCommitTool(
 				const seen = new Set<string>();
 				for (const change of commit.changes) {
 					const file = change.path;
-					if (!stagedSet.has(file)) {
+					if (!stagedSet.has(file) && !changelogSet.has(file)) {
 						errors.push(`File not staged: ${file}`);
 						continue;
 					}
