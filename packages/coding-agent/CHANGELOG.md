@@ -105,12 +105,10 @@
 - Updated TypeScript and Bun configuration for monorepo-wide build consistency and reduced boilerplate
 - Removed WASM base64 encoding build script; imports now use Bun loader with `wasm?raw` query parameter
 - Unified TypeScript checking pipeline with tsgo-based configuration instead of per-package tsconfig.publish.json boilerplate
-- Migrated file system operations from synchronous to asynchronous APIs in skills loading, agent discovery, and file processing for improved performance
 - Refactored scanDirectoryForSkills to use async/await with concurrent directory scanning via Promise.all
-- Migrated file system operations from synchronous to asynchronous APIs across plugins, settings, extensions, and config modules
-- Updated import organization in model-registry.ts and other modules for consistency
-- Changed FilesystemError handling to use new pi-utils type guards for safer error checking
 - Improved error logging in settings manager for config file access failures
+- Migrated node module imports from named to namespace imports across all packages for consistency with project guidelines
+- Improved filesystem error handling in extension loader with additional type guards (isEacces, hasFsCode) for permission and EPERM errors
 
 ### Fixed
 - Fixed database busy errors during concurrent access by adding retry logic with exponential backoff when opening storage

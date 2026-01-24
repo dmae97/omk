@@ -5,7 +5,7 @@
  * Returns structured search results with optional content extraction.
  */
 
-import { homedir } from "node:os";
+import * as os from "node:os";
 import type { WebSearchResponse, WebSearchSource } from "../../../web/search/types";
 import { WebSearchProviderError } from "../../../web/search/types";
 
@@ -57,7 +57,7 @@ async function parseEnvFile(filePath: string): Promise<Record<string, string>> {
 }
 
 function getHomeDir(): string {
-	return homedir();
+	return os.homedir();
 }
 
 /** Find EXA_API_KEY from environment or .env files */

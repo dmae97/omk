@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import {
 	ApplyPatchError,
@@ -336,7 +336,7 @@ describe("apply-patch scenarios", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `apply-patch-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(os.tmpdir(), `apply-patch-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -424,7 +424,7 @@ describe("applyPatch", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `apply-patch-unit-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(os.tmpdir(), `apply-patch-unit-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -579,7 +579,7 @@ describe("simple replace mode", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `simple-replace-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(os.tmpdir(), `simple-replace-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 

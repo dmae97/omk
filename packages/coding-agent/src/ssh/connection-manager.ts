@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import { homedir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
@@ -26,9 +26,9 @@ export interface SSHHostInfo {
 	compatEnabled: boolean;
 }
 
-const CONTROL_DIR = path.join(homedir(), CONFIG_DIR_NAME, "ssh-control");
+const CONTROL_DIR = path.join(os.homedir(), CONFIG_DIR_NAME, "ssh-control");
 const CONTROL_PATH = path.join(CONTROL_DIR, "%h.sock");
-const HOST_INFO_DIR = path.join(homedir(), CONFIG_DIR_NAME, "remote-host");
+const HOST_INFO_DIR = path.join(os.homedir(), CONFIG_DIR_NAME, "remote-host");
 const HOST_INFO_VERSION = 2;
 
 const activeHosts = new Map<string, SSHConnectionTarget>();
@@ -41,15 +41,6 @@ async function ensureControlDir(): Promise<void> {
 		await fs.chmod(CONTROL_DIR, 0o700);
 	} catch (err) {
 		logger.debug("SSH control dir chmod failed", { path: CONTROL_DIR, error: String(err) });
-	}
-}
-
-async function ensureHostInfoDir(): Promise<void> {
-	await fs.mkdir(HOST_INFO_DIR, { recursive: true, mode: 0o700 });
-	try {
-		await fs.chmod(HOST_INFO_DIR, 0o700);
-	} catch (err) {
-		logger.debug("SSH host info dir chmod failed", { path: HOST_INFO_DIR, error: String(err) });
 	}
 }
 
@@ -242,7 +233,6 @@ async function loadHostInfoFromDiskByName(hostName: string): Promise<SSHHostInfo
 
 async function persistHostInfo(host: SSHConnectionTarget, info: SSHHostInfo): Promise<void> {
 	try {
-		await ensureHostInfoDir();
 		const path = getHostInfoPath(host.name);
 		const payload = { ...info, version: HOST_INFO_VERSION };
 		hostInfoCache.set(host.name, payload);

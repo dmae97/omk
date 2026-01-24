@@ -1,5 +1,5 @@
 import * as fs from "node:fs";
-import { homedir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { supportsXhigh } from "./models";
 import { type BedrockOptions, streamBedrock } from "./providers/amazon-bedrock";
@@ -37,7 +37,7 @@ function hasVertexAdcCredentials(): boolean {
 			cachedVertexAdcCredentialsExists = fs.existsSync(gacPath);
 		} else {
 			cachedVertexAdcCredentialsExists = fs.existsSync(
-				path.join(homedir(), ".config", "gcloud", "application_default_credentials.json"),
+				path.join(os.homedir(), ".config", "gcloud", "application_default_credentials.json"),
 			);
 		}
 	}

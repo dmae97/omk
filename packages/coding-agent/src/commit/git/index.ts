@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import type { FileDiff, FileHunks, NumstatEntry } from "../../commit/types";
@@ -134,7 +134,7 @@ export class ControlledGit {
 
 		const patch = joinPatch(patchParts);
 		if (!patch.trim()) return;
-		const tempPath = path.join(tmpdir(), `omp-hunks-${randomUUID()}.patch`);
+		const tempPath = path.join(os.tmpdir(), `omp-hunks-${randomUUID()}.patch`);
 		try {
 			await Bun.write(tempPath, patch);
 			const result = await runGitCommand(this.cwd, ["apply", "--cached", "--binary", tempPath]);

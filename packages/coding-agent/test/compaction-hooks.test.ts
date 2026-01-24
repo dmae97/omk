@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { Agent } from "@oh-my-pi/pi-agent-core";
 import { getModel } from "@oh-my-pi/pi-ai";
@@ -33,7 +33,7 @@ describe.skipIf(!API_KEY)("Compaction hooks", () => {
 	let capturedEvents: SessionEvent[];
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `omp-compaction-hooks-test-${nanoid()}`);
+		tempDir = path.join(os.tmpdir(), `omp-compaction-hooks-test-${nanoid()}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 		capturedEvents = [];
 	});

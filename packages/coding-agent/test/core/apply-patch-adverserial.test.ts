@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { ApplyPatchError, applyPatch } from "@oh-my-pi/pi-coding-agent/patch";
 
@@ -8,7 +8,7 @@ describe("applyPatch adversarial inputs", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `apply-patch-adversarial-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(os.tmpdir(), `apply-patch-adversarial-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 

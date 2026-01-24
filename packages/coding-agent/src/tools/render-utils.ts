@@ -5,7 +5,7 @@
  * tool renderers to ensure a unified TUI experience.
  */
 
-import { homedir } from "node:os";
+import * as os from "node:os";
 import type { Theme } from "../modes/theme/theme";
 import { getTreeBranch } from "../tui/utils";
 
@@ -643,7 +643,7 @@ export function truncateDiffByHunk(
 // =============================================================================
 
 export function shortenPath(filePath: string, homeDir?: string): string {
-	const home = homeDir ?? homedir();
+	const home = homeDir ?? os.homedir();
 	if (home && filePath.startsWith(home)) {
 		return `~${filePath.slice(home.length)}`;
 	}

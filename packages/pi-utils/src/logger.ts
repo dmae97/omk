@@ -6,14 +6,14 @@
  */
 
 import * as fs from "node:fs";
-import { homedir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import winston from "winston";
 import DailyRotateFile from "winston-daily-rotate-file";
 
 /** Get the logs directory (~/.omp/logs/) */
 function getLogsDir(): string {
-	return path.join(homedir(), ".omp", "logs");
+	return path.join(os.homedir(), ".omp", "logs");
 }
 
 /** Ensure logs directory exists */

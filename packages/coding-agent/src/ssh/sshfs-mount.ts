@@ -1,11 +1,11 @@
 import * as fs from "node:fs";
-import { homedir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { $ } from "bun";
 import { CONFIG_DIR_NAME } from "../config";
 import { getControlDir, getControlPathTemplate, type SSHConnectionTarget } from "./connection-manager";
 
-const REMOTE_DIR = path.join(homedir(), CONFIG_DIR_NAME, "remote");
+const REMOTE_DIR = path.join(os.homedir(), CONFIG_DIR_NAME, "remote");
 const CONTROL_DIR = getControlDir();
 const CONTROL_PATH = getControlPathTemplate();
 

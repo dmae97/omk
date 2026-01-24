@@ -4,7 +4,7 @@
  * Client for interacting with Exa MCP servers.
  */
 
-import { homedir } from "node:os";
+import * as os from "node:os";
 import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
 
@@ -29,7 +29,7 @@ export async function findApiKey(): Promise<string | null> {
 
 	// Try loading from .env files in cwd and home
 	const cwd = process.cwd();
-	const home = homedir();
+	const home = os.homedir();
 
 	for (const dir of [cwd, home]) {
 		const envPath = `${dir}/.env`;

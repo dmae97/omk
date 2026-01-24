@@ -77,10 +77,12 @@ $`do-stuff ${tmpFile}`.quiet().nothrow();
 // BAD: Named imports
 import { readdir, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 
 // GOOD: Namespace imports
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import * as os from "node:os";
 
 // Then use: fs.readdir(), path.join(), etc.
 ```
@@ -98,7 +100,7 @@ await fs.stat(path);
 
 // File mixing sync and async (e.g., sync in constructor, async in methods)
 import * as fs from "node:fs";
-fs.existsSync(path);           // sync
+fs.existsSync(path); // sync
 await fs.promises.readdir(dir); // async
 ```
 

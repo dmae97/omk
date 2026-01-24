@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { homedir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { loadSkills, loadSkillsFromDir, type Skill } from "@oh-my-pi/pi-coding-agent/extensibility/skills";
 
@@ -188,7 +188,7 @@ describe("skills", () => {
 		});
 
 		it("should expand ~ in customDirectories", async () => {
-			const homeSkillsDir = path.join(homedir(), ".omp/agent/skills");
+			const homeSkillsDir = path.join(os.homedir(), ".omp/agent/skills");
 			const { skills: withTilde } = await loadSkills({
 				enableCodexUser: false,
 				enableClaudeUser: false,

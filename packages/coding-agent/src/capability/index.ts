@@ -7,7 +7,7 @@
  * - Loading items for a capability across all providers
  */
 
-import { homedir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { clearCache as clearFsCache, cacheStats as fsCacheStats, invalidate as invalidateFs } from "./fs";
 import type {
@@ -214,7 +214,7 @@ export async function loadCapability<T>(capabilityId: string, options: LoadOptio
 	}
 
 	const cwd = options.cwd ?? process.cwd();
-	const home = homedir();
+	const home = os.homedir();
 	const ctx: LoadContext = { cwd, home };
 	const providers = filterProviders(capability, options);
 

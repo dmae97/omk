@@ -1,10 +1,10 @@
 import { Database } from "bun:sqlite";
 import * as fs from "node:fs/promises";
-import { homedir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import type { AggregatedStats, FolderStats, MessageStats, ModelStats, TimeSeriesPoint } from "./types";
 
-const DB_PATH = path.join(homedir(), ".omp", "stats.db");
+const DB_PATH = path.join(os.homedir(), ".omp", "stats.db");
 
 let db: Database | null = null;
 
@@ -15,7 +15,7 @@ export async function initDb(): Promise<Database> {
 	if (db) return db;
 
 	// Ensure directory exists
-	await fs.mkdir(path.join(homedir(), ".omp"), { recursive: true });
+	await fs.mkdir(path.join(os.homedir(), ".omp"), { recursive: true });
 
 	db = new Database(DB_PATH);
 	db.exec("PRAGMA journal_mode = WAL");

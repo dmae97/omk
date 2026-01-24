@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { processFileArguments } from "@oh-my-pi/pi-coding-agent/cli/file-processor";
 import { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
@@ -56,7 +56,7 @@ describe("blockImages setting", () => {
 		let testDir: string;
 
 		beforeEach(() => {
-			testDir = path.join(tmpdir(), `block-images-test-${Date.now()}-${Math.random()}`);
+			testDir = path.join(os.tmpdir(), `block-images-test-${Date.now()}-${Math.random()}`);
 			fs.mkdirSync(testDir, { recursive: true });
 		});
 
@@ -97,7 +97,7 @@ describe("blockImages setting", () => {
 		let testDir: string;
 
 		beforeEach(() => {
-			testDir = path.join(tmpdir(), `block-images-process-test-${Date.now()}-${Math.random()}`);
+			testDir = path.join(os.tmpdir(), `block-images-process-test-${Date.now()}-${Math.random()}`);
 			fs.mkdirSync(testDir, { recursive: true });
 		});
 

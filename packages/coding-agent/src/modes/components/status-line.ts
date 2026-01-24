@@ -1,8 +1,8 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { type Component, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
 import { $ } from "bun";
-import { type FSWatcher, watch } from "fs";
-import { dirname, join } from "path";
 import type { StatusLineSegmentOptions, StatusLineSettings } from "../../config/settings-manager";
 import { theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
@@ -26,11 +26,11 @@ function sanitizeStatusText(text: string): string {
 async function findGitHeadPath(): Promise<string | null> {
 	let dir = process.cwd();
 	while (true) {
-		const gitHeadPath = join(dir, ".git", "HEAD");
+		const gitHeadPath = path.join(dir, ".git", "HEAD");
 		if (await Bun.file(gitHeadPath).exists()) {
 			return gitHeadPath;
 		}
-		const parent = dirname(dir);
+		const parent = path.dirname(dir);
 		if (parent === dir) {
 			return null;
 		}
@@ -46,7 +46,7 @@ export class StatusLineComponent implements Component {
 	private session: AgentSession;
 	private settings: StatusLineSettings = {};
 	private cachedBranch: string | null | undefined = undefined;
-	private gitWatcher: FSWatcher | null = null;
+	private gitWatcher: fs.FSWatcher | null = null;
 	private onBranchChange: (() => void) | null = null;
 	private autoCompactEnabled: boolean = true;
 	private hookStatuses: Map<string, string> = new Map();
@@ -102,7 +102,7 @@ export class StatusLineComponent implements Component {
 			if (!gitHeadPath) return;
 
 			try {
-				this.gitWatcher = watch(gitHeadPath, () => {
+				this.gitWatcher = fs.watch(gitHeadPath, () => {
 					this.cachedBranch = undefined;
 					if (this.onBranchChange) {
 						this.onBranchChange();

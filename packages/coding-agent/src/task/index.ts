@@ -14,7 +14,7 @@
  */
 
 import * as fs from "node:fs/promises";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import path from "node:path";
 import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Usage } from "@oh-my-pi/pi-ai";
@@ -308,9 +308,8 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 		// Derive artifacts directory
 		const sessionFile = this.session.getSessionFile();
 		const artifactsDir = sessionFile ? sessionFile.slice(0, -6) : null;
-		const tempArtifactsDir = artifactsDir ? null : path.join(tmpdir(), `omp-task-${nanoid()}`);
+		const tempArtifactsDir = artifactsDir ? null : path.join(os.tmpdir(), `omp-task-${nanoid()}`);
 		const effectiveArtifactsDir = artifactsDir || tempArtifactsDir!;
-		await fs.mkdir(effectiveArtifactsDir, { recursive: true });
 
 		// Initialize progress tracking
 		const progressMap = new Map<number, AgentProgress>();
@@ -587,7 +586,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 						if (!combinedPatch.trim()) {
 							patchesApplied = true;
 						} else {
-							const combinedPatchPath = path.join(tmpdir(), `omp-task-combined-${nanoid()}.patch`);
+							const combinedPatchPath = path.join(os.tmpdir(), `omp-task-combined-${nanoid()}.patch`);
 							try {
 								await Bun.write(combinedPatchPath, combinedPatch);
 								const checkResult = await $`git apply --check --binary ${combinedPatchPath}`

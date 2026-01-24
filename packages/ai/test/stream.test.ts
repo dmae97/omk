@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { type ChildProcess, execSync, spawn } from "node:child_process";
 import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { getModel } from "@oh-my-pi/pi-ai/models";
 import { complete, stream } from "@oh-my-pi/pi-ai/stream";
 import type { Api, Context, ImageContent, Model, OptionsForApi, Tool, ToolResultMessage } from "@oh-my-pi/pi-ai/types";
 import { StringEnum } from "@oh-my-pi/pi-ai/utils/typebox-helpers";
 import { Type } from "@sinclair/typebox";
-import { join } from "path";
 import { e2eApiKey, resolveApiKey } from "./oauth";
 
 // Resolve OAuth tokens at module level (async, runs before tests)
@@ -218,7 +218,7 @@ async function handleImage<TApi extends Api>(model: Model<TApi>, options?: Optio
 	}
 
 	// Read the test image
-	const imagePath = join(import.meta.dir, "data", "red-circle.png");
+	const imagePath = path.join(import.meta.dir, "data", "red-circle.png");
 	const imageBuffer = await fs.readFile(imagePath);
 	const base64Image = imageBuffer.toString("base64");
 

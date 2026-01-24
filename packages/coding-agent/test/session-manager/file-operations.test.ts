@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { findMostRecentSession, loadEntriesFromFile } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { nanoid } from "nanoid";
@@ -9,7 +9,7 @@ describe("loadEntriesFromFile", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `session-test-${nanoid()}`);
+		tempDir = path.join(os.tmpdir(), `session-test-${nanoid()}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -70,7 +70,7 @@ describe("findMostRecentSession", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `session-test-${nanoid()}`);
+		tempDir = path.join(os.tmpdir(), `session-test-${nanoid()}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 

@@ -6,7 +6,7 @@
  */
 
 import * as fs from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { type ImageContent, supportsXhigh } from "@oh-my-pi/pi-ai";
@@ -274,7 +274,7 @@ async function maybeAutoChdir(parsed: Args): Promise<void> {
 		return;
 	}
 
-	const home = homedir();
+	const home = os.homedir();
 	if (!home) {
 		return;
 	}
@@ -313,7 +313,7 @@ async function maybeAutoChdir(parsed: Args): Promise<void> {
 	}
 
 	try {
-		const fallback = tmpdir();
+		const fallback = os.tmpdir();
 		if (fallback && normalizePath(fallback) !== cwd && (await isDirectory(fallback))) {
 			process.chdir(fallback);
 		}

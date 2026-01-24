@@ -1,5 +1,5 @@
 import * as fs from "node:fs";
-import { homedir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 // Embed package.json at build time for config
@@ -56,7 +56,7 @@ export function getChangelogPath(): string {
 
 /** Get the agent config directory (e.g., ~/.omp/agent/) */
 export function getAgentDir(): string {
-	return process.env[ENV_AGENT_DIR] || path.join(homedir(), CONFIG_DIR_NAME, "agent");
+	return process.env[ENV_AGENT_DIR] || path.join(os.homedir(), CONFIG_DIR_NAME, "agent");
 }
 
 /** Get path to user's custom themes directory */
@@ -128,7 +128,7 @@ export function getDebugLogPath(): string {
  * Project-level: .omp, .pi, .claude, .codex, .gemini
  */
 const USER_CONFIG_BASES = priorityList.map(({ dir, globalAgentDir }) => ({
-	base: () => path.join(homedir(), globalAgentDir ?? dir),
+	base: () => path.join(os.homedir(), globalAgentDir ?? dir),
 	name: dir,
 }));
 

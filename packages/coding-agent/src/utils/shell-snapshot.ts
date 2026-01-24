@@ -7,7 +7,7 @@
  */
 
 import * as fs from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { postmortem } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
@@ -18,7 +18,7 @@ let cachedSnapshotPath: string | null = null;
  * Get the user's shell config file path.
  */
 function getShellConfigFile(shell: string): string {
-	const home = homedir();
+	const home = os.homedir();
 	if (shell.includes("zsh")) return path.join(home, ".zshrc");
 	if (shell.includes("bash")) return path.join(home, ".bashrc");
 	return path.join(home, ".profile");
@@ -130,7 +130,7 @@ export async function getOrCreateSnapshot(
 	const rcFile = getShellConfigFile(shell);
 
 	// Create snapshot directory
-	const snapshotDir = path.join(tmpdir(), "omp-shell-snapshots");
+	const snapshotDir = path.join(os.tmpdir(), "omp-shell-snapshots");
 	await fs.promises.mkdir(snapshotDir, { recursive: true });
 
 	// Generate unique snapshot path

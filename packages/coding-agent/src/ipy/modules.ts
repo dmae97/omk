@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import { homedir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 
 export type PythonModuleSource = "user" | "project";
@@ -66,7 +66,7 @@ async function readModuleContent(candidate: ModuleCandidate): Promise<PythonModu
  */
 export async function discoverPythonModules(options: DiscoverPythonModulesOptions = {}): Promise<PythonModuleEntry[]> {
 	const cwd = options.cwd ?? process.cwd();
-	const homeDir = options.homeDir ?? homedir();
+	const homeDir = options.homeDir ?? os.homedir();
 
 	const userDirs = [path.join(homeDir, ".omp", "agent", "modules"), path.join(homeDir, ".pi", "agent", "modules")];
 	const projectDirs = [path.resolve(cwd, ".omp", "modules"), path.resolve(cwd, ".pi", "modules")];

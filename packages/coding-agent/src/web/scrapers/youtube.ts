@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import path from "node:path";
 import { cspawn } from "@oh-my-pi/pi-utils";
 import { nanoid } from "nanoid";
@@ -229,7 +229,7 @@ export const handleYouTube: SpecialHandler = async (
 	const hasAutoSubs = listResult.stdout.includes("[info] Available automatic captions");
 
 	// Create temp directory for subtitle download
-	const tmpDir = tmpdir();
+	const tmpDir = os.tmpdir();
 	const tmpBase = path.join(tmpDir, `yt-${yt.videoId}-${nanoid()}`);
 
 	try {

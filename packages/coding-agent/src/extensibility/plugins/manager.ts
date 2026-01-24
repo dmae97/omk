@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { isEnoent } from "@oh-my-pi/pi-utils";
+import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { extractPackageName, parsePluginSpec } from "./parser";
 import {
 	getPluginsDir,
@@ -64,7 +64,8 @@ export class PluginManager {
 			return await Bun.file(lockPath).json();
 		} catch (err) {
 			if (isEnoent(err)) return { plugins: {}, settings: {} };
-			throw err;
+			logger.warn("Failed to load plugin runtime config", { path: lockPath, error: String(err) });
+			return { plugins: {}, settings: {} };
 		}
 	}
 
@@ -77,7 +78,6 @@ export class PluginManager {
 
 	private async saveRuntimeConfig(): Promise<void> {
 		await this.ensureConfigLoaded();
-		await this.ensurePluginsDir();
 		await Bun.write(getPluginsLockfile(), JSON.stringify(this.runtimeConfig, null, 2));
 	}
 
@@ -87,7 +87,8 @@ export class PluginManager {
 			return await Bun.file(overridesPath).json();
 		} catch (err) {
 			if (isEnoent(err)) return {};
-			throw err;
+			logger.warn("Failed to load project plugin overrides", { path: overridesPath, error: String(err) });
+			return {};
 		}
 	}
 
@@ -101,7 +102,6 @@ export class PluginManager {
 	}
 
 	private async ensurePackageJson(): Promise<void> {
-		await this.ensurePluginsDir();
 		const pkgJsonPath = getPluginsPackageJson();
 		try {
 			await Bun.file(pkgJsonPath).json();

@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { $ } from "bun";
 
@@ -31,12 +31,11 @@ export async function renderMermaidToPng(
 		return null;
 	}
 
-	const tmpDir = path.join(tmpdir(), `mermaid-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+	const tmpDir = path.join(os.tmpdir(), `mermaid-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 	const inputPath = path.join(tmpDir, "input.mmd");
 	const outputPath = path.join(tmpDir, "output.png");
 
 	try {
-		await fs.mkdir(tmpDir, { recursive: true });
 		await Bun.write(inputPath, source);
 
 		const args: string[] = ["-i", inputPath, "-o", outputPath, "-q"];

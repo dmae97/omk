@@ -1,4 +1,4 @@
-import { hostname as osHostname } from "node:os";
+import * as os from "node:os";
 import { theme } from "../../../modes/theme/theme";
 import { shortenPath } from "../../../tools/render-utils";
 import type { RenderedSegment, SegmentContext, StatusLineSegment, StatusLineSegmentId } from "./types";
@@ -286,7 +286,7 @@ const sessionSegment: StatusLineSegment = {
 const hostnameSegment: StatusLineSegment = {
 	id: "hostname",
 	render(_ctx) {
-		const name = osHostname().split(".")[0];
+		const name = os.hostname().split(".")[0];
 		return { content: withIcon(theme.icon.host, name), visible: true };
 	},
 };

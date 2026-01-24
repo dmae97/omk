@@ -1,5 +1,5 @@
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 
 export class TempDir {
@@ -65,7 +65,7 @@ export class TempDir {
 	}
 }
 
-const kTempDir = tmpdir();
+const kTempDir = os.tmpdir();
 
 function normalizePrefix(prefix?: string): string {
 	if (!prefix) {

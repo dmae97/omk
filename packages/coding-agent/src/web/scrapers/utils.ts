@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { ptree } from "@oh-my-pi/pi-utils";
 import { nanoid } from "nanoid";
@@ -40,7 +40,7 @@ export async function convertWithMarkitdown(
 
 	// Write to temp file with extension hint
 	const ext = extensionHint || ".bin";
-	const tmpDir = tmpdir();
+	const tmpDir = os.tmpdir();
 	const tmpFile = path.join(tmpDir, `omp-convert-${nanoid()}${ext}`);
 
 	if (content.length > MAX_BYTES) {

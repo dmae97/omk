@@ -9,7 +9,7 @@ import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Model, TextContent } from "@oh-my-pi/pi-ai";
 import * as piCodingAgent from "@oh-my-pi/pi-coding-agent";
 import type { KeyId } from "@oh-my-pi/pi-tui";
-import { isEnoent, logger } from "@oh-my-pi/pi-utils";
+import { hasFsCode, isEacces, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
 import * as TypeBox from "@sinclair/typebox";
 import { type ExtensionModule, extensionModuleCapability } from "../../capability/extension-module";
@@ -326,6 +326,9 @@ async function readExtensionManifest(packageJsonPath: string): Promise<Extension
 		}
 		return null;
 	} catch (error) {
+		if (isEnoent(error) || isEacces(error) || hasFsCode(error, "EPERM")) {
+			return null;
+		}
 		logger.warn("Failed to read extension manifest", { path: packageJsonPath, error: String(error) });
 		return null;
 	}
@@ -349,7 +352,8 @@ async function resolveExtensionEntries(dir: string): Promise<string[] | null> {
 				await fs.stat(resolvedExtPath);
 				entries.push(resolvedExtPath);
 			} catch (err) {
-				if (!isEnoent(err)) throw err;
+				if (isEnoent(err) || isEacces(err) || hasFsCode(err, "EPERM")) continue;
+				throw err;
 			}
 		}
 		if (entries.length > 0) {
@@ -363,13 +367,21 @@ async function resolveExtensionEntries(dir: string): Promise<string[] | null> {
 		await fs.stat(indexTs);
 		return [indexTs];
 	} catch (err) {
-		if (!isEnoent(err)) throw err;
+		if (isEnoent(err) || isEacces(err) || hasFsCode(err, "EPERM")) {
+			// Ignore
+		} else {
+			throw err;
+		}
 	}
 	try {
 		await fs.stat(indexJs);
 		return [indexJs];
 	} catch (err) {
-		if (!isEnoent(err)) throw err;
+		if (isEnoent(err) || isEacces(err) || hasFsCode(err, "EPERM")) {
+			// Ignore
+		} else {
+			throw err;
+		}
 	}
 
 	return null;

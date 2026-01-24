@@ -1,4 +1,4 @@
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { StringEnum } from "@oh-my-pi/pi-ai";
 import { untilAborted } from "@oh-my-pi/pi-utils";
@@ -489,7 +489,7 @@ function getExtensionForMime(mimeType: string): string {
 async function saveImageToTemp(image: InlineImageData): Promise<string> {
 	const ext = getExtensionForMime(image.mimeType);
 	const filename = `omp-image-${nanoid()}.${ext}`;
-	const filepath = path.join(tmpdir(), filename);
+	const filepath = path.join(os.tmpdir(), filename);
 	await Bun.write(filepath, Buffer.from(image.data, "base64"));
 	return filepath;
 }

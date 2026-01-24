@@ -8,7 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { applyPatch, findContextLine, seekSequence } from "@oh-my-pi/pi-coding-agent/patch";
 
@@ -16,7 +16,7 @@ describe("regression: indentation adjustment for line-based replacements (2B)", 
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `regression-2b-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(os.tmpdir(), `regression-2b-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -97,7 +97,7 @@ describe("regression: ambiguity detection for context-less hunks (2C)", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `regression-2c-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(os.tmpdir(), `regression-2c-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -161,7 +161,7 @@ describe("regression: context search uses line hints (2D)", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `regression-2d-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(os.tmpdir(), `regression-2d-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -246,7 +246,7 @@ describe("regression: insertion uses newStartLine fallback (2E)", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `regression-2e-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(os.tmpdir(), `regression-2e-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -413,7 +413,7 @@ describe("plan: partial line matching for @@ context", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `plan-partial-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(os.tmpdir(), `plan-partial-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -477,7 +477,7 @@ describe("plan: unified diff format line numbers", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `plan-unified-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(os.tmpdir(), `plan-unified-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -551,7 +551,7 @@ describe("plan: Codex-style wrapped patches", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `plan-codex-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(os.tmpdir(), `plan-codex-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -692,7 +692,7 @@ describe("plan: strip + prefix from file creation", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `plan-create-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(os.tmpdir(), `plan-create-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -750,7 +750,7 @@ describe("regression: *** End of File marker handling (2A/2G)", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `regression-eof-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(os.tmpdir(), `regression-eof-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -809,7 +809,7 @@ describe("regression: model edit attempt - @@ line N syntax (session 2026-01-19)
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `model-line-n-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(os.tmpdir(), `model-line-n-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -861,7 +861,7 @@ describe("regression: model edit attempt - nested @@ anchors (session 2026-01-19
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `model-nested-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(os.tmpdir(), `model-nested-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -954,7 +954,7 @@ describe("regression: model edit attempt - space-separated anchors (session 2026
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `model-space-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(os.tmpdir(), `model-space-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -1042,7 +1042,7 @@ describe("regression: model edit attempt - unique substring on long line (sessio
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `model-long-line-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(os.tmpdir(), `model-long-line-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -1122,7 +1122,7 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `bench-regression-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = path.join(os.tmpdir(), `bench-regression-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 

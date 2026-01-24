@@ -1,4 +1,4 @@
-import os from "node:os";
+import * as os from "node:os";
 import { abortableSleep } from "@oh-my-pi/pi-utils";
 import type {
 	ResponseFunctionToolCall,

@@ -294,7 +294,7 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 	);
 	time("createTools:afterFactories");
 	if (slowTools.length > 0 && process.env.OMP_TIMING === "1") {
-		console.error(`  [slow tools: ${slowTools.map((t) => `${t.name}=${t.ms}ms`).join(", ")}]`);
+		logger.debug("Tool factory timings", { slowTools });
 	}
 	const tools = results.filter((r) => r.tool !== null).map((r) => r.tool as Tool);
 	const wrappedTools = wrapToolsWithMetaNotice(tools);

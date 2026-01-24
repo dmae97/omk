@@ -1,4 +1,4 @@
-import { homedir, platform } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import { TOML } from "bun";
@@ -63,8 +63,8 @@ const STATE_CACHE_TTL_MS = 5 * 60 * 1000;
  * Matches Rust's `dirs::config_dir()` behavior.
  */
 function getConfigPath(): string {
-	const home = homedir();
-	switch (platform()) {
+	const home = os.homedir();
+	switch (os.platform()) {
 		case "win32":
 			return path.join(process.env.APPDATA ?? path.join(home, "AppData", "Roaming"), "lspmux", "config.toml");
 		case "darwin":

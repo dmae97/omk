@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { Agent, type AgentTool } from "@oh-my-pi/pi-agent-core";
 import {
@@ -214,7 +214,7 @@ describe("streaming edit abort", () => {
 	const seeds = [7, 21, 42, 84, 128];
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `pi-streaming-edit-${nanoid()}`);
+		tempDir = path.join(os.tmpdir(), `pi-streaming-edit-${nanoid()}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 

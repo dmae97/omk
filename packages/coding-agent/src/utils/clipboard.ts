@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import { platform } from "node:os";
+import * as os from "node:os";
 import { $ } from "bun";
 import { nanoid } from "nanoid";
 
@@ -32,7 +32,7 @@ function selectPreferredImageMimeType(mimeTypes: string[]): string | null {
 }
 
 export async function copyToClipboard(text: string): Promise<void> {
-	const p = platform();
+	const p = os.platform();
 	const timeout = 5000;
 
 	try {
@@ -83,7 +83,7 @@ export interface ClipboardImage {
  * - Windows: uses PowerShell
  */
 export async function readImageFromClipboard(): Promise<ClipboardImage | null> {
-	const p = platform();
+	const p = os.platform();
 	const timeout = 3000;
 	let promise: Promise<ClipboardImage | null>;
 	switch (p) {

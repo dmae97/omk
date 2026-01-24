@@ -25,12 +25,12 @@ export function e2eApiKey(envVar: string): string | undefined {
 	return process.env[envVar];
 }
 
+import * as os from "node:os";
+import * as path from "node:path";
 import { getOAuthApiKey } from "@oh-my-pi/pi-ai/utils/oauth";
 import type { OAuthCredentials, OAuthProvider } from "@oh-my-pi/pi-ai/utils/oauth/types";
-import { homedir } from "os";
-import { dirname, join } from "path";
 
-const AUTH_PATH = join(homedir(), ".pi", "agent", "auth.json");
+const AUTH_PATH = path.join(os.homedir(), ".pi", "agent", "auth.json");
 
 type ApiKeyCredential = {
 	type: "api_key";
@@ -56,8 +56,6 @@ async function loadAuthStorage(): Promise<AuthStorage> {
 }
 
 async function saveAuthStorage(storage: AuthStorage): Promise<void> {
-	const configDir = dirname(AUTH_PATH);
-	await fs.mkdir(configDir, { recursive: true, mode: 0o700 });
 	await Bun.write(AUTH_PATH, JSON.stringify(storage, null, 2));
 	await fs.chmod(AUTH_PATH, 0o600);
 }

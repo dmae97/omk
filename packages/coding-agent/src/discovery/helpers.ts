@@ -2,7 +2,7 @@
  * Shared helpers for discovery providers.
  */
 
-import { homedir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { readDirEntries, readFile } from "../capability/fs";
@@ -26,10 +26,10 @@ export function normalizeUnicodeSpaces(str: string): string {
 export function expandPath(p: string): string {
 	const normalized = normalizeUnicodeSpaces(p);
 	if (normalized.startsWith("~/")) {
-		return path.join(homedir(), normalized.slice(2));
+		return path.join(os.homedir(), normalized.slice(2));
 	}
 	if (normalized.startsWith("~")) {
-		return path.join(homedir(), normalized.slice(1));
+		return path.join(os.homedir(), normalized.slice(1));
 	}
 	return normalized;
 }

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
@@ -12,7 +12,7 @@ describe("ModelRegistry", () => {
 	let authStorage: AuthStorage;
 
 	beforeEach(async () => {
-		tempDir = path.join(tmpdir(), `pi-test-model-registry-${nanoid()}`);
+		tempDir = path.join(os.tmpdir(), `pi-test-model-registry-${nanoid()}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 		modelsJsonPath = path.join(tempDir, "models.json");
 		authStorage = await AuthStorage.create(path.join(tempDir, "auth.json"));
@@ -145,7 +145,7 @@ describe("ModelRegistry", () => {
 			expect(googleModels[0].id).toBe("gemini-custom");
 		});
 
-		test("refresh() picks up baseUrl override changes", () => {
+		test("refresh() picks up baseUrl override changes", async () => {
 			writeRawModelsJson({
 				anthropic: overrideConfig("https://first-proxy.example.com/v1"),
 			});
@@ -157,7 +157,7 @@ describe("ModelRegistry", () => {
 			writeRawModelsJson({
 				anthropic: overrideConfig("https://second-proxy.example.com/v1"),
 			});
-			registry.refresh();
+			await registry.refresh();
 
 			expect(getModelsForProvider(registry, "anthropic")[0].baseUrl).toBe("https://second-proxy.example.com/v1");
 		});
@@ -211,7 +211,7 @@ describe("ModelRegistry", () => {
 			expect(googleModels[0].baseUrl).toBe("https://google-proxy.example.com/v1");
 		});
 
-		test("refresh() reloads overrides from disk", () => {
+		test("refresh() reloads overrides from disk", async () => {
 			writeModelsJson({
 				anthropic: providerConfig("https://first-proxy.example.com/v1", [{ id: "claude-first" }]),
 			});
@@ -223,14 +223,14 @@ describe("ModelRegistry", () => {
 			writeModelsJson({
 				anthropic: providerConfig("https://second-proxy.example.com/v1", [{ id: "claude-second" }]),
 			});
-			registry.refresh();
+			await registry.refresh();
 
 			const anthropicModels = getModelsForProvider(registry, "anthropic");
 			expect(anthropicModels[0].id).toBe("claude-second");
 			expect(anthropicModels[0].baseUrl).toBe("https://second-proxy.example.com/v1");
 		});
 
-		test("removing override from models.json restores built-in provider", () => {
+		test("removing override from models.json restores built-in provider", async () => {
 			writeModelsJson({
 				anthropic: providerConfig("https://proxy.example.com/v1", [{ id: "claude-custom" }]),
 			});
@@ -240,7 +240,7 @@ describe("ModelRegistry", () => {
 
 			// Remove override and refresh
 			writeModelsJson({});
-			registry.refresh();
+			await registry.refresh();
 
 			const anthropicModels = getModelsForProvider(registry, "anthropic");
 			expect(anthropicModels.length).toBeGreaterThan(1);

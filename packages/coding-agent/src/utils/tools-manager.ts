@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import { arch, platform } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { logger, TempDir } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
@@ -148,7 +148,7 @@ export async function getToolPath(tool: ToolName): Promise<string | null> {
 	if (!config) return null;
 
 	// Check our tools directory first
-	const localPath = path.join(TOOLS_DIR, config.binaryName + (platform() === "win32" ? ".exe" : ""));
+	const localPath = path.join(TOOLS_DIR, config.binaryName + (os.platform() === "win32" ? ".exe" : ""));
 	if (await Bun.file(localPath).exists()) {
 		return localPath;
 	}
@@ -187,8 +187,8 @@ async function downloadTool(tool: ToolName): Promise<string> {
 	const config = TOOLS[tool];
 	if (!config) throw new Error(`Unknown tool: ${tool}`);
 
-	const plat = platform();
-	const architecture = arch();
+	const plat = os.platform();
+	const architecture = os.arch();
 
 	// Get latest version
 	const version = await getLatestVersion(config.repo);

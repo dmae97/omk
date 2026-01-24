@@ -1,4 +1,4 @@
-import { homedir } from "node:os";
+import * as os from "node:os";
 import path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
@@ -37,7 +37,7 @@ import {
 const CONVERTIBLE_EXTENSIONS = new Set([".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".rtf", ".epub"]);
 
 // Remote mount path prefix (sshfs mounts) - skip fuzzy matching to avoid hangs
-const REMOTE_MOUNT_PREFIX = path.join(homedir(), CONFIG_DIR_NAME, "remote") + path.sep;
+const REMOTE_MOUNT_PREFIX = path.join(os.homedir(), CONFIG_DIR_NAME, "remote") + path.sep;
 
 function isRemoteMountPath(absolutePath: string): boolean {
 	return absolutePath.startsWith(REMOTE_MOUNT_PREFIX);

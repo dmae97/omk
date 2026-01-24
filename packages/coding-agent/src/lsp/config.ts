@@ -1,4 +1,4 @@
-import { homedir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
@@ -253,7 +253,7 @@ function getConfigPaths(cwd: string): string[] {
 
 	// User home root files (lowest priority fallback)
 	for (const filename of filenames) {
-		paths.push(path.join(homedir(), filename));
+		paths.push(path.join(os.homedir(), filename));
 	}
 
 	return paths;

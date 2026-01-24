@@ -231,7 +231,7 @@ const bookMeetingTool: Tool = {
 Tool results use content blocks and can include both text and images:
 
 ```typescript
-import { readFileSync } from "fs";
+import * as fs from "node:fs";
 
 const context: Context = {
 	messages: [{ role: "user", content: "What is the weather in London?" }],
@@ -260,7 +260,7 @@ for (const block of response.content) {
 }
 
 // Tool results can also include images (for vision-capable models)
-const imageBuffer = readFileSync("chart.png");
+const imageBuffer = fs.readFileSync("chart.png");
 context.messages.push({
 	role: "toolResult",
 	toolCallId: "tool_xyz",
@@ -379,7 +379,7 @@ All streaming events emitted during assistant message generation:
 Models with vision capabilities can process images. You can check if a model supports images via the `input` property. If you pass images to a non-vision model, they are silently ignored.
 
 ```typescript
-import { readFileSync } from "fs";
+import * as fs from "node:fs";
 import { getModel, complete } from "@oh-my-pi/pi-ai";
 
 const model = getModel("openai", "gpt-4o-mini");
@@ -389,7 +389,7 @@ if (model.input.includes("image")) {
 	console.log("Model supports vision");
 }
 
-const imageBuffer = readFileSync("image.png");
+const imageBuffer = fs.readFileSync("image.png");
 const base64Image = imageBuffer.toString("base64");
 
 const response = await complete(model, {
@@ -1021,7 +1021,7 @@ await loginOpenAICodex({
 
 ```typescript
 import { loginGitHubCopilot } from "@oh-my-pi/pi-ai";
-import { writeFileSync } from "fs";
+import * as fs from "node:fs";
 
 const credentials = await loginGitHubCopilot({
 	onAuth: (url, instructions) => {
@@ -1036,7 +1036,7 @@ const credentials = await loginGitHubCopilot({
 
 // Store credentials yourself
 const auth = { "github-copilot": { type: "oauth", ...credentials } };
-writeFileSync("auth.json", JSON.stringify(auth, null, 2));
+fs.writeFileSync("auth.json", JSON.stringify(auth, null, 2));
 ```
 
 ### Using OAuth Tokens
@@ -1045,10 +1045,10 @@ Use `getOAuthApiKey()` to get an API key, automatically refreshing if expired:
 
 ```typescript
 import { getModel, complete, getOAuthApiKey } from "@oh-my-pi/pi-ai";
-import { readFileSync, writeFileSync } from "fs";
+import * as fs from "node:fs";
 
 // Load your stored credentials
-const auth = JSON.parse(readFileSync("auth.json", "utf-8"));
+const auth = JSON.parse(fs.readFileSync("auth.json", "utf-8"));
 
 // Get API key (refreshes if expired)
 const result = await getOAuthApiKey("github-copilot", auth);
@@ -1056,7 +1056,7 @@ if (!result) throw new Error("Not logged in");
 
 // Save refreshed credentials
 auth["github-copilot"] = { type: "oauth", ...result.newCredentials };
-writeFileSync("auth.json", JSON.stringify(auth, null, 2));
+fs.writeFileSync("auth.json", JSON.stringify(auth, null, 2));
 
 // Use the API key
 const model = getModel("github-copilot", "gpt-4o");

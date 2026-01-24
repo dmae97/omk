@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import * as os from "node:os";
 import path from "node:path";
 import { $ } from "bun";
 
@@ -30,7 +30,7 @@ export async function getRepoRoot(cwd: string): Promise<string> {
 export async function ensureWorktree(baseCwd: string, id: string): Promise<string> {
 	const repoRoot = await getRepoRoot(baseCwd);
 	const encodedProject = getEncodedProjectName(repoRoot);
-	const worktreeDir = path.join(homedir(), ".omp", "wt", encodedProject, id);
+	const worktreeDir = path.join(os.homedir(), ".omp", "wt", encodedProject, id);
 	await fs.mkdir(path.dirname(worktreeDir), { recursive: true });
 	await $`git worktree remove -f ${worktreeDir}`.cwd(repoRoot).quiet().nothrow();
 	await fs.rm(worktreeDir, { recursive: true, force: true });
@@ -56,7 +56,7 @@ export async function captureBaseline(repoRoot: string): Promise<WorktreeBaselin
 }
 
 async function writeTempPatchFile(patch: string): Promise<string> {
-	const tempPath = path.join(tmpdir(), `omp-task-patch-${randomUUID()}.patch`);
+	const tempPath = path.join(os.tmpdir(), `omp-task-patch-${randomUUID()}.patch`);
 	await Bun.write(tempPath, patch);
 	return tempPath;
 }
@@ -119,7 +119,7 @@ async function listUntracked(cwd: string): Promise<string[]> {
 }
 
 export async function captureDeltaPatch(worktreeDir: string, baseline: WorktreeBaseline): Promise<string> {
-	const tempIndex = path.join(tmpdir(), `omp-task-index-${randomUUID()}`);
+	const tempIndex = path.join(os.tmpdir(), `omp-task-index-${randomUUID()}`);
 	try {
 		await $`git read-tree HEAD`.cwd(worktreeDir).env({
 			GIT_INDEX_FILE: tempIndex,

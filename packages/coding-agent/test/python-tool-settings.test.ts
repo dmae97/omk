@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import * as pythonExecutor from "@oh-my-pi/pi-coding-agent/ipy/executor";
 import * as pythonKernel from "@oh-my-pi/pi-coding-agent/ipy/kernel";
@@ -38,7 +38,7 @@ describe("python tool settings", () => {
 	let testDir: string;
 
 	beforeEach(() => {
-		testDir = path.join(tmpdir(), `python-tool-settings-${crypto.randomUUID()}`);
+		testDir = path.join(os.tmpdir(), `python-tool-settings-${crypto.randomUUID()}`);
 		fs.mkdirSync(testDir, { recursive: true });
 	});
 

@@ -5,7 +5,7 @@
  * .pi is an alias for backwards compatibility.
  */
 
-import { dirname, isAbsolute, join, resolve } from "path";
+import * as path from "node:path";
 import { registerProvider } from "../capability";
 import { type ContextFile, contextFileCapability } from "../capability/context-file";
 import { type Extension, type ExtensionManifest, extensionCapability } from "../capability/extension";
@@ -47,7 +47,7 @@ async function getConfigDirs(ctx: LoadContext): Promise<Array<{ dir: string; lev
 	const result: Array<{ dir: string; level: "user" | "project" }> = [];
 
 	for (const name of PROJECT_DIRS) {
-		const projectDir = join(ctx.cwd, name);
+		const projectDir = path.join(ctx.cwd, name);
 		const entries = await readDirEntries(projectDir);
 		if (entries.length > 0) {
 			result.push({ dir: projectDir, level: "project" });
@@ -56,7 +56,7 @@ async function getConfigDirs(ctx: LoadContext): Promise<Array<{ dir: string; lev
 	}
 
 	for (const name of USER_DIRS) {
-		const userDir = join(ctx.home, name, PATHS.userAgent.replace(`${PATHS.userBase}/`, ""));
+		const userDir = path.join(ctx.home, name, PATHS.userAgent.replace(`${PATHS.userBase}/`, ""));
 		const entries = await readDirEntries(userDir);
 		if (entries.length > 0) {
 			result.push({ dir: userDir, level: "user" });
@@ -96,16 +96,16 @@ async function loadMCPServers(ctx: LoadContext): Promise<LoadResult<MCPServer>> 
 
 	const projectDirs = await Promise.all(
 		PROJECT_DIRS.map(async (name) => {
-			const dir = join(ctx.cwd, name);
+			const dir = path.join(ctx.cwd, name);
 			const entries = await readDirEntries(dir);
 			return entries.length > 0 ? dir : null;
 		}),
 	);
-	const userPaths = USER_DIRS.map((name) => join(ctx.home, name, "mcp.json"));
+	const userPaths = USER_DIRS.map((name) => path.join(ctx.home, name, "mcp.json"));
 
 	const projectDir = projectDirs.find((dir) => dir !== null);
 	if (projectDir) {
-		const projectCandidates = ["mcp.json", ".mcp.json"].map((filename) => join(projectDir, filename));
+		const projectCandidates = ["mcp.json", ".mcp.json"].map((filename) => path.join(projectDir, filename));
 		const projectContents = await Promise.all(projectCandidates.map((path) => readFile(path)));
 		for (let i = 0; i < projectCandidates.length; i++) {
 			const content = projectContents[i];
@@ -141,7 +141,7 @@ async function loadSystemPrompt(ctx: LoadContext): Promise<LoadResult<SystemProm
 	const items: SystemPrompt[] = [];
 
 	const userPaths = USER_DIRS.map((name) =>
-		join(ctx.home, name, PATHS.userAgent.replace(`${PATHS.userBase}/`, ""), "SYSTEM.md"),
+		path.join(ctx.home, name, PATHS.userAgent.replace(`${PATHS.userBase}/`, ""), "SYSTEM.md"),
 	);
 	const userContents = await Promise.all(userPaths.map((p) => readFile(p)));
 	for (let i = 0; i < userPaths.length; i++) {
@@ -161,18 +161,18 @@ async function loadSystemPrompt(ctx: LoadContext): Promise<LoadResult<SystemProm
 	let current = ctx.cwd;
 	while (true) {
 		ancestors.push(current);
-		const parent = dirname(current);
+		const parent = path.dirname(current);
 		if (parent === current) break;
 		current = parent;
 	}
 
 	for (const dir of ancestors) {
-		const configDirs = PROJECT_DIRS.map((name) => join(dir, name));
+		const configDirs = PROJECT_DIRS.map((name) => path.join(dir, name));
 		const entriesResults = await Promise.all(configDirs.map((d) => readDirEntries(d)));
 		const validConfigDir = configDirs.find((_, i) => entriesResults[i].length > 0);
 		if (!validConfigDir) continue;
 
-		const projectPath = join(validConfigDir, "SYSTEM.md");
+		const projectPath = path.join(validConfigDir, "SYSTEM.md");
 		const content = await readFile(projectPath);
 		if (content) {
 			items.push({
@@ -202,7 +202,7 @@ async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
 	const results = await Promise.all(
 		configDirs.map(({ dir, level }) =>
 			loadSkillsFromDir(ctx, {
-				dir: join(dir, "skills"),
+				dir: path.join(dir, "skills"),
 				providerId: PROVIDER_ID,
 				level,
 				requireDescription: true,
@@ -230,7 +230,7 @@ async function loadSlashCommands(ctx: LoadContext): Promise<LoadResult<SlashComm
 	const warnings: string[] = [];
 
 	for (const { dir, level } of await getConfigDirs(ctx)) {
-		const commandsDir = join(dir, "commands");
+		const commandsDir = path.join(dir, "commands");
 		const result = await loadFilesFromDir<SlashCommand>(ctx, commandsDir, PROVIDER_ID, level, {
 			extensions: ["md"],
 			transform: (name, content, path, source) => ({
@@ -262,7 +262,7 @@ async function loadRules(ctx: LoadContext): Promise<LoadResult<Rule>> {
 	const warnings: string[] = [];
 
 	for (const { dir, level } of await getConfigDirs(ctx)) {
-		const rulesDir = join(dir, "rules");
+		const rulesDir = path.join(dir, "rules");
 		const result = await loadFilesFromDir<Rule>(ctx, rulesDir, PROVIDER_ID, level, {
 			extensions: ["md", "mdc"],
 			transform: (name, content, path, source) => {
@@ -300,7 +300,7 @@ async function loadPrompts(ctx: LoadContext): Promise<LoadResult<Prompt>> {
 	const warnings: string[] = [];
 
 	for (const { dir, level } of await getConfigDirs(ctx)) {
-		const promptsDir = join(dir, "prompts");
+		const promptsDir = path.join(dir, "prompts");
 		const result = await loadFilesFromDir<Prompt>(ctx, promptsDir, PROVIDER_ID, level, {
 			extensions: ["md"],
 			transform: (name, content, path, source) => ({
@@ -332,15 +332,15 @@ async function loadExtensionModules(ctx: LoadContext): Promise<LoadResult<Extens
 
 	const resolveExtensionPath = (rawPath: string): string => {
 		if (rawPath.startsWith("~/")) {
-			return join(ctx.home, rawPath.slice(2));
+			return path.join(ctx.home, rawPath.slice(2));
 		}
 		if (rawPath.startsWith("~")) {
-			return join(ctx.home, rawPath.slice(1));
+			return path.join(ctx.home, rawPath.slice(1));
 		}
-		if (isAbsolute(rawPath)) {
+		if (path.isAbsolute(rawPath)) {
 			return rawPath;
 		}
-		return resolve(ctx.cwd, rawPath);
+		return path.resolve(ctx.cwd, rawPath);
 	};
 
 	const createExtensionModule = (extPath: string, level: "user" | "project"): ExtensionModule => ({
@@ -353,8 +353,8 @@ async function loadExtensionModules(ctx: LoadContext): Promise<LoadResult<Extens
 	const configDirs = await getConfigDirs(ctx);
 
 	const [discoveredResults, settingsResults] = await Promise.all([
-		Promise.all(configDirs.map(({ dir }) => discoverExtensionModulePaths(ctx, join(dir, "extensions")))),
-		Promise.all(configDirs.map(({ dir }) => readFile(join(dir, "settings.json")))),
+		Promise.all(configDirs.map(({ dir }) => discoverExtensionModulePaths(ctx, path.join(dir, "extensions")))),
+		Promise.all(configDirs.map(({ dir }) => readFile(path.join(dir, "settings.json")))),
 	]);
 
 	for (let i = 0; i < configDirs.length; i++) {
@@ -375,7 +375,7 @@ async function loadExtensionModules(ctx: LoadContext): Promise<LoadResult<Extens
 		const settingsContent = settingsResults[i];
 		if (!settingsContent) continue;
 
-		const settingsPath = join(dir, "settings.json");
+		const settingsPath = path.join(dir, "settings.json");
 		const settingsData = parseJSON<{ extensions?: unknown }>(settingsContent);
 		const extensions = settingsData?.extensions;
 		if (!Array.isArray(extensions)) continue;
@@ -445,7 +445,7 @@ async function loadExtensions(ctx: LoadContext): Promise<LoadResult<Extension>> 
 	const warnings: string[] = [];
 
 	const configDirs = await getConfigDirs(ctx);
-	const entriesResults = await Promise.all(configDirs.map(({ dir }) => readDirEntries(join(dir, "extensions"))));
+	const entriesResults = await Promise.all(configDirs.map(({ dir }) => readDirEntries(path.join(dir, "extensions"))));
 
 	const manifestCandidates: Array<{
 		extDir: string;
@@ -457,16 +457,16 @@ async function loadExtensions(ctx: LoadContext): Promise<LoadResult<Extension>> 
 	for (let i = 0; i < configDirs.length; i++) {
 		const { dir, level } = configDirs[i];
 		const entries = entriesResults[i];
-		const extensionsDir = join(dir, "extensions");
+		const extensionsDir = path.join(dir, "extensions");
 
 		for (const entry of entries) {
 			if (entry.name.startsWith(".")) continue;
 			if (!entry.isDirectory()) continue;
 
-			const extDir = join(extensionsDir, entry.name);
+			const extDir = path.join(extensionsDir, entry.name);
 			manifestCandidates.push({
 				extDir,
-				manifestPath: join(extDir, "gemini-extension.json"),
+				manifestPath: path.join(extDir, "gemini-extension.json"),
 				entryName: entry.name,
 				level,
 			});
@@ -512,7 +512,7 @@ async function loadInstructions(ctx: LoadContext): Promise<LoadResult<Instructio
 	const warnings: string[] = [];
 
 	for (const { dir, level } of await getConfigDirs(ctx)) {
-		const instructionsDir = join(dir, "instructions");
+		const instructionsDir = path.join(dir, "instructions");
 		const result = await loadFilesFromDir<Instruction>(ctx, instructionsDir, PROVIDER_ID, level, {
 			extensions: ["md"],
 			transform: (name, content, path, source) => {
@@ -557,7 +557,7 @@ async function loadHooks(ctx: LoadContext): Promise<LoadResult<Hook>> {
 	for (const { dir, level } of configDirs) {
 		for (const hookType of hookTypes) {
 			typeDirRequests.push({
-				typeDir: join(dir, "hooks", hookType),
+				typeDir: path.join(dir, "hooks", hookType),
 				hookType,
 				level,
 			});
@@ -574,17 +574,17 @@ async function loadHooks(ctx: LoadContext): Promise<LoadResult<Hook>> {
 			if (entry.name.startsWith(".")) continue;
 			if (!entry.isFile()) continue;
 
-			const path = join(typeDir, entry.name);
+			const hookPath = path.join(typeDir, entry.name);
 			const baseName = entry.name.includes(".") ? entry.name.slice(0, entry.name.lastIndexOf(".")) : entry.name;
 			const tool = baseName === "*" ? "*" : baseName;
 
 			items.push({
 				name: entry.name,
-				path,
+				path: hookPath,
 				type: hookType,
 				tool,
 				level,
-				_source: createSourceMeta(PROVIDER_ID, path, level),
+				_source: createSourceMeta(PROVIDER_ID, hookPath, level),
 			});
 		}
 	}
@@ -606,7 +606,7 @@ async function loadTools(ctx: LoadContext): Promise<LoadResult<CustomTool>> {
 	const warnings: string[] = [];
 
 	const configDirs = await getConfigDirs(ctx);
-	const entriesResults = await Promise.all(configDirs.map(({ dir }) => readDirEntries(join(dir, "tools"))));
+	const entriesResults = await Promise.all(configDirs.map(({ dir }) => readDirEntries(path.join(dir, "tools"))));
 
 	const fileLoadPromises: Array<Promise<{ items: CustomTool[]; warnings?: string[] }>> = [];
 	const subDirCandidates: Array<{
@@ -620,7 +620,7 @@ async function loadTools(ctx: LoadContext): Promise<LoadResult<CustomTool>> {
 		const toolEntries = entriesResults[i];
 		if (toolEntries.length === 0) continue;
 
-		const toolsDir = join(dir, "tools");
+		const toolsDir = path.join(dir, "tools");
 
 		fileLoadPromises.push(
 			loadFilesFromDir<CustomTool>(ctx, toolsDir, PROVIDER_ID, level, {
@@ -653,7 +653,7 @@ async function loadTools(ctx: LoadContext): Promise<LoadResult<CustomTool>> {
 			if (!entry.isDirectory()) continue;
 
 			subDirCandidates.push({
-				indexPath: join(toolsDir, entry.name, "index.ts"),
+				indexPath: path.join(toolsDir, entry.name, "index.ts"),
 				entryName: entry.name,
 				level,
 			});
@@ -701,7 +701,7 @@ async function loadSettings(ctx: LoadContext): Promise<LoadResult<Settings>> {
 	const warnings: string[] = [];
 
 	for (const { dir, level } of await getConfigDirs(ctx)) {
-		const settingsPath = join(dir, "settings.json");
+		const settingsPath = path.join(dir, "settings.json");
 		const content = await readFile(settingsPath);
 		if (!content) continue;
 
@@ -736,7 +736,7 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 	const warnings: string[] = [];
 
 	const userPaths = USER_DIRS.map((name) =>
-		join(ctx.home, name, PATHS.userAgent.replace(`${PATHS.userBase}/`, ""), "AGENTS.md"),
+		path.join(ctx.home, name, PATHS.userAgent.replace(`${PATHS.userBase}/`, ""), "AGENTS.md"),
 	);
 	const userContents = await Promise.all(userPaths.map((p) => readFile(p)));
 	for (let i = 0; i < userPaths.length; i++) {
@@ -757,19 +757,19 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 	let depth = 0;
 	while (true) {
 		ancestors.push({ dir: current, depth });
-		const parent = dirname(current);
+		const parent = path.dirname(current);
 		if (parent === current) break;
 		current = parent;
 		depth++;
 	}
 
 	for (const { dir, depth: ancestorDepth } of ancestors) {
-		const configDirs = PROJECT_DIRS.map((name) => join(dir, name));
+		const configDirs = PROJECT_DIRS.map((name) => path.join(dir, name));
 		const entriesResults = await Promise.all(configDirs.map((d) => readDirEntries(d)));
 		const validConfigDir = configDirs.find((_, i) => entriesResults[i].length > 0);
 		if (!validConfigDir) continue;
 
-		const projectPath = join(validConfigDir, "AGENTS.md");
+		const projectPath = path.join(validConfigDir, "AGENTS.md");
 		const content = await readFile(projectPath);
 		if (content) {
 			items.push({

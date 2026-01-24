@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { Agent } from "@oh-my-pi/pi-agent-core";
 import { type AssistantMessage, type AssistantMessageEvent, EventStream, getModel } from "@oh-my-pi/pi-ai";
@@ -54,7 +54,7 @@ describe("AgentSession concurrent prompt guard", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `pi-concurrent-test-${nanoid()}`);
+		tempDir = path.join(os.tmpdir(), `pi-concurrent-test-${nanoid()}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 

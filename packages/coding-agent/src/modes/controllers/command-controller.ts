@@ -439,7 +439,6 @@ export class CommandController {
 		].join("\n");
 
 		try {
-			await fs.mkdir(path.dirname(debugLogPath), { recursive: true });
 			await Bun.write(debugLogPath, debugData);
 		} catch (error) {
 			this.ctx.showError(`Failed to write debug log: ${error instanceof Error ? error.message : String(error)}`);

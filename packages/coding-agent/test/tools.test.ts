@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { EditTool } from "@oh-my-pi/pi-coding-agent/patch";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
@@ -50,7 +50,7 @@ describe("Coding Agent Tools", () => {
 		process.env.OMP_EDIT_VARIANT = "replace";
 
 		// Create a unique temporary directory for each test
-		testDir = path.join(tmpdir(), `coding-agent-test-${nanoid()}`);
+		testDir = path.join(os.tmpdir(), `coding-agent-test-${nanoid()}`);
 		fs.mkdirSync(testDir, { recursive: true });
 
 		// Create tools for this test directory
@@ -538,7 +538,7 @@ describe("edit tool CRLF handling", () => {
 		originalEditVariant = process.env.OMP_EDIT_VARIANT;
 		process.env.OMP_EDIT_VARIANT = "replace";
 
-		testDir = path.join(tmpdir(), `coding-agent-crlf-test-${nanoid()}`);
+		testDir = path.join(os.tmpdir(), `coding-agent-crlf-test-${nanoid()}`);
 		fs.mkdirSync(testDir, { recursive: true });
 		editTool = new EditTool(createTestToolSession(testDir));
 	});

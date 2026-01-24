@@ -86,7 +86,6 @@ export async function applyWorkspaceEdit(edit: WorkspaceEdit, cwd: string): Prom
 				if (change.kind === "create") {
 					const createOp = change as CreateFile;
 					const filePath = uriToFile(createOp.uri);
-					await fs.mkdir(path.dirname(filePath), { recursive: true });
 					await Bun.write(filePath, "");
 					applied.push(`Created ${path.relative(cwd, filePath)}`);
 				} else if (change.kind === "rename") {

@@ -1,8 +1,8 @@
 import * as fs from "node:fs";
+import * as path from "node:path";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { type Component, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
 import { isEnoent } from "@oh-my-pi/pi-utils";
-import { dirname, join } from "path";
 import { theme } from "../../modes/theme/theme";
 
 import type { AgentSession } from "../../session/agent-session";
@@ -24,14 +24,14 @@ function sanitizeStatusText(text: string): string {
 async function findGitHeadPath(): Promise<{ path: string; content: string } | null> {
 	let dir = process.cwd();
 	while (true) {
-		const gitHeadPath = join(dir, ".git", "HEAD");
+		const gitHeadPath = path.join(dir, ".git", "HEAD");
 		try {
 			const content = await Bun.file(gitHeadPath).text();
 			return { path: gitHeadPath, content };
 		} catch (err) {
 			if (!isEnoent(err)) throw err;
 		}
-		const parent = dirname(dir);
+		const parent = path.dirname(dir);
 		if (parent === dir) {
 			return null;
 		}

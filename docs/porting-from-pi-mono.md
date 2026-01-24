@@ -33,7 +33,7 @@ We use a bundler and strip `.js` from TypeScript imports.
 - Remove `.js` extensions from all internal imports.
 - Keep real file extensions only when required by tooling (e.g., `.json`, `.css`).
 - Example:
-  - `import { x } from "./foo.js";` -> `import { x } from "./foo";`
+   - `import { x } from "./foo.js";` -> `import { x } from "./foo";`
 
 ## 3) Replace import scopes
 
@@ -41,9 +41,9 @@ Upstream uses different package scopes. Replace them consistently.
 
 - Replace old scopes with the local scope used here.
 - Examples (adjust to match the actual packages you are porting):
-  - `@mariozechner/pi-coding-agent` -> `@oh-my-pi/pi-coding-agent`
-  - `@mariozechner/pi-agent-core` -> `@oh-my-pi/pi-agent-core`
-  - `@mariozechner/tui` -> `@oh-my-pi/pi-tui`
+   - `@mariozechner/pi-coding-agent` -> `@oh-my-pi/pi-coding-agent`
+   - `@mariozechner/pi-agent-core` -> `@oh-my-pi/pi-agent-core`
+   - `@mariozechner/tui` -> `@oh-my-pi/pi-tui`
 
 ## 4) Use Bun APIs where they improve on Node
 
@@ -65,7 +65,7 @@ We run on Bun. Replace Node APIs only when Bun provides a better alternative.
 - `fs.mkdtempSync()` — do NOT replace with manual path construction
 - `path.join()`, `path.resolve()`, etc. — these are fine
 
-**Import style:** Use `node:` prefix for Node builtins (`import { homedir } from "node:os"`).
+**Import style:** Use `node:` prefix for Node builtins with namespace imports (`import * as os from "node:os"`).
 
 **Wrong:**
 
@@ -78,12 +78,12 @@ const tmp = Bun.env.TMPDIR || "/tmp";
 **Correct:**
 
 ```typescript
-import { homedir, tmpdir } from "node:os";
-import { mkdtempSync } from "node:fs";
-import { join } from "node:path";
+import * as os from "node:os";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
-const configDir = join(homedir(), ".config", "myapp");
-const tempDir = mkdtempSync(join(tmpdir(), "myapp-"));
+const configDir = path.join(os.homedir(), ".config", "myapp");
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "myapp-"));
 ```
 
 ## 5) Prefer Bun embeds (no copying)
@@ -95,10 +95,10 @@ Do not copy runtime assets or vendor files at build time.
 - Keep assets in-repo and let the bundler include them.
 - Eliminate copy scripts unless the user explicitly requests them.
 - If upstream reads a bundled fallback file at runtime, replace filesystem reads with a Bun text embed import.
-  - Example (Codex instructions fallback):
-    - `const FALLBACK_PROMPT_PATH = join(import.meta.dir, "codex-instructions.md");` -> removed
-    - `import FALLBACK_INSTRUCTIONS from "./codex-instructions.md" with { type: "text" };`
-    - Use `return FALLBACK_INSTRUCTIONS;` instead of `readFileSync(FALLBACK_PROMPT_PATH, "utf8")`
+   - Example (Codex instructions fallback):
+      - `const FALLBACK_PROMPT_PATH = join(import.meta.dir, "codex-instructions.md");` -> removed
+      - `import FALLBACK_INSTRUCTIONS from "./codex-instructions.md" with { type: "text" };`
+      - Use `return FALLBACK_INSTRUCTIONS;` instead of `readFileSync(FALLBACK_PROMPT_PATH, "utf8")`
 
 ## 6) Port `package.json` carefully
 
@@ -117,13 +117,13 @@ Treat `package.json` as a contract. Merge intentionally.
 - Avoid dynamic imports and inline type imports.
 - Prefer existing helpers and utilities over new ad-hoc code.
 - Preserve Bun-first infrastructure changes already made in this repo:
-  - Runtime is Bun (no Node entry points).
-  - Package manager is Bun (no npm lockfiles).
-  - Heavy Node APIs (`child_process`, `readline`) are replaced with Bun equivalents.
-  - Lightweight Node APIs (`os.homedir`, `os.tmpdir`, `fs.mkdtempSync`, `path.*`) are kept.
-  - CLI shebangs use `bun` (not `node`, not `tsx`).
-  - Packages use source files directly (no TypeScript build step).
-  - CI workflows run Bun for install/check/test.
+   - Runtime is Bun (no Node entry points).
+   - Package manager is Bun (no npm lockfiles).
+   - Heavy Node APIs (`child_process`, `readline`) are replaced with Bun equivalents.
+   - Lightweight Node APIs (`os.homedir`, `os.tmpdir`, `fs.mkdtempSync`, `path.*`) are kept.
+   - CLI shebangs use `bun` (not `node`, not `tsx`).
+   - Packages use source files directly (no TypeScript build step).
+   - CI workflows run Bun for install/check/test.
 
 ## 8) Remove old compatibility layers
 

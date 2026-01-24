@@ -1,8 +1,8 @@
+import * as fs from "node:fs";
+import path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { logger, once, untilAborted } from "@oh-my-pi/pi-utils";
 import type { BunFile } from "bun";
-import * as fs from "node:fs";
-import path from "node:path";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import { type Theme, theme } from "../modes/theme/theme";
 import lspDescription from "../prompts/tools/lsp.md" with { type: "text" };
@@ -22,7 +22,7 @@ import {
 	WARMUP_TIMEOUT_MS,
 } from "./client";
 import { getLinterClient } from "./clients";
-import { getServersForFile, hasCapability, loadConfig, type LspConfig } from "./config";
+import { getServersForFile, hasCapability, type LspConfig, loadConfig } from "./config";
 import { applyTextEditsToString, applyWorkspaceEdit } from "./edits";
 import { detectLspmux } from "./lspmux";
 import { renderCall, renderResult } from "./render";
@@ -40,8 +40,8 @@ import {
 	type LocationLink,
 	type LspClient,
 	type LspParams,
-	lspSchema,
 	type LspToolDetails,
+	lspSchema,
 	type ServerConfig,
 	type SymbolInformation,
 	type TextEdit,

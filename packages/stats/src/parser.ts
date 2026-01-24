@@ -1,10 +1,10 @@
 import * as fs from "node:fs/promises";
-import { homedir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import type { MessageStats, SessionEntry, SessionMessageEntry } from "./types";
 
-const SESSIONS_DIR = path.join(homedir(), ".omp", "agent", "sessions");
+const SESSIONS_DIR = path.join(os.homedir(), ".omp", "agent", "sessions");
 
 /**
  * Extract folder name from session filename.

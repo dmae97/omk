@@ -41,7 +41,6 @@ export interface LoadSkillsFromDirOptions {
 /**
  * Load skills from a directory recursively.
  * Skills are directories containing a SKILL.md file with frontmatter including a description.
- * @deprecated Use loadSync("skills") from discovery API instead
  */
 export async function loadSkillsFromDir(options: LoadSkillsFromDirOptions): Promise<LoadSkillsResult> {
 	const skills: Skill[] = [];

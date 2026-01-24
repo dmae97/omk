@@ -10,7 +10,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { Agent, type ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { getModel, type Model } from "@oh-my-pi/pi-ai";
@@ -32,7 +32,7 @@ describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigra
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `pi-thinking-compaction-test-${nanoid()}`);
+		tempDir = path.join(os.tmpdir(), `pi-thinking-compaction-test-${nanoid()}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -142,7 +142,7 @@ describe.skipIf(!HAS_ANTHROPIC_AUTH)("Compaction with thinking models (Anthropic
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(tmpdir(), `pi-thinking-compaction-anthropic-test-${nanoid()}`);
+		tempDir = path.join(os.tmpdir(), `pi-thinking-compaction-anthropic-test-${nanoid()}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 

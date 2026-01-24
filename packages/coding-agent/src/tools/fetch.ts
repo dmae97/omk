@@ -450,7 +450,6 @@ async function renderHtmlToText(
 	timeout: number,
 	scratchDir: string,
 ): Promise<{ content: string; ok: boolean; method: string }> {
-	await fs.mkdir(scratchDir, { recursive: true });
 	const tmpFile = path.join(scratchDir, `omp-${nanoid()}.html`);
 
 	try {

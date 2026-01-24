@@ -1,4 +1,4 @@
-import { homedir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { CONFIG_DIR_NAME, getConfigDirPaths } from "../../config";
 
@@ -8,7 +8,7 @@ import { CONFIG_DIR_NAME, getConfigDirPaths } from "../../config";
 
 /** Root plugin directory: ~/.omp/plugins (not under agent/) */
 export function getPluginsDir(): string {
-	return path.join(homedir(), CONFIG_DIR_NAME, "plugins");
+	return path.join(os.homedir(), CONFIG_DIR_NAME, "plugins");
 }
 
 /** Where npm installs packages: ~/.omp/plugins/node_modules */

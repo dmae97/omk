@@ -5,7 +5,7 @@
 
 import { Database } from "bun:sqlite";
 import * as fs from "node:fs/promises";
-import { homedir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import type { OAuthCredentials } from "./utils/oauth/types";
 
@@ -24,7 +24,7 @@ type AuthRow = {
  * Get the agent config directory (e.g., ~/.omp/agent/)
  */
 function getAgentDir(): string {
-	const configDir = process.env.OMP_CODING_AGENT_DIR || path.join(homedir(), ".omp", "agent");
+	const configDir = process.env.OMP_CODING_AGENT_DIR || path.join(os.homedir(), ".omp", "agent");
 	return configDir;
 }
 

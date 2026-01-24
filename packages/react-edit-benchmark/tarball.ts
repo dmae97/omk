@@ -189,7 +189,6 @@ export async function extractTaskFiles(
 		if (!relativePath) continue;
 
 		const destPath = join(destDir, relativePath);
-		await fs.mkdir(dirname(destPath), { recursive: true });
 		await Bun.write(destPath, await file.arrayBuffer());
 	}
 }

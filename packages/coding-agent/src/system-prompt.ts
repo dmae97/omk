@@ -2,7 +2,7 @@
  * System prompt construction and project context loading
  */
 
-import { homedir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 import { $ } from "bun";
 import chalk from "chalk";
@@ -429,7 +429,7 @@ interface SystemInfoCache {
 }
 
 function getSystemInfoCachePath(): string {
-	return path.join(homedir(), ".omp", "system_info.json");
+	return path.join(os.homedir(), ".omp", "system_info.json");
 }
 
 async function loadSystemInfoCache(): Promise<SystemInfoCache | null> {

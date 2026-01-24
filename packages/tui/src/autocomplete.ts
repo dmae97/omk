@@ -1,5 +1,5 @@
 import * as fs from "node:fs";
-import { homedir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
 
 async function walkDirectoryWithFd(
@@ -314,11 +314,11 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 	// Expand home directory (~/) to actual home path
 	private expandHomePath(filePath: string): string {
 		if (filePath.startsWith("~/")) {
-			const expandedPath = path.join(homedir(), filePath.slice(2));
+			const expandedPath = path.join(os.homedir(), filePath.slice(2));
 			// Preserve trailing slash if original path had one
 			return filePath.endsWith("/") && !expandedPath.endsWith("/") ? `${expandedPath}/` : expandedPath;
 		} else if (filePath === "~") {
-			return homedir();
+			return os.homedir();
 		}
 		return filePath;
 	}
