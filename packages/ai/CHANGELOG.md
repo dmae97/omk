@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+### Fixed
+- Fixed handling of streaming function call arguments in OpenAI responses to properly parse arguments when sent via `response.function_call_arguments.done` events
 ## [8.2.0] - 2026-01-24
 
 ### Changed
