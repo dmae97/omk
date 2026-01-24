@@ -419,8 +419,8 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 		}
 
 		// Process zAi models
-		if (data.zai?.models) {
-			for (const [modelId, model] of Object.entries(data.zai.models)) {
+		if (data["zai-coding-plan"]?.models) {
+			for (const [modelId, model] of Object.entries(data["zai-coding-plan"].models)) {
 				const m = model as ModelsDevModel;
 				if (m.tool_call !== true) continue;
 				const supportsImage = m.modalities?.input?.includes("image");
