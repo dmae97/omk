@@ -110,6 +110,7 @@
 - Migrated file system operations from synchronous to asynchronous APIs across plugins, settings, extensions, and config modules
 - Updated import organization in model-registry.ts and other modules for consistency
 - Changed FilesystemError handling to use new pi-utils type guards for safer error checking
+- Improved error logging in settings manager for config file access failures
 
 ### Fixed
 - Fixed database busy errors during concurrent access by adding retry logic with exponential backoff when opening storage
@@ -119,6 +120,11 @@
 - Fixed indentation formatting in split-commit tool function signature
 - Fixed changelog application to process proposals containing only deletion entries without additions
 - Fixed indentation formatting in Python tool output renderer
+- Fixed Python kernel resource management with proper timing instrumentation for performance monitoring
+- Fixed model discovery to re-check file existence after JSON to YAML migration
+- Fixed branch change callbacks in footer component to properly update state after git resolution
+- Added guard clause in plugin-settings to prevent null reference when settings list is undefined
+- Fixed agent task discovery to support symlinks and improved error handling for file access failures
 ## [8.0.0] - 2026-01-23
 ### Added
 

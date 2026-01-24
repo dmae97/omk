@@ -587,7 +587,10 @@ export class SettingsManager {
 			await Bun.file(configPath).text();
 			return;
 		} catch (err) {
-			if (!isEnoent(err)) throw err;
+			if (!isEnoent(err)) {
+				logger.warn("SettingsManager failed to check config.yml", { path: configPath, error: String(err) });
+				return;
+			}
 		}
 
 		let settings: Settings = {};

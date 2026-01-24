@@ -5,6 +5,7 @@ import { $, type Subprocess } from "bun";
 import { nanoid } from "nanoid";
 import { getShellConfig, killProcessTree } from "../utils/shell";
 import { getOrCreateSnapshot } from "../utils/shell-snapshot";
+import { time } from "../utils/timings";
 import { htmlToBasicMarkdown } from "../web/scrapers/types";
 import { acquireSharedGateway, releaseSharedGateway } from "./gateway-coordinator";
 import { loadPythonModules } from "./modules";
@@ -503,6 +504,7 @@ export class PythonKernel {
 
 	static async start(options: KernelStartOptions): Promise<PythonKernel> {
 		const availability = await checkPythonKernelAvailability(options.cwd);
+		time("PythonKernel.start:availabilityCheck");
 		if (!availability.ok) {
 			throw new Error(availability.reason ?? "Python kernel unavailable");
 		}
@@ -516,8 +518,11 @@ export class PythonKernel {
 		if (options.useSharedGateway !== false) {
 			try {
 				const sharedResult = await acquireSharedGateway(options.cwd);
+				time("PythonKernel.start:acquireSharedGateway");
 				if (sharedResult) {
-					return PythonKernel.startWithSharedGateway(sharedResult.url, options.cwd, options.env);
+					const kernel = await PythonKernel.startWithSharedGateway(sharedResult.url, options.cwd, options.env);
+					time("PythonKernel.start:startWithSharedGateway");
+					return kernel;
 				}
 			} catch (err) {
 				logger.warn("Failed to acquire shared gateway, falling back to local", {
@@ -580,6 +585,7 @@ export class PythonKernel {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ name: "python3" }),
 		});
+		time("startWithSharedGateway:createKernel");
 
 		if (!createResponse.ok) {
 			await releaseSharedGateway();
@@ -593,13 +599,17 @@ export class PythonKernel {
 
 		try {
 			await kernel.connectWebSocket();
+			time("startWithSharedGateway:connectWS");
 			await kernel.initializeKernelEnvironment(cwd, env);
+			time("startWithSharedGateway:initEnv");
 			kernel.startHeartbeat();
 			const preludeResult = await kernel.execute(PYTHON_PRELUDE, { silent: true, storeHistory: false });
+			time("startWithSharedGateway:prelude");
 			if (preludeResult.cancelled || preludeResult.status === "error") {
 				throw new Error("Failed to initialize Python kernel prelude");
 			}
 			await loadPythonModules(kernel, { cwd });
+			time("startWithSharedGateway:loadModules");
 			return kernel;
 		} catch (err: unknown) {
 			await kernel.shutdown();

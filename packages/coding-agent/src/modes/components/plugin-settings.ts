@@ -278,6 +278,7 @@ export class PluginDetailComponent extends Container {
 	}
 
 	handleInput(data: string): void {
+		if (!this.settingsList) return;
 		this.settingsList.handleInput(data);
 	}
 }

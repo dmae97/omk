@@ -1,5 +1,6 @@
 import { logger } from "@oh-my-pi/pi-utils";
 import { OutputSink } from "../session/streaming-output";
+import { time } from "../utils/timings";
 import { shutdownSharedGateway } from "./gateway-coordinator";
 import {
 	checkPythonKernelAvailability,
@@ -154,6 +155,7 @@ export async function warmPythonEnvironment(
 ): Promise<{ ok: boolean; reason?: string; docs: PreludeHelper[] }> {
 	try {
 		await ensureKernelAvailable(cwd);
+		time("warmPython:ensureKernelAvailable");
 	} catch (err: unknown) {
 		const reason = err instanceof Error ? err.message : String(err);
 		cachedPreludeDocs = [];
@@ -171,6 +173,7 @@ export async function warmPythonEnvironment(
 			useSharedGateway,
 			sessionFile,
 		);
+		time("warmPython:withKernelSession");
 		cachedPreludeDocs = docs;
 		return { ok: true, docs };
 	} catch (err: unknown) {
@@ -230,6 +233,7 @@ async function createKernelSession(
 	let kernel: PythonKernel;
 	try {
 		kernel = await PythonKernel.start({ cwd, useSharedGateway, env });
+		time("createKernelSession:PythonKernel.start");
 	} catch (err) {
 		if (!isRetry && isResourceExhaustionError(err)) {
 			await recoverFromResourceExhaustion();

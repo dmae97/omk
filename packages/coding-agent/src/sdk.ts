@@ -282,11 +282,12 @@ export async function discoverModels(
 	const jsonPath = path.join(agentDir, "models.json");
 
 	// Check existence of yaml and json files
-	const [yamlExists, jsonExists] = await Promise.all([Bun.file(yamlPath).exists(), Bun.file(jsonPath).exists()]);
+	let [yamlExists, jsonExists] = await Promise.all([Bun.file(yamlPath).exists(), Bun.file(jsonPath).exists()]);
 
 	// Migrate models.json to models.yml if yaml doesn't exist but json does
 	if (!yamlExists && jsonExists) {
 		await migrateModelsJsonToYaml(jsonPath, yamlPath);
+		[yamlExists, jsonExists] = await Promise.all([Bun.file(yamlPath).exists(), Bun.file(jsonPath).exists()]);
 	}
 
 	// Prefer models.yml, fall back to models.json

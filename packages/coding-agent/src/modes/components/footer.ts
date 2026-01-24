@@ -137,6 +137,9 @@ export class FooterComponent implements Component {
 		findGitHeadPath().then((result) => {
 			if (!result) {
 				this.cachedBranch = null;
+				if (this.onBranchChange) {
+					this.onBranchChange();
+				}
 				return;
 			}
 			const content = result.content.trim();
@@ -145,6 +148,9 @@ export class FooterComponent implements Component {
 				this.cachedBranch = content.slice(16);
 			} else {
 				this.cachedBranch = "detached";
+			}
+			if (this.onBranchChange) {
+				this.onBranchChange();
 			}
 		});
 

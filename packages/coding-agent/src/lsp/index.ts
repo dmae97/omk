@@ -1,8 +1,8 @@
+import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
+import { logger, once, untilAborted } from "@oh-my-pi/pi-utils";
+import type { BunFile } from "bun";
 import * as fs from "node:fs";
 import path from "node:path";
-import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
-import { isEnoent, logger, once, untilAborted } from "@oh-my-pi/pi-utils";
-import type { BunFile } from "bun";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import { type Theme, theme } from "../modes/theme/theme";
 import lspDescription from "../prompts/tools/lsp.md" with { type: "text" };
@@ -22,7 +22,7 @@ import {
 	WARMUP_TIMEOUT_MS,
 } from "./client";
 import { getLinterClient } from "./clients";
-import { getServersForFile, hasCapability, type LspConfig, loadConfig } from "./config";
+import { getServersForFile, hasCapability, loadConfig, type LspConfig } from "./config";
 import { applyTextEditsToString, applyWorkspaceEdit } from "./edits";
 import { detectLspmux } from "./lspmux";
 import { renderCall, renderResult } from "./render";
@@ -40,8 +40,8 @@ import {
 	type LocationLink,
 	type LspClient,
 	type LspParams,
-	type LspToolDetails,
 	lspSchema,
+	type LspToolDetails,
 	type ServerConfig,
 	type SymbolInformation,
 	type TextEdit,
@@ -358,38 +358,25 @@ interface ProjectType {
 	description: string;
 }
 
-async function fileExists(filePath: string): Promise<boolean> {
-	try {
-		await fs.promises.stat(filePath);
-		return true;
-	} catch (err) {
-		if (isEnoent(err)) return false;
-		throw err;
-	}
-}
-
 /** Detect project type from root markers */
-async function detectProjectType(cwd: string): Promise<ProjectType> {
+function detectProjectType(cwd: string): ProjectType {
 	// Check for Rust (Cargo.toml)
-	if (await fileExists(path.join(cwd, "Cargo.toml"))) {
+	if (fs.existsSync(path.join(cwd, "Cargo.toml"))) {
 		return { type: "rust", command: ["cargo", "check", "--message-format=short"], description: "Rust (cargo check)" };
 	}
 
 	// Check for TypeScript (tsconfig.json)
-	if (await fileExists(path.join(cwd, "tsconfig.json"))) {
+	if (fs.existsSync(path.join(cwd, "tsconfig.json"))) {
 		return { type: "typescript", command: ["npx", "tsc", "--noEmit"], description: "TypeScript (tsc --noEmit)" };
 	}
 
 	// Check for Go (go.mod)
-	if (await fileExists(path.join(cwd, "go.mod"))) {
+	if (fs.existsSync(path.join(cwd, "go.mod"))) {
 		return { type: "go", command: ["go", "build", "./..."], description: "Go (go build)" };
 	}
 
 	// Check for Python (pyproject.toml or pyrightconfig.json)
-	if (
-		(await fileExists(path.join(cwd, "pyproject.toml"))) ||
-		(await fileExists(path.join(cwd, "pyrightconfig.json")))
-	) {
+	if (fs.existsSync(path.join(cwd, "pyproject.toml")) || fs.existsSync(path.join(cwd, "pyrightconfig.json"))) {
 		return { type: "python", command: ["pyright"], description: "Python (pyright)" };
 	}
 
@@ -401,7 +388,7 @@ async function runWorkspaceDiagnostics(
 	cwd: string,
 	config: LspConfig,
 ): Promise<{ output: string; projectType: ProjectType }> {
-	const projectType = await detectProjectType(cwd);
+	const projectType = detectProjectType(cwd);
 
 	// For Rust, use flycheck via rust-analyzer if available
 	if (projectType.type === "rust") {

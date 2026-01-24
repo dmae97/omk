@@ -322,7 +322,10 @@ async function expandGlobs(patterns: string[]): Promise<string[]> {
 				await Bun.file(pattern).text();
 				files.push(pattern);
 			} catch (err) {
-				if (!isEnoent(err)) throw err;
+				if (isEnoent(err)) continue;
+				const error = err as NodeJS.ErrnoException;
+				if (error.code === "EISDIR" || error.code === "EACCES" || error.code === "EPERM") continue;
+				throw err;
 			}
 		}
 	}

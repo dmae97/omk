@@ -290,6 +290,7 @@ export class Editor implements Component, Focusable {
 	private autocompleteList?: SelectList;
 	private isAutocompleting: boolean = false;
 	private autocompletePrefix: string = "";
+	private autocompleteRequestId: number = 0;
 	public onAutocompleteUpdate?: () => void;
 
 	// Paste tracking for large pastes
@@ -1840,7 +1841,6 @@ export class Editor implements Component, Focusable {
 	// Autocomplete methods
 	private async tryTriggerAutocomplete(explicitTab: boolean = false): Promise<void> {
 		if (!this.autocompleteProvider) return;
-
 		// Check if we should trigger file completion on Tab
 		if (explicitTab) {
 			const provider = this.autocompleteProvider as CombinedAutocompleteProvider;
@@ -1852,11 +1852,14 @@ export class Editor implements Component, Focusable {
 			}
 		}
 
+		const requestId = ++this.autocompleteRequestId;
+
 		const suggestions = await this.autocompleteProvider.getSuggestions(
 			this.state.lines,
 			this.state.cursorLine,
 			this.state.cursorCol,
 		);
+		if (requestId !== this.autocompleteRequestId) return;
 
 		if (suggestions && suggestions.items.length > 0) {
 			this.autocompletePrefix = suggestions.prefix;
@@ -1904,11 +1907,13 @@ https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19536643416/job/
 			return;
 		}
 
+		const requestId = ++this.autocompleteRequestId;
 		const suggestions = await provider.getForceFileSuggestions(
 			this.state.lines,
 			this.state.cursorLine,
 			this.state.cursorCol,
 		);
+		if (requestId !== this.autocompleteRequestId) return;
 
 		if (suggestions && suggestions.items.length > 0) {
 			this.autocompletePrefix = suggestions.prefix;
@@ -1924,6 +1929,7 @@ https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19536643416/job/
 	private cancelAutocomplete(notifyCancel: boolean = false): void {
 		const wasAutocompleting = this.isAutocompleting;
 		this.clearAutocompleteTimeout();
+		this.autocompleteRequestId += 1;
 		this.isAutocompleting = false;
 		this.autocompleteList = undefined;
 		this.autocompletePrefix = "";
@@ -1938,12 +1944,14 @@ https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19536643416/job/
 
 	private async updateAutocomplete(): Promise<void> {
 		if (!this.isAutocompleting || !this.autocompleteProvider) return;
+		const requestId = ++this.autocompleteRequestId;
 
 		const suggestions = await this.autocompleteProvider.getSuggestions(
 			this.state.lines,
 			this.state.cursorLine,
 			this.state.cursorCol,
 		);
+		if (requestId !== this.autocompleteRequestId) return;
 
 		if (suggestions && suggestions.items.length > 0) {
 			this.autocompletePrefix = suggestions.prefix;

@@ -31,7 +31,7 @@ export interface DiscoveryResult {
 async function loadAgentsFromDir(dir: string, source: AgentSource): Promise<AgentDefinition[]> {
 	const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
 	const files = entries
-		.filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+		.filter((entry) => (entry.isFile() || entry.isSymbolicLink()) && entry.name.endsWith(".md"))
 		.sort((a, b) => a.name.localeCompare(b.name))
 		.map((file) => {
 			const filePath = path.join(dir, file.name);

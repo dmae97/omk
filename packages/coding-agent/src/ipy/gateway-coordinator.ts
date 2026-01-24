@@ -7,6 +7,7 @@ import type { Subprocess } from "bun";
 import { getAgentDir } from "../config";
 import { getShellConfig, killProcessTree } from "../utils/shell";
 import { getOrCreateSnapshot } from "../utils/shell-snapshot";
+import { time } from "../utils/timings";
 
 const GATEWAY_DIR_NAME = "python-gateway";
 const GATEWAY_INFO_FILE = "gateway.json";
@@ -482,9 +483,12 @@ export async function acquireSharedGateway(cwd: string): Promise<AcquireResult |
 
 	try {
 		return await withGatewayLock(async () => {
+			time("acquireSharedGateway:lockAcquired");
 			const existingInfo = await readGatewayInfo();
+			time("acquireSharedGateway:readInfo");
 			if (existingInfo) {
 				if (await isGatewayAlive(existingInfo)) {
+					time("acquireSharedGateway:isAlive");
 					localGatewayUrl = existingInfo.url;
 					isCoordinatorInitialized = true;
 					logger.debug("Reusing global Python gateway", { url: existingInfo.url });
@@ -499,6 +503,7 @@ export async function acquireSharedGateway(cwd: string): Promise<AcquireResult |
 			}
 
 			const { url, pid, pythonPath, venvPath } = await startGatewayProcess(cwd);
+			time("acquireSharedGateway:startGateway");
 			const info: GatewayInfo = {
 				url,
 				pid,
