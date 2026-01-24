@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [8.2.0] - 2026-01-24
+
 ### Added
 - Added mermaid diagram rendering engine (renderMermaidToPng) with mmdc CLI integration
 - Added terminal graphics encoding (iTerm2/Kitty) for mermaid diagrams with automatic width scaling

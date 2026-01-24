@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [8.2.0] - 2026-01-24
+
 ### Added
 - Added `omp commit` command to generate conventional commits with changelog updates
 - Added agentic commit mode with commit-specific tools and `--legacy` fallback

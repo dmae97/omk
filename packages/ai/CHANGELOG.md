@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [8.2.0] - 2026-01-24
+
 ### Changed
 - Migrated node module imports from named to namespace imports across all packages for consistency with project guidelines
 ## [8.0.0] - 2026-01-23
