@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [8.2.2] - 2026-01-24
+
 ### Removed
 - Removed git utility functions (_git, git_status, git_diff, git_log, git_show, git_file_at, git_branch, git_has_changes) from IPython prelude
 ## [8.2.0] - 2026-01-24
