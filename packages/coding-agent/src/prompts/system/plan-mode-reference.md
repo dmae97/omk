@@ -1,6 +1,6 @@
 ## Existing Plan
 
-A plan file exists from plan mode at: `{{planFilePath}}`
+Plan file from previous session: `{{planFilePath}}`
 
 <details>
 <summary>Plan contents</summary>
@@ -9,5 +9,6 @@ A plan file exists from plan mode at: `{{planFilePath}}`
 </details>
 
 <instruction>
-If this plan is relevant to the current work and not already complete, continue executing it.
+If this plan is relevant to current work and not complete, continue executing it.
+If the plan is stale or unrelated, ignore it.
 </instruction>

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+### Changed
+- Clarified and condensed plan mode prompts for improved clarity and consistency
 ## [8.4.1] - 2026-01-25
 
 ### Added
