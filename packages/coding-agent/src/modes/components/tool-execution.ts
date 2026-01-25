@@ -1,6 +1,7 @@
 import type { AgentTool } from "@oh-my-pi/pi-agent-core";
 import {
 	Box,
+	type Component,
 	Container,
 	getCapabilities,
 	getImageDimensions,
@@ -11,6 +12,7 @@ import {
 	type TUI,
 } from "@oh-my-pi/pi-tui";
 import { sanitizeText } from "@oh-my-pi/pi-utils";
+import type { Theme } from "../../modes/theme/theme";
 import { theme } from "../../modes/theme/theme";
 import { computeEditDiff, computePatchDiff, type EditDiffError, type EditDiffResult } from "../../patch";
 import { BASH_DEFAULT_PREVIEW_LINES } from "../../tools/bash";
@@ -376,7 +378,8 @@ export class ToolExecutionComponent extends Container {
 			const tool = this.tool;
 			const mergeCallAndResult = Boolean((tool as { mergeCallAndResult?: boolean }).mergeCallAndResult);
 			// Custom tools use Box for flexible component rendering
-			this.contentBox.setBgFn(bgFn);
+			const inline = Boolean((tool as { inline?: boolean }).inline);
+			this.contentBox.setBgFn(inline ? undefined : bgFn);
 			this.contentBox.clear();
 
 			// Render call component
@@ -404,10 +407,17 @@ export class ToolExecutionComponent extends Container {
 			// Render result component if we have a result
 			if (this.result && tool.renderResult) {
 				try {
-					const resultComponent = tool.renderResult(
-						{ content: this.result.content as any, details: this.result.details },
+					const renderResult = tool.renderResult as (
+						result: { content: Array<{ type: string; text?: string }>; details?: unknown; isError?: boolean },
+						options: { expanded: boolean; isPartial: boolean; spinnerFrame?: number },
+						theme: Theme,
+						args?: unknown,
+					) => Component;
+					const resultComponent = renderResult(
+						{ content: this.result.content as any, details: this.result.details, isError: this.result.isError },
 						{ expanded: this.expanded, isPartial: this.isPartial, spinnerFrame: this.spinnerFrame },
 						theme,
+						this.args,
 					);
 					if (resultComponent) {
 						// Ensure component has invalidate() method for Component interface

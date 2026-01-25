@@ -1082,6 +1082,7 @@ export function renderFetchResult(
 						{ label: uiTheme.fg("toolTitle", "Content Preview"), lines: contentPreviewLines },
 					],
 					width,
+					applyBg: false,
 				},
 				uiTheme,
 			),

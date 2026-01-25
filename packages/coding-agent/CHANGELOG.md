@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+- Added request parameter tracking to LSP tool rendering for better diagnostics visibility
+- Added async diff computation and Kitty protocol support to tool execution rendering
+- Refactored patch applicator with improved fuzzy matching (7-pass sequence matching with Levenshtein distance) and indentation adjustment
+- Added inline rendering flag to bash and fetch tool renderers
+- Extracted constants for preview formatting to improve code maintainability
+
+### Fixed
+- Fixed output block border rendering (bottom-right corner was missing)
+- Added background control parameter to output block rendering
 ## [8.2.2] - 2026-01-24
 
 ### Removed

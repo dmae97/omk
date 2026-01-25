@@ -12,10 +12,11 @@ export interface OutputBlockOptions {
 	state?: State;
 	sections?: Array<{ label?: string; lines: string[] }>;
 	width: number;
+	applyBg?: boolean;
 }
 
 export function renderOutputBlock(options: OutputBlockOptions, theme: Theme): string[] {
-	const { header, headerMeta, state, sections = [], width } = options;
+	const { header, headerMeta, state, sections = [], width, applyBg = true } = options;
 	const h = theme.boxSharp.horizontal;
 	const v = theme.boxSharp.vertical;
 	const cap = h.repeat(3);
@@ -30,24 +31,31 @@ export function renderOutputBlock(options: OutputBlockOptions, theme: Theme): st
 					? "accent"
 					: "dim";
 	const border = (text: string) => theme.fg(borderColor, text);
-	const bgFn = state ? (text: string) => theme.bg(getStateBgColor(state), text) : undefined;
+	const bgFn = state && applyBg ? (text: string) => theme.bg(getStateBgColor(state), text) : undefined;
 
-	const buildBarLine = (leftChar: string, label?: string, meta?: string): string => {
+	const buildBarLine = (leftChar: string, rightChar: string, label?: string, meta?: string): string => {
 		const left = border(`${leftChar}${cap}`);
-		if (lineWidth <= 0) return left;
+		const right = border(rightChar);
+		if (lineWidth <= 0) return left + right;
 		const labelText = [label, meta].filter(Boolean).join(theme.sep.dot);
 		const rawLabel = labelText ? ` ${labelText} ` : " ";
-		const maxLabelWidth = Math.max(0, lineWidth - visibleWidth(left));
+		const leftWidth = visibleWidth(left);
+		const rightWidth = visibleWidth(right);
+		const maxLabelWidth = Math.max(0, lineWidth - leftWidth - rightWidth);
 		const trimmedLabel = truncateToWidth(rawLabel, maxLabelWidth, theme.format.ellipsis);
-		const fillCount = Math.max(0, lineWidth - visibleWidth(left + trimmedLabel));
-		return `${left}${trimmedLabel}${border(h.repeat(fillCount))}`;
+		const labelWidth = visibleWidth(trimmedLabel);
+		const fillCount = Math.max(0, lineWidth - leftWidth - labelWidth - rightWidth);
+		return `${left}${trimmedLabel}${border(h.repeat(fillCount))}${right}`;
 	};
 
 	const contentPrefix = border(`${v} `);
-	const contentWidth = Math.max(0, lineWidth - visibleWidth(contentPrefix));
+	const contentSuffix = border(v);
+	const contentWidth = Math.max(0, lineWidth - visibleWidth(contentPrefix) - visibleWidth(contentSuffix));
 	const lines: string[] = [];
 
-	lines.push(padToWidth(buildBarLine(theme.boxSharp.topLeft, header, headerMeta), lineWidth, bgFn));
+	lines.push(
+		padToWidth(buildBarLine(theme.boxSharp.topLeft, theme.boxSharp.topRight, header, headerMeta), lineWidth, bgFn),
+	);
 
 	const hasSections = sections.length > 0;
 	const normalizedSections = hasSections ? sections : [{ lines: [] }];
@@ -55,17 +63,22 @@ export function renderOutputBlock(options: OutputBlockOptions, theme: Theme): st
 	for (let i = 0; i < normalizedSections.length; i++) {
 		const section = normalizedSections[i];
 		if (section.label) {
-			lines.push(padToWidth(buildBarLine(theme.boxSharp.teeRight, section.label), lineWidth, bgFn));
+			lines.push(
+				padToWidth(buildBarLine(theme.boxSharp.teeRight, theme.boxSharp.teeLeft, section.label), lineWidth, bgFn),
+			);
 		}
 		for (const line of section.lines) {
 			const text = truncateToWidth(line, contentWidth, theme.format.ellipsis);
-			lines.push(padToWidth(`${contentPrefix}${text}`, lineWidth, bgFn));
+			const innerPadding = " ".repeat(Math.max(0, contentWidth - visibleWidth(text)));
+			const fullLine = `${contentPrefix}${text}${innerPadding}${contentSuffix}`;
+			lines.push(padToWidth(fullLine, lineWidth, bgFn));
 		}
 	}
 
 	const bottomLeft = border(`${theme.boxSharp.bottomLeft}${cap}`);
-	const bottomFillCount = Math.max(0, lineWidth - visibleWidth(bottomLeft));
-	const bottomLine = `${bottomLeft}${border(h.repeat(bottomFillCount))}`;
+	const bottomRight = border(theme.boxSharp.bottomRight);
+	const bottomFillCount = Math.max(0, lineWidth - visibleWidth(bottomLeft) - visibleWidth(bottomRight));
+	const bottomLine = `${bottomLeft}${border(h.repeat(bottomFillCount))}${bottomRight}`;
 	lines.push(padToWidth(bottomLine, lineWidth, bgFn));
 
 	return lines;

@@ -53,6 +53,7 @@ export interface LspToolDetails {
 	serverName?: string;
 	action: string;
 	success: boolean;
+	request?: LspParams;
 }
 
 // =============================================================================

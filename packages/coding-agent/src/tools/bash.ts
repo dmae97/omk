@@ -288,4 +288,5 @@ export const bashToolRenderer = {
 		};
 	},
 	mergeCallAndResult: true,
+	inline: true,
 };

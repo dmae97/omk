@@ -29,6 +29,12 @@ const PARTIAL_MATCH_MIN_LENGTH = 6;
 /** Minimum ratio of pattern to line length for substring match */
 const PARTIAL_MATCH_MIN_RATIO = 0.3;
 
+/** Context lines to show before/after an ambiguous match preview */
+const OCCURRENCE_PREVIEW_CONTEXT = 5;
+
+/** Maximum line length for ambiguous match previews */
+const OCCURRENCE_PREVIEW_MAX_LEN = 80;
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Core Algorithms
 // ═══════════════════════════════════════════════════════════════════════════
@@ -224,10 +230,14 @@ export function findMatch(
 				if (idx === -1) break;
 				const lineNumber = content.slice(0, idx).split("\n").length;
 				occurrenceLines.push(lineNumber);
-				// Extract 3 lines starting from match (0-indexed)
-				const previewLines = contentLines.slice(lineNumber - 1, lineNumber + 2);
+				const start = Math.max(0, lineNumber - 1 - OCCURRENCE_PREVIEW_CONTEXT);
+				const end = Math.min(contentLines.length, lineNumber + OCCURRENCE_PREVIEW_CONTEXT + 1);
+				const previewLines = contentLines.slice(start, end);
 				const preview = previewLines
-					.map((line, i) => `  ${lineNumber + i} | ${line.length > 60 ? `${line.slice(0, 57)}...` : line}`)
+					.map((line, idx) => {
+						const num = start + idx + 1;
+						return `  ${num} | ${line.length > OCCURRENCE_PREVIEW_MAX_LEN ? `${line.slice(0, OCCURRENCE_PREVIEW_MAX_LEN - 3)}...` : line}`;
+					})
 					.join("\n");
 				occurrencePreviews.push(preview);
 				searchStart = idx + 1;

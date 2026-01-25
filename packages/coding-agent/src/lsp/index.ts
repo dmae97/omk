@@ -955,6 +955,8 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 	public readonly parameters = lspSchema;
 	public readonly renderCall = renderCall;
 	public readonly renderResult = renderResult;
+	public readonly mergeCallAndResult = true;
+	public readonly inline = true;
 
 	private readonly session: ToolSession;
 
@@ -1011,7 +1013,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 			const output = lspmuxStatus ? `${serverStatus}\n${lspmuxStatus}` : serverStatus;
 			return {
 				content: [{ type: "text", text: output }],
-				details: { action, success: true },
+				details: { action, success: true, request: params },
 			};
 		}
 
@@ -1025,7 +1027,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 						text: `Workspace diagnostics (${result.projectType.description}):\n${result.output}`,
 					},
 				],
-				details: { action, success: true },
+				details: { action, success: true, request: params },
 			};
 		}
 
@@ -1636,13 +1638,13 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 
 			return {
 				content: [{ type: "text", text: output }],
-				details: { serverName, action, success: true },
+				details: { serverName, action, success: true, request: params },
 			};
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : String(err);
 			return {
 				content: [{ type: "text", text: `LSP error: ${errorMessage}` }],
-				details: { serverName, action, success: false },
+				details: { serverName, action, success: false, request: params },
 			};
 		}
 	}

@@ -957,11 +957,15 @@ function computeReplacements(
 			if (secondMatch.index !== undefined) {
 				// Extract 3-line previews for each match
 				const formatPreview = (startIdx: number) => {
-					const lines = originalLines.slice(startIdx, startIdx + 3);
+					const contextLines = 2;
+					const maxLineLength = 80;
+					const start = Math.max(0, startIdx - contextLines);
+					const end = Math.min(originalLines.length, startIdx + contextLines + 1);
+					const lines = originalLines.slice(start, end);
 					return lines
 						.map((line, i) => {
-							const num = startIdx + i + 1;
-							const truncated = line.length > 60 ? `${line.slice(0, 57)}...` : line;
+							const num = start + i + 1;
+							const truncated = line.length > maxLineLength ? `${line.slice(0, maxLineLength - 3)}...` : line;
 							return `  ${num} | ${truncated}`;
 						})
 						.join("\n");

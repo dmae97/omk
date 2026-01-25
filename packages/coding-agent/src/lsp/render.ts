@@ -7,11 +7,18 @@
  * - Grouped references and symbols
  * - Collapsible/expandable views
  */
-import type { AgentToolResult, RenderResultOptions } from "@oh-my-pi/pi-agent-core";
+import type { RenderResultOptions } from "@oh-my-pi/pi-agent-core";
 import { type Component, Text } from "@oh-my-pi/pi-tui";
 import { highlight, supportsLanguage } from "cli-highlight";
 import { getLanguageFromPath, type Theme } from "../modes/theme/theme";
-import { formatExpandHint, formatMoreItems, TRUNCATE_LENGTHS, truncate } from "../tools/render-utils";
+import {
+	formatExpandHint,
+	formatMoreItems,
+	formatStatusIcon,
+	shortenPath,
+	TRUNCATE_LENGTHS,
+	truncate,
+} from "../tools/render-utils";
 import { renderOutputBlock, renderStatusLine } from "../tui";
 import type { LspParams, LspToolDetails } from "./types";
 
@@ -23,15 +30,74 @@ import type { LspParams, LspToolDetails } from "./types";
  * Render the LSP tool call in the TUI.
  * Shows: "lsp <operation> <file/filecount>"
  */
-export function renderCall(args: unknown, theme: Theme): Text {
-	const p = args as LspParams & { file?: string; files?: string[] };
-	const meta: string[] = [];
-	if (p.file) {
-		meta.push(p.file);
-	} else if (p.files?.length) {
-		meta.push(`${p.files.length} file(s)`);
+export function renderCall(args: LspParams, theme: Theme): Text {
+	const actionLabel = (args.action ?? "request").replace(/_/g, " ");
+	const queryPreview = args.query ? truncate(args.query, TRUNCATE_LENGTHS.SHORT, theme.format.ellipsis) : undefined;
+	const replacementPreview = args.replacement
+		? truncate(args.replacement, TRUNCATE_LENGTHS.SHORT, theme.format.ellipsis)
+		: undefined;
+
+	let target: string | undefined;
+	let hasFileTarget = false;
+
+	if (args.file) {
+		target = shortenPath(args.file);
+		hasFileTarget = true;
+	} else if (args.files?.length === 1) {
+		target = shortenPath(args.files[0]);
+		hasFileTarget = true;
+	} else if (args.files?.length) {
+		target = `${args.files.length} files`;
 	}
-	const text = renderStatusLine({ icon: "pending", title: "LSP", description: p.action || "?", meta }, theme);
+
+	if (hasFileTarget && args.line !== undefined) {
+		const col = args.column !== undefined ? `:${args.column}` : "";
+		target += `:${args.line}${col}`;
+		if (args.end_line !== undefined) {
+			const endCol = args.end_character !== undefined ? `:${args.end_character}` : "";
+			target += `-${args.end_line}${endCol}`;
+		}
+	} else if (!target && args.line !== undefined) {
+		const col = args.column !== undefined ? `:${args.column}` : "";
+		target = `line ${args.line}${col}`;
+		if (args.end_line !== undefined) {
+			const endCol = args.end_character !== undefined ? `:${args.end_character}` : "";
+			target += `-${args.end_line}${endCol}`;
+		}
+	}
+
+	const meta: string[] = [];
+	if (queryPreview && target) meta.push(`query:${queryPreview}`);
+	if (args.new_name) meta.push(`new:${args.new_name}`);
+	if (replacementPreview) meta.push(`replace:${replacementPreview}`);
+	if (args.kind) meta.push(`kind:${args.kind}`);
+	if (args.apply !== undefined) meta.push(`apply:${args.apply ? "true" : "false"}`);
+	if (args.action_index !== undefined) meta.push(`action:${args.action_index}`);
+	if (args.include_declaration !== undefined) {
+		meta.push(`include_decl:${args.include_declaration ? "true" : "false"}`);
+	}
+	if (args.end_line !== undefined && args.line === undefined) {
+		const endCol = args.end_character !== undefined ? `:${args.end_character}` : "";
+		meta.push(`end:${args.end_line}${endCol}`);
+	}
+
+	const descriptionParts = [actionLabel];
+	if (target) {
+		descriptionParts.push(target);
+	} else if (queryPreview) {
+		descriptionParts.push(queryPreview);
+	}
+
+	const text = renderStatusLine(
+		{
+			icon: "pending",
+			title: "LSP",
+			description: descriptionParts.join(" "),
+			meta,
+		},
+		theme,
+	);
+
 	return new Text(text, 0, 0);
 }
 
@@ -44,14 +110,15 @@ export function renderCall(args: unknown, theme: Theme): Text {
  * Detects hover, diagnostics, references, symbols, etc. and formats accordingly.
  */
 export function renderResult(
-	result: AgentToolResult<LspToolDetails>,
+	result: { content: Array<{ type: string; text?: string }>; details?: LspToolDetails; isError?: boolean },
 	options: RenderResultOptions,
 	theme: Theme,
 	args?: LspParams & { file?: string; files?: string[] },
 ): Component {
 	const content = result.content?.[0];
 	if (!content || content.type !== "text" || !("text" in content) || !content.text) {
-		const header = renderStatusLine({ icon: "warning", title: "LSP", description: "No result" }, theme);
+		const icon = formatStatusIcon("warning", theme, options.spinnerFrame);
+		const header = `${icon} LSP`;
 		return new Text([header, theme.fg("dim", "No result")].join("\n"), 0, 0);
 	}
 
@@ -94,22 +161,50 @@ export function renderResult(
 		}
 	}
 
-	const meta: string[] = [];
-	if (args?.action) meta.push(args.action);
-	if (args?.file) {
-		meta.push(args.file);
-	} else if (args?.files?.length) {
-		meta.push(`${args.files.length} file(s)`);
+	const request = args ?? result.details?.request;
+	const requestLines: string[] = [];
+	if (request?.file) {
+		requestLines.push(theme.fg("toolOutput", request.file));
+	} else if (request?.files?.length === 1) {
+		requestLines.push(theme.fg("toolOutput", request.files[0]));
+	} else if (request?.files?.length) {
+		requestLines.push(theme.fg("dim", `${request.files.length} file(s)`));
 	}
-	const header = renderStatusLine({ icon: state, title: "LSP", description: label, meta }, theme);
+	if (request?.line !== undefined) {
+		const col = request.column !== undefined ? `:${request.column}` : "";
+		requestLines.push(theme.fg("dim", `line ${request.line}${col}`));
+	}
+	if (request?.end_line !== undefined) {
+		const endCol = request.end_character !== undefined ? `:${request.end_character}` : "";
+		requestLines.push(theme.fg("dim", `end ${request.end_line}${endCol}`));
+	}
+	if (request?.query) requestLines.push(theme.fg("dim", `query: ${request.query}`));
+	if (request?.new_name) requestLines.push(theme.fg("dim", `new name: ${request.new_name}`));
+	if (request?.replacement) requestLines.push(theme.fg("dim", `replacement: ${request.replacement}`));
+	if (request?.kind) requestLines.push(theme.fg("dim", `kind: ${request.kind}`));
+	if (request?.apply !== undefined) requestLines.push(theme.fg("dim", `apply: ${request.apply ? "true" : "false"}`));
+	if (request?.action_index !== undefined) requestLines.push(theme.fg("dim", `action: ${request.action_index}`));
+	if (request?.include_declaration !== undefined) {
+		requestLines.push(theme.fg("dim", `include declaration: ${request.include_declaration ? "true" : "false"}`));
+	}
+
+	const actionLabel = (request?.action ?? result.details?.action ?? label.toLowerCase()).replace(/_/g, " ");
+	const status = options.isPartial ? "running" : result.isError ? "error" : "success";
+	const icon = formatStatusIcon(status, theme, options.spinnerFrame);
+	const header = `${icon} LSP ${actionLabel}`;
+
 	return {
 		render: (width: number) =>
 			renderOutputBlock(
 				{
 					header,
 					state,
-					sections: [{ label: theme.fg("toolTitle", label), lines: bodyLines }],
+					sections: [
+						...(requestLines.length > 0 ? [{ lines: requestLines }] : []),
+						{ label: theme.fg("toolTitle", "Response"), lines: bodyLines },
+					],
 					width,
+					applyBg: false,
 				},
 				theme,
 			),
@@ -612,4 +707,5 @@ export const lspToolRenderer = {
 	renderCall,
 	renderResult,
 	mergeCallAndResult: true,
+	inline: true,
 };
