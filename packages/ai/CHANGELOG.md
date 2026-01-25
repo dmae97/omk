@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [8.4.0] - 2026-01-25
+
 ### Added
 - Added Azure OpenAI Responses provider with deployment mapping and resource-based base URL support
 

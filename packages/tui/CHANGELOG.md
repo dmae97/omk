@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [8.4.0] - 2026-01-25
+
 ### Changed
 - Added Ctrl+Backspace as a delete-word-backward keybinding and improved modified backspace matching
 

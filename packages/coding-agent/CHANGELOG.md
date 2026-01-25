@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [8.4.0] - 2026-01-25
+
 ### Added
 - Added extension API to set working/loading messages during streaming
 - Added task worker propagation of context files, skills, and prompt templates
