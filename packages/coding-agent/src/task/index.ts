@@ -374,6 +374,9 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 
 			// Build full prompts with context prepended
 			const tasksWithContext = tasksWithUniqueIds.map(t => renderTemplate(context, t));
+			const contextFiles = this.session.contextFiles;
+			const skills = this.session.skills;
+			const promptTemplates = this.session.promptTemplates;
 
 			// Initialize progress for all tasks
 			for (let i = 0; i < tasksWithContext.length; i++) {
@@ -427,6 +430,9 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 						modelRegistry: this.session.modelRegistry,
 						settingsManager: this.session.settingsManager,
 						mcpManager: this.session.mcpManager,
+						contextFiles,
+						skills,
+						promptTemplates,
 					});
 				}
 
@@ -467,6 +473,9 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 						modelRegistry: this.session.modelRegistry,
 						settingsManager: this.session.settingsManager,
 						mcpManager: this.session.mcpManager,
+						contextFiles,
+						skills,
+						promptTemplates,
 					});
 					const patch = await captureDeltaPatch(worktreeDir, baseline);
 					const patchPath = path.join(effectiveArtifactsDir, `${task.id}.patch`);

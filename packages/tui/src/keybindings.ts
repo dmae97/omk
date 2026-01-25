@@ -60,7 +60,7 @@ export const DEFAULT_EDITOR_KEYBINDINGS: Required<EditorKeybindingsConfig> = {
 	// Deletion
 	deleteCharBackward: "backspace",
 	deleteCharForward: "delete",
-	deleteWordBackward: ["ctrl+w", "alt+backspace"],
+	deleteWordBackward: ["ctrl+w", "alt+backspace", "ctrl+backspace"],
 	deleteWordForward: ["alt+delete", "alt+d"],
 	deleteToLineStart: "ctrl+u",
 	deleteToLineEnd: "ctrl+k",

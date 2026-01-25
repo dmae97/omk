@@ -328,6 +328,11 @@ function parseOneHunk(lines: string[], lineNumber: number, allowMissingContext: 
 	for (let i = startIndex; i < lines.length; i++) {
 		const line = lines[i];
 		const trimmed = line.trim();
+		const nextLine = lines[i + 1];
+
+		if (line === "" && parsedLines > 0 && nextLine?.trimStart().startsWith("@@")) {
+			break;
+		}
 
 		if (!isDiffContentLine(line) && line.trimEnd() === EOF_MARKER && line.startsWith(EOF_MARKER)) {
 			if (parsedLines === 0) {

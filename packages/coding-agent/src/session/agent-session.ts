@@ -205,6 +205,7 @@ const noOpUIContext: ExtensionUIContext = {
 	input: async (_title, _placeholder, _dialogOptions) => undefined,
 	notify: () => {},
 	setStatus: () => {},
+	setWorkingMessage: () => {},
 	setWidget: () => {},
 	setTitle: () => {},
 	custom: async () => undefined as never,

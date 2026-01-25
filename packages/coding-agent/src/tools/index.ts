@@ -1,4 +1,6 @@
 import type { AgentTool } from "@oh-my-pi/pi-agent-core";
+import type { PromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import type { Skill } from "@oh-my-pi/pi-coding-agent/extensibility/skills";
 import { logger } from "@oh-my-pi/pi-utils";
 import type { BashInterceptorRule } from "../config/settings-manager";
 import type { InternalUrlRouter } from "../internal-urls";
@@ -94,12 +96,26 @@ export { WriteTool, type WriteToolDetails } from "./write";
 /** Tool type (AgentTool from pi-ai) */
 export type Tool = AgentTool<any, any, any>;
 
+export type ContextFileEntry = {
+	path: string;
+	content: string;
+	depth?: number;
+};
+
 /** Session context for tool factories */
 export interface ToolSession {
 	/** Current working directory */
 	cwd: string;
 	/** Whether UI is available */
 	hasUI: boolean;
+	/** Skip Python kernel availability check and warmup */
+	skipPythonPreflight?: boolean;
+	/** Pre-loaded context files (AGENTS.md, etc) */
+	contextFiles?: ContextFileEntry[];
+	/** Pre-loaded skills */
+	skills?: Skill[];
+	/** Pre-loaded prompt templates */
+	promptTemplates?: PromptTemplate[];
 	/** Whether LSP integrations are enabled */
 	enableLsp?: boolean;
 	/** Event bus for tool/extension communication */
@@ -219,10 +235,12 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 	const enableLsp = session.enableLsp ?? true;
 	const requestedTools = toolNames && toolNames.length > 0 ? [...new Set(toolNames)] : undefined;
 	const pythonMode = getPythonModeFromEnv() ?? session.settings?.getPythonToolMode?.() ?? "ipy-only";
+	const skipPythonPreflight = session.skipPythonPreflight === true;
 	let pythonAvailable = true;
 	const shouldCheckPython =
+		!skipPythonPreflight &&
 		pythonMode !== "bash-only" &&
-		(requestedTools === undefined || requestedTools.includes("python") || pythonMode === "ipy-only");
+		(requestedTools === undefined || requestedTools.includes("python"));
 	const isTestEnv = process.env.BUN_ENV === "test" || process.env.NODE_ENV === "test";
 	const skipPythonWarm = isTestEnv || process.env.OMP_PYTHON_SKIP_CHECK === "1";
 	if (shouldCheckPython) {

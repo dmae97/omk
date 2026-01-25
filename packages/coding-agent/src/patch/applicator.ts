@@ -7,7 +7,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { resolveToCwd } from "../tools/path-utils";
-import { DEFAULT_FUZZY_THRESHOLD, findContextLine, findMatch, seekSequence } from "./fuzzy";
+import { DEFAULT_FUZZY_THRESHOLD, findClosestSequenceMatch, findContextLine, findMatch, seekSequence } from "./fuzzy";
 import {
 	adjustIndentation,
 	convertLeadingTabsToSpaces,
@@ -67,9 +67,12 @@ interface Replacement {
 	newLines: string[];
 }
 
+type HunkVariantKind = "trim-common" | "dedupe-shared" | "collapse-repeated" | "single-line";
+
 interface HunkVariant {
 	oldLines: string[];
 	newLines: string[];
+	kind: HunkVariantKind;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -272,7 +275,7 @@ function trimCommonContext(oldLines: string[], newLines: string[]): HunkVariant 
 	if (trimmedOld.length === 0 && trimmedNew.length === 0) {
 		return undefined;
 	}
-	return { oldLines: trimmedOld, newLines: trimmedNew };
+	return { oldLines: trimmedOld, newLines: trimmedNew, kind: "trim-common" };
 }
 
 function collapseConsecutiveSharedLines(oldLines: string[], newLines: string[]): HunkVariant | undefined {
@@ -297,7 +300,7 @@ function collapseConsecutiveSharedLines(oldLines: string[], newLines: string[]):
 	if (collapsedOld.length === oldLines.length && collapsedNew.length === newLines.length) {
 		return undefined;
 	}
-	return { oldLines: collapsedOld, newLines: collapsedNew };
+	return { oldLines: collapsedOld, newLines: collapsedNew, kind: "dedupe-shared" };
 }
 
 function collapseRepeatedBlocks(oldLines: string[], newLines: string[]): HunkVariant | undefined {
@@ -339,7 +342,7 @@ function collapseRepeatedBlocks(oldLines: string[], newLines: string[]): HunkVar
 	if (collapsedOld.length === oldLines.length && collapsedNew.length === newLines.length) {
 		return undefined;
 	}
-	return { oldLines: collapsedOld, newLines: collapsedNew };
+	return { oldLines: collapsedOld, newLines: collapsedNew, kind: "collapse-repeated" };
 }
 
 function reduceToSingleLineChange(oldLines: string[], newLines: string[]): HunkVariant | undefined {
@@ -352,12 +355,12 @@ function reduceToSingleLineChange(oldLines: string[], newLines: string[]): HunkV
 		}
 	}
 	if (changedIndex === undefined) return undefined;
-	return { oldLines: [oldLines[changedIndex]], newLines: [newLines[changedIndex]] };
+	return { oldLines: [oldLines[changedIndex]], newLines: [newLines[changedIndex]], kind: "single-line" };
 }
 
 function buildFallbackVariants(hunk: DiffHunk): HunkVariant[] {
 	const variants: HunkVariant[] = [];
-	const base: HunkVariant = { oldLines: hunk.oldLines, newLines: hunk.newLines };
+	const base: HunkVariant = { oldLines: hunk.oldLines, newLines: hunk.newLines, kind: "trim-common" };
 
 	const trimmed = trimCommonContext(base.oldLines, base.newLines);
 	if (trimmed) variants.push(trimmed);
@@ -387,6 +390,11 @@ function buildFallbackVariants(hunk: DiffHunk): HunkVariant[] {
 	});
 }
 
+function filterFallbackVariants(variants: HunkVariant[], allowAggressive: boolean): HunkVariant[] {
+	if (allowAggressive) return variants;
+	return variants.filter(variant => variant.kind !== "collapse-repeated" && variant.kind !== "single-line");
+}
+
 function findContextRelativeMatch(
 	lines: string[],
 	patternLine: string,
@@ -411,6 +419,47 @@ function findContextRelativeMatch(
 			return i;
 		}
 	}
+	return undefined;
+}
+
+const AMBIGUITY_HINT_WINDOW = 200;
+const MATCH_PREVIEW_CONTEXT = 2;
+const MATCH_PREVIEW_MAX_LEN = 80;
+
+function formatSequenceMatchPreview(lines: string[], startIdx: number): string {
+	const start = Math.max(0, startIdx - MATCH_PREVIEW_CONTEXT);
+	const end = Math.min(lines.length, startIdx + MATCH_PREVIEW_CONTEXT + 1);
+	const previewLines = lines.slice(start, end);
+	return previewLines
+		.map((line, i) => {
+			const num = start + i + 1;
+			const truncated =
+				line.length > MATCH_PREVIEW_MAX_LEN ? `${line.slice(0, MATCH_PREVIEW_MAX_LEN - 3)}...` : line;
+			return `  ${num} | ${truncated}`;
+		})
+		.join("\n");
+}
+
+function formatSequenceMatchPreviews(
+	lines: string[],
+	matchIndices: number[] | undefined,
+	matchCount: number | undefined,
+): string | undefined {
+	if (!matchIndices || matchIndices.length === 0) return undefined;
+	const previews = matchIndices.map(index => formatSequenceMatchPreview(lines, index));
+	const moreMsg =
+		matchCount && matchCount > matchIndices.length ? ` (showing first ${matchIndices.length} of ${matchCount})` : "";
+	return `${previews.join("\n\n")}${moreMsg}`;
+}
+
+function chooseHintedMatch(
+	matchIndices: number[] | undefined,
+	hintIndex: number | undefined,
+	window: number,
+): number | undefined {
+	if (!matchIndices || matchIndices.length === 0 || hintIndex === undefined) return undefined;
+	const candidates = matchIndices.filter(index => Math.abs(index - hintIndex) <= window);
+	if (candidates.length === 1) return candidates[0];
 	return undefined;
 }
 
@@ -458,11 +507,17 @@ function findHierarchicalContext(
 					if (hintStart >= currentStart) {
 						const hintedResult = findContextLine(lines, part, hintStart, { allowFuzzy });
 						if (hintedResult.index !== undefined) {
-							return { ...hintedResult, matchCount: 1 };
+							return { ...hintedResult, matchCount: 1, matchIndices: [hintedResult.index] };
 						}
 					}
 				}
-				return { index: undefined, confidence: result.confidence, matchCount: result.matchCount };
+				return {
+					index: undefined,
+					confidence: result.confidence,
+					matchCount: result.matchCount,
+					matchIndices: result.matchIndices,
+					strategy: result.strategy,
+				};
 			}
 
 			if (result.index === undefined) {
@@ -471,7 +526,7 @@ function findHierarchicalContext(
 					if (hintStart >= currentStart) {
 						const hintedResult = findContextLine(lines, part, hintStart, { allowFuzzy });
 						if (hintedResult.index !== undefined) {
-							return { ...hintedResult, matchCount: 1 };
+							return { ...hintedResult, matchCount: 1, matchIndices: [hintedResult.index] };
 						}
 					}
 				}
@@ -494,17 +549,27 @@ function findHierarchicalContext(
 		const inner = spaceParts[spaceParts.length - 1];
 		const outerResult = findContextLine(lines, outer, startFrom, { allowFuzzy });
 		if (outerResult.matchCount !== undefined && outerResult.matchCount > 1) {
-			return { index: undefined, confidence: outerResult.confidence, matchCount: outerResult.matchCount };
+			return {
+				index: undefined,
+				confidence: outerResult.confidence,
+				matchCount: outerResult.matchCount,
+				matchIndices: outerResult.matchIndices,
+				strategy: outerResult.strategy,
+			};
 		}
 		if (outerResult.index !== undefined) {
 			const innerResult = findContextLine(lines, inner, outerResult.index + 1, { allowFuzzy });
 			if (innerResult.index !== undefined) {
 				return innerResult.matchCount && innerResult.matchCount > 1
-					? { ...innerResult, matchCount: 1 }
+					? { ...innerResult, matchCount: 1, matchIndices: [innerResult.index] }
 					: innerResult;
 			}
 			if (innerResult.matchCount !== undefined && innerResult.matchCount > 1) {
-				return { ...innerResult, matchCount: 1 };
+				return {
+					...innerResult,
+					matchCount: 1,
+					matchIndices: innerResult.index !== undefined ? [innerResult.index] : innerResult.matchIndices,
+				};
 			}
 		}
 	}
@@ -516,7 +581,7 @@ function findHierarchicalContext(
 		const hintStart = Math.max(0, lineHint - 1);
 		const hintedResult = findContextLine(lines, context, hintStart, { allowFuzzy });
 		if (hintedResult.index !== undefined) {
-			return { ...hintedResult, matchCount: 1 };
+			return { ...hintedResult, matchCount: 1, matchIndices: [hintedResult.index] };
 		}
 	}
 
@@ -547,7 +612,13 @@ function findHierarchicalContext(
 		const outerResult = findContextLine(lines, outer, startFrom, { allowFuzzy });
 
 		if (outerResult.matchCount !== undefined && outerResult.matchCount > 1) {
-			return { index: undefined, confidence: outerResult.confidence, matchCount: outerResult.matchCount };
+			return {
+				index: undefined,
+				confidence: outerResult.confidence,
+				matchCount: outerResult.matchCount,
+				matchIndices: outerResult.matchIndices,
+				strategy: outerResult.strategy,
+			};
 		}
 
 		if (outerResult.index === undefined) {
@@ -556,10 +627,16 @@ function findHierarchicalContext(
 
 		const innerResult = findContextLine(lines, inner, outerResult.index + 1, { allowFuzzy });
 		if (innerResult.index !== undefined) {
-			return innerResult.matchCount && innerResult.matchCount > 1 ? { ...innerResult, matchCount: 1 } : innerResult;
+			return innerResult.matchCount && innerResult.matchCount > 1
+				? { ...innerResult, matchCount: 1, matchIndices: [innerResult.index] }
+				: innerResult;
 		}
 		if (innerResult.matchCount !== undefined && innerResult.matchCount > 1) {
-			return { ...innerResult, matchCount: 1 };
+			return {
+				...innerResult,
+				matchCount: 1,
+				matchIndices: innerResult.index !== undefined ? [innerResult.index] : innerResult.matchIndices,
+			};
 		}
 	}
 
@@ -620,6 +697,7 @@ function attemptSequenceFallback(
 	currentIndex: number,
 	lineHint: number | undefined,
 	allowFuzzy: boolean,
+	allowAggressiveFallbacks: boolean,
 ): number | undefined {
 	if (hunk.oldLines.length === 0) return undefined;
 	const matchHint = getHunkHintIndex(hunk, currentIndex);
@@ -642,7 +720,7 @@ function attemptSequenceFallback(
 		return fallbackResult.index;
 	}
 
-	for (const variant of buildFallbackVariants(hunk)) {
+	for (const variant of filterFallbackVariants(buildFallbackVariants(hunk), allowAggressiveFallbacks)) {
 		if (variant.oldLines.length === 0) continue;
 		const variantResult = findSequenceWithHint(
 			lines,
@@ -669,7 +747,7 @@ function applyCharacterMatch(
 	hunk: DiffHunk,
 	fuzzyThreshold: number,
 	allowFuzzy: boolean,
-): string {
+): { content: string; warnings: string[] } {
 	const oldText = hunk.oldLines.join("\n");
 	const newText = hunk.newLines.join("\n");
 
@@ -725,10 +803,18 @@ function applyCharacterMatch(
 	// Adjust indentation to match what was actually found
 	const adjustedNewText = adjustIndentation(normalizedOldText, matchOutcome.match.actualText, newText);
 
+	const warnings: string[] = [];
+	if (matchOutcome.dominantFuzzy && matchOutcome.match) {
+		const similarity = Math.round(matchOutcome.match.confidence * 100);
+		warnings.push(
+			`Dominant fuzzy match selected in ${path} near line ${matchOutcome.match.startLine} (${similarity}% similar).`,
+		);
+	}
+
 	// Apply the replacement
 	const before = normalizedContent.substring(0, matchOutcome.match.startIndex);
 	const after = normalizedContent.substring(matchOutcome.match.startIndex + matchOutcome.match.actualText.length);
-	return before + adjustedNewText + after;
+	return { content: before + adjustedNewText + after, warnings };
 }
 
 function applyTrailingNewlinePolicy(content: string, hadFinalNewline: boolean): string {
@@ -746,8 +832,9 @@ function computeReplacements(
 	path: string,
 	hunks: DiffHunk[],
 	allowFuzzy: boolean,
-): Replacement[] {
+): { replacements: Replacement[]; warnings: string[] } {
 	const replacements: Replacement[] = [];
+	const warnings: string[] = [];
 	let lineIndex = 0;
 
 	for (const hunk of hunks) {
@@ -763,6 +850,7 @@ function computeReplacements(
 			);
 		}
 		const lineHint = hunk.oldStartLine;
+		const allowAggressiveFallbacks = hunk.changeContext !== undefined || lineHint !== undefined || hunk.isEndOfFile;
 		if (lineHint !== undefined && hunk.changeContext === undefined && !hunk.hasContextLines) {
 			lineIndex = Math.max(0, Math.min(lineHint - 1, originalLines.length - 1));
 		}
@@ -775,16 +863,26 @@ function computeReplacements(
 			contextIndex = idx;
 
 			if (idx === undefined || (result.matchCount !== undefined && result.matchCount > 1)) {
-				const fallback = attemptSequenceFallback(originalLines, hunk, lineIndex, lineHint, allowFuzzy);
+				const fallback = attemptSequenceFallback(
+					originalLines,
+					hunk,
+					lineIndex,
+					lineHint,
+					allowFuzzy,
+					allowAggressiveFallbacks,
+				);
 				if (fallback !== undefined) {
 					lineIndex = fallback;
 				} else if (result.matchCount !== undefined && result.matchCount > 1) {
 					const displayContext = hunk.changeContext.includes("\n")
 						? hunk.changeContext.split("\n").pop()
 						: hunk.changeContext;
+					const previews = formatSequenceMatchPreviews(originalLines, result.matchIndices, result.matchCount);
+					const strategyHint = result.strategy ? ` Matching strategy: ${result.strategy}.` : "";
+					const previewText = previews ? `\n\n${previews}` : "";
 					throw new ApplyPatchError(
-						`Found ${result.matchCount} matches for context '${displayContext}' in ${path}. ` +
-							`Add more surrounding context or additional @@ anchors to make it unique.`,
+						`Found ${result.matchCount} matches for context '${displayContext}' in ${path}.${strategyHint}` +
+							`${previewText}\n\nAdd more surrounding context or additional @@ anchors to make it unique.`,
 					);
 				} else {
 					const displayContext = hunk.changeContext.includes("\n")
@@ -875,7 +973,7 @@ function computeReplacements(
 		}
 
 		if (searchResult.index === undefined || (searchResult.matchCount ?? 0) > 1) {
-			for (const variant of buildFallbackVariants(hunk)) {
+			for (const variant of filterFallbackVariants(buildFallbackVariants(hunk), allowAggressiveFallbacks)) {
 				if (variant.oldLines.length === 0) continue;
 				const variantResult = findSequenceWithHint(
 					originalLines,
@@ -895,7 +993,7 @@ function computeReplacements(
 		}
 
 		if (searchResult.index === undefined && contextIndex !== undefined) {
-			for (const variant of buildFallbackVariants(hunk)) {
+			for (const variant of filterFallbackVariants(buildFallbackVariants(hunk), allowAggressiveFallbacks)) {
 				if (variant.oldLines.length !== 1 || variant.newLines.length !== 1) continue;
 				const removedLine = variant.oldLines[0];
 				const hasSharedDuplicate = hunk.newLines.some(line => line.trim() === removedLine.trim());
@@ -929,11 +1027,38 @@ function computeReplacements(
 			}
 		}
 
+		if ((searchResult.matchCount ?? 0) > 1) {
+			const hintIndex = matchHint ?? (lineHint ? lineHint - 1 : undefined);
+			const hinted = chooseHintedMatch(searchResult.matchIndices, hintIndex, AMBIGUITY_HINT_WINDOW);
+			if (hinted !== undefined) {
+				searchResult = { ...searchResult, index: hinted, matchCount: 1 };
+			}
+		}
+
 		if (searchResult.index === undefined) {
 			if (searchResult.matchCount !== undefined && searchResult.matchCount > 1) {
+				const previews = formatSequenceMatchPreviews(
+					originalLines,
+					searchResult.matchIndices,
+					searchResult.matchCount,
+				);
+				const strategyHint = searchResult.strategy ? ` Matching strategy: ${searchResult.strategy}.` : "";
+				const previewText = previews ? `\n\n${previews}` : "";
 				throw new ApplyPatchError(
-					`Found ${searchResult.matchCount} matches for the text in ${path}. ` +
-						`Add more surrounding context or additional @@ anchors to make it unique.`,
+					`Found ${searchResult.matchCount} matches for the text in ${path}.${strategyHint}` +
+						`${previewText}\n\nAdd more surrounding context or additional @@ anchors to make it unique.`,
+				);
+			}
+			const closest = findClosestSequenceMatch(originalLines, pattern, {
+				start: lineIndex,
+				eof: hunk.isEndOfFile,
+			});
+			if (closest.index !== undefined && closest.confidence > 0) {
+				const similarity = Math.round(closest.confidence * 100);
+				const preview = formatSequenceMatchPreview(originalLines, closest.index);
+				throw new ApplyPatchError(
+					`Failed to find expected lines in ${path}:\n${hunk.oldLines.join("\n")}\n\n` +
+						`Closest match (${similarity}% similar) near line ${closest.index + 1}:\n${preview}`,
 				);
 			}
 			throw new ApplyPatchError(`Failed to find expected lines in ${path}:\n${hunk.oldLines.join("\n")}`);
@@ -941,11 +1066,23 @@ function computeReplacements(
 
 		const found = searchResult.index;
 
+		if (searchResult.strategy === "fuzzy-dominant") {
+			const similarity = Math.round(searchResult.confidence * 100);
+			warnings.push(`Dominant fuzzy match selected in ${path} near line ${found + 1} (${similarity}% similar).`);
+		}
+
 		// Reject if match is ambiguous (prefix/substring matching found multiple matches)
 		if (searchResult.matchCount !== undefined && searchResult.matchCount > 1) {
+			const previews = formatSequenceMatchPreviews(
+				originalLines,
+				searchResult.matchIndices,
+				searchResult.matchCount,
+			);
+			const strategyHint = searchResult.strategy ? ` Matching strategy: ${searchResult.strategy}.` : "";
+			const previewText = previews ? `\n\n${previews}` : "";
 			throw new ApplyPatchError(
-				`Found ${searchResult.matchCount} matches for the text in ${path}. ` +
-					`Add more surrounding context or additional @@ anchors to make it unique.`,
+				`Found ${searchResult.matchCount} matches for the text in ${path}.${strategyHint}` +
+					`${previewText}\n\nAdd more surrounding context or additional @@ anchors to make it unique.`,
 			);
 		}
 
@@ -990,7 +1127,27 @@ function computeReplacements(
 	// Sort by start index
 	replacements.sort((a, b) => a.startIndex - b.startIndex);
 
-	return replacements;
+	for (let i = 1; i < replacements.length; i++) {
+		const prev = replacements[i - 1];
+		const next = replacements[i];
+		const prevEnd = prev.startIndex + prev.oldLen;
+		if (next.startIndex < prevEnd) {
+			const formatRange = (replacement: Replacement): string => {
+				if (replacement.oldLen === 0) {
+					return `${replacement.startIndex + 1} (insertion)`;
+				}
+				return `${replacement.startIndex + 1}-${replacement.startIndex + replacement.oldLen}`;
+			};
+			const prevRange = formatRange(prev);
+			const nextRange = formatRange(next);
+			throw new ApplyPatchError(
+				`Overlapping hunks detected in ${path} at lines ${prevRange} and ${nextRange}. ` +
+					`Split hunks or add more context to avoid overlap.`,
+			);
+		}
+	}
+
+	return { replacements, warnings };
 }
 
 /**
@@ -1018,7 +1175,7 @@ function applyHunksToContent(
 	hunks: DiffHunk[],
 	fuzzyThreshold: number,
 	allowFuzzy: boolean,
-): string {
+): { content: string; warnings: string[] } {
 	const hadFinalNewline = originalContent.endsWith("\n");
 
 	// Detect simple replace pattern: single hunk, no @@ context, no context lines, has old lines to match
@@ -1032,8 +1189,8 @@ function applyHunksToContent(
 			hunk.oldStartLine === undefined && // No line hint to use for positioning
 			!hunk.isEndOfFile // No EOF targeting (prefer end of file)
 		) {
-			const content = applyCharacterMatch(originalContent, path, hunk, fuzzyThreshold, allowFuzzy);
-			return applyTrailingNewlinePolicy(content, hadFinalNewline);
+			const { content, warnings } = applyCharacterMatch(originalContent, path, hunk, fuzzyThreshold, allowFuzzy);
+			return { content: applyTrailingNewlinePolicy(content, hadFinalNewline), warnings };
 		}
 	}
 
@@ -1048,7 +1205,7 @@ function applyHunksToContent(
 		strippedTrailingEmpty = true;
 	}
 
-	const replacements = computeReplacements(originalLines, path, hunks, allowFuzzy);
+	const { replacements, warnings } = computeReplacements(originalLines, path, hunks, allowFuzzy);
 	const newLines = applyReplacements(originalLines, replacements);
 
 	// Restore the trailing empty element if we stripped it
@@ -1060,12 +1217,12 @@ function applyHunksToContent(
 
 	// Preserve original trailing newline behavior
 	if (hadFinalNewline && !content.endsWith("\n")) {
-		return `${content}\n`;
+		return { content: `${content}\n`, warnings };
 	}
 	if (!hadFinalNewline && content.endsWith("\n")) {
-		return content.slice(0, -1);
+		return { content: content.slice(0, -1), warnings };
 	}
-	return content;
+	return { content, warnings };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1178,7 +1335,13 @@ async function applyNormalizedPatch(
 		throw new ApplyPatchError("Diff contains no hunks");
 	}
 
-	const newContent = applyHunksToContent(normalizedContent, input.path, hunks, fuzzyThreshold, allowFuzzy);
+	const { content: newContent, warnings } = applyHunksToContent(
+		normalizedContent,
+		input.path,
+		hunks,
+		fuzzyThreshold,
+		allowFuzzy,
+	);
 	const finalContent = bom + restoreLineEndings(newContent, lineEnding);
 	const destPath = input.rename ? resolvePath(input.rename) : absolutePath;
 	const isMove = Boolean(input.rename) && destPath !== absolutePath;
@@ -1204,6 +1367,7 @@ async function applyNormalizedPatch(
 			oldContent: originalContent,
 			newContent: finalContent,
 		},
+		warnings: warnings.length > 0 ? warnings : undefined,
 	};
 }
 

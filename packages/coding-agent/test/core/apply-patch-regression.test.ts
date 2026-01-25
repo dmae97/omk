@@ -1549,3 +1549,250 @@ describe("regression: bench edit failures (2026-01-19)", () => {
 		expect(await Bun.file(filePath).text()).toContain("const value = 100;");
 	});
 });
+
+describe("regression: trailing context lines don't delete file content", () => {
+	let tempDir: string;
+
+	beforeEach(() => {
+		tempDir = path.join(os.tmpdir(), `trailing-context-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		fs.mkdirSync(tempDir, { recursive: true });
+	});
+
+	afterEach(() => {
+		fs.rmSync(tempDir, { recursive: true, force: true });
+	});
+
+	test("context lines cannot cause collateral deletion via fuzzy match", async () => {
+		const filePath = path.join(tempDir, "file.ts");
+		// File has extra content between what the diff shows as context
+		await Bun.write(
+			filePath,
+			`function outer() {
+  function inner() {
+    // This is an important comment
+    return 1;
+  }
+}
+`,
+		);
+
+		// Diff shows context that skips the comment - should this fail or work?
+		// The expected behavior is: match the context lines, only delete - lines
+		// Since there are no - lines between inner() and return 1, nothing should be deleted
+		await applyPatch(
+			{
+				path: "file.ts",
+				op: "update",
+				diff: `@@ function outer
+ function outer() {
+   function inner() {
+-    return 1;
++    return 42;
+   }
+ }`,
+			},
+			{ cwd: tempDir },
+		);
+
+		const result = await Bun.file(filePath).text();
+		expect(result).toContain("return 42;");
+		// The comment should still be there!
+		expect(result).toContain("// This is an important comment");
+	});
+
+	test("unprefixed blank line between changes and trailing context", async () => {
+		const filePath = path.join(tempDir, "terminal.ts");
+		await Bun.write(
+			filePath,
+			`export class Example {
+	private field = false;
+
+	get value(): boolean {
+		return this.field;
+	}
+}
+`,
+		);
+
+		// Blank line has NO prefix (model might emit this)
+		// The implementation treats unprefixed blank lines as context
+		await applyPatch(
+			{
+				path: "terminal.ts",
+				op: "update",
+				diff: `@@ export class Example
+ export class Example {
+ 	private field = false;
++	private other = true;
+
+ 	get value(): boolean {`,
+			},
+			{ cwd: tempDir },
+		);
+
+		const result = await Bun.file(filePath).text();
+		expect(result).toContain("private other = true;");
+		expect(result).toContain("return this.field;");
+	});
+
+	test("two-hunk diff with trailing getter context preserves getter body", async () => {
+		const filePath = path.join(tempDir, "terminal.ts");
+		await Bun.write(
+			filePath,
+			`export class ProcessTerminal implements Terminal {
+	private wasRaw = false;
+	private inputHandler?: (data: string) => void;
+	private resizeHandler?: () => void;
+	private _kittyProtocolActive = false;
+	private stdinBuffer?: StdinBuffer;
+	private stdinDataHandler?: (data: string) => void;
+
+	get kittyProtocolActive(): boolean {
+		return this._kittyProtocolActive;
+	}
+
+	private safeWrite(data: string): void {
+		try {
+			process.stdout.write(data);
+		} catch (err) {
+			// EIO means terminal is dead - exit gracefully instead of crashing
+			if (err && typeof err === "object" && (err as { code?: string }).code === "EIO") {
+				process.exit(1);
+			}
+			throw err;
+		}
+	}
+}
+`,
+		);
+
+		await applyPatch(
+			{
+				path: "terminal.ts",
+				op: "update",
+				diff: `@@ export class ProcessTerminal implements Terminal {
+ export class ProcessTerminal implements Terminal {
+ \tprivate wasRaw = false;
+ \tprivate inputHandler?: (data: string) => void;
+ \tprivate resizeHandler?: () => void;
+ \tprivate _kittyProtocolActive = false;
+ \tprivate stdinBuffer?: StdinBuffer;
+ \tprivate stdinDataHandler?: (data: string) => void;
++\tprivate dead = false;
+ 
+ \tget kittyProtocolActive(): boolean {
+
+@@ private safeWrite(data: string): void {
+ \tprivate safeWrite(data: string): void {
++\t\tif (this.dead) return;
+ \t\ttry {
+ \t\t\tprocess.stdout.write(data);
+ \t\t} catch (err) {
+-\t\t\t// EIO means terminal is dead - exit gracefully instead of crashing
++\t\t\t// EIO means terminal is dead - mark dead and skip all future writes
+ \t\t\tif (err && typeof err === "object" && (err as { code?: string }).code === "EIO") {
+-\t\t\t\tprocess.exit(1);
++\t\t\t\tthis.dead = true;
++\t\t\t\treturn;
+ \t\t\t}
+ \t\t\tthrow err;
+ \t\t}
+ \t}`,
+			},
+			{ cwd: tempDir },
+		);
+
+		const result = await Bun.file(filePath).text();
+		expect(result).toContain("private dead = false;");
+		expect(result).toContain("return this._kittyProtocolActive;");
+		expect(result).toContain("if (this.dead) return;");
+		expect(result).toContain("mark dead and skip all future writes");
+		expect(result).toContain("this.dead = true;");
+	});
+
+	test("context anchor duplicated as first context line preserves file content", async () => {
+		const filePath = path.join(tempDir, "terminal.ts");
+		// Original file - exact structure from user's report
+		await Bun.write(
+			filePath,
+			`export class ProcessTerminal implements Terminal {
+	private wasRaw = false;
+	private inputHandler?: (data: string) => void;
+	private resizeHandler?: () => void;
+	private _kittyProtocolActive = false;
+	private stdinBuffer?: StdinBuffer;
+	private stdinDataHandler?: (data: string) => void;
+
+	get kittyProtocolActive(): boolean {
+		return this._kittyProtocolActive;
+	}
+}
+`,
+		);
+
+		// The anchor line and first context line are IDENTICAL
+		// This is the exact pattern from the user's failing case
+		await applyPatch(
+			{
+				path: "terminal.ts",
+				op: "update",
+				diff: `@@ export class ProcessTerminal implements Terminal {
+ export class ProcessTerminal implements Terminal {
+ 	private wasRaw = false;
+ 	private inputHandler?: (data: string) => void;
+ 	private resizeHandler?: () => void;
+ 	private _kittyProtocolActive = false;
+ 	private stdinBuffer?: StdinBuffer;
+ 	private stdinDataHandler?: (data: string) => void;
++	private dead = false;
+
+ 	get kittyProtocolActive(): boolean {`,
+			},
+			{ cwd: tempDir },
+		);
+
+		const result = await Bun.file(filePath).text();
+		expect(result).toContain("private dead = false;");
+		expect(result).toContain("return this._kittyProtocolActive;");
+	});
+
+	test("adding field with getter as trailing context preserves getter body", async () => {
+		const filePath = path.join(tempDir, "terminal.ts");
+		// Original file has a getter with a body
+		await Bun.write(
+			filePath,
+			`export class ProcessTerminal {
+	private _kittyProtocolActive = false;
+	private stdinDataHandler?: (data: string) => void;
+
+	get kittyProtocolActive(): boolean {
+		return this._kittyProtocolActive;
+	}
+}
+`,
+		);
+
+		// Hunk adds a new field, with getter declaration as trailing context
+		// The getter body should NOT be affected
+		await applyPatch(
+			{
+				path: "terminal.ts",
+				op: "update",
+				diff: `@@ export class ProcessTerminal
+ export class ProcessTerminal {
+ 	private _kittyProtocolActive = false;
+ 	private stdinDataHandler?: (data: string) => void;
++	private dead = false;
+
+ 	get kittyProtocolActive(): boolean {`,
+			},
+			{ cwd: tempDir },
+		);
+
+		const result = await Bun.file(filePath).text();
+		// The new field should be added
+		expect(result).toContain("private dead = false;");
+		// The getter body should still be there!
+		expect(result).toContain("return this._kittyProtocolActive;");
+	});
+});

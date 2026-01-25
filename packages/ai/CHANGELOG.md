@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+- Added Azure OpenAI Responses provider with deployment mapping and resource-based base URL support
+
+### Changed
+- Added OpenRouter routing preferences for OpenAI-compatible completions
+
+### Fixed
+- Defaulted Google tool call arguments to empty objects when providers omit args
+- Guarded Responses/Codex streaming deltas against missing content parts and handled arguments.done events
+
 ## [8.2.1] - 2026-01-24
 
 ### Fixed

@@ -559,12 +559,36 @@ describe("Editor component", () => {
 			// Cursor should be at end (after B)
 			const lines = editor.render(width);
 
-			// The cursor (blinking thin bar) should be visible
+			// The cursor (blinking bar) should be visible
 			const contentLine = lines[1]!;
-			expect(contentLine.includes("\x1b[5m|")).toBeTruthy();
+			expect(contentLine.includes("\x1b[5m")).toBeTruthy();
 
 			// Line should still be correct width
 			expect(visibleWidth(contentLine)).toBe(width);
+		});
+
+		it("shows cursor at end before wrap and wraps on next char", () => {
+			for (const paddingX of [0, 1]) {
+				const editor = new Editor({ ...defaultEditorTheme, editorPaddingX: paddingX });
+				const width = 20;
+				const contentWidth = width - 2 * (paddingX + 1);
+				const layoutWidth = Math.max(1, contentWidth - (paddingX === 0 ? 1 : 0));
+				const cursorToken = `\x1b[5m${defaultEditorTheme.symbols.inputCursor}\x1b[0m`;
+
+				for (let i = 0; i < layoutWidth; i++) {
+					editor.handleInput("a");
+				}
+
+				let lines = editor.render(width);
+				let contentLines = lines.length > 2 ? lines.slice(1, -1) : lines.slice(1);
+				expect(contentLines.length).toBe(1);
+				expect(contentLines[0]!.endsWith(cursorToken)).toBeTruthy();
+
+				editor.handleInput("a");
+				lines = editor.render(width);
+				contentLines = lines.length > 2 ? lines.slice(1, -1) : lines.slice(1);
+				expect(contentLines.length).toBe(2);
+			}
 		});
 
 		it("does not exceed terminal width with emoji at wrap boundary", () => {

@@ -68,6 +68,7 @@ export class EventController {
 					getSymbolTheme().spinnerFrames,
 				);
 				this.ctx.statusContainer.addChild(this.ctx.loadingAnimation);
+				this.ctx.applyPendingWorkingMessage();
 				this.ctx.ui.requestRender();
 				break;
 

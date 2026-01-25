@@ -541,9 +541,9 @@ export class InputController {
 					data: imageData.data,
 					mimeType: imageData.mimeType,
 				});
-				// Insert styled placeholder at cursor like Claude does
+				// Insert placeholder at cursor like Claude does
 				const imageNum = this.ctx.pendingImages.length;
-				const placeholder = theme.bold(theme.underline(`[Image #${imageNum}]`));
+				const placeholder = `[Image #${imageNum}]`;
 				this.ctx.editor.insertText(`${placeholder} `);
 				this.ctx.ui.requestRender();
 				return true;

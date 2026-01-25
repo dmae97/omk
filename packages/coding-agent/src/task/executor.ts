@@ -5,10 +5,13 @@
  */
 import path from "node:path";
 import type { AgentEvent, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
-import type { ToolSession } from "..";
+import type { PromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import type { Skill } from "@oh-my-pi/pi-coding-agent/extensibility/skills";
+import { getPreludeDocs } from "@oh-my-pi/pi-coding-agent/ipy/executor";
+import { checkPythonKernelAvailability } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
+import type { ContextFileEntry, ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import type { ModelRegistry } from "../config/model-registry";
 import { formatModelString, parseModelPattern } from "../config/model-resolver";
-import { checkPythonKernelAvailability } from "../ipy/kernel";
 import { LspTool } from "../lsp";
 import type { LspParams } from "../lsp/types";
 import { callTool } from "../mcp/client";
@@ -57,6 +60,9 @@ export interface ExecutorOptions {
 	persistArtifacts?: boolean;
 	artifactsDir?: string;
 	eventBus?: EventBus;
+	contextFiles?: ContextFileEntry[];
+	skills?: Skill[];
+	promptTemplates?: PromptTemplate[];
 	mcpManager?: MCPManager;
 	authStorage?: AuthStorage;
 	modelRegistry?: ModelRegistry;
@@ -307,6 +313,8 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 
 	const lspEnabled = enableLsp ?? true;
 	const lspToolRequested = lspEnabled && (toolNames === undefined || toolNames.includes("lsp"));
+	const pythonPreludeDocs = getPreludeDocs();
+	const pythonPreludeDocsPayload = pythonPreludeDocs.length > 0 ? pythonPreludeDocs : undefined;
 
 	let worker: Worker;
 	try {
@@ -692,6 +700,10 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			serializedAuth: options.authStorage?.serialize(),
 			serializedModels: options.modelRegistry?.serialize(),
 			serializedSettings,
+			pythonPreludeDocs: pythonPreludeDocsPayload,
+			contextFiles: options.contextFiles,
+			skills: options.skills,
+			promptTemplates: options.promptTemplates,
 			mcpTools: options.mcpManager ? extractMCPToolMetadata(options.mcpManager) : undefined,
 			pythonToolProxy: pythonProxyEnabled,
 			lspToolProxy: Boolean(lspTool),

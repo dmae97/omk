@@ -67,6 +67,15 @@ function runCleanup(reason: Reason): Promise<void> {
 // Worker thread: exit only (workers use self.addEventListener for exceptions)
 let inspectorOpened = false;
 
+function formatFatalError(label: string, err: Error): string {
+	const name = err.name || "Error";
+	const message = err.message || "(no message)";
+	const stack = err.stack || "";
+	const stackLines = stack.split("\n").slice(1);
+	const formattedStack = stackLines.length > 0 ? `\n${stackLines.join("\n")}` : "";
+	return `\n[${label}] ${name}: ${message}${formattedStack}\n`;
+}
+
 if (isMainThread) {
 	process
 		.on("SIGINT", async () => {
@@ -81,12 +90,14 @@ if (isMainThread) {
 			process.stderr.write(`Inspector opened: ${url}\n`);
 		})
 		.on("uncaughtException", async err => {
+			process.stderr.write(formatFatalError("Uncaught Exception", err));
 			logger.error("Uncaught exception", { err, stack: err.stack });
 			await runCleanup(Reason.UNCAUGHT_EXCEPTION);
 			process.exit(1);
 		})
 		.on("unhandledRejection", async reason => {
 			const err = reason instanceof Error ? reason : new Error(String(reason));
+			process.stderr.write(formatFatalError("Unhandled Rejection", err));
 			logger.error("Unhandled rejection", { err, stack: err.stack });
 			await runCleanup(Reason.UNHANDLED_REJECTION);
 			process.exit(1);

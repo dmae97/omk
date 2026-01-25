@@ -1,6 +1,7 @@
 import type { TSchema } from "@sinclair/typebox";
 import type { BedrockOptions } from "./providers/amazon-bedrock";
 import type { AnthropicOptions } from "./providers/anthropic";
+import type { AzureOpenAIResponsesOptions } from "./providers/azure-openai-responses";
 import type { CursorOptions } from "./providers/cursor";
 import type {
 	DeleteArgs,
@@ -33,6 +34,7 @@ export type Api =
 	| "openai-completions"
 	| "openai-responses"
 	| "openai-codex-responses"
+	| "azure-openai-responses"
 	| "anthropic-messages"
 	| "bedrock-converse-stream"
 	| "google-generative-ai"
@@ -46,6 +48,7 @@ export interface ApiOptionsMap {
 	"openai-completions": OpenAICompletionsOptions;
 	"openai-responses": OpenAIResponsesOptions;
 	"openai-codex-responses": OpenAICodexResponsesOptions;
+	"azure-openai-responses": AzureOpenAIResponsesOptions;
 	"google-generative-ai": GoogleOptions;
 	"google-gemini-cli": GoogleGeminiCliOptions;
 	"google-vertex": GoogleVertexOptions;
@@ -289,6 +292,20 @@ export interface OpenAICompat {
 	requiresMistralToolIds?: boolean;
 	/** Format for reasoning/thinking parameter. "openai" uses reasoning_effort, "zai" uses thinking: { type: "enabled" }. Default: "openai". */
 	thinkingFormat?: "openai" | "zai";
+	/** OpenRouter-specific routing preferences. Only used when baseUrl points to OpenRouter. */
+	openRouterRouting?: OpenRouterRouting;
+}
+
+/**
+ * OpenRouter provider routing preferences.
+ * Controls which upstream providers OpenRouter routes requests to.
+ * @see https://openrouter.ai/docs/provider-routing
+ */
+export interface OpenRouterRouting {
+	/** List of provider slugs to exclusively use for this request (e.g., ["amazon-bedrock", "anthropic"]). */
+	only?: string[];
+	/** List of provider slugs to try in order (e.g., ["anthropic", "openai"]). */
+	order?: string[];
 }
 
 // Model interface for the unified model system

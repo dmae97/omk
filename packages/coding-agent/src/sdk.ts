@@ -166,6 +166,8 @@ export interface CreateAgentSessionOptions {
 
 	/** Enable LSP integration (tool, formatting, diagnostics, warmup). Default: true */
 	enableLsp?: boolean;
+	/** Skip Python kernel availability check and prelude warmup */
+	skipPythonPreflight?: boolean;
 
 	/** Tool names explicitly requested (enables disabled-by-default tools) */
 	toolNames?: string[];
@@ -734,6 +736,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		cwd,
 		hasUI: options.hasUI ?? false,
 		enableLsp,
+		skipPythonPreflight: options.skipPythonPreflight,
+		contextFiles,
+		skills,
 		eventBus,
 		outputSchema: options.outputSchema,
 		requireCompleteTool: options.requireCompleteTool,
@@ -989,6 +994,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	const promptTemplates = options.promptTemplates ?? (await discoverPromptTemplates(cwd, agentDir));
 	time("discoverPromptTemplates");
+	toolSession.promptTemplates = promptTemplates;
 
 	const slashCommands = options.slashCommands ?? (await discoverSlashCommands(cwd));
 	time("discoverSlashCommands");

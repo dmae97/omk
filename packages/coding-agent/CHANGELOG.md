@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+- Added extension API to set working/loading messages during streaming
+- Added task worker propagation of context files, skills, and prompt templates
+- Added subagent option to skip Python preflight checks when Python tooling is unused
+
+### Changed
+- Merged patch application warnings into edit tool diagnostics output
+- Cached Python prelude docs for subagent workers to avoid repeated warmups
+- Simplified image placeholders inserted on paste to match Claude-style markers
+
+### Fixed
+- Rewrote empty or corrupted session files to restore valid headers
+- Improved patch applicator ambiguity errors with match previews and overlap detection
+
 ## [8.3.0] - 2026-01-25
 
 ### Changed

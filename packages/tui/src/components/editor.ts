@@ -273,8 +273,9 @@ export class Editor implements Component, Focusable {
 	private theme: EditorTheme;
 	private useTerminalCursor = false;
 
-	// Store last render width for cursor navigation
-	private lastWidth: number = 80;
+	// Store last layout width for cursor navigation
+	private lastLayoutWidth: number = 80;
+	private paddingXOverride: number | undefined;
 	private maxHeight?: number;
 	private scrollOffset: number = 0;
 
@@ -352,6 +353,10 @@ export class Editor implements Component, Focusable {
 		this.scrollOffset = 0;
 	}
 
+	setPaddingX(paddingX: number): void {
+		this.paddingXOverride = Math.max(0, paddingX);
+	}
+
 	setHistoryStorage(storage: HistoryStorage): void {
 		this.historyStorage = storage;
 		const recent = storage.getRecent(100);
@@ -382,15 +387,13 @@ export class Editor implements Component, Focusable {
 	}
 
 	private isOnFirstVisualLine(): boolean {
-		const contentWidth = this.getContentWidth(this.lastWidth, this.getEditorPaddingX());
-		const visualLines = this.buildVisualLineMap(contentWidth);
+		const visualLines = this.buildVisualLineMap(this.lastLayoutWidth);
 		const currentVisualLine = this.findCurrentVisualLine(visualLines);
 		return currentVisualLine === 0;
 	}
 
 	private isOnLastVisualLine(): boolean {
-		const contentWidth = this.getContentWidth(this.lastWidth, this.getEditorPaddingX());
-		const visualLines = this.buildVisualLineMap(contentWidth);
+		const visualLines = this.buildVisualLineMap(this.lastLayoutWidth);
 		const currentVisualLine = this.findCurrentVisualLine(visualLines);
 		return currentVisualLine === visualLines.length - 1;
 	}
@@ -430,12 +433,17 @@ export class Editor implements Component, Focusable {
 	}
 
 	private getEditorPaddingX(): number {
-		const padding = this.theme.editorPaddingX ?? 2;
-		return Math.max(1, padding);
+		const padding = this.paddingXOverride ?? this.theme.editorPaddingX ?? 2;
+		return Math.max(0, padding);
 	}
 
 	private getContentWidth(width: number, paddingX: number): number {
 		return Math.max(0, width - 2 * (paddingX + 1));
+	}
+
+	private getLayoutWidth(width: number, paddingX: number): number {
+		const contentWidth = this.getContentWidth(width, paddingX);
+		return Math.max(1, contentWidth - (paddingX === 0 ? 1 : 0));
 	}
 
 	private getVisibleContentHeight(contentLines: number): number {
@@ -443,13 +451,13 @@ export class Editor implements Component, Focusable {
 		return Math.max(1, this.maxHeight - 2);
 	}
 
-	private updateScrollOffset(contentWidth: number, layoutLines: LayoutLine[], visibleHeight: number): void {
+	private updateScrollOffset(layoutWidth: number, layoutLines: LayoutLine[], visibleHeight: number): void {
 		if (layoutLines.length <= visibleHeight) {
 			this.scrollOffset = 0;
 			return;
 		}
 
-		const visualLines = this.buildVisualLineMap(contentWidth);
+		const visualLines = this.buildVisualLineMap(layoutWidth);
 		const cursorLine = this.findCurrentVisualLine(visualLines);
 		if (cursorLine < this.scrollOffset) {
 			this.scrollOffset = cursorLine;
@@ -462,26 +470,23 @@ export class Editor implements Component, Focusable {
 	}
 
 	render(width: number): string[] {
-		// Store width for cursor navigation
-		this.lastWidth = width;
+		const paddingX = this.getEditorPaddingX();
+		const contentAreaWidth = this.getContentWidth(width, paddingX);
+		const layoutWidth = this.getLayoutWidth(width, paddingX);
+		this.lastLayoutWidth = layoutWidth;
 
 		// Box-drawing characters for rounded corners
 		const box = this.theme.symbols.boxRound;
-		const paddingX = this.getEditorPaddingX();
 		const borderWidth = paddingX + 1;
 		const topLeft = this.borderColor(`${box.topLeft}${box.horizontal.repeat(paddingX)}`);
 		const topRight = this.borderColor(`${box.horizontal.repeat(paddingX)}${box.topRight}`);
 		const bottomLeft = this.borderColor(`${box.bottomLeft}${box.horizontal}${" ".repeat(Math.max(0, paddingX - 1))}`);
-		const bottomRight = this.borderColor(
-			`${" ".repeat(Math.max(0, paddingX - 1))}${box.horizontal}${box.bottomRight}`,
-		);
 		const horizontal = this.borderColor(box.horizontal);
 
 		// Layout the text
-		const contentAreaWidth = this.getContentWidth(width, paddingX);
-		const layoutLines = this.layoutText(contentAreaWidth);
+		const layoutLines = this.layoutText(layoutWidth);
 		const visibleContentHeight = this.getVisibleContentHeight(layoutLines.length);
-		this.updateScrollOffset(contentAreaWidth, layoutLines, visibleContentHeight);
+		this.updateScrollOffset(layoutWidth, layoutLines, visibleContentHeight);
 		const visibleLayoutLines = layoutLines.slice(this.scrollOffset, this.scrollOffset + visibleContentHeight);
 
 		const result: string[] = [];
@@ -513,14 +518,21 @@ export class Editor implements Component, Focusable {
 		for (const layoutLine of visibleLayoutLines) {
 			let displayText = layoutLine.text;
 			let displayWidth = visibleWidth(layoutLine.text);
+			let cursorInPadding = false;
 
 			// Add cursor if this line has it
-			if (!this.useTerminalCursor && layoutLine.hasCursor && layoutLine.cursorPos !== undefined) {
+			const hasCursor = layoutLine.hasCursor && layoutLine.cursorPos !== undefined;
+			const marker = emitCursorMarker ? CURSOR_MARKER : "";
+
+			if (hasCursor && this.useTerminalCursor) {
+				if (marker) {
+					const before = displayText.slice(0, layoutLine.cursorPos);
+					const after = displayText.slice(layoutLine.cursorPos);
+					displayText = before + marker + after;
+				}
+			} else if (hasCursor && !this.useTerminalCursor) {
 				const before = displayText.slice(0, layoutLine.cursorPos);
 				const after = displayText.slice(layoutLine.cursorPos);
-
-				// Hardware cursor marker (zero-width, emitted before fake cursor for IME positioning)
-				const marker = emitCursorMarker ? CURSOR_MARKER : "";
 
 				if (after.length > 0) {
 					// Cursor is on a character (grapheme) - replace it with highlighted version
@@ -532,26 +544,13 @@ export class Editor implements Component, Focusable {
 					displayText = before + marker + cursor + restAfter;
 					// displayWidth stays the same - we're replacing, not adding
 				} else {
-					// Cursor is at the end - add thin blinking bar cursor
+					// Cursor is at the end - add thin cursor glyph
 					const cursorChar = this.theme.symbols.inputCursor;
 					const cursor = `\x1b[5m${cursorChar}\x1b[0m`;
 					displayText = before + marker + cursor;
 					displayWidth += visibleWidth(cursorChar);
-					if (displayWidth > lineContentWidth) {
-						// Line is at full width - use reverse video on last grapheme if possible
-						// or just show cursor at the end without adding space
-						const beforeGraphemes = [...segmenter.segment(before)];
-						if (beforeGraphemes.length > 0) {
-							const lastGrapheme = beforeGraphemes[beforeGraphemes.length - 1]?.segment || "";
-							const cursor = `\x1b[7m${lastGrapheme}\x1b[0m`;
-							// Rebuild 'before' without the last grapheme
-							const beforeWithoutLast = beforeGraphemes
-								.slice(0, -1)
-								.map(g => g.segment)
-								.join("");
-							displayText = beforeWithoutLast + marker + cursor;
-							displayWidth -= 1; // Back to original width (reverse video replaces, doesn't add)
-						}
+					if (displayWidth > lineContentWidth && paddingX > 0) {
+						cursorInPadding = true;
 					}
 				}
 			}
@@ -560,11 +559,16 @@ export class Editor implements Component, Focusable {
 			const isLastLine = layoutLine === visibleLayoutLines[visibleLayoutLines.length - 1];
 			const padding = " ".repeat(Math.max(0, lineContentWidth - displayWidth));
 
+			const rightPaddingWidth = Math.max(0, paddingX - (cursorInPadding ? 1 : 0));
 			if (isLastLine) {
-				result.push(`${bottomLeft}${displayText}${padding}${bottomRight}`);
+				const bottomRightPadding = Math.max(0, paddingX - 1 - (cursorInPadding ? 1 : 0));
+				const bottomRightAdjusted = this.borderColor(
+					`${" ".repeat(bottomRightPadding)}${box.horizontal}${box.bottomRight}`,
+				);
+				result.push(`${bottomLeft}${displayText}${padding}${bottomRightAdjusted}`);
 			} else {
 				const leftBorder = this.borderColor(`${box.vertical}${" ".repeat(paddingX)}`);
-				const rightBorder = this.borderColor(`${" ".repeat(paddingX)}${box.vertical}`);
+				const rightBorder = this.borderColor(`${" ".repeat(rightPaddingWidth)}${box.vertical}`);
 				result.push(leftBorder + displayText + padding + rightBorder);
 			}
 		}
@@ -583,12 +587,12 @@ export class Editor implements Component, Focusable {
 
 		const paddingX = this.getEditorPaddingX();
 		const borderWidth = paddingX + 1;
-		const contentWidth = this.getContentWidth(width, paddingX);
-		if (contentWidth <= 0) return null;
+		const layoutWidth = this.getLayoutWidth(width, paddingX);
+		if (layoutWidth <= 0) return null;
 
-		const layoutLines = this.layoutText(contentWidth);
+		const layoutLines = this.layoutText(layoutWidth);
 		const visibleContentHeight = this.getVisibleContentHeight(layoutLines.length);
-		this.updateScrollOffset(contentWidth, layoutLines, visibleContentHeight);
+		this.updateScrollOffset(layoutWidth, layoutLines, visibleContentHeight);
 
 		for (let i = 0; i < layoutLines.length; i++) {
 			if (i < this.scrollOffset || i >= this.scrollOffset + visibleContentHeight) continue;
@@ -598,7 +602,7 @@ export class Editor implements Component, Focusable {
 			const lineWidth = visibleWidth(layoutLine.text);
 			const isCursorAtLineEnd = layoutLine.cursorPos === layoutLine.text.length;
 
-			if (isCursorAtLineEnd && lineWidth >= contentWidth && layoutLine.text.length > 0) {
+			if (isCursorAtLineEnd && lineWidth >= layoutWidth && layoutLine.text.length > 0) {
 				const graphemes = [...segmenter.segment(layoutLine.text)];
 				const lastGrapheme = graphemes[graphemes.length - 1]?.segment || "";
 				const lastWidth = visibleWidth(lastGrapheme) || 1;
@@ -1686,7 +1690,7 @@ export class Editor implements Component, Focusable {
 
 	private moveCursor(deltaLine: number, deltaCol: number): void {
 		this.resetKillSequence();
-		const contentWidth = this.getContentWidth(this.lastWidth, this.getEditorPaddingX());
+		const contentWidth = this.lastLayoutWidth;
 
 		if (deltaLine !== 0) {
 			// Build visual line map for navigation

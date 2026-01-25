@@ -9,26 +9,12 @@ function normalizeToolCallId(id: string): string {
 	return id.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40);
 }
 
-/** Fast deterministic hash to shorten long strings */
-function shortHash(str: string): string {
-	let h1 = 0xdeadbeef;
-	let h2 = 0x41c6ce57;
-	for (let i = 0; i < str.length; i++) {
-		const ch = str.charCodeAt(i);
-		h1 = Math.imul(h1 ^ ch, 2654435761);
-		h2 = Math.imul(h2 ^ ch, 1597334677);
-	}
-	h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-	h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-	return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
-}
-
 function normalizeResponsesToolCallId(id: string): string {
 	const [callId, itemId] = id.split("|");
 	if (callId && itemId) {
 		return id;
 	}
-	const hash = shortHash(id);
+	const hash = Bun.hash.xxHash64(id).toString(36);
 	return `call_${hash}|item_${hash}`;
 }
 
@@ -36,7 +22,10 @@ export function transformMessages<TApi extends Api>(messages: Message[], model: 
 	// Build a map of original tool call IDs to normalized IDs for github-copilot cross-API switches
 	const toolCallIdMap = new Map<string, string>();
 	const skippedToolCallIds = new Set<string>();
-	const needsResponsesToolCallIds = model.api === "openai-responses" || model.api === "openai-codex-responses";
+	const needsResponsesToolCallIds =
+		model.api === "openai-responses" ||
+		model.api === "openai-codex-responses" ||
+		model.api === "azure-openai-responses";
 
 	// First pass: transform messages (thinking blocks, tool call ID normalization)
 	const transformed = messages.flatMap<Message>((msg): Message[] => {

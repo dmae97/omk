@@ -102,6 +102,8 @@ export class InteractiveMode implements InteractiveModeContext {
 	public loadingAnimation: Loader | undefined = undefined;
 	public autoCompactionLoader: Loader | undefined = undefined;
 	public retryLoader: Loader | undefined = undefined;
+	private pendingWorkingMessage: string | undefined;
+	private readonly defaultWorkingMessage = `Working${theme.format.ellipsis} (esc to interrupt)`;
 	public autoCompactionEscapeHandler?: () => void;
 	public retryEscapeHandler?: () => void;
 	public unsubscribe?: () => void;
@@ -160,6 +162,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.statusContainer = new Container();
 		this.todoContainer = new Container();
 		this.editor = new CustomEditor(getEditorTheme());
+		this.editor.setUseTerminalCursor(this.ui.getShowHardwareCursor());
 		this.editor.onAutocompleteCancel = () => {
 			this.ui.requestRender(true);
 		};
@@ -536,6 +539,33 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	showWarning(message: string): void {
 		this.uiHelpers.showWarning(message);
+	}
+
+	setWorkingMessage(message?: string): void {
+		if (message === undefined) {
+			this.pendingWorkingMessage = undefined;
+			if (this.loadingAnimation) {
+				this.loadingAnimation.setMessage(this.defaultWorkingMessage);
+			}
+			return;
+		}
+
+		if (this.loadingAnimation) {
+			this.loadingAnimation.setMessage(message);
+			return;
+		}
+
+		this.pendingWorkingMessage = message;
+	}
+
+	applyPendingWorkingMessage(): void {
+		if (this.pendingWorkingMessage === undefined) {
+			return;
+		}
+
+		const message = this.pendingWorkingMessage;
+		this.pendingWorkingMessage = undefined;
+		this.setWorkingMessage(message);
 	}
 
 	showNewVersionNotification(newVersion: string): void {

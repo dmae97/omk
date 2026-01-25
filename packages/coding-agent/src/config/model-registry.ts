@@ -19,12 +19,18 @@ import type { AuthStorage } from "../session/auth-storage";
 
 const Ajv = (AjvModule as any).default || AjvModule;
 
+const OpenRouterRoutingSchema = Type.Object({
+	only: Type.Optional(Type.Array(Type.String())),
+	order: Type.Optional(Type.Array(Type.String())),
+});
+
 // Schema for OpenAI compatibility settings
 const OpenAICompatSchema = Type.Object({
 	supportsStore: Type.Optional(Type.Boolean()),
 	supportsDeveloperRole: Type.Optional(Type.Boolean()),
 	supportsReasoningEffort: Type.Optional(Type.Boolean()),
 	maxTokensField: Type.Optional(Type.Union([Type.Literal("max_completion_tokens"), Type.Literal("max_tokens")])),
+	openRouterRouting: Type.Optional(OpenRouterRoutingSchema),
 });
 
 // Schema for custom model definition
@@ -36,6 +42,7 @@ const ModelDefinitionSchema = Type.Object({
 			Type.Literal("openai-completions"),
 			Type.Literal("openai-responses"),
 			Type.Literal("openai-codex-responses"),
+			Type.Literal("azure-openai-responses"),
 			Type.Literal("anthropic-messages"),
 			Type.Literal("google-generative-ai"),
 			Type.Literal("google-vertex"),
@@ -63,6 +70,7 @@ const ProviderConfigSchema = Type.Object({
 			Type.Literal("openai-completions"),
 			Type.Literal("openai-responses"),
 			Type.Literal("openai-codex-responses"),
+			Type.Literal("azure-openai-responses"),
 			Type.Literal("anthropic-messages"),
 			Type.Literal("google-generative-ai"),
 			Type.Literal("google-vertex"),

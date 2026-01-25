@@ -74,26 +74,12 @@ const CODEX_MAX_RETRIES = 2;
 const CODEX_RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 const CODEX_RETRY_DELAY_MS = 500;
 
-/** Fast deterministic hash to shorten long strings */
-function shortHash(str: string): string {
-	let h1 = 0xdeadbeef;
-	let h2 = 0x41c6ce57;
-	for (let i = 0; i < str.length; i++) {
-		const ch = str.charCodeAt(i);
-		h1 = Math.imul(h1 ^ ch, 2654435761);
-		h2 = Math.imul(h2 ^ ch, 1597334677);
-	}
-	h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-	h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-	return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
-}
-
 function normalizeResponsesToolCallId(id: string): { callId: string; itemId: string } {
 	const [callId, itemId] = id.split("|");
 	if (callId && itemId) {
 		return { callId, itemId };
 	}
-	const hash = shortHash(id);
+	const hash = Bun.hash.xxHash64(id).toString(36);
 	return { callId: `call_${hash}`, itemId: `item_${hash}` };
 }
 
@@ -298,6 +284,9 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 					}
 				} else if (eventType === "response.output_text.delta") {
 					if (currentItem && currentItem.type === "message" && currentBlock?.type === "text") {
+						if (!currentItem.content || currentItem.content.length === 0) {
+							continue;
+						}
 						const lastPart = currentItem.content[currentItem.content.length - 1];
 						if (lastPart && lastPart.type === "output_text") {
 							const delta = (rawEvent as { delta?: string }).delta || "";
@@ -313,6 +302,9 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 					}
 				} else if (eventType === "response.refusal.delta") {
 					if (currentItem && currentItem.type === "message" && currentBlock?.type === "text") {
+						if (!currentItem.content || currentItem.content.length === 0) {
+							continue;
+						}
 						const lastPart = currentItem.content[currentItem.content.length - 1];
 						if (lastPart && lastPart.type === "refusal") {
 							const delta = (rawEvent as { delta?: string }).delta || "";
@@ -337,6 +329,14 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 							delta,
 							partial: output,
 						});
+					}
+				} else if (eventType === "response.function_call_arguments.done") {
+					if (currentItem?.type === "function_call" && currentBlock?.type === "toolCall") {
+						const args = (rawEvent as { arguments?: string }).arguments;
+						if (typeof args === "string") {
+							currentBlock.partialJson = args;
+							currentBlock.arguments = parseStreamingJson(currentBlock.partialJson);
+						}
 					}
 				} else if (eventType === "response.output_item.done") {
 					const item = rawEvent.item as ResponseReasoningItem | ResponseOutputMessage | ResponseFunctionToolCall;
@@ -622,7 +622,7 @@ function convertMessages(model: Model<"openai-codex-responses">, context: Contex
 					if (!msgId) {
 						msgId = `msg_${msgIndex}`;
 					} else if (msgId.length > 64) {
-						msgId = `msg_${shortHash(msgId)}`;
+						msgId = `msg_${Bun.hash.xxHash64(msgId).toString(36)}`;
 					}
 					output.push({
 						type: "message",

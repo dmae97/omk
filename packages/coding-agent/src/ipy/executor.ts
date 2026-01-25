@@ -187,6 +187,10 @@ export function getPreludeDocs(): PreludeHelper[] {
 	return cachedPreludeDocs ?? [];
 }
 
+export function setPreludeDocsCache(docs: PreludeHelper[]): void {
+	cachedPreludeDocs = docs;
+}
+
 export function resetPreludeDocsCache(): void {
 	cachedPreludeDocs = null;
 }

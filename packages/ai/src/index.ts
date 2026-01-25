@@ -2,6 +2,7 @@ import "./utils/migrate-env";
 
 export * from "./models";
 export * from "./providers/anthropic";
+export * from "./providers/azure-openai-responses";
 export * from "./providers/cursor";
 export * from "./providers/google";
 export * from "./providers/google-gemini-cli";

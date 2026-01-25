@@ -1027,6 +1027,9 @@ export class SessionManager {
 			const explicitPath = this.sessionFile;
 			this._newSessionSync();
 			this.sessionFile = explicitPath; // preserve explicit path from --session flag
+			await this._rewriteFile();
+			this.flushed = true;
+			return;
 		}
 	}
 

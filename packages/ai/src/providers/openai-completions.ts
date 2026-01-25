@@ -50,6 +50,10 @@ function normalizeMistralToolId(id: string, isMistral: boolean): string {
 	return normalized;
 }
 
+type ResolvedOpenAICompat = Required<Omit<OpenAICompat, "openRouterRouting">> & {
+	openRouterRouting?: OpenAICompat["openRouterRouting"];
+};
+
 /**
  * Check if conversation messages contain tool calls or tool results.
  * This is needed because Anthropic (via proxy) requires the tools param
@@ -429,6 +433,11 @@ function buildParams(model: Model<"openai-completions">, context: Context, optio
 		params.reasoning_effort = options.reasoningEffort;
 	}
 
+	// OpenRouter provider routing preferences
+	if (model.baseUrl.includes("openrouter.ai") && compat.openRouterRouting) {
+		(params as { provider?: unknown }).provider = compat.openRouterRouting;
+	}
+
 	return params;
 }
 
@@ -468,7 +477,7 @@ function maybeAddOpenRouterAnthropicCacheControl(
 export function convertMessages(
 	model: Model<"openai-completions">,
 	context: Context,
-	compat: Required<OpenAICompat>,
+	compat: ResolvedOpenAICompat,
 ): ChatCompletionMessageParam[] {
 	const params: ChatCompletionMessageParam[] = [];
 
@@ -718,7 +727,7 @@ function mapStopReason(reason: ChatCompletionChunk.Choice["finish_reason"]): Sto
  * Provider takes precedence over URL-based detection since it's explicitly configured.
  * Returns a fully resolved OpenAICompat object with all fields set.
  */
-function detectCompat(model: Model<"openai-completions">): Required<OpenAICompat> {
+function detectCompat(model: Model<"openai-completions">): ResolvedOpenAICompat {
 	const provider = model.provider;
 	const baseUrl = model.baseUrl;
 
@@ -753,6 +762,7 @@ function detectCompat(model: Model<"openai-completions">): Required<OpenAICompat
 		requiresThinkingAsText: isMistral,
 		requiresMistralToolIds: isMistral,
 		thinkingFormat: isZai ? "zai" : "openai",
+		openRouterRouting: undefined,
 	};
 }
 
@@ -760,7 +770,7 @@ function detectCompat(model: Model<"openai-completions">): Required<OpenAICompat
  * Get resolved compatibility settings for a model.
  * Uses explicit model.compat if provided, otherwise auto-detects from provider/URL.
  */
-function getCompat(model: Model<"openai-completions">): Required<OpenAICompat> {
+function getCompat(model: Model<"openai-completions">): ResolvedOpenAICompat {
 	const detected = detectCompat(model);
 	if (!model.compat) return detected;
 
@@ -776,5 +786,6 @@ function getCompat(model: Model<"openai-completions">): Required<OpenAICompat> {
 		requiresThinkingAsText: model.compat.requiresThinkingAsText ?? detected.requiresThinkingAsText,
 		requiresMistralToolIds: model.compat.requiresMistralToolIds ?? detected.requiresMistralToolIds,
 		thinkingFormat: model.compat.thinkingFormat ?? detected.thinkingFormat,
+		openRouterRouting: model.compat.openRouterRouting ?? detected.openRouterRouting,
 	};
 }

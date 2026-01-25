@@ -46,9 +46,23 @@ export interface MatchOutcome {
 	occurrencePreviews?: string[];
 	/** Number of fuzzy matches above threshold */
 	fuzzyMatches?: number;
+	/** True when a dominant fuzzy match was accepted despite multiple candidates */
+	dominantFuzzy?: boolean;
 }
 
 /** Result of a sequence search */
+export type SequenceMatchStrategy =
+	| "exact"
+	| "trim-trailing"
+	| "trim"
+	| "comment-prefix"
+	| "unicode"
+	| "prefix"
+	| "substring"
+	| "fuzzy"
+	| "fuzzy-dominant"
+	| "character";
+
 export interface SequenceSearchResult {
 	/** Starting line index of the match (0-indexed) */
 	index: number | undefined;
@@ -56,9 +70,15 @@ export interface SequenceSearchResult {
 	confidence: number;
 	/** Number of matches at the same confidence level (for ambiguity detection) */
 	matchCount?: number;
+	/** Sample of matching indices (0-indexed, up to a small limit) */
+	matchIndices?: number[];
+	/** Matching strategy used */
+	strategy?: SequenceMatchStrategy;
 }
 
 /** Result of a context line search */
+export type ContextMatchStrategy = "exact" | "trim" | "unicode" | "prefix" | "substring" | "fuzzy";
+
 export interface ContextLineResult {
 	/** Index of the matching line (0-indexed) */
 	index: number | undefined;
@@ -66,6 +86,10 @@ export interface ContextLineResult {
 	confidence: number;
 	/** Number of matches at the same confidence level (for ambiguity detection) */
 	matchCount?: number;
+	/** Sample of matching indices (0-indexed, up to a small limit) */
+	matchIndices?: number[];
+	/** Matching strategy used */
+	strategy?: ContextMatchStrategy;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -133,6 +157,7 @@ export interface FileChange {
 /** Result of applying a patch */
 export interface ApplyPatchResult {
 	change: FileChange;
+	warnings?: string[];
 }
 
 /** Options for applying a patch */

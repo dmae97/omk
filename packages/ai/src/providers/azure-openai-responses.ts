@@ -1,4 +1,5 @@
-import OpenAI from "openai";
+import type OpenAI from "openai";
+import { AzureOpenAI } from "openai";
 import type {
 	Tool as OpenAITool,
 	ResponseCreateParamsStreaming,
@@ -16,6 +17,7 @@ import type {
 	Api,
 	AssistantMessage,
 	Context,
+	ImageContent,
 	Model,
 	StopReason,
 	StreamFunction,
@@ -31,25 +33,46 @@ import { formatErrorMessageWithRetryAfter } from "../utils/retry-after";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
 import { transformMessages } from "./transform-messages";
 
-// OpenAI Responses-specific options
-export interface OpenAIResponsesOptions extends StreamOptions {
+const DEFAULT_AZURE_API_VERSION = "v1";
+
+function parseDeploymentNameMap(value: string | undefined): Map<string, string> {
+	const map = new Map<string, string>();
+	if (!value) return map;
+	for (const entry of value.split(",")) {
+		const trimmed = entry.trim();
+		if (!trimmed) continue;
+		const [modelId, deploymentName] = trimmed.split("=", 2);
+		if (!modelId || !deploymentName) continue;
+		map.set(modelId.trim(), deploymentName.trim());
+	}
+	return map;
+}
+
+function resolveDeploymentName(model: Model<"azure-openai-responses">, options?: AzureOpenAIResponsesOptions): string {
+	if (options?.azureDeploymentName) {
+		return options.azureDeploymentName;
+	}
+	const mappedDeployment = parseDeploymentNameMap(process.env.AZURE_OPENAI_DEPLOYMENT_NAME_MAP).get(model.id);
+	return mappedDeployment || model.id;
+}
+
+// Azure OpenAI Responses-specific options
+export interface AzureOpenAIResponsesOptions extends StreamOptions {
 	reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
 	reasoningSummary?: "auto" | "detailed" | "concise" | null;
-	serviceTier?: ResponseCreateParamsStreaming["service_tier"];
-	/**
-	 * Enforce strict tool call/result pairing when building Responses API inputs.
-	 * Azure OpenAI Responses API requires tool results to have a matching tool call.
-	 */
-	strictResponsesPairing?: boolean;
+	azureApiVersion?: string;
+	azureResourceName?: string;
+	azureBaseUrl?: string;
+	azureDeploymentName?: string;
 }
 
 /**
- * Generate function for OpenAI Responses API
+ * Generate function for Azure OpenAI Responses API
  */
-export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
-	model: Model<"openai-responses">,
+export const streamAzureOpenAIResponses: StreamFunction<"azure-openai-responses"> = (
+	model: Model<"azure-openai-responses">,
 	context: Context,
-	options?: OpenAIResponsesOptions,
+	options?: AzureOpenAIResponsesOptions,
 ): AssistantMessageEventStream => {
 	const stream = new AssistantMessageEventStream();
 
@@ -57,11 +80,12 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 	(async () => {
 		const startTime = Date.now();
 		let firstTokenTime: number | undefined;
+		const deploymentName = resolveDeploymentName(model, options);
 
 		const output: AssistantMessage = {
 			role: "assistant",
 			content: [],
-			api: "openai-responses" as Api,
+			api: "azure-openai-responses" as Api,
 			provider: model.provider,
 			model: model.id,
 			usage: {
@@ -77,10 +101,10 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 		};
 
 		try {
-			// Create OpenAI client
+			// Create Azure OpenAI client
 			const apiKey = options?.apiKey || getEnvApiKey(model.provider) || "";
-			const client = createClient(model, context, apiKey, options?.headers);
-			const params = buildParams(model, context, options);
+			const client = createClient(model, apiKey, options);
+			const params = buildParams(model, context, options, deploymentName);
 			options?.onPayload?.(params);
 			const openaiStream = await client.responses.create(
 				params,
@@ -321,7 +345,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			stream.push({ type: "done", reason: output.stopReason, message: output });
 			stream.end();
 		} catch (error) {
-			for (const block of output.content) delete (block as any).index;
+			for (const block of output.content) delete (block as { index?: number }).index;
 			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
 			output.errorMessage = formatErrorMessageWithRetryAfter(error);
 			output.duration = Date.now() - startTime;
@@ -334,61 +358,82 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 	return stream;
 };
 
-function createClient(
-	model: Model<"openai-responses">,
-	context: Context,
-	apiKey?: string,
-	extraHeaders?: Record<string, string>,
-) {
+function normalizeAzureBaseUrl(baseUrl: string): string {
+	return baseUrl.replace(/\/+$/, "");
+}
+
+function buildDefaultBaseUrl(resourceName: string): string {
+	return `https://${resourceName}.openai.azure.com/openai/v1`;
+}
+
+function resolveAzureConfig(
+	model: Model<"azure-openai-responses">,
+	options?: AzureOpenAIResponsesOptions,
+): { baseUrl: string; apiVersion: string } {
+	const apiVersion = options?.azureApiVersion || process.env.AZURE_OPENAI_API_VERSION || DEFAULT_AZURE_API_VERSION;
+
+	const baseUrl = options?.azureBaseUrl?.trim() || process.env.AZURE_OPENAI_BASE_URL?.trim() || undefined;
+	const resourceName = options?.azureResourceName || process.env.AZURE_OPENAI_RESOURCE_NAME;
+
+	let resolvedBaseUrl = baseUrl;
+
+	if (!resolvedBaseUrl && resourceName) {
+		resolvedBaseUrl = buildDefaultBaseUrl(resourceName);
+	}
+
+	if (!resolvedBaseUrl && model.baseUrl) {
+		resolvedBaseUrl = model.baseUrl;
+	}
+
+	if (!resolvedBaseUrl) {
+		throw new Error(
+			"Azure OpenAI base URL is required. Set AZURE_OPENAI_BASE_URL or AZURE_OPENAI_RESOURCE_NAME, or pass azureBaseUrl, azureResourceName, or model.baseUrl.",
+		);
+	}
+
+	return {
+		baseUrl: normalizeAzureBaseUrl(resolvedBaseUrl),
+		apiVersion,
+	};
+}
+
+function createClient(model: Model<"azure-openai-responses">, apiKey: string, options?: AzureOpenAIResponsesOptions) {
 	if (!apiKey) {
-		if (!process.env.OPENAI_API_KEY) {
+		if (!process.env.AZURE_OPENAI_API_KEY) {
 			throw new Error(
-				"OpenAI API key is required. Set OPENAI_API_KEY environment variable or pass it as an argument.",
+				"Azure OpenAI API key is required. Set AZURE_OPENAI_API_KEY environment variable or pass it as an argument.",
 			);
 		}
-		apiKey = process.env.OPENAI_API_KEY;
+		apiKey = process.env.AZURE_OPENAI_API_KEY;
 	}
 
-	const headers = { ...(model.headers ?? {}), ...(extraHeaders ?? {}) };
-	if (model.provider === "github-copilot") {
-		// Copilot expects X-Initiator to indicate whether the request is user-initiated
-		// or agent-initiated (e.g. follow-up after assistant/tool messages). If there is
-		// no prior message, default to user-initiated.
-		const messages = context.messages || [];
-		const lastMessage = messages[messages.length - 1];
-		const isAgentCall = lastMessage ? lastMessage.role !== "user" : false;
-		headers["X-Initiator"] = isAgentCall ? "agent" : "user";
-		headers["Openai-Intent"] = "conversation-edits";
+	const headers = { ...(model.headers ?? {}) };
 
-		// Copilot requires this header when sending images
-		const hasImages = messages.some(msg => {
-			if (msg.role === "user" && Array.isArray(msg.content)) {
-				return msg.content.some(c => c.type === "image");
-			}
-			if (msg.role === "toolResult" && Array.isArray(msg.content)) {
-				return msg.content.some(c => c.type === "image");
-			}
-			return false;
-		});
-		if (hasImages) {
-			headers["Copilot-Vision-Request"] = "true";
-		}
+	if (options?.headers) {
+		Object.assign(headers, options.headers);
 	}
 
-	return new OpenAI({
+	const { baseUrl, apiVersion } = resolveAzureConfig(model, options);
+
+	return new AzureOpenAI({
 		apiKey,
-		baseURL: model.baseUrl,
+		apiVersion,
 		dangerouslyAllowBrowser: true,
 		defaultHeaders: headers,
+		baseURL: baseUrl,
 	});
 }
 
-function buildParams(model: Model<"openai-responses">, context: Context, options?: OpenAIResponsesOptions) {
-	const strictResponsesPairing = options?.strictResponsesPairing ?? isAzureOpenAIBaseUrl(model.baseUrl ?? "");
-	const messages = convertMessages(model, context, strictResponsesPairing);
+function buildParams(
+	model: Model<"azure-openai-responses">,
+	context: Context,
+	options: AzureOpenAIResponsesOptions | undefined,
+	deploymentName: string,
+) {
+	const messages = convertMessages(model, context, true);
 
 	const params: ResponseCreateParamsStreaming = {
-		model: model.id,
+		model: deploymentName,
 		input: messages,
 		stream: true,
 		prompt_cache_key: options?.sessionId,
@@ -400,10 +445,6 @@ function buildParams(model: Model<"openai-responses">, context: Context, options
 
 	if (options?.temperature !== undefined) {
 		params.temperature = options?.temperature;
-	}
-
-	if (options?.serviceTier !== undefined) {
-		params.service_tier = options.serviceTier;
 	}
 
 	if (context.tools) {
@@ -418,7 +459,7 @@ function buildParams(model: Model<"openai-responses">, context: Context, options
 			};
 			params.include = ["reasoning.encrypted_content"];
 		} else {
-			if (model.name.startsWith("gpt-5")) {
+			if (model.name.toLowerCase().startsWith("gpt-5")) {
 				// Jesus Christ, see https://community.openai.com/t/need-reasoning-false-option-for-gpt-5/1351588/7
 				messages.push({
 					role: "developer",
@@ -445,12 +486,8 @@ function normalizeResponsesToolCallId(id: string): { callId: string; itemId: str
 	return { callId: `call_${hash}`, itemId: `item_${hash}` };
 }
 
-function isAzureOpenAIBaseUrl(baseUrl: string): boolean {
-	return baseUrl.includes(".openai.azure.com") || baseUrl.includes("azure.com/openai");
-}
-
 function convertMessages(
-	model: Model<"openai-responses">,
+	model: Model<"azure-openai-responses">,
 	context: Context,
 	strictResponsesPairing: boolean,
 ): ResponseInput {
@@ -484,13 +521,12 @@ function convertMessages(
 							type: "input_text",
 							text: sanitizeSurrogates(item.text),
 						} satisfies ResponseInputText;
-					} else {
-						return {
-							type: "input_image",
-							detail: "auto",
-							image_url: `data:${item.mimeType};base64,${item.data}`,
-						} satisfies ResponseInputImage;
 					}
+					return {
+						type: "input_image",
+						detail: "auto",
+						image_url: `data:${item.mimeType};base64,${item.data}`,
+					} satisfies ResponseInputImage;
 				});
 				// Filter out images if model doesn't support them, and empty text blocks
 				let filteredContent = !model.input.includes("image")
@@ -571,7 +607,7 @@ function convertMessages(
 			// Extract text and image content
 			const textResult = msg.content
 				.filter(c => c.type === "text")
-				.map(c => (c as any).text)
+				.map(c => (c as { text: string }).text)
 				.join("\n");
 			const hasImages = msg.content.some(c => c.type === "image");
 			const normalized = normalizeResponsesToolCallId(msg.toolCallId);
@@ -603,7 +639,7 @@ function convertMessages(
 						contentParts.push({
 							type: "input_image",
 							detail: "auto",
-							image_url: `data:${(block as any).mimeType};base64,${(block as any).data}`,
+							image_url: `data:${(block as ImageContent).mimeType};base64,${(block as ImageContent).data}`,
 						} satisfies ResponseInputImage);
 					}
 				}
@@ -625,7 +661,7 @@ function convertTools(tools: Tool[]): OpenAITool[] {
 		type: "function",
 		name: tool.name,
 		description: tool.description,
-		parameters: tool.parameters as any, // TypeBox already generates JSON Schema
+		parameters: tool.parameters as Record<string, unknown>,
 		strict: false,
 	}));
 }

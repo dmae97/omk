@@ -14,6 +14,7 @@
  */
 import type { AgentEvent, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Api, Model } from "@oh-my-pi/pi-ai";
+import { setPreludeDocsCache } from "@oh-my-pi/pi-coding-agent/ipy/executor";
 import { logger, postmortem, untilAborted } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
 import { ModelRegistry } from "../config/model-registry";
@@ -527,6 +528,9 @@ async function runTask(runState: RunState, payload: SubagentWorkerStartPayload):
 	let error: string | undefined;
 	let aborted = false;
 	const sessionAbortController = new AbortController();
+	if (payload.pythonPreludeDocs && payload.pythonPreludeDocs.length > 0) {
+		setPreludeDocsCache(payload.pythonPreludeDocs);
+	}
 
 	// Helper to check abort status - throws if aborted to exit early
 	const checkAbort = (): void => {
@@ -589,6 +593,9 @@ async function runTask(runState: RunState, payload: SubagentWorkerStartPayload):
 			? `You will work under this working tree: ${payload.worktree}. CRITICAL: Do not touch the original repository; only make changes inside this worktree.`
 			: "";
 
+		const skipPythonPreflight =
+			payload.pythonToolProxy === true ||
+			(Array.isArray(payload.toolNames) && !payload.toolNames.includes("python"));
 		const { session } = await createAgentSession({
 			cwd: payload.worktree ?? payload.cwd,
 			authStorage,
@@ -599,6 +606,9 @@ async function runTask(runState: RunState, payload: SubagentWorkerStartPayload):
 			toolNames: payload.toolNames,
 			outputSchema: payload.outputSchema,
 			requireCompleteTool: true,
+			contextFiles: payload.contextFiles,
+			skills: payload.skills,
+			promptTemplates: payload.promptTemplates,
 			// Append system prompt (equivalent to CLI's --append-system-prompt)
 			systemPrompt: defaultPrompt =>
 				`${defaultPrompt}\n\n${payload.systemPrompt}\n\n${worktreeNotice}\n\n${completionInstruction}`,
@@ -607,6 +617,7 @@ async function runTask(runState: RunState, payload: SubagentWorkerStartPayload):
 			// Pass spawn restrictions to nested tasks
 			spawns: payload.spawnsEnv,
 			enableLsp: enableLsp && !lspProxyEnabled,
+			skipPythonPreflight,
 			// Disable local MCP discovery if using proxy tools
 			enableMCP: !payload.mcpTools,
 			// Add proxy tools

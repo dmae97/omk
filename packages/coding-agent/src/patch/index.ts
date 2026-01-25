@@ -167,6 +167,27 @@ class LspFileSystem implements FileSystem {
 	}
 }
 
+function mergeDiagnosticsWithWarnings(
+	diagnostics: FileDiagnosticsResult | undefined,
+	warnings: string[],
+): FileDiagnosticsResult | undefined {
+	if (warnings.length === 0) return diagnostics;
+	const warningMessages = warnings.map(warning => `patch: ${warning}`);
+	if (!diagnostics) {
+		return {
+			server: "patch",
+			messages: warningMessages,
+			summary: `Patch warnings: ${warnings.length}`,
+			errored: false,
+		};
+	}
+	return {
+		...diagnostics,
+		messages: [...warningMessages, ...diagnostics.messages],
+		summary: `${diagnostics.summary}; Patch warnings: ${warnings.length}`,
+	};
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Tool Class
 // ═══════════════════════════════════════════════════════════════════════════
@@ -319,9 +340,11 @@ export class EditTool implements AgentTool<TInput> {
 				const flushedDiagnostics = await flushLspWritethroughBatch(batchRequest.id, this.session.cwd, signal);
 				diagnostics ??= flushedDiagnostics;
 			}
+			const patchWarnings = result.warnings ?? [];
+			const mergedDiagnostics = mergeDiagnosticsWithWarnings(diagnostics, patchWarnings);
 
 			const meta = outputMeta()
-				.diagnostics(diagnostics?.summary ?? "", diagnostics?.messages ?? [])
+				.diagnostics(mergedDiagnostics?.summary ?? "", mergedDiagnostics?.messages ?? [])
 				.get();
 
 			return {
@@ -329,7 +352,7 @@ export class EditTool implements AgentTool<TInput> {
 				details: {
 					diff: diffResult.diff,
 					firstChangedLine: diffResult.firstChangedLine,
-					diagnostics,
+					diagnostics: mergedDiagnostics,
 					op,
 					rename: effRename,
 					meta,

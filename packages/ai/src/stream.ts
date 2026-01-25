@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { supportsXhigh } from "./models";
 import { type BedrockOptions, streamBedrock } from "./providers/amazon-bedrock";
 import { type AnthropicOptions, streamAnthropic } from "./providers/anthropic";
+import { type AzureOpenAIResponsesOptions, streamAzureOpenAIResponses } from "./providers/azure-openai-responses";
 import { type CursorOptions, streamCursor } from "./providers/cursor";
 import { type GoogleOptions, streamGoogle } from "./providers/google";
 import {
@@ -108,6 +109,7 @@ export function getEnvApiKey(provider: any): string | undefined {
 		minimax: "MINIMAX_API_KEY",
 		opencode: "OPENCODE_API_KEY",
 		cursor: "CURSOR_ACCESS_TOKEN",
+		"azure-openai-responses": "AZURE_OPENAI_API_KEY",
 	};
 
 	const envVar = envMap[provider];
@@ -143,6 +145,9 @@ export function stream<TApi extends Api>(
 
 		case "openai-responses":
 			return streamOpenAIResponses(model as Model<"openai-responses">, context, providerOptions as any);
+
+		case "azure-openai-responses":
+			return streamAzureOpenAIResponses(model as Model<"azure-openai-responses">, context, providerOptions as any);
 
 		case "openai-codex-responses":
 			return streamOpenAICodexResponses(model as Model<"openai-codex-responses">, context, providerOptions as any);
@@ -344,6 +349,12 @@ function mapOptionsForApi<TApi extends Api>(
 				...base,
 				reasoningEffort: supportsXhigh(model) ? options?.reasoning : clampReasoning(options?.reasoning),
 			} satisfies OpenAIResponsesOptions;
+
+		case "azure-openai-responses":
+			return {
+				...base,
+				reasoningEffort: supportsXhigh(model) ? options?.reasoning : clampReasoning(options?.reasoning),
+			} satisfies AzureOpenAIResponsesOptions;
 
 		case "openai-codex-responses":
 			return {

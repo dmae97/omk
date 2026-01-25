@@ -1,4 +1,8 @@
 import type { AgentEvent, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import type { PromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import type { Skill } from "@oh-my-pi/pi-coding-agent/extensibility/skills";
+import type { PreludeHelper } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
+import type { ContextFileEntry } from "@oh-my-pi/pi-coding-agent/tools";
 import type { SerializedModelRegistry } from "../config/model-registry";
 import type { Settings } from "../config/settings-manager";
 import type { SerializedAuthStorage } from "../session/auth-storage";
@@ -100,6 +104,10 @@ export interface SubagentWorkerStartPayload {
 	serializedAuth?: SerializedAuthStorage;
 	serializedModels?: SerializedModelRegistry;
 	serializedSettings?: Settings;
+	pythonPreludeDocs?: PreludeHelper[];
+	contextFiles?: ContextFileEntry[];
+	skills?: Skill[];
+	promptTemplates?: PromptTemplate[];
 	mcpTools?: MCPToolMetadata[];
 	pythonToolProxy?: boolean;
 	lspToolProxy?: boolean;

@@ -2,8 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+- Added Ctrl+Backspace as a delete-word-backward keybinding and improved modified backspace matching
+
 ### Fixed
 - Terminal gracefully handles write failures by marking dead instead of exiting the process
+- Reserved cursor space for zero padding and corrected end-of-line cursor rendering to prevent wrap glitches
 ## [8.2.0] - 2026-01-24
 
 ### Added

@@ -796,7 +796,10 @@ export function matchesKey(data: string, keyId: KeyId): boolean {
 			if (modifier === 0) {
 				return data === "\x7f" || data === "\x08" || matchesKittySequence(data, CODEPOINTS.backspace, 0);
 			}
-			return matchesKittySequence(data, CODEPOINTS.backspace, modifier);
+			return (
+				matchesKittySequence(data, CODEPOINTS.backspace, modifier) ||
+				matchesModifyOtherKeys(data, CODEPOINTS.backspace, modifier)
+			);
 
 		case "insert":
 			if (modifier === 0) {
