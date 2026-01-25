@@ -4,7 +4,8 @@
  */
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
-import type { AssistantMessage, ImageContent, Message, UsageReport } from "@oh-my-pi/pi-ai";
+import type { AssistantMessage, ImageContent, Message, Model, UsageReport } from "@oh-my-pi/pi-ai";
+import { resolvePlanUrlToPath } from "@oh-my-pi/pi-coding-agent/internal-urls";
 import type { Component, Loader, SlashCommand } from "@oh-my-pi/pi-tui";
 import {
 	CombinedAutocompleteProvider,
@@ -18,14 +19,17 @@ import {
 import { isEnoent, logger, postmortem } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { KeybindingsManager } from "../config/keybindings";
+import { renderPromptTemplate } from "../config/prompt-templates";
 import type { SettingsManager } from "../config/settings-manager";
 import type { ExtensionUIContext } from "../extensibility/extensions";
 import type { CompactOptions } from "../extensibility/extensions/types";
 import { loadSlashCommands } from "../extensibility/slash-commands";
+import planModeApprovedPrompt from "../prompts/system/plan-mode-approved.md" with { type: "text" };
 import type { AgentSession, AgentSessionEvent } from "../session/agent-session";
 import { HistoryStorage } from "../session/history-storage";
 import type { SessionContext, SessionManager } from "../session/session-manager";
 import { getRecentSessions } from "../session/session-manager";
+import type { EnterPlanModeDetails, ExitPlanModeDetails } from "../tools";
 import { setTerminalTitle } from "../utils/title-generator";
 import type { AssistantMessageComponent } from "./components/assistant-message";
 import type { BashExecutionComponent } from "./components/bash-execution";
@@ -87,6 +91,9 @@ export class InteractiveMode implements InteractiveModeContext {
 	public isBashMode = false;
 	public toolOutputExpanded = false;
 	public todoExpanded = false;
+	public planModeEnabled = false;
+	public planModePaused = false;
+	public planModePlanFilePath: string | undefined = undefined;
 	public todoItems: TodoItem[] = [];
 	public hideThinkingBlock = false;
 	public pendingImages: ImageContent[] = [];
@@ -124,6 +131,9 @@ export class InteractiveMode implements InteractiveModeContext {
 	private cleanupUnsubscribe?: () => void;
 	private readonly version: string;
 	private readonly changelogMarkdown: string | undefined;
+	private planModePreviousTools: string[] | undefined;
+	private planModePreviousModel: Model<any> | undefined;
+	private planModeHasEntered = false;
 	public readonly lspServers: Array<{ name: string; status: "ready" | "error"; fileTypes: string[] }> | undefined =
 		undefined;
 	public mcpManager?: import("@oh-my-pi/pi-coding-agent/mcp").MCPManager;
@@ -185,6 +195,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		// Define slash commands for autocomplete
 		const slashCommands: SlashCommand[] = [
 			{ name: "settings", description: "Open settings menu" },
+			{ name: "plan", description: "Toggle plan mode (agent plans before executing)" },
 			{ name: "model", description: "Select model (opens selector UI)" },
 			{ name: "export", description: "Export session to HTML file" },
 			{ name: "dump", description: "Copy session transcript to clipboard" },
@@ -202,6 +213,7 @@ export class InteractiveMode implements InteractiveModeContext {
 			{ name: "logout", description: "Logout from OAuth provider" },
 			{ name: "new", description: "Start a new session" },
 			{ name: "compact", description: "Manually compact the session context" },
+			{ name: "handoff", description: "Hand off the session context to a new session" },
 			{ name: "background", description: "Detach UI and continue running in background" },
 			{ name: "bg", description: "Alias for /background" },
 			{ name: "resume", description: "Resume a different session" },
@@ -469,6 +481,208 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.renderTodoList();
 	}
 
+	private getPlanFilePath(): string {
+		const sessionId = this.sessionManager.getSessionId();
+		return `plan://${sessionId}/plan.md`;
+	}
+
+	private resolvePlanFilePath(planFilePath: string): string {
+		if (planFilePath.startsWith("plan://")) {
+			return resolvePlanUrlToPath(planFilePath, {
+				getPlansDirectory: this.settingsManager.getPlansDirectory.bind(this.settingsManager),
+				cwd: this.sessionManager.getCwd(),
+			});
+		}
+		return planFilePath;
+	}
+
+	private updatePlanModeStatus(): void {
+		const status =
+			this.planModeEnabled || this.planModePaused
+				? {
+						enabled: this.planModeEnabled,
+						paused: this.planModePaused,
+					}
+				: undefined;
+		this.statusLine.setPlanModeStatus(status);
+		this.updateEditorTopBorder();
+		this.ui.requestRender();
+	}
+
+	private async applyPlanModeModel(): Promise<void> {
+		const slowModel = this.session.resolveRoleModel("slow");
+		if (!slowModel) return;
+		const currentModel = this.session.model;
+		if (currentModel && currentModel.provider === slowModel.provider && currentModel.id === slowModel.id) {
+			return;
+		}
+		this.planModePreviousModel = currentModel;
+		try {
+			await this.session.setModelTemporary(slowModel);
+		} catch (error) {
+			this.showWarning(
+				`Failed to switch to slow model for plan mode: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
+	}
+
+	private async enterPlanMode(options?: {
+		planFilePath?: string;
+		workflow?: "parallel" | "iterative";
+	}): Promise<void> {
+		if (this.planModeEnabled) {
+			return;
+		}
+
+		this.planModePaused = false;
+
+		const planFilePath = options?.planFilePath ?? this.getPlanFilePath();
+		const previousTools = this.session.getActiveToolNames();
+		const hasExitTool = this.session.getToolByName("exit_plan_mode") !== undefined;
+		const planTools = hasExitTool ? [...previousTools, "exit_plan_mode"] : previousTools;
+		const uniquePlanTools = [...new Set(planTools)];
+
+		this.planModePreviousTools = previousTools;
+		this.planModePlanFilePath = planFilePath;
+		this.planModeEnabled = true;
+
+		await this.session.setActiveToolsByName(uniquePlanTools);
+		this.session.setPlanModeState({
+			enabled: true,
+			planFilePath,
+			workflow: options?.workflow ?? "parallel",
+			reentry: this.planModeHasEntered,
+		});
+		this.planModeHasEntered = true;
+		await this.applyPlanModeModel();
+		this.updatePlanModeStatus();
+		this.showStatus(`Plan mode enabled. Plan file: ${planFilePath}`);
+	}
+
+	private async exitPlanMode(options?: { silent?: boolean; paused?: boolean }): Promise<void> {
+		if (!this.planModeEnabled) {
+			return;
+		}
+
+		const previousTools = this.planModePreviousTools;
+		if (previousTools && previousTools.length > 0) {
+			await this.session.setActiveToolsByName(previousTools);
+		}
+		if (this.planModePreviousModel) {
+			await this.session.setModelTemporary(this.planModePreviousModel);
+		}
+
+		this.session.setPlanModeState(undefined);
+		this.planModeEnabled = false;
+		this.planModePaused = options?.paused ?? false;
+		this.planModePlanFilePath = undefined;
+		this.planModePreviousTools = undefined;
+		this.planModePreviousModel = undefined;
+		this.updatePlanModeStatus();
+		if (!options?.silent) {
+			this.showStatus(this.planModePaused ? "Plan mode paused." : "Plan mode disabled.");
+		}
+	}
+
+	private async readPlanFile(planFilePath: string): Promise<string | null> {
+		const resolvedPath = this.resolvePlanFilePath(planFilePath);
+		try {
+			return await Bun.file(resolvedPath).text();
+		} catch (error) {
+			if (isEnoent(error)) {
+				return null;
+			}
+			throw error;
+		}
+	}
+
+	private renderPlanPreview(planContent: string): void {
+		this.chatContainer.addChild(new Spacer(1));
+		this.chatContainer.addChild(new DynamicBorder());
+		this.chatContainer.addChild(new Text(theme.bold(theme.fg("accent", "Plan Review")), 1, 1));
+		this.chatContainer.addChild(new Spacer(1));
+		this.chatContainer.addChild(new Markdown(planContent, 1, 1, getMarkdownTheme()));
+		this.chatContainer.addChild(new DynamicBorder());
+		this.ui.requestRender();
+	}
+
+	private async approvePlan(planContent: string): Promise<void> {
+		const previousTools = this.planModePreviousTools ?? this.session.getActiveToolNames();
+		await this.exitPlanMode({ silent: true, paused: false });
+		await this.handleClearCommand();
+		if (previousTools.length > 0) {
+			await this.session.setActiveToolsByName(previousTools);
+		}
+		this.session.markPlanReferenceSent();
+		const prompt = renderPromptTemplate(planModeApprovedPrompt, { planContent });
+		await this.session.prompt(prompt);
+	}
+
+	async handlePlanModeCommand(): Promise<void> {
+		if (this.planModeEnabled) {
+			const confirmed = await this.showHookConfirm(
+				"Exit plan mode?",
+				"This exits plan mode without approving a plan.",
+			);
+			if (!confirmed) return;
+			await this.exitPlanMode({ paused: true });
+			return;
+		}
+		await this.enterPlanMode();
+	}
+
+	async handleEnterPlanModeTool(details: EnterPlanModeDetails): Promise<void> {
+		if (this.planModeEnabled) {
+			this.showWarning("Plan mode is already active.");
+			return;
+		}
+
+		const confirmed = await this.showHookConfirm(
+			"Enter plan mode?",
+			"This enables read-only planning and creates a plan file for approval.",
+		);
+		if (!confirmed) {
+			return;
+		}
+
+		const planFilePath = details.planFilePath || this.getPlanFilePath();
+		this.planModePlanFilePath = planFilePath;
+		await this.enterPlanMode({ planFilePath, workflow: details.workflow });
+	}
+
+	async handleExitPlanModeTool(details: ExitPlanModeDetails): Promise<void> {
+		if (!this.planModeEnabled) {
+			this.showWarning("Plan mode is not active.");
+			return;
+		}
+
+		const planFilePath = details.planFilePath || this.planModePlanFilePath || this.getPlanFilePath();
+		this.planModePlanFilePath = planFilePath;
+		const planContent = await this.readPlanFile(planFilePath);
+		if (!planContent) {
+			this.showError(`Plan file not found at ${planFilePath}`);
+			return;
+		}
+
+		this.renderPlanPreview(planContent);
+		const choice = await this.showHookSelector("Plan mode - next step", [
+			"Approve and execute",
+			"Refine plan",
+			"Stay in plan mode",
+		]);
+
+		if (choice === "Approve and execute") {
+			await this.approvePlan(planContent);
+			return;
+		}
+		if (choice === "Refine plan") {
+			const refinement = await this.showHookInput("What should be refined?");
+			if (refinement) {
+				this.editor.setText(refinement);
+			}
+		}
+	}
+
 	stop(): void {
 		if (this.loadingAnimation) {
 			this.loadingAnimation.stop();
@@ -678,6 +892,10 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	handleCompactCommand(customInstructions?: string): Promise<void> {
 		return this.commandController.handleCompactCommand(customInstructions);
+	}
+
+	handleHandoffCommand(customInstructions?: string): Promise<void> {
+		return this.commandController.handleHandoffCommand(customInstructions);
 	}
 
 	executeCompaction(customInstructionsOrOptions?: string | CompactOptions, isAuto?: boolean): Promise<void> {

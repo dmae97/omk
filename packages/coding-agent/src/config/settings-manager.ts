@@ -155,6 +155,7 @@ export interface TodoCompletionSettings {
 export type StatusLineSegmentId =
 	| "pi"
 	| "model"
+	| "plan_mode"
 	| "path"
 	| "git"
 	| "subagents"
@@ -545,6 +546,10 @@ export class SettingsManager {
 	 */
 	serialize(): Settings {
 		return { ...this.settings };
+	}
+
+	getPlansDirectory(_cwd: string = this.cwd ?? process.cwd()): string {
+		return path.join(getAgentDir(), "plans");
 	}
 
 	/**

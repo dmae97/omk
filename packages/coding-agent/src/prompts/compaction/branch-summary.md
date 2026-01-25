@@ -3,6 +3,7 @@ Create a structured summary of this conversation branch for context when returni
 Use this EXACT format:
 
 ## Goal
+
 [What was the user trying to accomplish in this branch?]
 
 ## Constraints & Preferences
@@ -10,6 +11,7 @@ Use this EXACT format:
 - [Or "(none)" if none were mentioned]
 
 ## Progress
+
 ### Done
 - [x] [Completed tasks/changes]
 

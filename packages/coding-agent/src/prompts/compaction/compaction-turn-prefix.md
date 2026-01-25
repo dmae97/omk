@@ -3,6 +3,7 @@ This is the PREFIX of a turn that was too large to keep. The SUFFIX (recent work
 Summarize the prefix to provide context for the retained suffix:
 
 ## Original Request
+
 [What did the user ask for in this turn?]
 
 ## Early Progress

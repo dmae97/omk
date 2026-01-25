@@ -6,6 +6,7 @@ import { $ } from "bun";
 import { APP_NAME, getBinDir } from "../config";
 
 const TOOLS_DIR = getBinDir();
+const TOOL_DOWNLOAD_TIMEOUT_MS = 15000;
 
 interface ToolConfig {
 	name: string;
@@ -159,9 +160,18 @@ export async function getToolPath(tool: ToolName): Promise<string | null> {
 
 // Fetch latest release version from GitHub
 async function getLatestVersion(repo: string): Promise<string> {
-	const response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
-		headers: { "User-Agent": `${APP_NAME}-coding-agent` },
-	});
+	let response: Response;
+	try {
+		response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
+			headers: { "User-Agent": `${APP_NAME}-coding-agent` },
+			signal: AbortSignal.timeout(TOOL_DOWNLOAD_TIMEOUT_MS),
+		});
+	} catch (err) {
+		if (err instanceof Error && err.name === "AbortError") {
+			throw new Error("GitHub API request timed out");
+		}
+		throw err;
+	}
 
 	if (!response.ok) {
 		throw new Error(`GitHub API error: ${response.status}`);
@@ -173,7 +183,17 @@ async function getLatestVersion(repo: string): Promise<string> {
 
 // Download a file from URL
 async function downloadFile(url: string, dest: string): Promise<void> {
-	const response = await fetch(url);
+	let response: Response;
+	try {
+		response = await fetch(url, {
+			signal: AbortSignal.timeout(TOOL_DOWNLOAD_TIMEOUT_MS),
+		});
+	} catch (err) {
+		if (err instanceof Error && err.name === "AbortError") {
+			throw new Error(`Download timed out: ${url}`);
+		}
+		throw err;
+	}
 	if (!response.ok) {
 		throw new Error(`Failed to download: ${response.status}`);
 	} else if (!response.body) {
@@ -223,15 +243,12 @@ async function downloadTool(tool: ToolName): Promise<string> {
 	const tmp = await TempDir.create("@omp-tools-extract-");
 
 	try {
-		if (assetName.endsWith(".tar.gz")) {
+		if (assetName.endsWith(".tar.gz") || assetName.endsWith(".zip")) {
 			const archive = new Bun.Archive(await Bun.file(archivePath).arrayBuffer());
 			const files = await archive.files();
 			for (const [filePath, file] of files) {
 				await Bun.write(path.join(tmp.path(), filePath), file);
 			}
-		} else if (assetName.endsWith(".zip")) {
-			await fs.mkdir(tmp.path(), { recursive: true });
-			await $`unzip -o ${archivePath} -d ${tmp.path()}`.quiet().nothrow();
 		}
 
 		// Find the binary in extracted files
@@ -284,7 +301,17 @@ async function installPythonPackage(pkg: string): Promise<boolean> {
 
 // Ensure a tool is available, downloading if necessary
 // Returns the path to the tool, or null if unavailable
-export async function ensureTool(tool: ToolName, silent: boolean = false): Promise<string | undefined> {
+type EnsureToolOptions = {
+	silent?: boolean;
+	notify?: (message: string) => void;
+};
+
+export async function ensureTool(
+	tool: ToolName,
+	silentOrOptions: boolean | EnsureToolOptions = false,
+): Promise<string | undefined> {
+	const options = typeof silentOrOptions === "object" ? silentOrOptions : { silent: silentOrOptions };
+	const silent = options.silent ?? false;
 	const existingPath = await getToolPath(tool);
 	if (existingPath) {
 		return existingPath;
@@ -296,6 +323,7 @@ export async function ensureTool(tool: ToolName, silent: boolean = false): Promi
 		if (!silent) {
 			logger.debug(`${pythonConfig.name} not found. Installing via uv/pip...`);
 		}
+		options.notify?.(`Installing ${pythonConfig.name}...`);
 		const success = await installPythonPackage(pythonConfig.package);
 		if (success) {
 			// Re-check for the command after installation
@@ -320,6 +348,7 @@ export async function ensureTool(tool: ToolName, silent: boolean = false): Promi
 	if (!silent) {
 		logger.debug(`${config.name} not found. Downloading...`);
 	}
+	options.notify?.(`Downloading ${config.name}...`);
 
 	try {
 		const path = await downloadTool(tool);

@@ -107,21 +107,17 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 	private readonly session: ToolSession;
 	private readonly ops: GrepOperations;
 
-	private readonly rgPath: Promise<string | undefined>;
-
 	constructor(session: ToolSession, options?: GrepToolOptions) {
 		this.session = session;
 		this.ops = options?.operations ?? defaultGrepOperations;
 		this.description = renderPromptTemplate(grepDescription);
-		this.rgPath = ensureTool("rg", true);
 	}
 
 	/**
 	 * Validates a pattern against ripgrep's regex engine.
 	 * Uses a quick dry-run against /dev/null to check for parse errors.
 	 */
-	private async validateRegexPattern(pattern: string): Promise<{ valid: boolean; error?: string }> {
-		const rgPath = await this.rgPath;
+	private async validateRegexPattern(pattern: string, rgPath?: string): Promise<{ valid: boolean; error?: string }> {
 		if (!rgPath) {
 			return { valid: true }; // Can't validate, assume valid
 		}
@@ -146,7 +142,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 		params: GrepParams,
 		signal?: AbortSignal,
 		_onUpdate?: AgentToolUpdateCallback<GrepToolDetails>,
-		_context?: AgentToolContext,
+		toolContext?: AgentToolContext,
 	): Promise<AgentToolResult<GrepToolDetails>> {
 		const {
 			pattern,
@@ -167,19 +163,24 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 		return untilAborted(signal, async () => {
 			// Auto-detect invalid regex patterns and switch to literal mode
 			// This handles cases like "abort(" which would cause ripgrep regex parse errors
+			const rgPath = await ensureTool("rg", {
+				silent: true,
+				notify: message => toolContext?.ui?.notify(message, "info"),
+			});
+
+			if (!rgPath) {
+				throw new ToolError("rg is not available and could not be downloaded");
+			}
+
 			let useLiteral = literal ?? false;
 			if (!useLiteral) {
-				const validation = await this.validateRegexPattern(pattern);
+				const validation = await this.validateRegexPattern(pattern, rgPath);
 				if (!validation.valid) {
 					useLiteral = true;
 				}
 			}
 
-			const rgPath = await this.rgPath;
-			if (!rgPath) {
-				throw new ToolError("ripgrep (rg) is not available and could not be downloaded");
-			}
-
+			// rgPath resolved earlier
 			const searchPath = resolveToCwd(searchDir || ".", this.session.cwd);
 			const scopePath = (() => {
 				const relative = nodePath.relative(this.session.cwd, searchPath).replace(/\\/g, "/");

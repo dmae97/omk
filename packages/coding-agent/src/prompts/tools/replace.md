@@ -17,22 +17,22 @@ Returns success/failure status. On success, the file is modified in place with t
 - You must read the file at least once in the conversation before editing. The tool will error if you attempt an edit without reading the file first.
 </critical>
 
-<bash_alternatives>
-Replace is for content-addressed changes—you identify *what* to change by its text.
+<bash*alternatives>
+Replace is for content-addressed changes—you identify \_what* to change by its text.
 
 For position-addressed or pattern-addressed changes, bash is more efficient:
 
-| Operation | Command |
-|-----------|---------|
-| Append to file | `cat >> file <<'EOF'`...`EOF` |
-| Prepend to file | `{ cat - file; } <<'EOF' > tmp && mv tmp file` |
-| Delete lines N-M | `sed -i 'N,Md' file` |
-| Insert after line N | `sed -i 'Na\text' file` |
-| Regex replace | `sd 'pattern' 'replacement' file` |
-| Bulk replace across files | `sd 'pattern' 'replacement' **/*.ts` |
-| Copy lines N-M to another file | `sed -n 'N,Mp' src >> dest` |
-| Move lines N-M to another file | `sed -n 'N,Mp' src >> dest && sed -i 'N,Md' src` |
+|Operation|Command|
+|---|---|
+|Append to file|`cat >> file <<'EOF'`...`EOF`|
+|Prepend to file|`{ cat - file; } <<'EOF' > tmp && mv tmp file`|
+|Delete lines N-M|`sed -i 'N,Md' file`|
+|Insert after line N|`sed -i 'Na\text' file`|
+|Regex replace|`sd 'pattern' 'replacement' file`|
+|Bulk replace across files|`sd 'pattern' 'replacement' **/*.ts`|
+|Copy lines N-M to another file|`sed -n 'N,Mp' src >> dest`|
+|Move lines N-M to another file|`sed -n 'N,Mp' src >> dest && sed -i 'N,Md' src`|
 
-Use Replace when the *content itself* identifies the location.
-Use bash when *position* or *pattern* identifies what to change.
+Use Replace when the _content itself_ identifies the location.
+Use bash when _position_ or _pattern_ identifies what to change.
 </bash_alternatives>

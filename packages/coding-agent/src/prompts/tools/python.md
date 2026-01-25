@@ -4,13 +4,11 @@ Executes Python cells sequentially in a persistent IPython kernel.
 
 <instruction>
 The kernel persists between calls and between cells. **Imports, variables, and functions survive.** Use this.
-
 **Work incrementally:**
 - One logical step per cell (imports, define a function, test it, use it)
 - Pass multiple small cells in one call—they execute sequentially
 - Define small functions you can reuse and debug individually
 - Put explanations in the assistant message or cell title, **not** inside code
-
 **When something fails:**
 - The error tells you which cell failed (e.g., "Cell 3 failed")
 - Earlier cells already ran—their state persists in the kernel
@@ -24,6 +22,7 @@ All helpers auto-print results and return values for chaining.
 {{#if categories.length}}
 {{#each categories}}
 ### {{name}}
+
 ```
 {{#each functions}}
 {{name}}{{signature}}
@@ -45,7 +44,6 @@ The user sees output like a Jupyter notebook—rich displays are fully rendered:
 - `display(HTML(...))` → rendered HTML
 - `display(Markdown(...))` → formatted markdown
 - `plt.show()` → inline figures
-
 **You will see object repr** (e.g., `<IPython.core.display.JSON object>`) **but the user sees the rendered output.** Trust that `display()` calls work correctly—do not assume the user sees only the repr.
 </output>
 

@@ -8,6 +8,7 @@ import { getPreludeDocs, warmPythonEnvironment } from "../ipy/executor";
 import { checkPythonKernelAvailability } from "../ipy/kernel";
 import { LspTool } from "../lsp";
 import { EditTool } from "../patch";
+import type { PlanModeState } from "../plan-mode/state";
 import type { ArtifactManager } from "../session/artifacts";
 import { TaskTool } from "../task";
 import type { AgentOutputManager } from "../task/output-manager";
@@ -18,6 +19,8 @@ import { AskTool } from "./ask";
 import { BashTool } from "./bash";
 import { CalculatorTool } from "./calculator";
 import { CompleteTool } from "./complete";
+import { EnterPlanModeTool } from "./enter-plan-mode";
+import { ExitPlanModeTool } from "./exit-plan-mode";
 import { FetchTool } from "./fetch";
 import { FindTool } from "./find";
 import { GrepTool } from "./grep";
@@ -70,6 +73,8 @@ export { AskTool, type AskToolDetails } from "./ask";
 export { BashTool, type BashToolDetails, type BashToolOptions } from "./bash";
 export { CalculatorTool, type CalculatorToolDetails } from "./calculator";
 export { CompleteTool } from "./complete";
+export { type EnterPlanModeDetails, EnterPlanModeTool } from "./enter-plan-mode";
+export { type ExitPlanModeDetails, ExitPlanModeTool } from "./exit-plan-mode";
 export { FetchTool, type FetchToolDetails } from "./fetch";
 export { type FindOperations, FindTool, type FindToolDetails, type FindToolOptions } from "./find";
 export { setPreferredImageProvider } from "./gemini-image";
@@ -126,6 +131,8 @@ export interface ToolSession {
 	requireCompleteTool?: boolean;
 	/** Get session file */
 	getSessionFile: () => string | null;
+	/** Get session ID */
+	getSessionId?: () => string | null;
 	/** Cached artifact manager (allocated per ToolSession) */
 	artifactManager?: ArtifactManager;
 	/** Get artifacts directory for artifact:// URLs and $ARTIFACTS env var */
@@ -147,7 +154,10 @@ export interface ToolSession {
 	/** Agent output manager for unique agent:// IDs across task invocations */
 	agentOutputManager?: AgentOutputManager;
 	/** Settings manager for passing to subagents (avoids SQLite access in workers) */
-	settingsManager?: { serialize: () => import("@oh-my-pi/pi-coding-agent/config/settings-manager").Settings };
+	settingsManager?: {
+		serialize: () => import("@oh-my-pi/pi-coding-agent/config/settings-manager").Settings;
+		getPlansDirectory: (cwd?: string) => string;
+	};
 	/** Settings manager (optional) */
 	settings?: {
 		getImageAutoResize(): boolean;
@@ -165,6 +175,8 @@ export interface ToolSession {
 		getPythonKernelMode?(): "session" | "per-call";
 		getPythonSharedGateway?(): boolean;
 	};
+	/** Plan mode state (if active) */
+	getPlanModeState?: () => PlanModeState | undefined;
 }
 
 type ToolFactory = (session: ToolSession) => Tool | null | Promise<Tool | null>;
@@ -187,11 +199,13 @@ export const BUILTIN_TOOLS: Record<string, ToolFactory> = {
 	fetch: s => new FetchTool(s),
 	web_search: s => new WebSearchTool(s),
 	write: s => new WriteTool(s),
+	enter_plan_mode: s => new EnterPlanModeTool(s),
 };
 
 export const HIDDEN_TOOLS: Record<string, ToolFactory> = {
 	complete: s => new CompleteTool(s),
 	report_finding: () => reportFindingTool,
+	exit_plan_mode: s => new ExitPlanModeTool(s),
 };
 
 export type ToolName = keyof typeof BUILTIN_TOOLS;
@@ -234,6 +248,9 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 	const includeComplete = session.requireCompleteTool === true;
 	const enableLsp = session.enableLsp ?? true;
 	const requestedTools = toolNames && toolNames.length > 0 ? [...new Set(toolNames)] : undefined;
+	if (requestedTools && !requestedTools.includes("exit_plan_mode")) {
+		requestedTools.push("exit_plan_mode");
+	}
 	const pythonMode = getPythonModeFromEnv() ?? session.settings?.getPythonToolMode?.() ?? "ipy-only";
 	const skipPythonPreflight = session.skipPythonPreflight === true;
 	let pythonAvailable = true;
@@ -296,6 +313,7 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 			: [
 					...Object.entries(BUILTIN_TOOLS).filter(([name]) => isToolAllowed(name)),
 					...(includeComplete ? ([["complete", HIDDEN_TOOLS.complete]] as const) : []),
+					...([["exit_plan_mode", HIDDEN_TOOLS.exit_plan_mode]] as const),
 				];
 	time("createTools:beforeFactories");
 	const slowTools: Array<{ name: string; ms: number }> = [];

@@ -1,6 +1,7 @@
 ## Code Review Request
 
 ### Mode
+
 {{mode}}
 
 ### Changed Files ({{len files}} files, +{{totalAdded}}/-{{totalRemoved}} lines)
@@ -49,11 +50,13 @@ _Full diff too large ({{len files}} files). Showing first ~{{linesPerFile}} line
 
 {{#list files join="\n\n"}}
 #### {{path}}
+
 {{#codeblock lang="diff"}}
 {{hunksPreview}}
 {{/codeblock}}
 {{/list}}
 {{else}}
+
 ### Diff
 
 <diff>

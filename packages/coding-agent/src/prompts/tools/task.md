@@ -57,9 +57,7 @@ Results are keyed by task `id` (e.g., "AuthProvider", "AuthApi").
 3. The `task` string you provide
 
 If you discussed requirements, plans, schemas, or decisions with the user, you MUST include that information in `context`. Subagents cannot see prior messages—they start fresh with only what you explicitly pass them.
-
 **Never call Task multiple times in parallel.** Use a single Task call with multiple entries in the `tasks` array. Parallel Task calls waste resources and bypass coordination.
-
 **For code changes, subagents write files directly.** Never ask an agent to "return the changes" for you to apply—they have Edit and Write tools. Their context window holds the work; asking them to report back wastes it.
 </critical>
 

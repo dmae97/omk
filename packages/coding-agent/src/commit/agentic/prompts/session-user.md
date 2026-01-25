@@ -19,7 +19,6 @@ You may include entries from this list in the propose_changelog `deletions` fiel
 {{name}}:
 {{#list items prefix="- " join="\n"}}{{this}}{{/list}}
 {{/each}}
-
 {{/each}}
 {{/if}}
 

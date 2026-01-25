@@ -35,11 +35,11 @@ Use the read tool to load a skill's file when the task matches its description.
 
 <available_skills>
 {{#list skills join="\n"}}
-  <skill>
-    <name>{{escapeXml name}}</name>
-    <description>{{escapeXml description}}</description>
-    <location>skill://{{escapeXml name}}</location>
-  </skill>
+<skill>
+<name>{{escapeXml name}}</name>
+<description>{{escapeXml description}}</description>
+<location>skill://{{escapeXml name}}</location>
+</skill>
 {{/list}}
 </available_skills>
 {{/if}}
@@ -56,10 +56,10 @@ The following rules define project-specific guidelines and constraints:
 {{#list globs join="\n"}}
       <glob>{{escapeXml this}}</glob>
 {{/list}}
-    </globs>
+</globs>
 {{/if}}
     <location>rule://{{escapeXml name}}</location>
-  </rule>
+</rule>
 {{/list}}
 </rules>
 {{/if}}

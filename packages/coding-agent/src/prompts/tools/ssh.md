@@ -13,18 +13,15 @@ Execute commands on remote SSH hosts.
 - Files: `ls`, `cat`, `head`, `tail`, `grep`, `find`
 - System: `ps`, `top`, `df`, `uname`, `free` (Linux), `df`, `uname`, `top` (macOS)
 - Navigation: `cd`, `pwd`
-
 **windows/bash, windows/sh** — Windows with Unix compatibility layer (WSL, Cygwin, Git Bash):
 - Files: `ls`, `cat`, `head`, `tail`, `grep`, `find`
 - System: `ps`, `top`, `df`, `uname`
 - Navigation: `cd`, `pwd`
 - Note: These are Windows hosts but use Unix commands
-
 **windows/powershell** — Native Windows PowerShell:
 - Files: `Get-ChildItem`, `Get-Content`, `Select-String`
 - System: `Get-Process`, `Get-ComputerInfo`
 - Navigation: `Set-Location`, `Get-Location`
-
 **windows/cmd** — Native Windows Command Prompt:
 - Files: `dir`, `type`, `findstr`, `where`
 - System: `tasklist`, `systeminfo`

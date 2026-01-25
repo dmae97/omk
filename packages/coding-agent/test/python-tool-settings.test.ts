@@ -51,7 +51,7 @@ describe("python tool settings", () => {
 		vi.spyOn(pythonKernel, "checkPythonKernelAvailability").mockResolvedValue({ ok: true });
 		const tools = await createTools(createSession(testDir), ["python"]);
 
-		expect(tools.map(tool => tool.name)).toEqual(["python"]);
+		expect(tools.map(tool => tool.name).sort()).toEqual(["exit_plan_mode", "python"]);
 	});
 
 	it("falls back to bash when python is unavailable", async () => {
@@ -61,7 +61,7 @@ describe("python tool settings", () => {
 		});
 		const tools = await createTools(createSession(testDir), ["python"]);
 
-		expect(tools.map(tool => tool.name)).toEqual(["bash"]);
+		expect(tools.map(tool => tool.name).sort()).toEqual(["bash", "exit_plan_mode"]);
 	});
 
 	it("passes kernel mode from settings to executor", async () => {

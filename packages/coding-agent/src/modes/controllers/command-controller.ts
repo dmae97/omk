@@ -339,6 +339,7 @@ export class CommandController {
 
 	handleHotkeysCommand(): void {
 		const expandToolsKey = this.ctx.keybindings.getDisplayString("expandTools") || "Ctrl+O";
+		const planModeKey = this.ctx.keybindings.getDisplayString("togglePlanMode") || "Alt+Shift+P";
 		const hotkeys = `
 **Navigation**
 | Key | Action |
@@ -370,6 +371,7 @@ export class CommandController {
 | \`Shift+Ctrl+P\` | Cycle role models (temporary) |
 | \`Alt+P\` | Select model (temporary) |
 | \`Ctrl+L\` | Select model (set roles) |
+| \`${planModeKey}\` | Toggle plan mode |
 | \`Ctrl+R\` | Search prompt history |
 | \`${expandToolsKey}\` | Toggle tool output expansion |
 | \`Ctrl+T\` | Toggle todo list expansion |
@@ -625,6 +627,46 @@ export class CommandController {
 			this.ctx.editor.onEscape = originalOnEscape;
 		}
 		await this.ctx.flushCompactionQueue({ willRetry: false });
+	}
+
+	async handleHandoffCommand(customInstructions?: string): Promise<void> {
+		const entries = this.ctx.sessionManager.getEntries();
+		const messageCount = entries.filter(e => e.type === "message").length;
+
+		if (messageCount < 2) {
+			this.ctx.showWarning("Nothing to hand off (no messages yet)");
+			return;
+		}
+
+		try {
+			// The agent will visibly generate the handoff document in chat
+			const result = await this.ctx.session.handoff(customInstructions);
+
+			if (!result) {
+				this.ctx.showError("Handoff cancelled");
+				return;
+			}
+
+			// Rebuild chat from the new session (which now contains the handoff document)
+			this.ctx.rebuildChatFromMessages();
+
+			this.ctx.statusLine.invalidate();
+			this.ctx.updateEditorTopBorder();
+			await this.ctx.reloadTodos();
+
+			this.ctx.chatContainer.addChild(new Spacer(1));
+			this.ctx.chatContainer.addChild(
+				new Text(`${theme.fg("accent", `${theme.status.success} New session started with handoff context`)}`, 1, 1),
+			);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			if (message === "Handoff cancelled" || (error instanceof Error && error.name === "AbortError")) {
+				this.ctx.showError("Handoff cancelled");
+			} else {
+				this.ctx.showError(`Handoff failed: ${message}`);
+			}
+		}
+		this.ctx.ui.requestRender();
 	}
 }
 

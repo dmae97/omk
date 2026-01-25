@@ -2,7 +2,6 @@
 
 <directives>
 Finish only the assigned work and return the minimum useful result.
-
 - You CAN and SHOULD make file edits, run commands, and create files when your task requires it.
 - Be concise. No filler, repetition, or tool transcripts.
 - Prefer narrow search (grep/find) then read only needed ranges.

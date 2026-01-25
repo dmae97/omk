@@ -14,6 +14,7 @@
  */
 
 import * as fs from "node:fs";
+
 import type { Agent, AgentEvent, AgentMessage, AgentState, AgentTool, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type {
 	AssistantMessage,
@@ -26,6 +27,7 @@ import type {
 	UsageReport,
 } from "@oh-my-pi/pi-ai";
 import { isContextOverflow, modelsAreEqual, supportsXhigh } from "@oh-my-pi/pi-ai";
+import { resolvePlanUrlToPath } from "@oh-my-pi/pi-coding-agent/internal-urls";
 import { abortableSleep, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 import type { Rule } from "../capability/rule";
@@ -62,6 +64,9 @@ import { expandSlashCommand, type FileSlashCommand } from "../extensibility/slas
 import { executePython as executePythonCommand, type PythonResult } from "../ipy/executor";
 import { theme } from "../modes/theme/theme";
 import { normalizeDiff, normalizeToLF, ParseError, previewPatch, stripBom } from "../patch";
+import type { PlanModeState } from "../plan-mode/state";
+import planModeActivePrompt from "../prompts/system/plan-mode-active.md" with { type: "text" };
+import planModeReferencePrompt from "../prompts/system/plan-mode-reference.md" with { type: "text" };
 import ttsrInterruptTemplate from "../prompts/system/ttsr-interrupt.md" with { type: "text" };
 import { closeAllConnections } from "../ssh/connection-manager";
 import { unmountAll } from "../ssh/sshfs-mount";
@@ -188,6 +193,11 @@ export interface SessionStats {
 	cost: number;
 }
 
+/** Result from handoff() */
+export interface HandoffResult {
+	document: string;
+}
+
 /** Internal marker for hook messages queued through the agent loop */
 // ============================================================================
 // Constants
@@ -255,6 +265,8 @@ export class AgentSession {
 	private _followUpMessages: string[] = [];
 	/** Messages queued to be included with the next user prompt as context ("asides"). */
 	private _pendingNextTurnMessages: CustomMessage[] = [];
+	private _planModeState: PlanModeState | undefined;
+	private _planReferenceSent = false;
 
 	// Compaction state
 	private _compactionAbortController: AbortController | undefined = undefined;
@@ -262,6 +274,9 @@ export class AgentSession {
 
 	// Branch summarization state
 	private _branchSummaryAbortController: AbortController | undefined = undefined;
+
+	// Handoff state
+	private _handoffAbortController: AbortController | undefined = undefined;
 
 	// Retry state
 	private _retryAbortController: AbortController | undefined = undefined;
@@ -970,6 +985,25 @@ export class AgentSession {
 	}
 
 	/** Prompt templates */
+	getPlanModeState(): PlanModeState | undefined {
+		return this._planModeState;
+	}
+
+	setPlanModeState(state: PlanModeState | undefined): void {
+		this._planModeState = state;
+		if (state?.enabled) {
+			this._planReferenceSent = false;
+		}
+	}
+
+	markPlanReferenceSent(): void {
+		this._planReferenceSent = true;
+	}
+
+	resolveRoleModel(role: string): Model<any> | undefined {
+		return this._resolveRoleModel(role, this._modelRegistry.getAvailable(), this.model);
+	}
+
 	get promptTemplates(): ReadonlyArray<PromptTemplate> {
 		return this._promptTemplates;
 	}
@@ -982,6 +1016,95 @@ export class AgentSession {
 	// =========================================================================
 	// Prompting
 	// =========================================================================
+
+	/**
+	 * Build a plan mode message.
+	 * Returns null if plan mode is not enabled.
+	 * @returns The plan mode message, or null if plan mode is not enabled.
+	 */
+	private async _buildPlanReferenceMessage(): Promise<CustomMessage | null> {
+		if (this._planModeState?.enabled) return null;
+		if (this._planReferenceSent) return null;
+
+		const planFilePath = `plan://${this.sessionManager.getSessionId()}/plan.md`;
+		const resolvedPlanPath = resolvePlanUrlToPath(planFilePath, {
+			getPlansDirectory: this.settingsManager.getPlansDirectory.bind(this.settingsManager),
+			cwd: this.sessionManager.getCwd(),
+		});
+		let planContent: string;
+		try {
+			planContent = await fs.promises.readFile(resolvedPlanPath, "utf-8");
+		} catch (error) {
+			if (isEnoent(error)) {
+				return null;
+			}
+			throw error;
+		}
+
+		const content = renderPromptTemplate(planModeReferencePrompt, {
+			planFilePath,
+			planContent,
+		});
+
+		this._planReferenceSent = true;
+
+		return {
+			role: "custom",
+			customType: "plan-mode-reference",
+			content,
+			display: false,
+			timestamp: Date.now(),
+		};
+	}
+
+	private async _buildPlanModeMessage(): Promise<CustomMessage | null> {
+		const state = this._planModeState;
+		if (!state?.enabled) return null;
+		const sessionPlanUrl = `plan://${this.sessionManager.getSessionId()}/plan.md`;
+		const resolvedPlanPath = state.planFilePath.startsWith("plan://")
+			? resolvePlanUrlToPath(state.planFilePath, {
+					getPlansDirectory: this.settingsManager.getPlansDirectory.bind(this.settingsManager),
+					cwd: this.sessionManager.getCwd(),
+				})
+			: resolveToCwd(state.planFilePath, this.sessionManager.getCwd());
+		const resolvedSessionPlan = resolvePlanUrlToPath(sessionPlanUrl, {
+			getPlansDirectory: this.settingsManager.getPlansDirectory.bind(this.settingsManager),
+			cwd: this.sessionManager.getCwd(),
+		});
+		const displayPlanPath =
+			state.planFilePath.startsWith("plan://") || resolvedPlanPath !== resolvedSessionPlan
+				? state.planFilePath
+				: sessionPlanUrl;
+
+		let planExists = false;
+		try {
+			const stat = await fs.promises.stat(resolvedPlanPath);
+			planExists = stat.isFile();
+		} catch (error) {
+			if (!isEnoent(error)) {
+				throw error;
+			}
+		}
+
+		const content = renderPromptTemplate(planModeActivePrompt, {
+			planFilePath: displayPlanPath,
+			planExists,
+			askToolName: "ask",
+			writeToolName: "write",
+			editToolName: "edit",
+			exitToolName: "exit_plan_mode",
+			reentry: state.reentry ?? false,
+			iterative: state.workflow === "iterative",
+		});
+
+		return {
+			role: "custom",
+			customType: "plan-mode-context",
+			content,
+			display: false,
+			timestamp: Date.now(),
+		};
+	}
 
 	/**
 	 * Send a prompt to the agent.
@@ -1069,6 +1192,14 @@ export class AgentSession {
 
 		// Build messages array (custom messages if any, then user message)
 		const messages: AgentMessage[] = [];
+		const planReferenceMessage = await this._buildPlanReferenceMessage?.();
+		if (planReferenceMessage) {
+			messages.push(planReferenceMessage);
+		}
+		const planModeMessage = await this._buildPlanModeMessage();
+		if (planModeMessage) {
+			messages.push(planModeMessage);
+		}
 
 		// Add user message
 		const userContent: (TextContent | ImageContent)[] = [{ type: "text", text: expandedText }];
@@ -1512,6 +1643,7 @@ export class AgentSession {
 		this._followUpMessages = [];
 		this._pendingNextTurnMessages = [];
 		this._todoReminderCount = 0;
+		this._planReferenceSent = false;
 		this._reconnectToAgent();
 
 		// Emit session_switch event with reason "new" to hooks
@@ -1943,6 +2075,141 @@ export class AgentSession {
 	 */
 	abortBranchSummary(): void {
 		this._branchSummaryAbortController?.abort();
+	}
+
+	/**
+	 * Cancel in-progress handoff generation.
+	 */
+	abortHandoff(): void {
+		this._handoffAbortController?.abort();
+	}
+
+	/**
+	 * Check if handoff generation is in progress.
+	 */
+	get isGeneratingHandoff(): boolean {
+		return this._handoffAbortController !== undefined;
+	}
+
+	/**
+	 * Generate a handoff document by asking the agent, then start a new session with it.
+	 *
+	 * This prompts the current agent to write a comprehensive handoff document,
+	 * waits for completion, then starts a fresh session with the handoff as context.
+	 *
+	 * @param customInstructions Optional focus for the handoff document
+	 * @returns The handoff document text, or undefined if cancelled/failed
+	 */
+	async handoff(customInstructions?: string): Promise<HandoffResult | undefined> {
+		const entries = this.sessionManager.getBranch();
+		const messageCount = entries.filter(e => e.type === "message").length;
+
+		if (messageCount < 2) {
+			throw new Error("Nothing to hand off (no messages yet)");
+		}
+
+		this._handoffAbortController = new AbortController();
+
+		// Build the handoff prompt
+		let handoffPrompt = `Write a comprehensive handoff document that will allow another instance of yourself to seamlessly continue this work. The document should capture everything needed to resume without access to this conversation.
+
+Use this format:
+
+## Goal
+[What the user is trying to accomplish]
+
+## Constraints & Preferences
+- [Any constraints, preferences, or requirements mentioned]
+
+## Progress
+### Done
+- [x] [Completed tasks with specifics]
+
+### In Progress
+- [ ] [Current work if any]
+
+### Pending
+- [ ] [Tasks mentioned but not started]
+
+## Key Decisions
+- **[Decision]**: [Rationale]
+
+## Critical Context
+- [Code snippets, file paths, error messages, or data essential to continue]
+- [Repository state if relevant]
+
+## Next Steps
+1. [What should happen next]
+
+Be thorough - include exact file paths, function names, error messages, and technical details. Output ONLY the handoff document, no other text.`;
+
+		if (customInstructions) {
+			handoffPrompt += `\n\nAdditional focus: ${customInstructions}`;
+		}
+
+		// Create a promise that resolves when the agent completes
+		let handoffText: string | undefined;
+		const completionPromise = new Promise<void>((resolve, reject) => {
+			const unsubscribe = this.subscribe(event => {
+				if (this._handoffAbortController?.signal.aborted) {
+					unsubscribe();
+					reject(new Error("Handoff cancelled"));
+					return;
+				}
+
+				if (event.type === "agent_end") {
+					unsubscribe();
+					// Extract text from the last assistant message
+					const messages = this.agent.state.messages;
+					for (let i = messages.length - 1; i >= 0; i--) {
+						const msg = messages[i];
+						if (msg.role === "assistant") {
+							const content = (msg as AssistantMessage).content;
+							const textParts = content
+								.filter((c): c is { type: "text"; text: string } => c.type === "text")
+								.map(c => c.text);
+							if (textParts.length > 0) {
+								handoffText = textParts.join("\n");
+								break;
+							}
+						}
+					}
+					resolve();
+				}
+			});
+		});
+
+		try {
+			// Send the prompt and wait for completion
+			await this.prompt(handoffPrompt, { expandPromptTemplates: false });
+			await completionPromise;
+
+			if (!handoffText || this._handoffAbortController.signal.aborted) {
+				return undefined;
+			}
+
+			// Start a new session
+			await this.sessionManager.flush();
+			this.sessionManager.newSession();
+			this.agent.reset();
+			this.agent.sessionId = this.sessionManager.getSessionId();
+			this._steeringMessages = [];
+			this._followUpMessages = [];
+			this._pendingNextTurnMessages = [];
+			this._todoReminderCount = 0;
+
+			// Inject the handoff document as a custom message
+			const handoffContent = `<handoff-context>\n${handoffText}\n</handoff-context>\n\nThe above is a handoff document from a previous session. Use this context to continue the work seamlessly.`;
+			this.sessionManager.appendCustomMessageEntry("handoff", handoffContent, true);
+
+			// Rebuild agent messages from session
+			const sessionContext = this.sessionManager.buildSessionContext();
+			this.agent.replaceMessages(sessionContext.messages);
+
+			return { document: handoffText };
+		} finally {
+			this._handoffAbortController = undefined;
+		}
 	}
 
 	/**

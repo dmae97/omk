@@ -2,6 +2,49 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
+/**
+ * Check if query is a subsequence of target (fuzzy match).
+ * "wig" matches "skill:wig" because w-i-g appear in order.
+ */
+function fuzzyMatch(query: string, target: string): boolean {
+	if (query.length === 0) return true;
+	if (query.length > target.length) return false;
+
+	let qi = 0;
+	for (let ti = 0; ti < target.length && qi < query.length; ti++) {
+		if (query[qi] === target[ti]) qi++;
+	}
+	return qi === query.length;
+}
+
+/**
+ * Score a fuzzy match. Higher = better match.
+ * Prioritizes: exact match > starts-with > contains > subsequence
+ */
+function fuzzyScore(query: string, target: string): number {
+	if (query.length === 0) return 1;
+	if (target === query) return 100;
+	if (target.startsWith(query)) return 80;
+	if (target.includes(query)) return 60;
+
+	// Subsequence match - score by how "tight" the match is
+	// (fewer gaps between matched characters = higher score)
+	let qi = 0;
+	let gaps = 0;
+	let lastMatchIdx = -1;
+	for (let ti = 0; ti < target.length && qi < query.length; ti++) {
+		if (query[qi] === target[ti]) {
+			if (lastMatchIdx >= 0 && ti - lastMatchIdx > 1) gaps++;
+			lastMatchIdx = ti;
+			qi++;
+		}
+	}
+	if (qi !== query.length) return 0;
+
+	// Base score 40 for subsequence, minus penalty for gaps
+	return Math.max(1, 40 - gaps * 5);
+}
+
 async function walkDirectoryWithFd(
 	baseDir: string,
 	fdPath: string,
@@ -133,21 +176,39 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 			if (spaceIndex === -1) {
 				// No space yet - complete command names
 				const prefix = textBeforeCursor.slice(1); // Remove the "/"
-				const filtered = this.commands
-					.filter(cmd => {
-						const name = "name" in cmd ? cmd.name : cmd.value; // Check if SlashCommand or AutocompleteItem
-						return name?.toLowerCase().startsWith(prefix.toLowerCase());
-					})
-					.map(cmd => ({
-						value: "name" in cmd ? cmd.name : cmd.value,
-						label: "name" in cmd ? cmd.name : cmd.label,
-						...(cmd.description && { description: cmd.description }),
-					}));
+				const lowerPrefix = prefix.toLowerCase();
 
-				if (filtered.length === 0) return null;
+				// Filter commands using fuzzy matching (subsequence match)
+				const matches = this.commands
+					.filter(cmd => {
+						const name = "name" in cmd ? cmd.name : cmd.value;
+						if (!name) return false;
+						// Match name or description
+						if (fuzzyMatch(lowerPrefix, name.toLowerCase())) return true;
+						const desc = cmd.description?.toLowerCase();
+						return desc ? fuzzyMatch(lowerPrefix, desc) : false;
+					})
+					.map(cmd => {
+						const name = "name" in cmd ? cmd.name : cmd.value;
+						const lowerName = name?.toLowerCase() ?? "";
+						const lowerDesc = cmd.description?.toLowerCase() ?? "";
+						// Score name matches higher than description matches
+						const nameScore = fuzzyMatch(lowerPrefix, lowerName) ? fuzzyScore(lowerPrefix, lowerName) : 0;
+						const descScore = fuzzyMatch(lowerPrefix, lowerDesc) ? fuzzyScore(lowerPrefix, lowerDesc) * 0.5 : 0;
+						return {
+							value: name,
+							label: "name" in cmd ? cmd.name : cmd.label,
+							score: Math.max(nameScore, descScore),
+							...(cmd.description && { description: cmd.description }),
+						};
+					})
+					.sort((a, b) => b.score - a.score)
+					.map(({ score: _, ...rest }) => rest);
+
+				if (matches.length === 0) return null;
 
 				return {
-					items: filtered,
+					items: matches,
 					prefix: textBeforeCursor,
 				};
 			} else {

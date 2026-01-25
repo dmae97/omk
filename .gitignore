@@ -36,8 +36,6 @@ out.html
 
 # Claude Code - allow commands to be tracked
 !.claude/
-.claude/*
-!.claude/commands/
 packages/ai/test/.temp-images/
 
 changes/

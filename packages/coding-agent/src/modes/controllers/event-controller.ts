@@ -7,6 +7,7 @@ import { TtsrNotificationComponent } from "../../modes/components/ttsr-notificat
 import { getSymbolTheme, theme } from "../../modes/theme/theme";
 import type { InteractiveModeContext, TodoItem } from "../../modes/types";
 import type { AgentSessionEvent } from "../../session/agent-session";
+import type { ExitPlanModeDetails } from "../../tools";
 import { detectNotificationProtocol, isNotificationSuppressed, sendNotification } from "../../utils/terminal-notify";
 
 export class EventController {
@@ -244,6 +245,18 @@ export class EventController {
 					const details = event.result.details as { todos?: TodoItem[] } | undefined;
 					if (details?.todos) {
 						this.ctx.setTodos(details.todos);
+					}
+				}
+				if (event.toolName === "enter_plan_mode" && !event.isError) {
+					const details = event.result.details as import("../../tools").EnterPlanModeDetails | undefined;
+					if (details) {
+						await this.ctx.handleEnterPlanModeTool(details);
+					}
+				}
+				if (event.toolName === "exit_plan_mode" && !event.isError) {
+					const details = event.result.details as ExitPlanModeDetails | undefined;
+					if (details) {
+						await this.ctx.handleExitPlanModeTool(details);
 					}
 				}
 				break;

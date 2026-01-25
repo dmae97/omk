@@ -22,6 +22,7 @@
 export { AgentProtocolHandler, type AgentProtocolOptions } from "./agent-protocol";
 export { ArtifactProtocolHandler, type ArtifactProtocolOptions } from "./artifact-protocol";
 export { applyQuery, parseQuery, pathToQuery } from "./json-query";
+export { PlanProtocolHandler, type PlanProtocolOptions, resolvePlanUrlToPath } from "./plan-protocol";
 export { InternalUrlRouter } from "./router";
 export { RuleProtocolHandler, type RuleProtocolOptions } from "./rule-protocol";
 export { SkillProtocolHandler, type SkillProtocolOptions } from "./skill-protocol";

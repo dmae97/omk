@@ -162,10 +162,11 @@ function similarityScore(a: string, b: string): number {
 async function listCandidateFiles(
 	searchRoot: string,
 	signal?: AbortSignal,
+	notify?: (message: string) => void,
 ): Promise<{ files: string[]; truncated: boolean; error?: string }> {
 	let fdPath: string | undefined;
 	try {
-		fdPath = await ensureTool("fd", true);
+		fdPath = await ensureTool("fd", { silent: true, notify });
 	} catch {
 		return { files: [], truncated: false, error: "fd not available" };
 	}
@@ -248,6 +249,7 @@ async function findReadPathSuggestions(
 	rawPath: string,
 	cwd: string,
 	signal?: AbortSignal,
+	notify?: (message: string) => void,
 ): Promise<{ suggestions: string[]; scopeLabel?: string; truncated?: boolean; error?: string } | null> {
 	const resolvedPath = resolveToCwd(rawPath, cwd);
 	const searchRoot = await findExistingDirectory(path.dirname(resolvedPath), signal);
@@ -262,7 +264,7 @@ async function findReadPathSuggestions(
 		}
 	}
 
-	const { files, truncated, error } = await listCandidateFiles(searchRoot, signal);
+	const { files, truncated, error } = await listCandidateFiles(searchRoot, signal, notify);
 	const scopeLabel = formatScopeLabel(searchRoot, cwd);
 
 	if (error && files.length === 0) {
@@ -418,7 +420,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		params: ReadParams,
 		signal?: AbortSignal,
 		_onUpdate?: AgentToolUpdateCallback<ReadToolDetails>,
-		_context?: AgentToolContext,
+		toolContext?: AgentToolContext,
 	): Promise<AgentToolResult<ReadToolDetails>> {
 		const { path: readPath, offset, limit, lines } = params;
 
@@ -442,7 +444,9 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 
 				// Skip fuzzy matching for remote mounts (sshfs) to avoid hangs
 				if (!isRemoteMountPath(absolutePath)) {
-					const suggestions = await findReadPathSuggestions(readPath, this.session.cwd, signal);
+					const suggestions = await findReadPathSuggestions(readPath, this.session.cwd, signal, message =>
+						toolContext?.ui?.notify(message, "info"),
+					);
 
 					if (suggestions?.suggestions.length) {
 						const scopeLabel = suggestions.scopeLabel ? ` in ${suggestions.scopeLabel}` : "";

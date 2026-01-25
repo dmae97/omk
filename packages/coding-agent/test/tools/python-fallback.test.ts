@@ -43,7 +43,7 @@ describe("createTools python fallback", () => {
 		const tools = await createTools(session, ["python"]);
 		const names = tools.map(tool => tool.name).sort();
 
-		expect(names).toEqual(["bash"]);
+		expect(names).toEqual(["bash", "exit_plan_mode"]);
 
 		availabilitySpy.mockRestore();
 	});

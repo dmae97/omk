@@ -50,6 +50,7 @@ import {
 	loadCustomCommands as loadCustomCommandsInternal,
 } from "./extensibility/custom-commands";
 import type { CustomTool, CustomToolContext, CustomToolSessionEvent } from "./extensibility/custom-tools/types";
+import { CustomToolAdapter } from "./extensibility/custom-tools/wrapper";
 import {
 	discoverAndLoadExtensions,
 	type ExtensionContext,
@@ -69,6 +70,7 @@ import {
 	AgentProtocolHandler,
 	ArtifactProtocolHandler,
 	InternalUrlRouter,
+	PlanProtocolHandler,
 	RuleProtocolHandler,
 	SkillProtocolHandler,
 } from "./internal-urls";
@@ -743,12 +745,14 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		outputSchema: options.outputSchema,
 		requireCompleteTool: options.requireCompleteTool,
 		getSessionFile: () => sessionManager.getSessionFile() ?? null,
+		getSessionId: () => sessionManager.getSessionId?.() ?? null,
 		getSessionSpawns: () => options.spawns ?? "*",
 		getModelString: () => (hasExplicitModel && model ? formatModelString(model) : undefined),
 		getActiveModelString: () => {
 			const activeModel = agent?.state.model;
 			return activeModel ? formatModelString(activeModel) : undefined;
 		},
+		getPlanModeState: () => session.getPlanModeState(),
 		settings: settingsManager,
 		settingsManager,
 		authStorage,
@@ -763,6 +767,12 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	};
 	internalRouter.register(new AgentProtocolHandler({ getArtifactsDir }));
 	internalRouter.register(new ArtifactProtocolHandler({ getArtifactsDir }));
+	internalRouter.register(
+		new PlanProtocolHandler({
+			getPlansDirectory: settingsManager.getPlansDirectory.bind(settingsManager),
+			cwd,
+		}),
+	);
 	internalRouter.register(
 		new SkillProtocolHandler({
 			getSkills: () => skills,
@@ -924,14 +934,33 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const toolContextStore = new ToolContextStore(getSessionContext);
 
 	const registeredTools = extensionRunner?.getAllRegisteredTools() ?? [];
-	const allCustomTools = [
-		...registeredTools,
-		...(options.customTools?.map(tool => {
-			const definition = isCustomTool(tool) ? customToolToDefinition(tool) : tool;
-			return { definition, extensionPath: "<sdk>" };
-		}) ?? []),
-	];
-	const wrappedExtensionTools = extensionRunner ? wrapRegisteredTools(allCustomTools, extensionRunner) : [];
+	let wrappedExtensionTools: AgentTool[];
+
+	if (extensionRunner) {
+		// With extension runner: convert CustomTools to ToolDefinitions and wrap all together
+		const allCustomTools = [
+			...registeredTools,
+			...(options.customTools?.map(tool => {
+				const definition = isCustomTool(tool) ? customToolToDefinition(tool) : tool;
+				return { definition, extensionPath: "<sdk>" };
+			}) ?? []),
+		];
+		wrappedExtensionTools = wrapRegisteredTools(allCustomTools, extensionRunner);
+	} else {
+		// Without extension runner: wrap CustomTools directly with CustomToolAdapter
+		// ToolDefinition items require ExtensionContext and cannot be used without a runner
+		const customToolContext = (): CustomToolContext => ({
+			sessionManager,
+			modelRegistry,
+			model: agent?.state.model,
+			isIdle: () => !session?.isStreaming,
+			hasQueuedMessages: () => (session?.queuedMessageCount ?? 0) > 0,
+			abort: () => session?.abort(),
+		});
+		wrappedExtensionTools = (options.customTools ?? [])
+			.filter(isCustomTool)
+			.map(tool => CustomToolAdapter.wrap(tool, customToolContext) as AgentTool);
+	}
 
 	// All built-in tools are active (conditional tools like git/ask return null from factory if disabled)
 	const toolRegistry = new Map<string, AgentTool>();
@@ -989,7 +1018,25 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		return options.systemPrompt(defaultPrompt);
 	};
 
-	const systemPrompt = await rebuildSystemPrompt(Array.from(toolRegistry.keys()), toolRegistry);
+	const toolNamesFromRegistry = Array.from(toolRegistry.keys());
+	const requestedToolNames = options.toolNames ?? toolNamesFromRegistry;
+	const normalizedRequested = requestedToolNames.filter(name => toolRegistry.has(name));
+	const includeExitPlanMode = options.toolNames?.includes("exit_plan_mode") ?? false;
+	const initialToolNames = includeExitPlanMode
+		? normalizedRequested
+		: normalizedRequested.filter(name => name !== "exit_plan_mode");
+
+	// Custom tools are always included regardless of toolNames filter
+	if (options.customTools) {
+		const customToolNames = options.customTools.map(t => (isCustomTool(t) ? t.name : t.name));
+		for (const name of customToolNames) {
+			if (toolRegistry.has(name) && !initialToolNames.includes(name)) {
+				initialToolNames.push(name);
+			}
+		}
+	}
+
+	const systemPrompt = await rebuildSystemPrompt(initialToolNames, toolRegistry);
 	time("buildSystemPrompt");
 
 	const promptTemplates = options.promptTemplates ?? (await discoverPromptTemplates(cwd, agentDir));
@@ -1038,12 +1085,16 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		toolContextStore.setUIContext(uiContext, hasUI);
 	};
 
+	const initialTools = initialToolNames
+		.map(name => toolRegistry.get(name))
+		.filter((tool): tool is AgentTool => tool !== undefined);
+
 	agent = new Agent({
 		initialState: {
 			systemPrompt,
 			model,
 			thinkingLevel,
-			tools: Array.from(toolRegistry.values()),
+			tools: initialTools,
 		},
 		convertToLlm: convertToLlmWithBlockImages,
 		sessionId: sessionManager.getSessionId(),

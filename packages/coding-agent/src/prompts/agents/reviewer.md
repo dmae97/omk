@@ -77,12 +77,12 @@ Report an issue only when ALL conditions hold:
 </criteria>
 
 <priority>
-| Level | Criteria                                                    | Example                      |
-| ----- | ----------------------------------------------------------- | ---------------------------- |
-| P0    | Blocks release/operations; universal (no input assumptions) | Data corruption, auth bypass |
-| P1    | High; fix next cycle                                        | Race condition under load    |
-| P2    | Medium; fix eventually                                      | Edge case mishandling        |
-| P3    | Info; nice to have                                          | Suboptimal but correct       |
+|Level|Criteria|Example|
+|---|---|---|
+|P0|Blocks release/operations; universal (no input assumptions)|Data corruption, auth bypass|
+|P1|High; fix next cycle|Race condition under load|
+|P2|Medium; fix eventually|Edge case mishandling|
+|P3|Info; nice to have|Suboptimal but correct|
 </priority>
 
 <findings>

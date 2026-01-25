@@ -41,20 +41,20 @@ Input observations:
 
 Output:
 {
-  "type": "fix",
-  "scope": "api",
-  "details": [
-    {
-      "text": "Added token refresh guard to prevent duplicate refreshes.",
-      "changelog_category": "Fixed",
-      "user_visible": true
-    },
-    {
-      "text": "Introduced retry wrapper for 429 responses.",
-      "changelog_category": "Fixed",
-      "user_visible": true
-    }
-  ],
-  "issue_refs": []
+"type": "fix",
+"scope": "api",
+"details": [
+{
+"text": "Added token refresh guard to prevent duplicate refreshes.",
+"changelog_category": "Fixed",
+"user_visible": true
+},
+{
+"text": "Introduced retry wrapper for 429 responses.",
+"changelog_category": "Fixed",
+"user_visible": true
+}
+],
+"issue_refs": []
 }
 </example>

@@ -88,6 +88,11 @@ export class InputController {
 			this.ctx.editor.setCustomKeyHandler(key, () => this.handleDequeue());
 		}
 
+		const planModeKeys = this.ctx.keybindings.getKeys("togglePlanMode");
+		for (const key of planModeKeys) {
+			this.ctx.editor.setCustomKeyHandler(key, () => void this.ctx.handlePlanModeCommand());
+		}
+
 		this.ctx.editor.onChange = (text: string) => {
 			const wasBashMode = this.ctx.isBashMode;
 			const wasPythonMode = this.ctx.isPythonMode;
@@ -180,6 +185,11 @@ export class InputController {
 				this.ctx.editor.setText("");
 				return;
 			}
+			if (text === "/plan") {
+				await this.ctx.handlePlanModeCommand();
+				this.ctx.editor.setText("");
+				return;
+			}
 			if (text === "/model" || text === "/models") {
 				this.ctx.showModelSelector();
 				this.ctx.editor.setText("");
@@ -263,6 +273,12 @@ export class InputController {
 				const customInstructions = text.startsWith("/compact ") ? text.slice(9).trim() : undefined;
 				this.ctx.editor.setText("");
 				await this.ctx.handleCompactCommand(customInstructions);
+				return;
+			}
+			if (text === "/handoff" || text.startsWith("/handoff ")) {
+				const customInstructions = text.startsWith("/handoff ") ? text.slice(9).trim() : undefined;
+				this.ctx.editor.setText("");
+				await this.ctx.handleHandoffCommand(customInstructions);
 				return;
 			}
 			if (text === "/background" || text === "/bg") {

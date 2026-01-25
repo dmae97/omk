@@ -163,7 +163,9 @@ export interface PerplexityRequest {
 	search_recency_filter?: "day" | "week" | "month" | "year";
 	return_images?: boolean;
 	return_related_questions?: boolean;
-	search_context_size?: "low" | "medium" | "high";
+	web_search_options?: {
+		search_context_size?: "low" | "medium" | "high";
+	};
 }
 
 export interface PerplexitySearchResult {

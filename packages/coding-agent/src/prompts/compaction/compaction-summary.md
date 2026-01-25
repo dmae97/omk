@@ -3,6 +3,7 @@ The messages above are a conversation to summarize. Create a structured context 
 Use this EXACT format:
 
 ## Goal
+
 [What is the user trying to accomplish? Can be multiple items if the session covers different tasks.]
 
 ## Constraints & Preferences
@@ -10,6 +11,7 @@ Use this EXACT format:
 - [Or "(none)" if none were mentioned]
 
 ## Progress
+
 ### Done
 - [x] [Completed tasks/changes]
 

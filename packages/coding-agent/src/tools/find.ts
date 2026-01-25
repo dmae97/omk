@@ -127,7 +127,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 		params: Static<typeof findSchema>,
 		signal?: AbortSignal,
 		_onUpdate?: AgentToolUpdateCallback<FindToolDetails>,
-		_context?: AgentToolContext,
+		context?: AgentToolContext,
 	): Promise<AgentToolResult<FindToolDetails>> {
 		const { pattern, path: searchDir, limit, hidden, type } = params;
 
@@ -196,7 +196,10 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 			}
 
 			// Default: use fd
-			const fdPath = await ensureTool("fd", true);
+			const fdPath = await ensureTool("fd", {
+				silent: true,
+				notify: message => context?.ui?.notify(message, "info"),
+			});
 			if (!fdPath) {
 				throw new ToolError("fd is not available and could not be downloaded");
 			}

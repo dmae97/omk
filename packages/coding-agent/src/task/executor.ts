@@ -81,6 +81,7 @@ export interface ExecutorOptions {
 	modelRegistry?: ModelRegistry;
 	settingsManager?: {
 		serialize: () => import("@oh-my-pi/pi-coding-agent/config/settings-manager").Settings;
+		getPlansDirectory: (cwd?: string) => string;
 		getPythonToolMode?: () => "ipy-only" | "bash-only" | "both";
 		getPythonKernelMode?: () => "session" | "per-call";
 		getPythonSharedGateway?: () => boolean;

@@ -23,7 +23,7 @@ import patchDescription from "../prompts/tools/patch.md" with { type: "text" };
 import replaceDescription from "../prompts/tools/replace.md" with { type: "text" };
 import type { ToolSession } from "../tools";
 import { outputMeta } from "../tools/output-meta";
-import { resolveToCwd } from "../tools/path-utils";
+import { enforcePlanModeWrite, resolvePlanPath } from "../tools/plan-mode-guard";
 import { applyPatch } from "./applicator";
 import { generateDiffString, generateUnifiedDiffString, replaceText } from "./diff";
 import { DEFAULT_FUZZY_THRESHOLD, findMatch } from "./fuzzy";
@@ -290,6 +290,10 @@ export class EditTool implements AgentTool<TInput> {
 			// Normalize unrecognized operations to "update"
 			const op: Operation = rawOp === "create" || rawOp === "delete" ? rawOp : "update";
 
+			enforcePlanModeWrite(this.session, path, { op, rename });
+			const resolvedPath = resolvePlanPath(this.session, path);
+			const resolvedRename = rename ? resolvePlanPath(this.session, rename) : undefined;
+
 			if (path.endsWith(".ipynb")) {
 				throw new Error("Cannot edit Jupyter notebooks with the Edit tool. Use the NotebookEdit tool instead.");
 			}
@@ -297,7 +301,7 @@ export class EditTool implements AgentTool<TInput> {
 				throw new Error("Cannot edit Jupyter notebooks with the Edit tool. Use the NotebookEdit tool instead.");
 			}
 
-			const input: PatchInput = { path, op, rename, diff };
+			const input: PatchInput = { path: resolvedPath, op, rename: resolvedRename, diff };
 			const fs = new LspFileSystem(this.writethrough, signal, batchRequest);
 			const result = await applyPatch(input, {
 				cwd: this.session.cwd,
@@ -366,6 +370,8 @@ export class EditTool implements AgentTool<TInput> {
 		// ─────────────────────────────────────────────────────────────────
 		const { path, old_text, new_text, all } = params as ReplaceParams;
 
+		enforcePlanModeWrite(this.session, path);
+
 		if (path.endsWith(".ipynb")) {
 			throw new Error("Cannot edit Jupyter notebooks with the Edit tool. Use the NotebookEdit tool instead.");
 		}
@@ -374,7 +380,7 @@ export class EditTool implements AgentTool<TInput> {
 			throw new Error("old_text must not be empty.");
 		}
 
-		const absolutePath = resolveToCwd(path, this.session.cwd);
+		const absolutePath = resolvePlanPath(this.session, path);
 		const file = Bun.file(absolutePath);
 
 		if (!(await file.exists())) {

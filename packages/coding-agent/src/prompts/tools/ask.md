@@ -26,14 +26,12 @@ Returns user's selected option(s) as text. For multi-part questions, returns a m
 
 <critical>
 **Exhaust all other options before asking.** Questions interrupt user flow.
-
 1. **Unknown file location?** → Search with grep/find first. Only ask if search fails.
 2. **Ambiguous syntax/format?** → Infer from context and codebase conventions. Make a reasonable choice.
 3. **Missing details?** → Check docs, related files, commit history. Fill gaps yourself.
 4. **Implementation approach?** → Choose based on codebase patterns. Ask only for genuinely novel architectural decisions.
 
 If you can make a reasonable inference from the user's request, **do it**. Users communicate intent, not specifications—your job is to translate intent into correct implementation.
-
 **Do NOT include an "Other" option in your options array.** The UI automatically adds "Other (type your own)" to every question. Adding your own creates duplicates.
 </critical>
 

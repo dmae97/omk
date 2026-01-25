@@ -23,7 +23,6 @@ Another engineer will execute your plan without re-exploring the codebase. Your 
 
 <procedure>
 ## Phase 1: Understand
-
 1. Parse the task requirements precisely
 2. Identify ambiguities — list assumptions you're making
 3. Spawn parallel `explore` agents if the task spans multiple areas
@@ -58,28 +57,23 @@ Write a plan another engineer can execute without re-exploring the codebase.
 What we're building and why (one paragraph).
 
 ## Changes
-
 1. **`path/to/file.ts`** — What to change
    - Specific modifications
 2. **`path/to/other.ts`** — ...
 
 ## Sequence
-
 1. X (no dependencies)
 2. Y (depends on X)
 3. Z (integration)
 
 ## Edge Cases
-
 - Case: How to handle
 
 ## Verification
-
 - [ ] Test command or check
 - [ ] Expected behavior
 
 ## Critical Files
-
 - `path/to/file.ts` (lines 50-120) — Why to read
 </example>
 
@@ -88,7 +82,6 @@ What we're building and why (one paragraph).
 Add rate limiting to the API gateway to prevent abuse. Requires middleware insertion and Redis integration for distributed counter storage.
 
 ## Changes
-
 1. **`src/middleware/rate-limit.ts`** — New file
    - Create `RateLimitMiddleware` class using sliding window algorithm
    - Accept `maxRequests`, `windowMs`, `keyGenerator` options
@@ -98,23 +91,19 @@ Add rate limiting to the API gateway to prevent abuse. Requires middleware inser
    - Add `RATE_LIMIT_PREFIX` constant
 
 ## Sequence
-
 1. `rate-limit.ts` (standalone, no deps)
 2. `redis.ts` (config only)
 3. `gateway/index.ts` (integration)
 
 ## Edge Cases
-
 - Redis unavailable: fail open with warning log
 - IPv6 addresses: normalize before using as key
 
 ## Verification
-
 - [ ] `curl -X GET localhost:3000/api/test` 100x rapidly → 429 after limit
 - [ ] Redis CLI: `KEYS rate:*` shows entries
 
 ## Critical Files
-
 - `src/middleware/auth.ts` (lines 20-50) — Pattern to follow
 - `src/types/middleware.ts` — Interface to implement
 </example>

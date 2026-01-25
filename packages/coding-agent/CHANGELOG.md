@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+- Added core plan mode with plan file approval workflow and tool gating
+- Added plan:// internal URLs for plan file access and subagent plan-mode system prompt
+- Added plan mode toggle shortcut with paused status indicator
+
+### Fixed
+- Fixed plan reference injection and workflow prompt parameters for plan mode
+- Fixed tool downloads hanging on slow/blocked GitHub by adding timeouts and zip extraction fallback
+- Fixed missing UI notification when tools are downloaded or installed on demand
 ## [8.4.0] - 2026-01-25
 
 ### Added

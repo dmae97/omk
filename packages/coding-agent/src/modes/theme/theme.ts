@@ -81,6 +81,7 @@ export type SymbolKey =
 	| "sep.pipe"
 	// Icons
 	| "icon.model"
+	| "icon.plan"
 	| "icon.folder"
 	| "icon.file"
 	| "icon.git"
@@ -278,6 +279,8 @@ const UNICODE_SYMBOLS: SymbolMap = {
 	// Icons
 	// pick: ◈ | alt: ◆ ⬢ ◇
 	"icon.model": "◈",
+	// pick: 📋 | alt: 🗒 📝
+	"icon.plan": "📋",
 	// pick: 📁 | alt: 📂 🗂 🗃
 	"icon.folder": "📁",
 	// pick: 📄 | alt: 📃 📝
@@ -517,6 +520,8 @@ const NERD_SYMBOLS: SymbolMap = {
 	// Icons - Nerd Font specific
 	// pick:  | alt:   ◆
 	"icon.model": "\uec19",
+	// pick:  | alt:  
+	"icon.plan": "\uf2d2",
 	// pick:  | alt:  
 	"icon.folder": "\uf115",
 	// pick:  | alt:  
@@ -705,6 +710,7 @@ const ASCII_SYMBOLS: SymbolMap = {
 	"sep.pipe": " | ",
 	// Icons
 	"icon.model": "[M]",
+	"icon.plan": "plan",
 	"icon.folder": "[D]",
 	"icon.file": "[F]",
 	"icon.git": "git:",
@@ -1397,6 +1403,7 @@ export class Theme {
 	get icon() {
 		return {
 			model: this.symbols["icon.model"],
+			plan: this.symbols["icon.plan"],
 			folder: this.symbols["icon.folder"],
 			file: this.symbols["icon.file"],
 			git: this.symbols["icon.git"],

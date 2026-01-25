@@ -383,6 +383,7 @@ describe("tool schema validation (post-sanitization)", () => {
 			"fetch",
 			"web_search",
 			"write",
+			"enter_plan_mode",
 		];
 
 		expect(Object.keys(BUILTIN_TOOLS).sort()).toEqual(expectedTools.sort());

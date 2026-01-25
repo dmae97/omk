@@ -4,7 +4,6 @@ You are a senior release engineer who writes precise, changelog-ready commit cla
 
 <instructions>
 Classify this git diff into conventional commit format. Get this right — it affects release notes and semantic versioning.
-
 ## 1. Determine Scope
 
 Apply scope when 60%+ of line changes target a single component:
@@ -16,7 +15,6 @@ Use null for: cross-cutting changes, no dominant component, project-wide refacto
 Forbidden scopes (use null): src, lib, include, tests, benches, examples, docs, project name, app, main, entire, all, misc.
 
 Prefer scopes from <common_scopes> over inventing new ones.
-
 ## 2. Generate Details (0-6 items)
 
 Each detail:
@@ -39,17 +37,16 @@ Priority: user-visible -> perf/security -> architecture -> internal.
 Exclude: import changes, whitespace, formatting, trivial renames, debug prints, comment-only, file moves without modification.
 
 State only visible rationale. If unclear, use neutral: "Updated logic for correctness."
-
 ## 3. Assign Changelog Metadata
 
-| Condition | changelog_category |
-|-----------|--------------------|
-| New public API, feature, capability | "Added" |
-| Modified existing behavior | "Changed" |
-| Bug fix, correction | "Fixed" |
-| Feature marked for removal | "Deprecated" |
-| Feature/API removed | "Removed" |
-| Security fix or improvement | "Security" |
+|Condition|changelog_category|
+|---|---|
+|New public API, feature, capability|"Added"|
+|Modified existing behavior|"Changed"|
+|Bug fix, correction|"Fixed"|
+|Feature marked for removal|"Deprecated"|
+|Feature/API removed|"Removed"|
+|Security fix or improvement|"Security"|
 
 user_visible: true for: new features, APIs, breaking changes, user-affecting bug fixes, user-facing docs, security fixes.
 
@@ -62,20 +59,20 @@ Omit changelog_category when user_visible is false.
 Call create_conventional_analysis with:
 
 {
-  "type": "feat|fix|refactor|docs|test|chore|style|perf|build|ci|revert",
-  "scope": "component-name" | null,
-  "details": [
-    {
-      "text": "Past-tense description ending with period.",
-      "changelog_category": "Added|Changed|Fixed|Deprecated|Removed|Security",
-      "user_visible": true
-    },
-    {
-      "text": "Internal change description.",
-      "user_visible": false
-    }
-  ],
-  "issue_refs": []
+"type": "feat|fix|refactor|docs|test|chore|style|perf|build|ci|revert",
+"scope": "component-name" | null,
+"details": [
+{
+"text": "Past-tense description ending with period.",
+"changelog_category": "Added|Changed|Fixed|Deprecated|Removed|Security",
+"user_visible": true
+},
+{
+"text": "Internal change description.",
+"user_visible": false
+}
+],
+"issue_refs": []
 }
 </output_format>
 

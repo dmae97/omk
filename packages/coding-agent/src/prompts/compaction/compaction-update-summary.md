@@ -12,12 +12,14 @@ Update the existing structured summary with new information. RULES:
 Use this EXACT format:
 
 ## Goal
+
 [Preserve existing goals, add new ones if the task expanded]
 
 ## Constraints & Preferences
 - [Preserve existing, add new ones discovered]
 
 ## Progress
+
 ### Done
 - [x] [Include previously done items AND newly completed items]
 

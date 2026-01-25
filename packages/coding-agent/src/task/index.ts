@@ -17,6 +17,9 @@ import * as os from "node:os";
 import path from "node:path";
 import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Usage } from "@oh-my-pi/pi-ai";
+import planModeSubagentPrompt from "@oh-my-pi/pi-coding-agent/prompts/system/plan-mode-subagent.md" with {
+	type: "text",
+};
 import { $ } from "bun";
 import { nanoid } from "nanoid";
 import type { ToolSession } from "..";
@@ -192,14 +195,25 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 			};
 		}
 
-		const effectiveAgentModel = isDefaultModelAlias(agent.model) ? undefined : agent.model;
+		const planModeState = this.session.getPlanModeState?.();
+		const planModeTools = ["read", "grep", "find", "ls", "lsp", "fetch", "web_search"];
+		const effectiveAgent: typeof agent = planModeState?.enabled
+			? {
+					...agent,
+					systemPrompt: `${planModeSubagentPrompt}\n\n${agent.systemPrompt}`,
+					tools: planModeTools,
+					spawns: undefined,
+				}
+			: agent;
+
+		const effectiveAgentModel = isDefaultModelAlias(effectiveAgent.model) ? undefined : effectiveAgent.model;
 		const modelOverride =
 			effectiveAgentModel ?? this.session.getActiveModelString?.() ?? this.session.getModelString?.();
-		const thinkingLevelOverride = agent.thinkingLevel;
+		const thinkingLevelOverride = effectiveAgent.thinkingLevel;
 
 		// Output schema priority: agent frontmatter > params > inherited from parent session
-		const schemaOverridden = outputSchema !== undefined && agent.output !== undefined;
-		const effectiveOutputSchema = agent.output ?? outputSchema ?? this.session.outputSchema;
+		const schemaOverridden = outputSchema !== undefined && effectiveAgent.output !== undefined;
+		const effectiveOutputSchema = effectiveAgent.output ?? outputSchema ?? this.session.outputSchema;
 
 		// Handle empty or missing tasks
 		if (!params.tasks || params.tasks.length === 0) {

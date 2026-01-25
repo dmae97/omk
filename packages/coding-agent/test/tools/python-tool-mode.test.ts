@@ -29,9 +29,9 @@ describe("createTools python fallback", () => {
 		process.env.OMP_PYTHON_SKIP_CHECK = "1";
 		const session = createSession();
 		const tools = await createTools(session, ["python"]);
-		const names = tools.map(tool => tool.name);
+		const names = tools.map(tool => tool.name).sort();
 
-		expect(names).toEqual(["bash"]);
+		expect(names).toEqual(["bash", "exit_plan_mode"]);
 
 		if (previous === undefined) {
 			delete process.env.OMP_PYTHON_SKIP_CHECK;
