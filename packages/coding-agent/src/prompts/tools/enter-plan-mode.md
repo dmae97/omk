@@ -38,6 +38,12 @@ In plan mode:
 Requires user approval to enter. Once approved, you enter read-only exploration mode with restricted tool access.
 </output>
 
+<parameters>
+Optional parameters:
+  - `parallel`: Explore independent threads in parallel before synthesizing.
+  - `iterative`: One thread at a time with checkpoints between steps.
+</parameters>
+
 <example name="auth">
 User: "Add user authentication to the app"
 → Use plan mode: architectural decisions (session vs JWT, where to store tokens, middleware structure)

@@ -1,5 +1,6 @@
 import * as fs from "node:fs/promises";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
+import { StringEnum } from "@oh-my-pi/pi-ai";
 import { isEnoent } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
@@ -9,7 +10,11 @@ import type { ToolSession } from ".";
 import { ToolError } from "./tool-errors";
 
 const enterPlanModeSchema = Type.Object({
-	workflow: Type.Optional(Type.Union([Type.Literal("parallel"), Type.Literal("iterative")])),
+	workflow: Type.Optional(
+		StringEnum(["parallel", "iterative"], {
+			description: "Planning workflow to use",
+		}),
+	),
 });
 
 export interface EnterPlanModeDetails {

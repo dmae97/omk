@@ -16,7 +16,7 @@ import { renderCodeCell, renderOutputBlock, renderStatusLine } from "../tui";
 import { formatDimensionNote, resizeImage } from "../utils/image-resize";
 import { detectSupportedImageMimeTypeFromFile } from "../utils/mime";
 import { ensureTool } from "../utils/tools-manager";
-import { runFd } from "./find";
+import { runRg } from "./grep";
 import { applyListLimit } from "./list-limit";
 import { LsTool } from "./ls";
 import type { OutputMeta } from "./output-meta";
@@ -164,18 +164,26 @@ async function listCandidateFiles(
 	signal?: AbortSignal,
 	notify?: (message: string) => void,
 ): Promise<{ files: string[]; truncated: boolean; error?: string }> {
-	let fdPath: string | undefined;
+	let rgPath: string | undefined;
 	try {
-		fdPath = await ensureTool("fd", { silent: true, notify });
+		rgPath = await ensureTool("rg", { silent: true, notify });
 	} catch {
-		return { files: [], truncated: false, error: "fd not available" };
+		return { files: [], truncated: false, error: "rg not available" };
 	}
 
-	if (!fdPath) {
-		return { files: [], truncated: false, error: "fd not available" };
+	if (!rgPath) {
+		return { files: [], truncated: false, error: "rg not available" };
 	}
 
-	const args: string[] = ["--type", "f", "--color=never", "--hidden", "--max-results", String(MAX_FUZZY_CANDIDATES)];
+	const args: string[] = [
+		"--files",
+		"--color=never",
+		"--hidden",
+		"--glob",
+		"!**/.git/**",
+		"--glob",
+		"!**/node_modules/**",
+	];
 
 	const gitignoreFiles = new Set<string>();
 	const rootGitignore = path.join(searchRoot, ".gitignore");
@@ -185,20 +193,19 @@ async function listCandidateFiles(
 
 	try {
 		const gitignoreArgs = [
-			"--type",
-			"f",
+			"--files",
 			"--color=never",
 			"--hidden",
-			"--absolute-path",
+			"--no-ignore",
+			"--glob",
+			"!**/.git/**",
+			"--glob",
+			"!**/node_modules/**",
 			"--glob",
 			".gitignore",
-			"--exclude",
-			"node_modules",
-			"--exclude",
-			".git",
 			searchRoot,
 		];
-		const { stdout } = await runFd(fdPath, gitignoreArgs, signal);
+		const { stdout } = await runRg(rgPath, gitignoreArgs, signal);
 		const output = stdout.trim();
 		if (output) {
 			const nestedGitignores = output
@@ -224,15 +231,15 @@ async function listCandidateFiles(
 		args.push("--ignore-file", gitignorePath);
 	}
 
-	args.push(".", searchRoot);
+	args.push(searchRoot);
 
-	const { stdout, stderr, exitCode } = await runFd(fdPath, args, signal);
+	const { stdout, stderr, exitCode } = await runRg(rgPath, args, signal);
 	const output = stdout.trim();
 
 	if (!output) {
-		// fd exit codes: 0 = found, 1 = no matches, other = error
+		// rg exit codes: 0 = ok, 1 = no matches, other = error
 		if (exitCode !== 0 && exitCode !== 1) {
-			return { files: [], truncated: false, error: stderr.trim() || `fd failed (exit ${exitCode})` };
+			return { files: [], truncated: false, error: stderr.trim() || `rg failed (exit ${exitCode})` };
 		}
 		return { files: [], truncated: false };
 	}
@@ -242,7 +249,10 @@ async function listCandidateFiles(
 		.map(line => line.replace(/\r$/, "").trim())
 		.filter(line => line.length > 0);
 
-	return { files, truncated: files.length >= MAX_FUZZY_CANDIDATES };
+	const truncated = files.length > MAX_FUZZY_CANDIDATES;
+	const limited = truncated ? files.slice(0, MAX_FUZZY_CANDIDATES) : files;
+
+	return { files: limited, truncated };
 }
 
 async function findReadPathSuggestions(
