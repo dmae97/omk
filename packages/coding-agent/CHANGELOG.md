@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [8.3.0] - 2026-01-25
+
 ### Changed
 - Added request parameter tracking to LSP tool rendering for better diagnostics visibility
 - Added async diff computation and Kitty protocol support to tool execution rendering
