@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+### Fixed
+- Terminal gracefully handles write failures by marking dead instead of exiting the process
 ## [8.2.0] - 2026-01-24
 
 ### Added

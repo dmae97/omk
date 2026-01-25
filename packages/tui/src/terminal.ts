@@ -76,6 +76,7 @@ export class ProcessTerminal implements Terminal {
 	private _kittyProtocolActive = false;
 	private stdinBuffer?: StdinBuffer;
 	private stdinDataHandler?: (data: string) => void;
+	private dead = false;
 
 	get kittyProtocolActive(): boolean {
 		return this._kittyProtocolActive;
@@ -223,12 +224,14 @@ export class ProcessTerminal implements Terminal {
 	}
 
 	private safeWrite(data: string): void {
+		if (this.dead) return;
 		try {
 			process.stdout.write(data);
 		} catch (err) {
-			// EIO means terminal is dead - exit gracefully instead of crashing
+			// EIO means terminal is dead - mark dead and skip all future writes
 			if (err && typeof err === "object" && (err as { code?: string }).code === "EIO") {
-				process.exit(1);
+				this.dead = true;
+				return;
 			}
 			throw err;
 		}
