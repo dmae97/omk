@@ -163,10 +163,14 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 		const { agent: agentName, context, output: outputSchema, isolated } = params;
 		const isIsolated = isolated === true;
 
-		const isDefaultModelAlias = (value: string | undefined): boolean => {
+		const isDefaultModelAlias = (value: string | string[] | undefined): boolean => {
 			if (!value) return true;
-			const normalized = value.trim().toLowerCase();
-			return normalized === "default" || normalized === "pi/default" || normalized === "omp/default";
+			const values = Array.isArray(value) ? value : [value];
+			if (values.length === 0) return true;
+			return values.every(entry => {
+				const normalized = entry.trim().toLowerCase();
+				return normalized === "default" || normalized === "pi/default" || normalized === "omp/default";
+			});
 		};
 
 		// Validate agent exists

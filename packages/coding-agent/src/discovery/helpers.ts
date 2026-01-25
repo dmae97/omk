@@ -156,13 +156,23 @@ export function parseArrayOrCSV(value: unknown): string[] | undefined {
 	return undefined;
 }
 
+/**
+ * Parse model field into a prioritized list.
+ */
+export function parseModelList(value: unknown): string[] | undefined {
+	const parsed = parseArrayOrCSV(value);
+	if (!parsed) return undefined;
+	const normalized = parsed.map(entry => entry.trim()).filter(Boolean);
+	return normalized.length > 0 ? normalized : undefined;
+}
+
 /** Parsed agent fields from frontmatter (excludes source/filePath/systemPrompt) */
 export interface ParsedAgentFields {
 	name: string;
 	description: string;
 	tools?: string[];
 	spawns?: string[] | "*";
-	model?: string;
+	model?: string[];
 	output?: unknown;
 	thinkingLevel?: ThinkingLevel;
 }
@@ -202,7 +212,7 @@ export function parseAgentFields(frontmatter: Record<string, unknown>): ParsedAg
 	}
 
 	const output = frontmatter.output !== undefined ? frontmatter.output : undefined;
-	const model = typeof frontmatter.model === "string" ? frontmatter.model : undefined;
+	const model = parseModelList(frontmatter.model);
 	const thinkingLevel = parseThinkingLevel(frontmatter);
 
 	return { name, description, tools, spawns, model, output, thinkingLevel };

@@ -40,6 +40,19 @@ import type {
 	SubagentWorkerResponse,
 } from "./worker-protocol";
 
+const DEFAULT_MODEL_ALIASES = new Set(["default", "pi/default", "omp/default"]);
+
+function normalizeModelPatterns(value: string | string[] | undefined): string[] {
+	if (!value) return [];
+	if (Array.isArray(value)) {
+		return value.map(entry => entry.trim()).filter(Boolean);
+	}
+	return value
+		.split(",")
+		.map(entry => entry.trim())
+		.filter(Boolean);
+}
+
 /** Options for worker execution */
 export interface ExecutorOptions {
 	cwd: string;
@@ -50,7 +63,7 @@ export interface ExecutorOptions {
 	index: number;
 	id: string;
 	context?: string;
-	modelOverride?: string;
+	modelOverride?: string | string[];
 	thinkingLevel?: ThinkingLevel;
 	outputSchema?: unknown;
 	enableLsp?: boolean;
@@ -283,23 +296,30 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	const serializedSettings = options.settingsManager?.serialize();
 	const availableModels = options.modelRegistry?.getAvailable() ?? [];
 
-	// Resolve model pattern to provider/modelId string
-	const modelPattern = modelOverride ?? agent.model;
+	// Resolve model pattern list to provider/modelId string
+	const modelPatterns = normalizeModelPatterns(modelOverride ?? agent.model);
 	let resolvedModel: string | undefined;
-	if (modelPattern) {
-		// Handle omp/<role> or pi/<role> aliases (e.g., "omp/slow", "pi/fast")
-		let effectivePattern = modelPattern;
-		const lower = modelPattern.toLowerCase();
-		if (lower.startsWith("omp/") || lower.startsWith("pi/")) {
-			const role = lower.startsWith("omp/") ? modelPattern.slice(4) : modelPattern.slice(3);
-			const roles = serializedSettings?.modelRoles as Record<string, string> | undefined;
-			const configured = roles?.[role] ?? roles?.[role.toLowerCase()];
-			if (configured) {
-				effectivePattern = configured;
+	if (modelPatterns.length > 0) {
+		const roles = serializedSettings?.modelRoles as Record<string, string> | undefined;
+		for (const pattern of modelPatterns) {
+			const normalized = pattern.trim().toLowerCase();
+			if (!normalized || DEFAULT_MODEL_ALIASES.has(normalized)) {
+				continue;
+			}
+			let effectivePattern = pattern;
+			if (normalized.startsWith("omp/") || normalized.startsWith("pi/")) {
+				const role = normalized.startsWith("omp/") ? pattern.slice(4) : pattern.slice(3);
+				const configured = roles?.[role] ?? roles?.[role.toLowerCase()];
+				if (configured) {
+					effectivePattern = configured;
+				}
+			}
+			const { model } = parseModelPattern(effectivePattern, availableModels);
+			if (model) {
+				resolvedModel = formatModelString(model);
+				break;
 			}
 		}
-		const { model } = parseModelPattern(effectivePattern, availableModels);
-		resolvedModel = model ? formatModelString(model) : undefined;
 	}
 	const sessionFile = subtaskSessionFile ?? null;
 	const spawnsEnv = agent.spawns === undefined ? "" : agent.spawns === "*" ? "*" : agent.spawns.join(",");

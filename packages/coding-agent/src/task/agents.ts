@@ -18,7 +18,7 @@ interface AgentFrontmatter {
 	name: string;
 	description: string;
 	spawns?: string;
-	model?: string;
+	model?: string | string[];
 	thinkingLevel?: string;
 }
 

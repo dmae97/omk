@@ -97,7 +97,7 @@ export interface AgentDefinition {
 	systemPrompt: string;
 	tools?: string[];
 	spawns?: string[] | "*";
-	model?: string;
+	model?: string[];
 	thinkingLevel?: ThinkingLevel;
 	output?: unknown;
 	source: AgentSource;
@@ -122,7 +122,7 @@ export interface AgentProgress {
 	toolCount: number;
 	tokens: number;
 	durationMs: number;
-	modelOverride?: string;
+	modelOverride?: string | string[];
 	/** Data extracted by registered subprocess tool handlers (keyed by tool name) */
 	extractedToolData?: Record<string, unknown[]>;
 }
@@ -142,7 +142,7 @@ export interface SingleResult {
 	truncated: boolean;
 	durationMs: number;
 	tokens: number;
-	modelOverride?: string;
+	modelOverride?: string | string[];
 	error?: string;
 	aborted?: boolean;
 	/** Aggregated usage from the subprocess, accumulated incrementally from message_end events. */
