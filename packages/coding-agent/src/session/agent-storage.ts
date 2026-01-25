@@ -23,6 +23,12 @@ type AuthRow = {
 	data: string;
 };
 
+/** Row shape for model_usage table queries */
+type ModelUsageRow = {
+	model_key: string;
+	last_used_at: number;
+};
+
 /**
  * Auth credential with database row ID for updates/deletes.
  * Wraps AuthCredential with storage metadata.
@@ -34,7 +40,7 @@ export interface StoredAuthCredential {
 }
 
 /** Bump when schema changes require migration */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 /**
  * Type guard for plain objects.
@@ -126,6 +132,9 @@ export class AgentStorage {
 	private deleteAuthStmt: Statement;
 	private deleteAuthByProviderStmt: Statement;
 	private countAuthStmt: Statement;
+	private upsertModelUsageStmt: Statement;
+	private listModelUsageStmt: Statement;
+	private modelUsageCache: string[] | null = null;
 
 	private constructor(dbPath: string) {
 		this.ensureDir(dbPath);
@@ -157,6 +166,13 @@ export class AgentStorage {
 		this.deleteAuthStmt = this.db.prepare("DELETE FROM auth_credentials WHERE id = ?");
 		this.deleteAuthByProviderStmt = this.db.prepare("DELETE FROM auth_credentials WHERE provider = ?");
 		this.countAuthStmt = this.db.prepare("SELECT COUNT(*) as count FROM auth_credentials");
+
+		this.upsertModelUsageStmt = this.db.prepare(
+			"INSERT INTO model_usage (model_key, last_used_at) VALUES (?, unixepoch()) ON CONFLICT(model_key) DO UPDATE SET last_used_at = unixepoch()",
+		);
+		this.listModelUsageStmt = this.db.prepare(
+			"SELECT model_key, last_used_at FROM model_usage ORDER BY last_used_at DESC",
+		);
 	}
 
 	/**
@@ -185,6 +201,11 @@ CREATE TABLE IF NOT EXISTS cache (
 	expires_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
+
+CREATE TABLE IF NOT EXISTS model_usage (
+	model_key TEXT PRIMARY KEY,
+	last_used_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
 
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY);
 `);
@@ -354,6 +375,38 @@ CREATE TABLE settings (
 			this.deleteExpiredCacheStmt.run();
 		} catch {
 			// Ignore cleanup errors
+		}
+	}
+
+	/**
+	 * Records model usage, updating the last-used timestamp.
+	 * @param modelKey - Model key in "provider/modelId" format
+	 */
+	recordModelUsage(modelKey: string): void {
+		try {
+			this.upsertModelUsageStmt.run(modelKey);
+			this.modelUsageCache = null;
+		} catch (error) {
+			logger.warn("AgentStorage failed to record model usage", { modelKey, error: String(error) });
+		}
+	}
+
+	/**
+	 * Gets model keys ordered by most recently used.
+	 * Results are cached until recordModelUsage is called.
+	 * @returns Array of model keys ("provider/modelId") in MRU order
+	 */
+	getModelUsageOrder(): string[] {
+		if (this.modelUsageCache) {
+			return this.modelUsageCache;
+		}
+		try {
+			const rows = this.listModelUsageStmt.all() as ModelUsageRow[];
+			this.modelUsageCache = rows.map(row => row.model_key);
+			return this.modelUsageCache;
+		} catch (error) {
+			logger.warn("AgentStorage failed to get model usage order", { error: String(error) });
+			return [];
 		}
 	}
 

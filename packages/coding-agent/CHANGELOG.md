@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Model usage tracking to record and retrieve most recently used models
+- Model sorting in selector based on usage history
 ## [8.4.2] - 2026-01-25
 
 ### Changed

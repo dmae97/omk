@@ -75,7 +75,6 @@ export class ModelSelectorComponent extends Container {
 	private allModels: ModelItem[] = [];
 	private filteredModels: ModelItem[] = [];
 	private selectedIndex: number = 0;
-	private currentModel?: Model<any>;
 	private defaultModel?: Model<any>;
 	private smolModel?: Model<any>;
 	private slowModel?: Model<any>;
@@ -98,7 +97,7 @@ export class ModelSelectorComponent extends Container {
 
 	constructor(
 		tui: TUI,
-		currentModel: Model<any> | undefined,
+		_currentModel: Model<any> | undefined,
 		settingsManager: SettingsManager,
 		modelRegistry: ModelRegistry,
 		scopedModels: ReadonlyArray<ScopedModelItem>,
@@ -109,7 +108,6 @@ export class ModelSelectorComponent extends Container {
 		super();
 
 		this.tui = tui;
-		this.currentModel = currentModel;
 		this.settingsManager = settingsManager;
 		this.modelRegistry = modelRegistry;
 		this.scopedModels = scopedModels;
@@ -213,6 +211,44 @@ export class ModelSelectorComponent extends Container {
 		}
 	}
 
+	private sortModels(models: ModelItem[]): void {
+		// Sort: tagged models (default/smol/slow) first, then MRU, then alphabetical
+		const mruOrder = this.settingsManager.getStorage()?.getModelUsageOrder() ?? [];
+		const mruIndex = new Map(mruOrder.map((key, i) => [key, i]));
+
+		models.sort((a, b) => {
+			const aKey = `${a.provider}/${a.id}`;
+			const bKey = `${b.provider}/${b.id}`;
+
+			// Tagged models first: default (0), smol (1), slow (2), untagged (3)
+			const aTag = modelsAreEqual(this.defaultModel, a.model)
+				? 0
+				: modelsAreEqual(this.smolModel, a.model)
+					? 1
+					: modelsAreEqual(this.slowModel, a.model)
+						? 2
+						: 3;
+			const bTag = modelsAreEqual(this.defaultModel, b.model)
+				? 0
+				: modelsAreEqual(this.smolModel, b.model)
+					? 1
+					: modelsAreEqual(this.slowModel, b.model)
+						? 2
+						: 3;
+			if (aTag !== bTag) return aTag - bTag;
+
+			// Then MRU order (models in mruIndex come before those not in it)
+			const aMru = mruIndex.get(aKey) ?? Number.MAX_SAFE_INTEGER;
+			const bMru = mruIndex.get(bKey) ?? Number.MAX_SAFE_INTEGER;
+			if (aMru !== bMru) return aMru - bMru;
+
+			// Finally alphabetical by provider, then id
+			const providerCmp = a.provider.localeCompare(b.provider);
+			if (providerCmp !== 0) return providerCmp;
+			return a.id.localeCompare(b.id);
+		});
+	}
+
 	private async loadModels(): Promise<void> {
 		let models: ModelItem[];
 
@@ -249,16 +285,7 @@ export class ModelSelectorComponent extends Container {
 			}
 		}
 
-		// Sort: current model first, then by provider, then by id
-		models.sort((a, b) => {
-			const aIsCurrent = modelsAreEqual(this.currentModel, a.model);
-			const bIsCurrent = modelsAreEqual(this.currentModel, b.model);
-			if (aIsCurrent && !bIsCurrent) return -1;
-			if (!aIsCurrent && bIsCurrent) return 1;
-			const providerCmp = a.provider.localeCompare(b.provider);
-			if (providerCmp !== 0) return providerCmp;
-			return a.id.localeCompare(b.id);
-		});
+		this.sortModels(models);
 
 		this.allModels = models;
 		this.filteredModels = models;
@@ -315,7 +342,9 @@ export class ModelSelectorComponent extends Container {
 				this.updateTabBar();
 				baseModels = this.allModels;
 			}
-			this.filteredModels = fuzzyFilter(baseModels, query, ({ id, provider }) => `${id} ${provider}`);
+			const fuzzyMatches = fuzzyFilter(baseModels, query, ({ id, provider }) => `${id} ${provider}`);
+			this.sortModels(fuzzyMatches);
+			this.filteredModels = fuzzyMatches;
 		} else {
 			this.filteredModels = baseModels;
 		}

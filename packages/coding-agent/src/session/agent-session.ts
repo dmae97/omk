@@ -1676,6 +1676,7 @@ export class AgentSession {
 		this.agent.setModel(model);
 		this.sessionManager.appendModelChange(`${model.provider}/${model.id}`, role);
 		this.settingsManager.setModelRole(role, `${model.provider}/${model.id}`);
+		this.settingsManager.getStorage()?.recordModelUsage(`${model.provider}/${model.id}`);
 
 		// Re-clamp thinking level for new model's capabilities
 		this.setThinkingLevel(this.thinkingLevel);
@@ -1694,6 +1695,7 @@ export class AgentSession {
 
 		this.agent.setModel(model);
 		this.sessionManager.appendModelChange(`${model.provider}/${model.id}`, "temporary");
+		this.settingsManager.getStorage()?.recordModelUsage(`${model.provider}/${model.id}`);
 
 		// Re-clamp thinking level for new model's capabilities
 		this.setThinkingLevel(this.thinkingLevel);
@@ -1790,6 +1792,7 @@ export class AgentSession {
 		this.agent.setModel(next.model);
 		this.sessionManager.appendModelChange(`${next.model.provider}/${next.model.id}`);
 		this.settingsManager.setModelRole("default", `${next.model.provider}/${next.model.id}`);
+		this.settingsManager.getStorage()?.recordModelUsage(`${next.model.provider}/${next.model.id}`);
 
 		// Apply thinking level (setThinkingLevel clamps to model capabilities)
 		this.setThinkingLevel(next.thinkingLevel);
@@ -1817,6 +1820,7 @@ export class AgentSession {
 		this.agent.setModel(nextModel);
 		this.sessionManager.appendModelChange(`${nextModel.provider}/${nextModel.id}`);
 		this.settingsManager.setModelRole("default", `${nextModel.provider}/${nextModel.id}`);
+		this.settingsManager.getStorage()?.recordModelUsage(`${nextModel.provider}/${nextModel.id}`);
 
 		// Re-clamp thinking level for new model's capabilities
 		this.setThinkingLevel(this.thinkingLevel);
