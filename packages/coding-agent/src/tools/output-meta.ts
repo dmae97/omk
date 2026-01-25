@@ -250,7 +250,7 @@ export class OutputMetaBuilder {
 		return this;
 	}
 
-	/** Add head_limit notice. No-op if reached <= 0. */
+	/** Add limit notice for head truncation. No-op if reached <= 0. */
 	headLimit(reached: number, suggestion = reached * 2): this {
 		if (reached <= 0) return this;
 		this.#meta.limits = { ...this.#meta.limits, headLimit: { reached, suggestion } };
@@ -349,7 +349,7 @@ export function formatOutputNotice(meta: OutputMeta | undefined): string {
 	}
 	if (meta.limits?.headLimit) {
 		const l = meta.limits.headLimit;
-		parts.push(`${l.reached} results limit reached. Use head_limit=${l.suggestion} for more`);
+		parts.push(`${l.reached} results limit reached. Use limit=${l.suggestion} for more`);
 	}
 	if (meta.limits?.columnTruncated) {
 		parts.push(`Some lines truncated to ${meta.limits.columnTruncated.maxColumn} chars`);

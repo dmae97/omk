@@ -19,6 +19,10 @@ Create your plan at `{{planFilePath}}`.
 
 The plan file is the ONLY file you may write or edit.
 
+<important>
+Plan execution runs in a fresh context (session cleared). Make the plan file self-contained: include any requirements, decisions, key findings, and remaining todos needed to continue without prior session history.
+</important>
+
 {{#if reentry}}
 ## Re-entry
 

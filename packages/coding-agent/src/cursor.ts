@@ -170,7 +170,7 @@ export class CursorExecHandlers implements ICursorExecHandlers {
 			context: args.context ?? args.contextBefore ?? args.contextAfter ?? undefined,
 			ignore_case: args.caseInsensitive || undefined,
 			type: args.type || undefined,
-			head_limit: args.headLimit ?? undefined,
+			limit: args.headLimit ?? undefined,
 			multiline: args.multiline || undefined,
 		});
 		return toolResultMessage;

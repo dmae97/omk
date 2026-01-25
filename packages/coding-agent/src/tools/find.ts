@@ -25,6 +25,7 @@ import { type TruncationResult, truncateHead } from "./truncate";
 const findSchema = Type.Object({
 	pattern: Type.String({ description: "Glob pattern, e.g. '*.ts', '**/*.json'" }),
 	path: Type.Optional(Type.String({ description: "Directory to search (default: cwd)" })),
+	hidden: Type.Optional(Type.Boolean({ description: "Include hidden files and directories (default: true)" })),
 	limit: Type.Optional(Type.Number({ description: "Max results (default: 1000)" })),
 });
 
@@ -81,7 +82,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 		_onUpdate?: AgentToolUpdateCallback<FindToolDetails>,
 		context?: AgentToolContext,
 	): Promise<AgentToolResult<FindToolDetails>> {
-		const { pattern, path: searchDir, limit } = params;
+		const { pattern, path: searchDir, limit, hidden } = params;
 
 		return untilAborted(signal, async () => {
 			const searchPath = resolveToCwd(searchDir || ".", this.session.cwd);
@@ -104,6 +105,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 			if (!Number.isFinite(effectiveLimit) || effectiveLimit <= 0) {
 				throw new ToolError("Limit must be a positive number");
 			}
+			const includeHidden = hidden ?? true;
 
 			// If custom operations provided with glob, use that instead of fd
 			if (this.customOps?.glob) {
@@ -176,10 +178,33 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				throw new ToolError("rg is not available and could not be downloaded");
 			}
 
+			const ignoreFiles: string[] = [];
+			let currentDir = searchPath;
+			while (true) {
+				const ignorePath = path.join(currentDir, ".gitignore");
+				try {
+					const stat = await fs.stat(ignorePath);
+					if (stat.isFile()) {
+						ignoreFiles.push(ignorePath);
+					}
+				} catch (err) {
+					if (!isEnoent(err)) {
+						throw err;
+					}
+				}
+				const parentDir = path.dirname(currentDir);
+				if (parentDir === currentDir) {
+					break;
+				}
+				currentDir = parentDir;
+			}
+			ignoreFiles.reverse();
+
 			const args = [
 				"--files",
-				"--hidden",
+				...(includeHidden ? ["--hidden"] : []),
 				"--color=never",
+				...ignoreFiles.flatMap(ignoreFile => ["--ignore-file", ignoreFile]),
 				"--glob",
 				"!**/.git/**",
 				"--glob",

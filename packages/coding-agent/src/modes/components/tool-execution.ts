@@ -558,9 +558,7 @@ export class ToolExecutionComponent extends Container {
 		const context: Record<string, unknown> = {};
 		const normalizeTimeoutSeconds = (value: unknown, maxSeconds: number): number | undefined => {
 			if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
-			let timeoutSec = value > 1000 ? value / 1000 : value;
-			timeoutSec = Math.max(1, Math.min(maxSeconds, timeoutSec));
-			return timeoutSec;
+			return Math.max(1, Math.min(maxSeconds, value));
 		};
 
 		if (this.toolName === "bash" && this.result) {

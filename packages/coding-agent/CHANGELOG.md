@@ -5,6 +5,12 @@
 ### Added
 - Model usage tracking to record and retrieve most recently used models
 - Model sorting in selector based on usage history
+
+### Changed
+- Renamed `head_limit` parameter to `limit` in grep and find tools for consistency
+- Added `context` as an alias for the `c` context parameter in grep tool
+- Made hidden files inclusion configurable in find tool via `hidden` parameter (defaults to true)
+- Added support for reading ignore patterns from .gitignore and .ignore files in find tool
 ## [8.4.2] - 2026-01-25
 
 ### Changed

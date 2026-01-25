@@ -172,10 +172,8 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 		}
 
 		const { cells, timeout: rawTimeout = 30, cwd, reset } = params;
-		// Auto-convert milliseconds to seconds if value > 1000 (16+ min is unreasonable)
-		let timeoutSec = rawTimeout > 1000 ? rawTimeout / 1000 : rawTimeout;
 		// Clamp to reasonable range: 1s - 600s (10 min)
-		timeoutSec = Math.max(1, Math.min(600, timeoutSec));
+		const timeoutSec = Math.max(1, Math.min(600, rawTimeout));
 		const timeoutMs = timeoutSec * 1000;
 		const timeoutSignal = AbortSignal.timeout(timeoutMs);
 		const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
