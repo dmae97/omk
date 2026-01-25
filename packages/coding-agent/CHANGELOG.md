@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [8.4.1] - 2026-01-25
+
 ### Added
 - Added core plan mode with plan file approval workflow and tool gating
 - Added plan:// internal URLs for plan file access and subagent plan-mode system prompt

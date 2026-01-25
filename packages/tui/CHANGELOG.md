@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [8.4.1] - 2026-01-25
+
 ### Added
 - Added fuzzy match function for autocomplete suggestions
 ## [8.4.0] - 2026-01-25
