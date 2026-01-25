@@ -8,6 +8,7 @@
 ### Fixed
 - Terminal gracefully handles write failures by marking dead instead of exiting the process
 - Reserved cursor space for zero padding and corrected end-of-line cursor rendering to prevent wrap glitches
+- Corrected editor end-of-line cursor rendering assertion to use includes() instead of endsWith()
 ## [8.2.0] - 2026-01-24
 
 ### Added

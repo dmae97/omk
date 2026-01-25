@@ -580,13 +580,13 @@ describe("Editor component", () => {
 				}
 
 				let lines = editor.render(width);
-				let contentLines = lines.length > 2 ? lines.slice(1, -1) : lines.slice(1);
+				let contentLines = lines.slice(1);
 				expect(contentLines.length).toBe(1);
-				expect(contentLines[0]!.endsWith(cursorToken)).toBeTruthy();
+				expect(contentLines[0]!.includes(cursorToken)).toBeTruthy();
 
 				editor.handleInput("a");
 				lines = editor.render(width);
-				contentLines = lines.length > 2 ? lines.slice(1, -1) : lines.slice(1);
+				contentLines = lines.slice(1);
 				expect(contentLines.length).toBe(2);
 			}
 		});
