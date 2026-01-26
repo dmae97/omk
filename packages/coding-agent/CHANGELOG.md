@@ -11,6 +11,9 @@
 - Added `context` as an alias for the `c` context parameter in grep tool
 - Made hidden files inclusion configurable in find tool via `hidden` parameter (defaults to true)
 - Added support for reading ignore patterns from .gitignore and .ignore files in find tool
+
+### Fixed
+- Respected .gitignore rules when filtering find tool results by glob pattern
 ## [8.4.2] - 2026-01-25
 
 ### Changed

@@ -106,6 +106,8 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				throw new ToolError("Limit must be a positive number");
 			}
 			const includeHidden = hidden ?? true;
+			const globPattern = normalizedPattern.replace(/\\/g, "/");
+			const globMatcher = new Bun.Glob(globPattern);
 
 			// If custom operations provided with glob, use that instead of fd
 			if (this.customOps?.glob) {
@@ -178,39 +180,15 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				throw new ToolError("rg is not available and could not be downloaded");
 			}
 
-			const ignoreFiles: string[] = [];
-			let currentDir = searchPath;
-			while (true) {
-				const ignorePath = path.join(currentDir, ".gitignore");
-				try {
-					const stat = await fs.stat(ignorePath);
-					if (stat.isFile()) {
-						ignoreFiles.push(ignorePath);
-					}
-				} catch (err) {
-					if (!isEnoent(err)) {
-						throw err;
-					}
-				}
-				const parentDir = path.dirname(currentDir);
-				if (parentDir === currentDir) {
-					break;
-				}
-				currentDir = parentDir;
-			}
-			ignoreFiles.reverse();
-
 			const args = [
 				"--files",
 				...(includeHidden ? ["--hidden"] : []),
+				"--no-require-git",
 				"--color=never",
-				...ignoreFiles.flatMap(ignoreFile => ["--ignore-file", ignoreFile]),
 				"--glob",
 				"!**/.git/**",
 				"--glob",
 				"!**/node_modules/**",
-				"--glob",
-				normalizedPattern,
 				searchPath,
 			];
 
@@ -248,6 +226,10 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				} else {
 					relativePath = path.relative(searchPath, line);
 				}
+				const matchPath = relativePath.replace(/\\/g, "/");
+				if (!globMatcher.match(matchPath)) {
+					continue;
+				}
 
 				let mtimeMs = 0;
 				let isDirectory = false;
@@ -267,6 +249,11 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 
 				relativized.push(relativePath);
 				mtimes.push(mtimeMs);
+			}
+
+			if (relativized.length === 0) {
+				const details: FindToolDetails = { scopePath, fileCount: 0, files: [], truncated: false };
+				return toolResult(details).text("No files found matching pattern").done();
 			}
 
 			// Sort by mtime (most recent first)
