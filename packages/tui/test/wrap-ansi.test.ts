@@ -11,7 +11,6 @@ describe("wrapTextWithAnsi", () => {
 
 			const wrapped = wrapTextWithAnsi(text, 40);
 
-
 			const prefix = "read this thread ";
 			expect(wrapped[0].startsWith(prefix)).toBe(true);
 			const underlineIndex = wrapped[0].indexOf(underlineOn);
@@ -86,8 +85,7 @@ describe("wrapTextWithAnsi", () => {
 
 			const wrapped = wrapTextWithAnsi(text, 20);
 
-			const lineHasBg = (line: string) =>
-				line.includes("[41m") || line.includes(";41m") || line.includes("[41;");
+			const lineHasBg = (line: string) => line.includes("[41m") || line.includes(";41m") || line.includes("[41;");
 
 			expect(lineHasBg(wrapped[0])).toBeTruthy();
 			expect(lineHasBg(wrapped[1])).toBeFalsy();

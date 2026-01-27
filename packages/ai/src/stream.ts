@@ -29,6 +29,15 @@ import type {
 	ThinkingLevel,
 } from "./types";
 
+// Set up http proxy according to env variables for `fetch` based SDKs in Node.js.
+// Bun has builtin support for this.
+if (typeof process !== "undefined" && process.versions?.node) {
+	import("undici").then(m => {
+		const { EnvHttpProxyAgent, setGlobalDispatcher } = m;
+		setGlobalDispatcher(new EnvHttpProxyAgent());
+	});
+}
+
 let cachedVertexAdcCredentialsExists: boolean | null = null;
 
 function hasVertexAdcCredentials(): boolean {

@@ -8,11 +8,9 @@ export function getSegmenter(): Intl.Segmenter {
 	return segmenter;
 }
 
-
 // Cache for non-ASCII strings
 const WIDTH_CACHE_SIZE = 512;
 const widthCache = new Map<string, number>();
-
 
 /**
  * Calculate the visible width of a string in terminal columns.
@@ -52,7 +50,6 @@ export function visibleWidth(str: string): number {
 		// Strip OSC 8 hyperlinks: \x1b]8;;URL\x07 and \x1b]8;;\x07
 		clean = clean.replace(/\x1b\]8;;[^\x07]*\x07/g, "");
 	}
-
 
 	const width = Bun.stringWidth(clean);
 
@@ -305,8 +302,6 @@ class AnsiCodeTracker {
 		return "";
 	}
 }
-
-
 
 /**
  * Wrap text with ANSI codes preserved.

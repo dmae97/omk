@@ -1195,51 +1195,15 @@ export class Editor implements Component, Focusable {
 			}
 
 			if (pastedLines.length === 1) {
-				const text = pastedLines[0] || "";
-				this.insertTextAtCursor(text);
+				// Single line - insert character by character to trigger autocomplete
+				for (const char of filteredText) {
+					this.insertCharacter(char);
+				}
 				return;
 			}
 
-			// Multi-line paste - be very careful with array manipulation
-			const currentLine = this.state.lines[this.state.cursorLine] || "";
-			const beforeCursor = currentLine.slice(0, this.state.cursorCol);
-			const afterCursor = currentLine.slice(this.state.cursorCol);
-
-			// Build the new lines array step by step
-			const newLines: string[] = [];
-
-			// Add all lines before current line
-			for (let i = 0; i < this.state.cursorLine; i++) {
-				newLines.push(this.state.lines[i] || "");
-			}
-
-			// Add the first pasted line merged with before cursor text
-			newLines.push(beforeCursor + (pastedLines[0] || ""));
-
-			// Add all middle pasted lines
-			for (let i = 1; i < pastedLines.length - 1; i++) {
-				newLines.push(pastedLines[i] || "");
-			}
-
-			// Add the last pasted line with after cursor text
-			newLines.push((pastedLines[pastedLines.length - 1] || "") + afterCursor);
-
-			// Add all lines after current line
-			for (let i = this.state.cursorLine + 1; i < this.state.lines.length; i++) {
-				newLines.push(this.state.lines[i] || "");
-			}
-
-			// Replace the entire lines array
-			this.state.lines = newLines;
-
-			// Update cursor position to end of pasted content
-			this.state.cursorLine += pastedLines.length - 1;
-			this.state.cursorCol = (pastedLines[pastedLines.length - 1] || "").length;
-
-			// Notify of change
-			if (this.onChange) {
-				this.onChange(this.getText());
-			}
+			// Multi-line paste - use insertTextAtCursor for proper handling
+			this.insertTextAtCursor(filteredText);
 		});
 	}
 

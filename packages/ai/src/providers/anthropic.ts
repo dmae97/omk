@@ -321,7 +321,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 			}
 
 			if (output.stopReason === "aborted" || output.stopReason === "error") {
-				throw new Error("An unkown error ocurred");
+				throw new Error("An unknown error occurred");
 			}
 
 			output.duration = Date.now() - startTime;

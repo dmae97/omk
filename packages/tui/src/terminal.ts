@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import { setKittyProtocolActive } from "./keys";
 import { StdinBuffer } from "./stdin-buffer";
 
@@ -77,6 +78,7 @@ export class ProcessTerminal implements Terminal {
 	private stdinBuffer?: StdinBuffer;
 	private stdinDataHandler?: (data: string) => void;
 	private dead = false;
+	private writeLogPath = process.env.OMP_TUI_WRITE_LOG || "";
 
 	get kittyProtocolActive(): boolean {
 		return this._kittyProtocolActive;
@@ -221,6 +223,13 @@ export class ProcessTerminal implements Terminal {
 
 	write(data: string): void {
 		this.safeWrite(data);
+		if (this.writeLogPath) {
+			try {
+				fs.appendFileSync(this.writeLogPath, data, { encoding: "utf8" });
+			} catch {
+				// Ignore logging errors
+			}
+		}
 	}
 
 	private safeWrite(data: string): void {
