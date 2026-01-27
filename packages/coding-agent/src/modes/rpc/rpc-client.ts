@@ -41,6 +41,42 @@ export interface ModelInfo {
 
 export type RpcEventListener = (event: AgentEvent) => void;
 
+const agentEventTypes = new Set<AgentEvent["type"]>([
+	"agent_start",
+	"agent_end",
+	"turn_start",
+	"turn_end",
+	"message_start",
+	"message_update",
+	"message_end",
+	"tool_execution_start",
+	"tool_execution_update",
+	"tool_execution_end",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isRpcResponse(value: unknown): value is RpcResponse {
+	if (!isRecord(value)) return false;
+	if (value.type !== "response") return false;
+	if (typeof value.command !== "string") return false;
+	if (typeof value.success !== "boolean") return false;
+	if (value.id !== undefined && typeof value.id !== "string") return false;
+	if (value.success === false) {
+		return typeof value.error === "string";
+	}
+	return true;
+}
+
+function isAgentEvent(value: unknown): value is AgentEvent {
+	if (!isRecord(value)) return false;
+	const type = value.type;
+	if (typeof type !== "string") return false;
+	return agentEventTypes.has(type as AgentEvent["type"]);
+}
+
 // ============================================================================
 // RPC Client
 // ============================================================================
@@ -434,16 +470,22 @@ export class RpcClient {
 
 		for (const data of result.values) {
 			// Check if it's a response to a pending request
-			if (data.type === "response" && data.id && this.pendingRequests.has(data.id)) {
-				const pending = this.pendingRequests.get(data.id)!;
-				this.pendingRequests.delete(data.id);
-				pending.resolve(data as RpcResponse);
-				return;
+			if (isRpcResponse(data)) {
+				const id = data.id;
+				if (id && this.pendingRequests.has(id)) {
+					const pending = this.pendingRequests.get(id)!;
+					this.pendingRequests.delete(id);
+					pending.resolve(data);
+					return;
+				}
+				continue;
 			}
+
+			if (!isAgentEvent(data)) continue;
 
 			// Otherwise it's an event
 			for (const listener of this.eventListeners) {
-				listener(data as AgentEvent);
+				listener(data);
 			}
 		}
 	}

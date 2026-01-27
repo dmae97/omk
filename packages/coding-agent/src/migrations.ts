@@ -9,6 +9,17 @@ import { getAgentDbPath, getAgentDir, getBinDir } from "./config";
 import { AgentStorage } from "./session/agent-storage";
 import type { AuthCredential } from "./session/auth-storage";
 
+type SessionHeader = {
+	type: "session";
+	cwd: string;
+};
+
+function isSessionHeader(value: unknown): value is SessionHeader {
+	if (!value || typeof value !== "object") return false;
+	const record = value as Record<string, unknown>;
+	return record.type === "session" && typeof record.cwd === "string" && record.cwd.length > 0;
+}
+
 /**
  * Migrate legacy oauth.json and settings.json apiKeys to agent.db.
  *
@@ -107,12 +118,11 @@ export async function migrateSessionsFromAgentRoot(): Promise<void> {
 				if (isEnoent(err)) continue;
 				throw err;
 			}
-			const entries = Bun.JSONL.parse(content);
+			const entries: unknown[] = Bun.JSONL.parse(content);
 			const header = entries[0];
-			if (!header) continue;
-			if (header.type !== "session" || !header.cwd) continue;
+			if (!isSessionHeader(header)) continue;
 
-			const cwd: string = header.cwd;
+			const cwd = header.cwd;
 
 			// Compute the correct session directory (same encoding as session-manager.ts)
 			const safePath = `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;

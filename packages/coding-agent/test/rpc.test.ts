@@ -2,9 +2,27 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { AgentEvent } from "@oh-my-pi/pi-agent-core";
+import type { AgentEvent, AgentMessage } from "@oh-my-pi/pi-agent-core";
+import type { AssistantMessage, TextContent } from "@oh-my-pi/pi-ai";
+import {
+	type CompactionEntry,
+	type FileEntry,
+	parseSessionEntries,
+	type SessionMessageEntry,
+} from "@oh-my-pi/pi-coding-agent";
 import { RpcClient } from "@oh-my-pi/pi-coding-agent/modes/rpc/rpc-client";
+import type { BashExecutionMessage } from "@oh-my-pi/pi-coding-agent/session/messages";
 import { nanoid } from "nanoid";
+
+type MessageEndEvent = Extract<AgentEvent, { type: "message_end" }>;
+
+const isMessageEndEvent = (event: AgentEvent): event is MessageEndEvent => event.type === "message_end";
+
+const isAssistantMessage = (message: AgentMessage): message is AssistantMessage => message.role === "assistant";
+
+const isSessionMessageEntry = (entry: FileEntry): entry is SessionMessageEntry => entry.type === "message";
+
+const isCompactionEntry = (entry: FileEntry): entry is CompactionEntry => entry.type === "compaction";
 
 /**
  * RPC mode tests.
@@ -67,16 +85,16 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		expect(sessionFiles.length).toBe(1);
 
 		const sessionContent = await Bun.file(path.join(cwdSessionDir, sessionFiles[0])).text();
-		const entries = Bun.JSONL.parse(sessionContent);
+		const entries = parseSessionEntries(sessionContent);
 
 		// First entry should be session header
 		expect(entries[0].type).toBe("session");
 
 		// Should have user and assistant messages
-		const messages = entries.filter((e: { type: string }) => e.type === "message");
+		const messages = entries.filter(isSessionMessageEntry);
 		expect(messages.length).toBeGreaterThanOrEqual(2);
 
-		const roles = messages.map((m: { message: { role: string } }) => m.message.role);
+		const roles = messages.map(message => message.message.role);
 		expect(roles).toContain("user");
 		expect(roles).toContain("assistant");
 	}, 90000);
@@ -101,9 +119,9 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		const cwdSessionDir = path.join(sessionsPath, sessionDirs[0]);
 		const sessionFiles = fs.readdirSync(cwdSessionDir).filter(f => f.endsWith(".jsonl"));
 		const sessionContent = await Bun.file(path.join(cwdSessionDir, sessionFiles[0])).text();
-		const entries = Bun.JSONL.parse(sessionContent);
+		const entries = parseSessionEntries(sessionContent);
 
-		const compactionEntries = entries.filter((e: { type: string }) => e.type === "compaction");
+		const compactionEntries = entries.filter(isCompactionEntry);
 		expect(compactionEntries.length).toBe(1);
 		expect(compactionEntries[0].summary).toBeDefined();
 	}, 120000);
@@ -136,11 +154,11 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		const cwdSessionDir = path.join(sessionsPath, sessionDirs[0]);
 		const sessionFiles = fs.readdirSync(cwdSessionDir).filter(f => f.endsWith(".jsonl"));
 		const sessionContent = await Bun.file(path.join(cwdSessionDir, sessionFiles[0])).text();
-		const entries = Bun.JSONL.parse(sessionContent);
+		const entries = parseSessionEntries(sessionContent);
 
 		const bashMessages = entries.filter(
-			(e: { type: string; message?: { role: string } }) =>
-				e.type === "message" && e.message?.role === "bashExecution",
+			(entry): entry is SessionMessageEntry & { message: BashExecutionMessage } =>
+				isSessionMessageEntry(entry) && entry.message.role === "bashExecution",
 		);
 		expect(bashMessages.length).toBe(1);
 		expect(bashMessages[0].message.output).toContain(uniqueValue);
@@ -159,14 +177,19 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		);
 
 		// Find assistant's response
-		const messageEndEvents = events.filter(e => e.type === "message_end") as AgentEvent[];
+		const messageEndEvents = events.filter(isMessageEndEvent);
 		const assistantMessage = messageEndEvents.find(
-			e => e.type === "message_end" && e.message?.role === "assistant",
-		) as any;
+			(event): event is MessageEndEvent & { message: AssistantMessage } => isAssistantMessage(event.message),
+		);
 
 		expect(assistantMessage).toBeDefined();
+		if (!assistantMessage) {
+			throw new Error("Expected assistant message_end event");
+		}
 
-		const textContent = assistantMessage.message.content.find((c: any) => c.type === "text");
+		const textContent = assistantMessage.message.content.find(
+			(content): content is TextContent => content.type === "text",
+		);
 		expect(textContent?.text).toContain(uniqueValue);
 	}, 90000);
 
