@@ -263,7 +263,7 @@ The agent reads, writes, and edits files, and executes commands via bash.
 | Ctrl+D                | Exit (when editor is empty)                              |
 | Ctrl+Z                | Suspend to background (use `fg` in shell to resume)      |
 | Shift+Tab             | Cycle thinking level                                     |
-| Ctrl+P / Shift+Ctrl+P | Cycle role models (slow/default/smol)                    |
+| Ctrl+P / Shift+Ctrl+P | Cycle role models (slow/default/smol/plan)               |
 | Ctrl+L                | Open model selector                                      |
 | Ctrl+O                | Toggle tool output expansion                             |
 | Ctrl+T                | Toggle todo list expansion                               |
@@ -564,7 +564,7 @@ Global `~/.omp/agent/settings.json` stores persistent preferences:
 | Setting                       | Description                                                                                                                         | Default         |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------- |
 | `theme`                       | Color theme name                                                                                                                    | auto-detected   |
-| `modelRoles`                  | Model assignments by role (e.g., `{"default": "anthropic/claude-sonnet-4-20250514", "slow": "...", "smol": "..."}`)                  | -               |
+| `modelRoles`                  | Model assignments by role (e.g., `{"default": "...", "slow": "...", "smol": "...", "plan": "..."}`)                                  | -               |
 | `defaultThinkingLevel`        | Thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`                                                                  | -               |
 | `enabledModels`               | Model patterns for cycling. Supports glob patterns (`github-copilot/*`, `*sonnet*`) and fuzzy matching. Same as `--models` CLI flag | -               |
 | `queueMode`                   | Message queue mode: `all` or `one-at-a-time`                                                                                        | `one-at-a-time` |

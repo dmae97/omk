@@ -3,7 +3,7 @@ name: plan
 description: Software architect for complex multi-file architectural decisions. NOT for simple tasks, single-file changes, or tasks completable in <5 tool calls.
 tools: read, grep, find, ls, bash
 spawns: explore
-model: pi/slow, gpt-5.2-codex, gpt-5.2, codex, gpt
+model: pi/plan, pi/slow, gpt-5.2-codex, gpt-5.2, codex, gpt
 ---
 
 <critical>

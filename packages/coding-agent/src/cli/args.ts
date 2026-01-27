@@ -15,6 +15,7 @@ export interface Args {
 	model?: string;
 	smol?: string;
 	slow?: string;
+	plan?: string;
 	apiKey?: string;
 	systemPrompt?: string;
 	appendSystemPrompt?: string;
@@ -85,6 +86,8 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 			result.smol = args[++i];
 		} else if (arg === "--slow" && i + 1 < args.length) {
 			result.slow = args[++i];
+		} else if (arg === "--plan" && i + 1 < args.length) {
+			result.plan = args[++i];
 		} else if (arg === "--api-key" && i + 1 < args.length) {
 			result.apiKey = args[++i];
 		} else if (arg === "--system-prompt" && i + 1 < args.length) {
@@ -193,6 +196,7 @@ ${chalk.bold("Options:")}
   --model <pattern>              Model to use (fuzzy match: "opus", "gpt-5.2", or "p-openai/gpt-5.2")
    --smol <id>                    Smol/fast model for lightweight tasks (or OMP_SMOL_MODEL env)
    --slow <id>                    Slow/reasoning model for thorough analysis (or OMP_SLOW_MODEL env)
+   --plan <id>                    Plan model for architectural planning (or OMP_PLAN_MODEL env)
   --api-key <key>                API key (defaults to env vars)
   --system-prompt <text>         System prompt (default: coding assistant prompt)
   --append-system-prompt <text>  Append text or file contents to the system prompt

@@ -35,7 +35,7 @@ interface ScopedModelItem {
 	thinkingLevel: string;
 }
 
-type ModelRole = "default" | "smol" | "slow" | "temporary";
+type ModelRole = "default" | "smol" | "slow" | "plan" | "temporary";
 
 interface MenuAction {
 	label: string;
@@ -46,6 +46,7 @@ const MENU_ACTIONS: MenuAction[] = [
 	{ label: "Set as Default", role: "default" },
 	{ label: "Set as Smol (Fast)", role: "smol" },
 	{ label: "Set as Slow (Thinking)", role: "slow" },
+	{ label: "Set as Plan (Architect)", role: "plan" },
 ];
 
 const ALL_TAB = "ALL";
@@ -78,6 +79,7 @@ export class ModelSelectorComponent extends Container {
 	private defaultModel?: Model<any>;
 	private smolModel?: Model<any>;
 	private slowModel?: Model<any>;
+	private planModel?: Model<any>;
 	private settingsManager: SettingsManager;
 	private modelRegistry: ModelRegistry;
 	private onSelectCallback: (model: Model<any>, role: string) => void;
@@ -209,10 +211,19 @@ export class ModelSelectorComponent extends Container {
 				this.slowModel = allModels.find(m => m.provider === parsed.provider && m.id === parsed.id);
 			}
 		}
+
+		// Load plan model
+		const planStr = roles.plan;
+		if (planStr) {
+			const parsed = parseModelString(planStr);
+			if (parsed) {
+				this.planModel = allModels.find(m => m.provider === parsed.provider && m.id === parsed.id);
+			}
+		}
 	}
 
 	private sortModels(models: ModelItem[]): void {
-		// Sort: tagged models (default/smol/slow) first, then MRU, then alphabetical
+		// Sort: tagged models (default/smol/slow/plan) first, then MRU, then alphabetical
 		const mruOrder = this.settingsManager.getStorage()?.getModelUsageOrder() ?? [];
 		const mruIndex = new Map(mruOrder.map((key, i) => [key, i]));
 
@@ -220,21 +231,25 @@ export class ModelSelectorComponent extends Container {
 			const aKey = `${a.provider}/${a.id}`;
 			const bKey = `${b.provider}/${b.id}`;
 
-			// Tagged models first: default (0), smol (1), slow (2), untagged (3)
+			// Tagged models first: default (0), smol (1), slow (2), plan (3), untagged (4)
 			const aTag = modelsAreEqual(this.defaultModel, a.model)
 				? 0
 				: modelsAreEqual(this.smolModel, a.model)
 					? 1
 					: modelsAreEqual(this.slowModel, a.model)
 						? 2
-						: 3;
+						: modelsAreEqual(this.planModel, a.model)
+							? 3
+							: 4;
 			const bTag = modelsAreEqual(this.defaultModel, b.model)
 				? 0
 				: modelsAreEqual(this.smolModel, b.model)
 					? 1
 					: modelsAreEqual(this.slowModel, b.model)
 						? 2
-						: 3;
+						: modelsAreEqual(this.planModel, b.model)
+							? 3
+							: 4;
 			if (aTag !== bTag) return aTag - bTag;
 
 			// Then MRU order (models in mruIndex come before those not in it)
@@ -380,12 +395,14 @@ export class ModelSelectorComponent extends Container {
 			const isDefault = modelsAreEqual(this.defaultModel, item.model);
 			const isSmol = modelsAreEqual(this.smolModel, item.model);
 			const isSlow = modelsAreEqual(this.slowModel, item.model);
+			const isPlan = modelsAreEqual(this.planModel, item.model);
 
 			// Build role badges (inverted: color as background, black text)
 			const badges: string[] = [];
 			if (isDefault) badges.push(makeInvertedBadge("DEFAULT", "success"));
 			if (isSmol) badges.push(makeInvertedBadge("SMOL", "warning"));
 			if (isSlow) badges.push(makeInvertedBadge("SLOW", "accent"));
+			if (isPlan) badges.push(makeInvertedBadge("PLAN", "muted"));
 			const badgeText = badges.length > 0 ? ` ${badges.join(" ")}` : "";
 
 			let line = "";
@@ -585,6 +602,8 @@ export class ModelSelectorComponent extends Container {
 			this.smolModel = model;
 		} else if (role === "slow") {
 			this.slowModel = model;
+		} else if (role === "plan") {
+			this.planModel = model;
 		}
 
 		// Notify caller (for updating agent state if needed)

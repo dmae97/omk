@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+- Added `plan` model role for specifying the model used by the plan agent
+- Added `--plan` CLI flag and `OMP_PLAN_MODEL` environment variable for ephemeral plan model override
+- Added plan model selection in model selector UI with PLAN badge
+
 ## [8.5.0] - 2026-01-27
 
 ### Added

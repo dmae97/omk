@@ -628,10 +628,12 @@ export async function main(args: string[]) {
 	// Apply model role overrides from CLI args or env vars (ephemeral, not persisted)
 	const smolModel = parsed.smol ?? process.env.OMP_SMOL_MODEL;
 	const slowModel = parsed.slow ?? process.env.OMP_SLOW_MODEL;
-	if (smolModel || slowModel) {
+	const planModel = parsed.plan ?? process.env.OMP_PLAN_MODEL;
+	if (smolModel || slowModel || planModel) {
 		const roleOverrides: Record<string, string> = {};
 		if (smolModel) roleOverrides.smol = smolModel;
 		if (slowModel) roleOverrides.slow = slowModel;
+		if (planModel) roleOverrides.plan = planModel;
 		settingsManager.applyOverrides({ modelRoles: roleOverrides });
 	}
 

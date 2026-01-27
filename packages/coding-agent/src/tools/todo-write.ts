@@ -99,13 +99,13 @@ function validateSequentialTodos(todos: TodoItem[]): { valid: boolean; error?: s
 		return acc;
 	}, []);
 
-	if (inProgressIndices.length > 1) {
-		return { valid: false, error: "Only one todo can be in progress at a time." };
-	}
-
-	if (inProgressIndices.length === 1 && firstIncompleteIndex >= 0) {
-		if (inProgressIndices[0] !== firstIncompleteIndex) {
-			return { valid: false, error: "Todo in progress must be the next incomplete item." };
+	for (const idx of inProgressIndices) {
+		const hasPriorIncomplete = todos.slice(0, idx).some(t => t.status === "pending");
+		if (hasPriorIncomplete) {
+			return {
+				valid: false,
+				error: `Cannot start "${todos[idx].content}" while earlier tasks are still pending.`,
+			};
 		}
 	}
 
