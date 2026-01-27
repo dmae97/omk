@@ -155,7 +155,6 @@ describe("createTools", () => {
 			"fetch",
 			"web_search",
 			"write",
-			"enter_plan_mode",
 		];
 
 		for (const tool of expectedTools) {

@@ -19,7 +19,6 @@ import { AskTool } from "./ask";
 import { BashTool } from "./bash";
 import { CalculatorTool } from "./calculator";
 import { CompleteTool } from "./complete";
-import { EnterPlanModeTool } from "./enter-plan-mode";
 import { ExitPlanModeTool } from "./exit-plan-mode";
 import { FetchTool } from "./fetch";
 import { FindTool } from "./find";
@@ -73,7 +72,6 @@ export { AskTool, type AskToolDetails } from "./ask";
 export { BashTool, type BashToolDetails, type BashToolOptions } from "./bash";
 export { CalculatorTool, type CalculatorToolDetails } from "./calculator";
 export { CompleteTool } from "./complete";
-export { type EnterPlanModeDetails, EnterPlanModeTool } from "./enter-plan-mode";
 export { type ExitPlanModeDetails, ExitPlanModeTool } from "./exit-plan-mode";
 export { FetchTool, type FetchToolDetails } from "./fetch";
 export { type FindOperations, FindTool, type FindToolDetails, type FindToolOptions } from "./find";
@@ -199,7 +197,6 @@ export const BUILTIN_TOOLS: Record<string, ToolFactory> = {
 	fetch: s => new FetchTool(s),
 	web_search: s => new WebSearchTool(s),
 	write: s => new WriteTool(s),
-	enter_plan_mode: s => new EnterPlanModeTool(s),
 };
 
 export const HIDDEN_TOOLS: Record<string, ToolFactory> = {

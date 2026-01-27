@@ -29,7 +29,7 @@ import type { AgentSession, AgentSessionEvent } from "../session/agent-session";
 import { HistoryStorage } from "../session/history-storage";
 import type { SessionContext, SessionManager } from "../session/session-manager";
 import { getRecentSessions } from "../session/session-manager";
-import type { EnterPlanModeDetails, ExitPlanModeDetails } from "../tools";
+import type { ExitPlanModeDetails } from "../tools";
 import { setTerminalTitle } from "../utils/title-generator";
 import type { AssistantMessageComponent } from "./components/assistant-message";
 import type { BashExecutionComponent } from "./components/bash-execution";
@@ -629,25 +629,6 @@ export class InteractiveMode implements InteractiveModeContext {
 			return;
 		}
 		await this.enterPlanMode();
-	}
-
-	async handleEnterPlanModeTool(details: EnterPlanModeDetails): Promise<void> {
-		if (this.planModeEnabled) {
-			this.showWarning("Plan mode is already active.");
-			return;
-		}
-
-		const confirmed = await this.showHookConfirm(
-			"Enter plan mode?",
-			"This enables read-only planning and creates a plan file for approval.",
-		);
-		if (!confirmed) {
-			return;
-		}
-
-		const planFilePath = details.planFilePath || this.getPlanFilePath();
-		this.planModePlanFilePath = planFilePath;
-		await this.enterPlanMode({ planFilePath, workflow: details.workflow });
 	}
 
 	async handleExitPlanModeTool(details: ExitPlanModeDetails): Promise<void> {

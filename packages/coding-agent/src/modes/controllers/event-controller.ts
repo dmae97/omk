@@ -247,12 +247,6 @@ export class EventController {
 						this.ctx.setTodos(details.todos);
 					}
 				}
-				if (event.toolName === "enter_plan_mode" && !event.isError) {
-					const details = event.result.details as import("../../tools").EnterPlanModeDetails | undefined;
-					if (details) {
-						await this.ctx.handleEnterPlanModeTool(details);
-					}
-				}
 				if (event.toolName === "exit_plan_mode" && !event.isError) {
 					const details = event.result.details as ExitPlanModeDetails | undefined;
 					if (details) {
