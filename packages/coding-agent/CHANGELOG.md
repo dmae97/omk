@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [8.5.0] - 2026-01-27
+
 ### Added
 - Added subagent support for preloading skill contents into the system prompt instead of listing available skills
 - Added session init entries to capture system prompt, task, tools, and output schema for subagent session logs
