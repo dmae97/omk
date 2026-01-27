@@ -504,26 +504,31 @@ export function convertMessages(
 
 		if (msg.role === "user") {
 			if (typeof msg.content === "string") {
+				const text = sanitizeSurrogates(msg.content);
+				if (text.trim().length === 0) continue;
 				params.push({
 					role: "user",
-					content: sanitizeSurrogates(msg.content),
+					content: text,
 				});
 			} else {
-				const content: ChatCompletionContentPart[] = msg.content.map((item): ChatCompletionContentPart => {
+				const content: ChatCompletionContentPart[] = [];
+				for (const item of msg.content) {
 					if (item.type === "text") {
-						return {
+						const text = sanitizeSurrogates(item.text);
+						if (text.trim().length === 0) continue;
+						content.push({
 							type: "text",
-							text: sanitizeSurrogates(item.text),
-						} satisfies ChatCompletionContentPartText;
+							text,
+						} satisfies ChatCompletionContentPartText);
 					} else {
-						return {
+						content.push({
 							type: "image_url",
 							image_url: {
 								url: `data:${item.mimeType};base64,${item.data}`,
 							},
-						} satisfies ChatCompletionContentPartImage;
+						} satisfies ChatCompletionContentPartImage);
 					}
-				});
+				}
 				const filteredContent = !model.input.includes("image")
 					? content.filter(c => c.type !== "image_url")
 					: content;
@@ -578,7 +583,36 @@ export function convertMessages(
 				}
 			}
 
+			if (compat.thinkingFormat === "openai") {
+				const reasoningField = compat.reasoningContentField ?? "reasoning_content";
+				const reasoningContent = (assistantMsg as any)[reasoningField];
+				if (!reasoningContent) {
+					const reasoning = (assistantMsg as any).reasoning;
+					const reasoningText = (assistantMsg as any).reasoning_text;
+					if (reasoning && reasoningField !== "reasoning") {
+						(assistantMsg as any)[reasoningField] = reasoning;
+					} else if (reasoningText && reasoningField !== "reasoning_text") {
+						(assistantMsg as any)[reasoningField] = reasoningText;
+					} else if (nonEmptyThinkingBlocks.length > 0) {
+						(assistantMsg as any)[reasoningField] = nonEmptyThinkingBlocks.map(b => b.thinking).join("\n");
+					}
+				}
+			}
+
 			const toolCalls = msg.content.filter(b => b.type === "toolCall") as ToolCall[];
+			const hasReasoningField =
+				(assistantMsg as any).reasoning_content !== undefined ||
+				(assistantMsg as any).reasoning !== undefined ||
+				(assistantMsg as any).reasoning_text !== undefined;
+			if (
+				toolCalls.length > 0 &&
+				compat.requiresReasoningContentForToolCalls &&
+				compat.thinkingFormat === "openai" &&
+				!hasReasoningField
+			) {
+				const reasoningField = compat.reasoningContentField ?? "reasoning_content";
+				(assistantMsg as any)[reasoningField] = ".";
+			}
 			if (toolCalls.length > 0) {
 				assistantMsg.tool_calls = toolCalls.map(tc => ({
 					id: normalizeMistralToolId(tc.id, compat.requiresMistralToolIds),
@@ -611,6 +645,9 @@ export function convertMessages(
 				content !== null &&
 				content !== undefined &&
 				(typeof content === "string" ? content.length > 0 : content.length > 0);
+			if (!hasContent && assistantMsg.tool_calls && compat.requiresAssistantContentForToolCalls) {
+				assistantMsg.content = ".";
+			}
 			if (!hasContent && !assistantMsg.tool_calls) {
 				continue;
 			}
@@ -732,6 +769,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAICompat 
 	const baseUrl = model.baseUrl;
 
 	const isZai = provider === "zai" || baseUrl.includes("api.z.ai");
+	const isOpenRouterKimi = provider === "openrouter" && model.id.includes("moonshotai/kimi");
 
 	const isNonStandard =
 		provider === "cerebras" ||
@@ -762,6 +800,9 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAICompat 
 		requiresThinkingAsText: isMistral,
 		requiresMistralToolIds: isMistral,
 		thinkingFormat: isZai ? "zai" : "openai",
+		reasoningContentField: "reasoning_content",
+		requiresReasoningContentForToolCalls: isOpenRouterKimi,
+		requiresAssistantContentForToolCalls: isOpenRouterKimi,
 		openRouterRouting: undefined,
 	};
 }
@@ -786,6 +827,11 @@ function getCompat(model: Model<"openai-completions">): ResolvedOpenAICompat {
 		requiresThinkingAsText: model.compat.requiresThinkingAsText ?? detected.requiresThinkingAsText,
 		requiresMistralToolIds: model.compat.requiresMistralToolIds ?? detected.requiresMistralToolIds,
 		thinkingFormat: model.compat.thinkingFormat ?? detected.thinkingFormat,
+		reasoningContentField: model.compat.reasoningContentField ?? detected.reasoningContentField,
+		requiresReasoningContentForToolCalls:
+			model.compat.requiresReasoningContentForToolCalls ?? detected.requiresReasoningContentForToolCalls,
+		requiresAssistantContentForToolCalls:
+			model.compat.requiresAssistantContentForToolCalls ?? detected.requiresAssistantContentForToolCalls,
 		openRouterRouting: model.compat.openRouterRouting ?? detected.openRouterRouting,
 	};
 }

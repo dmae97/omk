@@ -292,6 +292,12 @@ export interface OpenAICompat {
 	requiresMistralToolIds?: boolean;
 	/** Format for reasoning/thinking parameter. "openai" uses reasoning_effort, "zai" uses thinking: { type: "enabled" }. Default: "openai". */
 	thinkingFormat?: "openai" | "zai";
+	/** Which reasoning content field to emit on assistant messages. Default: auto-detected. */
+	reasoningContentField?: "reasoning_content" | "reasoning" | "reasoning_text";
+	/** Whether assistant tool-call messages must include reasoning content. Default: false. */
+	requiresReasoningContentForToolCalls?: boolean;
+	/** Whether assistant tool-call messages must include non-empty content. Default: false. */
+	requiresAssistantContentForToolCalls?: boolean;
 	/** OpenRouter-specific routing preferences. Only used when baseUrl points to OpenRouter. */
 	openRouterRouting?: OpenRouterRouting;
 }

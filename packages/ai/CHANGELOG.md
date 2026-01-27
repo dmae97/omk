@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- Filtered empty user text blocks for OpenAI-compatible completions and normalized Kimi reasoning_content for OpenRouter tool-call messages
+
 ## [8.4.0] - 2026-01-25
 
 ### Added
