@@ -2,8 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+- Added subagent support for preloading skill contents into the system prompt instead of listing available skills
+- Added session init entries to capture system prompt, task, tools, and output schema for subagent session logs
+
 ### Fixed
 - Reduced Task tool progress update overhead to keep the UI responsive during high-volume streaming output
+- Fixed subagent session logs dropping pre-assistant entries (user/task metadata) before the first assistant response
 
 ### Removed
 - Removed enter-plan-mode tool

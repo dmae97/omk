@@ -75,6 +75,7 @@ export interface ExecutorOptions {
 	eventBus?: EventBus;
 	contextFiles?: ContextFileEntry[];
 	skills?: Skill[];
+	preloadedSkills?: Skill[];
 	promptTemplates?: PromptTemplate[];
 	mcpManager?: MCPManager;
 	authStorage?: AuthStorage;
@@ -804,6 +805,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			pythonPreludeDocs: pythonPreludeDocsPayload,
 			contextFiles: options.contextFiles,
 			skills: options.skills,
+			preloadedSkills: options.preloadedSkills,
 			promptTemplates: options.promptTemplates,
 			mcpTools: options.mcpManager ? extractMCPToolMetadata(options.mcpManager) : undefined,
 			pythonToolProxy: pythonProxyEnabled,

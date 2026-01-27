@@ -43,6 +43,20 @@ Use the read tool to load a skill's file when the task matches its description.
 {{/list}}
 </available_skills>
 {{/if}}
+{{#if preloadedSkills.length}}
+The following skills are preloaded in full. Apply their instructions directly.
+
+<preloaded_skills>
+{{#list preloadedSkills join="\n"}}
+<skill name="{{name}}">
+<location>skill://{{escapeXml name}}</location>
+<content>
+{{content}}
+</content>
+</skill>
+{{/list}}
+</preloaded_skills>
+{{/if}}
 {{#if rules.length}}
 The following rules define project-specific guidelines and constraints:
 

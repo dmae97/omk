@@ -23,6 +23,24 @@ interface GitContext {
 	commits: string;
 }
 
+type PreloadedSkill = { name: string; content: string };
+
+async function loadPreloadedSkillContents(preloadedSkills: Skill[]): Promise<PreloadedSkill[]> {
+	const contents = await Promise.all(
+		preloadedSkills.map(async skill => {
+			try {
+				const content = await Bun.file(skill.filePath).text();
+				return { name: skill.name, content };
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				throw new Error(`Failed to load skill "${skill.name}" from ${skill.filePath}: ${message}`);
+			}
+		}),
+	);
+
+	return contents;
+}
+
 /**
  * Load git context for the system prompt.
  * Returns structured git data or null if not in a git repo.
@@ -643,6 +661,8 @@ export interface BuildSystemPromptOptions {
 	contextFiles?: Array<{ path: string; content: string; depth?: number }>;
 	/** Pre-loaded skills (skips discovery if provided). */
 	skills?: Skill[];
+	/** Skills to inline into the system prompt instead of listing available skills. */
+	preloadedSkills?: Skill[];
 	/** Pre-loaded rulebook rules (rules with descriptions, excluding TTSR and always-apply). */
 	rules?: Array<{ name: string; description?: string; path: string; globs?: string[] }>;
 }
@@ -662,6 +682,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		cwd,
 		contextFiles: providedContextFiles,
 		skills: providedSkills,
+		preloadedSkills: providedPreloadedSkills,
 		rules,
 	} = options;
 	const resolvedCwd = cwd ?? process.cwd();
@@ -707,13 +728,15 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 	const skills =
 		providedSkills ??
 		(skillsSettings?.enabled !== false ? (await loadSkills({ ...skillsSettings, cwd: resolvedCwd })).skills : []);
+	const preloadedSkills = providedPreloadedSkills;
+	const preloadedSkillContents = preloadedSkills ? await loadPreloadedSkillContents(preloadedSkills) : [];
 
 	// Get git context
 	const git = await loadGitContext(resolvedCwd);
 
 	// Filter skills to only include those with read tool
 	const hasRead = tools?.has("read");
-	const filteredSkills = hasRead ? skills : [];
+	const filteredSkills = preloadedSkills === undefined && hasRead ? skills : [];
 
 	if (resolvedCustomPrompt) {
 		return renderPromptTemplate(customSystemPromptTemplate, {
@@ -724,6 +747,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 			agentsMdSearch,
 			git,
 			skills: filteredSkills,
+			preloadedSkills: preloadedSkillContents,
 			rules: rules ?? [],
 			dateTime,
 			cwd: resolvedCwd,
@@ -738,6 +762,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		agentsMdSearch,
 		git,
 		skills: filteredSkills,
+		preloadedSkills: preloadedSkillContents,
 		rules: rules ?? [],
 		dateTime,
 		cwd: resolvedCwd,

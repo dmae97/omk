@@ -608,6 +608,7 @@ async function runTask(runState: RunState, payload: SubagentWorkerStartPayload):
 			requireCompleteTool: true,
 			contextFiles: payload.contextFiles,
 			skills: payload.skills,
+			preloadedSkills: payload.preloadedSkills,
 			promptTemplates: payload.promptTemplates,
 			// Append system prompt (equivalent to CLI's --append-system-prompt)
 			systemPrompt: defaultPrompt =>
@@ -626,6 +627,14 @@ async function runTask(runState: RunState, payload: SubagentWorkerStartPayload):
 
 		runState.session = session;
 		checkAbort();
+
+		// Write session init metadata for debugging/replay
+		session.sessionManager.appendSessionInit({
+			systemPrompt: session.agent.state.systemPrompt,
+			task: payload.task,
+			tools: session.getAllToolNames(),
+			outputSchema: payload.outputSchema,
+		});
 
 		signal.addEventListener(
 			"abort",

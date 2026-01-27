@@ -38,6 +38,7 @@ Agents with `output="structured"` have a fixed schema enforced via frontmatter; 
 		- `id`: Short CamelCase identifier (max 32 chars, e.g., "SessionStore", "LspRefactor")
 		- `description`: Short human-readable description of what the task does
 		- `args`: Object with keys matching `\{{placeholders}}` in context (always include this, even if empty)
+		- `skills`: (optional) Array of skill names to preload into this task's system prompt. When set, the skills index section is omitted and the full SKILL.md contents are embedded.
 - `output`: (optional) JTD schema for structured subagent output (used by the complete tool)
 </parameters>
 

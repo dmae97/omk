@@ -110,6 +110,19 @@ export interface TtsrInjectionEntry extends SessionEntryBase {
 	injectedRules: string[];
 }
 
+/** Session init entry - captures initial context for subagent sessions (debugging/replay). */
+export interface SessionInitEntry extends SessionEntryBase {
+	type: "session_init";
+	/** Full system prompt sent to the model */
+	systemPrompt: string;
+	/** Initial task/user message */
+	task: string;
+	/** Tools available to the agent */
+	tools: string[];
+	/** Output schema if structured output was requested */
+	outputSchema?: unknown;
+}
+
 /**
  * Custom message entry for extensions to inject messages into LLM context.
  * Use customType to identify your extension's entries.
@@ -140,7 +153,8 @@ export type SessionEntry =
 	| CustomEntry
 	| CustomMessageEntry
 	| LabelEntry
-	| TtsrInjectionEntry;
+	| TtsrInjectionEntry
+	| SessionInitEntry;
 
 /** Raw file entry (includes header) */
 export type FileEntry = SessionHeader | SessionEntry;
@@ -1263,7 +1277,7 @@ export class SessionManager {
 		if (this.persistError) throw this.persistError;
 
 		const hasAssistant = this.fileEntries.some(e => e.type === "message" && e.message.role === "assistant");
-		if (!hasAssistant) return;
+		if (!hasAssistant && !this.flushed) return;
 
 		if (!this.flushed) {
 			this.flushed = true;
@@ -1363,6 +1377,19 @@ export class SessionManager {
 			timestamp: new Date().toISOString(),
 			model,
 			role,
+		};
+		this._appendEntry(entry);
+		return entry.id;
+	}
+
+	/** Append session init metadata (for subagent debugging/replay). Returns entry id. */
+	appendSessionInit(init: { systemPrompt: string; task: string; tools: string[]; outputSchema?: unknown }): string {
+		const entry: SessionInitEntry = {
+			type: "session_init",
+			id: generateId(this.byId),
+			parentId: this.leafId,
+			timestamp: new Date().toISOString(),
+			...init,
 		};
 		this._appendEntry(entry);
 		return entry.id;

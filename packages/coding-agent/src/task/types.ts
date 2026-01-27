@@ -49,6 +49,11 @@ export const taskItemSchema = Type.Object({
 			description: "Arguments to fill {{placeholders}} in context",
 		}),
 	),
+	skills: Type.Optional(
+		Type.Array(Type.String(), {
+			description: "Skill names to preload into the subagent system prompt",
+		}),
+	),
 });
 
 export type TaskItem = Static<typeof taskItemSchema>;

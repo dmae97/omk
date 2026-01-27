@@ -391,12 +391,57 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 			// Build full prompts with context prepended
 			const tasksWithContext = tasksWithUniqueIds.map(t => renderTemplate(context, t));
 			const contextFiles = this.session.contextFiles;
-			const skills = this.session.skills;
+			const availableSkills = this.session.skills;
+			const availableSkillList = availableSkills ?? [];
 			const promptTemplates = this.session.promptTemplates;
+			const skillLookup = new Map(availableSkillList.map(skill => [skill.name, skill]));
+			const missingSkillsByTask: Array<{ id: string; missing: string[] }> = [];
+			const tasksWithSkills = tasksWithContext.map(task => {
+				if (task.skills === undefined) {
+					return { ...task, resolvedSkills: availableSkills, preloadedSkills: undefined };
+				}
+				const requested = task.skills;
+				const resolved = [] as typeof availableSkillList;
+				const missing: string[] = [];
+				const seen = new Set<string>();
+				for (const name of requested) {
+					const trimmed = name.trim();
+					if (!trimmed || seen.has(trimmed)) continue;
+					seen.add(trimmed);
+					const skill = skillLookup.get(trimmed);
+					if (skill) {
+						resolved.push(skill);
+					} else {
+						missing.push(trimmed);
+					}
+				}
+				if (missing.length > 0) {
+					missingSkillsByTask.push({ id: task.id, missing });
+				}
+				return { ...task, resolvedSkills: resolved, preloadedSkills: resolved };
+			});
+
+			if (missingSkillsByTask.length > 0) {
+				const available = availableSkillList.map(skill => skill.name).join(", ") || "none";
+				const details = missingSkillsByTask.map(entry => `${entry.id}: ${entry.missing.join(", ")}`).join("; ");
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Unknown skills requested: ${details}. Available skills: ${available}`,
+						},
+					],
+					details: {
+						projectAgentsDir,
+						results: [],
+						totalDurationMs: Date.now() - startTime,
+					},
+				};
+			}
 
 			// Initialize progress for all tasks
-			for (let i = 0; i < tasksWithContext.length; i++) {
-				const t = tasksWithContext[i];
+			for (let i = 0; i < tasksWithSkills.length; i++) {
+				const t = tasksWithSkills[i];
 				progressMap.set(i, {
 					index: i,
 					id: t.id,
@@ -416,7 +461,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 			}
 			emitProgress();
 
-			const runTask = async (task: (typeof tasksWithContext)[number], index: number) => {
+			const runTask = async (task: (typeof tasksWithSkills)[number], index: number) => {
 				if (!isIsolated) {
 					return runSubprocess({
 						cwd: this.session.cwd,
@@ -437,8 +482,8 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 						eventBus: undefined,
 						onProgress: progress => {
 							progressMap.set(index, {
-								...progress,
-								args: tasksWithContext[index]?.args,
+								...structuredClone(progress),
+								args: tasksWithSkills[index]?.args,
 							});
 							emitProgress();
 						},
@@ -447,7 +492,8 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 						settingsManager: this.session.settingsManager,
 						mcpManager: this.session.mcpManager,
 						contextFiles,
-						skills,
+						skills: task.resolvedSkills,
+						preloadedSkills: task.preloadedSkills,
 						promptTemplates,
 					});
 				}
@@ -480,8 +526,8 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 						eventBus: undefined,
 						onProgress: progress => {
 							progressMap.set(index, {
-								...progress,
-								args: tasksWithContext[index]?.args,
+								...structuredClone(progress),
+								args: tasksWithSkills[index]?.args,
 							});
 							emitProgress();
 						},
@@ -490,7 +536,8 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 						settingsManager: this.session.settingsManager,
 						mcpManager: this.session.mcpManager,
 						contextFiles,
-						skills,
+						skills: task.resolvedSkills,
+						preloadedSkills: task.preloadedSkills,
 						promptTemplates,
 					});
 					const patch = await captureDeltaPatch(worktreeDir, baseline);
@@ -527,7 +574,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 
 			// Execute in parallel with concurrency limit
 			const { results: partialResults, aborted } = await mapWithConcurrencyLimit(
-				tasksWithContext,
+				tasksWithSkills,
 				MAX_CONCURRENCY,
 				runTask,
 				signal,
@@ -538,10 +585,10 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 				if (result !== undefined) {
 					return {
 						...result,
-						args: tasksWithContext[index]?.args,
+						args: tasksWithSkills[index]?.args,
 					};
 				}
-				const task = tasksWithContext[index];
+				const task = tasksWithSkills[index];
 				return {
 					index,
 					id: task.id,

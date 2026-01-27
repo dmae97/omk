@@ -107,6 +107,7 @@ export interface SubagentWorkerStartPayload {
 	pythonPreludeDocs?: PreludeHelper[];
 	contextFiles?: ContextFileEntry[];
 	skills?: Skill[];
+	preloadedSkills?: Skill[];
 	promptTemplates?: PromptTemplate[];
 	mcpTools?: MCPToolMetadata[];
 	pythonToolProxy?: boolean;

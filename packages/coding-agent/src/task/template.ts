@@ -5,10 +5,11 @@ type RenderResult = {
 	args: Record<string, string>;
 	id: string;
 	description: string;
+	skills?: string[];
 };
 
 export function renderTemplate(template: string, task: TaskItem): RenderResult {
-	const { id, description, args } = task;
+	const { id, description, args, skills } = task;
 
 	let usedPlaceholder = false;
 	const unknownArguments: string[] = [];
@@ -43,5 +44,6 @@ export function renderTemplate(template: string, task: TaskItem): RenderResult {
 		args: { id, description, ...args },
 		id,
 		description,
+		skills,
 	};
 }

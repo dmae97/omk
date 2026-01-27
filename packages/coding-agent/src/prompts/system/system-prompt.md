@@ -264,6 +264,18 @@ If a skill covers what you're producing, read it before proceeding.
 {{/list}}
 </skills>
 {{/if}}
+{{#if preloadedSkills.length}}
+<preloaded_skills>
+The following skills are preloaded in full. Apply their instructions directly.
+
+{{#list preloadedSkills join="\n"}}
+<skill name="{{name}}">
+<location>skill://{{escapeXml name}}</location>
+{{content}}
+</skill>
+{{/list}}
+</preloaded_skills>
+{{/if}}
 {{#if rules.length}}
 <rules>
 Rules are local constraints.

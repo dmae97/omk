@@ -156,6 +156,8 @@ export interface CreateAgentSessionOptions {
 
 	/** Skills. Default: discovered from multiple locations */
 	skills?: Skill[];
+	/** Skills to inline into the system prompt instead of listing available skills. */
+	preloadedSkills?: Skill[];
 	/** Context files (AGENTS.md content). Default: discovered walking up from cwd */
 	contextFiles?: Array<{ path: string; content: string }>;
 	/** Prompt templates. Default: discovered from cwd/.omp/prompts/ + agentDir/prompts/ */
@@ -993,6 +995,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		const defaultPrompt = await buildSystemPromptInternal({
 			cwd,
 			skills,
+			preloadedSkills: options.preloadedSkills,
 			contextFiles,
 			tools,
 			toolNames,
@@ -1007,6 +1010,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			return await buildSystemPromptInternal({
 				cwd,
 				skills,
+				preloadedSkills: options.preloadedSkills,
 				contextFiles,
 				tools,
 				toolNames,
