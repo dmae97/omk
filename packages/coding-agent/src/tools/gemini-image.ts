@@ -622,32 +622,31 @@ async function parseAntigravitySseForImage(response: Response, signal?: AbortSig
 				const jsonStr = line.slice(5).trim();
 				if (!jsonStr) continue;
 
-				let chunk: AntigravityResponseChunk;
-				try {
-					chunk = JSON.parse(jsonStr);
-				} catch {
-					continue;
-				}
+				const parsed = Bun.JSONL.parseChunk(`${jsonStr}\n`);
+				if (parsed.error || parsed.values.length === 0) continue;
 
-				const responseData = chunk.response;
-				if (!responseData?.candidates) continue;
+				for (const value of parsed.values) {
+					const chunk = value as AntigravityResponseChunk;
+					const responseData = chunk.response;
+					if (!responseData?.candidates) continue;
 
-				if (responseData.usageMetadata) {
-					usage = responseData.usageMetadata;
-				}
+					if (responseData.usageMetadata) {
+						usage = responseData.usageMetadata;
+					}
 
-				for (const candidate of responseData.candidates) {
-					const parts = candidate.content?.parts;
-					if (!parts) continue;
-					for (const part of parts) {
-						if (part.text) {
-							textParts.push(part.text);
-						}
-						if (part.inlineData?.data && part.inlineData?.mimeType) {
-							images.push({
-								data: part.inlineData.data,
-								mimeType: part.inlineData.mimeType,
-							});
+					for (const candidate of responseData.candidates) {
+						const parts = candidate.content?.parts;
+						if (!parts) continue;
+						for (const part of parts) {
+							if (part.text) {
+								textParts.push(part.text);
+							}
+							if (part.inlineData?.data && part.inlineData?.mimeType) {
+								images.push({
+									data: part.inlineData.data,
+									mimeType: part.inlineData.mimeType,
+								});
+							}
 						}
 					}
 				}

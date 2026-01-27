@@ -544,7 +544,7 @@ interface Terminal {
 ```typescript
 import { visibleWidth, truncateToWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-tui";
 
-// Get visible width of string (ignoring ANSI codes)
+// Get visible width of string (ignoring ANSI codes, uses Bun.stringWidth)
 const width = visibleWidth("\x1b[31mHello\x1b[0m"); // 5
 
 // Truncate string to width (preserving ANSI codes, adds ellipsis)
@@ -553,7 +553,7 @@ const truncated = truncateToWidth("Hello World", 8); // "Hello..."
 // Truncate without ellipsis
 const truncatedNoEllipsis = truncateToWidth("Hello World", 8, ""); // "Hello Wo"
 
-// Wrap text to width (preserving ANSI codes across line breaks)
+// Wrap text to width (Bun.wrapAnsi word wrap, trims line ends, preserves ANSI)
 const lines = wrapTextWithAnsi("This is a long line that needs wrapping", 20);
 // ["This is a long line", "that needs wrapping"]
 ```
@@ -631,10 +631,11 @@ class MyComponent implements Component {
 
 ### ANSI Code Considerations
 
-Both `visibleWidth()` and `truncateToWidth()` correctly handle ANSI escape codes:
+`visibleWidth()`, `truncateToWidth()`, and `wrapTextWithAnsi()` correctly handle ANSI escape codes:
 
-- `visibleWidth()` ignores ANSI codes when calculating width
+- `visibleWidth()` ignores ANSI codes when calculating width (via `Bun.stringWidth`)
 - `truncateToWidth()` preserves ANSI codes and properly closes them when truncating
+- `wrapTextWithAnsi()` preserves ANSI codes while word-wrapping and trimming line ends
 
 ```typescript
 import chalk from "chalk";

@@ -1,5 +1,3 @@
-import { eastAsianWidth } from "get-east-asian-width";
-
 // Grapheme segmenter (shared instance)
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
@@ -10,70 +8,11 @@ export function getSegmenter(): Intl.Segmenter {
 	return segmenter;
 }
 
-/**
- * Check if a grapheme cluster (after segmentation) could possibly be an RGI emoji.
- * This is a fast heuristic to avoid the expensive rgiEmojiRegex test.
- * The tested Unicode blocks are deliberately broad to account for future
- * Unicode additions.
- */
-function couldBeEmoji(segment: string): boolean {
-	const cp = segment.codePointAt(0)!;
-	return (
-		(cp >= 0x1f000 && cp <= 0x1fbff) || // Emoji and Pictograph
-		(cp >= 0x2300 && cp <= 0x23ff) || // Misc technical
-		(cp >= 0x2600 && cp <= 0x27bf) || // Misc symbols, dingbats
-		(cp >= 0x2b50 && cp <= 0x2b55) || // Specific stars/circles
-		segment.includes("\uFE0F") || // Contains VS16 (emoji presentation selector)
-		segment.length > 2 // Multi-codepoint sequences (ZWJ, skin tones, etc.)
-	);
-}
-
-// Regexes for character classification (same as string-width library)
-const zeroWidthRegex = /^(?:\p{Default_Ignorable_Code_Point}|\p{Control}|\p{Mark}|\p{Surrogate})+$/v;
-const leadingNonPrintingRegex = /^[\p{Default_Ignorable_Code_Point}\p{Control}\p{Format}\p{Mark}\p{Surrogate}]+/v;
-const rgiEmojiRegex = /^\p{RGI_Emoji}$/v;
 
 // Cache for non-ASCII strings
 const WIDTH_CACHE_SIZE = 512;
 const widthCache = new Map<string, number>();
 
-/**
- * Calculate the terminal width of a single grapheme cluster.
- * Based on code from the string-width library, but includes a possible-emoji
- * check to avoid running the RGI_Emoji regex unnecessarily.
- */
-function graphemeWidth(segment: string): number {
-	// Zero-width clusters
-	if (zeroWidthRegex.test(segment)) {
-		return 0;
-	}
-
-	// Emoji check with pre-filter
-	if (couldBeEmoji(segment) && rgiEmojiRegex.test(segment)) {
-		return 2;
-	}
-
-	// Get base visible codepoint
-	const base = segment.replace(leadingNonPrintingRegex, "");
-	const cp = base.codePointAt(0);
-	if (cp === undefined) {
-		return 0;
-	}
-
-	let width = eastAsianWidth(cp);
-
-	// Trailing halfwidth/fullwidth forms
-	if (segment.length > 1) {
-		for (const char of segment.slice(1)) {
-			const c = char.codePointAt(0)!;
-			if (c >= 0xff00 && c <= 0xffef) {
-				width += eastAsianWidth(c);
-			}
-		}
-	}
-
-	return width;
-}
 
 /**
  * Calculate the visible width of a string in terminal columns.
@@ -114,11 +53,8 @@ export function visibleWidth(str: string): number {
 		clean = clean.replace(/\x1b\]8;;[^\x07]*\x07/g, "");
 	}
 
-	// Calculate width
-	let width = 0;
-	for (const { segment } of segmenter.segment(clean)) {
-		width += graphemeWidth(segment);
-	}
+
+	const width = Bun.stringWidth(clean);
 
 	// Cache result
 	if (widthCache.size >= WIDTH_CACHE_SIZE) {
@@ -370,69 +306,7 @@ class AnsiCodeTracker {
 	}
 }
 
-function updateTrackerFromText(text: string, tracker: AnsiCodeTracker): void {
-	let i = 0;
-	while (i < text.length) {
-		const ansiResult = extractAnsiCode(text, i);
-		if (ansiResult) {
-			tracker.process(ansiResult.code);
-			i += ansiResult.length;
-		} else {
-			i++;
-		}
-	}
-}
 
-/**
- * Split text into words while keeping ANSI codes attached.
- */
-function splitIntoTokensWithAnsi(text: string): string[] {
-	const tokens: string[] = [];
-	let current = "";
-	let pendingAnsi = ""; // ANSI codes waiting to be attached to next visible content
-	let inWhitespace = false;
-	let i = 0;
-
-	while (i < text.length) {
-		const ansiResult = extractAnsiCode(text, i);
-		if (ansiResult) {
-			// Hold ANSI codes separately - they'll be attached to the next visible char
-			pendingAnsi += ansiResult.code;
-			i += ansiResult.length;
-			continue;
-		}
-
-		const char = text[i];
-		const charIsSpace = char === " ";
-
-		if (charIsSpace !== inWhitespace && current) {
-			// Switching between whitespace and non-whitespace, push current token
-			tokens.push(current);
-			current = "";
-		}
-
-		// Attach any pending ANSI codes to this visible character
-		if (pendingAnsi) {
-			current += pendingAnsi;
-			pendingAnsi = "";
-		}
-
-		inWhitespace = charIsSpace;
-		current += char;
-		i++;
-	}
-
-	// Handle any remaining pending ANSI codes (attach to last token)
-	if (pendingAnsi) {
-		current += pendingAnsi;
-	}
-
-	if (current) {
-		tokens.push(current);
-	}
-
-	return tokens;
-}
 
 /**
  * Wrap text with ANSI codes preserved.
@@ -450,112 +324,7 @@ export function wrapTextWithAnsi(text: string, width: number): string[] {
 		return [""];
 	}
 
-	// Handle newlines by processing each line separately
-	// Track ANSI state across lines so styles carry over after literal newlines
-	const inputLines = text.split("\n");
-	const result: string[] = [];
-	const tracker = new AnsiCodeTracker();
-
-	for (const inputLine of inputLines) {
-		// Prepend active ANSI codes from previous lines (except for first line)
-		const prefix = result.length > 0 ? tracker.getActiveCodes() : "";
-		result.push(...wrapSingleLine(prefix + inputLine, width));
-		// Update tracker with codes from this line for next iteration
-		updateTrackerFromText(inputLine, tracker);
-	}
-
-	return result.length > 0 ? result : [""];
-}
-
-function wrapSingleLine(line: string, width: number): string[] {
-	if (!line) {
-		return [""];
-	}
-
-	const visibleLength = visibleWidth(line);
-	if (visibleLength <= width) {
-		return [line];
-	}
-
-	const wrapped: string[] = [];
-	const tracker = new AnsiCodeTracker();
-	const tokens = splitIntoTokensWithAnsi(line);
-
-	let currentLine = "";
-	let currentVisibleLength = 0;
-
-	for (const token of tokens) {
-		const tokenVisibleLength = visibleWidth(token);
-		const isWhitespace = token.trim() === "";
-
-		// Token itself is too long - break it character by character
-		// For whitespace tokens exceeding width, truncate to width instead of breaking
-		if (tokenVisibleLength > width && isWhitespace) {
-			// Truncate long whitespace to fit width
-			const truncated = token.substring(0, width - currentVisibleLength);
-			if (truncated) {
-				currentLine += truncated;
-				currentVisibleLength += visibleWidth(truncated);
-			}
-			updateTrackerFromText(token, tracker);
-			continue;
-		}
-
-		if (tokenVisibleLength > width && !isWhitespace) {
-			if (currentLine) {
-				// Add specific reset for underline only (preserves background)
-				const lineEndReset = tracker.getLineEndReset();
-				if (lineEndReset) {
-					currentLine += lineEndReset;
-				}
-				wrapped.push(currentLine);
-				currentLine = "";
-				currentVisibleLength = 0;
-			}
-
-			// Break long token - breakLongWord handles its own resets
-			const broken = breakLongWord(token, width, tracker);
-			wrapped.push(...broken.slice(0, -1));
-			currentLine = broken[broken.length - 1];
-			currentVisibleLength = visibleWidth(currentLine);
-			continue;
-		}
-
-		// Check if adding this token would exceed width
-		const totalNeeded = currentVisibleLength + tokenVisibleLength;
-
-		if (totalNeeded > width && currentVisibleLength > 0) {
-			// Trim trailing whitespace, then add underline reset (not full reset, to preserve background)
-			let lineToWrap = currentLine.trimEnd();
-			const lineEndReset = tracker.getLineEndReset();
-			if (lineEndReset) {
-				lineToWrap += lineEndReset;
-			}
-			wrapped.push(lineToWrap);
-			if (isWhitespace) {
-				// Don't start new line with whitespace
-				currentLine = tracker.getActiveCodes();
-				currentVisibleLength = 0;
-			} else {
-				currentLine = tracker.getActiveCodes() + token;
-				currentVisibleLength = tokenVisibleLength;
-			}
-		} else {
-			// Add to current line
-			currentLine += token;
-			currentVisibleLength += tokenVisibleLength;
-		}
-
-		updateTrackerFromText(token, tracker);
-	}
-
-	if (currentLine) {
-		// No reset at end of final line - let caller handle it
-		wrapped.push(currentLine);
-	}
-
-	// Trailing whitespace can cause lines to exceed the requested width
-	return wrapped.length > 0 ? wrapped.map(line => line.trimEnd()) : [""];
+	return Bun.wrapAnsi(text, width, { wordWrap: true, hard: true, trim: false }).split("\n");
 }
 
 const PUNCTUATION_REGEX = /[(){}[\]<>.,;:'"!?+\-=*/\\|&%^$#@~`]/;
@@ -572,75 +341,6 @@ export function isWhitespaceChar(char: string): boolean {
  */
 export function isPunctuationChar(char: string): boolean {
 	return PUNCTUATION_REGEX.test(char);
-}
-
-function breakLongWord(word: string, width: number, tracker: AnsiCodeTracker): string[] {
-	const lines: string[] = [];
-	let currentLine = tracker.getActiveCodes();
-	let currentWidth = 0;
-
-	// First, separate ANSI codes from visible content
-	// We need to handle ANSI codes specially since they're not graphemes
-	let i = 0;
-	const segments: Array<{ type: "ansi" | "grapheme"; value: string }> = [];
-
-	while (i < word.length) {
-		const ansiResult = extractAnsiCode(word, i);
-		if (ansiResult) {
-			segments.push({ type: "ansi", value: ansiResult.code });
-			i += ansiResult.length;
-		} else {
-			// Find the next ANSI code or end of string
-			let end = i;
-			while (end < word.length) {
-				const nextAnsi = extractAnsiCode(word, end);
-				if (nextAnsi) break;
-				end++;
-			}
-			// Segment this non-ANSI portion into graphemes
-			const textPortion = word.slice(i, end);
-			for (const seg of segmenter.segment(textPortion)) {
-				segments.push({ type: "grapheme", value: seg.segment });
-			}
-			i = end;
-		}
-	}
-
-	// Now process segments
-	for (const seg of segments) {
-		if (seg.type === "ansi") {
-			currentLine += seg.value;
-			tracker.process(seg.value);
-			continue;
-		}
-
-		const grapheme = seg.value;
-		// Skip empty graphemes to avoid issues with string-width calculation
-		if (!grapheme) continue;
-
-		const graphemeWidth = visibleWidth(grapheme);
-
-		if (currentWidth + graphemeWidth > width) {
-			// Add specific reset for underline only (preserves background)
-			const lineEndReset = tracker.getLineEndReset();
-			if (lineEndReset) {
-				currentLine += lineEndReset;
-			}
-			lines.push(currentLine);
-			currentLine = tracker.getActiveCodes();
-			currentWidth = 0;
-		}
-
-		currentLine += grapheme;
-		currentWidth += graphemeWidth;
-	}
-
-	if (currentLine) {
-		// No reset at end of final segment - caller handles continuation
-		lines.push(currentLine);
-	}
-
-	return lines.length > 0 ? lines : [""];
 }
 
 /**
@@ -782,7 +482,7 @@ export function sliceWithWidth(
 		while (textEnd < line.length && !extractAnsiCode(line, textEnd)) textEnd++;
 
 		for (const { segment } of segmenter.segment(line.slice(i, textEnd))) {
-			const w = graphemeWidth(segment);
+			const w = visibleWidth(segment);
 			const inRange = currentCol >= startCol && currentCol < endCol;
 			const fits = !strict || currentCol + w <= endCol;
 			if (inRange && fits) {
@@ -850,7 +550,7 @@ export function extractSegments(
 		while (textEnd < line.length && !extractAnsiCode(line, textEnd)) textEnd++;
 
 		for (const { segment } of segmenter.segment(line.slice(i, textEnd))) {
-			const w = graphemeWidth(segment);
+			const w = visibleWidth(segment);
 
 			if (currentCol < beforeEnd) {
 				if (pendingAnsiBefore) {

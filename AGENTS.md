@@ -255,6 +255,84 @@ for await (const line of readLines(stream)) {
 
 **Avoid manual reader loops** unless protocol requires it (SSE, streaming JSON-RPC).
 
+### JSON5 Parsing
+
+**Use `Bun.JSON5`** — never add `json5` as a dependency:
+
+```typescript
+// BAD: External dependency
+import JSON5 from "json5";
+const data = JSON5.parse(text);
+
+// GOOD: Bun builtin
+const data = Bun.JSON5.parse(text);
+const output = Bun.JSON5.stringify(obj);
+```
+
+### JSONL Parsing
+
+**Use `Bun.JSONL`** — never manually split and parse:
+
+```typescript
+// BAD: Manual split + JSON.parse
+const lines = text.split("\n").filter(Boolean);
+const entries = lines.map((line) => JSON.parse(line));
+
+// GOOD: Full blob parsing
+const entries = Bun.JSONL.parse(text);
+```
+
+**For streaming JSONL** (SSE, JSON-RPC, subprocess output), use `Bun.JSONL.parseChunk()`:
+
+```typescript
+// BAD: Manual buffering and line splitting
+let buffer = "";
+for await (const chunk of stream) {
+	buffer += decoder.decode(chunk);
+	const lines = buffer.split("\n");
+	buffer = lines.pop() ?? "";
+	for (const line of lines) {
+		if (line.trim()) yield JSON.parse(line);
+	}
+}
+
+// GOOD: Bun handles buffering and parsing
+let buffer: Uint8Array | undefined;
+for await (const chunk of stream) {
+	const { values, remainder } = Bun.JSONL.parseChunk(chunk, buffer);
+	buffer = remainder;
+	for (const value of values) yield value;
+}
+```
+
+### Terminal Width and Wrapping
+
+**Use `Bun.stringWidth()`** for display width calculations:
+
+```typescript
+// BAD: External dependency or custom implementation
+import { getWidth } from "get-east-asian-width";
+function visibleWidth(str: string) { /* custom logic */ }
+
+// GOOD: Bun builtin (handles ANSI, emoji, CJK)
+const width = Bun.stringWidth(text);
+const widthNoAnsi = Bun.stringWidth(text, { countAnsiEscapeCodes: false });
+```
+
+**Use `Bun.wrapAnsi()`** for ANSI-aware text wrapping:
+
+```typescript
+// BAD: Custom ANSI-aware wrapping
+function wrapTextWithAnsi(text: string, width: number) { /* complex SGR tracking */ }
+
+// GOOD: Bun builtin
+const wrapped = Bun.wrapAnsi(text, width, {
+	wordWrap: true,
+	hard: false,
+	trim: true,
+});
+```
+
 ### Where Bun Wins
 
 | Operation       | Use                                   | Not                             |
@@ -267,6 +345,10 @@ for await (const line of readLines(stream)) {
 | SQLite          | `bun:sqlite`                          | `better-sqlite3`                |
 | Hashing         | `Bun.hash()`, Web Crypto              | `node:crypto`                   |
 | Path resolution | `import.meta.dir`, `import.meta.path` | `fileURLToPath` dance           |
+| JSON5 parsing   | `Bun.JSON5.parse()`                   | `json5` package                 |
+| JSONL parsing   | `Bun.JSONL.parse()`, `.parseChunk()`  | manual split + `JSON.parse`     |
+| String width    | `Bun.stringWidth()`                   | `get-east-asian-width`, custom  |
+| Text wrapping   | `Bun.wrapAnsi()`                      | custom ANSI-aware wrappers      |
 
 ### Patterns
 
@@ -290,6 +372,10 @@ const valid = await Bun.password.verify("password", hash);
 - `new Promise((resolve) => setTimeout(resolve, ms))` → use `Bun.sleep(ms)`
 - `existsSync/readFileSync/writeFileSync` in async code → use `Bun.file()` APIs
 - Manual `child.stdout.getReader()` loops for non-streaming commands → use `readStream()` helper
+- `import JSON5 from "json5"` → use `Bun.JSON5.parse()`
+- `text.split("\n").map(JSON.parse)` for JSONL → use `Bun.JSONL.parse()`
+- Custom `visibleWidth()` / `get-east-asian-width` → use `Bun.stringWidth()`
+- Custom ANSI-aware text wrapping → use `Bun.wrapAnsi()`
 
 ## Logging
 

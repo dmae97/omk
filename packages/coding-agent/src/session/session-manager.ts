@@ -277,6 +277,28 @@ function migrateToCurrentVersion(entries: FileEntry[]): boolean {
 	return true;
 }
 
+function parseJsonlEntries<T>(content: string): T[] {
+	if (!content.trim()) return [];
+	const entries: T[] = [];
+	let buffer = content;
+	while (buffer.length > 0) {
+		const result = Bun.JSONL.parseChunk(buffer);
+		if (result.values.length > 0) {
+			entries.push(...(result.values as T[]));
+		}
+		if (result.error) {
+			const nextNewline = buffer.indexOf("\n", result.read);
+			if (nextNewline === -1) break;
+			buffer = buffer.slice(nextNewline + 1);
+			continue;
+		}
+		if (result.read === 0) break;
+		buffer = buffer.slice(result.read);
+		if (result.done) break;
+	}
+	return entries;
+}
+
 /** Exported for testing */
 export function migrateSessionEntries(entries: FileEntry[]): void {
 	migrateToCurrentVersion(entries);
@@ -284,20 +306,7 @@ export function migrateSessionEntries(entries: FileEntry[]): void {
 
 /** Exported for compaction.test.ts */
 export function parseSessionEntries(content: string): FileEntry[] {
-	const entries: FileEntry[] = [];
-	const lines = content.trim().split("\n");
-
-	for (const line of lines) {
-		if (!line.trim()) continue;
-		try {
-			const entry = JSON.parse(line) as FileEntry;
-			entries.push(entry);
-		} catch {
-			// Skip malformed lines
-		}
-	}
-
-	return entries;
+	return parseJsonlEntries<FileEntry>(content);
 }
 
 export function getLatestCompactionEntry(entries: SessionEntry[]): CompactionEntry | null {
@@ -463,19 +472,7 @@ export async function loadEntriesFromFile(
 		if (isEnoent(err)) return [];
 		throw err;
 	}
-
-	const entries: FileEntry[] = [];
-	const lines = content.trim().split("\n");
-
-	for (const line of lines) {
-		if (!line.trim()) continue;
-		try {
-			const entry = JSON.parse(line) as FileEntry;
-			entries.push(entry);
-		} catch {
-			// Skip malformed lines
-		}
-	}
+	const entries = parseJsonlEntries<FileEntry>(content);
 
 	// Validate session header
 	if (entries.length === 0) return entries;
@@ -546,27 +543,20 @@ class RecentSessionInfo {
  * Extracts the text content from a user message entry.
  * Returns undefined if the entry is not a user message or has no text.
  */
-function extractFirstUserPrompt(lines: string[]): string | undefined {
-	for (let i = 1; i < lines.length; i++) {
-		const line = lines[i];
-		if (!line?.trim()) continue;
-		try {
-			const entry = JSON.parse(line) as Record<string, unknown>;
-			if (entry.type !== "message") continue;
-			const message = entry.message as Record<string, unknown> | undefined;
-			if (message?.role !== "user") continue;
-			const content = message.content;
-			if (typeof content === "string") return content;
-			if (Array.isArray(content)) {
-				for (const block of content) {
-					if (typeof block === "object" && block !== null && "text" in block) {
-						const text = (block as { text: unknown }).text;
-						if (typeof text === "string") return text;
-					}
+function extractFirstUserPrompt(entries: Array<Record<string, unknown>>): string | undefined {
+	for (const entry of entries) {
+		if (entry.type !== "message") continue;
+		const message = entry.message as Record<string, unknown> | undefined;
+		if (message?.role !== "user") continue;
+		const content = message.content;
+		if (typeof content === "string") return content;
+		if (Array.isArray(content)) {
+			for (const block of content) {
+				if (typeof block === "object" && block !== null && "text" in block) {
+					const text = (block as { text: unknown }).text;
+					if (typeof text === "string") return text;
 				}
 			}
-		} catch {
-			// Invalid JSON, skip to next line
 		}
 	}
 	return undefined;
@@ -584,13 +574,12 @@ async function getSortedSessions(sessionDir: string, storage: SessionStorage): P
 			files.map(async (path: string) => {
 				try {
 					const content = await storage.readTextPrefix(path, 4096);
-					const lines = content.split("\n");
-					const firstLine = lines[0];
-					if (!firstLine || !firstLine.trim()) return null;
-					const header = JSON.parse(firstLine) as Record<string, unknown>;
+					const entries = parseJsonlEntries<Record<string, unknown>>(content);
+					if (entries.length === 0) return null;
+					const header = entries[0] as Record<string, unknown>;
 					if (header.type !== "session" || typeof header.id !== "string") return null;
 					const mtime = storage.statSync(path).mtimeMs;
-					const firstPrompt = header.title ? undefined : extractFirstUserPrompt(lines);
+					const firstPrompt = header.title ? undefined : extractFirstUserPrompt(entries);
 					return new RecentSessionInfo(path, mtime, header, firstPrompt);
 				} catch {
 					return null;
@@ -913,48 +902,36 @@ async function collectSessionsFromFiles(files: string[], storage: SessionStorage
 	for (const file of files) {
 		try {
 			const content = await storage.readText(file);
-			const lines = content.trim().split("\n");
-			if (lines.length === 0) continue;
+			const entries = parseJsonlEntries<Record<string, unknown>>(content);
+			if (entries.length === 0) continue;
 
-			// Check first line for valid session header
+			// Check first entry for valid session header
 			type SessionHeaderShape = { type: string; id: string; cwd?: string; title?: string; timestamp: string };
-			let header: SessionHeaderShape | null = null;
-			try {
-				const first = JSON.parse(lines[0]) as SessionHeaderShape;
-				if (first.type === "session" && first.id) {
-					header = first;
-				}
-			} catch {
-				// Not valid JSON
-			}
-			if (!header) continue;
+			const header = entries[0] as SessionHeaderShape;
+			if (header.type !== "session" || !header.id) continue;
 
 			const stats = storage.statSync(file);
 			let messageCount = 0;
 			let firstMessage = "";
 			const allMessages: string[] = [];
 
-			for (let i = 1; i < lines.length; i++) {
-				try {
-					const entry = JSON.parse(lines[i]) as { type?: string; message?: Message };
+			for (let i = 1; i < entries.length; i++) {
+				const entry = entries[i] as { type?: string; message?: Message };
 
-					if (entry.type === "message" && entry.message) {
-						messageCount++;
+				if (entry.type === "message" && entry.message) {
+					messageCount++;
 
-						if (entry.message.role === "user" || entry.message.role === "assistant") {
-							const textContent = extractTextFromContent(entry.message.content);
+					if (entry.message.role === "user" || entry.message.role === "assistant") {
+						const textContent = extractTextFromContent(entry.message.content);
 
-							if (textContent) {
-								allMessages.push(textContent);
+						if (textContent) {
+							allMessages.push(textContent);
 
-								if (!firstMessage && entry.message.role === "user") {
-									firstMessage = textContent;
-								}
+							if (!firstMessage && entry.message.role === "user") {
+								firstMessage = textContent;
 							}
 						}
 					}
-				} catch {
-					// Skip malformed lines
 				}
 			}
 

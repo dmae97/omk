@@ -86,18 +86,26 @@ export class HttpTransport implements MCPTransport {
 				return;
 			}
 
+			let buffer = "";
 			// Read SSE stream
 			for await (const event of readSseEvents(response.body)) {
 				if (!this._connected) break;
 				const data = event.data?.trim();
 				if (!data || data === "[DONE]") continue;
-				try {
-					const message = JSON.parse(data);
+				buffer += data;
+				if (!data.endsWith("\n")) {
+					buffer += "\n";
+				}
+				const result = Bun.JSONL.parseChunk(buffer);
+				buffer = buffer.slice(result.read);
+				if (result.error) {
+					buffer = "";
+					continue;
+				}
+				for (const message of result.values as JsonRpcMessage[]) {
 					if ("method" in message && !("id" in message)) {
 						this.onNotification?.(message.method, message.params);
 					}
-				} catch {
-					// Ignore parse errors
 				}
 			}
 		} catch (error) {
@@ -174,13 +182,22 @@ export class HttpTransport implements MCPTransport {
 		const timeout = this.config.timeout ?? 30000;
 
 		const parse = async (): Promise<T> => {
+			let buffer = "";
 			for await (const event of readSseEvents(response.body!)) {
 				const data = event.data?.trim();
 				if (!data || data === "[DONE]") continue;
+				buffer += data;
+				if (!data.endsWith("\n")) {
+					buffer += "\n";
+				}
+				const result = Bun.JSONL.parseChunk(buffer);
+				buffer = buffer.slice(result.read);
+				if (result.error) {
+					buffer = "";
+					continue;
+				}
 
-				try {
-					const message = JSON.parse(data) as JsonRpcMessage;
-
+				for (const message of result.values as JsonRpcMessage[]) {
 					if (
 						"id" in message &&
 						(message as JsonRpcResponse).id === expectedId &&
@@ -195,10 +212,6 @@ export class HttpTransport implements MCPTransport {
 
 					if ("method" in message && !("id" in message)) {
 						this.onNotification?.(message.method, message.params);
-					}
-				} catch (error) {
-					if (error instanceof Error && error.message.startsWith("MCP error")) {
-						throw error;
 					}
 				}
 			}

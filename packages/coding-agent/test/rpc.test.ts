@@ -67,7 +67,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		expect(sessionFiles.length).toBe(1);
 
 		const sessionContent = await Bun.file(path.join(cwdSessionDir, sessionFiles[0])).text();
-		const entries = sessionContent.split("\n").map(line => JSON.parse(line));
+		const entries = Bun.JSONL.parse(sessionContent);
 
 		// First entry should be session header
 		expect(entries[0].type).toBe("session");
@@ -101,10 +101,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		const cwdSessionDir = path.join(sessionsPath, sessionDirs[0]);
 		const sessionFiles = fs.readdirSync(cwdSessionDir).filter(f => f.endsWith(".jsonl"));
 		const sessionContent = await Bun.file(path.join(cwdSessionDir, sessionFiles[0])).text();
-		const entries = sessionContent
-			.trim()
-			.split("\n")
-			.map(line => JSON.parse(line));
+		const entries = Bun.JSONL.parse(sessionContent);
 
 		const compactionEntries = entries.filter((e: { type: string }) => e.type === "compaction");
 		expect(compactionEntries.length).toBe(1);
@@ -139,10 +136,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		const cwdSessionDir = path.join(sessionsPath, sessionDirs[0]);
 		const sessionFiles = fs.readdirSync(cwdSessionDir).filter(f => f.endsWith(".jsonl"));
 		const sessionContent = await Bun.file(path.join(cwdSessionDir, sessionFiles[0])).text();
-		const entries = sessionContent
-			.trim()
-			.split("\n")
-			.map(line => JSON.parse(line));
+		const entries = Bun.JSONL.parse(sessionContent);
 
 		const bashMessages = entries.filter(
 			(e: { type: string; message?: { role: string } }) =>

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Replaced JSON5 dependency with Bun.JSON5 parsing
+
 ### Fixed
 - Filtered empty user text blocks for OpenAI-compatible completions and normalized Kimi reasoning_content for OpenRouter tool-call messages
 

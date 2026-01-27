@@ -3,7 +3,7 @@ import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallb
 import { StringEnum } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
-import { ptree, readLines } from "@oh-my-pi/pi-utils";
+import { ptree } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import { $ } from "bun";
 import { renderPromptTemplate } from "../config/prompt-templates";
@@ -558,47 +558,79 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 			};
 
 			const maxMatches = effectiveLimit !== undefined ? effectiveLimit + effectiveOffset : undefined;
-			const processLine = async (line: string): Promise<void> => {
-				if (!line.trim()) {
+			const processEvent = async (event: unknown): Promise<void> => {
+				if (!event || typeof event !== "object") {
+					return;
+				}
+				const parsed = event as { type?: string; data?: { path?: { text?: string }; line_number?: number } };
+				if (parsed.type !== "match") {
 					return;
 				}
 
-				let event: { type: string; data?: { path?: { text?: string }; line_number?: number } };
-				try {
-					event = JSON.parse(line);
-				} catch {
+				const nextIndex = matchCount + 1;
+				if (maxMatches !== undefined && nextIndex > maxMatches) {
+					matchLimitReached = true;
+					killedDueToLimit = true;
+					child.kill("SIGKILL");
 					return;
 				}
 
-				if (event.type === "match") {
-					const nextIndex = matchCount + 1;
-					if (maxMatches !== undefined && nextIndex > maxMatches) {
-						matchLimitReached = true;
-						killedDueToLimit = true;
-						child.kill("SIGKILL");
+				matchCount = nextIndex;
+				const filePath = parsed.data?.path?.text;
+				const lineNumber = parsed.data?.line_number;
+
+				if (filePath && typeof lineNumber === "number") {
+					if (matchCount <= effectiveOffset) {
 						return;
 					}
+					recordFile(filePath);
+					recordFileMatch(filePath);
+					const block = await formatBlock(filePath, lineNumber);
+					outputLines.push(...block);
+				}
+			};
 
-					matchCount = nextIndex;
-					const filePath = event.data?.path?.text;
-					const lineNumber = event.data?.line_number;
+			const decoder = new TextDecoder();
+			let buffer = "";
+			const parseBuffer = async () => {
+				while (buffer.length > 0) {
+					const result = Bun.JSONL.parseChunk(buffer);
+					for (const value of result.values) {
+						await processEvent(value);
+					}
 
-					if (filePath && typeof lineNumber === "number") {
-						if (matchCount <= effectiveOffset) {
-							return;
+					if (result.read > 0) {
+						buffer = buffer.slice(result.read);
+					}
+
+					if (result.error) {
+						const nextNewline = buffer.indexOf("\n");
+						if (nextNewline === -1) {
+							buffer = "";
+							break;
 						}
-						recordFile(filePath);
-						recordFileMatch(filePath);
-						const block = await formatBlock(filePath, lineNumber);
-						outputLines.push(...block);
+						buffer = buffer.slice(nextNewline + 1);
+						continue;
+					}
+
+					if (result.read === 0) {
+						break;
 					}
 				}
 			};
 
-			// Process stdout line by line
+			// Process stdout stream with JSONL chunk parsing
 			try {
-				for await (const line of readLines(child.stdout)) {
-					await processLine(line);
+				for await (const chunk of child.stdout) {
+					if (killedDueToLimit) {
+						break;
+					}
+					buffer += decoder.decode(chunk, { stream: true });
+					await parseBuffer();
+				}
+				if (!killedDueToLimit) {
+					buffer += decoder.decode();
+					await parseBuffer();
 				}
 			} catch (err) {
 				if (err instanceof ptree.Exception && err.aborted) {

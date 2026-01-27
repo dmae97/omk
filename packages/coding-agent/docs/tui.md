@@ -153,7 +153,7 @@ handleInput(data: string) {
 
 ## Line Width
 
-**Critical:** Each line from `render()` must not exceed the `width` parameter.
+**Critical:** Each line from `render()` must not exceed the `width` parameter. Width calculations and wrapping follow Bun’s built-ins (`Bun.stringWidth`, `Bun.wrapAnsi`).
 
 ```typescript
 import { visibleWidth, truncateToWidth } from "@oh-my-pi/pi-tui";
@@ -166,9 +166,9 @@ render(width: number): string[] {
 
 Utilities:
 
-- `visibleWidth(str)` - Get display width (ignores ANSI codes)
+- `visibleWidth(str)` - Get display width (ANSI-safe, Unicode-width aware)
 - `truncateToWidth(str, width, ellipsis?)` - Truncate with optional ellipsis
-- `wrapTextWithAnsi(str, width)` - Word wrap preserving ANSI codes
+- `wrapTextWithAnsi(str, width)` - Word wrap preserving ANSI codes (Bun.wrapAnsi)
 
 ## Creating Custom Components
 

@@ -73,8 +73,7 @@ function classifyError(resultText: string): string {
 
 async function extractEditAttempts(sessionPath: string): Promise<EditAttempt[]> {
 	const content = await Bun.file(sessionPath).text();
-	const lines = content.trim().split("\n");
-	const messages: Message[] = lines.map((line) => JSON.parse(line));
+	const messages = Bun.JSONL.parse(content) as Message[];
 
 	const editAttempts: EditAttempt[] = [];
 

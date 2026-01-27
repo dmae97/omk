@@ -100,7 +100,6 @@
 		"highlight.js": "^11.11.1",
 		"marked": "^17.0.1",
 		"nanoid": "^5.1.6",
-		"ndjson": "^2.0.0",
 		"node-html-parser": "^7.0.2",
 		"smol-toml": "^1.6.0",
 		"strip-ansi": "^7.1.2",
@@ -109,7 +108,6 @@
 	"devDependencies": {
 		"@types/diff": "^8.0.0",
 		"@types/ms": "^2.1.0",
-		"@types/ndjson": "^2.0.4",
 		"@types/node": "^25.0.10",
 		"ms": "^2.1.3"
 	},

@@ -107,10 +107,9 @@ export async function migrateSessionsFromAgentRoot(): Promise<void> {
 				if (isEnoent(err)) continue;
 				throw err;
 			}
-			const firstLine = content.split("\n")[0];
-			if (!firstLine?.trim()) continue;
-
-			const header = JSON.parse(firstLine);
+			const entries = Bun.JSONL.parse(content);
+			const header = entries[0];
+			if (!header) continue;
 			if (header.type !== "session" || !header.cwd) continue;
 
 			const cwd: string = header.cwd;

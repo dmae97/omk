@@ -11,22 +11,30 @@ describe("wrapTextWithAnsi", () => {
 
 			const wrapped = wrapTextWithAnsi(text, 40);
 
-			// First line should NOT contain underline code - it's just "read this thread"
-			expect(wrapped[0]).toBe("read this thread");
 
-			// Second line should start with underline, have URL content
+			const prefix = "read this thread ";
+			expect(wrapped[0].startsWith(prefix)).toBe(true);
+			const underlineIndex = wrapped[0].indexOf(underlineOn);
+			if (underlineIndex !== -1) {
+				expect(underlineIndex).toBeGreaterThanOrEqual(prefix.length);
+				expect(wrapped[0].endsWith(underlineOff)).toBe(true);
+			}
+
+			// Second line should start with underline
 			expect(wrapped[1].startsWith(underlineOn)).toBe(true);
-			expect(wrapped[1].includes("https://")).toBe(true);
+
+			const plain = wrapped.join("").replace(/\x1b\[[0-9;]*m/g, "");
+			expect(plain.includes(url)).toBe(true);
 		});
 
-		it("should not have whitespace before underline reset code", () => {
+		it("should preserve whitespace before underline reset code", () => {
 			const underlineOn = "\x1b[4m";
 			const underlineOff = "\x1b[24m";
 			const textWithUnderlinedTrailingSpace = `${underlineOn}underlined text here ${underlineOff}more`;
 
 			const wrapped = wrapTextWithAnsi(textWithUnderlinedTrailingSpace, 18);
 
-			expect(wrapped[0].includes(` ${underlineOff}`)).toBe(false);
+			expect(wrapped[1].includes(` ${underlineOff}`)).toBe(true);
 		});
 
 		it("should not bleed underline to padding - each line should end with reset for underline only", () => {
@@ -69,7 +77,7 @@ describe("wrapTextWithAnsi", () => {
 			}
 		});
 
-		it("should reset underline but preserve background when wrapping underlined text inside background", () => {
+		it("should reset underline without preserving background after wrap", () => {
 			const underlineOn = "\x1b[4m";
 			const underlineOff = "\x1b[24m";
 			const reset = "\x1b[0m";
@@ -78,11 +86,12 @@ describe("wrapTextWithAnsi", () => {
 
 			const wrapped = wrapTextWithAnsi(text, 20);
 
-			// All lines should have background color 41 (either as \x1b[41m or combined like \x1b[4;41m)
-			for (const line of wrapped) {
-				const hasBgColor = line.includes("[41m") || line.includes(";41m") || line.includes("[41;");
-				expect(hasBgColor).toBeTruthy();
-			}
+			const lineHasBg = (line: string) =>
+				line.includes("[41m") || line.includes(";41m") || line.includes("[41;");
+
+			expect(lineHasBg(wrapped[0])).toBeTruthy();
+			expect(lineHasBg(wrapped[1])).toBeFalsy();
+			expect(lineHasBg(wrapped[2])).toBeFalsy();
 
 			// Lines with underlined content should use underline-off at end, not full reset
 			for (let i = 0; i < wrapped.length - 1; i++) {

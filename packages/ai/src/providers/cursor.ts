@@ -3,7 +3,6 @@ import * as fs from "node:fs/promises";
 import http2 from "node:http2";
 import { create, fromBinary, fromJson, type JsonValue, toBinary, toJson } from "@bufbuild/protobuf";
 import { ValueSchema } from "@bufbuild/protobuf/wkt";
-import JSON5 from "json5";
 import { calculateCost } from "../models";
 import type {
 	Api,
@@ -1509,7 +1508,7 @@ function parseToolArgsJson(text: string): unknown {
 			.replace(/\bNone\b/g, "null")
 			.replace(/\bTrue\b/g, "true")
 			.replace(/\bFalse\b/g, "false");
-		return JSON5.parse(normalized);
+		return Bun.JSON5.parse(normalized);
 	} catch {}
 	return text;
 }

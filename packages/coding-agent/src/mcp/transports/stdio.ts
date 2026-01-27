@@ -118,20 +118,25 @@ export class StdioTransport implements MCPTransport {
 	}
 
 	private processBuffer(): void {
-		const lines = this.buffer.split("\n");
-		// Keep incomplete last line in buffer
-		this.buffer = lines.pop() ?? "";
-
-		for (const line of lines) {
-			const trimmed = line.trim();
-			if (!trimmed) continue;
-
-			try {
-				const message = JSON.parse(trimmed) as JsonRpcResponse;
-				this.handleMessage(message);
-			} catch {
-				// Ignore malformed lines
+		while (this.buffer.length > 0) {
+			const result = Bun.JSONL.parseChunk(this.buffer);
+			for (const message of result.values) {
+				this.handleMessage(message as JsonRpcResponse);
 			}
+
+			if (result.error) {
+				const nextNewline = this.buffer.indexOf("\n", result.read);
+				if (nextNewline === -1) {
+					this.buffer = "";
+					break;
+				}
+				this.buffer = this.buffer.slice(nextNewline + 1);
+				continue;
+			}
+
+			if (result.read === 0) break;
+			this.buffer = this.buffer.slice(result.read);
+			if (result.done) break;
 		}
 	}
 

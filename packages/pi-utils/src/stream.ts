@@ -6,7 +6,6 @@ import stripAnsi from "strip-ansi";
  * Removes characters that crash string-width or cause display issues:
  * - Control characters (except tab, newline, carriage return)
  * - Lone surrogates
- * - Unicode Format characters (crash string-width due to a bug)
  * - Characters with undefined code points
  */
 export function sanitizeBinaryOutput(str: string): string {
@@ -17,7 +16,6 @@ export function sanitizeBinaryOutput(str: string): string {
 		.filter(char => {
 			// Filter out characters that cause string-width to crash
 			// This includes:
-			// - Unicode format characters
 			// - Lone surrogates (already filtered by Array.from)
 			// - Control chars except \t \n \r
 			// - Characters with undefined code points
@@ -32,9 +30,6 @@ export function sanitizeBinaryOutput(str: string): string {
 
 			// Filter out control characters (0x00-0x1F, except 0x09, 0x0a, 0x0x0d)
 			if (code <= 0x1f) return false;
-
-			// Filter out Unicode format characters
-			if (code >= 0xfff9 && code <= 0xfffb) return false;
 
 			return true;
 		})

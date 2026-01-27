@@ -227,12 +227,10 @@ Entries form a tree:
 ## Parsing Example
 
 ```typescript
-import * as fs from "node:fs";
+const text = await Bun.file("session.jsonl").text();
+const entries = Bun.JSONL.parse(text);
 
-const lines = fs.readFileSync("session.jsonl", "utf8").trim().split("\n");
-
-for (const line of lines) {
-	const entry = JSON.parse(line);
+for (const entry of entries) {
 
 	switch (entry.type) {
 		case "session":

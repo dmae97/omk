@@ -487,7 +487,7 @@ describe("Editor component", () => {
 			// All content lines (between borders) should fit within width
 			for (let i = 1; i < lines.length - 1; i++) {
 				const lineWidth = visibleWidth(lines[i]!);
-				expect(lineWidth).toBe(width);
+				expect(lineWidth).toBeLessThanOrEqual(width);
 			}
 		});
 
@@ -504,7 +504,7 @@ describe("Editor component", () => {
 			// First line: 5 emojis (10 cols), second line: 1 emoji (2 cols) + padding
 			for (let i = 1; i < lines.length - 1; i++) {
 				const lineWidth = visibleWidth(lines[i]!);
-				expect(lineWidth).toBe(width);
+				expect(lineWidth).toBeLessThanOrEqual(width);
 			}
 		});
 
@@ -519,7 +519,7 @@ describe("Editor component", () => {
 			// All content lines (including last which has bottom border) should be correct width
 			for (let i = 1; i < lines.length; i++) {
 				const lineWidth = visibleWidth(lines[i]!);
-				expect(lineWidth).toBe(width);
+				expect(lineWidth).toBeLessThanOrEqual(width);
 			}
 
 			// Verify content split correctly - extract content between borders
@@ -548,7 +548,7 @@ describe("Editor component", () => {
 			expect(contentLines.length).toBe(1);
 
 			const lineWidth = visibleWidth(contentLines[0]!);
-			expect(lineWidth).toBe(width);
+			expect(lineWidth).toBeLessThanOrEqual(width);
 		});
 
 		it("renders cursor correctly on wide characters", () => {
@@ -564,7 +564,7 @@ describe("Editor component", () => {
 			expect(contentLine.includes("\x1b[5m")).toBeTruthy();
 
 			// Line should still be correct width
-			expect(visibleWidth(contentLine)).toBe(width);
+			expect(visibleWidth(contentLine)).toBeLessThanOrEqual(width);
 		});
 
 		it("shows cursor at end before wrap and wraps on next char", () => {

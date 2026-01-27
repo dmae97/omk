@@ -429,9 +429,10 @@ export class RpcClient {
 	// =========================================================================
 
 	private handleLine(line: string): void {
-		try {
-			const data = JSON.parse(line);
+		const result = Bun.JSONL.parseChunk(line);
+		if (result.error) return;
 
+		for (const data of result.values) {
 			// Check if it's a response to a pending request
 			if (data.type === "response" && data.id && this.pendingRequests.has(data.id)) {
 				const pending = this.pendingRequests.get(data.id)!;
@@ -444,8 +445,6 @@ export class RpcClient {
 			for (const listener of this.eventListeners) {
 				listener(data as AgentEvent);
 			}
-		} catch {
-			// Ignore non-JSON lines
 		}
 	}
 

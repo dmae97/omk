@@ -627,28 +627,34 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 	for await (const line of readLines(Bun.stdin.stream())) {
 		if (!line.trim()) continue;
 
-		try {
-			const parsed = JSON.parse(line);
+		const result = Bun.JSONL.parseChunk(`${line}\n`);
+		if (result.error) {
+			output(error(undefined, "parse", `Failed to parse command: ${result.error.message}`));
+			continue;
+		}
 
-			// Handle extension UI responses
-			if (parsed.type === "extension_ui_response") {
-				const response = parsed as RpcExtensionUIResponse;
-				const pending = pendingExtensionRequests.get(response.id);
-				if (pending) {
-					pending.resolve(response);
+		for (const parsed of result.values) {
+			try {
+				// Handle extension UI responses
+				if ((parsed as RpcExtensionUIResponse).type === "extension_ui_response") {
+					const response = parsed as RpcExtensionUIResponse;
+					const pending = pendingExtensionRequests.get(response.id);
+					if (pending) {
+						pending.resolve(response);
+					}
+					continue;
 				}
-				continue;
+
+				// Handle regular commands
+				const command = parsed as RpcCommand;
+				const response = await handleCommand(command);
+				output(response);
+
+				// Check for deferred shutdown request (idle between commands)
+				await checkShutdownRequested();
+			} catch (e: any) {
+				output(error(undefined, "parse", `Failed to parse command: ${e.message}`));
 			}
-
-			// Handle regular commands
-			const command = parsed as RpcCommand;
-			const response = await handleCommand(command);
-			output(response);
-
-			// Check for deferred shutdown request (idle between commands)
-			await checkShutdownRequested();
-		} catch (e: any) {
-			output(error(undefined, "parse", `Failed to parse command: ${e.message}`));
 		}
 	}
 

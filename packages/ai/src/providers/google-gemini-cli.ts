@@ -527,6 +527,7 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 				const reader = activeResponse.body.getReader();
 				const decoder = new TextDecoder();
 				let buffer = "";
+				let jsonlBuffer = "";
 
 				// Set up abort handler to cancel reader when signal fires
 				const abortHandler = () => {
@@ -553,13 +554,16 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 
 							const jsonStr = line.slice(5).trim();
 							if (!jsonStr) continue;
-
-							let chunk: CloudCodeAssistResponseChunk;
-							try {
-								chunk = JSON.parse(jsonStr);
-							} catch {
+							jsonlBuffer += `${jsonStr}\n`;
+							const parsed = Bun.JSONL.parseChunk(jsonlBuffer);
+							jsonlBuffer = jsonlBuffer.slice(parsed.read);
+							if (parsed.error) {
+								jsonlBuffer = "";
 								continue;
 							}
+
+							const chunk = parsed.values[0] as CloudCodeAssistResponseChunk | undefined;
+							if (!chunk) continue;
 
 							// Unwrap the response
 							const responseData = chunk.response;

@@ -18,20 +18,6 @@ function extractFolderFromPath(sessionPath: string): string {
 }
 
 /**
- * Parse a single JSONL line into a session entry.
- */
-function parseLine(line: string): SessionEntry | null {
-	const trimmed = line.trim();
-	if (!trimmed) return null;
-
-	try {
-		return JSON.parse(trimmed) as SessionEntry;
-	} catch {
-		return null;
-	}
-}
-
-/**
  * Check if an entry is an assistant message.
  */
 function isAssistantMessage(entry: SessionEntry): entry is SessionMessageEntry {
@@ -78,21 +64,24 @@ export async function parseSessionFile(
 	}
 
 	const text = await file.text();
+	const entries = Bun.JSONL.parse(text) as SessionEntry[];
 	const lines = text.split("\n");
 	const folder = extractFolderFromPath(sessionPath);
 	const stats: MessageStats[] = [];
 
 	let currentOffset = 0;
+	let entryIndex = 0;
 	for (const line of lines) {
 		const lineLength = line.length + 1; // +1 for newline
-		if (currentOffset >= fromOffset && line.trim()) {
-			const entry = parseLine(line);
-			if (entry && isAssistantMessage(entry)) {
+		if (line.trim()) {
+			const entry = entries[entryIndex];
+			if (currentOffset >= fromOffset && entry && isAssistantMessage(entry)) {
 				const msgStats = extractStats(sessionPath, folder, entry);
 				if (msgStats) {
 					stats.push(msgStats);
 				}
 			}
+			entryIndex += 1;
 		}
 		currentOffset += lineLength;
 	}
@@ -154,11 +143,10 @@ export async function getSessionEntry(sessionPath: string, entryId: string): Pro
 	if (!(await file.exists())) return null;
 
 	const text = await file.text();
-	const lines = text.split("\n");
+	const entries = Bun.JSONL.parse(text) as SessionEntry[];
 
-	for (const line of lines) {
-		const entry = parseLine(line);
-		if (entry && "id" in entry && entry.id === entryId) {
+	for (const entry of entries) {
+		if ("id" in entry && entry.id === entryId) {
 			return entry;
 		}
 	}

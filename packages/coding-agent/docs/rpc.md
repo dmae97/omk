@@ -23,6 +23,8 @@ Common options:
 - **Responses**: JSON objects with `type: "response"` indicating command success/failure
 - **Events**: Agent events streamed to stdout as JSON lines
 
+If you're consuming output in Bun, prefer `Bun.JSONL.parse(text)` for buffered JSONL or `Bun.JSONL.parseChunk()` for streaming output instead of splitting and `JSON.parse`.
+
 All commands support an optional `id` field for request/response correlation. If provided, the corresponding response will include the same `id`.
 
 ## Commands
@@ -1034,6 +1036,7 @@ Created by the `bash` RPC command (not by LLM tool calls):
 ```python
 import subprocess
 import json
+import jsonlines
 
 proc = subprocess.Popen(
     ["omp", "--mode", "rpc", "--no-session"],
@@ -1047,8 +1050,9 @@ def send(cmd):
     proc.stdin.flush()
 
 def read_events():
-    for line in proc.stdout:
-        yield json.loads(line)
+    with jsonlines.Reader(proc.stdout) as reader:
+        for event in reader:
+            yield event
 
 # Send prompt
 send({"type": "prompt", "message": "Hello!"})
@@ -1065,26 +1069,39 @@ for event in read_events():
         break
 ```
 
-## Example: Interactive Client (Node.js)
+## Example: Interactive Client (Bun)
 
 See [`test/rpc-example.ts`](../test/rpc-example.ts) for a complete interactive example, or [`src/modes/rpc/rpc-client.ts`](../src/modes/rpc/rpc-client.ts) for a typed client implementation.
 
 ```javascript
-const { spawn } = require("child_process");
-const readline = require("readline");
+const agent = Bun.spawn(["omp", "--mode", "rpc", "--no-session"], {
+	stdin: "pipe",
+	stdout: "pipe",
+});
 
-const agent = spawn("omp", ["--mode", "rpc", "--no-session"]);
+const decoder = new TextDecoder();
+let buffer = "";
 
-readline.createInterface({ input: agent.stdout }).on("line", (line) => {
-	const event = JSON.parse(line);
-
-	if (event.type === "message_update") {
-		const { assistantMessageEvent } = event;
-		if (assistantMessageEvent.type === "text_delta") {
-			process.stdout.write(assistantMessageEvent.delta);
+async function readEvents() {
+	const reader = agent.stdout.getReader();
+	while (true) {
+		const { value, done } = await reader.read();
+		if (done) break;
+		buffer += decoder.decode(value, { stream: true });
+		const result = Bun.JSONL.parseChunk(buffer);
+		buffer = buffer.slice(result.read);
+		for (const event of result.values) {
+			if (event.type === "message_update") {
+				const { assistantMessageEvent } = event;
+				if (assistantMessageEvent.type === "text_delta") {
+					process.stdout.write(assistantMessageEvent.delta);
+				}
+			}
 		}
 	}
-});
+}
+
+readEvents();
 
 // Send prompt
 agent.stdin.write(JSON.stringify({ type: "prompt", message: "Hello" }) + "\n");
