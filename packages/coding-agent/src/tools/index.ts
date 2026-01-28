@@ -1,8 +1,7 @@
 import type { AgentTool } from "@oh-my-pi/pi-agent-core";
-import type { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
 import { logger } from "@oh-my-pi/pi-utils";
 import type { PromptTemplate } from "../config/prompt-templates";
-import type { BashInterceptorRule } from "../config/settings-manager";
+import type { BashInterceptorRule, SettingsManager } from "../config/settings-manager";
 import type { Skill } from "../extensibility/skills";
 import type { InternalUrlRouter } from "../internal-urls";
 import { getPreludeDocs, warmPythonEnvironment } from "../ipy/executor";

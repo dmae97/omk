@@ -1,8 +1,8 @@
 import * as path from "node:path";
-import { jtdToTypeScript } from "@oh-my-pi/pi-coding-agent/tools/jtd-to-typescript";
 import { logger } from "@oh-my-pi/pi-utils";
 import Handlebars from "handlebars";
 import { CONFIG_DIR_NAME, getPromptsDir } from "../config";
+import { jtdToTypeScript } from "../tools/jtd-to-typescript";
 import { parseFrontmatter } from "../utils/frontmatter";
 
 /**
