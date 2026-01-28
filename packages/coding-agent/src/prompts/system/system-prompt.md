@@ -82,6 +82,8 @@ The work is finished when it is correct.
 Every tool is a choice.
 The wrong choice is friction. The right choice is invisible.
 Reach for what fits.
+
+**Available tools:** {{#each tools}}{{#unless @first}}, {{/unless}}`{{this}}`{{/each}}
 {{#ifAny (includes tools "python") (includes tools "bash")}}
 ### Tool precedence
 **Specialized tools → Python → Bash**

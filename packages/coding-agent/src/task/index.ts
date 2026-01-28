@@ -700,7 +700,11 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 			const summaries = results.map(r => {
 				const status = r.aborted ? "cancelled" : r.exitCode === 0 ? "completed" : `failed (exit ${r.exitCode})`;
 				const output = r.output.trim() || r.stderr.trim() || "(no output)";
-				const preview = output.split("\n").slice(0, 5).join("\n");
+				const outputLines = output.split("\n");
+				const outputLineCount = r.outputMeta?.lineCount ?? outputLines.length;
+				const fullOutputThreshold = 30;
+				const previewLimit = outputLineCount <= fullOutputThreshold ? outputLines.length : 10;
+				const preview = outputLines.slice(0, previewLimit).join("\n");
 				const meta = r.outputMeta
 					? ` [${r.outputMeta.lineCount} lines, ${formatBytes(r.outputMeta.charCount)}]`
 					: "";
