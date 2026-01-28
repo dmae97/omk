@@ -133,6 +133,14 @@ export function calculateContextTokens(usage: Usage): number {
 	return usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
 }
 
+export function calculatePromptTokens(usage: Usage): number {
+	const promptTokens = usage.input + usage.cacheRead + usage.cacheWrite;
+	if (promptTokens > 0) {
+		return promptTokens;
+	}
+	return calculateContextTokens(usage);
+}
+
 /**
  * Get usage from an assistant message if available.
  * Skips aborted and error messages as they don't have valid usage data.
@@ -235,6 +243,17 @@ export function estimateTokens(message: AgentMessage): number {
 	}
 
 	return 0;
+}
+
+function estimateEntriesTokens(entries: SessionEntry[], startIndex: number, endIndex: number): number {
+	let total = 0;
+	for (let i = startIndex; i < endIndex; i++) {
+		const msg = getMessageFromEntry(entries[i]);
+		if (msg) {
+			total += estimateTokens(msg);
+		}
+	}
+	return total;
 }
 
 /**
@@ -616,8 +635,17 @@ export function prepareCompaction(
 
 	const lastUsage = getLastAssistantUsage(pathEntries);
 	const tokensBefore = lastUsage ? calculateContextTokens(lastUsage) : 0;
+	let keepRecentTokens = settings.keepRecentTokens;
+	if (lastUsage) {
+		const estimatedTokens = estimateEntriesTokens(pathEntries, boundaryStart, boundaryEnd);
+		const promptTokens = calculatePromptTokens(lastUsage);
+		const ratio = estimatedTokens > 0 ? promptTokens / estimatedTokens : 0;
+		if (Number.isFinite(ratio) && ratio > 1) {
+			keepRecentTokens = Math.max(1, Math.floor(keepRecentTokens / ratio));
+		}
+	}
 
-	const cutPoint = findCutPoint(pathEntries, boundaryStart, boundaryEnd, settings.keepRecentTokens);
+	const cutPoint = findCutPoint(pathEntries, boundaryStart, boundaryEnd, keepRecentTokens);
 
 	// Get UUID of first kept entry
 	const firstKeptEntry = pathEntries[cutPoint.firstKeptEntryIndex];
@@ -742,8 +770,8 @@ export async function compact(
 		]);
 		// Merge into single summary
 		summary = `${historyResult}\n\n---\n\n**Turn Context (split turn):**\n\n${turnPrefixResult}`;
-	} else {
-		// Just generate history summary
+	} else if (messagesToSummarize.length > 0) {
+		// Generate history summary from messages to summarize
 		summary = await generateSummary(
 			messagesToSummarize,
 			model,
@@ -754,6 +782,12 @@ export async function compact(
 			previousSummary,
 			summaryOptions,
 		);
+	} else if (previousSummary) {
+		// No new messages to summarize, preserve previous summary
+		summary = previousSummary;
+	} else {
+		// No messages and no previous summary
+		summary = "No prior history.";
 	}
 
 	const shortSummary = await generateShortSummary(
