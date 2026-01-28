@@ -12,6 +12,7 @@ export interface HookSelectorOptions {
 	timeout?: number;
 	initialIndex?: number;
 	outline?: boolean;
+	maxVisible?: number;
 }
 
 class OutlinedList extends Container {
@@ -37,6 +38,7 @@ class OutlinedList extends Container {
 export class HookSelectorComponent extends Container {
 	private options: string[];
 	private selectedIndex: number;
+	private maxVisible: number;
 	private listContainer: Container | undefined;
 	private outlinedList: OutlinedList | undefined;
 	private onSelectCallback: (option: string) => void;
@@ -56,6 +58,7 @@ export class HookSelectorComponent extends Container {
 
 		this.options = options;
 		this.selectedIndex = Math.min(opts?.initialIndex ?? 0, options.length - 1);
+		this.maxVisible = Math.max(3, opts?.maxVisible ?? 12);
 		this.onSelectCallback = onSelect;
 		this.onCancelCallback = onCancel;
 		this.baseTitle = title;
@@ -101,12 +104,22 @@ export class HookSelectorComponent extends Container {
 
 	private updateList(): void {
 		const lines: string[] = [];
-		for (let i = 0; i < this.options.length; i++) {
+		const startIndex = Math.max(
+			0,
+			Math.min(this.selectedIndex - Math.floor(this.maxVisible / 2), this.options.length - this.maxVisible),
+		);
+		const endIndex = Math.min(startIndex + this.maxVisible, this.options.length);
+
+		for (let i = startIndex; i < endIndex; i++) {
 			const isSelected = i === this.selectedIndex;
 			const text = isSelected
 				? theme.fg("accent", `${theme.nav.cursor} `) + theme.fg("accent", this.options[i])
 				: `  ${theme.fg("text", this.options[i])}`;
 			lines.push(text);
+		}
+
+		if (startIndex > 0 || endIndex < this.options.length) {
+			lines.push(theme.fg("dim", `  (${this.selectedIndex + 1}/${this.options.length})`));
 		}
 		if (this.outlinedList) {
 			this.outlinedList.setLines(lines);

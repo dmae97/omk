@@ -504,6 +504,7 @@ export class ExtensionUiController {
 		const { promise, resolve } = Promise.withResolvers<string | undefined>();
 		this.hookSelectorOverlay?.hide();
 		this.hookSelectorOverlay = undefined;
+		const maxVisible = Math.max(4, Math.min(15, this.ctx.ui.terminal.rows - 12));
 		this.ctx.hookSelector = new HookSelectorComponent(
 			title,
 			options,
@@ -520,6 +521,7 @@ export class ExtensionUiController {
 				timeout: dialogOptions?.timeout,
 				tui: this.ctx.ui,
 				outline: dialogOptions?.outline,
+				maxVisible,
 			},
 		);
 		this.hookSelectorOverlay = this.ctx.ui.showOverlay(this.ctx.hookSelector, this.dialogOverlayOptions);

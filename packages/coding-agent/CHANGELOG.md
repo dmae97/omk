@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [8.12.2] - 2026-01-28
+
 ### Changed
 - Replaced ripgrep-based file listing with fs.glob for project scans and find/read tooling
 

@@ -1,6 +1,5 @@
-import type * as fsTypes from "node:fs";
-import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { Glob } from "bun";
 
 export interface GlobPathsOptions {
 	/** Base directory for glob patterns. Defaults to process.cwd(). */
@@ -17,14 +16,6 @@ export interface GlobPathsOptions {
 	onlyFiles?: boolean;
 	/** Respect .gitignore files when true. Walks up directory tree to find all applicable .gitignore files. */
 	gitignore?: boolean;
-}
-
-function createGlobSignal(signal?: AbortSignal, timeoutMs?: number): AbortSignal | undefined {
-	const timeoutSignal = timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined;
-	if (signal && timeoutSignal) {
-		return AbortSignal.any([signal, timeoutSignal]);
-	}
-	return signal ?? timeoutSignal;
 }
 
 /** Patterns always excluded (.git is never useful in glob results). */
@@ -133,30 +124,6 @@ export async function loadGitignorePatterns(baseDir: string): Promise<string[]> 
 	return patterns;
 }
 
-function isAsyncIterable<T>(value: unknown): value is AsyncIterable<T> {
-	return typeof (value as { [Symbol.asyncIterator]?: unknown })?.[Symbol.asyncIterator] === "function";
-}
-
-async function collectGlobResults(result: unknown): Promise<string[]> {
-	const resolved = await Promise.resolve(result);
-	if (!resolved) {
-		return [];
-	}
-	if (Array.isArray(resolved)) {
-		return resolved.filter((entry): entry is string => typeof entry === "string");
-	}
-	if (isAsyncIterable<string>(resolved)) {
-		const entries: string[] = [];
-		for await (const entry of resolved) {
-			if (typeof entry === "string") {
-				entries.push(entry);
-			}
-		}
-		return entries;
-	}
-	return [];
-}
-
 /**
  * Resolve filesystem paths matching glob patterns with optional exclude filters.
  * Returns paths relative to the provided cwd (or process.cwd()).
@@ -177,17 +144,45 @@ export async function globPaths(patterns: string | string[], options: GlobPathsO
 		effectiveExclude = [...effectiveExclude, ...gitignorePatterns];
 	}
 
-	const globOptions = {
-		cwd,
-		exclude: effectiveExclude,
-		signal: createGlobSignal(signal, timeoutMs),
-		dot,
-		nodir: onlyFiles,
-	} as fsTypes.GlobOptions;
-
-	const result = fs.glob(patterns, globOptions);
-	const entries = await collectGlobResults(result);
 	const base = cwd ?? process.cwd();
+	const allResults: string[] = [];
 
-	return entries.map(entry => (path.isAbsolute(entry) ? path.relative(base, entry) : entry));
+	// Combine timeout and abort signals
+	const timeoutSignal = timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined;
+	const combinedSignal =
+		signal && timeoutSignal ? AbortSignal.any([signal, timeoutSignal]) : (signal ?? timeoutSignal);
+
+	for (const pattern of patternArray) {
+		const glob = new Glob(pattern);
+		const scanOptions = {
+			cwd: base,
+			dot,
+			onlyFiles,
+			throwErrorOnBrokenSymlink: false,
+		};
+
+		for await (const entry of glob.scan(scanOptions)) {
+			if (combinedSignal?.aborted) {
+				const reason = combinedSignal.reason;
+				if (reason instanceof Error) throw reason;
+				throw new DOMException("Aborted", "AbortError");
+			}
+
+			// Check exclusion patterns
+			const normalized = entry.replace(/\\/g, "/");
+			let excluded = false;
+			for (const excludePattern of effectiveExclude) {
+				const excludeGlob = new Glob(excludePattern);
+				if (excludeGlob.match(normalized)) {
+					excluded = true;
+					break;
+				}
+			}
+			if (!excluded) {
+				allResults.push(normalized);
+			}
+		}
+	}
+
+	return allResults;
 }
