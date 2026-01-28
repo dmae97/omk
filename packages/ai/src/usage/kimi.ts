@@ -9,7 +9,7 @@ import type {
 	UsageStatus,
 	UsageWindow,
 } from "../usage";
-import { getKimiCommonHeaders } from "../utils/oauth/kimi";
+import { getKimiCommonHeaders, refreshKimiToken } from "../utils/oauth/kimi";
 
 const DEFAULT_BASE_URL = "https://api.kimi.com/coding/v1";
 const USAGE_PATH = "usages";
@@ -259,13 +259,23 @@ export const kimiUsageProvider: UsageProvider = {
 		const { credential } = params;
 		if (credential.type !== "oauth") return null;
 
-		const accessToken = credential.accessToken;
+		let accessToken = credential.accessToken;
 		if (!accessToken) return null;
 
 		const nowMs = ctx.now();
 		if (credential.expiresAt !== undefined && credential.expiresAt <= nowMs) {
-			ctx.logger?.warn("Kimi usage token expired", { provider: params.provider });
-			return null;
+			if (!credential.refreshToken) {
+				ctx.logger?.warn("Kimi usage token expired, no refresh token", { provider: params.provider });
+				return null;
+			}
+			try {
+				ctx.logger?.debug("Kimi usage token expired, refreshing", { provider: params.provider });
+				const refreshed = await refreshKimiToken(credential.refreshToken);
+				accessToken = refreshed.access;
+			} catch (error) {
+				ctx.logger?.warn("Kimi usage token refresh failed", { provider: params.provider, error: String(error) });
+				return null;
+			}
 		}
 
 		const baseUrl = normalizeBaseUrl(params.baseUrl);
