@@ -619,6 +619,21 @@ export class Markdown implements Component {
 	}
 
 	/**
+	 * Get the visible width of the longest word in a string.
+	 */
+	private getLongestWordWidth(text: string, maxWidth?: number): number {
+		const words = text.split(/\s+/).filter((word) => word.length > 0);
+		let longest = 0;
+		for (const word of words) {
+			longest = Math.max(longest, visibleWidth(word));
+		}
+		if (maxWidth === undefined) {
+			return longest;
+		}
+		return Math.min(longest, maxWidth);
+	}
+
+	/**
 	 * Wrap a table cell to fit into a column.
 	 *
 	 * Delegates to wrapTextWithAnsi() so ANSI codes + long tokens are handled
