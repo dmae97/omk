@@ -7,7 +7,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Agent } from "@oh-my-pi/pi-agent-core";
-import { type AssistantMessage, type AssistantMessageEvent, EventStream, getModel } from "@oh-my-pi/pi-ai";
+import { type AssistantMessage, getModel } from "@oh-my-pi/pi-ai";
+import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
 import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
@@ -16,18 +17,7 @@ import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manage
 import { nanoid } from "nanoid";
 
 // Mock stream that mimics AssistantMessageEventStream
-class MockAssistantStream extends EventStream<AssistantMessageEvent, AssistantMessage> {
-	constructor() {
-		super(
-			event => event.type === "done" || event.type === "error",
-			event => {
-				if (event.type === "done") return event.message;
-				if (event.type === "error") return event.error;
-				throw new Error("Unexpected event type");
-			},
-		);
-	}
-}
+class MockAssistantStream extends AssistantMessageEventStream {}
 
 function createAssistantMessage(text: string): AssistantMessage {
 	return {

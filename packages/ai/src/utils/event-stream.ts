@@ -2,15 +2,15 @@ import type { AssistantMessage, AssistantMessageEvent } from "../types";
 
 // Generic event stream class for async iteration
 export class EventStream<T, R = T> implements AsyncIterable<T> {
-	private queue: T[] = [];
-	private waiting: ((value: IteratorResult<T>) => void)[] = [];
-	private done = false;
-	private finalResultPromise: Promise<R>;
-	private resolveFinalResult!: (result: R) => void;
+	protected queue: T[] = [];
+	protected waiting: ((value: IteratorResult<T>) => void)[] = [];
+	protected done = false;
+	protected finalResultPromise: Promise<R>;
+	protected resolveFinalResult!: (result: R) => void;
 
 	constructor(
-		private isComplete: (event: T) => boolean,
-		private extractResult: (event: T) => R,
+		protected isComplete: (event: T) => boolean,
+		protected extractResult: (event: T) => R,
 	) {
 		const { promise, resolve } = Promise.withResolvers<R>();
 		this.finalResultPromise = promise;
@@ -34,12 +34,28 @@ export class EventStream<T, R = T> implements AsyncIterable<T> {
 		}
 	}
 
+	protected deliver(event: T): void {
+		const waiter = this.waiting.shift();
+		if (waiter) {
+			waiter({ value: event, done: false });
+		} else {
+			this.queue.push(event);
+		}
+	}
+
 	end(result?: R): void {
 		this.done = true;
 		if (result !== undefined) {
 			this.resolveFinalResult(result);
 		}
 		// Notify all waiting consumers that we're done
+		while (this.waiting.length > 0) {
+			const waiter = this.waiting.shift()!;
+			waiter({ value: undefined as any, done: true });
+		}
+	}
+
+	protected endWaiting(): void {
 		while (this.waiting.length > 0) {
 			const waiter = this.waiting.shift()!;
 			waiter({ value: undefined as any, done: true });
@@ -65,7 +81,23 @@ export class EventStream<T, R = T> implements AsyncIterable<T> {
 	}
 }
 
+// Delta events that can be batched for throttling
+type DeltaEvent =
+	| { type: "text_delta"; contentIndex: number; delta: string; partial: AssistantMessage }
+	| { type: "thinking_delta"; contentIndex: number; delta: string; partial: AssistantMessage }
+	| { type: "toolcall_delta"; contentIndex: number; delta: string; partial: AssistantMessage };
+
+function isDeltaEvent(event: AssistantMessageEvent): event is DeltaEvent {
+	return event.type === "text_delta" || event.type === "thinking_delta" || event.type === "toolcall_delta";
+}
+
 export class AssistantMessageEventStream extends EventStream<AssistantMessageEvent, AssistantMessage> {
+	// Throttling state
+	private deltaBuffer: DeltaEvent[] = [];
+	private flushTimer: ReturnType<typeof setTimeout> | null = null;
+	private lastFlushTime = 0;
+	private readonly throttleMs = 50; // 20 updates/sec
+
 	constructor() {
 		super(
 			event => event.type === "done" || event.type === "error",
@@ -78,5 +110,99 @@ export class AssistantMessageEventStream extends EventStream<AssistantMessageEve
 				throw new Error("Unexpected event type for final result");
 			},
 		);
+	}
+
+	override push(event: AssistantMessageEvent): void {
+		if (this.done) return;
+
+		// Check for completion first
+		if (this.isComplete(event)) {
+			this.flushDeltas(); // Flush any pending deltas before completing
+			this.done = true;
+			this.resolveFinalResult(this.extractResult(event));
+		}
+
+		// Delta events get batched and throttled
+		if (isDeltaEvent(event)) {
+			this.deltaBuffer.push(event);
+			this.scheduleFlush();
+			return;
+		}
+
+		// Non-delta events flush pending deltas immediately, then emit
+		this.flushDeltas();
+		this.deliver(event);
+	}
+
+	override end(result?: AssistantMessage): void {
+		this.flushDeltas();
+		this.done = true;
+		if (result !== undefined) {
+			this.resolveFinalResult(result);
+		}
+		this.endWaiting();
+	}
+
+	private scheduleFlush(): void {
+		if (this.flushTimer) return; // Already scheduled
+
+		const now = performance.now();
+		const timeSinceLastFlush = now - this.lastFlushTime;
+
+		if (timeSinceLastFlush >= this.throttleMs) {
+			// Flush immediately if throttle window has passed
+			this.flushDeltas();
+		} else {
+			// Schedule flush for when throttle window expires
+			const delay = this.throttleMs - timeSinceLastFlush;
+			this.flushTimer = setTimeout(() => {
+				this.flushTimer = null;
+				this.flushDeltas();
+			}, delay);
+		}
+	}
+
+	private flushDeltas(): void {
+		if (this.flushTimer) {
+			clearTimeout(this.flushTimer);
+			this.flushTimer = null;
+		}
+
+		if (this.deltaBuffer.length === 0) return;
+
+		// Merge consecutive deltas for the same content block and type
+		const merged = this.mergeDeltas(this.deltaBuffer);
+		this.deltaBuffer = [];
+		this.lastFlushTime = performance.now();
+
+		for (const event of merged) {
+			this.deliver(event);
+		}
+	}
+
+	private mergeDeltas(deltas: DeltaEvent[]): AssistantMessageEvent[] {
+		if (deltas.length === 0) return [];
+		if (deltas.length === 1) return [deltas[0]];
+
+		const result: AssistantMessageEvent[] = [];
+		let current = deltas[0];
+
+		for (let i = 1; i < deltas.length; i++) {
+			const next = deltas[i];
+			// Can merge if same type, same content index
+			if (next.type === current.type && next.contentIndex === current.contentIndex) {
+				current = {
+					...current,
+					delta: current.delta + next.delta,
+					partial: next.partial, // Use latest partial
+				} as DeltaEvent;
+			} else {
+				result.push(current);
+				current = next;
+			}
+		}
+		result.push(current);
+
+		return result;
 	}
 }

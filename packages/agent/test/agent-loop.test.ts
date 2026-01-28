@@ -9,29 +9,12 @@ import type {
 	AgentToolContext,
 	ToolCallContext,
 } from "@oh-my-pi/pi-agent-core/types";
-import {
-	type AssistantMessage,
-	type AssistantMessageEvent,
-	EventStream,
-	type Message,
-	type Model,
-	type UserMessage,
-} from "@oh-my-pi/pi-ai";
+import type { AssistantMessage, Message, Model, UserMessage } from "@oh-my-pi/pi-ai";
+import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
 import { Type } from "@sinclair/typebox";
 
-// Mock stream for testing - mimics MockAssistantStream
-class MockAssistantStream extends EventStream<AssistantMessageEvent, AssistantMessage> {
-	constructor() {
-		super(
-			event => event.type === "done" || event.type === "error",
-			event => {
-				if (event.type === "done") return event.message;
-				if (event.type === "error") return event.error;
-				throw new Error("Unexpected event type");
-			},
-		);
-	}
-}
+// Mock stream for testing - uses actual AssistantMessageEventStream with throttling
+class MockAssistantStream extends AssistantMessageEventStream {}
 
 function createUsage() {
 	return {

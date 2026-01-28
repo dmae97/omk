@@ -1,26 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { Agent } from "@oh-my-pi/pi-agent-core";
-import {
-	type AssistantMessage,
-	type AssistantMessageEvent,
-	EventStream,
-	getModel,
-	type ThinkingBudgets,
-	type Usage,
-} from "@oh-my-pi/pi-ai";
+import { type AssistantMessage, getModel, type ThinkingBudgets, type Usage } from "@oh-my-pi/pi-ai";
+import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
 
-class MockAssistantStream extends EventStream<AssistantMessageEvent, AssistantMessage> {
-	constructor() {
-		super(
-			event => event.type === "done" || event.type === "error",
-			event => {
-				if (event.type === "done") return event.message;
-				if (event.type === "error") return event.error;
-				throw new Error("Unexpected event type");
-			},
-		);
-	}
-}
+class MockAssistantStream extends AssistantMessageEventStream {}
 
 function createUsage(): Usage {
 	return {
