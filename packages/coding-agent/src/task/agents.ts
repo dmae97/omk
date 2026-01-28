@@ -5,6 +5,7 @@
  */
 import { renderPromptTemplate } from "../config/prompt-templates";
 import { parseAgentFields } from "../discovery/helpers";
+import designerMd from "../prompts/agents/designer.md" with { type: "text" };
 import exploreMd from "../prompts/agents/explore.md" with { type: "text" };
 // Embed agent markdown files at build time
 import agentFrontmatterTemplate from "../prompts/agents/frontmatter.md" with { type: "text" };
@@ -37,6 +38,7 @@ function buildAgentContent(def: EmbeddedAgentDef): string {
 const EMBEDDED_AGENT_DEFS: EmbeddedAgentDef[] = [
 	{ fileName: "explore.md", template: exploreMd },
 	{ fileName: "plan.md", template: planMd },
+	{ fileName: "designer.md", template: designerMd },
 	{ fileName: "reviewer.md", template: reviewerMd },
 	{
 		fileName: "task.md",
@@ -54,15 +56,6 @@ const EMBEDDED_AGENT_DEFS: EmbeddedAgentDef[] = [
 			name: "quick_task",
 			description: "Quick task for fast execution",
 			model: "pi/smol",
-		},
-		template: taskMd,
-	},
-	{
-		fileName: "deep_task.md",
-		frontmatter: {
-			name: "deep_task",
-			description: "Deep task for comprehensive reasoning",
-			model: "pi/slow",
 		},
 		template: taskMd,
 	},
