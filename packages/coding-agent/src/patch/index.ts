@@ -202,14 +202,12 @@ type TInput = typeof replaceEditSchema | typeof patchEditSchema;
 export class EditTool implements AgentTool<TInput> {
 	public readonly name = "edit";
 	public readonly label = "Edit";
-	public readonly description: string;
-	public readonly parameters: TInput;
 
 	private readonly session: ToolSession;
-	private readonly patchMode: boolean;
 	private readonly allowFuzzy: boolean;
 	private readonly fuzzyThreshold: number;
 	private readonly writethrough: WritethroughCallback;
+	private readonly envEditVariant: string;
 
 	constructor(session: ToolSession) {
 		this.session = session;
@@ -217,22 +215,14 @@ export class EditTool implements AgentTool<TInput> {
 		const {
 			OMP_EDIT_FUZZY: editFuzzy = "auto",
 			OMP_EDIT_FUZZY_THRESHOLD: editFuzzyThreshold = "auto",
-			OMP_EDIT_VARIANT: editVariant = "auto",
+			OMP_EDIT_VARIANT: envEditVariant = "auto",
 		} = process.env;
+		this.envEditVariant = envEditVariant;
 
-		switch (editVariant) {
-			case "replace":
-				this.patchMode = false;
-				break;
-			case "patch":
-				this.patchMode = true;
-				break;
-			case "auto":
-				this.patchMode = session.settings?.getEditPatchMode?.() ?? true;
-				break;
-			default:
-				throw new Error(`Invalid OMP_EDIT_VARIANT: ${process.env.OMP_EDIT_VARIANT}`);
+		if (envEditVariant !== "replace" && envEditVariant !== "patch" && envEditVariant !== "auto") {
+			throw new Error(`Invalid OMP_EDIT_VARIANT: ${envEditVariant}`);
 		}
+
 		switch (editFuzzy) {
 			case "true":
 			case "1":
@@ -266,10 +256,37 @@ export class EditTool implements AgentTool<TInput> {
 		this.writethrough = enableLsp
 			? createLspWritethrough(session.cwd, { enableFormat, enableDiagnostics })
 			: writethroughNoop;
-		this.description = this.patchMode
-			? renderPromptTemplate(patchDescription)
-			: renderPromptTemplate(replaceDescription);
-		this.parameters = this.patchMode ? patchEditSchema : replaceEditSchema;
+	}
+
+	/**
+	 * Determine patch mode dynamically based on current model.
+	 * This is re-evaluated on each access so tool definitions stay current when model changes.
+	 */
+	private get patchMode(): boolean {
+		if (this.envEditVariant === "replace") return false;
+		if (this.envEditVariant === "patch") return true;
+
+		// Auto mode: check model-specific settings
+		const activeModel = this.session.getActiveModelString?.();
+		const modelVariant = this.session.settings?.getEditVariantForModel?.(activeModel);
+		if (modelVariant === "replace") return false;
+		if (modelVariant === "patch") return true;
+
+		return this.session.settings?.getEditPatchMode?.() ?? true;
+	}
+
+	/**
+	 * Dynamic description based on current patch mode (which depends on current model).
+	 */
+	public get description(): string {
+		return this.patchMode ? renderPromptTemplate(patchDescription) : renderPromptTemplate(replaceDescription);
+	}
+
+	/**
+	 * Dynamic parameters schema based on current patch mode (which depends on current model).
+	 */
+	public get parameters(): TInput {
+		return this.patchMode ? patchEditSchema : replaceEditSchema;
 	}
 
 	public async execute(

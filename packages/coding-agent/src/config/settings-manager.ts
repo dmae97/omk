@@ -135,6 +135,8 @@ export interface EditSettings {
 	fuzzyThreshold?: number; // default: 0.95 (similarity threshold for fuzzy matching)
 	patchMode?: boolean; // default: true (use codex-style apply-patch format instead of old_text/new_text)
 	streamingAbort?: boolean; // default: false (abort streaming edit tool calls when patch preview fails)
+	/** Model-specific variant overrides. Keys are model pattern substrings (e.g., "kimi", "deepseek"). */
+	modelVariants?: Record<string, "patch" | "replace">;
 }
 
 export type { SymbolPreset };
@@ -1384,6 +1386,57 @@ export class SettingsManager {
 			this.globalSettings.edit = {};
 		}
 		this.globalSettings.edit.streamingAbort = enabled;
+		await this.save();
+	}
+
+	/**
+	 * Default model patterns that should use replace mode instead of patch mode.
+	 * These are models known to struggle with unified diff format.
+	 */
+	static readonly DEFAULT_REPLACE_MODE_PATTERNS = ["kimi"];
+
+	/**
+	 * Get the edit variant for a specific model.
+	 * Returns "patch", "replace", or null (use global default).
+	 */
+	getEditVariantForModel(model: string | undefined): "patch" | "replace" | null {
+		if (!model) return null;
+		const modelLower = model.toLowerCase();
+
+		const userVariants = this.settings.edit?.modelVariants;
+		if (userVariants) {
+			for (const [pattern, variant] of Object.entries(userVariants)) {
+				if (modelLower.includes(pattern.toLowerCase())) {
+					return variant;
+				}
+			}
+		}
+
+		for (const pattern of SettingsManager.DEFAULT_REPLACE_MODE_PATTERNS) {
+			if (modelLower.includes(pattern)) {
+				return "replace";
+			}
+		}
+
+		return null;
+	}
+
+	getEditModelVariants(): Record<string, "patch" | "replace"> {
+		return this.settings.edit?.modelVariants ?? {};
+	}
+
+	async setEditModelVariant(pattern: string, variant: "patch" | "replace" | null): Promise<void> {
+		if (!this.globalSettings.edit) {
+			this.globalSettings.edit = {};
+		}
+		if (!this.globalSettings.edit.modelVariants) {
+			this.globalSettings.edit.modelVariants = {};
+		}
+		if (variant === null) {
+			delete this.globalSettings.edit.modelVariants[pattern];
+		} else {
+			this.globalSettings.edit.modelVariants[pattern] = variant;
+		}
 		await this.save();
 	}
 

@@ -163,6 +163,7 @@ export interface ToolSession {
 		getEditFuzzyMatch(): boolean;
 		getEditFuzzyThreshold?(): number;
 		getEditPatchMode?(): boolean;
+		getEditVariantForModel?(model: string | undefined): "patch" | "replace" | null;
 		getBashInterceptorEnabled(): boolean;
 		getBashInterceptorSimpleLsEnabled(): boolean;
 		getBashInterceptorRules(): BashInterceptorRule[];

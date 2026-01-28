@@ -753,7 +753,10 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		getModelString: () => (hasExplicitModel && model ? formatModelString(model) : undefined),
 		getActiveModelString: () => {
 			const activeModel = agent?.state.model;
-			return activeModel ? formatModelString(activeModel) : undefined;
+			if (activeModel) return formatModelString(activeModel);
+			// Fall back to initial model during tool creation (before agent exists)
+			if (model) return formatModelString(model);
+			return undefined;
 		},
 		getPlanModeState: () => session.getPlanModeState(),
 		settings: settingsManager,
