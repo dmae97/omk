@@ -16,6 +16,8 @@ import { loadSkills, type Skill } from "./extensibility/skills";
 import customSystemPromptTemplate from "./prompts/system/custom-system-prompt.md" with { type: "text" };
 import systemPromptTemplate from "./prompts/system/system-prompt.md" with { type: "text" };
 import type { ToolName } from "./tools";
+import { runRg } from "./tools/grep";
+import { ensureTool } from "./utils/tools-manager";
 
 interface GitContext {
 	isRepo: boolean;
@@ -207,11 +209,63 @@ type ProjectTreeScan = {
 	truncatedDirs: Set<string>;
 };
 
+const RG_TIMEOUT_MS = 5000;
+
+/**
+ * Get allowed paths (files and directories) based on gitignore rules using ripgrep.
+ * Returns null if ripgrep is unavailable.
+ */
+async function getGitignoreAllowedPaths(root: string): Promise<{ files: Set<string>; dirs: Set<string> } | null> {
+	const rgPath = await ensureTool("rg", { silent: true });
+	if (!rgPath) {
+		return null;
+	}
+
+	const args = ["--files", "--no-require-git", "--color=never", root];
+
+	try {
+		const signal = AbortSignal.timeout(RG_TIMEOUT_MS);
+		const { stdout, exitCode } = await runRg(rgPath, args, signal);
+
+		// rg exit codes: 0 = found files, 1 = no matches, other = error
+		if (exitCode !== 0 && exitCode !== 1) {
+			return null;
+		}
+
+		const files = new Set<string>();
+		const dirs = new Set<string>();
+
+		// Always include root
+		dirs.add(root);
+
+		for (const line of stdout.split("\n")) {
+			const filePath = line.trim();
+			if (!filePath) continue;
+
+			files.add(filePath);
+
+			// Walk up to collect all parent directories
+			let dir = path.dirname(filePath);
+			while (dir.length >= root.length && dir !== path.dirname(dir)) {
+				dirs.add(dir);
+				dir = path.dirname(dir);
+			}
+		}
+
+		return { files, dirs };
+	} catch {
+		return null;
+	}
+}
+
 async function scanProjectTree(root: string): Promise<ProjectTreeScan> {
 	const children = new Map<string, ProjectTreeEntry[]>();
 	let entryCount = 0;
 	let truncated = false;
 	const truncatedDirs = new Set<string>();
+
+	// Get gitignore-based allowed paths (null if rg unavailable)
+	const allowedPaths = await getGitignoreAllowedPaths(root);
 
 	const queue: Array<{ dirPath: string; depth: number }> = [{ dirPath: root, depth: 0 }];
 	let cursor = 0;
@@ -226,7 +280,21 @@ async function scanProjectTree(root: string): Promise<ProjectTreeScan> {
 			continue;
 		}
 
-		const filtered = entries.filter(entry => !PROJECT_TREE_IGNORED.has(entry.name));
+		const filtered = entries.filter(entry => {
+			// Always filter static ignored names
+			if (PROJECT_TREE_IGNORED.has(entry.name)) return false;
+
+			// If we have gitignore info, filter against allowed paths
+			if (allowedPaths) {
+				const entryPath = path.join(dirPath, entry.name);
+				if (entry.isDirectory()) {
+					return allowedPaths.dirs.has(entryPath);
+				}
+				return allowedPaths.files.has(entryPath);
+			}
+
+			return true;
+		});
 		const withStats = await Promise.all(
 			filtered.map(async entry => {
 				const entryPath = path.join(dirPath, entry.name);
