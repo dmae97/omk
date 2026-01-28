@@ -255,10 +255,9 @@ async function createKernelSession(
 		lastUsedAt: Date.now(),
 	};
 
-	session.heartbeatTimer = setInterval(async () => {
+	session.heartbeatTimer = setInterval(() => {
 		if (session.dead) return;
-		const ok = await session.kernel.ping().catch(() => false);
-		if (!ok) {
+		if (!session.kernel.isAlive()) {
 			session.dead = true;
 		}
 	}, 5000);

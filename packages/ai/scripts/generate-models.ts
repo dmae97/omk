@@ -81,6 +81,8 @@ async function fetchOpenRouterModels(): Promise<Model<any>[]> {
 			const outputCost = parseFloat(model.pricing?.completion || "0") * 1_000_000;
 			const cacheReadCost = parseFloat(model.pricing?.input_cache_read || "0") * 1_000_000;
 			const cacheWriteCost = parseFloat(model.pricing?.input_cache_write || "0") * 1_000_000;
+			// Check if model supports tool_choice parameter
+			const supportsToolChoice = model.supported_parameters?.includes("tool_choice") ?? false;
 
 			const normalizedModel: Model<any> = {
 				id: modelKey,
@@ -98,6 +100,8 @@ async function fetchOpenRouterModels(): Promise<Model<any>[]> {
 				},
 				contextWindow: model.context_length || 4096,
 				maxTokens: model.top_provider?.max_completion_tokens || 4096,
+				// Only add compat if tool_choice is not supported (default is true)
+				...(supportsToolChoice ? {} : { compat: { supportsToolChoice: false } }),
 			};
 			models.push(normalizedModel);
 		}

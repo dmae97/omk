@@ -5,7 +5,7 @@
  */
 import path from "node:path";
 import type { AgentEvent, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
-import type { Api, Model } from "@oh-my-pi/pi-ai";
+import type { Api, Model, ToolChoice } from "@oh-my-pi/pi-ai";
 import type { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { parseModelPattern } from "@oh-my-pi/pi-coding-agent/config/model-resolver";
 import type { PromptTemplate } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
@@ -19,10 +19,12 @@ import type { AgentSession, AgentSessionEvent } from "@oh-my-pi/pi-coding-agent/
 import type { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import type { ContextFileEntry } from "@oh-my-pi/pi-coding-agent/tools";
+import { jtdToJsonSchema } from "@oh-my-pi/pi-coding-agent/tools/jtd-to-json-schema";
 import { ToolAbortError } from "@oh-my-pi/pi-coding-agent/tools/tool-errors";
 import type { EventBus } from "@oh-my-pi/pi-coding-agent/utils/event-bus";
 import { logger, untilAborted } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
+import Ajv, { type ValidateFunction } from "ajv";
 import { subprocessToolRegistry } from "./subprocess-tool-registry";
 import {
 	type AgentDefinition,
@@ -37,6 +39,7 @@ import {
 
 const DEFAULT_MODEL_ALIASES = new Set(["default", "pi/default", "omp/default"]);
 const MCP_CALL_TIMEOUT_MS = 60_000;
+const ajv = new Ajv({ allErrors: true, strict: false });
 
 /** Agent event types to forward for progress tracking. */
 const agentEventTypes = new Set<AgentEvent["type"]>([
@@ -152,6 +155,22 @@ function resolveModelOverride(
 	return {};
 }
 
+function buildCompleteToolChoice(model?: Model<Api>): ToolChoice | undefined {
+	if (!model) return undefined;
+	if (
+		model.api === "openai-codex-responses" ||
+		model.api === "openai-responses" ||
+		model.api === "openai-completions" ||
+		model.api === "azure-openai-responses"
+	) {
+		return { type: "function", name: "complete" };
+	}
+	if (model.api === "anthropic-messages" || model.api === "bedrock-converse-stream") {
+		return { type: "tool", name: "complete" };
+	}
+	return undefined;
+}
+
 /** Options for subagent execution */
 export interface ExecutorOptions {
 	cwd: string;
@@ -225,6 +244,89 @@ function truncateOutput(output: string): { text: string; truncated: boolean } {
 	}
 
 	return { text: output, truncated };
+}
+
+function parseStringifiedJson(value: unknown): unknown {
+	if (typeof value !== "string") return value;
+	const trimmed = value.trim();
+	if (!trimmed) return value;
+	if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return value;
+	try {
+		return JSON.parse(trimmed);
+	} catch {
+		return value;
+	}
+}
+
+function normalizeOutputSchema(schema: unknown): { normalized?: unknown; error?: string } {
+	if (schema === undefined || schema === null) return {};
+	if (typeof schema === "string") {
+		try {
+			return { normalized: JSON.parse(schema) };
+		} catch (err) {
+			return { error: err instanceof Error ? err.message : String(err) };
+		}
+	}
+	return { normalized: schema };
+}
+
+function buildOutputValidator(schema: unknown): { validate?: ValidateFunction; error?: string } {
+	const { normalized, error } = normalizeOutputSchema(schema);
+	if (error) return { error };
+	if (normalized === undefined) return {};
+	const jsonSchema = jtdToJsonSchema(normalized);
+	try {
+		return { validate: ajv.compile(jsonSchema as any) };
+	} catch (err) {
+		return { error: err instanceof Error ? err.message : String(err) };
+	}
+}
+
+function tryParseJsonOutput(text: string): unknown | undefined {
+	const trimmed = text.trim();
+	if (!trimmed) return undefined;
+	try {
+		return JSON.parse(trimmed);
+	} catch {
+		return undefined;
+	}
+}
+
+function extractCompletionData(parsed: unknown): unknown {
+	if (!parsed || typeof parsed !== "object") return parsed;
+	const record = parsed as Record<string, unknown>;
+	if ("data" in record) {
+		return record.data;
+	}
+	return parsed;
+}
+
+function normalizeCompleteData(data: unknown, reportFindings?: ReviewFinding[]): unknown {
+	let normalized = parseStringifiedJson(data ?? null);
+	if (
+		Array.isArray(reportFindings) &&
+		reportFindings.length > 0 &&
+		normalized &&
+		typeof normalized === "object" &&
+		!Array.isArray(normalized)
+	) {
+		const record = normalized as Record<string, unknown>;
+		if (!("findings" in record)) {
+			normalized = { ...record, findings: reportFindings };
+		}
+	}
+	return normalized;
+}
+
+function resolveFallbackCompletion(rawOutput: string, outputSchema: unknown): { data: unknown } | null {
+	const parsed = tryParseJsonOutput(rawOutput);
+	if (parsed === undefined) return null;
+	const candidate = parseStringifiedJson(extractCompletionData(parsed));
+	if (candidate === undefined) return null;
+	const { validate, error } = buildOutputValidator(outputSchema);
+	if (error) return null;
+	if (validate && !validate(candidate)) return null;
+	return { data: candidate };
 }
 
 /**
@@ -819,7 +921,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			const enableMCP = !options.mcpManager;
 
 			const completionInstruction =
-				"When finished, call the complete tool exactly once. Do not end with a plain-text final answer.";
+				"When finished, call the complete tool exactly once. Do not output JSON or code blocks. Do not end with a plain-text final answer.";
 			const worktreeNotice = worktree
 				? `You will work under this working tree: ${worktree}. CRITICAL: Do not touch the original repository; only make changes inside this worktree.`
 				: "";
@@ -944,10 +1046,18 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 
 			await session.prompt(fullTask);
 
+			const reminderToolChoice = buildCompleteToolChoice(session.model);
+
 			let retryCount = 0;
-			while (!completeCalled && retryCount < MAX_COMPLETE_RETRIES && !abortSignal.aborted) {
-				retryCount++;
-				const reminder = `<system-reminder>
+			let previousTools: string[] | null = null;
+			try {
+				while (!completeCalled && retryCount < MAX_COMPLETE_RETRIES && !abortSignal.aborted) {
+					retryCount++;
+					if (!previousTools) {
+						previousTools = session.getActiveToolNames();
+						await session.setActiveToolsByName(["complete"]);
+					}
+					const reminder = `<system-reminder>
 CRITICAL: You stopped without calling the complete tool. This is reminder ${retryCount} of ${MAX_COMPLETE_RETRIES}.
 
 You MUST call the complete tool to finish your task. Options:
@@ -959,7 +1069,12 @@ Failure to call complete after ${MAX_COMPLETE_RETRIES} reminders will result in 
 
 Call complete now.`;
 
-				await session.prompt(reminder);
+					await session.prompt(reminder, reminderToolChoice ? { toolChoice: reminderToolChoice } : undefined);
+				}
+			} finally {
+				if (previousTools) {
+					await session.setActiveToolsByName(previousTools);
+				}
 			}
 
 			const lastMessage = session.state.messages[session.state.messages.length - 1];
@@ -1026,6 +1141,7 @@ Call complete now.`;
 	const completeItems = progress.extractedToolData?.complete as
 		| Array<{ data?: unknown; status?: "success" | "aborted"; error?: string }>
 		| undefined;
+	const reportFindings = progress.extractedToolData?.report_finding as ReviewFinding[] | undefined;
 	const hasComplete = Array.isArray(completeItems) && completeItems.length > 0;
 	if (hasComplete) {
 		const lastComplete = completeItems[completeItems.length - 1];
@@ -1041,29 +1157,7 @@ Call complete now.`;
 			}
 		} else {
 			// Normal successful completion
-			let completeData = lastComplete?.data ?? null;
-			// Handle double-stringified JSON (subagent returned JSON string instead of object)
-			if (typeof completeData === "string" && (completeData.startsWith("{") || completeData.startsWith("["))) {
-				try {
-					completeData = JSON.parse(completeData);
-				} catch {
-					// Not valid JSON, keep as string
-				}
-			}
-			// Special case: merge report_finding data into review output for parent visibility
-			const reportFindings = progress.extractedToolData?.report_finding as ReviewFinding[] | undefined;
-			if (
-				Array.isArray(reportFindings) &&
-				reportFindings.length > 0 &&
-				completeData &&
-				typeof completeData === "object" &&
-				!Array.isArray(completeData)
-			) {
-				const record = completeData as Record<string, unknown>;
-				if (!("findings" in record)) {
-					completeData = { ...record, findings: reportFindings };
-				}
-			}
+			const completeData = normalizeCompleteData(lastComplete?.data ?? null, reportFindings);
 			try {
 				rawOutput = JSON.stringify(completeData, null, 2) ?? "null";
 			} catch (err) {
@@ -1074,8 +1168,27 @@ Call complete now.`;
 			stderr = "";
 		}
 	} else {
-		const warning = "SYSTEM WARNING: Subagent exited without calling complete tool after 3 reminders.";
-		rawOutput = rawOutput ? `${warning}\n\n${rawOutput}` : warning;
+		const allowFallback = !done.aborted && !signal?.aborted;
+		const { normalized: normalizedSchema, error: schemaError } = normalizeOutputSchema(outputSchema);
+		const hasOutputSchema = normalizedSchema !== undefined && !schemaError;
+		const fallback = allowFallback ? resolveFallbackCompletion(rawOutput, outputSchema) : null;
+		if (fallback) {
+			const completeData = normalizeCompleteData(fallback.data, reportFindings);
+			try {
+				rawOutput = JSON.stringify(completeData, null, 2) ?? "null";
+			} catch (err) {
+				const errorMessage = err instanceof Error ? err.message : String(err);
+				rawOutput = `{"error":"Failed to serialize fallback completion: ${errorMessage}"}`;
+			}
+			exitCode = 0;
+			stderr = "";
+		} else if (!hasOutputSchema && allowFallback && rawOutput.trim().length > 0) {
+			exitCode = 0;
+			stderr = "";
+		} else {
+			const warning = "SYSTEM WARNING: Subagent exited without calling complete tool after 3 reminders.";
+			rawOutput = rawOutput ? `${warning}\n\n${rawOutput}` : warning;
+		}
 	}
 	const { text: truncatedOutput, truncated } = truncateOutput(rawOutput);
 

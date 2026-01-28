@@ -23,6 +23,7 @@ import type {
 	ThinkingContent,
 	Tool,
 	ToolCall,
+	ToolChoice,
 	ToolResultMessage,
 } from "../types";
 import { AssistantMessageEventStream } from "../utils/event-stream";
@@ -74,7 +75,7 @@ function hasToolHistory(messages: Message[]): boolean {
 }
 
 export interface OpenAICompletionsOptions extends StreamOptions {
-	toolChoice?: "auto" | "none" | "required" | { type: "function"; function: { name: string } };
+	toolChoice?: ToolChoice;
 	reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
 }
 
@@ -420,7 +421,7 @@ function buildParams(model: Model<"openai-completions">, context: Context, optio
 		params.tools = [];
 	}
 
-	if (options?.toolChoice) {
+	if (options?.toolChoice && compat.supportsToolChoice) {
 		params.tool_choice = options.toolChoice;
 	}
 
@@ -794,6 +795,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAICompat 
 		supportsDeveloperRole: !isNonStandard,
 		supportsReasoningEffort: !isGrok && !isZai,
 		supportsUsageInStreaming: true,
+		supportsToolChoice: true,
 		maxTokensField: useMaxTokens ? "max_tokens" : "max_completion_tokens",
 		requiresToolResultName: isMistral,
 		requiresAssistantAfterToolResult: false, // Mistral no longer requires this as of Dec 2024
@@ -820,6 +822,7 @@ function getCompat(model: Model<"openai-completions">): ResolvedOpenAICompat {
 		supportsDeveloperRole: model.compat.supportsDeveloperRole ?? detected.supportsDeveloperRole,
 		supportsReasoningEffort: model.compat.supportsReasoningEffort ?? detected.supportsReasoningEffort,
 		supportsUsageInStreaming: model.compat.supportsUsageInStreaming ?? detected.supportsUsageInStreaming,
+		supportsToolChoice: model.compat.supportsToolChoice ?? detected.supportsToolChoice,
 		maxTokensField: model.compat.maxTokensField ?? detected.maxTokensField,
 		requiresToolResultName: model.compat.requiresToolResultName ?? detected.requiresToolResultName,
 		requiresAssistantAfterToolResult:

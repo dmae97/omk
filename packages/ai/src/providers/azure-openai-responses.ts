@@ -26,6 +26,7 @@ import type {
 	ThinkingContent,
 	Tool,
 	ToolCall,
+	ToolChoice,
 } from "../types";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { parseStreamingJson } from "../utils/json-parse";
@@ -64,6 +65,7 @@ export interface AzureOpenAIResponsesOptions extends StreamOptions {
 	azureResourceName?: string;
 	azureBaseUrl?: string;
 	azureDeploymentName?: string;
+	toolChoice?: ToolChoice;
 }
 
 /**
@@ -449,6 +451,9 @@ function buildParams(
 
 	if (context.tools) {
 		params.tools = convertTools(context.tools);
+		if (options?.toolChoice) {
+			params.tool_choice = options.toolChoice;
+		}
 	}
 
 	if (model.reasoning) {

@@ -302,51 +302,6 @@ describe("PythonKernel (external gateway)", () => {
 		});
 	});
 
-	it("marks kernel dead after repeated ping failures", async () => {
-		const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-			if (url.endsWith("/api/kernels") && init?.method === "POST") {
-				return new Response(JSON.stringify({ id: "kernel-2" }), { status: 201 });
-			}
-			if (url.includes("/api/kernels/kernel-2") && !init?.method) {
-				throw new Error("ping failed");
-			}
-			return new Response("", { status: 200 });
-		});
-		globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-		let initSeen = false;
-		let preludeSeen = false;
-
-		const kernelPromise = PythonKernel.start({ cwd: "/" });
-		await Bun.sleep(10);
-		const ws = FakeWebSocket.lastInstance;
-		if (!ws) throw new Error("WebSocket not initialized");
-		ws.setSendHandler(data => {
-			const msg = typeof data === "string" ? (JSON.parse(data) as JupyterMessage) : decodeMessage(data);
-			const code = String(msg.content.code ?? "");
-			if (!initSeen) {
-				initSeen = true;
-				sendOkExecution(ws, msg.header.msg_id);
-				return;
-			}
-			if (!preludeSeen) {
-				expect(code).toBe(PYTHON_PRELUDE);
-				preludeSeen = true;
-			}
-			sendOkExecution(ws, msg.header.msg_id);
-		});
-
-		const kernel = await kernelPromise;
-		const firstPing = await kernel.ping(1);
-		const secondPing = await kernel.ping(1);
-
-		expect(firstPing).toBe(false);
-		expect(secondPing).toBe(false);
-		expect(kernel.isAlive()).toBe(false);
-
-		await kernel.shutdown();
-	});
-
 	it("initializes the IPython prelude", async () => {
 		const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
 			if (url.endsWith("/api/kernels") && init?.method === "POST") {

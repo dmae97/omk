@@ -4610,6 +4610,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "openrouter",
 			baseUrl: "https://openrouter.ai/api/v1",
+			compat: {"supportsToolChoice":false},
 			reasoning: false,
 			input: ["text", "image"],
 			cost: {
@@ -4627,6 +4628,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "openrouter",
 			baseUrl: "https://openrouter.ai/api/v1",
+			compat: {"supportsToolChoice":false},
 			reasoning: false,
 			input: ["text"],
 			cost: {
@@ -4644,6 +4646,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "openrouter",
 			baseUrl: "https://openrouter.ai/api/v1",
+			compat: {"supportsToolChoice":false},
 			reasoning: false,
 			input: ["text", "image"],
 			cost: {
@@ -4661,6 +4664,7 @@ export const MODELS = {
 			api: "openai-completions",
 			provider: "openrouter",
 			baseUrl: "https://openrouter.ai/api/v1",
+			compat: {"supportsToolChoice":false},
 			reasoning: false,
 			input: ["text", "image"],
 			cost: {
@@ -4858,6 +4862,24 @@ export const MODELS = {
 			},
 			contextWindow: 1000000,
 			maxTokens: 64000,
+		} satisfies Model<"openai-completions">,
+		"arcee-ai/trinity-large-preview:free": {
+			id: "arcee-ai/trinity-large-preview:free",
+			name: "Arcee AI: Trinity Large Preview (free)",
+			api: "openai-completions",
+			provider: "openrouter",
+			baseUrl: "https://openrouter.ai/api/v1",
+			compat: {"supportsToolChoice":false},
+			reasoning: false,
+			input: ["text"],
+			cost: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+			},
+			contextWindow: 131000,
+			maxTokens: 4096,
 		} satisfies Model<"openai-completions">,
 		"arcee-ai/trinity-mini": {
 			id: "arcee-ai/trinity-mini",
@@ -5227,7 +5249,7 @@ export const MODELS = {
 			cost: {
 				input: 0.21,
 				output: 0.32,
-				cacheRead: 0,
+				cacheRead: 0.21,
 				cacheWrite: 0,
 			},
 			contextWindow: 163840,
@@ -6264,11 +6286,11 @@ export const MODELS = {
 			cost: {
 				input: 0.6,
 				output: 3,
-				cacheRead: 0.09999999999999999,
+				cacheRead: 0,
 				cacheWrite: 0,
 			},
 			contextWindow: 262144,
-			maxTokens: 4096,
+			maxTokens: 262144,
 		} satisfies Model<"openai-completions">,
 		"nex-agi/deepseek-v3.1-nex-n1": {
 			id: "nex-agi/deepseek-v3.1-nex-n1",
@@ -7624,7 +7646,7 @@ export const MODELS = {
 			cost: {
 				input: 0.049999999999999996,
 				output: 0.25,
-				cacheRead: 0,
+				cacheRead: 0.049999999999999996,
 				cacheWrite: 0,
 			},
 			contextWindow: 32000,
@@ -8787,6 +8809,23 @@ export const MODELS = {
 			},
 			contextWindow: 1000000,
 			maxTokens: 64000,
+		} satisfies Model<"anthropic-messages">,
+		"arcee-ai/trinity-large-preview": {
+			id: "arcee-ai/trinity-large-preview",
+			name: "Trinity Large Preview",
+			api: "anthropic-messages",
+			provider: "vercel-ai-gateway",
+			baseUrl: "https://ai-gateway.vercel.sh",
+			reasoning: false,
+			input: ["text"],
+			cost: {
+				input: 0.25,
+				output: 1,
+				cacheRead: 0,
+				cacheWrite: 0,
+			},
+			contextWindow: 131000,
+			maxTokens: 131000,
 		} satisfies Model<"anthropic-messages">,
 		"bytedance/seed-1.6": {
 			id: "bytedance/seed-1.6",

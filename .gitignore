@@ -42,3 +42,5 @@ changes/
 
 __pycache__/
 *.b64.js
+
+*.cpuprofile

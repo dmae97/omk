@@ -13,6 +13,7 @@ import {
 	streamSimple,
 	type TextContent,
 	type ThinkingBudgets,
+	type ToolChoice,
 	type ToolResultMessage,
 } from "@oh-my-pi/pi-ai";
 import { agentLoop, agentLoopContinue } from "./agent-loop";
@@ -105,6 +106,10 @@ export interface AgentOptions {
 	 * Cursor tool result callback for exec tool responses.
 	 */
 	cursorOnToolResult?: CursorToolResultHandler;
+}
+
+export interface AgentPromptOptions {
+	toolChoice?: ToolChoice;
 }
 
 /** Buffered Cursor tool result with text position at time of call */
@@ -358,9 +363,13 @@ export class Agent {
 	}
 
 	/** Send a prompt with an AgentMessage */
-	async prompt(message: AgentMessage | AgentMessage[]): Promise<void>;
-	async prompt(input: string, images?: ImageContent[]): Promise<void>;
-	async prompt(input: string | AgentMessage | AgentMessage[], images?: ImageContent[]) {
+	async prompt(message: AgentMessage | AgentMessage[], options?: AgentPromptOptions): Promise<void>;
+	async prompt(input: string, images?: ImageContent[], options?: AgentPromptOptions): Promise<void>;
+	async prompt(
+		input: string | AgentMessage | AgentMessage[],
+		imagesOrOptions?: ImageContent[] | AgentPromptOptions,
+		options?: AgentPromptOptions,
+	) {
 		if (this._state.isStreaming) {
 			throw new Error(
 				"Agent is already processing a prompt. Use steer() or followUp() to queue messages, or wait for completion.",
@@ -371,10 +380,19 @@ export class Agent {
 		if (!model) throw new Error("No model configured");
 
 		let msgs: AgentMessage[];
+		let promptOptions: AgentPromptOptions | undefined;
+		let images: ImageContent[] | undefined;
 
 		if (Array.isArray(input)) {
 			msgs = input;
+			promptOptions = imagesOrOptions as AgentPromptOptions | undefined;
 		} else if (typeof input === "string") {
+			if (Array.isArray(imagesOrOptions)) {
+				images = imagesOrOptions;
+				promptOptions = options;
+			} else {
+				promptOptions = imagesOrOptions;
+			}
 			const content: Array<TextContent | ImageContent> = [{ type: "text", text: input }];
 			if (images && images.length > 0) {
 				content.push(...images);
@@ -388,9 +406,10 @@ export class Agent {
 			];
 		} else {
 			msgs = [input];
+			promptOptions = imagesOrOptions as AgentPromptOptions | undefined;
 		}
 
-		await this._runLoop(msgs);
+		await this._runLoop(msgs, promptOptions);
 	}
 
 	/** Continue from current context (for retry after overflow) */
@@ -415,7 +434,7 @@ export class Agent {
 	 * If messages are provided, starts a new conversation turn with those messages.
 	 * Otherwise, continues from existing context.
 	 */
-	private async _runLoop(messages?: AgentMessage[]) {
+	private async _runLoop(messages?: AgentMessage[], options?: AgentPromptOptions) {
 		const model = this._state.model;
 		if (!model) throw new Error("No model configured");
 
@@ -467,6 +486,7 @@ export class Agent {
 			interruptMode: this.interruptMode,
 			sessionId: this._sessionId,
 			thinkingBudgets: this._thinkingBudgets,
+			toolChoice: options?.toolChoice,
 			convertToLlm: this.convertToLlm,
 			transformContext: this.transformContext,
 			getApiKey: this.getApiKey,

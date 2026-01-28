@@ -13,9 +13,6 @@ import { PYTHON_PRELUDE } from "./prelude";
 
 const TEXT_ENCODER = new TextEncoder();
 const TEXT_DECODER = new TextDecoder();
-const HEARTBEAT_INTERVAL_MS = 5000;
-const HEARTBEAT_TIMEOUT_MS = 2000;
-const HEARTBEAT_FAILURE_LIMIT = 1;
 const GATEWAY_STARTUP_TIMEOUT_MS = 30000;
 const GATEWAY_STARTUP_ATTEMPTS = 3;
 const TRACE_IPC = process.env.OMP_PYTHON_IPC_TRACE === "1";
@@ -465,8 +462,6 @@ export class PythonKernel {
 	#ws: WebSocket | null = null;
 	#disposed = false;
 	#alive = true;
-	#heartbeatTimer?: NodeJS.Timeout;
-	#heartbeatFailures = 0;
 	#messageHandlers = new Map<string, (msg: JupyterMessage) => void>();
 	#channelHandlers = new Map<string, Set<(msg: JupyterMessage) => void>>();
 	#pendingExecutions = new Map<string, (reason: string) => void>();
@@ -562,7 +557,6 @@ export class PythonKernel {
 		try {
 			await kernel.connectWebSocket();
 			await kernel.initializeKernelEnvironment(cwd, env);
-			kernel.startHeartbeat();
 			const preludeResult = await kernel.execute(PYTHON_PRELUDE, { silent: true, storeHistory: false });
 			if (preludeResult.cancelled || preludeResult.status === "error") {
 				throw new Error("Failed to initialize Python kernel prelude");
@@ -602,7 +596,6 @@ export class PythonKernel {
 			time("startWithSharedGateway:connectWS");
 			await kernel.initializeKernelEnvironment(cwd, env);
 			time("startWithSharedGateway:initEnv");
-			kernel.startHeartbeat();
 			const preludeResult = await kernel.execute(PYTHON_PRELUDE, { silent: true, storeHistory: false });
 			time("startWithSharedGateway:prelude");
 			if (preludeResult.cancelled || preludeResult.status === "error") {
@@ -721,7 +714,6 @@ export class PythonKernel {
 		try {
 			await kernel.connectWebSocket();
 			await kernel.initializeKernelEnvironment(options.cwd, options.env);
-			kernel.startHeartbeat();
 			const preludeResult = await kernel.execute(PYTHON_PRELUDE, { silent: true, storeHistory: false });
 			if (preludeResult.cancelled || preludeResult.status === "error") {
 				throw new Error("Failed to initialize Python kernel prelude");
@@ -1108,11 +1100,6 @@ export class PythonKernel {
 		this.#alive = false;
 		this.abortPendingExecutions("Kernel shutdown");
 
-		if (this.#heartbeatTimer) {
-			clearInterval(this.#heartbeatTimer);
-			this.#heartbeatTimer = undefined;
-		}
-
 		try {
 			await fetch(`${this.gatewayUrl}/api/kernels/${this.kernelId}`, {
 				method: "DELETE",
@@ -1138,35 +1125,6 @@ export class PythonKernel {
 				});
 			}
 		}
-	}
-
-	async ping(timeoutMs: number = HEARTBEAT_TIMEOUT_MS): Promise<boolean> {
-		if (!this.isAlive()) return false;
-		try {
-			const response = await fetch(`${this.gatewayUrl}/api/kernels/${this.kernelId}`, {
-				signal: AbortSignal.timeout(timeoutMs),
-				headers: this.#authHeaders(),
-			});
-			if (response.ok) {
-				this.#heartbeatFailures = 0;
-				return true;
-			}
-			throw new Error(`Kernel status check failed: ${response.status}`);
-		} catch (err: unknown) {
-			this.#heartbeatFailures += 1;
-			if (this.#heartbeatFailures > HEARTBEAT_FAILURE_LIMIT) {
-				this.#alive = false;
-				logger.warn("Kernel heartbeat failed", { error: err instanceof Error ? err.message : String(err) });
-			}
-			return false;
-		}
-	}
-
-	private startHeartbeat(): void {
-		if (this.#heartbeatTimer) return;
-		this.#heartbeatTimer = setInterval(() => {
-			void this.ping();
-		}, HEARTBEAT_INTERVAL_MS);
 	}
 
 	private renderDisplay(content: Record<string, unknown>): { text: string; outputs: KernelDisplayOutput[] } {

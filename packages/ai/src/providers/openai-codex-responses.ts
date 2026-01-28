@@ -24,6 +24,7 @@ import type {
 	ThinkingContent,
 	Tool,
 	ToolCall,
+	ToolChoice,
 } from "../types";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { parseStreamingJson } from "../utils/json-parse";
@@ -46,6 +47,7 @@ export interface OpenAICodexResponsesOptions extends StreamOptions {
 	textVerbosity?: "low" | "medium" | "high";
 	include?: string[];
 	codexMode?: boolean;
+	toolChoice?: ToolChoice;
 }
 
 export const CODEX_INSTRUCTIONS = `You are an expert coding assistant operating inside pi, a coding agent harness.`;
@@ -81,6 +83,23 @@ function normalizeResponsesToolCallId(id: string): { callId: string; itemId: str
 	}
 	const hash = Bun.hash.xxHash64(id).toString(36);
 	return { callId: `call_${hash}`, itemId: `item_${hash}` };
+}
+
+function normalizeCodexToolChoice(choice: ToolChoice | undefined): string | Record<string, unknown> | undefined {
+	if (!choice) return undefined;
+	if (typeof choice === "string") return choice;
+	if (choice.type === "function") {
+		if ("function" in choice && choice.function?.name) {
+			return { type: "function", name: choice.function.name };
+		}
+		if ("name" in choice && choice.name) {
+			return { type: "function", name: choice.name };
+		}
+	}
+	if (choice.type === "tool" && choice.name) {
+		return { type: "function", name: choice.name };
+	}
+	return undefined;
 }
 
 export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"> = (
@@ -139,8 +158,14 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 				params.temperature = options.temperature;
 			}
 
-			if (context.tools) {
+			if (context.tools && context.tools.length > 0) {
 				params.tools = convertTools(context.tools);
+				if (options?.toolChoice) {
+					const toolChoice = normalizeCodexToolChoice(options.toolChoice);
+					if (toolChoice) {
+						params.tool_choice = toolChoice;
+					}
+				}
 			}
 
 			const systemPrompt = buildCodexSystemPrompt({

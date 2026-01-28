@@ -77,8 +77,7 @@ function formatJsonScalar(value: unknown, theme: Theme): string {
 	return "";
 }
 
-const MISSING_COMPLETE_WARNING_PREFIX =
-	"SYSTEM WARNING: Subagent exited without calling complete tool";
+const MISSING_COMPLETE_WARNING_PREFIX = "SYSTEM WARNING: Subagent exited without calling complete tool";
 
 function extractMissingCompleteWarning(output: string): { warning?: string; rest: string } {
 	const lines = output.split("\n");
@@ -89,7 +88,7 @@ function extractMissingCompleteWarning(output: string): { warning?: string; rest
 	const rest = lines
 		.slice(1)
 		.join("\n")
-		.replace(/^\s*\n+/, "")
+		.replace(/^\s*\n+/, "");
 	return { warning: firstLine, rest };
 }
 
@@ -294,10 +293,7 @@ function renderOutputSection(
 
 		if (outputLines.length > previewCount) {
 			lines.push(
-				`${continuePrefix}  ${theme.fg(
-					"dim",
-					formatMoreItems(outputLines.length - previewCount, "line", theme),
-				)}`,
+				`${continuePrefix}  ${theme.fg("dim", formatMoreItems(outputLines.length - previewCount, "line", theme))}`,
 			);
 		}
 
@@ -736,8 +732,7 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 	const prefix = isLast ? theme.fg("dim", theme.tree.last) : theme.fg("dim", theme.tree.branch);
 	const continuePrefix = isLast ? "   " : `${theme.fg("dim", theme.tree.vertical)}  `;
 
-	const { warning: missingCompleteWarning, rest: outputWithoutWarning } =
-		extractMissingCompleteWarning(result.output);
+	const { warning: missingCompleteWarning, rest: outputWithoutWarning } = extractMissingCompleteWarning(result.output);
 	const aborted = result.aborted ?? false;
 	const success = !aborted && result.exitCode === 0;
 	const needsWarning = Boolean(missingCompleteWarning) && success;
@@ -841,15 +836,7 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 	// Fallback to output preview if no custom rendering
 	if (!hasCustomRendering) {
 		lines.push(
-			...renderOutputSection(
-				outputWithoutWarning,
-				continuePrefix,
-				expanded,
-				theme,
-				3,
-				12,
-				missingCompleteWarning,
-			),
+			...renderOutputSection(outputWithoutWarning, continuePrefix, expanded, theme, 3, 12, missingCompleteWarning),
 		);
 	}
 

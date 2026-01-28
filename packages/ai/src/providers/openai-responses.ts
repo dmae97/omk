@@ -24,6 +24,7 @@ import type {
 	ThinkingContent,
 	Tool,
 	ToolCall,
+	ToolChoice,
 } from "../types";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { parseStreamingJson } from "../utils/json-parse";
@@ -36,6 +37,7 @@ export interface OpenAIResponsesOptions extends StreamOptions {
 	reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
 	reasoningSummary?: "auto" | "detailed" | "concise" | null;
 	serviceTier?: ResponseCreateParamsStreaming["service_tier"];
+	toolChoice?: ToolChoice;
 	/**
 	 * Enforce strict tool call/result pairing when building Responses API inputs.
 	 * Azure OpenAI Responses API requires tool results to have a matching tool call.
@@ -408,6 +410,9 @@ function buildParams(model: Model<"openai-responses">, context: Context, options
 
 	if (context.tools) {
 		params.tools = convertTools(context.tools);
+		if (options?.toolChoice) {
+			params.tool_choice = options.toolChoice;
+		}
 	}
 
 	if (model.reasoning) {

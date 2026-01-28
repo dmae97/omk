@@ -303,6 +303,8 @@ class AnsiCodeTracker {
 	}
 }
 
+const WRAP_OPTIONS = { wordWrap: true, hard: true, trim: false } as const;
+
 /**
  * Wrap text with ANSI codes preserved.
  *
@@ -315,11 +317,7 @@ class AnsiCodeTracker {
  * @returns Array of wrapped lines (NOT padded to width)
  */
 export function wrapTextWithAnsi(text: string, width: number): string[] {
-	if (!text) {
-		return [""];
-	}
-
-	return Bun.wrapAnsi(text, width, { wordWrap: true, hard: true, trim: false }).split("\n");
+	return Bun.wrapAnsi(text, width, WRAP_OPTIONS).split("\n");
 }
 
 const PUNCTUATION_REGEX = /[(){}[\]<>.,;:'"!?+\-=*/\\|&%^$#@~`]/;

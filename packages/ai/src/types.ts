@@ -94,6 +94,15 @@ export type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh";
 /** Token budgets for each thinking level (token-based providers only) */
 export type ThinkingBudgets = { [key in ThinkingLevel]?: number };
 
+export type ToolChoice =
+	| "auto"
+	| "none"
+	| "any"
+	| "required"
+	| { type: "function"; name: string }
+	| { type: "function"; function: { name: string } }
+	| { type: "tool"; name: string };
+
 // Base options all providers share
 export interface StreamOptions {
 	temperature?: number;
@@ -129,6 +138,8 @@ export interface SimpleStreamOptions extends StreamOptions {
 	cursorExecHandlers?: CursorExecHandlers;
 	/** Hook to handle tool results from Cursor exec */
 	cursorOnToolResult?: CursorToolResultHandler;
+	/** Optional tool choice override for compatible providers */
+	toolChoice?: ToolChoice;
 }
 
 // Generic StreamFunction with typed options
@@ -298,6 +309,8 @@ export interface OpenAICompat {
 	requiresReasoningContentForToolCalls?: boolean;
 	/** Whether assistant tool-call messages must include non-empty content. Default: false. */
 	requiresAssistantContentForToolCalls?: boolean;
+	/** Whether the provider supports the `tool_choice` parameter. Default: true. */
+	supportsToolChoice?: boolean;
 	/** OpenRouter-specific routing preferences. Only used when baseUrl points to OpenRouter. */
 	openRouterRouting?: OpenRouterRouting;
 }

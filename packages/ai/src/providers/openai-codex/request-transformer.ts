@@ -28,6 +28,7 @@ export interface RequestBody {
 	instructions?: string;
 	input?: InputItem[];
 	tools?: unknown;
+	tool_choice?: unknown;
 	temperature?: number;
 	reasoning?: Partial<ReasoningConfig>;
 	text?: {

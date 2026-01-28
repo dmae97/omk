@@ -115,6 +115,8 @@ Final `complete` call (payload goes under `data`):
 - `data.confidence`: 0.0-1.0
 - `data.findings`: Optional; MUST omit (it is populated from `report_finding` calls)
 
+Do not output JSON or code blocks. You must call the `complete` tool.
+
 Correctness judgment ignores non-blocking issues (style, docs, nits).
 </output>
 

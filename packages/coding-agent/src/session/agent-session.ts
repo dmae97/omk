@@ -23,6 +23,7 @@ import type {
 	Model,
 	TextContent,
 	ToolCall,
+	ToolChoice,
 	Usage,
 	UsageReport,
 } from "@oh-my-pi/pi-ai";
@@ -157,6 +158,8 @@ export interface PromptOptions {
 	images?: ImageContent[];
 	/** When streaming, how to queue the message: "steer" (interrupt) or "followUp" (wait). */
 	streamingBehavior?: "steer" | "followUp";
+	/** Optional tool choice override for the next LLM call. */
+	toolChoice?: ToolChoice;
 }
 
 /** Result from cycleModel() */
@@ -1252,7 +1255,8 @@ export class AgentSession {
 			}
 		}
 
-		await this.agent.prompt(messages);
+		const agentPromptOptions = options?.toolChoice ? { toolChoice: options.toolChoice } : undefined;
+		await this.agent.prompt(messages, agentPromptOptions);
 		await this.waitForRetry();
 	}
 
