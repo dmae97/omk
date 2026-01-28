@@ -15,6 +15,7 @@ const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_RETRIES = 3;
 const BASE_RETRY_DELAY_MS = 500;
+const PROFILE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const CLAUDE_HEADERS = {
 	accept: "application/json, text/plain, */*",
@@ -158,6 +159,64 @@ async function fetchUsagePayload(
 	}
 
 	return lastPayload ? { payload: lastPayload, orgId: lastOrgId } : null;
+}
+
+interface ClaudeProfile {
+	account?: {
+		uuid?: string;
+		email?: string;
+	};
+}
+
+async function fetchProfile(
+	baseUrl: string,
+	headers: Record<string, string>,
+	ctx: UsageFetchContext,
+	signal?: AbortSignal,
+): Promise<ClaudeProfile | null> {
+	const url = `${baseUrl}/profile`;
+	try {
+		const response = await ctx.fetch(url, { headers, signal });
+		if (!response.ok) return null;
+		return (await response.json()) as ClaudeProfile;
+	} catch {
+		return null;
+	}
+}
+
+function buildProfileCacheKey(params: UsageFetchParams): string {
+	const credential = params.credential;
+	const token = credential.accessToken ?? credential.refreshToken;
+	const fingerprint = token && typeof token === "string" ? Bun.hash(token).toString(16) : "anonymous";
+	const baseUrl = params.baseUrl ?? DEFAULT_ENDPOINT;
+	return `profile:${params.provider}:${fingerprint}:${baseUrl}`;
+}
+
+async function resolveEmail(
+	params: UsageFetchParams,
+	ctx: UsageFetchContext,
+	baseUrl: string,
+	headers: Record<string, string>,
+): Promise<string | undefined> {
+	if (params.credential.email) return params.credential.email;
+
+	const cacheKey = buildProfileCacheKey(params);
+	const cached = await ctx.cache.get(cacheKey);
+	const now = ctx.now();
+	if (cached && cached.expiresAt > now && cached.value?.metadata?.email) {
+		return cached.value.metadata.email as string;
+	}
+
+	const profile = await fetchProfile(baseUrl, headers, ctx, params.signal);
+	const email = profile?.account?.email;
+	if (email) {
+		const entry = {
+			value: { provider: params.provider, fetchedAt: now, limits: [], metadata: { email } },
+			expiresAt: now + PROFILE_CACHE_TTL_MS,
+		};
+		await ctx.cache.set(cacheKey, entry);
+	}
+	return email;
 }
 
 function buildUsageAmount(utilization: number | undefined): UsageAmount | undefined {
@@ -329,7 +388,7 @@ async function fetchClaudeUsage(params: UsageFetchParams, ctx: UsageFetchContext
 	if (limits.length === 0) return cachedValue;
 	const identity = extractUsageIdentity(payload, orgId);
 	const accountId = identity.accountId ?? credential.accountId;
-	const email = identity.email ?? credential.email;
+	const email = identity.email ?? (await resolveEmail(params, ctx, baseUrl, headers));
 
 	const report: UsageReport = {
 		provider: params.provider,
