@@ -10,7 +10,7 @@ Ask the user a question when you need clarification or input during task executi
 </conditions>
 
 <instruction>
-- Place recommended option first with " (Recommended)" suffix
+- Use `recommended: <index>` to mark the default option (0-indexed); " (Recommended)" suffix is added automatically
 - Use `questions` array for multiple related questions instead of asking one at a time
 - Set `multi: true` on a question to allow multiple selections
 </instruction>
@@ -37,12 +37,13 @@ If you can make a reasonable inference from the user's request, **do it**. Users
 
 <example name="single">
 question: "Which authentication method should this API use?"
-options: [{"label": "JWT (Recommended)"}, {"label": "OAuth2"}, {"label": "Session cookies"}]
+options: [{"label": "JWT"}, {"label": "OAuth2"}, {"label": "Session cookies"}]
+recommended: 0
 </example>
 
 <example name="multi-part">
 questions: [
-  {"id": "auth", "question": "Which auth method?", "options": [{"label": "JWT"}, {"label": "OAuth2"}]},
+  {"id": "auth", "question": "Which auth method?", "options": [{"label": "JWT"}, {"label": "OAuth2"}], "recommended": 0},
   {"id": "cache", "question": "Enable caching?", "options": [{"label": "Yes"}, {"label": "No"}]},
   {"id": "features", "question": "Which features to include?", "options": [{"label": "Logging"}, {"label": "Metrics"}, {"label": "Tracing"}], "multi": true}
 ]

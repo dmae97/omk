@@ -20,7 +20,7 @@ import chalk from "chalk";
 import { KeybindingsManager } from "../config/keybindings";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { SettingsManager } from "../config/settings-manager";
-import type { ExtensionUIContext } from "../extensibility/extensions";
+import type { ExtensionUIContext, ExtensionUIDialogOptions } from "../extensibility/extensions";
 import type { CompactOptions } from "../extensibility/extensions/types";
 import { loadSlashCommands } from "../extensibility/slash-commands";
 import { resolvePlanUrlToPath } from "../internal-urls";
@@ -1020,8 +1020,12 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.extensionUiController.setHookStatus(key, text);
 	}
 
-	showHookSelector(title: string, options: string[], initialIndex?: number): Promise<string | undefined> {
-		return this.extensionUiController.showHookSelector(title, options, initialIndex);
+	showHookSelector(
+		title: string,
+		options: string[],
+		dialogOptions?: ExtensionUIDialogOptions,
+	): Promise<string | undefined> {
+		return this.extensionUiController.showHookSelector(title, options, dialogOptions);
 	}
 
 	hideHookSelector(): void {

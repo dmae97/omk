@@ -8,6 +8,7 @@ import type {
 	ExtensionContextActions,
 	ExtensionError,
 	ExtensionUIContext,
+	ExtensionUIDialogOptions,
 } from "../../extensibility/extensions";
 import { HookEditorComponent } from "../../modes/components/hook-editor";
 import { HookInputComponent } from "../../modes/components/hook-input";
@@ -25,7 +26,7 @@ export class ExtensionUiController {
 	async initHooksAndCustomTools(): Promise<void> {
 		// Create and set hook & tool UI context
 		const uiContext: ExtensionUIContext = {
-			select: (title, options, dialogOptions) => this.showHookSelector(title, options, dialogOptions?.initialIndex),
+			select: (title, options, dialogOptions) => this.showHookSelector(title, options, dialogOptions),
 			confirm: (title, message, _dialogOptions) => this.showHookConfirm(title, message),
 			input: (title, placeholder, _dialogOptions) => this.showHookInput(title, placeholder),
 			notify: (message, type) => this.showHookNotify(message, type),
@@ -484,7 +485,11 @@ export class ExtensionUiController {
 	/**
 	 * Show a selector for hooks.
 	 */
-	showHookSelector(title: string, options: string[], initialIndex?: number): Promise<string | undefined> {
+	showHookSelector(
+		title: string,
+		options: string[],
+		dialogOptions?: ExtensionUIDialogOptions,
+	): Promise<string | undefined> {
 		const { promise, resolve } = Promise.withResolvers<string | undefined>();
 		this.ctx.hookSelector = new HookSelectorComponent(
 			title,
@@ -497,7 +502,7 @@ export class ExtensionUiController {
 				this.hideHookSelector();
 				resolve(undefined);
 			},
-			{ initialIndex },
+			{ initialIndex: dialogOptions?.initialIndex, timeout: dialogOptions?.timeout, tui: this.ctx.ui },
 		);
 
 		this.ctx.editorContainer.clear();

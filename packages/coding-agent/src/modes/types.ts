@@ -3,7 +3,7 @@ import type { AssistantMessage, ImageContent, Message, UsageReport } from "@oh-m
 import type { Component, Container, Loader, Spacer, Text, TUI } from "@oh-my-pi/pi-tui";
 import type { KeybindingsManager } from "../config/keybindings";
 import type { SettingsManager } from "../config/settings-manager";
-import type { ExtensionUIContext } from "../extensibility/extensions";
+import type { ExtensionUIContext, ExtensionUIDialogOptions } from "../extensibility/extensions";
 import type { CompactOptions } from "../extensibility/extensions/types";
 import type { MCPManager } from "../mcp";
 import type { AgentSession, AgentSessionEvent } from "../session/agent-session";
@@ -189,7 +189,11 @@ export interface InteractiveModeContext {
 	): Promise<void>;
 	setHookWidget(key: string, content: unknown): void;
 	setHookStatus(key: string, text: string | undefined): void;
-	showHookSelector(title: string, options: string[], initialIndex?: number): Promise<string | undefined>;
+	showHookSelector(
+		title: string,
+		options: string[],
+		dialogOptions?: ExtensionUIDialogOptions,
+	): Promise<string | undefined>;
 	hideHookSelector(): void;
 	showHookInput(title: string, placeholder?: string): Promise<string | undefined>;
 	hideHookInput(): void;

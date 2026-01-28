@@ -50,7 +50,15 @@ export class HookSelectorComponent extends Container {
 				opts.timeout,
 				opts.tui,
 				s => this.titleText.setText(theme.fg("accent", `${this.baseTitle} (${s}s)`)),
-				() => this.onCancelCallback(),
+				() => {
+					// Auto-select current option on timeout (typically the first/recommended option)
+					const selected = this.options[this.selectedIndex];
+					if (selected) {
+						this.onSelectCallback(selected);
+					} else {
+						this.onCancelCallback();
+					}
+				},
 			);
 		}
 

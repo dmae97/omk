@@ -11,8 +11,8 @@
  * Usage notes:
  *   - Users will always be able to select "Other" to provide custom text input
  *   - Use multi: true to allow multiple answers to be selected for a question
- *   - If you recommend a specific option, make that the first option in the list
- *     and add "(Recommended)" at the end of the label
+ *   - Use recommended: <index> to mark the default option; "(Recommended)" suffix is added automatically
+ *   - Questions time out after 30 seconds and auto-select the recommended option
  */
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
@@ -39,12 +39,14 @@ const QuestionItem = Type.Object({
 	question: Type.String({ description: "Question text" }),
 	options: Type.Array(OptionItem, { description: "Available options" }),
 	multi: Type.Optional(Type.Boolean({ description: "Allow multiple selections" })),
+	recommended: Type.Optional(Type.Number({ description: "Index of recommended option (0-indexed)" })),
 });
 
 const askSchema = Type.Object({
 	question: Type.Optional(Type.String({ description: "Question to ask" })),
 	options: Type.Optional(Type.Array(OptionItem, { description: "Available options" })),
 	multi: Type.Optional(Type.Boolean({ description: "Allow multiple selections (default: false)" })),
+	recommended: Type.Optional(Type.Number({ description: "Index of recommended option (0-indexed, default: 0)" })),
 	questions: Type.Optional(Type.Array(QuestionItem, { description: "Multiple questions in sequence" })),
 });
 
@@ -74,8 +76,28 @@ export interface AskToolDetails {
 // =============================================================================
 
 const OTHER_OPTION = "Other (type your own)";
+const RECOMMENDED_SUFFIX = " (Recommended)";
+
 function getDoneOptionLabel(): string {
 	return `${theme.status.success} Done selecting`;
+}
+
+/** Add "(Recommended)" suffix to the option at the given index if not already present */
+function addRecommendedSuffix(labels: string[], recommendedIndex?: number): string[] {
+	if (recommendedIndex === undefined || recommendedIndex < 0 || recommendedIndex >= labels.length) {
+		return labels;
+	}
+	return labels.map((label, i) => {
+		if (i === recommendedIndex && !label.endsWith(RECOMMENDED_SUFFIX)) {
+			return label + RECOMMENDED_SUFFIX;
+		}
+		return label;
+	});
+}
+
+/** Strip "(Recommended)" suffix from a label */
+function stripRecommendedSuffix(label: string): string {
+	return label.endsWith(RECOMMENDED_SUFFIX) ? label.slice(0, -RECOMMENDED_SUFFIX.length) : label;
 }
 
 // =============================================================================
@@ -88,7 +110,11 @@ interface SelectionResult {
 }
 
 interface UIContext {
-	select(prompt: string, options: string[], options_?: { initialIndex?: number }): Promise<string | undefined>;
+	select(
+		prompt: string,
+		options: string[],
+		options_?: { initialIndex?: number; timeout?: number },
+	): Promise<string | undefined>;
 	input(prompt: string): Promise<string | undefined>;
 }
 
@@ -97,6 +123,7 @@ async function askSingleQuestion(
 	question: string,
 	optionLabels: string[],
 	multi: boolean,
+	recommended?: number,
 ): Promise<SelectionResult> {
 	const doneLabel = getDoneOptionLabel();
 	let selectedOptions: string[] = [];
@@ -155,12 +182,16 @@ async function askSingleQuestion(
 		}
 		selectedOptions = Array.from(selected);
 	} else {
-		const choice = await ui.select(question, [...optionLabels, OTHER_OPTION]);
+		const displayLabels = addRecommendedSuffix(optionLabels, recommended);
+		const choice = await ui.select(question, [...displayLabels, OTHER_OPTION], {
+			timeout: 30000,
+			initialIndex: recommended,
+		});
 		if (choice === OTHER_OPTION) {
 			const input = await ui.input("Enter your response:");
 			if (input) customInput = input;
 		} else if (choice) {
-			selectedOptions = [choice];
+			selectedOptions = [stripRecommendedSuffix(choice)];
 		}
 	}
 
@@ -187,11 +218,13 @@ interface AskParams {
 	question?: string;
 	options?: Array<{ label: string }>;
 	multi?: boolean;
+	recommended?: number;
 	questions?: Array<{
 		id: string;
 		question: string;
 		options: Array<{ label: string }>;
 		multi?: boolean;
+		recommended?: number;
 	}>;
 }
 
@@ -243,6 +276,7 @@ export class AskTool implements AgentTool<typeof askSchema, AskToolDetails> {
 					q.question,
 					optionLabels,
 					q.multi ?? false,
+					q.recommended,
 				);
 
 				results.push({
@@ -275,7 +309,13 @@ export class AskTool implements AgentTool<typeof askSchema, AskToolDetails> {
 			};
 		}
 
-		const { selectedOptions, customInput } = await askSingleQuestion(ui, question, optionLabels, multi);
+		const { selectedOptions, customInput } = await askSingleQuestion(
+			ui,
+			question,
+			optionLabels,
+			multi,
+			params.recommended,
+		);
 
 		const details: AskToolDetails = {
 			question,
