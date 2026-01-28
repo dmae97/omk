@@ -77,6 +77,22 @@ function formatJsonScalar(value: unknown, theme: Theme): string {
 	return "";
 }
 
+const MISSING_COMPLETE_WARNING_PREFIX =
+	"SYSTEM WARNING: Subagent exited without calling complete tool";
+
+function extractMissingCompleteWarning(output: string): { warning?: string; rest: string } {
+	const lines = output.split("\n");
+	const firstLine = lines[0]?.trim() ?? "";
+	if (!firstLine.startsWith(MISSING_COMPLETE_WARNING_PREFIX)) {
+		return { rest: output };
+	}
+	const rest = lines
+		.slice(1)
+		.join("\n")
+		.replace(/^\s*\n+/, "")
+	return { warning: firstLine, rest };
+}
+
 function buildTreePrefix(ancestors: boolean[], theme: Theme): string {
 	return ancestors.map(hasNext => (hasNext ? `${theme.tree.vertical}  ` : "   ")).join("");
 }
@@ -227,10 +243,66 @@ function renderOutputSection(
 	theme: Theme,
 	maxCollapsed = 3,
 	maxExpanded = 10,
+	warning?: string,
 ): string[] {
 	const lines: string[] = [];
 	const trimmedOutput = output.trimEnd();
-	if (!trimmedOutput) return lines;
+	if (!trimmedOutput && !warning) return lines;
+
+	if (warning) {
+		lines.push(`${continuePrefix}${theme.fg("dim", "Output")}`);
+		lines.push(
+			`${continuePrefix}  ${theme.fg("warning", theme.status.warning)} ${theme.fg(
+				"dim",
+				truncate(warning, 80, theme.format.ellipsis),
+			)}`,
+		);
+
+		if (!trimmedOutput) {
+			return lines;
+		}
+
+		if (trimmedOutput.startsWith("{") || trimmedOutput.startsWith("[")) {
+			try {
+				const parsed = JSON.parse(trimmedOutput);
+
+				if (!expanded) {
+					lines.push(`${continuePrefix}  ${theme.fg("dim", formatOutputInline(parsed, theme))}`);
+					return lines;
+				}
+
+				const tree = renderJsonTreeLines(parsed, theme, expanded ? 6 : 2, expanded ? 24 : 6);
+				if (tree.lines.length > 0) {
+					for (const line of tree.lines) {
+						lines.push(`${continuePrefix}  ${line}`);
+					}
+					if (tree.truncated) {
+						lines.push(`${continuePrefix}  ${theme.fg("dim", theme.format.ellipsis)}`);
+					}
+					return lines;
+				}
+			} catch {
+				// Fall back to raw output
+			}
+		}
+
+		const outputLines = output.trimEnd().split("\n");
+		const previewCount = expanded ? maxExpanded : maxCollapsed;
+		for (const line of outputLines.slice(0, previewCount)) {
+			lines.push(`${continuePrefix}  ${theme.fg("dim", truncate(line, 70, theme.format.ellipsis))}`);
+		}
+
+		if (outputLines.length > previewCount) {
+			lines.push(
+				`${continuePrefix}  ${theme.fg(
+					"dim",
+					formatMoreItems(outputLines.length - previewCount, "line", theme),
+				)}`,
+			);
+		}
+
+		return lines;
+	}
 
 	if (trimmedOutput.startsWith("{") || trimmedOutput.startsWith("[")) {
 		try {
@@ -664,11 +736,20 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 	const prefix = isLast ? theme.fg("dim", theme.tree.last) : theme.fg("dim", theme.tree.branch);
 	const continuePrefix = isLast ? "   " : `${theme.fg("dim", theme.tree.vertical)}  `;
 
+	const { warning: missingCompleteWarning, rest: outputWithoutWarning } =
+		extractMissingCompleteWarning(result.output);
 	const aborted = result.aborted ?? false;
 	const success = !aborted && result.exitCode === 0;
-	const icon = aborted ? theme.status.aborted : success ? theme.status.success : theme.status.error;
-	const iconColor = success ? "success" : "error";
-	const statusText = aborted ? "aborted" : success ? "done" : "failed";
+	const needsWarning = Boolean(missingCompleteWarning) && success;
+	const icon = aborted
+		? theme.status.aborted
+		: needsWarning
+			? theme.status.warning
+			: success
+				? theme.status.success
+				: theme.status.error;
+	const iconColor = needsWarning ? "warning" : success ? "success" : "error";
+	const statusText = aborted ? "aborted" : needsWarning ? "warning" : success ? "done" : "failed";
 
 	// Main status line: id: description [status] · stats · ⟨agent⟩
 	const description = result.description?.trim();
@@ -748,9 +829,28 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 		}
 	}
 
+	if (hasCustomRendering && missingCompleteWarning) {
+		lines.push(
+			`${continuePrefix}${theme.fg("warning", theme.status.warning)} ${theme.fg(
+				"dim",
+				truncate(missingCompleteWarning, 80, theme.format.ellipsis),
+			)}`,
+		);
+	}
+
 	// Fallback to output preview if no custom rendering
 	if (!hasCustomRendering) {
-		lines.push(...renderOutputSection(result.output, continuePrefix, expanded, theme, 3, 12));
+		lines.push(
+			...renderOutputSection(
+				outputWithoutWarning,
+				continuePrefix,
+				expanded,
+				theme,
+				3,
+				12,
+				missingCompleteWarning,
+			),
+		);
 	}
 
 	if (result.patchPath && !aborted && result.exitCode === 0) {
