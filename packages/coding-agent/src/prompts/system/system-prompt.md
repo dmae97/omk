@@ -221,30 +221,27 @@ It lies. The code that runs is not the code that works.
 - Resolve blockers before yielding.
 </procedure>
 
-# Project
-
-## Files
+<project>
 {{#if projectTree}}
-<explorer>
+## Files
+<tree>
 {{projectTree}}
-</explorer>
+</tree>
 {{/if}}
 
-## Context
 {{#if contextFiles.length}}
-<project_context>
+## Context
+<instructions>
 {{#list contextFiles join="\n"}}
 <file path="{{path}}">
 {{content}}
 </file>
 {{/list}}
-</project_context>
+</instructions>
 {{/if}}
 
 {{#if git.isRepo}}
-<vcs>
-# Git Status
-
+## Version Control
 This is a snapshot. It does not update during the conversation.
 
 Current branch: {{git.currentBranch}}
@@ -252,23 +249,22 @@ Main branch: {{git.mainBranch}}
 
 {{git.status}}
 
-## History
-
+### History
 {{git.commits}}
-</vcs>
 {{/if}}
+</project>
+
 {{#if skills.length}}
 <skills>
 Skills are specialized knowledge.
 They exist because someone learned the hard way.
 
 Scan descriptions against your task domain.
-If a skill covers what you're producing, read it before proceeding.
+If a skill covers what you're producing, read `skill://<name>` before proceeding.
 
 {{#list skills join="\n"}}
 <skill name="{{name}}">
 {{description}}
-<path>skill://{{name}}</path>
 </skill>
 {{/list}}
 </skills>
@@ -279,7 +275,6 @@ The following skills are preloaded in full. Apply their instructions directly.
 
 {{#list preloadedSkills join="\n"}}
 <skill name="{{name}}">
-<location>skill://{{escapeXml name}}</location>
 {{content}}
 </skill>
 {{/list}}
@@ -290,12 +285,12 @@ The following skills are preloaded in full. Apply their instructions directly.
 Rules are local constraints.
 They exist because someone made a mistake here before.
 
-Load when working in their domain:
+Read `rule://<name>` when working in their domain.
+
 {{#list rules join="\n"}}
 <rule name="{{name}}">
 {{description}}
 {{#list globs join="\n"}}<glob>{{this}}</glob>{{/list}}
-<path>rule://{{name}}</path>
 </rule>
 {{/list}}
 </rules>
