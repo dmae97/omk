@@ -20,6 +20,7 @@ $Repo = "can1357/oh-my-pi"
 $Package = "@oh-my-pi/pi-coding-agent"
 $InstallDir = if ($env:OMP_INSTALL_DIR) { $env:OMP_INSTALL_DIR } else { "$env:LOCALAPPDATA\omp" }
 $BinaryName = "omp-windows-x64.exe"
+$MinimumBunVersion = "1.3.7"
 
 function Test-BunInstalled {
     try {
@@ -27,6 +28,41 @@ function Test-BunInstalled {
         return $true
     } catch {
         return $false
+    }
+}
+
+function Get-BunVersion {
+    try {
+        $versionText = (bun --version 2>$null)
+        if (-not $versionText) {
+            return $null
+        }
+
+        $clean = $versionText.Trim().Split("-")[0]
+        return [version]$clean
+    } catch {
+        return $null
+    }
+}
+
+function Test-BunVersion {
+    param([string]$MinimumVersion)
+
+    $currentVersion = Get-BunVersion
+    if (-not $currentVersion) {
+        return $false
+    }
+
+    return $currentVersion -ge [version]$MinimumVersion
+}
+
+function Assert-BunVersion {
+    param([string]$MinimumVersion)
+
+    if (-not (Test-BunVersion $MinimumVersion)) {
+        $current = Get-BunVersion
+        $currentText = if ($current) { $current.ToString() } else { "unknown" }
+        throw "Bun $MinimumVersion or newer is required. Current version: $currentText. Upgrade Bun at https://bun.sh/docs/installation"
     }
 }
 
@@ -129,6 +165,7 @@ function Install-Bun {
     irm bun.sh/install.ps1 | iex
     # Refresh PATH
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "User") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+    Assert-BunVersion $MinimumBunVersion
 }
 
 function Install-ViaBun {
@@ -254,12 +291,14 @@ if ($Source) {
     if (-not (Test-BunInstalled)) {
         Install-Bun
     }
+    Assert-BunVersion $MinimumBunVersion
     Install-ViaBun
 } elseif ($Binary) {
     Install-Binary
 } else {
     # Default: use bun if available, otherwise binary
     if (Test-BunInstalled) {
+        Assert-BunVersion $MinimumBunVersion
         Install-ViaBun
     } else {
         Install-Binary

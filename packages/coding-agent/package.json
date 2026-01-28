@@ -127,6 +127,6 @@
 		"directory": "packages/coding-agent"
 	},
 	"engines": {
-		"bun": ">=1.0.0"
+		"bun": ">=1.3.7"
 	}
 }

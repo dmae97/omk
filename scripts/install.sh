@@ -13,6 +13,7 @@ set -e
 REPO="can1357/oh-my-pi"
 PACKAGE="@oh-my-pi/pi-coding-agent"
 INSTALL_DIR="${OMP_INSTALL_DIR:-$HOME/.local/bin}"
+MIN_BUN_VERSION="1.3.7"
 
 # Parse arguments
 MODE=""
@@ -70,6 +71,48 @@ has_bun() {
     command -v bun >/dev/null 2>&1
 }
 
+version_ge() {
+    current="$1"
+    minimum="$2"
+
+    IFS=. set -- $current
+    current_major=${1:-0}
+    current_minor=${2:-0}
+    current_patch=${3:-0}
+
+    IFS=. set -- $minimum
+    minimum_major=${1:-0}
+    minimum_minor=${2:-0}
+    minimum_patch=${3:-0}
+
+    if [ "$current_major" -ne "$minimum_major" ]; then
+        [ "$current_major" -gt "$minimum_major" ]
+        return $?
+    fi
+
+    if [ "$current_minor" -ne "$minimum_minor" ]; then
+        [ "$current_minor" -gt "$minimum_minor" ]
+        return $?
+    fi
+
+    [ "$current_patch" -ge "$minimum_patch" ]
+}
+
+require_bun_version() {
+    version_raw=$(bun --version 2>/dev/null || true)
+    if [ -z "$version_raw" ]; then
+        echo "Failed to read bun version"
+        exit 1
+    fi
+
+    version_clean=${version_raw%%-*}
+    if ! version_ge "$version_clean" "$MIN_BUN_VERSION"; then
+        echo "Bun ${MIN_BUN_VERSION} or newer is required. Current version: ${version_clean}"
+        echo "Upgrade Bun at https://bun.sh/docs/installation"
+        exit 1
+    fi
+}
+
 # Check if git is available
 has_git() {
     command -v git >/dev/null 2>&1
@@ -86,6 +129,7 @@ install_bun() {
     fi
     export BUN_INSTALL="$HOME/.bun"
     export PATH="$BUN_INSTALL/bin:$PATH"
+    require_bun_version
 }
 
 # Check if git-lfs is available
@@ -202,6 +246,7 @@ case "$MODE" in
         if ! has_bun; then
             install_bun
         fi
+        require_bun_version
         install_via_bun
         ;;
     binary)
@@ -210,6 +255,7 @@ case "$MODE" in
     *)
         # Default: use bun if available, otherwise binary
         if has_bun; then
+            require_bun_version
             install_via_bun
         else
             install_binary
