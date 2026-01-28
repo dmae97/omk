@@ -1710,11 +1710,6 @@ export class AgentSession {
 		// Update agent session ID
 		this.agent.sessionId = this.sessionManager.getSessionId();
 
-		// Clear queued messages (they would be duplicated otherwise)
-		this._steeringMessages = [];
-		this._followUpMessages = [];
-		this._pendingNextTurnMessages = [];
-
 		// Emit session_switch event with reason "fork" to hooks
 		if (this._extensionRunner) {
 			await this._extensionRunner.emit({

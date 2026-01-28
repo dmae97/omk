@@ -419,6 +419,10 @@ export class CommandController {
 	}
 
 	async handleForkCommand(): Promise<void> {
+		if (this.ctx.session.isStreaming) {
+			this.ctx.showWarning("Wait for the current response to finish or abort it before forking.");
+			return;
+		}
 		if (this.ctx.loadingAnimation) {
 			this.ctx.loadingAnimation.stop();
 			this.ctx.loadingAnimation = undefined;

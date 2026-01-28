@@ -212,11 +212,13 @@ export class InteractiveMode implements InteractiveModeContext {
 			{ name: "login", description: "Login with OAuth provider" },
 			{ name: "logout", description: "Logout from OAuth provider" },
 			{ name: "new", description: "Start a new session" },
+			{ name: "fork", description: "Duplicate current session into a new session" },
 			{ name: "compact", description: "Manually compact the session context" },
 			{ name: "handoff", description: "Hand off the session context to a new session" },
 			{ name: "background", description: "Detach UI and continue running in background" },
 			{ name: "bg", description: "Alias for /background" },
 			{ name: "resume", description: "Resume a different session" },
+			{ name: "debug", description: "Write debug log (TUI state and messages)" },
 			{ name: "exit", description: "Exit the application" },
 		];
 
