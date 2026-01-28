@@ -373,7 +373,10 @@ async function buildSessionOptions(
 	// Model from CLI (--model) - uses same fuzzy matching as --models
 	if (parsed.model) {
 		const available = modelRegistry.getAvailable();
-		const { model, warning } = parseModelPattern(parsed.model, available);
+		const modelMatchPreferences = {
+			usageOrder: settingsManager.getStorage()?.getModelUsageOrder(),
+		};
+		const { model, warning } = parseModelPattern(parsed.model, available, modelMatchPreferences);
 		if (warning) {
 			writeStderr(chalk.yellow(`Warning: ${warning}`));
 		}
@@ -652,8 +655,11 @@ export async function main(args: string[]) {
 
 	let scopedModels: ScopedModel[] = [];
 	const modelPatterns = parsed.models ?? settingsManager.getEnabledModels();
+	const modelMatchPreferences = {
+		usageOrder: settingsManager.getStorage()?.getModelUsageOrder(),
+	};
 	if (modelPatterns && modelPatterns.length > 0) {
-		scopedModels = await resolveModelScope(modelPatterns, modelRegistry);
+		scopedModels = await resolveModelScope(modelPatterns, modelRegistry, modelMatchPreferences);
 		time("resolveModelScope");
 	}
 

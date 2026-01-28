@@ -11,9 +11,10 @@ export async function resolvePrimaryModel(
 	},
 ): Promise<{ model: Model<Api>; apiKey: string }> {
 	const available = modelRegistry.getAvailable();
+	const matchPreferences = { usageOrder: settingsManager.getStorage()?.getModelUsageOrder() };
 	const model = override
-		? resolveModelFromString(expandRoleAlias(override, settingsManager), available)
-		: resolveModelFromSettings(settingsManager, available);
+		? resolveModelFromString(expandRoleAlias(override, settingsManager), available, matchPreferences)
+		: resolveModelFromSettings(settingsManager, available, matchPreferences);
 	if (!model) {
 		throw new Error("No model available for commit generation");
 	}
@@ -34,15 +35,16 @@ export async function resolveSmolModel(
 	fallbackApiKey: string,
 ): Promise<{ model: Model<Api>; apiKey: string }> {
 	const available = modelRegistry.getAvailable();
+	const matchPreferences = { usageOrder: settingsManager.getStorage()?.getModelUsageOrder() };
 	const role = settingsManager.getModelRole("smol");
-	const roleModel = role ? resolveModelFromString(role, available) : undefined;
+	const roleModel = role ? resolveModelFromString(role, available, matchPreferences) : undefined;
 	if (roleModel) {
 		const apiKey = await modelRegistry.getApiKey(roleModel);
 		if (apiKey) return { model: roleModel, apiKey };
 	}
 
 	for (const pattern of SMOL_MODEL_PRIORITY) {
-		const candidate = parseModelPattern(pattern, available).model;
+		const candidate = parseModelPattern(pattern, available, matchPreferences).model;
 		if (!candidate) continue;
 		const apiKey = await modelRegistry.getApiKey(candidate);
 		if (apiKey) return { model: candidate, apiKey };
@@ -51,23 +53,35 @@ export async function resolveSmolModel(
 	return { model: fallbackModel, apiKey: fallbackApiKey };
 }
 
-function resolveModelFromSettings(settingsManager: SettingsManager, available: Model<Api>[]): Model<Api> | undefined {
+function resolveModelFromSettings(
+	settingsManager: SettingsManager,
+	available: Model<Api>[],
+	matchPreferences: { usageOrder?: string[] },
+): Model<Api> | undefined {
 	const roles = ["commit", "smol", "default"];
 	for (const role of roles) {
 		const configured = settingsManager.getModelRole(role);
 		if (!configured) continue;
-		const resolved = resolveModelFromString(expandRoleAlias(configured, settingsManager), available);
+		const resolved = resolveModelFromString(
+			expandRoleAlias(configured, settingsManager),
+			available,
+			matchPreferences,
+		);
 		if (resolved) return resolved;
 	}
 	return available[0];
 }
 
-function resolveModelFromString(value: string, available: Model<Api>[]): Model<Api> | undefined {
+function resolveModelFromString(
+	value: string,
+	available: Model<Api>[],
+	matchPreferences: { usageOrder?: string[] },
+): Model<Api> | undefined {
 	const parsed = parseModelString(value);
 	if (parsed) {
 		return available.find(model => model.provider === parsed.provider && model.id === parsed.id);
 	}
-	return parseModelPattern(value, available).model;
+	return parseModelPattern(value, available, matchPreferences).model;
 }
 
 function expandRoleAlias(value: string, settingsManager: SettingsManager): string {

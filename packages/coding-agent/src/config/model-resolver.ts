@@ -60,6 +60,76 @@ export function formatModelString(model: Model<Api>): string {
 	return `${model.provider}/${model.id}`;
 }
 
+export interface ModelMatchPreferences {
+	/** Most-recently-used model keys (provider/modelId) to prefer when ambiguous. */
+	usageOrder?: string[];
+	/** Providers to deprioritize when no recent usage is available. */
+	deprioritizeProviders?: string[];
+}
+
+interface ModelPreferenceContext {
+	modelUsageRank: Map<string, number>;
+	providerUsageRank: Map<string, number>;
+	deprioritizedProviders: Set<string>;
+	modelOrder: Map<string, number>;
+}
+
+function buildPreferenceContext(
+	availableModels: Model<Api>[],
+	preferences: ModelMatchPreferences | undefined,
+): ModelPreferenceContext {
+	const modelUsageRank = new Map<string, number>();
+	const providerUsageRank = new Map<string, number>();
+	const usageOrder = preferences?.usageOrder ?? [];
+	for (let i = 0; i < usageOrder.length; i += 1) {
+		const key = usageOrder[i];
+		if (!modelUsageRank.has(key)) {
+			modelUsageRank.set(key, i);
+		}
+		const parsed = parseModelString(key);
+		if (parsed && !providerUsageRank.has(parsed.provider)) {
+			providerUsageRank.set(parsed.provider, i);
+		}
+	}
+
+	const deprioritizedProviders = new Set(preferences?.deprioritizeProviders ?? ["openrouter"]);
+	const modelOrder = new Map<string, number>();
+	for (let i = 0; i < availableModels.length; i += 1) {
+		modelOrder.set(formatModelString(availableModels[i]), i);
+	}
+
+	return { modelUsageRank, providerUsageRank, deprioritizedProviders, modelOrder };
+}
+
+function pickPreferredModel(candidates: Model<Api>[], context: ModelPreferenceContext): Model<Api> {
+	if (candidates.length <= 1) return candidates[0];
+	return [...candidates].sort((a, b) => {
+		const aKey = formatModelString(a);
+		const bKey = formatModelString(b);
+		const aUsage = context.modelUsageRank.get(aKey);
+		const bUsage = context.modelUsageRank.get(bKey);
+		if (aUsage !== undefined || bUsage !== undefined) {
+			return (aUsage ?? Number.POSITIVE_INFINITY) - (bUsage ?? Number.POSITIVE_INFINITY);
+		}
+
+		const aProviderUsage = context.providerUsageRank.get(a.provider);
+		const bProviderUsage = context.providerUsageRank.get(b.provider);
+		if (aProviderUsage !== undefined || bProviderUsage !== undefined) {
+			return (aProviderUsage ?? Number.POSITIVE_INFINITY) - (bProviderUsage ?? Number.POSITIVE_INFINITY);
+		}
+
+		const aDeprioritized = context.deprioritizedProviders.has(a.provider);
+		const bDeprioritized = context.deprioritizedProviders.has(b.provider);
+		if (aDeprioritized !== bDeprioritized) {
+			return aDeprioritized ? 1 : -1;
+		}
+
+		const aOrder = context.modelOrder.get(aKey) ?? 0;
+		const bOrder = context.modelOrder.get(bKey) ?? 0;
+		return aOrder - bOrder;
+	})[0];
+}
+
 /**
  * Helper to check if a model ID looks like an alias (no date suffix)
  * Dates are typically in format: -20241022 or -20250929
@@ -77,7 +147,11 @@ function isAlias(id: string): boolean {
  * Try to match a pattern to a model from the available models list.
  * Returns the matched model or undefined if no match found.
  */
-function tryMatchModel(modelPattern: string, availableModels: Model<Api>[]): Model<Api> | undefined {
+function tryMatchModel(
+	modelPattern: string,
+	availableModels: Model<Api>[],
+	context: ModelPreferenceContext,
+): Model<Api> | undefined {
 	// Check for provider/modelId format (provider is everything before the first /)
 	const slashIndex = modelPattern.indexOf("/");
 	if (slashIndex !== -1) {
@@ -93,9 +167,9 @@ function tryMatchModel(modelPattern: string, availableModels: Model<Api>[]): Mod
 	}
 
 	// Check for exact ID match (case-insensitive)
-	const exactMatch = availableModels.find(m => m.id.toLowerCase() === modelPattern.toLowerCase());
-	if (exactMatch) {
-		return exactMatch;
+	const exactMatches = availableModels.filter(m => m.id.toLowerCase() === modelPattern.toLowerCase());
+	if (exactMatches.length > 0) {
+		return pickPreferredModel(exactMatches, context);
 	}
 
 	// No exact match - fall back to partial matching
@@ -114,14 +188,19 @@ function tryMatchModel(modelPattern: string, availableModels: Model<Api>[]): Mod
 	const datedVersions = matches.filter(m => !isAlias(m.id));
 
 	if (aliases.length > 0) {
-		// Prefer alias - if multiple aliases, pick the one that sorts highest
-		aliases.sort((a, b) => b.id.localeCompare(a.id));
-		return aliases[0];
-	} else {
-		// No alias found, pick latest dated version
-		datedVersions.sort((a, b) => b.id.localeCompare(a.id));
+		return pickPreferredModel(aliases, context);
+	}
+	if (datedVersions.length === 0) return undefined;
+
+	if (datedVersions.length === 1) {
 		return datedVersions[0];
 	}
+
+	const sortedById = [...datedVersions].sort((a, b) => b.id.localeCompare(a.id));
+	const topId = sortedById[0]?.id;
+	if (!topId) return undefined;
+	const topCandidates = sortedById.filter(model => model.id === topId);
+	return pickPreferredModel(topCandidates, context);
 }
 
 export interface ParsedModelResult {
@@ -145,9 +224,13 @@ export interface ParsedModelResult {
  *
  * @internal Exported for testing
  */
-export function parseModelPattern(pattern: string, availableModels: Model<Api>[]): ParsedModelResult {
+function parseModelPatternWithContext(
+	pattern: string,
+	availableModels: Model<Api>[],
+	context: ModelPreferenceContext,
+): ParsedModelResult {
 	// Try exact match first
-	const exactMatch = tryMatchModel(pattern, availableModels);
+	const exactMatch = tryMatchModel(pattern, availableModels, context);
 	if (exactMatch) {
 		return { model: exactMatch, thinkingLevel: undefined, warning: undefined, explicitThinkingLevel: false };
 	}
@@ -164,7 +247,7 @@ export function parseModelPattern(pattern: string, availableModels: Model<Api>[]
 
 	if (isValidThinkingLevel(suffix)) {
 		// Valid thinking level - recurse on prefix and use this level
-		const result = parseModelPattern(prefix, availableModels);
+		const result = parseModelPatternWithContext(prefix, availableModels, context);
 		if (result.model) {
 			// Only use this thinking level if no warning from inner recursion
 			const explicitThinkingLevel = !result.warning;
@@ -179,7 +262,7 @@ export function parseModelPattern(pattern: string, availableModels: Model<Api>[]
 	}
 
 	// Invalid suffix - recurse on prefix and warn
-	const result = parseModelPattern(prefix, availableModels);
+	const result = parseModelPatternWithContext(prefix, availableModels, context);
 	if (result.model) {
 		return {
 			model: result.model,
@@ -189,6 +272,15 @@ export function parseModelPattern(pattern: string, availableModels: Model<Api>[]
 		};
 	}
 	return result;
+}
+
+export function parseModelPattern(
+	pattern: string,
+	availableModels: Model<Api>[],
+	preferences?: ModelMatchPreferences,
+): ParsedModelResult {
+	const context = buildPreferenceContext(availableModels, preferences);
+	return parseModelPatternWithContext(pattern, availableModels, context);
 }
 
 /**
@@ -202,8 +294,13 @@ export function parseModelPattern(pattern: string, availableModels: Model<Api>[]
  * The algorithm tries to match the full pattern first, then progressively
  * strips colon-suffixes to find a match.
  */
-export async function resolveModelScope(patterns: string[], modelRegistry: ModelRegistry): Promise<ScopedModel[]> {
+export async function resolveModelScope(
+	patterns: string[],
+	modelRegistry: ModelRegistry,
+	preferences?: ModelMatchPreferences,
+): Promise<ScopedModel[]> {
 	const availableModels = modelRegistry.getAvailable();
+	const context = buildPreferenceContext(availableModels, preferences);
 	const scopedModels: ScopedModel[] = [];
 
 	for (const pattern of patterns) {
@@ -245,7 +342,11 @@ export async function resolveModelScope(patterns: string[], modelRegistry: Model
 			continue;
 		}
 
-		const { model, thinkingLevel, warning, explicitThinkingLevel } = parseModelPattern(pattern, availableModels);
+		const { model, thinkingLevel, warning, explicitThinkingLevel } = parseModelPatternWithContext(
+			pattern,
+			availableModels,
+			context,
+		);
 
 		if (warning) {
 			console.warn(chalk.yellow(`Warning: ${warning}`));

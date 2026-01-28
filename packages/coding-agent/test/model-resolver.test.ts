@@ -58,7 +58,34 @@ const mockOpenRouterModels: Model<"anthropic-messages">[] = [
 	},
 ];
 
-const allModels = [...mockModels, ...mockOpenRouterModels];
+const mockProviderOverlapModels: Model<"anthropic-messages">[] = [
+	{
+		id: "kimi-k2.5",
+		name: "Kimi K2.5",
+		api: "anthropic-messages",
+		provider: "kimi-code",
+		baseUrl: "https://api.kimi.ai",
+		reasoning: false,
+		input: ["text"],
+		cost: { input: 2, output: 6, cacheRead: 0.2, cacheWrite: 2 },
+		contextWindow: 128000,
+		maxTokens: 8192,
+	},
+	{
+		id: "moonshotai/kimi-k2.5",
+		name: "Kimi K2.5 (OpenRouter)",
+		api: "anthropic-messages",
+		provider: "openrouter",
+		baseUrl: "https://openrouter.ai/api/v1",
+		reasoning: false,
+		input: ["text"],
+		cost: { input: 2.2, output: 6.2, cacheRead: 0.22, cacheWrite: 2.2 },
+		contextWindow: 128000,
+		maxTokens: 8192,
+	},
+];
+
+const allModels = [...mockModels, ...mockOpenRouterModels, ...mockProviderOverlapModels];
 
 describe("parseModelPattern", () => {
 	describe("simple patterns without colons", () => {
@@ -211,6 +238,28 @@ describe("parseModelPattern", () => {
 			// So it tries to match "sonnet:" which won't match, then tries "sonnet"
 			expect(result.model?.id).toBe("claude-sonnet-4-5");
 			expect(result.warning).toContain("Invalid thinking level");
+		});
+	});
+
+	describe("preference logic", () => {
+		test("prefers most recently used model when multiple providers match", () => {
+			const result = parseModelPattern("k2.5", allModels, {
+				usageOrder: ["kimi-code/kimi-k2.5"],
+			});
+			expect(result.model?.provider).toBe("kimi-code");
+		});
+
+		test("falls back to deprioritizing openrouter when no usage data", () => {
+			const result = parseModelPattern("k2.5", allModels, { usageOrder: [] });
+			expect(result.model?.provider).toBe("kimi-code");
+		});
+
+		test("respects most recently used provider even if openrouter", () => {
+			const result = parseModelPattern("k2.5", allModels, {
+				usageOrder: ["openrouter/moonshotai/kimi-k2.5"],
+			});
+			expect(result.model?.provider).toBe("openrouter");
+			expect(result.model?.id).toBe("moonshotai/kimi-k2.5");
 		});
 	});
 });

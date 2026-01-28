@@ -134,6 +134,7 @@ function resolveModelOverride(
 	settingsManager?: SettingsManager,
 ): { model?: Model<Api>; thinkingLevel?: ThinkingLevel } {
 	if (modelPatterns.length === 0) return {};
+	const matchPreferences = { usageOrder: settingsManager?.getStorage()?.getModelUsageOrder() };
 	const roles = settingsManager?.serialize().modelRoles as Record<string, string> | undefined;
 	for (const pattern of modelPatterns) {
 		const normalized = pattern.trim().toLowerCase();
@@ -148,7 +149,11 @@ function resolveModelOverride(
 				effectivePattern = configured;
 			}
 		}
-		const { model, thinkingLevel } = parseModelPattern(effectivePattern, modelRegistry.getAvailable());
+		const { model, thinkingLevel } = parseModelPattern(
+			effectivePattern,
+			modelRegistry.getAvailable(),
+			matchPreferences,
+		);
 		if (model) {
 			return { model, thinkingLevel: thinkingLevel !== "off" ? thinkingLevel : undefined };
 		}
