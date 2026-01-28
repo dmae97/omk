@@ -172,6 +172,165 @@ async function fetchAiGatewayModels(): Promise<Model<any>[]> {
 	}
 }
 
+const KIMI_CODE_BASE_URL = "https://api.kimi.com/coding/v1";
+const KIMI_CODE_DEFAULT_MAX_TOKENS = 32000;
+const KIMI_CODE_HEADERS = {
+	"User-Agent": "KimiCLI/1.0",
+	"X-Msh-Platform": "kimi_cli",
+} as const;
+
+interface KimiModelInfo {
+	id: string;
+	display_name?: string;
+	context_length?: number;
+	supports_reasoning?: boolean;
+	supports_image_in?: boolean;
+	supports_video_in?: boolean;
+}
+
+async function fetchKimiCodeModels(): Promise<Model<"openai-completions">[]> {
+	// Kimi Code /models endpoint requires authentication
+	// Use KIMI_API_KEY env var if available, otherwise return fallback models
+	const apiKey = process.env.KIMI_API_KEY;
+
+	if (apiKey) {
+		try {
+			console.log("Fetching models from Kimi Code API...");
+			const response = await fetch(`${KIMI_CODE_BASE_URL}/models`, {
+				headers: { Authorization: `Bearer ${apiKey}` },
+			});
+
+			if (!response.ok) {
+				console.warn(`Kimi Code API returned ${response.status}, using fallback models`);
+				return getKimiCodeFallbackModels();
+			}
+
+			const data = await response.json();
+			const items = Array.isArray(data.data) ? (data.data as KimiModelInfo[]) : [];
+			const models: Model<"openai-completions">[] = [];
+
+			for (const model of items) {
+				if (!model.id) continue;
+
+				// Derive capabilities from model info
+				const hasThinking = model.supports_reasoning || model.id.toLowerCase().includes("thinking");
+				const hasImage = model.supports_image_in || model.id.toLowerCase().includes("k2.5");
+
+				const input: ("text" | "image")[] = ["text"];
+				if (hasImage) input.push("image");
+
+				// Use display_name if available, otherwise format from model ID
+				const name =
+					model.display_name ||
+					model.id
+						.split("-")
+						.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+						.join(" ");
+
+				models.push({
+					id: model.id,
+					name,
+					api: "openai-completions",
+					provider: "kimi-code",
+					baseUrl: KIMI_CODE_BASE_URL,
+					headers: { ...KIMI_CODE_HEADERS },
+					reasoning: hasThinking,
+					input,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: model.context_length || 262144,
+					maxTokens: KIMI_CODE_DEFAULT_MAX_TOKENS,
+					compat: {
+						thinkingFormat: "zai",
+						reasoningContentField: "reasoning_content",
+						supportsDeveloperRole: false,
+					},
+				});
+			}
+
+			console.log(`Fetched ${models.length} models from Kimi Code API`);
+			return models;
+		} catch (error) {
+			console.error("Failed to fetch Kimi Code models:", error);
+			return getKimiCodeFallbackModels();
+		}
+	}
+
+	console.log("KIMI_API_KEY not set, using fallback Kimi Code models");
+	return getKimiCodeFallbackModels();
+}
+
+function getKimiCodeFallbackModels(): Model<"openai-completions">[] {
+	// Kimi Code models - the /models endpoint returns "kimi-for-coding" but the API
+	// accepts various model IDs. "kimi-for-coding" is an alias powered by kimi-k2.5.
+	const CONTEXT = 262144;
+	const MAX_TOKENS = KIMI_CODE_DEFAULT_MAX_TOKENS;
+	const compat = {
+		thinkingFormat: "zai" as const,
+		reasoningContentField: "reasoning_content" as const,
+		supportsDeveloperRole: false,
+	};
+	const headers = { ...KIMI_CODE_HEADERS };
+
+	return [
+		{
+			id: "kimi-for-coding",
+			name: "Kimi For Coding",
+			api: "openai-completions",
+			provider: "kimi-code",
+			baseUrl: KIMI_CODE_BASE_URL,
+			headers,
+			reasoning: true,
+			input: ["text", "image"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: CONTEXT,
+			maxTokens: MAX_TOKENS,
+			compat,
+		},
+		{
+			id: "kimi-k2.5",
+			name: "Kimi K2.5",
+			api: "openai-completions",
+			provider: "kimi-code",
+			baseUrl: KIMI_CODE_BASE_URL,
+			headers,
+			reasoning: true,
+			input: ["text", "image"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: CONTEXT,
+			maxTokens: MAX_TOKENS,
+			compat,
+		},
+		{
+			id: "kimi-k2-turbo-preview",
+			name: "Kimi K2 Turbo Preview",
+			api: "openai-completions",
+			provider: "kimi-code",
+			baseUrl: KIMI_CODE_BASE_URL,
+			headers,
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: CONTEXT,
+			maxTokens: MAX_TOKENS,
+			compat,
+		},
+		{
+			id: "kimi-k2",
+			name: "Kimi K2",
+			api: "openai-completions",
+			provider: "kimi-code",
+			baseUrl: KIMI_CODE_BASE_URL,
+			headers,
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: CONTEXT,
+			maxTokens: MAX_TOKENS,
+			compat,
+		},
+	];
+}
+
 async function loadModelsDevData(): Promise<Model<any>[]> {
 	try {
 		console.log("Fetching models from models.dev API...");
@@ -624,9 +783,10 @@ async function generateModels() {
 	const modelsDevModels = await loadModelsDevData();
 	const openRouterModels = await fetchOpenRouterModels();
 	const aiGatewayModels = await fetchAiGatewayModels();
+	const kimiCodeModels = await fetchKimiCodeModels();
 
 	// Combine models (models.dev has priority)
-	const allModels = [...modelsDevModels, ...openRouterModels, ...aiGatewayModels];
+	const allModels = [...modelsDevModels, ...openRouterModels, ...aiGatewayModels, ...kimiCodeModels];
 
 	// Fix incorrect cache pricing for Claude Opus 4.5 from models.dev
 	// models.dev has 3x the correct pricing (1.5/18.75 instead of 0.5/6.25)
@@ -766,6 +926,7 @@ async function generateModels() {
 		},
 	];
 	allModels.push(...codexModels);
+
 
 	// Add missing Grok models
 	if (!allModels.some((m) => m.provider === "xai" && m.id === "grok-code-fast-1")) {

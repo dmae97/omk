@@ -13,6 +13,7 @@ export type OAuthProvider =
 	| "github-copilot"
 	| "google-gemini-cli"
 	| "google-antigravity"
+	| "kimi-code"
 	| "openai-codex"
 	| "cursor";
 

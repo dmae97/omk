@@ -8,6 +8,7 @@ import { loginCursor } from "./utils/oauth/cursor";
 import { loginGitHubCopilot } from "./utils/oauth/github-copilot";
 import { loginAntigravity } from "./utils/oauth/google-antigravity";
 import { loginGeminiCli } from "./utils/oauth/google-gemini-cli";
+import { loginKimi } from "./utils/oauth/kimi";
 import { loginOpenAICodex } from "./utils/oauth/openai-codex";
 import type { OAuthCredentials, OAuthProvider } from "./utils/oauth/types";
 
@@ -89,6 +90,17 @@ async function login(provider: OAuthProvider): Promise<void> {
 				});
 				break;
 
+			case "kimi-code":
+				credentials = await loginKimi({
+					onAuth(info) {
+						const { url, instructions } = info;
+						console.log(`\nOpen this URL in your browser:\n${url}`);
+						if (instructions) console.log(instructions);
+						console.log();
+					},
+				});
+				break;
+
 			case "cursor":
 				credentials = await loginCursor(
 					url => {
@@ -132,6 +144,7 @@ Providers:
   google-gemini-cli Google Gemini CLI
   google-antigravity Antigravity (Gemini 3, Claude, GPT-OSS)
   openai-codex      OpenAI Codex (ChatGPT Plus/Pro)
+  kimi-code        Kimi Code
   cursor            Cursor (Claude, GPT, etc.)
 
 Examples:

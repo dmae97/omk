@@ -6,6 +6,7 @@ import { refreshCursorToken } from "./cursor";
 import { refreshGitHubCopilotToken } from "./github-copilot";
 import { refreshAntigravityToken } from "./google-antigravity";
 import { refreshGoogleCloudToken } from "./google-gemini-cli";
+import { refreshKimiToken } from "./kimi";
 import { refreshOpenAICodexToken } from "./openai-codex";
 import type { OAuthCredentials, OAuthProvider, OAuthProviderInfo } from "./types";
 
@@ -18,6 +19,7 @@ import type { OAuthCredentials, OAuthProvider, OAuthProviderInfo } from "./types
  * - GitHub Copilot
  * - Google Cloud Code Assist (Gemini CLI)
  * - Antigravity (Gemini 3, Claude, GPT-OSS via Google Cloud)
+ * - Kimi Code
  */
 
 // Anthropic
@@ -41,6 +43,8 @@ export {
 export { loginAntigravity, refreshAntigravityToken } from "./google-antigravity";
 // Google Gemini CLI
 export { loginGeminiCli, refreshGoogleCloudToken } from "./google-gemini-cli";
+// Kimi Code
+export { loginKimi, refreshKimiToken } from "./kimi";
 export type { OpenAICodexLoginOptions } from "./openai-codex";
 // OpenAI Codex (ChatGPT OAuth)
 export { loginOpenAICodex, refreshOpenAICodexToken } from "./openai-codex";
@@ -82,6 +86,9 @@ export async function refreshOAuthToken(
 			break;
 		case "openai-codex":
 			newCredentials = await refreshOpenAICodexToken(credentials.refresh);
+			break;
+		case "kimi-code":
+			newCredentials = await refreshKimiToken(credentials.refresh);
 			break;
 		case "cursor":
 			newCredentials = await refreshCursorToken(credentials.refresh);
@@ -139,6 +146,11 @@ export function getOAuthProviders(): OAuthProviderInfo[] {
 		{
 			id: "openai-codex",
 			name: "ChatGPT Plus/Pro (Codex Subscription)",
+			available: true,
+		},
+		{
+			id: "kimi-code",
+			name: "Kimi Code",
 			available: true,
 		},
 		{

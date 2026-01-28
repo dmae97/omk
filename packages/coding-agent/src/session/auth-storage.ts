@@ -11,11 +11,13 @@ import {
 	getOAuthApiKey,
 	githubCopilotUsageProvider,
 	googleGeminiCliUsageProvider,
+	kimiUsageProvider,
 	loginAnthropic,
 	loginAntigravity,
 	loginCursor,
 	loginGeminiCli,
 	loginGitHubCopilot,
+	loginKimi,
 	loginOpenAICodex,
 	type OAuthController,
 	type OAuthCredentials,
@@ -85,6 +87,7 @@ export type AuthStorageOptions = {
 
 const DEFAULT_USAGE_PROVIDERS: UsageProvider[] = [
 	openaiCodexUsageProvider,
+	kimiUsageProvider,
 	antigravityUsageProvider,
 	googleGeminiCliUsageProvider,
 	claudeUsageProvider,
@@ -769,6 +772,9 @@ export class AuthStorage {
 				break;
 			case "openai-codex":
 				credentials = await loginOpenAICodex(ctrl);
+				break;
+			case "kimi-code":
+				credentials = await loginKimi(ctrl);
 				break;
 			case "cursor":
 				credentials = await loginCursor(

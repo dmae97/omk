@@ -28,6 +28,7 @@ import type {
 } from "../types";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { parseStreamingJson } from "../utils/json-parse";
+import { getKimiCommonHeaders } from "../utils/oauth/kimi";
 import { formatErrorMessageWithRetryAfter } from "../utils/retry-after";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
 import { mapToOpenAICompletionsToolChoice } from "../utils/tool-choice";
@@ -111,7 +112,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 
 		try {
 			const apiKey = options?.apiKey || getEnvApiKey(model.provider) || "";
-			const client = createClient(model, context, apiKey, options?.headers);
+			const client = await createClient(model, context, apiKey, options?.headers);
 			const params = buildParams(model, context, options);
 			options?.onPayload?.(params);
 			const openaiStream = await client.chat.completions.create(params, { signal: options?.signal });
@@ -151,7 +152,11 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 
 			for await (const chunk of openaiStream) {
 				if (chunk.usage) {
-					const cachedTokens = chunk.usage.prompt_tokens_details?.cached_tokens || 0;
+					// Check for cached_tokens at root level (Kimi) or in prompt_tokens_details (OpenAI)
+					const cachedTokens =
+						(chunk.usage as { cached_tokens?: number }).cached_tokens ??
+						chunk.usage.prompt_tokens_details?.cached_tokens ??
+						0;
 					const reasoningTokens = chunk.usage.completion_tokens_details?.reasoning_tokens || 0;
 					const input = (chunk.usage.prompt_tokens || 0) - cachedTokens;
 					const outputTokens = (chunk.usage.completion_tokens || 0) + reasoningTokens;
@@ -335,7 +340,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 	return stream;
 };
 
-function createClient(
+async function createClient(
 	model: Model<"openai-completions">,
 	context: Context,
 	apiKey?: string,
@@ -350,7 +355,10 @@ function createClient(
 		apiKey = process.env.OPENAI_API_KEY;
 	}
 
-	const headers = { ...(model.headers ?? {}), ...(extraHeaders ?? {}) };
+	let headers = { ...(model.headers ?? {}), ...(extraHeaders ?? {}) };
+	if (model.provider === "kimi-code") {
+		headers = { ...(await getKimiCommonHeaders()), ...headers };
+	}
 	if (model.provider === "github-copilot") {
 		// Copilot expects X-Initiator to indicate whether the request is user-initiated
 		// or agent-initiated (e.g. follow-up after assistant/tool messages). If there is

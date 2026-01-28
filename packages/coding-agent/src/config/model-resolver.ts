@@ -28,6 +28,7 @@ export const defaultModelPerProvider: Record<KnownProvider, string> = {
 	mistral: "devstral-medium-latest",
 	minimax: "MiniMax-M2",
 	opencode: "claude-opus-4-5",
+	"kimi-code": "kimi-k2.5",
 };
 
 export interface ScopedModel {

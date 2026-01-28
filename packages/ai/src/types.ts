@@ -76,6 +76,7 @@ export type KnownProvider =
 	| "google-vertex"
 	| "openai"
 	| "openai-codex"
+	| "kimi-code"
 	| "github-copilot"
 	| "cursor"
 	| "xai"
