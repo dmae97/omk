@@ -14,7 +14,7 @@ import { ToolExecutionComponent } from "../../modes/components/tool-execution";
 import { UserMessageComponent } from "../../modes/components/user-message";
 import { theme } from "../../modes/theme/theme";
 import type { CompactionQueuedMessage, InteractiveModeContext } from "../../modes/types";
-import { type CustomMessage, type SkillPromptDetails, SKILL_PROMPT_MESSAGE_TYPE } from "../../session/messages";
+import { type CustomMessage, SKILL_PROMPT_MESSAGE_TYPE, type SkillPromptDetails } from "../../session/messages";
 import type { SessionContext } from "../../session/session-manager";
 
 type TextBlock = { type: "text"; text: string };
