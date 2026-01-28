@@ -7,12 +7,15 @@
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, Model, Usage } from "@oh-my-pi/pi-ai";
 import { completeSimple } from "@oh-my-pi/pi-ai";
+import { logger } from "@oh-my-pi/pi-utils";
 import { renderPromptTemplate } from "../../config/prompt-templates";
+import compactionShortSummaryPrompt from "../../prompts/compaction/compaction-short-summary.md" with { type: "text" };
 import compactionSummaryPrompt from "../../prompts/compaction/compaction-summary.md" with { type: "text" };
 import compactionTurnPrefixPrompt from "../../prompts/compaction/compaction-turn-prefix.md" with { type: "text" };
 import compactionUpdateSummaryPrompt from "../../prompts/compaction/compaction-update-summary.md" with { type: "text" };
 import { convertToLlm, createBranchSummaryMessage, createCustomMessage } from "../../session/messages";
 import type { CompactionEntry, SessionEntry } from "../../session/session-manager";
+
 import {
 	computeFileLists,
 	createFileOps,
@@ -89,10 +92,14 @@ function getMessageFromEntry(entry: SessionEntry): AgentMessage | undefined {
 /** Result from compact() - SessionManager adds uuid/parentUuid when saving */
 export interface CompactionResult<T = unknown> {
 	summary: string;
+	/** Short PR-style summary for display purposes. */
+	shortSummary?: string;
 	firstKeptEntryId: string;
 	tokensBefore: number;
 	/** Hook-specific data (e.g., ArtifactIndex, version markers for structured compaction) */
 	details?: T;
+	/** Hook-provided data to persist alongside compaction entry. */
+	preserveData?: Record<string, unknown>;
 }
 
 // ============================================================================
@@ -103,12 +110,15 @@ export interface CompactionSettings {
 	enabled: boolean;
 	reserveTokens: number;
 	keepRecentTokens: number;
+	autoContinue?: boolean;
+	remoteEndpoint?: string;
 }
 
 export const DEFAULT_COMPACTION_SETTINGS: CompactionSettings = {
 	enabled: true,
 	reserveTokens: 16384,
 	keepRecentTokens: 20000,
+	autoContinue: true,
 };
 
 // ============================================================================
@@ -390,10 +400,63 @@ const SUMMARIZATION_PROMPT = renderPromptTemplate(compactionSummaryPrompt);
 
 const UPDATE_SUMMARIZATION_PROMPT = renderPromptTemplate(compactionUpdateSummaryPrompt);
 
+const SHORT_SUMMARY_PROMPT = renderPromptTemplate(compactionShortSummaryPrompt);
+
+function formatAdditionalContext(context: string[] | undefined): string {
+	if (!context || context.length === 0) return "";
+	const lines = context.map(line => `- ${line}`).join("\n");
+	return `<additional-context>\n${lines}\n</additional-context>\n\n`;
+}
+
+interface RemoteCompactionRequest {
+	systemPrompt: string;
+	prompt: string;
+}
+
+interface RemoteCompactionResponse {
+	summary: string;
+	shortSummary?: string;
+}
+
+async function requestRemoteCompaction(
+	endpoint: string,
+	request: RemoteCompactionRequest,
+): Promise<RemoteCompactionResponse> {
+	const response = await fetch(endpoint, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(request),
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text().catch(() => "");
+		logger.warn("Remote compaction failed", {
+			endpoint,
+			status: response.status,
+			statusText: response.statusText,
+			errorText,
+		});
+		throw new Error(`Remote compaction failed (${response.status} ${response.statusText})`);
+	}
+
+	const data = (await response.json()) as RemoteCompactionResponse | undefined;
+	if (!data || typeof data.summary !== "string") {
+		throw new Error("Remote compaction response missing summary");
+	}
+
+	return data;
+}
+
 /**
  * Generate a summary of the conversation using the LLM.
  * If previousSummary is provided, uses the update prompt to merge.
  */
+export interface SummaryOptions {
+	promptOverride?: string;
+	extraContext?: string[];
+	remoteEndpoint?: string;
+}
+
 export async function generateSummary(
 	currentMessages: AgentMessage[],
 	model: Model<any>,
@@ -402,11 +465,15 @@ export async function generateSummary(
 	signal?: AbortSignal,
 	customInstructions?: string,
 	previousSummary?: string,
+	options?: SummaryOptions,
 ): Promise<string> {
 	const maxTokens = Math.floor(0.8 * reserveTokens);
 
 	// Use update prompt if we have a previous summary, otherwise initial prompt
 	let basePrompt = previousSummary ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
+	if (options?.promptOverride) {
+		basePrompt = options.promptOverride;
+	}
 	if (customInstructions) {
 		basePrompt = `${basePrompt}\n\nAdditional focus: ${customInstructions}`;
 	}
@@ -421,6 +488,7 @@ export async function generateSummary(
 	if (previousSummary) {
 		promptText += `<previous-summary>\n${previousSummary}\n</previous-summary>\n\n`;
 	}
+	promptText += formatAdditionalContext(options?.extraContext);
 	promptText += basePrompt;
 
 	const summarizationMessages = [
@@ -430,6 +498,14 @@ export async function generateSummary(
 			timestamp: Date.now(),
 		},
 	];
+
+	if (options?.remoteEndpoint) {
+		const remote = await requestRemoteCompaction(options.remoteEndpoint, {
+			systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
+			prompt: promptText,
+		});
+		return remote.summary;
+	}
 
 	const response = await completeSimple(
 		model,
@@ -449,6 +525,53 @@ export async function generateSummary(
 	return textContent;
 }
 
+async function generateShortSummary(
+	recentMessages: AgentMessage[],
+	historySummary: string | undefined,
+	model: Model<any>,
+	reserveTokens: number,
+	apiKey: string,
+	signal?: AbortSignal,
+	options?: SummaryOptions,
+): Promise<string> {
+	const maxTokens = Math.min(512, Math.floor(0.2 * reserveTokens));
+	const llmMessages = convertToLlm(recentMessages);
+	const conversationText = serializeConversation(llmMessages);
+
+	let promptText = `<conversation>\n${conversationText}\n</conversation>\n\n`;
+	if (historySummary) {
+		promptText += `<previous-summary>\n${historySummary}\n</previous-summary>\n\n`;
+	}
+	promptText += formatAdditionalContext(options?.extraContext);
+	promptText += SHORT_SUMMARY_PROMPT;
+
+	if (options?.remoteEndpoint) {
+		const remote = await requestRemoteCompaction(options.remoteEndpoint, {
+			systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
+			prompt: promptText,
+		});
+		return remote.summary;
+	}
+
+	const response = await completeSimple(
+		model,
+		{
+			systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
+			messages: [{ role: "user", content: [{ type: "text", text: promptText }], timestamp: Date.now() }],
+		},
+		{ maxTokens, signal, apiKey, reasoning: "high" },
+	);
+
+	if (response.stopReason === "error") {
+		throw new Error(`Short summary failed: ${response.errorMessage || "Unknown error"}`);
+	}
+
+	return response.content
+		.filter((c): c is { type: "text"; text: string } => c.type === "text")
+		.map(c => c.text)
+		.join("\n");
+}
+
 // ============================================================================
 // Compaction Preparation (for hooks)
 // ============================================================================
@@ -460,6 +583,8 @@ export interface CompactionPreparation {
 	messagesToSummarize: AgentMessage[];
 	/** Messages that will be turned into turn prefix summary (if splitting) */
 	turnPrefixMessages: AgentMessage[];
+	/** Messages kept in full after compaction (recent history) */
+	recentMessages: AgentMessage[];
 	/** Whether this is a split turn (cut point in middle of turn) */
 	isSplitTurn: boolean;
 	tokensBefore: number;
@@ -519,6 +644,13 @@ export function prepareCompaction(
 		}
 	}
 
+	// Messages kept after compaction (recent history)
+	const recentMessages: AgentMessage[] = [];
+	for (let i = cutPoint.firstKeptEntryIndex; i < boundaryEnd; i++) {
+		const msg = getMessageFromEntry(pathEntries[i]);
+		if (msg) recentMessages.push(msg);
+	}
+
 	// Get previous summary for iterative update
 	let previousSummary: string | undefined;
 	if (prevCompactionIndex >= 0) {
@@ -540,6 +672,7 @@ export function prepareCompaction(
 		firstKeptEntryId,
 		messagesToSummarize,
 		turnPrefixMessages,
+		recentMessages,
 		isSplitTurn: cutPoint.isSplitTurn,
 		tokensBefore,
 		previousSummary,
@@ -567,17 +700,25 @@ export async function compact(
 	apiKey: string,
 	customInstructions?: string,
 	signal?: AbortSignal,
+	options?: SummaryOptions,
 ): Promise<CompactionResult> {
 	const {
 		firstKeptEntryId,
 		messagesToSummarize,
 		turnPrefixMessages,
+		recentMessages,
 		isSplitTurn,
 		tokensBefore,
 		previousSummary,
 		fileOps,
 		settings,
 	} = preparation;
+
+	const summaryOptions: SummaryOptions = {
+		promptOverride: options?.promptOverride,
+		extraContext: options?.extraContext,
+		remoteEndpoint: settings.remoteEndpoint,
+	};
 
 	// Generate summaries (can be parallel if both needed) and merge into one
 	let summary: string;
@@ -594,6 +735,7 @@ export async function compact(
 						signal,
 						customInstructions,
 						previousSummary,
+						summaryOptions,
 					)
 				: Promise.resolve("No prior history."),
 			generateTurnPrefixSummary(turnPrefixMessages, model, settings.reserveTokens, apiKey, signal),
@@ -610,8 +752,19 @@ export async function compact(
 			signal,
 			customInstructions,
 			previousSummary,
+			summaryOptions,
 		);
 	}
+
+	const shortSummary = await generateShortSummary(
+		recentMessages,
+		summary,
+		model,
+		settings.reserveTokens,
+		apiKey,
+		signal,
+		{ extraContext: options?.extraContext, remoteEndpoint: settings.remoteEndpoint },
+	);
 
 	// Compute file lists and append to summary
 	const { readFiles, modifiedFiles } = computeFileLists(fileOps);
@@ -623,6 +776,7 @@ export async function compact(
 
 	return {
 		summary,
+		shortSummary,
 		firstKeptEntryId,
 		tokensBefore,
 		details: { readFiles, modifiedFiles } as CompactionDetails,

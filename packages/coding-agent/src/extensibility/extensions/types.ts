@@ -300,6 +300,13 @@ export interface SessionBeforeCompactEvent {
 	signal: AbortSignal;
 }
 
+/** Fired before compaction summarization to customize prompts/context */
+export interface SessionCompactingEvent {
+	type: "session.compacting";
+	sessionId: string;
+	messages: AgentMessage[];
+}
+
 /** Fired after context compaction */
 export interface SessionCompactEvent {
 	type: "session_compact";
@@ -344,6 +351,7 @@ export type SessionEvent =
 	| SessionBeforeBranchEvent
 	| SessionBranchEvent
 	| SessionBeforeCompactEvent
+	| SessionCompactingEvent
 	| SessionCompactEvent
 	| SessionShutdownEvent
 	| SessionBeforeTreeEvent
@@ -605,6 +613,12 @@ export interface SessionBeforeCompactResult {
 	compaction?: CompactionResult;
 }
 
+export interface SessionCompactingResult {
+	context?: string[];
+	prompt?: string;
+	preserveData?: Record<string, unknown>;
+}
+
 export interface SessionBeforeTreeResult {
 	cancel?: boolean;
 	summary?: {
@@ -682,6 +696,7 @@ export interface ExtensionAPI {
 		event: "session_before_compact",
 		handler: ExtensionHandler<SessionBeforeCompactEvent, SessionBeforeCompactResult>,
 	): void;
+	on(event: "session.compacting", handler: ExtensionHandler<SessionCompactingEvent, SessionCompactingResult>): void;
 	on(event: "session_compact", handler: ExtensionHandler<SessionCompactEvent>): void;
 	on(event: "session_shutdown", handler: ExtensionHandler<SessionShutdownEvent>): void;
 	on(event: "session_before_tree", handler: ExtensionHandler<SessionBeforeTreeEvent, SessionBeforeTreeResult>): void;

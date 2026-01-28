@@ -45,6 +45,9 @@ export class CompactionSummaryMessageComponent extends Box {
 			this.addChild(
 				new Text(theme.fg("customMessageText", `Compacted from ${tokenStr} tokens (ctrl+o to expand)`), 0, 0),
 			);
+			if (this.message.shortSummary) {
+				this.addChild(new Text(theme.fg("customMessageText", this.message.shortSummary), 0, 1));
+			}
 		}
 	}
 }

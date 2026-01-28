@@ -638,7 +638,12 @@ export class CommandController {
 
 			this.ctx.rebuildChatFromMessages();
 
-			const msg = createCompactionSummaryMessage(result.summary, result.tokensBefore, new Date().toISOString());
+			const msg = createCompactionSummaryMessage(
+				result.summary,
+				result.tokensBefore,
+				new Date().toISOString(),
+				result.shortSummary,
+			);
 			this.ctx.addMessageToChat(msg);
 
 			this.ctx.statusLine.invalidate();

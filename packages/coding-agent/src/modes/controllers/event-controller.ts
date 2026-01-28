@@ -86,8 +86,10 @@ export class EventController {
 				} else if (event.message.role === "user") {
 					this.resetReadGroup();
 					this.ctx.addMessageToChat(event.message);
-					this.ctx.editor.setText("");
-					this.ctx.updatePendingMessagesDisplay();
+					if (!event.message.synthetic) {
+						this.ctx.editor.setText("");
+						this.ctx.updatePendingMessagesDisplay();
+					}
 					this.ctx.ui.requestRender();
 				} else if (event.message.role === "fileMention") {
 					this.resetReadGroup();
@@ -310,6 +312,7 @@ export class EventController {
 						role: "compactionSummary",
 						tokensBefore: event.result.tokensBefore,
 						summary: event.result.summary,
+						shortSummary: event.result.shortSummary,
 						timestamp: Date.now(),
 					});
 					this.ctx.statusLine.invalidate();

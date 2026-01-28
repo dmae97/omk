@@ -9,10 +9,11 @@ Update the existing structured summary with new information. RULES:
 - PRESERVE exact file paths, function names, and error messages
 - If something is no longer relevant, you may remove it
 
-Use this EXACT format:
+IMPORTANT: Check if the new messages end with an unanswered question or request to the user. If so, add it to Critical Context (replacing any previous pending question if it was answered).
+
+Use this format (sections can be omitted if not applicable):
 
 ## Goal
-
 [Preserve existing goals, add new ones if the task expanded]
 
 ## Constraints & Preferences
@@ -37,6 +38,9 @@ Use this EXACT format:
 
 ## Critical Context
 - [Preserve important context, add new if needed]
+
+## Additional Notes
+[Any other important info that doesn't fit above]
 
 Output only the structured summary. No extra text.
 

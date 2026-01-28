@@ -128,9 +128,9 @@ export class UiHelpers {
 			case "user": {
 				const textContent = this.ctx.getUserMessageText(message);
 				if (textContent) {
-					const userComponent = new UserMessageComponent(textContent);
+					const userComponent = new UserMessageComponent(textContent, message.synthetic ?? false);
 					this.ctx.chatContainer.addChild(userComponent);
-					if (options?.populateHistory) {
+					if (options?.populateHistory && !message.synthetic) {
 						this.ctx.editor.addToHistory(textContent);
 					}
 				}

@@ -15,13 +15,8 @@ Agents with `output="structured"` have a fixed schema enforced via frontmatter; 
 
 <instruction>
 - Always include a short description of the task in the task parameter
-- **Plan-then-execute**: Put shared constraints in `context`, keep each task focused, specify acceptance criteria; use `output` when you need structured output
-- **Ask open-ended questions**: For exploration tasks, frame prompts to elicit factual discovery, not confirmation. Avoid yes/no questions that are easy to hallucinate.
-    - Bad: "Is there rate limiting?" or "Does the API validate tokens?" → Binary answers invite hallucination
-    - Good: "Find and describe how rate limiting is implemented" or "How does the API handle token validation?" → Forces investigation and factual reporting
-  - The subagent should report *what exists*, then YOU verify if it meets requirements
+- **Plan-then-execute**: Put shared constraints in `context`, keep each task focused, specify acceptance criteria; **always provide an `output` schema unless the task explicitly does not require structured output**
 - **Minimize tool chatter**: Avoid repeating large context; use `read agent://<id>` for full logs
-- **Structured completion**: If `output` is provided, subagents must call `complete` to finish
 - **Parallelize**: Launch multiple agents whenever possible. You MUST use a single Task call with multiple entries in the `tasks` array to do this.
 - **Isolate file scopes**: Assign each task distinct files or directories so agents don't conflict
 - **Results are intermediate data**: Agent findings provide context for YOU to perform actual work. Do not treat agent reports as "task complete" signals.
@@ -85,6 +80,7 @@ assistant: Uses the Task tool:
 </example>
 
 <avoid>
+- Confirmation bias: avoid yes/no exploration prompts; ask for factual discovery instead
 - Reading a specific file path → Use Read tool instead
 - Finding files by pattern/name → Use Find tool instead
 - Searching for a specific class/function definition → Use Grep tool instead

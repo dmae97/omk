@@ -34,6 +34,7 @@ import type {
 	RegisteredTool,
 	SessionBeforeCompactResult,
 	SessionBeforeTreeResult,
+	SessionCompactingResult,
 	ToolCallEvent,
 	ToolCallEventResult,
 	ToolResultEventResult,
@@ -361,9 +362,16 @@ export class ExtensionRunner {
 
 	async emit(
 		event: ExtensionEvent,
-	): Promise<SessionBeforeCompactResult | SessionBeforeTreeResult | ToolResultEventResult | undefined> {
+	): Promise<
+		SessionBeforeCompactResult | SessionBeforeTreeResult | SessionCompactingResult | ToolResultEventResult | undefined
+	> {
 		const ctx = this.createContext();
-		let result: SessionBeforeCompactResult | SessionBeforeTreeResult | ToolResultEventResult | undefined;
+		let result:
+			| SessionBeforeCompactResult
+			| SessionBeforeTreeResult
+			| SessionCompactingResult
+			| ToolResultEventResult
+			| undefined;
 
 		for (const ext of this.extensions) {
 			const handlers = ext.handlers.get(event.type);
@@ -382,6 +390,9 @@ export class ExtensionRunner {
 
 					if (event.type === "tool_result" && handlerResult) {
 						result = handlerResult as ToolResultEventResult;
+					}
+					if (event.type === "session.compacting" && handlerResult) {
+						result = handlerResult as SessionCompactingResult;
 					}
 				} catch (err) {
 					const message = err instanceof Error ? err.message : String(err);

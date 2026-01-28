@@ -28,6 +28,7 @@ import type {
 	RegisteredCommand,
 	SessionBeforeCompactResult,
 	SessionBeforeTreeResult,
+	SessionCompactingResult,
 	ToolCallEvent,
 	ToolCallEventResult,
 	ToolResultEventResult,
@@ -287,9 +288,16 @@ export class HookRunner {
 	 */
 	async emit(
 		event: HookEvent,
-	): Promise<SessionBeforeCompactResult | SessionBeforeTreeResult | ToolResultEventResult | undefined> {
+	): Promise<
+		SessionBeforeCompactResult | SessionBeforeTreeResult | SessionCompactingResult | ToolResultEventResult | undefined
+	> {
 		const ctx = this.createContext();
-		let result: SessionBeforeCompactResult | SessionBeforeTreeResult | ToolResultEventResult | undefined;
+		let result:
+			| SessionBeforeCompactResult
+			| SessionBeforeTreeResult
+			| SessionCompactingResult
+			| ToolResultEventResult
+			| undefined;
 
 		for (const hook of this.hooks) {
 			const handlers = hook.handlers.get(event.type);
@@ -311,6 +319,9 @@ export class HookRunner {
 					// For tool_result events, capture the result
 					if (event.type === "tool_result" && handlerResult) {
 						result = handlerResult as ToolResultEventResult;
+					}
+					if (event.type === "session.compacting" && handlerResult) {
+						result = handlerResult as SessionCompactingResult;
 					}
 				} catch (err) {
 					const message = err instanceof Error ? err.message : String(err);

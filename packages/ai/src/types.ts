@@ -195,6 +195,8 @@ export type StopReason = "stop" | "length" | "toolUse" | "error" | "aborted";
 export interface UserMessage {
 	role: "user";
 	content: string | (TextContent | ImageContent)[];
+	/** True if the message was injected by the system (e.g., auto-continue). */
+	synthetic?: boolean;
 	timestamp: number; // Unix timestamp in milliseconds
 }
 
@@ -219,6 +221,8 @@ export interface ToolResultMessage<TDetails = any, TInput = unknown> {
 	content: (TextContent | ImageContent)[]; // Supports text and images
 	details?: TDetails;
 	isError: boolean;
+	/** Timestamp when output was pruned (ms since epoch). Undefined if unpruned. */
+	prunedAt?: number;
 	timestamp: number; // Unix timestamp in milliseconds
 	$normative?: TInput;
 }

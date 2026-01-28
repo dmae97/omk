@@ -76,6 +76,8 @@ export type {
 	SessionBeforeTreeResult,
 	SessionBranchEvent,
 	SessionCompactEvent,
+	SessionCompactingEvent,
+	SessionCompactingResult,
 	SessionEvent,
 	SessionShutdownEvent,
 	// Events - Session

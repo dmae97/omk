@@ -5,24 +5,24 @@
  * and provides a transformer to convert them to LLM-compatible messages.
  */
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
-import type { ImageContent, Message, TextContent } from "@oh-my-pi/pi-ai";
+import type { ImageContent, Message, TextContent, ToolResultMessage } from "@oh-my-pi/pi-ai";
+import { renderPromptTemplate } from "../config/prompt-templates";
+import branchSummaryContextPrompt from "../prompts/compaction/branch-summary-context.md" with { type: "text" };
+import compactionSummaryContextPrompt from "../prompts/compaction/compaction-summary-context.md" with { type: "text" };
 import type { OutputMeta } from "../tools/output-meta";
 import { formatOutputNotice } from "../tools/output-meta";
 
-export const COMPACTION_SUMMARY_PREFIX = `The conversation history before this point was compacted into the following summary:
+const COMPACTION_SUMMARY_TEMPLATE = compactionSummaryContextPrompt;
+const BRANCH_SUMMARY_TEMPLATE = branchSummaryContextPrompt;
 
-<summary>
-`;
-
-export const COMPACTION_SUMMARY_SUFFIX = `
-</summary>`;
-
-export const BRANCH_SUMMARY_PREFIX = `The following is a summary of a branch that this conversation came back from:
-
-<summary>
-`;
-
-export const BRANCH_SUMMARY_SUFFIX = `</summary>`;
+function getPrunedToolResultContent(message: ToolResultMessage): (TextContent | ImageContent)[] {
+	if (message.prunedAt === undefined) {
+		return message.content;
+	}
+	const textBlocks = message.content.filter((content): content is TextContent => content.type === "text");
+	const text = textBlocks.map(block => block.text).join("") || "[Output truncated]";
+	return [{ type: "text", text }];
+}
 
 /**
  * Message type for bash executions via the ! command.
@@ -91,6 +91,7 @@ export interface BranchSummaryMessage {
 export interface CompactionSummaryMessage {
 	role: "compactionSummary";
 	summary: string;
+	shortSummary?: string;
 	tokensBefore: number;
 	timestamp: number;
 }
@@ -173,10 +174,12 @@ export function createCompactionSummaryMessage(
 	summary: string,
 	tokensBefore: number,
 	timestamp: string,
+	shortSummary?: string,
 ): CompactionSummaryMessage {
 	return {
 		role: "compactionSummary",
 		summary,
+		shortSummary,
 		tokensBefore,
 		timestamp: new Date(timestamp).getTime(),
 	};
@@ -242,14 +245,22 @@ export function convertToLlm(messages: AgentMessage[]): Message[] {
 				case "branchSummary":
 					return {
 						role: "user",
-						content: [{ type: "text" as const, text: BRANCH_SUMMARY_PREFIX + m.summary + BRANCH_SUMMARY_SUFFIX }],
+						content: [
+							{
+								type: "text" as const,
+								text: renderPromptTemplate(BRANCH_SUMMARY_TEMPLATE, { summary: m.summary }),
+							},
+						],
 						timestamp: m.timestamp,
 					};
 				case "compactionSummary":
 					return {
 						role: "user",
 						content: [
-							{ type: "text" as const, text: COMPACTION_SUMMARY_PREFIX + m.summary + COMPACTION_SUMMARY_SUFFIX },
+							{
+								type: "text" as const,
+								text: renderPromptTemplate(COMPACTION_SUMMARY_TEMPLATE, { summary: m.summary }),
+							},
 						],
 						timestamp: m.timestamp,
 					};
@@ -263,8 +274,12 @@ export function convertToLlm(messages: AgentMessage[]): Message[] {
 				}
 				case "user":
 				case "assistant":
-				case "toolResult":
 					return m;
+				case "toolResult":
+					return {
+						...m,
+						content: getPrunedToolResultContent(m as ToolResultMessage),
+					};
 				default:
 					// biome-ignore lint/correctness/noSwitchDeclarations: fine
 					const _exhaustiveCheck: never = m;

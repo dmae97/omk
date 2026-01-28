@@ -85,6 +85,7 @@ import {
 	prepareCompaction,
 	shouldCompact,
 } from "./compaction";
+import { DEFAULT_PRUNE_CONFIG, pruneToolOutputs } from "./compaction/pruning";
 import {
 	type BashExecutionMessage,
 	type BranchSummaryMessage,
@@ -160,6 +161,8 @@ export interface PromptOptions {
 	streamingBehavior?: "steer" | "followUp";
 	/** Optional tool choice override for the next LLM call. */
 	toolChoice?: ToolChoice;
+	/** Mark the user message as synthetic (system-injected). */
+	synthetic?: boolean;
 }
 
 /** Result from cycleModel() */
@@ -1212,6 +1215,7 @@ export class AgentSession {
 		messages.push({
 			role: "user",
 			content: userContent,
+			synthetic: options?.synthetic,
 			timestamp: Date.now(),
 		});
 
@@ -2012,6 +2016,19 @@ export class AgentSession {
 	// Compaction
 	// =========================================================================
 
+	private async _pruneToolOutputs(): Promise<{ prunedCount: number; tokensSaved: number } | undefined> {
+		const branchEntries = this.sessionManager.getBranch();
+		const result = pruneToolOutputs(branchEntries, DEFAULT_PRUNE_CONFIG);
+		if (result.prunedCount === 0) {
+			return undefined;
+		}
+
+		await this.sessionManager.rewriteEntries();
+		const sessionContext = this.sessionManager.buildSessionContext();
+		this.agent.replaceMessages(sessionContext.messages);
+		return result;
+	}
+
 	/**
 	 * Manually compact the session context.
 	 * Aborts current agent operation first.
@@ -2028,13 +2045,14 @@ export class AgentSession {
 				throw new Error("No model selected");
 			}
 
-			const apiKey = await this._modelRegistry.getApiKey(this.model, this.sessionId);
+			const settings = this.settingsManager.getCompactionSettings();
+			const compactionModel = this.model;
+			const apiKey = await this._modelRegistry.getApiKey(compactionModel, this.sessionId);
 			if (!apiKey) {
-				throw new Error(`No API key for ${this.model.provider}`);
+				throw new Error(`No API key for ${compactionModel.provider}`);
 			}
 
 			const pathEntries = this.sessionManager.getBranch();
-			const settings = this.settingsManager.getCompactionSettings();
 
 			const preparation = prepareCompaction(pathEntries, settings);
 			if (!preparation) {
@@ -2048,6 +2066,9 @@ export class AgentSession {
 
 			let hookCompaction: CompactionResult | undefined;
 			let fromExtension = false;
+			let hookContext: string[] | undefined;
+			let hookPrompt: string | undefined;
+			let preserveData: Record<string, unknown> | undefined;
 
 			if (this._extensionRunner?.hasHandlers("session_before_compact")) {
 				const result = (await this._extensionRunner.emit({
@@ -2068,7 +2089,21 @@ export class AgentSession {
 				}
 			}
 
+			if (!hookCompaction && this._extensionRunner?.hasHandlers("session.compacting")) {
+				const compactMessages = preparation.messagesToSummarize.concat(preparation.turnPrefixMessages);
+				const result = (await this._extensionRunner.emit({
+					type: "session.compacting",
+					sessionId: this.sessionId,
+					messages: compactMessages,
+				})) as { context?: string[]; prompt?: string; preserveData?: Record<string, unknown> } | undefined;
+
+				hookContext = result?.context;
+				hookPrompt = result?.prompt;
+				preserveData = result?.preserveData;
+			}
+
 			let summary: string;
+			let shortSummary: string | undefined;
 			let firstKeptEntryId: string;
 			let tokensBefore: number;
 			let details: unknown;
@@ -2076,19 +2111,23 @@ export class AgentSession {
 			if (hookCompaction) {
 				// Extension provided compaction content
 				summary = hookCompaction.summary;
+				shortSummary = hookCompaction.shortSummary;
 				firstKeptEntryId = hookCompaction.firstKeptEntryId;
 				tokensBefore = hookCompaction.tokensBefore;
 				details = hookCompaction.details;
+				preserveData ??= hookCompaction.preserveData;
 			} else {
 				// Generate compaction result
 				const result = await compact(
 					preparation,
-					this.model,
+					compactionModel,
 					apiKey,
 					customInstructions,
 					this._compactionAbortController.signal,
+					{ promptOverride: hookPrompt, extraContext: hookContext },
 				);
 				summary = result.summary;
+				shortSummary = result.shortSummary;
 				firstKeptEntryId = result.firstKeptEntryId;
 				tokensBefore = result.tokensBefore;
 				details = result.details;
@@ -2098,7 +2137,15 @@ export class AgentSession {
 				throw new Error("Compaction cancelled");
 			}
 
-			this.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension);
+			this.sessionManager.appendCompaction(
+				summary,
+				shortSummary,
+				firstKeptEntryId,
+				tokensBefore,
+				details,
+				fromExtension,
+				preserveData,
+			);
 			const newEntries = this.sessionManager.getEntries();
 			const sessionContext = this.sessionManager.buildSessionContext();
 			this.agent.replaceMessages(sessionContext.messages);
@@ -2118,9 +2165,11 @@ export class AgentSession {
 
 			const compactionResult: CompactionResult = {
 				summary,
+				shortSummary,
 				firstKeptEntryId,
 				tokensBefore,
 				details,
+				preserveData,
 			};
 			options?.onComplete?.(compactionResult);
 			return compactionResult;
@@ -2299,6 +2348,8 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		const settings = this.settingsManager.getCompactionSettings();
 		if (!settings.enabled) return;
 
+		const pruneResult = await this._pruneToolOutputs();
+
 		// Skip if message was aborted (user cancelled) - unless skipAbortedCheck is false
 		if (skipAbortedCheck && assistantMessage.stopReason === "aborted") return;
 
@@ -2336,7 +2387,10 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		// Skip if this was an error (non-overflow errors don't have usage data)
 		if (assistantMessage.stopReason === "error") return;
 
-		const contextTokens = calculateContextTokens(assistantMessage.usage);
+		let contextTokens = calculateContextTokens(assistantMessage.usage);
+		if (pruneResult) {
+			contextTokens = Math.max(0, contextTokens - pruneResult.tokensSaved);
+		}
 		if (shouldCompact(contextTokens, contextWindow, settings)) {
 			await this._runAutoCompaction("threshold", false);
 		}
@@ -2468,6 +2522,8 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		return candidates;
 	}
 
+
+
 	/**
 	 * Internal: Run auto-compaction with events.
 	 */
@@ -2503,6 +2559,9 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 			let hookCompaction: CompactionResult | undefined;
 			let fromExtension = false;
+			let hookContext: string[] | undefined;
+			let hookPrompt: string | undefined;
+			let preserveData: Record<string, unknown> | undefined;
 
 			if (this._extensionRunner?.hasHandlers("session_before_compact")) {
 				const hookResult = (await this._extensionRunner.emit({
@@ -2524,7 +2583,21 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				}
 			}
 
+			if (!hookCompaction && this._extensionRunner?.hasHandlers("session.compacting")) {
+				const compactMessages = preparation.messagesToSummarize.concat(preparation.turnPrefixMessages);
+				const result = (await this._extensionRunner.emit({
+					type: "session.compacting",
+					sessionId: this.sessionId,
+					messages: compactMessages,
+				})) as { context?: string[]; prompt?: string; preserveData?: Record<string, unknown> } | undefined;
+
+				hookContext = result?.context;
+				hookPrompt = result?.prompt;
+				preserveData = result?.preserveData;
+			}
+
 			let summary: string;
+			let shortSummary: string | undefined;
 			let firstKeptEntryId: string;
 			let tokensBefore: number;
 			let details: unknown;
@@ -2532,9 +2605,11 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			if (hookCompaction) {
 				// Extension provided compaction content
 				summary = hookCompaction.summary;
+				shortSummary = hookCompaction.shortSummary;
 				firstKeptEntryId = hookCompaction.firstKeptEntryId;
 				tokensBefore = hookCompaction.tokensBefore;
 				details = hookCompaction.details;
+				preserveData ??= hookCompaction.preserveData;
 			} else {
 				const candidates = this._getCompactionModelCandidates(availableModels);
 				const retrySettings = this.settingsManager.getRetrySettings();
@@ -2554,6 +2629,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 								apiKey,
 								undefined,
 								this._autoCompactionAbortController.signal,
+								{ promptOverride: hookPrompt, extraContext: hookContext },
 							);
 							break;
 						} catch (error) {
@@ -2618,6 +2694,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				}
 
 				summary = compactResult.summary;
+				shortSummary = compactResult.shortSummary;
 				firstKeptEntryId = compactResult.firstKeptEntryId;
 				tokensBefore = compactResult.tokensBefore;
 				details = compactResult.details;
@@ -2628,7 +2705,15 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				return;
 			}
 
-			this.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension);
+			this.sessionManager.appendCompaction(
+				summary,
+				shortSummary,
+				firstKeptEntryId,
+				tokensBefore,
+				details,
+				fromExtension,
+				preserveData,
+			);
 			const newEntries = this.sessionManager.getEntries();
 			const sessionContext = this.sessionManager.buildSessionContext();
 			this.agent.replaceMessages(sessionContext.messages);
@@ -2648,11 +2733,20 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 			const result: CompactionResult = {
 				summary,
+				shortSummary,
 				firstKeptEntryId,
 				tokensBefore,
 				details,
+				preserveData,
 			};
 			this._emit({ type: "auto_compaction_end", result, aborted: false, willRetry });
+
+			if (!willRetry && settings.autoContinue !== false) {
+				await this.prompt("Continue if you have next steps.", {
+					expandPromptTemplates: false,
+					synthetic: true,
+				});
+			}
 
 			if (willRetry) {
 				const messages = this.agent.state.messages;

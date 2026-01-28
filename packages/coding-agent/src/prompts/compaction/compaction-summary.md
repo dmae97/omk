@@ -1,14 +1,18 @@
 The messages above are a conversation to summarize. Create a structured context checkpoint handoff summary that another LLM will use to resume the task.
 
-Use this EXACT format:
+IMPORTANT: If the conversation ends with:
+- An unanswered question to the user, preserve that exact question
+- An imperative statement or request waiting for user response (e.g., "Please run the command and paste the output"), preserve that exact request
+
+These must appear in the Critical Context section.
+
+Use this format (sections can be omitted if not applicable):
 
 ## Goal
-
 [What is the user trying to accomplish? Can be multiple items if the session covers different tasks.]
 
 ## Constraints & Preferences
-- [Any constraints, preferences, or requirements mentioned by user]
-- [Or "(none)" if none were mentioned]
+- [Any constraints or requirements mentioned]
 
 ## Progress
 
@@ -19,7 +23,7 @@ Use this EXACT format:
 - [ ] [Current work]
 
 ### Blocked
-- [Issues preventing progress, if any]
+- [Issues preventing progress]
 
 ## Key Decisions
 - **[Decision]**: [Brief rationale]
@@ -28,8 +32,10 @@ Use this EXACT format:
 1. [Ordered list of what should happen next]
 
 ## Critical Context
-- [Any data, examples, or references needed to continue]
-- [Or "(none)" if not applicable]
+- [Important data, pending questions, references]
+
+## Additional Notes
+[Anything else important that doesn't fit above categories]
 
 Output only the structured summary. No extra text.
 

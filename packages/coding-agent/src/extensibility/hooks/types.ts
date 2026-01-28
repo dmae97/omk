@@ -247,7 +247,7 @@ export interface SessionBranchEvent {
 	previousSessionFile: string | undefined;
 }
 
-/** Fired before context compaction (can be cancelled or customized) */
+/** Fired before context compaction (can be cancelled) */
 export interface SessionBeforeCompactEvent {
 	type: "session_before_compact";
 	/** Compaction preparation with messages to summarize, file ops, previous summary, etc. */
@@ -258,6 +258,13 @@ export interface SessionBeforeCompactEvent {
 	customInstructions?: string;
 	/** Abort signal - hooks should pass this to LLM calls and check it periodically */
 	signal: AbortSignal;
+}
+
+/** Fired before compaction summarization to customize prompts/context */
+export interface SessionCompactingEvent {
+	type: "session.compacting";
+	sessionId: string;
+	messages: AgentMessage[];
 }
 
 /** Fired after context compaction */
@@ -317,6 +324,7 @@ export type SessionEvent =
 	| SessionBeforeBranchEvent
 	| SessionBranchEvent
 	| SessionBeforeCompactEvent
+	| SessionCompactingEvent
 	| SessionCompactEvent
 	| SessionShutdownEvent
 	| SessionBeforeTreeEvent
@@ -592,6 +600,16 @@ export interface SessionBeforeCompactResult {
 	compaction?: CompactionResult;
 }
 
+/** Return type for session.compacting handlers */
+export interface SessionCompactingResult {
+	/** Additional context lines to include in summary */
+	context?: string[];
+	/** Override the default compaction prompt */
+	prompt?: string;
+	/** Custom data to store in compaction entry */
+	preserveData?: Record<string, unknown>;
+}
+
 /** Return type for session_before_tree handlers */
 export interface SessionBeforeTreeResult {
 	/** If true, cancel the navigation entirely */
@@ -657,6 +675,7 @@ export interface HookAPI {
 		event: "session_before_compact",
 		handler: HookHandler<SessionBeforeCompactEvent, SessionBeforeCompactResult>,
 	): void;
+	on(event: "session.compacting", handler: HookHandler<SessionCompactingEvent, SessionCompactingResult>): void;
 	on(event: "session_compact", handler: HookHandler<SessionCompactEvent>): void;
 	on(event: "session_shutdown", handler: HookHandler<SessionShutdownEvent>): void;
 	on(event: "session_before_tree", handler: HookHandler<SessionBeforeTreeEvent, SessionBeforeTreeResult>): void;
