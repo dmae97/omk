@@ -14,9 +14,6 @@ import type { CustomTool } from "@oh-my-pi/pi-coding-agent/extensibility/custom-
 import type { Skill } from "@oh-my-pi/pi-coding-agent/extensibility/skills";
 import { callTool } from "@oh-my-pi/pi-coding-agent/mcp/client";
 import type { MCPManager } from "@oh-my-pi/pi-coding-agent/mcp/manager";
-import subagentSystemPromptTemplate from "@oh-my-pi/pi-coding-agent/prompts/system/subagent-system-prompt.md" with {
-	type: "text",
-};
 import { createAgentSession, discoverAuthStorage, discoverModels } from "@oh-my-pi/pi-coding-agent/sdk";
 import type { AgentSession, AgentSessionEvent } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import type { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
@@ -28,6 +25,7 @@ import type { EventBus } from "@oh-my-pi/pi-coding-agent/utils/event-bus";
 import { logger, untilAborted } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
 import Ajv, { type ValidateFunction } from "ajv";
+import subagentSystemPromptTemplate from "../prompts/system/subagent-system-prompt.md" with { type: "text" };
 import { subprocessToolRegistry } from "./subprocess-tool-registry";
 import {
 	type AgentDefinition,
