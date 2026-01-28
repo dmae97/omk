@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Rendered /skill command messages as compact skill entries instead of full prompt text
+
 ## [8.8.8] - 2026-01-28
 
 ### Added

@@ -15,6 +15,15 @@ import { formatOutputNotice } from "../tools/output-meta";
 const COMPACTION_SUMMARY_TEMPLATE = compactionSummaryContextPrompt;
 const BRANCH_SUMMARY_TEMPLATE = branchSummaryContextPrompt;
 
+export const SKILL_PROMPT_MESSAGE_TYPE = "skill-prompt";
+
+export interface SkillPromptDetails {
+	name: string;
+	path: string;
+	args?: string;
+	lineCount: number;
+}
+
 function getPrunedToolResultContent(message: ToolResultMessage): (TextContent | ImageContent)[] {
 	if (message.prunedAt === undefined) {
 		return message.content;

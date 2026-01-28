@@ -17,6 +17,7 @@ Performs patch operations on a file given a diff. Primary tool for modifying exi
 **Context Lines:**
 - Include enough ` `-prefixed lines to make match unique (usually 2–8 total)
 - Must exist in the file exactly as written (preserve indentation/trailing spaces)
+- When editing structured blocks (nested braces, tags, indented regions), include opening and closing lines in context so the edit stays inside the block
 </instruction>
 
 <parameters>
@@ -47,6 +48,9 @@ Returns success/failure status. On failure, returns error message indicating:
 - Always read the target file before editing
 - Copy anchors and context lines verbatim (including whitespace)
 - Never use anchors as comments (no line numbers, location labels, or placeholders like `@@ @@`)
+- Do not place new lines outside the intended block unless that is the explicit goal
+- If an edit fails or produces broken structure, re-read the file and produce a new patch from current content—do not retry the same diff
+- If indentation is wrong after editing, run the project's formatter (if available) rather than making repeated edit attempts
 </critical>
 
 <example name="create">
@@ -69,4 +73,6 @@ edit {"path":"obsolete.txt","op":"delete"}
 - Generic anchors: `import`, `export`, `describe`, `function`, `const`
 - Anchor comments: `line 207`, `top of file`, `near imports`, `...`
 - Editing without reading the file first (causes stale context errors)
+- Repeating the same addition in multiple hunks (creates duplicate blocks)
+- Falling back to full-file overwrites for minor changes (acceptable for major restructures or short files)
 </avoid>

@@ -1165,6 +1165,62 @@ export class AgentSession {
 			return;
 		}
 
+		const userContent: (TextContent | ImageContent)[] = [{ type: "text", text: expandedText }];
+		if (options?.images) {
+			userContent.push(...options.images);
+		}
+
+		await this._promptWithMessage(
+			{
+				role: "user",
+				content: userContent,
+				synthetic: options?.synthetic,
+				timestamp: Date.now(),
+			},
+			expandedText,
+			options,
+		);
+	}
+
+	async promptCustomMessage<T = unknown>(
+		message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">,
+		options?: Pick<PromptOptions, "streamingBehavior" | "toolChoice">,
+	): Promise<void> {
+		const textContent =
+			typeof message.content === "string"
+				? message.content
+				: message.content
+						.filter((content): content is TextContent => content.type === "text")
+						.map(content => content.text)
+						.join("");
+
+		if (this.isStreaming) {
+			if (!options?.streamingBehavior) {
+				throw new Error(
+					"Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.",
+				);
+			}
+			await this.sendCustomMessage(message, { deliverAs: options.streamingBehavior });
+			return;
+		}
+
+		const customMessage: CustomMessage<T> = {
+			role: "custom",
+			customType: message.customType,
+			content: message.content,
+			display: message.display,
+			details: message.details,
+			timestamp: Date.now(),
+		};
+
+		await this._promptWithMessage(customMessage, textContent, options);
+	}
+
+	private async _promptWithMessage(
+		message: AgentMessage,
+		expandedText: string,
+		options?: Pick<PromptOptions, "toolChoice" | "images">,
+	): Promise<void> {
 		// Flush any pending bash messages before the new prompt
 		this._flushPendingBashMessages();
 		this._flushPendingPythonMessages();
@@ -1207,17 +1263,7 @@ export class AgentSession {
 			messages.push(planModeMessage);
 		}
 
-		// Add user message
-		const userContent: (TextContent | ImageContent)[] = [{ type: "text", text: expandedText }];
-		if (options?.images) {
-			userContent.push(...options.images);
-		}
-		messages.push({
-			role: "user",
-			content: userContent,
-			synthetic: options?.synthetic,
-			timestamp: Date.now(),
-		});
+		messages.push(message);
 
 		// Inject any pending "nextTurn" messages as context alongside the user message
 		for (const msg of this._pendingNextTurnMessages) {

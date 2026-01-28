@@ -7,6 +7,7 @@ import { nanoid } from "nanoid";
 import { theme } from "../../modes/theme/theme";
 import type { InteractiveModeContext } from "../../modes/types";
 import type { AgentSessionEvent } from "../../session/agent-session";
+import { SKILL_PROMPT_MESSAGE_TYPE, type SkillPromptDetails } from "../../session/messages";
 import { readImageFromClipboard } from "../../utils/clipboard";
 import { resizeImage } from "../../utils/image-resize";
 import { generateSessionTitle, setTerminalTitle } from "../../utils/title-generator";
@@ -329,7 +330,22 @@ export class InputController {
 							metaLines.push(`User: ${args}`);
 						}
 						const message = `${body}\n\n---\n\n${metaLines.join("\n")}`;
-						await this.ctx.session.prompt(message, { streamingBehavior: "followUp" });
+						const skillName = commandName.slice("skill:".length);
+						const details: SkillPromptDetails = {
+							name: skillName || commandName,
+							path: skillPath,
+							args: args || undefined,
+							lineCount: body ? body.split("\n").length : 0,
+						};
+						await this.ctx.session.promptCustomMessage(
+							{
+								customType: SKILL_PROMPT_MESSAGE_TYPE,
+								content: message,
+								display: true,
+								details,
+							},
+							{ streamingBehavior: "followUp" },
+						);
 					} catch (err) {
 						this.ctx.showError(`Failed to load skill: ${err instanceof Error ? err.message : String(err)}`);
 					}

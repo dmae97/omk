@@ -9,11 +9,12 @@ import { CustomMessageComponent } from "../../modes/components/custom-message";
 import { DynamicBorder } from "../../modes/components/dynamic-border";
 import { PythonExecutionComponent } from "../../modes/components/python-execution";
 import { ReadToolGroupComponent } from "../../modes/components/read-tool-group";
+import { SkillMessageComponent } from "../../modes/components/skill-message";
 import { ToolExecutionComponent } from "../../modes/components/tool-execution";
 import { UserMessageComponent } from "../../modes/components/user-message";
 import { theme } from "../../modes/theme/theme";
 import type { CompactionQueuedMessage, InteractiveModeContext } from "../../modes/types";
-import type { CustomMessage } from "../../session/messages";
+import { type CustomMessage, type SkillPromptDetails, SKILL_PROMPT_MESSAGE_TYPE } from "../../session/messages";
 import type { SessionContext } from "../../session/session-manager";
 
 type TextBlock = { type: "text"; text: string };
@@ -94,9 +95,17 @@ export class UiHelpers {
 			case "hookMessage":
 			case "custom": {
 				if (message.display) {
+					if (message.customType === SKILL_PROMPT_MESSAGE_TYPE) {
+						const component = new SkillMessageComponent(message as CustomMessage<SkillPromptDetails>);
+						component.setExpanded(this.ctx.toolOutputExpanded);
+						this.ctx.chatContainer.addChild(component);
+						break;
+					}
 					const renderer = this.ctx.session.extensionRunner?.getMessageRenderer(message.customType);
 					// Both HookMessage and CustomMessage have the same structure, cast for compatibility
-					this.ctx.chatContainer.addChild(new CustomMessageComponent(message as CustomMessage<unknown>, renderer));
+					const component = new CustomMessageComponent(message as CustomMessage<unknown>, renderer);
+					component.setExpanded(this.ctx.toolOutputExpanded);
+					this.ctx.chatContainer.addChild(component);
 				}
 				break;
 			}
