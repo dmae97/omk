@@ -691,10 +691,8 @@ export const geminiImageTool: CustomTool<typeof geminiImageSchema, GeminiImageTo
 			}
 
 			const { timeout: rawTimeout = DEFAULT_TIMEOUT_SECONDS } = params;
-			// Auto-convert milliseconds to seconds if value > 1000 (16+ min is unreasonable)
-			let timeoutSeconds = rawTimeout > 1000 ? rawTimeout / 1000 : rawTimeout;
 			// Clamp to reasonable range: 1s - 600s (10 min)
-			timeoutSeconds = Math.max(1, Math.min(600, timeoutSeconds));
+			const timeoutSeconds = Math.max(1, Math.min(600, rawTimeout));
 			const requestSignal = createRequestSignal(signal, timeoutSeconds);
 
 			if (provider === "antigravity") {

@@ -162,10 +162,8 @@ export class SshTool implements AgentTool<typeof sshSchema, SSHToolDetails> {
 		const hostInfo = await ensureHostInfo(hostConfig);
 		const remoteCommand = buildRemoteCommand(command, cwd, hostInfo);
 
-		// Auto-convert milliseconds to seconds if value > 1000 (16+ min is unreasonable)
-		let timeoutSec = rawTimeout > 1000 ? rawTimeout / 1000 : rawTimeout;
 		// Clamp to reasonable range: 1s - 3600s (1 hour)
-		timeoutSec = Math.max(1, Math.min(3600, timeoutSec));
+		const timeoutSec = Math.max(1, Math.min(3600, rawTimeout));
 		const timeoutMs = timeoutSec * 1000;
 
 		const tailBuffer = createTailBuffer(DEFAULT_MAX_BYTES);

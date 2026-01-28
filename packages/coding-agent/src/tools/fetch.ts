@@ -911,11 +911,8 @@ export class FetchTool implements AgentTool<typeof fetchSchema, FetchToolDetails
 	): Promise<AgentToolResult<FetchToolDetails>> {
 		const { url, timeout: rawTimeout = 20, raw = false } = params;
 
-		// Auto-convert milliseconds to seconds if value > 1000 (16+ min is unreasonable)
-		const timeoutSec = rawTimeout > 1000 ? rawTimeout / 1000 : rawTimeout;
-
 		// Clamp to valid range (seconds)
-		const effectiveTimeout = Math.min(Math.max(timeoutSec, 1), 45);
+		const effectiveTimeout = Math.min(Math.max(rawTimeout, 1), 45);
 
 		if (signal?.aborted) {
 			throw new ToolAbortError();
