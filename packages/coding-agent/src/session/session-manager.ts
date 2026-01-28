@@ -1030,6 +1030,55 @@ export class SessionManager {
 		return this._newSessionSync(options);
 	}
 
+	/**
+	 * Fork the current session, creating a new session file with the same entries.
+	 * Returns both the old and new session file paths for artifact copying.
+	 * @returns { oldSessionFile, newSessionFile } or undefined if not persisting
+	 */
+	async fork(): Promise<{ oldSessionFile: string; newSessionFile: string } | undefined> {
+		if (!this.persist || !this.sessionFile) {
+			return undefined;
+		}
+
+		const oldSessionFile = this.sessionFile;
+		const oldSessionId = this.sessionId;
+
+		// Close the current writer
+		await this._closePersistWriter();
+		this.persistChain = Promise.resolve();
+		this.persistError = undefined;
+		this.persistErrorReported = false;
+
+		// Create new session ID and header
+		this.sessionId = nanoid();
+		const timestamp = new Date().toISOString();
+		const fileTimestamp = timestamp.replace(/[:.]/g, "-");
+		this.sessionFile = path.join(this.getSessionDir(), `${fileTimestamp}_${this.sessionId}.jsonl`);
+
+		// Update the header with new ID but keep all entries
+		const oldHeader = this.fileEntries.find(e => e.type === "session") as SessionHeader | undefined;
+		const newHeader: SessionHeader = {
+			type: "session",
+			version: CURRENT_SESSION_VERSION,
+			id: this.sessionId,
+			title: oldHeader?.title ?? this.sessionTitle,
+			timestamp,
+			cwd: this.cwd,
+			parentSession: oldSessionId,
+		};
+		this.sessionTitle = newHeader.title;
+
+		// Replace the header in fileEntries
+		const entries = this.fileEntries.filter(e => e.type !== "session") as SessionEntry[];
+		this.fileEntries = [newHeader, ...entries];
+
+		// Write the new session file
+		this.flushed = false;
+		await this._rewriteFile();
+
+		return { oldSessionFile, newSessionFile: this.sessionFile };
+	}
+
 	/** Sync version for initial creation (no existing writer to close) */
 	private _newSessionSync(options?: NewSessionOptions): string | undefined {
 		this.persistChain = Promise.resolve();

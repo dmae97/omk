@@ -855,6 +855,10 @@ export class InteractiveMode implements InteractiveModeContext {
 		return this.commandController.handleClearCommand();
 	}
 
+	handleForkCommand(): Promise<void> {
+		return this.commandController.handleForkCommand();
+	}
+
 	handleDebugCommand(): Promise<void> {
 		return this.commandController.handleDebugCommand();
 	}

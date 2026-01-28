@@ -269,6 +269,11 @@ export class InputController {
 				await this.ctx.handleClearCommand();
 				return;
 			}
+			if (text === "/fork") {
+				this.ctx.editor.setText("");
+				await this.ctx.handleForkCommand();
+				return;
+			}
 			if (text === "/compact" || text.startsWith("/compact ")) {
 				const customInstructions = text.startsWith("/compact ") ? text.slice(9).trim() : undefined;
 				this.ctx.editor.setText("");

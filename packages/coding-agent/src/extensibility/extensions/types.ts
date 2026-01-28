@@ -268,14 +268,14 @@ export interface SessionStartEvent {
 /** Fired before switching to another session (can be cancelled) */
 export interface SessionBeforeSwitchEvent {
 	type: "session_before_switch";
-	reason: "new" | "resume";
+	reason: "new" | "resume" | "fork";
 	targetSessionFile?: string;
 }
 
 /** Fired after switching to another session */
 export interface SessionSwitchEvent {
 	type: "session_switch";
-	reason: "new" | "resume";
+	reason: "new" | "resume" | "fork";
 	previousSessionFile: string | undefined;
 }
 

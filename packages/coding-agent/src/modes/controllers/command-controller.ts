@@ -418,6 +418,31 @@ export class CommandController {
 		this.ctx.ui.requestRender();
 	}
 
+	async handleForkCommand(): Promise<void> {
+		if (this.ctx.loadingAnimation) {
+			this.ctx.loadingAnimation.stop();
+			this.ctx.loadingAnimation = undefined;
+		}
+		this.ctx.statusContainer.clear();
+
+		const success = await this.ctx.session.fork();
+		if (!success) {
+			this.ctx.showError("Fork failed (session not persisted or cancelled)");
+			return;
+		}
+
+		this.ctx.statusLine.invalidate();
+		this.ctx.updateEditorTopBorder();
+
+		const sessionFile = this.ctx.session.sessionFile;
+		const shortPath = sessionFile ? sessionFile.split("/").pop() : "new session";
+		this.ctx.chatContainer.addChild(new Spacer(1));
+		this.ctx.chatContainer.addChild(
+			new Text(`${theme.fg("accent", `${theme.status.success} Session forked to ${shortPath}`)}`, 1, 1),
+		);
+		this.ctx.ui.requestRender();
+	}
+
 	async handleDebugCommand(): Promise<void> {
 		const width = this.ctx.ui.terminal.columns;
 		const allLines = this.ctx.ui.render(width);

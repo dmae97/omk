@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Added `/fork` command to create a new session with the exact same state (entries and artifacts) as the current session
+
 ## [8.6.0] - 2026-01-27
 
 ### Added

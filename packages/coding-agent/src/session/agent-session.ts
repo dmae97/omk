@@ -1658,6 +1658,75 @@ export class AgentSession {
 		return true;
 	}
 
+	/**
+	 * Fork the current session, creating a new session file with the exact same state.
+	 * Copies all entries and artifacts to the new session.
+	 * Unlike newSession(), this preserves all messages in the agent state.
+	 * @returns true if completed, false if cancelled by hook or not persisting
+	 */
+	async fork(): Promise<boolean> {
+		const previousSessionFile = this.sessionFile;
+
+		// Emit session_before_switch event with reason "fork" (can be cancelled)
+		if (this._extensionRunner?.hasHandlers("session_before_switch")) {
+			const result = (await this._extensionRunner.emit({
+				type: "session_before_switch",
+				reason: "fork",
+			})) as SessionBeforeSwitchResult | undefined;
+
+			if (result?.cancel) {
+				return false;
+			}
+		}
+
+		// Flush current session to ensure all entries are written
+		await this.sessionManager.flush();
+
+		// Fork the session (creates new session file with same entries)
+		const forkResult = await this.sessionManager.fork();
+		if (!forkResult) {
+			return false;
+		}
+
+		// Copy artifacts directory if it exists
+		const oldArtifactDir = forkResult.oldSessionFile.slice(0, -6);
+		const newArtifactDir = forkResult.newSessionFile.slice(0, -6);
+
+		try {
+			const oldDirStat = await fs.promises.stat(oldArtifactDir);
+			if (oldDirStat.isDirectory()) {
+				await fs.promises.cp(oldArtifactDir, newArtifactDir, { recursive: true });
+			}
+		} catch (err) {
+			if (!isEnoent(err)) {
+				logger.warn("Failed to copy artifacts during fork", {
+					oldArtifactDir,
+					newArtifactDir,
+					error: err instanceof Error ? err.message : String(err),
+				});
+			}
+		}
+
+		// Update agent session ID
+		this.agent.sessionId = this.sessionManager.getSessionId();
+
+		// Clear queued messages (they would be duplicated otherwise)
+		this._steeringMessages = [];
+		this._followUpMessages = [];
+		this._pendingNextTurnMessages = [];
+
+		// Emit session_switch event with reason "fork" to hooks
+		if (this._extensionRunner) {
+			await this._extensionRunner.emit({
+				type: "session_switch",
+				reason: "fork",
+				previousSessionFile,
+			});
+		}
+
+		return true;
+	}
+
 	// =========================================================================
 	// Model Management
 	// =========================================================================
