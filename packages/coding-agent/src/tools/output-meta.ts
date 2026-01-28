@@ -428,10 +428,9 @@ export function wrapToolWithMetaNotice<T extends AgentTool<any, any, any>>(tool:
 		return result;
 	};
 
-	return {
-		...tool,
-		execute: wrappedExecute,
-	} as T;
+	return Object.create(tool, {
+		execute: { value: wrappedExecute, enumerable: true },
+	}) as T;
 }
 
 /**

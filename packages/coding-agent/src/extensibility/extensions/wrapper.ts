@@ -73,10 +73,6 @@ export function wrapRegisteredTools(registeredTools: RegisteredTool[], runner: E
 export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetails = unknown>
 	implements AgentTool<TParameters, TDetails>
 {
-	name: string;
-	label: string;
-	description: string;
-	parameters: TParameters;
 	renderCall?: AgentTool<TParameters, TDetails>["renderCall"];
 	renderResult?: AgentTool<TParameters, TDetails>["renderResult"];
 	mergeCallAndResult?: boolean;
@@ -86,14 +82,26 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 		private tool: AgentTool<TParameters, TDetails>,
 		private runner: ExtensionRunner,
 	) {
-		this.name = tool.name;
-		this.label = tool.label ?? "";
-		this.description = tool.description;
-		this.parameters = tool.parameters;
 		this.renderCall = tool.renderCall;
 		this.renderResult = tool.renderResult;
 		this.mergeCallAndResult = (tool as { mergeCallAndResult?: boolean }).mergeCallAndResult;
 		this.inline = (tool as { inline?: boolean }).inline;
+	}
+
+	get name(): string {
+		return this.tool.name;
+	}
+
+	get label(): string {
+		return this.tool.label ?? "";
+	}
+
+	get description(): string {
+		return this.tool.description;
+	}
+
+	get parameters(): TParameters {
+		return this.tool.parameters;
 	}
 
 	async execute(

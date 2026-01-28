@@ -900,15 +900,15 @@ function convertTools(tools: Tool[], isOAuthToken: boolean): Anthropic.Messages.
 	if (!tools) return [];
 
 	return tools.map(tool => {
-		const jsonSchema = tool.parameters as any; // TypeBox already generates JSON Schema
+		const jsonSchema = tool.parameters as any;
 
 		return {
 			name: isOAuthToken ? toClaudeCodeName(tool.name) : tool.name,
 			description: tool.description,
 			input_schema: {
 				type: "object" as const,
-				properties: jsonSchema.properties || {},
-				required: jsonSchema.required || [],
+				properties: jsonSchema?.properties || {},
+				required: jsonSchema?.required || [],
 			},
 		};
 	});

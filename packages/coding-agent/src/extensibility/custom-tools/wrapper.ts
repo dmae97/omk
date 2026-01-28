@@ -10,19 +10,25 @@ import type { CustomTool, CustomToolContext, LoadedCustomTool } from "./types";
 export class CustomToolAdapter<TParams extends TSchema = TSchema, TDetails = any, TTheme extends Theme = Theme>
 	implements AgentTool<TParams, TDetails, TTheme>
 {
-	name: string;
-	label: string;
-	description: string;
-	parameters: TParams;
-
 	constructor(
 		private tool: CustomTool<TParams, TDetails>,
 		private getContext: () => CustomToolContext,
-	) {
-		this.name = tool.name;
-		this.label = tool.label ?? "";
-		this.description = tool.description;
-		this.parameters = tool.parameters;
+	) {}
+
+	get name() {
+		return this.tool.name;
+	}
+
+	get label() {
+		return this.tool.label;
+	}
+
+	get description() {
+		return this.tool.description;
+	}
+
+	get parameters() {
+		return this.tool.parameters;
 	}
 
 	execute(
