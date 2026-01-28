@@ -63,8 +63,8 @@ export const taskSchema = Type.Object({
 	agent: Type.String({ description: "Agent type for all tasks" }),
 	context: Type.String({ description: "Template with {{placeholders}} for args" }),
 	isolated: Type.Optional(Type.Boolean({ description: "Run in isolated git worktree" })),
-	output: Type.Optional(
-		Type.Record(Type.String(), Type.Unknown(), { description: "JTD schema for structured output" }),
+	schema: Type.Optional(
+		Type.Record(Type.String(), Type.Unknown(), { description: "JTD schema defining expected response structure" }),
 	),
 	tasks: Type.Array(taskItemSchema, { description: "Tasks to run in parallel", maxItems: MAX_PARALLEL_TASKS }),
 });

@@ -14,7 +14,8 @@ Use a single Task call with multiple `tasks` entries when parallelizing. Multipl
 
 For code changes, have subagents write files directly with Edit/Write. Do not ask them to return patches for you to apply.
 
-Agents with `output="structured"` enforce their own schema; the `output` parameter is ignored for those agents.
+Agents with `output="structured"` enforce their own schema; the `schema` parameter is ignored for those agents.
+**Never describe expected output in `context` or task descriptions.** All response format requirements go in the `schema` parameter. Use structured schemas with typed properties—not `{ "type": "string" }`. Prose like "respond as a bullet list" is prohibited.
 </critical>
 
 <agents>
@@ -29,9 +30,9 @@ Agents with `output="structured"` enforce their own schema; the `output` paramet
 <instruction>
 This matters. Be thorough.
 1. Plan before acting. Define the goal, acceptance criteria, and scope per task.
-2. Put shared constraints and decisions in `context`; keep each task request short and unambiguous.
+2. Put shared constraints and decisions in `context`; keep each task request short and unambiguous. **Do not describe response format here.**
 3. State whether each task is research-only or should modify files.
-4. Provide an `output` schema whenever possible. Do not repeat the schema in `context`; the agent does not need it there.
+4. **Always provide a `schema`** with typed properties. Avoid `{ "type": "string" }`—if data has any structure (list, fields, categories), model it. Plain text is almost never the right choice.
 5. Assign distinct file scopes per task to avoid conflicts.
 6. Trust the returned data, then verify with tools when correctness matters.
 </instruction>
@@ -45,14 +46,14 @@ This matters. Be thorough.
 		- `description`: Short human-readable description of what the task does
 		- `args`: Object with keys matching `\{{placeholders}}` in context (always include this, even if empty)
 		- `skills`: (optional) Array of skill names to preload into this task's system prompt. When set, the skills index section is omitted and the full SKILL.md contents are embedded.
-- `output`: (optional) JTD schema for structured subagent output (used by the submit_result tool). Do not duplicate this schema in `context`.
+- `schema`: JTD schema defining expected response structure. **Required.** Use objects with typed properties—e.g., `{ "properties": { "items": { "elements": { "type": "string" } } } }` for lists.
 </parameters>
 
 <output>
 Returns task results for each spawned agent:
 - Truncated preview of agent output (use `read agent://<id>` for full content if truncated)
 - Summary with line/character counts
-- For agents with `output` schema: structured JSON accessible via `agent://<id>?q=<query>` or `agent://<id>/<path>`
+- For agents with `schema`: structured JSON accessible via `agent://<id>?q=<query>` or `agent://<id>/<path>`
 
 Results are keyed by task `id` (e.g., "AuthProvider", "AuthApi").
 </output>
@@ -64,7 +65,7 @@ assistant: Uses the Task tool:
 {
   "agent": "task",
   "context": "Refactoring the auth module into separate concerns.\n\nPlan:\n1. AuthProvider - Extract React context and provider from src/auth/index.tsx\n2. AuthApi - Extract API calls to src/auth/api.ts, use existing fetchJson helper\n3. AuthTypes - Move types to types.ts, re-export from index\n\nConstraints:\n- Preserve all existing exports from src/auth/index.tsx\n- Use project's fetchJson (src/utils/http.ts), don't use raw fetch\n- No new dependencies\n\nTask: \{{step}}\n\nFiles: \{{files}}",
-  "output": {
+  "schema": {
     "properties": {
       "summary": { "type": "string" },
       "decisions": { "elements": { "type": "string" } },
@@ -80,6 +81,7 @@ assistant: Uses the Task tool:
 </example>
 
 <avoid>
+- Describing response format in `context` (e.g., "respond as JSON", "return a bullet list")—use `schema` parameter instead
 - Confirmation bias: ask for factual discovery instead of yes/no exploration prompts
 - Reading a specific file path → Use Read tool instead
 - Finding files by pattern/name → Use Find tool instead

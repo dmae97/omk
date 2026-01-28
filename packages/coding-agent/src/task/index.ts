@@ -162,7 +162,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 	): Promise<AgentToolResult<TaskToolDetails>> {
 		const startTime = Date.now();
 		const { agents, projectAgentsDir } = await discoverAgents(this.session.cwd);
-		const { agent: agentName, context, output: outputSchema, isolated } = params;
+		const { agent: agentName, context, schema: outputSchema, isolated } = params;
 		const isIsolated = isolated === true;
 
 		const isDefaultModelAlias = (value: string | string[] | undefined): boolean => {
@@ -704,20 +704,22 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 				const outputCharCount = r.outputMeta?.charCount ?? output.length;
 				const fullOutputThreshold = 5000;
 				let preview = output;
+				let truncated = false;
 				if (outputCharCount > fullOutputThreshold) {
 					const slice = output.slice(0, fullOutputThreshold);
 					const lastNewline = slice.lastIndexOf("\n");
 					preview = lastNewline >= 0 ? slice.slice(0, lastNewline) : slice;
+					truncated = true;
 				}
 				return {
 					agent: r.agent,
 					status,
 					id: r.id,
 					preview,
+					truncated,
 					meta: r.outputMeta
 						? {
 								lineCount: r.outputMeta.lineCount,
-								charCount: r.outputMeta.charCount,
 								charSize: formatBytes(r.outputMeta.charCount),
 							}
 						: undefined,

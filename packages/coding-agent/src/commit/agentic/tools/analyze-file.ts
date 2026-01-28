@@ -82,7 +82,7 @@ export function createAnalyzeFileTool(options: {
 			const taskParams: TaskParams = {
 				agent: "quick_task",
 				context,
-				output: analyzeFileOutputSchema,
+				schema: analyzeFileOutputSchema,
 				tasks,
 			};
 			return taskTool.execute(toolCallId, taskParams, signal, onUpdate);
