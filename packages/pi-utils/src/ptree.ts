@@ -167,7 +167,7 @@ export class ChildProcess {
 	#stdoutQueue = new AsyncQueue<Uint8Array>();
 	#stderrQueue = new AsyncQueue<Uint8Array>();
 	#stderrDone!: Promise<void>;
-	#streamStop = new AbortController();
+	#requestStreamStop: () => void;
 	#stdoutActive = true;
 	#stdoutStream?: ReadableStream<Uint8Array>;
 	#stderrStream?: ReadableStream<Uint8Array>;
@@ -179,19 +179,8 @@ export class ChildProcess {
 		public readonly proc: PipedSubprocess,
 		public readonly isProcessGroup: boolean,
 	) {
-		const stopStreaming: Promise<StreamReadResult> = new Promise(resolve => {
-			if (this.#streamStop.signal.aborted) {
-				resolve({ done: true, value: undefined });
-				return;
-			}
-			this.#streamStop.signal.addEventListener(
-				"abort",
-				() => {
-					resolve({ done: true, value: undefined });
-				},
-				{ once: true },
-			);
-		});
+		const { promise: stopStreaming, resolve: resolveStopStreaming } = Promise.withResolvers<StreamReadResult>();
+		this.#requestStreamStop = () => void resolveStopStreaming({ done: true, value: undefined });
 
 		const { promise: stderrDone, resolve: resolveStderrDone } = Promise.withResolvers<void>();
 		this.#stderrDone = stderrDone;
@@ -352,10 +341,6 @@ export class ChildProcess {
 	 */
 	peekStderr(): string {
 		return this.#stderrBuffer;
-	}
-
-	#requestStreamStop(): void {
-		this.#streamStop.abort();
 	}
 
 	/**
