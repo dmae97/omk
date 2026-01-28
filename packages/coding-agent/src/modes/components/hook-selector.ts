@@ -84,6 +84,9 @@ export class HookSelectorComponent extends Container {
 	}
 
 	handleInput(keyData: string): void {
+		// Reset countdown on any interaction
+		this.countdown?.reset();
+
 		if (matchesKey(keyData, "up") || keyData === "k") {
 			this.selectedIndex = Math.max(0, this.selectedIndex - 1);
 			this.updateList();

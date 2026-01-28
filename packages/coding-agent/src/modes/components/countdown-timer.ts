@@ -6,6 +6,7 @@ import type { TUI } from "@oh-my-pi/pi-tui";
 export class CountdownTimer {
 	private intervalId: ReturnType<typeof setInterval> | undefined;
 	private remainingSeconds: number;
+	private readonly initialMs: number;
 
 	constructor(
 		timeoutMs: number,
@@ -13,6 +14,7 @@ export class CountdownTimer {
 		private onTick: (seconds: number) => void,
 		private onExpire: () => void,
 	) {
+		this.initialMs = timeoutMs;
 		this.remainingSeconds = Math.ceil(timeoutMs / 1000);
 		this.onTick(this.remainingSeconds);
 
@@ -26,6 +28,13 @@ export class CountdownTimer {
 				this.onExpire();
 			}
 		}, 1000);
+	}
+
+	/** Reset the countdown to its initial value */
+	reset(): void {
+		this.remainingSeconds = Math.ceil(this.initialMs / 1000);
+		this.onTick(this.remainingSeconds);
+		this.tui?.requestRender();
 	}
 
 	dispose(): void {
