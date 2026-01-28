@@ -107,6 +107,15 @@ export async function runStatsCommand(cmd: StatsCommandArgs): Promise<void> {
 	// Start the dashboard server
 	const { port } = await startServer(cmd.port);
 	console.log(chalk.green(`Dashboard available at: http://localhost:${port}`));
+
+	// Open browser
+	const url = `http://localhost:${port}`;
+	const openCommand = process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
+	Bun.spawn(openCommand === "cmd" ? ["cmd", "/c", "start", url] : [openCommand, url], {
+		stdout: "ignore",
+		stderr: "ignore",
+	}).unref();
+
 	console.log("Press Ctrl+C to stop\n");
 
 	// Keep process running
