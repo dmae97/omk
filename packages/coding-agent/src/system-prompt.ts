@@ -1,6 +1,8 @@
 /**
  * System prompt construction and project context loading
  */
+import type * as fsTypes from "node:fs";
+import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { $ } from "bun";
@@ -129,6 +131,24 @@ function stripQuotes(value: string): string {
 
 const AGENTS_MD_PATTERN = "**/AGENTS.md";
 const AGENTS_MD_LIMIT = 200;
+const PROJECT_TREE_LIMIT = 2000;
+const PROJECT_TREE_PER_DIR_LIMIT = 10;
+const PROJECT_TREE_PER_DIR_DEPTH = 2;
+const PROJECT_TREE_IGNORED = new Set([
+	".git",
+	".hg",
+	".svn",
+	".next",
+	".turbo",
+	".cache",
+	".venv",
+	".idea",
+	".vscode",
+	"build",
+	"dist",
+	"node_modules",
+	"target",
+]);
 
 interface AgentsMdSearch {
 	scopePath: string;
@@ -139,6 +159,15 @@ interface AgentsMdSearch {
 
 function normalizePath(value: string): string {
 	return value.replace(/\\/g, "/");
+}
+
+function escapeXmlValue(value: string): string {
+	return value
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&apos;");
 }
 
 function listAgentsMdFiles(root: string, limit: number): string[] {
@@ -164,6 +193,145 @@ function buildAgentsMdSearch(cwd: string): AgentsMdSearch {
 		pattern: AGENTS_MD_PATTERN,
 		files,
 	};
+}
+
+type ProjectTreeEntry = {
+	name: string;
+	isDirectory: boolean;
+	path: string;
+};
+
+type ProjectTreeScan = {
+	children: Map<string, ProjectTreeEntry[]>;
+	truncated: boolean;
+	truncatedDirs: Set<string>;
+};
+
+async function scanProjectTree(root: string): Promise<ProjectTreeScan> {
+	const children = new Map<string, ProjectTreeEntry[]>();
+	let entryCount = 0;
+	let truncated = false;
+	const truncatedDirs = new Set<string>();
+
+	const queue: Array<{ dirPath: string; depth: number }> = [{ dirPath: root, depth: 0 }];
+	let cursor = 0;
+
+	while (cursor < queue.length && !truncated) {
+		const { dirPath, depth } = queue[cursor];
+		cursor += 1;
+		let entries: fsTypes.Dirent[];
+		try {
+			entries = await fs.readdir(dirPath, { withFileTypes: true });
+		} catch {
+			continue;
+		}
+
+		const filtered = entries.filter(entry => !PROJECT_TREE_IGNORED.has(entry.name));
+		const withStats = await Promise.all(
+			filtered.map(async entry => {
+				const entryPath = path.join(dirPath, entry.name);
+				try {
+					const stats = await fs.stat(entryPath);
+					return { entry, entryPath, mtimeMs: stats.mtimeMs };
+				} catch {
+					return { entry, entryPath, mtimeMs: 0 };
+				}
+			}),
+		);
+
+		withStats.sort((a, b) => {
+			if (a.mtimeMs !== b.mtimeMs) return b.mtimeMs - a.mtimeMs;
+			return a.entry.name.localeCompare(b.entry.name);
+		});
+
+		const perDirLimit = depth >= PROJECT_TREE_PER_DIR_DEPTH ? PROJECT_TREE_PER_DIR_LIMIT : null;
+		const limited = perDirLimit === null ? withStats : withStats.slice(0, perDirLimit);
+		const hasMoreEntries = perDirLimit !== null && withStats.length > perDirLimit;
+
+		const mapped: ProjectTreeEntry[] = [];
+		for (const entryWithStat of limited) {
+			if (entryCount >= PROJECT_TREE_LIMIT) {
+				truncated = true;
+				break;
+			}
+
+			mapped.push({
+				name: entryWithStat.entry.name,
+				isDirectory: entryWithStat.entry.isDirectory(),
+				path: entryWithStat.entryPath,
+			});
+			entryCount += 1;
+
+			if (entryWithStat.entry.isDirectory()) {
+				queue.push({ dirPath: entryWithStat.entryPath, depth: depth + 1 });
+			}
+		}
+
+		if (!truncated && hasMoreEntries) {
+			truncatedDirs.add(dirPath);
+		}
+		children.set(dirPath, mapped);
+	}
+
+	return { children, truncated, truncatedDirs };
+}
+
+function renderProjectTree(scan: ProjectTreeScan, root: string): string {
+	const lines: string[] = [];
+
+	const collapseDir = (dirPath: string): { path: string; entries: ProjectTreeEntry[] } | null => {
+		let currentPath = dirPath;
+		while (true) {
+			const entries = scan.children.get(currentPath);
+			if (!entries || entries.length === 0) return null;
+			const files = entries.filter(entry => !entry.isDirectory);
+			const dirs = entries.filter(entry => entry.isDirectory);
+			if (files.length === 0 && dirs.length === 1 && !scan.truncatedDirs.has(currentPath)) {
+				currentPath = dirs[0].path;
+				continue;
+			}
+			return { path: currentPath, entries };
+		}
+	};
+
+	const renderDir = (dirPath: string, indent: string): void => {
+		const collapsed = collapseDir(dirPath);
+		if (!collapsed) return;
+		const { path: collapsedPath, entries } = collapsed;
+		const relative = collapsedPath === root ? "." : path.relative(root, collapsedPath) || ".";
+		lines.push(`${indent}<dir path="${escapeXmlValue(relative)}">`);
+		const contentIndent = `${indent}  `;
+
+		const files = entries.filter(entry => !entry.isDirectory);
+		const dirs = entries.filter(entry => entry.isDirectory);
+
+		for (const entry of files) {
+			lines.push(`${contentIndent}- ${escapeXmlValue(entry.name)}`);
+		}
+
+		if (scan.truncatedDirs.has(collapsedPath)) {
+			lines.push(`${contentIndent}- ...`);
+		}
+
+		for (const entry of dirs) {
+			renderDir(entry.path, contentIndent);
+		}
+
+		lines.push(`${indent}</dir>`);
+	};
+
+	renderDir(root, "");
+
+	if (scan.truncated) {
+		lines.push("...");
+	}
+
+	return lines.join("\n");
+}
+
+async function buildProjectTreeSnapshot(root: string): Promise<string> {
+	const scan = await scanProjectTree(root);
+	return renderProjectTree(scan, root);
 }
 
 function getOsName(): string {
@@ -707,6 +875,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 	// Resolve context files: use provided or discover
 	const contextFiles = providedContextFiles ?? (await loadProjectContextFiles({ cwd: resolvedCwd }));
 	const agentsMdSearch = buildAgentsMdSearch(resolvedCwd);
+	const projectTree = await buildProjectTreeSnapshot(resolvedCwd);
 
 	// Build tool descriptions array
 	// Priority: toolNames (explicit list) > tools (Map) > defaults
@@ -744,6 +913,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 			customPrompt: resolvedCustomPrompt,
 			appendPrompt: resolvedAppendPrompt ?? "",
 			contextFiles,
+			projectTree,
 			agentsMdSearch,
 			git,
 			skills: filteredSkills,
@@ -759,6 +929,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		environment: await getEnvironmentInfo(),
 		systemPromptCustomization: systemPromptCustomization ?? "",
 		contextFiles,
+		projectTree,
 		agentsMdSearch,
 		git,
 		skills: filteredSkills,

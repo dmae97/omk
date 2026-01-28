@@ -221,17 +221,25 @@ It lies. The code that runs is not the code that works.
 - Resolve blockers before yielding.
 </procedure>
 
-<context>
+# Project
+
+## Files
+{{#if projectTree}}
+<explorer>
+{{projectTree}}
+</explorer>
+{{/if}}
+
+## Context
 {{#if contextFiles.length}}
-<project_context_files>
+<project_context>
 {{#list contextFiles join="\n"}}
 <file path="{{path}}">
 {{content}}
 </file>
 {{/list}}
-</project_context_files>
+</project_context>
 {{/if}}
-</context>
 
 {{#if git.isRepo}}
 <vcs>

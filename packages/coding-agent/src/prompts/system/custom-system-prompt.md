@@ -8,6 +8,12 @@
 {{#if contextFiles.length}}
 # Project Context
 
+{{#if projectTree}}
+<explorer>
+{{projectTree}}
+</explorer>
+{{/if}}
+
 <project_context_files>
 {{#list contextFiles join="\n"}}
 <file path="{{path}}">
