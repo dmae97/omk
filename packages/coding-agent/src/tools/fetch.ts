@@ -20,9 +20,11 @@ import { convertWithMarkitdown, fetchBinary } from "../web/scrapers/utils";
 import type { ToolSession } from ".";
 import { applyListLimit } from "./list-limit";
 import type { OutputMeta } from "./output-meta";
+import { allocateOutputArtifact } from "./output-utils";
 import { formatExpandHint } from "./render-utils";
 import { ToolAbortError } from "./tool-errors";
 import { toolResult } from "./tool-result";
+import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, truncateHead } from "./truncate";
 
 // =============================================================================
 // Types and Constants
@@ -921,29 +923,46 @@ export class FetchTool implements AgentTool<typeof fetchSchema, FetchToolDetails
 
 		const scratchDir = this.session.getArtifactsDir?.() ?? this.session.cwd;
 		const result = await renderUrl(url, effectiveTimeout, raw, scratchDir, signal);
+		const truncation = truncateHead(result.content, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
+		const needsArtifact = truncation.truncated;
+		let artifactId: string | undefined;
 
-		// Format output
-		let output = "";
-		output += `URL: ${result.finalUrl}\n`;
-		output += `Content-Type: ${result.contentType}\n`;
-		output += `Method: ${result.method}\n`;
-		if (result.notes.length > 0) {
-			output += `Notes: ${result.notes.join("; ")}\n`;
+		const buildOutput = (content: string): string => {
+			let output = "";
+			output += `URL: ${result.finalUrl}\n`;
+			output += `Content-Type: ${result.contentType}\n`;
+			output += `Method: ${result.method}\n`;
+			if (result.notes.length > 0) {
+				output += `Notes: ${result.notes.join("; ")}\n`;
+			}
+			output += `\n---\n\n`;
+			output += content;
+			return output;
+		};
+
+		if (needsArtifact) {
+			const { artifactPath, artifactId: allocatedId } = await allocateOutputArtifact(this.session, "fetch");
+			if (artifactPath) {
+				await Bun.write(artifactPath, buildOutput(result.content));
+				artifactId = allocatedId;
+			}
 		}
-		output += `\n---\n\n`;
-		output += result.content;
+
+		const output = buildOutput(needsArtifact ? truncation.content : result.content);
 
 		const details: FetchToolDetails = {
 			url: result.url,
 			finalUrl: result.finalUrl,
 			contentType: result.contentType,
 			method: result.method,
-			truncated: result.truncated,
+			truncated: result.truncated || needsArtifact,
 			notes: result.notes,
 		};
 
 		const resultBuilder = toolResult(details).text(output).sourceUrl(result.finalUrl);
-		if (result.truncated) {
+		if (needsArtifact) {
+			resultBuilder.truncation(truncation, { direction: "head", artifactId });
+		} else if (result.truncated) {
 			const outputLines = result.content.split("\n").length;
 			const outputBytes = Buffer.byteLength(result.content, "utf-8");
 			const totalBytes = Math.max(outputBytes + 1, MAX_OUTPUT_CHARS + 1);
