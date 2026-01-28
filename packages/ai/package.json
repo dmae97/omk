@@ -58,22 +58,22 @@
 	"dependencies": {
 		"@anthropic-ai/sdk": "^0.71.2",
 		"@aws-sdk/client-bedrock-runtime": "^3.975.0",
-		"@bufbuild/protobuf": "^2.10.2",
+		"@bufbuild/protobuf": "^2.11.0",
 		"@connectrpc/connect": "^2.1.1",
 		"@connectrpc/connect-node": "^2.1.1",
 		"@google/genai": "^1.38.0",
 		"@mistralai/mistralai": "^1.13.0",
 		"@oh-my-pi/pi-utils": "workspace:*",
-		"@sinclair/typebox": "^0.34.41",
-		"@smithy/node-http-handler": "4.4.8",
+		"@sinclair/typebox": "^0.34.48",
+		"@smithy/node-http-handler": "^4.4.8",
 		"ajv": "^8.17.1",
 		"ajv-formats": "^3.0.1",
 		"chalk": "^5.6.2",
 		"openai": "^6.16.0",
 		"partial-json": "^0.1.7",
 		"proxy-agent": "^6.5.0",
-		"undici": "^7.19.1",
-		"zod-to-json-schema": "^3.24.6"
+		"undici": "^7.19.2",
+		"zod-to-json-schema": "^3.25.1"
 	},
 	"keywords": [
 		"ai",

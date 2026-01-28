@@ -88,13 +88,13 @@
 		"@oh-my-pi/pi-ai": "workspace:*",
 		"@oh-my-pi/pi-tui": "workspace:*",
 		"@oh-my-pi/pi-utils": "workspace:*",
-		"@openai/agents": "^0.4.3",
-		"@sinclair/typebox": "^0.34.46",
+		"@openai/agents": "^0.4.4",
+		"@sinclair/typebox": "^0.34.48",
 		"ajv": "^8.17.1",
-		"chalk": "^5.5.0",
+		"chalk": "^5.6.2",
 		"cli-highlight": "^2.1.11",
-		"diff": "^8.0.2",
-		"file-type": "^21.1.1",
+		"diff": "^8.0.3",
+		"file-type": "^21.3.0",
 		"glob": "^13.0.0",
 		"handlebars": "^4.7.8",
 		"highlight.js": "^11.11.1",
@@ -103,7 +103,7 @@
 		"node-html-parser": "^7.0.2",
 		"smol-toml": "^1.6.0",
 		"strip-ansi": "^7.1.2",
-		"zod": "^4.3.5"
+		"zod": "^4.3.6"
 	},
 	"devDependencies": {
 		"@types/diff": "^8.0.0",
