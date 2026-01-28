@@ -163,15 +163,6 @@ function normalizePath(value: string): string {
 	return value.replace(/\\/g, "/");
 }
 
-function escapeXmlValue(value: string): string {
-	return value
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;")
-		.replace(/'/g, "&apos;");
-}
-
 function listAgentsMdFiles(root: string, limit: number): string[] {
 	try {
 		const entries = Array.from(
@@ -212,60 +203,128 @@ type ProjectTreeScan = {
 const RG_TIMEOUT_MS = 5000;
 
 /**
- * Get allowed paths (files and directories) based on gitignore rules using ripgrep.
+ * Scan project tree using ripgrep to respect gitignore.
  * Returns null if ripgrep is unavailable.
  */
-async function getGitignoreAllowedPaths(root: string): Promise<{ files: Set<string>; dirs: Set<string> } | null> {
+async function scanProjectTreeWithRg(root: string): Promise<ProjectTreeScan | null> {
 	const rgPath = await ensureTool("rg", { silent: true });
-	if (!rgPath) {
-		return null;
-	}
+	if (!rgPath) return null;
 
 	const args = ["--files", "--no-require-git", "--color=never", root];
 
+	let stdout: string;
 	try {
 		const signal = AbortSignal.timeout(RG_TIMEOUT_MS);
-		const { stdout, exitCode } = await runRg(rgPath, args, signal);
-
-		// rg exit codes: 0 = found files, 1 = no matches, other = error
-		if (exitCode !== 0 && exitCode !== 1) {
-			return null;
-		}
-
-		const files = new Set<string>();
-		const dirs = new Set<string>();
-
-		// Always include root
-		dirs.add(root);
-
-		for (const line of stdout.split("\n")) {
-			const filePath = line.trim();
-			if (!filePath) continue;
-
-			files.add(filePath);
-
-			// Walk up to collect all parent directories
-			let dir = path.dirname(filePath);
-			while (dir.length >= root.length && dir !== path.dirname(dir)) {
-				dirs.add(dir);
-				dir = path.dirname(dir);
-			}
-		}
-
-		return { files, dirs };
+		const result = await runRg(rgPath, args, signal);
+		if (result.exitCode !== 0 && result.exitCode !== 1) return null;
+		stdout = result.stdout;
 	} catch {
 		return null;
 	}
-}
 
-async function scanProjectTree(root: string): Promise<ProjectTreeScan> {
+	// Build directory contents map from file list
+	// Map<dirPath, Map<entryPath, isDirectory>>
+	const dirContents = new Map<string, Map<string, boolean>>();
+	dirContents.set(root, new Map());
+
+	for (const line of stdout.split("\n")) {
+		const filePath = line.trim();
+		if (!filePath) continue;
+
+		// Check static ignores on path components
+		const relative = path.relative(root, filePath);
+		const parts = relative.split(path.sep);
+		if (parts.some(p => PROJECT_TREE_IGNORED.has(p))) continue;
+
+		// Add file to its parent directory
+		const parent = path.dirname(filePath);
+		if (!dirContents.has(parent)) dirContents.set(parent, new Map());
+		dirContents.get(parent)!.set(filePath, false);
+
+		// Add all intermediate directories
+		let dir = parent;
+		while (dir.length >= root.length && dir !== path.dirname(dir)) {
+			const parentDir = path.dirname(dir);
+			if (!dirContents.has(parentDir)) dirContents.set(parentDir, new Map());
+			dirContents.get(parentDir)!.set(dir, true);
+			dir = parentDir;
+		}
+	}
+
+	// BFS to build the tree with limits
 	const children = new Map<string, ProjectTreeEntry[]>();
 	let entryCount = 0;
 	let truncated = false;
 	const truncatedDirs = new Set<string>();
 
-	// Get gitignore-based allowed paths (null if rg unavailable)
-	const allowedPaths = await getGitignoreAllowedPaths(root);
+	const queue: Array<{ dirPath: string; depth: number }> = [{ dirPath: root, depth: 0 }];
+	let cursor = 0;
+
+	while (cursor < queue.length && !truncated) {
+		const { dirPath, depth } = queue[cursor];
+		cursor += 1;
+
+		const contents = dirContents.get(dirPath);
+		if (!contents || contents.size === 0) continue;
+
+		// Get stats for sorting
+		const entries = Array.from(contents.entries());
+		const withStats = await Promise.all(
+			entries.map(async ([entryPath, isDirectory]) => {
+				try {
+					const stats = await fs.stat(entryPath);
+					return { entryPath, isDirectory, mtimeMs: stats.mtimeMs };
+				} catch {
+					return { entryPath, isDirectory, mtimeMs: 0 };
+				}
+			}),
+		);
+
+		withStats.sort((a, b) => {
+			if (a.mtimeMs !== b.mtimeMs) return b.mtimeMs - a.mtimeMs;
+			return path.basename(a.entryPath).localeCompare(path.basename(b.entryPath));
+		});
+
+		const perDirLimit = depth >= PROJECT_TREE_PER_DIR_DEPTH ? PROJECT_TREE_PER_DIR_LIMIT : null;
+		const limited = perDirLimit === null ? withStats : withStats.slice(0, perDirLimit);
+		const hasMoreEntries = perDirLimit !== null && withStats.length > perDirLimit;
+
+		const mapped: ProjectTreeEntry[] = [];
+		for (const { entryPath, isDirectory } of limited) {
+			if (entryCount >= PROJECT_TREE_LIMIT) {
+				truncated = true;
+				break;
+			}
+
+			mapped.push({
+				name: path.basename(entryPath),
+				isDirectory,
+				path: entryPath,
+			});
+			entryCount += 1;
+
+			if (isDirectory) {
+				queue.push({ dirPath: entryPath, depth: depth + 1 });
+			}
+		}
+
+		if (!truncated && hasMoreEntries) {
+			truncatedDirs.add(dirPath);
+		}
+		children.set(dirPath, mapped);
+	}
+
+	return { children, truncated, truncatedDirs };
+}
+
+/**
+ * Fallback scan using readdir when ripgrep is unavailable.
+ */
+async function scanProjectTreeFallback(root: string): Promise<ProjectTreeScan> {
+	const children = new Map<string, ProjectTreeEntry[]>();
+	let entryCount = 0;
+	let truncated = false;
+	const truncatedDirs = new Set<string>();
 
 	const queue: Array<{ dirPath: string; depth: number }> = [{ dirPath: root, depth: 0 }];
 	let cursor = 0;
@@ -280,21 +339,7 @@ async function scanProjectTree(root: string): Promise<ProjectTreeScan> {
 			continue;
 		}
 
-		const filtered = entries.filter(entry => {
-			// Always filter static ignored names
-			if (PROJECT_TREE_IGNORED.has(entry.name)) return false;
-
-			// If we have gitignore info, filter against allowed paths
-			if (allowedPaths) {
-				const entryPath = path.join(dirPath, entry.name);
-				if (entry.isDirectory()) {
-					return allowedPaths.dirs.has(entryPath);
-				}
-				return allowedPaths.files.has(entryPath);
-			}
-
-			return true;
-		});
+		const filtered = entries.filter(entry => !PROJECT_TREE_IGNORED.has(entry.name));
 		const withStats = await Promise.all(
 			filtered.map(async entry => {
 				const entryPath = path.join(dirPath, entry.name);
@@ -344,6 +389,12 @@ async function scanProjectTree(root: string): Promise<ProjectTreeScan> {
 	return { children, truncated, truncatedDirs };
 }
 
+async function scanProjectTree(root: string): Promise<ProjectTreeScan> {
+	const rgResult = await scanProjectTreeWithRg(root);
+	if (rgResult) return rgResult;
+	return scanProjectTreeFallback(root);
+}
+
 function renderProjectTree(scan: ProjectTreeScan, root: string): string {
 	const lines: string[] = [];
 
@@ -362,36 +413,38 @@ function renderProjectTree(scan: ProjectTreeScan, root: string): string {
 		}
 	};
 
-	const renderDir = (dirPath: string, indent: string): void => {
+	const renderDir = (dirPath: string, indent: string, isRoot: boolean): void => {
 		const collapsed = collapseDir(dirPath);
 		if (!collapsed) return;
 		const { path: collapsedPath, entries } = collapsed;
-		const relative = collapsedPath === root ? "." : path.relative(root, collapsedPath) || ".";
-		lines.push(`${indent}<dir path="${escapeXmlValue(relative)}">`);
-		const contentIndent = `${indent}  `;
+
+		// For non-root directories, print the header and indent contents
+		const contentIndent = isRoot ? indent : `${indent}  `;
+		if (!isRoot) {
+			const relative = path.relative(root, collapsedPath) || ".";
+			lines.push(`${indent}@ ${relative}`);
+		}
 
 		const files = entries.filter(entry => !entry.isDirectory);
 		const dirs = entries.filter(entry => entry.isDirectory);
 
 		for (const entry of files) {
-			lines.push(`${contentIndent}- ${escapeXmlValue(entry.name)}`);
+			lines.push(`${contentIndent}- ${entry.name}`);
 		}
 
 		if (scan.truncatedDirs.has(collapsedPath)) {
-			lines.push(`${contentIndent}- ...`);
+			lines.push(`${contentIndent}- …`);
 		}
 
 		for (const entry of dirs) {
-			renderDir(entry.path, contentIndent);
+			renderDir(entry.path, contentIndent, false);
 		}
-
-		lines.push(`${indent}</dir>`);
 	};
 
-	renderDir(root, "");
+	renderDir(root, "", true);
 
 	if (scan.truncated) {
-		lines.push("...");
+		lines.push("…");
 	}
 
 	return lines.join("\n");
