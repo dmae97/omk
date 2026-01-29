@@ -87,12 +87,9 @@ impl AnsiCodeTracker {
 		let parts: Vec<&str> = params.split(';').collect();
 		let mut i = 0;
 		while i < parts.len() {
-			let code = match parts[i].parse::<u32>() {
-				Ok(value) => value,
-				Err(_) => {
-					i += 1;
-					continue;
-				},
+			let Ok(code) = parts[i].parse::<u32>() else {
+				i += 1;
+				continue;
 			};
 
 			if code == 38 || code == 48 {
@@ -265,7 +262,7 @@ pub fn visible_width(text: &str) -> usize {
 
 	let is_pure_ascii = text
 		.bytes()
-		.all(|byte| byte >= 0x20 && byte <= 0x7e);
+		.all(|byte| (0x20..=0x7e).contains(&byte));
 	if is_pure_ascii {
 		return text.len();
 	}
@@ -343,7 +340,7 @@ pub fn truncate_to_width(text: &str, max_width: usize, ellipsis: &str, pad: bool
 		current_width += width;
 	}
 
-	let mut truncated = format!("{}\x1b[0m{}", result, ellipsis);
+	let mut truncated = format!("{result}\x1b[0m{ellipsis}");
 	if pad {
 		let truncated_width = visible_width(&truncated);
 		if truncated_width < max_width {
