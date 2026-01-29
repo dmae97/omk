@@ -1,5 +1,7 @@
 /* @ts-self-types="./pi_natives.d.ts" */
 
+import wasmPath from "./pi_natives_bg.wasm";
+
 /**
  * A compiled regex matcher that can be reused across multiple searches.
  */
@@ -651,6 +653,6 @@ const cachedTextEncoder = new TextEncoder();
 
 let WASM_VECTOR_LEN = 0;
 
-const wasmUrl = new URL('pi_natives_bg.wasm', import.meta.url);
+const wasmUrl = import.meta.resolve(wasmPath);
 const wasmInstantiated = await WebAssembly.instantiateStreaming(fetch(wasmUrl), __wbg_get_imports());
 const wasm = wasmInstantiated.instance.exports;

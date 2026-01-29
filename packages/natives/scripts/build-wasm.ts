@@ -41,8 +41,21 @@ if (optResult.exitCode !== 0) {
 	await fs.copyFile(wasmSrc, wasmDst);
 }
 
-// Copy JS bindings
-await fs.copyFile(path.join(pkgDir, "pi_natives.js"), path.join(wasmDir, "pi_natives.js"));
+// Copy and patch JS bindings for Bun compiled binary compatibility
+// wasm-bindgen uses `new URL('file.wasm', import.meta.url)` which doesn't work
+// in Bun's single-file executable. We use asset import + import.meta.resolve() instead.
+const jsDst = path.join(wasmDir, "pi_natives.js");
+await fs.copyFile(path.join(pkgDir, "pi_natives.js"), jsDst);
+let jsContent = await Bun.file(jsDst).text();
+jsContent = jsContent.replace(
+	"/* @ts-self-types=",
+	'import wasmPath from "./pi_natives_bg.wasm";\n\n/* @ts-self-types='
+);
+jsContent = jsContent.replace(
+	"const wasmUrl = new URL('pi_natives_bg.wasm', import.meta.url);",
+	"const wasmUrl = import.meta.resolve(wasmPath);"
+);
+await Bun.write(jsDst, jsContent);
 
 // Copy d.ts bindings
 await fs.copyFile(path.join(pkgDir, "pi_natives.d.ts"), path.join(wasmDir, "pi_natives.d.ts"));
