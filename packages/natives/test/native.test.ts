@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { type FindMatch, find, grep } from "../src/index";
+import { type FindMatch, find, grep, htmlToMarkdown } from "../src/index";
 
 let testDir: string;
 
@@ -101,6 +101,56 @@ describe("pi-natives", () => {
 			});
 
 			expect(result.totalMatches).toBe(3);
+		});
+	});
+
+	describe("htmlToMarkdown", () => {
+		it("should convert basic HTML to markdown", async () => {
+			const html = "<h1>Hello World</h1><p>This is a paragraph.</p>";
+			const markdown = await htmlToMarkdown(html);
+
+			expect(markdown).toContain("# Hello World");
+			expect(markdown).toContain("This is a paragraph.");
+		});
+
+		it("should handle links", async () => {
+			const html = '<p>Visit <a href="https://example.com">Example</a> for more info.</p>';
+			const markdown = await htmlToMarkdown(html);
+
+			expect(markdown).toContain("[Example](https://example.com)");
+		});
+
+		it("should handle lists", async () => {
+			const html = "<ul><li>Item 1</li><li>Item 2</li><li>Item 3</li></ul>";
+			const markdown = await htmlToMarkdown(html);
+
+			expect(markdown).toContain("- Item 1");
+			expect(markdown).toContain("- Item 2");
+			expect(markdown).toContain("- Item 3");
+		});
+
+		it("should handle code blocks", async () => {
+			const html = "<pre><code>const x = 42;</code></pre>";
+			const markdown = await htmlToMarkdown(html);
+
+			expect(markdown).toContain("const x = 42;");
+		});
+
+		it("should skip images when option is set", async () => {
+			const html = '<p>Text with <img src="image.jpg" alt="pic"> image</p>';
+			const withImages = await htmlToMarkdown(html);
+			const withoutImages = await htmlToMarkdown(html, { skipImages: true });
+
+			expect(withImages).toContain("pic");
+			expect(withoutImages).not.toContain("pic");
+		});
+
+		it("should clean content when option is set", async () => {
+			const html = "<nav>Navigation</nav><main><p>Main content</p></main><footer>Footer</footer>";
+			const cleaned = await htmlToMarkdown(html, { cleanContent: true });
+
+			expect(cleaned).toContain("Main content");
+			// Navigation/footer may or may not be removed depending on preprocessing
 		});
 	});
 });

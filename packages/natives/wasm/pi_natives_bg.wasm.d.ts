@@ -10,6 +10,7 @@ export const extract_segments: (a: number, b: number, c: number, d: number, e: n
 export const get_supported_languages: (a: number) => void;
 export const has_match: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
 export const highlight_code: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+export const html_to_markdown: (a: number, b: number, c: number, d: number) => void;
 export const photonimage_get_bytes: (a: number, b: number) => void;
 export const photonimage_get_bytes_jpeg: (a: number, b: number, c: number) => void;
 export const photonimage_get_height: (a: number) => number;

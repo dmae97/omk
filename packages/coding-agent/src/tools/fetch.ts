@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
+import { htmlToMarkdown } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { ptree } from "@oh-my-pi/pi-utils";
@@ -386,11 +387,11 @@ function parseFeedToMarkdown(content: string, maxItems = 10): string {
 }
 
 /**
- * Render HTML to text using jina, trafilatura, lynx, or html2text (in order of preference)
+ * Render HTML to markdown using native WASM, jina, trafilatura, lynx, or html2text (in order of preference)
  */
 async function renderHtmlToText(
 	url: string,
-	html: Blob | NodeJS.TypedArray | ArrayBufferLike | string | Bun.BlobPart[] | Bun.Archive,
+	html: string,
 	timeout: number,
 	scratchDir: string,
 	userSignal?: AbortSignal,
@@ -403,6 +404,17 @@ async function renderHtmlToText(
 		stderr: "full" as const,
 		signal,
 	};
+
+	// Try native WASM converter first (fastest, no network/subprocess)
+	try {
+		const content = await htmlToMarkdown(html, { cleanContent: true });
+		if (content.trim().length > 100 && !isLowQualityOutput(content)) {
+			return { content, ok: true, method: "native" };
+		}
+	} catch {
+		// Native converter failed, continue to next method
+		signal?.throwIfAborted();
+	}
 
 	// Try jina first (reader API)
 	try {
@@ -431,7 +443,7 @@ async function renderHtmlToText(
 		}
 	}
 
-	// Try lynx first (can't auto-install, system package)
+	// Try lynx (can't auto-install, system package)
 	const lynx = hasCommand("lynx");
 	if (lynx) {
 		const result = await ptree.exec(["lynx", "-dump", "-nolist", "-width", "250", url], execOptions);
@@ -450,8 +462,7 @@ async function renderHtmlToText(
 			if (result.ok) {
 				return { content: result.stdout, ok: true, method: "html2text" };
 			}
-		} catch {
-			// Ignore cleanup errors
+		} finally {
 			void fs.rm(tmpFile, { force: true }).catch(() => {});
 		}
 	}

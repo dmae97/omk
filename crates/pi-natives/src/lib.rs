@@ -4,6 +4,7 @@
 //! The JS side handles directory walking and file reading, then passes
 //! content here for matching.
 
+pub mod html;
 pub mod highlight;
 pub mod image;
 pub mod text;

@@ -102,6 +102,11 @@ export function has_match(content: string, pattern: string, ignore_case: boolean
 export function highlight_code(code: string, lang: string | null | undefined, colors: any): string;
 
 /**
+ * Convert HTML to Markdown.
+ */
+export function html_to_markdown(html: string, options: any): string;
+
+/**
  * Resize an image to the specified dimensions.
  */
 export function resize(image: PhotonImage, width: number, height: number, filter: SamplingFilter): PhotonImage;
