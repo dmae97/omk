@@ -265,7 +265,9 @@ export class CommandController {
 			info += `\n${theme.bold("LSP Servers")}\n`;
 			for (const server of this.ctx.lspServers) {
 				const statusColor = server.status === "ready" ? "success" : "error";
-				info += `${theme.fg("dim", `${server.name}:`)} ${theme.fg(statusColor, server.status)} ${theme.fg("dim", `(${server.fileTypes.join(", ")})`)}\n`;
+				const statusText =
+					server.status === "error" && server.error ? `${server.status}: ${server.error}` : server.status;
+				info += `${theme.fg("dim", `${server.name}:`)} ${theme.fg(statusColor, statusText)} ${theme.fg("dim", `(${server.fileTypes.join(", ")})`)}\n`;
 			}
 		}
 

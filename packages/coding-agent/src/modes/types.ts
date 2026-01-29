@@ -51,7 +51,7 @@ export interface InteractiveModeContext {
 	agent: AgentSession["agent"];
 	historyStorage?: HistoryStorage;
 	mcpManager?: MCPManager;
-	lspServers?: Array<{ name: string; status: "ready" | "error"; fileTypes: string[] }>;
+	lspServers?: Array<{ name: string; status: "ready" | "error"; fileTypes: string[]; error?: string }>;
 
 	// State
 	isInitialized: boolean;

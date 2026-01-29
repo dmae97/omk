@@ -204,7 +204,7 @@ export interface CreateAgentSessionResult {
 	/** Warning if session was restored with a different model than saved */
 	modelFallbackMessage?: string;
 	/** LSP servers that were warmed up at startup */
-	lspServers?: Array<{ name: string; status: "ready" | "error"; fileTypes: string[] }>;
+	lspServers?: Array<{ name: string; status: "ready" | "error"; fileTypes: string[]; error?: string }>;
 }
 
 // Re-exports

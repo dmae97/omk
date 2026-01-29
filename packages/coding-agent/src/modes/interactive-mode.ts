@@ -134,8 +134,9 @@ export class InteractiveMode implements InteractiveModeContext {
 	private planModePreviousTools: string[] | undefined;
 	private planModePreviousModel: Model<any> | undefined;
 	private planModeHasEntered = false;
-	public readonly lspServers: Array<{ name: string; status: "ready" | "error"; fileTypes: string[] }> | undefined =
-		undefined;
+	public readonly lspServers:
+		| Array<{ name: string; status: "ready" | "error"; fileTypes: string[]; error?: string }>
+		| undefined = undefined;
 	public mcpManager?: import("../mcp").MCPManager;
 	private readonly toolUiContextSetter: (uiContext: ExtensionUIContext, hasUI: boolean) => void;
 
@@ -151,7 +152,9 @@ export class InteractiveMode implements InteractiveModeContext {
 		version: string,
 		changelogMarkdown: string | undefined = undefined,
 		setToolUIContext: (uiContext: ExtensionUIContext, hasUI: boolean) => void = () => {},
-		lspServers: Array<{ name: string; status: "ready" | "error"; fileTypes: string[] }> | undefined = undefined,
+		lspServers:
+			| Array<{ name: string; status: "ready" | "error"; fileTypes: string[]; error?: string }>
+			| undefined = undefined,
 		mcpManager?: import("../mcp").MCPManager,
 	) {
 		this.session = session;

@@ -11,6 +11,9 @@
   - `View: system info` - Show environment details
   - `Clear: artifact cache` - Remove old session artifacts
 
+### Fixed
+- Fixed LSP server errors not being visible in `/session` output or logs when startup fails
+
 ## [8.12.7] - 2026-01-29
 
 ### Fixed

@@ -118,6 +118,7 @@ export async function warmupLspServers(cwd: string, options?: LspWarmupOptions):
 			});
 		} else {
 			const errorMsg = result.reason?.message ?? String(result.reason);
+			logger.warn("LSP server failed to start", { server: name, error: errorMsg });
 			servers.push({
 				name,
 				status: "error",

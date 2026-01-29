@@ -87,7 +87,7 @@ async function runInteractiveMode(
 	versionCheckPromise: Promise<string | undefined>,
 	initialMessages: string[],
 	setExtensionUIContext: (uiContext: ExtensionUIContext, hasUI: boolean) => void,
-	lspServers: Array<{ name: string; status: "ready" | "error"; fileTypes: string[] }> | undefined,
+	lspServers: Array<{ name: string; status: "ready" | "error"; fileTypes: string[]; error?: string }> | undefined,
 	mcpManager: import("./mcp").MCPManager | undefined,
 	initialMessage?: string,
 	initialImages?: ImageContent[],
