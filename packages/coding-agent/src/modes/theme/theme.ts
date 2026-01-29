@@ -1,14 +1,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import {
+	type HighlightColors as NativeHighlightColors,
+	highlightCode as nativeHighlightCode,
+	supportsLanguage as nativeSupportsLanguage,
+} from "@oh-my-pi/pi-natives";
 import type { EditorTheme, MarkdownTheme, SelectListTheme, SymbolTheme } from "@oh-my-pi/pi-tui";
 import { adjustHsv, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { TypeCompiler } from "@sinclair/typebox/compiler";
-import {
-	highlightCode as nativeHighlightCode,
-	type HighlightColors as NativeHighlightColors,
-	supportsLanguage as nativeSupportsLanguage,
-} from "@oh-my-pi/pi-natives";
 import chalk from "chalk";
 import { getCustomThemesDir } from "../../config";
 // Embed theme JSON files at build time

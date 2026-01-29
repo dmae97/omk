@@ -74,7 +74,7 @@ async function streamLinesFromFile(
 	let sawAnyByte = false;
 	let endedWithNewline = false;
 	let firstLinePreviewBytes = 0;
-	let firstLinePreviewChunks: Buffer[] = [];
+	const firstLinePreviewChunks: Buffer[] = [];
 	let firstLineByteLength: number | undefined;
 	let selectedBytesTotal = 0;
 	let selectedLinesSeen = 0;
@@ -727,7 +727,6 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				stoppedByByteLimit,
 				firstLinePreview,
 				firstLineByteLength,
-				selectedBytesTotal,
 			} = streamResult;
 
 			// Check if offset is out of bounds - return graceful message instead of throwing
@@ -742,12 +741,10 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			}
 
 			const selectedContent = collectedLines.join("\n");
-			const userLimitedLines =
-				limit !== undefined ? Math.min(limit, Math.max(0, totalFileLines - startLine)) : undefined;
+			const userLimitedLines = limit !== undefined ? collectedLines.length : undefined;
 
-			const totalSelectedLines =
-				limit !== undefined ? Math.min(limit, Math.max(0, totalFileLines - startLine)) : totalFileLines - startLine;
-			const totalSelectedBytes = selectedBytesTotal;
+			const totalSelectedLines = totalFileLines - startLine;
+			const totalSelectedBytes = collectedBytes;
 			const wasTruncated = collectedLines.length < totalSelectedLines || stoppedByByteLimit;
 			const firstLineExceedsLimit = firstLineByteLength !== undefined && firstLineByteLength > DEFAULT_MAX_BYTES;
 

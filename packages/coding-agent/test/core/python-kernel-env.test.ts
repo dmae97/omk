@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { SettingsManager } from "@oh-my-pi/pi-coding-agent";
 import { PythonKernel } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
 import { PYTHON_PRELUDE } from "@oh-my-pi/pi-coding-agent/ipy/prelude";
-import * as shell from "@oh-my-pi/pi-coding-agent/utils/shell";
 import * as shellSnapshot from "@oh-my-pi/pi-coding-agent/utils/shell-snapshot";
 import { TempDir } from "@oh-my-pi/pi-utils";
 
@@ -70,7 +70,7 @@ describe("PythonKernel.start (local gateway)", () => {
 		});
 		globalThis.fetch = fetchSpy as unknown as typeof fetch;
 
-		const shellSpy = vi.spyOn(shell, "getShellConfig").mockResolvedValue({
+		const shellSpy = vi.spyOn(SettingsManager, "getGlobalShellConfig").mockResolvedValue({
 			shell: "/bin/bash",
 			args: ["-lc"],
 			env: {
