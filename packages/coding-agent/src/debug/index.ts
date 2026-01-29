@@ -1,0 +1,362 @@
+/**
+ * Debug command handler with interactive menu.
+ *
+ * Provides tools for debugging, bug report generation, and system diagnostics.
+ */
+import { Container, Loader, type SelectItem, SelectList, Spacer, Text } from "@oh-my-pi/pi-tui";
+import { getSessionsDir } from "../config";
+import { DynamicBorder } from "../modes/components/dynamic-border";
+import { getSelectListTheme, getSymbolTheme, theme } from "../modes/theme/theme";
+import type { InteractiveModeContext } from "../modes/types";
+import { generateHeapSnapshotData, type ProfilerSession, startCpuProfile } from "./profiler";
+import { clearArtifactCache, createReportBundle, getArtifactCacheStats, getRecentLogs } from "./report-bundle";
+import { collectSystemInfo, formatSystemInfo } from "./system-info";
+
+/** Debug menu options */
+const DEBUG_MENU_ITEMS: SelectItem[] = [
+	{ value: "performance", label: "Report: performance issue", description: "Profile CPU, reproduce, then bundle" },
+	{ value: "dump", label: "Report: dump session", description: "Create report bundle immediately" },
+	{ value: "memory", label: "Report: memory issue", description: "Heap snapshot + bundle" },
+	{ value: "logs", label: "View: recent logs", description: "Show last 50 log entries" },
+	{ value: "system", label: "View: system info", description: "Show environment details" },
+	{ value: "clear-cache", label: "Clear: artifact cache", description: "Remove old session artifacts" },
+];
+
+/**
+ * Debug selector component.
+ */
+export class DebugSelectorComponent extends Container {
+	private selectList: SelectList;
+
+	constructor(
+		private ctx: InteractiveModeContext,
+		onDone: () => void,
+	) {
+		super();
+
+		// Title
+		this.addChild(new DynamicBorder());
+		this.addChild(new Text(theme.bold(theme.fg("accent", "Debug Tools")), 1, 0));
+		this.addChild(new Spacer(1));
+
+		// Select list
+		this.selectList = new SelectList(DEBUG_MENU_ITEMS, 6, getSelectListTheme());
+
+		this.selectList.onSelect = item => {
+			onDone();
+			void this.handleSelection(item.value);
+		};
+
+		this.selectList.onCancel = () => {
+			onDone();
+		};
+
+		this.addChild(this.selectList);
+		this.addChild(new DynamicBorder());
+	}
+
+	handleInput(keyData: string): void {
+		this.selectList.handleInput(keyData);
+	}
+
+	private async handleSelection(value: string): Promise<void> {
+		switch (value) {
+			case "performance":
+				await this.handlePerformanceReport();
+				break;
+			case "dump":
+				await this.handleDumpReport();
+				break;
+			case "memory":
+				await this.handleMemoryReport();
+				break;
+			case "logs":
+				await this.handleViewLogs();
+				break;
+			case "system":
+				await this.handleViewSystemInfo();
+				break;
+			case "clear-cache":
+				await this.handleClearCache();
+				break;
+		}
+	}
+
+	private async handlePerformanceReport(): Promise<void> {
+		// Start profiling
+		let session: ProfilerSession;
+		try {
+			session = await startCpuProfile();
+		} catch (err) {
+			this.ctx.showError(`Failed to start profiler: ${err instanceof Error ? err.message : String(err)}`);
+			return;
+		}
+
+		// Show message and wait for keypress
+		this.ctx.chatContainer.addChild(new Spacer(1));
+		this.ctx.chatContainer.addChild(new Text(theme.fg("accent", `${theme.status.info} CPU profiling started`), 1, 0));
+		this.ctx.chatContainer.addChild(new Spacer(1));
+		this.ctx.chatContainer.addChild(
+			new Text(theme.fg("muted", "Reproduce the performance issue, then press Enter to stop profiling."), 1, 0),
+		);
+		this.ctx.ui.requestRender();
+
+		// Wait for Enter keypress
+		const { promise, resolve } = Promise.withResolvers<void>();
+		const originalOnEscape = this.ctx.editor.onEscape;
+		const originalOnSubmit = this.ctx.editor.onSubmit;
+
+		this.ctx.editor.onSubmit = () => {
+			this.ctx.editor.onEscape = originalOnEscape;
+			this.ctx.editor.onSubmit = originalOnSubmit;
+			resolve();
+		};
+
+		this.ctx.editor.onEscape = () => {
+			this.ctx.editor.onEscape = originalOnEscape;
+			this.ctx.editor.onSubmit = originalOnSubmit;
+			resolve();
+		};
+
+		await promise;
+
+		// Stop profiling and create report
+		const loader = new Loader(
+			this.ctx.ui,
+			spinner => theme.fg("accent", spinner),
+			text => theme.fg("muted", text),
+			"Generating report...",
+			getSymbolTheme().spinnerFrames,
+		);
+		this.ctx.statusContainer.addChild(loader);
+		this.ctx.ui.requestRender();
+
+		try {
+			const cpuProfile = await session.stop();
+			const result = await createReportBundle({
+				sessionFile: this.ctx.sessionManager.getSessionFile(),
+				settings: this.getResolvedSettings(),
+				cpuProfile,
+			});
+
+			loader.stop();
+			this.ctx.statusContainer.clear();
+
+			this.ctx.chatContainer.addChild(new Spacer(1));
+			this.ctx.chatContainer.addChild(
+				new Text(theme.fg("success", `${theme.status.success} Performance report saved`), 1, 0),
+			);
+			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", result.path), 1, 0));
+			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", `Files: ${result.files.length}`), 1, 0));
+		} catch (err) {
+			loader.stop();
+			this.ctx.statusContainer.clear();
+			this.ctx.showError(`Failed to create report: ${err instanceof Error ? err.message : String(err)}`);
+		}
+
+		this.ctx.ui.requestRender();
+	}
+
+	private async handleDumpReport(): Promise<void> {
+		const loader = new Loader(
+			this.ctx.ui,
+			spinner => theme.fg("accent", spinner),
+			text => theme.fg("muted", text),
+			"Creating report bundle...",
+			getSymbolTheme().spinnerFrames,
+		);
+		this.ctx.statusContainer.addChild(loader);
+		this.ctx.ui.requestRender();
+
+		try {
+			const result = await createReportBundle({
+				sessionFile: this.ctx.sessionManager.getSessionFile(),
+				settings: this.getResolvedSettings(),
+			});
+
+			loader.stop();
+			this.ctx.statusContainer.clear();
+
+			this.ctx.chatContainer.addChild(new Spacer(1));
+			this.ctx.chatContainer.addChild(
+				new Text(theme.fg("success", `${theme.status.success} Report bundle saved`), 1, 0),
+			);
+			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", result.path), 1, 0));
+			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", `Files: ${result.files.length}`), 1, 0));
+		} catch (err) {
+			loader.stop();
+			this.ctx.statusContainer.clear();
+			this.ctx.showError(`Failed to create report: ${err instanceof Error ? err.message : String(err)}`);
+		}
+
+		this.ctx.ui.requestRender();
+	}
+
+	private async handleMemoryReport(): Promise<void> {
+		const loader = new Loader(
+			this.ctx.ui,
+			spinner => theme.fg("accent", spinner),
+			text => theme.fg("muted", text),
+			"Generating heap snapshot...",
+			getSymbolTheme().spinnerFrames,
+		);
+		this.ctx.statusContainer.addChild(loader);
+		this.ctx.ui.requestRender();
+
+		try {
+			const heapSnapshot = generateHeapSnapshotData();
+			loader.setText("Creating report bundle...");
+
+			const result = await createReportBundle({
+				sessionFile: this.ctx.sessionManager.getSessionFile(),
+				settings: this.getResolvedSettings(),
+				heapSnapshot,
+			});
+
+			loader.stop();
+			this.ctx.statusContainer.clear();
+
+			this.ctx.chatContainer.addChild(new Spacer(1));
+			this.ctx.chatContainer.addChild(
+				new Text(theme.fg("success", `${theme.status.success} Memory report saved`), 1, 0),
+			);
+			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", result.path), 1, 0));
+			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", `Files: ${result.files.length}`), 1, 0));
+		} catch (err) {
+			loader.stop();
+			this.ctx.statusContainer.clear();
+			this.ctx.showError(`Failed to create report: ${err instanceof Error ? err.message : String(err)}`);
+		}
+
+		this.ctx.ui.requestRender();
+	}
+
+	private async handleViewLogs(): Promise<void> {
+		try {
+			const logs = await getRecentLogs(50);
+			if (!logs) {
+				this.ctx.showWarning("No log entries found for today.");
+				return;
+			}
+
+			this.ctx.chatContainer.addChild(new Spacer(1));
+			this.ctx.chatContainer.addChild(new DynamicBorder());
+			this.ctx.chatContainer.addChild(new Text(theme.bold(theme.fg("accent", "Recent Logs")), 1, 0));
+			this.ctx.chatContainer.addChild(new Spacer(1));
+
+			// Display logs with dim styling
+			const lines = logs.split("\n").slice(-50);
+			for (const line of lines) {
+				if (line.trim()) {
+					this.ctx.chatContainer.addChild(new Text(theme.fg("dim", line), 1, 0));
+				}
+			}
+
+			this.ctx.chatContainer.addChild(new DynamicBorder());
+		} catch (err) {
+			this.ctx.showError(`Failed to read logs: ${err instanceof Error ? err.message : String(err)}`);
+		}
+
+		this.ctx.ui.requestRender();
+	}
+
+	private async handleViewSystemInfo(): Promise<void> {
+		try {
+			const info = await collectSystemInfo();
+			const formatted = formatSystemInfo(info);
+
+			this.ctx.chatContainer.addChild(new Spacer(1));
+			this.ctx.chatContainer.addChild(new DynamicBorder());
+			this.ctx.chatContainer.addChild(new Text(formatted, 1, 0));
+			this.ctx.chatContainer.addChild(new DynamicBorder());
+		} catch (err) {
+			this.ctx.showError(`Failed to collect system info: ${err instanceof Error ? err.message : String(err)}`);
+		}
+
+		this.ctx.ui.requestRender();
+	}
+
+	private async handleClearCache(): Promise<void> {
+		const sessionsDir = getSessionsDir();
+
+		// Get stats first
+		const stats = await getArtifactCacheStats(sessionsDir);
+
+		if (stats.count === 0) {
+			this.ctx.showStatus("Artifact cache is empty.");
+			return;
+		}
+
+		const sizeStr = formatBytes(stats.totalSize);
+		const oldestStr = stats.oldestDate ? stats.oldestDate.toLocaleDateString() : "unknown";
+
+		// Show confirmation
+		const confirmed = await this.ctx.showHookConfirm(
+			"Clear Artifact Cache",
+			`Found ${stats.count} artifact files (${sizeStr})\nOldest: ${oldestStr}\n\nRemove artifacts older than 30 days?`,
+		);
+
+		if (!confirmed) {
+			this.ctx.showStatus("Cache clear cancelled.");
+			return;
+		}
+
+		// Clear cache
+		const loader = new Loader(
+			this.ctx.ui,
+			spinner => theme.fg("accent", spinner),
+			text => theme.fg("muted", text),
+			"Clearing artifact cache...",
+			getSymbolTheme().spinnerFrames,
+		);
+		this.ctx.statusContainer.addChild(loader);
+		this.ctx.ui.requestRender();
+
+		try {
+			const result = await clearArtifactCache(sessionsDir, 30);
+
+			loader.stop();
+			this.ctx.statusContainer.clear();
+
+			this.ctx.chatContainer.addChild(new Spacer(1));
+			this.ctx.chatContainer.addChild(
+				new Text(
+					theme.fg("success", `${theme.status.success} Cleared ${result.removed} artifact directories`),
+					1,
+					0,
+				),
+			);
+		} catch (err) {
+			loader.stop();
+			this.ctx.statusContainer.clear();
+			this.ctx.showError(`Failed to clear cache: ${err instanceof Error ? err.message : String(err)}`);
+		}
+
+		this.ctx.ui.requestRender();
+	}
+
+	private getResolvedSettings(): Record<string, unknown> {
+		// Extract key settings for the report
+		return {
+			model: this.ctx.session.model?.id,
+			thinkingLevel: this.ctx.session.thinkingLevel,
+			planModeEnabled: this.ctx.planModeEnabled,
+			toolOutputExpanded: this.ctx.toolOutputExpanded,
+			hideThinkingBlock: this.ctx.hideThinkingBlock,
+		};
+	}
+}
+
+function formatBytes(bytes: number): string {
+	if (bytes < 1024) return `${bytes} B`;
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Show the debug selector.
+ */
+export function showDebugSelector(ctx: InteractiveModeContext, done: () => void): DebugSelectorComponent {
+	const selector = new DebugSelectorComponent(ctx, done);
+	return selector;
+}

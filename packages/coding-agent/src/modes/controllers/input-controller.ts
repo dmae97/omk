@@ -64,7 +64,7 @@ export class InputController {
 		this.ctx.editor.onAltP = () => this.ctx.showModelSelector({ temporaryOnly: true });
 
 		// Global debug handler on TUI (works regardless of focus)
-		this.ctx.ui.onDebug = () => void this.ctx.handleDebugCommand();
+		this.ctx.ui.onDebug = () => this.ctx.showDebugSelector();
 		this.ctx.editor.onCtrlL = () => this.ctx.showModelSelector();
 		this.ctx.editor.onCtrlR = () => this.ctx.showHistorySearch();
 		this.ctx.editor.onCtrlT = () => this.ctx.toggleTodoExpansion();
@@ -293,7 +293,7 @@ export class InputController {
 				return;
 			}
 			if (text === "/debug") {
-				void this.ctx.handleDebugCommand();
+				this.ctx.showDebugSelector();
 				this.ctx.editor.setText("");
 				return;
 			}

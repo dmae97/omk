@@ -3,6 +3,7 @@ import type { OAuthProvider } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Input, Loader, Spacer, Text } from "@oh-my-pi/pi-tui";
 import { getAgentDbPath } from "../../config";
+import { DebugSelectorComponent } from "../../debug";
 import { disableProvider, enableProvider } from "../../discovery";
 import { AssistantMessageComponent } from "../../modes/components/assistant-message";
 import { ExtensionDashboard } from "../../modes/components/extensions";
@@ -622,6 +623,13 @@ export class SelectorController {
 					this.ctx.ui.requestRender();
 				},
 			);
+			return { component: selector, focus: selector };
+		});
+	}
+
+	showDebugSelector(): void {
+		this.showSelector(done => {
+			const selector = new DebugSelectorComponent(this.ctx, done);
 			return { component: selector, focus: selector };
 		});
 	}

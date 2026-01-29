@@ -861,8 +861,8 @@ export class InteractiveMode implements InteractiveModeContext {
 		return this.commandController.handleForkCommand();
 	}
 
-	handleDebugCommand(): Promise<void> {
-		return this.commandController.handleDebugCommand();
+	showDebugSelector(): void {
+		this.selectorController.showDebugSelector();
 	}
 
 	handleArminSaysHi(): void {

@@ -144,7 +144,6 @@ export interface InteractiveModeContext {
 	handleDumpCommand(): Promise<void>;
 	handleClearCommand(): Promise<void>;
 	handleForkCommand(): Promise<void>;
-	handleDebugCommand(): Promise<void>;
 	handleArminSaysHi(): void;
 	handleBashCommand(command: string, excludeFromContext?: boolean): Promise<void>;
 	handlePythonCommand(code: string, excludeFromContext?: boolean): Promise<void>;
@@ -164,6 +163,7 @@ export interface InteractiveModeContext {
 	handleResumeSession(sessionPath: string): Promise<void>;
 	showOAuthSelector(mode: "login" | "logout"): Promise<void>;
 	showHookConfirm(title: string, message: string): Promise<boolean>;
+	showDebugSelector(): void;
 
 	// Input handling
 	handleCtrlC(): void;

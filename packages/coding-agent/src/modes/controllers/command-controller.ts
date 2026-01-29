@@ -5,7 +5,6 @@ import type { UsageLimit, UsageReport } from "@oh-my-pi/pi-ai";
 import { Loader, Markdown, Spacer, Text, visibleWidth } from "@oh-my-pi/pi-tui";
 import { $ } from "bun";
 import { nanoid } from "nanoid";
-import { getDebugLogPath } from "../../config";
 import { loadCustomShare } from "../../export/custom-share";
 import type { CompactOptions } from "../../extensibility/extensions/types";
 import { getGatewayStatus } from "../../ipy/gateway-coordinator";
@@ -443,46 +442,6 @@ export class CommandController {
 		this.ctx.chatContainer.addChild(new Spacer(1));
 		this.ctx.chatContainer.addChild(
 			new Text(`${theme.fg("accent", `${theme.status.success} Session forked to ${shortPath}`)}`, 1, 1),
-		);
-		this.ctx.ui.requestRender();
-	}
-
-	async handleDebugCommand(): Promise<void> {
-		const width = this.ctx.ui.terminal.columns;
-		const allLines = this.ctx.ui.render(width);
-
-		const debugLogPath = getDebugLogPath();
-		const debugData = [
-			`Debug output at ${new Date().toISOString()}`,
-			`Terminal width: ${width}`,
-			`Total lines: ${allLines.length}`,
-			"",
-			"=== All rendered lines with visible widths ===",
-			...allLines.map((line, idx) => {
-				const vw = visibleWidth(line);
-				const escaped = JSON.stringify(line);
-				return `[${idx}] (w=${vw}) ${escaped}`;
-			}),
-			"",
-			"=== Agent messages (JSONL) ===",
-			...this.ctx.session.messages.map(msg => JSON.stringify(msg)),
-			"",
-		].join("\n");
-
-		try {
-			await Bun.write(debugLogPath, debugData);
-		} catch (error) {
-			this.ctx.showError(`Failed to write debug log: ${error instanceof Error ? error.message : String(error)}`);
-			return;
-		}
-
-		this.ctx.chatContainer.addChild(new Spacer(1));
-		this.ctx.chatContainer.addChild(
-			new Text(
-				`${theme.fg("accent", `${theme.status.success} Debug log written`)}\n${theme.fg("muted", debugLogPath)}`,
-				1,
-				1,
-			),
 		);
 		this.ctx.ui.requestRender();
 	}

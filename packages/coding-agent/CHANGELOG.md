@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+- Added `/debug` command with interactive menu for bug report generation:
+  - `Report: performance issue` - CPU profiling with reproduction flow
+  - `Report: dump session` - Immediate session bundle creation
+  - `Report: memory issue` - Heap snapshot with bundle
+  - `View: recent logs` - Display last 50 log entries
+  - `View: system info` - Show environment details
+  - `Clear: artifact cache` - Remove old session artifacts
+
 ## [8.12.7] - 2026-01-29
 
 ### Fixed
