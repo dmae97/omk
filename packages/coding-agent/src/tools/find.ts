@@ -1,9 +1,10 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
+import { find as wasmFind } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
-import { globPaths, isEnoent, untilAborted } from "@oh-my-pi/pi-utils";
+import { isEnoent, untilAborted } from "@oh-my-pi/pi-utils";
 import type { Static } from "@sinclair/typebox";
 import { Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
@@ -169,21 +170,25 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 			}
 
 			let lines: string[];
+			const timeoutSignal = AbortSignal.timeout(GLOB_TIMEOUT_MS);
+			const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 			try {
-				lines = await globPaths(globPattern, {
-					cwd: searchPath,
-					gitignore: true,
-					dot: includeHidden,
-					signal,
-					timeoutMs: GLOB_TIMEOUT_MS,
-				});
+				const result = await untilAborted(combinedSignal, () =>
+					wasmFind({
+						pattern: globPattern,
+						path: searchPath,
+						fileType: "file",
+						hidden: includeHidden,
+					}),
+				);
+				lines = result.matches.map(match => match.path);
 			} catch (error) {
 				if (error instanceof Error && error.name === "AbortError") {
+					if (timeoutSignal.aborted && !signal?.aborted) {
+						const timeoutSeconds = Math.max(1, Math.round(GLOB_TIMEOUT_MS / 1000));
+						throw new ToolError(`find timed out after ${timeoutSeconds}s`);
+					}
 					throw new ToolAbortError();
-				}
-				if (error instanceof Error && error.name === "TimeoutError") {
-					const timeoutSeconds = Math.max(1, Math.round(GLOB_TIMEOUT_MS / 1000));
-					throw new ToolError(`glob timed out after ${timeoutSeconds}s`);
 				}
 				throw error;
 			}
@@ -197,13 +202,13 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 
 			for (const rawLine of lines) {
 				throwIfAborted(signal);
-				const line = rawLine.replace(/\r$/, "").trim();
+				const line = rawLine;
 				if (!line) {
 					continue;
 				}
 
 				const hadTrailingSlash = line.endsWith("/") || line.endsWith("\\");
-				let relativePath = line.replace(/\\/g, "/");
+				let relativePath = line;
 
 				let mtimeMs = 0;
 				let isDirectory = false;

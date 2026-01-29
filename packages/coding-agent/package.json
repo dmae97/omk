@@ -58,10 +58,6 @@
 			"types": "./src/internal-urls/*.ts",
 			"import": "./src/internal-urls/*.ts"
 		},
-		"./vendor/photon/*": {
-			"types": "./src/vendor/photon/*",
-			"import": "./src/vendor/photon/*"
-		},
 		"./*": {
 			"types": "./src/*.ts",
 			"import": "./src/*.ts"
@@ -86,6 +82,7 @@
 		"@oh-my-pi/omp-stats": "workspace:*",
 		"@oh-my-pi/pi-agent-core": "workspace:*",
 		"@oh-my-pi/pi-ai": "workspace:*",
+		"@oh-my-pi/pi-natives": "workspace:*",
 		"@oh-my-pi/pi-tui": "workspace:*",
 		"@oh-my-pi/pi-utils": "workspace:*",
 		"@openai/agents": "^0.4.4",

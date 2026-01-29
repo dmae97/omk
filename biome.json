@@ -12,7 +12,8 @@
 			"suspicious": {
 				"noExplicitAny": "off",
 				"noControlCharactersInRegex": "off",
-				"noEmptyInterface": "off"
+				"noEmptyInterface": "off",
+				"noConstEnum": "off"
 			}
 		}
 	},

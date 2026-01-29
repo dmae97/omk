@@ -1,4 +1,4 @@
-import * as photon from "../vendor/photon";
+import { PhotonImage } from "@oh-my-pi/pi-natives";
 
 /**
  * Convert image to PNG format for terminal display.
@@ -14,16 +14,12 @@ export async function convertToPng(
 	}
 
 	try {
-		const image = photon.PhotonImage.new_from_byteslice(new Uint8Array(Buffer.from(base64Data, "base64")));
-		try {
-			const pngBuffer = image.get_bytes();
-			return {
-				data: Buffer.from(pngBuffer).toString("base64"),
-				mimeType: "image/png",
-			};
-		} finally {
-			image.free();
-		}
+		using image = await PhotonImage.new_from_byteslice(new Uint8Array(Buffer.from(base64Data, "base64")));
+		const pngBuffer = await image.get_bytes();
+		return {
+			data: Buffer.from(pngBuffer).toString("base64"),
+			mimeType: "image/png",
+		};
 	} catch {
 		// Conversion failed
 		return null;

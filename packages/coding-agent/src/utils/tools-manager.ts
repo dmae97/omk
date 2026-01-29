@@ -3,9 +3,9 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { logger, TempDir } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
-import { APP_NAME, getBinDir } from "../config";
+import { APP_NAME, getToolsDir } from "../config";
 
-const TOOLS_DIR = getBinDir();
+const TOOLS_DIR = getToolsDir();
 const TOOL_DOWNLOAD_TIMEOUT_MS = 15000;
 
 interface ToolConfig {
@@ -18,46 +18,6 @@ interface ToolConfig {
 }
 
 const TOOLS: Record<string, ToolConfig> = {
-	fd: {
-		name: "fd",
-		repo: "sharkdp/fd",
-		binaryName: "fd",
-		tagPrefix: "v",
-		getAssetName: (version, plat, architecture) => {
-			if (plat === "darwin") {
-				const archStr = architecture === "arm64" ? "aarch64" : "x86_64";
-				return `fd-v${version}-${archStr}-apple-darwin.tar.gz`;
-			} else if (plat === "linux") {
-				const archStr = architecture === "arm64" ? "aarch64" : "x86_64";
-				return `fd-v${version}-${archStr}-unknown-linux-gnu.tar.gz`;
-			} else if (plat === "win32") {
-				const archStr = architecture === "arm64" ? "aarch64" : "x86_64";
-				return `fd-v${version}-${archStr}-pc-windows-msvc.zip`;
-			}
-			return null;
-		},
-	},
-	rg: {
-		name: "ripgrep",
-		repo: "BurntSushi/ripgrep",
-		binaryName: "rg",
-		tagPrefix: "",
-		getAssetName: (version, plat, architecture) => {
-			if (plat === "darwin") {
-				const archStr = architecture === "arm64" ? "aarch64" : "x86_64";
-				return `ripgrep-${version}-${archStr}-apple-darwin.tar.gz`;
-			} else if (plat === "linux") {
-				if (architecture === "arm64") {
-					return `ripgrep-${version}-aarch64-unknown-linux-gnu.tar.gz`;
-				}
-				return `ripgrep-${version}-x86_64-unknown-linux-musl.tar.gz`;
-			} else if (plat === "win32") {
-				const archStr = architecture === "arm64" ? "aarch64" : "x86_64";
-				return `ripgrep-${version}-${archStr}-pc-windows-msvc.zip`;
-			}
-			return null;
-		},
-	},
 	sd: {
 		name: "sd",
 		repo: "chmln/sd",
@@ -135,7 +95,7 @@ const PYTHON_TOOLS: Record<string, PythonToolConfig> = {
 	},
 };
 
-export type ToolName = "fd" | "rg" | "sd" | "sg" | "yt-dlp" | "markitdown" | "html2text";
+export type ToolName = "sd" | "sg" | "yt-dlp" | "markitdown" | "html2text";
 
 // Get the path to a tool (system-wide or in our tools dir)
 export async function getToolPath(tool: ToolName): Promise<string | null> {

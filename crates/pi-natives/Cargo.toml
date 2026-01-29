@@ -1,0 +1,31 @@
+[package]
+name = "pi-natives"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+wasm-bindgen = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+grep-regex = "0.1.14"
+grep-searcher = "0.1.16"
+grep-matcher = "0.1.8"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
+# Better panic messages in debug builds
+console_error_panic_hook = { version = "0.1.7", optional = true }
+
+[features]
+default = ["console_error_panic_hook"]
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false

@@ -1,25 +1,23 @@
 import * as nodePath from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
+import { type GrepMatch as WasmGrepMatch, grep as wasmGrep } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
-import { ptree } from "@oh-my-pi/pi-utils";
+import { untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { Theme } from "../modes/theme/theme";
 import grepDescription from "../prompts/tools/grep.md" with { type: "text" };
 import { renderFileList, renderStatusLine, renderTreeList } from "../tui";
-import { ensureTool } from "../utils/tools-manager";
-import { untilAborted } from "../utils/utils";
 import type { ToolSession } from ".";
-import { applyListLimit } from "./list-limit";
 import type { OutputMeta } from "./output-meta";
 import { resolveToCwd } from "./path-utils";
 import { formatCount, formatEmptyMessage, formatErrorMessage, PREVIEW_LIMITS } from "./render-utils";
-import { ToolAbortError, ToolError } from "./tool-errors";
+import { ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
-import { DEFAULT_MAX_COLUMN, type TruncationResult, truncateHead, truncateLine } from "./truncate";
+import { DEFAULT_MAX_COLUMN, type TruncationResult, truncateHead } from "./truncate";
 
 const grepSchema = Type.Object({
 	pattern: Type.String({ description: "Regex pattern to search for" }),
@@ -27,7 +25,7 @@ const grepSchema = Type.Object({
 	glob: Type.Optional(Type.String({ description: "Filter files by glob pattern (e.g., '*.js')" })),
 	type: Type.Optional(Type.String({ description: "Filter by file type (e.g., js, py, rust)" })),
 	output_mode: Type.Optional(
-		StringEnum(["files_with_matches", "content", "count"], {
+		StringEnum(["filesWithMatches", "content", "count"], {
 			description: "Output format (default: files_with_matches)",
 		}),
 	),
@@ -47,76 +45,22 @@ export interface GrepToolDetails {
 	resultLimitReached?: number;
 	linesTruncated?: boolean;
 	meta?: OutputMeta;
-	// Fields for TUI rendering
 	scopePath?: string;
 	matchCount?: number;
 	fileCount?: number;
 	files?: string[];
 	fileMatches?: Array<{ path: string; count: number }>;
-	mode?: "content" | "files_with_matches" | "count";
+	mode?: "content" | "filesWithMatches" | "count";
 	truncated?: boolean;
 	error?: string;
 }
 
-export interface RgResult {
-	stdout: string;
-	stderr: string;
-	exitCode: number | null;
-}
-
-/**
- * Run rg command and capture output.
- *
- * @throws ToolAbortError if signal is aborted
- */
-export async function runRg(
-	rgPath: string,
-	args: string[],
-	options?: { signal?: AbortSignal; timeoutMs?: number },
-): Promise<RgResult> {
-	const timeoutSeconds = options?.timeoutMs ? Math.max(1, Math.round(options.timeoutMs / 1000)) : undefined;
-	const timeoutMessage = timeoutSeconds ? `rg timed out after ${timeoutSeconds}s` : "rg timed out";
-
-	const result = await ptree.exec([rgPath, ...args], {
-		signal: options?.signal,
-		timeout: options?.timeoutMs,
-		allowNonZero: true,
-		allowAbort: true,
-		stderr: "buffer",
-	});
-
-	if (result.exitError instanceof ptree.TimeoutError) {
-		throw new ToolError(timeoutMessage);
-	}
-	if (result.exitError?.aborted) {
-		throw new ToolAbortError();
-	}
-
-	return {
-		stdout: result.stdout,
-		stderr: result.stderr,
-		exitCode: result.exitCode,
-	};
-}
-
-/**
- * Pluggable operations for the grep tool.
- * Override these to delegate search to remote systems (e.g., SSH).
- */
 export interface GrepOperations {
-	/** Check if path is a directory. Throws if path doesn't exist. */
 	isDirectory: (absolutePath: string) => Promise<boolean> | boolean;
-	/** Read file contents for context lines */
 	readFile: (absolutePath: string) => Promise<string> | string;
 }
 
-const defaultGrepOperations: GrepOperations = {
-	isDirectory: async p => (await Bun.file(p).stat()).isDirectory(),
-	readFile: p => Bun.file(p).text(),
-};
-
 export interface GrepToolOptions {
-	/** Custom operations for grep. Default: local filesystem + ripgrep */
 	operations?: GrepOperations;
 }
 
@@ -129,38 +73,10 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 	public readonly parameters = grepSchema;
 
 	private readonly session: ToolSession;
-	private readonly ops: GrepOperations;
 
-	constructor(session: ToolSession, options?: GrepToolOptions) {
+	constructor(session: ToolSession, _options?: GrepToolOptions) {
 		this.session = session;
-		this.ops = options?.operations ?? defaultGrepOperations;
 		this.description = renderPromptTemplate(grepDescription);
-	}
-
-	/**
-	 * Validates a pattern against ripgrep's regex engine.
-	 * Uses a quick dry-run against the null device to check for parse errors.
-	 */
-	private async validateRegexPattern(pattern: string, rgPath?: string): Promise<{ valid: boolean; error?: string }> {
-		if (!rgPath) {
-			return { valid: true }; // Can't validate, assume valid
-		}
-
-		// Run ripgrep against the null device with the pattern - this validates regex syntax
-		// without searching any files
-		const nullDevice = process.platform === "win32" ? "NUL" : "/dev/null";
-		const result = await ptree.exec([rgPath, "--no-config", "--quiet", "--", pattern, nullDevice], {
-			allowNonZero: true,
-			allowAbort: true,
-		});
-
-		// Exit code 1 = no matches (pattern is valid), 0 = matches found
-		// Exit code 2 = error (often regex parse error)
-		if (result.exitCode === 2 && result.stderr.includes("regex parse error")) {
-			return { valid: false, error: result.stderr.trim() };
-		}
-
-		return { valid: true };
 	}
 
 	public async execute(
@@ -168,7 +84,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 		params: GrepParams,
 		signal?: AbortSignal,
 		_onUpdate?: AgentToolUpdateCallback<GrepToolDetails>,
-		toolContext?: AgentToolContext,
+		_toolContext?: AgentToolContext,
 	): Promise<AgentToolResult<GrepToolDetails>> {
 		const { pattern, path: searchDir, glob, type, output_mode, i, n, context, multiline, limit, offset } = params;
 
@@ -189,38 +105,11 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 			}
 			const normalizedLimit = rawLimit !== undefined && rawLimit > 0 ? rawLimit : undefined;
 
-			const normalizeContext = (value: number | undefined, label: string): number => {
-				if (value === undefined) return 0;
-				const normalized = Number.isFinite(value) ? Math.floor(value) : Number.NaN;
-				if (!Number.isFinite(normalized) || normalized < 0) {
-					throw new ToolError(`${label} must be a non-negative number`);
-				}
-				return normalized;
-			};
-
-			const normalizedContext = normalizeContext(context ?? 5, "Context");
+			const normalizedContext = context ?? 5;
 			const showLineNumbers = n ?? true;
 			const ignoreCase = i ?? false;
-			const normalizedGlob = glob?.trim() ?? "";
-			const normalizedType = type?.trim() ?? "";
 			const hasContentHints = limit !== undefined || context !== undefined;
 
-			// Validate regex patterns early to surface parse errors before running rg
-			const rgPath = await ensureTool("rg", {
-				silent: true,
-				notify: message => toolContext?.ui?.notify(message, "info"),
-			});
-
-			if (!rgPath) {
-				throw new ToolError("rg is not available and could not be downloaded");
-			}
-
-			const validation = await this.validateRegexPattern(normalizedPattern, rgPath);
-			if (!validation.valid) {
-				throw new ToolError(validation.error ?? "Invalid regex pattern");
-			}
-
-			// rgPath resolved earlier
 			const searchPath = resolveToCwd(searchDir || ".", this.session.cwd);
 			const scopePath = (() => {
 				const relative = nodePath.relative(this.session.cwd, searchPath).replace(/\\/g, "/");
@@ -229,98 +118,50 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 
 			let isDirectory: boolean;
 			try {
-				isDirectory = await this.ops.isDirectory(searchPath);
+				const stat = await Bun.file(searchPath).stat();
+				isDirectory = stat.isDirectory();
 			} catch {
 				throw new ToolError(`Path not found: ${searchPath}`);
 			}
-			const effectiveOutputMode =
-				output_mode ?? (!isDirectory || hasContentHints ? "content" : "files_with_matches");
-			const effectiveOffset = normalizedOffset > 0 ? normalizedOffset : 0;
+
+			const effectiveOutputMode = output_mode ?? (!isDirectory || hasContentHints ? "content" : "filesWithMatches");
 			const effectiveLimit =
 				effectiveOutputMode === "content" ? (normalizedLimit ?? DEFAULT_MATCH_LIMIT) : normalizedLimit;
 
+			// Run WASM grep
+			let result: Awaited<ReturnType<typeof wasmGrep>>;
+			try {
+				result = await wasmGrep({
+					pattern: normalizedPattern,
+					path: searchPath,
+					glob: glob?.trim() || undefined,
+					type: type?.trim() || undefined,
+					ignoreCase,
+					multiline: multiline ?? false,
+					hidden: true,
+					maxCount: effectiveLimit,
+					offset: normalizedOffset > 0 ? normalizedOffset : undefined,
+					context: effectiveOutputMode === "content" ? normalizedContext : undefined,
+					maxColumns: DEFAULT_MAX_COLUMN,
+					mode: effectiveOutputMode,
+				});
+			} catch (err) {
+				if (err instanceof Error && err.message.startsWith("regex parse error")) {
+					throw new ToolError(err.message);
+				}
+				throw err;
+			}
+
 			const formatPath = (filePath: string): string => {
+				// WASM returns paths starting with / (the virtual root)
+				const cleanPath = filePath.startsWith("/") ? filePath.slice(1) : filePath;
 				if (isDirectory) {
-					const relative = nodePath.relative(searchPath, filePath);
-					if (relative && !relative.startsWith("..")) {
-						return relative.replace(/\\/g, "/");
-					}
+					return cleanPath.replace(/\\/g, "/");
 				}
-				return nodePath.basename(filePath);
+				return nodePath.basename(cleanPath);
 			};
 
-			const fileCache = new Map<string, Promise<string[]>>();
-			const getFileLines = async (filePath: string): Promise<string[]> => {
-				let linesPromise = fileCache.get(filePath);
-				if (!linesPromise) {
-					linesPromise = (async () => {
-						try {
-							const content = await this.ops.readFile(filePath);
-							return content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-						} catch {
-							return [];
-						}
-					})();
-					fileCache.set(filePath, linesPromise);
-				}
-				return linesPromise;
-			};
-
-			const args: string[] = [];
-
-			// Ignore user config files for consistent behavior
-			args.push("--no-config");
-
-			// Base arguments depend on output mode
-			if (effectiveOutputMode === "files_with_matches") {
-				args.push("--files-with-matches", "--color=never");
-			} else if (effectiveOutputMode === "count") {
-				args.push("--count", "--color=never");
-			} else {
-				args.push("--json", "--color=never");
-				if (showLineNumbers) {
-					args.push("--line-number");
-				}
-			}
-
-			args.push("--hidden");
-
-			if (ignoreCase) {
-				args.push("--ignore-case");
-			} else {
-				args.push("--case-sensitive");
-			}
-
-			if (multiline) {
-				args.push("--multiline");
-			}
-
-			if (normalizedGlob) {
-				args.push("--glob", normalizedGlob);
-			}
-
-			args.push("--glob", "!**/.git/**");
-			args.push("--glob", "!**/node_modules/**");
-
-			if (normalizedType) {
-				args.push("--type", normalizedType);
-			}
-
-			if (effectiveOutputMode === "content") {
-				if (normalizedContext > 0) {
-					args.push("-C", String(normalizedContext));
-				}
-			}
-
-			args.push("--", normalizedPattern, searchPath);
-
-			using child = ptree.spawn([rgPath, ...args], { signal });
-
-			let matchCount = 0;
-			let matchLimitReached = false;
-			let linesTruncated = false;
-			let killedDueToLimit = false;
-			const outputLines: string[] = [];
+			// Build output
 			const files = new Set<string>();
 			const fileList: string[] = [];
 			const fileMatchCounts = new Map<string, number>();
@@ -333,289 +174,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 				}
 			};
 
-			const recordFileMatch = (filePath: string) => {
-				const relative = formatPath(filePath);
-				fileMatchCounts.set(relative, (fileMatchCounts.get(relative) ?? 0) + 1);
-			};
-
-			// For simple output modes (files_with_matches, count), process text directly
-			if (effectiveOutputMode === "files_with_matches" || effectiveOutputMode === "count") {
-				const stdout = await child.text().catch(x => {
-					if (x instanceof ptree.Exception && x.exitCode === 1) {
-						return "";
-					}
-					return Promise.reject(x);
-				});
-
-				const exitCode = child.exitCode ?? 0;
-				if (exitCode !== 0 && exitCode !== 1) {
-					const errorMsg = child.peekStderr().trim() || `ripgrep exited with code ${exitCode}`;
-					throw new ToolError(errorMsg);
-				}
-
-				const lines = stdout
-					.trim()
-					.split("\n")
-					.filter(line => line.length > 0);
-
-				if (lines.length === 0) {
-					const details: GrepToolDetails = {
-						scopePath,
-						matchCount: 0,
-						fileCount: 0,
-						files: [],
-						mode: effectiveOutputMode,
-						truncated: false,
-					};
-					return toolResult(details).text("No matches found").done();
-				}
-
-				const offsetLines = effectiveOffset > 0 ? lines.slice(effectiveOffset) : lines;
-				const listLimit = applyListLimit(offsetLines, {
-					limit: normalizedLimit,
-					limitType: "result",
-				});
-				const processedLines = listLimit.items;
-				const limitMeta = listLimit.meta;
-
-				let simpleMatchCount = 0;
-				let fileCount = 0;
-				const simpleFiles = new Set<string>();
-				const simpleFileList: string[] = [];
-				const simpleFileMatchCounts = new Map<string, number>();
-
-				const recordSimpleFile = (filePath: string) => {
-					const relative = formatPath(filePath);
-					if (!simpleFiles.has(relative)) {
-						simpleFiles.add(relative);
-						simpleFileList.push(relative);
-					}
-				};
-
-				// Count mode: ripgrep provides total count per file, so we set directly (not increment)
-				const setFileMatchCount = (filePath: string, count: number) => {
-					const relative = formatPath(filePath);
-					simpleFileMatchCounts.set(relative, count);
-				};
-
-				if (effectiveOutputMode === "files_with_matches") {
-					for (const line of processedLines) {
-						recordSimpleFile(line);
-					}
-					fileCount = simpleFiles.size;
-					simpleMatchCount = fileCount;
-				} else {
-					for (const line of processedLines) {
-						const separatorIndex = line.lastIndexOf(":");
-						const filePart = separatorIndex === -1 ? line : line.slice(0, separatorIndex);
-						const countPart = separatorIndex === -1 ? "" : line.slice(separatorIndex + 1);
-						const count = Number.parseInt(countPart, 10);
-						recordSimpleFile(filePart);
-						if (!Number.isNaN(count)) {
-							simpleMatchCount += count;
-							setFileMatchCount(filePart, count);
-						}
-					}
-					fileCount = simpleFiles.size;
-				}
-
-				const truncatedByLimit = Boolean(limitMeta.resultLimit);
-
-				// For count mode, format as "path:count"
-				if (effectiveOutputMode === "count") {
-					const formatted = processedLines.map(line => {
-						const separatorIndex = line.lastIndexOf(":");
-						const relative = formatPath(separatorIndex === -1 ? line : line.slice(0, separatorIndex));
-						const count = separatorIndex === -1 ? "0" : line.slice(separatorIndex + 1);
-						return `${relative}:${count}`;
-					});
-					const output = formatted.join("\n");
-					const details: GrepToolDetails = {
-						scopePath,
-						matchCount: simpleMatchCount,
-						fileCount,
-						files: simpleFileList,
-						fileMatches: simpleFileList.map(path => ({
-							path,
-							count: simpleFileMatchCounts.get(path) ?? 0,
-						})),
-						mode: effectiveOutputMode,
-						truncated: truncatedByLimit,
-						resultLimitReached: limitMeta.resultLimit?.reached,
-					};
-					return toolResult(details)
-						.text(output)
-						.limits({
-							resultLimit: limitMeta.resultLimit?.reached,
-						})
-						.done();
-				}
-
-				// For files_with_matches, format paths
-				const formatted = processedLines.map(line => formatPath(line));
-				const output = formatted.join("\n");
-				const details: GrepToolDetails = {
-					scopePath,
-					matchCount: simpleMatchCount,
-					fileCount,
-					files: simpleFileList,
-					mode: effectiveOutputMode,
-					truncated: truncatedByLimit,
-					resultLimitReached: limitMeta.resultLimit?.reached,
-				};
-				return toolResult(details)
-					.text(output)
-					.limits({
-						resultLimit: limitMeta.resultLimit?.reached,
-					})
-					.done();
-			}
-
-			// Content mode - existing JSON processing
-			const formatBlock = async (filePath: string, lineNumber: number): Promise<string[]> => {
-				const relativePath = formatPath(filePath);
-				const lines = await getFileLines(filePath);
-				if (!lines.length) {
-					return showLineNumbers
-						? [`${relativePath}:${lineNumber}: (unable to read file)`]
-						: [`${relativePath}: (unable to read file)`];
-				}
-
-				const block: string[] = [];
-				const start = normalizedContext > 0 ? Math.max(1, lineNumber - normalizedContext) : lineNumber;
-				const end = normalizedContext > 0 ? Math.min(lines.length, lineNumber + normalizedContext) : lineNumber;
-
-				for (let current = start; current <= end; current++) {
-					const lineText = lines[current - 1] ?? "";
-					const sanitized = lineText.replace(/\r/g, "");
-					const isMatchLine = current === lineNumber;
-
-					const { text: truncatedText, wasTruncated } = truncateLine(sanitized);
-					if (wasTruncated) {
-						linesTruncated = true;
-					}
-
-					if (isMatchLine) {
-						block.push(
-							showLineNumbers
-								? `${relativePath}:${current}: ${truncatedText}`
-								: `${relativePath}: ${truncatedText}`,
-						);
-					} else {
-						block.push(
-							showLineNumbers
-								? `${relativePath}-${current}- ${truncatedText}`
-								: `${relativePath}- ${truncatedText}`,
-						);
-					}
-				}
-
-				return block;
-			};
-
-			const maxMatches = effectiveLimit !== undefined ? effectiveLimit + effectiveOffset : undefined;
-			const processEvent = async (event: unknown): Promise<void> => {
-				if (!event || typeof event !== "object") {
-					return;
-				}
-				const parsed = event as { type?: string; data?: { path?: { text?: string }; line_number?: number } };
-				if (parsed.type !== "match") {
-					return;
-				}
-
-				const nextIndex = matchCount + 1;
-				if (maxMatches !== undefined && nextIndex > maxMatches) {
-					matchLimitReached = true;
-					killedDueToLimit = true;
-					return;
-				}
-
-				matchCount = nextIndex;
-				const filePath = parsed.data?.path?.text;
-				const lineNumber = parsed.data?.line_number;
-
-				if (filePath && typeof lineNumber === "number") {
-					if (matchCount <= effectiveOffset) {
-						return;
-					}
-					recordFile(filePath);
-					recordFileMatch(filePath);
-					const block = await formatBlock(filePath, lineNumber);
-					outputLines.push(...block);
-				}
-			};
-
-			let buffer = "";
-			const parseBuffer = async () => {
-				while (buffer.length > 0) {
-					const result = Bun.JSONL.parseChunk(buffer);
-					for (const value of result.values) {
-						await processEvent(value);
-					}
-
-					if (result.read > 0) {
-						buffer = buffer.slice(result.read);
-					}
-
-					if (result.error) {
-						const nextNewline = buffer.indexOf("\n");
-						if (nextNewline === -1) {
-							buffer = "";
-							break;
-						}
-						buffer = buffer.slice(nextNewline + 1);
-						continue;
-					}
-
-					if (result.read === 0) {
-						break;
-					}
-				}
-			};
-
-			// Process stdout stream with JSONL chunk parsing
-			const decoder = new TextDecoder();
-			try {
-				for await (const chunk of child.stdout) {
-					if (killedDueToLimit) {
-						break;
-					}
-					buffer += decoder.decode(chunk, { stream: true });
-					await parseBuffer();
-				}
-				if (!killedDueToLimit) {
-					buffer += decoder.decode();
-					await parseBuffer();
-				}
-			} catch (err) {
-				if (err instanceof ptree.Exception && err.aborted) {
-					throw new ToolAbortError();
-				}
-				// Stream may close early if we killed due to limit - that's ok
-				if (!killedDueToLimit) {
-					throw err;
-				}
-			}
-
-			// Wait for process to exit
-			try {
-				await child.exitedCleanly;
-			} catch (err) {
-				if (err instanceof ptree.Exception) {
-					if (err.aborted) {
-						throw new ToolAbortError();
-					}
-					// Non-zero exit is ok if we killed due to limit or exit code 1 (no matches)
-					if (!killedDueToLimit && err.exitCode !== 1) {
-						const errorMsg = child.peekStderr().trim() || `ripgrep exited with code ${err.exitCode}`;
-						throw new ToolError(errorMsg);
-					}
-				} else {
-					throw err;
-				}
-			}
-
-			if (matchCount === 0) {
+			if (result.totalMatches === 0) {
 				const details: GrepToolDetails = {
 					scopePath,
 					matchCount: 0,
@@ -627,21 +186,76 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 				return toolResult(details).text("No matches found").done();
 			}
 
-			const limitMeta =
-				matchLimitReached && effectiveLimit !== undefined
-					? { matchLimit: { reached: effectiveLimit, suggestion: effectiveLimit * 2 } }
-					: {};
+			let outputLines: string[] = [];
+			let linesTruncated = false;
 
-			// Apply byte truncation (no line limit since we already have match limit)
+			for (const match of result.matches) {
+				recordFile(match.path);
+				const relativePath = formatPath(match.path);
+
+				if (effectiveOutputMode === "content") {
+					// Add context before
+					if (match.contextBefore) {
+						for (const ctx of match.contextBefore) {
+							outputLines.push(
+								showLineNumbers
+									? `${relativePath}-${ctx.lineNumber}- ${ctx.line}`
+									: `${relativePath}- ${ctx.line}`,
+							);
+						}
+					}
+
+					// Add match line
+					outputLines.push(
+						showLineNumbers
+							? `${relativePath}:${match.lineNumber}: ${match.line}`
+							: `${relativePath}: ${match.line}`,
+					);
+
+					if (match.truncated) {
+						linesTruncated = true;
+					}
+
+					// Add context after
+					if (match.contextAfter) {
+						for (const ctx of match.contextAfter) {
+							outputLines.push(
+								showLineNumbers
+									? `${relativePath}-${ctx.lineNumber}- ${ctx.line}`
+									: `${relativePath}- ${ctx.line}`,
+							);
+						}
+					}
+
+					// Track per-file counts
+					fileMatchCounts.set(relativePath, (fileMatchCounts.get(relativePath) ?? 0) + 1);
+				} else if (effectiveOutputMode === "filesWithMatches") {
+					// One line per file
+					const matchWithCount = match as WasmGrepMatch & { matchCount?: number };
+					fileMatchCounts.set(relativePath, matchWithCount.matchCount ?? 1);
+				} else {
+					// count mode
+					const matchWithCount = match as WasmGrepMatch & { matchCount?: number };
+					fileMatchCounts.set(relativePath, matchWithCount.matchCount ?? 0);
+				}
+			}
+
+			// Format output based on mode
+			if (effectiveOutputMode === "filesWithMatches") {
+				outputLines = fileList;
+			} else if (effectiveOutputMode === "count") {
+				outputLines = fileList.map(f => `${f}:${fileMatchCounts.get(f) ?? 0}`);
+			}
+
 			const rawOutput = outputLines.join("\n");
 			const truncation = truncateHead(rawOutput, { maxLines: Number.MAX_SAFE_INTEGER });
-
 			const output = truncation.content;
-			const truncated = Boolean(matchLimitReached || truncation.truncated || limitMeta.matchLimit || linesTruncated);
+
+			const truncated = Boolean(result.limitReached || truncation.truncated || linesTruncated);
 			const details: GrepToolDetails = {
 				scopePath,
-				matchCount: effectiveOffset > 0 ? Math.max(0, matchCount - effectiveOffset) : matchCount,
-				fileCount: files.size,
+				matchCount: result.totalMatches,
+				fileCount: result.filesWithMatches,
 				files: fileList,
 				fileMatches: fileList.map(path => ({
 					path,
@@ -649,22 +263,19 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 				})),
 				mode: effectiveOutputMode,
 				truncated,
-				matchLimitReached: limitMeta.matchLimit?.reached,
+				matchLimitReached: result.limitReached ? effectiveLimit : undefined,
 			};
 
-			// Keep TUI compatibility fields
-			if (matchLimitReached && effectiveLimit !== undefined) {
-				details.matchLimitReached = effectiveLimit;
-			}
 			if (truncation.truncated) details.truncation = truncation;
 			if (linesTruncated) details.linesTruncated = true;
 
 			const resultBuilder = toolResult(details)
 				.text(output)
 				.limits({
-					matchLimit: limitMeta.matchLimit?.reached,
+					matchLimit: result.limitReached ? effectiveLimit : undefined,
 					columnMax: linesTruncated ? DEFAULT_MAX_COLUMN : undefined,
 				});
+
 			if (truncation.truncated) {
 				resultBuilder.truncation(truncation, { direction: "head" });
 			}
@@ -702,7 +313,7 @@ export const grepToolRenderer = {
 		if (args.path) meta.push(`in ${args.path}`);
 		if (args.glob) meta.push(`glob:${args.glob}`);
 		if (args.type) meta.push(`type:${args.type}`);
-		if (args.output_mode && args.output_mode !== "files_with_matches") meta.push(`mode:${args.output_mode}`);
+		if (args.output_mode && args.output_mode !== "filesWithMatches") meta.push(`mode:${args.output_mode}`);
 		if (args.i) meta.push("case:insensitive");
 		if (args.n === false) meta.push("no-line-numbers");
 		if (args.context !== undefined && args.context > 0) meta.push(`context:${args.context}`);
@@ -758,7 +369,7 @@ export const grepToolRenderer = {
 
 		const matchCount = details?.matchCount ?? 0;
 		const fileCount = details?.fileCount ?? 0;
-		const mode = details?.mode ?? "files_with_matches";
+		const mode = details?.mode ?? "filesWithMatches";
 		const truncation = details?.meta?.truncation;
 		const limits = details?.meta?.limits;
 		const truncated = Boolean(
@@ -775,7 +386,7 @@ export const grepToolRenderer = {
 		}
 
 		const summaryParts =
-			mode === "files_with_matches"
+			mode === "filesWithMatches"
 				? [formatCount("file", fileCount)]
 				: [formatCount("match", matchCount), formatCount("file", fileCount)];
 		const meta = [...summaryParts];

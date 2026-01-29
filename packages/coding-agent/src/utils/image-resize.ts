@@ -1,5 +1,5 @@
 import type { ImageContent } from "@oh-my-pi/pi-ai";
-import * as photon from "../vendor/photon";
+import { PhotonImage, resize, SamplingFilter } from "@oh-my-pi/pi-natives";
 
 export interface ImageResizeOptions {
 	maxWidth?: number; // Default: 2000
@@ -53,9 +53,8 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 	const opts = { ...DEFAULT_OPTIONS, ...options };
 	const inputBuffer = Buffer.from(img.data, "base64");
 
-	let image: ReturnType<typeof photon.PhotonImage.new_from_byteslice> | undefined;
 	try {
-		image = photon.PhotonImage.new_from_byteslice(new Uint8Array(inputBuffer));
+		using image = await PhotonImage.new_from_byteslice(new Uint8Array(inputBuffer));
 
 		const originalWidth = image.get_width();
 		const originalHeight = image.get_height();
@@ -89,24 +88,19 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 		}
 
 		// Helper to resize and encode in both formats, returning the smaller one
-		function tryBothFormats(
+		async function tryBothFormats(
 			width: number,
 			height: number,
 			jpegQuality: number,
-		): { buffer: Uint8Array; mimeType: string } {
-			const resized = photon!.resize(image!, width, height, photon!.SamplingFilter.Lanczos3);
+		): Promise<{ buffer: Uint8Array; mimeType: string }> {
+			using resized = await resize(image!, width, height, SamplingFilter.Lanczos3);
 
-			try {
-				const pngBuffer = resized.get_bytes();
-				const jpegBuffer = resized.get_bytes_jpeg(jpegQuality);
+			const [pngBuffer, jpegBuffer] = await Promise.all([resized.get_bytes(), resized.get_bytes_jpeg(jpegQuality)]);
 
-				return pickSmaller(
-					{ buffer: pngBuffer, mimeType: "image/png" },
-					{ buffer: jpegBuffer, mimeType: "image/jpeg" },
-				);
-			} finally {
-				resized.free();
-			}
+			return pickSmaller(
+				{ buffer: pngBuffer, mimeType: "image/png" },
+				{ buffer: jpegBuffer, mimeType: "image/jpeg" },
+			);
 		}
 
 		// Try to produce an image under maxBytes
@@ -118,7 +112,7 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 		let finalHeight = targetHeight;
 
 		// First attempt: resize to target dimensions, try both formats
-		best = tryBothFormats(targetWidth, targetHeight, opts.jpegQuality);
+		best = await tryBothFormats(targetWidth, targetHeight, opts.jpegQuality);
 
 		if (best.buffer.length <= opts.maxBytes) {
 			return {
@@ -134,7 +128,7 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 
 		// Still too large - try JPEG with decreasing quality
 		for (const quality of qualitySteps) {
-			best = tryBothFormats(targetWidth, targetHeight, quality);
+			best = await tryBothFormats(targetWidth, targetHeight, quality);
 
 			if (best.buffer.length <= opts.maxBytes) {
 				return {
@@ -159,7 +153,7 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 			}
 
 			for (const quality of qualitySteps) {
-				best = tryBothFormats(finalWidth, finalHeight, quality);
+				best = await tryBothFormats(finalWidth, finalHeight, quality);
 
 				if (best.buffer.length <= opts.maxBytes) {
 					return {
@@ -196,10 +190,6 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 			height: 0,
 			wasResized: false,
 		};
-	} finally {
-		if (image) {
-			image.free();
-		}
 	}
 }
 

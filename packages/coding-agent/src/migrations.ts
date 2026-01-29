@@ -5,7 +5,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
-import { getAgentDbPath, getAgentDir, getBinDir } from "./config";
+import { getAgentDbPath, getAgentDir } from "./config";
 import { AgentStorage } from "./session/agent-storage";
 import type { AuthCredential } from "./session/auth-storage";
 
@@ -145,50 +145,6 @@ export async function migrateSessionsFromAgentRoot(): Promise<void> {
 }
 
 /**
- * Move fd/rg binaries from tools/ to bin/ if they exist.
- */
-async function migrateToolsToBin(): Promise<void> {
-	const agentDir = getAgentDir();
-	const toolsDir = path.join(agentDir, "tools");
-	const binDir = getBinDir();
-
-	if (!fs.existsSync(toolsDir)) return;
-
-	const binaries = ["fd", "rg", "fd.exe", "rg.exe"];
-	let movedAny = false;
-
-	for (const bin of binaries) {
-		const oldPath = path.join(toolsDir, bin);
-		const newPath = path.join(binDir, bin);
-		if (!fs.existsSync(oldPath)) continue;
-
-		if (!fs.existsSync(binDir)) {
-			await fs.promises.mkdir(binDir, { recursive: true });
-		}
-
-		if (!fs.existsSync(newPath)) {
-			try {
-				await fs.promises.rename(oldPath, newPath);
-				movedAny = true;
-			} catch (error) {
-				logger.warn("Failed to migrate binary", { from: oldPath, to: newPath, error: String(error) });
-			}
-		} else {
-			// Target exists, just delete the old one
-			try {
-				await fs.promises.rm(oldPath, { force: true });
-			} catch {
-				// Ignore
-			}
-		}
-	}
-
-	if (movedAny) {
-		console.log(chalk.green(`Migrated managed binaries tools/ → bin/`));
-	}
-}
-
-/**
  * Run all migrations. Called once on startup.
  *
  * @param _cwd - Current working directory (reserved for future project-local migrations)
@@ -201,7 +157,6 @@ export async function runMigrations(_cwd: string): Promise<{
 	// Then: run data migrations
 	const migratedAuthProviders = await migrateAuthToAgentDb();
 	await migrateSessionsFromAgentRoot();
-	await migrateToolsToBin();
 
 	return { migratedAuthProviders, deprecationWarnings: [] };
 }

@@ -26,6 +26,34 @@ This repo contains multiple packages, but **`packages/coding-agent/`** is the pr
 - Always ask before removing functionality or code that appears to be intentional
 - **NEVER build prompts in code** — no inline strings, no template literals, no string concatenation. Prompts live in static `.md` files; use Handlebars for any dynamic content.
 - **Import static text files via Bun** — use `import content from "./prompt.md" with { type: "text" }` instead of `readFileSync`
+- **Use `Promise.withResolvers()`** instead of `new Promise((resolve, reject) => ...)` — cleaner, avoids callback nesting, and the resolver functions are properly typed:
+  ```typescript
+  // BAD: Verbose, callback nesting
+  const promise = new Promise<string>((resolve, reject) => { ... });
+
+  // GOOD: Clean destructuring, typed resolvers
+  const { promise, resolve, reject } = Promise.withResolvers<string>();
+  ```
+
+## WASM Bindgen Resources
+
+**Use `using` declarations** for wasm-bindgen objects — they implement `Symbol.dispose`:
+
+```typescript
+// BAD: Manual try/finally with .free()
+const image = PhotonImage.new_from_byteslice(bytes);
+try {
+	return image.get_bytes();
+} finally {
+	image.free();
+}
+
+// GOOD: Automatic cleanup via Symbol.dispose
+using image = PhotonImage.new_from_byteslice(bytes);
+return image.get_bytes();
+```
+
+This applies to all wasm-bindgen generated classes (`CompiledPattern`, `PhotonImage`, etc.).
 
 ## Bun Over Node
 

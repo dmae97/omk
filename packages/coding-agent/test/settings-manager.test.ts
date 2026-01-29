@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { SettingsManager } from "@oh-my-pi/pi-coding-agent/config/settings-manager";
 import { YAML } from "bun";
@@ -11,7 +12,7 @@ describe("SettingsManager", () => {
 
 	beforeEach(() => {
 		// Use random UUID to isolate parallel test runs (SQLite files can't be shared)
-		testDir = path.join(process.cwd(), "test-settings-tmp", crypto.randomUUID());
+		testDir = path.join(os.tmpdir(), "test-settings-tmp", crypto.randomUUID());
 		agentDir = path.join(testDir, "agent");
 		projectDir = path.join(testDir, "project");
 

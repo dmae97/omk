@@ -2,9 +2,10 @@ import * as os from "node:os";
 import path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
+import { find as wasmFind } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
-import { globPaths, ptree } from "@oh-my-pi/pi-utils";
+import { ptree, untilAborted } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import { CONFIG_DIR_NAME } from "../config";
 import { renderPromptTemplate } from "../config/prompt-templates";
@@ -165,27 +166,31 @@ async function listCandidateFiles(
 	_notify?: (message: string) => void,
 ): Promise<{ files: string[]; truncated: boolean; error?: string }> {
 	let files: string[];
+	const timeoutSignal = AbortSignal.timeout(GLOB_TIMEOUT_MS);
+	const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 	try {
-		files = await globPaths("**/*", {
-			cwd: searchRoot,
-			gitignore: true,
-			dot: true,
-			signal,
-			timeoutMs: GLOB_TIMEOUT_MS,
-		});
+		const result = await untilAborted(combinedSignal, () =>
+			wasmFind({
+				pattern: "**/*",
+				path: searchRoot,
+				fileType: "file",
+				hidden: true,
+			}),
+		);
+		files = result.matches.map(match => match.path);
 	} catch (error) {
 		if (error instanceof Error && error.name === "AbortError") {
+			if (timeoutSignal.aborted && !signal?.aborted) {
+				const timeoutSeconds = Math.max(1, Math.round(GLOB_TIMEOUT_MS / 1000));
+				return { files: [], truncated: false, error: `find timed out after ${timeoutSeconds}s` };
+			}
 			throw new ToolAbortError();
-		}
-		if (error instanceof Error && error.name === "TimeoutError") {
-			const timeoutSeconds = Math.max(1, Math.round(GLOB_TIMEOUT_MS / 1000));
-			return { files: [], truncated: false, error: `glob timed out after ${timeoutSeconds}s` };
 		}
 		const message = error instanceof Error ? error.message : String(error);
 		return { files: [], truncated: false, error: message };
 	}
 
-	const normalizedFiles = files.map(line => line.replace(/\r$/, "").trim()).filter(line => line.length > 0);
+	const normalizedFiles = files.filter(line => line.length > 0);
 	const truncated = normalizedFiles.length > MAX_FUZZY_CANDIDATES;
 	const limited = truncated ? normalizedFiles.slice(0, MAX_FUZZY_CANDIDATES) : normalizedFiles;
 

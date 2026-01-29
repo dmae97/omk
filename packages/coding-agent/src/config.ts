@@ -93,11 +93,6 @@ export function getToolsDir(): string {
 	return path.join(getAgentDir(), "tools");
 }
 
-/** Get path to managed binaries directory (fd, rg) */
-export function getBinDir(): string {
-	return path.join(getAgentDir(), "bin");
-}
-
 /** Get path to slash commands directory */
 export function getCommandsDir(): string {
 	return path.join(getAgentDir(), "commands");

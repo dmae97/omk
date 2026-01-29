@@ -4,7 +4,8 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { globPaths } from "@oh-my-pi/pi-utils";
+import { find as wasmFind } from "@oh-my-pi/pi-natives";
+import { untilAborted } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
 import chalk from "chalk";
 import { contextFileCapability } from "./capability/context-file";
@@ -201,17 +202,21 @@ type ProjectTreeScan = {
 const GLOB_TIMEOUT_MS = 5000;
 
 /**
- * Scan project tree using fs.promises.glob with exclusion filters.
- * Returns null if glob fails.
+ * Scan project tree using ripgrep-wasm find with exclusion filters.
+ * Returns null if scan fails.
  */
 async function scanProjectTreeWithGlob(root: string): Promise<ProjectTreeScan | null> {
 	let entries: string[];
+	const timeoutSignal = AbortSignal.timeout(GLOB_TIMEOUT_MS);
 	try {
-		entries = await globPaths("**/*", {
-			cwd: root,
-			gitignore: true,
-			timeoutMs: GLOB_TIMEOUT_MS,
-		});
+		const result = await untilAborted(timeoutSignal, () =>
+			wasmFind({
+				pattern: "**/*",
+				path: root,
+				fileType: "file",
+			}),
+		);
+		entries = result.matches.map(match => match.path).filter(entry => entry.length > 0);
 	} catch {
 		return null;
 	}
@@ -222,7 +227,7 @@ async function scanProjectTreeWithGlob(root: string): Promise<ProjectTreeScan | 
 	dirContents.set(root, new Map());
 
 	for (const entry of entries) {
-		const filePath = entry.trim();
+		const filePath = entry;
 		if (!filePath) continue;
 		const absolutePath = path.join(root, filePath);
 		// Check static ignores on path components

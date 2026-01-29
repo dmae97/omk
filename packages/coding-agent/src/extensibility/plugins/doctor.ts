@@ -6,8 +6,6 @@ export async function runDoctorChecks(): Promise<DoctorCheck[]> {
 
 	// Check external tools
 	const tools = [
-		{ name: "fd", description: "File finder" },
-		{ name: "rg", description: "Ripgrep" },
 		{ name: "sd", description: "Find-replace" },
 		{ name: "sg", description: "AST-grep" },
 		{ name: "git", description: "Version control" },
