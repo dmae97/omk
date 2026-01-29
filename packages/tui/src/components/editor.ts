@@ -289,9 +289,10 @@ export class Editor implements Component, Focusable {
 	// Autocomplete support
 	private autocompleteProvider?: AutocompleteProvider;
 	private autocompleteList?: SelectList;
-	private isAutocompleting: boolean = false;
+	private autocompleteState: "regular" | "force" | null = null;
 	private autocompletePrefix: string = "";
 	private autocompleteRequestId: number = 0;
+	private autocompleteMaxVisible: number = 5;
 	public onAutocompleteUpdate?: () => void;
 
 	// Paste tracking for large pastes
@@ -301,7 +302,6 @@ export class Editor implements Component, Focusable {
 	// Bracketed paste mode buffering
 	private pasteBuffer: string = "";
 	private isInPaste: boolean = false;
-	private pendingShiftEnter: boolean = false;
 
 	// Prompt history for up/down navigation
 	private history: string[] = [];
@@ -355,6 +355,17 @@ export class Editor implements Component, Focusable {
 
 	setPaddingX(paddingX: number): void {
 		this.paddingXOverride = Math.max(0, paddingX);
+	}
+
+	getAutocompleteMaxVisible(): number {
+		return this.autocompleteMaxVisible;
+	}
+
+	setAutocompleteMaxVisible(maxVisible: number): void {
+		const newMaxVisible = Number.isFinite(maxVisible) ? Math.max(3, Math.min(20, Math.floor(maxVisible))) : 5;
+		if (this.autocompleteMaxVisible !== newMaxVisible) {
+			this.autocompleteMaxVisible = newMaxVisible;
+		}
 	}
 
 	setHistoryStorage(storage: HistoryStorage): void {
@@ -512,7 +523,7 @@ export class Editor implements Component, Focusable {
 
 		// Render each layout line
 		// Emit hardware cursor marker only when focused and not showing autocomplete
-		const emitCursorMarker = this.focused && !this.isAutocompleting;
+		const emitCursorMarker = this.focused && !this.autocompleteState;
 		const lineContentWidth = contentAreaWidth;
 
 		for (const layoutLine of visibleLayoutLines) {
@@ -574,7 +585,7 @@ export class Editor implements Component, Focusable {
 		}
 
 		// Add autocomplete list if active
-		if (this.isAutocompleting && this.autocompleteList) {
+		if (this.autocompleteState && this.autocompleteList) {
 			const autocompleteResult = this.autocompleteList.render(width);
 			result.push(...autocompleteResult);
 		}
@@ -664,21 +675,6 @@ export class Editor implements Component, Focusable {
 
 		// Handle special key combinations first
 
-		if (this.pendingShiftEnter) {
-			if (data === "\r") {
-				this.pendingShiftEnter = false;
-				this.addNewLine();
-				return;
-			}
-			this.pendingShiftEnter = false;
-			this.insertCharacter("\\");
-		}
-
-		if (data === "\\") {
-			this.pendingShiftEnter = true;
-			return;
-		}
-
 		// Ctrl+C - Exit (let parent handle this)
 		if (matchesKey(data, "ctrl+c")) {
 			return;
@@ -691,7 +687,7 @@ export class Editor implements Component, Focusable {
 		}
 
 		// Handle autocomplete special keys first (but don't block other input)
-		if (this.isAutocompleting && this.autocompleteList) {
+		if (this.autocompleteState && this.autocompleteList) {
 			// Escape - cancel autocomplete
 			if (matchesKey(data, "escape") || matchesKey(data, "esc")) {
 				this.cancelAutocomplete(true);
@@ -798,7 +794,7 @@ export class Editor implements Component, Focusable {
 		}
 
 		// Tab key - context-aware completion (but not when already autocompleting)
-		if (matchesKey(data, "tab") && !this.isAutocompleting) {
+		if (matchesKey(data, "tab") && !this.autocompleteState) {
 			this.handleTabCompletion();
 			return;
 		}
@@ -853,8 +849,7 @@ export class Editor implements Component, Focusable {
 			data === "\x1b[13;2~" || // Shift+Enter in some terminals (legacy format)
 			matchesKey(data, "shift+enter") || // Shift+Enter (Kitty protocol, handles lock bits)
 			(data.length > 1 && data.includes("\x1b") && data.includes("\r")) ||
-			(data === "\n" && data.length === 1) || // Shift+Enter from iTerm2 mapping
-			data === "\\\r" // Shift+Enter in VS Code terminal
+			(data === "\n" && data.length === 1) // Shift+Enter from iTerm2 mapping
 		) {
 			// Modifier + Enter = new line
 			this.addNewLine();
@@ -863,6 +858,15 @@ export class Editor implements Component, Focusable {
 		else if (matchesKey(data, "enter") || matchesKey(data, "return") || data === "\n") {
 			// If submit is disabled, do nothing
 			if (this.disableSubmit) {
+				return;
+			}
+
+			// Workaround for terminals without Shift+Enter support:
+			// If char before cursor is \, delete it and insert newline instead of submitting.
+			const currentLine = this.state.lines[this.state.cursorLine] || "";
+			if (this.state.cursorCol > 0 && currentLine[this.state.cursorCol - 1] === "\\") {
+				this.handleBackspace();
+				this.addNewLine();
 				return;
 			}
 
@@ -1120,7 +1124,7 @@ export class Editor implements Component, Focusable {
 		}
 
 		// Check if we should trigger or update autocomplete
-		if (!this.isAutocompleting) {
+		if (!this.autocompleteState) {
 			// Auto-trigger for "/" at the start of a line (slash commands)
 			if (char === "/" && this.isAtStartOfMessage()) {
 				this.tryTriggerAutocomplete();
@@ -1275,7 +1279,7 @@ export class Editor implements Component, Focusable {
 		}
 
 		// Update or re-trigger autocomplete after backspace
-		if (this.isAutocompleting) {
+		if (this.autocompleteState) {
 			this.debouncedUpdateAutocomplete();
 		} else {
 			// If autocomplete was cancelled (no matches), re-trigger if we're in a completable context
@@ -1361,7 +1365,7 @@ export class Editor implements Component, Focusable {
 			this.onChange(this.getText());
 		}
 
-		if (this.isAutocompleting) {
+		if (this.autocompleteState) {
 			this.debouncedUpdateAutocomplete();
 		} else {
 			const currentLine = this.state.lines[this.state.cursorLine] || "";
@@ -1586,7 +1590,7 @@ export class Editor implements Component, Focusable {
 		}
 
 		// Update or re-trigger autocomplete after forward delete
-		if (this.isAutocompleting) {
+		if (this.autocompleteState) {
 			this.debouncedUpdateAutocomplete();
 		} else {
 			const currentLine = this.state.lines[this.state.cursorLine] || "";
@@ -1839,8 +1843,8 @@ export class Editor implements Component, Focusable {
 
 		if (suggestions && suggestions.items.length > 0) {
 			this.autocompletePrefix = suggestions.prefix;
-			this.autocompleteList = new SelectList(suggestions.items, 5, this.theme.selectList);
-			this.isAutocompleting = true;
+			this.autocompleteList = new SelectList(suggestions.items, this.autocompleteMaxVisible, this.theme.selectList);
+			this.autocompleteState = "regular";
 			this.onAutocompleteUpdate?.();
 		} else {
 			this.cancelAutocomplete();
@@ -1858,7 +1862,7 @@ export class Editor implements Component, Focusable {
 		if (beforeCursor.trimStart().startsWith("/") && !beforeCursor.trimStart().includes(" ")) {
 			this.handleSlashCommandCompletion();
 		} else {
-			this.forceFileAutocomplete();
+			this.forceFileAutocomplete(true);
 		}
 	}
 
@@ -1871,7 +1875,7 @@ https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19536643416/job/
 17 this job fails with https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19
 536643416/job/55932288317 havea  look at .gi
     */
-	private async forceFileAutocomplete(): Promise<void> {
+	private async forceFileAutocomplete(explicitTab: boolean = false): Promise<void> {
 		if (!this.autocompleteProvider) return;
 
 		// Check if provider supports force file suggestions via runtime check
@@ -1892,9 +1896,30 @@ https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19536643416/job/
 		if (requestId !== this.autocompleteRequestId) return;
 
 		if (suggestions && suggestions.items.length > 0) {
+			// If there's exactly one suggestion and this was an explicit Tab press, apply it immediately
+			if (explicitTab && suggestions.items.length === 1) {
+				const item = suggestions.items[0]!;
+				const result = this.autocompleteProvider.applyCompletion(
+					this.state.lines,
+					this.state.cursorLine,
+					this.state.cursorCol,
+					item,
+					suggestions.prefix,
+				);
+
+				this.state.lines = result.lines;
+				this.state.cursorLine = result.cursorLine;
+				this.state.cursorCol = result.cursorCol;
+
+				if (this.onChange) {
+					this.onChange(this.getText());
+				}
+				return;
+			}
+
 			this.autocompletePrefix = suggestions.prefix;
-			this.autocompleteList = new SelectList(suggestions.items, 5, this.theme.selectList);
-			this.isAutocompleting = true;
+			this.autocompleteList = new SelectList(suggestions.items, this.autocompleteMaxVisible, this.theme.selectList);
+			this.autocompleteState = "force";
 			this.onAutocompleteUpdate?.();
 		} else {
 			this.cancelAutocomplete();
@@ -1903,10 +1928,10 @@ https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19536643416/job/
 	}
 
 	private cancelAutocomplete(notifyCancel: boolean = false): void {
-		const wasAutocompleting = this.isAutocompleting;
+		const wasAutocompleting = this.autocompleteState !== null;
 		this.clearAutocompleteTimeout();
 		this.autocompleteRequestId += 1;
-		this.isAutocompleting = false;
+		this.autocompleteState = null;
 		this.autocompleteList = undefined;
 		this.autocompletePrefix = "";
 		if (notifyCancel && wasAutocompleting) {
@@ -1915,11 +1940,18 @@ https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19536643416/job/
 	}
 
 	public isShowingAutocomplete(): boolean {
-		return this.isAutocompleting;
+		return this.autocompleteState !== null;
 	}
 
 	private async updateAutocomplete(): Promise<void> {
-		if (!this.isAutocompleting || !this.autocompleteProvider) return;
+		if (!this.autocompleteState || !this.autocompleteProvider) return;
+
+		// In force mode, use forceFileAutocomplete to get suggestions
+		if (this.autocompleteState === "force") {
+			this.forceFileAutocomplete();
+			return;
+		}
+
 		const requestId = ++this.autocompleteRequestId;
 
 		const suggestions = await this.autocompleteProvider.getSuggestions(
@@ -1932,7 +1964,7 @@ https://github.com/EsotericSoftware/spine-runtimes/actions/runs/19536643416/job/
 		if (suggestions && suggestions.items.length > 0) {
 			this.autocompletePrefix = suggestions.prefix;
 			// Always create new SelectList to ensure update
-			this.autocompleteList = new SelectList(suggestions.items, 5, this.theme.selectList);
+			this.autocompleteList = new SelectList(suggestions.items, this.autocompleteMaxVisible, this.theme.selectList);
 			this.onAutocompleteUpdate?.();
 		} else {
 			this.cancelAutocomplete();

@@ -5,8 +5,8 @@ Use it for any merge: single file, feature branch, or full release sync.
 
 ## Last Sync Point
 
-**Commit:** `9f3eef65f`
-**Date:** 2026-01-26
+**Commit:** `52532c7c0`
+**Date:** 2026-01-29
 
 When starting a new sync, generate patches from this commit forward:
 

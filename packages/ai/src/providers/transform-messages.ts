@@ -6,13 +6,33 @@ import type { Api, AssistantMessage, Message, Model, ToolCall, ToolResultMessage
  * Anthropic APIs require IDs matching ^[a-zA-Z0-9_-]+$ (max 64 chars).
  */
 function normalizeToolCallId(id: string): string {
+	// Handle pipe-separated IDs from OpenAI Responses API
+	// Format: {call_id}|{item_id} where {item_id} can be 400+ chars with special chars (+, /, =)
+	// Extract just the call_id part and normalize it
+	if (id.includes("|")) {
+		const [callId] = id.split("|");
+		// Sanitize to allowed chars and truncate to 40 chars (OpenAI limit)
+		return callId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
+	}
 	return id.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40);
 }
 
 function normalizeResponsesToolCallId(id: string): string {
 	const [callId, itemId] = id.split("|");
 	if (callId && itemId) {
-		return id;
+		// Sanitize invalid characters and ensure proper format
+		const sanitizedCallId = callId.replace(/[^a-zA-Z0-9_-]/g, "_");
+		let sanitizedItemId = itemId.replace(/[^a-zA-Z0-9_-]/g, "_");
+		// OpenAI Responses API requires item id to start with "fc"
+		if (!sanitizedItemId.startsWith("fc")) {
+			sanitizedItemId = `fc_${sanitizedItemId}`;
+		}
+		// Truncate to 64 chars and strip trailing underscores (OpenAI Codex rejects them)
+		let normalizedCallId = sanitizedCallId.length > 64 ? sanitizedCallId.slice(0, 64) : sanitizedCallId;
+		let normalizedItemId = sanitizedItemId.length > 64 ? sanitizedItemId.slice(0, 64) : sanitizedItemId;
+		normalizedCallId = normalizedCallId.replace(/_+$/, "");
+		normalizedItemId = normalizedItemId.replace(/_+$/, "");
+		return `${normalizedCallId}|${normalizedItemId}`;
 	}
 	const hash = Bun.hash.xxHash64(id).toString(36);
 	return `call_${hash}|item_${hash}`;

@@ -460,6 +460,8 @@ export class SettingsManager {
 	private overrides: Settings;
 	private settings!: Settings;
 	private persist: boolean;
+	private modifiedFields = new Set<keyof Settings>();
+	private modifiedNestedFields = new Map<keyof Settings, Set<string>>();
 
 	static #lastInstance: SettingsManager | null = null;
 
@@ -714,6 +716,17 @@ export class SettingsManager {
 		this.rebuildSettings(projectSettings);
 	}
 
+	/** Mark a field as modified during this session */
+	private markModified(field: keyof Settings, nestedKey?: string): void {
+		this.modifiedFields.add(field);
+		if (nestedKey) {
+			if (!this.modifiedNestedFields.has(field)) {
+				this.modifiedNestedFields.set(field, new Set());
+			}
+			this.modifiedNestedFields.get(field)!.add(nestedKey);
+		}
+	}
+
 	/**
 	 * Persist current global settings to config.yml and rebuild merged settings.
 	 * Uses file locking to prevent concurrent write races.
@@ -723,8 +736,32 @@ export class SettingsManager {
 			const configPath = this.configPath;
 			try {
 				await withFileLock(configPath, async () => {
-					const currentSettings = await SettingsManager.loadFromYaml(configPath);
-					const mergedSettings = deepMergeSettings(currentSettings, this.globalSettings);
+					// Re-read current file to get latest external changes
+					const currentFileSettings = await SettingsManager.loadFromYaml(configPath);
+
+					// Start with file settings as base - preserves external edits
+					const mergedSettings: Settings = { ...currentFileSettings };
+
+					// Only override with in-memory values for fields that were explicitly modified during this session
+					for (const field of this.modifiedFields) {
+						const value = this.globalSettings[field];
+
+						// Handle nested objects specially - merge at nested level to preserve unmodified nested keys
+						if (this.modifiedNestedFields.has(field) && typeof value === "object" && value !== null) {
+							const nestedModified = this.modifiedNestedFields.get(field)!;
+							const baseNested = (currentFileSettings[field] as Record<string, unknown>) ?? {};
+							const inMemoryNested = value as Record<string, unknown>;
+							const mergedNested = { ...baseNested };
+							for (const nestedKey of nestedModified) {
+								mergedNested[nestedKey] = inMemoryNested[nestedKey];
+							}
+							(mergedSettings as Record<string, unknown>)[field] = mergedNested;
+						} else {
+							// For top-level primitives and arrays, use the modified value directly
+							(mergedSettings as Record<string, unknown>)[field] = value;
+						}
+					}
+
 					this.globalSettings = mergedSettings;
 					await Bun.write(configPath, YAML.stringify(this.globalSettings, null, 2));
 				});
@@ -743,6 +780,7 @@ export class SettingsManager {
 
 	async setLastChangelogVersion(version: string): Promise<void> {
 		this.globalSettings.lastChangelogVersion = version;
+		this.markModified("lastChangelogVersion");
 		await this.save();
 	}
 
@@ -761,6 +799,7 @@ export class SettingsManager {
 			this.globalSettings.modelRoles = {};
 		}
 		this.globalSettings.modelRoles[role] = model;
+		this.markModified("modelRoles", role);
 
 		if (this.overrides.modelRoles && this.overrides.modelRoles[role] !== undefined) {
 			this.overrides.modelRoles[role] = model;
@@ -782,6 +821,7 @@ export class SettingsManager {
 
 	async setSteeringMode(mode: "all" | "one-at-a-time"): Promise<void> {
 		this.globalSettings.steeringMode = mode;
+		this.markModified("steeringMode");
 		await this.save();
 	}
 
@@ -791,6 +831,7 @@ export class SettingsManager {
 
 	async setFollowUpMode(mode: "all" | "one-at-a-time"): Promise<void> {
 		this.globalSettings.followUpMode = mode;
+		this.markModified("followUpMode");
 		await this.save();
 	}
 
@@ -800,6 +841,7 @@ export class SettingsManager {
 
 	async setInterruptMode(mode: "immediate" | "wait"): Promise<void> {
 		this.globalSettings.interruptMode = mode;
+		this.markModified("interruptMode");
 		await this.save();
 	}
 
@@ -809,6 +851,7 @@ export class SettingsManager {
 
 	async setTheme(theme: string): Promise<void> {
 		this.globalSettings.theme = theme;
+		this.markModified("theme");
 		await this.save();
 	}
 
@@ -818,6 +861,7 @@ export class SettingsManager {
 
 	async setSymbolPreset(preset: SymbolPreset): Promise<void> {
 		this.globalSettings.symbolPreset = preset;
+		this.markModified("symbolPreset");
 		await this.save();
 	}
 
@@ -827,6 +871,7 @@ export class SettingsManager {
 
 	async setColorBlindMode(enabled: boolean): Promise<void> {
 		this.globalSettings.colorBlindMode = enabled;
+		this.markModified("colorBlindMode");
 		await this.save();
 	}
 
@@ -836,6 +881,7 @@ export class SettingsManager {
 
 	async setDefaultThinkingLevel(level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh"): Promise<void> {
 		this.globalSettings.defaultThinkingLevel = level;
+		this.markModified("defaultThinkingLevel");
 		await this.save();
 	}
 
@@ -848,6 +894,7 @@ export class SettingsManager {
 			this.globalSettings.compaction = {};
 		}
 		this.globalSettings.compaction.enabled = enabled;
+		this.markModified("compaction", "enabled");
 		await this.save();
 	}
 
@@ -892,6 +939,7 @@ export class SettingsManager {
 			this.globalSettings.branchSummary = {};
 		}
 		this.globalSettings.branchSummary.enabled = enabled;
+		this.markModified("branchSummary", "enabled");
 		await this.save();
 	}
 
@@ -911,6 +959,7 @@ export class SettingsManager {
 			this.globalSettings.retry = {};
 		}
 		this.globalSettings.retry.enabled = enabled;
+		this.markModified("retry", "enabled");
 		await this.save();
 	}
 
@@ -942,6 +991,7 @@ export class SettingsManager {
 			this.globalSettings.retry = {};
 		}
 		this.globalSettings.retry.maxRetries = maxRetries;
+		this.markModified("retry", "maxRetries");
 		await this.save();
 	}
 
@@ -954,6 +1004,7 @@ export class SettingsManager {
 			this.globalSettings.retry = {};
 		}
 		this.globalSettings.retry.baseDelayMs = baseDelayMs;
+		this.markModified("retry", "baseDelayMs");
 		await this.save();
 	}
 
@@ -973,6 +1024,7 @@ export class SettingsManager {
 			this.globalSettings.todoCompletion = {};
 		}
 		this.globalSettings.todoCompletion.enabled = enabled;
+		this.markModified("todoCompletion", "enabled");
 		await this.save();
 	}
 
@@ -985,6 +1037,7 @@ export class SettingsManager {
 			this.globalSettings.todoCompletion = {};
 		}
 		this.globalSettings.todoCompletion.maxReminders = maxReminders;
+		this.markModified("todoCompletion", "maxReminders");
 		await this.save();
 	}
 
@@ -998,6 +1051,7 @@ export class SettingsManager {
 
 	async setHideThinkingBlock(hide: boolean): Promise<void> {
 		this.globalSettings.hideThinkingBlock = hide;
+		this.markModified("hideThinkingBlock");
 		await this.save();
 	}
 
@@ -1007,6 +1061,7 @@ export class SettingsManager {
 
 	async setShellPath(path: string | undefined): Promise<void> {
 		this.globalSettings.shellPath = path;
+		this.markModified("shellPath");
 		await this.save();
 	}
 
@@ -1016,6 +1071,7 @@ export class SettingsManager {
 
 	async setCollapseChangelog(collapse: boolean): Promise<void> {
 		this.globalSettings.collapseChangelog = collapse;
+		this.markModified("collapseChangelog");
 		await this.save();
 	}
 
@@ -1028,6 +1084,7 @@ export class SettingsManager {
 			this.globalSettings.startup = {};
 		}
 		this.globalSettings.startup.quiet = quiet;
+		this.markModified("startup", "quiet");
 		await this.save();
 	}
 
@@ -1037,6 +1094,7 @@ export class SettingsManager {
 
 	async setExtensionPaths(paths: string[]): Promise<void> {
 		this.globalSettings.extensions = paths;
+		this.markModified("extensions");
 		await this.save();
 	}
 
@@ -1049,6 +1107,7 @@ export class SettingsManager {
 			this.globalSettings.skills = {};
 		}
 		this.globalSettings.skills.enabled = enabled;
+		this.markModified("skills", "enabled");
 		await this.save();
 	}
 
@@ -1076,6 +1135,7 @@ export class SettingsManager {
 			this.globalSettings.skills = {};
 		}
 		this.globalSettings.skills.enableSkillCommands = enabled;
+		this.markModified("skills", "enableSkillCommands");
 		await this.save();
 	}
 
@@ -1095,6 +1155,7 @@ export class SettingsManager {
 			this.globalSettings.commands = {};
 		}
 		this.globalSettings.commands.enableClaudeUser = enabled;
+		this.markModified("commands", "enableClaudeUser");
 		await this.save();
 	}
 
@@ -1107,6 +1168,7 @@ export class SettingsManager {
 			this.globalSettings.commands = {};
 		}
 		this.globalSettings.commands.enableClaudeProject = enabled;
+		this.markModified("commands", "enableClaudeProject");
 		await this.save();
 	}
 
@@ -1119,6 +1181,7 @@ export class SettingsManager {
 			this.globalSettings.terminal = {};
 		}
 		this.globalSettings.terminal.showImages = show;
+		this.markModified("terminal", "showImages");
 		await this.save();
 	}
 
@@ -1131,6 +1194,7 @@ export class SettingsManager {
 			this.globalSettings.notifications = {};
 		}
 		this.globalSettings.notifications.onComplete = method;
+		this.markModified("notifications", "onComplete");
 		await this.save();
 	}
 
@@ -1146,6 +1210,7 @@ export class SettingsManager {
 			this.globalSettings.ask = {};
 		}
 		this.globalSettings.ask.timeout = seconds;
+		this.markModified("ask", "timeout");
 		await this.save();
 	}
 
@@ -1158,6 +1223,7 @@ export class SettingsManager {
 			this.globalSettings.ask = {};
 		}
 		this.globalSettings.ask.notification = method;
+		this.markModified("ask", "notification");
 		await this.save();
 	}
 
@@ -1170,6 +1236,7 @@ export class SettingsManager {
 			this.globalSettings.images = {};
 		}
 		this.globalSettings.images.autoResize = enabled;
+		this.markModified("images", "autoResize");
 		await this.save();
 	}
 
@@ -1182,6 +1249,7 @@ export class SettingsManager {
 			this.globalSettings.images = {};
 		}
 		this.globalSettings.images.blockImages = blocked;
+		this.markModified("images", "blockImages");
 		await this.save();
 	}
 
@@ -1205,6 +1273,7 @@ export class SettingsManager {
 			this.globalSettings.exa = {};
 		}
 		this.globalSettings.exa.enabled = enabled;
+		this.markModified("exa", "enabled");
 		await this.save();
 	}
 
@@ -1213,6 +1282,7 @@ export class SettingsManager {
 			this.globalSettings.exa = {};
 		}
 		this.globalSettings.exa.enableSearch = enabled;
+		this.markModified("exa", "enableSearch");
 		await this.save();
 	}
 
@@ -1221,6 +1291,7 @@ export class SettingsManager {
 			this.globalSettings.exa = {};
 		}
 		this.globalSettings.exa.enableLinkedin = enabled;
+		this.markModified("exa", "enableLinkedin");
 		await this.save();
 	}
 
@@ -1229,6 +1300,7 @@ export class SettingsManager {
 			this.globalSettings.exa = {};
 		}
 		this.globalSettings.exa.enableCompany = enabled;
+		this.markModified("exa", "enableCompany");
 		await this.save();
 	}
 
@@ -1237,6 +1309,7 @@ export class SettingsManager {
 			this.globalSettings.exa = {};
 		}
 		this.globalSettings.exa.enableResearcher = enabled;
+		this.markModified("exa", "enableResearcher");
 		await this.save();
 	}
 
@@ -1245,6 +1318,7 @@ export class SettingsManager {
 			this.globalSettings.exa = {};
 		}
 		this.globalSettings.exa.enableWebsets = enabled;
+		this.markModified("exa", "enableWebsets");
 		await this.save();
 	}
 
@@ -1258,6 +1332,7 @@ export class SettingsManager {
 			this.globalSettings.providers = {};
 		}
 		this.globalSettings.providers.webSearch = provider;
+		this.markModified("providers", "webSearch");
 		await this.save();
 	}
 
@@ -1270,6 +1345,7 @@ export class SettingsManager {
 			this.globalSettings.providers = {};
 		}
 		this.globalSettings.providers.image = provider;
+		this.markModified("providers", "image");
 		await this.save();
 	}
 
@@ -1290,6 +1366,7 @@ export class SettingsManager {
 			this.globalSettings.bashInterceptor = {};
 		}
 		this.globalSettings.bashInterceptor.enabled = enabled;
+		this.markModified("bashInterceptor", "enabled");
 		await this.save();
 	}
 
@@ -1298,6 +1375,7 @@ export class SettingsManager {
 			this.globalSettings.bashInterceptor = {};
 		}
 		this.globalSettings.bashInterceptor.simpleLs = enabled;
+		this.markModified("bashInterceptor", "simpleLs");
 		await this.save();
 	}
 
@@ -1310,6 +1388,7 @@ export class SettingsManager {
 			this.globalSettings.python = {};
 		}
 		this.globalSettings.python.toolMode = mode;
+		this.markModified("python", "toolMode");
 		await this.save();
 	}
 
@@ -1322,6 +1401,7 @@ export class SettingsManager {
 			this.globalSettings.python = {};
 		}
 		this.globalSettings.python.kernelMode = mode;
+		this.markModified("python", "kernelMode");
 		await this.save();
 	}
 
@@ -1334,6 +1414,7 @@ export class SettingsManager {
 			this.globalSettings.python = {};
 		}
 		this.globalSettings.python.sharedGateway = enabled;
+		this.markModified("python", "sharedGateway");
 		await this.save();
 	}
 
@@ -1346,6 +1427,7 @@ export class SettingsManager {
 			this.globalSettings.mcp = {};
 		}
 		this.globalSettings.mcp.enableProjectConfig = enabled;
+		this.markModified("mcp", "enableProjectConfig");
 		await this.save();
 	}
 
@@ -1358,6 +1440,7 @@ export class SettingsManager {
 			this.globalSettings.lsp = {};
 		}
 		this.globalSettings.lsp.formatOnWrite = enabled;
+		this.markModified("lsp", "formatOnWrite");
 		await this.save();
 	}
 
@@ -1370,6 +1453,7 @@ export class SettingsManager {
 			this.globalSettings.lsp = {};
 		}
 		this.globalSettings.lsp.diagnosticsOnWrite = enabled;
+		this.markModified("lsp", "diagnosticsOnWrite");
 		await this.save();
 	}
 
@@ -1382,6 +1466,7 @@ export class SettingsManager {
 			this.globalSettings.lsp = {};
 		}
 		this.globalSettings.lsp.diagnosticsOnEdit = enabled;
+		this.markModified("lsp", "diagnosticsOnEdit");
 		await this.save();
 	}
 
@@ -1394,6 +1479,7 @@ export class SettingsManager {
 			this.globalSettings.edit = {};
 		}
 		this.globalSettings.edit.fuzzyMatch = enabled;
+		this.markModified("edit", "fuzzyMatch");
 		await this.save();
 	}
 
@@ -1406,6 +1492,7 @@ export class SettingsManager {
 			this.globalSettings.edit = {};
 		}
 		this.globalSettings.edit.fuzzyThreshold = value;
+		this.markModified("edit", "fuzzyThreshold");
 		await this.save();
 	}
 
@@ -1418,6 +1505,7 @@ export class SettingsManager {
 			this.globalSettings.edit = {};
 		}
 		this.globalSettings.edit.patchMode = enabled;
+		this.markModified("edit", "patchMode");
 		await this.save();
 	}
 
@@ -1430,6 +1518,7 @@ export class SettingsManager {
 			this.globalSettings.edit = {};
 		}
 		this.globalSettings.edit.streamingAbort = enabled;
+		this.markModified("edit", "streamingAbort");
 		await this.save();
 	}
 
@@ -1481,6 +1570,7 @@ export class SettingsManager {
 		} else {
 			this.globalSettings.edit.modelVariants[pattern] = variant;
 		}
+		this.markModified("edit", "modelVariants");
 		await this.save();
 	}
 
@@ -1490,6 +1580,7 @@ export class SettingsManager {
 
 	async setNormativeRewrite(enabled: boolean): Promise<void> {
 		this.globalSettings.normativeRewrite = enabled;
+		this.markModified("normativeRewrite");
 		await this.save();
 	}
 
@@ -1499,6 +1590,7 @@ export class SettingsManager {
 
 	async setReadLineNumbers(enabled: boolean): Promise<void> {
 		this.globalSettings.readLineNumbers = enabled;
+		this.markModified("readLineNumbers");
 		await this.save();
 	}
 
@@ -1508,6 +1600,7 @@ export class SettingsManager {
 
 	async setDisabledProviders(providerIds: string[]): Promise<void> {
 		this.globalSettings.disabledProviders = providerIds;
+		this.markModified("disabledProviders");
 		await this.save();
 	}
 
@@ -1517,6 +1610,7 @@ export class SettingsManager {
 
 	async setDisabledExtensions(extensionIds: string[]): Promise<void> {
 		this.globalSettings.disabledExtensions = extensionIds;
+		this.markModified("disabledExtensions");
 		await this.save();
 	}
 
@@ -1530,6 +1624,7 @@ export class SettingsManager {
 		if (index !== -1) {
 			disabled.splice(index, 1);
 			this.globalSettings.disabledExtensions = disabled;
+			this.markModified("disabledExtensions");
 			await this.save();
 		}
 	}
@@ -1539,6 +1634,7 @@ export class SettingsManager {
 		if (!disabled.includes(extensionId)) {
 			disabled.push(extensionId);
 			this.globalSettings.disabledExtensions = disabled;
+			this.markModified("disabledExtensions");
 			await this.save();
 		}
 	}
@@ -1549,6 +1645,7 @@ export class SettingsManager {
 
 	async setTtsrSettings(settings: TtsrSettings): Promise<void> {
 		this.globalSettings.ttsr = { ...this.globalSettings.ttsr, ...settings };
+		this.markModified("ttsr");
 		await this.save();
 	}
 
@@ -1561,6 +1658,7 @@ export class SettingsManager {
 			this.globalSettings.ttsr = {};
 		}
 		this.globalSettings.ttsr.enabled = enabled;
+		this.markModified("ttsr", "enabled");
 		await this.save();
 	}
 
@@ -1573,6 +1671,7 @@ export class SettingsManager {
 			this.globalSettings.ttsr = {};
 		}
 		this.globalSettings.ttsr.contextMode = mode;
+		this.markModified("ttsr", "contextMode");
 		await this.save();
 	}
 
@@ -1585,6 +1684,7 @@ export class SettingsManager {
 			this.globalSettings.ttsr = {};
 		}
 		this.globalSettings.ttsr.repeatMode = mode;
+		this.markModified("ttsr", "repeatMode");
 		await this.save();
 	}
 
@@ -1597,6 +1697,7 @@ export class SettingsManager {
 			this.globalSettings.ttsr = {};
 		}
 		this.globalSettings.ttsr.repeatGap = gap;
+		this.markModified("ttsr", "repeatGap");
 		await this.save();
 	}
 
@@ -1620,8 +1721,12 @@ export class SettingsManager {
 			delete this.globalSettings.statusLine.leftSegments;
 			delete this.globalSettings.statusLine.rightSegments;
 			delete this.globalSettings.statusLine.segmentOptions;
+			this.markModified("statusLine", "leftSegments");
+			this.markModified("statusLine", "rightSegments");
+			this.markModified("statusLine", "segmentOptions");
 		}
 		this.globalSettings.statusLine.preset = preset;
+		this.markModified("statusLine", "preset");
 		await this.save();
 	}
 
@@ -1634,6 +1739,7 @@ export class SettingsManager {
 			this.globalSettings.statusLine = {};
 		}
 		this.globalSettings.statusLine.separator = separator;
+		this.markModified("statusLine", "separator");
 		await this.save();
 	}
 
@@ -1646,9 +1752,11 @@ export class SettingsManager {
 			this.globalSettings.statusLine = {};
 		}
 		this.globalSettings.statusLine.leftSegments = segments;
+		this.markModified("statusLine", "leftSegments");
 		// Setting segments explicitly implies custom preset
 		if (this.globalSettings.statusLine.preset !== "custom") {
 			this.globalSettings.statusLine.preset = "custom";
+			this.markModified("statusLine", "preset");
 		}
 		await this.save();
 	}
@@ -1662,9 +1770,11 @@ export class SettingsManager {
 			this.globalSettings.statusLine = {};
 		}
 		this.globalSettings.statusLine.rightSegments = segments;
+		this.markModified("statusLine", "rightSegments");
 		// Setting segments explicitly implies custom preset
 		if (this.globalSettings.statusLine.preset !== "custom") {
 			this.globalSettings.statusLine.preset = "custom";
+			this.markModified("statusLine", "preset");
 		}
 		await this.save();
 	}
@@ -1688,6 +1798,7 @@ export class SettingsManager {
 			this.globalSettings.statusLine.segmentOptions[segment] = {} as NonNullable<StatusLineSegmentOptions[K]>;
 		}
 		(this.globalSettings.statusLine.segmentOptions[segment] as Record<string, unknown>)[option as string] = value;
+		this.markModified("statusLine", "segmentOptions");
 		await this.save();
 	}
 
@@ -1706,6 +1817,7 @@ export class SettingsManager {
 		if (Object.keys(segmentOptions).length === 0) {
 			delete this.globalSettings.statusLine?.segmentOptions;
 		}
+		this.markModified("statusLine", "segmentOptions");
 		await this.save();
 	}
 
@@ -1718,6 +1830,7 @@ export class SettingsManager {
 			this.globalSettings.statusLine = {};
 		}
 		this.globalSettings.statusLine.showHookStatus = show;
+		this.markModified("statusLine", "showHookStatus");
 		await this.save();
 	}
 
@@ -1727,6 +1840,7 @@ export class SettingsManager {
 
 	async setDoubleEscapeAction(action: "branch" | "tree"): Promise<void> {
 		this.globalSettings.doubleEscapeAction = action;
+		this.markModified("doubleEscapeAction");
 		await this.save();
 	}
 
@@ -1745,6 +1859,7 @@ export class SettingsManager {
 
 	async setShowHardwareCursor(show: boolean): Promise<void> {
 		this.globalSettings.showHardwareCursor = show;
+		this.markModified("showHardwareCursor");
 		await this.save();
 	}
 
@@ -1761,6 +1876,7 @@ export class SettingsManager {
 	 */
 	async setEnvironmentVariables(envVars: Record<string, string>): Promise<void> {
 		this.globalSettings.env = { ...envVars };
+		this.markModified("env");
 		await this.save();
 	}
 
@@ -1769,6 +1885,7 @@ export class SettingsManager {
 	 */
 	async clearEnvironmentVariables(): Promise<void> {
 		delete this.globalSettings.env;
+		this.markModified("env");
 		await this.save();
 	}
 
@@ -1780,6 +1897,7 @@ export class SettingsManager {
 			this.globalSettings.env = {};
 		}
 		this.globalSettings.env[key] = value;
+		this.markModified("env", key);
 		await this.save();
 	}
 
@@ -1789,6 +1907,7 @@ export class SettingsManager {
 	async removeEnvironmentVariable(key: string): Promise<void> {
 		if (this.globalSettings.env) {
 			delete this.globalSettings.env[key];
+			this.markModified("env", key);
 			await this.save();
 		}
 	}
