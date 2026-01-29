@@ -67,7 +67,8 @@ export function renderOutputBlock(options: OutputBlockOptions, theme: Theme): st
 				padToWidth(buildBarLine(theme.boxSharp.teeRight, theme.boxSharp.teeLeft, section.label), lineWidth, bgFn),
 			);
 		}
-		for (const line of section.lines) {
+		const allLines = section.lines.flatMap(l => l.split("\n"));
+		for (const line of allLines) {
 			const text = truncateToWidth(line, contentWidth, theme.format.ellipsis);
 			const innerPadding = " ".repeat(Math.max(0, contentWidth - visibleWidth(text)));
 			const fullLine = `${contentPrefix}${text}${innerPadding}${contentSuffix}`;
