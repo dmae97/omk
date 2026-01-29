@@ -1,7 +1,7 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import { StringEnum } from "@oh-my-pi/pi-ai";
-import { untilAborted } from "@oh-my-pi/pi-utils";
+import { ptree, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { nanoid } from "nanoid";
 import type { ModelRegistry } from "../config/model-registry";
@@ -540,11 +540,6 @@ function combineParts(response: GeminiGenerateContentResponse): GeminiPart[] {
 	return parts;
 }
 
-function createRequestSignal(signal: AbortSignal | undefined, timeoutSeconds: number): AbortSignal {
-	const timeoutSignal = AbortSignal.timeout(timeoutSeconds * 1000);
-	return signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
-}
-
 function buildAntigravityRequest(
 	prompt: string,
 	model: string,
@@ -693,7 +688,7 @@ export const geminiImageTool: CustomTool<typeof geminiImageSchema, GeminiImageTo
 			const { timeout: rawTimeout = DEFAULT_TIMEOUT_SECONDS } = params;
 			// Clamp to reasonable range: 1s - 600s (10 min)
 			const timeoutSeconds = Math.max(1, Math.min(600, rawTimeout));
-			const requestSignal = createRequestSignal(signal, timeoutSeconds);
+			const requestSignal = ptree.combineSignals(signal, timeoutSeconds * 1000);
 
 			if (provider === "antigravity") {
 				if (!apiKey.projectId) {

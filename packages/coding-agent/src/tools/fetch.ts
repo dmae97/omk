@@ -386,51 +386,76 @@ function parseFeedToMarkdown(content: string, maxItems = 10): string {
 }
 
 /**
- * Render HTML to text using lynx or html2text fallback
+ * Render HTML to text using jina, trafilatura, lynx, or html2text (in order of preference)
  */
 async function renderHtmlToText(
-	html: string,
+	url: string,
+	html: Blob | NodeJS.TypedArray | ArrayBufferLike | string | Bun.BlobPart[] | Bun.Archive,
 	timeout: number,
 	scratchDir: string,
+	userSignal?: AbortSignal,
 ): Promise<{ content: string; ok: boolean; method: string }> {
-	const tmpFile = path.join(scratchDir, `omp-${nanoid()}.html`);
+	const signal = ptree.combineSignals(userSignal, timeout * 1000);
+	const execOptions = {
+		mode: "group" as const,
+		allowNonZero: true,
+		allowAbort: true,
+		stderr: "full" as const,
+		signal,
+	};
 
+	// Try jina first (reader API)
 	try {
-		await Bun.write(tmpFile, html);
-		const execOptions = {
-			mode: "group" as const,
-			timeout: timeout * 1000,
-			allowNonZero: true,
-			allowAbort: true,
-			stderr: "full" as const,
-		};
-
-		// Try lynx first (can't auto-install, system package)
-		const lynx = hasCommand("lynx");
-		if (lynx) {
-			const normalizedPath = tmpFile.replace(/\\/g, "/");
-			const fileUrl = normalizedPath.startsWith("/") ? `file://${normalizedPath}` : `file:///${normalizedPath}`;
-			const result = await ptree.exec(["lynx", "-dump", "-nolist", "-width", "120", fileUrl], execOptions);
-			if (result.ok) {
-				return { content: result.stdout, ok: true, method: "lynx" };
+		const jinaUrl = `https://r.jina.ai/${url}`;
+		const response = await fetch(jinaUrl, {
+			headers: { Accept: "text/markdown" },
+			signal,
+		});
+		if (response.ok) {
+			const content = await response.text();
+			if (content.trim().length > 100 && !isLowQualityOutput(content)) {
+				return { content, ok: true, method: "jina" };
 			}
 		}
+	} catch {
+		// Jina failed, continue to next method
+		signal?.throwIfAborted();
+	}
 
-		// Fall back to html2text (auto-install via uv/pip)
-		const html2text = await ensureTool("html2text", true);
-		if (html2text) {
+	// Try trafilatura (auto-install via uv/pip)
+	const trafilatura = await ensureTool("trafilatura", { signal, silent: true });
+	if (trafilatura) {
+		const result = await ptree.exec([trafilatura, "-u", url, "--output-format", "markdown"], execOptions);
+		if (result.ok && result.stdout.trim().length > 100) {
+			return { content: result.stdout, ok: true, method: "trafilatura" };
+		}
+	}
+
+	// Try lynx first (can't auto-install, system package)
+	const lynx = hasCommand("lynx");
+	if (lynx) {
+		const result = await ptree.exec(["lynx", "-dump", "-nolist", "-width", "250", url], execOptions);
+		if (result.ok) {
+			return { content: result.stdout, ok: true, method: "lynx" };
+		}
+	}
+
+	// Fall back to html2text (auto-install via uv/pip)
+	const html2text = await ensureTool("html2text", { signal, silent: true });
+	if (html2text) {
+		const tmpFile = path.join(scratchDir, `omp-${nanoid()}.html`);
+		try {
+			await Bun.write(tmpFile, html);
 			const result = await ptree.exec([html2text, tmpFile], execOptions);
 			if (result.ok) {
 				return { content: result.stdout, ok: true, method: "html2text" };
 			}
+		} catch {
+			// Ignore cleanup errors
+			void fs.rm(tmpFile, { force: true }).catch(() => {});
 		}
-
-		return { content: "", ok: false, method: "none" };
-	} finally {
-		try {
-			await fs.rm(tmpFile, { force: true });
-		} catch {}
 	}
+	return { content: "", ok: false, method: "none" };
 }
 
 /**
@@ -742,7 +767,7 @@ async function renderUrl(
 		}
 
 		// Step 6: Render HTML with lynx or html2text
-		const htmlResult = await renderHtmlToText(rawContent, timeout, scratchDir);
+		const htmlResult = await renderHtmlToText(finalUrl, rawContent, timeout, scratchDir, signal);
 		if (!htmlResult.ok) {
 			notes.push("html rendering failed (lynx/html2text unavailable)");
 			const output = finalizeOutput(rawContent);

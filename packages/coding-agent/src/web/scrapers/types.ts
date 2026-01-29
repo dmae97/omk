@@ -1,6 +1,7 @@
 /**
  * Shared types and utilities for web-fetch handlers
  */
+import { ptree } from "@oh-my-pi/pi-utils";
 import { ToolAbortError } from "../../tools/tool-errors";
 
 export interface RenderResult {
@@ -24,39 +25,6 @@ const USER_AGENTS = [
 	"Mozilla/5.0 (compatible; TextBot/1.0)",
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
 ];
-
-export interface RequestSignal {
-	signal: AbortSignal;
-	cleanup: () => void;
-}
-
-export function createRequestSignal(timeoutMs: number, signal?: AbortSignal): RequestSignal {
-	const controller = new AbortController();
-	let timeoutId: ReturnType<typeof setTimeout> | undefined = setTimeout(() => controller.abort(), timeoutMs);
-	const abortHandler = () => controller.abort();
-
-	if (signal) {
-		if (signal.aborted) {
-			clearTimeout(timeoutId);
-			timeoutId = undefined;
-			controller.abort();
-		} else {
-			signal.addEventListener("abort", abortHandler, { once: true });
-		}
-	}
-
-	const cleanup = () => {
-		if (timeoutId !== undefined) {
-			clearTimeout(timeoutId);
-			timeoutId = undefined;
-		}
-		if (signal) {
-			signal.removeEventListener("abort", abortHandler);
-		}
-	};
-
-	return { signal: controller.signal, cleanup };
-}
 
 function isBotBlocked(status: number, content: string): boolean {
 	if (status === 403 || status === 503) {
@@ -114,7 +82,7 @@ export async function loadPage(url: string, options: LoadPageOptions = {}): Prom
 		}
 
 		const userAgent = USER_AGENTS[attempt];
-		const { signal: requestSignal, cleanup } = createRequestSignal(timeout * 1000, signal);
+		const requestSignal = ptree.combineSignals(signal, timeout * 1000);
 
 		try {
 			const requestInit: RequestInit = {
@@ -176,8 +144,6 @@ export async function loadPage(url: string, options: LoadPageOptions = {}): Prom
 			if (attempt === USER_AGENTS.length - 1) {
 				return { content: "", contentType: "", finalUrl: url, ok: false };
 			}
-		} finally {
-			cleanup();
 		}
 	}
 

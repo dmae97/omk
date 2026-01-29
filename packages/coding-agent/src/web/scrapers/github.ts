@@ -1,5 +1,6 @@
+import { ptree } from "@oh-my-pi/pi-utils";
 import type { RenderResult, SpecialHandler } from "./types";
-import { createRequestSignal, finalizeOutput, loadPage } from "./types";
+import { finalizeOutput, loadPage } from "./types";
 
 interface GitHubUrl {
 	type: "blob" | "tree" | "repo" | "issue" | "issues" | "pull" | "pulls" | "discussion" | "discussions" | "other";
@@ -76,7 +77,7 @@ export async function fetchGitHubApi(
 	signal?: AbortSignal,
 ): Promise<{ data: unknown; ok: boolean }> {
 	try {
-		const { signal: requestSignal, cleanup } = createRequestSignal(timeout * 1000, signal);
+		const requestSignal = ptree.combineSignals(signal, timeout * 1000);
 
 		const headers: Record<string, string> = {
 			Accept: "application/vnd.github.v3+json",
@@ -89,20 +90,16 @@ export async function fetchGitHubApi(
 			headers.Authorization = `Bearer ${token}`;
 		}
 
-		try {
-			const response = await fetch(`https://api.github.com${endpoint}`, {
-				signal: requestSignal,
-				headers,
-			});
+		const response = await fetch(`https://api.github.com${endpoint}`, {
+			signal: requestSignal,
+			headers,
+		});
 
-			if (!response.ok) {
-				return { data: null, ok: false };
-			}
-
-			return { data: await response.json(), ok: true };
-		} finally {
-			cleanup();
+		if (!response.ok) {
+			return { data: null, ok: false };
 		}
+
+		return { data: await response.json(), ok: true };
 	} catch {
 		return { data: null, ok: false };
 	}

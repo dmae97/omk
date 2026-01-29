@@ -421,7 +421,12 @@ export class ChildProcess<In extends InMask = InMask> {
 type ChildSpawnOptions<In extends InMask = InMask> = Omit<
 	Spawn.SpawnOptions<In, "pipe", "pipe">,
 	"stdout" | "stderr"
-> & { signal?: AbortSignal; detached?: boolean };
+> & {
+	/** AbortSignal to cancel the process */
+	signal?: AbortSignal;
+	/** Whether to detach the process */
+	detached?: boolean;
+};
 
 /**
  * Spawn a child process.
@@ -430,7 +435,7 @@ type ChildSpawnOptions<In extends InMask = InMask> = Omit<
  * @returns A ChildProcess instance.
  */
 export function spawn<In extends InMask = InMask>(cmd: string[], options?: ChildSpawnOptions<In>): ChildProcess<In> {
-	const { detached = false, timeout, signal, ...rest } = options ?? {};
+	const { detached = false, timeout = -1, signal, ...rest } = options ?? {};
 	const child = Bun.spawn(cmd, {
 		stdin: "ignore",
 		stdout: "pipe",
@@ -440,7 +445,7 @@ export function spawn<In extends InMask = InMask>(cmd: string[], options?: Child
 	});
 	const cproc = new ChildProcess(child, detached);
 	if (signal) cproc.attachSignal(signal);
-	if (timeout && timeout > 0) cproc.attachTimeout(timeout);
+	if (timeout > 0) cproc.attachTimeout(timeout);
 	return cproc;
 }
 
@@ -454,7 +459,39 @@ export interface ExecOptions extends Omit<ChildSpawnOptions, "stdin">, WaitOptio
 export async function exec(cmd: string[], options?: ExecOptions): Promise<ExecResult> {
 	const { input, stderr, allowAbort, allowNonZero, ...spawnOptions } = options ?? {};
 	const stdin = typeof input === "string" ? Buffer.from(input) : input;
-	const resolvedOptions: ChildSpawnOptions = stdin === undefined ? { ...spawnOptions } : { ...spawnOptions, stdin };
+	const resolvedOptions: ChildSpawnOptions = stdin === undefined ? spawnOptions : { ...spawnOptions, stdin };
 	using child = spawn(cmd, resolvedOptions);
 	return await child.wait({ stderr, allowAbort, allowNonZero });
+}
+
+type SignalValue = AbortSignal | number | null | undefined;
+
+export function combineSignals(...signals: SignalValue[]): AbortSignal | undefined {
+	let timeout: number | undefined;
+	let n = 0;
+	for (let i = 0; i < signals.length; i++) {
+		const s = signals[i];
+		if (s instanceof AbortSignal) {
+			if (s.aborted) return s;
+			signals[n++] = s;
+		} else if (typeof s === "number" && s > 0) {
+			timeout = Math.min(timeout ?? s, s);
+		}
+	}
+
+	// Create timeout signal.
+	if (timeout !== undefined) {
+		signals[n++] = AbortSignal.timeout(timeout);
+	}
+
+	// Single signal, ezpz.
+	const rawSignals = signals.slice(0, n) as AbortSignal[];
+	switch (rawSignals.length) {
+		case 0:
+			return undefined;
+		case 1:
+			return rawSignals[0];
+		default:
+			return AbortSignal.any(rawSignals);
+	}
 }

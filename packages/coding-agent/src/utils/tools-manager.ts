@@ -1,12 +1,12 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { logger, TempDir } from "@oh-my-pi/pi-utils";
-import { $ } from "bun";
+import { logger, ptree, TempDir } from "@oh-my-pi/pi-utils";
 import { APP_NAME, getToolsDir } from "../config";
 
 const TOOLS_DIR = getToolsDir();
 const TOOL_DOWNLOAD_TIMEOUT_MS = 15000;
+const TOOL_METADATA_TIMEOUT_MS = 5000;
 
 interface ToolConfig {
 	name: string;
@@ -93,9 +93,14 @@ const PYTHON_TOOLS: Record<string, PythonToolConfig> = {
 		package: "html2text",
 		binaryName: "html2text",
 	},
+	trafilatura: {
+		name: "trafilatura",
+		package: "trafilatura",
+		binaryName: "trafilatura",
+	},
 };
 
-export type ToolName = "sd" | "sg" | "yt-dlp" | "markitdown" | "html2text";
+export type ToolName = "sd" | "sg" | "yt-dlp" | "markitdown" | "html2text" | "trafilatura";
 
 // Get the path to a tool (system-wide or in our tools dir)
 export async function getToolPath(tool: ToolName): Promise<string | null> {
@@ -119,12 +124,12 @@ export async function getToolPath(tool: ToolName): Promise<string | null> {
 }
 
 // Fetch latest release version from GitHub
-async function getLatestVersion(repo: string): Promise<string> {
+async function getLatestVersion(repo: string, signal?: AbortSignal): Promise<string> {
 	let response: Response;
 	try {
 		response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
 			headers: { "User-Agent": `${APP_NAME}-coding-agent` },
-			signal: AbortSignal.timeout(TOOL_DOWNLOAD_TIMEOUT_MS),
+			signal: ptree.combineSignals(signal, TOOL_METADATA_TIMEOUT_MS),
 		});
 	} catch (err) {
 		if (err instanceof Error && err.name === "AbortError") {
@@ -142,11 +147,11 @@ async function getLatestVersion(repo: string): Promise<string> {
 }
 
 // Download a file from URL
-async function downloadFile(url: string, dest: string): Promise<void> {
+async function downloadFile(url: string, dest: string, signal?: AbortSignal): Promise<void> {
 	let response: Response;
 	try {
 		response = await fetch(url, {
-			signal: AbortSignal.timeout(TOOL_DOWNLOAD_TIMEOUT_MS),
+			signal: ptree.combineSignals(signal, TOOL_DOWNLOAD_TIMEOUT_MS),
 		});
 	} catch (err) {
 		if (err instanceof Error && err.name === "AbortError") {
@@ -163,7 +168,7 @@ async function downloadFile(url: string, dest: string): Promise<void> {
 }
 
 // Download and install a tool
-async function downloadTool(tool: ToolName): Promise<string> {
+async function downloadTool(tool: ToolName, signal?: AbortSignal): Promise<string> {
 	const config = TOOLS[tool];
 	if (!config) throw new Error(`Unknown tool: ${tool}`);
 
@@ -171,7 +176,7 @@ async function downloadTool(tool: ToolName): Promise<string> {
 	const architecture = os.arch();
 
 	// Get latest version
-	const version = await getLatestVersion(config.repo);
+	const version = await getLatestVersion(config.repo, signal);
 
 	// Get asset name for this platform
 	const assetName = config.getAssetName(version, plat, architecture);
@@ -188,7 +193,7 @@ async function downloadTool(tool: ToolName): Promise<string> {
 
 	// Handle direct binary downloads (no archive extraction needed)
 	if (config.isDirectBinary) {
-		await downloadFile(downloadUrl, binaryPath);
+		await downloadFile(downloadUrl, binaryPath, signal);
 		if (plat !== "win32") {
 			await fs.chmod(binaryPath, 0o755);
 		}
@@ -197,7 +202,7 @@ async function downloadTool(tool: ToolName): Promise<string> {
 
 	// Download archive
 	const archivePath = path.join(TOOLS_DIR, assetName);
-	await downloadFile(downloadUrl, archivePath);
+	await downloadFile(downloadUrl, archivePath, signal);
 
 	// Extract
 	const tmp = await TempDir.create("@omp-tools-extract-");
@@ -241,18 +246,28 @@ async function downloadTool(tool: ToolName): Promise<string> {
 }
 
 // Install a Python package via uv (preferred) or pip
-async function installPythonPackage(pkg: string): Promise<boolean> {
+async function installPythonPackage(pkg: string, signal?: AbortSignal): Promise<boolean> {
 	// Try uv first (faster, better isolation)
 	const uv = Bun.which("uv");
 	if (uv) {
-		const result = await $`${uv} tool install ${pkg}`.quiet().nothrow();
+		const result = await ptree.exec(["uv", "tool", "install", pkg], {
+			signal,
+			allowNonZero: true,
+			allowAbort: true,
+			stderr: "full",
+		});
 		if (result.exitCode === 0) return true;
 	}
 
 	// Fall back to pip
 	const pip = Bun.which("pip3") || Bun.which("pip");
 	if (pip) {
-		const result = await $`${pip} install --user ${pkg}`.quiet().nothrow();
+		const result = await ptree.exec(["pip", "install", "--user", pkg], {
+			signal,
+			allowNonZero: true,
+			allowAbort: true,
+			stderr: "full",
+		});
 		return result.exitCode === 0;
 	}
 
@@ -262,16 +277,13 @@ async function installPythonPackage(pkg: string): Promise<boolean> {
 // Ensure a tool is available, downloading if necessary
 // Returns the path to the tool, or null if unavailable
 type EnsureToolOptions = {
+	signal?: AbortSignal;
 	silent?: boolean;
 	notify?: (message: string) => void;
 };
 
-export async function ensureTool(
-	tool: ToolName,
-	silentOrOptions: boolean | EnsureToolOptions = false,
-): Promise<string | undefined> {
-	const options = typeof silentOrOptions === "object" ? silentOrOptions : { silent: silentOrOptions };
-	const silent = options.silent ?? false;
+export async function ensureTool(tool: ToolName, silentOrOptions?: EnsureToolOptions): Promise<string | undefined> {
+	const { signal, silent = false, notify } = silentOrOptions ?? {};
 	const existingPath = await getToolPath(tool);
 	if (existingPath) {
 		return existingPath;
@@ -283,8 +295,8 @@ export async function ensureTool(
 		if (!silent) {
 			logger.debug(`${pythonConfig.name} not found. Installing via uv/pip...`);
 		}
-		options.notify?.(`Installing ${pythonConfig.name}...`);
-		const success = await installPythonPackage(pythonConfig.package);
+		notify?.(`Installing ${pythonConfig.name}...`);
+		const success = await installPythonPackage(pythonConfig.package, signal);
 		if (success) {
 			// Re-check for the command after installation
 			const path = Bun.which(pythonConfig.binaryName);
@@ -308,10 +320,10 @@ export async function ensureTool(
 	if (!silent) {
 		logger.debug(`${config.name} not found. Downloading...`);
 	}
-	options.notify?.(`Downloading ${config.name}...`);
+	notify?.(`Downloading ${config.name}...`);
 
 	try {
-		const path = await downloadTool(tool);
+		const path = await downloadTool(tool, signal);
 		if (!silent) {
 			logger.debug(`${config.name} installed to ${path}`);
 		}

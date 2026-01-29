@@ -4,7 +4,6 @@ import * as path from "node:path";
 import { ptree } from "@oh-my-pi/pi-utils";
 import { nanoid } from "nanoid";
 import { ensureTool } from "../../utils/tools-manager";
-import { createRequestSignal } from "./types";
 
 const MAX_BYTES = 50 * 1024 * 1024; // 50MB for binary files
 
@@ -27,13 +26,15 @@ export async function convertWithMarkitdown(
 	content: Buffer,
 	extensionHint: string,
 	timeout: number,
-	signal?: AbortSignal,
+	userSignal?: AbortSignal,
 ): Promise<ConvertResult> {
-	if (signal?.aborted) {
+	if (userSignal?.aborted) {
 		return { content: "", ok: false, error: "aborted" };
 	}
 
-	const markitdown = await ensureTool("markitdown", true);
+	const signal = ptree.combineSignals(userSignal, timeout * 1000);
+
+	const markitdown = await ensureTool("markitdown", { signal, silent: true });
 	if (!markitdown) {
 		return { content: "", ok: false, error: "markitdown not available" };
 	}
@@ -50,7 +51,7 @@ export async function convertWithMarkitdown(
 	try {
 		await Bun.write(tmpFile, content);
 		const result = await ptree.exec([markitdown, tmpFile], {
-			timeout,
+			signal,
 			allowNonZero: true,
 			stderr: "full",
 			detached: true,
@@ -65,22 +66,20 @@ export async function convertWithMarkitdown(
 		}
 		return { content: result.stdout, ok: true };
 	} finally {
-		try {
-			await fs.rm(tmpFile, { force: true });
-		} catch {}
+		void fs.rm(tmpFile, { force: true }).catch(() => {});
 	}
 }
 
-export async function fetchBinary(url: string, timeout: number, signal?: AbortSignal): Promise<BinaryFetchResult> {
-	if (signal?.aborted) {
+export async function fetchBinary(url: string, timeout: number, userSignal?: AbortSignal): Promise<BinaryFetchResult> {
+	if (userSignal?.aborted) {
 		return { buffer: Buffer.alloc(0), contentType: "", ok: false, error: "aborted" };
 	}
 
-	const { signal: requestSignal, cleanup } = createRequestSignal(timeout * 1000, signal);
+	const signal = ptree.combineSignals(userSignal, timeout * 1000);
 
 	try {
 		const response = await fetch(url, {
-			signal: requestSignal,
+			signal,
 			headers: {
 				"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0",
 			},
@@ -139,7 +138,5 @@ export async function fetchBinary(url: string, timeout: number, signal?: AbortSi
 			ok: false,
 			error: `request failed: ${String(err)}`,
 		};
-	} finally {
-		cleanup();
 	}
 }

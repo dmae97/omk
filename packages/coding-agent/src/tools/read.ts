@@ -487,7 +487,7 @@ async function convertWithMarkitdown(
 	filePath: string,
 	signal?: AbortSignal,
 ): Promise<{ content: string; ok: boolean; error?: string }> {
-	const cmd = await ensureTool("markitdown", true);
+	const cmd = await ensureTool("markitdown", { signal, silent: true });
 	if (!cmd) {
 		return { content: "", ok: false, error: "markitdown not found (uv/pip unavailable)" };
 	}

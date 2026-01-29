@@ -110,15 +110,15 @@ function formatDuration(seconds: number): string {
 export const handleYouTube: SpecialHandler = async (
 	url: string,
 	timeout: number,
-	signal?: AbortSignal,
+	userSignal?: AbortSignal,
 ): Promise<RenderResult | null> => {
-	throwIfAborted(signal);
+	throwIfAborted(userSignal);
 	const yt = parseYouTubeUrl(url);
 	if (!yt) return null;
 
 	// Ensure yt-dlp is available (auto-download if missing)
-	const ytdlp = await ensureTool("yt-dlp", true);
-	throwIfAborted(signal);
+	const signal = ptree.combineSignals(userSignal, timeout * 1000);
+	const ytdlp = await ensureTool("yt-dlp", { signal, silent: true });
 	if (!ytdlp) {
 		return {
 			url,
@@ -138,19 +138,16 @@ export const handleYouTube: SpecialHandler = async (
 	const execOptions = {
 		mode: "group" as const,
 		signal,
-		timeout: timeout * 1000,
 		allowNonZero: true,
 		allowAbort: true,
 		stderr: "full" as const,
 	};
 
 	// Fetch video metadata
-	throwIfAborted(signal);
 	const metaResult = await ptree.exec(
 		[ytdlp, "--dump-json", "--no-warnings", "--no-playlist", "--skip-download", videoUrl],
 		execOptions,
 	);
-	throwIfAborted(signal);
 
 	let title = "YouTube Video";
 	let channel = "";
@@ -190,12 +187,10 @@ export const handleYouTube: SpecialHandler = async (
 	let transcriptSource = "";
 
 	// First, list available subtitles
-	throwIfAborted(signal);
 	const listResult = await ptree.exec(
 		[ytdlp, "--list-subs", "--no-warnings", "--no-playlist", "--skip-download", videoUrl],
 		execOptions,
 	);
-	throwIfAborted(signal);
 
 	const hasManualSubs = listResult.stdout.includes("[info] Available subtitles");
 	const hasAutoSubs = listResult.stdout.includes("[info] Available automatic captions");
@@ -207,7 +202,6 @@ export const handleYouTube: SpecialHandler = async (
 	try {
 		// Try manual subtitles first (English preferred)
 		if (hasManualSubs) {
-			throwIfAborted(signal);
 			const subResult = await ptree.exec(
 				[
 					ytdlp,
@@ -228,10 +222,8 @@ export const handleYouTube: SpecialHandler = async (
 
 			if (subResult.ok) {
 				// Find the downloaded subtitle file using glob
-				throwIfAborted(signal);
 				const subFiles = await Array.fromAsync(new Bun.Glob(`${tmpBase}*.vtt`).scan({ absolute: true }));
 				if (subFiles.length > 0) {
-					throwIfAborted(signal);
 					const vttContent = await Bun.file(subFiles[0]).text();
 					transcript = cleanVttToText(vttContent);
 					transcriptSource = "manual";
@@ -242,7 +234,6 @@ export const handleYouTube: SpecialHandler = async (
 
 		// Fall back to auto-generated captions
 		if (!transcript && hasAutoSubs) {
-			throwIfAborted(signal);
 			const autoResult = await ptree.exec(
 				[
 					ytdlp,
@@ -262,10 +253,8 @@ export const handleYouTube: SpecialHandler = async (
 			);
 
 			if (autoResult.ok) {
-				throwIfAborted(signal);
 				const subFiles = await Array.fromAsync(new Bun.Glob(`${tmpBase}*.vtt`).scan({ absolute: true }));
 				if (subFiles.length > 0) {
-					throwIfAborted(signal);
 					const vttContent = await Bun.file(subFiles[0]).text();
 					transcript = cleanVttToText(vttContent);
 					transcriptSource = "auto-generated";
@@ -274,6 +263,7 @@ export const handleYouTube: SpecialHandler = async (
 			}
 		}
 	} finally {
+		throwIfAborted(signal);
 		// Cleanup temp files (fire-and-forget with error suppression)
 		Array.fromAsync(new Bun.Glob(`${tmpBase}*`).scan({ absolute: true }))
 			.then(tmpFiles => Promise.all(tmpFiles.map(f => fs.unlink(f).catch(() => {}))))
