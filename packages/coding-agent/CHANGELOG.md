@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [8.13.0] - 2026-01-29
+
 ### Added
 - Added `/debug` command with interactive menu for bug report generation:
   - `Report: performance issue` - CPU profiling with reproduction flow
