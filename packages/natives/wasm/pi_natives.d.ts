@@ -78,9 +78,33 @@ export enum SamplingFilter {
 export function extract_segments(line: string, before_end: number, after_start: number, after_len: number, strict_after: boolean): any;
 
 /**
+ * Get list of supported languages.
+ */
+export function get_supported_languages(): string[];
+
+/**
  * Quick check if content matches a pattern.
  */
 export function has_match(content: string, pattern: string, ignore_case: boolean, multiline: boolean): boolean;
+
+/**
+ * Highlight code and return ANSI-colored lines.
+ *
+ * # Arguments
+ * * `code` - The source code to highlight
+ * * `lang` - Language identifier (e.g., "rust", "typescript", "python")
+ * * `colors` - Theme colors as ANSI escape sequences
+ *
+ * # Returns
+ * Highlighted code with ANSI color codes, or the original code if highlighting
+ * fails.
+ */
+export function highlight_code(code: string, lang: string | null | undefined, colors: any): string;
+
+/**
+ * Layout a component tree into terminal lines.
+ */
+export function layout_tui(request: any, width: number): any;
 
 /**
  * Resize an image to the specified dimensions.
@@ -97,6 +121,13 @@ export function search(content: string, options: any): any;
  * Slice a range of visible columns from a line.
  */
 export function slice_with_width(line: string, start_col: number, length: number, strict: boolean): any;
+
+/**
+ * Check if a language is supported for highlighting.
+ * Returns true if the language has either direct support or a fallback
+ * mapping.
+ */
+export function supports_language(lang: string): boolean;
 
 /**
  * Truncate text to a visible width, preserving ANSI codes.

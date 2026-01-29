@@ -22,6 +22,7 @@ grep-matcher = "0.1.8"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 unicode-segmentation = "1.11"
 unicode-width = "0.2"
+syntect = { version = "5.3", default-features = false, features = ["default-syntaxes", "default-themes", "regex-fancy"] }
 
 # Better panic messages in debug builds
 console_error_panic_hook = { version = "0.1.7", optional = true }

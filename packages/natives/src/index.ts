@@ -147,6 +147,33 @@ export {
 } from "./text/index";
 
 // =============================================================================
+// Syntax highlighting
+// =============================================================================
+
+export {
+	getSupportedLanguages,
+	highlightCode,
+	type HighlightColors,
+	supportsLanguage,
+} from "./highlight/index";
+
+// =============================================================================
+// TUI layout engine
+// =============================================================================
+
+export {
+	type BoxNode,
+	type ColumnNode,
+	type LayoutNode,
+	type LayoutRequest,
+	type LayoutResult,
+	layoutTui,
+	type SpacerNode,
+	type TextNode,
+	type WrapMode,
+} from "./tui/index";
+
+// =============================================================================
 // Worker Pool (shared infrastructure)
 // =============================================================================
 

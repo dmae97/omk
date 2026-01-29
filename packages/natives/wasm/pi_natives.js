@@ -127,7 +127,7 @@ export class PhotonImage {
                 throw takeObject(r2);
             }
             var v1 = getArrayU8FromWasm0(r0, r1).slice();
-            wasm.__wbindgen_export3(r0, r1 * 1, 1);
+            wasm.__wbindgen_export4(r0, r1 * 1, 1);
             return v1;
         } finally {
             wasm.__wbindgen_add_to_stack_pointer(16);
@@ -150,7 +150,7 @@ export class PhotonImage {
                 throw takeObject(r2);
             }
             var v1 = getArrayU8FromWasm0(r0, r1).slice();
-            wasm.__wbindgen_export3(r0, r1 * 1, 1);
+            wasm.__wbindgen_export4(r0, r1 * 1, 1);
             return v1;
         } finally {
             wasm.__wbindgen_add_to_stack_pointer(16);
@@ -227,6 +227,24 @@ export function extract_segments(line, before_end, after_start, after_len, stric
 }
 
 /**
+ * Get list of supported languages.
+ * @returns {string[]}
+ */
+export function get_supported_languages() {
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        wasm.get_supported_languages(retptr);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        var v1 = getArrayJsValueFromWasm0(r0, r1).slice();
+        wasm.__wbindgen_export4(r0, r1 * 4, 4);
+        return v1;
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+    }
+}
+
+/**
  * Quick check if content matches a pattern.
  * @param {string} content
  * @param {string} pattern
@@ -252,6 +270,54 @@ export function has_match(content, pattern, ignore_case, multiline) {
     } finally {
         wasm.__wbindgen_add_to_stack_pointer(16);
     }
+}
+
+/**
+ * Highlight code and return ANSI-colored lines.
+ *
+ * # Arguments
+ * * `code` - The source code to highlight
+ * * `lang` - Language identifier (e.g., "rust", "typescript", "python")
+ * * `colors` - Theme colors as ANSI escape sequences
+ *
+ * # Returns
+ * Highlighted code with ANSI color codes, or the original code if highlighting
+ * fails.
+ * @param {string} code
+ * @param {string | null | undefined} lang
+ * @param {any} colors
+ * @returns {string}
+ */
+export function highlight_code(code, lang, colors) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(code, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(lang) ? 0 : passStringToWasm0(lang, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        var len1 = WASM_VECTOR_LEN;
+        wasm.highlight_code(retptr, ptr0, len0, ptr1, len1, addHeapObject(colors));
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        deferred3_0 = r0;
+        deferred3_1 = r1;
+        return getStringFromWasm0(r0, r1);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Layout a component tree into terminal lines.
+ * @param {any} request
+ * @param {number} width
+ * @returns {any}
+ */
+export function layout_tui(request, width) {
+    const ret = wasm.layout_tui(addHeapObject(request), width);
+    return takeObject(ret);
 }
 
 /**
@@ -298,6 +364,20 @@ export function slice_with_width(line, start_col, length, strict) {
 }
 
 /**
+ * Check if a language is supported for highlighting.
+ * Returns true if the language has either direct support or a fallback
+ * mapping.
+ * @param {string} lang
+ * @returns {boolean}
+ */
+export function supports_language(lang) {
+    const ptr0 = passStringToWasm0(lang, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.supports_language(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
  * Truncate text to a visible width, preserving ANSI codes.
  * @param {string} text
  * @param {number} max_width
@@ -322,7 +402,7 @@ export function truncate_to_width(text, max_width, ellipsis, pad) {
         return getStringFromWasm0(r0, r1);
     } finally {
         wasm.__wbindgen_add_to_stack_pointer(16);
-        wasm.__wbindgen_export3(deferred3_0, deferred3_1, 1);
+        wasm.__wbindgen_export4(deferred3_0, deferred3_1, 1);
     }
 }
 
@@ -382,6 +462,10 @@ function __wbg_get_imports() {
             const ret = typeof(getObject(arg0)) === 'bigint';
             return ret;
         },
+        __wbg___wbindgen_is_function_0095a73b8b156f76: function(arg0) {
+            const ret = typeof(getObject(arg0)) === 'function';
+            return ret;
+        },
         __wbg___wbindgen_is_object_5ae8e5880f2c1fbd: function(arg0) {
             const val = getObject(arg0);
             const ret = typeof(val) === 'object' && val !== null;
@@ -420,6 +504,14 @@ function __wbg_get_imports() {
         __wbg___wbindgen_throw_be289d5034ed271b: function(arg0, arg1) {
             throw new Error(getStringFromWasm0(arg0, arg1));
         },
+        __wbg_call_389efe28435a9388: function() { return handleError(function (arg0, arg1) {
+            const ret = getObject(arg0).call(getObject(arg1));
+            return addHeapObject(ret);
+        }, arguments); },
+        __wbg_done_57b39ecd9addfe81: function(arg0) {
+            const ret = getObject(arg0).done;
+            return ret;
+        },
         __wbg_entries_58c7934c745daac7: function(arg0) {
             const ret = Object.entries(getObject(arg0));
             return addHeapObject(ret);
@@ -432,13 +524,17 @@ function __wbg_get_imports() {
                 deferred0_1 = arg1;
                 console.error(getStringFromWasm0(arg0, arg1));
             } finally {
-                wasm.__wbindgen_export3(deferred0_0, deferred0_1, 1);
+                wasm.__wbindgen_export4(deferred0_0, deferred0_1, 1);
             }
         },
         __wbg_get_9b94d73e6221f75c: function(arg0, arg1) {
             const ret = getObject(arg0)[arg1 >>> 0];
             return addHeapObject(ret);
         },
+        __wbg_get_b3ed3ad4be2bc8ac: function() { return handleError(function (arg0, arg1) {
+            const ret = Reflect.get(getObject(arg0), getObject(arg1));
+            return addHeapObject(ret);
+        }, arguments); },
         __wbg_get_with_ref_key_1dc361bd10053bfe: function(arg0, arg1) {
             const ret = getObject(arg0)[getObject(arg1)];
             return addHeapObject(ret);
@@ -447,6 +543,16 @@ function __wbg_get_imports() {
             let result;
             try {
                 result = getObject(arg0) instanceof ArrayBuffer;
+            } catch (_) {
+                result = false;
+            }
+            const ret = result;
+            return ret;
+        },
+        __wbg_instanceof_Map_53af74335dec57f4: function(arg0) {
+            let result;
+            try {
+                result = getObject(arg0) instanceof Map;
             } catch (_) {
                 result = false;
             }
@@ -463,9 +569,17 @@ function __wbg_get_imports() {
             const ret = result;
             return ret;
         },
+        __wbg_isArray_d314bb98fcf08331: function(arg0) {
+            const ret = Array.isArray(getObject(arg0));
+            return ret;
+        },
         __wbg_isSafeInteger_bfbc7332a9768d2a: function(arg0) {
             const ret = Number.isSafeInteger(getObject(arg0));
             return ret;
+        },
+        __wbg_iterator_6ff6560ca1568e55: function() {
+            const ret = Symbol.iterator;
+            return addHeapObject(ret);
         },
         __wbg_length_32ed9a279acd054c: function(arg0) {
             const ret = getObject(arg0).length;
@@ -491,6 +605,14 @@ function __wbg_get_imports() {
             const ret = new Uint8Array(getObject(arg0));
             return addHeapObject(ret);
         },
+        __wbg_next_3482f54c49e8af19: function() { return handleError(function (arg0) {
+            const ret = getObject(arg0).next();
+            return addHeapObject(ret);
+        }, arguments); },
+        __wbg_next_418f80d8f5303233: function(arg0) {
+            const ret = getObject(arg0).next;
+            return addHeapObject(ret);
+        },
         __wbg_prototypesetcall_bdcdcc5842e4d77d: function(arg0, arg1, arg2) {
             Uint8Array.prototype.set.call(getArrayU8FromWasm0(arg0, arg1), getObject(arg2));
         },
@@ -507,17 +629,26 @@ function __wbg_get_imports() {
             getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
             getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
         },
+        __wbg_value_0546255b415e96c1: function(arg0) {
+            const ret = getObject(arg0).value;
+            return addHeapObject(ret);
+        },
         __wbindgen_cast_0000000000000001: function(arg0) {
             // Cast intrinsic for `F64 -> Externref`.
             const ret = arg0;
             return addHeapObject(ret);
         },
-        __wbindgen_cast_0000000000000002: function(arg0, arg1) {
+        __wbindgen_cast_0000000000000002: function(arg0) {
+            // Cast intrinsic for `I64 -> Externref`.
+            const ret = arg0;
+            return addHeapObject(ret);
+        },
+        __wbindgen_cast_0000000000000003: function(arg0, arg1) {
             // Cast intrinsic for `Ref(String) -> Externref`.
             const ret = getStringFromWasm0(arg0, arg1);
             return addHeapObject(ret);
         },
-        __wbindgen_cast_0000000000000003: function(arg0) {
+        __wbindgen_cast_0000000000000004: function(arg0) {
             // Cast intrinsic for `U64 -> Externref`.
             const ret = BigInt.asUintN(64, arg0);
             return addHeapObject(ret);
@@ -629,6 +760,16 @@ function dropObject(idx) {
     heap_next = idx;
 }
 
+function getArrayJsValueFromWasm0(ptr, len) {
+    ptr = ptr >>> 0;
+    const mem = getDataViewMemory0();
+    const result = [];
+    for (let i = ptr; i < ptr + 4 * len; i += 4) {
+        result.push(takeObject(mem.getUint32(i, true)));
+    }
+    return result;
+}
+
 function getArrayU8FromWasm0(ptr, len) {
     ptr = ptr >>> 0;
     return getUint8ArrayMemory0().subarray(ptr / 1, ptr / 1 + len);
@@ -656,6 +797,14 @@ function getUint8ArrayMemory0() {
 }
 
 function getObject(idx) { return heap[idx]; }
+
+function handleError(f, args) {
+    try {
+        return f.apply(this, args);
+    } catch (e) {
+        wasm.__wbindgen_export3(addHeapObject(e));
+    }
+}
 
 let heap = new Array(128).fill(undefined);
 heap.push(undefined, null, true, false);

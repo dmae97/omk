@@ -8,8 +8,12 @@
  * - Collapsible/expandable views
  */
 import type { RenderResultOptions } from "@oh-my-pi/pi-agent-core";
+import {
+	highlightCode as nativeHighlightCode,
+	type HighlightColors,
+	supportsLanguage,
+} from "@oh-my-pi/pi-natives";
 import { type Component, Text } from "@oh-my-pi/pi-tui";
-import { highlight, supportsLanguage } from "cli-highlight";
 import { getLanguageFromPath, type Theme } from "../modes/theme/theme";
 import {
 	formatExpandHint,
@@ -291,29 +295,23 @@ function renderHover(
 }
 
 /**
- * Syntax highlight code using highlight.ts.
+ * Syntax highlight code using native WASM highlighter.
  */
 function highlightCode(codeText: string, language: string, theme: Theme): string[] {
 	const validLang = language && supportsLanguage(language) ? language : undefined;
 	try {
-		const cliTheme = {
-			keyword: (s: string) => theme.fg("syntaxKeyword", s),
-			built_in: (s: string) => theme.fg("syntaxType", s),
-			literal: (s: string) => theme.fg("syntaxNumber", s),
-			number: (s: string) => theme.fg("syntaxNumber", s),
-			string: (s: string) => theme.fg("syntaxString", s),
-			comment: (s: string) => theme.fg("syntaxComment", s),
-			function: (s: string) => theme.fg("syntaxFunction", s),
-			title: (s: string) => theme.fg("syntaxFunction", s),
-			class: (s: string) => theme.fg("syntaxType", s),
-			type: (s: string) => theme.fg("syntaxType", s),
-			attr: (s: string) => theme.fg("syntaxVariable", s),
-			variable: (s: string) => theme.fg("syntaxVariable", s),
-			params: (s: string) => theme.fg("syntaxVariable", s),
-			operator: (s: string) => theme.fg("syntaxOperator", s),
-			punctuation: (s: string) => theme.fg("syntaxPunctuation", s),
+		const colors: HighlightColors = {
+			comment: theme.getFgAnsi("syntaxComment"),
+			keyword: theme.getFgAnsi("syntaxKeyword"),
+			function: theme.getFgAnsi("syntaxFunction"),
+			variable: theme.getFgAnsi("syntaxVariable"),
+			string: theme.getFgAnsi("syntaxString"),
+			number: theme.getFgAnsi("syntaxNumber"),
+			type: theme.getFgAnsi("syntaxType"),
+			operator: theme.getFgAnsi("syntaxOperator"),
+			punctuation: theme.getFgAnsi("syntaxPunctuation"),
 		};
-		return highlight(codeText, { language: validLang, ignoreIllegals: true, theme: cliTheme }).split("\n");
+		return nativeHighlightCode(codeText, validLang, colors).split("\n");
 	} catch {
 		return codeText.split("\n");
 	}
