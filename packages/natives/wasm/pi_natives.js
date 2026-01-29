@@ -1,6 +1,6 @@
-/* @ts-self-types="./pi_natives.d.ts" */
-
 import wasmPath from "./pi_natives_bg.wasm";
+
+/* @ts-self-types="./pi_natives.d.ts" */
 
 /**
  * A compiled regex matcher that can be reused across multiple searches.
@@ -173,7 +173,8 @@ export class PhotonImage {
         return ret >>> 0;
     }
     /**
-     * Create a new PhotonImage from encoded image bytes (PNG, JPEG, WebP, GIF).
+     * Create a new `PhotonImage` from encoded image bytes (PNG, JPEG, WebP,
+     * GIF).
      * @param {Uint8Array} bytes
      * @returns {PhotonImage}
      */
@@ -208,6 +209,22 @@ export const SamplingFilter = Object.freeze({
     Gaussian: 4, "4": "Gaussian",
     Lanczos3: 5, "5": "Lanczos3",
 });
+
+/**
+ * Extract the before/after slices around an overlay region.
+ * @param {string} line
+ * @param {number} before_end
+ * @param {number} after_start
+ * @param {number} after_len
+ * @param {boolean} strict_after
+ * @returns {any}
+ */
+export function extract_segments(line, before_end, after_start, after_len, strict_after) {
+    const ptr0 = passStringToWasm0(line, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.extract_segments(ptr0, len0, before_end, after_start, after_len, strict_after);
+    return takeObject(ret);
+}
 
 /**
  * Quick check if content matches a pattern.
@@ -263,6 +280,62 @@ export function search(content, options) {
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.search(ptr0, len0, addHeapObject(options));
     return takeObject(ret);
+}
+
+/**
+ * Slice a range of visible columns from a line.
+ * @param {string} line
+ * @param {number} start_col
+ * @param {number} length
+ * @param {boolean} strict
+ * @returns {any}
+ */
+export function slice_with_width(line, start_col, length, strict) {
+    const ptr0 = passStringToWasm0(line, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.slice_with_width(ptr0, len0, start_col, length, strict);
+    return takeObject(ret);
+}
+
+/**
+ * Truncate text to a visible width, preserving ANSI codes.
+ * @param {string} text
+ * @param {number} max_width
+ * @param {string} ellipsis
+ * @param {boolean} pad
+ * @returns {string}
+ */
+export function truncate_to_width(text, max_width, ellipsis, pad) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(text, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(ellipsis, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len1 = WASM_VECTOR_LEN;
+        wasm.truncate_to_width(retptr, ptr0, len0, max_width, ptr1, len1, pad);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        deferred3_0 = r0;
+        deferred3_1 = r1;
+        return getStringFromWasm0(r0, r1);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export3(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Compute the visible width of a string, ignoring ANSI codes.
+ * @param {string} text
+ * @returns {number}
+ */
+export function visible_width(text) {
+    const ptr0 = passStringToWasm0(text, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.visible_width(ptr0, len0);
+    return ret >>> 0;
 }
 
 function __wbg_get_imports() {

@@ -11,6 +11,17 @@ export interface VisualTruncateResult {
 	skippedCount: number;
 }
 
+const textCache = new Map<number, Text>();
+
+function getCachedText(paddingX: number): Text {
+	let text = textCache.get(paddingX);
+	if (!text) {
+		text = new Text("", paddingX, 0);
+		textCache.set(paddingX, text);
+	}
+	return text;
+}
+
 /**
  * Truncate text to a maximum number of visual lines (from the end).
  * This accounts for line wrapping based on terminal width.
@@ -34,7 +45,10 @@ export function truncateToVisualLines(
 	}
 
 	// Create a temporary Text component to render and get visual lines
-	const tempText = new Text(text, paddingX, 0);
+	const tempText = getCachedText(paddingX);
+	if (tempText.getText() !== text) {
+		tempText.setText(text);
+	}
 	const allVisualLines = tempText.render(width);
 
 	if (allVisualLines.length <= maxVisualLines) {

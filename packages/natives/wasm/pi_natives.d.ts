@@ -55,7 +55,8 @@ export class PhotonImage {
      */
     get_width(): number;
     /**
-     * Create a new PhotonImage from encoded image bytes (PNG, JPEG, WebP, GIF).
+     * Create a new `PhotonImage` from encoded image bytes (PNG, JPEG, WebP,
+     * GIF).
      */
     static new_from_byteslice(bytes: Uint8Array): PhotonImage;
 }
@@ -72,6 +73,11 @@ export enum SamplingFilter {
 }
 
 /**
+ * Extract the before/after slices around an overlay region.
+ */
+export function extract_segments(line: string, before_end: number, after_start: number, after_len: number, strict_after: boolean): any;
+
+/**
  * Quick check if content matches a pattern.
  */
 export function has_match(content: string, pattern: string, ignore_case: boolean, multiline: boolean): boolean;
@@ -86,3 +92,18 @@ export function resize(image: PhotonImage, width: number, height: number, filter
  * For repeated searches with the same pattern, use [`CompiledPattern`].
  */
 export function search(content: string, options: any): any;
+
+/**
+ * Slice a range of visible columns from a line.
+ */
+export function slice_with_width(line: string, start_col: number, length: number, strict: boolean): any;
+
+/**
+ * Truncate text to a visible width, preserving ANSI codes.
+ */
+export function truncate_to_width(text: string, max_width: number, ellipsis: string, pad: boolean): string;
+
+/**
+ * Compute the visible width of a string, ignoring ANSI codes.
+ */
+export function visible_width(text: string): number;

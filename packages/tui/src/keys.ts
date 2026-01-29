@@ -664,16 +664,26 @@ function rawCtrlChar(letter: string): string {
 	return String.fromCharCode(code);
 }
 
-function parseKeyId(keyId: string): { key: string; ctrl: boolean; shift: boolean; alt: boolean } | null {
-	const parts = keyId.toLowerCase().split("+");
+type ParsedKeyId = { key: string; ctrl: boolean; shift: boolean; alt: boolean };
+
+const PARSED_KEY_ID_CACHE = new Map<string, ParsedKeyId>();
+
+function parseKeyId(keyId: string): ParsedKeyId | null {
+	const normalizedKeyId = keyId.toLowerCase();
+	const cached = PARSED_KEY_ID_CACHE.get(normalizedKeyId);
+	if (cached) return cached;
+
+	const parts = normalizedKeyId.split("+");
 	const key = parts[parts.length - 1];
 	if (!key) return null;
-	return {
+	const parsed = {
 		key,
 		ctrl: parts.includes("ctrl"),
 		shift: parts.includes("shift"),
 		alt: parts.includes("alt"),
 	};
+	PARSED_KEY_ID_CACHE.set(normalizedKeyId, parsed);
+	return parsed;
 }
 
 /**

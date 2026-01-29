@@ -20,6 +20,8 @@ grep-regex = "0.1.14"
 grep-searcher = "0.1.16"
 grep-matcher = "0.1.8"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+unicode-segmentation = "1.11"
+unicode-width = "0.2"
 
 # Better panic messages in debug builds
 console_error_panic_hook = { version = "0.1.7", optional = true }

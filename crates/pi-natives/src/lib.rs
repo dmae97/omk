@@ -5,6 +5,7 @@
 //! content here for matching.
 
 pub mod image;
+pub mod text;
 
 use std::io::{self, Cursor};
 

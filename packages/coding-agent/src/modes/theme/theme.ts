@@ -1180,8 +1180,8 @@ const langMap: Record<string, SymbolKey> = {
 };
 
 export class Theme {
-	private fgColors: Map<ThemeColor, string>;
-	private bgColors: Map<ThemeBg, string>;
+	private fgColors: Record<ThemeColor, string>;
+	private bgColors: Record<ThemeBg, string>;
 	private mode: ColorMode;
 	private symbols: SymbolMap;
 	private symbolPreset: SymbolPreset;
@@ -1190,18 +1190,18 @@ export class Theme {
 		fgColors: Record<ThemeColor, string | number>,
 		bgColors: Record<ThemeBg, string | number>,
 		mode: ColorMode,
-		symbolPreset: SymbolPreset = "unicode",
-		symbolOverrides: Record<string, string> = {},
+		symbolPreset: SymbolPreset,
+		symbolOverrides: Partial<Record<SymbolKey, string>>,
 	) {
 		this.mode = mode;
 		this.symbolPreset = symbolPreset;
-		this.fgColors = new Map();
+		this.fgColors = {} as Record<ThemeColor, string>;
 		for (const [key, value] of Object.entries(fgColors) as [ThemeColor, string | number][]) {
-			this.fgColors.set(key, fgAnsi(value, mode));
+			this.fgColors[key] = fgAnsi(value, mode);
 		}
-		this.bgColors = new Map();
+		this.bgColors = {} as Record<ThemeBg, string>;
 		for (const [key, value] of Object.entries(bgColors) as [ThemeBg, string | number][]) {
-			this.bgColors.set(key, bgAnsi(value, mode));
+			this.bgColors[key] = bgAnsi(value, mode);
 		}
 		// Build symbol map from preset + overrides
 		const baseSymbols = SYMBOL_PRESETS[symbolPreset];
@@ -1216,13 +1216,13 @@ export class Theme {
 	}
 
 	fg(color: ThemeColor, text: string): string {
-		const ansi = this.fgColors.get(color);
+		const ansi = this.fgColors[color];
 		if (!ansi) throw new Error(`Unknown theme color: ${color}`);
 		return `${ansi}${text}\x1b[39m`; // Reset only foreground color
 	}
 
 	bg(color: ThemeBg, text: string): string {
-		const ansi = this.bgColors.get(color);
+		const ansi = this.bgColors[color];
 		if (!ansi) throw new Error(`Unknown theme background color: ${color}`);
 		return `${ansi}${text}\x1b[49m`; // Reset only background color
 	}
@@ -1248,13 +1248,13 @@ export class Theme {
 	}
 
 	getFgAnsi(color: ThemeColor): string {
-		const ansi = this.fgColors.get(color);
+		const ansi = this.fgColors[color];
 		if (!ansi) throw new Error(`Unknown theme color: ${color}`);
 		return ansi;
 	}
 
 	getBgAnsi(color: ThemeBg): string {
-		const ansi = this.bgColors.get(color);
+		const ansi = this.bgColors[color];
 		if (!ansi) throw new Error(`Unknown theme background color: ${color}`);
 		return ansi;
 	}

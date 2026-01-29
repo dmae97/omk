@@ -134,6 +134,19 @@ export {
 } from "./image/index";
 
 // =============================================================================
+// Text utilities
+// =============================================================================
+
+export {
+	type ExtractSegmentsResult,
+	extractSegments,
+	type SliceWithWidthResult,
+	sliceWithWidth,
+	truncateToWidth,
+	visibleWidth,
+} from "./text/index";
+
+// =============================================================================
 // Worker Pool (shared infrastructure)
 // =============================================================================
 
