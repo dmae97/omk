@@ -236,13 +236,9 @@ export class ProcessTerminal implements Terminal {
 		if (this.dead) return;
 		try {
 			process.stdout.write(data);
-		} catch (err) {
-			// EIO means terminal is dead - mark dead and skip all future writes
-			if (err && typeof err === "object" && (err as { code?: string }).code === "EIO") {
-				this.dead = true;
-				return;
-			}
-			throw err;
+		} catch {
+			// Any write failure means terminal is dead - no recovery possible
+			this.dead = true;
 		}
 	}
 
