@@ -16,7 +16,7 @@ This repo contains multiple packages, but **`packages/coding-agent/`** is the pr
 | `packages/tui`          | Terminal UI library with differential rendering       |
 | `packages/natives`      | WASM bindings for native text/image/grep operations   |
 | `packages/stats`        | Local observability dashboard (`omp stats`)           |
-| `packages/pi-utils`     | Shared utilities (logger, streams, temp files)        |
+| `packages/utils`        | Shared utilities (logger, streams, temp files)        |
 | `crates/pi-natives`     | Rust WASM crate for performance-critical text/grep ops |
 
 ## Code Quality

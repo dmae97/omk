@@ -63,7 +63,7 @@ RUN cat > /repo/scripts/publish-local.sh <<'SCRIPT'
 set -e
 
 REGISTRY="http://localhost:4873"
-PACKAGES=(pi-utils ai agent tui stats coding-agent)
+PACKAGES=(utils ai agent tui stats coding-agent)
 
 # Build version map from all package.json files
 declare -A VERSION_MAP

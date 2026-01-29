@@ -24,7 +24,7 @@
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/can1357/oh-my-pi.git",
-		"directory": "packages/pi-utils"
+		"directory": "packages/utils"
 	},
 	"dependencies": {
 		"winston": "^3.19.0",

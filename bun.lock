@@ -110,18 +110,6 @@
         "@types/node": "^25.0.10",
       },
     },
-    "packages/pi-utils": {
-      "name": "@oh-my-pi/pi-utils",
-      "version": "8.12.6",
-      "dependencies": {
-        "strip-ansi": "^7.1.2",
-        "winston": "^3.19.0",
-        "winston-daily-rotate-file": "^5.0.0",
-      },
-      "devDependencies": {
-        "@types/node": "^25.0.10",
-      },
-    },
     "packages/react-edit-benchmark": {
       "name": "@oh-my-pi/react-edit-benchmark",
       "version": "0.0.1",
@@ -173,6 +161,18 @@
       "devDependencies": {
         "@xterm/headless": "^6.0.0",
         "@xterm/xterm": "^6.0.0",
+      },
+    },
+    "packages/utils": {
+      "name": "@oh-my-pi/pi-utils",
+      "version": "8.12.6",
+      "dependencies": {
+        "strip-ansi": "^7.1.2",
+        "winston": "^3.19.0",
+        "winston-daily-rotate-file": "^5.0.0",
+      },
+      "devDependencies": {
+        "@types/node": "^25.0.10",
       },
     },
   },
@@ -309,7 +309,7 @@
 
     "@oh-my-pi/pi-tui": ["@oh-my-pi/pi-tui@workspace:packages/tui"],
 
-    "@oh-my-pi/pi-utils": ["@oh-my-pi/pi-utils@workspace:packages/pi-utils"],
+    "@oh-my-pi/pi-utils": ["@oh-my-pi/pi-utils@workspace:packages/utils"],
 
     "@oh-my-pi/react-edit-benchmark": ["@oh-my-pi/react-edit-benchmark@workspace:packages/react-edit-benchmark"],
 
