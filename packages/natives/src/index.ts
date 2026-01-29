@@ -152,26 +152,10 @@ export {
 
 export {
 	getSupportedLanguages,
-	highlightCode,
 	type HighlightColors,
+	highlightCode,
 	supportsLanguage,
 } from "./highlight/index";
-
-// =============================================================================
-// TUI layout engine
-// =============================================================================
-
-export {
-	type BoxNode,
-	type ColumnNode,
-	type LayoutNode,
-	type LayoutRequest,
-	type LayoutResult,
-	layoutTui,
-	type SpacerNode,
-	type TextNode,
-	type WrapMode,
-} from "./tui/index";
 
 // =============================================================================
 // Worker Pool (shared infrastructure)

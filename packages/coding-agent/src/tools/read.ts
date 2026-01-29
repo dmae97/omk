@@ -1,3 +1,4 @@
+import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
@@ -43,75 +44,89 @@ function isRemoteMountPath(absolutePath: string): boolean {
 	return absolutePath.startsWith(REMOTE_MOUNT_PREFIX);
 }
 
-/**
- * Stream lines from a file, collecting only the requested range.
- * Avoids loading the entire file into memory for large files.
- *
- * @param filePath - Path to the file
- * @param startLine - 0-indexed start line
- * @param maxLinesToCollect - Maximum lines to collect (from startLine)
- * @param maxBytes - Maximum bytes to collect
- * @returns Collected lines, total line count, and truncation info
- */
+const READ_CHUNK_SIZE = 64 * 1024;
+
 async function streamLinesFromFile(
 	filePath: string,
 	startLine: number,
 	maxLinesToCollect: number,
 	maxBytes: number,
+	signal?: AbortSignal,
 ): Promise<{
 	lines: string[];
 	totalFileLines: number;
 	collectedBytes: number;
 	stoppedByByteLimit: boolean;
 }> {
-	const stream = Bun.file(filePath).stream();
 	const decoder = new TextDecoder();
-
+	const bufferChunk = Buffer.allocUnsafe(READ_CHUNK_SIZE);
 	const collectedLines: string[] = [];
 	let lineIndex = 0;
 	let collectedBytes = 0;
 	let stoppedByByteLimit = false;
 	let buffer = "";
 	let doneCollecting = false;
+	let fileHandle: fs.FileHandle | null = null;
 
-	for await (const chunk of stream) {
-		buffer += decoder.decode(chunk, { stream: true });
+	try {
+		fileHandle = await fs.open(filePath, "r");
 
-		for (let newlinePos = buffer.indexOf("\n"); newlinePos !== -1; newlinePos = buffer.indexOf("\n")) {
-			const line = buffer.slice(0, newlinePos);
-			buffer = buffer.slice(newlinePos + 1);
+		while (true) {
+			throwIfAborted(signal);
+			const { bytesRead } = await fileHandle.read(bufferChunk, 0, bufferChunk.length, null);
+			if (bytesRead === 0) break;
 
-			if (!doneCollecting && lineIndex >= startLine) {
-				const lineBytes = Buffer.byteLength(line, "utf-8") + (collectedLines.length > 0 ? 1 : 0);
+			buffer += decoder.decode(bufferChunk.subarray(0, bytesRead), { stream: true });
 
-				if (collectedBytes + lineBytes > maxBytes && collectedLines.length > 0) {
-					stoppedByByteLimit = true;
-					doneCollecting = true;
-				} else if (collectedLines.length < maxLinesToCollect) {
-					collectedLines.push(line);
-					collectedBytes += lineBytes;
-					if (collectedLines.length >= maxLinesToCollect) {
+			for (let newlinePos = buffer.indexOf("\n"); newlinePos !== -1; newlinePos = buffer.indexOf("\n")) {
+				const line = buffer.slice(0, newlinePos);
+				buffer = buffer.slice(newlinePos + 1);
+
+				if (!doneCollecting && lineIndex >= startLine) {
+					const lineBytes = Buffer.byteLength(line, "utf-8") + (collectedLines.length > 0 ? 1 : 0);
+
+					if (collectedBytes + lineBytes > maxBytes && collectedLines.length > 0) {
+						stoppedByByteLimit = true;
+						doneCollecting = true;
+					} else if (collectedLines.length < maxLinesToCollect) {
+						collectedLines.push(line);
+						collectedBytes += lineBytes;
+						if (collectedBytes > maxBytes) {
+							stoppedByByteLimit = true;
+							doneCollecting = true;
+						} else if (collectedLines.length >= maxLinesToCollect) {
+							doneCollecting = true;
+						}
+					} else {
 						doneCollecting = true;
 					}
-				} else {
-					doneCollecting = true;
 				}
-			}
 
-			lineIndex++;
+				lineIndex++;
+			}
+		}
+
+		buffer += decoder.decode();
+	} finally {
+		if (fileHandle) {
+			await fileHandle.close();
 		}
 	}
 
-	// Handle remaining buffer (last line without trailing newline)
 	if (buffer.length > 0) {
 		if (!doneCollecting && lineIndex >= startLine && collectedLines.length < maxLinesToCollect) {
 			const lineBytes = Buffer.byteLength(buffer, "utf-8") + (collectedLines.length > 0 ? 1 : 0);
-			if (collectedBytes + lineBytes <= maxBytes || collectedLines.length === 0) {
+			if (collectedBytes + lineBytes > maxBytes && collectedLines.length > 0) {
+				stoppedByByteLimit = true;
+			} else {
 				collectedLines.push(buffer);
 				collectedBytes += lineBytes;
-			} else {
-				stoppedByByteLimit = true;
+				if (collectedBytes > maxBytes) {
+					stoppedByByteLimit = true;
+				}
 			}
+		} else if (!doneCollecting && lineIndex >= startLine && collectedLines.length >= maxLinesToCollect) {
+			doneCollecting = true;
 		}
 		lineIndex++;
 	}
@@ -599,11 +614,14 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			const startLine = offset ? Math.max(0, offset - 1) : 0;
 			const startLineDisplay = startLine + 1; // For display (1-indexed)
 
-			// Calculate how many lines to collect: user limit or default truncation limit
 			const maxLinesToCollect = limit !== undefined ? limit : DEFAULT_MAX_LINES;
-
-			// Stream the file, collecting only the needed lines
-			const streamResult = await streamLinesFromFile(absolutePath, startLine, maxLinesToCollect, DEFAULT_MAX_BYTES);
+			const streamResult = await streamLinesFromFile(
+				absolutePath,
+				startLine,
+				maxLinesToCollect,
+				DEFAULT_MAX_BYTES,
+				signal,
+			);
 
 			const { lines: collectedLines, totalFileLines, collectedBytes, stoppedByByteLimit } = streamResult;
 
@@ -618,13 +636,11 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 					.done();
 			}
 
-			// Build the selected content from collected lines
 			const selectedContent = collectedLines.join("\n");
 			const userLimitedLines = limit !== undefined ? collectedLines.length : undefined;
 
-			// Build truncation result from streaming data
 			const totalSelectedLines = totalFileLines - startLine;
-			const totalSelectedBytes = collectedBytes; // We don't know exact total bytes without reading all
+			const totalSelectedBytes = collectedBytes;
 			const wasTruncated = collectedLines.length < totalSelectedLines || stoppedByByteLimit;
 
 			const truncation: TruncationResult = {

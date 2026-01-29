@@ -10,7 +10,6 @@ export const extract_segments: (a: number, b: number, c: number, d: number, e: n
 export const get_supported_languages: (a: number) => void;
 export const has_match: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
 export const highlight_code: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
-export const layout_tui: (a: number, b: number) => number;
 export const photonimage_get_bytes: (a: number, b: number) => void;
 export const photonimage_get_bytes_jpeg: (a: number, b: number, c: number) => void;
 export const photonimage_get_height: (a: number) => number;
@@ -26,6 +25,5 @@ export const compiledpattern_has_match_bytes: (a: number, b: number, c: number) 
 export const compiledpattern_search_bytes: (a: number, b: number, c: number, d: number, e: number) => number;
 export const __wbindgen_export: (a: number, b: number) => number;
 export const __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
-export const __wbindgen_export3: (a: number) => void;
-export const __wbindgen_export4: (a: number, b: number, c: number) => void;
+export const __wbindgen_export3: (a: number, b: number, c: number) => void;
 export const __wbindgen_add_to_stack_pointer: (a: number) => number;

@@ -102,11 +102,6 @@ export function has_match(content: string, pattern: string, ignore_case: boolean
 export function highlight_code(code: string, lang: string | null | undefined, colors: any): string;
 
 /**
- * Layout a component tree into terminal lines.
- */
-export function layout_tui(request: any, width: number): any;
-
-/**
  * Resize an image to the specified dimensions.
  */
 export function resize(image: PhotonImage, width: number, height: number, filter: SamplingFilter): PhotonImage;
