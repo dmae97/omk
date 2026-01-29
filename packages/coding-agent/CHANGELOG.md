@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [9.0.0] - 2026-01-29
+
 ### Fixed
 
 - External edits to `config.yml` are now preserved when omp reloads or saves unrelated settings. Previously, editing config.yml directly (e.g., removing a package from `packages` array) would be silently reverted on next omp startup when automatic setters like `setLastChangelogVersion()` triggered a save. ([#1046](https://github.com/badlogic/pi-mono/pull/1046) by [@nicobailonMD](https://github.com/nicobailonMD))

@@ -498,7 +498,7 @@ dependencies = [
 
 [[package]]
 name = "pi-natives"
-version = "8.13.0"
+version = "9.0.0"
 dependencies = [
  "console_error_panic_hook",
  "grep-matcher",

@@ -1,6 +1,6 @@
 {
 	"name": "@oh-my-pi/pi-natives",
-	"version": "8.13.0",
+	"version": "9.0.0",
 	"description": "Native Rust functionality compiled to WebAssembly via wasm-bindgen",
 	"type": "module",
 	"main": "./src/index.ts",
