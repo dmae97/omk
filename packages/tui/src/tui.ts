@@ -541,8 +541,8 @@ export class TUI extends Container {
 		return result;
 	}
 
-	private containsImage(line: string): boolean {
-		return line.includes("\x1b_G") || line.includes("\x1b]1337;File=");
+	static containsImage(line: string): boolean {
+		return getCapabilities().containsImage(line);
 	}
 
 	/**
@@ -764,7 +764,7 @@ export class TUI extends Container {
 
 	private applyLineResets(lines: string[]): string[] {
 		const reset = TUI.SEGMENT_RESET;
-		return lines.map(line => (this.containsImage(line) ? line : line + reset));
+		return lines.map(line => (TUI.containsImage(line) ? line : line + reset));
 	}
 
 	/**
@@ -839,7 +839,7 @@ export class TUI extends Container {
 		overlayWidth: number,
 		totalWidth: number,
 	): string {
-		if (this.containsImage(baseLine)) return baseLine;
+		if (TUI.containsImage(baseLine)) return baseLine;
 
 		// Single pass through baseLine extracts both before and after segments
 		const afterStart = startCol + overlayWidth;
@@ -1081,7 +1081,7 @@ export class TUI extends Container {
 			if (i > firstChanged) buffer += "\r\n";
 			buffer += "\x1b[2K"; // Clear current line
 			const line = newLines[i];
-			const isImageLine = this.containsImage(line);
+			const isImageLine = TUI.containsImage(line);
 			if (!isImageLine && visibleWidth(line) > width) {
 				// Log all lines to crash file for debugging
 				const crashLogPath = path.join(os.homedir(), ".omp", "agent", "omp-crash.log");

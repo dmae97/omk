@@ -1,9 +1,10 @@
 export type ImageProtocol = "kitty" | "iterm2" | null;
 
 export interface TerminalCapabilities {
-	images: ImageProtocol;
-	trueColor: boolean;
-	hyperlinks: boolean;
+	readonly images: ImageProtocol;
+	readonly trueColor: boolean;
+	readonly hyperlinks: boolean;
+	containsImage(line: string): boolean;
 }
 
 export interface CellDimensions {
@@ -35,37 +36,72 @@ export function setCellDimensions(dims: CellDimensions): void {
 	cellDimensions = dims;
 }
 
+const kBaseCaps: TerminalCapabilities = {
+	images: null,
+	trueColor: false,
+	hyperlinks: true,
+	containsImage() {
+		return false;
+	},
+};
+
+function createTerminalCaps(parts: Partial<TerminalCapabilities>): TerminalCapabilities {
+	return Object.freeze({ ...kBaseCaps, ...parts });
+}
+
+const kKittyCaps = createTerminalCaps({
+	images: "kitty",
+	trueColor: true,
+	hyperlinks: true,
+	containsImage(line: string) {
+		return line.includes("\x1b_G");
+	},
+});
+const kGhosttyCaps = kKittyCaps;
+const kWeztermCaps = kKittyCaps;
+
+const kIterm2Caps = createTerminalCaps({
+	images: "iterm2",
+	trueColor: true,
+	hyperlinks: true,
+	containsImage(line: string) {
+		return line.includes("\x1b]1337;File=");
+	},
+});
+
+const kTrueColorCaps = createTerminalCaps({
+	...kBaseCaps,
+	trueColor: true,
+});
+
+const kVscodeCaps = kTrueColorCaps;
+const kAlacrittyCaps = kTrueColorCaps;
+
 export function detectCapabilities(): TerminalCapabilities {
 	const termProgram = process.env.TERM_PROGRAM?.toLowerCase() || "";
 	const term = process.env.TERM?.toLowerCase() || "";
 	const colorTerm = process.env.COLORTERM?.toLowerCase() || "";
 
 	if (process.env.KITTY_WINDOW_ID || termProgram === "kitty") {
-		return { images: "kitty", trueColor: true, hyperlinks: true };
+		return kKittyCaps;
 	}
-
 	if (termProgram === "ghostty" || term.includes("ghostty") || process.env.GHOSTTY_RESOURCES_DIR) {
-		return { images: "kitty", trueColor: true, hyperlinks: true };
+		return kGhosttyCaps;
 	}
-
 	if (process.env.WEZTERM_PANE || termProgram === "wezterm") {
-		return { images: "kitty", trueColor: true, hyperlinks: true };
+		return kWeztermCaps;
 	}
-
 	if (process.env.ITERM_SESSION_ID || termProgram === "iterm.app") {
-		return { images: "iterm2", trueColor: true, hyperlinks: true };
+		return kIterm2Caps;
 	}
-
 	if (termProgram === "vscode") {
-		return { images: null, trueColor: true, hyperlinks: true };
+		return kVscodeCaps;
 	}
-
 	if (termProgram === "alacritty") {
-		return { images: null, trueColor: true, hyperlinks: true };
+		return kAlacrittyCaps;
 	}
-
 	const trueColor = colorTerm === "truecolor" || colorTerm === "24bit";
-	return { images: null, trueColor, hyperlinks: true };
+	return trueColor ? kTrueColorCaps : kBaseCaps;
 }
 
 export function getCapabilities(): TerminalCapabilities {
