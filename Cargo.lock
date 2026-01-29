@@ -246,7 +246,7 @@ checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 
 [[package]]
 name = "pi-natives"
-version = "8.12.8"
+version = "8.12.9"
 dependencies = [
  "console_error_panic_hook",
  "grep-matcher",
