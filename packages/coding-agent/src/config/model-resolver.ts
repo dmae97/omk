@@ -5,6 +5,7 @@ import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { type Api, type KnownProvider, type Model, modelsAreEqual } from "@oh-my-pi/pi-ai";
 import chalk from "chalk";
 import { isValidThinkingLevel } from "../cli/args";
+import { fuzzyMatch } from "../utils/fuzzy";
 import type { ModelRegistry } from "./model-registry";
 
 /** Default model IDs for each known provider */
@@ -162,6 +163,32 @@ function tryMatchModel(
 		);
 		if (providerMatch) {
 			return providerMatch;
+		}
+
+		const providerModels = availableModels.filter(m => m.provider.toLowerCase() === provider.toLowerCase());
+		if (providerModels.length > 0) {
+			const scored = providerModels
+				.map(model => ({ model, match: fuzzyMatch(modelId, model.id) }))
+				.filter(entry => entry.match.matches);
+			if (scored.length > 0) {
+				scored.sort((a, b) => {
+					if (a.match.score !== b.match.score) return a.match.score - b.match.score;
+					const aKey = formatModelString(a.model);
+					const bKey = formatModelString(b.model);
+					const aUsage = context.modelUsageRank.get(aKey) ?? Number.POSITIVE_INFINITY;
+					const bUsage = context.modelUsageRank.get(bKey) ?? Number.POSITIVE_INFINITY;
+					if (aUsage !== bUsage) return aUsage - bUsage;
+
+					const aProviderUsage = context.providerUsageRank.get(a.model.provider) ?? Number.POSITIVE_INFINITY;
+					const bProviderUsage = context.providerUsageRank.get(b.model.provider) ?? Number.POSITIVE_INFINITY;
+					if (aProviderUsage !== bProviderUsage) return aProviderUsage - bProviderUsage;
+
+					const aOrder = context.modelOrder.get(aKey) ?? 0;
+					const bOrder = context.modelOrder.get(bKey) ?? 0;
+					return aOrder - bOrder;
+				});
+				return scored[0]?.model;
+			}
 		}
 		// No exact provider/model match - fall through to other matching
 	}
