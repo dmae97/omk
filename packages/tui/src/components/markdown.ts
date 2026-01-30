@@ -134,7 +134,7 @@ export class Markdown implements Component {
 		const wrappedLines: string[] = [];
 		for (const line of renderedLines) {
 			// Skip wrapping for image protocol lines (would corrupt escape sequences)
-			if (this.containsImage(line)) {
+			if (TERMINAL_INFO.isImageLine(line)) {
 				wrappedLines.push(line);
 			} else {
 				wrappedLines.push(...wrapTextWithAnsi(line, contentWidth));
@@ -149,7 +149,7 @@ export class Markdown implements Component {
 
 		for (const line of wrappedLines) {
 			// Image lines must be output raw - no margins or background
-			if (this.containsImage(line)) {
+			if (TERMINAL_INFO.isImageLine(line)) {
 				contentLines.push(line);
 				continue;
 			}
@@ -759,10 +759,6 @@ export class Markdown implements Component {
 
 		lines.push(""); // Add spacing after table
 		return lines;
-	}
-
-	private containsImage(line: string): boolean {
-		return line.includes("\x1b_G") || line.includes("\x1b]1337;File=");
 	}
 
 	/**

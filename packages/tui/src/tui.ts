@@ -541,10 +541,6 @@ export class TUI extends Container {
 		return result;
 	}
 
-	static containsImage(line: string): boolean {
-		return TERMINAL_INFO.isImageLine(line);
-	}
-
 	/**
 	 * Resolve overlay layout from options.
 	 * Returns { width, row, col, maxHeight } for rendering.
@@ -766,7 +762,7 @@ export class TUI extends Container {
 		const reset = TUI.SEGMENT_RESET;
 		for (let i = 0; i < lines.length; i++) {
 			const line = lines[i];
-			if (!TUI.containsImage(line)) {
+			if (!TERMINAL_INFO.isImageLine(line)) {
 				lines[i] = line + reset;
 			}
 		}
@@ -845,7 +841,7 @@ export class TUI extends Container {
 		overlayWidth: number,
 		totalWidth: number,
 	): string {
-		if (TUI.containsImage(baseLine)) return baseLine;
+		if (TERMINAL_INFO.isImageLine(baseLine)) return baseLine;
 
 		// Single pass through baseLine extracts both before and after segments
 		const afterStart = startCol + overlayWidth;
@@ -1087,7 +1083,7 @@ export class TUI extends Container {
 			if (i > firstChanged) buffer += "\r\n";
 			buffer += "\x1b[2K"; // Clear current line
 			const line = newLines[i];
-			const isImageLine = TUI.containsImage(line);
+			const isImageLine = TERMINAL_INFO.isImageLine(line);
 			if (!isImageLine && visibleWidth(line) > width) {
 				// Log all lines to crash file for debugging
 				const crashLogPath = path.join(os.homedir(), ".omp", "agent", "omp-crash.log");
