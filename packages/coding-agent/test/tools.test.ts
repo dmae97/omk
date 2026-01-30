@@ -484,8 +484,7 @@ function b() {
 			fs.writeFileSync(path.join(testDir, "visible.txt"), "visible");
 
 			const result = await findTool.execute("test-call-13", {
-				pattern: "**/*.txt",
-				path: testDir,
+				pattern: `${testDir}/**/*.txt`,
 				hidden: true,
 			});
 
@@ -504,8 +503,7 @@ function b() {
 			fs.writeFileSync(path.join(testDir, "kept.txt"), "kept");
 
 			const result = await findTool.execute("test-call-14", {
-				pattern: "**/*.txt",
-				path: testDir,
+				pattern: `${testDir}/**/*.txt`,
 			});
 
 			const output = getTextOutput(result);

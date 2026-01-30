@@ -22,14 +22,58 @@ import { toolResult } from "./tool-result";
 import { type TruncationResult, truncateHead } from "./truncate";
 
 const findSchema = Type.Object({
-	pattern: Type.String({ description: "Glob pattern, e.g. '*.ts', '**/*.json'" }),
-	path: Type.Optional(Type.String({ description: "Directory to search (default: cwd)" })),
+	pattern: Type.String({ description: "Glob pattern, e.g. '*.ts', 'src/**/*.json', 'lib/*.tsx'" }),
 	hidden: Type.Optional(Type.Boolean({ description: "Include hidden files and directories (default: true)" })),
 	limit: Type.Optional(Type.Number({ description: "Max results (default: 1000)" })),
 });
 
 const DEFAULT_LIMIT = 1000;
 const GLOB_TIMEOUT_MS = 5000;
+
+/**
+ * Parse a pattern to extract the base directory path and glob pattern.
+ * Examples:
+ *   "src/app/**\/*.tsx" → { basePath: "src/app", globPattern: "**\/*.tsx" }
+ *   "src/app/*.tsx" → { basePath: "src/app", globPattern: "*.tsx" }
+ *   "*.ts" → { basePath: ".", globPattern: "**\/*.ts" }
+ *   "**\/*.json" → { basePath: ".", globPattern: "**\/*.json" }
+ *   "/abs/path/**\/*.ts" → { basePath: "/abs/path", globPattern: "**\/*.ts" }
+ */
+function parsePatternPath(pattern: string): { basePath: string; globPattern: string } {
+	// Find the first segment containing glob characters
+	const segments = pattern.split("/");
+	const globChars = ["*", "?", "[", "{"];
+
+	let firstGlobIndex = -1;
+	for (let i = 0; i < segments.length; i++) {
+		if (globChars.some(c => segments[i].includes(c))) {
+			firstGlobIndex = i;
+			break;
+		}
+	}
+
+	// No glob characters found - treat as literal path with implicit **/*
+	if (firstGlobIndex === -1) {
+		// Pattern is a directory path like "src/app" - search recursively in it
+		return { basePath: pattern, globPattern: "**/*" };
+	}
+
+	// Glob starts at first segment - no base path
+	if (firstGlobIndex === 0) {
+		// Simple pattern like "*.ts" needs **/ prefix for recursive search
+		const needsRecursive = !pattern.startsWith("**/");
+		return {
+			basePath: ".",
+			globPattern: needsRecursive ? `**/${pattern}` : pattern,
+		};
+	}
+
+	// Split at the glob boundary
+	const basePath = segments.slice(0, firstGlobIndex).join("/");
+	const globPattern = segments.slice(firstGlobIndex).join("/");
+
+	return { basePath, globPattern };
+}
 
 export interface FindToolDetails {
 	truncation?: TruncationResult;
@@ -81,10 +125,19 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 		_onUpdate?: AgentToolUpdateCallback<FindToolDetails>,
 		_context?: AgentToolContext,
 	): Promise<AgentToolResult<FindToolDetails>> {
-		const { pattern, path: searchDir, limit, hidden } = params;
+		const { pattern, limit, hidden } = params;
 
 		return untilAborted(signal, async () => {
-			const searchPath = resolveToCwd(searchDir || ".", this.session.cwd);
+			// Parse pattern to extract base directory and glob pattern
+			// e.g., "src/app/**/*.tsx" → basePath: "src/app", globPattern: "**/*.tsx"
+			// e.g., "*.ts" → basePath: ".", globPattern: "**/*.ts"
+			const normalizedPattern = pattern.trim().replace(/\\/g, "/");
+			if (!normalizedPattern) {
+				throw new ToolError("Pattern must not be empty");
+			}
+
+			const { basePath, globPattern } = parsePatternPath(normalizedPattern);
+			const searchPath = resolveToCwd(basePath, this.session.cwd);
 
 			if (searchPath === "/") {
 				throw new ToolError("Searching from root directory '/' is not allowed");
@@ -94,10 +147,6 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				const relative = path.relative(this.session.cwd, searchPath).replace(/\\/g, "/");
 				return relative.length === 0 ? "." : relative;
 			})();
-			const normalizedPattern = pattern.trim();
-			if (!normalizedPattern) {
-				throw new ToolError("Pattern must not be empty");
-			}
 
 			const rawLimit = limit ?? DEFAULT_LIMIT;
 			const effectiveLimit = Number.isFinite(rawLimit) ? Math.floor(rawLimit) : Number.NaN;
@@ -105,7 +154,6 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				throw new ToolError("Limit must be a positive number");
 			}
 			const includeHidden = hidden ?? true;
-			const globPattern = normalizedPattern.replace(/\\/g, "/");
 
 			// If custom operations provided with glob, use that instead of fd
 			if (this.customOps?.glob) {
@@ -113,7 +161,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 					throw new ToolError(`Path not found: ${searchPath}`);
 				}
 
-				const results = await this.customOps.glob(normalizedPattern, searchPath, {
+				const results = await this.customOps.glob(globPattern, searchPath, {
 					ignore: ["**/node_modules/**", "**/.git/**"],
 					limit: effectiveLimit,
 				});
@@ -279,8 +327,6 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 
 interface FindRenderArgs {
 	pattern: string;
-	path?: string;
-	sortByMtime?: boolean;
 	limit?: number;
 }
 
@@ -290,8 +336,6 @@ export const findToolRenderer = {
 	inline: true,
 	renderCall(args: FindRenderArgs, uiTheme: Theme): Component {
 		const meta: string[] = [];
-		if (args.path) meta.push(`in ${args.path}`);
-		if (args.sortByMtime) meta.push("sort:mtime");
 		if (args.limit !== undefined) meta.push(`limit:${args.limit}`);
 
 		const text = renderStatusLine(

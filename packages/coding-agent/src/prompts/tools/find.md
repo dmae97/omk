@@ -3,7 +3,8 @@
 Fast file pattern matching that works with any codebase size.
 
 <instruction>
-- Supports glob patterns like `**/*.js` or `src/**/*.ts`
+- Pattern includes the search path: `src/**/*.ts`, `lib/*.json`, `**/*.md`
+- Simple patterns like `*.ts` automatically search recursively from cwd
 - Includes hidden files by default (use `hidden: false` to exclude)
 - Speculatively perform multiple searches in parallel when potentially useful
 </instruction>
