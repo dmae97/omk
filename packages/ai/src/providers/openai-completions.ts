@@ -397,6 +397,11 @@ function buildParams(model: Model<"openai-completions">, context: Context, optio
 	const messages = convertMessages(model, context, compat);
 	maybeAddOpenRouterAnthropicCacheControl(model, messages);
 
+	// Kimi calculates TPM rate limits based on max_tokens, not actual output.
+	// Always send max_tokens to avoid their high default causing rate limit issues.
+	const isKimi = model.provider === "kimi-code" || model.id.includes("moonshotai/kimi");
+	const effectiveMaxTokens = options?.maxTokens ?? (isKimi ? model.maxTokens : undefined);
+
 	const params: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
 		model: model.id,
 		messages,
@@ -411,11 +416,11 @@ function buildParams(model: Model<"openai-completions">, context: Context, optio
 		params.store = false;
 	}
 
-	if (options?.maxTokens) {
+	if (effectiveMaxTokens) {
 		if (compat.maxTokensField === "max_tokens") {
-			(params as any).max_tokens = options.maxTokens;
+			(params as any).max_tokens = effectiveMaxTokens;
 		} else {
-			params.max_completion_tokens = options.maxTokens;
+			params.max_completion_tokens = effectiveMaxTokens;
 		}
 	}
 
