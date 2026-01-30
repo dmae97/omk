@@ -90,10 +90,12 @@ export interface ExaSettings {
 
 export type WebSearchProviderOption = "auto" | "exa" | "perplexity" | "anthropic";
 export type ImageProviderOption = "auto" | "gemini" | "openrouter";
+export type KimiApiFormatOption = "openai" | "anthropic";
 
 export interface ProviderSettings {
 	webSearch?: WebSearchProviderOption; // default: "auto" (exa > perplexity > anthropic)
 	image?: ImageProviderOption; // default: "auto" (openrouter > gemini)
+	kimiApiFormat?: KimiApiFormatOption; // default: "anthropic" (use Anthropic-compatible API for Kimi, more stable)
 }
 
 export interface BashInterceptorRule {
@@ -1346,6 +1348,19 @@ export class SettingsManager {
 		}
 		this.globalSettings.providers.image = provider;
 		this.markModified("providers", "image");
+		await this.save();
+	}
+
+	getKimiApiFormat(): KimiApiFormatOption {
+		return this.settings.providers?.kimiApiFormat ?? "anthropic";
+	}
+
+	async setKimiApiFormat(format: KimiApiFormatOption): Promise<void> {
+		if (!this.globalSettings.providers) {
+			this.globalSettings.providers = {};
+		}
+		this.globalSettings.providers.kimiApiFormat = format;
+		this.markModified("providers", "kimiApiFormat");
 		await this.save();
 	}
 

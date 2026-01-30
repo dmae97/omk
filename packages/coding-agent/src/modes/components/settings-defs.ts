@@ -11,6 +11,7 @@ import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { TERMINAL_INFO } from "@oh-my-pi/pi-tui";
 import type {
 	ImageProviderOption,
+	KimiApiFormatOption,
 	NotificationMethod,
 	PythonKernelMode,
 	PythonToolMode,
@@ -414,6 +415,19 @@ export const SETTINGS_DEFS: SettingDef[] = [
 			{ value: "auto", label: "Auto", description: "Priority: OpenRouter > Gemini" },
 			{ value: "gemini", label: "Gemini", description: "Use Gemini API directly (requires GEMINI_API_KEY)" },
 			{ value: "openrouter", label: "OpenRouter", description: "Use OpenRouter (requires OPENROUTER_API_KEY)" },
+		],
+	},
+	{
+		id: "kimiApiFormat",
+		tab: "tools",
+		type: "submenu",
+		label: "Kimi API format",
+		description: "API format for Kimi Code provider",
+		get: sm => sm.getKimiApiFormat(),
+		set: (sm, v) => sm.setKimiApiFormat(v as KimiApiFormatOption),
+		getOptions: () => [
+			{ value: "openai", label: "OpenAI", description: "Use OpenAI-compatible API (api.kimi.com)" },
+			{ value: "anthropic", label: "Anthropic", description: "Use Anthropic-compatible API (api.moonshot.ai)" },
 		],
 	},
 

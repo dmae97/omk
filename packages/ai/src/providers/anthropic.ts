@@ -424,9 +424,7 @@ export function buildAnthropicHeaders(options: AnthropicHeaderOptions): Record<s
 		"X-App": "cli",
 	};
 
-	if (oauthToken || !isAnthropicBaseUrl(options.baseUrl)) {
-		headers.Authorization = `Bearer ${options.apiKey}`;
-	} else {
+	if (!oauthToken) {
 		headers["X-Api-Key"] = options.apiKey;
 	}
 
@@ -466,11 +464,19 @@ function createClient(
 		defaultHeaders: defaultHeadersBase,
 	};
 
-	if (oauthToken || !isAnthropicBaseUrl(model.baseUrl)) {
+	if (isAnthropicBaseUrl(model.baseUrl)) {
+		// For Anthropic API, let SDK handle auth
+		if (oauthToken) {
+			clientOptions.apiKey = null;
+			clientOptions.authToken = apiKey;
+		} else {
+			clientOptions.apiKey = apiKey;
+		}
+	} else {
+		// For non-Anthropic URLs (e.g., Kimi), use authToken
+		// The SDK will add Authorization: Bearer header, which is what we want
 		clientOptions.apiKey = null;
 		clientOptions.authToken = apiKey;
-	} else {
-		clientOptions.apiKey = apiKey;
 	}
 
 	const client = new Anthropic(clientOptions);

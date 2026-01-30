@@ -397,9 +397,10 @@ function buildParams(model: Model<"openai-completions">, context: Context, optio
 	const messages = convertMessages(model, context, compat);
 	maybeAddOpenRouterAnthropicCacheControl(model, messages);
 
-	// Kimi calculates TPM rate limits based on max_tokens, not actual output.
+	// Kimi (including via OpenRouter) calculates TPM rate limits based on max_tokens, not actual output.
 	// Always send max_tokens to avoid their high default causing rate limit issues.
-	const isKimi = model.provider === "kimi-code" || model.id.includes("moonshotai/kimi");
+	// Note: Direct kimi-code provider is handled by the dedicated Kimi provider in kimi.ts.
+	const isKimi = model.id.includes("moonshotai/kimi");
 	const effectiveMaxTokens = options?.maxTokens ?? (isKimi ? model.maxTokens : undefined);
 
 	const params: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {

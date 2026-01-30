@@ -13,6 +13,7 @@ import {
 	streamGoogleGeminiCli,
 } from "./providers/google-gemini-cli";
 import { type GoogleVertexOptions, streamGoogleVertex } from "./providers/google-vertex";
+import { isKimiModel, streamKimi } from "./providers/kimi";
 import { streamOpenAICodexResponses } from "./providers/openai-codex-responses";
 import { type OpenAICompletionsOptions, streamOpenAICompletions } from "./providers/openai-completions";
 import { streamOpenAIResponses } from "./providers/openai-responses";
@@ -210,6 +211,16 @@ export function streamSimple<TApi extends Api>(
 	const apiKey = options?.apiKey || getEnvApiKey(model.provider);
 	if (!apiKey) {
 		throw new Error(`No API key for provider: ${model.provider}`);
+	}
+
+	// Kimi Code - route to dedicated handler that wraps OpenAI or Anthropic API
+	if (isKimiModel(model)) {
+		// Pass raw SimpleStreamOptions - streamKimi handles mapping internally
+		return streamKimi(model as Model<"openai-completions">, context, {
+			...options,
+			apiKey,
+			format: options?.kimiApiFormat ?? "anthropic",
+		});
 	}
 
 	const providerOptions = mapOptionsForApi(model, options, apiKey);

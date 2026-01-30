@@ -8,6 +8,7 @@ export * from "./providers/google";
 export * from "./providers/google-gemini-cli";
 export * from "./providers/google-gemini-cli-usage";
 export * from "./providers/google-vertex";
+export * from "./providers/kimi";
 export * from "./providers/openai-completions";
 export * from "./providers/openai-responses";
 export * from "./stream";

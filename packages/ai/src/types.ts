@@ -141,6 +141,8 @@ export interface SimpleStreamOptions extends StreamOptions {
 	cursorOnToolResult?: CursorToolResultHandler;
 	/** Optional tool choice override for compatible providers */
 	toolChoice?: ToolChoice;
+	/** API format for Kimi Code provider: "openai" or "anthropic" (default: "anthropic") */
+	kimiApiFormat?: "openai" | "anthropic";
 }
 
 // Generic StreamFunction with typed options

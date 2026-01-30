@@ -70,6 +70,11 @@ export interface AgentOptions {
 	interruptMode?: "immediate" | "wait";
 
 	/**
+	 * API format for Kimi Code provider: "openai" or "anthropic" (default: "anthropic")
+	 */
+	kimiApiFormat?: "openai" | "anthropic";
+
+	/**
 	 * Custom stream function (for proxy backends, etc.). Default uses streamSimple.
 	 */
 	streamFn?: StreamFn;
@@ -149,6 +154,7 @@ export class Agent {
 	private cursorOnToolResult?: CursorToolResultHandler;
 	private runningPrompt?: Promise<void>;
 	private resolveRunningPrompt?: () => void;
+	private kimiApiFormat?: "openai" | "anthropic";
 
 	/** Buffered Cursor tool results with text length at time of call (for correct ordering) */
 	private _cursorToolResultBuffer: CursorToolResultEntry[] = [];
@@ -167,6 +173,7 @@ export class Agent {
 		this.getToolContext = opts.getToolContext;
 		this.cursorExecHandlers = opts.cursorExecHandlers;
 		this.cursorOnToolResult = opts.cursorOnToolResult;
+		this.kimiApiFormat = opts.kimiApiFormat;
 	}
 
 	/**
@@ -486,6 +493,7 @@ export class Agent {
 			interruptMode: this.interruptMode,
 			sessionId: this._sessionId,
 			thinkingBudgets: this._thinkingBudgets,
+			kimiApiFormat: this.kimiApiFormat,
 			toolChoice: options?.toolChoice,
 			convertToLlm: this.convertToLlm,
 			transformContext: this.transformContext,

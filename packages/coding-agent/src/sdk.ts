@@ -1115,6 +1115,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		followUpMode: settingsManager.getFollowUpMode(),
 		interruptMode: settingsManager.getInterruptMode(),
 		thinkingBudgets: settingsManager.getThinkingBudgets(),
+		kimiApiFormat: settingsManager.getKimiApiFormat(),
 		getToolContext: tc => toolContextStore.getContext(tc),
 		getApiKey: async () => {
 			const currentModel = agent.state.model;

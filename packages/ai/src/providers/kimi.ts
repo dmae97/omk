@@ -1,0 +1,147 @@
+/**
+ * Kimi Code provider - wraps OpenAI or Anthropic API based on format setting.
+ *
+ * Kimi offers both OpenAI-compatible and Anthropic-compatible APIs:
+ * - OpenAI: https://api.kimi.com/coding/v1/chat/completions
+ * - Anthropic: https://api.kimi.com/coding/v1/messages
+ *
+ * The Anthropic API is generally more stable and recommended.
+ * Note: Kimi calculates TPM rate limits based on max_tokens, not actual output.
+ */
+
+import type { Api, Context, Model, SimpleStreamOptions } from "../types";
+import { AssistantMessageEventStream } from "../utils/event-stream";
+import { getKimiCommonHeaders } from "../utils/oauth/kimi";
+import { streamAnthropic } from "./anthropic";
+import { streamOpenAICompletions } from "./openai-completions";
+
+export type KimiApiFormat = "openai" | "anthropic";
+
+// Note: Anthropic SDK appends /v1/messages, so base URL should not include /v1
+const KIMI_ANTHROPIC_BASE_URL = "https://api.kimi.com/coding";
+
+// Default thinking budgets for Anthropic format (matches stream.ts)
+const DEFAULT_THINKING_BUDGETS = {
+	minimal: 1024,
+	low: 4096,
+	medium: 8192,
+	high: 16384,
+	xhigh: 32768,
+} as const;
+
+export interface KimiOptions extends SimpleStreamOptions {
+	/** API format: "openai" or "anthropic". Default: "anthropic" */
+	format?: KimiApiFormat;
+}
+
+/**
+ * Stream from Kimi Code, routing to either OpenAI or Anthropic API based on format.
+ * Returns synchronously like other providers - async header fetching happens internally.
+ */
+export function streamKimi(
+	model: Model<"openai-completions">,
+	context: Context,
+	options?: KimiOptions,
+): AssistantMessageEventStream {
+	const stream = new AssistantMessageEventStream();
+	const format = options?.format ?? "anthropic";
+
+	// Async IIFE to handle header fetching and stream piping
+	(async () => {
+		try {
+			const kimiHeaders = await getKimiCommonHeaders();
+			const mergedHeaders = { ...kimiHeaders, ...options?.headers };
+
+			if (format === "anthropic") {
+				// Create a synthetic Anthropic model pointing to Kimi's endpoint
+				const anthropicModel: Model<"anthropic-messages"> = {
+					id: model.id,
+					name: model.name,
+					api: "anthropic-messages",
+					provider: model.provider,
+					baseUrl: KIMI_ANTHROPIC_BASE_URL,
+					headers: mergedHeaders,
+					contextWindow: model.contextWindow,
+					maxTokens: model.maxTokens,
+					reasoning: model.reasoning,
+					input: model.input,
+					cost: model.cost,
+				};
+
+				// Calculate thinking budget from reasoning level
+				const reasoning = options?.reasoning;
+				const thinkingEnabled = !!reasoning && model.reasoning;
+				const thinkingBudget = reasoning
+					? (options?.thinkingBudgets?.[reasoning] ?? DEFAULT_THINKING_BUDGETS[reasoning])
+					: undefined;
+
+				const innerStream = streamAnthropic(anthropicModel, context, {
+					apiKey: options?.apiKey,
+					temperature: options?.temperature,
+					maxTokens: options?.maxTokens ?? Math.min(model.maxTokens, 32000),
+					signal: options?.signal,
+					headers: mergedHeaders,
+					sessionId: options?.sessionId,
+					onPayload: options?.onPayload,
+					thinkingEnabled,
+					thinkingBudgetTokens: thinkingBudget,
+				});
+
+				for await (const event of innerStream) {
+					stream.push(event);
+				}
+			} else {
+				// OpenAI format - use original model with Kimi headers
+				const innerStream = streamOpenAICompletions(model, context, {
+					apiKey: options?.apiKey,
+					temperature: options?.temperature,
+					maxTokens: options?.maxTokens ?? model.maxTokens,
+					signal: options?.signal,
+					headers: mergedHeaders,
+					sessionId: options?.sessionId,
+					onPayload: options?.onPayload,
+					reasoningEffort: options?.reasoning,
+				});
+
+				for await (const event of innerStream) {
+					stream.push(event);
+				}
+			}
+		} catch (err) {
+			stream.push({
+				type: "error",
+				reason: "error",
+				error: createErrorMessage(model, err),
+			});
+		}
+	})();
+
+	return stream;
+}
+
+function createErrorMessage(model: Model<Api>, err: unknown) {
+	return {
+		role: "assistant" as const,
+		content: [{ type: "text" as const, text: err instanceof Error ? err.message : String(err) }],
+		api: model.api,
+		provider: model.provider,
+		model: model.id,
+		usage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		stopReason: "error" as const,
+		timestamp: Date.now(),
+	};
+}
+
+/**
+ * Check if a model is a Kimi Code model.
+ */
+export function isKimiModel(model: Model<Api>): boolean {
+	return model.provider === "kimi-code";
+}
