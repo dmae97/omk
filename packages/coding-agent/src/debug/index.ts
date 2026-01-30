@@ -3,6 +3,7 @@
  *
  * Provides tools for debugging, bug report generation, and system diagnostics.
  */
+import * as fs from "node:fs/promises";
 import { Container, Loader, type SelectItem, SelectList, Spacer, Text } from "@oh-my-pi/pi-tui";
 import { getSessionsDir } from "../config";
 import { DynamicBorder } from "../modes/components/dynamic-border";
@@ -14,6 +15,7 @@ import { collectSystemInfo, formatSystemInfo } from "./system-info";
 
 /** Debug menu options */
 const DEBUG_MENU_ITEMS: SelectItem[] = [
+	{ value: "open-artifacts", label: "Open: artifact folder", description: "Open session artifacts in file manager" },
 	{ value: "performance", label: "Report: performance issue", description: "Profile CPU, reproduce, then bundle" },
 	{ value: "dump", label: "Report: dump session", description: "Create report bundle immediately" },
 	{ value: "memory", label: "Report: memory issue", description: "Heap snapshot + bundle" },
@@ -40,7 +42,7 @@ export class DebugSelectorComponent extends Container {
 		this.addChild(new Spacer(1));
 
 		// Select list
-		this.selectList = new SelectList(DEBUG_MENU_ITEMS, 6, getSelectListTheme());
+		this.selectList = new SelectList(DEBUG_MENU_ITEMS, 7, getSelectListTheme());
 
 		this.selectList.onSelect = item => {
 			onDone();
@@ -61,6 +63,9 @@ export class DebugSelectorComponent extends Container {
 
 	private async handleSelection(value: string): Promise<void> {
 		switch (value) {
+			case "open-artifacts":
+				await this.handleOpenArtifacts();
+				break;
 			case "performance":
 				await this.handlePerformanceReport();
 				break;
@@ -274,6 +279,42 @@ export class DebugSelectorComponent extends Container {
 		}
 
 		this.ctx.ui.requestRender();
+	}
+
+	private async handleOpenArtifacts(): Promise<void> {
+		const sessionFile = this.ctx.sessionManager.getSessionFile();
+		if (!sessionFile) {
+			this.ctx.showWarning("No active session file.");
+			return;
+		}
+
+		const artifactsDir = sessionFile.slice(0, -6);
+
+		try {
+			const stat = await fs.stat(artifactsDir);
+			if (!stat.isDirectory()) {
+				this.ctx.showWarning("Artifact folder does not exist yet.");
+				return;
+			}
+		} catch {
+			this.ctx.showWarning("Artifact folder does not exist yet.");
+			return;
+		}
+
+		const openArgs =
+			process.platform === "darwin"
+				? ["open", artifactsDir]
+				: process.platform === "win32"
+					? ["cmd", "/c", "start", "", artifactsDir]
+					: ["xdg-open", artifactsDir];
+		const [cmd, ...args] = openArgs;
+
+		try {
+			Bun.spawn([cmd, ...args], { stdout: "ignore", stderr: "ignore" }).unref();
+			this.ctx.showStatus(`Opened: ${artifactsDir}`);
+		} catch (err) {
+			this.ctx.showError(`Failed to open artifact folder: ${err instanceof Error ? err.message : String(err)}`);
+		}
 	}
 
 	private async handleClearCache(): Promise<void> {
