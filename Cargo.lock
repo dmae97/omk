@@ -527,7 +527,7 @@ dependencies = [
 
 [[package]]
 name = "pi-natives"
-version = "9.2.2"
+version = "9.2.3"
 dependencies = [
  "console_error_panic_hook",
  "grep-matcher",

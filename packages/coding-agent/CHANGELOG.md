@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [9.2.3] - 2026-01-31
 ### Added
 
 - Persistent shell session support for bash tool with environment variable preservation across commands
