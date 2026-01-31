@@ -1,13 +1,18 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Changed
 
+- Migrated environment variable handling to use centralized `getEnv()` and `getEnvApiKey()` utilities from pi-ai package for consistent API key resolution across web search providers and image tools
+- Simplified web search error messages to remove provider-specific configuration hints
 - Replaced manual space padding with `padding()` utility function from pi-tui across UI components for consistent whitespace handling
 - Improved rendering performance for Python cell output by implementing caching in the table and cell results renderers
 - Updated task tool documentation to clarify that subagents can access parent conversation context via a searchable file, reducing need to repeat information in context parameter
 - Updated plan mode prompt to guide model toward using `edit` tool for incremental plan updates instead of defaulting to `write`
+
+### Removed
+
+- Removed environment variable denylist that blocked API keys from being passed to subprocesses; API keys are now controlled via allowlist only
 
 ## [9.3.1] - 2026-01-31
 ### Added

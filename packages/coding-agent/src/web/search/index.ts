@@ -96,14 +96,10 @@ function formatProviderList(providers: WebSearchProvider[]): string {
 	return providers.map(provider => formatProviderLabel(provider)).join(", ");
 }
 
-function buildNoProviderError(): string {
-	return "No web search provider configured. Set EXA_API_KEY, PERPLEXITY_API_KEY, ANTHROPIC_SEARCH_API_KEY, or ANTHROPIC_API_KEY.";
-}
-
 function formatProviderError(error: unknown, provider: WebSearchProvider): string {
 	if (error instanceof WebSearchProviderError) {
 		if (error.provider === "anthropic" && error.status === 404) {
-			return "Anthropic web search returned 404 (model or endpoint not found). Set ANTHROPIC_SEARCH_MODEL/ANTHROPIC_SEARCH_BASE_URL, or configure EXA_API_KEY or PERPLEXITY_API_KEY.";
+			return "Anthropic web search returned 404 (model or endpoint not found).";
 		}
 		if (error.status === 401 || error.status === 403) {
 			return `${formatProviderLabel(error.provider)} authorization failed (${error.status}). Check API key or base URL.`;
@@ -221,7 +217,7 @@ async function executeWebSearch(
 	const { providers, allowFallback } = await resolveProviderChain(params.provider);
 
 	if (providers.length === 0) {
-		const message = buildNoProviderError();
+		const message = "No web search provider configured.";
 		const fallbackProvider = preferredProvider === "auto" ? "anthropic" : preferredProvider;
 		return {
 			content: [{ type: "text" as const, text: `Error: ${message}` }],

@@ -88,26 +88,11 @@ const WINDOWS_ENV_ALLOWLIST = new Set([
 
 const DEFAULT_ENV_ALLOW_PREFIXES = ["LC_", "XDG_", "OMP_"];
 
-const DEFAULT_ENV_DENYLIST = new Set([
-	"OPENAI_API_KEY",
-	"ANTHROPIC_API_KEY",
-	"GOOGLE_API_KEY",
-	"GEMINI_API_KEY",
-	"OPENROUTER_API_KEY",
-	"PERPLEXITY_API_KEY",
-	"EXA_API_KEY",
-	"AZURE_OPENAI_API_KEY",
-	"MISTRAL_API_KEY",
-]);
-
 const CASE_INSENSITIVE_ENV = process.platform === "win32";
 const ACTIVE_ENV_ALLOWLIST = CASE_INSENSITIVE_ENV ? WINDOWS_ENV_ALLOWLIST : DEFAULT_ENV_ALLOWLIST;
 
 const NORMALIZED_ALLOWLIST = new Map(
 	Array.from(ACTIVE_ENV_ALLOWLIST, key => [CASE_INSENSITIVE_ENV ? key.toUpperCase() : key, key] as const),
-);
-const NORMALIZED_DENYLIST = new Set(
-	Array.from(DEFAULT_ENV_DENYLIST, key => (CASE_INSENSITIVE_ENV ? key.toUpperCase() : key)),
 );
 const NORMALIZED_ALLOW_PREFIXES = CASE_INSENSITIVE_ENV
 	? DEFAULT_ENV_ALLOW_PREFIXES.map(prefix => prefix.toUpperCase())
@@ -150,7 +135,6 @@ function filterEnv(env: Record<string, string | undefined>): Record<string, stri
 	for (const [key, value] of Object.entries(env)) {
 		if (value === undefined) continue;
 		const normalizedKey = normalizeEnvKey(key);
-		if (NORMALIZED_DENYLIST.has(normalizedKey)) continue;
 		const canonicalKey = NORMALIZED_ALLOWLIST.get(normalizedKey);
 		if (canonicalKey !== undefined) {
 			filtered[canonicalKey] = value;

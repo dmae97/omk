@@ -1,6 +1,6 @@
 import * as os from "node:os";
 import * as path from "node:path";
-import { StringEnum } from "@oh-my-pi/pi-ai";
+import { getEnv, getEnvApiKey, StringEnum } from "@oh-my-pi/pi-ai";
 import { ptree, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { nanoid } from "nanoid";
@@ -9,7 +9,6 @@ import { renderPromptTemplate } from "../config/prompt-templates";
 import type { CustomTool } from "../extensibility/custom-tools/types";
 import geminiImageDescription from "../prompts/tools/gemini-image.md" with { type: "text" };
 import { detectSupportedImageMimeTypeFromFile } from "../utils/mime";
-import { getEnv } from "../web/search/auth";
 import { resolveReadPath } from "./path-utils";
 
 const DEFAULT_MODEL = "gemini-3-pro-image-preview";
@@ -408,13 +407,13 @@ async function findImageApiKey(modelRegistry?: ModelRegistry): Promise<ImageApiK
 		// Fall through to auto-detect if preferred provider key not found
 	}
 	if (preferredImageProvider === "gemini") {
-		const geminiKey = await getEnv("GEMINI_API_KEY");
+		const geminiKey = getEnvApiKey("google");
 		if (geminiKey) return { provider: "gemini", apiKey: geminiKey };
-		const googleKey = await getEnv("GOOGLE_API_KEY");
+		const googleKey = getEnv("GOOGLE_API_KEY");
 		if (googleKey) return { provider: "gemini", apiKey: googleKey };
 		// Fall through to auto-detect if preferred provider key not found
 	} else if (preferredImageProvider === "openrouter") {
-		const openRouterKey = await getEnv("OPENROUTER_API_KEY");
+		const openRouterKey = getEnvApiKey("openrouter");
 		if (openRouterKey) return { provider: "openrouter", apiKey: openRouterKey };
 		// Fall through to auto-detect if preferred provider key not found
 	}
@@ -425,13 +424,13 @@ async function findImageApiKey(modelRegistry?: ModelRegistry): Promise<ImageApiK
 		if (antigravity) return antigravity;
 	}
 
-	const openRouterKey = await getEnv("OPENROUTER_API_KEY");
+	const openRouterKey = getEnvApiKey("openrouter");
 	if (openRouterKey) return { provider: "openrouter", apiKey: openRouterKey };
 
-	const geminiKey = await getEnv("GEMINI_API_KEY");
+	const geminiKey = getEnvApiKey("google");
 	if (geminiKey) return { provider: "gemini", apiKey: geminiKey };
 
-	const googleKey = await getEnv("GOOGLE_API_KEY");
+	const googleKey = getEnv("GOOGLE_API_KEY");
 	if (googleKey) return { provider: "gemini", apiKey: googleKey };
 
 	return null;

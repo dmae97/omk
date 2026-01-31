@@ -1,6 +1,16 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `getEnv()` function to retrieve environment variables from process.env, cwd/.env, or ~/.env
+- Added support for reading .env files from home directory and current working directory
+- Added support for `exa` and `perplexity` as known providers in `getEnvApiKey()`
+
+### Changed
+
+- Changed `getEnvApiKey()` to check process.env, cwd/.env, and ~/.env files in order of precedence
+- Refactored provider API key resolution to use a declarative service provider map
 
 ## [9.2.2] - 2026-01-31
 ### Added

@@ -7,9 +7,8 @@
  *   3. OAuth credentials in ~/.omp/agent/agent.db (with expiry check)
  *   4. ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL fallback
  */
-import * as os from "node:os";
 import * as path from "node:path";
-import { buildAnthropicHeaders as buildProviderAnthropicHeaders } from "@oh-my-pi/pi-ai";
+import { buildAnthropicHeaders as buildProviderAnthropicHeaders, getEnv, getEnvApiKey } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
 import { getAgentDbPath, getConfigDirPaths } from "../../config";
 import { AgentStorage } from "../../session/agent-storage";
@@ -18,58 +17,7 @@ import { migrateJsonStorage } from "../../session/storage-migration";
 import type { AnthropicAuthConfig, AnthropicOAuthCredential, ModelsJson } from "./types";
 
 const DEFAULT_BASE_URL = "https://api.anthropic.com";
-
-/**
- * Parses a .env file and extracts key-value pairs.
- * @param filePath - Path to the .env file
- * @returns Object containing parsed environment variables
- */
-async function parseEnvFile(filePath: string): Promise<Record<string, string>> {
-	const result: Record<string, string> = {};
-	try {
-		const file = Bun.file(filePath);
-		if (!(await file.exists())) return result;
-
-		const content = await file.text();
-		for (const line of content.split("\n")) {
-			const trimmed = line.trim();
-			if (!trimmed || trimmed.startsWith("#")) continue;
-
-			const eqIndex = trimmed.indexOf("=");
-			if (eqIndex === -1) continue;
-
-			const key = trimmed.slice(0, eqIndex).trim();
-			let value = trimmed.slice(eqIndex + 1).trim();
-
-			// Remove surrounding quotes
-			if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-				value = value.slice(1, -1);
-			}
-
-			result[key] = value;
-		}
-	} catch (error) {
-		logger.warn("Failed to read .env file", { path: filePath, error: String(error) });
-	}
-	return result;
-}
-
-/**
- * Gets an environment variable from process.env or .env files.
- * @param key - The environment variable name to look up
- * @returns The value if found, undefined otherwise
- */
-export async function getEnv(key: string): Promise<string | undefined> {
-	if (process.env[key]) return process.env[key];
-
-	const localEnv = await parseEnvFile(`${process.cwd()}/.env`);
-	if (localEnv[key]) return localEnv[key];
-
-	const homeEnv = await parseEnvFile(`${os.homedir()}/.env`);
-	if (homeEnv[key]) return homeEnv[key];
-
-	return undefined;
-}
+export { getEnv };
 
 /**
  * Reads and parses a JSON file safely.
@@ -173,8 +121,8 @@ export async function findAnthropicAuth(): Promise<AnthropicAuthConfig | null> {
 	const configDirs = getConfigDirPaths("", { project: false });
 
 	// 1. Explicit search-specific env vars
-	const searchApiKey = await getEnv("ANTHROPIC_SEARCH_API_KEY");
-	const searchBaseUrl = await getEnv("ANTHROPIC_SEARCH_BASE_URL");
+	const searchApiKey = getEnv("ANTHROPIC_SEARCH_API_KEY");
+	const searchBaseUrl = getEnv("ANTHROPIC_SEARCH_BASE_URL");
 	if (searchApiKey) {
 		return {
 			apiKey: searchApiKey,
@@ -228,8 +176,8 @@ export async function findAnthropicAuth(): Promise<AnthropicAuthConfig | null> {
 	}
 
 	// 4. Generic ANTHROPIC_API_KEY fallback
-	const apiKey = await getEnv("ANTHROPIC_API_KEY");
-	const baseUrl = await getEnv("ANTHROPIC_BASE_URL");
+	const apiKey = getEnvApiKey("anthropic");
+	const baseUrl = getEnv("ANTHROPIC_BASE_URL");
 	if (apiKey) {
 		return {
 			apiKey,

@@ -4,7 +4,7 @@
  * High-quality neural search via Exa Search API.
  * Returns structured search results with optional content extraction.
  */
-import * as os from "node:os";
+import { getEnvApiKey } from "@oh-my-pi/pi-ai";
 import type { WebSearchResponse, WebSearchSource } from "../../../web/search/types";
 import { WebSearchProviderError } from "../../../web/search/types";
 
@@ -22,66 +22,6 @@ export interface ExaSearchParams {
 	exclude_domains?: string[];
 	start_published_date?: string;
 	end_published_date?: string;
-}
-
-/** Parse a .env file and return key-value pairs */
-async function parseEnvFile(filePath: string): Promise<Record<string, string>> {
-	const result: Record<string, string> = {};
-	try {
-		const content = await Bun.file(filePath).text();
-		for (const line of content.split("\n")) {
-			let trimmed = line.trim();
-			if (!trimmed || trimmed.startsWith("#")) continue;
-
-			if (trimmed.startsWith("export ")) {
-				trimmed = trimmed.slice("export ".length).trim();
-			}
-
-			const eqIndex = trimmed.indexOf("=");
-			if (eqIndex === -1) continue;
-
-			const key = trimmed.slice(0, eqIndex).trim();
-			let value = trimmed.slice(eqIndex + 1).trim();
-
-			if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-				value = value.slice(1, -1);
-			}
-
-			result[key] = value;
-		}
-	} catch {
-		// Ignore read errors (including ENOENT for missing files)
-	}
-	return result;
-}
-
-function getHomeDir(): string {
-	return os.homedir();
-}
-
-/** Find EXA_API_KEY from environment or .env files */
-export async function findApiKey(): Promise<string | null> {
-	// 1. Check environment variable
-	if (process.env.EXA_API_KEY) {
-		return process.env.EXA_API_KEY;
-	}
-
-	// 2. Check .env in current directory
-	const localEnv = await parseEnvFile(`${process.cwd()}/.env`);
-	if (localEnv.EXA_API_KEY) {
-		return localEnv.EXA_API_KEY;
-	}
-
-	// 3. Check ~/.env
-	const homeDir = getHomeDir();
-	if (homeDir) {
-		const homeEnv = await parseEnvFile(`${homeDir}/.env`);
-		if (homeEnv.EXA_API_KEY) {
-			return homeEnv.EXA_API_KEY;
-		}
-	}
-
-	return null;
 }
 
 interface ExaSearchResult {
@@ -159,7 +99,7 @@ function dateToAgeSeconds(dateStr: string | null | undefined): number | undefine
 
 /** Execute Exa web search */
 export async function searchExa(params: ExaSearchParams): Promise<WebSearchResponse> {
-	const apiKey = await findApiKey();
+	const apiKey = getEnvApiKey("exa");
 	if (!apiKey) {
 		throw new Error("EXA_API_KEY not found. Set it in environment or .env file.");
 	}

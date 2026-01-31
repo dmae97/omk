@@ -4,7 +4,8 @@
  * Supports both sonar (fast) and sonar-pro (comprehensive) models.
  * Returns synthesized answers with citations and related questions.
  */
-import * as os from "node:os";
+
+import { getEnvApiKey } from "@oh-my-pi/pi-ai";
 import type {
 	PerplexityRequest,
 	PerplexityResponse,
@@ -23,56 +24,9 @@ export interface PerplexitySearchParams {
 	num_results?: number;
 }
 
-/** Parse a .env file and return key-value pairs */
-async function parseEnvFile(filePath: string): Promise<Record<string, string>> {
-	const result: Record<string, string> = {};
-	try {
-		const file = Bun.file(filePath);
-		if (!(await file.exists())) return result;
-
-		const content = await file.text();
-		for (const line of content.split("\n")) {
-			const trimmed = line.trim();
-			if (!trimmed || trimmed.startsWith("#")) continue;
-
-			const eqIndex = trimmed.indexOf("=");
-			if (eqIndex === -1) continue;
-
-			const key = trimmed.slice(0, eqIndex).trim();
-			let value = trimmed.slice(eqIndex + 1).trim();
-
-			if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-				value = value.slice(1, -1);
-			}
-
-			result[key] = value;
-		}
-	} catch {
-		// Ignore read errors
-	}
-	return result;
-}
-
-/** Find PERPLEXITY_API_KEY from environment or .env files */
-export async function findApiKey(): Promise<string | null> {
-	// 1. Check environment variable
-	if (process.env.PERPLEXITY_API_KEY) {
-		return process.env.PERPLEXITY_API_KEY;
-	}
-
-	// 2. Check .env in current directory
-	const localEnv = await parseEnvFile(`${process.cwd()}/.env`);
-	if (localEnv.PERPLEXITY_API_KEY) {
-		return localEnv.PERPLEXITY_API_KEY;
-	}
-
-	// 3. Check ~/.env
-	const homeEnv = await parseEnvFile(`${os.homedir()}/.env`);
-	if (homeEnv.PERPLEXITY_API_KEY) {
-		return homeEnv.PERPLEXITY_API_KEY;
-	}
-
-	return null;
+/** Find PERPLEXITY_API_KEY from environment or .env files (also checks PPLX_API_KEY) */
+export function findApiKey(): string | null {
+	return getEnvApiKey("perplexity") ?? null;
 }
 
 /** Call Perplexity API */
@@ -154,7 +108,7 @@ function parseResponse(response: PerplexityResponse): WebSearchResponse {
 
 /** Execute Perplexity web search */
 export async function searchPerplexity(params: PerplexitySearchParams): Promise<WebSearchResponse> {
-	const apiKey = await findApiKey();
+	const apiKey = findApiKey();
 	if (!apiKey) {
 		throw new Error("PERPLEXITY_API_KEY not found. Set it in environment or .env file.");
 	}

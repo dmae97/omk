@@ -22,7 +22,6 @@ import type {
 	AssistantMessage,
 	AssistantMessageEventStream,
 	Context,
-	KnownProvider,
 	Model,
 	OptionsForApi,
 	SimpleStreamOptions,
@@ -42,9 +41,69 @@ if (typeof process !== "undefined" && process.versions?.node) {
 
 let cachedVertexAdcCredentialsExists: boolean | null = null;
 
-function hasVertexAdcCredentials(): boolean {
+// Cached .env file contents (parsed once per process)
+let cachedEnvMap: Record<string, string> | null = null;
+
+/**
+ * Parses a .env file synchronously and extracts key-value pairs.
+ */
+function parseEnvFile(filePath: string): Record<string, string> {
+	const result: Record<string, string> = {};
+	try {
+		const content = fs.readFileSync(filePath, "utf-8");
+		for (const line of content.split("\n")) {
+			const trimmed = line.trim();
+			if (!trimmed || trimmed.startsWith("#")) continue;
+
+			const eqIndex = trimmed.indexOf("=");
+			if (eqIndex === -1) continue;
+
+			const key = trimmed.slice(0, eqIndex).trim();
+			let value = trimmed.slice(eqIndex + 1).trim();
+
+			// Remove surrounding quotes
+			if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+				value = value.slice(1, -1);
+			}
+
+			result[key] = value;
+		}
+	} catch {
+		// File doesn't exist or can't be read - return empty
+	}
+	return result;
+}
+
+function getEnvMap(): Record<string, string> {
+	if (cachedEnvMap) return cachedEnvMap;
+
+	const pruneEmpty = (env: any) =>
+		Object.fromEntries(
+			Object.entries(env).filter(([k, v]) => typeof k === "string" && typeof v === "string" && v) as [
+				string,
+				string,
+			][],
+		);
+
+	cachedEnvMap = {
+		...pruneEmpty(parseEnvFile(path.join(os.homedir(), ".env"))),
+		...pruneEmpty(parseEnvFile(path.join(process.cwd(), ".env"))),
+		...pruneEmpty(process.env),
+	};
+	return cachedEnvMap;
+}
+
+/**
+ * Gets an environment variable from process.env or .env files.
+ * Checks: process.env → cwd/.env → ~/.env
+ */
+export function getEnv(key: string): string | undefined {
+	return getEnvMap()[key];
+}
+
+function hasVertexAdcCredentials(env: Record<string, string>): boolean {
 	if (cachedVertexAdcCredentialsExists === null) {
-		const gacPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+		const gacPath = env.GOOGLE_APPLICATION_CREDENTIALS;
 		if (gacPath) {
 			cachedVertexAdcCredentialsExists = fs.existsSync(gacPath);
 		} else {
@@ -56,75 +115,73 @@ function hasVertexAdcCredentials(): boolean {
 	return cachedVertexAdcCredentialsExists;
 }
 
-/**
- * Get API key for provider from known environment variables, e.g. OPENAI_API_KEY.
- *
- * Will not return API keys for providers that require OAuth tokens.
- */
-export function getEnvApiKey(provider: KnownProvider): string | undefined;
-export function getEnvApiKey(provider: string): string | undefined;
-export function getEnvApiKey(provider: any): string | undefined {
-	// Fall back to environment variables
-	if (provider === "github-copilot") {
-		return process.env.COPILOT_GITHUB_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
-	}
+type KeyResolver = string | ((env: Record<string, string>) => string | undefined);
 
+const serviceProviderMap: Record<string, KeyResolver> = {
+	openai: "OPENAI_API_KEY",
+	google: "GEMINI_API_KEY",
+	groq: "GROQ_API_KEY",
+	cerebras: "CEREBRAS_API_KEY",
+	xai: "XAI_API_KEY",
+	openrouter: "OPENROUTER_API_KEY",
+	"vercel-ai-gateway": "AI_GATEWAY_API_KEY",
+	zai: "ZAI_API_KEY",
+	mistral: "MISTRAL_API_KEY",
+	minimax: "MINIMAX_API_KEY",
+	opencode: "OPENCODE_API_KEY",
+	cursor: "CURSOR_ACCESS_TOKEN",
+	"azure-openai-responses": "AZURE_OPENAI_API_KEY",
+	exa: "EXA_API_KEY",
+	perplexity: "PERPLEXITY_API_KEY",
+	// GitHub Copilot uses GitHub personal access token
+	"github-copilot": env => env.COPILOT_GITHUB_TOKEN || env.GH_TOKEN || env.GITHUB_TOKEN,
 	// ANTHROPIC_OAUTH_TOKEN takes precedence over ANTHROPIC_API_KEY
-	if (provider === "anthropic") {
-		return process.env.ANTHROPIC_OAUTH_TOKEN || process.env.ANTHROPIC_API_KEY;
-	}
-
+	anthropic: env => env.ANTHROPIC_OAUTH_TOKEN || env.ANTHROPIC_API_KEY,
 	// Vertex AI uses Application Default Credentials, not API keys.
 	// Auth is configured via `gcloud auth application-default login`.
-	if (provider === "google-vertex") {
-		const hasCredentials = hasVertexAdcCredentials();
-		const hasProject = !!(process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT);
-		const hasLocation = !!process.env.GOOGLE_CLOUD_LOCATION;
-
+	"google-vertex": env => {
+		const hasCredentials = hasVertexAdcCredentials(env);
+		const hasProject = !!(env.GOOGLE_CLOUD_PROJECT || env.GCLOUD_PROJECT);
+		const hasLocation = !!env.GOOGLE_CLOUD_LOCATION;
 		if (hasCredentials && hasProject && hasLocation) {
 			return "<authenticated>";
 		}
-	}
-
-	if (provider === "amazon-bedrock") {
-		// Amazon Bedrock supports multiple credential sources:
-		// 1. AWS_PROFILE - named profile from ~/.aws/credentials
-		// 2. AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY - standard IAM keys
-		// 3. AWS_BEARER_TOKEN_BEDROCK - Bedrock API keys (bearer token)
-		// 4. AWS_CONTAINER_CREDENTIALS_* - ECS/Task IAM role credentials
-		// 5. AWS_WEB_IDENTITY_TOKEN_FILE + AWS_ROLE_ARN - IRSA (EKS) web identity
+	},
+	// Amazon Bedrock supports multiple credential sources:
+	// 1. AWS_PROFILE - named profile from ~/.aws/credentials
+	// 2. AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY - standard IAM keys
+	// 3. AWS_BEARER_TOKEN_BEDROCK - Bedrock API keys (bearer token)
+	// 4. AWS_CONTAINER_CREDENTIALS_* - ECS/Task IAM role credentials
+	// 5. AWS_WEB_IDENTITY_TOKEN_FILE + AWS_ROLE_ARN - IRSA (EKS) web identity
+	"amazon-bedrock": env => {
 		const hasEcsCredentials =
-			!!process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || !!process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI;
-		const hasWebIdentity = !!process.env.AWS_WEB_IDENTITY_TOKEN_FILE && !!process.env.AWS_ROLE_ARN;
+			!!env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || !!env.AWS_CONTAINER_CREDENTIALS_FULL_URI;
+		const hasWebIdentity = !!env.AWS_WEB_IDENTITY_TOKEN_FILE && !!env.AWS_ROLE_ARN;
 		if (
-			process.env.AWS_PROFILE ||
-			(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ||
-			process.env.AWS_BEARER_TOKEN_BEDROCK ||
+			env.AWS_PROFILE ||
+			(env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY) ||
+			env.AWS_BEARER_TOKEN_BEDROCK ||
 			hasEcsCredentials ||
 			hasWebIdentity
 		) {
 			return "<authenticated>";
 		}
+	},
+};
+
+/**
+ * Get API key for provider from known environment variables, e.g. OPENAI_API_KEY.
+ *
+ * Will not return API keys for providers that require OAuth tokens.
+ * Checks process.env, then cwd/.env, then ~/.env.
+ */
+export function getEnvApiKey(provider: string): string | undefined {
+	const env = getEnvMap();
+	const resolver = serviceProviderMap[provider];
+	if (typeof resolver === "string") {
+		return env[resolver];
 	}
-
-	const envMap: Record<string, string> = {
-		openai: "OPENAI_API_KEY",
-		google: "GEMINI_API_KEY",
-		groq: "GROQ_API_KEY",
-		cerebras: "CEREBRAS_API_KEY",
-		xai: "XAI_API_KEY",
-		openrouter: "OPENROUTER_API_KEY",
-		"vercel-ai-gateway": "AI_GATEWAY_API_KEY",
-		zai: "ZAI_API_KEY",
-		mistral: "MISTRAL_API_KEY",
-		minimax: "MINIMAX_API_KEY",
-		opencode: "OPENCODE_API_KEY",
-		cursor: "CURSOR_ACCESS_TOKEN",
-		"azure-openai-responses": "AZURE_OPENAI_API_KEY",
-	};
-
-	const envVar = envMap[provider];
-	return envVar ? process.env[envVar] : undefined;
+	return resolver?.(env);
 }
 
 export function stream<TApi extends Api>(

@@ -4,8 +4,8 @@
  * Uses Claude's built-in web_search_20250305 tool to search the web.
  * Returns synthesized answers with citations and source metadata.
  */
-import { applyClaudeToolPrefix, buildAnthropicSystemBlocks, stripClaudeToolPrefix } from "@oh-my-pi/pi-ai";
-import { buildAnthropicHeaders, buildAnthropicUrl, findAnthropicAuth, getEnv } from "../../../web/search/auth";
+import { applyClaudeToolPrefix, buildAnthropicSystemBlocks, getEnv, stripClaudeToolPrefix } from "@oh-my-pi/pi-ai";
+import { buildAnthropicHeaders, buildAnthropicUrl, findAnthropicAuth } from "../../../web/search/auth";
 import type {
 	AnthropicApiResponse,
 	AnthropicAuthConfig,
@@ -41,8 +41,8 @@ export interface AnthropicSearchParams {
  * Gets the model to use for web search from environment or default.
  * @returns Model identifier string
  */
-async function getModel(): Promise<string> {
-	return (await getEnv("ANTHROPIC_SEARCH_MODEL")) ?? DEFAULT_MODEL;
+function getModel(): string {
+	return getEnv("ANTHROPIC_SEARCH_MODEL") ?? DEFAULT_MODEL;
 }
 
 /**
@@ -235,7 +235,7 @@ export async function searchAnthropic(params: AnthropicSearchParams): Promise<We
 		);
 	}
 
-	const model = await getModel();
+	const model = getModel();
 	const response = await callWebSearch(auth, model, params.query, params.system_prompt);
 
 	const result = parseResponse(response);
