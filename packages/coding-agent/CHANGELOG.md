@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Removed
+
+- Removed Nushell language server configuration from LSP defaults
 
 ## [9.4.0] - 2026-01-31
 ### Changed

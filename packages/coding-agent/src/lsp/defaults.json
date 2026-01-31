@@ -294,12 +294,6 @@
 			}
 		}
 	},
-	"nushell": {
-		"command": "nu",
-		"args": ["--lsp"],
-		"fileTypes": [".nu"],
-		"rootMarkers": [".git"]
-	},
 	"lua-language-server": {
 		"command": "lua-language-server",
 		"args": [],
