@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [9.2.4] - 2026-01-31
 ### Fixed
 
 - Prevented interactive commands from blocking on stdin by redirecting from /dev/null in POSIX and Fish shell sessions
