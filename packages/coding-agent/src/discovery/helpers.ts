@@ -189,7 +189,12 @@ export function parseAgentFields(frontmatter: Record<string, unknown>): ParsedAg
 		return null;
 	}
 
-	const tools = parseArrayOrCSV(frontmatter.tools);
+	let tools = parseArrayOrCSV(frontmatter.tools);
+
+	// Subagents with explicit tool lists always need submit_result
+	if (tools && !tools.includes("submit_result")) {
+		tools = [...tools, "submit_result"];
+	}
 
 	// Parse spawns field (array, "*", or CSV)
 	let spawns: string[] | "*" | undefined;

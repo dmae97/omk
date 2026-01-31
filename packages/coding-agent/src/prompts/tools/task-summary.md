@@ -20,13 +20,6 @@
 {{/unless}}
 {{/each}}
 
-{{#if schemaOverridden}}
-<schema-note>
-Note: Agent '{{agentName}}' has a fixed output schema:
-{{requiredSchema}}
-</schema-note>
-{{/if}}
-
 {{#if patchApplySummary}}
 <patch-summary>
 {{patchApplySummary}}

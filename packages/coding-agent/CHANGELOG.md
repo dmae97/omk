@@ -1,6 +1,20 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `getCompactContext()` API to retrieve parent conversation context for subagents, excluding system prompts and tool results
+- Added automatic `submit_result` tool injection for subagents with explicit tool lists
+- Added `contextFile` parameter to pass parent conversation context to subagent sessions
+
+### Changed
+
+- Updated subagent system prompt to reference parent conversation context file when available
+- Enhanced subagent system prompt formatting with clearer backtick notation for tool and parameter names
+
+### Removed
+
+- Removed schema override notification from task summary prompt
 
 ## [9.2.5] - 2026-01-31
 ### Changed

@@ -211,7 +211,6 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 		const thinkingLevelOverride = effectiveAgent.thinkingLevel;
 
 		// Output schema priority: agent frontmatter > params > inherited from parent session
-		const schemaOverridden = outputSchema !== undefined && effectiveAgent.output !== undefined;
 		const effectiveOutputSchema = effectiveAgent.output ?? outputSchema ?? this.session.outputSchema;
 
 		// Handle empty or missing tasks
@@ -382,6 +381,15 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 				};
 			}
 
+			// Write parent conversation context for subagents
+			await fs.mkdir(effectiveArtifactsDir, { recursive: true });
+			const compactContext = this.session.getCompactContext?.();
+			let contextFilePath: string | undefined;
+			if (compactContext) {
+				contextFilePath = path.join(effectiveArtifactsDir, "context.md");
+				await Bun.write(contextFilePath, compactContext);
+			}
+
 			// Build full prompts with context prepended
 			// Allocate unique IDs across the session to prevent artifact collisions
 			const outputManager =
@@ -478,6 +486,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 						sessionFile,
 						persistArtifacts: !!artifactsDir,
 						artifactsDir: effectiveArtifactsDir,
+						contextFile: contextFilePath,
 						enableLsp: false,
 						signal,
 						eventBus: undefined,
@@ -522,6 +531,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 						sessionFile,
 						persistArtifacts: !!artifactsDir,
 						artifactsDir: effectiveArtifactsDir,
+						contextFile: contextFilePath,
 						enableLsp: false,
 						signal,
 						eventBus: undefined,
@@ -735,9 +745,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 				duration: formatDuration(totalDuration),
 				summaries,
 				outputIds,
-				schemaOverridden,
 				agentName,
-				requiredSchema: agent.output ? JSON.stringify(agent.output) : "",
 				patchApplySummary,
 			});
 

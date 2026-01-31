@@ -173,6 +173,8 @@ export interface ToolSession {
 	};
 	/** Plan mode state (if active) */
 	getPlanModeState?: () => PlanModeState | undefined;
+	/** Get compact conversation context for subagents (excludes tool results, system prompts) */
+	getCompactContext?: () => string;
 }
 
 type ToolFactory = (session: ToolSession) => Tool | null | Promise<Tool | null>;

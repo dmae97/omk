@@ -760,6 +760,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			return undefined;
 		},
 		getPlanModeState: () => session.getPlanModeState(),
+		getCompactContext: () => session.formatCompactContext(),
 		settings: settingsManager,
 		settingsManager,
 		authStorage,

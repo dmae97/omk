@@ -196,6 +196,8 @@ export interface ExecutorOptions {
 	sessionFile?: string | null;
 	persistArtifacts?: boolean;
 	artifactsDir?: string;
+	/** Path to parent conversation context file */
+	contextFile?: string;
 	eventBus?: EventBus;
 	contextFiles?: ContextFileEntry[];
 	skills?: Skill[];
@@ -948,6 +950,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 						agent: agent.systemPrompt,
 						worktree: worktree ?? "",
 						outputSchema: normalizedOutputSchema,
+						contextFile: options.contextFile,
 					}),
 				sessionManager,
 				hasUI: false,
