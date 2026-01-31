@@ -1,16 +1,8 @@
 /**
- * Syntax highlighting powered by WASM (syntect).
+ * Syntax highlighting powered by native syntect bindings.
  */
 
-import * as wasm from "../../wasm/pi_natives";
-
-type WasmHighlightExports = typeof wasm & {
-	highlight_code: (code: string, lang: string | null | undefined, colors: HighlightColors) => string;
-	supports_language: (lang: string) => boolean;
-	get_supported_languages: () => string[];
-};
-
-const wasmHighlight = wasm as WasmHighlightExports;
+import { native } from "../native";
 
 /**
  * Theme colors for syntax highlighting.
@@ -41,19 +33,19 @@ export interface HighlightColors {
  * @returns Highlighted code as a single string with ANSI color codes
  */
 export function highlightCode(code: string, lang: string | undefined, colors: HighlightColors): string {
-	return wasmHighlight.highlight_code(code, lang, colors);
+	return native.highlightCode(code, lang, colors);
 }
 
 /**
  * Check if a language is supported for highlighting.
  */
 export function supportsLanguage(lang: string): boolean {
-	return wasmHighlight.supports_language(lang);
+	return native.supportsLanguage(lang);
 }
 
 /**
  * Get list of all supported languages.
  */
 export function getSupportedLanguages(): string[] {
-	return wasmHighlight.get_supported_languages();
+	return native.getSupportedLanguages();
 }

@@ -1,12 +1,12 @@
 # @oh-my-pi/pi-natives
 
-Native Rust functionality compiled to WebAssembly via wasm-bindgen.
+Native Rust functionality via N-API.
 
 ## What's Inside
 
-- **Grep**: Regex-based search powered by ripgrep's engine (WASM handles matching, JS handles I/O + gitignore-aware file walking)
+- **Grep**: Regex-based search powered by ripgrep's engine with native file walking and matching
 - **Find**: Glob-based file/directory discovery with gitignore support (pure TypeScript via `globPaths`)
-- **Image**: Image processing via photon-rs (resize, format conversion)
+- **Image**: Image processing via photon-rs (resize, format conversion) exposed through N-API
 
 ## Usage
 
@@ -37,8 +37,8 @@ const pngBytes = await resized.get_bytes();
 ## Building
 
 ```bash
-# Build WASM from workspace root (requires Rust + wasm-pack)
-bun run build:wasm
+# Build native addon from workspace root (requires Rust)
+bun run build:native
 
 # Type check
 bun run check
@@ -48,16 +48,13 @@ bun run check
 
 ```
 crates/pi-natives/       # Rust source (workspace member)
-  src/lib.rs             # Grep/search + wasm-bindgen bindings
+  src/lib.rs             # N-API exports
   src/image.rs           # Image processing (photon-rs)
   Cargo.toml             # Rust dependencies
-wasm/                    # Generated WASM output
-  pi_natives.wasm        # Compiled WASM module
-  pi_natives.js          # wasm-bindgen generated JS glue
-  pi_natives.d.ts        # TypeScript definitions
+native/                  # Native addon binaries
+  pi_natives.<platform>-<arch>.node
+  pi_natives.node
 src/                     # TypeScript wrappers
+  native.ts              # Native addon loader
   index.ts               # Public API
-  grep/                  # Grep with worker pool
-  image/                 # Async image processing via worker
-  pool.ts                # Generic worker pool infrastructure
 ```

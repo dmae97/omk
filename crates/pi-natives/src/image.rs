@@ -4,16 +4,16 @@
 //! - Load image from bytes (PNG, JPEG, WebP, GIF)
 //! - Get dimensions
 //! - Resize with Lanczos3 filter
-//! - Export as PNG or JPEG
+//! - Export as PNG, JPEG, WebP, or GIF
 
 use std::io::Cursor;
 
-use image::{DynamicImage, ImageFormat, ImageReader, imageops::FilterType};
-use wasm_bindgen::prelude::*;
+use image::{imageops::FilterType, DynamicImage, ImageFormat, ImageReader};
+use napi::bindgen_prelude::*;
+use napi_derive::napi;
 
 /// Sampling filter for resize operations.
-#[wasm_bindgen]
-#[derive(Clone, Copy)]
+#[napi]
 pub enum SamplingFilter {
 	Nearest    = 1,
 	Triangle   = 2,
@@ -34,91 +34,106 @@ impl From<SamplingFilter> for FilterType {
 	}
 }
 
-/// Image container for WASM interop.
-#[wasm_bindgen]
+/// Image container for native interop.
+#[napi]
 pub struct PhotonImage {
 	img: DynamicImage,
 }
 
-#[wasm_bindgen]
+#[napi]
 impl PhotonImage {
 	/// Create a new `PhotonImage` from encoded image bytes (PNG, JPEG, WebP,
 	/// GIF).
-	#[wasm_bindgen(js_name = new_from_byteslice)]
-	pub fn new_from_byteslice(bytes: &[u8]) -> Result<Self, JsValue> {
-		let reader = ImageReader::new(Cursor::new(bytes))
+	///
+	/// # Errors
+	/// Returns an error if the image format cannot be detected or decoded.
+	#[napi(factory, js_name = "new_from_byteslice")]
+	pub fn new_from_byteslice(bytes: Uint8Array) -> Result<Self> {
+		let reader = ImageReader::new(Cursor::new(bytes.as_ref()))
 			.with_guessed_format()
-			.map_err(|e| JsValue::from_str(&format!("Failed to detect image format: {e}")))?;
+			.map_err(|e| Error::from_reason(format!("Failed to detect image format: {e}")))?;
 
 		let img = reader
 			.decode()
-			.map_err(|e| JsValue::from_str(&format!("Failed to decode image: {e}")))?;
+			.map_err(|e| Error::from_reason(format!("Failed to decode image: {e}")))?;
 
 		Ok(Self { img })
 	}
 
 	/// Get the width of the image.
-	#[wasm_bindgen(js_name = get_width)]
+	#[napi(js_name = "get_width")]
 	pub fn get_width(&self) -> u32 {
 		self.img.width()
 	}
 
 	/// Get the height of the image.
-	#[wasm_bindgen(js_name = get_height)]
+	#[napi(js_name = "get_height")]
 	pub fn get_height(&self) -> u32 {
 		self.img.height()
 	}
 
 	/// Export image as PNG bytes.
-	#[wasm_bindgen(js_name = get_bytes)]
-	pub fn get_bytes(&self) -> Result<Vec<u8>, JsValue> {
+	///
+	/// # Errors
+	/// Returns an error if PNG encoding fails.
+	#[napi(js_name = "get_bytes")]
+	pub fn get_bytes(&self) -> Result<Uint8Array> {
 		let mut buffer = Vec::new();
 		self
 			.img
 			.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Png)
-			.map_err(|e| JsValue::from_str(&format!("Failed to encode PNG: {e}")))?;
-		Ok(buffer)
+			.map_err(|e| Error::from_reason(format!("Failed to encode PNG: {e}")))?;
+		Ok(Uint8Array::from(buffer))
 	}
 
 	/// Export image as JPEG bytes with specified quality (0-100).
-	#[wasm_bindgen(js_name = get_bytes_jpeg)]
-	pub fn get_bytes_jpeg(&self, quality: u8) -> Result<Vec<u8>, JsValue> {
+	///
+	/// # Errors
+	/// Returns an error if JPEG encoding fails.
+	#[napi(js_name = "get_bytes_jpeg")]
+	pub fn get_bytes_jpeg(&self, quality: u8) -> Result<Uint8Array> {
 		let mut buffer = Vec::new();
 		let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buffer, quality);
 		self
 			.img
 			.write_with_encoder(encoder)
-			.map_err(|e| JsValue::from_str(&format!("Failed to encode JPEG: {e}")))?;
-		Ok(buffer)
+			.map_err(|e| Error::from_reason(format!("Failed to encode JPEG: {e}")))?;
+		Ok(Uint8Array::from(buffer))
 	}
 
 	/// Export image as lossless WebP bytes.
-	#[wasm_bindgen(js_name = get_bytes_webp)]
-	pub fn get_bytes_webp(&self) -> Result<Vec<u8>, JsValue> {
+	///
+	/// # Errors
+	/// Returns an error if WebP encoding fails.
+	#[napi(js_name = "get_bytes_webp")]
+	pub fn get_bytes_webp(&self) -> Result<Uint8Array> {
 		let mut buffer = Vec::new();
 		let encoder = image::codecs::webp::WebPEncoder::new_lossless(&mut buffer);
 		self
 			.img
 			.write_with_encoder(encoder)
-			.map_err(|e| JsValue::from_str(&format!("Failed to encode WebP: {e}")))?;
-		Ok(buffer)
+			.map_err(|e| Error::from_reason(format!("Failed to encode WebP: {e}")))?;
+		Ok(Uint8Array::from(buffer))
 	}
 
 	/// Export image as GIF bytes.
-	#[wasm_bindgen(js_name = get_bytes_gif)]
-	pub fn get_bytes_gif(&self) -> Result<Vec<u8>, JsValue> {
+	///
+	/// # Errors
+	/// Returns an error if GIF encoding fails.
+	#[napi(js_name = "get_bytes_gif")]
+	pub fn get_bytes_gif(&self) -> Result<Uint8Array> {
 		let mut buffer = Vec::new();
 		self
 			.img
 			.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Gif)
-			.map_err(|e| JsValue::from_str(&format!("Failed to encode GIF: {e}")))?;
-		Ok(buffer)
+			.map_err(|e| Error::from_reason(format!("Failed to encode GIF: {e}")))?;
+		Ok(Uint8Array::from(buffer))
 	}
-}
 
-/// Resize an image to the specified dimensions.
-#[wasm_bindgen]
-pub fn resize(image: &PhotonImage, width: u32, height: u32, filter: SamplingFilter) -> PhotonImage {
-	let resized = image.img.resize_exact(width, height, filter.into());
-	PhotonImage { img: resized }
+	/// Resize the image to the specified dimensions.
+	#[napi(js_name = "resize")]
+	pub fn resize(&self, width: u32, height: u32, filter: SamplingFilter) -> PhotonImage {
+		let resized = self.img.resize_exact(width, height, filter.into());
+		PhotonImage { img: resized }
+	}
 }

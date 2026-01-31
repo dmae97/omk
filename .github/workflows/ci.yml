@@ -33,27 +33,44 @@ jobs:
       - name: Check
         run: cargo check --workspace
 
-  wasm:
-    runs-on: ubuntu-latest
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - os: ubuntu-24.04-arm64
+            platform: linux
+            arch: arm64
+          - os: macos-13
+            platform: darwin
+            arch: x64
+          - os: macos-14
+            platform: darwin
+            arch: arm64
+          - os: windows-latest
+            platform: win32
+            arch: x64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
           lfs: true
       - uses: dtolnay/rust-toolchain@nightly
-        with:
-          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - name: Install wasm-pack
-        run: cargo install wasm-pack
-      - name: Install binaryen (wasm-opt)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y binaryen
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3"
-      - name: Build WASM
-        run: bun --cwd=packages/natives run build:wasm
+      - name: Build native addon
+        run: bun --cwd=packages/natives run build:native
+      - name: Upload native addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: pi-natives-${{ matrix.platform }}-${{ matrix.arch }}
+          path: packages/natives/native/pi_natives.${{ matrix.platform }}-${{ matrix.arch }}.node
+          if-no-files-found: error
 
   test:
     runs-on: ubuntu-latest
@@ -76,6 +93,7 @@ jobs:
           sudo ln -s $(which fdfind) /usr/local/bin/fd
           sudo ln -sf /usr/bin/convert /usr/local/bin/magick
       - run: bun install --frozen-lockfile
+      - run: bun --cwd=packages/natives run build:native
       - run: bun run check
       - run: bun run test
       - name: CLI smoke test
@@ -86,7 +104,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [rust, wasm, test]
+    needs: [rust, native, test]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -108,18 +126,25 @@ jobs:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock') }}
       - run: bun install --frozen-lockfile
+      - name: Download native addons
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pi-natives-*
+          path: packages/natives/native
+          merge-multiple: true
 
       - name: Build binaries
         run: |
           mkdir -p packages/coding-agent/binaries
           ENTRYPOINT="./packages/coding-agent/src/cli.ts"
-          WORKERS="./packages/natives/src/grep/worker.ts ./packages/natives/src/html/worker.ts ./packages/natives/src/image/worker.ts"
           DEFINES="--define OMP_COMPILED=true --root ."
-          bun build --compile $DEFINES --target=bun-darwin-arm64 $ENTRYPOINT $WORKERS --outfile packages/coding-agent/binaries/omp-darwin-arm64
-          bun build --compile $DEFINES --target=bun-darwin-x64 $ENTRYPOINT $WORKERS --outfile packages/coding-agent/binaries/omp-darwin-x64
-          bun build --compile $DEFINES --target=bun-linux-x64 $ENTRYPOINT $WORKERS --outfile packages/coding-agent/binaries/omp-linux-x64
-          bun build --compile $DEFINES --target=bun-linux-arm64 $ENTRYPOINT $WORKERS --outfile packages/coding-agent/binaries/omp-linux-arm64
-          bun build --compile $DEFINES --target=bun-windows-x64 $ENTRYPOINT $WORKERS --outfile packages/coding-agent/binaries/omp-windows-x64.exe
+          bun build --compile $DEFINES --target=bun-darwin-arm64 $ENTRYPOINT --outfile packages/coding-agent/binaries/omp-darwin-arm64
+          bun build --compile $DEFINES --target=bun-darwin-x64 $ENTRYPOINT --outfile packages/coding-agent/binaries/omp-darwin-x64
+          bun build --compile $DEFINES --target=bun-linux-x64 $ENTRYPOINT --outfile packages/coding-agent/binaries/omp-linux-x64
+          bun build --compile $DEFINES --target=bun-linux-arm64 $ENTRYPOINT --outfile packages/coding-agent/binaries/omp-linux-arm64
+          bun build --compile $DEFINES --target=bun-windows-x64 $ENTRYPOINT --outfile packages/coding-agent/binaries/omp-windows-x64.exe
+      - name: Stage native addons for release
+        run: cp packages/natives/native/*.node packages/coding-agent/binaries/
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:

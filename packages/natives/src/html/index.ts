@@ -1,26 +1,16 @@
 /**
- * HTML to Markdown conversion powered by WASM.
- *
- * Conversion happens in a worker thread to avoid blocking the main thread.
+ * HTML to Markdown conversion powered by native bindings.
  */
 
-import { type RequestOptions, WorkerPool } from "../pool";
-import { resolveWorkerSpecifier } from "../worker-resolver";
-import type { HtmlRequest, HtmlResponse, HtmlToMarkdownOptions } from "./types";
+import { native } from "../native";
+import type { RequestOptions } from "../request-options";
+import type { HtmlToMarkdownOptions } from "./types";
 
 export type { HtmlToMarkdownOptions } from "./types";
 
-const pool = new WorkerPool<HtmlRequest, HtmlResponse>({
-	createWorker: () =>
-		new Worker(
-			resolveWorkerSpecifier({
-				compiled: "./packages/natives/src/html/worker.ts",
-				dev: new URL("./worker.ts", import.meta.url),
-			}),
-		),
-	maxWorkers: 2,
-	idleTimeoutMs: 30_000,
-});
+function assertRequest(req?: RequestOptions): void {
+	req?.signal?.throwIfAborted();
+}
 
 /**
  * Convert HTML to Markdown.
@@ -34,21 +24,11 @@ export async function htmlToMarkdown(
 	options?: HtmlToMarkdownOptions,
 	req?: RequestOptions,
 ): Promise<string> {
-	const response = await pool.request<Extract<HtmlResponse, { type: "converted" }>>(
-		{
-			type: "convert",
-			html,
-			options,
-		},
-		req,
-	);
-	return response.markdown;
+	assertRequest(req);
+	return native.htmlToMarkdown(html, options);
 }
 
 /**
- * Terminate the HTML worker pool.
- * Call this when shutting down to clean up resources.
+ * Terminate HTML resources (no-op for native bindings).
  */
-export function terminate(): void {
-	pool.terminate();
-}
+export function terminate(): void {}

@@ -52,31 +52,39 @@ export interface GrepResult extends GrepSummary {
 	matches: GrepMatch[];
 }
 
-/** WASM match result from the compiled pattern. */
-export interface WasmMatch {
-	lineNumber: number;
-	line: string;
-	contextBefore: ContextLine[];
-	contextAfter: ContextLine[];
-	truncated: boolean;
+export interface SearchOptions {
+	/** Regex pattern to search for */
+	pattern: string;
+	/** Case-insensitive search */
+	ignoreCase?: boolean;
+	/** Enable multiline matching */
+	multiline?: boolean;
+	/** Maximum number of matches to return */
+	maxCount?: number;
+	/** Skip first N matches */
+	offset?: number;
+	/** Lines of context before/after matches */
+	context?: number;
+	/** Truncate lines longer than this (characters) */
+	maxColumns?: number;
+	/** Output mode */
+	mode?: "content" | "count";
 }
 
-/** WASM search result. */
-export interface WasmSearchResult {
-	matches: WasmMatch[];
+export interface SearchMatch {
+	lineNumber: number;
+	line: string;
+	contextBefore?: ContextLine[];
+	contextAfter?: ContextLine[];
+	truncated?: boolean;
+}
+
+export interface SearchResult {
+	matches: SearchMatch[];
 	matchCount: number;
 	limitReached: boolean;
 	error?: string;
 }
 
-/** Message types from main thread to worker. */
-export type WorkerRequest =
-	| { type: "init"; id: number }
-	| { type: "grep"; id: number; request: GrepOptions }
-	| { type: "destroy" };
-
-/** Message types from worker to main thread. */
-export type WorkerResponse =
-	| { type: "ready"; id: number }
-	| { type: "result"; id: number; result: GrepResult }
-	| { type: "error"; id: number; error: string };
+export type WasmMatch = SearchMatch;
+export type WasmSearchResult = SearchResult;

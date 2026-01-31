@@ -1,7 +1,7 @@
 {
 	"name": "@oh-my-pi/pi-natives",
 	"version": "9.4.0",
-	"description": "Native Rust functionality compiled to WebAssembly via wasm-bindgen",
+	"description": "Native Rust functionality via N-API",
 	"type": "module",
 	"main": "./src/index.ts",
 	"types": "./src/index.ts",
@@ -13,13 +13,13 @@
 	},
 	"files": [
 		"src",
-		"wasm"
+		"native"
 	],
 	"scripts": {
-		"build:wasm": "bun scripts/build-wasm.ts",
+		"build:native": "bun scripts/build-native.ts",
 		"check": "biome check . && tsgo -p tsconfig.json",
 		"fix": "biome check --write --unsafe .",
-		"test": "bun test",
+		"test": "bun run build:native && bun test",
 		"bench": "bun bench/grep.ts"
 	},
 	"author": "Can Bölük",

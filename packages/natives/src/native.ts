@@ -1,0 +1,123 @@
+import * as path from "node:path";
+import { createRequire } from "node:module";
+import type { GrepOptions, GrepResult, SearchOptions, SearchResult } from "./grep/types";
+import type { HtmlToMarkdownOptions } from "./html/types";
+import type { HighlightColors } from "./highlight/index";
+import type { ExtractSegmentsResult, SliceWithWidthResult } from "./text/index";
+
+export interface NativePhotonImage {
+	getWidth(): number;
+	getHeight(): number;
+	getBytes(): Uint8Array;
+	getBytesJpeg(quality: number): Uint8Array;
+	getBytesWebp(): Uint8Array;
+	getBytesGif(): Uint8Array;
+	resize(width: number, height: number, filter: number): NativePhotonImage;
+}
+
+export interface NativePhotonImageConstructor {
+	newFromByteslice(bytes: Uint8Array): NativePhotonImage;
+	prototype: NativePhotonImage;
+}
+
+export interface NativeSamplingFilter {
+	Nearest: 1;
+	Triangle: 2;
+	CatmullRom: 3;
+	Gaussian: 4;
+	Lanczos3: 5;
+}
+
+export interface NativeBindings {
+	grep(options: GrepOptions): GrepResult;
+	search(content: string, options: SearchOptions): SearchResult;
+	hasMatch(content: string, pattern: string, ignoreCase: boolean, multiline: boolean): boolean;
+	htmlToMarkdown(html: string, options?: HtmlToMarkdownOptions | null): string;
+	highlightCode(code: string, lang: string | null | undefined, colors: HighlightColors): string;
+	supportsLanguage(lang: string): boolean;
+	getSupportedLanguages(): string[];
+	SamplingFilter: NativeSamplingFilter;
+	PhotonImage: NativePhotonImageConstructor;
+	visibleWidth(text: string): number;
+	truncateToWidth(text: string, maxWidth: number, ellipsis: string, pad: boolean): string;
+	sliceWithWidth(line: string, startCol: number, length: number, strict: boolean): SliceWithWidthResult;
+	extractSegments(
+		line: string,
+		beforeEnd: number,
+		afterStart: number,
+		afterLen: number,
+		strictAfter: boolean,
+	): ExtractSegmentsResult;
+}
+
+const require = createRequire(import.meta.url);
+const platformTag = `${process.platform}-${process.arch}`;
+const nativeDir = path.join(import.meta.dir, "..", "native");
+const repoRoot = path.join(import.meta.dir, "..", "..", "..");
+const execDir = path.dirname(process.execPath);
+const candidates = [
+	path.join(nativeDir, `pi_natives.${platformTag}.node`),
+	path.join(nativeDir, "pi_natives.node"),
+	path.join(execDir, `pi_natives.${platformTag}.node`),
+	path.join(execDir, "pi_natives.node"),
+	path.join(repoRoot, "target", "release", "pi_natives.node"),
+	path.join(repoRoot, "crates", "pi-natives", "target", "release", "pi_natives.node"),
+];
+
+function loadNative(): NativeBindings {
+	const errors: string[] = [];
+
+	for (const candidate of candidates) {
+		try {
+			const bindings = require(candidate) as NativeBindings;
+			validateNative(bindings, candidate);
+			return bindings;
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			errors.push(`${candidate}: ${message}`);
+		}
+	}
+
+	const details = errors.map(error => `- ${error}`).join("\n");
+	throw new Error(`Failed to load pi_natives native addon. Tried:\n${details}`);
+}
+
+function validateNative(bindings: NativeBindings, source: string): void {
+	const missing: string[] = [];
+	const checkFn = (name: keyof NativeBindings) => {
+		if (typeof bindings[name] !== "function") {
+			missing.push(name);
+		}
+	};
+
+	checkFn("grep");
+	checkFn("search");
+	checkFn("hasMatch");
+	checkFn("htmlToMarkdown");
+	checkFn("highlightCode");
+	checkFn("supportsLanguage");
+	checkFn("getSupportedLanguages");
+	checkFn("visibleWidth");
+	checkFn("truncateToWidth");
+	checkFn("sliceWithWidth");
+	checkFn("extractSegments");
+
+	if (!bindings.PhotonImage?.newFromByteslice) {
+		missing.push("PhotonImage.newFromByteslice");
+	}
+	if (!bindings.PhotonImage?.prototype?.resize) {
+		missing.push("PhotonImage.resize");
+	}
+	if (!bindings.SamplingFilter || typeof bindings.SamplingFilter.Lanczos3 !== "number") {
+		missing.push("SamplingFilter");
+	}
+
+	if (missing.length) {
+		throw new Error(
+			`Native addon missing exports (${source}). Missing: ${missing.join(", ")}. ` +
+				"Rebuild with `bun --cwd=packages/natives run build:native`.",
+		);
+	}
+}
+
+export const native = loadNative();

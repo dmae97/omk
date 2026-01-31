@@ -7,9 +7,9 @@
 
 use std::sync::OnceLock;
 
-use serde::Deserialize;
+use napi::bindgen_prelude::*;
+use napi_derive::napi;
 use syntect::parsing::{ParseState, Scope, ScopeStack, ScopeStackOp, SyntaxReference, SyntaxSet};
-use wasm_bindgen::prelude::*;
 
 static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
 static SCOPE_MATCHERS: OnceLock<ScopeMatchers> = OnceLock::new();
@@ -118,8 +118,8 @@ fn get_scope_matchers() -> &'static ScopeMatchers {
 
 /// Theme colors for syntax highlighting.
 /// Each color is an ANSI escape sequence (e.g., "\x1b[38;2;255;0;0m").
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug)]
+#[napi(object)]
 pub struct HighlightColors {
 	pub comment:     String,
 	pub keyword:     String,
@@ -127,13 +127,14 @@ pub struct HighlightColors {
 	pub variable:    String,
 	pub string:      String,
 	pub number:      String,
+	#[napi(js_name = "type")]
 	pub r#type:      String,
 	pub operator:    String,
 	pub punctuation: String,
-	#[serde(default)]
-	pub inserted:    String,
-	#[serde(default)]
-	pub deleted:     String,
+	#[napi(js_name = "inserted")]
+	pub inserted:    Option<String>,
+	#[napi(js_name = "deleted")]
+	pub deleted:     Option<String>,
 }
 
 /// Language alias mappings: (aliases, target syntax name).
@@ -333,26 +334,24 @@ fn find_syntax<'a>(ss: &'a SyntaxSet, lang: &str) -> Option<&'a SyntaxReference>
 /// # Returns
 /// Highlighted code with ANSI color codes, or the original code if highlighting
 /// fails.
-#[wasm_bindgen]
-pub fn highlight_code(code: &str, lang: Option<String>, colors: JsValue) -> String {
-	let colors: HighlightColors = match serde_wasm_bindgen::from_value(colors) {
-		Ok(c) => c,
-		Err(_) => return code.to_string(),
-	};
+#[napi(js_name = "highlight_code")]
+pub fn highlight_code(code: String, lang: Option<String>, colors: HighlightColors) -> Result<String> {
+	let inserted = colors.inserted.as_deref().unwrap_or("");
+	let deleted = colors.deleted.as_deref().unwrap_or("");
 
 	// Color palette as array for quick indexing
 	let palette = [
-		&colors.comment,     // 0
-		&colors.keyword,     // 1
-		&colors.function,    // 2
-		&colors.variable,    // 3
-		&colors.string,      // 4
-		&colors.number,      // 5
-		&colors.r#type,      // 6
-		&colors.operator,    // 7
-		&colors.punctuation, // 8
-		&colors.inserted,    // 9
-		&colors.deleted,     // 10
+		colors.comment.as_str(),     // 0
+		colors.keyword.as_str(),     // 1
+		colors.function.as_str(),    // 2
+		colors.variable.as_str(),    // 3
+		colors.string.as_str(),      // 4
+		colors.number.as_str(),      // 5
+		colors.r#type.as_str(),      // 6
+		colors.operator.as_str(),    // 7
+		colors.punctuation.as_str(), // 8
+		inserted,                    // 9
+		deleted,                     // 10
 	];
 
 	let ss = get_syntax_set();
@@ -368,7 +367,7 @@ pub fn highlight_code(code: &str, lang: Option<String>, colors: JsValue) -> Stri
 	let mut scope_stack = ScopeStack::new();
 	let mut result = String::with_capacity(code.len() * 2);
 
-	for line in syntect::util::LinesWithEndings::from(code) {
+	for line in syntect::util::LinesWithEndings::from(code.as_str()) {
 		let Ok(ops) = parse_state.parse_line(line, ss) else {
 			result.push_str(line);
 			continue;
@@ -422,25 +421,25 @@ pub fn highlight_code(code: &str, lang: Option<String>, colors: JsValue) -> Stri
 		}
 	}
 
-	result
+	Ok(result)
 }
 
 /// Check if a language is supported for highlighting.
 /// Returns true if the language has either direct support or a fallback
 /// mapping.
-#[wasm_bindgen]
-pub fn supports_language(lang: &str) -> bool {
-	if is_known_alias(lang) {
+#[napi(js_name = "supports_language")]
+pub fn supports_language(lang: String) -> bool {
+	if is_known_alias(&lang) {
 		return true;
 	}
 
 	// Fall back to direct syntax lookup
 	let ss = get_syntax_set();
-	find_syntax(ss, lang).is_some()
+	find_syntax(ss, &lang).is_some()
 }
 
 /// Get list of supported languages.
-#[wasm_bindgen]
+#[napi(js_name = "get_supported_languages")]
 pub fn get_supported_languages() -> Vec<String> {
 	let ss = get_syntax_set();
 	ss.syntaxes().iter().map(|s| s.name.clone()).collect()

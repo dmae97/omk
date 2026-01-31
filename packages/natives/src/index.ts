@@ -1,5 +1,5 @@
 /**
- * Native utilities powered by WASM.
+ * Native utilities powered by N-API.
  */
 
 import * as fs from "node:fs/promises";
@@ -23,12 +23,6 @@ export {
 	searchContent,
 	terminate,
 } from "./grep/index";
-
-// =============================================================================
-// WASI implementation
-// =============================================================================
-
-export { WASI1, WASIError, WASIExitError, type WASIOptions } from "./wasix";
 
 // =============================================================================
 // Find (file discovery)
@@ -167,8 +161,4 @@ export {
 	terminate as terminateHtmlWorker,
 } from "./html/index";
 
-// =============================================================================
-// Worker Pool (shared infrastructure)
-// =============================================================================
-
-export { type BaseRequest, type BaseResponse, type RequestOptions, WorkerPool, type WorkerPoolOptions } from "./pool";
+export type { RequestOptions } from "./request-options";

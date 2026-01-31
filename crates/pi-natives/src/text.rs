@@ -1,26 +1,33 @@
 //! ANSI-aware text measurement and slicing utilities.
 
-use serde::Serialize;
+use napi_derive::napi;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
-use wasm_bindgen::prelude::*;
 
 const TAB_WIDTH: usize = 3;
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SliceResult {
-	text:  String,
-	width: usize,
+/// Result of slicing a line by visible width.
+#[napi(object)]
+pub struct SliceResult {
+	/// The sliced text, including any ANSI codes.
+	pub text:  String,
+	/// Visible width of the slice in columns.
+	pub width: u32,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ExtractSegmentsResult {
-	before:       String,
-	before_width: usize,
-	after:        String,
-	after_width:  usize,
+/// Before/after segments extracted around an overlay region.
+#[napi(object)]
+pub struct ExtractSegmentsResult {
+	/// Text before the overlay region.
+	pub before: String,
+	/// Visible width of `before` in columns.
+	#[napi(js_name = "beforeWidth")]
+	pub before_width: u32,
+	/// Text after the overlay region.
+	pub after: String,
+	/// Visible width of `after` in columns.
+	#[napi(js_name = "afterWidth")]
+	pub after_width: u32,
 }
 
 struct AnsiCodeTracker {
@@ -255,9 +262,11 @@ fn grapheme_width(grapheme: &str) -> usize {
 	UnicodeWidthStr::width(grapheme)
 }
 
-/// Compute the visible width of a string, ignoring ANSI codes.
-#[wasm_bindgen]
-pub fn visible_width(text: &str) -> usize {
+fn clamp_u32(value: usize) -> u32 {
+	value.min(u32::MAX as usize) as u32
+}
+
+fn visible_width_impl(text: &str) -> usize {
 	if text.is_empty() {
 		return 0;
 	}
@@ -286,18 +295,25 @@ pub fn visible_width(text: &str) -> usize {
 	width
 }
 
+/// Compute the visible width of a string, ignoring ANSI codes.
+#[napi(js_name = "visible_width")]
+pub fn visible_width(text: String) -> u32 {
+	clamp_u32(visible_width_impl(&text))
+}
+
 /// Truncate text to a visible width, preserving ANSI codes.
-#[wasm_bindgen]
-pub fn truncate_to_width(text: &str, max_width: usize, ellipsis: &str, pad: bool) -> String {
-	let text_visible_width = visible_width(text);
+#[napi(js_name = "truncate_to_width")]
+pub fn truncate_to_width(text: String, max_width: u32, ellipsis: String, pad: bool) -> String {
+	let max_width = max_width as usize;
+	let text_visible_width = visible_width_impl(&text);
 	if text_visible_width <= max_width {
 		if pad {
 			return format!("{}{}", text, " ".repeat(max_width - text_visible_width));
 		}
-		return text.to_string();
+		return text;
 	}
 
-	let ellipsis_width = visible_width(ellipsis);
+	let ellipsis_width = visible_width_impl(&ellipsis);
 	let target_width = max_width.saturating_sub(ellipsis_width);
 	if target_width == 0 {
 		return ellipsis.graphemes(true).take(max_width).collect();
@@ -306,13 +322,13 @@ pub fn truncate_to_width(text: &str, max_width: usize, ellipsis: &str, pad: bool
 	let mut segments: Vec<(bool, &str)> = Vec::new();
 	let mut i = 0;
 	while i < text.len() {
-		if let Some(len) = extract_ansi_code(text, i) {
+		if let Some(len) = extract_ansi_code(&text, i) {
 			segments.push((true, &text[i..i + len]));
 			i += len;
 			continue;
 		}
 
-		let next_ansi = next_ansi_start(text, i);
+		let next_ansi = next_ansi_start(&text, i);
 		let end = next_ansi.unwrap_or(text.len());
 		for grapheme in text[i..end].graphemes(true) {
 			segments.push((false, grapheme));
@@ -342,7 +358,7 @@ pub fn truncate_to_width(text: &str, max_width: usize, ellipsis: &str, pad: bool
 
 	let mut truncated = format!("{result}\x1b[0m{ellipsis}");
 	if pad {
-		let truncated_width = visible_width(&truncated);
+		let truncated_width = visible_width_impl(&truncated);
 		if truncated_width < max_width {
 			truncated.push_str(&" ".repeat(max_width - truncated_width));
 		}
@@ -402,14 +418,13 @@ fn slice_with_width_impl(line: &str, start_col: usize, length: usize, strict: bo
 		}
 	}
 
-	SliceResult { text: result, width: result_width }
+	SliceResult { text: result, width: clamp_u32(result_width) }
 }
 
 /// Slice a range of visible columns from a line.
-#[wasm_bindgen]
-pub fn slice_with_width(line: &str, start_col: usize, length: usize, strict: bool) -> JsValue {
-	let result = slice_with_width_impl(line, start_col, length, strict);
-	serde_wasm_bindgen::to_value(&result).unwrap_or(JsValue::NULL)
+#[napi(js_name = "slice_with_width")]
+pub fn slice_with_width(line: String, start_col: u32, length: u32, strict: bool) -> SliceResult {
+	slice_with_width_impl(&line, start_col as usize, length as usize, strict)
 }
 
 fn extract_segments_impl(
@@ -490,18 +505,28 @@ fn extract_segments_impl(
 		}
 	}
 
-	ExtractSegmentsResult { before, before_width, after, after_width }
+	ExtractSegmentsResult {
+		before,
+		before_width: clamp_u32(before_width),
+		after,
+		after_width: clamp_u32(after_width),
+	}
 }
 
 /// Extract the before/after slices around an overlay region.
-#[wasm_bindgen]
+#[napi(js_name = "extract_segments")]
 pub fn extract_segments(
-	line: &str,
-	before_end: usize,
-	after_start: usize,
-	after_len: usize,
+	line: String,
+	before_end: u32,
+	after_start: u32,
+	after_len: u32,
 	strict_after: bool,
-) -> JsValue {
-	let result = extract_segments_impl(line, before_end, after_start, after_len, strict_after);
-	serde_wasm_bindgen::to_value(&result).unwrap_or(JsValue::NULL)
+) -> ExtractSegmentsResult {
+	extract_segments_impl(
+		&line,
+		before_end as usize,
+		after_start as usize,
+		after_len as usize,
+		strict_after,
+	)
 }

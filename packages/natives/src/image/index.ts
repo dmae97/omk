@@ -1,48 +1,55 @@
 /**
- * Async image processing via worker.
- *
- * All heavy lifting happens in a worker thread to avoid blocking the main thread.
- * Uses transferable ArrayBuffers to avoid copying image data.
+ * Image processing via native bindings.
  */
 
-import { WorkerPool } from "../pool";
-import { resolveWorkerSpecifier } from "../worker-resolver";
-import type { ImageRequest, ImageResponse } from "./types";
+import { native, type NativePhotonImage } from "../native";
 
-// Re-export the enum for filter selection
-export { SamplingFilter } from "../../wasm/pi_natives";
+const images = new Map<number, NativePhotonImage>();
+let nextHandle = 1;
 
-const pool = new WorkerPool<ImageRequest, ImageResponse>({
-	createWorker: () =>
-		new Worker(
-			resolveWorkerSpecifier({
-				compiled: "./packages/natives/src/image/worker.ts",
-				dev: new URL("./worker.ts", import.meta.url),
-			}),
-		),
-	maxWorkers: 1,
-	idleTimeoutMs: 0, // Keep alive - stateful (image handles)
-});
+function registerImage(image: NativePhotonImage): number {
+	const handle = nextHandle++;
+	images.set(handle, image);
+	return handle;
+}
+
+function getImage(handle: number): NativePhotonImage {
+	const image = images.get(handle);
+	if (!image) {
+		throw new Error("Image already freed");
+	}
+	return image;
+}
+
+export const SamplingFilter = native.SamplingFilter;
+export type SamplingFilter = (typeof SamplingFilter)[keyof typeof SamplingFilter];
 
 /**
  * Image handle for async operations.
- * Must call free() when done to release WASM memory.
  */
 export class PhotonImage {
 	#handle: number;
-	#width: number;
-	#height: number;
 	#freed = false;
 
-	private constructor(handle: number, width: number, height: number) {
+	private constructor(handle: number) {
 		this.#handle = handle;
-		this.#width = width;
-		this.#height = height;
 	}
 
 	/** @internal */
-	static _create(handle: number, width: number, height: number): PhotonImage {
-		return new PhotonImage(handle, width, height);
+	static _create(handle: number): PhotonImage {
+		if (!images.has(handle)) {
+			throw new Error("Invalid image handle");
+		}
+		return new PhotonImage(handle);
+	}
+
+	/**
+	 * Load an image from encoded bytes (PNG, JPEG, WebP, GIF).
+	 */
+	static async new_from_byteslice(bytes: Uint8Array): Promise<PhotonImage> {
+		const image = native.PhotonImage.newFromByteslice(bytes);
+		const handle = registerImage(image);
+		return new PhotonImage(handle);
 	}
 
 	/** @internal */
@@ -51,56 +58,36 @@ export class PhotonImage {
 		return this.#handle;
 	}
 
-	/**
-	 * Load an image from encoded bytes (PNG, JPEG, WebP, GIF).
-	 * The bytes are transferred to the worker (zero-copy).
-	 */
-	static async new_from_byteslice(bytes: Uint8Array): Promise<PhotonImage> {
-		const response = await pool.request<Extract<ImageResponse, { type: "loaded" }>>(
-			{ type: "load", bytes },
-			{
-				transfer: [bytes.buffer],
-			},
-		);
-		return new PhotonImage(response.handle, response.width, response.height);
+	#native(): NativePhotonImage {
+		if (this.#freed) throw new Error("Image already freed");
+		return getImage(this.#handle);
 	}
 
 	/** Get image width in pixels. */
 	get_width(): number {
-		return this.#width;
+		return this.#native().getWidth();
 	}
 
 	/** Get image height in pixels. */
 	get_height(): number {
-		return this.#height;
+		return this.#native().getHeight();
 	}
 
 	/** Export as PNG bytes. */
 	async get_bytes(): Promise<Uint8Array> {
-		if (this.#freed) throw new Error("Image already freed");
-		const response = await pool.request<Extract<ImageResponse, { type: "bytes" }>>({
-			type: "get_png",
-			handle: this.#handle,
-		});
-		return response.bytes;
+		return this.#native().getBytes();
 	}
 
 	/** Export as JPEG bytes with specified quality (0-100). */
 	async get_bytes_jpeg(quality: number): Promise<Uint8Array> {
-		if (this.#freed) throw new Error("Image already freed");
-		const response = await pool.request<Extract<ImageResponse, { type: "bytes" }>>({
-			type: "get_jpeg",
-			handle: this.#handle,
-			quality,
-		});
-		return response.bytes;
+		return this.#native().getBytesJpeg(quality);
 	}
 
-	/** Release WASM memory. Must be called when done with the image. */
+	/** Release native resources. */
 	free() {
 		if (this.#freed) return;
 		this.#freed = true;
-		pool.request({ type: "free", handle: this.#handle }).catch(() => {});
+		images.delete(this.#handle);
 	}
 
 	/** Alias for free() to support using-declarations. */
@@ -114,21 +101,13 @@ export class PhotonImage {
  * Returns a new PhotonImage (original is not modified).
  */
 export async function resize(image: PhotonImage, width: number, height: number, filter: number): Promise<PhotonImage> {
-	const handle = image._getHandle();
-	const response = await pool.request<Extract<ImageResponse, { type: "resized" }>>({
-		type: "resize",
-		handle,
-		width,
-		height,
-		filter,
-	});
-	return PhotonImage._create(response.handle, response.width, response.height);
+	const nativeImage = getImage(image._getHandle());
+	const resized = nativeImage.resize(width, height, filter);
+	const handle = registerImage(resized);
+	return PhotonImage._create(handle);
 }
 
 /**
- * Terminate the image worker.
- * Call this when shutting down to clean up resources.
+ * Terminate image resources (no-op for native bindings).
  */
-export function terminate(): void {
-	pool.terminate();
-}
+export function terminate(): void {}

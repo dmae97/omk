@@ -1,11 +1,21 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added context-structure template showing required sections (Goal, Constraints, Existing Code, API Contract) with examples of good vs bad context
+- Added explicit dependency test: 'Can agent B write correct code without seeing agent A's output?' to determine sequencing
+- Added detailed phased execution pattern with four phases (Foundation, Parallel Implementation, Integration, Dependent Layer) and WASM-to-N-API migration example
+- Added table of dependency patterns that must be sequential (API creation before bindings, interface definition before implementation, etc.)
 - Added phased execution guidance for migrations and refactors to prevent parallel work on dependent layers
 - Added example demonstrating phased execution pattern for porting WASM to N-API with sequential foundation, parallel implementation, integration, and dependent layer phases
+
+### Changed
+
+- Restructured Task tool documentation to emphasize context quality and explicit API contracts for subagent success
+- Updated task execution guidance to require structured context with Goal, Constraints, Existing Code, and API Contract sections
+- Reorganized parallelization rules with explicit dependency patterns and phased execution guidance for migrations
+- Clarified that response format requirements must go in schema parameter, never in context descriptions
 
 ### Removed
 
