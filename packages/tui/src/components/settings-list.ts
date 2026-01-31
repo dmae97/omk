@@ -1,6 +1,6 @@
 import { matchesKey } from "../keys";
 import type { Component } from "../tui";
-import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "../utils";
+import { padding, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "../utils";
 
 export interface SettingItem {
 	/** Unique identifier for this setting */
@@ -100,7 +100,7 @@ export class SettingsList implements Component {
 			const prefixWidth = visibleWidth(prefix);
 
 			// Pad label to align values
-			const labelPadded = item.label + " ".repeat(Math.max(0, maxLabelWidth - visibleWidth(item.label)));
+			const labelPadded = item.label + padding(Math.max(0, maxLabelWidth - visibleWidth(item.label)));
 			const labelText = this.theme.label(labelPadded, isSelected);
 
 			// Calculate space for value

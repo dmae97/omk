@@ -2,7 +2,7 @@
  * Snake game hook - play snake with /snake command
  */
 import type { HookAPI } from "@oh-my-pi/pi-coding-agent";
-import { matchesKey, visibleWidth } from "@oh-my-pi/pi-tui";
+import { matchesKey, padding, visibleWidth } from "@oh-my-pi/pi-tui";
 
 const GAME_WIDTH = 40;
 const GAME_HEIGHT = 15;
@@ -227,8 +227,8 @@ class SnakeComponent {
 		// Helper to pad content inside box
 		const boxLine = (content: string) => {
 			const contentLen = visibleWidth(content);
-			const padding = Math.max(0, boxWidth - contentLen);
-			return dim(" │") + content + " ".repeat(padding) + dim("│");
+			const pad = Math.max(0, boxWidth - contentLen);
+			return dim(" │") + content + padding(pad) + dim("│");
 		};
 
 		// Top border
@@ -291,8 +291,8 @@ class SnakeComponent {
 	private padLine(line: string, width: number): string {
 		// Calculate visible length (strip ANSI codes)
 		const visibleLen = line.replace(/\x1b\[[0-9;]*m/g, "").length;
-		const padding = Math.max(0, width - visibleLen);
-		return line + " ".repeat(padding);
+		const pad = Math.max(0, width - visibleLen);
+		return line + padding(pad);
 	}
 
 	dispose(): void {

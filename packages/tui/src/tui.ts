@@ -7,7 +7,7 @@ import * as path from "node:path";
 import { isKeyRelease, matchesKey } from "./keys";
 import type { Terminal } from "./terminal";
 import { setCellDimensions, TERMINAL_INFO } from "./terminal-image";
-import { extractSegments, sliceByColumn, sliceWithWidth, visibleWidth } from "./utils";
+import { extractSegments, padding, sliceByColumn, sliceWithWidth, visibleWidth } from "./utils";
 
 /**
  * Component interface - all components must implement this
@@ -861,14 +861,7 @@ export class TUI extends Container {
 		// Compose result
 		const r = TUI.SEGMENT_RESET;
 		const result =
-			base.before +
-			" ".repeat(beforePad) +
-			r +
-			overlay.text +
-			" ".repeat(overlayPad) +
-			r +
-			base.after +
-			" ".repeat(afterPad);
+			base.before + padding(beforePad) + r + overlay.text + padding(overlayPad) + r + base.after + padding(afterPad);
 
 		// CRITICAL: Always verify and truncate to terminal width.
 		// This is the final safeguard against width overflow which would crash the TUI.

@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
-import { type Component, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
+import { type Component, padding, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
 import { isEnoent } from "@oh-my-pi/pi-utils";
 import { theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
@@ -283,8 +283,8 @@ export class FooterComponent implements Component {
 		let statsLine: string;
 		if (totalNeeded <= width) {
 			// Both fit - add padding to right-align model
-			const padding = " ".repeat(width - statsLeftWidth - rightSideWidth);
-			statsLine = statsLeft + padding + rightSide;
+			const pad = padding(width - statsLeftWidth - rightSideWidth);
+			statsLine = statsLeft + pad + rightSide;
 		} else {
 			// Need to truncate right side
 			const availableForRight = width - statsLeftWidth - minPadding;
@@ -293,8 +293,8 @@ export class FooterComponent implements Component {
 				const plainRightSide = rightSide.replace(/\x1b\[[0-9;]*m/g, "");
 				const truncatedPlain = plainRightSide.substring(0, availableForRight);
 				// For simplicity, just use plain truncated version (loses color, but fits)
-				const padding = " ".repeat(width - statsLeftWidth - truncatedPlain.length);
-				statsLine = statsLeft + padding + truncatedPlain;
+				const pad = padding(width - statsLeftWidth - truncatedPlain.length);
+				statsLine = statsLeft + pad + truncatedPlain;
 			} else {
 				// Not enough space for right side at all
 				statsLine = statsLeft;

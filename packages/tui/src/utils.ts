@@ -5,6 +5,18 @@ import {
 	visibleWidth as nativeVisibleWidth,
 } from "@oh-my-pi/pi-natives";
 
+// Pre-allocated space buffer for padding
+const SPACE_BUFFER = " ".repeat(512);
+
+/**
+ * Returns a string of n spaces. Uses a pre-allocated buffer for efficiency.
+ */
+export function padding(n: number): string {
+	if (n <= 0) return "";
+	if (n <= 512) return SPACE_BUFFER.slice(0, n);
+	return " ".repeat(n);
+}
+
 // Grapheme segmenter (shared instance)
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
@@ -155,10 +167,9 @@ export function applyBackgroundToLine(line: string, width: number, bgFn: (text: 
 	// Calculate padding needed
 	const visibleLen = visibleWidth(line);
 	const paddingNeeded = Math.max(0, width - visibleLen);
-	const padding = " ".repeat(paddingNeeded);
 
 	// Apply background to content + padding
-	const withPadding = line + padding;
+	const withPadding = line + padding(paddingNeeded);
 	return bgFn(withPadding);
 }
 

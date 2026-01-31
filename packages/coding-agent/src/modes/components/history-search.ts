@@ -3,6 +3,7 @@ import {
 	Container,
 	Input,
 	matchesKey,
+	padding,
 	Spacer,
 	Text,
 	truncateToWidth,
@@ -50,7 +51,7 @@ class HistoryResultsList implements Component {
 
 			const cursorSymbol = `${theme.nav.cursor} `;
 			const cursorWidth = visibleWidth(cursorSymbol);
-			const cursor = isSelected ? theme.fg("accent", cursorSymbol) : " ".repeat(cursorWidth);
+			const cursor = isSelected ? theme.fg("accent", cursorSymbol) : padding(cursorWidth);
 			const maxWidth = width - cursorWidth;
 
 			const normalized = entry.prompt.replace(/\s+/g, " ").trim();

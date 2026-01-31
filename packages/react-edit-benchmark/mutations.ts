@@ -1,3 +1,5 @@
+import { padding } from "@oh-my-pi/pi-tui";
+
 /**
  * Code mutations for edit benchmark generation.
  *
@@ -84,7 +86,7 @@ function applyCandidate(lines: string[], candidate: Candidate): MutationInfo {
 
 function stripStrings(line: string): string {
 	const pattern = /(?<quote>['"])(?<body>(?:\\.|[^\\\n])*?)\k<quote>/g;
-	return line.replace(pattern, (match) => " ".repeat(match.length));
+	return line.replace(pattern, (match) => padding(match.length));
 }
 
 function mutateIdentifier(identifier: string): string | null {

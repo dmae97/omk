@@ -1,6 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Exported `padding` utility function for creating space-padded strings efficiently
+
+### Changed
+
+- Optimized padding operations across all components to use pre-allocated space buffer for better performance
 
 ## [9.2.2] - 2026-01-31
 

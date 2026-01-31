@@ -11,7 +11,16 @@
  * - Space: Toggle selected item (or master switch)
  * - Esc: Close dashboard (clears search first if active)
  */
-import { type Component, Container, matchesKey, Spacer, Text, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
+import {
+	type Component,
+	Container,
+	matchesKey,
+	padding,
+	Spacer,
+	Text,
+	truncateToWidth,
+	visibleWidth,
+} from "@oh-my-pi/pi-tui";
 import type { SettingsManager } from "../../../config/settings-manager";
 import { DynamicBorder } from "../../../modes/components/dynamic-border";
 import { theme } from "../../../modes/theme/theme";
@@ -296,7 +305,7 @@ class TwoColumnBody implements Component {
 
 		for (let i = 0; i < numLines; i++) {
 			const left = truncateToWidth(leftLines[i] ?? "", leftWidth);
-			const leftPadded = left + " ".repeat(Math.max(0, leftWidth - visibleWidth(left)));
+			const leftPadded = left + padding(Math.max(0, leftWidth - visibleWidth(left)));
 			const right = truncateToWidth(rightLines[i] ?? "", rightWidth);
 			combined.push(leftPadded + separator + right);
 		}

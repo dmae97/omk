@@ -3,7 +3,7 @@ import type { MermaidImage } from "../mermaid";
 import type { SymbolTheme } from "../symbols";
 import { encodeITerm2, encodeKitty, getCellDimensions, ImageProtocol, TERMINAL_INFO } from "../terminal-image";
 import type { Component } from "../tui";
-import { applyBackgroundToLine, visibleWidth, wrapTextWithAnsi } from "../utils";
+import { applyBackgroundToLine, padding, visibleWidth, wrapTextWithAnsi } from "../utils";
 
 /**
  * Default text styling for markdown content.
@@ -151,8 +151,8 @@ export class Markdown implements Component {
 		}
 
 		// Add margins and background to each wrapped line
-		const leftMargin = " ".repeat(this.paddingX);
-		const rightMargin = " ".repeat(this.paddingX);
+		const leftMargin = padding(this.paddingX);
+		const rightMargin = padding(this.paddingX);
 		const bgFn = this.defaultTextStyle?.bgColor;
 		const contentLines: string[] = [];
 
@@ -174,7 +174,7 @@ export class Markdown implements Component {
 		}
 
 		// Add top/bottom padding (empty lines)
-		const emptyLine = " ".repeat(width);
+		const emptyLine = padding(width);
 		const emptyLines: string[] = [];
 		for (let i = 0; i < this.paddingY; i++) {
 			const line = bgFn ? applyBackgroundToLine(emptyLine, width, bgFn) : emptyLine;
@@ -326,7 +326,7 @@ export class Markdown implements Component {
 					}
 				}
 
-				const codeIndent = " ".repeat(this.codeBlockIndent);
+				const codeIndent = padding(this.codeBlockIndent);
 				lines.push(this.theme.codeBlockBorder(`\`\`\`${token.lang || ""}`));
 				if (this.theme.highlightCode) {
 					const highlightedLines = this.theme.highlightCode(token.text, token.lang);
@@ -577,7 +577,7 @@ export class Markdown implements Component {
 				lines.push(text);
 			} else if (token.type === "code") {
 				// Code block in list item
-				const codeIndent = " ".repeat(this.codeBlockIndent);
+				const codeIndent = padding(this.codeBlockIndent);
 				lines.push(this.theme.codeBlockBorder(`\`\`\`${token.lang || ""}`));
 				if (this.theme.highlightCode) {
 					const highlightedLines = this.theme.highlightCode(token.text, token.lang);
@@ -763,7 +763,7 @@ export class Markdown implements Component {
 		for (let lineIdx = 0; lineIdx < headerLineCount; lineIdx++) {
 			const rowParts = headerCellLines.map((cellLines, colIdx) => {
 				const text = cellLines[lineIdx] || "";
-				const padded = text + " ".repeat(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
+				const padded = text + padding(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
 				return this.theme.bold(padded);
 			});
 			lines.push(`${v} ${rowParts.join(` ${v} `)} ${v}`);
@@ -786,7 +786,7 @@ export class Markdown implements Component {
 			for (let lineIdx = 0; lineIdx < rowLineCount; lineIdx++) {
 				const rowParts = rowCellLines.map((cellLines, colIdx) => {
 					const text = cellLines[lineIdx] || "";
-					return text + " ".repeat(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
+					return text + padding(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
 				});
 				lines.push(`${v} ${rowParts.join(` ${v} `)} ${v}`);
 			}

@@ -1,5 +1,5 @@
 import type { Component } from "../tui";
-import { applyBackgroundToLine, visibleWidth } from "../utils";
+import { applyBackgroundToLine, padding, visibleWidth } from "../utils";
 
 type Cache = {
 	key: string[];
@@ -77,7 +77,7 @@ export class Box implements Component {
 		}
 
 		const contentWidth = Math.max(1, width - this.paddingX * 2);
-		const leftPad = " ".repeat(this.paddingX);
+		const leftPad = padding(this.paddingX);
 
 		// Render all children
 		const childLines: string[] = [];
@@ -127,7 +127,7 @@ export class Box implements Component {
 	private applyBg(line: string, width: number): string {
 		const visLen = visibleWidth(line);
 		const padNeeded = Math.max(0, width - visLen);
-		const padded = line + " ".repeat(padNeeded);
+		const padded = line + padding(padNeeded);
 
 		if (this.bgFn) {
 			return applyBackgroundToLine(padded, width, this.bgFn);

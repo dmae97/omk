@@ -1,7 +1,7 @@
 import { matchesKey } from "../keys";
 import type { SymbolTheme } from "../symbols";
 import type { Component } from "../tui";
-import { truncateToWidth, visibleWidth } from "../utils";
+import { padding, truncateToWidth, visibleWidth } from "../utils";
 
 export interface SelectItem {
 	value: string;
@@ -84,7 +84,7 @@ export class SelectList implements Component {
 					// Calculate how much space we have for value + description
 					const maxValueWidth = Math.min(30, width - prefixWidth - 4);
 					const truncatedValue = truncateToWidth(displayValue, maxValueWidth, "");
-					const spacing = " ".repeat(Math.max(1, 32 - truncatedValue.length));
+					const spacing = padding(Math.max(1, 32 - truncatedValue.length));
 
 					// Calculate remaining space for description using visible widths
 					const descriptionStart = prefixWidth + truncatedValue.length + spacing.length;
@@ -106,13 +106,13 @@ export class SelectList implements Component {
 				}
 			} else {
 				const displayValue = item.label || item.value;
-				const prefix = " ".repeat(visibleWidth(`${this.theme.symbols.cursor} `));
+				const prefix = padding(visibleWidth(this.theme.symbols.cursor) + 1);
 
 				if (item.description && width > 40) {
 					// Calculate how much space we have for value + description
 					const maxValueWidth = Math.min(30, width - prefix.length - 4);
 					const truncatedValue = truncateToWidth(displayValue, maxValueWidth, "");
-					const spacing = " ".repeat(Math.max(1, 32 - truncatedValue.length));
+					const spacing = padding(Math.max(1, 32 - truncatedValue.length));
 
 					// Calculate remaining space for description
 					const descriptionStart = prefix.length + truncatedValue.length + spacing.length;

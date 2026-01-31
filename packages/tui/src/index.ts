@@ -85,4 +85,4 @@ export {
 } from "./terminal-image";
 export { type Component, Container, type OverlayHandle, type SizeValue, TUI } from "./tui";
 // Utilities
-export { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "./utils";
+export { padding, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "./utils";

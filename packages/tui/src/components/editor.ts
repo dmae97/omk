@@ -2,7 +2,7 @@ import type { AutocompleteProvider, CombinedAutocompleteProvider } from "../auto
 import { matchesKey } from "../keys";
 import type { SymbolTheme } from "../symbols";
 import { type Component, CURSOR_MARKER, type Focusable } from "../tui";
-import { getSegmenter, isPunctuationChar, isWhitespaceChar, truncateToWidth, visibleWidth } from "../utils";
+import { getSegmenter, isPunctuationChar, isWhitespaceChar, padding, truncateToWidth, visibleWidth } from "../utils";
 import { SelectList, type SelectListTheme } from "./select-list";
 
 const segmenter = getSegmenter();
@@ -491,7 +491,7 @@ export class Editor implements Component, Focusable {
 		const borderWidth = paddingX + 1;
 		const topLeft = this.borderColor(`${box.topLeft}${box.horizontal.repeat(paddingX)}`);
 		const topRight = this.borderColor(`${box.horizontal.repeat(paddingX)}${box.topRight}`);
-		const bottomLeft = this.borderColor(`${box.bottomLeft}${box.horizontal}${" ".repeat(Math.max(0, paddingX - 1))}`);
+		const bottomLeft = this.borderColor(`${box.bottomLeft}${box.horizontal}${padding(Math.max(0, paddingX - 1))}`);
 		const horizontal = this.borderColor(box.horizontal);
 
 		// Layout the text
@@ -568,19 +568,19 @@ export class Editor implements Component, Focusable {
 
 			// All lines have consistent borders based on padding
 			const isLastLine = layoutLine === visibleLayoutLines[visibleLayoutLines.length - 1];
-			const padding = " ".repeat(Math.max(0, lineContentWidth - displayWidth));
+			const linePad = padding(Math.max(0, lineContentWidth - displayWidth));
 
 			const rightPaddingWidth = Math.max(0, paddingX - (cursorInPadding ? 1 : 0));
 			if (isLastLine) {
 				const bottomRightPadding = Math.max(0, paddingX - 1 - (cursorInPadding ? 1 : 0));
 				const bottomRightAdjusted = this.borderColor(
-					`${" ".repeat(bottomRightPadding)}${box.horizontal}${box.bottomRight}`,
+					`${padding(bottomRightPadding)}${box.horizontal}${box.bottomRight}`,
 				);
-				result.push(`${bottomLeft}${displayText}${padding}${bottomRightAdjusted}`);
+				result.push(`${bottomLeft}${displayText}${linePad}${bottomRightAdjusted}`);
 			} else {
-				const leftBorder = this.borderColor(`${box.vertical}${" ".repeat(paddingX)}`);
-				const rightBorder = this.borderColor(`${" ".repeat(rightPaddingWidth)}${box.vertical}`);
-				result.push(leftBorder + displayText + padding + rightBorder);
+				const leftBorder = this.borderColor(`${box.vertical}${padding(paddingX)}`);
+				const rightBorder = this.borderColor(`${padding(rightPaddingWidth)}${box.vertical}`);
+				result.push(leftBorder + displayText + linePad + rightBorder);
 			}
 		}
 

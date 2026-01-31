@@ -1,7 +1,7 @@
 /**
  * Shared helpers for tool-rendered UI components.
  */
-import { truncateToWidth as truncateToWidthBase, visibleWidth } from "@oh-my-pi/pi-tui";
+import { padding, truncateToWidth as truncateToWidthBase, visibleWidth } from "@oh-my-pi/pi-tui";
 import type { Theme, ThemeBg } from "../modes/theme/theme";
 import type { IconType, State } from "./types";
 
@@ -24,7 +24,7 @@ export function truncateToWidth(text: string, width: number, ellipsis: string): 
 export function padToWidth(text: string, width: number, bgFn?: (s: string) => string): string {
 	if (width <= 0) return bgFn ? bgFn(text) : text;
 	const paddingNeeded = Math.max(0, width - visibleWidth(text));
-	const padded = paddingNeeded > 0 ? text + " ".repeat(paddingNeeded) : text;
+	const padded = paddingNeeded > 0 ? text + padding(paddingNeeded) : text;
 	return bgFn ? bgFn(padded) : padded;
 }
 

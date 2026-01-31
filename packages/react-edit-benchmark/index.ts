@@ -12,6 +12,7 @@ import * as fs from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import { padding } from "@oh-my-pi/pi-tui";
 import { TempDir } from "@oh-my-pi/pi-utils";
 import { generateJsonReport, generateReport } from "./report";
 import { type BenchmarkConfig, type ProgressEvent, runBenchmark } from "./runner";
@@ -460,8 +461,8 @@ class LiveProgress {
 	}
 
 	private writeLine(line: string): void {
-		const padding = this.lastLineLength > line.length ? " ".repeat(this.lastLineLength - line.length) : "";
-		process.stdout.write(`\r${line}${padding}`);
+		const pad = this.lastLineLength > line.length ? padding(this.lastLineLength - line.length) : "";
+		process.stdout.write(`\r${line}${pad}`);
 		this.lastLineLength = line.length;
 	}
 
@@ -470,7 +471,7 @@ class LiveProgress {
 			return;
 		}
 		if (this.lastLineLength > 0) {
-			process.stdout.write("\r" + " ".repeat(this.lastLineLength) + "\r");
+			process.stdout.write("\r" + padding(this.lastLineLength) + "\r");
 			this.lastLineLength = 0;
 		}
 	}

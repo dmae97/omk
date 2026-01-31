@@ -5,7 +5,7 @@
  * that toggles the entire provider. All items below are dimmed when the
  * master switch is off.
  */
-import { type Component, matchesKey, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
+import { type Component, matchesKey, padding, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
 import { isProviderEnabled } from "../../../discovery";
 import { theme } from "../../../modes/theme/theme";
 import { applyFilter } from "./state-manager";
@@ -272,7 +272,7 @@ export class ExtensionList implements Component {
 		if (width >= targetWidth) {
 			return truncateToWidth(text, targetWidth);
 		}
-		return text + " ".repeat(targetWidth - width);
+		return text + padding(targetWidth - width);
 	}
 
 	private rebuildList(): void {

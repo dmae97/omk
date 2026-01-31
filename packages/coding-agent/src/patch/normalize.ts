@@ -4,6 +4,8 @@
  * Handles line endings, BOM, whitespace, and Unicode normalization.
  */
 
+import { padding } from "@oh-my-pi/pi-tui";
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Line Ending Utilities
 // ═══════════════════════════════════════════════════════════════════════════
@@ -194,7 +196,7 @@ export function convertLeadingTabsToSpaces(text: string, spacesPerTab: number): 
 			if (trimmed.length === 0) return line;
 			const leading = getLeadingWhitespace(line);
 			if (!leading.includes("\t") || leading.includes(" ")) return line;
-			const converted = " ".repeat(leading.length * spacesPerTab);
+			const converted = padding(leading.length * spacesPerTab);
 			return converted + trimmed;
 		})
 		.join("\n");

@@ -1,6 +1,6 @@
 import { getEditorKeybindings } from "../keybindings";
 import { type Component, CURSOR_MARKER, type Focusable } from "../tui";
-import { getSegmenter, isPunctuationChar, isWhitespaceChar, visibleWidth } from "../utils";
+import { getSegmenter, isPunctuationChar, isWhitespaceChar, padding, visibleWidth } from "../utils";
 
 const segmenter = getSegmenter();
 
@@ -338,8 +338,8 @@ export class Input implements Component, Focusable {
 
 		// Calculate visual width
 		const visualLength = visibleWidth(textWithCursor);
-		const padding = " ".repeat(Math.max(0, availableWidth - visualLength));
-		const line = prompt + textWithCursor + padding;
+		const pad = padding(Math.max(0, availableWidth - visualLength));
+		const line = prompt + textWithCursor + pad;
 
 		return [line];
 	}

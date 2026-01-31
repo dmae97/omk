@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
-import { type Component, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
+import { type Component, padding, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
 import { $ } from "bun";
 import type { StatusLineSegmentOptions, StatusLineSettings } from "../../config/settings-manager";
 import { theme } from "../../modes/theme/theme";
@@ -378,7 +378,7 @@ export class StatusLineComponent implements Component {
 		leftWidth = groupWidth(left, leftCapWidth, leftSepWidth);
 		rightWidth = groupWidth(right, rightCapWidth, rightSepWidth);
 		const gapWidth = Math.max(1, topFillWidth - leftWidth - rightWidth);
-		return leftGroup + " ".repeat(gapWidth) + rightGroup;
+		return leftGroup + padding(gapWidth) + rightGroup;
 	}
 
 	getTopBorder(width: number): { content: string; width: number } {

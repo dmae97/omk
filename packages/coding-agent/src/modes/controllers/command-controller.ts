@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { UsageLimit, UsageReport } from "@oh-my-pi/pi-ai";
-import { Loader, Markdown, Spacer, Text, visibleWidth } from "@oh-my-pi/pi-tui";
+import { Loader, Markdown, padding, Spacer, Text, visibleWidth } from "@oh-my-pi/pi-tui";
 import { $ } from "bun";
 import { nanoid } from "nanoid";
 import { loadCustomShare } from "../../export/custom-share";
@@ -773,7 +773,7 @@ function formatAccountHeader(limit: UsageLimit, report: UsageReport, index: numb
 function padColumn(text: string, width: number): string {
 	const visible = visibleWidth(text);
 	if (visible >= width) return text;
-	return `${text}${" ".repeat(width - visible)}`;
+	return `${text}${padding(width - visible)}`;
 }
 
 function resolveAggregateStatus(limits: UsageLimit[]): UsageLimit["status"] {

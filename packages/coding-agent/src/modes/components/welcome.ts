@@ -1,4 +1,4 @@
-import { type Component, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
+import { type Component, padding, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
 import { APP_NAME } from "../../config";
 import { theme } from "../../modes/theme/theme";
 
@@ -169,7 +169,7 @@ export class WelcomeComponent implements Component {
 		}
 		const leftPad = Math.floor((width - visLen) / 2);
 		const rightPad = width - visLen - leftPad;
-		return " ".repeat(leftPad) + text + " ".repeat(rightPad);
+		return padding(leftPad) + text + padding(rightPad);
 	}
 
 	/** Apply magenta→cyan gradient to a string */
@@ -224,6 +224,6 @@ export class WelcomeComponent implements Component {
 			}
 			return `${truncated}${ellipsis}`;
 		}
-		return str + " ".repeat(width - visLen);
+		return str + padding(width - visLen);
 	}
 }

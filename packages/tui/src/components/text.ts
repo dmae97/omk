@@ -1,5 +1,5 @@
 import type { Component } from "../tui";
-import { applyBackgroundToLine, wrapTextWithAnsi } from "../utils";
+import { applyBackgroundToLine, padding, wrapTextWithAnsi } from "../utils";
 
 /**
  * Text component - displays multi-line text with word wrapping
@@ -71,8 +71,8 @@ export class Text implements Component {
 		const wrappedLines = wrapTextWithAnsi(normalizedText, contentWidth);
 
 		// Add margins and background to each line
-		const leftMargin = " ".repeat(this.paddingX);
-		const rightMargin = " ".repeat(this.paddingX);
+		const leftMargin = padding(this.paddingX);
+		const rightMargin = padding(this.paddingX);
 		const contentLines: string[] = [];
 
 		for (const line of wrappedLines) {
@@ -89,7 +89,7 @@ export class Text implements Component {
 		}
 
 		// Add top/bottom padding (empty lines)
-		const emptyLine = " ".repeat(width);
+		const emptyLine = padding(width);
 		const emptyLines: string[] = [];
 		for (let i = 0; i < this.paddingY; i++) {
 			const line = this.customBgFn ? applyBackgroundToLine(emptyLine, width, this.customBgFn) : emptyLine;

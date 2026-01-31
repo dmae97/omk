@@ -1,7 +1,7 @@
 /**
  * Bordered output container with optional header and sections.
  */
-import { visibleWidth } from "@oh-my-pi/pi-tui";
+import { padding, visibleWidth } from "@oh-my-pi/pi-tui";
 import type { Theme } from "../modes/theme/theme";
 import type { State } from "./types";
 import { getStateBgColor, padToWidth, truncateToWidth } from "./utils";
@@ -70,7 +70,7 @@ export function renderOutputBlock(options: OutputBlockOptions, theme: Theme): st
 		const allLines = section.lines.flatMap(l => l.split("\n"));
 		for (const line of allLines) {
 			const text = truncateToWidth(line, contentWidth, theme.format.ellipsis);
-			const innerPadding = " ".repeat(Math.max(0, contentWidth - visibleWidth(text)));
+			const innerPadding = padding(Math.max(0, contentWidth - visibleWidth(text)));
 			const fullLine = `${contentPrefix}${text}${innerPadding}${contentSuffix}`;
 			lines.push(padToWidth(fullLine, lineWidth, bgFn));
 		}
