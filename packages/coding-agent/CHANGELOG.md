@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [9.4.0] - 2026-01-31
 ### Changed
 
 - Migrated environment variable handling to use centralized `getEnv()` and `getEnvApiKey()` utilities from pi-ai package for consistent API key resolution across web search providers and image tools

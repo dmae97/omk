@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [9.4.0] - 2026-01-31
 ### Added
 
 - Added `getEnv()` function to retrieve environment variables from process.env, cwd/.env, or ~/.env

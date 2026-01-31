@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [9.4.0] - 2026-01-31
 ### Added
 
 - Exported `padding` utility function for creating space-padded strings efficiently
