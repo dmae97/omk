@@ -221,6 +221,12 @@ export class ProcessTerminal implements Terminal {
 		}
 
 		// Restore raw mode state
+		// Pause stdin so Node.js stops reading from the terminal input queue.
+		// Without this, process.stdin stays in flowing mode and races with any
+		// external process (e.g. vim) for keystrokes on the same tty.
+		// start() calls resume() to counterpart this.
+		process.stdin.pause();
+
 		if (process.stdin.setRawMode) {
 			process.stdin.setRawMode(this.wasRaw);
 		}

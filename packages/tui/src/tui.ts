@@ -221,6 +221,7 @@ export class TUI extends Container {
 	/** Global callback for debug key (Shift+Ctrl+D). Called before input is forwarded to focused component. */
 	public onDebug?: () => void;
 	private renderRequested = false;
+	private stopped = false;
 	private rendering = false;
 	private cursorRow = 0; // Logical cursor row (end of rendered content)
 	private hardwareCursorRow = 0; // Actual terminal cursor row (may differ due to IME positioning)
@@ -371,6 +372,7 @@ export class TUI extends Container {
 	}
 
 	start(): void {
+		this.stopped = false;
 		this.terminal.start(
 			data => this.handleInput(data),
 			() => this.requestRender(),
@@ -392,6 +394,7 @@ export class TUI extends Container {
 	}
 
 	stop(): void {
+		this.stopped = true;
 		// Move cursor to the end of the content to prevent overwriting/artifacts on exit
 		if (this.previousLines.length > 0) {
 			const targetRow = this.previousLines.length; // Line after the last content
@@ -421,6 +424,7 @@ export class TUI extends Container {
 			this.maxLinesRendered = 0;
 			this.previousViewportTop = 0;
 		}
+		if (this.stopped) return;
 		if (this.renderRequested) return;
 		this.renderRequested = true;
 		process.nextTick(() => {
