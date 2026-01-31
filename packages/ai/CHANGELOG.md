@@ -1,8 +1,11 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
+
+- Added OpenCode Zen provider with API key authentication for accessing multiple AI models
+- Added 4 new free models via OpenCode: glm-4.7-free, kimi-k2.5-free, minimax-m2.1-free, trinity-large-preview-free
+- Added glm-4.7-flash model via Zai provider
 - Added Kimi Code provider with OpenAI and Anthropic API format support
 - Added prompt cache retention support with PI_CACHE_RETENTION env var
 - Added overflow patterns for Bedrock, MiniMax, Kimi; reclassified 429 as rate limiting
@@ -16,10 +19,27 @@
 - Added ToolChoice type for controlling tool selection (auto, none, any, required, function)
 
 ### Changed
+
+- Updated Kimi K2.5 cache read pricing from 0.1 to 0.08
+- Updated MiniMax M2 pricing: input 0.6→0.6, output 3→3, cache read 0.1→0.09999999999999999
+- Updated OpenRouter DeepSeek V3.1 pricing and max tokens: input 0.6→0.5, output 3→2.8, maxTokens 262144→4096
+- Updated OpenRouter DeepSeek R1 pricing and max tokens: input 0.06→0.049999999999999996, output 0.24→0.19999999999999998, maxTokens 262144→4096
+- Updated Anthropic Claude 3.5 Sonnet max tokens from 256000 to 65536 on OpenRouter
+- Updated Vercel AI Gateway Claude 3.5 Sonnet cache read pricing from 0.125 to 0.13
+- Updated Vercel AI Gateway Claude 3.5 Sonnet New cache read pricing from 0.125 to 0.13
+- Updated Vercel AI Gateway GPT-5.2 cache read pricing from 0.175 to 0.18 and display name to 'GPT 5.2'
+- Updated Zai GLM-4.6 cache read pricing from 0.024999999999999998 to 0.03
+- Updated Zai Qwen QwQ max tokens from 66000 to 16384
 - Added delta event batching and throttling (50ms, 20 updates/sec max) to AssistantMessageEventStream
 - Updated MiniMax-M2 pricing: input 1.2→0.6, output 1.2→3, cacheRead 0.6→0.1
 
+### Removed
+
+- Removed OpenRouter google/gemini-2.0-flash-exp:free model
+- Removed Vercel AI Gateway stealth/sonoma-dusk-alpha and stealth/sonoma-sky-alpha models
+
 ### Fixed
+
 - Fixed rate limit issues with Kimi models by always sending max_tokens
 - Added handling for sensitive stop reason from Anthropic API safety filters
 - Added optional chaining for safer JSON schema property access in Anthropic provider

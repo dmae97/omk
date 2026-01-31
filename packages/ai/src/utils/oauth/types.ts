@@ -15,6 +15,7 @@ export type OAuthProvider =
 	| "google-antigravity"
 	| "kimi-code"
 	| "openai-codex"
+	| "opencode"
 	| "cursor";
 
 export type OAuthPrompt = {

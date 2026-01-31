@@ -48,6 +48,8 @@ export { loginKimi, refreshKimiToken } from "./kimi";
 export type { OpenAICodexLoginOptions } from "./openai-codex";
 // OpenAI Codex (ChatGPT OAuth)
 export { loginOpenAICodex, refreshOpenAICodexToken } from "./openai-codex";
+// OpenCode (API key)
+export { loginOpenCode } from "./opencode";
 
 export * from "./types";
 
@@ -92,6 +94,10 @@ export async function refreshOAuthToken(
 			break;
 		case "cursor":
 			newCredentials = await refreshCursorToken(credentials.refresh);
+			break;
+		case "opencode":
+			// API keys don't expire, return as-is
+			newCredentials = credentials;
 			break;
 		default:
 			throw new Error(`Unknown OAuth provider: ${provider}`);
@@ -171,6 +177,11 @@ export function getOAuthProviders(): OAuthProviderInfo[] {
 		{
 			id: "cursor",
 			name: "Cursor (Claude, GPT, etc.)",
+			available: true,
+		},
+		{
+			id: "opencode",
+			name: "OpenCode Zen",
 			available: true,
 		},
 	];

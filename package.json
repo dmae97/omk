@@ -32,7 +32,8 @@
 		"prepublishOnly": "bun run check",
 		"publish": "bun run prepublishOnly && npm publish -ws --access public",
 		"publish:dry": "bun run prepublishOnly && npm publish -ws --access public --dry-run",
-		"release": "bun scripts/release.ts"
+		"release": "bun scripts/release.ts",
+		"generate-models": "bun --cwd=packages/ai scripts/generate-models.ts"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.3.13",

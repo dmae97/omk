@@ -19,6 +19,7 @@ import {
 	loginGitHubCopilot,
 	loginKimi,
 	loginOpenAICodex,
+	loginOpenCode,
 	type OAuthController,
 	type OAuthCredentials,
 	type OAuthProvider,
@@ -782,6 +783,11 @@ export class AuthStorage {
 					ctrl.onProgress ? () => ctrl.onProgress?.("Waiting for browser authentication...") : undefined,
 				);
 				break;
+			case "opencode": {
+				const apiKey = await loginOpenCode(ctrl);
+				credentials = { access: apiKey, refresh: apiKey, expires: Number.MAX_SAFE_INTEGER };
+				break;
+			}
 			default:
 				throw new Error(`Unknown OAuth provider: ${provider}`);
 		}
