@@ -3,7 +3,6 @@
  * Shares the same kernel session as the agent's Python tool.
  */
 import { Container, Loader, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
-import stripAnsi from "strip-ansi";
 import { getSymbolTheme, highlightCode, theme } from "../../modes/theme/theme";
 import type { TruncationMeta } from "../../tools/output-meta";
 import { formatSize } from "../../tools/truncate";
@@ -172,7 +171,7 @@ export class PythonExecutionComponent extends Container {
 	}
 
 	private normalizeOutput(text: string): string {
-		return stripAnsi(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+		return Bun.stripANSI(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 	}
 
 	private setOutput(output: string): void {

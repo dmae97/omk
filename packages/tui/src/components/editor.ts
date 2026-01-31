@@ -933,6 +933,9 @@ export class Editor implements Component, Focusable {
 				this.navigateHistory(-1); // Start browsing history
 			} else if (this.historyIndex > -1 && this.isOnFirstVisualLine()) {
 				this.navigateHistory(-1); // Navigate to older history entry
+			} else if (this.isOnFirstVisualLine()) {
+				// Already at top - jump to start of line
+				this.moveToLineStart();
 			} else {
 				this.moveCursor(-1, 0); // Cursor movement (within text or history entry)
 			}
@@ -940,6 +943,9 @@ export class Editor implements Component, Focusable {
 			// Down - history navigation or cursor movement
 			if (this.historyIndex > -1 && this.isOnLastVisualLine()) {
 				this.navigateHistory(1); // Navigate to newer history entry or clear
+			} else if (this.isOnLastVisualLine()) {
+				// Already at bottom - jump to end of line
+				this.moveToLineEnd();
 			} else {
 				this.moveCursor(1, 0); // Cursor movement (within text or history entry)
 			}

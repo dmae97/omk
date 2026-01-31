@@ -53,6 +53,11 @@ export interface MarkdownTheme {
 	symbols: SymbolTheme;
 }
 
+interface InlineStyleContext {
+	applyText: (text: string) => string;
+	stylePrefix: string;
+}
+
 export class Markdown implements Component {
 	private text: string;
 	private paddingX: number; // Left/right padding
@@ -115,7 +120,11 @@ export class Markdown implements Component {
 		}
 
 		// Replace tabs with 3 spaces for consistent rendering
-		const normalizedText = this.text.replace(/\t/g, "   ");
+		let normalizedText = this.text.replace(/\t/g, "   ");
+
+		// Fix inline code fences: text:```lang or text```lang should have newline before ```
+		// This handles malformed markdown from LLM thinking output
+		normalizedText = normalizedText.replace(/([^\n])```(\w*)\n/g, "$1\n```$2\n");
 
 		// Parse markdown to HTML-like tokens
 		const tokens = marked.lexer(normalizedText);
@@ -252,6 +261,20 @@ export class Markdown implements Component {
 		return this.defaultStylePrefix;
 	}
 
+	private getStylePrefix(styleFn: (text: string) => string): string {
+		const sentinel = "\u0000";
+		const styled = styleFn(sentinel);
+		const sentinelIndex = styled.indexOf(sentinel);
+		return sentinelIndex >= 0 ? styled.slice(0, sentinelIndex) : "";
+	}
+
+	private getDefaultInlineStyleContext(): InlineStyleContext {
+		return {
+			applyText: (text: string) => this.applyDefaultStyle(text),
+			stylePrefix: this.getDefaultStylePrefix(),
+		};
+	}
+
 	private renderToken(token: Token, width: number, nextTokenType?: string): string[] {
 		const lines: string[] = [];
 
@@ -339,13 +362,23 @@ export class Markdown implements Component {
 			}
 
 			case "blockquote": {
-				const quoteText = this.renderInlineTokens(token.tokens || []);
+				const quoteStyle = (text: string) => this.theme.quote(this.theme.italic(text));
+				const quoteStyleContext: InlineStyleContext = {
+					applyText: quoteStyle,
+					stylePrefix: this.getStylePrefix(quoteStyle),
+				};
+				const quoteText = this.renderInlineTokens(token.tokens || [], quoteStyleContext);
 				const quoteLines = quoteText.split("\n");
+
+				// Calculate available width for quote content (subtract border + space = 2 chars)
+				const quoteContentWidth = Math.max(1, width - 2);
+
 				for (const quoteLine of quoteLines) {
-					lines.push(
-						this.theme.quoteBorder(`${this.theme.symbols.quoteBorder} `) +
-							this.theme.quote(this.theme.italic(quoteLine)),
-					);
+					// Wrap the styled line, then add border to each wrapped line
+					const wrappedLines = wrapTextWithAnsi(quoteLine, quoteContentWidth);
+					for (const wrappedLine of wrappedLines) {
+						lines.push(this.theme.quoteBorder(`${this.theme.symbols.quoteBorder} `) + wrappedLine);
+					}
 				}
 				if (nextTokenType !== "space") {
 					lines.push(""); // Add spacing after blockquotes (unless space token follows)
@@ -382,51 +415,61 @@ export class Markdown implements Component {
 		return lines;
 	}
 
-	private renderInlineTokens(tokens: Token[]): string {
+	private renderInlineTokens(tokens: Token[], styleContext?: InlineStyleContext): string {
 		let result = "";
+		const resolvedStyleContext = styleContext ?? this.getDefaultInlineStyleContext();
+		const { applyText, stylePrefix } = resolvedStyleContext;
+		const applyTextWithNewlines = (text: string): string => {
+			const segments: string[] = text.split("\n");
+			return segments.map((segment: string) => applyText(segment)).join("\n");
+		};
 
 		for (const token of tokens) {
 			switch (token.type) {
 				case "text":
 					// Text tokens in list items can have nested tokens for inline formatting
 					if (token.tokens && token.tokens.length > 0) {
-						result += this.renderInlineTokens(token.tokens);
+						result += this.renderInlineTokens(token.tokens, resolvedStyleContext);
 					} else {
-						// Apply default style to plain text
-						result += this.applyDefaultStyle(token.text);
+						result += applyTextWithNewlines(token.text);
 					}
 					break;
 
+				case "paragraph":
+					// Paragraph tokens contain nested inline tokens
+					result += this.renderInlineTokens(token.tokens || [], resolvedStyleContext);
+					break;
+
 				case "strong": {
-					// Apply bold, then reapply default style after
-					const boldContent = this.renderInlineTokens(token.tokens || []);
-					result += this.theme.bold(boldContent) + this.getDefaultStylePrefix();
+					const boldContent = this.renderInlineTokens(token.tokens || [], resolvedStyleContext);
+					result += this.theme.bold(boldContent) + stylePrefix;
 					break;
 				}
 
 				case "em": {
-					// Apply italic, then reapply default style after
-					const italicContent = this.renderInlineTokens(token.tokens || []);
-					result += this.theme.italic(italicContent) + this.getDefaultStylePrefix();
+					const italicContent = this.renderInlineTokens(token.tokens || [], resolvedStyleContext);
+					result += this.theme.italic(italicContent) + stylePrefix;
 					break;
 				}
 
 				case "codespan":
-					// Apply code styling without backticks
-					result += this.theme.code(token.text) + this.getDefaultStylePrefix();
+					result += this.theme.code(token.text) + stylePrefix;
 					break;
 
 				case "link": {
-					const linkText = this.renderInlineTokens(token.tokens || []);
+					const linkText = this.renderInlineTokens(token.tokens || [], resolvedStyleContext);
 					// If link text matches href, only show the link once
 					// Compare raw text (token.text) not styled text (linkText) since linkText has ANSI codes
-					if (token.text === token.href) {
-						result += this.theme.link(this.theme.underline(linkText)) + this.getDefaultStylePrefix();
+					// For mailto: links, strip the prefix before comparing (autolinked emails have
+					// text="foo@bar.com" but href="mailto:foo@bar.com")
+					const hrefForComparison = token.href.startsWith("mailto:") ? token.href.slice(7) : token.href;
+					if (token.text === token.href || token.text === hrefForComparison) {
+						result += this.theme.link(this.theme.underline(linkText)) + stylePrefix;
 					} else {
 						result +=
 							this.theme.link(this.theme.underline(linkText)) +
 							this.theme.linkUrl(` (${token.href})`) +
-							this.getDefaultStylePrefix();
+							stylePrefix;
 					}
 					break;
 				}
@@ -436,22 +479,22 @@ export class Markdown implements Component {
 					break;
 
 				case "del": {
-					const delContent = this.renderInlineTokens(token.tokens || []);
-					result += this.theme.strikethrough(delContent) + this.getDefaultStylePrefix();
+					const delContent = this.renderInlineTokens(token.tokens || [], resolvedStyleContext);
+					result += this.theme.strikethrough(delContent) + stylePrefix;
 					break;
 				}
 
 				case "html":
 					// Render inline HTML as plain text
 					if ("raw" in token && typeof token.raw === "string") {
-						result += this.applyDefaultStyle(token.raw);
+						result += applyTextWithNewlines(token.raw);
 					}
 					break;
 
 				default:
 					// Handle any other inline token types as plain text
 					if ("text" in token && typeof token.text === "string") {
-						result += this.applyDefaultStyle(token.text);
+						result += applyTextWithNewlines(token.text);
 					}
 			}
 		}

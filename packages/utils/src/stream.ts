@@ -1,5 +1,4 @@
 import { TextDecoderStream } from "node:stream/web";
-import stripAnsi from "strip-ansi";
 
 /**
  * Sanitize binary output for display/storage.
@@ -40,7 +39,7 @@ export function sanitizeBinaryOutput(str: string): string {
  * Sanitize text output: strip ANSI codes, remove binary garbage, normalize line endings.
  */
 export function sanitizeText(text: string): string {
-	return sanitizeBinaryOutput(stripAnsi(text)).replace(/\r/g, "");
+	return sanitizeBinaryOutput(Bun.stripANSI(text)).replace(/\r/g, "");
 }
 
 /**

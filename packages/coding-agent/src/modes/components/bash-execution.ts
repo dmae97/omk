@@ -2,7 +2,6 @@
  * Component for displaying bash command execution with streaming output.
  */
 import { Container, Loader, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
-import stripAnsi from "strip-ansi";
 import { getSymbolTheme, theme } from "../../modes/theme/theme";
 import type { TruncationMeta } from "../../tools/output-meta";
 import { formatSize } from "../../tools/truncate";
@@ -188,7 +187,7 @@ export class BashExecutionComponent extends Container {
 	private normalizeOutput(text: string): string {
 		// Strip ANSI codes and normalize line endings
 		// Note: binary data is already sanitized in tui-renderer.ts executeBashCommand
-		return stripAnsi(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+		return Bun.stripANSI(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 	}
 
 	private setOutput(output: string): void {

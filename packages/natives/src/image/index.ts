@@ -6,13 +6,20 @@
  */
 
 import { WorkerPool } from "../pool";
+import { resolveWorkerSpecifier } from "../worker-resolver";
 import type { ImageRequest, ImageResponse } from "./types";
 
 // Re-export the enum for filter selection
 export { SamplingFilter } from "../../wasm/pi_natives";
 
 const pool = new WorkerPool<ImageRequest, ImageResponse>({
-	workerUrl: new URL("./worker.ts", import.meta.url).href,
+	createWorker: () =>
+		new Worker(
+			resolveWorkerSpecifier({
+				compiled: "./packages/natives/src/image/worker.ts",
+				dev: new URL("./worker.ts", import.meta.url),
+			}),
+		),
 	maxWorkers: 1,
 	idleTimeoutMs: 0, // Keep alive - stateful (image handles)
 });

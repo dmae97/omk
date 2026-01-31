@@ -2049,6 +2049,8 @@ function getHighlightColors(t: Theme): NativeHighlightColors {
 			type: t.getFgAnsi("syntaxType"),
 			operator: t.getFgAnsi("syntaxOperator"),
 			punctuation: t.getFgAnsi("syntaxPunctuation"),
+			inserted: t.getFgAnsi("toolDiffAdded"),
+			deleted: t.getFgAnsi("toolDiffRemoved"),
 		};
 	}
 	return cachedHighlightColors;

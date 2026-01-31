@@ -306,6 +306,8 @@ function highlightCode(codeText: string, language: string, theme: Theme): string
 			type: theme.getFgAnsi("syntaxType"),
 			operator: theme.getFgAnsi("syntaxOperator"),
 			punctuation: theme.getFgAnsi("syntaxPunctuation"),
+			inserted: theme.getFgAnsi("toolDiffAdded"),
+			deleted: theme.getFgAnsi("toolDiffRemoved"),
 		};
 		return nativeHighlightCode(codeText, validLang, colors).split("\n");
 	} catch {

@@ -19,8 +19,10 @@ export interface BaseResponse {
 }
 
 export interface WorkerPoolOptions {
-	/** URL to the worker script. */
-	workerUrl: string | URL;
+	/** URL to the worker script (deprecated: use createWorker for compiled binaries). */
+	workerUrl?: string | URL;
+	/** Factory function to create workers. Required for compiled binaries where Bun needs static analysis. */
+	createWorker?: () => Worker;
 	/** Maximum number of workers (default: 4). */
 	maxWorkers?: number;
 	/** Idle timeout in ms before terminating unused workers (0 = never, default: 30000). */
@@ -61,7 +63,14 @@ interface PendingRequest<T> {
  * @typeParam TRes - Response message type (must extend BaseResponse)
  */
 export class WorkerPool<TReq extends BaseRequest, TRes extends BaseResponse> {
-	readonly #options: Required<WorkerPoolOptions>;
+	readonly #options: {
+		workerUrl?: string | URL;
+		createWorker?: () => Worker;
+		maxWorkers: number;
+		idleTimeoutMs: number;
+		initTimeoutMs: number;
+		stuckGracePeriodMs: number;
+	};
 	readonly #pool: PooledWorker[] = [];
 	readonly #waiters: Array<(worker: PooledWorker) => void> = [];
 	readonly #pending = new Map<number, PendingRequest<TRes>>();
@@ -69,8 +78,12 @@ export class WorkerPool<TReq extends BaseRequest, TRes extends BaseResponse> {
 	#idleCheckInterval: ReturnType<typeof setInterval> | null = null;
 
 	constructor(options: WorkerPoolOptions) {
+		if (!options.workerUrl && !options.createWorker) {
+			throw new Error("WorkerPool requires either workerUrl or createWorker");
+		}
 		this.#options = {
 			workerUrl: options.workerUrl,
+			createWorker: options.createWorker,
 			maxWorkers: options.maxWorkers ?? 4,
 			idleTimeoutMs: options.idleTimeoutMs ?? 30_000,
 			initTimeoutMs: options.initTimeoutMs ?? 10_000,
@@ -152,7 +165,7 @@ export class WorkerPool<TReq extends BaseRequest, TRes extends BaseResponse> {
 	}
 
 	#createWorker(): PooledWorker {
-		const worker = new Worker(this.#options.workerUrl);
+		const worker = this.#options.createWorker ? this.#options.createWorker() : new Worker(this.#options.workerUrl!);
 
 		const pooledWorker: PooledWorker = {
 			worker,
@@ -314,6 +327,7 @@ export class WorkerPool<TReq extends BaseRequest, TRes extends BaseResponse> {
 			dispose: () => clearTimeout(timeout),
 		} as PendingRequest<TRes>);
 
+		pooledWorker.currentRequestId = id;
 		pooledWorker.worker.postMessage({ type: "init", id } satisfies BaseRequest);
 		return promise;
 	}

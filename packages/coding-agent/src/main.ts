@@ -14,6 +14,7 @@ import chalk from "chalk";
 import { type Args, parseArgs, printHelp } from "./cli/args";
 import { parseConfigArgs, printConfigHelp, runConfigCommand } from "./cli/config-cli";
 import { processFileArguments } from "./cli/file-processor";
+import { parseGrepArgs, printGrepHelp, runGrepCommand } from "./cli/grep-cli";
 import { parseJupyterArgs, printJupyterHelp, runJupyterCommand } from "./cli/jupyter-cli";
 import { listModels } from "./cli/list-models";
 import { parsePluginArgs, printPluginHelp, runPluginCommand } from "./cli/plugin-cli";
@@ -550,6 +551,17 @@ export async function main(args: string[]) {
 			return;
 		}
 		await runStatsCommand(statsCmd);
+		return;
+	}
+
+	// Handle grep subcommand (for testing grep tool)
+	const grepCmd = parseGrepArgs(args);
+	if (grepCmd) {
+		if (args.includes("--help") || args.includes("-h")) {
+			printGrepHelp();
+			return;
+		}
+		await runGrepCommand(grepCmd);
 		return;
 	}
 

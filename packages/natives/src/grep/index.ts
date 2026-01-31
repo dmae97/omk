@@ -14,6 +14,8 @@ import {
 	search as wasmSearch,
 } from "../../wasm/pi_natives";
 import { WorkerPool } from "../pool";
+import { resolveWorkerSpecifier } from "../worker-resolver";
+import { FileReader } from "./file-reader";
 import { buildGlobPattern, matchesTypeFilter, resolveTypeFilter } from "./filters";
 import type {
 	ContextLine,
@@ -97,7 +99,17 @@ async function grepDirect(options: GrepOptions, onMatch?: (match: GrepMatch) => 
 			};
 		}
 
-		const content = Bun.mmap(searchPath);
+		const fileReader = new FileReader();
+		const content = await fileReader.read(searchPath);
+		if (!content) {
+			return {
+				matches,
+				totalMatches,
+				filesWithMatches,
+				filesSearched,
+				limitReached: limitReached || undefined,
+			};
+		}
 		filesSearched = 1;
 
 		const result = compiledPattern.search_bytes(
@@ -148,6 +160,7 @@ async function grepDirect(options: GrepOptions, onMatch?: (match: GrepMatch) => 
 			gitignore: true,
 		});
 
+		const fileReader = new FileReader();
 		for (const relativePath of paths) {
 			if (limitReached) break;
 			if (typeFilter && !matchesTypeFilter(relativePath, typeFilter)) {
@@ -157,12 +170,8 @@ async function grepDirect(options: GrepOptions, onMatch?: (match: GrepMatch) => 
 			const normalizedPath = relativePath.replace(/\\/g, "/");
 			const fullPath = path.join(searchPath, normalizedPath);
 
-			let content: Uint8Array;
-			try {
-				content = Bun.mmap(fullPath);
-			} catch {
-				continue;
-			}
+			const content = await fileReader.read(fullPath);
+			if (!content) continue;
 
 			filesSearched++;
 
@@ -293,7 +302,13 @@ export async function grepPool(options: GrepOptions): Promise<GrepResult> {
 // =============================================================================
 
 const pool = new WorkerPool<WorkerRequest, WorkerResponse>({
-	workerUrl: new URL("./worker.ts", import.meta.url).href,
+	createWorker: () =>
+		new Worker(
+			resolveWorkerSpecifier({
+				compiled: "./packages/natives/src/grep/worker.ts",
+				dev: new URL("./worker.ts", import.meta.url),
+			}),
+		),
 	maxWorkers: 4,
 	idleTimeoutMs: 30_000,
 });

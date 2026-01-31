@@ -251,6 +251,9 @@ export class ChildProcess<In extends InMask = InMask> {
 		proc.exited
 			.catch(() => null)
 			.then(async exitCode => {
+				// Stop pumping streams - process has exited, no more data coming
+				this.#stop.abort();
+
 				if (this.#exitReasonPending) {
 					this.#exitReason = this.#exitReasonPending;
 					reject(this.#exitReasonPending);
@@ -411,6 +414,9 @@ export class ChildProcess<In extends InMask = InMask> {
 	}
 
 	[Symbol.dispose](): void {
+		// Don't kill if process already exited - avoids race where dispose runs
+		// before the proc.exited.then() callback, causing spurious AbortError
+		if (this.proc.exitCode !== null) return;
 		this.kill(new AbortError("process disposed", this.#stderrBuffer));
 	}
 }

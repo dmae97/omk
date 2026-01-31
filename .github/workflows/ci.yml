@@ -111,13 +111,15 @@ jobs:
 
       - name: Build binaries
         run: |
-          cd packages/coding-agent
-          mkdir -p binaries
-          bun build --compile --target=bun-darwin-arm64 ./src/cli.ts --outfile binaries/omp-darwin-arm64
-          bun build --compile --target=bun-darwin-x64 ./src/cli.ts --outfile binaries/omp-darwin-x64
-          bun build --compile --target=bun-linux-x64 ./src/cli.ts --outfile binaries/omp-linux-x64
-          bun build --compile --target=bun-linux-arm64 ./src/cli.ts --outfile binaries/omp-linux-arm64
-          bun build --compile --target=bun-windows-x64 ./src/cli.ts --outfile binaries/omp-windows-x64.exe
+		  mkdir -p packages/coding-agent/binaries
+		  ENTRYPOINT="./packages/coding-agent/src/cli.ts"
+		  WORKERS="./packages/natives/src/grep/worker.ts ./packages/natives/src/html/worker.ts ./packages/natives/src/image/worker.ts"
+		  DEFINES="--define OMP_COMPILED=true --root ."
+		  bun build --compile $DEFINES --target=bun-darwin-arm64 $ENTRYPOINT $WORKERS --outfile packages/coding-agent/binaries/omp-darwin-arm64
+		  bun build --compile $DEFINES --target=bun-darwin-x64 $ENTRYPOINT $WORKERS --outfile packages/coding-agent/binaries/omp-darwin-x64
+		  bun build --compile $DEFINES --target=bun-linux-x64 $ENTRYPOINT $WORKERS --outfile packages/coding-agent/binaries/omp-linux-x64
+		  bun build --compile $DEFINES --target=bun-linux-arm64 $ENTRYPOINT $WORKERS --outfile packages/coding-agent/binaries/omp-linux-arm64
+		  bun build --compile $DEFINES --target=bun-windows-x64 $ENTRYPOINT $WORKERS --outfile packages/coding-agent/binaries/omp-windows-x64.exe
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:

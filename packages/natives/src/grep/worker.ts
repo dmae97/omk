@@ -7,6 +7,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { globPaths } from "@oh-my-pi/pi-utils";
 import { CompiledPattern } from "../../wasm/pi_natives";
+import { FileReader } from "./file-reader";
 import { buildGlobPattern, matchesTypeFilter, resolveTypeFilter } from "./filters";
 import type { GrepMatch, GrepOptions, GrepResult, WasmSearchResult, WorkerRequest, WorkerResponse } from "./types";
 
@@ -46,6 +47,7 @@ async function runGrep(request: GrepOptions): Promise<GrepResult> {
 	const typeFilter = resolveTypeFilter(request.type);
 	const globPattern = buildGlobPattern(request.glob);
 
+	const fileReader = new FileReader();
 	if (isFile) {
 		if (typeFilter && !matchesTypeFilter(searchPath, typeFilter)) {
 			return {
@@ -57,7 +59,16 @@ async function runGrep(request: GrepOptions): Promise<GrepResult> {
 			};
 		}
 
-		const content = Bun.mmap(searchPath);
+		const content = await fileReader.read(searchPath);
+		if (!content) {
+			return {
+				matches,
+				totalMatches,
+				filesWithMatches,
+				filesSearched,
+				limitReached: limitReached || undefined,
+			};
+		}
 		filesSearched = 1;
 
 		const result = compiledPattern.search_bytes(
@@ -109,12 +120,8 @@ async function runGrep(request: GrepOptions): Promise<GrepResult> {
 			const normalizedPath = relativePath.replace(/\\/g, "/");
 			const fullPath = path.join(searchPath, normalizedPath);
 
-			let content: Uint8Array;
-			try {
-				content = Bun.mmap(fullPath);
-			} catch {
-				continue;
-			}
+			const content = await fileReader.read(fullPath);
+			if (!content) continue;
 
 			filesSearched++;
 

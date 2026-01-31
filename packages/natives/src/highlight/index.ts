@@ -26,6 +26,10 @@ export interface HighlightColors {
 	type: string;
 	operator: string;
 	punctuation: string;
+	/** Color for diff inserted lines (+). Optional, defaults to no coloring. */
+	inserted?: string;
+	/** Color for diff deleted lines (-). Optional, defaults to no coloring. */
+	deleted?: string;
 }
 
 /**

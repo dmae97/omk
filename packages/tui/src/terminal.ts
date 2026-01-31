@@ -9,6 +9,8 @@ import { StdinBuffer } from "./stdin-buffer";
 
 // Track active terminal for emergency cleanup on crash
 let activeTerminal: ProcessTerminal | null = null;
+// Track if a terminal was ever started (for emergency restore logic)
+let terminalEverStarted = false;
 
 /**
  * Emergency terminal restore - call this from signal/crash handlers
@@ -20,8 +22,9 @@ export function emergencyTerminalRestore(): void {
 		if (terminal) {
 			terminal.stop();
 			terminal.showCursor();
-		} else {
-			// Blind restore if no instance tracked - covers edge cases
+		} else if (terminalEverStarted) {
+			// Blind restore only if we know a terminal was started but lost track of it
+			// This avoids writing escape sequences for non-TUI commands (grep, commit, etc.)
 			process.stdout.write(
 				"\x1b[?2004l" + // Disable bracketed paste
 					"\x1b[<u" + // Pop kitty keyboard protocol
@@ -91,6 +94,7 @@ export class ProcessTerminal implements Terminal {
 
 		// Register for emergency cleanup
 		activeTerminal = this;
+		terminalEverStarted = true;
 
 		// Save previous state and enable raw mode
 		this.wasRaw = process.stdin.isRaw || false;

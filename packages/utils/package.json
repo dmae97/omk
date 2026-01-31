@@ -28,8 +28,7 @@
 	},
 	"dependencies": {
 		"winston": "^3.19.0",
-		"winston-daily-rotate-file": "^5.0.0",
-		"strip-ansi": "^7.1.2"
+		"winston-daily-rotate-file": "^5.0.0"
 	},
 	"devDependencies": {
 		"@types/node": "^25.0.10"

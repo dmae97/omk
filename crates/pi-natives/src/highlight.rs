@@ -1,9 +1,9 @@
 //! Syntax highlighting using syntect.
 //!
 //! Provides ANSI-colored output for code blocks. Takes theme colors as input
-//! and maps syntect scopes to 9 semantic categories:
+//! and maps syntect scopes to 11 semantic categories:
 //! - comment, keyword, function, variable, string, number, type, operator,
-//!   punctuation
+//!   punctuation, inserted, deleted
 
 use std::sync::OnceLock;
 
@@ -65,6 +65,12 @@ struct ScopeMatchers {
 	variable:    Scope,
 	entity_name: Scope,
 	meta_path:   Scope,
+
+	// Diff (indices 9, 10)
+	markup_inserted:  Scope,
+	markup_deleted:   Scope,
+	meta_diff_header: Scope,
+	meta_diff_range:  Scope,
 }
 
 impl ScopeMatchers {
@@ -98,6 +104,10 @@ impl ScopeMatchers {
 			variable:              Scope::new("variable").unwrap(),
 			entity_name:           Scope::new("entity.name").unwrap(),
 			meta_path:             Scope::new("meta.path").unwrap(),
+			markup_inserted:       Scope::new("markup.inserted").unwrap(),
+			markup_deleted:        Scope::new("markup.deleted").unwrap(),
+			meta_diff_header:      Scope::new("meta.diff.header").unwrap(),
+			meta_diff_range:       Scope::new("meta.diff.range").unwrap(),
 		}
 	}
 }
@@ -120,6 +130,10 @@ pub struct HighlightColors {
 	pub r#type:      String,
 	pub operator:    String,
 	pub punctuation: String,
+	#[serde(default)]
+	pub inserted:    String,
+	#[serde(default)]
+	pub deleted:     String,
 }
 
 /// Language alias mappings: (aliases, target syntax name).
@@ -202,6 +216,21 @@ fn scope_to_color_index(scope: &ScopeStack) -> usize {
 		// Comment (index 0)
 		if m.comment.is_prefix_of(*s) {
 			return 0;
+		}
+
+		// Diff inserted (index 9) - check before other scopes
+		if m.markup_inserted.is_prefix_of(*s) {
+			return 9;
+		}
+
+		// Diff deleted (index 10)
+		if m.markup_deleted.is_prefix_of(*s) {
+			return 10;
+		}
+
+		// Diff header/range -> keyword (index 1)
+		if m.meta_diff_header.is_prefix_of(*s) || m.meta_diff_range.is_prefix_of(*s) {
+			return 1;
 		}
 
 		// String (index 4)
@@ -322,6 +351,8 @@ pub fn highlight_code(code: &str, lang: Option<String>, colors: JsValue) -> Stri
 		&colors.r#type,      // 6
 		&colors.operator,    // 7
 		&colors.punctuation, // 8
+		&colors.inserted,    // 9
+		&colors.deleted,     // 10
 	];
 
 	let ss = get_syntax_set();
