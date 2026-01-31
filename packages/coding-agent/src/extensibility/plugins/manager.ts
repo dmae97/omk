@@ -159,6 +159,7 @@ export class PluginManager {
 			stdin: "ignore",
 			stdout: "pipe",
 			stderr: "pipe",
+			windowsHide: true,
 		});
 
 		const exitCode = await proc.exited;
@@ -239,6 +240,7 @@ export class PluginManager {
 			stdin: "ignore",
 			stdout: "pipe",
 			stderr: "pipe",
+			windowsHide: true,
 		});
 
 		const exitCode = await proc.exited;
@@ -621,6 +623,7 @@ export class PluginManager {
 				stdin: "ignore",
 				stdout: "pipe",
 				stderr: "pipe",
+				windowsHide: true,
 			});
 			return (await proc.exited) === 0;
 		} catch {

@@ -104,6 +104,7 @@ async function checkServerRunning(binaryPath: string): Promise<boolean> {
 		const proc = Bun.spawn([binaryPath, "status"], {
 			stdout: "pipe",
 			stderr: "pipe",
+			windowsHide: true,
 		});
 
 		const exited = await Promise.race([

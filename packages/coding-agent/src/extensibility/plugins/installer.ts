@@ -50,6 +50,7 @@ export async function installPlugin(packageName: string): Promise<InstalledPlugi
 		stdin: "ignore",
 		stdout: "pipe",
 		stderr: "pipe",
+		windowsHide: true,
 	});
 
 	const exitCode = await proc.exited;
@@ -91,6 +92,7 @@ export async function uninstallPlugin(name: string): Promise<void> {
 		stdin: "ignore",
 		stdout: "pipe",
 		stderr: "pipe",
+		windowsHide: true,
 	});
 
 	const exitCode = await proc.exited;

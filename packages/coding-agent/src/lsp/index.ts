@@ -437,6 +437,7 @@ async function runWorkspaceDiagnostics(
 			cwd,
 			stdout: "pipe",
 			stderr: "pipe",
+			windowsHide: true,
 		});
 
 		const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);

@@ -60,6 +60,7 @@ async function walkDirectoryWithFd(
 	const proc = Bun.spawn([fdPath, ...args], {
 		stdout: "pipe",
 		stderr: "pipe",
+		windowsHide: true,
 	});
 
 	const exitCode = await proc.exited;

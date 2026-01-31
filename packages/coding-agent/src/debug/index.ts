@@ -310,7 +310,7 @@ export class DebugSelectorComponent extends Container {
 		const [cmd, ...args] = openArgs;
 
 		try {
-			Bun.spawn([cmd, ...args], { stdout: "ignore", stderr: "ignore" }).unref();
+			Bun.spawn([cmd, ...args], { stdout: "ignore", stderr: "ignore", windowsHide: true }).unref();
 			this.ctx.showStatus(`Opened: ${artifactsDir}`);
 		} catch (err) {
 			this.ctx.showError(`Failed to open artifact folder: ${err instanceof Error ? err.message : String(err)}`);

@@ -447,6 +447,7 @@ export function spawn<In extends InMask = InMask>(cmd: string[], options?: Child
 		stdout: "pipe",
 		stderr: "pipe",
 		detached,
+		windowsHide: true,
 		...rest,
 	});
 	const cproc = new ChildProcess(child, detached);

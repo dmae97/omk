@@ -114,6 +114,7 @@ export async function runStatsCommand(cmd: StatsCommandArgs): Promise<void> {
 	Bun.spawn(openCommand === "cmd" ? ["cmd", "/c", "start", url] : [openCommand, url], {
 		stdout: "ignore",
 		stderr: "ignore",
+		windowsHide: true,
 	}).unref();
 
 	console.log("Press Ctrl+C to stop\n");

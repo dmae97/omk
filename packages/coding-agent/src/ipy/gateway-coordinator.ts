@@ -420,6 +420,7 @@ async function startGatewayProcess(
 			stdout: "pipe",
 			stderr: "pipe",
 			detached: true,
+			windowsHide: true,
 			env: kernelEnv,
 		},
 	);

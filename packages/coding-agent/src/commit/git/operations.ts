@@ -37,6 +37,7 @@ export async function commit(cwd: string, message: string): Promise<GitResult> {
 		stdin: Buffer.from(message),
 		stdout: "pipe",
 		stderr: "pipe",
+		windowsHide: true,
 	});
 
 	const [stdout, stderr, exitCode] = await Promise.all([

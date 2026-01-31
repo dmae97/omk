@@ -37,25 +37,33 @@ export async function copyToClipboard(text: string): Promise<void> {
 
 	try {
 		if (p === "darwin") {
-			await Bun.spawn(["pbcopy"], { stdin: Buffer.from(text), timeout }).exited;
+			await Bun.spawn(["pbcopy"], { stdin: Buffer.from(text), timeout, windowsHide: true }).exited;
 		} else if (p === "win32") {
-			await Bun.spawn(["clip"], { stdin: Buffer.from(text), timeout }).exited;
+			await Bun.spawn(["clip"], { stdin: Buffer.from(text), timeout, windowsHide: true }).exited;
 		} else {
 			const wayland = isWaylandSession();
 			if (wayland) {
 				const wlCopyPath = Bun.which("wl-copy");
 				if (wlCopyPath) {
 					// Fire-and-forget: wl-copy may not exit promptly, so we unref to avoid blocking
-					void Bun.spawn([wlCopyPath], { stdin: Buffer.from(text), timeout }).unref();
+					void Bun.spawn([wlCopyPath], { stdin: Buffer.from(text), timeout, windowsHide: true }).unref();
 					return;
 				}
 			}
 
 			// Linux - try xclip first, fall back to xsel
 			try {
-				await Bun.spawn(["xclip", "-selection", "clipboard"], { stdin: Buffer.from(text), timeout }).exited;
+				await Bun.spawn(["xclip", "-selection", "clipboard"], {
+					stdin: Buffer.from(text),
+					timeout,
+					windowsHide: true,
+				}).exited;
 			} catch {
-				await Bun.spawn(["xsel", "--clipboard", "--input"], { stdin: Buffer.from(text), timeout }).exited;
+				await Bun.spawn(["xsel", "--clipboard", "--input"], {
+					stdin: Buffer.from(text),
+					timeout,
+					windowsHide: true,
+				}).exited;
 			}
 		}
 	} catch (error) {

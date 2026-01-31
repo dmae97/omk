@@ -294,6 +294,7 @@ export async function terminate(options: TerminateOptions): Promise<boolean> {
 						stdout: "ignore",
 						stderr: "ignore",
 						timeout: 5000,
+						windowsHide: true,
 					});
 					void taskkill.exited.catch(() => {});
 					taskkill.unref();
