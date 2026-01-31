@@ -358,6 +358,8 @@ export interface ServerConfig {
 	initOptions?: Record<string, unknown>;
 	settings?: Record<string, unknown>;
 	disabled?: boolean;
+	/** Per-server warmup timeout in milliseconds. Overrides the global WARMUP_TIMEOUT_MS for this server during startup. */
+	warmupTimeoutMs?: number;
 	capabilities?: ServerCapabilities;
 	/** If true, this is a linter/formatter server (e.g., Biome) - used only for diagnostics/actions, not type intelligence */
 	isLinter?: boolean;

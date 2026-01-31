@@ -436,6 +436,19 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string, initT
 		proc.exited.then(() => {
 			clients.delete(key);
 			clientLocks.delete(key);
+
+			// Reject any pending requests — the server is gone, they will never complete.
+			if (client.pendingRequests.size > 0) {
+				const stderr = proc.peekStderr().trim();
+				const code = proc.exitCode;
+				const err = new Error(
+					stderr ? `LSP server exited (code ${code}): ${stderr}` : `LSP server exited unexpectedly (code ${code})`,
+				);
+				for (const pending of client.pendingRequests.values()) {
+					pending.reject(err);
+				}
+				client.pendingRequests.clear();
+			}
 		});
 
 		// Start background message reader
@@ -743,7 +756,7 @@ export async function sendRequest(
 	timeout = setTimeout(() => {
 		if (client.pendingRequests.has(id)) {
 			client.pendingRequests.delete(id);
-			const err = new Error(`LSP request ${method} timed out`);
+			const err = new Error(`LSP request ${method} timed out after ${timeoutMs}ms`);
 			cleanup();
 			reject(err);
 		}
