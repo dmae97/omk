@@ -122,7 +122,7 @@ export async function searchPerplexity(params: PerplexitySearchParams): Promise<
 	const request: PerplexityRequest = {
 		model: "sonar-pro",
 		messages,
-		return_related_questions: true,
+		return_related_questions: false,
 		web_search_options: {
 			search_context_size: "high",
 		},
