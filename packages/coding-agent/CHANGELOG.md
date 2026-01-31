@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [9.2.5] - 2026-01-31
 ### Changed
 
 - Clarified that user instructions about delegation override tool-use defaults
