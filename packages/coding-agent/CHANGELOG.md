@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Clarified that user instructions about delegation override tool-use defaults
+- Updated coordinator guidance to emphasize Task tool preference for substantial work with improved emphasis on context window limitations
+- Enhanced `context` parameter documentation to require self-contained information for subagents, including file contents and user requirements
 
 ## [9.2.4] - 2026-01-31
 ### Fixed

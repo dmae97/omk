@@ -35,11 +35,12 @@ This matters. Be thorough.
 4. **Always provide a `schema`** with typed properties. Avoid `{ "type": "string" }`—if data has any structure (list, fields, categories), model it. Plain text is almost never the right choice.
 5. Assign distinct file scopes per task to avoid conflicts.
 6. Trust the returned data, then verify with tools when correctness matters.
+7. The `context` must be self-contained. Paste relevant file contents, quote user requirements verbatim, include data from prior tool results. "The output user showed" means nothing to a subagent.
 </instruction>
 
 <parameters>
 - `agent`: Agent type to use for all tasks
-- `context`: Template with `\{{placeholders}}` for multi-task. Each placeholder is filled from task args. `\{{id}}` and `\{{description}}` are always available.
+- `context`: Template with `\{{placeholders}}` for multi-task. Must be self-contained—include all information the subagent needs. Subagents cannot see conversation history, images, or prior tool results. Reproduce relevant content directly: paste file snippets, quote user requirements, embed data. Each placeholder is filled from task args. `\{{id}}` and `\{{description}}` are always available.
 - `isolated`: (optional) Run each task in its own git worktree and return patches; patches are applied only if all apply cleanly.
 - `tasks`: Array of `{id, description, args}` - tasks to run in parallel
 		- `id`: Short CamelCase identifier (max 32 chars, e.g., "SessionStore", "LspRefactor")
