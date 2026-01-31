@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import * as path from "node:path";
 import type { Api, Model } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
@@ -108,7 +109,7 @@ export async function applyChangelogProposals({
 		)
 			continue;
 		onProgress?.(`Applying entries for ${proposal.path}...`);
-		const exists = await Bun.file(proposal.path).exists();
+		const exists = fs.existsSync(proposal.path);
 		if (!exists) {
 			logger.warn("commit changelog path missing", { path: proposal.path });
 			continue;

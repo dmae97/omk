@@ -25,10 +25,11 @@ function getTextOutput(result: any): string {
 }
 
 function createTestToolSession(cwd: string): ToolSession {
+	const sessionFile = path.join(cwd, "session.jsonl");
 	return {
 		cwd,
 		hasUI: false,
-		getSessionFile: () => null,
+		getSessionFile: () => sessionFile,
 		getSessionSpawns: () => "*",
 	};
 }
@@ -402,6 +403,46 @@ function b() {
 			expect(result.details).toBeUndefined();
 		});
 
+		it("should stream output updates", async () => {
+			const updates: string[] = [];
+			const result = await bashTool.execute(
+				"test-call-8-stream",
+				{ command: "for i in 1 2 3; do echo $i; sleep 0.2; done" },
+				undefined,
+				update => {
+					const text = update.content?.find(c => c.type === "text")?.text ?? "";
+					updates.push(text);
+				},
+			);
+
+			expect(updates.length).toBeGreaterThan(1);
+			expect(getTextOutput(result)).toContain("1");
+			expect(getTextOutput(result)).toContain("3");
+		});
+
+		it("should persist environment variables between commands", async () => {
+			if (process.platform === "win32" || process.env.OMP_SHELL_PERSIST === "0") {
+				return;
+			}
+
+			await bashTool.execute("test-call-8-env-set", { command: "export OMP_TEST_VAR=hello" });
+			const result = await bashTool.execute("test-call-8-env-get", { command: "echo $OMP_TEST_VAR" });
+			expect(getTextOutput(result)).toContain("hello");
+		});
+
+		it("should write truncated output to artifacts", async () => {
+			const result = await bashTool.execute("test-call-8-artifact", {
+				command: "printf 'a%.0s' {1..60000}",
+			});
+
+			const artifactId = result.details?.meta?.truncation?.artifactId;
+			expect(artifactId).toBeDefined();
+			if (artifactId) {
+				const artifactPath = path.join(testDir, "session", `${artifactId}.bash.log`);
+				expect(fs.existsSync(artifactPath)).toBe(true);
+			}
+		});
+
 		it("should handle command errors", async () => {
 			await expect(bashTool.execute("test-call-9", { command: "exit 1" })).rejects.toThrow(
 				/(Command failed|code 1)/,
@@ -412,6 +453,17 @@ function b() {
 			await expect(bashTool.execute("test-call-10", { command: "sleep 5", timeout: 1 })).rejects.toThrow(
 				/timed out/i,
 			);
+		});
+
+		it("should abort and recover for subsequent commands", async () => {
+			const controller = new AbortController();
+			const promise = bashTool.execute("test-call-10-abort", { command: "sleep 5" }, controller.signal);
+			await Bun.sleep(200);
+			controller.abort("test abort");
+			await expect(promise).rejects.toThrow(/abort|cancel|timed out/i);
+
+			const result = await bashTool.execute("test-call-10-after-abort", { command: "echo ok" });
+			expect(getTextOutput(result)).toContain("ok");
 		});
 
 		it("should throw error when cwd does not exist", async () => {

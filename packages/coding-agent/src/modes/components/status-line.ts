@@ -23,11 +23,11 @@ function sanitizeStatusText(text: string): string {
 }
 
 /** Find the git root directory by walking up from cwd */
-async function findGitHeadPath(): Promise<string | null> {
+function findGitHeadPath(): string | null {
 	let dir = process.cwd();
 	while (true) {
 		const gitHeadPath = path.join(dir, ".git", "HEAD");
-		if (await Bun.file(gitHeadPath).exists()) {
+		if (fs.existsSync(gitHeadPath)) {
 			return gitHeadPath;
 		}
 		const parent = path.dirname(dir);
@@ -103,20 +103,19 @@ export class StatusLineComponent implements Component {
 			this.gitWatcher = null;
 		}
 
-		findGitHeadPath().then(gitHeadPath => {
-			if (!gitHeadPath) return;
+		const gitHeadPath = findGitHeadPath();
+		if (!gitHeadPath) return;
 
-			try {
-				this.gitWatcher = fs.watch(gitHeadPath, () => {
-					this.cachedBranch = undefined;
-					if (this.onBranchChange) {
-						this.onBranchChange();
-					}
-				});
-			} catch {
-				// Silently fail
-			}
-		});
+		try {
+			this.gitWatcher = fs.watch(gitHeadPath, () => {
+				this.cachedBranch = undefined;
+				if (this.onBranchChange) {
+					this.onBranchChange();
+				}
+			});
+		} catch {
+			// Silently fail
+		}
 	}
 
 	dispose(): void {
@@ -135,25 +134,22 @@ export class StatusLineComponent implements Component {
 			return this.cachedBranch;
 		}
 
-		// Note: synchronous call to async function - will return undefined on first call
-		// This is acceptable since it's a cached value that will update on next render
-		findGitHeadPath().then(async gitHeadPath => {
-			if (!gitHeadPath) {
-				this.cachedBranch = null;
-				return;
-			}
-			try {
-				const content = (await Bun.file(gitHeadPath).text()).trim();
+		const gitHeadPath = findGitHeadPath();
+		if (!gitHeadPath) {
+			this.cachedBranch = null;
+			return null;
+		}
+		try {
+			const content = fs.readFileSync(gitHeadPath, "utf8").trim();
 
-				if (content.startsWith("ref: refs/heads/")) {
-					this.cachedBranch = content.slice(16);
-				} else {
-					this.cachedBranch = "detached";
-				}
-			} catch {
-				this.cachedBranch = null;
+			if (content.startsWith("ref: refs/heads/")) {
+				this.cachedBranch = content.slice(16);
+			} else {
+				this.cachedBranch = "detached";
 			}
-		});
+		} catch {
+			this.cachedBranch = null;
+		}
 
 		return this.cachedBranch ?? null;
 	}

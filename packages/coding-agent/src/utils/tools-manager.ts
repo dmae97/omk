@@ -1,4 +1,4 @@
-import * as fs from "node:fs/promises";
+import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { logger, ptree, TempDir } from "@oh-my-pi/pi-utils";
@@ -98,7 +98,7 @@ const PYTHON_TOOLS: Record<string, PythonToolConfig> = {
 export type ToolName = "sd" | "sg" | "yt-dlp" | "markitdown" | "trafilatura";
 
 // Get the path to a tool (system-wide or in our tools dir)
-export async function getToolPath(tool: ToolName): Promise<string | null> {
+export function getToolPath(tool: ToolName): string | null {
 	// Check Python tools first
 	const pythonConfig = PYTHON_TOOLS[tool];
 	if (pythonConfig) {
@@ -110,7 +110,7 @@ export async function getToolPath(tool: ToolName): Promise<string | null> {
 
 	// Check our tools directory first
 	const localPath = path.join(TOOLS_DIR, config.binaryName + (os.platform() === "win32" ? ".exe" : ""));
-	if (await Bun.file(localPath).exists()) {
+	if (fs.existsSync(localPath)) {
 		return localPath;
 	}
 
@@ -180,7 +180,7 @@ async function downloadTool(tool: ToolName, signal?: AbortSignal): Promise<strin
 	}
 
 	// Create tools directory
-	await fs.mkdir(TOOLS_DIR, { recursive: true });
+	await fs.promises.mkdir(TOOLS_DIR, { recursive: true });
 
 	const downloadUrl = `https://github.com/${config.repo}/releases/download/${config.tagPrefix}${version}/${assetName}`;
 	const binaryExt = plat === "win32" ? ".exe" : "";
@@ -190,7 +190,7 @@ async function downloadTool(tool: ToolName, signal?: AbortSignal): Promise<strin
 	if (config.isDirectBinary) {
 		await downloadFile(downloadUrl, binaryPath, signal);
 		if (plat !== "win32") {
-			await fs.chmod(binaryPath, 0o755);
+			await fs.promises.chmod(binaryPath, 0o755);
 		}
 		return binaryPath;
 	}
@@ -221,20 +221,20 @@ async function downloadTool(tool: ToolName, signal?: AbortSignal): Promise<strin
 			extractedBinary = path.join(extractedDir, config.binaryName + binaryExt);
 		}
 
-		if (await Bun.file(extractedBinary).exists()) {
-			await fs.rename(extractedBinary, binaryPath);
+		if (fs.existsSync(extractedBinary)) {
+			await fs.promises.rename(extractedBinary, binaryPath);
 		} else {
 			throw new Error(`Binary not found in archive: ${extractedBinary}`);
 		}
 
 		// Make executable (Unix only)
 		if (plat !== "win32") {
-			await fs.chmod(binaryPath, 0o755);
+			await fs.promises.chmod(binaryPath, 0o755);
 		}
 	} finally {
 		// Cleanup
 		await tmp.remove();
-		await fs.rm(archivePath, { force: true });
+		await fs.promises.rm(archivePath, { force: true });
 	}
 
 	return binaryPath;

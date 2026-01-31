@@ -163,25 +163,25 @@ function filterEnv(env: Record<string, string | undefined>): Record<string, stri
 	return filtered;
 }
 
-async function resolveVenvPath(cwd: string): Promise<string | null> {
+function resolveVenvPath(cwd: string): string | null {
 	if (process.env.VIRTUAL_ENV) return process.env.VIRTUAL_ENV;
 	const candidates = [path.join(cwd, ".venv"), path.join(cwd, "venv")];
 	for (const candidate of candidates) {
-		if (await Bun.file(candidate).exists()) {
+		if (fs.existsSync(candidate)) {
 			return candidate;
 		}
 	}
 	return null;
 }
 
-async function resolvePythonRuntime(cwd: string, baseEnv: Record<string, string | undefined>) {
+function resolvePythonRuntime(cwd: string, baseEnv: Record<string, string | undefined>) {
 	const env = { ...baseEnv };
-	const venvPath = env.VIRTUAL_ENV ?? (await resolveVenvPath(cwd));
+	const venvPath = env.VIRTUAL_ENV ?? resolveVenvPath(cwd);
 	if (venvPath) {
 		env.VIRTUAL_ENV = venvPath;
 		const binDir = process.platform === "win32" ? path.join(venvPath, "Scripts") : path.join(venvPath, "bin");
 		const pythonCandidate = path.join(binDir, process.platform === "win32" ? "python.exe" : "python");
-		if (await Bun.file(pythonCandidate).exists()) {
+		if (fs.existsSync(pythonCandidate)) {
 			const pathKey = resolvePathKey(env);
 			const currentPath = env[pathKey];
 			env[pathKey] = currentPath ? `${binDir}${path.delimiter}${currentPath}` : binDir;

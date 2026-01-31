@@ -450,7 +450,7 @@ describe("applyPatch", () => {
 		const result = await applyPatch({ path: "del.txt", op: "delete" }, { cwd: tempDir });
 
 		expect(result.change.type).toBe("delete");
-		expect(await Bun.file(filePath).exists()).toBe(false);
+		expect(fs.existsSync(filePath)).toBe(false);
 	});
 
 	test("update file", async () => {
@@ -477,7 +477,7 @@ describe("applyPatch", () => {
 
 		expect(result.change.type).toBe("update");
 		expect(result.change.newPath).toBe(path.join(tempDir, "dst.txt"));
-		expect(await Bun.file(srcPath).exists()).toBe(false);
+		expect(fs.existsSync(srcPath)).toBe(false);
 		expect(await Bun.file(path.join(tempDir, "dst.txt")).text()).toBe("line2\n");
 	});
 

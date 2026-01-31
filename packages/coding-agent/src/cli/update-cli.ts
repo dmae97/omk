@@ -195,15 +195,10 @@ async function updateViaBinary(release: ReleaseInfo): Promise<void> {
 		console.log(chalk.green(`\n${theme.status.success} Updated to ${release.version}`));
 		console.log(chalk.dim(`Restart ${APP_NAME} to use the new version`));
 	} catch (err) {
-		const [backupExists, execExists, tempExists] = await Promise.all([
-			Bun.file(backupPath).exists(),
-			Bun.file(execPath).exists(),
-			Bun.file(tempPath).exists(),
-		]);
-		if (backupExists && !execExists) {
+		if (fs.existsSync(backupPath) && !fs.existsSync(execPath)) {
 			await fs.promises.rename(backupPath, execPath);
 		}
-		if (tempExists) {
+		if (fs.existsSync(tempPath)) {
 			await fs.promises.unlink(tempPath);
 		}
 		throw err;

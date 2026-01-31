@@ -17,9 +17,9 @@ const TERM_SIGNAL = IS_WINDOWS ? undefined : "SIGTERM";
 /**
  * Check if a shell binary is executable.
  */
-async function isExecutable(path: string): Promise<boolean> {
+function isExecutable(path: string): boolean {
 	try {
-		await fs.promises.access(path, fs.constants.X_OK);
+		fs.accessSync(path, fs.constants.X_OK);
 		return true;
 	} catch {
 		return false;
@@ -90,14 +90,14 @@ function buildConfig(shell: string): ShellConfig {
  * 3. On Unix: $SHELL if bash/zsh, then fallback paths
  * 4. Fallback: sh
  */
-export async function getShellConfig(customShellPath?: string): Promise<ShellConfig> {
+export function getShellConfig(customShellPath?: string): ShellConfig {
 	if (cachedShellConfig) {
 		return cachedShellConfig;
 	}
 
 	// 1. Check user-specified shell path
 	if (customShellPath) {
-		if (await Bun.file(customShellPath).exists()) {
+		if (fs.existsSync(customShellPath)) {
 			cachedShellConfig = buildConfig(customShellPath);
 			return cachedShellConfig;
 		}
@@ -119,7 +119,7 @@ export async function getShellConfig(customShellPath?: string): Promise<ShellCon
 		}
 
 		for (const path of paths) {
-			if (await Bun.file(path).exists()) {
+			if (fs.existsSync(path)) {
 				cachedShellConfig = buildConfig(path);
 				return cachedShellConfig;
 			}
@@ -144,7 +144,7 @@ export async function getShellConfig(customShellPath?: string): Promise<ShellCon
 	// Unix: prefer user's shell from $SHELL if it's bash/zsh and executable
 	const userShell = process.env.SHELL;
 	const isValidShell = userShell && (userShell.includes("bash") || userShell.includes("zsh"));
-	if (isValidShell && (await isExecutable(userShell))) {
+	if (isValidShell && isExecutable(userShell)) {
 		cachedShellConfig = buildConfig(userShell);
 		return cachedShellConfig;
 	}
@@ -157,7 +157,7 @@ export async function getShellConfig(customShellPath?: string): Promise<ShellCon
 	for (const shellName of shellOrder) {
 		for (const dir of fallbackPaths) {
 			const shellPath = `${dir}/${shellName}`;
-			if (await isExecutable(shellPath)) {
+			if (isExecutable(shellPath)) {
 				cachedShellConfig = buildConfig(shellPath);
 				return cachedShellConfig;
 			}

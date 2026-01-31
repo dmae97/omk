@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import Handlebars from "handlebars";
@@ -435,7 +436,7 @@ async function loadTemplatesFromDir(
 			}
 		}
 	} catch (error) {
-		if (!(await Bun.file(dir).exists())) {
+		if (!fs.existsSync(dir)) {
 			return [];
 		}
 		logger.warn("Failed to scan prompt templates directory", { dir, error: String(error) });

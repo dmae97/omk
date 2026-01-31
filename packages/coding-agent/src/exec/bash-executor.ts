@@ -7,6 +7,7 @@ import { Exception, ptree } from "@oh-my-pi/pi-utils";
 import { SettingsManager } from "../config/settings-manager";
 import { OutputSink } from "../session/streaming-output";
 import { getOrCreateSnapshot, getSnapshotSourceCommand } from "../utils/shell-snapshot";
+import { executeShellCommand } from "./shell-session";
 
 export interface BashExecutorOptions {
 	cwd?: string;
@@ -34,13 +35,62 @@ export interface BashResult {
 
 export async function executeBash(command: string, options?: BashExecutorOptions): Promise<BashResult> {
 	const { shell, args, env, prefix } = await SettingsManager.getGlobalShellConfig();
+	const snapshotPath = await getOrCreateSnapshot(shell, env);
+
+	if (shouldUsePersistentShell(shell)) {
+		return await executeShellCommand({ shell, env, prefix, snapshotPath }, command, {
+			cwd: options?.cwd,
+			timeout: options?.timeout,
+			signal: options?.signal,
+			onChunk: options?.onChunk,
+			env: options?.env,
+			artifactPath: options?.artifactPath,
+			artifactId: options?.artifactId,
+		});
+	}
+
+	return await executeBashOnce(command, options, { shell, args, env, prefix, snapshotPath });
+}
+
+function shouldUsePersistentShell(shell: string): boolean {
+	const flag = parseEnvFlag(process.env.OMP_SHELL_PERSIST);
+	if (flag !== undefined) return flag;
+	if (process.platform === "win32") return false;
+	const normalized = shell.toLowerCase();
+	return (
+		normalized.includes("bash") ||
+		normalized.includes("zsh") ||
+		normalized.includes("fish") ||
+		normalized.endsWith("/sh") ||
+		normalized.endsWith("\\\\sh") ||
+		normalized.endsWith("sh")
+	);
+}
+
+function parseEnvFlag(value: string | undefined): boolean | undefined {
+	if (!value) return undefined;
+	const normalized = value.toLowerCase();
+	if (["1", "true", "yes", "on"].includes(normalized)) return true;
+	if (["0", "false", "no", "off"].includes(normalized)) return false;
+	return undefined;
+}
+
+async function executeBashOnce(
+	command: string,
+	options: BashExecutorOptions | undefined,
+	config: {
+		shell: string;
+		args: string[];
+		env: Record<string, string | undefined>;
+		prefix?: string;
+		snapshotPath: string | null;
+	},
+): Promise<BashResult> {
+	const { shell, args, env, prefix, snapshotPath } = config;
 
 	// Merge additional env vars if provided
 	const finalEnv = options?.env ? { ...env, ...options.env } : env;
-
-	const snapshotPath = await getOrCreateSnapshot(shell, env);
 	const snapshotPrefix = getSnapshotSourceCommand(snapshotPath);
-
 	const prefixedCommand = prefix ? `${prefix} ${command}` : command;
 	const finalCommand = `${snapshotPrefix}${prefixedCommand}`;
 

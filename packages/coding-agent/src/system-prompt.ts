@@ -881,6 +881,8 @@ export interface BuildSystemPromptOptions {
 	preloadedSkills?: Skill[];
 	/** Pre-loaded rulebook rules (rules with descriptions, excluding TTSR and always-apply). */
 	rules?: Array<{ name: string; description?: string; path: string; globs?: string[] }>;
+	/** Whether this is the main coordinator agent (not a subagent). Enables parallel delegation emphasis. */
+	isCoordinator?: boolean;
 }
 
 /** Build the system prompt with tools, guidelines, and context */
@@ -900,6 +902,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		skills: providedSkills,
 		preloadedSkills: providedPreloadedSkills,
 		rules,
+		isCoordinator,
 	} = options;
 	const resolvedCwd = cwd ?? process.cwd();
 	const resolvedCustomPrompt = await resolvePromptInput(customPrompt, "system prompt");
@@ -969,6 +972,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 			rules: rules ?? [],
 			dateTime,
 			cwd: resolvedCwd,
+			isCoordinator: isCoordinator ?? false,
 		});
 	}
 
@@ -986,5 +990,6 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		dateTime,
 		cwd: resolvedCwd,
 		appendSystemPrompt: resolvedAppendPrompt ?? "",
+		isCoordinator: isCoordinator ?? false,
 	});
 }

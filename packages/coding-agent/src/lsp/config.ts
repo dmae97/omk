@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
@@ -84,13 +85,9 @@ function normalizeServerConfig(name: string, config: Partial<ServerConfig>): Ser
 	};
 }
 
-async function readConfigFile(filePath: string): Promise<NormalizedConfig | null> {
+function readConfigFile(filePath: string): NormalizedConfig | null {
 	try {
-		const file = Bun.file(filePath);
-		if (!(await file.exists())) {
-			return null;
-		}
-		const content = await file.text();
+		const content = fs.readFileSync(filePath, "utf-8");
 		const parsed = parseConfigContent(content, filePath);
 		return normalizeConfig(parsed);
 	} catch {
@@ -155,7 +152,7 @@ function applyRuntimeDefaults(servers: Record<string, ServerConfig>): Record<str
 /**
  * Check if any root marker file exists in the directory
  */
-export async function hasRootMarkers(cwd: string, markers: string[]): Promise<boolean> {
+export function hasRootMarkers(cwd: string, markers: string[]): boolean {
 	for (const marker of markers) {
 		// Handle glob-like patterns (e.g., "*.cabal")
 		if (marker.includes("*")) {
@@ -170,7 +167,7 @@ export async function hasRootMarkers(cwd: string, markers: string[]): Promise<bo
 			continue;
 		}
 		const filePath = path.join(cwd, marker);
-		if (await Bun.file(filePath).exists()) {
+		if (fs.existsSync(filePath)) {
 			return true;
 		}
 	}
@@ -207,12 +204,12 @@ const LOCAL_BIN_PATHS: Array<{ markers: string[]; binDir: string }> = [
  * @param cwd - Working directory to search from
  * @returns Absolute path to the executable, or null if not found
  */
-export async function resolveCommand(command: string, cwd: string): Promise<string | null> {
+export function resolveCommand(command: string, cwd: string): string | null {
 	// Check local bin directories based on project markers
 	for (const { markers, binDir } of LOCAL_BIN_PATHS) {
-		if (await hasRootMarkers(cwd, markers)) {
+		if (hasRootMarkers(cwd, markers)) {
 			const localPath = path.join(cwd, binDir, command);
-			if (await Bun.file(localPath).exists()) {
+			if (fs.existsSync(localPath)) {
 				return localPath;
 			}
 		}
@@ -290,7 +287,7 @@ function getConfigPaths(cwd: string): string[] {
  * }
  * ```
  */
-export async function loadConfig(cwd: string): Promise<LspConfig> {
+export function loadConfig(cwd: string): LspConfig {
 	let mergedServers = coerceServerConfigs(DEFAULTS);
 
 	const configPaths = getConfigPaths(cwd).reverse();
@@ -298,7 +295,7 @@ export async function loadConfig(cwd: string): Promise<LspConfig> {
 
 	let idleTimeoutMs: number | undefined;
 	for (const configPath of configPaths) {
-		const parsed = await readConfigFile(configPath);
+		const parsed = readConfigFile(configPath);
 		if (!parsed) continue;
 		const hasServerOverrides = Object.keys(parsed.servers).length > 0;
 		if (hasServerOverrides) {
@@ -317,10 +314,10 @@ export async function loadConfig(cwd: string): Promise<LspConfig> {
 
 		for (const [name, config] of Object.entries(defaultsWithRuntime)) {
 			// Check if project has root markers for this language
-			if (!(await hasRootMarkers(cwd, config.rootMarkers))) continue;
+			if (!hasRootMarkers(cwd, config.rootMarkers)) continue;
 
 			// Check if the language server binary is available (local or $PATH)
-			const resolved = await resolveCommand(config.command, cwd);
+			const resolved = resolveCommand(config.command, cwd);
 			if (!resolved) continue;
 
 			detected[name] = { ...config, resolvedCommand: resolved };
@@ -335,7 +332,7 @@ export async function loadConfig(cwd: string): Promise<LspConfig> {
 
 	for (const [name, config] of Object.entries(mergedWithRuntime)) {
 		if (config.disabled) continue;
-		const resolved = await resolveCommand(config.command, cwd);
+		const resolved = resolveCommand(config.command, cwd);
 		if (!resolved) continue;
 		available[name] = { ...config, resolvedCommand: resolved };
 	}

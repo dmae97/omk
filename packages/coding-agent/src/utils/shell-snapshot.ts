@@ -11,7 +11,14 @@ import * as path from "node:path";
 import { postmortem } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
 
-let cachedSnapshotPath: string | null = null;
+const cachedSnapshotPaths = new Map<string, string>();
+
+function sanitizeSnapshotEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
+	const sanitized = { ...env };
+	delete sanitized.BASH_ENV;
+	delete sanitized.ENV;
+	return sanitized;
+}
 
 /**
  * Get the user's shell config file path.
@@ -28,8 +35,8 @@ function getShellConfigFile(shell: string): string {
  * This script sources the user's rc file and extracts functions, aliases, and options.
  * Matches Claude Code's snapshot generation logic.
  */
-async function generateSnapshotScript(shell: string, snapshotPath: string, rcFile: string): Promise<string> {
-	const hasRcFile = await Bun.file(rcFile).exists();
+function generateSnapshotScript(shell: string, snapshotPath: string, rcFile: string): string {
+	const hasRcFile = fs.existsSync(rcFile);
 	const isZsh = shell.includes("zsh");
 	const commonToolsRegex =
 		"^(ls|dir|vdir|cat|head|tail|less|more|grep|egrep|fgrep|rg|find|fd|locate|sed|awk|perl|cp|mv|rm|mkdir|rmdir|touch|chmod|chown|ln|pwd|readlink|stat|cut|sort|uniq|xargs|tee|tr|basename|dirname)$";
@@ -68,7 +75,7 @@ setopt 2>/dev/null | sed 's/^/setopt /' | head -n 1000 >> "$SNAPSHOT_FILE"
 		: `
 echo "# Shell Options" >> "$SNAPSHOT_FILE"
 shopt -p 2>/dev/null | head -n 1000 >> "$SNAPSHOT_FILE"
-set -o 2>/dev/null | grep "on" | awk '{print "set -o " $1}' | head -n 1000 >> "$SNAPSHOT_FILE"
+set -o 2>/dev/null | awk '$2 == "on" && $1 !~ /^(onecmd|monitor|restricted)$/ {print "set -o " $1}' | head -n 1000 >> "$SNAPSHOT_FILE"
 echo "shopt -s expand_aliases" >> "$SNAPSHOT_FILE"
 `;
 
@@ -116,9 +123,14 @@ export async function getOrCreateSnapshot(
 	shell: string,
 	env: Record<string, string | undefined>,
 ): Promise<string | null> {
+	const cacheKey = shell;
 	// Return cached snapshot if valid
-	if (cachedSnapshotPath && (await Bun.file(cachedSnapshotPath).exists())) {
-		return cachedSnapshotPath;
+	const cached = cachedSnapshotPaths.get(cacheKey);
+	if (cached && fs.existsSync(cached)) {
+		return cached;
+	}
+	if (cached) {
+		cachedSnapshotPaths.delete(cacheKey);
 	}
 
 	// Skip on Windows (no .bashrc in standard location)
@@ -130,19 +142,20 @@ export async function getOrCreateSnapshot(
 
 	// Create snapshot directory
 	const snapshotDir = path.join(os.tmpdir(), "omp-shell-snapshots");
-	await fs.promises.mkdir(snapshotDir, { recursive: true });
+	fs.mkdirSync(snapshotDir, { recursive: true });
 
 	// Generate unique snapshot path
 	const shellName = shell.includes("zsh") ? "zsh" : shell.includes("bash") ? "bash" : "sh";
 	const snapshotPath = path.join(snapshotDir, `snapshot-${shellName}-${crypto.randomUUID()}.sh`);
 
 	// Generate and execute snapshot script
-	const script = await generateSnapshotScript(shell, snapshotPath, rcFile);
+	const script = generateSnapshotScript(shell, snapshotPath, rcFile);
 
 	try {
-		await $`${shell} -l -c ${script}`.env(env).quiet().text();
-		if (await Bun.file(snapshotPath).exists()) {
-			cachedSnapshotPath = snapshotPath;
+		const snapshotEnv = sanitizeSnapshotEnv(env);
+		await $`${shell} -c ${script}`.env(snapshotEnv).quiet().text();
+		if (fs.existsSync(snapshotPath)) {
+			cachedSnapshotPaths.set(cacheKey, snapshotPath);
 			return snapshotPath;
 		}
 	} catch {
@@ -164,7 +177,8 @@ export function getSnapshotSourceCommand(snapshotPath: string | null): string {
 }
 
 postmortem.register("shell-snapshot", () => {
-	if (cachedSnapshotPath) {
-		fs.unlinkSync(cachedSnapshotPath);
+	for (const snapshotPath of cachedSnapshotPaths.values()) {
+		fs.unlinkSync(snapshotPath);
 	}
+	cachedSnapshotPaths.clear();
 });

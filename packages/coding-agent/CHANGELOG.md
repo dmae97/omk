@@ -1,6 +1,31 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Persistent shell session support for bash tool with environment variable preservation across commands
+- New `shellForceBasic` setting to force bash/sh even if user's default shell is different (default: true)
+- New `OMP_SHELL_PERSIST` environment variable to control persistent shell behavior (set to 0 to disable)
+
+### Changed
+
+- Bash tool now reuses a persistent shell session by default on Unix systems for improved performance and state preservation
+- Replaced Bun file APIs with Node.js `fs` module for better cross-runtime compatibility
+- LSP configuration loading is now synchronous instead of async
+- Shell snapshot generation now sanitizes `BASH_ENV` and `ENV` variables to prevent shell exit issues
+- Shell snapshot caching now per-shell-binary instead of global to avoid cross-shell contamination
+- System prompt restructured with coordinator-specific guidance for parallel task delegation
+- Bash tool now reuses a persistent shell session by default on Unix. Set `OMP_SHELL_PERSIST=0` to disable or fall back to per-command execution on Windows/unsupported shells.
+- Added a shellForceBasic setting to force bash/sh and keep environment changes across bash commands (default: true).
+
+### Fixed
+
+- Shell snapshots now filter unsafe bash options (onecmd, monitor, restricted) to prevent session exits
+- Git branch detection in status line now works synchronously without race conditions
+- Shell session initialization properly restores trap handlers and shell functions after command execution
+- Sanitized `BASH_ENV`/`ENV` during persistent shell startup and snapshot creation to prevent basic shells from exiting immediately.
+- Cached shell snapshots per shell binary to avoid sourcing zsh snapshots in bash sessions.
+- Filtered unsafe bash options (onecmd/monitor/restricted) out of shell snapshots to prevent session exits.
 
 ## [9.2.2] - 2026-01-31
 

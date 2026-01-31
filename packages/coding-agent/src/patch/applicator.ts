@@ -4,7 +4,8 @@
  * Applies parsed diff hunks to file content using fuzzy matching
  * for robust handling of whitespace and formatting differences.
  */
-import * as fs from "node:fs/promises";
+
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { resolveToCwd } from "../tools/path-utils";
 import { DEFAULT_FUZZY_THRESHOLD, findClosestSequenceMatch, findContextLine, findMatch, seekSequence } from "./fuzzy";
@@ -37,7 +38,7 @@ import { ApplyPatchError, normalizePatchInput } from "./types";
 /** Default filesystem implementation using Bun APIs */
 export const defaultFileSystem: FileSystem = {
 	async exists(path: string): Promise<boolean> {
-		return Bun.file(path).exists();
+		return fs.existsSync(path);
 	},
 	async read(path: string): Promise<string> {
 		return Bun.file(path).text();
@@ -50,10 +51,10 @@ export const defaultFileSystem: FileSystem = {
 		await Bun.write(path, content);
 	},
 	async delete(path: string): Promise<void> {
-		await fs.unlink(path);
+		await fs.promises.unlink(path);
 	},
 	async mkdir(path: string): Promise<void> {
-		await fs.mkdir(path, { recursive: true });
+		await fs.promises.mkdir(path, { recursive: true });
 	},
 };
 

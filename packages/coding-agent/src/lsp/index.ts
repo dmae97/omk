@@ -88,7 +88,7 @@ export interface LspWarmupOptions {
  * @returns Status of each server that was started
  */
 export async function warmupLspServers(cwd: string, options?: LspWarmupOptions): Promise<LspWarmupResult> {
-	const config = await loadConfig(cwd);
+	const config = loadConfig(cwd);
 	setIdleTimeout(config.idleTimeoutMs);
 	const servers: LspWarmupResult["servers"] = [];
 	const lspServers = getLspServers(config);
@@ -198,10 +198,10 @@ async function notifyFileSaved(
 // Cache config per cwd to avoid repeated file I/O
 const configCache = new Map<string, LspConfig>();
 
-async function getConfig(cwd: string): Promise<LspConfig> {
+function getConfig(cwd: string): LspConfig {
 	let config = configCache.get(cwd);
 	if (!config) {
-		config = await loadConfig(cwd);
+		config = loadConfig(cwd);
 		setIdleTimeout(config.idleTimeoutMs);
 		configCache.set(cwd, config);
 	}
@@ -827,7 +827,7 @@ async function runLspWritethrough(
 	file?: BunFile,
 ): Promise<FileDiagnosticsResult | undefined> {
 	const { enableFormat, enableDiagnostics } = options;
-	const config = await getConfig(cwd);
+	const config = getConfig(cwd);
 	const servers = getServersForFile(config, dst);
 	if (servers.length === 0) {
 		return writethroughNoop(dst, content, signal, file);
@@ -996,7 +996,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 			include_declaration,
 		} = params;
 
-		const config = await getConfig(this.session.cwd);
+		const config = getConfig(this.session.cwd);
 
 		// Status action doesn't need a file
 		if (action === "status") {

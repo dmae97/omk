@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import { createServer } from "node:net";
 import * as path from "node:path";
 import { logger, ptree } from "@oh-my-pi/pi-utils";
@@ -235,25 +236,25 @@ function filterEnv(env: Record<string, string | undefined>): Record<string, stri
 	return filtered;
 }
 
-async function resolveVenvPath(cwd: string): Promise<string | null> {
+function resolveVenvPath(cwd: string): string | null {
 	if (process.env.VIRTUAL_ENV) return process.env.VIRTUAL_ENV;
 	const candidates = [path.join(cwd, ".venv"), path.join(cwd, "venv")];
 	for (const candidate of candidates) {
-		if (await Bun.file(candidate).exists()) {
+		if (fs.existsSync(candidate)) {
 			return candidate;
 		}
 	}
 	return null;
 }
 
-async function resolvePythonRuntime(cwd: string, baseEnv: Record<string, string | undefined>) {
+function resolvePythonRuntime(cwd: string, baseEnv: Record<string, string | undefined>) {
 	const env = { ...baseEnv };
-	const venvPath = env.VIRTUAL_ENV ?? (await resolveVenvPath(cwd));
+	const venvPath = env.VIRTUAL_ENV ?? resolveVenvPath(cwd);
 	if (venvPath) {
 		env.VIRTUAL_ENV = venvPath;
 		const binDir = process.platform === "win32" ? path.join(venvPath, "Scripts") : path.join(venvPath, "bin");
 		const pythonCandidate = path.join(binDir, process.platform === "win32" ? "python.exe" : "python");
-		if (await Bun.file(pythonCandidate).exists()) {
+		if (fs.existsSync(pythonCandidate)) {
 			const pathKey = resolvePathKey(env);
 			const currentPath = env[pathKey];
 			env[pathKey] = currentPath ? `${binDir}${path.delimiter}${currentPath}` : binDir;
@@ -281,7 +282,7 @@ export async function checkPythonKernelAvailability(cwd: string): Promise<Python
 	try {
 		const { env } = await SettingsManager.getGlobalShellConfig();
 		const baseEnv = filterEnv(env);
-		const runtime = await resolvePythonRuntime(cwd, baseEnv);
+		const runtime = resolvePythonRuntime(cwd, baseEnv);
 		const checkScript =
 			"import importlib.util,sys;sys.exit(0 if importlib.util.find_spec('kernel_gateway') and importlib.util.find_spec('ipykernel') else 1)";
 		const result = await $`${runtime.pythonPath} -c ${checkScript}`.quiet().nothrow().cwd(cwd).env(runtime.env);
@@ -613,7 +614,7 @@ export class PythonKernel {
 	private static async startWithLocalGateway(options: KernelStartOptions): Promise<PythonKernel> {
 		const { shell, env } = await SettingsManager.getGlobalShellConfig();
 		const filteredEnv = filterEnv(env);
-		const runtime = await resolvePythonRuntime(options.cwd, filteredEnv);
+		const runtime = resolvePythonRuntime(options.cwd, filteredEnv);
 		const snapshotPath = await getOrCreateSnapshot(shell, env).catch((err: unknown) => {
 			logger.warn("Failed to resolve shell snapshot for Python kernel", {
 				error: err instanceof Error ? err.message : String(err),

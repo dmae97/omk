@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ChangelogBoundary } from "../../commit/types";
 
@@ -25,7 +26,7 @@ async function findNearestChangelog(cwd: string, filePath: string): Promise<stri
 	const root = path.resolve(cwd);
 	while (true) {
 		const candidate = path.resolve(current, CHANGELOG_NAME);
-		if (await Bun.file(candidate).exists()) {
+		if (fs.existsSync(candidate)) {
 			return candidate;
 		}
 		if (current === root) return null;

@@ -264,6 +264,15 @@ export const SETTINGS_DEFS: SettingDef[] = [
 		set: (sm, v) => sm.setBashInterceptorEnabled(v),
 	},
 	{
+		id: "shellForceBasic",
+		tab: "tools",
+		type: "boolean",
+		label: "Force basic shell",
+		description: "Use bash/sh even if your default shell is different",
+		get: sm => sm.getShellForceBasic(),
+		set: (sm, v) => sm.setShellForceBasic(v),
+	},
+	{
 		id: "bashInterceptorSimpleLs",
 		tab: "tools",
 		type: "boolean",
