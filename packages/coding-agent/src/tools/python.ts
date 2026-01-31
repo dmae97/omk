@@ -785,8 +785,15 @@ export const pythonToolRenderer = {
 			return new Text(text, 0, 0);
 		}
 
+		// Cache state - cells don't change, only width varies
+		let cached: { width: number; result: string[] } | undefined;
+
 		return {
 			render: (width: number): string[] => {
+				if (cached && cached.width === width) {
+					return cached.result;
+				}
+
 				const lines: string[] = [];
 				for (let i = 0; i < cells.length; i++) {
 					const cell = cells[i];
@@ -812,9 +819,12 @@ export const pythonToolRenderer = {
 						lines.push("");
 					}
 				}
+				cached = { width, result: lines };
 				return lines;
 			},
-			invalidate: () => {},
+			invalidate: () => {
+				cached = undefined;
+			},
 		};
 	},
 
@@ -864,8 +874,20 @@ export const pythonToolRenderer = {
 
 		const cellResults = details?.cells;
 		if (cellResults && cellResults.length > 0) {
+			// Cache state following Box pattern
+			let cached: { key: string; width: number; result: string[] } | undefined;
+
+			const buildCacheKey = (spinnerFrame: number | undefined): string => {
+				return `${expanded}|${previewLines}|${spinnerFrame}`;
+			};
+
 			return {
 				render: (width: number): string[] => {
+					const key = buildCacheKey(options.spinnerFrame);
+					if (cached && cached.key === key && cached.width === width) {
+						return cached.result;
+					}
+
 					const lines: string[] = [];
 					for (let i = 0; i < cellResults.length; i++) {
 						const cell = cellResults[i];
@@ -921,9 +943,12 @@ export const pythonToolRenderer = {
 					if (warningLine) {
 						lines.push(warningLine);
 					}
+					cached = { key, width, result: lines };
 					return lines;
 				},
-				invalidate: () => {},
+				invalidate: () => {
+					cached = undefined;
+				},
 			};
 		}
 
