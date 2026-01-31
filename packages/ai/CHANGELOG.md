@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### Added
+- Added Kimi Code provider with OpenAI and Anthropic API format support
+- Added prompt cache retention support with PI_CACHE_RETENTION env var
+- Added overflow patterns for Bedrock, MiniMax, Kimi; reclassified 429 as rate limiting
+- Added profile endpoint integration to resolve user emails with 24-hour caching
+- Added automatic token refresh for expired Kimi OAuth credentials
+- Added Kimi Code OAuth handler with device authorization flow
+- Added Kimi Code usage provider with quota caching
+- Added 4 new Kimi Code models (kimi-for-coding, kimi-k2, kimi-k2-turbo-preview, kimi-k2.5)
+- Added Kimi Code provider integration with OAuth and token management
+- Added tool-choice utility for mapping unified ToolChoice to provider-specific formats
+- Added ToolChoice type for controlling tool selection (auto, none, any, required, function)
+
+### Changed
+- Added delta event batching and throttling (50ms, 20 updates/sec max) to AssistantMessageEventStream
+- Updated MiniMax-M2 pricing: input 1.2→0.6, output 1.2→3, cacheRead 0.6→0.1
+
+### Fixed
+- Fixed rate limit issues with Kimi models by always sending max_tokens
+- Added handling for sensitive stop reason from Anthropic API safety filters
+- Added optional chaining for safer JSON schema property access in Anthropic provider
+
 ## [8.6.0] - 2026-01-27
 
 ### Changed

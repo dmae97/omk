@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+### Added
+- Added setAutocompleteMaxVisible() configuration (3-20 items)
+- Added image detection to terminal capabilities (containsImage method)
+- Added stdin monitoring to detect stalled input events and log warnings
+
+### Changed
+- Improved blockquote rendering with text wrapping in Markdown component
+- Restructured terminal capabilities from interface-based to class-based model
+- Improved table column width calculation with word-aware wrapping
+- Refactored text utilities to use native WASM implementations for strings >256 chars with JS fast path
+
+### Fixed
+- Simplified terminal write error handling to mark terminal as dead on any write failure
+- Fixed multi-line strings in renderOutputBlock causing width overflow
+- Fixed slash command autocomplete applying stale completion when typing quickly
+
+### Removed
+- Removed TUI layout engine exports from public API (BoxNode, ColumnNode, LayoutNode, etc.)
+
 ## [8.12.7] - 2026-01-29
 
 ### Fixed
