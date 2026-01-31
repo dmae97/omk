@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [9.3.1] - 2026-01-31
 ### Added
 
 - Added `getCompactContext()` API to retrieve parent conversation context for subagents, excluding system prompts and tool results
