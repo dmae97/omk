@@ -90,7 +90,10 @@ function buildPosixCommandScript(
 	];
 	if (envExports) lines.push(envExports);
 	if (cwd) lines.push(`cd -- ${escapePosix(cwd)}`);
-	lines.push(commandLine.length > 0 ? commandLine : ":");
+	// Redirect stdin from /dev/null to prevent interactive commands from blocking
+	// on the shell's stdin pipe (which is used for sending commands, not user input).
+	// Explicit pipes within the command (e.g., `echo "y" | cmd`) still work.
+	lines.push(commandLine.length > 0 ? `{ ${commandLine}; } < /dev/null` : ":");
 	lines.push("__omp_status=$?");
 	lines.push("unset -f exit logout exec 2>/dev/null");
 	lines.push('if [ -n "$__omp_prev_exit" ]; then eval "$__omp_prev_exit"; fi');
@@ -145,7 +148,8 @@ function buildFishCommandScript(
 	];
 	if (envExports) lines.push(envExports);
 	if (cwd) lines.push(`cd -- ${escapePosix(cwd)}`);
-	lines.push(commandLine.length > 0 ? commandLine : ":");
+	// Redirect stdin from /dev/null to prevent interactive commands from blocking
+	lines.push(commandLine.length > 0 ? `begin; ${commandLine}; end < /dev/null` : ":");
 	lines.push("if set -q __omp_exit_code");
 	lines.push("  set -l __omp_status $__omp_exit_code");
 	lines.push("  set -e __omp_exit_code");
