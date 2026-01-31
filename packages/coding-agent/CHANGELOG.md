@@ -1,6 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Added phased execution guidance for migrations and refactors to prevent parallel work on dependent layers
+- Added example demonstrating phased execution pattern for porting WASM to N-API with sequential foundation, parallel implementation, integration, and dependent layer phases
+
 ### Removed
 
 - Removed Nushell language server configuration from LSP defaults

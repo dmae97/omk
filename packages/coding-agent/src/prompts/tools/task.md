@@ -18,6 +18,27 @@ Agents with `output="structured"` enforce their own schema; the `schema` paramet
 **Never describe expected output in `context` or task descriptions.** All response format requirements go in the `schema` parameter. Use structured schemas with typed properties—not `{ "type": "string" }`. Prose like "respond as a bullet list" is prohibited.
 </critical>
 
+<instruction id="phased-execution">
+## Phased execution for migrations and refactors
+
+When work has layers where one layer must exist before the next can be built:
+
+1. **Foundation phase** — Create scaffolding, define interfaces, establish the API shape. Do this yourself or in a single task. Never fan out until the contract is known.
+2. **Parallel implementation** — Fan out to independent tasks that all consume the same known interface.
+3. **Integration phase** — Wire things together, update build/CI. Do this yourself.
+4. **Dependent layer** — Fan out again for work that consumes the previous layer.
+
+**Wrong:** Launch "create Rust API" + "update JS bindings to use Rust API" + "update CI for Rust" in parallel. JS bindings need to know the API. CI needs to know what's being built.
+
+**Right:** 
+1. Create Rust API scaffold yourself (or single task)
+2. Fan out: one task per module to implement against the scaffold
+3. Update CI yourself
+4. Fan out: one task per JS binding now that Rust exports are known
+
+The test: Can subagent B write correct code without seeing A's output? If no, they are sequential.
+</instruction>
+
 <agents>
 {{#list agents join="\n"}}
 <agent name="{{name}}"{{#if output}} output="structured"{{/if}}>
@@ -78,6 +99,39 @@ assistant: Uses the Task tool:
     { "id": "AuthApi", "description": "Extract API layer", "args": { "step": "Execute step 2: Extract API calls to api.ts", "files": "src/auth/api.ts" } },
     { "id": "AuthTypes", "description": "Extract types", "args": { "step": "Execute step 3: Move types to types.ts", "files": "src/auth/types.ts" } }
   ]
+}
+</example>
+
+<example name="phased-migration">
+user: "Port the natives package from WASM to N-API"
+assistant: This requires phased execution—JS bindings depend on knowing the Rust API.
+
+Phase 1: I'll create the N-API scaffold myself to establish the API shape.
+assistant: [Uses Edit tool to create Cargo.toml with napi-rs, writes lib.rs with module structure and exported function signatures]
+
+Phase 2: Now that the API contract is defined, I'll fan out to implement each module.
+assistant: Uses the Task tool:
+{
+  "agent": "task",
+  "context": "Implementing N-API native module. Scaffold exists at crates/pi-natives with napi-rs setup.\n\nAPI contract (from lib.rs):\n- grep: async fn search(pattern: &str, path: &str, opts: SearchOptions) -> Vec<Match>\n- text: fn visible_width(s: &str) -> usize, fn truncate(s: &str, width: usize) -> String\n- html: fn to_markdown(html: &str) -> String\n- image: fn resize(data: &[u8], width: u32, height: u32) -> Vec<u8>\n\nTask: Implement {{module}} module. File: crates/pi-natives/src/{{module}}.rs",
+  "schema": { "properties": { "exports": { "elements": { "type": "string" } }, "notes": { "type": "string" } } },
+  "tasks": [
+    { "id": "Grep", "description": "Implement parallel grep with ignore crate", "args": { "module": "grep" } },
+    { "id": "Text", "description": "Implement text width/truncate", "args": { "module": "text" } },
+    { "id": "Html", "description": "Implement HTML to markdown", "args": { "module": "html" } },
+    { "id": "Image", "description": "Implement image resize", "args": { "module": "image" } }
+  ]
+}
+
+Phase 3: Rust implementation complete. I'll update CI for native builds myself.
+assistant: [Uses Edit tool to update .github/workflows/ci.yml with cross-platform native build matrix]
+
+Phase 4: Now I'll fan out to update JS bindings—the Rust exports are known.
+assistant: Uses the Task tool:
+{
+  "agent": "task", 
+  "context": "Update JS bindings to load N-API addon instead of WASM workers.\n\nRust exports (from Phase 2):\n{{exports}}\n\nTask: Update packages/natives/src/{{module}}/index.ts to use native addon. Remove worker.ts usage.",
+  ...
 }
 </example>
 
