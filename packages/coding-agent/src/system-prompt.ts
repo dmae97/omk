@@ -11,7 +11,7 @@ import chalk from "chalk";
 import { contextFileCapability } from "./capability/context-file";
 import { systemPromptCapability } from "./capability/system-prompt";
 import { renderPromptTemplate } from "./config/prompt-templates";
-import type { SkillsSettings } from "./config/settings-manager";
+import { SettingsManager, type SkillsSettings } from "./config/settings-manager";
 import { type ContextFile, loadCapability, type SystemPrompt as SystemPromptFile } from "./discovery";
 import { loadSkills, type Skill } from "./extensibility/skills";
 import customSystemPromptTemplate from "./prompts/system/custom-system-prompt.md" with { type: "text" };
@@ -573,11 +573,6 @@ async function getGpuModel(): Promise<string | null> {
 	}
 }
 
-function getShellName(): string {
-	const shell = firstNonEmpty([process.env.SHELL, process.env.ComSpec]);
-	return shell ?? "unknown";
-}
-
 function getTerminalName(): string {
 	const termProgram = process.env.TERM_PROGRAM;
 	const termProgramVersion = process.env.TERM_PROGRAM_VERSION;
@@ -765,6 +760,9 @@ async function getEnvironmentInfo(): Promise<Array<{ label: string; value: strin
 		await saveSystemInfoCache(sysInfo);
 	}
 
+	// Get the actual shell used for command execution (not $SHELL)
+	const shellConfig = await SettingsManager.getGlobalShellConfig();
+
 	return [
 		{ label: "OS", value: sysInfo.os },
 		{ label: "Distro", value: sysInfo.distro },
@@ -773,7 +771,7 @@ async function getEnvironmentInfo(): Promise<Array<{ label: string; value: strin
 		{ label: "CPU", value: sysInfo.cpu },
 		{ label: "GPU", value: sysInfo.gpu },
 		{ label: "Disk", value: sysInfo.disk },
-		{ label: "Shell", value: getShellName() },
+		{ label: "Shell", value: shellConfig.shell },
 		{ label: "Terminal", value: getTerminalName() },
 		{ label: "DE", value: getDesktopEnvironment() },
 		{ label: "WM", value: getWindowManager() },
