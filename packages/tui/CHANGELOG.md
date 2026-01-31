@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [9.2.2] - 2026-01-31
+
 ### Added
 - Added setAutocompleteMaxVisible() configuration (3-20 items)
 - Added image detection to terminal capabilities (containsImage method)

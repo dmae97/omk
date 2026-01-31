@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [9.2.2] - 2026-01-31
+
 ### Added
 - Added grep CLI subcommand (`omp grep`) for testing pattern matching
 - Added fuzzy matching for model resolution with scoring and ranking fallback

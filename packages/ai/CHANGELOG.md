@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [9.2.2] - 2026-01-31
 ### Added
 
 - Added OpenCode Zen provider with API key authentication for accessing multiple AI models
