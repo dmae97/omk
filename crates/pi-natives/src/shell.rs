@@ -850,33 +850,18 @@ impl builtins::Command for TimeoutCommand {
 				spawn_execution_tracker(baseline_set, execution_target.clone(), tracker_done.clone());
 			let run_future = context.shell.run_string(command_line, &params);
 			tokio::pin!(run_future);
-			let mut timed_out = false;
 			let result = tokio::select! {
-				result = &mut run_future => Some(result),
+				result = &mut run_future => result,
 				() = time::sleep(timeout) => {
-					timed_out = true;
-					None
+					wait_for_execution_target(&execution_target, Duration::from_millis(200)).await;
+					terminate_execution_processes(&execution_target).await;
+					let _ = time::timeout(Duration::from_millis(1500), &mut run_future).await;
+					Ok(ExecutionResult::new(124))
 				}
 			};
-
-			if result.is_none() {
-				wait_for_execution_target(&execution_target, Duration::from_millis(200)).await;
-				terminate_execution_processes(&execution_target).await;
-				let _ = time::timeout(Duration::from_millis(1500), &mut run_future).await;
-				tracker_done.store(true, Ordering::Release);
-				let _ = tracker_handle.await;
-				return Ok(ExecutionResult::new(124));
-			}
-
 			tracker_done.store(true, Ordering::Release);
 			let _ = tracker_handle.await;
-
-			if timed_out {
-				return Ok(ExecutionResult::new(124));
-			}
-
-			let result = result.expect("result ensured")?;
-			Ok(result)
+			Ok(result?)
 		}
 	}
 }
