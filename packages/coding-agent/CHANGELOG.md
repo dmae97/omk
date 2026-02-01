@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [10.1.0] - 2026-02-01
 ### Added
 
 - Added work scheduling profiler to debug menu for analyzing CPU scheduling patterns over the last 30 seconds

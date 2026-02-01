@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [10.1.0] - 2026-02-01
+
 ### Breaking Changes
 
 - Changed `executionId` parameter type from `string` to `number` in `abortShellExecution()` and `ShellExecuteOptions`
