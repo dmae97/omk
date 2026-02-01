@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [9.6.1] - 2026-02-01
+
 ### Fixed
 
 - Fixed output handling to prioritize text/markdown over text/plain when both are available, ensuring Markdown content is displayed correctly

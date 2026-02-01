@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [9.6.1] - 2026-02-01
 ### Added
 
 - Added `matchesKittySequence` function to match Kitty protocol sequences for codepoint and modifier

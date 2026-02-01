@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [9.6.1] - 2026-02-01
 ### Changed
 
 - Improved performance of key ID parsing with optimized cache lookup strategy
