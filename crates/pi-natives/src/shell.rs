@@ -14,7 +14,9 @@
 
 use std::{
 	collections::HashMap,
-	io::{Read, Write},
+	fs,
+	io::{self, Write},
+	str,
 	sync::{
 		Arc, LazyLock,
 		atomic::{AtomicU64, Ordering},
@@ -40,38 +42,42 @@ use napi::{
 };
 use napi_derive::napi;
 use parking_lot::Mutex;
+use tokio::{io::AsyncReadExt as _, sync::oneshot};
 use tokio_util::sync::CancellationToken;
 #[cfg(windows)]
 use windows::configure_windows_path;
 
-use crate::work::launch_task;
+use crate::work::launch_async;
 
-type ExecutionMap = HashMap<String, ExecutionControl>;
-type SessionMap = HashMap<String, Arc<TokioMutex<ShellSession>>>;
+type ExecutionMap = HashMap<u64, ExecutionControl>;
 
 struct ExecutionControl {
-	cancel:      tokio::sync::oneshot::Sender<()>,
-	session_key: String,
+	cancel:   oneshot::Sender<()>,
+	shell_id: u64,
 }
 
 struct ExecutionGuard {
-	execution_id: String,
+	execution_id: u64,
 }
 
 impl Drop for ExecutionGuard {
 	fn drop(&mut self) {
-		let mut executions = EXECUTIONS.lock();
-		executions.remove(&self.execution_id);
+		EXECUTIONS.lock().remove(&self.execution_id);
 	}
 }
 
-struct ShellSession {
+struct ShellSessionCore {
 	shell: BrushShell,
 }
 
+#[derive(Clone)]
+struct ShellConfig {
+	session_env:   Option<HashMap<String, String>>,
+	snapshot_path: Option<String>,
+}
+
 static EXECUTIONS: LazyLock<Mutex<ExecutionMap>> = LazyLock::new(|| Mutex::new(HashMap::new()));
-static SESSIONS: LazyLock<Mutex<SessionMap>> = LazyLock::new(|| Mutex::new(HashMap::new()));
-static SESSION_COUNTER: AtomicU64 = AtomicU64::new(1);
+static SHELL_COUNTER: AtomicU64 = AtomicU64::new(1);
 static EXECUTION_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 /// Options for configuring a persistent shell session.
@@ -110,9 +116,9 @@ pub struct ShellRunResult {
 /// Persistent brush-core shell session.
 #[napi]
 pub struct Shell {
-	session_key:   String,
-	session_env:   Option<HashMap<String, String>>,
-	snapshot_path: Option<String>,
+	id:      u64,
+	session: Arc<TokioMutex<Option<ShellSessionCore>>>,
+	config:  ShellConfig,
 }
 
 #[napi]
@@ -122,10 +128,12 @@ impl Shell {
 	///
 	/// The options set session-scoped environment variables and a snapshot path.
 	pub fn new(options: Option<ShellOptions>) -> Self {
-		let session_key = next_session_key();
-		let (session_env, snapshot_path) =
-			options.map_or((None, None), |opt| (opt.session_env, opt.snapshot_path));
-		Self { session_key, session_env, snapshot_path }
+		let id = SHELL_COUNTER.fetch_add(1, Ordering::Relaxed);
+		let config = options.map_or_else(
+			|| ShellConfig { session_env: None, snapshot_path: None },
+			|opt| ShellConfig { session_env: opt.session_env, snapshot_path: opt.snapshot_path },
+		);
+		Self { id, session: Arc::new(TokioMutex::new(None)), config }
 	}
 
 	/// Run a shell command using the provided options.
@@ -141,26 +149,101 @@ impl Shell {
 			ThreadsafeFunction<String>,
 		>,
 	) -> Result<ShellRunResult> {
-		let execution_id = next_execution_id();
+		let execution_id = EXECUTION_COUNTER.fetch_add(1, Ordering::Relaxed);
+		let timeout_ms = options.timeout_ms;
 
-		let execute_options = ShellExecuteOptions {
-			command: options.command,
-			cwd: options.cwd,
-			env: options.env,
-			session_env: self.session_env.clone(),
-			timeout_ms: options.timeout_ms,
-			execution_id,
-			session_key: self.session_key.clone(),
-			snapshot_path: self.snapshot_path.clone(),
+		let (cancel_tx, cancel_rx) = oneshot::channel();
+		{
+			let mut executions = EXECUTIONS.lock();
+			executions
+				.insert(execution_id, ExecutionControl { cancel: cancel_tx, shell_id: self.id });
+		}
+		let _guard = ExecutionGuard { execution_id };
+
+		let session = self.session.clone();
+		let config = self.config.clone();
+		let cancel_token = CancellationToken::new();
+
+		let mut run_task = tokio::spawn({
+			let cancel_token = cancel_token.clone();
+			async move {
+				let mut session_guard = session.lock().await;
+				if session_guard.is_none() {
+					*session_guard = Some(create_session(&config).await?);
+				}
+				let session_core = session_guard.as_mut().unwrap();
+				run_shell_command(session_core, &options, on_chunk, cancel_token).await
+			}
+		});
+
+		let mut cancelled = false;
+		let mut timed_out = false;
+		let mut tainted = false;
+
+		let run_result = {
+			let run_result = if let Some(ms) = timeout_ms {
+				let timeout = time::sleep(Duration::from_millis(ms as u64));
+				tokio::pin!(timeout);
+
+				tokio::select! {
+					result = &mut run_task => Some(result),
+					_ = cancel_rx => {
+						cancelled = true;
+						cancel_token.cancel();
+						None
+					}
+					() = &mut timeout => {
+						timed_out = true;
+						cancel_token.cancel();
+						None
+					}
+				}
+			} else {
+				tokio::select! {
+					result = &mut run_task => Some(result),
+					_ = cancel_rx => {
+						cancelled = true;
+						cancel_token.cancel();
+						None
+					}
+				}
+			};
+
+			if let Some(run_result) = run_result {
+				let run_result = match run_result {
+					Ok(result) => result,
+					Err(err) => {
+						*self.session.lock().await = None;
+						return Err(Error::from_reason(format!("Shell execution task failed: {err}")));
+					},
+				};
+				Some(run_result?)
+			} else {
+				match time::timeout(Duration::from_millis(1500), &mut run_task).await {
+					Ok(Err(_)) => tainted = true,
+					Err(_) => {
+						tainted = true;
+						run_task.abort();
+					},
+					_ => {},
+				}
+				None
+			}
 		};
 
-		execute_shell_with_options(execute_options, on_chunk)
-			.await
-			.map(|result| ShellRunResult {
-				exit_code: result.exit_code,
-				cancelled: result.cancelled,
-				timed_out: result.timed_out,
-			})
+		if tainted {
+			*self.session.lock().await = None;
+		}
+
+		let Some(run_result) = run_result else {
+			return Ok(ShellRunResult { exit_code: None, cancelled, timed_out });
+		};
+
+		if should_reset_session(&run_result) {
+			*self.session.lock().await = None;
+		}
+
+		Ok(ShellRunResult { exit_code: Some(exit_code(&run_result)), cancelled, timed_out })
 	}
 
 	/// Abort all running commands for this shell session.
@@ -168,17 +251,15 @@ impl Shell {
 	/// Returns `Ok(())` even when no commands are running.
 	#[napi]
 	pub fn abort(&self) -> Result<()> {
-		let execution_ids: Vec<String> = {
-			let executions = EXECUTIONS.lock();
-			executions
-				.iter()
-				.filter(|(_, control)| control.session_key == self.session_key)
-				.map(|(execution_id, _)| execution_id.clone())
-				.collect()
-		};
-
-		for execution_id in execution_ids {
-			abort_shell_execution(execution_id)?;
+		let mut executions = EXECUTIONS.lock();
+		let ids: Vec<u64> = executions
+			.iter()
+			.filter_map(|(id, ctrl)| (ctrl.shell_id == self.id).then_some(*id))
+			.collect();
+		for id in ids {
+			if let Some(ctrl) = executions.remove(&id) {
+				let _ = ctrl.cancel.send(());
+			}
 		}
 
 		Ok(())
@@ -199,9 +280,7 @@ pub struct ShellExecuteOptions {
 	/// Timeout in milliseconds before cancelling the command.
 	pub timeout_ms:    Option<u32>,
 	/// Unique identifier for this execution.
-	pub execution_id:  String,
-	/// Session key for a persistent brush shell instance.
-	pub session_key:   String,
+	pub execution_id:  u32,
 	/// Optional snapshot file to source on session creation.
 	pub snapshot_path: Option<String>,
 }
@@ -217,10 +296,11 @@ pub struct ShellExecuteResult {
 	pub timed_out: bool,
 }
 
-/// Execute a brush shell command with explicit session metadata.
+/// Execute a brush shell command.
 ///
-/// The `on_chunk` callback receives streamed stdout/stderr output. Returns the
-/// exit code when the command completes, or flags when cancelled or timed out.
+/// Creates a fresh session for each call. The `on_chunk` callback receives
+/// streamed stdout/stderr output. Returns the exit code when the command
+/// completes, or flags when cancelled or timed out.
 #[napi]
 pub async fn execute_shell(
 	options: ShellExecuteOptions,
@@ -228,48 +308,46 @@ pub async fn execute_shell(
 		ThreadsafeFunction<String>,
 	>,
 ) -> Result<ShellExecuteResult> {
-	execute_shell_with_options(options, on_chunk).await
-}
-
-async fn execute_shell_with_options(
-	options: ShellExecuteOptions,
-	on_chunk: Option<ThreadsafeFunction<String>>,
-) -> Result<ShellExecuteResult> {
-	let execution_id = options.execution_id.clone();
+	let execution_id = options.execution_id as u64;
 	let timeout_ms = options.timeout_ms;
 
-	let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+	let (cancel_tx, cancel_rx) = oneshot::channel();
 	{
 		let mut executions = EXECUTIONS.lock();
 		if executions.contains_key(&execution_id) {
 			return Err(Error::from_reason("Execution already running"));
 		}
-		executions.insert(execution_id.clone(), ExecutionControl {
-			cancel:      cancel_tx,
-			session_key: options.session_key.clone(),
-		});
+		executions.insert(execution_id, ExecutionControl { cancel: cancel_tx, shell_id: 0 });
 	}
 	let _guard = ExecutionGuard { execution_id };
 
-	let session = get_or_create_session(&options).await?;
+	let config = ShellConfig {
+		session_env:   options.session_env.clone(),
+		snapshot_path: options.snapshot_path.clone(),
+	};
+	let run_options = ShellRunOptions {
+		command:    options.command,
+		cwd:        options.cwd,
+		env:        options.env,
+		timeout_ms: None, // handled below
+	};
+
 	let cancel_token = CancellationToken::new();
-	let session_key = options.session_key.clone();
+
 	let mut run_task = tokio::spawn({
-		let session = session.clone();
 		let cancel_token = cancel_token.clone();
 		async move {
-			let mut session = session.lock().await;
-			run_shell_command(&mut session, &options, on_chunk, cancel_token).await
+			let mut session = create_session(&config).await?;
+			run_shell_command(&mut session, &run_options, on_chunk, cancel_token).await
 		}
 	});
 
 	let mut cancelled = false;
 	let mut timed_out = false;
-	let mut tainted = false;
 
 	let run_result = {
 		let run_result = if let Some(ms) = timeout_ms {
-			let timeout = time::sleep(Duration::from_millis(u64::from(ms)));
+			let timeout = time::sleep(Duration::from_millis(ms as u64));
 			tokio::pin!(timeout);
 
 			tokio::select! {
@@ -300,35 +378,24 @@ async fn execute_shell_with_options(
 			let run_result = match run_result {
 				Ok(result) => result,
 				Err(err) => {
-					remove_session(&session_key);
 					return Err(Error::from_reason(format!("Shell execution task failed: {err}")));
 				},
 			};
 			Some(run_result?)
 		} else {
-			if let Ok(join_result) = time::timeout(Duration::from_millis(1500), &mut run_task).await {
-				if join_result.is_err() {
-					tainted = true;
-				}
-			} else {
-				tainted = true;
-				run_task.abort();
+			match time::timeout(Duration::from_millis(1500), &mut run_task).await {
+				Ok(Err(_)) | Err(_) => {
+					run_task.abort();
+				},
+				_ => {},
 			}
 			None
 		}
 	};
 
-	if tainted {
-		remove_session(&session_key);
-	}
-
 	let Some(run_result) = run_result else {
 		return Ok(ShellExecuteResult { exit_code: None, cancelled, timed_out });
 	};
-
-	if should_reset_session(&run_result) {
-		remove_session(&session_key);
-	}
 
 	Ok(ShellExecuteResult { exit_code: Some(exit_code(&run_result)), cancelled, timed_out })
 }
@@ -354,33 +421,15 @@ const fn exit_code(result: &ExecutionResult) -> i32 {
 ///
 /// Returns `Ok(())` even when the execution ID is not active.
 #[napi]
-pub fn abort_shell_execution(execution_id: String) -> Result<()> {
+pub fn abort_shell_execution(execution_id: u32) -> Result<()> {
 	let mut executions = EXECUTIONS.lock();
-	if let Some(control) = executions.remove(&execution_id) {
+	if let Some(control) = executions.remove(&(execution_id as u64)) {
 		let _ = control.cancel.send(());
 	}
 	Ok(())
 }
 
-async fn get_or_create_session(
-	options: &ShellExecuteOptions,
-) -> Result<Arc<TokioMutex<ShellSession>>> {
-	if let Some(session) = { SESSIONS.lock().get(&options.session_key).cloned() } {
-		return Ok(session);
-	}
-
-	let session = Arc::new(TokioMutex::new(create_session(options).await?));
-
-	let mut sessions = SESSIONS.lock();
-	if let Some(existing) = sessions.get(&options.session_key) {
-		return Ok(existing.clone());
-	}
-
-	sessions.insert(options.session_key.clone(), session.clone());
-	Ok(session)
-}
-
-async fn create_session(options: &ShellExecuteOptions) -> Result<ShellSession> {
+async fn create_session(config: &ShellConfig) -> Result<ShellSessionCore> {
 	let create_options = CreateOptions {
 		interactive: false,
 		login: false,
@@ -416,7 +465,7 @@ async fn create_session(options: &ShellExecuteOptions) -> Result<ShellSession> {
 			.map_err(|err| Error::from_reason(format!("Failed to set env: {err}")))?;
 	}
 
-	if let Some(env) = options.session_env.as_ref() {
+	if let Some(env) = config.session_env.as_ref() {
 		for (key, value) in env {
 			if should_skip_env_var(key) {
 				continue;
@@ -433,11 +482,11 @@ async fn create_session(options: &ShellExecuteOptions) -> Result<ShellSession> {
 	#[cfg(windows)]
 	configure_windows_path(&mut shell)?;
 
-	if let Some(snapshot_path) = options.snapshot_path.as_ref() {
+	if let Some(snapshot_path) = config.snapshot_path.as_ref() {
 		source_snapshot(&mut shell, snapshot_path).await?;
 	}
 
-	Ok(ShellSession { shell })
+	Ok(ShellSessionCore { shell })
 }
 
 async fn source_snapshot(shell: &mut BrushShell, snapshot_path: &str) -> Result<()> {
@@ -456,8 +505,8 @@ async fn source_snapshot(shell: &mut BrushShell, snapshot_path: &str) -> Result<
 }
 
 async fn run_shell_command(
-	session: &mut ShellSession,
-	options: &ShellExecuteOptions,
+	session: &mut ShellSessionCore,
+	options: &ShellRunOptions,
 	on_chunk: Option<ThreadsafeFunction<String>>,
 	cancel_token: CancellationToken,
 ) -> Result<ExecutionResult> {
@@ -505,8 +554,8 @@ async fn run_shell_command(
 		}
 	}
 
-	let reader_handle = launch_task(move || -> Result<()> {
-		read_output(reader_file, on_chunk);
+	let reader_handle = launch_async(async move {
+		read_output(reader_file, on_chunk).await;
 		Ok(())
 	});
 	let result = session
@@ -524,7 +573,7 @@ async fn run_shell_command(
 
 	drop(params);
 
-	let _: Result<()> = reader_handle.wait().await;
+	let () = reader_handle.wait().await?;
 
 	result.map_err(|err| Error::from_reason(format!("Shell execution failed: {err}")))
 }
@@ -587,16 +636,6 @@ fn should_skip_env_var(key: &str) -> bool {
 	)
 }
 
-fn next_session_key() -> String {
-	let counter = SESSION_COUNTER.fetch_add(1, Ordering::Relaxed);
-	format!("shell-{}-{counter}", std::process::id())
-}
-
-fn next_execution_id() -> String {
-	let counter = EXECUTION_COUNTER.fetch_add(1, Ordering::Relaxed);
-	format!("exec-{}-{counter}", std::process::id())
-}
-
 const fn should_reset_session(result: &ExecutionResult) -> bool {
 	match result.next_control_flow {
 		ExecutionControlFlow::Normal => false,
@@ -607,54 +646,73 @@ const fn should_reset_session(result: &ExecutionResult) -> bool {
 	}
 }
 
-fn remove_session(session_key: &str) {
-	let mut sessions = SESSIONS.lock();
-	sessions.remove(session_key);
-}
+async fn read_output(reader: fs::File, on_chunk: Option<ThreadsafeFunction<String>>) {
+	const REPLACEMENT: &str = "\u{FFFD}";
+	const BUF: usize = 4096;
+	let mut buf = [0u8; BUF + 4]; // +4 for max UTF-8 char
+	let mut it = 0;
 
-fn read_output(mut reader: std::fs::File, on_chunk: Option<ThreadsafeFunction<String>>) {
-	let mut buf = [0u8; 8192];
-	let mut pending = Vec::new();
+	let reader = tokio::fs::File::from_std(reader);
+	tokio::pin!(reader);
+
 	loop {
-		let read = match reader.read(&mut buf) {
-			Ok(0) => break,
-			Ok(count) => count,
+		let n = match reader.read(&mut buf[it..BUF]).await {
+			Ok(0) => break, // EOF
+			Ok(n) => n,
+			Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
 			Err(_) => break,
 		};
+		it += n;
 
-		pending.extend_from_slice(&buf[..read]);
-		let mut start = 0;
-		while start < pending.len() {
-			match std::str::from_utf8(&pending[start..]) {
+		// Consume as much of `pending` as is decodable *right now*.
+		while it > 0 {
+			let pending = &buf[..it];
+			match str::from_utf8(pending) {
 				Ok(text) => {
 					emit_chunk(text, on_chunk.as_ref());
-					pending.clear();
+					it = 0;
 					break;
 				},
 				Err(err) => {
-					let valid = err.valid_up_to();
-					if valid > 0 {
-						let text = String::from_utf8_lossy(&pending[start..start + valid]);
-						emit_chunk(&text, on_chunk.as_ref());
-						start += valid;
+					let p = err.valid_up_to();
+					if p > 0 {
+						// SAFETY: [..p] is guaranteed valid UTF-8 by valid_up_to().
+						let text = unsafe { str::from_utf8_unchecked(&pending[..p]) };
+						emit_chunk(text, on_chunk.as_ref());
+						// copy p..it to the beginning of the buffer
+						buf.copy_within(p..it, 0);
+						it -= p;
 					}
 
-					if let Some(error_len) = err.error_len() {
-						emit_chunk("\u{FFFD}", on_chunk.as_ref());
-						start += error_len;
-						continue;
+					match err.error_len() {
+						Some(p) => {
+							// Invalid byte sequence: emit replacement and drop those bytes.
+							emit_chunk(REPLACEMENT, on_chunk.as_ref());
+							// copy p..it to the beginning of the buffer
+							buf.copy_within(p..it, 0);
+							it -= p;
+							// continue loop in case more bytes remain after the
+							// invalid sequence
+						},
+						None => {
+							// Incomplete UTF-8 sequence at end: keep bytes for next read.
+							break;
+						},
 					}
-
-					pending = pending.split_off(start);
-					break;
 				},
 			}
 		}
 	}
 
-	if !pending.is_empty() {
-		let text = String::from_utf8_lossy(&pending);
-		emit_chunk(&text, on_chunk.as_ref());
+	// Flush whatever is left at EOF (including an incomplete final sequence).
+	for chunk in buf[..it].utf8_chunks() {
+		let valid = chunk.valid();
+		if !valid.is_empty() {
+			emit_chunk(valid, on_chunk.as_ref());
+		}
+		if !chunk.invalid().is_empty() {
+			emit_chunk(REPLACEMENT, on_chunk.as_ref());
+		}
 	}
 }
 
@@ -664,39 +722,29 @@ fn emit_chunk(text: &str, callback: Option<&ThreadsafeFunction<String>>) {
 	}
 }
 
-fn pipe_to_files(label: &str) -> Result<(std::fs::File, std::fs::File)> {
-	let (pipe_reader, pipe_writer) = os_pipe::pipe()
+fn pipe_to_files(label: &str) -> Result<(fs::File, fs::File)> {
+	let (r, w) = os_pipe::pipe()
 		.map_err(|err| Error::from_reason(format!("Failed to create {label} pipe: {err}")))?;
 
 	#[cfg(unix)]
-	let (reader_file, writer_file): (std::fs::File, std::fs::File) = {
-		use std::os::unix::io::IntoRawFd;
-		let reader_fd = pipe_reader.into_raw_fd();
-		let writer_fd = pipe_writer.into_raw_fd();
+	let (r, w): (fs::File, fs::File) = {
+		use std::os::unix::io::{FromRawFd, IntoRawFd};
+		let r = r.into_raw_fd();
+		let w = w.into_raw_fd();
 		// SAFETY: We just obtained these fds from os_pipe and own them exclusively.
-		unsafe {
-			(
-				std::os::unix::io::FromRawFd::from_raw_fd(reader_fd),
-				std::os::unix::io::FromRawFd::from_raw_fd(writer_fd),
-			)
-		}
+		unsafe { (FromRawFd::from_raw_fd(r), FromRawFd::from_raw_fd(w)) }
 	};
 
 	#[cfg(windows)]
-	let (reader_file, writer_file): (std::fs::File, std::fs::File) = {
-		use std::os::windows::io::IntoRawHandle;
-		let reader_handle = pipe_reader.into_raw_handle();
-		let writer_handle = pipe_writer.into_raw_handle();
+	let (r, w): (fs::File, fs::File) = {
+		use std::os::windows::io::{FromRawHandle, IntoRawHandle};
+		let r = r.into_raw_handle();
+		let w = w.into_raw_handle();
 		// SAFETY: We just obtained these handles from os_pipe and own them exclusively.
-		unsafe {
-			(
-				std::os::windows::io::FromRawHandle::from_raw_handle(reader_handle),
-				std::os::windows::io::FromRawHandle::from_raw_handle(writer_handle),
-			)
-		}
+		unsafe { (FromRawHandle::from_raw_handle(r), FromRawHandle::from_raw_handle(w)) }
 	};
 
-	Ok((reader_file, writer_file))
+	Ok((r, w))
 }
 
 #[derive(Parser)]
