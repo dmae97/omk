@@ -41,9 +41,10 @@ jobs:
           - os: ubuntu-latest
             platform: linux
             arch: x64
-          - os: ubuntu-24.04-arm64
+          - os: ubuntu-latest
             platform: linux
             arch: arm64
+            target: aarch64-unknown-linux-gnu
           - os: macos-15-intel
             platform: darwin
             arch: x64
@@ -59,11 +60,25 @@ jobs:
         with:
           lfs: true
       - uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3"
+      - name: Install cross-compilation toolchain
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
       - name: Build native addon
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.target }}
+          TARGET_PLATFORM: ${{ matrix.platform }}
+          TARGET_ARCH: ${{ matrix.arch }}
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         run: bun --cwd=packages/natives run build:native
       - name: Upload native addon
         uses: actions/upload-artifact@v4

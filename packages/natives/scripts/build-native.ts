@@ -4,18 +4,24 @@ import * as path from "node:path";
 
 const repoRoot = path.join(import.meta.dir, "../../..");
 const rustDir = path.join(repoRoot, "crates/pi-natives");
+const cargoTarget = process.env.CARGO_BUILD_TARGET;
 const targetRoots = [
 	process.env.CARGO_TARGET_DIR ? path.resolve(process.env.CARGO_TARGET_DIR) : undefined,
 	path.join(repoRoot, "target"),
 	path.join(rustDir, "target"),
 ].filter((value): value is string => Boolean(value));
-const releaseDirs = targetRoots.map(root => path.join(root, "release"));
+const releaseDirs = targetRoots.flatMap(root => {
+	const base = cargoTarget ? path.join(root, cargoTarget, "release") : path.join(root, "release");
+	return cargoTarget ? [base, path.join(root, "release")] : [base];
+});
 const nativeDir = path.join(import.meta.dir, "../native");
 
-const platform = process.platform;
-const arch = process.arch;
+const platform = process.env.TARGET_PLATFORM || process.platform;
+const arch = process.env.TARGET_ARCH || process.arch;
 
-const buildResult = await $`cargo build --release`.cwd(rustDir).nothrow();
+const cargoArgs = ["build", "--release"];
+if (cargoTarget) cargoArgs.push("--target", cargoTarget);
+const buildResult = await $`cargo ${cargoArgs}`.cwd(rustDir).nothrow();
 if (buildResult.exitCode !== 0) {
 	const stderrText =
 		typeof buildResult.stderr === "string"

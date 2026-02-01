@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Support for cross-compilation via `CARGO_BUILD_TARGET` environment variable
+- Support for overriding platform and architecture detection via `TARGET_PLATFORM` and `TARGET_ARCH` environment variables
+
+### Changed
+
+- Native build script now searches for release artifacts in target-specific directories when cross-compiling
 
 ## [9.5.0] - 2026-02-01
 
