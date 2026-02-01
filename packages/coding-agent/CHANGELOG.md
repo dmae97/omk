@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [9.6.2] - 2026-02-01
 ### Changed
 
 - Replaced hardcoded ellipsis strings with Unicode ellipsis character (…) throughout rendering code

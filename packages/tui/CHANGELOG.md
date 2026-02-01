@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [9.6.2] - 2026-02-01
 ### Changed
 
 - Renamed `EllipsisKind` enum to `Ellipsis` for clearer API naming
