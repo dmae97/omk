@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `find` now returns a single match when given a file path instead of failing with "not a directory"
+
 ## [9.8.0] - 2026-02-01
 ### Breaking Changes
 

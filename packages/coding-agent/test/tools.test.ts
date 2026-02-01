@@ -515,6 +515,22 @@ function b() {
 	});
 
 	describe("find tool", () => {
+		it("should return a single file when given a file path", async () => {
+			const testFile = path.join(testDir, "single.txt");
+			fs.writeFileSync(testFile, "single");
+
+			const result = await findTool.execute("test-call-13a", {
+				pattern: testFile,
+			});
+
+			const outputLines = getTextOutput(result)
+				.split("\n")
+				.map(line => line.trim())
+				.filter(Boolean);
+
+			expect(outputLines).toEqual(["single.txt"]);
+		});
+
 		it("should include hidden files that are not gitignored", async () => {
 			const hiddenDir = path.join(testDir, ".secret");
 			fs.mkdirSync(hiddenDir);

@@ -75,6 +75,11 @@ function parsePatternPath(pattern: string): { basePath: string; globPattern: str
 	return { basePath, globPattern };
 }
 
+function hasGlobChars(pattern: string): boolean {
+	const globChars = ["*", "?", "[", "{"];
+	return globChars.some(char => pattern.includes(char));
+}
+
 export interface FindToolDetails {
 	truncation?: TruncationResult;
 	resultLimitReached?: number;
@@ -94,6 +99,8 @@ export interface FindToolDetails {
 export interface FindOperations {
 	/** Check if path exists */
 	exists: (absolutePath: string) => Promise<boolean> | boolean;
+	/** Optional stat for distinguishing files vs directories. */
+	stat?: (absolutePath: string) => Promise<{ isFile(): boolean; isDirectory(): boolean }> | { isFile(): boolean; isDirectory(): boolean };
 	/** Find files matching glob pattern. Returns relative paths. */
 	glob: (pattern: string, cwd: string, options: { ignore: string[]; limit: number }) => Promise<string[]> | string[];
 }
@@ -136,6 +143,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				throw new ToolError("Pattern must not be empty");
 			}
 
+			const hasGlob = hasGlobChars(normalizedPattern);
 			const { basePath, globPattern } = parsePatternPath(normalizedPattern);
 			const searchPath = resolveToCwd(basePath, this.session.cwd);
 
@@ -159,6 +167,20 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 			if (this.customOps?.glob) {
 				if (!(await this.customOps.exists(searchPath))) {
 					throw new ToolError(`Path not found: ${searchPath}`);
+				}
+
+				if (!hasGlob && this.customOps.stat) {
+					const stat = await this.customOps.stat(searchPath);
+					if (stat.isFile()) {
+						const files = [scopePath];
+						const details: FindToolDetails = {
+							scopePath,
+							fileCount: 1,
+							files,
+							truncated: false,
+						};
+						return toolResult(details).text(files.join("\n")).done();
+					}
 				}
 
 				const results = await this.customOps.glob(globPattern, searchPath, {
@@ -212,6 +234,17 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 					throw new ToolError(`Path not found: ${searchPath}`);
 				}
 				throw err;
+			}
+
+			if (!hasGlob && searchStat.isFile()) {
+				const files = [scopePath];
+				const details: FindToolDetails = {
+					scopePath,
+					fileCount: 1,
+					files,
+					truncated: false,
+				};
+				return toolResult(details).text(files.join("\n")).done();
 			}
 			if (!searchStat.isDirectory()) {
 				throw new ToolError(`Path is not a directory: ${searchPath}`);
