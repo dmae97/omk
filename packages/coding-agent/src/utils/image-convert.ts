@@ -1,5 +1,4 @@
-import { PhotonImage } from "@oh-my-pi/pi-natives";
-import { ImageFormat } from "@oh-my-pi/pi-natives/native";
+import { ImageFormat, PhotonImage } from "@oh-my-pi/pi-natives";
 
 /**
  * Convert image to PNG format for terminal display.

@@ -29,17 +29,23 @@ fn build_utf16_string(data: Vec<u16>) -> Utf16String {
 
 #[napi(object)]
 pub struct SliceResult {
+	/// UTF-16 slice containing the selected text.
 	pub text:  Utf16String,
+	/// Visible width of the slice in terminal cells.
 	pub width: u32,
 }
 
 #[napi(object)]
 pub struct ExtractSegmentsResult {
+	/// UTF-16 content before the overlay region.
 	pub before:       Utf16String,
 	#[napi(js_name = "beforeWidth")]
+	/// Visible width of the `before` segment.
 	pub before_width: u32,
+	/// UTF-16 content after the overlay region.
 	pub after:        Utf16String,
 	#[napi(js_name = "afterWidth")]
+	/// Visible width of the `after` segment.
 	pub after_width:  u32,
 }
 
@@ -719,8 +725,9 @@ fn wrap_text_with_ansi_impl(text: &[u16], width: usize) -> Vec<Vec<u16>> {
 	result
 }
 
-/// Wrap text to a visible width, preserving ANSI escape codes across line
-/// breaks.
+/// Wrap text to a visible width, preserving ANSI escape codes across line breaks.
+///
+/// Returns UTF-16 lines with active SGR codes carried across line boundaries.
 #[napi(js_name = "wrapTextWithAnsi")]
 pub fn wrap_text_with_ansi(text: JsString, width: u32) -> Result<Vec<Utf16String>> {
 	let text_u16 = text.into_utf16()?;
@@ -734,7 +741,7 @@ pub fn wrap_text_with_ansi(text: JsString, width: u32) -> Result<Vec<Utf16String
 
 /// Truncate text to a visible width, preserving ANSI codes.
 ///
-/// `ellipsis_kind`: 0 = "…", 1 = "...", 2 = "" (omit)
+/// `ellipsis_kind`: 0 = "…", 1 = "...", 2 = "" (omit); pads with spaces when requested.
 #[napi(js_name = "truncateToWidth")]
 pub fn truncate_to_width(
 	text: JsString<'_>,
@@ -992,6 +999,8 @@ fn slice_with_width_impl(
 }
 
 /// Slice a range of visible columns from a line.
+///
+/// Counts terminal cells, skipping ANSI escapes, and optionally enforces strict width.
 #[napi(js_name = "sliceWithWidth")]
 pub fn slice_with_width(
 	line: JsString,
@@ -1145,6 +1154,8 @@ fn extract_segments_impl(
 }
 
 /// Extract the before/after slices around an overlay region.
+///
+/// Preserves ANSI state so the `after` segment renders correctly after truncation.
 #[napi(js_name = "extractSegments")]
 pub fn extract_segments(
 	line: JsString,
@@ -1177,6 +1188,8 @@ pub fn extract_segments(
 // ============================================================================
 
 /// Calculate visible width of text, excluding ANSI escape sequences.
+///
+/// Tabs count as a fixed-width cell.
 #[napi(js_name = "visibleWidth")]
 pub fn visible_width_napi(text: JsString) -> Result<u32> {
 	let text_u16 = text.into_utf16()?;

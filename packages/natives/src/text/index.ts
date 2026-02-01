@@ -2,25 +2,11 @@
  * ANSI-aware text utilities powered by native bindings.
  */
 
+import { Ellipsis, type SliceWithWidthResult } from "@oh-my-pi/pi-natives";
 import { native } from "../native";
 
-export interface SliceWithWidthResult {
-	text: string;
-	width: number;
-}
-
-export interface ExtractSegmentsResult {
-	before: string;
-	beforeWidth: number;
-	after: string;
-	afterWidth: number;
-}
-
-export const enum Ellipsis {
-	Unicode = 0, // "…"
-	Ascii = 1, // "..."
-	Omit = 2, // ""
-}
+export type { ExtractSegmentsResult, SliceWithWidthResult } from "./types";
+export { Ellipsis } from "./types";
 
 /**
  * Truncate text to fit within a maximum visible width, adding ellipsis if needed.
@@ -43,40 +29,16 @@ export function truncateToWidth(
 }
 
 /**
- * Wrap text to a visible width, preserving ANSI escape codes across line breaks.
- *
- * @param text - Text to wrap (may contain ANSI codes and newlines)
- * @param width - Maximum visible width per line
- * @returns Array of wrapped lines (NOT padded to width)
- */
-export function wrapTextWithAnsi(text: string, width: number): string[] {
-	return native.wrapTextWithAnsi(text, width);
-}
-
-/**
- * Measure the visible width of text (excluding ANSI codes).
- */
-export function visibleWidth(text: string): number {
-	return native.visibleWidth(text);
-}
-
-/**
  * Slice a range of visible columns from a line.
+ * @param line - The line to slice
+ * @param startCol - The starting column
+ * @param length - The length of the slice
+ * @param strict - Whether to strictly enforce the length
+ * @returns The sliced line
  */
 export function sliceWithWidth(line: string, startCol: number, length: number, strict = false): SliceWithWidthResult {
 	if (length <= 0) return { text: "", width: 0 };
 	return native.sliceWithWidth(line, startCol, length, strict);
 }
 
-/**
- * Extract before/after segments around an overlay region.
- */
-export function extractSegments(
-	line: string,
-	beforeEnd: number,
-	afterStart: number,
-	afterLen: number,
-	strictAfter = false,
-): ExtractSegmentsResult {
-	return native.extractSegments(line, beforeEnd, afterStart, afterLen, strictAfter);
-}
+export const { wrapTextWithAnsi, visibleWidth, extractSegments } = native;

@@ -94,14 +94,18 @@ struct ParsedKittySequence {
 	event_type:      Option<u32>,
 }
 
-/// Parsed Kitty keyboard protocol sequence result.
+/// Parsed Kitty keyboard protocol sequence result for a Kitty input sequence.
 #[napi(object)]
 pub struct ParsedKittyResult {
+	/// Primary codepoint associated with the key.
 	pub codepoint:       i32,
+	/// Optional shifted key codepoint from the sequence.
 	pub shifted_key:     Option<i32>,
+	/// Optional base layout key codepoint from the sequence.
 	pub base_layout_key: Option<i32>,
+	/// Modifier bitmask (shift/alt/ctrl), excluding lock bits.
 	pub modifier:        u32,
-	/// 1 = press, 2 = repeat, 3 = release
+	/// Optional event type (1 = press, 2 = repeat, 3 = release).
 	pub event_type:      Option<u32>,
 }
 
@@ -203,7 +207,10 @@ static LETTERS: [&str; 26] = [
 // Public API
 // =============================================================================
 
-/// Matches Kitty protocol keyboard sequences against a codepoint and modifier.
+/// Match Kitty protocol input against a codepoint and modifier mask.
+///
+/// Returns true when the parsed sequence matches the expected codepoint (or
+/// base layout key) and modifier bits.
 #[napi(js_name = "matchesKittySequence")]
 pub fn matches_kitty_sequence(
 	data: String,
@@ -224,12 +231,16 @@ pub fn matches_kitty_sequence(
 }
 
 /// Parse terminal input and return a normalized key identifier.
+///
+/// Returns a key id like "escape" or "ctrl+c", or None if unrecognized.
 #[napi(js_name = "parseKey")]
 pub fn parse_key(data: String, kitty_protocol_active: bool) -> Option<String> {
 	parse_key_inner(data.as_bytes(), kitty_protocol_active).map(|s| s.into_owned())
 }
 
-/// Check if input matches a legacy escape sequence.
+/// Check if input matches a legacy escape sequence for the given key name.
+///
+/// Returns true only when the byte sequence maps to the exact key identifier.
 #[napi(js_name = "matchesLegacySequence")]
 pub fn matches_legacy_sequence(data: String, key_name: String) -> bool {
 	LEGACY_SEQUENCES
@@ -238,12 +249,16 @@ pub fn matches_legacy_sequence(data: String, key_name: String) -> bool {
 }
 
 /// Match input data against a key identifier string.
+///
+/// Returns true when the bytes represent the specified key with modifiers.
 #[napi(js_name = "matchesKey")]
 pub fn matches_key(data: String, key_id: String, kitty_protocol_active: bool) -> bool {
 	matches_key_inner(data.as_bytes(), &key_id, kitty_protocol_active)
 }
 
 /// Parse a Kitty keyboard protocol sequence.
+///
+/// Returns a structured parse result when the input is a valid Kitty sequence.
 #[napi(js_name = "parseKittySequence")]
 pub fn parse_kitty_sequence_napi(data: String) -> Option<ParsedKittyResult> {
 	parse_kitty_sequence(data.as_bytes()).map(|p| ParsedKittyResult {

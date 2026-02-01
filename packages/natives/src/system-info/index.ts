@@ -4,13 +4,6 @@
 
 import { native } from "../native";
 
-export interface SystemInfo {
-	distro?: string;
-	kernel?: string;
-	cpu?: string;
-	disk?: string;
-}
+export type { SystemInfo } from "./types";
 
-export function getSystemInfo(): SystemInfo {
-	return native.getSystemInfo();
-}
+export const { getSystemInfo } = native;

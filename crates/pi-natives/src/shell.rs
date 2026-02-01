@@ -6,7 +6,9 @@
 //!
 //! # Example
 //! ```ignore
-//! const result = await natives.executeShell({ command: "ls" }, (chunk) => {
+//! const shell = new natives.Shell();
+//! const result = await shell.run({ command: "ls" }, (err, chunk) => {
+//!   if (err) return;
 //!   console.log(chunk);
 //! });
 //! ```
@@ -16,14 +18,14 @@ use std::{
 	io::{Read, Write},
 	sync::{
 		Arc, LazyLock,
-		atomic::{AtomicBool, AtomicI32, Ordering},
+		atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering},
 	},
 	time::Duration,
 };
 
 use brush_core::{
-	CreateOptions, ExecutionContext, OpenFile, OpenFiles, ProcessGroupPolicy, Shell, ShellValue,
-	ShellVariable, builtins, env::EnvironmentScope,
+	CreateOptions, ExecutionContext, OpenFile, OpenFiles, ProcessGroupPolicy, Shell as BrushShell,
+	ShellValue, ShellVariable, builtins, env::EnvironmentScope,
 };
 use clap::Parser;
 use napi::{
@@ -40,7 +42,8 @@ type ExecutionMap = HashMap<String, ExecutionControl>;
 type SessionMap = HashMap<String, Arc<TokioMutex<ShellSession>>>;
 
 struct ExecutionControl {
-	cancel: tokio::sync::oneshot::Sender<()>,
+	cancel:      tokio::sync::oneshot::Sender<()>,
+	session_key: String,
 }
 
 struct ExecutionTarget {
@@ -94,40 +97,172 @@ impl Drop for ExecutionGuard {
 }
 
 struct ShellSession {
-	shell: Shell,
+	shell: BrushShell,
 }
 
 static EXECUTIONS: LazyLock<Mutex<ExecutionMap>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 static SESSIONS: LazyLock<Mutex<SessionMap>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+static SESSION_COUNTER: AtomicU64 = AtomicU64::new(1);
+static EXECUTION_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+/// Options for configuring a persistent shell session.
+#[napi(object)]
+pub struct ShellOptions {
+	/// Environment variables to apply once per session.
+	pub session_env:   Option<HashMap<String, String>>,
+	/// Optional snapshot file to source on session creation.
+	pub snapshot_path: Option<String>,
+}
+
+/// Options for running a shell command.
+#[napi(object)]
+pub struct ShellRunOptions {
+	/// Command string to execute in the shell.
+	pub command:    String,
+	/// Working directory for the command.
+	pub cwd:        Option<String>,
+	/// Environment variables to apply for this command only.
+	pub env:        Option<HashMap<String, String>>,
+	/// Timeout in milliseconds before cancelling the command.
+	pub timeout_ms: Option<u32>,
+}
+
+/// Result of running a shell command.
+#[napi(object)]
+pub struct ShellRunResult {
+	/// Exit code when the command completes normally.
+	pub exit_code: Option<i32>,
+	/// Whether the command was cancelled via abort.
+	pub cancelled: bool,
+	/// Whether the command timed out before completion.
+	pub timed_out: bool,
+}
+
+/// Persistent brush-core shell session.
+#[napi]
+pub struct Shell {
+	session_key:   String,
+	session_env:   Option<HashMap<String, String>>,
+	snapshot_path: Option<String>,
+}
+
+#[napi]
+impl Shell {
+	#[napi(constructor)]
+	/// Create a new shell session from optional configuration.
+	///
+	/// The options set session-scoped environment variables and a snapshot path.
+	pub fn new(options: Option<ShellOptions>) -> Self {
+		let session_key = next_session_key();
+		let (session_env, snapshot_path) =
+			options.map_or((None, None), |opt| (opt.session_env, opt.snapshot_path));
+		Self { session_key, session_env, snapshot_path }
+	}
+
+	/// Run a shell command using the provided options.
+	///
+	/// The `on_chunk` callback receives streamed stdout/stderr output. Returns the
+	/// exit code when the command completes, or flags when cancelled or timed out.
+	#[napi]
+	pub async fn run(
+		&self,
+		options: ShellRunOptions,
+		#[napi(ts_arg_type = "((error: Error | null, chunk: string) => void) | undefined | null")]
+		on_chunk: Option<ThreadsafeFunction<String>>,
+	) -> Result<ShellRunResult> {
+		let execution_id = next_execution_id();
+
+		let execute_options = ShellExecuteOptions {
+			command: options.command,
+			cwd: options.cwd,
+			env: options.env,
+			session_env: self.session_env.clone(),
+			timeout_ms: options.timeout_ms,
+			execution_id,
+			session_key: self.session_key.clone(),
+			snapshot_path: self.snapshot_path.clone(),
+		};
+
+		execute_shell_with_options(execute_options, on_chunk)
+			.await
+			.map(|result| ShellRunResult {
+				exit_code: result.exit_code,
+				cancelled: result.cancelled,
+				timed_out: result.timed_out,
+			})
+	}
+
+	/// Abort all running commands for this shell session.
+	///
+	/// Returns `Ok(())` even when no commands are running.
+	#[napi]
+	pub fn abort(&self) -> Result<()> {
+		let execution_ids: Vec<String> = {
+			let executions = EXECUTIONS.lock();
+			executions
+				.iter()
+				.filter(|(_, control)| control.session_key == self.session_key)
+				.map(|(execution_id, _)| execution_id.clone())
+				.collect()
+		};
+
+		for execution_id in execution_ids {
+			abort_shell_execution(execution_id)?;
+		}
+
+		Ok(())
+	}
+}
 
 /// Options for executing a shell command via brush-core.
 #[napi(object)]
 pub struct ShellExecuteOptions {
+	/// Command string to execute in the shell.
 	pub command:       String,
+	/// Working directory for the command.
 	pub cwd:           Option<String>,
+	/// Environment variables to apply for this command only.
 	pub env:           Option<HashMap<String, String>>,
+	/// Environment variables to apply once per session.
 	pub session_env:   Option<HashMap<String, String>>,
+	/// Timeout in milliseconds before cancelling the command.
 	pub timeout_ms:    Option<u32>,
+	/// Unique identifier for this execution.
 	pub execution_id:  String,
+	/// Session key for a persistent brush shell instance.
 	pub session_key:   String,
+	/// Optional snapshot file to source on session creation.
 	pub snapshot_path: Option<String>,
 }
 
 /// Result of executing a shell command via brush-core.
 #[napi(object)]
 pub struct ShellExecuteResult {
+	/// Exit code when the command completes normally.
 	pub exit_code: Option<i32>,
+	/// Whether the command was cancelled via abort.
 	pub cancelled: bool,
+	/// Whether the command timed out before completion.
 	pub timed_out: bool,
 }
 
-/// Execute a brush shell command.
+/// Execute a brush shell command with explicit session metadata.
+///
+/// The `on_chunk` callback receives streamed stdout/stderr output. Returns the
+/// exit code when the command completes, or flags when cancelled or timed out.
 #[napi]
 pub async fn execute_shell(
 	options: ShellExecuteOptions,
 	#[napi(ts_arg_type = "((chunk: string) => void) | undefined | null")] on_chunk: Option<
 		ThreadsafeFunction<String>,
 	>,
+) -> Result<ShellExecuteResult> {
+	execute_shell_with_options(options, on_chunk).await
+}
+
+async fn execute_shell_with_options(
+	options: ShellExecuteOptions,
+	on_chunk: Option<ThreadsafeFunction<String>>,
 ) -> Result<ShellExecuteResult> {
 	let execution_id = options.execution_id.clone();
 	let timeout_ms = options.timeout_ms;
@@ -138,7 +273,10 @@ pub async fn execute_shell(
 		if executions.contains_key(&execution_id) {
 			return Err(Error::from_reason("Execution already running"));
 		}
-		executions.insert(execution_id.clone(), ExecutionControl { cancel: cancel_tx });
+		executions.insert(execution_id.clone(), ExecutionControl {
+			cancel:      cancel_tx,
+			session_key: options.session_key.clone(),
+		});
 	}
 	let _guard = ExecutionGuard { execution_id };
 
@@ -185,7 +323,12 @@ pub async fn execute_shell(
 			}
 		};
 
-		if run_result.is_none() {
+		if let Some(run_result) = run_result {
+			Some(
+				run_result
+					.map_err(|err| Error::from_reason(format!("Shell execution failed: {err}")))?,
+			)
+		} else {
 			wait_for_execution_target(&execution_target, Duration::from_millis(200)).await;
 			terminate_execution_processes(&execution_target).await;
 			if time::timeout(Duration::from_millis(1500), &mut run_future)
@@ -195,12 +338,6 @@ pub async fn execute_shell(
 				tainted = true;
 			}
 			None
-		} else {
-			Some(
-				run_result
-					.expect("run_result ensured")
-					.map_err(|err| Error::from_reason(format!("Shell execution failed: {err}")))?,
-			)
 		}
 	};
 
@@ -222,7 +359,9 @@ pub async fn execute_shell(
 	Ok(ShellExecuteResult { exit_code: Some(i32::from(run_result.exit_code)), cancelled, timed_out })
 }
 
-/// Abort a running shell execution.
+/// Abort a running shell execution by ID.
+///
+/// Returns `Ok(())` even when the execution ID is not active.
 #[napi]
 pub fn abort_shell_execution(execution_id: String) -> Result<()> {
 	let mut executions = EXECUTIONS.lock();
@@ -235,7 +374,7 @@ pub fn abort_shell_execution(execution_id: String) -> Result<()> {
 async fn get_or_create_session(
 	options: &ShellExecuteOptions,
 ) -> Result<Arc<TokioMutex<ShellSession>>> {
-	if let Some(session) = SESSIONS.lock().get(&options.session_key).cloned() {
+	if let Some(session) = { SESSIONS.lock().get(&options.session_key).cloned() } {
 		return Ok(session);
 	}
 
@@ -260,7 +399,7 @@ async fn create_session(options: &ShellExecuteOptions) -> Result<ShellSession> {
 		..Default::default()
 	};
 
-	let mut shell = Shell::new(&create_options)
+	let mut shell = BrushShell::new(&create_options)
 		.await
 		.map_err(|err| Error::from_reason(format!("Failed to initialize shell: {err}")))?;
 
@@ -294,7 +433,7 @@ async fn create_session(options: &ShellExecuteOptions) -> Result<ShellSession> {
 	Ok(ShellSession { shell })
 }
 
-async fn source_snapshot(shell: &mut Shell, snapshot_path: &str) -> Result<()> {
+async fn source_snapshot(shell: &mut BrushShell, snapshot_path: &str) -> Result<()> {
 	let mut params = shell.default_exec_params();
 	let mut open_files = shell.open_files.clone();
 	open_files.set(OpenFiles::STDIN_FD, OpenFile::Null);
@@ -434,6 +573,16 @@ fn should_skip_env_var(key: &str) -> bool {
 			| "HOSTNAME"
 			| "HOSTTYPE"
 	)
+}
+
+fn next_session_key() -> String {
+	let counter = SESSION_COUNTER.fetch_add(1, Ordering::Relaxed);
+	format!("shell-{}-{counter}", std::process::id())
+}
+
+fn next_execution_id() -> String {
+	let counter = EXECUTION_COUNTER.fetch_add(1, Ordering::Relaxed);
+	format!("exec-{}-{counter}", std::process::id())
 }
 
 const fn should_reset_session(result: &brush_core::ExecutionResult) -> bool {

@@ -16,7 +16,10 @@ pub struct HtmlToMarkdownOptions {
 	pub skip_images:   Option<bool>,
 }
 
-/// Convert HTML to Markdown.
+/// Convert HTML source to Markdown with optional preprocessing.
+///
+/// # Errors
+/// Returns an error if the conversion fails or the worker task aborts.
 #[napi(js_name = "htmlToMarkdown")]
 pub async fn html_to_markdown(
 	html: String,

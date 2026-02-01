@@ -101,6 +101,7 @@ pub struct GrepOptions {
 pub struct ContextLine {
 	#[napi(js_name = "lineNumber")]
 	pub line_number: u32,
+	/// Raw line content (trimmed line ending).
 	pub line:        String,
 }
 
@@ -141,15 +142,22 @@ pub struct SearchResult {
 #[derive(Clone)]
 #[napi(object)]
 pub struct GrepMatch {
+	/// File path for the match (relative for directory searches).
 	pub path:           String,
+	/// 1-indexed line number (0 for count-only entries).
 	#[napi(js_name = "lineNumber")]
 	pub line_number:    u32,
+	/// The matched line content (empty for count-only entries).
 	pub line:           String,
+	/// Context lines before the match.
 	#[napi(js_name = "contextBefore")]
 	pub context_before: Option<Vec<ContextLine>>,
+	/// Context lines after the match.
 	#[napi(js_name = "contextAfter")]
 	pub context_after:  Option<Vec<ContextLine>>,
+	/// Whether the line was truncated.
 	pub truncated:      Option<bool>,
+	/// Per-file match count (count mode only).
 	#[napi(js_name = "matchCount")]
 	pub match_count:    Option<u32>,
 }
@@ -157,13 +165,18 @@ pub struct GrepMatch {
 /// Result of searching files.
 #[napi(object)]
 pub struct GrepResult {
+	/// Matches or per-file counts, depending on output mode.
 	pub matches:            Vec<GrepMatch>,
+	/// Total matches across all files.
 	#[napi(js_name = "totalMatches")]
 	pub total_matches:      u32,
+	/// Number of files with at least one match.
 	#[napi(js_name = "filesWithMatches")]
 	pub files_with_matches: u32,
+	/// Number of files searched.
 	#[napi(js_name = "filesSearched")]
 	pub files_searched:     u32,
+	/// Whether the limit/offset stopped the search early.
 	#[napi(js_name = "limitReached")]
 	pub limit_reached:      Option<bool>,
 }
@@ -939,8 +952,12 @@ fn grep_sync(
 /// Search content for a pattern (one-shot, compiles pattern each time).
 /// For repeated searches with the same pattern, use [`grep`] with file filters.
 ///
-/// Accepts either a `Uint8Array`/`Buffer` (zero-copy) or a `string` (transcoded
-/// to UTF-8).
+/// # Arguments
+/// - `content`: `Uint8Array`/`Buffer` (zero-copy) or `string` (UTF-8).
+/// - `options`: Regex settings, context, and output mode.
+///
+/// # Returns
+/// Match list plus counts/limit status; errors are surfaced in `error`.
 #[napi(js_name = "search")]
 pub fn search(content: Either<JsString, Uint8Array>, options: SearchOptions) -> SearchResult {
 	match &content {
@@ -957,8 +974,14 @@ pub fn search(content: Either<JsString, Uint8Array>, options: SearchOptions) -> 
 
 /// Quick check if content matches a pattern.
 ///
-/// Accepts either `Uint8Array`/`Buffer` (zero-copy) or `string` for both
-/// content and pattern.
+/// # Arguments
+/// - `content`: `Uint8Array`/`Buffer` (zero-copy) or `string` (UTF-8).
+/// - `pattern`: `Uint8Array`/`Buffer` (zero-copy) or `string` (UTF-8).
+/// - `ignore_case`: Case-insensitive matching.
+/// - `multiline`: Enable multiline regex mode.
+///
+/// # Returns
+/// True if any match exists; false on no match.
 #[napi(js_name = "hasMatch")]
 pub fn has_match(
 	content: Either<JsString, Uint8Array>,
@@ -996,6 +1019,13 @@ pub fn has_match(
 }
 
 /// Search files for a regex pattern.
+///
+/// # Arguments
+/// - `options`: Pattern, path, filters, and output mode.
+/// - `on_match`: Optional callback invoked per match/result.
+///
+/// # Returns
+/// Aggregated results across matching files.
 #[napi(js_name = "grep")]
 pub async fn grep(
 	options: GrepOptions,
@@ -1118,8 +1148,11 @@ fn fuzzy_find_sync(options: FuzzyFindOptions) -> Result<FuzzyFindResult> {
 
 /// Fuzzy file path search for autocomplete.
 ///
-/// Searches for files and directories whose paths contain the query substring
-/// (case-insensitive). Respects .gitignore by default.
+/// # Arguments
+/// - `options`: Query substring, root path, and limits.
+///
+/// # Returns
+/// Matching file and directory entries.
 #[napi(js_name = "fuzzyFind")]
 pub async fn fuzzy_find(options: FuzzyFindOptions) -> Result<FuzzyFindResult> {
 	task::spawn_blocking(move || fuzzy_find_sync(options))

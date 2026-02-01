@@ -3,9 +3,20 @@
  */
 
 import { native } from "../native";
-import type { ShellExecuteOptions, ShellExecuteResult } from "./types";
+import type { ShellExecuteOptions, ShellExecuteResult, ShellOptions, ShellRunOptions, ShellRunResult } from "./types";
 
-export type { ShellExecuteOptions, ShellExecuteResult } from "./types";
+export type { ShellExecuteOptions, ShellExecuteResult, ShellOptions, ShellRunOptions, ShellRunResult } from "./types";
+
+export interface Shell {
+	run(options: ShellRunOptions, onChunk?: (error: Error | null, chunk: string) => void): Promise<ShellRunResult>;
+	abort(): void;
+}
+
+export interface ShellConstructor {
+	new (options?: ShellOptions): Shell;
+}
+
+export const Shell = native.Shell as ShellConstructor;
 
 /**
  * Execute a shell command using brush-core.
@@ -18,7 +29,6 @@ export async function executeShell(
 	options: ShellExecuteOptions,
 	onChunk?: (chunk: string) => void,
 ): Promise<ShellExecuteResult> {
-	// napi-rs ThreadsafeFunction passes (error, value) - skip callback on error
 	const wrappedCallback = onChunk ? (err: Error | null, chunk: string) => !err && onChunk(chunk) : undefined;
 	return native.executeShell(options, wrappedCallback);
 }

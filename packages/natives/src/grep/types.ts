@@ -1,3 +1,8 @@
+/**
+ * Types for grep/search operations.
+ */
+
+import type { TsFunc } from "../bindings";
 import type { RequestOptions } from "../request-options";
 
 /** Options for searching files. */
@@ -28,32 +33,51 @@ export interface GrepOptions extends RequestOptions {
 	mode?: "content" | "filesWithMatches" | "count";
 }
 
+/** A context line returned around a match. */
 export interface ContextLine {
+	/** 1-indexed line number. */
 	lineNumber: number;
+	/** Line content (trimmed line ending). */
 	line: string;
 }
 
+/** A single grep match or per-file count entry. */
 export interface GrepMatch {
+	/** File path for the match (relative for directory searches). */
 	path: string;
+	/** 1-indexed line number (0 for count-only entries). */
 	lineNumber: number;
+	/** Matched line content (empty for count-only entries). */
 	line: string;
+	/** Context lines before the match. */
 	contextBefore?: ContextLine[];
+	/** Context lines after the match. */
 	contextAfter?: ContextLine[];
+	/** Whether the line was truncated. */
 	truncated?: boolean;
+	/** Per-file match count (count mode only). */
 	matchCount?: number;
 }
 
+/** Summary stats for a grep run. */
 export interface GrepSummary {
+	/** Total matches across all files. */
 	totalMatches: number;
+	/** Number of files with at least one match. */
 	filesWithMatches: number;
+	/** Number of files searched. */
 	filesSearched: number;
+	/** Whether the limit/offset stopped the search early. */
 	limitReached?: boolean;
 }
 
+/** Full grep result including matches and summary counts. */
 export interface GrepResult extends GrepSummary {
+	/** Matches or per-file counts, depending on mode. */
 	matches: GrepMatch[];
 }
 
+/** Options for searching in-memory content. */
 export interface SearchOptions {
 	/** Regex pattern to search for */
 	pattern: string;
@@ -73,22 +97,35 @@ export interface SearchOptions {
 	mode?: "content" | "count";
 }
 
+/** A single content match. */
 export interface SearchMatch {
+	/** 1-indexed line number. */
 	lineNumber: number;
+	/** Matched line content. */
 	line: string;
+	/** Context lines before the match. */
 	contextBefore?: ContextLine[];
+	/** Context lines after the match. */
 	contextAfter?: ContextLine[];
+	/** Whether the line was truncated. */
 	truncated?: boolean;
 }
 
+/** Result of searching in-memory content. */
 export interface SearchResult {
+	/** All matches found. */
 	matches: SearchMatch[];
+	/** Total number of matches (may exceed `matches.length`). */
 	matchCount: number;
+	/** Whether the limit was reached. */
 	limitReached: boolean;
+	/** Error message, if any. */
 	error?: string;
 }
 
+/** Legacy alias for WASM match output. */
 export type WasmMatch = SearchMatch;
+/** Legacy alias for WASM search output. */
 export type WasmSearchResult = SearchResult;
 
 /** Options for fuzzy file path search. */
@@ -119,4 +156,22 @@ export interface FuzzyFindResult {
 	matches: FuzzyFindMatch[];
 	/** Total number of matches found (may exceed `matches.length`). */
 	totalMatches: number;
+}
+
+declare module "../bindings" {
+	interface NativeBindings {
+		/** Fuzzy file path search for autocomplete. */
+		fuzzyFind(options: FuzzyFindOptions): Promise<FuzzyFindResult>;
+		/** Search files for a regex pattern. */
+		grep(options: GrepOptions, onMatch?: TsFunc<GrepMatch>): Promise<GrepResult>;
+		/** Search in-memory content for a regex pattern. */
+		search(content: string | Uint8Array, options: SearchOptions): SearchResult;
+		/** Quick check if content matches a pattern. */
+		hasMatch(
+			content: string | Uint8Array,
+			pattern: string | Uint8Array,
+			ignoreCase: boolean,
+			multiline: boolean,
+		): boolean;
+	}
 }

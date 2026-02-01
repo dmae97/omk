@@ -3,8 +3,7 @@
  *
  * Uses brush-core via native bindings for shell execution.
  */
-import * as crypto from "node:crypto";
-import { abortShellExecution, executeShell } from "@oh-my-pi/pi-natives";
+import { Shell } from "@oh-my-pi/pi-natives";
 import { Settings } from "../config/settings";
 import { OutputSink } from "../session/streaming-output";
 import { getOrCreateSnapshot } from "../utils/shell-snapshot";
@@ -35,13 +34,12 @@ export interface BashResult {
 	artifactId?: string;
 }
 
+const shellSessions = new Map<string, Shell>();
+
 export async function executeBash(command: string, options?: BashExecutorOptions): Promise<BashResult> {
 	const settings = await Settings.init();
 	const { shell, env: shellEnv, prefix } = settings.getShellConfig();
 	const snapshotPath = shell.includes("bash") ? await getOrCreateSnapshot(shell, shellEnv) : null;
-
-	// Generate unique execution ID for abort support
-	const executionId = crypto.randomUUID();
 
 	// Apply command prefix if configured
 	const prefixedCommand = prefix ? `${prefix} ${command}` : command;
@@ -59,37 +57,43 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 		pendingChunks = pendingChunks.then(() => sink.push(chunk)).catch(() => {});
 	};
 
-	// Set up abort handling
-	let abortListener: (() => void) | undefined;
-	if (options?.signal) {
-		const signal = options.signal;
-		if (signal.aborted) {
-			// Already aborted
-			return {
-				exitCode: undefined,
-				cancelled: true,
-				...(await sink.dump("Command cancelled")),
-			};
-		}
-		abortListener = () => {
-			abortShellExecution(executionId);
+	if (options?.signal?.aborted) {
+		return {
+			exitCode: undefined,
+			cancelled: true,
+			...(await sink.dump("Command cancelled")),
 		};
-		signal.addEventListener("abort", abortListener, { once: true });
 	}
 
+	let abortListener: (() => void) | undefined;
+
 	try {
-		const result = await executeShell(
+		const sessionKey = buildSessionKey(shell, prefix, snapshotPath, shellEnv, options?.sessionKey);
+		let shellSession = shellSessions.get(sessionKey);
+		if (!shellSession) {
+			shellSession = new Shell({ sessionEnv: shellEnv, snapshotPath: snapshotPath ?? undefined });
+			shellSessions.set(sessionKey, shellSession);
+		}
+
+		if (options?.signal) {
+			abortListener = () => {
+				shellSession?.abort();
+			};
+			options.signal.addEventListener("abort", abortListener, { once: true });
+		}
+
+		const result = await shellSession.run(
 			{
 				command: finalCommand,
 				cwd: options?.cwd,
 				env: options?.env,
-				sessionEnv: shellEnv,
 				timeoutMs: options?.timeout,
-				executionId,
-				sessionKey: options?.sessionKey ?? "singleton",
-				snapshotPath: snapshotPath ?? undefined,
 			},
-			enqueueChunk,
+			(err, chunk) => {
+				if (!err) {
+					enqueueChunk(chunk);
+				}
+			},
 		);
 
 		await pendingChunks;
@@ -123,8 +127,7 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 		};
 	} finally {
 		await pendingChunks;
-		// Clean up abort listener
-		if (abortListener && options?.signal) {
+		if (options?.signal && abortListener) {
 			options.signal.removeEventListener("abort", abortListener);
 		}
 	}

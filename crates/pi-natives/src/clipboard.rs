@@ -24,8 +24,10 @@ use napi_derive::napi;
 /// Clipboard image payload encoded as PNG bytes.
 #[napi(object)]
 pub struct ClipboardImage {
+	/// PNG-encoded image bytes.
 	pub data:      Uint8Array,
 	#[napi(js_name = "mimeType")]
+	/// MIME type for the encoded image payload.
 	pub mime_type: String,
 }
 
@@ -47,6 +49,9 @@ fn encode_png(image: ImageData<'_>) -> Result<Vec<u8>> {
 
 /// Copy plain text to the system clipboard.
 ///
+/// # Parameters
+/// - `text`: UTF-8 text to place on the clipboard.
+///
 /// # Errors
 /// Returns an error if clipboard access fails.
 #[napi(js_name = "copyToClipboard")]
@@ -65,6 +70,8 @@ pub async fn copy_to_clipboard(text: String) -> Result<()> {
 }
 
 /// Read an image from the system clipboard.
+///
+/// Returns `Ok(None)` when no image data is available.
 ///
 /// # Errors
 /// Returns an error if clipboard access fails or image encoding fails.

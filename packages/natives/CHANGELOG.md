@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Removed `resize()` function; use `PhotonImage.resize()` method instead
@@ -13,6 +14,11 @@
 
 ### Added
 
+- Exported `Shell` class for creating persistent shell sessions with `run()` method and session options
+- Exported `ShellOptions`, `ShellRunOptions`, and `ShellRunResult` types for shell session management
+- Exported `find()` function for file discovery with glob patterns and .gitignore support
+- Exported `FindOptions`, `FindMatch`, and `FindResult` types for file search operations
+- Exported `ImageFormat` enum for specifying output formats (PNG, JPEG, WEBP, GIF) in image encoding
 - Added `ImageFormat` enum for specifying output format (PNG, JPEG, WEBP, GIF) in `encode()` method
 - Added `SamplingFilter` as exported enum instead of object
 - Added `Shell` class with persistent session options (`sessionEnv`, `snapshotPath`) and a `run()` command API
@@ -24,6 +30,10 @@
 
 ### Changed
 
+- Reorganized native bindings into modular type files with declaration merging via `NativeBindings` interface
+- Moved type definitions from implementation files to dedicated `types.ts` modules for better separation of concerns
+- Enhanced `SystemInfo` type with additional fields: `os`, `arch`, `hostname`, `shell`, `terminal`, `de`, `wm`, and `gpu`
+- Refactored module exports to use direct destructuring from native bindings instead of wrapper functions
 - Changed `PhotonImage` API to use instance methods (`resize()`, `encode()`) instead of standalone functions
 - Changed `PhotonImage` to use property accessors for `width` and `height` instead of getter methods
 

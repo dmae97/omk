@@ -1,113 +1,27 @@
+/**
+ * Native addon loader and bindings.
+ *
+ * Each module extends NativeBindings via declaration merging in its types.ts.
+ */
+
 import { createRequire } from "node:module";
 import * as path from "node:path";
-import type { ClipboardImage } from "./clipboard/types";
-import type { FindMatch, FindOptions, FindResult } from "./find/types";
-import type {
-	FuzzyFindOptions,
-	FuzzyFindResult,
-	GrepOptions,
-	GrepResult,
-	SearchOptions,
-	SearchResult,
-} from "./grep/types";
-import type { HighlightColors } from "./highlight/index";
-import type { HtmlToMarkdownOptions } from "./html/types";
-import type { ShellExecuteOptions, ShellExecuteResult } from "./shell/types";
-import type { SystemInfo } from "./system-info/index";
-import type { ExtractSegmentsResult, SliceWithWidthResult } from "./text/index";
+import type { NativeBindings } from "./bindings";
 
-export type { RequestOptions } from "./request-options";
+// Import types to trigger declaration merging
+import "./clipboard/types";
+import "./find/types";
+import "./grep/types";
+import "./highlight/types";
+import "./html/types";
+import "./image/types";
+import "./keys/types";
+import "./ps/types";
+import "./shell/types";
+import "./system-info/types";
+import "./text/types";
 
-/**
- * Event types from Kitty keyboard protocol (flag 2)
- * 1 = key press, 2 = key repeat, 3 = key release
- */
-export const enum KeyEventType {
-	Press = 1,
-	Repeat = 2,
-	Release = 3,
-}
-/** Parsed Kitty keyboard protocol sequence result. */
-export interface ParsedKittyResult {
-	codepoint: number;
-	shiftedKey?: number;
-	baseLayoutKey?: number;
-	modifier: number;
-	eventType?: KeyEventType;
-}
-
-export const enum ImageFormat {
-	PNG = 0,
-	JPEG = 1,
-	WEBP = 2,
-	GIF = 3,
-}
-
-export interface PhotonImage {
-	get width(): number;
-	get height(): number;
-	encode(format: ImageFormat, quality: number): Promise<Uint8Array>;
-	resize(width: number, height: number, filter: number): Promise<PhotonImage>;
-}
-
-export interface PhotonImageConstructor {
-	parse(bytes: Uint8Array): Promise<PhotonImage>;
-	prototype: PhotonImage;
-}
-
-export const enum SamplingFilter {
-	Nearest = 1,
-	Triangle = 2,
-	CatmullRom = 3,
-	Gaussian = 4,
-	Lanczos3 = 5,
-}
-
-import type { GrepMatch } from "./grep/types";
-
-export type TsFunc<T> = (error: Error | null, value: T) => void;
-
-export interface NativeBindings {
-	copyToClipboard(text: string): Promise<void>;
-	readImageFromClipboard(): Promise<ClipboardImage | null>;
-	find(options: FindOptions, onMatch?: TsFunc<FindMatch>): Promise<FindResult>;
-	fuzzyFind(options: FuzzyFindOptions): Promise<FuzzyFindResult>;
-	grep(options: GrepOptions, onMatch?: TsFunc<GrepMatch>): Promise<GrepResult>;
-	search(content: string | Uint8Array, options: SearchOptions): SearchResult;
-	hasMatch(
-		content: string | Uint8Array,
-		pattern: string | Uint8Array,
-		ignoreCase: boolean,
-		multiline: boolean,
-	): boolean;
-	htmlToMarkdown(html: string, options?: HtmlToMarkdownOptions | null): Promise<string>;
-	highlightCode(code: string, lang: string | null | undefined, colors: HighlightColors): string;
-	supportsLanguage(lang: string): boolean;
-	getSupportedLanguages(): string[];
-	SamplingFilter: SamplingFilter;
-	PhotonImage: PhotonImageConstructor;
-	truncateToWidth(text: string, maxWidth: number, ellipsisKind: number, pad: boolean): string;
-	wrapTextWithAnsi(text: string, width: number): string[];
-	sliceWithWidth(line: string, startCol: number, length: number, strict: boolean): SliceWithWidthResult;
-	visibleWidth(text: string): number;
-	extractSegments(
-		line: string,
-		beforeEnd: number,
-		afterStart: number,
-		afterLen: number,
-		strictAfter: boolean,
-	): ExtractSegmentsResult;
-	matchesKittySequence(data: string, expectedCodepoint: number, expectedModifier: number): boolean;
-	executeShell(options: ShellExecuteOptions, onChunk?: TsFunc<string>): Promise<ShellExecuteResult>;
-	abortShellExecution(executionId: string): void;
-	parseKey(data: string, kittyProtocolActive: boolean): string | null;
-	matchesLegacySequence(data: string, keyName: string): boolean;
-	parseKittySequence(data: string): ParsedKittyResult | null;
-	matchesKey(data: string, keyId: string, kittyProtocolActive: boolean): boolean;
-	killTree(pid: number, signal: number): number;
-	listDescendants(pid: number): number[];
-	getSystemInfo(): SystemInfo;
-}
+export type { NativeBindings, TsFunc } from "./bindings";
 
 const require = createRequire(import.meta.url);
 const platformTag = `${process.platform}-${process.arch}`;
@@ -195,6 +109,7 @@ function validateNative(bindings: NativeBindings, source: string): void {
 	checkFn("matchesKittySequence");
 	checkFn("executeShell");
 	checkFn("abortShellExecution");
+	checkFn("Shell");
 	checkFn("parseKey");
 	checkFn("matchesLegacySequence");
 	checkFn("parseKittySequence");

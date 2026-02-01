@@ -23,7 +23,8 @@ use napi_derive::napi;
 mod platform {
 	use std::fs;
 
-	/// Recursively collect all descendant PIDs by reading /proc/{pid}/children.
+	/// Collect all descendant PIDs of `pid` into `pids`.
+	/// Skips branches when `/proc/{pid}/children` cannot be read.
 	pub fn collect_descendants(pid: i32, pids: &mut Vec<i32>) {
 		let children_path = format!("/proc/{pid}/task/{pid}/children");
 		let Ok(content) = fs::read_to_string(&children_path) else {
@@ -38,19 +39,23 @@ mod platform {
 		}
 	}
 
-	/// Kill a process with the given signal.
+	/// Send `signal` to `pid`.
+	/// Returns true when the signal is delivered successfully.
 	pub fn kill_pid(pid: i32, signal: i32) -> bool {
 		// SAFETY: libc::kill is safe to call with any pid/signal combination
 		unsafe { libc::kill(pid, signal) == 0 }
 	}
 
-	/// Get the process group id for a pid.
+	/// Get the process group id for `pid`.
+	/// Returns `None` when the process does not exist or is inaccessible.
 	pub fn process_group_id(pid: i32) -> Option<i32> {
+		// SAFETY: `libc::getpgid` is safe to call with any pid
 		let pgid = unsafe { libc::getpgid(pid) };
 		if pgid < 0 { None } else { Some(pgid) }
 	}
 
-	/// Kill a process group with the given signal.
+	/// Send `signal` to the process group `pgid`.
+	/// Returns true when the signal is delivered successfully.
 	pub fn kill_process_group(pgid: i32, signal: i32) -> bool {
 		// SAFETY: libc::kill is safe to call with any pid/signal combination
 		unsafe { libc::kill(-pgid, signal) == 0 }
@@ -66,7 +71,8 @@ mod platform {
 		fn proc_listchildpids(ppid: i32, buffer: *mut i32, buffersize: i32) -> i32;
 	}
 
-	/// Recursively collect all descendant PIDs using libproc.
+	/// Collect all descendant PIDs of `pid` into `pids` using libproc.
+	/// Skips branches when libproc returns no children.
 	pub fn collect_descendants(pid: i32, pids: &mut Vec<i32>) {
 		// First call to get count
 		let count = unsafe { proc_listchildpids(pid, ptr::null_mut(), 0) };
@@ -92,19 +98,23 @@ mod platform {
 		}
 	}
 
-	/// Kill a process with the given signal.
+	/// Send `signal` to `pid`.
+	/// Returns true when the signal is delivered successfully.
 	pub fn kill_pid(pid: i32, signal: i32) -> bool {
 		// SAFETY: libc::kill is safe to call with any pid/signal combination
 		unsafe { libc::kill(pid, signal) == 0 }
 	}
 
-	/// Get the process group id for a pid.
+	/// Get the process group id for `pid`.
+	/// Returns `None` when the process does not exist or is inaccessible.
 	pub fn process_group_id(pid: i32) -> Option<i32> {
+		// SAFETY: libc::getpgid is safe to call with any pid
 		let pgid = unsafe { libc::getpgid(pid) };
 		if pgid < 0 { None } else { Some(pgid) }
 	}
 
-	/// Kill a process group with the given signal.
+	/// Send `signal` to the process group `pgid`.
+	/// Returns true when the signal is delivered successfully.
 	pub fn kill_process_group(pgid: i32, signal: i32) -> bool {
 		// SAFETY: libc::kill is safe to call with any pid/signal combination
 		unsafe { libc::kill(-pgid, signal) == 0 }
@@ -177,7 +187,8 @@ mod platform {
 		tree
 	}
 
-	/// Recursively collect all descendant PIDs.
+	/// Collect all descendant PIDs of `pid` into `pids`.
+	/// Uses a snapshot of the current process table.
 	pub fn collect_descendants(pid: i32, pids: &mut Vec<i32>) {
 		let tree = build_process_tree();
 		collect_descendants_from_tree(pid as u32, &tree, pids);
@@ -192,7 +203,8 @@ mod platform {
 		}
 	}
 
-	/// Kill a process (signal is ignored on Windows, always terminates).
+	/// Terminate `pid` (Windows ignores `signal`).
+	/// Returns true when the process is terminated.
 	pub fn kill_pid(pid: i32, _signal: i32) -> bool {
 		unsafe {
 			let handle = OpenProcess(PROCESS_TERMINATE, 0, pid as u32);
@@ -206,11 +218,13 @@ mod platform {
 	}
 
 	/// Process groups are not exposed on Windows.
+	/// Always returns `None`.
 	pub fn process_group_id(_pid: i32) -> Option<i32> {
 		None
 	}
 
 	/// Process groups are not exposed on Windows.
+	/// Always returns `false`.
 	pub fn kill_process_group(_pgid: i32, _signal: i32) -> bool {
 		false
 	}
@@ -218,6 +232,7 @@ mod platform {
 
 /// Kill a process tree (the process and all its descendants).
 ///
+/// Arguments: `pid` is the root process and `signal` is the kill signal.
 /// Kills children first (bottom-up) to prevent orphan re-parenting issues.
 /// Returns the number of processes successfully killed.
 #[napi]
@@ -242,17 +257,19 @@ pub fn kill_tree(pid: i32, signal: i32) -> u32 {
 	killed
 }
 
-/// Get the process group id for a pid.
+/// Get the process group id for `pid`.
+/// Returns `None` when the process is missing or unsupported on the platform.
 pub fn process_group_id(pid: i32) -> Option<i32> {
 	platform::process_group_id(pid)
 }
 
-/// Kill a process group by pgid.
+/// Send `signal` to the process group `pgid`.
+/// Returns false when process groups are unsupported on the platform.
 pub fn kill_process_group(pgid: i32, signal: i32) -> bool {
 	platform::kill_process_group(pgid, signal)
 }
 
-/// List all descendant PIDs of a process.
+/// List all descendant PIDs of `pid`.
 ///
 /// Returns an empty array if the process has no children or doesn't exist.
 #[napi]

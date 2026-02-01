@@ -2,8 +2,12 @@
  * Image processing via native bindings.
  */
 
-import { native, SamplingFilter } from "../native";
+import { native } from "../native";
 
-const { PhotonImage } = native;
+export { ImageFormat, type PhotonImageConstructor, SamplingFilter } from "./types";
 
-export { PhotonImage, SamplingFilter };
+/** PhotonImage class for image manipulation. Use PhotonImage.parse() to create instances. */
+export const PhotonImage = native.PhotonImage;
+
+/** PhotonImage instance type. */
+export type PhotonImage = import("./types").PhotonImage;

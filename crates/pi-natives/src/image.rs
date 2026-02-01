@@ -19,10 +19,15 @@ use napi_derive::napi;
 /// Sampling filter for resize operations.
 #[napi]
 pub enum SamplingFilter {
+	/// Nearest-neighbor sampling (fast, low quality).
 	Nearest    = 1,
+	/// Triangle filter (linear interpolation).
 	Triangle   = 2,
+	/// Catmull-Rom filter with sharper edges.
 	CatmullRom = 3,
+	/// Gaussian filter for smoother results.
 	Gaussian   = 4,
+	/// Lanczos3 filter for high-quality downscaling.
 	Lanczos3   = 5,
 }
 
@@ -41,13 +46,14 @@ impl From<SamplingFilter> for FilterType {
 /// Image container for native interop.
 #[napi]
 pub struct PhotonImage {
+	/// Shared decoded image data.
 	img: Arc<DynamicImage>,
 }
 
 #[napi]
 impl PhotonImage {
-	/// Create a new `PhotonImage` from encoded image bytes (PNG, JPEG, WebP,
-	/// GIF).
+	/// Create a new `PhotonImage` from encoded image bytes (PNG, JPEG, WebP, GIF).
+	/// Returns the decoded image handle on success.
 	///
 	/// # Errors
 	/// Returns an error if the image format cannot be detected or decoded.
@@ -71,19 +77,19 @@ impl PhotonImage {
 		Ok(Self { img: Arc::new(img) })
 	}
 
-	/// Get the width of the image.
+	/// Get the image width in pixels.
 	#[napi(getter, js_name = "width")]
 	pub fn get_width(&self) -> u32 {
 		self.img.width()
 	}
 
-	/// Get the height of the image.
+	/// Get the image height in pixels.
 	#[napi(getter, js_name = "height")]
 	pub fn get_height(&self) -> u32 {
 		self.img.height()
 	}
 
-	/// Encode image to bytes in the specified format.
+	/// Encode the image to bytes in the specified format.
 	///
 	/// Format values (matching `ImageFormat` enum in TS):
 	/// - 0: PNG (quality ignored)
@@ -102,7 +108,8 @@ impl PhotonImage {
 		Ok(Uint8Array::from(buffer))
 	}
 
-	/// Resize the image to the specified dimensions.
+	/// Resize the image to the specified pixel dimensions using the filter.
+	/// Returns a new `PhotonImage` containing the resized image.
 	#[napi(js_name = "resize")]
 	pub async fn resize(&self, width: u32, height: u32, filter: SamplingFilter) -> Result<Self> {
 		let img = Arc::clone(&self.img);

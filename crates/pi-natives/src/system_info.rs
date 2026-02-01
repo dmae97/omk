@@ -18,12 +18,17 @@ use sysinfo::{Disks, System};
 /// Basic system info without shelling out.
 #[napi(object)]
 pub struct SystemInfo {
+	/// Linux distro or OS name when available.
 	pub distro: Option<String>,
+	/// Kernel version string (if reported by the OS).
 	pub kernel: Option<String>,
+	/// Primary CPU brand/model string.
 	pub cpu:    Option<String>,
+	/// Disk usage summary (used/total) for primary mount.
 	pub disk:   Option<String>,
 }
 
+/// Collect system info with native APIs (no shell commands).
 #[napi(js_name = "getSystemInfo")]
 pub fn get_system_info() -> SystemInfo {
 	let mut system = System::new_all();

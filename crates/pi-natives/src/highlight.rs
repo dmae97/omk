@@ -125,18 +125,29 @@ fn get_scope_matchers() -> &'static ScopeMatchers {
 #[derive(Debug)]
 #[napi(object)]
 pub struct HighlightColors {
+	/// ANSI color for comments.
 	pub comment:     String,
+	/// ANSI color for keywords.
 	pub keyword:     String,
+	/// ANSI color for function names.
 	pub function:    String,
+	/// ANSI color for variables and identifiers.
 	pub variable:    String,
+	/// ANSI color for string literals.
 	pub string:      String,
+	/// ANSI color for numeric literals.
 	pub number:      String,
+	/// ANSI color for type identifiers.
 	#[napi(js_name = "type")]
 	pub r#type:      String,
+	/// ANSI color for operators.
 	pub operator:    String,
+	/// ANSI color for punctuation tokens.
 	pub punctuation: String,
+	/// ANSI color for diff inserted lines.
 	#[napi(js_name = "inserted")]
 	pub inserted:    Option<String>,
+	/// ANSI color for diff deleted lines.
 	#[napi(js_name = "deleted")]
 	pub deleted:     Option<String>,
 }

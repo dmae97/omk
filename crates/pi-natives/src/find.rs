@@ -50,7 +50,9 @@ pub struct FindOptions {
 #[derive(Clone)]
 #[napi(object)]
 pub struct FindMatch {
+	/// Relative path from the search root, using forward slashes.
 	pub path:      String,
+	/// Resolved filesystem type for the match.
 	#[napi(js_name = "fileType")]
 	pub file_type: String,
 	/// Modification time in milliseconds since epoch (if available).
@@ -60,7 +62,9 @@ pub struct FindMatch {
 /// Result of a find operation.
 #[napi(object)]
 pub struct FindResult {
+	/// Matched filesystem entries.
 	pub matches:       Vec<FindMatch>,
+	/// Number of matches returned after limits are applied.
 	#[napi(js_name = "totalMatches")]
 	pub total_matches: u32,
 }
@@ -284,6 +288,9 @@ fn run_find(
 }
 
 /// Find filesystem entries matching a glob pattern.
+///
+/// Uses the provided options to resolve the search root, apply glob
+/// matching, and optionally stream matches to a callback.
 ///
 /// # Errors
 /// Returns an error if the glob is invalid or the search path is missing.
