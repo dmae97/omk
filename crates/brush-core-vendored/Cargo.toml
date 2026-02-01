@@ -41,14 +41,6 @@ name = "brush_core"
 path = "src/lib.rs"
 bench = false
 
-[[example]]
-name = "call-func"
-path = "examples/call-func.rs"
-
-[[example]]
-name = "custom-builtin"
-path = "examples/custom-builtin.rs"
-
 [dependencies.async-recursion]
 version = "1.1.1"
 
@@ -165,6 +157,10 @@ version = "=0.3.4"
 
 [target."cfg(windows)".dependencies.whoami]
 version = "1.6.1"
+
+[target."cfg(windows)".dependencies.windows-sys]
+version = "0.59"
+features = ["Win32_Foundation", "Win32_System_Threading"]
 
 [target.wasm32-unknown-unknown.dependencies.getrandom]
 version = "0.3.4"

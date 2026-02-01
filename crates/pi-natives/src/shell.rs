@@ -26,9 +26,6 @@ use std::{
 #[cfg(windows)]
 mod windows;
 
-#[cfg(windows)]
-use windows::configure_windows_path;
-
 use brush_builtins::{BuiltinSet, default_builtins};
 use brush_core::{
 	CreateOptions, ExecutionContext, ExecutionControlFlow, ExecutionExitCode, ExecutionResult,
@@ -45,6 +42,8 @@ use napi::{
 use napi_derive::napi;
 use parking_lot::Mutex;
 use tokio_util::sync::CancellationToken;
+#[cfg(windows)]
+use windows::configure_windows_path;
 
 use crate::work::launch_task;
 
@@ -55,8 +54,6 @@ struct ExecutionControl {
 	cancel:      tokio::sync::oneshot::Sender<()>,
 	session_key: String,
 }
-
-
 
 struct ExecutionGuard {
 	execution_id: String,
@@ -263,8 +260,7 @@ async fn execute_shell_with_options(
 
 	let run_result = {
 		let mut session = session.lock().await;
-		let run_future =
-			run_shell_command(&mut session, &options, on_chunk, cancel_token.clone());
+		let run_future = run_shell_command(&mut session, &options, on_chunk, cancel_token.clone());
 		tokio::pin!(run_future);
 
 		let run_result = if let Some(ms) = timeout_ms {
@@ -588,7 +584,6 @@ fn remove_session(session_key: &str) {
 	sessions.remove(session_key);
 }
 
-
 fn read_output(mut reader: std::fs::File, on_chunk: Option<ThreadsafeFunction<String>>) {
 	let mut buf = [0u8; 8192];
 	let mut pending = Vec::new();
@@ -691,9 +686,9 @@ impl builtins::Command for SleepCommand {
 	) -> impl Future<Output = std::result::Result<ExecutionResult, brush_core::Error>> + Send {
 		let durations = self.durations.clone();
 		async move {
-		if context.is_cancelled() {
-			return Ok(ExecutionExitCode::Interrupted.into());
-		}
+			if context.is_cancelled() {
+				return Ok(ExecutionExitCode::Interrupted.into());
+			}
 			let mut total = Duration::from_millis(0);
 			for duration in &durations {
 				let Some(parsed) = parse_duration(duration) else {
@@ -701,20 +696,20 @@ impl builtins::Command for SleepCommand {
 					return Ok(ExecutionResult::new(1));
 				};
 				total += parsed;
-		}
-		let sleep = time::sleep(total);
-		tokio::pin!(sleep);
-		if let Some(cancel_token) = context.cancel_token() {
-			tokio::select! {
-				() = &mut sleep => Ok(ExecutionResult::success()),
-				_ = cancel_token.cancelled() => Ok(ExecutionExitCode::Interrupted.into()),
 			}
-		} else {
-			sleep.await;
-			Ok(ExecutionResult::success())
+			let sleep = time::sleep(total);
+			tokio::pin!(sleep);
+			if let Some(cancel_token) = context.cancel_token() {
+				tokio::select! {
+					() = &mut sleep => Ok(ExecutionResult::success()),
+					() = cancel_token.cancelled() => Ok(ExecutionExitCode::Interrupted.into()),
+				}
+			} else {
+				sleep.await;
+				Ok(ExecutionResult::success())
+			}
 		}
 	}
-			}
 }
 
 #[derive(Parser)]
@@ -736,9 +731,9 @@ impl builtins::Command for TimeoutCommand {
 		let duration = self.duration.clone();
 		let command = self.command.clone();
 		async move {
-		if context.is_cancelled() {
-			return Ok(ExecutionExitCode::Interrupted.into());
-		}
+			if context.is_cancelled() {
+				return Ok(ExecutionExitCode::Interrupted.into());
+			}
 			let Some(timeout) = parse_duration(&duration) else {
 				let _ = writeln!(context.stderr(), "timeout: invalid time interval '{duration}'");
 				return Ok(ExecutionResult::new(125));
@@ -755,29 +750,29 @@ impl builtins::Command for TimeoutCommand {
 			for (idx, arg) in command.iter().enumerate() {
 				if idx > 0 {
 					command_line.push(' ');
-			}
+				}
 				command_line.push_str(&quote_arg(arg));
-		}
-		let cancel_token = context.cancel_token();
+			}
+
+			let cancel_token = context.cancel_token();
 			let run_future = context.shell.run_string(command_line, &params);
 			tokio::pin!(run_future);
-		let result = if let Some(cancel_token) = cancel_token {
-			tokio::select! {
-				result = &mut run_future => result,
-				() = time::sleep(timeout) => Ok(ExecutionResult::new(124)),
-				_ = cancel_token.cancelled() => Ok(ExecutionExitCode::Interrupted.into()),
-			}
-		} else {
-			tokio::select! {
-				result = &mut run_future => result,
-				() = time::sleep(timeout) => Ok(ExecutionResult::new(124)),
-			}
-			};
-			Ok(result?)
-	}
-				}
-}
 
+			if let Some(cancel_token) = cancel_token {
+				tokio::select! {
+					result = &mut run_future => result,
+					() = time::sleep(timeout) => Ok(ExecutionResult::new(124)),
+					() = cancel_token.cancelled() => Ok(ExecutionExitCode::Interrupted.into()),
+				}
+			} else {
+				tokio::select! {
+					result = &mut run_future => result,
+					() = time::sleep(timeout) => Ok(ExecutionResult::new(124)),
+				}
+			}
+		}
+	}
+}
 fn parse_duration(input: &str) -> Option<Duration> {
 	let trimmed = input.trim();
 	if trimmed.is_empty() {

@@ -1,14 +1,8 @@
-use std::{
-	path::Path,
-	process::Command,
-};
+use std::{path::Path, process::Command};
 
 use brush_core::{Shell as BrushShell, ShellValue, ShellVariable};
 use napi::{Error, Result};
-use winreg::{
-	enums::HKEY_LOCAL_MACHINE,
-	RegKey,
-};
+use winreg::{RegKey, enums::HKEY_LOCAL_MACHINE};
 
 pub fn configure_windows_path(shell: &mut BrushShell) -> Result<()> {
 	let Some(git_usr_bin) = find_git_usr_bin() else {
@@ -55,12 +49,9 @@ fn path_contains_entry(path_value: &str, entry: &str) -> bool {
 }
 
 fn find_git_usr_bin() -> Option<String> {
-	for install_path in [
-		query_git_install_path_from_registry(),
-		query_git_install_path_from_where(),
-	]
-	.into_iter()
-	.flatten()
+	for install_path in [query_git_install_path_from_registry(), query_git_install_path_from_where()]
+		.into_iter()
+		.flatten()
 	{
 		if let Some(path) = git_usr_bin_with_ls(&install_path) {
 			return Some(path);
@@ -72,10 +63,7 @@ fn find_git_usr_bin() -> Option<String> {
 
 fn query_git_install_path_from_registry() -> Option<String> {
 	let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-	let key_paths = [
-		"SOFTWARE\\GitForWindows",
-		"SOFTWARE\\WOW6432Node\\GitForWindows",
-	];
+	let key_paths = ["SOFTWARE\\GitForWindows", "SOFTWARE\\WOW6432Node\\GitForWindows"];
 
 	for key_path in key_paths {
 		if let Ok(key) = hklm.open_subkey(key_path) {

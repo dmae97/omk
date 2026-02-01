@@ -43,12 +43,17 @@ impl JobTask {
     pub async fn wait(&mut self) -> Result<JobTaskWaitResult, error::Error> {
         match self {
             Self::External(process) => {
-                let wait_result = process.wait().await?;
+                // Background jobs don't receive cancellation tokens
+                let wait_result = process.wait(None).await?;
                 match wait_result {
                     processes::ProcessWaitResult::Completed(output) => {
                         Ok(JobTaskWaitResult::Completed(output.into()))
                     }
                     processes::ProcessWaitResult::Stopped => Ok(JobTaskWaitResult::Stopped),
+                    processes::ProcessWaitResult::Cancelled => {
+                        // Should never happen since we pass None, but handle gracefully
+                        Ok(JobTaskWaitResult::Completed(ExecutionResult::new(130)))
+                    }
                 }
             }
             Self::Internal(handle) => Ok(JobTaskWaitResult::Completed(handle.await??)),

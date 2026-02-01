@@ -24,6 +24,7 @@ impl From<processes::ProcessWaitResult> for results::ExecutionResult {
         match wait_result {
             processes::ProcessWaitResult::Completed(output) => output.into(),
             processes::ProcessWaitResult::Stopped => Self::stopped(),
+            processes::ProcessWaitResult::Cancelled => Self::new(130),
         }
     }
 }
@@ -66,15 +67,9 @@ pub struct ExecutionParameters {
     pub process_group_policy: ProcessGroupPolicy,
     /// Optional cancellation token shared with callers.
     cancel_token: Option<CancellationToken>,
-    /// Optional tracker for the first spawned process ID.
-    process_id_tracker: Option<std::sync::Arc<std::sync::atomic::AtomicI32>>,
-    /// Optional tracker for the process group ID used by execution.
-    process_group_id_tracker: Option<std::sync::Arc<std::sync::atomic::AtomicI32>>,
 }
 
 impl ExecutionParameters {
-    const UNSET_TRACKER_VALUE: i32 = 0;
-
     /// Assigns a cancellation token for this execution.
     pub fn set_cancel_token(&mut self, token: CancellationToken) {
         self.cancel_token = Some(token);
@@ -509,7 +504,10 @@ async fn wait_for_pipeline_processes_and_update_status(
 
     while let Some(child) = process_spawn_results.pop_front() {
         ensure_not_cancelled(params)?;
-        match child.wait(!stopped_children.is_empty()).await? {
+        match child
+            .wait(!stopped_children.is_empty(), params.cancel_token())
+            .await?
+        {
             ExecutionWaitResult::Completed(current_result) => {
                 result = current_result;
                 *shell.last_exit_status_mut() = result.exit_code.into();

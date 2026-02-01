@@ -220,19 +220,26 @@ impl From<ExecutionResult> for ExecutionSpawnResult {
     }
 }
 
+use tokio_util::sync::CancellationToken;
+
 impl ExecutionSpawnResult {
     /// Waits for the command to complete.
     ///
     /// # Arguments
     ///
     /// * `no_wait` - If true, do not wait for the command to complete; return immediately.
-    pub async fn wait(self, no_wait: bool) -> Result<ExecutionWaitResult, error::Error> {
+    /// * `cancel_token` - Optional cancellation token; if triggered, kills the process.
+    pub async fn wait(
+        self,
+        no_wait: bool,
+        cancel_token: Option<CancellationToken>,
+    ) -> Result<ExecutionWaitResult, error::Error> {
         match self {
             Self::StartedProcess(mut child) => {
                 let process_wait_result = if !no_wait {
                     // Wait for the process to exit or for a relevant signal, whichever happens
                     // first.
-                    child.wait().await?
+                    child.wait(cancel_token).await?
                 } else {
                     processes::ProcessWaitResult::Stopped
                 };
@@ -242,6 +249,10 @@ impl ExecutionSpawnResult {
                         ExecutionWaitResult::Completed(ExecutionResult::from(output))
                     }
                     processes::ProcessWaitResult::Stopped => ExecutionWaitResult::Stopped(child),
+                    processes::ProcessWaitResult::Cancelled => {
+                        // 130 = 128 + SIGINT (2), standard shell interrupted exit code
+                        ExecutionWaitResult::Completed(ExecutionResult::new(130))
+                    }
                 };
 
                 Ok(wait_result)

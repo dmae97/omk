@@ -1,6 +1,7 @@
 //! Process management
 
 use futures::FutureExt;
+use tokio_util::sync::CancellationToken;
 
 use crate::{error, sys};
 
@@ -32,17 +33,34 @@ impl ChildProcess {
     }
 
     /// Waits for the process to exit.
-    pub async fn wait(&mut self) -> Result<ProcessWaitResult, error::Error> {
+    ///
+    /// If a cancellation token is provided and triggered, the process will be killed.
+    pub async fn wait(
+        &mut self,
+        cancel_token: Option<CancellationToken>,
+    ) -> Result<ProcessWaitResult, error::Error> {
         #[allow(unused_mut, reason = "only mutated on some platforms")]
         let mut sigtstp = sys::signal::tstp_signal_listener()?;
         #[allow(unused_mut, reason = "only mutated on some platforms")]
         let mut sigchld = sys::signal::chld_signal_listener()?;
+
+        let cancelled = async {
+            match &cancel_token {
+                Some(token) => token.cancelled().await,
+                None => std::future::pending().await,
+            }
+        };
+        tokio::pin!(cancelled);
 
         #[allow(clippy::ignored_unit_patterns)]
         loop {
             tokio::select! {
                 output = &mut self.exec_future => {
                     break Ok(ProcessWaitResult::Completed(output?))
+                },
+                _ = &mut cancelled => {
+                    self.kill();
+                    break Ok(ProcessWaitResult::Cancelled)
                 },
                 _ = sigtstp.recv() => {
                     break Ok(ProcessWaitResult::Stopped)
@@ -61,6 +79,32 @@ impl ChildProcess {
         }
     }
 
+    /// Terminates the process if we have a PID.
+    fn kill(&self) {
+        let Some(pid) = self.pid else { return };
+
+        #[cfg(unix)]
+        {
+            let _ = nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), nix::sys::signal::Signal::SIGKILL);
+        }
+
+        #[cfg(windows)]
+        {
+            use windows_sys::Win32::Foundation::CloseHandle;
+            use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+
+            // SAFETY: Windows API calls with proper handle management
+            unsafe {
+                #[expect(clippy::cast_sign_loss)]
+                let handle = OpenProcess(PROCESS_TERMINATE, 0, pid as u32);
+                if handle != 0 {
+                    let _ = TerminateProcess(handle, 1);
+                    CloseHandle(handle);
+                }
+            }
+        }
+    }
+
     pub(crate) fn poll(&mut self) -> Option<Result<std::process::Output, error::Error>> {
         let checkable_future = &mut self.exec_future;
         checkable_future
@@ -75,4 +119,6 @@ pub enum ProcessWaitResult {
     Completed(std::process::Output),
     /// The process stopped and has not yet completed.
     Stopped,
+    /// The process was killed due to cancellation.
+    Cancelled,
 }
