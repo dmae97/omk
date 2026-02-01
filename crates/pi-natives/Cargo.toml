@@ -29,6 +29,7 @@ image = { version = "0.25", default-features = false, features = [
    "gif",
    "webp",
 ] }
+arboard = "3.5.0"
 bstr = "1"
 unicode-segmentation = "1.11"
 unicode-width = "0.2"

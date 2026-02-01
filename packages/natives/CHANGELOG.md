@@ -1,9 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Exported `copyToClipboard()` and `readImageFromClipboard()` functions for clipboard operations
+- Exported `ClipboardImage` type for clipboard image data with MIME type information
 - Added `wrapTextWithAnsi()` function to wrap text to a visible width while preserving ANSI escape codes across line breaks
+- Added native clipboard helpers for copying text and reading images via arboard
 
 ## [9.7.0] - 2026-02-01
 

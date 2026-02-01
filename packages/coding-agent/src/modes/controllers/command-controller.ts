@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { UsageLimit, UsageReport } from "@oh-my-pi/pi-ai";
+import { copyToClipboard } from "@oh-my-pi/pi-natives";
 import { Loader, Markdown, padding, Spacer, Text, visibleWidth } from "@oh-my-pi/pi-tui";
 import { $ } from "bun";
 import { nanoid } from "nanoid";
@@ -18,7 +19,6 @@ import type { InteractiveModeContext } from "../../modes/types";
 import { createCompactionSummaryMessage } from "../../session/messages";
 import { outputMeta } from "../../tools/output-meta";
 import { getChangelogPath, parseChangelog } from "../../utils/changelog";
-import { copyToClipboard } from "../../utils/clipboard";
 
 export class CommandController {
 	constructor(private readonly ctx: InteractiveModeContext) {}

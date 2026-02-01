@@ -12,6 +12,12 @@ export type { RequestOptions } from "./request-options";
 setNativeKillTree(native.killTree);
 
 // =============================================================================
+// Clipboard
+// =============================================================================
+
+export { type ClipboardImage, copyToClipboard, readImageFromClipboard } from "./clipboard/index";
+
+// =============================================================================
 // Grep (ripgrep-based regex search)
 // =============================================================================
 

@@ -9,6 +9,7 @@
 
 - Migrated bash command execution from ptree-based persistent sessions to native shell bindings with streaming support
 - Simplified bash executor to use brush-core native API instead of managing long-lived shell processes
+- Routed clipboard copy and image paste through native arboard bindings instead of shell commands
 
 ### Removed
 

@@ -3,13 +3,13 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
+import { readImageFromClipboard } from "@oh-my-pi/pi-natives";
 import { nanoid } from "nanoid";
 import { settings } from "../../config/settings";
 import { theme } from "../../modes/theme/theme";
 import type { InteractiveModeContext } from "../../modes/types";
 import type { AgentSessionEvent } from "../../session/agent-session";
 import { SKILL_PROMPT_MESSAGE_TYPE, type SkillPromptDetails } from "../../session/messages";
-import { readImageFromClipboard } from "../../utils/clipboard";
 import { resizeImage } from "../../utils/image-resize";
 import { generateSessionTitle, setTerminalTitle } from "../../utils/title-generator";
 
@@ -563,17 +563,18 @@ export class InputController {
 		try {
 			const image = await readImageFromClipboard();
 			if (image) {
-				let imageData = image;
+				const base64Data = Buffer.from(image.data).toString("base64");
+				let imageData = { data: base64Data, mimeType: image.mimeType };
 				if (settings.get("images.autoResize")) {
 					try {
 						const resized = await resizeImage({
 							type: "image",
-							data: image.data,
+							data: base64Data,
 							mimeType: image.mimeType,
 						});
 						imageData = { data: resized.data, mimeType: resized.mimeType };
 					} catch {
-						imageData = image;
+						imageData = { data: base64Data, mimeType: image.mimeType };
 					}
 				}
 

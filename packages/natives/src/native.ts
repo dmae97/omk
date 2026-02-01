@@ -13,6 +13,7 @@ import type { HighlightColors } from "./highlight/index";
 import type { HtmlToMarkdownOptions } from "./html/types";
 import type { ShellExecuteOptions, ShellExecuteResult } from "./shell/types";
 import type { ExtractSegmentsResult, SliceWithWidthResult } from "./text/index";
+import type { ClipboardImage } from "./clipboard/types";
 
 export type { RequestOptions } from "./request-options";
 
@@ -60,6 +61,8 @@ export interface NativeSamplingFilter {
 import type { GrepMatch } from "./grep/types";
 
 export interface NativeBindings {
+	copyToClipboard(text: string): Promise<void>;
+	readImageFromClipboard(): Promise<ClipboardImage | null>;
 	find(options: FindOptions, onMatch?: (error: Error | null, match: FindMatch) => void): Promise<FindResult>;
 	fuzzyFind(options: FuzzyFindOptions): Promise<FuzzyFindResult>;
 	grep(options: GrepOptions, onMatch?: (error: Error | null, match: GrepMatch) => void): Promise<GrepResult>;
@@ -169,6 +172,8 @@ function validateNative(bindings: NativeBindings, source: string): void {
 		}
 	};
 
+	checkFn("copyToClipboard");
+	checkFn("readImageFromClipboard");
 	checkFn("find");
 	checkFn("fuzzyFind");
 	checkFn("grep");
