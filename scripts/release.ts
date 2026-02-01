@@ -34,6 +34,48 @@ async function watchCI(): Promise<boolean> {
 			continue;
 		}
 
+		// Check job-level status for in-progress runs (fail fast on first job failure)
+		const failedJobs: Array<{ workflow: string; job: string; jobId: number; conclusion: string }> = [];
+		const inProgressRuns = runs.filter((r) => r.status === "in_progress" || r.status === "queued");
+
+		for (const run of inProgressRuns) {
+			const jobsOutput =
+				await $`gh run view ${run.databaseId} --json jobs`.quiet().nothrow().text();
+			try {
+				const { jobs } = JSON.parse(jobsOutput) as {
+					jobs: Array<{ name: string; databaseId: number; status: string; conclusion: string | null }>;
+				};
+				for (const job of jobs) {
+					if (job.status === "completed" && job.conclusion !== "success" && job.conclusion !== "skipped") {
+						failedJobs.push({
+							workflow: run.name,
+							job: job.name,
+							jobId: job.databaseId,
+							conclusion: job.conclusion ?? "unknown",
+						});
+					}
+				}
+			} catch {
+				// Ignore parse errors
+			}
+		}
+
+		if (failedJobs.length > 0) {
+			console.error("\nCI job failed:");
+			for (const f of failedJobs) {
+				console.error(`  - ${f.workflow} / ${f.job} (job ${f.jobId}): ${f.conclusion}`);
+				// Tail the failed job's log
+				const log = await $`gh run view --job ${f.jobId} --log-failed`.quiet().nothrow().text();
+				if (log.trim()) {
+					const lines = log.trimEnd().split("\n");
+					const tail = lines.slice(-20).join("\n");
+					console.error(`\n--- Last 20 lines of ${f.job} ---\n${tail}\n`);
+				}
+			}
+			return false;
+		}
+
+		// Check workflow-level status
 		const pending = runs.filter((r) => r.status !== "completed");
 		const failed = runs.filter((r) => r.status === "completed" && r.conclusion !== "success");
 		const passed = runs.filter((r) => r.status === "completed" && r.conclusion === "success");
@@ -44,6 +86,25 @@ async function watchCI(): Promise<boolean> {
 			console.error("\nCI failed:");
 			for (const r of failed) {
 				console.error(`  - ${r.name}: ${r.conclusion}`);
+				// Fetch failed jobs and tail their logs
+				const jobsOutput = await $`gh run view ${r.databaseId} --json jobs`.quiet().nothrow().text();
+				try {
+					const { jobs } = JSON.parse(jobsOutput) as {
+						jobs: Array<{ name: string; databaseId: number; status: string; conclusion: string | null }>;
+					};
+					for (const job of jobs) {
+						if (job.conclusion !== "success" && job.conclusion !== "skipped") {
+							const log = await $`gh run view --job ${job.databaseId} --log-failed`.quiet().nothrow().text();
+							if (log.trim()) {
+								const lines = log.trimEnd().split("\n");
+								const tail = lines.slice(-20).join("\n");
+								console.error(`\n--- Last 20 lines of ${job.name} (job ${job.databaseId}) ---\n${tail}\n`);
+							}
+						}
+					}
+				} catch {
+					// Ignore parse errors
+				}
 			}
 			return false;
 		}

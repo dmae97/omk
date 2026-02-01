@@ -7,8 +7,7 @@
 //! # Example
 //! ```ignore
 //! const shell = new natives.Shell();
-//! const result = await shell.run({ command: "ls" }, (err, chunk) => {
-//!   if (err) return;
+//! const result = await shell.run({ command: "ls" }, (chunk) => {
 //!   console.log(chunk);
 //! });
 //! ```
@@ -138,8 +137,9 @@ impl Shell {
 	pub async fn run(
 		&self,
 		options: ShellRunOptions,
-		#[napi(ts_arg_type = "((error: Error | null, chunk: string) => void) | undefined | null")]
-		on_chunk: Option<ThreadsafeFunction<String>>,
+		#[napi(ts_arg_type = "((chunk: string) => void) | undefined | null")] on_chunk: Option<
+			ThreadsafeFunction<String>,
+		>,
 	) -> Result<ShellRunResult> {
 		let execution_id = next_execution_id();
 
@@ -253,22 +253,27 @@ async fn execute_shell_with_options(
 
 	let session = get_or_create_session(&options).await?;
 	let cancel_token = CancellationToken::new();
+	let session_key = options.session_key.clone();
+	let mut run_task = tokio::spawn({
+		let session = session.clone();
+		let cancel_token = cancel_token.clone();
+		async move {
+			let mut session = session.lock().await;
+			run_shell_command(&mut session, &options, on_chunk, cancel_token).await
+		}
+	});
 
 	let mut cancelled = false;
 	let mut timed_out = false;
 	let mut tainted = false;
 
 	let run_result = {
-		let mut session = session.lock().await;
-		let run_future = run_shell_command(&mut session, &options, on_chunk, cancel_token.clone());
-		tokio::pin!(run_future);
-
 		let run_result = if let Some(ms) = timeout_ms {
 			let timeout = time::sleep(Duration::from_millis(u64::from(ms)));
 			tokio::pin!(timeout);
 
 			tokio::select! {
-				result = &mut run_future => Some(result),
+				result = &mut run_task => Some(result),
 				_ = cancel_rx => {
 					cancelled = true;
 					cancel_token.cancel();
@@ -282,7 +287,7 @@ async fn execute_shell_with_options(
 			}
 		} else {
 			tokio::select! {
-				result = &mut run_future => Some(result),
+				result = &mut run_task => Some(result),
 				_ = cancel_rx => {
 					cancelled = true;
 					cancel_token.cancel();
@@ -292,23 +297,29 @@ async fn execute_shell_with_options(
 		};
 
 		if let Some(run_result) = run_result {
-			Some(
-				run_result
-					.map_err(|err| Error::from_reason(format!("Shell execution failed: {err}")))?,
-			)
+			let run_result = match run_result {
+				Ok(result) => result,
+				Err(err) => {
+					remove_session(&session_key);
+					return Err(Error::from_reason(format!("Shell execution task failed: {err}")));
+				},
+			};
+			Some(run_result?)
 		} else {
-			if time::timeout(Duration::from_millis(1500), &mut run_future)
-				.await
-				.is_err()
-			{
+			if let Ok(join_result) = time::timeout(Duration::from_millis(1500), &mut run_task).await {
+				if join_result.is_err() {
+					tainted = true;
+				}
+			} else {
 				tainted = true;
+				run_task.abort();
 			}
 			None
 		}
 	};
 
 	if tainted {
-		remove_session(&options.session_key);
+		remove_session(&session_key);
 	}
 
 	let Some(run_result) = run_result else {
@@ -316,7 +327,7 @@ async fn execute_shell_with_options(
 	};
 
 	if should_reset_session(&run_result) {
-		remove_session(&options.session_key);
+		remove_session(&session_key);
 	}
 
 	Ok(ShellExecuteResult { exit_code: Some(exit_code(&run_result)), cancelled, timed_out })
@@ -393,6 +404,18 @@ async fn create_session(options: &ShellExecuteOptions) -> Result<ShellSession> {
 	shell.register_builtin("sleep", builtins::builtin::<SleepCommand>());
 	shell.register_builtin("timeout", builtins::builtin::<TimeoutCommand>());
 
+	for (key, value) in std::env::vars() {
+		if should_skip_env_var(&key) {
+			continue;
+		}
+		let mut var = ShellVariable::new(ShellValue::String(value));
+		var.export();
+		shell
+			.env
+			.set_global(key, var)
+			.map_err(|err| Error::from_reason(format!("Failed to set env: {err}")))?;
+	}
+
 	if let Some(env) = options.session_env.as_ref() {
 		for (key, value) in env {
 			if should_skip_env_var(key) {
@@ -461,19 +484,24 @@ async fn run_shell_command(
 	params.process_group_policy = ProcessGroupPolicy::NewProcessGroup;
 	params.set_cancel_token(cancel_token);
 
+	let mut env_scope_pushed = false;
 	if let Some(env) = options.env.as_ref() {
 		session.shell.env.push_scope(EnvironmentScope::Command);
+		env_scope_pushed = true;
 		for (key, value) in env {
 			if should_skip_env_var(key) {
 				continue;
 			}
 			let mut var = ShellVariable::new(ShellValue::String(value.clone()));
 			var.export();
-			session
+			if let Err(err) = session
 				.shell
 				.env
 				.add(key.clone(), var, EnvironmentScope::Command)
-				.map_err(|err| Error::from_reason(format!("Failed to set env: {err}")))?;
+			{
+				let _ = session.shell.env.pop_scope(EnvironmentScope::Command);
+				return Err(Error::from_reason(format!("Failed to set env: {err}")));
+			}
 		}
 	}
 
@@ -486,7 +514,7 @@ async fn run_shell_command(
 		.run_string(options.command.clone(), &params)
 		.await;
 
-	if options.env.is_some() {
+	if env_scope_pushed {
 		session
 			.shell
 			.env
@@ -611,8 +639,9 @@ fn read_output(mut reader: std::fs::File, on_chunk: Option<ThreadsafeFunction<St
 						start += valid;
 					}
 
-					if err.error_len().is_some() {
-						start += 1;
+					if let Some(error_len) = err.error_len() {
+						emit_chunk("\u{FFFD}", on_chunk.as_ref());
+						start += error_len;
 						continue;
 					}
 
@@ -631,7 +660,7 @@ fn read_output(mut reader: std::fs::File, on_chunk: Option<ThreadsafeFunction<St
 
 fn emit_chunk(text: &str, callback: Option<&ThreadsafeFunction<String>>) {
 	if let Some(callback) = callback {
-		callback.call(Ok(text.to_string()), ThreadsafeFunctionCallMode::Blocking);
+		callback.call(Ok(text.to_string()), ThreadsafeFunctionCallMode::NonBlocking);
 	}
 }
 
