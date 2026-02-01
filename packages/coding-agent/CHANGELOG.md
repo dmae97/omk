@@ -1,13 +1,20 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Removed persistent shell session support; bash execution now uses native bindings via brush-core for improved reliability
 
+### Added
+
+- Added `sessionKey` option to bash executor to isolate shell sessions per agent instance
+- Added shell snapshot support for bash execution to preserve shell state across commands
+- Added `onChunk` callback support for streaming command output in real-time
+
 ### Changed
 
+- Refactored bash executor to queue output chunks asynchronously for improved reliability
+- Updated bash executor to pass environment variables separately as `sessionEnv` to native bindings
 - Migrated system information collection to use native bindings from brush-core instead of shell command execution
 - Updated CPU information to report core count alongside model name
 - Simplified OS version reporting to use Node.js built-in APIs

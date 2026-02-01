@@ -16,6 +16,8 @@ workspace = true
 napi = { version = "3", features = ["napi10", "tokio_rt", "tokio_time"] }
 napi-derive = "3"
 brush-core = "0.3.5"
+parking_lot = "0.12.5"
+clap = { version = "4", features = ["derive"] }
 os_pipe = "1"
 sysinfo = "0.30"
 grep-regex = "0.1"

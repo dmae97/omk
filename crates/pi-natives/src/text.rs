@@ -463,15 +463,15 @@ fn write_line_end_reset(state: &AnsiState, out: &mut Vec<u16>) {
 fn update_state_from_text(data: &[u16], state: &mut AnsiState) {
 	let mut i = 0usize;
 	while i < data.len() {
-		if data[i] == ESC {
-			if let Some(seq_len) = ansi_seq_len_u16(data, i) {
-				let seq = &data[i..i + seq_len];
-				if is_sgr_u16(seq) {
-					state.apply_sgr_u16(&seq[2..seq_len - 1]);
-				}
-				i += seq_len;
-				continue;
+		if data[i] == ESC
+			&& let Some(seq_len) = ansi_seq_len_u16(data, i)
+		{
+			let seq = &data[i..i + seq_len];
+			if is_sgr_u16(seq) {
+				state.apply_sgr_u16(&seq[2..seq_len - 1]);
 			}
+			i += seq_len;
+			continue;
 		}
 		i += 1;
 	}
@@ -480,11 +480,11 @@ fn update_state_from_text(data: &[u16], state: &mut AnsiState) {
 fn token_is_whitespace(token: &[u16]) -> bool {
 	let mut i = 0usize;
 	while i < token.len() {
-		if token[i] == ESC {
-			if let Some(seq_len) = ansi_seq_len_u16(token, i) {
-				i += seq_len;
-				continue;
-			}
+		if token[i] == ESC
+			&& let Some(seq_len) = ansi_seq_len_u16(token, i)
+		{
+			i += seq_len;
+			continue;
 		}
 		if token[i] != b' ' as u16 {
 			return false;
@@ -512,12 +512,12 @@ fn split_into_tokens_with_ansi(line: &[u16]) -> Vec<Vec<u16>> {
 	let mut i = 0usize;
 
 	while i < line.len() {
-		if line[i] == ESC {
-			if let Some(seq_len) = ansi_seq_len_u16(line, i) {
-				pending_ansi.extend_from_slice(&line[i..i + seq_len]);
-				i += seq_len;
-				continue;
-			}
+		if line[i] == ESC
+			&& let Some(seq_len) = ansi_seq_len_u16(line, i)
+		{
+			pending_ansi.extend_from_slice(&line[i..i + seq_len]);
+			i += seq_len;
+			continue;
 		}
 
 		let ch = line[i];
@@ -556,16 +556,16 @@ fn break_long_word(word: &[u16], width: usize, state: &mut AnsiState) -> Vec<Vec
 	let mut i = 0usize;
 
 	while i < word.len() {
-		if word[i] == ESC {
-			if let Some(seq_len) = ansi_seq_len_u16(word, i) {
-				let seq = &word[i..i + seq_len];
-				current_line.extend_from_slice(seq);
-				if is_sgr_u16(seq) {
-					state.apply_sgr_u16(&seq[2..seq_len - 1]);
-				}
-				i += seq_len;
-				continue;
+		if word[i] == ESC
+			&& let Some(seq_len) = ansi_seq_len_u16(word, i)
+		{
+			let seq = &word[i..i + seq_len];
+			current_line.extend_from_slice(seq);
+			if is_sgr_u16(seq) {
+				state.apply_sgr_u16(&seq[2..seq_len - 1]);
 			}
+			i += seq_len;
+			continue;
 		}
 
 		let start = i;
@@ -719,7 +719,8 @@ fn wrap_text_with_ansi_impl(text: &[u16], width: usize) -> Vec<Vec<u16>> {
 	result
 }
 
-/// Wrap text to a visible width, preserving ANSI escape codes across line breaks.
+/// Wrap text to a visible width, preserving ANSI escape codes across line
+/// breaks.
 #[napi(js_name = "wrapTextWithAnsi")]
 pub fn wrap_text_with_ansi(text: JsString, width: u32) -> Result<Vec<Utf16String>> {
 	let text_u16 = text.into_utf16()?;

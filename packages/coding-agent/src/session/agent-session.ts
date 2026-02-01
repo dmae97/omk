@@ -3080,6 +3080,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			const result = await executeBashCommand(command, {
 				onChunk,
 				signal: this._bashAbortController.signal,
+				sessionKey: this.sessionId,
 			});
 
 			this.recordBashResult(command, result, options);

@@ -1131,10 +1131,10 @@ fn format_kitty_key(parsed: &ParsedKittySequence) -> Option<Cow<'static, str>> {
 
 	// No modifiers - return static string
 	if effective_mod == 0 {
-		if let Some(text_codepoint) = parsed.text_codepoint {
-			if let Some(key_name) = format_key_name(text_codepoint) {
-				return Some(Cow::Borrowed(key_name));
-			}
+		if let Some(text_codepoint) = parsed.text_codepoint
+			&& let Some(key_name) = format_key_name(text_codepoint)
+		{
+			return Some(Cow::Borrowed(key_name));
 		}
 		return format_key_name(effective_codepoint).map(Cow::Borrowed);
 	}

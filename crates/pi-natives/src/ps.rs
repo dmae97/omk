@@ -43,6 +43,18 @@ mod platform {
 		// SAFETY: libc::kill is safe to call with any pid/signal combination
 		unsafe { libc::kill(pid, signal) == 0 }
 	}
+
+	/// Get the process group id for a pid.
+	pub fn process_group_id(pid: i32) -> Option<i32> {
+		let pgid = unsafe { libc::getpgid(pid) };
+		if pgid < 0 { None } else { Some(pgid) }
+	}
+
+	/// Kill a process group with the given signal.
+	pub fn kill_process_group(pgid: i32, signal: i32) -> bool {
+		// SAFETY: libc::kill is safe to call with any pid/signal combination
+		unsafe { libc::kill(-pgid, signal) == 0 }
+	}
 }
 
 #[cfg(target_os = "macos")]
@@ -84,6 +96,18 @@ mod platform {
 	pub fn kill_pid(pid: i32, signal: i32) -> bool {
 		// SAFETY: libc::kill is safe to call with any pid/signal combination
 		unsafe { libc::kill(pid, signal) == 0 }
+	}
+
+	/// Get the process group id for a pid.
+	pub fn process_group_id(pid: i32) -> Option<i32> {
+		let pgid = unsafe { libc::getpgid(pid) };
+		if pgid < 0 { None } else { Some(pgid) }
+	}
+
+	/// Kill a process group with the given signal.
+	pub fn kill_process_group(pgid: i32, signal: i32) -> bool {
+		// SAFETY: libc::kill is safe to call with any pid/signal combination
+		unsafe { libc::kill(-pgid, signal) == 0 }
 	}
 }
 
@@ -180,6 +204,16 @@ mod platform {
 			result != 0
 		}
 	}
+
+	/// Process groups are not exposed on Windows.
+	pub fn process_group_id(_pid: i32) -> Option<i32> {
+		None
+	}
+
+	/// Process groups are not exposed on Windows.
+	pub fn kill_process_group(_pgid: i32, _signal: i32) -> bool {
+		false
+	}
 }
 
 /// Kill a process tree (the process and all its descendants).
@@ -206,6 +240,16 @@ pub fn kill_tree(pid: i32, signal: i32) -> u32 {
 	}
 
 	killed
+}
+
+/// Get the process group id for a pid.
+pub fn process_group_id(pid: i32) -> Option<i32> {
+	platform::process_group_id(pid)
+}
+
+/// Kill a process group by pgid.
+pub fn kill_process_group(pgid: i32, signal: i32) -> bool {
+	platform::kill_process_group(pgid, signal)
 }
 
 /// List all descendant PIDs of a process.

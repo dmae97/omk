@@ -6,7 +6,7 @@ import type { Subprocess } from "bun";
 export interface ShellConfig {
 	shell: string;
 	args: string[];
-	env: Record<string, string | undefined>;
+	env: Record<string, string>;
 	prefix: string | undefined;
 }
 
@@ -30,7 +30,7 @@ function isExecutable(path: string): boolean {
 /**
  * Build the spawn environment (cached).
  */
-function buildSpawnEnv(shell: string): Record<string, string | undefined> {
+function buildSpawnEnv(shell: string): Record<string, string> {
 	const noCI = process.env.OMP_BASH_NO_CI || process.env.CLAUDE_BASH_NO_CI;
 	return {
 		...process.env,

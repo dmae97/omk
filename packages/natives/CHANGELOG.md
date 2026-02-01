@@ -1,13 +1,21 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `sessionEnv` option to `ShellExecuteOptions` for setting environment variables once per session
+- Added `sessionKey` option to `ShellExecuteOptions` for managing persistent brush shell instances
+- Added `snapshotPath` option to `ShellExecuteOptions` to source bash session snapshots
 - Exported `getSystemInfo()` function and `SystemInfo` type for retrieving system information including distro, kernel, CPU, and disk details
 - Exported `copyToClipboard()` and `readImageFromClipboard()` functions for clipboard operations
 - Exported `ClipboardImage` type for clipboard image data with MIME type information
 - Added `wrapTextWithAnsi()` function to wrap text to a visible width while preserving ANSI escape codes across line breaks
 - Added native clipboard helpers for copying text and reading images via arboard
+
+### Changed
+
+- Updated `env` option documentation in `ShellExecuteOptions` to clarify it applies variables for the current command only
 
 ## [9.7.0] - 2026-02-01
 

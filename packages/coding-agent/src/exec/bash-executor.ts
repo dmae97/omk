@@ -7,12 +7,15 @@ import * as crypto from "node:crypto";
 import { abortShellExecution, executeShell } from "@oh-my-pi/pi-natives";
 import { Settings } from "../config/settings";
 import { OutputSink } from "../session/streaming-output";
+import { getOrCreateSnapshot } from "../utils/shell-snapshot";
 
 export interface BashExecutorOptions {
 	cwd?: string;
 	timeout?: number;
 	onChunk?: (chunk: string) => void;
 	signal?: AbortSignal;
+	/** Session key suffix to isolate shell sessions per agent */
+	sessionKey?: string;
 	/** Additional environment variables to inject */
 	env?: Record<string, string>;
 	/** Artifact path/id for full output storage */
@@ -34,30 +37,15 @@ export interface BashResult {
 
 export async function executeBash(command: string, options?: BashExecutorOptions): Promise<BashResult> {
 	const settings = await Settings.init();
-	const { env: shellEnv, prefix } = settings.getShellConfig();
+	const { shell, env: shellEnv, prefix } = settings.getShellConfig();
+	const snapshotPath = shell.includes("bash") ? await getOrCreateSnapshot(shell, shellEnv) : null;
 
 	// Generate unique execution ID for abort support
 	const executionId = crypto.randomUUID();
 
-	// Merge shell env with additional env vars (additional takes precedence)
-	// Filter out undefined values and problematic vars for the native API
-	// BASH_ENV and ENV cause brush-core to fail with "not yet implemented" errors
-	const mergedEnv: Record<string, string> = {};
-	for (const [key, value] of Object.entries(shellEnv)) {
-		if (value !== undefined && key !== "BASH_ENV" && key !== "ENV") {
-			mergedEnv[key] = value;
-		}
-	}
-	if (options?.env) {
-		for (const [key, value] of Object.entries(options.env)) {
-			if (key !== "BASH_ENV" && key !== "ENV") {
-				mergedEnv[key] = value;
-			}
-		}
-	}
-
 	// Apply command prefix if configured
-	const finalCommand = prefix ? `${prefix} ${command}` : command;
+	const prefixedCommand = prefix ? `${prefix} ${command}` : command;
+	const finalCommand = prefixedCommand;
 
 	// Create output sink for truncation and artifact handling
 	const sink = new OutputSink({
@@ -65,6 +53,11 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 		artifactPath: options?.artifactPath,
 		artifactId: options?.artifactId,
 	});
+
+	let pendingChunks = Promise.resolve();
+	const enqueueChunk = (chunk: string) => {
+		pendingChunks = pendingChunks.then(() => sink.push(chunk)).catch(() => {});
+	};
 
 	// Set up abort handling
 	let abortListener: (() => void) | undefined;
@@ -89,14 +82,17 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 			{
 				command: finalCommand,
 				cwd: options?.cwd,
-				env: Object.keys(mergedEnv).length > 0 ? mergedEnv : undefined,
+				env: options?.env,
+				sessionEnv: shellEnv,
 				timeoutMs: options?.timeout,
 				executionId,
+				sessionKey: options?.sessionKey ?? "singleton",
+				snapshotPath: snapshotPath ?? undefined,
 			},
-			async (chunk: string) => {
-				await sink.push(chunk);
-			},
+			enqueueChunk,
 		);
+
+		await pendingChunks;
 
 		// Handle timeout
 		if (result.timedOut) {
@@ -126,9 +122,23 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 			...(await sink.dump()),
 		};
 	} finally {
+		await pendingChunks;
 		// Clean up abort listener
 		if (abortListener && options?.signal) {
 			options.signal.removeEventListener("abort", abortListener);
 		}
 	}
+}
+
+function buildSessionKey(
+	shell: string,
+	prefix: string | undefined,
+	snapshotPath: string | null,
+	env: Record<string, string>,
+	agentSessionKey?: string,
+): string {
+	const entries = Object.entries(env);
+	entries.sort(([a], [b]) => a.localeCompare(b));
+	const envSerialized = entries.map(([key, value]) => `${key}=${value}`).join("\n");
+	return [agentSessionKey ?? "", shell, prefix ?? "", snapshotPath ?? "", envSerialized].join("\n");
 }
