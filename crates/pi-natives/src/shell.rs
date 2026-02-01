@@ -554,7 +554,7 @@ async fn run_shell_command(
 		}
 	}
 
-	let reader_handle = launch_async(async move {
+	let reader_handle = launch_async("shell.read_output", async move {
 		read_output(reader_file, on_chunk).await;
 		Ok(())
 	});

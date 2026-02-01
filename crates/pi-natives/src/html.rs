@@ -31,7 +31,7 @@ pub async fn html_to_markdown(
 	let clean_content = options.clean_content.unwrap_or(false);
 	let skip_images = options.skip_images.unwrap_or(false);
 
-	launch_blocking(move || {
+	launch_blocking("html_to_markdown", move || {
 		let conversion_opts = ConversionOptions {
 			skip_images,
 			preprocessing: PreprocessingOptions {

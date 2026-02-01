@@ -685,7 +685,7 @@ fn matches_key_inner(bytes: &[u8], key_id: &str, kitty_protocol_active: bool) ->
 
 			// ctrl+symbol legacy mapping (layout dependent)
 			if let Some(legacy_ctrl) = ctrl_symbol_to_byte(ch)
-				&& bytes == &[legacy_ctrl]
+				&& bytes == [legacy_ctrl]
 			{
 				return true;
 			}

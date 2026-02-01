@@ -24,6 +24,7 @@ import "./ps/types";
 import "./shell/types";
 import "./system-info/types";
 import "./text/types";
+import "./work/types";
 
 export type { NativeBindings, TsFunc } from "./bindings";
 
@@ -184,6 +185,7 @@ function validateNative(bindings: NativeBindings, source: string): void {
 	checkFn("killTree");
 	checkFn("listDescendants");
 	checkFn("getSystemInfo");
+	checkFn("getWorkProfile");
 
 	if (missing.length) {
 		throw new Error(

@@ -1034,7 +1034,7 @@ pub async fn grep(
 		ThreadsafeFunction<GrepMatch>,
 	>,
 ) -> Result<GrepResult> {
-	launch_blocking(move || grep_sync(options, on_match.as_ref()))
+	launch_blocking("grep", move || grep_sync(options, on_match.as_ref()))
 		.wait()
 		.await
 }
@@ -1156,7 +1156,7 @@ fn fuzzy_find_sync(options: FuzzyFindOptions) -> Result<FuzzyFindResult> {
 /// Matching file and directory entries.
 #[napi(js_name = "fuzzyFind")]
 pub async fn fuzzy_find(options: FuzzyFindOptions) -> Result<FuzzyFindResult> {
-	launch_blocking(move || fuzzy_find_sync(options))
+	launch_blocking("fuzzy_find", move || fuzzy_find_sync(options))
 		.wait()
 		.await
 }

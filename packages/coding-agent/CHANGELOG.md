@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added work scheduling profiler to debug menu for analyzing CPU scheduling patterns over the last 30 seconds
+- Added support for work profile data in report bundles including folded stacks, summary, and flamegraph visualization
 
 ## [10.0.0] - 2026-02-01
 ### Added

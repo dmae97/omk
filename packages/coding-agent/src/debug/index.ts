@@ -4,6 +4,7 @@
  * Provides tools for debugging, bug report generation, and system diagnostics.
  */
 import * as fs from "node:fs/promises";
+import { getWorkProfile } from "@oh-my-pi/pi-natives/work";
 import { Container, Loader, type SelectItem, SelectList, Spacer, Text } from "@oh-my-pi/pi-tui";
 import { getSessionsDir } from "../config";
 import { DynamicBorder } from "../modes/components/dynamic-border";
@@ -17,6 +18,7 @@ import { collectSystemInfo, formatSystemInfo } from "./system-info";
 const DEBUG_MENU_ITEMS: SelectItem[] = [
 	{ value: "open-artifacts", label: "Open: artifact folder", description: "Open session artifacts in file manager" },
 	{ value: "performance", label: "Report: performance issue", description: "Profile CPU, reproduce, then bundle" },
+	{ value: "work", label: "Profile: work scheduling", description: "Open flamegraph of last 30s" },
 	{ value: "dump", label: "Report: dump session", description: "Create report bundle immediately" },
 	{ value: "memory", label: "Report: memory issue", description: "Heap snapshot + bundle" },
 	{ value: "logs", label: "View: recent logs", description: "Show last 50 log entries" },
@@ -68,6 +70,9 @@ export class DebugSelectorComponent extends Container {
 				break;
 			case "performance":
 				await this.handlePerformanceReport();
+				break;
+			case "work":
+				await this.handleWorkReport();
 				break;
 			case "dump":
 				await this.handleDumpReport();
@@ -157,6 +162,39 @@ export class DebugSelectorComponent extends Container {
 			loader.stop();
 			this.ctx.statusContainer.clear();
 			this.ctx.showError(`Failed to create report: ${err instanceof Error ? err.message : String(err)}`);
+		}
+
+		this.ctx.ui.requestRender();
+	}
+
+	private async handleWorkReport(): Promise<void> {
+		try {
+			const workProfile = getWorkProfile(30);
+
+			if (!workProfile.svg) {
+				this.ctx.showWarning(`No work profile data (${workProfile.sampleCount} samples)`);
+				return;
+			}
+
+			// Write SVG to temp file and open in browser
+			const tmpPath = `/tmp/work-profile-${Date.now()}.svg`;
+			await Bun.write(tmpPath, workProfile.svg);
+
+			const openCmd =
+				process.platform === "darwin"
+					? ["open", tmpPath]
+					: process.platform === "win32"
+						? ["cmd", "/c", "start", "", tmpPath]
+						: ["xdg-open", tmpPath];
+
+			Bun.spawn(openCmd, { stdout: "ignore", stderr: "ignore" }).unref();
+
+			this.ctx.chatContainer.addChild(new Spacer(1));
+			this.ctx.chatContainer.addChild(
+				new Text(theme.fg("dim", `Opened flamegraph (${workProfile.sampleCount} samples)`), 1, 0),
+			);
+		} catch (err) {
+			this.ctx.showError(`Failed to open profile: ${err instanceof Error ? err.message : String(err)}`);
 		}
 
 		this.ctx.ui.requestRender();

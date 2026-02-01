@@ -58,7 +58,7 @@ fn encode_png(image: ImageData<'_>) -> Result<Vec<u8>> {
 /// Returns an error if clipboard access fails.
 #[napi(js_name = "copyToClipboard")]
 pub async fn copy_to_clipboard(text: String) -> Result<()> {
-	launch_blocking(move || -> Result<()> {
+	launch_blocking("clipboard.copy", move || -> Result<()> {
 		let mut clipboard = Clipboard::new()
 			.map_err(|err| Error::from_reason(format!("Failed to access clipboard: {err}")))?;
 		clipboard
@@ -79,22 +79,23 @@ pub async fn copy_to_clipboard(text: String) -> Result<()> {
 /// Returns an error if clipboard access fails or image encoding fails.
 #[napi(js_name = "readImageFromClipboard")]
 pub async fn read_image_from_clipboard() -> Result<Option<ClipboardImage>> {
-	let result = launch_blocking(move || -> Result<Option<ClipboardImage>> {
-		let mut clipboard = Clipboard::new()
-			.map_err(|err| Error::from_reason(format!("Failed to access clipboard: {err}")))?;
-		match clipboard.get_image() {
-			Ok(image) => {
-				let bytes = encode_png(image)?;
-				Ok(Some(ClipboardImage {
-					data:      Uint8Array::from(bytes),
-					mime_type: "image/png".to_string(),
-				}))
-			},
-			Err(ClipboardError::ContentNotAvailable) => Ok(None),
-			Err(err) => Err(Error::from_reason(format!("Failed to read clipboard image: {err}"))),
-		}
-	})
-	.wait()
-	.await?;
+	let result =
+		launch_blocking("clipboard.read_image", move || -> Result<Option<ClipboardImage>> {
+			let mut clipboard = Clipboard::new()
+				.map_err(|err| Error::from_reason(format!("Failed to access clipboard: {err}")))?;
+			match clipboard.get_image() {
+				Ok(image) => {
+					let bytes = encode_png(image)?;
+					Ok(Some(ClipboardImage {
+						data:      Uint8Array::from(bytes),
+						mime_type: "image/png".to_string(),
+					}))
+				},
+				Err(ClipboardError::ContentNotAvailable) => Ok(None),
+				Err(err) => Err(Error::from_reason(format!("Failed to read clipboard image: {err}"))),
+			}
+		})
+		.wait()
+		.await?;
 	Ok(result)
 }

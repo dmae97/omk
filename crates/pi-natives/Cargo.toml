@@ -29,6 +29,7 @@ grep-matcher = "0.1"
 globset = "0.4"
 ignore = "0.4"
 rayon = "1.10"
+inferno = { version = "0.12", default-features = false }
 image = { version = "0.25", default-features = false, features = [
    "png",
    "jpeg",
@@ -46,6 +47,8 @@ syntect = { version = "5.3", default-features = false, features = [
 ] }
 html-to-markdown-rs = { version = "2.24", default-features = false }
 phf = { version = "0.13", features = ["macros"] }
+smallvec = { version = "1.15.1", features = ["serde", "write", "union", "specialization"] }
+heapless = { version = "0.9.2", features = ["serde", "nightly"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

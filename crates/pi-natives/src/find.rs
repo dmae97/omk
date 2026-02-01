@@ -317,7 +317,7 @@ pub async fn find(
 	let mentions_node_modules = pattern.contains("node_modules");
 	let sort_by_mtime = sort_by_mtime.unwrap_or(false);
 
-	launch_blocking(move || {
+	launch_blocking("find", move || {
 		let cancelled = AtomicBool::new(false);
 		let config = FindConfig {
 			root: search_path,

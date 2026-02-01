@@ -1,10 +1,16 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Changed `executionId` parameter type from `string` to `number` in `abortShellExecution()` and `ShellExecuteOptions`
 - Removed `sessionKey` field from `ShellExecuteOptions`
+
+### Added
+
+- Added `getWorkProfile()` function to retrieve work scheduling profiling data from a circular buffer of recent activity
+- Added `WorkProfile` type with folded stack format, markdown summary, SVG flamegraph, and sample metrics for profiling results
 
 ## [9.8.0] - 2026-02-01
 ### Breaking Changes

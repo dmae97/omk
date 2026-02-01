@@ -6,6 +6,7 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import type { WorkProfile } from "@oh-my-pi/pi-natives/work";
 import { isEnoent } from "@oh-my-pi/pi-utils";
 import type { CpuProfile, HeapSnapshot } from "./profiler";
 import { collectSystemInfo, sanitizeEnv } from "./system-info";
@@ -42,6 +43,8 @@ export interface ReportBundleOptions {
 	cpuProfile?: CpuProfile;
 	/** Heap snapshot (for memory reports) */
 	heapSnapshot?: HeapSnapshot;
+	/** Work profile (for work scheduling reports) */
+	workProfile?: WorkProfile;
 }
 
 export interface ReportBundleResult {
@@ -63,6 +66,9 @@ export interface ReportBundleResult {
  * - profile.cpuprofile: CPU profile (performance report only)
  * - profile.md: Markdown CPU profile (performance report only)
  * - heap.heapsnapshot: Heap snapshot (memory report only)
+ * - work.folded: Work profile folded stacks (work report only)
+ * - work.md: Work profile summary (work report only)
+ * - work.svg: Work profile flamegraph (work report only)
  */
 export async function createReportBundle(options: ReportBundleOptions): Promise<ReportBundleResult> {
 	const reportsDir = getReportsDir();
@@ -129,6 +135,18 @@ export async function createReportBundle(options: ReportBundleOptions): Promise<
 	if (options.heapSnapshot) {
 		data["heap.heapsnapshot"] = options.heapSnapshot.data;
 		files.push("heap.heapsnapshot");
+	}
+
+	// Work profile
+	if (options.workProfile) {
+		data["work.folded"] = options.workProfile.folded;
+		files.push("work.folded");
+		data["work.md"] = options.workProfile.summary;
+		files.push("work.md");
+		if (options.workProfile.svg) {
+			data["work.svg"] = options.workProfile.svg;
+			files.push("work.svg");
+		}
 	}
 
 	// Write archive
