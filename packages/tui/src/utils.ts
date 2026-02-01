@@ -84,20 +84,35 @@ export function visibleWidth(str: string): number {
 	*/
 }
 
-const PUNCTUATION_REGEX = /[(){}[\]<>.,;:'"!?+\-=*/\\|&%^$#@~`]/;
+const makeBoolArray = (chars: string): ReadonlyArray<boolean> => {
+	const table = Array.from({ length: 128 }, () => false);
+	for (let i = 0; i < chars.length; i++) {
+		const code = chars.charCodeAt(i);
+		if (code < table.length) {
+			table[code] = true;
+		}
+	}
+	return table;
+};
+
+const ASCII_WHITESPACE = makeBoolArray("\x09\x0a\x0b\x0c\x0d\x20");
 
 /**
  * Check if a character is whitespace.
  */
 export function isWhitespaceChar(char: string): boolean {
-	return /\s/.test(char);
+	const code = char.codePointAt(0) || 0;
+	return ASCII_WHITESPACE[code] ?? false;
 }
+
+const ASCII_PUNCTUATION = makeBoolArray("(){}[]<>.,;:'\"!?+-=*/\\|&%^$#@~`");
 
 /**
  * Check if a character is punctuation.
  */
 export function isPunctuationChar(char: string): boolean {
-	return PUNCTUATION_REGEX.test(char);
+	const code = char.codePointAt(0) || 0;
+	return ASCII_PUNCTUATION[code] ?? false;
 }
 
 /**
