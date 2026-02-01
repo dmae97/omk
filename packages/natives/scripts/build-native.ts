@@ -4,7 +4,7 @@ import * as path from "node:path";
 
 const repoRoot = path.join(import.meta.dir, "../../..");
 const rustDir = path.join(repoRoot, "crates/pi-natives");
-const cargoTarget = process.env.CARGO_BUILD_TARGET;
+const cargoTarget = process.env.CROSS_TARGET || undefined;
 const targetRoots = [
 	process.env.CARGO_TARGET_DIR ? path.resolve(process.env.CARGO_TARGET_DIR) : undefined,
 	path.join(repoRoot, "target"),

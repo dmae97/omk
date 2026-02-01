@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Fixed bash command normalization to preserve newlines in heredocs and multiline commands
+
+## [9.6.0] - 2026-02-01
 ### Breaking Changes
 
 - Replaced `SettingsManager` class with new `Settings` singleton providing sync get/set API with background persistence

@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [9.6.0] - 2026-02-01
 ### Added
 
 - Support for cross-compilation via `CARGO_BUILD_TARGET` environment variable
