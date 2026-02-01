@@ -8,6 +8,7 @@
 //! global offsets, optional match limits, and per-file match summaries.
 
 use std::{
+	borrow::Cow,
 	fs::File,
 	io::{self, Cursor, Read},
 	path::{Path, PathBuf},
@@ -235,6 +236,13 @@ impl MatchCollector {
 	}
 }
 
+fn bytes_to_trimmed_string(bytes: &[u8]) -> String {
+	match std::str::from_utf8(bytes) {
+		Ok(text) => text.trim_end().to_string(),
+		Err(_) => String::from_utf8_lossy(bytes).trim_end().to_string(),
+	}
+}
+
 impl Sink for MatchCollector {
 	type Error = io::Error;
 
@@ -258,7 +266,7 @@ impl Sink for MatchCollector {
 		}
 
 		if self.collect_matches {
-			let raw_line = String::from_utf8_lossy(mat.bytes()).trim_end().to_string();
+			let raw_line = bytes_to_trimmed_string(mat.bytes());
 			let (line, truncated) = self.truncate_line(&raw_line);
 			let line_number = mat.line_number().unwrap_or(0);
 
@@ -294,7 +302,7 @@ impl Sink for MatchCollector {
 			return Ok(true);
 		}
 
-		let raw_line = String::from_utf8_lossy(ctx.bytes()).trim_end().to_string();
+		let raw_line = bytes_to_trimmed_string(ctx.bytes());
 		let (line, _) = self.truncate_line(&raw_line);
 		let line_number = ctx.line_number().unwrap_or(0);
 
@@ -325,7 +333,7 @@ fn clamp_u32(value: u64) -> u32 {
 fn parse_output_mode(mode: Option<&str>) -> OutputMode {
 	match mode {
 		Some("count" | "filesWithMatches") => OutputMode::Count,
-		Some("content") | _ => OutputMode::Content,
+		_ => OutputMode::Content,
 	}
 }
 
@@ -409,24 +417,30 @@ fn resolve_type_filter(type_name: Option<&str>) -> Option<TypeFilter> {
 	})
 }
 
+fn matches_case_insensitive(value: &str, candidates: &[String]) -> bool {
+	if value.is_ascii() {
+		candidates
+			.iter()
+			.any(|candidate| value.eq_ignore_ascii_case(candidate))
+	} else {
+		let lowered = value.to_lowercase();
+		candidates.iter().any(|candidate| candidate == &lowered)
+	}
+}
+
 fn matches_type_filter(path: &Path, filter: &TypeFilter) -> bool {
 	let base_name = path
 		.file_name()
 		.and_then(|name| name.to_str())
-		.unwrap_or("")
-		.to_lowercase();
-	if filter.names.iter().any(|name| name == &base_name) {
+		.unwrap_or("");
+	if matches_case_insensitive(base_name, &filter.names) {
 		return true;
 	}
-	let ext = path
-		.extension()
-		.and_then(|ext| ext.to_str())
-		.unwrap_or("")
-		.to_lowercase();
+	let ext = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 	if ext.is_empty() {
 		return false;
 	}
-	filter.extensions.iter().any(|value| value == &ext)
+	matches_case_insensitive(ext, &filter.extensions)
 }
 
 fn read_file_prefix(path: &Path) -> io::Result<Vec<u8>> {
@@ -437,9 +451,18 @@ fn read_file_prefix(path: &Path) -> io::Result<Vec<u8>> {
 	Ok(buffer)
 }
 
-fn normalize_relative_path(root: &Path, path: &Path) -> String {
+fn normalize_relative_path<'a>(root: &Path, path: &'a Path) -> Cow<'a, str> {
 	let relative = path.strip_prefix(root).unwrap_or(path);
-	relative.to_string_lossy().replace('\\', "/")
+	if cfg!(windows) {
+		let relative = relative.to_string_lossy();
+		if relative.contains('\\') {
+			Cow::Owned(relative.replace('\\', "/"))
+		} else {
+			relative
+		}
+	} else {
+		relative.to_string_lossy()
+	}
 }
 
 fn build_searcher(context: u32) -> Searcher {
@@ -545,10 +568,7 @@ fn collect_files(
 
 	let mut entries = Vec::new();
 	for entry in builder.build() {
-		let entry = match entry {
-			Ok(entry) => entry,
-			Err(_) => continue,
-		};
+		let Ok(entry) = entry else { continue };
 		let file_type = entry.file_type();
 		if !file_type.is_some_and(|ft| ft.is_file()) {
 			continue;
@@ -565,10 +585,8 @@ fn collect_files(
 		{
 			continue;
 		}
-		entries.push(FileEntry {
-			path:          path.clone(),
-			relative_path: normalize_relative_path(root, &path),
-		});
+		let relative_path = normalize_relative_path(root, &path).into_owned();
+		entries.push(FileEntry { path, relative_path });
 	}
 	entries
 }
@@ -628,9 +646,8 @@ fn run_sequential_search(
 		if limit_reached {
 			break;
 		}
-		let bytes = match read_file_prefix(&entry.path) {
-			Ok(bytes) => bytes,
-			Err(_) => continue,
+		let Ok(bytes) = read_file_prefix(&entry.path) else {
+			continue;
 		};
 		files_searched = files_searched.saturating_add(1);
 		if !matcher.is_match(&bytes).unwrap_or(false) {
@@ -644,11 +661,11 @@ fn run_sequential_search(
 			break;
 		}
 
-		let search =
-			match run_search(matcher, &bytes, context, max_columns, mode, remaining, file_offset) {
-				Ok(result) => result,
-				Err(_) => continue,
-			};
+		let Ok(search) =
+			run_search(matcher, &bytes, context, max_columns, mode, remaining, file_offset)
+		else {
+			continue;
+		};
 
 		if search.match_count == 0 {
 			continue;
@@ -745,17 +762,14 @@ fn grep_sync(options: GrepOptions) -> Result<GrepResult> {
 			});
 		}
 
-		let bytes = match read_file_prefix(&search_path) {
-			Ok(bytes) => bytes,
-			Err(_) => {
-				return Ok(GrepResult {
-					matches:            Vec::new(),
-					total_matches:      0,
-					files_with_matches: 0,
-					files_searched:     0,
-					limit_reached:      None,
-				});
-			},
+		let Ok(bytes) = read_file_prefix(&search_path) else {
+			return Ok(GrepResult {
+				matches:            Vec::new(),
+				total_matches:      0,
+				files_with_matches: 0,
+				files_searched:     0,
+				limit_reached:      None,
+			});
 		};
 
 		let search =

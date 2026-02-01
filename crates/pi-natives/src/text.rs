@@ -299,20 +299,34 @@ fn visible_width_impl(text: &str) -> usize {
 		return text.len();
 	}
 
-	let mut width = 0;
+	let mut ansi_ranges = Vec::new();
+	let bytes = text.as_bytes();
 	let mut i = 0;
-	while i < text.len() {
-		if let Some(len) = extract_ansi_code(text, i) {
+	while i < bytes.len() {
+		if bytes[i] == 0x1b
+			&& let Some(len) = extract_ansi_code(text, i)
+		{
+			ansi_ranges.push((i, i + len));
 			i += len;
 			continue;
 		}
+		i += 1;
+	}
 
-		let next_ansi = next_ansi_start(text, i);
-		let end = next_ansi.unwrap_or(text.len());
-		for grapheme in text[i..end].graphemes(true) {
+	let mut width = 0;
+	let mut cursor = 0;
+	for (start, end) in ansi_ranges {
+		if start > cursor {
+			for grapheme in text[cursor..start].graphemes(true) {
+				width += grapheme_width(grapheme);
+			}
+		}
+		cursor = end;
+	}
+	if cursor < text.len() {
+		for grapheme in text[cursor..].graphemes(true) {
 			width += grapheme_width(grapheme);
 		}
-		i = end;
 	}
 
 	width

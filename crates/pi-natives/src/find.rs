@@ -9,7 +9,10 @@
 //! // JS: await native.find({ pattern: "*.rs", path: "." })
 //! ```
 
-use std::path::{Path, PathBuf};
+use std::{
+	borrow::Cow,
+	path::{Path, PathBuf},
+};
 
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use ignore::WalkBuilder;
@@ -73,9 +76,13 @@ fn resolve_search_path(path: &str) -> Result<PathBuf> {
 }
 
 fn build_glob_pattern(glob: &str) -> String {
-	let normalized = glob.replace('\\', "/");
+	let normalized = if cfg!(windows) && glob.contains('\\') {
+		Cow::Owned(glob.replace('\\', "/"))
+	} else {
+		Cow::Borrowed(glob)
+	};
 	if normalized.contains('/') || normalized.starts_with("**") {
-		normalized
+		normalized.into_owned()
 	} else {
 		format!("**/{normalized}")
 	}
@@ -92,9 +99,18 @@ fn compile_glob(glob: &str) -> Result<GlobSet> {
 		.map_err(|err| Error::from_reason(format!("Failed to build glob matcher: {err}")))
 }
 
-fn normalize_relative_path(root: &Path, path: &Path) -> String {
+fn normalize_relative_path<'a>(root: &Path, path: &'a Path) -> Cow<'a, str> {
 	let relative = path.strip_prefix(root).unwrap_or(path);
-	relative.to_string_lossy().replace('\\', "/")
+	if cfg!(windows) {
+		let relative = relative.to_string_lossy();
+		if relative.contains('\\') {
+			Cow::Owned(relative.replace('\\', "/"))
+		} else {
+			relative
+		}
+	} else {
+		relative.to_string_lossy()
+	}
 }
 
 fn contains_component(path: &Path, target: &str) -> bool {
@@ -172,10 +188,7 @@ fn run_find(
 	}
 
 	for entry in builder.build() {
-		let entry = match entry {
-			Ok(entry) => entry,
-			Err(_) => continue,
-		};
+		let Ok(entry) = entry else { continue };
 		let path = entry.path();
 		if should_skip_path(path, mentions_node_modules) {
 			continue;
@@ -184,7 +197,7 @@ fn run_find(
 		if relative.is_empty() {
 			continue;
 		}
-		if !glob_set.is_match(&relative) {
+		if !glob_set.is_match(relative.as_ref()) {
 			continue;
 		}
 		let Some(file_type) = classify_file_type(path) else {
@@ -196,7 +209,8 @@ fn run_find(
 			continue;
 		}
 
-		matches.push(FindMatch { path: relative, file_type: file_type.to_string() });
+		matches
+			.push(FindMatch { path: relative.into_owned(), file_type: file_type.to_string() });
 
 		if matches.len() >= max_results {
 			break;
