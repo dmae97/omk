@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import * as path from "node:path";
+import type { ClipboardImage } from "./clipboard/types";
 import type { FindMatch, FindOptions, FindResult } from "./find/types";
 import type {
 	FuzzyFindOptions,
@@ -12,8 +13,8 @@ import type {
 import type { HighlightColors } from "./highlight/index";
 import type { HtmlToMarkdownOptions } from "./html/types";
 import type { ShellExecuteOptions, ShellExecuteResult } from "./shell/types";
+import type { SystemInfo } from "./system-info/index";
 import type { ExtractSegmentsResult, SliceWithWidthResult } from "./text/index";
-import type { ClipboardImage } from "./clipboard/types";
 
 export type { RequestOptions } from "./request-options";
 
@@ -102,6 +103,7 @@ export interface NativeBindings {
 	matchesKey(data: string, keyId: string, kittyProtocolActive: boolean): boolean;
 	killTree(pid: number, signal: number): number;
 	listDescendants(pid: number): number[];
+	getSystemInfo(): SystemInfo;
 }
 
 const require = createRequire(import.meta.url);
@@ -197,6 +199,7 @@ function validateNative(bindings: NativeBindings, source: string): void {
 	checkFn("visibleWidth");
 	checkFn("killTree");
 	checkFn("listDescendants");
+	checkFn("getSystemInfo");
 
 	if (missing.length) {
 		throw new Error(

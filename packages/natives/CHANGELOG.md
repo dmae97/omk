@@ -1,9 +1,9 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Exported `getSystemInfo()` function and `SystemInfo` type for retrieving system information including distro, kernel, CPU, and disk details
 - Exported `copyToClipboard()` and `readImageFromClipboard()` functions for clipboard operations
 - Exported `ClipboardImage` type for clipboard image data with MIME type information
 - Added `wrapTextWithAnsi()` function to wrap text to a visible width while preserving ANSI escape codes across line breaks

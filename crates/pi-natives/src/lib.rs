@@ -29,4 +29,5 @@ pub mod image;
 pub mod keys;
 pub mod ps;
 pub mod shell;
+pub mod system_info;
 pub mod text;

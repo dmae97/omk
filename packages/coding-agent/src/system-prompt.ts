@@ -4,14 +4,14 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { find as wasmFind } from "@oh-my-pi/pi-natives";
+import { getSystemInfo as getNativeSystemInfo, type SystemInfo, find as wasmFind } from "@oh-my-pi/pi-natives";
 import { untilAborted } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
 import chalk from "chalk";
 import { contextFileCapability } from "./capability/context-file";
 import { systemPromptCapability } from "./capability/system-prompt";
 import { renderPromptTemplate } from "./config/prompt-templates";
-import { Settings, type SkillsSettings } from "./config/settings";
+import type { SkillsSettings } from "./config/settings";
 import { type ContextFile, loadCapability, type SystemPrompt as SystemPromptFile } from "./discovery";
 import { loadSkills, type Skill } from "./extensibility/skills";
 import customSystemPromptTemplate from "./prompts/system/custom-system-prompt.md" with { type: "text" };
@@ -87,21 +87,12 @@ export async function loadGitContext(cwd: string): Promise<GitContext | null> {
 	};
 }
 
-function firstNonEmpty(values: Array<string | undefined | null>): string | null {
+function firstNonEmpty(...values: (string | undefined | null)[]): string | null {
 	for (const value of values) {
 		const trimmed = value?.trim();
 		if (trimmed) return trimmed;
 	}
 	return null;
-}
-
-function firstNonEmptyLine(value: string | null): string | null {
-	if (!value) return null;
-	const line = value
-		.split("\n")
-		.map(entry => entry.trim())
-		.filter(Boolean)[0];
-	return line ?? null;
 }
 
 function parseWmicTable(output: string, header: string): string | null {
@@ -111,23 +102,6 @@ function parseWmicTable(output: string, header: string): string | null {
 		.filter(Boolean);
 	const filtered = lines.filter(line => line.toLowerCase() !== header.toLowerCase());
 	return filtered[0] ?? null;
-}
-
-function parseKeyValueOutput(output: string): Record<string, string> {
-	const result: Record<string, string> = {};
-	for (const line of output.split("\n")) {
-		const trimmed = line.trim();
-		if (!trimmed) continue;
-		const [key, ...rest] = trimmed.split("=");
-		if (!key || rest.length === 0) continue;
-		const value = rest.join("=").trim();
-		if (value) result[key.trim()] = value;
-	}
-	return result;
-}
-
-function stripQuotes(value: string): string {
-	return value.replace(/^"|"$/g, "");
 }
 
 const AGENTS_MD_PATTERN = "**/AGENTS.md";
@@ -382,147 +356,6 @@ async function buildProjectTreeSnapshot(root: string): Promise<string> {
 	return renderProjectTree(scan, root);
 }
 
-function getOsName(): string {
-	switch (process.platform) {
-		case "win32":
-			return "Windows";
-		case "darwin":
-			return "macOS";
-		case "linux":
-			return "Linux";
-		case "freebsd":
-			return "FreeBSD";
-		case "openbsd":
-			return "OpenBSD";
-		case "netbsd":
-			return "NetBSD";
-		case "aix":
-			return "AIX";
-		default:
-			return process.platform || "unknown";
-	}
-}
-
-async function getKernelVersion(): Promise<string> {
-	if (process.platform === "win32") {
-		return await $`ver`
-			.quiet()
-			.text()
-			.catch(() => "unknown");
-	} else {
-		return await $`uname -sr`
-			.quiet()
-			.text()
-			.catch(() => "unknown");
-	}
-}
-
-async function getOsDistro(): Promise<string | null> {
-	switch (process.platform) {
-		case "win32": {
-			const output = await $`wmic os get Caption,Version /value`
-				.quiet()
-				.text()
-				.catch(() => null);
-			if (!output) return null;
-			const parsed = parseKeyValueOutput(output);
-			const caption = parsed.Caption;
-			const version = parsed.Version;
-			if (caption && version) return `${caption} ${version}`.trim();
-			return caption ?? version ?? null;
-		}
-		case "darwin": {
-			const name = firstNonEmptyLine(
-				await $`sw_vers -productName`
-					.quiet()
-					.text()
-					.catch(() => null),
-			);
-			const version = firstNonEmptyLine(
-				await $`sw_vers -productVersion`
-					.quiet()
-					.text()
-					.catch(() => null),
-			);
-			if (name && version) return `${name} ${version}`.trim();
-			return name ?? version ?? null;
-		}
-		case "linux": {
-			const lsb = firstNonEmptyLine(
-				await $`lsb_release -ds`
-					.quiet()
-					.text()
-					.catch(() => null),
-			);
-			if (lsb) return stripQuotes(lsb);
-			const osRelease = await Bun.file("/etc/os-release")
-				.text()
-				.catch(() => null);
-			if (!osRelease) return null;
-			const parsed = parseKeyValueOutput(osRelease);
-			const pretty = parsed.PRETTY_NAME ?? parsed.NAME;
-			const version = parsed.VERSION ?? parsed.VERSION_ID;
-			if (pretty) return stripQuotes(pretty);
-			if (parsed.NAME && version) return `${stripQuotes(parsed.NAME)} ${stripQuotes(version)}`.trim();
-			return parsed.NAME ? stripQuotes(parsed.NAME) : null;
-		}
-		default:
-			return null;
-	}
-}
-
-function getCpuArch(): string {
-	return process.arch || "unknown";
-}
-
-async function getCpuModel(): Promise<string | null> {
-	switch (process.platform) {
-		case "win32": {
-			const output = await $`wmic cpu get Name`
-				.quiet()
-				.text()
-				.catch(() => null);
-			return output ? parseWmicTable(output, "Name") : null;
-		}
-		case "darwin": {
-			return firstNonEmptyLine(
-				await $`sysctl -n machdep.cpu.brand_string`
-					.quiet()
-					.text()
-					.catch(() => null),
-			);
-		}
-		case "linux": {
-			const lscpu = await $`lscpu`
-				.quiet()
-				.text()
-				.catch(() => null);
-			if (lscpu) {
-				const match = lscpu
-					.split("\n")
-					.map(line => line.trim())
-					.find(line => line.toLowerCase().startsWith("model name:"));
-				if (match) return match.split(":").slice(1).join(":").trim();
-			}
-			const cpuInfo = await Bun.file("/proc/cpuinfo")
-				.text()
-				.catch(() => null);
-			if (!cpuInfo) return null;
-			for (const line of cpuInfo.split("\n")) {
-				const [key, ...rest] = line.split(":");
-				if (!key || rest.length === 0) continue;
-				const normalized = key.trim().toLowerCase();
-				if (normalized === "model name" || normalized === "hardware" || normalized === "processor") {
-					return rest.join(":").trim();
-				}
-			}
-			return null;
-		}
-		default:
-			return null;
-	}
-}
-
 async function getGpuModel(): Promise<string | null> {
 	switch (process.platform) {
 		case "win32": {
@@ -582,7 +415,7 @@ function getTerminalName(): string {
 
 	if (process.env.WT_SESSION) return "Windows Terminal";
 
-	const term = firstNonEmpty([process.env.TERM, process.env.COLORTERM, process.env.TERMINAL_EMULATOR]);
+	const term = firstNonEmpty(process.env.TERM, process.env.COLORTERM, process.env.TERMINAL_EMULATOR);
 	return term ?? "unknown";
 }
 
@@ -598,12 +431,12 @@ function normalizeDesktopValue(value: string): string {
 
 function getDesktopEnvironment(): string {
 	if (process.env.KDE_FULL_SESSION === "true") return "KDE";
-	const raw = firstNonEmpty([
+	const raw = firstNonEmpty(
 		process.env.XDG_CURRENT_DESKTOP,
 		process.env.DESKTOP_SESSION,
 		process.env.XDG_SESSION_DESKTOP,
 		process.env.GDMSESSION,
-	]);
+	);
 	return raw ? normalizeDesktopValue(raw) : "unknown";
 }
 
@@ -633,10 +466,10 @@ function matchKnownWindowManager(value: string): string | null {
 }
 
 function getWindowManager(): string {
-	const explicit = firstNonEmpty([process.env.WINDOWMANAGER]);
+	const explicit = firstNonEmpty(process.env.WINDOWMANAGER);
 	if (explicit) return explicit;
 
-	const desktop = firstNonEmpty([process.env.XDG_CURRENT_DESKTOP, process.env.DESKTOP_SESSION]);
+	const desktop = firstNonEmpty(process.env.XDG_CURRENT_DESKTOP, process.env.DESKTOP_SESSION);
 	if (desktop) {
 		const matched = matchKnownWindowManager(desktop);
 		if (matched) return matched;
@@ -682,74 +515,25 @@ async function saveSystemInfoCache(info: SystemInfoCache): Promise<void> {
 }
 
 async function collectSystemInfo(): Promise<SystemInfoCache> {
-	const [distro, cpu, gpu, disk, kernel] = await Promise.all([
-		getOsDistro(),
-		getCpuModel(),
-		getGpuModel(),
-		getDiskInfo(),
-		getKernelVersion(),
-	]);
-	return {
-		os: getOsName(),
-		distro: distro ?? "unknown",
-		kernel: kernel ?? "unknown",
-		arch: getCpuArch(),
-		cpu: cpu ?? "unknown",
-		gpu: gpu ?? "unknown",
-		disk: disk ?? "unknown",
-	};
-}
-
-function formatBytes(bytes: number): string {
-	if (bytes < 1024) return `${bytes}B`;
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
-	if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
-	if (bytes < 1024 * 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}GB`;
-	return `${(bytes / (1024 * 1024 * 1024 * 1024)).toFixed(1)}TB`;
-}
-
-async function getDiskInfo(): Promise<string | null> {
-	switch (process.platform) {
-		case "win32": {
-			const output = await $`wmic logicaldisk get Caption,Size,FreeSpace /format:csv`
-				.quiet()
-				.text()
-				.catch(() => null);
-			if (!output) return null;
-			const lines = output.split("\n").filter(l => l.trim() && !l.startsWith("Node"));
-			const disks: string[] = [];
-			for (const line of lines) {
-				const parts = line.split(",");
-				if (parts.length < 4) continue;
-				const caption = parts[1]?.trim();
-				const freeSpace = Number.parseInt(parts[2]?.trim() ?? "", 10);
-				const size = Number.parseInt(parts[3]?.trim() ?? "", 10);
-				if (!caption || Number.isNaN(size) || size === 0) continue;
-				const used = size - (Number.isNaN(freeSpace) ? 0 : freeSpace);
-				const pct = Math.round((used / size) * 100);
-				disks.push(`${caption} ${formatBytes(used)}/${formatBytes(size)} (${pct}%)`);
-			}
-			return disks.length > 0 ? disks.join(", ") : null;
-		}
-		case "linux":
-		case "darwin": {
-			const output = await $`df -h /`
-				.quiet()
-				.text()
-				.catch(() => null);
-			if (!output) return null;
-			const lines = output.split("\n");
-			if (lines.length < 2) return null;
-			const parts = lines[1].split(/\s+/);
-			if (parts.length < 5) return null;
-			const size = parts[1];
-			const used = parts[2];
-			const pct = parts[4];
-			return `/ ${used}/${size} (${pct})`;
-		}
-		default:
-			return null;
+	let nativeInfo: SystemInfo | null = null;
+	try {
+		nativeInfo = getNativeSystemInfo();
+	} catch {
+		nativeInfo = null;
 	}
+
+	const gpu = await getGpuModel();
+	const cpus = os.cpus();
+
+	return {
+		os: `${os.platform()} ${os.release()}`,
+		arch: os.arch(),
+		distro: nativeInfo?.distro ?? os.type(),
+		kernel: nativeInfo?.kernel ?? os.version(),
+		cpu: `${cpus.length}x ${nativeInfo?.cpu ?? cpus[0]?.model}`,
+		gpu: gpu ?? "unknown",
+		disk: nativeInfo?.disk ?? "unknown",
+	};
 }
 
 async function getEnvironmentInfo(): Promise<Array<{ label: string; value: string }>> {
@@ -760,9 +544,6 @@ async function getEnvironmentInfo(): Promise<Array<{ label: string; value: strin
 		await saveSystemInfoCache(sysInfo);
 	}
 
-	// Get the actual shell used for command execution (not $SHELL)
-	const shellConfig = (await Settings.init()).getShellConfig();
-
 	return [
 		{ label: "OS", value: sysInfo.os },
 		{ label: "Distro", value: sysInfo.distro },
@@ -771,7 +552,6 @@ async function getEnvironmentInfo(): Promise<Array<{ label: string; value: strin
 		{ label: "CPU", value: sysInfo.cpu },
 		{ label: "GPU", value: sysInfo.gpu },
 		{ label: "Disk", value: sysInfo.disk },
-		{ label: "Shell", value: shellConfig.shell },
 		{ label: "Terminal", value: getTerminalName() },
 		{ label: "DE", value: getDesktopEnvironment() },
 		{ label: "WM", value: getWindowManager() },

@@ -1,18 +1,23 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Removed persistent shell session support; bash execution now uses native bindings via brush-core for improved reliability
 
 ### Changed
 
+- Migrated system information collection to use native bindings from brush-core instead of shell command execution
+- Updated CPU information to report core count alongside model name
+- Simplified OS version reporting to use Node.js built-in APIs
 - Migrated bash command execution from ptree-based persistent sessions to native shell bindings with streaming support
 - Simplified bash executor to use brush-core native API instead of managing long-lived shell processes
 - Routed clipboard copy and image paste through native arboard bindings instead of shell commands
 
 ### Removed
 
+- Removed shell configuration from environment information display
 - Removed `shell-session.ts` module providing persistent shell session management
 - Removed shell session test suite for persistent execution patterns
 

@@ -90,8 +90,8 @@ export {
 	type SliceWithWidthResult,
 	sliceWithWidth,
 	truncateToWidth,
-	wrapTextWithAnsi,
 	visibleWidth,
+	wrapTextWithAnsi,
 } from "./text/index";
 
 // =============================================================================
@@ -127,6 +127,12 @@ export {
 	type HtmlToMarkdownOptions,
 	htmlToMarkdown,
 } from "./html/index";
+
+// =============================================================================
+// System info
+// =============================================================================
+
+export { getSystemInfo, type SystemInfo } from "./system-info/index";
 
 // =============================================================================
 // Shell execution (brush-core)
