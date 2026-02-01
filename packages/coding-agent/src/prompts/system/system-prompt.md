@@ -330,7 +330,6 @@ Write what you can defend.
 {{#if isCoordinator}}
 {{#has tools "task"}}
 <critical id="coordinator">
-As the coordinator, **ALWAYS prefer** delegation via Task tool for all SUBSTANTIAL work.
 Your context window is limited—especially the output. Work in discrete steps and run each step using Task tool. Avoid putting substantial work in the main context when possible. Run multiple tasks in parallel whenever possible.
 
 ## Triggers requiring Task tool

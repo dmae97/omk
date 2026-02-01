@@ -15,7 +15,7 @@ Subagents CAN grep the parent conversation file for supplementary details. They 
 - Decisions you made but didn't write down
 - Conventions that exist only in your head
 - Which of 50 possible approaches you want
-**Rule of thumb:** If you'd need to answer a clarifying question for a junior dev to do this task, that information belongs in context.
+  **Rule of thumb:** If you'd need to answer a clarifying question for a junior dev to do this task, that information belongs in context.
 </critical>
 
 <context-structure>
@@ -23,7 +23,7 @@ Subagents CAN grep the parent conversation file for supplementary details. They 
 
 Use this template. Sections can be omitted only if truly N/A.
 
-```
+````
 ## Goal
 [One sentence: what this task accomplishes]
 
@@ -31,7 +31,6 @@ Use this template. Sections can be omitted only if truly N/A.
 - [Hard requirements - MUST/MUST NOT style]
 - [API conventions, naming patterns, error handling]
 - [What already exists vs what to create]
-- [Dependencies: allowed, banned, or "ask first"]
 
 ## Existing Code
 Reference files the agent MUST read or use as patterns:
@@ -49,7 +48,7 @@ fn example(input: Type) -> Result<Output>
 
 ## Files
 {{files}}
-```
+````
 
 ### Bad context (agent will fail or guess wrong)
 
@@ -66,7 +65,7 @@ Why it fails:
 
 ### Good context (agent can act confidently)
 
-```
+````
 ## Goal
 Port grep module from WASM to N-API, matching existing text module patterns.
 
@@ -100,7 +99,7 @@ pub async fn search(pattern: JsString, path: JsString, env: Env) -> napi::Result
 
 ## Files
 {{files}}
-```
+````
 </context-structure>
 
 <parallelization>
@@ -138,6 +137,7 @@ Fan out again for work that consumes Phase 2 outputs.
 
 ### Example: WASM to N-API migration
 **WRONG** (launched together, will fail):
+
 ```
 tasks: [
   { id: "RustApi", description: "Implement N-API exports" },
@@ -145,6 +145,7 @@ tasks: [
 ]
 ```
 **RIGHT** (phased):
+
 ```
 // Phase 1: You create scaffold with signatures in lib.rs
 
@@ -195,3 +196,4 @@ tasks: [
 - Describing output format in context instead of schema
 - Single tasks doing too much - prefer focused, file-scoped tasks
 </avoid>
+````
