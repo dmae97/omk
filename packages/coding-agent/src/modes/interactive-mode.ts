@@ -515,18 +515,18 @@ export class InteractiveMode implements InteractiveModeContext {
 	}
 
 	private async applyPlanModeModel(): Promise<void> {
-		const slowModel = this.session.resolveRoleModel("slow");
-		if (!slowModel) return;
+		const planModel = this.session.resolveRoleModel("plan");
+		if (!planModel) return;
 		const currentModel = this.session.model;
-		if (currentModel && currentModel.provider === slowModel.provider && currentModel.id === slowModel.id) {
+		if (currentModel && currentModel.provider === planModel.provider && currentModel.id === planModel.id) {
 			return;
 		}
 		this.planModePreviousModel = currentModel;
 		try {
-			await this.session.setModelTemporary(slowModel);
+			await this.session.setModelTemporary(planModel);
 		} catch (error) {
 			this.showWarning(
-				`Failed to switch to slow model for plan mode: ${error instanceof Error ? error.message : String(error)}`,
+				`Failed to switch to plan model for plan mode: ${error instanceof Error ? error.message : String(error)}`,
 			);
 		}
 	}
