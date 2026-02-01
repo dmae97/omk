@@ -18,8 +18,10 @@ use std::io::Cursor;
 
 use arboard::{Clipboard, Error as ClipboardError, ImageData};
 use image::{DynamicImage, ImageFormat, RgbaImage};
-use napi::{bindgen_prelude::*, tokio::task::spawn_blocking};
+use napi::bindgen_prelude::*;
 use napi_derive::napi;
+
+use crate::work::launch_task;
 
 /// Clipboard image payload encoded as PNG bytes.
 #[napi(object)]
@@ -56,7 +58,7 @@ fn encode_png(image: ImageData<'_>) -> Result<Vec<u8>> {
 /// Returns an error if clipboard access fails.
 #[napi(js_name = "copyToClipboard")]
 pub async fn copy_to_clipboard(text: String) -> Result<()> {
-	spawn_blocking(move || -> Result<()> {
+	launch_task(move || -> Result<()> {
 		let mut clipboard = Clipboard::new()
 			.map_err(|err| Error::from_reason(format!("Failed to access clipboard: {err}")))?;
 		clipboard
@@ -64,8 +66,8 @@ pub async fn copy_to_clipboard(text: String) -> Result<()> {
 			.map_err(|err| Error::from_reason(format!("Failed to copy to clipboard: {err}")))?;
 		Ok(())
 	})
-	.await
-	.map_err(|err| Error::from_reason(format!("Clipboard task failed: {err}")))??;
+	.wait()
+	.await?;
 	Ok(())
 }
 
@@ -77,7 +79,7 @@ pub async fn copy_to_clipboard(text: String) -> Result<()> {
 /// Returns an error if clipboard access fails or image encoding fails.
 #[napi(js_name = "readImageFromClipboard")]
 pub async fn read_image_from_clipboard() -> Result<Option<ClipboardImage>> {
-	let result = spawn_blocking(move || -> Result<Option<ClipboardImage>> {
+	let result = launch_task(move || -> Result<Option<ClipboardImage>> {
 		let mut clipboard = Clipboard::new()
 			.map_err(|err| Error::from_reason(format!("Failed to access clipboard: {err}")))?;
 		match clipboard.get_image() {
@@ -92,7 +94,7 @@ pub async fn read_image_from_clipboard() -> Result<Option<ClipboardImage>> {
 			Err(err) => Err(Error::from_reason(format!("Failed to read clipboard image: {err}"))),
 		}
 	})
-	.await
-	.map_err(|err| Error::from_reason(format!("Clipboard task failed: {err}")))??;
+	.wait()
+	.await?;
 	Ok(result)
 }

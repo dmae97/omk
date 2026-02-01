@@ -13,8 +13,10 @@ use image::{
 	codecs::{jpeg::JpegEncoder, webp::WebPEncoder},
 	imageops::FilterType,
 };
-use napi::{bindgen_prelude::*, tokio::task::spawn_blocking};
+use napi::bindgen_prelude::*;
 use napi_derive::napi;
+
+use crate::work::launch_task;
 
 /// Sampling filter for resize operations.
 #[napi]
@@ -60,7 +62,7 @@ impl PhotonImage {
 	#[napi(factory, js_name = "parse")]
 	pub async fn parse(bytes: Uint8Array) -> Result<Self> {
 		let bytes = bytes.as_ref().to_vec();
-		let img = spawn_blocking(move || -> Result<DynamicImage> {
+		let img = launch_task(move || -> Result<DynamicImage> {
 			let reader = ImageReader::new(Cursor::new(bytes))
 				.with_guessed_format()
 				.map_err(|e| Error::from_reason(format!("Failed to detect image format: {e}")))?;
@@ -71,8 +73,8 @@ impl PhotonImage {
 
 			Ok(img)
 		})
-		.await
-		.map_err(|e| Error::from_reason(format!("Image decode task failed: {e}")))??;
+		.wait()
+		.await?;
 
 		Ok(Self { img: Arc::new(img) })
 	}
@@ -102,9 +104,9 @@ impl PhotonImage {
 	#[napi(js_name = "encode")]
 	pub async fn encode(&self, format: u8, quality: u8) -> Result<Uint8Array> {
 		let img = Arc::clone(&self.img);
-		let buffer = spawn_blocking(move || encode_image(&img, format, quality))
-			.await
-			.map_err(|e| Error::from_reason(format!("Encode task failed: {e}")))??;
+		let buffer: Vec<u8> = launch_task(move || encode_image(&img, format, quality))
+			.wait()
+			.await?;
 		Ok(Uint8Array::from(buffer))
 	}
 
@@ -113,9 +115,9 @@ impl PhotonImage {
 	#[napi(js_name = "resize")]
 	pub async fn resize(&self, width: u32, height: u32, filter: SamplingFilter) -> Result<Self> {
 		let img = Arc::clone(&self.img);
-		let resized = spawn_blocking(move || img.resize_exact(width, height, filter.into()))
-			.await
-			.map_err(|e| Error::from_reason(format!("Resize task failed: {e}")))?;
+		let resized = launch_task(move || Ok(img.resize_exact(width, height, filter.into())))
+			.wait()
+			.await?;
 		Ok(Self { img: Arc::new(resized) })
 	}
 }

@@ -36,7 +36,7 @@ use napi::{
 use napi_derive::napi;
 use parking_lot::Mutex;
 
-use crate::ps;
+use crate::{ps, work::launch_task};
 
 type ExecutionMap = HashMap<String, ExecutionControl>;
 type SessionMap = HashMap<String, Arc<TokioMutex<ShellSession>>>;
@@ -161,8 +161,9 @@ impl Shell {
 
 	/// Run a shell command using the provided options.
 	///
-	/// The `on_chunk` callback receives streamed stdout/stderr output. Returns the
-	/// exit code when the command completes, or flags when cancelled or timed out.
+	/// The `on_chunk` callback receives streamed stdout/stderr output. Returns
+	/// the exit code when the command completes, or flags when cancelled or
+	/// timed out.
 	#[napi]
 	pub async fn run(
 		&self,
@@ -496,7 +497,10 @@ async fn run_shell_command(
 		}
 	}
 
-	let reader_handle = task::spawn_blocking(move || read_output(reader_file, on_chunk));
+	let reader_handle = launch_task(move || -> Result<()> {
+		read_output(reader_file, on_chunk);
+		Ok(())
+	});
 	let result = session
 		.shell
 		.run_string(options.command.clone(), &params)
@@ -512,7 +516,7 @@ async fn run_shell_command(
 
 	drop(params);
 
-	let _ = reader_handle.await;
+	let _ = reader_handle.wait().await;
 
 	result.map_err(|err| Error::from_reason(format!("Shell execution failed: {err}")))
 }

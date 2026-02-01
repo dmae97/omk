@@ -25,10 +25,11 @@ use napi::{
 	JsString,
 	bindgen_prelude::*,
 	threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
-	tokio::task,
 };
 use napi_derive::napi;
 use rayon::prelude::*;
+
+use crate::work::launch_task;
 
 const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -1033,9 +1034,9 @@ pub async fn grep(
 		ThreadsafeFunction<GrepMatch>,
 	>,
 ) -> Result<GrepResult> {
-	task::spawn_blocking(move || grep_sync(options, on_match.as_ref()))
+	launch_task(move || grep_sync(options, on_match.as_ref()))
+		.wait()
 		.await
-		.map_err(|err| Error::from_reason(format!("Join error: {err}")))?
 }
 
 // =============================================================================
@@ -1155,7 +1156,7 @@ fn fuzzy_find_sync(options: FuzzyFindOptions) -> Result<FuzzyFindResult> {
 /// Matching file and directory entries.
 #[napi(js_name = "fuzzyFind")]
 pub async fn fuzzy_find(options: FuzzyFindOptions) -> Result<FuzzyFindResult> {
-	task::spawn_blocking(move || fuzzy_find_sync(options))
+		launch_task(move || fuzzy_find_sync(options))
+			.wait()
 		.await
-		.map_err(|err| Error::from_reason(format!("Join error: {err}")))?
 }

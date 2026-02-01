@@ -20,9 +20,10 @@ use ignore::WalkBuilder;
 use napi::{
 	bindgen_prelude::*,
 	threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
-	tokio::task,
 };
 use napi_derive::napi;
+
+use crate::work::launch_task;
 
 /// Options for discovering files and directories.
 #[napi(object)]
@@ -316,7 +317,7 @@ pub async fn find(
 	let mentions_node_modules = pattern.contains("node_modules");
 	let sort_by_mtime = sort_by_mtime.unwrap_or(false);
 
-	task::spawn_blocking(move || {
+	launch_task(move || {
 		let cancelled = AtomicBool::new(false);
 		let config = FindConfig {
 			root: search_path,
@@ -330,6 +331,6 @@ pub async fn find(
 		};
 		run_find(config, on_match.as_ref(), &cancelled)
 	})
+	.wait()
 	.await
-	.map_err(|err| Error::from_reason(format!("Join error: {err}")))?
 }
