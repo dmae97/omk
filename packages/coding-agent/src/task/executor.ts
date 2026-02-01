@@ -135,7 +135,7 @@ function resolveModelOverride(
 ): { model?: Model<Api>; thinkingLevel?: ThinkingLevel } {
 	if (modelPatterns.length === 0) return {};
 	const matchPreferences = { usageOrder: settings?.getStorage()?.getModelUsageOrder() };
-	const roles = settings?.serialize().modelRoles as Record<string, string> | undefined;
+	const roles = settings?.getGroup("modelRoles");
 	for (const pattern of modelPatterns) {
 		const normalized = pattern.trim().toLowerCase();
 		if (!normalized || DEFAULT_MODEL_ALIASES.has(normalized)) {

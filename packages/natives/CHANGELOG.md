@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `visibleWidth()` function to measure the visible width of text, excluding ANSI codes
 
 ## [9.6.1] - 2026-02-01
 ### Added

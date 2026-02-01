@@ -26,6 +26,13 @@ export function truncateToWidth(text: TextInput, maxWidth: number, ellipsis: Tex
 }
 
 /**
+ * Measure the visible width of text (excluding ANSI codes).
+ */
+export function visibleWidth(text: TextInput): number {
+	return native.visibleWidth(text);
+}
+
+/**
  * Slice a range of visible columns from a line.
  */
 export function sliceWithWidth(

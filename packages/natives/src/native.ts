@@ -57,6 +57,7 @@ export interface NativeBindings {
 	PhotonImage: NativePhotonImageConstructor;
 	truncateToWidth(text: TextInput, maxWidth: number, ellipsis: TextInput, pad: boolean): string;
 	sliceWithWidth(line: TextInput, startCol: number, length: number, strict: boolean): SliceWithWidthResult;
+	visibleWidth(text: TextInput): number;
 	extractSegments(
 		line: TextInput,
 		beforeEnd: number,

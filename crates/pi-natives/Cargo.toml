@@ -13,7 +13,7 @@ crate-type = ["cdylib"]
 workspace = true
 
 [dependencies]
-napi = { version = "3", features = ["napi8", "tokio_rt"] }
+napi = { version = "3", features = ["napi10", "tokio_rt"] }
 napi-derive = "3"
 grep-regex = "0.1"
 grep-searcher = "0.1"
@@ -28,6 +28,7 @@ image = { version = "0.25", default-features = false, features = [
    "webp",
 ] }
 bstr = "1"
+unicode-segmentation = "1.11"
 unicode-width = "0.2"
 syntect = { version = "5.3", default-features = false, features = [
    "default-syntaxes",

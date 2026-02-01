@@ -75,6 +75,7 @@ export {
 	type SliceWithWidthResult,
 	sliceWithWidth,
 	truncateToWidth,
+	visibleWidth,
 } from "./text/index";
 
 // =============================================================================

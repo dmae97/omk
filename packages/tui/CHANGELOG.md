@@ -1,6 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Refactored `visibleWidth` function to use caching wrapper around new `visibleWidthRaw` implementation for improved performance
+
+### Removed
+
+- Removed `extractAnsiCode` function from public API
 
 ## [9.6.1] - 2026-02-01
 ### Changed
