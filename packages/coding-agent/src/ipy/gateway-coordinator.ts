@@ -7,6 +7,7 @@ import { getAgentDir } from "../config";
 import { SettingsManager } from "../config/settings-manager";
 import { getOrCreateSnapshot } from "../utils/shell-snapshot";
 import { time } from "../utils/timings";
+import { filterEnv, resolvePythonRuntime } from "./runtime";
 
 const GATEWAY_DIR_NAME = "python-gateway";
 const GATEWAY_INFO_FILE = "gateway.json";
@@ -17,96 +18,6 @@ const GATEWAY_LOCK_RETRY_MS = 50;
 const GATEWAY_LOCK_STALE_MS = GATEWAY_STARTUP_TIMEOUT_MS * 2;
 const GATEWAY_LOCK_HEARTBEAT_MS = 5000;
 const HEALTH_CHECK_TIMEOUT_MS = 3000;
-
-const DEFAULT_ENV_ALLOWLIST = new Set([
-	"PATH",
-	"HOME",
-	"USER",
-	"LOGNAME",
-	"SHELL",
-	"LANG",
-	"LC_ALL",
-	"LC_CTYPE",
-	"LC_MESSAGES",
-	"TERM",
-	"TERM_PROGRAM",
-	"TERM_PROGRAM_VERSION",
-	"TMPDIR",
-	"TEMP",
-	"TMP",
-	"XDG_CACHE_HOME",
-	"XDG_CONFIG_HOME",
-	"XDG_DATA_HOME",
-	"XDG_RUNTIME_DIR",
-	"SSH_AUTH_SOCK",
-	"SSH_AGENT_PID",
-	"CONDA_PREFIX",
-	"CONDA_DEFAULT_ENV",
-	"VIRTUAL_ENV",
-	"PYTHONPATH",
-	"SYSTEMROOT",
-	"COMSPEC",
-	"WINDIR",
-	"USERPROFILE",
-	"LOCALAPPDATA",
-	"APPDATA",
-	"PROGRAMDATA",
-	"PATHEXT",
-	"USERNAME",
-	"HOMEDRIVE",
-	"HOMEPATH",
-]);
-
-const WINDOWS_ENV_ALLOWLIST = new Set([
-	"APPDATA",
-	"COMPUTERNAME",
-	"COMSPEC",
-	"HOMEDRIVE",
-	"HOMEPATH",
-	"LOCALAPPDATA",
-	"NUMBER_OF_PROCESSORS",
-	"OS",
-	"PATH",
-	"PATHEXT",
-	"PROCESSOR_ARCHITECTURE",
-	"PROCESSOR_IDENTIFIER",
-	"PROGRAMDATA",
-	"PROGRAMFILES",
-	"PROGRAMFILES(X86)",
-	"PROGRAMW6432",
-	"SESSIONNAME",
-	"SYSTEMDRIVE",
-	"SYSTEMROOT",
-	"TEMP",
-	"TMP",
-	"USERDOMAIN",
-	"USERDOMAIN_ROAMINGPROFILE",
-	"USERPROFILE",
-	"USERNAME",
-	"WINDIR",
-]);
-
-const DEFAULT_ENV_ALLOW_PREFIXES = ["LC_", "XDG_", "OMP_"];
-
-const CASE_INSENSITIVE_ENV = process.platform === "win32";
-const ACTIVE_ENV_ALLOWLIST = CASE_INSENSITIVE_ENV ? WINDOWS_ENV_ALLOWLIST : DEFAULT_ENV_ALLOWLIST;
-
-const NORMALIZED_ALLOWLIST = new Map(
-	Array.from(ACTIVE_ENV_ALLOWLIST, key => [CASE_INSENSITIVE_ENV ? key.toUpperCase() : key, key] as const),
-);
-const NORMALIZED_ALLOW_PREFIXES = CASE_INSENSITIVE_ENV
-	? DEFAULT_ENV_ALLOW_PREFIXES.map(prefix => prefix.toUpperCase())
-	: DEFAULT_ENV_ALLOW_PREFIXES;
-
-function normalizeEnvKey(key: string): string {
-	return CASE_INSENSITIVE_ENV ? key.toUpperCase() : key;
-}
-
-function resolvePathKey(env: Record<string, string | undefined>): string {
-	if (!CASE_INSENSITIVE_ENV) return "PATH";
-	const match = Object.keys(env).find(candidate => candidate.toLowerCase() === "path");
-	return match ?? "PATH";
-}
 
 export interface GatewayInfo {
 	url: string;
@@ -129,56 +40,6 @@ interface AcquireResult {
 let localGatewayProcess: Subprocess | null = null;
 let localGatewayUrl: string | null = null;
 let isCoordinatorInitialized = false;
-
-function filterEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
-	const filtered: Record<string, string | undefined> = {};
-	for (const [key, value] of Object.entries(env)) {
-		if (value === undefined) continue;
-		const normalizedKey = normalizeEnvKey(key);
-		const canonicalKey = NORMALIZED_ALLOWLIST.get(normalizedKey);
-		if (canonicalKey !== undefined) {
-			filtered[canonicalKey] = value;
-			continue;
-		}
-		if (NORMALIZED_ALLOW_PREFIXES.some(prefix => normalizedKey.startsWith(prefix))) {
-			filtered[key] = value;
-		}
-	}
-	return filtered;
-}
-
-function resolveVenvPath(cwd: string): string | null {
-	if (process.env.VIRTUAL_ENV) return process.env.VIRTUAL_ENV;
-	const candidates = [path.join(cwd, ".venv"), path.join(cwd, "venv")];
-	for (const candidate of candidates) {
-		if (fs.existsSync(candidate)) {
-			return candidate;
-		}
-	}
-	return null;
-}
-
-function resolvePythonRuntime(cwd: string, baseEnv: Record<string, string | undefined>) {
-	const env = { ...baseEnv };
-	const venvPath = env.VIRTUAL_ENV ?? resolveVenvPath(cwd);
-	if (venvPath) {
-		env.VIRTUAL_ENV = venvPath;
-		const binDir = process.platform === "win32" ? path.join(venvPath, "Scripts") : path.join(venvPath, "bin");
-		const pythonCandidate = path.join(binDir, process.platform === "win32" ? "python.exe" : "python");
-		if (fs.existsSync(pythonCandidate)) {
-			const pathKey = resolvePathKey(env);
-			const currentPath = env[pathKey];
-			env[pathKey] = currentPath ? `${binDir}${path.delimiter}${currentPath}` : binDir;
-			return { pythonPath: pythonCandidate, env, venvPath };
-		}
-	}
-
-	const pythonPath = Bun.which("python") ?? Bun.which("python3");
-	if (!pythonPath) {
-		throw new Error("Python executable not found on PATH");
-	}
-	return { pythonPath, env, venvPath: null };
-}
 
 async function allocatePort(): Promise<number> {
 	const { promise, resolve, reject } = Promise.withResolvers<number>();
@@ -389,7 +250,7 @@ async function startGatewayProcess(
 
 	const gatewayProcess = Bun.spawn(
 		[
-			runtime.pythonPath,
+			runtime.pythonwPath,
 			"-m",
 			"kernel_gateway",
 			"--KernelGatewayApp.ip=127.0.0.1",

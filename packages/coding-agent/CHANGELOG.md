@@ -21,10 +21,15 @@
 - Updated task execution guidance to require structured context with Goal, Constraints, Existing Code, and API Contract sections
 - Reorganized parallelization rules with explicit dependency patterns and phased execution guidance for migrations
 - Clarified that response format requirements must go in schema parameter, never in context descriptions
+- Centralized Python runtime resolution into shared `ipy/runtime.ts` module, removing duplicate code from kernel and gateway coordinator
 
 ### Removed
 
 - Removed Nushell language server configuration from LSP defaults
+
+### Fixed
+
+- Fixed Python gateway spawning console window on Windows by using windowless Python interpreter (pythonw.exe)
 
 ## [9.4.0] - 2026-01-31
 ### Changed
