@@ -68,8 +68,28 @@ const taggedPath = path.join(nativeDir, `pi_natives.${platform}-${arch}.node`);
 const fallbackPath = path.join(nativeDir, "pi_natives.node");
 const devPath = path.join(path.dirname(sourcePath), "pi_natives.node");
 
-await fs.copyFile(sourcePath, taggedPath);
-await fs.copyFile(sourcePath, fallbackPath);
+// Safe copy: mv old -> temp, cp new -> target, rm temp
+// This avoids overwriting in-memory binaries which can crash running processes
+async function safeCopy(src: string, dest: string): Promise<void> {
+	const tempPath = `${dest}.old.${process.pid}`;
+	try {
+		await fs.rename(dest, tempPath);
+	} catch (err) {
+		// Ignore if dest doesn't exist
+		if (err && typeof err === "object" && "code" in err && (err as { code?: string }).code !== "ENOENT") {
+			throw err;
+		}
+	}
+	await fs.copyFile(src, dest);
+	try {
+		await fs.unlink(tempPath);
+	} catch {
+		// Ignore cleanup errors
+	}
+}
+
+await safeCopy(sourcePath, taggedPath);
+await safeCopy(sourcePath, fallbackPath);
 if (sourcePath !== devPath) {
-	await fs.copyFile(sourcePath, devPath);
+	await safeCopy(sourcePath, devPath);
 }

@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Improved fuzzy file search performance by using native implementation instead of spawning external process
+- Replaced external `fd` binary with native fuzzy path search for `@`-prefixed autocomplete
 
 ## [9.4.0] - 2026-01-31
 ### Added

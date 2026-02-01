@@ -970,3 +970,122 @@ pub async fn grep(options: GrepOptions) -> Result<GrepResult> {
 		.await
 		.map_err(|err| Error::from_reason(format!("Join error: {err}")))?
 }
+
+// =============================================================================
+// Fuzzy Find
+// =============================================================================
+
+/// Options for fuzzy file path search.
+#[napi(object)]
+pub struct FuzzyFindOptions {
+	/// Substring query to match against file paths (case-insensitive).
+	pub query:       String,
+	/// Directory to search.
+	pub path:        String,
+	/// Include hidden files (default: false).
+	pub hidden:      Option<bool>,
+	/// Respect .gitignore (default: true).
+	pub gitignore:   Option<bool>,
+	/// Maximum number of matches to return (default: 100).
+	#[napi(js_name = "maxResults")]
+	pub max_results: Option<u32>,
+}
+
+/// A single match in fuzzy find results.
+#[napi(object)]
+pub struct FuzzyFindMatch {
+	/// Relative path from the search root (uses `/` separators).
+	pub path:         String,
+	/// Whether this entry is a directory.
+	#[napi(js_name = "isDirectory")]
+	pub is_directory: bool,
+}
+
+/// Result of fuzzy file path search.
+#[napi(object)]
+pub struct FuzzyFindResult {
+	/// Matched entries (up to `maxResults`).
+	pub matches:       Vec<FuzzyFindMatch>,
+	/// Total number of matches found (may exceed `matches.len()`).
+	#[napi(js_name = "totalMatches")]
+	pub total_matches: u32,
+}
+
+fn fuzzy_find_sync(options: FuzzyFindOptions) -> Result<FuzzyFindResult> {
+	let root = resolve_search_path(&options.path)?;
+	let metadata = std::fs::metadata(&root)
+		.map_err(|err| Error::from_reason(format!("Path not found: {err}")))?;
+
+	if !metadata.is_dir() {
+		return Err(Error::from_reason("Path must be a directory"));
+	}
+
+	let include_hidden = options.hidden.unwrap_or(false);
+	let respect_gitignore = options.gitignore.unwrap_or(true);
+	let max_results = options.max_results.unwrap_or(100) as usize;
+	let query_lower = options.query.to_lowercase();
+
+	let mut builder = WalkBuilder::new(&root);
+	builder
+		.hidden(!include_hidden)
+		.git_ignore(respect_gitignore)
+		.git_exclude(respect_gitignore)
+		.git_global(respect_gitignore)
+		.ignore(respect_gitignore)
+		.parents(true)
+		.follow_links(false)
+		.sort_by_file_path(|a, b| a.cmp(b));
+
+	let mut matches = Vec::with_capacity(max_results.min(256));
+	let mut total_matches = 0u32;
+
+	for entry in builder.build() {
+		let Ok(entry) = entry else { continue };
+		let file_type = entry.file_type();
+		let Some(ft) = file_type else { continue };
+
+		// Skip symlinks
+		if ft.is_symlink() {
+			continue;
+		}
+
+		// Skip the root directory itself
+		if entry.depth() == 0 {
+			continue;
+		}
+
+		let entry_path = entry.path();
+		let relative = normalize_relative_path(&root, entry_path);
+
+		// Case-insensitive substring match
+		if !query_lower.is_empty() && !relative.to_lowercase().contains(&query_lower) {
+			continue;
+		}
+
+		total_matches = total_matches.saturating_add(1);
+
+		if matches.len() < max_results {
+			let is_directory = ft.is_dir();
+			let path_str = if is_directory {
+				format!("{relative}/")
+			} else {
+				relative.into_owned()
+			};
+
+			matches.push(FuzzyFindMatch { path: path_str, is_directory });
+		}
+	}
+
+	Ok(FuzzyFindResult { matches, total_matches })
+}
+
+/// Fuzzy file path search for autocomplete.
+///
+/// Searches for files and directories whose paths contain the query substring
+/// (case-insensitive). Respects .gitignore by default.
+#[napi(js_name = "fuzzyFind")]
+pub async fn fuzzy_find(options: FuzzyFindOptions) -> Result<FuzzyFindResult> {
+	task::spawn_blocking(move || fuzzy_find_sync(options))
+		.await
+		.map_err(|err| Error::from_reason(format!("Join error: {err}")))?
+}

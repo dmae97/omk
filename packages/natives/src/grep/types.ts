@@ -88,3 +88,33 @@ export interface SearchResult {
 
 export type WasmMatch = SearchMatch;
 export type WasmSearchResult = SearchResult;
+
+/** Options for fuzzy file path search. */
+export interface FuzzyFindOptions {
+	/** Substring query to match against file paths (case-insensitive). */
+	query: string;
+	/** Directory to search. */
+	path: string;
+	/** Include hidden files (default: false). */
+	hidden?: boolean;
+	/** Respect .gitignore (default: true). */
+	gitignore?: boolean;
+	/** Maximum number of matches to return (default: 100). */
+	maxResults?: number;
+}
+
+/** A single match in fuzzy find results. */
+export interface FuzzyFindMatch {
+	/** Relative path from the search root (uses `/` separators). */
+	path: string;
+	/** Whether this entry is a directory. */
+	isDirectory: boolean;
+}
+
+/** Result of fuzzy file path search. */
+export interface FuzzyFindResult {
+	/** Matched entries (up to `maxResults`). */
+	matches: FuzzyFindMatch[];
+	/** Total number of matches found (may exceed `matches.length`). */
+	totalMatches: number;
+}

@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fuzzyFind } from "@oh-my-pi/pi-natives";
 
 /**
  * Check if query is a subsequence of target (fuzzy match).
@@ -43,44 +44,6 @@ function fuzzyScore(query: string, target: string): number {
 
 	// Base score 40 for subsequence, minus penalty for gaps
 	return Math.max(1, 40 - gaps * 5);
-}
-
-async function walkDirectoryWithFd(
-	baseDir: string,
-	fdPath: string,
-	query: string,
-	maxResults: number,
-): Promise<Array<{ path: string; isDirectory: boolean }>> {
-	const args = ["--base-directory", baseDir, "--max-results", String(maxResults), "--type", "f", "--type", "d"];
-
-	if (query) {
-		args.push(query);
-	}
-
-	const proc = Bun.spawn([fdPath, ...args], {
-		stdout: "pipe",
-		stderr: "pipe",
-		windowsHide: true,
-	});
-
-	const exitCode = await proc.exited;
-	if (exitCode !== 0 || !proc.stdout) {
-		return [];
-	}
-
-	const stdout = await new Response(proc.stdout).text();
-	const lines = stdout.trim().split("\n").filter(Boolean);
-	const results: Array<{ path: string; isDirectory: boolean }> = [];
-
-	for (const line of lines) {
-		const isDirectory = line.endsWith("/");
-		results.push({
-			path: line,
-			isDirectory,
-		});
-	}
-
-	return results;
 }
 
 export interface AutocompleteItem {
@@ -128,18 +91,12 @@ export interface AutocompleteProvider {
 export class CombinedAutocompleteProvider implements AutocompleteProvider {
 	private commands: (SlashCommand | AutocompleteItem)[];
 	private basePath: string;
-	private fdPath: string | null;
 	private dirCache: Map<string, { entries: fs.Dirent[]; timestamp: number }> = new Map();
 	private readonly DIR_CACHE_TTL = 2000; // 2 seconds
 
-	constructor(
-		commands: (SlashCommand | AutocompleteItem)[] = [],
-		basePath: string = process.cwd(),
-		fdPath: string | null = null,
-	) {
+	constructor(commands: (SlashCommand | AutocompleteItem)[] = [], basePath: string = process.cwd()) {
 		this.commands = commands;
 		this.basePath = basePath;
-		this.fdPath = fdPath ?? Bun.which("fd") ?? Bun.which("fdfind");
 	}
 
 	async getSuggestions(
@@ -591,16 +548,19 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 	}
 
 	private async getFuzzyFileSuggestions(query: string): Promise<AutocompleteItem[]> {
-		if (!this.fdPath) {
-			return [];
-		}
-
 		try {
-			const entries = await walkDirectoryWithFd(this.basePath, this.fdPath, query, 100);
+			const result = await fuzzyFind({
+				query,
+				path: this.basePath,
+				maxResults: 100,
+				hidden: false,
+				gitignore: true,
+			});
 
-			const scoredEntries = entries
+			const scoredEntries = result.matches
 				.map(entry => ({
-					...entry,
+					path: entry.path,
+					isDirectory: entry.isDirectory,
 					score: query ? this.scoreEntry(entry.path, query, entry.isDirectory) : 1,
 				}))
 				.filter(entry => entry.score > 0);

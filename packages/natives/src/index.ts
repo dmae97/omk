@@ -12,6 +12,10 @@ import { native } from "./native";
 
 export {
 	type ContextLine,
+	type FuzzyFindMatch,
+	type FuzzyFindOptions,
+	type FuzzyFindResult,
+	fuzzyFind,
 	type GrepMatch,
 	type GrepOptions,
 	type GrepResult,

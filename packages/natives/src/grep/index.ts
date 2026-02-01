@@ -5,6 +5,9 @@
 import { native } from "../native";
 import type {
 	ContextLine,
+	FuzzyFindMatch,
+	FuzzyFindOptions,
+	FuzzyFindResult,
 	GrepMatch,
 	GrepOptions,
 	GrepResult,
@@ -13,7 +16,18 @@ import type {
 	SearchResult,
 } from "./types";
 
-export type { ContextLine, GrepMatch, GrepOptions, GrepResult, GrepSummary, SearchOptions, SearchResult };
+export type {
+	ContextLine,
+	FuzzyFindMatch,
+	FuzzyFindOptions,
+	FuzzyFindResult,
+	GrepMatch,
+	GrepOptions,
+	GrepResult,
+	GrepSummary,
+	SearchOptions,
+	SearchResult,
+};
 
 function notifyMatches(matches: GrepMatch[], onMatch?: (match: GrepMatch) => void): void {
 	if (!onMatch) return;
@@ -70,3 +84,13 @@ export function hasMatch(
 
 /** Terminate grep resources (no-op for native bindings). */
 export function terminate(): void {}
+
+/**
+ * Fuzzy file path search for autocomplete.
+ *
+ * Searches for files and directories whose paths contain the query substring
+ * (case-insensitive). Respects .gitignore by default.
+ */
+export async function fuzzyFind(options: FuzzyFindOptions): Promise<FuzzyFindResult> {
+	return native.fuzzyFind(options);
+}

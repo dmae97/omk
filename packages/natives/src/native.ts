@@ -1,7 +1,14 @@
 import { createRequire } from "node:module";
 import * as path from "node:path";
 import type { FindMatch, FindOptions, FindResult } from "./find/types";
-import type { GrepOptions, GrepResult, SearchOptions, SearchResult } from "./grep/types";
+import type {
+	FuzzyFindOptions,
+	FuzzyFindResult,
+	GrepOptions,
+	GrepResult,
+	SearchOptions,
+	SearchResult,
+} from "./grep/types";
 import type { HighlightColors } from "./highlight/index";
 import type { HtmlToMarkdownOptions } from "./html/types";
 import type { ExtractSegmentsResult, SliceWithWidthResult, TextInput } from "./text/index";
@@ -31,6 +38,7 @@ export interface NativeSamplingFilter {
 
 export interface NativeBindings {
 	find(options: FindOptions, onMatch?: (match: FindMatch) => void): Promise<FindResult>;
+	fuzzyFind(options: FuzzyFindOptions): Promise<FuzzyFindResult>;
 	grep(options: GrepOptions): Promise<GrepResult>;
 	search(content: string | Uint8Array, options: SearchOptions): SearchResult;
 	hasMatch(
@@ -115,6 +123,7 @@ function validateNative(bindings: NativeBindings, source: string): void {
 	};
 
 	checkFn("find");
+	checkFn("fuzzyFind");
 	checkFn("grep");
 	checkFn("search");
 	checkFn("hasMatch");
