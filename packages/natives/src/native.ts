@@ -77,12 +77,15 @@ const execDir = path.dirname(process.execPath);
 const SUPPORTED_PLATFORMS = ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64", "win32-x64"];
 
 const candidates = [
+	// Platform-tagged builds (preferred - always correct platform)
+	path.join(nativeDir, `pi_natives.${platformTag}.node`),
+	path.join(execDir, `pi_natives.${platformTag}.node`),
+	// Fallback untagged (only created for native builds, not cross-compilation)
+	path.join(nativeDir, "pi_natives.node"),
+	path.join(execDir, "pi_natives.node"),
+	// Dev builds (cargo build --release output, may be stale after cross-compilation)
 	path.join(repoRoot, "target", "release", "pi_natives.node"),
 	path.join(repoRoot, "crates", "pi-natives", "target", "release", "pi_natives.node"),
-	path.join(nativeDir, `pi_natives.${platformTag}.node`),
-	path.join(nativeDir, "pi_natives.node"),
-	path.join(execDir, `pi_natives.${platformTag}.node`),
-	path.join(execDir, "pi_natives.node"),
 ];
 
 function loadNative(): NativeBindings {

@@ -4,115 +4,124 @@ import * as path from "node:path";
 
 const repoRoot = path.join(import.meta.dir, "../../..");
 const rustDir = path.join(repoRoot, "crates/pi-natives");
-const cargoTarget = process.env.CROSS_TARGET || undefined;
-const targetRoots = [
-	process.env.CARGO_TARGET_DIR ? path.resolve(process.env.CARGO_TARGET_DIR) : undefined,
-	path.join(repoRoot, "target"),
-	path.join(rustDir, "target"),
-].filter((value): value is string => Boolean(value));
-const releaseDirs = targetRoots.flatMap(root => {
-	const base = cargoTarget ? path.join(root, cargoTarget, "release") : path.join(root, "release");
-	return cargoTarget ? [base, path.join(root, "release")] : [base];
-});
 const nativeDir = path.join(import.meta.dir, "../native");
 
-const platform = process.env.TARGET_PLATFORM || process.platform;
-const arch = process.env.TARGET_ARCH || process.arch;
+const crossTarget = process.env.CROSS_TARGET;
+const targetPlatform = process.env.TARGET_PLATFORM || process.platform;
+const targetArch = process.env.TARGET_ARCH || process.arch;
+const isCrossCompile =
+	Boolean(crossTarget) ||
+	targetPlatform !== process.platform ||
+	targetArch !== process.arch;
 
 const cargoArgs = ["build", "--release"];
-if (cargoTarget) cargoArgs.push("--target", cargoTarget);
+if (crossTarget) cargoArgs.push("--target", crossTarget);
+
+console.log(`Building pi-natives for ${targetPlatform}-${targetArch}...`);
 const buildResult = await $`cargo ${cargoArgs}`.cwd(rustDir).nothrow();
 if (buildResult.exitCode !== 0) {
-	const stderrText =
+	const stderr =
 		typeof buildResult.stderr === "string"
 			? buildResult.stderr
 			: buildResult.stderr?.length
 				? new TextDecoder().decode(buildResult.stderr)
 				: "";
-	throw new Error(
-		`cargo build --release failed${stderrText ? `:\n${stderrText}` : ""}`,
-	);
+	throw new Error(`cargo build --release failed${stderr ? `:\n${stderr}` : ""}`);
 }
 
-const candidateNames = [
-	"libpi_natives.so",
-	"libpi_natives.dylib",
-	"pi_natives.dll",
-	"libpi_natives.dll",
-];
+const targetRoots = [
+	process.env.CARGO_TARGET_DIR ? path.resolve(process.env.CARGO_TARGET_DIR) : undefined,
+	path.join(repoRoot, "target"),
+	path.join(rustDir, "target"),
+].filter((v): v is string => Boolean(v));
+
+const releaseDirs = targetRoots.flatMap((root) => {
+	if (crossTarget) {
+		return [path.join(root, crossTarget, "release"), path.join(root, "release")];
+	}
+	return [path.join(root, "release")];
+});
+
+const libraryNames = ["libpi_natives.so", "libpi_natives.dylib", "pi_natives.dll", "libpi_natives.dll"];
 
 let sourcePath: string | null = null;
-for (const releaseDir of releaseDirs) {
-	for (const candidate of candidateNames) {
-		const fullPath = path.join(releaseDir, candidate);
+for (const dir of releaseDirs) {
+	for (const name of libraryNames) {
+		const fullPath = path.join(dir, name);
 		try {
 			await fs.stat(fullPath);
 			sourcePath = fullPath;
 			break;
 		} catch (err) {
-			if (err && typeof err === "object" && "code" in err) {
-				const code = (err as { code?: string }).code;
-				if (code === "ENOENT") {
-					continue;
-				}
-			}
-			throw err;
+			if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
 		}
 	}
 	if (sourcePath) break;
 }
 
 if (!sourcePath) {
-	const locations = releaseDirs.map(dir => `- ${dir}`).join("\n");
-	throw new Error(`Built library not found. Checked:\n${locations}`);
+	const checked = releaseDirs.map((d) => `  - ${d}`).join("\n");
+	throw new Error(`Built library not found. Checked:\n${checked}`);
 }
 
+console.log(`Found: ${sourcePath}`);
 await fs.mkdir(nativeDir, { recursive: true });
 
-const taggedPath = path.join(nativeDir, `pi_natives.${platform}-${arch}.node`);
-const fallbackPath = path.join(nativeDir, "pi_natives.node");
-const devPath = path.join(path.dirname(sourcePath), "pi_natives.node");
-
-// Safe copy pattern for in-use binaries (especially Windows DLLs):
-// 1. Copy new file to temp location first
-// 2. Rename old file out of the way (works even if DLL is loaded)
-// 3. Rename new file to target
-// 4. Clean up old file
-// This ensures we never lose the original if something fails.
-async function safeCopy(src: string, dest: string): Promise<void> {
-	const tempOld = `${dest}.old.${process.pid}`;
-	const tempNew = `${dest}.new.${process.pid}`;
-
-	// Step 1: Copy new file to temp location
-	await fs.copyFile(src, tempNew);
-
-	// Step 2: Move old file out of the way (if exists)
+async function cleanupStaleTemps(dir: string): Promise<void> {
 	try {
-		await fs.rename(dest, tempOld);
-	} catch (err) {
-		if (err && typeof err === "object" && "code" in err && (err as { code?: string }).code !== "ENOENT") {
-			// Rename failed for reason other than "file doesn't exist"
-			await fs.unlink(tempNew).catch(() => {});
-			throw err;
+		const entries = await fs.readdir(dir);
+		for (const entry of entries) {
+			if (entry.includes(".tmp.") || entry.includes(".old.") || entry.includes(".new.")) {
+				await fs.unlink(path.join(dir, entry)).catch(() => {});
+			}
+		}
+	} catch {
+		// Directory might not exist yet
+	}
+}
+
+async function installBinary(src: string, dest: string): Promise<void> {
+	const tempPath = `${dest}.tmp.${process.pid}`;
+
+	await fs.copyFile(src, tempPath);
+
+	try {
+		// Atomic rename - works even if dest is loaded on Linux/macOS (old inode stays valid)
+		await fs.rename(tempPath, dest);
+	} catch (renameErr) {
+		// On Windows, loaded DLLs cannot be overwritten via rename
+		// Try delete-then-rename as fallback
+		try {
+			await fs.unlink(dest);
+		} catch (unlinkErr) {
+			if ((unlinkErr as NodeJS.ErrnoException).code !== "ENOENT") {
+				await fs.unlink(tempPath).catch(() => {});
+				const isWindows = process.platform === "win32";
+				throw new Error(
+					`Cannot replace ${path.basename(dest)}${isWindows ? " (file may be in use - close any running processes)" : ""}: ${(unlinkErr as Error).message}`,
+				);
+			}
+		}
+		try {
+			await fs.rename(tempPath, dest);
+		} catch (finalErr) {
+			await fs.unlink(tempPath).catch(() => {});
+			throw new Error(`Failed to install ${path.basename(dest)}: ${(finalErr as Error).message}`);
 		}
 	}
-
-	// Step 3: Move new file to target
-	try {
-		await fs.rename(tempNew, dest);
-	} catch {
-		// If rename fails, try to restore old file
-		await fs.rename(tempOld, dest).catch(() => {});
-		await fs.unlink(tempNew).catch(() => {});
-		throw new Error(`Failed to install native binary to ${dest}`);
-	}
-
-	// Step 4: Clean up old file (best effort)
-	await fs.unlink(tempOld).catch(() => {});
 }
 
-await safeCopy(sourcePath, taggedPath);
-await safeCopy(sourcePath, fallbackPath);
-if (sourcePath !== devPath) {
-	await safeCopy(sourcePath, devPath);
+await cleanupStaleTemps(nativeDir);
+
+const taggedPath = path.join(nativeDir, `pi_natives.${targetPlatform}-${targetArch}.node`);
+console.log(`Installing: ${taggedPath}`);
+await installBinary(sourcePath, taggedPath);
+
+// Only create fallback for native (non-cross) builds to avoid overwriting with wrong-platform binaries
+if (!isCrossCompile) {
+	const fallbackPath = path.join(nativeDir, "pi_natives.node");
+	console.log(`Installing: ${fallbackPath}`);
+	await installBinary(sourcePath, fallbackPath);
 }
+
+console.log("Build complete.");

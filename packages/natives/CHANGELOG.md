@@ -1,6 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Improved native binary installation to use atomic rename operations and better fallback handling for Windows DLLs
+- Reordered native binary search candidates to prioritize platform-tagged builds and avoid loading stale cross-compiled binaries
+- Enhanced cross-compilation detection to prevent installing wrong-platform fallback binaries during cross-compilation builds
+
+### Fixed
+
+- Fixed potential issue where cross-compiled binaries could overwrite platform-specific native builds with incorrect architecture binaries
 
 ## [9.6.4] - 2026-02-01
 ### Breaking Changes
