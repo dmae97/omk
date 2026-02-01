@@ -2,9 +2,7 @@ import type { Component } from "../tui";
 import { applyBackgroundToLine, padding, visibleWidth } from "../utils";
 
 type Cache = {
-	key: string[];
-	width: number;
-	bgSample: string | undefined;
+	key: bigint;
 	result: string[];
 };
 
@@ -53,15 +51,12 @@ export class Box implements Component {
 		this.cached = undefined;
 	}
 
-	private matchCache(width: number, childLines: string[], bgSample: string | undefined): boolean {
-		const cache = this.cached;
-		return (
-			!!cache &&
-			cache.width === width &&
-			cache.bgSample === bgSample &&
-			cache.key.length === childLines.length &&
-			cache.key.every((key, index) => key === childLines[index])
-		);
+	private computeCacheKey(width: number, childLines: string[], bgSample: string | undefined): bigint {
+		return Bun.hash.xxHash64(JSON.stringify([width, bgSample, childLines]));
+	}
+
+	private matchCache(cacheKey: bigint): boolean {
+		return this.cached?.key === cacheKey;
 	}
 
 	invalidate(): void {
@@ -95,8 +90,10 @@ export class Box implements Component {
 		// Check if bgFn output changed by sampling
 		const bgSample = this.bgFn ? this.bgFn("test") : undefined;
 
+		const cacheKey = this.computeCacheKey(width, childLines, bgSample);
+
 		// Check cache validity
-		if (this.matchCache(width, childLines, bgSample)) {
+		if (this.matchCache(cacheKey)) {
 			return this.cached!.result;
 		}
 
@@ -119,7 +116,7 @@ export class Box implements Component {
 		}
 
 		// Update cache
-		this.cached = { key: childLines, width, bgSample, result };
+		this.cached = { key: cacheKey, result };
 
 		return result;
 	}
