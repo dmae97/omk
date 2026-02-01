@@ -194,6 +194,7 @@ class ShellSession {
 	#buffer = "";
 	#queue: Promise<void> = Promise.resolve();
 	#chunkQueue: Promise<void> = Promise.resolve();
+	#streamsDone: Promise<unknown> = Promise.resolve();
 	#current: RunningCommand | null = null;
 	#startPromise: Promise<void> | null = null;
 	#closed = false;
@@ -313,8 +314,7 @@ class ShellSession {
 			}
 		};
 
-		void readStream(child.stdout);
-		void readStream(child.stderr);
+		this.#streamsDone = Promise.allSettled([readStream(child.stdout), readStream(child.stderr)]);
 	}
 
 	async #enqueueChunk(text: string): Promise<void> {
@@ -477,6 +477,11 @@ class ShellSession {
 		if (completed) return;
 
 		await this.#terminateSession();
+
+		// Drain streams and chunk queue - marker might have arrived but not yet processed
+		await this.#streamsDone;
+		await this.#chunkQueue;
+
 		if (running.completed) return;
 		running.completed = true;
 		running.abortListener?.();
@@ -522,14 +527,21 @@ class ShellSession {
 		this.#child = null;
 		this.#stdinWriter = null;
 		this.#startPromise = null;
-		this.#buffer = "";
 
 		if (!running || running.completed) return;
+
+		// Wait for any pending chunks to be processed - marker might be in the queue
+		await this.#streamsDone;
+		await this.#chunkQueue;
+
+		if (running.completed) return;
+
 		running.cancelled = true;
 		running.abortReason = "signal";
 		running.completed = true;
 		running.abortListener?.();
 		this.#current = null;
+		this.#buffer = "";
 		const summary = await running.sink.dump(running.abortNotice ?? "Shell session terminated");
 		running.resolve({
 			exitCode: undefined,

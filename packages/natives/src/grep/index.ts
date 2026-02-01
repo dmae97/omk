@@ -3,6 +3,7 @@
  */
 
 import { native } from "../native";
+import { wrapRequestOptions } from "../request-options";
 import type {
 	ContextLine,
 	FuzzyFindMatch,
@@ -29,34 +30,11 @@ export type {
 	SearchResult,
 };
 
-function notifyMatches(matches: GrepMatch[], onMatch?: (match: GrepMatch) => void): void {
-	if (!onMatch) return;
-	for (const match of matches) {
-		onMatch(match);
-	}
-}
-
 /**
- * Search files for a regex pattern.
+ * Search files for a regex pattern with optional streaming callback.
  */
 export async function grep(options: GrepOptions, onMatch?: (match: GrepMatch) => void): Promise<GrepResult> {
-	const result = await native.grep(options);
-	notifyMatches(result.matches, onMatch);
-	return result;
-}
-
-/**
- * Search files for a regex pattern (single-threaded).
- */
-export async function grepDirect(options: GrepOptions, onMatch?: (match: GrepMatch) => void): Promise<GrepResult> {
-	return await grep(options, onMatch);
-}
-
-/**
- * Search files for a regex pattern (compatibility alias).
- */
-export async function grepPool(options: GrepOptions): Promise<GrepResult> {
-	return await grep(options);
+	return wrapRequestOptions(() => native.grep(options, onMatch), options);
 }
 
 /**
@@ -82,9 +60,6 @@ export function hasMatch(
 	return native.hasMatch(content, pattern, options?.ignoreCase ?? false, options?.multiline ?? false);
 }
 
-/** Terminate grep resources (no-op for native bindings). */
-export function terminate(): void {}
-
 /**
  * Fuzzy file path search for autocomplete.
  *
@@ -92,5 +67,5 @@ export function terminate(): void {}
  * (case-insensitive). Respects .gitignore by default.
  */
 export async function fuzzyFind(options: FuzzyFindOptions): Promise<FuzzyFindResult> {
-	return native.fuzzyFind(options);
+	return wrapRequestOptions(() => native.fuzzyFind(options), options);
 }

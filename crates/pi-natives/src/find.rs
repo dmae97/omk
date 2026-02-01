@@ -12,38 +12,49 @@
 use std::{
 	borrow::Cow,
 	path::{Path, PathBuf},
+	sync::atomic::{AtomicBool, Ordering},
 };
 
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use ignore::WalkBuilder;
-use napi::{bindgen_prelude::*, tokio::task};
+use napi::{
+	bindgen_prelude::*,
+	threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode},
+	tokio::task,
+};
 use napi_derive::napi;
 
 /// Options for discovering files and directories.
 #[napi(object)]
 pub struct FindOptions {
 	/// Glob pattern to match (e.g., "*.ts").
-	pub pattern:     String,
+	pub pattern:       String,
 	/// Directory to search.
-	pub path:        String,
+	pub path:          String,
 	/// Filter by file type: "file", "dir", or "symlink".
 	#[napi(js_name = "fileType")]
-	pub file_type:   Option<String>,
+	pub file_type:     Option<String>,
 	/// Include hidden files (default: false).
-	pub hidden:      Option<bool>,
+	pub hidden:        Option<bool>,
 	/// Maximum number of results to return.
 	#[napi(js_name = "maxResults")]
-	pub max_results: Option<u32>,
+	pub max_results:   Option<u32>,
 	/// Respect .gitignore files (default: true).
-	pub gitignore:   Option<bool>,
+	pub gitignore:     Option<bool>,
+	/// Sort results by mtime (most recent first) before applying limit.
+	#[napi(js_name = "sortByMtime")]
+	pub sort_by_mtime: Option<bool>,
 }
 
 /// A single filesystem match.
+#[derive(Clone)]
 #[napi(object)]
 pub struct FindMatch {
 	pub path:      String,
 	#[napi(js_name = "fileType")]
 	pub file_type: String,
+	/// Modification time in milliseconds since epoch (if available).
+	pub mtime:     Option<f64>,
 }
 
 /// Result of a find operation.
@@ -138,27 +149,52 @@ fn normalize_file_type(value: Option<String>) -> Option<String> {
 		.filter(|v| !v.is_empty())
 }
 
-fn classify_file_type(path: &Path) -> Option<&'static str> {
+fn classify_file_type(path: &Path) -> Option<(&'static str, Option<f64>)> {
 	let metadata = std::fs::symlink_metadata(path).ok()?;
 	let file_type = metadata.file_type();
+	let mtime_ms = metadata
+		.modified()
+		.ok()
+		.and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+		.map(|d| d.as_millis() as f64);
 	if file_type.is_symlink() {
-		Some(FILE_TYPE_SYMLINK)
+		Some((FILE_TYPE_SYMLINK, mtime_ms))
 	} else if file_type.is_dir() {
-		Some(FILE_TYPE_DIR)
+		Some((FILE_TYPE_DIR, mtime_ms))
 	} else {
-		Some(FILE_TYPE_FILE)
+		Some((FILE_TYPE_FILE, mtime_ms))
 	}
 }
 
-fn run_find(
-	root: PathBuf,
-	pattern: String,
-	include_hidden: bool,
-	file_type_filter: Option<String>,
-	max_results: usize,
-	use_gitignore: bool,
+/// Internal configuration for the find operation, grouped to reduce parameter
+/// count.
+struct FindConfig {
+	root:                  PathBuf,
+	pattern:               String,
+	include_hidden:        bool,
+	file_type_filter:      Option<String>,
+	max_results:           usize,
+	use_gitignore:         bool,
 	mentions_node_modules: bool,
+	sort_by_mtime:         bool,
+}
+
+fn run_find(
+	config: FindConfig,
+	on_match: Option<&ThreadsafeFunction<FindMatch, ErrorStrategy::Fatal>>,
+	cancelled: &AtomicBool,
 ) -> Result<FindResult> {
+	let FindConfig {
+		root,
+		pattern,
+		include_hidden,
+		file_type_filter,
+		max_results,
+		use_gitignore,
+		mentions_node_modules,
+		sort_by_mtime,
+	} = config;
+
 	let glob_set = compile_glob(&pattern)?;
 	let mut builder = WalkBuilder::new(&root);
 	builder
@@ -188,6 +224,11 @@ fn run_find(
 	}
 
 	for entry in builder.build() {
+		// Check for cancellation
+		if cancelled.load(Ordering::Relaxed) {
+			break;
+		}
+
 		let Ok(entry) = entry else { continue };
 		let path = entry.path();
 		if should_skip_path(path, mentions_node_modules) {
@@ -200,7 +241,7 @@ fn run_find(
 		if !glob_set.is_match(relative.as_ref()) {
 			continue;
 		}
-		let Some(file_type) = classify_file_type(path) else {
+		let Some((file_type, mtime)) = classify_file_type(path) else {
 			continue;
 		};
 		if let Some(filter) = file_type_filter.as_deref()
@@ -209,12 +250,33 @@ fn run_find(
 			continue;
 		}
 
-		matches
-			.push(FindMatch { path: relative.into_owned(), file_type: file_type.to_string() });
+		let found =
+			FindMatch { path: relative.into_owned(), file_type: file_type.to_string(), mtime };
 
-		if matches.len() >= max_results {
+		// Call streaming callback if provided
+		if let Some(callback) = on_match {
+			callback.call(found.clone(), ThreadsafeFunctionCallMode::NonBlocking);
+		}
+
+		matches.push(found);
+
+		// Only limit during iteration if NOT sorting by mtime
+		// (sorting requires collecting all matches first)
+		if !sort_by_mtime && matches.len() >= max_results {
 			break;
 		}
+	}
+
+	// Sort by mtime (most recent first) if requested
+	if sort_by_mtime {
+		matches.sort_by(|a, b| {
+			let a_mtime = a.mtime.unwrap_or(0.0);
+			let b_mtime = b.mtime.unwrap_or(0.0);
+			b_mtime
+				.partial_cmp(&a_mtime)
+				.unwrap_or(std::cmp::Ordering::Equal)
+		});
+		matches.truncate(max_results);
 	}
 
 	let total_matches = matches.len().min(u32::MAX as usize) as u32;
@@ -226,8 +288,14 @@ fn run_find(
 /// # Errors
 /// Returns an error if the glob is invalid or the search path is missing.
 #[napi(js_name = "find")]
-pub async fn find(options: FindOptions) -> Result<FindResult> {
-	let FindOptions { pattern, path, file_type, hidden, max_results, gitignore } = options;
+pub async fn find(
+	options: FindOptions,
+	#[napi(ts_arg_type = "((match: FindMatch) => void) | undefined | null")] on_match: Option<
+		ThreadsafeFunction<FindMatch, ErrorStrategy::Fatal>,
+	>,
+) -> Result<FindResult> {
+	let FindOptions { pattern, path, file_type, hidden, max_results, gitignore, sort_by_mtime } =
+		options;
 
 	let pattern = pattern.trim();
 	let pattern = if pattern.is_empty() { "*" } else { pattern };
@@ -239,17 +307,21 @@ pub async fn find(options: FindOptions) -> Result<FindResult> {
 	let max_results = max_results.map_or(usize::MAX, |value| value as usize);
 	let use_gitignore = gitignore.unwrap_or(true);
 	let mentions_node_modules = pattern.contains("node_modules");
+	let sort_by_mtime = sort_by_mtime.unwrap_or(false);
 
 	task::spawn_blocking(move || {
-		run_find(
-			search_path,
+		let cancelled = AtomicBool::new(false);
+		let config = FindConfig {
+			root: search_path,
 			pattern,
 			include_hidden,
 			file_type_filter,
 			max_results,
 			use_gitignore,
 			mentions_node_modules,
-		)
+			sort_by_mtime,
+		};
+		run_find(config, on_match.as_ref(), &cancelled)
 	})
 	.await
 	.map_err(|err| Error::from_reason(format!("Join error: {err}")))?

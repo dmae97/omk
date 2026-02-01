@@ -3,14 +3,10 @@
  */
 
 import { native } from "../native";
-import type { RequestOptions } from "../request-options";
+import { type RequestOptions, wrapRequestOptions } from "../request-options";
 import type { HtmlToMarkdownOptions } from "./types";
 
 export type { HtmlToMarkdownOptions } from "./types";
-
-function assertRequest(req?: RequestOptions): void {
-	req?.signal?.throwIfAborted();
-}
 
 /**
  * Convert HTML to Markdown.
@@ -24,11 +20,5 @@ export async function htmlToMarkdown(
 	options?: HtmlToMarkdownOptions,
 	req?: RequestOptions,
 ): Promise<string> {
-	assertRequest(req);
-	return native.htmlToMarkdown(html, options);
+	return wrapRequestOptions(() => native.htmlToMarkdown(html, options), req);
 }
-
-/**
- * Terminate HTML resources (no-op for native bindings).
- */
-export function terminate(): void {}

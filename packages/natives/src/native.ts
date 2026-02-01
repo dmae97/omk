@@ -36,10 +36,12 @@ export interface NativeSamplingFilter {
 	Lanczos3: 5;
 }
 
+import type { GrepMatch } from "./grep/types";
+
 export interface NativeBindings {
 	find(options: FindOptions, onMatch?: (match: FindMatch) => void): Promise<FindResult>;
 	fuzzyFind(options: FuzzyFindOptions): Promise<FuzzyFindResult>;
-	grep(options: GrepOptions): Promise<GrepResult>;
+	grep(options: GrepOptions, onMatch?: (match: GrepMatch) => void): Promise<GrepResult>;
 	search(content: string | Uint8Array, options: SearchOptions): SearchResult;
 	hasMatch(
 		content: string | Uint8Array,

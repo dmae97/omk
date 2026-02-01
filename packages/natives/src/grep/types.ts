@@ -1,5 +1,7 @@
+import type { RequestOptions } from "../request-options";
+
 /** Options for searching files. */
-export interface GrepOptions {
+export interface GrepOptions extends RequestOptions {
 	/** Regex pattern to search for */
 	pattern: string;
 	/** Directory or file to search */
@@ -90,7 +92,7 @@ export type WasmMatch = SearchMatch;
 export type WasmSearchResult = SearchResult;
 
 /** Options for fuzzy file path search. */
-export interface FuzzyFindOptions {
+export interface FuzzyFindOptions extends RequestOptions {
 	/** Substring query to match against file paths (case-insensitive). */
 	query: string;
 	/** Directory to search. */

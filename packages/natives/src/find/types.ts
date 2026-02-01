@@ -15,6 +15,8 @@ export interface FindOptions {
 	maxResults?: number;
 	/** Respect .gitignore files (default: true) */
 	gitignore?: boolean;
+	/** Sort results by mtime (most recent first) before applying limit */
+	sortByMtime?: boolean;
 }
 
 export interface FindMatch {

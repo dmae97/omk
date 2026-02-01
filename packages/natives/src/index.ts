@@ -21,11 +21,8 @@ export {
 	type GrepResult,
 	type GrepSummary,
 	grep,
-	grepDirect,
-	grepPool,
 	hasMatch,
 	searchContent,
-	terminate,
 } from "./grep/index";
 
 // =============================================================================
@@ -57,7 +54,7 @@ export async function find(options: FindOptions, onMatch?: (match: FindMatch) =>
 	);
 }
 
-// =============================================================================
+// =====================================================	========================
 // Image processing (photon-compatible API)
 // =============================================================================
 
@@ -99,7 +96,6 @@ export {
 export {
 	type HtmlToMarkdownOptions,
 	htmlToMarkdown,
-	terminate as terminateHtmlWorker,
 } from "./html/index";
 
 export type { RequestOptions } from "./request-options";

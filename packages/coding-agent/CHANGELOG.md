@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `head` and `tail` parameters to bash tool to limit output lines without breaking streaming
@@ -16,6 +15,8 @@
 
 ### Changed
 
+- Improved find tool performance by delegating mtime-based sorting to native layer instead of post-processing results in JavaScript
+- Simplified find tool result processing by removing redundant filesystem stat calls when native metadata is available
 - Updated bash tool documentation to recommend using `head` and `tail` parameters instead of piping through head/tail commands
 - Updated binary build process to exclude worker files from compilation, reducing binary size
 - Modified update mechanism to download and install native addon alongside CLI binary for platform-specific functionality
@@ -33,6 +34,7 @@
 
 ### Fixed
 
+- Fixed race condition in shell session where command completion could occur before stream data was fully processed
 - Fixed Python gateway spawning console window on Windows by using windowless Python interpreter (pythonw.exe)
 
 ## [9.4.0] - 2026-01-31

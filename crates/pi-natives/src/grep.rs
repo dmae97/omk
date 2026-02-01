@@ -21,7 +21,12 @@ use grep_searcher::{
 	BinaryDetection, Searcher, SearcherBuilder, Sink, SinkContext, SinkContextKind, SinkMatch,
 };
 use ignore::WalkBuilder;
-use napi::{JsString, bindgen_prelude::*, tokio::task};
+use napi::{
+	JsString,
+	bindgen_prelude::*,
+	threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode},
+	tokio::task,
+};
 use napi_derive::napi;
 use rayon::prelude::*;
 
@@ -91,6 +96,7 @@ pub struct GrepOptions {
 }
 
 /// A context line (before or after a match).
+#[derive(Clone)]
 #[napi(object)]
 pub struct ContextLine {
 	#[napi(js_name = "lineNumber")]
@@ -132,6 +138,7 @@ pub struct SearchResult {
 }
 
 /// A single match in a grep result.
+#[derive(Clone)]
 #[napi(object)]
 pub struct GrepMatch {
 	pub path:           String,
@@ -190,6 +197,7 @@ struct CollectedMatch {
 struct SearchResultInternal {
 	matches:       Vec<CollectedMatch>,
 	match_count:   u64,
+	collected:     u64,
 	limit_reached: bool,
 }
 
@@ -228,7 +236,9 @@ impl MatchCollector {
 	fn truncate_line(&self, line: &str) -> (String, bool) {
 		match self.max_columns {
 			Some(max) if line.len() > max => {
-				let truncated = format!("{}...", &line[..max.saturating_sub(3)]);
+				let cut = max.saturating_sub(3);
+				let boundary = line.floor_char_boundary(cut);
+				let truncated = format!("{}...", &line[..boundary]);
 				(truncated, true)
 			},
 			_ => (line.to_string(), false),
@@ -503,6 +513,7 @@ fn run_search_reader<R: Read>(
 	Ok(SearchResultInternal {
 		matches:       collector.matches,
 		match_count:   collector.match_count,
+		collected:     collector.collected_count,
 		limit_reached: collector.limit_reached,
 	})
 }
@@ -644,6 +655,7 @@ fn run_sequential_search(
 ) -> (Vec<GrepMatch>, u64, u32, u32, bool) {
 	let mut matches = Vec::new();
 	let mut total_matches = 0u64;
+	let mut collected = 0u64;
 	let mut files_with_matches = 0u32;
 	let mut files_searched = 0u32;
 	let mut limit_reached = false;
@@ -653,9 +665,10 @@ fn run_sequential_search(
 			break;
 		}
 
-		// Check remaining count before opening file
+		// Calculate offset for this file (skip matches we've already seen)
 		let file_offset = offset.saturating_sub(total_matches);
-		let remaining = max_count.map(|max| max.saturating_sub(total_matches));
+		// Calculate remaining based on collected count, not total matches
+		let remaining = max_count.map(|max| max.saturating_sub(collected));
 		if remaining == Some(0) {
 			limit_reached = true;
 			break;
@@ -680,6 +693,7 @@ fn run_sequential_search(
 
 		files_with_matches = files_with_matches.saturating_add(1);
 		total_matches = total_matches.saturating_add(search.match_count);
+		collected = collected.saturating_add(search.collected);
 
 		match mode {
 			OutputMode::Content => {
@@ -700,7 +714,7 @@ fn run_sequential_search(
 			},
 		}
 
-		if search.limit_reached || max_count.is_some_and(|max| total_matches >= max) {
+		if search.limit_reached || max_count.is_some_and(|max| collected >= max) {
 			limit_reached = true;
 		}
 	}
@@ -735,7 +749,10 @@ fn search_sync(content: &[u8], options: SearchOptions) -> SearchResult {
 	}
 }
 
-fn grep_sync(options: GrepOptions) -> Result<GrepResult> {
+fn grep_sync(
+	options: GrepOptions,
+	on_match: Option<&ThreadsafeFunction<GrepMatch, ErrorStrategy::Fatal>>,
+) -> Result<GrepResult> {
 	let search_path = resolve_search_path(&options.path)?;
 	let metadata = std::fs::metadata(&search_path)
 		.map_err(|err| Error::from_reason(format!("Path not found: {err}")))?;
@@ -816,7 +833,7 @@ fn grep_sync(options: GrepOptions) -> Result<GrepResult> {
 		}
 
 		let limit_reached =
-			search.limit_reached || max_count.is_some_and(|max| search.match_count >= max);
+			search.limit_reached || max_count.is_some_and(|max| search.collected >= max);
 
 		return Ok(GrepResult {
 			matches,
@@ -858,11 +875,15 @@ fn grep_sync(options: GrepOptions) -> Result<GrepResult> {
 			match output_mode {
 				OutputMode::Content => {
 					for matched in result.matches {
-						matches.push(to_grep_match(&result.relative_path, matched));
+						let grep_match = to_grep_match(&result.relative_path, matched);
+						if let Some(callback) = on_match {
+							callback.call(grep_match.clone(), ThreadsafeFunctionCallMode::NonBlocking);
+						}
+						matches.push(grep_match);
 					}
 				},
 				OutputMode::Count => {
-					matches.push(GrepMatch {
+					let grep_match = GrepMatch {
 						path:           result.relative_path.clone(),
 						line_number:    0,
 						line:           String::new(),
@@ -870,7 +891,11 @@ fn grep_sync(options: GrepOptions) -> Result<GrepResult> {
 						context_after:  None,
 						truncated:      None,
 						match_count:    Some(clamp_u32(result.match_count)),
-					});
+					};
+					if let Some(callback) = on_match {
+						callback.call(grep_match.clone(), ThreadsafeFunctionCallMode::NonBlocking);
+					}
+					matches.push(grep_match);
 				},
 			}
 		}
@@ -894,6 +919,13 @@ fn grep_sync(options: GrepOptions) -> Result<GrepResult> {
 			max_count,
 			offset,
 		);
+
+	// Fire callbacks for sequential search results
+	if let Some(callback) = on_match {
+		for grep_match in &matches {
+			callback.call(grep_match.clone(), ThreadsafeFunctionCallMode::NonBlocking);
+		}
+	}
 
 	Ok(GrepResult {
 		matches,
@@ -965,8 +997,13 @@ pub fn has_match(
 
 /// Search files for a regex pattern.
 #[napi(js_name = "grep")]
-pub async fn grep(options: GrepOptions) -> Result<GrepResult> {
-	task::spawn_blocking(move || grep_sync(options))
+pub async fn grep(
+	options: GrepOptions,
+	#[napi(ts_arg_type = "((match: GrepMatch) => void) | undefined | null")] on_match: Option<
+		ThreadsafeFunction<GrepMatch, ErrorStrategy::Fatal>,
+	>,
+) -> Result<GrepResult> {
+	task::spawn_blocking(move || grep_sync(options, on_match.as_ref()))
 		.await
 		.map_err(|err| Error::from_reason(format!("Join error: {err}")))?
 }

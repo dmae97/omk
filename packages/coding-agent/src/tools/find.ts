@@ -260,6 +260,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 							fileType: "file",
 							hidden: includeHidden,
 							maxResults: effectiveLimit,
+							sortByMtime: true,
 						},
 						onMatch,
 					),
@@ -281,7 +282,6 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				return toolResult(details).text("No files found matching pattern").done();
 			}
 			const relativized: string[] = [];
-			const mtimes: number[] = [];
 
 			for (const match of matches) {
 				throwIfAborted(signal);
@@ -293,25 +293,13 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				const hadTrailingSlash = line.endsWith("/") || line.endsWith("\\");
 				let relativePath = line;
 
-				let mtimeMs = match.mtime;
-				let isDirectory = match.fileType === "dir";
-				if (mtimeMs === undefined) {
-					try {
-						const fullPath = path.join(searchPath, relativePath);
-						const stat = await fs.stat(fullPath);
-						mtimeMs = stat.mtimeMs;
-						isDirectory = stat.isDirectory();
-					} catch {
-						mtimeMs = 0;
-					}
-				}
+				const isDirectory = match.fileType === "dir";
 
 				if ((isDirectory || hadTrailingSlash) && !relativePath.endsWith("/")) {
 					relativePath += "/";
 				}
 
 				relativized.push(relativePath);
-				mtimes.push(mtimeMs ?? 0);
 			}
 
 			if (relativized.length === 0) {
@@ -319,13 +307,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				return toolResult(details).text("No files found matching pattern").done();
 			}
 
-			// Sort by mtime (most recent first)
-			if (relativized.length > 0) {
-				const indexed = relativized.map((path, idx) => ({ path, mtime: mtimes[idx] }));
-				indexed.sort((a, b) => b.mtime - a.mtime);
-				relativized.length = 0;
-				relativized.push(...indexed.map(item => item.path));
-			}
+			// Results are already sorted by mtime from native (sortByMtime: true)
 
 			const listLimit = applyListLimit(relativized, { limit: effectiveLimit });
 			const limited = listLimit.items;

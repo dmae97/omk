@@ -7,7 +7,6 @@
 
 use std::{cell::RefCell, collections::HashMap, sync::OnceLock};
 
-use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use syntect::parsing::{ParseState, Scope, ScopeStack, ScopeStackOp, SyntaxReference, SyntaxSet};
 
@@ -350,11 +349,7 @@ fn find_syntax<'a>(ss: &'a SyntaxSet, lang: &str) -> Option<&'a SyntaxReference>
 /// Highlighted code with ANSI color codes, or the original code if highlighting
 /// fails.
 #[napi(js_name = "highlightCode")]
-pub fn highlight_code(
-	code: String,
-	lang: Option<String>,
-	colors: HighlightColors,
-) -> Result<String> {
+pub fn highlight_code(code: String, lang: Option<String>, colors: HighlightColors) -> String {
 	let inserted = colors.inserted.as_deref().unwrap_or("");
 	let deleted = colors.deleted.as_deref().unwrap_or("");
 
@@ -388,6 +383,7 @@ pub fn highlight_code(
 
 	for line in syntect::util::LinesWithEndings::from(code.as_str()) {
 		let Ok(ops) = parse_state.parse_line(line, ss) else {
+			// Parse error - append unhighlighted line and continue
 			result.push_str(line);
 			continue;
 		};
@@ -440,7 +436,7 @@ pub fn highlight_code(
 		}
 	}
 
-	Ok(result)
+	result
 }
 
 /// Check if a language is supported for highlighting.
