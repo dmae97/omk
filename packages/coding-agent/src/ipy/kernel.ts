@@ -984,6 +984,11 @@ export class PythonKernel {
 			outputs.push({ type: "json", data: data["application/json"] });
 		}
 
+		// Check text/markdown before text/plain since Markdown objects provide both
+		// (text/plain is just the repr)
+		if (typeof data["text/markdown"] === "string") {
+			return { text: normalizeDisplayText(String(data["text/markdown"])), outputs };
+		}
 		if (typeof data["text/plain"] === "string") {
 			return { text: normalizeDisplayText(String(data["text/plain"])), outputs };
 		}
