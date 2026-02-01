@@ -336,21 +336,16 @@ const fn ascii_cell_width_u16(u: u16) -> usize {
 }
 
 #[inline]
-fn segment_is_ascii_u16(seg: &[u16]) -> bool {
-	seg.iter().all(|&u| u <= 0x7f)
-}
-
-#[inline]
 fn grapheme_width_str(g: &str) -> usize {
 	if g == "\t" {
 		return TAB_WIDTH;
 	}
-	if g.len() == 1 {
-		return g
-			.chars()
-			.next()
-			.and_then(UnicodeWidthChar::width)
-			.unwrap_or(0);
+	let mut it = g.chars();
+	let Some(c0) = it.next() else {
+		return 0;
+	};
+	if it.next().is_none() {
+		return UnicodeWidthChar::width(c0).unwrap_or(0);
 	}
 	UnicodeWidthStr::width(g)
 }
@@ -359,13 +354,11 @@ thread_local! {
   static SCRATCH: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
-/// Iterate graphemes in a UTF-16 segment with:
-/// - ASCII fast path (no UTF-8 conversion)
-/// - non-ASCII slow path using a reused scratch String
+/// Iterate graphemes in a non-ASCII UTF-16 segment.
 ///
 /// Callback returns `true` to continue, `false` to stop early.
 #[inline]
-fn for_each_grapheme_u16<F>(segment: &[u16], mut f: F) -> bool
+fn for_each_grapheme_u16_slow<F>(segment: &[u16], mut f: F) -> bool
 where
 	F: FnMut(&[u16], usize) -> bool,
 {
@@ -373,17 +366,6 @@ where
 		return true;
 	}
 
-	if segment_is_ascii_u16(segment) {
-		for i in 0..segment.len() {
-			let w = ascii_cell_width_u16(segment[i]);
-			if !f(&segment[i..=i], w) {
-				return false;
-			}
-		}
-		return true;
-	}
-
-	// Slow path: decode into scratch once, reuse allocation
 	SCRATCH.with_borrow_mut(|scratch| {
 		scratch.clear();
 		scratch.reserve(segment.len());
@@ -413,31 +395,43 @@ where
 fn visible_width_u16_up_to(data: &[u16], limit: usize) -> (usize, bool) {
 	let mut width = 0usize;
 	let mut i = 0usize;
+	let len = data.len();
 
-	while i < data.len() {
+	while i < len {
 		if data[i] == ESC {
-			if let Some(len) = ansi_seq_len_u16(data, i) {
-				i += len;
+			if let Some(seq_len) = ansi_seq_len_u16(data, i) {
+				i += seq_len;
 				continue;
 			}
-			// invalid ESC: treat as width 0 and continue
 			i += 1;
 			continue;
 		}
 
-		// plain run until next ESC (or end)
 		let start = i;
-		while i < data.len() && data[i] != ESC {
+		let mut is_ascii = true;
+		while i < len && data[i] != ESC {
+			if data[i] > 0x7f {
+				is_ascii = false;
+			}
 			i += 1;
 		}
 		let seg = &data[start..i];
 
-		let ok = for_each_grapheme_u16(seg, |_, w| {
-			width += w;
-			width <= limit
-		});
-		if !ok {
-			return (width, true);
+		if is_ascii {
+			for &u in seg {
+				width += ascii_cell_width_u16(u);
+				if width > limit {
+					return (width, true);
+				}
+			}
+		} else {
+			let ok = for_each_grapheme_u16_slow(seg, |_, w| {
+				width += w;
+				width <= limit
+			});
+			if !ok {
+				return (width, true);
+			}
 		}
 	}
 
@@ -507,7 +501,7 @@ pub fn truncate_to_width(
 	if target_w == 0 {
 		let mut out = Vec::with_capacity(ellipsis.len().min(max_width * 2));
 		let mut w = 0usize;
-		let _ = for_each_grapheme_u16(ellipsis, |gu16, gw| {
+		let _ = for_each_grapheme_u16_slow(ellipsis, |gu16, gw| {
 			if w + gw > max_width {
 				return false;
 			}
@@ -526,45 +520,65 @@ pub fn truncate_to_width(
 	let mut out = Vec::with_capacity(text.len().min(max_width * 2) + ellipsis.len() + 8);
 	let mut w = 0usize;
 	let mut i = 0usize;
+	let text_len = text.len();
 
-	let mut saw_any_ansi = false;
+	let mut saw_sgr = false;
 
-	while i < text.len() {
+	while i < text_len {
 		if text[i] == ESC {
-			if let Some(len) = ansi_seq_len_u16(text, i) {
-				out.extend_from_slice(&text[i..i + len]);
-				saw_any_ansi = true;
-				i += len;
+			if let Some(seq_len) = ansi_seq_len_u16(text, i) {
+				let seq = &text[i..i + seq_len];
+				out.extend_from_slice(seq);
+				if is_sgr_u16(seq) {
+					saw_sgr = true;
+				}
+				i += seq_len;
 				continue;
 			}
-			// invalid ESC; preserve it as literal width-0
 			out.push(ESC);
 			i += 1;
 			continue;
 		}
 
 		let start = i;
-		while i < text.len() && text[i] != ESC {
+		let mut is_ascii = true;
+		while i < text_len && text[i] != ESC {
+			if text[i] > 0x7f {
+				is_ascii = false;
+			}
 			i += 1;
 		}
 		let seg = &text[start..i];
 
-		let keep_going = for_each_grapheme_u16(seg, |gu16, gw| {
-			if w + gw > target_w {
-				return false;
+		if is_ascii {
+			for &u in seg {
+				let gw = ascii_cell_width_u16(u);
+				if w + gw > target_w {
+					break;
+				}
+				out.push(u);
+				w += gw;
 			}
-			out.extend_from_slice(gu16);
-			w += gw;
-			true
-		});
-
-		if !keep_going {
-			break;
+			if w >= target_w {
+				break;
+			}
+		} else {
+			let keep_going = for_each_grapheme_u16_slow(seg, |gu16, gw| {
+				if w + gw > target_w {
+					return false;
+				}
+				out.extend_from_slice(gu16);
+				w += gw;
+				true
+			});
+			if !keep_going {
+				break;
+			}
 		}
 	}
 
-	// Only reset if we actually copied ANSI codes into the output.
-	if saw_any_ansi {
+	// Only reset if we actually copied SGR codes into the output.
+	if saw_sgr {
 		out.extend_from_slice(&[ESC, b'[' as u16, b'0' as u16, b'm' as u16]);
 	}
 	out.extend_from_slice(ellipsis);
@@ -596,22 +610,22 @@ fn slice_with_width_impl(
 
 	let mut current_col = 0usize;
 	let mut i = 0usize;
+	let line_len = line.len();
 
 	// store pending ANSI ranges (pos,len) to avoid copying until needed
 	let mut pending_ansi: Vec<(usize, usize)> = Vec::new();
 
-	while i < line.len() && current_col < end_col {
+	while i < line_len && current_col < end_col {
 		if line[i] == ESC {
-			if let Some(len) = ansi_seq_len_u16(line, i) {
+			if let Some(seq_len) = ansi_seq_len_u16(line, i) {
 				if current_col >= start_col {
-					out.extend_from_slice(&line[i..i + len]);
+					out.extend_from_slice(&line[i..i + seq_len]);
 				} else {
-					pending_ansi.push((i, len));
+					pending_ansi.push((i, seq_len));
 				}
-				i += len;
+				i += seq_len;
 				continue;
 			}
-			// invalid ESC literal width 0
 			if current_col >= start_col {
 				out.push(ESC);
 			}
@@ -620,33 +634,60 @@ fn slice_with_width_impl(
 		}
 
 		let start = i;
-		while i < line.len() && line[i] != ESC {
+		let mut is_ascii = true;
+		while i < line_len && line[i] != ESC {
+			if line[i] > 0x7f {
+				is_ascii = false;
+			}
 			i += 1;
 		}
 		let seg = &line[start..i];
 
-		let _ = for_each_grapheme_u16(seg, |gu16, gw| {
-			if current_col >= end_col {
-				return false;
-			}
-
-			let in_range = current_col >= start_col;
-			let fits = !strict || current_col + gw <= end_col;
-
-			if in_range && fits {
-				if !pending_ansi.is_empty() {
-					for &(p, l) in &pending_ansi {
-						out.extend_from_slice(&line[p..p + l]);
-					}
-					pending_ansi.clear();
+		if is_ascii {
+			for &u in seg {
+				if current_col >= end_col {
+					break;
 				}
-				out.extend_from_slice(gu16);
-				out_w += gw;
-			}
+				let gw = ascii_cell_width_u16(u);
+				let in_range = current_col >= start_col;
+				let fits = !strict || current_col + gw <= end_col;
 
-			current_col += gw;
-			current_col < end_col
-		});
+				if in_range && fits {
+					if !pending_ansi.is_empty() {
+						for &(p, l) in &pending_ansi {
+							out.extend_from_slice(&line[p..p + l]);
+						}
+						pending_ansi.clear();
+					}
+					out.push(u);
+					out_w += gw;
+				}
+				current_col += gw;
+			}
+		} else {
+			let _ = for_each_grapheme_u16_slow(seg, |gu16, gw| {
+				if current_col >= end_col {
+					return false;
+				}
+
+				let in_range = current_col >= start_col;
+				let fits = !strict || current_col + gw <= end_col;
+
+				if in_range && fits {
+					if !pending_ansi.is_empty() {
+						for &(p, l) in &pending_ansi {
+							out.extend_from_slice(&line[p..p + l]);
+						}
+						pending_ansi.clear();
+					}
+					out.extend_from_slice(gu16);
+					out_w += gw;
+				}
+
+				current_col += gw;
+				current_col < end_col
+			});
+		}
 	}
 
 	// Include trailing ANSI sequences (e.g., reset codes) that immediately follow
@@ -701,6 +742,7 @@ fn extract_segments_impl(
 
 	let mut current_col = 0usize;
 	let mut i = 0usize;
+	let line_len = line.len();
 
 	// Store pending ANSI ranges for "before"
 	let mut pending_before_ansi: Vec<(usize, usize)> = Vec::new();
@@ -708,35 +750,30 @@ fn extract_segments_impl(
 	let mut after_started = false;
 	let mut state = AnsiState::new();
 
-	while i < line.len() {
-		let done = if after_len == 0 {
-			current_col >= before_end
-		} else {
-			current_col >= after_end
-		};
-		if done {
-			break;
-		}
+	let done_col = if after_len == 0 {
+		before_end
+	} else {
+		after_end
+	};
 
+	while i < line_len && current_col < done_col {
 		if line[i] == ESC {
-			if let Some(len) = ansi_seq_len_u16(line, i) {
-				let seq = &line[i..i + len];
+			if let Some(seq_len) = ansi_seq_len_u16(line, i) {
+				let seq = &line[i..i + seq_len];
 				if is_sgr_u16(seq) {
-					// between ESC[ and 'm'
-					state.apply_sgr_u16(&seq[2..len - 1]);
+					state.apply_sgr_u16(&seq[2..seq_len - 1]);
 				}
 
 				if current_col < before_end {
-					pending_before_ansi.push((i, len));
+					pending_before_ansi.push((i, seq_len));
 				} else if current_col >= after_start && current_col < after_end && after_started {
 					after.extend_from_slice(seq);
 				}
 
-				i += len;
+				i += seq_len;
 				continue;
 			}
 
-			// invalid ESC literal width 0
 			if current_col < before_end {
 				before.push(ESC);
 			} else if current_col >= after_start && current_col < after_end && after_started {
@@ -747,45 +784,75 @@ fn extract_segments_impl(
 		}
 
 		let start = i;
-		while i < line.len() && line[i] != ESC {
+		let mut is_ascii = true;
+		while i < line_len && line[i] != ESC {
+			if line[i] > 0x7f {
+				is_ascii = false;
+			}
 			i += 1;
 		}
 		let seg = &line[start..i];
 
-		let _ = for_each_grapheme_u16(seg, |gu16, gw| {
-			let done_inner = if after_len == 0 {
-				current_col >= before_end
-			} else {
-				current_col >= after_end
-			};
-			if done_inner {
-				return false;
-			}
-
-			if current_col < before_end {
-				if !pending_before_ansi.is_empty() {
-					for &(p, l) in &pending_before_ansi {
-						before.extend_from_slice(&line[p..p + l]);
-					}
-					pending_before_ansi.clear();
+		if is_ascii {
+			for &u in seg {
+				if current_col >= done_col {
+					break;
 				}
-				before.extend_from_slice(gu16);
-				before_w += gw;
-			} else if current_col >= after_start && current_col < after_end {
-				let fits = !strict_after || current_col + gw <= after_end;
-				if fits {
-					if !after_started {
-						state.write_restore_u16(&mut after);
-						after_started = true;
-					}
-					after.extend_from_slice(gu16);
-					after_w += gw;
-				}
-			}
+				let gw = ascii_cell_width_u16(u);
 
-			current_col += gw;
-			true
-		});
+				if current_col < before_end {
+					if !pending_before_ansi.is_empty() {
+						for &(p, l) in &pending_before_ansi {
+							before.extend_from_slice(&line[p..p + l]);
+						}
+						pending_before_ansi.clear();
+					}
+					before.push(u);
+					before_w += gw;
+				} else if current_col >= after_start && current_col < after_end {
+					let fits = !strict_after || current_col + gw <= after_end;
+					if fits {
+						if !after_started {
+							state.write_restore_u16(&mut after);
+							after_started = true;
+						}
+						after.push(u);
+						after_w += gw;
+					}
+				}
+				current_col += gw;
+			}
+		} else {
+			let _ = for_each_grapheme_u16_slow(seg, |gu16, gw| {
+				if current_col >= done_col {
+					return false;
+				}
+
+				if current_col < before_end {
+					if !pending_before_ansi.is_empty() {
+						for &(p, l) in &pending_before_ansi {
+							before.extend_from_slice(&line[p..p + l]);
+						}
+						pending_before_ansi.clear();
+					}
+					before.extend_from_slice(gu16);
+					before_w += gw;
+				} else if current_col >= after_start && current_col < after_end {
+					let fits = !strict_after || current_col + gw <= after_end;
+					if fits {
+						if !after_started {
+							state.write_restore_u16(&mut after);
+							after_started = true;
+						}
+						after.extend_from_slice(gu16);
+						after_w += gw;
+					}
+				}
+
+				current_col += gw;
+				true
+			});
+		}
 	}
 
 	(before, before_w, after, after_w)
@@ -871,11 +938,15 @@ mod tests {
 
 	#[test]
 	fn test_ascii_fast_path() {
+		fn is_ascii(seg: &[u16]) -> bool {
+			seg.iter().all(|&u| u <= 0x7f)
+		}
+
 		let ascii = to_u16("hello world 12345");
-		assert!(segment_is_ascii_u16(&ascii));
+		assert!(is_ascii(&ascii));
 
 		let non_ascii = to_u16("hello 世界");
-		assert!(!segment_is_ascii_u16(&non_ascii));
+		assert!(!is_ascii(&non_ascii));
 	}
 
 	#[test]
