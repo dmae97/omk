@@ -1,6 +1,19 @@
 # Changelog
 
 ## [Unreleased]
+### Breaking Changes
+
+- Removed persistent shell session support; bash execution now uses native bindings via brush-core for improved reliability
+
+### Changed
+
+- Migrated bash command execution from ptree-based persistent sessions to native shell bindings with streaming support
+- Simplified bash executor to use brush-core native API instead of managing long-lived shell processes
+
+### Removed
+
+- Removed `shell-session.ts` module providing persistent shell session management
+- Removed shell session test suite for persistent execution patterns
 
 ## [9.6.2] - 2026-02-01
 ### Changed

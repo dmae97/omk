@@ -1,13 +1,12 @@
 /**
  * Bash command execution with streaming support and cancellation.
  *
- * Provides unified bash execution for AgentSession.executeBash() and direct calls.
+ * Uses brush-core via native bindings for shell execution.
  */
-import { Exception, ptree } from "@oh-my-pi/pi-utils";
+import * as crypto from "node:crypto";
+import { abortShellExecution, executeShell } from "@oh-my-pi/pi-natives";
 import { Settings } from "../config/settings";
 import { OutputSink } from "../session/streaming-output";
-import { getOrCreateSnapshot, getSnapshotSourceCommand } from "../utils/shell-snapshot";
-import { executeShellCommand } from "./shell-session";
 
 export interface BashExecutorOptions {
 	cwd?: string;
@@ -35,114 +34,101 @@ export interface BashResult {
 
 export async function executeBash(command: string, options?: BashExecutorOptions): Promise<BashResult> {
 	const settings = await Settings.init();
-	const { shell, args, env, prefix } = settings.getShellConfig();
-	const snapshotPath = await getOrCreateSnapshot(shell, env);
+	const { env: shellEnv, prefix } = settings.getShellConfig();
 
-	if (shouldUsePersistentShell(settings.get("bash.persistentShell"))) {
-		return await executeShellCommand({ shell, env, prefix, snapshotPath }, command, {
-			cwd: options?.cwd,
-			timeout: options?.timeout,
-			signal: options?.signal,
-			onChunk: options?.onChunk,
-			env: options?.env,
-			artifactPath: options?.artifactPath,
-			artifactId: options?.artifactId,
-		});
+	// Generate unique execution ID for abort support
+	const executionId = crypto.randomUUID();
+
+	// Merge shell env with additional env vars (additional takes precedence)
+	// Filter out undefined values and problematic vars for the native API
+	// BASH_ENV and ENV cause brush-core to fail with "not yet implemented" errors
+	const mergedEnv: Record<string, string> = {};
+	for (const [key, value] of Object.entries(shellEnv)) {
+		if (value !== undefined && key !== "BASH_ENV" && key !== "ENV") {
+			mergedEnv[key] = value;
+		}
+	}
+	if (options?.env) {
+		for (const [key, value] of Object.entries(options.env)) {
+			if (key !== "BASH_ENV" && key !== "ENV") {
+				mergedEnv[key] = value;
+			}
+		}
 	}
 
-	return await executeBashOnce(command, options, { shell, args, env, prefix, snapshotPath });
-}
+	// Apply command prefix if configured
+	const finalCommand = prefix ? `${prefix} ${command}` : command;
 
-/**
- * Determine whether to use persistent shell sessions.
- * Priority: OMP_SHELL_PERSIST env var > settings > default (false)
- */
-function shouldUsePersistentShell(settingValue: boolean): boolean {
-	// Env var takes precedence (for debugging/override)
-	const flag = parseEnvFlag(process.env.OMP_SHELL_PERSIST);
-	if (flag !== undefined) return flag;
-	// Windows never uses persistent shell (too unreliable)
-	if (process.platform === "win32") return false;
-	// Use setting value (defaults to false)
-	return settingValue;
-}
-
-function parseEnvFlag(value: string | undefined): boolean | undefined {
-	if (!value) return undefined;
-	const normalized = value.toLowerCase();
-	if (["1", "true", "yes", "on"].includes(normalized)) return true;
-	if (["0", "false", "no", "off"].includes(normalized)) return false;
-	return undefined;
-}
-
-async function executeBashOnce(
-	command: string,
-	options: BashExecutorOptions | undefined,
-	config: {
-		shell: string;
-		args: string[];
-		env: Record<string, string | undefined>;
-		prefix?: string;
-		snapshotPath: string | null;
-	},
-): Promise<BashResult> {
-	const { shell, args, env, prefix, snapshotPath } = config;
-
-	// Merge additional env vars if provided
-	const finalEnv = options?.env ? { ...env, ...options.env } : env;
-	const snapshotPrefix = getSnapshotSourceCommand(snapshotPath);
-	const prefixedCommand = prefix ? `${prefix} ${command}` : command;
-	const finalCommand = `${snapshotPrefix}${prefixedCommand}`;
-
+	// Create output sink for truncation and artifact handling
 	const sink = new OutputSink({
 		onChunk: options?.onChunk,
 		artifactPath: options?.artifactPath,
 		artifactId: options?.artifactId,
 	});
 
-	using child = ptree.spawn([shell, ...args, finalCommand], {
-		cwd: options?.cwd,
-		env: finalEnv,
-		signal: options?.signal,
-		timeout: options?.timeout,
-	});
-
-	// Pump streams - errors during abort/timeout are expected
-	// Use preventClose to avoid closing the shared sink when either stream finishes
-	await Promise.allSettled([child.stdout.pipeTo(sink.createInput()), child.stderr.pipeTo(sink.createInput())]).catch(
-		() => {},
-	);
-
-	// Wait for process exit
-	try {
-		return {
-			exitCode: await child.exited,
-			cancelled: false,
-			...(await sink.dump()),
-		};
-	} catch (err: unknown) {
-		// Exception covers NonZeroExitError, AbortError, TimeoutError
-		if (err instanceof Exception) {
-			if (err.aborted) {
-				const isTimeout = err instanceof ptree.TimeoutError || err.message.toLowerCase().includes("timed out");
-				const annotation = isTimeout
-					? `Command timed out after ${Math.round((options?.timeout ?? 0) / 1000)} seconds`
-					: undefined;
-				return {
-					exitCode: undefined,
-					cancelled: true,
-					...(await sink.dump(annotation)),
-				};
-			}
-
-			// NonZeroExitError
+	// Set up abort handling
+	let abortListener: (() => void) | undefined;
+	if (options?.signal) {
+		const signal = options.signal;
+		if (signal.aborted) {
+			// Already aborted
 			return {
-				exitCode: err.exitCode,
-				cancelled: false,
-				...(await sink.dump()),
+				exitCode: undefined,
+				cancelled: true,
+				...(await sink.dump("Command cancelled")),
+			};
+		}
+		abortListener = () => {
+			abortShellExecution(executionId);
+		};
+		signal.addEventListener("abort", abortListener, { once: true });
+	}
+
+	try {
+		const result = await executeShell(
+			{
+				command: finalCommand,
+				cwd: options?.cwd,
+				env: Object.keys(mergedEnv).length > 0 ? mergedEnv : undefined,
+				timeoutMs: options?.timeout,
+				executionId,
+			},
+			async (chunk: string) => {
+				await sink.push(chunk);
+			},
+		);
+
+		// Handle timeout
+		if (result.timedOut) {
+			const annotation = options?.timeout
+				? `Command timed out after ${Math.round(options.timeout / 1000)} seconds`
+				: "Command timed out";
+			return {
+				exitCode: undefined,
+				cancelled: true,
+				...(await sink.dump(annotation)),
 			};
 		}
 
-		throw err;
+		// Handle cancellation
+		if (result.cancelled) {
+			return {
+				exitCode: undefined,
+				cancelled: true,
+				...(await sink.dump("Command cancelled")),
+			};
+		}
+
+		// Normal completion
+		return {
+			exitCode: result.exitCode,
+			cancelled: false,
+			...(await sink.dump()),
+		};
+	} finally {
+		// Clean up abort listener
+		if (abortListener && options?.signal) {
+			options.signal.removeEventListener("abort", abortListener);
+		}
 	}
 }

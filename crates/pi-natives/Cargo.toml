@@ -13,8 +13,10 @@ crate-type = ["cdylib"]
 workspace = true
 
 [dependencies]
-napi = { version = "3", features = ["napi10", "tokio_rt"] }
+napi = { version = "3", features = ["napi10", "tokio_rt", "tokio_time"] }
 napi-derive = "3"
+brush-core = "0.3.5"
+os_pipe = "1"
 grep-regex = "0.1"
 grep-searcher = "0.1"
 grep-matcher = "0.1"

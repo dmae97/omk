@@ -7,6 +7,8 @@ import { setNativeKillTree } from "@oh-my-pi/pi-utils";
 import type { FindMatch, FindOptions, FindResult } from "./find/types";
 import { native } from "./native";
 
+export type { RequestOptions } from "./request-options";
+
 setNativeKillTree(native.killTree);
 
 // =============================================================================
@@ -60,7 +62,7 @@ export async function find(options: FindOptions, onMatch?: (match: FindMatch) =>
 	);
 }
 
-// =====================================================	========================
+// =============================================================================
 // Image processing (photon-compatible API)
 // =============================================================================
 
@@ -118,6 +120,17 @@ export {
 	type HtmlToMarkdownOptions,
 	htmlToMarkdown,
 } from "./html/index";
+
+// =============================================================================
+// Shell execution (brush-core)
+// =============================================================================
+
+export {
+	abortShellExecution,
+	executeShell,
+	type ShellExecuteOptions,
+	type ShellExecuteResult,
+} from "./shell/index";
 
 // =============================================================================
 // Process management

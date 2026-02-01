@@ -27,4 +27,5 @@ pub mod html;
 pub mod image;
 pub mod keys;
 pub mod ps;
+pub mod shell;
 pub mod text;

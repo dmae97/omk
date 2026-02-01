@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { _resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { EditTool } from "@oh-my-pi/pi-coding-agent/patch";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { BashTool } from "@oh-my-pi/pi-coding-agent/tools/bash";
@@ -475,22 +475,6 @@ function b() {
 			await expect(bashToolWithBadCwd.execute("test-call-11", { command: "echo test" })).rejects.toThrow(
 				/Working directory does not exist/,
 			);
-		});
-
-		it("should handle process spawn errors", async () => {
-			_resetSettingsForTest();
-			vi.spyOn(Settings.prototype, "getShellConfig").mockReturnValue({
-				shell: "/nonexistent-shell-path-xyz123",
-				args: ["-c"],
-				env: {},
-				prefix: undefined,
-			});
-
-			const bashWithBadShell = new BashTool(createTestToolSession(testDir));
-
-			await expect(bashWithBadShell.execute("test-call-12", { command: "echo test" })).rejects.toThrow(/ENOENT/);
-
-			vi.restoreAllMocks();
 		});
 	});
 
