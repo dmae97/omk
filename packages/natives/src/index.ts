@@ -97,7 +97,15 @@ export {
 // Keyboard sequence helpers
 // =============================================================================
 
-export { matchesKittySequence } from "./keys/index";
+export {
+	type KeyEventType,
+	matchesKey,
+	matchesKittySequence,
+	matchesLegacySequence,
+	type ParsedKittyResult,
+	parseKey,
+	parseKittySequence,
+} from "./keys/index";
 
 // =============================================================================
 // HTML to Markdown
@@ -107,5 +115,3 @@ export {
 	type HtmlToMarkdownOptions,
 	htmlToMarkdown,
 } from "./html/index";
-
-export type { RequestOptions } from "./request-options";

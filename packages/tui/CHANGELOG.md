@@ -1,6 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+### Breaking Changes
+
+- Removed `Key` helper object from public API; use string literals like `"ctrl+c"` instead of `Key.ctrl("c")`
+- Removed `KeyEventType` export from public API
+
+### Changed
+
+- Migrated key parsing and matching logic to native implementation for improved performance
+- Simplified `isKeyRelease()` and `isKeyRepeat()` to use regex pattern matching instead of string inclusion checks
 
 ## [9.6.2] - 2026-02-01
 ### Changed

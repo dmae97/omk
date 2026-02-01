@@ -13,6 +13,26 @@ import type { HighlightColors } from "./highlight/index";
 import type { HtmlToMarkdownOptions } from "./html/types";
 import type { ExtractSegmentsResult, SliceWithWidthResult } from "./text/index";
 
+export type { RequestOptions } from "./request-options";
+
+/**
+ * Event types from Kitty keyboard protocol (flag 2)
+ * 1 = key press, 2 = key repeat, 3 = key release
+ */
+export const enum KeyEventType {
+	Press = 1,
+	Repeat = 2,
+	Release = 3,
+}
+/** Parsed Kitty keyboard protocol sequence result. */
+export interface ParsedKittyResult {
+	codepoint: number;
+	shiftedKey?: number;
+	baseLayoutKey?: number;
+	modifier: number;
+	eventType?: KeyEventType;
+}
+
 export interface NativePhotonImage {
 	getWidth(): number;
 	getHeight(): number;
@@ -66,6 +86,10 @@ export interface NativeBindings {
 		strictAfter: boolean,
 	): ExtractSegmentsResult;
 	matchesKittySequence(data: string, expectedCodepoint: number, expectedModifier: number): boolean;
+	parseKey(data: string, kittyProtocolActive: boolean): string | null;
+	matchesLegacySequence(data: string, keyName: string): boolean;
+	parseKittySequence(data: string): ParsedKittyResult | null;
+	matchesKey(data: string, keyId: string, kittyProtocolActive: boolean): boolean;
 }
 
 const require = createRequire(import.meta.url);
@@ -141,6 +165,11 @@ function validateNative(bindings: NativeBindings, source: string): void {
 	checkFn("sliceWithWidth");
 	checkFn("extractSegments");
 	checkFn("matchesKittySequence");
+	checkFn("parseKey");
+	checkFn("matchesLegacySequence");
+	checkFn("parseKittySequence");
+	checkFn("matchesKey");
+	checkFn("visibleWidth");
 
 	if (missing.length) {
 		throw new Error(

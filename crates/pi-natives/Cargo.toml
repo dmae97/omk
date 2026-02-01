@@ -36,6 +36,7 @@ syntect = { version = "5.3", default-features = false, features = [
    "regex-fancy",
 ] }
 html-to-markdown-rs = { version = "2.24", default-features = false }
+phf = { version = "0.11", features = ["macros"] }
 
 [build-dependencies]
 napi-build = "2"

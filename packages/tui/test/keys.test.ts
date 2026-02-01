@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { Key, matchesKey, setKittyProtocolActive } from "@oh-my-pi/pi-tui/keys";
+import { matchesKey, setKittyProtocolActive } from "@oh-my-pi/pi-tui/keys";
 
 describe("matchesKey", () => {
 	it("matches ctrl+letter sequences", () => {
 		setKittyProtocolActive(false);
 		const ctrlC = String.fromCharCode(3);
-		expect(matchesKey(ctrlC, Key.ctrl("c"))).toBe(true);
+		expect(matchesKey(ctrlC, "ctrl+c")).toBe(true);
 	});
 
 	it("matches shifted tab", () => {

@@ -1,6 +1,16 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Exported keyboard parsing and matching functions: `parseKey`, `parseKittySequence`, `matchesLegacySequence`, and `matchesKey` for terminal input handling
+- Exported `KeyEventType` enum and `ParsedKittyResult` type for Kitty keyboard protocol support
+- Added `parseKey` function to parse terminal input and return normalized key identifiers (e.g., "ctrl+c", "shift+tab")
+- Added `parseKittySequence` function to parse Kitty keyboard protocol sequences with codepoint, modifier, and event type information
+- Added `matchesLegacySequence` function to match legacy escape sequences for specific keys
+- Added `matchesKey` function to match input against key identifiers with support for modifiers and Kitty protocol
+
 ### Changed
 
 - Improved native binary installation to use atomic rename operations and better fallback handling for Windows DLLs
