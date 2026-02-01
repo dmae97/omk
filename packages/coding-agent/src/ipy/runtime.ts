@@ -104,8 +104,6 @@ function resolvePathKey(env: Record<string, string | undefined>): string {
 export interface PythonRuntime {
 	/** Path to python executable */
 	pythonPath: string;
-	/** Path to windowless python executable (pythonw.exe on Windows, same as pythonPath otherwise) */
-	pythonwPath: string;
 	/** Filtered environment variables */
 	env: Record<string, string | undefined>;
 	/** Path to virtual environment, if detected */
@@ -177,8 +175,7 @@ export function resolvePythonRuntime(cwd: string, baseEnv: Record<string, string
 			const currentPath = env[pathKey];
 			env[pathKey] = currentPath ? `${binDir}${path.delimiter}${currentPath}` : binDir;
 			return {
-				pythonPath: pythonCandidate,
-				pythonwPath: resolveWindowlessPython(pythonCandidate),
+				pythonPath: resolveWindowlessPython(pythonCandidate),
 				env,
 				venvPath,
 			};
@@ -190,8 +187,7 @@ export function resolvePythonRuntime(cwd: string, baseEnv: Record<string, string
 		throw new Error("Python executable not found on PATH");
 	}
 	return {
-		pythonPath,
-		pythonwPath: resolveWindowlessPython(pythonPath),
+		pythonPath: resolveWindowlessPython(pythonPath),
 		env,
 		venvPath: null,
 	};

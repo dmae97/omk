@@ -251,7 +251,7 @@ async function startGatewayProcess(
 
 	const gatewayProcess = Bun.spawn(
 		[
-			runtime.pythonwPath,
+			runtime.pythonPath,
 			"-m",
 			"kernel_gateway",
 			"--KernelGatewayApp.ip=127.0.0.1",
