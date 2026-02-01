@@ -68,24 +68,42 @@ const taggedPath = path.join(nativeDir, `pi_natives.${platform}-${arch}.node`);
 const fallbackPath = path.join(nativeDir, "pi_natives.node");
 const devPath = path.join(path.dirname(sourcePath), "pi_natives.node");
 
-// Safe copy: mv old -> temp, cp new -> target, rm temp
-// This avoids overwriting in-memory binaries which can crash running processes
+// Safe copy pattern for in-use binaries (especially Windows DLLs):
+// 1. Copy new file to temp location first
+// 2. Rename old file out of the way (works even if DLL is loaded)
+// 3. Rename new file to target
+// 4. Clean up old file
+// This ensures we never lose the original if something fails.
 async function safeCopy(src: string, dest: string): Promise<void> {
-	const tempPath = `${dest}.old.${process.pid}`;
+	const tempOld = `${dest}.old.${process.pid}`;
+	const tempNew = `${dest}.new.${process.pid}`;
+
+	// Step 1: Copy new file to temp location
+	await fs.copyFile(src, tempNew);
+
+	// Step 2: Move old file out of the way (if exists)
 	try {
-		await fs.rename(dest, tempPath);
+		await fs.rename(dest, tempOld);
 	} catch (err) {
-		// Ignore if dest doesn't exist
 		if (err && typeof err === "object" && "code" in err && (err as { code?: string }).code !== "ENOENT") {
+			// Rename failed for reason other than "file doesn't exist"
+			await fs.unlink(tempNew).catch(() => {});
 			throw err;
 		}
 	}
-	await fs.copyFile(src, dest);
+
+	// Step 3: Move new file to target
 	try {
-		await fs.unlink(tempPath);
+		await fs.rename(tempNew, dest);
 	} catch {
-		// Ignore cleanup errors
+		// If rename fails, try to restore old file
+		await fs.rename(tempOld, dest).catch(() => {});
+		await fs.unlink(tempNew).catch(() => {});
+		throw new Error(`Failed to install native binary to ${dest}`);
 	}
+
+	// Step 4: Clean up old file (best effort)
+	await fs.unlink(tempOld).catch(() => {});
 }
 
 await safeCopy(sourcePath, taggedPath);
