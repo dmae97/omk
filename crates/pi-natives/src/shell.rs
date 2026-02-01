@@ -379,7 +379,61 @@ async fn run_shell_command(
 }
 
 fn should_skip_env_var(key: &str) -> bool {
-	matches!(key, "BASH_ENV" | "ENV")
+	if key.starts_with("BASH_FUNC_") && key.ends_with("%%") {
+		return true;
+	}
+
+	matches!(
+		key,
+		"BASH_ENV"
+			| "ENV"
+			| "HISTFILE"
+			| "HISTTIMEFORMAT"
+			| "HISTCMD"
+			| "PS0"
+			| "PS1"
+			| "PS2"
+			| "PS4"
+			| "BRUSH_PS_ALT"
+			| "READLINE_LINE"
+			| "READLINE_POINT"
+			| "BRUSH_VERSION"
+			| "BASH"
+			| "BASHOPTS"
+			| "BASH_ALIASES"
+			| "BASH_ARGV0"
+			| "BASH_CMDS"
+			| "BASH_SOURCE"
+			| "BASH_SUBSHELL"
+			| "BASH_VERSINFO"
+			| "BASH_VERSION"
+			| "SHELLOPTS"
+			| "SHLVL"
+			| "SHELL"
+			| "COMP_WORDBREAKS"
+			| "DIRSTACK"
+			| "EPOCHREALTIME"
+			| "EPOCHSECONDS"
+			| "FUNCNAME"
+			| "GROUPS"
+			| "IFS"
+			| "LINENO"
+			| "MACHTYPE"
+			| "OSTYPE"
+			| "OPTERR"
+			| "OPTIND"
+			| "PIPESTATUS"
+			| "PPID"
+			| "PWD"
+			| "OLDPWD"
+			| "RANDOM"
+			| "SRANDOM"
+			| "SECONDS"
+			| "UID"
+			| "EUID"
+			| "HOSTNAME"
+			| "HOSTTYPE"
+	)
 }
 
 const fn should_reset_session(result: &brush_core::ExecutionResult) -> bool {
