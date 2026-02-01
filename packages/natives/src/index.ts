@@ -42,6 +42,9 @@ export async function find(options: FindOptions, onMatch?: (match: FindMatch) =>
 	// Convert simple patterns to recursive globs if needed
 	const globPattern = pattern.includes("/") || pattern.startsWith("**") ? pattern : `**/${pattern}`;
 
+	// napi-rs ThreadsafeFunction passes (error, value) - skip callback on error
+	const cb = onMatch ? (err: Error | null, m: FindMatch) => !err && onMatch(m) : undefined;
+
 	return native.find(
 		{
 			...options,
@@ -50,7 +53,7 @@ export async function find(options: FindOptions, onMatch?: (match: FindMatch) =>
 			hidden: options.hidden ?? false,
 			gitignore: options.gitignore ?? true,
 		},
-		onMatch,
+		cb,
 	);
 }
 

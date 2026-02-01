@@ -39,9 +39,9 @@ export interface NativeSamplingFilter {
 import type { GrepMatch } from "./grep/types";
 
 export interface NativeBindings {
-	find(options: FindOptions, onMatch?: (match: FindMatch) => void): Promise<FindResult>;
+	find(options: FindOptions, onMatch?: (error: Error | null, match: FindMatch) => void): Promise<FindResult>;
 	fuzzyFind(options: FuzzyFindOptions): Promise<FuzzyFindResult>;
-	grep(options: GrepOptions, onMatch?: (match: GrepMatch) => void): Promise<GrepResult>;
+	grep(options: GrepOptions, onMatch?: (error: Error | null, match: GrepMatch) => void): Promise<GrepResult>;
 	search(content: string | Uint8Array, options: SearchOptions): SearchResult;
 	hasMatch(
 		content: string | Uint8Array,

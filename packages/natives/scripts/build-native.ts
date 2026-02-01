@@ -35,7 +35,6 @@ if (buildResult.exitCode !== 0) {
 }
 
 const candidateNames = [
-	"pi_natives.node",
 	"libpi_natives.so",
 	"libpi_natives.dylib",
 	"pi_natives.dll",

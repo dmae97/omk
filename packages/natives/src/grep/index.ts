@@ -34,7 +34,9 @@ export type {
  * Search files for a regex pattern with optional streaming callback.
  */
 export async function grep(options: GrepOptions, onMatch?: (match: GrepMatch) => void): Promise<GrepResult> {
-	return wrapRequestOptions(() => native.grep(options, onMatch), options);
+	// napi-rs ThreadsafeFunction passes (error, value) - skip callback on error
+	const cb = onMatch ? (err: Error | null, m: GrepMatch) => !err && onMatch(m) : undefined;
+	return wrapRequestOptions(() => native.grep(options, cb), options);
 }
 
 /**
