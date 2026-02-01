@@ -3,6 +3,7 @@ use itertools::Itertools;
 use std::collections::VecDeque;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use tokio_util::sync::CancellationToken;
 use sys::commands::ExitStatusExt;
 
 use crate::arithmetic::{self, ExpandAndEvaluate};
@@ -63,9 +64,35 @@ pub struct ExecutionParameters {
     open_files: openfiles::OpenFiles,
     /// Policy for how to manage spawned external processes.
     pub process_group_policy: ProcessGroupPolicy,
+    /// Optional cancellation token shared with callers.
+    cancel_token: Option<CancellationToken>,
+    /// Optional tracker for the first spawned process ID.
+    process_id_tracker: Option<std::sync::Arc<std::sync::atomic::AtomicI32>>,
+    /// Optional tracker for the process group ID used by execution.
+    process_group_id_tracker: Option<std::sync::Arc<std::sync::atomic::AtomicI32>>,
 }
 
 impl ExecutionParameters {
+    const UNSET_TRACKER_VALUE: i32 = 0;
+
+    /// Assigns a cancellation token for this execution.
+    pub fn set_cancel_token(&mut self, token: CancellationToken) {
+        self.cancel_token = Some(token);
+    }
+
+    /// Returns the cancellation token, if present.
+    pub fn cancel_token(&self) -> Option<CancellationToken> {
+        self.cancel_token.clone()
+    }
+
+	/// Returns true when cancellation has been requested.
+	pub fn is_cancelled(&self) -> bool {
+		self
+			.cancel_token
+			.as_ref()
+			.is_some_and(CancellationToken::is_cancelled)
+	}
+
     /// Returns the standard input file; usable with `write!` et al.
     ///
     /// # Arguments
@@ -171,6 +198,13 @@ impl ExecutionParameters {
     }
 }
 
+fn ensure_not_cancelled(params: &ExecutionParameters) -> Result<(), error::Error> {
+	if params.is_cancelled() {
+		return Err(error::ErrorKind::Interrupted.into());
+	}
+	Ok(())
+}
+
 #[derive(Clone, Debug, Default)]
 /// Policy for how to manage spawned external processes.
 pub enum ProcessGroupPolicy {
@@ -206,9 +240,11 @@ impl Execute for ast::Program {
         shell: &mut Shell,
         params: &ExecutionParameters,
     ) -> Result<ExecutionResult, error::Error> {
+        ensure_not_cancelled(params)?;
         let mut result = ExecutionResult::success();
 
         for command in &self.complete_commands {
+            ensure_not_cancelled(params)?;
             result = command.execute(shell, params).await?;
             if !result.is_normal_flow() {
                 break;
@@ -227,9 +263,11 @@ impl Execute for ast::CompoundList {
         shell: &mut Shell,
         params: &ExecutionParameters,
     ) -> Result<ExecutionResult, error::Error> {
+        ensure_not_cancelled(params)?;
         let mut result = ExecutionResult::success();
 
         for ast::CompoundListItem(ao_list, sep) in &self.0 {
+            ensure_not_cancelled(params)?;
             let run_async = matches!(sep, ast::SeparatorOperator::Async);
 
             if run_async {
@@ -291,9 +329,11 @@ impl Execute for ast::AndOrList {
         shell: &mut Shell,
         params: &ExecutionParameters,
     ) -> Result<ExecutionResult, error::Error> {
+        ensure_not_cancelled(params)?;
         let mut result = self.first.execute(shell, params).await?;
 
         for next_ao in &self.additional {
+            ensure_not_cancelled(params)?;
             // Check for non-normal control flow.
             if !result.is_normal_flow() {
                 break;
@@ -330,6 +370,7 @@ impl Execute for ast::Pipeline {
         shell: &mut Shell,
         params: &ExecutionParameters,
     ) -> Result<ExecutionResult, error::Error> {
+        ensure_not_cancelled(params)?;
         // Capture current timing if so requested.
         let stopwatch = self
             .timed
@@ -388,12 +429,14 @@ async fn spawn_pipeline_processes(
     shell: &mut Shell,
     params: &ExecutionParameters,
 ) -> Result<VecDeque<ExecutionSpawnResult>, error::Error> {
+    ensure_not_cancelled(params)?;
     let pipeline_len = pipeline.seq.len();
     let mut output_pipes = vec![];
     let mut spawn_results = VecDeque::new();
     let mut process_group_id: Option<i32> = None;
 
     for (current_pipeline_index, command) in pipeline.seq.iter().enumerate() {
+        ensure_not_cancelled(params)?;
         //
         // We run a command directly in the current shell if either of the following is true:
         //     * There's only one command in the pipeline.
@@ -457,6 +500,7 @@ async fn wait_for_pipeline_processes_and_update_status(
     shell: &mut Shell,
     params: &ExecutionParameters,
 ) -> Result<ExecutionResult, error::Error> {
+    ensure_not_cancelled(params)?;
     let mut result = ExecutionResult::success();
     let mut stopped_children = vec![];
 
@@ -464,6 +508,7 @@ async fn wait_for_pipeline_processes_and_update_status(
     shell.last_pipeline_statuses.clear();
 
     while let Some(child) = process_spawn_results.pop_front() {
+        ensure_not_cancelled(params)?;
         match child.wait(!stopped_children.is_empty()).await? {
             ExecutionWaitResult::Completed(current_result) => {
                 result = current_result;
@@ -509,6 +554,7 @@ impl ExecuteInPipeline for ast::Command {
         pipeline_context: &mut PipelineExecutionContext<'_>,
         mut params: ExecutionParameters,
     ) -> Result<ExecutionSpawnResult, error::Error> {
+        ensure_not_cancelled(&params)?;
         if pipeline_context.shell.options.do_not_execute_commands {
             return Ok(ExecutionSpawnResult::Completed(ExecutionResult::success()));
         }
@@ -562,6 +608,7 @@ impl Execute for ast::CompoundCommand {
         shell: &mut Shell,
         params: &ExecutionParameters,
     ) -> Result<ExecutionResult, error::Error> {
+        ensure_not_cancelled(params)?;
         match self {
             Self::BraceGroup(ast::BraceGroupCommand { list, .. }) => {
                 list.execute(shell, params).await
@@ -593,6 +640,7 @@ impl Execute for ast::ForClauseCommand {
         shell: &mut Shell,
         params: &ExecutionParameters,
     ) -> Result<ExecutionResult, error::Error> {
+        ensure_not_cancelled(params)?;
         let mut result = ExecutionResult::success();
 
         // If we were given explicit words to iterate over, then expand them all, with splitting
@@ -610,6 +658,7 @@ impl Execute for ast::ForClauseCommand {
         }
 
         for value in expanded_values {
+            ensure_not_cancelled(params)?;
             if shell.options.print_commands_and_arguments {
                 if let Some(unexpanded_values) = &self.values {
                     shell
@@ -664,6 +713,7 @@ impl Execute for ast::CaseClauseCommand {
         shell: &mut Shell,
         params: &ExecutionParameters,
     ) -> Result<ExecutionResult, error::Error> {
+        ensure_not_cancelled(params)?;
         // N.B. One would think it makes sense to trace the expanded value being switched
         // on, but that's not it.
         if shell.options.print_commands_and_arguments {
@@ -677,6 +727,7 @@ impl Execute for ast::CaseClauseCommand {
         let mut force_execute_next_case = false;
 
         for case in &self.cases {
+            ensure_not_cancelled(params)?;
             if force_execute_next_case {
                 force_execute_next_case = false;
             } else {
@@ -731,6 +782,7 @@ impl Execute for ast::IfClauseCommand {
         shell: &mut Shell,
         params: &ExecutionParameters,
     ) -> Result<ExecutionResult, error::Error> {
+        ensure_not_cancelled(params)?;
         let condition = self.condition.execute(shell, params).await?;
 
         // Check if the condition itself resulted in non-normal control flow.
@@ -744,6 +796,7 @@ impl Execute for ast::IfClauseCommand {
 
         if let Some(elses) = &self.elses {
             for else_clause in elses {
+                ensure_not_cancelled(params)?;
                 match &else_clause.condition {
                     Some(else_condition) => {
                         let else_condition_result = else_condition.execute(shell, params).await?;
@@ -778,6 +831,7 @@ impl Execute for (WhileOrUntil, &ast::WhileOrUntilClauseCommand) {
         shell: &mut Shell,
         params: &ExecutionParameters,
     ) -> Result<ExecutionResult, error::Error> {
+        ensure_not_cancelled(params)?;
         let is_while = match self.0 {
             WhileOrUntil::While => true,
             WhileOrUntil::Until => false,
@@ -788,6 +842,7 @@ impl Execute for (WhileOrUntil, &ast::WhileOrUntilClauseCommand) {
         let mut result = ExecutionResult::success();
 
         loop {
+            ensure_not_cancelled(params)?;
             let condition_result = test_condition.execute(shell, params).await?;
             if !condition_result.is_normal_flow() {
                 result = condition_result;
@@ -827,6 +882,7 @@ impl Execute for ast::ArithmeticCommand {
         shell: &mut Shell,
         params: &ExecutionParameters,
     ) -> Result<ExecutionResult, error::Error> {
+        ensure_not_cancelled(params)?;
         let value = self.expr.eval(shell, params, true).await?;
         let result = if value != 0 {
             ExecutionResult::success()
@@ -847,12 +903,14 @@ impl Execute for ast::ArithmeticForClauseCommand {
         shell: &mut Shell,
         params: &ExecutionParameters,
     ) -> Result<ExecutionResult, error::Error> {
+        ensure_not_cancelled(params)?;
         let mut result = ExecutionResult::success();
         if let Some(initializer) = &self.initializer {
             initializer.eval(shell, params, true).await?;
         }
 
         loop {
+            ensure_not_cancelled(params)?;
             if let Some(condition) = &self.condition {
                 if condition.eval(shell, params, true).await? == 0 {
                     break;
@@ -906,6 +964,7 @@ impl ExecuteInPipeline for ast::SimpleCommand {
         context: &mut PipelineExecutionContext<'_>,
         mut params: ExecutionParameters,
     ) -> Result<ExecutionSpawnResult, error::Error> {
+        ensure_not_cancelled(&params)?;
         let prefix_iter = self.prefix.as_ref().map(|s| s.0.iter()).unwrap_or_default();
         let suffix_iter = self.suffix.as_ref().map(|s| s.0.iter()).unwrap_or_default();
         let cmd_name_items = self
@@ -921,6 +980,7 @@ impl ExecuteInPipeline for ast::SimpleCommand {
         let mut command_takes_assignments = false;
 
         for item in prefix_iter.chain(cmd_name_items.iter()).chain(suffix_iter) {
+            ensure_not_cancelled(&params)?;
             match item {
                 CommandPrefixOrSuffixItem::IoRedirect(redirect) => {
                     if let Err(e) = setup_redirect(context.shell, &mut params, redirect).await {

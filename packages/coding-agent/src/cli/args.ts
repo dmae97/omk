@@ -191,6 +191,7 @@ ${chalk.bold("Subcommands:")}
   update    Check for and install updates
   config    Manage configuration settings
   setup     Install dependencies for optional features
+  shell     Interactive shell console (brush-core test)
 
 ${chalk.bold("Options:")}
   --model <pattern>              Model to use (fuzzy match: "opus", "gpt-5.2", or "p-openai/gpt-5.2")

@@ -14,11 +14,11 @@
 //! ```
 
 use std::{
-	collections::{HashMap, HashSet},
+	collections::HashMap,
 	io::{Read, Write},
 	sync::{
 		Arc, LazyLock,
-		atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering},
+		atomic::{AtomicU64, Ordering},
 	},
 	time::Duration,
 };
@@ -34,12 +34,13 @@ use clap::Parser;
 use napi::{
 	bindgen_prelude::*,
 	threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
-	tokio::{self, sync::Mutex as TokioMutex, task, time},
+	tokio::{self, sync::Mutex as TokioMutex, time},
 };
 use napi_derive::napi;
 use parking_lot::Mutex;
+use tokio_util::sync::CancellationToken;
 
-use crate::{ps, work::launch_task};
+use crate::work::launch_task;
 
 type ExecutionMap = HashMap<String, ExecutionControl>;
 type SessionMap = HashMap<String, Arc<TokioMutex<ShellSession>>>;
@@ -49,44 +50,7 @@ struct ExecutionControl {
 	session_key: String,
 }
 
-struct ExecutionTarget {
-	pid:  AtomicI32,
-	pgid: AtomicI32,
-}
 
-impl ExecutionTarget {
-	const UNSET: i32 = 0;
-
-	const fn new() -> Self {
-		Self { pid: AtomicI32::new(Self::UNSET), pgid: AtomicI32::new(Self::UNSET) }
-	}
-
-	fn set_pid(&self, pid: i32) {
-		self.pid.store(pid, Ordering::Release);
-	}
-
-	fn set_pgid(&self, pgid: i32) {
-		self.pgid.store(pgid, Ordering::Release);
-	}
-
-	fn pid(&self) -> Option<i32> {
-		let pid = self.pid.load(Ordering::Acquire);
-		if pid == Self::UNSET { None } else { Some(pid) }
-	}
-
-	fn pgid(&self) -> Option<i32> {
-		let pgid = self.pgid.load(Ordering::Acquire);
-		if pgid == Self::UNSET {
-			None
-		} else {
-			Some(pgid)
-		}
-	}
-
-	fn has_target(&self) -> bool {
-		self.pid().is_some() || self.pgid().is_some()
-	}
-}
 
 struct ExecutionGuard {
 	execution_id: String,
@@ -285,13 +249,7 @@ async fn execute_shell_with_options(
 	let _guard = ExecutionGuard { execution_id };
 
 	let session = get_or_create_session(&options).await?;
-
-	let baseline = ps::list_descendants(std::process::id() as i32);
-	let baseline_set: HashSet<i32> = baseline.into_iter().collect();
-	let execution_target = Arc::new(ExecutionTarget::new());
-	let tracker_done = Arc::new(AtomicBool::new(false));
-	let tracker_handle =
-		spawn_execution_tracker(baseline_set, execution_target.clone(), tracker_done.clone());
+	let cancel_token = CancellationToken::new();
 
 	let mut cancelled = false;
 	let mut timed_out = false;
@@ -299,7 +257,8 @@ async fn execute_shell_with_options(
 
 	let run_result = {
 		let mut session = session.lock().await;
-		let run_future = run_shell_command(&mut session, &options, on_chunk);
+		let run_future =
+			run_shell_command(&mut session, &options, on_chunk, cancel_token.clone());
 		tokio::pin!(run_future);
 
 		let run_result = if let Some(ms) = timeout_ms {
@@ -310,10 +269,12 @@ async fn execute_shell_with_options(
 				result = &mut run_future => Some(result),
 				_ = cancel_rx => {
 					cancelled = true;
+					cancel_token.cancel();
 					None
 				}
 				() = &mut timeout => {
 					timed_out = true;
+					cancel_token.cancel();
 					None
 				}
 			}
@@ -322,6 +283,7 @@ async fn execute_shell_with_options(
 				result = &mut run_future => Some(result),
 				_ = cancel_rx => {
 					cancelled = true;
+					cancel_token.cancel();
 					None
 				}
 			}
@@ -333,8 +295,6 @@ async fn execute_shell_with_options(
 					.map_err(|err| Error::from_reason(format!("Shell execution failed: {err}")))?,
 			)
 		} else {
-			wait_for_execution_target(&execution_target, Duration::from_millis(200)).await;
-			terminate_execution_processes(&execution_target).await;
 			if time::timeout(Duration::from_millis(1500), &mut run_future)
 				.await
 				.is_err()
@@ -344,9 +304,6 @@ async fn execute_shell_with_options(
 			None
 		}
 	};
-
-	tracker_done.store(true, Ordering::Release);
-	let _ = tracker_handle.await;
 
 	if tainted {
 		remove_session(&options.session_key);
@@ -474,6 +431,7 @@ async fn run_shell_command(
 	session: &mut ShellSession,
 	options: &ShellExecuteOptions,
 	on_chunk: Option<ThreadsafeFunction<String>>,
+	cancel_token: CancellationToken,
 ) -> Result<ExecutionResult> {
 	if let Some(cwd) = options.cwd.as_deref() {
 		session
@@ -496,6 +454,7 @@ async fn run_shell_command(
 	params.set_fd(OpenFiles::STDOUT_FD, stdout_file);
 	params.set_fd(OpenFiles::STDERR_FD, stderr_file);
 	params.process_group_policy = ProcessGroupPolicy::NewProcessGroup;
+	params.set_cancel_token(cancel_token);
 
 	if let Some(env) = options.env.as_ref() {
 		session.shell.env.push_scope(EnvironmentScope::Command);
@@ -620,52 +579,6 @@ fn remove_session(session_key: &str) {
 	sessions.remove(session_key);
 }
 
-fn spawn_execution_tracker(
-	baseline: HashSet<i32>,
-	target: Arc<ExecutionTarget>,
-	done: Arc<AtomicBool>,
-) -> task::JoinHandle<()> {
-	task::spawn(async move {
-		while !done.load(Ordering::Acquire) && !target.has_target() {
-			let current = ps::list_descendants(std::process::id() as i32);
-			if let Some(pid) = current.into_iter().find(|pid| !baseline.contains(pid)) {
-				target.set_pid(pid);
-				#[cfg(unix)]
-				if let Some(pgid) = ps::process_group_id(pid) {
-					target.set_pgid(pgid);
-				}
-				break;
-			}
-			time::sleep(Duration::from_millis(10)).await;
-		}
-	})
-}
-
-async fn wait_for_execution_target(target: &ExecutionTarget, timeout: Duration) {
-	let deadline = time::Instant::now() + timeout;
-	while !target.has_target() && time::Instant::now() < deadline {
-		time::sleep(Duration::from_millis(10)).await;
-	}
-}
-
-async fn terminate_execution_processes(target: &ExecutionTarget) {
-	if let Some(pgid) = target.pgid() {
-		let signal_int = interrupt_signal();
-		let _ = ps::kill_process_group(pgid, signal_int);
-		time::sleep(Duration::from_millis(50)).await;
-		let signal_kill = kill_signal();
-		let _ = ps::kill_process_group(pgid, signal_kill);
-		return;
-	}
-
-	if let Some(pid) = target.pid() {
-		let signal_int = interrupt_signal();
-		let _ = ps::kill_tree(pid, signal_int);
-		time::sleep(Duration::from_millis(50)).await;
-		let signal_kill = kill_signal();
-		let _ = ps::kill_tree(pid, signal_kill);
-	}
-}
 
 fn read_output(mut reader: std::fs::File, on_chunk: Option<ThreadsafeFunction<String>>) {
 	let mut buf = [0u8; 8192];
@@ -753,26 +666,6 @@ fn pipe_to_files(label: &str) -> Result<(std::fs::File, std::fs::File)> {
 	Ok((reader_file, writer_file))
 }
 
-#[cfg(unix)]
-const fn interrupt_signal() -> i32 {
-	libc::SIGINT
-}
-
-#[cfg(not(unix))]
-fn interrupt_signal() -> i32 {
-	1
-}
-
-#[cfg(unix)]
-const fn kill_signal() -> i32 {
-	libc::SIGKILL
-}
-
-#[cfg(not(unix))]
-fn kill_signal() -> i32 {
-	1
-}
-
 #[derive(Parser)]
 #[command(disable_help_flag = true)]
 struct SleepCommand {
@@ -789,6 +682,9 @@ impl builtins::Command for SleepCommand {
 	) -> impl Future<Output = std::result::Result<ExecutionResult, brush_core::Error>> + Send {
 		let durations = self.durations.clone();
 		async move {
+		if context.is_cancelled() {
+			return Ok(ExecutionExitCode::Interrupted.into());
+		}
 			let mut total = Duration::from_millis(0);
 			for duration in &durations {
 				let Some(parsed) = parse_duration(duration) else {
@@ -796,11 +692,20 @@ impl builtins::Command for SleepCommand {
 					return Ok(ExecutionResult::new(1));
 				};
 				total += parsed;
+		}
+		let sleep = time::sleep(total);
+		tokio::pin!(sleep);
+		if let Some(cancel_token) = context.cancel_token() {
+			tokio::select! {
+				() = &mut sleep => Ok(ExecutionResult::success()),
+				_ = cancel_token.cancelled() => Ok(ExecutionExitCode::Interrupted.into()),
 			}
-			time::sleep(total).await;
+		} else {
+			sleep.await;
 			Ok(ExecutionResult::success())
 		}
 	}
+			}
 }
 
 #[derive(Parser)]
@@ -822,6 +727,9 @@ impl builtins::Command for TimeoutCommand {
 		let duration = self.duration.clone();
 		let command = self.command.clone();
 		async move {
+		if context.is_cancelled() {
+			return Ok(ExecutionExitCode::Interrupted.into());
+		}
 			let Some(timeout) = parse_duration(&duration) else {
 				let _ = writeln!(context.stderr(), "timeout: invalid time interval '{duration}'");
 				return Ok(ExecutionResult::new(125));
@@ -838,32 +746,27 @@ impl builtins::Command for TimeoutCommand {
 			for (idx, arg) in command.iter().enumerate() {
 				if idx > 0 {
 					command_line.push(' ');
-				}
-				command_line.push_str(&quote_arg(arg));
 			}
-
-			let baseline = ps::list_descendants(std::process::id() as i32);
-			let baseline_set: HashSet<i32> = baseline.into_iter().collect();
-			let execution_target = Arc::new(ExecutionTarget::new());
-			let tracker_done = Arc::new(AtomicBool::new(false));
-			let tracker_handle =
-				spawn_execution_tracker(baseline_set, execution_target.clone(), tracker_done.clone());
+				command_line.push_str(&quote_arg(arg));
+		}
+		let cancel_token = context.cancel_token();
 			let run_future = context.shell.run_string(command_line, &params);
 			tokio::pin!(run_future);
-			let result = tokio::select! {
+		let result = if let Some(cancel_token) = cancel_token {
+			tokio::select! {
 				result = &mut run_future => result,
-				() = time::sleep(timeout) => {
-					wait_for_execution_target(&execution_target, Duration::from_millis(200)).await;
-					terminate_execution_processes(&execution_target).await;
-					let _ = time::timeout(Duration::from_millis(1500), &mut run_future).await;
-					Ok(ExecutionResult::new(124))
-				}
+				() = time::sleep(timeout) => Ok(ExecutionResult::new(124)),
+				_ = cancel_token.cancelled() => Ok(ExecutionExitCode::Interrupted.into()),
+			}
+		} else {
+			tokio::select! {
+				result = &mut run_future => result,
+				() = time::sleep(timeout) => Ok(ExecutionResult::new(124)),
+			}
 			};
-			tracker_done.store(true, Ordering::Release);
-			let _ = tracker_handle.await;
 			Ok(result?)
-		}
 	}
+				}
 }
 
 fn parse_duration(input: &str) -> Option<Duration> {

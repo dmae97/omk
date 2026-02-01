@@ -1,6 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `shell` subcommand for interactive shell console testing with brush-core
+- Added `--cwd` / `-C` option to set working directory for shell commands
+- Added `--timeout` / `-t` option to configure per-command timeout in milliseconds
+- Added `--no-snapshot` option to skip sourcing snapshot from user shell
 
 ### Fixed
 

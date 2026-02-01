@@ -15,6 +15,7 @@ import { type Args, parseArgs, printHelp } from "./cli/args";
 import { parseConfigArgs, printConfigHelp, runConfigCommand } from "./cli/config-cli";
 import { processFileArguments } from "./cli/file-processor";
 import { parseGrepArgs, printGrepHelp, runGrepCommand } from "./cli/grep-cli";
+import { parseShellArgs, printShellHelp, runShellCommand } from "./cli/shell-cli";
 import { parseJupyterArgs, printJupyterHelp, runJupyterCommand } from "./cli/jupyter-cli";
 import { listModels } from "./cli/list-models";
 import { parsePluginArgs, printPluginHelp, runPluginCommand } from "./cli/plugin-cli";
@@ -555,6 +556,17 @@ export async function main(args: string[]) {
 			return;
 		}
 		await runGrepCommand(grepCmd);
+		return;
+	}
+
+	// Handle shell subcommand (for testing brush-core shell)
+	const shellCmd = parseShellArgs(args);
+	if (shellCmd) {
+		if (args.includes("--help") || args.includes("-h")) {
+			printShellHelp();
+			return;
+		}
+		await runShellCommand(shellCmd);
 		return;
 	}
 

@@ -65,6 +65,16 @@ impl ExecutionContext<'_> {
         self.params.iter_fds(self.shell)
     }
 
+    /// Returns the cancellation token, if one is configured.
+    pub fn cancel_token(&self) -> Option<tokio_util::sync::CancellationToken> {
+        self.params.cancel_token()
+    }
+
+    /// Returns true when cancellation has been requested.
+    pub fn is_cancelled(&self) -> bool {
+        self.params.is_cancelled()
+    }
+
     pub(crate) const fn should_cmd_lead_own_process_group(&self) -> bool {
         self.shell.options.interactive
             && matches!(
