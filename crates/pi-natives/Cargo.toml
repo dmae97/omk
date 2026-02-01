@@ -13,13 +13,15 @@ crate-type = ["cdylib"]
 workspace = true
 
 [dependencies]
+tokio = { version = "1", features = ["full"] }
 napi = { version = "3", features = ["napi10", "tokio_rt", "tokio_time"] }
 napi-derive = "3"
-brush-core = "0.3.5"
+brush-core = "0.4.0"
+brush-builtins = "0.1.0"
 parking_lot = "0.12.5"
 clap = { version = "4", features = ["derive"] }
 os_pipe = "1"
-sysinfo = "0.30"
+sysinfo = "0.38"
 grep-regex = "0.1"
 grep-searcher = "0.1"
 grep-matcher = "0.1"
@@ -42,7 +44,7 @@ syntect = { version = "5.3", default-features = false, features = [
    "regex-fancy",
 ] }
 html-to-markdown-rs = { version = "2.24", default-features = false }
-phf = { version = "0.11", features = ["macros"] }
+phf = { version = "0.13", features = ["macros"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

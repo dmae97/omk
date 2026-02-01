@@ -18,8 +18,11 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 const TAB_WIDTH: usize = 3;
 const ESC: u16 = 0x1b;
 
-fn build_utf16_string(data: Vec<u16>) -> Utf16String {
+fn build_utf16_string(mut data: Vec<u16>) -> Utf16String {
 	// SAFETY: we know Utf16String == struct(Vec<u16>)
+	while data.last() == Some(&0) {
+		data.pop();
+	}
 	unsafe { std::mem::transmute(data) }
 }
 
@@ -725,7 +728,8 @@ fn wrap_text_with_ansi_impl(text: &[u16], width: usize) -> Vec<Vec<u16>> {
 	result
 }
 
-/// Wrap text to a visible width, preserving ANSI escape codes across line breaks.
+/// Wrap text to a visible width, preserving ANSI escape codes across line
+/// breaks.
 ///
 /// Returns UTF-16 lines with active SGR codes carried across line boundaries.
 #[napi(js_name = "wrapTextWithAnsi")]
@@ -741,7 +745,8 @@ pub fn wrap_text_with_ansi(text: JsString, width: u32) -> Result<Vec<Utf16String
 
 /// Truncate text to a visible width, preserving ANSI codes.
 ///
-/// `ellipsis_kind`: 0 = "…", 1 = "...", 2 = "" (omit); pads with spaces when requested.
+/// `ellipsis_kind`: 0 = "…", 1 = "...", 2 = "" (omit); pads with spaces when
+/// requested.
 #[napi(js_name = "truncateToWidth")]
 pub fn truncate_to_width(
 	text: JsString<'_>,
@@ -1000,7 +1005,8 @@ fn slice_with_width_impl(
 
 /// Slice a range of visible columns from a line.
 ///
-/// Counts terminal cells, skipping ANSI escapes, and optionally enforces strict width.
+/// Counts terminal cells, skipping ANSI escapes, and optionally enforces strict
+/// width.
 #[napi(js_name = "sliceWithWidth")]
 pub fn slice_with_width(
 	line: JsString,
@@ -1155,7 +1161,8 @@ fn extract_segments_impl(
 
 /// Extract the before/after slices around an overlay region.
 ///
-/// Preserves ANSI state so the `after` segment renders correctly after truncation.
+/// Preserves ANSI state so the `after` segment renders correctly after
+/// truncation.
 #[napi(js_name = "extractSegments")]
 pub fn extract_segments(
 	line: JsString,

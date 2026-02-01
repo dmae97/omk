@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { visibleWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-tui/utils";
+import { visibleWidth, wrapTextWithAnsi } from "../src/utils";
 
 describe("wrapTextWithAnsi", () => {
 	describe("underline styling", () => {
@@ -11,29 +11,22 @@ describe("wrapTextWithAnsi", () => {
 
 			const wrapped = wrapTextWithAnsi(text, 40);
 
-			const prefix = "read this thread ";
-			expect(wrapped[0].startsWith(prefix)).toBe(true);
-			const underlineIndex = wrapped[0].indexOf(underlineOn);
-			if (underlineIndex !== -1) {
-				expect(underlineIndex).toBeGreaterThanOrEqual(prefix.length);
-				expect(wrapped[0].endsWith(underlineOff)).toBe(true);
-			}
+			// First line should NOT contain underline code - it's just "read this thread"
+			expect(wrapped[0]).toBe("read this thread");
 
-			// Second line should start with underline
-			expect(wrapped[1].startsWith(underlineOn)).toBe(true);
-
-			const plain = wrapped.join("").replace(/\x1b\[[0-9;]*m/g, "");
-			expect(plain.includes(url)).toBe(true);
+			// Second line should start with underline, have URL content
+			expect(wrapped[1].startsWith(underlineOn)).toStrictEqual(true);
+			expect(wrapped[1].includes("https://")).toBe(true);
 		});
 
-		it("should preserve whitespace before underline reset code", () => {
+		it("should not have whitespace before underline reset code", () => {
 			const underlineOn = "\x1b[4m";
 			const underlineOff = "\x1b[24m";
 			const textWithUnderlinedTrailingSpace = `${underlineOn}underlined text here ${underlineOff}more`;
 
 			const wrapped = wrapTextWithAnsi(textWithUnderlinedTrailingSpace, 18);
 
-			expect(wrapped[1].includes(` ${underlineOff}`)).toBe(true);
+			expect(wrapped[0].includes(` ${underlineOff}`)).toBe(false);
 		});
 
 		it("should not bleed underline to padding - each line should end with reset for underline only", () => {
@@ -67,7 +60,7 @@ describe("wrapTextWithAnsi", () => {
 
 			// Each line should have background color
 			for (const line of wrapped) {
-				expect(line.includes(bgBlue)).toBeTruthy();
+				expect(line.includes(bgBlue)).toBe(true);
 			}
 
 			// Middle lines should NOT end with full reset (kills background for padding)
@@ -76,7 +69,7 @@ describe("wrapTextWithAnsi", () => {
 			}
 		});
 
-		it("should reset underline without preserving background after wrap", () => {
+		it("should reset underline but preserve background when wrapping underlined text inside background", () => {
 			const underlineOn = "\x1b[4m";
 			const underlineOff = "\x1b[24m";
 			const reset = "\x1b[0m";
@@ -85,11 +78,11 @@ describe("wrapTextWithAnsi", () => {
 
 			const wrapped = wrapTextWithAnsi(text, 20);
 
-			const lineHasBg = (line: string) => line.includes("[41m") || line.includes(";41m") || line.includes("[41;");
-
-			expect(lineHasBg(wrapped[0])).toBeTruthy();
-			expect(lineHasBg(wrapped[1])).toBeFalsy();
-			expect(lineHasBg(wrapped[2])).toBeFalsy();
+			// All lines should have background color 41 (either as \x1b[41m or combined like \x1b[4;41m)
+			for (const line of wrapped) {
+				const hasBgColor = line.includes("[41m") || line.includes(";41m") || line.includes("[41;");
+				expect(hasBgColor).toBe(true);
+			}
 
 			// Lines with underlined content should use underline-off at end, not full reset
 			for (let i = 0; i < wrapped.length - 1; i++) {
@@ -111,15 +104,15 @@ describe("wrapTextWithAnsi", () => {
 			const text = "hello world this is a test";
 			const wrapped = wrapTextWithAnsi(text, 10);
 
-			expect(wrapped.length > 1).toBeTruthy();
+			expect(wrapped.length > 1).toBe(true);
 			for (const line of wrapped) {
-				expect(visibleWidth(line) <= 10).toBeTruthy();
+				expect(visibleWidth(line) <= 10).toBe(true);
 			}
 		});
 
 		it("should truncate trailing whitespace that exceeds width", () => {
 			const twoSpacesWrappedToWidth1 = wrapTextWithAnsi("  ", 1);
-			expect(visibleWidth(twoSpacesWrappedToWidth1[0]) <= 1).toBeTruthy();
+			expect(visibleWidth(twoSpacesWrappedToWidth1[0]) <= 1).toBe(true);
 		});
 
 		it("should preserve color codes across wraps", () => {

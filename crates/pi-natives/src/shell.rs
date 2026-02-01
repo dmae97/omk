@@ -24,9 +24,12 @@ use std::{
 };
 
 use brush_core::{
-	CreateOptions, ExecutionContext, OpenFile, OpenFiles, ProcessGroupPolicy, Shell as BrushShell,
-	ShellValue, ShellVariable, builtins, env::EnvironmentScope,
+	CreateOptions, ExecutionContext, ExecutionControlFlow, ExecutionExitCode, ExecutionResult,
+	ProcessGroupPolicy, Shell as BrushShell, ShellValue, ShellVariable, builtins,
+	env::EnvironmentScope,
+	openfiles::{self, OpenFile, OpenFiles},
 };
+use brush_builtins::{BuiltinSet, default_builtins};
 use clap::Parser;
 use napi::{
 	bindgen_prelude::*,
@@ -357,7 +360,25 @@ async fn execute_shell_with_options(
 		remove_session(&options.session_key);
 	}
 
-	Ok(ShellExecuteResult { exit_code: Some(i32::from(run_result.exit_code)), cancelled, timed_out })
+	Ok(ShellExecuteResult { exit_code: exit_code(&run_result), cancelled, timed_out })
+}
+
+fn null_file() -> Result<OpenFile> {
+	Ok(openfiles::null()
+		.map_err(|err| Error::from_reason(format!("Failed to create null file: {err}")))?)
+}
+
+fn exit_code(result: &ExecutionResult) -> Option<i32> {
+	match result.exit_code {
+		ExecutionExitCode::Success => Some(0),
+		ExecutionExitCode::GeneralError => Some(1),
+		ExecutionExitCode::InvalidUsage => Some(2),
+		ExecutionExitCode::Unimplemented => Some(99),
+		ExecutionExitCode::CannotExecute => Some(126),
+		ExecutionExitCode::NotFound => Some(127),
+		ExecutionExitCode::Interrupted => Some(130),
+		ExecutionExitCode::Custom(code) => Some(code as i32),
+	}
 }
 
 /// Abort a running shell execution by ID.
@@ -397,17 +418,18 @@ async fn create_session(options: &ShellExecuteOptions) -> Result<ShellSession> {
 		no_profile: true,
 		no_rc: true,
 		do_not_inherit_env: true,
+		builtins: default_builtins(BuiltinSet::BashMode),
 		..Default::default()
 	};
 
-	let mut shell = BrushShell::new(&create_options)
+	let mut shell = BrushShell::new(create_options)
 		.await
 		.map_err(|err| Error::from_reason(format!("Failed to initialize shell: {err}")))?;
 
-	if let Some(exec_builtin) = shell.builtins.get_mut("exec") {
+	if let Some(exec_builtin) = shell.builtin_mut("exec") {
 		exec_builtin.disabled = true;
 	}
-	if let Some(suspend_builtin) = shell.builtins.get_mut("suspend") {
+	if let Some(suspend_builtin) = shell.builtin_mut("suspend") {
 		suspend_builtin.disabled = true;
 	}
 	shell.register_builtin("sleep", builtins::builtin::<SleepCommand>());
@@ -436,11 +458,9 @@ async fn create_session(options: &ShellExecuteOptions) -> Result<ShellSession> {
 
 async fn source_snapshot(shell: &mut BrushShell, snapshot_path: &str) -> Result<()> {
 	let mut params = shell.default_exec_params();
-	let mut open_files = shell.open_files.clone();
-	open_files.set(OpenFiles::STDIN_FD, OpenFile::Null);
-	open_files.set(OpenFiles::STDOUT_FD, OpenFile::Null);
-	open_files.set(OpenFiles::STDERR_FD, OpenFile::Null);
-	params.open_files = open_files;
+	params.set_fd(OpenFiles::STDIN_FD, null_file()?);
+	params.set_fd(OpenFiles::STDOUT_FD, null_file()?);
+	params.set_fd(OpenFiles::STDERR_FD, null_file()?);
 
 	let escaped = snapshot_path.replace('\'', "'\\''");
 	let command = format!("source '{escaped}'");
@@ -455,7 +475,7 @@ async fn run_shell_command(
 	session: &mut ShellSession,
 	options: &ShellExecuteOptions,
 	on_chunk: Option<ThreadsafeFunction<String>>,
-) -> Result<brush_core::ExecutionResult> {
+) -> Result<ExecutionResult> {
 	if let Some(cwd) = options.cwd.as_deref() {
 		session
 			.shell
@@ -472,13 +492,10 @@ async fn run_shell_command(
 	);
 	let stderr_file = OpenFile::from(writer_file);
 
-	let mut open_files = session.shell.open_files.clone();
-	open_files.set(OpenFiles::STDIN_FD, OpenFile::Null);
-	open_files.set(OpenFiles::STDOUT_FD, stdout_file);
-	open_files.set(OpenFiles::STDERR_FD, stderr_file);
-
 	let mut params = session.shell.default_exec_params();
-	params.open_files = open_files;
+	params.set_fd(OpenFiles::STDIN_FD, null_file()?);
+	params.set_fd(OpenFiles::STDOUT_FD, stdout_file);
+	params.set_fd(OpenFiles::STDERR_FD, stderr_file);
 	params.process_group_policy = ProcessGroupPolicy::NewProcessGroup;
 
 	if let Some(env) = options.env.as_ref() {
@@ -516,7 +533,7 @@ async fn run_shell_command(
 
 	drop(params);
 
-	let _ = reader_handle.wait().await;
+	let _: Result<()> = reader_handle.wait().await;
 
 	result.map_err(|err| Error::from_reason(format!("Shell execution failed: {err}")))
 }
@@ -589,11 +606,14 @@ fn next_execution_id() -> String {
 	format!("exec-{}-{counter}", std::process::id())
 }
 
-const fn should_reset_session(result: &brush_core::ExecutionResult) -> bool {
-	result.exit_shell
-		|| result.return_from_function_or_script
-		|| result.break_loop.is_some()
-		|| result.continue_loop.is_some()
+const fn should_reset_session(result: &ExecutionResult) -> bool {
+	match result.next_control_flow {
+		ExecutionControlFlow::Normal => false,
+		ExecutionControlFlow::BreakLoop { .. } => true,
+		ExecutionControlFlow::ContinueLoop { .. } => true,
+		ExecutionControlFlow::ReturnFromFunctionOrScript => true,
+		ExecutionControlFlow::ExitShell => true,
+	}
 }
 
 fn remove_session(session_key: &str) {
@@ -762,23 +782,24 @@ struct SleepCommand {
 }
 
 impl builtins::Command for SleepCommand {
+	type Error = brush_core::Error;
+
 	fn execute(
 		&self,
 		context: ExecutionContext<'_>,
-	) -> impl std::future::Future<Output = std::result::Result<builtins::ExitCode, brush_core::Error>>
-	+ std::marker::Send {
+	) -> impl Future<Output = std::result::Result<ExecutionResult, brush_core::Error>> + Send {
 		let durations = self.durations.clone();
 		async move {
 			let mut total = Duration::from_millis(0);
 			for duration in &durations {
 				let Some(parsed) = parse_duration(duration) else {
 					let _ = writeln!(context.stderr(), "sleep: invalid time interval '{duration}'");
-					return Ok(builtins::ExitCode::Custom(1));
+					return Ok(ExecutionResult::new(1));
 				};
 				total += parsed;
 			}
 			time::sleep(total).await;
-			Ok(builtins::ExitCode::Success)
+			Ok(ExecutionResult::success())
 		}
 	}
 }
@@ -793,21 +814,22 @@ struct TimeoutCommand {
 }
 
 impl builtins::Command for TimeoutCommand {
+	type Error = brush_core::Error;
+
 	fn execute(
 		&self,
 		context: ExecutionContext<'_>,
-	) -> impl std::future::Future<Output = std::result::Result<builtins::ExitCode, brush_core::Error>>
-	+ std::marker::Send {
+	) -> impl Future<Output = std::result::Result<ExecutionResult, brush_core::Error>> + Send {
 		let duration = self.duration.clone();
 		let command = self.command.clone();
 		async move {
 			let Some(timeout) = parse_duration(&duration) else {
 				let _ = writeln!(context.stderr(), "timeout: invalid time interval '{duration}'");
-				return Ok(builtins::ExitCode::Custom(125));
+				return Ok(ExecutionResult::new(125));
 			};
 			if command.is_empty() {
 				let _ = writeln!(context.stderr(), "timeout: missing command");
-				return Ok(builtins::ExitCode::Custom(125));
+				return Ok(ExecutionResult::new(125));
 			}
 
 			let mut params = context.params.clone();
@@ -844,18 +866,18 @@ impl builtins::Command for TimeoutCommand {
 				let _ = time::timeout(Duration::from_millis(1500), &mut run_future).await;
 				tracker_done.store(true, Ordering::Release);
 				let _ = tracker_handle.await;
-				return Ok(builtins::ExitCode::Custom(124));
+				return Ok(ExecutionResult::new(124));
 			}
 
 			tracker_done.store(true, Ordering::Release);
 			let _ = tracker_handle.await;
 
 			if timed_out {
-				return Ok(builtins::ExitCode::Custom(124));
+				return Ok(ExecutionResult::new(124));
 			}
 
 			let result = result.expect("result ensured")?;
-			Ok(builtins::ExitCode::from(result))
+			Ok(result)
 		}
 	}
 }

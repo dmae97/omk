@@ -424,7 +424,8 @@ export async function executePython(code: string, options?: PythonExecutorOption
 	await ensureKernelAvailable(cwd);
 
 	const kernelMode = options?.kernelMode ?? "session";
-	const useSharedGateway = options?.useSharedGateway;
+	const isTestEnv = process.env.BUN_ENV === "test" || process.env.NODE_ENV === "test";
+	const useSharedGateway = isTestEnv ? false : options?.useSharedGateway;
 	const sessionFile = options?.sessionFile;
 	const artifactsDir = options?.artifactsDir;
 

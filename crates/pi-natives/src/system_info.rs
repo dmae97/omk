@@ -100,8 +100,7 @@ fn strip_quotes(value: &str) -> String {
 
 fn get_disk_info() -> Option<String> {
 	let mut disks = Disks::new_with_refreshed_list();
-	disks.refresh_list();
-	disks.refresh();
+	disks.refresh(true);
 
 	if cfg!(target_os = "windows") {
 		let mut entries = Vec::new();

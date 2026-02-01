@@ -1,4 +1,3 @@
 [toolchain]
 channel = "nightly"
 components = ["rustfmt", "clippy", "rust-analyzer"]
-targets = ["wasm32-unknown-unknown"]
