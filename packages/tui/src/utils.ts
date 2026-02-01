@@ -2,7 +2,6 @@ import {
 	extractSegments as nativeExtractSegments,
 	sliceWithWidth as nativeSliceWithWidth,
 	truncateToWidth as nativeTruncateToWidth,
-	visibleWidth as nativeVisibleWidth,
 } from "@oh-my-pi/pi-natives";
 
 // Pre-allocated space buffer for padding
@@ -30,7 +29,6 @@ export function getSegmenter(): Intl.Segmenter {
 // Cache for non-ASCII strings
 const WIDTH_CACHE_SIZE = 512;
 const widthCache = new Map<string, number>();
-const NATIVE_WIDTH_THRESHOLD = 256;
 
 /**
  * Calculate the visible width of a string in terminal columns.
@@ -42,15 +40,17 @@ export function visibleWidth(str: string): number {
 
 	// Fast path: pure ASCII printable
 	let isPureAscii = true;
+	let tabLength = 0;
 	for (let i = 0; i < str.length; i++) {
 		const code = str.charCodeAt(i);
-		if (code < 0x20 || code > 0x7e) {
+		if (code === 9) {
+			tabLength += 3;
+		} else if (code < 0x20 || code > 0x7e) {
 			isPureAscii = false;
-			break;
 		}
 	}
 	if (isPureAscii) {
-		return str.length;
+		return str.length + tabLength;
 	}
 
 	// Check cache
@@ -59,25 +59,8 @@ export function visibleWidth(str: string): number {
 		return cached;
 	}
 
-	let width: number;
-	if (str.length <= NATIVE_WIDTH_THRESHOLD) {
-		// Normalize: tabs to 3 spaces, strip ANSI escape codes
-		let clean = str;
-		if (str.includes("\t")) {
-			clean = clean.replace(/\t/g, "   ");
-		}
-		if (clean.includes("\x1b")) {
-			// Strip SGR codes (\x1b[...m) and cursor codes (\x1b[...G/K/H/J)
-			clean = clean.replace(/\x1b\[[0-9;]*[mGKHJ]/g, "");
-			// Strip OSC 8 hyperlinks: \x1b]8;;URL\x07 and \x1b]8;;\x07
-			clean = clean.replace(/\x1b\]8;;[^\x07]*\x07/g, "");
-		}
-		width = Bun.stringWidth(clean);
-	} else {
-		width = nativeVisibleWidth(str);
-	}
-
 	// Cache result
+	const width = Bun.stringWidth(str) + tabLength;
 	if (widthCache.size >= WIDTH_CACHE_SIZE) {
 		const firstKey = widthCache.keys().next().value;
 		if (firstKey !== undefined) {

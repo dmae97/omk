@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Improved performance of key ID parsing with optimized cache lookup strategy
+- Simplified `visibleWidth` calculation to use consistent Bun.stringWidth approach for all string lengths
+
+### Removed
+
+- Removed `visibleWidth` benchmark file in favor of Kitty sequence benchmarking
 
 ## [9.5.0] - 2026-02-01
 ### Changed

@@ -25,4 +25,5 @@ pub mod grep;
 pub mod highlight;
 pub mod html;
 pub mod image;
+pub mod keys;
 pub mod text;

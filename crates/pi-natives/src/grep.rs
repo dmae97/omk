@@ -24,7 +24,7 @@ use ignore::WalkBuilder;
 use napi::{
 	JsString,
 	bindgen_prelude::*,
-	threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode},
+	threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
 	tokio::task,
 };
 use napi_derive::napi;
@@ -751,7 +751,7 @@ fn search_sync(content: &[u8], options: SearchOptions) -> SearchResult {
 
 fn grep_sync(
 	options: GrepOptions,
-	on_match: Option<&ThreadsafeFunction<GrepMatch, ErrorStrategy::Fatal>>,
+	on_match: Option<&ThreadsafeFunction<GrepMatch>>,
 ) -> Result<GrepResult> {
 	let search_path = resolve_search_path(&options.path)?;
 	let metadata = std::fs::metadata(&search_path)
@@ -877,7 +877,7 @@ fn grep_sync(
 					for matched in result.matches {
 						let grep_match = to_grep_match(&result.relative_path, matched);
 						if let Some(callback) = on_match {
-							callback.call(grep_match.clone(), ThreadsafeFunctionCallMode::NonBlocking);
+							callback.call(Ok(grep_match.clone()), ThreadsafeFunctionCallMode::NonBlocking);
 						}
 						matches.push(grep_match);
 					}
@@ -893,7 +893,7 @@ fn grep_sync(
 						match_count:    Some(clamp_u32(result.match_count)),
 					};
 					if let Some(callback) = on_match {
-						callback.call(grep_match.clone(), ThreadsafeFunctionCallMode::NonBlocking);
+						callback.call(Ok(grep_match.clone()), ThreadsafeFunctionCallMode::NonBlocking);
 					}
 					matches.push(grep_match);
 				},
@@ -923,7 +923,7 @@ fn grep_sync(
 	// Fire callbacks for sequential search results
 	if let Some(callback) = on_match {
 		for grep_match in &matches {
-			callback.call(grep_match.clone(), ThreadsafeFunctionCallMode::NonBlocking);
+			callback.call(Ok(grep_match.clone()), ThreadsafeFunctionCallMode::NonBlocking);
 		}
 	}
 
@@ -1000,7 +1000,7 @@ pub fn has_match(
 pub async fn grep(
 	options: GrepOptions,
 	#[napi(ts_arg_type = "((match: GrepMatch) => void) | undefined | null")] on_match: Option<
-		ThreadsafeFunction<GrepMatch, ErrorStrategy::Fatal>,
+		ThreadsafeFunction<GrepMatch>,
 	>,
 ) -> Result<GrepResult> {
 	task::spawn_blocking(move || grep_sync(options, on_match.as_ref()))

@@ -18,6 +18,8 @@
  * - isKittyProtocolActive() - Query global Kitty protocol state
  */
 
+import { matchesKittySequence } from "@oh-my-pi/pi-natives";
+
 // =============================================================================
 // Global Kitty Protocol State
 // =============================================================================
@@ -620,26 +622,6 @@ export function parseKittySequence(data: string): ParsedKittySequence | null {
 	return null;
 }
 
-function matchesKittySequence(data: string, expectedCodepoint: number, expectedModifier: number): boolean {
-	const parsed = parseKittySequence(data);
-	if (!parsed) return false;
-	const actualMod = parsed.modifier & ~LOCK_MASK;
-	const expectedMod = expectedModifier & ~LOCK_MASK;
-
-	// Check if modifiers match
-	if (actualMod !== expectedMod) return false;
-
-	// Primary match: codepoint matches directly
-	if (parsed.codepoint === expectedCodepoint) return true;
-
-	// Alternate match: use base layout key for non-Latin keyboard layouts
-	// This allows Ctrl+С (Cyrillic) to match Ctrl+c (Latin) when terminal reports
-	// the base layout key (the key in standard PC-101 layout)
-	if (parsed.baseLayoutKey !== undefined && parsed.baseLayoutKey === expectedCodepoint) return true;
-
-	return false;
-}
-
 /**
  * Match xterm modifyOtherKeys format: CSI 27 ; modifiers ; keycode ~
  * This is used by terminals when Kitty protocol is not enabled.
@@ -666,23 +648,26 @@ function rawCtrlChar(letter: string): string {
 
 type ParsedKeyId = { key: string; ctrl: boolean; shift: boolean; alt: boolean };
 
-const PARSED_KEY_ID_CACHE = new Map<string, ParsedKeyId>();
+const PARSED_KEY_ID_CACHE = new Map<string, ParsedKeyId | null>();
 
-function parseKeyId(keyId: string): ParsedKeyId | null {
+function parseKeyIdSlow(keyId: string): ParsedKeyId | null {
 	const normalizedKeyId = keyId.toLowerCase();
-	const cached = PARSED_KEY_ID_CACHE.get(normalizedKeyId);
-	if (cached) return cached;
-
 	const parts = normalizedKeyId.split("+");
 	const key = parts[parts.length - 1];
 	if (!key) return null;
-	const parsed = {
+	return {
 		key,
 		ctrl: parts.includes("ctrl"),
 		shift: parts.includes("shift"),
 		alt: parts.includes("alt"),
 	};
-	PARSED_KEY_ID_CACHE.set(normalizedKeyId, parsed);
+}
+
+function parseKeyId(keyId: string): ParsedKeyId | null {
+	const cached = PARSED_KEY_ID_CACHE.get(keyId);
+	if (cached !== undefined) return cached;
+	const parsed = parseKeyIdSlow(keyId);
+	PARSED_KEY_ID_CACHE.set(keyId, parsed);
 	return parsed;
 }
 

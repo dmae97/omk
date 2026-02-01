@@ -13,18 +13,27 @@ crate-type = ["cdylib"]
 workspace = true
 
 [dependencies]
-napi = { version = "2", features = ["napi8", "tokio_rt"] }
-napi-derive = "2"
-grep-regex = "0.1.14"
-grep-searcher = "0.1.16"
-grep-matcher = "0.1.8"
+napi = { version = "3", features = ["napi8", "tokio_rt"] }
+napi-derive = "3"
+grep-regex = "0.1"
+grep-searcher = "0.1"
+grep-matcher = "0.1"
 globset = "0.4"
 ignore = "0.4"
 rayon = "1.10"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
-unicode-segmentation = "1.11"
+image = { version = "0.25", default-features = false, features = [
+   "png",
+   "jpeg",
+   "gif",
+   "webp",
+] }
+bstr = "1"
 unicode-width = "0.2"
-syntect = { version = "5.3", default-features = false, features = ["default-syntaxes", "default-themes", "regex-fancy"] }
+syntect = { version = "5.3", default-features = false, features = [
+   "default-syntaxes",
+   "default-themes",
+   "regex-fancy",
+] }
 html-to-markdown-rs = { version = "2.24", default-features = false }
 
 [build-dependencies]

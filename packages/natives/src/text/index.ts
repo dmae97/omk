@@ -18,11 +18,6 @@ export interface ExtractSegmentsResult {
 
 export type TextInput = string | Uint8Array;
 
-/** Compute the visible width of a string, ignoring ANSI codes. */
-export function visibleWidth(text: TextInput): number {
-	return native.visibleWidth(text);
-}
-
 /**
  * Truncate a string to a visible width, preserving ANSI codes.
  */

@@ -19,7 +19,7 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use ignore::WalkBuilder;
 use napi::{
 	bindgen_prelude::*,
-	threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode},
+	threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
 	tokio::task,
 };
 use napi_derive::napi;
@@ -181,7 +181,7 @@ struct FindConfig {
 
 fn run_find(
 	config: FindConfig,
-	on_match: Option<&ThreadsafeFunction<FindMatch, ErrorStrategy::Fatal>>,
+	on_match: Option<&ThreadsafeFunction<FindMatch>>,
 	cancelled: &AtomicBool,
 ) -> Result<FindResult> {
 	let FindConfig {
@@ -255,7 +255,7 @@ fn run_find(
 
 		// Call streaming callback if provided
 		if let Some(callback) = on_match {
-			callback.call(found.clone(), ThreadsafeFunctionCallMode::NonBlocking);
+			callback.call(Ok(found.clone()), ThreadsafeFunctionCallMode::NonBlocking);
 		}
 
 		matches.push(found);
@@ -291,7 +291,7 @@ fn run_find(
 pub async fn find(
 	options: FindOptions,
 	#[napi(ts_arg_type = "((match: FindMatch) => void) | undefined | null")] on_match: Option<
-		ThreadsafeFunction<FindMatch, ErrorStrategy::Fatal>,
+		ThreadsafeFunction<FindMatch>,
 	>,
 ) -> Result<FindResult> {
 	let FindOptions { pattern, path, file_type, hidden, max_results, gitignore, sort_by_mtime } =

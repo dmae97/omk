@@ -1,8 +1,8 @@
 //! ANSI-aware text measurement and slicing utilities.
 
+use bstr::ByteSlice;
 use napi::{JsString, JsStringUtf8, bindgen_prelude::*};
 use napi_derive::napi;
-use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 const TAB_WIDTH: usize = 3;
@@ -208,8 +208,8 @@ impl AnsiCodeTracker {
 	}
 }
 
-fn extract_ansi_code(text: &str, pos: usize) -> Option<usize> {
-	let bytes = text.as_bytes();
+fn extract_ansi_code(text: impl AsRef<[u8]>, pos: usize) -> Option<usize> {
+	let bytes = text.as_ref();
 	if pos >= bytes.len() || bytes[pos] != 0x1b {
 		return None;
 	}
@@ -245,10 +245,10 @@ fn extract_ansi_code(text: &str, pos: usize) -> Option<usize> {
 	}
 }
 
-fn next_ansi_start(text: &str, mut pos: usize) -> Option<usize> {
-	let bytes = text.as_bytes();
+fn next_ansi_start(text: impl AsRef<[u8]>, mut pos: usize) -> Option<usize> {
+	let bytes = text.as_ref();
 	while pos < bytes.len() {
-		if bytes[pos] == 0x1b && extract_ansi_code(text, pos).is_some() {
+		if bytes[pos] == 0x1b && extract_ansi_code(bytes, pos).is_some() {
 			return Some(pos);
 		}
 		pos += 1;
@@ -267,13 +267,13 @@ fn clamp_u32(value: usize) -> u32 {
 	value.min(u32::MAX as usize) as u32
 }
 
-enum TextInput {
-	Utf8(JsStringUtf8),
-	Bytes(Uint8Array),
+enum TextInput<'a> {
+	Utf8(JsStringUtf8<'a>),
+	Bytes(&'a Uint8Array),
 }
 
-impl TextInput {
-	fn new(value: Either<JsString, Uint8Array>) -> Result<Self> {
+impl<'a> TextInput<'a> {
+	fn new(value: &'a Either<JsString, Uint8Array>) -> Result<Self> {
 		match value {
 			Either::A(value) => Ok(Self::Utf8(value.into_utf8()?)),
 			Either::B(value) => Ok(Self::Bytes(value)),
@@ -289,14 +289,19 @@ impl TextInput {
 	}
 }
 
-fn visible_width_impl(text: &str) -> usize {
+impl AsRef<[u8]> for TextInput<'_> {
+	fn as_ref(&self) -> &[u8] {
+		match self {
+			Self::Utf8(text) => text.as_slice(),
+			Self::Bytes(bytes) => bytes.as_ref(),
+		}
+	}
+}
+
+fn visible_width_impl(text: impl AsRef<[u8]>) -> usize {
+	let text = text.as_ref();
 	if text.is_empty() {
 		return 0;
-	}
-
-	let is_pure_ascii = text.bytes().all(|byte| (0x20..=0x7e).contains(&byte));
-	if is_pure_ascii {
-		return text.len();
 	}
 
 	// Single-pass: skip ANSI codes, measure graphemes
@@ -310,20 +315,13 @@ fn visible_width_impl(text: &str) -> usize {
 
 		// Find next ANSI code or end of string
 		let next_ansi = next_ansi_start(text, i + 1).unwrap_or(text.len());
-		for grapheme in text[i..next_ansi].graphemes(true) {
+		for (_, _, grapheme) in text[i..next_ansi].grapheme_indices() {
 			width += grapheme_width(grapheme);
 		}
 		i = next_ansi;
 	}
 
 	width
-}
-
-/// Compute the visible width of a string, ignoring ANSI codes.
-#[napi(js_name = "visibleWidth")]
-pub fn visible_width(text: Either<JsString, Uint8Array>) -> Result<u32> {
-	let text = TextInput::new(text)?;
-	Ok(clamp_u32(visible_width_impl(text.as_str()?)))
 }
 
 /// Truncate text to a visible width, preserving ANSI codes.
@@ -334,9 +332,9 @@ pub fn truncate_to_width(
 	ellipsis: Either<JsString, Uint8Array>,
 	pad: bool,
 ) -> Result<String> {
-	let text = TextInput::new(text)?;
+	let text = TextInput::new(&text)?;
 	let text = text.as_str()?;
-	let ellipsis = TextInput::new(ellipsis)?;
+	let ellipsis = TextInput::new(&ellipsis)?;
 	let ellipsis = ellipsis.as_str()?;
 	let max_width = max_width as usize;
 	let text_visible_width = visible_width_impl(text);
@@ -350,7 +348,12 @@ pub fn truncate_to_width(
 	let ellipsis_width = visible_width_impl(ellipsis);
 	let target_width = max_width.saturating_sub(ellipsis_width);
 	if target_width == 0 {
-		return Ok(ellipsis.graphemes(true).take(max_width).collect());
+		return Ok(ellipsis
+			.as_bytes()
+			.grapheme_indices()
+			.take(max_width)
+			.map(|(_, _, g)| g)
+			.collect());
 	}
 
 	// Streaming: walk string once, copy ANSI codes through, copy graphemes until
@@ -369,7 +372,7 @@ pub fn truncate_to_width(
 
 		// Copy graphemes until we hit target width or next ANSI code
 		let next_ansi = next_ansi_start(text, i + 1).unwrap_or(text.len());
-		for grapheme in text[i..next_ansi].graphemes(true) {
+		for (_, _, grapheme) in text.as_bytes()[i..next_ansi].grapheme_indices() {
 			let w = grapheme_width(grapheme);
 			if width + w > target_width {
 				// Hit limit, stop copying
@@ -398,11 +401,13 @@ pub fn truncate_to_width(
 	Ok(out)
 }
 
-fn slice_with_width_impl(line: &str, start_col: usize, length: usize, strict: bool) -> SliceResult {
-	if length == 0 {
-		return SliceResult { text: String::new(), width: 0 };
-	}
-
+fn slice_with_width_impl(
+	line: impl AsRef<[u8]>,
+	start_col: usize,
+	length: usize,
+	strict: bool,
+) -> SliceResult {
+	let line = line.as_ref();
 	let end_col = start_col + length;
 	let mut result = String::new();
 	let mut result_width = 0;
@@ -413,6 +418,9 @@ fn slice_with_width_impl(line: &str, start_col: usize, length: usize, strict: bo
 	while i < line.len() {
 		if let Some(len) = extract_ansi_code(line, i) {
 			let code = &line[i..i + len];
+			// SAFETY: we know the code is valid UTF-8
+			let code = unsafe { std::str::from_utf8_unchecked(code) };
+
 			if current_col >= start_col && current_col < end_col {
 				result.push_str(code);
 			} else if current_col < start_col {
@@ -424,7 +432,7 @@ fn slice_with_width_impl(line: &str, start_col: usize, length: usize, strict: bo
 
 		let next_ansi = next_ansi_start(line, i);
 		let end = next_ansi.unwrap_or(line.len());
-		for grapheme in line[i..end].graphemes(true) {
+		for (_, _, grapheme) in line[i..end].grapheme_indices() {
 			let width = grapheme_width(grapheme);
 			let in_range = current_col >= start_col && current_col < end_col;
 			let fits = !strict || current_col + width <= end_col;
@@ -460,12 +468,12 @@ pub fn slice_with_width(
 	length: u32,
 	strict: bool,
 ) -> Result<SliceResult> {
-	let line = TextInput::new(line)?;
-	Ok(slice_with_width_impl(line.as_str()?, start_col as usize, length as usize, strict))
+	let line = TextInput::new(&line)?;
+	Ok(slice_with_width_impl(line, start_col as usize, length as usize, strict))
 }
 
 fn extract_segments_impl(
-	line: &str,
+	line: impl AsRef<[u8]>,
 	before_end: usize,
 	after_start: usize,
 	after_len: usize,
@@ -483,10 +491,12 @@ fn extract_segments_impl(
 
 	let mut tracker = AnsiCodeTracker::new();
 	tracker.clear();
-
+	let line = line.as_ref();
 	while i < line.len() {
 		if let Some(len) = extract_ansi_code(line, i) {
 			let code = &line[i..i + len];
+			// SAFETY: we know the code is valid UTF-8
+			let code = unsafe { std::str::from_utf8_unchecked(code) };
 			tracker.process(code);
 			if current_col < before_end {
 				pending_ansi_before.push_str(code);
@@ -499,7 +509,7 @@ fn extract_segments_impl(
 
 		let next_ansi = next_ansi_start(line, i);
 		let end = next_ansi.unwrap_or(line.len());
-		for grapheme in line[i..end].graphemes(true) {
+		for (_, _, grapheme) in line[i..end].grapheme_indices() {
 			let width = grapheme_width(grapheme);
 
 			if current_col < before_end {
@@ -559,9 +569,9 @@ pub fn extract_segments(
 	after_len: u32,
 	strict_after: bool,
 ) -> Result<ExtractSegmentsResult> {
-	let line = TextInput::new(line)?;
+	let line = TextInput::new(&line)?;
 	Ok(extract_segments_impl(
-		line.as_str()?,
+		line,
 		before_end as usize,
 		after_start as usize,
 		after_len as usize,

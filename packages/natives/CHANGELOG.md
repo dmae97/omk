@@ -1,6 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `matchesKittySequence` function to match Kitty protocol sequences for codepoint and modifier
+
+### Removed
+
+- Removed `visibleWidth` function from text utilities
 
 ## [9.6.0] - 2026-02-01
 ### Added

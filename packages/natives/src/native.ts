@@ -55,7 +55,6 @@ export interface NativeBindings {
 	getSupportedLanguages(): string[];
 	SamplingFilter: NativeSamplingFilter;
 	PhotonImage: NativePhotonImageConstructor;
-	visibleWidth(text: TextInput): number;
 	truncateToWidth(text: TextInput, maxWidth: number, ellipsis: TextInput, pad: boolean): string;
 	sliceWithWidth(line: TextInput, startCol: number, length: number, strict: boolean): SliceWithWidthResult;
 	extractSegments(
@@ -65,6 +64,7 @@ export interface NativeBindings {
 		afterLen: number,
 		strictAfter: boolean,
 	): ExtractSegmentsResult;
+	matchesKittySequence(data: string, expectedCodepoint: number, expectedModifier: number): boolean;
 }
 
 const require = createRequire(import.meta.url);
@@ -133,10 +133,10 @@ function validateNative(bindings: NativeBindings, source: string): void {
 	checkFn("highlightCode");
 	checkFn("supportsLanguage");
 	checkFn("getSupportedLanguages");
-	checkFn("visibleWidth");
 	checkFn("truncateToWidth");
 	checkFn("sliceWithWidth");
 	checkFn("extractSegments");
+	checkFn("matchesKittySequence");
 
 	if (!bindings.PhotonImage?.newFromByteslice) {
 		missing.push("PhotonImage.newFromByteslice");

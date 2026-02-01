@@ -75,7 +75,6 @@ export {
 	type SliceWithWidthResult,
 	sliceWithWidth,
 	truncateToWidth,
-	visibleWidth,
 } from "./text/index";
 
 // =============================================================================
@@ -88,6 +87,12 @@ export {
 	highlightCode,
 	supportsLanguage,
 } from "./highlight/index";
+
+// =============================================================================
+// Keyboard sequence helpers
+// =============================================================================
+
+export { matchesKittySequence } from "./keys/index";
 
 // =============================================================================
 // HTML to Markdown
