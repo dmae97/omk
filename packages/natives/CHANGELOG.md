@@ -1,6 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Added `executeShell()` function to execute shell commands with streaming output support and configurable timeout
+- Added `abortShellExecution()` function to cancel running shell executions by ID
+- Added `ShellExecuteOptions` and `ShellExecuteResult` types for shell command execution configuration and results
+
 ### Changed
 
 - Improved native binary installation to use atomic rename operations and better fallback handling for Windows DLLs

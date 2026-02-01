@@ -6,6 +6,8 @@ import * as path from "node:path";
 import type { FindMatch, FindOptions, FindResult } from "./find/types";
 import { native } from "./native";
 
+export type { RequestOptions } from "./request-options";
+
 // =============================================================================
 // Grep (ripgrep-based regex search)
 // =============================================================================
@@ -108,4 +110,13 @@ export {
 	htmlToMarkdown,
 } from "./html/index";
 
-export type { RequestOptions } from "./request-options";
+// =============================================================================
+// Shell execution (brush-core)
+// =============================================================================
+
+export {
+	abortShellExecution,
+	executeShell,
+	type ShellExecuteOptions,
+	type ShellExecuteResult,
+} from "./shell/index";

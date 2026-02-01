@@ -11,6 +11,7 @@ import type {
 } from "./grep/types";
 import type { HighlightColors } from "./highlight/index";
 import type { HtmlToMarkdownOptions } from "./html/types";
+import type { ShellExecuteOptions, ShellExecuteResult } from "./shell/types";
 import type { ExtractSegmentsResult, SliceWithWidthResult } from "./text/index";
 
 export interface NativePhotonImage {
@@ -66,6 +67,11 @@ export interface NativeBindings {
 		strictAfter: boolean,
 	): ExtractSegmentsResult;
 	matchesKittySequence(data: string, expectedCodepoint: number, expectedModifier: number): boolean;
+	executeShell(
+		options: ShellExecuteOptions,
+		onChunk?: (error: Error | null, chunk: string) => void,
+	): Promise<ShellExecuteResult>;
+	abortShellExecution(executionId: string): void;
 }
 
 const require = createRequire(import.meta.url);
@@ -141,6 +147,8 @@ function validateNative(bindings: NativeBindings, source: string): void {
 	checkFn("sliceWithWidth");
 	checkFn("extractSegments");
 	checkFn("matchesKittySequence");
+	checkFn("executeShell");
+	checkFn("abortShellExecution");
 
 	if (missing.length) {
 		throw new Error(
