@@ -78,11 +78,7 @@ class SessionList implements Component {
 			} else {
 				// "Current folder" scope - hint to try "all"
 				lines.push(
-					truncateToWidth(
-						theme.fg("muted", "  No sessions in current folder. Press Tab to view all."),
-						width,
-						"…",
-					),
+					truncateToWidth(theme.fg("muted", "  No sessions in current folder. Press Tab to view all."), width),
 				);
 			}
 			return lines;

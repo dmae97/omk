@@ -16,7 +16,7 @@ export interface ExtractSegmentsResult {
 	afterWidth: number;
 }
 
-export const enum EllipsisKind {
+export const enum Ellipsis {
 	Unicode = 0, // "…"
 	Ascii = 1, // "..."
 	Omit = 2, // ""
@@ -36,10 +36,9 @@ export const enum EllipsisKind {
 export function truncateToWidth(
 	text: string,
 	maxWidth: number,
-	ellipsis: EllipsisKind = EllipsisKind.Unicode,
+	ellipsis: Ellipsis = Ellipsis.Unicode,
 	pad = false,
 ): string {
-	if (text.length <= maxWidth && !pad) return text;
 	return native.truncateToWidth(text, maxWidth, ellipsis, pad);
 }
 

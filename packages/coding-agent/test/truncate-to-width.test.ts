@@ -11,7 +11,7 @@ describe("truncateToWidth", () => {
 	it("should truncate messages with Unicode characters correctly", () => {
 		// This message contains a checkmark (✔) which may have display width > 1 byte
 		const message = '✔ script to run › dev $ concurrently "vite" "node --import tsx ./';
-		const maxMsgWidth = Bun.stringWidth(message) - 1;
+		const maxMsgWidth = visibleWidth(message) - 1;
 
 		const truncated = truncateToWidth(message, maxMsgWidth);
 		const truncatedWidth = visibleWidth(truncated);
@@ -21,7 +21,7 @@ describe("truncateToWidth", () => {
 
 	it("should handle emoji characters", () => {
 		const message = "🎉 Celebration! 🚀 Launch 📦 Package ready for deployment now";
-		const maxMsgWidth = Bun.stringWidth(message) - 2;
+		const maxMsgWidth = visibleWidth(message) - 2;
 
 		const truncated = truncateToWidth(message, maxMsgWidth);
 		const truncatedWidth = visibleWidth(truncated);
@@ -31,7 +31,7 @@ describe("truncateToWidth", () => {
 
 	it("should handle mixed ASCII and wide characters", () => {
 		const message = "Hello 世界 Test 你好 More text here that is long";
-		const maxMsgWidth = Bun.stringWidth(message) - 2;
+		const maxMsgWidth = visibleWidth(message) - 2;
 
 		const truncated = truncateToWidth(message, maxMsgWidth);
 		const truncatedWidth = visibleWidth(truncated);
@@ -66,7 +66,7 @@ describe("truncateToWidth", () => {
 		// The problematic text contained "✔" and "›" characters
 		const message = '✔ script to run › dev $ concurrently "vite" "node --import tsx ./server.ts"';
 		const cursorWidth = 2; // "› " or "  "
-		const terminalWidth = Bun.stringWidth(message) + cursorWidth - 1;
+		const terminalWidth = visibleWidth(message) + cursorWidth - 1;
 		const maxMsgWidth = terminalWidth - cursorWidth;
 
 		const truncated = truncateToWidth(message, maxMsgWidth);

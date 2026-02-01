@@ -5,11 +5,11 @@
  * tool renderers to ensure a unified TUI experience.
  */
 import * as os from "node:os";
-import { EllipsisKind, truncateToWidth } from "@oh-my-pi/pi-tui";
+import { type Ellipsis, truncateToWidth } from "@oh-my-pi/pi-tui";
 import type { Theme } from "../modes/theme/theme";
 import { getTreeBranch } from "../tui/utils";
 
-export { EllipsisKind, truncateToWidth } from "@oh-my-pi/pi-tui";
+export { Ellipsis, truncateToWidth } from "@oh-my-pi/pi-tui";
 
 // =============================================================================
 // Standardized Display Constants
@@ -53,12 +53,7 @@ export const EXPAND_HINT = "(Ctrl+O for more)";
 /**
  * Get first N lines of text as preview, with each line truncated.
  */
-export function getPreviewLines(
-	text: string,
-	maxLines: number,
-	maxLineLen: number,
-	ellipsis: EllipsisKind = EllipsisKind.Unicode,
-): string[] {
+export function getPreviewLines(text: string, maxLines: number, maxLineLen: number, ellipsis?: Ellipsis): string[] {
 	const lines = text.split("\n").filter(l => l.trim());
 	return lines.slice(0, maxLines).map(l => truncateToWidth(l.trim(), maxLineLen, ellipsis));
 }

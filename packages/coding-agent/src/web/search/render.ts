@@ -104,7 +104,7 @@ export function renderWebSearchResult(
 	const contentText = answerText || rawText;
 	const totalAnswerLines = contentText ? contentText.split("\n").filter(l => l.trim()).length : 0;
 	const answerLimit = expanded ? MAX_EXPANDED_ANSWER_LINES : MAX_COLLAPSED_ANSWER_LINES;
-	const answerPreview = contentText ? getPreviewLines(contentText, answerLimit, MAX_ANSWER_LINE_LEN, "…") : [];
+	const answerPreview = contentText ? getPreviewLines(contentText, answerLimit, MAX_ANSWER_LINE_LEN) : [];
 
 	const providerLabel =
 		provider === "anthropic"
@@ -171,7 +171,7 @@ export function renderWebSearchResult(
 				const lines: string[] = [`${theme.fg("accent", title)}${metaSuffix}`];
 				const snippetText = typeof src.snippet === "string" ? src.snippet : "";
 				if (snippetText.trim()) {
-					const snippetLines = getPreviewLines(snippetText, MAX_SNIPPET_LINES, MAX_SNIPPET_LINE_LEN, "…");
+					const snippetLines = getPreviewLines(snippetText, MAX_SNIPPET_LINES, MAX_SNIPPET_LINE_LEN);
 					for (const snippetLine of snippetLines) {
 						lines.push(theme.fg("muted", `${theme.format.dash} ${snippetLine}`));
 					}

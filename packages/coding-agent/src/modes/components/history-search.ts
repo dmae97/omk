@@ -1,7 +1,7 @@
 import {
 	type Component,
 	Container,
-	EllipsisKind,
+	Ellipsis,
 	Input,
 	matchesKey,
 	padding,
@@ -62,7 +62,7 @@ class HistoryResultsList implements Component {
 
 		if (startIndex > 0 || endIndex < this.results.length) {
 			const scrollText = `  (${this.selectedIndex + 1}/${this.results.length})`;
-			lines.push(theme.fg("muted", truncateToWidth(scrollText, width, EllipsisKind.Omit)));
+			lines.push(theme.fg("muted", truncateToWidth(scrollText, width, Ellipsis.Omit)));
 		}
 
 		return lines;

@@ -77,12 +77,12 @@ const execDir = path.dirname(process.execPath);
 const SUPPORTED_PLATFORMS = ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64", "win32-x64"];
 
 const candidates = [
+	path.join(repoRoot, "target", "release", "pi_natives.node"),
+	path.join(repoRoot, "crates", "pi-natives", "target", "release", "pi_natives.node"),
 	path.join(nativeDir, `pi_natives.${platformTag}.node`),
 	path.join(nativeDir, "pi_natives.node"),
 	path.join(execDir, `pi_natives.${platformTag}.node`),
 	path.join(execDir, "pi_natives.node"),
-	path.join(repoRoot, "target", "release", "pi_natives.node"),
-	path.join(repoRoot, "crates", "pi-natives", "target", "release", "pi_natives.node"),
 ];
 
 function loadNative(): NativeBindings {
@@ -138,16 +138,6 @@ function validateNative(bindings: NativeBindings, source: string): void {
 	checkFn("sliceWithWidth");
 	checkFn("extractSegments");
 	checkFn("matchesKittySequence");
-
-	if (!bindings.PhotonImage?.newFromByteslice) {
-		missing.push("PhotonImage.newFromByteslice");
-	}
-	if (!bindings.PhotonImage?.prototype?.resize) {
-		missing.push("PhotonImage.resize");
-	}
-	if (!bindings.SamplingFilter || typeof bindings.SamplingFilter.Lanczos3 !== "number") {
-		missing.push("SamplingFilter");
-	}
 
 	if (missing.length) {
 		throw new Error(

@@ -1,9 +1,9 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
+- Renamed `EllipsisKind` enum to `Ellipsis`
 - Changed `TextInput` type parameter to `string` in `truncateToWidth()`, `visibleWidth()`, `sliceWithWidth()`, and `extractSegments()` functions—Uint8Array is no longer accepted
 - Removed `TextInput` type export from public API
 
@@ -13,9 +13,15 @@
 
 ### Changed
 
+- Reordered native module search paths to prioritize repository build artifacts
 - Improved JSDoc documentation for `truncateToWidth()` with clearer parameter descriptions and behavior details
 - Added early return optimization in `truncateToWidth()` to skip native call when text fits within maxWidth and padding is not requested
 - Added early return optimization in `sliceWithWidth()` to return empty result when length is zero or negative
+
+### Removed
+
+- Removed validation checks for `PhotonImage` and `SamplingFilter` native exports
+- Removed early return optimization in `truncateToWidth()` when text fits within maxWidth
 
 ## [9.6.1] - 2026-02-01
 ### Added

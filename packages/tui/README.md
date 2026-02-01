@@ -542,16 +542,16 @@ interface Terminal {
 ## Utilities
 
 ```typescript
-import { EllipsisKind, visibleWidth, truncateToWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-tui";
+import { Ellipsis, visibleWidth, truncateToWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-tui";
 
 // Get visible width of string (ignoring ANSI codes, uses Bun.stringWidth)
 const width = visibleWidth("\x1b[31mHello\x1b[0m"); // 5
 
 // Truncate string to width (preserving ANSI codes, adds ellipsis)
-const truncated = truncateToWidth("Hello World", 8); // "Hello…" (default: EllipsisKind.Unicode)
+const truncated = truncateToWidth("Hello World", 8); // "Hello…" (default: Ellipsis.Unicode)
 
 // Truncate without ellipsis
-const truncatedNoEllipsis = truncateToWidth("Hello World", 8, EllipsisKind.Omit); // "Hello Wo"
+const truncatedNoEllipsis = truncateToWidth("Hello World", 8, Ellipsis.Omit); // "Hello Wo"
 
 // Wrap text to width (Bun.wrapAnsi word wrap, trims line ends, preserves ANSI)
 const lines = wrapTextWithAnsi("This is a long line that needs wrapping", 20);

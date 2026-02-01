@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { EllipsisKind, extractSegments, sliceWithWidth, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui/utils";
+import { extractSegments, sliceWithWidth, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui/utils";
 
 describe("text utils", () => {
 	it("computes visible width for ANSI and tabs", () => {
@@ -14,7 +14,7 @@ describe("text utils", () => {
 
 	it("truncates ANSI text with ellipsis", () => {
 		const text = "\x1b[31mhello world\x1b[0m";
-		const result = truncateToWidth(text, 6, EllipsisKind.Unicode);
+		const result = truncateToWidth(text, 6);
 		expect(result.includes("\x1b[0m…")).toBe(true);
 		expect(visibleWidth(result)).toBe(6);
 	});

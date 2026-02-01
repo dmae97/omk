@@ -85,4 +85,4 @@ export {
 } from "./terminal-image";
 export { type Component, Container, type OverlayHandle, type SizeValue, TUI } from "./tui";
 // Utilities
-export { EllipsisKind, padding, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "./utils";
+export { Ellipsis, padding, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "./utils";

@@ -1,9 +1,9 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Changed
 
+- Renamed `EllipsisKind` enum to `Ellipsis` for clearer API naming
 - Changed hardcoded ellipsis character from theme-configurable to literal "…" in editor truncation
 - Refactored `visibleWidth` function to use caching wrapper around new `visibleWidthRaw` implementation for improved performance
 
