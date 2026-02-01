@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [9.7.0] - 2026-02-01
+
 ### Added
 
 - Exported `killTree` function to kill a process and all its descendants using platform-native APIs

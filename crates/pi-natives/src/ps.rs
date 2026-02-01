@@ -50,7 +50,7 @@ mod platform {
 	use std::ptr;
 
 	#[link(name = "proc", kind = "dylib")]
-	extern "C" {
+	unsafe extern "C" {
 		fn proc_listchildpids(ppid: i32, buffer: *mut i32, buffersize: i32) -> i32;
 	}
 
@@ -112,7 +112,7 @@ mod platform {
 	const PROCESS_TERMINATE: u32 = 0x0001;
 
 	#[link(name = "kernel32")]
-	extern "system" {
+	unsafe extern "system" {
 		fn CreateToolhelp32Snapshot(dwFlags: u32, th32ProcessID: u32) -> HANDLE;
 		fn Process32FirstW(hSnapshot: HANDLE, lppe: *mut PROCESSENTRY32W) -> i32;
 		fn Process32NextW(hSnapshot: HANDLE, lppe: *mut PROCESSENTRY32W) -> i32;

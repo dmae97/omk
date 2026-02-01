@@ -832,7 +832,7 @@ dependencies = [
 
 [[package]]
 name = "pi-natives"
-version = "9.6.4"
+version = "9.7.0"
 dependencies = [
  "bstr",
  "globset",

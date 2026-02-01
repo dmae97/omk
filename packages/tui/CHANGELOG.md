@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [9.7.0] - 2026-02-01
 ### Breaking Changes
 
 - Removed `Key` helper object from public API; use string literals like `"ctrl+c"` instead of `Key.ctrl("c")`
