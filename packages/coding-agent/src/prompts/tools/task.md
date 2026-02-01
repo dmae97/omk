@@ -6,7 +6,6 @@ Launch agents to handle complex, multi-step tasks autonomously.
 ## Context is everything
 
 Subagents fail when context is vague. They cannot read your mind or infer project conventions. Every task needs:
-
 1. **Goal** - What this accomplishes (one sentence)
 2. **Constraints** - Hard requirements, banned approaches, naming conventions
 3. **Existing Code** - File paths and function signatures to use as patterns
@@ -16,7 +15,6 @@ Subagents CAN grep the parent conversation file for supplementary details. They 
 - Decisions you made but didn't write down
 - Conventions that exist only in your head
 - Which of 50 possible approaches you want
-
 **Rule of thumb:** If you'd need to answer a clarifying question for a junior dev to do this task, that information belongs in context.
 </critical>
 
@@ -107,23 +105,20 @@ pub async fn search(pattern: JsString, path: JsString, env: Env) -> napi::Result
 
 <parallelization>
 ## When to parallelize vs sequence
-
 **The test:** Can agent B write correct code without seeing agent A's output?
-
 - If YES → parallelize
 - If NO → sequence (A completes, then B runs with A's output in context)
 
 ### Dependency patterns that MUST be sequential
 
-| First | Then | Why |
-|-------|------|-----|
-| Create Rust API | Update TS bindings | Bindings need to know export names and signatures |
-| Define interface/types | Implement consumers | Consumers need the contract |
-| Scaffold with signatures | Implement bodies | Implementations need the shape |
-| Core module | Dependent modules | Dependents import from core |
+|First|Then|Why|
+|---|---|---|
+|Create Rust API|Update TS bindings|Bindings need to know export names and signatures|
+|Define interface/types|Implement consumers|Consumers need the contract|
+|Scaffold with signatures|Implement bodies|Implementations need the shape|
+|Core module|Dependent modules|Dependents import from core|
 
 ### Safe to parallelize
-
 - Independent modules that don't import each other
 - Tests for already-implemented code
 - Documentation for stable APIs
@@ -132,21 +127,16 @@ pub async fn search(pattern: JsString, path: JsString, env: Env) -> napi::Result
 ### Phased execution pattern
 
 For migrations/refactors with layers:
-
 **Phase 1 - Foundation (do yourself or single task):**
 Create the scaffold, define interfaces, establish API shape. Never fan out until the contract is known.
-
 **Phase 2 - Parallel implementation:**
 Fan out to independent tasks that all consume the same known interface. Include the API contract from Phase 1 in every task's context.
-
 **Phase 3 - Integration (do yourself):**
 Wire things together, update build/CI, fix any mismatches.
-
 **Phase 4 - Dependent layer:**
 Fan out again for work that consumes Phase 2 outputs.
 
 ### Example: WASM to N-API migration
-
 **WRONG** (launched together, will fail):
 ```
 tasks: [
@@ -154,7 +144,6 @@ tasks: [
   { id: "TsBindings", description: "Update TS to use N-API" },  // ← needs RustApi output!
 ]
 ```
-
 **RIGHT** (phased):
 ```
 // Phase 1: You create scaffold with signatures in lib.rs
@@ -186,7 +175,6 @@ tasks: [
   - `args`: Object with keys matching `{{placeholders}}` in context
   - `skills`: (optional) Skill names to preload
 - `schema`: JTD schema for response structure. **Required.** Use typed properties, not `{ "type": "string" }`.
-
 **Schema goes in `schema` parameter. Never describe output format in `context`.**
 </parameters>
 

@@ -8,8 +8,12 @@
 
 use std::io::Cursor;
 
-use image::{imageops::FilterType, DynamicImage, ImageFormat, ImageReader};
-use napi::bindgen_prelude::*;
+use image::{
+	DynamicImage, ImageFormat, ImageReader,
+	codecs::{jpeg::JpegEncoder, webp::WebPEncoder},
+	imageops::FilterType,
+};
+use napi::{bindgen_prelude::*, tokio::task::spawn_blocking};
 use napi_derive::napi;
 
 /// Sampling filter for resize operations.
@@ -47,27 +51,34 @@ impl PhotonImage {
 	///
 	/// # Errors
 	/// Returns an error if the image format cannot be detected or decoded.
-	#[napi(factory, js_name = "new_from_byteslice")]
-	pub fn new_from_byteslice(bytes: Uint8Array) -> Result<Self> {
-		let reader = ImageReader::new(Cursor::new(bytes.as_ref()))
-			.with_guessed_format()
-			.map_err(|e| Error::from_reason(format!("Failed to detect image format: {e}")))?;
+	#[napi(factory, js_name = "newFromByteslice")]
+	pub async fn new_from_byteslice(bytes: Uint8Array) -> Result<Self> {
+		let bytes = bytes.as_ref().to_vec();
+		let img = spawn_blocking(move || -> Result<DynamicImage> {
+			let reader = ImageReader::new(Cursor::new(bytes))
+				.with_guessed_format()
+				.map_err(|e| Error::from_reason(format!("Failed to detect image format: {e}")))?;
 
-		let img = reader
-			.decode()
-			.map_err(|e| Error::from_reason(format!("Failed to decode image: {e}")))?;
+			let img = reader
+				.decode()
+				.map_err(|e| Error::from_reason(format!("Failed to decode image: {e}")))?;
+
+			Ok(img)
+		})
+		.await
+		.map_err(|e| Error::from_reason(format!("Image decode task failed: {e}")))??;
 
 		Ok(Self { img })
 	}
 
 	/// Get the width of the image.
-	#[napi(js_name = "get_width")]
+	#[napi(js_name = "getWidth")]
 	pub fn get_width(&self) -> u32 {
 		self.img.width()
 	}
 
 	/// Get the height of the image.
-	#[napi(js_name = "get_height")]
+	#[napi(js_name = "getHeight")]
 	pub fn get_height(&self) -> u32 {
 		self.img.height()
 	}
@@ -76,13 +87,17 @@ impl PhotonImage {
 	///
 	/// # Errors
 	/// Returns an error if PNG encoding fails.
-	#[napi(js_name = "get_bytes")]
-	pub fn get_bytes(&self) -> Result<Uint8Array> {
-		let mut buffer = Vec::new();
-		self
-			.img
-			.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Png)
-			.map_err(|e| Error::from_reason(format!("Failed to encode PNG: {e}")))?;
+	#[napi(js_name = "getBytes")]
+	pub async fn get_bytes(&self) -> Result<Uint8Array> {
+		let img = self.img.clone();
+		let buffer = spawn_blocking(move || -> Result<Vec<u8>> {
+			let mut buffer = Vec::new();
+			img.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Png)
+				.map_err(|e| Error::from_reason(format!("Failed to encode PNG: {e}")))?;
+			Ok(buffer)
+		})
+		.await
+		.map_err(|e| Error::from_reason(format!("PNG encode task failed: {e}")))??;
 		Ok(Uint8Array::from(buffer))
 	}
 
@@ -90,14 +105,18 @@ impl PhotonImage {
 	///
 	/// # Errors
 	/// Returns an error if JPEG encoding fails.
-	#[napi(js_name = "get_bytes_jpeg")]
-	pub fn get_bytes_jpeg(&self, quality: u8) -> Result<Uint8Array> {
-		let mut buffer = Vec::new();
-		let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buffer, quality);
-		self
-			.img
-			.write_with_encoder(encoder)
-			.map_err(|e| Error::from_reason(format!("Failed to encode JPEG: {e}")))?;
+	#[napi(js_name = "getBytesJpeg")]
+	pub async fn get_bytes_jpeg(&self, quality: u8) -> Result<Uint8Array> {
+		let img = self.img.clone();
+		let buffer = spawn_blocking(move || -> Result<Vec<u8>> {
+			let mut buffer = Vec::new();
+			let encoder = JpegEncoder::new_with_quality(&mut buffer, quality);
+			img.write_with_encoder(encoder)
+				.map_err(|e| Error::from_reason(format!("Failed to encode JPEG: {e}")))?;
+			Ok(buffer)
+		})
+		.await
+		.map_err(|e| Error::from_reason(format!("JPEG encode task failed: {e}")))??;
 		Ok(Uint8Array::from(buffer))
 	}
 
@@ -105,14 +124,18 @@ impl PhotonImage {
 	///
 	/// # Errors
 	/// Returns an error if WebP encoding fails.
-	#[napi(js_name = "get_bytes_webp")]
-	pub fn get_bytes_webp(&self) -> Result<Uint8Array> {
-		let mut buffer = Vec::new();
-		let encoder = image::codecs::webp::WebPEncoder::new_lossless(&mut buffer);
-		self
-			.img
-			.write_with_encoder(encoder)
-			.map_err(|e| Error::from_reason(format!("Failed to encode WebP: {e}")))?;
+	#[napi(js_name = "getBytesWebp")]
+	pub async fn get_bytes_webp(&self) -> Result<Uint8Array> {
+		let img = self.img.clone();
+		let buffer = spawn_blocking(move || -> Result<Vec<u8>> {
+			let mut buffer = Vec::new();
+			let encoder = WebPEncoder::new_lossless(&mut buffer);
+			img.write_with_encoder(encoder)
+				.map_err(|e| Error::from_reason(format!("Failed to encode WebP: {e}")))?;
+			Ok(buffer)
+		})
+		.await
+		.map_err(|e| Error::from_reason(format!("WebP encode task failed: {e}")))??;
 		Ok(Uint8Array::from(buffer))
 	}
 
@@ -120,20 +143,27 @@ impl PhotonImage {
 	///
 	/// # Errors
 	/// Returns an error if GIF encoding fails.
-	#[napi(js_name = "get_bytes_gif")]
-	pub fn get_bytes_gif(&self) -> Result<Uint8Array> {
-		let mut buffer = Vec::new();
-		self
-			.img
-			.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Gif)
-			.map_err(|e| Error::from_reason(format!("Failed to encode GIF: {e}")))?;
+	#[napi(js_name = "getBytesGif")]
+	pub async fn get_bytes_gif(&self) -> Result<Uint8Array> {
+		let img = self.img.clone();
+		let buffer = spawn_blocking(move || -> Result<Vec<u8>> {
+			let mut buffer = Vec::new();
+			img.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Gif)
+				.map_err(|e| Error::from_reason(format!("Failed to encode GIF: {e}")))?;
+			Ok(buffer)
+		})
+		.await
+		.map_err(|e| Error::from_reason(format!("GIF encode task failed: {e}")))??;
 		Ok(Uint8Array::from(buffer))
 	}
 
 	/// Resize the image to the specified dimensions.
 	#[napi(js_name = "resize")]
-	pub fn resize(&self, width: u32, height: u32, filter: SamplingFilter) -> PhotonImage {
-		let resized = self.img.resize_exact(width, height, filter.into());
-		PhotonImage { img: resized }
+	pub async fn resize(&self, width: u32, height: u32, filter: SamplingFilter) -> Result<Self> {
+		let img = self.img.clone();
+		let resized = spawn_blocking(move || img.resize_exact(width, height, filter.into()))
+			.await
+			.map_err(|e| Error::from_reason(format!("Resize task failed: {e}")))?;
+		Ok(Self { img: resized })
 	}
 }

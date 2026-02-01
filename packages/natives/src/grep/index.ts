@@ -13,7 +13,7 @@ import type {
 	SearchResult,
 } from "./types";
 
-export type { ContextLine, GrepMatch, GrepOptions, GrepResult, GrepSummary };
+export type { ContextLine, GrepMatch, GrepOptions, GrepResult, GrepSummary, SearchOptions, SearchResult };
 
 function notifyMatches(matches: GrepMatch[], onMatch?: (match: GrepMatch) => void): void {
 	if (!onMatch) return;
@@ -26,7 +26,7 @@ function notifyMatches(matches: GrepMatch[], onMatch?: (match: GrepMatch) => voi
  * Search files for a regex pattern.
  */
 export async function grep(options: GrepOptions, onMatch?: (match: GrepMatch) => void): Promise<GrepResult> {
-	const result = native.grep(options);
+	const result = await native.grep(options);
 	notifyMatches(result.matches, onMatch);
 	return result;
 }
@@ -48,17 +48,21 @@ export async function grepPool(options: GrepOptions): Promise<GrepResult> {
 /**
  * Search a single file's content for a pattern.
  * Lower-level API for when you already have file content.
+ *
+ * Accepts `Uint8Array`/`Buffer` for zero-copy when content is already UTF-8 encoded.
  */
-export function searchContent(content: string, options: SearchOptions): SearchResult {
+export function searchContent(content: string | Uint8Array, options: SearchOptions): SearchResult {
 	return native.search(content, options);
 }
 
 /**
  * Quick check if content contains a pattern match.
+ *
+ * Accepts `Uint8Array`/`Buffer` for zero-copy when content/pattern are already UTF-8 encoded.
  */
 export function hasMatch(
-	content: string,
-	pattern: string,
+	content: string | Uint8Array,
+	pattern: string | Uint8Array,
 	options?: { ignoreCase?: boolean; multiline?: boolean },
 ): boolean {
 	return native.hasMatch(content, pattern, options?.ignoreCase ?? false, options?.multiline ?? false);

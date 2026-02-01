@@ -16,22 +16,29 @@ export interface ExtractSegmentsResult {
 	afterWidth: number;
 }
 
+export type TextInput = string | Uint8Array;
+
 /** Compute the visible width of a string, ignoring ANSI codes. */
-export function visibleWidth(text: string): number {
+export function visibleWidth(text: TextInput): number {
 	return native.visibleWidth(text);
 }
 
 /**
  * Truncate a string to a visible width, preserving ANSI codes.
  */
-export function truncateToWidth(text: string, maxWidth: number, ellipsis = "…", pad = false): string {
+export function truncateToWidth(text: TextInput, maxWidth: number, ellipsis: TextInput = "…", pad = false): string {
 	return native.truncateToWidth(text, maxWidth, ellipsis, pad);
 }
 
 /**
  * Slice a range of visible columns from a line.
  */
-export function sliceWithWidth(line: string, startCol: number, length: number, strict = false): SliceWithWidthResult {
+export function sliceWithWidth(
+	line: TextInput,
+	startCol: number,
+	length: number,
+	strict = false,
+): SliceWithWidthResult {
 	return native.sliceWithWidth(line, startCol, length, strict);
 }
 
@@ -39,7 +46,7 @@ export function sliceWithWidth(line: string, startCol: number, length: number, s
  * Extract before/after segments around an overlay region.
  */
 export function extractSegments(
-	line: string,
+	line: TextInput,
 	beforeEnd: number,
 	afterStart: number,
 	afterLen: number,

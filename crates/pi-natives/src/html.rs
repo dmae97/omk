@@ -1,7 +1,7 @@
 //! HTML to Markdown conversion.
 
-use html_to_markdown_rs::{convert, ConversionOptions, PreprocessingOptions, PreprocessingPreset};
-use napi::bindgen_prelude::*;
+use html_to_markdown_rs::{ConversionOptions, PreprocessingOptions, PreprocessingPreset, convert};
+use napi::{bindgen_prelude::*, tokio::task::spawn_blocking};
 use napi_derive::napi;
 
 /// Options for HTML to Markdown conversion.
@@ -17,20 +17,30 @@ pub struct HtmlToMarkdownOptions {
 }
 
 /// Convert HTML to Markdown.
-#[napi(js_name = "html_to_markdown")]
-pub fn html_to_markdown(html: String, options: Option<HtmlToMarkdownOptions>) -> Result<String> {
+#[napi(js_name = "htmlToMarkdown")]
+pub async fn html_to_markdown(
+	html: String,
+	options: Option<HtmlToMarkdownOptions>,
+) -> Result<String> {
 	let options = options.unwrap_or_default();
-	let conversion_opts = ConversionOptions {
-		skip_images: options.skip_images.unwrap_or(false),
-		preprocessing: PreprocessingOptions {
-			enabled:           options.clean_content.unwrap_or(false),
-			preset:            PreprocessingPreset::Aggressive,
-			remove_navigation: true,
-			remove_forms:      true,
-		},
-		..Default::default()
-	};
+	let clean_content = options.clean_content.unwrap_or(false);
+	let skip_images = options.skip_images.unwrap_or(false);
 
-	convert(&html, Some(conversion_opts))
-		.map_err(|err| Error::from_reason(format!("Conversion error: {err}")))
+	spawn_blocking(move || {
+		let conversion_opts = ConversionOptions {
+			skip_images,
+			preprocessing: PreprocessingOptions {
+				enabled:           clean_content,
+				preset:            PreprocessingPreset::Aggressive,
+				remove_navigation: true,
+				remove_forms:      true,
+			},
+			..Default::default()
+		};
+
+		convert(html.as_str(), Some(conversion_opts))
+			.map_err(|err| Error::from_reason(format!("Conversion error: {err}")))
+	})
+	.await
+	.map_err(|err| Error::from_reason(format!("HTML conversion task failed: {err}")))?
 }

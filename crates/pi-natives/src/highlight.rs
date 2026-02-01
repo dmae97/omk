@@ -334,8 +334,12 @@ fn find_syntax<'a>(ss: &'a SyntaxSet, lang: &str) -> Option<&'a SyntaxReference>
 /// # Returns
 /// Highlighted code with ANSI color codes, or the original code if highlighting
 /// fails.
-#[napi(js_name = "highlight_code")]
-pub fn highlight_code(code: String, lang: Option<String>, colors: HighlightColors) -> Result<String> {
+#[napi(js_name = "highlightCode")]
+pub fn highlight_code(
+	code: String,
+	lang: Option<String>,
+	colors: HighlightColors,
+) -> Result<String> {
 	let inserted = colors.inserted.as_deref().unwrap_or("");
 	let deleted = colors.deleted.as_deref().unwrap_or("");
 
@@ -427,7 +431,7 @@ pub fn highlight_code(code: String, lang: Option<String>, colors: HighlightColor
 /// Check if a language is supported for highlighting.
 /// Returns true if the language has either direct support or a fallback
 /// mapping.
-#[napi(js_name = "supports_language")]
+#[napi(js_name = "supportsLanguage")]
 pub fn supports_language(lang: String) -> bool {
 	if is_known_alias(&lang) {
 		return true;
@@ -439,7 +443,7 @@ pub fn supports_language(lang: String) -> bool {
 }
 
 /// Get list of supported languages.
-#[napi(js_name = "get_supported_languages")]
+#[napi(js_name = "getSupportedLanguages")]
 pub fn get_supported_languages() -> Vec<String> {
 	let ss = get_syntax_set();
 	ss.syntaxes().iter().map(|s| s.name.clone()).collect()

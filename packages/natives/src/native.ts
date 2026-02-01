@@ -1,22 +1,23 @@
-import * as path from "node:path";
 import { createRequire } from "node:module";
+import * as path from "node:path";
+import type { FindOptions, FindResult } from "./find/types";
 import type { GrepOptions, GrepResult, SearchOptions, SearchResult } from "./grep/types";
-import type { HtmlToMarkdownOptions } from "./html/types";
 import type { HighlightColors } from "./highlight/index";
-import type { ExtractSegmentsResult, SliceWithWidthResult } from "./text/index";
+import type { HtmlToMarkdownOptions } from "./html/types";
+import type { ExtractSegmentsResult, SliceWithWidthResult, TextInput } from "./text/index";
 
 export interface NativePhotonImage {
 	getWidth(): number;
 	getHeight(): number;
-	getBytes(): Uint8Array;
-	getBytesJpeg(quality: number): Uint8Array;
-	getBytesWebp(): Uint8Array;
-	getBytesGif(): Uint8Array;
-	resize(width: number, height: number, filter: number): NativePhotonImage;
+	getBytes(): Promise<Uint8Array>;
+	getBytesJpeg(quality: number): Promise<Uint8Array>;
+	getBytesWebp(): Promise<Uint8Array>;
+	getBytesGif(): Promise<Uint8Array>;
+	resize(width: number, height: number, filter: number): Promise<NativePhotonImage>;
 }
 
 export interface NativePhotonImageConstructor {
-	newFromByteslice(bytes: Uint8Array): NativePhotonImage;
+	newFromByteslice(bytes: Uint8Array): Promise<NativePhotonImage>;
 	prototype: NativePhotonImage;
 }
 
@@ -29,20 +30,26 @@ export interface NativeSamplingFilter {
 }
 
 export interface NativeBindings {
-	grep(options: GrepOptions): GrepResult;
-	search(content: string, options: SearchOptions): SearchResult;
-	hasMatch(content: string, pattern: string, ignoreCase: boolean, multiline: boolean): boolean;
-	htmlToMarkdown(html: string, options?: HtmlToMarkdownOptions | null): string;
+	find(options: FindOptions): Promise<FindResult>;
+	grep(options: GrepOptions): Promise<GrepResult>;
+	search(content: string | Uint8Array, options: SearchOptions): SearchResult;
+	hasMatch(
+		content: string | Uint8Array,
+		pattern: string | Uint8Array,
+		ignoreCase: boolean,
+		multiline: boolean,
+	): boolean;
+	htmlToMarkdown(html: string, options?: HtmlToMarkdownOptions | null): Promise<string>;
 	highlightCode(code: string, lang: string | null | undefined, colors: HighlightColors): string;
 	supportsLanguage(lang: string): boolean;
 	getSupportedLanguages(): string[];
 	SamplingFilter: NativeSamplingFilter;
 	PhotonImage: NativePhotonImageConstructor;
-	visibleWidth(text: string): number;
-	truncateToWidth(text: string, maxWidth: number, ellipsis: string, pad: boolean): string;
-	sliceWithWidth(line: string, startCol: number, length: number, strict: boolean): SliceWithWidthResult;
+	visibleWidth(text: TextInput): number;
+	truncateToWidth(text: TextInput, maxWidth: number, ellipsis: TextInput, pad: boolean): string;
+	sliceWithWidth(line: TextInput, startCol: number, length: number, strict: boolean): SliceWithWidthResult;
 	extractSegments(
-		line: string,
+		line: TextInput,
 		beforeEnd: number,
 		afterStart: number,
 		afterLen: number,
@@ -90,6 +97,7 @@ function validateNative(bindings: NativeBindings, source: string): void {
 		}
 	};
 
+	checkFn("find");
 	checkFn("grep");
 	checkFn("search");
 	checkFn("hasMatch");

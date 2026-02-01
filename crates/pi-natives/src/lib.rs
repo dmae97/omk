@@ -1,8 +1,9 @@
 //! Native utilities exported via N-API for the Oh My Pi toolchain.
 //!
 //! # Overview
-//! High-performance primitives for grep, ANSI-aware text measurement, syntax
-//! highlighting, HTML-to-Markdown conversion, and image processing.
+//! High-performance primitives for grep, file discovery, ANSI-aware text
+//! measurement, syntax highlighting, HTML-to-Markdown conversion, and image
+//! processing.
 //!
 //! # Example
 //! ```ignore
@@ -14,9 +15,10 @@
 //!
 //! # Architecture
 //! ```text
-//! JS (packages/natives) -> N-API -> Rust modules (grep/html/highlight/image/text)
+//! JS (packages/natives) -> N-API -> Rust modules (find/grep/html/highlight/image/text)
 //! ```
 
+pub mod find;
 pub mod grep;
 pub mod highlight;
 pub mod html;

@@ -7,16 +7,20 @@
 //! The filesystem search matches the previous JS wrapper behavior, including
 //! global offsets, optional match limits, and per-file match summaries.
 
-use std::fs::File;
-use std::io::{self, Cursor, Read};
-use std::path::{Path, PathBuf};
+use std::{
+	fs::File,
+	io::{self, Cursor, Read},
+	path::{Path, PathBuf},
+};
 
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use grep_matcher::Matcher;
 use grep_regex::RegexMatcherBuilder;
-use grep_searcher::{BinaryDetection, Searcher, SearcherBuilder, Sink, SinkContext, SinkContextKind, SinkMatch};
+use grep_searcher::{
+	BinaryDetection, Searcher, SearcherBuilder, Sink, SinkContext, SinkContextKind, SinkMatch,
+};
 use ignore::WalkBuilder;
-use napi::bindgen_prelude::*;
+use napi::{JsString, bindgen_prelude::*, tokio::task};
 use napi_derive::napi;
 use rayon::prelude::*;
 
@@ -32,35 +36,35 @@ enum OutputMode {
 #[napi(object)]
 pub struct SearchOptions {
 	/// Regex pattern to search for.
-	pub pattern: String,
+	pub pattern:     String,
 	/// Case-insensitive search.
 	#[napi(js_name = "ignoreCase")]
 	pub ignore_case: Option<bool>,
 	/// Enable multiline matching.
-	pub multiline: Option<bool>,
+	pub multiline:   Option<bool>,
 	/// Maximum number of matches to return.
 	#[napi(js_name = "maxCount")]
-	pub max_count: Option<u32>,
+	pub max_count:   Option<u32>,
 	/// Skip first N matches.
-	pub offset: Option<u32>,
+	pub offset:      Option<u32>,
 	/// Lines of context before/after matches.
-	pub context: Option<u32>,
+	pub context:     Option<u32>,
 	/// Truncate lines longer than this (characters).
 	#[napi(js_name = "maxColumns")]
 	pub max_columns: Option<u32>,
 	/// Output mode (content or count).
-	pub mode: Option<String>,
+	pub mode:        Option<String>,
 }
 
 /// Options for searching files on disk.
 #[napi(object)]
 pub struct GrepOptions {
 	/// Regex pattern to search for.
-	pub pattern: String,
+	pub pattern:     String,
 	/// Directory or file to search.
-	pub path: String,
+	pub path:        String,
 	/// Glob filter for filenames (e.g., "*.ts").
-	pub glob: Option<String>,
+	pub glob:        Option<String>,
 	/// Filter by file type (e.g., "js", "py", "rust").
 	#[napi(js_name = "type")]
 	pub type_filter: Option<String>,
@@ -68,21 +72,21 @@ pub struct GrepOptions {
 	#[napi(js_name = "ignoreCase")]
 	pub ignore_case: Option<bool>,
 	/// Enable multiline matching.
-	pub multiline: Option<bool>,
+	pub multiline:   Option<bool>,
 	/// Include hidden files (default: true).
-	pub hidden: Option<bool>,
+	pub hidden:      Option<bool>,
 	/// Maximum number of matches to return.
 	#[napi(js_name = "maxCount")]
-	pub max_count: Option<u32>,
+	pub max_count:   Option<u32>,
 	/// Skip first N matches.
-	pub offset: Option<u32>,
+	pub offset:      Option<u32>,
 	/// Lines of context before/after matches.
-	pub context: Option<u32>,
+	pub context:     Option<u32>,
 	/// Truncate lines longer than this (characters).
 	#[napi(js_name = "maxColumns")]
 	pub max_columns: Option<u32>,
 	/// Output mode (content, filesWithMatches, or count).
-	pub mode: Option<String>,
+	pub mode:        Option<String>,
 }
 
 /// A context line (before or after a match).
@@ -90,7 +94,7 @@ pub struct GrepOptions {
 pub struct ContextLine {
 	#[napi(js_name = "lineNumber")]
 	pub line_number: u32,
-	pub line: String,
+	pub line:        String,
 }
 
 /// A single match in the content.
@@ -98,109 +102,114 @@ pub struct ContextLine {
 pub struct Match {
 	/// 1-indexed line number.
 	#[napi(js_name = "lineNumber")]
-	pub line_number: u32,
+	pub line_number:    u32,
 	/// The matched line content.
-	pub line: String,
+	pub line:           String,
 	/// Context lines before the match.
 	#[napi(js_name = "contextBefore")]
 	pub context_before: Option<Vec<ContextLine>>,
 	/// Context lines after the match.
 	#[napi(js_name = "contextAfter")]
-	pub context_after: Option<Vec<ContextLine>>,
+	pub context_after:  Option<Vec<ContextLine>>,
 	/// Whether the line was truncated.
-	pub truncated: Option<bool>,
+	pub truncated:      Option<bool>,
 }
 
 /// Result of searching content.
 #[napi(object)]
 pub struct SearchResult {
 	/// All matches found.
-	pub matches: Vec<Match>,
+	pub matches:       Vec<Match>,
 	/// Total number of matches (may exceed `matches.len()` due to offset/limit).
 	#[napi(js_name = "matchCount")]
-	pub match_count: u32,
+	pub match_count:   u32,
 	/// Whether the limit was reached.
 	#[napi(js_name = "limitReached")]
 	pub limit_reached: bool,
 	/// Error message, if any.
-	pub error: Option<String>,
+	pub error:         Option<String>,
 }
 
 /// A single match in a grep result.
 #[napi(object)]
 pub struct GrepMatch {
-	pub path: String,
+	pub path:           String,
 	#[napi(js_name = "lineNumber")]
-	pub line_number: u32,
-	pub line: String,
+	pub line_number:    u32,
+	pub line:           String,
 	#[napi(js_name = "contextBefore")]
 	pub context_before: Option<Vec<ContextLine>>,
 	#[napi(js_name = "contextAfter")]
-	pub context_after: Option<Vec<ContextLine>>,
-	pub truncated: Option<bool>,
+	pub context_after:  Option<Vec<ContextLine>>,
+	pub truncated:      Option<bool>,
 	#[napi(js_name = "matchCount")]
-	pub match_count: Option<u32>,
+	pub match_count:    Option<u32>,
 }
 
 /// Result of searching files.
 #[napi(object)]
 pub struct GrepResult {
-	pub matches: Vec<GrepMatch>,
+	pub matches:            Vec<GrepMatch>,
 	#[napi(js_name = "totalMatches")]
-	pub total_matches: u32,
+	pub total_matches:      u32,
 	#[napi(js_name = "filesWithMatches")]
 	pub files_with_matches: u32,
 	#[napi(js_name = "filesSearched")]
-	pub files_searched: u32,
+	pub files_searched:     u32,
 	#[napi(js_name = "limitReached")]
-	pub limit_reached: Option<bool>,
+	pub limit_reached:      Option<bool>,
 }
 
 struct TypeFilter {
 	extensions: Vec<String>,
-	names: Vec<String>,
+	names:      Vec<String>,
 }
 
 struct MatchCollector {
-	matches: Vec<CollectedMatch>,
-	match_count: u64,
+	matches:         Vec<CollectedMatch>,
+	match_count:     u64,
 	collected_count: u64,
-	max_count: Option<u64>,
-	offset: u64,
-	skipped: u64,
-	limit_reached: bool,
-	context_before: Vec<ContextLine>,
-	max_columns: Option<usize>,
+	max_count:       Option<u64>,
+	offset:          u64,
+	skipped:         u64,
+	limit_reached:   bool,
+	context_before:  Vec<ContextLine>,
+	max_columns:     Option<usize>,
 	collect_matches: bool,
 }
 
 struct CollectedMatch {
-	line_number: u64,
-	line: String,
+	line_number:    u64,
+	line:           String,
 	context_before: Vec<ContextLine>,
-	context_after: Vec<ContextLine>,
-	truncated: bool,
+	context_after:  Vec<ContextLine>,
+	truncated:      bool,
 }
 
 struct SearchResultInternal {
-	matches: Vec<CollectedMatch>,
-	match_count: u64,
+	matches:       Vec<CollectedMatch>,
+	match_count:   u64,
 	limit_reached: bool,
 }
 
 struct FileEntry {
-	path: PathBuf,
+	path:          PathBuf,
 	relative_path: String,
 }
 
 struct FileSearchResult {
 	relative_path: String,
-	matches: Vec<CollectedMatch>,
-	match_count: u64,
+	matches:       Vec<CollectedMatch>,
+	match_count:   u64,
 }
 
 impl MatchCollector {
-	const fn new(max_count: Option<u64>, offset: u64, max_columns: Option<usize>, collect_matches: bool) -> Self {
+	const fn new(
+		max_count: Option<u64>,
+		offset: u64,
+		max_columns: Option<usize>,
+		collect_matches: bool,
+	) -> Self {
 		Self {
 			matches: Vec::new(),
 			match_count: 0,
@@ -229,11 +238,11 @@ impl MatchCollector {
 impl Sink for MatchCollector {
 	type Error = io::Error;
 
-    fn matched(
-        &mut self,
-        _searcher: &Searcher,
-        mat: &SinkMatch<'_>,
-    ) -> std::result::Result<bool, Self::Error> {
+	fn matched(
+		&mut self,
+		_searcher: &Searcher,
+		mat: &SinkMatch<'_>,
+	) -> std::result::Result<bool, Self::Error> {
 		self.match_count += 1;
 
 		// If we already hit the limit, stop now (after-context for previous match was
@@ -276,11 +285,11 @@ impl Sink for MatchCollector {
 		Ok(true)
 	}
 
- fn context(
-        &mut self,
-        _searcher: &Searcher,
-        ctx: &SinkContext<'_>,
- ) -> std::result::Result<bool, Self::Error> {
+	fn context(
+		&mut self,
+		_searcher: &Searcher,
+		ctx: &SinkContext<'_>,
+	) -> std::result::Result<bool, Self::Error> {
 		if !self.collect_matches {
 			return Ok(true);
 		}
@@ -291,17 +300,15 @@ impl Sink for MatchCollector {
 
 		match ctx.kind() {
 			SinkContextKind::Before => {
-				self.context_before.push(ContextLine {
-					line_number: clamp_u32(line_number),
-					line,
-				});
+				self
+					.context_before
+					.push(ContextLine { line_number: clamp_u32(line_number), line });
 			},
 			SinkContextKind::After => {
 				if let Some(last_match) = self.matches.last_mut() {
-					last_match.context_after.push(ContextLine {
-						line_number: clamp_u32(line_number),
-						line,
-					});
+					last_match
+						.context_after
+						.push(ContextLine { line_number: clamp_u32(line_number), line });
 				}
 			},
 			SinkContextKind::Other => {},
@@ -317,7 +324,7 @@ fn clamp_u32(value: u64) -> u32 {
 
 fn parse_output_mode(mode: Option<&str>) -> OutputMode {
 	match mode {
-		Some("count") | Some("filesWithMatches") => OutputMode::Count,
+		Some("count" | "filesWithMatches") => OutputMode::Count,
 		Some("content") | _ => OutputMode::Content,
 	}
 }
@@ -394,8 +401,11 @@ fn resolve_type_filter(type_name: Option<&str>) -> Option<TypeFilter> {
 	};
 
 	Some(TypeFilter {
-		extensions: extensions.into_iter().map(|value| value.to_string()).collect(),
-		names: names.into_iter().map(|value| value.to_string()).collect(),
+		extensions: extensions
+			.into_iter()
+			.map(|value| value.to_string())
+			.collect(),
+		names:      names.into_iter().map(|value| value.to_string()).collect(),
 	})
 }
 
@@ -450,7 +460,11 @@ fn run_search(
 	max_count: Option<u64>,
 	offset: u64,
 ) -> io::Result<SearchResultInternal> {
-	let mut searcher = build_searcher(if mode == OutputMode::Content { context } else { 0 });
+	let mut searcher = build_searcher(if mode == OutputMode::Content {
+		context
+	} else {
+		0
+	});
 	let mut collector = MatchCollector::new(
 		max_count,
 		offset,
@@ -460,8 +474,8 @@ fn run_search(
 	let cursor = Cursor::new(content);
 	searcher.search_reader(matcher, cursor, &mut collector)?;
 	Ok(SearchResultInternal {
-		matches: collector.matches,
-		match_count: collector.match_count,
+		matches:       collector.matches,
+		match_count:   collector.match_count,
 		limit_reached: collector.limit_reached,
 	})
 }
@@ -508,13 +522,8 @@ fn to_grep_match(path: &str, matched: CollectedMatch) -> GrepMatch {
 	}
 }
 
-fn empty_search_result(error: Option<String>) -> SearchResult {
-	SearchResult {
-		matches: Vec::new(),
-		match_count: 0,
-		limit_reached: false,
-		error,
-	}
+const fn empty_search_result(error: Option<String>) -> SearchResult {
+	SearchResult { matches: Vec::new(), match_count: 0, limit_reached: false, error }
 }
 
 fn collect_files(
@@ -541,7 +550,7 @@ fn collect_files(
 			Err(_) => continue,
 		};
 		let file_type = entry.file_type();
-		if !file_type.map(|ft| ft.is_file()).unwrap_or(false) {
+		if !file_type.is_some_and(|ft| ft.is_file()) {
 			continue;
 		}
 		let path = entry.into_path();
@@ -551,20 +560,24 @@ fn collect_files(
 				continue;
 			}
 		}
-		if let Some(filter) = type_filter {
-			if !matches_type_filter(&path, filter) {
-				continue;
-			}
+		if let Some(filter) = type_filter
+			&& !matches_type_filter(&path, filter)
+		{
+			continue;
 		}
 		entries.push(FileEntry {
-			path: path.clone(),
+			path:          path.clone(),
 			relative_path: normalize_relative_path(root, &path),
 		});
 	}
 	entries
 }
 
-fn build_matcher(pattern: &str, ignore_case: bool, multiline: bool) -> Result<grep_regex::RegexMatcher> {
+fn build_matcher(
+	pattern: &str,
+	ignore_case: bool,
+	multiline: bool,
+) -> Result<grep_regex::RegexMatcher> {
 	RegexMatcherBuilder::new()
 		.case_insensitive(ignore_case)
 		.multi_line(multiline)
@@ -586,8 +599,8 @@ fn run_parallel_search(
 			let search = run_search(matcher, &bytes, context, max_columns, mode, None, 0).ok()?;
 			Some(FileSearchResult {
 				relative_path: entry.relative_path.clone(),
-				matches: search.matches,
-				match_count: search.match_count,
+				matches:       search.matches,
+				match_count:   search.match_count,
 			})
 		})
 		.collect();
@@ -626,23 +639,16 @@ fn run_sequential_search(
 
 		let file_offset = offset.saturating_sub(total_matches);
 		let remaining = max_count.map(|max| max.saturating_sub(total_matches));
-		if let Some(0) = remaining {
+		if remaining == Some(0) {
 			limit_reached = true;
 			break;
 		}
 
-		let search = match run_search(
-			matcher,
-			&bytes,
-			context,
-			max_columns,
-			mode,
-			remaining,
-			file_offset,
-		) {
-			Ok(result) => result,
-			Err(_) => continue,
-		};
+		let search =
+			match run_search(matcher, &bytes, context, max_columns, mode, remaining, file_offset) {
+				Ok(result) => result,
+				Err(_) => continue,
+			};
 
 		if search.match_count == 0 {
 			continue;
@@ -659,13 +665,13 @@ fn run_sequential_search(
 			},
 			OutputMode::Count => {
 				matches.push(GrepMatch {
-					path: entry.relative_path.clone(),
-					line_number: 0,
-					line: String::new(),
+					path:           entry.relative_path.clone(),
+					line_number:    0,
+					line:           String::new(),
 					context_before: None,
-					context_after: None,
-					truncated: None,
-					match_count: Some(clamp_u32(search.match_count)),
+					context_after:  None,
+					truncated:      None,
+					match_count:    Some(clamp_u32(search.match_count)),
 				});
 			},
 		}
@@ -678,10 +684,7 @@ fn run_sequential_search(
 	(matches, total_matches, files_with_matches, files_searched, limit_reached)
 }
 
-/// Search content for a pattern (one-shot, compiles pattern each time).
-/// For repeated searches with the same pattern, use [`grep`] with file filters.
-#[napi(js_name = "search")]
-pub fn search(content: String, options: SearchOptions) -> SearchResult {
+fn search_sync(content: &[u8], options: SearchOptions) -> SearchResult {
 	let ignore_case = options.ignore_case.unwrap_or(false);
 	let multiline = options.multiline.unwrap_or(false);
 	let mode = parse_output_mode(options.mode.as_deref());
@@ -695,29 +698,20 @@ pub fn search(content: String, options: SearchOptions) -> SearchResult {
 	let max_count = options.max_count.map(u64::from);
 	let offset = options.offset.unwrap_or(0) as u64;
 
-	let result = match run_search(&matcher, content.as_bytes(), context, max_columns, mode, max_count, offset) {
+	let result = match run_search(&matcher, content, context, max_columns, mode, max_count, offset) {
 		Ok(result) => result,
 		Err(err) => return empty_search_result(Some(err.to_string())),
 	};
 
 	SearchResult {
-		matches: result.matches.into_iter().map(to_public_match).collect(),
-		match_count: clamp_u32(result.match_count),
+		matches:       result.matches.into_iter().map(to_public_match).collect(),
+		match_count:   clamp_u32(result.match_count),
 		limit_reached: result.limit_reached,
-		error: None,
+		error:         None,
 	}
 }
 
-/// Quick check if content matches a pattern.
-#[napi(js_name = "has_match")]
-pub fn has_match(content: String, pattern: String, ignore_case: bool, multiline: bool) -> Result<bool> {
-	let matcher = build_matcher(&pattern, ignore_case, multiline)?;
-	Ok(matcher.is_match(content.as_bytes()).unwrap_or(false))
-}
-
-/// Search files for a regex pattern.
-#[napi(js_name = "grep")]
-pub fn grep(options: GrepOptions) -> Result<GrepResult> {
+fn grep_sync(options: GrepOptions) -> Result<GrepResult> {
 	let search_path = resolve_search_path(&options.path)?;
 	let metadata = std::fs::metadata(&search_path)
 		.map_err(|err| Error::from_reason(format!("Path not found: {err}")))?;
@@ -739,41 +733,42 @@ pub fn grep(options: GrepOptions) -> Result<GrepResult> {
 	let type_filter = resolve_type_filter(options.type_filter.as_deref());
 
 	if metadata.is_file() {
-		if let Some(filter) = type_filter.as_ref() {
-			if !matches_type_filter(&search_path, filter) {
-				return Ok(GrepResult {
-					matches: Vec::new(),
-					total_matches: 0,
-					files_with_matches: 0,
-					files_searched: 0,
-					limit_reached: None,
-				});
-			}
+		if let Some(filter) = type_filter.as_ref()
+			&& !matches_type_filter(&search_path, filter)
+		{
+			return Ok(GrepResult {
+				matches:            Vec::new(),
+				total_matches:      0,
+				files_with_matches: 0,
+				files_searched:     0,
+				limit_reached:      None,
+			});
 		}
 
 		let bytes = match read_file_prefix(&search_path) {
 			Ok(bytes) => bytes,
 			Err(_) => {
 				return Ok(GrepResult {
-					matches: Vec::new(),
-					total_matches: 0,
+					matches:            Vec::new(),
+					total_matches:      0,
 					files_with_matches: 0,
-					files_searched: 0,
-					limit_reached: None,
+					files_searched:     0,
+					limit_reached:      None,
 				});
 			},
 		};
 
-		let search = run_search(&matcher, &bytes, context, max_columns, output_mode, max_count, offset)
-			.map_err(|err| Error::from_reason(format!("Search failed: {err}")))?;
+		let search =
+			run_search(&matcher, &bytes, context, max_columns, output_mode, max_count, offset)
+				.map_err(|err| Error::from_reason(format!("Search failed: {err}")))?;
 
 		if search.match_count == 0 {
 			return Ok(GrepResult {
-				matches: Vec::new(),
-				total_matches: 0,
+				matches:            Vec::new(),
+				total_matches:      0,
 				files_with_matches: 0,
-				files_searched: 1,
-				limit_reached: None,
+				files_searched:     1,
+				limit_reached:      None,
 			});
 		}
 
@@ -787,19 +782,19 @@ pub fn grep(options: GrepOptions) -> Result<GrepResult> {
 			},
 			OutputMode::Count => {
 				matches.push(GrepMatch {
-					path: path_string,
-					line_number: 0,
-					line: String::new(),
+					path:           path_string,
+					line_number:    0,
+					line:           String::new(),
 					context_before: None,
-					context_after: None,
-					truncated: None,
-					match_count: Some(clamp_u32(search.match_count)),
+					context_after:  None,
+					truncated:      None,
+					match_count:    Some(clamp_u32(search.match_count)),
 				});
 			},
 		}
 
-		let limit_reached = search.limit_reached
-			|| max_count.is_some_and(|max| search.match_count >= max);
+		let limit_reached =
+			search.limit_reached || max_count.is_some_and(|max| search.match_count >= max);
 
 		return Ok(GrepResult {
 			matches,
@@ -810,15 +805,16 @@ pub fn grep(options: GrepOptions) -> Result<GrepResult> {
 		});
 	}
 
-	let entries = collect_files(&search_path, glob_set.as_ref(), include_hidden, type_filter.as_ref());
+	let entries =
+		collect_files(&search_path, glob_set.as_ref(), include_hidden, type_filter.as_ref());
 
 	if entries.is_empty() {
 		return Ok(GrepResult {
-			matches: Vec::new(),
-			total_matches: 0,
+			matches:            Vec::new(),
+			total_matches:      0,
 			files_with_matches: 0,
-			files_searched: 0,
-			limit_reached: None,
+			files_searched:     0,
+			limit_reached:      None,
 		});
 	}
 
@@ -845,13 +841,13 @@ pub fn grep(options: GrepOptions) -> Result<GrepResult> {
 				},
 				OutputMode::Count => {
 					matches.push(GrepMatch {
-						path: result.relative_path.clone(),
-						line_number: 0,
-						line: String::new(),
+						path:           result.relative_path.clone(),
+						line_number:    0,
+						line:           String::new(),
 						context_before: None,
-						context_after: None,
-						truncated: None,
-						match_count: Some(clamp_u32(result.match_count)),
+						context_after:  None,
+						truncated:      None,
+						match_count:    Some(clamp_u32(result.match_count)),
 					});
 				},
 			}
@@ -866,15 +862,16 @@ pub fn grep(options: GrepOptions) -> Result<GrepResult> {
 		});
 	}
 
-	let (matches, total_matches, files_with_matches, files_searched, limit_reached) = run_sequential_search(
-		&entries,
-		&matcher,
-		context,
-		max_columns,
-		output_mode,
-		max_count,
-		offset,
-	);
+	let (matches, total_matches, files_with_matches, files_searched, limit_reached) =
+		run_sequential_search(
+			&entries,
+			&matcher,
+			context,
+			max_columns,
+			output_mode,
+			max_count,
+			offset,
+		);
 
 	Ok(GrepResult {
 		matches,
@@ -883,4 +880,69 @@ pub fn grep(options: GrepOptions) -> Result<GrepResult> {
 		files_searched,
 		limit_reached: if limit_reached { Some(true) } else { None },
 	})
+}
+
+/// Search content for a pattern (one-shot, compiles pattern each time).
+/// For repeated searches with the same pattern, use [`grep`] with file filters.
+///
+/// Accepts either a `Uint8Array`/`Buffer` (zero-copy) or a `string` (transcoded
+/// to UTF-8).
+#[napi(js_name = "search")]
+pub fn search(content: Either<JsString, Uint8Array>, options: SearchOptions) -> SearchResult {
+	match &content {
+		Either::A(js_str) => {
+			let utf8 = match js_str.into_utf8() {
+				Ok(utf8) => utf8,
+				Err(err) => return empty_search_result(Some(err.to_string())),
+			};
+			search_sync(utf8.as_slice(), options)
+		},
+		Either::B(buf) => search_sync(buf.as_ref(), options),
+	}
+}
+
+/// Quick check if content matches a pattern.
+///
+/// Accepts either `Uint8Array`/`Buffer` (zero-copy) or `string` for both
+/// content and pattern.
+#[napi(js_name = "hasMatch")]
+pub fn has_match(
+	content: Either<JsString, Uint8Array>,
+	pattern: Either<JsString, Uint8Array>,
+	ignore_case: bool,
+	multiline: bool,
+) -> Result<bool> {
+	let content_bytes: Vec<u8>;
+	let content_slice: &[u8] = match &content {
+		Either::A(js_str) => {
+			content_bytes = js_str.into_utf8()?.as_slice().to_vec();
+			&content_bytes
+		},
+		Either::B(buf) => buf.as_ref(),
+	};
+
+	let pattern_str: String;
+	let pattern_ref: &str = match &pattern {
+		Either::A(js_str) => {
+			pattern_str = js_str.into_utf8()?.as_str()?.to_owned();
+			&pattern_str
+		},
+		Either::B(buf) => {
+			pattern_str = std::str::from_utf8(buf.as_ref())
+				.map_err(|err| Error::from_reason(format!("Invalid UTF-8 in pattern: {err}")))?
+				.to_owned();
+			&pattern_str
+		},
+	};
+
+	let matcher = build_matcher(pattern_ref, ignore_case, multiline)?;
+	Ok(matcher.is_match(content_slice).unwrap_or(false))
+}
+
+/// Search files for a regex pattern.
+#[napi(js_name = "grep")]
+pub async fn grep(options: GrepOptions) -> Result<GrepResult> {
+	task::spawn_blocking(move || grep_sync(options))
+		.await
+		.map_err(|err| Error::from_reason(format!("Join error: {err}")))?
 }

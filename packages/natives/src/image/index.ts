@@ -2,7 +2,7 @@
  * Image processing via native bindings.
  */
 
-import { native, type NativePhotonImage } from "../native";
+import { type NativePhotonImage, native } from "../native";
 
 const images = new Map<number, NativePhotonImage>();
 let nextHandle = 1;
@@ -47,7 +47,7 @@ export class PhotonImage {
 	 * Load an image from encoded bytes (PNG, JPEG, WebP, GIF).
 	 */
 	static async new_from_byteslice(bytes: Uint8Array): Promise<PhotonImage> {
-		const image = native.PhotonImage.newFromByteslice(bytes);
+		const image = await native.PhotonImage.newFromByteslice(bytes);
 		const handle = registerImage(image);
 		return new PhotonImage(handle);
 	}
@@ -102,7 +102,7 @@ export class PhotonImage {
  */
 export async function resize(image: PhotonImage, width: number, height: number, filter: number): Promise<PhotonImage> {
 	const nativeImage = getImage(image._getHandle());
-	const resized = nativeImage.resize(width, height, filter);
+	const resized = await nativeImage.resize(width, height, filter);
 	const handle = registerImage(resized);
 	return PhotonImage._create(handle);
 }
