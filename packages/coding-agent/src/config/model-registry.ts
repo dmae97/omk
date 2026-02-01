@@ -24,6 +24,12 @@ const OpenRouterRoutingSchema = Type.Object({
 	order: Type.Optional(Type.Array(Type.String())),
 });
 
+// Schema for Vercel AI Gateway routing preferences
+const VercelGatewayRoutingSchema = Type.Object({
+	only: Type.Optional(Type.Array(Type.String())),
+	order: Type.Optional(Type.Array(Type.String())),
+});
+
 // Schema for OpenAI compatibility settings
 const OpenAICompatSchema = Type.Object({
 	supportsStore: Type.Optional(Type.Boolean()),
@@ -31,6 +37,7 @@ const OpenAICompatSchema = Type.Object({
 	supportsReasoningEffort: Type.Optional(Type.Boolean()),
 	maxTokensField: Type.Optional(Type.Union([Type.Literal("max_completion_tokens"), Type.Literal("max_tokens")])),
 	openRouterRouting: Type.Optional(OpenRouterRoutingSchema),
+	vercelGatewayRouting: Type.Optional(VercelGatewayRoutingSchema),
 });
 
 // Schema for custom model definition

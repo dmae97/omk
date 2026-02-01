@@ -16,6 +16,7 @@
 - Added `Settings.init()` for initializing global settings instance
 - Added `settings` global export for convenient access to settings singleton
 - New `settings-schema.ts` providing unified, type-safe settings definitions with UI metadata
+- Added "none" option to `doubleEscapeAction` setting to disable double-escape behavior entirely ([#973](https://github.com/badlogic/pi-mono/issues/973) by [@juanibiapina](https://github.com/juanibiapina))
 
 ### Changed
 
@@ -31,6 +32,10 @@
 - Deleted `settings-manager.ts` (2035 lines) - functionality replaced by new Settings singleton
 - Removed `SettingsManager.create()`, `SettingsManager.acquire()`, and `SettingsManager.inMemory()` factory methods
 - Removed individual getter/setter methods from settings API (e.g., `getTheme()`, `setTheme()`, `getCompactionSettings()`)
+
+### Fixed
+
+- Respect .gitignore, .ignore, and .fdignore files when scanning package resources for skills, prompts, themes, and extensions
 
 ## [9.5.1] - 2026-02-01
 

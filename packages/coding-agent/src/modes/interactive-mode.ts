@@ -330,7 +330,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		}
 
 		// Set terminal title if session already has one (resumed session)
-		const existingTitle = this.sessionManager.getSessionTitle();
+		const existingTitle = this.sessionManager.getSessionName();
 		if (existingTitle) {
 			setTerminalTitle(`pi: ${existingTitle}`);
 		}

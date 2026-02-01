@@ -8,6 +8,7 @@ import { readDirEntries, readFile } from "../capability/fs";
 import type { Skill, SkillFrontmatter } from "../capability/skill";
 import type { LoadContext, LoadResult, SourceMeta } from "../capability/types";
 import { parseFrontmatter } from "../utils/frontmatter";
+import { addIgnoreRules, createIgnoreMatcher, type IgnoreMatcher, shouldIgnore } from "../utils/ignore-files";
 
 const VALID_THINKING_LEVELS: readonly string[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
 const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
@@ -236,6 +237,10 @@ export async function loadSkillsFromDir(
 	const warnings: string[] = [];
 	const { dir, level, providerId, requireDescription = false } = options;
 
+	// Initialize ignore matcher and read ignore rules from root
+	const ig = createIgnoreMatcher();
+	await addIgnoreRules(ig, dir, dir, readFile);
+
 	const entries = await readDirEntries(dir);
 	const skillDirs = entries.filter(
 		entry => entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules",
@@ -243,7 +248,14 @@ export async function loadSkillsFromDir(
 
 	const results = await Promise.all(
 		skillDirs.map(async entry => {
-			const skillFile = path.join(dir, entry.name, "SKILL.md");
+			const entryPath = path.join(dir, entry.name);
+
+			// Check if this directory should be ignored
+			if (shouldIgnore(ig, dir, entryPath, true)) {
+				return { item: null as Skill | null, warning: null as string | null };
+			}
+
+			const skillFile = path.join(entryPath, "SKILL.md");
 			const content = await readFile(skillFile);
 			if (!content) {
 				return { item: null as Skill | null, warning: null as string | null };
@@ -311,6 +323,7 @@ export function expandEnvVarsDeep<T>(obj: T, extraEnv?: Record<string, string>):
 
 /**
  * Load files from a directory matching a pattern.
+ * Respects .gitignore, .ignore, and .fdignore files.
  */
 export async function loadFilesFromDir<T>(
 	_ctx: LoadContext,
@@ -324,24 +337,47 @@ export async function loadFilesFromDir<T>(
 		transform: (name: string, content: string, path: string, source: SourceMeta) => T | null;
 		/** Whether to recurse into subdirectories */
 		recursive?: boolean;
+		/** Root directory for ignore file handling (defaults to dir) */
+		rootDir?: string;
+		/** Ignore matcher (used internally for recursion) */
+		ignoreMatcher?: IgnoreMatcher;
 	},
 ): Promise<LoadResult<T>> {
+	const rootDir = options.rootDir ?? dir;
+	const ig = options.ignoreMatcher ?? createIgnoreMatcher();
+
+	// Read ignore rules from this directory
+	await addIgnoreRules(ig, dir, rootDir, readFile);
+
 	const entries = await readDirEntries(dir);
 
 	const visibleEntries = entries.filter(entry => !entry.name.startsWith("."));
 
-	const directories = options.recursive ? visibleEntries.filter(entry => entry.isDirectory()) : [];
+	const directories = options.recursive
+		? visibleEntries.filter(entry => {
+				if (!entry.isDirectory()) return false;
+				const entryPath = path.join(dir, entry.name);
+				return !shouldIgnore(ig, rootDir, entryPath, true);
+			})
+		: [];
 
-	const files = visibleEntries
-		.filter(entry => entry.isFile())
-		.filter(entry => {
-			if (!options.extensions) return true;
-			return options.extensions.some(ext => entry.name.endsWith(`.${ext}`));
-		});
+	const files = visibleEntries.filter(entry => {
+		if (!entry.isFile()) return false;
+		const entryPath = path.join(dir, entry.name);
+		if (shouldIgnore(ig, rootDir, entryPath, false)) return false;
+		if (!options.extensions) return true;
+		return options.extensions.some(ext => entry.name.endsWith(`.${ext}`));
+	});
 
 	const [subResults, fileResults] = await Promise.all([
 		Promise.all(
-			directories.map(entry => loadFilesFromDir(_ctx, path.join(dir, entry.name), provider, level, options)),
+			directories.map(entry =>
+				loadFilesFromDir(_ctx, path.join(dir, entry.name), provider, level, {
+					...options,
+					rootDir,
+					ignoreMatcher: ig,
+				}),
+			),
 		),
 		Promise.all(
 			files.map(async entry => {
@@ -435,10 +471,15 @@ function isExtensionModuleFile(name: string): boolean {
  * 3. Subdirectory with package.json: `extensions/<ext>/package.json` with "omp"/"pi" field → load declared paths
  *
  * No recursion beyond one level. Complex packages must use package.json manifest.
+ * Respects .gitignore, .ignore, and .fdignore files.
  */
 export async function discoverExtensionModulePaths(ctx: LoadContext, dir: string): Promise<string[]> {
 	const discovered: string[] = [];
 	const entries = await readDirEntries(dir);
+
+	// Initialize ignore matcher and read ignore rules from root
+	const ig = createIgnoreMatcher();
+	await addIgnoreRules(ig, dir, dir, readFile);
 
 	for (const entry of entries) {
 		if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
@@ -446,13 +487,16 @@ export async function discoverExtensionModulePaths(ctx: LoadContext, dir: string
 		const entryPath = path.join(dir, entry.name);
 
 		// 1. Direct files: *.ts or *.js
-		if (entry.isFile() && isExtensionModuleFile(entry.name)) {
+		if ((entry.isFile() || entry.isSymbolicLink()) && isExtensionModuleFile(entry.name)) {
+			if (shouldIgnore(ig, dir, entryPath, false)) continue;
 			discovered.push(entryPath);
 			continue;
 		}
 
 		// 2 & 3. Subdirectories
-		if (entry.isDirectory()) {
+		if (entry.isDirectory() || entry.isSymbolicLink()) {
+			if (shouldIgnore(ig, dir, entryPath, true)) continue;
+
 			const subEntries = await readDirEntries(entryPath);
 			const subFileNames = new Set(subEntries.filter(e => e.isFile()).map(e => e.name));
 

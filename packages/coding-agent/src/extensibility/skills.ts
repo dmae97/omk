@@ -7,6 +7,7 @@ import type { SkillsSettings } from "../config/settings";
 import type { Skill as CapabilitySkill, SkillFrontmatter as ImportedSkillFrontmatter } from "../discovery";
 import { loadCapability } from "../discovery";
 import { parseFrontmatter } from "../utils/frontmatter";
+import { addIgnoreRules, createIgnoreMatcher, type IgnoreMatcher, shouldIgnore } from "../utils/ignore-files";
 
 // Re-export SkillFrontmatter for backward compatibility
 export type { ImportedSkillFrontmatter as SkillFrontmatter };
@@ -38,14 +39,24 @@ export interface LoadSkillsFromDirOptions {
 	source: string;
 }
 
+async function readFileContent(filePath: string): Promise<string | null> {
+	try {
+		return await fs.readFile(filePath, "utf-8");
+	} catch {
+		return null;
+	}
+}
+
 /**
  * Load skills from a directory recursively.
  * Skills are directories containing a SKILL.md file with frontmatter including a description.
+ * Respects .gitignore, .ignore, and .fdignore files.
  */
 export async function loadSkillsFromDir(options: LoadSkillsFromDirOptions): Promise<LoadSkillsResult> {
 	const skills: Skill[] = [];
 	const warnings: SkillWarning[] = [];
 	const seenPaths = new Set<string>();
+	const rootDir = options.dir;
 
 	async function addSkill(skillFile: string, skillDir: string, dirName: string): Promise<void> {
 		if (seenPaths.has(skillFile)) return;
@@ -70,8 +81,11 @@ export async function loadSkillsFromDir(options: LoadSkillsFromDirOptions): Prom
 		}
 	}
 
-	async function scanDir(dir: string): Promise<void> {
+	async function scanDir(dir: string, ig: IgnoreMatcher): Promise<void> {
 		try {
+			// Add ignore rules from this directory
+			await addIgnoreRules(ig, dir, rootDir, readFileContent);
+
 			// First check if this directory itself is a skill
 			const selfSkillFile = path.join(dir, "SKILL.md");
 			try {
@@ -92,8 +106,13 @@ export async function loadSkillsFromDir(options: LoadSkillsFromDirOptions): Prom
 				if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
 
 				const fullPath = path.join(dir, entry.name);
-				if (entry.isDirectory()) {
-					await scanDir(fullPath);
+				const isDir = entry.isDirectory();
+
+				// Check if this entry should be ignored
+				if (shouldIgnore(ig, rootDir, fullPath, isDir)) continue;
+
+				if (isDir) {
+					await scanDir(fullPath, ig);
 				}
 			}
 		} catch (err) {
@@ -101,7 +120,8 @@ export async function loadSkillsFromDir(options: LoadSkillsFromDirOptions): Prom
 		}
 	}
 
-	await scanDir(options.dir);
+	const ig = createIgnoreMatcher();
+	await scanDir(options.dir, ig);
 
 	return { skills, warnings };
 }
@@ -109,11 +129,13 @@ export async function loadSkillsFromDir(options: LoadSkillsFromDirOptions): Prom
 /**
  * Scan a directory for SKILL.md files recursively.
  * Used internally by loadSkills for custom directories.
+ * Respects .gitignore, .ignore, and .fdignore files.
  */
 async function scanDirectoryForSkills(dir: string): Promise<LoadSkillsResult> {
 	const skills: Skill[] = [];
 	const warnings: SkillWarning[] = [];
 	const seenPaths = new Set<string>();
+	const rootDir = dir;
 
 	async function addSkill(skillFile: string, skillDir: string, dirName: string): Promise<void> {
 		if (seenPaths.has(skillFile)) return;
@@ -138,8 +160,11 @@ async function scanDirectoryForSkills(dir: string): Promise<LoadSkillsResult> {
 		}
 	}
 
-	async function scanDir(currentDir: string): Promise<void> {
+	async function scanDir(currentDir: string, ig: IgnoreMatcher): Promise<void> {
 		try {
+			// Add ignore rules from this directory
+			await addIgnoreRules(ig, currentDir, rootDir, readFileContent);
+
 			// First check if this directory itself is a skill
 			const selfSkillFile = path.join(currentDir, "SKILL.md");
 			try {
@@ -160,8 +185,13 @@ async function scanDirectoryForSkills(dir: string): Promise<LoadSkillsResult> {
 				if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
 
 				const fullPath = path.join(currentDir, entry.name);
-				if (entry.isDirectory()) {
-					await scanDir(fullPath);
+				const isDir = entry.isDirectory();
+
+				// Check if this entry should be ignored
+				if (shouldIgnore(ig, rootDir, fullPath, isDir)) continue;
+
+				if (isDir) {
+					await scanDir(fullPath, ig);
 				}
 			}
 		} catch (err) {
@@ -169,7 +199,8 @@ async function scanDirectoryForSkills(dir: string): Promise<LoadSkillsResult> {
 		}
 	}
 
-	await scanDir(dir);
+	const ig = createIgnoreMatcher();
+	await scanDir(dir, ig);
 
 	return { skills, warnings };
 }

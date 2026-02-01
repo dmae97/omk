@@ -208,7 +208,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 							type: "toolCall",
 							id: event.content_block.id,
 							name: isOAuthToken ? fromClaudeCodeName(event.content_block.name) : event.content_block.name,
-							arguments: event.content_block.input as Record<string, any>,
+							arguments: (event.content_block.input as Record<string, any>) ?? {},
 							partialJson: "",
 							index: event.index,
 						};
@@ -842,7 +842,7 @@ function convertMessages(
 						type: "tool_use",
 						id: sanitizeToolCallId(block.id),
 						name: isOAuthToken ? toClaudeCodeName(block.name) : block.name,
-						input: block.arguments,
+						input: block.arguments ?? {},
 					});
 				}
 			}

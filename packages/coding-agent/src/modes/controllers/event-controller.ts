@@ -387,7 +387,7 @@ export class EventController {
 		const method = settings.get("notifications.onComplete");
 		if (method === "off") return;
 		const protocol = method === "auto" ? detectNotificationProtocol() : method;
-		const title = this.ctx.sessionManager.getSessionTitle();
+		const title = this.ctx.sessionManager.getSessionName();
 		const message = title ? `${title}: Complete` : "Complete";
 		sendNotification(protocol, message);
 	}

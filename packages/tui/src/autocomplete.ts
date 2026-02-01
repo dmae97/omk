@@ -3,6 +3,86 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fuzzyFind } from "@oh-my-pi/pi-natives";
 
+const PATH_DELIMITERS = new Set([" ", "\t", '"', "'", "="]);
+
+function findLastDelimiter(text: string): number {
+	for (let i = text.length - 1; i >= 0; i -= 1) {
+		if (PATH_DELIMITERS.has(text[i] ?? "")) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+function findUnclosedQuoteStart(text: string): number | null {
+	let inQuotes = false;
+	let quoteStart = -1;
+
+	for (let i = 0; i < text.length; i += 1) {
+		if (text[i] === '"') {
+			inQuotes = !inQuotes;
+			if (inQuotes) {
+				quoteStart = i;
+			}
+		}
+	}
+
+	return inQuotes ? quoteStart : null;
+}
+
+function isTokenStart(text: string, index: number): boolean {
+	return index === 0 || PATH_DELIMITERS.has(text[index - 1] ?? "");
+}
+
+function extractQuotedPrefix(text: string): string | null {
+	const quoteStart = findUnclosedQuoteStart(text);
+	if (quoteStart === null) {
+		return null;
+	}
+
+	if (quoteStart > 0 && text[quoteStart - 1] === "@") {
+		if (!isTokenStart(text, quoteStart - 1)) {
+			return null;
+		}
+		return text.slice(quoteStart - 1);
+	}
+
+	if (!isTokenStart(text, quoteStart)) {
+		return null;
+	}
+
+	return text.slice(quoteStart);
+}
+
+function parsePathPrefix(prefix: string): { rawPrefix: string; isAtPrefix: boolean; isQuotedPrefix: boolean } {
+	if (prefix.startsWith('@"')) {
+		return { rawPrefix: prefix.slice(2), isAtPrefix: true, isQuotedPrefix: true };
+	}
+	if (prefix.startsWith('"')) {
+		return { rawPrefix: prefix.slice(1), isAtPrefix: false, isQuotedPrefix: true };
+	}
+	if (prefix.startsWith("@")) {
+		return { rawPrefix: prefix.slice(1), isAtPrefix: true, isQuotedPrefix: false };
+	}
+	return { rawPrefix: prefix, isAtPrefix: false, isQuotedPrefix: false };
+}
+
+function buildCompletionValue(
+	path: string,
+	options: { isDirectory: boolean; isAtPrefix: boolean; isQuotedPrefix: boolean },
+): string {
+	const needsQuotes = options.isQuotedPrefix || path.includes(" ");
+	const prefix = options.isAtPrefix ? "@" : "";
+
+	if (!needsQuotes) {
+		return `${prefix}${path}`;
+	}
+
+	const openQuote = `${prefix}"`;
+	const closeQuote = options.isDirectory ? "" : '"';
+	return `${openQuote}${path}${closeQuote}`;
+}
+
 /**
  * Check if query is a subsequence of target (fuzzy match).
  * "wig" matches "skill:wig" because w-i-g appear in order.
@@ -107,23 +187,24 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		const currentLine = lines[cursorLine] || "";
 		const textBeforeCursor = currentLine.slice(0, cursorCol);
 
-		// Check for @ file reference (fuzzy search) - must be after a space or at start
-		const atMatch = textBeforeCursor.match(/(?:^|[\s])(@[^\s]*)$/);
-		if (atMatch) {
-			const prefix = atMatch[1] ?? "@"; // The @... part
-			const query = prefix.slice(1); // Remove the @
+		// Check for @ file reference (fuzzy search) - must be after a delimiter or at start
+		const atPrefix = this.extractAtPrefix(textBeforeCursor);
+		if (atPrefix) {
+			const { rawPrefix, isQuotedPrefix } = parsePathPrefix(atPrefix);
 			const suggestions =
-				query.length > 0 ? await this.getFuzzyFileSuggestions(query) : await this.getFileSuggestions("@");
-			if (suggestions.length === 0 && query.length > 0) {
-				const fallback = await this.getFileSuggestions(prefix);
+				rawPrefix.length > 0
+					? await this.getFuzzyFileSuggestions(rawPrefix, { isQuotedPrefix })
+					: await this.getFileSuggestions("@");
+			if (suggestions.length === 0 && rawPrefix.length > 0) {
+				const fallback = await this.getFileSuggestions(atPrefix);
 				if (fallback.length === 0) return null;
-				return { items: fallback, prefix };
+				return { items: fallback, prefix: atPrefix };
 			}
 			if (suggestions.length === 0) return null;
 
 			return {
 				items: suggestions,
-				prefix: prefix,
+				prefix: atPrefix,
 			};
 		}
 
@@ -290,24 +371,31 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		};
 	}
 
-	// Extract a path-like prefix from the text before cursor
-	private extractPathPrefix(text: string, forceExtract: boolean = false): string | null {
-		// Check for @ file attachment syntax first
-		const atMatch = text.match(/@([^\s]*)$/);
-		if (atMatch) {
-			return atMatch[0]; // Return the full @path pattern
+	// Extract @ prefix for fuzzy file suggestions
+	private extractAtPrefix(text: string): string | null {
+		const quotedPrefix = extractQuotedPrefix(text);
+		if (quotedPrefix?.startsWith('@"')) {
+			return quotedPrefix;
 		}
 
-		// Simple approach: find the last whitespace/delimiter and extract the word after it
-		// This avoids catastrophic backtracking from nested quantifiers
-		const lastDelimiterIndex = Math.max(
-			text.lastIndexOf(" "),
-			text.lastIndexOf("\t"),
-			text.lastIndexOf('"'),
-			text.lastIndexOf("'"),
-			text.lastIndexOf("="),
-		);
+		const lastDelimiterIndex = findLastDelimiter(text);
+		const tokenStart = lastDelimiterIndex === -1 ? 0 : lastDelimiterIndex + 1;
 
+		if (text[tokenStart] === "@") {
+			return text.slice(tokenStart);
+		}
+
+		return null;
+	}
+
+	// Extract a path-like prefix from the text before cursor
+	private extractPathPrefix(text: string, forceExtract: boolean = false): string | null {
+		const quotedPrefix = extractQuotedPrefix(text);
+		if (quotedPrefix) {
+			return quotedPrefix;
+		}
+
+		const lastDelimiterIndex = findLastDelimiter(text);
 		const pathPrefix = lastDelimiterIndex === -1 ? text : text.slice(lastDelimiterIndex + 1);
 
 		// For forced extraction (Tab key), always return something
@@ -379,39 +467,34 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		try {
 			let searchDir: string;
 			let searchPrefix: string;
-			let expandedPrefix = prefix;
-			let isAtPrefix = false;
-
-			// Handle @ file attachment prefix
-			if (prefix.startsWith("@")) {
-				isAtPrefix = true;
-				expandedPrefix = prefix.slice(1); // Remove the @
-			}
+			const { rawPrefix, isAtPrefix, isQuotedPrefix } = parsePathPrefix(prefix);
+			let expandedPrefix = rawPrefix;
 
 			// Handle home directory expansion
 			if (expandedPrefix.startsWith("~")) {
 				expandedPrefix = this.expandHomePath(expandedPrefix);
 			}
 
-			if (
-				expandedPrefix === "" ||
-				expandedPrefix === "./" ||
-				expandedPrefix === "../" ||
-				expandedPrefix === "~" ||
-				expandedPrefix === "~/" ||
-				expandedPrefix === "/" ||
-				prefix === "@"
-			) {
+			const isRootPrefix =
+				rawPrefix === "" ||
+				rawPrefix === "./" ||
+				rawPrefix === "../" ||
+				rawPrefix === "~" ||
+				rawPrefix === "~/" ||
+				rawPrefix === "/" ||
+				(isAtPrefix && rawPrefix === "");
+
+			if (isRootPrefix) {
 				// Complete from specified position
-				if (prefix.startsWith("~") || expandedPrefix === "/") {
+				if (rawPrefix.startsWith("~") || expandedPrefix.startsWith("/")) {
 					searchDir = expandedPrefix;
 				} else {
 					searchDir = path.join(this.basePath, expandedPrefix);
 				}
 				searchPrefix = "";
-			} else if (expandedPrefix.endsWith("/")) {
+			} else if (rawPrefix.endsWith("/")) {
 				// If prefix ends with /, show contents of that directory
-				if (prefix.startsWith("~") || expandedPrefix.startsWith("/")) {
+				if (rawPrefix.startsWith("~") || expandedPrefix.startsWith("/")) {
 					searchDir = expandedPrefix;
 				} else {
 					searchDir = path.join(this.basePath, expandedPrefix);
@@ -421,7 +504,7 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 				// Split into directory and file prefix
 				const dir = path.dirname(expandedPrefix);
 				const file = path.basename(expandedPrefix);
-				if (prefix.startsWith("~") || expandedPrefix.startsWith("/")) {
+				if (rawPrefix.startsWith("~") || expandedPrefix.startsWith("/")) {
 					searchDir = dir;
 				} else {
 					searchDir = path.join(this.basePath, dir);
@@ -451,58 +534,46 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 
 				let relativePath: string;
 				const name = entry.name;
+				const displayPrefix = rawPrefix;
 
-				// Handle @ prefix path construction
-				if (isAtPrefix) {
-					const pathWithoutAt = expandedPrefix;
-					if (pathWithoutAt.endsWith("/")) {
-						relativePath = `@${pathWithoutAt}${name}`;
-					} else if (pathWithoutAt.includes("/")) {
-						if (pathWithoutAt.startsWith("~/")) {
-							const homeRelativeDir = pathWithoutAt.slice(2); // Remove ~/
-							const dir = path.dirname(homeRelativeDir);
-							relativePath = `@~/${dir === "." ? name : path.join(dir, name)}`;
-						} else {
-							relativePath = `@${path.join(path.dirname(pathWithoutAt), name)}`;
-						}
-					} else {
-						if (pathWithoutAt.startsWith("~")) {
-							relativePath = `@~/${name}`;
-						} else {
-							relativePath = `@${name}`;
-						}
-					}
-				} else if (prefix.endsWith("/")) {
+				if (displayPrefix.endsWith("/")) {
 					// If prefix ends with /, append entry to the prefix
-					relativePath = prefix + name;
-				} else if (prefix.includes("/")) {
+					relativePath = displayPrefix + name;
+				} else if (displayPrefix.includes("/")) {
 					// Preserve ~/ format for home directory paths
-					if (prefix.startsWith("~/")) {
-						const homeRelativeDir = prefix.slice(2); // Remove ~/
+					if (displayPrefix.startsWith("~/")) {
+						const homeRelativeDir = displayPrefix.slice(2); // Remove ~/
 						const dir = path.dirname(homeRelativeDir);
 						relativePath = `~/${dir === "." ? name : path.join(dir, name)}`;
-					} else if (prefix.startsWith("/")) {
+					} else if (displayPrefix.startsWith("/")) {
 						// Absolute path - construct properly
-						const dir = path.dirname(prefix);
+						const dir = path.dirname(displayPrefix);
 						if (dir === "/") {
 							relativePath = `/${name}`;
 						} else {
 							relativePath = `${dir}/${name}`;
 						}
 					} else {
-						relativePath = path.join(path.dirname(prefix), name);
+						relativePath = path.join(path.dirname(displayPrefix), name);
 					}
 				} else {
 					// For standalone entries, preserve ~/ if original prefix was ~/
-					if (prefix.startsWith("~")) {
+					if (displayPrefix.startsWith("~")) {
 						relativePath = `~/${name}`;
 					} else {
 						relativePath = name;
 					}
 				}
 
+				const pathValue = isDirectory ? `${relativePath}/` : relativePath;
+				const value = buildCompletionValue(pathValue, {
+					isDirectory,
+					isAtPrefix,
+					isQuotedPrefix,
+				});
+
 				suggestions.push({
-					value: isDirectory ? `${relativePath}/` : relativePath,
+					value,
 					label: name + (isDirectory ? "/" : ""),
 				});
 			}
@@ -547,7 +618,10 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		return score;
 	}
 
-	private async getFuzzyFileSuggestions(query: string): Promise<AutocompleteItem[]> {
+	private async getFuzzyFileSuggestions(
+		query: string,
+		options: { isQuotedPrefix: boolean },
+	): Promise<AutocompleteItem[]> {
 		try {
 			const result = await fuzzyFind({
 				query,
@@ -572,9 +646,14 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 			for (const { path: entryPath, isDirectory } of topEntries) {
 				const pathWithoutSlash = isDirectory ? entryPath.slice(0, -1) : entryPath;
 				const entryName = path.basename(pathWithoutSlash);
+				const value = buildCompletionValue(entryPath, {
+					isDirectory,
+					isAtPrefix: true,
+					isQuotedPrefix: options.isQuotedPrefix,
+				});
 
 				suggestions.push({
-					value: `@${entryPath}`,
+					value,
 					label: entryName + (isDirectory ? "/" : ""),
 					description: pathWithoutSlash,
 				});

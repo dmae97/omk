@@ -41,17 +41,20 @@ export class InputController {
 				this.ctx.isPythonMode = false;
 				this.ctx.updateEditorBorderColor();
 			} else if (!this.ctx.editor.getText().trim()) {
-				// Double-escape with empty editor triggers /tree or /branch based on setting
-				const now = Date.now();
-				if (now - this.ctx.lastEscapeTime < 500) {
-					if (settings.get("doubleEscapeAction") === "tree") {
-						this.ctx.showTreeSelector();
+				// Double-escape with empty editor triggers /tree, /branch, or nothing based on setting
+				const action = settings.get("doubleEscapeAction");
+				if (action !== "none") {
+					const now = Date.now();
+					if (now - this.ctx.lastEscapeTime < 500) {
+						if (action === "tree") {
+							this.ctx.showTreeSelector();
+						} else {
+							this.ctx.showUserMessageSelector();
+						}
+						this.ctx.lastEscapeTime = 0;
 					} else {
-						this.ctx.showUserMessageSelector();
+						this.ctx.lastEscapeTime = now;
 					}
-					this.ctx.lastEscapeTime = 0;
-				} else {
-					this.ctx.lastEscapeTime = now;
 				}
 			}
 		};
@@ -419,13 +422,13 @@ export class InputController {
 
 			// Generate session title on first message
 			const hasUserMessages = this.ctx.agent.state.messages.some((m: AgentMessage) => m.role === "user");
-			if (!hasUserMessages && !this.ctx.sessionManager.getSessionTitle() && !process.env.OMP_NO_TITLE) {
+			if (!hasUserMessages && !this.ctx.sessionManager.getSessionName() && !process.env.OMP_NO_TITLE) {
 				const registry = this.ctx.session.modelRegistry;
 				const smolModel = this.ctx.settings.getModelRole("smol");
 				generateSessionTitle(text, registry, smolModel, this.ctx.session.sessionId)
 					.then(async title => {
 						if (title) {
-							await this.ctx.sessionManager.setSessionTitle(title);
+							await this.ctx.sessionManager.setSessionName(title);
 							setTerminalTitle(`π: ${title}`);
 						}
 					})

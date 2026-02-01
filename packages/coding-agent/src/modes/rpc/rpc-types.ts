@@ -58,6 +58,7 @@ export type RpcCommand =
 	| { id?: string; type: "branch"; entryId: string }
 	| { id?: string; type: "get_branch_messages" }
 	| { id?: string; type: "get_last_assistant_text" }
+	| { id?: string; type: "set_session_name"; name: string }
 
 	// Messages
 	| { id?: string; type: "get_messages" };
@@ -76,6 +77,7 @@ export interface RpcSessionState {
 	interruptMode: "immediate" | "wait";
 	sessionFile?: string;
 	sessionId: string;
+	sessionName?: string;
 	autoCompactionEnabled: boolean;
 	messageCount: number;
 	queuedMessageCount: number;
@@ -166,6 +168,7 @@ export type RpcResponse =
 			success: true;
 			data: { text: string | null };
 	  }
+	| { id?: string; type: "response"; command: "set_session_name"; success: true }
 
 	// Messages
 	| { id?: string; type: "response"; command: "get_messages"; success: true; data: { messages: AgentMessage[] } }

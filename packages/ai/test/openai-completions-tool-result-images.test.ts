@@ -28,6 +28,7 @@ const compat: Required<OpenAICompat> = {
 	requiresReasoningContentForToolCalls: false,
 	requiresAssistantContentForToolCalls: false,
 	openRouterRouting: {},
+	vercelGatewayRouting: {},
 };
 
 function buildToolResult(toolCallId: string, timestamp: number): ToolResultMessage {

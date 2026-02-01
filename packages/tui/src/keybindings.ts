@@ -13,6 +13,8 @@ export type EditorAction =
 	| "cursorWordRight"
 	| "cursorLineStart"
 	| "cursorLineEnd"
+	| "jumpForward"
+	| "jumpBackward"
 	// Deletion
 	| "deleteCharBackward"
 	| "deleteCharForward"
@@ -51,12 +53,14 @@ export const DEFAULT_EDITOR_KEYBINDINGS: Required<EditorKeybindingsConfig> = {
 	// Cursor movement
 	cursorUp: "up",
 	cursorDown: "down",
-	cursorLeft: "left",
-	cursorRight: "right",
+	cursorLeft: ["left", "ctrl+b"],
+	cursorRight: ["right", "ctrl+f"],
 	cursorWordLeft: ["alt+left", "ctrl+left", "alt+b"],
 	cursorWordRight: ["alt+right", "ctrl+right", "alt+f"],
 	cursorLineStart: ["home", "ctrl+a"],
 	cursorLineEnd: ["end", "ctrl+e"],
+	jumpForward: "ctrl+]",
+	jumpBackward: "ctrl+alt+]",
 	// Deletion
 	deleteCharBackward: "backspace",
 	deleteCharForward: ["delete", "ctrl+d"],

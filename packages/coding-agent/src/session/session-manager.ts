@@ -972,7 +972,7 @@ async function collectSessionsFromFiles(files: string[], storage: SessionStorage
 
 export class SessionManager {
 	private sessionId: string = "";
-	private sessionTitle: string | undefined;
+	private sessionName: string | undefined;
 	private sessionFile: string | undefined;
 	private sessionDir: string;
 	private cwd: string;
@@ -1021,7 +1021,7 @@ export class SessionManager {
 		if (this.fileEntries.length > 0) {
 			const header = this.fileEntries.find(e => e.type === "session") as SessionHeader | undefined;
 			this.sessionId = header?.id ?? nanoid();
-			this.sessionTitle = header?.title;
+			this.sessionName = header?.title;
 
 			if (migrateToCurrentVersion(this.fileEntries)) {
 				await this._rewriteFile();
@@ -1076,12 +1076,12 @@ export class SessionManager {
 			type: "session",
 			version: CURRENT_SESSION_VERSION,
 			id: this.sessionId,
-			title: oldHeader?.title ?? this.sessionTitle,
+			title: oldHeader?.title ?? this.sessionName,
 			timestamp,
 			cwd: this.cwd,
 			parentSession: oldSessionId,
 		};
-		this.sessionTitle = newHeader.title;
+		this.sessionName = newHeader.title;
 
 		// Replace the header in fileEntries
 		const entries = this.fileEntries.filter(e => e.type !== "session") as SessionEntry[];
@@ -1293,17 +1293,17 @@ export class SessionManager {
 		return this.sessionFile;
 	}
 
-	getSessionTitle(): string | undefined {
-		return this.sessionTitle;
+	getSessionName(): string | undefined {
+		return this.sessionName;
 	}
 
-	async setSessionTitle(title: string): Promise<void> {
-		this.sessionTitle = title;
+	async setSessionName(name: string): Promise<void> {
+		this.sessionName = name;
 
 		// Update the in-memory header (so first flush includes title)
 		const header = this.fileEntries.find(e => e.type === "session") as SessionHeader | undefined;
 		if (header) {
-			header.title = title;
+			header.title = name;
 		}
 
 		// Update the session file header with the title (if already flushed)
@@ -1915,7 +1915,7 @@ export class SessionManager {
 		const newHeader = manager.fileEntries[0] as SessionHeader;
 		newHeader.title = sourceHeader?.title;
 		manager.fileEntries = [newHeader, ...historyEntries];
-		manager.sessionTitle = newHeader.title;
+		manager.sessionName = newHeader.title;
 		manager._buildIndex();
 		await manager._rewriteFile();
 		return manager;

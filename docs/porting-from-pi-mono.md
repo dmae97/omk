@@ -5,13 +5,13 @@ Use it for any merge: single file, feature branch, or full release sync.
 
 ## Last Sync Point
 
-**Commit:** `52532c7c0`
-**Date:** 2026-01-29
+**Commit:** `82d7da878`
+**Date:** 2026-01-30
 
 When starting a new sync, generate patches from this commit forward:
 
 ```bash
-git format-patch 3635e45f..HEAD --stdout > changes.patch
+git format-patch 82d7da878..HEAD --stdout > changes.patch
 ```
 
 ## 0) Define the scope
@@ -165,10 +165,10 @@ the improvements and add explicit checks so they don’t get lost in the merge.
   didn’t revert (e.g., new config precedence, disabled features, tool lists).
 - **Audit env/shell behavior**: if you fixed execution or sandboxing, verify the new path still uses your
   sanitized env and does not reintroduce alias/function overrides.
-- **Re-run targeted samples**: keep a minimal set of “known good” examples and run them after the port
+- **Re-run targeted samples**: keep a minimal set of "known good" examples and run them after the port
   (CLI flags, extension registration, tool execution).
 
-## 11) Detect and handle reworked code
+## 12) Detect and handle reworked code
 
 Before porting a file, check if upstream significantly refactored it:
 
@@ -220,7 +220,7 @@ git show upstream/main:path/to/file.ts | rg "default|DEFAULT"
 rg "case \"" path/to/file.ts
 ```
 
-## 12) Quick audit checklist
+## 13) Quick audit checklist
 
 Use this as a final pass before you finish:
 
@@ -230,9 +230,53 @@ Use this as a final pass before you finish:
 - [ ] `package.json` scripts use Bun
 - [ ] Assets load via Bun embed patterns (no copy scripts)
 - [ ] Tests or checks run (or explicitly noted as blocked)
-- [ ] No functionality regressions (see section 11)
+- [ ] No functionality regressions (see sections 11-12)
 
-## 13) Intentional Divergences
+## 14) Commit message format
+
+When committing a backport, use this format:
+
+```
+fix: backport fixes from pi-mono (<from>..<to>)
+
+packages/<package>:
+- <type>: <description>
+- <type>: <description> (#<issue> by @<contributor>)
+
+packages/<other-package>:
+- <type>: <description>
+```
+
+**Example:**
+
+```
+fix: backport fixes from pi-mono (9f3eef65f..52532c7c0)
+
+packages/ai:
+- fix: handle "sensitive" stop reason from Anthropic API
+- fix: normalize tool call IDs with special characters for Responses API
+- fix: add overflow detection for Bedrock, MiniMax, Kimi providers
+- fix: 429 status is rate limiting, not context overflow
+
+packages/tui:
+- fix: refactored autocomplete state tracking
+- fix: file autocomplete should not trigger on empty text
+- fix: configurable autocomplete max visible items
+- fix: improved table column width calculation with word-aware wrapping
+
+packages/coding-agent:
+- fix: preserve external config.yml edits on save (#1046 by @nicobailonMD)
+- fix: resolve macOS NFD and curly quote variants in file paths
+```
+
+**Rules:**
+
+- Group changes by package
+- Use conventional commit types (`fix`, `feat`, `refactor`, `perf`, `docs`)
+- Include upstream issue/PR numbers and contributor attribution for external contributions
+- The commit range in the title helps track sync points
+
+## 15) Intentional Divergences
 
 Our fork has architectural decisions that differ from upstream. **Do not port these upstream patterns:**
 
@@ -253,6 +297,14 @@ Our fork has architectural decisions that differ from upstream. **Do not port th
 | `extension-selector.ts`      | `hook-selector.ts`      |
 | `ExtensionInputComponent`    | `HookInputComponent`    |
 | `ExtensionSelectorComponent` | `HookSelectorComponent` |
+
+### API Naming
+
+| Upstream                                  | Our Fork                                  | Notes                                      |
+| ----------------------------------------- | ----------------------------------------- | ------------------------------------------ |
+| `sessionManager.appendSessionInfo(name)`  | `sessionManager.setSessionName(name)`     | We use `sessionName` throughout            |
+| `sessionManager.getSessionName()`         | `sessionManager.getSessionName()`         | Same (we unified to match upstream's RPC)  |
+| `agent.sessionName` / `setSessionName()`  | `agent.sessionName` / `setSessionName()`  | Same                                       |
 
 ### File Consolidation
 
