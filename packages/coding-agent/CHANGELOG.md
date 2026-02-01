@@ -1,8 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Fixed
 
+- Fixed output handling to prioritize text/markdown over text/plain when both are available, ensuring Markdown content is displayed correctly
 - Fixed bash command normalization to preserve newlines in heredocs and multiline commands
 
 ## [9.6.0] - 2026-02-01
