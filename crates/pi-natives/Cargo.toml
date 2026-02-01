@@ -50,5 +50,8 @@ phf = { version = "0.13", features = ["macros"] }
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+[target.'cfg(windows)'.dependencies]
+winreg = "0.52"
+
 [build-dependencies]
 napi-build = "2"

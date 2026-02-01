@@ -23,6 +23,12 @@ use std::{
 	time::Duration,
 };
 
+#[cfg(windows)]
+mod windows;
+
+#[cfg(windows)]
+use windows::configure_windows_path;
+
 use brush_builtins::{BuiltinSet, default_builtins};
 use brush_core::{
 	CreateOptions, ExecutionContext, ExecutionControlFlow, ExecutionExitCode, ExecutionResult,
@@ -404,6 +410,9 @@ async fn create_session(options: &ShellExecuteOptions) -> Result<ShellSession> {
 				.map_err(|err| Error::from_reason(format!("Failed to set env: {err}")))?;
 		}
 	}
+
+	#[cfg(windows)]
+	configure_windows_path(&mut shell)?;
 
 	if let Some(snapshot_path) = options.snapshot_path.as_ref() {
 		source_snapshot(&mut shell, snapshot_path).await?;
