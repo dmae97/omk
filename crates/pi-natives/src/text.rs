@@ -8,6 +8,8 @@
 //! - Ellipsis decoded lazily
 //! - truncateToWidth returns the original `JsString` when possible
 
+use std::cell::RefCell;
+
 use napi::{JsString, bindgen_prelude::*};
 use napi_derive::napi;
 use unicode_segmentation::UnicodeSegmentation;
@@ -293,7 +295,7 @@ fn ansi_seq_len_u16(data: &[u16], pos: usize) -> Option<usize> {
 			// '[' CSI
 			for (i, b) in data[pos + 2..].iter().enumerate() {
 				if (0x40..=0x7e).contains(b) {
-					return Some(i + 1 - pos);
+					return Some(i + 3);
 				}
 			}
 			None
@@ -302,10 +304,10 @@ fn ansi_seq_len_u16(data: &[u16], pos: usize) -> Option<usize> {
 			// ']' OSC
 			for (i, &b) in data[pos + 2..].iter().enumerate() {
 				if b == 0x07 {
-					return Some(i + 1 - pos);
+					return Some(i + 3);
 				}
-				if b == ESC && data.get(i + 1) == Some(&0x5c) {
-					return Some(i + 2 - pos);
+				if b == ESC && data.get(pos + 2 + i + 1) == Some(&0x5c) {
+					return Some(i + 4);
 				}
 			}
 			None
@@ -353,13 +355,17 @@ fn grapheme_width_str(g: &str) -> usize {
 	UnicodeWidthStr::width(g)
 }
 
+thread_local! {
+  static SCRATCH: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
 /// Iterate graphemes in a UTF-16 segment with:
 /// - ASCII fast path (no UTF-8 conversion)
 /// - non-ASCII slow path using a reused scratch String
 ///
 /// Callback returns `true` to continue, `false` to stop early.
 #[inline]
-fn for_each_grapheme_u16<F>(segment: &[u16], scratch: &mut String, mut f: F) -> bool
+fn for_each_grapheme_u16<F>(segment: &[u16], mut f: F) -> bool
 where
 	F: FnMut(&[u16], usize) -> bool,
 {
@@ -378,31 +384,33 @@ where
 	}
 
 	// Slow path: decode into scratch once, reuse allocation
-	scratch.clear();
-	scratch.reserve(segment.len());
+	SCRATCH.with_borrow_mut(|scratch| {
+		scratch.clear();
+		scratch.reserve(segment.len());
 
-	for r in std::char::decode_utf16(segment.iter().copied()) {
-		scratch.push(r.unwrap_or('\u{FFFD}'));
-	}
-
-	let mut utf16_pos = 0usize;
-	for g in scratch.graphemes(true) {
-		let w = grapheme_width_str(g);
-
-		let g_u16_len: usize = g.chars().map(|c| c.len_utf16()).sum();
-		let u16_slice = &segment[utf16_pos..utf16_pos + g_u16_len];
-		utf16_pos += g_u16_len;
-
-		if !f(u16_slice, w) {
-			return false;
+		for r in std::char::decode_utf16(segment.iter().copied()) {
+			scratch.push(r.unwrap_or('\u{FFFD}'));
 		}
-	}
 
-	true
+		let mut utf16_pos = 0usize;
+		for g in scratch.graphemes(true) {
+			let w = grapheme_width_str(g);
+
+			let g_u16_len: usize = g.chars().map(|c| c.len_utf16()).sum();
+			let u16_slice = &segment[utf16_pos..utf16_pos + g_u16_len];
+			utf16_pos += g_u16_len;
+
+			if !f(u16_slice, w) {
+				return false;
+			}
+		}
+
+		true
+	})
 }
 
 /// Visible width, with early-exit if width exceeds `limit`.
-fn visible_width_u16_up_to(data: &[u16], limit: usize, scratch: &mut String) -> (usize, bool) {
+fn visible_width_u16_up_to(data: &[u16], limit: usize) -> (usize, bool) {
 	let mut width = 0usize;
 	let mut i = 0usize;
 
@@ -424,7 +432,7 @@ fn visible_width_u16_up_to(data: &[u16], limit: usize, scratch: &mut String) -> 
 		}
 		let seg = &data[start..i];
 
-		let ok = for_each_grapheme_u16(seg, scratch, |_, w| {
+		let ok = for_each_grapheme_u16(seg, |_, w| {
 			width += w;
 			width <= limit
 		});
@@ -436,8 +444,8 @@ fn visible_width_u16_up_to(data: &[u16], limit: usize, scratch: &mut String) -> 
 	(width, width > limit)
 }
 
-fn visible_width_u16(data: &[u16], scratch: &mut String) -> usize {
-	visible_width_u16_up_to(data, usize::MAX, scratch).0
+fn visible_width_u16(data: &[u16]) -> usize {
+	visible_width_u16_up_to(data, usize::MAX).0
 }
 
 // ============================================================================
@@ -462,10 +470,8 @@ pub fn truncate_to_width(
 	let text_u16 = text.into_utf16()?;
 	let text = text_u16.as_slice();
 
-	let mut scratch = String::new();
-
 	// Fast path: early-exit width check
-	let (text_w, exceeded) = visible_width_u16_up_to(text, max_width, &mut scratch);
+	let (text_w, exceeded) = visible_width_u16_up_to(text, max_width);
 	if !exceeded {
 		if !pad {
 			// Return original JsString handle: zero output allocation.
@@ -501,7 +507,7 @@ pub fn truncate_to_width(
 	if target_w == 0 {
 		let mut out = Vec::with_capacity(ellipsis.len().min(max_width * 2));
 		let mut w = 0usize;
-		let _ = for_each_grapheme_u16(ellipsis, &mut scratch, |gu16, gw| {
+		let _ = for_each_grapheme_u16(ellipsis, |gu16, gw| {
 			if w + gw > max_width {
 				return false;
 			}
@@ -543,7 +549,7 @@ pub fn truncate_to_width(
 		}
 		let seg = &text[start..i];
 
-		let keep_going = for_each_grapheme_u16(seg, &mut scratch, |gu16, gw| {
+		let keep_going = for_each_grapheme_u16(seg, |gu16, gw| {
 			if w + gw > target_w {
 				return false;
 			}
@@ -594,8 +600,6 @@ fn slice_with_width_impl(
 	// store pending ANSI ranges (pos,len) to avoid copying until needed
 	let mut pending_ansi: Vec<(usize, usize)> = Vec::new();
 
-	let mut scratch = String::new();
-
 	while i < line.len() && current_col < end_col {
 		if line[i] == ESC {
 			if let Some(len) = ansi_seq_len_u16(line, i) {
@@ -621,7 +625,7 @@ fn slice_with_width_impl(
 		}
 		let seg = &line[start..i];
 
-		let _ = for_each_grapheme_u16(seg, &mut scratch, |gu16, gw| {
+		let _ = for_each_grapheme_u16(seg, |gu16, gw| {
 			if current_col >= end_col {
 				return false;
 			}
@@ -704,8 +708,6 @@ fn extract_segments_impl(
 	let mut after_started = false;
 	let mut state = AnsiState::new();
 
-	let mut scratch = String::new();
-
 	while i < line.len() {
 		let done = if after_len == 0 {
 			current_col >= before_end
@@ -750,7 +752,7 @@ fn extract_segments_impl(
 		}
 		let seg = &line[start..i];
 
-		let _ = for_each_grapheme_u16(seg, &mut scratch, |gu16, gw| {
+		let _ = for_each_grapheme_u16(seg, |gu16, gw| {
 			let done_inner = if after_len == 0 {
 				current_col >= before_end
 			} else {
@@ -825,8 +827,7 @@ pub fn extract_segments(
 #[napi(js_name = "visibleWidth")]
 pub fn visible_width_napi(text: JsString) -> Result<u32> {
 	let text_u16 = text.into_utf16()?;
-	let mut scratch = String::new();
-	Ok(clamp_u32(visible_width_u16(text_u16.as_slice(), &mut scratch)))
+	Ok(clamp_u32(visible_width_u16(text_u16.as_slice())))
 }
 
 #[cfg(test)]
@@ -839,11 +840,10 @@ mod tests {
 
 	#[test]
 	fn test_visible_width() {
-		let mut scratch = String::new();
-		assert_eq!(visible_width_u16(&to_u16("hello"), &mut scratch), 5);
-		assert_eq!(visible_width_u16(&to_u16("\x1b[31mhello\x1b[0m"), &mut scratch), 5);
-		assert_eq!(visible_width_u16(&to_u16("\x1b[38;5;196mred\x1b[0m"), &mut scratch), 3);
-		assert_eq!(visible_width_u16(&to_u16("a\tb"), &mut scratch), 1 + TAB_WIDTH + 1);
+		assert_eq!(visible_width_u16(&to_u16("hello")), 5);
+		assert_eq!(visible_width_u16(&to_u16("\x1b[31mhello\x1b[0m")), 5);
+		assert_eq!(visible_width_u16(&to_u16("\x1b[38;5;196mred\x1b[0m")), 3);
+		assert_eq!(visible_width_u16(&to_u16("a\tb")), 1 + TAB_WIDTH + 1);
 	}
 
 	#[test]
@@ -881,8 +881,7 @@ mod tests {
 	#[test]
 	fn test_early_exit() {
 		let data = to_u16(&"a]b".repeat(1000));
-		let mut scratch = String::new();
-		let (w, exceeded) = visible_width_u16_up_to(&data, 10, &mut scratch);
+		let (w, exceeded) = visible_width_u16_up_to(&data, 10);
 		assert!(exceeded);
 		assert!(w > 10);
 	}

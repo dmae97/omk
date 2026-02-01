@@ -25,8 +25,8 @@ export function getSegmenter(): Intl.Segmenter {
 }
 
 // Cache for non-ASCII strings
-const WIDTH_CACHE_SIZE = 512;
-const widthCache = new Map<string, number>();
+//const WIDTH_CACHE_SIZE = 512;
+//const widthCache = new Map<string, number>();
 
 /**
  * Calculate the visible width of a string in terminal columns.
@@ -60,7 +60,11 @@ export function visibleWidth(str: string): number {
 	if (str.length === 0) {
 		return 0;
 	}
+	return visibleWidthRaw(str);
 
+	// === Disabled cache ===
+
+	/*
 	// Check cache
 	const cached = widthCache.get(str);
 	if (cached !== undefined) {
@@ -77,6 +81,7 @@ export function visibleWidth(str: string): number {
 	widthCache.set(str, width);
 
 	return width;
+	*/
 }
 
 const WRAP_OPTIONS = { wordWrap: true, hard: true, trim: false } as const;

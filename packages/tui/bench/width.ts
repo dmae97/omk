@@ -57,10 +57,6 @@ function bunStringWidth(str: string): number {
 	if (str.includes("\t")) {
 		clean = clean.replace(/\t/g, "   ");
 	}
-	if (clean.includes("\x1b")) {
-		clean = clean.replace(/\x1b\[[0-9;]*[mGKHJ]/g, "");
-		clean = clean.replace(/\x1b\]8;;[^\x07]*\x07/g, "");
-	}
 	return Bun.stringWidth(clean);
 }
 
