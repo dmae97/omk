@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import * as path from "node:path";
-import { grep, grepPool, terminate } from "../src/index.js";
+import { grep } from "../src/index.js";
 
 const ITERATIONS = 50;
 const CONCURRENCY = 8;
@@ -21,7 +21,6 @@ const cases: BenchCase[] = [
 
 // Warmup
 await grep({ pattern: "test", path: path.resolve(packages, "tui/src") });
-await grepPool({ pattern: "test", path: path.resolve(packages, "tui/src") });
 
 console.log(`Benchmark: ${ITERATIONS} iterations per case\n`);
 
@@ -44,26 +43,6 @@ for (const c of cases) {
 			Array.from({ length: CONCURRENCY }, () => grep({ pattern: c.pattern, path: c.path, glob: c.glob })),
 		);
 		mainConcurrentTimes.push(performance.now() - start);
-	}
-
-	// Worker pool sequential
-	const poolTimes: number[] = [];
-	let poolMatches = 0;
-	for (let i = 0; i < ITERATIONS; i++) {
-		const start = performance.now();
-		const result = await grepPool({ pattern: c.pattern, path: c.path, glob: c.glob });
-		poolTimes.push(performance.now() - start);
-		poolMatches = result.totalMatches;
-	}
-
-	// Worker pool concurrent (8x parallel)
-	const poolConcurrentTimes: number[] = [];
-	for (let i = 0; i < ITERATIONS; i++) {
-		const start = performance.now();
-		await Promise.all(
-			Array.from({ length: CONCURRENCY }, () => grepPool({ pattern: c.pattern, path: c.path, glob: c.glob })),
-		);
-		poolConcurrentTimes.push(performance.now() - start);
 	}
 
 	// Subprocess rg sequential
@@ -118,19 +97,15 @@ for (const c of cases) {
 	console.log(`${c.name}:`);
 	console.log(`  Main thread:          ${avg(mainTimes).toFixed(2)}ms (${mainMatches} matches)`);
 	console.log(`  Main thread 8x:       ${avg(mainConcurrentTimes).toFixed(2)}ms`);
-	console.log(`  Worker pool:          ${avg(poolTimes).toFixed(2)}ms (${poolMatches} matches)`);
-	console.log(`  Worker pool 8x:       ${avg(poolConcurrentTimes).toFixed(2)}ms`);
 	console.log(`  Subprocess rg:        ${avg(rgTimes).toFixed(2)}ms (${rgMatches} matches)`);
 	console.log(`  Subprocess rg 8x:     ${avg(rgConcurrentTimes).toFixed(2)}ms`);
 
 	const mainVsRg = avg(rgTimes) / avg(mainTimes);
-	const poolVsRgConcurrent = avg(rgConcurrentTimes) / avg(poolConcurrentTimes);
+	const mainVsRgConcurrent = avg(rgConcurrentTimes) / avg(mainConcurrentTimes);
 	console.log(
 		`  => Main thread is ${mainVsRg > 1 ? `${mainVsRg.toFixed(1)}x faster` : `${(1 / mainVsRg).toFixed(1)}x slower`} than rg (sequential)`,
 	);
 	console.log(
-		`  => Worker pool is ${poolVsRgConcurrent > 1 ? `${poolVsRgConcurrent.toFixed(1)}x faster` : `${(1 / poolVsRgConcurrent).toFixed(1)}x slower`} than rg (8x concurrent)\n`,
+		`  => Main thread is ${mainVsRgConcurrent > 1 ? `${mainVsRgConcurrent.toFixed(1)}x faster` : `${(1 / mainVsRgConcurrent).toFixed(1)}x slower`} than rg (8x concurrent)\n`,
 	);
 }
-
-terminate();
