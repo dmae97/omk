@@ -4,15 +4,16 @@
 
 import * as path from "node:path";
 import { native } from "../native";
-import type { FindMatch, FindOptions, FindResult } from "./types";
+import type { GlobMatch, GlobOptions, GlobResult } from "./types";
 
-export type { FindMatch, FindOptions, FindResult } from "./types";
+export type { GlobMatch, GlobOptions, GlobResult } from "./types";
+export { FileType } from "./types";
 
 /**
  * Find files matching a glob pattern.
  * Respects .gitignore by default.
  */
-export async function find(options: FindOptions, onMatch?: (match: FindMatch) => void): Promise<FindResult> {
+export async function glob(options: GlobOptions, onMatch?: (match: GlobMatch) => void): Promise<GlobResult> {
 	const searchPath = path.resolve(options.path);
 	const pattern = options.pattern || "*";
 
@@ -20,9 +21,9 @@ export async function find(options: FindOptions, onMatch?: (match: FindMatch) =>
 	const globPattern = pattern.includes("/") || pattern.startsWith("**") ? pattern : `**/${pattern}`;
 
 	// napi-rs ThreadsafeFunction passes (error, value) - skip callback on error
-	const cb = onMatch ? (err: Error | null, m: FindMatch) => !err && onMatch(m) : undefined;
+	const cb = onMatch ? (err: Error | null, m: GlobMatch) => !err && onMatch(m) : undefined;
 
-	return native.find(
+	return native.glob(
 		{
 			...options,
 			path: searchPath,

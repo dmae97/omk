@@ -3,7 +3,6 @@
  */
 
 import { native } from "../native";
-import { wrapRequestOptions } from "../request-options";
 import type {
 	ContextLine,
 	FuzzyFindMatch,
@@ -36,7 +35,7 @@ export type {
 export async function grep(options: GrepOptions, onMatch?: (match: GrepMatch) => void): Promise<GrepResult> {
 	// napi-rs ThreadsafeFunction passes (error, value) - skip callback on error
 	const cb = onMatch ? (err: Error | null, m: GrepMatch) => !err && onMatch(m) : undefined;
-	return wrapRequestOptions(() => native.grep(options, cb), options);
+	return native.grep(options, cb);
 }
 
 /**
@@ -69,5 +68,5 @@ export function hasMatch(
  * (case-insensitive). Respects .gitignore by default.
  */
 export async function fuzzyFind(options: FuzzyFindOptions): Promise<FuzzyFindResult> {
-	return wrapRequestOptions(() => native.fuzzyFind(options), options);
+	return native.fuzzyFind(options);
 }

@@ -14,7 +14,7 @@ import { embeddedAddon } from "./embedded-addon";
 
 // Import types to trigger declaration merging
 import "./clipboard/types";
-import "./find/types";
+import "./glob/types";
 import "./grep/types";
 import "./highlight/types";
 import "./html/types";
@@ -160,7 +160,7 @@ function validateNative(bindings: NativeBindings, source: string): void {
 
 	checkFn("copyToClipboard");
 	checkFn("readImageFromClipboard");
-	checkFn("find");
+	checkFn("glob");
 	checkFn("fuzzyFind");
 	checkFn("grep");
 	checkFn("search");
@@ -175,7 +175,6 @@ function validateNative(bindings: NativeBindings, source: string): void {
 	checkFn("extractSegments");
 	checkFn("matchesKittySequence");
 	checkFn("executeShell");
-	checkFn("abortShellExecution");
 	checkFn("Shell");
 	checkFn("parseKey");
 	checkFn("matchesLegacySequence");

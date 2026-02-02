@@ -4,7 +4,7 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { getSystemInfo as getNativeSystemInfo, type SystemInfo, find as wasmFind } from "@oh-my-pi/pi-natives";
+import { FileType, getSystemInfo as getNativeSystemInfo, glob, type SystemInfo } from "@oh-my-pi/pi-natives";
 import { untilAborted } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
 import chalk from "chalk";
@@ -184,10 +184,10 @@ async function scanProjectTreeWithGlob(root: string): Promise<ProjectTreeScan | 
 	const timeoutSignal = AbortSignal.timeout(GLOB_TIMEOUT_MS);
 	try {
 		const result = await untilAborted(timeoutSignal, () =>
-			wasmFind({
+			glob({
 				pattern: "**/*",
 				path: root,
-				fileType: "file",
+				fileType: FileType.File,
 			}),
 		);
 		entries = result.matches.map(match => match.path).filter(entry => entry.length > 0);

@@ -2,7 +2,7 @@
  * Types for shell execution via brush-core.
  */
 
-import type { TsFunc } from "../bindings";
+import type { Cancellable, TsFunc } from "../bindings";
 
 /**
  * Configuration for a persistent brush-core shell session.
@@ -17,15 +17,13 @@ export interface ShellOptions {
 /**
  * Options for running a single shell command.
  */
-export interface ShellRunOptions {
+export interface ShellRunOptions extends Cancellable {
 	/** The command to execute. */
 	command: string;
 	/** Working directory for command execution. */
 	cwd?: string;
 	/** Environment variables to apply for this command. */
 	env?: Record<string, string>;
-	/** Timeout in milliseconds. */
-	timeoutMs?: number;
 }
 
 /**
@@ -43,7 +41,7 @@ export interface ShellRunResult {
 /**
  * Internal options for the native brush-core binding.
  */
-export interface ShellExecuteOptions {
+export interface ShellExecuteOptions extends Cancellable {
 	/** The command to execute. */
 	command: string;
 	/** Working directory for command execution. */
@@ -52,10 +50,6 @@ export interface ShellExecuteOptions {
 	env?: Record<string, string>;
 	/** Environment variables to set once per session. */
 	sessionEnv?: Record<string, string>;
-	/** Timeout in milliseconds. */
-	timeoutMs?: number;
-	/** Unique identifier for this execution (used for abort). */
-	executionId: number;
 	/** Optional snapshot path to source for bash sessions. */
 	snapshotPath?: string;
 }
@@ -65,7 +59,7 @@ export interface ShellExecuteOptions {
 export interface ShellExecuteResult extends ShellRunResult {}
 
 /** Native Shell class instance. */
-export interface NativeShell {
+export interface Shell {
 	/**
 	 * Run a command in the shell.
 	 * @param options Command execution options.
@@ -75,17 +69,18 @@ export interface NativeShell {
 	run(options: ShellRunOptions, onChunk?: TsFunc<string>): Promise<ShellRunResult>;
 	/**
 	 * Abort all running commands in this session.
+	 * @param reason Optional reason for the abort.
 	 */
-	abort(): void;
+	abort(reason?: string): void;
 }
 
 /** Native Shell class constructor. */
-export interface NativeShellConstructor {
+export interface ShellConstructor {
 	/**
 	 * Create a new shell session.
 	 * @param options Optional session configuration.
 	 */
-	new (options?: ShellOptions): NativeShell;
+	new (options?: ShellOptions): Shell;
 }
 
 declare module "../bindings" {
@@ -98,12 +93,8 @@ declare module "../bindings" {
 		 * @returns Promise resolving to the command result.
 		 */
 		executeShell(options: ShellExecuteOptions, onChunk?: TsFunc<string>): Promise<ShellExecuteResult>;
-		/**
-		 * Abort a running shell execution by ID.
-		 * @param executionId Execution identifier from ShellExecuteOptions.
-		 */
-		abortShellExecution(executionId: number): void;
+
 		/** Shell class constructor for creating sessions. */
-		Shell: NativeShellConstructor;
+		Shell: ShellConstructor;
 	}
 }

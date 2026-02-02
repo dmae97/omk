@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
-import { type FindMatch, find as wasmFind } from "@oh-my-pi/pi-natives";
+import { FileType, type GlobMatch, glob } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { isEnoent, untilAborted } from "@oh-my-pi/pi-utils";
@@ -252,7 +252,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				throw new ToolError(`Path is not a directory: ${searchPath}`);
 			}
 
-			let matches: Awaited<ReturnType<typeof wasmFind>>["matches"];
+			let matches: Awaited<ReturnType<typeof glob>>["matches"];
 			const onUpdateMatches: string[] = [];
 			const updateIntervalMs = 200;
 			let lastUpdate = 0;
@@ -273,11 +273,11 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				});
 			};
 			const onMatch = onUpdate
-				? (match: FindMatch | null) => {
+				? (match: GlobMatch | null) => {
 						if (signal?.aborted || !match) return;
 						let relativePath = match.path;
 						if (!relativePath) return;
-						if (match.fileType === "dir" && !relativePath.endsWith("/")) {
+						if (match.fileType === FileType.Dir && !relativePath.endsWith("/")) {
 							relativePath += "/";
 						}
 						onUpdateMatches.push(relativePath);
@@ -288,11 +288,11 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 			const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 			try {
 				const result = await untilAborted(combinedSignal, () =>
-					wasmFind(
+					glob(
 						{
 							pattern: globPattern,
 							path: searchPath,
-							fileType: "file",
+							fileType: FileType.File,
 							hidden: includeHidden,
 							maxResults: effectiveLimit,
 							sortByMtime: true,
@@ -328,7 +328,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				const hadTrailingSlash = line.endsWith("/") || line.endsWith("\\");
 				let relativePath = line;
 
-				const isDirectory = match.fileType === "dir";
+				const isDirectory = match.fileType === FileType.Dir;
 
 				if ((isDirectory || hadTrailingSlash) && !relativePath.endsWith("/")) {
 					relativePath += "/";

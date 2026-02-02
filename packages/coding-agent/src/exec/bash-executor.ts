@@ -65,8 +65,6 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 		};
 	}
 
-	let abortListener: (() => void) | undefined;
-
 	try {
 		const sessionKey = buildSessionKey(shell, prefix, snapshotPath, shellEnv, options?.sessionKey);
 		let shellSession = shellSessions.get(sessionKey);
@@ -75,19 +73,13 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 			shellSessions.set(sessionKey, shellSession);
 		}
 
-		if (options?.signal) {
-			abortListener = () => {
-				shellSession?.abort();
-			};
-			options.signal.addEventListener("abort", abortListener, { once: true });
-		}
-
 		const result = await shellSession.run(
 			{
 				command: finalCommand,
 				cwd: options?.cwd,
 				env: options?.env,
 				timeoutMs: options?.timeout,
+				signal: options?.signal,
 			},
 			(err, chunk) => {
 				if (!err) {
@@ -127,9 +119,6 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 		};
 	} finally {
 		await pendingChunks;
-		if (options?.signal && abortListener) {
-			options.signal.removeEventListener("abort", abortListener);
-		}
 	}
 }
 

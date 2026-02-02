@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { type FindMatch, find, grep, htmlToMarkdown } from "../src/index";
+import { FileType, type GlobMatch, glob, grep, htmlToMarkdown } from "../src/index";
 
 let testDir: string;
 
@@ -84,20 +84,20 @@ describe("pi-natives", () => {
 
 	describe("find", () => {
 		it("should find files matching pattern", async () => {
-			const result = await find({
+			const result = await glob({
 				pattern: "*.ts",
 				path: testDir,
 			});
 
 			expect(result.totalMatches).toBe(2);
-			expect(result.matches.every((m: FindMatch) => m.path.endsWith(".ts"))).toBe(true);
+			expect(result.matches.every((m: GlobMatch) => m.path.endsWith(".ts"))).toBe(true);
 		});
 
 		it("should filter by file type", async () => {
-			const result = await find({
+			const result = await glob({
 				pattern: "*",
 				path: testDir,
-				fileType: "file",
+				fileType: FileType.File,
 			});
 
 			expect(result.totalMatches).toBe(3);

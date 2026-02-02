@@ -1,6 +1,33 @@
 # Changelog
 
 ## [Unreleased]
+### Breaking Changes
+
+- Replaced `find()` with `glob()` - update imports and function calls
+- Changed file type filtering from string values to `FileType` enum
+- Removed `abortShellExecution()` function - use `Shell.abort()` method instead
+- Removed `RequestOptions` parameter from `htmlToMarkdown()` - pass options directly
+
+### Added
+
+- Added `glob()` function for file discovery with glob pattern matching and .gitignore support
+- Added `Cancellable` interface for timeout and abort signal support across async operations
+- Added `FileType` enum to filter glob results by file type (File, Dir, Symlink)
+- Added `signal` parameter to shell operations for cancellation via AbortSignal
+
+### Changed
+
+- Renamed `find()` to `glob()` for file discovery operations
+- Renamed `FindMatch` to `GlobMatch` and `FindOptions` to `GlobOptions`
+- Moved timeout and abort signal handling into unified `Cancellable` interface across grep, glob, and shell modules
+- Updated `Shell.abort()` to accept optional abort reason parameter
+- Simplified `htmlToMarkdown()` signature by removing `RequestOptions` parameter
+
+### Removed
+
+- Removed `RequestOptions` type and `wrapRequestOptions()` utility function
+- Removed `abortShellExecution()` function; use `Shell.abort()` instead
+- Removed `executionId` parameter from `ShellExecuteOptions`
 
 ## [10.1.0] - 2026-02-01
 

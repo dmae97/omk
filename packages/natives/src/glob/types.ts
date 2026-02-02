@@ -2,16 +2,25 @@
  * Types for native find API.
  */
 
-import type { TsFunc } from "../bindings";
+import type { Cancellable, TsFunc } from "../bindings";
+
+export const enum FileType {
+	/** A regular file. */
+	File = 1,
+	/** A directory. */
+	Dir = 2,
+	/** A symlink. */
+	Symlink = 3,
+}
 
 /** Options for discovering files and directories. */
-export interface FindOptions {
+export interface GlobOptions extends Cancellable {
 	/** Glob pattern to match (e.g., `*.ts`). */
 	pattern: string;
 	/** Directory to search. */
 	path: string;
 	/** Filter by file type: "file", "dir", or "symlink". */
-	fileType?: "file" | "dir" | "symlink";
+	fileType?: FileType;
 	/** Include hidden files (default: false). */
 	hidden?: boolean;
 	/** Maximum number of results to return. */
@@ -23,19 +32,19 @@ export interface FindOptions {
 }
 
 /** A single filesystem match. */
-export interface FindMatch {
+export interface GlobMatch {
 	/** Relative path from the search root. */
 	path: string;
 	/** Resolved filesystem type for the match. */
-	fileType: "file" | "dir" | "symlink";
+	fileType: FileType;
 	/** Modification time in milliseconds since epoch, if available. */
 	mtime?: number;
 }
 
 /** Result of a find operation. */
-export interface FindResult {
+export interface GlobResult {
 	/** Matched filesystem entries. */
-	matches: FindMatch[];
+	matches: GlobMatch[];
 	/** Number of matches returned after limits are applied. */
 	totalMatches: number;
 }
@@ -47,6 +56,6 @@ declare module "../bindings" {
 		 * @param options Search options that control globbing and filters.
 		 * @param onMatch Optional callback for streaming matches as they are found.
 		 */
-		find(options: FindOptions, onMatch?: TsFunc<FindMatch>): Promise<FindResult>;
+		glob(options: GlobOptions, onMatch?: TsFunc<GlobMatch>): Promise<GlobResult>;
 	}
 }

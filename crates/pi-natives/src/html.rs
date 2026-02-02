@@ -4,7 +4,7 @@ use html_to_markdown_rs::{ConversionOptions, PreprocessingOptions, Preprocessing
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
-use crate::work::launch_blocking;
+use crate::task;
 
 /// Options for HTML to Markdown conversion.
 #[napi(object)]
@@ -23,15 +23,15 @@ pub struct HtmlToMarkdownOptions {
 /// # Errors
 /// Returns an error if the conversion fails or the worker task aborts.
 #[napi(js_name = "htmlToMarkdown")]
-pub async fn html_to_markdown(
+pub fn html_to_markdown(
 	html: String,
 	options: Option<HtmlToMarkdownOptions>,
-) -> Result<String> {
+) -> task::Async<String> {
 	let options = options.unwrap_or_default();
 	let clean_content = options.clean_content.unwrap_or(false);
 	let skip_images = options.skip_images.unwrap_or(false);
 
-	launch_blocking("html_to_markdown", move || {
+	task::blocking("html_to_markdown", (), move |_| {
 		let conversion_opts = ConversionOptions {
 			skip_images,
 			preprocessing: PreprocessingOptions {
@@ -46,6 +46,4 @@ pub async fn html_to_markdown(
 		convert(html.as_str(), Some(conversion_opts))
 			.map_err(|err| Error::from_reason(format!("Conversion error: {err}")))
 	})
-	.wait()
-	.await
 }

@@ -2,11 +2,10 @@
  * Types for grep/search operations.
  */
 
-import type { TsFunc } from "../bindings";
-import type { RequestOptions } from "../request-options";
+import type { Cancellable, TsFunc } from "../bindings";
 
 /** Options for searching files. */
-export interface GrepOptions extends RequestOptions {
+export interface GrepOptions extends Cancellable {
 	/** Regex pattern to search for */
 	pattern: string;
 	/** Directory or file to search */
@@ -129,7 +128,7 @@ export type WasmMatch = SearchMatch;
 export type WasmSearchResult = SearchResult;
 
 /** Options for fuzzy file path search. */
-export interface FuzzyFindOptions extends RequestOptions {
+export interface FuzzyFindOptions extends Cancellable {
 	/** Substring query to match against file paths (case-insensitive). */
 	query: string;
 	/** Directory to search. */

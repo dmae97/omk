@@ -3,20 +3,12 @@
  */
 
 import { native } from "../native";
-import type { ShellExecuteOptions, ShellExecuteResult, ShellOptions, ShellRunOptions, ShellRunResult } from "./types";
+import type { ShellExecuteOptions, ShellExecuteResult } from "./types";
 
 export type { ShellExecuteOptions, ShellExecuteResult, ShellOptions, ShellRunOptions, ShellRunResult } from "./types";
 
-export interface Shell {
-	run(options: ShellRunOptions, onChunk?: (error: Error | null, chunk: string) => void): Promise<ShellRunResult>;
-	abort(): void;
-}
-
-export interface ShellConstructor {
-	new (options?: ShellOptions): Shell;
-}
-
-export const Shell = native.Shell as ShellConstructor;
+export const { Shell } = native;
+export type Shell = import("./types").Shell;
 
 /**
  * Execute a shell command using brush-core.
@@ -31,13 +23,4 @@ export async function executeShell(
 ): Promise<ShellExecuteResult> {
 	const wrappedCallback = onChunk ? (err: Error | null, chunk: string) => !err && onChunk(chunk) : undefined;
 	return native.executeShell(options, wrappedCallback);
-}
-
-/**
- * Abort a running shell execution.
- *
- * @param executionId - The execution ID to abort
- */
-export function abortShellExecution(executionId: number): void {
-	native.abortShellExecution(executionId);
 }

@@ -3,7 +3,7 @@ import * as os from "node:os";
 import path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
-import { find as wasmFind } from "@oh-my-pi/pi-natives";
+import { FileType, glob } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { ptree, untilAborted } from "@oh-my-pi/pi-utils";
@@ -361,10 +361,10 @@ async function listCandidateFiles(
 	const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 	try {
 		const result = await untilAborted(combinedSignal, () =>
-			wasmFind({
+			glob({
 				pattern: "**/*",
 				path: searchRoot,
-				fileType: "file",
+				fileType: FileType.File,
 				hidden: true,
 			}),
 		);

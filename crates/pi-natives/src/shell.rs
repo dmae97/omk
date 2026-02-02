@@ -17,10 +17,7 @@ use std::{
 	fs,
 	io::{self, Write},
 	str,
-	sync::{
-		Arc, LazyLock,
-		atomic::{AtomicU64, Ordering},
-	},
+	sync::Arc,
 	time::Duration,
 };
 
@@ -41,34 +38,16 @@ use napi::{
 	tokio::{self, sync::Mutex as TokioMutex, time},
 };
 use napi_derive::napi;
-use parking_lot::Mutex;
-use smallvec::SmallVec;
-use tokio::{io::AsyncReadExt as _, sync::oneshot};
+use tokio::io::AsyncReadExt as _;
 use tokio_util::sync::CancellationToken;
 #[cfg(windows)]
 use windows::configure_windows_path;
 
-use crate::work::launch_async;
-
-type ExecutionMap = HashMap<u64, ExecutionControl>;
-
-struct ExecutionControl {
-	cancel:   oneshot::Sender<()>,
-	shell_id: u64,
-}
-
-struct ExecutionGuard {
-	execution_id: u64,
-}
-
-impl Drop for ExecutionGuard {
-	fn drop(&mut self) {
-		EXECUTIONS.lock().remove(&self.execution_id);
-	}
-}
+use crate::task;
 
 struct ShellSessionCore {
-	shell: BrushShell,
+	shell:         BrushShell,
+	current_abort: Option<task::AbortToken>,
 }
 
 #[derive(Clone)]
@@ -76,10 +55,6 @@ struct ShellConfig {
 	session_env:   Option<HashMap<String, String>>,
 	snapshot_path: Option<String>,
 }
-
-static EXECUTIONS: LazyLock<Mutex<ExecutionMap>> = LazyLock::new(|| Mutex::new(HashMap::new()));
-static SHELL_COUNTER: AtomicU64 = AtomicU64::new(1);
-static EXECUTION_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 /// Options for configuring a persistent shell session.
 #[napi(object)]
@@ -90,9 +65,19 @@ pub struct ShellOptions {
 	pub snapshot_path: Option<String>,
 }
 
+/// Options for running a shell command (internal, lifetime-free).
+struct ShellRunConfig {
+	/// Command string to execute in the shell.
+	command: String,
+	/// Working directory for the command.
+	cwd:     Option<String>,
+	/// Environment variables to apply for this command only.
+	env:     Option<HashMap<String, String>>,
+}
+
 /// Options for running a shell command.
 #[napi(object)]
-pub struct ShellRunOptions {
+pub struct ShellRunOptions<'env> {
 	/// Command string to execute in the shell.
 	pub command:    String,
 	/// Working directory for the command.
@@ -100,7 +85,10 @@ pub struct ShellRunOptions {
 	/// Environment variables to apply for this command only.
 	pub env:        Option<HashMap<String, String>>,
 	/// Timeout in milliseconds before cancelling the command.
+	#[napi(js_name = "timeoutMs")]
 	pub timeout_ms: Option<u32>,
+	/// Abort signal for cancelling the operation.
+	pub signal:     Option<Unknown<'env>>,
 }
 
 /// Result of running a shell command.
@@ -117,7 +105,6 @@ pub struct ShellRunResult {
 /// Persistent brush-core shell session.
 #[napi]
 pub struct Shell {
-	id:      u64,
 	session: Arc<TokioMutex<Option<ShellSessionCore>>>,
 	config:  ShellConfig,
 }
@@ -129,12 +116,11 @@ impl Shell {
 	///
 	/// The options set session-scoped environment variables and a snapshot path.
 	pub fn new(options: Option<ShellOptions>) -> Self {
-		let id = SHELL_COUNTER.fetch_add(1, Ordering::Relaxed);
 		let config = options.map_or_else(
 			|| ShellConfig { session_env: None, snapshot_path: None },
 			|opt| ShellConfig { session_env: opt.session_env, snapshot_path: opt.snapshot_path },
 		);
-		Self { id, session: Arc::new(TokioMutex::new(None)), config }
+		Self { session: Arc::new(TokioMutex::new(None)), config }
 	}
 
 	/// Run a shell command using the provided options.
@@ -143,133 +129,91 @@ impl Shell {
 	/// the exit code when the command completes, or flags when cancelled or
 	/// timed out.
 	#[napi]
-	pub async fn run(
+	pub fn run<'e>(
 		&self,
-		options: ShellRunOptions,
+		env: &'e Env,
+		options: ShellRunOptions<'e>,
 		#[napi(ts_arg_type = "((chunk: string) => void) | undefined | null")] on_chunk: Option<
 			ThreadsafeFunction<String>,
 		>,
-	) -> Result<ShellRunResult> {
-		let execution_id = EXECUTION_COUNTER.fetch_add(1, Ordering::Relaxed);
-		let timeout_ms = options.timeout_ms;
-
-		let (cancel_tx, cancel_rx) = oneshot::channel();
-		{
-			let mut executions = EXECUTIONS.lock();
-			executions
-				.insert(execution_id, ExecutionControl { cancel: cancel_tx, shell_id: self.id });
-		}
-		let _guard = ExecutionGuard { execution_id };
-
+	) -> Result<PromiseRaw<'e, ShellRunResult>> {
+		let ct = task::CancelToken::new(options.timeout_ms, options.signal);
 		let session = self.session.clone();
 		let config = self.config.clone();
-		let cancel_token = CancellationToken::new();
 
-		let mut run_task = tokio::spawn({
-			let cancel_token = cancel_token.clone();
-			async move {
-				let mut session_guard = session.lock().await;
-				if session_guard.is_none() {
-					*session_guard = Some(create_session(&config).await?);
-				}
-				let session_core = session_guard.as_mut().unwrap();
-				run_shell_command(session_core, &options, on_chunk, cancel_token).await
-			}
-		});
+		let run_config =
+			ShellRunConfig { command: options.command, cwd: options.cwd, env: options.env };
 
-		let mut cancelled = false;
-		let mut timed_out = false;
-		let mut tainted = false;
-
-		let run_result = {
-			let run_result = if let Some(ms) = timeout_ms {
-				let timeout = time::sleep(Duration::from_millis(ms as u64));
-				tokio::pin!(timeout);
-
-				tokio::select! {
-					result = &mut run_task => Some(result),
-					_ = cancel_rx => {
-						cancelled = true;
-						cancel_token.cancel();
-						None
-					}
-					() = &mut timeout => {
-						timed_out = true;
-						cancel_token.cancel();
-						None
-					}
-				}
-			} else {
-				tokio::select! {
-					result = &mut run_task => Some(result),
-					_ = cancel_rx => {
-						cancelled = true;
-						cancel_token.cancel();
-						None
-					}
-				}
-			};
-
-			if let Some(run_result) = run_result {
-				let run_result = match run_result {
-					Ok(result) => result,
-					Err(err) => {
-						*self.session.lock().await = None;
-						return Err(Error::from_reason(format!("Shell execution task failed: {err}")));
-					},
-				};
-				Some(run_result?)
-			} else {
-				match time::timeout(Duration::from_millis(1500), &mut run_task).await {
-					Ok(Err(_)) => tainted = true,
-					Err(_) => {
-						tainted = true;
-						run_task.abort();
-					},
-					_ => {},
-				}
-				None
-			}
-		};
-
-		if tainted {
-			*self.session.lock().await = None;
-		}
-
-		let Some(run_result) = run_result else {
-			return Ok(ShellRunResult { exit_code: None, cancelled, timed_out });
-		};
-
-		if should_reset_session(&run_result) {
-			*self.session.lock().await = None;
-		}
-
-		Ok(ShellRunResult { exit_code: Some(exit_code(&run_result)), cancelled, timed_out })
+		task::future(env, "shell.run", async move {
+			run_shell_session(session, config, run_config, on_chunk, ct).await
+		})
 	}
 
 	/// Abort all running commands for this shell session.
 	///
 	/// Returns `Ok(())` even when no commands are running.
 	#[napi]
-	pub fn abort(&self) -> Result<()> {
-		let mut executions = EXECUTIONS.lock();
-		let ids: SmallVec<[u64; 4]> = executions
-			.iter()
-			.filter_map(|(id, ctrl)| (ctrl.shell_id == self.id).then_some(*id))
-			.collect();
-		for id in ids {
-			if let Some(ctrl) = executions.remove(&id) {
-				let _ = ctrl.cancel.send(());
-			}
+	pub async fn abort(&self) -> Result<()> {
+		if let Some(session) = self.session.lock().await.as_ref()
+			&& let Some(at) = &session.current_abort
+		{
+			at.abort(task::AbortReason::Signal);
 		}
-
 		Ok(())
 	}
 }
 
+/// Run a shell command within a persistent session.
+async fn run_shell_session(
+	session: Arc<TokioMutex<Option<ShellSessionCore>>>,
+	config: ShellConfig,
+	run_config: ShellRunConfig,
+	on_chunk: Option<ThreadsafeFunction<String>>,
+	mut ct: task::CancelToken,
+) -> Result<ShellRunResult> {
+	let tokio_cancel = CancellationToken::new();
+
+	let mut run_task = tokio::spawn({
+		let session = session.clone();
+		let tokio_cancel = tokio_cancel.clone();
+		let at = ct.emplace_abort_token();
+		async move {
+			let mut session_guard = session.lock().await;
+
+			let session = match &mut *session_guard {
+				Some(session) => session,
+				None => session_guard.insert(create_session(&config).await?),
+			};
+			session.current_abort = Some(at);
+			run_shell_command(session, &run_config, on_chunk, tokio_cancel).await
+		}
+	});
+
+	let res = tokio::select! {
+		res = &mut run_task => res,
+		reason = ct.wait() => {
+			tokio_cancel.cancel();
+			return Ok(ShellRunResult { exit_code: None, cancelled: matches!(reason, task::AbortReason::Signal), timed_out: matches!(reason, task::AbortReason::Timeout) });
+		}
+	};
+	let res =
+		res.unwrap_or_else(|e| Err(Error::from_reason(format!("Shell execution task failed: {e}"))));
+
+	let keepalive = res.as_ref().is_ok_and(session_keepalive);
+	if keepalive {
+		// Clear abort token when command completes
+		if let Some(session_core) = session.lock().await.as_mut() {
+			session_core.current_abort = None;
+		}
+	} else {
+		*session.lock().await = None;
+	}
+	Ok(ShellRunResult { exit_code: Some(exit_code(&res?)), cancelled: false, timed_out: false })
+}
+
 /// Options for executing a shell command via brush-core.
 #[napi(object)]
-pub struct ShellExecuteOptions {
+pub struct ShellExecuteOptions<'env> {
 	/// Command string to execute in the shell.
 	pub command:       String,
 	/// Working directory for the command.
@@ -279,11 +223,13 @@ pub struct ShellExecuteOptions {
 	/// Environment variables to apply once per session.
 	pub session_env:   Option<HashMap<String, String>>,
 	/// Timeout in milliseconds before cancelling the command.
+	#[napi(js_name = "timeoutMs")]
 	pub timeout_ms:    Option<u32>,
-	/// Unique identifier for this execution.
-	pub execution_id:  u32,
 	/// Optional snapshot file to source on session creation.
+	#[napi(js_name = "snapshotPath")]
 	pub snapshot_path: Option<String>,
+	/// Abort signal for cancelling the operation.
+	pub signal:        Option<Unknown<'env>>,
 }
 
 /// Result of executing a shell command via brush-core.
@@ -302,103 +248,58 @@ pub struct ShellExecuteResult {
 /// Creates a fresh session for each call. The `on_chunk` callback receives
 /// streamed stdout/stderr output. Returns the exit code when the command
 /// completes, or flags when cancelled or timed out.
-#[napi]
-pub async fn execute_shell(
-	options: ShellExecuteOptions,
+#[napi(js_name = "executeShell")]
+pub fn execute_shell<'env>(
+	env: &'env Env,
+	options: ShellExecuteOptions<'env>,
 	#[napi(ts_arg_type = "((chunk: string) => void) | undefined | null")] on_chunk: Option<
 		ThreadsafeFunction<String>,
 	>,
+) -> Result<PromiseRaw<'env, ShellExecuteResult>> {
+	let config =
+		ShellConfig { session_env: options.session_env, snapshot_path: options.snapshot_path };
+	let run_config =
+		ShellRunConfig { command: options.command, cwd: options.cwd, env: options.env };
+
+	let ct = task::CancelToken::new(options.timeout_ms, options.signal);
+	task::future(env, "shell.execute", async move {
+		run_shell_oneshot(config, run_config, on_chunk, ct).await
+	})
+}
+
+/// Run a shell command in a fresh session (one-shot execution).
+async fn run_shell_oneshot(
+	config: ShellConfig,
+	run_config: ShellRunConfig,
+	on_chunk: Option<ThreadsafeFunction<String>>,
+	ct: task::CancelToken,
 ) -> Result<ShellExecuteResult> {
-	let execution_id = options.execution_id as u64;
-	let timeout_ms = options.timeout_ms;
+	let tokio_cancel = CancellationToken::new();
 
-	let (cancel_tx, cancel_rx) = oneshot::channel();
-	{
-		let mut executions = EXECUTIONS.lock();
-		if executions.contains_key(&execution_id) {
-			return Err(Error::from_reason("Execution already running"));
-		}
-		executions.insert(execution_id, ExecutionControl { cancel: cancel_tx, shell_id: 0 });
-	}
-	let _guard = ExecutionGuard { execution_id };
-
-	let config = ShellConfig {
-		session_env:   options.session_env.clone(),
-		snapshot_path: options.snapshot_path.clone(),
-	};
-	let run_options = ShellRunOptions {
-		command:    options.command,
-		cwd:        options.cwd,
-		env:        options.env,
-		timeout_ms: None, // handled below
-	};
-
-	let cancel_token = CancellationToken::new();
-
-	let mut run_task = tokio::spawn({
-		let cancel_token = cancel_token.clone();
+	let mut task = tokio::spawn({
+		let tokio_cancel = tokio_cancel.clone();
 		async move {
 			let mut session = create_session(&config).await?;
-			run_shell_command(&mut session, &run_options, on_chunk, cancel_token).await
+			run_shell_command(&mut session, &run_config, on_chunk, tokio_cancel).await
 		}
 	});
 
-	let mut cancelled = false;
-	let mut timed_out = false;
-
-	let run_result = {
-		let run_result = if let Some(ms) = timeout_ms {
-			let timeout = time::sleep(Duration::from_millis(ms as u64));
-			tokio::pin!(timeout);
-
-			tokio::select! {
-				result = &mut run_task => Some(result),
-				_ = cancel_rx => {
-					cancelled = true;
-					cancel_token.cancel();
-					None
-				}
-				() = &mut timeout => {
-					timed_out = true;
-					cancel_token.cancel();
-					None
-				}
-			}
-		} else {
-			tokio::select! {
-				result = &mut run_task => Some(result),
-				_ = cancel_rx => {
-					cancelled = true;
-					cancel_token.cancel();
-					None
-				}
-			}
-		};
-
-		if let Some(run_result) = run_result {
-			let run_result = match run_result {
-				Ok(result) => result,
-				Err(err) => {
-					return Err(Error::from_reason(format!("Shell execution task failed: {err}")));
-				},
-			};
-			Some(run_result?)
-		} else {
-			match time::timeout(Duration::from_millis(1500), &mut run_task).await {
-				Ok(Err(_)) | Err(_) => {
-					run_task.abort();
-				},
-				_ => {},
-			}
-			None
-		}
+	let run_result = tokio::select! {
+		result = &mut task => result,
+		reason = ct.wait() => {
+			task.abort();
+			return Ok(ShellExecuteResult {
+				exit_code: None,
+				cancelled: matches!(reason, task::AbortReason::Signal),
+				timed_out: matches!(reason, task::AbortReason::Timeout),
+			})
+		},
 	};
 
-	let Some(run_result) = run_result else {
-		return Ok(ShellExecuteResult { exit_code: None, cancelled, timed_out });
-	};
+	let res = run_result
+		.unwrap_or_else(|e| Err(Error::from_reason(format!("Shell execution task failed: {e}"))));
 
-	Ok(ShellExecuteResult { exit_code: Some(exit_code(&run_result)), cancelled, timed_out })
+	Ok(ShellExecuteResult { exit_code: Some(exit_code(&res?)), cancelled: false, timed_out: false })
 }
 
 fn null_file() -> Result<OpenFile> {
@@ -416,18 +317,6 @@ const fn exit_code(result: &ExecutionResult) -> i32 {
 		ExecutionExitCode::Interrupted => 130,
 		ExecutionExitCode::Custom(code) => code as i32,
 	}
-}
-
-/// Abort a running shell execution by ID.
-///
-/// Returns `Ok(())` even when the execution ID is not active.
-#[napi]
-pub fn abort_shell_execution(execution_id: u32) -> Result<()> {
-	let mut executions = EXECUTIONS.lock();
-	if let Some(control) = executions.remove(&(execution_id as u64)) {
-		let _ = control.cancel.send(());
-	}
-	Ok(())
 }
 
 async fn create_session(config: &ShellConfig) -> Result<ShellSessionCore> {
@@ -487,7 +376,7 @@ async fn create_session(config: &ShellConfig) -> Result<ShellSessionCore> {
 		source_snapshot(&mut shell, snapshot_path).await?;
 	}
 
-	Ok(ShellSessionCore { shell })
+	Ok(ShellSessionCore { shell, current_abort: None })
 }
 
 async fn source_snapshot(shell: &mut BrushShell, snapshot_path: &str) -> Result<()> {
@@ -507,7 +396,7 @@ async fn source_snapshot(shell: &mut BrushShell, snapshot_path: &str) -> Result<
 
 async fn run_shell_command(
 	session: &mut ShellSessionCore,
-	options: &ShellRunOptions,
+	options: &ShellRunConfig,
 	on_chunk: Option<ThreadsafeFunction<String>>,
 	cancel_token: CancellationToken,
 ) -> Result<ExecutionResult> {
@@ -555,9 +444,9 @@ async fn run_shell_command(
 		}
 	}
 
-	let reader_handle = launch_async("shell.read_output", async move {
+	let reader_handle = tokio::spawn(async move {
 		read_output(reader_file, on_chunk).await;
-		Ok(())
+		Result::<()>::Ok(())
 	});
 	let result = session
 		.shell
@@ -574,7 +463,7 @@ async fn run_shell_command(
 
 	drop(params);
 
-	let () = reader_handle.wait().await?;
+	let _ = reader_handle.await;
 
 	result.map_err(|err| Error::from_reason(format!("Shell execution failed: {err}")))
 }
@@ -637,13 +526,13 @@ fn should_skip_env_var(key: &str) -> bool {
 	)
 }
 
-const fn should_reset_session(result: &ExecutionResult) -> bool {
+const fn session_keepalive(result: &ExecutionResult) -> bool {
 	match result.next_control_flow {
-		ExecutionControlFlow::Normal => false,
-		ExecutionControlFlow::BreakLoop { .. } => true,
-		ExecutionControlFlow::ContinueLoop { .. } => true,
-		ExecutionControlFlow::ReturnFromFunctionOrScript => true,
-		ExecutionControlFlow::ExitShell => true,
+		ExecutionControlFlow::Normal => true,
+		ExecutionControlFlow::BreakLoop { .. } => false,
+		ExecutionControlFlow::ContinueLoop { .. } => false,
+		ExecutionControlFlow::ReturnFromFunctionOrScript => false,
+		ExecutionControlFlow::ExitShell => false,
 	}
 }
 

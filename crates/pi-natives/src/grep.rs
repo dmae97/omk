@@ -30,7 +30,7 @@ use napi_derive::napi;
 use rayon::prelude::*;
 use smallvec::SmallVec;
 
-use crate::work::launch_blocking;
+use crate::task;
 
 const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -66,7 +66,7 @@ pub struct SearchOptions {
 
 /// Options for searching files on disk.
 #[napi(object)]
-pub struct GrepOptions {
+pub struct GrepOptions<'env> {
 	/// Regex pattern to search for.
 	pub pattern:     String,
 	/// Directory or file to search.
@@ -95,6 +95,11 @@ pub struct GrepOptions {
 	pub max_columns: Option<u32>,
 	/// Output mode (content, filesWithMatches, or count).
 	pub mode:        Option<String>,
+	/// Abort signal for cancelling the operation.
+	pub signal:      Option<Unknown<'env>>,
+	/// Timeout in milliseconds for the operation.
+	#[napi(js_name = "timeoutMs")]
+	pub timeout_ms:  Option<u32>,
 }
 
 /// A context line (before or after a match).
@@ -580,6 +585,22 @@ const fn empty_search_result(error: Option<String>) -> SearchResult {
 	SearchResult { matches: Vec::new(), match_count: 0, limit_reached: false, error }
 }
 
+/// Internal configuration for grep, extracted from options.
+struct GrepConfig {
+	pattern:     String,
+	path:        String,
+	glob:        Option<String>,
+	type_filter: Option<String>,
+	ignore_case: Option<bool>,
+	multiline:   Option<bool>,
+	hidden:      Option<bool>,
+	max_count:   Option<u32>,
+	offset:      Option<u32>,
+	context:     Option<u32>,
+	max_columns: Option<u32>,
+	mode:        Option<String>,
+}
+
 fn collect_files(
 	root: &Path,
 	glob_set: Option<&GlobSet>,
@@ -766,8 +787,9 @@ fn search_sync(content: &[u8], options: SearchOptions) -> SearchResult {
 }
 
 fn grep_sync(
-	options: GrepOptions,
+	options: GrepConfig,
 	on_match: Option<&ThreadsafeFunction<GrepMatch>>,
+	ct: task::CancelToken,
 ) -> Result<GrepResult> {
 	let search_path = resolve_search_path(&options.path)?;
 	let metadata = std::fs::metadata(&search_path)
@@ -862,6 +884,9 @@ fn grep_sync(
 
 	let entries =
 		collect_files(&search_path, glob_set.as_ref(), include_hidden, type_filter.as_ref());
+
+	// Check cancellation before heavy work
+	ct.heartbeat()?;
 
 	if entries.is_empty() {
 		return Ok(GrepResult {
@@ -1030,15 +1055,46 @@ pub fn has_match(
 /// # Returns
 /// Aggregated results across matching files.
 #[napi(js_name = "grep")]
-pub async fn grep(
-	options: GrepOptions,
+pub fn grep(
+	options: GrepOptions<'_>,
 	#[napi(ts_arg_type = "((match: GrepMatch) => void) | undefined | null")] on_match: Option<
 		ThreadsafeFunction<GrepMatch>,
 	>,
-) -> Result<GrepResult> {
-	launch_blocking("grep", move || grep_sync(options, on_match.as_ref()))
-		.wait()
-		.await
+) -> task::Async<GrepResult> {
+	let GrepOptions {
+		pattern,
+		path,
+		glob,
+		type_filter,
+		ignore_case,
+		multiline,
+		hidden,
+		max_count,
+		offset,
+		context,
+		max_columns,
+		mode,
+		timeout_ms,
+		signal,
+	} = options;
+
+	let config = GrepConfig {
+		pattern,
+		path,
+		glob,
+		type_filter,
+		ignore_case,
+		multiline,
+		hidden,
+		max_count,
+		offset,
+		context,
+		max_columns,
+		mode,
+	};
+
+	let ct = task::CancelToken::new(timeout_ms, signal);
+	task::blocking("grep", ct, move |ct| grep_sync(config, on_match.as_ref(), ct))
 }
 
 // =============================================================================
@@ -1047,7 +1103,7 @@ pub async fn grep(
 
 /// Options for fuzzy file path search.
 #[napi(object)]
-pub struct FuzzyFindOptions {
+pub struct FuzzyFindOptions<'env> {
 	/// Substring query to match against file paths (case-insensitive).
 	pub query:       String,
 	/// Directory to search.
@@ -1059,6 +1115,11 @@ pub struct FuzzyFindOptions {
 	/// Maximum number of matches to return (default: 100).
 	#[napi(js_name = "maxResults")]
 	pub max_results: Option<u32>,
+	/// Abort signal for cancelling the operation.
+	pub signal:      Option<Unknown<'env>>,
+	/// Timeout in milliseconds for the operation.
+	#[napi(js_name = "timeoutMs")]
+	pub timeout_ms:  Option<u32>,
 }
 
 /// A single match in fuzzy find results.
@@ -1081,8 +1142,17 @@ pub struct FuzzyFindResult {
 	pub total_matches: u32,
 }
 
-fn fuzzy_find_sync(options: FuzzyFindOptions) -> Result<FuzzyFindResult> {
-	let root = resolve_search_path(&options.path)?;
+/// Internal configuration for fuzzy find, extracted from options.
+struct FuzzyFindConfig {
+	query:       String,
+	path:        String,
+	hidden:      Option<bool>,
+	gitignore:   Option<bool>,
+	max_results: Option<u32>,
+}
+
+fn fuzzy_find_sync(config: FuzzyFindConfig, ct: task::CancelToken) -> Result<FuzzyFindResult> {
+	let root = resolve_search_path(&config.path)?;
 	let metadata = std::fs::metadata(&root)
 		.map_err(|err| Error::from_reason(format!("Path not found: {err}")))?;
 
@@ -1090,10 +1160,10 @@ fn fuzzy_find_sync(options: FuzzyFindOptions) -> Result<FuzzyFindResult> {
 		return Err(Error::from_reason("Path must be a directory"));
 	}
 
-	let include_hidden = options.hidden.unwrap_or(false);
-	let respect_gitignore = options.gitignore.unwrap_or(true);
-	let max_results = options.max_results.unwrap_or(100) as usize;
-	let query_lower = options.query.to_lowercase();
+	let include_hidden = config.hidden.unwrap_or(false);
+	let respect_gitignore = config.gitignore.unwrap_or(true);
+	let max_results = config.max_results.unwrap_or(100) as usize;
+	let query_lower = config.query.to_lowercase();
 
 	let mut builder = WalkBuilder::new(&root);
 	builder
@@ -1110,6 +1180,8 @@ fn fuzzy_find_sync(options: FuzzyFindOptions) -> Result<FuzzyFindResult> {
 	let mut total_matches = 0u32;
 
 	for entry in builder.build() {
+		ct.heartbeat()?;
+
 		let Ok(entry) = entry else { continue };
 		let file_type = entry.file_type();
 		let Some(ft) = file_type else { continue };
@@ -1157,8 +1229,11 @@ fn fuzzy_find_sync(options: FuzzyFindOptions) -> Result<FuzzyFindResult> {
 /// # Returns
 /// Matching file and directory entries.
 #[napi(js_name = "fuzzyFind")]
-pub async fn fuzzy_find(options: FuzzyFindOptions) -> Result<FuzzyFindResult> {
-	launch_blocking("fuzzy_find", move || fuzzy_find_sync(options))
-		.wait()
-		.await
+pub fn fuzzy_find(options: FuzzyFindOptions<'_>) -> task::Async<FuzzyFindResult> {
+	let FuzzyFindOptions { query, path, hidden, gitignore, max_results, timeout_ms, signal } =
+		options;
+
+	let ct = task::CancelToken::new(timeout_ms, signal);
+	let config = FuzzyFindConfig { query, path, hidden, gitignore, max_results };
+	task::blocking("fuzzy_find", ct, move |ct| fuzzy_find_sync(config, ct))
 }

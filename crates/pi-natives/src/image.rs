@@ -16,7 +16,7 @@ use image::{
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
-use crate::work::launch_blocking;
+use crate::task;
 
 /// Sampling filter for resize operations.
 #[napi]
@@ -52,6 +52,8 @@ pub struct PhotonImage {
 	img: Arc<DynamicImage>,
 }
 
+type ImageTask = task::Async<PhotonImage>;
+
 #[napi]
 impl PhotonImage {
 	/// Create a new `PhotonImage` from encoded image bytes (PNG, JPEG, WebP,
@@ -59,10 +61,10 @@ impl PhotonImage {
 	///
 	/// # Errors
 	/// Returns an error if the image format cannot be detected or decoded.
-	#[napi(factory, js_name = "parse")]
-	pub async fn parse(bytes: Uint8Array) -> Result<Self> {
+	#[napi(js_name = "parse")]
+	pub fn parse(bytes: Uint8Array) -> ImageTask {
 		let bytes = bytes.as_ref().to_vec();
-		let img = launch_blocking("image.decode", move || -> Result<DynamicImage> {
+		task::blocking("image.decode", (), move |_| -> Result<Self> {
 			let reader = ImageReader::new(Cursor::new(bytes))
 				.with_guessed_format()
 				.map_err(|e| Error::from_reason(format!("Failed to detect image format: {e}")))?;
@@ -71,12 +73,8 @@ impl PhotonImage {
 				.decode()
 				.map_err(|e| Error::from_reason(format!("Failed to decode image: {e}")))?;
 
-			Ok(img)
+			Ok(Self { img: Arc::new(img) })
 		})
-		.wait()
-		.await?;
-
-		Ok(Self { img: Arc::new(img) })
 	}
 
 	/// Get the image width in pixels.
@@ -102,26 +100,19 @@ impl PhotonImage {
 	/// # Errors
 	/// Returns an error if encoding fails or format is invalid.
 	#[napi(js_name = "encode")]
-	pub async fn encode(&self, format: u8, quality: u8) -> Result<Uint8Array> {
+	pub fn encode(&self, format: u8, quality: u8) -> task::Async<Vec<u8>> {
 		let img = Arc::clone(&self.img);
-		let buffer: Vec<u8> =
-			launch_blocking("image.encode", move || encode_image(&img, format, quality))
-				.wait()
-				.await?;
-		Ok(Uint8Array::from(buffer))
+		task::blocking("image.encode", (), move |_| encode_image(&img, format, quality))
 	}
 
 	/// Resize the image to the specified pixel dimensions using the filter.
 	/// Returns a new `PhotonImage` containing the resized image.
 	#[napi(js_name = "resize")]
-	pub async fn resize(&self, width: u32, height: u32, filter: SamplingFilter) -> Result<Self> {
+	pub fn resize(&self, width: u32, height: u32, filter: SamplingFilter) -> ImageTask {
 		let img = Arc::clone(&self.img);
-		let resized = launch_blocking("image.resize", move || {
-			Ok(img.resize_exact(width, height, filter.into()))
+		task::blocking("image.resize", (), move |_| {
+			Ok(Self { img: Arc::new(img.resize_exact(width, height, filter.into())) })
 		})
-		.wait()
-		.await?;
-		Ok(Self { img: Arc::new(resized) })
 	}
 }
 

@@ -2,8 +2,6 @@
  * Native utilities powered by N-API.
  */
 
-export type { RequestOptions } from "./request-options";
-
 // =============================================================================
 // Clipboard
 // =============================================================================
@@ -30,10 +28,16 @@ export {
 } from "./grep";
 
 // =============================================================================
-// Find (file discovery)
+// Glob (file discovery)
 // =============================================================================
 
-export { type FindMatch, type FindOptions, type FindResult, find } from "./find";
+export {
+	FileType,
+	type GlobMatch,
+	type GlobOptions,
+	type GlobResult,
+	glob,
+} from "./glob";
 
 // =============================================================================
 // Image processing (photon-compatible API)
@@ -98,7 +102,6 @@ export { getSystemInfo, type SystemInfo } from "./system-info";
 // =============================================================================
 
 export {
-	abortShellExecution,
 	executeShell,
 	Shell,
 	type ShellExecuteOptions,

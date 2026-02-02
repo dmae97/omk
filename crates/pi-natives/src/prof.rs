@@ -1,66 +1,13 @@
-//! Rayon-backed scheduling for blocking work in N-API exports.
+//! Always-on circular buffer profiler for work scheduling.
 //!
-//! # Overview
-//! Runs CPU-bound or blocking Rust work on a shared Rayon thread pool instead
-//! of Tokio's limited blocking workers.
-//!
-//! # Profiling
-//! Samples are always collected into a circular buffer. Call
-//! `get_work_profile()` to retrieve the last N seconds of data.
+//! Samples are continuously collected into a fixed-size circular buffer.
+//! Call `get_work_profile()` to retrieve the last N seconds of profiling data.
 
-use std::{
-	cell::RefCell,
-	cmp::Reverse,
-	collections::HashMap,
-	panic::{AssertUnwindSafe, catch_unwind},
-	sync::LazyLock,
-	time::Instant,
-};
+use std::{cell::RefCell, cmp::Reverse, collections::HashMap, sync::LazyLock, time::Instant};
 
-use napi::{Error, Result};
 use napi_derive::napi;
 use parking_lot::Mutex;
-use rayon::{ThreadPool, ThreadPoolBuilder};
-use smallvec::{SmallVec, smallvec};
-use tokio::{sync::oneshot, task::JoinHandle};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Work Handle
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Handle for a scheduled blocking task.
-pub enum WorkHandle<T> {
-	Blocking(oneshot::Receiver<Result<T>>),
-	Async(JoinHandle<Result<T>>),
-}
-
-impl<T> WorkHandle<T> {
-	/// Await completion of the scheduled work.
-	pub async fn wait(self) -> Result<T> {
-		match self {
-			Self::Blocking(receiver) => match receiver.await {
-				Ok(result) => result,
-				Err(_) => Err(Error::from_reason("Blocking task cancelled")),
-			},
-			Self::Async(handle) => match handle.await {
-				Ok(result) => result,
-				Err(_) => Err(Error::from_reason("Async task cancelled")),
-			},
-		}
-	}
-
-	/// Abort the scheduled work.
-	pub fn abort(self) {
-		match self {
-			Self::Blocking(_) => (),
-			Self::Async(handle) => handle.abort(),
-		}
-	}
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Work Profiler - Always-on circular buffer
-// ─────────────────────────────────────────────────────────────────────────────
+use smallvec::SmallVec;
 
 /// Maximum samples to keep (roughly 60s at high activity).
 const MAX_SAMPLES: usize = 10_000;
@@ -300,67 +247,3 @@ pub fn get_work_profile(last_seconds: f64) -> WorkProfile {
 		sample_count: samples.len() as u32,
 	}
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Work Scheduling
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Schedule blocking work on the shared Rayon pool with a profiling tag.
-pub fn launch_blocking<F, T>(tag: &'static str, work: F) -> WorkHandle<T>
-where
-	F: FnOnce() -> Result<T> + Send + 'static,
-	T: Send + 'static,
-{
-	let (sender, receiver) = oneshot::channel();
-	let submit_time = Instant::now();
-
-	POOL.spawn(move || {
-		// Record queue wait time
-		let wait_us = submit_time.elapsed().as_micros() as u64;
-		let timestamp_us = PROCESS_START.elapsed().as_micros() as u64;
-		PROFILE_BUFFER.lock().push(ProfileSample {
-			stack: smallvec![tag, "queue_wait"],
-			duration_us: wait_us,
-			timestamp_us,
-		});
-
-		// Execute with profiling
-		let guard = profile_region(tag);
-		let result = catch_unwind(AssertUnwindSafe(work))
-			.unwrap_or_else(|_| Err(Error::from_reason("Rayon task panicked")));
-		drop(guard);
-
-		let _ = sender.send(result);
-	});
-
-	WorkHandle::Blocking(receiver)
-}
-
-/// Schedule non-blocking async work on the Tokio runtime with a profiling tag.
-pub fn launch_async<Fut, T>(tag: &'static str, work: Fut) -> WorkHandle<T>
-where
-	Fut: Future<Output = Result<T>> + Send + 'static,
-	T: Send + 'static,
-{
-	WorkHandle::Async(tokio::spawn(async move {
-		let start = Instant::now();
-		let result = work.await;
-		let duration_us = start.elapsed().as_micros() as u64;
-		let timestamp_us = PROCESS_START.elapsed().as_micros() as u64;
-
-		PROFILE_BUFFER.lock().push(ProfileSample {
-			stack: smallvec![tag],
-			duration_us,
-			timestamp_us,
-		});
-
-		result
-	}))
-}
-
-static POOL: LazyLock<ThreadPool> = LazyLock::new(|| {
-	ThreadPoolBuilder::new()
-		.thread_name(|index| format!("pi-natives-{index}"))
-		.build()
-		.expect("Failed to build Rayon thread pool")
-});
