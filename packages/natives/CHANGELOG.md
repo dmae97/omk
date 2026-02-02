@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [10.2.2] - 2026-02-02
 ### Added
 
 - Exported `getWorkProfile` function and `WorkProfile` type for work profiling capabilities
