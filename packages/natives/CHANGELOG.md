@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [10.2.0] - 2026-02-02
 ### Breaking Changes
 
 - Replaced `find()` with `glob()` - update imports and function calls
