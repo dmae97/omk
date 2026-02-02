@@ -3811,13 +3811,32 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 		// Include available tools
 		const tools = this.agent.state.tools;
+
+		// Recursively strip all fields starting with 'TypeBox.' from an object
+		function stripTypeBoxFields(obj: any): any {
+			if (Array.isArray(obj)) {
+				return obj.map(stripTypeBoxFields);
+			}
+			if (obj && typeof obj === "object") {
+				const result: Record<string, any> = {};
+				for (const [k, v] of Object.entries(obj)) {
+					if (!k.startsWith("TypeBox.")) {
+						result[k] = stripTypeBoxFields(v);
+					}
+				}
+				return result;
+			}
+			return obj;
+		}
+
 		if (tools.length > 0) {
 			lines.push("## Available Tools\n");
 			for (const tool of tools) {
 				lines.push(`### ${tool.name}\n`);
 				lines.push(tool.description);
 				lines.push("\n```yaml");
-				lines.push(YAML.stringify(tool.parameters, null, 2));
+				const parametersClean = stripTypeBoxFields(tool.parameters);
+				lines.push(YAML.stringify(parametersClean, null, 2));
 				lines.push("```\n");
 			}
 			lines.push("\n");

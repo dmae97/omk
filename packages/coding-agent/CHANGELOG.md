@@ -1,9 +1,18 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `tools` field to agent frontmatter for declaring agent-specific tool capabilities
+
+### Removed
+
+- Removed project tree snapshot generation from system prompt (unused feature)
+
+### Fixed
+
+- Fixed tool parameter schemas displaying internal TypeBox metadata fields in system prompt
 
 ## [10.2.1] - 2026-02-02
 ### Breaking Changes

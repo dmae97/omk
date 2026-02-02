@@ -1,11 +1,9 @@
 /**
  * System prompt construction and project context loading
  */
-import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { FileType, getSystemInfo as getNativeSystemInfo, glob, type SystemInfo } from "@oh-my-pi/pi-natives";
-import { untilAborted } from "@oh-my-pi/pi-utils";
+import { getSystemInfo as getNativeSystemInfo, type SystemInfo } from "@oh-my-pi/pi-natives";
 import { $ } from "bun";
 import chalk from "chalk";
 import { contextFileCapability } from "./capability/context-file";
@@ -106,24 +104,6 @@ function parseWmicTable(output: string, header: string): string | null {
 
 const AGENTS_MD_PATTERN = "**/AGENTS.md";
 const AGENTS_MD_LIMIT = 200;
-const PROJECT_TREE_LIMIT = 2000;
-const PROJECT_TREE_PER_DIR_LIMIT = 10;
-const PROJECT_TREE_PER_DIR_DEPTH = 2;
-const PROJECT_TREE_IGNORED = new Set([
-	".git",
-	".hg",
-	".svn",
-	".next",
-	".turbo",
-	".cache",
-	".venv",
-	".idea",
-	".vscode",
-	"build",
-	"dist",
-	"node_modules",
-	"target",
-]);
 
 interface AgentsMdSearch {
 	scopePath: string;
@@ -159,201 +139,6 @@ function buildAgentsMdSearch(cwd: string): AgentsMdSearch {
 		pattern: AGENTS_MD_PATTERN,
 		files,
 	};
-}
-
-type ProjectTreeEntry = {
-	name: string;
-	isDirectory: boolean;
-	path: string;
-};
-
-type ProjectTreeScan = {
-	children: Map<string, ProjectTreeEntry[]>;
-	truncated: boolean;
-	truncatedDirs: Set<string>;
-};
-
-const GLOB_TIMEOUT_MS = 5000;
-
-/**
- * Scan project tree using ripgrep-wasm find with exclusion filters.
- * Returns null if scan fails.
- */
-async function scanProjectTreeWithGlob(root: string): Promise<ProjectTreeScan | null> {
-	let entries: string[];
-	const timeoutSignal = AbortSignal.timeout(GLOB_TIMEOUT_MS);
-	try {
-		const result = await untilAborted(timeoutSignal, () =>
-			glob({
-				pattern: "**/*",
-				path: root,
-				fileType: FileType.File,
-			}),
-		);
-		entries = result.matches.map(match => match.path).filter(entry => entry.length > 0);
-	} catch {
-		return null;
-	}
-
-	// Build directory contents map from file list
-	// Map<dirPath, Map<entryPath, isDirectory>>
-	const dirContents = new Map<string, Map<string, boolean>>();
-	dirContents.set(root, new Map());
-
-	for (const entry of entries) {
-		const filePath = entry;
-		if (!filePath) continue;
-		const absolutePath = path.join(root, filePath);
-		// Check static ignores on path components
-		const relative = path.relative(root, absolutePath);
-		const parts = relative.split(path.sep);
-		if (parts.some(p => PROJECT_TREE_IGNORED.has(p))) continue;
-
-		// Add file to its parent directory
-		const parent = path.dirname(absolutePath);
-		if (!dirContents.has(parent)) dirContents.set(parent, new Map());
-		dirContents.get(parent)!.set(absolutePath, false);
-
-		// Add all intermediate directories
-		let dir = parent;
-		while (dir.length >= root.length && dir !== path.dirname(dir)) {
-			const parentDir = path.dirname(dir);
-			if (!dirContents.has(parentDir)) dirContents.set(parentDir, new Map());
-			dirContents.get(parentDir)!.set(dir, true);
-			dir = parentDir;
-		}
-	}
-
-	// BFS to build the tree with limits
-	const children = new Map<string, ProjectTreeEntry[]>();
-	let entryCount = 0;
-	let truncated = false;
-	const truncatedDirs = new Set<string>();
-
-	const queue: Array<{ dirPath: string; depth: number }> = [{ dirPath: root, depth: 0 }];
-	let cursor = 0;
-
-	while (cursor < queue.length && !truncated) {
-		const { dirPath, depth } = queue[cursor];
-		cursor += 1;
-
-		const contents = dirContents.get(dirPath);
-		if (!contents || contents.size === 0) continue;
-
-		// Get stats for sorting
-		const entries = Array.from(contents.entries());
-		const withStats = await Promise.all(
-			entries.map(async ([entryPath, isDirectory]) => {
-				try {
-					const stats = await fs.stat(entryPath);
-					return { entryPath, isDirectory, mtimeMs: stats.mtimeMs };
-				} catch {
-					return { entryPath, isDirectory, mtimeMs: 0 };
-				}
-			}),
-		);
-
-		withStats.sort((a, b) => {
-			if (a.mtimeMs !== b.mtimeMs) return b.mtimeMs - a.mtimeMs;
-			return path.basename(a.entryPath).localeCompare(path.basename(b.entryPath));
-		});
-
-		const perDirLimit = depth >= PROJECT_TREE_PER_DIR_DEPTH ? PROJECT_TREE_PER_DIR_LIMIT : null;
-		const limited = perDirLimit === null ? withStats : withStats.slice(0, perDirLimit);
-		const hasMoreEntries = perDirLimit !== null && withStats.length > perDirLimit;
-
-		const mapped: ProjectTreeEntry[] = [];
-		for (const { entryPath, isDirectory } of limited) {
-			if (entryCount >= PROJECT_TREE_LIMIT) {
-				truncated = true;
-				break;
-			}
-
-			mapped.push({
-				name: path.basename(entryPath),
-				isDirectory,
-				path: entryPath,
-			});
-			entryCount += 1;
-
-			if (isDirectory) {
-				queue.push({ dirPath: entryPath, depth: depth + 1 });
-			}
-		}
-
-		if (!truncated && hasMoreEntries) {
-			truncatedDirs.add(dirPath);
-		}
-		children.set(dirPath, mapped);
-	}
-
-	return { children, truncated, truncatedDirs };
-}
-
-async function scanProjectTree(root: string): Promise<ProjectTreeScan> {
-	const globResult = await scanProjectTreeWithGlob(root);
-	if (globResult) return globResult;
-	return { children: new Map(), truncated: false, truncatedDirs: new Set() };
-}
-
-function renderProjectTree(scan: ProjectTreeScan, root: string): string {
-	const lines: string[] = [];
-
-	const collapseDir = (dirPath: string): { path: string; entries: ProjectTreeEntry[] } | null => {
-		let currentPath = dirPath;
-		while (true) {
-			const entries = scan.children.get(currentPath);
-			if (!entries || entries.length === 0) return null;
-			const files = entries.filter(entry => !entry.isDirectory);
-			const dirs = entries.filter(entry => entry.isDirectory);
-			if (files.length === 0 && dirs.length === 1 && !scan.truncatedDirs.has(currentPath)) {
-				currentPath = dirs[0].path;
-				continue;
-			}
-			return { path: currentPath, entries };
-		}
-	};
-
-	const renderDir = (dirPath: string, indent: string, isRoot: boolean): void => {
-		const collapsed = collapseDir(dirPath);
-		if (!collapsed) return;
-		const { path: collapsedPath, entries } = collapsed;
-
-		// For non-root directories, print the header and indent contents
-		const contentIndent = isRoot ? indent : `${indent}  `;
-		if (!isRoot) {
-			const relative = path.relative(root, collapsedPath) || ".";
-			lines.push(`${indent}@ ${relative}`);
-		}
-
-		const files = entries.filter(entry => !entry.isDirectory);
-		const dirs = entries.filter(entry => entry.isDirectory);
-
-		for (const entry of files) {
-			lines.push(`${contentIndent}- ${entry.name}`);
-		}
-
-		if (scan.truncatedDirs.has(collapsedPath)) {
-			lines.push(`${contentIndent}- …`);
-		}
-
-		for (const entry of dirs) {
-			renderDir(entry.path, contentIndent, false);
-		}
-	};
-
-	renderDir(root, "", true);
-
-	if (scan.truncated) {
-		lines.push("…");
-	}
-
-	return lines.join("\n");
-}
-
-async function buildProjectTreeSnapshot(root: string): Promise<string> {
-	const scan = await scanProjectTree(root);
-	return renderProjectTree(scan, root);
 }
 
 async function getGpuModel(): Promise<string | null> {
@@ -704,7 +489,6 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 	// Resolve context files: use provided or discover
 	const contextFiles = providedContextFiles ?? (await loadProjectContextFiles({ cwd: resolvedCwd }));
 	const agentsMdSearch = buildAgentsMdSearch(resolvedCwd);
-	const projectTree = await buildProjectTreeSnapshot(resolvedCwd);
 
 	// Build tool descriptions array
 	// Priority: toolNames (explicit list) > tools (Map) > defaults
@@ -742,7 +526,6 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 			customPrompt: resolvedCustomPrompt,
 			appendPrompt: resolvedAppendPrompt ?? "",
 			contextFiles,
-			projectTree,
 			agentsMdSearch,
 			git,
 			skills: filteredSkills,
@@ -759,7 +542,6 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		environment: await getEnvironmentInfo(),
 		systemPromptCustomization: systemPromptCustomization ?? "",
 		contextFiles,
-		projectTree,
 		agentsMdSearch,
 		git,
 		skills: filteredSkills,
