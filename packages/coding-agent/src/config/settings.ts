@@ -307,12 +307,6 @@ export class Settings {
 	 * Get shell configuration based on settings.
 	 */
 	getShellConfig() {
-		if (this.get("shellForceBasic")) {
-			const basicShell = procmgr.resolveBasicShell();
-			if (basicShell) {
-				return procmgr.getShellConfig(basicShell);
-			}
-		}
 		const shell = this.get("shellPath");
 		return procmgr.getShellConfig(shell);
 	}

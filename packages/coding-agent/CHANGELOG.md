@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Removed
+
+- Removed `shellForceBasic` setting that forced bash/sh shell selection
+- Removed `bash.persistentShell` experimental setting for shell session reuse
 
 ## [10.2.3] - 2026-02-02
 ### Added

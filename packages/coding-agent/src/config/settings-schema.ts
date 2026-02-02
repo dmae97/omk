@@ -214,15 +214,6 @@ export const SETTINGS_SCHEMA = {
 		},
 	},
 	shellPath: { type: "string", default: undefined },
-	shellForceBasic: {
-		type: "boolean",
-		default: true,
-		ui: {
-			tab: "bash",
-			label: "Force basic shell",
-			description: "Use bash/sh even if your default shell is different",
-		},
-	},
 	collapseChangelog: {
 		type: "boolean",
 		default: false,
@@ -555,15 +546,6 @@ export const SETTINGS_SCHEMA = {
 		},
 	},
 	// bashInterceptor.patterns is complex - handle separately
-
-	// ─────────────────────────────────────────────────────────────────────────
-	// Bash settings
-	// ─────────────────────────────────────────────────────────────────────────
-	"bash.persistentShell": {
-		type: "boolean",
-		default: false,
-		ui: { tab: "bash", label: "Persistent shell", description: "Reuse shell session across commands (experimental)" },
-	},
 
 	// ─────────────────────────────────────────────────────────────────────────
 	// MCP settings

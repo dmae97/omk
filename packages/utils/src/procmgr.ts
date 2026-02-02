@@ -84,7 +84,7 @@ function buildConfig(shell: string): ShellConfig {
 }
 
 /**
- * Resolve the basic shell to use if shellForceBasic is true.
+ * Resolve a basic shell (bash or sh) as fallback.
  */
 export function resolveBasicShell(): string | undefined {
 	for (const name of ["bash", "bash.exe", "sh", "sh.exe"]) {
