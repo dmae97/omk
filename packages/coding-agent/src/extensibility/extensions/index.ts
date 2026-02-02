@@ -103,13 +103,4 @@ export type {
 	UserPythonEventResult,
 	WriteToolResultEvent,
 } from "./types";
-// Type guards
-export {
-	isBashToolResult,
-	isEditToolResult,
-	isFindToolResult,
-	isGrepToolResult,
-	isReadToolResult,
-	isWriteToolResult,
-} from "./types";
 export { ExtensionToolWrapper, RegisteredToolAdapter, wrapRegisteredTool, wrapRegisteredTools } from "./wrapper";

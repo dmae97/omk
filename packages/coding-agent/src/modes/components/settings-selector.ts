@@ -19,6 +19,7 @@ import type {
 	StatusLineSegmentId,
 	StatusLineSeparatorStyle,
 } from "../../config/settings-schema";
+import { SETTING_TABS, TAB_METADATA } from "../../config/settings-schema";
 import { getSelectListTheme, getSettingsListTheme, theme } from "../../modes/theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 import { PluginSettingsComponent } from "./plugin-settings";
@@ -116,17 +117,16 @@ class SelectSubmenu extends Container {
 	}
 }
 
-const SETTINGS_TABS: Tab[] = [
-	{ id: "behavior", label: "Behavior" },
-	{ id: "tools", label: "Tools" },
-	{ id: "bash", label: "Bash" },
-	{ id: "display", label: "Display" },
-	{ id: "ttsr", label: "TTSR" },
-	{ id: "status", label: "Status" },
-	{ id: "lsp", label: "LSP" },
-	{ id: "exa", label: "Exa" },
-	{ id: "plugins", label: "Plugins" },
-];
+function getSettingsTabs(): Tab[] {
+	return [
+		...SETTING_TABS.map(id => {
+			const meta = TAB_METADATA[id];
+			const icon = theme.symbol(meta.icon as Parameters<typeof theme.symbol>[0]);
+			return { id, label: `${icon} ${meta.label}` };
+		}),
+		{ id: "plugins", label: `${theme.icon.package} Plugins` },
+	];
+}
 
 /**
  * Dynamic context for settings that need runtime data.
@@ -177,7 +177,7 @@ export class SettingsSelectorComponent extends Container {
 	private pluginComponent: PluginSettingsComponent | null = null;
 	private statusPreviewContainer: Container | null = null;
 	private statusPreviewText: Text | null = null;
-	private currentTabId: SettingTab | "plugins" = "behavior";
+	private currentTabId: SettingTab | "plugins" = "display";
 
 	private context: SettingsRuntimeContext;
 	private callbacks: SettingsCallbacks;
@@ -192,7 +192,7 @@ export class SettingsSelectorComponent extends Container {
 		this.addChild(new DynamicBorder());
 
 		// Tab bar
-		this.tabBar = new TabBar("Settings", SETTINGS_TABS, getTabBarTheme());
+		this.tabBar = new TabBar("Settings", getSettingsTabs(), getTabBarTheme());
 		this.tabBar.onTabChange = () => {
 			this.switchToTab(this.tabBar.getActiveTab().id as SettingTab | "plugins");
 		};
@@ -202,7 +202,7 @@ export class SettingsSelectorComponent extends Container {
 		this.addChild(new Spacer(1));
 
 		// Initialize with first tab
-		this.switchToTab("behavior");
+		this.switchToTab("display");
 
 		// Add bottom border
 		this.addChild(new DynamicBorder());

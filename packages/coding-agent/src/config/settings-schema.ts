@@ -14,7 +14,47 @@
 // Schema Definition Types
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type SettingTab = "behavior" | "tools" | "bash" | "display" | "ttsr" | "status" | "lsp" | "exa";
+export type SettingTab =
+	| "display"
+	| "agent"
+	| "input"
+	| "tools"
+	| "config"
+	| "services"
+	| "bash"
+	| "lsp"
+	| "ttsr"
+	| "status";
+
+/** Tab display metadata - icon is resolved via theme.symbol() */
+export type TabMetadata = { label: string; icon: `tab.${string}` };
+
+/** Ordered list of tabs for UI rendering (status excluded - custom menu) */
+export const SETTING_TABS: SettingTab[] = [
+	"display",
+	"agent",
+	"input",
+	"tools",
+	"config",
+	"services",
+	"bash",
+	"lsp",
+	"ttsr",
+];
+
+/** Tab display metadata - icon is a symbol key from theme.ts (tab.*) */
+export const TAB_METADATA: Record<SettingTab, { label: string; icon: `tab.${string}` }> = {
+	display: { label: "Display", icon: "tab.display" },
+	agent: { label: "Agent", icon: "tab.agent" },
+	input: { label: "Input", icon: "tab.input" },
+	tools: { label: "Tools", icon: "tab.tools" },
+	config: { label: "Config", icon: "tab.config" },
+	services: { label: "Services", icon: "tab.services" },
+	bash: { label: "Bash", icon: "tab.bash" },
+	lsp: { label: "LSP", icon: "tab.lsp" },
+	ttsr: { label: "TTSR", icon: "tab.ttsr" },
+	status: { label: "Status", icon: "tab.status" },
+};
 
 /** Status line segment identifiers */
 export type StatusLineSegmentId =
@@ -126,7 +166,7 @@ export const SETTINGS_SCHEMA = {
 		values: ["off", "minimal", "low", "medium", "high", "xhigh"] as const,
 		default: "off",
 		ui: {
-			tab: "display",
+			tab: "agent",
 			label: "Thinking level",
 			description: "Reasoning depth for thinking-capable models",
 			submenu: true,
@@ -135,14 +175,14 @@ export const SETTINGS_SCHEMA = {
 	hideThinkingBlock: {
 		type: "boolean",
 		default: false,
-		ui: { tab: "display", label: "Hide thinking", description: "Hide thinking blocks in assistant responses" },
+		ui: { tab: "agent", label: "Hide thinking", description: "Hide thinking blocks in assistant responses" },
 	},
 	steeringMode: {
 		type: "enum",
 		values: ["all", "one-at-a-time"] as const,
 		default: "one-at-a-time",
 		ui: {
-			tab: "behavior",
+			tab: "agent",
 			label: "Steering mode",
 			description: "How to process queued messages while agent is working",
 		},
@@ -152,7 +192,7 @@ export const SETTINGS_SCHEMA = {
 		values: ["all", "one-at-a-time"] as const,
 		default: "one-at-a-time",
 		ui: {
-			tab: "behavior",
+			tab: "agent",
 			label: "Follow-up mode",
 			description: "How to drain follow-up messages after a turn completes",
 		},
@@ -161,14 +201,14 @@ export const SETTINGS_SCHEMA = {
 		type: "enum",
 		values: ["immediate", "wait"] as const,
 		default: "immediate",
-		ui: { tab: "behavior", label: "Interrupt mode", description: "When steering messages interrupt tool execution" },
+		ui: { tab: "agent", label: "Interrupt mode", description: "When steering messages interrupt tool execution" },
 	},
 	doubleEscapeAction: {
 		type: "enum",
 		values: ["branch", "tree", "none"] as const,
 		default: "tree",
 		ui: {
-			tab: "behavior",
+			tab: "input",
 			label: "Double-escape action",
 			description: "Action when pressing Escape twice with empty editor",
 		},
@@ -186,13 +226,13 @@ export const SETTINGS_SCHEMA = {
 	collapseChangelog: {
 		type: "boolean",
 		default: false,
-		ui: { tab: "behavior", label: "Collapse changelog", description: "Show condensed changelog after updates" },
+		ui: { tab: "input", label: "Collapse changelog", description: "Show condensed changelog after updates" },
 	},
 	normativeRewrite: {
 		type: "boolean",
 		default: false,
 		ui: {
-			tab: "behavior",
+			tab: "agent",
 			label: "Normative rewrite",
 			description: "Rewrite tool call arguments to normalized format in session history",
 		},
@@ -201,7 +241,7 @@ export const SETTINGS_SCHEMA = {
 		type: "boolean",
 		default: false,
 		ui: {
-			tab: "tools",
+			tab: "config",
 			label: "Read line numbers",
 			description: "Prepend line numbers to read tool output by default",
 		},
@@ -225,7 +265,7 @@ export const SETTINGS_SCHEMA = {
 		type: "boolean",
 		default: true,
 		ui: {
-			tab: "behavior",
+			tab: "agent",
 			label: "Auto-compact",
 			description: "Automatically compact context when it gets too large",
 		},
@@ -241,7 +281,7 @@ export const SETTINGS_SCHEMA = {
 	"branchSummary.enabled": {
 		type: "boolean",
 		default: false,
-		ui: { tab: "behavior", label: "Branch summaries", description: "Prompt to summarize when leaving a branch" },
+		ui: { tab: "agent", label: "Branch summaries", description: "Prompt to summarize when leaving a branch" },
 	},
 	"branchSummary.reserveTokens": { type: "number", default: 16384 },
 
@@ -253,7 +293,7 @@ export const SETTINGS_SCHEMA = {
 		type: "number",
 		default: 3,
 		ui: {
-			tab: "behavior",
+			tab: "agent",
 			label: "Retry max attempts",
 			description: "Maximum retry attempts on API errors",
 			submenu: true,
@@ -267,13 +307,13 @@ export const SETTINGS_SCHEMA = {
 	"todo.reminders": {
 		type: "boolean",
 		default: false,
-		ui: { tab: "behavior", label: "Todo reminders", description: "Remind agent to complete todos before stopping" },
+		ui: { tab: "agent", label: "Todo reminders", description: "Remind agent to complete todos before stopping" },
 	},
 	"todo.reminders.max": {
 		type: "number",
 		default: 3,
 		ui: {
-			tab: "behavior",
+			tab: "agent",
 			label: "Todo max reminders",
 			description: "Maximum reminders to complete todos before giving up",
 			submenu: true,
@@ -297,11 +337,6 @@ export const SETTINGS_SCHEMA = {
 		type: "boolean",
 		default: true,
 		ui: { tab: "tools", label: "Enable Grep", description: "Enable the grep tool for content searching" },
-	},
-	"ls.enabled": {
-		type: "boolean",
-		default: true,
-		ui: { tab: "tools", label: "Enable ls", description: "Enable the ls tool for file listing" },
 	},
 	"notebook.enabled": {
 		type: "boolean",
@@ -339,7 +374,7 @@ export const SETTINGS_SCHEMA = {
 	"startup.quiet": {
 		type: "boolean",
 		default: false,
-		ui: { tab: "behavior", label: "Startup quiet", description: "Skip welcome screen and startup status messages" },
+		ui: { tab: "input", label: "Startup quiet", description: "Skip welcome screen and startup status messages" },
 	},
 
 	// ─────────────────────────────────────────────────────────────────────────
@@ -349,7 +384,7 @@ export const SETTINGS_SCHEMA = {
 		type: "enum",
 		values: ["auto", "bell", "osc99", "osc9", "off"] as const,
 		default: "auto",
-		ui: { tab: "behavior", label: "Completion notification", description: "Notify when the agent completes" },
+		ui: { tab: "input", label: "Completion notification", description: "Notify when the agent completes" },
 	},
 
 	// ─────────────────────────────────────────────────────────────────────────
@@ -359,7 +394,7 @@ export const SETTINGS_SCHEMA = {
 		type: "number",
 		default: 30,
 		ui: {
-			tab: "behavior",
+			tab: "input",
 			label: "Ask tool timeout",
 			description: "Auto-select recommended option after timeout (0 to disable)",
 			submenu: true,
@@ -369,7 +404,7 @@ export const SETTINGS_SCHEMA = {
 		type: "enum",
 		values: ["auto", "bell", "osc99", "osc9", "off"] as const,
 		default: "auto",
-		ui: { tab: "behavior", label: "Ask notification", description: "Notify when ask tool is waiting for input" },
+		ui: { tab: "input", label: "Ask notification", description: "Notify when ask tool is waiting for input" },
 	},
 
 	// ─────────────────────────────────────────────────────────────────────────
@@ -443,19 +478,29 @@ export const SETTINGS_SCHEMA = {
 		type: "enum",
 		values: ["auto", "exa", "perplexity", "anthropic"] as const,
 		default: "auto",
-		ui: { tab: "tools", label: "Web search provider", description: "Provider for web search tool", submenu: true },
+		ui: { tab: "services", label: "Web search provider", description: "Provider for web search tool", submenu: true },
 	},
 	"providers.image": {
 		type: "enum",
 		values: ["auto", "gemini", "openrouter"] as const,
 		default: "auto",
-		ui: { tab: "tools", label: "Image provider", description: "Provider for image generation tool", submenu: true },
+		ui: {
+			tab: "services",
+			label: "Image provider",
+			description: "Provider for image generation tool",
+			submenu: true,
+		},
 	},
 	"providers.kimiApiFormat": {
 		type: "enum",
 		values: ["openai", "anthropic"] as const,
 		default: "anthropic",
-		ui: { tab: "tools", label: "Kimi API format", description: "API format for Kimi Code provider", submenu: true },
+		ui: {
+			tab: "services",
+			label: "Kimi API format",
+			description: "API format for Kimi Code provider",
+			submenu: true,
+		},
 	},
 
 	// ─────────────────────────────────────────────────────────────────────────
@@ -464,32 +509,32 @@ export const SETTINGS_SCHEMA = {
 	"exa.enabled": {
 		type: "boolean",
 		default: true,
-		ui: { tab: "exa", label: "Exa enabled", description: "Master toggle for all Exa search tools" },
+		ui: { tab: "services", label: "Exa enabled", description: "Master toggle for all Exa search tools" },
 	},
 	"exa.enableSearch": {
 		type: "boolean",
 		default: true,
-		ui: { tab: "exa", label: "Exa search", description: "Basic search, deep search, code search, crawl" },
+		ui: { tab: "services", label: "Exa search", description: "Basic search, deep search, code search, crawl" },
 	},
 	"exa.enableLinkedin": {
 		type: "boolean",
 		default: false,
-		ui: { tab: "exa", label: "Exa LinkedIn", description: "Search LinkedIn for people and companies" },
+		ui: { tab: "services", label: "Exa LinkedIn", description: "Search LinkedIn for people and companies" },
 	},
 	"exa.enableCompany": {
 		type: "boolean",
 		default: false,
-		ui: { tab: "exa", label: "Exa company", description: "Comprehensive company research tool" },
+		ui: { tab: "services", label: "Exa company", description: "Comprehensive company research tool" },
 	},
 	"exa.enableResearcher": {
 		type: "boolean",
 		default: false,
-		ui: { tab: "exa", label: "Exa researcher", description: "AI-powered deep research tasks" },
+		ui: { tab: "services", label: "Exa researcher", description: "AI-powered deep research tasks" },
 	},
 	"exa.enableWebsets": {
 		type: "boolean",
 		default: false,
-		ui: { tab: "exa", label: "Exa websets", description: "Webset management and enrichment tools" },
+		ui: { tab: "services", label: "Exa websets", description: "Webset management and enrichment tools" },
 	},
 
 	// ─────────────────────────────────────────────────────────────────────────
@@ -559,14 +604,14 @@ export const SETTINGS_SCHEMA = {
 		type: "enum",
 		values: ["ipy-only", "bash-only", "both"] as const,
 		default: "both",
-		ui: { tab: "tools", label: "Python tool mode", description: "How Python code is executed" },
+		ui: { tab: "config", label: "Python tool mode", description: "How Python code is executed" },
 	},
 	"python.kernelMode": {
 		type: "enum",
 		values: ["session", "per-call"] as const,
 		default: "session",
 		ui: {
-			tab: "tools",
+			tab: "config",
 			label: "Python kernel mode",
 			description: "Whether to keep IPython kernel alive across calls",
 		},
@@ -575,7 +620,7 @@ export const SETTINGS_SCHEMA = {
 		type: "boolean",
 		default: true,
 		ui: {
-			tab: "tools",
+			tab: "config",
 			label: "Python shared gateway",
 			description: "Share IPython kernel gateway across pi instances",
 		},
@@ -588,7 +633,7 @@ export const SETTINGS_SCHEMA = {
 		type: "boolean",
 		default: true,
 		ui: {
-			tab: "tools",
+			tab: "config",
 			label: "Edit fuzzy match",
 			description: "Accept high-confidence fuzzy matches for whitespace differences",
 		},
@@ -597,7 +642,7 @@ export const SETTINGS_SCHEMA = {
 		type: "number",
 		default: 0.95,
 		ui: {
-			tab: "tools",
+			tab: "config",
 			label: "Edit fuzzy threshold",
 			description: "Similarity threshold for fuzzy matches",
 			submenu: true,
@@ -606,13 +651,13 @@ export const SETTINGS_SCHEMA = {
 	"edit.patchMode": {
 		type: "boolean",
 		default: true,
-		ui: { tab: "tools", label: "Edit patch mode", description: "Use codex-style apply-patch format for edits" },
+		ui: { tab: "config", label: "Edit patch mode", description: "Use codex-style apply-patch format for edits" },
 	},
 	"edit.streamingAbort": {
 		type: "boolean",
 		default: false,
 		ui: {
-			tab: "tools",
+			tab: "config",
 			label: "Edit streaming abort",
 			description: "Abort streaming edit tool calls when patch preview fails",
 		},

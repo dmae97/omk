@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `find.enabled`, `grep.enabled`, `ls.enabled`, `notebook.enabled`, `fetch.enabled`, `web_search.enabled`, `lsp.enabled`, and `calc.enabled` settings to control availability of individual tools
@@ -10,6 +11,13 @@
 
 ### Changed
 
+- Reorganized settings tabs from 8 to 9 tabs with clearer categorization: Display, Agent, Input, Tools, Config, Services, Bash, LSP, and TTSR
+- Moved behavior-related settings to new Agent tab for better organization
+- Moved input/interaction settings to new Input tab
+- Moved tool configuration settings to new Config tab
+- Moved provider and service settings to new Services tab
+- Added visual icons to settings tabs using theme symbols for improved UI clarity
+- Changed default settings tab from Behavior to Display on startup
 - Updated `read` tool to handle directory paths by returning formatted listings with modification times instead of redirecting to `ls`
 - Updated tool documentation to reflect that `read` now handles both files and directories
 - Updated system prompt tool precedence section to conditionally display only available specialized tools based on enabled settings
@@ -18,6 +26,7 @@
 
 ### Removed
 
+- Removed type guard functions (`isBashToolResult`, `isReadToolResult`, `isEditToolResult`, `isWriteToolResult`, `isGrepToolResult`, `isFindToolResult`, `isLsToolResult`) from public API exports
 - Removed `ls` tool—directory listing is now handled by the `read` tool
 - Removed `ls.enabled` setting and related configuration options
 - Removed `bashInterceptor.simpleLs` setting that redirected simple `ls` commands to the dedicated tool

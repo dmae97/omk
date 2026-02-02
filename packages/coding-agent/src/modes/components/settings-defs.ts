@@ -13,6 +13,7 @@ import {
 	getPathsForTab,
 	getType,
 	getUi,
+	SETTING_TABS,
 	type SettingPath,
 	type SettingTab,
 } from "../../config/settings-schema";
@@ -73,7 +74,7 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "10", label: "10 retries" },
 	],
 	// Todo max reminders
-	"todoCompletion.maxReminders": () => [
+	"todo.reminders.max": () => [
 		{ value: "1", label: "1 reminder" },
 		{ value: "2", label: "2 reminders" },
 		{ value: "3", label: "3 reminders" },
@@ -227,7 +228,7 @@ export function getAllSettingDefs(): SettingDef[] {
 	if (cachedDefs) return cachedDefs;
 
 	const defs: SettingDef[] = [];
-	for (const tab of ["behavior", "tools", "bash", "display", "ttsr", "status", "lsp", "exa"] as SettingTab[]) {
+	for (const tab of [...SETTING_TABS, "status"] as SettingTab[]) {
 		for (const path of getPathsForTab(tab)) {
 			const def = pathToSettingDef(path);
 			if (def) defs.push(def);

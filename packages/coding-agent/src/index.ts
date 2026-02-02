@@ -75,13 +75,6 @@ export {
 	discoverAndLoadExtensions,
 	ExtensionRunner,
 	ExtensionRuntime,
-	isBashToolResult,
-	isEditToolResult,
-	isFindToolResult,
-	isGrepToolResult,
-	isLsToolResult,
-	isReadToolResult,
-	isWriteToolResult,
 } from "./extensibility/extensions";
 // Hook system types (legacy re-export)
 export type * from "./extensibility/hooks";
@@ -180,7 +173,6 @@ export {
 	EditTool,
 	FindTool,
 	GrepTool,
-	LsTool,
 	loadSshTool,
 	PythonTool,
 	ReadTool,
