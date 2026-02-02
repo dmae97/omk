@@ -1,19 +1,17 @@
 # Python
 
-Executes Python cells sequentially in a persistent IPython kernel.
+Runs Python cells sequentially in persistent IPython kernel.
 
 <instruction>
-The kernel persists between calls and between cells. **Imports, variables, and functions survive.** Use this.
+Kernel persists across calls and cells; **imports, variables, and functions survive—use this.**
 **Work incrementally:**
-- One logical step per cell (imports, define a function, test it, use it)
-- Pass multiple small cells in one call—they execute sequentially
+- One logical step per cell (imports, define function, test it, use it)
+- Pass multiple small cells in one call
 - Define small functions you can reuse and debug individually
-- Put explanations in the assistant message or cell title, **not** inside code
+- Put explanations in assistant message or cell title, **not** in code
 **When something fails:**
-- The error tells you which cell failed (e.g., "Cell 3 failed")
-- Earlier cells already ran—their state persists in the kernel
-- Resubmit with only the fixed cell (or the fixed cell + remaining cells)
-- Do NOT rewrite working cells or re-import modules
+- Errors tell you which cell failed (e.g., "Cell 3 failed")
+- Resubmit only fixed cell (or fixed cell + remaining cells)
 </instruction>
 
 <prelude>
@@ -36,26 +34,23 @@ All helpers auto-print results and return values for chaining.
 </prelude>
 
 <output>
-Output streams in real time, truncated after 100KB.
-If output is truncated, full output is stored under $ARTIFACTS and referenced as `artifact://<id>` in metadata.
+Streams in real time, truncated after 100KB; if truncated, full output stored under $ARTIFACTS and referenced as `artifact://<id>` in metadata.
 
-The user sees output like a Jupyter notebook—rich displays are fully rendered:
+User sees output like Jupyter notebook; rich displays render fully:
 - `display(JSON(data))` → interactive JSON tree
 - `display(HTML(...))` → rendered HTML
 - `display(Markdown(...))` → formatted markdown
 - `plt.show()` → inline figures
-**You will see object repr** (e.g., `<IPython.core.display.JSON object>`) **but the user sees the rendered output.** Trust that `display()` calls work correctly—do not assume the user sees only the repr.
+**You will see object repr** (e.g., `<IPython.core.display.JSON object>`). Trust `display()`; do not assume user sees only repr.
 </output>
 
 <important>
-- Kernel persists for the session by default; per-call mode uses a fresh kernel each call
-- Use `reset: true` to clear state when session mode is active
+- Per-call mode uses fresh kernel each call
+- Use `reset: true` to clear state when session mode active
 </important>
 
 <critical>
-- Use `plt.show()` to display figures
-- Use `display()` from IPython.display for rich output (HTML, Markdown, images, etc.)
-- Use `sh()` or `run()` for shell commands, never raw `subprocess`
+- Use `sh()` or `run()` for shell commands; never raw `subprocess`
 </critical>
 
 <example name="good">
@@ -100,10 +95,3 @@ import subprocess
 subprocess.run(["bun", "run", "check"], ...)
 ```
 </example>
-
-<avoid>
-- Putting everything in one giant cell
-- Re-importing modules you already imported
-- Rewriting working cells when only one part failed
-- Large functions that are hard to debug piece by piece
-</avoid>

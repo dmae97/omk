@@ -1,15 +1,15 @@
-Signals plan completion and requests user approval to begin implementation.
+Signals plan completion, requests user approval to begin implementation.
 
 <conditions>
 Use when:
-- Plan is written to the plan file
+- Plan written to plan file
 - No unresolved questions about requirements or approach
-- Ready for user to review and approve
+- Ready for user review and approval
 </conditions>
 
 <instruction>
-- Write your plan to the plan file BEFORE calling this tool
-- This tool reads the plan from that file—does not take plan content as parameter
+- Write plan to plan file BEFORE calling this tool
+- Tool reads plan from file—does not take plan content as parameter
 - User sees plan contents when reviewing
 </instruction>
 
@@ -28,7 +28,7 @@ Unsure about auth method (OAuth vs JWT).
 </example>
 
 <avoid>
-- Calling before plan is written to file
+- Calling before plan written to file
 - Using `ask` to request plan approval (this tool does that)
 - Calling after pure research tasks (no implementation planned)
 </avoid>

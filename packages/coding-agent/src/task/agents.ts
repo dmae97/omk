@@ -18,6 +18,7 @@ import type { AgentDefinition, AgentSource } from "./types";
 interface AgentFrontmatter {
 	name: string;
 	description: string;
+	tools?: string[];
 	spawns?: string;
 	model?: string | string[];
 	thinkingLevel?: string;

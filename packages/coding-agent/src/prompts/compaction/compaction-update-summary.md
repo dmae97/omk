@@ -1,34 +1,32 @@
-The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
-Update the structured handoff summary that another LLM will use to resume the task.
-
-Update the existing structured summary with new information. RULES:
-- PRESERVE all existing information from the previous summary
-- ADD new progress, decisions, and context from the new messages
-- UPDATE the Progress section: move items from "In Progress" to "Done" when completed
+Incorporate new messages above into existing handoff summary in <previous-summary> tags, used by another LLM to resume task.
+RULES:
+- PRESERVE all information from previous summary
+- ADD new progress, decisions, and context from new messages
+- UPDATE Progress: move items from "In Progress" to "Done" when completed
 - UPDATE "Next Steps" based on what was accomplished
 - PRESERVE exact file paths, function names, and error messages
-- If something is no longer relevant, you may remove it
+- You may remove anything no longer relevant
 
-IMPORTANT: Check if the new messages end with an unanswered question or request to the user. If so, add it to Critical Context (replacing any previous pending question if it was answered).
+IMPORTANT: If new messages end with unanswered question or request to user, add it to Critical Context (replacing any previous pending question if answered).
 
-Use this format (sections can be omitted if not applicable):
+Use this format (omit sections if not applicable):
 
 ## Goal
-[Preserve existing goals, add new ones if the task expanded]
+[Preserve existing goals; add new ones if task expanded]
 
 ## Constraints & Preferences
-- [Preserve existing, add new ones discovered]
+- [Preserve existing; add new ones discovered]
 
 ## Progress
 
 ### Done
-- [x] [Include previously done items AND newly completed items]
+- [x] [Include previously done and newly completed items]
 
 ### In Progress
-- [ ] [Current work - update based on progress]
+- [ ] [Current work—update based on progress]
 
 ### Blocked
-- [Current blockers - remove if resolved]
+- [Current blockers—remove if resolved]
 
 ## Key Decisions
 - **[Decision]**: [Brief rationale] (preserve all previous, add new)
@@ -37,11 +35,11 @@ Use this format (sections can be omitted if not applicable):
 1. [Update based on current state]
 
 ## Critical Context
-- [Preserve important context, add new if needed]
+- [Preserve important context; add new if needed]
 
 ## Additional Notes
-[Any other important info that doesn't fit above]
+[Other important info not fitting above]
 
-Output only the structured summary. No extra text.
+Output only structured summary; no extra text.
 
-Keep each section concise. Preserve exact file paths, function names, error messages, and relevant tool outputs or command results. Include repository state changes (branch, uncommitted changes) if mentioned.
+Keep sections concise. Preserve relevant tool outputs/command results. Include repository state changes (branch, uncommitted changes) if mentioned.

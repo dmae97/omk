@@ -1,18 +1,14 @@
-The messages above are a conversation to summarize. Create a structured context checkpoint handoff summary that another LLM will use to resume the task.
+Summarize conversation above into structured context checkpoint handoff summary for another LLM to resume task.
 
-IMPORTANT: If the conversation ends with:
-- An unanswered question to the user, preserve that exact question
-- An imperative statement or request waiting for user response (e.g., "Please run the command and paste the output"), preserve that exact request
-
-These must appear in the Critical Context section.
+IMPORTANT: If conversation ends with unanswered question to user or imperative/request awaiting user response (e.g., "Please run command and paste output"), preserve that exact question/request.
 
 Use this format (sections can be omitted if not applicable):
 
 ## Goal
-[What is the user trying to accomplish? Can be multiple items if the session covers different tasks.]
+[User goals; list multiple if session covers different tasks.]
 
 ## Constraints & Preferences
-- [Any constraints or requirements mentioned]
+- [Constraints or requirements mentioned]
 
 ## Progress
 
@@ -29,14 +25,14 @@ Use this format (sections can be omitted if not applicable):
 - **[Decision]**: [Brief rationale]
 
 ## Next Steps
-1. [Ordered list of what should happen next]
+1. [Ordered list of next actions]
 
 ## Critical Context
 - [Important data, pending questions, references]
 
 ## Additional Notes
-[Anything else important that doesn't fit above categories]
+[Anything else important not covered above]
 
-Output only the structured summary. No extra text.
+Output only structured summary; no extra text.
 
-Keep each section concise. Preserve exact file paths, function names, error messages, and relevant tool outputs or command results. Include repository state changes (branch, uncommitted changes) if mentioned.
+Keep sections concise. Preserve exact file paths, function names, error messages, and relevant tool outputs or command results. Include repository state changes (branch, uncommitted changes) if mentioned.

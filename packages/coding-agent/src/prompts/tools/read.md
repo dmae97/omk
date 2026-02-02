@@ -1,13 +1,13 @@
 # Read
 
-Reads files from the local filesystem or internal URLs.
+Reads files from local filesystem or internal URLs.
 
 <instruction>
-- Reads up to {{DEFAULT_MAX_LINES}} lines by default
+- Reads up to {{DEFAULT_MAX_LINES}} lines default
 - Use `offset` and `limit` for large files
-- Use `lines: true` to include line numbers
+- Use `lines: true` include line numbers
 - Supports images (PNG, JPG) and PDFs
-- For directories, use the ls tool instead
+- For directories, use ls tool instead
 - Parallelize reads when exploring related files
 - Supports internal URLs:
   - `skill://<name>` - read SKILL.md for a skill

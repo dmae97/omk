@@ -17,11 +17,9 @@
 {{ types_description }}
 </commit_types>
 {{/if}}
-
 <diff_statistics>
 {{ stat }}
 </diff_statistics>
-
 <scope_candidates>
 {{ scope_candidates }}
 </scope_candidates>
@@ -35,7 +33,6 @@
 {{ recent_commits }}
 </style_patterns>
 {{/if}}
-
 <diff>
 {{ diff }}
 </diff>

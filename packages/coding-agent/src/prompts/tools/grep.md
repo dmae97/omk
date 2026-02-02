@@ -1,6 +1,6 @@
 # Grep
 
-A powerful search tool built on ripgrep.
+Powerful search tool built on ripgrep.
 
 <instruction>
 - Supports full regex syntax (e.g., `log.*Error`, `function\\s+\\w+`)
@@ -15,12 +15,12 @@ Results depend on `output_mode`:
 - `files_with_matches`: File paths only (one per line)
 - `count`: Match counts per file
 
-In `content` mode, truncated at 100 matches by default (configurable via `limit`).
-For `files_with_matches` and `count` modes, use `limit` to truncate results.
+In `content` mode, truncated at 100 matches default (configurable via `limit`).
+For `files_with_matches` and `count` modes, use `limit` truncate results.
 </output>
 
 <critical>
-- ALWAYS use Grep for search tasks—NEVER invoke `grep` or `rg` via Bash. This tool has correct permissions and access.
+- ALWAYS use Grep for search tasks—NEVER invoke `grep` or `rg` via Bash. Has correct permissions and access.
 </critical>
 
 <avoid>

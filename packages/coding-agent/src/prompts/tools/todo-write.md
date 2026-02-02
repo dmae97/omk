@@ -1,49 +1,43 @@
 # Todo Write
 
-Create and manage a structured task list for your current coding session.
+Create/manage structured task list for coding session.
 
 <conditions>
-Use this tool proactively in these scenarios:
-1. Complex multi-step tasks - When a task requires 3 or more distinct steps or actions
-2. Non-trivial and complex tasks - Tasks that require careful planning or multiple operations
-3. User explicitly requests todo list - When the user directly asks you to use the todo list
-4. User provides multiple tasks - When users provide a list of things to be done (numbered or comma-separated)
-5. After receiving new instructions - Immediately capture user requirements as todos
-6. When you start working on a task - Mark it as in_progress BEFORE beginning work
-7. After completing a task - Mark it as completed and add any new follow-up tasks discovered during implementation
+Use proactively:
+1. Complex multi-step tasks requiring 3+ steps/actions
+2. User requests todo list
+3. User provides multiple tasks (numbered/comma-separated)
+4. After new instructions—capture requirements as todos
+5. Starting task—mark in_progress BEFORE beginning
+6. After completing—mark completed, add follow-up tasks found
 </conditions>
 
 <protocol>
-1. **Task States**: Use these states to track progress:
-	 - pending: Task not yet started
-	 - in_progress: Currently working on
-	 - completed: Task finished successfully
+1. **Task States**:
+	 - pending: not started
+	 - in_progress: working
+	 - completed: finished
 2. **Task Management**:
-   - Update task status in real-time as you work
-   - Mark tasks complete IMMEDIATELY after finishing (don't batch completions)
-   - Multiple tasks may be in_progress simultaneously when working in parallel
-   - Remove tasks that are no longer relevant from the list entirely
+   - Update status in real time
+   - Mark complete IMMEDIATELY after finishing (no batching)
+   - Multiple tasks may be in_progress in parallel
+   - Remove tasks no longer relevant
 3. **Task Completion Requirements**:
-   - ONLY mark a task as completed when you have FULLY accomplished it
-   - If you encounter errors, blockers, or cannot finish, keep the task as in_progress
-   - When blocked, create a new task describing what needs to be resolved
-   - Never mark a task as completed if:
-     - Tests are failing
-     - Implementation is partial
-     - You encountered unresolved errors
-	   - You couldn't find necessary files or dependencies
+   - ONLY mark completed when FULLY accomplished
+   - On errors/blockers/inability to finish, keep in_progress
+   - When blocked, create task describing what needs resolving
 4. **Task Breakdown**:
 	 - Create specific, actionable items
-	 - Break complex tasks into smaller, manageable steps
-	 - Use clear, descriptive task names
+	 - Break complex tasks into smaller steps
+	 - Use clear, descriptive names
 </protocol>
 
 <output>
-Returns confirmation that the todo list has been updated. The updated list is displayed to the user in the UI, showing each task's status (pending, in_progress, completed) and description.
+Returns confirmation todo list updated.
 </output>
 
 <important>
-When in doubt, use this tool. Being proactive with task management demonstrates attentiveness and ensures you complete all requirements successfully.
+When in doubt, use this.
 </important>
 
 <example name="use-dark-mode">
@@ -53,20 +47,17 @@ User: Add dark mode toggle to settings. Run tests when done.
 
 <example name="use-features">
 User: Implement user registration, product catalog, shopping cart, checkout.
-→ Creates todos for each feature, broken into subtasks
+→ Creates todos per feature with subtasks
 </example>
 
 <example name="skip">
 User: Run npm install / Add a comment to this function / What does git status do?
-→ Just do it directly. Single-step or informational tasks don't need tracking.
+→ Do directly. Single-step/informational tasks need no tracking.
 </example>
 
 <avoid>
-Skip using this tool when:
-1. There is only a single, straightforward task
-2. The task is trivial and tracking it provides no organizational benefit
-3. The task can be completed in less than 3 trivial steps
-4. The task is purely conversational or informational
-
-If there is only one trivial task to do, just do it directly.
+Skip when:
+1. Single straightforward task
+2. Task completable in <3 trivial steps
+3. Task purely conversational/informational
 </avoid>

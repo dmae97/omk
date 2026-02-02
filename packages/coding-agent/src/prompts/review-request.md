@@ -23,30 +23,30 @@ _No files to review._
 
 ### Distribution Guidelines
 
-Based on the diff weight (~{{totalLines}} lines across {{len files}} files), {{#when agentCount "==" 1}}use **1 reviewer agent**.{{else}}spawn **{{agentCount}} reviewer agents** in parallel.{{/when}}
+{{#when agentCount "==" 1}}Use **1 reviewer agent**.{{else}}Spawn **{{agentCount}} reviewer agents** in parallel.{{/when}}
 
 {{#if multiAgent}}
-Group files by locality (related changes together). For example:
-- Files in the same directory or module → same agent
-- Files that implement related functionality → same agent
-- Test files with their implementation files → same agent
+Group files by locality, e.g.:
+- Same directory/module → same agent
+- Related functionality → same agent
+- Tests with their implementation files → same agent
 
-Use the Task tool with `agent: "reviewer"` and the batch `tasks` array to run reviews in parallel.
+Use Task tool with `agent: "reviewer"` and `tasks` array.
 {{/if}}
 
 ### Reviewer Instructions
 
-Each reviewer agent should:
-1. Focus ONLY on its assigned files
-2. {{#if skipDiff}}Run `git diff` or `git show` to get the diff for assigned files{{else}}Use the diff hunks provided below (don't re-run git diff){{/if}}
-3. Read full file context as needed via the `read` tool
-4. Call `report_finding` for each issue found
+Reviewer should:
+1. Focus ONLY on assigned files
+2. {{#if skipDiff}}Run `git diff`/`git show` for assigned files{{else}}Use diff hunks below (don't re-run git diff){{/if}}
+3. Read full file context as needed via `read`
+4. Call `report_finding` per issue
 5. Call `submit_result` with verdict when done
 
 {{#if skipDiff}}
 ### Diff Previews
 
-_Full diff too large ({{len files}} files). Showing first ~{{linesPerFile}} lines per file. Reviewers should fetch full diffs for assigned files._
+_Full diff too large ({{len files}} files). Showing first ~{{linesPerFile}} lines per file._
 
 {{#list files join="\n\n"}}
 #### {{path}}

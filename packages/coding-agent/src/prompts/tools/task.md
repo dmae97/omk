@@ -5,23 +5,23 @@ Launch agents to handle complex, multi-step tasks autonomously.
 <critical>
 ## Context is everything
 
-Subagents fail when context is vague. They cannot read your mind or infer project conventions. Every task needs:
+Subagents fail with vague context. Every task needs:
 1. **Goal** - What this accomplishes (one sentence)
 2. **Constraints** - Hard requirements, banned approaches, naming conventions
 3. **Existing Code** - File paths and function signatures to use as patterns
 4. **API Contract** - If the task produces or consumes an interface, spell it out
 
-Subagents CAN grep the parent conversation file for supplementary details. They CANNOT grep for:
+Subagents CAN grep parent conversation file for supplementary details, but CANNOT grep for:
 - Decisions you made but didn't write down
 - Conventions that exist only in your head
 - Which of 50 possible approaches you want
-  **Rule of thumb:** If you'd need to answer a clarifying question for a junior dev to do this task, that information belongs in context.
+  **Rule of thumb:** If you'd answer clarifying question for junior dev, info belongs in context.
 </critical>
 
 <context-structure>
 ## Required context structure
 
-Use this template. Sections can be omitted only if truly N/A.
+Use this template. Omit sections only if N/A.
 
 ````
 ## Goal
@@ -33,7 +33,7 @@ Use this template. Sections can be omitted only if truly N/A.
 - [What already exists vs what to create]
 
 ## Existing Code
-Reference files the agent MUST read or use as patterns:
+Reference files the agent MUST read/use as patterns:
 - `path/to/file.ts` - [what pattern it demonstrates]
 - `path/to/other.rs` - [what to reuse from it]
 
@@ -50,18 +50,12 @@ fn example(input: Type) -> Result<Output>
 {{files}}
 ````
 
-### Bad context (agent will fail or guess wrong)
+### Bad context (agent fails or guesses wrong)
 
 ```
 N-API migration. Keep highlight sync. Use JsString. No WASM.
 Task: {{description}} Files: {{files}}
 ```
-
-Why it fails:
-- No existing code to reference - agent doesn't know your patterns
-- No API contract - agent will invent signatures that don't match consumers
-- No goal - agent doesn't know what success looks like
-- "Keep highlight sync" is meaningless without knowing what highlight is or where it lives
 
 ### Good context (agent can act confidently)
 
@@ -71,9 +65,9 @@ Port grep module from WASM to N-API, matching existing text module patterns.
 
 ## Constraints
 - Use `#[napi]` attribute macro on all exports (not `#[napi(js_name = "...")]`)
-- Return `napi::Result<T>` for fallible ops, never panic
-- Use `spawn_blocking` for any operation that touches filesystem or runs >1ms
-- Accept `JsString` for string params (NOT JsStringUtf8 - it has lifetime issues)
+- Return `napi::Result<T>` for fallible ops; never panic
+- Use `spawn_blocking` for filesystem ops or >1ms work
+- Accept `JsString` for string params (NOT JsStringUtf8; lifetime issues)
 - Keep all existing function names - TS bindings depend on them
 - No new crate dependencies
 
@@ -104,36 +98,36 @@ pub async fn search(pattern: JsString, path: JsString, env: Env) -> napi::Result
 
 <parallelization>
 ## When to parallelize vs sequence
-**The test:** Can agent B write correct code without seeing agent A's output?
+**Test:** Can agent B write correct code without seeing A's output?
 - If YES → parallelize
 - If NO → sequence (A completes, then B runs with A's output in context)
 
-### Dependency patterns that MUST be sequential
+### Dependencies that MUST be sequential
 
 |First|Then|Why|
 |---|---|---|
-|Create Rust API|Update TS bindings|Bindings need to know export names and signatures|
-|Define interface/types|Implement consumers|Consumers need the contract|
-|Scaffold with signatures|Implement bodies|Implementations need the shape|
+|Create Rust API|Update TS bindings|Bindings need export names and signatures|
+|Define interface/types|Implement consumers|Consumers need contract|
+|Scaffold with signatures|Implement bodies|Implementations need shape|
 |Core module|Dependent modules|Dependents import from core|
 
 ### Safe to parallelize
-- Independent modules that don't import each other
+- Independent modules not importing each other
 - Tests for already-implemented code
 - Documentation for stable APIs
 - Refactors in isolated file scopes
 
 ### Phased execution pattern
 
-For migrations/refactors with layers:
+For layered migrations/refactors:
 **Phase 1 - Foundation (do yourself or single task):**
-Create the scaffold, define interfaces, establish API shape. Never fan out until the contract is known.
+Create scaffold, define interfaces, establish API shape. Never fan out until contract known.
 **Phase 2 - Parallel implementation:**
-Fan out to independent tasks that all consume the same known interface. Include the API contract from Phase 1 in every task's context.
+Fan out to independent tasks consuming same known interface. Include Phase 1 API contract in every task's context.
 **Phase 3 - Integration (do yourself):**
-Wire things together, update build/CI, fix any mismatches.
+Wire things together, update build/CI, fix mismatches.
 **Phase 4 - Dependent layer:**
-Fan out again for work that consumes Phase 2 outputs.
+Fan out again for work consuming Phase 2 outputs.
 
 ### Example: WASM to N-API migration
 **WRONG** (launched together, will fail):
@@ -168,15 +162,14 @@ tasks: [
 
 <parameters>
 - `agent`: Agent type for all tasks
-- `context`: Template with `{{placeholders}}`. **Must follow the structure above.** Include Goal, Constraints, Existing Code references. Subagents can search parent context for background, but core requirements must be explicit here.
+- `context`: Template with `{{placeholders}}`; **Must follow structure above**.
 - `isolated`: (optional) Run in git worktree, return patches
 - `tasks`: Array of `{id, description, args}`
   - `id`: CamelCase identifier (max 32 chars)
-  - `description`: What the task does (for logging)
+  - `description`: What task does (for logging)
   - `args`: Object with keys matching `{{placeholders}}` in context
   - `skills`: (optional) Skill names to preload
-- `schema`: JTD schema for response structure. **Required.** Use typed properties, not `{ "type": "string" }`.
-**Schema goes in `schema` parameter. Never describe output format in `context`.**
+- `schema`: JTD schema for response structure (**required**; use typed properties, not `{ "type": "string" }`). **Schema goes in `schema`; never describe output format in `context`.**
 </parameters>
 
 <agents>
@@ -189,11 +182,6 @@ tasks: [
 </agents>
 
 <avoid>
-- Terse context that requires agents to guess conventions
-- Launching dependent tasks in parallel (bindings + API, consumer + producer)
-- Missing "Existing Code" references - agents need patterns to follow
-- Assuming agents know your codebase - they start fresh each time
-- Describing output format in context instead of schema
 - Single tasks doing too much - prefer focused, file-scoped tasks
 </avoid>
 ````

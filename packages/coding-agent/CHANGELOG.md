@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `tools` field to agent frontmatter for declaring agent-specific tool capabilities
 
 ## [10.2.1] - 2026-02-02
 ### Breaking Changes
