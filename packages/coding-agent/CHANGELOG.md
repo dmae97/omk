@@ -1,13 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `find.enabled`, `grep.enabled`, `ls.enabled`, `notebook.enabled`, `fetch.enabled`, `web_search.enabled`, `lsp.enabled`, and `calc.enabled` settings to control availability of individual tools
+- Added conditional tool documentation in system prompt that dynamically lists only enabled specialized tools
 - Added `todos.enabled` setting to control availability of the todo_write tool for task tracking
 - Added `tools` field to agent frontmatter for declaring agent-specific tool capabilities
 
 ### Changed
 
+- Updated system prompt tool precedence section to conditionally display only available specialized tools based on enabled settings
 - Renamed todo completion settings from `todoCompletion.*` to `todos.reminders.*` and `todos.enabled` for clearer organization
 - Updated todo reminder logic to check both `todos.reminders` and `todos.enabled` settings independently
 

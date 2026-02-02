@@ -67,7 +67,9 @@ User instructions on _how_ to work (direct vs. delegation) override tool-use def
 {{#ifAny (includes tools "python") (includes tools "bash")}}
 ### Tool precedence
 **Specialized tools → Python → Bash**
-1. **Specialized tools**: `read`, `grep`, `find`, `ls`, `edit`, `lsp`
+{{#ifAny (includes tools "read") (includes tools "grep") (includes tools "find") (includes tools "ls") (includes tools "edit") (includes tools "lsp")}}
+1. **Specialized tools**: {{#has tools "read"}}`read`, {{/has}}{{#has tools "grep"}}`grep`, {{/has}}{{#has tools "find"}}`find`, {{/has}}{{#has tools "ls"}}`ls`, {{/has}}{{#has tools "edit"}}`edit`, {{/has}}{{#has tools "lsp"}}`lsp`{{/has}}
+{{/ifAny}}
 2. **Python** for logic/loops/processing, displaying results (graphs, formatted output)
 3. **Bash** only for simple one-liners: `cargo build`, `npm install`, `docker run`
 
@@ -77,7 +79,9 @@ User instructions on _how_ to work (direct vs. delegation) override tool-use def
 
 <critical>
 Never use Python/Bash when specialized tool exists.
-`read` not cat/open(); `write` not cat>/echo>; `grep` not bash grep/re; `find` not bash find/glob; `ls` not bash ls/os.listdir; `edit` not sed.
+{{#ifAny (includes tools "read") (includes tools "write") (includes tools "grep") (includes tools "find") (includes tools "ls") (includes tools "edit")}}
+{{#has tools "read"}}`read` not cat/open(); {{/has}}{{#has tools "write"}}`write` not cat>/echo>; {{/has}}{{#has tools "grep"}}`grep` not bash grep/re; {{/has}}{{#has tools "find"}}`find` not bash find/glob; {{/has}}{{#has tools "ls"}}`ls` not bash ls/os.listdir; {{/has}}{{#has tools "edit"}}`edit` not sed.{{/has}}
+{{/ifAny}}
 </critical>
 {{/ifAny}}
 {{#has tools "lsp"}}

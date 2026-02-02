@@ -281,12 +281,56 @@ export const SETTINGS_SCHEMA = {
 	},
 
 	// ─────────────────────────────────────────────────────────────────────────
-	// Todos settings
+	// Optional tools
 	// ─────────────────────────────────────────────────────────────────────────
 	"todo.enabled": {
 		type: "boolean",
 		default: true,
-		ui: { tab: "tools", label: "Todos", description: "Enable the todo_write tool for task tracking" },
+		ui: { tab: "tools", label: "Enable Todos", description: "Enable the todo_write tool for task tracking" },
+	},
+	"find.enabled": {
+		type: "boolean",
+		default: true,
+		ui: { tab: "tools", label: "Enable Find", description: "Enable the find tool for file searching" },
+	},
+	"grep.enabled": {
+		type: "boolean",
+		default: true,
+		ui: { tab: "tools", label: "Enable Grep", description: "Enable the grep tool for content searching" },
+	},
+	"ls.enabled": {
+		type: "boolean",
+		default: true,
+		ui: { tab: "tools", label: "Enable ls", description: "Enable the ls tool for file listing" },
+	},
+	"notebook.enabled": {
+		type: "boolean",
+		default: true,
+		ui: { tab: "tools", label: "Enable Notebook", description: "Enable the notebook tool for notebook editing" },
+	},
+	"fetch.enabled": {
+		type: "boolean",
+		default: true,
+		ui: { tab: "tools", label: "Enable Fetch", description: "Enable the fetch tool for URL fetching" },
+	},
+	"web_search.enabled": {
+		type: "boolean",
+		default: true,
+		ui: { tab: "tools", label: "Enable Web Search", description: "Enable the web_search tool for web searching" },
+	},
+	"lsp.enabled": {
+		type: "boolean",
+		default: true,
+		ui: { tab: "tools", label: "Enable LSP", description: "Enable the lsp tool for language server protocol" },
+	},
+	"calc.enabled": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "tools",
+			label: "Enable Calculator",
+			description: "Enable the calculator tool for basic calculations",
+		},
 	},
 
 	// ─────────────────────────────────────────────────────────────────────────

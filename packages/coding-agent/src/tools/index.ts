@@ -279,6 +279,14 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 		if (name === "bash") return allowBash;
 		if (name === "python") return allowPython;
 		if (name === "todo_write") return !includeSubmitResult && session.settings.get("todo.enabled");
+		if (name === "ls") return session.settings.get("ls.enabled");
+		if (name === "find") return session.settings.get("find.enabled");
+		if (name === "grep") return session.settings.get("grep.enabled");
+		if (name === "notebook") return session.settings.get("notebook.enabled");
+		if (name === "fetch") return session.settings.get("fetch.enabled");
+		if (name === "web_search") return session.settings.get("web_search.enabled");
+		if (name === "lsp") return session.settings.get("lsp.enabled");
+		if (name === "calc") return session.settings.get("calc.enabled");
 		return true;
 	};
 	if (includeSubmitResult && requestedTools && !requestedTools.includes("submit_result")) {
