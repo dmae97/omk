@@ -8,11 +8,15 @@ import * as pythonKernel from "@oh-my-pi/pi-coding-agent/ipy/kernel";
 import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { PythonTool } from "@oh-my-pi/pi-coding-agent/tools/python";
 
-function createSession(cwd: string, overrides?: Partial<Record<SettingPath, unknown>>): ToolSession {
+function createSession(
+	cwd: string,
+	sessionFile: string,
+	overrides?: Partial<Record<SettingPath, unknown>>,
+): ToolSession {
 	return {
 		cwd,
 		hasUI: false,
-		getSessionFile: () => "session.json",
+		getSessionFile: () => sessionFile,
 		getSessionSpawns: () => null,
 		settings: Settings.isolated({ "python.toolMode": "ipy-only", ...overrides }),
 	};
@@ -33,7 +37,8 @@ describe("python tool settings", () => {
 
 	it("exposes python tool when kernel is available", async () => {
 		vi.spyOn(pythonKernel, "checkPythonKernelAvailability").mockResolvedValue({ ok: true });
-		const tools = await createTools(createSession(testDir), ["python"]);
+		const sessionFile = path.join(testDir, "session.jsonl");
+		const tools = await createTools(createSession(testDir, sessionFile), ["python"]);
 
 		expect(tools.map(tool => tool.name).sort()).toEqual(["exit_plan_mode", "python"]);
 	});
@@ -43,7 +48,8 @@ describe("python tool settings", () => {
 			ok: false,
 			reason: "missing",
 		});
-		const tools = await createTools(createSession(testDir), ["python"]);
+		const sessionFile = path.join(testDir, "session.jsonl");
+		const tools = await createTools(createSession(testDir, sessionFile), ["python"]);
 
 		expect(tools.map(tool => tool.name).sort()).toEqual(["bash", "exit_plan_mode"]);
 	});
@@ -62,7 +68,8 @@ describe("python tool settings", () => {
 			stdinRequested: false,
 		});
 
-		const session = createSession(testDir, { "python.kernelMode": "per-call" });
+		const sessionFile = path.join(testDir, "session.jsonl");
+		const session = createSession(testDir, sessionFile, { "python.kernelMode": "per-call" });
 		const pythonTool = new PythonTool(session);
 
 		await pythonTool.execute("tool-call", { cells: [{ code: "print(1)" }] });
@@ -71,7 +78,7 @@ describe("python tool settings", () => {
 			"print(1)",
 			expect.objectContaining({
 				kernelMode: "per-call",
-				sessionId: `session:session.json:cwd:${testDir}`,
+				sessionId: `session:${sessionFile}:cwd:${testDir}`,
 			}),
 		);
 	});

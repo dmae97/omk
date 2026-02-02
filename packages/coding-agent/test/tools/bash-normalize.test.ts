@@ -55,54 +55,12 @@ describe("normalizeBashCommand", () => {
 		});
 	});
 
-	describe("2>&1 stripping", () => {
-		it("strips 2>&1", () => {
-			const result = normalizeBashCommand("make 2>&1");
-			expect(result.command).toBe("make");
-			expect(result.strippedRedirect).toBe(true);
-		});
-
-		it("strips 2>&1 before pipe", () => {
-			const result = normalizeBashCommand("make 2>&1 | grep error");
-			expect(result.command).toBe("make | grep error");
-			expect(result.strippedRedirect).toBe(true);
-		});
-
-		it("strips multiple 2>&1", () => {
-			const result = normalizeBashCommand("cmd1 2>&1 | cmd2 2>&1");
-			expect(result.command).toBe("cmd1 | cmd2");
-			expect(result.strippedRedirect).toBe(true);
-		});
-
-		it("reports no redirect stripped when none present", () => {
-			const result = normalizeBashCommand("ls -la");
-			expect(result.strippedRedirect).toBe(false);
-		});
-	});
-
-	describe("combined patterns", () => {
-		it("strips 2>&1 and extracts tail", () => {
-			const result = normalizeBashCommand("make 2>&1 | tail -n 50");
-			expect(result.command).toBe("make");
-			expect(result.tailLines).toBe(50);
-			expect(result.strippedRedirect).toBe(true);
-		});
-
-		it("handles complex command with 2>&1 before tail pipe", () => {
-			const result = normalizeBashCommand(
-				"podman build -f scripts/install-tests/tarball.dockerfile -t omp-test-tarball . 2>&1 | tail -60",
-			);
-			expect(result.command).toBe("podman build -f scripts/install-tests/tarball.dockerfile -t omp-test-tarball .");
-			expect(result.tailLines).toBe(60);
-			expect(result.strippedRedirect).toBe(true);
-		});
-
-		it("preserves command with no patterns", () => {
+	describe("no patterns", () => {
+		it("preserves command unchanged", () => {
 			const result = normalizeBashCommand("git status");
 			expect(result.command).toBe("git status");
 			expect(result.headLines).toBeUndefined();
 			expect(result.tailLines).toBeUndefined();
-			expect(result.strippedRedirect).toBe(false);
 		});
 	});
 });

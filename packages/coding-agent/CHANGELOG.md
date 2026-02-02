@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Breaking Changes
+
+- Removed `strippedRedirect` field from `NormalizedCommand` interface returned by `normalizeBashCommand()`
+- Removed automatic stripping of `2>&1` stderr redirections from bash command normalization
 
 ## [10.1.0] - 2026-02-01
 ### Added

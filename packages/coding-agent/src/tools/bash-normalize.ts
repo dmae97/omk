@@ -1,10 +1,9 @@
 /**
- * Bash command normalizer - strips patterns that are better handled natively.
+ * Bash command normalizer - extracts patterns that are better handled natively.
  *
- * Detects and removes:
+ * Detects and extracts:
  * - `| head -n N` / `| head -N` - extracted to headLines
  * - `| tail -n N` / `| tail -N` - extracted to tailLines
- * - `2>&1` - redundant since we merge stdout/stderr
  */
 
 export interface NormalizedCommand {
@@ -14,8 +13,6 @@ export interface NormalizedCommand {
 	headLines?: number;
 	/** Extracted tail line count, if any */
 	tailLines?: number;
-	/** Whether 2>&1 was stripped */
-	strippedRedirect: boolean;
 }
 
 /**
@@ -33,14 +30,6 @@ export interface NormalizedCommand {
 const TRAILING_HEAD_TAIL_PATTERN = /\|\s*(head|tail)\s+(?:-n\s*(\d+)|(-\d+))\s*$/;
 
 /**
- * Pattern to match 2>&1 redirection.
- * Common variations:
- * - `2>&1`
- * - `2>&1 |` (before a pipe)
- */
-const STDERR_REDIRECT_PATTERN = /\s*2>&1\s*/g;
-
-/**
  * Normalize a bash command by stripping patterns better handled natively.
  *
  * Extracts `| head -n N` and `| tail -n N` suffixes into separate fields
@@ -52,13 +41,6 @@ export function normalizeBashCommand(command: string): NormalizedCommand {
 	let normalized = command;
 	let headLines: number | undefined;
 	let tailLines: number | undefined;
-	let strippedRedirect = false;
-
-	// Strip 2>&1 patterns (we merge streams already)
-	if (STDERR_REDIRECT_PATTERN.test(normalized)) {
-		normalized = normalized.replace(STDERR_REDIRECT_PATTERN, " ");
-		strippedRedirect = true;
-	}
 
 	// Extract trailing head/tail
 	const match = normalized.match(TRAILING_HEAD_TAIL_PATTERN);
@@ -82,7 +64,6 @@ export function normalizeBashCommand(command: string): NormalizedCommand {
 		command: normalized,
 		headLines,
 		tailLines,
-		strippedRedirect,
 	};
 }
 
