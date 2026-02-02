@@ -54,7 +54,7 @@ const EMBEDDED_AGENT_DEFS: EmbeddedAgentDef[] = [
 		fileName: "quick_task.md",
 		frontmatter: {
 			name: "quick_task",
-			description: "Quick task for fast execution",
+			description: "Low-reasoning agent for strictly mechanical updates or data collection only",
 			model: "pi/smol",
 		},
 		template: taskMd,
