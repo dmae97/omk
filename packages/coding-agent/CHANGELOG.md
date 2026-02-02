@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [10.2.3] - 2026-02-02
 ### Added
 
 - Added `find.enabled`, `grep.enabled`, `ls.enabled`, `notebook.enabled`, `fetch.enabled`, `web_search.enabled`, `lsp.enabled`, and `calc.enabled` settings to control availability of individual tools
