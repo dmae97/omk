@@ -255,7 +255,12 @@ export interface ToolDefinition<TParams extends TSchema = TSchema, TDetails = un
 	renderCall?: (args: Static<TParams>, theme: Theme) => Component;
 
 	/** Custom rendering for tool result display */
-	renderResult?: (result: AgentToolResult<TDetails>, options: ToolRenderResultOptions, theme: Theme) => Component;
+	renderResult?: (
+		result: AgentToolResult<TDetails>,
+		options: ToolRenderResultOptions,
+		theme: Theme,
+		args?: Static<TParams>,
+	) => Component;
 }
 
 // ============================================================================

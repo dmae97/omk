@@ -147,7 +147,12 @@ export interface CustomTool<TParams extends TSchema = TSchema, TDetails = any> {
 	renderCall?: (args: Static<TParams>, theme: Theme) => Component;
 
 	/** Custom rendering for tool result display - return a Component */
-	renderResult?: (result: CustomToolResult<TDetails>, options: RenderResultOptions, theme: Theme) => Component;
+	renderResult?: (
+		result: CustomToolResult<TDetails>,
+		options: RenderResultOptions,
+		theme: Theme,
+		args?: Static<TParams>,
+	) => Component;
 }
 
 /** Factory function that creates a custom tool or array of tools */

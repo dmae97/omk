@@ -42,11 +42,12 @@ export class RegisteredToolAdapter implements AgentTool<any, any, any> {
 		return this.registeredTool.definition.renderCall?.(args, theme as Theme);
 	}
 
-	renderResult?(result: any, options: any, theme: any) {
+	renderResult?(result: any, options: any, theme: any, args?: any) {
 		return this.registeredTool.definition.renderResult?.(
 			result,
 			{ expanded: options.expanded, isPartial: options.isPartial, spinnerFrame: options.spinnerFrame },
 			theme as Theme,
+			args,
 		);
 	}
 }
@@ -82,8 +83,8 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 		private tool: AgentTool<TParameters, TDetails>,
 		private runner: ExtensionRunner,
 	) {
-		this.renderCall = tool.renderCall;
-		this.renderResult = tool.renderResult;
+		this.renderCall = tool.renderCall?.bind(tool);
+		this.renderResult = tool.renderResult?.bind(tool);
 		this.mergeCallAndResult = (tool as { mergeCallAndResult?: boolean }).mergeCallAndResult;
 		this.inline = (tool as { inline?: boolean }).inline;
 	}

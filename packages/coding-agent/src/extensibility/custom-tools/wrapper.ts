@@ -47,8 +47,13 @@ export class CustomToolAdapter<TParams extends TSchema = TSchema, TDetails = any
 	}
 
 	/** Optional custom rendering for tool result display (returns UI component) */
-	renderResult(result: AgentToolResult<TDetails>, options: RenderResultOptions, theme: TTheme): Component | undefined {
-		return this.tool.renderResult?.(result, options, theme);
+	renderResult(
+		result: AgentToolResult<TDetails>,
+		options: RenderResultOptions,
+		theme: TTheme,
+		args?: Static<TParams>,
+	): Component | undefined {
+		return this.tool.renderResult?.(result, options, theme, args);
 	}
 
 	/**

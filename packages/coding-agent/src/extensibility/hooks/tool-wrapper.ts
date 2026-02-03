@@ -34,8 +34,8 @@ export class HookToolWrapper<TParameters extends TSchema = TSchema, TDetails = u
 		this.label = tool.label ?? "";
 		this.description = tool.description;
 		this.parameters = tool.parameters;
-		this.renderCall = tool.renderCall;
-		this.renderResult = tool.renderResult;
+		this.renderCall = tool.renderCall?.bind(tool);
+		this.renderResult = tool.renderResult?.bind(tool);
 		this.mergeCallAndResult = (tool as { mergeCallAndResult?: boolean }).mergeCallAndResult;
 		this.inline = (tool as { inline?: boolean }).inline;
 	}

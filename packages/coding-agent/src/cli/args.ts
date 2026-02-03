@@ -3,7 +3,7 @@
  */
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import chalk from "chalk";
-import { APP_NAME, CONFIG_DIR_NAME, ENV_AGENT_DIR } from "../config";
+import { APP_NAME, CONFIG_DIR_NAME } from "../config";
 import { BUILTIN_TOOLS } from "../tools";
 
 export type Mode = "text" | "json" | "rpc";
@@ -286,7 +286,7 @@ ${chalk.bold("Environment Variables:")}
   PERPLEXITY_API_KEY      - Perplexity search API key
 
   ${chalk.dim("# Configuration")}
-  ${ENV_AGENT_DIR.padEnd(23)} - Session storage directory (default: ~/${CONFIG_DIR_NAME}/agent)
+  OMP_CODING_AGENT_DIR    - Session storage directory (default: ~/${CONFIG_DIR_NAME}/agent)
 
 ${chalk.bold("Available Tools (all enabled by default):")}
   read       - Read file contents

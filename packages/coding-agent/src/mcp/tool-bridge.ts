@@ -6,8 +6,15 @@
 import type { AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { TSchema } from "@sinclair/typebox";
 import type { SourceMeta } from "../capability/types";
-import type { CustomTool, CustomToolContext, CustomToolResult } from "../extensibility/custom-tools/types";
+import type {
+	CustomTool,
+	CustomToolContext,
+	CustomToolResult,
+	RenderResultOptions,
+} from "../extensibility/custom-tools/types";
+import type { Theme } from "../modes/theme/theme";
 import { callTool } from "./client";
+import { renderMCPCall, renderMCPResult } from "./render";
 import type { MCPContent, MCPServerConnection, MCPToolDefinition } from "./types";
 
 /** Details included in MCP tool results for rendering */
@@ -135,6 +142,14 @@ export class MCPTool implements CustomTool<TSchema, MCPToolDetails> {
 		this.mcpServerName = connection.name;
 	}
 
+	renderCall(args: unknown, theme: Theme) {
+		return renderMCPCall((args ?? {}) as Record<string, unknown>, theme, this.label);
+	}
+
+	renderResult(result: CustomToolResult<MCPToolDetails>, options: RenderResultOptions, theme: Theme, args?: unknown) {
+		return renderMCPResult(result, options, theme, (args ?? {}) as Record<string, unknown>);
+	}
+
 	async execute(
 		_toolCallId: string,
 		params: unknown,
@@ -221,6 +236,14 @@ export class DeferredMCPTool implements CustomTool<TSchema, MCPToolDetails> {
 		this.mcpServerName = serverName;
 		this.fallbackProvider = source?.provider;
 		this.fallbackProviderName = source?.providerName;
+	}
+
+	renderCall(args: unknown, theme: Theme) {
+		return renderMCPCall((args ?? {}) as Record<string, unknown>, theme, this.label);
+	}
+
+	renderResult(result: CustomToolResult<MCPToolDetails>, options: RenderResultOptions, theme: Theme, args?: unknown) {
+		return renderMCPResult(result, options, theme, (args ?? {}) as Record<string, unknown>);
 	}
 
 	async execute(

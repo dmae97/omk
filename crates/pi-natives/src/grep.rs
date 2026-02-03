@@ -619,6 +619,9 @@ fn collect_files(
 		.sort_by_file_path(|a, b| a.cmp(b));
 
 	let mut entries = Vec::new();
+	// Skip .git directories entirely
+	builder.filter_entry(|entry| entry.file_name().to_str() != Some(".git"));
+
 	for entry in builder.build() {
 		let Ok(entry) = entry else { continue };
 		let file_type = entry.file_type();
@@ -1175,6 +1178,9 @@ fn fuzzy_find_sync(config: FuzzyFindConfig, ct: task::CancelToken) -> Result<Fuz
 		.parents(true)
 		.follow_links(false)
 		.sort_by_file_path(|a, b| a.cmp(b));
+
+	// Skip .git directories entirely
+	builder.filter_entry(|entry| entry.file_name().to_str() != Some(".git"));
 
 	let mut matches = Vec::with_capacity(max_results.min(256));
 	let mut total_matches = 0u32;

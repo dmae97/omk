@@ -22,9 +22,6 @@ const priorityList = [
 	{ dir: ".gemini" },
 ];
 
-// e.g., OMP_CODING_AGENT_DIR
-export const ENV_AGENT_DIR = `${APP_NAME.toUpperCase()}_CODING_AGENT_DIR`;
-
 // =============================================================================
 // Package Directory (for optional external docs/examples)
 // =============================================================================
@@ -56,7 +53,7 @@ export function getChangelogPath(): string {
 
 /** Get the agent config directory (e.g., ~/.omp/agent/) */
 export function getAgentDir(): string {
-	return process.env[ENV_AGENT_DIR] || path.join(os.homedir(), CONFIG_DIR_NAME, "agent");
+	return process.env.OMP_CODING_AGENT_DIR || path.join(os.homedir(), CONFIG_DIR_NAME, "agent");
 }
 
 /** Get path to user's custom themes directory */

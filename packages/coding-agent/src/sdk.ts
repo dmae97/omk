@@ -33,7 +33,6 @@ import type { Component } from "@oh-my-pi/pi-tui";
 import { logger, postmortem } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 import chalk from "chalk";
-// Import discovery to register all providers on startup
 import { loadCapability } from "./capability";
 import { type Rule, ruleCapability } from "./capability/rule";
 import { getAgentDir, getConfigDirPaths } from "./config";

@@ -1,6 +1,16 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `renderCall` and `renderResult` methods to MCP tools for structured TUI display of tool calls and results
+- Added new `mcp/render.ts` module providing JSON tree rendering for MCP tool output with collapsible/expandable views
+
+### Changed
+
+- Updated `renderResult` signature in custom tools and extensions to accept optional `args` parameter for context-aware rendering
+- Changed environment variable from `ENV_AGENT_DIR` constant to hardcoded `OMP_CODING_AGENT_DIR` string in config and CLI help text
+- Fixed method binding in extension and hook tool wrappers to preserve `this` context for `renderCall` and `renderResult` methods
 
 ## [10.3.1] - 2026-02-03
 ### Fixed
