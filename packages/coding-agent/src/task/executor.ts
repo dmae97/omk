@@ -17,6 +17,7 @@ import type { CustomTool } from "../extensibility/custom-tools/types";
 import type { Skill } from "../extensibility/skills";
 import { callTool } from "../mcp/client";
 import type { MCPManager } from "../mcp/manager";
+import submitReminderTemplate from "../prompts/system/subagent-submit-reminder.md" with { type: "text" };
 import subagentSystemPromptTemplate from "../prompts/system/subagent-system-prompt.md" with { type: "text" };
 import { createAgentSession, discoverAuthStorage, discoverModels } from "../sdk";
 import type { AgentSession, AgentSessionEvent } from "../session/agent-session";
@@ -1067,17 +1068,10 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 						previousTools = session.getActiveToolNames();
 						await session.setActiveToolsByName(["submit_result"]);
 					}
-					const reminder = `<system-reminder>
-CRITICAL: You stopped without calling the submit_result tool. This is reminder ${retryCount} of ${MAX_SUBMIT_RESULT_RETRIES}.
-
-You MUST call the submit_result tool to finish your task. Options:
-1. Call submit_result with your result data if you have completed the task
-2. Call submit_result with status="aborted" and an error message if you cannot complete the task
-
-Failure to call submit_result after ${MAX_SUBMIT_RESULT_RETRIES} reminders will result in task failure.
-</system-reminder>
-
-Call submit_result now.`;
+					const reminder = renderPromptTemplate(submitReminderTemplate, {
+						retryCount,
+						maxRetries: MAX_SUBMIT_RESULT_RETRIES,
+					});
 
 					await session.prompt(reminder, reminderToolChoice ? { toolChoice: reminderToolChoice } : undefined);
 				}

@@ -729,8 +729,16 @@ async function runLspWritethrough(
 
 	let formatter: FileFormatResult | undefined;
 	let diagnostics: FileDiagnosticsResult | undefined;
+	let timedOut = false;
 	try {
 		const timeoutSignal = AbortSignal.timeout(10_000);
+		timeoutSignal.addEventListener(
+			"abort",
+			() => {
+				timedOut = true;
+			},
+			{ once: true },
+		);
 		const operationSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 		await untilAborted(operationSignal, async () => {
 			if (useCustomFormatter) {
@@ -768,6 +776,10 @@ async function runLspWritethrough(
 			}
 		});
 	} catch {
+		if (timedOut) {
+			formatter = undefined;
+			diagnostics = undefined;
+		}
 		await getWritePromise();
 	}
 
