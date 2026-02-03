@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [10.3.1] - 2026-02-03
 ### Fixed
 
 - Fixed timeout handling in LSP write-through operations to properly clear formatter and diagnostics results when operations exceed the 10-second timeout
