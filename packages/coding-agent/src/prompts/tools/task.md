@@ -181,7 +181,32 @@ tasks: [
 {{/list}}
 </agents>
 
-<avoid>
-- Single tasks doing too much - prefer focused, file-scoped tasks
-</avoid>
-````
+<critical>
+## Task granularity
+
+Each task MUST target a small, well-defined scope. A single task should touch at most 3-5 files.
+**Red flags that a task is too broad:**
+- File list uses globs (`src/**/*.ts`) instead of explicit paths
+- Description says "update all" / "migrate all" / "refactor all"
+- Task covers an entire package or directory tree
+- Estimated touch surface is >5 files
+**Fix:** Split into one task per file (or small group of related files). Fan out in parallel.
+
+### Bad (will timeout or produce garbage)
+```
+tasks: [
+  { id: "UpdateAll", description: "Update all constructor calls in src/**/*.ts" }
+]
+```
+
+### Good (focused, parallel)
+```
+tasks: [
+  { id: "UpdateDebug", description: "Update constructors in debug/index.ts", args: { files: "src/debug/index.ts" } },
+  { id: "UpdateAgent", description: "Update constructors in commit/agent.ts", args: { files: "src/commit/agentic/agent.ts" } },
+  { id: "UpdateTodoExample", description: "Update constructors in examples/todo", args: { files: "examples/custom-tools/todo/index.ts" } },
+]
+```
+
+When the set of files isn't known upfront, grep/glob yourself first to enumerate them, then fan out one task per file.
+</critical>
