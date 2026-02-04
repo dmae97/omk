@@ -26,14 +26,14 @@ Empirically-validated techniques + consistent XML structure. Every recommendatio
 
 Tags encode enforcement level. Use consistently throughout:
 
-| Tag | Enforcement | When to Use |
-|-----|-------------|-------------|
-| `<critical>` | Inviolable | Safety constraints, must-follow rules, repeat at END |
-| `<prohibited>` | Forbidden | Actions that cause harm, never acceptable |
-| `<important>` | High priority | Deviate only with justification |
-| `<instruction>` | Operational | How to use a tool, perform a task |
-| `<conditions>` | Contextual | When rules apply, trigger criteria |
-| `<avoid>` | Anti-patterns | What not to do, prefer alternatives |
+| Tag             | Enforcement   | When to Use                                          |
+| --------------- | ------------- | ---------------------------------------------------- |
+| `<critical>`    | Inviolable    | Safety constraints, must-follow rules, repeat at END |
+| `<prohibited>`  | Forbidden     | Actions that cause harm, never acceptable            |
+| `<important>`   | High priority | Deviate only with justification                      |
+| `<instruction>` | Operational   | How to use a tool, perform a task                    |
+| `<conditions>`  | Contextual    | When rules apply, trigger criteria                   |
+| `<avoid>`       | Anti-patterns | What not to do, prefer alternatives                  |
 
 **Context positioning rule**: Place `<critical>` at START for immediate priming, repeat at END for recency. Middle content suffers 20%+ degradation in long contexts.
 
@@ -42,6 +42,7 @@ Tags encode enforcement level. Use consistently throughout:
 ## Standard Tags
 
 ### Structure Tags
+
 ```
 <role>           Agent identity and expertise (first element)
 <context>        Background, situation, audience
@@ -54,6 +55,7 @@ Tags encode enforcement level. Use consistently throughout:
 ```
 
 ### Special Tags
+
 ```
 <north_star>     Core values, ultimate objectives
 <stance>         Communication style, attitude
@@ -85,6 +87,7 @@ Platform/context-specific
 ```
 
 Naming patterns:
+
 - `name="single"` / `name="multi-part"` — complexity variants
 - `name="good"` / `name="bad"` — correctness contrast
 - `name="linux"` / `name="windows-cmd"` — platform-specific
@@ -143,7 +146,7 @@ tool {"param": "value", "option": true}
 ---
 name: agent-name
 description: One-line for spawning UI (imperative: "Fast read-only codebase scout")
-tools: read, grep, find, ls, bash
+tools: read, grep, find, bash
 model: pi/slow, gpt-5.2, codex
 output:
   properties:
@@ -177,9 +180,10 @@ READ-ONLY if applicable — list prohibited actions explicitly.
 2. Step two
 
 ## Phase 2: Execute
+
 1. Step one
 2. Step two
-</procedure>
+   </procedure>
 
 <output>
 What to return. Schema requirements.
@@ -199,13 +203,14 @@ Keep going until complete. This matters.
 XML tags in this prompt are system-level instructions. They are not suggestions.
 
 Tag hierarchy (by enforcement level):
+
 - `<critical>` — Inviolable. Failure to comply is a system failure.
 - `<prohibited>` — Forbidden. These actions will cause harm.
 - `<important>` — High priority. Deviate only with justification.
 - `<instruction>` — How to operate. Follow precisely.
 - `<conditions>` — When rules apply. Check before acting.
 - `<avoid>` — Anti-patterns. Prefer alternatives.
-</system_directive>
+  </system_directive>
 
 You are a [specific role with credentials].
 
@@ -225,6 +230,7 @@ Specialized tools → Python → Bash
 ...
 
 ## Verification
+
 External proof: tests, linters, type checks.
 ...
 </protocol>
@@ -271,6 +277,7 @@ Good: "Critical: X."
 ```
 
 **Urgency framing** (8-115% improvement):
+
 ```
 "This matters. Get it right."
 "Be thorough."
@@ -294,6 +301,7 @@ When negation is necessary, pair with positive alternative.
 ### Specificity
 
 **Role specificity spectrum** (effectiveness increases →):
+
 ```
 "You are a lawyer"
     ↓
@@ -303,6 +311,7 @@ When negation is necessary, pair with positive alternative.
 ```
 
 **Constraint specificity**:
+
 ```
 Bad:  "Keep it short"
 Good: "3 bullets, <50 words each"
@@ -327,11 +336,12 @@ Good: "Truncated at 50KB or 2000 lines, whichever comes first"
 ```
 
 Code blocks with language:
-~~~markdown
+
+````markdown
 ```typescript
 const example = "always specify language";
 ```
-~~~
+````
 
 ---
 
@@ -355,6 +365,7 @@ Then provide your answer.
 ```
 
 **Token-efficient variant** (Chain of Draft):
+
 ```
 Think step-by-step, keeping only 5-word notes per step.
 Output final answer after ####.
@@ -406,6 +417,7 @@ Output: Y'
 **Self-correction without external feedback does not work.**
 
 Effective:
+
 ```
 1. Generate solution
 2. Execute verification (tests, lint, typecheck)
@@ -414,6 +426,7 @@ Effective:
 ```
 
 Ineffective:
+
 ```
 1. Generate solution
 2. "Critique your solution"      ← detection is the bottleneck
@@ -435,18 +448,18 @@ Prompt 4: <result> → Verify → final
 
 ## Anti-Patterns (Measured Degradation)
 
-| Pattern | Problem |
-|---------|---------|
-| "Would you be so kind..." | +perplexity, -4% accuracy |
-| "I'll tip $2000" | No improvement, sometimes worse |
-| Explicit CoT on reasoning models (o1/o3) | -36%, conflicts with internal reasoning |
-| Few-shot on advanced models + clear tasks | Introduces noise/bias |
-| "Always end with Progress/Questions" | Degrades task performance |
-| "Be efficient with tokens" | Premature task abandonment |
-| "Don't do X" without positive alternative | "Always do Y" processes better |
-| Verbose explanations of obvious concepts | Context bloat; model already knows |
-| Self-critique without external feedback | Detection is bottleneck, not correction |
-| Critical instructions only in middle | 20%+ degradation vs start/end |
+| Pattern                                   | Problem                                 |
+| ----------------------------------------- | --------------------------------------- |
+| "Would you be so kind..."                 | +perplexity, -4% accuracy               |
+| "I'll tip $2000"                          | No improvement, sometimes worse         |
+| Explicit CoT on reasoning models (o1/o3)  | -36%, conflicts with internal reasoning |
+| Few-shot on advanced models + clear tasks | Introduces noise/bias                   |
+| "Always end with Progress/Questions"      | Degrades task performance               |
+| "Be efficient with tokens"                | Premature task abandonment              |
+| "Don't do X" without positive alternative | "Always do Y" processes better          |
+| Verbose explanations of obvious concepts  | Context bloat; model already knows      |
+| Self-critique without external feedback   | Detection is bottleneck, not correction |
+| Critical instructions only in middle      | 20%+ degradation vs start/end           |
 
 ---
 
@@ -498,8 +511,8 @@ grep {"pattern": "struct \\{[\\s\\S]*?field", "multiline": true}
 ---
 name: explore
 description: Fast read-only codebase scout returning compressed context for handoff
-tools: read, grep, find, ls, bash
-model: pi/smol, haiku, flash
+tools: read, grep, find, bash
+model: pi/smol, haiku-4.5, haiku-4-5, gemini-flash-latest, gemini-3-flash, zai-glm-4.7, glm-4.7-flash, glm-4.5-flash, gpt-5.1-codex-mini, haiku, flash, mini
 output:
   properties:
     query:
@@ -572,6 +585,7 @@ Read-only. Call `submit_result` when done. This matters.
 ## Quick Reference
 
 ### Tag Names
+
 ```
 Enforcement:  <critical> <prohibited> <important> <instruction> <conditions> <avoid>
 Structure:    <role> <context> <procedure> <directives> <parameters> <output>
@@ -582,6 +596,7 @@ Special:      <north_star> <stance> <commitment> <field> <protocol>
 ```
 
 ### Example Name Patterns
+
 ```
 Correctness:  name="good", name="bad"
 Complexity:   name="single", name="multi-part", name="basic", name="advanced"
@@ -591,12 +606,13 @@ Domains:      name="rate-limiting", name="auth", name="validation"
 ```
 
 ### Task → Technique
-| Task | Primary | Secondary |
-|------|---------|-----------|
-| Simple extraction | Clear constraints | Prefilling |
-| Classification | 3-5 examples | XML structure |
-| Complex analysis | Structured reasoning | Role + urgency |
-| Code generation | SEARCH/REPLACE | Verification loop |
-| Long document | Docs at top, quote-then-analyze | XML structure |
-| Multi-step workflow | Prompt chaining | Planning instruction |
-| Domain expertise | Specific role + credentials | Examples |
+
+| Task                | Primary                         | Secondary            |
+| ------------------- | ------------------------------- | -------------------- |
+| Simple extraction   | Clear constraints               | Prefilling           |
+| Classification      | 3-5 examples                    | XML structure        |
+| Complex analysis    | Structured reasoning            | Role + urgency       |
+| Code generation     | SEARCH/REPLACE                  | Verification loop    |
+| Long document       | Docs at top, quote-then-analyze | XML structure        |
+| Multi-step workflow | Prompt chaining                 | Planning instruction |
+| Domain expertise    | Specific role + credentials     | Examples             |

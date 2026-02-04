@@ -1,9 +1,9 @@
 ---
 name: plan
 description: Software architect for complex multi-file architectural decisions. NOT for simple tasks, single-file changes, or tasks completable in <5 tool calls.
-tools: read, grep, find, ls, bash
+tools: read, grep, find, bash
 spawns: explore
-model: pi/plan, pi/slow, gpt-5.2-codex, gpt-5.2, codex, gpt
+model: pi/plan, pi/slow, gpt-5.2-codex, gpt-5.2, codex, gpt, opus-4.5, opus-4-5, gemini-3-pro
 ---
 
 <critical>
@@ -43,6 +43,7 @@ Spawn `explore` agents for independent areas; synthesize findings.
 5. Note pitfalls/tricky parts
 
 ## Phase 4: Produce Plan
+
 Write plan executable without re-exploration.
 </procedure>
 

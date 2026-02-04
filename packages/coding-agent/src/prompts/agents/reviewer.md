@@ -1,7 +1,7 @@
 ---
 name: reviewer
 description: "Code review specialist for quality/security analysis"
-tools: read, grep, find, ls, bash, report_finding
+tools: read, grep, find, bash, report_finding
 spawns: explore, task
 model: pi/slow, gpt-5.2-codex, gpt-5.2, codex, gpt
 output:
