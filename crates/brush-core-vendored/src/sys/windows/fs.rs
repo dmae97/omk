@@ -56,8 +56,8 @@ impl crate::sys::fs::PathExt for std::path::Path {
 	fn get_device_and_inode(&self) -> Result<(u64, u64), crate::error::Error> {
 		let metadata = self.metadata()?;
 		let volume_serial_number =
-			std::os::windows::fs::MetadataExt::volume_serial_number(&metadata) as u64;
-		let file_index = std::os::windows::fs::MetadataExt::file_index(&metadata);
+            std::os::windows::fs::MetadataExt::volume_serial_number(&metadata) as u64;
+        let file_index = std::os::windows::fs::MetadataExt::file_index(&metadata);
 		Ok((volume_serial_number, file_index))
 	}
 }

@@ -1,7 +1,7 @@
 #![allow(clippy::missing_const_for_fn)]
 
 use crate::error;
-use std::{mem::MaybeUninit, path::PathBuf};
+use std::{mem::MaybeUninit, path::PathBuf, sync::OnceLock};
 use windows_sys::Win32::{
     Foundation::{CloseHandle, HANDLE},
     Security::{GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY},
@@ -21,8 +21,8 @@ pub(crate) fn get_current_user_home_dir() -> Option<PathBuf> {
 }
 
 pub(crate) fn is_root() -> bool {
-    static IS_ROOT: OnceCell<bool> = OnceCell::new();
-    IS_ROOT.get_or_init(|| {
+    static IS_ROOT: OnceLock<bool> = OnceLock::new();
+    *IS_ROOT.get_or_init(|| {
         // SAFETY: Windows APIs are called with valid handles and buffers.
         unsafe {
             let mut elevation = MaybeUninit::<TOKEN_ELEVATION>::zeroed();

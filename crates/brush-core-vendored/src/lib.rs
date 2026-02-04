@@ -1,3 +1,4 @@
+#![cfg_attr(windows, feature(windows_by_handle))]
 //! Core implementation of the brush shell. Implements the shell's abstraction, its interpreter, and
 //! various facilities used internally by the shell.
 

@@ -159,7 +159,7 @@ pub fn get_foreground_pid() -> Option<sys::process::ProcessId> {
 		// SAFETY: GetForegroundWindow has no safety requirements.
 		unsafe { GetForegroundWindow() }
 	};
-	if hwnd == 0 {
+    if hwnd.is_null() {
 		return None;
 	}
 
@@ -177,7 +177,7 @@ pub fn move_to_foreground(_pid: sys::process::ProcessId) -> Result<(), error::Er
 		// SAFETY: GetConsoleWindow has no safety requirements.
 		unsafe { GetConsoleWindow() }
 	};
-	if hwnd != 0 {
+    if !hwnd.is_null() {
 		let _ = {
 			// SAFETY: hwnd is a console window handle when non-zero.
 			unsafe { SetForegroundWindow(hwnd) }
@@ -212,7 +212,7 @@ fn console_output_handle() -> Result<HANDLE, error::Error> {
 }
 
 fn validate_handle(handle: HANDLE) -> Result<HANDLE, error::Error> {
-	if handle == 0 || handle == INVALID_HANDLE_VALUE {
+    if handle.is_null() || handle == INVALID_HANDLE_VALUE {
 		return Err(std::io::Error::last_os_error().into());
 	}
 
