@@ -19,9 +19,6 @@ function getEnv(name: string, defaultValue: number): number {
 	return defaultValue;
 }
 
-/** Maximum tasks per call */
-export const MAX_PARALLEL_TASKS = getEnv("OMP_TASK_MAX_PARALLEL", 32);
-
 /** Maximum concurrent tasks */
 export const MAX_CONCURRENCY = getEnv("OMP_TASK_MAX_CONCURRENCY", 16);
 
@@ -66,7 +63,7 @@ export const taskSchema = Type.Object({
 	schema: Type.Optional(
 		Type.Record(Type.String(), Type.Unknown(), { description: "JTD schema defining expected response structure" }),
 	),
-	tasks: Type.Array(taskItemSchema, { description: "Tasks to run in parallel", maxItems: MAX_PARALLEL_TASKS }),
+	tasks: Type.Array(taskItemSchema, { description: "Tasks to run in parallel" }),
 });
 
 export type TaskParams = Static<typeof taskSchema>;

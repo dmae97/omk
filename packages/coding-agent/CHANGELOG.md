@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Removed
+
+- Removed `MAX_PARALLEL_TASKS` constant and associated task count validation limit
 
 ## [10.6.1] - 2026-02-04
 

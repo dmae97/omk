@@ -38,7 +38,6 @@ import { renderTemplate } from "./template";
 import {
 	type AgentProgress,
 	MAX_CONCURRENCY,
-	MAX_PARALLEL_TASKS,
 	type SingleResult,
 	type TaskParams,
 	type TaskToolDetails,
@@ -115,7 +114,6 @@ async function buildDescription(cwd: string): Promise<string> {
 
 	return renderPromptTemplate(taskDescriptionTemplate, {
 		agents,
-		MAX_PARALLEL_TASKS,
 		MAX_CONCURRENCY,
 	});
 }
@@ -211,23 +209,6 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 					{
 						type: "text",
 						text: `No tasks provided. Use: { agent, context, tasks: [{id, description, args}, ...] }`,
-					},
-				],
-				details: {
-					projectAgentsDir,
-					results: [],
-					totalDurationMs: 0,
-				},
-			};
-		}
-
-		// Validate task count
-		if (params.tasks.length > MAX_PARALLEL_TASKS) {
-			return {
-				content: [
-					{
-						type: "text",
-						text: `Too many tasks (${params.tasks.length}). Max is ${MAX_PARALLEL_TASKS}.`,
 					},
 				],
 				details: {
