@@ -5,6 +5,7 @@ const availWidth = width;
 const availHeight = Math_max(height - 40, 0); // Account for taskbar
 const colorDepth = 24;
 const pixelDepth = 24;
+const devicePixelRatio = window.devicePixelRatio && window.devicePixelRatio > 1 ? window.devicePixelRatio : 1.25;
 
 const defineScreenProp = (prop, value) => {
   try {
@@ -65,7 +66,7 @@ if (window.visualViewport) {
 
 // Consistent devicePixelRatio
 Object_defineProperty(window, "devicePixelRatio", {
-  get: () => 1,
+  get: () => devicePixelRatio,
   configurable: true,
   enumerable: true,
 });

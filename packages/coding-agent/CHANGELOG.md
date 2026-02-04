@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Changed `ask` tool to require `questions` array parameter; single-question mode with `question`, `options`, `multi`, and `recommended` parameters is no longer supported
@@ -18,6 +17,8 @@
 
 ### Changed
 
+- Updated browser viewport to use 1.25x device scale factor for improved rendering on high-DPI displays
+- Modified device pixel ratio detection to respect actual screen capabilities instead of forcing 1x ratio
 - Updated system prompt guidance to state assumptions and proceed without asking for confirmation, reducing unnecessary round-trips
 - Tightened `ask` tool conditions to require multiple approaches with significantly different tradeoffs before prompting user
 - Strengthened `ask` tool guidance to default to action and only ask when genuinely blocked by decisions with materially different outcomes

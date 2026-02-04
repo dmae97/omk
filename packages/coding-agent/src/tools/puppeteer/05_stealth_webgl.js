@@ -14,6 +14,10 @@ const renderer = renderers[Math_floor(Math_random() * renderers.length)];
 const getParameterProxyHandler = {
   apply(target, thisArg, args) {
     const param = args[0];
+    // VENDOR = 0x1F00
+    if (param === 0x1F00) return vendor;
+    // RENDERER = 0x1F01
+    if (param === 0x1F01) return renderer;
     // UNMASKED_VENDOR_WEBGL = 0x9245
     if (param === 0x9245) return vendor;
     // UNMASKED_RENDERER_WEBGL = 0x9246

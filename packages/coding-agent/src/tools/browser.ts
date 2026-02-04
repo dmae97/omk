@@ -32,7 +32,7 @@ import { toolResult } from "./tool-result";
 
 const DEFAULT_TIMEOUT_SECONDS = 30;
 const MAX_TIMEOUT_SECONDS = 120;
-const DEFAULT_VIEWPORT = { width: 1365, height: 768 };
+const DEFAULT_VIEWPORT = { width: 1365, height: 768, deviceScaleFactor: 1.25 };
 const STEALTH_IGNORE_DEFAULT_ARGS = [
 	"--disable-extensions",
 	"--disable-default-apps",
@@ -291,6 +291,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 		this.currentHeadless = this.session.settings.get("browser.headless");
 		this.browser = await puppeteer.launch({
 			headless: this.currentHeadless,
+			defaultViewport: DEFAULT_VIEWPORT,
 			args: [
 				"--no-sandbox",
 				"--disable-setuid-sandbox",
