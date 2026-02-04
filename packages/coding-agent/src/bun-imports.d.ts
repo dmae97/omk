@@ -20,9 +20,3 @@ declare module "*.py" {
 	const content: string;
 	export default content;
 }
-
-// JavaScript files imported as text
-declare module "*.js?raw" {
-	const content: string;
-	export default content;
-}

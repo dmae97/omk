@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [10.5.0] - 2026-02-04
 ### Changed
 
 - Updated @anthropic-ai/sdk to ^0.72.1

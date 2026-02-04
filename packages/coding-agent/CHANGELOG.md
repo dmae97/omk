@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [10.5.0] - 2026-02-04
+
 ### Breaking Changes
 
 - Changed `ask` tool to require `questions` array parameter; single-question mode with `question`, `options`, `multi`, and `recommended` parameters is no longer supported

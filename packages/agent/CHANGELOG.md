@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [10.5.0] - 2026-02-04
 ### Added
 
 - Added `concurrency` option to `AgentTool` to control tool scheduling: "shared" (default, runs in parallel) or "exclusive" (runs alone)

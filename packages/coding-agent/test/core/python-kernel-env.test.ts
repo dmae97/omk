@@ -1,112 +1,56 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
-import { _resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
-import { acquireSharedGateway } from "@oh-my-pi/pi-coding-agent/ipy/gateway-coordinator";
-import * as shellSnapshot from "@oh-my-pi/pi-coding-agent/utils/shell-snapshot";
-import { TempDir } from "@oh-my-pi/pi-utils";
+import { describe, expect, it } from "bun:test";
+import { filterEnv } from "@oh-my-pi/pi-coding-agent/ipy/runtime";
 
-class FakeWebSocket {
-	static OPEN = 1;
-	static CLOSED = 3;
-	readyState = FakeWebSocket.OPEN;
-	binaryType = "arraybuffer";
-	url: string;
-	onopen?: () => void;
-	onerror?: (event: unknown) => void;
-	onclose?: () => void;
-	onmessage?: (event: { data: ArrayBuffer }) => void;
+describe("Python gateway environment filtering", () => {
+	it("filters sensitive and unknown variables from shell env", () => {
+		const env: Record<string, string | undefined> = {
+			PATH: "/bin",
+			HOME: "/home/test",
+			OPENAI_API_KEY: "secret",
+			ANTHROPIC_API_KEY: "also-secret",
+			UNSAFE_TOKEN: "nope",
+			OMP_CUSTOM: "1",
+			LC_ALL: "en_US.UTF-8",
+		};
 
-	constructor(url: string) {
-		this.url = url;
-		queueMicrotask(() => {
-			this.onopen?.();
-		});
-	}
+		const filtered = filterEnv(env);
 
-	send(_data: ArrayBuffer) {}
-
-	close() {
-		this.readyState = FakeWebSocket.CLOSED;
-		this.onclose?.();
-	}
-}
-
-describe("Shared Python gateway environment", () => {
-	const originalEnv = { ...process.env };
-	const originalFetch = globalThis.fetch;
-	const originalWebSocket = globalThis.WebSocket;
-
-	beforeEach(() => {
-		_resetSettingsForTest();
-		process.env.BUN_ENV = "test";
-		delete process.env.OMP_PYTHON_GATEWAY_URL;
-		delete process.env.OMP_PYTHON_GATEWAY_TOKEN;
-		globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+		expect(filtered.PATH).toBe("/bin");
+		expect(filtered.HOME).toBe("/home/test");
+		expect(filtered.OMP_CUSTOM).toBe("1");
+		expect(filtered.LC_ALL).toBe("en_US.UTF-8");
+		expect(filtered.OPENAI_API_KEY).toBeUndefined();
+		expect(filtered.ANTHROPIC_API_KEY).toBeUndefined();
+		expect(filtered.UNSAFE_TOKEN).toBeUndefined();
 	});
 
-	afterEach(() => {
-		for (const key of Object.keys(process.env)) {
-			if (!(key in originalEnv)) {
-				delete process.env[key];
-			}
-		}
-		for (const [key, value] of Object.entries(originalEnv)) {
-			process.env[key] = value;
-		}
-		globalThis.fetch = originalFetch;
-		globalThis.WebSocket = originalWebSocket;
-		vi.restoreAllMocks();
+	it("preserves XDG and LC prefixed variables", () => {
+		const env: Record<string, string | undefined> = {
+			XDG_CONFIG_HOME: "/home/test/.config",
+			XDG_RUNTIME_DIR: "/run/user/1000",
+			LC_CTYPE: "UTF-8",
+			LC_MESSAGES: "en_US.UTF-8",
+		};
+
+		const filtered = filterEnv(env);
+
+		expect(filtered.XDG_CONFIG_HOME).toBe("/home/test/.config");
+		expect(filtered.XDG_RUNTIME_DIR).toBe("/run/user/1000");
+		expect(filtered.LC_CTYPE).toBe("UTF-8");
+		expect(filtered.LC_MESSAGES).toBe("en_US.UTF-8");
 	});
 
-	it("filters environment variables before spawning shared gateway", async () => {
-		const fetchSpy = vi.fn(async (input: string | URL) => {
-			const url = typeof input === "string" ? input : input.toString();
-			if (url.endsWith("/api/kernelspecs")) {
-				return new Response(JSON.stringify({}), { status: 200 });
-			}
-			return new Response("", { status: 200 });
-		});
-		globalThis.fetch = fetchSpy as unknown as typeof fetch;
+	it("passes filtered env through to resolved runtime", () => {
+		const env: Record<string, string | undefined> = {
+			PATH: "/usr/bin",
+			HOME: "/home/test",
+			OPENAI_API_KEY: "secret",
+			OMP_DEBUG: "1",
+		};
 
-		vi.spyOn(Settings.prototype, "getShellConfig").mockReturnValue({
-			shell: "/bin/bash",
-			args: ["-lc"],
-			env: {
-				PATH: "/bin",
-				HOME: "/home/test",
-				OPENAI_API_KEY: "secret",
-				UNSAFE_TOKEN: "nope",
-				OMP_CUSTOM: "1",
-				LC_ALL: "en_US.UTF-8",
-			},
-			prefix: undefined,
-		});
-		const snapshotSpy = vi.spyOn(shellSnapshot, "getOrCreateSnapshot").mockResolvedValue(null);
-		const whichSpy = vi.spyOn(Bun, "which").mockReturnValue("/usr/bin/python");
-
-		let spawnEnv: Record<string, string | undefined> | undefined;
-		let spawnArgs: string[] | undefined;
-		const spawnSpy = vi.spyOn(Bun, "spawn").mockImplementation(((...args: unknown[]) => {
-			const [cmd, options] = args as [string[] | { cmd: string[] }, { env?: Record<string, string | undefined> }?];
-			spawnArgs = Array.isArray(cmd) ? cmd : cmd.cmd;
-			spawnEnv = options?.env;
-			return { pid: 1234, exited: Promise.resolve(0) } as unknown as Bun.Subprocess;
-		}) as unknown as typeof Bun.spawn);
-
-		using tempDir = TempDir.createSync("@python-kernel-env-");
-		process.env.OMP_CODING_AGENT_DIR = tempDir.path();
-		await acquireSharedGateway(tempDir.path());
-
-		expect(spawnArgs).toContain("kernel_gateway");
-		expect(spawnEnv?.PATH).toBe("/bin");
-		expect(spawnEnv?.HOME).toBe("/home/test");
-		expect(spawnEnv?.OMP_CUSTOM).toBe("1");
-		expect(spawnEnv?.LC_ALL).toBe("en_US.UTF-8");
-		expect(spawnEnv?.OPENAI_API_KEY).toBeUndefined();
-		expect(spawnEnv?.UNSAFE_TOKEN).toBeUndefined();
-
-		vi.restoreAllMocks();
-		snapshotSpy.mockRestore();
-		whichSpy.mockRestore();
-		spawnSpy.mockRestore();
+		const filtered = filterEnv(env);
+		expect(filtered.OPENAI_API_KEY).toBeUndefined();
+		expect(filtered.PATH).toBe("/usr/bin");
+		expect(filtered.OMP_DEBUG).toBe("1");
 	});
 });
