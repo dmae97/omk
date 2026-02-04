@@ -1287,7 +1287,7 @@ impl Shell {
     ) -> impl Iterator<Item = PathBuf> + 'a {
         let path_var = self.env.get_str("PATH", self).unwrap_or_default();
         let paths = std::env::split_paths(OsStr::new(path_var.as_ref()))
-            .map(|path| path.to_string_lossy().to_string());
+            .map(|path| path.to_string_lossy().trim_matches('"').to_string());
 
         pathsearch::search_for_executable(paths.into_iter(), filename)
     }
@@ -1305,7 +1305,7 @@ impl Shell {
     ) -> impl Iterator<Item = PathBuf> {
         let path_var = self.env.get_str("PATH", self).unwrap_or_default();
         let paths = std::env::split_paths(OsStr::new(path_var.as_ref()))
-            .map(|path| path.to_string_lossy().to_string());
+            .map(|path| path.to_string_lossy().trim_matches('"').to_string());
 
         pathsearch::search_for_executable_with_prefix(
             paths.into_iter(),
@@ -1326,7 +1326,7 @@ impl Shell {
     ) -> Option<PathBuf> {
         let path_var = self.env_str("PATH").unwrap_or_default();
         let paths = std::env::split_paths(OsStr::new(path_var.as_ref()))
-            .map(|path| path.to_string_lossy().to_string());
+            .map(|path| path.to_string_lossy().trim_matches('"').to_string());
         pathsearch::search_for_executable(paths.into_iter(), candidate_name.as_ref()).next()
     }
 

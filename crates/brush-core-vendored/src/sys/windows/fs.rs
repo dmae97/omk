@@ -1,7 +1,7 @@
 //! Filesystem utilities.
 
 use crate::error;
-use std::{ffi::OsStr, sync::OnceLock};
+use std::{ffi::OsStr, path::PathBuf, sync::OnceLock};
 
 impl crate::sys::fs::PathExt for std::path::Path {
 	fn readable(&self) -> bool {
@@ -71,13 +71,21 @@ pub(crate) trait MetadataExt {
 impl MetadataExt for std::fs::Metadata {}
 
 pub(crate) fn get_default_executable_search_paths() -> Vec<String> {
-	vec![]
+	let mut paths = Vec::new();
+	if let Some(system32) = system32_path() {
+		paths.push(system32.to_string_lossy().to_string());
+	}
+	paths
 }
 
 /// Returns the default paths where standard Unix utilities are typically installed.
 /// This is a stub implementation that returns an empty vector.
 pub fn get_default_standard_utils_paths() -> Vec<String> {
-	vec![]
+	let mut paths = Vec::new();
+	if let Some(system32) = system32_path() {
+		paths.push(system32.to_string_lossy().to_string());
+	}
+	paths
 }
 
 /// Opens a null file that will discard all I/O.
@@ -85,6 +93,11 @@ pub fn open_null_file() -> Result<std::fs::File, error::Error> {
 	let f = std::fs::File::options().read(true).write(true).open("NUL")?;
 
 	Ok(f)
+}
+
+fn system32_path() -> Option<PathBuf> {
+	let system_root = std::env::var_os("SystemRoot")?;
+	Some(PathBuf::from(system_root).join("System32"))
 }
 
 pub(crate) fn executable_extensions() -> &'static [String] {
