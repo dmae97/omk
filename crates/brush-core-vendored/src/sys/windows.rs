@@ -1,5 +1,5 @@
-pub use crate::sys::stubs::commands;
-pub use crate::sys::stubs::fd;
+pub mod commands;
+pub mod fd;
 pub mod fs;
 pub use crate::sys::stubs::input;
 pub(crate) mod network;
@@ -11,7 +11,7 @@ pub mod signal {
     pub(crate) use tokio::signal::ctrl_c as await_ctrl_c;
 }
 
-pub use crate::sys::stubs::terminal;
+pub mod terminal;
 pub use crate::sys::tokio_process as process;
 pub(crate) mod users;
 

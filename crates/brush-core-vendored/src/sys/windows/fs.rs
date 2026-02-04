@@ -5,11 +5,11 @@ use std::{ffi::OsStr, path::PathBuf, sync::OnceLock};
 
 impl crate::sys::fs::PathExt for std::path::Path {
 	fn readable(&self) -> bool {
-		true
+		std::fs::OpenOptions::new().read(true).open(self).is_ok()
 	}
 
 	fn writable(&self) -> bool {
-		true
+		std::fs::OpenOptions::new().write(true).open(self).is_ok()
 	}
 
 	fn executable(&self) -> bool {
@@ -54,7 +54,11 @@ impl crate::sys::fs::PathExt for std::path::Path {
 	}
 
 	fn get_device_and_inode(&self) -> Result<(u64, u64), crate::error::Error> {
-		Ok((0, 0))
+		let metadata = self.metadata()?;
+		let volume_serial_number =
+			std::os::windows::fs::MetadataExt::volume_serial_number(&metadata) as u64;
+		let file_index = std::os::windows::fs::MetadataExt::file_index(&metadata);
+		Ok((volume_serial_number, file_index))
 	}
 }
 
@@ -72,14 +76,32 @@ impl MetadataExt for std::fs::Metadata {}
 
 pub(crate) fn get_default_executable_search_paths() -> Vec<String> {
 	let mut paths = Vec::new();
-	if let Some(system32) = system32_path() {
+	if let Some(system_root) = system_root_path() {
+		let system32 = system_root.join("System32");
 		paths.push(system32.to_string_lossy().to_string());
+		paths.push(system32.join("Wbem").to_string_lossy().to_string());
+		paths.push(
+			system32
+				.join("WindowsPowerShell")
+				.join("v1.0")
+				.to_string_lossy()
+				.to_string(),
+		);
+		paths.push(system_root.to_string_lossy().to_string());
+	}
+
+	if paths.is_empty() {
+		if let Some(env_path) = std::env::var_os("PATH") {
+			paths.extend(
+				std::env::split_paths(&env_path)
+					.map(|path| path.to_string_lossy().to_string()),
+			);
+		}
 	}
 	paths
 }
 
-/// Returns the default paths where standard Unix utilities are typically installed.
-/// This is a stub implementation that returns an empty vector.
+/// Returns Windows paths where standard utilities are typically installed.
 pub fn get_default_standard_utils_paths() -> Vec<String> {
 	let mut paths = Vec::new();
 	if let Some(system32) = system32_path() {
@@ -95,9 +117,14 @@ pub fn open_null_file() -> Result<std::fs::File, error::Error> {
 	Ok(f)
 }
 
-fn system32_path() -> Option<PathBuf> {
+fn system_root_path() -> Option<PathBuf> {
 	let system_root = std::env::var_os("SystemRoot")?;
-	Some(PathBuf::from(system_root).join("System32"))
+	Some(PathBuf::from(system_root))
+}
+
+fn system32_path() -> Option<PathBuf> {
+	let system_root = system_root_path()?;
+	Some(system_root.join("System32"))
 }
 
 pub(crate) fn executable_extensions() -> &'static [String] {

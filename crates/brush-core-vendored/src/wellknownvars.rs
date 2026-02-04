@@ -327,7 +327,10 @@ pub(crate) fn initialize_vars(
 
     // PATH (if not already set)
     if !shell.env.is_set("PATH") {
-        let default_path_str = sys::fs::get_default_executable_search_paths().join(":");
+        let default_paths = sys::fs::get_default_executable_search_paths();
+        let default_path_str = std::env::join_paths(default_paths.iter())
+            .map(|paths| paths.to_string_lossy().to_string())
+            .unwrap_or_else(|_| default_paths.join(if cfg!(windows) { ";" } else { ":" }));
         shell
             .env
             .set_global("PATH", ShellVariable::new(default_path_str))?;

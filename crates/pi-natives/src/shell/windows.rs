@@ -1,4 +1,8 @@
-use std::{path::Path, process::Command};
+use std::{
+	env,
+	path::{Path, PathBuf},
+	process::Command,
+};
 
 use brush_core::{Shell as BrushShell, ShellValue, ShellVariable};
 use napi::{Error, Result};
@@ -43,9 +47,36 @@ pub fn configure_windows_path(shell: &mut BrushShell) -> Result<()> {
 }
 
 fn path_contains_entry(path_value: &str, entry: &str) -> bool {
-	path_value
-		.split(';')
-		.any(|segment| segment.trim().eq_ignore_ascii_case(entry))
+	let entry_normalized = normalize_path(Path::new(entry));
+	if entry_normalized.is_empty() {
+		return false;
+	}
+
+	env::split_paths(path_value).any(|segment| {
+		let segment_normalized = normalize_path(&segment);
+		!segment_normalized.is_empty() && segment_normalized.eq_ignore_ascii_case(&entry_normalized)
+	})
+}
+
+fn normalize_path(path: &Path) -> String {
+	let path_str = path.to_string_lossy();
+	let trimmed = path_str.trim();
+	let unquoted = trimmed.trim_matches('"');
+	if unquoted.is_empty() {
+		return String::new();
+	}
+
+	let path = Path::new(unquoted);
+	if let Ok(canonical) = path.canonicalize() {
+		return canonical.to_string_lossy().to_string();
+	}
+
+	let mut normalized = PathBuf::new();
+	for component in path.components() {
+		normalized.push(component.as_os_str());
+	}
+
+	normalized.to_string_lossy().to_string()
 }
 
 fn find_git_usr_bin() -> Option<String> {
