@@ -5,10 +5,12 @@ Sessions are stored as JSONL (JSON Lines) files. Each line is a JSON object with
 ## File Location
 
 ```
-~/.omp/agent/sessions/--<path>--/<timestamp>_<uuid>.jsonl
+~/.omp/agent/sessions/--<cwd>--/<timestamp>_<sessionId>.jsonl
 ```
 
-Where `<path>` is the working directory with `/` replaced by `-`.
+Default base directory comes from `getAgentDir()` (overridable via `OMP_CODING_AGENT_DIR`).
+`<cwd>` is the working directory with the leading slash removed and `/`, `\`, `:` replaced by `-`.
+`<timestamp>` is ISO-8601 with `:`/`.` replaced by `-`. `sessionId` is a nanoid.
 
 ## Session Version
 
@@ -16,14 +18,16 @@ Sessions have a version field in the header:
 
 - **Version 1**: Linear entry sequence (legacy, auto-migrated on load)
 - **Version 2**: Tree structure with `id`/`parentId` linking
+- **Version 3**: Renamed legacy `hookMessage` role to `custom`
 
-Existing v1 sessions are automatically migrated to v2 when loaded.
+Existing sessions are automatically migrated to the latest version when loaded.
 
 ## Type Definitions
 
-- [`src/core/session-manager.ts`](../src/core/session-manager.ts) - Session entry types
-- [`packages/agent/src/types.ts`](../../agent/src/types.ts) - `AgentMessage`, `Attachment`, `ThinkingLevel`
-- [`packages/ai/src/types.ts`](../../ai/src/types.ts) - `UserMessage`, `AssistantMessage`, `ToolResultMessage`, `Usage`, `ToolCall`
+- [`src/session/session-manager.ts`](../src/session/session-manager.ts) - Session entry types and `SessionManager`
+- [`src/session/messages.ts`](../src/session/messages.ts) - Custom message roles and LLM conversion
+- [`packages/agent/src/types.ts`](../../agent/src/types.ts) - `AgentMessage`, `ThinkingLevel`
+- [`packages/ai/src/types.ts`](../../ai/src/types.ts) - `Message`, content blocks, `Usage`, `ToolCall`
 
 ## Entry Base
 
@@ -32,7 +36,7 @@ All entries (except `SessionHeader`) extend `SessionEntryBase`:
 ```typescript
 interface SessionEntryBase {
 	type: string;
-	id: string; // 8-char hex ID
+	id: string; // Short nanoid (8 chars, URL-safe)
 	parentId: string | null; // Parent entry ID (null for first entry)
 	timestamp: string; // ISO timestamp
 }
@@ -42,28 +46,32 @@ interface SessionEntryBase {
 
 ### SessionHeader
 
-First line of the file. Metadata only, not part of the tree (no `id`/`parentId`).
+First line of the file. Metadata only, not part of the tree (no `id`/`parentId`). `version` is absent in v1 sessions.
 
 ```json
-{ "type": "session", "version": 2, "id": "uuid", "timestamp": "2024-12-03T14:00:00.000Z", "cwd": "/path/to/project" }
+{ "type": "session", "version": 3, "id": "nanoid", "timestamp": "2024-12-03T14:00:00.000Z", "cwd": "/path/to/project", "title": "Optional title" }
 ```
 
-For sessions with a parent (created via `/branch` or `newSession({ parentSession })`):
+For sessions with a parent (created via `/branch`, `newSession({ parentSession })`, or fork operations):
 
 ```json
 {
 	"type": "session",
-	"version": 2,
-	"id": "uuid",
+	"version": 3,
+	"id": "nanoid",
 	"timestamp": "2024-12-03T14:00:00.000Z",
 	"cwd": "/path/to/project",
 	"parentSession": "/path/to/original/session.jsonl"
 }
 ```
 
+`parentSession` is an opaque string used for lineage tracking (typically a session file path).
+
 ### SessionMessageEntry
 
-A message in the conversation. The `message` field contains an `AgentMessage`.
+A message in the conversation. The `message` field contains an `AgentMessage`,
+including base LLM messages plus coding-agent custom roles (bash/python execution,
+custom/legacy `hookMessage` messages from v2 sessions, file mentions, etc.).
 
 ```json
 {"type":"message","id":"a1b2c3d4","parentId":"prev1234","timestamp":"2024-12-03T14:00:01.000Z","message":{"role":"user","content":"Hello"}}
@@ -73,7 +81,7 @@ A message in the conversation. The `message` field contains an `AgentMessage`.
 
 ### ModelChangeEntry
 
-Emitted when the user switches models mid-session.
+Emitted when the user switches models mid-session. `model` is stored as `provider/modelId`.
 
 ```json
 {
@@ -81,8 +89,8 @@ Emitted when the user switches models mid-session.
 	"id": "d4e5f6g7",
 	"parentId": "c3d4e5f6",
 	"timestamp": "2024-12-03T14:05:00.000Z",
-	"provider": "openai",
-	"modelId": "gpt-4o"
+	"model": "openai/gpt-4o",
+	"role": "default"
 }
 ```
 
@@ -100,6 +108,8 @@ Emitted when the user changes the thinking/reasoning level.
 }
 ```
 
+`thinkingLevel` matches `ThinkingLevel` from `packages/agent` (e.g., `off`, `minimal`, `low`, `medium`, `high`, `xhigh`).
+
 ### CompactionEntry
 
 Created when context is compacted. Stores a summary of earlier messages.
@@ -111,19 +121,23 @@ Created when context is compacted. Stores a summary of earlier messages.
 	"parentId": "e5f6g7h8",
 	"timestamp": "2024-12-03T14:10:00.000Z",
 	"summary": "User discussed X, Y, Z...",
+	"shortSummary": "Quick recap...",
 	"firstKeptEntryId": "c3d4e5f6",
-	"tokensBefore": 50000
+	"tokensBefore": 50000,
+	"fromExtension": false
 }
 ```
 
 Optional fields:
 
-- `details`: Compaction-implementation specific data (e.g., file operations for default implementation, or custom data for custom hook implementations)
-- `fromHook`: `true` if generated by a hook, `false`/`undefined` if omp-generated
+- `details`: Compaction-implementation specific data (extension data, version markers, etc.)
+- `shortSummary`: Short-form summary for UI contexts
+- `preserveData`: Hook/extension data to persist across compaction
+- `fromExtension`: `true` if generated by an extension, `false`/`undefined` if pi-generated
 
 ### BranchSummaryEntry
 
-Created when switching branches via `/tree` with an LLM generated summary of the left branch up to the common ancestor. Captures context from the abandoned path.
+Created when switching branches with an LLM-generated summary of the abandoned path. Captures context from the previous branch.
 
 ```json
 {
@@ -136,14 +150,16 @@ Created when switching branches via `/tree` with an LLM generated summary of the
 }
 ```
 
+`fromId` is the branch point entry id; when branching from the root it is `"root"`.
+
 Optional fields:
 
-- `details`: File tracking data (`{ readFiles: string[], modifiedFiles: string[] }`) for default implementation, arbitrary for custom implementation
-- `fromHook`: `true` if generated by a hook
+- `details`: Extension-specific data (not sent to LLM)
+- `fromExtension`: `true` if generated by an extension
 
 ### CustomEntry
 
-Hook state persistence. Does NOT participate in LLM context.
+Extension state persistence. Does NOT participate in LLM context.
 
 ```json
 {
@@ -151,16 +167,16 @@ Hook state persistence. Does NOT participate in LLM context.
 	"id": "h8i9j0k1",
 	"parentId": "g7h8i9j0",
 	"timestamp": "2024-12-03T14:20:00.000Z",
-	"customType": "my-hook",
+	"customType": "my-extension",
 	"data": { "count": 42 }
 }
 ```
 
-Use `customType` to identify your hook's entries on reload.
+Use `customType` to identify your extension's entries on reload.
 
 ### CustomMessageEntry
 
-Hook-injected messages that DO participate in LLM context.
+Extension-injected messages that DO participate in LLM context.
 
 ```json
 {
@@ -168,7 +184,7 @@ Hook-injected messages that DO participate in LLM context.
 	"id": "i9j0k1l2",
 	"parentId": "h8i9j0k1",
 	"timestamp": "2024-12-03T14:25:00.000Z",
-	"customType": "my-hook",
+	"customType": "my-extension",
 	"content": "Injected context...",
 	"display": true
 }
@@ -177,8 +193,8 @@ Hook-injected messages that DO participate in LLM context.
 Fields:
 
 - `content`: String or `(TextContent | ImageContent)[]` (same as UserMessage)
-- `display`: `true` = show in TUI with purple styling, `false` = hidden
-- `details`: Optional hook-specific metadata (not sent to LLM)
+- `display`: `true` = show in TUI with distinct styling, `false` = hidden
+- `details`: Optional extension-specific metadata (not sent to LLM)
 
 ### LabelEntry
 
@@ -196,6 +212,37 @@ User-defined bookmark/marker on an entry.
 ```
 
 Set `label` to `undefined` to clear a label.
+
+### TtsrInjectionEntry
+
+Tracks which time-traveling stream rules were injected during the session.
+
+```json
+{
+	"type": "ttsr_injection",
+	"id": "k1l2m3n4",
+	"parentId": "j0k1l2m3",
+	"timestamp": "2024-12-03T14:31:00.000Z",
+	"injectedRules": ["rule-a", "rule-b"]
+}
+```
+
+### SessionInitEntry
+
+Captures initial context for subagent sessions (debugging/replay). Not used in LLM context building.
+
+```json
+{
+	"type": "session_init",
+	"id": "l2m3n4o5",
+	"parentId": "k1l2m3n4",
+	"timestamp": "2024-12-03T14:32:00.000Z",
+	"systemPrompt": "...",
+	"task": "Initial task...",
+	"tools": ["bash", "read"],
+	"outputSchema": { "type": "object" }
+}
+```
 
 ## Tree Structure
 
@@ -217,12 +264,14 @@ Entries form a tree:
 `buildSessionContext()` walks from the current leaf to the root, producing the message list for the LLM:
 
 1. Collects all entries on the path
-2. Extracts current model and thinking level settings
+2. Extracts current model map, thinking level, and injected TTSR rules
 3. If a `CompactionEntry` is on the path:
    - Emits the summary first
    - Then messages from `firstKeptEntryId` to compaction
    - Then messages after compaction
 4. Converts `BranchSummaryEntry` and `CustomMessageEntry` to appropriate message formats
+
+Return value is a `SessionContext` containing `messages`, `models`, `thinkingLevel`, and `injectedTtsrRules`.
 
 ## Parsing Example
 
@@ -249,13 +298,19 @@ for (const entry of entries) {
 			console.log(`[${entry.id}] Custom (${entry.customType}): ${JSON.stringify(entry.data)}`);
 			break;
 		case "custom_message":
-			console.log(`[${entry.id}] Hook message (${entry.customType}): ${entry.content}`);
+			console.log(`[${entry.id}] Custom message (${entry.customType}): ${entry.content}`);
+			break;
+		case "ttsr_injection":
+			console.log(`[${entry.id}] TTSR rules: ${entry.injectedRules.join(", ")}`);
+			break;
+		case "session_init":
+			console.log(`[${entry.id}] Init: ${entry.tools.join(", ")}`);
 			break;
 		case "label":
 			console.log(`[${entry.id}] Label "${entry.label}" on ${entry.targetId}`);
 			break;
 		case "model_change":
-			console.log(`[${entry.id}] Model: ${entry.provider}/${entry.modelId}`);
+			console.log(`[${entry.id}] Model: ${entry.model} (${entry.role ?? "default"})`);
 			break;
 		case "thinking_level_change":
 			console.log(`[${entry.id}] Thinking: ${entry.thinkingLevel}`);
@@ -279,22 +334,26 @@ Key methods for working with sessions programmatically:
 
 - `appendMessage(message)` - Add message
 - `appendThinkingLevelChange(level)` - Record thinking change
-- `appendModelChange(provider, modelId)` - Record model change
-- `appendCompaction(summary, firstKeptEntryId, tokensBefore, details?, fromHook?)` - Add compaction
-- `appendCustomEntry(customType, data?)` - Hook state (not in context)
-- `appendCustomMessageEntry(customType, content, display, details?)` - Hook message (in context)
+- `appendModelChange(model, role?)` - Record model change (`model` = `provider/modelId`)
+- `appendSessionInit(init)` - Record initial subagent context
+- `appendCompaction(summary, shortSummary, firstKeptEntryId, tokensBefore, details?, fromExtension?, preserveData?)`
+- `appendCustomEntry(customType, data?)` - Extension state (not in context)
+- `appendCustomMessageEntry(customType, content, display, details?)` - Extension message (in context)
+- `appendTtsrInjection(ruleNames)` - Record injected TTSR rules
 - `appendLabelChange(targetId, label)` - Set/clear label
 
 ### Tree Navigation
 
 - `getLeafId()` - Current position
+- `getLeafEntry()` - Current leaf entry
 - `getEntry(id)` - Get entry by ID
-- `getPath(fromId?)` - Walk from entry to root
+- `getBranch(fromId?)` - Walk from entry to root
 - `getTree()` - Get full tree structure
 - `getChildren(parentId)` - Get direct children
 - `getLabel(id)` - Get label for entry
 - `branch(entryId)` - Move leaf to earlier entry
-- `branchWithSummary(entryId, summary, details?, fromHook?)` - Branch with context summary
+- `branchWithSummary(entryId | null, summary, details?, fromExtension?)` - Branch with context summary
+- `resetLeaf()` - Move leaf to before first entry
 
 ### Context
 

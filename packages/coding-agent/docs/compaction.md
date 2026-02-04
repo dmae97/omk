@@ -1,47 +1,67 @@
 # Compaction & Branch Summarization
 
-LLMs have limited context windows. When conversations grow too long, omp uses compaction to summarize older content while preserving recent work. This page covers both auto-compaction and branch summarization.
+LLMs have limited context windows. OMP uses compaction to summarize older context while keeping recent work intact, and branch summarization to capture work when moving between branches in the session tree.
 
 **Source files:**
 
-- [`src/core/compaction/compaction.ts`](../src/core/compaction/compaction.ts) - Auto-compaction logic
-- [`src/core/compaction/branch-summarization.ts`](../src/core/compaction/branch-summarization.ts) - Branch summarization
-- [`src/core/compaction/utils.ts`](../src/core/compaction/utils.ts) - Shared utilities (file tracking, serialization)
-- [`src/core/session-manager.ts`](../src/core/session-manager.ts) - Entry types (`CompactionEntry`, `BranchSummaryEntry`)
-- [`src/core/hooks/types.ts`](../src/core/hooks/types.ts) - Hook event types
+- [`src/session/compaction/compaction.ts`](../src/session/compaction/compaction.ts) - Auto-compaction logic
+- [`src/session/compaction/branch-summarization.ts`](../src/session/compaction/branch-summarization.ts) - Branch summarization
+- [`src/session/compaction/utils.ts`](../src/session/compaction/utils.ts) - Shared utilities (file tracking, serialization)
+- [`src/session/compaction/pruning.ts`](../src/session/compaction/pruning.ts) - Tool output pruning
+- [`src/session/session-manager.ts`](../src/session/session-manager.ts) - Entry types (`CompactionEntry`, `BranchSummaryEntry`)
+- [`src/extensibility/hooks/types.ts`](../src/extensibility/hooks/types.ts) - Hook event types
+- [`src/prompts/compaction/*`](../src/prompts/compaction) - Summarization prompts
+- [`src/prompts/system/*`](../src/prompts/system) - Summarization system prompt + file op tags
 
 ## Overview
 
 OMP has two summarization mechanisms:
 
-| Mechanism            | Trigger                                  | Purpose                                   |
-| -------------------- | ---------------------------------------- | ----------------------------------------- |
-| Compaction           | Context exceeds threshold, or `/compact` | Summarize old messages to free up context |
-| Branch summarization | `/tree` navigation                       | Preserve context when switching branches  |
+| Mechanism            | Trigger                                                | Purpose                                   |
+| -------------------- | ------------------------------------------------------ | ----------------------------------------- |
+| Compaction           | Context overflow/threshold, or `/compact`              | Summarize old messages to free up context |
+| Branch summarization | `/tree` navigation (when branch summaries are enabled) | Preserve context when switching branches  |
 
-Both use the same structured summary format and track file operations cumulatively.
+Compaction and branch summaries are stored as session entries and injected into LLM context as user messages via `compaction-summary-context.md` and `branch-summary-context.md`.
 
 ## Compaction
 
 ### When It Triggers
 
-Auto-compaction triggers when:
+Auto-compaction runs after a turn completes:
 
-```
-contextTokens > contextWindow - reserveTokens
-```
+- **Overflow recovery**: If the current model returns a context overflow error, OMP compacts and retries automatically.
+- **Threshold**: If `contextTokens > contextWindow - reserveTokens`, OMP compacts without retry.
+  - Tool output pruning runs first and can reduce `contextTokens`.
 
-By default, `reserveTokens` is 16384 tokens (configurable in `~/.omp/agent/settings.json` or `<project-dir>/.omp/settings.json`). This leaves room for the LLM's response.
+Manual compaction is available via `/compact [instructions]`.
 
-You can also trigger manually with `/compact [instructions]`, where optional instructions focus the summary.
+Auto-compaction is controlled by `compaction.enabled`. After threshold compaction, OMP sends a synthetic "Continue if you have next steps." prompt unless `compaction.autoContinue` is set to `false`.
 
 ### How It Works
 
-2. **Find cut point**: Walk backwards from newest message, accumulating token estimates until `keepRecentTokens` (default 20k, configurable in `~/.omp/agent/settings.json` or `<project-dir>/.omp/settings.json`) is reached
-2. **Extract messages**: Collect messages from previous compaction (or start) up to cut point
-3. **Generate summary**: Call LLM to summarize with structured format
-4. **Append entry**: Save `CompactionEntry` with summary and `firstKeptEntryId`
-5. **Reload**: Session reloads, using summary + messages from `firstKeptEntryId` onwards
+1. **Prepare**: `prepareCompaction()` finds the latest compaction boundary and chooses a cut point that keeps approximately `keepRecentTokens` (adjusted using usage data).
+2. **Extract**: Collect messages to summarize, plus a turn prefix if the cut point splits a turn.
+3. **Track files**: Gather file ops from `read`/`write`/`edit` tool calls and previous compaction details.
+4. **Summarize**:
+   - Main summary uses `compaction-summary.md` or `compaction-update-summary.md` if there is a previous summary.
+   - Split turns add a turn-prefix summary from `compaction-turn-prefix.md` and merge with:
+
+     ```
+     <history summary>
+
+     ---
+
+     **Turn Context (split turn):**
+
+     <turn prefix summary>
+     ```
+
+   - Optional custom instructions are appended to the prompt.
+   - If `compaction.remoteEndpoint` is set, OMP POSTs `{ systemPrompt, prompt }` to the endpoint and expects `{ summary, shortSummary? }`.
+5. **Finalize**: Generate a short PR-style summary from recent messages, append file-operation tags, persist `CompactionEntry`, and reload session context.
+
+Compaction rewrites the session like this:
 
 ```
 Before compaction:
@@ -75,87 +95,65 @@ What the LLM sees:
     prompt   from cmp          messages from firstKeptEntryId
 ```
 
+Compaction summaries are injected into the LLM context using `compaction-summary-context.md`.
+
 ### Split Turns
 
-A "turn" starts with a user message and includes all assistant responses and tool calls until the next user message. Normally, compaction cuts at turn boundaries.
+A "turn" starts with a user message and includes all assistant responses and tool calls until the next user message. `bashExecution` messages and `custom_message`/`branch_summary` entries are treated like user messages for turn boundaries.
 
-When a single turn exceeds `keepRecentTokens`, the cut point lands mid-turn at an assistant message. This is a "split turn":
-
-```
-Split turn (one huge turn exceeds budget):
-
-  entry:  0     1     2      3     4      5      6     7      8
-        ┌─────┬─────┬─────┬──────┬─────┬──────┬──────┬─────┬──────┐
-        │ hdr │ usr │ ass │ tool │ ass │ tool │ tool │ ass │ tool │
-        └─────┴─────┴─────┴──────┴─────┴──────┴──────┴─────┴──────┘
-                ↑                                     ↑
-         turnStartIndex = 1                  firstKeptEntryId = 7
-                │                                     │
-                └──── turnPrefixMessages (1-6) ───────┘
-                                                      └── kept (7-8)
-
-  isSplitTurn = true
-  messagesToSummarize = []  (no complete turns before)
-  turnPrefixMessages = [usr, ass, tool, ass, tool, tool]
-```
-
-For split turns, omp generates two summaries and merges them:
-
-1. **History summary**: Previous context (if any)
-2. **Turn prefix summary**: The early part of the split turn
+If a single turn exceeds `keepRecentTokens`, compaction cuts mid-turn at a non-user message (usually an assistant message). OMP produces two summaries (history + turn prefix) and merges them as shown above.
 
 ### Cut Point Rules
 
 Valid cut points are:
 
-- User messages
-- Assistant messages
-- BashExecution messages
-- Hook messages (custom_message, branch_summary)
+- User, assistant, bashExecution, hookMessage, branchSummary, or compactionSummary messages
+- `custom_message` and `branch_summary` entries (treated as user-role messages)
 
-Never cut at tool results (they must stay with their tool call).
+Never cut at tool results; they must stay with their tool call. Non-message entries (model changes, labels, etc.) are pulled into the kept region before the cut point until a message or compaction boundary is reached.
 
 ### CompactionEntry Structure
 
-Defined in [`src/core/session-manager.ts`](../src/core/session-manager.ts):
+Defined in [`src/session/session-manager.ts`](../src/session/session-manager.ts):
 
 ```typescript
 interface CompactionEntry<T = unknown> {
 	type: "compaction";
 	id: string;
-	parentId: string;
-	timestamp: number;
+	parentId: string | null;
+	timestamp: string;
 	summary: string;
+	shortSummary?: string;
 	firstKeptEntryId: string;
 	tokensBefore: number;
-	fromHook?: boolean; // true if hook provided the compaction
-	details?: T; // hook-specific data
+	details?: T;
+	preserveData?: Record<string, unknown>;
+	fromExtension?: boolean;
 }
 
-// Default compaction uses this for details (from compaction.ts):
+// Default compaction details:
 interface CompactionDetails {
 	readFiles: string[];
 	modifiedFiles: string[];
 }
 ```
 
-Hooks can store any JSON-serializable data in `details`. The default compaction tracks file operations, but custom compaction hooks can use their own structure.
-
-See [`prepareCompaction()`](../src/core/compaction/compaction.ts) and [`compact()`](../src/core/compaction/compaction.ts) for the implementation.
+`shortSummary` is used in the UI tree. `preserveData` stores hook-provided state across compactions. Entries created by hooks set `fromExtension` and are excluded from default file tracking.
 
 ## Branch Summarization
 
 ### When It Triggers
 
-When you use `/tree` to navigate to a different branch, omp offers to summarize the work you're leaving. This injects context from the left branch into the new branch.
+When you use `/tree` to navigate to a different branch, the UI prompts to summarize the branch you're leaving if `branchSummary.enabled` is true. You can optionally supply custom instructions.
+
+Hooks fire regardless of user choice; a summary is only generated when `preparation.userWantsSummary` is true.
 
 ### How It Works
 
-1. **Find common ancestor**: Deepest node shared by old and new positions
-2. **Collect entries**: Walk from old leaf back to common ancestor
-3. **Prepare with budget**: Include messages up to token budget (newest first)
-4. **Generate summary**: Call LLM with structured format
-5. **Append entry**: Save `BranchSummaryEntry` at navigation point
+1. **Find common ancestor**: Deepest node shared by old and new positions.
+2. **Collect entries**: Walk from old leaf back to the common ancestor (including compactions and prior branch summaries).
+3. **Budget**: Keep newest messages first under the token budget (`contextWindow - branchSummary.reserveTokens`).
+4. **Summarize**: Generate summary with `branch-summary.md`, prepend `branch-summary-preamble.md`, append file-op tags, and store `BranchSummaryEntry`.
 
 ```
 Tree before navigation:
@@ -174,84 +172,45 @@ After navigation with summary:
          └─ E ─ F (new leaf)
 ```
 
-### Cumulative File Tracking
-
-Both compaction and branch summarization track files cumulatively. When generating a summary, omp extracts file operations from:
-
-- Tool calls in the messages being summarized
-- Previous compaction or branch summary `details` (if any)
-
-This means file tracking accumulates across multiple compactions or nested branch summaries, preserving the full history of read and modified files.
+Branch summaries are injected into context using `branch-summary-context.md`.
 
 ### BranchSummaryEntry Structure
 
-Defined in [`src/core/session-manager.ts`](../src/core/session-manager.ts):
+Defined in [`src/session/session-manager.ts`](../src/session/session-manager.ts):
 
 ```typescript
 interface BranchSummaryEntry<T = unknown> {
 	type: "branch_summary";
 	id: string;
-	parentId: string;
-	timestamp: number;
+	parentId: string | null;
+	timestamp: string;
+	fromId: string;
 	summary: string;
-	fromId: string; // Entry we navigated from
-	fromHook?: boolean; // true if hook provided the summary
-	details?: T; // hook-specific data
+	details?: T;
+	fromExtension?: boolean;
 }
 
-// Default branch summarization uses this for details (from branch-summarization.ts):
+// Default branch summary details:
 interface BranchSummaryDetails {
 	readFiles: string[];
 	modifiedFiles: string[];
 }
 ```
 
-Same as compaction, hooks can store custom data in `details`.
+## Cumulative File Tracking
 
-See [`collectEntriesForBranchSummary()`](../src/core/compaction/branch-summarization.ts), [`prepareBranchEntries()`](../src/core/compaction/branch-summarization.ts), and [`generateBranchSummary()`](../src/core/compaction/branch-summarization.ts) for the implementation.
+Both compaction and branch summarization track files cumulatively.
 
-## Summary Format
+- File ops are extracted from `read`, `write`, and `edit` tool calls in assistant messages.
+- Writes and edits are treated as modified files; read-only files exclude those modified.
+- Compaction includes file ops from previous compaction details (only when `fromExtension` is false).
+- Branch summaries include file ops from previous branch summary details even if those entries aren't within the token budget.
 
-Both compaction and branch summarization use the same structured format:
+File lists are appended to the summary with XML tags:
 
-```markdown
-## Goal
-
-[What the user is trying to accomplish]
-
-## Constraints & Preferences
-
-- [Requirements mentioned by user]
-
-## Progress
-
-### Done
-
-- [x] [Completed tasks]
-
-### In Progress
-
-- [ ] [Current work]
-
-### Blocked
-
-- [Issues, if any]
-
-## Key Decisions
-
-- **[Decision]**: [Rationale]
-
-## Next Steps
-
-1. [What should happen next]
-
-## Critical Context
-
-- [Data needed to continue]
-
+```
 <read-files>
-path/to/file1.ts
-path/to/file2.ts
+path/to/file.ts
 </read-files>
 
 <modified-files>
@@ -259,42 +218,105 @@ path/to/changed.ts
 </modified-files>
 ```
 
-### Message Serialization
+## Summary Format
 
-Before summarization, messages are serialized to text via [`serializeConversation()`](../src/core/compaction/utils.ts):
+### Compaction Summary Format
+
+Prompt: [`compaction-summary.md`](../src/prompts/compaction/compaction-summary.md)
+
+```markdown
+## Goal
+[User goals]
+
+## Constraints & Preferences
+- [Constraints]
+
+## Progress
+
+### Done
+- [x] [Completed tasks]
+
+### In Progress
+- [ ] [Current work]
+
+### Blocked
+- [Issues, if any]
+
+## Key Decisions
+- **[Decision]**: [Rationale]
+
+## Next Steps
+1. [What should happen next]
+
+## Critical Context
+- [Data needed to continue]
+
+## Additional Notes
+[Anything else important not covered above]
+```
+
+File-operation tags are appended after the summary.
+
+### Branch Summary Format
+
+Prompt: [`branch-summary.md`](../src/prompts/compaction/branch-summary.md)
+
+```markdown
+## Goal
+
+[What user trying to accomplish in this branch?]
+
+## Constraints & Preferences
+- [Constraints, preferences, requirements mentioned]
+- [(none) if none mentioned]
+
+## Progress
+
+### Done
+- [x] [Completed tasks/changes]
+
+### In Progress
+- [ ] [Work started but not finished]
+
+### Blocked
+- [Issues preventing progress]
+
+## Key Decisions
+- **[Decision]**: [Brief rationale]
+
+## Next Steps
+1. [What should happen next to continue]
+```
+
+### Short Summary
+
+Compaction also generates a short PR-style summary (`compaction-short-summary.md`) for UI display. It is 2–3 sentences in first person, describing changes made.
+
+## Message Serialization
+
+Before summarization, messages are serialized to text via [`serializeConversation()`](../src/session/compaction/utils.ts). Messages are first converted with `convertToLlm()` so custom types (bash execution, hook messages, compaction summaries) are represented as user messages.
 
 ```
 [User]: What they said
 [Assistant thinking]: Internal reasoning
 [Assistant]: Response text
 [Assistant tool calls]: read(path="foo.ts"); edit(path="bar.ts", ...)
-[Tool result]: Output from tool
+[Tool result]: Output from tool (or "[Output truncated - N tokens]")
 ```
 
-This prevents the model from treating it as a conversation to continue.
+This prevents the model from treating the input as a conversation to continue.
 
 ## Custom Summarization via Hooks
 
-Hooks can intercept and customize both compaction and branch summarization. See [`src/core/hooks/types.ts`](../src/core/hooks/types.ts) for event type definitions.
+Hooks can customize both compaction and branch summarization. See [`src/extensibility/hooks/types.ts`](../src/extensibility/hooks/types.ts).
 
 ### session_before_compact
 
-Fired before auto-compaction or `/compact`. Can cancel or provide custom summary. See `SessionBeforeCompactEvent` and `CompactionPreparation` in the types file.
+Fired before auto-compaction or `/compact`. Can cancel or supply a custom summary.
 
 ```typescript
 pi.on("session_before_compact", async (event, ctx) => {
-	const { preparation, branchEntries, customInstructions, signal } = event;
-
-	// preparation.messagesToSummarize - messages to summarize
-	// preparation.turnPrefixMessages - split turn prefix (if isSplitTurn)
-	// preparation.previousSummary - previous compaction summary
-	// preparation.fileOps - extracted file operations
-	// preparation.tokensBefore - context tokens before compaction
-	// preparation.firstKeptEntryId - where kept messages start
-	// preparation.settings - compaction settings
-
-	// branchEntries - all entries on current branch (for custom state)
-	// signal - AbortSignal (pass to LLM calls)
+	const { preparation, customInstructions, signal } = event;
 
 	// Cancel:
 	return { cancel: true };
@@ -303,6 +325,7 @@ pi.on("session_before_compact", async (event, ctx) => {
 	return {
 		compaction: {
 			summary: "Your summary...",
+			shortSummary: "Short summary...",
 			firstKeptEntryId: preparation.firstKeptEntryId,
 			tokensBefore: preparation.tokensBefore,
 			details: {
@@ -323,16 +346,7 @@ import { convertToLlm, serializeConversation } from "@oh-my-pi/pi-coding-agent";
 pi.on("session_before_compact", async (event, ctx) => {
 	const { preparation } = event;
 
-	// Convert AgentMessage[] to Message[], then serialize to text
 	const conversationText = serializeConversation(convertToLlm(preparation.messagesToSummarize));
-	// Returns:
-	// [User]: message text
-	// [Assistant thinking]: thinking content
-	// [Assistant]: response text
-	// [Assistant tool calls]: read(path="..."); bash(command="...")
-	// [Tool result]: output text
-
-	// Now send to your model for summarization
 	const summary = await myModel.summarize(conversationText);
 
 	return {
@@ -347,9 +361,25 @@ pi.on("session_before_compact", async (event, ctx) => {
 
 See [examples/hooks/custom-compaction.ts](../examples/hooks/custom-compaction.ts) for a complete example using a different model.
 
+### session.compacting
+
+Fired just before summarization to override the prompt or add extra context.
+
+```typescript
+pi.on("session.compacting", async (event, ctx) => {
+	return {
+		prompt: "Override the default compaction prompt...",
+		context: ["Include ticket ABC-123", "Keep recent benchmark results"],
+		preserveData: { artifactIndex: ["foo.ts"] },
+	};
+});
+```
+
+`context` lines are injected as `<additional-context>` in the prompt. `preserveData` is stored on the compaction entry.
+
 ### session_before_tree
 
-Fired before `/tree` navigation. Always fires regardless of whether user chose to summarize. Can cancel navigation or provide custom summary.
+Fired before `/tree` navigation. Always fires, even if the user opts out of summarization.
 
 ```typescript
 pi.on("session_before_tree", async (event, ctx) => {
@@ -378,26 +408,29 @@ pi.on("session_before_tree", async (event, ctx) => {
 });
 ```
 
-See `SessionBeforeTreeEvent` and `TreePreparation` in the types file.
-
 ## Settings
 
-Configure compaction in `~/.omp/agent/settings.json` or `<project-dir>/.omp/settings.json`:
+Global settings are stored in `~/.omp/agent/config.yml`. Project-level overrides are loaded from `settings.json` in config directories (for example `.omp/settings.json` or `.claude/settings.json`).
 
-```json
-{
-	"compaction": {
-		"enabled": true,
-		"reserveTokens": 16384,
-		"keepRecentTokens": 20000
-	}
-}
+```yaml
+# ~/.omp/agent/config.yml
+compaction:
+  enabled: true
+  reserveTokens: 16384
+  keepRecentTokens: 20000
+  autoContinue: true
+  remoteEndpoint: "https://example.com/compaction"
+branchSummary:
+  enabled: false
+  reserveTokens: 16384
 ```
 
-| Setting            | Default | Description                            |
-| ------------------ | ------- | -------------------------------------- |
-| `enabled`          | `true`  | Enable auto-compaction                 |
-| `reserveTokens`    | `16384` | Tokens to reserve for LLM response     |
-| `keepRecentTokens` | `20000` | Recent tokens to keep (not summarized) |
-
-Disable auto-compaction with `"enabled": false`. You can still compact manually with `/compact`.
+| Setting                        | Default | Description                                            |
+| ------------------------------ | ------- | ------------------------------------------------------ |
+| `compaction.enabled`           | `true`  | Enable auto-compaction                                 |
+| `compaction.reserveTokens`     | `16384` | Tokens reserved for prompts + response                 |
+| `compaction.keepRecentTokens`  | `20000` | Recent tokens to keep                                  |
+| `compaction.autoContinue`      | `true`  | Auto-send a continuation prompt after compaction       |
+| `compaction.remoteEndpoint`    | unset   | Remote summarization endpoint                          |
+| `branchSummary.enabled`        | `false` | Prompt to summarize when leaving a branch              |
+| `branchSummary.reserveTokens`  | `16384` | Tokens reserved for branch summary prompts             |

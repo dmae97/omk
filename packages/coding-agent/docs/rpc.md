@@ -2,7 +2,7 @@
 
 RPC mode enables headless operation of the coding agent via a JSON protocol over stdin/stdout. This is useful for embedding the agent in other applications, IDEs, or custom UIs.
 
-**Note for Node.js/TypeScript users**: If you're building a Node.js application, consider using `AgentSession` directly from `@oh-my-pi/pi-coding-agent` instead of spawning a subprocess. See [`src/core/agent-session.ts`](../src/core/agent-session.ts) for the API. For a subprocess-based TypeScript client, see [`src/modes/rpc/rpc-client.ts`](../src/modes/rpc/rpc-client.ts).
+**Note for Node.js/TypeScript users**: If you're building a Node.js application, consider using `createAgentSession()` from `@oh-my-pi/pi-coding-agent` instead of spawning a subprocess. See [`src/sdk.ts`](../src/sdk.ts) for the SDK API. For a subprocess-based TypeScript client, see [`src/modes/rpc/rpc-client.ts`](../src/modes/rpc/rpc-client.ts).
 
 ## Starting RPC Mode
 
@@ -105,7 +105,7 @@ Response:
 
 #### new_session
 
-Start a fresh session. Can be cancelled by a `session_before_switch` hook.
+Start a fresh session. Can be cancelled by a `session_before_switch` extension handler.
 
 ```json
 { "type": "new_session" }
@@ -123,7 +123,7 @@ Response:
 { "type": "response", "command": "new_session", "success": true, "data": { "cancelled": false } }
 ```
 
-If a hook cancelled:
+If an extension cancelled:
 
 ```json
 { "type": "response", "command": "new_session", "success": true, "data": { "cancelled": true } }
@@ -156,6 +156,7 @@ Response:
     "interruptMode": "immediate",
     "sessionFile": "/path/to/session.jsonl",
     "sessionId": "abc123",
+    "sessionName": "my-session",
     "autoCompactionEnabled": true,
     "messageCount": 5,
     "queuedMessageCount": 0
@@ -448,12 +449,16 @@ Response:
 		"output": "total 48\ndrwxr-xr-x ...",
 		"exitCode": 0,
 		"cancelled": false,
-		"truncated": false
+		"truncated": false,
+		"totalLines": 48,
+		"totalBytes": 2048,
+		"outputLines": 48,
+		"outputBytes": 2048
 	}
 }
 ```
 
-If output was truncated, includes `fullOutputPath`:
+If output was truncated, includes `artifactId`:
 
 ```json
 {
@@ -465,7 +470,11 @@ If output was truncated, includes `fullOutputPath`:
 		"exitCode": 0,
 		"cancelled": false,
 		"truncated": true,
-		"fullOutputPath": "/tmp/omp-bash-abc123.log"
+		"totalLines": 5000,
+		"totalBytes": 102400,
+		"outputLines": 2000,
+		"outputBytes": 51200,
+		"artifactId": "abc123"
 	}
 }
 ```
@@ -568,7 +577,7 @@ Response:
 
 #### switch_session
 
-Load a different session file. Can be cancelled by a `before_switch` hook.
+Load a different session file. Can be cancelled by a `session_before_switch` extension handler.
 
 ```json
 { "type": "switch_session", "sessionPath": "/path/to/session.jsonl" }
@@ -580,7 +589,7 @@ Response:
 { "type": "response", "command": "switch_session", "success": true, "data": { "cancelled": false } }
 ```
 
-If a hook cancelled the switch:
+If an extension cancelled the switch:
 
 ```json
 { "type": "response", "command": "switch_session", "success": true, "data": { "cancelled": true } }
@@ -588,7 +597,7 @@ If a hook cancelled the switch:
 
 #### branch
 
-Create a new branch from a previous user message. Can be cancelled by a `before_branch` hook. Returns the text of the message being branched from.
+Create a new branch from a previous user message. Can be cancelled by a `session_before_branch` extension handler. Returns the text of the message being branched from.
 
 ```json
 { "type": "branch", "entryId": "abc123" }
@@ -605,7 +614,7 @@ Response:
 }
 ```
 
-If a hook cancelled the branch:
+If an extension cancelled the branch:
 
 ```json
 {
@@ -661,6 +670,22 @@ Response:
 
 Returns `{"text": null}` if no assistant messages exist.
 
+#### set_session_name
+
+Set a display name for the current session.
+
+```json
+{ "type": "set_session_name", "name": "my-session" }
+```
+
+Response:
+
+```json
+{ "type": "response", "command": "set_session_name", "success": true }
+```
+
+Returns an error if the name is empty.
+
 ## Events
 
 Events are streamed to stdout as JSON lines during agent operation. Events do NOT include an `id` field (only responses do).
@@ -683,7 +708,7 @@ Events are streamed to stdout as JSON lines during agent operation. Events do NO
 | `auto_compaction_end`   | Auto-compaction completes                                    |
 | `auto_retry_start`      | Auto-retry begins (after transient error)                    |
 | `auto_retry_end`        | Auto-retry completes (success or final failure)              |
-| `hook_error`            | Hook threw an error                                          |
+| `extension_error`       | Extension threw an error                                     |
 
 ### agent_start
 
@@ -795,7 +820,7 @@ During execution, `tool_execution_update` events stream partial results (e.g., b
 	"args": { "command": "ls -la" },
 	"partialResult": {
 		"content": [{ "type": "text", "text": "partial output so far..." }],
-		"details": { "truncation": null, "fullOutputPath": null }
+		"details": {...}
 	}
 }
 ```
@@ -878,15 +903,15 @@ On final failure (max retries exceeded):
 }
 ```
 
-### hook_error
+### extension_error
 
-Emitted when a hook throws an error.
+Emitted when an extension throws an error.
 
 ```json
 {
-	"type": "hook_error",
-	"hookPath": "/path/to/hook.ts",
-	"event": "tool_call",
+	"type": "extension_error",
+	"extensionPath": "/path/to/extension.ts",
+	"event": "turn_start",
 	"error": "Error message..."
 }
 ```
@@ -921,7 +946,7 @@ Source files:
 
 - [`packages/ai/src/types.ts`](../../ai/src/types.ts) - `Model`, `UserMessage`, `AssistantMessage`, `ToolResultMessage`
 - [`packages/agent/src/types.ts`](../../agent/src/types.ts) - `AgentMessage`, `AgentEvent`
-- [`src/core/messages.ts`](../src/core/messages.ts) - `BashExecutionMessage`
+- [`src/session/messages.ts`](../src/session/messages.ts) - `BashExecutionMessage`
 - [`src/modes/rpc/rpc-types.ts`](../src/modes/rpc/rpc-types.ts) - RPC command/response types
 
 ### Model
@@ -1011,7 +1036,6 @@ Created by the `bash` RPC command (not by LLM tool calls):
 	"exitCode": 0,
 	"cancelled": false,
 	"truncated": false,
-	"fullOutputPath": null,
 	"timestamp": 1733234567890
 }
 ```

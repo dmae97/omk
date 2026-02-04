@@ -6,82 +6,100 @@ This is a practical guide for moving hot paths into `crates/pi-natives` and wiri
 
 Port when any of these are true:
 
-- The hot path is called in render loops or large batches.
-- JS allocates too much (string churn, regex backtracking, large arrays).
-- You already have a JS implementation and can write a benchmark for it.
+- The hot path runs in render loops, tight UI updates, or large batches.
+- JS allocations dominate (string churn, regex backtracking, large arrays).
+- You already have a JS baseline and can benchmark both versions side by side.
+- The work is CPU-bound or blocking I/O that can run on the libuv thread pool.
+- The work is async I/O that can run on Tokio's runtime (e.g., shell execution).
 
-Do not port code that depends on JS-only state, dynamic imports, or anything async-first. N-API favors CPU-bound, synchronous work.
+Avoid ports that depend on JS-only state or dynamic imports. N-API exports should be pure, data-in/data-out. Long-running work should go through `task::blocking` (CPU-bound/blocking I/O) or `task::future` (async I/O) with cancellation.
 
 ## Anatomy of a native export
 
 **Rust side:**
-- Implementation lives in `crates/pi-natives/src/<module>.rs`.
-- Export lives either in that module **with** `#[napi]` or in `lib.rs` calling into the module.
+- Implementation lives in `crates/pi-natives/src/<module>.rs`. If you add a new module, register it in `crates/pi-natives/src/lib.rs`.
+- Export with `#[napi]` and `#[napi(js_name = "...")]` to keep JS-facing camelCase names. Use `#[napi(object)]` for structs.
+- Use `task::blocking(tag, cancel_token, work)` (see `crates/pi-natives/src/task.rs`) for CPU-bound or blocking work. Use `task::future(env, tag, work)` for async work that needs Tokio (e.g., shell sessions). Pass a `CancelToken` when you expose `timeoutMs` or `AbortSignal`.
 
 **JS side:**
-- `packages/natives/src/native.ts` declares the binding and validates it.
-- `packages/natives/src/<module>/index.ts` wraps the binding.
-- `packages/natives/src/index.ts` re-exports it.
-- Call sites (often in `packages/tui/src/utils.ts`) use the wrapper.
+- `packages/natives/src/bindings.ts` holds the base `NativeBindings` interface.
+- `packages/natives/src/<module>/types.ts` defines TS types and augments `NativeBindings` via declaration merging.
+- `packages/natives/src/native.ts` imports each `<module>/types.ts` file to activate the declarations.
+- `packages/natives/src/<module>/index.ts` wraps the `native` binding from `packages/natives/src/native.ts`.
+- `packages/natives/src/native.ts` loads the addon and `validateNative` enforces required exports.
+- `packages/natives/src/index.ts` re-exports the wrapper for callers in `packages/*`.
 
 ## Porting checklist
 
 1) **Add the Rust implementation**
 - Put the core logic in a plain Rust function.
-- Expose it with `#[napi(js_name = "...")]`.
-- Keep signatures simple: `String`, `Vec<String>`, `Uint8Array`, numbers, bools.
+- If it’s a new module, add it to `crates/pi-natives/src/lib.rs`.
+- Expose it with `#[napi(js_name = "...")]` to keep camelCase names stable.
+- Keep signatures owned and simple: `String`, `Vec<String>`, `Uint8Array`, or `Either<JsString, Uint8Array>` for large string/byte inputs.
+- For CPU-bound or blocking work, use `task::blocking`; for async work, use `task::future`. Pass a `CancelToken` and call `heartbeat()` inside long loops.
 
 2) **Wire JS bindings**
-- Add the method to `NativeBindings` in `packages/natives/src/native.ts`.
-- Add `checkFn("newExport")` in `validateNative`.
-- Add a wrapper in `packages/natives/src/<module>/index.ts`.
+- Add the types and `NativeBindings` augmentation in `packages/natives/src/<module>/types.ts`.
+- Import `./<module>/types` in `packages/natives/src/native.ts` to trigger declaration merging.
+- Add a wrapper in `packages/natives/src/<module>/index.ts` that calls `native`.
 - Re-export from `packages/natives/src/index.ts`.
 
-3) **Add benchmarks**
-- Put benchmarks in `packages/tui/bench/*.ts` (see `text-layout.ts`).
+3) **Update native validation**
+- Add `checkFn("newExport")` in `validateNative` (`packages/natives/src/native.ts`).
+
+4) **Add benchmarks**
+- Put benchmarks next to the owning package (`packages/tui/bench`, `packages/natives/bench`, or `packages/coding-agent/bench`).
 - Include a JS baseline and native version in the same run.
 - Use `performance.now()` and a fixed iteration count.
 - Keep the benchmark inputs small and realistic (actual data seen in the hot path).
 
-4) **Build the native binary**
+5) **Build the native binary**
 - `bun --cwd=packages/natives run build:native`
+- Use `bun --cwd=packages/natives run dev:native` for debug builds (`pi_natives.dev.node`) and set `OMP_DEV=1` when loading it.
 
-5) **Run the benchmark**
-- `bun run packages/tui/bench/<bench>.ts`
+6) **Run the benchmark**
+- `bun run packages/<pkg>/bench/<bench>.ts` (or `bun --cwd=packages/natives run bench`)
 
-6) **Decide on usage**
+7) **Decide on usage**
 - If native is slower, **keep JS** and leave the native export unused.
 - If native is faster, switch call sites to the native wrapper.
 
 ## Pain points and how to avoid them
 
 ### 1) Stale `pi_natives.node` prevents new exports
-The build script prefers `target/release/pi_natives.node` if it exists. If it’s stale, the exported symbols won’t update even after a rebuild.
+The loader prefers the platform-tagged binary in `packages/natives/native` (`pi_natives.<platform>-<arch>.node`). When `OMP_DEV=1`, it will load `pi_natives.dev.node` instead. There is also a fallback `pi_natives.node`. Compiled binaries extract to `~/.omp/natives/<version>/pi_natives.<platform>-<arch>.node`. If any of these are stale, exports won’t update.
 
 **Fix:** remove the stale file before rebuilding.
 
 ```bash
-rm /work/pi/target/release/pi_natives.node
+rm packages/natives/native/pi_natives.linux-x64.node
+rm packages/natives/native/pi_natives.node
 bun --cwd=packages/natives run build:native
+```
+
+If you’re running a compiled binary, delete the cached addon directory:
+
+```bash
+rm -rf ~/.omp/natives/<version>
 ```
 
 Then verify the export exists in the binary:
 
 ```bash
-bun -e "const mod = require('./packages/natives/native/pi_natives.linux-x64.node'); console.log(Object.keys(mod).includes('newExport'));"
+bun -e 'const tag = `${process.platform}-${process.arch}`; const mod = require(`./packages/natives/native/pi_natives.${tag}.node`); console.log(Object.keys(mod).includes("newExport"));'
 ```
 
 ### 2) “Missing exports” errors from `validateNative`
 This is **good** — it prevents silent mismatches. When you see this:
 
 ```
-Native addon missing exports ... Missing: applyLineResets
+Native addon missing exports ... Missing: visibleWidth
 ```
 
-it means your binary is stale or the `#[napi]` export didn’t compile in. Fix the build, don’t weaken validation.
+it means your binary is stale, the Rust `#[napi(js_name = "...")]` doesn’t match the JS name, or the export never compiled in. Fix the build and the naming mismatch, don’t weaken validation.
 
 ### 3) Rust signature mismatch
-Keep it simple. `Vec<String>` works. Avoid references like `&str` in public exports. If you need complex types, wrap them in `#[napi(object)]` structs.
+Keep it simple and owned. `String`, `Vec<String>`, and `Uint8Array` work. Avoid references like `&str` in public exports. If you need structured data, wrap it in `#[napi(object)]` structs.
 
 ### 4) Benchmarking mistakes
 - Don’t compare different inputs or allocations.
@@ -113,6 +131,7 @@ bench("feature/native", () => {
 ## Verification checklist
 
 - `validateNative` passes (no missing exports).
+- `NativeBindings` is augmented in `packages/natives/src/<module>/types.ts` and the wrapper is re-exported in `packages/natives/src/index.ts`.
 - `Object.keys(require(...))` includes your new export.
 - Bench numbers recorded in the PR/notes.
 - Call site updated **only if** native is faster or equal.

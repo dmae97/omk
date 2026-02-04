@@ -8,7 +8,7 @@ Themes allow you to customize the colors used throughout the coding agent TUI.
 
 Every theme must define all color tokens. There are no optional colors.
 
-### Core UI (10 colors)
+### Core UI (11 colors)
 
 | Token          | Purpose               | Examples                             |
 | -------------- | --------------------- | ------------------------------------ |
@@ -67,7 +67,7 @@ Note: Diff colors are specific to tool execution boxes and must work with tool b
 
 ### Syntax Highlighting (9 colors)
 
-Future-proofing for syntax highlighting support:
+Used for native syntax highlighting in tool output and editors:
 
 | Token               | Purpose                          |
 | ------------------- | -------------------------------- |
@@ -92,17 +92,37 @@ Editor border colors that indicate the current thinking/reasoning level:
 | `thinkingLow`     | Border for low thinking                                           |
 | `thinkingMedium`  | Border for medium thinking                                        |
 | `thinkingHigh`    | Border for high thinking                                          |
-| `thinkingXhigh`   | Border for xhigh thinking (most prominent, OpenAI codex-max only) |
+| `thinkingXhigh`   | Border for xhigh thinking (most prominent)                       |
 
 These create a visual hierarchy: off → minimal → low → medium → high → xhigh
 
-### Bash Mode (1 color)
+### Mode Borders (2 colors)
 
-| Token      | Purpose                                          |
-| ---------- | ------------------------------------------------ |
-| `bashMode` | Editor border color when in bash mode (! prefix) |
+| Token        | Purpose                                          |
+| ------------ | ------------------------------------------------ |
+| `bashMode`   | Editor border color when in bash mode (! prefix) |
+| `pythonMode` | Editor border color when in python mode (>>>)   |
 
-**Total: 50 color tokens** (all required)
+### Status Line (14 colors)
+
+| Token               | Purpose                                 |
+| ------------------- | --------------------------------------- |
+| `statusLineBg`      | Status line background                  |
+| `statusLineSep`     | Separators between status line segments |
+| `statusLineModel`   | Model segment text                      |
+| `statusLinePath`    | Working directory segment               |
+| `statusLineGitClean` | Git segment (clean)                    |
+| `statusLineGitDirty` | Git segment (dirty)                    |
+| `statusLineContext` | Context window usage segment            |
+| `statusLineSpend`   | Token input/total segment               |
+| `statusLineStaged`  | Git staged count                        |
+| `statusLineDirty`   | Git unstaged count                      |
+| `statusLineUntracked` | Git untracked count                   |
+| `statusLineOutput`  | Token output/cache output segment       |
+| `statusLineCost`    | Cost segment                            |
+| `statusLineSubagents` | Subagent count segment                |
+
+**Total: 66 color tokens** (all required)
 
 ### HTML Export Colors (optional)
 
@@ -132,7 +152,7 @@ Themes are defined in JSON files with the following structure:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/can1357/oh-my-pi/main/packages/coding-agent/theme-schema.json",
+  "$schema": "https://raw.githubusercontent.com/can1357/oh-my-pi/main/packages/coding-agent/src/modes/theme/theme-schema.json",
   "name": "my-theme",
   "vars": {
     "blue": "#0066cc",
@@ -151,7 +171,7 @@ Themes are defined in JSON files with the following structure:
 
 ## Symbols
 
-Themes can also customize specific UI symbols (icons, separators, bullets, etc.). Use `symbols.preset` to set a theme default (overridden by user settings), and `symbols.overrides` to override individual keys.
+Themes can also customize specific UI symbols (icons, separators, bullets, etc.). Use `symbols.preset` (`unicode`, `nerd`, `ascii`) to set a theme default (overridden by the `symbolPreset` setting), and `symbols.overrides` to override individual keys.
 
 Example:
 
@@ -175,12 +195,14 @@ Symbol keys by category:
 - Tree: `tree.branch`, `tree.last`, `tree.vertical`, `tree.horizontal`, `tree.hook`
 - Boxes (rounded): `boxRound.topLeft`, `boxRound.topRight`, `boxRound.bottomLeft`, `boxRound.bottomRight`, `boxRound.horizontal`, `boxRound.vertical`
 - Boxes (sharp): `boxSharp.topLeft`, `boxSharp.topRight`, `boxSharp.bottomLeft`, `boxSharp.bottomRight`, `boxSharp.horizontal`, `boxSharp.vertical`, `boxSharp.cross`, `boxSharp.teeDown`, `boxSharp.teeUp`, `boxSharp.teeRight`, `boxSharp.teeLeft`
-- Separators: `sep.powerline`, `sep.powerlineThin`, `sep.powerlineLeft`, `sep.powerlineRight`, `sep.powerlineThinLeft`, `sep.powerlineThinRight`, `sep.dot`, `sep.slash`, `sep.pipe`
-- Icons: `icon.model`, `icon.folder`, `icon.file`, `icon.git`, `icon.branch`, `icon.tokens`, `icon.context`, `icon.cost`, `icon.time`, `icon.pi`, `icon.agents`, `icon.cache`, `icon.input`, `icon.output`, `icon.host`, `icon.session`, `icon.package`, `icon.warning`, `icon.rewind`, `icon.auto`, `icon.extensionSkill`, `icon.extensionTool`, `icon.extensionSlashCommand`, `icon.extensionMcp`, `icon.extensionRule`, `icon.extensionHook`, `icon.extensionPrompt`, `icon.extensionContextFile`, `icon.extensionInstruction`
+- Separators: `sep.powerline`, `sep.powerlineThin`, `sep.powerlineLeft`, `sep.powerlineRight`, `sep.powerlineThinLeft`, `sep.powerlineThinRight`, `sep.block`, `sep.space`, `sep.asciiLeft`, `sep.asciiRight`, `sep.dot`, `sep.slash`, `sep.pipe`
+- Icons: `icon.model`, `icon.plan`, `icon.folder`, `icon.file`, `icon.git`, `icon.branch`, `icon.tokens`, `icon.context`, `icon.cost`, `icon.time`, `icon.pi`, `icon.agents`, `icon.cache`, `icon.input`, `icon.output`, `icon.host`, `icon.session`, `icon.package`, `icon.warning`, `icon.rewind`, `icon.auto`, `icon.extensionSkill`, `icon.extensionTool`, `icon.extensionSlashCommand`, `icon.extensionMcp`, `icon.extensionRule`, `icon.extensionHook`, `icon.extensionPrompt`, `icon.extensionContextFile`, `icon.extensionInstruction`
 - Thinking: `thinking.minimal`, `thinking.low`, `thinking.medium`, `thinking.high`, `thinking.xhigh`
 - Checkboxes: `checkbox.checked`, `checkbox.unchecked`
-- Formatting: `format.bullet`, `format.dash`
+- Formatting: `format.bullet`, `format.dash`, `format.bracketLeft`, `format.bracketRight`
 - Markdown: `md.quoteBorder`, `md.hrChar`, `md.bullet`
+- Language icons: `lang.default`, `lang.typescript`, `lang.javascript`, `lang.python`, `lang.rust`, `lang.go`, `lang.java`, `lang.c`, `lang.cpp`, `lang.csharp`, `lang.ruby`, `lang.php`, `lang.swift`, `lang.kotlin`, `lang.shell`, `lang.html`, `lang.css`, `lang.json`, `lang.yaml`, `lang.markdown`, `lang.sql`, `lang.docker`, `lang.lua`, `lang.text`, `lang.env`, `lang.toml`, `lang.xml`, `lang.ini`, `lang.conf`, `lang.log`, `lang.csv`, `lang.tsv`, `lang.image`, `lang.pdf`, `lang.archive`, `lang.binary`
+- Settings tabs: `tab.display`, `tab.agent`, `tab.input`, `tab.tools`, `tab.config`, `tab.services`, `tab.bash`, `tab.lsp`, `tab.ttsr`, `tab.status`
 
 ### Color Values
 
@@ -238,55 +260,47 @@ This is useful for:
 
 ## Built-in Themes
 
-OMP comes with two built-in themes:
+OMP ships with `dark` (default), `light`, and 90+ curated themes under `src/modes/theme/defaults/`. Examples include:
 
-### `dark` (default)
-
-Optimized for dark terminal backgrounds with bright, saturated colors.
-
-### `light`
-
-Optimized for light terminal backgrounds with darker, muted colors.
+- **Dark themes**: `dark-aurora`, `dark-gruvbox`, `dark-nord`, `dark-tokyo-night`, `dark-catppuccin`, `dark-dracula`, `dark-solarized`, `dark-github`, `dark-monokai`, `dark-synthwave`
+- **Light themes**: `light-solarized`, `light-gruvbox`, `light-github`, `light-catppuccin`, `light-paper`, `light-dawn`, `light-frost`
+- **Neutral/material**: `graphite`, `obsidian`, `onyx`, `titanium`, `marble`, `pearl`, `alabaster`, `anthracite`
 
 ## Selecting a Theme
 
-Themes are configured in the settings (accessible via `/settings`):
+Themes are configured in the Settings UI (Display → Theme) or via the config CLI:
 
-```json
-{
-	"theme": "dark"
-}
+```bash
+omp config set theme dark
 ```
 
-Or use the `/theme` command interactively.
-
-On first run, OMP detects your terminal's background and sets a sensible default (`dark` or `light`).
+On first run, OMP uses the terminal background reported by `COLORFGBG` and falls back to `dark` if unavailable.
 
 ## Custom Themes
 
 ### Theme Locations
 
-Custom themes are loaded from `~/.omp/agent/themes/*.json`.
+Custom themes are loaded from `~/.omp/agent/themes/*.json` by default, or from `$OMP_CODING_AGENT_DIR/themes` if that environment variable is set.
 
 ### Creating a Custom Theme
 
 1. **Create theme directory:**
 
    ```bash
-   mkdir -p ~/.omp/agent/themes
+   mkdir -p "${OMP_CODING_AGENT_DIR:-~/.omp/agent}/themes"
    ```
 
 2. **Create theme file:**
 
    ```bash
-   vim ~/.omp/agent/themes/my-theme.json
+   vim "${OMP_CODING_AGENT_DIR:-~/.omp/agent}/themes/my-theme.json"
    ```
 
-3. **Define all colors:**
+3. **Define all colors (see the schema for the full list; snippet below shows structure):**
 
    ```json
    {
-   	"$schema": "https://raw.githubusercontent.com/can1357/oh-my-pi/main/packages/coding-agent/theme-schema.json",
+   	"$schema": "https://raw.githubusercontent.com/can1357/oh-my-pi/main/packages/coding-agent/src/modes/theme/theme-schema.json",
    	"name": "my-theme",
    	"vars": {
    		"primary": "#00aaff",
@@ -309,7 +323,9 @@ Custom themes are loaded from `~/.omp/agent/themes/*.json`.
    		"toolPendingBg": "#1e1e2e",
    		"toolSuccessBg": "#1e2e1e",
    		"toolErrorBg": "#2e1e1e",
-   		"toolText": "",
+   		"toolTitle": "",
+   		"toolOutput": "",
+   		// ...
 
    		"mdHeading": "#ffaa00",
    		"mdLink": "primary",
@@ -339,14 +355,16 @@ Custom themes are loaded from `~/.omp/agent/themes/*.json`.
    		"thinkingMinimal": "primary",
    		"thinkingLow": "#00aaff",
    		"thinkingMedium": "#00ffff",
-   		"thinkingHigh": "#ff00ff"
+   		"thinkingHigh": "#ff00ff",
+   		"thinkingXhigh": "#ff88ff"
+   		// ... plus bashMode, pythonMode, statusLine* colors
    	}
    }
    ```
 
 4. **Select your theme:**
-   - Use `/settings` command and set `"theme": "my-theme"`
-   - Or use `/theme` command interactively
+   - Use the Settings UI (Display → Theme)
+   - Or run `omp config set theme my-theme`
 
 ## Tips
 
@@ -367,7 +385,7 @@ Custom themes are loaded from `~/.omp/agent/themes/*.json`.
 ### Color Harmony
 
 - Start with a base palette (e.g., Nord, Gruvbox, Tokyo Night)
-- Define your palette in `defs`
+- Define your palette in `vars`
 - Reference colors consistently
 
 ### Testing
@@ -444,51 +462,56 @@ Example usage:
 
 ### Terminal Compatibility
 
-OMP uses 24-bit RGB colors (`\x1b[38;2;R;G;Bm`). Most modern terminals support this:
+OMP prefers 24-bit RGB colors (`\x1b[38;2;R;G;Bm`) and assumes truecolor on modern terminals.
 
-- ✅ iTerm2, Alacritty, Kitty, WezTerm
-- ✅ Windows Terminal
-- ✅ VS Code integrated terminal
-- ✅ Modern GNOME Terminal, Konsole
+Color mode detection:
 
-For older terminals with only 256-color support, OMP automatically falls back to the nearest 256-color approximation.
+- `COLORTERM=truecolor|24bit` or `WT_SESSION` → truecolor
+- `TERM=dumb`, `TERM=linux`, or empty `TERM` → 256-color fallback
+- Otherwise → truecolor
 
-To check if your terminal supports truecolor:
+If you need to confirm terminal hints:
 
 ```bash
-echo $COLORTERM  # Should output "truecolor" or "24bit"
+echo $COLORTERM
 ```
 
 ## Example Themes
 
 See the built-in themes for complete examples:
 
-- [Dark theme](../src/themes/dark.json)
-- [Light theme](../src/themes/light.json)
+- [Dark theme](../src/modes/theme/dark.json)
+- [Light theme](../src/modes/theme/light.json)
+- [Defaults library](../src/modes/theme/defaults)
 
 ## Schema Validation
 
-Themes are validated on load using [TypeBox](https://github.com/sinclairzx81/typebox) + [Ajv](https://ajv.js.org/).
+Themes are validated on load using [TypeBox](https://github.com/sinclairzx81/typebox) and the TypeBox compiler.
 
 Invalid themes will show an error with details about what's wrong:
 
 ```
-Error loading theme 'my-theme':
-  - colors.accent: must be string or number
-  - colors.mdHeading: required property missing
+Invalid theme "my-theme":
+
+Missing required color tokens:
+  - mdHeading
+  - mdLink
+
+Other errors:
+  - /colors/accent: Expected union value
 ```
 
 For editor support, the JSON schema is available at:
 
 ```
-https://raw.githubusercontent.com/can1357/oh-my-pi/main/packages/coding-agent/theme-schema.json
+https://raw.githubusercontent.com/can1357/oh-my-pi/main/packages/coding-agent/src/modes/theme/theme-schema.json
 ```
 
 Add to your theme file for auto-completion and validation:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/can1357/oh-my-pi/main/packages/coding-agent/theme-schema.json",
+  "$schema": "https://raw.githubusercontent.com/can1357/oh-my-pi/main/packages/coding-agent/src/modes/theme/theme-schema.json",
   ...
 }
 ```
@@ -511,6 +534,30 @@ class Theme {
 	bold(text: string): string;
 	italic(text: string): string;
 	underline(text: string): string;
+	strikethrough(text: string): string;
+	inverse(text: string): string;
+
+	// Raw ANSI codes (for composing with other formatters)
+	getFgAnsi(color: ThemeColor): string;
+	getBgAnsi(color: ThemeBg): string;
+
+	// Symbol access
+	symbol(key: SymbolKey): string;
+	styledSymbol(key: SymbolKey, color: ThemeColor): string;
+	getSymbolPreset(): SymbolPreset;
+
+	// Category accessors (return grouped symbol objects)
+	get status(): { success, error, warning, ... };
+	get nav(): { cursor, selected, expand, collapse, back };
+	get icon(): { model, folder, file, git, ... };
+	get boxRound(): { topLeft, topRight, ... };
+	get boxSharp(): { topLeft, topRight, ... };
+	get sep(): { powerline, dot, slash, pipe, ... };
+	get thinking(): { minimal, low, medium, high, xhigh };
+	get spinnerFrames(): string[];
+
+	// Language icon lookup
+	getLangIcon(lang: string | undefined): string;
 }
 ```
 
@@ -522,9 +569,16 @@ The active theme is available as a global singleton in `coding-agent`:
 // theme.ts
 export let theme: Theme;
 
-export function setTheme(name: string) {
-	theme = loadTheme(name);
-}
+export async function initTheme(
+	themeName?: string,
+	enableWatcher?: boolean,
+	symbolPreset?: SymbolPreset,
+	colorBlindMode?: boolean,
+): Promise<void>;
+export async function setTheme(
+	name: string,
+	enableWatcher?: boolean,
+): Promise<{ success: boolean; error?: string }>;
 
 // Usage throughout coding-agent
 import { theme } from "./theme.js";
@@ -554,51 +608,44 @@ export interface MarkdownTheme {
 	italic: (text: string) => string;
 	strikethrough: (text: string) => string;
 	underline: (text: string) => string;
+	highlightCode?: (code: string, lang?: string) => string[];
+	getMermaidImage?: (sourceHash: string) => MermaidImage | null;
+	symbols: SymbolTheme;
 }
 ```
 
-The `coding-agent` provides themed functions when creating components:
+The `coding-agent` bridges the theme to TUI components via exported helpers:
 
 ```typescript
-// In coding-agent
-import { theme } from "./theme.js";
-import { Markdown } from "@oh-my-pi/pi-tui";
-
-// Helper to create markdown theme functions
-function getMarkdownTheme(): MarkdownTheme {
+// Exported helper in theme.ts
+export function getMarkdownTheme(): MarkdownTheme {
 	return {
 		heading: (text) => theme.fg("mdHeading", text),
 		link: (text) => theme.fg("mdLink", text),
-		linkUrl: (text) => theme.fg("mdLinkUrl", text),
-		code: (text) => theme.fg("mdCode", text),
-		codeBlock: (text) => theme.fg("mdCodeBlock", text),
-		codeBlockBorder: (text) => theme.fg("mdCodeBlockBorder", text),
-		quote: (text) => theme.fg("mdQuote", text),
-		quoteBorder: (text) => theme.fg("mdQuoteBorder", text),
-		hr: (text) => theme.fg("mdHr", text),
-		listBullet: (text) => theme.fg("mdListBullet", text),
+		// ... all color mappings ...
 		bold: (text) => theme.bold(text),
 		italic: (text) => theme.italic(text),
 		underline: (text) => theme.underline(text),
 		strikethrough: (text) => chalk.strikethrough(text),
+		symbols: getSymbolTheme(),
+		getMermaidImage,
+		highlightCode: (code, lang) => { /* uses native syntax highlighter */ },
 	};
 }
-
-// Create markdown with theme
-const md = new Markdown(text, 1, 1, getMarkdownTheme(), { bgColor: theme.bg("userMessageBg") });
 ```
 
 This approach:
 
 - Keeps TUI components theme-agnostic (reusable in other projects)
 - Maintains type safety via interfaces
-- Allows components to have sensible defaults if no theme provided
 - Centralizes theme access in `coding-agent`
+
+Similar helpers exist for other TUI components: `getSelectListTheme()`, `getEditorTheme()`, `getSettingsListTheme()`, `getSymbolTheme()`.
 
 **Example usage:**
 
 ```typescript
-const theme = loadTheme("dark");
+await initTheme("dark");
 
 // Apply foreground colors
 theme.fg("accent", "Selected");
@@ -620,9 +667,9 @@ const userMsg = theme.bg("userMessageBg", theme.fg("userMessageText", "Hello"));
 **Color resolution:**
 
 1. **Detect terminal capabilities:**
-   - Check `$COLORTERM` env var (`truecolor` or `24bit` → truecolor support)
-   - Check `$TERM` env var (`*-256color` → 256-color support)
-   - Fallback to 256-color mode if detection fails
+   - `COLORTERM=truecolor|24bit` or `WT_SESSION` → truecolor
+   - `TERM=dumb`, `TERM=linux`, or empty `TERM` → 256-color
+   - Otherwise → truecolor
 
 2. **Load JSON theme file**
 
@@ -642,25 +689,9 @@ const userMsg = theme.bg("userMessageBg", theme.fg("userMessageText", "Hello"));
 
 4. **Convert colors to ANSI codes based on terminal capability:**
 
-   **Truecolor mode (24-bit):**
-   - Hex (`"#ff0000"`) → `\x1b[38;2;255;0;0m`
-   - 256-color (`42`) → `\x1b[38;5;42m` (keep as-is)
-   - Empty string (`""`) → `\x1b[39m`
-
-   **256-color mode:**
-   - Hex (`"#ff0000"`) → convert to nearest RGB cube color → `\x1b[38;5;196m`
-   - 256-color (`42`) → `\x1b[38;5;42m` (keep as-is)
-   - Empty string (`""`) → `\x1b[39m`
-
-   **Hex to 256-color conversion:**
-
-   ```typescript
-   // Convert RGB to 6x6x6 cube (colors 16-231)
-   r_index = Math.round((r / 255) * 5);
-   g_index = Math.round((g / 255) * 5);
-   b_index = Math.round((b / 255) * 5);
-   color_index = 16 + 36 * r_index + 6 * g_index + b_index;
-   ```
+   - Empty string (`""`) → terminal default (foreground/background reset)
+   - 256-color (`42`) → `\x1b[38;5;42m` / `\x1b[48;5;42m`
+   - Hex or resolved vars → `Bun.color(value, "ansi-16m" | "ansi-256")`
 
 5. **Cache as `Theme` instance**
 

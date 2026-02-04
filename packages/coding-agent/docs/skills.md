@@ -4,7 +4,7 @@
 
 Skills are self-contained capability packages that the agent loads on-demand. A skill provides specialized workflows, setup instructions, helper scripts, and reference documentation for specific tasks.
 
-OMP implements the [Agent Skills standard](https://agentskills.io/specification).
+OMP follows the [Agent Skills](https://agentskills.io/specification) SKILL.md format (YAML frontmatter + markdown body) and exposes skills via `skill://` URLs.
 
 **Example use cases:**
 - Web search and content extraction (Brave Search API)
@@ -87,99 +87,77 @@ cd /path/to/skill && npm install
 
 ### Frontmatter Fields
 
-Per the [Agent Skills specification](https://agentskills.io/specification#frontmatter-required):
+| Field | Required | Notes |
+|-------|----------|-------|
+| `name` | No | Defaults to the skill directory name. Use lowercase + hyphens for compatibility. |
+| `description` | Yes (OMP/custom), recommended everywhere | Used for skill matching and shown in the system prompt. |
 
-| Field | Required | Constraints |
-|-------|----------|-------------|
-| `name` | Yes | Max 64 chars. Lowercase a-z, 0-9, hyphens only. Must match parent directory name. |
-| `description` | Yes | Max 1024 chars. What the skill does and when to use it. |
-| `license` | No | License name or reference to bundled license file. |
-| `compatibility` | No | Max 500 chars. Environment requirements (system packages, network access, etc.). |
-| `metadata` | No | Arbitrary key-value mapping for additional metadata. |
-| `allowed-tools` | No | Space-delimited list of pre-approved tools (experimental). |
+OMP ignores additional frontmatter fields, but other tooling may use them.
 
-#### Name Validation
+#### Naming Guidance
 
-The `name` field must:
-- Be 1-64 characters
-- Contain only lowercase letters (a-z), numbers (0-9), and hyphens
-- Not start or end with a hyphen
-- Not contain consecutive hyphens (--)
-- Match the parent directory name exactly
-
-Valid: `pdf-processing`, `data-analysis`, `code-review`
-Invalid: `PDF-Processing`, `-pdf`, `pdf--processing`
-
-#### Description Best Practices
-
-The `description` is critical. It determines when the agent loads the skill. Be specific about both what it does and when to use it.
-
-Good:
-```yaml
-description: Extracts text and tables from PDF files, fills PDF forms, and merges multiple PDFs. Use when working with PDF documents or when the user mentions PDFs, forms, or document extraction.
-```
-
-Poor:
-```yaml
-description: Helps with PDFs.
-```
+OMP does not enforce naming rules, but skill names must match exactly for `skill://<name>` and `/skill:<name>` lookups. For cross-tool compatibility, keep names lowercase, hyphenated, and aligned with the directory name.
 
 ### File References
 
-Use relative paths from the skill directory:
+Use `skill://` URLs to reference files inside a skill directory:
 
 ```markdown
-See [the reference guide](references/REFERENCE.md) for details.
+Read the full skill:
+\`\`\`
+skill://my-skill
+\`\`\`
 
-Run the extraction script:
-\`\`\`bash
-./scripts/extract.py input.pdf
+Read a reference file:
+\`\`\`
+skill://my-skill/references/api-reference.md
 \`\`\`
 ```
 
 ## Skill Locations
 
-Skills are discovered from these locations (later wins on name collision):
+Skills are discovered from these sources (first match wins on name collisions):
 
-1. `~/.codex/skills/**/SKILL.md` (Codex CLI, recursive)
-2. `~/.claude/skills/*/SKILL.md` (Claude Code user, one level)
-3. `<cwd>/.claude/skills/*/SKILL.md` (Claude Code project, one level)
-4. `~/.omp/agent/skills/**/SKILL.md` (OMP user, recursive)
-5. `<cwd>/.omp/skills/**/SKILL.md` (OMP project, recursive)
+- OMP user: `~/.omp/agent/skills/<skill>/SKILL.md` (legacy alias: `~/.pi/agent/skills/...`)
+- OMP project: `<cwd>/.omp/skills/<skill>/SKILL.md` (legacy alias: `<cwd>/.pi/skills/...`)
+- Claude Code: `~/.claude/skills/<skill>/SKILL.md` and `<cwd>/.claude/skills/<skill>/SKILL.md`
+- Codex CLI: `~/.codex/skills/<skill>/SKILL.md` and `<cwd>/.codex/skills/<skill>/SKILL.md`
+- Custom directories from `skills.customDirectories` (scanned recursively)
+
+Discovery skips hidden directories and `node_modules`, and respects `.gitignore`, `.ignore`, and `.fdignore` rules.
 
 ## Configuration
 
-Configure skill loading in `~/.omp/agent/settings.json`:
+Global settings live in `~/.omp/agent/config.yml` (migrated from legacy `settings.json`). Project overrides live in `<cwd>/.omp/settings.json` or `<cwd>/.pi/settings.json`.
 
-```json
-{
-  "skills": {
-    "enabled": true,
-    "enableCodexUser": true,
-    "enableClaudeUser": true,
-    "enableClaudeProject": true,
-    "enablePiUser": true,
-    "enablePiProject": true,
-    "customDirectories": ["~/my-skills-repo"],
-    "ignoredSkills": ["deprecated-skill"],
-    "includeSkills": ["git-*", "docker"]
-  }
-}
+```yaml
+skills:
+  enabled: true
+  enableSkillCommands: true
+  enableCodexUser: true
+  enableClaudeUser: true
+  enableClaudeProject: true
+  enablePiUser: true
+  enablePiProject: true
+  customDirectories: []
+  ignoredSkills: []
+  includeSkills: []
 ```
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `enabled` | `true` | Master toggle for all skills |
+| `enableSkillCommands` | `true` | Register `/skill:<name>` commands in interactive mode |
 | `enableCodexUser` | `true` | Load from `~/.codex/skills/` |
 | `enableClaudeUser` | `true` | Load from `~/.claude/skills/` |
 | `enableClaudeProject` | `true` | Load from `<cwd>/.claude/skills/` |
-| `enableOmpUser` | `true` | Load from `~/.omp/agent/skills/` |
-| `enableOmpProject` | `true` | Load from `<cwd>/.omp/skills/` |
-| `customDirectories` | `[]` | Additional directories to scan (supports `~` expansion) |
-| `ignoredSkills` | `[]` | Glob patterns to exclude (e.g., `["deprecated-*", "test-skill"]`) |
-| `includeSkills` | `[]` | Glob patterns to include (empty = all; e.g., `["git-*", "docker"]`) |
+| `enablePiUser` | `true` | Load from `~/.omp/agent/skills/` (or `~/.pi/agent/skills/`) |
+| `enablePiProject` | `true` | Load from `<cwd>/.omp/skills/` (or `<cwd>/.pi/skills/`) |
+| `customDirectories` | `[]` | Additional directories to scan recursively (use absolute paths) |
+| `ignoredSkills` | `[]` | Glob patterns to exclude (e.g., `"deprecated-*"`) |
+| `includeSkills` | `[]` | Glob patterns to include (empty = all) |
 
-**Note:** `ignoredSkills` takes precedence over both `includeSkills` in settings and the `--skills` CLI flag. A skill matching any ignore pattern will be excluded regardless of include patterns.
+**Note:** `ignoredSkills` takes precedence over both `includeSkills` and the `--skills` CLI flag.
 
 ### CLI Filtering
 
@@ -200,25 +178,19 @@ This overrides the `includeSkills` setting for the current session.
 
 ## How Skills Work
 
-1. At startup, omp scans skill locations and extracts names + descriptions
-2. The system prompt includes available skills in XML format
-3. When a task matches, the agent uses `read` to load the full SKILL.md
-4. The agent follows the instructions, using relative paths to reference scripts/assets
+1. At startup, omp scans enabled skill locations and filters them by settings and CLI flags.
+2. If the `read` tool is available, skill names + descriptions are injected into the system prompt as XML.
+3. When a task matches a skill, the agent loads it with `read skill://<name>` or `skill://<name>/<path>`.
+4. When skills are preloaded (e.g., Task tool with explicit skills), their full contents are inlined under `<preloaded_skills>` and no `read` call is needed.
 
-This is progressive disclosure: only descriptions are always in context, full instructions load on-demand.
+This is progressive disclosure: only descriptions are always in context, full instructions load on-demand unless explicitly preloaded.
 
-## Validation Warnings
+## Warnings
 
-OMP validates skills against the Agent Skills standard and warns (but still loads) non-compliant skills:
+OMP emits warnings when:
 
-- Name doesn't match parent directory
-- Name exceeds 64 characters
-- Name contains invalid characters
-- Name starts/ends with hyphen or has consecutive hyphens
-- Description missing or exceeds 1024 characters
-- Unknown frontmatter fields
-
-Name collisions (same name from different locations) warn and keep the first skill found.
+- A skill directory or file cannot be read
+- Two skills share the same name (the first loaded wins; later ones are skipped)
 
 ## Example: Web Search Skill
 
@@ -258,12 +230,6 @@ cd /path/to/brave-search && npm install
 \`\`\`
 ```
 
-## Compatibility
-
-**Claude Code**: OMP reads skills from `~/.claude/skills/*/SKILL.md`. The `allowed-tools` and `model` frontmatter fields are ignored.
-
-**Codex CLI**: OMP reads skills from `~/.codex/skills/` recursively. Hidden files/directories and symlinks are skipped.
-
 ## Skill Repositories
 
 For inspiration and ready-to-use skills:
@@ -278,13 +244,10 @@ CLI:
 omp --no-skills
 ```
 
-Settings (`~/.omp/agent/settings.json`):
-```json
-{
-  "skills": {
-    "enabled": false
-  }
-}
+Settings:
+```yaml
+skills:
+  enabled: false
 ```
 
 Use the granular `enable*` flags to disable individual sources (e.g., `enableClaudeUser: false` to skip `~/.claude/skills`).

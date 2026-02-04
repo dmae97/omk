@@ -8,6 +8,8 @@ Use it for any merge: single file, feature branch, or full release sync.
 **Commit:** `82d7da878`
 **Date:** 2026-01-30
 
+Update this section after each sync; do not reuse the previous range.
+
 When starting a new sync, generate patches from this commit forward:
 
 ```bash
@@ -26,14 +28,15 @@ git format-patch 82d7da878..HEAD --stdout > changes.patch
 - Avoid copying built artifacts or generated files.
 - If upstream added new files, add them explicitly and review contents.
 
-## 2) Remove `.js` from imports
+## 2) Match import extension conventions
 
-We use a bundler and strip `.js` from TypeScript imports.
+Most runtime TypeScript sources omit `.js` in internal imports, but some test/bench entrypoints keep `.js` for ESM
+runtime compatibility. Follow the local package’s existing style; do not blanket-strip extensions.
 
-- Remove `.js` extensions from all internal imports.
-- Keep real file extensions only when required by tooling (e.g., `.json`, `.css`).
-- Example:
-   - `import { x } from "./foo.js";` -> `import { x } from "./foo";`
+- In `packages/coding-agent` runtime sources, keep internal imports extensionless unless importing non-TS assets.
+- In `packages/tui/test` and `packages/natives/bench`, keep `.js` where surrounding files already use it.
+- Keep real file extensions when required by tooling (e.g., `.json`, `.css`, `.md` text embeds).
+- Example: `import { x } from "./foo.js";` → `import { x } from "./foo";` (only when the package convention is extensionless).
 
 ## 3) Replace import scopes
 
@@ -41,9 +44,10 @@ Upstream uses different package scopes. Replace them consistently.
 
 - Replace old scopes with the local scope used here.
 - Examples (adjust to match the actual packages you are porting):
-   - `@mariozechner/pi-coding-agent` -> `@oh-my-pi/pi-coding-agent`
-   - `@mariozechner/pi-agent-core` -> `@oh-my-pi/pi-agent-core`
-   - `@mariozechner/tui` -> `@oh-my-pi/pi-tui`
+  - `@mariozechner/pi-coding-agent` → `@oh-my-pi/pi-coding-agent`
+  - `@mariozechner/pi-agent-core` → `@oh-my-pi/pi-agent-core`
+  - `@mariozechner/pi-tui` → `@oh-my-pi/pi-tui`
+  - `@mariozechner/pi-ai` → `@oh-my-pi/pi-ai`
 
 ## 4) Use Bun APIs where they improve on Node
 
@@ -51,7 +55,7 @@ We run on Bun. Replace Node APIs only when Bun provides a better alternative.
 
 **DO replace:**
 
-- Process spawning: `child_process.spawn` → `Bun.spawn` / `Bun.spawnSync`
+- Process spawning: `child_process.spawn` → Bun Shell `$` for simple commands, `Bun.spawn`/`Bun.spawnSync` for streaming or long-running work
 - File I/O: `fs.readFileSync` → `Bun.file().text()` / `Bun.write()`
 - HTTP clients: `node-fetch`, `axios` → native `fetch`
 - Crypto hashing: `node:crypto` → Web Crypto or `Bun.hash`
@@ -65,7 +69,14 @@ We run on Bun. Replace Node APIs only when Bun provides a better alternative.
 - `fs.mkdtempSync()` — do NOT replace with manual path construction
 - `path.join()`, `path.resolve()`, etc. — these are fine
 
-**Import style:** Use `node:` prefix for Node builtins with namespace imports (`import * as os from "node:os"`).
+**Import style:** Use the `node:` prefix with namespace imports only (no named imports from `node:fs` or `node:path`).
+
+**Additional Bun conventions:**
+
+- Prefer Bun Shell `$` for short, non-streaming commands; use `Bun.spawn` only when you need streaming I/O or process control.
+- Use `Bun.file()`/`Bun.write()` for files and `node:fs/promises` for directories.
+- Avoid `Bun.file().exists()` checks; use `isEnoent` handling in try/catch.
+- Prefer `Bun.sleep(ms)` over `setTimeout` wrappers.
 
 **Wrong:**
 
@@ -91,21 +102,22 @@ const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "myapp-"));
 Do not copy runtime assets or vendor files at build time.
 
 - If upstream copies assets into a dist folder, replace with Bun-friendly embeds.
-- Use `import.meta.dir` + `Bun.file` to load adjacent resources.
+- Prompts are static `.md` files; use Bun text imports (`with { type: "text" }`) and Handlebars instead of inline prompt strings.
+- Use `import.meta.dir` + `Bun.file` to load adjacent non-text resources.
 - Keep assets in-repo and let the bundler include them.
 - Eliminate copy scripts unless the user explicitly requests them.
 - If upstream reads a bundled fallback file at runtime, replace filesystem reads with a Bun text embed import.
-   - Example (Codex instructions fallback):
-      - `const FALLBACK_PROMPT_PATH = join(import.meta.dir, "codex-instructions.md");` -> removed
-      - `import FALLBACK_INSTRUCTIONS from "./codex-instructions.md" with { type: "text" };`
-      - Use `return FALLBACK_INSTRUCTIONS;` instead of `readFileSync(FALLBACK_PROMPT_PATH, "utf8")`
+  - Example (Codex instructions fallback):
+    - `const FALLBACK_PROMPT_PATH = join(import.meta.dir, "codex-instructions.md");` -> removed
+    - `import FALLBACK_INSTRUCTIONS from "./codex-instructions.md" with { type: "text" };`
+    - Use `return FALLBACK_INSTRUCTIONS;` instead of `readFileSync(FALLBACK_PROMPT_PATH, "utf8")`
 
 ## 6) Port `package.json` carefully
 
 Treat `package.json` as a contract. Merge intentionally.
 
 - Keep existing `name`, `version`, `type`, `exports`, and `bin` unless the port requires changes.
-- Replace npm/node scripts with Bun equivalents (e.g., `bun run`, `bun test`).
+- Replace npm/node scripts with Bun equivalents (e.g., `bun check`, `bun test`).
 - Ensure dependencies use the correct scope.
 - Do not downgrade dependencies to fix type errors; upgrade instead.
 - Validate workspace package links and `peerDependencies`.
@@ -114,16 +126,19 @@ Treat `package.json` as a contract. Merge intentionally.
 
 - Keep existing formatting conventions.
 - Do not introduce `any` unless required.
-- Avoid dynamic imports and inline type imports.
+- Avoid dynamic imports and inline type imports; use top-level imports only.
+- Never build prompts in code; prompts are static `.md` files rendered with Handlebars.
+- In coding-agent, never use `console.log`/`console.warn`/`console.error`; use `logger` from `@oh-my-pi/pi-utils`.
+- Use `Promise.withResolvers()` instead of `new Promise((resolve, reject) => ...)`.
 - Prefer existing helpers and utilities over new ad-hoc code.
 - Preserve Bun-first infrastructure changes already made in this repo:
-   - Runtime is Bun (no Node entry points).
-   - Package manager is Bun (no npm lockfiles).
-   - Heavy Node APIs (`child_process`, `readline`) are replaced with Bun equivalents.
-   - Lightweight Node APIs (`os.homedir`, `os.tmpdir`, `fs.mkdtempSync`, `path.*`) are kept.
-   - CLI shebangs use `bun` (not `node`, not `tsx`).
-   - Packages use source files directly (no TypeScript build step).
-   - CI workflows run Bun for install/check/test.
+  - Runtime is Bun (no Node entry points).
+  - Package manager is Bun (no npm lockfiles).
+  - Heavy Node APIs (`child_process`, `readline`) are replaced with Bun equivalents.
+  - Lightweight Node APIs (`os.homedir`, `os.tmpdir`, `fs.mkdtempSync`, `path.*`) are kept.
+  - CLI shebangs use `bun` (not `node`, not `tsx`).
+  - Packages use source files directly (no TypeScript build step).
+  - CI workflows run Bun for install/check/test.
 
 ## 8) Remove old compatibility layers
 
@@ -143,7 +158,7 @@ Unless requested, remove upstream compatibility shims.
 
 Run the standard checks after changes:
 
-- `bun run check`
+- `bun check`
 
 If the repo already has failing checks unrelated to your changes, call that out.
 Tests use Bun's runner (not Vitest), but only run `bun test` when explicitly requested.
@@ -224,20 +239,23 @@ rg "case \"" path/to/file.ts
 
 Use this as a final pass before you finish:
 
-- [ ] No `.js` import extensions in TS files
+- [ ] Import extensions follow the local package convention (no blanket `.js` stripping)
 - [ ] No Node-only APIs in new/ported code
 - [ ] All package scopes updated
 - [ ] `package.json` scripts use Bun
+- [ ] Prompts are `.md` text imports (no inline prompt strings)
+- [ ] No `console.*` in coding-agent (use `logger`)
 - [ ] Assets load via Bun embed patterns (no copy scripts)
 - [ ] Tests or checks run (or explicitly noted as blocked)
 - [ ] No functionality regressions (see sections 11-12)
 
 ## 14) Commit message format
 
-When committing a backport, use this format:
+When committing a backport, follow the repo format `<type>(scope): <past-tense description>` and keep the commit
+range in the title.
 
 ```
-fix: backport fixes from pi-mono (<from>..<to>)
+fix(coding-agent): backported pi-mono changes (<from>..<to>)
 
 packages/<package>:
 - <type>: <description>
@@ -250,7 +268,7 @@ packages/<other-package>:
 **Example:**
 
 ```
-fix: backport fixes from pi-mono (9f3eef65f..52532c7c0)
+fix(coding-agent): backported pi-mono changes (9f3eef65f..52532c7c0)
 
 packages/ai:
 - fix: handle "sensitive" stop reason from Anthropic API
@@ -282,12 +300,12 @@ Our fork has architectural decisions that differ from upstream. **Do not port th
 
 ### UI Architecture
 
-| Upstream                                    | Our Fork                    | Reason                                              |
-| ------------------------------------------- | --------------------------- | --------------------------------------------------- |
-| `FooterDataProvider` class                  | `StatusLineComponent`       | Simpler, integrated status line                     |
-| `ctx.ui.setHeader()` / `ctx.ui.setFooter()` | Removed                     | Not implemented; StatusLineComponent handles status |
-| `ctx.ui.setEditorComponent()`               | Removed                     | Not implemented                                     |
-| `InteractiveModeOptions` interface          | Positional constructor args | Existing pattern works fine                         |
+| Upstream                                    | Our Fork                                                  | Reason                                                                |
+| ------------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------- |
+| `FooterDataProvider` class                  | `StatusLineComponent`                                     | Simpler, integrated status line                                       |
+| `ctx.ui.setHeader()` / `ctx.ui.setFooter()` | Stub in non-TUI modes                                     | Implemented in TUI, no-op elsewhere                                   |
+| `ctx.ui.setEditorComponent()`               | Stub in non-TUI modes                                     | Implemented in TUI, no-op elsewhere                                   |
+| `InteractiveModeOptions` options object     | Positional constructor args (options type still exported) | Keep constructor signature; update the type when upstream adds fields |
 
 ### Component Naming
 
@@ -300,18 +318,17 @@ Our fork has architectural decisions that differ from upstream. **Do not port th
 
 ### API Naming
 
-| Upstream                                  | Our Fork                                  | Notes                                      |
-| ----------------------------------------- | ----------------------------------------- | ------------------------------------------ |
-| `sessionManager.appendSessionInfo(name)`  | `sessionManager.setSessionName(name)`     | We use `sessionName` throughout            |
-| `sessionManager.getSessionName()`         | `sessionManager.getSessionName()`         | Same (we unified to match upstream's RPC)  |
-| `agent.sessionName` / `setSessionName()`  | `agent.sessionName` / `setSessionName()`  | Same                                       |
+| Upstream                                 | Our Fork                                 | Notes                                     |
+| ---------------------------------------- | ---------------------------------------- | ----------------------------------------- |
+| `sessionManager.appendSessionInfo(name)` | `sessionManager.setSessionName(name)`    | We use `sessionName` throughout           |
+| `sessionManager.getSessionName()`        | `sessionManager.getSessionName()`        | Same (we unified to match upstream's RPC) |
+| `agent.sessionName` / `setSessionName()` | `agent.sessionName` / `setSessionName()` | Same                                      |
 
 ### File Consolidation
 
-| Upstream                              | Our Fork                 | Reason                                |
-| ------------------------------------- | ------------------------ | ------------------------------------- |
-| `clipboard.ts` + `clipboard-image.ts` | `clipboard.ts` only      | Merged with Bun-native implementation |
-| `@mariozechner/clipboard` dependency  | Native platform commands | No external dependency needed         |
+| Upstream                                           | Our Fork                                | Reason                                  |
+| -------------------------------------------------- | --------------------------------------- | --------------------------------------- |
+| `clipboard.ts` + `clipboard-image.ts` (tool files) | `@oh-my-pi/pi-natives` clipboard module | Merged into N-API native implementation |
 
 ### Test Framework
 
@@ -322,18 +339,18 @@ Our fork has architectural decisions that differ from upstream. **Do not port th
 
 ### Tool Architecture
 
-| Upstream                            | Our Fork                                  |
-| ----------------------------------- | ----------------------------------------- |
-| `createTool(cwd: string, options?)` | `createTool(session: ToolSession)`        |
-| Per-tool `*Operations` interfaces   | Unified `FileOperations` in `ToolSession` |
-| Node.js `fs/promises`               | Bun APIs (`Bun.file()`, `Bun.write()`)    |
+| Upstream                            | Our Fork                                                          | Notes                                                     |
+| ----------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------- |
+| `createTool(cwd: string, options?)` | `createTools(session: ToolSession)` via `BUILTIN_TOOLS` registry  | Tool factories accept `ToolSession` and can return `null` |
+| Per-tool `*Operations` interfaces   | Per-tool interfaces remain (`FindOperations`, `GrepOperations`)   | Used for SSH/remote overrides                             |
+| Node.js `fs/promises` everywhere    | `Bun.file()`/`Bun.write()` for files; `node:fs/promises` for dirs | Prefer Bun APIs when they simplify                        |
 
 ### Auth Storage
 
-| Upstream                       | Our Fork                                    |
-| ------------------------------ | ------------------------------------------- |
-| `proper-lockfile` library      | Native `O_EXCL` atomic file locking         |
-| Single credential per provider | Multi-credential with round-robin selection |
+| Upstream                        | Our Fork                                    | Notes                                                 |
+| ------------------------------- | ------------------------------------------- | ----------------------------------------------------- |
+| `proper-lockfile` + `auth.json` | `agent.db` (bun:sqlite)                     | Legacy `auth.json` is migrated; do not reintroduce it |
+| Single credential per provider  | Multi-credential with round-robin selection | Session affinity and backoff logic preserved          |
 
 ### Extensions
 
@@ -347,8 +364,7 @@ Our fork has architectural decisions that differ from upstream. **Do not port th
 When porting, **skip** these files/features entirely:
 
 - `footer-data-provider.ts` — we use StatusLineComponent
-- `clipboard-image.ts` — merged into clipboard.ts
-- `compaction-extensions.test.ts` — different test architecture
+- `clipboard-image.ts` — clipboard is in `@oh-my-pi/pi-natives` N-API module
 - GitHub workflow files — we have our own CI
 - `models.generated.ts` — auto-generated, regenerate locally
 
@@ -358,8 +374,7 @@ These exist in our fork but not upstream. **Never overwrite:**
 
 - `StatusLineComponent` in interactive mode
 - Multi-credential auth with session affinity
-- Capability-based discovery system (`loadSync`, `skillCapability`, etc.)
-- Voice mode integration
+- Capability-based discovery system (`defineCapability`, `registerProvider`, `loadCapability`, `skillCapability`, etc.)
 - MCP/Exa/SSH integrations
 - LSP writethrough for format-on-save
 - Bash interception (`checkBashInterception`)

@@ -46,7 +46,7 @@ const factory: CustomToolFactory = (pi) => ({
 	}),
 
 	async execute(toolCallId, params, onUpdate, ctx, signal) {
-		const { name } = params as { name: string };
+		const { name } = params;
 		return {
 			content: [{ type: "text", text: `Hello, ${name}!` }],
 			details: { greeted: name },
@@ -61,14 +61,25 @@ The tool is automatically discovered and available in your next omp session.
 
 ## Tool Locations
 
-Tools must be in a subdirectory with an `index.ts` entry point:
+OMP discovers custom tools through the capability system. Native OMP tools live in a subdirectory with an `index.ts`
+entry point; `.pi` mirrors the same layout as a compatibility alias.
 
-| Location                            | Scope                 | Auto-discovered |
-| ----------------------------------- | --------------------- | --------------- |
-| `~/.omp/agent/tools/*/index.ts`     | Global (all projects) | Yes             |
-| `.omp/tools/*/index.ts`             | Project-local         | Yes             |
-| `settings.json` `customTools` array | Configured paths      | Yes             |
-| `--tool <path>` CLI flag            | One-off/debugging     | No              |
+| Location                        | Scope          | Auto-discovered |
+| ------------------------------- | -------------- | --------------- |
+| `~/.omp/agent/tools/*/index.ts` | User (OMP)     | Yes             |
+| `.omp/tools/*/index.ts`         | Project (OMP)  | Yes             |
+| `~/.pi/agent/tools/*/index.ts`  | User (alias)   | Yes             |
+| `.pi/tools/*/index.ts`          | Project (alias) | Yes             |
+
+Compatibility sources load flat modules (no subdirectory):
+
+- `~/.claude/tools/<tool>.ts` (or `.js`, `.sh`, `.bash`, `.py`), `.claude/tools/<tool>.*`
+- `~/.codex/tools/<tool>.ts` or `<tool>.js`, `.codex/tools/<tool>.ts` or `<tool>.js`
+
+Tools declared by installed plugins (via `~/.omp/plugins/node_modules` manifests) are also auto-discovered.
+
+Only TypeScript/JavaScript modules are executable. `.md` and `.json` files in tools directories are treated as metadata
+and are not loaded as tool modules.
 
 **Example structure:**
 
@@ -82,9 +93,10 @@ Tools must be in a subdirectory with an `index.ts` entry point:
     └── types.ts        # Type definitions (not loaded directly)
 ```
 
-**Priority:** Later sources win on name conflicts. CLI `--tool` takes highest priority.
+**Name conflicts:** Duplicate tool names are rejected; the first loaded tool keeps its name and later conflicts are
+reported as load errors.
 
-**Reserved names:** Custom tools cannot use built-in tool names (`read`, `write`, `edit`, `bash`, `grep`, `find`, `ls`).
+**Reserved names:** Custom tools cannot use built-in tool names (`read`, `write`, `edit`, `bash`, `grep`, `find`, `python`, `fetch`, `task`, `browser`, `web_search`, etc.).
 
 ## Available Imports
 
@@ -96,6 +108,7 @@ Custom tools can import from these packages:
 | `@oh-my-pi/pi-coding-agent` | Types and utilities                                       | Via `pi.pi.*` (injected) or direct import for types |
 | `@oh-my-pi/pi-ai`           | AI utilities (`StringEnum` for Google-compatible enums)   | Via `pi.pi.*` (re-exported through coding-agent)    |
 | `@oh-my-pi/pi-tui`          | TUI components (`Text`, `Box`, etc. for custom rendering) | Via `pi.pi.*` (re-exported through coding-agent)    |
+| `@oh-my-pi/pi-utils`        | Logging (`logger`)                                        | Via `pi.logger` (injected)                          |
 
 Node.js built-in modules (`node:fs`, `node:path`, etc.) are also available.
 
@@ -152,7 +165,7 @@ const factory: CustomToolFactory = (pi) => {
 		renderCall(args, theme) {
 			/* return Component */
 		},
-		renderResult(result, options, theme) {
+		renderResult(result, options, theme, args) {
 			/* return Component */
 		},
 	};
@@ -160,6 +173,8 @@ const factory: CustomToolFactory = (pi) => {
 
 export default factory;
 ```
+
+Set `hidden: true` to exclude a tool from the default tool list; hidden tools must be explicitly enabled by the session.
 
 **Important:** Use `StringEnum` from `pi.pi` instead of `Type.Union`/`Type.Literal` for string enums. The latter doesn't work with Google's API.
 
@@ -173,6 +188,7 @@ interface CustomToolAPI {
 	exec(command: string, args: string[], options?: ExecOptions): Promise<ExecResult>;
 	ui: ToolUIContext;
 	hasUI: boolean; // false in --print or --mode rpc
+	logger: typeof import("@oh-my-pi/pi-utils").logger; // File logger
 	typebox: typeof import("@sinclair/typebox"); // Injected @sinclair/typebox
 	pi: typeof import("@oh-my-pi/pi-coding-agent"); // Injected pi-coding-agent exports
 }
@@ -182,21 +198,33 @@ interface ToolUIContext {
 	confirm(title: string, message: string): Promise<boolean>;
 	input(title: string, placeholder?: string): Promise<string | undefined>;
 	notify(message: string, type?: "info" | "warning" | "error"): void;
-	custom(component: Component & { dispose?(): void }): { close: () => void; requestRender: () => void };
+	setStatus(key: string, text: string | undefined): void;
+	custom<T>(
+		factory: (tui: TUI, theme: Theme, done: (result: T) => void) =>
+			| (Component & { dispose?(): void })
+			| Promise<Component & { dispose?(): void }>,
+	): Promise<T>;
+	setEditorText(text: string): void;
+	getEditorText(): string;
+	editor(title: string, prefill?: string): Promise<string | undefined>;
+	readonly theme: Theme;
 }
 
 interface ExecOptions {
 	signal?: AbortSignal; // Cancel the process
 	timeout?: number; // Timeout in milliseconds
+	cwd?: string; // Working directory
 }
 
 interface ExecResult {
 	stdout: string;
 	stderr: string;
 	code: number;
-	killed?: boolean; // True if process was killed by signal/timeout
+	killed: boolean; // True if process was killed by signal/timeout
 }
 ```
+
+`TUI` and `Theme` are from `@oh-my-pi/pi-tui` (available via `pi.pi`).
 
 Always check `pi.hasUI` before using UI methods.
 
@@ -247,7 +275,7 @@ interface CustomToolContext {
 	sessionManager: ReadonlySessionManager; // Read-only access to session
 	modelRegistry: ModelRegistry; // For API key resolution
 	model: Model | undefined; // Current model (may be undefined)
-	isIdle(): boolean; // Whether agent is streaming
+	isIdle(): boolean; // Whether agent is idle (not streaming)
 	hasQueuedMessages(): boolean; // Whether user has queued messages
 	abort(): void; // Abort current operation (fire-and-forget)
 }
@@ -442,6 +470,7 @@ renderResult(result, { expanded, isPartial }, theme) {
 
 - `expanded`: User pressed Ctrl+O to expand
 - `isPartial`: Result is from `onUpdate` (streaming), not final
+- `spinnerFrame`: Spinner frame index (0-9) during partial updates
 
 ### Best Practices
 
@@ -534,8 +563,8 @@ See [`examples/custom-tools/todo/index.ts`](../examples/custom-tools/todo/index.
 - Custom `renderCall` and `renderResult`
 - Proper branching support via details storage
 
-Test with:
+Test by copying the example into your tools directory and restarting omp:
 
 ```bash
-omp --tool packages/coding-agent/examples/custom-tools/todo/index.ts
+cp -r packages/coding-agent/examples/custom-tools/todo ~/.omp/agent/tools/
 ```

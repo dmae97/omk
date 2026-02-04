@@ -35,13 +35,7 @@ import { AgentOutputManager } from "./output-manager";
 import { mapWithConcurrencyLimit } from "./parallel";
 import { renderCall, renderResult } from "./render";
 import { renderTemplate } from "./template";
-import {
-	type AgentProgress,
-	type SingleResult,
-	type TaskParams,
-	type TaskToolDetails,
-	taskSchema,
-} from "./types";
+import { type AgentProgress, type SingleResult, type TaskParams, type TaskToolDetails, taskSchema } from "./types";
 import {
 	applyBaseline,
 	captureBaseline,
