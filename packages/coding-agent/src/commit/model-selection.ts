@@ -82,8 +82,8 @@ function resolveModelFromString(
 
 function expandRoleAlias(value: string, settings: Settings): string {
 	const lower = value.toLowerCase();
-	if (lower.startsWith("pi/") || lower.startsWith("omp/")) {
-		const role = lower.startsWith("pi/") ? value.slice(3) : value.slice(4);
+	if (lower.startsWith("pi/")) {
+		const role = value.slice(3);
 		return settings.getModelRole(role) ?? value;
 	}
 	return value;

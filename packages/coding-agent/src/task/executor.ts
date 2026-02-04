@@ -39,7 +39,7 @@ import {
 	TASK_SUBAGENT_PROGRESS_CHANNEL,
 } from "./types";
 
-const DEFAULT_MODEL_ALIASES = new Set(["default", "pi/default", "omp/default"]);
+const DEFAULT_MODEL_ALIASES = new Set(["default", "pi/default"]);
 const MCP_CALL_TIMEOUT_MS = 60_000;
 const ajv = new Ajv({ allErrors: true, strict: false });
 
@@ -136,16 +136,15 @@ function resolveModelOverride(
 ): { model?: Model<Api>; thinkingLevel?: ThinkingLevel } {
 	if (modelPatterns.length === 0) return {};
 	const matchPreferences = { usageOrder: settings?.getStorage()?.getModelUsageOrder() };
-	const roles = settings?.getGroup("modelRoles");
 	for (const pattern of modelPatterns) {
 		const normalized = pattern.trim().toLowerCase();
 		if (!normalized || DEFAULT_MODEL_ALIASES.has(normalized)) {
 			continue;
 		}
 		let effectivePattern = pattern;
-		if (normalized.startsWith("omp/") || normalized.startsWith("pi/")) {
-			const role = normalized.startsWith("omp/") ? pattern.slice(4) : pattern.slice(3);
-			const configured = roles?.[role] ?? roles?.[role.toLowerCase()];
+		if (normalized.startsWith("pi/")) {
+			const role = pattern.slice(3);
+			const configured = settings?.getModelRole(role);
 			if (configured) {
 				effectivePattern = configured;
 			}

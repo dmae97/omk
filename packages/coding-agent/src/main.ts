@@ -391,8 +391,7 @@ async function buildSessionOptions(
 			process.exit(1);
 		}
 		options.model = model;
-		const currentRoles = settings.get("modelRoles") as Record<string, string>;
-		settings.override("modelRoles", { ...currentRoles, default: `${model.provider}/${model.id}` });
+		settings.overrideModelRoles({ default: `${model.provider}/${model.id}` });
 	} else if (scopedModels.length > 0 && !parsed.continue && !parsed.resume) {
 		const remembered = settings.getModelRole("default");
 		if (remembered) {

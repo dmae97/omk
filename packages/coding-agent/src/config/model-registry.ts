@@ -15,7 +15,25 @@ import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import AjvModule from "ajv";
 import { YAML } from "bun";
+import type { ThemeColor } from "../modes/theme/theme";
 import type { AuthStorage } from "../session/auth-storage";
+
+export type ModelRole = "default" | "smol" | "slow" | "plan";
+
+export interface ModelRoleInfo {
+	tag: string;
+	name: string;
+	color: ThemeColor;
+}
+
+export const MODEL_ROLES: Record<ModelRole, ModelRoleInfo> = {
+	default: { tag: "DEFAULT", name: "Default", color: "success" },
+	smol: { tag: "SMOL", name: "Fast", color: "warning" },
+	slow: { tag: "SLOW", name: "Thinking", color: "accent" },
+	plan: { tag: "PLAN", name: "Architect", color: "muted" },
+};
+
+export const MODEL_ROLE_IDS: ModelRole[] = ["default", "smol", "slow", "plan"];
 
 const Ajv = (AjvModule as any).default || AjvModule;
 

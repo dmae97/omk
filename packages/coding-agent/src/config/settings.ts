@@ -401,6 +401,26 @@ export class Settings {
 	}
 
 	/**
+	 * Get all model roles (helper for modelRoles record).
+	 */
+	getModelRoles(): ReadOnlyDict<string> {
+		return this.get("modelRoles");
+	}
+
+	/*
+	 * Override model roles (helper for modelRoles record).
+	 */
+	overrideModelRoles(roles: Record<string, string>): void {
+		const prev = this.get("modelRoles");
+		for (const [role, modelId] of Object.entries(roles)) {
+			if (modelId) {
+				prev[role] = modelId;
+			}
+		}
+		this.set("modelRoles", prev);
+	}
+
+	/**
 	 * Set disabled providers (for compatibility with discovery system).
 	 */
 	setDisabledProviders(ids: string[]): void {

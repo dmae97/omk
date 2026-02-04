@@ -11,7 +11,7 @@ import {
 	type TUI,
 	visibleWidth,
 } from "@oh-my-pi/pi-tui";
-import type { ModelRegistry } from "../../config/model-registry";
+import { MODEL_ROLE_IDS, MODEL_ROLES, type ModelRegistry, type ModelRole } from "../../config/model-registry";
 import { parseModelString } from "../../config/model-resolver";
 import type { Settings } from "../../config/settings";
 import { type ThemeColor, theme } from "../../modes/theme/theme";
@@ -35,19 +35,12 @@ interface ScopedModelItem {
 	thinkingLevel: string;
 }
 
-type ModelRole = "default" | "smol" | "slow" | "plan" | "temporary";
-
 interface MenuAction {
 	label: string;
 	role: ModelRole;
 }
 
-const MENU_ACTIONS: MenuAction[] = [
-	{ label: "Set as Default", role: "default" },
-	{ label: "Set as Smol (Fast)", role: "smol" },
-	{ label: "Set as Slow (Thinking)", role: "slow" },
-	{ label: "Set as Plan (Architect)", role: "plan" },
-];
+const MENU_ACTIONS: MenuAction[] = MODEL_ROLE_IDS.map(role => ({ label: `Set as ${MODEL_ROLES[role].name}`, role }));
 
 const ALL_TAB = "ALL";
 
@@ -76,10 +69,7 @@ export class ModelSelectorComponent extends Container {
 	private allModels: ModelItem[] = [];
 	private filteredModels: ModelItem[] = [];
 	private selectedIndex: number = 0;
-	private defaultModel?: Model<any>;
-	private smolModel?: Model<any>;
-	private slowModel?: Model<any>;
-	private planModel?: Model<any>;
+	private roles: { [key in ModelRole]?: Model<any> } = {};
 	private settings: Settings;
 	private modelRegistry: ModelRegistry;
 	private onSelectCallback: (model: Model<any>, role: string) => void;
@@ -182,42 +172,16 @@ export class ModelSelectorComponent extends Container {
 	}
 
 	private _loadRoleModels(): void {
-		const roles = this.settings.get("modelRoles") as Record<string, string>;
 		const allModels = this.modelRegistry.getAll();
-
-		// Load default model
-		const defaultStr = roles.default;
-		if (defaultStr) {
-			const parsed = parseModelString(defaultStr);
+		for (const role of MODEL_ROLE_IDS) {
+			const modelId = this.settings.getModelRole(role);
+			if (!modelId) continue;
+			const parsed = parseModelString(modelId);
 			if (parsed) {
-				this.defaultModel = allModels.find(m => m.provider === parsed.provider && m.id === parsed.id);
-			}
-		}
-
-		// Load smol model
-		const smolStr = roles.smol;
-		if (smolStr) {
-			const parsed = parseModelString(smolStr);
-			if (parsed) {
-				this.smolModel = allModels.find(m => m.provider === parsed.provider && m.id === parsed.id);
-			}
-		}
-
-		// Load slow model
-		const slowStr = roles.slow;
-		if (slowStr) {
-			const parsed = parseModelString(slowStr);
-			if (parsed) {
-				this.slowModel = allModels.find(m => m.provider === parsed.provider && m.id === parsed.id);
-			}
-		}
-
-		// Load plan model
-		const planStr = roles.plan;
-		if (planStr) {
-			const parsed = parseModelString(planStr);
-			if (parsed) {
-				this.planModel = allModels.find(m => m.provider === parsed.provider && m.id === parsed.id);
+				const model = allModels.find(m => m.provider === parsed.provider && m.id === parsed.id);
+				if (model) {
+					this.roles[role] = model;
+				}
 			}
 		}
 	}
@@ -227,30 +191,25 @@ export class ModelSelectorComponent extends Container {
 		const mruOrder = this.settings.getStorage()?.getModelUsageOrder() ?? [];
 		const mruIndex = new Map(mruOrder.map((key, i) => [key, i]));
 
+		const modelRank = (model: ModelItem) => {
+			let i = 0;
+			while (i < MODEL_ROLE_IDS.length) {
+				const role = MODEL_ROLE_IDS[i];
+				if (this.roles[role] && modelsAreEqual(this.roles[role], model.model)) {
+					break;
+				}
+				i++;
+			}
+			return i;
+		};
+
 		models.sort((a, b) => {
 			const aKey = `${a.provider}/${a.id}`;
 			const bKey = `${b.provider}/${b.id}`;
 
-			// Tagged models first: default (0), smol (1), slow (2), plan (3), untagged (4)
-			const aTag = modelsAreEqual(this.defaultModel, a.model)
-				? 0
-				: modelsAreEqual(this.smolModel, a.model)
-					? 1
-					: modelsAreEqual(this.slowModel, a.model)
-						? 2
-						: modelsAreEqual(this.planModel, a.model)
-							? 3
-							: 4;
-			const bTag = modelsAreEqual(this.defaultModel, b.model)
-				? 0
-				: modelsAreEqual(this.smolModel, b.model)
-					? 1
-					: modelsAreEqual(this.slowModel, b.model)
-						? 2
-						: modelsAreEqual(this.planModel, b.model)
-							? 3
-							: 4;
-			if (aTag !== bTag) return aTag - bTag;
+			const aRank = modelRank(a);
+			const bRank = modelRank(b);
+			if (aRank !== bRank) return aRank - bRank;
 
 			// Then MRU order (models in mruIndex come before those not in it)
 			const aMru = mruIndex.get(aKey) ?? Number.MAX_SAFE_INTEGER;
@@ -392,17 +351,15 @@ export class ModelSelectorComponent extends Container {
 			if (!item) continue;
 
 			const isSelected = i === this.selectedIndex;
-			const isDefault = modelsAreEqual(this.defaultModel, item.model);
-			const isSmol = modelsAreEqual(this.smolModel, item.model);
-			const isSlow = modelsAreEqual(this.slowModel, item.model);
-			const isPlan = modelsAreEqual(this.planModel, item.model);
 
 			// Build role badges (inverted: color as background, black text)
 			const badges: string[] = [];
-			if (isDefault) badges.push(makeInvertedBadge("DEFAULT", "success"));
-			if (isSmol) badges.push(makeInvertedBadge("SMOL", "warning"));
-			if (isSlow) badges.push(makeInvertedBadge("SLOW", "accent"));
-			if (isPlan) badges.push(makeInvertedBadge("PLAN", "muted"));
+			for (const role of MODEL_ROLE_IDS) {
+				const { tag, color } = MODEL_ROLES[role];
+				if (modelsAreEqual(this.roles[role], item.model)) {
+					badges.push(makeInvertedBadge(tag, color));
+				}
+			}
 			const badgeText = badges.length > 0 ? ` ${badges.join(" ")}` : "";
 
 			let line = "";
@@ -533,7 +490,7 @@ export class ModelSelectorComponent extends Container {
 			if (selectedModel) {
 				if (this.temporaryOnly) {
 					// In temporary mode, skip menu and select directly
-					this.handleSelect(selectedModel.model, "temporary");
+					this.handleSelect(selectedModel.model, null);
 				} else {
 					this.openMenu();
 				}
@@ -585,10 +542,10 @@ export class ModelSelectorComponent extends Container {
 		}
 	}
 
-	private handleSelect(model: Model<any>, role: ModelRole): void {
+	private handleSelect(model: Model<any>, role: ModelRole | null): void {
 		// For temporary role, don't save to settings - just notify caller
-		if (role === "temporary") {
-			this.onSelectCallback(model, role);
+		if (role === null) {
+			this.onSelectCallback(model, "temporary");
 			return;
 		}
 
@@ -596,15 +553,7 @@ export class ModelSelectorComponent extends Container {
 		this.settings.setModelRole(role, `${model.provider}/${model.id}`);
 
 		// Update local state for UI
-		if (role === "default") {
-			this.defaultModel = model;
-		} else if (role === "smol") {
-			this.smolModel = model;
-		} else if (role === "slow") {
-			this.slowModel = model;
-		} else if (role === "plan") {
-			this.planModel = model;
-		}
+		this.roles[role] = model;
 
 		// Notify caller (for updating agent state if needed)
 		this.onSelectCallback(model, role);

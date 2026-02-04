@@ -171,7 +171,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 			if (values.length === 0) return true;
 			return values.every(entry => {
 				const normalized = entry.trim().toLowerCase();
-				return normalized === "default" || normalized === "pi/default" || normalized === "omp/default";
+				return normalized === "default" || normalized === "pi/default";
 			});
 		};
 

@@ -32,7 +32,7 @@ import { abortableSleep, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 import type { Rule } from "../capability/rule";
 import { getAgentDbPath } from "../config";
-import type { ModelRegistry } from "../config/model-registry";
+import { MODEL_ROLE_IDS, type ModelRegistry, type ModelRole } from "../config/model-registry";
 import { parseModelString } from "../config/model-resolver";
 import {
 	expandPromptTemplate,
@@ -1014,7 +1014,7 @@ export class AgentSession {
 		this._planReferenceSent = true;
 	}
 
-	resolveRoleModel(role: string): Model<any> | undefined {
+	resolveRoleModel(role: ModelRole): Model<any> | undefined {
 		return this._resolveRoleModel(role, this._modelRegistry.getAvailable(), this.model);
 	}
 
@@ -2535,7 +2535,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 	}
 
 	private _resolveRoleModel(
-		role: string,
+		role: ModelRole,
 		availableModels: Model<any>[],
 		currentModel: Model<any> | undefined,
 	): Model<any> | undefined {
@@ -2568,10 +2568,9 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		};
 
 		const currentModel = this.model;
-		addCandidate(this._resolveRoleModel("default", availableModels, currentModel));
-		addCandidate(this._resolveRoleModel("slow", availableModels, currentModel));
-		addCandidate(this._resolveRoleModel("small", availableModels, currentModel));
-		addCandidate(this._resolveRoleModel("smol", availableModels, currentModel));
+		for (const role of MODEL_ROLE_IDS) {
+			addCandidate(this._resolveRoleModel(role, availableModels, currentModel));
+		}
 
 		const sortedByContext = [...availableModels].sort((a, b) => b.contextWindow - a.contextWindow);
 		for (const model of sortedByContext) {

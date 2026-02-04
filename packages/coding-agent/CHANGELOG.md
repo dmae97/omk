@@ -1,6 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Refactored model role system to use centralized `MODEL_ROLES` registry with consistent tag, name, and color definitions
+- Simplified model role resolution to use `MODEL_ROLE_IDS` array instead of hardcoded role checks
+- Updated model selector to dynamically generate menu actions from `MODEL_ROLES` registry
+
+### Removed
+
+- Removed support for `omp/` model role prefix; use `pi/` prefix instead
 
 ## [10.6.0] - 2026-02-04
 ### Breaking Changes
