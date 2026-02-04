@@ -47,6 +47,7 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 	public readonly label = "Bash";
 	public readonly description: string;
 	public readonly parameters = bashSchema;
+	public readonly concurrency = "exclusive";
 
 	private readonly session: ToolSession;
 

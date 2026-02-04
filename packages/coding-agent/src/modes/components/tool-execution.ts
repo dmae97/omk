@@ -17,7 +17,6 @@ import type { Theme } from "../../modes/theme/theme";
 import { theme } from "../../modes/theme/theme";
 import { computeEditDiff, computePatchDiff, type EditDiffError, type EditDiffResult } from "../../patch";
 import { BASH_DEFAULT_PREVIEW_LINES } from "../../tools/bash";
-import { PYTHON_DEFAULT_PREVIEW_LINES } from "../../tools/python";
 import {
 	formatArgsInline,
 	JSON_TREE_MAX_DEPTH_COLLAPSED,
@@ -28,12 +27,12 @@ import {
 	JSON_TREE_SCALAR_LEN_EXPANDED,
 	renderJsonTreeLines,
 } from "../../tools/json-tree";
+import { PYTHON_DEFAULT_PREVIEW_LINES } from "../../tools/python";
 import { formatExpandHint, truncateToWidth } from "../../tools/render-utils";
 import { toolRenderers } from "../../tools/renderers";
 import { renderStatusLine } from "../../tui";
 import { convertToPng } from "../../utils/image-convert";
 import { renderDiff } from "./diff";
-
 
 export interface ToolExecutionOptions {
 	showImages?: boolean; // default: true (only used if terminal supports images)

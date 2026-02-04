@@ -203,6 +203,7 @@ export class EditTool implements AgentTool<TInput> {
 	public readonly name = "edit";
 	public readonly label = "Edit";
 	public readonly nonAbortable = true;
+	public readonly concurrency = "exclusive";
 
 	private readonly session: ToolSession;
 	private readonly allowFuzzy: boolean;

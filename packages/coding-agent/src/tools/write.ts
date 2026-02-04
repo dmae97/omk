@@ -72,6 +72,7 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 	public readonly description: string;
 	public readonly parameters = writeSchema;
 	public readonly nonAbortable = true;
+	public readonly concurrency = "exclusive";
 
 	private readonly session: ToolSession;
 	private readonly writethrough: WritethroughCallback;

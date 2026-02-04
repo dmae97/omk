@@ -146,6 +146,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 	public readonly label = "Python";
 	public readonly description: string;
 	public readonly parameters = pythonSchema;
+	public readonly concurrency = "exclusive";
 
 	private readonly session: ToolSession | null;
 	private readonly proxyExecutor?: PythonProxyExecutor;

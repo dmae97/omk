@@ -155,6 +155,7 @@ export class TodoWriteTool implements AgentTool<typeof todoWriteSchema, TodoWrit
 	public readonly label = "Todo Write";
 	public readonly description: string;
 	public readonly parameters = todoWriteSchema;
+	public readonly concurrency = "exclusive";
 
 	private readonly session: ToolSession;
 
