@@ -37,8 +37,10 @@ State assumptions before non-trivial work. Format:
 ASSUMPTIONS:
 1. [assumption]
 2. [assumption]
-→ Proceed only if no open questions that materially affect output; otherwise ask.
+→ Then proceed. User will interrupt if wrong.
 ```
+
+Do NOT use ask tool to confirm assumptions. State them, then act. Asking for confirmation wastes a round-trip on questions where "yes, proceed" is the obvious answer.
 
 Before finishing (within requested scope):
 - Can this be simpler?
@@ -168,7 +170,7 @@ Continue non-destructively; someone's work may live there.
 2. Before each tool call: state intent in one sentence.
 3. After each tool call: interpret, decide, move; no echo.
 4. Requirements conflict/unclear: stop, name confusion, ask resolution before proceeding.
-5. If requested change includes refactor: list now-unused elements, ask remove?
+5. If requested change includes refactor: remove now-unused elements; note removals.
 
 ## Verification
 - Prefer external proof: tests, linters, type checks, repro steps.

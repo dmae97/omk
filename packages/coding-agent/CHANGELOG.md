@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Changed `ask` tool to require `questions` array parameter; single-question mode with `question`, `options`, `multi`, and `recommended` parameters is no longer supported
@@ -15,6 +14,10 @@
 
 ### Changed
 
+- Updated system prompt guidance to state assumptions and proceed without asking for confirmation, reducing unnecessary round-trips
+- Tightened `ask` tool conditions to require multiple approaches with significantly different tradeoffs before prompting user
+- Strengthened `ask` tool guidance to default to action and only ask when genuinely blocked by decisions with materially different outcomes
+- Changed refactor workflow to automatically remove now-unused elements and note removals instead of asking for confirmation
 - Enforced exclusive concurrency mode for all file-modifying tools (edit, write, bash, python, ssh, todo-write) to prevent concurrent execution conflicts
 - Updated `ask` tool guidance to prioritize proactive problem-solving and default to action, asking only when truly blocked by decisions that materially change scope or behavior
 - Changed Python kernel initialization to require shared gateway mode; local gateway startup has been removed

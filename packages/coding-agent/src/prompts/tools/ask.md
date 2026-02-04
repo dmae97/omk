@@ -3,10 +3,7 @@
 Ask user when you need clarification or input during task execution.
 
 <conditions>
-- Clarify ambiguous requirements before implementing
-- Get decisions on implementation approach when multiple valid options exist
-- Request preferences (styling, naming conventions, architecture patterns)
-- Offer meaningful choices about task direction
+- Multiple approaches exist with significantly different tradeoffs user should weigh
 </conditions>
 
 <instruction>
@@ -24,11 +21,11 @@ Returns selected option(s) as text. For multi-part questions, returns map of que
 </important>
 
 <critical>
-**Be proactive and default to action. Ask only when you are truly blocked.**
+**Default to action. Do NOT ask unless you are genuinely blocked and user preference is required to avoid a wrong outcome.**
 1. **Resolve ambiguity yourself** using repo conventions, existing patterns, and reasonable defaults.
-2. **Try to find answers** in the codebase, configs, docs, or history before asking.
-3. **If multiple choices are acceptable**, pick the most conservative/standard option and state it.
-4. **Ask only for decisions that materially change scope, behavior, or risk.**
+2. **Exhaust existing sources** (code, configs, docs, history) before asking anything.
+3. **If multiple choices are acceptable**, pick the most conservative/standard option and proceed; state the choice.
+4. **Only ask when options have materially different tradeoffs and the user must decide.**
 **Do NOT include "Other" option in your options array.** UI automatically adds "Other (type your own)" to every question; adding your own creates duplicates.
 </critical>
 
