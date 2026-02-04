@@ -10,7 +10,7 @@ import { logger, untilAborted } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
 import Ajv, { type ValidateFunction } from "ajv";
 import type { ModelRegistry } from "../config/model-registry";
-import { parseModelPattern } from "../config/model-resolver";
+import { resolveModelOverride } from "../config/model-resolver";
 import { type PromptTemplate, renderPromptTemplate } from "../config/prompt-templates";
 import { Settings } from "../config/settings";
 import type { CustomTool } from "../extensibility/custom-tools/types";
@@ -126,38 +126,6 @@ function getReportFindingKey(value: unknown): string | null {
 		return null;
 	}
 	return `${filePath}:${lineStart}:${lineEnd}:${priority ?? ""}:${title}`;
-}
-
-function resolveModelOverride(
-	modelPatterns: string[],
-	modelRegistry: ModelRegistry,
-	settings?: Settings,
-): { model?: Model<Api>; thinkingLevel?: ThinkingLevel } {
-	if (modelPatterns.length === 0) return {};
-	const matchPreferences = { usageOrder: settings?.getStorage()?.getModelUsageOrder() };
-	for (const pattern of modelPatterns) {
-		const normalized = pattern.trim().toLowerCase();
-		if (!normalized || normalized === "default" || normalized === "pi/default") {
-			continue;
-		}
-		let effectivePattern = pattern;
-		if (normalized.startsWith("pi/")) {
-			const role = pattern.slice(3);
-			const configured = settings?.getModelRole(role);
-			if (configured) {
-				effectivePattern = configured;
-			}
-		}
-		const { model, thinkingLevel } = parseModelPattern(
-			effectivePattern,
-			modelRegistry.getAvailable(),
-			matchPreferences,
-		);
-		if (model) {
-			return { model, thinkingLevel: thinkingLevel !== "off" ? thinkingLevel : undefined };
-		}
-	}
-	return {};
 }
 
 function buildSubmitResultToolChoice(model?: Model<Api>): ToolChoice | undefined {

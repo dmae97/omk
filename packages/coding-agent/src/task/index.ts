@@ -20,6 +20,7 @@ import type { Usage } from "@oh-my-pi/pi-ai";
 import { $ } from "bun";
 import { nanoid } from "nanoid";
 import type { ToolSession } from "..";
+import { isDefaultModelAlias } from "../config/model-resolver";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { Theme } from "../modes/theme/theme";
 import planModeSubagentPrompt from "../prompts/system/plan-mode-subagent.md" with { type: "text" };
@@ -164,16 +165,6 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 		const { agents, projectAgentsDir } = await discoverAgents(this.session.cwd);
 		const { agent: agentName, context, schema: outputSchema, isolated } = params;
 		const isIsolated = isolated === true;
-
-		const isDefaultModelAlias = (value: string | string[] | undefined): boolean => {
-			if (!value) return true;
-			const values = Array.isArray(value) ? value : [value];
-			if (values.length === 0) return true;
-			return values.every(entry => {
-				const normalized = entry.trim().toLowerCase();
-				return normalized === "default" || normalized === "pi/default";
-			});
-		};
 
 		// Validate agent exists
 		const agent = getAgent(agents, agentName);

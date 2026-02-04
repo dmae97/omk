@@ -649,7 +649,7 @@ export class InputController {
 
 	async cycleRoleModel(options?: { temporary?: boolean }): Promise<void> {
 		try {
-			const roleOrder = ["slow", "default", "smol"];
+			const roleOrder = ["slow", "default", "smol"] as const;
 			const result = await this.ctx.session.cycleRoleModels(roleOrder, options);
 			if (!result) {
 				this.ctx.showStatus("Only one role model available");

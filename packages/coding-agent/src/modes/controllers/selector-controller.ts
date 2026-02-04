@@ -3,6 +3,7 @@ import type { OAuthProvider } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Input, Loader, Spacer, Text } from "@oh-my-pi/pi-tui";
 import { getAgentDbPath } from "../../config";
+import { MODEL_ROLES } from "../../config/model-registry";
 import { settings } from "../../config/settings";
 import { DebugSelectorComponent } from "../../debug";
 import { disableProvider, enableProvider } from "../../discovery";
@@ -277,7 +278,7 @@ export class SelectorController {
 				this.ctx.session.scopedModels,
 				async (model, role) => {
 					try {
-						if (role === "temporary") {
+						if (role === null) {
 							// Temporary: update agent state but don't persist to settings
 							await this.ctx.session.setModelTemporary(model);
 							this.ctx.statusLine.invalidate();
@@ -294,7 +295,8 @@ export class SelectorController {
 							// Don't call done() - selector stays open for role assignment
 						} else {
 							// Other roles (smol, slow): just update settings, not current model
-							const roleLabel = role === "smol" ? "Smol" : role;
+							const roleInfo = MODEL_ROLES[role];
+							const roleLabel = roleInfo?.name ?? role;
 							this.ctx.showStatus(`${roleLabel} model: ${model.id}`);
 							// Don't call done() - selector stays open
 						}

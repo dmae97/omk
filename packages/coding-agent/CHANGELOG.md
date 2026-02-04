@@ -1,8 +1,18 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Added `commit` model role for dedicated commit message generation
+- Exported `resolveModelOverride` function from model resolver for external use
+
 ### Changed
 
+- Updated model role resolution to accept optional `roleOrder` parameter for custom role priority
+- Made `tag` and `color` properties optional in `ModelRoleInfo` interface
+- Updated model selector to safely handle roles without tag or color definitions
+- Refactored role label display to use centralized `MODEL_ROLES` registry instead of hardcoded strings
 - Refactored model role system to use centralized `MODEL_ROLES` registry with consistent tag, name, and color definitions
 - Simplified model role resolution to use `MODEL_ROLE_IDS` array instead of hardcoded role checks
 - Updated model selector to dynamically generate menu actions from `MODEL_ROLES` registry

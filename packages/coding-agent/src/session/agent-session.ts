@@ -1854,7 +1854,7 @@ export class AgentSession {
 	 * @param options - Optional settings: `temporary` to not persist to settings
 	 */
 	async cycleRoleModels(
-		roleOrder: ModelRole[],
+		roleOrder: readonly ModelRole[],
 		options?: { temporary?: boolean },
 	): Promise<RoleModelCycleResult | undefined> {
 		const availableModels = this._modelRegistry.getAvailable();

@@ -18,12 +18,12 @@ import { YAML } from "bun";
 import type { ThemeColor } from "../modes/theme/theme";
 import type { AuthStorage } from "../session/auth-storage";
 
-export type ModelRole = "default" | "smol" | "slow" | "plan";
+export type ModelRole = "default" | "smol" | "slow" | "plan" | "commit";
 
 export interface ModelRoleInfo {
-	tag: string;
+	tag?: string;
 	name: string;
-	color: ThemeColor;
+	color?: ThemeColor;
 }
 
 export const MODEL_ROLES: Record<ModelRole, ModelRoleInfo> = {
@@ -31,9 +31,10 @@ export const MODEL_ROLES: Record<ModelRole, ModelRoleInfo> = {
 	smol: { tag: "SMOL", name: "Fast", color: "warning" },
 	slow: { tag: "SLOW", name: "Thinking", color: "accent" },
 	plan: { tag: "PLAN", name: "Architect", color: "muted" },
+	commit: { name: "Commit" },
 };
 
-export const MODEL_ROLE_IDS: ModelRole[] = ["default", "smol", "slow", "plan"];
+export const MODEL_ROLE_IDS: ModelRole[] = ["default", "smol", "slow", "plan", "commit"];
 
 const Ajv = (AjvModule as any).default || AjvModule;
 

@@ -356,8 +356,8 @@ export class ModelSelectorComponent extends Container {
 			const badges: string[] = [];
 			for (const role of MODEL_ROLE_IDS) {
 				const { tag, color } = MODEL_ROLES[role];
-				if (modelsAreEqual(this.roles[role], item.model)) {
-					badges.push(makeInvertedBadge(tag, color));
+				if (tag && modelsAreEqual(this.roles[role], item.model)) {
+					badges.push(makeInvertedBadge(tag, color ?? "success"));
 				}
 			}
 			const badgeText = badges.length > 0 ? ` ${badges.join(" ")}` : "";
