@@ -73,6 +73,17 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "5", label: "5 retries" },
 		{ value: "10", label: "10 retries" },
 	],
+	// Task max concurrency
+	"task.maxConcurrency": () => [
+		{ value: "0", label: "Unlimited" },
+		{ value: "1", label: "1 task" },
+		{ value: "2", label: "2 tasks" },
+		{ value: "4", label: "4 tasks" },
+		{ value: "8", label: "8 tasks" },
+		{ value: "16", label: "16 tasks" },
+		{ value: "32", label: "32 tasks" },
+		{ value: "64", label: "64 tasks" },
+	],
 	// Todo max reminders
 	"todo.reminders.max": () => [
 		{ value: "1", label: "1 reminder" },

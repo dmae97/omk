@@ -19,9 +19,6 @@ function getEnv(name: string, defaultValue: number): number {
 	return defaultValue;
 }
 
-/** Maximum concurrent tasks */
-export const MAX_CONCURRENCY = getEnv("OMP_TASK_MAX_CONCURRENCY", 16);
-
 /** Maximum output bytes per agent */
 export const MAX_OUTPUT_BYTES = getEnv("OMP_TASK_MAX_OUTPUT_BYTES", 500_000);
 

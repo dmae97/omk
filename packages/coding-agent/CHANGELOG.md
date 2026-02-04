@@ -1,6 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Added `task.maxConcurrency` setting to control concurrent limit for subagents (default: 32)
+- Added UI options for task concurrency configuration with presets from unlimited to 64 tasks
+
+### Changed
+
+- Changed task concurrency from hardcoded constant to configurable setting via `task.maxConcurrency`
+- Changed concurrency limit calculation to support unlimited concurrency when set to 0
+
 ### Removed
 
 - Removed `MAX_PARALLEL_TASKS` constant and associated task count validation limit

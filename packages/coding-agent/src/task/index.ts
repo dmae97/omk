@@ -37,7 +37,6 @@ import { renderCall, renderResult } from "./render";
 import { renderTemplate } from "./template";
 import {
 	type AgentProgress,
-	MAX_CONCURRENCY,
 	type SingleResult,
 	type TaskParams,
 	type TaskToolDetails,
@@ -109,12 +108,12 @@ export { taskSchema } from "./types";
 /**
  * Build dynamic tool description listing available agents.
  */
-async function buildDescription(cwd: string): Promise<string> {
+async function buildDescription(cwd: string, maxConcurrency: number): Promise<string> {
 	const { agents } = await discoverAgents(cwd);
 
 	return renderPromptTemplate(taskDescriptionTemplate, {
 		agents,
-		MAX_CONCURRENCY,
+		MAX_CONCURRENCY: maxConcurrency,
 	});
 }
 
@@ -149,7 +148,8 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 	 * Create a TaskTool instance with async agent discovery.
 	 */
 	public static async create(session: ToolSession): Promise<TaskTool> {
-		const description = await buildDescription(session.cwd);
+		const maxConcurrency = session.settings.get("task.maxConcurrency");
+		const description = await buildDescription(session.cwd, maxConcurrency);
 		return new TaskTool(session, description);
 	}
 
@@ -163,6 +163,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 		const { agents, projectAgentsDir } = await discoverAgents(this.session.cwd);
 		const { agent: agentName, context, schema: outputSchema, isolated } = params;
 		const isIsolated = isolated === true;
+		const maxConcurrency = this.session.settings.get("task.maxConcurrency");
 
 		// Validate agent exists
 		const agent = getAgent(agents, agentName);
@@ -558,7 +559,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 			// Execute in parallel with concurrency limit
 			const { results: partialResults, aborted } = await mapWithConcurrencyLimit(
 				tasksWithSkills,
-				MAX_CONCURRENCY,
+				maxConcurrency,
 				runTask,
 				signal,
 			);

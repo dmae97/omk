@@ -398,6 +398,20 @@ export const SETTINGS_SCHEMA = {
 	},
 
 	// ─────────────────────────────────────────────────────────────────────────
+	// Task tool settings
+	// ─────────────────────────────────────────────────────────────────────────
+	"task.maxConcurrency": {
+		type: "number",
+		default: 32,
+		ui: {
+			tab: "tools",
+			label: "Task max concurrency",
+			description: "Concurrent limit for subagents",
+			submenu: true,
+		},
+	},
+
+	// ─────────────────────────────────────────────────────────────────────────
 	// Startup settings
 	// ─────────────────────────────────────────────────────────────────────────
 	"startup.quiet": {

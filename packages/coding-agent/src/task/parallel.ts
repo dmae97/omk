@@ -1,8 +1,6 @@
 /**
  * Parallel execution with concurrency control.
  */
-import { MAX_CONCURRENCY } from "./types";
-
 /** Result of parallel execution */
 export interface ParallelResult<R> {
 	/** Results array - undefined entries indicate tasks that were skipped due to abort */
@@ -31,7 +29,9 @@ export async function mapWithConcurrencyLimit<T, R>(
 	fn: (item: T, index: number) => Promise<R>,
 	signal?: AbortSignal,
 ): Promise<ParallelResult<R>> {
-	const limit = Math.max(1, Math.min(concurrency, items.length, MAX_CONCURRENCY));
+	const normalizedConcurrency = Number.isFinite(concurrency) ? Math.floor(concurrency) : items.length;
+	const effectiveConcurrency = normalizedConcurrency > 0 ? normalizedConcurrency : items.length;
+	const limit = Math.max(1, Math.min(effectiveConcurrency, items.length));
 	const results: (R | undefined)[] = new Array(items.length);
 	let nextIndex = 0;
 
