@@ -17,6 +17,7 @@ import { time } from "../utils/timings";
 import { WebSearchTool } from "../web/search";
 import { AskTool } from "./ask";
 import { BashTool } from "./bash";
+import { BrowserTool } from "./browser";
 import { CalculatorTool } from "./calculator";
 import { ExitPlanModeTool } from "./exit-plan-mode";
 import { FetchTool } from "./fetch";
@@ -69,6 +70,7 @@ export {
 } from "../web/search";
 export { AskTool, type AskToolDetails } from "./ask";
 export { BashTool, type BashToolDetails, type BashToolOptions } from "./bash";
+export { BrowserTool, type BrowserToolDetails } from "./browser";
 export { CalculatorTool, type CalculatorToolDetails } from "./calculator";
 export { type ExitPlanModeDetails, ExitPlanModeTool } from "./exit-plan-mode";
 export { FetchTool, type FetchToolDetails } from "./fetch";
@@ -171,6 +173,7 @@ export const BUILTIN_TOOLS: Record<string, ToolFactory> = {
 	lsp: LspTool.createIf,
 	notebook: s => new NotebookTool(s),
 	read: s => new ReadTool(s),
+	browser: s => new BrowserTool(s),
 	task: TaskTool.create,
 	todo_write: s => new TodoWriteTool(s),
 	fetch: s => new FetchTool(s),
@@ -283,6 +286,7 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 		if (name === "web_search") return session.settings.get("web_search.enabled");
 		if (name === "lsp") return session.settings.get("lsp.enabled");
 		if (name === "calc") return session.settings.get("calc.enabled");
+		if (name === "browser") return session.settings.get("browser.enabled");
 		return true;
 	};
 	if (includeSubmitResult && requestedTools && !requestedTools.includes("submit_result")) {

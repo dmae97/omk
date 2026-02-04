@@ -84,7 +84,7 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 	}
 
 	/**
-	 * Forward Puppeteer mode changes when available.
+	 * Forward browser mode changes when available.
 	 */
 	restartForModeChange(): Promise<void> {
 		const target = this.tool as { restartForModeChange?: () => Promise<void> };

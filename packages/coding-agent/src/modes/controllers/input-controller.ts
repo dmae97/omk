@@ -5,6 +5,7 @@ import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import { readImageFromClipboard } from "@oh-my-pi/pi-natives";
 import { nanoid } from "nanoid";
+import type { SettingPath, SettingValue } from "../../config/settings";
 import { settings } from "../../config/settings";
 import { theme } from "../../modes/theme/theme";
 import type { InteractiveModeContext } from "../../modes/types";
@@ -212,6 +213,43 @@ export class InputController {
 			}
 			if (text === "/share") {
 				await this.ctx.handleShareCommand();
+				this.ctx.editor.setText("");
+				return;
+			}
+			if (text === "/browser" || text.startsWith("/browser ")) {
+				const arg = text.slice(8).trim().toLowerCase();
+				const current = settings.get("browser.headless" as SettingPath) as boolean;
+				let next = current;
+				if (!(settings.get("browser.enabled" as SettingPath) as boolean)) {
+					this.ctx.showWarning("Browser tool is disabled (enable in settings)");
+					this.ctx.editor.setText("");
+					return;
+				}
+				if (!arg) {
+					next = !current;
+				} else if (["headless", "hidden"].includes(arg)) {
+					next = true;
+				} else if (["visible", "show", "headful"].includes(arg)) {
+					next = false;
+				} else {
+					this.ctx.showStatus("Usage: /browser [headless|visible]");
+					this.ctx.editor.setText("");
+					return;
+				}
+				settings.set("browser.headless" as SettingPath, next as SettingValue<SettingPath>);
+				const tool = this.ctx.session.getToolByName("browser");
+				if (tool && "restartForModeChange" in tool) {
+					try {
+						await (tool as { restartForModeChange: () => Promise<void> }).restartForModeChange();
+					} catch (error) {
+						this.ctx.showWarning(
+							`Failed to restart browser: ${error instanceof Error ? error.message : String(error)}`,
+						);
+						this.ctx.editor.setText("");
+						return;
+					}
+				}
+				this.ctx.showStatus(`Browser mode: ${next ? "headless" : "visible"}`);
 				this.ctx.editor.setText("");
 				return;
 			}

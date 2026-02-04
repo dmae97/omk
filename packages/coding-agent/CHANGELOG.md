@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Changed `ask` tool to require `questions` array parameter; single-question mode with `question`, `options`, `multi`, and `recommended` parameters is no longer supported
@@ -8,6 +9,9 @@
 
 ### Added
 
+- Added browser tool powered by Ulixee Hero with support for navigation, DOM interaction, screenshots, and readable content extraction
+- Added `/browser` command to toggle browser headless vs visible mode in interactive sessions
+- Added `browser.enabled` and `browser.headless` settings to control browser automation behavior
 - Added Python prelude caching to improve startup performance by storing compiled prelude helpers and module metadata
 - Added `OMP_DEBUG_STARTUP` environment variable for conditional startup performance debugging output
 - Added autonomous memory system with storage, memory tools, and context injection

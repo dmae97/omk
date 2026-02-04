@@ -208,6 +208,7 @@ export class InteractiveMode implements InteractiveModeContext {
 			{ name: "export", description: "Export session to HTML file" },
 			{ name: "dump", description: "Copy session transcript to clipboard" },
 			{ name: "share", description: "Share session as a secret GitHub gist" },
+			{ name: "browser", description: "Toggle browser headless vs visible mode" },
 			{ name: "copy", description: "Copy last agent message to clipboard" },
 			{ name: "session", description: "Show session info and stats" },
 			{ name: "usage", description: "Show provider usage and limits" },

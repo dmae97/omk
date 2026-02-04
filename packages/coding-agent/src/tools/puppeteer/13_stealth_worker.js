@@ -1,0 +1,74 @@
+const patchWorkerConstructor = (name, OriginalWorker) => {
+	if (typeof OriginalWorker !== "function") return;
+
+	const buildWrappedUrl = (scriptURL, options) => {
+		const ua = navigator.userAgent;
+		const platform = navigator.platform;
+		const uaData = navigator.userAgentData && typeof navigator.userAgentData.toJSON === "function"
+			? navigator.userAgentData.toJSON()
+			: navigator.userAgentData;
+
+		const preludeLines = [
+			"try {",
+			`const ua = ${JSON.stringify(ua)};`,
+			`const platform = ${JSON.stringify(platform)};`,
+			"Object_defineProperty(self.navigator, 'userAgent', { get: () => ua, configurable: true });",
+			"Object_defineProperty(self.navigator, 'platform', { get: () => platform, configurable: true });",
+		];
+
+		if (uaData) {
+			preludeLines.push(`const uaData = ${JSON.stringify(uaData)};`);
+			preludeLines.push(
+				"Object_defineProperty(self.navigator, 'userAgentData', { get: () => uaData, configurable: true });",
+			);
+		}
+
+		preludeLines.push("} catch (e) {};");
+		const prelude = preludeLines.join("\n");
+		const importLine = options?.type === "module"
+			? `import ${JSON.stringify(String(scriptURL))};`
+			: `importScripts(${JSON.stringify(String(scriptURL))});`;
+		const blob = new Window_Blob([prelude, "\n", importLine], { type: "application/javascript" });
+		const url = URL.createObjectURL(blob);
+		return url;
+	};
+
+	const handler = {
+		construct(target, args) {
+			try {
+				const scriptURL = args?.[0];
+				const options = args?.[1];
+				if (!scriptURL) {
+					return new target(...(args || []));
+				}
+				const wrappedUrl = buildWrappedUrl(scriptURL, options);
+				const worker = new target(wrappedUrl, options);
+				URL.revokeObjectURL(wrappedUrl);
+				return worker;
+			} catch {
+				return new target(...(args || []));
+			}
+		},
+		apply(target, thisArg, args) {
+			return Reflect.apply(target, thisArg, args || []);
+		},
+	};
+
+	const proxied = new Window_Proxy(OriginalWorker, handler);
+	Object_defineProperty(window, name, {
+		value: proxied,
+		writable: true,
+		configurable: true,
+	});
+	Object_defineProperty(window[name], "toString", {
+		value: Function_toString.bind(OriginalWorker),
+		writable: false,
+		configurable: true,
+		enumerable: false,
+	});
+};
+
+try {
+	patchWorkerConstructor("Worker", window.Worker);
+	patchWorkerConstructor("SharedWorker", window.SharedWorker);
+} catch {}

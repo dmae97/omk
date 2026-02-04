@@ -1,0 +1,81 @@
+const addContentWindowProxy = (iframe) => {
+	const contentWindowProxy = {
+		get(target, key) {
+			if (key === "self") return this;
+			if (key === "frameElement") return iframe;
+			if (key === "0") return undefined;
+			return Reflect.get(target, key);
+		},
+	};
+
+	if (!iframe.contentWindow) {
+		const proxy = new Window_Proxy(window, contentWindowProxy);
+		Object_defineProperty(iframe, "contentWindow", {
+			get() {
+				return proxy;
+			},
+			set(newValue) {
+				return newValue;
+			},
+			enumerable: true,
+			configurable: false,
+		});
+	}
+};
+
+const handleIframeCreation = (target, thisArg, args) => {
+	const iframe = target.apply(thisArg, args);
+	const originalIframe = iframe;
+	const originalSrcdoc = originalIframe.srcdoc;
+
+	Object_defineProperty(iframe, "srcdoc", {
+		configurable: true,
+		get() {
+			return originalSrcdoc;
+		},
+		set(newValue) {
+			addContentWindowProxy(this);
+			Object_defineProperty(iframe, "srcdoc", {
+				configurable: false,
+				writable: false,
+				value: originalSrcdoc,
+			});
+			originalIframe.srcdoc = newValue;
+		},
+	});
+
+	return iframe;
+};
+
+const addIframeCreationSniffer = () => {
+	const originalCreateElement = document.createElement;
+	const handler = {
+		apply(target, thisArg, args) {
+			const isIframe = args && args.length && `${args[0]}`.toLowerCase() === "iframe";
+			if (!isIframe) {
+				return target.apply(thisArg, args);
+			}
+			return handleIframeCreation(target, thisArg, args);
+		},
+		get(target, key) {
+			return Reflect.get(target, key);
+		},
+	};
+
+	const proxied = new Window_Proxy(originalCreateElement, handler);
+	Object_defineProperty(document, "createElement", {
+		value: proxied,
+		writable: true,
+		configurable: true,
+	});
+	Object_defineProperty(document.createElement, "toString", {
+		value: Function_toString.bind(originalCreateElement),
+		writable: false,
+		configurable: true,
+		enumerable: false,
+	});
+};
+
+try {
+	addIframeCreationSniffer();
+} catch {}

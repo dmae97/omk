@@ -1,6 +1,19 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Updated @anthropic-ai/sdk to ^0.72.1
+- Updated @aws-sdk/client-bedrock-runtime to ^3.982.0
+- Updated @google/genai to ^1.39.0
+- Updated @smithy/node-http-handler to ^4.4.9
+- Updated openai to ^6.17.0
+- Updated @types/node to ^25.2.0
+
+### Removed
+
+- Removed proxy-agent dependency
+- Removed undici dependency
 
 ## [9.4.0] - 2026-01-31
 ### Added

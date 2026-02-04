@@ -239,6 +239,7 @@ export {
 // Tools (detail types and utilities)
 export {
 	type BashToolDetails,
+	type BrowserToolDetails,
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
 	type FindOperations,

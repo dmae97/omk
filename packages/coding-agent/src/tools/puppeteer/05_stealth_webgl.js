@@ -1,0 +1,71 @@
+const vendors = ["Intel Inc.", "NVIDIA Corporation", "AMD"];
+const renderers = [
+  "Intel(R) Iris(TM) Plus Graphics 640",
+  "Intel(R) HD Graphics 630",
+  "NVIDIA GeForce GTX 1050 Ti",
+  "NVIDIA GeForce GTX 1060",
+  "NVIDIA GeForce RTX 3060",
+  "AMD Radeon RX 580",
+  "AMD Radeon Pro 560",
+];
+const vendor = vendors[Math_floor(Math_random() * vendors.length)];
+const renderer = renderers[Math_floor(Math_random() * renderers.length)];
+
+const getParameterProxyHandler = {
+  apply(target, thisArg, args) {
+    const param = args[0];
+    // UNMASKED_VENDOR_WEBGL = 0x9245
+    if (param === 0x9245) return vendor;
+    // UNMASKED_RENDERER_WEBGL = 0x9246
+    if (param === 0x9246) return renderer;
+    return target.apply(thisArg, args);
+  },
+};
+
+// Hook WebGL contexts
+const hookWebGL = (proto) => {
+  const originalGetParameter = proto.getParameter;
+  Object_defineProperty(proto, "getParameter", {
+    value: new Window_Proxy(originalGetParameter, getParameterProxyHandler),
+    writable: true,
+    configurable: true,
+    enumerable: true,
+  });
+};
+
+if (window.WebGLRenderingContext) {
+  hookWebGL(WebGLRenderingContext.prototype);
+}
+if (window.WebGL2RenderingContext) {
+  hookWebGL(WebGL2RenderingContext.prototype);
+}
+
+// Also mask getShaderPrecisionFormat for software rendering detection
+const precisionMask = (proto) => {
+  const original = proto.getShaderPrecisionFormat;
+  if (!original) return;
+  Object_defineProperty(proto, "getShaderPrecisionFormat", {
+    value: function (shaderType, precisionType) {
+      const result = original.call(this, shaderType, precisionType);
+      if (result) {
+        // Hardware typically has higher precision than SwiftShader defaults
+        return {
+          precision: Math_max(result.precision, 23),
+          rangeMin: Math_min(result.rangeMin, 127),
+          rangeMax: Math_max(result.rangeMax, 127),
+        };
+      }
+      return result;
+    },
+    writable: true,
+    configurable: true,
+    enumerable: true,
+  });
+};
+
+if (window.WebGLRenderingContext) {
+  precisionMask(WebGLRenderingContext.prototype);
+}
+if (window.WebGL2RenderingContext) {
+  precisionMask(WebGL2RenderingContext.prototype);
+}

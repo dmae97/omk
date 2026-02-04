@@ -358,6 +358,24 @@ export const SETTINGS_SCHEMA = {
 			description: "Enable the calculator tool for basic calculations",
 		},
 	},
+	"browser.enabled": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "tools",
+			label: "Enable Browser",
+			description: "Enable the browser tool (Ulixee Hero)",
+		},
+	},
+	"browser.headless": {
+		type: "boolean",
+		default: true,
+		ui: {
+			tab: "tools",
+			label: "Browser headless",
+			description: "Launch browser in headless mode (disable to show browser UI)",
+		},
+	},
 
 	// ─────────────────────────────────────────────────────────────────────────
 	// Startup settings

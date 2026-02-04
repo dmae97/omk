@@ -1,0 +1,40 @@
+const parseInput = (arg) => {
+	const [mime, codecStr] = arg.trim().split(";");
+	let codecs = [];
+	if (codecStr && codecStr.includes('codecs="')) {
+		codecs = codecStr
+			.trim()
+			.replace('codecs="', "")
+			.replace('"', "")
+			.trim()
+			.split(",")
+			.filter(Boolean)
+			.map(item => item.trim());
+	}
+	return { mime, codecStr, codecs };
+};
+
+const originalCanPlayType = HTMLMediaElement.prototype.canPlayType;
+Object_defineProperty(HTMLMediaElement.prototype, "canPlayType", {
+	value: new Window_Proxy(originalCanPlayType, {
+		apply(target, ctx, args) {
+			if (!args || !args.length) {
+				return target.apply(ctx, args);
+			}
+			const { mime, codecs } = parseInput(args[0]);
+			if (mime === "video/mp4" && codecs.includes("avc1.42E01E")) {
+				return "probably";
+			}
+			if (mime === "audio/x-m4a" && !codecs.length) {
+				return "maybe";
+			}
+			if (mime === "audio/aac" && !codecs.length) {
+				return "probably";
+			}
+			return target.apply(ctx, args);
+		},
+	}),
+	writable: true,
+	configurable: true,
+	enumerable: true,
+});
