@@ -360,7 +360,7 @@ export const SETTINGS_SCHEMA = {
 	},
 	"browser.enabled": {
 		type: "boolean",
-		default: false,
+		default: true,
 		ui: {
 			tab: "tools",
 			label: "Enable Browser",

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Enabled the browser tool by default
+
 ## [10.5.0] - 2026-02-04
 
 ### Breaking Changes
