@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Fixed glob search returning no results when all files are ignored by gitignore by automatically retrying without gitignore filtering
 
 ## [10.3.2] - 2026-02-03
 ### Added

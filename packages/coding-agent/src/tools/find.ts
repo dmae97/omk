@@ -286,8 +286,9 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				: undefined;
 			const timeoutSignal = AbortSignal.timeout(GLOB_TIMEOUT_MS);
 			const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
-			try {
-				const result = await untilAborted(combinedSignal, () =>
+
+			const doGlob = async (useGitignore: boolean) =>
+				untilAborted(combinedSignal, () =>
 					glob(
 						{
 							pattern: globPattern,
@@ -296,10 +297,18 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 							hidden: includeHidden,
 							maxResults: effectiveLimit,
 							sortByMtime: true,
+							gitignore: useGitignore,
 						},
 						onMatch,
 					),
 				);
+
+			try {
+				let result = await doGlob(true);
+				// If gitignore filtering yielded nothing, retry without it
+				if (result.matches.length === 0) {
+					result = await doGlob(false);
+				}
 				matches = result.matches;
 			} catch (error) {
 				if (error instanceof Error && error.name === "AbortError") {
