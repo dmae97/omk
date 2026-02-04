@@ -1,11 +1,11 @@
 /**
  * Web Search Types
  *
- * Unified types for web search responses across Anthropic and Perplexity providers.
+ * Unified types for web search responses across supported providers.
  */
 
 /** Supported web search providers */
-export type WebSearchProvider = "exa" | "anthropic" | "perplexity" | "gemini" | "codex";
+export type WebSearchProvider = "exa" | "jina" | "anthropic" | "perplexity" | "gemini" | "codex";
 
 /** Source returned by search (all providers) */
 export interface WebSearchSource {

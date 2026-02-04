@@ -1,7 +1,7 @@
 /**
  * Unified Web Search Tool
  *
- * Single tool supporting Anthropic, Perplexity, and Exa providers with
+ * Single tool supporting Anthropic, Perplexity, Exa, and Jina providers with
  * provider-specific parameters exposed conditionally.
  *
  * When EXA_API_KEY is available, additional specialized tools are exposed:
@@ -27,6 +27,7 @@ import { formatAge } from "../../tools/render-utils";
 import { findAnthropicAuth } from "./auth";
 import { searchAnthropic } from "./providers/anthropic";
 import { searchExa } from "./providers/exa";
+import { findApiKey as findJinaKey, searchJina } from "./providers/jina";
 import { findApiKey as findPerplexityKey, searchPerplexity } from "./providers/perplexity";
 import { renderWebSearchCall, renderWebSearchResult, type WebSearchRenderDetails } from "./render";
 import type { WebSearchProvider, WebSearchResponse } from "./types";
@@ -36,7 +37,7 @@ import { WebSearchProviderError } from "./types";
 export const webSearchSchema = Type.Object({
 	query: Type.String({ description: "Search query" }),
 	provider: Type.Optional(
-		StringEnum(["auto", "exa", "anthropic", "perplexity"], {
+		StringEnum(["auto", "exa", "jina", "anthropic", "perplexity"], {
 			description: "Search provider (default: auto)",
 		}),
 	),
@@ -50,7 +51,7 @@ export const webSearchSchema = Type.Object({
 
 export type WebSearchParams = {
 	query: string;
-	provider?: "auto" | "exa" | "anthropic" | "perplexity";
+	provider?: "auto" | "exa" | "jina" | "anthropic" | "perplexity";
 	recency?: "day" | "week" | "month" | "year";
 	limit?: number;
 };
@@ -70,6 +71,9 @@ async function getAvailableProviders(): Promise<WebSearchProvider[]> {
 	const exaKey = await findExaKey();
 	if (exaKey) providers.push("exa");
 
+	const jinaKey = await findJinaKey();
+	if (jinaKey) providers.push("jina");
+
 	const perplexityKey = await findPerplexityKey();
 	if (perplexityKey) providers.push("perplexity");
 
@@ -83,6 +87,8 @@ function formatProviderLabel(provider: WebSearchProvider): string {
 	switch (provider) {
 		case "exa":
 			return "Exa";
+		case "jina":
+			return "Jina";
 		case "perplexity":
 			return "Perplexity";
 		case "anthropic":
@@ -237,6 +243,11 @@ async function executeWebSearch(
 					query: params.query,
 					num_results: params.limit,
 				});
+			} else if (provider === "jina") {
+				response = await searchJina({
+					query: params.query,
+					num_results: params.limit,
+				});
 			} else if (provider === "anthropic") {
 				response = await searchAnthropic({
 					query: params.query,
@@ -279,7 +290,7 @@ async function executeWebSearch(
 /**
  * Web search tool implementation.
  *
- * Supports Anthropic, Perplexity, and Exa providers with automatic fallback.
+ * Supports Anthropic, Perplexity, Exa, and Jina providers with automatic fallback.
  * Session is accepted for interface consistency but not used.
  */
 export class WebSearchTool implements AgentTool<typeof webSearchSchema, WebSearchRenderDetails> {

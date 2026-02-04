@@ -113,7 +113,9 @@ export function renderWebSearchResult(
 				? "Perplexity"
 				: provider === "exa"
 					? "Exa"
-					: "Unknown";
+					: provider === "jina"
+						? "Jina"
+						: "Unknown";
 	const queryPreview = args?.query
 		? truncateToWidth(args.query, 80)
 		: searchQueries[0]

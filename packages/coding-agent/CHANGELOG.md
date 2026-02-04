@@ -1,6 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Added Jina as a web search provider option alongside Exa, Perplexity, and Anthropic
+- Added support for Jina Reader API integration with automatic provider detection when JINA_API_KEY is configured
+
 ### Changed
 
 - Split grep context parameter into separate `context_pre` and `context_post` options for independent control of lines before and after matches
