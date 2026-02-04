@@ -1100,6 +1100,7 @@ export class SessionManager {
 		this.persistError = undefined;
 		this.persistErrorReported = false;
 		this.sessionId = nanoid();
+		this.sessionName = undefined;
 		const timestamp = new Date().toISOString();
 		const header: SessionHeader = {
 			type: "session",
