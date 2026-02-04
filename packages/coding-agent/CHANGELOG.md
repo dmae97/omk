@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+### Breaking Changes
+
+- Removed `output_mode` parameter from grep tool—results now always use content mode with formatted match output
+- Renamed grep context parameters from `context_pre`/`context_post` to `pre`/`post`
+- Removed `n` (show line numbers) parameter—line numbers are now always displayed in grep results
 
 ### Added
 
@@ -9,10 +14,18 @@
 
 ### Changed
 
+- Reformatted grep output to display matches grouped by file with numbered match headers and aligned context lines
+- Updated grep output to use `>>` prefix for match lines and aligned spacing for context lines for improved readability
+- Changed multiline matching to automatically enable when pattern contains literal newlines (`
+`)
 - Split grep context parameter into separate `context_pre` and `context_post` options for independent control of lines before and after matches
 - Updated grep tool to use configurable default context settings from `grep.contextBefore` and `grep.contextAfter` configuration
 - Added configurable grep context defaults and reduced the default to 1 line before, 3 lines after
 - Enabled the browser tool by default
+
+### Removed
+
+- Removed `filesWithMatches` and `count` output modes from grep tool
 
 ## [10.5.0] - 2026-02-04
 

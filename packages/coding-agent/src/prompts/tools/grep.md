@@ -6,17 +6,13 @@ Powerful search tool built on ripgrep.
 - Supports full regex syntax (e.g., `log.*Error`, `function\\s+\\w+`)
 - Filter files with `glob` (e.g., `*.js`, `**/*.tsx`) or `type` (e.g., `js`, `py`, `rust`)
 - Pattern syntax uses ripgrep—literal braces need escaping (`interface\\{\\}` to find `interface{}` in Go)
-- For cross-line patterns like `struct \\{[\\s\\S]*?field`, use `multiline: true`
+- For cross-line patterns like `struct \\{[\\s\\S]*?field`, set `multiline: true` if needed
+- If the pattern contains a literal `\n`, multiline defaults to true
 </instruction>
 
 <output>
-Results depend on `output_mode`:
-- `content`: Matching lines with file paths and line numbers
-- `files_with_matches`: File paths only (one per line)
-- `count`: Match counts per file
-
-In `content` mode, truncated at 100 matches default (configurable via `limit`).
-For `files_with_matches` and `count` modes, use `limit` truncate results.
+Results are always content mode: matching lines with file paths and line numbers.
+Truncated at 100 matches by default (configurable via `limit`).
 </output>
 
 <critical>

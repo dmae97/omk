@@ -167,7 +167,7 @@ export class CursorExecHandlers implements ICursorExecHandlers {
 			pattern: args.pattern,
 			path: args.path || undefined,
 			glob: args.glob || undefined,
-			output_mode: args.outputMode || undefined,
+			mode: args.outputMode || undefined,
 			context: args.context ?? args.contextBefore ?? args.contextAfter ?? undefined,
 			ignore_case: args.caseInsensitive || undefined,
 			type: args.type || undefined,

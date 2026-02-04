@@ -329,7 +329,7 @@ fn normalize_env_key(key: &str) -> &str {
 }
 
 #[cfg(not(windows))]
-fn normalize_env_key(key: &str) -> &str {
+const fn normalize_env_key(key: &str) -> &str {
 	key
 }
 

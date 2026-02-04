@@ -522,56 +522,47 @@ fn build_searcher(before_context: u32, after_context: u32) -> Searcher {
 		.build()
 }
 
+#[derive(Clone, Copy)]
+struct SearchParams {
+	context_before: u32,
+	context_after:  u32,
+	max_columns:    Option<u32>,
+	mode:           OutputMode,
+	max_count:      Option<u64>,
+	offset:         u64,
+}
+
 fn run_search(
 	matcher: &grep_regex::RegexMatcher,
 	content: &[u8],
-	context_before: u32,
-	context_after: u32,
-	max_columns: Option<u32>,
-	mode: OutputMode,
-	max_count: Option<u64>,
-	offset: u64,
+	params: SearchParams,
 ) -> io::Result<SearchResultInternal> {
-	run_search_reader(
-		matcher,
-		Cursor::new(content),
-		context_before,
-		context_after,
-		max_columns,
-		mode,
-		max_count,
-		offset,
-	)
+	run_search_reader(matcher, Cursor::new(content), params)
 }
 
 /// Stream-based search that reads directly from a `Read` without buffering.
 fn run_search_reader<R: Read>(
 	matcher: &grep_regex::RegexMatcher,
 	reader: R,
-	context_before: u32,
-	context_after: u32,
-	max_columns: Option<u32>,
-	mode: OutputMode,
-	max_count: Option<u64>,
-	offset: u64,
+	params: SearchParams,
 ) -> io::Result<SearchResultInternal> {
 	let mut searcher = build_searcher(
-		if mode == OutputMode::Content {
-			context_before
+		if params.mode == OutputMode::Content {
+			params.context_before
 		} else {
 			0
 		},
-		if mode == OutputMode::Content {
-			context_after
+		if params.mode == OutputMode::Content {
+			params.context_after
 		} else {
 			0
 		},
 	);
 	let mut collector = MatchCollector::new(
-		max_count,
-		offset,
-		max_columns.map(|v| v as usize),
-		mode == OutputMode::Content,
+		params.max_count,
+		params.offset,
+		params.max_columns.map(|v| v as usize),
+		params.mode == OutputMode::Content,
 	);
 	searcher.search_reader(matcher, reader, &mut collector)?;
 	Ok(SearchResultInternal {
@@ -711,22 +702,14 @@ fn run_parallel_search(
 	max_columns: Option<u32>,
 	mode: OutputMode,
 ) -> Vec<FileSearchResult> {
+	let params =
+		SearchParams { context_before, context_after, max_columns, mode, max_count: None, offset: 0 };
 	let mut results: Vec<FileSearchResult> = entries
 		.par_iter()
 		.filter_map(|entry| {
 			let file = File::open(&entry.path).ok()?;
 			let reader = file.take(MAX_FILE_BYTES);
-			let search = run_search_reader(
-				matcher,
-				reader,
-				context_before,
-				context_after,
-				max_columns,
-				mode,
-				None,
-				0,
-			)
-			.ok()?;
+			let search = run_search_reader(matcher, reader, params).ok()?;
 			Some(FileSearchResult {
 				relative_path: entry.relative_path.clone(),
 				matches:       search.matches,
@@ -742,13 +725,9 @@ fn run_parallel_search(
 fn run_sequential_search(
 	entries: &[FileEntry],
 	matcher: &grep_regex::RegexMatcher,
-	context_before: u32,
-	context_after: u32,
-	max_columns: Option<u32>,
-	mode: OutputMode,
-	max_count: Option<u64>,
-	offset: u64,
+	params: SearchParams,
 ) -> (Vec<GrepMatch>, u64, u32, u32, bool) {
+	let SearchParams { mode, max_count, offset, .. } = params;
 	let mut matches = Vec::new();
 	let mut total_matches = 0u64;
 	let mut collected = 0u64;
@@ -777,16 +756,8 @@ fn run_sequential_search(
 		files_searched = files_searched.saturating_add(1);
 		let reader = file.take(MAX_FILE_BYTES);
 
-		let Ok(search) = run_search_reader(
-			matcher,
-			reader,
-			context_before,
-			context_after,
-			max_columns,
-			mode,
-			remaining,
-			file_offset,
-		) else {
+		let file_params = SearchParams { max_count: remaining, offset: file_offset, ..params };
+		let Ok(search) = run_search_reader(matcher, reader, file_params) else {
 			continue;
 		};
 
@@ -839,17 +810,10 @@ fn search_sync(content: &[u8], options: SearchOptions) -> SearchResult {
 	let max_columns = options.max_columns;
 	let max_count = options.max_count.map(u64::from);
 	let offset = options.offset.unwrap_or(0) as u64;
+	let params =
+		SearchParams { context_before, context_after, max_columns, mode, max_count, offset };
 
-	let result = match run_search(
-		&matcher,
-		content,
-		context_before,
-		context_after,
-		max_columns,
-		mode,
-		max_count,
-		offset,
-	) {
+	let result = match run_search(&matcher, content, params) {
 		Ok(result) => result,
 		Err(err) => return empty_search_result(Some(err.to_string())),
 	};
@@ -913,17 +877,16 @@ fn grep_sync(
 		};
 		let reader = file.take(MAX_FILE_BYTES);
 
-		let search = run_search_reader(
-			&matcher,
-			reader,
+		let params = SearchParams {
 			context_before,
 			context_after,
 			max_columns,
-			output_mode,
+			mode: output_mode,
 			max_count,
 			offset,
-		)
-		.map_err(|err| Error::from_reason(format!("Search failed: {err}")))?;
+		};
+		let search = run_search_reader(&matcher, reader, params)
+			.map_err(|err| Error::from_reason(format!("Search failed: {err}")))?;
 
 		if search.match_count == 0 {
 			return Ok(GrepResult {
@@ -1044,16 +1007,14 @@ fn grep_sync(
 	}
 
 	let (matches, total_matches, files_with_matches, files_searched, limit_reached) =
-		run_sequential_search(
-			&entries,
-			&matcher,
+		run_sequential_search(&entries, &matcher, SearchParams {
 			context_before,
 			context_after,
 			max_columns,
-			output_mode,
+			mode: output_mode,
 			max_count,
 			offset,
-		);
+		});
 
 	// Fire callbacks for sequential search results
 	if let Some(callback) = on_match {

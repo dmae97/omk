@@ -1,7 +1,7 @@
 import * as nodePath from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
-import { StringEnum } from "@oh-my-pi/pi-ai";
-import { type GrepMatch as WasmGrepMatch, grep as wasmGrep } from "@oh-my-pi/pi-natives";
+
+import { grep as wasmGrep } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { untilAborted } from "@oh-my-pi/pi-utils";
@@ -10,7 +10,7 @@ import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { Theme } from "../modes/theme/theme";
 import grepDescription from "../prompts/tools/grep.md" with { type: "text" };
-import { renderFileList, renderStatusLine, renderTreeList } from "../tui";
+import { renderStatusLine, renderTreeList } from "../tui";
 import type { ToolSession } from ".";
 import type { OutputMeta } from "./output-meta";
 import { resolveToCwd } from "./path-utils";
@@ -24,17 +24,11 @@ const grepSchema = Type.Object({
 	path: Type.Optional(Type.String({ description: "File or directory to search (default: cwd)" })),
 	glob: Type.Optional(Type.String({ description: "Filter files by glob pattern (e.g., '*.js')" })),
 	type: Type.Optional(Type.String({ description: "Filter by file type (e.g., js, py, rust)" })),
-	output_mode: Type.Optional(
-		StringEnum(["filesWithMatches", "content", "count"], {
-			description: "Output format (default: files_with_matches)",
-		}),
-	),
 	i: Type.Optional(Type.Boolean({ description: "Case-insensitive search (default: false)" })),
-	n: Type.Optional(Type.Boolean({ description: "Show line numbers (default: true)" })),
-	context_pre: Type.Optional(Type.Number({ description: "Lines of context before matches" })),
-	context_post: Type.Optional(Type.Number({ description: "Lines of context after matches" })),
-	multiline: Type.Optional(Type.Boolean({ description: "Enable multiline matching (default: false)" })),
-	limit: Type.Optional(Type.Number({ description: "Limit output to first N matches (default: 100 in content mode)" })),
+	pre: Type.Optional(Type.Number({ description: "Lines of context before matches" })),
+	post: Type.Optional(Type.Number({ description: "Lines of context after matches" })),
+	multiline: Type.Optional(Type.Boolean({ description: "Enable multiline matching" })),
+	limit: Type.Optional(Type.Number({ description: "Limit output to first N matches (default: 100)" })),
 	offset: Type.Optional(Type.Number({ description: "Skip first N entries before applying limit (default: 0)" })),
 });
 
@@ -51,7 +45,6 @@ export interface GrepToolDetails {
 	fileCount?: number;
 	files?: string[];
 	fileMatches?: Array<{ path: string; count: number }>;
-	mode?: "content" | "filesWithMatches" | "count";
 	truncated?: boolean;
 	error?: string;
 }
@@ -87,20 +80,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 		_onUpdate?: AgentToolUpdateCallback<GrepToolDetails>,
 		_toolContext?: AgentToolContext,
 	): Promise<AgentToolResult<GrepToolDetails>> {
-		const {
-			pattern,
-			path: searchDir,
-			glob,
-			type,
-			output_mode,
-			i,
-			n,
-			context_pre,
-			context_post,
-			multiline,
-			limit,
-			offset,
-		} = params;
+		const { pattern, path: searchDir, glob, type, i, pre, post, multiline, limit, offset } = params;
 
 		return untilAborted(signal, async () => {
 			const normalizedPattern = pattern.trim();
@@ -121,11 +101,11 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 
 			const defaultContextBefore = this.session.settings.get("grep.contextBefore");
 			const defaultContextAfter = this.session.settings.get("grep.contextAfter");
-			const normalizedContextBefore = context_pre ?? defaultContextBefore;
-			const normalizedContextAfter = context_post ?? defaultContextAfter;
-			const showLineNumbers = n ?? true;
+			const normalizedContextBefore = pre ?? defaultContextBefore;
+			const normalizedContextAfter = post ?? defaultContextAfter;
 			const ignoreCase = i ?? false;
-			const hasContentHints = limit !== undefined || context_pre !== undefined || context_post !== undefined;
+			const patternHasNewline = normalizedPattern.includes("\n") || normalizedPattern.includes("\\n");
+			const effectiveMultiline = multiline ?? patternHasNewline;
 
 			const searchPath = resolveToCwd(searchDir || ".", this.session.cwd);
 			const scopePath = (() => {
@@ -141,9 +121,8 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 				throw new ToolError(`Path not found: ${searchPath}`);
 			}
 
-			const effectiveOutputMode = output_mode ?? (!isDirectory || hasContentHints ? "content" : "filesWithMatches");
-			const effectiveLimit =
-				effectiveOutputMode === "content" ? (normalizedLimit ?? DEFAULT_MATCH_LIMIT) : normalizedLimit;
+			const effectiveOutputMode = "content";
+			const effectiveLimit = normalizedLimit ?? DEFAULT_MATCH_LIMIT;
 
 			// Run WASM grep
 			let result: Awaited<ReturnType<typeof wasmGrep>>;
@@ -154,12 +133,12 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 					glob: glob?.trim() || undefined,
 					type: type?.trim() || undefined,
 					ignoreCase,
-					multiline: multiline ?? false,
+					multiline: effectiveMultiline,
 					hidden: true,
 					maxCount: effectiveLimit,
 					offset: normalizedOffset > 0 ? normalizedOffset : undefined,
-					contextBefore: effectiveOutputMode === "content" ? normalizedContextBefore : undefined,
-					contextAfter: effectiveOutputMode === "content" ? normalizedContextAfter : undefined,
+					contextBefore: normalizedContextBefore,
+					contextAfter: normalizedContextAfter,
 					maxColumns: DEFAULT_MAX_COLUMN,
 					mode: effectiveOutputMode,
 				});
@@ -198,71 +177,66 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 					matchCount: 0,
 					fileCount: 0,
 					files: [],
-					mode: effectiveOutputMode,
 					truncated: false,
 				};
 				return toolResult(details).text("No matches found").done();
 			}
 
-			let outputLines: string[] = [];
+			const outputLines: string[] = [];
 			let linesTruncated = false;
+			let matchIndex = 0;
 
 			for (const match of result.matches) {
 				recordFile(match.path);
 				const relativePath = formatPath(match.path);
 
-				if (effectiveOutputMode === "content") {
-					// Add context before
-					if (match.contextBefore) {
-						for (const ctx of match.contextBefore) {
-							outputLines.push(
-								showLineNumbers
-									? `${relativePath}-${ctx.lineNumber}- ${ctx.line}`
-									: `${relativePath}- ${ctx.line}`,
-							);
-						}
-					}
-
-					// Add match line
-					outputLines.push(
-						showLineNumbers
-							? `${relativePath}:${match.lineNumber}: ${match.line}`
-							: `${relativePath}: ${match.line}`,
-					);
-
-					if (match.truncated) {
-						linesTruncated = true;
-					}
-
-					// Add context after
-					if (match.contextAfter) {
-						for (const ctx of match.contextAfter) {
-							outputLines.push(
-								showLineNumbers
-									? `${relativePath}-${ctx.lineNumber}- ${ctx.line}`
-									: `${relativePath}- ${ctx.line}`,
-							);
-						}
-					}
-
-					// Track per-file counts
-					fileMatchCounts.set(relativePath, (fileMatchCounts.get(relativePath) ?? 0) + 1);
-				} else if (effectiveOutputMode === "filesWithMatches") {
-					// One line per file
-					const matchWithCount = match as WasmGrepMatch & { matchCount?: number };
-					fileMatchCounts.set(relativePath, matchWithCount.matchCount ?? 1);
-				} else {
-					// count mode
-					const matchWithCount = match as WasmGrepMatch & { matchCount?: number };
-					fileMatchCounts.set(relativePath, matchWithCount.matchCount ?? 0);
+				matchIndex += 1;
+				if (matchIndex > 1) {
+					outputLines.push("");
 				}
-			}
+				outputLines.push(`${matchIndex}. ${relativePath}:${match.lineNumber}`);
 
-			// Format output based on mode
-			if (effectiveOutputMode === "filesWithMatches") {
-				outputLines = fileList;
-			} else if (effectiveOutputMode === "count") {
-				outputLines = fileList.map(f => `${f}:${fileMatchCounts.get(f) ?? 0}`);
+				const lineNumbers: number[] = [match.lineNumber];
+				if (match.contextBefore) {
+					for (const ctx of match.contextBefore) {
+						lineNumbers.push(ctx.lineNumber);
+					}
+				}
+				if (match.contextAfter) {
+					for (const ctx of match.contextAfter) {
+						lineNumbers.push(ctx.lineNumber);
+					}
+				}
+				const lineWidth = Math.max(...lineNumbers.map(value => value.toString().length));
+
+				const formatLine = (lineNumber: number, line: string, isMatch: boolean): string => {
+					const padded = lineNumber.toString().padStart(lineWidth, " ");
+					return isMatch ? `>>${padded} ${line}` : `  ${padded} ${line}`;
+				};
+
+				// Add context before
+				if (match.contextBefore) {
+					for (const ctx of match.contextBefore) {
+						outputLines.push(formatLine(ctx.lineNumber, ctx.line, false));
+					}
+				}
+
+				// Add match line
+				outputLines.push(formatLine(match.lineNumber, match.line, true));
+
+				if (match.truncated) {
+					linesTruncated = true;
+				}
+
+				// Add context after
+				if (match.contextAfter) {
+					for (const ctx of match.contextAfter) {
+						outputLines.push(formatLine(ctx.lineNumber, ctx.line, false));
+					}
+				}
+
+				// Track per-file counts
+				fileMatchCounts.set(relativePath, (fileMatchCounts.get(relativePath) ?? 0) + 1);
 			}
 
 			const rawOutput = outputLines.join("\n");
@@ -279,7 +253,6 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 					path,
 					count: fileMatchCounts.get(path) ?? 0,
 				})),
-				mode: effectiveOutputMode,
 				truncated,
 				matchLimitReached: result.limitReached ? effectiveLimit : undefined,
 			};
@@ -313,16 +286,13 @@ interface GrepRenderArgs {
 	glob?: string;
 	type?: string;
 	i?: boolean;
-	n?: boolean;
-	context_pre?: number;
-	context_post?: number;
+	pre?: number;
+	post?: number;
 	multiline?: boolean;
-	output_mode?: string;
 	limit?: number;
 	offset?: number;
 }
 
-const COLLAPSED_LIST_LIMIT = PREVIEW_LIMITS.COLLAPSED_ITEMS;
 const COLLAPSED_TEXT_LIMIT = PREVIEW_LIMITS.COLLAPSED_LINES * 2;
 
 export const grepToolRenderer = {
@@ -332,14 +302,12 @@ export const grepToolRenderer = {
 		if (args.path) meta.push(`in ${args.path}`);
 		if (args.glob) meta.push(`glob:${args.glob}`);
 		if (args.type) meta.push(`type:${args.type}`);
-		if (args.output_mode && args.output_mode !== "filesWithMatches") meta.push(`mode:${args.output_mode}`);
 		if (args.i) meta.push("case:insensitive");
-		if (args.n === false) meta.push("no-line-numbers");
-		if (args.context_pre !== undefined && args.context_pre > 0) {
-			meta.push(`pre:${args.context_pre}`);
+		if (args.pre !== undefined && args.pre > 0) {
+			meta.push(`pre:${args.pre}`);
 		}
-		if (args.context_post !== undefined && args.context_post > 0) {
-			meta.push(`post:${args.context_post}`);
+		if (args.post !== undefined && args.post > 0) {
+			meta.push(`post:${args.post}`);
 		}
 		if (args.multiline) meta.push("multiline");
 		if (args.limit !== undefined && args.limit > 0) meta.push(`limit:${args.limit}`);
@@ -393,13 +361,11 @@ export const grepToolRenderer = {
 
 		const matchCount = details?.matchCount ?? 0;
 		const fileCount = details?.fileCount ?? 0;
-		const mode = details?.mode ?? "filesWithMatches";
 		const truncation = details?.meta?.truncation;
 		const limits = details?.meta?.limits;
 		const truncated = Boolean(
 			details?.truncated || truncation || limits?.matchLimit || limits?.resultLimit || limits?.columnTruncated,
 		);
-		const files = details?.files ?? [];
 
 		if (matchCount === 0) {
 			const header = renderStatusLine(
@@ -409,10 +375,7 @@ export const grepToolRenderer = {
 			return new Text([header, formatEmptyMessage("No matches found", uiTheme)].join("\n"), 0, 0);
 		}
 
-		const summaryParts =
-			mode === "filesWithMatches"
-				? [formatCount("file", fileCount)]
-				: [formatCount("match", matchCount), formatCount("file", fileCount)];
+		const summaryParts = [formatCount("match", matchCount), formatCount("file", fileCount)];
 		const meta = [...summaryParts];
 		if (details?.scopePath) meta.push(`in ${details.scopePath}`);
 		if (truncated) meta.push(uiTheme.fg("warning", "truncated"));
@@ -422,34 +385,51 @@ export const grepToolRenderer = {
 			uiTheme,
 		);
 
-		if (mode === "content") {
-			const textContent = result.content?.find(c => c.type === "text")?.text ?? "";
-			const contentLines = textContent.split("\n").filter(line => line.trim().length > 0);
-			const matchLines = renderTreeList(
-				{
-					items: contentLines,
-					expanded,
-					maxCollapsed: COLLAPSED_TEXT_LIMIT,
-					itemType: "match",
-					renderItem: line => uiTheme.fg("toolOutput", line),
-				},
-				uiTheme,
-			);
-			return new Text([header, ...matchLines].join("\n"), 0, 0);
+		const textContent = result.content?.find(c => c.type === "text")?.text ?? "";
+		const rawLines = textContent.split("\n");
+		const hasSeparators = rawLines.some(line => line.trim().length === 0);
+		const matchGroups: string[][] = [];
+		if (hasSeparators) {
+			let current: string[] = [];
+			for (const line of rawLines) {
+				if (line.trim().length === 0) {
+					if (current.length > 0) {
+						matchGroups.push(current);
+						current = [];
+					}
+					continue;
+				}
+				current.push(line);
+			}
+			if (current.length > 0) matchGroups.push(current);
+		} else {
+			for (const line of rawLines) {
+				if (line.trim().length === 0) continue;
+				matchGroups.push([line]);
+			}
 		}
 
-		const fileEntries: Array<{ path: string; count?: number }> = details?.fileMatches?.length
-			? details.fileMatches.map(entry => ({ path: entry.path, count: entry.count }))
-			: files.map(path => ({ path }));
-		const fileLines = renderFileList(
+		const getCollapsedMatchLimit = (groups: string[][], maxLines: number): number => {
+			if (groups.length === 0) return 0;
+			let usedLines = 0;
+			let count = 0;
+			for (const group of groups) {
+				if (count > 0 && usedLines + group.length > maxLines) break;
+				usedLines += group.length;
+				count += 1;
+				if (usedLines >= maxLines) break;
+			}
+			return count;
+		};
+
+		const maxCollapsed = expanded ? matchGroups.length : getCollapsedMatchLimit(matchGroups, COLLAPSED_TEXT_LIMIT);
+		const matchLines = renderTreeList(
 			{
-				files: fileEntries.map(entry => ({
-					path: entry.path,
-					isDirectory: entry.path.endsWith("/"),
-					meta: entry.count !== undefined ? `(${entry.count} match${entry.count !== 1 ? "es" : ""})` : undefined,
-				})),
+				items: matchGroups,
 				expanded,
-				maxCollapsed: COLLAPSED_LIST_LIMIT,
+				maxCollapsed,
+				itemType: "match",
+				renderItem: group => group.map(line => uiTheme.fg("toolOutput", line)),
 			},
 			uiTheme,
 		);
@@ -464,7 +444,7 @@ export const grepToolRenderer = {
 		const extraLines =
 			truncationReasons.length > 0 ? [uiTheme.fg("warning", `truncated: ${truncationReasons.join(", ")}`)] : [];
 
-		return new Text([header, ...fileLines, ...extraLines].join("\n"), 0, 0);
+		return new Text([header, ...matchLines, ...extraLines].join("\n"), 0, 0);
 	},
 	mergeCallAndResult: true,
 };
