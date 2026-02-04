@@ -499,7 +499,8 @@ function b() {
 				pattern: "match",
 				path: testFile,
 				limit: 1,
-				context: 1,
+				pre: 1,
+				post: 1,
 			});
 
 			const output = getTextOutput(result);

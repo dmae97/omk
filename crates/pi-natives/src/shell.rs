@@ -12,6 +12,8 @@
 //! });
 //! ```
 
+#[cfg(windows)]
+use std::collections::HashSet;
 use std::{
 	collections::HashMap,
 	fs,
@@ -333,6 +335,52 @@ const fn normalize_env_key(key: &str) -> &str {
 	key
 }
 
+#[cfg(windows)]
+fn merge_path_values(existing: &str, incoming: &str) -> String {
+	let mut merged = Vec::new();
+	let mut seen = HashSet::new();
+	push_unique_paths(&mut merged, &mut seen, existing);
+	push_unique_paths(&mut merged, &mut seen, incoming);
+
+	std::env::join_paths(merged.iter())
+		.map(|paths| paths.to_string_lossy().to_string())
+		.unwrap_or_else(|_| merged.join(";"))
+}
+
+#[cfg(windows)]
+fn push_unique_paths(merged: &mut Vec<String>, seen: &mut HashSet<String>, value: &str) {
+	for segment in std::env::split_paths(value) {
+		let segment_str = segment.to_string_lossy().to_string();
+		let normalized = normalize_path_segment(&segment_str);
+		if normalized.is_empty() {
+			continue;
+		}
+		if seen.insert(normalized) {
+			merged.push(segment_str);
+		}
+	}
+}
+
+#[cfg(windows)]
+fn normalize_path_segment(segment: &str) -> String {
+	let trimmed = segment.trim().trim_matches('"');
+	if trimmed.is_empty() {
+		return String::new();
+	}
+
+	let mut normalized = std::path::PathBuf::new();
+	for component in std::path::Path::new(trimmed).components() {
+		normalized.push(component.as_os_str());
+	}
+
+	normalized.to_string_lossy().to_ascii_lowercase()
+}
+
+#[cfg(not(windows))]
+fn merge_path_values(_existing: &str, incoming: &str) -> String {
+	incoming.to_string()
+}
+
 async fn create_session(config: &ShellConfig) -> Result<ShellSessionCore> {
 	let create_options = CreateOptions {
 		interactive: false,
@@ -357,9 +405,17 @@ async fn create_session(config: &ShellConfig) -> Result<ShellSessionCore> {
 	shell.register_builtin("sleep", builtins::builtin::<SleepCommand>());
 	shell.register_builtin("timeout", builtins::builtin::<TimeoutCommand>());
 
+	let mut merged_path: Option<String> = None;
 	for (key, value) in std::env::vars() {
 		let normalized_key = normalize_env_key(&key);
 		if should_skip_env_var(normalized_key) {
+			continue;
+		}
+		if normalized_key == "PATH" {
+			merged_path = Some(match merged_path {
+				Some(existing) => merge_path_values(&existing, &value),
+				None => value,
+			});
 			continue;
 		}
 		let mut var = ShellVariable::new(ShellValue::String(value));
@@ -367,6 +423,22 @@ async fn create_session(config: &ShellConfig) -> Result<ShellSessionCore> {
 		shell
 			.env
 			.set_global(normalized_key, var)
+			.map_err(|err| Error::from_reason(format!("Failed to set env: {err}")))?;
+	}
+
+	#[cfg(windows)]
+	if merged_path.is_none() {
+		if let Some(value) = std::env::var_os("Path").or_else(|| std::env::var_os("PATH")) {
+			merged_path = Some(value.to_string_lossy().to_string());
+		}
+	}
+
+	if let Some(path_value) = merged_path {
+		let mut var = ShellVariable::new(ShellValue::String(path_value));
+		var.export();
+		shell
+			.env
+			.set_global("PATH", var)
 			.map_err(|err| Error::from_reason(format!("Failed to set env: {err}")))?;
 	}
 
