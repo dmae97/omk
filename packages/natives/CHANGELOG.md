@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Added separate grep context before/after options in bindings
+
 ## [10.2.2] - 2026-02-02
 ### Added
 

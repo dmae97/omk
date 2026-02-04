@@ -24,7 +24,11 @@ export interface GrepOptions extends Cancellable {
 	maxCount?: number;
 	/** Skip first N matches */
 	offset?: number;
-	/** Lines of context before/after matches */
+	/** Lines of context before matches */
+	contextBefore?: number;
+	/** Lines of context after matches */
+	contextAfter?: number;
+	/** Lines of context before/after matches (legacy) */
 	context?: number;
 	/** Truncate lines longer than this (characters) */
 	maxColumns?: number;
@@ -88,7 +92,11 @@ export interface SearchOptions {
 	maxCount?: number;
 	/** Skip first N matches */
 	offset?: number;
-	/** Lines of context before/after matches */
+	/** Lines of context before matches */
+	contextBefore?: number;
+	/** Lines of context after matches */
+	contextAfter?: number;
+	/** Lines of context before/after matches (legacy) */
 	context?: number;
 	/** Truncate lines longer than this (characters) */
 	maxColumns?: number;

@@ -329,6 +329,26 @@ export const SETTINGS_SCHEMA = {
 		default: true,
 		ui: { tab: "tools", label: "Enable Grep", description: "Enable the grep tool for content searching" },
 	},
+	"grep.contextBefore": {
+		type: "number",
+		default: 1,
+		ui: {
+			tab: "tools",
+			label: "Grep context before",
+			description: "Lines of context before each grep match",
+			submenu: true,
+		},
+	},
+	"grep.contextAfter": {
+		type: "number",
+		default: 3,
+		ui: {
+			tab: "tools",
+			label: "Grep context after",
+			description: "Lines of context after each grep match",
+			submenu: true,
+		},
+	},
 	"notebook.enabled": {
 		type: "boolean",
 		default: true,

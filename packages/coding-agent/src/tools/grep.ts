@@ -31,7 +31,8 @@ const grepSchema = Type.Object({
 	),
 	i: Type.Optional(Type.Boolean({ description: "Case-insensitive search (default: false)" })),
 	n: Type.Optional(Type.Boolean({ description: "Show line numbers (default: true)" })),
-	context: Type.Optional(Type.Number({ description: "Lines of context (default: 5)" })),
+	context_pre: Type.Optional(Type.Number({ description: "Lines of context before matches" })),
+	context_post: Type.Optional(Type.Number({ description: "Lines of context after matches" })),
 	multiline: Type.Optional(Type.Boolean({ description: "Enable multiline matching (default: false)" })),
 	limit: Type.Optional(Type.Number({ description: "Limit output to first N matches (default: 100 in content mode)" })),
 	offset: Type.Optional(Type.Number({ description: "Skip first N entries before applying limit (default: 0)" })),
@@ -86,7 +87,20 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 		_onUpdate?: AgentToolUpdateCallback<GrepToolDetails>,
 		_toolContext?: AgentToolContext,
 	): Promise<AgentToolResult<GrepToolDetails>> {
-		const { pattern, path: searchDir, glob, type, output_mode, i, n, context, multiline, limit, offset } = params;
+		const {
+			pattern,
+			path: searchDir,
+			glob,
+			type,
+			output_mode,
+			i,
+			n,
+			context_pre,
+			context_post,
+			multiline,
+			limit,
+			offset,
+		} = params;
 
 		return untilAborted(signal, async () => {
 			const normalizedPattern = pattern.trim();
@@ -105,10 +119,13 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 			}
 			const normalizedLimit = rawLimit !== undefined && rawLimit > 0 ? rawLimit : undefined;
 
-			const normalizedContext = context ?? 5;
+			const defaultContextBefore = this.session.settings.get("grep.contextBefore");
+			const defaultContextAfter = this.session.settings.get("grep.contextAfter");
+			const normalizedContextBefore = context_pre ?? defaultContextBefore;
+			const normalizedContextAfter = context_post ?? defaultContextAfter;
 			const showLineNumbers = n ?? true;
 			const ignoreCase = i ?? false;
-			const hasContentHints = limit !== undefined || context !== undefined;
+			const hasContentHints = limit !== undefined || context_pre !== undefined || context_post !== undefined;
 
 			const searchPath = resolveToCwd(searchDir || ".", this.session.cwd);
 			const scopePath = (() => {
@@ -141,7 +158,8 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 					hidden: true,
 					maxCount: effectiveLimit,
 					offset: normalizedOffset > 0 ? normalizedOffset : undefined,
-					context: effectiveOutputMode === "content" ? normalizedContext : undefined,
+					contextBefore: effectiveOutputMode === "content" ? normalizedContextBefore : undefined,
+					contextAfter: effectiveOutputMode === "content" ? normalizedContextAfter : undefined,
 					maxColumns: DEFAULT_MAX_COLUMN,
 					mode: effectiveOutputMode,
 				});
@@ -296,7 +314,8 @@ interface GrepRenderArgs {
 	type?: string;
 	i?: boolean;
 	n?: boolean;
-	context?: number;
+	context_pre?: number;
+	context_post?: number;
 	multiline?: boolean;
 	output_mode?: string;
 	limit?: number;
@@ -316,7 +335,12 @@ export const grepToolRenderer = {
 		if (args.output_mode && args.output_mode !== "filesWithMatches") meta.push(`mode:${args.output_mode}`);
 		if (args.i) meta.push("case:insensitive");
 		if (args.n === false) meta.push("no-line-numbers");
-		if (args.context !== undefined && args.context > 0) meta.push(`context:${args.context}`);
+		if (args.context_pre !== undefined && args.context_pre > 0) {
+			meta.push(`pre:${args.context_pre}`);
+		}
+		if (args.context_post !== undefined && args.context_post > 0) {
+			meta.push(`post:${args.context_post}`);
+		}
 		if (args.multiline) meta.push("multiline");
 		if (args.limit !== undefined && args.limit > 0) meta.push(`limit:${args.limit}`);
 		if (args.offset !== undefined && args.offset > 0) meta.push(`offset:${args.offset}`);

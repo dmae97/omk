@@ -44,62 +44,74 @@ enum OutputMode {
 #[napi(object)]
 pub struct SearchOptions {
 	/// Regex pattern to search for.
-	pub pattern:     String,
+	pub pattern:        String,
 	/// Case-insensitive search.
 	#[napi(js_name = "ignoreCase")]
-	pub ignore_case: Option<bool>,
+	pub ignore_case:    Option<bool>,
 	/// Enable multiline matching.
-	pub multiline:   Option<bool>,
+	pub multiline:      Option<bool>,
 	/// Maximum number of matches to return.
 	#[napi(js_name = "maxCount")]
-	pub max_count:   Option<u32>,
+	pub max_count:      Option<u32>,
 	/// Skip first N matches.
-	pub offset:      Option<u32>,
-	/// Lines of context before/after matches.
-	pub context:     Option<u32>,
+	pub offset:         Option<u32>,
+	/// Lines of context before matches.
+	#[napi(js_name = "contextBefore")]
+	pub context_before: Option<u32>,
+	/// Lines of context after matches.
+	#[napi(js_name = "contextAfter")]
+	pub context_after:  Option<u32>,
+	/// Lines of context before/after matches (legacy).
+	pub context:        Option<u32>,
 	/// Truncate lines longer than this (characters).
 	#[napi(js_name = "maxColumns")]
-	pub max_columns: Option<u32>,
+	pub max_columns:    Option<u32>,
 	/// Output mode (content or count).
-	pub mode:        Option<String>,
+	pub mode:           Option<String>,
 }
 
 /// Options for searching files on disk.
 #[napi(object)]
 pub struct GrepOptions<'env> {
 	/// Regex pattern to search for.
-	pub pattern:     String,
+	pub pattern:        String,
 	/// Directory or file to search.
-	pub path:        String,
+	pub path:           String,
 	/// Glob filter for filenames (e.g., "*.ts").
-	pub glob:        Option<String>,
+	pub glob:           Option<String>,
 	/// Filter by file type (e.g., "js", "py", "rust").
 	#[napi(js_name = "type")]
-	pub type_filter: Option<String>,
+	pub type_filter:    Option<String>,
 	/// Case-insensitive search.
 	#[napi(js_name = "ignoreCase")]
-	pub ignore_case: Option<bool>,
+	pub ignore_case:    Option<bool>,
 	/// Enable multiline matching.
-	pub multiline:   Option<bool>,
+	pub multiline:      Option<bool>,
 	/// Include hidden files (default: true).
-	pub hidden:      Option<bool>,
+	pub hidden:         Option<bool>,
 	/// Maximum number of matches to return.
 	#[napi(js_name = "maxCount")]
-	pub max_count:   Option<u32>,
+	pub max_count:      Option<u32>,
 	/// Skip first N matches.
-	pub offset:      Option<u32>,
-	/// Lines of context before/after matches.
-	pub context:     Option<u32>,
+	pub offset:         Option<u32>,
+	/// Lines of context before matches.
+	#[napi(js_name = "contextBefore")]
+	pub context_before: Option<u32>,
+	/// Lines of context after matches.
+	#[napi(js_name = "contextAfter")]
+	pub context_after:  Option<u32>,
+	/// Lines of context before/after matches (legacy).
+	pub context:        Option<u32>,
 	/// Truncate lines longer than this (characters).
 	#[napi(js_name = "maxColumns")]
-	pub max_columns: Option<u32>,
+	pub max_columns:    Option<u32>,
 	/// Output mode (content, filesWithMatches, or count).
-	pub mode:        Option<String>,
+	pub mode:           Option<String>,
 	/// Abort signal for cancelling the operation.
-	pub signal:      Option<Unknown<'env>>,
+	pub signal:         Option<Unknown<'env>>,
 	/// Timeout in milliseconds for the operation.
 	#[napi(js_name = "timeoutMs")]
-	pub timeout_ms:  Option<u32>,
+	pub timeout_ms:     Option<u32>,
 }
 
 /// A context line (before or after a match).
@@ -488,42 +500,73 @@ fn normalize_relative_path<'a>(root: &Path, path: &'a Path) -> Cow<'a, str> {
 	}
 }
 
-fn build_searcher(context: u32) -> Searcher {
+fn resolve_context(
+	context: Option<u32>,
+	context_before: Option<u32>,
+	context_after: Option<u32>,
+) -> (u32, u32) {
+	if context_before.is_some() || context_after.is_some() {
+		(context_before.unwrap_or(0), context_after.unwrap_or(0))
+	} else {
+		let value = context.unwrap_or(0);
+		(value, value)
+	}
+}
+
+fn build_searcher(before_context: u32, after_context: u32) -> Searcher {
 	SearcherBuilder::new()
 		.binary_detection(BinaryDetection::quit(b'\x00'))
 		.line_number(true)
-		.before_context(context as usize)
-		.after_context(context as usize)
+		.before_context(before_context as usize)
+		.after_context(after_context as usize)
 		.build()
 }
 
 fn run_search(
 	matcher: &grep_regex::RegexMatcher,
 	content: &[u8],
-	context: u32,
+	context_before: u32,
+	context_after: u32,
 	max_columns: Option<u32>,
 	mode: OutputMode,
 	max_count: Option<u64>,
 	offset: u64,
 ) -> io::Result<SearchResultInternal> {
-	run_search_reader(matcher, Cursor::new(content), context, max_columns, mode, max_count, offset)
+	run_search_reader(
+		matcher,
+		Cursor::new(content),
+		context_before,
+		context_after,
+		max_columns,
+		mode,
+		max_count,
+		offset,
+	)
 }
 
 /// Stream-based search that reads directly from a `Read` without buffering.
 fn run_search_reader<R: Read>(
 	matcher: &grep_regex::RegexMatcher,
 	reader: R,
-	context: u32,
+	context_before: u32,
+	context_after: u32,
 	max_columns: Option<u32>,
 	mode: OutputMode,
 	max_count: Option<u64>,
 	offset: u64,
 ) -> io::Result<SearchResultInternal> {
-	let mut searcher = build_searcher(if mode == OutputMode::Content {
-		context
-	} else {
-		0
-	});
+	let mut searcher = build_searcher(
+		if mode == OutputMode::Content {
+			context_before
+		} else {
+			0
+		},
+		if mode == OutputMode::Content {
+			context_after
+		} else {
+			0
+		},
+	);
 	let mut collector = MatchCollector::new(
 		max_count,
 		offset,
@@ -587,18 +630,20 @@ const fn empty_search_result(error: Option<String>) -> SearchResult {
 
 /// Internal configuration for grep, extracted from options.
 struct GrepConfig {
-	pattern:     String,
-	path:        String,
-	glob:        Option<String>,
-	type_filter: Option<String>,
-	ignore_case: Option<bool>,
-	multiline:   Option<bool>,
-	hidden:      Option<bool>,
-	max_count:   Option<u32>,
-	offset:      Option<u32>,
-	context:     Option<u32>,
-	max_columns: Option<u32>,
-	mode:        Option<String>,
+	pattern:        String,
+	path:           String,
+	glob:           Option<String>,
+	type_filter:    Option<String>,
+	ignore_case:    Option<bool>,
+	multiline:      Option<bool>,
+	hidden:         Option<bool>,
+	max_count:      Option<u32>,
+	offset:         Option<u32>,
+	context_before: Option<u32>,
+	context_after:  Option<u32>,
+	context:        Option<u32>,
+	max_columns:    Option<u32>,
+	mode:           Option<String>,
 }
 
 fn collect_files(
@@ -661,7 +706,8 @@ fn build_matcher(
 fn run_parallel_search(
 	entries: &[FileEntry],
 	matcher: &grep_regex::RegexMatcher,
-	context: u32,
+	context_before: u32,
+	context_after: u32,
 	max_columns: Option<u32>,
 	mode: OutputMode,
 ) -> Vec<FileSearchResult> {
@@ -670,8 +716,17 @@ fn run_parallel_search(
 		.filter_map(|entry| {
 			let file = File::open(&entry.path).ok()?;
 			let reader = file.take(MAX_FILE_BYTES);
-			let search =
-				run_search_reader(matcher, reader, context, max_columns, mode, None, 0).ok()?;
+			let search = run_search_reader(
+				matcher,
+				reader,
+				context_before,
+				context_after,
+				max_columns,
+				mode,
+				None,
+				0,
+			)
+			.ok()?;
 			Some(FileSearchResult {
 				relative_path: entry.relative_path.clone(),
 				matches:       search.matches,
@@ -687,7 +742,8 @@ fn run_parallel_search(
 fn run_sequential_search(
 	entries: &[FileEntry],
 	matcher: &grep_regex::RegexMatcher,
-	context: u32,
+	context_before: u32,
+	context_after: u32,
 	max_columns: Option<u32>,
 	mode: OutputMode,
 	max_count: Option<u64>,
@@ -721,9 +777,16 @@ fn run_sequential_search(
 		files_searched = files_searched.saturating_add(1);
 		let reader = file.take(MAX_FILE_BYTES);
 
-		let Ok(search) =
-			run_search_reader(matcher, reader, context, max_columns, mode, remaining, file_offset)
-		else {
+		let Ok(search) = run_search_reader(
+			matcher,
+			reader,
+			context_before,
+			context_after,
+			max_columns,
+			mode,
+			remaining,
+			file_offset,
+		) else {
 			continue;
 		};
 
@@ -771,12 +834,22 @@ fn search_sync(content: &[u8], options: SearchOptions) -> SearchResult {
 		Err(err) => return empty_search_result(Some(err.to_string())),
 	};
 
-	let context = options.context.unwrap_or(0);
+	let (context_before, context_after) =
+		resolve_context(options.context, options.context_before, options.context_after);
 	let max_columns = options.max_columns;
 	let max_count = options.max_count.map(u64::from);
 	let offset = options.offset.unwrap_or(0) as u64;
 
-	let result = match run_search(&matcher, content, context, max_columns, mode, max_count, offset) {
+	let result = match run_search(
+		&matcher,
+		content,
+		context_before,
+		context_after,
+		max_columns,
+		mode,
+		max_count,
+		offset,
+	) {
 		Ok(result) => result,
 		Err(err) => return empty_search_result(Some(err.to_string())),
 	};
@@ -802,10 +875,12 @@ fn grep_sync(
 	let output_mode = parse_output_mode(options.mode.as_deref());
 	let matcher = build_matcher(&options.pattern, ignore_case, multiline)?;
 
-	let context = if output_mode == OutputMode::Content {
-		options.context.unwrap_or(0)
+	let (context_before, context_after) =
+		resolve_context(options.context, options.context_before, options.context_after);
+	let (context_before, context_after) = if output_mode == OutputMode::Content {
+		(context_before, context_after)
 	} else {
-		0
+		(0, 0)
 	};
 	let max_columns = options.max_columns;
 	let max_count = options.max_count.map(u64::from);
@@ -838,9 +913,17 @@ fn grep_sync(
 		};
 		let reader = file.take(MAX_FILE_BYTES);
 
-		let search =
-			run_search_reader(&matcher, reader, context, max_columns, output_mode, max_count, offset)
-				.map_err(|err| Error::from_reason(format!("Search failed: {err}")))?;
+		let search = run_search_reader(
+			&matcher,
+			reader,
+			context_before,
+			context_after,
+			max_columns,
+			output_mode,
+			max_count,
+			offset,
+		)
+		.map_err(|err| Error::from_reason(format!("Search failed: {err}")))?;
 
 		if search.match_count == 0 {
 			return Ok(GrepResult {
@@ -903,7 +986,14 @@ fn grep_sync(
 
 	let allow_parallel = max_count.is_none() && offset == 0;
 	if allow_parallel {
-		let results = run_parallel_search(&entries, &matcher, context, max_columns, output_mode);
+		let results = run_parallel_search(
+			&entries,
+			&matcher,
+			context_before,
+			context_after,
+			max_columns,
+			output_mode,
+		);
 		let mut matches = Vec::new();
 		let mut total_matches = 0u64;
 		let mut files_with_matches = 0u32;
@@ -957,7 +1047,8 @@ fn grep_sync(
 		run_sequential_search(
 			&entries,
 			&matcher,
-			context,
+			context_before,
+			context_after,
 			max_columns,
 			output_mode,
 			max_count,
@@ -1074,6 +1165,8 @@ pub fn grep(
 		hidden,
 		max_count,
 		offset,
+		context_before,
+		context_after,
 		context,
 		max_columns,
 		mode,
@@ -1091,6 +1184,8 @@ pub fn grep(
 		hidden,
 		max_count,
 		offset,
+		context_before,
+		context_after,
 		context,
 		max_columns,
 		mode,

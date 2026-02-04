@@ -1,9 +1,11 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Changed
 
+- Split grep context parameter into separate `context_pre` and `context_post` options for independent control of lines before and after matches
+- Updated grep tool to use configurable default context settings from `grep.contextBefore` and `grep.contextAfter` configuration
+- Added configurable grep context defaults and reduced the default to 1 line before, 3 lines after
 - Enabled the browser tool by default
 
 ## [10.5.0] - 2026-02-04
