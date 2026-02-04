@@ -1,6 +1,6 @@
 {
 	"name": "@oh-my-pi/pi-utils",
-	"version": "10.5.0",
+	"version": "10.6.0",
 	"description": "Shared utilities for pi packages",
 	"type": "module",
 	"main": "./src/index.ts",

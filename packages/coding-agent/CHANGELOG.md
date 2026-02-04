@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [10.6.0] - 2026-02-04
 ### Breaking Changes
 
 - Removed `output_mode` parameter from grep tool—results now always use content mode with formatted match output

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [10.6.0] - 2026-02-04
+
 ### Changed
 
 - Added separate grep context before/after options in bindings

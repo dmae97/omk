@@ -1,6 +1,6 @@
 {
 	"name": "@oh-my-pi/pi-tui",
-	"version": "10.5.0",
+	"version": "10.6.0",
 	"description": "Terminal User Interface library with differential rendering for efficient text-based applications",
 	"type": "module",
 	"main": "./src/index.ts",
