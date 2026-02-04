@@ -372,17 +372,58 @@ async function executeToolCalls(
 	getToolContext?: AgentLoopConfig["getToolContext"],
 	interruptMode: AgentLoopConfig["interruptMode"] = "immediate",
 ): Promise<{ toolResults: ToolResultMessage[]; steeringMessages?: AgentMessage[] }> {
-	const toolCalls = assistantMessage.content.filter(c => c.type === "toolCall");
+	type ToolCallContent = Extract<AssistantMessage["content"][number], { type: "toolCall" }>;
+	const toolCalls = assistantMessage.content.filter((c): c is ToolCallContent => c.type === "toolCall");
 	const results: ToolResultMessage[] = [];
 	let steeringMessages: AgentMessage[] | undefined;
 	const shouldInterruptImmediately = interruptMode !== "wait";
 	const toolCallInfos = toolCalls.map(call => ({ id: call.id, name: call.name }));
 	const batchId = `${assistantMessage.timestamp ?? Date.now()}_${toolCalls[0]?.id ?? "batch"}`;
+	const steeringAbortController = new AbortController();
+	const toolSignal = signal
+		? AbortSignal.any([signal, steeringAbortController.signal])
+		: steeringAbortController.signal;
+	const interruptState = { triggered: false };
+	let steeringCheck: Promise<void> | null = null;
 
-	for (let index = 0; index < toolCalls.length; index++) {
-		const toolCall = toolCalls[index];
-		const tool = tools?.find(t => t.name === toolCall.name);
+	const checkSteering = async (): Promise<void> => {
+		if (!shouldInterruptImmediately || !getSteeringMessages || interruptState.triggered) {
+			return;
+		}
+		if (steeringCheck) {
+			await steeringCheck;
+			return;
+		}
+		steeringCheck = (async () => {
+			const steering = await getSteeringMessages();
+			if (steering.length > 0) {
+				steeringMessages = steering;
+				interruptState.triggered = true;
+				steeringAbortController.abort();
+			}
+		})().finally(() => {
+			steeringCheck = null;
+		});
+		await steeringCheck;
+	};
 
+	const records = toolCalls.map(toolCall => ({
+		toolCall,
+		tool: tools?.find(t => t.name === toolCall.name),
+		started: false,
+		result: undefined as AgentToolResult<any> | undefined,
+		isError: false,
+		skipped: false,
+	}));
+
+	const runTool = async (record: (typeof records)[number], index: number): Promise<void> => {
+		if (interruptState.triggered) {
+			record.skipped = true;
+			return;
+		}
+
+		const { toolCall, tool } = record;
+		record.started = true;
 		stream.push({
 			type: "tool_execution_start",
 			toolCallId: toolCall.id,
@@ -397,7 +438,6 @@ async function executeToolCalls(
 			if (!tool) throw new Error(`Tool ${toolCall.name} not found`);
 
 			const validatedArgs = validateToolArguments(tool, toolCall);
-
 			const toolContext = getToolContext
 				? getToolContext({
 						batchId,
@@ -409,8 +449,9 @@ async function executeToolCalls(
 			result = await tool.execute(
 				toolCall.id,
 				validatedArgs,
-				tool.nonAbortable ? undefined : signal,
+				tool.nonAbortable ? undefined : toolSignal,
 				partialResult => {
+					if (interruptState.triggered) return;
 					stream.push({
 						type: "tool_execution_update",
 						toolCallId: toolCall.id,
@@ -429,6 +470,49 @@ async function executeToolCalls(
 			isError = true;
 		}
 
+		if (!interruptState.triggered) {
+			record.result = result;
+			record.isError = isError;
+		} else {
+			record.skipped = true;
+		}
+
+		await checkSteering();
+	};
+
+	let lastExclusive: Promise<void> = Promise.resolve();
+	let sharedTasks: Promise<void>[] = [];
+	const tasks: Promise<void>[] = [];
+
+	for (let index = 0; index < records.length; index++) {
+		const record = records[index];
+		const concurrency = record.tool?.concurrency ?? "shared";
+		const start = concurrency === "exclusive" ? Promise.all([lastExclusive, ...sharedTasks]) : lastExclusive;
+		const task = start.then(() => runTool(record, index));
+		tasks.push(task);
+		if (concurrency === "exclusive") {
+			lastExclusive = task;
+			sharedTasks = [];
+		} else {
+			sharedTasks.push(task);
+		}
+	}
+
+	await Promise.allSettled(tasks);
+
+	for (const record of records) {
+		const toolCall = record.toolCall;
+		const shouldSkip = record.skipped || record.result === undefined;
+		const result = shouldSkip ? createSkippedToolResult() : record.result;
+		const isError = shouldSkip ? true : record.isError;
+		if (!record.started) {
+			stream.push({
+				type: "tool_execution_start",
+				toolCallId: toolCall.id,
+				toolName: toolCall.name,
+				args: toolCall.arguments,
+			});
+		}
 		stream.push({
 			type: "tool_execution_end",
 			toolCallId: toolCall.id,
@@ -450,61 +534,16 @@ async function executeToolCalls(
 		results.push(toolResultMessage);
 		stream.push({ type: "message_start", message: toolResultMessage });
 		stream.push({ type: "message_end", message: toolResultMessage });
-
-		// Check for steering messages - skip remaining tools if user interrupted
-		if (shouldInterruptImmediately && getSteeringMessages) {
-			const steering = await getSteeringMessages();
-			if (steering.length > 0) {
-				steeringMessages = steering;
-				const remainingCalls = toolCalls.slice(index + 1);
-				for (const skipped of remainingCalls) {
-					results.push(skipToolCall(skipped, stream));
-				}
-				break;
-			}
-		}
 	}
 
 	return { toolResults: results, steeringMessages };
 }
 
-function skipToolCall(
-	toolCall: Extract<AssistantMessage["content"][number], { type: "toolCall" }>,
-	stream: EventStream<AgentEvent, AgentMessage[]>,
-): ToolResultMessage {
-	const result: AgentToolResult<any> = {
+function createSkippedToolResult(): AgentToolResult<any> {
+	return {
 		content: [{ type: "text", text: "Skipped due to queued user message." }],
 		details: {},
 	};
-
-	stream.push({
-		type: "tool_execution_start",
-		toolCallId: toolCall.id,
-		toolName: toolCall.name,
-		args: toolCall.arguments,
-	});
-	stream.push({
-		type: "tool_execution_end",
-		toolCallId: toolCall.id,
-		toolName: toolCall.name,
-		result,
-		isError: true,
-	});
-
-	const toolResultMessage: ToolResultMessage = {
-		role: "toolResult",
-		toolCallId: toolCall.id,
-		toolName: toolCall.name,
-		content: result.content,
-		details: {},
-		isError: true,
-		timestamp: Date.now(),
-	};
-
-	stream.push({ type: "message_start", message: toolResultMessage });
-	stream.push({ type: "message_end", message: toolResultMessage });
-
-	return toolResultMessage;
 }
 
 /**

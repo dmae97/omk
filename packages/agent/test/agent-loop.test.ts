@@ -9,7 +9,7 @@ import type {
 	AgentToolContext,
 	ToolCallContext,
 } from "@oh-my-pi/pi-agent-core/types";
-import type { AssistantMessage, Message, Model, UserMessage } from "@oh-my-pi/pi-ai";
+import type { AssistantMessage, Message, Model, ToolResultMessage, UserMessage } from "@oh-my-pi/pi-ai";
 import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
 import { Type } from "@sinclair/typebox";
 
@@ -371,15 +371,128 @@ describe("agentLoop with AgentMessage", () => {
 		}
 	});
 
-	it("should inject queued messages and skip remaining tool calls", async () => {
+	it("runs shared tools in parallel but emits ordered results", async () => {
 		const toolSchema = Type.Object({ value: Type.String() });
-		const executed: string[] = [];
+		const startTimes: Record<string, number> = {};
+		const finishTimes: Record<string, number> = {};
+		const { promise: slowContinue, resolve: slowResolve } = Promise.withResolvers<void>();
+		const { promise: slowStarted, resolve: slowStartedResolve } = Promise.withResolvers<void>();
+		const { promise: fastFinished, resolve: fastFinishedResolve } = Promise.withResolvers<void>();
+
 		const tool: AgentTool<typeof toolSchema, { value: string }> = {
 			name: "echo",
 			label: "Echo",
 			description: "Echo tool",
 			parameters: toolSchema,
 			async execute(_toolCallId, params) {
+				if (params.value === "slow") {
+					startTimes.slow = performance.now();
+					slowStartedResolve();
+					await slowContinue;
+					finishTimes.slow = performance.now();
+				} else {
+					await slowStarted;
+					startTimes.fast = performance.now();
+					finishTimes.fast = performance.now();
+					fastFinishedResolve();
+				}
+				return {
+					content: [{ type: "text", text: `echoed: ${params.value}` }],
+					details: { value: params.value },
+				};
+			},
+		};
+
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [tool],
+		};
+
+		const userPrompt: AgentMessage = createUserMessage("start");
+
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+		};
+
+		let callIndex = 0;
+		const streamFn = () => {
+			const stream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					const message = createAssistantMessage(
+						[
+							{ type: "toolCall", id: "tool-1", name: "echo", arguments: { value: "slow" } },
+							{ type: "toolCall", id: "tool-2", name: "echo", arguments: { value: "fast" } },
+						],
+						"toolUse",
+					);
+					stream.push({ type: "done", reason: "toolUse", message });
+				} else {
+					const message = createAssistantMessage([{ type: "text", text: "done" }]);
+					stream.push({ type: "done", reason: "stop", message });
+				}
+				callIndex++;
+			});
+			return stream;
+		};
+
+		const events: AgentEvent[] = [];
+		const stream = agentLoop([userPrompt], context, config, undefined, streamFn);
+		const streamTask = (async () => {
+			for await (const event of stream) {
+				events.push(event);
+			}
+		})();
+
+		await fastFinished;
+		slowResolve();
+		await streamTask;
+
+		expect(startTimes.fast).toBeDefined();
+		expect(startTimes.slow).toBeDefined();
+		expect(finishTimes.fast).toBeDefined();
+		expect(finishTimes.slow).toBeDefined();
+		expect(startTimes.fast).toBeLessThan(finishTimes.slow);
+		expect(finishTimes.fast).toBeLessThan(finishTimes.slow);
+
+		const toolResultStarts = events.filter(
+			(e): e is Extract<AgentEvent, { type: "message_start" }> =>
+				e.type === "message_start" && e.message.role === "toolResult",
+		);
+		expect(toolResultStarts).toHaveLength(2);
+		expect((toolResultStarts[0].message as ToolResultMessage).toolCallId).toBe("tool-1");
+		expect((toolResultStarts[1].message as ToolResultMessage).toolCallId).toBe("tool-2");
+	});
+
+	it("should inject queued messages and skip remaining tool calls", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		const executed: string[] = [];
+		const { promise: allowSecond, resolve: allowSecondResolve } = Promise.withResolvers<void>();
+		const tool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "echo",
+			label: "Echo",
+			description: "Echo tool",
+			parameters: toolSchema,
+			async execute(_toolCallId, params, signal) {
+				if (params.value === "second") {
+					await new Promise<void>((resolve, reject) => {
+						if (signal?.aborted) {
+							reject(new Error("Tool aborted"));
+							return;
+						}
+						const onAbort = () => reject(new Error("Tool aborted"));
+						signal?.addEventListener("abort", onAbort, { once: true });
+						allowSecond.then(() => {
+							signal?.removeEventListener("abort", onAbort);
+							resolve();
+						});
+					});
+					if (signal?.aborted) {
+						throw new Error("Tool aborted");
+					}
+				}
 				executed.push(params.value);
 				return {
 					content: [{ type: "text", text: `ok:${params.value}` }],
@@ -408,6 +521,7 @@ describe("agentLoop with AgentMessage", () => {
 				// Return queued message after first tool executes
 				if (executed.length === 1 && !queuedDelivered) {
 					queuedDelivered = true;
+					allowSecondResolve();
 					return [queuedUserMessage];
 				}
 				return [];

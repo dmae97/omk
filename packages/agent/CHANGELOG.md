@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `concurrency` option to `AgentTool` to control tool scheduling: "shared" (default, runs in parallel) or "exclusive" (runs alone)
+- Implemented parallel execution of shared tools within a single agent turn for improved performance
+
+### Changed
+
+- Refactored tool execution to support concurrent scheduling with proper interrupt handling and steering message checks
 
 ## [9.2.2] - 2026-01-31
 
