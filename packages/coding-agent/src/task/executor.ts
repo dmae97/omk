@@ -23,7 +23,7 @@ import { createAgentSession, discoverAuthStorage, discoverModels } from "../sdk"
 import type { AgentSession, AgentSessionEvent } from "../session/agent-session";
 import type { AuthStorage } from "../session/auth-storage";
 import { SessionManager } from "../session/session-manager";
-import type { ContextFileEntry } from "../tools";
+import { type ContextFileEntry, truncateTail } from "../tools";
 import { jtdToJsonSchema } from "../tools/jtd-to-json-schema";
 import { ToolAbortError } from "../tools/tool-errors";
 import type { EventBus } from "../utils/event-bus";
@@ -208,51 +208,6 @@ export interface ExecutorOptions {
 	authStorage?: AuthStorage;
 	modelRegistry?: ModelRegistry;
 	settings?: Settings;
-}
-
-/**
- * Truncate output to byte and line limits.
- */
-function truncateOutput(output: string): { text: string; truncated: boolean } {
-	let truncated = false;
-	let byteBudget = MAX_OUTPUT_BYTES;
-	let lineBudget = MAX_OUTPUT_LINES;
-
-	let i = 0;
-	let lastNewlineIndex = -1;
-	while (i < output.length) {
-		const codePoint = output.codePointAt(i);
-		if (codePoint === undefined) break;
-		const codeUnitLength = codePoint > 0xffff ? 2 : 1;
-		const byteLen = codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
-		if (byteBudget - byteLen < 0) {
-			truncated = true;
-			break;
-		}
-		byteBudget -= byteLen;
-		i += codeUnitLength;
-
-		if (codePoint === 0x0a) {
-			lineBudget--;
-			lastNewlineIndex = i - 1;
-			if (lineBudget <= 0) {
-				truncated = true;
-				break;
-			}
-		}
-	}
-
-	if (i < output.length) {
-		truncated = true;
-	}
-
-	if (truncated && lineBudget <= 0 && lastNewlineIndex >= 0) {
-		output = output.slice(0, lastNewlineIndex);
-	} else {
-		output = output.slice(0, i);
-	}
-
-	return { text: output, truncated };
 }
 
 function parseStringifiedJson(value: unknown): unknown {
@@ -1194,7 +1149,10 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			rawOutput = rawOutput ? `${warning}\n\n${rawOutput}` : warning;
 		}
 	}
-	const { text: truncatedOutput, truncated } = truncateOutput(rawOutput);
+	const { content: truncatedOutput, truncated } = truncateTail(rawOutput, {
+		maxBytes: MAX_OUTPUT_BYTES,
+		maxLines: MAX_OUTPUT_LINES,
+	});
 
 	// Write output artifact (input and jsonl already written in real-time)
 	// Compute output metadata for agent:// URL integration
