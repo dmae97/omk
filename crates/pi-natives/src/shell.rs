@@ -319,6 +319,20 @@ const fn exit_code(result: &ExecutionResult) -> i32 {
 	}
 }
 
+#[cfg(windows)]
+fn normalize_env_key(key: &str) -> &str {
+	if key.eq_ignore_ascii_case("PATH") {
+		"PATH"
+	} else {
+		key
+	}
+}
+
+#[cfg(not(windows))]
+fn normalize_env_key(key: &str) -> &str {
+	key
+}
+
 async fn create_session(config: &ShellConfig) -> Result<ShellSessionCore> {
 	let create_options = CreateOptions {
 		interactive: false,
@@ -344,27 +358,29 @@ async fn create_session(config: &ShellConfig) -> Result<ShellSessionCore> {
 	shell.register_builtin("timeout", builtins::builtin::<TimeoutCommand>());
 
 	for (key, value) in std::env::vars() {
-		if should_skip_env_var(&key) {
+		let normalized_key = normalize_env_key(&key);
+		if should_skip_env_var(normalized_key) {
 			continue;
 		}
 		let mut var = ShellVariable::new(ShellValue::String(value));
 		var.export();
 		shell
 			.env
-			.set_global(key, var)
+			.set_global(normalized_key, var)
 			.map_err(|err| Error::from_reason(format!("Failed to set env: {err}")))?;
 	}
 
 	if let Some(env) = config.session_env.as_ref() {
 		for (key, value) in env {
-			if should_skip_env_var(key) {
+			let normalized_key = normalize_env_key(key);
+			if should_skip_env_var(normalized_key) {
 				continue;
 			}
 			let mut var = ShellVariable::new(ShellValue::String(value.clone()));
 			var.export();
 			shell
 				.env
-				.set_global(key.clone(), var)
+				.set_global(normalized_key, var)
 				.map_err(|err| Error::from_reason(format!("Failed to set env: {err}")))?;
 		}
 	}
@@ -428,7 +444,8 @@ async fn run_shell_command(
 		session.shell.env.push_scope(EnvironmentScope::Command);
 		env_scope_pushed = true;
 		for (key, value) in env {
-			if should_skip_env_var(key) {
+			let normalized_key = normalize_env_key(key);
+			if should_skip_env_var(normalized_key) {
 				continue;
 			}
 			let mut var = ShellVariable::new(ShellValue::String(value.clone()));
@@ -436,7 +453,7 @@ async fn run_shell_command(
 			if let Err(err) = session
 				.shell
 				.env
-				.add(key.clone(), var, EnvironmentScope::Command)
+				.add(normalized_key, var, EnvironmentScope::Command)
 			{
 				let _ = session.shell.env.pop_scope(EnvironmentScope::Command);
 				return Err(Error::from_reason(format!("Failed to set env: {err}")));
