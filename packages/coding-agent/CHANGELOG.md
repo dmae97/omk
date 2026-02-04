@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [10.6.1] - 2026-02-04
+
 ### Added
 
 - Added `commit` model role for dedicated commit message generation
