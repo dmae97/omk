@@ -503,7 +503,7 @@ async function executeToolCalls(
 	for (const record of records) {
 		const toolCall = record.toolCall;
 		const shouldSkip = record.skipped || record.result === undefined;
-		const result = shouldSkip ? createSkippedToolResult() : record.result;
+		const result = shouldSkip ? createSkippedToolResult() : (record.result ?? createSkippedToolResult());
 		const isError = shouldSkip ? true : record.isError;
 		if (!record.started) {
 			stream.push({

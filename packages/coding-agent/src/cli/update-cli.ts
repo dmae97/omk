@@ -7,7 +7,6 @@
 import { execSync, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { isEnoent } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
@@ -200,8 +199,7 @@ async function updateViaBinary(release: ReleaseInfo): Promise<void> {
 	}
 
 	const fileStream = fs.createWriteStream(tempPath, { mode: 0o755 });
-	const nodeStream = Readable.fromWeb(response.body as import("stream/web").ReadableStream);
-	await pipeline(nodeStream, fileStream);
+	await pipeline(response.body, fileStream);
 
 	// Download native addon
 	console.log(chalk.dim(`Downloading ${nativeAddonName}...`));
@@ -212,8 +210,7 @@ async function updateViaBinary(release: ReleaseInfo): Promise<void> {
 	}
 
 	const nativeFileStream = fs.createWriteStream(nativeTempPath, { mode: 0o755 });
-	const nativeNodeStream = Readable.fromWeb(nativeResponse.body as import("stream/web").ReadableStream);
-	await pipeline(nativeNodeStream, nativeFileStream);
+	await pipeline(nativeResponse.body, nativeFileStream);
 
 	// Replace current binary
 	console.log(chalk.dim("Installing update..."));

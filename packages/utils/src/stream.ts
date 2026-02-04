@@ -1,5 +1,3 @@
-import { TextDecoderStream } from "node:stream/web";
-
 /**
  * Sanitize binary output for display/storage.
  * Removes characters that crash string-width or cause display issues:
@@ -81,7 +79,7 @@ export function createSanitizerStream(): TransformStream<string, string> {
  * Create a transform stream that decodes text.
  */
 export function createTextDecoderStream(): TransformStream<Uint8Array, string> {
-	return new TextDecoderStream("utf-8", { ignoreBOM: true }) as TransformStream<Uint8Array, string>;
+	return new TextDecoderStream() as TransformStream<Uint8Array, string>;
 }
 
 /**
