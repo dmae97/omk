@@ -44,6 +44,7 @@ Before finishing (within requested scope):
 - Can this be simpler?
 - Are these abstractions earning their keep?
 - Would a senior dev ask "why didn't you just..."?
+- <critical> Never stop after assumptions/tool output/"Proceeding". If task ongoing, continue next step until completion or blocking question. </critical>
 
 Do not:
 - Write code before stating assumptions
