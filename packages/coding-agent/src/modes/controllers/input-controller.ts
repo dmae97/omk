@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import { readImageFromClipboard } from "@oh-my-pi/pi-natives";
-import { getEnv } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils";
 import { nanoid } from "nanoid";
 import type { SettingPath, SettingValue } from "../../config/settings";
 import { settings } from "../../config/settings";
@@ -461,7 +461,7 @@ export class InputController {
 
 			// Generate session title on first message
 			const hasUserMessages = this.ctx.agent.state.messages.some((m: AgentMessage) => m.role === "user");
-			if (!hasUserMessages && !this.ctx.sessionManager.getSessionName() && !getEnv("PI_NO_TITLE")) {
+			if (!hasUserMessages && !this.ctx.sessionManager.getSessionName() && !$env.PI_NO_TITLE) {
 				const registry = this.ctx.session.modelRegistry;
 				const smolModel = this.ctx.settings.getModelRole("smol");
 				generateSessionTitle(text, registry, smolModel, this.ctx.session.sessionId)
@@ -732,7 +732,7 @@ export class InputController {
 
 	async openExternalEditor(): Promise<void> {
 		// Determine editor (respect $VISUAL, then $EDITOR)
-		const editorCmd = getEnv("VISUAL") || getEnv("EDITOR");
+		const editorCmd = $env.VISUAL || $env.EDITOR;
 		if (!editorCmd) {
 			this.ctx.showWarning("No editor configured. Set $VISUAL or $EDITOR environment variable.");
 			return;

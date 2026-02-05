@@ -1,5 +1,5 @@
 import * as os from "node:os";
-import { abortableSleep, getEnv } from "@oh-my-pi/pi-utils";
+import { $env, abortableSleep } from "@oh-my-pi/pi-utils";
 import type {
 	ResponseFunctionToolCall,
 	ResponseInput,
@@ -71,7 +71,7 @@ export function buildCodexSystemPrompt(args: { userSystemPrompt?: string }): Cod
 	};
 }
 
-const CODEX_DEBUG = getEnv("PI_CODEX_DEBUG") === "1" || getEnv("PI_CODEX_DEBUG") === "true";
+const CODEX_DEBUG = $env.PI_CODEX_DEBUG === "1" || $env.PI_CODEX_DEBUG === "true";
 const CODEX_MAX_RETRIES = 2;
 const CODEX_RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 const CODEX_RETRY_DELAY_MS = 500;

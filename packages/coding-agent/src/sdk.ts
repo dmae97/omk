@@ -30,7 +30,7 @@ import * as path from "node:path";
 import { Agent, type AgentEvent, type AgentMessage, type AgentTool, type ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { type Message, type Model, supportsXhigh } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
-import { getEnv, logger, postmortem } from "@oh-my-pi/pi-utils";
+import { $env, logger, postmortem } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 import chalk from "chalk";
 import { loadCapability } from "./capability";
@@ -112,9 +112,7 @@ import { EventBus } from "./utils/event-bus";
 import { time } from "./utils/timings";
 
 /** Conditional startup debug prints (stderr) when PI_DEBUG_STARTUP is set */
-const debugStartup = getEnv("PI_DEBUG_STARTUP")
-	? (stage: string) => process.stderr.write(`[startup] ${stage}\n`)
-	: () => {};
+const debugStartup = $env.PI_DEBUG_STARTUP ? (stage: string) => process.stderr.write(`[startup] ${stage}\n`) : () => {};
 
 // Types
 export interface CreateAgentSessionOptions {
@@ -815,7 +813,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		toolSession.mcpManager = mcpManager;
 
 		// If we extracted Exa API keys from MCP configs and EXA_API_KEY isn't set, use the first one
-		if (mcpResult.exaApiKeys.length > 0 && !getEnv("EXA_API_KEY")) {
+		if (mcpResult.exaApiKeys.length > 0 && !$env.EXA_API_KEY) {
 			process.env.EXA_API_KEY = mcpResult.exaApiKeys[0];
 		}
 

@@ -8,7 +8,7 @@ import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
-import { getEnv } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils";
 
 import packageJson from "../package.json";
 import type { NativeBindings } from "./bindings";
@@ -66,7 +66,7 @@ const compiledCandidates = [
 ];
 
 const releaseCandidates = isCompiledBinary ? [...compiledCandidates, ...baseReleaseCandidates] : baseReleaseCandidates;
-const candidates = getEnv("PI_DEV") ? [...debugCandidates, ...releaseCandidates] : releaseCandidates;
+const candidates = $env.PI_DEV ? [...debugCandidates, ...releaseCandidates] : releaseCandidates;
 
 function maybeExtractEmbeddedAddon(errors: string[]): string | null {
 	if (!isCompiledBinary || !embeddedAddon) return null;
@@ -111,12 +111,12 @@ function loadNative(): NativeBindings {
 		try {
 			const bindings = require(candidate) as NativeBindings;
 			validateNative(bindings, candidate);
-			if (getEnv("PI_DEV")) {
+			if ($env.PI_DEV) {
 				console.log(`Loaded native addon from ${candidate}`);
 			}
 			return bindings;
 		} catch (err) {
-			if (getEnv("PI_DEV")) {
+			if ($env.PI_DEV) {
 				console.error(`Error loading native addon from ${candidate}:`, err);
 			}
 			const message = err instanceof Error ? err.message : String(err);

@@ -1,5 +1,5 @@
 import type { AgentTool } from "@oh-my-pi/pi-agent-core";
-import { getEnv, logger } from "@oh-my-pi/pi-utils";
+import { $env, logger } from "@oh-my-pi/pi-utils";
 import type { PromptTemplate } from "../config/prompt-templates";
 import type { Settings } from "../config/settings";
 import type { Skill } from "../extensibility/skills";
@@ -203,7 +203,7 @@ export type PythonToolMode = "ipy-only" | "bash-only" | "both";
  * - "mix" or "both" → both
  */
 function getPythonModeFromEnv(): PythonToolMode | null {
-	const value = getEnv("PI_PY")?.toLowerCase();
+	const value = $env.PI_PY?.toLowerCase();
 	if (!value) return null;
 
 	switch (value) {
@@ -240,7 +240,7 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 		pythonMode !== "bash-only" &&
 		(requestedTools === undefined || requestedTools.includes("python"));
 	const isTestEnv = process.env.BUN_ENV === "test" || process.env.NODE_ENV === "test";
-	const skipPythonWarm = isTestEnv || getEnv("PI_PYTHON_SKIP_CHECK") === "1";
+	const skipPythonWarm = isTestEnv || $env.PI_PYTHON_SKIP_CHECK === "1";
 	if (shouldCheckPython) {
 		const availability = await checkPythonKernelAvailability(session.cwd);
 		time("createTools:pythonCheck");
@@ -324,7 +324,7 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 		}),
 	);
 	time("createTools:afterFactories");
-	if (slowTools.length > 0 && getEnv("PI_TIMING") === "1") {
+	if (slowTools.length > 0 && $env.PI_TIMING === "1") {
 		logger.debug("Tool factory timings", { slowTools });
 	}
 	const tools = results.filter(r => r.tool !== null).map(r => r.tool as Tool);

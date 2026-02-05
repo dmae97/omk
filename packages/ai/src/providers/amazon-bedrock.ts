@@ -18,7 +18,7 @@ import {
 	type ToolConfiguration,
 	ToolResultStatus,
 } from "@aws-sdk/client-bedrock-runtime";
-import { getEnv } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils";
 import { calculateCost } from "../models";
 import type {
 	Api,
@@ -98,7 +98,7 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream"> = (
 
 		// in Node.js/Bun environment only
 		if (typeof process !== "undefined" && (process.versions?.node || process.versions?.bun)) {
-			config.region = config.region || getEnv("AWS_REGION") || getEnv("AWS_DEFAULT_REGION");
+			config.region = config.region || $env.AWS_REGION || $env.AWS_DEFAULT_REGION;
 		}
 
 		config.region = config.region || "us-east-1";

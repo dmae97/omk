@@ -1,4 +1,4 @@
-import { getEnv } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils";
 import OpenAI from "openai";
 import type {
 	Tool as OpenAITool,
@@ -40,7 +40,7 @@ import { transformMessages } from "./transform-messages";
  * Returns '24h' for long retention, undefined for default (in-memory).
  */
 function getPromptCacheRetention(baseUrl: string): "24h" | undefined {
-	if (getEnv("PI_CACHE_RETENTION") === "long" && baseUrl.includes("api.openai.com")) {
+	if ($env.PI_CACHE_RETENTION === "long" && baseUrl.includes("api.openai.com")) {
 		return "24h";
 	}
 	return undefined;
@@ -357,12 +357,12 @@ function createClient(
 	extraHeaders?: Record<string, string>,
 ) {
 	if (!apiKey) {
-		if (!getEnv("OPENAI_API_KEY")) {
+		if (!$env.OPENAI_API_KEY) {
 			throw new Error(
 				"OpenAI API key is required. Set OPENAI_API_KEY environment variable or pass it as an argument.",
 			);
 		}
-		apiKey = getEnv("OPENAI_API_KEY");
+		apiKey = $env.OPENAI_API_KEY;
 	}
 
 	const headers = { ...(model.headers ?? {}), ...(extraHeaders ?? {}) };

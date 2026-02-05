@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { getEnv, isEnoent, logger } from "@oh-my-pi/pi-utils";
+import { $env, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { getAgentDir } from "../config";
 import { OutputSink } from "../session/streaming-output";
 import { time } from "../utils/timings";
@@ -15,9 +15,7 @@ import {
 import { discoverPythonModules } from "./modules";
 import { PYTHON_PRELUDE } from "./prelude";
 
-const debugStartup = getEnv("PI_DEBUG_STARTUP")
-	? (stage: string) => process.stderr.write(`[startup] ${stage}\n`)
-	: () => {};
+const debugStartup = $env.PI_DEBUG_STARTUP ? (stage: string) => process.stderr.write(`[startup] ${stage}\n`) : () => {};
 
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_KERNEL_SESSIONS = 4;

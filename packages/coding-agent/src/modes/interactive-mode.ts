@@ -15,7 +15,7 @@ import {
 	Text,
 	TUI,
 } from "@oh-my-pi/pi-tui";
-import { getEnv, isEnoent, logger, postmortem } from "@oh-my-pi/pi-utils";
+import { $env, isEnoent, logger, postmortem } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { KeybindingsManager } from "../config/keybindings";
 import { renderPromptTemplate } from "../config/prompt-templates";
@@ -54,9 +54,7 @@ import type { CompactionQueuedMessage, InteractiveModeContext, TodoItem } from "
 import { UiHelpers } from "./utils/ui-helpers";
 
 /** Conditional startup debug prints (stderr) when PI_DEBUG_STARTUP is set */
-const debugStartup = getEnv("PI_DEBUG_STARTUP")
-	? (stage: string) => process.stderr.write(`[startup] ${stage}\n`)
-	: () => {};
+const debugStartup = $env.PI_DEBUG_STARTUP ? (stage: string) => process.stderr.write(`[startup] ${stage}\n`) : () => {};
 
 const TODO_FILE_NAME = "todos.json";
 

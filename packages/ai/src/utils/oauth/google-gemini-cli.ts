@@ -2,10 +2,11 @@
  * Gemini CLI OAuth flow (Google Cloud Code Assist)
  * Standard Gemini models only (gemini-2.0-flash, gemini-2.5-*)
  */
+
+import { $env } from "@oh-my-pi/pi-utils";
 import { OAuthCallbackFlow } from "./callback-server";
 import { generatePKCE } from "./pkce";
 import type { OAuthController, OAuthCredentials } from "./types";
-import { getEnv } from "@oh-my-pi/pi-utils";
 
 const decode = (s: string) => atob(s);
 const CLIENT_ID = decode(
@@ -92,7 +93,7 @@ async function pollOperation(
 }
 
 async function discoverProject(accessToken: string, onProgress?: (message: string) => void): Promise<string> {
-	const envProjectId = getEnv("GOOGLE_CLOUD_PROJECT") || getEnv("GOOGLE_CLOUD_PROJECT_ID");
+	const envProjectId = $env.GOOGLE_CLOUD_PROJECT || $env.GOOGLE_CLOUD_PROJECT_ID;
 
 	const headers = {
 		Authorization: `Bearer ${accessToken}`,

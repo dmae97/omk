@@ -1,4 +1,4 @@
-import { getEnv } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils";
 
 export enum ImageProtocol {
 	Kitty = "\x1b_G",
@@ -42,7 +42,7 @@ export class TerminalInfo {
 }
 
 export function isNotificationSuppressed(): boolean {
-	const value = getEnv("PI_NOTIFICATIONS");
+	const value = $env.PI_NOTIFICATIONS;
 	if (!value) return false;
 	return value === "off" || value === "0" || value === "false";
 }

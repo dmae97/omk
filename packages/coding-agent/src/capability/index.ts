@@ -8,12 +8,10 @@
  */
 import * as os from "node:os";
 import * as path from "node:path";
-import { getEnv } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils";
 
 /** Conditional startup debug prints (stderr) when PI_DEBUG_STARTUP is set */
-const debugStartup = getEnv("PI_DEBUG_STARTUP")
-	? (stage: string) => process.stderr.write(`[startup] ${stage}\n`)
-	: () => {};
+const debugStartup = $env.PI_DEBUG_STARTUP ? (stage: string) => process.stderr.write(`[startup] ${stage}\n`) : () => {};
 
 import type { Settings } from "../config/settings";
 import { clearCache as clearFsCache, cacheStats as fsCacheStats, invalidate as invalidateFs } from "./fs";

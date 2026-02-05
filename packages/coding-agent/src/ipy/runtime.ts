@@ -7,7 +7,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { getEnv } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils";
 
 const DEFAULT_ENV_ALLOWLIST = new Set([
 	"PATH",
@@ -138,7 +138,7 @@ export function filterEnv(env: Record<string, string | undefined>): Record<strin
  * Detect virtual environment path from VIRTUAL_ENV or common locations.
  */
 export function resolveVenvPath(cwd: string): string | undefined {
-	if (getEnv("VIRTUAL_ENV")) return getEnv("VIRTUAL_ENV");
+	if ($env.VIRTUAL_ENV) return $env.VIRTUAL_ENV;
 	const candidates = [path.join(cwd, ".venv"), path.join(cwd, "venv")];
 	for (const candidate of candidates) {
 		if (fs.existsSync(candidate)) {

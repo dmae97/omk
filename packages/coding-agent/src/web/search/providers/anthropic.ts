@@ -5,7 +5,7 @@
  * Returns synthesized answers with citations and source metadata.
  */
 import { applyClaudeToolPrefix, buildAnthropicSystemBlocks, stripClaudeToolPrefix } from "@oh-my-pi/pi-ai";
-import { getEnv } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils";
 import { buildAnthropicHeaders, buildAnthropicUrl, findAnthropicAuth } from "../../../web/search/auth";
 import type {
 	AnthropicApiResponse,
@@ -43,7 +43,7 @@ export interface AnthropicSearchParams {
  * @returns Model identifier string
  */
 function getModel(): string {
-	return getEnv("ANTHROPIC_SEARCH_MODEL") ?? DEFAULT_MODEL;
+	return $env.ANTHROPIC_SEARCH_MODEL ?? DEFAULT_MODEL;
 }
 
 /**

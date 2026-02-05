@@ -3,7 +3,7 @@ import * as fs from "node:fs/promises";
 import http2 from "node:http2";
 import { create, fromBinary, fromJson, type JsonValue, toBinary, toJson } from "@bufbuild/protobuf";
 import { ValueSchema } from "@bufbuild/protobuf/wkt";
-import { getEnv } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils";
 import { calculateCost } from "../models";
 import type {
 	Api,
@@ -139,7 +139,7 @@ interface CursorLogEntry {
 }
 
 async function appendCursorDebugLog(entry: CursorLogEntry): Promise<void> {
-	const logPath = getEnv("DEBUG_CURSOR_LOG");
+	const logPath = $env.DEBUG_CURSOR_LOG;
 	if (!logPath) return;
 	try {
 		await fs.appendFile(logPath, `${JSON.stringify(entry, debugReplacer)}\n`);
@@ -149,10 +149,10 @@ async function appendCursorDebugLog(entry: CursorLogEntry): Promise<void> {
 }
 
 function log(type: string, subtype?: string, data?: unknown): void {
-	if (!getEnv("DEBUG_CURSOR")) return;
+	if (!$env.DEBUG_CURSOR) return;
 	const normalizedData = data ? decodeLogData(data) : data;
 	const entry: CursorLogEntry = { ts: Date.now(), type, subtype, data: normalizedData };
-	const verbose = getEnv("DEBUG_CURSOR") === "2" || getEnv("DEBUG_CURSOR") === "verbose";
+	const verbose = $env.DEBUG_CURSOR === "2" || $env.DEBUG_CURSOR === "verbose";
 	const dataStr = verbose && normalizedData ? ` ${JSON.stringify(normalizedData, debugReplacer)?.slice(0, 500)}` : "";
 	console.error(`[CURSOR] ${type}${subtype ? `: ${subtype}` : ""}${dataStr}`);
 	void appendCursorDebugLog(entry);
@@ -2066,7 +2066,7 @@ function buildGrpcRequest(
 
 	const toolNames = context.tools?.map(tool => tool.name) ?? [];
 	const detail =
-		getEnv("DEBUG_CURSOR") === "2"
+		$env.DEBUG_CURSOR === "2"
 			? ` ${JSON.stringify(clientMessage.message.value, debugReplacer, 2)?.slice(0, 2000)}`
 			: "";
 	log("info", "builtRunRequest", {

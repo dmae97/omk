@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { join } from "node:path";
-import { getEnv } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils";
 import type { Api, KnownProvider, Model } from "../src/types";
 
 const packageRoot = join(import.meta.dir, "..");

@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { getEnvMap } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils";
 import { supportsXhigh } from "./models";
 import { type BedrockOptions, streamBedrock } from "./providers/amazon-bedrock";
 import { type AnthropicOptions, streamAnthropic } from "./providers/anthropic";
@@ -33,9 +33,9 @@ import type {
 
 let cachedVertexAdcCredentialsExists: boolean | null = null;
 
-function hasVertexAdcCredentials(env: ReadOnlyDict<string>): boolean {
+function hasVertexAdcCredentials(): boolean {
 	if (cachedVertexAdcCredentialsExists === null) {
-		const gacPath = env.GOOGLE_APPLICATION_CREDENTIALS;
+		const gacPath = $env.GOOGLE_APPLICATION_CREDENTIALS;
 		if (gacPath) {
 			cachedVertexAdcCredentialsExists = fs.existsSync(gacPath);
 		} else {
@@ -47,7 +47,7 @@ function hasVertexAdcCredentials(env: ReadOnlyDict<string>): boolean {
 	return cachedVertexAdcCredentialsExists;
 }
 
-type KeyResolver = string | ((env: ReadOnlyDict<string>) => string | undefined);
+type KeyResolver = string | (() => string | undefined);
 
 const serviceProviderMap: Record<string, KeyResolver> = {
 	openai: "OPENAI_API_KEY",
@@ -66,15 +66,15 @@ const serviceProviderMap: Record<string, KeyResolver> = {
 	exa: "EXA_API_KEY",
 	perplexity: "PERPLEXITY_API_KEY",
 	// GitHub Copilot uses GitHub personal access token
-	"github-copilot": env => env.COPILOT_GITHUB_TOKEN || env.GH_TOKEN || env.GITHUB_TOKEN,
+	"github-copilot": () => $env.COPILOT_GITHUB_TOKEN || $env.GH_TOKEN || $env.GITHUB_TOKEN,
 	// ANTHROPIC_OAUTH_TOKEN takes precedence over ANTHROPIC_API_KEY
-	anthropic: env => env.ANTHROPIC_OAUTH_TOKEN || env.ANTHROPIC_API_KEY,
+	anthropic: () => $env.ANTHROPIC_OAUTH_TOKEN || $env.ANTHROPIC_API_KEY,
 	// Vertex AI uses Application Default Credentials, not API keys.
 	// Auth is configured via `gcloud auth application-default login`.
-	"google-vertex": env => {
-		const hasCredentials = hasVertexAdcCredentials(env);
-		const hasProject = !!(env.GOOGLE_CLOUD_PROJECT || env.GCLOUD_PROJECT);
-		const hasLocation = !!env.GOOGLE_CLOUD_LOCATION;
+	"google-vertex": () => {
+		const hasCredentials = hasVertexAdcCredentials();
+		const hasProject = !!($env.GOOGLE_CLOUD_PROJECT || $env.GCLOUD_PROJECT);
+		const hasLocation = !!$env.GOOGLE_CLOUD_LOCATION;
 		if (hasCredentials && hasProject && hasLocation) {
 			return "<authenticated>";
 		}
@@ -85,14 +85,14 @@ const serviceProviderMap: Record<string, KeyResolver> = {
 	// 3. AWS_BEARER_TOKEN_BEDROCK - Bedrock API keys (bearer token)
 	// 4. AWS_CONTAINER_CREDENTIALS_* - ECS/Task IAM role credentials
 	// 5. AWS_WEB_IDENTITY_TOKEN_FILE + AWS_ROLE_ARN - IRSA (EKS) web identity
-	"amazon-bedrock": env => {
+	"amazon-bedrock": () => {
 		const hasEcsCredentials =
-			!!env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || !!env.AWS_CONTAINER_CREDENTIALS_FULL_URI;
-		const hasWebIdentity = !!env.AWS_WEB_IDENTITY_TOKEN_FILE && !!env.AWS_ROLE_ARN;
+			!!$env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || !!$env.AWS_CONTAINER_CREDENTIALS_FULL_URI;
+		const hasWebIdentity = !!$env.AWS_WEB_IDENTITY_TOKEN_FILE && !!$env.AWS_ROLE_ARN;
 		if (
-			env.AWS_PROFILE ||
-			(env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY) ||
-			env.AWS_BEARER_TOKEN_BEDROCK ||
+			$env.AWS_PROFILE ||
+			($env.AWS_ACCESS_KEY_ID && $env.AWS_SECRET_ACCESS_KEY) ||
+			$env.AWS_BEARER_TOKEN_BEDROCK ||
 			hasEcsCredentials ||
 			hasWebIdentity
 		) {
@@ -108,12 +108,11 @@ const serviceProviderMap: Record<string, KeyResolver> = {
  * Checks process.env, then cwd/.env, then ~/.env.
  */
 export function getEnvApiKey(provider: string): string | undefined {
-	const env = getEnvMap();
 	const resolver = serviceProviderMap[provider];
 	if (typeof resolver === "string") {
-		return env[resolver];
+		return $env[resolver];
 	}
-	return resolver?.(env);
+	return resolver?.();
 }
 
 export function stream<TApi extends Api>(

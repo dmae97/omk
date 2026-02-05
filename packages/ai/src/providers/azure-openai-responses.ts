@@ -1,4 +1,4 @@
-import { getEnv } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils";
 import type OpenAI from "openai";
 import { AzureOpenAI } from "openai";
 import type {
@@ -55,7 +55,7 @@ function resolveDeploymentName(model: Model<"azure-openai-responses">, options?:
 	if (options?.azureDeploymentName) {
 		return options.azureDeploymentName;
 	}
-	const mappedDeployment = parseDeploymentNameMap(getEnv("AZURE_OPENAI_DEPLOYMENT_NAME_MAP")).get(model.id);
+	const mappedDeployment = parseDeploymentNameMap($env.AZURE_OPENAI_DEPLOYMENT_NAME_MAP).get(model.id);
 	return mappedDeployment ?? model.id;
 }
 
@@ -374,10 +374,10 @@ function resolveAzureConfig(
 	model: Model<"azure-openai-responses">,
 	options?: AzureOpenAIResponsesOptions,
 ): { baseUrl: string; apiVersion: string } {
-	const apiVersion = options?.azureApiVersion || getEnv("AZURE_OPENAI_API_VERSION") || DEFAULT_AZURE_API_VERSION;
+	const apiVersion = options?.azureApiVersion || $env.AZURE_OPENAI_API_VERSION || DEFAULT_AZURE_API_VERSION;
 
-	const baseUrl = options?.azureBaseUrl?.trim() || getEnv("AZURE_OPENAI_BASE_URL")?.trim() || undefined;
-	const resourceName = options?.azureResourceName || getEnv("AZURE_OPENAI_RESOURCE_NAME");
+	const baseUrl = options?.azureBaseUrl?.trim() || $env.AZURE_OPENAI_BASE_URL?.trim() || undefined;
+	const resourceName = options?.azureResourceName || $env.AZURE_OPENAI_RESOURCE_NAME;
 
 	let resolvedBaseUrl = baseUrl;
 
@@ -403,7 +403,7 @@ function resolveAzureConfig(
 
 function createClient(model: Model<"azure-openai-responses">, apiKey: string, options?: AzureOpenAIResponsesOptions) {
 	if (!apiKey) {
-		const envKey = getEnv("AZURE_OPENAI_API_KEY");
+		const envKey = $env.AZURE_OPENAI_API_KEY;
 		if (!envKey) {
 			throw new Error(
 				"Azure OpenAI API key is required. Set AZURE_OPENAI_API_KEY environment variable or pass it as an argument.",

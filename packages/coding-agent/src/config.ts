@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { getEnv, isEnoent, logger } from "@oh-my-pi/pi-utils";
+import { $env, isEnoent, logger } from "@oh-my-pi/pi-utils";
 // Embed package.json at build time for config
 import packageJson from "../package.json" with { type: "json" };
 
@@ -53,7 +53,7 @@ export function getChangelogPath(): string {
 
 /** Get the agent config directory (e.g., ~/.omp/agent/) */
 export function getAgentDir(): string {
-	return getEnv("PI_CODING_AGENT_DIR") || path.join(os.homedir(), CONFIG_DIR_NAME, "agent");
+	return $env.PI_CODING_AGENT_DIR || path.join(os.homedir(), CONFIG_DIR_NAME, "agent");
 }
 
 /** Get path to user's custom themes directory */

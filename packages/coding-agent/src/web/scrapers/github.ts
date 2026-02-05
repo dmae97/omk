@@ -1,4 +1,4 @@
-import { getEnv, ptree } from "@oh-my-pi/pi-utils";
+import { $env, ptree } from "@oh-my-pi/pi-utils";
 import type { RenderResult, SpecialHandler } from "./types";
 import { finalizeOutput, loadPage } from "./types";
 
@@ -85,7 +85,7 @@ export async function fetchGitHubApi(
 		};
 
 		// Use GITHUB_TOKEN if available
-		const token = getEnv("GITHUB_TOKEN") || getEnv("GH_TOKEN");
+		const token = $env.GITHUB_TOKEN || $env.GH_TOKEN;
 		if (token) {
 			headers.Authorization = `Bearer ${token}`;
 		}

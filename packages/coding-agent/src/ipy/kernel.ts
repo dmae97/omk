@@ -1,4 +1,4 @@
-import { getEnv, logger } from "@oh-my-pi/pi-utils";
+import { $env, logger } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
 import { nanoid } from "nanoid";
 import { Settings } from "../config/settings";
@@ -11,12 +11,10 @@ import { filterEnv, resolvePythonRuntime } from "./runtime";
 
 const TEXT_ENCODER = new TextEncoder();
 const TEXT_DECODER = new TextDecoder();
-const TRACE_IPC = getEnv("PI_PYTHON_IPC_TRACE") === "1";
+const TRACE_IPC = $env.PI_PYTHON_IPC_TRACE === "1";
 const PRELUDE_INTROSPECTION_SNIPPET = "import json\nprint(json.dumps(__omp_prelude_docs__()))";
 
-const debugStartup = getEnv("PI_DEBUG_STARTUP")
-	? (stage: string) => process.stderr.write(`[startup] ${stage}\n`)
-	: () => {};
+const debugStartup = $env.PI_DEBUG_STARTUP ? (stage: string) => process.stderr.write(`[startup] ${stage}\n`) : () => {};
 
 class SharedGatewayCreateError extends Error {
 	readonly status: number;
@@ -33,11 +31,11 @@ interface ExternalGatewayConfig {
 }
 
 function getExternalGatewayConfig(): ExternalGatewayConfig | null {
-	const url = getEnv("PI_PYTHON_GATEWAY_URL");
+	const url = $env.PI_PYTHON_GATEWAY_URL;
 	if (!url) return null;
 	return {
 		url: url.replace(/\/$/, ""),
-		token: getEnv("PI_PYTHON_GATEWAY_TOKEN"),
+		token: $env.PI_PYTHON_GATEWAY_TOKEN,
 	};
 }
 
@@ -111,7 +109,7 @@ export interface PythonKernelAvailability {
 }
 
 export async function checkPythonKernelAvailability(cwd: string): Promise<PythonKernelAvailability> {
-	if (process.env.BUN_ENV === "test" || process.env.NODE_ENV === "test" || getEnv("PI_PYTHON_SKIP_CHECK") === "1") {
+	if (process.env.BUN_ENV === "test" || process.env.NODE_ENV === "test" || $env.PI_PYTHON_SKIP_CHECK === "1") {
 		return { ok: true };
 	}
 

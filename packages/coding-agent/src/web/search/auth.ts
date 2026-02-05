@@ -9,7 +9,7 @@
  */
 import * as path from "node:path";
 import { buildAnthropicHeaders as buildProviderAnthropicHeaders, getEnvApiKey } from "@oh-my-pi/pi-ai";
-import { getEnv, logger } from "@oh-my-pi/pi-utils";
+import { $env, logger } from "@oh-my-pi/pi-utils";
 import { getAgentDbPath, getConfigDirPaths } from "../../config";
 import { AgentStorage } from "../../session/agent-storage";
 import type { AuthCredential, AuthCredentialEntry, AuthStorageData } from "../../session/auth-storage";
@@ -120,8 +120,8 @@ export async function findAnthropicAuth(): Promise<AnthropicAuthConfig | null> {
 	const configDirs = getConfigDirPaths("", { project: false });
 
 	// 1. Explicit search-specific env vars
-	const searchApiKey = getEnv("ANTHROPIC_SEARCH_API_KEY");
-	const searchBaseUrl = getEnv("ANTHROPIC_SEARCH_BASE_URL");
+	const searchApiKey = $env.ANTHROPIC_SEARCH_API_KEY;
+	const searchBaseUrl = $env.ANTHROPIC_SEARCH_BASE_URL;
 	if (searchApiKey) {
 		return {
 			apiKey: searchApiKey,
@@ -176,7 +176,7 @@ export async function findAnthropicAuth(): Promise<AnthropicAuthConfig | null> {
 
 	// 4. Generic ANTHROPIC_API_KEY fallback
 	const apiKey = getEnvApiKey("anthropic");
-	const baseUrl = getEnv("ANTHROPIC_BASE_URL");
+	const baseUrl = $env.ANTHROPIC_BASE_URL;
 	if (apiKey) {
 		return {
 			apiKey,

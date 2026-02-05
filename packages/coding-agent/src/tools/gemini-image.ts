@@ -1,7 +1,7 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import { getEnvApiKey, StringEnum } from "@oh-my-pi/pi-ai";
-import { getEnv, ptree, untilAborted } from "@oh-my-pi/pi-utils";
+import { $env, ptree, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { nanoid } from "nanoid";
 import type { ModelRegistry } from "../config/model-registry";
@@ -409,7 +409,7 @@ async function findImageApiKey(modelRegistry?: ModelRegistry): Promise<ImageApiK
 	if (preferredImageProvider === "gemini") {
 		const geminiKey = getEnvApiKey("google");
 		if (geminiKey) return { provider: "gemini", apiKey: geminiKey };
-		const googleKey = getEnv("GOOGLE_API_KEY");
+		const googleKey = $env.GOOGLE_API_KEY;
 		if (googleKey) return { provider: "gemini", apiKey: googleKey };
 		// Fall through to auto-detect if preferred provider key not found
 	} else if (preferredImageProvider === "openrouter") {
@@ -430,7 +430,7 @@ async function findImageApiKey(modelRegistry?: ModelRegistry): Promise<ImageApiK
 	const geminiKey = getEnvApiKey("google");
 	if (geminiKey) return { provider: "gemini", apiKey: geminiKey };
 
-	const googleKey = getEnv("GOOGLE_API_KEY");
+	const googleKey = $env.GOOGLE_API_KEY;
 	if (googleKey) return { provider: "gemini", apiKey: googleKey };
 
 	return null;

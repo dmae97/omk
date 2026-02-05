@@ -2,9 +2,9 @@
  * Central timing instrumentation for startup profiling.
  * Enable with PI_TIMING=1 or PI_TIMING=1 environment variable.
  */
-import { getEnv } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils";
 
-const ENABLED = getEnv("PI_TIMING") === "1";
+const ENABLED = $env.PI_TIMING === "1";
 const timings: Array<{ label: string; ms: number }> = [];
 let lastTime = Date.now();
 

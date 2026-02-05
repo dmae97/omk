@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import { createInterface } from "node:readline/promises";
-import { getEnv } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils";
 import { applyChangelogProposals } from "../../commit/changelog";
 import { detectChangelogBoundaries } from "../../commit/changelog/detect";
 import { parseUnreleasedSection } from "../../commit/changelog/parse";
@@ -83,7 +83,7 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	} else {
 		writeStdout("  └─ (none found)");
 	}
-	const forceFallback = getEnv("PI_COMMIT_TEST_FALLBACK")?.toLowerCase() === "true";
+	const forceFallback = $env.PI_COMMIT_TEST_FALLBACK?.toLowerCase() === "true";
 	if (forceFallback) {
 		writeStdout("● Forcing fallback commit generation...");
 		const fallbackProposal = generateFallbackProposal(numstat);
@@ -138,7 +138,7 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		writeStderr(`Agent error: ${errorMessage}`);
-		if (error instanceof Error && error.stack && getEnv("DEBUG")) {
+		if (error instanceof Error && error.stack && $env.DEBUG) {
 			writeStderr(error.stack);
 		}
 		writeStdout("● Using fallback commit generation...");
@@ -147,7 +147,7 @@ export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
 	}
 
 	if (!usedFallback && !commitState.proposal && !commitState.splitProposal) {
-		if (getEnv("PI_COMMIT_NO_FALLBACK")?.toLowerCase() !== "true") {
+		if ($env.PI_COMMIT_NO_FALLBACK?.toLowerCase() !== "true") {
 			writeStdout("● Agent did not provide proposal, using fallback...");
 			commitState.proposal = generateFallbackProposal(numstat);
 			usedFallback = true;

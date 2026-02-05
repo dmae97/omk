@@ -17,7 +17,7 @@ import * as os from "node:os";
 import path from "node:path";
 import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Usage } from "@oh-my-pi/pi-ai";
-import { getEnv } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
 import { nanoid } from "nanoid";
 import type { ToolSession } from "..";
@@ -136,7 +136,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 	private constructor(session: ToolSession, description: string) {
 		this.session = session;
 		this.description = description;
-		this.blockedAgent = getEnv("PI_BLOCKED_AGENT");
+		this.blockedAgent = $env.PI_BLOCKED_AGENT;
 	}
 
 	/**

@@ -7,7 +7,7 @@ import { Database } from "bun:sqlite";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { getEnv } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils";
 import type { OAuthCredentials } from "./utils/oauth/types";
 
 type AuthCredential = { type: "api_key"; key: string } | ({ type: "oauth" } & OAuthCredentials);
@@ -25,7 +25,7 @@ type AuthRow = {
  * Get the agent config directory (e.g., ~/.omp/agent/)
  */
 function getAgentDir(): string {
-	const configDir = getEnv("PI_CODING_AGENT_DIR") || path.join(os.homedir(), ".omp", "agent");
+	const configDir = $env.PI_CODING_AGENT_DIR || path.join(os.homedir(), ".omp", "agent");
 	return configDir;
 }
 

@@ -4,7 +4,7 @@
  * Client for interacting with Exa MCP servers.
  */
 import * as os from "node:os";
-import { getEnv, isEnoent, logger } from "@oh-my-pi/pi-utils";
+import { $env, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
 import type { CustomTool, CustomToolResult } from "../extensibility/custom-tools/types";
 import { callMCP } from "../mcp/json-rpc";
@@ -21,8 +21,8 @@ import type {
 /** Find EXA_API_KEY from process.env or .env files */
 export async function findApiKey(): Promise<string | null> {
 	// Check process.env first
-	if (getEnv("EXA_API_KEY")) {
-		return getEnv("EXA_API_KEY");
+	if ($env.EXA_API_KEY) {
+		return $env.EXA_API_KEY;
 	}
 
 	// Try loading from .env files in cwd and home

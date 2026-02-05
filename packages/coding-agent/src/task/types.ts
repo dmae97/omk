@@ -1,6 +1,6 @@
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Usage } from "@oh-my-pi/pi-ai";
-import { getEnv } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 
 /** Source of an agent definition */
@@ -19,10 +19,10 @@ const parseNumber = (value: string | undefined, defaultValue: number): number =>
 };
 
 /** Maximum output bytes per agent */
-export const MAX_OUTPUT_BYTES = parseNumber(getEnv("PI_TASK_MAX_OUTPUT_BYTES"), 500_000);
+export const MAX_OUTPUT_BYTES = parseNumber($env.PI_TASK_MAX_OUTPUT_BYTES, 500_000);
 
 /** Maximum output lines per agent */
-export const MAX_OUTPUT_LINES = parseNumber(getEnv("PI_TASK_MAX_OUTPUT_LINES"), 5000);
+export const MAX_OUTPUT_LINES = parseNumber($env.PI_TASK_MAX_OUTPUT_LINES, 5000);
 
 /** EventBus channel for raw subagent events */
 export const TASK_SUBAGENT_EVENT_CHANNEL = "task:subagent:event";

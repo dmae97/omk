@@ -3,8 +3,8 @@
  */
 import * as os from "node:os";
 import * as path from "node:path";
-import { getEnv } from "@oh-my-pi/pi-utils";
 import { getSystemInfo as getNativeSystemInfo, type SystemInfo } from "@oh-my-pi/pi-natives";
+import { $env } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
 import chalk from "chalk";
 import { contextFileCapability } from "./capability/context-file";
@@ -449,7 +449,7 @@ export interface BuildSystemPromptOptions {
 
 /** Build the system prompt with tools, guidelines, and context */
 export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}): Promise<string> {
-	if (getEnv("NULL_PROMPT") === "true") {
+	if ($env.NULL_PROMPT === "true") {
 		return "";
 	}
 

@@ -1,5 +1,5 @@
 import * as fs from "node:fs";
-import { getEnv, logger } from "@oh-my-pi/pi-utils";
+import { $env, logger } from "@oh-my-pi/pi-utils";
 import { setKittyProtocolActive } from "./keys";
 import { StdinBuffer } from "./stdin-buffer";
 
@@ -82,7 +82,7 @@ export class ProcessTerminal implements Terminal {
 	private stdinBuffer?: StdinBuffer;
 	private stdinDataHandler?: (data: string) => void;
 	private dead = false;
-	private writeLogPath = getEnv("PI_TUI_WRITE_LOG") || "";
+	private writeLogPath = $env.PI_TUI_WRITE_LOG || "";
 
 	get kittyProtocolActive(): boolean {
 		return this._kittyProtocolActive;
