@@ -415,8 +415,7 @@ export const SETTINGS_SCHEMA = {
 		ui: {
 			tab: "tools",
 			label: "Task max recursion depth",
-			description:
-				"How many levels deep subagents can spawn their own subagents (0=none, 1=one level, 2=two levels, -1=unlimited)",
+			description: "How many levels deep subagents can spawn their own subagents",
 			submenu: true,
 		},
 	},

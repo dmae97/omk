@@ -84,12 +84,36 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "32", label: "32 tasks" },
 		{ value: "64", label: "64 tasks" },
 	],
+	// Task max recursion depth
+	"task.maxRecursionDepth": () => [
+		{ value: "-1", label: "Unlimited" },
+		{ value: "0", label: "None" },
+		{ value: "1", label: "Single" },
+		{ value: "2", label: "Double" },
+		{ value: "3", label: "Triple" },
+	],
 	// Todo max reminders
 	"todo.reminders.max": () => [
 		{ value: "1", label: "1 reminder" },
 		{ value: "2", label: "2 reminders" },
 		{ value: "3", label: "3 reminders" },
 		{ value: "5", label: "5 reminders" },
+	],
+	// Grep context
+	"grep.contextBefore": () => [
+		{ value: "0", label: "0 lines" },
+		{ value: "1", label: "1 line" },
+		{ value: "2", label: "2 lines" },
+		{ value: "3", label: "3 lines" },
+		{ value: "5", label: "5 lines" },
+	],
+	"grep.contextAfter": () => [
+		{ value: "0", label: "0 lines" },
+		{ value: "1", label: "1 line" },
+		{ value: "2", label: "2 lines" },
+		{ value: "3", label: "3 lines" },
+		{ value: "5", label: "5 lines" },
+		{ value: "10", label: "10 lines" },
 	],
 	// Ask timeout
 	"ask.timeout": () => [

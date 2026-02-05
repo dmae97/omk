@@ -1,8 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added UI dropdown options for `task.maxRecursion Depth` setting with presets (Unlimited, None, Single, Double, Triple)
+- Added UI dropdown options for `grep.contextBefore` setting with presets (0-5 lines)
+- Added UI dropdown options for `grep.contextAfter` setting with presets (0-10 lines)
 - Added `task.maxRecursionDepth` setting to control how many levels deep subagents can spawn their own subagents (0=none, 1=one level, 2=two levels, -1=unlimited)
 - Added support for nested task artifact naming with parent task prefixes (e.g., "0-Auth.1-Subtask") to organize hierarchical task outputs
 - Added `taskDepth` and `parentTaskPrefix` options to `CreateAgentSessionOptions` for tracking subagent recursion depth and organizing nested artifacts
@@ -12,6 +16,7 @@
 
 ### Changed
 
+- Simplified `task.maxRecursionDepth` description in settings UI to remove specific value examples
 - Made thinking level persistence optional via `persist` parameter in `setThinkingLevel()` method, allowing temporary thinking level changes without saving to settings
 - Updated thinking level cycling to no longer persist changes to settings, enabling quick iteration through thinking levels without modifying user preferences
 - Replaced nanoid with Snowflake for ID generation throughout codebase for improved performance and collision resistance
