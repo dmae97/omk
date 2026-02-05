@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Support for image file mentions—images are now automatically detected, resized, and attached when referenced with @filepath syntax
@@ -8,11 +9,13 @@
 
 ### Changed
 
+- Updated Perplexity search to use 'pro' search type for improved search quality and relevance
 - File mention messages now support both text content and image attachments, with optional line count for text files
 - Updated file mention processing to respect image auto-resize settings
 
 ### Fixed
 
+- Fixed web search to use search results when Perplexity API returns no citations, ensuring search results are always available to users
 - Fixed model switches deferred during streaming to apply correctly when the stream completes, preventing model changes from being lost
 - Fixed plan mode toggles during streaming to inject plan-mode context immediately, preventing file edits while in plan mode
 - Fixed plan mode model switches during streaming to defer model changes until the current turn completes

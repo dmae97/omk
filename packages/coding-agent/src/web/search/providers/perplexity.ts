@@ -75,19 +75,31 @@ function parseResponse(response: PerplexityResponse): WebSearchResponse {
 	const citationUrls = response.citations ?? [];
 	const searchResults = response.search_results ?? [];
 
-	for (const url of citationUrls) {
-		const searchResult = searchResults.find(r => r.url === url);
-		sources.push({
-			title: searchResult?.title ?? url,
-			url,
-			snippet: searchResult?.snippet,
-			publishedDate: searchResult?.date,
-			ageSeconds: dateToAgeSeconds(searchResult?.date),
-		});
-		citations.push({
-			url,
-			title: searchResult?.title ?? url,
-		});
+	if (citationUrls.length > 0) {
+		for (const url of citationUrls) {
+			const searchResult = searchResults.find(r => r.url === url);
+			sources.push({
+				title: searchResult?.title ?? url,
+				url,
+				snippet: searchResult?.snippet,
+				publishedDate: searchResult?.date,
+				ageSeconds: dateToAgeSeconds(searchResult?.date),
+			});
+			citations.push({
+				url,
+				title: searchResult?.title ?? url,
+			});
+		}
+	} else {
+		for (const searchResult of searchResults) {
+			sources.push({
+				title: searchResult.title ?? searchResult.url,
+				url: searchResult.url,
+				snippet: searchResult.snippet,
+				publishedDate: searchResult.date,
+				ageSeconds: dateToAgeSeconds(searchResult.date),
+			});
+		}
 	}
 
 	return {
@@ -124,6 +136,7 @@ export async function searchPerplexity(params: PerplexitySearchParams): Promise<
 		messages,
 		return_related_questions: false,
 		web_search_options: {
+			search_type: "pro",
 			search_context_size: "high",
 		},
 	};

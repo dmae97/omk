@@ -163,6 +163,7 @@ export interface PerplexityRequest {
 	return_images?: boolean;
 	return_related_questions?: boolean;
 	web_search_options?: {
+		search_type?: "fast" | "pro";
 		search_context_size?: "low" | "medium" | "high";
 	};
 }
