@@ -47,7 +47,7 @@ export function sanitizeBinaryOutput(str: string): string {
  * Sanitize text output: strip ANSI codes, remove binary garbage, normalize line endings.
  */
 export function sanitizeText(text: string): string {
-	return sanitizeBinaryOutput(Bun.stripANSI(text)).replace(/\r/g, "");
+	return sanitizeBinaryOutput(Bun.stripANSI(text)).replaceAll("\r", "");
 }
 
 const LF = 0x0a;
@@ -107,44 +107,12 @@ export async function* readJsonl<T>(stream: ReadableStream<Uint8Array>, signal?:
 // SSE (Server-Sent Events)
 // =============================================================================
 
-class Bitmap {
-	private bits: Uint32Array;
-	constructor(n: number) {
-		this.bits = new Uint32Array((n + 31) >>> 5);
-	}
-
-	set(i: number, value: boolean) {
-		const index = i >>> 5;
-		const mask = 1 << (i & 31);
-		if (value) {
-			this.bits[index] |= mask;
-		} else {
-			this.bits[index] &= ~mask;
-		}
-	}
-	get(i: number) {
-		const index = i >>> 5;
-		const mask = 1 << (i & 31);
-		const word = this.bits[index];
-		return word !== undefined && (word & mask) !== 0;
-	}
-}
-
-const WHITESPACE = new Bitmap(256);
-for (let i = 0; i <= 0x7f; i++) {
-	const c = String.fromCharCode(i);
-	switch (c) {
-		case " ":
-		case "\t":
-		case "\n":
-		case "\r":
-			WHITESPACE.set(i, true);
-			break;
-		default:
-			WHITESPACE.set(i, !c.trim());
-			break;
-	}
-}
+/** Byte lookup table: 1 = whitespace, 0 = not. */
+const WS = new Uint8Array(256);
+WS[0x09] = 1; // tab
+WS[0x0a] = 1; // LF
+WS[0x0d] = 1; // CR
+WS[0x20] = 1; // space
 
 const createPattern = (prefix: string) => {
 	const pre = Buffer.from(prefix, "utf-8");
@@ -235,7 +203,6 @@ class ConcatSink {
 			}
 		}
 	}
-
 	*pullJSONL<T>(chunk: Uint8Array, beg: number, end: number) {
 		if (this.isEmpty) {
 			const { values, error, read, done } = Bun.JSONL.parseChunk(chunk, beg, end);
@@ -244,8 +211,7 @@ class ConcatSink {
 			}
 			if (error) throw error;
 			if (done) return;
-			const rem = end - read;
-			this.reset(chunk.subarray(end - rem, end));
+			this.reset(chunk.subarray(read, end));
 			return;
 		}
 
@@ -265,9 +231,9 @@ class ConcatSink {
 			this.#length = 0;
 			return;
 		}
-		const rem = end - read;
+		const rem = total - read;
 		if (rem < total) {
-			space.copyWithin(0, total - rem, total);
+			space.copyWithin(0, read, total);
 		}
 		this.#length = rem;
 	}
@@ -297,7 +263,7 @@ export async function* readSseJson<T>(stream: ReadableStream<Uint8Array>, signal
 		const processLine = function* (line: Uint8Array) {
 			// Strip trailing spaces including \r.
 			let end = line.length;
-			while (end && WHITESPACE.get(line[end - 1])) {
+			while (end && WS[line[end - 1]]) {
 				--end;
 			}
 			if (!end) return; // blank line
@@ -307,7 +273,7 @@ export async function* readSseJson<T>(stream: ReadableStream<Uint8Array>, signal
 			// Check "data:" prefix and optional space afterwards.
 			let beg = PAT_DATA.strip(trimmed);
 			if (beg === null) return;
-			while (beg < end && WHITESPACE.get(trimmed[beg])) {
+			while (beg < end && WS[trimmed[beg]]) {
 				++beg;
 			}
 			if (beg >= end) return;

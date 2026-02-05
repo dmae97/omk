@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import type { BufferSource } from "bun";
 import {
 	parseJsonlLenient,
 	readJsonl,
@@ -10,24 +9,6 @@ import {
 } from "../src/stream";
 
 const encoder = new TextEncoder();
-
-async function runTransform<T>(transform: TransformStream<BufferSource, T>, chunks: Uint8Array[]): Promise<T[]> {
-	const readable = new ReadableStream<BufferSource>({
-		start(controller) {
-			for (const chunk of chunks) controller.enqueue(chunk);
-			controller.close();
-		},
-	});
-
-	const reader = readable.pipeThrough(transform).getReader();
-	const output: T[] = [];
-	while (true) {
-		const { value, done } = await reader.read();
-		if (done) break;
-		output.push(value);
-	}
-	return output;
-}
 
 async function runStringTransform(transform: TransformStream<string, string>, chunks: string[]): Promise<string[]> {
 	const readable = new ReadableStream<string>({
@@ -135,14 +116,6 @@ describe("createSanitizerStream", () => {
 		const output = await runStringTransform(transform, ["\u001b[34mhi\u001b[0m\r\n"]);
 
 		expect(output).toEqual(["hi\n"]);
-	});
-});
-
-describe("createTextDecoderStream", () => {
-	it("decodes utf-8 byte streams", async () => {
-		const output = await runTransform(new TextDecoderStream(), [encoder.encode("hello"), encoder.encode(" world")]);
-
-		expect(output.join("")).toBe("hello world");
 	});
 });
 

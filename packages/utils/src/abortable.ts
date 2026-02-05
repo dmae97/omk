@@ -30,38 +30,6 @@ export function createAbortableStream<T>(stream: ReadableStream<T>, signal?: Abo
 }
 
 /**
- * Creates a deferred { promise, resolve, reject } triple which automatically rejects
- * with { name: "AbortError" } if the given abort signal fires before resolve/reject.
- *
- * @param signal - Optional AbortSignal to cancel the operation
- * @returns A deferred { promise, resolve, reject } triple
- */
-export function createAbortablePromise<T>(signal?: AbortSignal): {
-	promise: Promise<T>;
-	resolve: (value: T | PromiseLike<T>) => void;
-	reject: (reason?: unknown) => void;
-} {
-	if (!signal) {
-		return Promise.withResolvers<T>();
-	} else if (signal.aborted) {
-		return { promise: Promise.reject(new AbortError(signal)), resolve: () => {}, reject: () => {} };
-	}
-
-	const { promise, resolve, reject } = Promise.withResolvers<T>();
-
-	const abortHandler = () => {
-		reject(new AbortError(signal));
-	};
-	signal.addEventListener("abort", abortHandler, { once: true });
-	promise
-		.finally(() => {
-			signal.removeEventListener("abort", abortHandler);
-		})
-		.catch(() => {});
-	return { promise, resolve, reject };
-}
-
-/**
  * Runs a promise-returning function (`pr`). If the given AbortSignal is aborted before or during
  * execution, the promise is rejected with a standard error.
  *
@@ -70,26 +38,25 @@ export function createAbortablePromise<T>(signal?: AbortSignal): {
  * @returns Promise resolving as `pr` would, or rejecting on abort
  */
 export function untilAborted<T>(signal: AbortSignal | undefined | null, pr: () => Promise<T>): Promise<T> {
-	if (!signal) {
-		return pr();
-	} else if (signal.aborted) {
-		return Promise.reject(new AbortError(signal));
-	}
-	const { promise, resolve, reject } = createAbortablePromise<T>(signal);
-	let settled = false;
-	const wrappedResolve = (value: T | PromiseLike<T>) => {
-		if (!settled) {
-			settled = true;
-			resolve(value);
+	if (!signal) return pr();
+	if (signal.aborted) return Promise.reject(new AbortError(signal));
+
+	const { promise, resolve, reject } = Promise.withResolvers<T>();
+	const onAbort = () => reject(new AbortError(signal));
+	signal.addEventListener("abort", onAbort, { once: true });
+	const cleanup = () => signal.removeEventListener("abort", onAbort);
+
+	void (async () => {
+		try {
+			const out = await pr();
+			resolve(out);
+		} catch (err) {
+			reject(err);
+		} finally {
+			cleanup();
 		}
-	};
-	const wrappedReject = (reason?: unknown) => {
-		if (!settled) {
-			settled = true;
-			reject(reason);
-		}
-	};
-	pr().then(wrappedResolve, wrappedReject);
+	})();
+
 	return promise;
 }
 
