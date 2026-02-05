@@ -158,13 +158,13 @@ export async function* readSseJson<T>(
 	sink.start({ asUint8Array: true, stream: true, highWaterMark: 4096 });
 	let pending = false;
 
-	const cleanup = () => {
-		stream.cancel(abortSignal?.reason ?? new Error("Request aborted"));
-	};
-	abortSignal?.addEventListener("abort", cleanup, { once: true });
+	// pipeThrough with { signal } makes the stream abort-aware: the pipe
+	// cancels the source and errors the output when the signal fires,
+	// so for-await-of exits cleanly without manual reader/listener management.
+	const source = abortSignal ? stream.pipeThrough(new TransformStream(), { signal: abortSignal }) : stream;
 
 	try {
-		for await (const chunk of stream) {
+		for await (const chunk of source) {
 			let pos = 0;
 			while (pos < chunk.length) {
 				const nl = chunk.indexOf(LF, pos);
@@ -213,8 +213,10 @@ export async function* readSseJson<T>(
 				if (parsed !== undefined) yield parsed as T;
 			}
 		}
-	} finally {
-		abortSignal?.removeEventListener("abort", cleanup);
+	} catch (err) {
+		// Abort errors are expected — just stop the generator.
+		if (abortSignal?.aborted) return;
+		throw err;
 	}
 
 	// Trailing line without final newline.
