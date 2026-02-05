@@ -6,6 +6,7 @@
 
 - Added `task.maxConcurrency` setting to control concurrent limit for subagents (default: 32)
 - Added UI options for task concurrency configuration with presets from unlimited to 64 tasks
+- Added support for loading skills from `~/.agents/skills`
 
 ### Changed
 

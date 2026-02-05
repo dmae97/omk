@@ -121,6 +121,7 @@ Skills are discovered from these sources (first match wins on name collisions):
 - OMP user: `~/.omp/agent/skills/<skill>/SKILL.md` (legacy alias: `~/.pi/agent/skills/...`)
 - OMP project: `<cwd>/.omp/skills/<skill>/SKILL.md` (legacy alias: `<cwd>/.pi/skills/...`)
 - Claude Code: `~/.claude/skills/<skill>/SKILL.md` and `<cwd>/.claude/skills/<skill>/SKILL.md`
+- Agents standard: `~/.agents/skills/<skill>/SKILL.md`
 - Codex CLI: `~/.codex/skills/<skill>/SKILL.md` and `<cwd>/.codex/skills/<skill>/SKILL.md`
 - Custom directories from `skills.customDirectories` (scanned recursively)
 
