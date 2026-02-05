@@ -579,23 +579,22 @@ function extractFirstUserPrompt(entries: Array<Record<string, unknown>>): string
 async function getSortedSessions(sessionDir: string, storage: SessionStorage): Promise<RecentSessionInfo[]> {
 	try {
 		const files: string[] = storage.listFilesSync(sessionDir, "*.jsonl");
-		const results = await Promise.all(
+		const sessions: RecentSessionInfo[] = [];
+		await Promise.all(
 			files.map(async (path: string) => {
 				try {
 					const content = await storage.readTextPrefix(path, 4096);
 					const entries = parseJsonlEntries<Record<string, unknown>>(content);
-					if (entries.length === 0) return null;
+					if (entries.length === 0) return;
 					const header = entries[0] as Record<string, unknown>;
-					if (header.type !== "session" || typeof header.id !== "string") return null;
+					if (header.type !== "session" || typeof header.id !== "string") return;
 					const mtime = storage.statSync(path).mtimeMs;
 					const firstPrompt = header.title ? undefined : extractFirstUserPrompt(entries);
-					return new RecentSessionInfo(path, mtime, header, firstPrompt);
-				} catch {
-					return null;
-				}
+					sessions.push(new RecentSessionInfo(path, mtime, header, firstPrompt));
+				} catch {}
 			}),
 		);
-		return results.filter((item): item is RecentSessionInfo => item !== null).sort((a, b) => b.mtime - a.mtime);
+		return sessions.sort((a, b) => b.mtime - a.mtime);
 	} catch {
 		return [];
 	}
@@ -908,62 +907,65 @@ function extractTextFromContent(content: Message["content"]): string {
 async function collectSessionsFromFiles(files: string[], storage: SessionStorage): Promise<SessionInfo[]> {
 	const sessions: SessionInfo[] = [];
 
-	for (const file of files) {
-		try {
-			const content = await storage.readText(file);
-			const entries = parseJsonlEntries<Record<string, unknown>>(content);
-			if (entries.length === 0) continue;
+	// Collect session info for all files in parallel
+	await Promise.all(
+		files.map(async file => {
+			try {
+				const content = await storage.readText(file);
+				const entries = parseJsonlEntries<Record<string, unknown>>(content);
+				if (entries.length === 0) return;
 
-			// Check first entry for valid session header
-			type SessionHeaderShape = { type: string; id: string; cwd?: string; title?: string; timestamp: string };
-			const header = entries[0] as SessionHeaderShape;
-			if (header.type !== "session" || !header.id) continue;
+				// Check first entry for valid session header
+				type SessionHeaderShape = { type: string; id: string; cwd?: string; title?: string; timestamp: string };
+				const header = entries[0] as SessionHeaderShape;
+				if (header.type !== "session" || !header.id) return;
 
-			const stats = storage.statSync(file);
-			let messageCount = 0;
-			let firstMessage = "";
-			const allMessages: string[] = [];
-			let shortSummary: string | undefined;
+				let messageCount = 0;
+				let firstMessage = "";
+				const allMessages: string[] = [];
+				let shortSummary: string | undefined;
 
-			for (let i = 1; i < entries.length; i++) {
-				const entry = entries[i] as { type?: string; message?: Message; shortSummary?: string };
+				for (let i = 1; i < entries.length; i++) {
+					const entry = entries[i] as { type?: string; message?: Message; shortSummary?: string };
 
-				if (entry.type === "compaction" && typeof entry.shortSummary === "string") {
-					shortSummary = entry.shortSummary;
-				}
+					if (entry.type === "compaction" && typeof entry.shortSummary === "string") {
+						shortSummary = entry.shortSummary;
+					}
 
-				if (entry.type === "message" && entry.message) {
-					messageCount++;
+					if (entry.type === "message" && entry.message) {
+						messageCount++;
 
-					if (entry.message.role === "user" || entry.message.role === "assistant") {
-						const textContent = extractTextFromContent(entry.message.content);
+						if (entry.message.role === "user" || entry.message.role === "assistant") {
+							const textContent = extractTextFromContent(entry.message.content);
 
-						if (textContent) {
-							allMessages.push(textContent);
+							if (textContent) {
+								allMessages.push(textContent);
 
-							if (!firstMessage && entry.message.role === "user") {
-								firstMessage = textContent;
+								if (!firstMessage && entry.message.role === "user") {
+									firstMessage = textContent;
+								}
 							}
 						}
 					}
 				}
-			}
 
-			sessions.push({
-				path: file,
-				id: header.id,
-				cwd: typeof header.cwd === "string" ? header.cwd : "",
-				title: header.title ?? shortSummary,
-				created: new Date(header.timestamp),
-				modified: stats.mtime,
-				messageCount,
-				firstMessage: firstMessage || "(no messages)",
-				allMessagesText: allMessages.join(" "),
-			});
-		} catch {
-			// Skip files that can't be read
-		}
-	}
+				if (messageCount) {
+					const stats = storage.statSync(file);
+					sessions.push({
+						path: file,
+						id: header.id,
+						cwd: typeof header.cwd === "string" ? header.cwd : "",
+						title: header.title ?? shortSummary,
+						created: new Date(header.timestamp),
+						modified: stats.mtime,
+						messageCount,
+						firstMessage: firstMessage || "(no messages)",
+						allMessagesText: allMessages.join(" "),
+					});
+				}
+			} catch {}
+		}),
+	);
 
 	sessions.sort((a, b) => b.modified.getTime() - a.modified.getTime());
 	return sessions;

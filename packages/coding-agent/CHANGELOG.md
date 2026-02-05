@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed role model cycling to expand role aliases (e.g., roles pointing at `pi/plan`) so slow/default/smol cycles resolve correctly
+
 ## [11.0.0] - 2026-02-05
 
 ### Added
