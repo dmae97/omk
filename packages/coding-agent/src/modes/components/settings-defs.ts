@@ -43,7 +43,7 @@ export interface EnumSettingDef extends BaseSettingDef {
 
 export interface SubmenuSettingDef extends BaseSettingDef {
 	type: "submenu";
-	getOptions: () => Array<{ value: string; label: string; description?: string }>;
+	get options(): OptionList;
 	onPreview?: (value: string) => void;
 	onPreviewCancel?: (originalValue: string) => void;
 }
@@ -62,11 +62,12 @@ const CONDITIONS: Record<string, () => boolean> = {
 // Submenu Option Providers
 // ═══════════════════════════════════════════════════════════════════════════
 
-type OptionProvider = () => Array<{ value: string; label: string; description?: string }>;
+type OptionList = ReadonlyArray<{ value: string; label: string; description?: string }>;
+type OptionProvider = (() => OptionList) | OptionList;
 
 const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 	// Retry max retries
-	"retry.maxRetries": () => [
+	"retry.maxRetries": [
 		{ value: "1", label: "1 retry" },
 		{ value: "2", label: "2 retries" },
 		{ value: "3", label: "3 retries" },
@@ -74,7 +75,7 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "10", label: "10 retries" },
 	],
 	// Task max concurrency
-	"task.maxConcurrency": () => [
+	"task.maxConcurrency": [
 		{ value: "0", label: "Unlimited" },
 		{ value: "1", label: "1 task" },
 		{ value: "2", label: "2 tasks" },
@@ -85,7 +86,7 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "64", label: "64 tasks" },
 	],
 	// Task max recursion depth
-	"task.maxRecursionDepth": () => [
+	"task.maxRecursionDepth": [
 		{ value: "-1", label: "Unlimited" },
 		{ value: "0", label: "None" },
 		{ value: "1", label: "Single" },
@@ -93,21 +94,21 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "3", label: "Triple" },
 	],
 	// Todo max reminders
-	"todo.reminders.max": () => [
+	"todo.reminders.max": [
 		{ value: "1", label: "1 reminder" },
 		{ value: "2", label: "2 reminders" },
 		{ value: "3", label: "3 reminders" },
 		{ value: "5", label: "5 reminders" },
 	],
 	// Grep context
-	"grep.contextBefore": () => [
+	"grep.contextBefore": [
 		{ value: "0", label: "0 lines" },
 		{ value: "1", label: "1 line" },
 		{ value: "2", label: "2 lines" },
 		{ value: "3", label: "3 lines" },
 		{ value: "5", label: "5 lines" },
 	],
-	"grep.contextAfter": () => [
+	"grep.contextAfter": [
 		{ value: "0", label: "0 lines" },
 		{ value: "1", label: "1 line" },
 		{ value: "2", label: "2 lines" },
@@ -116,7 +117,7 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "10", label: "10 lines" },
 	],
 	// Ask timeout
-	"ask.timeout": () => [
+	"ask.timeout": [
 		{ value: "0", label: "Disabled" },
 		{ value: "15", label: "15 seconds" },
 		{ value: "30", label: "30 seconds" },
@@ -124,14 +125,14 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "120", label: "120 seconds" },
 	],
 	// Edit fuzzy threshold
-	"edit.fuzzyThreshold": () => [
+	"edit.fuzzyThreshold": [
 		{ value: "0.85", label: "0.85", description: "Lenient" },
 		{ value: "0.90", label: "0.90", description: "Moderate" },
 		{ value: "0.95", label: "0.95", description: "Default" },
 		{ value: "0.98", label: "0.98", description: "Strict" },
 	],
 	// TTSR repeat gap
-	"ttsr.repeatGap": () => [
+	"ttsr.repeatGap": [
 		{ value: "5", label: "5 messages" },
 		{ value: "10", label: "10 messages" },
 		{ value: "15", label: "15 messages" },
@@ -139,29 +140,38 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "30", label: "30 messages" },
 	],
 	// Provider options
-	"providers.webSearch": () => [
+	"providers.webSearch": [
 		{ value: "auto", label: "Auto", description: "Priority: Exa > Perplexity > Anthropic" },
 		{ value: "exa", label: "Exa", description: "Requires EXA_API_KEY" },
 		{ value: "perplexity", label: "Perplexity", description: "Requires PERPLEXITY_API_KEY" },
 		{ value: "anthropic", label: "Anthropic", description: "Uses Anthropic web search" },
 	],
-	"providers.image": () => [
+	"providers.image": [
 		{ value: "auto", label: "Auto", description: "Priority: OpenRouter > Gemini" },
 		{ value: "gemini", label: "Gemini", description: "Requires GEMINI_API_KEY" },
 		{ value: "openrouter", label: "OpenRouter", description: "Requires OPENROUTER_API_KEY" },
 	],
-	"providers.kimiApiFormat": () => [
+	"providers.kimiApiFormat": [
 		{ value: "openai", label: "OpenAI", description: "api.kimi.com" },
 		{ value: "anthropic", label: "Anthropic", description: "api.moonshot.ai" },
 	],
+	// Default thinking level
+	defaultThinkingLevel: [
+		{ value: "off", label: "off", description: "No reasoning" },
+		{ value: "minimal", label: "minimal", description: "Very brief (~1k tokens)" },
+		{ value: "low", label: "low", description: "Light (~2k tokens)" },
+		{ value: "medium", label: "medium", description: "Moderate (~8k tokens)" },
+		{ value: "high", label: "high", description: "Deep (~16k tokens)" },
+		{ value: "xhigh", label: "xhigh", description: "Maximum (~32k tokens)" },
+	],
 	// Symbol preset
-	symbolPreset: () => [
+	symbolPreset: [
 		{ value: "unicode", label: "Unicode", description: "Standard symbols (default)" },
 		{ value: "nerd", label: "Nerd Font", description: "Requires Nerd Font" },
 		{ value: "ascii", label: "ASCII", description: "Maximum compatibility" },
 	],
 	// Status line preset
-	"statusLine.preset": () => [
+	"statusLine.preset": [
 		{ value: "default", label: "Default", description: "Model, path, git, context, tokens, cost" },
 		{ value: "minimal", label: "Minimal", description: "Path and git only" },
 		{ value: "compact", label: "Compact", description: "Model, git, cost, context" },
@@ -171,7 +181,7 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "custom", label: "Custom", description: "User-defined segments" },
 	],
 	// Status line separator
-	"statusLine.separator": () => [
+	"statusLine.separator": [
 		{ value: "powerline", label: "Powerline", description: "Solid arrows (Nerd Font)" },
 		{ value: "powerline-thin", label: "Thin chevron", description: "Thin arrows (Nerd Font)" },
 		{ value: "slash", label: "Slash", description: "Forward slashes" },
@@ -182,14 +192,23 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 	],
 };
 
-const THINKING_DESCRIPTIONS: Record<string, string> = {
-	off: "No reasoning",
-	minimal: "Very brief (~1k tokens)",
-	low: "Light (~2k tokens)",
-	medium: "Moderate (~8k tokens)",
-	high: "Deep (~16k tokens)",
-	xhigh: "Maximum (~32k tokens)",
-};
+function createSubmenuSettingDef(base: Omit<SettingDef, "type" | "options">, provider: OptionProvider): SettingDef {
+	if (typeof provider === "function") {
+		return {
+			...base,
+			type: "submenu",
+			get options() {
+				return provider();
+			},
+		};
+	} else {
+		return {
+			...base,
+			type: "submenu",
+			options: provider,
+		};
+	}
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Schema to UI Conversion
@@ -215,18 +234,8 @@ function pathToSettingDef(path: SettingPath): SettingDef | null {
 		// If marked as submenu, use submenu type
 		if (ui.submenu) {
 			const provider = OPTION_PROVIDERS[path];
-			return {
-				...base,
-				type: "submenu",
-				getOptions:
-					provider ??
-					(() =>
-						values.map(v => ({
-							value: v,
-							label: v,
-							description: path === "defaultThinkingLevel" ? THINKING_DESCRIPTIONS[v] : undefined,
-						}))),
-			};
+			if (!provider) return null;
+			return createSubmenuSettingDef(base, provider);
 		}
 
 		return { ...base, type: "enum", values };
@@ -235,17 +244,17 @@ function pathToSettingDef(path: SettingPath): SettingDef | null {
 	if (schemaType === "number" && ui.submenu) {
 		const provider = OPTION_PROVIDERS[path];
 		if (provider) {
-			return { ...base, type: "submenu", getOptions: provider };
+			return createSubmenuSettingDef(base, provider);
 		}
 	}
 
 	if (schemaType === "string" && ui.submenu) {
 		const provider = OPTION_PROVIDERS[path];
 		if (provider) {
-			return { ...base, type: "submenu", getOptions: provider };
+			return createSubmenuSettingDef(base, provider);
 		}
 		// For theme etc, options will be injected at runtime
-		return { ...base, type: "submenu", getOptions: () => [] };
+		return createSubmenuSettingDef(base, []);
 	}
 
 	return null;

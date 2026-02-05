@@ -19,21 +19,19 @@ export interface SelectListTheme {
 }
 
 export class SelectList implements Component {
-	private items: SelectItem[] = [];
-	private filteredItems: SelectItem[] = [];
+	private filteredItems: ReadonlyArray<SelectItem>;
 	private selectedIndex: number = 0;
-	private maxVisible: number = 5;
-	private theme: SelectListTheme;
 
 	public onSelect?: (item: SelectItem) => void;
 	public onCancel?: () => void;
 	public onSelectionChange?: (item: SelectItem) => void;
 
-	constructor(items: SelectItem[], maxVisible: number, theme: SelectListTheme) {
-		this.items = items;
+	constructor(
+		private readonly items: ReadonlyArray<SelectItem>,
+		private readonly maxVisible: number,
+		private readonly theme: SelectListTheme,
+	) {
 		this.filteredItems = items;
-		this.maxVisible = maxVisible;
-		this.theme = theme;
 	}
 
 	setFilter(filter: string): void {

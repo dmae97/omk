@@ -41,20 +41,18 @@ function getTabBarTheme(): TabBarTheme {
 class SelectSubmenu extends Container {
 	private selectList: SelectList;
 	private previewText: Text | null = null;
-	private getPreview: (() => string) | undefined;
 
 	constructor(
 		title: string,
 		description: string,
-		options: SelectItem[],
+		options: ReadonlyArray<SelectItem>,
 		currentValue: string,
 		onSelect: (value: string) => void,
 		onCancel: () => void,
 		onSelectionChange?: (value: string) => void,
-		getPreview?: () => string,
+		private readonly getPreview?: () => string,
 	) {
 		super();
-		this.getPreview = getPreview;
 
 		// Title
 		this.addChild(new Text(theme.bold(theme.fg("accent", title)), 0, 0));
@@ -179,14 +177,11 @@ export class SettingsSelectorComponent extends Container {
 	private statusPreviewText: Text | null = null;
 	private currentTabId: SettingTab | "plugins" = "display";
 
-	private context: SettingsRuntimeContext;
-	private callbacks: SettingsCallbacks;
-
-	constructor(context: SettingsRuntimeContext, callbacks: SettingsCallbacks) {
+	constructor(
+		private readonly context: SettingsRuntimeContext,
+		private readonly callbacks: SettingsCallbacks,
+	) {
 		super();
-
-		this.context = context;
-		this.callbacks = callbacks;
 
 		// Add top border
 		this.addChild(new DynamicBorder());
@@ -285,10 +280,6 @@ export class SettingsSelectorComponent extends Container {
 	 * Get the current value for a setting.
 	 */
 	private getCurrentValue(def: SettingDef): unknown {
-		// Special case: thinking level comes from runtime context
-		if (def.path === "defaultThinkingLevel") {
-			return this.context.thinkingLevel;
-		}
 		return settings.get(def.path);
 	}
 
@@ -300,12 +291,12 @@ export class SettingsSelectorComponent extends Container {
 		currentValue: string,
 		done: (value?: string) => void,
 	): Container {
-		let options = def.getOptions();
+		let options = def.options;
 
 		// Special case: inject runtime options for thinking level
 		if (def.path === "defaultThinkingLevel") {
 			options = this.context.availableThinkingLevels.map(level => {
-				const baseOpt = def.getOptions().find(o => o.value === level);
+				const baseOpt = options.find(o => o.value === level);
 				return baseOpt || { value: level, label: level };
 			});
 		} else if (def.path === "theme") {

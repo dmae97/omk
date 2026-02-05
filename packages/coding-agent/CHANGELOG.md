@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `openInEditor()` utility function to centralize external editor handling with support for custom file extensions and stdio configuration
@@ -9,6 +8,9 @@
 
 ### Changed
 
+- Changed `SubmenuSettingDef.getOptions()` method to `options` getter property for cleaner API access
+- Converted static option providers from functions to direct array definitions for improved performance
+- Added `createSubmenuSettingDef()` helper function to support both static and dynamic option providers
 - Modified `setThinkingLevel()` API to accept optional `persist` parameter (defaults to false) for controlling whether thinking level changes are saved to settings
 - Refactored hook editor and input controller to use shared external editor utilities, reducing code duplication
 

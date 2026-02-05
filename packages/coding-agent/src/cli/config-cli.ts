@@ -48,7 +48,7 @@ function getSettingValues(def: SettingDef): readonly string[] | undefined {
 		return def.values;
 	}
 	if (def.type === "submenu") {
-		const options = def.getOptions();
+		const options = def.options;
 		if (options.length > 0) {
 			return options.map(o => o.value);
 		}
