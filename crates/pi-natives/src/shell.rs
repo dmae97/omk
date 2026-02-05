@@ -195,7 +195,14 @@ async fn run_shell_session(
 		res = &mut run_task => res,
 		reason = ct.wait() => {
 			tokio_cancel.cancel();
-			return Ok(ShellRunResult { exit_code: None, cancelled: matches!(reason, task::AbortReason::Signal), timed_out: matches!(reason, task::AbortReason::Timeout) });
+			run_task.abort();
+			let _ = run_task.await;
+			*session.lock().await = None;
+			return Ok(ShellRunResult {
+				exit_code: None,
+				cancelled: matches!(reason, task::AbortReason::Signal),
+				timed_out: matches!(reason, task::AbortReason::Timeout),
+			});
 		}
 	};
 	let res =
