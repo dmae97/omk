@@ -8,15 +8,15 @@ This repo contains multiple packages, but **`packages/coding-agent/`** is the pr
 
 ### Package Structure
 
-| Package                 | Description                                           |
-| ----------------------- | ----------------------------------------------------- |
-| `packages/ai`           | Multi-provider LLM client with streaming support      |
-| `packages/agent`        | Agent runtime with tool calling and state management  |
-| `packages/coding-agent` | Main CLI application (primary focus)                  |
-| `packages/tui`          | Terminal UI library with differential rendering       |
-| `packages/natives`      | WASM bindings for native text/image/grep operations   |
-| `packages/stats`        | Local observability dashboard (`omp stats`)           |
-| `packages/utils`        | Shared utilities (logger, streams, temp files)        |
+| Package                 | Description                                            |
+| ----------------------- | ------------------------------------------------------ |
+| `packages/ai`           | Multi-provider LLM client with streaming support       |
+| `packages/agent`        | Agent runtime with tool calling and state management   |
+| `packages/coding-agent` | Main CLI application (primary focus)                   |
+| `packages/tui`          | Terminal UI library with differential rendering        |
+| `packages/natives`      | WASM bindings for native text/image/grep operations    |
+| `packages/stats`        | Local observability dashboard (`omp stats`)            |
+| `packages/utils`        | Shared utilities (logger, streams, temp files)         |
 | `crates/pi-natives`     | Rust WASM crate for performance-critical text/grep ops |
 
 ## Code Quality
@@ -29,6 +29,7 @@ This repo contains multiple packages, but **`packages/coding-agent/`** is the pr
 - **NEVER build prompts in code** — no inline strings, no template literals, no string concatenation. Prompts live in static `.md` files; use Handlebars for any dynamic content.
 - **Import static text files via Bun** — use `import content from "./prompt.md" with { type: "text" }` instead of `readFileSync`
 - **Use `Promise.withResolvers()`** instead of `new Promise((resolve, reject) => ...)` — cleaner, avoids callback nesting, and the resolver functions are properly typed:
+
   ```typescript
   // BAD: Verbose, callback nesting
   const promise = new Promise<string>((resolve, reject) => { ... });
@@ -311,28 +312,7 @@ const entries = lines.map((line) => JSON.parse(line));
 const entries = Bun.JSONL.parse(text);
 ```
 
-**For streaming JSONL** (SSE, JSON-RPC, subprocess output), use `Bun.JSONL.parseChunk()`:
-
-```typescript
-// BAD: Manual buffering and line splitting
-let buffer = "";
-for await (const chunk of stream) {
-	buffer += decoder.decode(chunk);
-	const lines = buffer.split("\n");
-	buffer = lines.pop() ?? "";
-	for (const line of lines) {
-		if (line.trim()) yield JSON.parse(line);
-	}
-}
-
-// GOOD: Bun handles buffering and parsing
-let buffer: Uint8Array | undefined;
-for await (const chunk of stream) {
-	const { values, remainder } = Bun.JSONL.parseChunk(chunk, buffer);
-	buffer = remainder;
-	for (const value of values) yield value;
-}
-```
+**For streaming JSONL** (SSE, JSON-RPC, subprocess output), use `Bun.JSONL.parseChunk() | Bun.JSONL.parse()` without decoding to string:
 
 ### Terminal Width and Wrapping
 
@@ -428,20 +408,20 @@ Logs go to `~/.omp/logs/omp.YYYY-MM-DD.log` with automatic rotation.
 
 ## Commands
 
-| Command        | Description                                      |
-| -------------- | ------------------------------------------------ |
-| `bun check`    | Check all (TypeScript + Rust)                    |
-| `bun check:ts` | Biome check + tsgo type checking                 |
-| `bun check:rs` | Cargo fmt --check + clippy                       |
-| `bun lint`     | Lint all                                         |
-| `bun lint:ts`  | Biome lint                                       |
-| `bun lint:rs`  | Cargo clippy                                     |
-| `bun fmt`      | Format all                                       |
-| `bun fmt:ts`   | Biome format                                     |
-| `bun fmt:rs`   | Cargo fmt                                        |
-| `bun fix`      | Fix all (unsafe fixes + format)                  |
-| `bun fix:ts`   | Biome --unsafe + format-prompts                  |
-| `bun fix:rs`   | Clippy --fix + cargo fmt                         |
+| Command        | Description                      |
+| -------------- | -------------------------------- |
+| `bun check`    | Check all (TypeScript + Rust)    |
+| `bun check:ts` | Biome check + tsgo type checking |
+| `bun check:rs` | Cargo fmt --check + clippy       |
+| `bun lint`     | Lint all                         |
+| `bun lint:ts`  | Biome lint                       |
+| `bun lint:rs`  | Cargo clippy                     |
+| `bun fmt`      | Format all                       |
+| `bun fmt:ts`   | Biome format                     |
+| `bun fmt:rs`   | Cargo fmt                        |
+| `bun fix`      | Fix all (unsafe fixes + format)  |
+| `bun fix:ts`   | Biome --unsafe + format-prompts  |
+| `bun fix:rs`   | Clippy --fix + cargo fmt         |
 
 - NEVER run: `bun run dev`, `bun test` unless user instructs
 - Only run specific tests if user instructs: `bun test test/specific.test.ts`

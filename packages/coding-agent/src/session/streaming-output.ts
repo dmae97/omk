@@ -140,7 +140,7 @@ export class OutputSink {
 			await this.push(dec.decode());
 		};
 
-		return new WritableStream<Uint8Array | string>({
+		return new WritableStream({
 			write: async chunk => {
 				if (typeof chunk === "string") {
 					await this.push(chunk);

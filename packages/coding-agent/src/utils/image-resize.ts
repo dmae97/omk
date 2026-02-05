@@ -119,7 +119,7 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 
 		if (best.buffer.length <= opts.maxBytes) {
 			return {
-				data: Buffer.from(best.buffer).toString("base64"),
+				data: best.buffer.toBase64(),
 				mimeType: best.mimeType,
 				originalWidth,
 				originalHeight,
@@ -135,7 +135,7 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 
 			if (best.buffer.length <= opts.maxBytes) {
 				return {
-					data: Buffer.from(best.buffer).toString("base64"),
+					data: best.buffer.toBase64(),
 					mimeType: best.mimeType,
 					originalWidth,
 					originalHeight,
@@ -160,7 +160,7 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 
 				if (best.buffer.length <= opts.maxBytes) {
 					return {
-						data: Buffer.from(best.buffer).toString("base64"),
+						data: best.buffer.toBase64(),
 						mimeType: best.mimeType,
 						originalWidth,
 						originalHeight,
@@ -174,7 +174,7 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 
 		// Last resort: return smallest version we produced
 		return {
-			data: Buffer.from(best.buffer).toString("base64"),
+			data: best.buffer.toBase64(),
 			mimeType: best.mimeType,
 			originalWidth,
 			originalHeight,

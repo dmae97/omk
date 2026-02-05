@@ -64,24 +64,21 @@ export async function parseSessionFile(
 	}
 
 	const text = await file.text();
-	const entries = Bun.JSONL.parse(text) as SessionEntry[];
 	const lines = text.split("\n");
 	const folder = extractFolderFromPath(sessionPath);
 	const stats: MessageStats[] = [];
 
 	let currentOffset = 0;
-	let entryIndex = 0;
 	for (const line of lines) {
 		const lineLength = line.length + 1; // +1 for newline
 		if (line.trim()) {
-			const entry = entries[entryIndex];
+			const entry = JSON.parse(line) as SessionEntry;
 			if (currentOffset >= fromOffset && entry && isAssistantMessage(entry)) {
 				const msgStats = extractStats(sessionPath, folder, entry);
 				if (msgStats) {
 					stats.push(msgStats);
 				}
 			}
-			entryIndex += 1;
 		}
 		currentOffset += lineLength;
 	}
@@ -142,7 +139,7 @@ export async function getSessionEntry(sessionPath: string, entryId: string): Pro
 	const file = Bun.file(sessionPath);
 	if (!(await file.exists())) return null;
 
-	const text = await file.text();
+	const text = await file.bytes();
 	const entries = Bun.JSONL.parse(text) as SessionEntry[];
 
 	for (const entry of entries) {

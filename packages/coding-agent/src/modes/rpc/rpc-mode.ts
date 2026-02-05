@@ -10,7 +10,7 @@
  * - Events: AgentSessionEvent objects streamed as they occur
  * - Extension UI: Extension UI requests are emitted, client responds with extension_ui_response
  */
-import { readLines, Snowflake } from "@oh-my-pi/pi-utils";
+import { createTextLineSplitter, Snowflake } from "@oh-my-pi/pi-utils";
 import type { ExtensionUIContext, ExtensionUIDialogOptions } from "../../extensibility/extensions";
 import { type Theme, theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
@@ -633,7 +633,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 	}
 
 	// Listen for JSON input using Bun's stdin
-	for await (const line of readLines(Bun.stdin.stream())) {
+	for await (const line of Bun.stdin.stream().pipeThrough(createTextLineSplitter())) {
 		if (!line.trim()) continue;
 
 		const result = Bun.JSONL.parseChunk(`${line}\n`);

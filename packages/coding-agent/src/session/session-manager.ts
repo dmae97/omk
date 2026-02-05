@@ -279,26 +279,30 @@ function migrateToCurrentVersion(entries: FileEntry[]): boolean {
 	return true;
 }
 
-function parseJsonlEntries<T>(content: string): T[] {
-	if (!content.trim()) return [];
-	const entries: T[] = [];
-	let buffer = content;
+function parseJsonlEntries<T>(buffer: string): T[] {
+	let entries: T[] | undefined;
+
 	while (buffer.length > 0) {
-		const result = Bun.JSONL.parseChunk(buffer);
-		if (result.values.length > 0) {
-			entries.push(...(result.values as T[]));
+		const { values, error, read, done } = Bun.JSONL.parseChunk(buffer);
+		if (values.length > 0) {
+			const ext = values as T[];
+			if (!entries) {
+				entries = ext;
+			} else {
+				entries.push(...ext);
+			}
 		}
-		if (result.error) {
-			const nextNewline = buffer.indexOf("\n", result.read);
+		if (error) {
+			const nextNewline = buffer.indexOf("\n", read);
 			if (nextNewline === -1) break;
-			buffer = buffer.slice(nextNewline + 1);
+			buffer = buffer.substring(nextNewline + 1);
 			continue;
 		}
-		if (result.read === 0) break;
-		buffer = buffer.slice(result.read);
-		if (result.done) break;
+		if (read === 0) break;
+		buffer = buffer.substring(read);
+		if (done) break;
 	}
-	return entries;
+	return entries ?? [];
 }
 
 /** Exported for testing */

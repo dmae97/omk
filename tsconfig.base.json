@@ -2,7 +2,7 @@
 	"compilerOptions": {
 		"target": "ES2024",
 		"module": "ESNext",
-		"lib": ["ES2024"],
+		"lib": ["ES2024", "DOM.AsyncIterable"],
 		"strict": true,
 		"esModuleInterop": true,
 		"skipLibCheck": true,

@@ -5,7 +5,7 @@
  */
 import type { AgentEvent, AgentMessage, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent } from "@oh-my-pi/pi-ai";
-import { createSanitizerStream, createSplitterStream, createTextDecoderStream, ptree } from "@oh-my-pi/pi-utils";
+import { createTextLineSplitter, ptree } from "@oh-my-pi/pi-utils";
 import type { BashResult } from "../../exec/bash-executor";
 import type { SessionStats } from "../../session/agent-session";
 import type { CompactionResult } from "../../session/compaction";
@@ -119,10 +119,7 @@ export class RpcClient {
 		});
 
 		// Process lines in background
-		const lines = this.process.stdout
-			.pipeThrough(createTextDecoderStream())
-			.pipeThrough(createSanitizerStream())
-			.pipeThrough(createSplitterStream("\n"));
+		const lines = this.process.stdout.pipeThrough(createTextLineSplitter(true));
 		this.lineReader = lines;
 		void (async () => {
 			try {

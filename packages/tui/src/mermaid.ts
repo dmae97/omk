@@ -63,8 +63,8 @@ export async function renderMermaidToPng(
 			return null;
 		}
 
-		const buffer = Buffer.from(await outputFile.bytes());
-		const base64 = buffer.toString("base64");
+		const buffer = await outputFile.bytes();
+		const base64 = buffer.toBase64();
 
 		const dims = parsePngDimensions(buffer);
 		if (!dims) {
@@ -83,14 +83,15 @@ export async function renderMermaidToPng(
 	}
 }
 
-function parsePngDimensions(buffer: Buffer): { width: number; height: number } | null {
+function parsePngDimensions(buffer: Uint8Array): { width: number; height: number } | null {
 	if (buffer.length < 24) return null;
 	if (buffer[0] !== 0x89 || buffer[1] !== 0x50 || buffer[2] !== 0x4e || buffer[3] !== 0x47) {
 		return null;
 	}
+	const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
 	return {
-		width: buffer.readUInt32BE(16),
-		height: buffer.readUInt32BE(20),
+		width: view.getUint32(16, false),
+		height: view.getUint32(20, false),
 	};
 }
 

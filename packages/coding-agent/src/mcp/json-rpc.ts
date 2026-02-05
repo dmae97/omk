@@ -13,8 +13,8 @@ export function parseSSE(text: string): unknown {
 		if (line.startsWith("data: ")) {
 			const data = line.slice(6).trim();
 			if (data === "[DONE]") continue;
-			const result = Bun.JSONL.parseChunk(`${data}\n`);
-			if (result.values.length > 0) return result.values[0];
+			const result = JSON.parse(data) as unknown;
+			if (result) return result;
 		}
 	}
 	// Fallback: try parsing entire response as JSON

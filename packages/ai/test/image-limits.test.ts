@@ -85,7 +85,7 @@ async function generateImage(width: number, height: number, filename: string): P
 	const filepath = path.join(TEMP_DIR, filename);
 	execSync(`magick -size ${width}x${height} xc:red "${filepath}"`, { stdio: "ignore" });
 	const buffer = await fs.promises.readFile(filepath);
-	return buffer.toString("base64");
+	return buffer.toBase64();
 }
 
 /**
@@ -111,7 +111,7 @@ async function generateImageWithSize(targetBytes: number, filename: string): Pro
 	}
 
 	const buffer = await fs.promises.readFile(filepath);
-	return buffer.toString("base64");
+	return buffer.toBase64();
 }
 
 /**

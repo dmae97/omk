@@ -79,6 +79,7 @@ export async function executeSSH(
 	using child = ptree.spawn(["ssh", ...(await buildRemoteCommand(host, resolvedCommand))], {
 		signal: options?.signal,
 		timeout: options?.timeout,
+		exposeStderr: true,
 	});
 
 	const sink = new OutputSink({
@@ -87,9 +88,11 @@ export async function executeSSH(
 		artifactId: options?.artifactId,
 	});
 
-	await Promise.allSettled([child.stdout.pipeTo(sink.createInput()), child.stderr.pipeTo(sink.createInput())]).catch(
-		() => {},
-	);
+	const streams = [child.stdout.pipeTo(sink.createInput())];
+	if (child.stderr) {
+		streams.push(child.stderr.pipeTo(sink.createInput()));
+	}
+	await Promise.allSettled(streams).catch(() => {});
 
 	try {
 		return {

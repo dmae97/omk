@@ -24,7 +24,7 @@ describe("openai-codex streaming", () => {
 		const payload = Buffer.from(
 			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),
 			"utf8",
-		).toString("base64");
+		).toBase64();
 		const token = `aaa.${payload}.bbb`;
 
 		const sse = `${[
@@ -135,7 +135,7 @@ describe("openai-codex streaming", () => {
 		const payload = Buffer.from(
 			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),
 			"utf8",
-		).toString("base64");
+		).toBase64();
 		const token = `aaa.${payload}.bbb`;
 
 		const sse = `${[
@@ -236,7 +236,7 @@ describe("openai-codex streaming", () => {
 		const payload = Buffer.from(
 			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),
 			"utf8",
-		).toString("base64");
+		).toBase64();
 		const token = `aaa.${payload}.bbb`;
 
 		const sse = `${[
@@ -270,14 +270,6 @@ describe("openai-codex streaming", () => {
 			})}`,
 		].join("\n\n")}\n\n`;
 
-		const encoder = new TextEncoder();
-		const stream = new ReadableStream<Uint8Array>({
-			start(controller) {
-				controller.enqueue(encoder.encode(sse));
-				controller.close();
-			},
-		});
-
 		const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
 			const url = typeof input === "string" ? input : input.toString();
 			if (url === "https://api.github.com/repos/openai/codex/releases/latest") {
@@ -292,7 +284,7 @@ describe("openai-codex streaming", () => {
 				expect(headers?.has("conversation_id")).toBe(false);
 				expect(headers?.has("session_id")).toBe(false);
 
-				return new Response(stream, {
+				return new Response(sse, {
 					status: 200,
 					headers: { "content-type": "text/event-stream" },
 				});

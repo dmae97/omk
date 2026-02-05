@@ -102,7 +102,7 @@ interface SessionData {
 /** Generate HTML from bundled template with runtime substitutions. */
 async function generateHtml(sessionData: SessionData, themeName?: string): Promise<string> {
 	const themeVars = await generateThemeVars(themeName);
-	const sessionDataBase64 = Buffer.from(JSON.stringify(sessionData)).toString("base64");
+	const sessionDataBase64 = Buffer.from(JSON.stringify(sessionData)).toBase64();
 
 	return TEMPLATE.replace("<theme-vars/>", `<style>:root { ${themeVars} }</style>`).replace(
 		"{{SESSION_DATA}}",

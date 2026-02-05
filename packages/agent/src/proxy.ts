@@ -13,7 +13,7 @@ import {
 	type ToolCall,
 } from "@oh-my-pi/pi-ai";
 import { parseStreamingJson } from "@oh-my-pi/pi-ai/utils/json-parse";
-import { readSseEvents } from "@oh-my-pi/pi-utils";
+import { readSseJson } from "@oh-my-pi/pi-utils";
 
 // Create stream class matching ProxyMessageEventStream
 class ProxyMessageEventStream extends EventStream<AssistantMessageEvent, AssistantMessage> {
@@ -147,22 +147,11 @@ export function streamProxy(model: Model, context: Context, options: ProxyStream
 				throw new Error(errorMessage);
 			}
 
-			for await (const event of readSseEvents(response.body!)) {
-				if (options.signal?.aborted) {
-					throw new Error("Request aborted by user");
-				}
-
-				const data = event.data?.trim();
-				if (!data || data === "[DONE]") continue;
-				const proxyEvent = JSON.parse(data) as ProxyAssistantMessageEvent;
-				const parsedEvent = processProxyEvent(proxyEvent, partial);
+			for await (const event of readSseJson<ProxyAssistantMessageEvent>(response.body!, options.signal)) {
+				const parsedEvent = processProxyEvent(event, partial);
 				if (parsedEvent) {
 					stream.push(parsedEvent);
 				}
-			}
-
-			if (options.signal?.aborted) {
-				throw new Error("Request aborted by user");
 			}
 
 			stream.end();

@@ -17,7 +17,7 @@ export async function convertToPng(
 		const image = await PhotonImage.parse(new Uint8Array(Buffer.from(base64Data, "base64")));
 		const pngBuffer = await image.encode(ImageFormat.PNG, 100);
 		return {
-			data: Buffer.from(pngBuffer).toString("base64"),
+			data: Buffer.from(pngBuffer).toBase64(),
 			mimeType: "image/png",
 		};
 	} catch {

@@ -20,7 +20,7 @@ try {
 	process.exit(1);
 }
 
-const base64Data = Buffer.from(imageBuffer).toString("base64");
+const base64Data = imageBuffer.toBase64();
 const dims = getImageDimensions(base64Data, "image/png");
 
 console.log("Image dimensions:", dims);

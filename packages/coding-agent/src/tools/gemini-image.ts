@@ -1,7 +1,7 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import { getEnvApiKey, StringEnum } from "@oh-my-pi/pi-ai";
-import { $env, ptree, Snowflake, untilAborted } from "@oh-my-pi/pi-utils";
+import { $env, ptree, readSseJson, Snowflake, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import type { ModelRegistry } from "../config/model-registry";
 import { renderPromptTemplate } from "../config/prompt-templates";
@@ -316,8 +316,8 @@ async function loadImageFromUrl(imageUrl: string, signal?: AbortSignal): Promise
 	if (!contentType || !contentType.startsWith("image/")) {
 		throw new Error(`Unsupported image type from URL: ${imageUrl}`);
 	}
-	const buffer = Buffer.from(await response.arrayBuffer());
-	return { data: buffer.toString("base64"), mimeType: contentType };
+	const buffer = await response.bytes();
+	return { data: buffer.toBase64(), mimeType: contentType };
 }
 
 function collectOpenRouterResponseText(message: OpenRouterMessage | undefined): string | undefined {
@@ -450,8 +450,8 @@ async function loadImageFromPath(imagePath: string, cwd: string): Promise<Inline
 		throw new Error(`Unsupported image type: ${imagePath}`);
 	}
 
-	const buffer = Buffer.from(await file.arrayBuffer());
-	return { data: buffer.toString("base64"), mimeType };
+	const buffer = await file.bytes();
+	return { data: buffer.toBase64(), mimeType };
 }
 
 async function resolveInputImage(input: ImageInput, cwd: string): Promise<InlineImageData> {
@@ -585,68 +585,37 @@ interface AntigravitySseResult {
 	usage?: GeminiUsageMetadata;
 }
 
+const _prefix = Buffer.from("data: ", "utf-8");
+
 async function parseAntigravitySseForImage(response: Response, signal?: AbortSignal): Promise<AntigravitySseResult> {
 	if (!response.body) {
 		throw new Error("No response body");
 	}
 
-	const reader = response.body.getReader();
-	const decoder = new TextDecoder();
-	let buffer = "";
 	const textParts: string[] = [];
 	const images: InlineImageData[] = [];
 	let usage: GeminiUsageMetadata | undefined;
 
-	try {
-		while (true) {
-			if (signal?.aborted) {
-				throw new Error("Request was aborted");
-			}
-
-			const { done, value } = await reader.read();
-			if (done) break;
-
-			buffer += decoder.decode(value, { stream: true });
-			const lines = buffer.split("\n");
-			buffer = lines.pop() ?? "";
-
-			for (const line of lines) {
-				if (!line.startsWith("data:")) continue;
-				const jsonStr = line.slice(5).trim();
-				if (!jsonStr) continue;
-
-				const parsed = Bun.JSONL.parseChunk(`${jsonStr}\n`);
-				if (parsed.error || parsed.values.length === 0) continue;
-
-				for (const value of parsed.values) {
-					const chunk = value as AntigravityResponseChunk;
-					const responseData = chunk.response;
-					if (!responseData?.candidates) continue;
-
-					if (responseData.usageMetadata) {
-						usage = responseData.usageMetadata;
-					}
-
-					for (const candidate of responseData.candidates) {
-						const parts = candidate.content?.parts;
-						if (!parts) continue;
-						for (const part of parts) {
-							if (part.text) {
-								textParts.push(part.text);
-							}
-							if (part.inlineData?.data && part.inlineData?.mimeType) {
-								images.push({
-									data: part.inlineData.data,
-									mimeType: part.inlineData.mimeType,
-								});
-							}
-						}
-					}
+	for await (const chunk of readSseJson<AntigravityResponseChunk>(response.body, signal)) {
+		const responseData = chunk.response;
+		if (!responseData) continue;
+		if (!responseData.candidates) continue;
+		for (const candidate of responseData.candidates) {
+			const parts = candidate.content?.parts;
+			if (!parts) continue;
+			for (const part of parts) {
+				if (part.text) {
+					textParts.push(part.text);
+				}
+				const inlineData = part.inlineData;
+				if (inlineData?.data && inlineData.mimeType) {
+					images.push({ data: inlineData.data, mimeType: inlineData.mimeType });
 				}
 			}
 		}
-	} finally {
-		reader.releaseLock();
+		if (responseData.usageMetadata) {
+			usage = responseData.usageMetadata;
+		}
 	}
 
 	return { images, text: textParts, usage };

@@ -1,3 +1,5 @@
+import { ArrayBufferSink } from "bun";
+
 /**
  * Sanitize binary output for display/storage.
  * Removes characters that crash string-width or cause display issues:
@@ -43,25 +45,55 @@ export function sanitizeText(text: string): string {
 /**
  * Create a transform stream that splits lines.
  */
-export function createSplitterStream(delimiter: string): TransformStream<string, string> {
-	let buf = "";
-	return new TransformStream<string, string>({
-		transform(chunk, controller) {
-			buf = buf ? `${buf}${chunk}` : chunk;
+export function createSplitterStream<T>(options: {
+	newLine?: boolean;
+	mapFn: (chunk: Uint8Array) => T;
+}): TransformStream<Uint8Array, T> {
+	const { newLine = false, mapFn } = options;
+	const LF = 0x0a;
+	const sink = new Bun.ArrayBufferSink();
+	sink.start({ asUint8Array: true, stream: true, highWaterMark: 4096 });
+	let pending = false; // whether the sink has unflushed data
 
-			while (true) {
-				const nl = buf.indexOf(delimiter);
-				if (nl === -1) break;
-				controller.enqueue(buf.slice(0, nl));
-				buf = buf.slice(nl + delimiter.length);
+	return new TransformStream<Uint8Array, T>({
+		transform(chunk, ctrl) {
+			let pos = 0;
+
+			while (pos < chunk.length) {
+				const nl = chunk.indexOf(LF, pos);
+				if (nl === -1) {
+					sink.write(chunk.subarray(pos));
+					pending = true;
+					break;
+				}
+
+				const slice = chunk.subarray(pos, newLine ? nl + 1 : nl);
+
+				if (pending) {
+					if (slice.length > 0) sink.write(slice);
+					ctrl.enqueue(mapFn(sink.flush() as Uint8Array));
+					pending = false;
+				} else {
+					ctrl.enqueue(mapFn(slice));
+				}
+				pos = nl + 1;
 			}
 		},
-		flush(controller) {
-			if (buf) {
-				controller.enqueue(buf);
+		flush(ctrl) {
+			if (pending) {
+				const tail = sink.end() as Uint8Array;
+				if (tail.length > 0) ctrl.enqueue(mapFn(tail));
 			}
 		},
 	});
+}
+
+export function createTextLineSplitter(sanitize = false): TransformStream<Uint8Array, string> {
+	const dec = new TextDecoder("utf-8", { ignoreBOM: true, fatal: true });
+	if (sanitize) {
+		return createSplitterStream({ mapFn: chunk => sanitizeText(dec.decode(chunk)) });
+	}
+	return createSplitterStream({ mapFn: dec.decode.bind(dec) });
 }
 
 /**
@@ -82,152 +114,130 @@ export function createTextDecoderStream(): TransformStream<Uint8Array, string> {
 	return new TextDecoderStream() as TransformStream<Uint8Array, string>;
 }
 
-/**
- * Read stream line-by-line
- *
- * @param delimiter Line delimiter (default: "\n")
- */
-export function readLines(stream: ReadableStream<Uint8Array>, delimiter = "\n"): AsyncIterable<string> {
-	return stream.pipeThrough(createTextDecoderStream()).pipeThrough(createSplitterStream(delimiter));
-}
-
 // =============================================================================
 // SSE (Server-Sent Events)
 // =============================================================================
 
-/**
- * Parsed SSE event.
- */
-export interface SseEvent {
-	/** Event type (from `event:` field, default: "message") */
-	event: string;
-	/** Event data (from `data:` field(s), joined with newlines) */
-	data: string;
-	/** Event ID (from `id:` field) */
-	id?: string;
-	/** Retry interval in ms (from `retry:` field) */
-	retry?: number;
-}
+const LF = 0x0a;
+const CR = 0x0d;
+const SPACE = 0x20;
 
-/**
- * Parse a single SSE event block (lines between blank lines).
- * Returns null if the block contains no data.
- */
-export function parseSseEvent(block: string): SseEvent | null {
-	const lines = block.split("\n");
-	let event = "message";
-	const dataLines: string[] = [];
-	let id: string | undefined;
-	let retry: number | undefined;
+// "data:" = [0x64, 0x61, 0x74, 0x61, 0x3a]
+const DATA_0 = 0x64; // d
+const DATA_1 = 0x61; // a
+const DATA_2 = 0x74; // t
+const DATA_3 = 0x61; // a
+const DATA_4 = 0x3a; // :
 
-	for (const line of lines) {
-		// Comments start with ':'
-		if (line.startsWith(":")) continue;
+// "[DONE]" = [0x5b, 0x44, 0x4f, 0x4e, 0x45, 0x5d]
+const DONE = Uint8Array.from([0x5b, 0x44, 0x4f, 0x4e, 0x45, 0x5d]);
 
-		const colonIdx = line.indexOf(":");
-		if (colonIdx === -1) continue;
-
-		const field = line.slice(0, colonIdx);
-		// Value starts after colon, with optional leading space trimmed
-		let value = line.slice(colonIdx + 1);
-		if (value.startsWith(" ")) value = value.slice(1);
-
-		switch (field) {
-			case "event":
-				event = value;
-				break;
-			case "data":
-				dataLines.push(value);
-				break;
-			case "id":
-				id = value;
-				break;
-			case "retry": {
-				const n = parseInt(value, 10);
-				if (!Number.isNaN(n)) retry = n;
-				break;
-			}
-		}
+function isDone(buf: Uint8Array, start: number, end: number): boolean {
+	if (end - start !== 6) return false;
+	for (let i = 0; i < 6; i++) {
+		if (buf[start + i] !== DONE[i]) return false;
 	}
-
-	if (dataLines.length === 0) return null;
-
-	return {
-		event,
-		data: dataLines.join("\n"),
-		id,
-		retry,
-	};
+	return true;
 }
 
 /**
- * Read SSE events from a stream.
- *
- * Handles the SSE wire format:
- * - Events separated by blank lines
- * - Fields: event, data, id, retry
- * - Comments (lines starting with :) are ignored
- * - Multiple data: lines are joined with newlines
+ * Stream parsed JSON objects from SSE `data:` lines.
  *
  * @example
  * ```ts
- * for await (const event of readSseEvents(response.body)) {
- *   if (event.data === "[DONE]") break;
- *   const payload = JSON.parse(event.data);
- *   console.log(event.event, payload);
+ * for await (const obj of readSseJson(response.body!)) {
+ *   console.log(obj);
  * }
  * ```
  */
-export async function* readSseEvents(stream: ReadableStream<Uint8Array>): AsyncGenerator<SseEvent, void, undefined> {
-	const blockLines: string[] = [];
-
-	for await (const rawLine of readLines(stream)) {
-		const line = rawLine.replace(/\r$/, "");
-		if (line === "") {
-			if (blockLines.length > 0) {
-				const event = parseSseEvent(blockLines.join("\n"));
-				if (event) yield event;
-				blockLines.length = 0;
-			}
-			continue;
-		}
-
-		blockLines.push(line);
-	}
-
-	if (blockLines.length > 0) {
-		const event = parseSseEvent(blockLines.join("\n"));
-		if (event) yield event;
-	}
-}
-
-/**
- * Read SSE data payloads from a stream, parsing JSON automatically.
- *
- * Convenience wrapper over readSseEvents that:
- * - Skips [DONE] markers
- * - Parses JSON data
- * - Optionally filters by event type
- *
- * @example
- * ```ts
- * for await (const data of readSseData<ChatChunk>(response.body)) {
- *   console.log(data.choices[0].delta);
- * }
- * ```
- */
-export async function* readSseData<T = unknown>(
+export async function* readSseJson<T>(
 	stream: ReadableStream<Uint8Array>,
-	eventType?: string,
-): AsyncGenerator<T, void, undefined> {
-	for await (const event of readSseEvents(stream)) {
-		if (eventType && event.event !== eventType) continue;
-		if (event.data === "[DONE]") continue;
+	abortSignal?: AbortSignal,
+): AsyncGenerator<T> {
+	const sink = new ArrayBufferSink();
+	sink.start({ asUint8Array: true, stream: true, highWaterMark: 4096 });
+	let pending = false;
 
-		try {
-			yield JSON.parse(event.data) as T;
-		} catch {
-			// Skip malformed JSON
+	const cleanup = () => {
+		stream.cancel(abortSignal?.reason ?? new Error("Request aborted"));
+	};
+	abortSignal?.addEventListener("abort", cleanup, { once: true });
+
+	try {
+		for await (const chunk of stream) {
+			let pos = 0;
+			while (pos < chunk.length) {
+				const nl = chunk.indexOf(LF, pos);
+				if (nl === -1) {
+					sink.write(chunk.subarray(pos));
+					pending = true;
+					break;
+				}
+
+				let line: Uint8Array;
+				if (pending) {
+					if (nl > pos) sink.write(chunk.subarray(pos, nl));
+					line = sink.flush() as Uint8Array;
+					pending = false;
+				} else {
+					line = chunk.subarray(pos, nl);
+				}
+				pos = nl + 1;
+
+				// Strip trailing CR, skip blank/short lines.
+				const len = line.length > 0 && line[line.length - 1] === CR ? line.length - 1 : line.length;
+				if (len < 6) continue; // "data:" + at least 1 byte
+
+				// Check "data:" prefix.
+				if (
+					line[0] !== DATA_0 ||
+					line[1] !== DATA_1 ||
+					line[2] !== DATA_2 ||
+					line[3] !== DATA_3 ||
+					line[4] !== DATA_4
+				)
+					continue;
+
+				// Payload start — skip optional space after colon.
+				const pStart = line[5] === SPACE ? 6 : 5;
+				if (pStart >= len) continue;
+				if (isDone(line, pStart, len)) return;
+
+				// Build payload + \n for JSONL.parse.
+				const pLen = len - pStart;
+				const buf = new Uint8Array(pLen + 1);
+				buf.set(line.subarray(pStart, len));
+				buf[pLen] = LF;
+
+				const [parsed] = Bun.JSONL.parse(buf);
+				if (parsed !== undefined) yield parsed as T;
+			}
+		}
+	} finally {
+		abortSignal?.removeEventListener("abort", cleanup);
+	}
+
+	// Trailing line without final newline.
+	if (pending) {
+		const tail = sink.end() as Uint8Array;
+		const len = tail.length > 0 && tail[tail.length - 1] === CR ? tail.length - 1 : tail.length;
+		if (
+			len >= 6 &&
+			tail[0] === DATA_0 &&
+			tail[1] === DATA_1 &&
+			tail[2] === DATA_2 &&
+			tail[3] === DATA_3 &&
+			tail[4] === DATA_4
+		) {
+			const pStart = tail[5] === SPACE ? 6 : 5;
+			if (pStart < len && !isDone(tail, pStart, len)) {
+				const pLen = len - pStart;
+				const buf = new Uint8Array(pLen + 1);
+				buf.set(tail.subarray(pStart, len));
+				buf[pLen] = LF;
+				const [parsed] = Bun.JSONL.parse(buf);
+				if (parsed !== undefined) yield parsed as T;
+			}
 		}
 	}
 }

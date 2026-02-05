@@ -220,7 +220,7 @@ async function handleImage<TApi extends Api>(model: Model<TApi>, options?: Optio
 	// Read the test image
 	const imagePath = path.join(import.meta.dir, "data", "red-circle.png");
 	const imageBuffer = await fs.readFile(imagePath);
-	const base64Image = imageBuffer.toString("base64");
+	const base64Image = imageBuffer.toBase64();
 
 	const imageContent: ImageContent = {
 		type: "image",

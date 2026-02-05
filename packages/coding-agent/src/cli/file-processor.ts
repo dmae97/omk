@@ -49,7 +49,7 @@ export async function processFileArguments(fileArgs: string[], options?: Process
 
 		if (mimeType) {
 			// Handle image file
-			const base64Content = buffer.toString("base64");
+			const base64Content = buffer.toBase64();
 			let attachment: ImageContent;
 			let dimensionNote: string | undefined;
 

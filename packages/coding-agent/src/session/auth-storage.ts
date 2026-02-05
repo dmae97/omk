@@ -2,7 +2,6 @@
  * Credential storage for API keys and OAuth tokens.
  * Handles loading, saving, and refreshing credentials from agent.db.
  */
-import { Buffer } from "node:buffer";
 import * as path from "node:path";
 import {
 	antigravityUsageProvider,
@@ -386,9 +385,10 @@ export class AuthStorage {
 		const parts = token.split(".");
 		if (parts.length !== 3) return undefined;
 		const payloadRaw = parts[1];
+		const decoder = new TextDecoder("utf-8");
 		try {
 			const payload = JSON.parse(
-				Buffer.from(payloadRaw.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"),
+				decoder.decode(Uint8Array.fromBase64(payloadRaw, { alphabet: "base64url" })),
 			) as Record<string, unknown>;
 			if (!payload || typeof payload !== "object") return undefined;
 			const identifiers: string[] = [];

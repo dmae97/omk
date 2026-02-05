@@ -631,7 +631,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 					const maxStr = formatSize(MAX_IMAGE_SIZE);
 					throw new ToolError(`Image file too large: ${sizeStr} exceeds ${maxStr} limit.`);
 				} else {
-					const base64 = Buffer.from(buffer).toString("base64");
+					const base64 = new Uint8Array(buffer).toBase64();
 
 					if (this.autoResizeImages) {
 						// Resize image if needed - catch errors from Photon

@@ -275,23 +275,23 @@ export function convertToLlm(messages: AgentMessage[]): Message[] {
 						timestamp: m.timestamp,
 					};
 				case "fileMention": {
-				const fileContents = m.files
-					.map(file => {
-						const inner = file.content ? `\n${file.content}\n` : "\n";
-						return `<file path="${file.path}">${inner}</file>`;
-					})
-					.join("\n\n");
-				const content: (TextContent | ImageContent)[] = [
-					{ type: "text" as const, text: `<system-reminder>\n${fileContents}\n</system-reminder>` },
-				];
-				for (const file of m.files) {
-					if (file.image) {
-						content.push(file.image);
-				}
-				}
+					const fileContents = m.files
+						.map(file => {
+							const inner = file.content ? `\n${file.content}\n` : "\n";
+							return `<file path="${file.path}">${inner}</file>`;
+						})
+						.join("\n\n");
+					const content: (TextContent | ImageContent)[] = [
+						{ type: "text" as const, text: `<system-reminder>\n${fileContents}\n</system-reminder>` },
+					];
+					for (const file of m.files) {
+						if (file.image) {
+							content.push(file.image);
+						}
+					}
 					return {
 						role: "user",
-					content,
+						content,
 						timestamp: m.timestamp,
 					};
 				}

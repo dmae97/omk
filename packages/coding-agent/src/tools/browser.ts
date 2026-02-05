@@ -1031,10 +1031,10 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					const html = (await untilAborted(signal, () => page.content())) as string;
 					const url = page.url();
 					const virtualConsole = new VirtualConsole();
-					virtualConsole.on("jsdomError", error => {
-						if (error?.message?.includes("Could not parse CSS stylesheet")) return;
+					virtualConsole.on("jsdomError", err => {
+						if (err?.message?.includes("Could not parse CSS stylesheet")) return;
 						logger.debug("JSDOM error during readable extraction", {
-							error: error instanceof Error ? error.message : String(error),
+							error: err instanceof Error ? err.message : String(err),
 						});
 					});
 					const dom = new JSDOM(html, { url, virtualConsole });
@@ -1092,7 +1092,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					}
 
 					const mimeType = imageFormat === "png" ? "image/png" : "image/jpeg";
-					const base64 = buffer.toString("base64");
+					const base64 = buffer.toBase64();
 					let savedPath: string | undefined;
 					if (params.path) {
 						const resolved = resolveToCwd(params.path, this.session.cwd);

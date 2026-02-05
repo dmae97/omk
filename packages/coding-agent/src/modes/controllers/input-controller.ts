@@ -599,7 +599,7 @@ export class InputController {
 		try {
 			const image = await readImageFromClipboard();
 			if (image) {
-				const base64Data = Buffer.from(image.data).toString("base64");
+				const base64Data = image.data.toBase64();
 				let imageData = { data: base64Data, mimeType: image.mimeType };
 				if (settings.get("images.autoResize")) {
 					try {

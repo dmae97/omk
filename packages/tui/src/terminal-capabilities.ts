@@ -192,7 +192,7 @@ export function encodeITerm2(
 	if (options.width !== undefined) params.push(`width=${options.width}`);
 	if (options.height !== undefined) params.push(`height=${options.height}`);
 	if (options.name) {
-		const nameBase64 = Buffer.from(options.name).toString("base64");
+		const nameBase64 = Buffer.from(options.name).toBase64();
 		params.push(`name=${nameBase64}`);
 	}
 	if (options.preserveAspectRatio === false) {

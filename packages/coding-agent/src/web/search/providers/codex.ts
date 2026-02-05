@@ -6,7 +6,7 @@
  * Returns synthesized answers with web search sources.
  */
 import * as os from "node:os";
-import { readSseData } from "@oh-my-pi/pi-utils";
+import { readSseJson } from "@oh-my-pi/pi-utils";
 import packageJson from "../../../../package.json" with { type: "json" };
 import { getAgentDbPath, getConfigDirPaths } from "../../../config";
 import { AgentStorage } from "../../../session/agent-storage";
@@ -21,6 +21,7 @@ const DEFAULT_INSTRUCTIONS =
 	"You are a helpful assistant with web search capabilities. Search the web to answer the user's question accurately and cite your sources.";
 
 export interface CodexSearchParams {
+	signal?: AbortSignal;
 	query: string;
 	system_prompt?: string;
 	num_results?: number;
@@ -178,7 +179,7 @@ function buildCodexHeaders(accessToken: string, accountId: string): Record<strin
 async function callCodexWebSearch(
 	auth: { accessToken: string; accountId: string },
 	query: string,
-	options: { systemPrompt?: string; searchContextSize?: "low" | "medium" | "high" },
+	options: { signal?: AbortSignal; systemPrompt?: string; searchContextSize?: "low" | "medium" | "high" },
 ): Promise<{
 	answer: string;
 	sources: WebSearchSource[];
@@ -231,7 +232,7 @@ async function callCodexWebSearch(
 	let requestId = "";
 	let usage: { inputTokens: number; outputTokens: number; totalTokens: number } | undefined;
 
-	for await (const rawEvent of readSseData<Record<string, unknown>>(response.body)) {
+	for await (const rawEvent of readSseJson<Record<string, unknown>>(response.body, options.signal)) {
 		const eventType = typeof rawEvent.type === "string" ? rawEvent.type : "";
 		if (!eventType) continue;
 

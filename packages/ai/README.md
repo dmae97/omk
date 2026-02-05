@@ -10,38 +10,38 @@ Unified LLM API with automatic model discovery, provider configuration, token an
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Tools](#tools)
-   - [Defining Tools](#defining-tools)
-   - [Handling Tool Calls](#handling-tool-calls)
-   - [Streaming Tool Calls with Partial JSON](#streaming-tool-calls-with-partial-json)
-   - [Validating Tool Arguments](#validating-tool-arguments)
-   - [Complete Event Reference](#complete-event-reference)
+  - [Defining Tools](#defining-tools)
+  - [Handling Tool Calls](#handling-tool-calls)
+  - [Streaming Tool Calls with Partial JSON](#streaming-tool-calls-with-partial-json)
+  - [Validating Tool Arguments](#validating-tool-arguments)
+  - [Complete Event Reference](#complete-event-reference)
 - [Image Input](#image-input)
 - [Thinking/Reasoning](#thinkingreasoning)
-   - [Unified Interface](#unified-interface-streamsimplecompletesimple)
-   - [Provider-Specific Options](#provider-specific-options-streamcomplete)
-   - [Streaming Thinking Content](#streaming-thinking-content)
+  - [Unified Interface](#unified-interface-streamsimplecompletesimple)
+  - [Provider-Specific Options](#provider-specific-options-streamcomplete)
+  - [Streaming Thinking Content](#streaming-thinking-content)
 - [Stop Reasons](#stop-reasons)
 - [Error Handling](#error-handling)
-   - [Aborting Requests](#aborting-requests)
-   - [Continuing After Abort](#continuing-after-abort)
+  - [Aborting Requests](#aborting-requests)
+  - [Continuing After Abort](#continuing-after-abort)
 - [APIs, Models, and Providers](#apis-models-and-providers)
-   - [Providers and Models](#providers-and-models)
-   - [Querying Providers and Models](#querying-providers-and-models)
-   - [Custom Models](#custom-models)
-   - [OpenAI Compatibility Settings](#openai-compatibility-settings)
-   - [Type Safety](#type-safety)
+  - [Providers and Models](#providers-and-models)
+  - [Querying Providers and Models](#querying-providers-and-models)
+  - [Custom Models](#custom-models)
+  - [OpenAI Compatibility Settings](#openai-compatibility-settings)
+  - [Type Safety](#type-safety)
 - [Cross-Provider Handoffs](#cross-provider-handoffs)
 - [Context Serialization](#context-serialization)
 - [Browser Usage](#browser-usage)
-   - [Environment Variables](#environment-variables-nodejs-only)
-   - [Checking Environment Variables](#checking-environment-variables)
+  - [Environment Variables](#environment-variables-nodejs-only)
+  - [Checking Environment Variables](#checking-environment-variables)
 - [OAuth Providers](#oauth-providers)
-   - [Vertex AI (ADC)](#vertex-ai-adc)
-   - [CLI Login](#cli-login)
-   - [Programmatic OAuth](#programmatic-oauth)
-   - [Login Flow Example](#login-flow-example)
-   - [Using OAuth Tokens](#using-oauth-tokens)
-   - [Provider Notes](#provider-notes)
+  - [Vertex AI (ADC)](#vertex-ai-adc)
+  - [CLI Login](#cli-login)
+  - [Programmatic OAuth](#programmatic-oauth)
+  - [Login Flow Example](#login-flow-example)
+  - [Using OAuth Tokens](#using-oauth-tokens)
+  - [Provider Notes](#provider-notes)
 - [License](#license)
 
 ## Supported Providers
@@ -267,7 +267,7 @@ context.messages.push({
 	toolName: "generate_chart",
 	content: [
 		{ type: "text", text: "Generated chart showing temperature trends" },
-		{ type: "image", data: imageBuffer.toString("base64"), mimeType: "image/png" },
+		{ type: "image", data: imageBuffer.toBase64(), mimeType: "image/png" },
 	],
 	isError: false,
 	timestamp: Date.now(),
@@ -390,7 +390,7 @@ if (model.input.includes("image")) {
 }
 
 const imageBuffer = fs.readFileSync("image.png");
-const base64Image = imageBuffer.toString("base64");
+const base64Image = imageBuffer.toBase64();
 
 const response = await complete(model, {
 	messages: [
@@ -443,7 +443,7 @@ const response = await completeSimple(
 	},
 	{
 		reasoning: "medium", // 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' (xhigh maps to high on non-OpenAI providers)
-	},
+	}
 );
 
 // Access thinking and text blocks
@@ -562,7 +562,7 @@ const s = stream(
 	},
 	{
 		signal,
-	},
+	}
 );
 
 for await (const event of s) {
@@ -877,7 +877,7 @@ const response = await complete(
 	},
 	{
 		apiKey: "your-api-key",
-	},
+	}
 );
 ```
 
@@ -1065,7 +1065,7 @@ const response = await complete(
 	{
 		messages: [{ role: "user", content: "Hello!" }],
 	},
-	{ apiKey: result.apiKey },
+	{ apiKey: result.apiKey }
 );
 ```
 

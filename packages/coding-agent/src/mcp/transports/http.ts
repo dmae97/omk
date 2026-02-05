@@ -4,7 +4,7 @@
  * Implements JSON-RPC 2.0 over HTTP POST with optional SSE streaming.
  * Based on MCP spec 2025-03-26.
  */
-import { readSseEvents } from "@oh-my-pi/pi-utils";
+import { readSseJson } from "@oh-my-pi/pi-utils";
 import type {
 	JsonRpcMessage,
 	JsonRpcResponse,
@@ -86,26 +86,11 @@ export class HttpTransport implements MCPTransport {
 				return;
 			}
 
-			let buffer = "";
 			// Read SSE stream
-			for await (const event of readSseEvents(response.body)) {
+			for await (const message of readSseJson<JsonRpcMessage>(response.body, this.sseConnection.signal)) {
 				if (!this._connected) break;
-				const data = event.data?.trim();
-				if (!data || data === "[DONE]") continue;
-				buffer += data;
-				if (!data.endsWith("\n")) {
-					buffer += "\n";
-				}
-				const result = Bun.JSONL.parseChunk(buffer);
-				buffer = buffer.slice(result.read);
-				if (result.error) {
-					buffer = "";
-					continue;
-				}
-				for (const message of result.values as JsonRpcMessage[]) {
-					if ("method" in message && !("id" in message)) {
-						this.onNotification?.(message.method, message.params);
-					}
+				if ("method" in message && !("id" in message)) {
+					this.onNotification?.(message.method, message.params);
 				}
 			}
 		} catch (error) {
@@ -182,40 +167,18 @@ export class HttpTransport implements MCPTransport {
 		const timeout = this.config.timeout ?? 30000;
 
 		const parse = async (): Promise<T> => {
-			let buffer = "";
-			for await (const event of readSseEvents(response.body!)) {
-				const data = event.data?.trim();
-				if (!data || data === "[DONE]") continue;
-				buffer += data;
-				if (!data.endsWith("\n")) {
-					buffer += "\n";
-				}
-				const result = Bun.JSONL.parseChunk(buffer);
-				buffer = buffer.slice(result.read);
-				if (result.error) {
-					buffer = "";
-					continue;
+			for await (const message of readSseJson<JsonRpcMessage>(response.body!)) {
+				if ("id" in message && message.id === expectedId && ("result" in message || "error" in message)) {
+					if (message.error) {
+						throw new Error(`MCP error ${message.error.code}: ${message.error.message}`);
+					}
+					return message.result as T;
 				}
 
-				for (const message of result.values as JsonRpcMessage[]) {
-					if (
-						"id" in message &&
-						(message as JsonRpcResponse).id === expectedId &&
-						("result" in message || "error" in message)
-					) {
-						const response = message as JsonRpcResponse;
-						if (response.error) {
-							throw new Error(`MCP error ${response.error.code}: ${response.error.message}`);
-						}
-						return response.result as T;
-					}
-
-					if ("method" in message && !("id" in message)) {
-						this.onNotification?.(message.method, message.params);
-					}
+				if ("method" in message && !("id" in message)) {
+					this.onNotification?.(message.method, message.params);
 				}
 			}
-
 			throw new Error(`No response received for request ID ${expectedId}`);
 		};
 

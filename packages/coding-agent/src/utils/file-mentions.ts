@@ -188,7 +188,7 @@ export async function generateFileMentionMessages(
 					continue;
 				}
 
-				const base64Content = buffer.toString("base64");
+				const base64Content = buffer.toBase64();
 				let image = { type: "image" as const, mimeType, data: base64Content };
 				let dimensionNote: string | undefined;
 

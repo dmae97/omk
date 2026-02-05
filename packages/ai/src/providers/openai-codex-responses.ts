@@ -1,5 +1,5 @@
 import * as os from "node:os";
-import { $env, abortableSleep } from "@oh-my-pi/pi-utils";
+import { $env, abortableSleep, readSseJson } from "@oh-my-pi/pi-utils";
 import type {
 	ResponseFunctionToolCall,
 	ResponseInput,
@@ -38,7 +38,7 @@ import {
 	URL_PATHS,
 } from "./openai-codex/constants";
 import { type CodexRequestOptions, type RequestBody, transformRequestBody } from "./openai-codex/request-transformer";
-import { parseCodexError, parseCodexSseStream } from "./openai-codex/response-handler";
+import { parseCodexError } from "./openai-codex/response-handler";
 import { transformMessages } from "./transform-messages";
 
 export interface OpenAICodexResponsesOptions extends StreamOptions {
@@ -234,7 +234,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 			const blocks = output.content;
 			const blockIndex = () => blocks.length - 1;
 
-			for await (const rawEvent of parseCodexSseStream(response)) {
+			for await (const rawEvent of readSseJson<Record<string, unknown>>(response.body!, options?.signal)) {
 				const eventType = typeof rawEvent.type === "string" ? rawEvent.type : "";
 				if (!eventType) continue;
 

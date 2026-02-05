@@ -1,5 +1,3 @@
-import { readSseData } from "@oh-my-pi/pi-utils";
-
 export type CodexRateLimit = {
 	used_percent?: number;
 	window_minutes?: number;
@@ -69,16 +67,6 @@ export async function parseCodexError(response: Response): Promise<CodexErrorInf
 		rateLimits,
 		raw: raw,
 	};
-}
-
-export async function* parseCodexSseStream(response: Response): AsyncGenerator<Record<string, unknown>> {
-	if (!response.body) {
-		return;
-	}
-
-	for await (const data of readSseData<Record<string, unknown>>(response.body)) {
-		yield data;
-	}
 }
 
 function toNumber(v: string | null): number | undefined {
