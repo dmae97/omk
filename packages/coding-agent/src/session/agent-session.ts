@@ -33,7 +33,7 @@ import { YAML } from "bun";
 import type { Rule } from "../capability/rule";
 import { getAgentDbPath } from "../config";
 import { MODEL_ROLE_IDS, type ModelRegistry, type ModelRole } from "../config/model-registry";
-import { parseModelString } from "../config/model-resolver";
+import { expandRoleAlias, parseModelString } from "../config/model-resolver";
 import {
 	expandPromptTemplate,
 	type PromptTemplate,
@@ -1871,13 +1871,14 @@ export class AgentSession {
 					: this.settings.getModelRole(role);
 			if (!roleModelStr) continue;
 
-			const parsed = parseModelString(roleModelStr);
+			const expandedRoleModelStr = expandRoleAlias(roleModelStr, this.settings);
+			const parsed = parseModelString(expandedRoleModelStr);
 			let match: Model | undefined;
 			if (parsed) {
 				match = availableModels.find(m => m.provider === parsed.provider && m.id === parsed.id);
 			}
 			if (!match) {
-				match = availableModels.find(m => m.id.toLowerCase() === roleModelStr.toLowerCase());
+				match = availableModels.find(m => m.id.toLowerCase() === expandedRoleModelStr.toLowerCase());
 			}
 			if (!match) continue;
 

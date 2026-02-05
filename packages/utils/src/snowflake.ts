@@ -97,9 +97,8 @@ namespace Snowflake {
 	//
 	export function lowerbound(timelike: Date | number | Snowflake): Snowflake {
 		switch (typeof timelike) {
-			// biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough
 			case "object": // Date
-				timelike = timelike.getTime();
+				return formatParts(timelike.getTime() - EPOCH, 0);
 			case "number":
 				return formatParts(timelike - EPOCH, 0);
 			case "string": // Snowflake hex string
@@ -108,11 +107,10 @@ namespace Snowflake {
 	}
 	export function upperbound(timelike: Date | number | Snowflake): Snowflake {
 		switch (typeof timelike) {
-			// biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough
 			case "object": // Date
-				timelike = timelike.getTime();
+				return formatParts(timelike.getTime() - EPOCH, MAX_SEQ);
 			case "number":
-				return formatParts(timelike - EPOCH, 0x3fffff);
+				return formatParts(timelike - EPOCH, MAX_SEQ);
 			case "string": // Snowflake hex string
 				return timelike;
 		}
