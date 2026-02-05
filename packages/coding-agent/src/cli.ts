@@ -10,7 +10,7 @@ import { APP_NAME } from "./config";
 
 process.title = APP_NAME;
 const argv = process.argv.slice(2);
-const runArgv = argv.length === 0 ? ["index"] : argv;
+const runArgv = argv.length === 0 || argv[0]?.startsWith("-") ? ["index", ...argv] : argv;
 run(runArgv, import.meta.url).catch((error: unknown) => {
 	const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
 	process.stderr.write(`${message}\n`);

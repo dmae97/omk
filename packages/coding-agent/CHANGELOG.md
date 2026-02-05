@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed CLI invocation with flags only (e.g. `pi --model=codex`) to route to the default command instead of erroring
+
 ## [11.2.0] - 2026-02-05
 ### Added
 
