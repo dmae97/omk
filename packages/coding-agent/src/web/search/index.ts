@@ -1,8 +1,8 @@
 /**
  * Unified Web Search Tool
  *
- * Single tool supporting Anthropic, Perplexity, Exa, and Jina providers with
- * provider-specific parameters exposed conditionally.
+ * Single tool supporting Anthropic, Perplexity, Exa, Jina, Gemini, and Codex
+ * providers with provider-specific parameters exposed conditionally.
  *
  * When EXA_API_KEY is available, additional specialized tools are exposed:
  * - web_search_deep: Natural language web search with synthesized results
@@ -26,7 +26,9 @@ import type { ToolSession } from "../../tools";
 import { formatAge } from "../../tools/render-utils";
 import { findAnthropicAuth } from "./auth";
 import { searchAnthropic } from "./providers/anthropic";
+import { searchCodex, hasCodexWebSearch } from "./providers/codex";
 import { searchExa } from "./providers/exa";
+import { searchGemini, hasGeminiWebSearch } from "./providers/gemini";
 import { findApiKey as findJinaKey, searchJina } from "./providers/jina";
 import { findApiKey as findPerplexityKey, searchPerplexity } from "./providers/perplexity";
 import { renderWebSearchCall, renderWebSearchResult, type WebSearchRenderDetails } from "./render";
@@ -37,7 +39,7 @@ import { WebSearchProviderError } from "./types";
 export const webSearchSchema = Type.Object({
 	query: Type.String({ description: "Search query" }),
 	provider: Type.Optional(
-		StringEnum(["auto", "exa", "jina", "anthropic", "perplexity"], {
+		StringEnum(["auto", "exa", "jina", "anthropic", "perplexity", "gemini", "codex"], {
 			description: "Search provider (default: auto)",
 		}),
 	),
@@ -51,10 +53,94 @@ export const webSearchSchema = Type.Object({
 
 export type WebSearchParams = {
 	query: string;
-	provider?: "auto" | "exa" | "jina" | "anthropic" | "perplexity";
+	provider?: "auto" | "exa" | "jina" | "anthropic" | "perplexity" | "gemini" | "codex";
 	recency?: "day" | "week" | "month" | "year";
 	limit?: number;
 };
+
+interface WebSearchProviderDefinition {
+	id: WebSearchProvider;
+	label: string;
+	isAvailable: () => Promise<boolean>;
+	search: (params: {
+		query: string;
+		limit?: number;
+		recency?: "day" | "week" | "month" | "year";
+		systemPrompt: string;
+		signal?: AbortSignal;
+	}) => Promise<WebSearchResponse>;
+}
+
+const webSearchProviders: WebSearchProviderDefinition[] = [
+	{
+		id: "exa",
+		label: "Exa",
+		isAvailable: async () => Boolean(findExaKey()),
+		search: async ({ query, limit }) =>
+			searchExa({
+				query,
+				num_results: limit,
+			}),
+	},
+	{
+		id: "jina",
+		label: "Jina",
+		isAvailable: async () => Boolean(findJinaKey()),
+		search: async ({ query, limit }) =>
+			searchJina({
+				query,
+				num_results: limit,
+			}),
+	},
+	{
+		id: "perplexity",
+		label: "Perplexity",
+		isAvailable: async () => Boolean(findPerplexityKey()),
+		search: async ({ query, limit, recency, systemPrompt }) =>
+			searchPerplexity({
+				query,
+				system_prompt: systemPrompt,
+				search_recency_filter: recency,
+				num_results: limit,
+			}),
+	},
+	{
+		id: "anthropic",
+		label: "Anthropic",
+		isAvailable: async () => Boolean(await findAnthropicAuth()),
+		search: async ({ query, limit, systemPrompt }) =>
+			searchAnthropic({
+				query,
+				system_prompt: systemPrompt,
+				num_results: limit,
+			}),
+	},
+	{
+		id: "gemini",
+		label: "Gemini",
+		isAvailable: hasGeminiWebSearch,
+		search: async ({ query, limit, systemPrompt }) =>
+			searchGemini({
+				query,
+				system_prompt: systemPrompt,
+				num_results: limit,
+			}),
+	},
+	{
+		id: "codex",
+		label: "Codex",
+		isAvailable: hasCodexWebSearch,
+		search: async ({ query, limit, systemPrompt, signal }) =>
+			searchCodex({
+				signal,
+				query,
+				system_prompt: systemPrompt,
+				num_results: limit,
+			}),
+	},
+];
+
+const webSearchProviderMap = new Map(webSearchProviders.map(provider => [provider.id, provider]));
 
 /** Preferred provider set via settings (default: auto) */
 let preferredProvider: WebSearchProvider | "auto" = "auto";
@@ -68,34 +154,17 @@ export function setPreferredWebSearchProvider(provider: WebSearchProvider | "aut
 async function getAvailableProviders(): Promise<WebSearchProvider[]> {
 	const providers: WebSearchProvider[] = [];
 
-	const exaKey = await findExaKey();
-	if (exaKey) providers.push("exa");
-
-	const jinaKey = await findJinaKey();
-	if (jinaKey) providers.push("jina");
-
-	const perplexityKey = await findPerplexityKey();
-	if (perplexityKey) providers.push("perplexity");
-
-	const anthropicAuth = await findAnthropicAuth();
-	if (anthropicAuth) providers.push("anthropic");
+	for (const provider of webSearchProviders) {
+		if (await provider.isAvailable()) {
+			providers.push(provider.id);
+		}
+	}
 
 	return providers;
 }
 
 function formatProviderLabel(provider: WebSearchProvider): string {
-	switch (provider) {
-		case "exa":
-			return "Exa";
-		case "jina":
-			return "Jina";
-		case "perplexity":
-			return "Perplexity";
-		case "anthropic":
-			return "Anthropic";
-		default:
-			return provider;
-	}
+	return webSearchProviderMap.get(provider)?.label ?? provider;
 }
 
 function formatProviderList(providers: WebSearchProvider[]): string {
@@ -236,32 +305,19 @@ async function executeWebSearch(
 
 	for (const provider of providers) {
 		lastProvider = provider;
+		const providerDefinition = webSearchProviderMap.get(provider);
+		if (!providerDefinition) {
+			lastError = new Error(`Unknown web search provider: ${provider}`);
+			if (!allowFallback) break;
+			continue;
+		}
 		try {
-			let response: WebSearchResponse;
-			if (provider === "exa") {
-				response = await searchExa({
-					query: params.query,
-					num_results: params.limit,
-				});
-			} else if (provider === "jina") {
-				response = await searchJina({
-					query: params.query,
-					num_results: params.limit,
-				});
-			} else if (provider === "anthropic") {
-				response = await searchAnthropic({
-					query: params.query,
-					system_prompt: webSearchSystemPrompt,
-					num_results: params.limit,
-				});
-			} else {
-				response = await searchPerplexity({
-					query: params.query,
-					system_prompt: webSearchSystemPrompt,
-					search_recency_filter: params.recency,
-					num_results: params.limit,
-				});
-			}
+			const response = await providerDefinition.search({
+				query: params.query,
+				limit: params.limit,
+				recency: params.recency,
+				systemPrompt: webSearchSystemPrompt,
+			});
 
 			const text = formatForLLM(response);
 
@@ -290,7 +346,7 @@ async function executeWebSearch(
 /**
  * Web search tool implementation.
  *
- * Supports Anthropic, Perplexity, Exa, and Jina providers with automatic fallback.
+ * Supports Anthropic, Perplexity, Exa, Jina, Gemini, and Codex providers with automatic fallback.
  * Session is accepted for interface consistency but not used.
  */
 export class WebSearchTool implements AgentTool<typeof webSearchSchema, WebSearchRenderDetails> {
