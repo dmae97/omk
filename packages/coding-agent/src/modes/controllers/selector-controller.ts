@@ -180,7 +180,7 @@ export class SelectorController {
 				break;
 			case "thinkingLevel":
 			case "defaultThinkingLevel":
-				this.ctx.session.setThinkingLevel(value as ThinkingLevel);
+				this.ctx.session.setThinkingLevel(value as ThinkingLevel, true);
 				this.ctx.statusLine.invalidate();
 				this.ctx.updateEditorBorderColor();
 				break;

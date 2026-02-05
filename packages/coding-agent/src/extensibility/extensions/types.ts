@@ -839,7 +839,7 @@ export type SetModelHandler = (model: Model) => Promise<boolean>;
 
 export type GetThinkingLevelHandler = () => ThinkingLevel;
 
-export type SetThinkingLevelHandler = (level: ThinkingLevel) => void;
+export type SetThinkingLevelHandler = (level: ThinkingLevel, persist?: boolean) => void;
 
 /** Shared state created by loader, used during registration and runtime. */
 export interface ExtensionRuntimeState {

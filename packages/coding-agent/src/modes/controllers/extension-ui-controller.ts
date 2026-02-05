@@ -282,7 +282,7 @@ export class ExtensionUiController {
 				return true;
 			},
 			getThinkingLevel: () => this.ctx.session.thinkingLevel,
-			setThinkingLevel: level => this.ctx.session.setThinkingLevel(level),
+			setThinkingLevel: (level, persist) => this.ctx.session.setThinkingLevel(level, persist),
 		};
 		const contextActions: ExtensionContextActions = {
 			getModel: () => this.ctx.session.model,

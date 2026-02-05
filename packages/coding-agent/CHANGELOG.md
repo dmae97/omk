@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `openInEditor()` utility function to centralize external editor handling with support for custom file extensions and stdio configuration
@@ -8,6 +9,7 @@
 
 ### Changed
 
+- Modified `setThinkingLevel()` API to accept optional `persist` parameter (defaults to false) for controlling whether thinking level changes are saved to settings
 - Refactored hook editor and input controller to use shared external editor utilities, reducing code duplication
 
 ## [11.0.3] - 2026-02-05

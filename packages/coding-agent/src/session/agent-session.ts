@@ -1811,7 +1811,7 @@ export class AgentSession {
 		this.settings.setModelRole(role, `${model.provider}/${model.id}`);
 		this.settings.getStorage()?.recordModelUsage(`${model.provider}/${model.id}`);
 
-		// Re-clamp thinking level for new model's capabilities
+		// Re-clamp thinking level for new model's capabilities without persisting settings
 		this.setThinkingLevel(this.thinkingLevel);
 	}
 
@@ -1830,7 +1830,7 @@ export class AgentSession {
 		this.sessionManager.appendModelChange(`${model.provider}/${model.id}`, "temporary");
 		this.settings.getStorage()?.recordModelUsage(`${model.provider}/${model.id}`);
 
-		// Re-clamp thinking level for new model's capabilities
+		// Re-clamp thinking level for new model's capabilities without persisting settings
 		this.setThinkingLevel(this.thinkingLevel);
 	}
 
@@ -1956,7 +1956,7 @@ export class AgentSession {
 		this.settings.setModelRole("default", `${nextModel.provider}/${nextModel.id}`);
 		this.settings.getStorage()?.recordModelUsage(`${nextModel.provider}/${nextModel.id}`);
 
-		// Re-clamp thinking level for new model's capabilities
+		// Re-clamp thinking level for new model's capabilities without persisting settings
 		this.setThinkingLevel(this.thinkingLevel);
 
 		return { model: nextModel, thinkingLevel: this.thinkingLevel, isScoped: false };
@@ -1978,12 +1978,12 @@ export class AgentSession {
 	 * Clamps to model capabilities based on available thinking levels.
 	 * Saves to session, with optional persistence to settings.
 	 */
-	setThinkingLevel(level: ThinkingLevel, options?: { persist?: boolean }): void {
+	setThinkingLevel(level: ThinkingLevel, persist: boolean = false): void {
 		const availableLevels = this.getAvailableThinkingLevels();
 		const effectiveLevel = availableLevels.includes(level) ? level : this._clampThinkingLevel(level, availableLevels);
 		this.agent.setThinkingLevel(effectiveLevel);
 		this.sessionManager.appendThinkingLevelChange(effectiveLevel);
-		if (options?.persist !== false) {
+		if (persist) {
 			this.settings.set("defaultThinkingLevel", effectiveLevel);
 		}
 	}
@@ -2000,7 +2000,7 @@ export class AgentSession {
 		const nextIndex = (currentIndex + 1) % levels.length;
 		const nextLevel = levels[nextIndex];
 
-		this.setThinkingLevel(nextLevel, { persist: false });
+		this.setThinkingLevel(nextLevel);
 		return nextLevel;
 	}
 

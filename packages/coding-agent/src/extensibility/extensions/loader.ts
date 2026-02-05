@@ -214,8 +214,8 @@ class ConcreteExtensionAPI implements ExtensionAPI, IExtensionRuntime {
 		return this.runtime.getThinkingLevel();
 	}
 
-	setThinkingLevel(level: ThinkingLevel): void {
-		this.runtime.setThinkingLevel(level);
+	setThinkingLevel(level: ThinkingLevel, persist?: boolean): void {
+		this.runtime.setThinkingLevel(level, persist);
 	}
 }
 
