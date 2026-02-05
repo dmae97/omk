@@ -269,6 +269,7 @@ export class EventController {
 					this.ctx.streamingComponent = undefined;
 					this.ctx.streamingMessage = undefined;
 				}
+				await this.ctx.flushPendingModelSwitch();
 				this.ctx.pendingTools.clear();
 				this.ctx.ui.requestRender();
 				this.sendCompletionNotification();

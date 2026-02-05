@@ -136,6 +136,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	private readonly changelogMarkdown: string | undefined;
 	private planModePreviousTools: string[] | undefined;
 	private planModePreviousModel: Model | undefined;
+	private pendingModelSwitch: Model | undefined;
 	private planModeHasEntered = false;
 	public readonly lspServers:
 		| Array<{ name: string; status: "ready" | "error"; fileTypes: string[]; error?: string }>
@@ -533,11 +534,29 @@ export class InteractiveMode implements InteractiveModeContext {
 			return;
 		}
 		this.planModePreviousModel = currentModel;
+		if (this.session.isStreaming) {
+			this.pendingModelSwitch = planModel;
+			return;
+		}
 		try {
 			await this.session.setModelTemporary(planModel);
 		} catch (error) {
 			this.showWarning(
 				`Failed to switch to plan model for plan mode: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
+	}
+
+	/** Apply any deferred model switch after the current stream ends. */
+	async flushPendingModelSwitch(): Promise<void> {
+		const model = this.pendingModelSwitch;
+		if (!model) return;
+		this.pendingModelSwitch = undefined;
+		try {
+			await this.session.setModelTemporary(model);
+		} catch (error) {
+			this.showWarning(
+				`Failed to switch model after streaming: ${error instanceof Error ? error.message : String(error)}`,
 			);
 		}
 	}
@@ -588,7 +607,11 @@ export class InteractiveMode implements InteractiveModeContext {
 			await this.session.setActiveToolsByName(previousTools);
 		}
 		if (this.planModePreviousModel) {
-			await this.session.setModelTemporary(this.planModePreviousModel);
+			if (this.session.isStreaming) {
+				this.pendingModelSwitch = this.planModePreviousModel;
+			} else {
+				await this.session.setModelTemporary(this.planModePreviousModel);
+			}
 		}
 
 		this.session.setPlanModeState(undefined);

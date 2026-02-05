@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Support for image file mentions—images are now automatically detected, resized, and attached when referenced with @filepath syntax
@@ -14,6 +13,7 @@
 
 ### Fixed
 
+- Fixed model switches deferred during streaming to apply correctly when the stream completes, preventing model changes from being lost
 - Fixed plan mode toggles during streaming to inject plan-mode context immediately, preventing file edits while in plan mode
 - Fixed plan mode model switches during streaming to defer model changes until the current turn completes
 
