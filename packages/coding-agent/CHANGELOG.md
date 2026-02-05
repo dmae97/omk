@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `task.maxRecursionDepth` setting to control how many levels deep subagents can spawn their own subagents (0=none, 1=one level, 2=two levels, -1=unlimited)
@@ -12,6 +13,8 @@
 
 ### Changed
 
+- Made thinking level persistence optional via `persist` parameter in `setThinkingLevel()` method, allowing temporary thinking level changes without saving to settings
+- Updated thinking level cycling to no longer persist changes to settings, enabling quick iteration through thinking levels without modifying user preferences
 - Replaced nanoid with Snowflake for ID generation throughout codebase for improved performance and collision resistance
 - Updated session ID format in documentation from nanoid to snowflake hex string (e.g., "a1b2c3d4e5f60001")
 - Renamed environment variable prefix from `OMP_` to `PI_` throughout codebase (e.g., `OMP_DEBUG_STARTUP` → `PI_DEBUG_STARTUP`, `OMP_PYTHON_GATEWAY_URL` → `PI_PYTHON_GATEWAY_URL`)

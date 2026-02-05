@@ -179,6 +179,7 @@ export class SelectorController {
 				this.ctx.session.setInterruptMode(value as "immediate" | "wait");
 				break;
 			case "thinkingLevel":
+			case "defaultThinkingLevel":
 				this.ctx.session.setThinkingLevel(value as ThinkingLevel);
 				this.ctx.statusLine.invalidate();
 				this.ctx.updateEditorBorderColor();

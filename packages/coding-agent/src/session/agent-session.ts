@@ -1975,14 +1975,16 @@ export class AgentSession {
 	/**
 	 * Set thinking level.
 	 * Clamps to model capabilities based on available thinking levels.
-	 * Saves to session and settings.
+	 * Saves to session, with optional persistence to settings.
 	 */
-	setThinkingLevel(level: ThinkingLevel): void {
+	setThinkingLevel(level: ThinkingLevel, options?: { persist?: boolean }): void {
 		const availableLevels = this.getAvailableThinkingLevels();
 		const effectiveLevel = availableLevels.includes(level) ? level : this._clampThinkingLevel(level, availableLevels);
 		this.agent.setThinkingLevel(effectiveLevel);
 		this.sessionManager.appendThinkingLevelChange(effectiveLevel);
-		this.settings.set("defaultThinkingLevel", effectiveLevel);
+		if (options?.persist !== false) {
+			this.settings.set("defaultThinkingLevel", effectiveLevel);
+		}
 	}
 
 	/**
@@ -1997,7 +1999,7 @@ export class AgentSession {
 		const nextIndex = (currentIndex + 1) % levels.length;
 		const nextLevel = levels[nextIndex];
 
-		this.setThinkingLevel(nextLevel);
+		this.setThinkingLevel(nextLevel, { persist: false });
 		return nextLevel;
 	}
 
