@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { $env, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
-import { Value } from "@sinclair/typebox/value/index.mjs";
+import { Value } from "@sinclair/typebox/value";
 import { Ajv, type ErrorObject, type ValidateFunction } from "ajv";
 import { JSONC, YAML } from "bun";
 // Embed package.json at build time for config
