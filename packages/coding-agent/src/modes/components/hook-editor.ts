@@ -2,12 +2,9 @@
  * Multi-line editor component for hooks.
  * Supports Ctrl+G for external editor.
  */
-import * as fs from "node:fs/promises";
-import * as os from "node:os";
-import * as path from "node:path";
 import { Container, Editor, matchesKey, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
-import { $env, Snowflake } from "@oh-my-pi/pi-utils";
 import { getEditorTheme, theme } from "../../modes/theme/theme";
+import { getEditorCommand, openInEditor } from "../../utils/external-editor";
 import { DynamicBorder } from "./dynamic-border";
 
 export class HookEditorComponent extends Container {
@@ -47,10 +44,7 @@ export class HookEditorComponent extends Container {
 		this.addChild(new Spacer(1));
 
 		// Add hint
-		const hasExternalEditor = !!($env.VISUAL || $env.EDITOR);
-		const hint = hasExternalEditor
-			? "ctrl+enter submit  esc cancel  ctrl+g external editor"
-			: "ctrl+enter submit  esc cancel";
+		const hint = "ctrl+enter submit  esc cancel  ctrl+g external editor";
 		this.addChild(new Text(theme.fg("dim", hint), 1, 0));
 
 		this.addChild(new Spacer(1));
@@ -83,36 +77,17 @@ export class HookEditorComponent extends Container {
 	}
 
 	private async openExternalEditor(): Promise<void> {
-		const editorCmd = $env.VISUAL || $env.EDITOR;
-		if (!editorCmd) {
-			return;
-		}
+		const editorCmd = getEditorCommand();
+		if (!editorCmd) return;
 
 		const currentText = this.editor.getText();
-		const tmpFile = path.join(os.tmpdir(), `omp-hook-editor-${Snowflake.next()}.md`);
-
 		try {
-			await Bun.write(tmpFile, currentText);
 			this.tui.stop();
-
-			const [editor, ...editorArgs] = editorCmd.split(" ");
-			const child = Bun.spawn([editor, ...editorArgs, tmpFile], {
-				stdin: "inherit",
-				stdout: "inherit",
-				stderr: "inherit",
-			});
-			const exitCode = await child.exited;
-
-			if (exitCode === 0) {
-				const newContent = (await Bun.file(tmpFile).text()).replace(/\n$/, "");
-				this.editor.setText(newContent);
+			const result = await openInEditor(editorCmd, currentText);
+			if (result !== null) {
+				this.editor.setText(result);
 			}
 		} finally {
-			try {
-				await fs.rm(tmpFile, { force: true });
-			} catch {
-				// Ignore cleanup errors
-			}
 			this.tui.start();
 			this.tui.requestRender(true);
 		}
