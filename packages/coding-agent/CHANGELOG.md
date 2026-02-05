@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `openInEditor()` utility function to centralize external editor handling with support for custom file extensions and stdio configuration
+- Added `getEditorCommand()` utility function to retrieve the user's preferred editor from $VISUAL or $EDITOR environment variables
+
+### Changed
+
+- Refactored hook editor and input controller to use shared external editor utilities, reducing code duplication
 
 ## [11.0.3] - 2026-02-05
 ### Added

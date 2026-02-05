@@ -1,16 +1,14 @@
-import { spawn } from "node:child_process";
 import * as fs from "node:fs/promises";
-import * as os from "node:os";
-import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import { readImageFromClipboard } from "@oh-my-pi/pi-natives";
-import { $env, Snowflake } from "@oh-my-pi/pi-utils";
+import { $env } from "@oh-my-pi/pi-utils";
 import type { SettingPath, SettingValue } from "../../config/settings";
 import { settings } from "../../config/settings";
 import { theme } from "../../modes/theme/theme";
 import type { InteractiveModeContext } from "../../modes/types";
 import type { AgentSessionEvent } from "../../session/agent-session";
 import { SKILL_PROMPT_MESSAGE_TYPE, type SkillPromptDetails } from "../../session/messages";
+import { getEditorCommand, openInEditor } from "../../utils/external-editor";
 import { resizeImage } from "../../utils/image-resize";
 import { generateSessionTitle, setTerminalTitle } from "../../utils/title-generator";
 
@@ -730,61 +728,36 @@ export class InputController {
 	}
 
 	async openExternalEditor(): Promise<void> {
-		// Determine editor (respect $VISUAL, then $EDITOR)
-		const editorCmd = $env.VISUAL || $env.EDITOR;
+		const editorCmd = getEditorCommand();
 		if (!editorCmd) {
 			this.ctx.showWarning("No editor configured. Set $VISUAL or $EDITOR environment variable.");
 			return;
 		}
 
 		const currentText = this.ctx.editor.getText();
-		const tmpFile = path.join(os.tmpdir(), `omp-editor-${Snowflake.next()}.omp.md`);
 
 		let ttyHandle: fs.FileHandle | null = null;
 		try {
-			// Write current content to temp file
-			await Bun.write(tmpFile, currentText);
-
-			// Stop TUI to release terminal
 			ttyHandle = await this.openEditorTerminalHandle();
 			this.ctx.ui.stop();
-
-			// Split by space to support editor arguments (e.g., "code --wait")
-			const [editor, ...editorArgs] = editorCmd.split(" ");
 
 			const stdio: [number | "inherit", number | "inherit", number | "inherit"] = ttyHandle
 				? [ttyHandle.fd, ttyHandle.fd, ttyHandle.fd]
 				: ["inherit", "inherit", "inherit"];
 
-			const child = spawn(editor, [...editorArgs, tmpFile], { stdio });
-			const exitCode = await new Promise<number>((resolve, reject) => {
-				child.once("exit", (code, signal) => resolve(code ?? (signal ? -1 : 0)));
-				child.once("error", error => reject(error));
-			});
-
-			// On successful exit (exitCode 0), replace editor content
-			if (exitCode === 0) {
-				const newContent = (await Bun.file(tmpFile).text()).replace(/\n$/, "");
-				this.ctx.editor.setText(newContent);
+			const result = await openInEditor(editorCmd, currentText, { extension: ".omp.md", stdio });
+			if (result !== null) {
+				this.ctx.editor.setText(result);
 			}
-			// On non-zero exit, keep original text (no action needed)
 		} catch (error) {
 			this.ctx.showWarning(
 				`Failed to open external editor: ${error instanceof Error ? error.message : String(error)}`,
 			);
 		} finally {
-			// Clean up temp file
-			try {
-				await fs.rm(tmpFile, { force: true });
-			} catch {
-				// Ignore cleanup errors
-			}
-
 			if (ttyHandle) {
 				await ttyHandle.close();
 			}
 
-			// Restart TUI
 			this.ctx.ui.start();
 			this.ctx.ui.requestRender();
 		}
