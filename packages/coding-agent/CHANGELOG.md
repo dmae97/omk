@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [11.0.0] - 2026-02-05
+
 ### Added
 
 - Added UI dropdown options for `task.maxRecursion Depth` setting with presets (Unlimited, None, Single, Double, Triple)

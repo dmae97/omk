@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [11.0.0] - 2026-02-05
 ### Removed
 
 - Removed legacy type aliases `WasmMatch` and `WasmSearchResult`

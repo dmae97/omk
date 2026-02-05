@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [11.0.0] - 2026-02-05
+
 ### Added
 
 - Introduced `terminal-capabilities.ts` module consolidating terminal detection and image protocol support

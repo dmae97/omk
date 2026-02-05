@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [11.0.0] - 2026-02-05
 ### Changed
 
 - Replaced direct `process.env` access with `getEnv()` utility from `@oh-my-pi/pi-utils` for consistent environment variable handling across all providers
