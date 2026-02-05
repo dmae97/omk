@@ -1,6 +1,6 @@
 {
 	"name": "@oh-my-pi/pi-natives",
-	"version": "11.2.2",
+	"version": "11.2.3",
 	"description": "Native Rust functionality via N-API",
 	"type": "module",
 	"main": "./src/index.ts",

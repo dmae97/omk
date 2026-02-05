@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [11.2.3] - 2026-02-05
 ### Added
 
 - Added Claude Opus 4.6 model support across multiple providers (Anthropic, Amazon Bedrock, GitHub Copilot, OpenRouter, OpenCode, Vercel AI Gateway)

@@ -1,6 +1,6 @@
 {
 	"name": "@oh-my-pi/pi-ai",
-	"version": "11.2.2",
+	"version": "11.2.3",
 	"description": "Unified LLM API with automatic model discovery and provider configuration",
 	"type": "module",
 	"main": "./src/index.ts",
