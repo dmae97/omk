@@ -39,12 +39,10 @@ namespace Snowflake {
 	// Formats a sequence and timestamp into a snowflake hex string.
 	//
 	export function formatParts(dt: number, seq: number): Snowflake {
-		// Split 64-bit value into two 32-bit parts for number arithmetic
-		// high32 = delta >> 10 (timestamp bits 41-10)
-		// low32 = (delta & 0x3ff) << 22 | seq
-		const hi = dt >>> 10;
-		const lo = (dt << 22) | seq;
-
+		// Keep everything in Number space; dt is < 2^53 for current epochs.
+		const value = dt * 0x400000 + seq; // dt << 22
+		const hi = Math.floor(value / 0x100000000);
+		const lo = (value - hi * 0x100000000) >>> 0;
 		const hi1 = (hi >>> 16) & 0xffff;
 		const hi2 = hi & 0xffff;
 		const lo1 = (lo >>> 16) & 0xffff;
