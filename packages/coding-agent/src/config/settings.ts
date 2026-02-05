@@ -418,7 +418,7 @@ export class Settings {
 				prev[role] = modelId;
 			}
 		}
-		this.set("modelRoles", prev);
+		this.override("modelRoles", prev);
 	}
 
 	/**

@@ -657,11 +657,11 @@ export async function main(args: string[]) {
 	const slowModel = parsed.slow ?? $env.PI_SLOW_MODEL;
 	const planModel = parsed.plan ?? $env.PI_PLAN_MODEL;
 	if (smolModel || slowModel || planModel) {
-		const currentRoles = settings.get("modelRoles") as Record<string, string>;
-		if (smolModel) currentRoles.smol = smolModel;
-		if (slowModel) currentRoles.slow = slowModel;
-		if (planModel) currentRoles.plan = planModel;
-		settings.override("modelRoles", currentRoles);
+		settings.overrideModelRoles({
+			smol: smolModel,
+			slow: slowModel,
+			plan: planModel,
+		});
 	}
 
 	await initTheme(settings.get("theme"), isInteractive, settings.get("symbolPreset"), settings.get("colorBlindMode"));
