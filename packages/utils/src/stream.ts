@@ -1,3 +1,5 @@
+import { createAbortableStream } from "./abortable";
+
 /**
  * Sanitize binary output for display/storage.
  * Removes characters that crash string-width or cause display issues:
@@ -6,31 +8,39 @@
  * - Characters with undefined code points
  */
 export function sanitizeBinaryOutput(str: string): string {
-	// Use Array.from to properly iterate over code points (not code units)
-	// This handles surrogate pairs correctly and catches edge cases where
-	// codePointAt() might return undefined
-	return Array.from(str)
-		.filter(char => {
-			// Filter out characters that cause string-width to crash
-			// This includes:
-			// - Lone surrogates (already filtered by Array.from)
-			// - Control chars except \t \n \r
-			// - Characters with undefined code points
+	let out: string[] | undefined;
+	let last = 0;
 
-			const code = char.codePointAt(0);
+	for (let i = 0; i < str.length; ) {
+		const code = str.codePointAt(i)!;
+		const width = code > 0xffff ? 2 : 1;
+		const next = i + width;
 
-			// Skip if code point is undefined (edge case with invalid strings)
-			if (code === undefined) return false;
+		// Allow tab, newline, carriage return.
+		const isAllowedControl = code === 0x09 || code === 0x0a || code === 0x0d;
+		if (isAllowedControl) {
+			i = next;
+			continue;
+		}
 
-			// Allow tab, newline, carriage return
-			if (code === 0x09 || code === 0x0a || code === 0x0d) return true;
+		// Filter out characters that crash `Bun.stringWidth()` or cause display issues:
+		// - ASCII control chars (C0)
+		// - DEL + C1 control block
+		// - Lone surrogates
+		const isControl = code <= 0x1f || code === 0x7f || (code >= 0x80 && code <= 0x9f);
+		const isSurrogate = code >= 0xd800 && code <= 0xdfff;
+		if (isControl || isSurrogate) {
+			out ??= [];
+			if (last !== i) out.push(str.slice(last, i));
+			last = next;
+		}
 
-			// Filter out control characters (0x00-0x1F, except 0x09, 0x0a, 0x0x0d)
-			if (code <= 0x1f) return false;
+		i = next;
+	}
 
-			return true;
-		})
-		.join("");
+	if (!out) return str;
+	if (last < str.length) out.push(str.slice(last));
+	return out.join("");
 }
 
 /**
@@ -44,7 +54,7 @@ const LF = 0x0a;
 
 export async function* readLines(stream: ReadableStream<Uint8Array>, signal?: AbortSignal): AsyncGenerator<Uint8Array> {
 	const buffer = new ConcatSink();
-	const source = signal ? stream.pipeThrough(new TransformStream(), { signal }) : stream;
+	const source = createAbortableStream(stream, signal);
 	try {
 		for await (const chunk of source) {
 			for (const line of buffer.appendAndFlushLines(chunk)) {
@@ -67,23 +77,10 @@ export async function* readLines(stream: ReadableStream<Uint8Array>, signal?: Ab
 
 export async function* readJsonl<T>(stream: ReadableStream<Uint8Array>, signal?: AbortSignal): AsyncGenerator<T> {
 	const buffer = new ConcatSink();
-	const source = signal ? stream.pipeThrough(new TransformStream(), { signal }) : stream;
+	const source = createAbortableStream(stream, signal);
 	try {
-		const yieldBuffer: T[] = [];
 		for await (const chunk of source) {
-			buffer.appendAndConsume(chunk, 0, chunk.length, (payload, beg, end) => {
-				const { values, error, read, done } = Bun.JSONL.parseChunk(payload, beg, end);
-				if (values.length > 0) {
-					yieldBuffer.push(...(values as T[]));
-				}
-				if (error) throw error;
-				if (done) return 0;
-				return end - read;
-			});
-			if (yieldBuffer.length > 0) {
-				yield* yieldBuffer;
-				yieldBuffer.length = 0;
-			}
+			yield* buffer.pullJSONL<T>(chunk, 0, chunk.length);
 		}
 		if (!buffer.isEmpty) {
 			const tail = buffer.flush();
@@ -104,24 +101,6 @@ export async function* readJsonl<T>(stream: ReadableStream<Uint8Array>, signal?:
 		if (signal?.aborted) return;
 		throw err;
 	}
-}
-
-/**
- * Create a transform stream that sanitizes text.
- */
-export function createSanitizerStream(): TransformStream<string, string> {
-	return new TransformStream<string, string>({
-		transform(chunk, controller) {
-			controller.enqueue(sanitizeText(chunk));
-		},
-	});
-}
-
-/**
- * Create a transform stream that decodes text.
- */
-export function createTextDecoderStream(): TransformStream<Uint8Array, string> {
-	return new TextDecoderStream() as TransformStream<Uint8Array, string>;
 }
 
 // =============================================================================
@@ -257,16 +236,15 @@ class ConcatSink {
 		}
 	}
 
-	appendAndConsume(
-		chunk: Uint8Array,
-		beg: number,
-		end: number,
-		// (slice) => [remaining length]
-		consumer: (payload: Uint8Array, beg: number, end: number) => number,
-	) {
+	*pullJSONL<T>(chunk: Uint8Array, beg: number, end: number) {
 		if (this.isEmpty) {
-			const rem = consumer(chunk, beg, end);
-			if (!rem) return;
+			const { values, error, read, done } = Bun.JSONL.parseChunk(chunk, beg, end);
+			if (values.length > 0) {
+				yield* values as T[];
+			}
+			if (error) throw error;
+			if (done) return;
+			const rem = end - read;
 			this.reset(chunk.subarray(end - rem, end));
 			return;
 		}
@@ -277,11 +255,17 @@ class ConcatSink {
 		const space = this.#ensureCapacity(total);
 		space.set(chunk.subarray(beg, end), offset);
 		this.#length = total;
-		const rem = consumer(space.subarray(0, total), 0, total);
-		if (!rem) {
+
+		const { values, error, read, done } = Bun.JSONL.parseChunk(space.subarray(0, total), 0, total);
+		if (values.length > 0) {
+			yield* values as T[];
+		}
+		if (error) throw error;
+		if (done) {
 			this.#length = 0;
 			return;
 		}
+		const rem = end - read;
 		if (rem < total) {
 			space.copyWithin(0, total - rem, total);
 		}
@@ -308,10 +292,9 @@ export async function* readSseJson<T>(stream: ReadableStream<Uint8Array>, signal
 	// pipeThrough with { signal } makes the stream abort-aware: the pipe
 	// cancels the source and errors the output when the signal fires,
 	// so for-await-of exits cleanly without manual reader/listener management.
-	stream = signal ? stream.pipeThrough(new TransformStream(), { signal }) : stream;
+	stream = createAbortableStream(stream, signal);
 	try {
-		const yieldBuffer: T[] = [];
-		const processLine = (line: Uint8Array) => {
+		const processLine = function* (line: Uint8Array) {
 			// Strip trailing spaces including \r.
 			let end = line.length;
 			while (end && WHITESPACE.get(line[end - 1])) {
@@ -329,39 +312,24 @@ export async function* readSseJson<T>(stream: ReadableStream<Uint8Array>, signal
 			}
 			if (beg >= end) return;
 
-			jsonBuffer.appendAndConsume(trimmed, beg, end, (payload, beg, end) => {
-				const { values, error, read, done } = Bun.JSONL.parseChunk(payload, beg, end);
-				if (values.length > 0) {
-					yieldBuffer.push(...(values as T[]));
-				}
-				if (error) {
-					if (PAT_DONE.strip(payload.subarray(beg, end))) {
-						throw kDoneError;
-					}
-					throw error;
-				}
-				if (done) return 0;
-				return end - read;
-			});
+			// Fast-path: the OpenAI-style done marker isn't JSON.
+			const donePrefix = PAT_DONE.strip(trimmed.subarray(beg, end));
+			if (donePrefix !== null && donePrefix === end - beg) {
+				throw kDoneError;
+			}
+
+			yield* jsonBuffer.pullJSONL<T>(trimmed, beg, end);
 		};
 		for await (const chunk of stream) {
 			for (const line of lineBuffer.appendAndFlushLines(chunk)) {
-				processLine(line);
-				if (yieldBuffer.length > 0) {
-					yield* yieldBuffer;
-					yieldBuffer.length = 0;
-				}
+				yield* processLine(line);
 			}
 		}
 		if (!lineBuffer.isEmpty) {
 			const tail = lineBuffer.flush();
 			if (tail) {
 				lineBuffer.clear();
-				processLine(tail);
-				if (yieldBuffer.length > 0) {
-					yield* yieldBuffer;
-					yieldBuffer.length = 0;
-				}
+				yield* processLine(tail);
 			}
 		}
 	} catch (err) {

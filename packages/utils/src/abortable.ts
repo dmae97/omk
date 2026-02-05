@@ -18,6 +18,18 @@ export async function abortableSleep(ms: number, signal?: AbortSignal): Promise<
 }
 
 /**
+ * Creates an abortable stream from a given stream and signal.
+ *
+ * @param stream - The stream to make abortable
+ * @param signal - The signal to abort the stream
+ * @returns The abortable stream
+ */
+export function createAbortableStream<T>(stream: ReadableStream<T>, signal?: AbortSignal): ReadableStream<T> {
+	if (!signal) return stream;
+	return stream.pipeThrough(new TransformStream<T, T>(), { signal });
+}
+
+/**
  * Creates a deferred { promise, resolve, reject } triple which automatically rejects
  * with { name: "AbortError" } if the given abort signal fires before resolve/reject.
  *

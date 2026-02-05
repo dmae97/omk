@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import type { BufferSource } from "bun";
 import {
-	createSanitizerStream,
-	createTextDecoderStream,
 	parseJsonlLenient,
 	readJsonl,
 	readLines,
@@ -12,8 +11,8 @@ import {
 
 const encoder = new TextEncoder();
 
-async function runTransform<T>(transform: TransformStream<Uint8Array, T>, chunks: Uint8Array[]): Promise<T[]> {
-	const readable = new ReadableStream<Uint8Array>({
+async function runTransform<T>(transform: TransformStream<BufferSource, T>, chunks: Uint8Array[]): Promise<T[]> {
+	const readable = new ReadableStream<BufferSource>({
 		start(controller) {
 			for (const chunk of chunks) controller.enqueue(chunk);
 			controller.close();
@@ -58,6 +57,16 @@ describe("sanitizeBinaryOutput", () => {
 	it("removes control characters but keeps tabs/newlines", () => {
 		const input = "a\u0000b\tline\ncarriage\r\u0001";
 		expect(sanitizeBinaryOutput(input)).toBe("ab\tline\ncarriage\r");
+	});
+
+	it("removes lone surrogates", () => {
+		const input = `a\ud800b\udc00c`;
+		expect(sanitizeBinaryOutput(input)).toBe("abc");
+	});
+
+	it("removes C1 control characters", () => {
+		const input = `a\u0085b`;
+		expect(sanitizeBinaryOutput(input)).toBe("ab");
 	});
 });
 
@@ -118,7 +127,11 @@ describe("readJsonl", () => {
 
 describe("createSanitizerStream", () => {
 	it("sanitizes text chunks", async () => {
-		const transform = createSanitizerStream();
+		const transform = new TransformStream<string, string>({
+			transform(chunk, controller) {
+				controller.enqueue(sanitizeText(chunk));
+			},
+		});
 		const output = await runStringTransform(transform, ["\u001b[34mhi\u001b[0m\r\n"]);
 
 		expect(output).toEqual(["hi\n"]);
@@ -127,8 +140,7 @@ describe("createSanitizerStream", () => {
 
 describe("createTextDecoderStream", () => {
 	it("decodes utf-8 byte streams", async () => {
-		const transform = createTextDecoderStream();
-		const output = await runTransform(transform, [encoder.encode("hello"), encoder.encode(" world")]);
+		const output = await runTransform(new TextDecoderStream(), [encoder.encode("hello"), encoder.encode(" world")]);
 
 		expect(output.join("")).toBe("hello world");
 	});

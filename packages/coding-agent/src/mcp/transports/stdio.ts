@@ -5,7 +5,7 @@
  * Messages are newline-delimited JSON.
  */
 
-import { readLines } from "@oh-my-pi/pi-utils";
+import { readJsonl } from "@oh-my-pi/pi-utils";
 import { type Subprocess, spawn } from "bun";
 import type { JsonRpcResponse, MCPStdioServerConfig, MCPTransport } from "../../mcp/types";
 
@@ -72,13 +72,11 @@ export class StdioTransport implements MCPTransport {
 
 	private async startReadLoop(): Promise<void> {
 		if (!this.process?.stdout) return;
-
-		const decoder = new TextDecoder();
 		try {
-			for await (const line of readLines(this.process.stdout)) {
+			for await (const line of readJsonl(this.process.stdout)) {
 				if (!this._connected) break;
 				try {
-					this.handleMessage(JSON.parse(decoder.decode(line)) as JsonRpcResponse);
+					this.handleMessage(line as JsonRpcResponse);
 				} catch {
 					// Skip malformed lines
 				}
