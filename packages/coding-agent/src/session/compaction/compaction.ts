@@ -647,7 +647,7 @@ export function prepareCompaction(
 
 	const cutPoint = findCutPoint(pathEntries, boundaryStart, boundaryEnd, keepRecentTokens);
 
-	// Get UUID of first kept entry
+	// Get ID of first kept entry
 	const firstKeptEntry = pathEntries[cutPoint.firstKeptEntryIndex];
 	if (!firstKeptEntry?.id) {
 		return undefined; // Session needs migration
@@ -717,7 +717,7 @@ const TURN_PREFIX_SUMMARIZATION_PROMPT = renderPromptTemplate(compactionTurnPref
 
 /**
  * Generate summaries for compaction using prepared data.
- * Returns CompactionResult - SessionManager adds uuid/parentUuid when saving.
+ * Returns CompactionResult - SessionManager adds id/parentId when saving.
  *
  * @param preparation - Pre-calculated preparation from prepareCompaction()
  * @param customInstructions - Optional custom focus for the summary
@@ -805,7 +805,7 @@ export async function compact(
 	summary += formatFileOperations(readFiles, modifiedFiles);
 
 	if (!firstKeptEntryId) {
-		throw new Error("First kept entry has no UUID - session may need migration");
+		throw new Error("First kept entry has no ID - session may need migration");
 	}
 
 	return {

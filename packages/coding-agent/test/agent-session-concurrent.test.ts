@@ -14,7 +14,7 @@ import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
-import { nanoid } from "nanoid";
+import { Snowflake } from "@oh-my-pi/pi-utils";
 
 // Mock stream that mimics AssistantMessageEventStream
 class MockAssistantStream extends AssistantMessageEventStream {}
@@ -44,7 +44,7 @@ describe("AgentSession concurrent prompt guard", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(os.tmpdir(), `pi-concurrent-test-${nanoid()}`);
+		tempDir = path.join(os.tmpdir(), `pi-concurrent-test-${Snowflake.next()}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 

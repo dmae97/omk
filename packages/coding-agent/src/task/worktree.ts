@@ -1,7 +1,7 @@
-import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
+import { Snowflake } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
 
 export interface WorktreeBaseline {
@@ -56,7 +56,7 @@ export async function captureBaseline(repoRoot: string): Promise<WorktreeBaselin
 }
 
 async function writeTempPatchFile(patch: string): Promise<string> {
-	const tempPath = path.join(os.tmpdir(), `omp-task-patch-${randomUUID()}.patch`);
+	const tempPath = path.join(os.tmpdir(), `omp-task-patch-${Snowflake.next()}.patch`);
 	await Bun.write(tempPath, patch);
 	return tempPath;
 }
@@ -119,7 +119,7 @@ async function listUntracked(cwd: string): Promise<string[]> {
 }
 
 export async function captureDeltaPatch(worktreeDir: string, baseline: WorktreeBaseline): Promise<string> {
-	const tempIndex = path.join(os.tmpdir(), `omp-task-index-${randomUUID()}`);
+	const tempIndex = path.join(os.tmpdir(), `omp-task-index-${Snowflake.next()}`);
 	try {
 		await $`git read-tree HEAD`.cwd(worktreeDir).env({
 			GIT_INDEX_FILE: tempIndex,

@@ -19,7 +19,7 @@ import { AgentSession, type AgentSessionEvent } from "@oh-my-pi/pi-coding-agent/
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
-import { nanoid } from "nanoid";
+import { Snowflake } from "@oh-my-pi/pi-utils";
 import { API_KEY } from "./utilities";
 
 describe.skipIf(!API_KEY)("AgentSession compaction e2e", () => {
@@ -30,7 +30,7 @@ describe.skipIf(!API_KEY)("AgentSession compaction e2e", () => {
 
 	beforeEach(() => {
 		// Create temp directory for session files
-		tempDir = path.join(os.tmpdir(), `omp-compaction-test-${nanoid()}`);
+		tempDir = path.join(os.tmpdir(), `omp-compaction-test-${Snowflake.next()}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 
 		// Track events

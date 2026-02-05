@@ -7,6 +7,7 @@ import * as pythonExecutor from "@oh-my-pi/pi-coding-agent/ipy/executor";
 import * as pythonKernel from "@oh-my-pi/pi-coding-agent/ipy/kernel";
 import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { PythonTool } from "@oh-my-pi/pi-coding-agent/tools/python";
+import { Snowflake } from "@oh-my-pi/pi-utils";
 
 function createSession(
 	cwd: string,
@@ -26,7 +27,7 @@ describe("python tool settings", () => {
 	let testDir: string;
 
 	beforeEach(() => {
-		testDir = path.join(os.tmpdir(), `python-tool-settings-${crypto.randomUUID()}`);
+		testDir = path.join(os.tmpdir(), `python-tool-settings-${Snowflake.next()}`);
 		fs.mkdirSync(testDir, { recursive: true });
 	});
 

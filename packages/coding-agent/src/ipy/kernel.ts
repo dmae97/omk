@@ -1,6 +1,5 @@
-import { $env, logger } from "@oh-my-pi/pi-utils";
+import { $env, logger, Snowflake } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
-import { nanoid } from "nanoid";
 import { Settings } from "../config/settings";
 import { time } from "../utils/timings";
 import { htmlToBasicMarkdown } from "../web/scrapers/types";
@@ -377,7 +376,15 @@ export class PythonKernel {
 		const kernelInfo = (await createResponse.json()) as { id: string };
 		const kernelId = kernelInfo.id;
 
-		const kernel = new PythonKernel(nanoid(), kernelId, config.url, nanoid(), "omp", false, config.token);
+		const kernel = new PythonKernel(
+			Snowflake.next(),
+			kernelId,
+			config.url,
+			Snowflake.next(),
+			"omp",
+			false,
+			config.token,
+		);
 
 		try {
 			await kernel.connectWebSocket();
@@ -425,7 +432,7 @@ export class PythonKernel {
 		debugStartup("sharedGateway:json:done");
 		const kernelId = kernelInfo.id;
 
-		const kernel = new PythonKernel(nanoid(), kernelId, gatewayUrl, nanoid(), "omp", true);
+		const kernel = new PythonKernel(Snowflake.next(), kernelId, gatewayUrl, Snowflake.next(), "omp", true);
 		debugStartup("sharedGateway:kernelCreated");
 
 		try {
@@ -578,7 +585,7 @@ export class PythonKernel {
 			throw new Error("Python kernel is not running");
 		}
 
-		const msgId = nanoid();
+		const msgId = Snowflake.next();
 		const msg: JupyterMessage = {
 			channel: "shell",
 			header: {
@@ -744,7 +751,7 @@ export class PythonKernel {
 					this.sendMessage({
 						channel: "stdin",
 						header: {
-							msg_id: nanoid(),
+							msg_id: Snowflake.next(),
 							session: this.sessionId,
 							username: this.username,
 							date: new Date().toISOString(),
@@ -806,7 +813,7 @@ export class PythonKernel {
 			const msg: JupyterMessage = {
 				channel: "control",
 				header: {
-					msg_id: nanoid(),
+					msg_id: Snowflake.next(),
 					session: this.sessionId,
 					username: this.username,
 					date: new Date().toISOString(),

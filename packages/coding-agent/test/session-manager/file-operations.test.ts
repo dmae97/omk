@@ -3,13 +3,13 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { findMostRecentSession, loadEntriesFromFile } from "@oh-my-pi/pi-coding-agent/session/session-manager";
-import { nanoid } from "nanoid";
+import { Snowflake } from "@oh-my-pi/pi-utils";
 
 describe("loadEntriesFromFile", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(os.tmpdir(), `session-test-${nanoid()}`);
+		tempDir = path.join(os.tmpdir(), `session-test-${Snowflake.next()}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 
@@ -70,7 +70,7 @@ describe("findMostRecentSession", () => {
 	let tempDir: string;
 
 	beforeEach(() => {
-		tempDir = path.join(os.tmpdir(), `session-test-${nanoid()}`);
+		tempDir = path.join(os.tmpdir(), `session-test-${Snowflake.next()}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 

@@ -1,10 +1,9 @@
-import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
-import { logger } from "@oh-my-pi/pi-utils";
+import { logger, Snowflake } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import chalk from "chalk";
 import { renderPromptTemplate } from "../config/prompt-templates";
@@ -72,7 +71,7 @@ function normalizeTodos(items: Array<{ id?: string; content?: string; status?: s
 			throw new Error("Todo content cannot be empty.");
 		}
 		return {
-			id: item.id && item.id.trim().length > 0 ? item.id : randomUUID(),
+			id: item.id && item.id.trim().length > 0 ? item.id : Snowflake.next(),
 			content,
 			status: normalizeTodoStatus(item.status),
 		};

@@ -10,7 +10,7 @@ Sessions are stored as JSONL (JSON Lines) files. Each line is a JSON object with
 
 Default base directory comes from `getAgentDir()` (overridable via `PI_CODING_AGENT_DIR`).
 `<cwd>` is the working directory with the leading slash removed and `/`, `\`, `:` replaced by `-`.
-`<timestamp>` is ISO-8601 with `:`/`.` replaced by `-`. `sessionId` is a nanoid.
+`<timestamp>` is ISO-8601 with `:`/`.` replaced by `-`. `sessionId` is a snowflake hex string.
 
 ## Session Version
 
@@ -36,7 +36,7 @@ All entries (except `SessionHeader`) extend `SessionEntryBase`:
 ```typescript
 interface SessionEntryBase {
 	type: string;
-	id: string; // Short nanoid (8 chars, URL-safe)
+	id: string; // Short snowflake suffix (8 hex chars)
 	parentId: string | null; // Parent entry ID (null for first entry)
 	timestamp: string; // ISO timestamp
 }
@@ -52,7 +52,7 @@ First line of the file. Metadata only, not part of the tree (no `id`/`parentId`)
 {
 	"type": "session",
 	"version": 3,
-	"id": "nanoid",
+	"id": "a1b2c3d4e5f60001",
 	"timestamp": "2024-12-03T14:00:00.000Z",
 	"cwd": "/path/to/project",
 	"title": "Optional title"
@@ -65,7 +65,7 @@ For sessions with a parent (created via `/branch`, `newSession({ parentSession }
 {
 	"type": "session",
 	"version": 3,
-	"id": "nanoid",
+	"id": "a1b2c3d4e5f60001",
 	"timestamp": "2024-12-03T14:00:00.000Z",
 	"cwd": "/path/to/project",
 	"parentSession": "/path/to/original/session.jsonl"

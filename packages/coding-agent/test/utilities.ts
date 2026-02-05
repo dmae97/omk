@@ -12,13 +12,13 @@ import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
-import { nanoid } from "nanoid";
+import { Snowflake } from "@oh-my-pi/pi-utils";
 
 /**
  * API key for authenticated tests. Tests using this should be wrapped in
  * describe.skipIf(!API_KEY)
  */
-export const API_KEY = process.env.ANTHROPIC_OAUTH_TOKEN || process.env.ANTHROPIC_API_KEY;
+export const API_KEY = process.env.E2E ? process.env.ANTHROPIC_OAUTH_TOKEN || process.env.ANTHROPIC_API_KEY : undefined;
 
 /**
  * Create a minimal user message for testing.
@@ -77,7 +77,7 @@ export interface TestSessionContext {
  * Use this for e2e tests that need real LLM calls.
  */
 export async function createTestSession(options: TestSessionOptions = {}): Promise<TestSessionContext> {
-	const tempDir = path.join(os.tmpdir(), `omp-test-${nanoid()}`);
+	const tempDir = path.join(os.tmpdir(), `omp-test-${Snowflake.next()}`);
 	fs.mkdirSync(tempDir, { recursive: true });
 
 	const toolSession: ToolSession = {

@@ -1,8 +1,7 @@
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Message, TextContent, Usage } from "@oh-my-pi/pi-ai";
-import { isEnoent, logger } from "@oh-my-pi/pi-utils";
-import { nanoid } from "nanoid";
+import { isEnoent, logger, Snowflake } from "@oh-my-pi/pi-utils";
 import { getAgentDir as getDefaultAgentDir } from "../config";
 import { resizeImage } from "../utils/image-resize";
 import {
@@ -212,10 +211,10 @@ export type ReadonlySessionManager = Pick<
 /** Generate a unique short ID (8 hex chars, collision-checked) */
 function generateId(byId: { has(id: string): boolean }): string {
 	for (let i = 0; i < 100; i++) {
-		const id = nanoid(8);
+		const id = crypto.randomUUID().slice(-8);
 		if (!byId.has(id)) return id;
 	}
-	return nanoid(); // fallback to full nanoid
+	return Snowflake.next(); // fallback to full snowflake id
 }
 
 /** Migrate v1 → v2: add id/parentId tree structure. Mutates in place. */
@@ -1020,7 +1019,7 @@ export class SessionManager {
 		this.fileEntries = await loadEntriesFromFile(this.sessionFile, this.storage);
 		if (this.fileEntries.length > 0) {
 			const header = this.fileEntries.find(e => e.type === "session") as SessionHeader | undefined;
-			this.sessionId = header?.id ?? nanoid();
+			this.sessionId = header?.id ?? Snowflake.next();
 			this.sessionName = header?.title;
 
 			if (migrateToCurrentVersion(this.fileEntries)) {
@@ -1065,7 +1064,7 @@ export class SessionManager {
 		this.persistErrorReported = false;
 
 		// Create new session ID and header
-		this.sessionId = nanoid();
+		this.sessionId = Snowflake.next();
 		const timestamp = new Date().toISOString();
 		const fileTimestamp = timestamp.replace(/[:.]/g, "-");
 		this.sessionFile = path.join(this.getSessionDir(), `${fileTimestamp}_${this.sessionId}.jsonl`);
@@ -1099,7 +1098,7 @@ export class SessionManager {
 		this.persistChain = Promise.resolve();
 		this.persistError = undefined;
 		this.persistErrorReported = false;
-		this.sessionId = nanoid();
+		this.sessionId = Snowflake.next();
 		this.sessionName = undefined;
 		const timestamp = new Date().toISOString();
 		const header: SessionHeader = {
@@ -1221,7 +1220,7 @@ export class SessionManager {
 	private async _writeEntriesAtomically(entries: FileEntry[]): Promise<void> {
 		if (!this.sessionFile) return;
 		const dir = path.resolve(this.sessionFile, "..");
-		const tempPath = path.join(dir, `.${path.basename(this.sessionFile)}.${nanoid(6)}.tmp`);
+		const tempPath = path.join(dir, `.${path.basename(this.sessionFile)}.${Snowflake.next()}.tmp`);
 		const writer = new NdjsonFileWriter(this.storage, tempPath, { flags: "w" });
 		try {
 			for (const entry of entries) {
@@ -1809,7 +1808,7 @@ export class SessionManager {
 		// Filter out LabelEntry from path - we'll recreate them from the resolved map
 		const pathWithoutLabels = branchPath.filter(e => e.type !== "label");
 
-		const newSessionId = nanoid();
+		const newSessionId = Snowflake.next();
 		const timestamp = new Date().toISOString();
 		const fileTimestamp = timestamp.replace(/[:.]/g, "-");
 		const newSessionFile = path.join(this.getSessionDir(), `${fileTimestamp}_${newSessionId}.jsonl`);

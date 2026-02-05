@@ -11,7 +11,7 @@ import { GrepTool } from "@oh-my-pi/pi-coding-agent/tools/grep";
 import { wrapToolWithMetaNotice } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
 import { ReadTool } from "@oh-my-pi/pi-coding-agent/tools/read";
 import { WriteTool } from "@oh-my-pi/pi-coding-agent/tools/write";
-import { nanoid } from "nanoid";
+import { Snowflake } from "@oh-my-pi/pi-utils";
 
 // Helper to extract text from content blocks
 function getTextOutput(result: any): string {
@@ -50,7 +50,7 @@ describe("Coding Agent Tools", () => {
 		process.env.PI_EDIT_VARIANT = "replace";
 
 		// Create a unique temporary directory for each test
-		testDir = path.join(os.tmpdir(), `coding-agent-test-${nanoid()}`);
+		testDir = path.join(os.tmpdir(), `coding-agent-test-${Snowflake.next()}`);
 		fs.mkdirSync(testDir, { recursive: true });
 
 		// Create tools for this test directory
@@ -578,7 +578,7 @@ describe("edit tool CRLF handling", () => {
 		originalEditVariant = process.env.PI_EDIT_VARIANT;
 		process.env.PI_EDIT_VARIANT = "replace";
 
-		testDir = path.join(os.tmpdir(), `coding-agent-crlf-test-${nanoid()}`);
+		testDir = path.join(os.tmpdir(), `coding-agent-crlf-test-${Snowflake.next()}`);
 		fs.mkdirSync(testDir, { recursive: true });
 		editTool = new EditTool(createTestToolSession(testDir));
 	});

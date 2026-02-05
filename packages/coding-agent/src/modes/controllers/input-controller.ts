@@ -4,8 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import { readImageFromClipboard } from "@oh-my-pi/pi-natives";
-import { $env } from "@oh-my-pi/pi-utils";
-import { nanoid } from "nanoid";
+import { $env, Snowflake } from "@oh-my-pi/pi-utils";
 import type { SettingPath, SettingValue } from "../../config/settings";
 import { settings } from "../../config/settings";
 import { theme } from "../../modes/theme/theme";
@@ -739,7 +738,7 @@ export class InputController {
 		}
 
 		const currentText = this.ctx.editor.getText();
-		const tmpFile = path.join(os.tmpdir(), `omp-editor-${nanoid()}.omp.md`);
+		const tmpFile = path.join(os.tmpdir(), `omp-editor-${Snowflake.next()}.omp.md`);
 
 		let ttyHandle: fs.FileHandle | null = null;
 		try {

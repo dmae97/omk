@@ -12,7 +12,7 @@ import {
 } from "@oh-my-pi/pi-coding-agent";
 import { RpcClient } from "@oh-my-pi/pi-coding-agent/modes/rpc/rpc-client";
 import type { BashExecutionMessage } from "@oh-my-pi/pi-coding-agent/session/messages";
-import { nanoid } from "nanoid";
+import { Snowflake } from "@oh-my-pi/pi-utils";
 
 type MessageEndEvent = Extract<AgentEvent, { type: "message_end" }>;
 
@@ -32,7 +32,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 	let sessionDir: string;
 
 	beforeEach(() => {
-		sessionDir = path.join(os.tmpdir(), `omp-rpc-test-${nanoid()}`);
+		sessionDir = path.join(os.tmpdir(), `omp-rpc-test-${Snowflake.next()}`);
 		client = new RpcClient({
 			cliPath: path.join(import.meta.dir, "..", "dist", "cli.js"),
 			cwd: path.join(import.meta.dir, ".."),
@@ -142,7 +142,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		await client.promptAndWait("Say hi");
 
 		// Run bash command
-		const uniqueValue = `test-${nanoid()}`;
+		const uniqueValue = `test-${Snowflake.next()}`;
 		await client.bash(`echo ${uniqueValue}`);
 
 		// Wait for file writes
@@ -168,7 +168,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_T
 		await client.start();
 
 		// Run a bash command with a unique value
-		const uniqueValue = `unique-${nanoid()}`;
+		const uniqueValue = `unique-${Snowflake.next()}`;
 		await client.bash(`echo ${uniqueValue}`);
 
 		// Ask the LLM what the output was

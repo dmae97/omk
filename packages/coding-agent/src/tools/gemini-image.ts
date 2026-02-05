@@ -1,9 +1,8 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import { getEnvApiKey, StringEnum } from "@oh-my-pi/pi-ai";
-import { $env, ptree, untilAborted } from "@oh-my-pi/pi-utils";
+import { $env, ptree, Snowflake, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
-import { nanoid } from "nanoid";
 import type { ModelRegistry } from "../config/model-registry";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { CustomTool } from "../extensibility/custom-tools/types";
@@ -487,7 +486,7 @@ function getExtensionForMime(mimeType: string): string {
 
 async function saveImageToTemp(image: InlineImageData): Promise<string> {
 	const ext = getExtensionForMime(image.mimeType);
-	const filename = `omp-image-${nanoid()}.${ext}`;
+	const filename = `omp-image-${Snowflake.next()}.${ext}`;
 	const filepath = path.join(os.tmpdir(), filename);
 	await Bun.write(filepath, Buffer.from(image.data, "base64"));
 	return filepath;

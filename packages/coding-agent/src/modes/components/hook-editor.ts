@@ -6,8 +6,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Container, Editor, matchesKey, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
-import { $env } from "@oh-my-pi/pi-utils";
-import { nanoid } from "nanoid";
+import { $env, Snowflake } from "@oh-my-pi/pi-utils";
 import { getEditorTheme, theme } from "../../modes/theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 
@@ -90,7 +89,7 @@ export class HookEditorComponent extends Container {
 		}
 
 		const currentText = this.editor.getText();
-		const tmpFile = path.join(os.tmpdir(), `omp-hook-editor-${nanoid()}.md`);
+		const tmpFile = path.join(os.tmpdir(), `omp-hook-editor-${Snowflake.next()}.md`);
 
 		try {
 			await Bun.write(tmpFile, currentText);

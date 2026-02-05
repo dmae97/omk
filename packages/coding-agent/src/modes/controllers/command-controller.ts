@@ -4,8 +4,8 @@ import * as path from "node:path";
 import type { UsageLimit, UsageReport } from "@oh-my-pi/pi-ai";
 import { copyToClipboard } from "@oh-my-pi/pi-natives";
 import { Loader, Markdown, padding, Spacer, Text, visibleWidth } from "@oh-my-pi/pi-tui";
+import { Snowflake } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
-import { nanoid } from "nanoid";
 import { loadCustomShare } from "../../export/custom-share";
 import type { CompactOptions } from "../../extensibility/extensions/types";
 import { getGatewayStatus } from "../../ipy/gateway-coordinator";
@@ -73,7 +73,7 @@ export class CommandController {
 	}
 
 	async handleShareCommand(): Promise<void> {
-		const tmpFile = path.join(os.tmpdir(), `${nanoid()}.html`);
+		const tmpFile = path.join(os.tmpdir(), `${Snowflake.next()}.html`);
 		const cleanupTempFile = async () => {
 			try {
 				await fs.rm(tmpFile, { force: true });

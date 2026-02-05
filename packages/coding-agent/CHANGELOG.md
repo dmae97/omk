@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `task.maxRecursionDepth` setting to control how many levels deep subagents can spawn their own subagents (0=none, 1=one level, 2=two levels, -1=unlimited)
@@ -13,6 +12,8 @@
 
 ### Changed
 
+- Replaced nanoid with Snowflake for ID generation throughout codebase for improved performance and collision resistance
+- Updated session ID format in documentation from nanoid to snowflake hex string (e.g., "a1b2c3d4e5f60001")
 - Renamed environment variable prefix from `OMP_` to `PI_` throughout codebase (e.g., `OMP_DEBUG_STARTUP` → `PI_DEBUG_STARTUP`, `OMP_PYTHON_GATEWAY_URL` → `PI_PYTHON_GATEWAY_URL`)
 - Removed `env` setting from configuration schema; environment variables are no longer automatically applied from settings
 - Changed `venvPath` property in PythonRuntime from nullable to optional (returns `undefined` instead of `null`)
@@ -26,6 +27,7 @@
 
 ### Removed
 
+- Removed nanoid dependency from package.json
 - Removed `terminal-notify.ts` utility module with `detectNotificationProtocol()`, `sendNotification()`, and `isNotificationSuppressed()` functions
 - Removed `MAX_PARALLEL_TASKS` constant and associated task count validation limit
 

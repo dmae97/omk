@@ -17,9 +17,8 @@ import * as os from "node:os";
 import path from "node:path";
 import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Usage } from "@oh-my-pi/pi-ai";
-import { $env } from "@oh-my-pi/pi-utils";
+import { $env, Snowflake } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
-import { nanoid } from "nanoid";
 import type { ToolSession } from "..";
 import { isDefaultModelAlias } from "../config/model-resolver";
 import { renderPromptTemplate } from "../config/prompt-templates";
@@ -291,7 +290,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 		// Derive artifacts directory
 		const sessionFile = this.session.getSessionFile();
 		const artifactsDir = sessionFile ? sessionFile.slice(0, -6) : null;
-		const tempArtifactsDir = artifactsDir ? null : path.join(os.tmpdir(), `omp-task-${nanoid()}`);
+		const tempArtifactsDir = artifactsDir ? null : path.join(os.tmpdir(), `omp-task-${Snowflake.next()}`);
 		const effectiveArtifactsDir = artifactsDir || tempArtifactsDir!;
 
 		// Initialize progress tracking
@@ -638,7 +637,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 						if (!combinedPatch.trim()) {
 							patchesApplied = true;
 						} else {
-							const combinedPatchPath = path.join(os.tmpdir(), `omp-task-combined-${nanoid()}.patch`);
+							const combinedPatchPath = path.join(os.tmpdir(), `omp-task-combined-${Snowflake.next()}.patch`);
 							try {
 								await Bun.write(combinedPatchPath, combinedPatch);
 								const checkResult = await $`git apply --check --binary ${combinedPatchPath}`

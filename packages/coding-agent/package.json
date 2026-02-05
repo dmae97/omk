@@ -97,7 +97,6 @@
 		"ignore": "^7.0.5",
 		"jsdom": "28.0.0",
 		"marked": "^17.0.1",
-		"nanoid": "^5.1.6",
 		"node-html-parser": "^7.0.2",
 		"puppeteer": "^24.36.1",
 		"smol-toml": "^1.6.0",

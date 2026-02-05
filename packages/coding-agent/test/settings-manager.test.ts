@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { _resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+import { Snowflake } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 
 describe("Settings", () => {
@@ -14,8 +15,8 @@ describe("Settings", () => {
 		// Reset global singleton so each test gets a fresh instance
 		_resetSettingsForTest();
 
-		// Use random UUID to isolate parallel test runs (SQLite files can't be shared)
-		testDir = path.join(os.tmpdir(), "test-settings-tmp", crypto.randomUUID());
+		// Use snowflake to isolate parallel test runs (SQLite files can't be shared)
+		testDir = path.join(os.tmpdir(), "test-settings-tmp", Snowflake.next());
 		agentDir = path.join(testDir, "agent");
 		projectDir = path.join(testDir, "project");
 

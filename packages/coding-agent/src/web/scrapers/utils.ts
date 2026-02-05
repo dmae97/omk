@@ -1,8 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { ptree } from "@oh-my-pi/pi-utils";
-import { nanoid } from "nanoid";
+import { ptree, Snowflake } from "@oh-my-pi/pi-utils";
 import { ensureTool } from "../../utils/tools-manager";
 
 const MAX_BYTES = 50 * 1024 * 1024; // 50MB for binary files
@@ -42,7 +41,7 @@ export async function convertWithMarkitdown(
 	// Write to temp file with extension hint
 	const ext = extensionHint || ".bin";
 	const tmpDir = os.tmpdir();
-	const tmpFile = path.join(tmpDir, `omp-convert-${nanoid()}${ext}`);
+	const tmpFile = path.join(tmpDir, `omp-convert-${Snowflake.next()}${ext}`);
 
 	if (content.length > MAX_BYTES) {
 		return { content: "", ok: false, error: `content exceeds ${MAX_BYTES} bytes` };

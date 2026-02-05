@@ -9,5 +9,6 @@ export * as procmgr from "./procmgr";
 export { setNativeKillTree } from "./procmgr";
 export * as ptree from "./ptree";
 export { AbortError, ChildProcess, Exception, NonZeroExitError } from "./ptree";
+export { Snowflake } from "./snowflake";
 export * from "./stream";
 export * from "./temp";

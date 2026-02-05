@@ -10,8 +10,7 @@
  * - Events: AgentSessionEvent objects streamed as they occur
  * - Extension UI: Extension UI requests are emitted, client responds with extension_ui_response
  */
-import { readLines } from "@oh-my-pi/pi-utils";
-import { nanoid } from "nanoid";
+import { readLines, Snowflake } from "@oh-my-pi/pi-utils";
 import type { ExtensionUIContext, ExtensionUIDialogOptions } from "../../extensibility/extensions";
 import { type Theme, theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
@@ -85,7 +84,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 		): Promise<T> {
 			if (opts?.signal?.aborted) return Promise.resolve(defaultValue);
 
-			const id = nanoid();
+			const id = Snowflake.next() as string;
 			const { promise, resolve, reject } = Promise.withResolvers<T>();
 			let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
@@ -169,7 +168,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			// Fire and forget - no response needed
 			this.output({
 				type: "extension_ui_request",
-				id: nanoid(),
+				id: Snowflake.next() as string,
 				method: "notify",
 				message,
 				notifyType: type,
@@ -180,7 +179,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			// Fire and forget - no response needed
 			this.output({
 				type: "extension_ui_request",
-				id: nanoid(),
+				id: Snowflake.next() as string,
 				method: "setStatus",
 				statusKey: key,
 				statusText: text,
@@ -196,7 +195,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			if (content === undefined || Array.isArray(content)) {
 				this.output({
 					type: "extension_ui_request",
-					id: nanoid(),
+					id: Snowflake.next() as string,
 					method: "setWidget",
 					widgetKey: key,
 					widgetLines: content as string[] | undefined,
@@ -217,7 +216,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			// Fire and forget - host can implement terminal title control
 			this.output({
 				type: "extension_ui_request",
-				id: nanoid(),
+				id: Snowflake.next() as string,
 				method: "setTitle",
 				title,
 			} as RpcExtensionUIRequest);
@@ -232,7 +231,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			// Fire and forget - host can implement editor control
 			this.output({
 				type: "extension_ui_request",
-				id: nanoid(),
+				id: Snowflake.next() as string,
 				method: "set_editor_text",
 				text,
 			} as RpcExtensionUIRequest);
@@ -245,7 +244,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 		}
 
 		async editor(title: string, prefill?: string): Promise<string | undefined> {
-			const id = nanoid();
+			const id = Snowflake.next() as string;
 			const { promise, resolve, reject } = Promise.withResolvers<string | undefined>();
 			this.pendingRequests.set(id, {
 				resolve: (response: RpcExtensionUIResponse) => {

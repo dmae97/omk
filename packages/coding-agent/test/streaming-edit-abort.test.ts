@@ -14,8 +14,8 @@ import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+import { Snowflake } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
-import { nanoid } from "nanoid";
 
 class MockAssistantStream extends AssistantMessageEventStream {}
 
@@ -197,7 +197,7 @@ describe("streaming edit abort", () => {
 	const seeds = [7, 21, 42, 84, 128];
 
 	beforeEach(() => {
-		tempDir = path.join(os.tmpdir(), `pi-streaming-edit-${nanoid()}`);
+		tempDir = path.join(os.tmpdir(), `pi-streaming-edit-${Snowflake.next()}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 	});
 

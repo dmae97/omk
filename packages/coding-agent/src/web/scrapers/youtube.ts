@@ -1,8 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
-import { ptree } from "@oh-my-pi/pi-utils";
-import { nanoid } from "nanoid";
+import { ptree, Snowflake } from "@oh-my-pi/pi-utils";
 import { throwIfAborted } from "../../tools/tool-errors";
 import { ensureTool } from "../../utils/tools-manager";
 import type { RenderResult, SpecialHandler } from "./types";
@@ -197,7 +196,7 @@ export const handleYouTube: SpecialHandler = async (
 
 	// Create temp directory for subtitle download
 	const tmpDir = os.tmpdir();
-	const tmpBase = path.join(tmpDir, `yt-${yt.videoId}-${nanoid()}`);
+	const tmpBase = path.join(tmpDir, `yt-${yt.videoId}-${Snowflake.next()}`);
 
 	try {
 		// Try manual subtitles first (English preferred)
