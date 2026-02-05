@@ -56,7 +56,7 @@ Avoid ports that depend on JS-only state or dynamic imports. N-API exports shoul
 
 - Put benchmarks next to the owning package (`packages/tui/bench`, `packages/natives/bench`, or `packages/coding-agent/bench`).
 - Include a JS baseline and native version in the same run.
-- Use `performance.now()` and a fixed iteration count.
+- Use `Bun.nanoseconds()` and a fixed iteration count.
 - Keep the benchmark inputs small and realistic (actual data seen in the hot path).
 
 5. **Build the native binary**
@@ -125,10 +125,10 @@ Keep it simple and owned. `String`, `Vec<String>`, and `Uint8Array` work. Avoid 
 const ITERATIONS = 2000;
 
 function bench(name: string, fn: () => void): number {
-	const start = performance.now();
+	const start = Bun.nanoseconds();
 	for (let i = 0; i < ITERATIONS; i++) fn();
-	const elapsed = performance.now() - start;
-	console.log(`${name}: ${elapsed.toFixed(2)}ms total (${(elapsed / ITERATIONS).toFixed(4)}ms/op)`);
+	const elapsed = (Bun.nanoseconds() - start) / 1e6;
+	console.log(`${name}: ${elapsed.toFixed(2)}ms total (${(elapsed / ITERATIONS).toFixed(6)}ms/op)`);
 	return elapsed;
 }
 

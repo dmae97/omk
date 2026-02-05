@@ -70,11 +70,11 @@ function bench(name: string, fn: () => void): BenchResult {
 	// Warmup
 	for (let i = 0; i < WARMUP; i++) fn();
 
-	const start = performance.now();
+	const start = Bun.nanoseconds();
 	for (let i = 0; i < ITERATIONS; i++) {
 		fn();
 	}
-	const totalMs = performance.now() - start;
+	const totalMs = (Bun.nanoseconds() - start) / 1e6;
 	const perOpUs = (totalMs / ITERATIONS) * 1000;
 
 	return { name, totalMs, perOpUs };

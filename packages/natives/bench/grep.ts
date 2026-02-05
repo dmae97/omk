@@ -25,29 +25,7 @@ await grep({ pattern: "test", path: path.resolve(packages, "tui/src") });
 console.log(`Benchmark: ${ITERATIONS} iterations per case\n`);
 
 for (const c of cases) {
-	// Main thread sequential
-	const mainTimes: number[] = [];
-	let mainMatches = 0;
-	for (let i = 0; i < ITERATIONS; i++) {
-		const start = performance.now();
-		const result = await grep({ pattern: c.pattern, path: c.path, glob: c.glob });
-		mainTimes.push(performance.now() - start);
-		mainMatches = result.totalMatches;
-	}
-
-	// Main thread concurrent (8x parallel)
-	const mainConcurrentTimes: number[] = [];
-	for (let i = 0; i < ITERATIONS; i++) {
-		const start = performance.now();
-		await Promise.all(
-			Array.from({ length: CONCURRENCY }, () => grep({ pattern: c.pattern, path: c.path, glob: c.glob })),
-		);
-		mainConcurrentTimes.push(performance.now() - start);
-	}
-
-	// Subprocess rg sequential
-	const rgTimes: number[] = [];
-	let rgMatches = 0;
+	const grepArgs = { pattern: c.pattern, path: c.path, glob: c.glob };
 	const rgDefaultArgs = ["--hidden", "--no-ignore", "--no-ignore-vcs"];
 	const globArg = c.glob ? ["-g", c.glob] : [];
 
@@ -77,31 +55,42 @@ for (const c of cases) {
 		return matches;
 	};
 
+	// Capture match counts from a single run
+	const mainMatches = (await grep(grepArgs)).totalMatches;
+	const rgMatches = countMatches(await runRg());
+
+	// Main thread sequential
+	let start = Bun.nanoseconds();
+	for (let i = 0; i < ITERATIONS; i++) await grep(grepArgs);
+	const mainMs = (Bun.nanoseconds() - start) / 1e6 / ITERATIONS;
+
+	// Main thread concurrent (8x parallel)
+	start = Bun.nanoseconds();
 	for (let i = 0; i < ITERATIONS; i++) {
-		const start = performance.now();
-		const result = await runRg();
-		rgTimes.push(performance.now() - start);
-		rgMatches = countMatches(result);
+		await Promise.all(Array.from({ length: CONCURRENCY }, () => grep(grepArgs)));
 	}
+	const mainConcurrentMs = (Bun.nanoseconds() - start) / 1e6 / ITERATIONS;
+
+	// Subprocess rg sequential
+	start = Bun.nanoseconds();
+	for (let i = 0; i < ITERATIONS; i++) await runRg();
+	const rgMs = (Bun.nanoseconds() - start) / 1e6 / ITERATIONS;
 
 	// Subprocess rg concurrent (8x parallel)
-	const rgConcurrentTimes: number[] = [];
+	start = Bun.nanoseconds();
 	for (let i = 0; i < ITERATIONS; i++) {
-		const start = performance.now();
 		await Promise.all(Array.from({ length: CONCURRENCY }, () => runRg()));
-		rgConcurrentTimes.push(performance.now() - start);
 	}
-
-	const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
+	const rgConcurrentMs = (Bun.nanoseconds() - start) / 1e6 / ITERATIONS;
 
 	console.log(`${c.name}:`);
-	console.log(`  Main thread:          ${avg(mainTimes).toFixed(2)}ms (${mainMatches} matches)`);
-	console.log(`  Main thread 8x:       ${avg(mainConcurrentTimes).toFixed(2)}ms`);
-	console.log(`  Subprocess rg:        ${avg(rgTimes).toFixed(2)}ms (${rgMatches} matches)`);
-	console.log(`  Subprocess rg 8x:     ${avg(rgConcurrentTimes).toFixed(2)}ms`);
+	console.log(`  Main thread:          ${mainMs.toFixed(2)}ms (${mainMatches} matches)`);
+	console.log(`  Main thread 8x:       ${mainConcurrentMs.toFixed(2)}ms`);
+	console.log(`  Subprocess rg:        ${rgMs.toFixed(2)}ms (${rgMatches} matches)`);
+	console.log(`  Subprocess rg 8x:     ${rgConcurrentMs.toFixed(2)}ms`);
 
-	const mainVsRg = avg(rgTimes) / avg(mainTimes);
-	const mainVsRgConcurrent = avg(rgConcurrentTimes) / avg(mainConcurrentTimes);
+	const mainVsRg = rgMs / mainMs;
+	const mainVsRgConcurrent = rgConcurrentMs / mainConcurrentMs;
 	console.log(
 		`  => Main thread is ${mainVsRg > 1 ? `${mainVsRg.toFixed(1)}x faster` : `${(1 / mainVsRg).toFixed(1)}x slower`} than rg (sequential)`,
 	);

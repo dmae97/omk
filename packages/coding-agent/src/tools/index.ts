@@ -314,9 +314,9 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 	const slowTools: Array<{ name: string; ms: number }> = [];
 	const results = await Promise.all(
 		entries.map(async ([name, factory]) => {
-			const start = performance.now();
+			const start = Bun.nanoseconds();
 			const tool = await factory(session);
-			const elapsed = performance.now() - start;
+			const elapsed = (Bun.nanoseconds() - start) / 1e6;
 			if (elapsed > 5) {
 				slowTools.push({ name, ms: Math.round(elapsed) });
 			}

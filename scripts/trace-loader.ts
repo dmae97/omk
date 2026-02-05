@@ -3,7 +3,7 @@
  * Usage: bun --preload ./scripts/trace-loader.ts <script>
  */
 
-const startTime = performance.now();
+const startTime = Bun.nanoseconds();
 const resolved = new Set<string>();
 
 Bun.plugin({
@@ -17,7 +17,7 @@ Bun.plugin({
 			}
 			resolved.add(args.path);
 			
-			const elapsed = (performance.now() - startTime).toFixed(1);
+			const elapsed = ((Bun.nanoseconds() - startTime) / 1e6).toFixed(1);
 			// Only trace local/project files, not node_modules
 			if (!args.path.includes("node_modules") && !args.path.startsWith("node:")) {
 				const shortPath = args.path.replace(process.cwd(), ".");

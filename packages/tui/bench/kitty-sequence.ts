@@ -25,12 +25,12 @@ function matchesKittySequenceJs(data: string, expectedCodepoint: number, expecte
 }
 
 function bench(name: string, fn: () => void): number {
-	const start = performance.now();
+	const start = Bun.nanoseconds();
 	for (let i = 0; i < ITERATIONS; i++) {
 		fn();
 	}
-	const elapsed = performance.now() - start;
-	const perOp = (elapsed / ITERATIONS).toFixed(4);
+	const elapsed = (Bun.nanoseconds() - start) / 1e6;
+	const perOp = (elapsed / ITERATIONS).toFixed(6);
 	console.log(`${name}: ${elapsed.toFixed(2)}ms total (${perOp}ms/op)`);
 	return elapsed;
 }

@@ -386,14 +386,14 @@ describe("agentLoop with AgentMessage", () => {
 			parameters: toolSchema,
 			async execute(_toolCallId, params) {
 				if (params.value === "slow") {
-					startTimes.slow = performance.now();
+					startTimes.slow = Bun.nanoseconds();
 					slowStartedResolve();
 					await slowContinue;
-					finishTimes.slow = performance.now();
+					finishTimes.slow = Bun.nanoseconds();
 				} else {
 					await slowStarted;
-					startTimes.fast = performance.now();
-					finishTimes.fast = performance.now();
+					startTimes.fast = Bun.nanoseconds();
+					finishTimes.fast = Bun.nanoseconds();
 					fastFinishedResolve();
 				}
 				return {
