@@ -1,3 +1,4 @@
+import { getEnv } from "@oh-my-pi/pi-utils";
 import OpenAI from "openai";
 import type {
 	Tool as OpenAITool,
@@ -39,11 +40,7 @@ import { transformMessages } from "./transform-messages";
  * Returns '24h' for long retention, undefined for default (in-memory).
  */
 function getPromptCacheRetention(baseUrl: string): "24h" | undefined {
-	if (
-		typeof process !== "undefined" &&
-		process.env.PI_CACHE_RETENTION === "long" &&
-		baseUrl.includes("api.openai.com")
-	) {
+	if (getEnv("PI_CACHE_RETENTION") === "long" && baseUrl.includes("api.openai.com")) {
 		return "24h";
 	}
 	return undefined;

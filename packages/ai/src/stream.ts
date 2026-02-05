@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { getEnvMap } from "@oh-my-pi/pi-utils";
 import { supportsXhigh } from "./models";
 import { type BedrockOptions, streamBedrock } from "./providers/amazon-bedrock";
 import { type AnthropicOptions, streamAnthropic } from "./providers/anthropic";
@@ -32,67 +33,7 @@ import type {
 
 let cachedVertexAdcCredentialsExists: boolean | null = null;
 
-// Cached .env file contents (parsed once per process)
-let cachedEnvMap: Record<string, string> | null = null;
-
-/**
- * Parses a .env file synchronously and extracts key-value pairs.
- */
-function parseEnvFile(filePath: string): Record<string, string> {
-	const result: Record<string, string> = {};
-	try {
-		const content = fs.readFileSync(filePath, "utf-8");
-		for (const line of content.split("\n")) {
-			const trimmed = line.trim();
-			if (!trimmed || trimmed.startsWith("#")) continue;
-
-			const eqIndex = trimmed.indexOf("=");
-			if (eqIndex === -1) continue;
-
-			const key = trimmed.slice(0, eqIndex).trim();
-			let value = trimmed.slice(eqIndex + 1).trim();
-
-			// Remove surrounding quotes
-			if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-				value = value.slice(1, -1);
-			}
-
-			result[key] = value;
-		}
-	} catch {
-		// File doesn't exist or can't be read - return empty
-	}
-	return result;
-}
-
-function getEnvMap(): Record<string, string> {
-	if (cachedEnvMap) return cachedEnvMap;
-
-	const pruneEmpty = (env: any) =>
-		Object.fromEntries(
-			Object.entries(env).filter(([k, v]) => typeof k === "string" && typeof v === "string" && v) as [
-				string,
-				string,
-			][],
-		);
-
-	cachedEnvMap = {
-		...pruneEmpty(parseEnvFile(path.join(os.homedir(), ".env"))),
-		...pruneEmpty(parseEnvFile(path.join(process.cwd(), ".env"))),
-		...pruneEmpty(process.env),
-	};
-	return cachedEnvMap;
-}
-
-/**
- * Gets an environment variable from process.env or .env files.
- * Checks: process.env → cwd/.env → ~/.env
- */
-export function getEnv(key: string): string | undefined {
-	return getEnvMap()[key];
-}
-
-function hasVertexAdcCredentials(env: Record<string, string>): boolean {
+function hasVertexAdcCredentials(env: ReadOnlyDict<string>): boolean {
 	if (cachedVertexAdcCredentialsExists === null) {
 		const gacPath = env.GOOGLE_APPLICATION_CREDENTIALS;
 		if (gacPath) {
@@ -106,7 +47,7 @@ function hasVertexAdcCredentials(env: Record<string, string>): boolean {
 	return cachedVertexAdcCredentialsExists;
 }
 
-type KeyResolver = string | ((env: Record<string, string>) => string | undefined);
+type KeyResolver = string | ((env: ReadOnlyDict<string>) => string | undefined);
 
 const serviceProviderMap: Record<string, KeyResolver> = {
 	openai: "OPENAI_API_KEY",

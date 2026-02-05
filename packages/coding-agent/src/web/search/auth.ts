@@ -8,8 +8,8 @@
  *   4. ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL fallback
  */
 import * as path from "node:path";
-import { buildAnthropicHeaders as buildProviderAnthropicHeaders, getEnv, getEnvApiKey } from "@oh-my-pi/pi-ai";
-import { logger } from "@oh-my-pi/pi-utils";
+import { buildAnthropicHeaders as buildProviderAnthropicHeaders, getEnvApiKey } from "@oh-my-pi/pi-ai";
+import { getEnv, logger } from "@oh-my-pi/pi-utils";
 import { getAgentDbPath, getConfigDirPaths } from "../../config";
 import { AgentStorage } from "../../session/agent-storage";
 import type { AuthCredential, AuthCredentialEntry, AuthStorageData } from "../../session/auth-storage";
@@ -17,7 +17,6 @@ import { migrateJsonStorage } from "../../session/storage-migration";
 import type { AnthropicAuthConfig, AnthropicOAuthCredential, ModelsJson } from "./types";
 
 const DEFAULT_BASE_URL = "https://api.anthropic.com";
-export { getEnv };
 
 /**
  * Reads and parses a JSON file safely.

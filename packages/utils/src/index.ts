@@ -1,5 +1,6 @@
 export * from "./abortable";
 export * from "./color";
+export * from "./env";
 export * from "./fs-error";
 export * from "./glob";
 export * as logger from "./logger";

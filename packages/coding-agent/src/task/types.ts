@@ -1,29 +1,28 @@
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Usage } from "@oh-my-pi/pi-ai";
+import { getEnv } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 
 /** Source of an agent definition */
 export type AgentSource = "bundled" | "user" | "project";
 
-function getEnv(name: string, defaultValue: number): number {
-	const value = process.env[name];
-	if (value === undefined) {
-		return defaultValue;
+const parseNumber = (value: string | undefined, defaultValue: number): number => {
+	if (value) {
+		try {
+			const number = Number.parseInt(value, 10);
+			if (!Number.isNaN(number) && number > 0) {
+				return number;
+			}
+		} catch {}
 	}
-	try {
-		const number = Number.parseInt(value, 10);
-		if (!Number.isNaN(number) && number > 0) {
-			return number;
-		}
-	} catch {}
 	return defaultValue;
-}
+};
 
 /** Maximum output bytes per agent */
-export const MAX_OUTPUT_BYTES = getEnv("OMP_TASK_MAX_OUTPUT_BYTES", 500_000);
+export const MAX_OUTPUT_BYTES = parseNumber(getEnv("OMP_TASK_MAX_OUTPUT_BYTES"), 500_000);
 
 /** Maximum output lines per agent */
-export const MAX_OUTPUT_LINES = getEnv("OMP_TASK_MAX_OUTPUT_LINES", 5000);
+export const MAX_OUTPUT_LINES = parseNumber(getEnv("OMP_TASK_MAX_OUTPUT_LINES"), 5000);
 
 /** EventBus channel for raw subagent events */
 export const TASK_SUBAGENT_EVENT_CHANNEL = "task:subagent:event";

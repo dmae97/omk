@@ -4,7 +4,8 @@
  * Uses Claude's built-in web_search_20250305 tool to search the web.
  * Returns synthesized answers with citations and source metadata.
  */
-import { applyClaudeToolPrefix, buildAnthropicSystemBlocks, getEnv, stripClaudeToolPrefix } from "@oh-my-pi/pi-ai";
+import { applyClaudeToolPrefix, buildAnthropicSystemBlocks, stripClaudeToolPrefix } from "@oh-my-pi/pi-ai";
+import { getEnv } from "@oh-my-pi/pi-utils";
 import { buildAnthropicHeaders, buildAnthropicUrl, findAnthropicAuth } from "../../../web/search/auth";
 import type {
 	AnthropicApiResponse,
