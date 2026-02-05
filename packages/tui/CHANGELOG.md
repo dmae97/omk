@@ -1,6 +1,23 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Introduced `terminal-capabilities.ts` module consolidating terminal detection and image protocol support
+- Added `TerminalInfo` class with methods for detecting image lines and formatting notifications
+- Added `NotifyProtocol` enum supporting Bell, OSC 99, and OSC 9 notification protocols
+- Added `isNotificationSuppressed()` function to check `OMP_NOTIFICATIONS` environment variable
+- Added `TERMINAL` constant providing detected terminal capabilities at runtime
+
+### Changed
+
+- Renamed `TERMINAL_INFO` export to `TERMINAL` for clearer API semantics
+- Reorganized terminal image exports from `terminal-image` to `terminal-capabilities` module
+- Updated all internal references to use `TERMINAL` instead of `TERMINAL_INFO`
+
+### Removed
+
+- Removed `terminal-image` module exports from public API (functionality migrated to `terminal-capabilities`)
 
 ## [10.5.0] - 2026-02-04
 

@@ -1,7 +1,7 @@
 import { marked, type Token } from "marked";
 import type { MermaidImage } from "../mermaid";
 import type { SymbolTheme } from "../symbols";
-import { encodeITerm2, encodeKitty, getCellDimensions, ImageProtocol, TERMINAL_INFO } from "../terminal-image";
+import { encodeITerm2, encodeKitty, getCellDimensions, ImageProtocol, TERMINAL } from "../terminal-capabilities";
 import type { Component } from "../tui";
 import { applyBackgroundToLine, padding, visibleWidth, wrapTextWithAnsi } from "../utils";
 
@@ -143,7 +143,7 @@ export class Markdown implements Component {
 		const wrappedLines: string[] = [];
 		for (const line of renderedLines) {
 			// Skip wrapping for image protocol lines (would corrupt escape sequences)
-			if (TERMINAL_INFO.isImageLine(line)) {
+			if (TERMINAL.isImageLine(line)) {
 				wrappedLines.push(line);
 			} else {
 				wrappedLines.push(...wrapTextWithAnsi(line, contentWidth));
@@ -158,7 +158,7 @@ export class Markdown implements Component {
 
 		for (const line of wrappedLines) {
 			// Image lines must be output raw - no margins or background
-			if (TERMINAL_INFO.isImageLine(line)) {
+			if (TERMINAL.isImageLine(line)) {
 				contentLines.push(line);
 				continue;
 			}
@@ -314,7 +314,7 @@ export class Markdown implements Component {
 					const hash = Bun.hash(token.text.trim()).toString(16);
 					const image = this.theme.getMermaidImage(hash);
 
-					if (image && TERMINAL_INFO.imageProtocol) {
+					if (image && TERMINAL.imageProtocol) {
 						const imageLines = this.renderMermaidImage(image, width);
 						if (imageLines) {
 							lines.push(...imageLines);
@@ -809,7 +809,7 @@ export class Markdown implements Component {
 	 * Returns array of lines (image placeholder rows) or null if rendering fails.
 	 */
 	private renderMermaidImage(image: MermaidImage, availableWidth: number): string[] | null {
-		if (!TERMINAL_INFO.imageProtocol) return null;
+		if (!TERMINAL.imageProtocol) return null;
 
 		const cellDims = getCellDimensions();
 		const scale = 0.5; // Render at 50% of natural size
@@ -833,7 +833,7 @@ export class Markdown implements Component {
 		}
 
 		let sequence: string;
-		switch (TERMINAL_INFO.imageProtocol) {
+		switch (TERMINAL.imageProtocol) {
 			case ImageProtocol.Kitty:
 				sequence = encodeKitty(image.base64, { columns, rows });
 				break;

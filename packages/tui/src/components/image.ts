@@ -1,4 +1,10 @@
-import { getImageDimensions, type ImageDimensions, imageFallback, renderImage, TERMINAL_INFO } from "../terminal-image";
+import {
+	getImageDimensions,
+	type ImageDimensions,
+	imageFallback,
+	renderImage,
+	TERMINAL,
+} from "../terminal-capabilities";
 import type { Component } from "../tui";
 
 export interface ImageTheme {
@@ -49,7 +55,7 @@ export class Image implements Component {
 
 		let lines: string[];
 
-		if (TERMINAL_INFO.imageProtocol) {
+		if (TERMINAL.imageProtocol) {
 			const result = renderImage(this.base64Data, this.dimensions, { maxWidthCells: maxWidth });
 
 			if (result) {

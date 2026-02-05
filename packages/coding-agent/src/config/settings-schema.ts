@@ -434,10 +434,10 @@ export const SETTINGS_SCHEMA = {
 	// ─────────────────────────────────────────────────────────────────────────
 	// Notification settings
 	// ─────────────────────────────────────────────────────────────────────────
-	"notifications.onComplete": {
+	"completion.notify": {
 		type: "enum",
-		values: ["auto", "bell", "osc99", "osc9", "off"] as const,
-		default: "auto",
+		values: ["on", "off"] as const,
+		default: "on",
 		ui: { tab: "input", label: "Completion notification", description: "Notify when the agent completes" },
 	},
 
@@ -454,10 +454,10 @@ export const SETTINGS_SCHEMA = {
 			submenu: true,
 		},
 	},
-	"ask.notification": {
+	"ask.notify": {
 		type: "enum",
-		values: ["auto", "bell", "osc99", "osc9", "off"] as const,
-		default: "auto",
+		values: ["on", "off"] as const,
+		default: "on",
 		ui: { tab: "input", label: "Ask notification", description: "Notify when ask tool is waiting for input" },
 	},
 

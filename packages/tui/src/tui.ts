@@ -6,7 +6,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { isKeyRelease, matchesKey } from "./keys";
 import type { Terminal } from "./terminal";
-import { setCellDimensions, TERMINAL_INFO } from "./terminal-image";
+import { setCellDimensions, TERMINAL } from "./terminal-capabilities";
 import { extractSegments, padding, sliceByColumn, sliceWithWidth, visibleWidth } from "./utils";
 
 /**
@@ -384,7 +384,7 @@ export class TUI extends Container {
 
 	private queryCellSize(): void {
 		// Only query if terminal supports images (cell size is only used for image rendering)
-		if (!TERMINAL_INFO.imageProtocol) {
+		if (!TERMINAL.imageProtocol) {
 			return;
 		}
 		// Query terminal for cell size in pixels: CSI 16 t
@@ -767,7 +767,7 @@ export class TUI extends Container {
 		const reset = TUI.SEGMENT_RESET;
 		for (let i = 0; i < lines.length; i++) {
 			const line = lines[i];
-			if (!TERMINAL_INFO.isImageLine(line)) {
+			if (!TERMINAL.isImageLine(line)) {
 				lines[i] = line + reset;
 			}
 		}
@@ -846,7 +846,7 @@ export class TUI extends Container {
 		overlayWidth: number,
 		totalWidth: number,
 	): string {
-		if (TERMINAL_INFO.isImageLine(baseLine)) return baseLine;
+		if (TERMINAL.isImageLine(baseLine)) return baseLine;
 
 		// Single pass through baseLine extracts both before and after segments
 		const afterStart = startCol + overlayWidth;
@@ -1081,7 +1081,7 @@ export class TUI extends Container {
 			if (i > firstChanged) buffer += "\r\n";
 			buffer += "\x1b[2K"; // Clear current line
 			let line = newLines[i];
-			const isImageLine = TERMINAL_INFO.isImageLine(line);
+			const isImageLine = TERMINAL.isImageLine(line);
 			if (!isImageLine && visibleWidth(line) > width) {
 				if (process.platform === "win32") {
 					line = sliceByColumn(line, 0, width, true);

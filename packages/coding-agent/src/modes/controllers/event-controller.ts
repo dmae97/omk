@@ -1,4 +1,4 @@
-import { Loader, Text } from "@oh-my-pi/pi-tui";
+import { Loader, TERMINAL, Text } from "@oh-my-pi/pi-tui";
 import { settings } from "../../config/settings";
 import { AssistantMessageComponent } from "../../modes/components/assistant-message";
 import { ReadToolGroupComponent } from "../../modes/components/read-tool-group";
@@ -9,7 +9,6 @@ import { getSymbolTheme, theme } from "../../modes/theme/theme";
 import type { InteractiveModeContext, TodoItem } from "../../modes/types";
 import type { AgentSessionEvent } from "../../session/agent-session";
 import type { ExitPlanModeDetails } from "../../tools";
-import { detectNotificationProtocol, isNotificationSuppressed, sendNotification } from "../../utils/terminal-notify";
 
 export class EventController {
 	private lastReadGroup: ReadToolGroupComponent | undefined = undefined;
@@ -383,13 +382,11 @@ export class EventController {
 
 	sendCompletionNotification(): void {
 		if (this.ctx.isBackgrounded === false) return;
-		if (isNotificationSuppressed()) return;
-		const method = settings.get("notifications.onComplete");
-		if (method === "off") return;
-		const protocol = method === "auto" ? detectNotificationProtocol() : method;
+		const notify = settings.get("completion.notify");
+		if (notify === "off") return;
 		const title = this.ctx.sessionManager.getSessionName();
 		const message = title ? `${title}: Complete` : "Complete";
-		sendNotification(protocol, message);
+		TERMINAL.sendNotification(message);
 	}
 
 	async handleBackgroundEvent(event: AgentSessionEvent): Promise<void> {

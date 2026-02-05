@@ -1,35 +1,63 @@
+import { getEnv } from "@oh-my-pi/pi-utils";
+
 export enum ImageProtocol {
 	Kitty = "\x1b_G",
 	Iterm2 = "\x1b]1337;File=",
 }
 
+export enum NotifyProtocol {
+	Bell = "\x07",
+	Osc99 = "\x1b]99;;",
+	Osc9 = "\x1b]9;",
+}
+
 export type TerminalId = "kitty" | "ghostty" | "wezterm" | "iterm2" | "vscode" | "alacritty" | "base" | "trueColor";
 
+/** Terminal capability details used for rendering and protocol selection. */
 export class TerminalInfo {
 	constructor(
 		public readonly id: TerminalId,
 		public readonly imageProtocol: ImageProtocol | null,
 		public readonly trueColor: boolean,
 		public readonly hyperlinks: boolean,
+		public readonly notifyProtocol: NotifyProtocol = NotifyProtocol.Bell,
 	) {}
 
 	isImageLine(line: string): boolean {
 		if (!this.imageProtocol) return false;
 		return line.slice(0, 64).includes(this.imageProtocol);
 	}
+
+	formatNotification(message: string): string {
+		if (this.notifyProtocol === NotifyProtocol.Bell) {
+			return NotifyProtocol.Bell;
+		}
+		return `${this.notifyProtocol}${message}\x1b\\`;
+	}
+
+	sendNotification(message: string): void {
+		if (isNotificationSuppressed()) return;
+		process.stdout.write(this.formatNotification(message));
+	}
+}
+
+export function isNotificationSuppressed(): boolean {
+	const value = getEnv("OMP_NOTIFICATIONS");
+	if (!value) return false;
+	return value === "off" || value === "0" || value === "false";
 }
 
 const KNOWN_TERMINALS = Object.freeze({
 	// Fallback terminals
-	base: new TerminalInfo("base", null, false, true),
-	trueColor: new TerminalInfo("trueColor", null, true, true),
+	base: new TerminalInfo("base", null, false, true, NotifyProtocol.Bell),
+	trueColor: new TerminalInfo("trueColor", null, true, true, NotifyProtocol.Bell),
 	// Recognized terminals
-	kitty: new TerminalInfo("kitty", ImageProtocol.Kitty, true, true),
-	ghostty: new TerminalInfo("ghostty", ImageProtocol.Kitty, true, true),
-	wezterm: new TerminalInfo("wezterm", ImageProtocol.Kitty, true, true),
-	iterm2: new TerminalInfo("iterm2", ImageProtocol.Iterm2, true, true),
-	vscode: new TerminalInfo("vscode", null, true, true),
-	alacritty: new TerminalInfo("alacritty", null, true, true),
+	kitty: new TerminalInfo("kitty", ImageProtocol.Kitty, true, true, NotifyProtocol.Osc99),
+	ghostty: new TerminalInfo("ghostty", ImageProtocol.Kitty, true, true, NotifyProtocol.Osc9),
+	wezterm: new TerminalInfo("wezterm", ImageProtocol.Kitty, true, true, NotifyProtocol.Osc9),
+	iterm2: new TerminalInfo("iterm2", ImageProtocol.Iterm2, true, true, NotifyProtocol.Osc9),
+	vscode: new TerminalInfo("vscode", null, true, true, NotifyProtocol.Bell),
+	alacritty: new TerminalInfo("alacritty", null, true, true, NotifyProtocol.Bell),
 });
 
 export const TERMINAL_ID: TerminalId = (() => {
@@ -73,7 +101,7 @@ export const TERMINAL_ID: TerminalId = (() => {
 	return "base";
 })();
 
-export const TERMINAL_INFO = getTerminalInfo(TERMINAL_ID);
+export const TERMINAL = getTerminalInfo(TERMINAL_ID);
 
 export function getTerminalInfo(terminalId: TerminalId): TerminalInfo {
 	return KNOWN_TERMINALS[terminalId];
@@ -332,19 +360,19 @@ export function renderImage(
 	imageDimensions: ImageDimensions,
 	options: ImageRenderOptions = {},
 ): { sequence: string; rows: number } | null {
-	if (!TERMINAL_INFO.imageProtocol) {
+	if (!TERMINAL.imageProtocol) {
 		return null;
 	}
 
 	const maxWidth = options.maxWidthCells ?? 80;
 	const rows = calculateImageRows(imageDimensions, maxWidth, getCellDimensions());
 
-	if (TERMINAL_INFO.imageProtocol === ImageProtocol.Kitty) {
+	if (TERMINAL.imageProtocol === ImageProtocol.Kitty) {
 		const sequence = encodeKitty(base64Data, { columns: maxWidth, rows });
 		return { sequence, rows };
 	}
 
-	if (TERMINAL_INFO.imageProtocol === ImageProtocol.Iterm2) {
+	if (TERMINAL.imageProtocol === ImageProtocol.Iterm2) {
 		const sequence = encodeITerm2(base64Data, {
 			width: maxWidth,
 			height: "auto",

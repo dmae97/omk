@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `task.maxRecursionDepth` setting to control how many levels deep subagents can spawn their own subagents (0=none, 1=one level, 2=two levels, -1=unlimited)
@@ -15,6 +16,8 @@
 
 ### Changed
 
+- Simplified notification settings from protocol-specific options (bell, osc99, osc9) to simple on/off toggle for `completion.notify` and `ask.notify`
+- Moved notification protocol detection and sending to `TERMINAL` API from local utility functions
 - Changed task tool spawns configuration from "explore" to "*" to allow subagents to spawn any agent type
 - Changed system prompt to enable parallel delegation guidance for all agents (removed coordinator-only restriction)
 - Changed task tool to automatically disable itself when maximum recursion depth is reached, preventing infinite nesting
@@ -23,6 +26,7 @@
 
 ### Removed
 
+- Removed `terminal-notify.ts` utility module with `detectNotificationProtocol()`, `sendNotification()`, and `isNotificationSuppressed()` functions
 - Removed `MAX_PARALLEL_TASKS` constant and associated task count validation limit
 
 ### Fixed

@@ -5,13 +5,13 @@ import {
 	Container,
 	getImageDimensions,
 	Image,
+	ImageProtocol,
 	imageFallback,
 	Spacer,
-	TERMINAL_INFO,
+	TERMINAL,
 	Text,
 	type TUI,
 } from "@oh-my-pi/pi-tui";
-import { ImageProtocol } from "@oh-my-pi/pi-tui/terminal-image";
 import { sanitizeText } from "@oh-my-pi/pi-utils";
 import type { Theme } from "../../modes/theme/theme";
 import { theme } from "../../modes/theme/theme";
@@ -239,7 +239,7 @@ export class ToolExecutionComponent extends Container {
 	 */
 	private maybeConvertImagesForKitty(): void {
 		// Only needed for Kitty protocol
-		if (TERMINAL_INFO.imageProtocol !== ImageProtocol.Kitty) return;
+		if (TERMINAL.imageProtocol !== ImageProtocol.Kitty) return;
 		if (!this.result) return;
 
 		const imageBlocks = this.getAllImageBlocks();
@@ -472,14 +472,14 @@ export class ToolExecutionComponent extends Container {
 
 			for (let i = 0; i < imageBlocks.length; i++) {
 				const img = imageBlocks[i];
-				if (TERMINAL_INFO.imageProtocol && this.showImages && img.data && img.mimeType) {
+				if (TERMINAL.imageProtocol && this.showImages && img.data && img.mimeType) {
 					// Use converted PNG for Kitty protocol if available
 					const converted = this.convertedImages.get(i);
 					const imageData = converted?.data ?? img.data;
 					const imageMimeType = converted?.mimeType ?? img.mimeType;
 
 					// For Kitty, skip non-PNG images that haven't been converted yet
-					if (TERMINAL_INFO.imageProtocol === ImageProtocol.Kitty && imageMimeType !== "image/png") {
+					if (TERMINAL.imageProtocol === ImageProtocol.Kitty && imageMimeType !== "image/png") {
 						continue;
 					}
 
@@ -543,7 +543,7 @@ export class ToolExecutionComponent extends Container {
 			})
 			.join("\n");
 
-		if (imageBlocks.length > 0 && (!TERMINAL_INFO.imageProtocol || !this.showImages)) {
+		if (imageBlocks.length > 0 && (!TERMINAL.imageProtocol || !this.showImages)) {
 			const imageIndicators = imageBlocks
 				.map((img: any) => {
 					const dims = img.data ? (getImageDimensions(img.data, img.mimeType) ?? undefined) : undefined;

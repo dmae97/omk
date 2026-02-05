@@ -59,28 +59,7 @@ export type { BoxSymbols, SymbolTheme } from "./symbols";
 // Terminal interface and implementations
 export { emergencyTerminalRestore, ProcessTerminal, type Terminal } from "./terminal";
 // Terminal image support
-export {
-	type CellDimensions,
-	calculateImageRows,
-	encodeITerm2,
-	encodeKitty,
-	getCellDimensions,
-	getGifDimensions,
-	getImageDimensions,
-	getJpegDimensions,
-	getPngDimensions,
-	getTerminalInfo,
-	getWebpDimensions,
-	type ImageDimensions,
-	type ImageRenderOptions,
-	imageFallback,
-	renderImage,
-	setCellDimensions,
-	TERMINAL_ID,
-	TERMINAL_INFO,
-	type TerminalId,
-	type TerminalInfo,
-} from "./terminal-image";
+export * from "./terminal-capabilities";
 export { type Component, Container, type OverlayHandle, type SizeValue, TUI } from "./tui";
 // Utilities
 export { Ellipsis, padding, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "./utils";

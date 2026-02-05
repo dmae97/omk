@@ -6,7 +6,7 @@
  * 1. Add it to settings-schema.ts with a `ui` field
  * 2. That's it - it appears in the UI automatically
  */
-import { TERMINAL_INFO } from "@oh-my-pi/pi-tui";
+import { TERMINAL } from "@oh-my-pi/pi-tui";
 import {
 	getDefault,
 	getEnumValues,
@@ -55,7 +55,7 @@ export type SettingDef = BooleanSettingDef | EnumSettingDef | SubmenuSettingDef;
 // ═══════════════════════════════════════════════════════════════════════════
 
 const CONDITIONS: Record<string, () => boolean> = {
-	hasImageProtocol: () => !!TERMINAL_INFO.imageProtocol,
+	hasImageProtocol: () => !!TERMINAL.imageProtocol,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════

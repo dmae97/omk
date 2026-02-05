@@ -16,14 +16,13 @@
  */
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
-import { Text } from "@oh-my-pi/pi-tui";
+import { TERMINAL, Text } from "@oh-my-pi/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { type Theme, theme } from "../modes/theme/theme";
 import askDescription from "../prompts/tools/ask.md" with { type: "text" };
 import { renderStatusLine } from "../tui";
-import { detectNotificationProtocol, isNotificationSuppressed, sendNotification } from "../utils/terminal-notify";
 import type { ToolSession } from ".";
 import { ToolUIKit } from "./render-utils";
 
@@ -268,13 +267,9 @@ export class AskTool implements AgentTool<typeof askSchema, AskToolDetails> {
 
 	/** Send terminal notification when ask tool is waiting for input */
 	private sendAskNotification(): void {
-		if (isNotificationSuppressed()) return;
-
-		const method = this.session.settings.get("ask.notification");
+		const method = this.session.settings.get("ask.notify");
 		if (method === "off") return;
-
-		const protocol = method === "auto" ? detectNotificationProtocol() : method;
-		sendNotification(protocol, "Waiting for input");
+		TERMINAL.sendNotification("Waiting for input");
 	}
 
 	public async execute(
