@@ -10,10 +10,14 @@ pub enum Signal {}
 
 /// Minimal signal representation for Windows.
 #[cfg(windows)]
+#[allow(unnameable_types)]
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub enum Signal {
+	/// Terminate signal.
 	Terminate,
+	/// Kill signal.
 	Kill,
+	/// Interrupt signal.
 	Interrupt,
 }
 
@@ -83,7 +87,7 @@ pub fn kill_process(
         let pid = _pid as u32;
         unsafe {
             let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
-            if handle == 0 {
+            if handle.is_null() {
                 return Err(error::ErrorKind::FailedToSendSignal.into());
             }
             let ok = TerminateProcess(handle, 1);

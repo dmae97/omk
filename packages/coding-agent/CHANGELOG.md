@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [11.1.0] - 2026-02-05
+
 ### Added
 
 - Added `sortDiagnostics()` utility function to sort diagnostics by severity, location, and message for consistent output ordering

@@ -12,6 +12,8 @@
 //! });
 //! ```
 
+#[cfg(windows)]
+use std::collections::HashSet;
 use std::{
 	collections::HashMap,
 	fs,
@@ -20,8 +22,6 @@ use std::{
 	sync::Arc,
 	time::Duration,
 };
-#[cfg(windows)]
-use std::{collections::HashSet, os::windows::io::AsRawHandle};
 
 #[cfg(windows)]
 mod windows;
@@ -45,8 +45,6 @@ use tokio::io::AsyncReadExt as _;
 use tokio_util::sync::CancellationToken;
 #[cfg(windows)]
 use windows::configure_windows_path;
-#[cfg(windows)]
-use windows_sys::Win32::System::Threading::TerminateProcess;
 
 use crate::task;
 
@@ -614,20 +612,26 @@ fn terminate_background_jobs(shell: &BrushShell) {
 	if shell.jobs.jobs.is_empty() {
 		return;
 	}
-	let mut handles = Vec::new();
+	let Ok(signal) = "TERM".parse::<traps::TrapSignal>() else {
+		return;
+	};
+	let mut pids = Vec::new();
 	for job in &shell.jobs.jobs {
-		handles.extend(job.duplicate_kill_handles());
+		if let Some(pid) = job.process_group_id().or_else(|| job.representative_pid()) {
+			let _ = sys::signal::kill_process(pid, signal);
+			pids.push(pid);
+		}
 	}
-	if handles.is_empty() {
+	if pids.is_empty() {
 		return;
 	}
 	tokio::spawn(async move {
 		time::sleep(Duration::from_millis(500)).await;
-		for handle in handles {
-			// SAFETY: OwnedHandle keeps the duplicated handle alive for the duration.
-			unsafe {
-				let _ = TerminateProcess(handle.as_raw_handle() as _, 1);
-			}
+		let Ok(signal) = "KILL".parse::<traps::TrapSignal>() else {
+			return;
+		};
+		for pid in pids {
+			let _ = sys::signal::kill_process(pid, signal);
 		}
 	});
 }
