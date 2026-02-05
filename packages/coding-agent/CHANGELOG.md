@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [11.2.0] - 2026-02-05
 ### Added
 
 - Added `omp commit` command to generate commit messages and update changelogs with `--push`, `--dry-run`, `--no-changelog`, and model override flags

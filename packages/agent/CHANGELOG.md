@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [11.2.0] - 2026-02-05
 ### Fixed
 
 - Fixed handling of aborted requests to properly throw abort errors when stream terminates without a terminal event
