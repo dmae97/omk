@@ -569,6 +569,9 @@ export class InteractiveMode implements InteractiveModeContext {
 			workflow: options?.workflow ?? "parallel",
 			reentry: this.planModeHasEntered,
 		});
+		if (this.session.isStreaming) {
+			await this.session.sendPlanModeContext({ deliverAs: "steer" });
+		}
 		this.planModeHasEntered = true;
 		await this.applyPlanModeModel();
 		this.updatePlanModeStatus();

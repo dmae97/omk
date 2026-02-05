@@ -1,6 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Updated file mention processing to respect image auto-resize settings
+
+### Fixed
+
+- Fixed plan mode toggles during streaming to inject plan-mode context immediately, preventing file edits while in plan mode
 
 ## [11.1.0] - 2026-02-05
 

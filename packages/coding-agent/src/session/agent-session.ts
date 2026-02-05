@@ -1014,6 +1014,23 @@ export class AgentSession {
 		this._planReferenceSent = true;
 	}
 
+	/**
+	 * Inject the plan mode context message into the conversation history.
+	 */
+	async sendPlanModeContext(options?: { deliverAs?: "steer" | "followUp" | "nextTurn" }): Promise<void> {
+		const message = await this._buildPlanModeMessage();
+		if (!message) return;
+		await this.sendCustomMessage(
+			{
+				customType: message.customType,
+				content: message.content,
+				display: message.display,
+				details: message.details,
+			},
+			options ? { deliverAs: options.deliverAs } : undefined,
+		);
+	}
+
 	resolveRoleModel(role: ModelRole): Model | undefined {
 		return this._resolveRoleModel(role, this._modelRegistry.getAvailable(), this.model);
 	}
@@ -1282,7 +1299,9 @@ export class AgentSession {
 		// Auto-read @filepath mentions
 		const fileMentions = extractFileMentions(expandedText);
 		if (fileMentions.length > 0) {
-			const fileMentionMessages = await generateFileMentionMessages(fileMentions, this.sessionManager.getCwd());
+			const fileMentionMessages = await generateFileMentionMessages(fileMentions, this.sessionManager.getCwd(), {
+				autoResizeImages: this.settings.get("images.autoResize"),
+			});
 			messages.push(...fileMentionMessages);
 		}
 
