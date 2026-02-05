@@ -9,7 +9,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { type ImageContent, supportsXhigh } from "@oh-my-pi/pi-ai";
-import { getEnv, logger, postmortem } from "@oh-my-pi/pi-utils";
+import { postmortem } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { type Args, parseArgs, printHelp } from "./cli/args";
 import { parseConfigArgs, printConfigHelp, runConfigCommand } from "./cli/config-cli";
@@ -29,7 +29,6 @@ import { findConfigFile, getModelsPath, VERSION } from "./config";
 import type { ModelRegistry } from "./config/model-registry";
 import { parseModelPattern, parseModelString, resolveModelScope, type ScopedModel } from "./config/model-resolver";
 import { Settings, settings } from "./config/settings";
-import { initPyroscope, stopPyroscope } from "./debug/pyroscope";
 import { initializeWithSettings } from "./discovery";
 import { exportFromFile } from "./export/html";
 import type { ExtensionUIContext } from "./extensibility/extensions/types";
@@ -641,15 +640,6 @@ export async function main(args: string[]) {
 	await Settings.init({ cwd });
 	debugStartup("main:Settings.init");
 	time("Settings.init");
-
-	// Initialize Pyroscope continuous profiling if configured
-	const pyroscopeSettings = settings.getGroup("pyroscope");
-	if (pyroscopeSettings.enabled || getEnv("PYROSCOPE_URL")) {
-		await initPyroscope(pyroscopeSettings);
-		logger.debug("Pyroscope: initialized", { settings: pyroscopeSettings });
-		debugStartup("main:initPyroscope");
-	}
-
 	const pipedInput = await readPipedInput();
 	let { initialMessage, initialImages } = await prepareInitialMessage(parsed, settings.get("images.autoResize"));
 	if (pipedInput) {
@@ -819,7 +809,6 @@ export async function main(args: string[]) {
 		});
 		await session.dispose();
 		stopThemeWatcher();
-		await stopPyroscope();
 		await postmortem.quit(0);
 	}
 }

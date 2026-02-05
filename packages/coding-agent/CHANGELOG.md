@@ -1,15 +1,11 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `task.maxRecursionDepth` setting to control how many levels deep subagents can spawn their own subagents (0=none, 1=one level, 2=two levels, -1=unlimited)
 - Added support for nested task artifact naming with parent task prefixes (e.g., "0-Auth.1-Subtask") to organize hierarchical task outputs
 - Added `taskDepth` and `parentTaskPrefix` options to `CreateAgentSessionOptions` for tracking subagent recursion depth and organizing nested artifacts
-- Added Grafana Pyroscope continuous profiling integration for CPU and heap profiling
-- Added `pyroscope.enabled`, `pyroscope.serverAddress`, `pyroscope.appName`, `pyroscope.basicAuthUser`, `pyroscope.basicAuthPassword`, `pyroscope.tenantID`, and `pyroscope.flushIntervalMs` settings for profiling configuration
-- Added support for Pyroscope configuration via environment variables (`PYROSCOPE_URL`, `PYROSCOPE_APP_NAME`, `PYROSCOPE_BASIC_AUTH_USER`, `PYROSCOPE_BASIC_AUTH_PASSWORD`, `PYROSCOPE_TENANT_ID`, `PYROSCOPE_FLUSH_INTERVAL_MS`)
 - Added `task.maxConcurrency` setting to control concurrent limit for subagents (default: 32)
 - Added UI options for task concurrency configuration with presets from unlimited to 64 tasks
 - Added support for loading skills from `~/.agents/skills`
