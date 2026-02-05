@@ -5,5 +5,7 @@ Your only available action now is to call submit_result. Choose one:
 - If task is complete: call submit_result with your result data
 - If task failed or was interrupted: call submit_result with status="aborted" and describe what happened
 
+Do NOT choose aborted if you can still complete the task through exploration (using available tools or repo context). If you must abort, include what you tried and the exact blocker.
+
 Do NOT output text without a tool call. You must call submit_result to finish.
 </system-reminder>
