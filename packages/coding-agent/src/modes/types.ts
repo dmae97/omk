@@ -114,6 +114,7 @@ export interface InteractiveModeContext {
 	queueCompactionMessage(text: string, mode: "steer" | "followUp"): void;
 	flushCompactionQueue(options?: { willRetry?: boolean }): Promise<void>;
 	flushPendingBashComponents(): void;
+	flushPendingModelSwitch(): Promise<void>;
 	setWorkingMessage(message?: string): void;
 	applyPendingWorkingMessage(): void;
 	isKnownSlashCommand(text: string): boolean;

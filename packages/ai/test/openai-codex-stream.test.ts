@@ -170,7 +170,7 @@ describe("openai-codex streaming", () => {
 		].join("\n\n")}\n\n`;
 
 		const encoder = new TextEncoder();
-		const stream = new ReadableStream<Uint8Array>({
+		const stream = new ReadableStream({
 			start(controller) {
 				controller.enqueue(encoder.encode(sse));
 				controller.close();

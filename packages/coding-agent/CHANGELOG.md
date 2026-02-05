@@ -15,6 +15,7 @@
 ### Fixed
 
 - Fixed plan mode toggles during streaming to inject plan-mode context immediately, preventing file edits while in plan mode
+- Fixed plan mode model switches during streaming to defer model changes until the current turn completes
 
 ## [11.1.0] - 2026-02-05
 

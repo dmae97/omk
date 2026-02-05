@@ -2,7 +2,7 @@
 	"compilerOptions": {
 		"target": "ES2024",
 		"module": "ESNext",
-		"lib": ["ES2024", "DOM.AsyncIterable"],
+		"lib": ["ES2024"],
 		"strict": true,
 		"esModuleInterop": true,
 		"skipLibCheck": true,
@@ -19,7 +19,7 @@
 		"experimentalDecorators": true,
 		"emitDecoratorMetadata": true,
 		"useDefineForClassFields": false,
-		"types": ["bun", "node", "assets"],
+		"types": ["bun", "assets"],
 		"typeRoots": ["./types", "./node_modules/@types"],
 		"paths": {
 			"@oh-my-pi/pi-ai": ["./packages/ai/src/index.ts"],
