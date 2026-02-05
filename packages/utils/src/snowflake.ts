@@ -1,11 +1,12 @@
-function rand64() {
-	return crypto.getRandomValues(new BigUint64Array(1))[0] ^ (BigInt(Date.now()) * 6364136223846793005n);
+// 16-bit hex lookup table (65536 entries) for fast conversion
+const HEX4 = Array.from({ length: 65536 }, (_, i) => i.toString(16).padStart(4, "0"));
+
+function randu32() {
+	return crypto.getRandomValues(new Uint32Array(1))[0];
 }
 
-const MAX_MASK = BigInt(Number.MAX_SAFE_INTEGER);
-function randint() {
-	return Number(rand64() & MAX_MASK);
-}
+const EPOCH = 1420070400000;
+const MAX_SEQ = 0x3fffff;
 
 // Snowflake as a hex string (16 chars, zero-padded).
 //
@@ -15,110 +16,105 @@ function randint() {
 type Snowflake = string & { readonly __brand: unique symbol };
 
 namespace Snowflake {
-	// Default epoch.
-	//
-	export const DEFAULT_EPOCH = 1420070400000n;
-
 	// Hex string validation pattern (16 lowercase hex chars).
 	//
 	export const PATTERN = /^[0-9a-f]{16}$/;
 
-	// Converts a bigint to a hex snowflake string.
+	// Epoch timestamp.
 	//
-	function toHex(value: bigint): Snowflake {
-		return value.toString(16).padStart(16, "0") as Snowflake;
-	}
+	export const EPOCH_TIMESTAMP = EPOCH;
+
+	// Maximum sequence number.
+	//
+	export const MAX_SEQUENCE = MAX_SEQ;
 
 	// Parses a hex string or bigint to bigint.
 	//
-	function toBigInt(value: Snowflake | bigint): bigint {
-		if (typeof value === "bigint") return value;
-		const highBits = BigInt(Number.parseInt(value.substring(0, 8), 16));
-		const lowBits = BigInt(Number.parseInt(value.substring(8, 16), 16));
-		return (highBits << 32n) | lowBits;
+	function toBigInt(value: Snowflake): bigint {
+		const hi = Number.parseInt(value.substring(0, 8), 16);
+		const lo = Number.parseInt(value.substring(8, 16), 16);
+		return (BigInt(hi) << 32n) | BigInt(lo);
+	}
+
+	// Formats a sequence and timestamp into a snowflake hex string.
+	//
+	export function formatParts(dt: number, seq: number): Snowflake {
+		// Split 64-bit value into two 32-bit parts for number arithmetic
+		// high32 = delta >> 10 (timestamp bits 41-10)
+		// low32 = (delta & 0x3ff) << 22 | seq
+		const hi = dt >>> 10;
+		const lo = (dt << 22) | seq;
+
+		const hi1 = (hi >>> 16) & 0xffff;
+		const hi2 = hi & 0xffff;
+		const lo1 = (lo >>> 16) & 0xffff;
+		const lo2 = lo & 0xffff;
+		return `${HEX4[hi1]}${HEX4[hi2]}${HEX4[lo1]}${HEX4[lo2]}` as Snowflake;
 	}
 
 	// Snowflake generator type.
 	//
 	export class Source {
-		static readonly DEFAULT = new Source();
-
-		readonly epoch: bigint;
 		#seq = 0;
-		constructor(config: { epoch?: bigint | number | Date; sequence?: number } = {}) {
-			const { epoch = DEFAULT_EPOCH, sequence = randint() } = config;
-			if (typeof epoch === "object") {
-				this.epoch = BigInt(epoch.getTime());
-			} else {
-				this.epoch = BigInt(epoch);
-			}
-			this.setSequence(sequence);
-		}
-
-		// Epoch.
-		//
-		getEpochTimestamp() {
-			return Number(this.epoch);
-		}
-		getEpochDate() {
-			return new Date(Number(this.epoch));
+		constructor(sequence: number = randu32() & MAX_SEQ) {
+			this.#seq = sequence & MAX_SEQ;
 		}
 
 		// Sequence number.
 		//
 		get sequence() {
-			return this.#seq & 0x3fffff;
+			return this.#seq & MAX_SEQ;
 		}
-		setSequence(v: number) {
-			this.#seq = v & 0x3fffff;
-			return this;
+		set sequence(v: number) {
+			this.#seq = v & MAX_SEQ;
 		}
 		reset() {
-			return this.setSequence(0);
+			this.#seq = 0;
 		}
 
 		// Generates the next value as a hex string.
 		//
-		next(timestamp = Date.now()): Snowflake {
-			const seq = (this.#seq + 1) & 0x3fffff;
+		generate(timestamp: number): Snowflake {
+			const seq = (this.#seq + 1) & MAX_SEQ;
+			const dt = timestamp - EPOCH;
 			this.#seq = seq;
-			const value = BigInt(seq) | ((BigInt(timestamp) - this.epoch) << 22n);
-			return toHex(value);
+			return formatParts(dt, seq);
 		}
 	}
 
 	// Gets the next snowflake given the timestamp.
 	//
-	export function next(timestamp = Date.now(), source: Source = Source.DEFAULT): Snowflake {
-		return source.next(timestamp);
+	const defaultSource = new Source();
+	export function next(timestamp = Date.now()): Snowflake {
+		return defaultSource.generate(timestamp);
 	}
 
 	// Validates a snowflake hex string.
 	//
 	export function valid(value: string): value is Snowflake {
-		return PATTERN.test(value);
+		return value.length === 16 && PATTERN.test(value);
 	}
 
 	// Returns the upper/lower boundaries for the given timestamp.
 	//
-	export function lowerbound(timelike: Date | number | Snowflake, source: Source = Source.DEFAULT): Snowflake {
+	export function lowerbound(timelike: Date | number | Snowflake): Snowflake {
 		switch (typeof timelike) {
 			// biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough
 			case "object": // Date
 				timelike = timelike.getTime();
-			case "number": // Milliseconds
-				return toHex(0x000000n | ((BigInt(timelike) - source.epoch) << 22n));
+			case "number":
+				return formatParts(timelike - EPOCH, 0);
 			case "string": // Snowflake hex string
 				return timelike;
 		}
 	}
-	export function upperbound(timelike: Date | number | Snowflake, source: Source = Source.DEFAULT): Snowflake {
+	export function upperbound(timelike: Date | number | Snowflake): Snowflake {
 		switch (typeof timelike) {
 			// biome-ignore lint/suspicious/noFallthroughSwitchClause: intentional fallthrough
 			case "object": // Date
 				timelike = timelike.getTime();
-			case "number": // Milliseconds
-				return toHex(0x3fffffn | ((BigInt(timelike) - source.epoch) << 22n));
+			case "number":
+				return formatParts(timelike - EPOCH, 0x3fffff);
 			case "string": // Snowflake hex string
 				return timelike;
 		}
@@ -127,23 +123,14 @@ namespace Snowflake {
 	// Returns the individual bits given the snowflake.
 	//
 	export function getSequence(value: Snowflake) {
-		let n = toBigInt(value);
-		n &= 0xfffn;
-		return Number(n);
+		return Number.parseInt(value.substring(8, 16), 16) & MAX_SEQ;
 	}
-	export function getMachineId(value: Snowflake) {
-		let n = toBigInt(value);
-		n &= 0x3ff000n;
-		n >>= 12n;
-		return Number(n);
+	export function getTimestamp(value: Snowflake) {
+		const n = toBigInt(value) >> 22n;
+		return Number(n + BigInt(EPOCH));
 	}
-	export function getTimestamp(value: Snowflake, epoch: bigint = DEFAULT_EPOCH) {
-		let n = toBigInt(value);
-		n >>= 22n;
-		return Number(n + epoch);
-	}
-	export function getDate(s: Snowflake, epoch: bigint = DEFAULT_EPOCH) {
-		return new Date(getTimestamp(s, epoch));
+	export function getDate(value: Snowflake) {
+		return new Date(getTimestamp(value));
 	}
 }
 
