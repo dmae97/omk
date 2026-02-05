@@ -195,8 +195,11 @@ async fn run_shell_session(
 		res = &mut run_task => res,
 		reason = ct.wait() => {
 			tokio_cancel.cancel();
-			run_task.abort();
-			let _ = run_task.await;
+			let graceful = time::timeout(Duration::from_secs(2), &mut run_task).await;
+			if graceful.is_err() {
+				run_task.abort();
+				let _ = run_task.await;
+			}
 			*session.lock().await = None;
 			return Ok(ShellRunResult {
 				exit_code: None,
@@ -296,7 +299,12 @@ async fn run_shell_oneshot(
 	let run_result = tokio::select! {
 		result = &mut task => result,
 		reason = ct.wait() => {
-			task.abort();
+			tokio_cancel.cancel();
+			let graceful = time::timeout(Duration::from_secs(2), &mut task).await;
+			if graceful.is_err() {
+				task.abort();
+				let _ = task.await;
+			}
 			return Ok(ShellExecuteResult {
 				exit_code: None,
 				cancelled: matches!(reason, task::AbortReason::Signal),
