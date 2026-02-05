@@ -1,6 +1,23 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Support for puppeteer query handlers (aria/, text/, xpath/, pierce/) in selector parameters across all browser actions
+- Automatic normalization of legacy p- prefixed selectors (p-aria/, p-text/, p-xpath/, p-pierce/) to modern puppeteer query handler syntax
+- Improved click action with intelligent element selection that prioritizes visible, actionable candidates and retries until timeout
+- Enhanced actionability checking for click operations, validating visibility, pointer events, opacity, viewport intersection, and element occlusion
+
+### Changed
+
+- Updated selector parameter descriptions to document support for CSS selectors and puppeteer query handlers
+- Modified viewport handling in headless mode to respect custom viewport parameters while disabling viewport in headed mode for better window management
+- Improved click action to use specialized text query handler logic with retry mechanism for better reliability with dynamic content
+
+### Fixed
+
+- Fixed click action to properly handle text/ query handlers with timeout and retry logic instead of failing immediately
+- Fixed viewport application to only apply when in headless mode or when explicitly requested, preventing conflicts in headed browser mode
 
 ## [11.2.1] - 2026-02-05
 
