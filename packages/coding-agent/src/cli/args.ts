@@ -180,100 +180,8 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 	return result;
 }
 
-export function printHelp(): void {
-	console.log(`${chalk.bold(APP_NAME)} - AI coding assistant
-
-${chalk.bold("Usage:")}
-  ${APP_NAME} [options] [@files...] [messages...]
-
-${chalk.bold("Subcommands:")}
-  plugin    Manage plugins (install, uninstall, list, etc.)
-  update    Check for and install updates
-  config    Manage configuration settings
-  setup     Install dependencies for optional features
-  commit    AI-assisted git commits
-  stats     AI usage statistics dashboard
-  jupyter   Manage the shared Jupyter gateway
-  shell     Interactive shell console (brush-core test)
-  grep      Test grep tool
-  q         Test web search providers
-
-${chalk.bold("Options:")}
-  --model <pattern>              Model to use (fuzzy match: "opus", "gpt-5.2", or "p-openai/gpt-5.2")
-   --smol <id>                    Smol/fast model for lightweight tasks (or PI_SMOL_MODEL env)
-   --slow <id>                    Slow/reasoning model for thorough analysis (or PI_SLOW_MODEL env)
-   --plan <id>                    Plan model for architectural planning (or PI_PLAN_MODEL env)
-  --api-key <key>                API key (defaults to env vars)
-  --system-prompt <text>         System prompt (default: coding assistant prompt)
-  --append-system-prompt <text>  Append text or file contents to the system prompt
-  --allow-home                   Allow starting in ~ without auto-switching to a temp dir
-  --mode <mode>                  Output mode: text (default), json, or rpc
-  --print, -p                    Non-interactive mode: process prompt and exit
-  --continue, -c                 Continue previous session
-  --resume, -r                   Select a session to resume
-  --session <path>               Use specific session file
-  --session-dir <dir>            Directory for session storage and lookup
-  --no-session                   Don't save session (ephemeral)
-  --models <patterns>            Comma-separated model patterns for Ctrl+P cycling
-                                 Supports globs (anthropic/*, *sonnet*) and fuzzy matching
-  --no-tools                     Disable all built-in tools
-  --no-lsp                       Disable LSP tools, formatting, and diagnostics
-  --tools <tools>                Comma-separated list of tools to enable (default: all)
-                                 Available: read, bash, edit, write, grep, find, lsp,
-                                 python, notebook, task, fetch, web_search, browser, ask
-  --thinking <level>             Set thinking level: off, minimal, low, medium, high, xhigh
-  --hook <path>                  Load a hook/extension file (can be used multiple times)
-  --extension, -e <path>         Load an extension file (can be used multiple times)
-  --no-extensions                Disable extension discovery (explicit -e paths still work)
-  --no-skills                    Disable skills discovery and loading
-  --skills <patterns>            Comma-separated glob patterns to filter skills (e.g., git-*,docker)
-  --export <file>                Export session file to HTML and exit
-  --list-models [search]         List available models (with optional fuzzy search)
-  --help, -h                     Show this help
-  --version, -v                  Show version number
-
-${chalk.bold("Examples:")}
-  # Interactive mode
-  ${APP_NAME}
-
-  # Interactive mode with initial prompt
-  ${APP_NAME} "List all .ts files in src/"
-
-  # Include files in initial message
-  ${APP_NAME} @prompt.md @image.png "What color is the sky?"
-
-  # Non-interactive mode (process and exit)
-  ${APP_NAME} -p "List all .ts files in src/"
-
-  # Multiple messages (interactive)
-  ${APP_NAME} "Read package.json" "What dependencies do we have?"
-
-  # Continue previous session
-  ${APP_NAME} --continue "What did we discuss?"
-
-  # Use different model (fuzzy matching)
-  ${APP_NAME} --model opus "Help me refactor this code"
-
-  # Limit model cycling to specific models
-  ${APP_NAME} --models claude-sonnet,claude-haiku,gpt-4o
-
-  # Limit to a specific provider with glob pattern
-  ${APP_NAME} --models "github-copilot/*"
-
-  # Cycle models with fixed thinking levels
-  ${APP_NAME} --models sonnet:high,haiku:low
-
-  # Start with a specific thinking level
-  ${APP_NAME} --thinking high "Solve this complex problem"
-
-  # Read-only mode (no file modifications possible)
-  ${APP_NAME} --tools read,grep,find -p "Review the code in src/"
-
-  # Export a session file to HTML
-  ${APP_NAME} --export ~/${CONFIG_DIR_NAME}/agent/sessions/--path--/session.jsonl
-  ${APP_NAME} --export session.jsonl output.html
-
-${chalk.bold("Environment Variables:")}
+export function getExtraHelpText(): string {
+	return `${chalk.bold("Environment Variables:")}
   ${chalk.dim("# Core Providers")}
   ANTHROPIC_API_KEY          - Anthropic Claude models
   ANTHROPIC_OAUTH_TOKEN      - Anthropic OAuth (takes precedence over API key)
@@ -328,5 +236,13 @@ ${chalk.bold("Available Tools (all enabled by default):")}
   fetch      - Fetch and process URLs
   web_search - Search the web
   ask        - Ask user questions (interactive mode only)
-`);
+`;
+}
+
+export function printHelp(): void {
+	process.stdout.write(
+		`${chalk.bold(APP_NAME)} - AI coding assistant\n\n` +
+			`Run ${APP_NAME} --help for full command and option details.\n\n` +
+			`${getExtraHelpText()}\n`,
+	);
 }

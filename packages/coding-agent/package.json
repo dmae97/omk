@@ -13,6 +13,7 @@
 	"oclif": {
 		"bin": "omp",
 		"commands": "./src/commands",
+		"helpClass": "./src/cli/oclif-help.ts",
 		"plugins": [
 			"@oclif/plugin-autocomplete"
 		]
