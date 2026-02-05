@@ -43,7 +43,7 @@ function isRemoteMountPath(absolutePath: string): boolean {
 	return absolutePath.startsWith(REMOTE_MOUNT_PREFIX);
 }
 
-const READ_CHUNK_SIZE = 64 * 1024;
+const READ_CHUNK_SIZE = 8 * 1024;
 
 async function streamLinesFromFile(
 	filePath: string,

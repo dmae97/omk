@@ -169,7 +169,7 @@ export class FileSessionStorage implements SessionStorage {
 	async readTextPrefix(path: string, maxBytes: number): Promise<string> {
 		const handle = await fs.promises.open(path, "r");
 		try {
-			const buffer = Buffer.alloc(maxBytes);
+			const buffer = Buffer.allocUnsafe(maxBytes);
 			const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0);
 			return buffer.subarray(0, bytesRead).toString("utf-8");
 		} finally {

@@ -4,6 +4,8 @@
  * Implements JSON-RPC 2.0 over subprocess stdin/stdout.
  * Messages are newline-delimited JSON.
  */
+
+import { readLines } from "@oh-my-pi/pi-utils";
 import { type Subprocess, spawn } from "bun";
 import type { JsonRpcResponse, MCPStdioServerConfig, MCPTransport } from "../../mcp/types";
 
@@ -25,7 +27,6 @@ export class StdioTransport implements MCPTransport {
 			reject: (error: Error) => void;
 		}
 	>();
-	private buffer = "";
 	private _connected = false;
 	private readLoop: Promise<void> | null = null;
 
@@ -72,23 +73,21 @@ export class StdioTransport implements MCPTransport {
 	private async startReadLoop(): Promise<void> {
 		if (!this.process?.stdout) return;
 
-		const reader = this.process.stdout.getReader();
 		const decoder = new TextDecoder();
-
 		try {
-			while (this._connected) {
-				const { done, value } = await reader.read();
-				if (done) break;
-
-				this.buffer += decoder.decode(value, { stream: true });
-				this.processBuffer();
+			for await (const line of readLines(this.process.stdout)) {
+				if (!this._connected) break;
+				try {
+					this.handleMessage(JSON.parse(decoder.decode(line)) as JsonRpcResponse);
+				} catch {
+					// Skip malformed lines
+				}
 			}
 		} catch (error) {
 			if (this._connected) {
 				this.onError?.(error instanceof Error ? error : new Error(String(error)));
 			}
 		} finally {
-			reader.releaseLock();
 			this.handleClose();
 		}
 	}
@@ -114,29 +113,6 @@ export class StdioTransport implements MCPTransport {
 			// Ignore stderr read errors
 		} finally {
 			reader.releaseLock();
-		}
-	}
-
-	private processBuffer(): void {
-		while (this.buffer.length > 0) {
-			const result = Bun.JSONL.parseChunk(this.buffer);
-			for (const message of result.values) {
-				this.handleMessage(message as JsonRpcResponse);
-			}
-
-			if (result.error) {
-				const nextNewline = this.buffer.indexOf("\n", result.read);
-				if (nextNewline === -1) {
-					this.buffer = "";
-					break;
-				}
-				this.buffer = this.buffer.slice(nextNewline + 1);
-				continue;
-			}
-
-			if (result.read === 0) break;
-			this.buffer = this.buffer.slice(result.read);
-			if (result.done) break;
 		}
 	}
 

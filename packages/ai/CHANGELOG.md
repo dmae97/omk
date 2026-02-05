@@ -1,6 +1,22 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added Claude Opus 4.6 model support across multiple providers (Anthropic, Amazon Bedrock, GitHub Copilot, OpenRouter, OpenCode, Vercel AI Gateway)
+- Added GPT-5.3 Codex model support for OpenAI
+- Added `readSseJson` utility import for improved SSE stream handling in Google Gemini CLI provider
+
+### Changed
+
+- Updated Google Gemini CLI provider to use `readSseJson` utility for cleaner SSE stream parsing
+- Updated pricing for Llama 3.1 405B model on Vercel AI Gateway (cache read rate adjusted)
+- Updated Llama 3.1 405B context window and max tokens on Vercel AI Gateway (256000 for both)
+
+### Removed
+
+- Removed Kimi K2, Kimi K2 Turbo Preview, and Kimi K2.5 models
+- Removed Deep Cogito Cogito V2 Preview models from OpenRouter
 
 ## [11.0.0] - 2026-02-05
 

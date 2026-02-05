@@ -8,7 +8,7 @@ const FILE_TYPE_SNIFF_BYTES = 4100;
 export async function detectSupportedImageMimeTypeFromFile(filePath: string): Promise<string | null> {
 	const fileHandle = await fs.open(filePath, "r");
 	try {
-		const buffer = Buffer.alloc(FILE_TYPE_SNIFF_BYTES);
+		const buffer = Buffer.allocUnsafe(FILE_TYPE_SNIFF_BYTES);
 		const { bytesRead } = await fileHandle.read(buffer, 0, FILE_TYPE_SNIFF_BYTES, 0);
 		if (bytesRead === 0) {
 			return null;

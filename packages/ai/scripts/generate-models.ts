@@ -192,7 +192,7 @@ interface KimiModelInfo {
 async function fetchKimiCodeModels(): Promise<Model<"openai-completions">[]> {
 	// Kimi Code /models endpoint requires authentication
 	// Use KIMI_API_KEY env var if available, otherwise return fallback models
-
+	const apiKey = $env.KIMI_API_KEY;
 	if (apiKey) {
 		try {
 			console.log("Fetching models from Kimi Code API...");
@@ -922,6 +922,18 @@ async function generateModels() {
 			input: ["text", "image"],
 			cost: { input: 1.75, output: 14, cacheRead: 0.175, cacheWrite: 0 },
 			contextWindow: CODEX_CONTEXT,
+			maxTokens: CODEX_MAX_TOKENS,
+		},
+		{
+			id: "gpt-5.3-codex",
+			name: "GPT-5.3 Codex",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: CODEX_BASE_URL,
+			reasoning: true,
+			input: ["text", "image"],
+			cost: { input: 1.75, output: 14, cacheRead: 0.175, cacheWrite: 0 },
+			contextWindow: 400000,
 			maxTokens: CODEX_MAX_TOKENS,
 		},
 	];

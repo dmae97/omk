@@ -87,8 +87,8 @@
 		"test": "bun test"
 	},
 	"dependencies": {
-		"@oclif/core": "^4.5.6",
-		"@oclif/plugin-autocomplete": "^3.2.23",
+		"@oclif/core": "^4.8.0",
+		"@oclif/plugin-autocomplete": "^3.2.40",
 		"@mozilla/readability": "0.6.0",
 		"@oh-my-pi/omp-stats": "workspace:*",
 		"@oh-my-pi/pi-agent-core": "workspace:*",
@@ -107,7 +107,7 @@
 		"jsdom": "28.0.0",
 		"marked": "^17.0.1",
 		"node-html-parser": "^7.0.2",
-		"puppeteer": "^24.36.1",
+		"puppeteer": "^24.37.1",
 		"smol-toml": "^1.6.0",
 		"zod": "^4.3.6"
 	},

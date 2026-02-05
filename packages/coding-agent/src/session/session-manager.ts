@@ -1,7 +1,7 @@
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Message, TextContent, Usage } from "@oh-my-pi/pi-ai";
-import { isEnoent, logger, Snowflake } from "@oh-my-pi/pi-utils";
+import { isEnoent, logger, parseJsonlLenient, Snowflake } from "@oh-my-pi/pi-utils";
 import { getAgentDir as getDefaultAgentDir } from "../config";
 import { resizeImage } from "../utils/image-resize";
 import {
@@ -279,32 +279,6 @@ function migrateToCurrentVersion(entries: FileEntry[]): boolean {
 	return true;
 }
 
-function parseJsonlEntries<T>(buffer: string): T[] {
-	let entries: T[] | undefined;
-
-	while (buffer.length > 0) {
-		const { values, error, read, done } = Bun.JSONL.parseChunk(buffer);
-		if (values.length > 0) {
-			const ext = values as T[];
-			if (!entries) {
-				entries = ext;
-			} else {
-				entries.push(...ext);
-			}
-		}
-		if (error) {
-			const nextNewline = buffer.indexOf("\n", read);
-			if (nextNewline === -1) break;
-			buffer = buffer.substring(nextNewline + 1);
-			continue;
-		}
-		if (read === 0) break;
-		buffer = buffer.substring(read);
-		if (done) break;
-	}
-	return entries ?? [];
-}
-
 /** Exported for testing */
 export function migrateSessionEntries(entries: FileEntry[]): void {
 	migrateToCurrentVersion(entries);
@@ -312,7 +286,7 @@ export function migrateSessionEntries(entries: FileEntry[]): void {
 
 /** Exported for compaction.test.ts */
 export function parseSessionEntries(content: string): FileEntry[] {
-	return parseJsonlEntries<FileEntry>(content);
+	return parseJsonlLenient<FileEntry>(content);
 }
 
 export function getLatestCompactionEntry(entries: SessionEntry[]): CompactionEntry | null {
@@ -485,7 +459,7 @@ export async function loadEntriesFromFile(
 		if (isEnoent(err)) return [];
 		throw err;
 	}
-	const entries = parseJsonlEntries<FileEntry>(content);
+	const entries = parseJsonlLenient<FileEntry>(content);
 
 	// Validate session header
 	if (entries.length === 0) return entries;
@@ -587,7 +561,7 @@ async function getSortedSessions(sessionDir: string, storage: SessionStorage): P
 			files.map(async (path: string) => {
 				try {
 					const content = await storage.readTextPrefix(path, 4096);
-					const entries = parseJsonlEntries<Record<string, unknown>>(content);
+					const entries = parseJsonlLenient<Record<string, unknown>>(content);
 					if (entries.length === 0) return;
 					const header = entries[0] as Record<string, unknown>;
 					if (header.type !== "session" || typeof header.id !== "string") return;
@@ -915,7 +889,7 @@ async function collectSessionsFromFiles(files: string[], storage: SessionStorage
 		files.map(async file => {
 			try {
 				const content = await storage.readText(file);
-				const entries = parseJsonlEntries<Record<string, unknown>>(content);
+				const entries = parseJsonlLenient<Record<string, unknown>>(content);
 				if (entries.length === 0) return;
 
 				// Check first entry for valid session header

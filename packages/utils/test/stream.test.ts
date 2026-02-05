@@ -1,9 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import {
 	createSanitizerStream,
-	createSplitterStream,
 	createTextDecoderStream,
-	createTextLineSplitter,
+	parseJsonlLenient,
+	readJsonl,
+	readLines,
 	readSseJson,
 	sanitizeBinaryOutput,
 	sanitizeText,
@@ -67,39 +68,51 @@ describe("sanitizeText", () => {
 	});
 });
 
-describe("createSplitterStream", () => {
+describe("readLines", () => {
 	it("splits lines across chunks without newlines", async () => {
-		const transform = createSplitterStream({
-			mapFn: chunk => new TextDecoder().decode(chunk),
+		const readable = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(encoder.encode("alpha\nbe"));
+				controller.enqueue(encoder.encode("ta\ngam"));
+				controller.enqueue(encoder.encode("ma"));
+				controller.close();
+			},
 		});
 
-		const output = await runTransform(transform, [
-			encoder.encode("alpha\nbe"),
-			encoder.encode("ta\ngam"),
-			encoder.encode("ma"),
-		]);
+		const output: string[] = [];
+		const dec = new TextDecoder();
+		for await (const line of readLines(readable)) {
+			output.push(dec.decode(line));
+		}
 
 		expect(output).toEqual(["alpha", "beta", "gamma"]);
 	});
-
-	it("includes newlines when requested", async () => {
-		const transform = createSplitterStream({
-			newLine: true,
-			mapFn: chunk => new TextDecoder().decode(chunk),
-		});
-
-		const output = await runTransform(transform, [encoder.encode("one\ntwo\n")]);
-
-		expect(output).toEqual(["one\n", "two\n"]);
-	});
 });
 
-describe("createTextLineSplitter", () => {
-	it("decodes utf-8 and sanitizes when requested", async () => {
-		const transform = createTextLineSplitter(true);
-		const output = await runTransform(transform, [encoder.encode("\u001b[32mgreen\u001b[0m\r\nblue\n")]);
+describe("readJsonl", () => {
+	it("parses JSONL across chunk boundaries", async () => {
+		const readable = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(encoder.encode('{"a":1}\n{"b":'));
+				controller.enqueue(encoder.encode('2}\n{"c":3}\n'));
+				controller.close();
+			},
+		});
 
-		expect(output).toEqual(["green", "blue"]);
+		const output = await collectAsync(readJsonl(readable));
+		expect(output).toEqual([{ a: 1 }, { b: 2 }, { c: 3 }]);
+	});
+
+	it("parses trailing line without newline", async () => {
+		const readable = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(encoder.encode('{"z":9}'));
+				controller.close();
+			},
+		});
+
+		const output = await collectAsync(readJsonl(readable));
+		expect(output).toEqual([{ z: 9 }]);
 	});
 });
 
@@ -118,6 +131,27 @@ describe("createTextDecoderStream", () => {
 		const output = await runTransform(transform, [encoder.encode("hello"), encoder.encode(" world")]);
 
 		expect(output.join("")).toBe("hello world");
+	});
+});
+
+describe("parseJsonlLenient", () => {
+	it("parses valid JSONL", () => {
+		const result = parseJsonlLenient<{ a: number }>('{"a":1}\n{"a":2}\n{"a":3}\n');
+		expect(result).toEqual([{ a: 1 }, { a: 2 }, { a: 3 }]);
+	});
+
+	it("skips malformed lines and continues", () => {
+		const result = parseJsonlLenient<{ a: number }>('{"a":1}\n{bad json}\n{"a":3}\n');
+		expect(result).toEqual([{ a: 1 }, { a: 3 }]);
+	});
+
+	it("returns empty array for empty input", () => {
+		expect(parseJsonlLenient("")).toEqual([]);
+	});
+
+	it("handles input without trailing newline", () => {
+		const result = parseJsonlLenient<{ x: number }>('{"x":42}');
+		expect(result).toEqual([{ x: 42 }]);
 	});
 });
 

@@ -10,7 +10,7 @@
  * - Events: AgentSessionEvent objects streamed as they occur
  * - Extension UI: Extension UI requests are emitted, client responds with extension_ui_response
  */
-import { createTextLineSplitter, Snowflake } from "@oh-my-pi/pi-utils";
+import { readJsonl, Snowflake } from "@oh-my-pi/pi-utils";
 import type { ExtensionUIContext, ExtensionUIDialogOptions } from "../../extensibility/extensions";
 import { type Theme, theme } from "../../modes/theme/theme";
 import type { AgentSession } from "../../session/agent-session";
@@ -633,37 +633,27 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 	}
 
 	// Listen for JSON input using Bun's stdin
-	for await (const line of Bun.stdin.stream().pipeThrough(createTextLineSplitter())) {
-		if (!line.trim()) continue;
-
-		const result = Bun.JSONL.parseChunk(`${line}\n`);
-		if (result.error) {
-			output(error(undefined, "parse", `Failed to parse command: ${result.error.message}`));
-			continue;
-		}
-
-		for (const parsed of result.values) {
-			try {
-				// Handle extension UI responses
-				if ((parsed as RpcExtensionUIResponse).type === "extension_ui_response") {
-					const response = parsed as RpcExtensionUIResponse;
-					const pending = pendingExtensionRequests.get(response.id);
-					if (pending) {
-						pending.resolve(response);
-					}
-					continue;
+	for await (const parsed of readJsonl(Bun.stdin.stream())) {
+		try {
+			// Handle extension UI responses
+			if ((parsed as RpcExtensionUIResponse).type === "extension_ui_response") {
+				const response = parsed as RpcExtensionUIResponse;
+				const pending = pendingExtensionRequests.get(response.id);
+				if (pending) {
+					pending.resolve(response);
 				}
-
-				// Handle regular commands
-				const command = parsed as RpcCommand;
-				const response = await handleCommand(command);
-				output(response);
-
-				// Check for deferred shutdown request (idle between commands)
-				await checkShutdownRequested();
-			} catch (e: any) {
-				output(error(undefined, "parse", `Failed to parse command: ${e.message}`));
+				continue;
 			}
+
+			// Handle regular commands
+			const command = parsed as RpcCommand;
+			const response = await handleCommand(command);
+			output(response);
+
+			// Check for deferred shutdown request (idle between commands)
+			await checkShutdownRequested();
+		} catch (e: any) {
+			output(error(undefined, "parse", `Failed to parse command: ${e.message}`));
 		}
 	}
 

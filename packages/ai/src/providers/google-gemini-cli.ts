@@ -5,7 +5,7 @@
  */
 import { createHash } from "node:crypto";
 import type { Content, ThinkingConfig } from "@google/genai";
-import { abortableSleep } from "@oh-my-pi/pi-utils";
+import { abortableSleep, readSseJson } from "@oh-my-pi/pi-utils";
 import { calculateCost } from "../models";
 import type {
 	Api,
@@ -523,211 +523,168 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 				const blocks = output.content;
 				const blockIndex = () => blocks.length - 1;
 
-				// Read SSE stream
-				const reader = activeResponse.body.getReader();
-				const decoder = new TextDecoder();
-				let buffer = "";
-				let jsonlBuffer = "";
+				for await (const chunk of readSseJson<CloudCodeAssistResponseChunk>(
+					activeResponse.body!,
+					options?.signal,
+				)) {
+					const responseData = chunk.response;
+					if (!responseData) continue;
 
-				// Set up abort handler to cancel reader when signal fires
-				const abortHandler = () => {
-					void reader.cancel().catch(() => {});
-				};
-				options?.signal?.addEventListener("abort", abortHandler);
-
-				try {
-					while (true) {
-						// Check abort signal before each read
-						if (options?.signal?.aborted) {
-							throw new Error("Request was aborted");
-						}
-
-						const { done, value } = await reader.read();
-						if (done) break;
-
-						buffer += decoder.decode(value, { stream: true });
-						const lines = buffer.split("\n");
-						buffer = lines.pop() || "";
-
-						for (const line of lines) {
-							if (!line.startsWith("data:")) continue;
-
-							const jsonStr = line.slice(5).trim();
-							if (!jsonStr) continue;
-							jsonlBuffer += `${jsonStr}\n`;
-							const parsed = Bun.JSONL.parseChunk(jsonlBuffer);
-							jsonlBuffer = jsonlBuffer.slice(parsed.read);
-							if (parsed.error) {
-								jsonlBuffer = "";
-								continue;
-							}
-
-							const chunk = parsed.values[0] as CloudCodeAssistResponseChunk | undefined;
-							if (!chunk) continue;
-
-							// Unwrap the response
-							const responseData = chunk.response;
-							if (!responseData) continue;
-
-							const candidate = responseData.candidates?.[0];
-							if (candidate?.content?.parts) {
-								for (const part of candidate.content.parts) {
-									if (part.text !== undefined) {
-										hasContent = true;
-										const isThinking = isThinkingPart(part);
-										if (
-											!currentBlock ||
-											(isThinking && currentBlock.type !== "thinking") ||
-											(!isThinking && currentBlock.type !== "text")
-										) {
-											if (currentBlock) {
-												if (currentBlock.type === "text") {
-													stream.push({
-														type: "text_end",
-														contentIndex: blocks.length - 1,
-														content: currentBlock.text,
-														partial: output,
-													});
-												} else {
-													stream.push({
-														type: "thinking_end",
-														contentIndex: blockIndex(),
-														content: currentBlock.thinking,
-														partial: output,
-													});
-												}
-											}
-											if (isThinking) {
-												currentBlock = { type: "thinking", thinking: "", thinkingSignature: undefined };
-												output.content.push(currentBlock);
-												ensureStarted();
-												stream.push({
-													type: "thinking_start",
-													contentIndex: blockIndex(),
-													partial: output,
-												});
-											} else {
-												currentBlock = { type: "text", text: "" };
-												output.content.push(currentBlock);
-												ensureStarted();
-												stream.push({ type: "text_start", contentIndex: blockIndex(), partial: output });
-											}
-										}
-										if (currentBlock.type === "thinking") {
-											currentBlock.thinking += part.text;
-											currentBlock.thinkingSignature = retainThoughtSignature(
-												currentBlock.thinkingSignature,
-												part.thoughtSignature,
-											);
+					const candidate = responseData.candidates?.[0];
+					if (candidate?.content?.parts) {
+						for (const part of candidate.content.parts) {
+							if (part.text !== undefined) {
+								hasContent = true;
+								const isThinking = isThinkingPart(part);
+								if (
+									!currentBlock ||
+									(isThinking && currentBlock.type !== "thinking") ||
+									(!isThinking && currentBlock.type !== "text")
+								) {
+									if (currentBlock) {
+										if (currentBlock.type === "text") {
 											stream.push({
-												type: "thinking_delta",
-												contentIndex: blockIndex(),
-												delta: part.text,
+												type: "text_end",
+												contentIndex: blocks.length - 1,
+												content: currentBlock.text,
 												partial: output,
 											});
 										} else {
-											currentBlock.text += part.text;
-											currentBlock.textSignature = retainThoughtSignature(
-												currentBlock.textSignature,
-												part.thoughtSignature,
-											);
 											stream.push({
-												type: "text_delta",
+												type: "thinking_end",
 												contentIndex: blockIndex(),
-												delta: part.text,
+												content: currentBlock.thinking,
 												partial: output,
 											});
 										}
 									}
-
-									if (part.functionCall) {
-										hasContent = true;
-										if (currentBlock) {
-											if (currentBlock.type === "text") {
-												stream.push({
-													type: "text_end",
-													contentIndex: blockIndex(),
-													content: currentBlock.text,
-													partial: output,
-												});
-											} else {
-												stream.push({
-													type: "thinking_end",
-													contentIndex: blockIndex(),
-													content: currentBlock.thinking,
-													partial: output,
-												});
-											}
-											currentBlock = null;
-										}
-
-										const providedId = part.functionCall.id;
-										const needsNewId =
-											!providedId || output.content.some(b => b.type === "toolCall" && b.id === providedId);
-										const toolCallId = needsNewId
-											? `${part.functionCall.name}_${Date.now()}_${++toolCallCounter}`
-											: providedId;
-
-										const toolCall: ToolCall = {
-											type: "toolCall",
-											id: toolCallId,
-											name: part.functionCall.name || "",
-											arguments: part.functionCall.args as Record<string, unknown>,
-											...(part.thoughtSignature && { thoughtSignature: part.thoughtSignature }),
-										};
-
-										output.content.push(toolCall);
+									if (isThinking) {
+										currentBlock = { type: "thinking", thinking: "", thinkingSignature: undefined };
+										output.content.push(currentBlock);
 										ensureStarted();
-										stream.push({ type: "toolcall_start", contentIndex: blockIndex(), partial: output });
 										stream.push({
-											type: "toolcall_delta",
+											type: "thinking_start",
 											contentIndex: blockIndex(),
-											delta: JSON.stringify(toolCall.arguments),
 											partial: output,
 										});
+									} else {
+										currentBlock = { type: "text", text: "" };
+										output.content.push(currentBlock);
+										ensureStarted();
+										stream.push({ type: "text_start", contentIndex: blockIndex(), partial: output });
+									}
+								}
+								if (currentBlock.type === "thinking") {
+									currentBlock.thinking += part.text;
+									currentBlock.thinkingSignature = retainThoughtSignature(
+										currentBlock.thinkingSignature,
+										part.thoughtSignature,
+									);
+									stream.push({
+										type: "thinking_delta",
+										contentIndex: blockIndex(),
+										delta: part.text,
+										partial: output,
+									});
+								} else {
+									currentBlock.text += part.text;
+									currentBlock.textSignature = retainThoughtSignature(
+										currentBlock.textSignature,
+										part.thoughtSignature,
+									);
+									stream.push({
+										type: "text_delta",
+										contentIndex: blockIndex(),
+										delta: part.text,
+										partial: output,
+									});
+								}
+							}
+
+							if (part.functionCall) {
+								hasContent = true;
+								if (currentBlock) {
+									if (currentBlock.type === "text") {
 										stream.push({
-											type: "toolcall_end",
+											type: "text_end",
 											contentIndex: blockIndex(),
-											toolCall,
+											content: currentBlock.text,
+											partial: output,
+										});
+									} else {
+										stream.push({
+											type: "thinking_end",
+											contentIndex: blockIndex(),
+											content: currentBlock.thinking,
 											partial: output,
 										});
 									}
+									currentBlock = null;
 								}
-							}
 
-							if (candidate?.finishReason) {
-								output.stopReason = mapStopReasonString(candidate.finishReason);
-								if (output.content.some(b => b.type === "toolCall")) {
-									output.stopReason = "toolUse";
-								}
-							}
+								const providedId = part.functionCall.id;
+								const needsNewId =
+									!providedId || output.content.some(b => b.type === "toolCall" && b.id === providedId);
+								const toolCallId = needsNewId
+									? `${part.functionCall.name}_${Date.now()}_${++toolCallCounter}`
+									: providedId;
 
-							if (responseData.usageMetadata) {
-								// promptTokenCount includes cachedContentTokenCount, so subtract to get fresh input
-								const promptTokens = responseData.usageMetadata.promptTokenCount || 0;
-								const cacheReadTokens = responseData.usageMetadata.cachedContentTokenCount || 0;
-								output.usage = {
-									input: promptTokens - cacheReadTokens,
-									output:
-										(responseData.usageMetadata.candidatesTokenCount || 0) +
-										(responseData.usageMetadata.thoughtsTokenCount || 0),
-									cacheRead: cacheReadTokens,
-									cacheWrite: 0,
-									totalTokens: responseData.usageMetadata.totalTokenCount || 0,
-									cost: {
-										input: 0,
-										output: 0,
-										cacheRead: 0,
-										cacheWrite: 0,
-										total: 0,
-									},
+								const toolCall: ToolCall = {
+									type: "toolCall",
+									id: toolCallId,
+									name: part.functionCall.name || "",
+									arguments: part.functionCall.args as Record<string, unknown>,
+									...(part.thoughtSignature && { thoughtSignature: part.thoughtSignature }),
 								};
-								calculateCost(model, output.usage);
+
+								output.content.push(toolCall);
+								ensureStarted();
+								stream.push({ type: "toolcall_start", contentIndex: blockIndex(), partial: output });
+								stream.push({
+									type: "toolcall_delta",
+									contentIndex: blockIndex(),
+									delta: JSON.stringify(toolCall.arguments),
+									partial: output,
+								});
+								stream.push({
+									type: "toolcall_end",
+									contentIndex: blockIndex(),
+									toolCall,
+									partial: output,
+								});
 							}
 						}
 					}
-				} finally {
-					options?.signal?.removeEventListener("abort", abortHandler);
+
+					if (candidate?.finishReason) {
+						output.stopReason = mapStopReasonString(candidate.finishReason);
+						if (output.content.some(b => b.type === "toolCall")) {
+							output.stopReason = "toolUse";
+						}
+					}
+
+					if (responseData.usageMetadata) {
+						// promptTokenCount includes cachedContentTokenCount, so subtract to get fresh input
+						const promptTokens = responseData.usageMetadata.promptTokenCount || 0;
+						const cacheReadTokens = responseData.usageMetadata.cachedContentTokenCount || 0;
+						output.usage = {
+							input: promptTokens - cacheReadTokens,
+							output:
+								(responseData.usageMetadata.candidatesTokenCount || 0) +
+								(responseData.usageMetadata.thoughtsTokenCount || 0),
+							cacheRead: cacheReadTokens,
+							cacheWrite: 0,
+							totalTokens: responseData.usageMetadata.totalTokenCount || 0,
+							cost: {
+								input: 0,
+								output: 0,
+								cacheRead: 0,
+								cacheWrite: 0,
+								total: 0,
+							},
+						};
+						calculateCost(model, output.usage);
+					}
 				}
 
 				if (currentBlock) {

@@ -5,7 +5,7 @@
  */
 import type { AgentEvent, AgentMessage, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent } from "@oh-my-pi/pi-ai";
-import { createTextLineSplitter, ptree } from "@oh-my-pi/pi-utils";
+import { ptree, readJsonl } from "@oh-my-pi/pi-utils";
 import type { BashResult } from "../../exec/bash-executor";
 import type { SessionStats } from "../../session/agent-session";
 import type { CompactionResult } from "../../session/compaction";
@@ -83,11 +83,11 @@ function isAgentEvent(value: unknown): value is AgentEvent {
 
 export class RpcClient {
 	private process: ptree.ChildProcess | null = null;
-	private lineReader: ReadableStream<string> | null = null;
 	private eventListeners: RpcEventListener[] = [];
 	private pendingRequests: Map<string, { resolve: (response: RpcResponse) => void; reject: (error: Error) => void }> =
 		new Map();
 	private requestId = 0;
+	private abortController = new AbortController();
 
 	constructor(private options: RpcClientOptions = {}) {}
 
@@ -119,19 +119,12 @@ export class RpcClient {
 		});
 
 		// Process lines in background
-		const lines = this.process.stdout.pipeThrough(createTextLineSplitter(true));
-		this.lineReader = lines;
+		const lines = readJsonl(this.process.stdout, this.abortController.signal);
 		void (async () => {
-			try {
-				for await (const line of lines) {
-					this.handleLine(line);
-				}
-			} catch {
-				// Stream closed
-			} finally {
-				lines.cancel();
+			for await (const line of lines) {
+				this.handleLine(line);
 			}
-		})();
+		})().catch(() => {});
 
 		// Wait a moment for process to initialize
 		await Bun.sleep(100);
@@ -154,11 +147,9 @@ export class RpcClient {
 	stop() {
 		if (!this.process) return;
 
-		this.lineReader?.cancel();
 		this.process.kill();
-
+		this.abortController.abort();
 		this.process = null;
-		this.lineReader = null;
 		this.pendingRequests.clear();
 	}
 
@@ -461,29 +452,23 @@ export class RpcClient {
 	// Internal
 	// =========================================================================
 
-	private handleLine(line: string): void {
-		const result = Bun.JSONL.parseChunk(line);
-		if (result.error) return;
-
-		for (const data of result.values) {
-			// Check if it's a response to a pending request
-			if (isRpcResponse(data)) {
-				const id = data.id;
-				if (id && this.pendingRequests.has(id)) {
-					const pending = this.pendingRequests.get(id)!;
-					this.pendingRequests.delete(id);
-					pending.resolve(data);
-					return;
-				}
-				continue;
+	private handleLine(data: unknown): void {
+		// Check if it's a response to a pending request
+		if (isRpcResponse(data)) {
+			const id = data.id;
+			if (id && this.pendingRequests.has(id)) {
+				const pending = this.pendingRequests.get(id)!;
+				this.pendingRequests.delete(id);
+				pending.resolve(data);
+				return;
 			}
+		}
 
-			if (!isAgentEvent(data)) continue;
+		if (!isAgentEvent(data)) return;
 
-			// Otherwise it's an event
-			for (const listener of this.eventListeners) {
-				listener(data);
-			}
+		// Otherwise it's an event
+		for (const listener of this.eventListeners) {
+			listener(data);
 		}
 	}
 

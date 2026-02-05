@@ -68,9 +68,11 @@ export async function convertWithMarkitdown(
 	}
 }
 
+const kEmptyBuffer = Buffer.alloc(0);
+
 export async function fetchBinary(url: string, timeout: number, userSignal?: AbortSignal): Promise<BinaryFetchResult> {
 	if (userSignal?.aborted) {
-		return { buffer: Buffer.alloc(0), contentType: "", ok: false, error: "aborted" };
+		return { buffer: kEmptyBuffer, contentType: "", ok: false, error: "aborted" };
 	}
 
 	const signal = ptree.combineSignals(userSignal, timeout * 1000);
@@ -89,7 +91,7 @@ export async function fetchBinary(url: string, timeout: number, userSignal?: Abo
 
 		if (!response.ok) {
 			return {
-				buffer: Buffer.alloc(0),
+				buffer: kEmptyBuffer,
 				contentType,
 				contentDisposition,
 				ok: false,
@@ -103,7 +105,7 @@ export async function fetchBinary(url: string, timeout: number, userSignal?: Abo
 			const size = Number.parseInt(contentLength, 10);
 			if (Number.isFinite(size) && size > MAX_BYTES) {
 				return {
-					buffer: Buffer.alloc(0),
+					buffer: kEmptyBuffer,
 					contentType,
 					contentDisposition,
 					ok: false,
@@ -116,7 +118,7 @@ export async function fetchBinary(url: string, timeout: number, userSignal?: Abo
 		const buffer = Buffer.from(await response.arrayBuffer());
 		if (buffer.length > MAX_BYTES) {
 			return {
-				buffer: Buffer.alloc(0),
+				buffer: kEmptyBuffer,
 				contentType,
 				contentDisposition,
 				ok: false,
@@ -128,10 +130,10 @@ export async function fetchBinary(url: string, timeout: number, userSignal?: Abo
 		return { buffer, contentType, contentDisposition, ok: true, status: response.status };
 	} catch (err) {
 		if (signal?.aborted) {
-			return { buffer: Buffer.alloc(0), contentType: "", ok: false, error: "aborted" };
+			return { buffer: kEmptyBuffer, contentType: "", ok: false, error: "aborted" };
 		}
 		return {
-			buffer: Buffer.alloc(0),
+			buffer: kEmptyBuffer,
 			contentType: "",
 			ok: false,
 			error: `request failed: ${String(err)}`,
