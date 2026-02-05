@@ -13,7 +13,6 @@ import { $env, logger } from "@oh-my-pi/pi-utils";
 import { getAgentDbPath, getConfigDirPaths } from "../../config";
 import { AgentStorage } from "../../session/agent-storage";
 import type { AuthCredential, AuthCredentialEntry, AuthStorageData } from "../../session/auth-storage";
-import { migrateJsonStorage } from "../../session/storage-migration";
 import type { AnthropicAuthConfig, AnthropicOAuthCredential, ModelsJson } from "./types";
 
 const DEFAULT_BASE_URL = "https://api.anthropic.com";
@@ -84,12 +83,6 @@ async function readLegacyAnthropicOAuthCredentials(configDir: string): Promise<A
  * @returns Array of valid Anthropic OAuth credentials
  */
 async function readAnthropicOAuthCredentials(configDir: string): Promise<AnthropicOAuthCredential[]> {
-	await migrateJsonStorage({
-		agentDir: configDir,
-		settingsPath: path.join(configDir, "settings.json"),
-		authPaths: [path.join(configDir, "auth.json")],
-	});
-
 	const storage = await AgentStorage.open(getAgentDbPath(configDir));
 	const records = storage.listAuthCredentials("anthropic");
 	const credentials: AnthropicOAuthCredential[] = [];

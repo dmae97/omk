@@ -5,7 +5,7 @@ import { $env, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value/index.mjs";
 import { Ajv, type ErrorObject, type ValidateFunction } from "ajv";
-import { JSONC, TOML, YAML } from "bun";
+import { JSONC, YAML } from "bun";
 // Embed package.json at build time for config
 import packageJson from "../package.json" with { type: "json" };
 
@@ -252,11 +252,6 @@ export function getAgentDir(): string {
 /** Get path to user's custom themes directory */
 export function getCustomThemesDir(): string {
 	return path.join(getAgentDir(), "themes");
-}
-
-/** Get path to auth.json */
-export function getAuthPath(): string {
-	return path.join(getAgentDir(), "auth.json");
 }
 
 /**

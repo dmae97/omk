@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `omp commit` command to generate commit messages and update changelogs with `--push`, `--dry-run`, `--no-changelog`, and model override flags
@@ -23,6 +22,8 @@
 
 ### Changed
 
+- Simplified `AuthStorage.create()` to accept direct agent.db path instead of legacy auth.json path with fallback resolution
+- Updated `discoverAuthStorage()` to skip JSON-to-SQLite migration step, improving startup performance
 - Renamed web search types and exports for consistency: `WebSearchProvider` → `SearchProviderId`, `WebSearchResponse` → `SearchResponse`, `WebSearchTool` → `SearchTool`, and related functions
 - Refactored web search provider system to use centralized provider registry with `getSearchProvider()` and `resolveProviderChain()` for improved provider management
 - Updated web search system prompt to emphasize comprehensive, detailed answers with concrete data and specific examples over brevity
@@ -38,6 +39,11 @@
 - Updated Perplexity search to use 'pro' search type for improved search quality and relevance
 - File mention messages now support both text content and image attachments, with optional line count for text files
 - Updated file mention processing to respect image auto-resize settings
+
+### Removed
+
+- Removed legacy auth.json migration system—credentials are now stored exclusively in agent.db
+- Removed `getAuthPath()` configuration function—use `getAgentDbPath()` for credential storage location
 
 ### Fixed
 

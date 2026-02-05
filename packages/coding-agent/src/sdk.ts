@@ -50,7 +50,6 @@ import { AgentSession } from "./session/agent-session";
 import { AuthStorage } from "./session/auth-storage";
 import { convertToLlm } from "./session/messages";
 import { SessionManager } from "./session/session-manager";
-import { migrateJsonStorage } from "./session/storage-migration";
 import { closeAllConnections } from "./ssh/connection-manager";
 import { unmountAll } from "./ssh/sshfs-mount";
 import {
@@ -234,17 +233,9 @@ export async function discoverAuthStorage(agentDir: string = getDefaultAgentDir(
 	// Get all auth.json paths (user-level only), excluding the primary
 	const allPaths = getConfigDirPaths("auth.json", { project: false });
 	const fallbackPaths = allPaths.filter(p => p !== primaryPath);
-
 	logger.debug("discoverAuthStorage", { agentDir, primaryPath, allPaths, fallbackPaths });
 
-	// Migrate legacy JSON files (settings.json, auth.json) to SQLite before loading
-	await migrateJsonStorage({
-		agentDir,
-		settingsPath: path.join(agentDir, "settings.json"),
-		authPaths: [primaryPath, ...fallbackPaths],
-	});
-
-	const storage = await AuthStorage.create(primaryPath, fallbackPaths);
+	const storage = await AuthStorage.create(primaryPath);
 	await storage.reload();
 	return storage;
 }

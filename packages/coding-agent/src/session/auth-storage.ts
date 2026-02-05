@@ -2,7 +2,6 @@
  * Credential storage for API keys and OAuth tokens.
  * Handles loading, saving, and refreshing credentials from agent.db.
  */
-import * as path from "node:path";
 import {
 	antigravityUsageProvider,
 	claudeUsageProvider,
@@ -34,9 +33,8 @@ import {
 	zaiUsageProvider,
 } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
-import { getAgentDbPath, getAuthPath } from "../config";
+import { getAgentDbPath } from "../config";
 import { AgentStorage } from "./agent-storage";
-import { migrateJsonStorage } from "./storage-migration";
 
 export type ApiKeyCredential = {
 	type: "api_key";
@@ -67,7 +65,6 @@ export interface SerializedAuthStorage {
 		}>
 	>;
 	runtimeOverrides?: Record<string, string>;
-	authPath?: string;
 	dbPath?: string;
 }
 
@@ -147,8 +144,6 @@ export class AuthStorage {
 
 	/** Provider -> credentials cache, populated from agent.db on reload(). */
 	private data: Map<string, StoredCredential[]> = new Map();
-	/** Resolved path to agent.db (derived from authPath or used directly if .db). */
-	private dbPath: string;
 	private runtimeOverrides: Map<string, string> = new Map();
 	/** Tracks next credential index per provider:type key for round-robin distribution (non-session use). */
 	private providerRoundRobinIndex: Map<string, number> = new Map();
@@ -164,12 +159,10 @@ export class AuthStorage {
 	private fallbackResolver?: (provider: string) => string | undefined;
 
 	private constructor(
-		private authPath: string,
-		private fallbackPaths: string[] = [],
+		private dbPath: string,
 		private storage: AgentStorage,
 		options: AuthStorageOptions = {},
 	) {
-		this.dbPath = AuthStorage.resolveDbPath(authPath);
 		this.usageProviderResolver = options.usageProviderResolver ?? resolveDefaultUsageProvider;
 		this.usageCache = options.usageCache ?? new AuthStorageUsageCache(this.storage);
 		this.usageFetch = options.usageFetch ?? fetch;
@@ -184,17 +177,11 @@ export class AuthStorage {
 
 	/**
 	 * Create an AuthStorage instance.
-	 * @param authPath - Legacy auth.json path used for migration and locating agent.db
-	 * @param fallbackPaths - Additional auth.json paths to migrate (legacy support)
+	 * @param dbPath - Path to agent.db
 	 */
-	static async create(
-		authPath: string,
-		fallbackPaths: string[] = [],
-		options: AuthStorageOptions = {},
-	): Promise<AuthStorage> {
-		const dbPath = AuthStorage.resolveDbPath(authPath);
+	static async create(dbPath: string, options: AuthStorageOptions = {}): Promise<AuthStorage> {
 		const storage = await AgentStorage.open(dbPath);
-		return new AuthStorage(authPath, fallbackPaths, storage, options);
+		return new AuthStorage(dbPath, storage, options);
 	}
 
 	/**
@@ -202,13 +189,10 @@ export class AuthStorage {
 	 * Used by subagent workers to bypass discovery and use parent's credentials.
 	 */
 	static async fromSerialized(data: SerializedAuthStorage, options: AuthStorageOptions = {}): Promise<AuthStorage> {
-		const authPath = data.authPath ?? data.dbPath ?? getAuthPath();
-		const dbPath = data.dbPath ?? AuthStorage.resolveDbPath(authPath);
+		const dbPath = data.dbPath ?? getAgentDbPath();
 		const storage = await AgentStorage.open(dbPath);
 
 		const instance = Object.create(AuthStorage.prototype) as AuthStorage;
-		instance.authPath = authPath;
-		instance.fallbackPaths = [];
 		instance.dbPath = dbPath;
 		instance.storage = storage;
 		instance.data = new Map();
@@ -268,21 +252,8 @@ export class AuthStorage {
 		return {
 			credentials,
 			runtimeOverrides: Object.keys(runtimeOverrides).length > 0 ? runtimeOverrides : undefined,
-			authPath: this.authPath,
 			dbPath: this.dbPath,
 		};
-	}
-
-	/**
-	 * Converts legacy auth.json path to agent.db path, or returns .db path as-is.
-	 * @param authPath - Path to auth.json or agent.db
-	 * @returns Resolved path to agent.db
-	 */
-	private static resolveDbPath(authPath: string): string {
-		if (authPath.endsWith(".db")) {
-			return authPath;
-		}
-		return getAgentDbPath(path.dirname(authPath));
 	}
 
 	/**
@@ -313,13 +284,6 @@ export class AuthStorage {
 	 * Migrates legacy auth.json/settings.json on first load.
 	 */
 	async reload(): Promise<void> {
-		const agentDir = path.dirname(this.dbPath);
-		await migrateJsonStorage({
-			agentDir,
-			settingsPath: path.join(agentDir, "settings.json"),
-			authPaths: [this.authPath, ...this.fallbackPaths],
-		});
-
 		const records = this.storage.listAuthCredentials();
 		const grouped = new Map<string, StoredCredential[]>();
 		for (const record of records) {
