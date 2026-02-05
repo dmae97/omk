@@ -35,7 +35,15 @@ import { AgentOutputManager } from "./output-manager";
 import { mapWithConcurrencyLimit } from "./parallel";
 import { renderCall, renderResult } from "./render";
 import { renderTemplate } from "./template";
-import { type AgentProgress, type SingleResult, type TaskParams, type TaskToolDetails, taskSchema } from "./types";
+import {
+	type AgentProgress,
+	type SingleResult,
+	type TaskParams,
+	type TaskSchema,
+	type TaskToolDetails,
+	taskSchema,
+	taskSchemaNoIsolation,
+} from "./types";
 import {
 	applyBaseline,
 	captureBaseline,
@@ -102,12 +110,13 @@ export { taskSchema } from "./types";
 /**
  * Build dynamic tool description listing available agents.
  */
-async function buildDescription(cwd: string, maxConcurrency: number): Promise<string> {
+async function buildDescription(cwd: string, maxConcurrency: number, isolationEnabled: boolean): Promise<string> {
 	const { agents } = await discoverAgents(cwd);
 
 	return renderPromptTemplate(taskDescriptionTemplate, {
 		agents,
 		MAX_CONCURRENCY: maxConcurrency,
+		isolationEnabled,
 	});
 }
 
@@ -121,10 +130,10 @@ async function buildDescription(cwd: string, maxConcurrency: number): Promise<st
  * Requires async initialization to discover available agents.
  * Use `TaskTool.create(session)` to instantiate.
  */
-export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, Theme> {
+export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 	public readonly name = "task";
 	public readonly label = "Task";
-	public readonly parameters = taskSchema;
+	public readonly parameters: TaskSchema;
 	public readonly renderCall = renderCall;
 	public readonly renderResult = renderResult;
 
@@ -133,7 +142,9 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 	private constructor(
 		private readonly session: ToolSession,
 		public readonly description: string,
+		isolationEnabled: boolean,
 	) {
+		this.parameters = isolationEnabled ? taskSchema : taskSchemaNoIsolation;
 		this.blockedAgent = $env.PI_BLOCKED_AGENT;
 	}
 
@@ -142,8 +153,9 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 	 */
 	public static async create(session: ToolSession): Promise<TaskTool> {
 		const maxConcurrency = session.settings.get("task.maxConcurrency");
-		const description = await buildDescription(session.cwd, maxConcurrency);
-		return new TaskTool(session, description);
+		const isolationEnabled = session.settings.get("task.isolation.enabled");
+		const description = await buildDescription(session.cwd, maxConcurrency, isolationEnabled);
+		return new TaskTool(session, description, isolationEnabled);
 	}
 
 	public async execute(
@@ -154,10 +166,28 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 	): Promise<AgentToolResult<TaskToolDetails>> {
 		const startTime = Date.now();
 		const { agents, projectAgentsDir } = await discoverAgents(this.session.cwd);
-		const { agent: agentName, context, schema: outputSchema, isolated } = params;
-		const isIsolated = isolated === true;
+		const { agent: agentName, context, schema: outputSchema } = params;
+		const isolationEnabled = this.session.settings.get("task.isolation.enabled");
+		const isolationRequested = "isolated" in params ? params.isolated === true : false;
+		const isIsolated = isolationEnabled && isolationRequested;
 		const maxConcurrency = this.session.settings.get("task.maxConcurrency");
 		const taskDepth = this.session.taskDepth ?? 0;
+
+		if (!isolationEnabled && "isolated" in params) {
+			return {
+				content: [
+					{
+						type: "text",
+						text: "Task isolation is disabled. Remove the isolated argument to run subagents.",
+					},
+				],
+				details: {
+					projectAgentsDir,
+					results: [],
+					totalDurationMs: 0,
+				},
+			};
+		}
 
 		// Validate agent exists
 		const agent = getAgent(agents, agentName);

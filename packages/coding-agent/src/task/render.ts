@@ -443,7 +443,7 @@ export function renderCall(args: TaskParams, theme: Theme): Component {
 	const branch = theme.fg("dim", theme.tree.branch);
 	const last = theme.fg("dim", theme.tree.last);
 	const vertical = theme.fg("dim", theme.tree.vertical);
-	const showIsolated = args.isolated === true;
+	const showIsolated = "isolated" in args && args.isolated === true;
 
 	if (hasContext) {
 		lines.push(` ${branch} ${theme.fg("dim", "Context")}`);

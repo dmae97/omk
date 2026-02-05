@@ -399,6 +399,16 @@ export const SETTINGS_SCHEMA = {
 	// ─────────────────────────────────────────────────────────────────────────
 	// Task tool settings
 	// ─────────────────────────────────────────────────────────────────────────
+	"task.isolation.enabled": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "tools",
+			label: "Task isolation",
+			description: "Run subagents in isolated git worktrees",
+			submenu: true,
+		},
+	},
 	"task.maxConcurrency": {
 		type: "number",
 		default: 32,

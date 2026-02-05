@@ -62,10 +62,11 @@ Array tasks execute in parallel.
 |`assignment`|✓|Complete per-task instructions. See [Writing an assignment](#writing-an-assignment).|
 |`skills`||Skill names preload. Use only when changes correctness — don’t spam every task.|
 
+{{#if isolationEnabled}}
 ### `isolated` (optional)
 
 Run in isolated git worktree; returns patches. Use when tasks edit overlapping files or when you want clean per-task diffs.
-
+{{/if}}
 ### `schema` (optional — recommended for structured output)
 
 JTD schema defining expected response structure. Use typed properties. If you care about parsing result, define here — **never describe output format in `context` or `assignment`**.

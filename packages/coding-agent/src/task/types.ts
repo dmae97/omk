@@ -51,32 +51,47 @@ export const taskItemSchema = Type.Object({
 });
 export type TaskItem = Static<typeof taskItemSchema>;
 
-export const taskSchema = Type.Object({
-	agent: Type.String({ description: "Agent type for all tasks in this batch" }),
-	context: Type.Optional(
-		Type.String({
+const createTaskSchema = (options: { isolationEnabled: boolean }) => {
+	const properties = {
+		agent: Type.String({ description: "Agent type for all tasks in this batch" }),
+		context: Type.Optional(
+			Type.String({
+				description:
+					"Shared background prepended to every task's assignment. Put goal, non-goals, constraints, conventions, reference paths, API contracts, and global acceptance commands here once — instead of duplicating across assignments.",
+			}),
+		),
+		schema: Type.Optional(
+			Type.Record(Type.String(), Type.Unknown(), {
+				description:
+					"JTD schema defining expected response structure. Use typed properties. Output format belongs here — never in context or assignment.",
+			}),
+		),
+		tasks: Type.Array(taskItemSchema, {
 			description:
-				"Shared background prepended to every task's assignment. Put goal, non-goals, constraints, conventions, reference paths, API contracts, and global acceptance commands here once — instead of duplicating across assignments.",
+				"Tasks to execute in parallel. Each must be small-scoped (3-5 files max) and self-contained given context + assignment.",
 		}),
-	),
-	isolated: Type.Optional(
-		Type.Boolean({
-			description: "Run in isolated git worktree; returns patches. Use when tasks edit overlapping files.",
-		}),
-	),
-	schema: Type.Optional(
-		Type.Record(Type.String(), Type.Unknown(), {
-			description:
-				"JTD schema defining expected response structure. Use typed properties. Output format belongs here — never in context or assignment.",
-		}),
-	),
-	tasks: Type.Array(taskItemSchema, {
-		description:
-			"Tasks to execute in parallel. Each must be small-scoped (3-5 files max) and self-contained given context + assignment.",
-	}),
-});
+	};
 
-export type TaskParams = Static<typeof taskSchema>;
+	if (options.isolationEnabled) {
+		return Type.Object({
+			...properties,
+			isolated: Type.Optional(
+				Type.Boolean({
+					description: "Run in isolated git worktree; returns patches. Use when tasks edit overlapping files.",
+				}),
+			),
+		});
+	}
+
+	return Type.Object(properties);
+};
+
+export const taskSchema = createTaskSchema({ isolationEnabled: true });
+export const taskSchemaNoIsolation = createTaskSchema({ isolationEnabled: false });
+
+export type TaskSchema = typeof taskSchema | typeof taskSchemaNoIsolation;
+
+export type TaskParams = Static<TaskSchema>;
 
 /** A code review finding reported by the reviewer agent */
 export interface ReviewFinding {
