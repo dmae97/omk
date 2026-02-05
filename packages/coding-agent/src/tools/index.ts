@@ -127,6 +127,8 @@ export interface ToolSession {
 	outputSchema?: unknown;
 	/** Whether to include the submit_result tool by default */
 	requireSubmitResultTool?: boolean;
+	/** Task recursion depth (0 = top-level, 1 = first child, etc.) */
+	taskDepth?: number;
 	/** Get session file */
 	getSessionFile: () => string | null;
 	/** Get session ID */
@@ -287,6 +289,11 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 		if (name === "lsp") return session.settings.get("lsp.enabled");
 		if (name === "calc") return session.settings.get("calc.enabled");
 		if (name === "browser") return session.settings.get("browser.enabled");
+		if (name === "task") {
+			const maxDepth = session.settings.get("task.maxRecursionDepth") ?? 2;
+			const currentDepth = session.taskDepth ?? 0;
+			return maxDepth < 0 || currentDepth < maxDepth;
+		}
 		return true;
 	};
 	if (includeSubmitResult && requestedTools && !requestedTools.includes("submit_result")) {

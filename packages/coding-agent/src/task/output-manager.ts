@@ -3,24 +3,33 @@
  *
  * Ensures unique output IDs across task tool invocations within a session.
  * Prefixes each ID with a sequential number (e.g., "0-AuthProvider", "1-AuthApi").
+ * If a parent prefix is provided, IDs are nested (e.g., "0-Auth.1-Subtask").
  *
  * This enables reliable agent:// URL resolution and prevents artifact collisions.
  */
 import * as fs from "node:fs/promises";
 
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /**
  * Manages agent output ID allocation to ensure uniqueness.
  *
  * Each allocated ID gets a numeric prefix based on allocation order.
+ * If configured with a parent prefix, the numeric prefix is appended after
+ * the parent (e.g., "0-Parent.0-Child").
  * On resume, scans existing files to find the next available index.
  */
 export class AgentOutputManager {
 	#nextId = 0;
 	#initialized = false;
 	readonly #getArtifactsDir: () => string | null;
+	readonly #parentPrefix: string | undefined;
 
-	constructor(getArtifactsDir: () => string | null) {
+	constructor(getArtifactsDir: () => string | null, options?: { parentPrefix?: string }) {
 		this.#getArtifactsDir = getArtifactsDir;
+		this.#parentPrefix = options?.parentPrefix;
 	}
 
 	/**
@@ -41,12 +50,15 @@ export class AgentOutputManager {
 			return; // Directory doesn't exist yet
 		}
 
+		const pattern = this.#parentPrefix
+			? new RegExp(`^${escapeRegExp(this.#parentPrefix)}\\.(\\d+)-.*\\.md$`)
+			: /^(\d+)-.*\.md$/;
+
 		let maxId = -1;
 		for (const file of files) {
-			// Agent outputs are named: {index}-{id}.md (e.g., "0-AuthProvider.md")
-			const match = file.match(/^(\d+)-.*\.md$/);
+			const match = file.match(pattern);
 			if (match) {
-				const id = parseInt(match[1], 10);
+				const id = Number.parseInt(match[1], 10);
 				if (id > maxId) maxId = id;
 			}
 		}
@@ -61,7 +73,8 @@ export class AgentOutputManager {
 	 */
 	async allocate(id: string): Promise<string> {
 		await this.#ensureInitialized();
-		return `${this.#nextId++}-${id}`;
+		const prefix = this.#parentPrefix ? `${this.#parentPrefix}.` : "";
+		return `${prefix}${this.#nextId++}-${id}`;
 	}
 
 	/**
@@ -72,7 +85,8 @@ export class AgentOutputManager {
 	 */
 	async allocateBatch(ids: string[]): Promise<string[]> {
 		await this.#ensureInitialized();
-		return ids.map(id => `${this.#nextId++}-${id}`);
+		const prefix = this.#parentPrefix ? `${this.#parentPrefix}.` : "";
+		return ids.map(id => `${prefix}${this.#nextId++}-${id}`);
 	}
 
 	/**

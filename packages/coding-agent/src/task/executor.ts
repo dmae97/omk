@@ -157,6 +157,8 @@ export interface ExecutorOptions {
 	modelOverride?: string | string[];
 	thinkingLevel?: ThinkingLevel;
 	outputSchema?: unknown;
+	/** Parent task recursion depth (0 = top-level, 1 = first child, etc.) */
+	taskDepth?: number;
 	enableLsp?: boolean;
 	signal?: AbortSignal;
 	onProgress?: (progress: AgentProgress) => void;
@@ -428,17 +430,25 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		subtaskSessionFile = path.join(options.artifactsDir, `${id}.jsonl`);
 	}
 
+	const settings = options.settings ?? Settings.isolated();
+	const maxRecursionDepth = settings.get("task.maxRecursionDepth") ?? 2;
+	const parentDepth = options.taskDepth ?? 0;
+	const childDepth = parentDepth + 1;
+	const atMaxDepth = maxRecursionDepth >= 0 && childDepth >= maxRecursionDepth;
+
 	// Add tools if specified
 	let toolNames: string[] | undefined;
 	if (agent.tools && agent.tools.length > 0) {
 		toolNames = agent.tools;
 		// Auto-include task tool if spawns defined but task not in tools
-		if (agent.spawns !== undefined && !toolNames.includes("task")) {
+		if (agent.spawns !== undefined && !toolNames.includes("task") && !atMaxDepth) {
 			toolNames = [...toolNames, "task"];
 		}
 	}
 
-	const settings = options.settings ?? Settings.isolated();
+	if (atMaxDepth && toolNames?.includes("task")) {
+		toolNames = toolNames.filter(name => name !== "task");
+	}
 	const pythonToolMode = settings.get("python.toolMode") ?? "both";
 	if (toolNames?.includes("exec")) {
 		const expanded = toolNames.filter(name => name !== "exec");
@@ -454,7 +464,13 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 
 	const modelPatterns = normalizeModelPatterns(modelOverride ?? agent.model);
 	const sessionFile = subtaskSessionFile ?? null;
-	const spawnsEnv = agent.spawns === undefined ? "" : agent.spawns === "*" ? "*" : agent.spawns.join(",");
+	const spawnsEnv = atMaxDepth
+		? ""
+		: agent.spawns === undefined
+			? ""
+			: agent.spawns === "*"
+				? "*"
+				: agent.spawns.join(",");
 
 	const lspEnabled = enableLsp ?? true;
 	const skipPythonPreflight = Array.isArray(toolNames) && !toolNames.includes("python");
@@ -877,6 +893,8 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				sessionManager,
 				hasUI: false,
 				spawns: spawnsEnv,
+				taskDepth: childDepth,
+				parentTaskPrefix: id,
 				enableLsp: lspEnabled,
 				skipPythonPreflight,
 				enableMCP,

@@ -158,6 +158,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 		const { agent: agentName, context, schema: outputSchema, isolated } = params;
 		const isIsolated = isolated === true;
 		const maxConcurrency = this.session.settings.get("task.maxConcurrency");
+		const taskDepth = this.session.taskDepth ?? 0;
 
 		// Validate agent exists
 		const agent = getAgent(agents, agentName);
@@ -447,6 +448,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 						index,
 						id: task.id,
 						context: undefined, // Already prepended above
+						taskDepth,
 						modelOverride,
 						thinkingLevel: thinkingLevelOverride,
 						outputSchema: effectiveOutputSchema,
@@ -492,6 +494,7 @@ export class TaskTool implements AgentTool<typeof taskSchema, TaskToolDetails, T
 						index,
 						id: task.id,
 						context: undefined, // Already prepended above
+						taskDepth,
 						modelOverride,
 						thinkingLevel: thinkingLevelOverride,
 						outputSchema: effectiveOutputSchema,

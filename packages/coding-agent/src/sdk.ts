@@ -183,6 +183,10 @@ export interface CreateAgentSessionOptions {
 	outputSchema?: unknown;
 	/** Whether to include the submit_result tool by default */
 	requireSubmitResultTool?: boolean;
+	/** Task recursion depth (for subagent sessions). Default: 0 */
+	taskDepth?: number;
+	/** Parent task ID prefix for nested artifact naming (e.g., "6-Extensions") */
+	parentTaskPrefix?: string;
 
 	/** Session manager. Default: SessionManager.create(cwd) */
 	sessionManager?: SessionManager;
@@ -728,6 +732,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		eventBus,
 		outputSchema: options.outputSchema,
 		requireSubmitResultTool: options.requireSubmitResultTool,
+		taskDepth: options.taskDepth ?? 0,
 		getSessionFile: () => sessionManager.getSessionFile() ?? null,
 		getSessionId: () => sessionManager.getSessionId?.() ?? null,
 		getSessionSpawns: () => options.spawns ?? "*",
@@ -772,7 +777,10 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	);
 	toolSession.internalRouter = internalRouter;
 	toolSession.getArtifactsDir = getArtifactsDir;
-	toolSession.agentOutputManager = new AgentOutputManager(getArtifactsDir);
+	toolSession.agentOutputManager = new AgentOutputManager(
+		getArtifactsDir,
+		options.parentTaskPrefix ? { parentPrefix: options.parentTaskPrefix } : undefined,
+	);
 
 	debugStartup("sdk:createTools:start");
 	// Create and wrap tools with meta notice formatting
@@ -996,7 +1004,6 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			toolNames,
 			rules: rulebookRules,
 			skillsSettings: settingsInstance.getGroup("skills") as SkillsSettings,
-			isCoordinator: options.hasUI,
 		});
 
 		if (options.systemPrompt === undefined) {
@@ -1013,7 +1020,6 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				rules: rulebookRules,
 				skillsSettings: settingsInstance.getGroup("skills") as SkillsSettings,
 				customPrompt: options.systemPrompt,
-				isCoordinator: options.hasUI,
 			});
 		}
 		return options.systemPrompt(defaultPrompt);

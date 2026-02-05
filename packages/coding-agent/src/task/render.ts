@@ -77,6 +77,18 @@ function formatJsonScalar(value: unknown, _theme: Theme): string {
 	return "";
 }
 
+function formatTaskId(id: string): string {
+	const segments = id.split(".");
+	if (segments.length < 2) return id;
+
+	const parsed = segments.map(segment => segment.match(/^(\d+)-(.+)$/));
+	if (parsed.some(match => !match)) return id;
+
+	const indices = parsed.map(match => match![1]).join(".");
+	const labels = parsed.map(match => match![2]).join(">");
+	return `${indices} ${labels}`;
+}
+
 const MISSING_SUBMIT_RESULT_WARNING_PREFIX = "SYSTEM WARNING: Subagent exited without calling submit_result tool";
 
 function extractMissingSubmitResultWarning(output: string): { warning?: string; rest: string } {
@@ -518,7 +530,8 @@ function renderAgentProgress(
 
 	// Main status line: id: description [status] · stats · ⟨agent⟩
 	const description = progress.description?.trim();
-	const titlePart = description ? `${theme.bold(progress.id)}: ${description}` : progress.id;
+	const displayId = formatTaskId(progress.id);
+	const titlePart = description ? `${theme.bold(displayId)}: ${description}` : displayId;
 	let statusLine = `${prefix} ${theme.fg(iconColor, icon)} ${theme.fg("accent", titlePart)}`;
 
 	// Only show badge for non-running states (spinner already indicates running)
@@ -748,7 +761,8 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 
 	// Main status line: id: description [status] · stats · ⟨agent⟩
 	const description = result.description?.trim();
-	const titlePart = description ? `${theme.bold(result.id)}: ${description}` : result.id;
+	const displayId = formatTaskId(result.id);
+	const titlePart = description ? `${theme.bold(displayId)}: ${description}` : displayId;
 	let statusLine = `${prefix} ${theme.fg(iconColor, icon)} ${theme.fg("accent", titlePart)} ${formatBadge(
 		statusText,
 		iconColor,
