@@ -13,12 +13,9 @@ import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { Snowflake } from "@oh-my-pi/pi-utils";
+import { e2eApiKey } from "../../ai/test/oauth";
 
-/**
- * API key for authenticated tests. Tests using this should be wrapped in
- * describe.skipIf(!API_KEY)
- */
-export const API_KEY = process.env.E2E ? process.env.ANTHROPIC_OAUTH_TOKEN || process.env.ANTHROPIC_API_KEY : undefined;
+export { e2eApiKey };
 
 /**
  * Create a minimal user message for testing.
@@ -91,7 +88,7 @@ export async function createTestSession(options: TestSessionOptions = {}): Promi
 
 	const model = getModel("anthropic", "claude-sonnet-4-5")!;
 	const agent = new Agent({
-		getApiKey: () => API_KEY,
+		getApiKey: () => e2eApiKey("ANTHROPIC_API_KEY"),
 		initialState: {
 			model,
 			systemPrompt: options.systemPrompt ?? "You are a helpful assistant. Be extremely concise.",

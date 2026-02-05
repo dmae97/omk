@@ -13,6 +13,7 @@ import {
 import { RpcClient } from "@oh-my-pi/pi-coding-agent/modes/rpc/rpc-client";
 import type { BashExecutionMessage } from "@oh-my-pi/pi-coding-agent/session/messages";
 import { Snowflake } from "@oh-my-pi/pi-utils";
+import { e2eApiKey } from "./utilities";
 
 type MessageEndEvent = Extract<AgentEvent, { type: "message_end" }>;
 
@@ -27,7 +28,7 @@ const isCompactionEntry = (entry: FileEntry): entry is CompactionEntry => entry.
 /**
  * RPC mode tests.
  */
-describe.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_OAUTH_TOKEN)("RPC mode", () => {
+describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("RPC mode", () => {
 	let client: RpcClient;
 	let sessionDir: string;
 

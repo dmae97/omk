@@ -9,9 +9,9 @@
  * - Abort handling during summarization
  */
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { API_KEY, createTestSession, type TestSessionContext } from "./utilities";
+import { createTestSession, e2eApiKey, type TestSessionContext } from "./utilities";
 
-describe.skipIf(!API_KEY)("AgentSession tree navigation e2e", () => {
+describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("AgentSession tree navigation e2e", () => {
 	let ctx: TestSessionContext;
 
 	beforeEach(async () => {
@@ -270,7 +270,7 @@ describe.skipIf(!API_KEY)("AgentSession tree navigation e2e", () => {
 	}, 120000);
 });
 
-describe.skipIf(!API_KEY)("AgentSession tree navigation - branch scenarios", () => {
+describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("AgentSession tree navigation - branch scenarios", () => {
 	let ctx: TestSessionContext;
 
 	beforeEach(async () => {

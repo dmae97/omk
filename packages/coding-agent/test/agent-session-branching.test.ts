@@ -20,9 +20,9 @@ import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { Snowflake } from "@oh-my-pi/pi-utils";
-import { API_KEY } from "./utilities";
+import { e2eApiKey } from "./utilities";
 
-describe.skipIf(!API_KEY)("AgentSession branching", () => {
+describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("AgentSession branching", () => {
 	let session: AgentSession;
 	let tempDir: string;
 	let sessionManager: SessionManager;
@@ -54,7 +54,7 @@ describe.skipIf(!API_KEY)("AgentSession branching", () => {
 
 		const model = getModel("anthropic", "claude-sonnet-4-5")!;
 		const agent = new Agent({
-			getApiKey: () => API_KEY,
+			getApiKey: () => e2eApiKey("ANTHROPIC_API_KEY"),
 			initialState: {
 				model,
 				systemPrompt: "You are a helpful assistant. Be extremely concise, reply with just a few words.",

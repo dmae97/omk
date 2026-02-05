@@ -21,11 +21,11 @@ import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { Snowflake } from "@oh-my-pi/pi-utils";
-import { API_KEY } from "./utilities";
+import { e2eApiKey } from "./utilities";
 
 // Check for auth
 const HAS_ANTIGRAVITY_AUTH = false; // OAuth not available in test environment
-const HAS_ANTHROPIC_AUTH = !!API_KEY;
+const HAS_ANTHROPIC_AUTH = !!e2eApiKey("ANTHROPIC_API_KEY");
 
 describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigravity)", () => {
 	let session: AgentSession;
@@ -64,7 +64,7 @@ describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigra
 		}
 
 		const agent = new Agent({
-			getApiKey: () => API_KEY,
+			getApiKey: () => e2eApiKey("ANTHROPIC_API_KEY"),
 			initialState: {
 				model,
 				systemPrompt: "You are a helpful assistant. Be concise.",
@@ -167,7 +167,7 @@ describe.skipIf(!HAS_ANTHROPIC_AUTH)("Compaction with thinking models (Anthropic
 		const tools = await createTools(toolSession);
 
 		const agent = new Agent({
-			getApiKey: () => API_KEY,
+			getApiKey: () => e2eApiKey("ANTHROPIC_API_KEY"),
 			initialState: {
 				model,
 				systemPrompt: "You are a helpful assistant. Be concise.",

@@ -23,10 +23,9 @@ import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { createTools, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { Snowflake } from "@oh-my-pi/pi-utils";
+import { e2eApiKey } from "./utilities";
 
-const API_KEY = process.env.ANTHROPIC_OAUTH_TOKEN || process.env.ANTHROPIC_API_KEY;
-
-describe.skipIf(!API_KEY)("Compaction hooks", () => {
+describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("Compaction hooks", () => {
 	let session: AgentSession;
 	let tempDir: string;
 	let hookRunner: HookRunner;
@@ -95,7 +94,7 @@ describe.skipIf(!API_KEY)("Compaction hooks", () => {
 		const tools = await createTools(toolSession);
 		const model = getModel("anthropic", "claude-sonnet-4-5")!;
 		const agent = new Agent({
-			getApiKey: () => API_KEY,
+			getApiKey: () => e2eApiKey("ANTHROPIC_API_KEY"),
 			initialState: {
 				model,
 				systemPrompt: "You are a helpful assistant. Be concise.",
