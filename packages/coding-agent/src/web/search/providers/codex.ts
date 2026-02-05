@@ -12,6 +12,8 @@ import { getAgentDbPath, getConfigDirPaths } from "../../../config";
 import { AgentStorage } from "../../../session/agent-storage";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import type { SearchParams } from "./base";
+import { SearchProvider } from "./base";
 
 const CODEX_BASE_URL = "https://chatgpt.com/backend-api";
 const CODEX_RESPONSES_PATH = "/codex/responses";
@@ -356,4 +358,23 @@ export async function searchCodex(params: CodexSearchParams): Promise<SearchResp
 export async function hasCodexSearch(): Promise<boolean> {
 	const auth = await findCodexAuth();
 	return auth !== null;
+}
+
+/** Search provider for OpenAI Codex web search. */
+export class CodexProvider extends SearchProvider {
+	readonly id = "codex";
+	readonly label = "Codex";
+
+	isAvailable(): Promise<boolean> {
+		return Promise.resolve(hasCodexSearch());
+	}
+
+	search(params: SearchParams): Promise<SearchResponse> {
+		return searchCodex({
+			signal: params.signal,
+			query: params.query,
+			system_prompt: params.systemPrompt,
+			num_results: params.numSearchResults ?? params.limit,
+		});
+	}
 }

@@ -15,10 +15,12 @@ import type {
 	SearchSource,
 } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import type { SearchParams } from "./base";
+import { SearchProvider } from "./base";
 
 const PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions";
 
-const DEFAULT_MAX_TOKENS = 4096;
+const DEFAULT_MAX_TOKENS = 8192;
 const DEFAULT_TEMPERATURE = 0.2;
 const DEFAULT_NUM_SEARCH_RESULTS = 10;
 
@@ -160,8 +162,11 @@ export async function searchPerplexity(params: PerplexitySearchParams): Promise<
 		num_search_results: params.num_search_results ?? DEFAULT_NUM_SEARCH_RESULTS,
 		web_search_options: {
 			search_type: "pro",
-			search_context_size: "high",
+			search_context_size: "medium",
 		},
+		enable_search_classifier: true,
+		reasoning_effort: "medium",
+		language_preference: "en",
 	};
 
 	if (params.search_recency_filter) {
@@ -177,4 +182,30 @@ export async function searchPerplexity(params: PerplexitySearchParams): Promise<
 	}
 
 	return result;
+}
+
+/** Search provider for Perplexity. */
+export class PerplexityProvider extends SearchProvider {
+	readonly id = "perplexity";
+	readonly label = "Perplexity";
+
+	isAvailable() {
+		try {
+			return !!findApiKey();
+		} catch {
+			return false;
+		}
+	}
+
+	search(params: SearchParams): Promise<SearchResponse> {
+		return searchPerplexity({
+			query: params.query,
+			temperature: params.temperature,
+			max_tokens: params.maxOutputTokens,
+			num_search_results: params.numSearchResults,
+			system_prompt: params.systemPrompt,
+			search_recency_filter: params.recency,
+			num_results: params.limit,
+		});
+	}
 }

@@ -5,8 +5,11 @@
  * Returns structured search results with optional content extraction.
  */
 import { getEnvApiKey } from "@oh-my-pi/pi-ai";
+import { findApiKey as findExaKey } from "../../../exa/mcp-client";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import type { SearchParams } from "./base";
+import { SearchProvider } from "./base";
 
 const EXA_API_URL = "https://api.exa.ai/search";
 
@@ -131,4 +134,25 @@ export async function searchExa(params: ExaSearchParams): Promise<SearchResponse
 		sources: limitedSources,
 		requestId: response.requestId,
 	};
+}
+
+/** Search provider for Exa. */
+export class ExaProvider extends SearchProvider {
+	readonly id = "exa";
+	readonly label = "Exa";
+
+	isAvailable(): boolean {
+		try {
+			return !!findExaKey();
+		} catch {
+			return false;
+		}
+	}
+
+	search(params: SearchParams): Promise<SearchResponse> {
+		return searchExa({
+			query: params.query,
+			num_results: params.numSearchResults ?? params.limit,
+		});
+	}
 }

@@ -24,7 +24,7 @@ import webSearchSystemPrompt from "../../prompts/system/web-search.md" with { ty
 import webSearchDescription from "../../prompts/tools/web-search.md" with { type: "text" };
 import type { ToolSession } from "../../tools";
 import { formatAge } from "../../tools/render-utils";
-import { getSearchProvider, resolveProviderChain, type SearchProvider } from "./provider-info";
+import { getSearchProvider, resolveProviderChain, type SearchProvider } from "./provider";
 import { renderSearchCall, renderSearchResult, type SearchRenderDetails } from "./render";
 import type { SearchResponse } from "./types";
 import { SearchProviderError } from "./types";
@@ -186,6 +186,9 @@ async function executeSearch(
 				limit: params.limit,
 				recency: params.recency,
 				systemPrompt: webSearchSystemPrompt,
+				maxOutputTokens: params.max_tokens,
+				numSearchResults: params.num_search_results,
+				temperature: params.temperature,
 			});
 
 			const text = formatForLLM(response);
@@ -566,8 +569,6 @@ export async function hasExaSearch(): Promise<boolean> {
 
 export {
 	getSearchProvider,
-	SEARCH_PROVIDER_ORDER,
-	SEARCH_PROVIDERS,
 	setPreferredSearchProvider,
-} from "./provider-info";
+} from "./provider";
 export type { SearchProviderId as SearchProvider, SearchResponse } from "./types";

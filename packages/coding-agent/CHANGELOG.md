@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `omp commit` command to generate commit messages and update changelogs with `--push`, `--dry-run`, `--no-changelog`, and model override flags
@@ -22,6 +23,12 @@
 
 ### Changed
 
+- Refactored web search provider system to use individual provider classes in separate files for improved maintainability
+- Moved `SearchProvider` base class and `SearchParams` interface to dedicated `providers/base.ts` module
+- Updated web search execution to pass `maxOutputTokens`, `numSearchResults`, and `temperature` parameters to providers
+- Changed Perplexity search context size from 'high' to 'medium' and added search classifier, reasoning effort, and language preference settings
+- Increased Perplexity default max tokens from 4096 to 8192 for more comprehensive responses
+- Updated Anthropic and Gemini search providers to support `max_tokens` and `temperature` parameters for finer control over response generation
 - Simplified `AuthStorage.create()` to accept direct agent.db path instead of legacy auth.json path with fallback resolution
 - Updated `discoverAuthStorage()` to skip JSON-to-SQLite migration step, improving startup performance
 - Renamed web search types and exports for consistency: `WebSearchProvider` → `SearchProviderId`, `WebSearchResponse` → `SearchResponse`, `WebSearchTool` → `SearchTool`, and related functions

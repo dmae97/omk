@@ -4,7 +4,7 @@
  * Tree-based rendering with collapsed/expanded states for web search results.
  */
 
-import { getSearchProvider } from "@oh-my-pi/pi-coding-agent/web/search/provider-info";
+import { getSearchProvider } from "@oh-my-pi/pi-coding-agent/web/search/provider";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text, visibleWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-tui";
 import type { RenderResultOptions } from "../../extensibility/custom-tools/types";

@@ -10,6 +10,8 @@ import { getAgentDbPath, getConfigDirPaths } from "../../../config";
 import { AgentStorage } from "../../../session/agent-storage";
 import type { SearchCitation, SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import type { SearchParams } from "./base";
+import { SearchProvider } from "./base";
 
 const DEFAULT_ENDPOINT = "https://cloudcode-pa.googleapis.com";
 const ANTIGRAVITY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
@@ -41,6 +43,10 @@ export interface GeminiSearchParams {
 	query: string;
 	system_prompt?: string;
 	num_results?: number;
+	/** Maximum output tokens. */
+	max_output_tokens?: number;
+	/** Sampling temperature (0–1). Lower = more focused/factual. */
+	temperature?: number;
 }
 
 /** OAuth credential stored in agent.db */
@@ -197,6 +203,8 @@ async function callGeminiSearch(
 	auth: GeminiAuth,
 	query: string,
 	systemPrompt?: string,
+	maxOutputTokens?: number,
+	temperature?: number,
 ): Promise<{
 	answer: string;
 	sources: SearchSource[];
@@ -209,7 +217,7 @@ async function callGeminiSearch(
 	const url = `${endpoint}/v1internal:streamGenerateContent?alt=sse`;
 	const headers = auth.isAntigravity ? ANTIGRAVITY_HEADERS : GEMINI_CLI_HEADERS;
 
-	const requestBody = {
+	const requestBody: Record<string, unknown> = {
 		project: auth.projectId,
 		model: DEFAULT_MODEL,
 		request: {
@@ -230,6 +238,17 @@ async function callGeminiSearch(
 		userAgent: "pi-web-search",
 		requestId: `search-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
 	};
+
+	if (maxOutputTokens !== undefined || temperature !== undefined) {
+		const generationConfig: Record<string, number> = {};
+		if (maxOutputTokens !== undefined) {
+			generationConfig.maxOutputTokens = maxOutputTokens;
+		}
+		if (temperature !== undefined) {
+			generationConfig.temperature = temperature;
+		}
+		(requestBody.request as Record<string, unknown>).generationConfig = generationConfig;
+	}
 
 	const response = await fetch(url, {
 		method: "POST",
@@ -396,7 +415,13 @@ export async function searchGemini(params: GeminiSearchParams): Promise<SearchRe
 		);
 	}
 
-	const result = await callGeminiSearch(auth, params.query, params.system_prompt);
+	const result = await callGeminiSearch(
+		auth,
+		params.query,
+		params.system_prompt,
+		params.max_output_tokens,
+		params.temperature,
+	);
 
 	let sources = result.sources;
 
@@ -414,4 +439,24 @@ export async function searchGemini(params: GeminiSearchParams): Promise<SearchRe
 		usage: result.usage,
 		model: result.model,
 	};
+}
+
+/** Search provider for Google Gemini web search. */
+export class GeminiProvider extends SearchProvider {
+	readonly id = "gemini";
+	readonly label = "Gemini";
+
+	isAvailable() {
+		return findGeminiAuth().then(Boolean);
+	}
+
+	search(params: SearchParams): Promise<SearchResponse> {
+		return searchGemini({
+			query: params.query,
+			system_prompt: params.systemPrompt,
+			num_results: params.numSearchResults ?? params.limit,
+			max_output_tokens: params.maxOutputTokens,
+			temperature: params.temperature,
+		});
+	}
 }

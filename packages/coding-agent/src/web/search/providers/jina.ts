@@ -8,6 +8,8 @@
 import { getEnvApiKey } from "@oh-my-pi/pi-ai";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import type { SearchParams } from "./base";
+import { SearchProvider } from "./base";
 
 const JINA_SEARCH_URL = "https://s.jina.ai";
 
@@ -73,4 +75,25 @@ export async function searchJina(params: JinaSearchParams): Promise<SearchRespon
 		provider: "jina",
 		sources: limitedSources,
 	};
+}
+
+/** Search provider for Jina Reader. */
+export class JinaProvider extends SearchProvider {
+	readonly id = "jina";
+	readonly label = "Jina";
+
+	isAvailable() {
+		try {
+			return !!findApiKey();
+		} catch {
+			return false;
+		}
+	}
+
+	search(params: SearchParams): Promise<SearchResponse> {
+		return searchJina({
+			query: params.query,
+			num_results: params.numSearchResults ?? params.limit,
+		});
+	}
 }

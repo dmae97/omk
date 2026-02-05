@@ -16,6 +16,8 @@ import type {
 	SearchSource,
 } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
+import type { SearchParams } from "./base";
+import { SearchProvider } from "./base";
 
 const DEFAULT_MODEL = "claude-haiku-4-5";
 const DEFAULT_MAX_TOKENS = 4096;
@@ -36,6 +38,10 @@ export interface AnthropicSearchParams {
 	query: string;
 	system_prompt?: string;
 	num_results?: number;
+	/** Maximum output tokens. Defaults to 4096. */
+	max_tokens?: number;
+	/** Sampling temperature (0–1). Lower = more focused/factual. */
+	temperature?: number;
 }
 
 /**
@@ -81,6 +87,8 @@ async function callSearch(
 	model: string,
 	query: string,
 	systemPrompt?: string,
+	maxTokens?: number,
+	temperature?: number,
 ): Promise<AnthropicApiResponse> {
 	const url = buildAnthropicUrl(auth);
 	const headers = buildAnthropicHeaders(auth);
@@ -89,7 +97,7 @@ async function callSearch(
 
 	const body: Record<string, unknown> = {
 		model,
-		max_tokens: DEFAULT_MAX_TOKENS,
+		max_tokens: maxTokens ?? DEFAULT_MAX_TOKENS,
 		messages: [{ role: "user", content: query }],
 		tools: [
 			{
@@ -98,6 +106,10 @@ async function callSearch(
 			},
 		],
 	};
+
+	if (temperature !== undefined) {
+		body.temperature = temperature;
+	}
 
 	if (systemBlocks && systemBlocks.length > 0) {
 		body.system = systemBlocks;
@@ -237,7 +249,14 @@ export async function searchAnthropic(params: AnthropicSearchParams): Promise<Se
 	}
 
 	const model = getModel();
-	const response = await callSearch(auth, model, params.query, params.system_prompt);
+	const response = await callSearch(
+		auth,
+		model,
+		params.query,
+		params.system_prompt,
+		params.max_tokens,
+		params.temperature,
+	);
 
 	const result = parseResponse(response);
 
@@ -247,4 +266,24 @@ export async function searchAnthropic(params: AnthropicSearchParams): Promise<Se
 	}
 
 	return result;
+}
+
+/** Search provider for Anthropic Claude web search. */
+export class AnthropicProvider extends SearchProvider {
+	readonly id = "anthropic";
+	readonly label = "Anthropic";
+
+	isAvailable() {
+		return findAnthropicAuth().then(Boolean);
+	}
+
+	search(params: SearchParams): Promise<SearchResponse> {
+		return searchAnthropic({
+			query: params.query,
+			system_prompt: params.systemPrompt,
+			num_results: params.numSearchResults ?? params.limit,
+			max_tokens: params.maxOutputTokens,
+			temperature: params.temperature,
+		});
+	}
 }
