@@ -16,6 +16,17 @@ This document lists all environment variables used by the coding agent.
 | `GH_TOKEN` | GitHub CLI token (fallback for Copilot) | - |
 | `GITHUB_TOKEN` | GitHub token (fallback for Copilot and API access) | - |
 | `EXA_API_KEY` | Exa search API key | - |
+| `GROQ_API_KEY` | Groq API key for Llama and other models | - |
+| `CEREBRAS_API_KEY` | Cerebras API key | - |
+| `XAI_API_KEY` | xAI API key for Grok models | - |
+| `OPENROUTER_API_KEY` | OpenRouter aggregated models API key | - |
+| `MISTRAL_API_KEY` | Mistral AI API key | - |
+| `ZAI_API_KEY` | z.ai API key (ZhipuAI/GLM models) | - |
+| `MINIMAX_API_KEY` | MiniMax API key | - |
+| `OPENCODE_API_KEY` | OpenCode API key | - |
+| `CURSOR_ACCESS_TOKEN` | Cursor AI access token | - |
+| `AI_GATEWAY_API_KEY` | Vercel AI Gateway API key | - |
+| `PERPLEXITY_API_KEY` | Perplexity search API key | - |
 
 ### Provider-Specific Configuration
 

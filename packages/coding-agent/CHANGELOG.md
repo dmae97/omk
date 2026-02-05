@@ -1,8 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added documentation for additional LLM provider API keys (Groq, Cerebras, xAI, OpenRouter, Mistral, z.ai, MiniMax, OpenCode, Cursor, Vercel AI Gateway) in environment variables reference
+- Added documentation for cloud provider configuration (AWS Bedrock, Google Vertex AI) in environment variables reference
+- Added documentation for search provider API keys (Perplexity, Anthropic Search) in environment variables reference
+- Added documentation for model override environment variables (`PI_SMOL_MODEL`, `PI_SLOW_MODEL`, `PI_PLAN_MODEL`) in CLI help text
 - Added comprehensive environment variables reference documentation at `docs/environment-variables.md` covering API keys, configuration, debugging, and testing variables
 - Added theme system with 44 customizable color tokens, two built-in themes (dark/light), and auto-detection based on terminal background
 - Added `/theme` command to interactively select and switch between themes

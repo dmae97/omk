@@ -287,7 +287,45 @@ ${chalk.bold("Environment Variables:")}
 
   ${chalk.dim("# Configuration")}
   PI_CODING_AGENT_DIR    - Session storage directory (default: ~/${CONFIG_DIR_NAME}/agent)
+${chalk.bold("API Keys (Environment Variables):")}
+  ${chalk.dim("# Core Providers")}
+  ANTHROPIC_API_KEY          - Anthropic Claude models
+  ANTHROPIC_OAUTH_TOKEN      - Anthropic OAuth (takes precedence over API key)
+  OPENAI_API_KEY             - OpenAI GPT models
+  GOOGLE_API_KEY             - Google Gemini models
+  GITHUB_TOKEN               - GitHub Copilot (or GH_TOKEN, COPILOT_GITHUB_TOKEN)
 
+  ${chalk.dim("# Additional LLM Providers")}
+  AZURE_OPENAI_API_KEY       - Azure OpenAI models
+  GROQ_API_KEY               - Groq models
+  CEREBRAS_API_KEY           - Cerebras models
+  XAI_API_KEY                - xAI Grok models
+  OPENROUTER_API_KEY         - OpenRouter aggregated models
+  MISTRAL_API_KEY            - Mistral models
+  ZAI_API_KEY                - z.ai models (ZhipuAI/GLM)
+  MINIMAX_API_KEY            - MiniMax models
+  OPENCODE_API_KEY           - OpenCode models
+  CURSOR_ACCESS_TOKEN        - Cursor AI models
+  AI_GATEWAY_API_KEY         - Vercel AI Gateway
+
+  ${chalk.dim("# Cloud Providers")}
+  AWS_PROFILE                - AWS Bedrock (or AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY)
+  GOOGLE_CLOUD_PROJECT       - Google Vertex AI (requires GOOGLE_CLOUD_LOCATION)
+  GOOGLE_APPLICATION_CREDENTIALS - Service account for Vertex AI
+
+  ${chalk.dim("# Search & Tools")}
+  EXA_API_KEY                - Exa web search
+  PERPLEXITY_API_KEY         - Perplexity web search
+  ANTHROPIC_SEARCH_API_KEY   - Anthropic search provider
+
+  ${chalk.dim("# Configuration")}
+  PI_CODING_AGENT_DIR        - Session storage directory (default: ~/${CONFIG_DIR_NAME}/agent)
+  PI_SMOL_MODEL              - Override smol/fast model (see --smol)
+  PI_SLOW_MODEL              - Override slow/reasoning model (see --slow)
+  PI_PLAN_MODEL              - Override planning model (see --plan)
+
+  For complete environment variable reference, see:
+  ${chalk.dim("docs/environment-variables.md")}
 ${chalk.bold("Available Tools (all enabled by default):")}
   read       - Read file contents
   bash       - Execute bash commands

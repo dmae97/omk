@@ -82,7 +82,7 @@ We run on Bun. Replace Node APIs only when Bun provides a better alternative.
 
 ```typescript
 // BROKEN: env vars may be undefined, "~" is not expanded
-const home = Bun.env.HOME || Bun.env.HOME || "~";
+const home = Bun.env.HOME || "~";
 const tmp = Bun.env.TMPDIR || "/tmp";
 ```
 
