@@ -18,7 +18,7 @@ export class FrontmatterError extends Error {
 		error: Error,
 		public readonly source?: unknown,
 	) {
-		super(`Failed to parse YAML frontmatter: ${error.message}`, { cause: error });
+		super(`Failed to parse YAML frontmatter (${source}): ${error.message}`, { cause: error });
 		this.name = "FrontmatterError";
 	}
 

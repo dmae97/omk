@@ -226,6 +226,8 @@ handlebars.registerHelper("not", (value: unknown): boolean => !value);
 
 handlebars.registerHelper("jtdToTypeScript", (schema: unknown): string => jtdToTypeScript(schema));
 
+handlebars.registerHelper("jsonStringify", (value: unknown): string => JSON.stringify(value));
+
 export function renderPromptTemplate(template: string, context: TemplateContext = {}): string {
 	const compiled = handlebars.compile(template, { noEscape: true, strict: false });
 	const rendered = compiled(context ?? {});

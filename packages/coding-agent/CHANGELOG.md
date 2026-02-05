@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `task.maxConcurrency` setting to control concurrent limit for subagents (default: 32)
@@ -16,6 +15,10 @@
 ### Removed
 
 - Removed `MAX_PARALLEL_TASKS` constant and associated task count validation limit
+
+### Fixed
+
+- Improved frontmatter parsing error messages to include source context for better debugging
 
 ## [10.6.1] - 2026-02-04
 
