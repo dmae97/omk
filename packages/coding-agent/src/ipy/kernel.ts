@@ -108,7 +108,7 @@ export interface PythonKernelAvailability {
 }
 
 export async function checkPythonKernelAvailability(cwd: string): Promise<PythonKernelAvailability> {
-	if (process.env.BUN_ENV === "test" || process.env.NODE_ENV === "test" || $env.PI_PYTHON_SKIP_CHECK === "1") {
+	if (Bun.env.BUN_ENV === "test" || Bun.env.NODE_ENV === "test" || $env.PI_PYTHON_SKIP_CHECK === "1") {
 		return { ok: true };
 	}
 

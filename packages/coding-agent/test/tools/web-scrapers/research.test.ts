@@ -3,7 +3,7 @@ import { handleBiorxiv } from "@oh-my-pi/pi-coding-agent/web/scrapers/biorxiv";
 import { handleOpenLibrary } from "@oh-my-pi/pi-coding-agent/web/scrapers/openlibrary";
 import { handleWikidata } from "@oh-my-pi/pi-coding-agent/web/scrapers/wikidata";
 
-const SKIP = !process.env.WEB_FETCH_INTEGRATION;
+const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
 
 describe.skipIf(SKIP)("handleWikidata", () => {
 	it("returns null for non-matching URLs", async () => {

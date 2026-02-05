@@ -3,7 +3,7 @@ import { handleHuggingFace } from "@oh-my-pi/pi-coding-agent/web/scrapers/huggin
 import { handleSpotify } from "@oh-my-pi/pi-coding-agent/web/scrapers/spotify";
 import { handleVimeo } from "@oh-my-pi/pi-coding-agent/web/scrapers/vimeo";
 
-const SKIP = !process.env.WEB_FETCH_INTEGRATION;
+const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
 
 describe.skipIf(SKIP)("handleVimeo", () => {
 	it("returns null for non-Vimeo URLs", async () => {

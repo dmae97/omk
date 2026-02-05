@@ -218,7 +218,7 @@ export class EditTool implements AgentTool<TInput> {
 			PI_EDIT_FUZZY: editFuzzy = "auto",
 			PI_EDIT_FUZZY_THRESHOLD: editFuzzyThreshold = "auto",
 			PI_EDIT_VARIANT: envEditVariant = "auto",
-		} = process.env;
+		} = Bun.env;
 		this.envEditVariant = envEditVariant;
 
 		if (envEditVariant !== "replace" && envEditVariant !== "patch" && envEditVariant !== "auto") {

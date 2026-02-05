@@ -412,7 +412,7 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string, initT
 		const proc = ptree.spawn([command, ...args], {
 			cwd,
 			stdin: "pipe",
-			env: env ? { ...process.env, ...env } : undefined,
+			env: env ? { ...Bun.env, ...env } : undefined,
 		});
 
 		const client: LspClient = {

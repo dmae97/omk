@@ -28,8 +28,8 @@ export async function collectSystemInfo(): Promise<SystemInfo> {
 	const cpuModel = cpus[0]?.model ?? "Unknown CPU";
 
 	// Try to get shell from environment
-	const shell = process.env.SHELL ?? process.env.ComSpec ?? "unknown";
-	const terminal = process.env.TERM_PROGRAM ?? process.env.TERM ?? undefined;
+	const shell = Bun.env.SHELL ?? Bun.env.ComSpec ?? "unknown";
+	const terminal = Bun.env.TERM_PROGRAM ?? Bun.env.TERM ?? undefined;
 
 	return {
 		os: `${os.type()} ${os.release()} (${os.platform()})`,

@@ -18,9 +18,9 @@ import type {
 	MCPToolWrapperConfig,
 } from "./types";
 
-/** Find EXA_API_KEY from process.env or .env files */
+/** Find EXA_API_KEY from Bun.env or .env files */
 export async function findApiKey(): Promise<string | null> {
-	// Check process.env first
+	// Check Bun.env first
 	if ($env.EXA_API_KEY) {
 		return $env.EXA_API_KEY;
 	}

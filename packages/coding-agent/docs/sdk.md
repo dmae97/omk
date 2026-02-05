@@ -87,7 +87,7 @@ interface AgentSession {
 	prompt(text: string, options?: PromptOptions): Promise<void>;
 	sendUserMessage(
 		content: string | (TextContent | ImageContent)[],
-		options?: { deliverAs?: "steer" | "followUp" },
+		options?: { deliverAs?: "steer" | "followUp" }
 	): Promise<void>;
 	steer(text: string): void;
 	followUp(text: string): void;
@@ -106,7 +106,7 @@ interface AgentSession {
 	setThinkingLevel(level: ThinkingLevel): void;
 	cycleModel(direction?: "forward" | "backward"): Promise<ModelCycleResult | undefined>;
 	cycleRoleModels(
-		direction?: "forward" | "backward",
+		direction?: "forward" | "backward"
 	): Promise<{ model: Model; thinkingLevel: ThinkingLevel; role: ModelRole } | undefined>;
 	cycleThinkingLevel(): ThinkingLevel | undefined;
 
@@ -141,7 +141,7 @@ interface AgentSession {
 	// Compaction
 	compact(
 		customInstructions?: string,
-		options?: { onComplete?: (result: CompactionResult) => void; onError?: (error: Error) => void },
+		options?: { onComplete?: (result: CompactionResult) => void; onError?: (error: Error) => void }
 	): Promise<CompactionResult>;
 	abortCompaction(): void;
 
@@ -491,11 +491,7 @@ const { session } = await createAgentSession({
 Extensions intercept agent events and can register custom tools/commands. Hooks remain for legacy compatibility.
 
 ```typescript
-import {
-	createAgentSession,
-	discoverExtensions,
-	type ExtensionFactory,
-} from "@oh-my-pi/pi-coding-agent";
+import { createAgentSession, discoverExtensions, type ExtensionFactory } from "@oh-my-pi/pi-coding-agent";
 
 // Inline extension
 const loggingExtension: ExtensionFactory = (api) => {
@@ -878,8 +874,8 @@ import systemPrompt from "./SYSTEM.md" with { type: "text" };
 const authStorage = await discoverAuthStorage();
 
 // Runtime API key override (not persisted)
-if (process.env.MY_KEY) {
-	authStorage.setRuntimeApiKey("anthropic", process.env.MY_KEY);
+if (Bun.env.MY_KEY) {
+	authStorage.setRuntimeApiKey("anthropic", Bun.env.MY_KEY);
 }
 
 // Model registry

@@ -1,6 +1,26 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added comprehensive environment variables reference documentation at `docs/environment-variables.md` covering API keys, configuration, debugging, and testing variables
+- Added theme system with 44 customizable color tokens, two built-in themes (dark/light), and auto-detection based on terminal background
+- Added `/theme` command to interactively select and switch between themes
+- Added support for custom themes in `~/.pi/agent/themes/*.json` with live editing - changes apply immediately when files are saved
+- Added `userMessageText` theme token for customizing user message text color
+- Added `toolTitle` and `toolOutput` theme tokens for separate coloring of tool execution box titles and output
+
+### Changed
+
+- Changed all environment variable access from `process.env` to `Bun.env` throughout the codebase for Bun runtime compatibility
+- Updated documentation to reference `Bun.env` instead of `process.env` in examples and comments
+
+### Fixed
+
+- Fixed `Text` component to properly implement `invalidate()` method, ensuring theme changes apply correctly to all UI elements
+- Fixed `TruncatedText` component to properly pad all lines to exactly match the specified width, preventing rendering artifacts
+- Fixed `TruncatedText` component to stop at the first newline and only display the first line
+- Fixed invalid or malformed themes to fall back gracefully to dark theme instead of crashing the application
 
 ## [11.0.2] - 2026-02-05
 

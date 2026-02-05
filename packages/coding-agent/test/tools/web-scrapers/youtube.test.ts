@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { handleYouTube } from "@oh-my-pi/pi-coding-agent/web/scrapers/youtube";
 
-const SKIP = !process.env.WEB_FETCH_INTEGRATION;
+const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
 
 describe.skipIf(SKIP)("handleYouTube", () => {
 	it("returns null for non-YouTube URLs", async () => {

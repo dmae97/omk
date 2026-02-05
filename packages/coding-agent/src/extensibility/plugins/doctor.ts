@@ -29,7 +29,7 @@ export async function runDoctorChecks(): Promise<DoctorCheck[]> {
 	];
 
 	for (const key of apiKeys) {
-		const hasKey = !!process.env[key.name];
+		const hasKey = !!Bun.env[key.name];
 		checks.push({
 			name: key.name,
 			status: hasKey ? "ok" : "warning",

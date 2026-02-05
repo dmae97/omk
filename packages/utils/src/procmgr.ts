@@ -34,7 +34,7 @@ function isExecutable(path: string): boolean {
 function buildSpawnEnv(shell: string): Record<string, string> {
 	const noCI = $env.PI_BASH_NO_CI || $env.CLAUDE_BASH_NO_CI;
 	return {
-		...process.env,
+		...Bun.env,
 		SHELL: shell,
 		GIT_EDITOR: "true",
 		GPG_TTY: "not a tty",
@@ -135,11 +135,11 @@ export function getShellConfig(customShellPath?: string): ShellConfig {
 	if (process.platform === "win32") {
 		// 2. Try Git Bash in known locations
 		const paths: string[] = [];
-		const programFiles = process.env.ProgramFiles;
+		const programFiles = Bun.env.ProgramFiles;
 		if (programFiles) {
 			paths.push(`${programFiles}\\Git\\bin\\bash.exe`);
 		}
-		const programFilesX86 = process.env["ProgramFiles(x86)"];
+		const programFilesX86 = Bun.env["ProgramFiles(x86)"];
 		if (programFilesX86) {
 			paths.push(`${programFilesX86}\\Git\\bin\\bash.exe`);
 		}
@@ -168,7 +168,7 @@ export function getShellConfig(customShellPath?: string): ShellConfig {
 	}
 
 	// Unix: prefer user's shell from $SHELL if it's bash/zsh and executable
-	const userShell = process.env.SHELL;
+	const userShell = Bun.env.SHELL;
 	const isValidShell = userShell && (userShell.includes("bash") || userShell.includes("zsh"));
 	if (isValidShell && isExecutable(userShell)) {
 		cachedShellConfig = buildConfig(userShell);

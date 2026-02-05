@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { handleWikipedia } from "@oh-my-pi/pi-coding-agent/web/scrapers/wikipedia";
 
-const SKIP = !process.env.WEB_FETCH_INTEGRATION;
+const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
 
 describe.skipIf(SKIP)("handleWikipedia", () => {
 	it("returns null for non-Wikipedia URLs", async () => {

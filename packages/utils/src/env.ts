@@ -50,17 +50,17 @@ const projectEnv = parseEnvFile(path.join(process.cwd(), ".env"));
 
 for (const file of [projectEnv, homeEnv]) {
 	for (const [key, value] of Object.entries(file)) {
-		if (!process.env[key]) {
-			process.env[key] = value;
+		if (!Bun.env[key]) {
+			Bun.env[key] = value;
 		}
 	}
 }
 
 /**
- * Intentional re-export of process.env.
+ * Intentional re-export of Bun.env.
  *
  * All users should import this env module (import { $env } from "@oh-my-pi/pi-utils")
  * before using environment variables. This ensures that .env files have been loaded and
  * overrides (project, home) have been applied, so $env always reflects the correct values.
  */
-export const $env: Record<string, string> = process.env as Record<string, string>;
+export const $env: Record<string, string> = Bun.env as Record<string, string>;

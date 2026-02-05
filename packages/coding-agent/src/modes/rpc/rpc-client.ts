@@ -114,7 +114,7 @@ export class RpcClient {
 
 		this.process = ptree.spawn(["bun", cliPath, ...args], {
 			cwd: this.options.cwd,
-			env: { ...process.env, ...this.options.env },
+			env: { ...Bun.env, ...this.options.env },
 			stdin: "pipe",
 		});
 

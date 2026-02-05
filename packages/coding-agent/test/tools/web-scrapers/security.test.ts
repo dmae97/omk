@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { handleNvd } from "@oh-my-pi/pi-coding-agent/web/scrapers/nvd";
 import { handleOsv } from "@oh-my-pi/pi-coding-agent/web/scrapers/osv";
 
-const SKIP = !process.env.WEB_FETCH_INTEGRATION;
+const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
 
 describe.skipIf(SKIP)("handleNvd", () => {
 	it("returns null for non-NVD URLs", async () => {

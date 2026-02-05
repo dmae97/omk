@@ -47,7 +47,7 @@ export class StdioTransport implements MCPTransport {
 
 		const args = this.config.args ?? [];
 		const env = {
-			...process.env,
+			...Bun.env,
 			...this.config.env,
 		};
 

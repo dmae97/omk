@@ -17,7 +17,7 @@ import { isEnoent } from "@oh-my-pi/pi-utils";
  * E2E tests require explicit opt-in via E2E=1 environment variable.
  * This prevents accidental API calls when keys happen to be in the environment.
  */
-export const E2E_ENABLED = process.env.E2E === "1" || process.env.E2E === "true";
+export const E2E_ENABLED = Bun.env.E2E === "1" || Bun.env.E2E === "true";
 
 /**
  * Get an API key from environment, but only if E2E tests are enabled.
@@ -25,7 +25,7 @@ export const E2E_ENABLED = process.env.E2E === "1" || process.env.E2E === "true"
  */
 export function e2eApiKey(envVar: string): string | undefined {
 	if (!E2E_ENABLED) return undefined;
-	return process.env[envVar];
+	return Bun.env[envVar];
 }
 
 const AUTH_PATH = path.join(os.homedir(), ".pi", "agent", "auth.json");

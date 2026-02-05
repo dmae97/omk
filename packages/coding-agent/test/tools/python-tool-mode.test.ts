@@ -19,8 +19,8 @@ function createSession(overrides: Partial<ToolSession> = {}): ToolSession {
 
 describe("createTools python fallback", () => {
 	it("falls back to bash when python is requested but disabled", async () => {
-		const previous = process.env.PI_PYTHON_SKIP_CHECK;
-		process.env.PI_PYTHON_SKIP_CHECK = "1";
+		const previous = Bun.env.PI_PYTHON_SKIP_CHECK;
+		Bun.env.PI_PYTHON_SKIP_CHECK = "1";
 		const session = createSession();
 		const tools = await createTools(session, ["python"]);
 		const names = tools.map(tool => tool.name).sort();
@@ -28,9 +28,9 @@ describe("createTools python fallback", () => {
 		expect(names).toEqual(["bash", "exit_plan_mode"]);
 
 		if (previous === undefined) {
-			delete process.env.PI_PYTHON_SKIP_CHECK;
+			delete Bun.env.PI_PYTHON_SKIP_CHECK;
 		} else {
-			process.env.PI_PYTHON_SKIP_CHECK = previous;
+			Bun.env.PI_PYTHON_SKIP_CHECK = previous;
 		}
 	});
 });

@@ -294,7 +294,7 @@ export async function loadSkillsFromDir(
  */
 export function expandEnvVars(value: string, extraEnv?: Record<string, string>): string {
 	return value.replace(/\$\{([^}:]+)(?::-([^}]*))?\}/g, (_, varName: string, defaultValue?: string) => {
-		const envValue = extraEnv?.[varName] ?? process.env[varName];
+		const envValue = extraEnv?.[varName] ?? Bun.env[varName];
 		if (envValue !== undefined) return envValue;
 		if (defaultValue !== undefined) return defaultValue;
 		return `\${${varName}}`;

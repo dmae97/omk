@@ -368,7 +368,7 @@ When disabled, neither case triggers automatic compaction (use `/compact` manual
 **Environment Variables (`env`):**
 
 - Automatically sets environment variables when the application starts
-- Only sets variables that aren't already present in `process.env`
+- Only sets variables that aren't already present in `Bun.env`
 - Supports any environment variable, not just API keys
 - Order of precedence: existing env vars > settings.json env vars > auth.json env vars
 

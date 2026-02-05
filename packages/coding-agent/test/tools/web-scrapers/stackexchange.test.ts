@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { handleStackOverflow } from "@oh-my-pi/pi-coding-agent/web/scrapers/stackoverflow";
 
-const SKIP = !process.env.WEB_FETCH_INTEGRATION;
+const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
 
 describe.skipIf(SKIP)("handleStackOverflow", () => {
 	it("returns null for non-SE URLs", async () => {

@@ -6,7 +6,7 @@ import { handleMetaCPAN } from "@oh-my-pi/pi-coding-agent/web/scrapers/metacpan"
 import { handleRepology } from "@oh-my-pi/pi-coding-agent/web/scrapers/repology";
 import { handleTerraform } from "@oh-my-pi/pi-coding-agent/web/scrapers/terraform";
 
-const SKIP = !process.env.WEB_FETCH_INTEGRATION;
+const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
 
 describe.skipIf(SKIP)("handleMetaCPAN", () => {
 	it("returns null for non-MetaCPAN URLs", async () => {

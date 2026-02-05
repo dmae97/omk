@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { handleBluesky } from "@oh-my-pi/pi-coding-agent/web/scrapers/bluesky";
 import { handleMastodon } from "@oh-my-pi/pi-coding-agent/web/scrapers/mastodon";
 
-const SKIP = !process.env.WEB_FETCH_INTEGRATION;
+const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
 
 describe.skipIf(SKIP)("handleMastodon", () => {
 	it("returns null for non-Mastodon URLs", async () => {

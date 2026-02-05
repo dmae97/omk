@@ -6,7 +6,7 @@ import { resetPreludeDocsCache, warmPythonEnvironment } from "@oh-my-pi/pi-codin
 import { getPythonToolDescription, PythonTool } from "@oh-my-pi/pi-coding-agent/tools/python";
 
 const resolvePythonPath = (): string | null => {
-	const venvPath = process.env.VIRTUAL_ENV;
+	const venvPath = Bun.env.VIRTUAL_ENV;
 	const candidates = [venvPath, path.join(process.cwd(), ".venv"), path.join(process.cwd(), "venv")].filter(
 		Boolean,
 	) as string[];

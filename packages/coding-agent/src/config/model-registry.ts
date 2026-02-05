@@ -150,7 +150,7 @@ function emptyCustomModelsResult(error?: string): CustomModelsResult {
  * Checks environment variable first, then treats as literal.
  */
 function resolveApiKeyConfig(keyConfig: string): string | undefined {
-	const envValue = process.env[keyConfig];
+	const envValue = Bun.env[keyConfig];
 	if (envValue) return envValue;
 	return keyConfig;
 }

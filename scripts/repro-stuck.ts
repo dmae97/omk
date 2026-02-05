@@ -77,7 +77,7 @@ async function spawnBatch(count: number, basePort: number, timeout: number): Pro
 			stdout: "pipe",
 			stderr: "pipe",
 			stdin: "pipe",
-			env: { ...process.env, NO_COLOR: "1", PI_DEBUG_STARTUP: "1" },
+			env: { ...Bun.env, NO_COLOR: "1", PI_DEBUG_STARTUP: "1" },
 		});
 		instances.push({ proc, port, stdout: "", stderr: "", status: "pending" });
 	}

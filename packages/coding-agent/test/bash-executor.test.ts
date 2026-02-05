@@ -161,7 +161,7 @@ describe("executeBash", () => {
 		if (process.platform === "win32") {
 			return;
 		}
-		const bashPath = process.env.SHELL?.includes("bash") ? process.env.SHELL : "/bin/bash";
+		const bashPath = Bun.env.SHELL?.includes("bash") ? Bun.env.SHELL : "/bin/bash";
 		if (!fs.existsSync(bashPath)) {
 			return;
 		}
@@ -171,8 +171,8 @@ describe("executeBash", () => {
 			shell: bashPath,
 			args: ["-l", "-c"],
 			env: {
-				PATH: process.env.PATH ?? "",
-				HOME: process.env.HOME ?? tempDir,
+				PATH: Bun.env.PATH ?? "",
+				HOME: Bun.env.HOME ?? tempDir,
 			},
 			prefix: undefined,
 		});

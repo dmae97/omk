@@ -160,8 +160,8 @@ afterEach(async () => {
 
 describe("warmPythonEnvironment", () => {
 	it("caches prelude docs on warmup", async () => {
-		const previousSkip = process.env.PI_PYTHON_SKIP_CHECK;
-		process.env.PI_PYTHON_SKIP_CHECK = "1";
+		const previousSkip = Bun.env.PI_PYTHON_SKIP_CHECK;
+		Bun.env.PI_PYTHON_SKIP_CHECK = "1";
 		using tempDir = TempDir.createSync("@python-executor-");
 		const docs: PreludeHelper[] = [
 			{
@@ -188,9 +188,9 @@ describe("warmPythonEnvironment", () => {
 
 		startSpy.mockRestore();
 		if (previousSkip === undefined) {
-			delete process.env.PI_PYTHON_SKIP_CHECK;
+			delete Bun.env.PI_PYTHON_SKIP_CHECK;
 		} else {
-			process.env.PI_PYTHON_SKIP_CHECK = previousSkip;
+			Bun.env.PI_PYTHON_SKIP_CHECK = previousSkip;
 		}
 	});
 });

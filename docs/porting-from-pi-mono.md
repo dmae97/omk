@@ -64,7 +64,7 @@ We run on Bun. Replace Node APIs only when Bun provides a better alternative.
 
 **DO NOT replace (these work fine in Bun):**
 
-- `os.homedir()` — do NOT replace with `process.env.HOME`, `Bun.env.HOME`, or literal `"~"`
+- `os.homedir()` — do NOT replace with `Bun.env.HOME`, `Bun.env.HOME`, or literal `"~"`
 - `os.tmpdir()` — do NOT replace with `Bun.env.TMPDIR || "/tmp"` or hardcoded paths
 - `fs.mkdtempSync()` — do NOT replace with manual path construction
 - `path.join()`, `path.resolve()`, etc. — these are fine
@@ -82,7 +82,7 @@ We run on Bun. Replace Node APIs only when Bun provides a better alternative.
 
 ```typescript
 // BROKEN: env vars may be undefined, "~" is not expanded
-const home = process.env.HOME || Bun.env.HOME || "~";
+const home = Bun.env.HOME || Bun.env.HOME || "~";
 const tmp = Bun.env.TMPDIR || "/tmp";
 ```
 

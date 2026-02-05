@@ -40,7 +40,7 @@ const versionedDir = path.join(os.homedir(), ".omp", "natives", packageVersion);
 const versionedAddonPath = path.join(versionedDir, addonFilename);
 const legacyUserDataDir =
 	process.platform === "win32"
-		? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"), "omp")
+		? path.join(Bun.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"), "omp")
 		: path.join(os.homedir(), ".local", "bin");
 const downloadUrl = `https://github.com/can1357/oh-my-pi/releases/latest/download/${addonFilename}`;
 const isCompiledBinary =

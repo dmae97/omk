@@ -193,15 +193,15 @@ async function getGpuModel(): Promise<string | null> {
 }
 
 function getTerminalName(): string {
-	const termProgram = process.env.TERM_PROGRAM;
-	const termProgramVersion = process.env.TERM_PROGRAM_VERSION;
+	const termProgram = Bun.env.TERM_PROGRAM;
+	const termProgramVersion = Bun.env.TERM_PROGRAM_VERSION;
 	if (termProgram) {
 		return termProgramVersion ? `${termProgram} ${termProgramVersion}` : termProgram;
 	}
 
-	if (process.env.WT_SESSION) return "Windows Terminal";
+	if (Bun.env.WT_SESSION) return "Windows Terminal";
 
-	const term = firstNonEmpty(process.env.TERM, process.env.COLORTERM, process.env.TERMINAL_EMULATOR);
+	const term = firstNonEmpty(Bun.env.TERM, Bun.env.COLORTERM, Bun.env.TERMINAL_EMULATOR);
 	return term ?? "unknown";
 }
 
@@ -216,12 +216,12 @@ function normalizeDesktopValue(value: string): string {
 }
 
 function getDesktopEnvironment(): string {
-	if (process.env.KDE_FULL_SESSION === "true") return "KDE";
+	if (Bun.env.KDE_FULL_SESSION === "true") return "KDE";
 	const raw = firstNonEmpty(
-		process.env.XDG_CURRENT_DESKTOP,
-		process.env.DESKTOP_SESSION,
-		process.env.XDG_SESSION_DESKTOP,
-		process.env.GDMSESSION,
+		Bun.env.XDG_CURRENT_DESKTOP,
+		Bun.env.DESKTOP_SESSION,
+		Bun.env.XDG_SESSION_DESKTOP,
+		Bun.env.GDMSESSION,
 	);
 	return raw ? normalizeDesktopValue(raw) : "unknown";
 }
@@ -252,10 +252,10 @@ function matchKnownWindowManager(value: string): string | null {
 }
 
 function getWindowManager(): string {
-	const explicit = firstNonEmpty(process.env.WINDOWMANAGER);
+	const explicit = firstNonEmpty(Bun.env.WINDOWMANAGER);
 	if (explicit) return explicit;
 
-	const desktop = firstNonEmpty(process.env.XDG_CURRENT_DESKTOP, process.env.DESKTOP_SESSION);
+	const desktop = firstNonEmpty(Bun.env.XDG_CURRENT_DESKTOP, Bun.env.DESKTOP_SESSION);
 	if (desktop) {
 		const matched = matchKnownWindowManager(desktop);
 		if (matched) return matched;

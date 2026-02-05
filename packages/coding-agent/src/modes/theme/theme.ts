@@ -1053,15 +1053,15 @@ type ColorMode = "truecolor" | "256color";
 // ============================================================================
 
 function detectColorMode(): ColorMode {
-	const colorterm = process.env.COLORTERM;
+	const colorterm = Bun.env.COLORTERM;
 	if (colorterm === "truecolor" || colorterm === "24bit") {
 		return "truecolor";
 	}
 	// Windows Terminal supports truecolor
-	if (process.env.WT_SESSION) {
+	if (Bun.env.WT_SESSION) {
 		return "truecolor";
 	}
-	const term = process.env.TERM || "";
+	const term = Bun.env.TERM || "";
 	// Only fall back to 256color for truly limited terminals
 	if (term === "dumb" || term === "" || term === "linux") {
 		return "256color";
@@ -1706,7 +1706,7 @@ export async function getThemeByName(name: string): Promise<Theme | undefined> {
 }
 
 function detectTerminalBackground(): "dark" | "light" {
-	const colorfgbg = process.env.COLORFGBG || "";
+	const colorfgbg = Bun.env.COLORFGBG || "";
 	if (colorfgbg) {
 		const parts = colorfgbg.split(";");
 		if (parts.length >= 2) {

@@ -145,24 +145,24 @@ class FakeWebSocket {
 }
 
 describe("PythonKernel (external gateway)", () => {
-	const originalEnv = { ...process.env };
+	const originalEnv = { ...Bun.env };
 	const originalFetch = globalThis.fetch;
 	const originalWebSocket = globalThis.WebSocket;
 
 	beforeEach(() => {
-		process.env.PI_PYTHON_GATEWAY_URL = "http://gateway.test";
-		process.env.PI_PYTHON_SKIP_CHECK = "1";
+		Bun.env.PI_PYTHON_GATEWAY_URL = "http://gateway.test";
+		Bun.env.PI_PYTHON_SKIP_CHECK = "1";
 		globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
 	});
 
 	afterEach(() => {
-		for (const key of Object.keys(process.env)) {
+		for (const key of Object.keys(Bun.env)) {
 			if (!(key in originalEnv)) {
-				delete process.env[key];
+				delete Bun.env[key];
 			}
 		}
 		for (const [key, value] of Object.entries(originalEnv)) {
-			process.env[key] = value;
+			Bun.env[key] = value;
 		}
 		globalThis.fetch = originalFetch;
 		globalThis.WebSocket = originalWebSocket;

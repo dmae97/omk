@@ -17,7 +17,7 @@
  * // Full control
  * const session = await createAgentSession({
  *   model: myModel,
- *   getApiKey: async () => process.env.MY_KEY,
+ *   getApiKey: async () => Bun.env.MY_KEY,
  *   toolNames: ["read", "bash", "edit", "write"], // Filter tools
  *   extensions: [],
  *   skills: [],
@@ -566,7 +566,7 @@ function createCustomToolsExtension(tools: CustomTool[]): ExtensionFactory {
  * // Full control
  * const { session } = await createAgentSession({
  *   model: myModel,
- *   getApiKey: async () => process.env.MY_KEY,
+ *   getApiKey: async () => Bun.env.MY_KEY,
  *   systemPrompt: 'You are helpful.',
  *   tools: codingTools({ cwd: process.cwd() }),
  *   skills: [],
@@ -814,7 +814,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 		// If we extracted Exa API keys from MCP configs and EXA_API_KEY isn't set, use the first one
 		if (mcpResult.exaApiKeys.length > 0 && !$env.EXA_API_KEY) {
-			process.env.EXA_API_KEY = mcpResult.exaApiKeys[0];
+			Bun.env.EXA_API_KEY = mcpResult.exaApiKeys[0];
 		}
 
 		// Log MCP errors

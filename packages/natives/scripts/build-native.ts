@@ -7,9 +7,9 @@ const rustDir = path.join(repoRoot, "crates/pi-natives");
 const nativeDir = path.join(import.meta.dir, "../native");
 
 const isDev = process.argv.includes("--dev");
-const crossTarget = process.env.CROSS_TARGET;
-const targetPlatform = process.env.TARGET_PLATFORM || process.platform;
-const targetArch = process.env.TARGET_ARCH || process.arch;
+const crossTarget = Bun.env.CROSS_TARGET;
+const targetPlatform = Bun.env.TARGET_PLATFORM || process.platform;
+const targetArch = Bun.env.TARGET_ARCH || process.arch;
 const isCrossCompile =
 	Boolean(crossTarget) ||
 	targetPlatform !== process.platform ||
@@ -79,7 +79,7 @@ if (buildResult.exitCode !== 0) {
 
 const profile = isDev ? "debug" : "release";
 const targetRoots = [
-	process.env.CARGO_TARGET_DIR ? path.resolve(process.env.CARGO_TARGET_DIR) : undefined,
+	Bun.env.CARGO_TARGET_DIR ? path.resolve(Bun.env.CARGO_TARGET_DIR) : undefined,
 	path.join(repoRoot, "target"),
 	path.join(rustDir, "target"),
 ].filter((v): v is string => Boolean(v));

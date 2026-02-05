@@ -12,8 +12,8 @@ if (reset) {
 	process.exit(0);
 }
 
-const targetPlatform = process.env.TARGET_PLATFORM || process.platform;
-const targetArch = process.env.TARGET_ARCH || process.arch;
+const targetPlatform = Bun.env.TARGET_PLATFORM || process.platform;
+const targetArch = Bun.env.TARGET_ARCH || process.arch;
 const platformTag = `${targetPlatform}-${targetArch}`;
 const addonFilename = `pi_natives.${platformTag}.node`;
 

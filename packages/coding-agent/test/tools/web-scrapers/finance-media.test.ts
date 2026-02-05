@@ -3,7 +3,7 @@ import { handleArtifactHub } from "@oh-my-pi/pi-coding-agent/web/scrapers/artifa
 import { handleCoinGecko } from "@oh-my-pi/pi-coding-agent/web/scrapers/coingecko";
 import { handleDiscogs } from "@oh-my-pi/pi-coding-agent/web/scrapers/discogs";
 
-const SKIP = !process.env.WEB_FETCH_INTEGRATION;
+const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
 
 describe.skipIf(SKIP)("handleCoinGecko", () => {
 	it("returns null for non-CoinGecko URLs", async () => {

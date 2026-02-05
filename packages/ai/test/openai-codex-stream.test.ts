@@ -4,14 +4,14 @@ import type { Context, Model } from "@oh-my-pi/pi-ai/types";
 import { TempDir } from "@oh-my-pi/pi-utils";
 
 const originalFetch = global.fetch;
-const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
+const originalAgentDir = Bun.env.PI_CODING_AGENT_DIR;
 
 afterEach(() => {
 	global.fetch = originalFetch;
 	if (originalAgentDir === undefined) {
-		delete process.env.PI_CODING_AGENT_DIR;
+		delete Bun.env.PI_CODING_AGENT_DIR;
 	} else {
-		process.env.PI_CODING_AGENT_DIR = originalAgentDir;
+		Bun.env.PI_CODING_AGENT_DIR = originalAgentDir;
 	}
 	vi.restoreAllMocks();
 });
@@ -19,7 +19,7 @@ afterEach(() => {
 describe("openai-codex streaming", () => {
 	it("streams SSE responses into AssistantMessageEventStream", async () => {
 		const tempDir = TempDir.createSync("@pi-codex-stream-");
-		process.env.PI_CODING_AGENT_DIR = tempDir.path();
+		Bun.env.PI_CODING_AGENT_DIR = tempDir.path();
 
 		const payload = Buffer.from(
 			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),
@@ -130,7 +130,7 @@ describe("openai-codex streaming", () => {
 
 	it("sets conversation_id/session_id headers and prompt_cache_key when sessionId is provided", async () => {
 		const tempDir = TempDir.createSync("@pi-codex-stream-");
-		process.env.PI_CODING_AGENT_DIR = tempDir.path();
+		Bun.env.PI_CODING_AGENT_DIR = tempDir.path();
 
 		const payload = Buffer.from(
 			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),
@@ -231,7 +231,7 @@ describe("openai-codex streaming", () => {
 
 	it("does not set conversation_id/session_id headers when sessionId is not provided", async () => {
 		const tempDir = TempDir.createSync("@pi-codex-stream-");
-		process.env.PI_CODING_AGENT_DIR = tempDir.path();
+		Bun.env.PI_CODING_AGENT_DIR = tempDir.path();
 
 		const payload = Buffer.from(
 			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),

@@ -4,7 +4,7 @@ import { handleGitLab } from "@oh-my-pi/pi-coding-agent/web/scrapers/gitlab";
 import { handleHackerNews } from "@oh-my-pi/pi-coding-agent/web/scrapers/hackernews";
 import { handleLobsters } from "@oh-my-pi/pi-coding-agent/web/scrapers/lobsters";
 
-const SKIP = !process.env.WEB_FETCH_INTEGRATION;
+const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
 
 // =============================================================================
 // HackerNews Tests

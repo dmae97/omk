@@ -3,9 +3,10 @@
 ## [Unreleased]
 
 ## [11.0.0] - 2026-02-05
+
 ### Changed
 
-- Replaced direct `process.env` access with `getEnv()` utility from `@oh-my-pi/pi-utils` for consistent environment variable handling across all providers
+- Replaced direct `Bun.env` access with `getEnv()` utility from `@oh-my-pi/pi-utils` for consistent environment variable handling across all providers
 - Updated environment variable names from `OMP_*` prefix to `PI_*` prefix for consistency (e.g., `OMP_CODING_AGENT_DIR` → `PI_CODING_AGENT_DIR`)
 
 ### Removed
@@ -13,6 +14,7 @@
 - Removed automatic environment variable migration from `PI_*` to `OMP_*` prefixes via `migrate-env.ts` module
 
 ## [10.5.0] - 2026-02-04
+
 ### Changed
 
 - Updated @anthropic-ai/sdk to ^0.72.1
@@ -28,18 +30,20 @@
 - Removed undici dependency
 
 ## [9.4.0] - 2026-01-31
+
 ### Added
 
-- Added `getEnv()` function to retrieve environment variables from process.env, cwd/.env, or ~/.env
+- Added `getEnv()` function to retrieve environment variables from Bun.env, cwd/.env, or ~/.env
 - Added support for reading .env files from home directory and current working directory
 - Added support for `exa` and `perplexity` as known providers in `getEnvApiKey()`
 
 ### Changed
 
-- Changed `getEnvApiKey()` to check process.env, cwd/.env, and ~/.env files in order of precedence
+- Changed `getEnvApiKey()` to check Bun.env, cwd/.env, and ~/.env files in order of precedence
 - Refactored provider API key resolution to use a declarative service provider map
 
 ## [9.2.2] - 2026-01-31
+
 ### Added
 
 - Added OpenCode Zen provider with API key authentication for accessing multiple AI models
@@ -86,31 +90,40 @@
 ## [8.6.0] - 2026-01-27
 
 ### Changed
+
 - Replaced JSON5 dependency with Bun.JSON5 parsing
 
 ### Fixed
+
 - Filtered empty user text blocks for OpenAI-compatible completions and normalized Kimi reasoning_content for OpenRouter tool-call messages
 
 ## [8.4.0] - 2026-01-25
 
 ### Added
+
 - Added Azure OpenAI Responses provider with deployment mapping and resource-based base URL support
 
 ### Changed
+
 - Added OpenRouter routing preferences for OpenAI-compatible completions
 
 ### Fixed
+
 - Defaulted Google tool call arguments to empty objects when providers omit args
 - Guarded Responses/Codex streaming deltas against missing content parts and handled arguments.done events
 
 ## [8.2.1] - 2026-01-24
 
 ### Fixed
+
 - Fixed handling of streaming function call arguments in OpenAI responses to properly parse arguments when sent via `response.function_call_arguments.done` events
+
 ## [8.2.0] - 2026-01-24
 
 ### Changed
+
 - Migrated node module imports from named to namespace imports across all packages for consistency with project guidelines
+
 ## [8.0.0] - 2026-01-23
 
 ### Fixed
@@ -119,6 +132,7 @@
 - Fixed 400 errors when reading multiple images via GitHub Copilot's Claude models. Claude requires tool_use -> tool_result adjacency with no user messages interleaved. Images from consecutive tool results are now batched into a single user message
 
 ## [7.0.0] - 2026-01-21
+
 ### Added
 
 - Added usage tracking system with normalized schema for provider quota/limit endpoints
@@ -152,12 +166,14 @@
 - Fixed Gemini CLI usage windows to consistently label quota windows for display suppression
 
 ## [6.9.69] - 2026-01-21
+
 ### Added
 
 - Added duration and time-to-first-token (ttft) metrics to all AI provider responses
 - Added performance tracking for streaming responses across all providers
 
 ## [6.9.0] - 2026-01-21
+
 ### Removed
 
 - Removed openai-codex provider exports from main package index
@@ -165,6 +181,7 @@
 - Removed vitest configuration file
 
 ## [6.8.4] - 2026-01-21
+
 ### Changed
 
 - Updated prompt caching strategy to follow Anthropic's recommended hierarchy
@@ -173,6 +190,7 @@
 - Increased OAuth callback timeout from 120 seconds to 120,000 milliseconds
 
 ## [6.8.3] - 2026-01-21
+
 ### Added
 
 - Added `headers` option to all providers for custom request headers
@@ -197,6 +215,7 @@
 - Enhanced AWS credential detection to support ECS task roles and IRSA web identity tokens
 
 ## [6.8.2] - 2026-01-21
+
 ### Fixed
 
 - Improved error handling for aborted requests in Google Gemini CLI provider
@@ -238,6 +257,7 @@
 - Fixed token refresh for all OAuth providers
 
 ## [6.7.670] - 2026-01-19
+
 ### Changed
 
 - Updated Claude Code compatibility headers and version
@@ -247,16 +267,19 @@
 - Updated PKCE verifier generation for better security
 
 ## [5.7.67] - 2026-01-18
+
 ### Fixed
 
 - Added error handling for unknown OAuth providers
 
 ## [5.6.77] - 2026-01-18
+
 ### Fixed
 
 - Prevented duplicate tool results for errored or aborted messages when results already exist
 
 ## [5.6.7] - 2026-01-18
+
 ### Added
 
 - Added automatic retry logic for OpenAI Codex responses with configurable delay and max retries
@@ -265,8 +288,8 @@
 
 ### Changed
 
-- Updated environment variable prefix from PI_ to OMP_ for better consistency
-- Added automatic migration for legacy PI_ environment variables to OMP_ equivalents
+- Updated environment variable prefix from PI* to OMP* for better consistency
+- Added automatic migration for legacy PI* environment variables to OMP* equivalents
 - Adjusted Bedrock Claude thinking budgets to reserve output tokens when maxTokens is too low
 
 ### Fixed
@@ -281,6 +304,7 @@
 - Fixed orphaned tool call handling to skip synthetic results for errored assistant messages
 
 ## [5.5.0] - 2026-01-18
+
 ### Changed
 
 - Updated User-Agent header from 'opencode' to 'pi' for OpenAI Codex requests
@@ -288,6 +312,7 @@
 - Removed bridge text override from Codex system prompt builder
 
 ## [5.3.0] - 2026-01-15
+
 ### Changed
 
 - Replaced detailed Codex system instructions with simplified pi assistant instructions
@@ -307,6 +332,7 @@
 - Fixed numbered list items showing "1." for all items when code blocks break list continuity (via `start` property)
 
 ## [5.0.0] - 2026-01-12
+
 ### Added
 
 - Added support for `xhigh` thinking level in `thinkingBudgets` configuration
@@ -318,6 +344,7 @@
 - Changed `supportsXhigh()` to return true for all Anthropic models
 
 ## [4.6.0] - 2026-01-12
+
 ### Fixed
 
 - Fixed incorrect classification of thought signatures in Google Gemini responses—thought signatures are now correctly treated as metadata rather than thinking content indicators
@@ -325,22 +352,26 @@
 - Fixed Google schema sanitization stripping property names that match schema keywords (e.g., "pattern", "format") from tool definitions
 
 ## [4.4.9] - 2026-01-12
+
 ### Fixed
 
 - Fixed Google provider schema sanitization to strip additional unsupported JSON Schema fields (patternProperties, additionalProperties, min/max constraints, pattern, format)
 
 ## [4.4.8] - 2026-01-12
+
 ### Fixed
 
 - Fixed Google provider schema sanitization to properly collapse `anyOf`/`oneOf` with const values into enum arrays
 - Fixed const-to-enum conversion to infer type from the const value when type is not specified
 
 ## [4.4.6] - 2026-01-11
+
 ### Fixed
 
 - Fixed tool parameter schema sanitization to only apply Google-specific transformations for Gemini models, preserving original schemas for other model types
 
 ## [4.4.5] - 2026-01-11
+
 ### Changed
 
 - Exported `sanitizeSchemaForGoogle` utility function for external use
@@ -375,13 +406,14 @@
 
 - Changed Cursor debug logging to use structured JSONL format with automatic MCP argument decoding
 - Changed MCP tool argument decoding to use protobuf Value schema for improved type handling
-- Changed tool advertisement to filter Cursor native tools (bash, read, write, delete, ls, grep, lsp) instead of only exposing mcp_ prefixed tools
+- Changed tool advertisement to filter Cursor native tools (bash, read, write, delete, ls, grep, lsp) instead of only exposing mcp\_ prefixed tools
 
 ### Fixed
 
 - Fixed Cursor conversation history serialization so subagents retain task context and can call complete
 
 ## [4.2.1] - 2026-01-11
+
 ### Changed
 
 - Updated `reasoningSummary` option to accept only `"auto"`, `"concise"`, `"detailed"`, or `null` (removed `"off"` and `"on"` values)
@@ -393,6 +425,7 @@
 - Fixed Cloud Code Assist tool schema conversion to avoid unsupported `const` fields
 
 ## [4.0.0] - 2026-01-10
+
 ### Added
 
 - Added `betas` option in `AnthropicOptions` for passing custom Anthropic beta feature flags
@@ -434,6 +467,7 @@
 - Crash when pasting text with trailing whitespace exceeding terminal width
 
 ## [3.37.1] - 2026-01-10
+
 ### Added
 
 - Added automatic type coercion for tool arguments when LLMs return JSON-encoded strings instead of native types (numbers, booleans, arrays, objects)
@@ -444,11 +478,13 @@
 - Changed validation error messages to include both original and normalized arguments when coercion was attempted
 
 ## [3.37.0] - 2026-01-10
+
 ### Changed
 
 - Enabled type coercion in JSON schema validation to automatically convert compatible types
 
 ## [3.35.0] - 2026-01-09
+
 ### Added
 
 - Enhanced error messages to include retry-after timing information from API rate limit headers

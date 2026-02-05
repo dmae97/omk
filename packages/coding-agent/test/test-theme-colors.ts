@@ -1,7 +1,7 @@
 import { initTheme, theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 
 // Initialize with dark theme explicitly
-process.env.COLORTERM = "truecolor";
+Bun.env.COLORTERM = "truecolor";
 initTheme("dark");
 
 console.log("\n=== Foreground Colors ===\n");
@@ -68,8 +68,8 @@ console.log("Direct #00d7ff test: \x1b[38;2;0;215;255mBRIGHT CYAN\x1b[0m");
 console.log("Theme cyan (should match above):", theme.fg("accent", "BRIGHT CYAN"));
 
 console.log("\n=== Environment ===\n");
-console.log("TERM:", process.env.TERM);
-console.log("COLORTERM:", process.env.COLORTERM);
+console.log("TERM:", Bun.env.TERM);
+console.log("COLORTERM:", Bun.env.COLORTERM);
 console.log("Color mode:", theme.getColorMode());
 
 console.log("\n");

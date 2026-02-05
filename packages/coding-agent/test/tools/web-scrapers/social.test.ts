@@ -3,7 +3,7 @@ import { handleReddit } from "@oh-my-pi/pi-coding-agent/web/scrapers/reddit";
 import { handleStackOverflow } from "@oh-my-pi/pi-coding-agent/web/scrapers/stackoverflow";
 import { handleTwitter } from "@oh-my-pi/pi-coding-agent/web/scrapers/twitter";
 
-const SKIP = !process.env.WEB_FETCH_INTEGRATION;
+const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
 
 describe.skipIf(SKIP)("handleTwitter", () => {
 	it("returns null for non-Twitter URLs", async () => {

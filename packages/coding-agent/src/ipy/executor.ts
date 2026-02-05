@@ -225,7 +225,7 @@ export async function warmPythonEnvironment(
 	useSharedGateway?: boolean,
 	sessionFile?: string,
 ): Promise<{ ok: boolean; reason?: string; docs: PreludeHelper[] }> {
-	const isTestEnv = process.env.BUN_ENV === "test" || process.env.NODE_ENV === "test";
+	const isTestEnv = Bun.env.BUN_ENV === "test" || Bun.env.NODE_ENV === "test";
 	let cacheState: PreludeCacheState | null = null;
 	try {
 		debugStartup("warmPython:ensureKernel:start");

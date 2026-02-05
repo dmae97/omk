@@ -4,7 +4,7 @@ import { handleIacr } from "@oh-my-pi/pi-coding-agent/web/scrapers/iacr";
 import { handlePubMed } from "@oh-my-pi/pi-coding-agent/web/scrapers/pubmed";
 import { handleSemanticScholar } from "@oh-my-pi/pi-coding-agent/web/scrapers/semantic-scholar";
 
-const SKIP = !process.env.WEB_FETCH_INTEGRATION;
+const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
 
 describe.skipIf(SKIP)("handleSemanticScholar", () => {
 	it("returns null for non-S2 URLs", async () => {

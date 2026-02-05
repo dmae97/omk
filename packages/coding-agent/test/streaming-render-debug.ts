@@ -11,7 +11,7 @@ import { ProcessTerminal, TUI } from "@oh-my-pi/pi-tui";
 import { sleep } from "bun";
 
 // Initialize dark theme with full color support
-process.env.COLORTERM = "truecolor";
+Bun.env.COLORTERM = "truecolor";
 initTheme("dark");
 
 async function main() {

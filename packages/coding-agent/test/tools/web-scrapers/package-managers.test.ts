@@ -6,7 +6,7 @@ import { handleNuGet } from "@oh-my-pi/pi-coding-agent/web/scrapers/nuget";
 import { handlePackagist } from "@oh-my-pi/pi-coding-agent/web/scrapers/packagist";
 import { handleRubyGems } from "@oh-my-pi/pi-coding-agent/web/scrapers/rubygems";
 
-const SKIP = !process.env.WEB_FETCH_INTEGRATION;
+const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
 
 describe.skipIf(SKIP)("handleBrew", () => {
 	it("returns null for non-Homebrew URLs", async () => {

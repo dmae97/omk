@@ -86,7 +86,7 @@ export async function createReportBundle(options: ReportBundleOptions): Promise<
 	files.push("system.json");
 
 	// Sanitized environment
-	data["env.json"] = JSON.stringify(sanitizeEnv(process.env as Record<string, string>), null, 2);
+	data["env.json"] = JSON.stringify(sanitizeEnv(Bun.env as Record<string, string>), null, 2);
 	files.push("env.json");
 
 	// Settings/config

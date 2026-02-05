@@ -160,7 +160,7 @@ function extractMCPServersFromToml(toml: Record<string, unknown>): Record<string
 		const env: Record<string, string> = { ...config.env };
 		if (config.env_vars) {
 			for (const varName of config.env_vars) {
-				const value = process.env[varName];
+				const value = Bun.env[varName];
 				if (value !== undefined) {
 					env[varName] = value;
 				}
@@ -174,14 +174,14 @@ function extractMCPServersFromToml(toml: Record<string, unknown>): Record<string
 		const headers: Record<string, string> = { ...config.http_headers };
 		if (config.env_http_headers) {
 			for (const [headerName, envVarName] of Object.entries(config.env_http_headers)) {
-				const value = process.env[envVarName];
+				const value = Bun.env[envVarName];
 				if (value !== undefined) {
 					headers[headerName] = value;
 				}
 			}
 		}
 		if (config.bearer_token_env_var) {
-			const token = process.env[config.bearer_token_env_var];
+			const token = Bun.env[config.bearer_token_env_var];
 			if (token) {
 				headers.Authorization = `Bearer ${token}`;
 			}

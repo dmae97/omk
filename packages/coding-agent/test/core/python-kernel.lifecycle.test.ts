@@ -80,9 +80,9 @@ describe("PythonKernel gateway lifecycle", () => {
 	const originalSleep = Bun.sleep;
 	const originalWhich = Bun.which;
 	const originalExecute = PythonKernel.prototype.execute;
-	const originalGatewayUrl = process.env.PI_PYTHON_GATEWAY_URL;
-	const originalGatewayToken = process.env.PI_PYTHON_GATEWAY_TOKEN;
-	const originalBunEnv = process.env.BUN_ENV;
+	const originalGatewayUrl = Bun.env.PI_PYTHON_GATEWAY_URL;
+	const originalGatewayToken = Bun.env.PI_PYTHON_GATEWAY_TOKEN;
+	const originalBunEnv = Bun.env.BUN_ENV;
 
 	let tempDir: TempDir;
 	let env: MockEnvironment;
@@ -91,9 +91,9 @@ describe("PythonKernel gateway lifecycle", () => {
 		tempDir = TempDir.createSync("@omp-python-kernel-");
 		env = { fetchCalls: [], spawnCalls: [] };
 
-		process.env.BUN_ENV = "test";
-		delete process.env.PI_PYTHON_GATEWAY_URL;
-		delete process.env.PI_PYTHON_GATEWAY_TOKEN;
+		Bun.env.BUN_ENV = "test";
+		delete Bun.env.PI_PYTHON_GATEWAY_URL;
+		delete Bun.env.PI_PYTHON_GATEWAY_TOKEN;
 
 		FakeWebSocket.instances = [];
 		globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
@@ -125,19 +125,19 @@ describe("PythonKernel gateway lifecycle", () => {
 		}
 
 		if (originalBunEnv === undefined) {
-			delete process.env.BUN_ENV;
+			delete Bun.env.BUN_ENV;
 		} else {
-			process.env.BUN_ENV = originalBunEnv;
+			Bun.env.BUN_ENV = originalBunEnv;
 		}
 		if (originalGatewayUrl === undefined) {
-			delete process.env.PI_PYTHON_GATEWAY_URL;
+			delete Bun.env.PI_PYTHON_GATEWAY_URL;
 		} else {
-			process.env.PI_PYTHON_GATEWAY_URL = originalGatewayUrl;
+			Bun.env.PI_PYTHON_GATEWAY_URL = originalGatewayUrl;
 		}
 		if (originalGatewayToken === undefined) {
-			delete process.env.PI_PYTHON_GATEWAY_TOKEN;
+			delete Bun.env.PI_PYTHON_GATEWAY_TOKEN;
 		} else {
-			process.env.PI_PYTHON_GATEWAY_TOKEN = originalGatewayToken;
+			Bun.env.PI_PYTHON_GATEWAY_TOKEN = originalGatewayToken;
 		}
 
 		globalThis.fetch = originalFetch;
