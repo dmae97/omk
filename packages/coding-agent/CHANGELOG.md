@@ -1,8 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Support for image file mentions—images are now automatically detected, resized, and attached when referenced with @filepath syntax
+- Image dimension information displayed in file mention UI to show image properties alongside text files
+
 ### Changed
 
+- File mention messages now support both text content and image attachments, with optional line count for text files
 - Updated file mention processing to respect image auto-resize settings
 
 ### Fixed

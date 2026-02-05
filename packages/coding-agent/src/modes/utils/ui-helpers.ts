@@ -127,10 +127,15 @@ export class UiHelpers {
 			case "fileMention": {
 				// Render compact file mention display
 				for (const file of message.files) {
+					const suffix = file.image
+						? "(image)"
+						: file.lineCount === undefined
+							? "(unknown lines)"
+							: `(${file.lineCount} lines)`;
 					const text = `${theme.fg("dim", `${theme.tree.last} `)}${theme.fg("muted", "Read")} ${theme.fg(
 						"accent",
 						file.path,
-					)} ${theme.fg("dim", `(${file.lineCount} lines)`)}`;
+					)} ${theme.fg("dim", suffix)}`;
 					this.ctx.chatContainer.addChild(new Text(text, 0, 0));
 				}
 				break;

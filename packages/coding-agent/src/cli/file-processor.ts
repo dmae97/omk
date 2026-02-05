@@ -22,7 +22,7 @@ export interface ProcessFileOptions {
 
 /** Process @file arguments into text content and image attachments */
 export async function processFileArguments(fileArgs: string[], options?: ProcessFileOptions): Promise<ProcessedFiles> {
-	const _autoResizeImages = options?.autoResizeImages ?? true;
+	const autoResizeImages = options?.autoResizeImages ?? true;
 	let text = "";
 	const images: ImageContent[] = [];
 
@@ -53,7 +53,7 @@ export async function processFileArguments(fileArgs: string[], options?: Process
 			let attachment: ImageContent;
 			let dimensionNote: string | undefined;
 
-			if (_autoResizeImages) {
+			if (autoResizeImages) {
 				try {
 					const resized = await resizeImage({ type: "image", data: base64Content, mimeType });
 					dimensionNote = formatDimensionNote(resized);

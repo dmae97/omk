@@ -3960,7 +3960,12 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				lines.push("## File Mention\n");
 				for (const file of fileMsg.files) {
 					lines.push(`<file path="${file.path}">`);
-					lines.push(file.content);
+					if (file.content) {
+						lines.push(file.content);
+					}
+					if (file.image) {
+						lines.push("[Image attached]");
+					}
 					lines.push("</file>\n");
 				}
 				lines.push("\n");

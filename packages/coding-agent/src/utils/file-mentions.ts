@@ -5,12 +5,15 @@
  * we automatically inject the file contents as a FileMentionMessage
  * so the agent doesn't need to read them manually.
  */
+import * as fs from "node:fs/promises";
 import path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { FileMentionMessage } from "../session/messages";
 import { resolveReadPath } from "../tools/path-utils";
 import { formatAge } from "../tools/render-utils";
 import { DEFAULT_MAX_BYTES, formatSize, truncateHead, truncateStringToBytesFromStart } from "../tools/truncate";
+import { formatDimensionNote, resizeImage } from "./image-resize";
+import { detectSupportedImageMimeTypeFromFile } from "./mime";
 
 /** Regex to match @filepath patterns in text */
 const FILE_MENTION_REGEX = /@([^\s@]+)/g;
@@ -156,8 +159,14 @@ export function extractFileMentions(text: string): string[] {
  * Generate a FileMentionMessage containing the contents of mentioned files.
  * Returns empty array if no files could be read.
  */
-export async function generateFileMentionMessages(filePaths: string[], cwd: string): Promise<AgentMessage[]> {
+export async function generateFileMentionMessages(
+	filePaths: string[],
+	cwd: string,
+	options?: { autoResizeImages?: boolean },
+): Promise<AgentMessage[]> {
 	if (filePaths.length === 0) return [];
+
+	const autoResizeImages = options?.autoResizeImages ?? true;
 
 	const files: FileMentionMessage["files"] = [];
 
@@ -169,6 +178,35 @@ export async function generateFileMentionMessages(filePaths: string[], cwd: stri
 			if (stat.isDirectory()) {
 				const { output, lineCount } = await buildDirectoryListing(absolutePath);
 				files.push({ path: filePath, content: output, lineCount });
+				continue;
+			}
+
+			const mimeType = await detectSupportedImageMimeTypeFromFile(absolutePath);
+			if (mimeType) {
+				const buffer = await fs.readFile(absolutePath);
+				if (buffer.length === 0) {
+					continue;
+				}
+
+				const base64Content = buffer.toString("base64");
+				let image = { type: "image" as const, mimeType, data: base64Content };
+				let dimensionNote: string | undefined;
+
+				if (autoResizeImages) {
+					try {
+						const resized = await resizeImage({ type: "image", data: base64Content, mimeType });
+						dimensionNote = formatDimensionNote(resized);
+						image = {
+							type: "image" as const,
+							mimeType: resized.mimeType,
+							data: resized.data,
+						};
+					} catch {
+						image = { type: "image" as const, mimeType, data: base64Content };
+					}
+				}
+
+				files.push({ path: filePath, content: dimensionNote ?? "", image });
 				continue;
 			}
 
