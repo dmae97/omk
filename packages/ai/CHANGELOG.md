@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Exported `convertAnthropicMessages` function for converting message formats to Anthropic API
+- Automatic fallback for Anthropic assistant-prefill requests: appends synthetic user "Continue." message when conversation ends with assistant turn to maintain API compatibility
+
+### Fixed
+
+- Fixed handling of conversations ending with assistant messages on Anthropic-routed models that reject assistant prefill requests
 
 ## [11.2.3] - 2026-02-05
 ### Added

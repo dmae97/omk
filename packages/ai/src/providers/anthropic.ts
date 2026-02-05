@@ -566,7 +566,7 @@ function buildParams(
 ): MessageCreateParamsStreaming {
 	const params: MessageCreateParamsStreaming = {
 		model: model.id,
-		messages: convertMessages(context.messages, model, isOAuthToken),
+			messages: convertAnthropicMessages(context.messages, model, isOAuthToken),
 		max_tokens: options?.maxTokens || (model.maxTokens / 3) | 0,
 		stream: true,
 	};
@@ -726,7 +726,7 @@ function applyPromptCaching(params: MessageCreateParamsStreaming): void {
 	}
 }
 
-function convertMessages(
+export function convertAnthropicMessages(
 	messages: Message[],
 	model: Model<"anthropic-messages">,
 	isOAuthToken: boolean,
@@ -892,6 +892,16 @@ function convertMessages(
 			}
 		}
 	}
+
+		// If the conversation ends with an assistant message, Anthropic treats that
+		// as an assistant prefill. Many Anthropic-routed models reject this and
+		// require the conversation to end with a user message.
+		//
+		// Best-effort fallback: append a synthetic user "Continue." turn so the model
+		// can continue generation from the prior assistant content.
+		if (params.length > 0 && params[params.length - 1]?.role === "assistant") {
+			params.push({ role: "user", content: "Continue." });
+}
 
 	// Final validation: filter out any messages with invalid content
 	return params.filter(msg => {
