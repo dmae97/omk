@@ -79,7 +79,7 @@ export async function executeSSH(
 	using child = ptree.spawn(["ssh", ...(await buildRemoteCommand(host, resolvedCommand))], {
 		signal: options?.signal,
 		timeout: options?.timeout,
-		exposeStderr: true,
+		stderr: "full",
 	});
 
 	const sink = new OutputSink({

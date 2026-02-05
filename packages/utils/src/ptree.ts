@@ -103,7 +103,10 @@ export class ChildProcess<In extends InMask = InMask> {
 	#exited: Promise<number>;
 	#stderrStream?: ReadableStream<Uint8Array>;
 
-	constructor(public readonly proc: PipedSubprocess<In>, options?: { exposeStderr?: boolean }) {
+	constructor(
+		public readonly proc: PipedSubprocess<In>,
+		readonly exposeStderr: boolean,
+	) {
 		// Eagerly drain stderr into a truncated tail string + raw chunks.
 		const dec = new TextDecoder();
 		const trim = () => {
@@ -111,7 +114,7 @@ export class ChildProcess<In extends InMask = InMask> {
 				this.#stderrTail = this.#stderrTail.slice(-NonZeroExitError.MAX_TRACE);
 		};
 		let stderrStream = proc.stderr;
-		if (options?.exposeStderr) {
+		if (exposeStderr) {
 			const [teeStream, drainStream] = stderrStream.tee();
 			this.#stderrStream = teeStream;
 			stderrStream = drainStream;
@@ -311,12 +314,12 @@ type ChildSpawnOptions<In extends InMask = InMask> = Omit<
 > & {
 	signal?: AbortSignal;
 	detached?: boolean;
-	exposeStderr?: boolean;
+	stderr?: "full" | null;
 };
 
 /** Spawn a child process with piped stdout/stderr. */
 export function spawn<In extends InMask = InMask>(cmd: string[], opts?: ChildSpawnOptions<In>): ChildProcess<In> {
-	const { timeout = -1, signal, exposeStderr, ...rest } = opts ?? {};
+	const { timeout = -1, signal, stderr, ...rest } = opts ?? {};
 	const child = Bun.spawn(cmd, {
 		stdin: "ignore",
 		stdout: "pipe",
@@ -324,14 +327,14 @@ export function spawn<In extends InMask = InMask>(cmd: string[], opts?: ChildSpa
 		windowsHide: true,
 		...rest,
 	});
-	const cp = new ChildProcess(child, { exposeStderr });
+	const cp = new ChildProcess(child, stderr === "full");
 	if (signal) cp.attachSignal(signal);
 	if (timeout > 0) cp.attachTimeout(timeout);
 	return cp;
 }
 
 /** Options for exec. */
-export interface ExecOptions extends Omit<ChildSpawnOptions, "stdin">, WaitOptions {
+export interface ExecOptions extends Omit<ChildSpawnOptions, "stderr" | "stdin">, WaitOptions {
 	input?: string | Buffer | Uint8Array;
 }
 
