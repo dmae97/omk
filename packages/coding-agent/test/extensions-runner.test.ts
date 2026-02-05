@@ -23,7 +23,7 @@ describe("ExtensionRunner", () => {
 		extensionsDir = path.join(tempDir.path(), ".omp", "extensions");
 		fs.mkdirSync(extensionsDir, { recursive: true });
 		sessionManager = SessionManager.inMemory();
-		const authStorage = await AuthStorage.create(path.join(tempDir.path(), "auth.json"));
+		const authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));
 		modelRegistry = new ModelRegistry(authStorage);
 	});
 

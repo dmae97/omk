@@ -206,10 +206,6 @@ describe("Tool Call Without Result Tests", () => {
 		);
 	});
 
-	// =========================================================================
-	// OAuth-based providers (credentials from ~/.pi/agent/oauth.json)
-	// =========================================================================
-
 	describe("Anthropic OAuth Provider", () => {
 		const model = getModel("anthropic", "claude-3-5-haiku-20241022");
 

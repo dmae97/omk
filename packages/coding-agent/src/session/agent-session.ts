@@ -329,6 +329,7 @@ export class AgentSession {
 	private _streamingEditAbortTriggered = false;
 	private _streamingEditCheckedLineCounts = new Map<string, number>();
 	private _streamingEditFileCache = new Map<string, string>();
+	private _promptInFlight = false;
 
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
@@ -693,7 +694,11 @@ export class AgentSession {
 			.map(line => line.slice(1));
 		if (removedLines.length > 0) {
 			const resolvedPath = resolveToCwd(path, this.sessionManager.getCwd());
-			const cachedContent = this._streamingEditFileCache.get(resolvedPath);
+			let cachedContent = this._streamingEditFileCache.get(resolvedPath);
+			if (cachedContent === undefined) {
+				this._ensureFileCache(resolvedPath);
+				cachedContent = this._streamingEditFileCache.get(resolvedPath);
+			}
 			if (cachedContent !== undefined) {
 				const missing = removedLines.find(line => !cachedContent.includes(normalizeToLF(line)));
 				if (missing) {
@@ -898,7 +903,7 @@ export class AgentSession {
 
 	/** Whether agent is currently streaming a response */
 	get isStreaming(): boolean {
-		return this.agent.state.isStreaming;
+		return this.agent.state.isStreaming || this._promptInFlight;
 	}
 
 	/** Current retry attempt (0 if not retrying) */
@@ -1246,95 +1251,100 @@ export class AgentSession {
 		expandedText: string,
 		options?: Pick<PromptOptions, "toolChoice" | "images">,
 	): Promise<void> {
-		// Flush any pending bash messages before the new prompt
-		this._flushPendingBashMessages();
-		this._flushPendingPythonMessages();
+		this._promptInFlight = true;
+		try {
+			// Flush any pending bash messages before the new prompt
+			this._flushPendingBashMessages();
+			this._flushPendingPythonMessages();
 
-		// Reset todo reminder count on new user prompt
-		this._todoReminderCount = 0;
+			// Reset todo reminder count on new user prompt
+			this._todoReminderCount = 0;
 
-		// Validate model
-		if (!this.model) {
-			throw new Error(
-				"No model selected.\n\n" +
-					`Use /login, set an API key environment variable, or create ${getAgentDbPath()}\n\n` +
-					"Then use /model to select a model.",
-			);
-		}
+			// Validate model
+			if (!this.model) {
+				throw new Error(
+					"No model selected.\n\n" +
+						`Use /login, set an API key environment variable, or create ${getAgentDbPath()}\n\n` +
+						"Then use /model to select a model.",
+				);
+			}
 
-		// Validate API key
-		const apiKey = await this._modelRegistry.getApiKey(this.model, this.sessionId);
-		if (!apiKey) {
-			throw new Error(
-				`No API key found for ${this.model.provider}.\n\n` +
-					`Use /login, set an API key environment variable, or create ${getAgentDbPath()}`,
-			);
-		}
+			// Validate API key
+			const apiKey = await this._modelRegistry.getApiKey(this.model, this.sessionId);
+			if (!apiKey) {
+				throw new Error(
+					`No API key found for ${this.model.provider}.\n\n` +
+						`Use /login, set an API key environment variable, or create ${getAgentDbPath()}`,
+				);
+			}
 
-		// Check if we need to compact before sending (catches aborted responses)
-		const lastAssistant = this._findLastAssistantMessage();
-		if (lastAssistant) {
-			await this._checkCompaction(lastAssistant, false);
-		}
+			// Check if we need to compact before sending (catches aborted responses)
+			const lastAssistant = this._findLastAssistantMessage();
+			if (lastAssistant) {
+				await this._checkCompaction(lastAssistant, false);
+			}
 
-		// Build messages array (custom messages if any, then user message)
-		const messages: AgentMessage[] = [];
-		const planReferenceMessage = await this._buildPlanReferenceMessage?.();
-		if (planReferenceMessage) {
-			messages.push(planReferenceMessage);
-		}
-		const planModeMessage = await this._buildPlanModeMessage();
-		if (planModeMessage) {
-			messages.push(planModeMessage);
-		}
+			// Build messages array (custom messages if any, then user message)
+			const messages: AgentMessage[] = [];
+			const planReferenceMessage = await this._buildPlanReferenceMessage?.();
+			if (planReferenceMessage) {
+				messages.push(planReferenceMessage);
+			}
+			const planModeMessage = await this._buildPlanModeMessage();
+			if (planModeMessage) {
+				messages.push(planModeMessage);
+			}
 
-		messages.push(message);
+			messages.push(message);
 
-		// Inject any pending "nextTurn" messages as context alongside the user message
-		for (const msg of this._pendingNextTurnMessages) {
-			messages.push(msg);
-		}
-		this._pendingNextTurnMessages = [];
+			// Inject any pending "nextTurn" messages as context alongside the user message
+			for (const msg of this._pendingNextTurnMessages) {
+				messages.push(msg);
+			}
+			this._pendingNextTurnMessages = [];
 
-		// Auto-read @filepath mentions
-		const fileMentions = extractFileMentions(expandedText);
-		if (fileMentions.length > 0) {
-			const fileMentionMessages = await generateFileMentionMessages(fileMentions, this.sessionManager.getCwd(), {
-				autoResizeImages: this.settings.get("images.autoResize"),
-			});
-			messages.push(...fileMentionMessages);
-		}
+			// Auto-read @filepath mentions
+			const fileMentions = extractFileMentions(expandedText);
+			if (fileMentions.length > 0) {
+				const fileMentionMessages = await generateFileMentionMessages(fileMentions, this.sessionManager.getCwd(), {
+					autoResizeImages: this.settings.get("images.autoResize"),
+				});
+				messages.push(...fileMentionMessages);
+			}
 
-		// Emit before_agent_start extension event
-		if (this._extensionRunner) {
-			const result = await this._extensionRunner.emitBeforeAgentStart(
-				expandedText,
-				options?.images,
-				this._baseSystemPrompt,
-			);
-			if (result?.messages) {
-				for (const msg of result.messages) {
-					messages.push({
-						role: "custom",
-						customType: msg.customType,
-						content: msg.content,
-						display: msg.display,
-						details: msg.details,
-						timestamp: Date.now(),
-					});
+			// Emit before_agent_start extension event
+			if (this._extensionRunner) {
+				const result = await this._extensionRunner.emitBeforeAgentStart(
+					expandedText,
+					options?.images,
+					this._baseSystemPrompt,
+				);
+				if (result?.messages) {
+					for (const msg of result.messages) {
+						messages.push({
+							role: "custom",
+							customType: msg.customType,
+							content: msg.content,
+							display: msg.display,
+							details: msg.details,
+							timestamp: Date.now(),
+						});
+					}
+				}
+
+				if (result?.systemPrompt !== undefined) {
+					this.agent.setSystemPrompt(result.systemPrompt);
+				} else {
+					this.agent.setSystemPrompt(this._baseSystemPrompt);
 				}
 			}
 
-			if (result?.systemPrompt !== undefined) {
-				this.agent.setSystemPrompt(result.systemPrompt);
-			} else {
-				this.agent.setSystemPrompt(this._baseSystemPrompt);
-			}
+			const agentPromptOptions = options?.toolChoice ? { toolChoice: options.toolChoice } : undefined;
+			await this.agent.prompt(messages, agentPromptOptions);
+			await this.waitForRetry();
+		} finally {
+			this._promptInFlight = false;
 		}
-
-		const agentPromptOptions = options?.toolChoice ? { toolChoice: options.toolChoice } : undefined;
-		await this.agent.prompt(messages, agentPromptOptions);
-		await this.waitForRetry();
 	}
 
 	/**

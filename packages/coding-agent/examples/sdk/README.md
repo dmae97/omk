@@ -77,7 +77,7 @@ const { session } = await createAgentSession({
 });
 
 // Full control
-const customAuth = new AuthStorage("/my/app/auth.json");
+const customAuth = await AuthStorage.create("/my/app/agent.db");
 customAuth.setRuntimeApiKey("anthropic", Bun.env.MY_KEY!);
 const customRegistry = new ModelRegistry(customAuth);
 

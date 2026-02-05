@@ -50,7 +50,7 @@ Many modules now use the **capability/discovery system** (`discovery/builtin.ts`
 | `session/agent-session.ts`            | `getAgentDbPath`                 | `~/.omp/agent/agent.db`     | Database path             |
 | `session/session-manager.ts`          | `getAgentDir`                    | `~/.omp/agent/sessions/`    | Session storage           |
 | `session/agent-storage.ts`            | `getAgentDbPath`                 | `~/.omp/agent/agent.db`     | Settings/auth storage     |
-| `session/auth-storage.ts`             | `getAgentDbPath`, `getAuthPath`  | agent.db, auth.json         | Auth credential storage   |
+| `session/auth-storage.ts`             | `getAgentDbPath`                 | agent.db                    | Auth credential storage   |
 | `session/history-storage.ts`          | `getAgentDir`                    | `~/.omp/agent/`             | Command history           |
 | `session/storage-migration.ts`        | `getAgentDbPath`                 | `~/.omp/agent/agent.db`     | JSON→SQLite migration     |
 | `modes/theme/theme.ts`                | `getCustomThemesDir`             | `~/.omp/agent/themes/`      | Custom themes             |
@@ -78,12 +78,12 @@ These use helpers to check `.omp`, `.pi`, `.claude`, `.codex`, `.gemini` directo
 | File                                     | Helper Used                                            | Subpath(s)                  | Levels       |
 | ---------------------------------------- | ------------------------------------------------------ | --------------------------- | ------------ |
 | `main.ts`                                | `findConfigFile`                                       | `SYSTEM.md`, `APPEND_SYSTEM.md` | user+project |
-| `sdk.ts`                                 | `getConfigDirPaths`                                    | `auth.json`, `models.yml`, `models.json` | user |
+| `sdk.ts`                                 | `getConfigDirPaths`                                    | `models.yml`, `models.json` | user |
 | `lsp/config.ts`                          | `getConfigDirPaths`                                    | `lsp.json`, `.lsp.json`     | user+project |
 | `task/discovery.ts`                      | `getConfigDirs`, `findAllNearestProjectConfigDirs`     | `agents/`                   | user+project |
 | `extensibility/plugins/paths.ts`         | `getConfigDirPaths`                                    | `plugin-overrides.json`     | project      |
 | `extensibility/custom-commands/loader.ts`| `getConfigDirs`                                        | `commands/`                 | user+project |
-| `web/search/auth.ts`                     | `getConfigDirPaths`, `getAgentDbPath`                  | auth.json, agent.db         | user         |
+| `web/search/auth.ts`                     | `getConfigDirPaths`, `getAgentDbPath`                  | agent.db         | user         |
 | `web/search/providers/codex.ts`          | `getConfigDirPaths`, `getAgentDbPath`                  | auth config                 | user         |
 | `web/search/providers/gemini.ts`         | `getConfigDirPaths`, `getAgentDbPath`                  | auth config                 | user         |
 
@@ -110,7 +110,6 @@ These modules use `discovery/builtin.ts` which has its own config directory reso
 ```
 User-level (~/.omp/agent/, ~/.pi/agent/, ~/.claude/, ~/.codex/, ~/.gemini/):
 ├── agent.db           ← SQLite storage (settings, auth)
-├── auth.json          ← Legacy auth (migrated to agent.db)
 ├── models.yml         ← Model configuration (preferred)
 ├── models.json        ← Model configuration (legacy)
 ├── config.yml         ← Settings (alternative to agent.db)

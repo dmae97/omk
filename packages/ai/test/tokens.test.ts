@@ -180,10 +180,6 @@ describe("Token Statistics on Abort", () => {
 		);
 	});
 
-	// =========================================================================
-	// OAuth-based providers (credentials from ~/.pi/agent/oauth.json)
-	// =========================================================================
-
 	describe("Anthropic OAuth Provider", () => {
 		const llm = getModel("anthropic", "claude-3-5-haiku-20241022");
 

@@ -159,6 +159,8 @@ export class ConfigFile<T> implements IConfigFile<T> {
 		} else if (configPath.endsWith(".yaml")) {
 			const jsonPath = `${configPath.slice(0, -5)}.json`;
 			migrateJsonToYml(jsonPath, configPath);
+		} else if (configPath.endsWith(".json") || configPath.endsWith(".jsonc")) {
+			// JSON configs are still supported without migration.
 		} else {
 			throw new Error(`Invalid config file path: ${configPath}`);
 		}

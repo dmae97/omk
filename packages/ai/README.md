@@ -983,7 +983,7 @@ bunx @oh-my-pi/pi-ai login anthropic    # login to specific provider
 bunx @oh-my-pi/pi-ai list               # list available providers
 ```
 
-Credentials are saved to `auth.json` in the current directory.
+Credentials are saved to `agent.db` in the agent directory.
 
 ### Programmatic OAuth
 
@@ -1036,7 +1036,7 @@ const credentials = await loginGitHubCopilot({
 
 // Store credentials yourself
 const auth = { "github-copilot": { type: "oauth", ...credentials } };
-fs.writeFileSync("auth.json", JSON.stringify(auth, null, 2));
+fs.writeFileSync("credentials.json", JSON.stringify(auth, null, 2));
 ```
 
 ### Using OAuth Tokens
@@ -1048,7 +1048,7 @@ import { getModel, complete, getOAuthApiKey } from "@oh-my-pi/pi-ai";
 import * as fs from "node:fs";
 
 // Load your stored credentials
-const auth = JSON.parse(fs.readFileSync("auth.json", "utf-8"));
+const auth = JSON.parse(fs.readFileSync("credentials.json", "utf-8"));
 
 // Get API key (refreshes if expired)
 const result = await getOAuthApiKey("github-copilot", auth);
@@ -1056,7 +1056,7 @@ if (!result) throw new Error("Not logged in");
 
 // Save refreshed credentials
 auth["github-copilot"] = { type: "oauth", ...result.newCredentials };
-fs.writeFileSync("auth.json", JSON.stringify(auth, null, 2));
+fs.writeFileSync("credentials.json", JSON.stringify(auth, null, 2));
 
 // Use the API key
 const model = getModel("github-copilot", "gpt-4o");

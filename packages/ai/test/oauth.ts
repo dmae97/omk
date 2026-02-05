@@ -1,8 +1,8 @@
 /**
- * Test helper for resolving API keys from ~/.pi/agent/auth.json
+ * Test helper for resolving API keys from ~/.pi/agent/testauth.db
  *
  * Supports both API key and OAuth credentials.
- * OAuth tokens are automatically refreshed if expired and saved back to auth.json.
+ * OAuth tokens are automatically refreshed if expired and saved back to testauth.db.
  *
  * E2E tests are disabled by default. Set E2E=1 environment variable to enable.
  */
@@ -28,7 +28,7 @@ export function e2eApiKey(envVar: string): string | undefined {
 	return Bun.env[envVar];
 }
 
-const AUTH_PATH = path.join(os.homedir(), ".pi", "agent", "auth.json");
+const AUTH_PATH = path.join(os.homedir(), ".pi", "agent", "testauth.db");
 
 type ApiKeyCredential = {
 	type: "api_key";
@@ -59,7 +59,7 @@ async function saveAuthStorage(storage: AuthStorage): Promise<void> {
 }
 
 /**
- * Resolve API key for a provider from ~/.pi/agent/auth.json
+ * Resolve API key for a provider from ~/.pi/agent/testauth.db
  *
  * For API key credentials, returns the key directly.
  * For OAuth credentials, returns the access token (refreshing if expired and saving back).
@@ -91,7 +91,7 @@ export async function resolveApiKey(provider: string): Promise<string | undefine
 		const result = await getOAuthApiKey(provider as OAuthProvider, oauthCredentials);
 		if (!result) return undefined;
 
-		// Save refreshed credentials back to auth.json
+		// Save refreshed credentials back to testauth.db
 		storage[provider] = { type: "oauth", ...result.newCredentials };
 		await saveAuthStorage(storage);
 

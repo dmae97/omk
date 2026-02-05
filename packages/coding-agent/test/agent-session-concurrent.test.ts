@@ -89,8 +89,8 @@ describe("AgentSession concurrent prompt guard", () => {
 
 		const sessionManager = SessionManager.inMemory();
 		const settings = Settings.isolated();
-		const authStorage = await AuthStorage.create(path.join(tempDir, "auth.json"));
-		const modelRegistry = new ModelRegistry(authStorage, tempDir);
+		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 
 		session = new AgentSession({
@@ -179,8 +179,8 @@ describe("AgentSession concurrent prompt guard", () => {
 
 		const sessionManager = SessionManager.inMemory();
 		const settings = Settings.isolated();
-		const authStorage = await AuthStorage.create(path.join(tempDir, "auth.json"));
-		const modelRegistry = new ModelRegistry(authStorage, tempDir);
+		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 
 		session = new AgentSession({

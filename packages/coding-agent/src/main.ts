@@ -23,7 +23,6 @@ import { Settings, settings } from "./config/settings";
 import { initializeWithSettings } from "./discovery";
 import { exportFromFile } from "./export/html";
 import type { ExtensionUIContext } from "./extensibility/extensions/types";
-import { runMigrations, showDeprecationWarnings } from "./migrations";
 import { InteractiveMode, runPrintMode, runRpcMode } from "./modes";
 import { initTheme, stopThemeWatcher } from "./modes/theme/theme";
 import { type CreateAgentSessionOptions, createAgentSession, discoverAuthStorage } from "./sdk";
@@ -488,13 +487,6 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 
 	const notifs: (InteractiveModeNotify | null)[] = [];
 
-	// Run migrations (pass cwd for project-local migrations)
-	const { migratedAuthProviders: migratedProviders, deprecationWarnings } = await runMigrations(process.cwd());
-	debugStartup("main:runMigrations");
-	if (migratedProviders.length > 0) {
-		notifs.push({ kind: "warn", message: `Migrated credentials to agent.db: ${migratedProviders.join(", ")}` });
-	}
-
 	// Create AuthStorage and ModelRegistry upfront
 	const authStorage = await discoverAuthStorage();
 	const modelRegistry = new ModelRegistry(authStorage);
@@ -563,11 +555,6 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	await initTheme(settings.get("theme"), isInteractive, settings.get("symbolPreset"), settings.get("colorBlindMode"));
 	debugStartup("main:initTheme2");
 	time("initTheme");
-
-	// Show deprecation warnings in interactive mode
-	if (isInteractive && deprecationWarnings.length > 0) {
-		await showDeprecationWarnings(deprecationWarnings);
-	}
 
 	let scopedModels: ScopedModel[] = [];
 	const modelPatterns = parsedArgs.models ?? settings.get("enabledModels");

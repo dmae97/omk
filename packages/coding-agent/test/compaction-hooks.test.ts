@@ -104,7 +104,7 @@ describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("Compaction hooks", () => {
 
 		const sessionManager = SessionManager.create(tempDir);
 		const settings = Settings.isolated();
-		const authStorage = await AuthStorage.create(path.join(tempDir, "auth.json"));
+		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
 		const modelRegistry = new ModelRegistry(authStorage);
 
 		hookRunner = new HookRunner(hooks, tempDir, sessionManager, modelRegistry);

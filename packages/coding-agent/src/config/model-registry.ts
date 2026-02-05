@@ -255,6 +255,7 @@ export class ModelRegistry {
 	 * Reload models from disk (built-in + custom from models.json).
 	 */
 	refresh(): void {
+		this.modelsConfigFile.invalidate();
 		this.customProviderApiKeys.clear();
 		this.configError = undefined;
 		this.loadModels();

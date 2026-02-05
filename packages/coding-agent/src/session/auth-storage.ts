@@ -137,7 +137,7 @@ class AuthStorageUsageCache implements UsageCache {
 
 /**
  * Credential storage backed by agent.db.
- * Reads from SQLite and migrates legacy auth.json paths.
+ * Reads from SQLite (agent.db).
  */
 export class AuthStorage {
 	private static readonly defaultBackoffMs = 60_000; // Default backoff when no reset time available
@@ -159,7 +159,6 @@ export class AuthStorage {
 	private fallbackResolver?: (provider: string) => string | undefined;
 
 	private constructor(
-		private dbPath: string,
 		private storage: AgentStorage,
 		options: AuthStorageOptions = {},
 	) {
@@ -181,7 +180,7 @@ export class AuthStorage {
 	 */
 	static async create(dbPath: string, options: AuthStorageOptions = {}): Promise<AuthStorage> {
 		const storage = await AgentStorage.open(dbPath);
-		return new AuthStorage(dbPath, storage, options);
+		return new AuthStorage(storage, options);
 	}
 
 	/**
@@ -193,7 +192,6 @@ export class AuthStorage {
 		const storage = await AgentStorage.open(dbPath);
 
 		const instance = Object.create(AuthStorage.prototype) as AuthStorage;
-		instance.dbPath = dbPath;
 		instance.storage = storage;
 		instance.data = new Map();
 		instance.runtimeOverrides = new Map();
@@ -252,7 +250,6 @@ export class AuthStorage {
 		return {
 			credentials,
 			runtimeOverrides: Object.keys(runtimeOverrides).length > 0 ? runtimeOverrides : undefined,
-			dbPath: this.dbPath,
 		};
 	}
 
@@ -281,7 +278,7 @@ export class AuthStorage {
 
 	/**
 	 * Reload credentials from agent.db.
-	 * Migrates legacy auth.json/settings.json on first load.
+	 * Reloads credentials from the database.
 	 */
 	async reload(): Promise<void> {
 		const records = this.storage.listAuthCredentials();

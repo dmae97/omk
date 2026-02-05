@@ -7,12 +7,11 @@
  *   3. OAuth credentials in ~/.omp/agent/agent.db (with expiry check)
  *   4. ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL fallback
  */
-import * as path from "node:path";
 import { buildAnthropicHeaders as buildProviderAnthropicHeaders, getEnvApiKey } from "@oh-my-pi/pi-ai";
 import { $env, logger } from "@oh-my-pi/pi-utils";
 import { getAgentDbPath, getConfigDirPaths } from "../../config";
 import { AgentStorage } from "../../session/agent-storage";
-import type { AuthCredential, AuthCredentialEntry, AuthStorageData } from "../../session/auth-storage";
+import type { AuthCredential } from "../../session/auth-storage";
 import type { AnthropicAuthConfig, AnthropicOAuthCredential, ModelsJson } from "./types";
 
 const DEFAULT_BASE_URL = "https://api.anthropic.com";
@@ -59,26 +58,8 @@ function toAnthropicOAuthCredential(credential: AuthCredential): AnthropicOAuthC
 	};
 }
 
-function normalizeAuthEntry(entry: AuthCredentialEntry | undefined): AuthCredential[] {
-	if (!entry) return [];
-	return Array.isArray(entry) ? entry : [entry];
-}
-
-async function readLegacyAnthropicOAuthCredentials(configDir: string): Promise<AnthropicOAuthCredential[]> {
-	const authJson = await readJson<AuthStorageData>(path.join(configDir, "auth.json"));
-	if (!authJson) return [];
-	const entry = authJson.anthropic as AuthCredentialEntry | undefined;
-	const credentials = normalizeAuthEntry(entry);
-	const results: AnthropicOAuthCredential[] = [];
-	for (const credential of credentials) {
-		const mapped = toAnthropicOAuthCredential(credential);
-		if (mapped) results.push(mapped);
-	}
-	return results;
-}
-
 /**
- * Reads Anthropic OAuth credentials from agent.db, migrating from legacy auth.json if needed.
+ * Reads Anthropic OAuth credentials from agent.db.
  * @param configDir - Path to the config directory containing agent.db
  * @returns Array of valid Anthropic OAuth credentials
  */
@@ -91,10 +72,6 @@ async function readAnthropicOAuthCredentials(configDir: string): Promise<Anthrop
 		if (mapped) {
 			credentials.push(mapped);
 		}
-	}
-
-	if (credentials.length === 0) {
-		return readLegacyAnthropicOAuthCredentials(configDir);
 	}
 
 	return credentials;
@@ -125,7 +102,7 @@ export async function findAnthropicAuth(): Promise<AnthropicAuthConfig | null> {
 
 	// 2. Provider with api="anthropic-messages" in models.json (check all config dirs)
 	for (const configDir of configDirs) {
-		const modelsJson = await readJson<ModelsJson>(path.join(configDir, "models.json"));
+		const modelsJson = await readJson<ModelsJson>(`${configDir}/models.json`);
 		if (modelsJson?.providers) {
 			// First pass: look for providers with actual API keys
 			for (const [_name, provider] of Object.entries(modelsJson.providers)) {

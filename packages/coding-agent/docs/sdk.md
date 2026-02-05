@@ -272,7 +272,7 @@ const { session } = await createAgentSession({
 `agentDir` is used for:
 
 - Global settings (`config.yml` + `agent.db`)
-- Primary auth/models locations (`auth.json`, `models.yml`, `models.json`)
+ - Primary auth/models locations (`agent.db`, `models.yml`, `models.json`)
 - Prompt templates (`prompts/`)
 - Custom TS commands (`commands/`)
 
@@ -328,12 +328,13 @@ API key resolution priority (handled by AuthStorage):
 3. Environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.)
 4. Fallback resolver (for custom provider keys from `models.yml`)
 
-`discoverAuthStorage` also migrates legacy `auth.json` from user config directories (`.pi`, `.claude`, `.codex`, `.gemini`) into `agent.db`.
+
+ `discoverAuthStorage` opens the `agent.db` SQLite database in the agent directory.
 
 ```typescript
 import { AuthStorage, ModelRegistry, discoverAuthStorage, discoverModels } from "@oh-my-pi/pi-coding-agent";
 
-// Default: uses agentDir/auth.json → agent.db and agentDir/models.yml (with legacy fallbacks)
+ // Default: uses agentDir/agent.db and agentDir/models.yml
 const authStorage = await discoverAuthStorage();
 const modelRegistry = discoverModels(authStorage);
 
@@ -347,7 +348,7 @@ const { session } = await createAgentSession({
 authStorage.setRuntimeApiKey("anthropic", "sk-my-temp-key");
 
 // Custom auth storage location (use create(), constructor is private)
-const customAuth = await AuthStorage.create("/my/app/auth.json");
+const customAuth = await AuthStorage.create("/my/app/agent.db");
 const customRegistry = new ModelRegistry(customAuth, "/my/app/models.yml");
 
 const { session } = await createAgentSession({
@@ -788,7 +789,7 @@ import {
 } from "@oh-my-pi/pi-coding-agent";
 
 // Auth and Models
-const authStorage = await discoverAuthStorage(); // <agentDir>/auth.json → agent.db (with fallbacks)
+const authStorage = await discoverAuthStorage(); // <agentDir>/agent.db
 const modelRegistry = discoverModels(authStorage); // + <agentDir>/models.yml (or models.json)
 const allModels = modelRegistry.getAll(); // All models (built-in + custom)
 const available = modelRegistry.getAvailable(); // Only models with API keys

@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `omp commit` command to generate commit messages and update changelogs with `--push`, `--dry-run`, `--no-changelog`, and model override flags
@@ -29,8 +28,7 @@
 - Changed Perplexity search context size from 'high' to 'medium' and added search classifier, reasoning effort, and language preference settings
 - Increased Perplexity default max tokens from 4096 to 8192 for more comprehensive responses
 - Updated Anthropic and Gemini search providers to support `max_tokens` and `temperature` parameters for finer control over response generation
-- Simplified `AuthStorage.create()` to accept direct agent.db path instead of legacy auth.json path with fallback resolution
-- Updated `discoverAuthStorage()` to skip JSON-to-SQLite migration step, improving startup performance
+- Simplified `AuthStorage.create()` to accept direct agent.db path
 - Renamed web search types and exports for consistency: `WebSearchProvider` → `SearchProviderId`, `WebSearchResponse` → `SearchResponse`, `WebSearchTool` → `SearchTool`, and related functions
 - Refactored web search provider system to use centralized provider registry with `getSearchProvider()` and `resolveProviderChain()` for improved provider management
 - Updated web search system prompt to emphasize comprehensive, detailed answers with concrete data and specific examples over brevity
@@ -49,8 +47,7 @@
 
 ### Removed
 
-- Removed legacy auth.json migration system—credentials are now stored exclusively in agent.db
-- Removed `getAuthPath()` configuration function—use `getAgentDbPath()` for credential storage location
+- Removed legacy auth.json file—credentials are stored exclusively in agent.db
 
 ### Fixed
 
@@ -1703,6 +1700,8 @@
 
 - Fixed editor border rendering glitch after canceling slash command autocomplete
 - Fixed login/logout credential path message to reference agent.db
+ - Removed legacy auth.json file—credentials are stored exclusively in agent.db
+ - Removed legacy auth.json file—credentials are stored exclusively in agent.db
 
 ## [4.2.0] - 2026-01-10
 

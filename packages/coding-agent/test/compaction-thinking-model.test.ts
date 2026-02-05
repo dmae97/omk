@@ -76,7 +76,7 @@ describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigra
 		const sessionManager = SessionManager.inMemory();
 		const settings = Settings.isolated();
 
-		const authStorage = await AuthStorage.create(path.join(tempDir, "auth.json"));
+		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
 		const modelRegistry = new ModelRegistry(authStorage);
 
 		session = new AgentSession({
@@ -179,7 +179,7 @@ describe.skipIf(!HAS_ANTHROPIC_AUTH)("Compaction with thinking models (Anthropic
 		const sessionManager = SessionManager.inMemory();
 		const settings = Settings.isolated();
 
-		const authStorage = await AuthStorage.create(path.join(tempDir, "auth.json"));
+		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
 		const modelRegistry = new ModelRegistry(authStorage);
 
 		session = new AgentSession({

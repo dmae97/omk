@@ -1,4 +1,3 @@
-import * as path from "node:path";
 import { Agent, type AgentEvent, type AgentMessage, type AgentTool, type ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { type Message, type Model, supportsXhigh } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
@@ -6,7 +5,7 @@ import { $env, logger, postmortem } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { loadCapability } from "./capability";
 import { type Rule, ruleCapability } from "./capability/rule";
-import { getAgentDir, getConfigDirPaths } from "./config";
+import { getAgentDbPath, getAgentDir } from "./config";
 import { ModelRegistry } from "./config/model-registry";
 import { formatModelString, parseModelString } from "./config/model-resolver";
 import { loadPromptTemplates as loadPromptTemplatesInternal, type PromptTemplate } from "./config/prompt-templates";
@@ -229,13 +228,10 @@ function getDefaultAgentDir(): string {
  * Reads from primary path first, then falls back to legacy paths (.pi, .claude).
  */
 export async function discoverAuthStorage(agentDir: string = getDefaultAgentDir()): Promise<AuthStorage> {
-	const primaryPath = path.join(agentDir, "auth.json");
-	// Get all auth.json paths (user-level only), excluding the primary
-	const allPaths = getConfigDirPaths("auth.json", { project: false });
-	const fallbackPaths = allPaths.filter(p => p !== primaryPath);
-	logger.debug("discoverAuthStorage", { agentDir, primaryPath, allPaths, fallbackPaths });
+	const dbPath = getAgentDbPath(agentDir);
+	logger.debug("discoverAuthStorage", { agentDir, dbPath });
 
-	const storage = await AuthStorage.create(primaryPath);
+	const storage = await AuthStorage.create(dbPath);
 	await storage.reload();
 	return storage;
 }

@@ -980,11 +980,6 @@ describe("Generate E2E Tests", () => {
 		);
 	});
 
-	// =========================================================================
-	// OAuth-based providers (credentials from ~/.pi/agent/oauth.json)
-	// Tokens are resolved at module level (see oauthTokens above)
-	// =========================================================================
-
 	describe("Anthropic OAuth Provider (claude-sonnet-4-20250514)", () => {
 		const model = getModel("anthropic", "claude-sonnet-4-20250514");
 

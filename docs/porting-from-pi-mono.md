@@ -349,7 +349,7 @@ Our fork has architectural decisions that differ from upstream. **Do not port th
 
 | Upstream                        | Our Fork                                    | Notes                                                 |
 | ------------------------------- | ------------------------------------------- | ----------------------------------------------------- |
-| `proper-lockfile` + `auth.json` | `agent.db` (bun:sqlite)                     | Legacy `auth.json` is migrated; do not reintroduce it |
+| `proper-lockfile` + `auth.json` | `agent.db` (bun:sqlite)                     | Credentials stored exclusively in `agent.db`          |
 | Single credential per provider  | Multi-credential with round-robin selection | Session affinity and backoff logic preserved          |
 
 ### Extensions

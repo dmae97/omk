@@ -465,10 +465,6 @@ describe("AI Providers Empty Message Tests", () => {
 		);
 	});
 
-	// =========================================================================
-	// OAuth-based providers (credentials from ~/.pi/agent/oauth.json)
-	// =========================================================================
-
 	describe("Anthropic OAuth Provider Empty Messages", () => {
 		const llm = getModel("anthropic", "claude-3-5-haiku-20241022");
 

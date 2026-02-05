@@ -93,9 +93,9 @@ async function createSession(tempDir: string, streamFn: Agent["streamFn"], tool:
 
 	const sessionManager = SessionManager.inMemory(tempDir);
 	const settings = Settings.isolated({ "edit.streamingAbort": true });
-	const authStorage = await AuthStorage.create(path.join(tempDir, "auth.json"));
+	const authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
 	authStorage.setRuntimeApiKey("anthropic", "test-key");
-	const modelRegistry = new ModelRegistry(authStorage, tempDir);
+	const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
 
 	return new AgentSession({
 		agent,

@@ -15,7 +15,7 @@ describe("ModelRegistry", () => {
 		tempDir = path.join(os.tmpdir(), `pi-test-model-registry-${Snowflake.next()}`);
 		fs.mkdirSync(tempDir, { recursive: true });
 		modelsJsonPath = path.join(tempDir, "models.json");
-		authStorage = await AuthStorage.create(path.join(tempDir, "auth.json"));
+		authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
 	});
 
 	afterEach(() => {

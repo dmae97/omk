@@ -99,8 +99,8 @@ export async function createTestSession(options: TestSessionOptions = {}): Promi
 	const sessionManager = options.inMemory ? SessionManager.inMemory() : SessionManager.create(tempDir);
 	const settings = Settings.isolated(options.settingsOverrides);
 
-	const authStorage = await AuthStorage.create(path.join(tempDir, "auth.json"));
-	const modelRegistry = new ModelRegistry(authStorage, tempDir);
+	const authStorage = await AuthStorage.create(path.join(tempDir, "testauth.db"));
+	const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
 	const session = new AgentSession({
 		agent,
 		sessionManager,

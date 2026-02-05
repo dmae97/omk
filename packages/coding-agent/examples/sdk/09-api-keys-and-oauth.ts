@@ -12,7 +12,7 @@ import {
 	SessionManager,
 } from "@oh-my-pi/pi-coding-agent";
 
-// Default: discoverAuthStorage() uses ~/.omp/agent/auth.json
+// Default: discoverAuthStorage() uses ~/.omp/agent/agent.db
 // discoverModels() loads built-in + custom models from ~/.omp/agent/models.json
 const authStorage = await discoverAuthStorage();
 const modelRegistry = await discoverModels(authStorage);
@@ -25,7 +25,7 @@ await createAgentSession({
 console.log("Session with default auth storage and model registry");
 
 // Custom auth storage location
-const customAuthStorage = new AuthStorage("/tmp/my-app/auth.json");
+const customAuthStorage = await AuthStorage.create("/tmp/my-app/agent.db");
 const customModelRegistry = new ModelRegistry(customAuthStorage, "/tmp/my-app/models.json");
 
 await createAgentSession({
