@@ -3,6 +3,7 @@ name: explore
 description: Fast read-only codebase scout returning compressed context for handoff
 tools: read, grep, find, bash
 model: pi/smol, haiku-4.5, haiku-4-5, gemini-flash-latest, gemini-3-flash, zai-glm-4.7, glm-4.7-flash, glm-4.5-flash, gpt-5.1-codex-mini, haiku, flash, mini
+thinking-level: minimal
 output:
   properties:
     query:

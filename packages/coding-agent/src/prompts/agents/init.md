@@ -1,6 +1,7 @@
 ---
 name: init
 description: Generate AGENTS.md for current codebase
+thinking-level: medium
 ---
 
 <task>

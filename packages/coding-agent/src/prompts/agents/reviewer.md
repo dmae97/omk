@@ -4,6 +4,7 @@ description: "Code review specialist for quality/security analysis"
 tools: read, grep, find, bash, report_finding
 spawns: explore, task
 model: pi/slow, gpt-5.2-codex, gpt-5.2, codex, gpt
+thinking-level: high
 output:
   properties:
     overall_correctness:
