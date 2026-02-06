@@ -125,6 +125,15 @@ export interface SessionInitEntry extends SessionEntryBase {
 	outputSchema?: unknown;
 }
 
+/** Mode change entry - tracks agent mode transitions (e.g. plan mode). */
+export interface ModeChangeEntry extends SessionEntryBase {
+	type: "mode_change";
+	/** Current mode name, or "none" when exiting a mode */
+	mode: string;
+	/** Optional mode-specific data (e.g. plan file path) */
+	data?: Record<string, unknown>;
+}
+
 /**
  * Custom message entry for extensions to inject messages into LLM context.
  * Use customType to identify your extension's entries.
@@ -156,7 +165,8 @@ export type SessionEntry =
 	| CustomMessageEntry
 	| LabelEntry
 	| TtsrInjectionEntry
-	| SessionInitEntry;
+	| SessionInitEntry
+	| ModeChangeEntry;
 
 /** Raw file entry (includes header) */
 export type FileEntry = SessionHeader | SessionEntry;
@@ -176,6 +186,10 @@ export interface SessionContext {
 	models: Record<string, string>;
 	/** Names of TTSR rules that have been injected this session */
 	injectedTtsrRules: string[];
+	/** Active mode (e.g. "plan") or "none" if no special mode is active */
+	mode: string;
+	/** Mode-specific data from the last mode_change entry */
+	modeData?: Record<string, unknown>;
 }
 
 export interface SessionInfo {
@@ -326,7 +340,7 @@ export function buildSessionContext(
 	let leaf: SessionEntry | undefined;
 	if (leafId === null) {
 		// Explicitly null - return no messages (navigated to before first entry)
-		return { messages: [], thinkingLevel: "off", models: {}, injectedTtsrRules: [] };
+		return { messages: [], thinkingLevel: "off", models: {}, injectedTtsrRules: [], mode: "none" };
 	}
 	if (leafId) {
 		leaf = byId.get(leafId);
@@ -337,7 +351,7 @@ export function buildSessionContext(
 	}
 
 	if (!leaf) {
-		return { messages: [], thinkingLevel: "off", models: {}, injectedTtsrRules: [] };
+		return { messages: [], thinkingLevel: "off", models: {}, injectedTtsrRules: [], mode: "none" };
 	}
 
 	// Walk from leaf to root, collecting path
@@ -353,6 +367,8 @@ export function buildSessionContext(
 	const models: Record<string, string> = {};
 	let compaction: CompactionEntry | null = null;
 	const injectedTtsrRulesSet = new Set<string>();
+	let mode = "none";
+	let modeData: Record<string, unknown> | undefined;
 
 	for (const entry of path) {
 		if (entry.type === "thinking_level_change") {
@@ -373,6 +389,9 @@ export function buildSessionContext(
 			for (const ruleName of entry.injectedRules) {
 				injectedTtsrRulesSet.add(ruleName);
 			}
+		} else if (entry.type === "mode_change") {
+			mode = entry.mode;
+			modeData = entry.data;
 		}
 	}
 
@@ -435,7 +454,7 @@ export function buildSessionContext(
 		}
 	}
 
-	return { messages, thinkingLevel, models, injectedTtsrRules };
+	return { messages, thinkingLevel, models, injectedTtsrRules, mode, modeData };
 }
 
 /**
@@ -1383,6 +1402,20 @@ export class SessionManager {
 			parentId: this.leafId,
 			timestamp: new Date().toISOString(),
 			thinkingLevel,
+		};
+		this._appendEntry(entry);
+		return entry.id;
+	}
+
+	/** Append a mode change as child of current leaf, then advance leaf. Returns entry id. */
+	appendModeChange(mode: string, data?: Record<string, unknown>): string {
+		const entry: ModeChangeEntry = {
+			type: "mode_change",
+			id: generateId(this.byId),
+			parentId: this.leafId,
+			timestamp: new Date().toISOString(),
+			mode,
+			data,
 		};
 		this._appendEntry(entry);
 		return entry.id;

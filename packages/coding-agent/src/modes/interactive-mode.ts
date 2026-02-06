@@ -345,6 +345,9 @@ export class InteractiveMode implements InteractiveModeContext {
 		// Initialize hooks with TUI-based UI context
 		await this.initHooksAndCustomTools();
 
+		// Restore mode from session (e.g. plan mode on resume)
+		await this.restoreModeFromSession();
+
 		// Subscribe to agent events
 		this.subscribeToAgent();
 
@@ -533,6 +536,19 @@ export class InteractiveMode implements InteractiveModeContext {
 		}
 	}
 
+	/** Restore mode state from session entries on resume (e.g. plan mode). */
+	private async restoreModeFromSession(): Promise<void> {
+		const sessionContext = this.sessionManager.buildSessionContext();
+		if (sessionContext.mode === "plan") {
+			const planFilePath = sessionContext.modeData?.planFilePath as string | undefined;
+			await this.enterPlanMode({ planFilePath });
+		} else if (sessionContext.mode === "plan_paused") {
+			this.planModePaused = true;
+			this.planModeHasEntered = true;
+			this.updatePlanModeStatus();
+		}
+	}
+
 	private async enterPlanMode(options?: {
 		planFilePath?: string;
 		workflow?: "parallel" | "iterative";
@@ -566,6 +582,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.planModeHasEntered = true;
 		await this.applyPlanModeModel();
 		this.updatePlanModeStatus();
+		this.sessionManager.appendModeChange("plan", { planFilePath });
 		this.showStatus(`Plan mode enabled. Plan file: ${planFilePath}`);
 	}
 
@@ -593,8 +610,10 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.planModePreviousTools = undefined;
 		this.planModePreviousModel = undefined;
 		this.updatePlanModeStatus();
+		const paused = options?.paused ?? false;
+		this.sessionManager.appendModeChange(paused ? "plan_paused" : "none");
 		if (!options?.silent) {
-			this.showStatus(this.planModePaused ? "Plan mode paused." : "Plan mode disabled.");
+			this.showStatus(paused ? "Plan mode paused." : "Plan mode disabled.");
 		}
 	}
 

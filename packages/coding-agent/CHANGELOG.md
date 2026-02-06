@@ -1,9 +1,12 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Exported `ModeChangeEntry` type for tracking agent mode transitions
+- Support for restoring plan mode state when resuming sessions
+- New `appendModeChange()` method in SessionManager to record mode transitions
+- New `mode` and `modeData` fields in SessionContext to track active agent mode
 - Support for `PI_PACKAGE_DIR` environment variable to override package directory (useful for Nix/Guix store paths)
 - New keybindings for session management: `toggleSessionNamedFilter` (Ctrl+N), `newSession`, `tree`, `fork`, and `resume` actions
 - Support for shell command execution in configuration values (API keys, headers) using `!` prefix, with result caching
@@ -30,6 +33,7 @@
 
 ### Changed
 
+- HTML export filter now treats `mode_change` entries as settings entries alongside model changes and thinking level changes
 - Replaced ellipsis string (`...`) with Unicode ellipsis character (`…`) throughout UI text and truncation logic for improved typography
 - Improved render performance by introducing caching for tool output blocks and search results to avoid redundant text width and padding computations
 - Enhanced read tool grouping to reset when non-tool content (text/thinking blocks) appears between read calls, preventing unintended coalescing
