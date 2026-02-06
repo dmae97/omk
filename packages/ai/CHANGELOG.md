@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `cacheRetention` option to control prompt cache retention preference ('none', 'short', 'long') across providers
@@ -14,6 +13,7 @@
 
 ### Changed
 
+- Changed `supportsXhigh()` to include GPT-5.1 Codex Max and broaden Anthropic support to all Anthropic Messages API models with budget-based thinking capability
 - Changed Anthropic thinking mode to use adaptive thinking for Opus 4.6+ models instead of budget-based thinking
 - Changed `supportsXhigh()` to support GPT-5.2/5.3 and Anthropic Opus 4.6+ models with adaptive thinking
 - Changed prompt caching to respect `cacheRetention` option and support TTL configuration for Anthropic

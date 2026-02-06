@@ -1022,22 +1022,21 @@ export class TUI extends Container {
 				this.previousWidth = width;
 				return;
 			}
-***
 			// Find first and last changed lines
-		let firstChanged = -1;
-		let lastChanged = -1;
-		const maxLines = Math.max(newLines.length, this.previousLines.length);
-		for (let i = 0; i < maxLines; i++) {
-			const oldLine = i < this.previousLines.length ? this.previousLines[i] : "";
-			const newLine = i < newLines.length ? newLines[i] : "";
+			let firstChanged = -1;
+			let lastChanged = -1;
+			const maxLines = Math.max(newLines.length, this.previousLines.length);
+			for (let i = 0; i < maxLines; i++) {
+				const oldLine = i < this.previousLines.length ? this.previousLines[i] : "";
+				const newLine = i < newLines.length ? newLines[i] : "";
 
-			if (oldLine !== newLine) {
-				if (firstChanged === -1) {
-					firstChanged = i;
+				if (oldLine !== newLine) {
+					if (firstChanged === -1) {
+						firstChanged = i;
+					}
+					lastChanged = i;
 				}
-				lastChanged = i;
 			}
-		}
 		const appendedLines = newLines.length > this.previousLines.length;
 		if (appendedLines) {
 			if (firstChanged === -1) {
