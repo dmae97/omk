@@ -24,7 +24,7 @@ import {
 	type ReportFindingDetails,
 	type SubmitReviewDetails,
 } from "../tools/review";
-import { Hasher, type RenderCache, renderStatusLine } from "../tui";
+import { Ellipsis, Hasher, type RenderCache, renderStatusLine } from "../tui";
 import { subprocessToolRegistry } from "./subprocess-tool-registry";
 import type { AgentProgress, SingleResult, TaskParams, TaskToolDetails } from "./types";
 
@@ -906,7 +906,7 @@ export function renderResult(
 
 			if (lines.length === 0) {
 				const text = fallbackText.trim() ? fallbackText : "No results";
-				const result = [theme.fg("dim", truncateToWidth(text, 140))];
+				const result = [theme.fg("dim", truncateToWidth(text, width))];
 				cached = { key, lines: result };
 				return result;
 			}
@@ -925,7 +925,9 @@ export function renderResult(
 				}
 			}
 
-			const indented = lines.map(line => (line.length > 0 ? `   ${line}` : ""));
+			const indented = lines.map(line =>
+				line.length > 0 ? truncateToWidth(`   ${line}`, width, Ellipsis.Omit) : "",
+			);
 			cached = { key, lines: indented };
 			return indented;
 		},

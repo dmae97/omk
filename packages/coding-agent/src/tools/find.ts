@@ -11,7 +11,15 @@ import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { Theme } from "../modes/theme/theme";
 import findDescription from "../prompts/tools/find.md" with { type: "text" };
-import { type RenderCache, renderFileList, renderStatusLine, renderTreeList } from "../tui";
+import {
+	Ellipsis,
+	Hasher,
+	type RenderCache,
+	renderFileList,
+	renderStatusLine,
+	renderTreeList,
+	truncateToWidth,
+} from "../tui";
 import type { ToolSession } from ".";
 import { applyListLimit } from "./list-limit";
 import type { OutputMeta } from "./output-meta";
@@ -448,9 +456,9 @@ export const findToolRenderer = {
 			);
 			let cached: RenderCache | undefined;
 			return {
-				render(_width: number): string[] {
+				render(width: number): string[] {
 					const { expanded } = options;
-					const key = expanded ? 1n : 0n;
+					const key = new Hasher().bool(expanded).u32(width).digest();
 					if (cached?.key === key) return cached.lines;
 					const listLines = renderTreeList(
 						{
@@ -462,7 +470,7 @@ export const findToolRenderer = {
 						},
 						uiTheme,
 					);
-					const result = [header, ...listLines];
+					const result = [header, ...listLines].map(l => truncateToWidth(l, width, Ellipsis.Omit));
 					cached = { key, lines: result };
 					return result;
 				},
@@ -507,9 +515,9 @@ export const findToolRenderer = {
 
 		let cached: RenderCache | undefined;
 		return {
-			render(_width: number): string[] {
+			render(width: number): string[] {
 				const { expanded } = options;
-				const key = expanded ? 1n : 0n;
+				const key = new Hasher().bool(expanded).u32(width).digest();
 				if (cached?.key === key) return cached.lines;
 				const fileLines = renderFileList(
 					{
@@ -519,7 +527,7 @@ export const findToolRenderer = {
 					},
 					uiTheme,
 				);
-				const result = [header, ...fileLines, ...extraLines];
+				const result = [header, ...fileLines, ...extraLines].map(l => truncateToWidth(l, width, Ellipsis.Omit));
 				cached = { key, lines: result };
 				return result;
 			},

@@ -1,8 +1,9 @@
 import * as path from "node:path";
-import { Text } from "@oh-my-pi/pi-tui";
+import { Ellipsis, Text, truncateToWidth } from "@oh-my-pi/pi-tui";
 import { logger } from "@oh-my-pi/pi-utils";
 import { theme } from "../../modes/theme/theme";
 import type { TodoItem } from "../../modes/types";
+import { Hasher, type RenderCache } from "../../tui";
 
 const TODO_FILE_NAME = "todos.json";
 
@@ -29,6 +30,7 @@ export class TodoDisplayComponent {
 	public todos: TodoItem[] = [];
 	private expanded = false;
 	private visible = false;
+	private cached: RenderCache | undefined;
 
 	constructor(private readonly sessionFile: string | null) {}
 
@@ -44,25 +46,31 @@ export class TodoDisplayComponent {
 		const data = await loadTodoFile(todoPath);
 		this.todos = data?.todos ?? [];
 		this.visible = this.todos.length > 0;
+		this.cached = undefined;
 	}
 
 	setTodos(todos: TodoItem[]): void {
 		this.todos = todos;
 		this.visible = this.todos.length > 0;
+		this.cached = undefined;
 	}
 
 	setExpanded(expanded: boolean): void {
 		this.expanded = expanded;
+		this.cached = undefined;
 	}
 
 	isVisible(): boolean {
 		return this.visible;
 	}
 
-	render(_width: number): string[] {
+	render(width: number): string[] {
 		if (!this.visible || this.todos.length === 0) {
 			return [];
 		}
+
+		const key = new Hasher().bool(this.expanded).u32(width).digest();
+		if (this.cached?.key === key) return this.cached.lines;
 
 		const lines: string[] = [];
 		const maxItems = this.expanded ? this.todos.length : Math.min(5, this.todos.length);
@@ -93,7 +101,9 @@ export class TodoDisplayComponent {
 			lines.push(theme.fg("dim", `        ${theme.tree.hook} +${this.todos.length - 5} more (Ctrl+T to expand)`));
 		}
 
-		return lines;
+		const result = lines.map(l => truncateToWidth(l, width, Ellipsis.Omit));
+		this.cached = { key, lines: result };
+		return result;
 	}
 
 	getRenderedComponent(): Text | null {

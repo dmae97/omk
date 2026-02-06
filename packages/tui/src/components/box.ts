@@ -79,7 +79,7 @@ export class Box implements Component {
 		for (const child of this.children) {
 			const lines = child.render(contentWidth);
 			for (const line of lines) {
-				childLines.push(leftPad + truncateToWidth(line, contentWidth));
+				childLines.push(leftPad + (visibleWidth(line) > contentWidth ? truncateToWidth(line, contentWidth) : line));
 			}
 		}
 

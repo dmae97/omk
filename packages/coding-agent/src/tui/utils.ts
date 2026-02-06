@@ -5,7 +5,7 @@ import { padding, visibleWidth } from "@oh-my-pi/pi-tui";
 import type { Theme, ThemeBg } from "../modes/theme/theme";
 import type { IconType, State } from "./types";
 
-export { truncateToWidth } from "@oh-my-pi/pi-tui";
+export { Ellipsis, truncateToWidth } from "@oh-my-pi/pi-tui";
 
 /** Cached typed-array scratch space for hashing non-string primitives. */
 const hashBuf = new ArrayBuffer(8);

@@ -19,7 +19,7 @@ import {
 	truncateDiffByHunk,
 } from "../tools/render-utils";
 import type { RenderCallOptions } from "../tools/renderers";
-import { Hasher, type RenderCache, renderStatusLine, truncateToWidth } from "../tui";
+import { Ellipsis, Hasher, type RenderCache, renderStatusLine, truncateToWidth } from "../tui";
 import type { DiffError, DiffResult, Operation } from "./types";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -283,7 +283,8 @@ export const editToolRenderer = {
 					);
 				}
 
-				const lines = width > 0 ? text.split("\n").map(line => truncateToWidth(line, width)) : text.split("\n");
+				const lines =
+					width > 0 ? text.split("\n").map(line => truncateToWidth(line, width, Ellipsis.Omit)) : text.split("\n");
 				cached = { key, lines };
 				return lines;
 			},

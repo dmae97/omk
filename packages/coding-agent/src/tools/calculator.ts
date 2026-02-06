@@ -7,16 +7,9 @@ import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { Theme } from "../modes/theme/theme";
 import calculatorDescription from "../prompts/tools/calculator.md" with { type: "text" };
-import { type RenderCache, renderStatusLine, renderTreeList } from "../tui";
+import { Ellipsis, Hasher, type RenderCache, renderStatusLine, renderTreeList, truncateToWidth } from "../tui";
 import type { ToolSession } from ".";
-import {
-	formatCount,
-	formatEmptyMessage,
-	formatErrorMessage,
-	PREVIEW_LIMITS,
-	TRUNCATE_LENGTHS,
-	truncateToWidth,
-} from "./render-utils";
+import { formatCount, formatEmptyMessage, formatErrorMessage, PREVIEW_LIMITS, TRUNCATE_LENGTHS } from "./render-utils";
 
 // =============================================================================
 // Token Types
@@ -517,9 +510,9 @@ export const calculatorToolRenderer = {
 		let cached: RenderCache | undefined;
 
 		return {
-			render(_width) {
+			render(width) {
 				const { expanded } = options;
-				const key = expanded ? 1n : 0n;
+				const key = new Hasher().bool(expanded).u32(width).digest();
 				if (cached?.key === key) return cached.lines;
 				const treeLines = renderTreeList(
 					{
@@ -531,7 +524,7 @@ export const calculatorToolRenderer = {
 					},
 					uiTheme,
 				);
-				const lines = [header, ...treeLines];
+				const lines = [header, ...treeLines].map(l => truncateToWidth(l, width, Ellipsis.Omit));
 				cached = { key, lines };
 				return lines;
 			},

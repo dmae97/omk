@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Exported `ModeChangeEntry` type for tracking agent mode transitions
@@ -34,6 +33,8 @@
 
 ### Changed
 
+- Improved text truncation across tool renderers to respect terminal width constraints and prevent output overflow
+- Enhanced render caching to include width parameter for accurate cache invalidation when terminal width changes
 - HTML export filter now treats `mode_change` entries as settings entries alongside model changes and thinking level changes
 - Replaced ellipsis string (`...`) with Unicode ellipsis character (`…`) throughout UI text and truncation logic for improved typography
 - Improved render performance by introducing caching for tool output blocks and search results to avoid redundant text width and padding computations

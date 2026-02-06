@@ -15,7 +15,7 @@ import { createLspWritethrough, type FileDiagnosticsResult, type WritethroughCal
 import { getLanguageFromPath, type Theme } from "../modes/theme/theme";
 import writeDescription from "../prompts/tools/write.md" with { type: "text" };
 import type { ToolSession } from "../sdk";
-import { type RenderCache, renderStatusLine } from "../tui";
+import { Ellipsis, Hasher, type RenderCache, renderStatusLine, truncateToWidth } from "../tui";
 import { type OutputMeta, outputMeta } from "./output-meta";
 import { enforcePlanModeWrite, resolvePlanPath } from "./plan-mode-guard";
 import {
@@ -238,9 +238,9 @@ export const writeToolRenderer = {
 		let cached: RenderCache | undefined;
 
 		return {
-			render(_width: number) {
+			render(width: number) {
 				const { expanded } = options;
-				const key = expanded ? 1n : 0n;
+				const key = new Hasher().bool(expanded).u32(width).digest();
 				if (cached?.key === key) return cached.lines;
 
 				let text = header;
@@ -260,7 +260,7 @@ export const writeToolRenderer = {
 					}
 				}
 
-				const lines = text.split("\n");
+				const lines = text.split("\n").map(l => truncateToWidth(l, width, Ellipsis.Omit));
 				cached = { key, lines };
 				return lines;
 			},

@@ -10,7 +10,7 @@ import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { Theme } from "../modes/theme/theme";
 import grepDescription from "../prompts/tools/grep.md" with { type: "text" };
-import { type RenderCache, renderStatusLine, renderTreeList } from "../tui";
+import { Ellipsis, Hasher, type RenderCache, renderStatusLine, renderTreeList, truncateToWidth } from "../tui";
 import type { ToolSession } from ".";
 import type { OutputMeta } from "./output-meta";
 import { resolveToCwd } from "./path-utils";
@@ -350,9 +350,9 @@ export const grepToolRenderer = {
 			);
 			let cached: RenderCache | undefined;
 			return {
-				render(_width: number): string[] {
+				render(width: number): string[] {
 					const { expanded } = options;
-					const key = expanded ? 1n : 0n;
+					const key = new Hasher().bool(expanded).u32(width).digest();
 					if (cached?.key === key) return cached.lines;
 					const listLines = renderTreeList(
 						{
@@ -364,7 +364,7 @@ export const grepToolRenderer = {
 						},
 						uiTheme,
 					);
-					const result = [header, ...listLines];
+					const result = [header, ...listLines].map(l => truncateToWidth(l, width, Ellipsis.Omit));
 					cached = { key, lines: result };
 					return result;
 				},
@@ -449,9 +449,9 @@ export const grepToolRenderer = {
 
 		let cached: RenderCache | undefined;
 		return {
-			render(_width: number): string[] {
+			render(width: number): string[] {
 				const { expanded } = options;
-				const key = expanded ? 1n : 0n;
+				const key = new Hasher().bool(expanded).u32(width).digest();
 				if (cached?.key === key) return cached.lines;
 				const maxCollapsed = expanded
 					? matchGroups.length
@@ -466,7 +466,7 @@ export const grepToolRenderer = {
 					},
 					uiTheme,
 				);
-				const result = [header, ...matchLines, ...extraLines];
+				const result = [header, ...matchLines, ...extraLines].map(l => truncateToWidth(l, width, Ellipsis.Omit));
 				cached = { key, lines: result };
 				return result;
 			},

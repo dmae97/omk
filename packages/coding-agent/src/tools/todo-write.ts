@@ -11,7 +11,7 @@ import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { Theme } from "../modes/theme/theme";
 import todoWriteDescription from "../prompts/tools/todo-write.md" with { type: "text" };
 import type { ToolSession } from "../sdk";
-import { type RenderCache, renderStatusLine, renderTreeList } from "../tui";
+import { Ellipsis, Hasher, type RenderCache, renderStatusLine, renderTreeList, truncateToWidth } from "../tui";
 import { PREVIEW_LIMITS } from "./render-utils";
 
 const todoWriteSchema = Type.Object({
@@ -245,9 +245,9 @@ export const todoWriteToolRenderer = {
 		let cached: RenderCache | undefined;
 
 		return {
-			render(_width) {
+			render(width) {
 				const { expanded } = options;
-				const key = expanded ? 1n : 0n;
+				const key = new Hasher().bool(expanded).u32(width).digest();
 				if (cached?.key === key) return cached.lines;
 				const treeLines = renderTreeList(
 					{
@@ -259,7 +259,7 @@ export const todoWriteToolRenderer = {
 					},
 					uiTheme,
 				);
-				const lines = [header, ...treeLines];
+				const lines = [header, ...treeLines].map(l => truncateToWidth(l, width, Ellipsis.Omit));
 				cached = { key, lines };
 				return lines;
 			},
