@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Exported `ModeChangeEntry` type for tracking agent mode transitions
@@ -64,6 +65,7 @@
 
 ### Fixed
 
+- Fixed config file parsing to properly handle missing files instead of treating them as errors
 - Fixed truncation indicator in truncate tool to use ellipsis character (…) instead of verbose '[truncated]' suffix
 - Fixed concurrent shell command execution by de-duplicating in-flight requests for the same command
 - Fixed git URL parsing to properly handle URL-encoded characters in hash fragments and reject invalid encodings

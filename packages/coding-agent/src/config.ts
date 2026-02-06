@@ -226,7 +226,7 @@ export class ConfigFile<T> implements IConfigFile<T> {
 			}
 			return this.#storeCache({ value: parsed, status: "ok" });
 		} catch (error) {
-			if (!isEnoent(error)) {
+			if (isEnoent(error)) {
 				return this.#storeCache({ status: "not-found" });
 			}
 			logger.warn("Failed to parse config file", { path: this.path(), error });
