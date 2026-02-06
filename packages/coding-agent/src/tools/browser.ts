@@ -1,8 +1,9 @@
+import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { Readability } from "@mozilla/readability";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
-import { logger, untilAborted } from "@oh-my-pi/pi-utils";
+import { logger, Snowflake, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { JSDOM, VirtualConsole } from "jsdom";
 import type { Browser, CDPSession, ElementHandle, KeyInput, Page, SerializedAXNode } from "puppeteer";
@@ -319,11 +320,10 @@ const browserSchema = Type.Object({
 	),
 	full_page: Type.Optional(Type.Boolean({ description: "Capture full page screenshot (screenshot)" })),
 	format: Type.Optional(
-		StringEnum(["png", "jpeg", "text", "markdown"], {
-			description: "Output format (screenshot: png/jpeg, extract_readable: text/markdown)",
+		StringEnum(["text", "markdown"], {
+			description: "Output format for extract_readable (text/markdown)",
 		}),
 	),
-	quality: Type.Optional(Type.Number({ description: "JPEG quality 0-100 (screenshot)" })),
 	path: Type.Optional(Type.String({ description: "Optional path to save screenshot (relative to cwd)" })),
 	viewport: Type.Optional(
 		Type.Object({
@@ -405,11 +405,6 @@ export interface ReadableResult {
 function clampTimeout(timeoutSeconds?: number): number {
 	if (timeoutSeconds === undefined) return DEFAULT_TIMEOUT_SECONDS;
 	return Math.min(Math.max(timeoutSeconds, 1), MAX_TIMEOUT_SECONDS);
-}
-
-function clampQuality(quality?: number): number | undefined {
-	if (quality === undefined) return undefined;
-	return Math.min(Math.max(quality, 0), 100);
 }
 
 function ensureParam<T>(value: T | undefined, name: string, action: string): T {
@@ -895,7 +890,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 		params: BrowserParams,
 		signal?: AbortSignal,
 		_onUpdate?: AgentToolUpdateCallback<BrowserToolDetails>,
-		_context?: AgentToolContext,
+		ctx?: AgentToolContext,
 	): Promise<AgentToolResult<BrowserToolDetails>> {
 		try {
 			throwIfAborted(signal);
@@ -1237,10 +1232,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 				}
 				case "extract_readable": {
 					const page = await this.ensurePage(params);
-					const format = params.format ?? "text";
-					if (format !== "text" && format !== "markdown") {
-						throw new ToolError("extract_readable format must be text or markdown");
-					}
+					const format = params.format ?? "markdown";
 					const html = (await untilAborted(signal, () => page.content())) as string;
 					const url = page.url();
 					const virtualConsole = new VirtualConsole();
@@ -1277,13 +1269,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 				}
 				case "screenshot": {
 					const page = await this.ensurePage(params);
-					const format = params.format ?? "png";
-					if (format !== "png" && format !== "jpeg") {
-						throw new ToolError("Screenshot format must be png or jpeg");
-					}
-					const imageFormat = format;
 					const fullPage = params.selector ? false : (params.full_page ?? false);
-					const quality = imageFormat === "jpeg" ? clampQuality(params.quality ?? 80) : undefined;
 					let buffer: Buffer;
 
 					if (params.selector) {
@@ -1292,47 +1278,34 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 						if (!handle) {
 							throw new ToolError("Screenshot selector did not resolve to an element");
 						}
-						buffer = (await untilAborted(signal, () =>
-							handle.screenshot({ type: imageFormat, quality }),
-						)) as Buffer;
+						buffer = (await untilAborted(signal, () => handle.screenshot({ type: "png" }))) as Buffer;
 						await handle.dispose();
 						details.selector = params.selector;
 					} else {
-						buffer = (await untilAborted(signal, () =>
-							page.screenshot({ type: imageFormat, quality, fullPage }),
-						)) as Buffer;
+						buffer = (await untilAborted(signal, () => page.screenshot({ type: "png", fullPage }))) as Buffer;
 					}
-
-					const mimeType = imageFormat === "png" ? "image/png" : "image/jpeg";
-					const base64 = buffer.toBase64();
-					let savedPath: string | undefined;
-					if (params.path) {
-						const resolved = resolveToCwd(params.path, this.session.cwd);
-						const ext = path.extname(resolved);
-						savedPath = ext ? resolved : `${resolved}.${imageFormat}`;
-						await Bun.write(savedPath, buffer);
-					} else {
-						const artifactsDir = resolveArtifactsDir(this.session);
-						if (artifactsDir) {
-							savedPath = path.join(artifactsDir, `puppeteer-${Date.now()}.${imageFormat}`);
-							await Bun.write(savedPath, buffer);
-						}
-					}
-					details.screenshotPath = savedPath;
-					details.mimeType = mimeType;
-					details.bytes = buffer.length;
 
 					// Compress for API content (same as pasted images)
-					const resized = await resizeImage({ type: "image", data: base64, mimeType });
+					// NOTE: screenshots can be deceptively large (especially PNG) even at modest resolutions,
+					// and tool results are immediately embedded in the next LLM request.
+					// Use a tighter budget than the global per-image limit to avoid 413 request_too_large.
+					const resized = await resizeImage(
+						{ type: "image", data: buffer.toBase64(), mimeType: "image/png" },
+						{ maxBytes: 0.75 * 1024 * 1024 },
+					);
 					const dimensionNote = formatDimensionNote(resized);
+					const tempFile = path.join(tmpdir(), `omp-sshots-${Snowflake.next()}.png`);
+					await Bun.write(tempFile, resized.buffer);
+					details.screenshotPath = tempFile;
+					details.mimeType = resized.mimeType;
+					details.bytes = resized.buffer.length;
 
-					const lines = ["Screenshot captured", `Format: ${format}`, `Bytes: ${buffer.length}`];
-					if (resized.wasResized) {
-						lines.push(`Compressed: ${resized.width}x${resized.height} (${resized.mimeType})`);
-					}
-					if (savedPath) {
-						lines.push(`Saved: ${savedPath}`);
-					}
+					// Show both raw bytes (saved to disk) and compressed bytes (sent to model).
+					const lines = [
+						"Screenshot captured",
+						`Format: ${resized.mimeType} (${(resized.buffer.length / 1024).toFixed(2)} KB)`,
+						`Dimensions: ${resized.width}x${resized.height}`,
+					];
 					if (dimensionNote) {
 						lines.push(dimensionNote);
 					}

@@ -1,6 +1,18 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Changed screenshot format to always use PNG instead of supporting JPEG with quality parameter
+- Changed default extract_readable format from text to markdown
+- Changed screenshot storage to use temporary directory with Snowflake IDs instead of artifacts directory
+- Changed ResizedImage interface to return buffer as Uint8Array with lazy-loaded base64 data getter for improved memory efficiency
+
+### Removed
+
+- Removed JPEG quality parameter from screenshot options
+- Removed format selection for screenshots (now PNG only)
+- Removed ability to save screenshots to custom paths or artifacts directory
 
 ## [11.4.1] - 2026-02-06
 ### Fixed

@@ -16,7 +16,7 @@ Use this tool to navigate, click, type, scroll, drag, query DOM content, and cap
 - Use `action: "get_text"`, `"get_html"`, or `"get_attribute"` for DOM queries
   - For batch queries, pass `args: [{ selector, attribute? }]` to get an array of results (attribute required for `get_attribute`)
 - Use `action: "extract_readable"` to return reader-mode content (title/byline/excerpt/text or markdown)
-  - Set `format` to `"text"` (default) or `"markdown"`
+  - Set `format` to `"markdown"` (default) or `"text"`
 - Use `action: "screenshot"` to capture images (optionally with `selector` to capture a single element)
 - Use `action: "close"` to release the browser when done
 </instruction>

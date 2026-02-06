@@ -3,7 +3,7 @@ import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Message, TextContent, Usage } from "@oh-my-pi/pi-ai";
 import { isEnoent, logger, parseJsonlLenient, Snowflake } from "@oh-my-pi/pi-utils";
 import { getBlobsDir, getAgentDir as getDefaultAgentDir } from "../config";
-import { BlobStore, externalizeImageData, isBlobRef, resolveImageData } from "./blob-store";
+import { type BlobPutResult, BlobStore, externalizeImageData, isBlobRef, resolveImageData } from "./blob-store";
 import {
 	type BashExecutionMessage,
 	type CustomMessage,
@@ -222,6 +222,7 @@ export type ReadonlySessionManager = Pick<
 	| "getEntries"
 	| "getTree"
 	| "getUsageStatistics"
+	| "putBlob"
 >;
 
 /** Generate a unique short ID (8 hex chars, collision-checked) */
@@ -1011,6 +1012,11 @@ export class SessionManager {
 			this.storage.ensureDirSync(sessionDir);
 		}
 		// Note: call _initSession() or _initSessionFile() after construction
+	}
+
+	/** Puts a binary blob into the blob store and returns the blob reference */
+	async putBlob(data: Buffer): Promise<BlobPutResult> {
+		return this.blobStore.put(data);
 	}
 
 	/** Initialize with a specific session file (used by factory methods) */

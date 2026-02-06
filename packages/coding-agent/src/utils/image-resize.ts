@@ -9,13 +9,14 @@ export interface ImageResizeOptions {
 }
 
 export interface ResizedImage {
-	data: string; // base64
+	buffer: Uint8Array;
 	mimeType: string;
 	originalWidth: number;
 	originalHeight: number;
 	width: number;
 	height: number;
 	wasResized: boolean;
+	get data(): string;
 }
 
 // 4.5MB - provides headroom below Anthropic's 5MB limit
@@ -64,13 +65,16 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 		const originalSize = inputBuffer.length;
 		if (originalWidth <= opts.maxWidth && originalHeight <= opts.maxHeight && originalSize <= opts.maxBytes) {
 			return {
-				data: img.data,
+				buffer: inputBuffer,
 				mimeType: img.mimeType ?? `image/${format}`,
 				originalWidth,
 				originalHeight,
 				width: originalWidth,
 				height: originalHeight,
 				wasResized: false,
+				get data() {
+					return img.data;
+				},
 			};
 		}
 
@@ -119,13 +123,16 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 
 		if (best.buffer.length <= opts.maxBytes) {
 			return {
-				data: best.buffer.toBase64(),
+				buffer: best.buffer,
 				mimeType: best.mimeType,
 				originalWidth,
 				originalHeight,
 				width: finalWidth,
 				height: finalHeight,
 				wasResized: true,
+				get data() {
+					return best.buffer.toBase64();
+				},
 			};
 		}
 
@@ -135,13 +142,16 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 
 			if (best.buffer.length <= opts.maxBytes) {
 				return {
-					data: best.buffer.toBase64(),
+					buffer: best.buffer,
 					mimeType: best.mimeType,
 					originalWidth,
 					originalHeight,
 					width: finalWidth,
 					height: finalHeight,
 					wasResized: true,
+					get data() {
+						return best.buffer.toBase64();
+					},
 				};
 			}
 		}
@@ -160,13 +170,16 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 
 				if (best.buffer.length <= opts.maxBytes) {
 					return {
-						data: best.buffer.toBase64(),
+						buffer: best.buffer,
 						mimeType: best.mimeType,
 						originalWidth,
 						originalHeight,
 						width: finalWidth,
 						height: finalHeight,
 						wasResized: true,
+						get data() {
+							return best.buffer.toBase64();
+						},
 					};
 				}
 			}
@@ -174,24 +187,30 @@ export async function resizeImage(img: ImageContent, options?: ImageResizeOption
 
 		// Last resort: return smallest version we produced
 		return {
-			data: best.buffer.toBase64(),
+			buffer: best.buffer,
 			mimeType: best.mimeType,
 			originalWidth,
 			originalHeight,
 			width: finalWidth,
 			height: finalHeight,
 			wasResized: true,
+			get data() {
+				return best.buffer.toBase64();
+			},
 		};
 	} catch {
 		// Failed to load image
 		return {
-			data: img.data,
+			buffer: inputBuffer,
 			mimeType: img.mimeType,
 			originalWidth: 0,
 			originalHeight: 0,
 			width: 0,
 			height: 0,
 			wasResized: false,
+			get data() {
+				return img.data;
+			},
 		};
 	}
 }

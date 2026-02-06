@@ -4,6 +4,12 @@ import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 
 const BLOB_PREFIX = "blob:sha256:";
 
+export interface BlobPutResult {
+	hash: string;
+	path: string;
+	get ref(): string;
+}
+
 /**
  * Content-addressed blob store for externalizing large binary data (images) from session JSONL files.
  *
@@ -18,22 +24,19 @@ export class BlobStore {
 	 * Write binary data to the blob store.
 	 * @returns SHA-256 hex hash of the data
 	 */
-	async put(data: Buffer): Promise<string> {
-		const hasher = new Bun.CryptoHasher("sha256");
-		hasher.update(data);
-		const hash = hasher.digest("hex");
+	async put(data: Buffer): Promise<BlobPutResult> {
+		const hash = new Bun.CryptoHasher("sha256").update(data).digest("hex");
 		const blobPath = path.join(this.dir, hash);
-
-		// Content-addressed: skip write if blob already exists
-		try {
-			await fs.access(blobPath);
-			return hash;
-		} catch {
-			// Does not exist, write it
-		}
+		const result = {
+			hash,
+			path: blobPath,
+			get ref() {
+				return `${BLOB_PREFIX}${hash}`;
+			},
+		};
 
 		await Bun.write(blobPath, data);
-		return hash;
+		return result;
 	}
 
 	/** Read blob by hash, returns Buffer or null if not found. */
@@ -71,11 +74,6 @@ export function parseBlobRef(data: string): string | null {
 	return data.slice(BLOB_PREFIX.length);
 }
 
-/** Create a blob reference string from a SHA-256 hash. */
-export function makeBlobRef(hash: string): string {
-	return `${BLOB_PREFIX}${hash}`;
-}
-
 /**
  * Externalize an image's base64 data to the blob store, returning a blob reference.
  * If the data is already a blob reference, returns it unchanged.
@@ -83,8 +81,8 @@ export function makeBlobRef(hash: string): string {
 export async function externalizeImageData(blobStore: BlobStore, base64Data: string): Promise<string> {
 	if (isBlobRef(base64Data)) return base64Data;
 	const buffer = Buffer.from(base64Data, "base64");
-	const hash = await blobStore.put(buffer);
-	return makeBlobRef(hash);
+	const { ref } = await blobStore.put(buffer);
+	return ref;
 }
 
 /**
