@@ -232,15 +232,17 @@ pub fn matches_kitty_sequence(
 	}
 
 	// Only fall back to base layout key when the codepoint is NOT already a
-	// recognized Latin letter (a-z) or symbol. This prevents remapped layouts
+	// recognized ASCII letter (A-Z / a-z) or symbol. This prevents remapped layouts
 	// (Dvorak, Colemak) from causing false matches.
 	if let Some(base) = parsed.base_layout_key
 		&& base == expected_codepoint
 	{
 		let cp = parsed.codepoint;
-		let is_latin_letter = (97..=122).contains(&cp); // a-z
+		let is_ascii_letter = u8::try_from(cp)
+			.ok()
+			.is_some_and(|b| b.is_ascii_alphabetic());
 		let is_known_symbol = is_symbol_key(cp);
-		if !is_latin_letter && !is_known_symbol {
+		if !is_ascii_letter && !is_known_symbol {
 			return true;
 		}
 	}
@@ -254,7 +256,8 @@ const fn is_symbol_key(cp: i32) -> bool {
 	matches!(
 		cp,
 		96  | // `
-		45  | // -
+			34  | // "
+			45  | // -
 		61  | // =
 		91  | // [
 		93  | // ]
@@ -486,9 +489,11 @@ fn matches_key_inner(bytes: &[u8], key_id: &str, kitty_protocol_active: bool) ->
 		if let Some(base) = parsed_base
 			&& base == codepoint
 		{
-			let is_latin_letter = (97..=122).contains(&parsed_codepoint);
+			let is_ascii_letter = u8::try_from(parsed_codepoint)
+				.ok()
+				.is_some_and(|b| b.is_ascii_alphabetic());
 			let is_known_symbol = is_symbol_key(parsed_codepoint);
-			if !is_latin_letter && !is_known_symbol {
+			if !is_ascii_letter && !is_known_symbol {
 				return true;
 			}
 		}
@@ -1175,9 +1180,11 @@ fn format_kitty_key(parsed: &ParsedKittySequence) -> Option<Cow<'static, str>> {
 	let effective_mod = parsed.modifier & !LOCK_MASK;
 	let effective_codepoint = {
 		let cp = parsed.codepoint;
-		let is_latin_letter = (97..=122).contains(&cp); // a-z
+		let is_ascii_letter = u8::try_from(cp)
+			.ok()
+			.is_some_and(|b| b.is_ascii_alphabetic());
 		let is_known_symbol = is_symbol_key(cp);
-		if is_latin_letter || is_known_symbol {
+		if is_ascii_letter || is_known_symbol {
 			cp
 		} else {
 			parsed.base_layout_key.unwrap_or(cp)

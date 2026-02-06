@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - OSC 52 fallback for clipboard operations over SSH/mosh connections
@@ -10,6 +11,8 @@
 
 ### Changed
 
+- OSC 52 clipboard emission now only occurs in real terminal environments (when stdout is a TTY), preventing unnecessary output in piped or headless contexts
+- Improved error handling for OSC 52 writes to gracefully handle EPIPE errors when stdout is closed or piped to processes that exit early
 - Clipboard functions now return promises for better async handling
 - Native clipboard operations are now best-effort with graceful degradation
 

@@ -346,7 +346,7 @@ export class Input implements Component, Focusable {
 				// Cursor in middle
 				const start = findValidStart(this.cursor - halfWidth);
 				visibleText = this.value.slice(start, findValidEnd(start + scrollWidth));
-				cursorDisplay = halfWidth;
+				cursorDisplay = this.cursor - start;
 			}
 		}
 

@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added sticky column behavior for vertical cursor movement, preserving target column when navigating through lines of varying lengths
@@ -23,6 +22,10 @@
 
 ### Fixed
 
+- Fixed cursor display position in Input component when scrolling horizontally through long text
+- Fixed Kitty keyboard protocol disable sequence to use safe write method, preventing potential output buffering issues
+- Fixed unnecessary full-screen redraws when changes occur in out-of-view components (e.g., spinners), reducing terminal scroll events and improving performance on slower connections
+- Fixed scrollback clearing behavior to only clear screen instead of scrollback when resizing or shrinking content, preventing loss of terminal history
 - Fixed `.git` directory appearing in autocomplete suggestions when filtering by prefix
 - Fixed cursor position corruption in Input component when displaying text with emoji and combining characters
 - Fixed `.git` directory appearing in autocomplete suggestions

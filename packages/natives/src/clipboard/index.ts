@@ -19,16 +19,40 @@ const hasDisplay = process.platform !== "linux" || Boolean(process.env.DISPLAY |
 /**
  * Copy text to the system clipboard.
  *
- * Always emits OSC 52 first (works over SSH/mosh, harmless locally),
+ * Emits OSC 52 first when running in a real terminal (works over SSH/mosh),
  * then attempts native clipboard copy as best-effort for local sessions.
  * On Termux, tries `termux-clipboard-set` before native.
  *
  * @param text - UTF-8 text to place on the clipboard.
  */
 export async function copyToClipboard(text: string): Promise<void> {
-	// Always emit OSC 52 — works over SSH/mosh, harmless locally
-	const encoded = Buffer.from(text).toString("base64");
-	process.stdout.write(`\x1b]52;c;${encoded}\x07`);
+	if (process.stdout.isTTY) {
+		const encoded = Buffer.from(text).toString("base64");
+		const osc52 = `\x1b]52;c;${encoded}\x07`;
+		const onError = (err: unknown) => {
+			process.stdout.off("error", onError);
+			// Prevent unhandled 'error' from crashing the process when stdout is a closed pipe.
+			if ((err as NodeJS.ErrnoException | null | undefined)?.code === "EPIPE") {
+				return;
+			}
+		};
+		try {
+			process.stdout.on("error", onError);
+			process.stdout.write(osc52, err => {
+				process.stdout.off("error", onError);
+				// If stdout is closed (e.g. piped to a process that exits early),
+				// ignore EPIPE and proceed with native clipboard best-effort.
+				if ((err as NodeJS.ErrnoException | null | undefined)?.code === "EPIPE") {
+					return;
+				}
+			});
+		} catch (err) {
+			process.stdout.off("error", onError);
+			if ((err as NodeJS.ErrnoException | null | undefined)?.code !== "EPIPE") {
+				// Ignore all write failures (OSC 52 is best-effort).
+			}
+		}
+	}
 
 	// Also try native tools (best effort for local sessions)
 	try {
@@ -43,7 +67,7 @@ export async function copyToClipboard(text: string): Promise<void> {
 
 		await native.copyToClipboard(text);
 	} catch {
-		// Ignore — OSC 52 already emitted as fallback
+		// Ignore — clipboard copy is best-effort
 	}
 }
 
