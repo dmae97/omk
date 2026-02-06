@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Message, TextContent, Usage } from "@oh-my-pi/pi-ai";
@@ -467,6 +468,96 @@ function getDefaultSessionDir(cwd: string, storage: SessionStorage): string {
 	const sessionDir = path.join(getDefaultAgentDir(), "sessions", safePath);
 	storage.ensureDirSync(sessionDir);
 	return sessionDir;
+}
+
+// =============================================================================
+// Terminal breadcrumbs: maps terminal (TTY) -> last session file for --continue
+// =============================================================================
+
+const TERMINAL_SESSIONS_DIR = "terminal-sessions";
+
+/**
+ * Get a stable identifier for the current terminal.
+ * Uses the TTY device path (e.g., /dev/pts/3), falling back to environment
+ * variables for terminal multiplexers or terminal emulators.
+ * Returns null if no terminal can be identified (e.g., piped input).
+ */
+function getTerminalId(): string | null {
+	// TTY device path — most reliable, unique per terminal tab
+	if (process.stdin.isTTY) {
+		try {
+			// On Linux/macOS, /proc/self/fd/0 -> /dev/pts/N
+			const ttyPath = fs.readlinkSync("/proc/self/fd/0");
+			if (ttyPath.startsWith("/dev/")) {
+				return ttyPath.slice(5).replace(/\//g, "-"); // /dev/pts/3 -> pts-3
+			}
+		} catch {}
+	}
+
+	// Fallback to terminal-specific env vars
+	const kittyId = process.env.KITTY_WINDOW_ID;
+	if (kittyId) return `kitty-${kittyId}`;
+
+	const tmuxPane = process.env.TMUX_PANE;
+	if (tmuxPane) return `tmux-${tmuxPane}`;
+
+	const terminalSessionId = process.env.TERM_SESSION_ID; // macOS Terminal.app
+	if (terminalSessionId) return `apple-${terminalSessionId}`;
+
+	const wtSession = process.env.WT_SESSION; // Windows Terminal
+	if (wtSession) return `wt-${wtSession}`;
+
+	return null;
+}
+
+/**
+ * Write a breadcrumb linking the current terminal to a session file.
+ * The breadcrumb contains the cwd and session path so --continue can
+ * find "this terminal's last session" even when running concurrent instances.
+ */
+function writeTerminalBreadcrumb(cwd: string, sessionFile: string): void {
+	const terminalId = getTerminalId();
+	if (!terminalId) return;
+
+	try {
+		const breadcrumbDir = path.join(getDefaultAgentDir(), TERMINAL_SESSIONS_DIR);
+		const breadcrumbFile = path.join(breadcrumbDir, terminalId);
+		const content = `${cwd}\n${sessionFile}\n`;
+		// Bun.write auto-creates parent dirs
+		void Bun.write(breadcrumbFile, content);
+	} catch {
+		// Best-effort — don't break session creation if breadcrumb fails
+	}
+}
+
+/**
+ * Read the terminal breadcrumb for the current terminal, scoped to a cwd.
+ * Returns the session file path if it exists and matches the cwd, null otherwise.
+ */
+async function readTerminalBreadcrumb(cwd: string): Promise<string | null> {
+	const terminalId = getTerminalId();
+	if (!terminalId) return null;
+
+	try {
+		const breadcrumbFile = path.join(getDefaultAgentDir(), TERMINAL_SESSIONS_DIR, terminalId);
+		const content = await Bun.file(breadcrumbFile).text();
+		const lines = content.trim().split("\n");
+		if (lines.length < 2) return null;
+
+		const breadcrumbCwd = lines[0];
+		const sessionFile = lines[1];
+
+		// Only return if cwd matches (user might have cd'd)
+		if (path.resolve(breadcrumbCwd) !== path.resolve(cwd)) return null;
+
+		// Verify the session file still exists
+		const stat = fs.statSync(sessionFile, { throwIfNoEntry: false });
+		if (stat?.isFile()) return sessionFile;
+	} catch (err) {
+		if (!isEnoent(err)) logger.debug("Terminal breadcrumb read failed", { err });
+		// Breadcrumb doesn't exist or is corrupt — fall through
+	}
+	return null;
 }
 
 /** Exported for testing */
@@ -1035,6 +1126,7 @@ export class SessionManager {
 		this.persistError = undefined;
 		this.persistErrorReported = false;
 		this.sessionFile = path.resolve(sessionFile);
+		writeTerminalBreadcrumb(this.cwd, this.sessionFile);
 		this.fileEntries = await loadEntriesFromFile(this.sessionFile, this.storage);
 		if (this.fileEntries.length > 0) {
 			const header = this.fileEntries.find(e => e.type === "session") as SessionHeader | undefined;
@@ -1140,6 +1232,7 @@ export class SessionManager {
 		if (this.persist) {
 			const fileTimestamp = timestamp.replace(/[:.]/g, "-");
 			this.sessionFile = path.join(this.getSessionDir(), `${fileTimestamp}_${this.sessionId}.jsonl`);
+			writeTerminalBreadcrumb(this.cwd, this.sessionFile);
 		}
 		return this.sessionFile;
 	}
@@ -1998,7 +2091,9 @@ export class SessionManager {
 		storage: SessionStorage = new FileSessionStorage(),
 	): Promise<SessionManager> {
 		const dir = sessionDir ?? getDefaultSessionDir(cwd, storage);
-		const mostRecent = await findMostRecentSession(dir, storage);
+		// Prefer terminal-scoped breadcrumb (handles concurrent sessions correctly)
+		const terminalSession = await readTerminalBreadcrumb(cwd);
+		const mostRecent = terminalSession ?? (await findMostRecentSession(dir, storage));
 		const manager = new SessionManager(cwd, dir, true, storage);
 		if (mostRecent) {
 			await manager._initSessionFile(mostRecent);

@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Added terminal breadcrumb tracking to remember the last session per terminal, enabling `--continue` to work correctly with concurrent sessions in different terminals
+
 ### Changed
 
 - Changed screenshot format to always use PNG instead of supporting JPEG with quality parameter
