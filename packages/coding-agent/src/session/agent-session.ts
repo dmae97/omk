@@ -29,7 +29,6 @@ import type {
 } from "@oh-my-pi/pi-ai";
 import { isContextOverflow, modelsAreEqual, supportsXhigh } from "@oh-my-pi/pi-ai";
 import { abortableSleep, isEnoent, logger } from "@oh-my-pi/pi-utils";
-import { YAML } from "bun";
 import type { Rule } from "../capability/rule";
 import { getAgentDbPath } from "../config";
 import { MODEL_ROLE_IDS, type ModelRegistry, type ModelRole } from "../config/model-registry";
@@ -1740,7 +1739,7 @@ export class AgentSession {
 		await this.abort();
 		this.agent.reset();
 		await this.sessionManager.flush();
-		this.sessionManager.newSession(options);
+		await this.sessionManager.newSession(options);
 		this.agent.sessionId = this.sessionManager.getSessionId();
 		this._steeringMessages = [];
 		this._followUpMessages = [];
@@ -2443,7 +2442,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 			// Start a new session
 			await this.sessionManager.flush();
-			this.sessionManager.newSession();
+			await this.sessionManager.newSession();
 			this.agent.reset();
 			this.agent.sessionId = this.sessionManager.getSessionId();
 			this._steeringMessages = [];
@@ -3453,7 +3452,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		await this.sessionManager.flush();
 
 		if (!selectedEntry.parentId) {
-			this.sessionManager.newSession({ parentSession: previousSessionFile });
+			await this.sessionManager.newSession({ parentSession: previousSessionFile });
 		} else {
 			this.sessionManager.createBranchedSession(selectedEntry.parentId);
 		}
@@ -3875,6 +3874,16 @@ Be thorough - include exact file paths, function names, error messages, and tech
 	formatSessionAsText(): string {
 		const lines: string[] = [];
 
+		/** Serialize an object as XML parameter elements, one per key. */
+		function formatArgsAsXml(args: Record<string, unknown>, indent = "\t"): string {
+			const parts: string[] = [];
+			for (const [key, value] of Object.entries(args)) {
+				const text = typeof value === "string" ? value : JSON.stringify(value);
+				parts.push(`${indent}<parameter name="${key}">${text}</parameter>`);
+			}
+			return parts.join("\n");
+		}
+
 		// Include system prompt at the beginning
 		const systemPrompt = this.agent.state.systemPrompt;
 		if (systemPrompt) {
@@ -3914,12 +3923,11 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		if (tools.length > 0) {
 			lines.push("## Available Tools\n");
 			for (const tool of tools) {
-				lines.push(`### ${tool.name}\n`);
+				lines.push(`<tool name="${tool.name}">`);
 				lines.push(tool.description);
-				lines.push("\n```yaml");
 				const parametersClean = stripTypeBoxFields(tool.parameters);
-				lines.push(YAML.stringify(parametersClean, null, 2));
-				lines.push("```\n");
+				lines.push(`\nParameters:\n${formatArgsAsXml(parametersClean as Record<string, unknown>)}`);
+				lines.push("<" + "/tool>\n");
 			}
 			lines.push("\n");
 		}
@@ -3951,10 +3959,11 @@ Be thorough - include exact file paths, function names, error messages, and tech
 						lines.push(c.thinking);
 						lines.push("</thinking>\n");
 					} else if (c.type === "toolCall") {
-						lines.push(`### Tool: ${c.name}`);
-						lines.push("```yaml");
-						lines.push(YAML.stringify(c.arguments, null, 2));
-						lines.push("```\n");
+						lines.push(`<invoke name="${c.name}">`);
+						if (c.arguments && typeof c.arguments === "object") {
+							lines.push(formatArgsAsXml(c.arguments as Record<string, unknown>));
+						}
+						lines.push("<" + "/invoke>\n");
 					}
 				}
 				lines.push("");

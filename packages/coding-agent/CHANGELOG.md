@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Fixed `newSession()` to properly await session manager operations, ensuring new session is fully initialized before returning
+- Fixed session formatting to use XML structure for tools and tool invocations instead of YAML, improving compatibility with structured output parsing
 
 ## [11.3.0] - 2026-02-06
 

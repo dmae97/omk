@@ -123,7 +123,7 @@ If tempted to write above, expand using templates.
 Structured agents (`explore`, `reviewer`) have built-in output schemas. Describing a different output format in `context`/`assignment` without overriding via `schema` creates a mismatch — the agent can't reconcile your prose instructions with its schema and submits null data. Always use `schema` for output structure, or pick an agent whose built-in schema matches your needs.
 **Test/lint commands in parallel tasks** — edit wars:
 Parallel agents share working tree. If two agents run `bun check` or `bun test` concurrently, they see each other's half-finished edits, "fix" phantom errors, loop. **Never tell parallel tasks run project-wide build/test/lint commands.** Each task edits, stops. Caller verifies after all tasks complete.
-**If you can’t specify scope yet**, create **Discovery task** first: enumerate files, find callsites, list candidates. Then fan out with explicit paths.
+**If you can't specify scope yet**, create **Discovery task** first: enumerate files, find callsites, list candidates. Then fan out with explicit paths.
 
 ### Delegate intent, not keystrokes
 
