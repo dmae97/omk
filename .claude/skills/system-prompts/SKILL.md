@@ -30,7 +30,7 @@ Tags encode enforcement level. Use consistently throughout:
 | --------------- | ------------- | ---------------------------------------------------- |
 | `<critical>`    | Inviolable    | Safety constraints, must-follow rules, repeat at END |
 | `<prohibited>`  | Forbidden     | Actions that cause harm, never acceptable            |
-| `<caution>`     | High priority | Deviate only with justification                      |
+| `<caution>`     | High priority | Important to follow                                  |
 | `<instruction>` | Operational   | How to use a tool, perform a task                    |
 | `<conditions>`  | Contextual    | When rules apply, trigger criteria                   |
 | `<avoid>`       | Anti-patterns | What not to do, prefer alternatives                  |
@@ -206,7 +206,7 @@ Tag hierarchy (by enforcement level):
 
 - `<critical>` — Inviolable. Failure to comply is a system failure.
 - `<prohibited>` — Forbidden. These actions will cause harm.
-- `<caution>` — High priority. Deviate only with justification.
+- `<caution>` — High priority. Important to follow.
 - `<instruction>` — How to operate. Follow precisely.
 - `<conditions>` — When rules apply. Check before acting.
 - `<avoid>` — Anti-patterns. Prefer alternatives.

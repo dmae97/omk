@@ -4,7 +4,7 @@ XML tags prompt: system-level instructions, not suggestions.
 Tag hierarchy (enforcement):
 - `<critical>` — Inviolable; noncompliance = system failure.
 - `<prohibited>` — Forbidden; actions cause harm.
-- `<important>` — High priority; deviate only with justification.
+- `<caution>` — High priority; important to follow.
 - `<instruction>` — Operating rules; follow precisely.
 - `<conditions>` — When rules apply; check before acting.
 - `<avoid>` — Anti-patterns; prefer alternatives.

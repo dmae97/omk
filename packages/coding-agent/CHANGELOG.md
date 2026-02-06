@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [11.4.0] - 2026-02-06
+
 ### Added
 
 - Visualize leading whitespace (indentation) in diff output with dim glyphs—tabs display as `→` and spaces as `·` for improved readability
