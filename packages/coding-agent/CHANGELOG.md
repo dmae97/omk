@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Exported `ModeChangeEntry` type for tracking agent mode transitions
@@ -33,6 +34,7 @@
 
 ### Changed
 
+- Screenshot tool now automatically compresses images for API content using the same resizing logic as pasted images, reducing payload size while maintaining quality
 - Improved text truncation across tool renderers to respect terminal width constraints and prevent output overflow
 - Enhanced render caching to include width parameter for accurate cache invalidation when terminal width changes
 - HTML export filter now treats `mode_change` entries as settings entries alongside model changes and thinking level changes

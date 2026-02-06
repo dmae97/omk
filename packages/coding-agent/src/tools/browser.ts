@@ -10,6 +10,7 @@ import puppeteer from "puppeteer";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import browserDescription from "../prompts/tools/browser.md" with { type: "text" };
 import type { ToolSession } from "../sdk";
+import { formatDimensionNote, resizeImage } from "../utils/image-resize";
 import { htmlToBasicMarkdown } from "../web/scrapers/types";
 import type { OutputMeta } from "./output-meta";
 import { resolveToCwd } from "./path-utils";
@@ -1321,15 +1322,25 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					details.mimeType = mimeType;
 					details.bytes = buffer.length;
 
+					// Compress for API content (same as pasted images)
+					const resized = await resizeImage({ type: "image", data: base64, mimeType });
+					const dimensionNote = formatDimensionNote(resized);
+
 					const lines = ["Screenshot captured", `Format: ${format}`, `Bytes: ${buffer.length}`];
+					if (resized.wasResized) {
+						lines.push(`Compressed: ${resized.width}x${resized.height} (${resized.mimeType})`);
+					}
 					if (savedPath) {
 						lines.push(`Saved: ${savedPath}`);
+					}
+					if (dimensionNote) {
+						lines.push(dimensionNote);
 					}
 
 					return toolResult(details)
 						.content([
 							{ type: "text", text: lines.join("\n") },
-							{ type: "image", data: base64, mimeType },
+							{ type: "image", data: resized.data, mimeType: resized.mimeType },
 						])
 						.done();
 				}
