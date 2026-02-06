@@ -14,7 +14,6 @@ import type { ToolSession } from "../sdk";
 import { formatDimensionNote, resizeImage } from "../utils/image-resize";
 import { htmlToBasicMarkdown } from "../web/scrapers/types";
 import type { OutputMeta } from "./output-meta";
-import { resolveToCwd } from "./path-utils";
 import stealthTamperingScript from "./puppeteer/00_stealth_tampering.txt" with { type: "text" };
 import stealthActivityScript from "./puppeteer/01_stealth_activity.txt" with { type: "text" };
 import stealthHairlineScript from "./puppeteer/02_stealth_hairline.txt" with { type: "text" };
@@ -412,10 +411,6 @@ function ensureParam<T>(value: T | undefined, name: string, action: string): T {
 		throw new ToolError(`Missing required parameter '${name}' for action '${action}'.`);
 	}
 	return value;
-}
-
-function resolveArtifactsDir(session: ToolSession): string | null {
-	return session.getArtifactsDir?.() ?? session.getSessionFile()?.slice(0, -6) ?? null;
 }
 
 function formatEvaluateResult(value: unknown): string {
@@ -890,7 +885,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 		params: BrowserParams,
 		signal?: AbortSignal,
 		_onUpdate?: AgentToolUpdateCallback<BrowserToolDetails>,
-		ctx?: AgentToolContext,
+		_ctx?: AgentToolContext,
 	): Promise<AgentToolResult<BrowserToolDetails>> {
 		try {
 			throwIfAborted(signal);
