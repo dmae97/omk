@@ -160,32 +160,20 @@ export function renderDiff(diffText: string, _options: RenderDiffOptions = {}): 
 				// Show all removed lines first, then all added lines
 				for (const removed of removedLines) {
 					result.push(
-						theme.fg(
-							"toolDiffRemoved",
-							formatLine("-", removed.lineNum, visualizeIndent(removed.content)),
-						),
+						theme.fg("toolDiffRemoved", formatLine("-", removed.lineNum, visualizeIndent(removed.content))),
 					);
 				}
 				for (const added of addedLines) {
-					result.push(
-						theme.fg(
-							"toolDiffAdded",
-							formatLine("+", added.lineNum, visualizeIndent(added.content)),
-						),
-					);
+					result.push(theme.fg("toolDiffAdded", formatLine("+", added.lineNum, visualizeIndent(added.content))));
 				}
 			}
 		} else if (parsed.prefix === "+") {
 			// Standalone added line
-			result.push(
-				theme.fg("toolDiffAdded", formatLine("+", parsed.lineNum, visualizeIndent(parsed.content))),
-			);
+			result.push(theme.fg("toolDiffAdded", formatLine("+", parsed.lineNum, visualizeIndent(parsed.content))));
 			i++;
 		} else {
 			// Context line
-			result.push(
-				theme.fg("toolDiffContext", formatLine(" ", parsed.lineNum, visualizeIndent(parsed.content))),
-			);
+			result.push(theme.fg("toolDiffContext", formatLine(" ", parsed.lineNum, visualizeIndent(parsed.content))));
 			i++;
 		}
 	}

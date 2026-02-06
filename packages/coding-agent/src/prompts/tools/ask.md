@@ -16,9 +16,9 @@ Ask user when you need clarification or input during task execution.
 Returns selected option(s) as text. For multi-part questions, returns map of question IDs to selected values.
 </output>
 
-<important>
+<caution>
 - Provide 2-5 concise, distinct options
-</important>
+</caution>
 
 <critical>
 **Default to action. Do NOT ask unless you are genuinely blocked and user preference is required to avoid a wrong outcome.**

@@ -4,7 +4,7 @@
 
 ### Added
 
-- Visualize leading whitespace (indentation) in diff output with dim glyphs—tabs display as ` → ` and spaces as `·` for improved readability
+- Visualize leading whitespace (indentation) in diff output with dim glyphs—tabs display as `→` and spaces as `·` for improved readability
 
 ### Fixed
 
@@ -121,6 +121,7 @@
 - Fixed CLI invocation with flags only (e.g. `pi --model=codex`) to route to the default command instead of erroring
 
 ## [11.2.0] - 2026-02-05
+
 ### Added
 
 - Added `omp commit` command to generate commit messages and update changelogs with `--push`, `--dry-run`, `--no-changelog`, and model override flags
@@ -1092,7 +1093,7 @@
 - Updated all tools to use structured metadata instead of inline notices for truncation, limits, and diagnostics
 - Replaced manual error formatting with ToolError.render() and standardized error handling
 - Enhanced bash and python executors to save full output as artifacts when truncated
-- Improved abort signal handling across all tools with consistent ToolAbortError
+- Improved abort signal handling across <caution>ith consistent ToolAbortError
 - Renamed task parameter from `vars` to `args` throughout task tool interface and updated template rendering to support built-in `{{id}}` and `{{description}}` placeholders
 - Simplified todo-write tool by removing active_form parameter, using single content field for task descriptions
 - Updated system prompt structure with `<important>` and `<avoid>` tags, clearer critical sections, and standardized whitespace handling
@@ -1820,8 +1821,8 @@
 
 - Fixed editor border rendering glitch after canceling slash command autocomplete
 - Fixed login/logout credential path message to reference agent.db
- - Removed legacy auth.json file—credentials are stored exclusively in agent.db
- - Removed legacy auth.json file—credentials are stored exclusively in agent.db
+- Removed legacy auth.json file—credentials are stored exclusively in agent.db
+- Removed legacy auth.json file—credentials are stored exclusively in agent.db
 
 ## [4.2.0] - 2026-01-10
 

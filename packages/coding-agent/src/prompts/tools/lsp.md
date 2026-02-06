@@ -22,7 +22,7 @@ Interact with Language Server Protocol servers for code intelligence.
 - `reload`: Confirmation of server restart
 </output>
 
-<important>
+<caution>
 - Requires running LSP server for target language
 - Some operations require file to be saved to disk
-</important>
+</caution>

@@ -19,9 +19,9 @@ Create plan at `{{planFilePath}}`.
 
 Use `{{editToolName}}` incremental updates; `{{writeToolName}}` only create/full replace.
 
-<important>
+<caution>
 Plan execution runs in fresh context (session cleared). Make plan file self-contained: include requirements, decisions, key findings, remaining todos needed to continue without prior session history.
-</important>
+</caution>
 
 {{#if reentry}}
 ## Re-entry
@@ -56,7 +56,7 @@ Use `{{editToolName}}` update plan file as you learn; don't wait until end.
 - Smaller task → fewer or no questions
 </procedure>
 
-<important>
+<caution>
 ### Plan Structure
 
 Use clear markdown headers; include:
@@ -65,7 +65,7 @@ Use clear markdown headers; include:
 - Verification: how to test end-to-end
 
 Concise enough to scan. Detailed enough to execute.
-</important>
+</caution>
 
 {{else}}
 ## Planning Workflow
@@ -87,9 +87,9 @@ Update `{{planFilePath}}` (`{{editToolName}}` changes, `{{writeToolName}}` only 
 - Verification section
 </procedure>
 
-<important>
+<caution>
 Ask questions throughout. Don't make large assumptions about user intent.
-</important>
+</caution>
 {{/if}}
 
 <directives>

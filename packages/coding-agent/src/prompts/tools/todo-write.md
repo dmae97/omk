@@ -36,9 +36,9 @@ Use proactively:
 Returns confirmation todo list updated.
 </output>
 
-<important>
+<caution>
 When in doubt, use this.
-</important>
+</caution>
 
 <example name="use-dark-mode">
 User: Add dark mode toggle to settings. Run tests when done.

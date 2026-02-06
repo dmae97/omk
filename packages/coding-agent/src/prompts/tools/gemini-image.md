@@ -14,10 +14,10 @@ When using multiple `input_images`, describe each image's role in `subject` or `
 Returns generated image saved to disk. Response includes file path where image was written.
 </output>
 
-<important>
+<caution>
 - For photoreal: add "ultra-detailed, realistic, natural skin texture" to style
 - For posters/cards: use 9:16 aspect ratio with negative space for text placement
 - For iteration: use `changes` for targeted adjustments rather than regenerating from scratch
 - For text: add "sharp, legible, correctly spelled" for important text; keep text short
 - For diagrams: include "scientifically accurate" in style and provide facts explicitly
-</important>
+</caution>
