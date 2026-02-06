@@ -2,6 +2,38 @@ import * as Diff from "diff";
 import { theme } from "../../modes/theme/theme";
 import { replaceTabs } from "../../tools/render-utils";
 
+/** SGR dim on / normal intensity — additive, preserves fg/bg colors. */
+const DIM = "\x1b[2m";
+const DIM_OFF = "\x1b[22m";
+
+/**
+ * Visualize leading whitespace (indentation) with dim glyphs.
+ * Tabs become ` → ` and spaces become `·`. Only affects whitespace
+ * before the first non-whitespace character; remaining tabs in code
+ * content are replaced with spaces (like replaceTabs).
+ */
+function visualizeIndent(text: string): string {
+	const match = text.match(/^([ \t]+)/);
+	if (!match) return replaceTabs(text);
+	const indent = match[1];
+	const rest = text.slice(indent.length);
+	// Normalize: collapse 3-space groups (tab-width) into tab arrows,
+	// then handle remaining tabs and lone spaces.
+	const normalized = indent.replaceAll("\t", "   ");
+	let visible = "";
+	let pos = 0;
+	while (pos < normalized.length) {
+		if (pos + 3 <= normalized.length && normalized.slice(pos, pos + 3) === "   ") {
+			visible += `${DIM} → ${DIM_OFF}`;
+			pos += 3;
+		} else {
+			visible += `${DIM}·${DIM_OFF}`;
+			pos++;
+		}
+	}
+	return `${visible}${replaceTabs(rest)}`;
+}
+
 /**
  * Parse diff line to extract prefix, line number, and content.
  * Format: "+123 content" or "-123 content" or " 123 content" or "     ..."
@@ -122,24 +154,38 @@ export function renderDiff(diffText: string, _options: RenderDiffOptions = {}): 
 					replaceTabs(added.content),
 				);
 
-				result.push(theme.fg("toolDiffRemoved", formatLine("-", removed.lineNum, removedLine)));
-				result.push(theme.fg("toolDiffAdded", formatLine("+", added.lineNum, addedLine)));
+				result.push(theme.fg("toolDiffRemoved", formatLine("-", removed.lineNum, visualizeIndent(removedLine))));
+				result.push(theme.fg("toolDiffAdded", formatLine("+", added.lineNum, visualizeIndent(addedLine))));
 			} else {
 				// Show all removed lines first, then all added lines
 				for (const removed of removedLines) {
-					result.push(theme.fg("toolDiffRemoved", formatLine("-", removed.lineNum, replaceTabs(removed.content))));
+					result.push(
+						theme.fg(
+							"toolDiffRemoved",
+							formatLine("-", removed.lineNum, visualizeIndent(removed.content)),
+						),
+					);
 				}
 				for (const added of addedLines) {
-					result.push(theme.fg("toolDiffAdded", formatLine("+", added.lineNum, replaceTabs(added.content))));
+					result.push(
+						theme.fg(
+							"toolDiffAdded",
+							formatLine("+", added.lineNum, visualizeIndent(added.content)),
+						),
+					);
 				}
 			}
 		} else if (parsed.prefix === "+") {
 			// Standalone added line
-			result.push(theme.fg("toolDiffAdded", formatLine("+", parsed.lineNum, replaceTabs(parsed.content))));
+			result.push(
+				theme.fg("toolDiffAdded", formatLine("+", parsed.lineNum, visualizeIndent(parsed.content))),
+			);
 			i++;
 		} else {
 			// Context line
-			result.push(theme.fg("toolDiffContext", formatLine(" ", parsed.lineNum, replaceTabs(parsed.content))));
+			result.push(
+				theme.fg("toolDiffContext", formatLine(" ", parsed.lineNum, visualizeIndent(parsed.content))),
+			);
 			i++;
 		}
 	}
