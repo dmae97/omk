@@ -109,6 +109,9 @@ export class InputController {
 		for (const key of this.ctx.keybindings.getKeys("resume")) {
 			this.ctx.editor.setCustomKeyHandler(key, () => this.ctx.showSessionSelector());
 		}
+		for (const key of this.ctx.keybindings.getKeys("followUp")) {
+			this.ctx.editor.setCustomKeyHandler(key, () => void this.handleFollowUp());
+		}
 
 		this.ctx.editor.onChange = (text: string) => {
 			const wasBashMode = this.ctx.isBashMode;
@@ -119,37 +122,6 @@ export class InputController {
 			if (wasBashMode !== this.ctx.isBashMode || wasPythonMode !== this.ctx.isPythonMode) {
 				this.ctx.updateEditorBorderColor();
 			}
-		};
-
-		this.ctx.editor.onAltEnter = async (text: string) => {
-			const trimmedText = text.trim();
-
-			// Queue follow-up messages while compaction is running
-			if (this.ctx.session.isCompacting) {
-				if (!trimmedText) {
-					this.ctx.editor.handleInput("\n");
-					return;
-				}
-				this.ctx.queueCompactionMessage(trimmedText, "followUp");
-				return;
-			}
-
-			// Alt+Enter queues a follow-up message while streaming
-			if (this.ctx.session.isStreaming) {
-				if (!trimmedText) {
-					this.ctx.editor.handleInput("\n");
-					return;
-				}
-				this.ctx.editor.addToHistory(trimmedText);
-				this.ctx.editor.setText("");
-				await this.ctx.session.prompt(trimmedText, { streamingBehavior: "followUp" });
-				this.ctx.updatePendingMessagesDisplay();
-				this.ctx.ui.requestRender();
-				return;
-			}
-
-			// Default behavior: insert a new line
-			this.ctx.editor.handleInput("\n");
 		};
 	}
 
@@ -530,6 +502,31 @@ export class InputController {
 		} else {
 			this.ctx.showStatus(`Restored ${restored} queued message${restored > 1 ? "s" : ""} to editor`);
 		}
+	}
+
+	/** Send editor text as a follow-up message (queued behind current stream). */
+	async handleFollowUp(): Promise<void> {
+		const text = this.ctx.editor.getText().trim();
+		if (!text) return;
+
+		if (this.ctx.session.isCompacting) {
+			this.ctx.queueCompactionMessage(text, "followUp");
+			return;
+		}
+
+		if (this.ctx.session.isStreaming) {
+			this.ctx.editor.addToHistory(text);
+			this.ctx.editor.setText("");
+			await this.ctx.session.prompt(text, { streamingBehavior: "followUp" });
+			this.ctx.updatePendingMessagesDisplay();
+			this.ctx.ui.requestRender();
+			return;
+		}
+
+		// Not streaming — just submit normally
+		this.ctx.editor.addToHistory(text);
+		this.ctx.editor.setText("");
+		await this.ctx.session.prompt(text);
 	}
 
 	restoreQueuedMessagesToEditor(options?: { abort?: boolean; currentText?: string }): number {
