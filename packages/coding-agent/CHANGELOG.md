@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [11.5.0] - 2026-02-06
+
 ### Added
 
 - Added terminal breadcrumb tracking to remember the last session per terminal, enabling `--continue` to work correctly with concurrent sessions in different terminals
