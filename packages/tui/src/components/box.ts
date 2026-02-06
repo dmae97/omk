@@ -51,8 +51,18 @@ export class Box implements Component {
 		this.cached = undefined;
 	}
 
+	private static _tmp = new Uint32Array(2);
 	private computeCacheKey(width: number, childLines: string[], bgSample: string | undefined): bigint {
-		return Bun.hash.xxHash64(JSON.stringify([width, bgSample, childLines]));
+		Box._tmp[0] = width;
+		Box._tmp[1] = childLines.length;
+		let h = Bun.hash.xxHash64(Box._tmp);
+		for (const line of childLines) {
+			Box._tmp[0] = line.length;
+			h = Bun.hash.xxHash64(Box._tmp, h);
+			h = Bun.hash.xxHash64(line, h);
+		}
+		h = Bun.hash.xxHash64(bgSample ?? "", h);
+		return h;
 	}
 
 	private matchCache(cacheKey: bigint): boolean {

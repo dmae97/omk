@@ -35,14 +35,14 @@ export function renderTreeList<T>(options: TreeListOptions<T>, theme: Theme): st
 		const rendered = renderItem(items[i], context);
 		if (Array.isArray(rendered)) {
 			if (rendered.length === 0) continue;
-				lines.push(`${prefix}${replaceTabs(rendered[0])}`);
+			lines.push(`${prefix}${replaceTabs(rendered[0])}`);
 			for (let j = 1; j < rendered.length; j++) {
-					lines.push(`${continuePrefix}${replaceTabs(rendered[j])}`);
+				lines.push(`${continuePrefix}${replaceTabs(rendered[j])}`);
 			}
 		} else {
-				lines.push(`${prefix}${replaceTabs(rendered)}`);
-			}
+			lines.push(`${prefix}${replaceTabs(rendered)}`);
 		}
+	}
 
 	if (!expanded && items.length > maxItems) {
 		const remaining = items.length - maxItems;
