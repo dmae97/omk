@@ -519,6 +519,10 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 				if (!entry.name.toLowerCase().startsWith(searchPrefix.toLowerCase())) {
 					continue;
 				}
+				// Skip .git directory
+				if (entry.name === ".git") {
+					continue;
+				}
 
 				// Check if entry is a directory (or a symlink pointing to a directory)
 				let isDirectory = entry.isDirectory();

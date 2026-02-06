@@ -480,7 +480,19 @@ fn matches_key_inner(bytes: &[u8], key_id: &str, kitty_protocol_active: bool) ->
 				parsed_base = Some(mapped);
 			}
 		}
-		parsed_codepoint == codepoint || parsed_base == Some(codepoint)
+		if parsed_codepoint == codepoint {
+			return true;
+		}
+		if let Some(base) = parsed_base
+			&& base == codepoint
+		{
+			let is_latin_letter = (97..=122).contains(&parsed_codepoint);
+			let is_known_symbol = is_symbol_key(parsed_codepoint);
+			if !is_latin_letter && !is_known_symbol {
+				return true;
+			}
+		}
+		false
 	};
 
 	// Parse modifyOtherKeys once.

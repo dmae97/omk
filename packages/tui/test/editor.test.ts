@@ -1028,7 +1028,7 @@ describe("Editor component", () => {
 			// Line 0: short
 			// Line 1: 30 chars = wraps to multiple visual lines at narrow width
 			editor.setText("short\n123456789012345678901234567890");
-			editor.render(15); // Narrow width to force wrapping
+			editor.render(16); // Narrow width to force wrapping
 
 			// Position at end of line 1 (col 30)
 			expect(editor.getCursor()).toEqual({ line: 1, col: 30 });
@@ -1109,7 +1109,7 @@ describe("Editor component", () => {
 			expect(editor.getCursor()).toEqual({ line: 0, col: 15 });
 
 			// Render with narrower width to simulate resize
-			editor.render(12); // Width 12
+			editor.render(17); // Width 17 -> layoutWidth 11
 
 			// Move down - sticky should be clamped to new width
 			editor.handleInput("\x1b[B"); // Down - line 1
@@ -1135,7 +1135,7 @@ describe("Editor component", () => {
 			expect(editor.getCursor()).toEqual({ line: 0, col: 5 });
 
 			// Narrow the editor
-			editor.render(10);
+			editor.render(15);
 
 			// Move down - preferredVisualCol was 15, but width is 10
 			// Should land on line 1, clamped to width (visual col 9, which is logical col 9)

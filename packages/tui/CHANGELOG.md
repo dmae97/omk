@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added sticky column behavior for vertical cursor movement, preserving target column when navigating through lines of varying lengths
@@ -22,6 +23,7 @@
 
 ### Fixed
 
+- Fixed `.git` directory appearing in autocomplete suggestions when filtering by prefix
 - Fixed cursor position corruption in Input component when displaying text with emoji and combining characters
 - Fixed `.git` directory appearing in autocomplete suggestions
 - Fixed race condition where Kitty key release events could leak to parent shell after TUI exit over slow SSH connections

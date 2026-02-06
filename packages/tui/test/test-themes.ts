@@ -43,7 +43,7 @@ const defaultSymbols: SymbolTheme = {
 		teeRight: "+",
 		cross: "+",
 	},
-	quoteBorder: "|",
+	quoteBorder: "│",
 	hrChar: "-",
 	spinnerFrames: ["-", "\\", "|", "/"],
 };
