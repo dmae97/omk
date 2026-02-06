@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [11.3.0] - 2026-02-06
 ### Added
 
 - Added `cacheRetention` option to control prompt cache retention preference ('none', 'short', 'long') across providers

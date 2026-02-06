@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [11.3.0] - 2026-02-06
 ### Added
 
 - Added `maxRetryDelayMs` option to AgentOptions to cap server-requested retry delays, allowing higher-level retry logic to handle long waits with user visibility

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [11.3.0] - 2026-02-06
+
 ### Added
 
 - Added resumption hint printed to stderr on session exit showing command to resume the session (e.g., `Resume this session with claude --resume <session-id>`)

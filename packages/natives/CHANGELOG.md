@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [11.3.0] - 2026-02-06
+
 ### Added
 
 - OSC 52 fallback for clipboard operations over SSH/mosh connections

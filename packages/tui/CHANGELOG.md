@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [11.3.0] - 2026-02-06
+
 ### Breaking Changes
 
 - Removed `getCursorPosition()` method from Component interface and implementations, eliminating hardware cursor positioning support
