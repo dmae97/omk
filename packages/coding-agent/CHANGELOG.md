@@ -1,9 +1,12 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- New `BlobStore` class for content-addressed storage of large binary data (images) externalized from session files
+- New `getBlobsDir()` function to get path to blob store directory
+- Support for externalizing large images to blob store during session persistence, reducing JSONL file size
+- New blob reference format (`blob:sha256:<hash>`) for tracking externalized image data in sessions
 - Exported `ModeChangeEntry` type for tracking agent mode transitions
 - Support for restoring plan mode state when resuming sessions
 - New `appendModeChange()` method in SessionManager to record mode transitions
@@ -34,6 +37,9 @@
 
 ### Changed
 
+- Image persistence now externalizes images ≥1KB to content-addressed blob store instead of compressing inline
+- Session loading now automatically resolves blob references back to base64 image data
+- Session forking now resolves blob references in copied entries to ensure data integrity
 - Screenshot tool now automatically compresses images for API content using the same resizing logic as pasted images, reducing payload size while maintaining quality
 - Improved text truncation across tool renderers to respect terminal width constraints and prevent output overflow
 - Enhanced render caching to include width parameter for accurate cache invalidation when terminal width changes

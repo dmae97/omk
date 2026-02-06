@@ -2,8 +2,8 @@ import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Message, TextContent, Usage } from "@oh-my-pi/pi-ai";
 import { isEnoent, logger, parseJsonlLenient, Snowflake } from "@oh-my-pi/pi-utils";
-import { getAgentDir as getDefaultAgentDir } from "../config";
-import { resizeImage } from "../utils/image-resize";
+import { getBlobsDir, getAgentDir as getDefaultAgentDir } from "../config";
+import { BlobStore, externalizeImageData, isBlobRef, resolveImageData } from "./blob-store";
 import {
 	type BashExecutionMessage,
 	type CustomMessage,
@@ -493,6 +493,41 @@ export async function loadEntriesFromFile(
 }
 
 /**
+ * Resolve blob references in loaded entries, replacing `blob:sha256:<hash>` data fields
+ * with the actual base64 content from the blob store. Mutates entries in place.
+ */
+async function resolveBlobRefsInEntries(entries: FileEntry[], blobStore: BlobStore): Promise<void> {
+	const promises: Promise<void>[] = [];
+
+	for (const entry of entries) {
+		if (entry.type === "session") continue;
+
+		// Resolve image blocks in message content arrays
+		let contentArray: unknown[] | undefined;
+		if (entry.type === "message") {
+			const content = (entry.message as { content?: unknown }).content;
+			if (Array.isArray(content)) contentArray = content;
+		} else if (entry.type === "custom_message" && Array.isArray(entry.content)) {
+			contentArray = entry.content;
+		}
+
+		if (!contentArray) continue;
+
+		for (const block of contentArray) {
+			if (isImageBlock(block) && isBlobRef(block.data)) {
+				promises.push(
+					resolveImageData(blobStore, block.data).then(resolved => {
+						(block as { data: string }).data = resolved;
+					}),
+				);
+			}
+		}
+	}
+
+	await Promise.all(promises);
+}
+
+/**
  * Lightweight metadata for a session file, used in session picker UI.
  * Uses lazy getters to defer string formatting until actually displayed.
  */
@@ -624,9 +659,8 @@ function formatTimeAgo(date: Date): string {
 
 const MAX_PERSIST_CHARS = 500_000;
 const TRUNCATION_NOTICE = "\n\n[Session persistence truncated large content]";
-const PLACEHOLDER_IMAGE_DATA =
-	"/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAAQABADASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAgP/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCkA//Z";
-
+/** Minimum base64 length to externalize to blob store (skip tiny inline images) */
+const BLOB_EXTERNALIZE_THRESHOLD = 1024;
 const TEXT_CONTENT_KEY = "content";
 
 /**
@@ -659,25 +693,7 @@ function isImageBlock(value: unknown): value is { type: "image"; data: string; m
 	);
 }
 
-async function compressImageForPersistence(image: ImageContent): Promise<ImageContent> {
-	try {
-		const maxBytes = Math.floor((MAX_PERSIST_CHARS * 3) / 4);
-		const resized = await resizeImage(image, {
-			maxWidth: 512,
-			maxHeight: 512,
-			maxBytes,
-			jpegQuality: 70,
-		});
-		if (resized.data.length > MAX_PERSIST_CHARS) {
-			return { type: "image", data: PLACEHOLDER_IMAGE_DATA, mimeType: "image/jpeg" };
-		}
-		return { type: "image", data: resized.data, mimeType: resized.mimeType };
-	} catch {
-		return { type: "image", data: PLACEHOLDER_IMAGE_DATA, mimeType: "image/jpeg" };
-	}
-}
-
-async function truncateForPersistence<T>(obj: T, key?: string): Promise<T> {
+async function truncateForPersistence<T>(obj: T, blobStore: BlobStore, key?: string): Promise<T> {
 	if (obj === null || obj === undefined) return obj;
 
 	if (typeof obj === "string") {
@@ -694,16 +710,13 @@ async function truncateForPersistence<T>(obj: T, key?: string): Promise<T> {
 			obj.map(async item => {
 				// Special handling: compress oversized images while preserving shape
 				if (key === TEXT_CONTENT_KEY && isImageBlock(item)) {
-					if (item.data.length > MAX_PERSIST_CHARS) {
+					if (!isBlobRef(item.data) && item.data.length >= BLOB_EXTERNALIZE_THRESHOLD) {
 						changed = true;
-						return compressImageForPersistence({
-							type: "image",
-							data: item.data,
-							mimeType: item.mimeType ?? "image/jpeg",
-						});
+						const blobRef = await externalizeImageData(blobStore, item.data);
+						return { ...item, data: blobRef };
 					}
 				}
-				const newItem = await truncateForPersistence(item, key);
+				const newItem = await truncateForPersistence(item, blobStore, key);
 				if (newItem !== item) changed = true;
 				return newItem;
 			}),
@@ -722,7 +735,7 @@ async function truncateForPersistence<T>(obj: T, key?: string): Promise<T> {
 				changed = true;
 				continue;
 			}
-			const newV = await truncateForPersistence(v, k);
+			const newV = await truncateForPersistence(v, blobStore, k);
 			result[k] = newV;
 			if (newV !== v) changed = true;
 		}
@@ -736,8 +749,8 @@ async function truncateForPersistence<T>(obj: T, key?: string): Promise<T> {
 	return obj;
 }
 
-async function prepareEntryForPersistence(entry: FileEntry): Promise<FileEntry> {
-	return truncateForPersistence(entry);
+async function prepareEntryForPersistence(entry: FileEntry, blobStore: BlobStore): Promise<FileEntry> {
+	return truncateForPersistence(entry, blobStore);
 }
 
 class NdjsonFileWriter {
@@ -985,6 +998,7 @@ export class SessionManager {
 	private persistChain: Promise<void> = Promise.resolve();
 	private persistError: Error | undefined;
 	private persistErrorReported = false;
+	private readonly blobStore: BlobStore;
 
 	private constructor(
 		private readonly cwd: string,
@@ -992,6 +1006,7 @@ export class SessionManager {
 		private readonly persist: boolean,
 		private readonly storage: SessionStorage,
 	) {
+		this.blobStore = new BlobStore(getBlobsDir());
 		if (persist && sessionDir) {
 			this.storage.ensureDirSync(sessionDir);
 		}
@@ -1023,6 +1038,8 @@ export class SessionManager {
 			if (migrateToCurrentVersion(this.fileEntries)) {
 				await this._rewriteFile();
 			}
+
+			await resolveBlobRefsInEntries(this.fileEntries, this.blobStore);
 
 			this._buildIndex();
 			this.flushed = true;
@@ -1248,7 +1265,7 @@ export class SessionManager {
 		if (!this.persist || !this.sessionFile) return;
 		await this._queuePersistTask(async () => {
 			await this._closePersistWriterInternal();
-			const entries = await Promise.all(this.fileEntries.map(entry => prepareEntryForPersistence(entry)));
+			const entries = await Promise.all(this.fileEntries.map(entry => prepareEntryForPersistence(entry, this.blobStore)));
 			await this._writeEntriesAtomically(entries);
 			this.flushed = true;
 		});
@@ -1327,7 +1344,7 @@ export class SessionManager {
 			void this._queuePersistTask(async () => {
 				const writer = this._ensurePersistWriter();
 				if (!writer) return;
-				const entries = await Promise.all(this.fileEntries.map(e => prepareEntryForPersistence(e)));
+				const entries = await Promise.all(this.fileEntries.map(e => prepareEntryForPersistence(e, this.blobStore)));
 				for (const persistedEntry of entries) {
 					await writer.write(persistedEntry);
 				}
@@ -1336,7 +1353,7 @@ export class SessionManager {
 			void this._queuePersistTask(async () => {
 				const writer = this._ensurePersistWriter();
 				if (!writer) return;
-				const persistedEntry = await prepareEntryForPersistence(entry);
+				const persistedEntry = await prepareEntryForPersistence(entry, this.blobStore);
 				await writer.write(persistedEntry);
 			});
 		}
@@ -1928,6 +1945,7 @@ export class SessionManager {
 		const manager = new SessionManager(cwd, dir, true, storage);
 		const forkEntries = structuredClone(await loadEntriesFromFile(sourcePath, storage)) as FileEntry[];
 		migrateToCurrentVersion(forkEntries);
+		await resolveBlobRefsInEntries(forkEntries, manager.blobStore);
 		const sourceHeader = forkEntries.find(e => e.type === "session") as SessionHeader | undefined;
 		const historyEntries = forkEntries.filter(entry => entry.type !== "session") as SessionEntry[];
 		manager._newSessionSync({ parentSession: sourceHeader?.id });

@@ -288,6 +288,11 @@ export function getPromptsDir(): string {
 	return path.join(getAgentDir(), "prompts");
 }
 
+/** Get path to content-addressed blob store directory */
+export function getBlobsDir(): string {
+	return path.join(getAgentDir(), "blobs");
+}
+
 /** Get path to sessions directory */
 export function getSessionsDir(): string {
 	return path.join(getAgentDir(), "sessions");
