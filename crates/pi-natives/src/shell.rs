@@ -887,8 +887,10 @@ impl builtins::Command for TimeoutCommand {
 				return Ok(ExecutionResult::new(125));
 			}
 
+			let child_cancel = CancellationToken::new();
 			let mut params = context.params.clone();
 			params.process_group_policy = ProcessGroupPolicy::NewProcessGroup;
+			params.set_cancel_token(child_cancel.clone());
 
 			let mut command_line = String::new();
 			for (idx, arg) in command.iter().enumerate() {
@@ -905,13 +907,26 @@ impl builtins::Command for TimeoutCommand {
 			if let Some(cancel_token) = cancel_token {
 				tokio::select! {
 					result = &mut run_future => result,
-					() = time::sleep(timeout) => Ok(ExecutionResult::new(124)),
-					() = cancel_token.cancelled() => Ok(ExecutionExitCode::Interrupted.into()),
+					() = time::sleep(timeout) => {
+						child_cancel.cancel();
+						// Wait briefly for the child to exit after cancellation.
+						let _ = time::timeout(Duration::from_secs(2), &mut run_future).await;
+						Ok(ExecutionResult::new(124))
+					},
+					() = cancel_token.cancelled() => {
+						child_cancel.cancel();
+						Ok(ExecutionExitCode::Interrupted.into())
+					},
 				}
 			} else {
 				tokio::select! {
 					result = &mut run_future => result,
-					() = time::sleep(timeout) => Ok(ExecutionResult::new(124)),
+					() = time::sleep(timeout) => {
+						child_cancel.cancel();
+						// Wait briefly for the child to exit after cancellation.
+						let _ = time::timeout(Duration::from_secs(2), &mut run_future).await;
+						Ok(ExecutionResult::new(124))
+					},
 				}
 			}
 		}
