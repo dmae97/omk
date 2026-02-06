@@ -14,6 +14,6 @@ Returns search results formatted as blocks with:
 - Provider-dependent structure based on selected backend
 </output>
 
-<important>
+<caution>
 Searches are performed automatically within a single API call—no pagination or follow-up requests needed.
-</important>
+</caution>

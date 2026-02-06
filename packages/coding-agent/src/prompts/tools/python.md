@@ -41,13 +41,13 @@ User sees output like Jupyter notebook; rich displays render fully:
 - `display(HTML(...))` → rendered HTML
 - `display(Markdown(...))` → formatted markdown
 - `plt.show()` → inline figures
-**You will see object repr** (e.g., `<IPython.core.display.JSON object>`). Trust `display()`; do not assume user sees only repr.
+  **You will see object repr** (e.g., `<IPython.core.display.JSON object>`). Trust `display()`; do not assume user sees only repr.
 </output>
 
-<important>
+<caution>
 - Per-call mode uses fresh kernel each call
 - Use `reset: true` to clear state when session mode active
-</important>
+</caution>
 
 <critical>
 - Use `run()` for shell commands; never raw `subprocess`
