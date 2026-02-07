@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed task tool renderer not sanitizing tabs, causing visual holes in TUI output
+- Fixed task tool expanded view showing redundant `<swarm_context>` block that is shared across all tasks
+
 ## [11.5.2] - 2026-02-07
 
 ### Fixed

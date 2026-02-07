@@ -15,6 +15,7 @@ import {
 	formatMoreItems,
 	formatStatusIcon,
 	formatTokens,
+	replaceTabs,
 	truncateToWidth,
 } from "../tools/render-utils";
 import {
@@ -300,7 +301,7 @@ function renderOutputSection(
 		const outputLines = output.trimEnd().split("\n");
 		const previewCount = expanded ? maxExpanded : maxCollapsed;
 		for (const line of outputLines.slice(0, previewCount)) {
-			lines.push(`${continuePrefix}  ${theme.fg("dim", truncateToWidth(line, 70))}`);
+			lines.push(`${continuePrefix}  ${theme.fg("dim", truncateToWidth(replaceTabs(line), 70))}`);
 		}
 
 		if (outputLines.length > previewCount) {
@@ -344,7 +345,7 @@ function renderOutputSection(
 	const outputLines = output.trimEnd().split("\n");
 	const previewCount = expanded ? maxExpanded : maxCollapsed;
 	for (const line of outputLines.slice(0, previewCount)) {
-		lines.push(`${continuePrefix}  ${theme.fg("dim", truncateToWidth(line, 70))}`);
+		lines.push(`${continuePrefix}  ${theme.fg("dim", truncateToWidth(replaceTabs(line), 70))}`);
 	}
 
 	if (outputLines.length > previewCount) {
@@ -365,10 +366,15 @@ function renderTaskSection(
 	const trimmed = task.trimEnd();
 	if (!expanded || !trimmed) return lines;
 
+	// Strip the shared <swarm_context>...</swarm_context> block — it's the same
+	// across all tasks and just adds noise when expanded.
+	const stripped = trimmed.replace(/<swarm_context>[\s\S]*?<\/swarm_context>\s*/, "").trimStart();
+	if (!stripped) return lines;
+
 	lines.push(`${continuePrefix}${theme.fg("dim", "Task")}`);
-	const taskLines = trimmed.split("\n");
+	const taskLines = stripped.split("\n");
 	for (const line of taskLines.slice(0, maxExpanded)) {
-		lines.push(`${continuePrefix}  ${theme.fg("dim", truncateToWidth(line, 70))}`);
+		lines.push(`${continuePrefix}  ${theme.fg("dim", truncateToWidth(replaceTabs(line), 70))}`);
 	}
 	if (taskLines.length > maxExpanded) {
 		lines.push(`${continuePrefix}  ${theme.fg("dim", formatMoreItems(taskLines.length - maxExpanded, "line"))}`);
@@ -454,7 +460,7 @@ export function renderCall(args: TaskParams, theme: Theme): Component {
 	if (hasContext) {
 		lines.push(` ${branch} ${theme.fg("dim", "Context")}`);
 		for (const line of context.split("\n")) {
-			const content = line ? theme.fg("muted", line) : "";
+			const content = line ? theme.fg("muted", replaceTabs(line)) : "";
 			lines.push(` ${vertical}  ${content}`);
 		}
 		const taskPrefix = showIsolated ? branch : last;
@@ -635,7 +641,7 @@ function renderReviewResult(
 			lines.push(`${continuePrefix}${theme.fg("dim", "Summary")}`);
 			const explanationLines = summary.explanation.split("\n");
 			for (const line of explanationLines) {
-				lines.push(`${continuePrefix}  ${theme.fg("dim", line)}`);
+				lines.push(`${continuePrefix}  ${theme.fg("dim", replaceTabs(line))}`);
 			}
 		} else {
 			// Preview: first sentence or ~100 chars
@@ -690,7 +696,7 @@ function renderFindings(
 			// Wrap body text
 			const bodyLines = finding.body.split("\n");
 			for (const bodyLine of bodyLines) {
-				lines.push(`${continuePrefix}${findingContinue}${theme.fg("dim", bodyLine)}`);
+				lines.push(`${continuePrefix}${findingContinue}${theme.fg("dim", replaceTabs(bodyLine))}`);
 			}
 		}
 	}
