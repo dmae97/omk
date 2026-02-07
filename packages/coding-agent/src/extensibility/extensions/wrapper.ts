@@ -7,7 +7,7 @@ import type { Static, TSchema } from "@sinclair/typebox";
 import type { Theme } from "../../modes/theme/theme";
 import { applyToolProxy } from "../tool-proxy";
 import type { ExtensionRunner } from "./runner";
-import type { RegisteredTool, ToolCallEventResult, ToolResultEventResult } from "./types";
+import type { RegisteredTool, ToolCallEventResult } from "./types";
 
 /**
  * Adapts a RegisteredTool into an AgentTool.
@@ -137,7 +137,7 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 
 		// Emit tool_result event - extensions can modify the result and error status
 		if (this.runner.hasHandlers("tool_result")) {
-			const resultResult = (await this.runner.emit({
+			const resultResult = await this.runner.emitToolResult({
 				type: "tool_result",
 				toolName: this.tool.name,
 				toolCallId,
@@ -145,7 +145,7 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 				content: result.content,
 				details: result.details,
 				isError: !!executionError,
-			})) as ToolResultEventResult | undefined;
+			});
 
 			if (resultResult) {
 				const modifiedContent: (TextContent | ImageContent)[] = resultResult.content ?? result.content;

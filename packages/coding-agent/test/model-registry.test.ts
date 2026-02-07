@@ -139,10 +139,10 @@ describe("ModelRegistry", () => {
 			expect(anthropicModels.length).toBeGreaterThan(1);
 			expect(anthropicModels[0].baseUrl).toBe("https://anthropic-proxy.example.com/v1");
 
-			// Google: single custom model
+			// Google: built-in models + custom model merged (custom wins on ID conflict)
 			const googleModels = getModelsForProvider(registry, "google");
-			expect(googleModels).toHaveLength(1);
-			expect(googleModels[0].id).toBe("gemini-custom");
+			expect(googleModels.length).toBeGreaterThan(1);
+			expect(googleModels.some(m => m.id === "gemini-custom")).toBe(true);
 		});
 
 		test("refresh() picks up baseUrl override changes", async () => {
@@ -164,7 +164,7 @@ describe("ModelRegistry", () => {
 	});
 
 	describe("provider replacement (with custom models)", () => {
-		test("custom provider with same name as built-in replaces built-in models", async () => {
+		test("custom provider with same name as built-in merges with built-in models", async () => {
 			writeModelsJson({
 				anthropic: providerConfig("https://my-proxy.example.com/v1", [{ id: "claude-custom" }]),
 			});
@@ -172,9 +172,11 @@ describe("ModelRegistry", () => {
 			const registry = new ModelRegistry(authStorage, modelsJsonPath);
 			const anthropicModels = getModelsForProvider(registry, "anthropic");
 
-			expect(anthropicModels).toHaveLength(1);
-			expect(anthropicModels[0].id).toBe("claude-custom");
-			expect(anthropicModels[0].baseUrl).toBe("https://my-proxy.example.com/v1");
+			// Built-in models still present, custom model merged in
+			expect(anthropicModels.length).toBeGreaterThan(1);
+			const custom = anthropicModels.find(m => m.id === "claude-custom");
+			expect(custom).toBeDefined();
+			expect(custom!.baseUrl).toBe("https://my-proxy.example.com/v1");
 		});
 
 		test("custom provider with same name as built-in does not affect other built-in providers", async () => {
@@ -188,7 +190,7 @@ describe("ModelRegistry", () => {
 			expect(getModelsForProvider(registry, "openai").length).toBeGreaterThan(0);
 		});
 
-		test("multiple built-in providers can be overridden", async () => {
+		test("multiple built-in providers can have custom models merged", async () => {
 			writeModelsJson({
 				anthropic: providerConfig("https://anthropic-proxy.example.com/v1", [{ id: "claude-proxy" }]),
 				google: providerConfig(
@@ -202,13 +204,15 @@ describe("ModelRegistry", () => {
 			const anthropicModels = getModelsForProvider(registry, "anthropic");
 			const googleModels = getModelsForProvider(registry, "google");
 
-			expect(anthropicModels).toHaveLength(1);
-			expect(anthropicModels[0].id).toBe("claude-proxy");
-			expect(anthropicModels[0].baseUrl).toBe("https://anthropic-proxy.example.com/v1");
+			expect(anthropicModels.length).toBeGreaterThan(1);
+			const customAnthropic = anthropicModels.find(m => m.id === "claude-proxy");
+			expect(customAnthropic).toBeDefined();
+			expect(customAnthropic!.baseUrl).toBe("https://anthropic-proxy.example.com/v1");
 
-			expect(googleModels).toHaveLength(1);
-			expect(googleModels[0].id).toBe("gemini-proxy");
-			expect(googleModels[0].baseUrl).toBe("https://google-proxy.example.com/v1");
+			expect(googleModels.length).toBeGreaterThan(1);
+			const customGoogle = googleModels.find(m => m.id === "gemini-proxy");
+			expect(customGoogle).toBeDefined();
+			expect(customGoogle!.baseUrl).toBe("https://google-proxy.example.com/v1");
 		});
 
 		test("refresh() reloads overrides from disk", async () => {
@@ -217,7 +221,7 @@ describe("ModelRegistry", () => {
 			});
 			const registry = new ModelRegistry(authStorage, modelsJsonPath);
 
-			expect(getModelsForProvider(registry, "anthropic")[0].id).toBe("claude-first");
+			expect(getModelsForProvider(registry, "anthropic").some(m => m.id === "claude-first")).toBe(true);
 
 			// Update and refresh
 			writeModelsJson({
@@ -226,8 +230,9 @@ describe("ModelRegistry", () => {
 			await registry.refresh();
 
 			const anthropicModels = getModelsForProvider(registry, "anthropic");
-			expect(anthropicModels[0].id).toBe("claude-second");
-			expect(anthropicModels[0].baseUrl).toBe("https://second-proxy.example.com/v1");
+			const custom = anthropicModels.find(m => m.id === "claude-second");
+			expect(custom).toBeDefined();
+			expect(custom!.baseUrl).toBe("https://second-proxy.example.com/v1");
 		});
 
 		test("removing override from models.json restores built-in provider", async () => {
@@ -236,7 +241,7 @@ describe("ModelRegistry", () => {
 			});
 			const registry = new ModelRegistry(authStorage, modelsJsonPath);
 
-			expect(getModelsForProvider(registry, "anthropic")).toHaveLength(1);
+			expect(getModelsForProvider(registry, "anthropic").some(m => m.id === "claude-custom")).toBe(true);
 
 			// Remove override and refresh
 			writeModelsJson({});

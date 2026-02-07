@@ -6,6 +6,16 @@
 
 - Fixed task tool renderer not sanitizing tabs, causing visual holes in TUI output
 - Fixed task tool expanded view showing redundant `<swarm_context>` block that is shared across all tasks
+- Fixed assistant message spacer appearing before tool executions when no visible content follows thinking block
+- Fixed extension runner `emit()` type safety with narrowed event/result types
+- Fixed extension runner `tool_result` event chaining across multiple extensions via dedicated `emitToolResult()`
+- Fixed queued messages not delivered after auto-compaction completes
+
+### Added
+
+- Added `/quit` slash command as alias for `/exit`
+- Added per-model overrides (`modelOverrides`) in `models.json` for customizing built-in model properties
+- Added `mergeCustomModels` to merge custom models with built-ins by provider+id instead of replacing
 
 ## [11.5.2] - 2026-02-07
 

@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added Bedrock cache retention support with `PI_CACHE_RETENTION` env var and per-request `cacheRetention` option
+- Added adaptive thinking support for Bedrock Opus 4.6+ models
+- Added `AWS_BEDROCK_SKIP_AUTH` env var to support unauthenticated Bedrock proxies
+- Added `AWS_BEDROCK_FORCE_HTTP1` env var to force HTTP/1.1 for custom Bedrock endpoints
+- Re-exported `Static`, `TSchema`, and `Type` from `@sinclair/typebox`
+
+### Fixed
+
+- Fixed OpenAI Responses storage disabled by default (`store: false`)
+- Fixed reasoning effort clamping for gpt-5.3 Codex models (minimal -> low)
+- Fixed Bedrock `supportsPromptCaching` to also check model cost fields
+
 ## [11.5.1] - 2026-02-07
 ### Fixed
 

@@ -4,6 +4,7 @@ import {
 	StopReason as BedrockStopReason,
 	type Tool as BedrockTool,
 	CachePointType,
+	CacheTTL,
 	type ContentBlock,
 	type ContentBlockDeltaEvent,
 	type ContentBlockStartEvent,
@@ -23,8 +24,10 @@ import { calculateCost } from "../models";
 import type {
 	Api,
 	AssistantMessage,
+	CacheRetention,
 	Context,
 	Model,
+	SimpleStreamOptions,
 	StopReason,
 	StreamFunction,
 	StreamOptions,
@@ -99,6 +102,19 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream"> = (
 		// in Node.js/Bun environment only
 		if (typeof process !== "undefined" && (process.versions?.node || process.versions?.bun)) {
 			config.region = config.region || $env.AWS_REGION || $env.AWS_DEFAULT_REGION;
+
+			// Support proxies that don't need authentication
+			if ($env.AWS_BEDROCK_SKIP_AUTH === "1") {
+				config.credentials = {
+					accessKeyId: "dummy-access-key",
+					secretAccessKey: "dummy-secret-key",
+				};
+			}
+
+			if ($env.AWS_BEDROCK_FORCE_HTTP1 === "1") {
+				const nodeHttpHandler = await import("@smithy/node-http-handler");
+				config.requestHandler = new nodeHttpHandler.NodeHttpHandler();
+			}
 		}
 
 		config.region = config.region || "us-east-1";
@@ -106,10 +122,12 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream"> = (
 		try {
 			const client = new BedrockRuntimeClient(config);
 
+			const cacheRetention = resolveCacheRetention(options.cacheRetention);
+
 			const commandInput = {
 				modelId: model.id,
-				messages: convertMessages(context, model),
-				system: buildSystemPrompt(context.systemPrompt, model),
+				messages: convertMessages(context, model, cacheRetention),
+				system: buildSystemPrompt(context.systemPrompt, model, cacheRetention),
 				inferenceConfig: { maxTokens: options.maxTokens, temperature: options.temperature },
 				toolConfig: convertToolConfig(context.tools, options.toolChoice),
 				additionalModelRequestFields: buildAdditionalModelRequestFields(model, options),
@@ -302,10 +320,21 @@ function handleContentBlockStop(
 }
 
 /**
+ * Resolve cache retention preference.
+ * Defaults to "short" and uses PI_CACHE_RETENTION for backward compatibility.
+ */
+function resolveCacheRetention(cacheRetention?: CacheRetention): CacheRetention {
+	if (cacheRetention) return cacheRetention;
+	if (typeof process !== "undefined" && process.env.PI_CACHE_RETENTION === "long") return "long";
+	return "short";
+}
+
+/**
  * Check if the model supports prompt caching.
  * Supported: Claude 3.5 Haiku, Claude 3.7 Sonnet, Claude 4.x models
  */
 function supportsPromptCaching(model: Model<"bedrock-converse-stream">): boolean {
+	if (model.cost.cacheRead || model.cost.cacheWrite) return true;
 	const id = model.id.toLowerCase();
 	// Claude 4.x models (opus-4, sonnet-4, haiku-4)
 	if (id.includes("claude") && (id.includes("-4-") || id.includes("-4."))) return true;
@@ -330,20 +359,27 @@ function supportsThinkingSignature(model: Model<"bedrock-converse-stream">): boo
 function buildSystemPrompt(
 	systemPrompt: string | undefined,
 	model: Model<"bedrock-converse-stream">,
+	cacheRetention: CacheRetention,
 ): SystemContentBlock[] | undefined {
 	if (!systemPrompt) return undefined;
 
 	const blocks: SystemContentBlock[] = [{ text: sanitizeSurrogates(systemPrompt) }];
 
 	// Add cache point for supported Claude models
-	if (supportsPromptCaching(model)) {
-		blocks.push({ cachePoint: { type: CachePointType.DEFAULT } });
+	if (cacheRetention !== "none" && supportsPromptCaching(model)) {
+		blocks.push({
+			cachePoint: { type: CachePointType.DEFAULT, ...(cacheRetention === "long" ? { ttl: CacheTTL.ONE_HOUR } : {}) },
+		});
 	}
 
 	return blocks;
 }
 
-function convertMessages(context: Context, model: Model<"bedrock-converse-stream">): Message[] {
+function convertMessages(
+	context: Context,
+	model: Model<"bedrock-converse-stream">,
+	cacheRetention: CacheRetention,
+): Message[] {
 	const result: Message[] = [];
 	const transformedMessages = transformMessages(context.messages, model);
 
@@ -494,10 +530,15 @@ function convertMessages(context: Context, model: Model<"bedrock-converse-stream
 	}
 
 	// Add cache point to the last user message for supported Claude models
-	if (supportsPromptCaching(model) && result.length > 0) {
+	if (cacheRetention !== "none" && supportsPromptCaching(model) && result.length > 0) {
 		const lastMessage = result[result.length - 1];
 		if (lastMessage.role === ConversationRole.USER && lastMessage.content) {
-			(lastMessage.content as ContentBlock[]).push({ cachePoint: { type: CachePointType.DEFAULT } });
+			(lastMessage.content as ContentBlock[]).push({
+				cachePoint: {
+					type: CachePointType.DEFAULT,
+					...(cacheRetention === "long" ? { ttl: CacheTTL.ONE_HOUR } : {}),
+				},
+			});
 		}
 	}
 
@@ -550,6 +591,28 @@ function mapStopReason(reason: string | undefined): StopReason {
 	}
 }
 
+/** Check if the model supports adaptive thinking (Opus 4.6+). */
+function supportsAdaptiveThinking(modelId: string): boolean {
+	return modelId.includes("opus-4-6") || modelId.includes("opus-4.6");
+}
+
+/** Map a thinking level to an adaptive effort value. */
+function mapThinkingLevelToEffort(level: SimpleStreamOptions["reasoning"]): "low" | "medium" | "high" | "max" {
+	switch (level) {
+		case "minimal":
+		case "low":
+			return "low";
+		case "medium":
+			return "medium";
+		case "high":
+			return "high";
+		case "xhigh":
+			return "max";
+		default:
+			return "high";
+	}
+}
+
 function buildAdditionalModelRequestFields(
 	model: Model<"bedrock-converse-stream">,
 	options: BedrockOptions,
@@ -559,6 +622,15 @@ function buildAdditionalModelRequestFields(
 	}
 
 	if (model.id.includes("anthropic.claude")) {
+		// Opus 4.6+ uses adaptive thinking with effort levels
+		if (supportsAdaptiveThinking(model.id)) {
+			const result: Record<string, any> = {
+				thinking: { type: "adaptive" },
+				output_config: { effort: mapThinkingLevelToEffort(options.reasoning) },
+			};
+			return result;
+		}
+
 		const defaultBudgets: Record<ThinkingLevel, number> = {
 			minimal: 1024,
 			low: 2048,
@@ -578,7 +650,7 @@ function buildAdditionalModelRequestFields(
 			},
 		};
 
-		if (options.interleavedThinking) {
+		if (options.interleavedThinking && !supportsAdaptiveThinking(model.id)) {
 			result.anthropic_beta = ["interleaved-thinking-2025-05-14"];
 		}
 

@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `hasQueuedMessages()` method to check for pending steering/follow-up messages
+- Resume queued steering and follow-up messages from `continue()` after auto-compaction
+
+### Changed
+
+- Extracted `dequeueSteeringMessages()` and `dequeueFollowUpMessages()` from inline config callbacks
+- Added `skipInitialSteeringPoll` option to `_runLoop()` for correct queue resume ordering
+
 ## [11.3.0] - 2026-02-06
 ### Added
 

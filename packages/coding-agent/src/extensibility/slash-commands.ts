@@ -41,6 +41,7 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "background", description: "Detach UI and continue running in background" },
 	{ name: "debug", description: "Write debug log (TUI state and messages)" },
 	{ name: "exit", description: "Exit the application" },
+	{ name: "quit", description: "Quit the application" },
 ];
 
 import { slashCommandCapability } from "../capability/slash-command";

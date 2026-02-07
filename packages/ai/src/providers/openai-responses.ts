@@ -428,6 +428,7 @@ function buildParams(model: Model<"openai-responses">, context: Context, options
 		stream: true,
 		prompt_cache_key: promptCacheKey,
 		prompt_cache_retention: promptCacheKey ? getPromptCacheRetention(model.baseUrl, cacheRetention) : undefined,
+		store: false,
 	};
 
 	if (options?.maxTokens) {

@@ -85,6 +85,27 @@ const ModelDefinitionSchema = Type.Object({
 	compat: Type.Optional(OpenAICompatSchema),
 });
 
+// Schema for per-model overrides (all fields optional, merged with built-in model)
+const ModelOverrideSchema = Type.Object({
+	name: Type.Optional(Type.String({ minLength: 1 })),
+	reasoning: Type.Optional(Type.Boolean()),
+	input: Type.Optional(Type.Array(Type.Union([Type.Literal("text"), Type.Literal("image")]))),
+	cost: Type.Optional(
+		Type.Object({
+			input: Type.Optional(Type.Number()),
+			output: Type.Optional(Type.Number()),
+			cacheRead: Type.Optional(Type.Number()),
+			cacheWrite: Type.Optional(Type.Number()),
+		}),
+	),
+	contextWindow: Type.Optional(Type.Number()),
+	maxTokens: Type.Optional(Type.Number()),
+	headers: Type.Optional(Type.Record(Type.String(), Type.String())),
+	compat: Type.Optional(OpenAICompatSchema),
+});
+
+type ModelOverride = Static<typeof ModelOverrideSchema>;
+
 const ProviderConfigSchema = Type.Object({
 	baseUrl: Type.Optional(Type.String({ minLength: 1 })),
 	apiKey: Type.Optional(Type.String({ minLength: 1 })),
@@ -102,6 +123,7 @@ const ProviderConfigSchema = Type.Object({
 	headers: Type.Optional(Type.Record(Type.String(), Type.String())),
 	authHeader: Type.Optional(Type.Boolean()),
 	models: Type.Optional(Type.Array(ModelDefinitionSchema)),
+	modelOverrides: Type.Optional(Type.Record(Type.String(), ModelOverrideSchema)),
 });
 
 const ModelsConfigSchema = Type.Object({
@@ -118,11 +140,11 @@ export const ModelsConfigFile = new ConfigFile<ModelsConfig>("models", ModelsCon
 			const models = providerConfig.models ?? [];
 
 			if (models.length === 0) {
-				// Override-only config: just needs baseUrl (to override built-in)
-				if (!providerConfig.baseUrl) {
-					throw new Error(
-						`Provider ${providerName}: must specify either "baseUrl" (for override) or "models" (for replacement).`,
-					);
+				// Override-only config: needs baseUrl or modelOverrides
+				const hasModelOverrides =
+					providerConfig.modelOverrides && Object.keys(providerConfig.modelOverrides).length > 0;
+				if (!providerConfig.baseUrl && !hasModelOverrides) {
+					throw new Error(`Provider ${providerName}: must specify "baseUrl", "modelOverrides", or "models".`);
 				}
 			} else {
 				// Full replacement: needs baseUrl and apiKey
@@ -172,10 +194,8 @@ export interface SerializedModelRegistry {
 /** Result of loading custom models from models.json */
 interface CustomModelsResult {
 	models?: Model<Api>[];
-	/** Providers with custom models (full replacement) */
-	replacedProviders?: Set<string>;
-	/** Providers with only baseUrl/headers override (no custom models) */
 	overrides?: Map<string, ProviderOverride>;
+	modelOverrides?: Map<string, Map<string, ModelOverride>>;
 	error?: ConfigError;
 	found: boolean;
 }
@@ -188,6 +208,45 @@ function resolveApiKeyConfig(keyConfig: string): string | undefined {
 	const envValue = Bun.env[keyConfig];
 	if (envValue) return envValue;
 	return keyConfig;
+}
+
+function mergeCompat(
+	baseCompat: Model<Api>["compat"],
+	overrideCompat: ModelOverride["compat"],
+): Model<Api>["compat"] | undefined {
+	if (!overrideCompat) return baseCompat;
+	const base = baseCompat as any;
+	const override = overrideCompat as any;
+	const merged = { ...base, ...override };
+	if (base?.openRouterRouting || override.openRouterRouting) {
+		merged.openRouterRouting = { ...base?.openRouterRouting, ...override.openRouterRouting };
+	}
+	if (base?.vercelGatewayRouting || override.vercelGatewayRouting) {
+		merged.vercelGatewayRouting = { ...base?.vercelGatewayRouting, ...override.vercelGatewayRouting };
+	}
+	return merged;
+}
+
+function applyModelOverride(model: Model<Api>, override: ModelOverride): Model<Api> {
+	const result = { ...model };
+	if (override.name !== undefined) result.name = override.name;
+	if (override.reasoning !== undefined) result.reasoning = override.reasoning;
+	if (override.input !== undefined) result.input = override.input as ("text" | "image")[];
+	if (override.contextWindow !== undefined) result.contextWindow = override.contextWindow;
+	if (override.maxTokens !== undefined) result.maxTokens = override.maxTokens;
+	if (override.cost) {
+		result.cost = {
+			input: override.cost.input ?? model.cost.input,
+			output: override.cost.output ?? model.cost.output,
+			cacheRead: override.cost.cacheRead ?? model.cost.cacheRead,
+			cacheWrite: override.cost.cacheWrite ?? model.cost.cacheWrite,
+		};
+	}
+	if (override.headers) {
+		result.headers = { ...model.headers, ...override.headers };
+	}
+	result.compat = mergeCompat(model.compat, override.compat);
+	return result;
 }
 
 /**
@@ -272,17 +331,17 @@ export class ModelRegistry {
 	}
 
 	private loadModels() {
-		// Load custom models from models.json first (to know which providers to skip/override)
+		// Load custom models from models.json first (to know which providers to override)
 		const {
 			models: customModels = [],
-			replacedProviders = new Set(),
 			overrides = new Map(),
+			modelOverrides = new Map(),
 			error: configError,
 		} = this.loadCustomModels();
 		this.configError = configError;
 
-		const builtInModels = this.loadBuiltInModels(replacedProviders, overrides);
-		const combined = [...builtInModels, ...customModels];
+		const builtInModels = this.loadBuiltInModels(overrides, modelOverrides);
+		const combined = this.mergeCustomModels(builtInModels, customModels);
 
 		// Update github-copilot base URL based on OAuth credentials
 		const copilotCred = this.authStorage.getOAuthCredential("github-copilot");
@@ -297,56 +356,86 @@ export class ModelRegistry {
 		}
 	}
 
-	/** Load built-in models, skipping replaced providers and applying overrides */
-	private loadBuiltInModels(replacedProviders: Set<string>, overrides: Map<string, ProviderOverride>): Model<Api>[] {
-		return getProviders()
-			.filter(provider => !replacedProviders.has(provider))
-			.flatMap(provider => {
-				const models = getModels(provider as any) as Model<Api>[];
-				const override = overrides.get(provider);
-				if (!override) return models;
+	/** Load built-in models, applying provider and per-model overrides */
+	private loadBuiltInModels(
+		overrides: Map<string, ProviderOverride>,
+		modelOverrides: Map<string, Map<string, ModelOverride>>,
+	): Model<Api>[] {
+		return getProviders().flatMap(provider => {
+			const models = getModels(provider as any) as Model<Api>[];
+			const providerOverride = overrides.get(provider);
+			const perModelOverrides = modelOverrides.get(provider);
 
-				// Apply baseUrl/headers override to all models of this provider
-				return models.map(m => ({
-					...m,
-					baseUrl: override.baseUrl ?? m.baseUrl,
-					headers: override.headers ? { ...m.headers, ...override.headers } : m.headers,
-				}));
+			return models.map(m => {
+				let model = m;
+				if (providerOverride) {
+					model = {
+						...model,
+						baseUrl: providerOverride.baseUrl ?? model.baseUrl,
+						headers: providerOverride.headers ? { ...model.headers, ...providerOverride.headers } : model.headers,
+					};
+				}
+				const modelOverride = perModelOverrides?.get(m.id);
+				if (modelOverride) {
+					model = applyModelOverride(model, modelOverride);
+				}
+				return model;
 			});
+		});
+	}
+
+	/** Merge custom models with built-in, replacing by provider+id match */
+	private mergeCustomModels(builtInModels: Model<Api>[], customModels: Model<Api>[]): Model<Api>[] {
+		const merged = [...builtInModels];
+		for (const customModel of customModels) {
+			const existingIndex = merged.findIndex(m => m.provider === customModel.provider && m.id === customModel.id);
+			if (existingIndex >= 0) {
+				merged[existingIndex] = customModel;
+			} else {
+				merged.push(customModel);
+			}
+		}
+		return merged;
 	}
 
 	private loadCustomModels(): CustomModelsResult {
 		const { value, error, status } = this.modelsConfigFile.tryLoad();
 
 		if (status === "error") {
-			return { models: [], replacedProviders: new Set(), overrides: new Map(), error, found: true };
+			return { models: [], overrides: new Map(), modelOverrides: new Map(), error, found: true };
 		} else if (status === "not-found") {
-			return { models: [], replacedProviders: new Set(), overrides: new Map(), found: false };
+			return { models: [], overrides: new Map(), modelOverrides: new Map(), found: false };
 		}
 
-		// Separate providers into "full replacement" (has models) vs "override-only" (no models)
-		const replacedProviders = new Set<string>();
 		const overrides = new Map<string, ProviderOverride>();
+		const allModelOverrides = new Map<string, Map<string, ModelOverride>>();
 
 		for (const [providerName, providerConfig] of Object.entries(value.providers)) {
-			if (providerConfig.models && providerConfig.models.length > 0) {
-				// Has custom models -> full replacement
-				replacedProviders.add(providerName);
-			} else {
-				// No models -> just override baseUrl/headers on built-in
+			// Always set overrides when baseUrl/headers present
+			if (providerConfig.baseUrl || providerConfig.headers || providerConfig.apiKey) {
 				overrides.set(providerName, {
 					baseUrl: providerConfig.baseUrl,
 					headers: providerConfig.headers,
 					apiKey: providerConfig.apiKey,
 				});
-				// Store API key for fallback resolver
-				if (providerConfig.apiKey) {
-					this.customProviderApiKeys.set(providerName, providerConfig.apiKey);
+			}
+
+			// Always store API key for fallback resolver
+			if (providerConfig.apiKey) {
+				this.customProviderApiKeys.set(providerName, providerConfig.apiKey);
+			}
+
+			// Parse per-model overrides
+			if (providerConfig.modelOverrides) {
+				const perModel = new Map<string, ModelOverride>();
+				for (const [modelId, override] of Object.entries(providerConfig.modelOverrides)) {
+					perModel.set(modelId, override);
 				}
+				allModelOverrides.set(providerName, perModel);
 			}
 		}
 
-		return { models: this.parseModels(value), replacedProviders, overrides, found: true };
+		return { models: this.parseModels(value), overrides, modelOverrides: allModelOverrides, found: true };
 	}
 
 	private parseModels(config: ModelsConfig): Model<Api>[] {

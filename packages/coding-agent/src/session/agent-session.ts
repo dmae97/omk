@@ -2887,6 +2887,12 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				setTimeout(() => {
 					this.agent.continue().catch(() => {});
 				}, 100);
+			} else if (this.agent.hasQueuedMessages()) {
+				// Auto-compaction can complete while follow-up/steering/custom messages are waiting.
+				// Kick the loop so queued messages are actually delivered.
+				setTimeout(() => {
+					this.agent.continue().catch(() => {});
+				}, 100);
 			}
 		} catch (error) {
 			if (this._autoCompactionAbortController?.signal.aborted) {

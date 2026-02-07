@@ -332,7 +332,7 @@ export class InputController {
 				this.ctx.editor.setText("");
 				return;
 			}
-			if (text === "/exit") {
+			if (text === "/quit" || text === "/exit") {
 				this.ctx.editor.setText("");
 				void this.ctx.shutdown();
 				return;
