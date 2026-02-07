@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [11.7.1] - 2026-02-07
+
 ### Added
 
 - Added Claude Opus 4.6 Thinking model for Antigravity provider
