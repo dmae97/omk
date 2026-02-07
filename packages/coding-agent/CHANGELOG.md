@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [11.5.2] - 2026-02-07
+
 ### Fixed
 
 - Fixed TUI crash when ask tool renders long user input exceeding terminal width by using Text component for word wrapping instead of raw line output
