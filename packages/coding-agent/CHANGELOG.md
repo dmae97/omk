@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [11.6.1] - 2026-02-07
 ### Fixed
 
 - Fixed potential crash when rendering results with undefined details.results
