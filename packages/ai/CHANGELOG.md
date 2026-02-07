@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [11.5.1] - 2026-02-07
 ### Fixed
 
 - Fixed schema normalization to handle array-valued `type` fields by converting them to a single type with nullable flag for Google provider compatibility
