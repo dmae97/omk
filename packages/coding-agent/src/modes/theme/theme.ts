@@ -184,242 +184,149 @@ export type SymbolKey =
 type SymbolMap = Record<SymbolKey, string>;
 
 const UNICODE_SYMBOLS: SymbolMap = {
-	// Status Indicators
-	// pick: ✓ | alt: ✔ ✅ ☑ ✚
-	"status.success": "✓",
-	// pick: ✗ | alt: ✘ ✖ ❌ ⨯
-	"status.error": "✗",
-	// pick: ⚠ | alt: ‼ ⁉ ▲ △
+	// Status
+	"status.success": "✔",
+	"status.error": "✘",
 	"status.warning": "⚠",
-	// pick: ℹ | alt: ⓘ 🛈 ⅈ
-	"status.info": "ℹ",
-	// pick: ◔ | alt: ● ◐ ◑ ◒ ◓ ⏳ …
-	"status.pending": "◔",
-	// pick: ○ | alt: ◌ ◯ ⃠
-	"status.disabled": "○",
-	// pick: ● | alt: ◉ ◎ ⬤
+	"status.info": "ⓘ",
+	"status.pending": "⏳",
+	"status.disabled": "⦸",
 	"status.enabled": "●",
-	// pick: ↻ | alt: ↺ ⟳ ⟲ ◐ ▶
-	"status.running": "↻",
-	// pick: ◐ | alt: ◑ ◒ ◓ ◔
-	"status.shadowed": "◐",
-	// pick: ⊗ | alt: ⊘ ⛔ ⏹ ⨂
-	"status.aborted": "⊗",
+	"status.running": "⟳",
+	"status.shadowed": "◌",
+	"status.aborted": "⏹",
 	// Navigation
-	// pick: ❯ | alt: › ▸ ▹
 	"nav.cursor": "❯",
-	// pick: ➜ | alt: → ➤ ➔ ⇒
-	"nav.selected": "➜",
-	// pick: ▸ | alt: ▶ ▹ ⯈
+	"nav.selected": "➤",
 	"nav.expand": "▸",
-	// pick: ▾ | alt: ▼ ▽ ⯆
 	"nav.collapse": "▾",
-	// pick: ← | alt: ↩ ↫ ⇦
-	"nav.back": "←",
-	// Tree Connectors
-	// pick: ├─ | alt: ├╴ ├╌ ├┄ ╠═
+	"nav.back": "⟵",
+	// Tree
 	"tree.branch": "├─",
-	// pick: └─ | alt: └╴ └╌ └┄ ╚═
 	"tree.last": "└─",
-	// pick: │ | alt: ┃ ║ ▏ ▕
 	"tree.vertical": "│",
-	// pick: ─ | alt: ━ ═ ╌ ┄
 	"tree.horizontal": "─",
-	// pick: └ | alt: ⎿ ╰ ↳
-	"tree.hook": "\u2514",
-	// Box Drawing - Rounded
-	// pick: ╭ | alt: ┌ ┏ ╔
+	"tree.hook": "└",
+	// Box (rounded)
 	"boxRound.topLeft": "╭",
-	// pick: ╮ | alt: ┐ ┓ ╗
 	"boxRound.topRight": "╮",
-	// pick: ╰ | alt: └ ┗ ╚
 	"boxRound.bottomLeft": "╰",
-	// pick: ╯ | alt: ┘ ┛ ╝
 	"boxRound.bottomRight": "╯",
-	// pick: ─ | alt: ━ ═ ╌
 	"boxRound.horizontal": "─",
-	// pick: │ | alt: ┃ ║ ▏
 	"boxRound.vertical": "│",
-	// Box Drawing - Sharp
-	// pick: ┌ | alt: ┏ ╭ ╔
+	// Box (sharp)
 	"boxSharp.topLeft": "┌",
-	// pick: ┐ | alt: ┓ ╮ ╗
 	"boxSharp.topRight": "┐",
-	// pick: └ | alt: ┗ ╰ ╚
 	"boxSharp.bottomLeft": "└",
-	// pick: ┘ | alt: ┛ ╯ ╝
 	"boxSharp.bottomRight": "┘",
-	// pick: ─ | alt: ━ ═ ╌
 	"boxSharp.horizontal": "─",
-	// pick: │ | alt: ┃ ║ ▏
 	"boxSharp.vertical": "│",
-	// pick: ┼ | alt: ╋ ╬ ┿
 	"boxSharp.cross": "┼",
-	// pick: ┬ | alt: ╦ ┯ ┳
 	"boxSharp.teeDown": "┬",
-	// pick: ┴ | alt: ╩ ┷ ┻
 	"boxSharp.teeUp": "┴",
-	// pick: ├ | alt: ╠ ┝ ┣
 	"boxSharp.teeRight": "├",
-	// pick: ┤ | alt: ╣ ┥ ┫
 	"boxSharp.teeLeft": "┤",
-	// Separators
-	// pick: │ | alt: ┃ ║ ▏
-	"sep.powerline": "│",
-	// pick: │ | alt: ┆ ┊
-	"sep.powerlineThin": "│",
-	// pick: > | alt: › ▸ »
-	"sep.powerlineLeft": ">",
-	// pick: < | alt: ‹ ◂ «
-	"sep.powerlineRight": "<",
-	// pick: > | alt: › ▸
+	// Separators (powerline-ish, but pure Unicode)
+	"sep.powerline": "▕",
+	"sep.powerlineThin": "┆",
+	"sep.powerlineLeft": "▶",
+	"sep.powerlineRight": "◀",
 	"sep.powerlineThinLeft": ">",
-	// pick: < | alt: ‹ ◂
 	"sep.powerlineThinRight": "<",
-	// pick: █ | alt: ▓ ▒ ░ ▉ ▌
-	"sep.block": "█",
-	// pick: space | alt: ␠ ·
+	"sep.block": "▌",
 	"sep.space": " ",
-	// pick: > | alt: › » ▸
 	"sep.asciiLeft": ">",
-	// pick: < | alt: ‹ « ◂
 	"sep.asciiRight": "<",
-	// pick: · | alt: • ⋅
 	"sep.dot": " · ",
-	// pick: / | alt: ／ ∕ ⁄
 	"sep.slash": " / ",
-	// pick: | | alt: │ ┃ ║
-	"sep.pipe": " | ",
+	"sep.pipe": " │ ",
 	// Icons
-	// pick: ◈ | alt: ◆ ⬢ ◇
-	"icon.model": "◈",
-	// pick: 📋 | alt: 🗒 📝
-	"icon.plan": "📋",
-	// pick: 📁 | alt: 📂 🗂 🗃
+	"icon.model": "⬢",
+	"icon.plan": "🗺",
 	"icon.folder": "📁",
-	// pick: 📄 | alt: 📃 📝
 	"icon.file": "📄",
-	// pick: ⎇ | alt: 🔀 ⑂
 	"icon.git": "⎇",
-	// pick: ⎇ | alt: 🌿 ⑂
-	"icon.branch": "⎇",
-	// pick: ⊛ | alt: ◎ ◍ ⊙
-	"icon.tokens": "⊛",
-	// pick: ◫ | alt: ◧ ▣ ▦
+	"icon.branch": "⑂",
+	"icon.tokens": "🪙",
 	"icon.context": "◫",
-	// pick: $ | alt: 💲 💰
-	"icon.cost": "$",
-	// pick: ◷ | alt: ⏱ ⏲ ⌛
-	"icon.time": "◷",
-	// pick: π | alt: ∏ ∑
+	"icon.cost": "💲",
+	"icon.time": "⏱",
 	"icon.pi": "π",
-	// pick: AG | alt: 👥 👤
-	"icon.agents": "AG",
-	// pick: cache | alt: 💾 🗄
-	"icon.cache": "cache",
-	// pick: in: | alt: ⤵ ↲
-	"icon.input": "in:",
-	// pick: out: | alt: ⤴ ↱
-	"icon.output": "out:",
-	// pick: host | alt: 🖥 💻
-	"icon.host": "host",
-	// pick: id | alt: 🧭 🧩
-	"icon.session": "id",
-	// pick: 📦 | alt: 🧰
+	"icon.agents": "👥",
+	"icon.cache": "💾",
+	"icon.input": "⤵",
+	"icon.output": "⤴",
+	"icon.host": "🖥",
+	"icon.session": "🆔",
 	"icon.package": "📦",
-	// pick: ⚠ | alt: ❗
 	"icon.warning": "⚠",
-	// pick: ↩ | alt: ↺ ⟲
-	"icon.rewind": "↩",
-	// pick: ⚡ | alt: ✨ ✦
-	"icon.auto": "⚡",
-	// pick: ✧ | alt: ⚙ SK 🧠
-	"icon.extensionSkill": "✧",
-	// pick: ⚒ | alt: ⛭ TL 🛠
-	"icon.extensionTool": "⚒",
-	// pick: / | alt: ⌘ ⌥
-	"icon.extensionSlashCommand": "/",
-	// pick: ◈ | alt: ⧫ MCP 🔌
-	"icon.extensionMcp": "◈",
-	// pick: § | alt: ⚖ RL 📏
-	"icon.extensionRule": "§",
-	// pick: ↪ | alt: ⚓ HK 🪝
-	"icon.extensionHook": "↪",
-	// pick: PR | alt: 💬 ✎
-	"icon.extensionPrompt": "PR",
-	// pick: CF | alt: 📄 📎
-	"icon.extensionContextFile": "CF",
-	// pick: IN | alt: 📘 ℹ
-	"icon.extensionInstruction": "IN",
-	// Thinking Levels
-	// pick: [min] | alt: · ◔ min
-	"thinking.minimal": "[min]",
-	// pick: [low] | alt: ◑ low ▪ low
-	"thinking.low": "[low]",
-	// pick: [med] | alt: ◒ med ▪ med
-	"thinking.medium": "[med]",
-	// pick: [high] | alt: ◕ high ▪ high
-	"thinking.high": "[high]",
-	// pick: [xhi] | alt: ◉ xhi ▪ xhi
-	"thinking.xhigh": "[xhi]",
+	"icon.rewind": "↶",
+	"icon.auto": "⟲",
+	"icon.extensionSkill": "✦",
+	"icon.extensionTool": "🛠",
+	"icon.extensionSlashCommand": "⌘",
+	"icon.extensionMcp": "🔌",
+	"icon.extensionRule": "⚖",
+	"icon.extensionHook": "🪝",
+	"icon.extensionPrompt": "✎",
+	"icon.extensionContextFile": "📎",
+	"icon.extensionInstruction": "📘",
+	// Thinking levels
+	"thinking.minimal": "◔ min",
+	"thinking.low": "◑ low",
+	"thinking.medium": "◒ med",
+	"thinking.high": "◕ high",
+	"thinking.xhigh": "◉ xhi",
 	// Checkboxes
-	// pick: ☑ | alt: ✓ ✔ ✅
 	"checkbox.checked": "☑",
-	// pick: ☐ | alt: □ ▢
 	"checkbox.unchecked": "☐",
-	// pick: • | alt: · ▪ ◦
+	// Formatting
 	"format.bullet": "•",
-	// pick: – | alt: — ― -
-	"format.dash": "–",
-	// pick: ⟨ | alt: [ ⟦
-	"format.bracketLeft": "⟨",
-	// pick: ⟩ | alt: ] ⟧
-	"format.bracketRight": "⟩",
-	// Markdown-specific
-	// pick: │ | alt: ┃ ║
-	"md.quoteBorder": "│",
-	// pick: ─ | alt: ━ ═
+	"format.dash": "—",
+	"format.bracketLeft": "⟦",
+	"format.bracketRight": "⟧",
+	// Markdown
+	"md.quoteBorder": "▏",
 	"md.hrChar": "─",
-	// pick: • | alt: · ▪ ◦
 	"md.bullet": "•",
-	// Language icons (unicode uses code symbol prefix)
-	"lang.default": "❖",
-	"lang.typescript": "❖ ts",
-	"lang.javascript": "❖ js",
-	"lang.python": "❖ py",
-	"lang.rust": "❖ rs",
-	"lang.go": "❖ go",
-	"lang.java": "❖ java",
-	"lang.c": "❖ c",
-	"lang.cpp": "❖ c++",
-	"lang.csharp": "❖ c#",
-	"lang.ruby": "❖ rb",
-	"lang.php": "❖ php",
-	"lang.swift": "❖ swift",
-	"lang.kotlin": "❖ kt",
-	"lang.shell": "❖ sh",
-	"lang.html": "❖ html",
-	"lang.css": "❖ css",
-	"lang.json": "❖ json",
-	"lang.yaml": "❖ yaml",
-	"lang.markdown": "❖ md",
-	"lang.sql": "❖ sql",
-	"lang.docker": "❖ docker",
-	"lang.lua": "❖ lua",
-	"lang.text": "❖ txt",
-	"lang.env": "❖ env",
-	"lang.toml": "❖ toml",
-	"lang.xml": "❖ xml",
-	"lang.ini": "❖ ini",
-	"lang.conf": "❖ conf",
-	"lang.log": "❖ log",
-	"lang.csv": "❖ csv",
-	"lang.tsv": "❖ tsv",
-	"lang.image": "❖ img",
-	"lang.pdf": "❖ pdf",
-	"lang.archive": "❖ zip",
-	"lang.binary": "❖ bin",
-	// Settings tab icons
+	// Language/file icons (emoji-centric, no Nerd Font required)
+	"lang.default": "⌘",
+	"lang.typescript": "🟦",
+	"lang.javascript": "🟨",
+	"lang.python": "🐍",
+	"lang.rust": "🦀",
+	"lang.go": "🐹",
+	"lang.java": "☕",
+	"lang.c": "Ⓒ",
+	"lang.cpp": "➕",
+	"lang.csharp": "♯",
+	"lang.ruby": "💎",
+	"lang.php": "🐘",
+	"lang.swift": "🕊",
+	"lang.kotlin": "🅺",
+	"lang.shell": "💻",
+	"lang.html": "🌐",
+	"lang.css": "🎨",
+	"lang.json": "🧾",
+	"lang.yaml": "📋",
+	"lang.markdown": "📝",
+	"lang.sql": "🗄",
+	"lang.docker": "🐳",
+	"lang.lua": "🌙",
+	"lang.text": "🗒",
+	"lang.env": "🔧",
+	"lang.toml": "🧾",
+	"lang.xml": "⟨⟩",
+	"lang.ini": "⚙",
+	"lang.conf": "⚙",
+	"lang.log": "📜",
+	"lang.csv": "📑",
+	"lang.tsv": "📑",
+	"lang.image": "🖼",
+	"lang.pdf": "📕",
+	"lang.archive": "🗜",
+	"lang.binary": "⚙",
+	// Settings tabs
 	"tab.display": "🎨",
 	"tab.agent": "🤖",
 	"tab.input": "⌨",
@@ -846,7 +753,7 @@ export type SpinnerType = "status" | "activity";
 
 const SPINNER_FRAMES: Record<SymbolPreset, Record<SpinnerType, string[]>> = {
 	unicode: {
-		status: ["·", "•", "●", "•"],
+		status: ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"],
 		activity: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
 	},
 	nerd: {
