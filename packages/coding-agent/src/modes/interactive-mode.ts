@@ -454,6 +454,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	private async loadTodoList(): Promise<void> {
 		const sessionFile = this.sessionManager.getSessionFile() ?? null;
 		if (!sessionFile) {
+			this.todoItems = [];
 			this.renderTodoList();
 			return;
 		}
@@ -463,9 +464,12 @@ export class InteractiveMode implements InteractiveModeContext {
 			const data = (await Bun.file(todoPath).json()) as { todos?: TodoItem[] };
 			if (data?.todos && Array.isArray(data.todos)) {
 				this.todoItems = data.todos;
+			} else {
+				this.todoItems = [];
 			}
 		} catch (error) {
 			if (isEnoent(error)) {
+				this.todoItems = [];
 				this.renderTodoList();
 				return;
 			}
