@@ -885,7 +885,7 @@ export function renderResult(
 					const isLast = i === details.progress!.length - 1;
 					lines.push(...renderAgentProgress(progress, isLast, expanded, theme, spinnerFrame));
 				});
-			} else if (details.results.length > 0) {
+			} else if (details.results && details.results.length > 0) {
 				details.results.forEach((res, i) => {
 					const isLast = i === details.results.length - 1;
 					lines.push(...renderAgentResult(res, isLast, expanded, theme));
