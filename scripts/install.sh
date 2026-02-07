@@ -75,15 +75,17 @@ version_ge() {
     current="$1"
     minimum="$2"
 
-    IFS=. set -- $current
-    current_major=${1:-0}
-    current_minor=${2:-0}
-    current_patch=${3:-0}
+    current_major="${current%%.*}"
+    current_rest="${current#*.}"
+    current_minor="${current_rest%%.*}"
+    current_patch="${current_rest#*.}"
+    current_patch="${current_patch%%.*}"
 
-    IFS=. set -- $minimum
-    minimum_major=${1:-0}
-    minimum_minor=${2:-0}
-    minimum_patch=${3:-0}
+    minimum_major="${minimum%%.*}"
+    minimum_rest="${minimum#*.}"
+    minimum_minor="${minimum_rest%%.*}"
+    minimum_patch="${minimum_rest#*.}"
+    minimum_patch="${minimum_patch%%.*}"
 
     if [ "$current_major" -ne "$minimum_major" ]; then
         [ "$current_major" -gt "$minimum_major" ]

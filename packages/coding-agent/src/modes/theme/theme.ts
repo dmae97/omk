@@ -1724,12 +1724,12 @@ function getDefaultTheme(): string {
 // Global Theme Instance
 // ============================================================================
 
-export let theme: Theme;
-let currentThemeName: string | undefined;
-let currentSymbolPresetOverride: SymbolPreset | undefined;
-let currentColorBlindMode: boolean = false;
-let themeWatcher: fs.FSWatcher | undefined;
-let onThemeChangeCallback: (() => void) | undefined;
+export var theme: Theme;
+var currentThemeName: string | undefined;
+var currentSymbolPresetOverride: SymbolPreset | undefined;
+var currentColorBlindMode: boolean = false;
+var themeWatcher: fs.FSWatcher | undefined;
+var onThemeChangeCallback: (() => void) | undefined;
 
 function getCurrentThemeOptions(): CreateThemeOptions {
 	return {

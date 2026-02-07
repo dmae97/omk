@@ -332,6 +332,17 @@ function sanitizeSchemaImpl(value: unknown, isInsideProperties: boolean): unknow
 		result[key] = sanitizeSchemaImpl(entry, key === "properties");
 	}
 
+	// Normalize array-valued "type" (e.g. ["string", "null"]) to a single type + nullable.
+	// Google's Schema proto expects type to be a single enum string, not an array.
+	if (Array.isArray(result.type)) {
+		const types = result.type as string[];
+		const nonNull = types.filter(t => t !== "null");
+		if (types.includes("null")) {
+			result.nullable = true;
+		}
+		result.type = nonNull[0] ?? types[0];
+	}
+
 	if (constValue !== undefined) {
 		// Convert const to enum, merging with existing enum if present
 		const existingEnum = Array.isArray(result.enum) ? result.enum : [];
