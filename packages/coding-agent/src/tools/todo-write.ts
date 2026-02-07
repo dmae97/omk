@@ -11,7 +11,7 @@ import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { Theme } from "../modes/theme/theme";
 import todoWriteDescription from "../prompts/tools/todo-write.md" with { type: "text" };
 import type { ToolSession } from "../sdk";
-import { Ellipsis, Hasher, type RenderCache, renderStatusLine, renderTreeList, truncateToWidth } from "../tui";
+import { renderStatusLine, renderTreeList } from "../tui";
 import { PREVIEW_LIMITS } from "./render-utils";
 
 const todoWriteSchema = Type.Object({
@@ -234,39 +234,22 @@ export const todoWriteToolRenderer = {
 		);
 		if (todos.length === 0) {
 			const fallback = result.content?.find(c => c.type === "text")?.text ?? "No todos";
-			const renderedLines = [header, uiTheme.fg("dim", fallback)];
-			return {
-				render() {
-					return renderedLines;
-				},
-				invalidate() {},
-			};
+			return new Text(`${header}\n${uiTheme.fg("dim", fallback)}`, 0, 0);
 		}
-		let cached: RenderCache | undefined;
 
-		return {
-			render(width) {
-				const { expanded } = options;
-				const key = new Hasher().bool(expanded).u32(width).digest();
-				if (cached?.key === key) return cached.lines;
-				const treeLines = renderTreeList(
-					{
-						items: todos,
-						expanded,
-						maxCollapsed: PREVIEW_LIMITS.COLLAPSED_ITEMS,
-						itemType: "todo",
-						renderItem: todo => formatTodoLine(todo, uiTheme, ""),
-					},
-					uiTheme,
-				);
-				const lines = [header, ...treeLines].map(l => truncateToWidth(l, width, Ellipsis.Omit));
-				cached = { key, lines };
-				return lines;
+		const { expanded } = options;
+		const treeLines = renderTreeList(
+			{
+				items: todos,
+				expanded,
+				maxCollapsed: PREVIEW_LIMITS.COLLAPSED_ITEMS,
+				itemType: "todo",
+				renderItem: todo => formatTodoLine(todo, uiTheme, ""),
 			},
-			invalidate() {
-				cached = undefined;
-			},
-		};
+			uiTheme,
+		);
+		const text = [header, ...treeLines].join("\n");
+		return new Text(text, 0, 0);
 	},
 	mergeCallAndResult: true,
 };
