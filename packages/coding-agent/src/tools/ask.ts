@@ -454,18 +454,11 @@ export const askToolRenderer = {
 			const txt = result.content[0];
 			const fallback = txt?.type === "text" && txt.text ? txt.text : "";
 			const header = renderStatusLine({ icon: "warning", title: "Ask" }, uiTheme);
-			const renderedLines = [header, uiTheme.fg("dim", fallback)];
-			return {
-				render() {
-					return renderedLines;
-				},
-				invalidate() {},
-			};
+			return new Text(`${header}\n${uiTheme.fg("dim", fallback)}`, 0, 0);
 		}
 
 		// Multi-part results
 		if (details.results && details.results.length > 0) {
-			const lines: string[] = [];
 			const hasAnySelection = details.results.some(
 				r => r.customInput || (r.selectedOptions && r.selectedOptions.length > 0),
 			);
@@ -477,7 +470,7 @@ export const askToolRenderer = {
 				},
 				uiTheme,
 			);
-			lines.push(header);
+			let text = header;
 
 			for (let i = 0; i < details.results.length; i++) {
 				const r = details.results[i];
@@ -489,47 +482,29 @@ export const askToolRenderer = {
 					? uiTheme.styledSymbol("status.success", "success")
 					: uiTheme.styledSymbol("status.warning", "warning");
 
-				lines.push(
-					` ${uiTheme.fg("dim", branch)} ${statusIcon} ${uiTheme.fg("dim", `[${r.id}]`)} ${uiTheme.fg("accent", r.question)}`,
-				);
+				text += `\n ${uiTheme.fg("dim", branch)} ${statusIcon} ${uiTheme.fg("dim", `[${r.id}]`)} ${uiTheme.fg("accent", r.question)}`;
 
 				if (r.customInput) {
-					lines.push(
-						`${continuation}${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.success", "success")} ${uiTheme.fg("toolOutput", r.customInput)}`,
-					);
+					text += `\n${continuation}${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.success", "success")} ${uiTheme.fg("toolOutput", r.customInput)}`;
 				} else if (r.selectedOptions.length > 0) {
 					for (let j = 0; j < r.selectedOptions.length; j++) {
 						const isLast = j === r.selectedOptions.length - 1;
 						const optBranch = isLast ? uiTheme.tree.last : uiTheme.tree.branch;
-						lines.push(
-							`${continuation}${uiTheme.fg("dim", optBranch)} ${uiTheme.fg("success", uiTheme.checkbox.checked)} ${uiTheme.fg("toolOutput", r.selectedOptions[j])}`,
-						);
+						text += `\n${continuation}${uiTheme.fg("dim", optBranch)} ${uiTheme.fg("success", uiTheme.checkbox.checked)} ${uiTheme.fg("toolOutput", r.selectedOptions[j])}`;
 					}
 				} else {
-					lines.push(
-						`${continuation}${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.warning", "warning")} ${uiTheme.fg("warning", "Cancelled")}`,
-					);
+					text += `\n${continuation}${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.warning", "warning")} ${uiTheme.fg("warning", "Cancelled")}`;
 				}
 			}
 
-			return {
-				render() {
-					return lines;
-				},
-				invalidate() {},
-			};
+			return new Text(text, 0, 0);
 		}
 
 		// Single question result
 		if (!details.question) {
 			const txt = result.content[0];
-			const renderedLines = txt?.type === "text" && txt.text ? txt.text.split("\n") : [""];
-			return {
-				render() {
-					return renderedLines;
-				},
-				invalidate() {},
-			};
+			const fallback = txt?.type === "text" && txt.text ? txt.text : "";
+			return new Text(fallback, 0, 0);
 		}
 
 		const hasSelection = details.customInput || (details.selectedOptions && details.selectedOptions.length > 0);
@@ -552,12 +527,6 @@ export const askToolRenderer = {
 			text += `\n ${uiTheme.fg("dim", uiTheme.tree.last)} ${uiTheme.styledSymbol("status.warning", "warning")} ${uiTheme.fg("warning", "Cancelled")}`;
 		}
 
-		const renderedLines = text.split("\n");
-		return {
-			render() {
-				return renderedLines;
-			},
-			invalidate() {},
-		};
+		return new Text(text, 0, 0);
 	},
 };
