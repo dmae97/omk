@@ -17,7 +17,7 @@ import type { ToolSession } from ".";
 import type { OutputMeta } from "./output-meta";
 import { allocateOutputArtifact, createTailBuffer } from "./output-utils";
 import { resolveToCwd } from "./path-utils";
-import { shortenPath, ToolUIKit, truncateToWidth } from "./render-utils";
+import { replaceTabs, shortenPath, ToolUIKit, truncateToWidth } from "./render-utils";
 import { ToolAbortError, ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
 import { DEFAULT_MAX_BYTES } from "./truncate";
@@ -341,18 +341,93 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 					cellResult.status = "error";
 					pushUpdate();
 					const errorMsg = result.output || "Command aborted";
-					throw new ToolError(cells.length > 1 ? `Cell ${i + 1} aborted: ${errorMsg}` : errorMsg);
+					const combinedOutput = cellOutputs.join("\n\n");
+					const outputText =
+						cells.length > 1
+							? `${combinedOutput}\n\nCell ${i + 1} aborted: ${errorMsg}`
+							: combinedOutput || errorMsg;
+
+					const rawSummary = (await finalizeOutput()) ?? {
+						output: "",
+						truncated: false,
+						totalLines: 0,
+						totalBytes: 0,
+						outputLines: 0,
+						outputBytes: 0,
+					};
+					const outputLines = combinedOutput.length > 0 ? combinedOutput.split("\n").length : 0;
+					const outputBytes = Buffer.byteLength(combinedOutput, "utf-8");
+					const missingLines = Math.max(0, rawSummary.totalLines - rawSummary.outputLines);
+					const missingBytes = Math.max(0, rawSummary.totalBytes - rawSummary.outputBytes);
+					const summaryForMeta: OutputSummary = {
+						output: combinedOutput,
+						truncated: rawSummary.truncated,
+						totalLines: outputLines + missingLines,
+						totalBytes: outputBytes + missingBytes,
+						outputLines,
+						outputBytes,
+						artifactId: rawSummary.artifactId,
+					};
+
+					const details: PythonToolDetails = {
+						cells: cellResults,
+						jsonOutputs: jsonOutputs.length > 0 ? jsonOutputs : undefined,
+						images: images.length > 0 ? images : undefined,
+						statusEvents: statusEvents.length > 0 ? statusEvents : undefined,
+						isError: true,
+					};
+
+					return toolResult(details)
+						.text(outputText)
+						.truncationFromSummary(summaryForMeta, { direction: "tail" })
+						.done();
 				}
 
 				if (result.exitCode !== 0 && result.exitCode !== undefined) {
 					cellResult.status = "error";
 					pushUpdate();
 					const combinedOutput = cellOutputs.join("\n\n");
-					throw new ToolError(
+					const outputText =
 						cells.length > 1
 							? `${combinedOutput}\n\nCell ${i + 1} failed (exit code ${result.exitCode}). Earlier cells succeeded—their state persists. Fix only cell ${i + 1}.`
-							: `${combinedOutput}\n\nCommand exited with code ${result.exitCode}`,
-					);
+							: combinedOutput
+								? `${combinedOutput}\n\nCommand exited with code ${result.exitCode}`
+								: `Command exited with code ${result.exitCode}`;
+
+					const rawSummary = (await finalizeOutput()) ?? {
+						output: "",
+						truncated: false,
+						totalLines: 0,
+						totalBytes: 0,
+						outputLines: 0,
+						outputBytes: 0,
+					};
+					const outputLines = combinedOutput.length > 0 ? combinedOutput.split("\n").length : 0;
+					const outputBytes = Buffer.byteLength(combinedOutput, "utf-8");
+					const missingLines = Math.max(0, rawSummary.totalLines - rawSummary.outputLines);
+					const missingBytes = Math.max(0, rawSummary.totalBytes - rawSummary.outputBytes);
+					const summaryForMeta: OutputSummary = {
+						output: combinedOutput,
+						truncated: rawSummary.truncated,
+						totalLines: outputLines + missingLines,
+						totalBytes: outputBytes + missingBytes,
+						outputLines,
+						outputBytes,
+						artifactId: rawSummary.artifactId,
+					};
+
+					const details: PythonToolDetails = {
+						cells: cellResults,
+						jsonOutputs: jsonOutputs.length > 0 ? jsonOutputs : undefined,
+						images: images.length > 0 ? images : undefined,
+						statusEvents: statusEvents.length > 0 ? statusEvents : undefined,
+						isError: true,
+					};
+
+					return toolResult(details)
+						.text(outputText)
+						.truncationFromSummary(summaryForMeta, { direction: "tail" })
+						.done();
 				}
 
 				cellResult.status = "complete";
@@ -627,7 +702,7 @@ function formatStatusEventExpanded(event: PythonStatusEvent, theme: Theme): stri
 	const addPreview = (preview: string, maxLines = 3) => {
 		const previewLines = String(preview).split("\n").slice(0, maxLines);
 		for (const line of previewLines) {
-			lines.push(`   ${theme.fg("toolOutput", truncateToWidth(line, 80))}`);
+			lines.push(`   ${theme.fg("toolOutput", truncateToWidth(replaceTabs(line), 80))}`);
 		}
 		const totalLines = String(preview).split("\n").length;
 		if (totalLines > maxLines) {
@@ -744,7 +819,10 @@ function formatCellOutputLines(
 	const rawLines = cell.output ? cell.output.split("\n") : [];
 	const displayLines = expanded ? rawLines : rawLines.slice(-previewLines);
 	const hiddenCount = rawLines.length - displayLines.length;
-	const outputLines = displayLines.map(line => theme.fg("toolOutput", line));
+	const outputLines = displayLines.map(line => {
+		const cleaned = replaceTabs(line);
+		return cell.status === "error" ? theme.fg("error", cleaned) : theme.fg("toolOutput", cleaned);
+	});
 
 	if (outputLines.length === 0) {
 		return { lines: [], hiddenCount: 0 };

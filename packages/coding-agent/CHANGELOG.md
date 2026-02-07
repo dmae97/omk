@@ -1,6 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Enhanced error messages for failed Python cells to include full combined output context instead of just the error message
+- Updated error cell output styling to use error color theme instead of standard tool output color for better visual distinction
+
+### Fixed
+
+- Improved error handling in Python cell execution to preserve and display combined output from previous cells when an error occurs
+- Fixed tab character rendering in Python tool output display to properly format whitespace in cell output and status events
 
 ## [11.6.1] - 2026-02-07
 ### Fixed
