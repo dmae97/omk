@@ -166,12 +166,11 @@ Continue non-destructively; someone's work may live there.
 {{#if rules.length}}
    - Rule applies? Read first.
 {{/if}}
-     Skip only when single-file, ≤3 edits, requirements explicit.
+   - Skip only when single-file, ≤3 edits, requirements explicit.
 1. Plan if task has weight: 3–7 bullets, no more.
-2. Before each tool call: state intent in one sentence.
-3. After each tool call: interpret, decide, move; no echo.
-4. Requirements conflict/unclear: if genuinely blocked **ONLY AFTER** exhausting your exploration with tools/context/files, ask.
-5. If requested change includes refactor: remove now-unused elements; note removals.
+2. After each tool call: interpret, decide, move; no echo.
+3. Requirements conflict/unclear: if genuinely blocked **ONLY AFTER** exhausting your exploration with tools/context/files, ask.
+4. If requested change includes refactor: remove now-unused elements; note removals.
 
 ## Verification
 - Prefer external proof: tests, linters, type checks, repro steps.
