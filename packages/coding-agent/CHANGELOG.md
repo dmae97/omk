@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- Hashline diff computation with `computeHashlineDiff` function for preview rendering of hashline-mode edits
+- Streaming preview display for hashline edits in tool execution UI showing edit sources and destinations
+- Streaming hash line computation with progress updates via `onUpdate` callback in read tool
+- Optional `onCollectedLine` callback parameter to `streamLinesFromFile` for line collection tracking
+
+### Changed
+
+- Edit tool renderer now displays computed preview diffs for hashline operations before execution
+- Read tool now streams hash lines incrementally instead of computing them all at once, improving responsiveness for large files
+- Refactored hash line formatting to use async `streamHashLinesFromLines` for better performance
+
 ## [11.10.3] - 2026-02-10
 ### Added
 

@@ -8,8 +8,9 @@ import * as Diff from "diff";
 import { resolveToCwd } from "../tools/path-utils";
 import { previewPatch } from "./applicator";
 import { DEFAULT_FUZZY_THRESHOLD, findMatch } from "./fuzzy";
+import { applyHashlineEdits } from "./hashline";
 import { adjustIndentation, normalizeToLF, stripBom } from "./normalize";
-import type { DiffError, DiffResult, PatchInput } from "./types";
+import type { DiffError, DiffResult, HashlineEdit, PatchInput } from "./types";
 import { EditMatchError } from "./types";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -359,6 +360,48 @@ export async function computePatchDiff(
 			return { diff: "", firstChangedLine: undefined };
 		}
 		return generateUnifiedDiffString(normalizedOld, normalizedNew);
+	} catch (err) {
+		return { error: err instanceof Error ? err.message : String(err) };
+	}
+}
+/**
+ * Compute the diff for a hashline operation without applying it.
+ * Used for preview rendering in the TUI before hashline-mode edits execute.
+ */
+export async function computeHashlineDiff(
+	input: { path: string; edits: HashlineEdit[] },
+	cwd: string,
+): Promise<DiffResult | DiffError> {
+	const { path, edits } = input;
+	const absolutePath = resolveToCwd(path, cwd);
+
+	try {
+		const file = Bun.file(absolutePath);
+		try {
+			if (!(await file.exists())) {
+				return { error: `File not found: ${path}` };
+			}
+		} catch {
+			return { error: `File not found: ${path}` };
+		}
+
+		let rawContent: string;
+		try {
+			rawContent = await file.text();
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return { error: message || `Unable to read ${path}` };
+		}
+
+		const { text: content } = stripBom(rawContent);
+		const normalizedContent = normalizeToLF(content);
+
+		const result = applyHashlineEdits(normalizedContent, edits);
+		if (normalizedContent === result.content) {
+			return { error: `No changes would be made to ${path}. The edits produce identical content.` };
+		}
+
+		return generateDiffString(normalizedContent, result.content);
 	} catch (err) {
 		return { error: err instanceof Error ? err.message : String(err) };
 	}

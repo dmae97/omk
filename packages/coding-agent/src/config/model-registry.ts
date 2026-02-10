@@ -6,9 +6,9 @@ import {
 	type Model,
 	normalizeDomain,
 } from "@oh-my-pi/pi-ai";
-import { type ConfigError, ConfigFile } from "@oh-my-pi/pi-coding-agent/config";
 import { type Static, Type } from "@sinclair/typebox";
 import AjvModule from "ajv";
+import { type ConfigError, ConfigFile } from "../config";
 import type { ThemeColor } from "../modes/theme/theme";
 import type { AuthStorage } from "../session/auth-storage";
 

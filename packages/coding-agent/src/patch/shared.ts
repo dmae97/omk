@@ -21,7 +21,7 @@ import {
 } from "../tools/render-utils";
 import type { RenderCallOptions } from "../tools/renderers";
 import { Ellipsis, Hasher, type RenderCache, renderStatusLine, truncateToWidth } from "../tui";
-import type { DiffError, DiffResult, Operation } from "./types";
+import type { DiffError, DiffResult, HashlineEdit, Operation } from "./types";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LSP Batching
@@ -77,6 +77,12 @@ interface EditRenderArgs {
 	op?: Operation;
 	rename?: string;
 	diff?: string;
+	/**
+	 * Computed preview diff (used when tool args don't include a diff, e.g. hashline mode).
+	 */
+	previewDiff?: string;
+	// Hashline mode fields
+	edits?: HashlineEdit[];
 }
 
 /** Extended context for edit tool rendering */
@@ -94,20 +100,78 @@ function countLines(text: string): number {
 	return text.split("\n").length;
 }
 
-function formatStreamingDiff(diff: string, rawPath: string, uiTheme: Theme): string {
+function formatStreamingDiff(diff: string, rawPath: string, uiTheme: Theme, label = "streaming"): string {
 	if (!diff) return "";
 	const lines = diff.split("\n");
 	const total = lines.length;
 	const displayLines = lines.slice(-EDIT_STREAMING_PREVIEW_LINES);
 	const hidden = total - displayLines.length;
-
 	let text = "\n\n";
 	if (hidden > 0) {
 		text += uiTheme.fg("dim", `… (${hidden} earlier lines)\n`);
 	}
 	text += renderDiffColored(displayLines.join("\n"), { filePath: rawPath });
-	text += uiTheme.fg("dim", `\n… (streaming)`);
+	text += uiTheme.fg("dim", `\n… (${label})`);
 	return text;
+}
+
+function formatStreamingHashlineEdits(edits: HashlineEdit[], uiTheme: Theme, ui: ToolUIKit): string {
+	const MAX_EDITS = 4;
+	const MAX_DST_LINES = 8;
+
+	let text = "\n\n";
+	text += uiTheme.fg("dim", `[${edits.length} hashline edit${edits.length === 1 ? "" : "s"}]`);
+	text += "\n";
+
+	let shownEdits = 0;
+	let shownDstLines = 0;
+
+	for (const edit of edits) {
+		shownEdits++;
+		if (shownEdits > MAX_EDITS) break;
+
+		text += uiTheme.fg("toolOutput", ui.truncate(replaceTabs(formatHashlineSrc(edit.src)), 120));
+		text += "\n";
+
+		if (edit.dst === "") {
+			text += uiTheme.fg("dim", ui.truncate("  (delete)", 120));
+			text += "\n";
+			continue;
+		}
+
+		const dstLines = edit.dst.split("\n");
+		for (const dstLine of dstLines) {
+			shownDstLines++;
+			if (shownDstLines > MAX_DST_LINES) break;
+			text += uiTheme.fg("toolOutput", ui.truncate(replaceTabs(`+ ${dstLine}`), 120));
+			text += "\n";
+		}
+		if (shownDstLines > MAX_DST_LINES) break;
+	}
+
+	if (edits.length > MAX_EDITS) {
+		text += uiTheme.fg("dim", `… (${edits.length - MAX_EDITS} more edits)`);
+	}
+	if (shownDstLines > MAX_DST_LINES) {
+		text += uiTheme.fg("dim", `\n… (${shownDstLines - MAX_DST_LINES} more dst lines)`);
+	}
+
+	return text.trimEnd();
+
+	function formatHashlineSrc(src: HashlineEdit["src"]): string {
+		switch (src.kind) {
+			case "single":
+				return `• single ${src.ref}`;
+			case "range":
+				return `• range ${src.start}..${src.end}`;
+			case "insertAfter":
+				return `• insertAfter ${src.after}..`;
+			case "insertBefore":
+				return `• insertBefore ..${src.before}`;
+			case "substring":
+				return `• substring ${JSON.stringify(src.needle)}`;
+		}
+	}
 }
 
 function formatMetadataLine(lineCount: number | null, language: string | undefined, uiTheme: Theme): string {
@@ -175,8 +239,12 @@ export const editToolRenderer = {
 		let text = `${ui.title(opTitle)} ${spinner ? `${spinner} ` : ""}${editIcon} ${pathDisplay}`;
 
 		// Show streaming preview of diff/content
-		if (args.diff && args.op) {
+		if (args.previewDiff) {
+			text += formatStreamingDiff(args.previewDiff, rawPath, uiTheme, "preview");
+		} else if (args.diff && args.op) {
 			text += formatStreamingDiff(args.diff, rawPath, uiTheme);
+		} else if (args.edits && args.edits.length > 0) {
+			text += formatStreamingHashlineEdits(args.edits, uiTheme, ui);
 		} else if (args.diff) {
 			const previewLines = args.diff.split("\n");
 			const maxLines = 6;

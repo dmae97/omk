@@ -44,7 +44,14 @@ import { EditMatchError } from "./types";
 // Application
 export { applyPatch, defaultFileSystem, previewPatch } from "./applicator";
 // Diff generation
-export { computeEditDiff, computePatchDiff, generateDiffString, generateUnifiedDiffString, replaceText } from "./diff";
+export {
+	computeEditDiff,
+	computeHashlineDiff,
+	computePatchDiff,
+	generateDiffString,
+	generateUnifiedDiffString,
+	replaceText,
+} from "./diff";
 
 // Fuzzy matching
 export { DEFAULT_FUZZY_THRESHOLD, findContextLine, findMatch as findEditMatch, findMatch, seekSequence } from "./fuzzy";

@@ -15,7 +15,13 @@ import {
 import { logger, sanitizeText } from "@oh-my-pi/pi-utils";
 import type { Theme } from "../../modes/theme/theme";
 import { theme } from "../../modes/theme/theme";
-import { computeEditDiff, computePatchDiff, type EditDiffError, type EditDiffResult } from "../../patch";
+import {
+	computeEditDiff,
+	computeHashlineDiff,
+	computePatchDiff,
+	type EditDiffError,
+	type EditDiffResult,
+} from "../../patch";
 import { BASH_DEFAULT_PREVIEW_LINES } from "../../tools/bash";
 import {
 	formatArgsInline,
@@ -186,6 +192,24 @@ export class ToolExecutionComponent extends Container {
 			}).then(result => {
 				if (this.#editDiffArgsKey === argsKey) {
 					this.#editDiffPreview = result;
+					this.#updateDisplay();
+					this.#ui.requestRender();
+				}
+			});
+			return;
+		}
+		const edits = this.#args?.edits;
+		if (path && Array.isArray(edits)) {
+			const argsKey = JSON.stringify({ path, edits });
+			if (this.#editDiffArgsKey === argsKey) return;
+			this.#editDiffArgsKey = argsKey;
+
+			computeHashlineDiff({ path, edits }, this.#cwd).then(result => {
+				if (this.#editDiffArgsKey === argsKey) {
+					this.#editDiffPreview = result;
+					if ("diff" in result && result.diff) {
+						(this.#args as Record<string, unknown>).previewDiff = result.diff;
+					}
 					this.#updateDisplay();
 					this.#ui.requestRender();
 				}
