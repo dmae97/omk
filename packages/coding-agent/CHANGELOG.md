@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [11.8.0] - 2026-02-10
 ### Added
 
 - Added `ctx.reload()` method to extension command context to reload extensions, skills, prompts, and themes from disk

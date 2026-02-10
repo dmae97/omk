@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [11.8.0] - 2026-02-10
 ### Added
 
 - Added Alt+Y keybinding to cycle through kill ring entries (yank-pop)
