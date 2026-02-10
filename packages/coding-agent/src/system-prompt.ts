@@ -508,6 +508,11 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		toolNamesArray = defaultToolNames;
 	}
 
+	// Build tool descriptions for system prompt rendering
+	const toolDescriptions = toolNamesArray.map(name => ({
+		name,
+		description: tools?.get(name)?.description ?? "",
+	}));
 	// Resolve skills: use provided or discover
 	const skills =
 		providedSkills ??
@@ -541,6 +546,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 
 	return renderPromptTemplate(systemPromptTemplate, {
 		tools: toolNamesArray,
+		toolDescriptions,
 		environment: await getEnvironmentInfo(),
 		systemPromptCustomization: systemPromptCustomization ?? "",
 		contextFiles,

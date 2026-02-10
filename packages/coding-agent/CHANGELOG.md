@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Replaced `edit.patchMode` boolean setting with `edit.mode` enum; existing `edit.patchMode: true` configurations should use `edit.mode: patch`
@@ -30,6 +31,7 @@
 
 ### Changed
 
+- Enhanced system prompt to display tool descriptions alongside tool names for improved clarity on available capabilities
 - Reduced hash length from 4 to 2 hex characters (16-bit hashes) for more concise line references
 - Updated `HashlineEdit` type to accept `string | string[]` for `old` and `new` fields, allowing single-line edits without array wrapping
 - Enhanced `parseLineRef` to strip display-format suffix (e.g., `5:ab| content` → `5:ab`), allowing models to copy full read output format

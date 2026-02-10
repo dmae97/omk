@@ -83,7 +83,14 @@ Bad approach? State downside, propose alternative, accept override.
 
 <protocol>
 ## Right tool exists—use it.
-**Tools:** {{#each tools}}{{#unless @first}}, {{/unless}}`{{this}}`{{/each}}
+<tools>
+{{#each toolDescriptions}}
+<tool name="{{name}}">
+{{description}}
+</tool>
+{{/each}}
+</tools>
+
 {{#ifAny (includes tools "python") (includes tools "bash")}}
 ### Tool precedence
 **Specialized tools → Python → Bash**
