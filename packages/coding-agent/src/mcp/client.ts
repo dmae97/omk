@@ -34,20 +34,49 @@ const CLIENT_INFO = {
 	version: "1.0.0",
 };
 
-/** Wrap a promise with a timeout */
-function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+/** Wrap a promise with a timeout and optional abort signal */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string, signal?: AbortSignal): Promise<T> {
+	if (signal?.aborted) {
+		const reason = signal.reason instanceof Error ? signal.reason : new Error("Aborted");
+		return Promise.reject(reason);
+	}
+
 	const { promise: wrapped, resolve, reject } = Promise.withResolvers<T>();
-	const timer = setTimeout(() => reject(new Error(message)), ms);
+	let settled = false;
+	const timeoutId = setTimeout(() => {
+		if (settled) return;
+		settled = true;
+		reject(new Error(message));
+	}, ms);
+
+	const onAbort = () => {
+		if (settled) return;
+		settled = true;
+		clearTimeout(timeoutId);
+		reject(signal?.reason instanceof Error ? signal.reason : new Error("Aborted"));
+	};
+
+	if (signal) {
+		signal.addEventListener("abort", onAbort, { once: true });
+	}
+
 	promise.then(
 		value => {
-			clearTimeout(timer);
+			if (settled) return;
+			settled = true;
+			clearTimeout(timeoutId);
+			if (signal) signal.removeEventListener("abort", onAbort);
 			resolve(value);
 		},
 		error => {
-			clearTimeout(timer);
+			if (settled) return;
+			settled = true;
+			clearTimeout(timeoutId);
+			if (signal) signal.removeEventListener("abort", onAbort);
 			reject(error);
 		},
 	);
+
 	return wrapped;
 }
 
@@ -71,7 +100,10 @@ async function createTransport(config: MCPServerConfig): Promise<MCPTransport> {
 /**
  * Initialize connection with MCP server.
  */
-async function initializeConnection(transport: MCPTransport): Promise<MCPInitializeResult> {
+async function initializeConnection(
+	transport: MCPTransport,
+	options?: { signal?: AbortSignal },
+): Promise<MCPInitializeResult> {
 	const params: MCPInitializeParams = {
 		protocolVersion: PROTOCOL_VERSION,
 		capabilities: {
@@ -83,7 +115,12 @@ async function initializeConnection(transport: MCPTransport): Promise<MCPInitial
 	const result = await transport.request<MCPInitializeResult>(
 		"initialize",
 		params as unknown as Record<string, unknown>,
+		options,
 	);
+
+	if (options?.signal?.aborted) {
+		throw options.signal.reason instanceof Error ? options.signal.reason : new Error("Aborted");
+	}
 
 	// Send initialized notification
 	await transport.notify("notifications/initialized");
@@ -95,14 +132,18 @@ async function initializeConnection(transport: MCPTransport): Promise<MCPInitial
  * Connect to an MCP server.
  * Has a 30 second timeout to prevent blocking startup.
  */
-export async function connectToServer(name: string, config: MCPServerConfig): Promise<MCPServerConnection> {
+export async function connectToServer(
+	name: string,
+	config: MCPServerConfig,
+	options?: { signal?: AbortSignal },
+): Promise<MCPServerConnection> {
 	const timeoutMs = config.timeout ?? CONNECTION_TIMEOUT_MS;
 
 	const connect = async (): Promise<MCPServerConnection> => {
 		const transport = await createTransport(config);
 
 		try {
-			const initResult = await initializeConnection(transport);
+			const initResult = await initializeConnection(transport, options);
 
 			return {
 				name,
@@ -117,13 +158,21 @@ export async function connectToServer(name: string, config: MCPServerConfig): Pr
 		}
 	};
 
-	return withTimeout(connect(), timeoutMs, `Connection to MCP server "${name}" timed out after ${timeoutMs}ms`);
+	return withTimeout(
+		connect(),
+		timeoutMs,
+		`Connection to MCP server "${name}" timed out after ${timeoutMs}ms`,
+		options?.signal,
+	);
 }
 
 /**
  * List tools from a connected server.
  */
-export async function listTools(connection: MCPServerConnection): Promise<MCPToolDefinition[]> {
+export async function listTools(
+	connection: MCPServerConnection,
+	options?: { signal?: AbortSignal },
+): Promise<MCPToolDefinition[]> {
 	// Check if server supports tools
 	if (!connection.capabilities.tools) {
 		return [];
@@ -143,7 +192,7 @@ export async function listTools(connection: MCPServerConnection): Promise<MCPToo
 			params.cursor = cursor;
 		}
 
-		const result = await connection.transport.request<MCPToolsListResult>("tools/list", params);
+		const result = await connection.transport.request<MCPToolsListResult>("tools/list", params, options);
 		allTools.push(...result.tools);
 		cursor = result.nextCursor;
 	} while (cursor);

@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Changed `HashlineEdit` API from `old: string | string[]` / `new: string | string[]` to `src: string` / `dst: string`; multi-line content uses `\n`-separated strings, empty string `""` for insert/delete operations
@@ -11,6 +12,7 @@
 
 ### Added
 
+- Added abort signal support to MCP server connection and tool listing operations, allowing requests to be cancelled via Escape key during testing
 - Added `MCPRequestOptions` interface with `signal` property to support request cancellation via AbortSignal
 - Added abort signal support to MCP tool execution, allowing requests to be cancelled via Escape-to-interrupt or other abort mechanisms
 - Added `HashlineMismatchError` class that displays grep-style output with `>>>` markers showing correct `LINE:HASH` references when hash validation fails
@@ -34,6 +36,9 @@
 
 ### Changed
 
+- Enhanced MCP connection timeout handling to properly respect abort signals and distinguish between timeout and user-initiated cancellation
+- Improved MCP test command UI to show cancellation hint (esc to cancel) and handle graceful cancellation without blocking cleanup
+- Updated HTTP transport session termination to use AbortSignal.timeout() for reliable cleanup with timeout protection
 - Enhanced bash executor to properly handle abort signals by registering abort event listeners and cleaning up resources in finally block
 - Improved bash tool error handling to distinguish between user-initiated aborts (via AbortSignal) and other cancellations, throwing ToolAbortError for aborted requests
 - Enhanced MCP request handling to propagate abort signals through HTTP, SSE, and stdio transports with proper cleanup
@@ -56,6 +61,10 @@
 - Changed `getEditVariantForModel` to return `EditMode | null` and removed hardcoded Kimi model detection
 - Renamed `settingsInstance` parameter to `settings` in `CreateAgentSessionOptions` for consistency
 - Updated all internal references from `settingsInstance` to `settings` throughout SDK and components
+
+### Fixed
+
+- Fixed MCP test command to properly clean up connections even when cancelled or aborted, preventing resource leaks
 
 ## [11.9.0] - 2026-02-10
 

@@ -14,7 +14,7 @@ import {
 	updateMCPServer,
 } from "../../mcp/config-writer";
 import { MCPOAuthFlow } from "../../mcp/oauth-flow";
-import type { MCPServerConfig } from "../../mcp/types";
+import type { MCPServerConfig, MCPServerConnection } from "../../mcp/types";
 import type { OAuthCredential } from "../../session/auth-storage";
 import { DynamicBorder } from "../components/dynamic-border";
 import { MCPAddWizard } from "../components/mcp-add-wizard";
@@ -929,6 +929,13 @@ export class MCPCommandController {
 			return;
 		}
 
+		const originalOnEscape = this.ctx.editor.onEscape;
+		const abortController = new AbortController();
+		this.ctx.editor.onEscape = () => {
+			abortController.abort();
+		};
+
+		let connection: MCPServerConnection | undefined;
 		try {
 			const cwd = process.cwd();
 			const userPath = getMCPConfigPath("user", cwd);
@@ -953,7 +960,9 @@ export class MCPCommandController {
 				return;
 			}
 
-			this.#showMessage(["", theme.fg("muted", `Testing connection to "${name}"...`), ""].join("\n"));
+			this.#showMessage(
+				["", theme.fg("muted", `Testing connection to "${name}"... (esc to cancel)`), ""].join("\n"),
+			);
 
 			// Resolve auth config if needed
 			let resolvedConfig: MCPServerConfig;
@@ -966,37 +975,37 @@ export class MCPCommandController {
 			}
 
 			// Create temporary connection
-			const connection = await connectToServer(name, resolvedConfig);
+			connection = await connectToServer(name, resolvedConfig, { signal: abortController.signal });
 
-			try {
-				// List tools to verify connection
-				const tools = await listTools(connection);
+			// List tools to verify connection
+			const tools = await listTools(connection, { signal: abortController.signal });
 
-				const lines = [
-					"",
-					theme.fg("success", `✓ Successfully connected to "${name}"`),
-					"",
-					`  Server: ${connection.serverInfo.name} v${connection.serverInfo.version}`,
-					`  Tools: ${tools.length}`,
-				];
+			const lines = [
+				"",
+				theme.fg("success", `✓ Successfully connected to "${name}"`),
+				"",
+				`  Server: ${connection.serverInfo.name} v${connection.serverInfo.version}`,
+				`  Tools: ${tools.length}`,
+			];
 
-				// Show tool names if there are any
-				if (tools.length > 0 && tools.length <= 10) {
-					lines.push("");
-					lines.push("  Available tools:");
-					for (const tool of tools) {
-						lines.push(`    • ${tool.name}`);
-					}
-				}
-
+			// Show tool names if there are any
+			if (tools.length > 0 && tools.length <= 10) {
 				lines.push("");
-				await this.#syncManagerConnection(name, config);
-				this.#showMessage(lines.join("\n"));
-			} finally {
-				// Disconnect test connection
-				await disconnectServer(connection);
+				lines.push("  Available tools:");
+				for (const tool of tools) {
+					lines.push(`    • ${tool.name}`);
+				}
 			}
+
+			lines.push("");
+			await this.#syncManagerConnection(name, config);
+			this.#showMessage(lines.join("\n"));
 		} catch (error) {
+			if (abortController.signal.aborted || (error instanceof Error && error.name === "AbortError")) {
+				this.ctx.showStatus(`Cancelled MCP test for "${name}"`);
+				return;
+			}
+
 			const errorMsg = error instanceof Error ? error.message : String(error);
 
 			// Provide helpful error messages
@@ -1014,6 +1023,12 @@ export class MCPCommandController {
 			}
 
 			this.ctx.showError(`Failed to connect to "${name}": ${errorMsg}${helpText}`);
+		} finally {
+			this.ctx.editor.onEscape = originalOnEscape;
+			if (connection) {
+				// Best-effort: don't block UI on cleanup.
+				void disconnectServer(connection);
+			}
 		}
 	}
 

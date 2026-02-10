@@ -301,6 +301,7 @@ export class HttpTransport implements MCPTransport {
 		// Send session termination if we have a session
 		if (this.#sessionId) {
 			try {
+				const timeout = this.config.timeout ?? 30000;
 				const headers: Record<string, string> = {
 					...this.config.headers,
 					"Mcp-Session-Id": this.#sessionId,
@@ -309,6 +310,7 @@ export class HttpTransport implements MCPTransport {
 				await fetch(this.config.url, {
 					method: "DELETE",
 					headers,
+					signal: AbortSignal.timeout(timeout),
 				});
 			} catch {
 				// Ignore termination errors
