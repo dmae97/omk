@@ -12,7 +12,7 @@
  * Reference format: `"LINENUM:HASH"` (e.g. `"5:a3f2"`)
  */
 
-import type { HashlineEdit } from "./types";
+import type { HashlineEdit, HashMismatch } from "./types";
 
 /**
  * Compute the 4-character hex hash of a single line.
@@ -88,6 +88,79 @@ export function validateLineRef(ref: { line: number; hash: string }, fileLines: 
 	}
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Hash Mismatch Error
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Number of context lines shown above/below each mismatched line */
+const MISMATCH_CONTEXT = 2;
+
+/**
+ * Error thrown when one or more hashline references have stale hashes.
+ *
+ * Displays grep-style output with `>>>` markers on mismatched lines,
+ * showing the correct `LINE:HASH` so the caller can fix all refs at once.
+ */
+export class HashlineMismatchError extends Error {
+	constructor(
+		public readonly mismatches: HashMismatch[],
+		public readonly fileLines: string[],
+	) {
+		super(HashlineMismatchError.formatMessage(mismatches, fileLines));
+		this.name = "HashlineMismatchError";
+	}
+
+	static formatMessage(mismatches: HashMismatch[], fileLines: string[]): string {
+		const mismatchSet = new Map<number, HashMismatch>();
+		for (const m of mismatches) {
+			mismatchSet.set(m.line, m);
+		}
+
+		// Collect line ranges to display (mismatch lines + context)
+		const displayLines = new Set<number>();
+		for (const m of mismatches) {
+			const lo = Math.max(1, m.line - MISMATCH_CONTEXT);
+			const hi = Math.min(fileLines.length, m.line + MISMATCH_CONTEXT);
+			for (let i = lo; i <= hi; i++) {
+				displayLines.add(i);
+			}
+		}
+
+		const sorted = [...displayLines].sort((a, b) => a - b);
+		const lines: string[] = [];
+
+		lines.push(
+			`${mismatches.length} line${mismatches.length > 1 ? "s have" : " has"} changed since last read. Re-read the file.`,
+		);
+		lines.push("");
+
+		let prevLine = -1;
+		for (const lineNum of sorted) {
+			// Gap separator between non-contiguous regions
+			if (prevLine !== -1 && lineNum > prevLine + 1) {
+				lines.push("    ...");
+			}
+			prevLine = lineNum;
+
+			const content = fileLines[lineNum - 1];
+			const hash = computeLineHash(lineNum, content);
+			const prefix = `${lineNum}:${hash}`;
+
+			if (mismatchSet.has(lineNum)) {
+				lines.push(`>>> ${prefix}| ${content}`);
+			} else {
+				lines.push(`    ${prefix}| ${content}`);
+			}
+		}
+
+		return lines.join("\n");
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Edit Application
+// ═══════════════════════════════════════════════════════════════════════════
+
 /**
  * Apply an array of hashline edits to file content.
  *
@@ -95,9 +168,9 @@ export function validateLineRef(ref: { line: number; hash: string }, fileLines: 
  * so that earlier edits don't invalidate line numbers for later ones.
  *
  * Supported operations:
- * - **Replace**: `src` has entries, `dst` has entries — replace src lines with dst
- * - **Delete**: `src` has entries, `dst` is empty — delete the src lines
- * - **Insert**: `src` is empty, `dst` has entries, `after` is set — insert after ref line
+ * - **Replace**: `old` has entries, `new` has entries — replace old lines with new
+ * - **Delete**: `old` has entries, `new` is empty — delete the old lines
+ * - **Insert**: `old` is empty, `new` has entries, `after` is set — insert after ref line
  *
  * @returns The modified content and the 1-indexed first changed line number
  */
@@ -112,7 +185,29 @@ export function applyHashlineEdits(
 	const fileLines = content.split("\n");
 	let firstChangedLine: number | undefined;
 
-	// Classify and annotate edits with their effective line number for sorting
+	// Pre-validate all line refs and collect hash mismatches in one pass.
+	// Structural errors (out of range, malformed, non-consecutive) still throw immediately.
+	const mismatches: HashMismatch[] = [];
+
+	for (const edit of edits) {
+		const refs: string[] = edit.old.length > 0 ? edit.old : edit.after ? [edit.after] : [];
+		for (const refStr of refs) {
+			const ref = parseLineRef(refStr);
+			if (ref.line < 1 || ref.line > fileLines.length) {
+				throw new Error(`Line ${ref.line} does not exist (file has ${fileLines.length} lines)`);
+			}
+			const actualHash = computeLineHash(ref.line, fileLines[ref.line - 1]);
+			if (actualHash !== ref.hash.toLowerCase()) {
+				mismatches.push({ line: ref.line, expected: ref.hash, actual: actualHash });
+			}
+		}
+	}
+
+	if (mismatches.length > 0) {
+		throw new HashlineMismatchError(mismatches, fileLines);
+	}
+
+	// Classify and annotate edits with their effective line number for sorting.
 	const annotated = edits.map((edit, idx) => {
 		const sortLine = getSortLine(edit, idx);
 		return { edit, sortLine };
@@ -122,24 +217,24 @@ export function applyHashlineEdits(
 	annotated.sort((a, b) => b.sortLine - a.sortLine);
 
 	for (const { edit } of annotated) {
-		const isInsert = edit.src.length === 0;
+		const isInsert = edit.old.length === 0;
 
 		if (isInsert) {
 			// Insert after a referenced line
 			if (!edit.after) {
-				throw new Error("Insert edit (empty src) requires an 'after' line reference.");
+				throw new Error("Insert edit (empty old) requires an 'after' line reference.");
 			}
 			const afterRef = parseLineRef(edit.after);
 			validateLineRef(afterRef, fileLines);
 
-			// Insert dst lines after the referenced line (0-indexed splice position)
+			// Insert new lines after the referenced line (0-indexed splice position)
 			const insertIdx = afterRef.line; // insert after this line = splice at this index
-			fileLines.splice(insertIdx, 0, ...edit.dst);
+			fileLines.splice(insertIdx, 0, ...edit.new);
 
 			trackFirstChanged(afterRef.line + 1);
 		} else {
 			// Replace or Delete
-			const refs = edit.src.map(parseLineRef);
+			const refs = edit.old.map(parseLineRef);
 
 			// Validate all refs
 			for (const ref of refs) {
@@ -153,8 +248,8 @@ export function applyHashlineEdits(
 			const endLine = refs[refs.length - 1].line;
 			const count = endLine - startLine + 1;
 
-			// Splice: remove `count` lines starting at startLine-1, insert dst
-			fileLines.splice(startLine - 1, count, ...edit.dst);
+			// Splice: remove `count` lines starting at startLine-1, insert new
+			fileLines.splice(startLine - 1, count, ...edit.new);
 
 			trackFirstChanged(startLine);
 		}
@@ -173,12 +268,12 @@ export function applyHashlineEdits(
 
 	/**
 	 * Determine the effective line number for sorting an edit (descending).
-	 * For replace/delete: use the first src line.
+	 * For replace/delete: use the first old line.
 	 * For insert: use the after line.
 	 */
 	function getSortLine(edit: HashlineEdit, idx: number): number {
-		if (edit.src.length > 0) {
-			return parseLineRef(edit.src[0]).line;
+		if (edit.old.length > 0) {
+			return parseLineRef(edit.old[0]).line;
 		}
 		if (edit.after) {
 			return parseLineRef(edit.after).line;

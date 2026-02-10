@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Replaced `edit.patchMode` boolean setting with `edit.mode` enum; existing `edit.patchMode: true` configurations should use `edit.mode: patch`
@@ -8,6 +9,8 @@
 
 ### Added
 
+- Added `HashlineMismatchError` class that displays grep-style output with `>>>` markers showing correct `LINE:HASH` references when hash validation fails
+- Added `HashMismatch` type to represent individual hash mismatches with line number, expected hash, and actual hash
 - Added hashline edit mode for line-addressed edits using content hashes (LINE:HASH format) with integrity verification
 - Added `readHashLines` setting to include line hashes in read output for hashline edit mode
 - Added `edit.mode` setting (enum: replace, patch, hashline) to select edit tool variant, replacing `edit.patchMode` boolean
@@ -27,6 +30,8 @@
 
 ### Changed
 
+- Renamed `HashlineEdit` fields from `src`/`dst` to `old`/`new` for clarity in replace, delete, and insert operations
+- Enhanced hash validation in `applyHashlineEdits` to collect all mismatches before throwing, providing comprehensive error reporting with context lines
 - Changed `edit.patchMode` boolean setting to `edit.mode` enum (replace, patch, hashline) with default value patch
 - Changed edit tool to support three modes (replace, patch, hashline) instead of two, with dynamic mode selection based on model and settings
 - Changed read tool to prioritize hash lines over line numbers when both are requested

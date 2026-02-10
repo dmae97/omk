@@ -198,10 +198,10 @@ export interface DiffError {
 /** A single edit operation in hashline mode */
 export interface HashlineEdit {
 	/** Line references to replace (e.g., ["5:abcd", "6:ef01"]) — empty for insert */
-	src: string[];
+	old: string[];
 	/** Replacement content lines — empty for delete */
-	dst: string[];
-	/** Insert after this line ref (e.g., "3:e7c4") — only when src is empty */
+	new: string[];
+	/** Insert after this line ref (e.g., "3:e7c4") — only when old is empty */
 	after?: string;
 }
 
@@ -211,6 +211,16 @@ export interface HashlineInput {
 	path: string;
 	/** Array of edit operations */
 	edits: HashlineEdit[];
+}
+
+/** A single hash mismatch found during validation */
+export interface HashMismatch {
+	/** 1-indexed line number */
+	line: number;
+	/** Hash the caller provided */
+	expected: string;
+	/** Hash computed from the current file content */
+	actual: string;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

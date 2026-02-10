@@ -49,7 +49,14 @@ export { computeEditDiff, computePatchDiff, generateDiffString, generateUnifiedD
 // Fuzzy matching
 export { DEFAULT_FUZZY_THRESHOLD, findContextLine, findMatch as findEditMatch, findMatch, seekSequence } from "./fuzzy";
 // Hashline
-export { applyHashlineEdits, computeLineHash, formatHashLines, parseLineRef, validateLineRef } from "./hashline";
+export {
+	applyHashlineEdits,
+	computeLineHash,
+	formatHashLines,
+	HashlineMismatchError,
+	parseLineRef,
+	validateLineRef,
+} from "./hashline";
 // Normalization
 export { adjustIndentation, detectLineEnding, normalizeToLF, restoreLineEndings, stripBom } from "./normalize";
 // Parsing
@@ -74,6 +81,7 @@ export type {
 	FuzzyMatch,
 	HashlineEdit,
 	HashlineInput,
+	HashMismatch,
 	MatchOutcome as EditMatchOutcome,
 	MatchOutcome,
 	Operation,
@@ -111,9 +119,9 @@ export type PatchParams = { path: string; op?: string; rename?: string; diff?: s
 export type HashlineParams = { path: string; edits: HashlineEdit[] };
 
 const hashlineEditItemSchema = Type.Object({
-	src: Type.Array(Type.String({ description: 'Line references to replace (e.g. "5:abcd")' })),
-	dst: Type.Array(Type.String({ description: "Replacement content lines" })),
-	after: Type.Optional(Type.String({ description: "Insert after this line ref (only when src is empty)" })),
+	old: Type.Array(Type.String({ description: 'Line references to replace (e.g. "5:abcd")' })),
+	new: Type.Array(Type.String({ description: "Replacement content lines" })),
+	after: Type.Optional(Type.String({ description: "Insert after this line ref (only when old is empty)" })),
 });
 
 const hashlineEditSchema = Type.Object({
