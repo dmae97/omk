@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added support for Kimi K2, K2 Turbo Preview, and K2.5 models with reasoning capabilities
+
+### Fixed
+
+- Fixed Claude Opus 4.6 context window to 200K across all providers (was incorrectly set to 1M)
+- Fixed Claude Sonnet 4 context window to 200K across multiple providers (was incorrectly set to 1M)
 
 ## [11.8.0] - 2026-02-10
 ### Added

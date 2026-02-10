@@ -249,7 +249,16 @@ async function fetchKimiCodeModels(): Promise<Model<"openai-completions">[]> {
 				});
 			}
 
-			console.log(`Fetched ${models.length} models from Kimi Code API`);
+			// The /models endpoint only returns "kimi-for-coding" but the API
+			// accepts other model IDs too — merge in fallback models not returned by the API
+			const fetchedIds = new Set(models.map((m) => m.id));
+			const fallbacks = getKimiCodeFallbackModels();
+			for (const fb of fallbacks) {
+				if (!fetchedIds.has(fb.id)) {
+					models.push(fb);
+				}
+			}
+			console.log(`Fetched ${fetchedIds.size} models from Kimi Code API, ${models.length} total with fallbacks`);
 			return models;
 		} catch (error) {
 			console.error("Failed to fetch Kimi Code models:", error);
@@ -1065,7 +1074,8 @@ async function generateModels() {
 			candidate.cost.cacheRead = 0.5;
 			candidate.cost.cacheWrite = 6.25;
 		}
-		if ((candidate.provider === "anthropic" || candidate.provider === "opencode") && candidate.id === "claude-opus-4-6") {
+		// Opus 4.6 1M context is API-only; all providers should use 200K
+		if (candidate.id.includes("opus-4-6") || candidate.id.includes("opus-4.6")) {
 			candidate.contextWindow = 200000;
 		}
 		// opencode lists Claude Sonnet 4/4.5 with 1M context, actual limit is 200K
