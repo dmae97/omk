@@ -83,7 +83,7 @@ export class MCPManager {
 	#pendingConnections = new Map<string, Promise<MCPServerConnection>>();
 	#pendingToolLoads = new Map<string, Promise<ToolLoadResult>>();
 	#sources = new Map<string, SourceMeta>();
-	private authStorage: AuthStorage | null = null;
+	#authStorage: AuthStorage | null = null;
 
 	constructor(
 		private cwd: string,
@@ -94,7 +94,7 @@ export class MCPManager {
 	 * Set the auth storage for resolving OAuth credentials.
 	 */
 	setAuthStorage(authStorage: AuthStorage): void {
-		this.authStorage = authStorage;
+		this.#authStorage = authStorage;
 	}
 
 	/**
@@ -164,10 +164,13 @@ export class MCPManager {
 			}
 
 			// Resolve auth config before connecting
-			const resolvedConfig = await this.resolveAuthConfig(config);
+			const resolvedConfig = await this.#resolveAuthConfig(config);
 
 			const connectionPromise = connectToServer(name, resolvedConfig).then(
 				connection => {
+					// Store original config (without resolved tokens) to keep
+					// cache keys stable and avoid leaking rotating credentials.
+					connection.config = config;
 					if (sources[name]) {
 						connection._source = sources[name];
 					}
@@ -329,7 +332,7 @@ export class MCPManager {
 	 * Resolve auth and shell-command substitutions in config before connecting.
 	 */
 	async prepareConfig(config: MCPServerConfig): Promise<MCPServerConfig> {
-		return this.resolveAuthConfig(config);
+		return this.#resolveAuthConfig(config);
 	}
 
 	/**
@@ -401,14 +404,14 @@ export class MCPManager {
 	/**
 	 * Resolve OAuth credentials and shell commands in config.
 	 */
-	private async resolveAuthConfig(config: MCPServerConfig): Promise<MCPServerConfig> {
+	async #resolveAuthConfig(config: MCPServerConfig): Promise<MCPServerConfig> {
 		let resolved: MCPServerConfig = { ...config };
 
 		const auth = config.auth;
-		if (auth?.type === "oauth" && auth.credentialId && this.authStorage) {
+		if (auth?.type === "oauth" && auth.credentialId && this.#authStorage) {
 			const credentialId = auth.credentialId;
 			try {
-				const credential = this.authStorage.get(credentialId);
+				const credential = this.#authStorage.get(credentialId);
 				if (credential?.type === "oauth") {
 					if (resolved.type === "http" || resolved.type === "sse") {
 						resolved = {

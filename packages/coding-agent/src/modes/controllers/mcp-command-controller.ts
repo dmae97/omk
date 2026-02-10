@@ -83,38 +83,38 @@ export class MCPCommandController {
 		const subcommand = parts[1]?.toLowerCase();
 
 		if (!subcommand || subcommand === "help") {
-			this.showHelp();
+			this.#showHelp();
 			return;
 		}
 
 		switch (subcommand) {
 			case "add":
-				await this.handleAdd(text);
+				await this.#handleAdd(text);
 				break;
 			case "list":
-				await this.handleList();
+				await this.#handleList();
 				break;
 			case "remove":
 			case "rm":
-				await this.handleRemove(text);
+				await this.#handleRemove(text);
 				break;
 			case "test":
-				await this.handleTest(parts[2]);
+				await this.#handleTest(parts[2]);
 				break;
 			case "reauth":
-				await this.handleReauth(parts[2]);
+				await this.#handleReauth(parts[2]);
 				break;
 			case "unauth":
-				await this.handleUnauth(parts[2]);
+				await this.#handleUnauth(parts[2]);
 				break;
 			case "enable":
-				await this.handleSetEnabled(parts[2], true);
+				await this.#handleSetEnabled(parts[2], true);
 				break;
 			case "disable":
-				await this.handleSetEnabled(parts[2], false);
+				await this.#handleSetEnabled(parts[2], false);
 				break;
 			case "reload":
-				await this.handleReload();
+				await this.#handleReload();
 				break;
 			default:
 				this.ctx.showError(`Unknown subcommand: ${subcommand}. Type /mcp help for usage.`);
@@ -124,7 +124,7 @@ export class MCPCommandController {
 	/**
 	 * Show help text
 	 */
-	private showHelp(): void {
+	#showHelp(): void {
 		const helpText = [
 			"",
 			theme.bold("MCP Server Management"),
@@ -146,10 +146,10 @@ export class MCPCommandController {
 			"",
 		].join("\n");
 
-		this.showMessage(helpText);
+		this.#showMessage(helpText);
 	}
 
-	private parseAddCommand(text: string): MCPAddParsed {
+	#parseAddCommand(text: string): MCPAddParsed {
 		const prefixMatch = text.match(/^\/mcp\s+add\b\s*(.*)$/i);
 		const rest = prefixMatch?.[1]?.trim() ?? "";
 		if (!rest) {
@@ -265,8 +265,8 @@ export class MCPCommandController {
 	/**
 	 * Handle /mcp add - Launch interactive wizard or quick-add from args
 	 */
-	private async handleAdd(text: string): Promise<void> {
-		const parsed = this.parseAddCommand(text);
+	async #handleAdd(text: string): Promise<void> {
+		const parsed = this.#parseAddCommand(text);
 		if (parsed.error) {
 			this.ctx.showError(parsed.error);
 			return;
@@ -278,10 +278,13 @@ export class MCPCommandController {
 			// matching wizard behavior. Command quick-add intentionally skips this.
 			if (!parsed.isCommandQuickAdd && (finalConfig.type === "http" || finalConfig.type === "sse")) {
 				try {
-					await this.handleTestConnection(finalConfig);
+					await this.#handleTestConnection(finalConfig);
 				} catch (error) {
 					if (parsed.hasAuthToken) {
-						throw error;
+						this.ctx.showError(
+							`Authentication failed for "${parsed.initialName}": ${error instanceof Error ? error.message : String(error)}`,
+						);
+						return;
 					}
 					const authResult = analyzeAuthError(error as Error);
 					if (authResult.requiresAuth) {
@@ -295,31 +298,39 @@ export class MCPCommandController {
 						}
 
 						if (!oauth) {
-							throw new Error(
+							this.ctx.showError(
 								`Authentication required for "${parsed.initialName}", but OAuth endpoints could not be discovered. ` +
 									`Use /mcp add ${parsed.initialName} (wizard) or configure auth manually.`,
 							);
+							return;
 						}
 
-						const credentialId = await this.handleOAuthFlow(
-							oauth.authorizationUrl,
-							oauth.tokenUrl,
-							oauth.clientId ?? "",
-							"",
-							oauth.scopes ?? "",
-						);
-						finalConfig = {
-							...finalConfig,
-							auth: {
-								type: "oauth",
-								credentialId,
-							},
-						};
+						try {
+							const credentialId = await this.#handleOAuthFlow(
+								oauth.authorizationUrl,
+								oauth.tokenUrl,
+								oauth.clientId ?? "",
+								"",
+								oauth.scopes ?? "",
+							);
+							finalConfig = {
+								...finalConfig,
+								auth: {
+									type: "oauth",
+									credentialId,
+								},
+							};
+						} catch (oauthError) {
+							this.ctx.showError(
+								`OAuth flow failed for "${parsed.initialName}": ${oauthError instanceof Error ? oauthError.message : String(oauthError)}`,
+							);
+							return;
+						}
 					}
 				}
 			}
 
-			await this.handleWizardComplete(parsed.initialName, finalConfig, parsed.scope);
+			await this.#handleWizardComplete(parsed.initialName, finalConfig, parsed.scope);
 			return;
 		}
 
@@ -334,17 +345,17 @@ export class MCPCommandController {
 		const wizard = new MCPAddWizard(
 			async (name: string, config: MCPServerConfig, scope: "user" | "project") => {
 				done();
-				await this.handleWizardComplete(name, config, scope);
+				await this.#handleWizardComplete(name, config, scope);
 			},
 			() => {
 				done();
-				this.handleWizardCancel();
+				this.#handleWizardCancel();
 			},
 			async (authUrl: string, tokenUrl: string, clientId: string, clientSecret: string, scopes: string) => {
-				return await this.handleOAuthFlow(authUrl, tokenUrl, clientId, clientSecret, scopes);
+				return await this.#handleOAuthFlow(authUrl, tokenUrl, clientId, clientSecret, scopes);
 			},
 			async (config: MCPServerConfig) => {
-				return await this.handleTestConnection(config);
+				return await this.#handleTestConnection(config);
 			},
 			() => {
 				this.ctx.ui.requestRender();
@@ -362,7 +373,7 @@ export class MCPCommandController {
 	/**
 	 * Handle OAuth authentication flow for MCP server
 	 */
-	private async handleOAuthFlow(
+	async #handleOAuthFlow(
 		authUrl: string,
 		tokenUrl: string,
 		clientId: string,
@@ -495,12 +506,7 @@ export class MCPCommandController {
 			);
 
 			// Execute OAuth flow with 5 minute timeout
-			const credentials = await Promise.race([
-				flow.login(),
-				new Promise<never>((_, reject) =>
-					setTimeout(() => reject(new Error("OAuth flow timed out after 5 minutes")), 5 * 60 * 1000),
-				),
-			]);
+			const credentials = await withTimeout(flow.login(), 5 * 60 * 1000, "OAuth flow timed out after 5 minutes");
 
 			this.ctx.chatContainer.addChild(new Spacer(1));
 			this.ctx.chatContainer.addChild(new Text(theme.fg("success", "✓ Authorization completed in browser."), 1, 0));
@@ -541,7 +547,7 @@ export class MCPCommandController {
 	 * Test connection to an MCP server.
 	 * Throws an error if connection fails (used for auto-detection).
 	 */
-	private async handleTestConnection(config: MCPServerConfig): Promise<void> {
+	async #handleTestConnection(config: MCPServerConfig): Promise<void> {
 		// Create temporary connection using a test name
 		const testName = `test_${Date.now()}`;
 		let resolvedConfig: MCPServerConfig;
@@ -557,7 +563,7 @@ export class MCPCommandController {
 		await disconnectServer(connection);
 	}
 
-	private async findConfiguredServer(
+	async #findConfiguredServer(
 		name: string,
 	): Promise<{ filePath: string; scope: "user" | "project"; config: MCPServerConfig } | null> {
 		const cwd = process.cwd();
@@ -578,43 +584,54 @@ export class MCPCommandController {
 		return null;
 	}
 
-	private async removeManagedOAuthCredential(credentialId: string | undefined): Promise<void> {
+	async #removeManagedOAuthCredential(credentialId: string | undefined): Promise<void> {
 		if (!credentialId || !credentialId.startsWith("mcp_oauth_")) return;
 		await this.ctx.session.modelRegistry.authStorage.remove(credentialId);
 	}
 
-	private stripOAuthAuth(config: MCPServerConfig): MCPServerConfig {
+	#stripOAuthAuth(config: MCPServerConfig): MCPServerConfig {
 		const next = { ...config } as MCPServerConfig & { auth?: { type: "oauth" | "apikey"; credentialId?: string } };
 		delete next.auth;
 		return next;
 	}
 
-	private async resolveOAuthEndpointsFromServer(config: MCPServerConfig): Promise<{
+	async #resolveOAuthEndpointsFromServer(config: MCPServerConfig): Promise<{
 		authorizationUrl: string;
 		tokenUrl: string;
 		clientId?: string;
 		scopes?: string;
 	}> {
+		// First test if server actually needs auth by connecting without OAuth
+		let connectionSucceeded = false;
+		let connectionError: Error | undefined;
 		try {
-			await this.handleTestConnection(this.stripOAuthAuth(config));
-			throw new Error("Server connection succeeded without OAuth; reauthorization is not required.");
+			await this.#handleTestConnection(this.#stripOAuthAuth(config));
+			connectionSucceeded = true;
 		} catch (error) {
-			const authResult = analyzeAuthError(error as Error);
-			let oauth = authResult.authType === "oauth" ? (authResult.oauth ?? null) : null;
-
-			if (!oauth && (config.type === "http" || config.type === "sse") && config.url) {
-				oauth = await discoverOAuthEndpoints(config.url);
-			}
-
-			if (!oauth) {
-				throw new Error("Could not discover OAuth endpoints from server response.");
-			}
-
-			return oauth;
+			connectionError = error as Error;
 		}
+
+		// Server connected fine without auth — reauth is not needed
+		if (connectionSucceeded) {
+			throw new Error("Server connection succeeded without OAuth; reauthorization is not required.");
+		}
+
+		// Analyze the connection error to extract OAuth endpoints
+		const authResult = analyzeAuthError(connectionError!);
+		let oauth = authResult.authType === "oauth" ? (authResult.oauth ?? null) : null;
+
+		if (!oauth && (config.type === "http" || config.type === "sse") && config.url) {
+			oauth = await discoverOAuthEndpoints(config.url);
+		}
+
+		if (!oauth) {
+			throw new Error("Could not discover OAuth endpoints from server response.");
+		}
+
+		return oauth;
 	}
 
-	private async waitForServerConnectionWithAnimation(
+	async #waitForServerConnectionWithAnimation(
 		name: string,
 		options?: { suppressDisconnectedWarning?: boolean },
 	): Promise<"connected" | "connecting" | "disconnected"> {
@@ -662,7 +679,7 @@ export class MCPCommandController {
 		}
 	}
 
-	private async syncManagerConnection(name: string, config: MCPServerConfig): Promise<void> {
+	async #syncManagerConnection(name: string, config: MCPServerConfig): Promise<void> {
 		if (!this.ctx.mcpManager) return;
 		if (this.ctx.mcpManager.getConnectionStatus(name) !== "disconnected") return;
 		await this.ctx.mcpManager.connectServers({ [name]: config }, {});
@@ -671,7 +688,7 @@ export class MCPCommandController {
 		}
 	}
 
-	private async handleWizardComplete(name: string, config: MCPServerConfig, scope: "user" | "project"): Promise<void> {
+	async #handleWizardComplete(name: string, config: MCPServerConfig, scope: "user" | "project"): Promise<void> {
 		try {
 			// Determine file path
 			const cwd = process.cwd();
@@ -681,11 +698,11 @@ export class MCPCommandController {
 			await addMCPServer(filePath, name, config);
 
 			// Reload MCP manager
-			await this.reloadMCP();
+			await this.#reloadMCP();
 			const state =
 				config.enabled === false
 					? "disconnected"
-					: await this.waitForServerConnectionWithAnimation(name, { suppressDisconnectedWarning: true });
+					: await this.#waitForServerConnectionWithAnimation(name, { suppressDisconnectedWarning: true });
 			let isConnected = state === "connected";
 			const isConnecting = state === "connecting";
 
@@ -693,9 +710,9 @@ export class MCPCommandController {
 			// report as connected to avoid false-negative messaging.
 			if (!isConnected && !isConnecting && config.enabled !== false) {
 				try {
-					await this.handleTestConnection(config);
+					await this.#handleTestConnection(config);
 					isConnected = true;
-					await this.syncManagerConnection(name, config);
+					await this.#syncManagerConnection(name, config);
 				} catch {
 					// Keep disconnected status
 				}
@@ -721,7 +738,7 @@ export class MCPCommandController {
 			lines.push(theme.fg("muted", `Run ${theme.fg("accent", "/mcp list")} to see all configured servers.`));
 			lines.push("");
 
-			this.showMessage(lines.join("\n"));
+			this.#showMessage(lines.join("\n"));
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 
@@ -739,8 +756,8 @@ export class MCPCommandController {
 		}
 	}
 
-	private handleWizardCancel(): void {
-		this.showMessage(
+	#handleWizardCancel(): void {
+		this.#showMessage(
 			[
 				"",
 				theme.fg("muted", "Server creation cancelled."),
@@ -754,7 +771,7 @@ export class MCPCommandController {
 	/**
 	 * Handle /mcp list - Show all configured servers
 	 */
-	private async handleList(): Promise<void> {
+	async #handleList(): Promise<void> {
 		try {
 			const cwd = process.cwd();
 
@@ -771,7 +788,7 @@ export class MCPCommandController {
 			const projectServers = Object.keys(projectConfig.mcpServers ?? {});
 
 			if (userServers.length === 0 && projectServers.length === 0) {
-				this.showMessage(
+				this.#showMessage(
 					[
 						"",
 						theme.fg("muted", "No MCP servers configured."),
@@ -831,7 +848,7 @@ export class MCPCommandController {
 				lines.push("");
 			}
 
-			this.showMessage(lines.join("\n"));
+			this.#showMessage(lines.join("\n"));
 		} catch (error) {
 			this.ctx.showError(`Failed to list servers: ${error instanceof Error ? error.message : String(error)}`);
 		}
@@ -840,7 +857,7 @@ export class MCPCommandController {
 	/**
 	 * Handle /mcp remove <name> - Remove a server
 	 */
-	private async handleRemove(text: string): Promise<void> {
+	async #handleRemove(text: string): Promise<void> {
 		const match = text.match(/^\/mcp\s+(?:remove|rm)\b\s*(.*)$/i);
 		const rest = match?.[1]?.trim() ?? "";
 		const tokens = parseCommandArgs(rest);
@@ -895,9 +912,9 @@ export class MCPCommandController {
 			await removeMCPServer(filePath, name);
 
 			// Reload MCP manager
-			await this.reloadMCP();
+			await this.#reloadMCP();
 
-			this.showMessage(["", theme.fg("success", `✓ Removed server "${name}" from ${scope} config`), ""].join("\n"));
+			this.#showMessage(["", theme.fg("success", `✓ Removed server "${name}" from ${scope} config`), ""].join("\n"));
 		} catch (error) {
 			this.ctx.showError(`Failed to remove server: ${error instanceof Error ? error.message : String(error)}`);
 		}
@@ -906,7 +923,7 @@ export class MCPCommandController {
 	/**
 	 * Handle /mcp test <name> - Test connection to a server
 	 */
-	private async handleTest(name: string | undefined): Promise<void> {
+	async #handleTest(name: string | undefined): Promise<void> {
 		if (!name) {
 			this.ctx.showError("Server name required. Usage: /mcp test <name>");
 			return;
@@ -936,7 +953,7 @@ export class MCPCommandController {
 				return;
 			}
 
-			this.showMessage(["", theme.fg("muted", `Testing connection to "${name}"...`), ""].join("\n"));
+			this.#showMessage(["", theme.fg("muted", `Testing connection to "${name}"...`), ""].join("\n"));
 
 			// Resolve auth config if needed
 			let resolvedConfig: MCPServerConfig;
@@ -973,8 +990,8 @@ export class MCPCommandController {
 				}
 
 				lines.push("");
-				await this.syncManagerConnection(name, config);
-				this.showMessage(lines.join("\n"));
+				await this.#syncManagerConnection(name, config);
+				this.#showMessage(lines.join("\n"));
 			} finally {
 				// Disconnect test connection
 				await disconnectServer(connection);
@@ -1000,21 +1017,21 @@ export class MCPCommandController {
 		}
 	}
 
-	private async handleSetEnabled(name: string | undefined, enabled: boolean): Promise<void> {
+	async #handleSetEnabled(name: string | undefined, enabled: boolean): Promise<void> {
 		if (!name) {
 			this.ctx.showError(`Server name required. Usage: /mcp ${enabled ? "enable" : "disable"} <name>`);
 			return;
 		}
 
 		try {
-			const found = await this.findConfiguredServer(name);
+			const found = await this.#findConfiguredServer(name);
 			if (!found) {
 				this.ctx.showError(`Server "${name}" not found.`);
 				return;
 			}
 
 			if ((found.config.enabled ?? true) === enabled) {
-				this.showMessage(
+				this.#showMessage(
 					["", theme.fg("muted", `Server "${name}" is already ${enabled ? "enabled" : "disabled"}.`), ""].join(
 						"\n",
 					),
@@ -1024,11 +1041,11 @@ export class MCPCommandController {
 
 			const updated: MCPServerConfig = { ...found.config, enabled };
 			await updateMCPServer(found.filePath, name, updated);
-			await this.reloadMCP();
+			await this.#reloadMCP();
 
 			let status = "";
 			if (enabled) {
-				const state = await this.waitForServerConnectionWithAnimation(name);
+				const state = await this.#waitForServerConnectionWithAnimation(name);
 				status =
 					state === "connected"
 						? theme.fg("success", "Connected")
@@ -1046,7 +1063,7 @@ export class MCPCommandController {
 				lines.push(`  Status: ${status}`);
 			}
 			lines.push("");
-			this.showMessage(lines.join("\n"));
+			this.#showMessage(lines.join("\n"));
 		} catch (error) {
 			this.ctx.showError(
 				`Failed to ${enabled ? "enable" : "disable"} server: ${error instanceof Error ? error.message : String(error)}`,
@@ -1054,14 +1071,14 @@ export class MCPCommandController {
 		}
 	}
 
-	private async handleUnauth(name: string | undefined): Promise<void> {
+	async #handleUnauth(name: string | undefined): Promise<void> {
 		if (!name) {
 			this.ctx.showError("Server name required. Usage: /mcp unauth <name>");
 			return;
 		}
 
 		try {
-			const found = await this.findConfiguredServer(name);
+			const found = await this.#findConfiguredServer(name);
 			if (!found) {
 				this.ctx.showError(`Server "${name}" not found.`);
 				return;
@@ -1071,14 +1088,14 @@ export class MCPCommandController {
 				found.config as MCPServerConfig & { auth?: { type: "oauth" | "apikey"; credentialId?: string } }
 			).auth;
 			if (currentAuth?.type === "oauth") {
-				await this.removeManagedOAuthCredential(currentAuth.credentialId);
+				await this.#removeManagedOAuthCredential(currentAuth.credentialId);
 			}
 
-			const updated = this.stripOAuthAuth(found.config);
+			const updated = this.#stripOAuthAuth(found.config);
 			await updateMCPServer(found.filePath, name, updated);
-			await this.reloadMCP();
+			await this.#reloadMCP();
 
-			this.showMessage(
+			this.#showMessage(
 				["", theme.fg("success", `✓ Cleared auth for "${name}" (${found.scope} config)`), ""].join("\n"),
 			);
 		} catch (error) {
@@ -1086,14 +1103,14 @@ export class MCPCommandController {
 		}
 	}
 
-	private async handleReauth(name: string | undefined): Promise<void> {
+	async #handleReauth(name: string | undefined): Promise<void> {
 		if (!name) {
 			this.ctx.showError("Server name required. Usage: /mcp reauth <name>");
 			return;
 		}
 
 		try {
-			const found = await this.findConfiguredServer(name);
+			const found = await this.#findConfiguredServer(name);
 			if (!found) {
 				this.ctx.showError(`Server "${name}" not found.`);
 				return;
@@ -1108,15 +1125,15 @@ export class MCPCommandController {
 				found.config as MCPServerConfig & { auth?: { type: "oauth" | "apikey"; credentialId?: string } }
 			).auth;
 			if (currentAuth?.type === "oauth") {
-				await this.removeManagedOAuthCredential(currentAuth.credentialId);
+				await this.#removeManagedOAuthCredential(currentAuth.credentialId);
 			}
 
-			const baseConfig = this.stripOAuthAuth(found.config);
-			const oauth = await this.resolveOAuthEndpointsFromServer(baseConfig);
+			const baseConfig = this.#stripOAuthAuth(found.config);
+			const oauth = await this.#resolveOAuthEndpointsFromServer(baseConfig);
 
-			this.showMessage(["", theme.fg("muted", `Reauthorizing "${name}"...`), ""].join("\n"));
+			this.#showMessage(["", theme.fg("muted", `Reauthorizing "${name}"...`), ""].join("\n"));
 
-			const credentialId = await this.handleOAuthFlow(
+			const credentialId = await this.#handleOAuthFlow(
 				oauth.authorizationUrl,
 				oauth.tokenUrl,
 				oauth.clientId ?? "",
@@ -1132,8 +1149,8 @@ export class MCPCommandController {
 				},
 			};
 			await updateMCPServer(found.filePath, name, updated);
-			await this.reloadMCP();
-			const state = await this.waitForServerConnectionWithAnimation(name);
+			await this.#reloadMCP();
+			const state = await this.#waitForServerConnectionWithAnimation(name);
 
 			const lines = [
 				"",
@@ -1148,18 +1165,18 @@ export class MCPCommandController {
 				}`,
 				"",
 			];
-			this.showMessage(lines.join("\n"));
+			this.#showMessage(lines.join("\n"));
 		} catch (error) {
 			this.ctx.showError(`Failed to reauthorize server: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
 
-	private async handleReload(): Promise<void> {
+	async #handleReload(): Promise<void> {
 		try {
-			this.showMessage(["", theme.fg("muted", "Reloading MCP servers and runtime tools..."), ""].join("\n"));
-			await this.reloadMCP();
+			this.#showMessage(["", theme.fg("muted", "Reloading MCP servers and runtime tools..."), ""].join("\n"));
+			await this.#reloadMCP();
 			const connectedCount = this.ctx.mcpManager?.getConnectedServers().length ?? 0;
-			this.showMessage(
+			this.#showMessage(
 				["", theme.fg("success", "✓ MCP reload complete"), `  Connected servers: ${connectedCount}`, ""].join("\n"),
 			);
 		} catch (error) {
@@ -1170,7 +1187,7 @@ export class MCPCommandController {
 	/**
 	 * Reload MCP manager with new configs
 	 */
-	private async reloadMCP(): Promise<void> {
+	async #reloadMCP(): Promise<void> {
 		if (!this.ctx.mcpManager) {
 			return;
 		}
@@ -1189,14 +1206,14 @@ export class MCPCommandController {
 				errorLines.push(`  ${serverName}: ${error}`);
 			}
 			errorLines.push("");
-			this.showMessage(errorLines.join("\n"));
+			this.#showMessage(errorLines.join("\n"));
 		}
 	}
 
 	/**
 	 * Show a message in the chat
 	 */
-	private showMessage(text: string): void {
+	#showMessage(text: string): void {
 		this.ctx.chatContainer.addChild(new Spacer(1));
 		this.ctx.chatContainer.addChild(new DynamicBorder());
 		this.ctx.chatContainer.addChild(new Text(text, 1, 1));

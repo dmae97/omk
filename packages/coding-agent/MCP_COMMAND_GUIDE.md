@@ -301,7 +301,7 @@ Project-specific configuration (usually in project root).
 3. **Secure sensitive data**
    - Use OAuth when available
    - Use shell commands for API keys: `!op read op://vault/key`
-   - Never commit `.mcp.json` files with plain API keys to version control
+   - Never commit `.omp/mcp.json` files with plain API keys to version control
 
 4. **Name servers descriptively**
    - Use purpose-based names: "github-tools", "docs-search"

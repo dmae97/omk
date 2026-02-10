@@ -7,6 +7,7 @@
  * Priority: 5 (low, as this is a fallback after tool-specific providers)
  */
 import * as path from "node:path";
+import { logger } from "@oh-my-pi/pi-utils";
 import { registerProvider } from "../capability";
 import { readFile } from "../capability/fs";
 import { type MCPServer, mcpCapability } from "../capability/mcp";
@@ -47,10 +48,33 @@ function transformMCPConfig(config: MCPConfigFile, source: SourceMeta): MCPServe
 
 	if (config.mcpServers) {
 		for (const [name, serverConfig] of Object.entries(config.mcpServers)) {
+			// Runtime type validation for user-controlled JSON values
+			let enabled: boolean | undefined;
+			if (serverConfig.enabled !== undefined) {
+				if (typeof serverConfig.enabled === "boolean") {
+					enabled = serverConfig.enabled;
+				} else {
+					logger.warn("MCP server has invalid 'enabled' value, ignoring", { name, value: serverConfig.enabled });
+				}
+			}
+
+			let timeout: number | undefined;
+			if (serverConfig.timeout !== undefined) {
+				if (
+					typeof serverConfig.timeout === "number" &&
+					Number.isFinite(serverConfig.timeout) &&
+					serverConfig.timeout > 0
+				) {
+					timeout = serverConfig.timeout;
+				} else {
+					logger.warn("MCP server has invalid 'timeout' value, ignoring", { name, value: serverConfig.timeout });
+				}
+			}
+
 			const server: MCPServer = {
 				name,
-				enabled: serverConfig.enabled,
-				timeout: serverConfig.timeout,
+				enabled,
+				timeout,
 				command: serverConfig.command,
 				args: serverConfig.args,
 				env: serverConfig.env,

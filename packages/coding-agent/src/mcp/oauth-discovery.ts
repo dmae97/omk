@@ -166,20 +166,6 @@ export function extractOAuthEndpoints(error: Error): OAuthEndpoints | null {
 		};
 	}
 
-	// Try to extract URLs from error message
-	const urlPattern = /(https?:\/\/[^\s"'<>]+)/g;
-	const urls = errorMsg.match(urlPattern);
-
-	if (urls && urls.length >= 2) {
-		// Heuristic: First URL is likely auth, second is token
-		return {
-			authorizationUrl: urls[0],
-			tokenUrl: urls[1],
-			clientId: clientIdFromAuthUrl(urls[0]),
-			scopes: scopeFromAuthUrl(urls[0]),
-		};
-	}
-
 	return null;
 }
 

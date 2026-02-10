@@ -334,7 +334,7 @@ export class InputController {
 			}
 
 			// Handle MCP server management commands
-			if (text.startsWith("/mcp")) {
+			if (text === "/mcp" || text.startsWith("/mcp ")) {
 				this.ctx.editor.addToHistory(text);
 				this.ctx.editor.setText("");
 				await this.ctx.handleMCPCommand(text);

@@ -161,30 +161,35 @@ export class StdioTransport implements MCPTransport {
 
 		const timeout = this.config.timeout ?? 30000;
 
-		return Promise.race([
-			new Promise<T>((resolve, reject) => {
-				this.#pendingRequests.set(id, {
-					resolve: resolve as (value: unknown) => void,
-					reject,
-				});
+		let timer: NodeJS.Timeout | undefined;
+		try {
+			return await Promise.race([
+				new Promise<T>((resolve, reject) => {
+					this.#pendingRequests.set(id, {
+						resolve: resolve as (value: unknown) => void,
+						reject,
+					});
 
-				const message = `${JSON.stringify(request)}\n`;
-				try {
-					// Bun's FileSink has write() method directly
-					this.#process!.stdin.write(message);
-					this.#process!.stdin.flush();
-				} catch (error: unknown) {
-					this.#pendingRequests.delete(id);
-					reject(error);
-				}
-			}),
-			new Promise<never>((_, reject) =>
-				setTimeout(() => {
-					this.#pendingRequests.delete(id);
-					reject(new Error(`Request timeout after ${timeout}ms`));
-				}, timeout),
-			),
-		]);
+					const message = `${JSON.stringify(request)}\n`;
+					try {
+						// Bun's FileSink has write() method directly
+						this.#process!.stdin.write(message);
+						this.#process!.stdin.flush();
+					} catch (error: unknown) {
+						this.#pendingRequests.delete(id);
+						reject(error);
+					}
+				}),
+				new Promise<never>((_, reject) => {
+					timer = setTimeout(() => {
+						this.#pendingRequests.delete(id);
+						reject(new Error(`Request timeout after ${timeout}ms`));
+					}, timeout);
+				}),
+			]);
+		} finally {
+			clearTimeout(timer);
+		}
 	}
 
 	async notify(method: string, params?: Record<string, unknown>): Promise<void> {

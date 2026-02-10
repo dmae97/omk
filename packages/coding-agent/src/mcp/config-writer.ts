@@ -1,11 +1,12 @@
 /**
  * MCP Configuration File Writer
  *
- * Utilities for reading/writing .mcp.json files at user or project level.
+ * Utilities for reading/writing .omp/mcp.json files at user or project level.
  */
 import * as fs from "node:fs";
-import { homedir } from "node:os";
+import * as os from "node:os";
 import * as path from "node:path";
+import { isEnoent } from "@oh-my-pi/pi-utils";
 import { validateServerConfig } from "./config";
 import type { MCPConfigFile, MCPServerConfig } from "./types";
 
@@ -16,7 +17,7 @@ import type { MCPConfigFile, MCPServerConfig } from "./types";
  */
 export function getMCPConfigPath(scope: "user" | "project", cwd: string): string {
 	if (scope === "user") {
-		return path.join(homedir(), ".omp", "mcp.json");
+		return path.join(os.homedir(), ".omp", "mcp.json");
 	}
 	return path.join(cwd, ".omp", "mcp.json");
 }
@@ -31,7 +32,7 @@ export async function readMCPConfigFile(filePath: string): Promise<MCPConfigFile
 		const parsed = JSON.parse(content) as MCPConfigFile;
 		return parsed;
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+		if (isEnoent(error)) {
 			// File doesn't exist, return empty config
 			return { mcpServers: {} };
 		}
@@ -46,12 +47,12 @@ export async function readMCPConfigFile(filePath: string): Promise<MCPConfigFile
 export async function writeMCPConfigFile(filePath: string, config: MCPConfigFile): Promise<void> {
 	// Ensure parent directory exists
 	const dir = path.dirname(filePath);
-	await fs.promises.mkdir(dir, { recursive: true });
+	await fs.promises.mkdir(dir, { recursive: true, mode: 0o700 });
 
 	// Write to temp file first (atomic write)
 	const tmpPath = `${filePath}.tmp`;
 	const content = JSON.stringify(config, null, 2);
-	await fs.promises.writeFile(tmpPath, content, "utf-8");
+	await fs.promises.writeFile(tmpPath, content, { encoding: "utf-8", mode: 0o600 });
 
 	// Rename to final path (atomic on most systems)
 	await fs.promises.rename(tmpPath, filePath);
@@ -122,6 +123,12 @@ export async function addMCPServer(filePath: string, name: string, config: MCPSe
  * @throws Error if validation fails
  */
 export async function updateMCPServer(filePath: string, name: string, config: MCPServerConfig): Promise<void> {
+	// Validate server name
+	const nameError = validateServerName(name);
+	if (nameError) {
+		throw new Error(nameError);
+	}
+
 	// Validate the config
 	const errors = validateServerConfig(name, config);
 	if (errors.length > 0) {

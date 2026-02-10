@@ -5,6 +5,7 @@
  * .pi is an alias for backwards compatibility.
  */
 import * as path from "node:path";
+import { logger } from "@oh-my-pi/pi-utils";
 import { registerProvider } from "../capability";
 import { type ContextFile, contextFileCapability } from "../capability/context-file";
 import { type Extension, type ExtensionManifest, extensionCapability } from "../capability/extension";
@@ -79,10 +80,54 @@ async function loadMCPServers(ctx: LoadContext): Promise<LoadResult<MCPServer>> 
 		const expanded = expandEnvVarsDeep(data.mcpServers);
 		for (const [serverName, config] of Object.entries(expanded)) {
 			const serverConfig = config as Record<string, unknown>;
+
+			// Validate enabled: coerce string "true"/"false", warn on other types
+			let enabled: boolean | undefined;
+			if (serverConfig.enabled === undefined || serverConfig.enabled === null) {
+				enabled = undefined;
+			} else if (typeof serverConfig.enabled === "boolean") {
+				enabled = serverConfig.enabled;
+			} else if (typeof serverConfig.enabled === "string") {
+				const lower = serverConfig.enabled.toLowerCase();
+				if (lower === "false" || lower === "0") enabled = false;
+				else if (lower === "true" || lower === "1") enabled = true;
+				else {
+					logger.warn(`MCP server "${serverName}": invalid enabled value "${serverConfig.enabled}", ignoring`);
+					enabled = undefined;
+				}
+			} else {
+				logger.warn(`MCP server "${serverName}": invalid enabled type ${typeof serverConfig.enabled}, ignoring`);
+				enabled = undefined;
+			}
+
+			// Validate timeout: coerce numeric strings, warn on invalid
+			let timeout: number | undefined;
+			if (serverConfig.timeout === undefined || serverConfig.timeout === null) {
+				timeout = undefined;
+			} else if (typeof serverConfig.timeout === "number") {
+				if (Number.isFinite(serverConfig.timeout) && serverConfig.timeout > 0) {
+					timeout = serverConfig.timeout;
+				} else {
+					logger.warn(`MCP server "${serverName}": invalid timeout ${serverConfig.timeout}, ignoring`);
+					timeout = undefined;
+				}
+			} else if (typeof serverConfig.timeout === "string") {
+				const parsed = Number(serverConfig.timeout);
+				if (Number.isFinite(parsed) && parsed > 0) {
+					timeout = parsed;
+				} else {
+					logger.warn(`MCP server "${serverName}": invalid timeout "${serverConfig.timeout}", ignoring`);
+					timeout = undefined;
+				}
+			} else {
+				logger.warn(`MCP server "${serverName}": invalid timeout type ${typeof serverConfig.timeout}, ignoring`);
+				timeout = undefined;
+			}
+
 			result.push({
 				name: serverName,
-				enabled: serverConfig.enabled as boolean | undefined,
-				timeout: serverConfig.timeout as number | undefined,
+				enabled,
+				timeout,
 				command: serverConfig.command as string | undefined,
 				args: serverConfig.args as string[] | undefined,
 				env: serverConfig.env as Record<string, string> | undefined,
