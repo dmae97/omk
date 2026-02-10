@@ -163,10 +163,11 @@ export class MCPManager {
 				continue;
 			}
 
-			// Resolve auth config before connecting
-			const resolvedConfig = await this.#resolveAuthConfig(config);
-
-			const connectionPromise = connectToServer(name, resolvedConfig).then(
+			// Resolve auth config before connecting, but do so per-server in parallel.
+			const connectionPromise = (async () => {
+				const resolvedConfig = await this.#resolveAuthConfig(config);
+				return connectToServer(name, resolvedConfig);
+			})().then(
 				connection => {
 					// Store original config (without resolved tokens) to keep
 					// cache keys stable and avoid leaking rotating credentials.

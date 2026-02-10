@@ -644,9 +644,18 @@ export class MCPAddWizard extends Container {
 			case "scope": {
 				const scopes: Scope[] = ["user", "project"];
 				this.#state.scope = scopes[this.#selectedIndex];
-				// Auto-save once scope is selected.
-				this.#complete();
-				return;
+				this.#currentStep = "confirm";
+				this.#selectedIndex = 0;
+				break;
+			}
+			case "confirm": {
+				if (this.#selectedIndex === 0) {
+					this.#complete();
+					return;
+				}
+				this.#currentStep = "scope";
+				this.#selectedIndex = this.#state.scope === "user" ? 0 : 1;
+				break;
 			}
 		}
 
