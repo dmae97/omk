@@ -27,6 +27,81 @@ function toArray(v: string | string[]): string[] {
 	return [v];
 }
 
+/** Pattern matching hashline display format: `LINE:HASH| CONTENT` */
+const HASHLINE_PREFIX_RE = /^\d+:[0-9a-fA-F]{1,16}\| /;
+
+/** Pattern matching a unified-diff `+` prefix (but not `++`) */
+const DIFF_PLUS_RE = /^\+(?!\+)/;
+
+/**
+ * Compare two strings ignoring all whitespace differences.
+ *
+ * Returns true when the non-whitespace characters are identical — meaning
+ * the only differences are in spaces, tabs, or other whitespace.
+ */
+function equalsIgnoringWhitespace(a: string, b: string): boolean {
+	// Fast path: identical strings
+	if (a === b) return true;
+	// Compare with all whitespace removed
+	return a.replace(/\s+/g, "") === b.replace(/\s+/g, "");
+}
+
+/**
+ * For replace edits (N old → N new), preserve original content on lines where
+ * the only difference is whitespace.
+ *
+ * Models frequently reformat code (e.g., removing spaces inside import braces)
+ * when making targeted edits. This detects lines that changed only in
+ * whitespace and keeps the original, preventing spurious formatting diffs.
+ */
+function preserveWhitespaceOnlyLines(oldLines: string[], newLines: string[]): string[] {
+	if (oldLines.length !== newLines.length) return newLines;
+	let anyPreserved = false;
+	const result = new Array<string>(newLines.length);
+	for (let i = 0; i < newLines.length; i++) {
+		if (oldLines[i] !== newLines[i] && equalsIgnoringWhitespace(oldLines[i], newLines[i])) {
+			result[i] = oldLines[i];
+			anyPreserved = true;
+		} else {
+			result[i] = newLines[i];
+		}
+	}
+	return anyPreserved ? result : newLines;
+}
+
+/**
+ * Strip hashline display prefixes and diff `+` markers from replacement lines.
+ *
+ * Models frequently copy the `LINE:HASH| ` prefix from read output into their
+ * replacement content, or include unified-diff `+` prefixes. Both corrupt the
+ * output file. This strips them heuristically before application.
+ */
+function stripNewLinePrefixes(lines: string[]): string[] {
+	// Detect whether the *majority* of non-empty lines carry a prefix —
+	// if only one line out of many has a match it's likely real content.
+	let hashPrefixCount = 0;
+	let diffPlusCount = 0;
+	let nonEmpty = 0;
+	for (const l of lines) {
+		if (l.length === 0) continue;
+		nonEmpty++;
+		if (HASHLINE_PREFIX_RE.test(l)) hashPrefixCount++;
+		if (DIFF_PLUS_RE.test(l)) diffPlusCount++;
+	}
+	if (nonEmpty === 0) return lines;
+
+	const stripHash = hashPrefixCount > 0 && hashPrefixCount >= nonEmpty * 0.5;
+	const stripPlus = !stripHash && diffPlusCount > 0 && diffPlusCount >= nonEmpty * 0.5;
+
+	if (!stripHash && !stripPlus) return lines;
+
+	return lines.map(l => {
+		if (stripHash) return l.replace(HASHLINE_PREFIX_RE, "");
+		if (stripPlus) return l.replace(DIFF_PLUS_RE, "");
+		return l;
+	});
+}
+
 const HASH_LEN = 2;
 const HASH_MASK = BigInt((1 << (HASH_LEN * 4)) - 1);
 
@@ -176,10 +251,7 @@ export function validateLineRef(ref: { line: number; hash: string }, fileLines: 
 	}
 	const actualHash = computeLineHash(ref.line, fileLines[ref.line - 1]);
 	if (actualHash !== ref.hash.toLowerCase()) {
-		throw new HashlineMismatchError(
-			[{ line: ref.line, expected: ref.hash, actual: actualHash }],
-			fileLines,
-		);
+		throw new HashlineMismatchError([{ line: ref.line, expected: ref.hash, actual: actualHash }], fileLines);
 	}
 }
 
@@ -212,7 +284,11 @@ export function applyHashlineEdits(
 	let firstChangedLine: number | undefined;
 
 	// Normalize string → string[] for old/new fields
-	const normalized = edits.map(e => ({ old: toArray(e.old), new: toArray(e.new), after: e.after }));
+	const normalized = edits.map(e => ({
+		old: toArray(e.old),
+		new: stripNewLinePrefixes(toArray(e.new)),
+		after: e.after,
+	}));
 
 	// Pre-validate all line refs and collect hash mismatches in one pass.
 	// Structural errors (out of range, malformed, non-consecutive) still throw immediately.
@@ -278,7 +354,9 @@ export function applyHashlineEdits(
 			const count = endLine - startLine + 1;
 
 			// Splice: remove `count` lines starting at startLine-1, insert new
-			fileLines.splice(startLine - 1, count, ...edit.new);
+			const origLines = fileLines.slice(startLine - 1, startLine - 1 + count);
+			const newLines = preserveWhitespaceOnlyLines(origLines, edit.new);
+			fileLines.splice(startLine - 1, count, ...newLines);
 
 			trackFirstChanged(startLine);
 		}

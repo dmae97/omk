@@ -1,4 +1,4 @@
-# Replace
+# Edit (Replace)
 
 String replacements in files with fuzzy whitespace matching.
 

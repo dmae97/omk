@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Replaced `edit.patchMode` boolean setting with `edit.mode` enum; existing `edit.patchMode: true` configurations should use `edit.mode: patch`
@@ -31,6 +30,8 @@
 
 ### Changed
 
+- Improved hashline edit robustness by automatically stripping `LINE:HASH|` display prefixes and unified-diff `+` markers that models may copy into replacement content
+- Enhanced replace edits to preserve original whitespace on lines where only whitespace differs, preventing spurious formatting diffs when models reformat code
 - Enhanced system prompt to display tool descriptions alongside tool names for improved clarity on available capabilities
 - Reduced hash length from 4 to 2 hex characters (16-bit hashes) for more concise line references
 - Updated `HashlineEdit` type to accept `string | string[]` for `old` and `new` fields, allowing single-line edits without array wrapping

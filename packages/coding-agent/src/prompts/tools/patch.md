@@ -1,4 +1,4 @@
-# Edit
+# Edit (Patch)
 
 Patch operations on file given diff. Primary tool for existing-file edits.
 

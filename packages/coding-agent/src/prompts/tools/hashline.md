@@ -1,4 +1,4 @@
-# Edit
+# Edit (Replace lines)
 
 Line-addressed edits using hash-verified line references. Read file with hashes first, then edit by referencing `lineNumber:hash` pairs.
 
