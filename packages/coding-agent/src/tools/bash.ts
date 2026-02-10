@@ -20,7 +20,7 @@ import type { OutputMeta } from "./output-meta";
 import { allocateOutputArtifact, createTailBuffer } from "./output-utils";
 import { resolveToCwd } from "./path-utils";
 import { formatBytes, replaceTabs, wrapBrackets } from "./render-utils";
-import { ToolError } from "./tool-errors";
+import { ToolAbortError, ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
 import { DEFAULT_MAX_BYTES } from "./truncate";
 
@@ -135,6 +135,9 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 		// Handle errors
 		const result = await executeBash(command, executorOptions);
 		if (result.cancelled) {
+			if (signal?.aborted) {
+				throw new ToolAbortError(result.output || "Command aborted");
+			}
 			throw new ToolError(result.output || "Command aborted");
 		}
 

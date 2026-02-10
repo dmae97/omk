@@ -146,7 +146,11 @@ export class StdioTransport implements MCPTransport {
 		this.onClose?.();
 	}
 
-	async request<T = unknown>(method: string, params?: Record<string, unknown>, options?: MCPRequestOptions): Promise<T> {
+	async request<T = unknown>(
+		method: string,
+		params?: Record<string, unknown>,
+		options?: MCPRequestOptions,
+	): Promise<T> {
 		if (!this.#connected || !this.#process?.stdin) {
 			throw new Error("Transport not connected");
 		}
