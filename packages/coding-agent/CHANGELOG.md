@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Exported `./patch/*` subpath for direct access to patch utilities
 
 ## [11.10.2] - 2026-02-10
 

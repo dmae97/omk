@@ -58,6 +58,10 @@
 			"types": "./src/internal-urls/*.ts",
 			"import": "./src/internal-urls/*.ts"
 		},
+		"./patch/*": {
+			"types": "./src/patch/*.ts",
+			"import": "./src/patch/*.ts"
+		},
 		"./*": {
 			"types": "./src/*.ts",
 			"import": "./src/*.ts"

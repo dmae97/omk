@@ -13,14 +13,14 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { ModelRole } from "@oh-my-pi/pi-coding-agent/config/model-registry";
-import { type EditMode, normalizeEditMode } from "@oh-my-pi/pi-coding-agent/patch";
 import { isEnoent, logger, procmgr } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 import { type Settings as SettingsCapabilityItem, settingsCapability } from "../capability/settings";
 import { getAgentDbPath, getAgentDir } from "../config";
+import type { ModelRole } from "../config/model-registry";
 import { loadCapability } from "../discovery";
 import { setColorBlindMode, setSymbolPreset, setTheme } from "../modes/theme/theme";
+import { type EditMode, normalizeEditMode } from "../patch";
 import { AgentStorage } from "../session/agent-storage";
 import { withFileLock } from "./file-lock";
 import {
