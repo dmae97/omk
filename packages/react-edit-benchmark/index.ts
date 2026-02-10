@@ -157,18 +157,12 @@ async function main(): Promise<void> {
 		allowPositionals: true,
 	});
 
-	// Auto-detect provider from model string: "provider/model" -> provider="provider", model="model"
-	let provider = values.provider;
-	let model = values.model!;
-	if (!provider) {
-		const slashIndex = model.indexOf("/");
-		if (slashIndex !== -1) {
-			provider = model.slice(0, slashIndex);
-			model = model.slice(slashIndex + 1);
-		} else {
-			provider = "anthropic";
-		}
-	}
+	// Extract provider for display/config purposes only.
+	// The full model string (e.g. "openrouter/google/gemini-2.5-flash-lite") is passed
+	// as --model to the CLI, which handles resolution via parseModelPattern.
+	const model = values.model!;
+	const slashIndex = model.indexOf("/");
+	const provider = values.provider ?? (slashIndex !== -1 ? model.slice(0, slashIndex) : "anthropic");
 
 	if (values.help) {
 		printUsage();

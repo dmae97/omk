@@ -14,6 +14,8 @@
 
 import type { HashlineEdit, HashMismatch } from "./types";
 
+const HEX3 = Array.from({ length: 0xfff + 1 }, (_, i) => i.toString(16).padStart(3, "0"));
+
 /**
  * Compute the 4-character hex hash of a single line.
  *
@@ -23,7 +25,7 @@ import type { HashlineEdit, HashMismatch } from "./types";
  * The line input should not include a trailing newline.
  */
 export function computeLineHash(idx: number, line: string): string {
-	return Bun.hash.xxHash64(line, BigInt(idx)).toString(16).padStart(16, "0").slice(0, 4);
+	return HEX3[Number(Bun.hash.xxHash64(line, BigInt(idx))) & 0xfff];
 }
 
 /**

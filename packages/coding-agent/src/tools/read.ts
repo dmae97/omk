@@ -760,8 +760,8 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				maxBytes: DEFAULT_MAX_BYTES,
 			};
 
-			const shouldAddHashLines = hashes ?? this.#defaultHashLines;
-			const shouldAddLineNumbers = shouldAddHashLines ? false : (lines ?? this.#defaultLineNumbers);
+			const shouldAddHashLines = hashes || this.#defaultHashLines;
+			const shouldAddLineNumbers = lines || this.#defaultLineNumbers;
 			const prependLineNumbers = (text: string, startNum: number): string => {
 				const textLines = text.split("\n");
 				const lastLineNum = startNum + textLines.length - 1;
