@@ -8,7 +8,6 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { createInterface } from "node:readline/promises";
-import { run } from "@oclif/core";
 import { type ImageContent, supportsXhigh } from "@oh-my-pi/pi-ai";
 import { $env, postmortem } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
@@ -713,6 +712,6 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 }
 
 export async function main(args: string[]): Promise<void> {
-	const argv = args.length === 0 ? ["index"] : args;
-	await run(argv, import.meta.url);
+	const { runCli } = await import("./cli");
+	await runCli(args.length === 0 ? ["launch"] : args);
 }

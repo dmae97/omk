@@ -1,7 +1,7 @@
 /**
  * Manage configuration settings.
  */
-import { Args, Command, Flags } from "@oclif/core";
+import { Args, Command, Flags } from "@oh-my-pi/pi-utils/cli";
 import { type ConfigAction, type ConfigCommandArgs, runConfigCommand } from "../cli/config-cli";
 import { initTheme } from "../modes/theme/theme";
 

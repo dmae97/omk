@@ -1,7 +1,7 @@
 /**
  * Interactive shell console.
  */
-import { Command, Flags } from "@oclif/core";
+import { Command, Flags } from "@oh-my-pi/pi-utils/cli";
 import { runShellCommand, type ShellCommandArgs } from "../cli/shell-cli";
 import { initTheme } from "../modes/theme/theme";
 

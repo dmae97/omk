@@ -1,6 +1,18 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Migrated CLI framework from oclif to lightweight pi-utils CLI runner
+- Replaced oclif command registration with explicit command entries in cli.ts
+- Changed default root command name from 'index' to 'launch'
+- Updated all command imports to use @oh-my-pi/pi-utils/cli instead of @oclif/core
+
+### Removed
+
+- Removed @oclif/core and @oclif/plugin-autocomplete dependencies
+- Removed oclif configuration from package.json
+- Removed custom oclif help renderer (oclif-help.ts)
 
 ## [11.10.0] - 2026-02-10
 ### Breaking Changes

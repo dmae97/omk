@@ -1,7 +1,7 @@
 /**
  * Install dependencies for optional features.
  */
-import { Args, Command, Flags } from "@oclif/core";
+import { Args, Command, Flags } from "@oh-my-pi/pi-utils/cli";
 import { runSetupCommand, type SetupCommandArgs, type SetupComponent } from "../cli/setup-cli";
 import { initTheme } from "../modes/theme/theme";
 

@@ -1,7 +1,7 @@
 /**
  * Test grep tool.
  */
-import { Args, Command, Flags } from "@oclif/core";
+import { Args, Command, Flags } from "@oh-my-pi/pi-utils/cli";
 import { type GrepCommandArgs, runGrepCommand } from "../cli/grep-cli";
 import { initTheme } from "../modes/theme/theme";
 

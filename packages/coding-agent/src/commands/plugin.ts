@@ -1,7 +1,7 @@
 /**
  * Manage plugins (install, uninstall, list, etc.).
  */
-import { Args, Command, Flags } from "@oclif/core";
+import { Args, Command, Flags } from "@oh-my-pi/pi-utils/cli";
 import { type PluginAction, type PluginCommandArgs, runPluginCommand } from "../cli/plugin-cli";
 import { initTheme } from "../modes/theme/theme";
 

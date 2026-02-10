@@ -1,7 +1,7 @@
 /**
  * Test web search providers.
  */
-import { Args, Command, Flags } from "@oclif/core";
+import { Args, Command, Flags } from "@oh-my-pi/pi-utils/cli";
 import { runSearchCommand, type SearchCommandArgs } from "../cli/web-search-cli";
 import type { SearchProviderId } from "../web/search/types";
 

@@ -1,10 +1,10 @@
 /**
  * Root command for the coding agent CLI.
  */
-import { Args, Command, Flags } from "@oclif/core";
-import { parseArgs } from "../../cli/args";
-import { APP_NAME } from "../../config";
-import { runRootCommand } from "../../main";
+import { Args, Command, Flags } from "@oh-my-pi/pi-utils/cli";
+import { parseArgs } from "../cli/args";
+import { APP_NAME } from "../config";
+import { runRootCommand } from "../main";
 
 export default class Index extends Command {
 	static description = "AI coding assistant";
