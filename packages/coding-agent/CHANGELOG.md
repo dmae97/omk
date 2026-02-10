@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [11.10.2] - 2026-02-10
+
 ### Added
 
 - Exported `streamHashLinesFromUtf8` and `streamHashLinesFromLines` functions for streaming hashline-formatted output with configurable chunking
