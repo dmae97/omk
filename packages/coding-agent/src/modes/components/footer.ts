@@ -42,16 +42,16 @@ async function findGitHeadPath(): Promise<{ path: string; content: string } | nu
  * Footer component that shows pwd, token stats, and context usage
  */
 export class FooterComponent implements Component {
-	private cachedBranch: string | null | undefined = undefined; // undefined = not checked yet, null = not in git repo, string = branch name
-	private gitWatcher: fs.FSWatcher | null = null;
-	private onBranchChange: (() => void) | null = null;
-	private autoCompactEnabled: boolean = true;
-	private extensionStatuses: Map<string, string> = new Map();
+	#cachedBranch: string | null | undefined = undefined; // undefined = not checked yet, null = not in git repo, string = branch name
+	#gitWatcher: fs.FSWatcher | null = null;
+	#onBranchChange: (() => void) | null = null;
+	#autoCompactEnabled: boolean = true;
+	#extensionStatuses: Map<string, string> = new Map();
 
 	constructor(private readonly session: AgentSession) {}
 
 	setAutoCompactEnabled(enabled: boolean): void {
-		this.autoCompactEnabled = enabled;
+		this.#autoCompactEnabled = enabled;
 	}
 
 	/**
@@ -63,9 +63,9 @@ export class FooterComponent implements Component {
 	 */
 	setExtensionStatus(key: string, text: string | undefined): void {
 		if (text === undefined) {
-			this.extensionStatuses.delete(key);
+			this.#extensionStatuses.delete(key);
 		} else {
-			this.extensionStatuses.set(key, text);
+			this.#extensionStatuses.set(key, text);
 		}
 	}
 
@@ -74,15 +74,15 @@ export class FooterComponent implements Component {
 	 * Call the provided callback when branch changes.
 	 */
 	watchBranch(onBranchChange: () => void): void {
-		this.onBranchChange = onBranchChange;
-		this.setupGitWatcher();
+		this.#onBranchChange = onBranchChange;
+		this.#setupGitWatcher();
 	}
 
-	private setupGitWatcher(): void {
+	#setupGitWatcher(): void {
 		// Clean up existing watcher
-		if (this.gitWatcher) {
-			this.gitWatcher.close();
-			this.gitWatcher = null;
+		if (this.#gitWatcher) {
+			this.#gitWatcher.close();
+			this.#gitWatcher = null;
 		}
 
 		findGitHeadPath().then(result => {
@@ -91,10 +91,10 @@ export class FooterComponent implements Component {
 			}
 
 			try {
-				this.gitWatcher = fs.watch(result.path, () => {
-					this.cachedBranch = undefined; // Invalidate cache
-					if (this.onBranchChange) {
-						this.onBranchChange();
+				this.#gitWatcher = fs.watch(result.path, () => {
+					this.#cachedBranch = undefined; // Invalidate cache
+					if (this.#onBranchChange) {
+						this.#onBranchChange();
 					}
 				});
 			} catch {
@@ -107,46 +107,46 @@ export class FooterComponent implements Component {
 	 * Clean up the file watcher
 	 */
 	dispose(): void {
-		if (this.gitWatcher) {
-			this.gitWatcher.close();
-			this.gitWatcher = null;
+		if (this.#gitWatcher) {
+			this.#gitWatcher.close();
+			this.#gitWatcher = null;
 		}
 	}
 
 	invalidate(): void {
 		// Invalidate cached branch so it gets re-read on next render
-		this.cachedBranch = undefined;
+		this.#cachedBranch = undefined;
 	}
 
 	/**
 	 * Get current git branch by reading .git/HEAD directly.
 	 * Returns null if not in a git repo, branch name otherwise.
 	 */
-	private getCurrentBranch(): string | null {
+	#getCurrentBranch(): string | null {
 		// Return cached value if available
-		if (this.cachedBranch !== undefined) {
-			return this.cachedBranch;
+		if (this.#cachedBranch !== undefined) {
+			return this.#cachedBranch;
 		}
 
 		// Note: fire-and-forget async call - will return undefined on first call
 		// This is acceptable since it's a cached value that will update on next render
 		findGitHeadPath().then(result => {
 			if (!result) {
-				this.cachedBranch = null;
-				if (this.onBranchChange) {
-					this.onBranchChange();
+				this.#cachedBranch = null;
+				if (this.#onBranchChange) {
+					this.#onBranchChange();
 				}
 				return;
 			}
 			const content = result.content.trim();
 
 			if (content.startsWith("ref: refs/heads/")) {
-				this.cachedBranch = content.slice(16);
+				this.#cachedBranch = content.slice(16);
 			} else {
-				this.cachedBranch = "detached";
+				this.#cachedBranch = "detached";
 			}
-			if (this.onBranchChange) {
-				this.onBranchChange();
+			if (this.#onBranchChange) {
+				this.#onBranchChange();
 			}
 		});
 
@@ -204,7 +204,7 @@ export class FooterComponent implements Component {
 		let pwd = shortenPath(process.cwd());
 
 		// Add git branch if available
-		const branch = this.getCurrentBranch();
+		const branch = this.#getCurrentBranch();
 		if (branch) {
 			pwd = `${pwd} (${branch})`;
 		}
@@ -237,7 +237,7 @@ export class FooterComponent implements Component {
 
 		// Colorize context percentage based on usage
 		let contextPercentStr: string;
-		const autoIndicator = this.autoCompactEnabled ? " (auto)" : "";
+		const autoIndicator = this.#autoCompactEnabled ? " (auto)" : "";
 		const contextPercentDisplay = `${contextPercent}%/${formatTokens(contextWindow)}${autoIndicator}`;
 		if (contextPercentValue > 90) {
 			contextPercentStr = theme.fg("error", contextPercentDisplay);
@@ -308,8 +308,8 @@ export class FooterComponent implements Component {
 		const lines = [theme.fg("dim", pwd), dimStatsLeft + dimRemainder];
 
 		// Add extension statuses on a single line, sorted by key alphabetically
-		if (this.extensionStatuses.size > 0) {
-			const sortedStatuses = Array.from(this.extensionStatuses.entries())
+		if (this.#extensionStatuses.size > 0) {
+			const sortedStatuses = Array.from(this.#extensionStatuses.entries())
 				.sort(([a], [b]) => a.localeCompare(b))
 				.map(([, text]) => sanitizeStatusText(text));
 			const statusLine = sortedStatuses.join(" ");

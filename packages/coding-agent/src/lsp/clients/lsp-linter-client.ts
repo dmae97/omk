@@ -21,7 +21,7 @@ const DEFAULT_FORMAT_OPTIONS = {
  * Wraps the existing LSP client infrastructure.
  */
 export class LspLinterClient implements LinterClient {
-	private client: LspClient | null = null;
+	#client: LspClient | null = null;
 
 	/** Factory method for creating LspLinterClient instances */
 	static create(config: ServerConfig, cwd: string): LinterClient {
@@ -33,15 +33,15 @@ export class LspLinterClient implements LinterClient {
 		private readonly cwd: string,
 	) {}
 
-	private async getClient(): Promise<LspClient> {
-		if (!this.client) {
-			this.client = await getOrCreateClient(this.config, this.cwd);
+	async #getClient(): Promise<LspClient> {
+		if (!this.#client) {
+			this.#client = await getOrCreateClient(this.config, this.cwd);
 		}
-		return this.client;
+		return this.#client;
 	}
 
 	async format(filePath: string, content: string): Promise<string> {
-		const client = await this.getClient();
+		const client = await this.#getClient();
 		const uri = fileToUri(filePath);
 
 		// Sync content to LSP
@@ -67,7 +67,7 @@ export class LspLinterClient implements LinterClient {
 	}
 
 	async lint(filePath: string): Promise<Diagnostic[]> {
-		const client = await this.getClient();
+		const client = await this.#getClient();
 		const uri = fileToUri(filePath);
 
 		// Notify that file was saved to trigger diagnostics

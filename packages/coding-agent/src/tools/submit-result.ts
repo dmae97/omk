@@ -53,15 +53,15 @@ function formatAjvErrors(errors: ErrorObject[] | null | undefined): string {
 }
 
 export class SubmitResultTool implements AgentTool<TObject, SubmitResultDetails> {
-	public readonly name = "submit_result";
-	public readonly label = "Submit Result";
-	public readonly description =
+	readonly name = "submit_result";
+	readonly label = "Submit Result";
+	readonly description =
 		"Finish the task with structured JSON output. Call exactly once at the end of the task.\n\n" +
 		"If you cannot complete the task, call with status='aborted' and an error message.";
-	public readonly parameters: TObject;
+	readonly parameters: TObject;
 
-	private readonly validate?: ValidateFunction;
-	private readonly schemaError?: string;
+	readonly #validate?: ValidateFunction;
+	readonly #schemaError?: string;
 
 	constructor(session: ToolSession) {
 		const schemaResult = normalizeSchema(session.outputSchema);
@@ -72,13 +72,13 @@ export class SubmitResultTool implements AgentTool<TObject, SubmitResultDetails>
 
 		if (normalizedSchema !== undefined && !schemaError) {
 			try {
-				this.validate = ajv.compile(normalizedSchema as any);
+				this.#validate = ajv.compile(normalizedSchema as any);
 			} catch (err) {
 				schemaError = err instanceof Error ? err.message : String(err);
 			}
 		}
 
-		this.schemaError = schemaError;
+		this.#schemaError = schemaError;
 
 		const schemaHint = formatSchema(normalizedSchema ?? session.outputSchema);
 
@@ -102,7 +102,7 @@ export class SubmitResultTool implements AgentTool<TObject, SubmitResultDetails>
 		});
 	}
 
-	public async execute(
+	async execute(
 		_toolCallId: string,
 		params: Static<TObject>,
 		_signal?: AbortSignal,
@@ -116,11 +116,11 @@ export class SubmitResultTool implements AgentTool<TObject, SubmitResultDetails>
 			if (params.data === undefined || params.data === null) {
 				throw new Error("data is required when status is 'success' (got null/undefined)");
 			}
-			if (this.schemaError) {
-				throw new Error(`Invalid output schema: ${this.schemaError}`);
+			if (this.#schemaError) {
+				throw new Error(`Invalid output schema: ${this.#schemaError}`);
 			}
-			if (this.validate && !this.validate(params.data)) {
-				throw new Error(`Output does not match schema: ${formatAjvErrors(this.validate.errors)}`);
+			if (this.#validate && !this.#validate(params.data)) {
+				throw new Error(`Output does not match schema: ${formatAjvErrors(this.#validate.errors)}`);
 			}
 		}
 

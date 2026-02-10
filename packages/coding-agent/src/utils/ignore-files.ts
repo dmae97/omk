@@ -6,7 +6,7 @@ import ignore from "ignore";
 
 export const IGNORE_FILE_NAMES = [".gitignore", ".ignore", ".fdignore"] as const;
 
-export type IgnoreMatcher = ReturnType<typeof ignore>;
+export type IgnoreMatcher = ignore.Ignore;
 
 /**
  * Convert a path to POSIX format (forward slashes).

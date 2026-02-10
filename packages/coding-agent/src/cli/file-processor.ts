@@ -1,7 +1,7 @@
 /**
  * Process @file CLI arguments into text content and image attachments
  */
-import * as fs from "node:fs/promises";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ImageContent } from "@oh-my-pi/pi-ai";
 import { isEnoent } from "@oh-my-pi/pi-utils";
@@ -36,15 +36,10 @@ export async function processFileArguments(fileArgs: string[], options?: Process
 		// Expand and resolve path (handles ~ expansion and macOS screenshot Unicode spaces)
 		const absolutePath = path.resolve(resolveReadPath(fileArg, process.cwd()));
 
-		let stat: Awaited<ReturnType<typeof fs.stat>>;
-		try {
-			stat = await fs.stat(absolutePath);
-		} catch (err) {
-			if (isEnoent(err)) {
-				console.error(chalk.red(`Error: File not found: ${absolutePath}`));
-				process.exit(1);
-			}
-			throw err;
+		const stat = fs.statSync(absolutePath, { throwIfNoEntry: false });
+		if (!stat) {
+			console.error(chalk.red(`Error: File not found: ${absolutePath}`));
+			process.exit(1);
 		}
 
 		const mimeType = await detectSupportedImageMimeTypeFromFile(absolutePath);
@@ -58,9 +53,9 @@ export async function processFileArguments(fileArgs: string[], options?: Process
 		}
 
 		// Read file, handling not-found gracefully
-		let buffer: Buffer;
+		let buffer: Uint8Array;
 		try {
-			buffer = await fs.readFile(absolutePath);
+			buffer = await Bun.file(absolutePath).bytes();
 		} catch (err) {
 			if (isEnoent(err)) {
 				console.error(chalk.red(`Error: File not found: ${absolutePath}`));
@@ -114,7 +109,7 @@ export async function processFileArguments(fileArgs: string[], options?: Process
 		} else {
 			// Handle text file
 			try {
-				const content = buffer.toString("utf-8");
+				const content = new TextDecoder().decode(buffer);
 				text += `<file name="${absolutePath}">\n${content}\n</file>\n`;
 			} catch (error: unknown) {
 				const message = error instanceof Error ? error.message : String(error);

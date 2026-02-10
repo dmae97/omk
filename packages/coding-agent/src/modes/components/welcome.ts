@@ -53,17 +53,17 @@ export class WelcomeComponent implements Component {
 		const piLogo = ["▀████████████▀", " ╘███    ███  ", "  ███    ███  ", "  ███    ███  ", " ▄███▄  ▄███▄ "];
 
 		// Apply gradient to logo
-		const logoColored = piLogo.map(line => this.gradientLine(line));
+		const logoColored = piLogo.map(line => this.#gradientLine(line));
 
 		// Left column - centered content
 		const leftLines = [
 			"",
-			this.centerText(theme.bold("Welcome back!"), leftCol),
+			this.#centerText(theme.bold("Welcome back!"), leftCol),
 			"",
-			...logoColored.map(l => this.centerText(l, leftCol)),
+			...logoColored.map(l => this.#centerText(l, leftCol)),
 			"",
-			this.centerText(theme.fg("muted", this.modelName), leftCol),
-			this.centerText(theme.fg("borderMuted", this.providerName), leftCol),
+			this.#centerText(theme.fg("muted", this.modelName), leftCol),
+			this.#centerText(theme.fg("borderMuted", this.providerName), leftCol),
 		];
 
 		// Right column separator
@@ -138,8 +138,8 @@ export class WelcomeComponent implements Component {
 		// Content rows
 		const maxRows = Math.max(leftLines.length, rightLines.length);
 		for (let i = 0; i < maxRows; i++) {
-			const left = this.fitToWidth(leftLines[i] ?? "", leftCol);
-			const right = this.fitToWidth(rightLines[i] ?? "", rightCol);
+			const left = this.#fitToWidth(leftLines[i] ?? "", leftCol);
+			const right = this.#fitToWidth(rightLines[i] ?? "", rightCol);
 			lines.push(v + left + v + right + v);
 		}
 
@@ -150,7 +150,7 @@ export class WelcomeComponent implements Component {
 	}
 
 	/** Center text within a given width */
-	private centerText(text: string, width: number): string {
+	#centerText(text: string, width: number): string {
 		const visLen = visibleWidth(text);
 		if (visLen >= width) {
 			return truncateToWidth(text, width);
@@ -161,7 +161,7 @@ export class WelcomeComponent implements Component {
 	}
 
 	/** Apply magenta→cyan gradient to a string */
-	private gradientLine(line: string): string {
+	#gradientLine(line: string): string {
 		const colors = [
 			"\x1b[38;5;199m", // bright magenta
 			"\x1b[38;5;171m", // magenta-purple
@@ -191,7 +191,7 @@ export class WelcomeComponent implements Component {
 	}
 
 	/** Fit string to exact width with ANSI-aware truncation/padding */
-	private fitToWidth(str: string, width: number): string {
+	#fitToWidth(str: string, width: number): string {
 		const visLen = visibleWidth(str);
 		if (visLen > width) {
 			const ellipsis = "…";

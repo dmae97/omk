@@ -1,7 +1,7 @@
-import * as nodePath from "node:path";
+import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 
-import { grep } from "@oh-my-pi/pi-natives";
+import { type GrepResult, grep } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { untilAborted } from "@oh-my-pi/pi-utils";
@@ -63,10 +63,10 @@ export interface GrepToolOptions {
 type GrepParams = Static<typeof grepSchema>;
 
 export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
-	public readonly name = "grep";
-	public readonly label = "Grep";
-	public readonly description: string;
-	public readonly parameters = grepSchema;
+	readonly name = "grep";
+	readonly label = "Grep";
+	readonly description: string;
+	readonly parameters = grepSchema;
 
 	constructor(
 		private readonly session: ToolSession,
@@ -75,7 +75,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 		this.description = renderPromptTemplate(grepDescription);
 	}
 
-	public async execute(
+	async execute(
 		_toolCallId: string,
 		params: GrepParams,
 		signal?: AbortSignal,
@@ -111,7 +111,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 
 			const searchPath = resolveToCwd(searchDir || ".", this.session.cwd);
 			const scopePath = (() => {
-				const relative = nodePath.relative(this.session.cwd, searchPath).replace(/\\/g, "/");
+				const relative = path.relative(this.session.cwd, searchPath).replace(/\\/g, "/");
 				return relative.length === 0 ? "." : relative;
 			})();
 
@@ -127,7 +127,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 			const effectiveLimit = normalizedLimit ?? DEFAULT_MATCH_LIMIT;
 
 			// Run grep
-			let result: Awaited<ReturnType<typeof grep>>;
+			let result: GrepResult;
 			try {
 				result = await grep({
 					pattern: normalizedPattern,
@@ -157,7 +157,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 				if (isDirectory) {
 					return cleanPath.replace(/\\/g, "/");
 				}
-				return nodePath.basename(cleanPath);
+				return path.basename(cleanPath);
 			};
 
 			// Build output

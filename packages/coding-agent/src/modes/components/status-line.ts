@@ -60,22 +60,22 @@ function findGitHeadPath(): string | null {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export class StatusLineComponent implements Component {
-	private settings: StatusLineSettings = {};
-	private cachedBranch: string | null | undefined = undefined;
-	private gitWatcher: fs.FSWatcher | null = null;
-	private onBranchChange: (() => void) | null = null;
-	private autoCompactEnabled: boolean = true;
-	private hookStatuses: Map<string, string> = new Map();
-	private subagentCount: number = 0;
-	private sessionStartTime: number = Date.now();
-	private planModeStatus: { enabled: boolean; paused: boolean } | null = null;
+	#settings: StatusLineSettings = {};
+	#cachedBranch: string | null | undefined = undefined;
+	#gitWatcher: fs.FSWatcher | null = null;
+	#onBranchChange: (() => void) | null = null;
+	#autoCompactEnabled: boolean = true;
+	#hookStatuses: Map<string, string> = new Map();
+	#subagentCount: number = 0;
+	#sessionStartTime: number = Date.now();
+	#planModeStatus: { enabled: boolean; paused: boolean } | null = null;
 
 	// Git status caching (1s TTL)
-	private cachedGitStatus: { staged: number; unstaged: number; untracked: number } | null = null;
-	private gitStatusLastFetch = 0;
+	#cachedGitStatus: { staged: number; unstaged: number; untracked: number } | null = null;
+	#gitStatusLastFetch = 0;
 
 	constructor(private readonly session: AgentSession) {
-		this.settings = {
+		this.#settings = {
 			preset: settings.get("statusLine.preset"),
 			leftSegments: settings.get("statusLine.leftSegments"),
 			rightSegments: settings.get("statusLine.rightSegments"),
@@ -86,52 +86,52 @@ export class StatusLineComponent implements Component {
 	}
 
 	updateSettings(settings: StatusLineSettings): void {
-		this.settings = settings;
+		this.#settings = settings;
 	}
 
 	setAutoCompactEnabled(enabled: boolean): void {
-		this.autoCompactEnabled = enabled;
+		this.#autoCompactEnabled = enabled;
 	}
 
 	setSubagentCount(count: number): void {
-		this.subagentCount = count;
+		this.#subagentCount = count;
 	}
 
 	setSessionStartTime(time: number): void {
-		this.sessionStartTime = time;
+		this.#sessionStartTime = time;
 	}
 
 	setPlanModeStatus(status: { enabled: boolean; paused: boolean } | undefined): void {
-		this.planModeStatus = status ?? null;
+		this.#planModeStatus = status ?? null;
 	}
 
 	setHookStatus(key: string, text: string | undefined): void {
 		if (text === undefined) {
-			this.hookStatuses.delete(key);
+			this.#hookStatuses.delete(key);
 		} else {
-			this.hookStatuses.set(key, text);
+			this.#hookStatuses.set(key, text);
 		}
 	}
 
 	watchBranch(onBranchChange: () => void): void {
-		this.onBranchChange = onBranchChange;
-		this.setupGitWatcher();
+		this.#onBranchChange = onBranchChange;
+		this.#setupGitWatcher();
 	}
 
-	private setupGitWatcher(): void {
-		if (this.gitWatcher) {
-			this.gitWatcher.close();
-			this.gitWatcher = null;
+	#setupGitWatcher(): void {
+		if (this.#gitWatcher) {
+			this.#gitWatcher.close();
+			this.#gitWatcher = null;
 		}
 
 		const gitHeadPath = findGitHeadPath();
 		if (!gitHeadPath) return;
 
 		try {
-			this.gitWatcher = fs.watch(gitHeadPath, () => {
-				this.cachedBranch = undefined;
-				if (this.onBranchChange) {
-					this.onBranchChange();
+			this.#gitWatcher = fs.watch(gitHeadPath, () => {
+				this.#cachedBranch = undefined;
+				if (this.#onBranchChange) {
+					this.#onBranchChange();
 				}
 			});
 		} catch {
@@ -140,45 +140,45 @@ export class StatusLineComponent implements Component {
 	}
 
 	dispose(): void {
-		if (this.gitWatcher) {
-			this.gitWatcher.close();
-			this.gitWatcher = null;
+		if (this.#gitWatcher) {
+			this.#gitWatcher.close();
+			this.#gitWatcher = null;
 		}
 	}
 
 	invalidate(): void {
-		this.cachedBranch = undefined;
+		this.#cachedBranch = undefined;
 	}
 
-	private getCurrentBranch(): string | null {
-		if (this.cachedBranch !== undefined) {
-			return this.cachedBranch;
+	#getCurrentBranch(): string | null {
+		if (this.#cachedBranch !== undefined) {
+			return this.#cachedBranch;
 		}
 
 		const gitHeadPath = findGitHeadPath();
 		if (!gitHeadPath) {
-			this.cachedBranch = null;
+			this.#cachedBranch = null;
 			return null;
 		}
 		try {
 			const content = fs.readFileSync(gitHeadPath, "utf8").trim();
 
 			if (content.startsWith("ref: refs/heads/")) {
-				this.cachedBranch = content.slice(16);
+				this.#cachedBranch = content.slice(16);
 			} else {
-				this.cachedBranch = "detached";
+				this.#cachedBranch = "detached";
 			}
 		} catch {
-			this.cachedBranch = null;
+			this.#cachedBranch = null;
 		}
 
-		return this.cachedBranch ?? null;
+		return this.#cachedBranch ?? null;
 	}
 
-	private getGitStatus(): { staged: number; unstaged: number; untracked: number } | null {
+	#getGitStatus(): { staged: number; unstaged: number; untracked: number } | null {
 		const now = Date.now();
-		if (now - this.gitStatusLastFetch < 1000) {
-			return this.cachedGitStatus;
+		if (now - this.#gitStatusLastFetch < 1000) {
+			return this.#cachedGitStatus;
 		}
 
 		// Fire async fetch, return cached value
@@ -187,8 +187,8 @@ export class StatusLineComponent implements Component {
 				const result = await $`git status --porcelain`.quiet().nothrow();
 
 				if (result.exitCode !== 0) {
-					this.cachedGitStatus = null;
-					this.gitStatusLastFetch = now;
+					this.#cachedGitStatus = null;
+					this.#gitStatusLastFetch = now;
 					return;
 				}
 
@@ -217,18 +217,18 @@ export class StatusLineComponent implements Component {
 					}
 				}
 
-				this.cachedGitStatus = { staged, unstaged, untracked };
-				this.gitStatusLastFetch = now;
+				this.#cachedGitStatus = { staged, unstaged, untracked };
+				this.#gitStatusLastFetch = now;
 			} catch {
-				this.cachedGitStatus = null;
-				this.gitStatusLastFetch = now;
+				this.#cachedGitStatus = null;
+				this.#gitStatusLastFetch = now;
 			}
 		})();
 
-		return this.cachedGitStatus;
+		return this.#cachedGitStatus;
 	}
 
-	private buildSegmentContext(width: number): SegmentContext {
+	#buildSegmentContext(width: number): SegmentContext {
 		const state = this.session.state;
 
 		// Get usage statistics
@@ -258,26 +258,26 @@ export class StatusLineComponent implements Component {
 		return {
 			session: this.session,
 			width,
-			options: this.resolveSettings().segmentOptions ?? {},
-			planMode: this.planModeStatus,
+			options: this.#resolveSettings().segmentOptions ?? {},
+			planMode: this.#planModeStatus,
 			usageStats,
 			contextPercent,
 			contextWindow,
-			autoCompactEnabled: this.autoCompactEnabled,
-			subagentCount: this.subagentCount,
-			sessionStartTime: this.sessionStartTime,
+			autoCompactEnabled: this.#autoCompactEnabled,
+			subagentCount: this.#subagentCount,
+			sessionStartTime: this.#sessionStartTime,
 			git: {
-				branch: this.getCurrentBranch(),
-				status: this.getGitStatus(),
+				branch: this.#getCurrentBranch(),
+				status: this.#getGitStatus(),
 			},
 		};
 	}
 
-	private resolveSettings(): Required<
+	#resolveSettings(): Required<
 		Pick<StatusLineSettings, "leftSegments" | "rightSegments" | "separator" | "segmentOptions">
 	> &
 		StatusLineSettings {
-		const preset = this.settings.preset ?? "default";
+		const preset = this.#settings.preset ?? "default";
 		const presetDef = getPreset(preset);
 		const useCustomSegments = preset === "custom";
 		const mergedSegmentOptions: StatusLineSettings["segmentOptions"] = {};
@@ -286,7 +286,7 @@ export class StatusLineComponent implements Component {
 			mergedSegmentOptions[segment as keyof StatusLineSegmentOptions] = { ...(options as Record<string, unknown>) };
 		}
 
-		for (const [segment, options] of Object.entries(this.settings.segmentOptions ?? {})) {
+		for (const [segment, options] of Object.entries(this.#settings.segmentOptions ?? {})) {
 			const current = mergedSegmentOptions[segment as keyof StatusLineSegmentOptions] ?? {};
 			mergedSegmentOptions[segment as keyof StatusLineSegmentOptions] = {
 				...(current as Record<string, unknown>),
@@ -295,24 +295,24 @@ export class StatusLineComponent implements Component {
 		}
 
 		const leftSegments = useCustomSegments
-			? (this.settings.leftSegments ?? presetDef.leftSegments)
+			? (this.#settings.leftSegments ?? presetDef.leftSegments)
 			: presetDef.leftSegments;
 		const rightSegments = useCustomSegments
-			? (this.settings.rightSegments ?? presetDef.rightSegments)
+			? (this.#settings.rightSegments ?? presetDef.rightSegments)
 			: presetDef.rightSegments;
 
 		return {
-			...this.settings,
+			...this.#settings,
 			leftSegments,
 			rightSegments,
-			separator: this.settings.separator ?? presetDef.separator,
+			separator: this.#settings.separator ?? presetDef.separator,
 			segmentOptions: mergedSegmentOptions,
 		};
 	}
 
-	private buildStatusLine(width: number): string {
-		const ctx = this.buildSegmentContext(width);
-		const effectiveSettings = this.resolveSettings();
+	#buildStatusLine(width: number): string {
+		const ctx = this.#buildSegmentContext(width);
+		const effectiveSettings = this.#resolveSettings();
 		const separatorDef = getSeparator(effectiveSettings.separator ?? "powerline-thin", theme);
 
 		const bgAnsi = theme.getBgAnsi("statusLineBg");
@@ -403,7 +403,7 @@ export class StatusLineComponent implements Component {
 	}
 
 	getTopBorder(width: number): { content: string; width: number } {
-		const content = this.buildStatusLine(width);
+		const content = this.#buildStatusLine(width);
 		return {
 			content,
 			width: visibleWidth(content),
@@ -412,12 +412,12 @@ export class StatusLineComponent implements Component {
 
 	render(width: number): string[] {
 		// Only render hook statuses - main status is in editor's top border
-		const showHooks = this.settings.showHookStatus ?? true;
-		if (!showHooks || this.hookStatuses.size === 0) {
+		const showHooks = this.#settings.showHookStatus ?? true;
+		if (!showHooks || this.#hookStatuses.size === 0) {
 			return [];
 		}
 
-		const sortedStatuses = Array.from(this.hookStatuses.entries())
+		const sortedStatuses = Array.from(this.#hookStatuses.entries())
 			.sort(([a], [b]) => a.localeCompare(b))
 			.map(([, text]) => sanitizeStatusText(text));
 		const hookLine = sortedStatuses.join(" ");

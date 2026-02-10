@@ -47,18 +47,18 @@ function validatePackageName(name: string): void {
 // =============================================================================
 
 export class PluginManager {
-	private runtimeConfig: PluginRuntimeConfig | null = null;
-	private cwd: string;
+	#runtimeConfig: PluginRuntimeConfig | null = null;
+	#cwd: string;
 
 	constructor(cwd: string = process.cwd()) {
-		this.cwd = cwd;
+		this.#cwd = cwd;
 	}
 
 	// ==========================================================================
 	// Runtime Config Management
 	// ==========================================================================
 
-	private async loadRuntimeConfig(): Promise<PluginRuntimeConfig> {
+	async #loadRuntimeConfig(): Promise<PluginRuntimeConfig> {
 		const lockPath = getPluginsLockfile();
 		try {
 			return await Bun.file(lockPath).json();
@@ -69,20 +69,20 @@ export class PluginManager {
 		}
 	}
 
-	private async ensureConfigLoaded(): Promise<PluginRuntimeConfig> {
-		if (!this.runtimeConfig) {
-			this.runtimeConfig = await this.loadRuntimeConfig();
+	async #ensureConfigLoaded(): Promise<PluginRuntimeConfig> {
+		if (!this.#runtimeConfig) {
+			this.#runtimeConfig = await this.#loadRuntimeConfig();
 		}
-		return this.runtimeConfig;
+		return this.#runtimeConfig;
 	}
 
-	private async saveRuntimeConfig(): Promise<void> {
-		await this.ensureConfigLoaded();
-		await Bun.write(getPluginsLockfile(), JSON.stringify(this.runtimeConfig, null, 2));
+	async #saveRuntimeConfig(): Promise<void> {
+		await this.#ensureConfigLoaded();
+		await Bun.write(getPluginsLockfile(), JSON.stringify(this.#runtimeConfig, null, 2));
 	}
 
-	private async loadProjectOverrides(): Promise<ProjectPluginOverrides> {
-		const overridesPath = getProjectPluginOverrides(this.cwd);
+	async #loadProjectOverrides(): Promise<ProjectPluginOverrides> {
+		const overridesPath = getProjectPluginOverrides(this.#cwd);
 		try {
 			return await Bun.file(overridesPath).json();
 		} catch (err) {
@@ -96,12 +96,12 @@ export class PluginManager {
 	// Directory Management
 	// ==========================================================================
 
-	private async ensurePluginsDir(): Promise<void> {
+	async #ensurePluginsDir(): Promise<void> {
 		await fs.promises.mkdir(getPluginsDir(), { recursive: true });
 		await fs.promises.mkdir(getPluginsNodeModules(), { recursive: true });
 	}
 
-	private async ensurePackageJson(): Promise<void> {
+	async #ensurePackageJson(): Promise<void> {
 		const pkgJsonPath = getPluginsPackageJson();
 		try {
 			await Bun.file(pkgJsonPath).json();
@@ -140,7 +140,7 @@ export class PluginManager {
 		const spec = parsePluginSpec(specString);
 		validatePackageName(spec.packageName);
 
-		await this.ensurePackageJson();
+		await this.#ensurePackageJson();
 
 		if (options.dryRun) {
 			return {
@@ -210,13 +210,13 @@ export class PluginManager {
 		// null = use defaults
 
 		// Update runtime config
-		const config = await this.ensureConfigLoaded();
+		const config = await this.#ensureConfigLoaded();
 		config.plugins[pkg.name] = {
 			version: pkg.version,
 			enabledFeatures,
 			enabled: true,
 		};
-		await this.saveRuntimeConfig();
+		await this.#saveRuntimeConfig();
 
 		return {
 			name: pkg.name,
@@ -233,7 +233,7 @@ export class PluginManager {
 	 */
 	async uninstall(name: string): Promise<void> {
 		validatePackageName(name);
-		await this.ensurePackageJson();
+		await this.#ensurePackageJson();
 
 		const proc = Bun.spawn(["bun", "uninstall", name], {
 			cwd: getPluginsDir(),
@@ -249,10 +249,10 @@ export class PluginManager {
 		}
 
 		// Remove from runtime config
-		const config = await this.ensureConfigLoaded();
+		const config = await this.#ensureConfigLoaded();
 		delete config.plugins[name];
 		delete config.settings[name];
-		await this.saveRuntimeConfig();
+		await this.#saveRuntimeConfig();
 	}
 
 	/**
@@ -269,8 +269,8 @@ export class PluginManager {
 		}
 
 		const deps = pkg.dependencies || {};
-		const projectOverrides = await this.loadProjectOverrides();
-		const config = await this.ensureConfigLoaded();
+		const projectOverrides = await this.#loadProjectOverrides();
+		const config = await this.#ensureConfigLoaded();
 		const plugins: InstalledPlugin[] = [];
 
 		for (const [name] of Object.entries(deps)) {
@@ -312,7 +312,7 @@ export class PluginManager {
 	 * Link a local plugin for development.
 	 */
 	async link(localPath: string): Promise<InstalledPlugin> {
-		const absolutePath = path.resolve(this.cwd, localPath);
+		const absolutePath = path.resolve(this.#cwd, localPath);
 
 		const pkgFilePath = path.join(absolutePath, "package.json");
 		let pkg: { name?: string; version: string; omp?: PluginManifest; pi?: PluginManifest };
@@ -326,7 +326,7 @@ export class PluginManager {
 			throw new Error("package.json must have a name field");
 		}
 
-		await this.ensurePluginsDir();
+		await this.#ensurePluginsDir();
 
 		const linkPath = path.join(getPluginsNodeModules(), pkg.name);
 
@@ -352,13 +352,13 @@ export class PluginManager {
 		manifest.version = pkg.version;
 
 		// Add to runtime config
-		const config = await this.ensureConfigLoaded();
+		const config = await this.#ensureConfigLoaded();
 		config.plugins[pkg.name] = {
 			version: pkg.version,
 			enabledFeatures: null,
 			enabled: true,
 		};
-		await this.saveRuntimeConfig();
+		await this.#saveRuntimeConfig();
 
 		return {
 			name: pkg.name,
@@ -378,12 +378,12 @@ export class PluginManager {
 	 * Enable or disable a plugin globally.
 	 */
 	async setEnabled(name: string, enabled: boolean): Promise<void> {
-		const config = await this.ensureConfigLoaded();
+		const config = await this.#ensureConfigLoaded();
 		if (!config.plugins[name]) {
 			throw new Error(`Plugin ${name} not found in runtime config`);
 		}
 		config.plugins[name].enabled = enabled;
-		await this.saveRuntimeConfig();
+		await this.#saveRuntimeConfig();
 	}
 
 	// ==========================================================================
@@ -394,7 +394,7 @@ export class PluginManager {
 	 * Get enabled features for a plugin.
 	 */
 	async getEnabledFeatures(name: string): Promise<string[] | null> {
-		const config = await this.ensureConfigLoaded();
+		const config = await this.#ensureConfigLoaded();
 		return config.plugins[name]?.enabledFeatures ?? null;
 	}
 
@@ -402,7 +402,7 @@ export class PluginManager {
 	 * Set enabled features for a plugin.
 	 */
 	async setEnabledFeatures(name: string, features: string[] | null): Promise<void> {
-		const config = await this.ensureConfigLoaded();
+		const config = await this.#ensureConfigLoaded();
 		if (!config.plugins[name]) {
 			throw new Error(`Plugin ${name} not found in runtime config`);
 		}
@@ -423,7 +423,7 @@ export class PluginManager {
 		}
 
 		config.plugins[name].enabledFeatures = features;
-		await this.saveRuntimeConfig();
+		await this.#saveRuntimeConfig();
 	}
 
 	// ==========================================================================
@@ -434,9 +434,9 @@ export class PluginManager {
 	 * Get all settings for a plugin.
 	 */
 	async getPluginSettings(name: string): Promise<Record<string, unknown>> {
-		const config = await this.ensureConfigLoaded();
+		const config = await this.#ensureConfigLoaded();
 		const global = config.settings[name] || {};
-		const projectOverrides = await this.loadProjectOverrides();
+		const projectOverrides = await this.#loadProjectOverrides();
 		const project = projectOverrides.settings?.[name] || {};
 
 		// Project settings override global
@@ -447,22 +447,22 @@ export class PluginManager {
 	 * Set a plugin setting value.
 	 */
 	async setPluginSetting(name: string, key: string, value: unknown): Promise<void> {
-		const config = await this.ensureConfigLoaded();
+		const config = await this.#ensureConfigLoaded();
 		if (!config.settings[name]) {
 			config.settings[name] = {};
 		}
 		config.settings[name][key] = value;
-		await this.saveRuntimeConfig();
+		await this.#saveRuntimeConfig();
 	}
 
 	/**
 	 * Delete a plugin setting.
 	 */
 	async deletePluginSetting(name: string, key: string): Promise<void> {
-		const config = await this.ensureConfigLoaded();
+		const config = await this.#ensureConfigLoaded();
 		if (config.settings[name]) {
 			delete config.settings[name][key];
-			await this.saveRuntimeConfig();
+			await this.#saveRuntimeConfig();
 		}
 	}
 
@@ -518,7 +518,7 @@ export class PluginManager {
 			return checks;
 		}
 		const deps = pkg.dependencies || {};
-		const config = await this.ensureConfigLoaded();
+		const config = await this.#ensureConfigLoaded();
 
 		for (const [name] of Object.entries(deps)) {
 			const pluginPath = path.join(nodeModulesPath, name);
@@ -530,7 +530,7 @@ export class PluginManager {
 			} catch (err) {
 				if (isEnoent(err)) {
 					if (!fs.existsSync(pluginPath)) {
-						const fixed = options.fix ? await this.fixMissingPlugin() : false;
+						const fixed = options.fix ? await this.#fixMissingPlugin() : false;
 						checks.push({
 							name: `plugin:${name}`,
 							status: "error",
@@ -588,7 +588,7 @@ export class PluginManager {
 			if (runtimeState?.enabledFeatures && manifest?.features) {
 				for (const feat of runtimeState.enabledFeatures) {
 					if (!(feat in manifest.features)) {
-						const fixed = options.fix ? await this.removeInvalidFeature(name, feat) : false;
+						const fixed = options.fix ? await this.#removeInvalidFeature(name, feat) : false;
 						checks.push({
 							name: `plugin:${name}:feature:${feat}`,
 							status: "warning",
@@ -603,7 +603,7 @@ export class PluginManager {
 		// Check for orphaned runtime config entries
 		for (const name of Object.keys(config.plugins)) {
 			if (!(name in deps)) {
-				const fixed = options.fix ? await this.removeOrphanedConfig(name) : false;
+				const fixed = options.fix ? await this.#removeOrphanedConfig(name) : false;
 				checks.push({
 					name: `orphan:${name}`,
 					status: "warning",
@@ -616,7 +616,7 @@ export class PluginManager {
 		return checks;
 	}
 
-	private async fixMissingPlugin(): Promise<boolean> {
+	async #fixMissingPlugin(): Promise<boolean> {
 		try {
 			const proc = Bun.spawn(["bun", "install"], {
 				cwd: getPluginsDir(),
@@ -631,22 +631,22 @@ export class PluginManager {
 		}
 	}
 
-	private async removeInvalidFeature(name: string, feat: string): Promise<boolean> {
-		const config = await this.ensureConfigLoaded();
+	async #removeInvalidFeature(name: string, feat: string): Promise<boolean> {
+		const config = await this.#ensureConfigLoaded();
 		const state = config.plugins[name];
 		if (state?.enabledFeatures) {
 			state.enabledFeatures = state.enabledFeatures.filter(f => f !== feat);
-			await this.saveRuntimeConfig();
+			await this.#saveRuntimeConfig();
 			return true;
 		}
 		return false;
 	}
 
-	private async removeOrphanedConfig(name: string): Promise<boolean> {
-		const config = await this.ensureConfigLoaded();
+	async #removeOrphanedConfig(name: string): Promise<boolean> {
+		const config = await this.#ensureConfigLoaded();
 		delete config.plugins[name];
 		delete config.settings[name];
-		await this.saveRuntimeConfig();
+		await this.#saveRuntimeConfig();
 		return true;
 	}
 }

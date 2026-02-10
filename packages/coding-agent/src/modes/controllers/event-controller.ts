@@ -11,25 +11,25 @@ import type { AgentSessionEvent } from "../../session/agent-session";
 import type { ExitPlanModeDetails } from "../../tools";
 
 export class EventController {
-	private lastReadGroup: ReadToolGroupComponent | undefined = undefined;
-	private lastThinkingCount = 0;
-	private renderedCustomMessages = new Set<string>();
+	#lastReadGroup: ReadToolGroupComponent | undefined = undefined;
+	#lastThinkingCount = 0;
+	#renderedCustomMessages = new Set<string>();
 
 	constructor(private ctx: InteractiveModeContext) {}
 
-	private resetReadGroup(): void {
-		this.lastReadGroup = undefined;
+	#resetReadGroup(): void {
+		this.#lastReadGroup = undefined;
 	}
 
-	private getReadGroup(): ReadToolGroupComponent {
-		if (!this.lastReadGroup) {
+	#getReadGroup(): ReadToolGroupComponent {
+		if (!this.#lastReadGroup) {
 			this.ctx.chatContainer.addChild(new Text("", 0, 0));
 			const group = new ReadToolGroupComponent();
 			group.setExpanded(this.ctx.toolOutputExpanded);
 			this.ctx.chatContainer.addChild(group);
-			this.lastReadGroup = group;
+			this.#lastReadGroup = group;
 		}
-		return this.lastReadGroup;
+		return this.#lastReadGroup;
 	}
 
 	subscribeToAgent(): void {
@@ -76,15 +76,15 @@ export class EventController {
 			case "message_start":
 				if (event.message.role === "hookMessage" || event.message.role === "custom") {
 					const signature = `${event.message.role}:${event.message.customType}:${event.message.timestamp}`;
-					if (this.renderedCustomMessages.has(signature)) {
+					if (this.#renderedCustomMessages.has(signature)) {
 						break;
 					}
-					this.renderedCustomMessages.add(signature);
-					this.resetReadGroup();
+					this.#renderedCustomMessages.add(signature);
+					this.#resetReadGroup();
 					this.ctx.addMessageToChat(event.message);
 					this.ctx.ui.requestRender();
 				} else if (event.message.role === "user") {
-					this.resetReadGroup();
+					this.#resetReadGroup();
 					this.ctx.addMessageToChat(event.message);
 					if (!event.message.synthetic) {
 						this.ctx.editor.setText("");
@@ -92,12 +92,12 @@ export class EventController {
 					}
 					this.ctx.ui.requestRender();
 				} else if (event.message.role === "fileMention") {
-					this.resetReadGroup();
+					this.#resetReadGroup();
 					this.ctx.addMessageToChat(event.message);
 					this.ctx.ui.requestRender();
 				} else if (event.message.role === "assistant") {
-					this.lastThinkingCount = 0;
-					this.resetReadGroup();
+					this.#lastThinkingCount = 0;
+					this.#resetReadGroup();
 					this.ctx.streamingComponent = new AssistantMessageComponent(undefined, this.ctx.hideThinkingBlock);
 					this.ctx.streamingMessage = event.message;
 					this.ctx.chatContainer.addChild(this.ctx.streamingComponent);
@@ -114,9 +114,9 @@ export class EventController {
 					const thinkingCount = this.ctx.streamingMessage.content.filter(
 						content => content.type === "thinking" && content.thinking.trim(),
 					).length;
-					if (thinkingCount > this.lastThinkingCount) {
-						this.resetReadGroup();
-						this.lastThinkingCount = thinkingCount;
+					if (thinkingCount > this.#lastThinkingCount) {
+						this.#resetReadGroup();
+						this.#lastThinkingCount = thinkingCount;
 					}
 
 					for (const content of this.ctx.streamingMessage.content) {
@@ -124,13 +124,13 @@ export class EventController {
 
 						if (!this.ctx.pendingTools.has(content.id)) {
 							if (content.name === "read") {
-								const group = this.getReadGroup();
+								const group = this.#getReadGroup();
 								group.updateArgs(content.arguments, content.id);
 								this.ctx.pendingTools.set(content.id, group);
 								continue;
 							}
 
-							this.resetReadGroup();
+							this.#resetReadGroup();
 							this.ctx.chatContainer.addChild(new Text("", 0, 0));
 							const tool = this.ctx.session.getToolByName(content.name);
 							const component = new ToolExecutionComponent(
@@ -198,14 +198,14 @@ export class EventController {
 			case "tool_execution_start": {
 				if (!this.ctx.pendingTools.has(event.toolCallId)) {
 					if (event.toolName === "read") {
-						const group = this.getReadGroup();
+						const group = this.#getReadGroup();
 						group.updateArgs(event.args, event.toolCallId);
 						this.ctx.pendingTools.set(event.toolCallId, group);
 						this.ctx.ui.requestRender();
 						break;
 					}
 
-					this.resetReadGroup();
+					this.#resetReadGroup();
 					const tool = this.ctx.session.getToolByName(event.toolName);
 					const component = new ToolExecutionComponent(
 						event.toolName,

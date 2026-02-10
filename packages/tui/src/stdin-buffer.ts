@@ -240,22 +240,22 @@ export type StdinBufferEventMap = {
  * Handles partial escape sequences that arrive across multiple chunks.
  */
 export class StdinBuffer extends EventEmitter<StdinBufferEventMap> {
-	private buffer: string = "";
-	private timeout: ReturnType<typeof setTimeout> | null = null;
-	private readonly timeoutMs: number;
-	private pasteMode: boolean = false;
-	private pasteBuffer: string = "";
+	#buffer: string = "";
+	#timeout?: NodeJS.Timeout;
+	readonly #timeoutMs: number;
+	#pasteMode: boolean = false;
+	#pasteBuffer: string = "";
 
 	constructor(options: StdinBufferOptions = {}) {
 		super();
-		this.timeoutMs = options.timeout ?? 10;
+		this.#timeoutMs = options.timeout ?? 10;
 	}
 
-	public process(data: string | Buffer): void {
+	process(data: string | Buffer): void {
 		// Clear any pending timeout
-		if (this.timeout) {
-			clearTimeout(this.timeout);
-			this.timeout = null;
+		if (this.#timeout) {
+			clearTimeout(this.#timeout);
+			this.#timeout = undefined;
 		}
 
 		// Handle high-byte conversion (for compatibility with parseKeypress)
@@ -272,24 +272,24 @@ export class StdinBuffer extends EventEmitter<StdinBufferEventMap> {
 			str = data;
 		}
 
-		if (str.length === 0 && this.buffer.length === 0) {
+		if (str.length === 0 && this.#buffer.length === 0) {
 			this.emit("data", "");
 			return;
 		}
 
-		this.buffer += str;
+		this.#buffer += str;
 
-		if (this.pasteMode) {
-			this.pasteBuffer += this.buffer;
-			this.buffer = "";
+		if (this.#pasteMode) {
+			this.#pasteBuffer += this.#buffer;
+			this.#buffer = "";
 
-			const endIndex = this.pasteBuffer.indexOf(BRACKETED_PASTE_END);
+			const endIndex = this.#pasteBuffer.indexOf(BRACKETED_PASTE_END);
 			if (endIndex !== -1) {
-				const pastedContent = this.pasteBuffer.slice(0, endIndex);
-				const remaining = this.pasteBuffer.slice(endIndex + BRACKETED_PASTE_END.length);
+				const pastedContent = this.#pasteBuffer.slice(0, endIndex);
+				const remaining = this.#pasteBuffer.slice(endIndex + BRACKETED_PASTE_END.length);
 
-				this.pasteMode = false;
-				this.pasteBuffer = "";
+				this.#pasteMode = false;
+				this.#pasteBuffer = "";
 
 				this.emit("paste", pastedContent);
 
@@ -300,28 +300,28 @@ export class StdinBuffer extends EventEmitter<StdinBufferEventMap> {
 			return;
 		}
 
-		const startIndex = this.buffer.indexOf(BRACKETED_PASTE_START);
+		const startIndex = this.#buffer.indexOf(BRACKETED_PASTE_START);
 		if (startIndex !== -1) {
 			if (startIndex > 0) {
-				const beforePaste = this.buffer.slice(0, startIndex);
+				const beforePaste = this.#buffer.slice(0, startIndex);
 				const result = extractCompleteSequences(beforePaste);
 				for (const sequence of result.sequences) {
 					this.emit("data", sequence);
 				}
 			}
 
-			this.buffer = this.buffer.slice(startIndex + BRACKETED_PASTE_START.length);
-			this.pasteMode = true;
-			this.pasteBuffer = this.buffer;
-			this.buffer = "";
+			this.#buffer = this.#buffer.slice(startIndex + BRACKETED_PASTE_START.length);
+			this.#pasteMode = true;
+			this.#pasteBuffer = this.#buffer;
+			this.#buffer = "";
 
-			const endIndex = this.pasteBuffer.indexOf(BRACKETED_PASTE_END);
+			const endIndex = this.#pasteBuffer.indexOf(BRACKETED_PASTE_END);
 			if (endIndex !== -1) {
-				const pastedContent = this.pasteBuffer.slice(0, endIndex);
-				const remaining = this.pasteBuffer.slice(endIndex + BRACKETED_PASTE_END.length);
+				const pastedContent = this.#pasteBuffer.slice(0, endIndex);
+				const remaining = this.#pasteBuffer.slice(endIndex + BRACKETED_PASTE_END.length);
 
-				this.pasteMode = false;
-				this.pasteBuffer = "";
+				this.#pasteMode = false;
+				this.#pasteBuffer = "";
 
 				this.emit("paste", pastedContent);
 
@@ -332,51 +332,51 @@ export class StdinBuffer extends EventEmitter<StdinBufferEventMap> {
 			return;
 		}
 
-		const result = extractCompleteSequences(this.buffer);
-		this.buffer = result.remainder;
+		const result = extractCompleteSequences(this.#buffer);
+		this.#buffer = result.remainder;
 
 		for (const sequence of result.sequences) {
 			this.emit("data", sequence);
 		}
 
-		if (this.buffer.length > 0) {
-			this.timeout = setTimeout(() => {
+		if (this.#buffer.length > 0) {
+			this.#timeout = setTimeout(() => {
 				const flushed = this.flush();
 
 				for (const sequence of flushed) {
 					this.emit("data", sequence);
 				}
-			}, this.timeoutMs);
+			}, this.#timeoutMs);
 		}
 	}
 
 	flush(): string[] {
-		if (this.timeout) {
-			clearTimeout(this.timeout);
-			this.timeout = null;
+		if (this.#timeout) {
+			clearTimeout(this.#timeout);
+			this.#timeout = undefined;
 		}
 
-		if (this.buffer.length === 0) {
+		if (this.#buffer.length === 0) {
 			return [];
 		}
 
-		const sequences = [this.buffer];
-		this.buffer = "";
+		const sequences = [this.#buffer];
+		this.#buffer = "";
 		return sequences;
 	}
 
 	clear(): void {
-		if (this.timeout) {
-			clearTimeout(this.timeout);
-			this.timeout = null;
+		if (this.#timeout) {
+			clearTimeout(this.#timeout);
+			this.#timeout = undefined;
 		}
-		this.buffer = "";
-		this.pasteMode = false;
-		this.pasteBuffer = "";
+		this.#buffer = "";
+		this.#pasteMode = false;
+		this.#pasteBuffer = "";
 	}
 
 	getBuffer(): string {
-		return this.buffer;
+		return this.#buffer;
 	}
 
 	destroy(): void {

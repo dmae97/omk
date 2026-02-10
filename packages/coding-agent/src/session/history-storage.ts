@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { Database, type Statement } from "bun:sqlite";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
@@ -11,8 +11,6 @@ export interface HistoryEntry {
 	cwd?: string;
 }
 
-type Statement = ReturnType<Database["prepare"]>;
-
 type HistoryRow = {
 	id: number;
 	prompt: string;
@@ -21,26 +19,26 @@ type HistoryRow = {
 };
 
 export class HistoryStorage {
-	private db: Database;
-	private static instance?: HistoryStorage;
+	#db: Database;
+	static #instance?: HistoryStorage;
 
 	// Prepared statements
-	private insertStmt: Statement;
-	private recentStmt: Statement;
-	private searchStmt: Statement;
-	private lastPromptStmt: Statement;
+	#insertStmt: Statement;
+	#recentStmt: Statement;
+	#searchStmt: Statement;
+	#lastPromptStmt: Statement;
 
 	// In-memory cache of last prompt to avoid sync DB reads on add
-	private lastPromptCache: string | null = null;
+	#lastPromptCache: string | null = null;
 
 	private constructor(dbPath: string) {
-		this.ensureDir(dbPath);
+		this.#ensureDir(dbPath);
 
-		this.db = new Database(dbPath);
+		this.#db = new Database(dbPath);
 
-		const hasFts = this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='history_fts'").get();
+		const hasFts = this.#db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='history_fts'").get();
 
-		this.db.exec(`
+		this.#db.exec(`
 PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
 PRAGMA busy_timeout=5000;
@@ -62,42 +60,42 @@ END;
 
 		if (!hasFts) {
 			try {
-				this.db.run("INSERT INTO history_fts(history_fts) VALUES('rebuild')");
+				this.#db.run("INSERT INTO history_fts(history_fts) VALUES('rebuild')");
 			} catch (error) {
 				logger.warn("HistoryStorage FTS rebuild failed", { error: String(error) });
 			}
 		}
 
-		this.insertStmt = this.db.prepare("INSERT INTO history (prompt, cwd) VALUES (?, ?)");
-		this.recentStmt = this.db.prepare(
+		this.#insertStmt = this.#db.prepare("INSERT INTO history (prompt, cwd) VALUES (?, ?)");
+		this.#recentStmt = this.#db.prepare(
 			"SELECT id, prompt, created_at, cwd FROM history ORDER BY created_at DESC, id DESC LIMIT ?",
 		);
-		this.searchStmt = this.db.prepare(
+		this.#searchStmt = this.#db.prepare(
 			"SELECT h.id, h.prompt, h.created_at, h.cwd FROM history_fts f JOIN history h ON h.id = f.rowid WHERE history_fts MATCH ? ORDER BY h.created_at DESC, h.id DESC LIMIT ?",
 		);
-		this.lastPromptStmt = this.db.prepare("SELECT prompt FROM history ORDER BY id DESC LIMIT 1");
+		this.#lastPromptStmt = this.#db.prepare("SELECT prompt FROM history ORDER BY id DESC LIMIT 1");
 
-		const last = this.lastPromptStmt.get() as { prompt?: string } | undefined;
-		this.lastPromptCache = last?.prompt ?? null;
+		const last = this.#lastPromptStmt.get() as { prompt?: string } | undefined;
+		this.#lastPromptCache = last?.prompt ?? null;
 	}
 
 	static open(dbPath: string = path.join(getAgentDir(), "history.db")): HistoryStorage {
-		if (!HistoryStorage.instance) {
-			HistoryStorage.instance = new HistoryStorage(dbPath);
+		if (!HistoryStorage.#instance) {
+			HistoryStorage.#instance = new HistoryStorage(dbPath);
 		}
-		return HistoryStorage.instance;
+		return HistoryStorage.#instance;
 	}
 
 	add(prompt: string, cwd?: string): void {
 		const trimmed = prompt.trim();
 		if (!trimmed) return;
-		if (this.lastPromptCache === trimmed) return;
+		if (this.#lastPromptCache === trimmed) return;
 
-		this.lastPromptCache = trimmed;
+		this.#lastPromptCache = trimmed;
 
 		setImmediate(() => {
 			try {
-				this.insertStmt.run(trimmed, cwd ?? null);
+				this.#insertStmt.run(trimmed, cwd ?? null);
 			} catch (error) {
 				logger.error("HistoryStorage add failed", { error: String(error) });
 			}
@@ -105,12 +103,12 @@ END;
 	}
 
 	getRecent(limit: number): HistoryEntry[] {
-		const safeLimit = this.normalizeLimit(limit);
+		const safeLimit = this.#normalizeLimit(limit);
 		if (safeLimit === 0) return [];
 
 		try {
-			const rows = this.recentStmt.all(safeLimit) as HistoryRow[];
-			return rows.map(row => this.toEntry(row));
+			const rows = this.#recentStmt.all(safeLimit) as HistoryRow[];
+			return rows.map(row => this.#toEntry(row));
 		} catch (error) {
 			logger.error("HistoryStorage getRecent failed", { error: String(error) });
 			return [];
@@ -118,33 +116,33 @@ END;
 	}
 
 	search(query: string, limit: number): HistoryEntry[] {
-		const safeLimit = this.normalizeLimit(limit);
+		const safeLimit = this.#normalizeLimit(limit);
 		if (safeLimit === 0) return [];
 
-		const ftsQuery = this.buildFtsQuery(query);
+		const ftsQuery = this.#buildFtsQuery(query);
 		if (!ftsQuery) return [];
 
 		try {
-			const rows = this.searchStmt.all(ftsQuery, safeLimit) as HistoryRow[];
-			return rows.map(row => this.toEntry(row));
+			const rows = this.#searchStmt.all(ftsQuery, safeLimit) as HistoryRow[];
+			return rows.map(row => this.#toEntry(row));
 		} catch (error) {
 			logger.error("HistoryStorage search failed", { error: String(error) });
 			return [];
 		}
 	}
 
-	private ensureDir(dbPath: string): void {
+	#ensureDir(dbPath: string): void {
 		const dir = path.dirname(dbPath);
 		fs.mkdirSync(dir, { recursive: true });
 	}
 
-	private normalizeLimit(limit: number): number {
+	#normalizeLimit(limit: number): number {
 		if (!Number.isFinite(limit)) return 0;
 		const clamped = Math.max(0, Math.floor(limit));
 		return Math.min(clamped, 1000);
 	}
 
-	private buildFtsQuery(query: string): string | null {
+	#buildFtsQuery(query: string): string | null {
 		const tokens = query
 			.trim()
 			.split(/\s+/)
@@ -161,7 +159,7 @@ END;
 			.join(" ");
 	}
 
-	private toEntry(row: HistoryRow): HistoryEntry {
+	#toEntry(row: HistoryRow): HistoryEntry {
 		return {
 			id: row.id,
 			prompt: row.prompt,

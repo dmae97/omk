@@ -16,16 +16,16 @@ export interface ExitPlanModeDetails {
 }
 
 export class ExitPlanModeTool implements AgentTool<typeof exitPlanModeSchema, ExitPlanModeDetails> {
-	public readonly name = "exit_plan_mode";
-	public readonly label = "ExitPlanMode";
-	public readonly description: string;
-	public readonly parameters = exitPlanModeSchema;
+	readonly name = "exit_plan_mode";
+	readonly label = "ExitPlanMode";
+	readonly description: string;
+	readonly parameters = exitPlanModeSchema;
 
 	constructor(private readonly session: ToolSession) {
 		this.description = renderPromptTemplate(exitPlanModeDescription);
 	}
 
-	public async execute(
+	async execute(
 		_toolCallId: string,
 		_params: Record<string, never>,
 		_signal?: AbortSignal,

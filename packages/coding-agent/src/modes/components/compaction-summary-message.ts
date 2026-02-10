@@ -7,24 +7,24 @@ import type { CompactionSummaryMessage } from "../../session/messages";
  * Uses same background color as hook messages for visual consistency.
  */
 export class CompactionSummaryMessageComponent extends Box {
-	private expanded = false;
+	#expanded = false;
 
 	constructor(private readonly message: CompactionSummaryMessage) {
 		super(1, 1, t => theme.bg("customMessageBg", t));
-		this.updateDisplay();
+		this.#updateDisplay();
 	}
 
 	setExpanded(expanded: boolean): void {
-		this.expanded = expanded;
-		this.updateDisplay();
+		this.#expanded = expanded;
+		this.#updateDisplay();
 	}
 
 	override invalidate(): void {
 		super.invalidate();
-		this.updateDisplay();
+		this.#updateDisplay();
 	}
 
-	private updateDisplay(): void {
+	#updateDisplay(): void {
 		this.clear();
 
 		const tokenStr = this.message.tokensBefore.toLocaleString();
@@ -32,7 +32,7 @@ export class CompactionSummaryMessageComponent extends Box {
 		this.addChild(new Text(label, 0, 0));
 		this.addChild(new Spacer(1));
 
-		if (this.expanded) {
+		if (this.#expanded) {
 			const header = `**Compacted from ${tokenStr} tokens**\n\n`;
 			this.addChild(
 				new Markdown(header + this.message.summary, 0, 0, getMarkdownTheme(), {

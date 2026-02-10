@@ -115,13 +115,40 @@ describe("AgentSession auto-compaction queue resume", () => {
 
 		const continueSpy = vi.spyOn(session.agent, "continue").mockResolvedValue();
 
-		const runAutoCompaction = (
-			session as unknown as {
-				_runAutoCompaction: (reason: "overflow" | "threshold", willRetry: boolean) => Promise<void>;
-			}
-		)._runAutoCompaction.bind(session);
+		// Wait for auto_compaction_end event to know when the async handler is done
+		const { promise: compactionDone, resolve: onCompactionDone } = Promise.withResolvers<void>();
+		session.subscribe(event => {
+			if (event.type === "auto_compaction_end") onCompactionDone();
+		});
 
-		await runAutoCompaction("threshold", false);
+		// Build a fake AssistantMessage with high token usage to trigger threshold
+		// compaction (contextWindow=200000, threshold ~80%).
+		const assistantMsg = {
+			role: "assistant" as const,
+			content: [],
+			api: "anthropic-messages" as const,
+			provider: "anthropic" as const,
+			model: "claude-sonnet-4-5",
+			stopReason: "stop" as const,
+			usage: {
+				input: 190000,
+				output: 1000,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 191000,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			timestamp: Date.now(),
+		};
+
+		// Drive auto-compaction through the event flow:
+		// message_end → stores #lastAssistantMessage
+		// agent_end   → #checkCompaction → shouldCompact → #runAutoCompaction
+		session.agent.emitExternalEvent({ type: "message_end", message: assistantMsg });
+		session.agent.emitExternalEvent({ type: "agent_end", messages: [assistantMsg] });
+
+		// Wait for the async compaction handler to finish, then advance past setTimeout(100)
+		await compactionDone;
 		vi.advanceTimersByTime(200);
 
 		expect(continueSpy).toHaveBeenCalledTimes(1);

@@ -1,3 +1,4 @@
+import type * as fs from "node:fs";
 import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
@@ -46,17 +47,17 @@ export interface BashToolOptions {}
  * Executes bash commands with optional timeout and working directory.
  */
 export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
-	public readonly name = "bash";
-	public readonly label = "Bash";
-	public readonly description: string;
-	public readonly parameters = bashSchema;
-	public readonly concurrency = "exclusive";
+	readonly name = "bash";
+	readonly label = "Bash";
+	readonly description: string;
+	readonly parameters = bashSchema;
+	readonly concurrency = "exclusive";
 
 	constructor(private readonly session: ToolSession) {
 		this.description = renderPromptTemplate(bashDescription);
 	}
 
-	public async execute(
+	async execute(
 		_toolCallId: string,
 		{
 			command: rawCommand,
@@ -87,7 +88,7 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 		}
 
 		const commandCwd = cwd ? resolveToCwd(cwd, this.session.cwd) : this.session.cwd;
-		let cwdStat: Awaited<ReturnType<Bun.BunFile["stat"]>>;
+		let cwdStat: fs.Stats;
 		try {
 			cwdStat = await Bun.file(commandCwd).stat();
 		} catch {

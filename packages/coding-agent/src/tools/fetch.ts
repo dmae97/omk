@@ -852,16 +852,16 @@ export interface FetchToolDetails {
 }
 
 export class FetchTool implements AgentTool<typeof fetchSchema, FetchToolDetails> {
-	public readonly name = "fetch";
-	public readonly label = "Fetch";
-	public readonly description: string;
-	public readonly parameters = fetchSchema;
+	readonly name = "fetch";
+	readonly label = "Fetch";
+	readonly description: string;
+	readonly parameters = fetchSchema;
 
 	constructor(private readonly session: ToolSession) {
 		this.description = renderPromptTemplate(fetchDescription);
 	}
 
-	public async execute(
+	async execute(
 		_toolCallId: string,
 		params: Static<typeof fetchSchema>,
 		signal?: AbortSignal,

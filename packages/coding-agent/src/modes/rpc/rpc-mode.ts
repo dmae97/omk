@@ -76,7 +76,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 		) {}
 
 		/** Helper for dialog methods with signal/timeout support */
-		private createDialogPromise<T>(
+		#createDialogPromise<T>(
 			opts: ExtensionUIDialogOptions | undefined,
 			defaultValue: T,
 			request: Record<string, unknown>,
@@ -86,7 +86,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 
 			const id = Snowflake.next() as string;
 			const { promise, resolve, reject } = Promise.withResolvers<T>();
-			let timeoutId: ReturnType<typeof setTimeout> | undefined;
+			let timeoutId: NodeJS.Timeout | undefined;
 
 			const cleanup = () => {
 				if (timeoutId) clearTimeout(timeoutId);
@@ -119,7 +119,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 		}
 
 		select(title: string, options: string[], dialogOptions?: ExtensionUIDialogOptions): Promise<string | undefined> {
-			return this.createDialogPromise(
+			return this.#createDialogPromise(
 				dialogOptions,
 				undefined,
 				{ method: "select", title, options, timeout: dialogOptions?.timeout },
@@ -133,7 +133,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 		}
 
 		confirm(title: string, message: string, dialogOptions?: ExtensionUIDialogOptions): Promise<boolean> {
-			return this.createDialogPromise(
+			return this.#createDialogPromise(
 				dialogOptions,
 				false,
 				{ method: "confirm", title, message, timeout: dialogOptions?.timeout },
@@ -151,7 +151,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			placeholder?: string,
 			dialogOptions?: ExtensionUIDialogOptions,
 		): Promise<string | undefined> {
-			return this.createDialogPromise(
+			return this.#createDialogPromise(
 				dialogOptions,
 				undefined,
 				{ method: "input", title, placeholder, timeout: dialogOptions?.timeout },

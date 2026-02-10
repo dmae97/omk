@@ -156,8 +156,8 @@ export class ConfigFile<T> implements IConfigFile<T> {
 	#auxValidate?: (value: T) => void;
 
 	constructor(
-		public readonly id: string,
-		public readonly schema: TSchema,
+		readonly id: string,
+		readonly schema: TSchema,
 		configPath: string = path.join(getAgentDir(), `${id}.yml`),
 	) {
 		this.#basePath = configPath;

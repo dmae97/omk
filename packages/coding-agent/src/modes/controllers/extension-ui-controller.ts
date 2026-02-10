@@ -18,10 +18,10 @@ import type { InteractiveModeContext } from "../../modes/types";
 import { setTerminalTitle } from "../../utils/title-generator";
 
 export class ExtensionUiController {
-	private hookSelectorOverlay: OverlayHandle | undefined;
-	private hookInputOverlay: OverlayHandle | undefined;
+	#hookSelectorOverlay: OverlayHandle | undefined;
+	#hookInputOverlay: OverlayHandle | undefined;
 
-	private readonly dialogOverlayOptions = {
+	readonly #dialogOverlayOptions = {
 		anchor: "bottom-center",
 		width: "80%",
 		minWidth: 40,
@@ -555,8 +555,8 @@ export class ExtensionUiController {
 		dialogOptions?: ExtensionUIDialogOptions,
 	): Promise<string | undefined> {
 		const { promise, resolve } = Promise.withResolvers<string | undefined>();
-		this.hookSelectorOverlay?.hide();
-		this.hookSelectorOverlay = undefined;
+		this.#hookSelectorOverlay?.hide();
+		this.#hookSelectorOverlay = undefined;
 		const maxVisible = Math.max(4, Math.min(15, this.ctx.ui.terminal.rows - 12));
 		this.ctx.hookSelector = new HookSelectorComponent(
 			title,
@@ -577,7 +577,7 @@ export class ExtensionUiController {
 				maxVisible,
 			},
 		);
-		this.hookSelectorOverlay = this.ctx.ui.showOverlay(this.ctx.hookSelector, this.dialogOverlayOptions);
+		this.#hookSelectorOverlay = this.ctx.ui.showOverlay(this.ctx.hookSelector, this.#dialogOverlayOptions);
 		return promise;
 	}
 
@@ -586,8 +586,8 @@ export class ExtensionUiController {
 	 */
 	hideHookSelector(): void {
 		this.ctx.hookSelector?.dispose();
-		this.hookSelectorOverlay?.hide();
-		this.hookSelectorOverlay = undefined;
+		this.#hookSelectorOverlay?.hide();
+		this.#hookSelectorOverlay = undefined;
 		this.ctx.hookSelector = undefined;
 		this.ctx.ui.setFocus(this.ctx.editor);
 		this.ctx.ui.requestRender();
@@ -606,8 +606,8 @@ export class ExtensionUiController {
 	 */
 	showHookInput(title: string, placeholder?: string): Promise<string | undefined> {
 		const { promise, resolve } = Promise.withResolvers<string | undefined>();
-		this.hookInputOverlay?.hide();
-		this.hookInputOverlay = undefined;
+		this.#hookInputOverlay?.hide();
+		this.#hookInputOverlay = undefined;
 		this.ctx.hookInput = new HookInputComponent(
 			title,
 			placeholder,
@@ -620,7 +620,7 @@ export class ExtensionUiController {
 				resolve(undefined);
 			},
 		);
-		this.hookInputOverlay = this.ctx.ui.showOverlay(this.ctx.hookInput, this.dialogOverlayOptions);
+		this.#hookInputOverlay = this.ctx.ui.showOverlay(this.ctx.hookInput, this.#dialogOverlayOptions);
 		return promise;
 	}
 
@@ -629,8 +629,8 @@ export class ExtensionUiController {
 	 */
 	hideHookInput(): void {
 		this.ctx.hookInput?.dispose();
-		this.hookInputOverlay?.hide();
-		this.hookInputOverlay = undefined;
+		this.#hookInputOverlay?.hide();
+		this.#hookInputOverlay = undefined;
 		this.ctx.hookInput = undefined;
 		this.ctx.ui.setFocus(this.ctx.editor);
 		this.ctx.ui.requestRender();

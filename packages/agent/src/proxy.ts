@@ -148,7 +148,10 @@ export function streamProxy(model: Model, context: Context, options: ProxyStream
 			}
 
 			let sawTerminalEvent = false;
-			for await (const event of readSseJson<ProxyAssistantMessageEvent>(response.body!, options.signal)) {
+			for await (const event of readSseJson<ProxyAssistantMessageEvent>(
+				response.body as ReadableStream<Uint8Array>,
+				options.signal,
+			)) {
 				const parsedEvent = processProxyEvent(event, partial);
 				if (parsedEvent) {
 					if (parsedEvent.type === "done" || parsedEvent.type === "error") {
@@ -310,11 +313,5 @@ function processProxyEvent(
 			partial.errorMessage = proxyEvent.errorMessage;
 			partial.usage = proxyEvent.usage;
 			return { type: "error", reason: proxyEvent.reason, error: partial };
-
-		default: {
-			const _exhaustiveCheck: never = proxyEvent;
-			console.warn(`Unhandled proxy event type: ${(proxyEvent as any).type}`);
-			return undefined;
-		}
 	}
 }

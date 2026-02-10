@@ -12,13 +12,13 @@ import { truncateToVisualLines } from "./visual-truncate";
 const PREVIEW_LINES = 20;
 
 export class BashExecutionComponent extends Container {
-	private outputLines: string[] = [];
-	private status: "running" | "complete" | "cancelled" | "error" = "running";
-	private exitCode: number | undefined = undefined;
-	private loader: Loader;
-	private truncation?: TruncationMeta;
-	private expanded = false;
-	private contentContainer: Container;
+	#outputLines: string[] = [];
+	#status: "running" | "complete" | "cancelled" | "error" = "running";
+	#exitCode: number | undefined = undefined;
+	#loader: Loader;
+	#truncation?: TruncationMeta;
+	#expanded = false;
+	#contentContainer: Container;
 
 	constructor(
 		private readonly command: string,
@@ -38,22 +38,22 @@ export class BashExecutionComponent extends Container {
 		this.addChild(new DynamicBorder(borderColor));
 
 		// Content container (holds dynamic content between borders)
-		this.contentContainer = new Container();
-		this.addChild(this.contentContainer);
+		this.#contentContainer = new Container();
+		this.addChild(this.#contentContainer);
 
 		// Command header
 		const header = new Text(theme.fg(colorKey, theme.bold(`$ ${command}`)), 1, 0);
-		this.contentContainer.addChild(header);
+		this.#contentContainer.addChild(header);
 
 		// Loader
-		this.loader = new Loader(
+		this.#loader = new Loader(
 			ui,
 			spinner => theme.fg(colorKey, spinner),
 			text => theme.fg("muted", text),
 			`Running… (esc to cancel)`,
 			getSymbolTheme().spinnerFrames,
 		);
-		this.contentContainer.addChild(this.loader);
+		this.#contentContainer.addChild(this.#loader);
 
 		// Bottom border
 		this.addChild(new DynamicBorder(borderColor));
@@ -63,29 +63,29 @@ export class BashExecutionComponent extends Container {
 	 * Set whether the output is expanded (shows full output) or collapsed (preview only).
 	 */
 	setExpanded(expanded: boolean): void {
-		this.expanded = expanded;
-		this.updateDisplay();
+		this.#expanded = expanded;
+		this.#updateDisplay();
 	}
 
 	override invalidate(): void {
 		super.invalidate();
-		this.updateDisplay();
+		this.#updateDisplay();
 	}
 
 	appendOutput(chunk: string): void {
-		const clean = this.normalizeOutput(chunk);
+		const clean = this.#normalizeOutput(chunk);
 
 		// Append to output lines
 		const newLines = clean.split("\n");
-		if (this.outputLines.length > 0 && newLines.length > 0) {
+		if (this.#outputLines.length > 0 && newLines.length > 0) {
 			// Append first chunk to last line (incomplete line continuation)
-			this.outputLines[this.outputLines.length - 1] += newLines[0];
-			this.outputLines.push(...newLines.slice(1));
+			this.#outputLines[this.#outputLines.length - 1] += newLines[0];
+			this.#outputLines.push(...newLines.slice(1));
 		} else {
-			this.outputLines.push(...newLines);
+			this.#outputLines.push(...newLines);
 		}
 
-		this.updateDisplay();
+		this.#updateDisplay();
 	}
 
 	setComplete(
@@ -93,48 +93,48 @@ export class BashExecutionComponent extends Container {
 		cancelled: boolean,
 		options?: { output?: string; truncation?: TruncationMeta },
 	): void {
-		this.exitCode = exitCode;
-		this.status = cancelled
+		this.#exitCode = exitCode;
+		this.#status = cancelled
 			? "cancelled"
 			: exitCode !== 0 && exitCode !== undefined && exitCode !== null
 				? "error"
 				: "complete";
-		this.truncation = options?.truncation;
+		this.#truncation = options?.truncation;
 		if (options?.output !== undefined) {
-			this.setOutput(options.output);
+			this.#setOutput(options.output);
 		}
 
 		// Stop loader
-		this.loader.stop();
+		this.#loader.stop();
 
-		this.updateDisplay();
+		this.#updateDisplay();
 	}
 
-	private updateDisplay(): void {
-		const availableLines = this.outputLines;
+	#updateDisplay(): void {
+		const availableLines = this.#outputLines;
 
 		// Apply preview truncation based on expanded state
 		const previewLogicalLines = availableLines.slice(-PREVIEW_LINES);
 		const hiddenLineCount = availableLines.length - previewLogicalLines.length;
 
 		// Rebuild content container
-		this.contentContainer.clear();
+		this.#contentContainer.clear();
 
 		// Command header
 		const header = new Text(theme.fg("bashMode", theme.bold(`$ ${this.command}`)), 1, 0);
-		this.contentContainer.addChild(header);
+		this.#contentContainer.addChild(header);
 
 		// Output
 		if (availableLines.length > 0) {
-			if (this.expanded) {
+			if (this.#expanded) {
 				// Show all lines
 				const displayText = availableLines.map(line => theme.fg("muted", line)).join("\n");
-				this.contentContainer.addChild(new Text(`\n${displayText}`, 1, 0));
+				this.#contentContainer.addChild(new Text(`\n${displayText}`, 1, 0));
 			} else {
 				// Use shared visual truncation utility, recomputed per render width
 				const styledOutput = previewLogicalLines.map(line => theme.fg("muted", line)).join("\n");
 				const previewText = `\n${styledOutput}`;
-				this.contentContainer.addChild({
+				this.#contentContainer.addChild({
 					render: (width: number) => {
 						const { visualLines } = truncateToVisualLines(previewText, PREVIEW_LINES, width, 1);
 						return visualLines;
@@ -145,8 +145,8 @@ export class BashExecutionComponent extends Container {
 		}
 
 		// Loader or status
-		if (this.status === "running") {
-			this.contentContainer.addChild(this.loader);
+		if (this.#status === "running") {
+			this.#contentContainer.addChild(this.#loader);
 		} else {
 			const statusParts: string[] = [];
 
@@ -155,51 +155,51 @@ export class BashExecutionComponent extends Container {
 				statusParts.push(theme.fg("dim", `… ${hiddenLineCount} more lines (ctrl+o to expand)`));
 			}
 
-			if (this.status === "cancelled") {
+			if (this.#status === "cancelled") {
 				statusParts.push(theme.fg("warning", "(cancelled)"));
-			} else if (this.status === "error") {
-				statusParts.push(theme.fg("error", `(exit ${this.exitCode})`));
+			} else if (this.#status === "error") {
+				statusParts.push(theme.fg("error", `(exit ${this.#exitCode})`));
 			}
 
-			if (this.truncation) {
+			if (this.#truncation) {
 				const warnings: string[] = [];
-				if (this.truncation.artifactId) {
-					warnings.push(`Full output: artifact://${this.truncation.artifactId}`);
+				if (this.#truncation.artifactId) {
+					warnings.push(`Full output: artifact://${this.#truncation.artifactId}`);
 				}
-				if (this.truncation.truncatedBy === "lines") {
+				if (this.#truncation.truncatedBy === "lines") {
 					warnings.push(
-						`Truncated: showing ${this.truncation.outputLines} of ${this.truncation.totalLines} lines`,
+						`Truncated: showing ${this.#truncation.outputLines} of ${this.#truncation.totalLines} lines`,
 					);
 				} else {
 					warnings.push(
-						`Truncated: ${this.truncation.outputLines} lines shown (${formatSize(this.truncation.outputBytes)} limit)`,
+						`Truncated: ${this.#truncation.outputLines} lines shown (${formatSize(this.#truncation.outputBytes)} limit)`,
 					);
 				}
 				statusParts.push(theme.fg("warning", warnings.join(". ")));
 			}
 
 			if (statusParts.length > 0) {
-				this.contentContainer.addChild(new Text(`\n${statusParts.join("\n")}`, 1, 0));
+				this.#contentContainer.addChild(new Text(`\n${statusParts.join("\n")}`, 1, 0));
 			}
 		}
 	}
 
-	private normalizeOutput(text: string): string {
+	#normalizeOutput(text: string): string {
 		// Strip ANSI codes and normalize line endings
 		// Note: binary data is already sanitized in tui-renderer.ts executeBashCommand
 		return Bun.stripANSI(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 	}
 
-	private setOutput(output: string): void {
-		const clean = this.normalizeOutput(output);
-		this.outputLines = clean ? clean.split("\n") : [];
+	#setOutput(output: string): void {
+		const clean = this.#normalizeOutput(output);
+		this.#outputLines = clean ? clean.split("\n") : [];
 	}
 
 	/**
 	 * Get the raw output for creating BashExecutionMessage.
 	 */
 	getOutput(): string {
-		return this.outputLines.join("\n");
+		return this.#outputLines.join("\n");
 	}
 
 	/**

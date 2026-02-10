@@ -3,7 +3,7 @@ import type { AgentState } from "@oh-my-pi/pi-agent-core";
 import { isEnoent } from "@oh-my-pi/pi-utils";
 import { APP_NAME } from "../../config";
 import { getResolvedThemeColors, getThemeExportColors } from "../../modes/theme/theme";
-import { SessionManager } from "../../session/session-manager";
+import { type SessionEntry, type SessionHeader, SessionManager } from "../../session/session-manager";
 // Pre-generated template (created by scripts/generate-template.ts at publish time)
 import { TEMPLATE } from "./template.generated";
 
@@ -92,8 +92,8 @@ async function generateThemeVars(themeName?: string): Promise<string> {
 }
 
 interface SessionData {
-	header: ReturnType<SessionManager["getHeader"]>;
-	entries: ReturnType<SessionManager["getEntries"]>;
+	header: SessionHeader | null;
+	entries: SessionEntry[];
 	leafId: string | null;
 	systemPrompt?: string;
 	tools?: { name: string; description: string }[];

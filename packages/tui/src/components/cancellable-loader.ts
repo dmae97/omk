@@ -11,24 +11,24 @@ import { Loader } from "./loader";
  * doWork(loader.signal).then(done);
  */
 export class CancellableLoader extends Loader {
-	private abortController = new AbortController();
+	#abortController = new AbortController();
 
 	/** Called when user presses Escape */
 	onAbort?: () => void;
 
 	/** AbortSignal that is aborted when user presses Escape */
 	get signal(): AbortSignal {
-		return this.abortController.signal;
+		return this.#abortController.signal;
 	}
 
 	/** Whether the loader was aborted */
 	get aborted(): boolean {
-		return this.abortController.signal.aborted;
+		return this.#abortController.signal.aborted;
 	}
 
 	handleInput(data: string): void {
 		if (matchesKey(data, "escape") || matchesKey(data, "esc")) {
-			this.abortController.abort();
+			this.#abortController.abort();
 			this.onAbort?.();
 		}
 	}

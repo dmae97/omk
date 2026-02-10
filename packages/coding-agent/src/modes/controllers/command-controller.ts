@@ -9,7 +9,6 @@ import { $ } from "bun";
 import { loadCustomShare } from "../../export/custom-share";
 import type { CompactOptions } from "../../extensibility/extensions/types";
 import { getGatewayStatus } from "../../ipy/gateway-coordinator";
-import { ArminComponent } from "../../modes/components/armin";
 import { BashExecutionComponent } from "../../modes/components/bash-execution";
 import { BorderedLoader } from "../../modes/components/bordered-loader";
 import { DynamicBorder } from "../../modes/components/dynamic-border";
@@ -445,12 +444,6 @@ export class CommandController {
 		this.ctx.chatContainer.addChild(
 			new Text(`${theme.fg("accent", `${theme.status.success} Session forked to ${shortPath}`)}`, 1, 1),
 		);
-		this.ctx.ui.requestRender();
-	}
-
-	handleArminSaysHi(): void {
-		this.ctx.chatContainer.addChild(new Spacer(1));
-		this.ctx.chatContainer.addChild(new ArminComponent(this.ctx.ui));
 		this.ctx.ui.requestRender();
 	}
 

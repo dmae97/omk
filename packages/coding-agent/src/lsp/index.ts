@@ -851,14 +851,14 @@ export function createLspWritethrough(cwd: string, options?: WritethroughOptions
  * LSP tool for language server protocol operations.
  */
 export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Theme> {
-	public readonly name = "lsp";
-	public readonly label = "LSP";
-	public readonly description: string;
-	public readonly parameters = lspSchema;
-	public readonly renderCall = renderCall;
-	public readonly renderResult = renderResult;
-	public readonly mergeCallAndResult = true;
-	public readonly inline = true;
+	readonly name = "lsp";
+	readonly label = "LSP";
+	readonly description: string;
+	readonly parameters = lspSchema;
+	readonly renderCall = renderCall;
+	readonly renderResult = renderResult;
+	readonly mergeCallAndResult = true;
+	readonly inline = true;
 
 	constructor(private readonly session: ToolSession) {
 		this.description = renderPromptTemplate(lspDescription);
@@ -868,7 +868,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 		return session.enableLsp === false ? null : new LspTool(session);
 	}
 
-	public async execute(
+	async execute(
 		_toolCallId: string,
 		params: LspParams,
 		_signal?: AbortSignal,

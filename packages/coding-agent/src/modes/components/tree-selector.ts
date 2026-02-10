@@ -47,19 +47,19 @@ interface ToolCallInfo {
 }
 
 class TreeList implements Component {
-	private flatNodes: FlatNode[] = [];
-	private filteredNodes: FlatNode[] = [];
-	private selectedIndex = 0;
-	private filterMode: FilterMode = "default";
-	private searchQuery = "";
-	private toolCallMap: Map<string, ToolCallInfo> = new Map();
-	private multipleRoots = false;
-	private activePathIds: Set<string> = new Set();
-	private lastSelectedId: string | null = null;
+	#flatNodes: FlatNode[] = [];
+	#filteredNodes: FlatNode[] = [];
+	#selectedIndex = 0;
+	#filterMode: FilterMode = "default";
+	#searchQuery = "";
+	#toolCallMap: Map<string, ToolCallInfo> = new Map();
+	#multipleRoots = false;
+	#activePathIds: Set<string> = new Set();
+	#lastSelectedId: string | null = null;
 
-	public onSelect?: (entryId: string) => void;
-	public onCancel?: () => void;
-	public onLabelEdit?: (entryId: string, currentLabel: string | undefined) => void;
+	onSelect?: (entryId: string) => void;
+	onCancel?: () => void;
+	onLabelEdit?: (entryId: string, currentLabel: string | undefined) => void;
 
 	constructor(
 		tree: SessionTreeNode[],
@@ -67,32 +67,32 @@ class TreeList implements Component {
 		private readonly maxVisibleLines: number,
 		initialSelectedId?: string,
 	) {
-		this.multipleRoots = tree.length > 1;
-		this.flatNodes = this.flattenTree(tree);
-		this.buildActivePath();
-		this.applyFilter();
+		this.#multipleRoots = tree.length > 1;
+		this.#flatNodes = this.#flattenTree(tree);
+		this.#buildActivePath();
+		this.#applyFilter();
 
 		// Start with initialSelectedId if provided, otherwise current leaf
 		const targetId = initialSelectedId ?? currentLeafId;
-		this.selectedIndex = this.findNearestVisibleIndex(targetId);
-		this.lastSelectedId = this.filteredNodes[this.selectedIndex]?.node.entry.id ?? null;
+		this.#selectedIndex = this.#findNearestVisibleIndex(targetId);
+		this.#lastSelectedId = this.#filteredNodes[this.#selectedIndex]?.node.entry.id ?? null;
 	}
 
 	/** Build the set of entry IDs on the path from root to current leaf */
-	private buildActivePath(): void {
-		this.activePathIds.clear();
+	#buildActivePath(): void {
+		this.#activePathIds.clear();
 		if (!this.currentLeafId) return;
 
 		// Build a map of id -> entry for parent lookup
 		const entryMap = new Map<string, FlatNode>();
-		for (const flatNode of this.flatNodes) {
+		for (const flatNode of this.#flatNodes) {
 			entryMap.set(flatNode.node.entry.id, flatNode);
 		}
 
 		// Walk from leaf to root
 		let currentId: string | null = this.currentLeafId;
 		while (currentId) {
-			this.activePathIds.add(currentId);
+			this.#activePathIds.add(currentId);
 			const node = entryMap.get(currentId);
 			if (!node) break;
 			currentId = node.node.entry.parentId ?? null;
@@ -103,17 +103,17 @@ class TreeList implements Component {
 	 * Find the index of the nearest visible entry, walking up the parent chain if needed.
 	 * Returns the index in filteredNodes, or the last index as fallback.
 	 */
-	private findNearestVisibleIndex(entryId: string | null): number {
-		if (this.filteredNodes.length === 0) return 0;
+	#findNearestVisibleIndex(entryId: string | null): number {
+		if (this.#filteredNodes.length === 0) return 0;
 
 		// Build a map for parent lookup
 		const entryMap = new Map<string, FlatNode>();
-		for (const flatNode of this.flatNodes) {
+		for (const flatNode of this.#flatNodes) {
 			entryMap.set(flatNode.node.entry.id, flatNode);
 		}
 
 		// Build a map of visible entry IDs to their indices in filteredNodes
-		const visibleIdToIndex = new Map<string, number>(this.filteredNodes.map((node, i) => [node.node.entry.id, i]));
+		const visibleIdToIndex = new Map<string, number>(this.#filteredNodes.map((node, i) => [node.node.entry.id, i]));
 
 		// Walk from entryId up to root, looking for a visible entry
 		let currentId = entryId;
@@ -126,12 +126,12 @@ class TreeList implements Component {
 		}
 
 		// Fallback: last visible entry
-		return this.filteredNodes.length - 1;
+		return this.#filteredNodes.length - 1;
 	}
 
-	private flattenTree(roots: SessionTreeNode[]): FlatNode[] {
+	#flattenTree(roots: SessionTreeNode[]): FlatNode[] {
 		const result: FlatNode[] = [];
-		this.toolCallMap.clear();
+		this.#toolCallMap.clear();
 
 		// Indentation rules:
 		// - At indent 0: stay at 0 unless parent has >1 children (then +1)
@@ -191,7 +191,7 @@ class TreeList implements Component {
 					for (const block of content) {
 						if (typeof block === "object" && block !== null && "type" in block && block.type === "toolCall") {
 							const tc = block as { id: string; name: string; arguments: Record<string, unknown> };
-							this.toolCallMap.set(tc.id, { name: tc.name, arguments: tc.arguments });
+							this.#toolCallMap.set(tc.id, { name: tc.name, arguments: tc.arguments });
 						}
 					}
 				}
@@ -235,7 +235,7 @@ class TreeList implements Component {
 			const connectorDisplayed = showConnector && !isVirtualRootChild;
 			// When connector is displayed, add a gutter entry at the connector's position
 			// Connector is at position (displayIndent - 1), so gutter should be there too
-			const currentDisplayIndent = this.multipleRoots ? Math.max(0, indent - 1) : indent;
+			const currentDisplayIndent = this.#multipleRoots ? Math.max(0, indent - 1) : indent;
 			const connectorPosition = Math.max(0, currentDisplayIndent - 1);
 			const childGutters: GutterInfo[] = connectorDisplayed
 				? [...gutters, { position: connectorPosition, show: !isLast }]
@@ -259,16 +259,16 @@ class TreeList implements Component {
 		return result;
 	}
 
-	private applyFilter(): void {
+	#applyFilter(): void {
 		// Update lastSelectedId only when we have a valid selection (non-empty list)
 		// This preserves the selection when switching through empty filter results
-		if (this.filteredNodes.length > 0) {
-			this.lastSelectedId = this.filteredNodes[this.selectedIndex]?.node.entry.id ?? this.lastSelectedId;
+		if (this.#filteredNodes.length > 0) {
+			this.#lastSelectedId = this.#filteredNodes[this.#selectedIndex]?.node.entry.id ?? this.#lastSelectedId;
 		}
 
-		const searchTokens = this.searchQuery.toLowerCase().split(/\s+/).filter(Boolean);
+		const searchTokens = this.#searchQuery.toLowerCase().split(/\s+/).filter(Boolean);
 
-		this.filteredNodes = this.flatNodes.filter(flatNode => {
+		this.#filteredNodes = this.#flatNodes.filter(flatNode => {
 			const entry = flatNode.node.entry;
 			const isCurrentLeaf = entry.id === this.currentLeafId;
 
@@ -276,7 +276,7 @@ class TreeList implements Component {
 			// Always show current leaf so active position is visible
 			if (entry.type === "message" && entry.message.role === "assistant" && !isCurrentLeaf) {
 				const msg = entry.message as { stopReason?: string; content?: unknown };
-				const hasText = this.hasTextContent(msg.content);
+				const hasText = this.#hasTextContent(msg.content);
 				const isErrorOrAborted = msg.stopReason && msg.stopReason !== "stop" && msg.stopReason !== "toolUse";
 				// Only hide if no text AND not an error/aborted message
 				if (!hasText && !isErrorOrAborted) {
@@ -293,7 +293,7 @@ class TreeList implements Component {
 				entry.type === "model_change" ||
 				entry.type === "thinking_level_change";
 
-			switch (this.filterMode) {
+			switch (this.#filterMode) {
 				case "user-only":
 					// Just user messages
 					passesFilter = entry.type === "message" && entry.message.role === "user";
@@ -320,7 +320,7 @@ class TreeList implements Component {
 
 			// Apply search filter
 			if (searchTokens.length > 0) {
-				const nodeText = this.getSearchableText(flatNode.node).toLowerCase();
+				const nodeText = this.#getSearchableText(flatNode.node).toLowerCase();
 				return searchTokens.every(token => nodeText.includes(token));
 			}
 
@@ -328,21 +328,21 @@ class TreeList implements Component {
 		});
 
 		// Try to preserve cursor on the same node, or find nearest visible ancestor
-		if (this.lastSelectedId) {
-			this.selectedIndex = this.findNearestVisibleIndex(this.lastSelectedId);
-		} else if (this.selectedIndex >= this.filteredNodes.length) {
+		if (this.#lastSelectedId) {
+			this.#selectedIndex = this.#findNearestVisibleIndex(this.#lastSelectedId);
+		} else if (this.#selectedIndex >= this.#filteredNodes.length) {
 			// Clamp index if out of bounds
-			this.selectedIndex = Math.max(0, this.filteredNodes.length - 1);
+			this.#selectedIndex = Math.max(0, this.#filteredNodes.length - 1);
 		}
 
 		// Update lastSelectedId to the actual selection (may have changed due to parent walk)
-		if (this.filteredNodes.length > 0) {
-			this.lastSelectedId = this.filteredNodes[this.selectedIndex]?.node.entry.id ?? this.lastSelectedId;
+		if (this.#filteredNodes.length > 0) {
+			this.#lastSelectedId = this.#filteredNodes[this.#selectedIndex]?.node.entry.id ?? this.#lastSelectedId;
 		}
 	}
 
 	/** Get searchable text content from a node */
-	private getSearchableText(node: SessionTreeNode): string {
+	#getSearchableText(node: SessionTreeNode): string {
 		const entry = node.entry;
 		const parts: string[] = [];
 
@@ -355,7 +355,7 @@ class TreeList implements Component {
 				const msg = entry.message;
 				parts.push(msg.role);
 				if ("content" in msg && msg.content) {
-					parts.push(this.extractContent(msg.content));
+					parts.push(this.#extractContent(msg.content));
 				}
 				if (msg.role === "bashExecution") {
 					const bashMsg = msg as { command?: string };
@@ -368,7 +368,7 @@ class TreeList implements Component {
 				if (typeof entry.content === "string") {
 					parts.push(entry.content);
 				} else {
-					parts.push(this.extractContent(entry.content));
+					parts.push(this.#extractContent(entry.content));
 				}
 				break;
 			}
@@ -398,15 +398,15 @@ class TreeList implements Component {
 	invalidate(): void {}
 
 	getSearchQuery(): string {
-		return this.searchQuery;
+		return this.#searchQuery;
 	}
 
 	getSelectedNode(): SessionTreeNode | undefined {
-		return this.filteredNodes[this.selectedIndex]?.node;
+		return this.#filteredNodes[this.#selectedIndex]?.node;
 	}
 
 	updateNodeLabel(entryId: string, label: string | undefined): void {
-		for (const flatNode of this.flatNodes) {
+		for (const flatNode of this.#flatNodes) {
 			if (flatNode.node.entry.id === entryId) {
 				flatNode.node.label = label;
 				break;
@@ -414,8 +414,8 @@ class TreeList implements Component {
 		}
 	}
 
-	private getFilterLabel(): string {
-		switch (this.filterMode) {
+	#getFilterLabel(): string {
+		switch (this.#filterMode) {
 			case "no-tools":
 				return " [no-tools]";
 			case "user-only":
@@ -432,31 +432,31 @@ class TreeList implements Component {
 	render(width: number): string[] {
 		const lines: string[] = [];
 
-		if (this.filteredNodes.length === 0) {
+		if (this.#filteredNodes.length === 0) {
 			lines.push(truncateToWidth(theme.fg("muted", "  No entries found"), width));
-			lines.push(truncateToWidth(theme.fg("muted", `  (0/0)${this.getFilterLabel()}`), width));
+			lines.push(truncateToWidth(theme.fg("muted", `  (0/0)${this.#getFilterLabel()}`), width));
 			return lines;
 		}
 
 		const startIndex = Math.max(
 			0,
 			Math.min(
-				this.selectedIndex - Math.floor(this.maxVisibleLines / 2),
-				this.filteredNodes.length - this.maxVisibleLines,
+				this.#selectedIndex - Math.floor(this.maxVisibleLines / 2),
+				this.#filteredNodes.length - this.maxVisibleLines,
 			),
 		);
-		const endIndex = Math.min(startIndex + this.maxVisibleLines, this.filteredNodes.length);
+		const endIndex = Math.min(startIndex + this.maxVisibleLines, this.#filteredNodes.length);
 
 		for (let i = startIndex; i < endIndex; i++) {
-			const flatNode = this.filteredNodes[i];
+			const flatNode = this.#filteredNodes[i];
 			const entry = flatNode.node.entry;
-			const isSelected = i === this.selectedIndex;
+			const isSelected = i === this.#selectedIndex;
 
 			// Build line: cursor + prefix + path marker + label + content
 			const cursor = isSelected ? theme.fg("accent", "› ") : "  ";
 
 			// If multiple roots, shift display (roots at 0, not 1)
-			const displayIndent = this.multipleRoots ? Math.max(0, flatNode.indent - 1) : flatNode.indent;
+			const displayIndent = this.#multipleRoots ? Math.max(0, flatNode.indent - 1) : flatNode.indent;
 
 			// Build prefix with gutters at their correct positions
 			// Each gutter has a position (displayIndent where its connector was shown)
@@ -496,11 +496,11 @@ class TreeList implements Component {
 			const prefix = prefixChars.join("");
 
 			// Active path marker - shown right before the entry text
-			const isOnActivePath = this.activePathIds.has(entry.id);
+			const isOnActivePath = this.#activePathIds.has(entry.id);
 			const pathMarker = isOnActivePath ? theme.fg("accent", `${theme.md.bullet} `) : "";
 
 			const label = flatNode.node.label ? theme.fg("warning", `[${flatNode.node.label}] `) : "";
-			const content = this.getEntryDisplayText(flatNode.node, isSelected);
+			const content = this.#getEntryDisplayText(flatNode.node, isSelected);
 
 			let line = cursor + theme.fg("dim", prefix) + pathMarker + label + content;
 			if (isSelected) {
@@ -511,7 +511,7 @@ class TreeList implements Component {
 
 		lines.push(
 			truncateToWidth(
-				theme.fg("muted", `  (${this.selectedIndex + 1}/${this.filteredNodes.length})${this.getFilterLabel()}`),
+				theme.fg("muted", `  (${this.#selectedIndex + 1}/${this.#filteredNodes.length})${this.#getFilterLabel()}`),
 				width,
 			),
 		);
@@ -519,7 +519,7 @@ class TreeList implements Component {
 		return lines;
 	}
 
-	private getEntryDisplayText(node: SessionTreeNode, isSelected: boolean): string {
+	#getEntryDisplayText(node: SessionTreeNode, isSelected: boolean): string {
 		const entry = node.entry;
 		let result: string;
 
@@ -531,11 +531,11 @@ class TreeList implements Component {
 				const role = msg.role;
 				if (role === "user") {
 					const msgWithContent = msg as { content?: unknown };
-					const content = normalize(this.extractContent(msgWithContent.content));
+					const content = normalize(this.#extractContent(msgWithContent.content));
 					result = theme.fg("accent", "user: ") + content;
 				} else if (role === "assistant") {
 					const msgWithContent = msg as { content?: unknown; stopReason?: string; errorMessage?: string };
-					const textContent = normalize(this.extractContent(msgWithContent.content));
+					const textContent = normalize(this.#extractContent(msgWithContent.content));
 					if (textContent) {
 						result = theme.fg("success", "assistant: ") + textContent;
 					} else if (msgWithContent.stopReason === "aborted") {
@@ -548,9 +548,9 @@ class TreeList implements Component {
 					}
 				} else if (role === "toolResult") {
 					const toolMsg = msg as { toolCallId?: string; toolName?: string };
-					const toolCall = toolMsg.toolCallId ? this.toolCallMap.get(toolMsg.toolCallId) : undefined;
+					const toolCall = toolMsg.toolCallId ? this.#toolCallMap.get(toolMsg.toolCallId) : undefined;
 					if (toolCall) {
-						result = theme.fg("muted", this.formatToolCall(toolCall.name, toolCall.arguments));
+						result = theme.fg("muted", this.#formatToolCall(toolCall.name, toolCall.arguments));
 					} else {
 						result = theme.fg("muted", `[${toolMsg.toolName ?? "tool"}]`);
 					}
@@ -600,7 +600,7 @@ class TreeList implements Component {
 		return isSelected ? theme.bold(result) : result;
 	}
 
-	private extractContent(content: unknown): string {
+	#extractContent(content: unknown): string {
 		const maxLen = 200;
 		if (typeof content === "string") return content.slice(0, maxLen);
 		if (Array.isArray(content)) {
@@ -616,7 +616,7 @@ class TreeList implements Component {
 		return "";
 	}
 
-	private hasTextContent(content: unknown): boolean {
+	#hasTextContent(content: unknown): boolean {
 		if (typeof content === "string") return content.trim().length > 0;
 		if (Array.isArray(content)) {
 			for (const c of content) {
@@ -629,7 +629,7 @@ class TreeList implements Component {
 		return false;
 	}
 
-	private formatToolCall(name: string, args: Record<string, unknown>): string {
+	#formatToolCall(name: string, args: Record<string, unknown>): string {
 		switch (name) {
 			case "read": {
 				const path = shortenPath(String(args.path || args.file_path || ""));
@@ -683,24 +683,24 @@ class TreeList implements Component {
 
 	handleInput(keyData: string): void {
 		if (matchesKey(keyData, "up")) {
-			this.selectedIndex = this.selectedIndex === 0 ? this.filteredNodes.length - 1 : this.selectedIndex - 1;
+			this.#selectedIndex = this.#selectedIndex === 0 ? this.#filteredNodes.length - 1 : this.#selectedIndex - 1;
 		} else if (matchesKey(keyData, "down")) {
-			this.selectedIndex = this.selectedIndex === this.filteredNodes.length - 1 ? 0 : this.selectedIndex + 1;
+			this.#selectedIndex = this.#selectedIndex === this.#filteredNodes.length - 1 ? 0 : this.#selectedIndex + 1;
 		} else if (matchesKey(keyData, "left")) {
 			// Page up
-			this.selectedIndex = Math.max(0, this.selectedIndex - this.maxVisibleLines);
+			this.#selectedIndex = Math.max(0, this.#selectedIndex - this.maxVisibleLines);
 		} else if (matchesKey(keyData, "right")) {
 			// Page down
-			this.selectedIndex = Math.min(this.filteredNodes.length - 1, this.selectedIndex + this.maxVisibleLines);
+			this.#selectedIndex = Math.min(this.#filteredNodes.length - 1, this.#selectedIndex + this.maxVisibleLines);
 		} else if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
-			const selected = this.filteredNodes[this.selectedIndex];
+			const selected = this.#filteredNodes[this.#selectedIndex];
 			if (selected && this.onSelect) {
 				this.onSelect(selected.node.entry.id);
 			}
 		} else if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc")) {
-			if (this.searchQuery) {
-				this.searchQuery = "";
-				this.applyFilter();
+			if (this.#searchQuery) {
+				this.#searchQuery = "";
+				this.#applyFilter();
 			} else {
 				this.onCancel?.();
 			}
@@ -709,37 +709,37 @@ class TreeList implements Component {
 		} else if (matchesKey(keyData, "shift+ctrl+o") || matchesKey(keyData, "ctrl+shift+o")) {
 			// Cycle filter backwards
 			const modes: FilterMode[] = ["default", "no-tools", "user-only", "labeled-only", "all"];
-			const currentIndex = modes.indexOf(this.filterMode);
-			this.filterMode = modes[(currentIndex - 1 + modes.length) % modes.length];
-			this.applyFilter();
+			const currentIndex = modes.indexOf(this.#filterMode);
+			this.#filterMode = modes[(currentIndex - 1 + modes.length) % modes.length];
+			this.#applyFilter();
 		} else if (matchesKey(keyData, "ctrl+o")) {
 			// Cycle filter forwards: default → no-tools → user-only → labeled-only → all → default
 			const modes: FilterMode[] = ["default", "no-tools", "user-only", "labeled-only", "all"];
-			const currentIndex = modes.indexOf(this.filterMode);
-			this.filterMode = modes[(currentIndex + 1) % modes.length];
-			this.applyFilter();
+			const currentIndex = modes.indexOf(this.#filterMode);
+			this.#filterMode = modes[(currentIndex + 1) % modes.length];
+			this.#applyFilter();
 		} else if (matchesKey(keyData, "alt+d")) {
-			this.filterMode = "default";
-			this.applyFilter();
+			this.#filterMode = "default";
+			this.#applyFilter();
 		} else if (matchesKey(keyData, "alt+t")) {
-			this.filterMode = "no-tools";
-			this.applyFilter();
+			this.#filterMode = "no-tools";
+			this.#applyFilter();
 		} else if (matchesKey(keyData, "alt+u")) {
-			this.filterMode = "user-only";
-			this.applyFilter();
+			this.#filterMode = "user-only";
+			this.#applyFilter();
 		} else if (matchesKey(keyData, "alt+l")) {
-			this.filterMode = "labeled-only";
-			this.applyFilter();
+			this.#filterMode = "labeled-only";
+			this.#applyFilter();
 		} else if (matchesKey(keyData, "alt+a")) {
-			this.filterMode = "all";
-			this.applyFilter();
+			this.#filterMode = "all";
+			this.#applyFilter();
 		} else if (matchesKey(keyData, "backspace")) {
-			if (this.searchQuery.length > 0) {
-				this.searchQuery = this.searchQuery.slice(0, -1);
-				this.applyFilter();
+			if (this.#searchQuery.length > 0) {
+				this.#searchQuery = this.#searchQuery.slice(0, -1);
+				this.#applyFilter();
 			}
-		} else if (matchesKey(keyData, "shift+l") && !this.searchQuery) {
-			const selected = this.filteredNodes[this.selectedIndex];
+		} else if (matchesKey(keyData, "shift+l") && !this.#searchQuery) {
+			const selected = this.#filteredNodes[this.#selectedIndex];
 			if (selected && this.onLabelEdit) {
 				this.onLabelEdit(selected.node.entry.id, selected.node.label);
 			}
@@ -749,8 +749,8 @@ class TreeList implements Component {
 				return code < 32 || code === 0x7f || (code >= 0x80 && code <= 0x9f);
 			});
 			if (!hasControlChars && keyData.length > 0) {
-				this.searchQuery += keyData;
-				this.applyFilter();
+				this.#searchQuery += keyData;
+				this.#applyFilter();
 			}
 		}
 	}
@@ -775,17 +775,17 @@ class SearchLine implements Component {
 
 /** Label input component shown when editing a label */
 class LabelInput implements Component {
-	private input: Input;
-	public onSubmit?: (entryId: string, label: string | undefined) => void;
-	public onCancel?: () => void;
+	#input: Input;
+	onSubmit?: (entryId: string, label: string | undefined) => void;
+	onCancel?: () => void;
 
 	constructor(
 		private readonly entryId: string,
 		currentLabel: string | undefined,
 	) {
-		this.input = new Input();
+		this.#input = new Input();
 		if (currentLabel) {
-			this.input.setValue(currentLabel);
+			this.#input.setValue(currentLabel);
 		}
 	}
 
@@ -796,19 +796,19 @@ class LabelInput implements Component {
 		const indent = "  ";
 		const availableWidth = width - indent.length;
 		lines.push(truncateToWidth(`${indent}${theme.fg("muted", "Label (empty to remove):")}`, width));
-		lines.push(...this.input.render(availableWidth).map(line => truncateToWidth(`${indent}${line}`, width)));
+		lines.push(...this.#input.render(availableWidth).map(line => truncateToWidth(`${indent}${line}`, width)));
 		lines.push(truncateToWidth(`${indent}${theme.fg("dim", "enter: save  esc: cancel")}`, width));
 		return lines;
 	}
 
 	handleInput(keyData: string): void {
 		if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
-			const value = this.input.getValue().trim();
+			const value = this.#input.getValue().trim();
 			this.onSubmit?.(this.entryId, value || undefined);
 		} else if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc")) {
 			this.onCancel?.();
 		} else {
-			this.input.handleInput(keyData);
+			this.#input.handleInput(keyData);
 		}
 	}
 }
@@ -817,10 +817,10 @@ class LabelInput implements Component {
  * Component that renders a session tree selector for navigation
  */
 export class TreeSelectorComponent extends Container {
-	private treeList: TreeList;
-	private labelInput: LabelInput | null = null;
-	private labelInputContainer: Container;
-	private treeContainer: Container;
+	#treeList: TreeList;
+	#labelInput: LabelInput | null = null;
+	#labelInputContainer: Container;
+	#treeContainer: Container;
 
 	constructor(
 		tree: SessionTreeNode[],
@@ -833,15 +833,15 @@ export class TreeSelectorComponent extends Container {
 		super();
 		const maxVisibleLines = Math.max(5, Math.floor(terminalHeight / 2));
 
-		this.treeList = new TreeList(tree, currentLeafId, maxVisibleLines);
-		this.treeList.onSelect = onSelect;
-		this.treeList.onCancel = onCancel;
-		this.treeList.onLabelEdit = (entryId, currentLabel) => this.showLabelInput(entryId, currentLabel);
+		this.#treeList = new TreeList(tree, currentLeafId, maxVisibleLines);
+		this.#treeList.onSelect = onSelect;
+		this.#treeList.onCancel = onCancel;
+		this.#treeList.onLabelEdit = (entryId, currentLabel) => this.#showLabelInput(entryId, currentLabel);
 
-		this.treeContainer = new Container();
-		this.treeContainer.addChild(this.treeList);
+		this.#treeContainer = new Container();
+		this.#treeContainer.addChild(this.#treeList);
 
-		this.labelInputContainer = new Container();
+		this.#labelInputContainer = new Container();
 
 		this.addChild(new Spacer(1));
 		this.addChild(new DynamicBorder());
@@ -856,11 +856,11 @@ export class TreeSelectorComponent extends Container {
 				0,
 			),
 		);
-		this.addChild(new SearchLine(this.treeList));
+		this.addChild(new SearchLine(this.#treeList));
 		this.addChild(new DynamicBorder());
 		this.addChild(new Spacer(1));
-		this.addChild(this.treeContainer);
-		this.addChild(this.labelInputContainer);
+		this.addChild(this.#treeContainer);
+		this.addChild(this.#labelInputContainer);
 		this.addChild(new Spacer(1));
 		this.addChild(new DynamicBorder());
 
@@ -869,36 +869,36 @@ export class TreeSelectorComponent extends Container {
 		}
 	}
 
-	private showLabelInput(entryId: string, currentLabel: string | undefined): void {
-		this.labelInput = new LabelInput(entryId, currentLabel);
-		this.labelInput.onSubmit = (id, label) => {
-			this.treeList.updateNodeLabel(id, label);
+	#showLabelInput(entryId: string, currentLabel: string | undefined): void {
+		this.#labelInput = new LabelInput(entryId, currentLabel);
+		this.#labelInput.onSubmit = (id, label) => {
+			this.#treeList.updateNodeLabel(id, label);
 			this.onLabelChangeCallback?.(id, label);
-			this.hideLabelInput();
+			this.#hideLabelInput();
 		};
-		this.labelInput.onCancel = () => this.hideLabelInput();
+		this.#labelInput.onCancel = () => this.#hideLabelInput();
 
-		this.treeContainer.clear();
-		this.labelInputContainer.clear();
-		this.labelInputContainer.addChild(this.labelInput);
+		this.#treeContainer.clear();
+		this.#labelInputContainer.clear();
+		this.#labelInputContainer.addChild(this.#labelInput);
 	}
 
-	private hideLabelInput(): void {
-		this.labelInput = null;
-		this.labelInputContainer.clear();
-		this.treeContainer.clear();
-		this.treeContainer.addChild(this.treeList);
+	#hideLabelInput(): void {
+		this.#labelInput = null;
+		this.#labelInputContainer.clear();
+		this.#treeContainer.clear();
+		this.#treeContainer.addChild(this.#treeList);
 	}
 
 	handleInput(keyData: string): void {
-		if (this.labelInput) {
-			this.labelInput.handleInput(keyData);
+		if (this.#labelInput) {
+			this.#labelInput.handleInput(keyData);
 		} else {
-			this.treeList.handleInput(keyData);
+			this.#treeList.handleInput(keyData);
 		}
 	}
 
 	getTreeList(): TreeList {
-		return this.treeList;
+		return this.#treeList;
 	}
 }

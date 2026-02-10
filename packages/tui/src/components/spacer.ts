@@ -4,14 +4,14 @@ import type { Component } from "../tui";
  * Spacer component that renders empty lines
  */
 export class Spacer implements Component {
-	private lines: number;
+	#lines: number;
 
 	constructor(lines: number = 1) {
-		this.lines = lines;
+		this.#lines = lines;
 	}
 
 	setLines(lines: number): void {
-		this.lines = lines;
+		this.#lines = lines;
 	}
 
 	invalidate(): void {
@@ -20,7 +20,7 @@ export class Spacer implements Component {
 
 	render(_width: number): string[] {
 		const result: string[] = [];
-		for (let i = 0; i < this.lines; i++) {
+		for (let i = 0; i < this.#lines; i++) {
 			result.push("");
 		}
 		return result;

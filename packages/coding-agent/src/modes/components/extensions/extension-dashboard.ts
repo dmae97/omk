@@ -30,11 +30,11 @@ import { applyFilter, createInitialState, filterByProvider, refreshState, toggle
 import type { DashboardState } from "./types";
 
 export class ExtensionDashboard extends Container {
-	private state!: DashboardState;
-	private mainList!: ExtensionList;
-	private inspector!: InspectorPanel;
+	#state!: DashboardState;
+	#mainList!: ExtensionList;
+	#inspector!: InspectorPanel;
 
-	public onClose?: () => void;
+	onClose?: () => void;
 
 	private constructor(
 		private readonly cwd: string,
@@ -50,54 +50,54 @@ export class ExtensionDashboard extends Container {
 		terminalHeight?: number,
 	): Promise<ExtensionDashboard> {
 		const dashboard = new ExtensionDashboard(cwd, settingsInstance, terminalHeight ?? process.stdout.rows ?? 24);
-		await dashboard.init();
+		await dashboard.#init();
 		return dashboard;
 	}
 
-	private async init(): Promise<void> {
+	async #init(): Promise<void> {
 		const sm = this.settingsInstance ?? (await Settings.init());
 		const disabledIds = sm ? ((sm.get("disabledExtensions") as string[]) ?? []) : [];
-		this.state = await createInitialState(this.cwd, disabledIds);
+		this.#state = await createInitialState(this.cwd, disabledIds);
 
 		// Calculate max visible items based on terminal height
 		// Reserve ~10 lines for header, tabs, help text, borders
 		const maxVisible = Math.max(5, Math.floor((this.terminalHeight - 10) / 2));
 
 		// Create main list - always focused
-		this.mainList = new ExtensionList(
-			this.state.searchFiltered,
+		this.#mainList = new ExtensionList(
+			this.#state.searchFiltered,
 			{
 				onSelectionChange: ext => {
-					this.state.selected = ext;
-					this.inspector.setExtension(ext);
+					this.#state.selected = ext;
+					this.#inspector.setExtension(ext);
 				},
 				onToggle: (extensionId, enabled) => {
-					this.handleExtensionToggle(extensionId, enabled);
+					this.#handleExtensionToggle(extensionId, enabled);
 				},
 				onMasterToggle: providerId => {
-					this.handleProviderToggle(providerId);
+					this.#handleProviderToggle(providerId);
 				},
-				masterSwitchProvider: this.getActiveProviderId(),
+				masterSwitchProvider: this.#getActiveProviderId(),
 			},
 			maxVisible,
 		);
-		this.mainList.setFocused(true);
+		this.#mainList.setFocused(true);
 
 		// Create inspector
-		this.inspector = new InspectorPanel();
-		if (this.state.selected) {
-			this.inspector.setExtension(this.state.selected);
+		this.#inspector = new InspectorPanel();
+		if (this.#state.selected) {
+			this.#inspector.setExtension(this.#state.selected);
 		}
 
-		this.buildLayout();
+		this.#buildLayout();
 	}
 
-	private getActiveProviderId(): string | null {
-		const tab = this.state.tabs[this.state.activeTabIndex];
+	#getActiveProviderId(): string | null {
+		const tab = this.#state.tabs[this.#state.activeTabIndex];
 		return tab && tab.id !== "all" ? tab.id : null;
 	}
 
-	private buildLayout(): void {
+	#buildLayout(): void {
 		this.clear();
 
 		// Top border
@@ -107,13 +107,13 @@ export class ExtensionDashboard extends Container {
 		this.addChild(new Text(theme.bold(theme.fg("accent", " Extension Control Center")), 0, 0));
 
 		// Tab bar
-		this.addChild(new Text(this.renderTabBar(), 0, 0));
+		this.addChild(new Text(this.#renderTabBar(), 0, 0));
 		this.addChild(new Spacer(1));
 
 		// 2-column body with height limit
 		// Reserve ~8 lines for header, tabs, help text, borders
 		const bodyMaxHeight = Math.max(5, this.terminalHeight - 8);
-		this.addChild(new TwoColumnBody(this.mainList, this.inspector, bodyMaxHeight));
+		this.addChild(new TwoColumnBody(this.#mainList, this.#inspector, bodyMaxHeight));
 
 		this.addChild(new Spacer(1));
 		this.addChild(new Text(theme.fg("dim", " ↑/↓: navigate  Space: toggle  Tab: next provider  Esc: close"), 0, 0));
@@ -122,12 +122,12 @@ export class ExtensionDashboard extends Container {
 		this.addChild(new DynamicBorder());
 	}
 
-	private renderTabBar(): string {
+	#renderTabBar(): string {
 		const parts: string[] = [" "];
 
-		for (let i = 0; i < this.state.tabs.length; i++) {
-			const tab = this.state.tabs[i];
-			const isActive = i === this.state.activeTabIndex;
+		for (let i = 0; i < this.#state.tabs.length; i++) {
+			const tab = this.#state.tabs[i];
+			const isActive = i === this.#state.activeTabIndex;
 			const isEmpty = tab.count === 0 && tab.id !== "all";
 			const isDisabled = !tab.enabled && tab.id !== "all";
 
@@ -157,12 +157,12 @@ export class ExtensionDashboard extends Container {
 		return parts.join("");
 	}
 
-	private handleProviderToggle(providerId: string): void {
+	#handleProviderToggle(providerId: string): void {
 		toggleProvider(providerId);
-		void this.refreshFromState();
+		void this.#refreshFromState();
 	}
 
-	private handleExtensionToggle(extensionId: string, enabled: boolean): void {
+	#handleExtensionToggle(extensionId: string, enabled: boolean): void {
 		const sm = this.settingsInstance ?? Settings.instance;
 		if (!sm) return;
 
@@ -180,67 +180,67 @@ export class ExtensionDashboard extends Container {
 			}
 		}
 
-		void this.refreshFromState();
+		void this.#refreshFromState();
 	}
 
-	private async refreshFromState(): Promise<void> {
+	async #refreshFromState(): Promise<void> {
 		// Remember current tab ID before refresh
-		const currentTabId = this.state.tabs[this.state.activeTabIndex]?.id;
+		const currentTabId = this.#state.tabs[this.#state.activeTabIndex]?.id;
 
 		const sm = this.settingsInstance ?? Settings.instance;
 		const disabledIds = sm ? ((sm.get("disabledExtensions") as string[]) ?? []) : [];
-		this.state = await refreshState(this.state, this.cwd, disabledIds);
+		this.#state = await refreshState(this.#state, this.cwd, disabledIds);
 
 		// Find the same tab in the new (re-sorted) list
 		if (currentTabId) {
-			const newIndex = this.state.tabs.findIndex(t => t.id === currentTabId);
+			const newIndex = this.#state.tabs.findIndex(t => t.id === currentTabId);
 			if (newIndex >= 0) {
-				this.state.activeTabIndex = newIndex;
+				this.#state.activeTabIndex = newIndex;
 			}
 		}
 
-		this.mainList.setExtensions(this.state.searchFiltered);
-		this.mainList.setMasterSwitchProvider(this.getActiveProviderId());
+		this.#mainList.setExtensions(this.#state.searchFiltered);
+		this.#mainList.setMasterSwitchProvider(this.#getActiveProviderId());
 
-		if (this.state.selected) {
-			this.inspector.setExtension(this.state.selected);
+		if (this.#state.selected) {
+			this.#inspector.setExtension(this.#state.selected);
 		}
 
-		this.buildLayout();
+		this.#buildLayout();
 	}
 
-	private switchTab(direction: 1 | -1): void {
-		const numTabs = this.state.tabs.length;
+	#switchTab(direction: 1 | -1): void {
+		const numTabs = this.#state.tabs.length;
 		if (numTabs === 0) return;
 
 		// Find next selectable tab (skip empty+enabled providers)
-		let nextIndex = this.state.activeTabIndex;
+		let nextIndex = this.#state.activeTabIndex;
 		for (let i = 0; i < numTabs; i++) {
 			nextIndex = (nextIndex + direction + numTabs) % numTabs;
-			const tab = this.state.tabs[nextIndex];
+			const tab = this.#state.tabs[nextIndex];
 			const isEmptyEnabled = tab.count === 0 && tab.enabled && tab.id !== "all";
 			if (!isEmptyEnabled) break;
 		}
-		this.state.activeTabIndex = nextIndex;
+		this.#state.activeTabIndex = nextIndex;
 
 		// Re-filter for new tab
-		const tab = this.state.tabs[this.state.activeTabIndex];
-		this.state.tabFiltered = filterByProvider(this.state.extensions, tab.id);
-		this.state.searchFiltered = applyFilter(this.state.tabFiltered, this.state.searchQuery);
-		this.state.listIndex = 0;
-		this.state.scrollOffset = 0;
-		this.state.selected = this.state.searchFiltered[0] ?? null;
+		const tab = this.#state.tabs[this.#state.activeTabIndex];
+		this.#state.tabFiltered = filterByProvider(this.#state.extensions, tab.id);
+		this.#state.searchFiltered = applyFilter(this.#state.tabFiltered, this.#state.searchQuery);
+		this.#state.listIndex = 0;
+		this.#state.scrollOffset = 0;
+		this.#state.selected = this.#state.searchFiltered[0] ?? null;
 
 		// Update list
-		this.mainList.setExtensions(this.state.searchFiltered);
-		this.mainList.setMasterSwitchProvider(this.getActiveProviderId());
-		this.mainList.resetSelection();
+		this.#mainList.setExtensions(this.#state.searchFiltered);
+		this.#mainList.setMasterSwitchProvider(this.#getActiveProviderId());
+		this.#mainList.resetSelection();
 
-		if (this.state.selected) {
-			this.inspector.setExtension(this.state.selected);
+		if (this.#state.selected) {
+			this.#inspector.setExtension(this.#state.selected);
 		}
 
-		this.buildLayout();
+		this.#buildLayout();
 	}
 
 	handleInput(data: string): void {
@@ -252,12 +252,12 @@ export class ExtensionDashboard extends Container {
 
 		// Escape - clear search first, then close
 		if (matchesKey(data, "escape") || matchesKey(data, "esc")) {
-			if (this.state.searchQuery.length > 0) {
-				this.state.searchQuery = "";
-				this.state.searchFiltered = this.state.tabFiltered;
-				this.mainList.setExtensions(this.state.searchFiltered);
-				this.mainList.clearSearch();
-				this.buildLayout();
+			if (this.#state.searchQuery.length > 0) {
+				this.#state.searchQuery = "";
+				this.#state.searchFiltered = this.#state.tabFiltered;
+				this.#mainList.setExtensions(this.#state.searchFiltered);
+				this.#mainList.clearSearch();
+				this.#buildLayout();
 				return;
 			}
 			this.onClose?.();
@@ -266,22 +266,22 @@ export class ExtensionDashboard extends Container {
 
 		// Tab/Shift+Tab: Cycle through tabs
 		if (matchesKey(data, "tab")) {
-			this.switchTab(1);
+			this.#switchTab(1);
 			return;
 		}
 		if (matchesKey(data, "shift+tab")) {
-			this.switchTab(-1);
+			this.#switchTab(-1);
 			return;
 		}
 
 		// All other input goes to the list
-		this.mainList.handleInput(data);
+		this.#mainList.handleInput(data);
 
 		// Sync search query back to state
-		const query = this.mainList.getSearchQuery();
-		if (query !== this.state.searchQuery) {
-			this.state.searchQuery = query;
-			this.state.searchFiltered = applyFilter(this.state.tabFiltered, query);
+		const query = this.#mainList.getSearchQuery();
+		if (query !== this.#state.searchQuery) {
+			this.#state.searchQuery = query;
+			this.#state.searchFiltered = applyFilter(this.#state.tabFiltered, query);
 		}
 	}
 }

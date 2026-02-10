@@ -9,10 +9,10 @@ import { theme } from "../../modes/theme/theme";
  * function when using DynamicBorder in components exported for hook use.
  */
 export class DynamicBorder implements Component {
-	private color: (str: string) => string;
+	#color: (str: string) => string;
 
 	constructor(color: (str: string) => string = str => theme.fg("border", str)) {
-		this.color = color;
+		this.#color = color;
 	}
 
 	invalidate(): void {
@@ -20,6 +20,6 @@ export class DynamicBorder implements Component {
 	}
 
 	render(width: number): string[] {
-		return [this.color(theme.boxSharp.horizontal.repeat(Math.max(1, width)))];
+		return [this.#color(theme.boxSharp.horizontal.repeat(Math.max(1, width)))];
 	}
 }

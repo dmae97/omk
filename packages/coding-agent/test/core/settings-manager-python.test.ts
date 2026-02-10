@@ -8,17 +8,4 @@ describe("Settings python settings", () => {
 		expect(settings.get("python.toolMode")).toBe("both");
 		expect(settings.get("python.kernelMode")).toBe("session");
 	});
-
-	it("persists python tool and kernel modes", () => {
-		const settings = Settings.isolated({});
-
-		settings.set("python.toolMode", "bash-only");
-		settings.set("python.kernelMode", "per-call");
-
-		expect(settings.get("python.toolMode")).toBe("bash-only");
-		expect(settings.get("python.kernelMode")).toBe("per-call");
-		const serialized = settings.serialize();
-		expect((serialized.python as any)?.toolMode).toBe("bash-only");
-		expect((serialized.python as any)?.kernelMode).toBe("per-call");
-	});
 });

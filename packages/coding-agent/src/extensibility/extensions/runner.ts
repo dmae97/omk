@@ -153,23 +153,23 @@ const noOpUIContext: ExtensionUIContext = {
 };
 
 export class ExtensionRunner {
-	private uiContext: ExtensionUIContext;
-	private errorListeners: Set<ExtensionErrorListener> = new Set();
-	private getModel: () => Model | undefined = () => undefined;
-	private isIdleFn: () => boolean = () => true;
-	private waitForIdleFn: () => Promise<void> = async () => {};
-	private abortFn: () => void = () => {};
-	private hasPendingMessagesFn: () => boolean = () => false;
-	private getContextUsageFn: () => ContextUsage | undefined = () => undefined;
-	private compactFn: (instructionsOrOptions?: string | CompactOptions) => Promise<void> = async () => {};
-	private getSystemPromptFn: () => string = () => "";
-	private newSessionHandler: NewSessionHandler = async () => ({ cancelled: false });
-	private branchHandler: BranchHandler = async () => ({ cancelled: false });
-	private navigateTreeHandler: NavigateTreeHandler = async () => ({ cancelled: false });
-	private switchSessionHandler: SwitchSessionHandler = async () => ({ cancelled: false });
-	private reloadHandler: () => Promise<void> = async () => {};
-	private shutdownHandler: ShutdownHandler = () => {};
-	private commandDiagnostics: Array<{ type: string; message: string; path: string }> = [];
+	#uiContext: ExtensionUIContext;
+	#errorListeners: Set<ExtensionErrorListener> = new Set();
+	#getModel: () => Model | undefined = () => undefined;
+	#isIdleFn: () => boolean = () => true;
+	#waitForIdleFn: () => Promise<void> = async () => {};
+	#abortFn: () => void = () => {};
+	#hasPendingMessagesFn: () => boolean = () => false;
+	#getContextUsageFn: () => ContextUsage | undefined = () => undefined;
+	#compactFn: (instructionsOrOptions?: string | CompactOptions) => Promise<void> = async () => {};
+	#getSystemPromptFn: () => string = () => "";
+	#newSessionHandler: NewSessionHandler = async () => ({ cancelled: false });
+	#branchHandler: BranchHandler = async () => ({ cancelled: false });
+	#navigateTreeHandler: NavigateTreeHandler = async () => ({ cancelled: false });
+	#switchSessionHandler: SwitchSessionHandler = async () => ({ cancelled: false });
+	#reloadHandler: () => Promise<void> = async () => {};
+	#shutdownHandler: ShutdownHandler = () => {};
+	#commandDiagnostics: Array<{ type: string; message: string; path: string }> = [];
 
 	constructor(
 		private readonly extensions: Extension[],
@@ -178,7 +178,7 @@ export class ExtensionRunner {
 		private readonly sessionManager: SessionManager,
 		private readonly modelRegistry: ModelRegistry,
 	) {
-		this.uiContext = noOpUIContext;
+		this.#uiContext = noOpUIContext;
 	}
 
 	initialize(
@@ -200,34 +200,34 @@ export class ExtensionRunner {
 		this.runtime.setThinkingLevel = actions.setThinkingLevel;
 
 		// Context actions (required)
-		this.getModel = contextActions.getModel;
-		this.isIdleFn = contextActions.isIdle;
-		this.abortFn = contextActions.abort;
-		this.hasPendingMessagesFn = contextActions.hasPendingMessages;
-		this.shutdownHandler = contextActions.shutdown;
-		this.getSystemPromptFn = contextActions.getSystemPrompt;
+		this.#getModel = contextActions.getModel;
+		this.#isIdleFn = contextActions.isIdle;
+		this.#abortFn = contextActions.abort;
+		this.#hasPendingMessagesFn = contextActions.hasPendingMessages;
+		this.#shutdownHandler = contextActions.shutdown;
+		this.#getSystemPromptFn = contextActions.getSystemPrompt;
 
 		// Command context actions (optional, only for interactive mode)
 		if (commandContextActions) {
-			this.waitForIdleFn = commandContextActions.waitForIdle;
-			this.newSessionHandler = commandContextActions.newSession;
-			this.branchHandler = commandContextActions.branch;
-			this.navigateTreeHandler = commandContextActions.navigateTree;
-			this.switchSessionHandler = commandContextActions.switchSession;
-			this.reloadHandler = commandContextActions.reload;
-			this.getContextUsageFn = commandContextActions.getContextUsage;
-			this.compactFn = commandContextActions.compact;
+			this.#waitForIdleFn = commandContextActions.waitForIdle;
+			this.#newSessionHandler = commandContextActions.newSession;
+			this.#branchHandler = commandContextActions.branch;
+			this.#navigateTreeHandler = commandContextActions.navigateTree;
+			this.#switchSessionHandler = commandContextActions.switchSession;
+			this.#reloadHandler = commandContextActions.reload;
+			this.#getContextUsageFn = commandContextActions.getContextUsage;
+			this.#compactFn = commandContextActions.compact;
 		}
 
-		this.uiContext = uiContext ?? noOpUIContext;
+		this.#uiContext = uiContext ?? noOpUIContext;
 	}
 
 	getUIContext(): ExtensionUIContext {
-		return this.uiContext;
+		return this.#uiContext;
 	}
 
 	hasUI(): boolean {
-		return this.uiContext !== noOpUIContext;
+		return this.#uiContext !== noOpUIContext;
 	}
 
 	getExtensionPaths(): string[] {
@@ -259,7 +259,7 @@ export class ExtensionRunner {
 		this.runtime.flagValues.set(name, value);
 	}
 
-	private static readonly RESERVED_SHORTCUTS = new Set([
+	static readonly #RESERVED_SHORTCUTS = new Set([
 		"ctrl+c",
 		"ctrl+d",
 		"ctrl+z",
@@ -282,7 +282,7 @@ export class ExtensionRunner {
 			for (const [key, shortcut] of ext.shortcuts) {
 				const normalizedKey = key.toLowerCase() as KeyId;
 
-				if (ExtensionRunner.RESERVED_SHORTCUTS.has(normalizedKey)) {
+				if (ExtensionRunner.#RESERVED_SHORTCUTS.has(normalizedKey)) {
 					logger.warn("Extension shortcut conflicts with built-in shortcut", {
 						key,
 						extensionPath: shortcut.extensionPath,
@@ -305,12 +305,12 @@ export class ExtensionRunner {
 	}
 
 	onError(listener: ExtensionErrorListener): () => void {
-		this.errorListeners.add(listener);
-		return () => this.errorListeners.delete(listener);
+		this.#errorListeners.add(listener);
+		return () => this.#errorListeners.delete(listener);
 	}
 
 	emitError(error: ExtensionError): void {
-		for (const listener of this.errorListeners) {
+		for (const listener of this.#errorListeners) {
 			listener(error);
 		}
 	}
@@ -336,14 +336,14 @@ export class ExtensionRunner {
 	}
 
 	getRegisteredCommands(reserved?: Set<string>): RegisteredCommand[] {
-		this.commandDiagnostics = [];
+		this.#commandDiagnostics = [];
 
 		const commands: RegisteredCommand[] = [];
 		for (const ext of this.extensions) {
 			for (const command of ext.commands.values()) {
 				if (reserved?.has(command.name)) {
 					const message = `Extension command '${command.name}' from ${ext.path} conflicts with built-in commands. Skipping.`;
-					this.commandDiagnostics.push({ type: "warning", message, path: ext.path });
+					this.#commandDiagnostics.push({ type: "warning", message, path: ext.path });
 					if (!this.hasUI()) {
 						logger.warn(message);
 					}
@@ -357,7 +357,7 @@ export class ExtensionRunner {
 	}
 
 	getCommandDiagnostics(): Array<{ type: string; message: string; path: string }> {
-		return this.commandDiagnostics;
+		return this.#commandDiagnostics;
 	}
 
 	getCommand(name: string): RegisteredCommand | undefined {
@@ -371,11 +371,11 @@ export class ExtensionRunner {
 	}
 
 	createContext(): ExtensionContext {
-		const getModel = this.getModel;
+		const getModel = this.#getModel;
 		return {
-			ui: this.uiContext,
-			getContextUsage: () => this.getContextUsageFn(),
-			compact: instructionsOrOptions => this.compactFn(instructionsOrOptions),
+			ui: this.#uiContext,
+			getContextUsage: () => this.#getContextUsageFn(),
+			compact: instructionsOrOptions => this.#compactFn(instructionsOrOptions),
 			hasUI: this.hasUI(),
 			cwd: this.cwd,
 			sessionManager: this.sessionManager,
@@ -383,12 +383,12 @@ export class ExtensionRunner {
 			get model() {
 				return getModel();
 			},
-			isIdle: () => this.isIdleFn(),
-			abort: () => this.abortFn(),
-			hasPendingMessages: () => this.hasPendingMessagesFn(),
-			shutdown: () => this.shutdownHandler(),
-			getSystemPrompt: () => this.getSystemPromptFn(),
-			hasQueuedMessages: () => this.hasPendingMessagesFn(), // deprecated alias
+			isIdle: () => this.#isIdleFn(),
+			abort: () => this.#abortFn(),
+			hasPendingMessages: () => this.#hasPendingMessagesFn(),
+			shutdown: () => this.#shutdownHandler(),
+			getSystemPrompt: () => this.#getSystemPromptFn(),
+			hasQueuedMessages: () => this.#hasPendingMessagesFn(), // deprecated alias
 		};
 	}
 
@@ -396,24 +396,24 @@ export class ExtensionRunner {
 	 * Request a graceful shutdown. Called by extension tools and event handlers.
 	 */
 	shutdown(): void {
-		this.shutdownHandler();
+		this.#shutdownHandler();
 	}
 
 	createCommandContext(): ExtensionCommandContext {
 		return {
 			...this.createContext(),
-			getContextUsage: () => this.getContextUsageFn(),
-			waitForIdle: () => this.waitForIdleFn(),
-			newSession: options => this.newSessionHandler(options),
-			branch: entryId => this.branchHandler(entryId),
-			navigateTree: (targetId, options) => this.navigateTreeHandler(targetId, options),
-			switchSession: sessionPath => this.switchSessionHandler(sessionPath),
-			reload: () => this.reloadHandler(),
-			compact: instructionsOrOptions => this.compactFn(instructionsOrOptions),
+			getContextUsage: () => this.#getContextUsageFn(),
+			waitForIdle: () => this.#waitForIdleFn(),
+			newSession: options => this.#newSessionHandler(options),
+			branch: entryId => this.#branchHandler(entryId),
+			navigateTree: (targetId, options) => this.#navigateTreeHandler(targetId, options),
+			switchSession: sessionPath => this.#switchSessionHandler(sessionPath),
+			reload: () => this.#reloadHandler(),
+			compact: instructionsOrOptions => this.#compactFn(instructionsOrOptions),
 		};
 	}
 
-	private isSessionBeforeEvent(event: RunnerEmitEvent): event is SessionBeforeEvent {
+	#isSessionBeforeEvent(event: RunnerEmitEvent): event is SessionBeforeEvent {
 		return (
 			event.type === "session_before_switch" ||
 			event.type === "session_before_branch" ||
@@ -434,7 +434,7 @@ export class ExtensionRunner {
 				try {
 					const handlerResult = await handler(event, ctx);
 
-					if (this.isSessionBeforeEvent(event) && handlerResult) {
+					if (this.#isSessionBeforeEvent(event) && handlerResult) {
 						result = handlerResult as SessionBeforeEventResult;
 						if (result.cancel) {
 							return result as RunnerEmitResult<TEvent>;

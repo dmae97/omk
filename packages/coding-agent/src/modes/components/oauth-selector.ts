@@ -8,14 +8,14 @@ import { DynamicBorder } from "./dynamic-border";
  * Component that renders an OAuth provider selector
  */
 export class OAuthSelectorComponent extends Container {
-	private listContainer: Container;
-	private allProviders: OAuthProviderInfo[] = [];
-	private selectedIndex: number = 0;
-	private mode: "login" | "logout";
-	private authStorage: AuthStorage;
-	private onSelectCallback: (providerId: string) => void;
-	private onCancelCallback: () => void;
-	private statusMessage: string | undefined;
+	#listContainer: Container;
+	#allProviders: OAuthProviderInfo[] = [];
+	#selectedIndex: number = 0;
+	#mode: "login" | "logout";
+	#authStorage: AuthStorage;
+	#onSelectCallback: (providerId: string) => void;
+	#onCancelCallback: () => void;
+	#statusMessage: string | undefined;
 
 	constructor(
 		mode: "login" | "logout",
@@ -25,13 +25,13 @@ export class OAuthSelectorComponent extends Container {
 	) {
 		super();
 
-		this.mode = mode;
-		this.authStorage = authStorage;
-		this.onSelectCallback = onSelect;
-		this.onCancelCallback = onCancel;
+		this.#mode = mode;
+		this.#authStorage = authStorage;
+		this.#onSelectCallback = onSelect;
+		this.#onCancelCallback = onCancel;
 
 		// Load all OAuth providers
-		this.loadProviders();
+		this.#loadProviders();
 
 		// Add top border
 		this.addChild(new DynamicBorder());
@@ -43,8 +43,8 @@ export class OAuthSelectorComponent extends Container {
 		this.addChild(new Spacer(1));
 
 		// Create list container
-		this.listContainer = new Container();
-		this.addChild(this.listContainer);
+		this.#listContainer = new Container();
+		this.addChild(this.#listContainer);
 
 		this.addChild(new Spacer(1));
 
@@ -52,25 +52,25 @@ export class OAuthSelectorComponent extends Container {
 		this.addChild(new DynamicBorder());
 
 		// Initial render
-		this.updateList();
+		this.#updateList();
 	}
 
-	private loadProviders(): void {
-		this.allProviders = getOAuthProviders();
+	#loadProviders(): void {
+		this.#allProviders = getOAuthProviders();
 	}
 
-	private updateList(): void {
-		this.listContainer.clear();
+	#updateList(): void {
+		this.#listContainer.clear();
 
-		for (let i = 0; i < this.allProviders.length; i++) {
-			const provider = this.allProviders[i];
+		for (let i = 0; i < this.#allProviders.length; i++) {
+			const provider = this.#allProviders[i];
 			if (!provider) continue;
 
-			const isSelected = i === this.selectedIndex;
+			const isSelected = i === this.#selectedIndex;
 			const isAvailable = provider.available;
 
 			// Check if user is logged in for this provider
-			const isLoggedIn = this.authStorage.hasOAuth(provider.id);
+			const isLoggedIn = this.#authStorage.hasOAuth(provider.id);
 			const statusIndicator = isLoggedIn ? theme.fg("success", ` ${theme.status.success} logged in`) : "";
 
 			let line = "";
@@ -83,53 +83,53 @@ export class OAuthSelectorComponent extends Container {
 				line = text + statusIndicator;
 			}
 
-			this.listContainer.addChild(new TruncatedText(line, 0, 0));
+			this.#listContainer.addChild(new TruncatedText(line, 0, 0));
 		}
 
 		// Show "no providers" if empty
-		if (this.allProviders.length === 0) {
+		if (this.#allProviders.length === 0) {
 			const message =
-				this.mode === "login" ? "No OAuth providers available" : "No OAuth providers logged in. Use /login first.";
-			this.listContainer.addChild(new TruncatedText(theme.fg("muted", `  ${message}`), 0, 0));
+				this.#mode === "login" ? "No OAuth providers available" : "No OAuth providers logged in. Use /login first.";
+			this.#listContainer.addChild(new TruncatedText(theme.fg("muted", `  ${message}`), 0, 0));
 		}
 
-		if (this.statusMessage) {
-			this.listContainer.addChild(new Spacer(1));
-			this.listContainer.addChild(new TruncatedText(theme.fg("warning", `  ${this.statusMessage}`), 0, 0));
+		if (this.#statusMessage) {
+			this.#listContainer.addChild(new Spacer(1));
+			this.#listContainer.addChild(new TruncatedText(theme.fg("warning", `  ${this.#statusMessage}`), 0, 0));
 		}
 	}
 
 	handleInput(keyData: string): void {
 		// Up arrow
 		if (matchesKey(keyData, "up")) {
-			if (this.allProviders.length > 0) {
-				this.selectedIndex = this.selectedIndex === 0 ? this.allProviders.length - 1 : this.selectedIndex - 1;
+			if (this.#allProviders.length > 0) {
+				this.#selectedIndex = this.#selectedIndex === 0 ? this.#allProviders.length - 1 : this.#selectedIndex - 1;
 			}
-			this.statusMessage = undefined;
-			this.updateList();
+			this.#statusMessage = undefined;
+			this.#updateList();
 		}
 		// Down arrow
 		else if (matchesKey(keyData, "down")) {
-			if (this.allProviders.length > 0) {
-				this.selectedIndex = this.selectedIndex === this.allProviders.length - 1 ? 0 : this.selectedIndex + 1;
+			if (this.#allProviders.length > 0) {
+				this.#selectedIndex = this.#selectedIndex === this.#allProviders.length - 1 ? 0 : this.#selectedIndex + 1;
 			}
-			this.statusMessage = undefined;
-			this.updateList();
+			this.#statusMessage = undefined;
+			this.#updateList();
 		}
 		// Enter
 		else if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
-			const selectedProvider = this.allProviders[this.selectedIndex];
+			const selectedProvider = this.#allProviders[this.#selectedIndex];
 			if (selectedProvider?.available) {
-				this.statusMessage = undefined;
-				this.onSelectCallback(selectedProvider.id);
+				this.#statusMessage = undefined;
+				this.#onSelectCallback(selectedProvider.id);
 			} else if (selectedProvider) {
-				this.statusMessage = "Provider unavailable in this environment.";
-				this.updateList();
+				this.#statusMessage = "Provider unavailable in this environment.";
+				this.#updateList();
 			}
 		}
 		// Escape or Ctrl+C
 		else if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc") || matchesKey(keyData, "ctrl+c")) {
-			this.onCancelCallback();
+			this.#onCancelCallback();
 		}
 	}
 }

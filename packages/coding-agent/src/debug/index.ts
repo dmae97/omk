@@ -30,7 +30,7 @@ const DEBUG_MENU_ITEMS: SelectItem[] = [
  * Debug selector component.
  */
 export class DebugSelectorComponent extends Container {
-	private selectList: SelectList;
+	#selectList: SelectList;
 
 	constructor(
 		private ctx: InteractiveModeContext,
@@ -44,55 +44,55 @@ export class DebugSelectorComponent extends Container {
 		this.addChild(new Spacer(1));
 
 		// Select list
-		this.selectList = new SelectList(DEBUG_MENU_ITEMS, 7, getSelectListTheme());
+		this.#selectList = new SelectList(DEBUG_MENU_ITEMS, 7, getSelectListTheme());
 
-		this.selectList.onSelect = item => {
+		this.#selectList.onSelect = item => {
 			onDone();
-			void this.handleSelection(item.value);
+			void this.#handleSelection(item.value);
 		};
 
-		this.selectList.onCancel = () => {
+		this.#selectList.onCancel = () => {
 			onDone();
 		};
 
-		this.addChild(this.selectList);
+		this.addChild(this.#selectList);
 		this.addChild(new DynamicBorder());
 	}
 
 	handleInput(keyData: string): void {
-		this.selectList.handleInput(keyData);
+		this.#selectList.handleInput(keyData);
 	}
 
-	private async handleSelection(value: string): Promise<void> {
+	async #handleSelection(value: string): Promise<void> {
 		switch (value) {
 			case "open-artifacts":
-				await this.handleOpenArtifacts();
+				await this.#handleOpenArtifacts();
 				break;
 			case "performance":
-				await this.handlePerformanceReport();
+				await this.#handlePerformanceReport();
 				break;
 			case "work":
-				await this.handleWorkReport();
+				await this.#handleWorkReport();
 				break;
 			case "dump":
-				await this.handleDumpReport();
+				await this.#handleDumpReport();
 				break;
 			case "memory":
-				await this.handleMemoryReport();
+				await this.#handleMemoryReport();
 				break;
 			case "logs":
-				await this.handleViewLogs();
+				await this.#handleViewLogs();
 				break;
 			case "system":
-				await this.handleViewSystemInfo();
+				await this.#handleViewSystemInfo();
 				break;
 			case "clear-cache":
-				await this.handleClearCache();
+				await this.#handleClearCache();
 				break;
 		}
 	}
 
-	private async handlePerformanceReport(): Promise<void> {
+	async #handlePerformanceReport(): Promise<void> {
 		// Start profiling
 		let session: ProfilerSession;
 		try {
@@ -146,7 +146,7 @@ export class DebugSelectorComponent extends Container {
 			const workProfile = getWorkProfile(30);
 			const result = await createReportBundle({
 				sessionFile: this.ctx.sessionManager.getSessionFile(),
-				settings: this.getResolvedSettings(),
+				settings: this.#getResolvedSettings(),
 				cpuProfile,
 				workProfile,
 			});
@@ -169,7 +169,7 @@ export class DebugSelectorComponent extends Container {
 		this.ctx.ui.requestRender();
 	}
 
-	private async handleWorkReport(): Promise<void> {
+	async #handleWorkReport(): Promise<void> {
 		try {
 			const workProfile = getWorkProfile(30);
 
@@ -202,7 +202,7 @@ export class DebugSelectorComponent extends Container {
 		this.ctx.ui.requestRender();
 	}
 
-	private async handleDumpReport(): Promise<void> {
+	async #handleDumpReport(): Promise<void> {
 		const loader = new Loader(
 			this.ctx.ui,
 			spinner => theme.fg("accent", spinner),
@@ -216,7 +216,7 @@ export class DebugSelectorComponent extends Container {
 		try {
 			const result = await createReportBundle({
 				sessionFile: this.ctx.sessionManager.getSessionFile(),
-				settings: this.getResolvedSettings(),
+				settings: this.#getResolvedSettings(),
 			});
 
 			loader.stop();
@@ -237,7 +237,7 @@ export class DebugSelectorComponent extends Container {
 		this.ctx.ui.requestRender();
 	}
 
-	private async handleMemoryReport(): Promise<void> {
+	async #handleMemoryReport(): Promise<void> {
 		const loader = new Loader(
 			this.ctx.ui,
 			spinner => theme.fg("accent", spinner),
@@ -254,7 +254,7 @@ export class DebugSelectorComponent extends Container {
 
 			const result = await createReportBundle({
 				sessionFile: this.ctx.sessionManager.getSessionFile(),
-				settings: this.getResolvedSettings(),
+				settings: this.#getResolvedSettings(),
 				heapSnapshot,
 			});
 
@@ -276,7 +276,7 @@ export class DebugSelectorComponent extends Container {
 		this.ctx.ui.requestRender();
 	}
 
-	private async handleViewLogs(): Promise<void> {
+	async #handleViewLogs(): Promise<void> {
 		try {
 			const logs = await getRecentLogs(50);
 			if (!logs) {
@@ -305,7 +305,7 @@ export class DebugSelectorComponent extends Container {
 		this.ctx.ui.requestRender();
 	}
 
-	private async handleViewSystemInfo(): Promise<void> {
+	async #handleViewSystemInfo(): Promise<void> {
 		try {
 			const info = await collectSystemInfo();
 			const formatted = formatSystemInfo(info);
@@ -321,7 +321,7 @@ export class DebugSelectorComponent extends Container {
 		this.ctx.ui.requestRender();
 	}
 
-	private async handleOpenArtifacts(): Promise<void> {
+	async #handleOpenArtifacts(): Promise<void> {
 		const sessionFile = this.ctx.sessionManager.getSessionFile();
 		if (!sessionFile) {
 			this.ctx.showWarning("No active session file.");
@@ -357,7 +357,7 @@ export class DebugSelectorComponent extends Container {
 		}
 	}
 
-	private async handleClearCache(): Promise<void> {
+	async #handleClearCache(): Promise<void> {
 		const sessionsDir = getSessionsDir();
 
 		// Get stats first
@@ -416,7 +416,7 @@ export class DebugSelectorComponent extends Container {
 		this.ctx.ui.requestRender();
 	}
 
-	private getResolvedSettings(): Record<string, unknown> {
+	#getResolvedSettings(): Record<string, unknown> {
 		// Extract key settings for the report
 		return {
 			model: this.ctx.session.model?.id,

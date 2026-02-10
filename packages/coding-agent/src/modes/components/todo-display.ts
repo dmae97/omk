@@ -27,17 +27,17 @@ async function loadTodoFile(filePath: string): Promise<TodoFile | null> {
 }
 
 export class TodoDisplayComponent {
-	public todos: TodoItem[] = [];
-	private expanded = false;
-	private visible = false;
-	private cached: RenderCache | undefined;
+	todos: TodoItem[] = [];
+	#expanded = false;
+	#visible = false;
+	#cached: RenderCache | undefined;
 
 	constructor(private readonly sessionFile: string | null) {}
 
 	async loadTodos(): Promise<void> {
 		if (!this.sessionFile) {
 			this.todos = [];
-			this.visible = false;
+			this.#visible = false;
 			return;
 		}
 
@@ -45,36 +45,36 @@ export class TodoDisplayComponent {
 		const todoPath = path.join(artifactsDir, TODO_FILE_NAME);
 		const data = await loadTodoFile(todoPath);
 		this.todos = data?.todos ?? [];
-		this.visible = this.todos.length > 0;
-		this.cached = undefined;
+		this.#visible = this.todos.length > 0;
+		this.#cached = undefined;
 	}
 
 	setTodos(todos: TodoItem[]): void {
 		this.todos = todos;
-		this.visible = this.todos.length > 0;
-		this.cached = undefined;
+		this.#visible = this.todos.length > 0;
+		this.#cached = undefined;
 	}
 
 	setExpanded(expanded: boolean): void {
-		this.expanded = expanded;
-		this.cached = undefined;
+		this.#expanded = expanded;
+		this.#cached = undefined;
 	}
 
 	isVisible(): boolean {
-		return this.visible;
+		return this.#visible;
 	}
 
 	render(width: number): string[] {
-		if (!this.visible || this.todos.length === 0) {
+		if (!this.#visible || this.todos.length === 0) {
 			return [];
 		}
 
-		const key = new Hasher().bool(this.expanded).u32(width).digest();
-		if (this.cached?.key === key) return this.cached.lines;
+		const key = new Hasher().bool(this.#expanded).u32(width).digest();
+		if (this.#cached?.key === key) return this.#cached.lines;
 
 		const lines: string[] = [];
-		const maxItems = this.expanded ? this.todos.length : Math.min(5, this.todos.length);
-		const hasMore = !this.expanded && this.todos.length > 5;
+		const maxItems = this.#expanded ? this.todos.length : Math.min(5, this.todos.length);
+		const hasMore = !this.#expanded && this.todos.length > 5;
 
 		for (let i = 0; i < maxItems; i++) {
 			const todo = this.todos[i];
@@ -102,12 +102,12 @@ export class TodoDisplayComponent {
 		}
 
 		const result = lines.map(l => truncateToWidth(l, width, Ellipsis.Omit));
-		this.cached = { key, lines: result };
+		this.#cached = { key, lines: result };
 		return result;
 	}
 
 	getRenderedComponent(): Text | null {
-		if (!this.visible) return null;
+		if (!this.#visible) return null;
 		const lines = this.render(80);
 		return new Text(lines.join("\n"), 0, 0);
 	}

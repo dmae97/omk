@@ -6,7 +6,7 @@ import { DynamicBorder } from "./dynamic-border";
  * Component that renders a show images selector with borders
  */
 export class ShowImagesSelectorComponent extends Container {
-	private selectList: SelectList;
+	#selectList: SelectList;
 
 	constructor(currentValue: boolean, onSelect: (show: boolean) => void, onCancel: () => void) {
 		super();
@@ -20,26 +20,26 @@ export class ShowImagesSelectorComponent extends Container {
 		this.addChild(new DynamicBorder());
 
 		// Create selector
-		this.selectList = new SelectList(items, 5, getSelectListTheme());
+		this.#selectList = new SelectList(items, 5, getSelectListTheme());
 
 		// Preselect current value
-		this.selectList.setSelectedIndex(currentValue ? 0 : 1);
+		this.#selectList.setSelectedIndex(currentValue ? 0 : 1);
 
-		this.selectList.onSelect = item => {
+		this.#selectList.onSelect = item => {
 			onSelect(item.value === "yes");
 		};
 
-		this.selectList.onCancel = () => {
+		this.#selectList.onCancel = () => {
 			onCancel();
 		};
 
-		this.addChild(this.selectList);
+		this.addChild(this.#selectList);
 
 		// Add bottom border
 		this.addChild(new DynamicBorder());
 	}
 
 	getSelectList(): SelectList {
-		return this.selectList;
+		return this.#selectList;
 	}
 }

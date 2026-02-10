@@ -22,6 +22,47 @@ This repo contains multiple packages, but **`packages/coding-agent/`** is the pr
 ## Code Quality
 
 - No `any` types unless absolutely necessary
+- **No `private`/`protected`/`public` keyword on class fields or methods** — use ES native `#` private fields for encapsulation; leave members that need external access as bare (no keyword). The only place `private`/`protected`/`public` is allowed is on **constructor parameter properties** (e.g., `constructor(private readonly session: ToolSession)`), where TypeScript requires the keyword for the implicit field declaration.
+
+  ```typescript
+  // BAD: TypeScript keyword privacy
+  class Foo {
+      private bar: string;
+      private _baz = 0;
+      protected qux(): void { ... }
+      public greet(): void { ... }
+  }
+
+  // GOOD: ES native # for private, bare for accessible
+  class Foo {
+      #bar: string;
+      #baz = 0;
+      qux(): void { ... }
+      greet(): void { ... }
+  }
+
+  // OK: constructor parameter properties keep the keyword
+  class Service {
+      constructor(private readonly session: ToolSession) {}
+  }
+  ```
+
+- **NEVER use `ReturnType<>`** — it obscures types behind indirection. Use the actual type name instead. Look up return types in source or `node_modules` type definitions and reference them directly.
+
+  ```typescript
+  // BAD: Indirection through ReturnType
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let stmt: ReturnType<Database["prepare"]>;
+  let stat: Awaited<ReturnType<typeof fs.stat>>;
+
+  // GOOD: Use the actual type
+  let timer?: NodeJS.Timeout;
+  let stmt: Statement;
+  let stat: Stats;
+  ```
+
+  If a function's return type has no exported name, define a named type alias at the call site — don't use `ReturnType<>`.
+
 - Check node_modules for external API type definitions instead of guessing
 - **NEVER use inline imports** - no `await import("./foo.js")`, no `import("pkg").Type` in type positions, no dynamic imports for types. Always use standard top-level imports.
 - NEVER remove or downgrade code to fix type errors from outdated dependencies; upgrade the dependency instead
@@ -122,18 +163,6 @@ import * as os from "node:os";
 - **Async-only file** → `import * as fs from "node:fs/promises"`
 - **Needs both sync and async** → `import * as fs from "node:fs"`, use `fs.promises.xxx` for async
 
-```typescript
-// File with only async operations
-import * as fs from "node:fs/promises";
-await fs.readdir(dir);
-await fs.stat(path);
-
-// File mixing sync and async (e.g., sync in constructor, async in methods)
-import * as fs from "node:fs";
-fs.existsSync(path); // sync
-await fs.promises.readdir(dir); // async
-```
-
 ### File I/O
 
 **Prefer Bun file APIs:**
@@ -142,7 +171,6 @@ await fs.promises.readdir(dir); // async
 // Read
 const text = await Bun.file(path).text();
 const data = await Bun.file(path).json();
-const exists = await Bun.file(path).exists();
 
 // Write
 await Bun.write(path, data);
@@ -184,37 +212,14 @@ if (await Bun.file(path).exists()) {
 	return await Bun.file(path).json();
 }
 
-// BAD: Even with handle reuse, still two syscalls
-const file = Bun.file(path);
-if (await file.exists()) {
-	return await file.json();
-}
-
 // GOOD: One syscall, atomic, type-safe error handling
-import { isEnoent } from "@anthropic/pi-utils";
+import { isEnoent } from "@oh-my-pi/pi-utils";
 
 try {
 	return await Bun.file(path).json();
 } catch (err) {
 	if (isEnoent(err)) return null;
 	throw err;
-}
-```
-
-**NEVER use `Bun.file().exists()` for directories** — it doesn't distinguish files from dirs:
-
-```typescript
-// BAD: Bun.file is for files, not directories
-if (await Bun.file(dirPath).exists()) { ... }
-
-// GOOD: Use fs.stat for directories
-import * as fs from "node:fs/promises";
-
-try {
-	const s = await fs.stat(dirPath);
-	if (s.isDirectory()) { ... }
-} catch (err) {
-	if (isEnoent(err)) { /* doesn't exist */ }
 }
 ```
 
@@ -420,6 +425,7 @@ All text displayed in tool renderers must be sanitized before output. Raw conten
 ### Where to apply
 
 Sanitization applies to **every** code path that renders text to the TUI, including:
+
 - Success output (file previews, command output, search results)
 - **Error messages** — these often embed file content (e.g., patch failure messages include the lines that failed to match)
 - Diff content (both added/removed lines)

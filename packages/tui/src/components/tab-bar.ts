@@ -46,48 +46,48 @@ export interface TabBarTheme {
  * ```
  */
 export class TabBar implements Component {
-	private tabs: Tab[];
-	private activeIndex: number = 0;
-	private theme: TabBarTheme;
-	private label: string;
+	#tabs: Tab[];
+	#activeIndex: number = 0;
+	#theme: TabBarTheme;
+	#label: string;
 
 	/** Callback fired when the active tab changes */
-	public onTabChange?: (tab: Tab, index: number) => void;
+	onTabChange?: (tab: Tab, index: number) => void;
 
 	constructor(label: string, tabs: Tab[], theme: TabBarTheme, initialIndex: number = 0) {
-		this.label = label;
-		this.tabs = tabs;
-		this.theme = theme;
-		this.activeIndex = initialIndex;
+		this.#label = label;
+		this.#tabs = tabs;
+		this.#theme = theme;
+		this.#activeIndex = initialIndex;
 	}
 
 	/** Get the currently active tab */
 	getActiveTab(): Tab {
-		return this.tabs[this.activeIndex];
+		return this.#tabs[this.#activeIndex];
 	}
 
 	/** Get the index of the currently active tab */
 	getActiveIndex(): number {
-		return this.activeIndex;
+		return this.#activeIndex;
 	}
 
 	/** Set the active tab by index (clamped to valid range) */
 	setActiveIndex(index: number): void {
-		const newIndex = Math.max(0, Math.min(index, this.tabs.length - 1));
-		if (newIndex !== this.activeIndex) {
-			this.activeIndex = newIndex;
-			this.onTabChange?.(this.tabs[this.activeIndex], this.activeIndex);
+		const newIndex = Math.max(0, Math.min(index, this.#tabs.length - 1));
+		if (newIndex !== this.#activeIndex) {
+			this.#activeIndex = newIndex;
+			this.onTabChange?.(this.#tabs[this.#activeIndex], this.#activeIndex);
 		}
 	}
 
 	/** Move to the next tab (wraps to first tab after last) */
 	nextTab(): void {
-		this.setActiveIndex((this.activeIndex + 1) % this.tabs.length);
+		this.setActiveIndex((this.#activeIndex + 1) % this.#tabs.length);
 	}
 
 	/** Move to the previous tab (wraps to last tab before first) */
 	prevTab(): void {
-		this.setActiveIndex((this.activeIndex - 1 + this.tabs.length) % this.tabs.length);
+		this.setActiveIndex((this.#activeIndex - 1 + this.#tabs.length) % this.#tabs.length);
 	}
 
 	invalidate(): void {
@@ -115,25 +115,25 @@ export class TabBar implements Component {
 		const parts: string[] = [];
 
 		// Label prefix
-		parts.push(this.theme.label(`${this.label}:`));
+		parts.push(this.#theme.label(`${this.#label}:`));
 		parts.push("  ");
 
 		// Tab buttons
-		for (let i = 0; i < this.tabs.length; i++) {
-			const tab = this.tabs[i];
-			if (i === this.activeIndex) {
-				parts.push(this.theme.activeTab(` ${tab.label} `));
+		for (let i = 0; i < this.#tabs.length; i++) {
+			const tab = this.#tabs[i];
+			if (i === this.#activeIndex) {
+				parts.push(this.#theme.activeTab(` ${tab.label} `));
 			} else {
-				parts.push(this.theme.inactiveTab(` ${tab.label} `));
+				parts.push(this.#theme.inactiveTab(` ${tab.label} `));
 			}
-			if (i < this.tabs.length - 1) {
+			if (i < this.#tabs.length - 1) {
 				parts.push("  ");
 			}
 		}
 
 		// Navigation hint
 		parts.push("  ");
-		parts.push(this.theme.hint("(tab to cycle)"));
+		parts.push(this.#theme.hint("(tab to cycle)"));
 
 		const line = parts.join("");
 		const maxWidth = Math.max(1, width);

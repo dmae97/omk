@@ -82,12 +82,12 @@ function isAgentEvent(value: unknown): value is AgentEvent {
 // ============================================================================
 
 export class RpcClient {
-	private process: ptree.ChildProcess | null = null;
-	private eventListeners: RpcEventListener[] = [];
-	private pendingRequests: Map<string, { resolve: (response: RpcResponse) => void; reject: (error: Error) => void }> =
+	#process: ptree.ChildProcess | null = null;
+	#eventListeners: RpcEventListener[] = [];
+	#pendingRequests: Map<string, { resolve: (response: RpcResponse) => void; reject: (error: Error) => void }> =
 		new Map();
-	private requestId = 0;
-	private abortController = new AbortController();
+	#requestId = 0;
+	#abortController = new AbortController();
 
 	constructor(private options: RpcClientOptions = {}) {}
 
@@ -95,7 +95,7 @@ export class RpcClient {
 	 * Start the RPC agent process.
 	 */
 	async start(): Promise<void> {
-		if (this.process) {
+		if (this.#process) {
 			throw new Error("Client already started");
 		}
 
@@ -112,17 +112,17 @@ export class RpcClient {
 			args.push(...this.options.args);
 		}
 
-		this.process = ptree.spawn(["bun", cliPath, ...args], {
+		this.#process = ptree.spawn(["bun", cliPath, ...args], {
 			cwd: this.options.cwd,
 			env: { ...Bun.env, ...this.options.env },
 			stdin: "pipe",
 		});
 
 		// Process lines in background
-		const lines = readJsonl(this.process.stdout, this.abortController.signal);
+		const lines = readJsonl(this.#process.stdout, this.#abortController.signal);
 		void (async () => {
 			for await (const line of lines) {
-				this.handleLine(line);
+				this.#handleLine(line);
 			}
 		})().catch(() => {});
 
@@ -130,10 +130,10 @@ export class RpcClient {
 		await Bun.sleep(100);
 
 		try {
-			const exitCode = await Promise.race([this.process.exited, Bun.sleep(500).then(() => null)]);
+			const exitCode = await Promise.race([this.#process.exited, Bun.sleep(500).then(() => null)]);
 			if (exitCode !== null) {
 				throw new Error(
-					`Agent process exited immediately with code ${exitCode}. Stderr: ${this.process.peekStderr()}`,
+					`Agent process exited immediately with code ${exitCode}. Stderr: ${this.#process.peekStderr()}`,
 				);
 			}
 		} catch {
@@ -145,23 +145,23 @@ export class RpcClient {
 	 * Stop the RPC agent process.
 	 */
 	stop() {
-		if (!this.process) return;
+		if (!this.#process) return;
 
-		this.process.kill();
-		this.abortController.abort();
-		this.process = null;
-		this.pendingRequests.clear();
+		this.#process.kill();
+		this.#abortController.abort();
+		this.#process = null;
+		this.#pendingRequests.clear();
 	}
 
 	/**
 	 * Subscribe to agent events.
 	 */
 	onEvent(listener: RpcEventListener): () => void {
-		this.eventListeners.push(listener);
+		this.#eventListeners.push(listener);
 		return () => {
-			const index = this.eventListeners.indexOf(listener);
+			const index = this.#eventListeners.indexOf(listener);
 			if (index !== -1) {
-				this.eventListeners.splice(index, 1);
+				this.#eventListeners.splice(index, 1);
 			}
 		};
 	}
@@ -170,7 +170,7 @@ export class RpcClient {
 	 * Get collected stderr output (useful for debugging).
 	 */
 	getStderr(): string {
-		return this.process?.peekStderr() ?? "";
+		return this.#process?.peekStderr() ?? "";
 	}
 
 	// =========================================================================
@@ -183,28 +183,28 @@ export class RpcClient {
 	 * Use waitForIdle() to wait for completion.
 	 */
 	async prompt(message: string, images?: ImageContent[]): Promise<void> {
-		await this.send({ type: "prompt", message, images });
+		await this.#send({ type: "prompt", message, images });
 	}
 
 	/**
 	 * Queue a steering message to interrupt the agent mid-run.
 	 */
 	async steer(message: string, images?: ImageContent[]): Promise<void> {
-		await this.send({ type: "steer", message, images });
+		await this.#send({ type: "steer", message, images });
 	}
 
 	/**
 	 * Queue a follow-up message to be processed after the agent finishes.
 	 */
 	async followUp(message: string, images?: ImageContent[]): Promise<void> {
-		await this.send({ type: "follow_up", message, images });
+		await this.#send({ type: "follow_up", message, images });
 	}
 
 	/**
 	 * Abort current operation.
 	 */
 	async abort(): Promise<void> {
-		await this.send({ type: "abort" });
+		await this.#send({ type: "abort" });
 	}
 
 	/**
@@ -213,24 +213,24 @@ export class RpcClient {
 	 * @returns Object with `cancelled: true` if an extension cancelled the new session
 	 */
 	async newSession(parentSession?: string): Promise<{ cancelled: boolean }> {
-		const response = await this.send({ type: "new_session", parentSession });
-		return this.getData(response);
+		const response = await this.#send({ type: "new_session", parentSession });
+		return this.#getData(response);
 	}
 
 	/**
 	 * Get current session state.
 	 */
 	async getState(): Promise<RpcSessionState> {
-		const response = await this.send({ type: "get_state" });
-		return this.getData(response);
+		const response = await this.#send({ type: "get_state" });
+		return this.#getData(response);
 	}
 
 	/**
 	 * Set model by provider and ID.
 	 */
 	async setModel(provider: string, modelId: string): Promise<{ provider: string; id: string }> {
-		const response = await this.send({ type: "set_model", provider, modelId });
-		return this.getData(response);
+		const response = await this.#send({ type: "set_model", provider, modelId });
+		return this.#getData(response);
 	}
 
 	/**
@@ -241,105 +241,105 @@ export class RpcClient {
 		thinkingLevel: ThinkingLevel;
 		isScoped: boolean;
 	} | null> {
-		const response = await this.send({ type: "cycle_model" });
-		return this.getData(response);
+		const response = await this.#send({ type: "cycle_model" });
+		return this.#getData(response);
 	}
 
 	/**
 	 * Get list of available models.
 	 */
 	async getAvailableModels(): Promise<ModelInfo[]> {
-		const response = await this.send({ type: "get_available_models" });
-		return this.getData<{ models: ModelInfo[] }>(response).models;
+		const response = await this.#send({ type: "get_available_models" });
+		return this.#getData<{ models: ModelInfo[] }>(response).models;
 	}
 
 	/**
 	 * Set thinking level.
 	 */
 	async setThinkingLevel(level: ThinkingLevel): Promise<void> {
-		await this.send({ type: "set_thinking_level", level });
+		await this.#send({ type: "set_thinking_level", level });
 	}
 
 	/**
 	 * Cycle thinking level.
 	 */
 	async cycleThinkingLevel(): Promise<{ level: ThinkingLevel } | null> {
-		const response = await this.send({ type: "cycle_thinking_level" });
-		return this.getData(response);
+		const response = await this.#send({ type: "cycle_thinking_level" });
+		return this.#getData(response);
 	}
 
 	/**
 	 * Set steering mode.
 	 */
 	async setSteeringMode(mode: "all" | "one-at-a-time"): Promise<void> {
-		await this.send({ type: "set_steering_mode", mode });
+		await this.#send({ type: "set_steering_mode", mode });
 	}
 
 	/**
 	 * Set follow-up mode.
 	 */
 	async setFollowUpMode(mode: "all" | "one-at-a-time"): Promise<void> {
-		await this.send({ type: "set_follow_up_mode", mode });
+		await this.#send({ type: "set_follow_up_mode", mode });
 	}
 
 	/**
 	 * Compact session context.
 	 */
 	async compact(customInstructions?: string): Promise<CompactionResult> {
-		const response = await this.send({ type: "compact", customInstructions });
-		return this.getData(response);
+		const response = await this.#send({ type: "compact", customInstructions });
+		return this.#getData(response);
 	}
 
 	/**
 	 * Set auto-compaction enabled/disabled.
 	 */
 	async setAutoCompaction(enabled: boolean): Promise<void> {
-		await this.send({ type: "set_auto_compaction", enabled });
+		await this.#send({ type: "set_auto_compaction", enabled });
 	}
 
 	/**
 	 * Set auto-retry enabled/disabled.
 	 */
 	async setAutoRetry(enabled: boolean): Promise<void> {
-		await this.send({ type: "set_auto_retry", enabled });
+		await this.#send({ type: "set_auto_retry", enabled });
 	}
 
 	/**
 	 * Abort in-progress retry.
 	 */
 	async abortRetry(): Promise<void> {
-		await this.send({ type: "abort_retry" });
+		await this.#send({ type: "abort_retry" });
 	}
 
 	/**
 	 * Execute a bash command.
 	 */
 	async bash(command: string): Promise<BashResult> {
-		const response = await this.send({ type: "bash", command });
-		return this.getData(response);
+		const response = await this.#send({ type: "bash", command });
+		return this.#getData(response);
 	}
 
 	/**
 	 * Abort running bash command.
 	 */
 	async abortBash(): Promise<void> {
-		await this.send({ type: "abort_bash" });
+		await this.#send({ type: "abort_bash" });
 	}
 
 	/**
 	 * Get session statistics.
 	 */
 	async getSessionStats(): Promise<SessionStats> {
-		const response = await this.send({ type: "get_session_stats" });
-		return this.getData(response);
+		const response = await this.#send({ type: "get_session_stats" });
+		return this.#getData(response);
 	}
 
 	/**
 	 * Export session to HTML.
 	 */
 	async exportHtml(outputPath?: string): Promise<{ path: string }> {
-		const response = await this.send({ type: "export_html", outputPath });
-		return this.getData(response);
+		const response = await this.#send({ type: "export_html", outputPath });
+		return this.#getData(response);
 	}
 
 	/**
@@ -347,8 +347,8 @@ export class RpcClient {
 	 * @returns Object with `cancelled: true` if an extension cancelled the switch
 	 */
 	async switchSession(sessionPath: string): Promise<{ cancelled: boolean }> {
-		const response = await this.send({ type: "switch_session", sessionPath });
-		return this.getData(response);
+		const response = await this.#send({ type: "switch_session", sessionPath });
+		return this.#getData(response);
 	}
 
 	/**
@@ -356,32 +356,32 @@ export class RpcClient {
 	 * @returns Object with `text` (the message text) and `cancelled` (if extension cancelled)
 	 */
 	async branch(entryId: string): Promise<{ text: string; cancelled: boolean }> {
-		const response = await this.send({ type: "branch", entryId });
-		return this.getData(response);
+		const response = await this.#send({ type: "branch", entryId });
+		return this.#getData(response);
 	}
 
 	/**
 	 * Get messages available for branching.
 	 */
 	async getBranchMessages(): Promise<Array<{ entryId: string; text: string }>> {
-		const response = await this.send({ type: "get_branch_messages" });
-		return this.getData<{ messages: Array<{ entryId: string; text: string }> }>(response).messages;
+		const response = await this.#send({ type: "get_branch_messages" });
+		return this.#getData<{ messages: Array<{ entryId: string; text: string }> }>(response).messages;
 	}
 
 	/**
 	 * Get text of last assistant message.
 	 */
 	async getLastAssistantText(): Promise<string | null> {
-		const response = await this.send({ type: "get_last_assistant_text" });
-		return this.getData<{ text: string | null }>(response).text;
+		const response = await this.#send({ type: "get_last_assistant_text" });
+		return this.#getData<{ text: string | null }>(response).text;
 	}
 
 	/**
 	 * Get all messages in the session.
 	 */
 	async getMessages(): Promise<AgentMessage[]> {
-		const response = await this.send({ type: "get_messages" });
-		return this.getData<{ messages: AgentMessage[] }>(response).messages;
+		const response = await this.#send({ type: "get_messages" });
+		return this.#getData<{ messages: AgentMessage[] }>(response).messages;
 	}
 
 	// =========================================================================
@@ -408,7 +408,7 @@ export class RpcClient {
 			if (settled) return;
 			settled = true;
 			unsubscribe();
-			reject(new Error(`Timeout waiting for agent to become idle. Stderr: ${this.process?.peekStderr() ?? ""}`));
+			reject(new Error(`Timeout waiting for agent to become idle. Stderr: ${this.#process?.peekStderr() ?? ""}`));
 		})();
 		return promise;
 	}
@@ -434,7 +434,7 @@ export class RpcClient {
 			if (settled) return;
 			settled = true;
 			unsubscribe();
-			reject(new Error(`Timeout collecting events. Stderr: ${this.process?.peekStderr() ?? ""}`));
+			reject(new Error(`Timeout collecting events. Stderr: ${this.#process?.peekStderr() ?? ""}`));
 		})();
 		return promise;
 	}
@@ -452,13 +452,13 @@ export class RpcClient {
 	// Internal
 	// =========================================================================
 
-	private handleLine(data: unknown): void {
+	#handleLine(data: unknown): void {
 		// Check if it's a response to a pending request
 		if (isRpcResponse(data)) {
 			const id = data.id;
-			if (id && this.pendingRequests.has(id)) {
-				const pending = this.pendingRequests.get(id)!;
-				this.pendingRequests.delete(id);
+			if (id && this.#pendingRequests.has(id)) {
+				const pending = this.#pendingRequests.get(id)!;
+				this.#pendingRequests.delete(id);
 				pending.resolve(data);
 				return;
 			}
@@ -467,31 +467,31 @@ export class RpcClient {
 		if (!isAgentEvent(data)) return;
 
 		// Otherwise it's an event
-		for (const listener of this.eventListeners) {
+		for (const listener of this.#eventListeners) {
 			listener(data);
 		}
 	}
 
-	private send(command: RpcCommandBody): Promise<RpcResponse> {
-		if (!this.process?.stdin) {
+	#send(command: RpcCommandBody): Promise<RpcResponse> {
+		if (!this.#process?.stdin) {
 			throw new Error("Client not started");
 		}
 
-		const id = `req_${++this.requestId}`;
+		const id = `req_${++this.#requestId}`;
 		const fullCommand = { ...command, id } as RpcCommand;
 		const { promise, resolve, reject } = Promise.withResolvers<RpcResponse>();
 		let settled = false;
 		void (async () => {
 			await Bun.sleep(30000);
 			if (settled) return;
-			this.pendingRequests.delete(id);
+			this.#pendingRequests.delete(id);
 			settled = true;
 			reject(
-				new Error(`Timeout waiting for response to ${command.type}. Stderr: ${this.process?.peekStderr() ?? ""}`),
+				new Error(`Timeout waiting for response to ${command.type}. Stderr: ${this.#process?.peekStderr() ?? ""}`),
 			);
 		})();
 
-		this.pendingRequests.set(id, {
+		this.#pendingRequests.set(id, {
 			resolve: response => {
 				if (settled) return;
 				settled = true;
@@ -505,13 +505,13 @@ export class RpcClient {
 		});
 
 		// Write to stdin after registering the handler
-		const stdin = this.process!.stdin as import("bun").FileSink;
+		const stdin = this.#process!.stdin as import("bun").FileSink;
 		stdin.write(`${JSON.stringify(fullCommand)}\n`);
 		// flush() returns number | Promise<number> - handle both cases
 		const flushResult = stdin.flush();
 		if (flushResult instanceof Promise) {
 			flushResult.catch((err: Error) => {
-				this.pendingRequests.delete(id);
+				this.#pendingRequests.delete(id);
 				if (settled) return;
 				settled = true;
 				reject(err);
@@ -520,7 +520,7 @@ export class RpcClient {
 		return promise;
 	}
 
-	private getData<T>(response: RpcResponse): T {
+	#getData<T>(response: RpcResponse): T {
 		if (!response.success) {
 			const errorResponse = response as Extract<RpcResponse, { success: false }>;
 			throw new Error(errorResponse.error);

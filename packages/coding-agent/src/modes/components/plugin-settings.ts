@@ -36,7 +36,7 @@ export interface PluginListCallbacks {
  * Selecting a plugin opens its detail view.
  */
 export class PluginListComponent extends Container {
-	private readonly selectList: SelectList;
+	readonly #selectList: SelectList;
 
 	constructor(
 		private readonly plugins: InstalledPlugin[],
@@ -57,8 +57,8 @@ export class PluginListComponent extends Container {
 			this.addChild(new DynamicBorder());
 
 			// Create empty list that just handles escape
-			this.selectList = new SelectList([], 1, getSelectListTheme());
-			this.selectList.onCancel = callbacks.onCancel;
+			this.#selectList = new SelectList([], 1, getSelectListTheme());
+			this.#selectList.onCancel = callbacks.onCancel;
 			return;
 		}
 
@@ -81,25 +81,25 @@ export class PluginListComponent extends Container {
 			};
 		});
 
-		this.selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
+		this.#selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
 
-		this.selectList.onSelect = item => {
+		this.#selectList.onSelect = item => {
 			const plugin = this.plugins.find(p => p.name === item.value);
 			if (plugin) {
 				callbacks.onPluginSelect(plugin);
 			}
 		};
 
-		this.selectList.onCancel = callbacks.onCancel;
+		this.#selectList.onCancel = callbacks.onCancel;
 
-		this.addChild(this.selectList);
+		this.addChild(this.#selectList);
 		this.addChild(new Spacer(1));
 		this.addChild(new Text(theme.fg("dim", "  Enter to configure · Esc to go back"), 0, 0));
 		this.addChild(new DynamicBorder());
 	}
 
 	handleInput(data: string): void {
-		this.selectList.handleInput(data);
+		this.#selectList.handleInput(data);
 	}
 }
 
@@ -121,7 +121,7 @@ export interface PluginDetailCallbacks {
  * - Config settings
  */
 export class PluginDetailComponent extends Container {
-	private settingsList!: SettingsList;
+	#settingsList!: SettingsList;
 
 	constructor(
 		private plugin: InstalledPlugin,
@@ -130,10 +130,10 @@ export class PluginDetailComponent extends Container {
 	) {
 		super();
 
-		void this.rebuild();
+		void this.#rebuild();
 	}
 
-	private async rebuild(): Promise<void> {
+	async #rebuild(): Promise<void> {
 		this.clear();
 
 		const plugin = this.plugin;
@@ -239,7 +239,7 @@ export class PluginDetailComponent extends Container {
 			}
 		}
 
-		this.settingsList = new SettingsList(
+		this.#settingsList = new SettingsList(
 			items,
 			Math.min(items.length, 10),
 			getSettingsListTheme(),
@@ -269,15 +269,15 @@ export class PluginDetailComponent extends Container {
 			this.callbacks.onBack,
 		);
 
-		this.addChild(this.settingsList);
+		this.addChild(this.#settingsList);
 		this.addChild(new Spacer(1));
 		this.addChild(new Text(theme.fg("dim", "  Enter to edit · Esc to go back"), 0, 0));
 		this.addChild(new DynamicBorder());
 	}
 
 	handleInput(data: string): void {
-		if (!this.settingsList) return;
-		this.settingsList.handleInput(data);
+		if (!this.#settingsList) return;
+		this.#settingsList.handleInput(data);
 	}
 }
 
@@ -289,7 +289,7 @@ export class PluginDetailComponent extends Container {
  * Submenu for enum config values.
  */
 class ConfigEnumSubmenu extends Container {
-	private selectList: SelectList;
+	#selectList: SelectList;
 
 	constructor(
 		key: string,
@@ -309,23 +309,23 @@ class ConfigEnumSubmenu extends Container {
 		this.addChild(new Spacer(1));
 
 		const items: SelectItem[] = values.map(v => ({ value: v, label: v }));
-		this.selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
+		this.#selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
 
 		const currentIndex = values.indexOf(currentValue);
 		if (currentIndex !== -1) {
-			this.selectList.setSelectedIndex(currentIndex);
+			this.#selectList.setSelectedIndex(currentIndex);
 		}
 
-		this.selectList.onSelect = item => onSelect(item.value);
-		this.selectList.onCancel = onCancel;
+		this.#selectList.onSelect = item => onSelect(item.value);
+		this.#selectList.onCancel = onCancel;
 
-		this.addChild(this.selectList);
+		this.addChild(this.#selectList);
 		this.addChild(new Spacer(1));
 		this.addChild(new Text(theme.fg("dim", "  Enter to select · Esc to cancel"), 0, 0));
 	}
 
 	handleInput(data: string): void {
-		this.selectList.handleInput(data);
+		this.#selectList.handleInput(data);
 	}
 }
 
@@ -333,7 +333,7 @@ class ConfigEnumSubmenu extends Container {
  * Submenu for string/number config values with text input.
  */
 class ConfigInputSubmenu extends Container {
-	private input: Input;
+	#input: Input;
 
 	constructor(
 		key: string,
@@ -364,12 +364,12 @@ class ConfigInputSubmenu extends Container {
 		this.addChild(new Spacer(1));
 
 		// Input field
-		this.input = new Input();
+		this.#input = new Input();
 		if (!schema.secret && currentValue) {
-			this.input.setValue(currentValue);
+			this.#input.setValue(currentValue);
 		}
 
-		this.input.onSubmit = value => {
+		this.#input.onSubmit = value => {
 			if (value.trim()) {
 				this.onSubmit(value);
 			} else {
@@ -377,7 +377,7 @@ class ConfigInputSubmenu extends Container {
 			}
 		};
 
-		this.addChild(this.input);
+		this.addChild(this.#input);
 		this.addChild(new Spacer(1));
 		this.addChild(new Text(theme.fg("dim", "  Enter to save · Esc to cancel"), 0, 0));
 	}
@@ -387,7 +387,7 @@ class ConfigInputSubmenu extends Container {
 			this.onCancel();
 			return;
 		}
-		this.input.handleInput(data);
+		this.#input.handleInput(data);
 	}
 }
 
@@ -410,68 +410,68 @@ interface InputHandler {
  * Manages navigation between plugin list and plugin detail views.
  */
 export class PluginSettingsComponent extends Container {
-	private manager: PluginManager;
-	private viewComponent: (Container & InputHandler) | null = null;
+	#manager: PluginManager;
+	#viewComponent: (Container & InputHandler) | null = null;
 	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: state tracking for view management
-	private currentView: "list" | "detail" = "list";
+	#currentView: "list" | "detail" = "list";
 	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: state tracking for view management
-	private currentPlugin: InstalledPlugin | null = null;
+	#currentPlugin: InstalledPlugin | null = null;
 
 	constructor(
 		cwd: string,
 		private readonly callbacks: PluginSettingsCallbacks,
 	) {
 		super();
-		this.manager = new PluginManager(cwd);
-		this.showPluginList();
+		this.#manager = new PluginManager(cwd);
+		this.#showPluginList();
 	}
 
-	private async showPluginList(): Promise<void> {
-		this.currentView = "list";
-		this.currentPlugin = null;
+	async #showPluginList(): Promise<void> {
+		this.#currentView = "list";
+		this.#currentPlugin = null;
 		this.clear();
 
-		const plugins = await this.manager.list();
+		const plugins = await this.#manager.list();
 
-		this.viewComponent = new PluginListComponent(plugins, {
-			onPluginSelect: plugin => this.showPluginDetail(plugin),
+		this.#viewComponent = new PluginListComponent(plugins, {
+			onPluginSelect: plugin => this.#showPluginDetail(plugin),
 			onCancel: () => this.callbacks.onClose(),
 		});
 
-		this.addChild(this.viewComponent);
+		this.addChild(this.#viewComponent);
 	}
 
-	private showPluginDetail(plugin: InstalledPlugin): void {
-		this.currentView = "detail";
-		this.currentPlugin = plugin;
+	#showPluginDetail(plugin: InstalledPlugin): void {
+		this.#currentView = "detail";
+		this.#currentPlugin = plugin;
 		this.clear();
 
-		this.viewComponent = new PluginDetailComponent(plugin, this.manager, {
+		this.#viewComponent = new PluginDetailComponent(plugin, this.#manager, {
 			onEnabledChange: async enabled => {
-				await this.manager.setEnabled(plugin.name, enabled);
+				await this.#manager.setEnabled(plugin.name, enabled);
 				this.callbacks.onPluginChanged();
 			},
 			onFeatureChange: async (feature, enabled) => {
-				const current = new Set((await this.manager.getEnabledFeatures(plugin.name)) ?? []);
+				const current = new Set((await this.#manager.getEnabledFeatures(plugin.name)) ?? []);
 				if (enabled) {
 					current.add(feature);
 				} else {
 					current.delete(feature);
 				}
-				await this.manager.setEnabledFeatures(plugin.name, [...current]);
+				await this.#manager.setEnabledFeatures(plugin.name, [...current]);
 				this.callbacks.onPluginChanged();
 			},
 			onConfigChange: async (key, value) => {
-				await this.manager.setPluginSetting(plugin.name, key, value);
+				await this.#manager.setPluginSetting(plugin.name, key, value);
 				this.callbacks.onPluginChanged();
 			},
-			onBack: () => this.showPluginList(),
+			onBack: () => this.#showPluginList(),
 		});
 
-		this.addChild(this.viewComponent);
+		this.addChild(this.#viewComponent);
 	}
 
 	handleInput(data: string): void {
-		this.viewComponent?.handleInput(data);
+		this.#viewComponent?.handleInput(data);
 	}
 }

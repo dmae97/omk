@@ -322,11 +322,6 @@ export class InputController {
 				this.ctx.editor.setText("");
 				return;
 			}
-			if (text === "/arminsayshi") {
-				this.ctx.handleArminSaysHi();
-				this.ctx.editor.setText("");
-				return;
-			}
 			if (text === "/resume") {
 				this.ctx.showSessionSelector();
 				this.ctx.editor.setText("");
@@ -722,15 +717,15 @@ export class InputController {
 		this.ctx.showStatus(`Thinking blocks: ${this.ctx.hideThinkingBlock ? "hidden" : "visible"}`);
 	}
 
-	private getEditorTerminalPath(): string | null {
+	#getEditorTerminalPath(): string | null {
 		if (process.platform === "win32") {
 			return null;
 		}
 		return "/dev/tty";
 	}
 
-	private async openEditorTerminalHandle(): Promise<fs.FileHandle | null> {
-		const terminalPath = this.getEditorTerminalPath();
+	async #openEditorTerminalHandle(): Promise<fs.FileHandle | null> {
+		const terminalPath = this.#getEditorTerminalPath();
 		if (!terminalPath) {
 			return null;
 		}
@@ -752,7 +747,7 @@ export class InputController {
 
 		let ttyHandle: fs.FileHandle | null = null;
 		try {
-			ttyHandle = await this.openEditorTerminalHandle();
+			ttyHandle = await this.#openEditorTerminalHandle();
 			this.ctx.ui.stop();
 
 			const stdio: [number | "inherit", number | "inherit", number | "inherit"] = ttyHandle

@@ -150,17 +150,17 @@ function formatTodoLine(item: TodoItem, uiTheme: Theme, prefix: string): string 
 // =============================================================================
 
 export class TodoWriteTool implements AgentTool<typeof todoWriteSchema, TodoWriteToolDetails> {
-	public readonly name = "todo_write";
-	public readonly label = "Todo Write";
-	public readonly description: string;
-	public readonly parameters = todoWriteSchema;
-	public readonly concurrency = "exclusive";
+	readonly name = "todo_write";
+	readonly label = "Todo Write";
+	readonly description: string;
+	readonly parameters = todoWriteSchema;
+	readonly concurrency = "exclusive";
 
 	constructor(private readonly session: ToolSession) {
 		this.description = renderPromptTemplate(todoWriteDescription);
 	}
 
-	public async execute(
+	async execute(
 		_toolCallId: string,
 		params: TodoWriteParams,
 		_signal?: AbortSignal,

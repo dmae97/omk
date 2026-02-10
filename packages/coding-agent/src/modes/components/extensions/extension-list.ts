@@ -31,71 +31,71 @@ type ListItem =
 	| { type: "extension"; item: Extension };
 
 export class ExtensionList implements Component {
-	private listItems: ListItem[] = [];
-	private selectedIndex = 0;
-	private scrollOffset = 0;
-	private searchQuery = "";
-	private focused = false;
-	private masterSwitchProvider: string | null = null;
-	private maxVisible: number;
+	#listItems: ListItem[] = [];
+	#selectedIndex = 0;
+	#scrollOffset = 0;
+	#searchQuery = "";
+	#focused = false;
+	#masterSwitchProvider: string | null = null;
+	#maxVisible: number;
 
 	constructor(
 		private extensions: Extension[],
 		private readonly callbacks: ExtensionListCallbacks = {},
 		maxVisible?: number,
 	) {
-		this.masterSwitchProvider = callbacks.masterSwitchProvider ?? null;
-		this.maxVisible = maxVisible ?? DEFAULT_MAX_VISIBLE;
-		this.rebuildList();
+		this.#masterSwitchProvider = callbacks.masterSwitchProvider ?? null;
+		this.#maxVisible = maxVisible ?? DEFAULT_MAX_VISIBLE;
+		this.#rebuildList();
 	}
 
 	setMaxVisible(maxVisible: number): void {
-		this.maxVisible = maxVisible;
-		this.clampSelection();
+		this.#maxVisible = maxVisible;
+		this.#clampSelection();
 	}
 
 	setExtensions(extensions: Extension[]): void {
 		this.extensions = extensions;
-		this.rebuildList();
-		this.clampSelection();
+		this.#rebuildList();
+		this.#clampSelection();
 	}
 
 	setFocused(focused: boolean): void {
-		this.focused = focused;
+		this.#focused = focused;
 	}
 
 	setMasterSwitchProvider(providerId: string | null): void {
-		this.masterSwitchProvider = providerId;
-		this.rebuildList();
+		this.#masterSwitchProvider = providerId;
+		this.#rebuildList();
 	}
 
 	getSearchQuery(): string {
-		return this.searchQuery;
+		return this.#searchQuery;
 	}
 
 	resetSelection(): void {
-		this.selectedIndex = 0;
-		this.scrollOffset = 0;
-		this.notifySelectionChange();
+		this.#selectedIndex = 0;
+		this.#scrollOffset = 0;
+		this.#notifySelectionChange();
 	}
 
 	getSelectedExtension(): Extension | null {
-		const item = this.listItems[this.selectedIndex];
+		const item = this.#listItems[this.#selectedIndex];
 		return item?.type === "extension" ? item.item : null;
 	}
 
 	/** Get the currently selected kind header (for preview purposes) */
 	getSelectedKind(): ExtensionKind | null {
-		const item = this.listItems[this.selectedIndex];
+		const item = this.#listItems[this.#selectedIndex];
 		return item?.type === "kind-header" ? item.kind : null;
 	}
 
 	setSearchQuery(query: string): void {
-		this.searchQuery = query;
-		this.rebuildList();
-		this.selectedIndex = 0;
-		this.scrollOffset = 0;
-		this.notifySelectionChange();
+		this.#searchQuery = query;
+		this.#rebuildList();
+		this.#selectedIndex = 0;
+		this.#scrollOffset = 0;
+		this.#notifySelectionChange();
 	}
 
 	clearSearch(): void {
@@ -109,47 +109,47 @@ export class ExtensionList implements Component {
 
 		// Search bar
 		const searchPrefix = theme.fg("muted", "Search: ");
-		const searchText = this.searchQuery || (this.focused ? "" : theme.fg("dim", "type to filter"));
-		const cursor = this.focused ? theme.fg("accent", "_") : "";
+		const searchText = this.#searchQuery || (this.#focused ? "" : theme.fg("dim", "type to filter"));
+		const cursor = this.#focused ? theme.fg("accent", "_") : "";
 		lines.push(searchPrefix + searchText + cursor);
 		lines.push("");
 
-		if (this.listItems.length === 0) {
+		if (this.#listItems.length === 0) {
 			lines.push(theme.fg("muted", "  No extensions found for this provider."));
 			return lines;
 		}
 
 		// Determine if master switch is off (for dimming child items)
-		const masterDisabled = this.masterSwitchProvider !== null && !isProviderEnabled(this.masterSwitchProvider);
+		const masterDisabled = this.#masterSwitchProvider !== null && !isProviderEnabled(this.#masterSwitchProvider);
 
 		// Calculate visible range
-		const startIdx = this.scrollOffset;
-		const endIdx = Math.min(startIdx + this.maxVisible, this.listItems.length);
+		const startIdx = this.#scrollOffset;
+		const endIdx = Math.min(startIdx + this.#maxVisible, this.#listItems.length);
 
 		// Render visible items
 		for (let i = startIdx; i < endIdx; i++) {
-			const listItem = this.listItems[i];
-			const isSelected = this.focused && i === this.selectedIndex;
+			const listItem = this.#listItems[i];
+			const isSelected = this.#focused && i === this.#selectedIndex;
 
 			if (listItem.type === "master") {
-				lines.push(this.renderMasterSwitch(listItem, isSelected, width));
+				lines.push(this.#renderMasterSwitch(listItem, isSelected, width));
 			} else if (listItem.type === "kind-header") {
-				lines.push(this.renderKindHeader(listItem, isSelected, width));
+				lines.push(this.#renderKindHeader(listItem, isSelected, width));
 			} else {
-				lines.push(this.renderExtensionRow(listItem.item, isSelected, width, masterDisabled));
+				lines.push(this.#renderExtensionRow(listItem.item, isSelected, width, masterDisabled));
 			}
 		}
 
 		// Scroll indicator
-		if (this.listItems.length > this.maxVisible) {
-			const indicator = theme.fg("muted", `  (${this.selectedIndex + 1}/${this.listItems.length})`);
+		if (this.#listItems.length > this.#maxVisible) {
+			const indicator = theme.fg("muted", `  (${this.#selectedIndex + 1}/${this.#listItems.length})`);
 			lines.push(indicator);
 		}
 
 		return lines;
 	}
 
-	private renderMasterSwitch(item: ListItem & { type: "master" }, isSelected: boolean, width: number): string {
+	#renderMasterSwitch(item: ListItem & { type: "master" }, isSelected: boolean, width: number): string {
 		const checkbox = item.enabled
 			? theme.fg("success", theme.checkbox.checked)
 			: theme.fg("dim", theme.checkbox.unchecked);
@@ -169,7 +169,7 @@ export class ExtensionList implements Component {
 		return truncateToWidth(line, width);
 	}
 
-	private renderKindHeader(item: ListItem & { type: "kind-header" }, isSelected: boolean, width: number): string {
+	#renderKindHeader(item: ListItem & { type: "kind-header" }, isSelected: boolean, width: number): string {
 		const countBadge = theme.fg("muted", `(${item.count})`);
 		let line = `${item.icon} ${item.label} ${countBadge}`;
 
@@ -183,12 +183,12 @@ export class ExtensionList implements Component {
 		return truncateToWidth(line, width);
 	}
 
-	private renderExtensionRow(ext: Extension, isSelected: boolean, width: number, masterDisabled: boolean): string {
+	#renderExtensionRow(ext: Extension, isSelected: boolean, width: number, masterDisabled: boolean): string {
 		// When master is disabled, all items appear dimmed
 		const effectivelyDisabled = masterDisabled || ext.state === "disabled";
 
 		// Status icon
-		const stateIcon = this.getStateIcon(ext.state, masterDisabled);
+		const stateIcon = this.#getStateIcon(ext.state, masterDisabled);
 
 		// Name
 		let name = ext.displayName;
@@ -206,7 +206,7 @@ export class ExtensionList implements Component {
 		}
 
 		// Pad name
-		const namePadded = this.padText(name, nameWidth);
+		const namePadded = this.#padText(name, nameWidth);
 		line += namePadded;
 
 		// Trigger hint
@@ -226,7 +226,7 @@ export class ExtensionList implements Component {
 		return truncateToWidth(line, width);
 	}
 
-	private getKindIcon(kind: ExtensionKind): string {
+	#getKindIcon(kind: ExtensionKind): string {
 		switch (kind) {
 			case "extension-module":
 				return theme.icon.extensionTool;
@@ -253,7 +253,7 @@ export class ExtensionList implements Component {
 		}
 	}
 
-	private getStateIcon(state: ExtensionState, masterDisabled: boolean): string {
+	#getStateIcon(state: ExtensionState, masterDisabled: boolean): string {
 		if (masterDisabled) {
 			return theme.fg("dim", theme.status.disabled);
 		}
@@ -267,7 +267,7 @@ export class ExtensionList implements Component {
 		}
 	}
 
-	private padText(text: string, targetWidth: number): string {
+	#padText(text: string, targetWidth: number): string {
 		const width = visibleWidth(text);
 		if (width >= targetWidth) {
 			return truncateToWidth(text, targetWidth);
@@ -275,34 +275,34 @@ export class ExtensionList implements Component {
 		return text + padding(targetWidth - width);
 	}
 
-	private rebuildList(): void {
-		this.listItems = [];
+	#rebuildList(): void {
+		this.#listItems = [];
 
 		// Apply search filter
-		const filtered = this.searchQuery.length > 0 ? applyFilter(this.extensions, this.searchQuery) : this.extensions;
+		const filtered = this.#searchQuery.length > 0 ? applyFilter(this.extensions, this.#searchQuery) : this.extensions;
 
 		// When searching, show flat list
-		if (this.searchQuery.length > 0) {
+		if (this.#searchQuery.length > 0) {
 			for (const ext of filtered) {
-				this.listItems.push({ type: "extension", item: ext });
+				this.#listItems.push({ type: "extension", item: ext });
 			}
 			return;
 		}
 
 		// Provider-specific view: Master switch + flat list
-		if (this.masterSwitchProvider) {
-			const providerName = filtered[0]?.source.providerName ?? this.masterSwitchProvider;
-			const enabled = isProviderEnabled(this.masterSwitchProvider);
+		if (this.#masterSwitchProvider) {
+			const providerName = filtered[0]?.source.providerName ?? this.#masterSwitchProvider;
+			const enabled = isProviderEnabled(this.#masterSwitchProvider);
 
-			this.listItems.push({
+			this.#listItems.push({
 				type: "master",
-				providerId: this.masterSwitchProvider,
+				providerId: this.#masterSwitchProvider,
 				providerName,
 				enabled,
 			});
 
 			for (const ext of filtered) {
-				this.listItems.push({ type: "extension", item: ext });
+				this.#listItems.push({ type: "extension", item: ext });
 			}
 			return;
 		}
@@ -332,21 +332,21 @@ export class ExtensionList implements Component {
 			const items = byKind.get(kind);
 			if (!items || items.length === 0) continue;
 
-			this.listItems.push({
+			this.#listItems.push({
 				type: "kind-header",
 				kind,
-				label: this.getKindLabel(kind),
-				icon: this.getKindIcon(kind),
+				label: this.#getKindLabel(kind),
+				icon: this.#getKindIcon(kind),
 				count: items.length,
 			});
 
 			for (const ext of items) {
-				this.listItems.push({ type: "extension", item: ext });
+				this.#listItems.push({ type: "extension", item: ext });
 			}
 		}
 	}
 
-	private getKindLabel(kind: ExtensionKind): string {
+	#getKindLabel(kind: ExtensionKind): string {
 		switch (kind) {
 			case "extension-module":
 				return "Extension Modules";
@@ -373,21 +373,21 @@ export class ExtensionList implements Component {
 		}
 	}
 
-	private clampSelection(): void {
-		if (this.listItems.length === 0) {
-			this.selectedIndex = 0;
-			this.scrollOffset = 0;
+	#clampSelection(): void {
+		if (this.#listItems.length === 0) {
+			this.#selectedIndex = 0;
+			this.#scrollOffset = 0;
 			return;
 		}
 
-		this.selectedIndex = Math.min(this.selectedIndex, this.listItems.length - 1);
-		this.selectedIndex = Math.max(0, this.selectedIndex);
+		this.#selectedIndex = Math.min(this.#selectedIndex, this.#listItems.length - 1);
+		this.#selectedIndex = Math.max(0, this.#selectedIndex);
 
 		// Adjust scroll offset
-		if (this.selectedIndex < this.scrollOffset) {
-			this.scrollOffset = this.selectedIndex;
-		} else if (this.selectedIndex >= this.scrollOffset + this.maxVisible) {
-			this.scrollOffset = this.selectedIndex - this.maxVisible + 1;
+		if (this.#selectedIndex < this.#scrollOffset) {
+			this.#scrollOffset = this.#selectedIndex;
+		} else if (this.#selectedIndex >= this.#scrollOffset + this.#maxVisible) {
+			this.#scrollOffset = this.#selectedIndex - this.#maxVisible + 1;
 		}
 	}
 
@@ -396,23 +396,24 @@ export class ExtensionList implements Component {
 
 		// Navigation
 		if (matchesKey(data, "up") || data === "k") {
-			this.moveSelectionUp();
+			this.#moveSelectionUp();
 			return;
 		}
 
 		if (matchesKey(data, "down") || data === "j") {
-			this.moveSelectionDown();
+			this.#moveSelectionDown();
 			return;
 		}
 
 		// Space: Toggle selected item
 		if (data === " ") {
-			const item = this.listItems[this.selectedIndex];
+			const item = this.#listItems[this.#selectedIndex];
 			if (item?.type === "master") {
 				this.callbacks.onMasterToggle?.(item.providerId);
 			} else if (item?.type === "extension") {
 				// Only allow toggling if master is enabled
-				const masterDisabled = this.masterSwitchProvider !== null && !isProviderEnabled(this.masterSwitchProvider);
+				const masterDisabled =
+					this.#masterSwitchProvider !== null && !isProviderEnabled(this.#masterSwitchProvider);
 				if (!masterDisabled) {
 					const newEnabled = item.item.state === "disabled";
 					this.callbacks.onToggle?.(item.item.id, newEnabled);
@@ -423,11 +424,12 @@ export class ExtensionList implements Component {
 
 		// Enter: Same as space - toggle selected item
 		if (matchesKey(data, "enter") || matchesKey(data, "return") || data === "\n") {
-			const item = this.listItems[this.selectedIndex];
+			const item = this.#listItems[this.#selectedIndex];
 			if (item?.type === "master") {
 				this.callbacks.onMasterToggle?.(item.providerId);
 			} else if (item?.type === "extension") {
-				const masterDisabled = this.masterSwitchProvider !== null && !isProviderEnabled(this.masterSwitchProvider);
+				const masterDisabled =
+					this.#masterSwitchProvider !== null && !isProviderEnabled(this.#masterSwitchProvider);
 				if (!masterDisabled) {
 					const newEnabled = item.item.state === "disabled";
 					this.callbacks.onToggle?.(item.item.id, newEnabled);
@@ -438,8 +440,8 @@ export class ExtensionList implements Component {
 
 		// Backspace: Delete from search query
 		if (matchesKey(data, "backspace")) {
-			if (this.searchQuery.length > 0) {
-				this.setSearchQuery(this.searchQuery.slice(0, -1));
+			if (this.#searchQuery.length > 0) {
+				this.setSearchQuery(this.#searchQuery.slice(0, -1));
 			}
 			return;
 		}
@@ -450,32 +452,32 @@ export class ExtensionList implements Component {
 			if (data === "j" || data === "k") {
 				return;
 			}
-			this.setSearchQuery(this.searchQuery + data);
+			this.setSearchQuery(this.#searchQuery + data);
 			return;
 		}
 	}
 
-	private moveSelectionUp(): void {
-		if (this.selectedIndex > 0) {
-			this.selectedIndex--;
-			if (this.selectedIndex < this.scrollOffset) {
-				this.scrollOffset = this.selectedIndex;
+	#moveSelectionUp(): void {
+		if (this.#selectedIndex > 0) {
+			this.#selectedIndex--;
+			if (this.#selectedIndex < this.#scrollOffset) {
+				this.#scrollOffset = this.#selectedIndex;
 			}
-			this.notifySelectionChange();
+			this.#notifySelectionChange();
 		}
 	}
 
-	private moveSelectionDown(): void {
-		if (this.selectedIndex < this.listItems.length - 1) {
-			this.selectedIndex++;
-			if (this.selectedIndex >= this.scrollOffset + this.maxVisible) {
-				this.scrollOffset = this.selectedIndex - this.maxVisible + 1;
+	#moveSelectionDown(): void {
+		if (this.#selectedIndex < this.#listItems.length - 1) {
+			this.#selectedIndex++;
+			if (this.#selectedIndex >= this.#scrollOffset + this.#maxVisible) {
+				this.#scrollOffset = this.#selectedIndex - this.#maxVisible + 1;
 			}
-			this.notifySelectionChange();
+			this.#notifySelectionChange();
 		}
 	}
 
-	private notifySelectionChange(): void {
+	#notifySelectionChange(): void {
 		const ext = this.getSelectedExtension();
 		this.callbacks.onSelectionChange?.(ext);
 	}

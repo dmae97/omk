@@ -1,13 +1,10 @@
-import { Database } from "bun:sqlite";
+import { Database, type Statement } from "bun:sqlite";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import { getAgentDbPath } from "../config";
 import type { RawSettings as Settings } from "../config/settings";
 import type { AuthCredential } from "./auth-storage";
-
-/** Prepared SQLite statement type from bun:sqlite */
-type Statement = ReturnType<Database["prepare"]>;
 
 /** Row shape for settings table queries */
 type SettingsRow = {
@@ -118,28 +115,28 @@ function deserializeCredential(row: AuthRow): AuthCredential | null {
  * Uses singleton pattern per database path; access via AgentStorage.open().
  */
 export class AgentStorage {
-	private db: Database;
-	private static instances = new Map<string, AgentStorage>();
+	#db: Database;
+	static #instances = new Map<string, AgentStorage>();
 
-	private listSettingsStmt: Statement;
-	private getCacheStmt: Statement;
-	private upsertCacheStmt: Statement;
-	private deleteExpiredCacheStmt: Statement;
-	private listAuthStmt: Statement;
-	private listAuthByProviderStmt: Statement;
-	private insertAuthStmt: Statement;
-	private updateAuthStmt: Statement;
-	private deleteAuthStmt: Statement;
-	private deleteAuthByProviderStmt: Statement;
-	private countAuthStmt: Statement;
-	private upsertModelUsageStmt: Statement;
-	private listModelUsageStmt: Statement;
-	private modelUsageCache: string[] | null = null;
+	#listSettingsStmt: Statement;
+	#getCacheStmt: Statement;
+	#upsertCacheStmt: Statement;
+	#deleteExpiredCacheStmt: Statement;
+	#listAuthStmt: Statement;
+	#listAuthByProviderStmt: Statement;
+	#insertAuthStmt: Statement;
+	#updateAuthStmt: Statement;
+	#deleteAuthStmt: Statement;
+	#deleteAuthByProviderStmt: Statement;
+	#countAuthStmt: Statement;
+	#upsertModelUsageStmt: Statement;
+	#listModelUsageStmt: Statement;
+	#modelUsageCache: string[] | null = null;
 
 	private constructor(dbPath: string) {
-		this.ensureDir(dbPath);
+		this.#ensureDir(dbPath);
 		try {
-			this.db = new Database(dbPath);
+			this.#db = new Database(dbPath);
 		} catch (err) {
 			const dir = path.dirname(dbPath);
 			const dirExists = fs.existsSync(dir);
@@ -151,37 +148,37 @@ export class AgentStorage {
 			);
 		}
 
-		this.initializeSchema();
-		this.hardenPermissions(dbPath);
+		this.#initializeSchema();
+		this.#hardenPermissions(dbPath);
 
-		this.listSettingsStmt = this.db.prepare("SELECT key, value FROM settings");
+		this.#listSettingsStmt = this.#db.prepare("SELECT key, value FROM settings");
 
-		this.getCacheStmt = this.db.prepare("SELECT value FROM cache WHERE key = ? AND expires_at > unixepoch()");
-		this.upsertCacheStmt = this.db.prepare(
+		this.#getCacheStmt = this.#db.prepare("SELECT value FROM cache WHERE key = ? AND expires_at > unixepoch()");
+		this.#upsertCacheStmt = this.#db.prepare(
 			"INSERT INTO cache (key, value, expires_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at",
 		);
-		this.deleteExpiredCacheStmt = this.db.prepare("DELETE FROM cache WHERE expires_at <= unixepoch()");
+		this.#deleteExpiredCacheStmt = this.#db.prepare("DELETE FROM cache WHERE expires_at <= unixepoch()");
 
-		this.listAuthStmt = this.db.prepare(
+		this.#listAuthStmt = this.#db.prepare(
 			"SELECT id, provider, credential_type, data FROM auth_credentials ORDER BY id ASC",
 		);
-		this.listAuthByProviderStmt = this.db.prepare(
+		this.#listAuthByProviderStmt = this.#db.prepare(
 			"SELECT id, provider, credential_type, data FROM auth_credentials WHERE provider = ? ORDER BY id ASC",
 		);
-		this.insertAuthStmt = this.db.prepare(
+		this.#insertAuthStmt = this.#db.prepare(
 			"INSERT INTO auth_credentials (provider, credential_type, data) VALUES (?, ?, ?) RETURNING id",
 		);
-		this.updateAuthStmt = this.db.prepare(
+		this.#updateAuthStmt = this.#db.prepare(
 			"UPDATE auth_credentials SET credential_type = ?, data = ?, updated_at = unixepoch() WHERE id = ?",
 		);
-		this.deleteAuthStmt = this.db.prepare("DELETE FROM auth_credentials WHERE id = ?");
-		this.deleteAuthByProviderStmt = this.db.prepare("DELETE FROM auth_credentials WHERE provider = ?");
-		this.countAuthStmt = this.db.prepare("SELECT COUNT(*) as count FROM auth_credentials");
+		this.#deleteAuthStmt = this.#db.prepare("DELETE FROM auth_credentials WHERE id = ?");
+		this.#deleteAuthByProviderStmt = this.#db.prepare("DELETE FROM auth_credentials WHERE provider = ?");
+		this.#countAuthStmt = this.#db.prepare("SELECT COUNT(*) as count FROM auth_credentials");
 
-		this.upsertModelUsageStmt = this.db.prepare(
+		this.#upsertModelUsageStmt = this.#db.prepare(
 			"INSERT INTO model_usage (model_key, last_used_at) VALUES (?, unixepoch()) ON CONFLICT(model_key) DO UPDATE SET last_used_at = unixepoch()",
 		);
-		this.listModelUsageStmt = this.db.prepare(
+		this.#listModelUsageStmt = this.#db.prepare(
 			"SELECT model_key, last_used_at FROM model_usage ORDER BY last_used_at DESC",
 		);
 	}
@@ -190,8 +187,8 @@ export class AgentStorage {
 	 * Creates tables if missing and migrates legacy single-blob settings to key-value format.
 	 * Handles v1 to v2 schema migration for settings table.
 	 */
-	private initializeSchema(): void {
-		this.db.exec(`
+	#initializeSchema(): void {
+		this.#db.exec(`
 PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
 PRAGMA busy_timeout=5000;
@@ -221,13 +218,13 @@ CREATE TABLE IF NOT EXISTS model_usage (
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY);
 `);
 
-		const settingsInfo = this.db.prepare("PRAGMA table_info(settings)").all() as Array<{ name?: string }>;
+		const settingsInfo = this.#db.prepare("PRAGMA table_info(settings)").all() as Array<{ name?: string }>;
 		const hasSettingsTable = settingsInfo.length > 0;
 		const hasKey = settingsInfo.some(column => column.name === "key");
 		const hasValue = settingsInfo.some(column => column.name === "value");
 
 		if (!hasSettingsTable) {
-			this.db.exec(`
+			this.#db.exec(`
 CREATE TABLE settings (
 	key TEXT PRIMARY KEY,
 	value TEXT NOT NULL,
@@ -237,7 +234,7 @@ CREATE TABLE settings (
 		} else if (!hasKey || !hasValue) {
 			// Migrate v1 schema: single JSON blob in `data` column → per-key rows
 			let legacySettings: Record<string, unknown> | null = null;
-			const row = this.db.prepare("SELECT data FROM settings WHERE id = 1").get() as { data?: string } | undefined;
+			const row = this.#db.prepare("SELECT data FROM settings WHERE id = 1").get() as { data?: string } | undefined;
 			if (row?.data) {
 				try {
 					const parsed = JSON.parse(row.data);
@@ -251,9 +248,9 @@ CREATE TABLE settings (
 				}
 			}
 
-			const migrate = this.db.transaction((settings: Record<string, unknown> | null) => {
-				this.db.exec("DROP TABLE settings");
-				this.db.exec(`
+			const migrate = this.#db.transaction((settings: Record<string, unknown> | null) => {
+				this.#db.exec("DROP TABLE settings");
+				this.#db.exec(`
 CREATE TABLE settings (
 	key TEXT PRIMARY KEY,
 	value TEXT NOT NULL,
@@ -261,7 +258,7 @@ CREATE TABLE settings (
 );
 `);
 				if (settings) {
-					const insert = this.db.prepare(
+					const insert = this.#db.prepare(
 						"INSERT INTO settings (key, value, updated_at) VALUES (?, ?, unixepoch())",
 					);
 					for (const [key, value] of Object.entries(settings)) {
@@ -276,7 +273,7 @@ CREATE TABLE settings (
 			migrate(legacySettings);
 		}
 
-		const versionRow = this.db.prepare("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").get() as
+		const versionRow = this.#db.prepare("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").get() as
 			| { version?: number }
 			| undefined;
 		if (versionRow?.version !== undefined && versionRow.version !== SCHEMA_VERSION) {
@@ -285,7 +282,7 @@ CREATE TABLE settings (
 				expected: SCHEMA_VERSION,
 			});
 		}
-		this.db.prepare("INSERT OR REPLACE INTO schema_version(version) VALUES (?)").run(SCHEMA_VERSION);
+		this.#db.prepare("INSERT OR REPLACE INTO schema_version(version) VALUES (?)").run(SCHEMA_VERSION);
 	}
 
 	/**
@@ -295,7 +292,7 @@ CREATE TABLE settings (
 	 * @returns AgentStorage instance for the given path
 	 */
 	static async open(dbPath: string = getAgentDbPath()): Promise<AgentStorage> {
-		const existing = AgentStorage.instances.get(dbPath);
+		const existing = AgentStorage.#instances.get(dbPath);
 		if (existing) return existing;
 
 		const maxRetries = 3;
@@ -305,7 +302,7 @@ CREATE TABLE settings (
 		for (let attempt = 0; attempt < maxRetries; attempt++) {
 			try {
 				const storage = new AgentStorage(dbPath);
-				AgentStorage.instances.set(dbPath, storage);
+				AgentStorage.#instances.set(dbPath, storage);
 				return storage;
 			} catch (err) {
 				const isSqliteBusy = err && typeof err === "object" && (err as { code?: string }).code === "SQLITE_BUSY";
@@ -329,7 +326,7 @@ CREATE TABLE settings (
 	 * @deprecated Use config.yml instead. This is only for migration.
 	 */
 	getSettings(): Settings | null {
-		const rows = (this.listSettingsStmt.all() as SettingsRow[]) ?? [];
+		const rows = (this.#listSettingsStmt.all() as SettingsRow[]) ?? [];
 		if (rows.length === 0) return null;
 		const settings: Record<string, unknown> = {};
 		for (const row of rows) {
@@ -360,7 +357,7 @@ CREATE TABLE settings (
 	 */
 	getCache(key: string): string | null {
 		try {
-			const row = this.getCacheStmt.get(key) as { value?: string } | undefined;
+			const row = this.#getCacheStmt.get(key) as { value?: string } | undefined;
 			return row?.value ?? null;
 		} catch {
 			return null;
@@ -372,7 +369,7 @@ CREATE TABLE settings (
 	 */
 	setCache(key: string, value: string, expiresAtSec: number): void {
 		try {
-			this.upsertCacheStmt.run(key, value, expiresAtSec);
+			this.#upsertCacheStmt.run(key, value, expiresAtSec);
 		} catch (error) {
 			logger.warn("AgentStorage failed to set cache", { key, error: String(error) });
 		}
@@ -383,7 +380,7 @@ CREATE TABLE settings (
 	 */
 	cleanExpiredCache(): void {
 		try {
-			this.deleteExpiredCacheStmt.run();
+			this.#deleteExpiredCacheStmt.run();
 		} catch {
 			// Ignore cleanup errors
 		}
@@ -395,8 +392,8 @@ CREATE TABLE settings (
 	 */
 	recordModelUsage(modelKey: string): void {
 		try {
-			this.upsertModelUsageStmt.run(modelKey);
-			this.modelUsageCache = null;
+			this.#upsertModelUsageStmt.run(modelKey);
+			this.#modelUsageCache = null;
 		} catch (error) {
 			logger.warn("AgentStorage failed to record model usage", { modelKey, error: String(error) });
 		}
@@ -408,13 +405,13 @@ CREATE TABLE settings (
 	 * @returns Array of model keys ("provider/modelId") in MRU order
 	 */
 	getModelUsageOrder(): string[] {
-		if (this.modelUsageCache) {
-			return this.modelUsageCache;
+		if (this.#modelUsageCache) {
+			return this.#modelUsageCache;
 		}
 		try {
-			const rows = this.listModelUsageStmt.all() as ModelUsageRow[];
-			this.modelUsageCache = rows.map(row => row.model_key);
-			return this.modelUsageCache;
+			const rows = this.#listModelUsageStmt.all() as ModelUsageRow[];
+			this.#modelUsageCache = rows.map(row => row.model_key);
+			return this.#modelUsageCache;
 		} catch (error) {
 			logger.warn("AgentStorage failed to get model usage order", { error: String(error) });
 			return [];
@@ -426,7 +423,7 @@ CREATE TABLE settings (
 	 * @returns True if at least one credential is stored
 	 */
 	hasAuthCredentials(): boolean {
-		const row = this.countAuthStmt.get() as { count?: number } | undefined;
+		const row = this.#countAuthStmt.get() as { count?: number } | undefined;
 		return (row?.count ?? 0) > 0;
 	}
 
@@ -438,8 +435,8 @@ CREATE TABLE settings (
 	listAuthCredentials(provider?: string): StoredAuthCredential[] {
 		const rows =
 			(provider
-				? (this.listAuthByProviderStmt.all(provider) as AuthRow[])
-				: (this.listAuthStmt.all() as AuthRow[])) ?? [];
+				? (this.#listAuthByProviderStmt.all(provider) as AuthRow[])
+				: (this.#listAuthStmt.all() as AuthRow[])) ?? [];
 
 		const results: StoredAuthCredential[] = [];
 		for (const row of rows) {
@@ -458,11 +455,11 @@ CREATE TABLE settings (
 	 * @returns Array of newly stored credentials with their database IDs
 	 */
 	replaceAuthCredentialsForProvider(provider: string, credentials: AuthCredential[]): StoredAuthCredential[] {
-		const replace = this.db.transaction((providerName: string, items: AuthCredential[]) => {
-			this.deleteAuthByProviderStmt.run(providerName);
+		const replace = this.#db.transaction((providerName: string, items: AuthCredential[]) => {
+			this.#deleteAuthByProviderStmt.run(providerName);
 			const inserted: StoredAuthCredential[] = [];
 			for (const credential of items) {
-				const record = this.insertAuthCredential(providerName, credential);
+				const record = this.#insertAuthCredential(providerName, credential);
 				if (record) inserted.push(record);
 			}
 			return inserted;
@@ -483,7 +480,7 @@ CREATE TABLE settings (
 			return;
 		}
 		try {
-			this.updateAuthStmt.run(serialized.credentialType, serialized.data, id);
+			this.#updateAuthStmt.run(serialized.credentialType, serialized.data, id);
 		} catch (error) {
 			logger.warn("AgentStorage updateAuthCredential failed", { id, error: String(error) });
 		}
@@ -495,7 +492,7 @@ CREATE TABLE settings (
 	 */
 	deleteAuthCredential(id: number): void {
 		try {
-			this.deleteAuthStmt.run(id);
+			this.#deleteAuthStmt.run(id);
 		} catch (error) {
 			logger.warn("AgentStorage deleteAuthCredential failed", { id, error: String(error) });
 		}
@@ -507,7 +504,7 @@ CREATE TABLE settings (
 	 */
 	deleteAuthCredentialsForProvider(provider: string): void {
 		try {
-			this.deleteAuthByProviderStmt.run(provider);
+			this.#deleteAuthByProviderStmt.run(provider);
 		} catch (error) {
 			logger.warn("AgentStorage deleteAuthCredentialsForProvider failed", {
 				provider,
@@ -522,14 +519,14 @@ CREATE TABLE settings (
 	 * @param credential - Credential to insert
 	 * @returns Stored credential with database ID, or null on failure
 	 */
-	private insertAuthCredential(provider: string, credential: AuthCredential): StoredAuthCredential | null {
+	#insertAuthCredential(provider: string, credential: AuthCredential): StoredAuthCredential | null {
 		const serialized = serializeCredential(credential);
 		if (!serialized) {
 			logger.warn("AgentStorage insertAuthCredential invalid type", { provider, type: credential.type });
 			return null;
 		}
 		try {
-			const row = this.insertAuthStmt.get(provider, serialized.credentialType, serialized.data) as
+			const row = this.#insertAuthStmt.get(provider, serialized.credentialType, serialized.data) as
 				| { id?: number }
 				| undefined;
 			if (!row?.id) {
@@ -547,7 +544,7 @@ CREATE TABLE settings (
 	 * Ensures the parent directory for the database file exists.
 	 * @param dbPath - Path to the database file
 	 */
-	private ensureDir(dbPath: string): void {
+	#ensureDir(dbPath: string): void {
 		const dir = path.dirname(dbPath);
 		try {
 			fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -564,7 +561,7 @@ CREATE TABLE settings (
 		}
 	}
 
-	private hardenPermissions(dbPath: string): void {
+	#hardenPermissions(dbPath: string): void {
 		const dir = path.dirname(dbPath);
 		try {
 			fs.chmodSync(dir, 0o700);

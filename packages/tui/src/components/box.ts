@@ -11,66 +11,66 @@ type Cache = {
  */
 export class Box implements Component {
 	children: Component[] = [];
-	private paddingX: number;
-	private paddingY: number;
-	private bgFn?: (text: string) => string;
+	#paddingX: number;
+	#paddingY: number;
+	#bgFn?: (text: string) => string;
 
 	// Cache for rendered output
-	private cached?: Cache;
+	#cached?: Cache;
 
 	constructor(paddingX = 1, paddingY = 1, bgFn?: (text: string) => string) {
-		this.paddingX = paddingX;
-		this.paddingY = paddingY;
-		this.bgFn = bgFn;
+		this.#paddingX = paddingX;
+		this.#paddingY = paddingY;
+		this.#bgFn = bgFn;
 	}
 
 	addChild(component: Component): void {
 		this.children.push(component);
-		this.invalidateCache();
+		this.#invalidateCache();
 	}
 
 	removeChild(component: Component): void {
 		const index = this.children.indexOf(component);
 		if (index !== -1) {
 			this.children.splice(index, 1);
-			this.invalidateCache();
+			this.#invalidateCache();
 		}
 	}
 
 	clear(): void {
 		this.children = [];
-		this.invalidateCache();
+		this.#invalidateCache();
 	}
 
 	setBgFn(bgFn?: (text: string) => string): void {
-		this.bgFn = bgFn;
+		this.#bgFn = bgFn;
 		// Don't invalidate here - we'll detect bgFn changes by sampling output
 	}
 
-	private invalidateCache(): void {
-		this.cached = undefined;
+	#invalidateCache(): void {
+		this.#cached = undefined;
 	}
 
-	private static _tmp = new Uint32Array(2);
-	private computeCacheKey(width: number, childLines: string[], bgSample: string | undefined): bigint {
-		Box._tmp[0] = width;
-		Box._tmp[1] = childLines.length;
-		let h = Bun.hash.xxHash64(Box._tmp);
+	static #tmp = new Uint32Array(2);
+	#computeCacheKey(width: number, childLines: string[], bgSample: string | undefined): bigint {
+		Box.#tmp[0] = width;
+		Box.#tmp[1] = childLines.length;
+		let h = Bun.hash.xxHash64(Box.#tmp);
 		for (const line of childLines) {
-			Box._tmp[0] = line.length;
-			h = Bun.hash.xxHash64(Box._tmp, h);
+			Box.#tmp[0] = line.length;
+			h = Bun.hash.xxHash64(Box.#tmp, h);
 			h = Bun.hash.xxHash64(line, h);
 		}
 		h = Bun.hash.xxHash64(bgSample ?? "", h);
 		return h;
 	}
 
-	private matchCache(cacheKey: bigint): boolean {
-		return this.cached?.key === cacheKey;
+	#matchCache(cacheKey: bigint): boolean {
+		return this.#cached?.key === cacheKey;
 	}
 
 	invalidate(): void {
-		this.invalidateCache();
+		this.#invalidateCache();
 		for (const child of this.children) {
 			child.invalidate?.();
 		}
@@ -81,8 +81,8 @@ export class Box implements Component {
 			return [];
 		}
 
-		const contentWidth = Math.max(1, width - this.paddingX * 2);
-		const leftPad = padding(this.paddingX);
+		const contentWidth = Math.max(1, width - this.#paddingX * 2);
+		const leftPad = padding(this.#paddingX);
 
 		// Render all children
 		const childLines: string[] = [];
@@ -98,46 +98,46 @@ export class Box implements Component {
 		}
 
 		// Check if bgFn output changed by sampling
-		const bgSample = this.bgFn ? this.bgFn("test") : undefined;
+		const bgSample = this.#bgFn ? this.#bgFn("test") : undefined;
 
-		const cacheKey = this.computeCacheKey(width, childLines, bgSample);
+		const cacheKey = this.#computeCacheKey(width, childLines, bgSample);
 
 		// Check cache validity
-		if (this.matchCache(cacheKey)) {
-			return this.cached!.result;
+		if (this.#matchCache(cacheKey)) {
+			return this.#cached!.result;
 		}
 
 		// Apply background and padding
 		const result: string[] = [];
 
 		// Top padding
-		for (let i = 0; i < this.paddingY; i++) {
-			result.push(this.applyBg("", width));
+		for (let i = 0; i < this.#paddingY; i++) {
+			result.push(this.#applyBg("", width));
 		}
 
 		// Content
 		for (const line of childLines) {
-			result.push(this.applyBg(line, width));
+			result.push(this.#applyBg(line, width));
 		}
 
 		// Bottom padding
-		for (let i = 0; i < this.paddingY; i++) {
-			result.push(this.applyBg("", width));
+		for (let i = 0; i < this.#paddingY; i++) {
+			result.push(this.#applyBg("", width));
 		}
 
 		// Update cache
-		this.cached = { key: cacheKey, result };
+		this.#cached = { key: cacheKey, result };
 
 		return result;
 	}
 
-	private applyBg(line: string, width: number): string {
+	#applyBg(line: string, width: number): string {
 		const visLen = visibleWidth(line);
 		const padNeeded = Math.max(0, width - visLen);
 		const padded = line + padding(padNeeded);
 
-		if (this.bgFn) {
-			return applyBackgroundToLine(padded, width, this.bgFn);
+		if (this.#bgFn) {
+			return applyBackgroundToLine(padded, width, this.#bgFn);
 		}
 		return padded;
 	}

@@ -59,37 +59,37 @@ export interface ToolExecutionHandle {
  * Component that renders a tool call with its result (updateable)
  */
 export class ToolExecutionComponent extends Container {
-	private contentBox: Box; // Used for custom tools and bash visual truncation
-	private contentText: Text; // For built-in tools (with its own padding/bg)
-	private imageComponents: Image[] = [];
-	private imageSpacers: Spacer[] = [];
-	private toolName: string;
-	private toolLabel: string;
-	private args: any;
-	private expanded = false;
-	private showImages: boolean;
-	private editFuzzyThreshold: number | undefined;
-	private editAllowFuzzy: boolean | undefined;
-	private isPartial = true;
-	private tool?: AgentTool;
-	private ui: TUI;
-	private cwd: string;
-	private result?: {
+	#contentBox: Box; // Used for custom tools and bash visual truncation
+	#contentText: Text; // For built-in tools (with its own padding/bg)
+	#imageComponents: Image[] = [];
+	#imageSpacers: Spacer[] = [];
+	#toolName: string;
+	#toolLabel: string;
+	#args: any;
+	#expanded = false;
+	#showImages: boolean;
+	#editFuzzyThreshold: number | undefined;
+	#editAllowFuzzy: boolean | undefined;
+	#isPartial = true;
+	#tool?: AgentTool;
+	#ui: TUI;
+	#cwd: string;
+	#result?: {
 		content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
 		isError?: boolean;
 		details?: any;
 	};
 	// Cached edit diff preview (computed when args arrive, before tool executes)
-	private editDiffPreview?: EditDiffResult | EditDiffError;
-	private editDiffArgsKey?: string; // Track which args the preview is for
+	#editDiffPreview?: EditDiffResult | EditDiffError;
+	#editDiffArgsKey?: string; // Track which args the preview is for
 	// Cached converted images for Kitty protocol (which requires PNG), keyed by index
-	private convertedImages: Map<number, { data: string; mimeType: string }> = new Map();
+	#convertedImages: Map<number, { data: string; mimeType: string }> = new Map();
 	// Spinner animation for partial task results
-	private spinnerFrame = 0;
-	private spinnerInterval: ReturnType<typeof setInterval> | null = null;
+	#spinnerFrame = 0;
+	#spinnerInterval?: NodeJS.Timeout;
 	// Track if args are still being streamed (for edit/write spinner)
-	private argsComplete = false;
-	private renderState: {
+	#argsComplete = false;
+	#renderState: {
 		spinnerFrame: number;
 		expanded: boolean;
 		isPartial: boolean;
@@ -109,38 +109,38 @@ export class ToolExecutionComponent extends Container {
 		cwd: string = process.cwd(),
 	) {
 		super();
-		this.toolName = toolName;
-		this.toolLabel = tool?.label ?? toolName;
-		this.args = args;
-		this.showImages = options.showImages ?? true;
-		this.editFuzzyThreshold = options.editFuzzyThreshold;
-		this.editAllowFuzzy = options.editAllowFuzzy;
-		this.tool = tool;
-		this.ui = ui;
-		this.cwd = cwd;
+		this.#toolName = toolName;
+		this.#toolLabel = tool?.label ?? toolName;
+		this.#args = args;
+		this.#showImages = options.showImages ?? true;
+		this.#editFuzzyThreshold = options.editFuzzyThreshold;
+		this.#editAllowFuzzy = options.editAllowFuzzy;
+		this.#tool = tool;
+		this.#ui = ui;
+		this.#cwd = cwd;
 
 		this.addChild(new Spacer(1));
 
 		// Always create both - contentBox for custom tools/bash/tools with renderers, contentText for other built-ins
-		this.contentBox = new Box(1, 1, (text: string) => theme.bg("toolPendingBg", text));
-		this.contentText = new Text("", 1, 1, (text: string) => theme.bg("toolPendingBg", text));
+		this.#contentBox = new Box(1, 1, (text: string) => theme.bg("toolPendingBg", text));
+		this.#contentText = new Text("", 1, 1, (text: string) => theme.bg("toolPendingBg", text));
 
 		// Use Box for custom tools or built-in tools that have renderers
 		const hasRenderer = toolName in toolRenderers;
 		const hasCustomRenderer = !!(tool?.renderCall || tool?.renderResult);
 		if (hasCustomRenderer || hasRenderer) {
-			this.addChild(this.contentBox);
+			this.addChild(this.#contentBox);
 		} else {
-			this.addChild(this.contentText);
+			this.addChild(this.#contentText);
 		}
 
-		this.updateDisplay();
+		this.#updateDisplay();
 	}
 
 	updateArgs(args: any, _toolCallId?: string): void {
-		this.args = args;
-		this.updateSpinnerAnimation();
-		this.updateDisplay();
+		this.#args = args;
+		this.#updateSpinnerAnimation();
+		this.#updateDisplay();
 	}
 
 	/**
@@ -148,46 +148,46 @@ export class ToolExecutionComponent extends Container {
 	 * This triggers diff computation for edit tool.
 	 */
 	setArgsComplete(_toolCallId?: string): void {
-		this.argsComplete = true;
-		this.updateSpinnerAnimation();
-		this.maybeComputeEditDiff();
+		this.#argsComplete = true;
+		this.#updateSpinnerAnimation();
+		this.#maybeComputeEditDiff();
 	}
 
 	/**
 	 * Compute edit diff preview when we have complete args.
 	 * This runs async and updates display when done.
 	 */
-	private maybeComputeEditDiff(): void {
-		if (this.toolName !== "edit") return;
+	#maybeComputeEditDiff(): void {
+		if (this.#toolName !== "edit") return;
 
-		const path = this.args?.path;
-		const op = this.args?.op;
+		const path = this.#args?.path;
+		const op = this.#args?.op;
 
 		if (op) {
-			const diff = this.args?.diff;
-			const rename = this.args?.rename;
+			const diff = this.#args?.diff;
+			const rename = this.#args?.rename;
 			if (!path) return;
 
 			const argsKey = JSON.stringify({ path, op, rename, diff });
-			if (this.editDiffArgsKey === argsKey) return;
-			this.editDiffArgsKey = argsKey;
+			if (this.#editDiffArgsKey === argsKey) return;
+			this.#editDiffArgsKey = argsKey;
 
-			computePatchDiff({ path, op, rename, diff }, this.cwd, {
-				fuzzyThreshold: this.editFuzzyThreshold,
-				allowFuzzy: this.editAllowFuzzy,
+			computePatchDiff({ path, op, rename, diff }, this.#cwd, {
+				fuzzyThreshold: this.#editFuzzyThreshold,
+				allowFuzzy: this.#editAllowFuzzy,
 			}).then(result => {
-				if (this.editDiffArgsKey === argsKey) {
-					this.editDiffPreview = result;
-					this.updateDisplay();
-					this.ui.requestRender();
+				if (this.#editDiffArgsKey === argsKey) {
+					this.#editDiffPreview = result;
+					this.#updateDisplay();
+					this.#ui.requestRender();
 				}
 			});
 			return;
 		}
 
-		const oldText = this.args?.old_text;
-		const newText = this.args?.new_text;
-		const all = this.args?.all;
+		const oldText = this.#args?.old_text;
+		const newText = this.#args?.new_text;
+		const all = this.#args?.all;
 
 		// Need all three params to compute diff
 		if (!path || oldText === undefined || newText === undefined) return;
@@ -196,17 +196,17 @@ export class ToolExecutionComponent extends Container {
 		const argsKey = JSON.stringify({ path, oldText, newText, all });
 
 		// Skip if we already computed for these exact args
-		if (this.editDiffArgsKey === argsKey) return;
+		if (this.#editDiffArgsKey === argsKey) return;
 
-		this.editDiffArgsKey = argsKey;
+		this.#editDiffArgsKey = argsKey;
 
 		// Compute diff async
-		computeEditDiff(path, oldText, newText, this.cwd, true, all, this.editFuzzyThreshold).then(result => {
+		computeEditDiff(path, oldText, newText, this.#cwd, true, all, this.#editFuzzyThreshold).then(result => {
 			// Only update if args haven't changed since we started
-			if (this.editDiffArgsKey === argsKey) {
-				this.editDiffPreview = result;
-				this.updateDisplay();
-				this.ui.requestRender();
+			if (this.#editDiffArgsKey === argsKey) {
+				this.#editDiffPreview = result;
+				this.#updateDisplay();
+				this.#ui.requestRender();
 			}
 		});
 	}
@@ -220,26 +220,26 @@ export class ToolExecutionComponent extends Container {
 		isPartial = false,
 		_toolCallId?: string,
 	): void {
-		this.result = result;
-		this.isPartial = isPartial;
+		this.#result = result;
+		this.#isPartial = isPartial;
 		// When tool is complete, ensure args are marked complete so spinner stops
 		if (!isPartial) {
-			this.argsComplete = true;
+			this.#argsComplete = true;
 		}
-		this.updateSpinnerAnimation();
-		this.updateDisplay();
+		this.#updateSpinnerAnimation();
+		this.#updateDisplay();
 		// Convert non-PNG images to PNG for Kitty protocol (async)
-		this.maybeConvertImagesForKitty();
+		this.#maybeConvertImagesForKitty();
 	}
 
 	/**
 	 * Get all image blocks from result content and details.images.
 	 * Some tools (like generate_image) store images in details to avoid bloating model context.
 	 */
-	private getAllImageBlocks(): Array<{ data?: string; mimeType?: string }> {
-		if (!this.result) return [];
-		const contentImages = this.result.content?.filter((c: any) => c.type === "image") || [];
-		const detailImages = this.result.details?.images || [];
+	#getAllImageBlocks(): Array<{ data?: string; mimeType?: string }> {
+		if (!this.#result) return [];
+		const contentImages = this.#result.content?.filter((c: any) => c.type === "image") || [];
+		const detailImages = this.#result.details?.images || [];
 		return [...contentImages, ...detailImages];
 	}
 
@@ -247,28 +247,28 @@ export class ToolExecutionComponent extends Container {
 	 * Convert non-PNG images to PNG for Kitty graphics protocol.
 	 * Kitty requires PNG format (f=100), so JPEG/GIF/WebP won't display.
 	 */
-	private maybeConvertImagesForKitty(): void {
+	#maybeConvertImagesForKitty(): void {
 		// Only needed for Kitty protocol
 		if (TERMINAL.imageProtocol !== ImageProtocol.Kitty) return;
-		if (!this.result) return;
+		if (!this.#result) return;
 
-		const imageBlocks = this.getAllImageBlocks();
+		const imageBlocks = this.#getAllImageBlocks();
 
 		for (let i = 0; i < imageBlocks.length; i++) {
 			const img = imageBlocks[i];
 			if (!img.data || !img.mimeType) continue;
 			// Skip if already PNG or already converted
 			if (img.mimeType === "image/png") continue;
-			if (this.convertedImages.has(i)) continue;
+			if (this.#convertedImages.has(i)) continue;
 
 			// Convert async - catch errors from processing
 			const index = i;
 			convertToPng(img.data, img.mimeType)
 				.then(converted => {
 					if (converted) {
-						this.convertedImages.set(index, converted);
-						this.updateDisplay();
-						this.ui.requestRender();
+						this.#convertedImages.set(index, converted);
+						this.#updateDisplay();
+						this.#ui.requestRender();
 					}
 				})
 				.catch(() => {
@@ -280,23 +280,23 @@ export class ToolExecutionComponent extends Container {
 	/**
 	 * Start or stop spinner animation based on whether this is a partial task result.
 	 */
-	private updateSpinnerAnimation(): void {
+	#updateSpinnerAnimation(): void {
 		// Spinner for: task tool with partial result, or edit/write while args streaming
-		const isStreamingArgs = !this.argsComplete && (this.toolName === "edit" || this.toolName === "write");
-		const isPartialTask = this.isPartial && this.toolName === "task";
+		const isStreamingArgs = !this.#argsComplete && (this.#toolName === "edit" || this.#toolName === "write");
+		const isPartialTask = this.#isPartial && this.#toolName === "task";
 		const needsSpinner = isStreamingArgs || isPartialTask;
-		if (needsSpinner && !this.spinnerInterval) {
-			this.spinnerInterval = setInterval(() => {
+		if (needsSpinner && !this.#spinnerInterval) {
+			this.#spinnerInterval = setInterval(() => {
 				const frameCount = theme.spinnerFrames.length;
 				if (frameCount === 0) return;
-				this.spinnerFrame = (this.spinnerFrame + 1) % frameCount;
-				this.renderState.spinnerFrame = this.spinnerFrame;
-				this.ui.requestRender();
+				this.#spinnerFrame = (this.#spinnerFrame + 1) % frameCount;
+				this.#renderState.spinnerFrame = this.#spinnerFrame;
+				this.#ui.requestRender();
 				// NO updateDisplay() — existing component closures read from renderState
 			}, 80);
-		} else if (!needsSpinner && this.spinnerInterval) {
-			clearInterval(this.spinnerInterval);
-			this.spinnerInterval = null;
+		} else if (!needsSpinner && this.#spinnerInterval) {
+			clearInterval(this.#spinnerInterval);
+			this.#spinnerInterval = undefined;
 		}
 	}
 
@@ -304,74 +304,74 @@ export class ToolExecutionComponent extends Container {
 	 * Stop spinner animation and cleanup resources.
 	 */
 	stopAnimation(): void {
-		if (this.spinnerInterval) {
-			clearInterval(this.spinnerInterval);
-			this.spinnerInterval = null;
+		if (this.#spinnerInterval) {
+			clearInterval(this.#spinnerInterval);
+			this.#spinnerInterval = undefined;
 		}
 	}
 
 	setExpanded(expanded: boolean): void {
-		this.expanded = expanded;
-		this.updateDisplay();
+		this.#expanded = expanded;
+		this.#updateDisplay();
 	}
 
 	setShowImages(show: boolean): void {
-		this.showImages = show;
-		this.updateDisplay();
+		this.#showImages = show;
+		this.#updateDisplay();
 	}
 
 	override invalidate(): void {
 		super.invalidate();
-		this.updateDisplay();
+		this.#updateDisplay();
 	}
 
-	private updateDisplay(): void {
+	#updateDisplay(): void {
 		// Set background based on state
-		const bgFn = this.isPartial
+		const bgFn = this.#isPartial
 			? (text: string) => theme.bg("toolPendingBg", text)
-			: this.result?.isError
+			: this.#result?.isError
 				? (text: string) => theme.bg("toolErrorBg", text)
 				: (text: string) => theme.bg("toolSuccessBg", text);
 
 		// Sync shared mutable render state for component closures
-		this.renderState.expanded = this.expanded;
-		this.renderState.isPartial = this.isPartial;
-		this.renderState.spinnerFrame = this.spinnerFrame;
+		this.#renderState.expanded = this.#expanded;
+		this.#renderState.isPartial = this.#isPartial;
+		this.#renderState.spinnerFrame = this.#spinnerFrame;
 
 		// Check for custom tool rendering
-		if (this.tool && (this.tool.renderCall || this.tool.renderResult)) {
-			const tool = this.tool;
+		if (this.#tool && (this.#tool.renderCall || this.#tool.renderResult)) {
+			const tool = this.#tool;
 			const mergeCallAndResult = Boolean((tool as { mergeCallAndResult?: boolean }).mergeCallAndResult);
 			// Custom tools use Box for flexible component rendering
 			const inline = Boolean((tool as { inline?: boolean }).inline);
-			this.contentBox.setBgFn(inline ? undefined : bgFn);
-			this.contentBox.clear();
+			this.#contentBox.setBgFn(inline ? undefined : bgFn);
+			this.#contentBox.clear();
 
 			// Render call component
-			const shouldRenderCall = !this.result || !mergeCallAndResult;
+			const shouldRenderCall = !this.#result || !mergeCallAndResult;
 			if (shouldRenderCall && tool.renderCall) {
 				try {
-					const callComponent = tool.renderCall(this.args, theme);
+					const callComponent = tool.renderCall(this.#args, theme);
 					if (callComponent) {
 						// Ensure component has invalidate() method for Component interface
 						const component = callComponent as any;
 						if (!component.invalidate) {
 							component.invalidate = () => {};
 						}
-						this.contentBox.addChild(component);
+						this.#contentBox.addChild(component);
 					}
 				} catch (err) {
-					logger.warn("Tool renderer failed", { tool: this.toolName, error: String(err) });
+					logger.warn("Tool renderer failed", { tool: this.#toolName, error: String(err) });
 					// Fall back to default on error
-					this.contentBox.addChild(new Text(theme.fg("toolTitle", theme.bold(this.toolLabel)), 0, 0));
+					this.#contentBox.addChild(new Text(theme.fg("toolTitle", theme.bold(this.#toolLabel)), 0, 0));
 				}
 			} else {
 				// No custom renderCall, show tool name
-				this.contentBox.addChild(new Text(theme.fg("toolTitle", theme.bold(this.toolLabel)), 0, 0));
+				this.#contentBox.addChild(new Text(theme.fg("toolTitle", theme.bold(this.#toolLabel)), 0, 0));
 			}
 
 			// Render result component if we have a result
-			if (this.result && tool.renderResult) {
+			if (this.#result && tool.renderResult) {
 				try {
 					const renderResult = tool.renderResult as (
 						result: { content: Array<{ type: string; text?: string }>; details?: unknown; isError?: boolean },
@@ -380,10 +380,14 @@ export class ToolExecutionComponent extends Container {
 						args?: unknown,
 					) => Component;
 					const resultComponent = renderResult(
-						{ content: this.result.content as any, details: this.result.details, isError: this.result.isError },
-						this.renderState,
+						{
+							content: this.#result.content as any,
+							details: this.#result.details,
+							isError: this.#result.isError,
+						},
+						this.#renderState,
 						theme,
-						this.args,
+						this.#args,
 					);
 					if (resultComponent) {
 						// Ensure component has invalidate() method for Component interface
@@ -391,62 +395,66 @@ export class ToolExecutionComponent extends Container {
 						if (!component.invalidate) {
 							component.invalidate = () => {};
 						}
-						this.contentBox.addChild(component);
+						this.#contentBox.addChild(component);
 					}
 				} catch (err) {
-					logger.warn("Tool renderer failed", { tool: this.toolName, error: String(err) });
+					logger.warn("Tool renderer failed", { tool: this.#toolName, error: String(err) });
 					// Fall back to showing raw output on error
-					const output = this.getTextOutput();
+					const output = this.#getTextOutput();
 					if (output) {
-						this.contentBox.addChild(new Text(theme.fg("toolOutput", output), 0, 0));
+						this.#contentBox.addChild(new Text(theme.fg("toolOutput", output), 0, 0));
 					}
 				}
-			} else if (this.result) {
+			} else if (this.#result) {
 				// Has result but no custom renderResult
-				const output = this.getTextOutput();
+				const output = this.#getTextOutput();
 				if (output) {
-					this.contentBox.addChild(new Text(theme.fg("toolOutput", output), 0, 0));
+					this.#contentBox.addChild(new Text(theme.fg("toolOutput", output), 0, 0));
 				}
 			}
-		} else if (this.toolName in toolRenderers) {
+		} else if (this.#toolName in toolRenderers) {
 			// Built-in tools with renderers
-			const renderer = toolRenderers[this.toolName];
+			const renderer = toolRenderers[this.#toolName];
 			// Inline renderers skip background styling
-			this.contentBox.setBgFn(renderer.inline ? undefined : bgFn);
-			this.contentBox.clear();
+			this.#contentBox.setBgFn(renderer.inline ? undefined : bgFn);
+			this.#contentBox.clear();
 
-			const shouldRenderCall = !this.result || !renderer.mergeCallAndResult;
+			const shouldRenderCall = !this.#result || !renderer.mergeCallAndResult;
 			if (shouldRenderCall) {
 				// Render call component
 				try {
-					const callComponent = renderer.renderCall(this.args, theme, this.renderState);
+					const callComponent = renderer.renderCall(this.#args, theme, this.#renderState);
 					if (callComponent) {
 						// Ensure component has invalidate() method for Component interface
 						const component = callComponent as any;
 						if (!component.invalidate) {
 							component.invalidate = () => {};
 						}
-						this.contentBox.addChild(component);
+						this.#contentBox.addChild(component);
 					}
 				} catch (err) {
-					logger.warn("Tool renderer failed", { tool: this.toolName, error: String(err) });
+					logger.warn("Tool renderer failed", { tool: this.#toolName, error: String(err) });
 					// Fall back to default on error
-					this.contentBox.addChild(new Text(theme.fg("toolTitle", theme.bold(this.toolLabel)), 0, 0));
+					this.#contentBox.addChild(new Text(theme.fg("toolTitle", theme.bold(this.#toolLabel)), 0, 0));
 				}
 			}
 
 			// Render result component if we have a result
-			if (this.result) {
+			if (this.#result) {
 				try {
 					// Build render context for tools that need extra state
-					const renderContext = this.buildRenderContext();
-					this.renderState.renderContext = renderContext;
+					const renderContext = this.#buildRenderContext();
+					this.#renderState.renderContext = renderContext;
 
 					const resultComponent = renderer.renderResult(
-						{ content: this.result.content as any, details: this.result.details, isError: this.result.isError },
-						this.renderState,
+						{
+							content: this.#result.content as any,
+							details: this.#result.details,
+							isError: this.#result.isError,
+						},
+						this.#renderState,
 						theme,
-						this.args, // Pass args for tools that need them
+						this.#args, // Pass args for tools that need them
 					);
 					if (resultComponent) {
 						// Ensure component has invalidate() method for Component interface
@@ -454,41 +462,41 @@ export class ToolExecutionComponent extends Container {
 						if (!component.invalidate) {
 							component.invalidate = () => {};
 						}
-						this.contentBox.addChild(component);
+						this.#contentBox.addChild(component);
 					}
 				} catch (err) {
-					logger.warn("Tool renderer failed", { tool: this.toolName, error: String(err) });
+					logger.warn("Tool renderer failed", { tool: this.#toolName, error: String(err) });
 					// Fall back to showing raw output on error
-					const output = this.getTextOutput();
+					const output = this.#getTextOutput();
 					if (output) {
-						this.contentBox.addChild(new Text(theme.fg("toolOutput", output), 0, 0));
+						this.#contentBox.addChild(new Text(theme.fg("toolOutput", output), 0, 0));
 					}
 				}
 			}
 		} else {
 			// Other built-in tools: use Text directly with caching
-			this.contentText.setCustomBgFn(bgFn);
-			this.contentText.setText(this.formatToolExecution());
+			this.#contentText.setCustomBgFn(bgFn);
+			this.#contentText.setText(this.#formatToolExecution());
 		}
 
 		// Handle images (same for both custom and built-in)
-		for (const img of this.imageComponents) {
+		for (const img of this.#imageComponents) {
 			this.removeChild(img);
 		}
-		this.imageComponents = [];
-		for (const spacer of this.imageSpacers) {
+		this.#imageComponents = [];
+		for (const spacer of this.#imageSpacers) {
 			this.removeChild(spacer);
 		}
-		this.imageSpacers = [];
+		this.#imageSpacers = [];
 
-		if (this.result) {
-			const imageBlocks = this.getAllImageBlocks();
+		if (this.#result) {
+			const imageBlocks = this.#getAllImageBlocks();
 
 			for (let i = 0; i < imageBlocks.length; i++) {
 				const img = imageBlocks[i];
-				if (TERMINAL.imageProtocol && this.showImages && img.data && img.mimeType) {
+				if (TERMINAL.imageProtocol && this.#showImages && img.data && img.mimeType) {
 					// Use converted PNG for Kitty protocol if available
-					const converted = this.convertedImages.get(i);
+					const converted = this.#convertedImages.get(i);
 					const imageData = converted?.data ?? img.data;
 					const imageMimeType = converted?.mimeType ?? img.mimeType;
 
@@ -499,14 +507,14 @@ export class ToolExecutionComponent extends Container {
 
 					const spacer = new Spacer(1);
 					this.addChild(spacer);
-					this.imageSpacers.push(spacer);
+					this.#imageSpacers.push(spacer);
 					const imageComponent = new Image(
 						imageData,
 						imageMimeType,
 						{ fallbackColor: (s: string) => theme.fg("toolOutput", s) },
 						{ maxWidthCells: 60 },
 					);
-					this.imageComponents.push(imageComponent);
+					this.#imageComponents.push(imageComponent);
 					this.addChild(imageComponent);
 				}
 			}
@@ -516,40 +524,40 @@ export class ToolExecutionComponent extends Container {
 	/**
 	 * Build render context for tools that need extra state (bash, python, edit)
 	 */
-	private buildRenderContext(): Record<string, unknown> {
+	#buildRenderContext(): Record<string, unknown> {
 		const context: Record<string, unknown> = {};
 		const normalizeTimeoutSeconds = (value: unknown, maxSeconds: number): number | undefined => {
 			if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
 			return Math.max(1, Math.min(maxSeconds, value));
 		};
 
-		if (this.toolName === "bash" && this.result) {
+		if (this.#toolName === "bash" && this.#result) {
 			// Pass raw output and expanded state - renderer handles width-aware truncation
-			const output = this.getTextOutput().trimEnd();
+			const output = this.#getTextOutput().trimEnd();
 			context.output = output;
-			context.expanded = this.expanded;
+			context.expanded = this.#expanded;
 			context.previewLines = BASH_DEFAULT_PREVIEW_LINES;
-			context.timeout = normalizeTimeoutSeconds(this.args?.timeout, 3600);
-		} else if (this.toolName === "python" && this.result) {
-			const output = this.getTextOutput().trimEnd();
+			context.timeout = normalizeTimeoutSeconds(this.#args?.timeout, 3600);
+		} else if (this.#toolName === "python" && this.#result) {
+			const output = this.#getTextOutput().trimEnd();
 			context.output = output;
-			context.expanded = this.expanded;
+			context.expanded = this.#expanded;
 			context.previewLines = PYTHON_DEFAULT_PREVIEW_LINES;
-			context.timeout = normalizeTimeoutSeconds(this.args?.timeout, 600);
-		} else if (this.toolName === "edit") {
+			context.timeout = normalizeTimeoutSeconds(this.#args?.timeout, 600);
+		} else if (this.#toolName === "edit") {
 			// Edit needs diff preview and renderDiff function
-			context.editDiffPreview = this.editDiffPreview;
+			context.editDiffPreview = this.#editDiffPreview;
 			context.renderDiff = renderDiff;
 		}
 
 		return context;
 	}
 
-	private getTextOutput(): string {
-		if (!this.result) return "";
+	#getTextOutput(): string {
+		if (!this.#result) return "";
 
-		const textBlocks = this.result.content?.filter((c: any) => c.type === "text") || [];
-		const imageBlocks = this.getAllImageBlocks();
+		const textBlocks = this.#result.content?.filter((c: any) => c.type === "text") || [];
+		const imageBlocks = this.#getAllImageBlocks();
 
 		let output = textBlocks
 			.map((c: any) => {
@@ -557,7 +565,7 @@ export class ToolExecutionComponent extends Container {
 			})
 			.join("\n");
 
-		if (imageBlocks.length > 0 && (!TERMINAL.imageProtocol || !this.showImages)) {
+		if (imageBlocks.length > 0 && (!TERMINAL.imageProtocol || !this.#showImages)) {
 			const imageIndicators = imageBlocks
 				.map((img: any) => {
 					const dims = img.data ? (getImageDimensions(img.data, img.mimeType) ?? undefined) : undefined;
@@ -573,24 +581,24 @@ export class ToolExecutionComponent extends Container {
 	/**
 	 * Format a generic tool execution (fallback for tools without custom renderers)
 	 */
-	private formatToolExecution(): string {
+	#formatToolExecution(): string {
 		const lines: string[] = [];
-		const icon = this.isPartial ? "pending" : this.result?.isError ? "error" : "success";
-		lines.push(renderStatusLine({ icon, title: this.toolLabel }, theme));
+		const icon = this.#isPartial ? "pending" : this.#result?.isError ? "error" : "success";
+		lines.push(renderStatusLine({ icon, title: this.#toolLabel }, theme));
 
-		const argsObject = this.args && typeof this.args === "object" ? (this.args as Record<string, unknown>) : null;
-		if (!this.expanded && argsObject && Object.keys(argsObject).length > 0) {
+		const argsObject = this.#args && typeof this.#args === "object" ? (this.#args as Record<string, unknown>) : null;
+		if (!this.#expanded && argsObject && Object.keys(argsObject).length > 0) {
 			const preview = formatArgsInline(argsObject, 70);
 			if (preview) {
 				lines.push(` ${theme.fg("dim", theme.tree.last)} ${theme.fg("dim", preview)}`);
 			}
 		}
 
-		if (this.expanded && this.args !== undefined) {
+		if (this.#expanded && this.#args !== undefined) {
 			lines.push("");
 			lines.push(theme.fg("dim", "Args"));
 			const tree = renderJsonTreeLines(
-				this.args,
+				this.#args,
 				theme,
 				JSON_TREE_MAX_DEPTH_EXPANDED,
 				JSON_TREE_MAX_LINES_EXPANDED,
@@ -603,11 +611,11 @@ export class ToolExecutionComponent extends Container {
 			lines.push("");
 		}
 
-		if (!this.result) {
+		if (!this.#result) {
 			return lines.join("\n");
 		}
 
-		const textContent = this.getTextOutput().trimEnd();
+		const textContent = this.#getTextOutput().trimEnd();
 		if (!textContent) {
 			lines.push(theme.fg("dim", "(no output)"));
 			return lines.join("\n");
@@ -616,15 +624,15 @@ export class ToolExecutionComponent extends Container {
 		if (textContent.startsWith("{") || textContent.startsWith("[")) {
 			try {
 				const parsed = JSON.parse(textContent);
-				const maxDepth = this.expanded ? JSON_TREE_MAX_DEPTH_EXPANDED : JSON_TREE_MAX_DEPTH_COLLAPSED;
-				const maxLines = this.expanded ? JSON_TREE_MAX_LINES_EXPANDED : JSON_TREE_MAX_LINES_COLLAPSED;
-				const maxScalarLen = this.expanded ? JSON_TREE_SCALAR_LEN_EXPANDED : JSON_TREE_SCALAR_LEN_COLLAPSED;
+				const maxDepth = this.#expanded ? JSON_TREE_MAX_DEPTH_EXPANDED : JSON_TREE_MAX_DEPTH_COLLAPSED;
+				const maxLines = this.#expanded ? JSON_TREE_MAX_LINES_EXPANDED : JSON_TREE_MAX_LINES_COLLAPSED;
+				const maxScalarLen = this.#expanded ? JSON_TREE_SCALAR_LEN_EXPANDED : JSON_TREE_SCALAR_LEN_COLLAPSED;
 				const tree = renderJsonTreeLines(parsed, theme, maxDepth, maxLines, maxScalarLen);
 
 				if (tree.lines.length > 0) {
 					lines.push(...tree.lines);
-					if (!this.expanded) {
-						lines.push(formatExpandHint(theme, this.expanded, true));
+					if (!this.#expanded) {
+						lines.push(formatExpandHint(theme, this.#expanded, true));
 					} else if (tree.truncated) {
 						lines.push(theme.fg("dim", "…"));
 					}
@@ -636,7 +644,7 @@ export class ToolExecutionComponent extends Container {
 		}
 
 		const outputLines = textContent.split("\n");
-		const maxOutputLines = this.expanded ? 12 : 4;
+		const maxOutputLines = this.#expanded ? 12 : 4;
 		const displayLines = outputLines.slice(0, maxOutputLines);
 
 		for (const line of displayLines) {
@@ -645,9 +653,9 @@ export class ToolExecutionComponent extends Container {
 
 		if (outputLines.length > maxOutputLines) {
 			const remaining = outputLines.length - maxOutputLines;
-			lines.push(`${theme.fg("dim", `… ${remaining} more lines`)} ${formatExpandHint(theme, this.expanded, true)}`);
-		} else if (!this.expanded) {
-			lines.push(formatExpandHint(theme, this.expanded, true));
+			lines.push(`${theme.fg("dim", `… ${remaining} more lines`)} ${formatExpandHint(theme, this.#expanded, true)}`);
+		} else if (!this.#expanded) {
+			lines.push(formatExpandHint(theme, this.#expanded, true));
 		}
 
 		return lines.join("\n");

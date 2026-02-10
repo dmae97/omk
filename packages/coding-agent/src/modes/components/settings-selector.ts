@@ -39,8 +39,8 @@ function getTabBarTheme(): TabBarTheme {
  * A submenu component for selecting from a list of options.
  */
 class SelectSubmenu extends Container {
-	private selectList: SelectList;
-	private previewText: Text | null = null;
+	#selectList: SelectList;
+	#previewText: Text | null = null;
 
 	constructor(
 		title: string,
@@ -67,51 +67,51 @@ class SelectSubmenu extends Container {
 		if (getPreview) {
 			this.addChild(new Spacer(1));
 			this.addChild(new Text(theme.fg("muted", "Preview:"), 0, 0));
-			this.previewText = new Text(getPreview(), 0, 0);
-			this.addChild(this.previewText);
+			this.#previewText = new Text(getPreview(), 0, 0);
+			this.addChild(this.#previewText);
 		}
 
 		// Spacer
 		this.addChild(new Spacer(1));
 
 		// Select list
-		this.selectList = new SelectList(options, Math.min(options.length, 10), getSelectListTheme());
+		this.#selectList = new SelectList(options, Math.min(options.length, 10), getSelectListTheme());
 
 		// Pre-select current value
 		const currentIndex = options.findIndex(o => o.value === currentValue);
 		if (currentIndex !== -1) {
-			this.selectList.setSelectedIndex(currentIndex);
+			this.#selectList.setSelectedIndex(currentIndex);
 		}
 
-		this.selectList.onSelect = item => {
+		this.#selectList.onSelect = item => {
 			onSelect(item.value);
 		};
 
-		this.selectList.onCancel = onCancel;
+		this.#selectList.onCancel = onCancel;
 
 		if (onSelectionChange) {
-			this.selectList.onSelectionChange = item => {
+			this.#selectList.onSelectionChange = item => {
 				onSelectionChange(item.value);
 				// Update preview after the preview callback has applied changes
-				this.updatePreview();
+				this.#updatePreview();
 			};
 		}
 
-		this.addChild(this.selectList);
+		this.addChild(this.#selectList);
 
 		// Hint
 		this.addChild(new Spacer(1));
 		this.addChild(new Text(theme.fg("dim", "  Enter to select · Esc to go back"), 0, 0));
 	}
 
-	private updatePreview(): void {
-		if (this.previewText && this.getPreview) {
-			this.previewText.setText(this.getPreview());
+	#updatePreview(): void {
+		if (this.#previewText && this.getPreview) {
+			this.#previewText.setText(this.getPreview());
 		}
 	}
 
 	handleInput(data: string): void {
-		this.selectList.handleInput(data);
+		this.#selectList.handleInput(data);
 	}
 }
 
@@ -169,13 +169,13 @@ export interface SettingsCallbacks {
  * Uses declarative settings definitions from settings-defs.ts.
  */
 export class SettingsSelectorComponent extends Container {
-	private tabBar: TabBar;
-	private currentList: SettingsList | null = null;
-	private currentSubmenu: Container | null = null;
-	private pluginComponent: PluginSettingsComponent | null = null;
-	private statusPreviewContainer: Container | null = null;
-	private statusPreviewText: Text | null = null;
-	private currentTabId: SettingTab | "plugins" = "display";
+	#tabBar: TabBar;
+	#currentList: SettingsList | null = null;
+	#currentSubmenu: Container | null = null;
+	#pluginComponent: PluginSettingsComponent | null = null;
+	#statusPreviewContainer: Container | null = null;
+	#statusPreviewText: Text | null = null;
+	#currentTabId: SettingTab | "plugins" = "display";
 
 	constructor(
 		private readonly context: SettingsRuntimeContext,
@@ -187,38 +187,38 @@ export class SettingsSelectorComponent extends Container {
 		this.addChild(new DynamicBorder());
 
 		// Tab bar
-		this.tabBar = new TabBar("Settings", getSettingsTabs(), getTabBarTheme());
-		this.tabBar.onTabChange = () => {
-			this.switchToTab(this.tabBar.getActiveTab().id as SettingTab | "plugins");
+		this.#tabBar = new TabBar("Settings", getSettingsTabs(), getTabBarTheme());
+		this.#tabBar.onTabChange = () => {
+			this.#switchToTab(this.#tabBar.getActiveTab().id as SettingTab | "plugins");
 		};
-		this.addChild(this.tabBar);
+		this.addChild(this.#tabBar);
 
 		// Spacer after tab bar
 		this.addChild(new Spacer(1));
 
 		// Initialize with first tab
-		this.switchToTab("display");
+		this.#switchToTab("display");
 
 		// Add bottom border
 		this.addChild(new DynamicBorder());
 	}
 
-	private switchToTab(tabId: SettingTab | "plugins"): void {
-		this.currentTabId = tabId;
+	#switchToTab(tabId: SettingTab | "plugins"): void {
+		this.#currentTabId = tabId;
 
 		// Remove current content
-		if (this.currentList) {
-			this.removeChild(this.currentList);
-			this.currentList = null;
+		if (this.#currentList) {
+			this.removeChild(this.#currentList);
+			this.#currentList = null;
 		}
-		if (this.pluginComponent) {
-			this.removeChild(this.pluginComponent);
-			this.pluginComponent = null;
+		if (this.#pluginComponent) {
+			this.removeChild(this.#pluginComponent);
+			this.#pluginComponent = null;
 		}
-		if (this.statusPreviewContainer) {
-			this.removeChild(this.statusPreviewContainer);
-			this.statusPreviewContainer = null;
-			this.statusPreviewText = null;
+		if (this.#statusPreviewContainer) {
+			this.removeChild(this.#statusPreviewContainer);
+			this.#statusPreviewContainer = null;
+			this.#statusPreviewText = null;
 		}
 
 		// Remove bottom border temporarily
@@ -226,9 +226,9 @@ export class SettingsSelectorComponent extends Container {
 		this.removeChild(bottomBorder);
 
 		if (tabId === "plugins") {
-			this.showPluginsTab();
+			this.#showPluginsTab();
 		} else {
-			this.showSettingsTab(tabId);
+			this.#showSettingsTab(tabId);
 		}
 
 		// Re-add bottom border
@@ -238,13 +238,13 @@ export class SettingsSelectorComponent extends Container {
 	/**
 	 * Convert a setting definition to a SettingItem for the UI.
 	 */
-	private defToItem(def: SettingDef): SettingItem | null {
+	#defToItem(def: SettingDef): SettingItem | null {
 		// Check condition
 		if (def.type === "boolean" && def.condition && !def.condition()) {
 			return null;
 		}
 
-		const currentValue = this.getCurrentValue(def);
+		const currentValue = this.#getCurrentValue(def);
 
 		switch (def.type) {
 			case "boolean":
@@ -271,7 +271,7 @@ export class SettingsSelectorComponent extends Container {
 					label: def.label,
 					description: def.description,
 					currentValue: String(currentValue ?? ""),
-					submenu: (cv, done) => this.createSubmenu(def, cv, done),
+					submenu: (cv, done) => this.#createSubmenu(def, cv, done),
 				};
 		}
 	}
@@ -279,14 +279,14 @@ export class SettingsSelectorComponent extends Container {
 	/**
 	 * Get the current value for a setting.
 	 */
-	private getCurrentValue(def: SettingDef): unknown {
+	#getCurrentValue(def: SettingDef): unknown {
 		return settings.get(def.path);
 	}
 
 	/**
 	 * Create a submenu for a submenu-type setting.
 	 */
-	private createSubmenu(
+	#createSubmenu(
 		def: SettingDef & { type: "submenu" },
 		currentValue: string,
 		done: (value?: string) => void,
@@ -321,7 +321,7 @@ export class SettingsSelectorComponent extends Container {
 					rightSegments: presetDef.rightSegments,
 					separator: presetDef.separator,
 				});
-				this.updateStatusPreview();
+				this.#updateStatusPreview();
 			};
 			onPreviewCancel = () => {
 				const currentPreset = settings.get("statusLine.preset");
@@ -332,17 +332,17 @@ export class SettingsSelectorComponent extends Container {
 					rightSegments: presetDef.rightSegments,
 					separator: presetDef.separator,
 				});
-				this.updateStatusPreview();
+				this.#updateStatusPreview();
 			};
 		} else if (def.path === "statusLine.separator") {
 			onPreview = value => {
 				this.callbacks.onStatusLinePreview?.({ separator: value as StatusLineSeparatorStyle });
-				this.updateStatusPreview();
+				this.#updateStatusPreview();
 			};
 			onPreviewCancel = () => {
 				const separator = settings.get("statusLine.separator");
 				this.callbacks.onStatusLinePreview?.({ separator });
-				this.updateStatusPreview();
+				this.#updateStatusPreview();
 			};
 		}
 
@@ -356,7 +356,7 @@ export class SettingsSelectorComponent extends Container {
 			currentValue,
 			value => {
 				// Persist
-				this.setSettingValue(def.path, value);
+				this.#setSettingValue(def.path, value);
 				// Notify
 				this.callbacks.onChange(def.path, value);
 				done(value);
@@ -373,7 +373,7 @@ export class SettingsSelectorComponent extends Container {
 	/**
 	 * Set a setting value, handling type conversion.
 	 */
-	private setSettingValue(path: SettingPath, value: string): void {
+	#setSettingValue(path: SettingPath, value: string): void {
 		// Handle number conversions
 		const currentValue = settings.get(path);
 		if (typeof currentValue === "number") {
@@ -388,12 +388,12 @@ export class SettingsSelectorComponent extends Container {
 	/**
 	 * Show a settings tab using definitions.
 	 */
-	private showSettingsTab(tabId: SettingTab): void {
+	#showSettingsTab(tabId: SettingTab): void {
 		const defs = getSettingsForTab(tabId);
 		const items: SettingItem[] = [];
 
 		for (const def of defs) {
-			const item = this.defToItem(def);
+			const item = this.#defToItem(def);
 			if (item) {
 				items.push(item);
 			}
@@ -401,16 +401,16 @@ export class SettingsSelectorComponent extends Container {
 
 		// Add status line preview for status tab
 		if (tabId === "status") {
-			this.statusPreviewContainer = new Container();
-			this.statusPreviewContainer.addChild(new Spacer(1));
-			this.statusPreviewContainer.addChild(new Text(theme.fg("muted", "Preview:"), 0, 0));
-			this.statusPreviewText = new Text(this.getStatusPreviewString(), 0, 0);
-			this.statusPreviewContainer.addChild(this.statusPreviewText);
-			this.statusPreviewContainer.addChild(new Spacer(1));
-			this.addChild(this.statusPreviewContainer);
+			this.#statusPreviewContainer = new Container();
+			this.#statusPreviewContainer.addChild(new Spacer(1));
+			this.#statusPreviewContainer.addChild(new Text(theme.fg("muted", "Preview:"), 0, 0));
+			this.#statusPreviewText = new Text(this.#getStatusPreviewString(), 0, 0);
+			this.#statusPreviewContainer.addChild(this.#statusPreviewText);
+			this.#statusPreviewContainer.addChild(new Spacer(1));
+			this.addChild(this.#statusPreviewContainer);
 		}
 
-		this.currentList = new SettingsList(
+		this.#currentList = new SettingsList(
 			items,
 			10,
 			getSettingsListTheme(),
@@ -426,7 +426,7 @@ export class SettingsSelectorComponent extends Container {
 					this.callbacks.onChange(path, boolValue);
 
 					if (tabId === "status") {
-						this.triggerStatusLinePreview();
+						this.#triggerStatusLinePreview();
 					}
 				} else if (def.type === "enum") {
 					settings.set(path, newValue as never);
@@ -437,13 +437,13 @@ export class SettingsSelectorComponent extends Container {
 			() => this.callbacks.onCancel(),
 		);
 
-		this.addChild(this.currentList);
+		this.addChild(this.#currentList);
 	}
 
 	/**
 	 * Get the status line preview string.
 	 */
-	private getStatusPreviewString(): string {
+	#getStatusPreviewString(): string {
 		if (this.callbacks.getStatusLinePreview) {
 			return this.callbacks.getStatusLinePreview();
 		}
@@ -453,7 +453,7 @@ export class SettingsSelectorComponent extends Container {
 	/**
 	 * Trigger status line preview with current settings.
 	 */
-	private triggerStatusLinePreview(): void {
+	#triggerStatusLinePreview(): void {
 		const statusLineSettings: StatusLinePreviewSettings = {
 			preset: settings.get("statusLine.preset"),
 			leftSegments: settings.get("statusLine.leftSegments"),
@@ -461,29 +461,29 @@ export class SettingsSelectorComponent extends Container {
 			separator: settings.get("statusLine.separator"),
 		};
 		this.callbacks.onStatusLinePreview?.(statusLineSettings);
-		this.updateStatusPreview();
+		this.#updateStatusPreview();
 	}
 
 	/**
 	 * Update the inline status preview text.
 	 */
-	private updateStatusPreview(): void {
-		if (this.statusPreviewText && this.currentTabId === "status") {
-			this.statusPreviewText.setText(this.getStatusPreviewString());
+	#updateStatusPreview(): void {
+		if (this.#statusPreviewText && this.#currentTabId === "status") {
+			this.#statusPreviewText.setText(this.#getStatusPreviewString());
 		}
 	}
 
-	private showPluginsTab(): void {
-		this.pluginComponent = new PluginSettingsComponent(this.context.cwd, {
+	#showPluginsTab(): void {
+		this.#pluginComponent = new PluginSettingsComponent(this.context.cwd, {
 			onClose: () => this.callbacks.onCancel(),
 			onPluginChanged: () => this.callbacks.onPluginsChanged?.(),
 		});
-		this.addChild(this.pluginComponent);
+		this.addChild(this.#pluginComponent);
 	}
 
 	getFocusComponent(): SettingsList | PluginSettingsComponent {
 		// Return the current focusable component - one of these will always be set
-		return (this.currentList || this.pluginComponent)!;
+		return (this.#currentList || this.#pluginComponent)!;
 	}
 
 	handleInput(data: string): void {
@@ -494,21 +494,21 @@ export class SettingsSelectorComponent extends Container {
 			matchesKey(data, "left") ||
 			matchesKey(data, "right")
 		) {
-			this.tabBar.handleInput(data);
+			this.#tabBar.handleInput(data);
 			return;
 		}
 
 		// Escape at top level cancels
-		if ((matchesKey(data, "escape") || matchesKey(data, "esc")) && !this.currentSubmenu) {
+		if ((matchesKey(data, "escape") || matchesKey(data, "esc")) && !this.#currentSubmenu) {
 			this.callbacks.onCancel();
 			return;
 		}
 
 		// Pass to current content
-		if (this.currentList) {
-			this.currentList.handleInput(data);
-		} else if (this.pluginComponent) {
-			this.pluginComponent.handleInput(data);
+		if (this.#currentList) {
+			this.#currentList.handleInput(data);
+		} else if (this.#pluginComponent) {
+			this.#pluginComponent.handleInput(data);
 		}
 	}
 }

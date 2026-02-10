@@ -1,4 +1,4 @@
-import * as fs from "node:fs/promises";
+import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { isEnoent, logger } from "@oh-my-pi/pi-utils";
@@ -34,10 +34,10 @@ const activeHosts = new Map<string, SSHConnectionTarget>();
 const pendingConnections = new Map<string, Promise<void>>();
 const hostInfoCache = new Map<string, SSHHostInfo>();
 
-async function ensureControlDir(): Promise<void> {
-	await fs.mkdir(CONTROL_DIR, { recursive: true, mode: 0o700 });
+function ensureControlDir() {
+	fs.mkdirSync(CONTROL_DIR, { recursive: true, mode: 0o700 });
 	try {
-		await fs.chmod(CONTROL_DIR, 0o700);
+		fs.chmodSync(CONTROL_DIR, 0o700);
 	} catch (err) {
 		logger.debug("SSH control dir chmod failed", { path: CONTROL_DIR, error: String(err) });
 	}
@@ -54,9 +54,9 @@ function getHostInfoPath(name: string): string {
 
 async function validateKeyPermissions(keyPath?: string): Promise<void> {
 	if (!keyPath) return;
-	let stats: Awaited<ReturnType<typeof fs.stat>>;
+	let stats: fs.Stats;
 	try {
-		stats = await fs.stat(keyPath);
+		stats = await fs.promises.stat(keyPath);
 	} catch (err) {
 		if (isEnoent(err)) {
 			throw new Error(`SSH key not found: ${keyPath}`);
@@ -203,7 +203,7 @@ function shouldRefreshHostInfo(host: SSHConnectionTarget, info: SSHHostInfo): bo
 async function loadHostInfoFromDisk(host: SSHConnectionTarget): Promise<SSHHostInfo | undefined> {
 	const path = getHostInfoPath(host.name);
 	try {
-		const raw = await fs.readFile(path, "utf-8");
+		const raw = await fs.promises.readFile(path, "utf-8");
 		const parsed = parseHostInfo(JSON.parse(raw));
 		if (!parsed) return undefined;
 		const resolved = applyCompatOverride(host, parsed);
@@ -219,7 +219,7 @@ async function loadHostInfoFromDisk(host: SSHConnectionTarget): Promise<SSHHostI
 async function loadHostInfoFromDiskByName(hostName: string): Promise<SSHHostInfo | undefined> {
 	const path = getHostInfoPath(hostName);
 	try {
-		const raw = await fs.readFile(path, "utf-8");
+		const raw = await fs.promises.readFile(path, "utf-8");
 		const parsed = parseHostInfo(JSON.parse(raw));
 		if (!parsed) return undefined;
 		return parsed;
@@ -381,7 +381,7 @@ export async function ensureConnection(host: SSHConnectionTarget): Promise<void>
 
 	const promise = (async () => {
 		ensureSshBinary();
-		await ensureControlDir();
+		ensureControlDir();
 		await validateKeyPermissions(host.keyPath);
 
 		const target = buildSshTarget(host);

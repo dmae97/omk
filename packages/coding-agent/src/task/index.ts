@@ -51,6 +51,7 @@ import {
 	cleanupWorktree,
 	ensureWorktree,
 	getRepoRoot,
+	type WorktreeBaseline,
 } from "./worktree";
 
 /** Format byte count for display */
@@ -131,13 +132,13 @@ async function buildDescription(cwd: string, maxConcurrency: number, isolationEn
  * Use `TaskTool.create(session)` to instantiate.
  */
 export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
-	public readonly name = "task";
-	public readonly label = "Task";
-	public readonly parameters: TaskSchema;
-	public readonly renderCall = renderCall;
-	public readonly renderResult = renderResult;
+	readonly name = "task";
+	readonly label = "Task";
+	readonly parameters: TaskSchema;
+	readonly renderCall = renderCall;
+	readonly renderResult = renderResult;
 
-	private readonly blockedAgent: string | undefined;
+	readonly #blockedAgent: string | undefined;
 
 	private constructor(
 		private readonly session: ToolSession,
@@ -145,20 +146,20 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 		isolationEnabled: boolean,
 	) {
 		this.parameters = isolationEnabled ? taskSchema : taskSchemaNoIsolation;
-		this.blockedAgent = $env.PI_BLOCKED_AGENT;
+		this.#blockedAgent = $env.PI_BLOCKED_AGENT;
 	}
 
 	/**
 	 * Create a TaskTool instance with async agent discovery.
 	 */
-	public static async create(session: ToolSession): Promise<TaskTool> {
+	static async create(session: ToolSession): Promise<TaskTool> {
 		const maxConcurrency = session.settings.get("task.maxConcurrency");
 		const isolationEnabled = session.settings.get("task.isolation.enabled");
 		const description = await buildDescription(session.cwd, maxConcurrency, isolationEnabled);
 		return new TaskTool(session, description, isolationEnabled);
 	}
 
-	public async execute(
+	async execute(
 		_toolCallId: string,
 		params: TaskParams,
 		signal?: AbortSignal,
@@ -293,7 +294,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 		}
 
 		let repoRoot: string | null = null;
-		let baseline = null as Awaited<ReturnType<typeof captureBaseline>> | null;
+		let baseline: WorktreeBaseline | null = null;
 		if (isIsolated) {
 			try {
 				repoRoot = await getRepoRoot(this.session.cwd);
@@ -341,12 +342,12 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 
 		try {
 			// Check self-recursion prevention
-			if (this.blockedAgent && agentName === this.blockedAgent) {
+			if (this.#blockedAgent && agentName === this.#blockedAgent) {
 				return {
 					content: [
 						{
 							type: "text",
-							text: `Cannot spawn ${this.blockedAgent} agent from within itself (recursion prevention). Use a different agent type.`,
+							text: `Cannot spawn ${this.#blockedAgent} agent from within itself (recursion prevention). Use a different agent type.`,
 						},
 					],
 					details: {

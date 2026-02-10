@@ -83,29 +83,29 @@ export interface Terminal {
  * Real terminal using process.stdin/stdout
  */
 export class ProcessTerminal implements Terminal {
-	private wasRaw = false;
-	private inputHandler?: (data: string) => void;
-	private resizeHandler?: () => void;
-	private _kittyProtocolActive = false;
-	private stdinBuffer?: StdinBuffer;
-	private stdinDataHandler?: (data: string) => void;
-	private dead = false;
-	private writeLogPath = $env.PI_TUI_WRITE_LOG || "";
+	#wasRaw = false;
+	#inputHandler?: (data: string) => void;
+	#resizeHandler?: () => void;
+	#kittyProtocolActive = false;
+	#stdinBuffer?: StdinBuffer;
+	#stdinDataHandler?: (data: string) => void;
+	#dead = false;
+	#writeLogPath = $env.PI_TUI_WRITE_LOG || "";
 
 	get kittyProtocolActive(): boolean {
-		return this._kittyProtocolActive;
+		return this.#kittyProtocolActive;
 	}
 
 	start(onInput: (data: string) => void, onResize: () => void): void {
-		this.inputHandler = onInput;
-		this.resizeHandler = onResize;
+		this.#inputHandler = onInput;
+		this.#resizeHandler = onResize;
 
 		// Register for emergency cleanup
 		activeTerminal = this;
 		terminalEverStarted = true;
 
 		// Save previous state and enable raw mode
-		this.wasRaw = process.stdin.isRaw || false;
+		this.#wasRaw = process.stdin.isRaw || false;
 		if (process.stdin.setRawMode) {
 			process.stdin.setRawMode(true);
 		}
@@ -113,10 +113,10 @@ export class ProcessTerminal implements Terminal {
 		process.stdin.resume();
 
 		// Enable bracketed paste mode - terminal will wrap pastes in \x1b[200~ ... \x1b[201~
-		this.safeWrite("\x1b[?2004h");
+		this.#safeWrite("\x1b[?2004h");
 
 		// Set up resize handler immediately
-		process.stdout.on("resize", this.resizeHandler);
+		process.stdout.on("resize", this.#resizeHandler);
 
 		// Refresh terminal dimensions - they may be stale after suspend/resume
 		// (SIGWINCH is lost while process is stopped). Unix only.
@@ -127,7 +127,7 @@ export class ProcessTerminal implements Terminal {
 		// Query and enable Kitty keyboard protocol
 		// The query handler intercepts input temporarily, then installs the user's handler
 		// See: https://sw.kovidgoyal.net/kitty/keyboard-protocol/
-		this.queryAndEnableKittyProtocol();
+		this.#queryAndEnableKittyProtocol();
 	}
 
 	/**
@@ -138,45 +138,45 @@ export class ProcessTerminal implements Terminal {
 	 * This is done here (after stdinBuffer parsing) rather than on raw stdin
 	 * to handle the case where the response arrives split across multiple events.
 	 */
-	private setupStdinBuffer(): void {
-		this.stdinBuffer = new StdinBuffer({ timeout: 10 });
+	#setupStdinBuffer(): void {
+		this.#stdinBuffer = new StdinBuffer({ timeout: 10 });
 
 		// Kitty protocol response pattern: \x1b[?<flags>u
 		const kittyResponsePattern = /^\x1b\[\?(\d+)u$/;
 
 		// Forward individual sequences to the input handler
-		this.stdinBuffer.on("data", (sequence: string) => {
+		this.#stdinBuffer.on("data", (sequence: string) => {
 			// Check for Kitty protocol response (only if not already enabled)
-			if (!this._kittyProtocolActive) {
+			if (!this.#kittyProtocolActive) {
 				const match = sequence.match(kittyResponsePattern);
 				if (match) {
-					this._kittyProtocolActive = true;
+					this.#kittyProtocolActive = true;
 					setKittyProtocolActive(true);
 
 					// Enable Kitty keyboard protocol (push flags)
 					// Flag 1 = disambiguate escape codes
 					// Flag 2 = report event types (press/repeat/release)
 					// Flag 4 = report alternate keys
-					this.safeWrite("\x1b[>7u");
+					this.#safeWrite("\x1b[>7u");
 					return; // Don't forward protocol response to TUI
 				}
 			}
 
-			if (this.inputHandler) {
-				this.inputHandler(sequence);
+			if (this.#inputHandler) {
+				this.#inputHandler(sequence);
 			}
 		});
 
 		// Re-wrap paste content with bracketed paste markers for existing editor handling
-		this.stdinBuffer.on("paste", (content: string) => {
-			if (this.inputHandler) {
-				this.inputHandler(`\x1b[200~${content}\x1b[201~`);
+		this.#stdinBuffer.on("paste", (content: string) => {
+			if (this.#inputHandler) {
+				this.#inputHandler(`\x1b[200~${content}\x1b[201~`);
 			}
 		});
 
 		// Handler that pipes stdin data through the buffer
-		this.stdinDataHandler = (data: string) => {
-			this.stdinBuffer!.process(data);
+		this.#stdinDataHandler = (data: string) => {
+			this.#stdinBuffer!.process(data);
 		};
 	}
 
@@ -189,23 +189,23 @@ export class ProcessTerminal implements Terminal {
 	 * The response is detected in setupStdinBuffer's data handler, which properly
 	 * handles the case where the response arrives split across multiple stdin events.
 	 */
-	private queryAndEnableKittyProtocol(): void {
-		this.setupStdinBuffer();
-		process.stdin.on("data", this.stdinDataHandler!);
-		this.safeWrite("\x1b[?u");
+	#queryAndEnableKittyProtocol(): void {
+		this.#setupStdinBuffer();
+		process.stdin.on("data", this.#stdinDataHandler!);
+		this.#safeWrite("\x1b[?u");
 	}
 
 	async drainInput(maxMs = 1000, idleMs = 50): Promise<void> {
-		if (this._kittyProtocolActive) {
+		if (this.#kittyProtocolActive) {
 			// Disable Kitty keyboard protocol first so any late key releases
 			// do not generate new Kitty escape sequences.
-			this.safeWrite("\x1b[<u");
-			this._kittyProtocolActive = false;
+			this.#safeWrite("\x1b[<u");
+			this.#kittyProtocolActive = false;
 			setKittyProtocolActive(false);
 		}
 
-		const previousHandler = this.inputHandler;
-		this.inputHandler = undefined;
+		const previousHandler = this.#inputHandler;
+		this.#inputHandler = undefined;
 
 		let lastDataTime = Date.now();
 		const onData = () => {
@@ -225,7 +225,7 @@ export class ProcessTerminal implements Terminal {
 			}
 		} finally {
 			process.stdin.removeListener("data", onData);
-			this.inputHandler = previousHandler;
+			this.#inputHandler = previousHandler;
 		}
 	}
 
@@ -236,30 +236,30 @@ export class ProcessTerminal implements Terminal {
 		}
 
 		// Disable bracketed paste mode
-		this.safeWrite("\x1b[?2004l");
+		this.#safeWrite("\x1b[?2004l");
 
 		// Disable Kitty keyboard protocol if not already done by drainInput()
-		if (this._kittyProtocolActive) {
-			this.safeWrite("\x1b[<u");
-			this._kittyProtocolActive = false;
+		if (this.#kittyProtocolActive) {
+			this.#safeWrite("\x1b[<u");
+			this.#kittyProtocolActive = false;
 			setKittyProtocolActive(false);
 		}
 
 		// Clean up StdinBuffer
-		if (this.stdinBuffer) {
-			this.stdinBuffer.destroy();
-			this.stdinBuffer = undefined;
+		if (this.#stdinBuffer) {
+			this.#stdinBuffer.destroy();
+			this.#stdinBuffer = undefined;
 		}
 
 		// Remove event handlers
-		if (this.stdinDataHandler) {
-			process.stdin.removeListener("data", this.stdinDataHandler);
-			this.stdinDataHandler = undefined;
+		if (this.#stdinDataHandler) {
+			process.stdin.removeListener("data", this.#stdinDataHandler);
+			this.#stdinDataHandler = undefined;
 		}
-		this.inputHandler = undefined;
-		if (this.resizeHandler) {
-			process.stdout.removeListener("resize", this.resizeHandler);
-			this.resizeHandler = undefined;
+		this.#inputHandler = undefined;
+		if (this.#resizeHandler) {
+			process.stdout.removeListener("resize", this.#resizeHandler);
+			this.#resizeHandler = undefined;
 		}
 
 		// Pause stdin to prevent any buffered input (e.g., Ctrl+D) from being
@@ -269,28 +269,28 @@ export class ProcessTerminal implements Terminal {
 
 		// Restore raw mode state
 		if (process.stdin.setRawMode) {
-			process.stdin.setRawMode(this.wasRaw);
+			process.stdin.setRawMode(this.#wasRaw);
 		}
 	}
 
 	write(data: string): void {
-		this.safeWrite(data);
-		if (this.writeLogPath) {
+		this.#safeWrite(data);
+		if (this.#writeLogPath) {
 			try {
-				fs.appendFileSync(this.writeLogPath, data, { encoding: "utf8" });
+				fs.appendFileSync(this.#writeLogPath, data, { encoding: "utf8" });
 			} catch {
 				// Ignore logging errors
 			}
 		}
 	}
 
-	private safeWrite(data: string): void {
-		if (this.dead) return;
+	#safeWrite(data: string): void {
+		if (this.#dead) return;
 		try {
 			process.stdout.write(data);
 		} catch (err) {
 			// Any write failure means terminal is dead - no recovery possible
-			this.dead = true;
+			this.#dead = true;
 			logger.warn("terminal is dead - no recovery possible", { error: err, data });
 		}
 	}
@@ -306,36 +306,36 @@ export class ProcessTerminal implements Terminal {
 	moveBy(lines: number): void {
 		if (lines > 0) {
 			// Move down
-			this.safeWrite(`\x1b[${lines}B`);
+			this.#safeWrite(`\x1b[${lines}B`);
 		} else if (lines < 0) {
 			// Move up
-			this.safeWrite(`\x1b[${-lines}A`);
+			this.#safeWrite(`\x1b[${-lines}A`);
 		}
 		// lines === 0: no movement
 	}
 
 	hideCursor(): void {
-		this.safeWrite("\x1b[?25l");
+		this.#safeWrite("\x1b[?25l");
 	}
 
 	showCursor(): void {
-		this.safeWrite("\x1b[?25h");
+		this.#safeWrite("\x1b[?25h");
 	}
 
 	clearLine(): void {
-		this.safeWrite("\x1b[K");
+		this.#safeWrite("\x1b[K");
 	}
 
 	clearFromCursor(): void {
-		this.safeWrite("\x1b[J");
+		this.#safeWrite("\x1b[J");
 	}
 
 	clearScreen(): void {
-		this.safeWrite("\x1b[2J\x1b[H"); // Clear screen and move to home (1,1)
+		this.#safeWrite("\x1b[2J\x1b[H"); // Clear screen and move to home (1,1)
 	}
 
 	setTitle(title: string): void {
 		// OSC 0;title BEL - set terminal window title
-		this.safeWrite(`\x1b]0;${title}\x07`);
+		this.#safeWrite(`\x1b]0;${title}\x07`);
 	}
 }

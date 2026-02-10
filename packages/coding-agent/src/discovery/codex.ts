@@ -28,7 +28,7 @@ import type { SlashCommand } from "../capability/slash-command";
 import { slashCommandCapability } from "../capability/slash-command";
 import type { CustomTool } from "../capability/tool";
 import { toolCapability } from "../capability/tool";
-import type { LoadContext, LoadResult } from "../capability/types";
+import type { LoadContext, LoadResult, SourceMeta } from "../capability/types";
 import { parseFrontmatter } from "../utils/frontmatter";
 import {
 	createSourceMeta,
@@ -276,8 +276,7 @@ async function loadSlashCommands(ctx: LoadContext): Promise<LoadResult<SlashComm
 	const projectCommandsDir = path.join(codexDir, "commands");
 
 	const transformCommand =
-		(level: "user" | "project") =>
-		(name: string, content: string, path: string, source: ReturnType<typeof createSourceMeta>) => {
+		(level: "user" | "project") => (name: string, content: string, path: string, source: SourceMeta) => {
 			const { frontmatter, body } = parseFrontmatter(content, { source: path });
 			const commandName = frontmatter.name || name.replace(/\.md$/, "");
 			return {
@@ -315,12 +314,7 @@ async function loadPrompts(ctx: LoadContext): Promise<LoadResult<Prompt>> {
 	const codexDir = getProjectCodexDir(ctx);
 	const projectPromptsDir = path.join(codexDir, "prompts");
 
-	const transformPrompt = (
-		name: string,
-		content: string,
-		path: string,
-		source: ReturnType<typeof createSourceMeta>,
-	) => {
+	const transformPrompt = (name: string, content: string, path: string, source: SourceMeta) => {
 		const { frontmatter, body } = parseFrontmatter(content, { source: path });
 		const promptName = frontmatter.name || name.replace(/\.md$/, "");
 		return {
@@ -359,8 +353,7 @@ async function loadHooks(ctx: LoadContext): Promise<LoadResult<Hook>> {
 	const projectHooksDir = path.join(codexDir, "hooks");
 
 	const transformHook =
-		(level: "user" | "project") =>
-		(name: string, _content: string, path: string, source: ReturnType<typeof createSourceMeta>) => {
+		(level: "user" | "project") => (name: string, _content: string, path: string, source: SourceMeta) => {
 			const baseName = name.replace(/\.(ts|js)$/, "");
 			const match = baseName.match(/^(pre|post)-(.+)$/);
 			const hookType = (match?.[1] as "pre" | "post") || "pre";
@@ -402,8 +395,7 @@ async function loadTools(ctx: LoadContext): Promise<LoadResult<CustomTool>> {
 	const projectToolsDir = path.join(codexDir, "tools");
 
 	const transformTool =
-		(level: "user" | "project") =>
-		(name: string, _content: string, path: string, source: ReturnType<typeof createSourceMeta>) => {
+		(level: "user" | "project") => (name: string, _content: string, path: string, source: SourceMeta) => {
 			const toolName = name.replace(/\.(ts|js)$/, "");
 			return {
 				name: toolName,

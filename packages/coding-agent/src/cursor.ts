@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import * as fs from "node:fs/promises";
+import * as fs from "node:fs";
 import type {
 	AgentEvent,
 	AgentTool,
@@ -98,9 +98,9 @@ async function executeDelete(options: CursorExecBridgeOptions, pathArg: string, 
 	let result: AgentToolResult<unknown>;
 
 	try {
-		let fileStat: Awaited<ReturnType<typeof fs.stat>> | undefined;
+		let fileStat: fs.Stats | undefined;
 		try {
-			fileStat = await fs.stat(absolutePath);
+			fileStat = fs.statSync(absolutePath);
 		} catch {
 			throw new Error(`File not found: ${pathArg}`);
 		}
@@ -108,7 +108,7 @@ async function executeDelete(options: CursorExecBridgeOptions, pathArg: string, 
 			throw new Error(`Path is not a file: ${pathArg}`);
 		}
 
-		await fs.rm(absolutePath);
+		fs.rmSync(absolutePath);
 
 		const sizeText = fileStat.size ? ` (${fileStat.size} bytes)` : "";
 		const message = `Deleted ${pathArg}${sizeText}`;

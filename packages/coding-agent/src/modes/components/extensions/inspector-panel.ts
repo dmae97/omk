@@ -9,20 +9,20 @@ import { theme } from "../../../modes/theme/theme";
 import type { Extension, ExtensionState } from "./types";
 
 export class InspectorPanel implements Component {
-	private extension: Extension | null = null;
+	#extension: Extension | null = null;
 
 	setExtension(extension: Extension | null): void {
-		this.extension = extension;
+		this.#extension = extension;
 	}
 
 	invalidate(): void {}
 
 	render(width: number): string[] {
-		if (!this.extension) {
+		if (!this.#extension) {
 			return [theme.fg("muted", "Select an extension"), theme.fg("dim", "to view details")];
 		}
 
-		const ext = this.extension;
+		const ext = this.#extension;
 		const lines: string[] = [];
 
 		// Name header
@@ -30,7 +30,7 @@ export class InspectorPanel implements Component {
 		lines.push("");
 
 		// Kind badge
-		lines.push(theme.fg("muted", "Type: ") + this.getKindBadge(ext.kind));
+		lines.push(theme.fg("muted", "Type: ") + this.#getKindBadge(ext.kind));
 		lines.push("");
 
 		// Description (wrapped)
@@ -46,40 +46,40 @@ export class InspectorPanel implements Component {
 		lines.push(theme.fg("muted", "Origin:"));
 		const levelLabel = ext.source.level === "user" ? "User" : ext.source.level === "project" ? "Project" : "Native";
 		lines.push(`  ${theme.italic(`via ${ext.source.providerName} (${levelLabel})`)}`);
-		lines.push(`  ${theme.fg("dim", this.shortenPath(ext.path))}`);
+		lines.push(`  ${theme.fg("dim", this.#shortenPath(ext.path))}`);
 		lines.push("");
 
 		// Status badge
 		lines.push(theme.fg("muted", "Status:"));
-		lines.push(`  ${this.getStatusBadge(ext.state, ext.disabledReason, ext.shadowedBy)}`);
+		lines.push(`  ${this.#getStatusBadge(ext.state, ext.disabledReason, ext.shadowedBy)}`);
 		lines.push("");
 
 		// Preview section (routed based on kind)
-		const previewLines = this.renderPreview(ext, width);
+		const previewLines = this.#renderPreview(ext, width);
 		lines.push(...previewLines);
 
 		return lines;
 	}
 
-	private renderPreview(ext: Extension, width: number): string[] {
+	#renderPreview(ext: Extension, width: number): string[] {
 		const lines: string[] = [];
 		let content: string[] = [];
 
 		switch (ext.kind) {
 			case "context-file":
-				content = this.renderFilePreview(ext.raw, width);
+				content = this.#renderFilePreview(ext.raw, width);
 				break;
 			case "tool":
-				content = this.renderToolArgs(ext.raw, width);
+				content = this.#renderToolArgs(ext.raw, width);
 				break;
 			case "skill":
-				content = this.renderSkillContent(ext.raw, width);
+				content = this.#renderSkillContent(ext.raw, width);
 				break;
 			case "mcp":
-				content = this.renderMcpDetails(ext.raw, width);
+				content = this.#renderMcpDetails(ext.raw, width);
 				break;
 			default:
-				content = this.renderDefaultPreview(ext, width);
+				content = this.#renderDefaultPreview(ext, width);
 				break;
 		}
 
@@ -90,12 +90,12 @@ export class InspectorPanel implements Component {
 		return lines;
 	}
 
-	private renderFilePreview(raw: unknown, width: number): string[] {
+	#renderFilePreview(raw: unknown, width: number): string[] {
 		const lines: string[] = [];
 		lines.push(theme.fg("muted", "Preview:"));
 		lines.push(theme.fg("dim", theme.boxSharp.horizontal.repeat(Math.min(width - 2, 40))));
 
-		const content = this.getContextFileContent(raw);
+		const content = this.#getContextFileContent(raw);
 		if (!content) {
 			lines.push(theme.fg("dim", "  (no content)"));
 			lines.push("");
@@ -104,7 +104,7 @@ export class InspectorPanel implements Component {
 
 		const fileLines = content.split("\n");
 		for (const line of fileLines.slice(0, 20)) {
-			const highlighted = this.highlightMarkdown(line);
+			const highlighted = this.#highlightMarkdown(line);
 			lines.push(truncateToWidth(highlighted, width - 2));
 		}
 
@@ -116,7 +116,7 @@ export class InspectorPanel implements Component {
 		return lines;
 	}
 
-	private getContextFileContent(raw: unknown): string | null {
+	#getContextFileContent(raw: unknown): string | null {
 		if (raw && typeof raw === "object" && "content" in raw) {
 			const content = (raw as { content?: unknown }).content;
 			return typeof content === "string" ? content : null;
@@ -124,7 +124,7 @@ export class InspectorPanel implements Component {
 		return null;
 	}
 
-	private highlightMarkdown(line: string): string {
+	#highlightMarkdown(line: string): string {
 		// Basic markdown syntax highlighting
 		let highlighted = line;
 
@@ -148,7 +148,7 @@ export class InspectorPanel implements Component {
 		return highlighted;
 	}
 
-	private renderToolArgs(raw: unknown, width: number): string[] {
+	#renderToolArgs(raw: unknown, width: number): string[] {
 		const lines: string[] = [];
 		lines.push(theme.fg("muted", "Arguments:"));
 		lines.push(theme.fg("dim", theme.boxSharp.horizontal.repeat(Math.min(width - 2, 40))));
@@ -187,7 +187,7 @@ export class InspectorPanel implements Component {
 		return lines;
 	}
 
-	private renderSkillContent(raw: unknown, width: number): string[] {
+	#renderSkillContent(raw: unknown, width: number): string[] {
 		const lines: string[] = [];
 		lines.push(theme.fg("muted", "Instruction:"));
 		lines.push(theme.fg("dim", theme.boxSharp.horizontal.repeat(Math.min(width - 2, 40))));
@@ -216,7 +216,7 @@ export class InspectorPanel implements Component {
 		return lines;
 	}
 
-	private renderMcpDetails(raw: unknown, width: number): string[] {
+	#renderMcpDetails(raw: unknown, width: number): string[] {
 		const lines: string[] = [];
 		lines.push(theme.fg("muted", "Connection:"));
 		lines.push(theme.fg("dim", theme.boxSharp.horizontal.repeat(Math.min(width - 2, 40))));
@@ -252,7 +252,7 @@ export class InspectorPanel implements Component {
 		return lines;
 	}
 
-	private renderDefaultPreview(ext: Extension, width: number): string[] {
+	#renderDefaultPreview(ext: Extension, width: number): string[] {
 		const lines: string[] = [];
 
 		// Show trigger pattern if present
@@ -266,7 +266,7 @@ export class InspectorPanel implements Component {
 		return lines;
 	}
 
-	private getKindBadge(kind: string): string {
+	#getKindBadge(kind: string): string {
 		const kindColors: Record<string, string> = {
 			"extension-module": "accent",
 			skill: "accent",
@@ -284,7 +284,7 @@ export class InspectorPanel implements Component {
 		return theme.fg(color as any, kind);
 	}
 
-	private getStatusBadge(state: ExtensionState, reason?: string, shadowedBy?: string): string {
+	#getStatusBadge(state: ExtensionState, reason?: string, shadowedBy?: string): string {
 		switch (state) {
 			case "active":
 				return theme.fg("success", `${theme.status.enabled} Active`);
@@ -302,7 +302,7 @@ export class InspectorPanel implements Component {
 		}
 	}
 
-	private shortenPath(path: string): string {
+	#shortenPath(path: string): string {
 		const home = os.homedir();
 		if (home && path.startsWith(home)) {
 			return `~${path.slice(home.length)}`;

@@ -6,7 +6,7 @@ import { DynamicBorder } from "./dynamic-border";
  * Component that renders a queue mode selector with borders
  */
 export class QueueModeSelectorComponent extends Container {
-	private selectList: SelectList;
+	#selectList: SelectList;
 
 	constructor(
 		currentMode: "all" | "one-at-a-time",
@@ -28,29 +28,29 @@ export class QueueModeSelectorComponent extends Container {
 		this.addChild(new DynamicBorder());
 
 		// Create selector
-		this.selectList = new SelectList(queueModes, 2, getSelectListTheme());
+		this.#selectList = new SelectList(queueModes, 2, getSelectListTheme());
 
 		// Preselect current mode
 		const currentIndex = queueModes.findIndex(item => item.value === currentMode);
 		if (currentIndex !== -1) {
-			this.selectList.setSelectedIndex(currentIndex);
+			this.#selectList.setSelectedIndex(currentIndex);
 		}
 
-		this.selectList.onSelect = item => {
+		this.#selectList.onSelect = item => {
 			onSelect(item.value as "all" | "one-at-a-time");
 		};
 
-		this.selectList.onCancel = () => {
+		this.#selectList.onCancel = () => {
 			onCancel();
 		};
 
-		this.addChild(this.selectList);
+		this.addChild(this.#selectList);
 
 		// Add bottom border
 		this.addChild(new DynamicBorder());
 	}
 
 	getSelectList(): SelectList {
-		return this.selectList;
+		return this.#selectList;
 	}
 }

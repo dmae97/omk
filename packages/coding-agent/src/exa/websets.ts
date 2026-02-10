@@ -3,7 +3,7 @@
  *
  * CRUD operations for websets, items, searches, enrichments, and monitoring.
  */
-import { Type } from "@sinclair/typebox";
+import { type TObject, type TProperties, Type } from "@sinclair/typebox";
 import type { CustomTool } from "../extensibility/custom-tools/types";
 import { callWebsetsTool, findApiKey } from "./mcp-client";
 import type { ExaRenderDetails } from "./types";
@@ -13,7 +13,7 @@ function createWebsetTool(
 	name: string,
 	label: string,
 	description: string,
-	parameters: ReturnType<typeof Type.Object>,
+	parameters: TObject<TProperties>,
 	mcpToolName: string,
 ): CustomTool<any, ExaRenderDetails> {
 	return {

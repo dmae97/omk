@@ -19,29 +19,29 @@ export interface SelectListTheme {
 }
 
 export class SelectList implements Component {
-	private filteredItems: ReadonlyArray<SelectItem>;
-	private selectedIndex: number = 0;
+	#filteredItems: ReadonlyArray<SelectItem>;
+	#selectedIndex: number = 0;
 
-	public onSelect?: (item: SelectItem) => void;
-	public onCancel?: () => void;
-	public onSelectionChange?: (item: SelectItem) => void;
+	onSelect?: (item: SelectItem) => void;
+	onCancel?: () => void;
+	onSelectionChange?: (item: SelectItem) => void;
 
 	constructor(
 		private readonly items: ReadonlyArray<SelectItem>,
 		private readonly maxVisible: number,
 		private readonly theme: SelectListTheme,
 	) {
-		this.filteredItems = items;
+		this.#filteredItems = items;
 	}
 
 	setFilter(filter: string): void {
-		this.filteredItems = this.items.filter(item => item.value.toLowerCase().startsWith(filter.toLowerCase()));
+		this.#filteredItems = this.items.filter(item => item.value.toLowerCase().startsWith(filter.toLowerCase()));
 		// Reset selection when filter changes
-		this.selectedIndex = 0;
+		this.#selectedIndex = 0;
 	}
 
 	setSelectedIndex(index: number): void {
-		this.selectedIndex = Math.max(0, Math.min(index, this.filteredItems.length - 1));
+		this.#selectedIndex = Math.max(0, Math.min(index, this.#filteredItems.length - 1));
 	}
 
 	invalidate(): void {
@@ -52,7 +52,7 @@ export class SelectList implements Component {
 		const lines: string[] = [];
 
 		// If no items match filter, show message
-		if (this.filteredItems.length === 0) {
+		if (this.#filteredItems.length === 0) {
 			lines.push(this.theme.noMatch("  No matching commands"));
 			return lines;
 		}
@@ -60,16 +60,16 @@ export class SelectList implements Component {
 		// Calculate visible range with scrolling
 		const startIndex = Math.max(
 			0,
-			Math.min(this.selectedIndex - Math.floor(this.maxVisible / 2), this.filteredItems.length - this.maxVisible),
+			Math.min(this.#selectedIndex - Math.floor(this.maxVisible / 2), this.#filteredItems.length - this.maxVisible),
 		);
-		const endIndex = Math.min(startIndex + this.maxVisible, this.filteredItems.length);
+		const endIndex = Math.min(startIndex + this.maxVisible, this.#filteredItems.length);
 
 		// Render visible items
 		for (let i = startIndex; i < endIndex; i++) {
-			const item = this.filteredItems[i];
+			const item = this.#filteredItems[i];
 			if (!item) continue;
 
-			const isSelected = i === this.selectedIndex;
+			const isSelected = i === this.#selectedIndex;
 
 			let line = "";
 			if (isSelected) {
@@ -136,8 +136,8 @@ export class SelectList implements Component {
 		}
 
 		// Add scroll indicators if needed
-		if (startIndex > 0 || endIndex < this.filteredItems.length) {
-			const scrollText = `  (${this.selectedIndex + 1}/${this.filteredItems.length})`;
+		if (startIndex > 0 || endIndex < this.#filteredItems.length) {
+			const scrollText = `  (${this.#selectedIndex + 1}/${this.#filteredItems.length})`;
 			// Truncate if too long for terminal
 			lines.push(this.theme.scrollInfo(truncateToWidth(scrollText, width - 2, Ellipsis.Omit)));
 		}
@@ -148,17 +148,17 @@ export class SelectList implements Component {
 	handleInput(keyData: string): void {
 		// Up arrow - wrap to bottom when at top
 		if (matchesKey(keyData, "up")) {
-			this.selectedIndex = this.selectedIndex === 0 ? this.filteredItems.length - 1 : this.selectedIndex - 1;
-			this.notifySelectionChange();
+			this.#selectedIndex = this.#selectedIndex === 0 ? this.#filteredItems.length - 1 : this.#selectedIndex - 1;
+			this.#notifySelectionChange();
 		}
 		// Down arrow - wrap to top when at bottom
 		else if (matchesKey(keyData, "down")) {
-			this.selectedIndex = this.selectedIndex === this.filteredItems.length - 1 ? 0 : this.selectedIndex + 1;
-			this.notifySelectionChange();
+			this.#selectedIndex = this.#selectedIndex === this.#filteredItems.length - 1 ? 0 : this.#selectedIndex + 1;
+			this.#notifySelectionChange();
 		}
 		// Enter
 		else if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
-			const selectedItem = this.filteredItems[this.selectedIndex];
+			const selectedItem = this.#filteredItems[this.#selectedIndex];
 			if (selectedItem && this.onSelect) {
 				this.onSelect(selectedItem);
 			}
@@ -171,15 +171,15 @@ export class SelectList implements Component {
 		}
 	}
 
-	private notifySelectionChange(): void {
-		const selectedItem = this.filteredItems[this.selectedIndex];
+	#notifySelectionChange(): void {
+		const selectedItem = this.#filteredItems[this.#selectedIndex];
 		if (selectedItem && this.onSelectionChange) {
 			this.onSelectionChange(selectedItem);
 		}
 	}
 
 	getSelectedItem(): SelectItem | null {
-		const item = this.filteredItems[this.selectedIndex];
+		const item = this.#filteredItems[this.#selectedIndex];
 		return item || null;
 	}
 }

@@ -72,7 +72,7 @@ const EMBEDDED_AGENTS: { name: string; content: string }[] = EMBEDDED_AGENT_DEFS
 export class AgentParsingError extends Error {
 	constructor(
 		error: Error,
-		public readonly source?: unknown,
+		readonly source?: unknown,
 	) {
 		super(`Failed to parse agent: ${error.message}`, { cause: error });
 		this.name = "AgentParsingError";

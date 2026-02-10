@@ -119,11 +119,11 @@ interface ToolPathWithSource {
 export class CustomToolLoader {
 	tools: LoadedCustomTool[] = [];
 	errors: ToolLoadError[] = [];
-	private sharedApi: CustomToolAPI;
-	private seenNames: Set<string>;
+	#sharedApi: CustomToolAPI;
+	#seenNames: Set<string>;
 
 	constructor(cwd: string, builtInToolNames: string[]) {
-		this.sharedApi = {
+		this.#sharedApi = {
 			cwd,
 			exec: (command: string, args: string[], options?: ExecOptions) =>
 				execCommand(command, args, options?.cwd ?? cwd, options),
@@ -133,12 +133,12 @@ export class CustomToolLoader {
 			typebox,
 			pi: piCodingAgent,
 		};
-		this.seenNames = new Set<string>(builtInToolNames);
+		this.#seenNames = new Set<string>(builtInToolNames);
 	}
 
 	async load(pathsWithSources: ToolPathWithSource[]): Promise<void> {
 		for (const { path: toolPath, source } of pathsWithSources) {
-			const { tools: loadedTools, error } = await loadTool(toolPath, this.sharedApi.cwd, this.sharedApi, source);
+			const { tools: loadedTools, error } = await loadTool(toolPath, this.#sharedApi.cwd, this.#sharedApi, source);
 
 			if (error) {
 				this.errors.push(error);
@@ -148,7 +148,7 @@ export class CustomToolLoader {
 			if (loadedTools) {
 				for (const loadedTool of loadedTools) {
 					// Check for name conflicts
-					if (this.seenNames.has(loadedTool.tool.name)) {
+					if (this.#seenNames.has(loadedTool.tool.name)) {
 						this.errors.push({
 							path: toolPath,
 							error: `Tool name "${loadedTool.tool.name}" conflicts with existing tool`,
@@ -157,7 +157,7 @@ export class CustomToolLoader {
 						continue;
 					}
 
-					this.seenNames.add(loadedTool.tool.name);
+					this.#seenNames.add(loadedTool.tool.name);
 					this.tools.push(loadedTool);
 				}
 			}
@@ -165,8 +165,8 @@ export class CustomToolLoader {
 	}
 
 	setUIContext(uiContext: HookUIContext, hasUI: boolean): void {
-		this.sharedApi.ui = uiContext;
-		this.sharedApi.hasUI = hasUI;
+		this.#sharedApi.ui = uiContext;
+		this.#sharedApi.hasUI = hasUI;
 	}
 }
 

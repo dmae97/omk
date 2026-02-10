@@ -20,7 +20,7 @@ import type { Rule } from "../capability/rule";
 import { ruleCapability } from "../capability/rule";
 import type { Settings } from "../capability/settings";
 import { settingsCapability } from "../capability/settings";
-import type { LoadContext, LoadResult } from "../capability/types";
+import type { LoadContext, LoadResult, SourceMeta } from "../capability/types";
 import { parseFrontmatter } from "../utils/frontmatter";
 import {
 	createSourceMeta,
@@ -136,12 +136,7 @@ async function loadRules(ctx: LoadContext): Promise<LoadResult<Rule>> {
 	return { items, warnings };
 }
 
-function transformMDCRule(
-	name: string,
-	content: string,
-	path: string,
-	source: ReturnType<typeof createSourceMeta>,
-): Rule {
+function transformMDCRule(name: string, content: string, path: string, source: SourceMeta): Rule {
 	const { frontmatter, body } = parseFrontmatter(content, { source: path });
 
 	// Extract frontmatter fields

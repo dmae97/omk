@@ -846,89 +846,89 @@ async function prepareEntryForPersistence(entry: FileEntry, blobStore: BlobStore
 }
 
 class NdjsonFileWriter {
-	private writer: SessionStorageWriter;
-	private closed = false;
-	private closing = false;
-	private error: Error | undefined;
-	private pendingWrites: Promise<void> = Promise.resolve();
-	private onError: ((err: Error) => void) | undefined;
+	#writer: SessionStorageWriter;
+	#closed = false;
+	#closing = false;
+	#error: Error | undefined;
+	#pendingWrites: Promise<void> = Promise.resolve();
+	#onError: ((err: Error) => void) | undefined;
 
 	constructor(storage: SessionStorage, path: string, options?: { flags?: "a" | "w"; onError?: (err: Error) => void }) {
-		this.onError = options?.onError;
-		this.writer = storage.openWriter(path, {
+		this.#onError = options?.onError;
+		this.#writer = storage.openWriter(path, {
 			flags: options?.flags ?? "a",
-			onError: (err: Error) => this.recordError(err),
+			onError: (err: Error) => this.#recordError(err),
 		});
 	}
 
-	private recordError(err: unknown): Error {
+	#recordError(err: unknown): Error {
 		const writeErr = toError(err);
-		if (!this.error) this.error = writeErr;
-		this.onError?.(writeErr);
+		if (!this.#error) this.#error = writeErr;
+		this.#onError?.(writeErr);
 		return writeErr;
 	}
 
-	private enqueue(task: () => Promise<void>): Promise<void> {
+	#enqueue(task: () => Promise<void>): Promise<void> {
 		const run = async () => {
-			if (this.error) throw this.error;
+			if (this.#error) throw this.#error;
 			await task();
 		};
-		const next = this.pendingWrites.then(run);
+		const next = this.#pendingWrites.then(run);
 		void next.catch((err: unknown) => {
-			if (!this.error) this.error = toError(err);
+			if (!this.#error) this.#error = toError(err);
 		});
-		this.pendingWrites = next;
+		this.#pendingWrites = next;
 		return next;
 	}
 
-	private async writeLine(line: string): Promise<void> {
-		if (this.error) throw this.error;
+	async #writeLine(line: string): Promise<void> {
+		if (this.#error) throw this.#error;
 		try {
-			await this.writer.writeLine(line);
+			await this.#writer.writeLine(line);
 		} catch (err) {
-			throw this.recordError(err);
+			throw this.#recordError(err);
 		}
 	}
 
 	/** Queue a write. Returns a promise so callers can await if needed. */
 	write(entry: FileEntry): Promise<void> {
-		if (this.closed || this.closing) throw new Error("Writer closed");
-		if (this.error) throw this.error;
+		if (this.#closed || this.#closing) throw new Error("Writer closed");
+		if (this.#error) throw this.#error;
 		const line = `${JSON.stringify(entry)}\n`;
-		return this.enqueue(() => this.writeLine(line));
+		return this.#enqueue(() => this.#writeLine(line));
 	}
 
 	/** Flush all buffered data to disk. Waits for all queued writes. */
 	async flush(): Promise<void> {
-		if (this.closed) return;
-		if (this.error) throw this.error;
+		if (this.#closed) return;
+		if (this.#error) throw this.#error;
 
-		await this.enqueue(async () => {});
+		await this.#enqueue(async () => {});
 
-		if (this.error) throw this.error;
+		if (this.#error) throw this.#error;
 
 		try {
-			await this.writer.flush();
+			await this.#writer.flush();
 		} catch (err) {
-			throw this.recordError(err);
+			throw this.#recordError(err);
 		}
 	}
 
 	/** Sync data to persistent storage. */
 	async fsync(): Promise<void> {
-		if (this.closed) return;
-		if (this.error) throw this.error;
+		if (this.#closed) return;
+		if (this.#error) throw this.#error;
 		try {
-			await this.writer.fsync();
+			await this.#writer.fsync();
 		} catch (err) {
-			throw this.recordError(err);
+			throw this.#recordError(err);
 		}
 	}
 
 	/** Close the writer, flushing all data. */
 	async close(): Promise<void> {
-		if (this.closed || this.closing) return;
-		this.closing = true;
+		if (this.#closed || this.#closing) return;
+		this.#closing = true;
 
 		let closeError: Error | undefined;
 		try {
@@ -938,27 +938,27 @@ class NdjsonFileWriter {
 		}
 
 		try {
-			await this.pendingWrites;
+			await this.#pendingWrites;
 		} catch (err) {
 			if (!closeError) closeError = toError(err);
 		}
 
 		try {
-			await this.writer.close();
+			await this.#writer.close();
 		} catch (err) {
-			const endErr = this.recordError(err);
+			const endErr = this.#recordError(err);
 			if (!closeError) closeError = endErr;
 		}
 
-		this.closed = true;
+		this.#closed = true;
 
-		if (!closeError && this.error) closeError = this.error;
+		if (!closeError && this.#error) closeError = this.#error;
 		if (closeError) throw closeError;
 	}
 
 	/** Check if there's a stored error. */
 	getError(): Error | undefined {
-		return this.error;
+		return this.#error;
 	}
 }
 
@@ -1076,21 +1076,21 @@ async function collectSessionsFromFiles(files: string[], storage: SessionStorage
 }
 
 export class SessionManager {
-	private sessionId: string = "";
-	private sessionName: string | undefined;
-	private sessionFile: string | undefined;
-	private flushed: boolean = false;
-	private fileEntries: FileEntry[] = [];
-	private byId: Map<string, SessionEntry> = new Map();
-	private labelsById: Map<string, string> = new Map();
-	private leafId: string | null = null;
-	private usageStatistics: UsageStatistics = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
-	private persistWriter: NdjsonFileWriter | undefined;
-	private persistWriterPath: string | undefined;
-	private persistChain: Promise<void> = Promise.resolve();
-	private persistError: Error | undefined;
-	private persistErrorReported = false;
-	private readonly blobStore: BlobStore;
+	#sessionId: string = "";
+	#sessionName: string | undefined;
+	#sessionFile: string | undefined;
+	#flushed: boolean = false;
+	#fileEntries: FileEntry[] = [];
+	#byId: Map<string, SessionEntry> = new Map();
+	#labelsById: Map<string, string> = new Map();
+	#leafId: string | null = null;
+	#usageStatistics: UsageStatistics = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+	#persistWriter: NdjsonFileWriter | undefined;
+	#persistWriterPath: string | undefined;
+	#persistChain: Promise<void> = Promise.resolve();
+	#persistError: Error | undefined;
+	#persistErrorReported = false;
+	readonly #blobStore: BlobStore;
 
 	private constructor(
 		private readonly cwd: string,
@@ -1098,7 +1098,7 @@ export class SessionManager {
 		private readonly persist: boolean,
 		private readonly storage: SessionStorage,
 	) {
-		this.blobStore = new BlobStore(getBlobsDir());
+		this.#blobStore = new BlobStore(getBlobsDir());
 		if (persist && sessionDir) {
 			this.storage.ensureDirSync(sessionDir);
 		}
@@ -1107,54 +1107,54 @@ export class SessionManager {
 
 	/** Puts a binary blob into the blob store and returns the blob reference */
 	async putBlob(data: Buffer): Promise<BlobPutResult> {
-		return this.blobStore.put(data);
+		return this.#blobStore.put(data);
 	}
 
 	/** Initialize with a specific session file (used by factory methods) */
-	private async _initSessionFile(sessionFile: string): Promise<void> {
+	async #initSessionFile(sessionFile: string): Promise<void> {
 		await this.setSessionFile(sessionFile);
 	}
 
 	/** Initialize with a new session (used by factory methods) */
-	private _initNewSession(): void {
-		this._newSessionSync();
+	#initNewSession(): void {
+		this.#newSessionSync();
 	}
 
 	/** Switch to a different session file (used for resume and branching) */
 	async setSessionFile(sessionFile: string): Promise<void> {
-		await this._closePersistWriter();
-		this.persistError = undefined;
-		this.persistErrorReported = false;
-		this.sessionFile = path.resolve(sessionFile);
-		writeTerminalBreadcrumb(this.cwd, this.sessionFile);
-		this.fileEntries = await loadEntriesFromFile(this.sessionFile, this.storage);
-		if (this.fileEntries.length > 0) {
-			const header = this.fileEntries.find(e => e.type === "session") as SessionHeader | undefined;
-			this.sessionId = header?.id ?? Snowflake.next();
-			this.sessionName = header?.title;
+		await this.#closePersistWriter();
+		this.#persistError = undefined;
+		this.#persistErrorReported = false;
+		this.#sessionFile = path.resolve(sessionFile);
+		writeTerminalBreadcrumb(this.cwd, this.#sessionFile);
+		this.#fileEntries = await loadEntriesFromFile(this.#sessionFile, this.storage);
+		if (this.#fileEntries.length > 0) {
+			const header = this.#fileEntries.find(e => e.type === "session") as SessionHeader | undefined;
+			this.#sessionId = header?.id ?? Snowflake.next();
+			this.#sessionName = header?.title;
 
-			if (migrateToCurrentVersion(this.fileEntries)) {
-				await this._rewriteFile();
+			if (migrateToCurrentVersion(this.#fileEntries)) {
+				await this.#rewriteFile();
 			}
 
-			await resolveBlobRefsInEntries(this.fileEntries, this.blobStore);
+			await resolveBlobRefsInEntries(this.#fileEntries, this.#blobStore);
 
-			this._buildIndex();
-			this.flushed = true;
+			this.#buildIndex();
+			this.#flushed = true;
 		} else {
-			const explicitPath = this.sessionFile;
-			this._newSessionSync();
-			this.sessionFile = explicitPath; // preserve explicit path from --session flag
-			await this._rewriteFile();
-			this.flushed = true;
+			const explicitPath = this.#sessionFile;
+			this.#newSessionSync();
+			this.#sessionFile = explicitPath; // preserve explicit path from --session flag
+			await this.#rewriteFile();
+			this.#flushed = true;
 			return;
 		}
 	}
 
 	/** Start a new session. Closes any existing writer first. */
 	async newSession(options?: NewSessionOptions): Promise<string | undefined> {
-		await this._closePersistWriter();
-		return this._newSessionSync(options);
+		await this.#closePersistWriter();
+		return this.#newSessionSync(options);
 	}
 
 	/**
@@ -1163,125 +1163,125 @@ export class SessionManager {
 	 * @returns { oldSessionFile, newSessionFile } or undefined if not persisting
 	 */
 	async fork(): Promise<{ oldSessionFile: string; newSessionFile: string } | undefined> {
-		if (!this.persist || !this.sessionFile) {
+		if (!this.persist || !this.#sessionFile) {
 			return undefined;
 		}
 
-		const oldSessionFile = this.sessionFile;
-		const oldSessionId = this.sessionId;
+		const oldSessionFile = this.#sessionFile;
+		const oldSessionId = this.#sessionId;
 
 		// Close the current writer
-		await this._closePersistWriter();
-		this.persistChain = Promise.resolve();
-		this.persistError = undefined;
-		this.persistErrorReported = false;
+		await this.#closePersistWriter();
+		this.#persistChain = Promise.resolve();
+		this.#persistError = undefined;
+		this.#persistErrorReported = false;
 
 		// Create new session ID and header
-		this.sessionId = Snowflake.next();
+		this.#sessionId = Snowflake.next();
 		const timestamp = new Date().toISOString();
 		const fileTimestamp = timestamp.replace(/[:.]/g, "-");
-		this.sessionFile = path.join(this.getSessionDir(), `${fileTimestamp}_${this.sessionId}.jsonl`);
+		this.#sessionFile = path.join(this.getSessionDir(), `${fileTimestamp}_${this.#sessionId}.jsonl`);
 
 		// Update the header with new ID but keep all entries
-		const oldHeader = this.fileEntries.find(e => e.type === "session") as SessionHeader | undefined;
+		const oldHeader = this.#fileEntries.find(e => e.type === "session") as SessionHeader | undefined;
 		const newHeader: SessionHeader = {
 			type: "session",
 			version: CURRENT_SESSION_VERSION,
-			id: this.sessionId,
-			title: oldHeader?.title ?? this.sessionName,
+			id: this.#sessionId,
+			title: oldHeader?.title ?? this.#sessionName,
 			timestamp,
 			cwd: this.cwd,
 			parentSession: oldSessionId,
 		};
-		this.sessionName = newHeader.title;
+		this.#sessionName = newHeader.title;
 
 		// Replace the header in fileEntries
-		const entries = this.fileEntries.filter(e => e.type !== "session") as SessionEntry[];
-		this.fileEntries = [newHeader, ...entries];
+		const entries = this.#fileEntries.filter(e => e.type !== "session") as SessionEntry[];
+		this.#fileEntries = [newHeader, ...entries];
 
 		// Write the new session file
-		this.flushed = false;
-		await this._rewriteFile();
+		this.#flushed = false;
+		await this.#rewriteFile();
 
-		return { oldSessionFile, newSessionFile: this.sessionFile };
+		return { oldSessionFile, newSessionFile: this.#sessionFile };
 	}
 
 	/** Sync version for initial creation (no existing writer to close) */
-	private _newSessionSync(options?: NewSessionOptions): string | undefined {
-		this.persistChain = Promise.resolve();
-		this.persistError = undefined;
-		this.persistErrorReported = false;
-		this.sessionId = Snowflake.next();
-		this.sessionName = undefined;
+	#newSessionSync(options?: NewSessionOptions): string | undefined {
+		this.#persistChain = Promise.resolve();
+		this.#persistError = undefined;
+		this.#persistErrorReported = false;
+		this.#sessionId = Snowflake.next();
+		this.#sessionName = undefined;
 		const timestamp = new Date().toISOString();
 		const header: SessionHeader = {
 			type: "session",
 			version: CURRENT_SESSION_VERSION,
-			id: this.sessionId,
+			id: this.#sessionId,
 			timestamp,
 			cwd: this.cwd,
 			parentSession: options?.parentSession,
 		};
-		this.fileEntries = [header];
-		this.byId.clear();
-		this.labelsById.clear();
-		this.leafId = null;
-		this.flushed = false;
-		this.usageStatistics = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+		this.#fileEntries = [header];
+		this.#byId.clear();
+		this.#labelsById.clear();
+		this.#leafId = null;
+		this.#flushed = false;
+		this.#usageStatistics = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
 
 		if (this.persist) {
 			const fileTimestamp = timestamp.replace(/[:.]/g, "-");
-			this.sessionFile = path.join(this.getSessionDir(), `${fileTimestamp}_${this.sessionId}.jsonl`);
-			writeTerminalBreadcrumb(this.cwd, this.sessionFile);
+			this.#sessionFile = path.join(this.getSessionDir(), `${fileTimestamp}_${this.#sessionId}.jsonl`);
+			writeTerminalBreadcrumb(this.cwd, this.#sessionFile);
 		}
-		return this.sessionFile;
+		return this.#sessionFile;
 	}
 
-	private _buildIndex(): void {
-		this.byId.clear();
-		this.labelsById.clear();
-		this.leafId = null;
-		this.usageStatistics = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
-		for (const entry of this.fileEntries) {
+	#buildIndex(): void {
+		this.#byId.clear();
+		this.#labelsById.clear();
+		this.#leafId = null;
+		this.#usageStatistics = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+		for (const entry of this.#fileEntries) {
 			if (entry.type === "session") continue;
-			this.byId.set(entry.id, entry);
-			this.leafId = entry.id;
+			this.#byId.set(entry.id, entry);
+			this.#leafId = entry.id;
 			if (entry.type === "label") {
 				if (entry.label) {
-					this.labelsById.set(entry.targetId, entry.label);
+					this.#labelsById.set(entry.targetId, entry.label);
 				} else {
-					this.labelsById.delete(entry.targetId);
+					this.#labelsById.delete(entry.targetId);
 				}
 			}
 			if (entry.type === "message" && entry.message.role === "assistant") {
 				const usage = entry.message.usage;
-				this.usageStatistics.input += usage.input;
-				this.usageStatistics.output += usage.output;
-				this.usageStatistics.cacheRead += usage.cacheRead;
-				this.usageStatistics.cacheWrite += usage.cacheWrite;
-				this.usageStatistics.cost += usage.cost.total;
+				this.#usageStatistics.input += usage.input;
+				this.#usageStatistics.output += usage.output;
+				this.#usageStatistics.cacheRead += usage.cacheRead;
+				this.#usageStatistics.cacheWrite += usage.cacheWrite;
+				this.#usageStatistics.cost += usage.cost.total;
 			}
 
 			if (entry.type === "message" && entry.message.role === "toolResult" && entry.message.toolName === "task") {
 				const usage = getTaskToolUsage(entry.message.details);
 				if (usage) {
-					this.usageStatistics.input += usage.input;
-					this.usageStatistics.output += usage.output;
-					this.usageStatistics.cacheRead += usage.cacheRead;
-					this.usageStatistics.cacheWrite += usage.cacheWrite;
-					this.usageStatistics.cost += usage.cost.total;
+					this.#usageStatistics.input += usage.input;
+					this.#usageStatistics.output += usage.output;
+					this.#usageStatistics.cacheRead += usage.cacheRead;
+					this.#usageStatistics.cacheWrite += usage.cacheWrite;
+					this.#usageStatistics.cost += usage.cost.total;
 				}
 			}
 		}
 	}
 
-	private _recordPersistError(err: unknown): Error {
+	#recordPersistError(err: unknown): Error {
 		const normalized = toError(err);
-		if (!this.persistError) this.persistError = normalized;
-		if (!this.persistErrorReported) {
-			this.persistErrorReported = true;
+		if (!this.#persistError) this.#persistError = normalized;
+		if (!this.#persistErrorReported) {
+			this.#persistErrorReported = true;
 			logger.error("Session persistence error.", {
-				sessionFile: this.sessionFile,
+				sessionFile: this.#sessionFile,
 				error: normalized.message,
 				stack: normalized.stack,
 			});
@@ -1289,52 +1289,52 @@ export class SessionManager {
 		return normalized;
 	}
 
-	private _queuePersistTask(task: () => Promise<void>, options?: { ignoreError?: boolean }): Promise<void> {
-		const next = this.persistChain.then(async () => {
-			if (this.persistError && !options?.ignoreError) throw this.persistError;
+	#queuePersistTask(task: () => Promise<void>, options?: { ignoreError?: boolean }): Promise<void> {
+		const next = this.#persistChain.then(async () => {
+			if (this.#persistError && !options?.ignoreError) throw this.#persistError;
 			await task();
 		});
-		this.persistChain = next.catch(err => {
-			this._recordPersistError(err);
+		this.#persistChain = next.catch(err => {
+			this.#recordPersistError(err);
 		});
 		return next;
 	}
 
-	private _ensurePersistWriter(): NdjsonFileWriter | undefined {
-		if (!this.persist || !this.sessionFile) return undefined;
-		if (this.persistError) throw this.persistError;
-		if (this.persistWriter && this.persistWriterPath === this.sessionFile) return this.persistWriter;
+	#ensurePersistWriter(): NdjsonFileWriter | undefined {
+		if (!this.persist || !this.#sessionFile) return undefined;
+		if (this.#persistError) throw this.#persistError;
+		if (this.#persistWriter && this.#persistWriterPath === this.#sessionFile) return this.#persistWriter;
 		// Note: caller must await _closePersistWriter() before calling this if switching files
-		this.persistWriter = new NdjsonFileWriter(this.storage, this.sessionFile, {
+		this.#persistWriter = new NdjsonFileWriter(this.storage, this.#sessionFile, {
 			onError: err => {
-				this._recordPersistError(err);
+				this.#recordPersistError(err);
 			},
 		});
-		this.persistWriterPath = this.sessionFile;
-		return this.persistWriter;
+		this.#persistWriterPath = this.#sessionFile;
+		return this.#persistWriter;
 	}
 
-	private async _closePersistWriterInternal(): Promise<void> {
-		if (this.persistWriter) {
-			await this.persistWriter.close();
-			this.persistWriter = undefined;
+	async #closePersistWriterInternal(): Promise<void> {
+		if (this.#persistWriter) {
+			await this.#persistWriter.close();
+			this.#persistWriter = undefined;
 		}
-		this.persistWriterPath = undefined;
+		this.#persistWriterPath = undefined;
 	}
 
-	private async _closePersistWriter(): Promise<void> {
-		await this._queuePersistTask(
+	async #closePersistWriter(): Promise<void> {
+		await this.#queuePersistTask(
 			async () => {
-				await this._closePersistWriterInternal();
+				await this.#closePersistWriterInternal();
 			},
 			{ ignoreError: true },
 		);
 	}
 
-	private async _writeEntriesAtomically(entries: FileEntry[]): Promise<void> {
-		if (!this.sessionFile) return;
-		const dir = path.resolve(this.sessionFile, "..");
-		const tempPath = path.join(dir, `.${path.basename(this.sessionFile)}.${Snowflake.next()}.tmp`);
+	async #writeEntriesAtomically(entries: FileEntry[]): Promise<void> {
+		if (!this.#sessionFile) return;
+		const dir = path.resolve(this.#sessionFile, "..");
+		const tempPath = path.join(dir, `.${path.basename(this.#sessionFile)}.${Snowflake.next()}.tmp`);
 		const writer = new NdjsonFileWriter(this.storage, tempPath, { flags: "w" });
 		try {
 			for (const entry of entries) {
@@ -1343,8 +1343,7 @@ export class SessionManager {
 			await writer.flush();
 			await writer.fsync();
 			await writer.close();
-			await this.storage.rename(tempPath, this.sessionFile);
-			this.storage.fsyncDirSync(dir);
+			await this.storage.rename(tempPath, this.#sessionFile);
 		} catch (err) {
 			try {
 				await writer.close();
@@ -1360,15 +1359,15 @@ export class SessionManager {
 		}
 	}
 
-	private async _rewriteFile(): Promise<void> {
-		if (!this.persist || !this.sessionFile) return;
-		await this._queuePersistTask(async () => {
-			await this._closePersistWriterInternal();
+	async #rewriteFile(): Promise<void> {
+		if (!this.persist || !this.#sessionFile) return;
+		await this.#queuePersistTask(async () => {
+			await this.#closePersistWriterInternal();
 			const entries = await Promise.all(
-				this.fileEntries.map(entry => prepareEntryForPersistence(entry, this.blobStore)),
+				this.#fileEntries.map(entry => prepareEntryForPersistence(entry, this.#blobStore)),
 			);
-			await this._writeEntriesAtomically(entries);
-			this.flushed = true;
+			await this.#writeEntriesAtomically(entries);
+			this.#flushed = true;
 		});
 	}
 
@@ -1378,14 +1377,14 @@ export class SessionManager {
 
 	/** Flush pending writes to disk. Call before switching sessions or on shutdown. */
 	async flush(): Promise<void> {
-		if (!this.persistWriter) return;
-		await this._queuePersistTask(async () => {
-			if (this.persistWriter) {
-				await this.persistWriter.flush();
-				await this.persistWriter.fsync();
+		if (!this.#persistWriter) return;
+		await this.#queuePersistTask(async () => {
+			if (this.#persistWriter) {
+				await this.#persistWriter.flush();
+				await this.#persistWriter.fsync();
 			}
 		});
-		if (this.persistError) throw this.persistError;
+		if (this.#persistError) throw this.#persistError;
 	}
 
 	getCwd(): string {
@@ -1394,7 +1393,7 @@ export class SessionManager {
 
 	/** Get usage statistics across all assistant messages in the session. */
 	getUsageStatistics(): UsageStatistics {
-		return this.usageStatistics;
+		return this.#usageStatistics;
 	}
 
 	getSessionDir(): string {
@@ -1402,86 +1401,88 @@ export class SessionManager {
 	}
 
 	getSessionId(): string {
-		return this.sessionId;
+		return this.#sessionId;
 	}
 
 	getSessionFile(): string | undefined {
-		return this.sessionFile;
+		return this.#sessionFile;
 	}
 
 	getSessionName(): string | undefined {
-		return this.sessionName;
+		return this.#sessionName;
 	}
 
 	async setSessionName(name: string): Promise<void> {
-		this.sessionName = name;
+		this.#sessionName = name;
 
 		// Update the in-memory header (so first flush includes title)
-		const header = this.fileEntries.find(e => e.type === "session") as SessionHeader | undefined;
+		const header = this.#fileEntries.find(e => e.type === "session") as SessionHeader | undefined;
 		if (header) {
 			header.title = name;
 		}
 
 		// Update the session file header with the title (if already flushed)
-		const sessionFile = this.sessionFile;
+		const sessionFile = this.#sessionFile;
 		if (this.persist && sessionFile && this.storage.existsSync(sessionFile)) {
-			await this._rewriteFile();
+			await this.#rewriteFile();
 		}
 	}
 
 	_persist(entry: SessionEntry): void {
-		if (!this.persist || !this.sessionFile) return;
-		if (this.persistError) throw this.persistError;
+		if (!this.persist || !this.#sessionFile) return;
+		if (this.#persistError) throw this.#persistError;
 
-		const hasAssistant = this.fileEntries.some(e => e.type === "message" && e.message.role === "assistant");
+		const hasAssistant = this.#fileEntries.some(e => e.type === "message" && e.message.role === "assistant");
 		if (!hasAssistant) {
 			// Mark as not flushed so when assistant arrives, all entries get written
-			this.flushed = false;
+			this.#flushed = false;
 			return;
 		}
 
-		if (!this.flushed) {
-			this.flushed = true;
-			void this._queuePersistTask(async () => {
-				const writer = this._ensurePersistWriter();
+		if (!this.#flushed) {
+			this.#flushed = true;
+			void this.#queuePersistTask(async () => {
+				const writer = this.#ensurePersistWriter();
 				if (!writer) return;
-				const entries = await Promise.all(this.fileEntries.map(e => prepareEntryForPersistence(e, this.blobStore)));
+				const entries = await Promise.all(
+					this.#fileEntries.map(e => prepareEntryForPersistence(e, this.#blobStore)),
+				);
 				for (const persistedEntry of entries) {
 					await writer.write(persistedEntry);
 				}
 			});
 		} else {
-			void this._queuePersistTask(async () => {
-				const writer = this._ensurePersistWriter();
+			void this.#queuePersistTask(async () => {
+				const writer = this.#ensurePersistWriter();
 				if (!writer) return;
-				const persistedEntry = await prepareEntryForPersistence(entry, this.blobStore);
+				const persistedEntry = await prepareEntryForPersistence(entry, this.#blobStore);
 				await writer.write(persistedEntry);
 			});
 		}
 	}
 
-	private _appendEntry(entry: SessionEntry): void {
-		this.fileEntries.push(entry);
-		this.byId.set(entry.id, entry);
-		this.leafId = entry.id;
+	#appendEntry(entry: SessionEntry): void {
+		this.#fileEntries.push(entry);
+		this.#byId.set(entry.id, entry);
+		this.#leafId = entry.id;
 		this._persist(entry);
 		if (entry.type === "message" && entry.message.role === "assistant") {
 			const usage = entry.message.usage;
-			this.usageStatistics.input += usage.input;
-			this.usageStatistics.output += usage.output;
-			this.usageStatistics.cacheRead += usage.cacheRead;
-			this.usageStatistics.cacheWrite += usage.cacheWrite;
-			this.usageStatistics.cost += usage.cost.total;
+			this.#usageStatistics.input += usage.input;
+			this.#usageStatistics.output += usage.output;
+			this.#usageStatistics.cacheRead += usage.cacheRead;
+			this.#usageStatistics.cacheWrite += usage.cacheWrite;
+			this.#usageStatistics.cost += usage.cost.total;
 		}
 
 		if (entry.type === "message" && entry.message.role === "toolResult" && entry.message.toolName === "task") {
 			const usage = getTaskToolUsage(entry.message.details);
 			if (usage) {
-				this.usageStatistics.input += usage.input;
-				this.usageStatistics.output += usage.output;
-				this.usageStatistics.cacheRead += usage.cacheRead;
-				this.usageStatistics.cacheWrite += usage.cacheWrite;
-				this.usageStatistics.cost += usage.cost.total;
+				this.#usageStatistics.input += usage.input;
+				this.#usageStatistics.output += usage.output;
+				this.#usageStatistics.cacheRead += usage.cacheRead;
+				this.#usageStatistics.cacheWrite += usage.cacheWrite;
+				this.#usageStatistics.cost += usage.cost.total;
 			}
 		}
 	}
@@ -1503,12 +1504,12 @@ export class SessionManager {
 	): string {
 		const entry: SessionMessageEntry = {
 			type: "message",
-			id: generateId(this.byId),
-			parentId: this.leafId,
+			id: generateId(this.#byId),
+			parentId: this.#leafId,
 			timestamp: new Date().toISOString(),
 			message,
 		};
-		this._appendEntry(entry);
+		this.#appendEntry(entry);
 		return entry.id;
 	}
 
@@ -1516,12 +1517,12 @@ export class SessionManager {
 	appendThinkingLevelChange(thinkingLevel: string): string {
 		const entry: ThinkingLevelChangeEntry = {
 			type: "thinking_level_change",
-			id: generateId(this.byId),
-			parentId: this.leafId,
+			id: generateId(this.#byId),
+			parentId: this.#leafId,
 			timestamp: new Date().toISOString(),
 			thinkingLevel,
 		};
-		this._appendEntry(entry);
+		this.#appendEntry(entry);
 		return entry.id;
 	}
 
@@ -1529,13 +1530,13 @@ export class SessionManager {
 	appendModeChange(mode: string, data?: Record<string, unknown>): string {
 		const entry: ModeChangeEntry = {
 			type: "mode_change",
-			id: generateId(this.byId),
-			parentId: this.leafId,
+			id: generateId(this.#byId),
+			parentId: this.#leafId,
 			timestamp: new Date().toISOString(),
 			mode,
 			data,
 		};
-		this._appendEntry(entry);
+		this.#appendEntry(entry);
 		return entry.id;
 	}
 
@@ -1547,13 +1548,13 @@ export class SessionManager {
 	appendModelChange(model: string, role?: string): string {
 		const entry: ModelChangeEntry = {
 			type: "model_change",
-			id: generateId(this.byId),
-			parentId: this.leafId,
+			id: generateId(this.#byId),
+			parentId: this.#leafId,
 			timestamp: new Date().toISOString(),
 			model,
 			role,
 		};
-		this._appendEntry(entry);
+		this.#appendEntry(entry);
 		return entry.id;
 	}
 
@@ -1561,12 +1562,12 @@ export class SessionManager {
 	appendSessionInit(init: { systemPrompt: string; task: string; tools: string[]; outputSchema?: unknown }): string {
 		const entry: SessionInitEntry = {
 			type: "session_init",
-			id: generateId(this.byId),
-			parentId: this.leafId,
+			id: generateId(this.#byId),
+			parentId: this.#leafId,
 			timestamp: new Date().toISOString(),
 			...init,
 		};
-		this._appendEntry(entry);
+		this.#appendEntry(entry);
 		return entry.id;
 	}
 
@@ -1582,8 +1583,8 @@ export class SessionManager {
 	): string {
 		const entry: CompactionEntry<T> = {
 			type: "compaction",
-			id: generateId(this.byId),
-			parentId: this.leafId,
+			id: generateId(this.#byId),
+			parentId: this.#leafId,
 			timestamp: new Date().toISOString(),
 			summary,
 			shortSummary,
@@ -1593,7 +1594,7 @@ export class SessionManager {
 			fromExtension,
 			preserveData,
 		};
-		this._appendEntry(entry);
+		this.#appendEntry(entry);
 		return entry.id;
 	}
 
@@ -1603,11 +1604,11 @@ export class SessionManager {
 			type: "custom",
 			customType,
 			data,
-			id: generateId(this.byId),
-			parentId: this.leafId,
+			id: generateId(this.#byId),
+			parentId: this.#leafId,
 			timestamp: new Date().toISOString(),
 		};
-		this._appendEntry(entry);
+		this.#appendEntry(entry);
 		return entry.id;
 	}
 
@@ -1616,8 +1617,8 @@ export class SessionManager {
 	 * Use sparingly (e.g., pruning old tool outputs).
 	 */
 	async rewriteEntries(): Promise<void> {
-		if (!this.persist || !this.sessionFile) return;
-		await this._rewriteFile();
+		if (!this.persist || !this.#sessionFile) return;
+		await this.#rewriteFile();
 	}
 
 	/**
@@ -1626,8 +1627,8 @@ export class SessionManager {
 	 */
 	async rewriteAssistantToolCallArgs(toolCallId: string, args: Record<string, unknown>): Promise<boolean> {
 		let updated = false;
-		for (let i = this.fileEntries.length - 1; i >= 0; i--) {
-			const entry = this.fileEntries[i];
+		for (let i = this.#fileEntries.length - 1; i >= 0; i--) {
+			const entry = this.#fileEntries[i];
 			if (entry.type !== "message" || entry.message.role !== "assistant") continue;
 			const message = entry.message as { content?: unknown };
 			if (!Array.isArray(message.content)) continue;
@@ -1644,8 +1645,8 @@ export class SessionManager {
 			if (updated) break;
 		}
 
-		if (updated && this.persist && this.sessionFile) {
-			await this._rewriteFile();
+		if (updated && this.persist && this.#sessionFile) {
+			await this.#rewriteFile();
 		}
 		return updated;
 	}
@@ -1670,11 +1671,11 @@ export class SessionManager {
 			content,
 			display,
 			details,
-			id: generateId(this.byId),
-			parentId: this.leafId,
+			id: generateId(this.#byId),
+			parentId: this.#leafId,
 			timestamp: new Date().toISOString(),
 		};
-		this._appendEntry(entry);
+		this.#appendEntry(entry);
 		return entry.id;
 	}
 
@@ -1690,12 +1691,12 @@ export class SessionManager {
 	appendTtsrInjection(ruleNames: string[]): string {
 		const entry: TtsrInjectionEntry = {
 			type: "ttsr_injection",
-			id: generateId(this.byId),
-			parentId: this.leafId,
+			id: generateId(this.#byId),
+			parentId: this.#leafId,
 			timestamp: new Date().toISOString(),
 			injectedRules: ruleNames,
 		};
-		this._appendEntry(entry);
+		this.#appendEntry(entry);
 		return entry.id;
 	}
 
@@ -1721,11 +1722,11 @@ export class SessionManager {
 	// =========================================================================
 
 	getLeafId(): string | null {
-		return this.leafId;
+		return this.#leafId;
 	}
 
 	getLeafEntry(): SessionEntry | undefined {
-		return this.leafId ? this.byId.get(this.leafId) : undefined;
+		return this.#leafId ? this.#byId.get(this.#leafId) : undefined;
 	}
 
 	/**
@@ -1738,13 +1739,13 @@ export class SessionManager {
 			if (current.type === "model_change") {
 				return current.role ?? "default";
 			}
-			current = current.parentId ? this.byId.get(current.parentId) : undefined;
+			current = current.parentId ? this.#byId.get(current.parentId) : undefined;
 		}
 		return undefined;
 	}
 
 	getEntry(id: string): SessionEntry | undefined {
-		return this.byId.get(id);
+		return this.#byId.get(id);
 	}
 
 	/**
@@ -1752,7 +1753,7 @@ export class SessionManager {
 	 */
 	getChildren(parentId: string): SessionEntry[] {
 		const children: SessionEntry[] = [];
-		for (const entry of this.byId.values()) {
+		for (const entry of this.#byId.values()) {
 			if (entry.parentId === parentId) {
 				children.push(entry);
 			}
@@ -1764,7 +1765,7 @@ export class SessionManager {
 	 * Get the label for an entry, if any.
 	 */
 	getLabel(id: string): string | undefined {
-		return this.labelsById.get(id);
+		return this.#labelsById.get(id);
 	}
 
 	/**
@@ -1773,22 +1774,22 @@ export class SessionManager {
 	 * Pass undefined or empty string to clear the label.
 	 */
 	appendLabelChange(targetId: string, label: string | undefined): string {
-		if (!this.byId.has(targetId)) {
+		if (!this.#byId.has(targetId)) {
 			throw new Error(`Entry ${targetId} not found`);
 		}
 		const entry: LabelEntry = {
 			type: "label",
-			id: generateId(this.byId),
-			parentId: this.leafId,
+			id: generateId(this.#byId),
+			parentId: this.#leafId,
 			timestamp: new Date().toISOString(),
 			targetId,
 			label,
 		};
-		this._appendEntry(entry);
+		this.#appendEntry(entry);
 		if (label) {
-			this.labelsById.set(targetId, label);
+			this.#labelsById.set(targetId, label);
 		} else {
-			this.labelsById.delete(targetId);
+			this.#labelsById.delete(targetId);
 		}
 		return entry.id;
 	}
@@ -1800,11 +1801,11 @@ export class SessionManager {
 	 */
 	getBranch(fromId?: string): SessionEntry[] {
 		const path: SessionEntry[] = [];
-		const startId = fromId ?? this.leafId;
-		let current = startId ? this.byId.get(startId) : undefined;
+		const startId = fromId ?? this.#leafId;
+		let current = startId ? this.#byId.get(startId) : undefined;
 		while (current) {
 			path.unshift(current);
-			current = current.parentId ? this.byId.get(current.parentId) : undefined;
+			current = current.parentId ? this.#byId.get(current.parentId) : undefined;
 		}
 		return path;
 	}
@@ -1814,14 +1815,14 @@ export class SessionManager {
 	 * Uses tree traversal from current leaf.
 	 */
 	buildSessionContext(): SessionContext {
-		return buildSessionContext(this.getEntries(), this.leafId, this.byId);
+		return buildSessionContext(this.getEntries(), this.#leafId, this.#byId);
 	}
 
 	/**
 	 * Get session header.
 	 */
 	getHeader(): SessionHeader | null {
-		const h = this.fileEntries.find(e => e.type === "session");
+		const h = this.#fileEntries.find(e => e.type === "session");
 		return h ? (h as SessionHeader) : null;
 	}
 
@@ -1831,7 +1832,7 @@ export class SessionManager {
 	 * change the leaf pointer. Entries cannot be modified or deleted.
 	 */
 	getEntries(): SessionEntry[] {
-		return this.fileEntries.filter((e): e is SessionEntry => e.type !== "session");
+		return this.#fileEntries.filter((e): e is SessionEntry => e.type !== "session");
 	}
 
 	/**
@@ -1846,7 +1847,7 @@ export class SessionManager {
 
 		// Create nodes with resolved labels
 		for (const entry of entries) {
-			const label = this.labelsById.get(entry.id);
+			const label = this.#labelsById.get(entry.id);
 			nodeMap.set(entry.id, { entry, children: [], label });
 		}
 
@@ -1889,10 +1890,10 @@ export class SessionManager {
 	 * are not modified or deleted.
 	 */
 	branch(branchFromId: string): void {
-		if (!this.byId.has(branchFromId)) {
+		if (!this.#byId.has(branchFromId)) {
 			throw new Error(`Entry ${branchFromId} not found`);
 		}
-		this.leafId = branchFromId;
+		this.#leafId = branchFromId;
 	}
 
 	/**
@@ -1901,7 +1902,7 @@ export class SessionManager {
 	 * Use this when navigating to re-edit the first user message.
 	 */
 	resetLeaf(): void {
-		this.leafId = null;
+		this.#leafId = null;
 	}
 
 	/**
@@ -1910,13 +1911,13 @@ export class SessionManager {
 	 * context from the abandoned conversation path.
 	 */
 	branchWithSummary(branchFromId: string | null, summary: string, details?: unknown, fromExtension?: boolean): string {
-		if (branchFromId !== null && !this.byId.has(branchFromId)) {
+		if (branchFromId !== null && !this.#byId.has(branchFromId)) {
 			throw new Error(`Entry ${branchFromId} not found`);
 		}
-		this.leafId = branchFromId;
+		this.#leafId = branchFromId;
 		const entry: BranchSummaryEntry = {
 			type: "branch_summary",
-			id: generateId(this.byId),
+			id: generateId(this.#byId),
 			parentId: branchFromId,
 			timestamp: new Date().toISOString(),
 			fromId: branchFromId ?? "root",
@@ -1924,7 +1925,7 @@ export class SessionManager {
 			details,
 			fromExtension,
 		};
-		this._appendEntry(entry);
+		this.#appendEntry(entry);
 		return entry.id;
 	}
 
@@ -1934,7 +1935,7 @@ export class SessionManager {
 	 * Returns the new session file path, or undefined if not persisting.
 	 */
 	createBranchedSession(leafId: string): string | undefined {
-		const previousSessionFile = this.sessionFile;
+		const previousSessionFile = this.#sessionFile;
 		const branchPath = this.getBranch(leafId);
 		if (branchPath.length === 0) {
 			throw new Error(`Entry ${leafId} not found`);
@@ -1960,7 +1961,7 @@ export class SessionManager {
 		// Collect labels for entries in the path
 		const pathEntryIds = new Set(pathWithoutLabels.map(e => e.id));
 		const labelsToWrite: Array<{ targetId: string; label: string }> = [];
-		for (const [targetId, label] of this.labelsById) {
+		for (const [targetId, label] of this.#labelsById) {
 			if (pathEntryIds.has(targetId)) {
 				labelsToWrite.push({ targetId, label });
 			}
@@ -1991,11 +1992,11 @@ export class SessionManager {
 				parentId = labelEntry.id;
 			}
 			this.storage.writeTextSync(newSessionFile, `${lines.join("\n")}\n`);
-			this.fileEntries = [header, ...pathWithoutLabels, ...labelEntries];
-			this.sessionId = newSessionId;
-			this.sessionFile = newSessionFile;
-			this.flushed = true;
-			this._buildIndex();
+			this.#fileEntries = [header, ...pathWithoutLabels, ...labelEntries];
+			this.#sessionId = newSessionId;
+			this.#sessionFile = newSessionFile;
+			this.#flushed = true;
+			this.#buildIndex();
 			return newSessionFile;
 		}
 
@@ -2014,9 +2015,9 @@ export class SessionManager {
 			labelEntries.push(labelEntry);
 			parentId = labelEntry.id;
 		}
-		this.fileEntries = [header, ...pathWithoutLabels, ...labelEntries];
-		this.sessionId = newSessionId;
-		this._buildIndex();
+		this.#fileEntries = [header, ...pathWithoutLabels, ...labelEntries];
+		this.#sessionId = newSessionId;
+		this.#buildIndex();
 		return undefined;
 	}
 
@@ -2028,7 +2029,7 @@ export class SessionManager {
 	static create(cwd: string, sessionDir?: string, storage: SessionStorage = new FileSessionStorage()): SessionManager {
 		const dir = sessionDir ?? getDefaultSessionDir(cwd, storage);
 		const manager = new SessionManager(cwd, dir, true, storage);
-		manager._initNewSession();
+		manager.#initNewSession();
 		return manager;
 	}
 
@@ -2046,16 +2047,16 @@ export class SessionManager {
 		const manager = new SessionManager(cwd, dir, true, storage);
 		const forkEntries = structuredClone(await loadEntriesFromFile(sourcePath, storage)) as FileEntry[];
 		migrateToCurrentVersion(forkEntries);
-		await resolveBlobRefsInEntries(forkEntries, manager.blobStore);
+		await resolveBlobRefsInEntries(forkEntries, manager.#blobStore);
 		const sourceHeader = forkEntries.find(e => e.type === "session") as SessionHeader | undefined;
 		const historyEntries = forkEntries.filter(entry => entry.type !== "session") as SessionEntry[];
-		manager._newSessionSync({ parentSession: sourceHeader?.id });
-		const newHeader = manager.fileEntries[0] as SessionHeader;
+		manager.#newSessionSync({ parentSession: sourceHeader?.id });
+		const newHeader = manager.#fileEntries[0] as SessionHeader;
 		newHeader.title = sourceHeader?.title;
-		manager.fileEntries = [newHeader, ...historyEntries];
-		manager.sessionName = newHeader.title;
-		manager._buildIndex();
-		await manager._rewriteFile();
+		manager.#fileEntries = [newHeader, ...historyEntries];
+		manager.#sessionName = newHeader.title;
+		manager.#buildIndex();
+		await manager.#rewriteFile();
 		return manager;
 	}
 
@@ -2076,7 +2077,7 @@ export class SessionManager {
 		// If no sessionDir provided, derive from file's parent directory
 		const dir = sessionDir ?? path.resolve(filePath, "..");
 		const manager = new SessionManager(cwd, dir, true, storage);
-		await manager._initSessionFile(filePath);
+		await manager.#initSessionFile(filePath);
 		return manager;
 	}
 
@@ -2096,9 +2097,9 @@ export class SessionManager {
 		const mostRecent = terminalSession ?? (await findMostRecentSession(dir, storage));
 		const manager = new SessionManager(cwd, dir, true, storage);
 		if (mostRecent) {
-			await manager._initSessionFile(mostRecent);
+			await manager.#initSessionFile(mostRecent);
 		} else {
-			manager._initNewSession();
+			manager.#initNewSession();
 		}
 		return manager;
 	}
@@ -2106,7 +2107,7 @@ export class SessionManager {
 	/** Create an in-memory session (no file persistence) */
 	static inMemory(cwd: string = process.cwd(), storage: SessionStorage = new MemorySessionStorage()): SessionManager {
 		const manager = new SessionManager(cwd, "", false, storage);
-		manager._initNewSession();
+		manager.#initNewSession();
 		return manager;
 	}
 

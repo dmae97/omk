@@ -77,11 +77,11 @@ export interface MCPDiscoverOptions {
  * Manages connections to MCP servers and provides tools to the agent.
  */
 export class MCPManager {
-	private connections = new Map<string, MCPServerConnection>();
-	private tools: CustomTool<TSchema, MCPToolDetails>[] = [];
-	private pendingConnections = new Map<string, Promise<MCPServerConnection>>();
-	private pendingToolLoads = new Map<string, Promise<ToolLoadResult>>();
-	private sources = new Map<string, SourceMeta>();
+	#connections = new Map<string, MCPServerConnection>();
+	#tools: CustomTool<TSchema, MCPToolDetails>[] = [];
+	#pendingConnections = new Map<string, Promise<MCPServerConnection>>();
+	#pendingToolLoads = new Map<string, Promise<ToolLoadResult>>();
+	#sources = new Map<string, SourceMeta>();
 
 	constructor(
 		private cwd: string,
@@ -129,20 +129,20 @@ export class MCPManager {
 
 		for (const [name, config] of Object.entries(configs)) {
 			if (sources[name]) {
-				this.sources.set(name, sources[name]);
-				const existing = this.connections.get(name);
+				this.#sources.set(name, sources[name]);
+				const existing = this.#connections.get(name);
 				if (existing) {
 					existing._source = sources[name];
 				}
 			}
 
 			// Skip if already connected
-			if (this.connections.has(name)) {
+			if (this.#connections.has(name)) {
 				connectedServers.add(name);
 				continue;
 			}
 
-			if (this.pendingConnections.has(name) || this.pendingToolLoads.has(name)) {
+			if (this.#pendingConnections.has(name) || this.#pendingToolLoads.has(name)) {
 				continue;
 			}
 
@@ -159,41 +159,41 @@ export class MCPManager {
 					if (sources[name]) {
 						connection._source = sources[name];
 					}
-					if (this.pendingConnections.get(name) === connectionPromise) {
-						this.pendingConnections.delete(name);
-						this.connections.set(name, connection);
+					if (this.#pendingConnections.get(name) === connectionPromise) {
+						this.#pendingConnections.delete(name);
+						this.#connections.set(name, connection);
 					}
 					return connection;
 				},
 				error => {
-					if (this.pendingConnections.get(name) === connectionPromise) {
-						this.pendingConnections.delete(name);
+					if (this.#pendingConnections.get(name) === connectionPromise) {
+						this.#pendingConnections.delete(name);
 					}
 					throw error;
 				},
 			);
-			this.pendingConnections.set(name, connectionPromise);
+			this.#pendingConnections.set(name, connectionPromise);
 
 			const toolsPromise = connectionPromise.then(async connection => {
 				const serverTools = await listTools(connection);
 				return { connection, serverTools };
 			});
-			this.pendingToolLoads.set(name, toolsPromise);
+			this.#pendingToolLoads.set(name, toolsPromise);
 
 			const tracked = trackPromise(toolsPromise);
 			connectionTasks.push({ name, config, tracked, toolsPromise });
 
 			void toolsPromise
 				.then(({ connection, serverTools }) => {
-					if (this.pendingToolLoads.get(name) !== toolsPromise) return;
-					this.pendingToolLoads.delete(name);
+					if (this.#pendingToolLoads.get(name) !== toolsPromise) return;
+					this.#pendingToolLoads.delete(name);
 					const customTools = MCPTool.fromTools(connection, serverTools);
-					this.replaceServerTools(name, customTools);
+					this.#replaceServerTools(name, customTools);
 					void this.toolCache?.set(name, config, serverTools);
 				})
 				.catch(error => {
-					if (this.pendingToolLoads.get(name) !== toolsPromise) return;
-					this.pendingToolLoads.delete(name);
+					if (this.#pendingToolLoads.get(name) !== toolsPromise) return;
+					this.#pendingToolLoads.delete(name);
 					if (!allowBackgroundLogging || reportedErrors.has(name)) return;
 					const message = error instanceof Error ? error.message : String(error);
 					logger.error("MCP tool load failed", { path: `mcp:${name}`, error: message });
@@ -248,7 +248,7 @@ export class MCPManager {
 				} else {
 					const cached = cachedTools.get(name);
 					if (cached) {
-						const source = this.sources.get(name);
+						const source = this.#sources.get(name);
 						allTools.push(...DeferredMCPTool.fromTools(name, cached, () => this.waitForConnection(name), source));
 					}
 				}
@@ -256,7 +256,7 @@ export class MCPManager {
 		}
 
 		// Update cached tools
-		this.tools = allTools;
+		this.#tools = allTools;
 		allowBackgroundLogging = true;
 
 		return {
@@ -267,39 +267,39 @@ export class MCPManager {
 		};
 	}
 
-	private replaceServerTools(name: string, tools: CustomTool<TSchema, MCPToolDetails>[]): void {
-		this.tools = this.tools.filter(t => !t.name.startsWith(`mcp_${name}_`));
-		this.tools.push(...tools);
+	#replaceServerTools(name: string, tools: CustomTool<TSchema, MCPToolDetails>[]): void {
+		this.#tools = this.#tools.filter(t => !t.name.startsWith(`mcp_${name}_`));
+		this.#tools.push(...tools);
 	}
 
 	/**
 	 * Get all loaded tools.
 	 */
 	getTools(): CustomTool<TSchema, MCPToolDetails>[] {
-		return this.tools;
+		return this.#tools;
 	}
 
 	/**
 	 * Get a specific connection.
 	 */
 	getConnection(name: string): MCPServerConnection | undefined {
-		return this.connections.get(name);
+		return this.#connections.get(name);
 	}
 
 	/**
 	 * Get the source metadata for a server.
 	 */
 	getSource(name: string): SourceMeta | undefined {
-		return this.sources.get(name) ?? this.connections.get(name)?._source;
+		return this.#sources.get(name) ?? this.#connections.get(name)?._source;
 	}
 
 	/**
 	 * Wait for a connection to complete (or fail).
 	 */
 	async waitForConnection(name: string): Promise<MCPServerConnection> {
-		const connection = this.connections.get(name);
+		const connection = this.#connections.get(name);
 		if (connection) return connection;
-		const pending = this.pendingConnections.get(name);
+		const pending = this.#pendingConnections.get(name);
 		if (pending) return pending;
 		throw new Error(`MCP server not connected: ${name}`);
 	}
@@ -308,46 +308,46 @@ export class MCPManager {
 	 * Get all connected server names.
 	 */
 	getConnectedServers(): string[] {
-		return Array.from(this.connections.keys());
+		return Array.from(this.#connections.keys());
 	}
 
 	/**
 	 * Disconnect from a specific server.
 	 */
 	async disconnectServer(name: string): Promise<void> {
-		this.pendingConnections.delete(name);
-		this.pendingToolLoads.delete(name);
-		this.sources.delete(name);
+		this.#pendingConnections.delete(name);
+		this.#pendingToolLoads.delete(name);
+		this.#sources.delete(name);
 
-		const connection = this.connections.get(name);
+		const connection = this.#connections.get(name);
 		if (connection) {
 			await disconnectServer(connection);
-			this.connections.delete(name);
+			this.#connections.delete(name);
 		}
 
 		// Remove tools from this server
-		this.tools = this.tools.filter(t => !t.name.startsWith(`mcp_${name}_`));
+		this.#tools = this.#tools.filter(t => !t.name.startsWith(`mcp_${name}_`));
 	}
 
 	/**
 	 * Disconnect from all servers.
 	 */
 	async disconnectAll(): Promise<void> {
-		const promises = Array.from(this.connections.values()).map(conn => disconnectServer(conn));
+		const promises = Array.from(this.#connections.values()).map(conn => disconnectServer(conn));
 		await Promise.allSettled(promises);
 
-		this.pendingConnections.clear();
-		this.pendingToolLoads.clear();
-		this.sources.clear();
-		this.connections.clear();
-		this.tools = [];
+		this.#pendingConnections.clear();
+		this.#pendingToolLoads.clear();
+		this.#sources.clear();
+		this.#connections.clear();
+		this.#tools = [];
 	}
 
 	/**
 	 * Refresh tools from a specific server.
 	 */
 	async refreshServerTools(name: string): Promise<void> {
-		const connection = this.connections.get(name);
+		const connection = this.#connections.get(name);
 		if (!connection) return;
 
 		// Clear cached tools
@@ -359,14 +359,14 @@ export class MCPManager {
 		void this.toolCache?.set(name, connection.config, serverTools);
 
 		// Replace tools from this server
-		this.replaceServerTools(name, customTools);
+		this.#replaceServerTools(name, customTools);
 	}
 
 	/**
 	 * Refresh tools from all servers.
 	 */
 	async refreshAllTools(): Promise<void> {
-		const promises = Array.from(this.connections.keys()).map(name => this.refreshServerTools(name));
+		const promises = Array.from(this.#connections.keys()).map(name => this.refreshServerTools(name));
 		await Promise.allSettled(promises);
 	}
 }

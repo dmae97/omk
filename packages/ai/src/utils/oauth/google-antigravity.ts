@@ -103,27 +103,24 @@ async function getUserEmail(accessToken: string): Promise<string | undefined> {
 }
 
 class AntigravityOAuthFlow extends OAuthCallbackFlow {
-	private verifier: string = "";
-	private challenge: string = "";
+	#verifier: string = "";
+	#challenge: string = "";
 
 	constructor(ctrl: OAuthController) {
 		super(ctrl, CALLBACK_PORT, CALLBACK_PATH);
 	}
 
-	protected async generateAuthUrl(
-		state: string,
-		redirectUri: string,
-	): Promise<{ url: string; instructions?: string }> {
+	async generateAuthUrl(state: string, redirectUri: string): Promise<{ url: string; instructions?: string }> {
 		const pkce = await generatePKCE();
-		this.verifier = pkce.verifier;
-		this.challenge = pkce.challenge;
+		this.#verifier = pkce.verifier;
+		this.#challenge = pkce.challenge;
 
 		const authParams = new URLSearchParams({
 			client_id: CLIENT_ID,
 			response_type: "code",
 			redirect_uri: redirectUri,
 			scope: SCOPES.join(" "),
-			code_challenge: this.challenge,
+			code_challenge: this.#challenge,
 			code_challenge_method: "S256",
 			state,
 			access_type: "offline",
@@ -134,7 +131,7 @@ class AntigravityOAuthFlow extends OAuthCallbackFlow {
 		return { url, instructions: "Complete the sign-in in your browser." };
 	}
 
-	protected async exchangeToken(code: string, _state: string, redirectUri: string): Promise<OAuthCredentials> {
+	async exchangeToken(code: string, _state: string, redirectUri: string): Promise<OAuthCredentials> {
 		this.ctrl.onProgress?.("Exchanging authorization code for tokens...");
 
 		const tokenResponse = await fetch(TOKEN_URL, {
@@ -146,7 +143,7 @@ class AntigravityOAuthFlow extends OAuthCallbackFlow {
 				code,
 				grant_type: "authorization_code",
 				redirect_uri: redirectUri,
-				code_verifier: this.verifier,
+				code_verifier: this.#verifier,
 			}),
 		});
 

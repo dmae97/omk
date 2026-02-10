@@ -20,20 +20,20 @@ type ReadEntry = {
 };
 
 export class ReadToolGroupComponent extends Container implements ToolExecutionHandle {
-	private entries = new Map<string, ReadEntry>();
-	private text: Text;
+	#entries = new Map<string, ReadEntry>();
+	#text: Text;
 
 	constructor() {
 		super();
-		this.text = new Text("", 0, 0);
-		this.addChild(this.text);
-		this.updateDisplay();
+		this.#text = new Text("", 0, 0);
+		this.addChild(this.#text);
+		this.#updateDisplay();
 	}
 
 	updateArgs(args: ReadRenderArgs, toolCallId?: string): void {
 		if (!toolCallId) return;
 		const rawPath = args.file_path || args.path || "";
-		const entry: ReadEntry = this.entries.get(toolCallId) ?? {
+		const entry: ReadEntry = this.#entries.get(toolCallId) ?? {
 			toolCallId,
 			path: rawPath,
 			offset: args.offset,
@@ -43,8 +43,8 @@ export class ReadToolGroupComponent extends Container implements ToolExecutionHa
 		entry.path = rawPath;
 		entry.offset = args.offset;
 		entry.limit = args.limit;
-		this.entries.set(toolCallId, entry);
-		this.updateDisplay();
+		this.#entries.set(toolCallId, entry);
+		this.#updateDisplay();
 	}
 
 	updateResult(
@@ -53,38 +53,38 @@ export class ReadToolGroupComponent extends Container implements ToolExecutionHa
 		toolCallId?: string,
 	): void {
 		if (!toolCallId) return;
-		const entry = this.entries.get(toolCallId);
+		const entry = this.#entries.get(toolCallId);
 		if (!entry) return;
 		if (isPartial) return;
 		entry.status = result.isError ? "error" : "success";
-		this.updateDisplay();
+		this.#updateDisplay();
 	}
 
 	setArgsComplete(_toolCallId?: string): void {
-		this.updateDisplay();
+		this.#updateDisplay();
 	}
 
 	setExpanded(_expanded: boolean): void {
-		this.updateDisplay();
+		this.#updateDisplay();
 	}
 
 	getComponent(): Component {
 		return this;
 	}
 
-	private updateDisplay(): void {
-		const entries = [...this.entries.values()];
+	#updateDisplay(): void {
+		const entries = [...this.#entries.values()];
 
 		if (entries.length === 0) {
-			this.text.setText(` ${theme.format.bullet} ${theme.fg("toolTitle", theme.bold("Read"))}`);
+			this.#text.setText(` ${theme.format.bullet} ${theme.fg("toolTitle", theme.bold("Read"))}`);
 			return;
 		}
 
 		if (entries.length === 1) {
 			const entry = entries[0];
-			const statusSymbol = this.formatStatus(entry.status);
-			const pathDisplay = this.formatPath(entry);
-			this.text.setText(
+			const statusSymbol = this.#formatStatus(entry.status);
+			const pathDisplay = this.#formatPath(entry);
+			this.#text.setText(
 				` ${theme.format.bullet} ${theme.fg("toolTitle", theme.bold("Read"))} ${pathDisplay} ${statusSymbol}`.trimEnd(),
 			);
 			return;
@@ -95,15 +95,15 @@ export class ReadToolGroupComponent extends Container implements ToolExecutionHa
 		const total = entries.length;
 		for (const [index, entry] of entries.entries()) {
 			const connector = index === total - 1 ? theme.tree.last : theme.tree.branch;
-			const statusSymbol = this.formatStatus(entry.status);
-			const pathDisplay = this.formatPath(entry);
+			const statusSymbol = this.#formatStatus(entry.status);
+			const pathDisplay = this.#formatPath(entry);
 			lines.push(`   ${theme.fg("dim", connector)} ${statusSymbol} ${pathDisplay}`.trimEnd());
 		}
 
-		this.text.setText(lines.join("\n"));
+		this.#text.setText(lines.join("\n"));
 	}
 
-	private formatPath(entry: ReadEntry): string {
+	#formatPath(entry: ReadEntry): string {
 		const filePath = shortenPath(entry.path);
 		let pathDisplay = filePath ? theme.fg("accent", filePath) : theme.fg("toolOutput", "…");
 		if (entry.offset !== undefined || entry.limit !== undefined) {
@@ -114,7 +114,7 @@ export class ReadToolGroupComponent extends Container implements ToolExecutionHa
 		return pathDisplay;
 	}
 
-	private formatStatus(status: ReadEntry["status"]): string {
+	#formatStatus(status: ReadEntry["status"]): string {
 		if (status === "success") {
 			return theme.fg("success", theme.status.success);
 		}

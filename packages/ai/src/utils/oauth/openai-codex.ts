@@ -53,10 +53,7 @@ class OpenAICodexOAuthFlow extends OAuthCallbackFlow {
 		super(ctrl, CALLBACK_PORT, CALLBACK_PATH);
 	}
 
-	protected async generateAuthUrl(
-		state: string,
-		redirectUri: string,
-	): Promise<{ url: string; instructions?: string }> {
+	async generateAuthUrl(state: string, redirectUri: string): Promise<{ url: string; instructions?: string }> {
 		const searchParams = new URLSearchParams({
 			response_type: "code",
 			client_id: CLIENT_ID,
@@ -74,7 +71,7 @@ class OpenAICodexOAuthFlow extends OAuthCallbackFlow {
 		return { url, instructions: "A browser window should open. Complete login to finish." };
 	}
 
-	protected async exchangeToken(code: string, _state: string, redirectUri: string): Promise<OAuthCredentials> {
+	async exchangeToken(code: string, _state: string, redirectUri: string): Promise<OAuthCredentials> {
 		return exchangeCodeForToken(code, this.pkce.verifier, redirectUri);
 	}
 }

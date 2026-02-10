@@ -253,10 +253,10 @@ function applyModelOverride(model: Model<Api>, override: ModelOverride): Model<A
  * Model registry - loads and manages models, resolves API keys via AuthStorage.
  */
 export class ModelRegistry {
-	private models: Model<Api>[] = [];
-	private customProviderApiKeys: Map<string, string> = new Map();
-	private configError: ConfigError | undefined = undefined;
-	private modelsConfigFile: ConfigFile<ModelsConfig>;
+	#models: Model<Api>[] = [];
+	#customProviderApiKeys: Map<string, string> = new Map();
+	#configError: ConfigError | undefined = undefined;
+	#modelsConfigFile: ConfigFile<ModelsConfig>;
 
 	/**
 	 * @param authStorage - Auth storage for API key resolution
@@ -265,83 +265,48 @@ export class ModelRegistry {
 		readonly authStorage: AuthStorage,
 		modelsPath?: string,
 	) {
-		this.modelsConfigFile = ModelsConfigFile.relocate(modelsPath);
+		this.#modelsConfigFile = ModelsConfigFile.relocate(modelsPath);
 		// Set up fallback resolver for custom provider API keys
 		this.authStorage.setFallbackResolver(provider => {
-			const keyConfig = this.customProviderApiKeys.get(provider);
+			const keyConfig = this.#customProviderApiKeys.get(provider);
 			if (keyConfig) {
 				return resolveApiKeyConfig(keyConfig);
 			}
 			return undefined;
 		});
 		// Load models synchronously in constructor
-		this.loadModels();
-	}
-
-	/**
-	 * Create an in-memory ModelRegistry instance from serialized data.
-	 * Used by subagent workers to bypass discovery and use parent's models.
-	 */
-	static fromSerialized(data: SerializedModelRegistry, authStorage: AuthStorage): ModelRegistry {
-		const instance = Object.create(ModelRegistry.prototype) as ModelRegistry;
-		(instance as any).authStorage = authStorage;
-		instance.models = data.models;
-		instance.customProviderApiKeys = new Map(Object.entries(data.customProviderApiKeys ?? {}));
-
-		authStorage.setFallbackResolver(provider => {
-			const keyConfig = instance.customProviderApiKeys.get(provider);
-			if (keyConfig) {
-				return resolveApiKeyConfig(keyConfig);
-			}
-			return undefined;
-		});
-
-		return instance;
-	}
-
-	/**
-	 * Serialize ModelRegistry for passing to subagent workers.
-	 */
-	serialize(): SerializedModelRegistry {
-		const customProviderApiKeys: Record<string, string> = {};
-		for (const [k, v] of this.customProviderApiKeys.entries()) {
-			customProviderApiKeys[k] = v;
-		}
-		return {
-			models: this.models,
-			customProviderApiKeys: Object.keys(customProviderApiKeys).length > 0 ? customProviderApiKeys : undefined,
-		};
+		this.#loadModels();
 	}
 
 	/**
 	 * Reload models from disk (built-in + custom from models.json).
 	 */
 	refresh(): void {
-		this.modelsConfigFile.invalidate();
-		this.customProviderApiKeys.clear();
-		this.configError = undefined;
-		this.loadModels();
+		this.#modelsConfigFile.invalidate();
+		this.#customProviderApiKeys.clear();
+		this.#configError = undefined;
+		this.#loadModels();
 	}
 
 	/**
 	 * Get any error from loading models.json (undefined if no error).
 	 */
 	getError(): ConfigError | undefined {
-		return this.configError;
+		return this.#configError;
 	}
 
-	private loadModels() {
+	#loadModels() {
 		// Load custom models from models.json first (to know which providers to override)
 		const {
 			models: customModels = [],
 			overrides = new Map(),
 			modelOverrides = new Map(),
 			error: configError,
-		} = this.loadCustomModels();
-		this.configError = configError;
+		} = this.#loadCustomModels();
+		this.#configError = configError;
 
-		const builtInModels = this.loadBuiltInModels(overrides, modelOverrides);
-		const combined = this.mergeCustomModels(builtInModels, customModels);
+		const builtInModels = this.#loadBuiltInModels(overrides, modelOverrides);
+		const combined = this.#mergeCustomModels(builtInModels, customModels);
 
 		// Update github-copilot base URL based on OAuth credentials
 		const copilotCred = this.authStorage.getOAuthCredential("github-copilot");
@@ -350,14 +315,14 @@ export class ModelRegistry {
 				? (normalizeDomain(copilotCred.enterpriseUrl) ?? undefined)
 				: undefined;
 			const baseUrl = getGitHubCopilotBaseUrl(copilotCred.access, domain);
-			this.models = combined.map(m => (m.provider === "github-copilot" ? { ...m, baseUrl } : m));
+			this.#models = combined.map(m => (m.provider === "github-copilot" ? { ...m, baseUrl } : m));
 		} else {
-			this.models = combined;
+			this.#models = combined;
 		}
 	}
 
 	/** Load built-in models, applying provider and per-model overrides */
-	private loadBuiltInModels(
+	#loadBuiltInModels(
 		overrides: Map<string, ProviderOverride>,
 		modelOverrides: Map<string, Map<string, ModelOverride>>,
 	): Model<Api>[] {
@@ -385,7 +350,7 @@ export class ModelRegistry {
 	}
 
 	/** Merge custom models with built-in, replacing by provider+id match */
-	private mergeCustomModels(builtInModels: Model<Api>[], customModels: Model<Api>[]): Model<Api>[] {
+	#mergeCustomModels(builtInModels: Model<Api>[], customModels: Model<Api>[]): Model<Api>[] {
 		const merged = [...builtInModels];
 		for (const customModel of customModels) {
 			const existingIndex = merged.findIndex(m => m.provider === customModel.provider && m.id === customModel.id);
@@ -398,8 +363,8 @@ export class ModelRegistry {
 		return merged;
 	}
 
-	private loadCustomModels(): CustomModelsResult {
-		const { value, error, status } = this.modelsConfigFile.tryLoad();
+	#loadCustomModels(): CustomModelsResult {
+		const { value, error, status } = this.#modelsConfigFile.tryLoad();
 
 		if (status === "error") {
 			return { models: [], overrides: new Map(), modelOverrides: new Map(), error, found: true };
@@ -422,7 +387,7 @@ export class ModelRegistry {
 
 			// Always store API key for fallback resolver
 			if (providerConfig.apiKey) {
-				this.customProviderApiKeys.set(providerName, providerConfig.apiKey);
+				this.#customProviderApiKeys.set(providerName, providerConfig.apiKey);
 			}
 
 			// Parse per-model overrides
@@ -435,10 +400,10 @@ export class ModelRegistry {
 			}
 		}
 
-		return { models: this.parseModels(value), overrides, modelOverrides: allModelOverrides, found: true };
+		return { models: this.#parseModels(value), overrides, modelOverrides: allModelOverrides, found: true };
 	}
 
-	private parseModels(config: ModelsConfig): Model<Api>[] {
+	#parseModels(config: ModelsConfig): Model<Api>[] {
 		const models: Model<Api>[] = [];
 
 		for (const [providerName, providerConfig] of Object.entries(config.providers)) {
@@ -447,7 +412,7 @@ export class ModelRegistry {
 
 			// Store API key config for fallback resolver
 			if (providerConfig.apiKey) {
-				this.customProviderApiKeys.set(providerName, providerConfig.apiKey);
+				this.#customProviderApiKeys.set(providerName, providerConfig.apiKey);
 			}
 
 			for (const modelDef of modelDefs) {
@@ -496,7 +461,7 @@ export class ModelRegistry {
 	 * If models.json had errors, returns only built-in models.
 	 */
 	getAll(): Model<Api>[] {
-		return this.models;
+		return this.#models;
 	}
 
 	/**
@@ -504,21 +469,21 @@ export class ModelRegistry {
 	 * This is a fast check that doesn't refresh OAuth tokens.
 	 */
 	getAvailable(): Model<Api>[] {
-		return this.models.filter(m => this.authStorage.hasAuth(m.provider));
+		return this.#models.filter(m => this.authStorage.hasAuth(m.provider));
 	}
 
 	/**
 	 * Find a model by provider and ID.
 	 */
 	find(provider: string, modelId: string): Model<Api> | undefined {
-		return this.models.find(m => m.provider === provider && m.id === modelId);
+		return this.#models.find(m => m.provider === provider && m.id === modelId);
 	}
 
 	/**
 	 * Get the base URL associated with a provider, if any model defines one.
 	 */
 	getProviderBaseUrl(provider: string): string | undefined {
-		return this.models.find(m => m.provider === provider && m.baseUrl)?.baseUrl;
+		return this.#models.find(m => m.provider === provider && m.baseUrl)?.baseUrl;
 	}
 
 	/**

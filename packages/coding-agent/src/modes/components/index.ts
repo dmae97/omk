@@ -1,5 +1,4 @@
 // UI Components barrel export
-export { ArminComponent } from "./armin";
 export { AssistantMessageComponent } from "./assistant-message";
 export { BashExecutionComponent } from "./bash-execution";
 export { BorderedLoader } from "./bordered-loader";

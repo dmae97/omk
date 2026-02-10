@@ -250,10 +250,10 @@ interface AskParams {
  * on implementation choices as the agent works.
  */
 export class AskTool implements AgentTool<typeof askSchema, AskToolDetails> {
-	public readonly name = "ask";
-	public readonly label = "Ask";
-	public readonly description: string;
-	public readonly parameters = askSchema;
+	readonly name = "ask";
+	readonly label = "Ask";
+	readonly description: string;
+	readonly parameters = askSchema;
 
 	constructor(private readonly session: ToolSession) {
 		this.description = renderPromptTemplate(askDescription);
@@ -264,13 +264,13 @@ export class AskTool implements AgentTool<typeof askSchema, AskToolDetails> {
 	}
 
 	/** Send terminal notification when ask tool is waiting for input */
-	private sendAskNotification(): void {
+	#sendAskNotification(): void {
 		const method = this.session.settings.get("ask.notify");
 		if (method === "off") return;
 		TERMINAL.sendNotification("Waiting for input");
 	}
 
-	public async execute(
+	async execute(
 		_toolCallId: string,
 		params: AskParams,
 		_signal?: AbortSignal,
@@ -295,7 +295,7 @@ export class AskTool implements AgentTool<typeof askSchema, AskToolDetails> {
 		const timeout = planModeEnabled ? null : settingsTimeout;
 
 		// Send notification if waiting and not suppressed
-		this.sendAskNotification();
+		this.#sendAskNotification();
 
 		if (params.questions.length === 0) {
 			return {

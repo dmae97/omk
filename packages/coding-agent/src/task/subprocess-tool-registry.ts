@@ -50,34 +50,34 @@ export interface SubprocessToolHandler<TData = unknown> {
 
 /** Registry for subprocess tool handlers */
 class SubprocessToolRegistryImpl {
-	private handlers = new Map<string, SubprocessToolHandler>();
+	#handlers = new Map<string, SubprocessToolHandler>();
 
 	/**
 	 * Register a handler for a tool's subprocess events.
 	 */
 	register<T>(toolName: string, handler: SubprocessToolHandler<T>): void {
-		this.handlers.set(toolName, handler as SubprocessToolHandler);
+		this.#handlers.set(toolName, handler as SubprocessToolHandler);
 	}
 
 	/**
 	 * Get the handler for a tool, if registered.
 	 */
 	getHandler(toolName: string): SubprocessToolHandler | undefined {
-		return this.handlers.get(toolName);
+		return this.#handlers.get(toolName);
 	}
 
 	/**
 	 * Check if a tool has a registered handler.
 	 */
 	hasHandler(toolName: string): boolean {
-		return this.handlers.has(toolName);
+		return this.#handlers.has(toolName);
 	}
 
 	/**
 	 * Get all registered tool names.
 	 */
 	getRegisteredTools(): string[] {
-		return Array.from(this.handlers.keys());
+		return Array.from(this.#handlers.keys());
 	}
 }
 

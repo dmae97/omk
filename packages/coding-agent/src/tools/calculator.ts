@@ -216,14 +216,14 @@ function tokenizeExpression(expression: string): Token[] {
  * the call stack.
  */
 class ExpressionParser {
-	private index = 0;
+	#index = 0;
 
 	constructor(private readonly tokens: Token[]) {}
 
 	/** Parse the full expression and ensure all tokens are consumed. */
 	parse(): number {
-		const value = this.parseExpression();
-		if (this.index < this.tokens.length) {
+		const value = this.#parseExpression();
+		if (this.#index < this.tokens.length) {
 			throw new Error("Unexpected token in expression");
 		}
 		return value;
@@ -233,15 +233,15 @@ class ExpressionParser {
 	 * Parse addition and subtraction (lowest precedence).
 	 * Left-associative: 1 - 2 - 3 = (1 - 2) - 3
 	 */
-	private parseExpression(): number {
-		let value = this.parseTerm();
+	#parseExpression(): number {
+		let value = this.#parseTerm();
 		while (true) {
-			if (this.matchOperator("+")) {
-				value += this.parseTerm();
+			if (this.#matchOperator("+")) {
+				value += this.#parseTerm();
 				continue;
 			}
-			if (this.matchOperator("-")) {
-				value -= this.parseTerm();
+			if (this.#matchOperator("-")) {
+				value -= this.#parseTerm();
 				continue;
 			}
 			break;
@@ -253,19 +253,19 @@ class ExpressionParser {
 	 * Parse multiplication, division, and modulo.
 	 * Left-associative: 8 / 4 / 2 = (8 / 4) / 2
 	 */
-	private parseTerm(): number {
-		let value = this.parseUnary();
+	#parseTerm(): number {
+		let value = this.#parseUnary();
 		while (true) {
-			if (this.matchOperator("*")) {
-				value *= this.parseUnary();
+			if (this.#matchOperator("*")) {
+				value *= this.#parseUnary();
 				continue;
 			}
-			if (this.matchOperator("/")) {
-				value /= this.parseUnary();
+			if (this.#matchOperator("/")) {
+				value /= this.#parseUnary();
 				continue;
 			}
-			if (this.matchOperator("%")) {
-				value %= this.parseUnary();
+			if (this.#matchOperator("%")) {
+				value %= this.#parseUnary();
 				continue;
 			}
 			break;
@@ -277,14 +277,14 @@ class ExpressionParser {
 	 * Parse unary + and - operators.
 	 * Recursive to handle chained unary: --x, +-x
 	 */
-	private parseUnary(): number {
-		if (this.matchOperator("+")) {
-			return this.parseUnary();
+	#parseUnary(): number {
+		if (this.#matchOperator("+")) {
+			return this.#parseUnary();
 		}
-		if (this.matchOperator("-")) {
-			return -this.parseUnary();
+		if (this.#matchOperator("-")) {
+			return -this.#parseUnary();
 		}
-		return this.parsePower();
+		return this.#parsePower();
 	}
 
 	/**
@@ -292,10 +292,10 @@ class ExpressionParser {
 	 * Right-associative: 2 ** 3 ** 2 = 2 ** (3 ** 2) = 512
 	 * Achieved by recursive call to parsePower for the right operand.
 	 */
-	private parsePower(): number {
-		let value = this.parsePrimary();
-		if (this.matchOperator("**")) {
-			value = value ** this.parsePower(); // Right-associative via recursion
+	#parsePower(): number {
+		let value = this.#parsePrimary();
+		if (this.#matchOperator("**")) {
+			value = value ** this.#parsePower(); // Right-associative via recursion
 		}
 		return value;
 	}
@@ -304,21 +304,21 @@ class ExpressionParser {
 	 * Parse primary expressions: number literals and parenthesized subexpressions.
 	 * Parentheses restart parsing at lowest precedence (parseExpression).
 	 */
-	private parsePrimary(): number {
-		const token = this.peek();
+	#parsePrimary(): number {
+		const token = this.#peek();
 		if (!token) {
 			throw new Error("Unexpected end of expression");
 		}
 
 		if (token.type === "number") {
-			this.index += 1;
+			this.#index += 1;
 			return token.value;
 		}
 
 		if (token.type === "paren" && token.value === "(") {
-			this.index += 1;
-			const value = this.parseExpression(); // Reset to lowest precedence
-			if (!this.matchParen(")")) {
+			this.#index += 1;
+			const value = this.#parseExpression(); // Reset to lowest precedence
+			if (!this.#matchParen(")")) {
 				throw new Error("Missing closing parenthesis");
 			}
 			return value;
@@ -328,28 +328,28 @@ class ExpressionParser {
 	}
 
 	/** Consume operator if it matches, advancing the token index. */
-	private matchOperator(value: Operator): boolean {
-		const token = this.tokens[this.index];
+	#matchOperator(value: Operator): boolean {
+		const token = this.tokens[this.#index];
 		if (token && token.type === "operator" && token.value === value) {
-			this.index += 1;
+			this.#index += 1;
 			return true;
 		}
 		return false;
 	}
 
 	/** Consume parenthesis if it matches, advancing the token index. */
-	private matchParen(value: "(" | ")"): boolean {
-		const token = this.tokens[this.index];
+	#matchParen(value: "(" | ")"): boolean {
+		const token = this.tokens[this.#index];
 		if (token && token.type === "paren" && token.value === value) {
-			this.index += 1;
+			this.#index += 1;
 			return true;
 		}
 		return false;
 	}
 
 	/** Look at current token without consuming it. */
-	private peek(): Token | undefined {
-		return this.tokens[this.index];
+	#peek(): Token | undefined {
+		return this.tokens[this.#index];
 	}
 }
 
@@ -395,16 +395,16 @@ type CalculatorParams = { calculations: Array<{ expression: string; prefix: stri
  * standard arithmetic operators, and parentheses.
  */
 export class CalculatorTool implements AgentTool<typeof calculatorSchema, CalculatorToolDetails> {
-	public readonly name = "calc";
-	public readonly label = "Calc";
-	public readonly description: string;
-	public readonly parameters = calculatorSchema;
+	readonly name = "calc";
+	readonly label = "Calc";
+	readonly description: string;
+	readonly parameters = calculatorSchema;
 
 	constructor(_session: ToolSession) {
 		this.description = renderPromptTemplate(calculatorDescription);
 	}
 
-	public async execute(
+	async execute(
 		_toolCallId: string,
 		{ calculations }: CalculatorParams,
 		signal?: AbortSignal,

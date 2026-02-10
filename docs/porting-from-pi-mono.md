@@ -130,6 +130,7 @@ Treat `package.json` as a contract. Merge intentionally.
 - Never build prompts in code; prompts are static `.md` files rendered with Handlebars.
 - In coding-agent, never use `console.log`/`console.warn`/`console.error`; use `logger` from `@oh-my-pi/pi-utils`.
 - Use `Promise.withResolvers()` instead of `new Promise((resolve, reject) => ...)`.
+- **No `private`/`protected`/`public` keywords on class fields or methods.** Use ES `#` private fields for encapsulation; leave accessible members bare (no keyword). The only exception is constructor parameter properties (`constructor(private readonly x: T)`), where the keyword is required by TypeScript. When porting upstream code that uses `private foo` or `protected bar`, convert to `#foo` (private) or bare `bar` (accessible).
 - Prefer existing helpers and utilities over new ad-hoc code.
 - Preserve Bun-first infrastructure changes already made in this repo:
   - Runtime is Bun (no Node entry points).

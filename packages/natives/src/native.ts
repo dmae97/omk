@@ -80,15 +80,8 @@ function maybeExtractEmbeddedAddon(errors: string[]): string | null {
 		return null;
 	}
 
-	try {
-		fs.statSync(versionedAddonPath);
+	if (fs.existsSync(versionedAddonPath)) {
 		return versionedAddonPath;
-	} catch (err) {
-		if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-			const message = err instanceof Error ? err.message : String(err);
-			errors.push(`embedded addon stat: ${message}`);
-			return null;
-		}
 	}
 
 	try {

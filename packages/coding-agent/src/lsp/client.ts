@@ -735,7 +735,7 @@ export async function sendRequest(
 	client.lastActivity = Date.now();
 
 	const { promise, resolve, reject } = Promise.withResolvers<unknown>();
-	let timeout: ReturnType<typeof setTimeout> | undefined;
+	let timeout: NodeJS.Timeout | undefined;
 	const cleanup = () => {
 		if (signal) {
 			signal.removeEventListener("abort", abortHandler);

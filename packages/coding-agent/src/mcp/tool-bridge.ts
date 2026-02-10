@@ -126,14 +126,14 @@ export function parseMCPToolName(name: string): { serverName: string; toolName: 
  * CustomTool wrapping an MCP tool with an active connection.
  */
 export class MCPTool implements CustomTool<TSchema, MCPToolDetails> {
-	public readonly name: string;
-	public readonly label: string;
-	public readonly description: string;
-	public readonly parameters: TSchema;
+	readonly name: string;
+	readonly label: string;
+	readonly description: string;
+	readonly parameters: TSchema;
 	/** Original MCP tool name (before normalization) */
-	public readonly mcpToolName: string;
+	readonly mcpToolName: string;
 	/** Server name */
-	public readonly mcpServerName: string;
+	readonly mcpServerName: string;
 
 	/** Create MCPTool instances for all tools from an MCP server connection */
 	static fromTools(connection: MCPServerConnection, tools: MCPToolDefinition[]): MCPTool[] {
@@ -211,14 +211,14 @@ export class MCPTool implements CustomTool<TSchema, MCPToolDetails> {
  * CustomTool wrapping an MCP tool with deferred connection resolution.
  */
 export class DeferredMCPTool implements CustomTool<TSchema, MCPToolDetails> {
-	public readonly name: string;
-	public readonly label: string;
-	public readonly description: string;
-	public readonly parameters: TSchema;
+	readonly name: string;
+	readonly label: string;
+	readonly description: string;
+	readonly parameters: TSchema;
 	/** Original MCP tool name (before normalization) */
-	public readonly mcpToolName: string;
+	readonly mcpToolName: string;
 	/** Server name */
-	public readonly mcpServerName: string;
+	readonly mcpServerName: string;
 	private readonly fallbackProvider: string | undefined;
 	private readonly fallbackProviderName: string | undefined;
 

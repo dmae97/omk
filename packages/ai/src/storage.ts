@@ -3,7 +3,7 @@
  * Compatible with coding-agent's agent.db format.
  */
 
-import { Database } from "bun:sqlite";
+import { Database, type Statement } from "bun:sqlite";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -84,22 +84,22 @@ function deserializeCredential(row: AuthRow): AuthCredential | null {
  * Use `CliAuthStorage.create()` to instantiate (async initialization).
  */
 export class CliAuthStorage {
-	private db: Database;
-	private insertStmt: ReturnType<Database["prepare"]>;
-	private listByProviderStmt: ReturnType<Database["prepare"]>;
-	private listAllStmt: ReturnType<Database["prepare"]>;
-	private deleteByProviderStmt: ReturnType<Database["prepare"]>;
+	#db: Database;
+	#insertStmt: Statement;
+	#listByProviderStmt: Statement;
+	#listAllStmt: Statement;
+	#deleteByProviderStmt: Statement;
 
 	private constructor(db: Database) {
-		this.db = db;
-		this.initializeSchema();
+		this.#db = db;
+		this.#initializeSchema();
 
-		this.insertStmt = this.db.prepare(
+		this.#insertStmt = this.#db.prepare(
 			"INSERT INTO auth_credentials (provider, credential_type, data) VALUES (?, ?, ?) RETURNING id",
 		);
-		this.listByProviderStmt = this.db.prepare("SELECT * FROM auth_credentials WHERE provider = ?");
-		this.listAllStmt = this.db.prepare("SELECT * FROM auth_credentials");
-		this.deleteByProviderStmt = this.db.prepare("DELETE FROM auth_credentials WHERE provider = ?");
+		this.#listByProviderStmt = this.#db.prepare("SELECT * FROM auth_credentials WHERE provider = ?");
+		this.#listAllStmt = this.#db.prepare("SELECT * FROM auth_credentials");
+		this.#deleteByProviderStmt = this.#db.prepare("DELETE FROM auth_credentials WHERE provider = ?");
 	}
 
 	static async create(dbPath: string = getAgentDbPath()): Promise<CliAuthStorage> {
@@ -122,8 +122,8 @@ export class CliAuthStorage {
 		return new CliAuthStorage(db);
 	}
 
-	private initializeSchema(): void {
-		this.db.exec(`
+	#initializeSchema(): void {
+		this.#db.exec(`
 PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
 PRAGMA busy_timeout=5000;
@@ -145,14 +145,14 @@ CREATE INDEX IF NOT EXISTS idx_auth_provider ON auth_credentials(provider);
 	 */
 	saveOAuth(provider: string, credentials: OAuthCredentials): void {
 		const credential: AuthCredential = { type: "oauth", ...credentials };
-		this.replaceForProvider(provider, credential);
+		this.#replaceForProvider(provider, credential);
 	}
 
 	/**
 	 * Get OAuth credentials for a provider.
 	 */
 	getOAuth(provider: string): OAuthCredentials | null {
-		const rows = this.listByProviderStmt.all(provider) as AuthRow[];
+		const rows = this.#listByProviderStmt.all(provider) as AuthRow[];
 		for (const row of rows) {
 			const credential = deserializeCredential(row);
 			if (credential && credential.type === "oauth") {
@@ -167,7 +167,7 @@ CREATE INDEX IF NOT EXISTS idx_auth_provider ON auth_credentials(provider);
 	 * List all providers with credentials.
 	 */
 	listProviders(): string[] {
-		const rows = this.listAllStmt.all() as AuthRow[];
+		const rows = this.#listAllStmt.all() as AuthRow[];
 		const providers = new Set<string>();
 		for (const row of rows) {
 			providers.add(row.provider);
@@ -179,24 +179,24 @@ CREATE INDEX IF NOT EXISTS idx_auth_provider ON auth_credentials(provider);
 	 * Delete all credentials for a provider.
 	 */
 	deleteProvider(provider: string): void {
-		this.deleteByProviderStmt.run(provider);
+		this.#deleteByProviderStmt.run(provider);
 	}
 
 	/**
 	 * Replace all credentials for a provider with a single credential.
 	 */
-	private replaceForProvider(provider: string, credential: AuthCredential): void {
+	#replaceForProvider(provider: string, credential: AuthCredential): void {
 		const serialized = serializeCredential(credential);
 		if (!serialized) return;
 
-		const replace = this.db.transaction(() => {
-			this.deleteByProviderStmt.run(provider);
-			this.insertStmt.run(provider, serialized.credentialType, serialized.data);
+		const replace = this.#db.transaction(() => {
+			this.#deleteByProviderStmt.run(provider);
+			this.#insertStmt.run(provider, serialized.credentialType, serialized.data);
 		});
 		replace();
 	}
 
 	close(): void {
-		this.db.close();
+		this.#db.close();
 	}
 }

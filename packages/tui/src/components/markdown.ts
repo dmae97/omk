@@ -59,19 +59,19 @@ interface InlineStyleContext {
 }
 
 export class Markdown implements Component {
-	private text: string;
-	private paddingX: number; // Left/right padding
-	private paddingY: number; // Top/bottom padding
-	private defaultTextStyle?: DefaultTextStyle;
-	private theme: MarkdownTheme;
-	private defaultStylePrefix?: string;
+	#text: string;
+	#paddingX: number; // Left/right padding
+	#paddingY: number; // Top/bottom padding
+	#defaultTextStyle?: DefaultTextStyle;
+	#theme: MarkdownTheme;
+	#defaultStylePrefix?: string;
 	/** Number of spaces used to indent code block content. */
-	private codeBlockIndent: number;
+	#codeBlockIndent: number;
 
 	// Cache for rendered output
-	private cachedText?: string;
-	private cachedWidth?: number;
-	private cachedLines?: string[];
+	#cachedText?: string;
+	#cachedWidth?: number;
+	#cachedLines?: string[];
 
 	constructor(
 		text: string,
@@ -81,46 +81,46 @@ export class Markdown implements Component {
 		defaultTextStyle?: DefaultTextStyle,
 		codeBlockIndent: number = 2,
 	) {
-		this.text = text;
-		this.paddingX = paddingX;
-		this.paddingY = paddingY;
-		this.theme = theme;
-		this.defaultTextStyle = defaultTextStyle;
-		this.codeBlockIndent = Math.max(0, Math.floor(codeBlockIndent));
+		this.#text = text;
+		this.#paddingX = paddingX;
+		this.#paddingY = paddingY;
+		this.#theme = theme;
+		this.#defaultTextStyle = defaultTextStyle;
+		this.#codeBlockIndent = Math.max(0, Math.floor(codeBlockIndent));
 	}
 
 	setText(text: string): void {
-		this.text = text;
+		this.#text = text;
 		this.invalidate();
 	}
 
 	invalidate(): void {
-		this.cachedText = undefined;
-		this.cachedWidth = undefined;
-		this.cachedLines = undefined;
+		this.#cachedText = undefined;
+		this.#cachedWidth = undefined;
+		this.#cachedLines = undefined;
 	}
 
 	render(width: number): string[] {
 		// Check cache
-		if (this.cachedLines && this.cachedText === this.text && this.cachedWidth === width) {
-			return this.cachedLines;
+		if (this.#cachedLines && this.#cachedText === this.#text && this.#cachedWidth === width) {
+			return this.#cachedLines;
 		}
 
 		// Calculate available width for content (subtract horizontal padding)
-		const contentWidth = Math.max(1, width - this.paddingX * 2);
+		const contentWidth = Math.max(1, width - this.#paddingX * 2);
 
 		// Don't render anything if there's no actual text
-		if (!this.text || this.text.trim() === "") {
+		if (!this.#text || this.#text.trim() === "") {
 			const result: string[] = [];
 			// Update cache
-			this.cachedText = this.text;
-			this.cachedWidth = width;
-			this.cachedLines = result;
+			this.#cachedText = this.#text;
+			this.#cachedWidth = width;
+			this.#cachedLines = result;
 			return result;
 		}
 
 		// Replace tabs with 3 spaces for consistent rendering
-		const normalizedText = replaceTabs(this.text);
+		const normalizedText = replaceTabs(this.#text);
 
 		// Parse markdown to HTML-like tokens
 		const tokens = marked.lexer(normalizedText);
@@ -131,7 +131,7 @@ export class Markdown implements Component {
 		for (let i = 0; i < tokens.length; i++) {
 			const token = tokens[i];
 			const nextToken = tokens[i + 1];
-			const tokenLines = this.renderToken(token, contentWidth, nextToken?.type);
+			const tokenLines = this.#renderToken(token, contentWidth, nextToken?.type);
 			renderedLines.push(...tokenLines);
 		}
 
@@ -147,9 +147,9 @@ export class Markdown implements Component {
 		}
 
 		// Add margins and background to each wrapped line
-		const leftMargin = padding(this.paddingX);
-		const rightMargin = padding(this.paddingX);
-		const bgFn = this.defaultTextStyle?.bgColor;
+		const leftMargin = padding(this.#paddingX);
+		const rightMargin = padding(this.#paddingX);
+		const bgFn = this.#defaultTextStyle?.bgColor;
 		const contentLines: string[] = [];
 
 		for (const line of wrappedLines) {
@@ -174,7 +174,7 @@ export class Markdown implements Component {
 		// Add top/bottom padding (empty lines)
 		const emptyLine = padding(width);
 		const emptyLines: string[] = [];
-		for (let i = 0; i < this.paddingY; i++) {
+		for (let i = 0; i < this.#paddingY; i++) {
 			const line = bgFn ? applyBackgroundToLine(emptyLine, width, bgFn) : emptyLine;
 			emptyLines.push(line);
 		}
@@ -183,9 +183,9 @@ export class Markdown implements Component {
 		const result = [...emptyLines, ...contentLines, ...emptyLines];
 
 		// Update cache
-		this.cachedText = this.text;
-		this.cachedWidth = width;
-		this.cachedLines = result;
+		this.#cachedText = this.#text;
+		this.#cachedWidth = width;
+		this.#cachedLines = result;
 
 		return result.length > 0 ? result : [""];
 	}
@@ -196,98 +196,98 @@ export class Markdown implements Component {
 	 * NOTE: Background color is NOT applied here - it's applied at the padding stage
 	 * to ensure it extends to the full line width.
 	 */
-	private applyDefaultStyle(text: string): string {
-		if (!this.defaultTextStyle) {
+	#applyDefaultStyle(text: string): string {
+		if (!this.#defaultTextStyle) {
 			return text;
 		}
 
 		let styled = text;
 
 		// Apply foreground color (NOT background - that's applied at padding stage)
-		if (this.defaultTextStyle.color) {
-			styled = this.defaultTextStyle.color(styled);
+		if (this.#defaultTextStyle.color) {
+			styled = this.#defaultTextStyle.color(styled);
 		}
 
-		// Apply text decorations using this.theme
-		if (this.defaultTextStyle.bold) {
-			styled = this.theme.bold(styled);
+		// Apply text decorations using this.#theme
+		if (this.#defaultTextStyle.bold) {
+			styled = this.#theme.bold(styled);
 		}
-		if (this.defaultTextStyle.italic) {
-			styled = this.theme.italic(styled);
+		if (this.#defaultTextStyle.italic) {
+			styled = this.#theme.italic(styled);
 		}
-		if (this.defaultTextStyle.strikethrough) {
-			styled = this.theme.strikethrough(styled);
+		if (this.#defaultTextStyle.strikethrough) {
+			styled = this.#theme.strikethrough(styled);
 		}
-		if (this.defaultTextStyle.underline) {
-			styled = this.theme.underline(styled);
+		if (this.#defaultTextStyle.underline) {
+			styled = this.#theme.underline(styled);
 		}
 
 		return styled;
 	}
 
-	private getDefaultStylePrefix(): string {
-		if (!this.defaultTextStyle) {
+	#getDefaultStylePrefix(): string {
+		if (!this.#defaultTextStyle) {
 			return "";
 		}
 
-		if (this.defaultStylePrefix !== undefined) {
-			return this.defaultStylePrefix;
+		if (this.#defaultStylePrefix !== undefined) {
+			return this.#defaultStylePrefix;
 		}
 
 		const sentinel = "\u0000";
 		let styled = sentinel;
 
-		if (this.defaultTextStyle.color) {
-			styled = this.defaultTextStyle.color(styled);
+		if (this.#defaultTextStyle.color) {
+			styled = this.#defaultTextStyle.color(styled);
 		}
 
-		if (this.defaultTextStyle.bold) {
-			styled = this.theme.bold(styled);
+		if (this.#defaultTextStyle.bold) {
+			styled = this.#theme.bold(styled);
 		}
-		if (this.defaultTextStyle.italic) {
-			styled = this.theme.italic(styled);
+		if (this.#defaultTextStyle.italic) {
+			styled = this.#theme.italic(styled);
 		}
-		if (this.defaultTextStyle.strikethrough) {
-			styled = this.theme.strikethrough(styled);
+		if (this.#defaultTextStyle.strikethrough) {
+			styled = this.#theme.strikethrough(styled);
 		}
-		if (this.defaultTextStyle.underline) {
-			styled = this.theme.underline(styled);
+		if (this.#defaultTextStyle.underline) {
+			styled = this.#theme.underline(styled);
 		}
 
 		const sentinelIndex = styled.indexOf(sentinel);
-		this.defaultStylePrefix = sentinelIndex >= 0 ? styled.slice(0, sentinelIndex) : "";
-		return this.defaultStylePrefix;
+		this.#defaultStylePrefix = sentinelIndex >= 0 ? styled.slice(0, sentinelIndex) : "";
+		return this.#defaultStylePrefix;
 	}
 
-	private getStylePrefix(styleFn: (text: string) => string): string {
+	#getStylePrefix(styleFn: (text: string) => string): string {
 		const sentinel = "\u0000";
 		const styled = styleFn(sentinel);
 		const sentinelIndex = styled.indexOf(sentinel);
 		return sentinelIndex >= 0 ? styled.slice(0, sentinelIndex) : "";
 	}
 
-	private getDefaultInlineStyleContext(): InlineStyleContext {
+	#getDefaultInlineStyleContext(): InlineStyleContext {
 		return {
-			applyText: (text: string) => this.applyDefaultStyle(text),
-			stylePrefix: this.getDefaultStylePrefix(),
+			applyText: (text: string) => this.#applyDefaultStyle(text),
+			stylePrefix: this.#getDefaultStylePrefix(),
 		};
 	}
 
-	private renderToken(token: Token, width: number, nextTokenType?: string): string[] {
+	#renderToken(token: Token, width: number, nextTokenType?: string): string[] {
 		const lines: string[] = [];
 
 		switch (token.type) {
 			case "heading": {
 				const headingLevel = token.depth;
 				const headingPrefix = `${"#".repeat(headingLevel)} `;
-				const headingText = this.renderInlineTokens(token.tokens || []);
+				const headingText = this.#renderInlineTokens(token.tokens || []);
 				let styledHeading: string;
 				if (headingLevel === 1) {
-					styledHeading = this.theme.heading(this.theme.bold(this.theme.underline(headingText)));
+					styledHeading = this.#theme.heading(this.#theme.bold(this.#theme.underline(headingText)));
 				} else if (headingLevel === 2) {
-					styledHeading = this.theme.heading(this.theme.bold(headingText));
+					styledHeading = this.#theme.heading(this.#theme.bold(headingText));
 				} else {
-					styledHeading = this.theme.heading(this.theme.bold(headingPrefix + headingText));
+					styledHeading = this.#theme.heading(this.#theme.bold(headingPrefix + headingText));
 				}
 				lines.push(styledHeading);
 				if (nextTokenType !== "space") {
@@ -297,7 +297,7 @@ export class Markdown implements Component {
 			}
 
 			case "paragraph": {
-				const paragraphText = this.renderInlineTokens(token.tokens || []);
+				const paragraphText = this.#renderInlineTokens(token.tokens || []);
 				lines.push(paragraphText);
 				// Don't add spacing if next token is space or list
 				if (nextTokenType && nextTokenType !== "list" && nextTokenType !== "space") {
@@ -308,12 +308,12 @@ export class Markdown implements Component {
 
 			case "code": {
 				// Handle mermaid diagrams with image rendering when available
-				if (token.lang === "mermaid" && this.theme.getMermaidImage) {
+				if (token.lang === "mermaid" && this.#theme.getMermaidImage) {
 					const hash = Bun.hash(token.text.trim()).toString(16);
-					const image = this.theme.getMermaidImage(hash);
+					const image = this.#theme.getMermaidImage(hash);
 
 					if (image && TERMINAL.imageProtocol) {
-						const imageLines = this.renderMermaidImage(image, width);
+						const imageLines = this.#renderMermaidImage(image, width);
 						if (imageLines) {
 							lines.push(...imageLines);
 							if (nextTokenType !== "space") {
@@ -324,10 +324,10 @@ export class Markdown implements Component {
 					}
 				}
 
-				const codeIndent = padding(this.codeBlockIndent);
-				lines.push(this.theme.codeBlockBorder(`\`\`\`${token.lang || ""}`));
-				if (this.theme.highlightCode) {
-					const highlightedLines = this.theme.highlightCode(token.text, token.lang);
+				const codeIndent = padding(this.#codeBlockIndent);
+				lines.push(this.#theme.codeBlockBorder(`\`\`\`${token.lang || ""}`));
+				if (this.#theme.highlightCode) {
+					const highlightedLines = this.#theme.highlightCode(token.text, token.lang);
 					for (const hlLine of highlightedLines) {
 						lines.push(`${codeIndent}${hlLine}`);
 					}
@@ -335,10 +335,10 @@ export class Markdown implements Component {
 					// Split code by newlines and style each line
 					const codeLines = token.text.split("\n");
 					for (const codeLine of codeLines) {
-						lines.push(`${codeIndent}${this.theme.codeBlock(codeLine)}`);
+						lines.push(`${codeIndent}${this.#theme.codeBlock(codeLine)}`);
 					}
 				}
-				lines.push(this.theme.codeBlockBorder("```"));
+				lines.push(this.#theme.codeBlockBorder("```"));
 				if (nextTokenType !== "space") {
 					lines.push(""); // Add spacing after code blocks (unless space token follows)
 				}
@@ -346,7 +346,7 @@ export class Markdown implements Component {
 			}
 
 			case "list": {
-				const listLines = this.renderList(token as any, 0);
+				const listLines = this.#renderList(token as any, 0);
 				lines.push(...listLines);
 				// Don't add spacing after lists if a space token follows
 				// (the space token will handle it)
@@ -354,18 +354,18 @@ export class Markdown implements Component {
 			}
 
 			case "table": {
-				const tableLines = this.renderTable(token as any, width);
+				const tableLines = this.#renderTable(token as any, width);
 				lines.push(...tableLines);
 				break;
 			}
 
 			case "blockquote": {
-				const quoteStyle = (text: string) => this.theme.quote(this.theme.italic(text));
+				const quoteStyle = (text: string) => this.#theme.quote(this.#theme.italic(text));
 				const quoteStyleContext: InlineStyleContext = {
 					applyText: quoteStyle,
-					stylePrefix: this.getStylePrefix(quoteStyle),
+					stylePrefix: this.#getStylePrefix(quoteStyle),
 				};
-				const quoteText = this.renderInlineTokens(token.tokens || [], quoteStyleContext);
+				const quoteText = this.#renderInlineTokens(token.tokens || [], quoteStyleContext);
 				const quoteLines = quoteText.split("\n");
 
 				// Calculate available width for quote content (subtract border + space = 2 chars)
@@ -375,7 +375,7 @@ export class Markdown implements Component {
 					// Wrap the styled line, then add border to each wrapped line
 					const wrappedLines = wrapTextWithAnsi(quoteLine, quoteContentWidth);
 					for (const wrappedLine of wrappedLines) {
-						lines.push(this.theme.quoteBorder(`${this.theme.symbols.quoteBorder} `) + wrappedLine);
+						lines.push(this.#theme.quoteBorder(`${this.#theme.symbols.quoteBorder} `) + wrappedLine);
 					}
 				}
 				if (nextTokenType !== "space") {
@@ -385,7 +385,7 @@ export class Markdown implements Component {
 			}
 
 			case "hr":
-				lines.push(this.theme.hr(this.theme.symbols.hrChar.repeat(Math.min(width, 80))));
+				lines.push(this.#theme.hr(this.#theme.symbols.hrChar.repeat(Math.min(width, 80))));
 				if (nextTokenType !== "space") {
 					lines.push(""); // Add spacing after horizontal rules (unless space token follows)
 				}
@@ -394,7 +394,7 @@ export class Markdown implements Component {
 			case "html":
 				// Render HTML as plain text (escaped for terminal)
 				if ("raw" in token && typeof token.raw === "string") {
-					lines.push(this.applyDefaultStyle(token.raw.trim()));
+					lines.push(this.#applyDefaultStyle(token.raw.trim()));
 				}
 				break;
 
@@ -413,9 +413,9 @@ export class Markdown implements Component {
 		return lines;
 	}
 
-	private renderInlineTokens(tokens: Token[], styleContext?: InlineStyleContext): string {
+	#renderInlineTokens(tokens: Token[], styleContext?: InlineStyleContext): string {
 		let result = "";
-		const resolvedStyleContext = styleContext ?? this.getDefaultInlineStyleContext();
+		const resolvedStyleContext = styleContext ?? this.#getDefaultInlineStyleContext();
 		const { applyText, stylePrefix } = resolvedStyleContext;
 		const applyTextWithNewlines = (text: string): string => {
 			const segments: string[] = text.split("\n");
@@ -427,7 +427,7 @@ export class Markdown implements Component {
 				case "text":
 					// Text tokens in list items can have nested tokens for inline formatting
 					if (token.tokens && token.tokens.length > 0) {
-						result += this.renderInlineTokens(token.tokens, resolvedStyleContext);
+						result += this.#renderInlineTokens(token.tokens, resolvedStyleContext);
 					} else {
 						result += applyTextWithNewlines(token.text);
 					}
@@ -435,38 +435,38 @@ export class Markdown implements Component {
 
 				case "paragraph":
 					// Paragraph tokens contain nested inline tokens
-					result += this.renderInlineTokens(token.tokens || [], resolvedStyleContext);
+					result += this.#renderInlineTokens(token.tokens || [], resolvedStyleContext);
 					break;
 
 				case "strong": {
-					const boldContent = this.renderInlineTokens(token.tokens || [], resolvedStyleContext);
-					result += this.theme.bold(boldContent) + stylePrefix;
+					const boldContent = this.#renderInlineTokens(token.tokens || [], resolvedStyleContext);
+					result += this.#theme.bold(boldContent) + stylePrefix;
 					break;
 				}
 
 				case "em": {
-					const italicContent = this.renderInlineTokens(token.tokens || [], resolvedStyleContext);
-					result += this.theme.italic(italicContent) + stylePrefix;
+					const italicContent = this.#renderInlineTokens(token.tokens || [], resolvedStyleContext);
+					result += this.#theme.italic(italicContent) + stylePrefix;
 					break;
 				}
 
 				case "codespan":
-					result += this.theme.code(token.text) + stylePrefix;
+					result += this.#theme.code(token.text) + stylePrefix;
 					break;
 
 				case "link": {
-					const linkText = this.renderInlineTokens(token.tokens || [], resolvedStyleContext);
+					const linkText = this.#renderInlineTokens(token.tokens || [], resolvedStyleContext);
 					// If link text matches href, only show the link once
 					// Compare raw text (token.text) not styled text (linkText) since linkText has ANSI codes
 					// For mailto: links, strip the prefix before comparing (autolinked emails have
 					// text="foo@bar.com" but href="mailto:foo@bar.com")
 					const hrefForComparison = token.href.startsWith("mailto:") ? token.href.slice(7) : token.href;
 					if (token.text === token.href || token.text === hrefForComparison) {
-						result += this.theme.link(this.theme.underline(linkText)) + stylePrefix;
+						result += this.#theme.link(this.#theme.underline(linkText)) + stylePrefix;
 					} else {
 						result +=
-							this.theme.link(this.theme.underline(linkText)) +
-							this.theme.linkUrl(` (${token.href})`) +
+							this.#theme.link(this.#theme.underline(linkText)) +
+							this.#theme.linkUrl(` (${token.href})`) +
 							stylePrefix;
 					}
 					break;
@@ -477,8 +477,8 @@ export class Markdown implements Component {
 					break;
 
 				case "del": {
-					const delContent = this.renderInlineTokens(token.tokens || [], resolvedStyleContext);
-					result += this.theme.strikethrough(delContent) + stylePrefix;
+					const delContent = this.#renderInlineTokens(token.tokens || [], resolvedStyleContext);
+					result += this.#theme.strikethrough(delContent) + stylePrefix;
 					break;
 				}
 
@@ -503,7 +503,7 @@ export class Markdown implements Component {
 	/**
 	 * Render a list with proper nesting support
 	 */
-	private renderList(token: Token & { items: any[]; ordered: boolean; start?: number }, depth: number): string[] {
+	#renderList(token: Token & { items: any[]; ordered: boolean; start?: number }, depth: number): string[] {
 		const lines: string[] = [];
 		const indent = "  ".repeat(depth);
 		// Use the list's start property (defaults to 1 for ordered lists)
@@ -514,7 +514,7 @@ export class Markdown implements Component {
 			const bullet = token.ordered ? `${startNumber + i}. ` : "- ";
 
 			// Process item tokens to handle nested lists
-			const itemLines = this.renderListItem(item.tokens || [], depth);
+			const itemLines = this.#renderListItem(item.tokens || [], depth);
 
 			if (itemLines.length > 0) {
 				// First line - check if it's a nested list
@@ -527,7 +527,7 @@ export class Markdown implements Component {
 					lines.push(firstLine);
 				} else {
 					// Regular text content - add indent and bullet
-					lines.push(indent + this.theme.listBullet(bullet) + firstLine);
+					lines.push(indent + this.#theme.listBullet(bullet) + firstLine);
 				}
 
 				// Rest of the lines
@@ -544,7 +544,7 @@ export class Markdown implements Component {
 					}
 				}
 			} else {
-				lines.push(indent + this.theme.listBullet(bullet));
+				lines.push(indent + this.#theme.listBullet(bullet));
 			}
 		}
 
@@ -555,43 +555,43 @@ export class Markdown implements Component {
 	 * Render list item tokens, handling nested lists
 	 * Returns lines WITHOUT the parent indent (renderList will add it)
 	 */
-	private renderListItem(tokens: Token[], parentDepth: number): string[] {
+	#renderListItem(tokens: Token[], parentDepth: number): string[] {
 		const lines: string[] = [];
 
 		for (const token of tokens) {
 			if (token.type === "list") {
 				// Nested list - render with one additional indent level
 				// These lines will have their own indent, so we just add them as-is
-				const nestedLines = this.renderList(token as any, parentDepth + 1);
+				const nestedLines = this.#renderList(token as any, parentDepth + 1);
 				lines.push(...nestedLines);
 			} else if (token.type === "text") {
 				// Text content (may have inline tokens)
 				const text =
-					token.tokens && token.tokens.length > 0 ? this.renderInlineTokens(token.tokens) : token.text || "";
+					token.tokens && token.tokens.length > 0 ? this.#renderInlineTokens(token.tokens) : token.text || "";
 				lines.push(text);
 			} else if (token.type === "paragraph") {
 				// Paragraph in list item
-				const text = this.renderInlineTokens(token.tokens || []);
+				const text = this.#renderInlineTokens(token.tokens || []);
 				lines.push(text);
 			} else if (token.type === "code") {
 				// Code block in list item
-				const codeIndent = padding(this.codeBlockIndent);
-				lines.push(this.theme.codeBlockBorder(`\`\`\`${token.lang || ""}`));
-				if (this.theme.highlightCode) {
-					const highlightedLines = this.theme.highlightCode(token.text, token.lang);
+				const codeIndent = padding(this.#codeBlockIndent);
+				lines.push(this.#theme.codeBlockBorder(`\`\`\`${token.lang || ""}`));
+				if (this.#theme.highlightCode) {
+					const highlightedLines = this.#theme.highlightCode(token.text, token.lang);
 					for (const hlLine of highlightedLines) {
 						lines.push(`${codeIndent}${hlLine}`);
 					}
 				} else {
 					const codeLines = token.text.split("\n");
 					for (const codeLine of codeLines) {
-						lines.push(`${codeIndent}${this.theme.codeBlock(codeLine)}`);
+						lines.push(`${codeIndent}${this.#theme.codeBlock(codeLine)}`);
 					}
 				}
-				lines.push(this.theme.codeBlockBorder("```"));
+				lines.push(this.#theme.codeBlockBorder("```"));
 			} else {
 				// Other token types - try to render as inline
-				const text = this.renderInlineTokens([token]);
+				const text = this.#renderInlineTokens([token]);
 				if (text) {
 					lines.push(text);
 				}
@@ -604,7 +604,7 @@ export class Markdown implements Component {
 	/**
 	 * Get the visible width of the longest word in a string.
 	 */
-	private getLongestWordWidth(text: string, maxWidth?: number): number {
+	#getLongestWordWidth(text: string, maxWidth?: number): number {
 		const words = text.split(/\s+/).filter(word => word.length > 0);
 		let longest = 0;
 		for (const word of words) {
@@ -622,7 +622,7 @@ export class Markdown implements Component {
 	 * Delegates to wrapTextWithAnsi() so ANSI codes + long tokens are handled
 	 * consistently with the rest of the renderer.
 	 */
-	private wrapCellText(text: string, maxWidth: number): string[] {
+	#wrapCellText(text: string, maxWidth: number): string[] {
 		return wrapTextWithAnsi(text, Math.max(1, maxWidth));
 	}
 
@@ -630,10 +630,7 @@ export class Markdown implements Component {
 	 * Render a table with width-aware cell wrapping.
 	 * Cells that don't fit are wrapped to multiple lines.
 	 */
-	private renderTable(
-		token: Token & { header: any[]; rows: any[][]; raw?: string },
-		availableWidth: number,
-	): string[] {
+	#renderTable(token: Token & { header: any[]; rows: any[][]; raw?: string }, availableWidth: number): string[] {
 		const lines: string[] = [];
 		const numCols = token.header.length;
 
@@ -658,17 +655,17 @@ export class Markdown implements Component {
 		const naturalWidths: number[] = [];
 		const minWordWidths: number[] = [];
 		for (let i = 0; i < numCols; i++) {
-			const headerText = this.renderInlineTokens(token.header[i].tokens || []);
+			const headerText = this.#renderInlineTokens(token.header[i].tokens || []);
 			naturalWidths[i] = visibleWidth(headerText);
-			minWordWidths[i] = Math.max(1, this.getLongestWordWidth(headerText, maxUnbrokenWordWidth));
+			minWordWidths[i] = Math.max(1, this.#getLongestWordWidth(headerText, maxUnbrokenWordWidth));
 		}
 		for (const row of token.rows) {
 			for (let i = 0; i < row.length; i++) {
-				const cellText = this.renderInlineTokens(row[i].tokens || []);
+				const cellText = this.#renderInlineTokens(row[i].tokens || []);
 				naturalWidths[i] = Math.max(naturalWidths[i] || 0, visibleWidth(cellText));
 				minWordWidths[i] = Math.max(
 					minWordWidths[i] || 1,
-					this.getLongestWordWidth(cellText, maxUnbrokenWordWidth),
+					this.#getLongestWordWidth(cellText, maxUnbrokenWordWidth),
 				);
 			}
 		}
@@ -743,7 +740,7 @@ export class Markdown implements Component {
 			}
 		}
 
-		const t = this.theme.symbols.table;
+		const t = this.#theme.symbols.table;
 		const h = t.horizontal;
 		const v = t.vertical;
 
@@ -753,8 +750,8 @@ export class Markdown implements Component {
 
 		// Render header with wrapping
 		const headerCellLines: string[][] = token.header.map((cell, i) => {
-			const text = this.renderInlineTokens(cell.tokens || []);
-			return this.wrapCellText(text, columnWidths[i]);
+			const text = this.#renderInlineTokens(cell.tokens || []);
+			return this.#wrapCellText(text, columnWidths[i]);
 		});
 		const headerLineCount = Math.max(...headerCellLines.map(c => c.length));
 
@@ -762,7 +759,7 @@ export class Markdown implements Component {
 			const rowParts = headerCellLines.map((cellLines, colIdx) => {
 				const text = cellLines[lineIdx] || "";
 				const padded = text + padding(Math.max(0, columnWidths[colIdx] - visibleWidth(text)));
-				return this.theme.bold(padded);
+				return this.#theme.bold(padded);
 			});
 			lines.push(`${v} ${rowParts.join(` ${v} `)} ${v}`);
 		}
@@ -776,8 +773,8 @@ export class Markdown implements Component {
 		for (let rowIndex = 0; rowIndex < token.rows.length; rowIndex++) {
 			const row = token.rows[rowIndex];
 			const rowCellLines: string[][] = row.map((cell, i) => {
-				const text = this.renderInlineTokens(cell.tokens || []);
-				return this.wrapCellText(text, columnWidths[i]);
+				const text = this.#renderInlineTokens(cell.tokens || []);
+				return this.#wrapCellText(text, columnWidths[i]);
 			});
 			const rowLineCount = Math.max(...rowCellLines.map(c => c.length));
 
@@ -806,7 +803,7 @@ export class Markdown implements Component {
 	 * Render a mermaid image using terminal graphics protocol.
 	 * Returns array of lines (image placeholder rows) or null if rendering fails.
 	 */
-	private renderMermaidImage(image: MermaidImage, availableWidth: number): string[] | null {
+	#renderMermaidImage(image: MermaidImage, availableWidth: number): string[] | null {
 		if (!TERMINAL.imageProtocol) return null;
 
 		const cellDims = getCellDimensions();

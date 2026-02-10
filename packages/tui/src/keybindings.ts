@@ -120,20 +120,20 @@ const normalizeKeyId = (key: KeyId): KeyId => key.toLowerCase() as KeyId;
  * Manages keybindings for the editor.
  */
 export class EditorKeybindingsManager {
-	private actionToKeys: Map<EditorAction, KeyId[]>;
+	#actionToKeys: Map<EditorAction, KeyId[]>;
 
 	constructor(config: EditorKeybindingsConfig = {}) {
-		this.actionToKeys = new Map();
-		this.buildMaps(config);
+		this.#actionToKeys = new Map();
+		this.#buildMaps(config);
 	}
 
-	private buildMaps(config: EditorKeybindingsConfig): void {
-		this.actionToKeys.clear();
+	#buildMaps(config: EditorKeybindingsConfig): void {
+		this.#actionToKeys.clear();
 
 		// Start with defaults
 		for (const [action, keys] of Object.entries(DEFAULT_EDITOR_KEYBINDINGS)) {
 			const keyArray = Array.isArray(keys) ? keys : [keys];
-			this.actionToKeys.set(
+			this.#actionToKeys.set(
 				action as EditorAction,
 				keyArray.map(key => normalizeKeyId(key as KeyId)),
 			);
@@ -143,7 +143,7 @@ export class EditorKeybindingsManager {
 		for (const [action, keys] of Object.entries(config)) {
 			if (keys === undefined) continue;
 			const keyArray = Array.isArray(keys) ? keys : [keys];
-			this.actionToKeys.set(
+			this.#actionToKeys.set(
 				action as EditorAction,
 				keyArray.map(key => normalizeKeyId(key as KeyId)),
 			);
@@ -154,7 +154,7 @@ export class EditorKeybindingsManager {
 	 * Check if input matches a specific action.
 	 */
 	matches(data: string, action: EditorAction): boolean {
-		const keys = this.actionToKeys.get(action);
+		const keys = this.#actionToKeys.get(action);
 		if (!keys) return false;
 		for (const key of keys) {
 			if (matchesKey(data, key)) return true;
@@ -171,14 +171,14 @@ export class EditorKeybindingsManager {
 	 * Get keys bound to an action.
 	 */
 	getKeys(action: EditorAction): KeyId[] {
-		return this.actionToKeys.get(action) ?? [];
+		return this.#actionToKeys.get(action) ?? [];
 	}
 
 	/**
 	 * Update configuration.
 	 */
 	setConfig(config: EditorKeybindingsConfig): void {
-		this.buildMaps(config);
+		this.#buildMaps(config);
 	}
 }
 

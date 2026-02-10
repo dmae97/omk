@@ -1,20 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { type KernelDisplayOutput, PythonKernel } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
-
-const renderDisplay = (
-	PythonKernel as unknown as {
-		prototype: {
-			renderDisplay: (content: Record<string, unknown>) => {
-				text: string;
-				outputs: KernelDisplayOutput[];
-			};
-		};
-	}
-).prototype.renderDisplay;
+import { renderKernelDisplay } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
 
 describe("PythonKernel display rendering", () => {
 	it("normalizes text/plain output and returns no display outputs", () => {
-		const { text, outputs } = renderDisplay.call({} as PythonKernel, {
+		const { text, outputs } = renderKernelDisplay({
 			data: { "text/plain": "hello" },
 		});
 
@@ -23,7 +12,7 @@ describe("PythonKernel display rendering", () => {
 	});
 
 	it("collects image and json display outputs without text", () => {
-		const { text, outputs } = renderDisplay.call({} as PythonKernel, {
+		const { text, outputs } = renderKernelDisplay({
 			data: { "image/png": "abc", "application/json": { foo: "bar" } },
 		});
 
@@ -35,7 +24,7 @@ describe("PythonKernel display rendering", () => {
 	});
 
 	it("converts text/html to markdown", () => {
-		const { text, outputs } = renderDisplay.call({} as PythonKernel, {
+		const { text, outputs } = renderKernelDisplay({
 			data: { "text/html": "<p><strong>Hello</strong></p>" },
 		});
 
@@ -44,7 +33,7 @@ describe("PythonKernel display rendering", () => {
 	});
 
 	it("combines text/plain with json output", () => {
-		const { text, outputs } = renderDisplay.call({} as PythonKernel, {
+		const { text, outputs } = renderKernelDisplay({
 			data: { "text/plain": "value", "application/json": { ok: true } },
 		});
 

@@ -217,8 +217,8 @@ export async function fetchMCPToolSchema(
  * reducing drift when MCP servers add new parameters.
  */
 export class MCPWrappedTool implements CustomTool<TSchema, ExaRenderDetails> {
-	public readonly name: string;
-	public readonly label: string;
+	readonly name: string;
+	readonly label: string;
 
 	constructor(
 		private readonly config: MCPToolWrapperConfig,

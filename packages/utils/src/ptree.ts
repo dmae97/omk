@@ -104,7 +104,7 @@ export class ChildProcess<In extends InMask = InMask> {
 	#stderrStream?: ReadableStream<Uint8Array>;
 
 	constructor(
-		public readonly proc: PipedSubprocess<In>,
+		readonly proc: PipedSubprocess<In>,
 		readonly exposeStderr: boolean,
 	) {
 		// Eagerly drain stderr into a truncated tail string + raw chunks.

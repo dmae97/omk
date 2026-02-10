@@ -132,7 +132,7 @@ interface CursorToolResultEntry {
 }
 
 export class Agent {
-	private _state: AgentState = {
+	#state: AgentState = {
 		systemPrompt: "",
 		model: getModel("google", "gemini-2.5-flash-lite-preview-06-17"),
 		thinkingLevel: "off",
@@ -144,53 +144,54 @@ export class Agent {
 		error: undefined,
 	};
 
-	private listeners = new Set<(e: AgentEvent) => void>();
-	private abortController?: AbortController;
-	private convertToLlm: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
-	private transformContext?: (messages: AgentMessage[], signal?: AbortSignal) => Promise<AgentMessage[]>;
-	private steeringQueue: AgentMessage[] = [];
-	private followUpQueue: AgentMessage[] = [];
-	private steeringMode: "all" | "one-at-a-time";
-	private followUpMode: "all" | "one-at-a-time";
-	private interruptMode: "immediate" | "wait";
-	public streamFn: StreamFn;
-	private _sessionId?: string;
-	private _thinkingBudgets?: ThinkingBudgets;
-	private _maxRetryDelayMs?: number;
-	public getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
-	private getToolContext?: (toolCall?: ToolCallContext) => AgentToolContext | undefined;
-	private cursorExecHandlers?: CursorExecHandlers;
-	private cursorOnToolResult?: CursorToolResultHandler;
-	private runningPrompt?: Promise<void>;
-	private resolveRunningPrompt?: () => void;
-	private kimiApiFormat?: "openai" | "anthropic";
+	#listeners = new Set<(e: AgentEvent) => void>();
+	#abortController?: AbortController;
+	#convertToLlm: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
+	#transformContext?: (messages: AgentMessage[], signal?: AbortSignal) => Promise<AgentMessage[]>;
+	#steeringQueue: AgentMessage[] = [];
+	#followUpQueue: AgentMessage[] = [];
+	#steeringMode: "all" | "one-at-a-time";
+	#followUpMode: "all" | "one-at-a-time";
+	#interruptMode: "immediate" | "wait";
+	#sessionId?: string;
+	#thinkingBudgets?: ThinkingBudgets;
+	#maxRetryDelayMs?: number;
+	#getToolContext?: (toolCall?: ToolCallContext) => AgentToolContext | undefined;
+	#cursorExecHandlers?: CursorExecHandlers;
+	#cursorOnToolResult?: CursorToolResultHandler;
+	#runningPrompt?: Promise<void>;
+	#resolveRunningPrompt?: () => void;
+	#kimiApiFormat?: "openai" | "anthropic";
 
 	/** Buffered Cursor tool results with text length at time of call (for correct ordering) */
-	private _cursorToolResultBuffer: CursorToolResultEntry[] = [];
+	#cursorToolResultBuffer: CursorToolResultEntry[] = [];
+
+	streamFn: StreamFn;
+	getApiKey?: (provider: string) => Promise<string | undefined> | string | undefined;
 
 	constructor(opts: AgentOptions = {}) {
-		this._state = { ...this._state, ...opts.initialState };
-		this.convertToLlm = opts.convertToLlm || defaultConvertToLlm;
-		this.transformContext = opts.transformContext;
-		this.steeringMode = opts.steeringMode || "one-at-a-time";
-		this.followUpMode = opts.followUpMode || "one-at-a-time";
-		this.interruptMode = opts.interruptMode || "immediate";
+		this.#state = { ...this.#state, ...opts.initialState };
+		this.#convertToLlm = opts.convertToLlm || defaultConvertToLlm;
+		this.#transformContext = opts.transformContext;
+		this.#steeringMode = opts.steeringMode || "one-at-a-time";
+		this.#followUpMode = opts.followUpMode || "one-at-a-time";
+		this.#interruptMode = opts.interruptMode || "immediate";
 		this.streamFn = opts.streamFn || streamSimple;
-		this._sessionId = opts.sessionId;
-		this._thinkingBudgets = opts.thinkingBudgets;
-		this._maxRetryDelayMs = opts.maxRetryDelayMs;
+		this.#sessionId = opts.sessionId;
+		this.#thinkingBudgets = opts.thinkingBudgets;
+		this.#maxRetryDelayMs = opts.maxRetryDelayMs;
 		this.getApiKey = opts.getApiKey;
-		this.getToolContext = opts.getToolContext;
-		this.cursorExecHandlers = opts.cursorExecHandlers;
-		this.cursorOnToolResult = opts.cursorOnToolResult;
-		this.kimiApiFormat = opts.kimiApiFormat;
+		this.#getToolContext = opts.getToolContext;
+		this.#cursorExecHandlers = opts.cursorExecHandlers;
+		this.#cursorOnToolResult = opts.cursorOnToolResult;
+		this.#kimiApiFormat = opts.kimiApiFormat;
 	}
 
 	/**
 	 * Get the current session ID used for provider caching.
 	 */
 	get sessionId(): string | undefined {
-		return this._sessionId;
+		return this.#sessionId;
 	}
 
 	/**
@@ -198,28 +199,28 @@ export class Agent {
 	 * Call this when switching sessions (new session, branch, resume).
 	 */
 	set sessionId(value: string | undefined) {
-		this._sessionId = value;
+		this.#sessionId = value;
 	}
 
 	/**
 	 * Get the current thinking budgets.
 	 */
 	get thinkingBudgets(): ThinkingBudgets | undefined {
-		return this._thinkingBudgets;
+		return this.#thinkingBudgets;
 	}
 
 	/**
 	 * Set custom thinking budgets for token-based providers.
 	 */
 	set thinkingBudgets(value: ThinkingBudgets | undefined) {
-		this._thinkingBudgets = value;
+		this.#thinkingBudgets = value;
 	}
 
 	/**
 	 * Get the current max retry delay in milliseconds.
 	 */
 	get maxRetryDelayMs(): number | undefined {
-		return this._maxRetryDelayMs;
+		return this.#maxRetryDelayMs;
 	}
 
 	/**
@@ -227,101 +228,101 @@ export class Agent {
 	 * Set to 0 to disable the cap.
 	 */
 	set maxRetryDelayMs(value: number | undefined) {
-		this._maxRetryDelayMs = value;
+		this.#maxRetryDelayMs = value;
 	}
 
 	get state(): AgentState {
-		return this._state;
+		return this.#state;
 	}
 
 	subscribe(fn: (e: AgentEvent) => void): () => void {
-		this.listeners.add(fn);
-		return () => this.listeners.delete(fn);
+		this.#listeners.add(fn);
+		return () => this.#listeners.delete(fn);
 	}
 
 	emitExternalEvent(event: AgentEvent) {
 		switch (event.type) {
 			case "message_start":
 			case "message_update":
-				this._state.streamMessage = event.message;
+				this.#state.streamMessage = event.message;
 				break;
 			case "message_end":
-				this._state.streamMessage = null;
+				this.#state.streamMessage = null;
 				this.appendMessage(event.message);
 				break;
 			case "tool_execution_start": {
-				const pending = new Set(this._state.pendingToolCalls);
+				const pending = new Set(this.#state.pendingToolCalls);
 				pending.add(event.toolCallId);
-				this._state.pendingToolCalls = pending;
+				this.#state.pendingToolCalls = pending;
 				break;
 			}
 			case "tool_execution_end": {
-				const pending = new Set(this._state.pendingToolCalls);
+				const pending = new Set(this.#state.pendingToolCalls);
 				pending.delete(event.toolCallId);
-				this._state.pendingToolCalls = pending;
+				this.#state.pendingToolCalls = pending;
 				break;
 			}
 		}
 
-		this.emit(event);
+		this.#emit(event);
 	}
 
 	// State mutators
 	setSystemPrompt(v: string) {
-		this._state.systemPrompt = v;
+		this.#state.systemPrompt = v;
 	}
 
 	setModel(m: Model) {
-		this._state.model = m;
+		this.#state.model = m;
 	}
 
 	setThinkingLevel(l: ThinkingLevel) {
-		this._state.thinkingLevel = l;
+		this.#state.thinkingLevel = l;
 	}
 
 	setSteeringMode(mode: "all" | "one-at-a-time") {
-		this.steeringMode = mode;
+		this.#steeringMode = mode;
 	}
 
 	getSteeringMode(): "all" | "one-at-a-time" {
-		return this.steeringMode;
+		return this.#steeringMode;
 	}
 
 	setFollowUpMode(mode: "all" | "one-at-a-time") {
-		this.followUpMode = mode;
+		this.#followUpMode = mode;
 	}
 
 	getFollowUpMode(): "all" | "one-at-a-time" {
-		return this.followUpMode;
+		return this.#followUpMode;
 	}
 
 	setInterruptMode(mode: "immediate" | "wait") {
-		this.interruptMode = mode;
+		this.#interruptMode = mode;
 	}
 
 	getInterruptMode(): "immediate" | "wait" {
-		return this.interruptMode;
+		return this.#interruptMode;
 	}
 
 	setTools(t: AgentTool<any>[]) {
-		this._state.tools = t;
+		this.#state.tools = t;
 	}
 
 	replaceMessages(ms: AgentMessage[]) {
-		this._state.messages = ms.slice();
+		this.#state.messages = ms.slice();
 	}
 
 	appendMessage(m: AgentMessage) {
-		this._state.messages = [...this._state.messages, m];
+		this.#state.messages = [...this.#state.messages, m];
 	}
 
 	popMessage(): AgentMessage | undefined {
-		const messages = this._state.messages.slice(0, -1);
-		const removed = this._state.messages.at(-1);
-		this._state.messages = messages;
+		const messages = this.#state.messages.slice(0, -1);
+		const removed = this.#state.messages.at(-1);
+		this.#state.messages = messages;
 
-		if (removed && this._state.streamMessage === removed) {
-			this._state.streamMessage = null;
+		if (removed && this.#state.streamMessage === removed) {
+			this.#state.streamMessage = null;
 		}
 
 		return removed;
@@ -332,7 +333,7 @@ export class Agent {
 	 * Delivered after current tool execution, skips remaining tools.
 	 */
 	steer(m: AgentMessage) {
-		this.steeringQueue.push(m);
+		this.#steeringQueue.push(m);
 	}
 
 	/**
@@ -340,51 +341,51 @@ export class Agent {
 	 * Delivered only when agent has no more tool calls or steering messages.
 	 */
 	followUp(m: AgentMessage) {
-		this.followUpQueue.push(m);
+		this.#followUpQueue.push(m);
 	}
 
 	clearSteeringQueue() {
-		this.steeringQueue = [];
+		this.#steeringQueue = [];
 	}
 
 	clearFollowUpQueue() {
-		this.followUpQueue = [];
+		this.#followUpQueue = [];
 	}
 
 	clearAllQueues() {
-		this.steeringQueue = [];
-		this.followUpQueue = [];
+		this.#steeringQueue = [];
+		this.#followUpQueue = [];
 	}
 
 	hasQueuedMessages(): boolean {
-		return this.steeringQueue.length > 0 || this.followUpQueue.length > 0;
+		return this.#steeringQueue.length > 0 || this.#followUpQueue.length > 0;
 	}
 
-	private dequeueSteeringMessages(): AgentMessage[] {
-		if (this.steeringMode === "one-at-a-time") {
-			if (this.steeringQueue.length > 0) {
-				const first = this.steeringQueue[0];
-				this.steeringQueue = this.steeringQueue.slice(1);
+	#dequeueSteeringMessages(): AgentMessage[] {
+		if (this.#steeringMode === "one-at-a-time") {
+			if (this.#steeringQueue.length > 0) {
+				const first = this.#steeringQueue[0];
+				this.#steeringQueue = this.#steeringQueue.slice(1);
 				return [first];
 			}
 			return [];
 		}
-		const steering = this.steeringQueue.slice();
-		this.steeringQueue = [];
+		const steering = this.#steeringQueue.slice();
+		this.#steeringQueue = [];
 		return steering;
 	}
 
-	private dequeueFollowUpMessages(): AgentMessage[] {
-		if (this.followUpMode === "one-at-a-time") {
-			if (this.followUpQueue.length > 0) {
-				const first = this.followUpQueue[0];
-				this.followUpQueue = this.followUpQueue.slice(1);
+	#dequeueFollowUpMessages(): AgentMessage[] {
+		if (this.#followUpMode === "one-at-a-time") {
+			if (this.#followUpQueue.length > 0) {
+				const first = this.#followUpQueue[0];
+				this.#followUpQueue = this.#followUpQueue.slice(1);
 				return [first];
 			}
 			return [];
 		}
-		const followUp = this.followUpQueue.slice();
-		this.followUpQueue = [];
+		const followUp = this.#followUpQueue.slice();
+		this.#followUpQueue = [];
 		return followUp;
 	}
 
@@ -393,7 +394,7 @@ export class Agent {
 	 * Used by dequeue keybinding.
 	 */
 	popLastSteer(): AgentMessage | undefined {
-		return this.steeringQueue.pop();
+		return this.#steeringQueue.pop();
 	}
 
 	/**
@@ -401,29 +402,29 @@ export class Agent {
 	 * Used by dequeue keybinding.
 	 */
 	popLastFollowUp(): AgentMessage | undefined {
-		return this.followUpQueue.pop();
+		return this.#followUpQueue.pop();
 	}
 
 	clearMessages() {
-		this._state.messages = [];
+		this.#state.messages = [];
 	}
 
 	abort() {
-		this.abortController?.abort();
+		this.#abortController?.abort();
 	}
 
 	waitForIdle(): Promise<void> {
-		return this.runningPrompt ?? Promise.resolve();
+		return this.#runningPrompt ?? Promise.resolve();
 	}
 
 	reset() {
-		this._state.messages = [];
-		this._state.isStreaming = false;
-		this._state.streamMessage = null;
-		this._state.pendingToolCalls = new Set<string>();
-		this._state.error = undefined;
-		this.steeringQueue = [];
-		this.followUpQueue = [];
+		this.#state.messages = [];
+		this.#state.isStreaming = false;
+		this.#state.streamMessage = null;
+		this.#state.pendingToolCalls = new Set<string>();
+		this.#state.error = undefined;
+		this.#steeringQueue = [];
+		this.#followUpQueue = [];
 	}
 
 	/** Send a prompt with an AgentMessage */
@@ -434,13 +435,13 @@ export class Agent {
 		imagesOrOptions?: ImageContent[] | AgentPromptOptions,
 		options?: AgentPromptOptions,
 	) {
-		if (this._state.isStreaming) {
+		if (this.#state.isStreaming) {
 			throw new Error(
 				"Agent is already processing a prompt. Use steer() or followUp() to queue messages, or wait for completion.",
 			);
 		}
 
-		const model = this._state.model;
+		const model = this.#state.model;
 		if (!model) throw new Error("No model configured");
 
 		let msgs: AgentMessage[];
@@ -473,38 +474,38 @@ export class Agent {
 			promptOptions = imagesOrOptions as AgentPromptOptions | undefined;
 		}
 
-		await this._runLoop(msgs, promptOptions);
+		await this.#runLoop(msgs, promptOptions);
 	}
 
 	/**
 	 * Continue from current context (used for retries and resuming queued messages).
 	 */
 	async continue() {
-		if (this._state.isStreaming) {
+		if (this.#state.isStreaming) {
 			throw new Error("Agent is already processing. Wait for completion before continuing.");
 		}
 
-		const messages = this._state.messages;
+		const messages = this.#state.messages;
 		if (messages.length === 0) {
 			throw new Error("No messages to continue from");
 		}
 		if (messages[messages.length - 1].role === "assistant") {
-			const queuedSteering = this.dequeueSteeringMessages();
+			const queuedSteering = this.#dequeueSteeringMessages();
 			if (queuedSteering.length > 0) {
-				await this._runLoop(queuedSteering, { skipInitialSteeringPoll: true });
+				await this.#runLoop(queuedSteering, { skipInitialSteeringPoll: true });
 				return;
 			}
 
-			const queuedFollowUp = this.dequeueFollowUpMessages();
+			const queuedFollowUp = this.#dequeueFollowUpMessages();
 			if (queuedFollowUp.length > 0) {
-				await this._runLoop(queuedFollowUp);
+				await this.#runLoop(queuedFollowUp);
 				return;
 			}
 
 			throw new Error("Cannot continue from message role: assistant");
 		}
 
-		await this._runLoop(undefined);
+		await this.#runLoop(undefined);
 	}
 
 	/**
@@ -512,42 +513,39 @@ export class Agent {
 	 * If messages are provided, starts a new conversation turn with those messages.
 	 * Otherwise, continues from existing context.
 	 */
-	private async _runLoop(
-		messages?: AgentMessage[],
-		options?: AgentPromptOptions & { skipInitialSteeringPoll?: boolean },
-	) {
-		const model = this._state.model;
+	async #runLoop(messages?: AgentMessage[], options?: AgentPromptOptions & { skipInitialSteeringPoll?: boolean }) {
+		const model = this.#state.model;
 		if (!model) throw new Error("No model configured");
 
 		let skipInitialSteeringPoll = options?.skipInitialSteeringPoll === true;
 
-		this.runningPrompt = new Promise<void>(resolve => {
-			this.resolveRunningPrompt = resolve;
+		this.#runningPrompt = new Promise<void>(resolve => {
+			this.#resolveRunningPrompt = resolve;
 		});
 
-		this.abortController = new AbortController();
-		this._state.isStreaming = true;
-		this._state.streamMessage = null;
-		this._state.error = undefined;
+		this.#abortController = new AbortController();
+		this.#state.isStreaming = true;
+		this.#state.streamMessage = null;
+		this.#state.error = undefined;
 
 		// Clear Cursor tool result buffer at start of each run
-		this._cursorToolResultBuffer = [];
+		this.#cursorToolResultBuffer = [];
 
-		const reasoning = this._state.thinkingLevel === "off" ? undefined : this._state.thinkingLevel;
+		const reasoning = this.#state.thinkingLevel === "off" ? undefined : this.#state.thinkingLevel;
 
 		const context: AgentContext = {
-			systemPrompt: this._state.systemPrompt,
-			messages: this._state.messages.slice(),
-			tools: this._state.tools,
+			systemPrompt: this.#state.systemPrompt,
+			messages: this.#state.messages.slice(),
+			tools: this.#state.tools,
 		};
 
 		const cursorOnToolResult =
-			this.cursorExecHandlers || this.cursorOnToolResult
+			this.#cursorExecHandlers || this.#cursorOnToolResult
 				? async (message: ToolResultMessage) => {
 						let finalMessage = message;
-						if (this.cursorOnToolResult) {
+						if (this.#cursorOnToolResult) {
 							try {
-								const updated = await this.cursorOnToolResult(message);
+								const updated = await this.#cursorOnToolResult(message);
 								if (updated) {
 									finalMessage = updated;
 								}
@@ -557,8 +555,8 @@ export class Agent {
 						// Cursor executes tools server-side during streaming, so the assistant message
 						// already incorporates results. We buffer here and emit in correct order
 						// when the assistant message ends.
-						const textLength = this._getAssistantTextLength(this._state.streamMessage);
-						this._cursorToolResultBuffer.push({ toolResult: finalMessage, textLengthAtCall: textLength });
+						const textLength = this.#getAssistantTextLength(this.#state.streamMessage);
+						this.#cursorToolResultBuffer.push({ toolResult: finalMessage, textLengthAtCall: textLength });
 						return finalMessage;
 					}
 				: undefined;
@@ -566,88 +564,88 @@ export class Agent {
 		const config: AgentLoopConfig = {
 			model,
 			reasoning,
-			interruptMode: this.interruptMode,
-			sessionId: this._sessionId,
-			thinkingBudgets: this._thinkingBudgets,
-			maxRetryDelayMs: this._maxRetryDelayMs,
-			kimiApiFormat: this.kimiApiFormat,
+			interruptMode: this.#interruptMode,
+			sessionId: this.#sessionId,
+			thinkingBudgets: this.#thinkingBudgets,
+			maxRetryDelayMs: this.#maxRetryDelayMs,
+			kimiApiFormat: this.#kimiApiFormat,
 			toolChoice: options?.toolChoice,
-			convertToLlm: this.convertToLlm,
-			transformContext: this.transformContext,
+			convertToLlm: this.#convertToLlm,
+			transformContext: this.#transformContext,
 			getApiKey: this.getApiKey,
-			getToolContext: this.getToolContext,
-			cursorExecHandlers: this.cursorExecHandlers,
+			getToolContext: this.#getToolContext,
+			cursorExecHandlers: this.#cursorExecHandlers,
 			cursorOnToolResult,
 			getSteeringMessages: async () => {
 				if (skipInitialSteeringPoll) {
 					skipInitialSteeringPoll = false;
 					return [];
 				}
-				return this.dequeueSteeringMessages();
+				return this.#dequeueSteeringMessages();
 			},
-			getFollowUpMessages: async () => this.dequeueFollowUpMessages(),
+			getFollowUpMessages: async () => this.#dequeueFollowUpMessages(),
 		};
 
 		let partial: AgentMessage | null = null;
 
 		try {
 			const stream = messages
-				? agentLoop(messages, context, config, this.abortController.signal, this.streamFn)
-				: agentLoopContinue(context, config, this.abortController.signal, this.streamFn);
+				? agentLoop(messages, context, config, this.#abortController.signal, this.streamFn)
+				: agentLoopContinue(context, config, this.#abortController.signal, this.streamFn);
 
 			for await (const event of stream) {
 				// Update internal state based on events
 				switch (event.type) {
 					case "message_start":
 						partial = event.message;
-						this._state.streamMessage = event.message;
+						this.#state.streamMessage = event.message;
 						break;
 
 					case "message_update":
 						partial = event.message;
-						this._state.streamMessage = event.message;
+						this.#state.streamMessage = event.message;
 						break;
 
 					case "message_end":
 						partial = null;
 						// Check if this is an assistant message with buffered Cursor tool results.
 						// If so, split the message to emit tool results at the correct position.
-						if (event.message.role === "assistant" && this._cursorToolResultBuffer.length > 0) {
-							this._emitCursorSplitAssistantMessage(event.message as AssistantMessage);
+						if (event.message.role === "assistant" && this.#cursorToolResultBuffer.length > 0) {
+							this.#emitCursorSplitAssistantMessage(event.message as AssistantMessage);
 							continue; // Skip default emit - split method handles everything
 						}
-						this._state.streamMessage = null;
+						this.#state.streamMessage = null;
 						this.appendMessage(event.message);
 						break;
 
 					case "tool_execution_start": {
-						const s = new Set(this._state.pendingToolCalls);
+						const s = new Set(this.#state.pendingToolCalls);
 						s.add(event.toolCallId);
-						this._state.pendingToolCalls = s;
+						this.#state.pendingToolCalls = s;
 						break;
 					}
 
 					case "tool_execution_end": {
-						const s = new Set(this._state.pendingToolCalls);
+						const s = new Set(this.#state.pendingToolCalls);
 						s.delete(event.toolCallId);
-						this._state.pendingToolCalls = s;
+						this.#state.pendingToolCalls = s;
 						break;
 					}
 
 					case "turn_end":
 						if (event.message.role === "assistant" && (event.message as any).errorMessage) {
-							this._state.error = (event.message as any).errorMessage;
+							this.#state.error = (event.message as any).errorMessage;
 						}
 						break;
 
 					case "agent_end":
-						this._state.isStreaming = false;
-						this._state.streamMessage = null;
+						this.#state.isStreaming = false;
+						this.#state.streamMessage = null;
 						break;
 				}
 
 				// Emit to listeners
-				this.emit(event);
+				this.#emit(event);
 			}
 
 			// Handle any remaining partial message
@@ -661,7 +659,7 @@ export class Agent {
 				if (!onlyEmpty) {
 					this.appendMessage(partial);
 				} else {
-					if (this.abortController?.signal.aborted) {
+					if (this.#abortController?.signal.aborted) {
 						throw new Error("Request was aborted");
 					}
 				}
@@ -681,33 +679,33 @@ export class Agent {
 					totalTokens: 0,
 					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 				},
-				stopReason: this.abortController?.signal.aborted ? "aborted" : "error",
+				stopReason: this.#abortController?.signal.aborted ? "aborted" : "error",
 				errorMessage: err?.message || String(err),
 				timestamp: Date.now(),
 			} as AgentMessage;
 
 			this.appendMessage(errorMsg);
-			this._state.error = err?.message || String(err);
-			this.emit({ type: "agent_end", messages: [errorMsg] });
+			this.#state.error = err?.message || String(err);
+			this.#emit({ type: "agent_end", messages: [errorMsg] });
 		} finally {
-			this._state.isStreaming = false;
-			this._state.streamMessage = null;
-			this._state.pendingToolCalls = new Set<string>();
-			this.abortController = undefined;
-			this.resolveRunningPrompt?.();
-			this.runningPrompt = undefined;
-			this.resolveRunningPrompt = undefined;
+			this.#state.isStreaming = false;
+			this.#state.streamMessage = null;
+			this.#state.pendingToolCalls = new Set<string>();
+			this.#abortController = undefined;
+			this.#resolveRunningPrompt?.();
+			this.#runningPrompt = undefined;
+			this.#resolveRunningPrompt = undefined;
 		}
 	}
 
-	private emit(e: AgentEvent) {
-		for (const listener of this.listeners) {
+	#emit(e: AgentEvent) {
+		for (const listener of this.#listeners) {
 			listener(e);
 		}
 	}
 
 	/** Calculate total text length from an assistant message's content blocks */
-	private _getAssistantTextLength(message: AgentMessage | null): number {
+	#getAssistantTextLength(message: AgentMessage | null): number {
 		if (!message || message.role !== "assistant" || !Array.isArray(message.content)) {
 			return 0;
 		}
@@ -726,15 +724,15 @@ export class Agent {
 	 *
 	 * Output order: Assistant(preamble) -> ToolResults -> Assistant(continuation)
 	 */
-	private _emitCursorSplitAssistantMessage(assistantMessage: AssistantMessage): void {
-		const buffer = this._cursorToolResultBuffer;
-		this._cursorToolResultBuffer = [];
+	#emitCursorSplitAssistantMessage(assistantMessage: AssistantMessage): void {
+		const buffer = this.#cursorToolResultBuffer;
+		this.#cursorToolResultBuffer = [];
 
 		if (buffer.length === 0) {
 			// No tool results, emit normally
-			this._state.streamMessage = null;
+			this.#state.streamMessage = null;
 			this.appendMessage(assistantMessage);
-			this.emit({ type: "message_end", message: assistantMessage });
+			this.#emit({ type: "message_end", message: assistantMessage });
 			return;
 		}
 
@@ -753,15 +751,15 @@ export class Agent {
 		// If no text or split point is 0 or at/past end, don't split
 		if (fullText.length === 0 || splitPoint <= 0 || splitPoint >= fullText.length) {
 			// Emit assistant message first, then tool results (original behavior but with buffered results)
-			this._state.streamMessage = null;
+			this.#state.streamMessage = null;
 			this.appendMessage(assistantMessage);
-			this.emit({ type: "message_end", message: assistantMessage });
+			this.#emit({ type: "message_end", message: assistantMessage });
 
 			// Emit buffered tool results
 			for (const { toolResult } of buffer) {
-				this.emit({ type: "message_start", message: toolResult });
+				this.#emit({ type: "message_start", message: toolResult });
 				this.appendMessage(toolResult);
-				this.emit({ type: "message_end", message: toolResult });
+				this.#emit({ type: "message_end", message: toolResult });
 			}
 			return;
 		}
@@ -783,15 +781,15 @@ export class Agent {
 		};
 
 		// Emit preamble
-		this._state.streamMessage = null;
+		this.#state.streamMessage = null;
 		this.appendMessage(preambleMessage);
-		this.emit({ type: "message_end", message: preambleMessage });
+		this.#emit({ type: "message_end", message: preambleMessage });
 
 		// Emit buffered tool results
 		for (const { toolResult } of buffer) {
-			this.emit({ type: "message_start", message: toolResult });
+			this.#emit({ type: "message_start", message: toolResult });
 			this.appendMessage(toolResult);
-			this.emit({ type: "message_end", message: toolResult });
+			this.#emit({ type: "message_end", message: toolResult });
 		}
 
 		// Emit continuation message (text after tools) if non-empty
@@ -812,9 +810,9 @@ export class Agent {
 					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 				},
 			};
-			this.emit({ type: "message_start", message: continuationMessage });
+			this.#emit({ type: "message_start", message: continuationMessage });
 			this.appendMessage(continuationMessage);
-			this.emit({ type: "message_end", message: continuationMessage });
+			this.#emit({ type: "message_end", message: continuationMessage });
 		}
 	}
 }

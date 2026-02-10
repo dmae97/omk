@@ -1,5 +1,6 @@
 import type {
 	AssistantMessageEvent,
+	AssistantMessageEventStream,
 	ImageContent,
 	Message,
 	Model,
@@ -14,7 +15,7 @@ import type { Static, TSchema } from "@sinclair/typebox";
 /** Stream function - can return sync or Promise for async config lookup */
 export type StreamFn = (
 	...args: Parameters<typeof streamSimple>
-) => ReturnType<typeof streamSimple> | Promise<ReturnType<typeof streamSimple>>;
+) => AssistantMessageEventStream | Promise<AssistantMessageEventStream>;
 
 /**
  * Configuration for the agent loop.

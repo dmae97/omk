@@ -10,9 +10,9 @@ import type { HookMessage } from "../../session/messages";
  * Uses distinct styling to differentiate from user messages.
  */
 export class HookMessageComponent extends Container {
-	private box: Box;
-	private customComponent?: Component;
-	private _expanded = false;
+	#box: Box;
+	#customComponent?: Component;
+	#expanded = false;
 
 	constructor(
 		private readonly message: HookMessage<unknown>,
@@ -23,38 +23,38 @@ export class HookMessageComponent extends Container {
 		this.addChild(new Spacer(1));
 
 		// Create box with purple background (used for default rendering)
-		this.box = new Box(1, 1, t => theme.bg("customMessageBg", t));
+		this.#box = new Box(1, 1, t => theme.bg("customMessageBg", t));
 
-		this.rebuild();
+		this.#rebuild();
 	}
 
 	setExpanded(expanded: boolean): void {
-		if (this._expanded !== expanded) {
-			this._expanded = expanded;
-			this.rebuild();
+		if (this.#expanded !== expanded) {
+			this.#expanded = expanded;
+			this.#rebuild();
 		}
 	}
 
 	override invalidate(): void {
 		super.invalidate();
-		this.rebuild();
+		this.#rebuild();
 	}
 
-	private rebuild(): void {
+	#rebuild(): void {
 		// Remove previous content component
-		if (this.customComponent) {
-			this.removeChild(this.customComponent);
-			this.customComponent = undefined;
+		if (this.#customComponent) {
+			this.removeChild(this.#customComponent);
+			this.#customComponent = undefined;
 		}
-		this.removeChild(this.box);
+		this.removeChild(this.#box);
 
 		// Try custom renderer first - it handles its own styling
 		if (this.customRenderer) {
 			try {
-				const component = this.customRenderer(this.message, { expanded: this._expanded }, theme);
+				const component = this.customRenderer(this.message, { expanded: this.#expanded }, theme);
 				if (component) {
 					// Custom renderer provides its own styled component
-					this.customComponent = component;
+					this.#customComponent = component;
 					this.addChild(component);
 					return;
 				}
@@ -64,13 +64,13 @@ export class HookMessageComponent extends Container {
 		}
 
 		// Default rendering uses our box
-		this.addChild(this.box);
-		this.box.clear();
+		this.addChild(this.#box);
+		this.#box.clear();
 
 		// Default rendering: label + content
 		const label = theme.fg("customMessageLabel", theme.bold(`[${this.message.customType}]`));
-		this.box.addChild(new Text(label, 0, 0));
-		this.box.addChild(new Spacer(1));
+		this.#box.addChild(new Text(label, 0, 0));
+		this.#box.addChild(new Spacer(1));
 
 		// Extract text content
 		let text: string;
@@ -84,14 +84,14 @@ export class HookMessageComponent extends Container {
 		}
 
 		// Limit lines when collapsed
-		if (!this._expanded) {
+		if (!this.#expanded) {
 			const lines = text.split("\n");
 			if (lines.length > 5) {
 				text = `${lines.slice(0, 5).join("\n")}\n…`;
 			}
 		}
 
-		this.box.addChild(
+		this.#box.addChild(
 			new Markdown(text, 0, 0, getMarkdownTheme(), {
 				color: (text: string) => theme.fg("customMessageText", text),
 			}),

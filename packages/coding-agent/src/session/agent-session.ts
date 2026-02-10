@@ -259,116 +259,116 @@ export class AgentSession {
 	readonly sessionManager: SessionManager;
 	readonly settings: Settings;
 
-	private _scopedModels: Array<{ model: Model; thinkingLevel: ThinkingLevel }>;
-	private _promptTemplates: PromptTemplate[];
-	private _slashCommands: FileSlashCommand[];
+	#scopedModels: Array<{ model: Model; thinkingLevel: ThinkingLevel }>;
+	#promptTemplates: PromptTemplate[];
+	#slashCommands: FileSlashCommand[];
 
 	// Event subscription state
-	private _unsubscribeAgent?: () => void;
-	private _eventListeners: AgentSessionEventListener[] = [];
+	#unsubscribeAgent?: () => void;
+	#eventListeners: AgentSessionEventListener[] = [];
 
 	/** Tracks pending steering messages for UI display. Removed when delivered. */
-	private _steeringMessages: string[] = [];
+	#steeringMessages: string[] = [];
 	/** Tracks pending follow-up messages for UI display. Removed when delivered. */
-	private _followUpMessages: string[] = [];
+	#followUpMessages: string[] = [];
 	/** Messages queued to be included with the next user prompt as context ("asides"). */
-	private _pendingNextTurnMessages: CustomMessage[] = [];
-	private _planModeState: PlanModeState | undefined;
-	private _planReferenceSent = false;
+	#pendingNextTurnMessages: CustomMessage[] = [];
+	#planModeState: PlanModeState | undefined;
+	#planReferenceSent = false;
 
 	// Compaction state
-	private _compactionAbortController: AbortController | undefined = undefined;
-	private _autoCompactionAbortController: AbortController | undefined = undefined;
+	#compactionAbortController: AbortController | undefined = undefined;
+	#autoCompactionAbortController: AbortController | undefined = undefined;
 
 	// Branch summarization state
-	private _branchSummaryAbortController: AbortController | undefined = undefined;
+	#branchSummaryAbortController: AbortController | undefined = undefined;
 
 	// Handoff state
-	private _handoffAbortController: AbortController | undefined = undefined;
+	#handoffAbortController: AbortController | undefined = undefined;
 
 	// Retry state
-	private _retryAbortController: AbortController | undefined = undefined;
-	private _retryAttempt = 0;
-	private _retryPromise: Promise<void> | undefined = undefined;
-	private _retryResolve: (() => void) | undefined = undefined;
+	#retryAbortController: AbortController | undefined = undefined;
+	#retryAttempt = 0;
+	#retryPromise: Promise<void> | undefined = undefined;
+	#retryResolve: (() => void) | undefined = undefined;
 
 	// Todo completion reminder state
-	private _todoReminderCount = 0;
+	#todoReminderCount = 0;
 
 	// Bash execution state
-	private _bashAbortController: AbortController | undefined = undefined;
-	private _pendingBashMessages: BashExecutionMessage[] = [];
+	#bashAbortController: AbortController | undefined = undefined;
+	#pendingBashMessages: BashExecutionMessage[] = [];
 
 	// Python execution state
-	private _pythonAbortController: AbortController | undefined = undefined;
-	private _pendingPythonMessages: PythonExecutionMessage[] = [];
+	#pythonAbortController: AbortController | undefined = undefined;
+	#pendingPythonMessages: PythonExecutionMessage[] = [];
 
 	// Extension system
-	private _extensionRunner: ExtensionRunner | undefined = undefined;
-	private _turnIndex = 0;
+	#extensionRunner: ExtensionRunner | undefined = undefined;
+	#turnIndex = 0;
 
-	private _skills: Skill[];
-	private _skillWarnings: SkillWarning[];
+	#skills: Skill[];
+	#skillWarnings: SkillWarning[];
 
 	// Custom commands (TypeScript slash commands)
-	private _customCommands: LoadedCustomCommand[] = [];
+	#customCommands: LoadedCustomCommand[] = [];
 
-	private _skillsSettings: Required<SkillsSettings> | undefined;
+	#skillsSettings: Required<SkillsSettings> | undefined;
 
 	// Model registry for API key resolution
-	private _modelRegistry: ModelRegistry;
+	#modelRegistry: ModelRegistry;
 
 	// Tool registry and prompt builder for extensions
-	private _toolRegistry: Map<string, AgentTool>;
-	private _rebuildSystemPrompt: ((toolNames: string[], tools: Map<string, AgentTool>) => Promise<string>) | undefined;
-	private _baseSystemPrompt: string;
+	#toolRegistry: Map<string, AgentTool>;
+	#rebuildSystemPrompt: ((toolNames: string[], tools: Map<string, AgentTool>) => Promise<string>) | undefined;
+	#baseSystemPrompt: string;
 
 	// TTSR manager for time-traveling stream rules
-	private _ttsrManager: TtsrManager | undefined = undefined;
-	private _pendingTtsrInjections: Rule[] = [];
-	private _ttsrAbortPending = false;
+	#ttsrManager: TtsrManager | undefined = undefined;
+	#pendingTtsrInjections: Rule[] = [];
+	#ttsrAbortPending = false;
 
-	private _streamingEditAbortTriggered = false;
-	private _streamingEditCheckedLineCounts = new Map<string, number>();
-	private _streamingEditFileCache = new Map<string, string>();
-	private _promptInFlight = false;
+	#streamingEditAbortTriggered = false;
+	#streamingEditCheckedLineCounts = new Map<string, number>();
+	#streamingEditFileCache = new Map<string, string>();
+	#promptInFlight = false;
 
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
 		this.sessionManager = config.sessionManager;
 		this.settings = config.settings;
-		this._scopedModels = config.scopedModels ?? [];
-		this._promptTemplates = config.promptTemplates ?? [];
-		this._slashCommands = config.slashCommands ?? [];
-		this._extensionRunner = config.extensionRunner;
-		this._skills = config.skills ?? [];
-		this._skillWarnings = config.skillWarnings ?? [];
-		this._customCommands = config.customCommands ?? [];
-		this._skillsSettings = config.skillsSettings;
-		this._modelRegistry = config.modelRegistry;
-		this._toolRegistry = config.toolRegistry ?? new Map();
-		this._rebuildSystemPrompt = config.rebuildSystemPrompt;
-		this._baseSystemPrompt = this.agent.state.systemPrompt;
-		this._ttsrManager = config.ttsrManager;
+		this.#scopedModels = config.scopedModels ?? [];
+		this.#promptTemplates = config.promptTemplates ?? [];
+		this.#slashCommands = config.slashCommands ?? [];
+		this.#extensionRunner = config.extensionRunner;
+		this.#skills = config.skills ?? [];
+		this.#skillWarnings = config.skillWarnings ?? [];
+		this.#customCommands = config.customCommands ?? [];
+		this.#skillsSettings = config.skillsSettings;
+		this.#modelRegistry = config.modelRegistry;
+		this.#toolRegistry = config.toolRegistry ?? new Map();
+		this.#rebuildSystemPrompt = config.rebuildSystemPrompt;
+		this.#baseSystemPrompt = this.agent.state.systemPrompt;
+		this.#ttsrManager = config.ttsrManager;
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, hooks, auto-compaction, retry logic)
-		this._unsubscribeAgent = this.agent.subscribe(this._handleAgentEvent);
+		this.#unsubscribeAgent = this.agent.subscribe(this.#handleAgentEvent);
 	}
 
 	/** Model registry for API key resolution and model discovery */
 	get modelRegistry(): ModelRegistry {
-		return this._modelRegistry;
+		return this.#modelRegistry;
 	}
 
 	/** TTSR manager for time-traveling stream rules */
 	get ttsrManager(): TtsrManager | undefined {
-		return this._ttsrManager;
+		return this.#ttsrManager;
 	}
 
 	/** Whether a TTSR abort is pending (stream was aborted to inject rules) */
 	get isTtsrAbortPending(): boolean {
-		return this._ttsrAbortPending;
+		return this.#ttsrAbortPending;
 	}
 
 	// =========================================================================
@@ -376,85 +376,85 @@ export class AgentSession {
 	// =========================================================================
 
 	/** Emit an event to all listeners */
-	private _emit(event: AgentSessionEvent): void {
+	#emit(event: AgentSessionEvent): void {
 		// Copy array before iteration to avoid mutation during iteration
-		const listeners = [...this._eventListeners];
+		const listeners = [...this.#eventListeners];
 		for (const l of listeners) {
 			l(event);
 		}
 	}
 
 	// Track last assistant message for auto-compaction check
-	private _lastAssistantMessage: AssistantMessage | undefined = undefined;
+	#lastAssistantMessage: AssistantMessage | undefined = undefined;
 
 	/** Internal handler for agent events - shared by subscribe and reconnect */
-	private _handleAgentEvent = async (event: AgentEvent): Promise<void> => {
+	#handleAgentEvent = async (event: AgentEvent): Promise<void> => {
 		// When a user message starts, check if it's from either queue and remove it BEFORE emitting
 		// This ensures the UI sees the updated queue state
 		if (event.type === "message_start" && event.message.role === "user") {
-			const messageText = this._getUserMessageText(event.message);
+			const messageText = this.#getUserMessageText(event.message);
 			if (messageText) {
 				// Check steering queue first
-				const steeringIndex = this._steeringMessages.indexOf(messageText);
+				const steeringIndex = this.#steeringMessages.indexOf(messageText);
 				if (steeringIndex !== -1) {
-					this._steeringMessages.splice(steeringIndex, 1);
+					this.#steeringMessages.splice(steeringIndex, 1);
 				} else {
 					// Check follow-up queue
-					const followUpIndex = this._followUpMessages.indexOf(messageText);
+					const followUpIndex = this.#followUpMessages.indexOf(messageText);
 					if (followUpIndex !== -1) {
-						this._followUpMessages.splice(followUpIndex, 1);
+						this.#followUpMessages.splice(followUpIndex, 1);
 					}
 				}
 			}
 		}
 
 		// Emit to extensions first
-		await this._emitExtensionEvent(event);
+		await this.#emitExtensionEvent(event);
 
 		// Notify all listeners
-		this._emit(event);
+		this.#emit(event);
 
 		if (event.type === "turn_start") {
-			this._resetStreamingEditState();
+			this.#resetStreamingEditState();
 			// TTSR: Reset buffer on turn start
-			this._ttsrManager?.resetBuffer();
+			this.#ttsrManager?.resetBuffer();
 		}
 
 		// TTSR: Increment message count on turn end (for repeat-after-gap tracking)
-		if (event.type === "turn_end" && this._ttsrManager) {
-			this._ttsrManager.incrementMessageCount();
+		if (event.type === "turn_end" && this.#ttsrManager) {
+			this.#ttsrManager.incrementMessageCount();
 		}
 
 		// TTSR: Check for pattern matches on text deltas and tool call argument deltas
-		if (event.type === "message_update" && this._ttsrManager?.hasRules()) {
+		if (event.type === "message_update" && this.#ttsrManager?.hasRules()) {
 			const assistantEvent = event.assistantMessageEvent;
 			// Monitor both assistant prose (text_delta) and tool call arguments (toolcall_delta)
 			if (assistantEvent.type === "text_delta" || assistantEvent.type === "toolcall_delta") {
-				this._ttsrManager.appendToBuffer(assistantEvent.delta);
-				const matches = this._ttsrManager.check(this._ttsrManager.getBuffer());
+				this.#ttsrManager.appendToBuffer(assistantEvent.delta);
+				const matches = this.#ttsrManager.check(this.#ttsrManager.getBuffer());
 				if (matches.length > 0) {
 					// Mark rules as injected so they don't trigger again
-					this._ttsrManager.markInjected(matches);
+					this.#ttsrManager.markInjected(matches);
 					// Store for injection on retry
-					this._pendingTtsrInjections.push(...matches);
+					this.#pendingTtsrInjections.push(...matches);
 					// Emit TTSR event before aborting (so UI can handle it)
-					this._ttsrAbortPending = true;
-					this._emit({ type: "ttsr_triggered", rules: matches });
+					this.#ttsrAbortPending = true;
+					this.#emit({ type: "ttsr_triggered", rules: matches });
 					// Abort the stream
 					this.agent.abort();
 					// Schedule retry after a short delay
 					setTimeout(async () => {
-						this._ttsrAbortPending = false;
+						this.#ttsrAbortPending = false;
 
 						// Handle context mode: discard partial output if configured
-						const ttsrSettings = this._ttsrManager?.getSettings();
+						const ttsrSettings = this.#ttsrManager?.getSettings();
 						if (ttsrSettings?.contextMode === "discard") {
 							// Remove the partial/aborted message from agent state
 							this.agent.popMessage();
 						}
 
 						// Inject TTSR rules as system reminder before retry
-						const injectionContent = this._getTtsrInjectionContent();
+						const injectionContent = this.#getTtsrInjectionContent();
 						if (injectionContent) {
 							this.agent.appendMessage({
 								role: "user",
@@ -470,14 +470,14 @@ export class AgentSession {
 		}
 
 		if (event.type === "message_update" && event.assistantMessageEvent.type === "toolcall_start") {
-			this._preCacheStreamingEditFile(event);
+			this.#preCacheStreamingEditFile(event);
 		}
 
 		if (
 			event.type === "message_update" &&
 			(event.assistantMessageEvent.type === "toolcall_end" || event.assistantMessageEvent.type === "toolcall_delta")
 		) {
-			this._maybeAbortStreamingEdit(event);
+			this.#maybeAbortStreamingEdit(event);
 		}
 
 		// Handle session persistence
@@ -504,19 +504,19 @@ export class AgentSession {
 
 			// Track assistant message for auto-compaction (checked on agent_end)
 			if (event.message.role === "assistant") {
-				this._lastAssistantMessage = event.message;
+				this.#lastAssistantMessage = event.message;
 
 				// Reset retry counter immediately on successful assistant response
 				// This prevents accumulation across multiple LLM calls within a turn
 				const assistantMsg = event.message as AssistantMessage;
-				if (assistantMsg.stopReason !== "error" && this._retryAttempt > 0) {
-					this._emit({
+				if (assistantMsg.stopReason !== "error" && this.#retryAttempt > 0) {
+					this.#emit({
 						type: "auto_retry_end",
 						success: true,
-						attempt: this._retryAttempt,
+						attempt: this.#retryAttempt,
 					});
-					this._retryAttempt = 0;
-					this._resolveRetry();
+					this.#retryAttempt = 0;
+					this.#resolveRetry();
 				}
 			}
 
@@ -528,56 +528,56 @@ export class AgentSession {
 					$normative?: Record<string, unknown>;
 				};
 				if ($normative && toolCallId && this.settings.get("normativeRewrite")) {
-					await this._rewriteToolCallArgs(toolCallId, $normative);
+					await this.#rewriteToolCallArgs(toolCallId, $normative);
 				}
 				// Invalidate streaming edit cache when edit tool completes to prevent stale data
 				if (toolName === "edit" && details?.path) {
-					this._invalidateFileCacheForPath(details.path);
+					this.#invalidateFileCacheForPath(details.path);
 				}
 			}
 		}
 
 		// Check auto-retry and auto-compaction after agent completes
-		if (event.type === "agent_end" && this._lastAssistantMessage) {
-			const msg = this._lastAssistantMessage;
-			this._lastAssistantMessage = undefined;
+		if (event.type === "agent_end" && this.#lastAssistantMessage) {
+			const msg = this.#lastAssistantMessage;
+			this.#lastAssistantMessage = undefined;
 
 			// Check for retryable errors first (overloaded, rate limit, server errors)
-			if (this._isRetryableError(msg)) {
-				const didRetry = await this._handleRetryableError(msg);
+			if (this.#isRetryableError(msg)) {
+				const didRetry = await this.#handleRetryableError(msg);
 				if (didRetry) return; // Retry was initiated, don't proceed to compaction
 			}
 
-			await this._checkCompaction(msg);
+			await this.#checkCompaction(msg);
 
 			// Check for incomplete todos (unless there was an error or abort)
 			if (msg.stopReason !== "error" && msg.stopReason !== "aborted") {
-				await this._checkTodoCompletion();
+				await this.#checkTodoCompletion();
 			}
 		}
 	};
 
 	/** Resolve the pending retry promise */
-	private _resolveRetry(): void {
-		if (this._retryResolve) {
-			this._retryResolve();
-			this._retryResolve = undefined;
-			this._retryPromise = undefined;
+	#resolveRetry(): void {
+		if (this.#retryResolve) {
+			this.#retryResolve();
+			this.#retryResolve = undefined;
+			this.#retryPromise = undefined;
 		}
 	}
 
 	/** Get TTSR injection content and clear pending injections */
-	private _getTtsrInjectionContent(): string | undefined {
-		if (this._pendingTtsrInjections.length === 0) return undefined;
-		const content = this._pendingTtsrInjections
+	#getTtsrInjectionContent(): string | undefined {
+		if (this.#pendingTtsrInjections.length === 0) return undefined;
+		const content = this.#pendingTtsrInjections
 			.map(r => renderPromptTemplate(ttsrInterruptTemplate, { name: r.name, path: r.path, content: r.content }))
 			.join("\n\n");
-		this._pendingTtsrInjections = [];
+		this.#pendingTtsrInjections = [];
 		return content;
 	}
 
 	/** Extract text content from a message */
-	private _getUserMessageText(message: Message): string {
+	#getUserMessageText(message: Message): string {
 		if (message.role !== "user") return "";
 		const content = message.content;
 		if (typeof content === "string") return content;
@@ -589,7 +589,7 @@ export class AgentSession {
 	}
 
 	/** Find the last assistant message in agent state (including aborted ones) */
-	private _findLastAssistantMessage(): AssistantMessage | undefined {
+	#findLastAssistantMessage(): AssistantMessage | undefined {
 		const messages = this.agent.state.messages;
 		for (let i = messages.length - 1; i >= 0; i--) {
 			const msg = messages[i];
@@ -600,13 +600,13 @@ export class AgentSession {
 		return undefined;
 	}
 
-	private _resetStreamingEditState(): void {
-		this._streamingEditAbortTriggered = false;
-		this._streamingEditCheckedLineCounts.clear();
-		this._streamingEditFileCache.clear();
+	#resetStreamingEditState(): void {
+		this.#streamingEditAbortTriggered = false;
+		this.#streamingEditCheckedLineCounts.clear();
+		this.#streamingEditFileCache.clear();
 	}
 
-	private async _preCacheStreamingEditFile(event: AgentEvent): Promise<void> {
+	async #preCacheStreamingEditFile(event: AgentEvent): Promise<void> {
 		if (!this.settings.get("edit.streamingAbort")) return;
 		if (event.type !== "message_update") return;
 		const assistantEvent = event.assistantMessageEvent;
@@ -627,30 +627,30 @@ export class AgentSession {
 		if (!path) return;
 
 		const resolvedPath = resolveToCwd(path, this.sessionManager.getCwd());
-		this._ensureFileCache(resolvedPath);
+		this.#ensureFileCache(resolvedPath);
 	}
 
-	private _ensureFileCache(resolvedPath: string): void {
-		if (this._streamingEditFileCache.has(resolvedPath)) return;
+	#ensureFileCache(resolvedPath: string): void {
+		if (this.#streamingEditFileCache.has(resolvedPath)) return;
 
 		try {
 			const rawText = fs.readFileSync(resolvedPath, "utf-8");
 			const { text } = stripBom(rawText);
-			this._streamingEditFileCache.set(resolvedPath, normalizeToLF(text));
+			this.#streamingEditFileCache.set(resolvedPath, normalizeToLF(text));
 		} catch {
 			// Don't cache on read errors (including ENOENT) - let the edit tool handle them
 		}
 	}
 
 	/** Invalidate cache for a file after an edit completes to prevent stale data */
-	private _invalidateFileCacheForPath(path: string): void {
+	#invalidateFileCacheForPath(path: string): void {
 		const resolvedPath = resolveToCwd(path, this.sessionManager.getCwd());
-		this._streamingEditFileCache.delete(resolvedPath);
+		this.#streamingEditFileCache.delete(resolvedPath);
 	}
 
-	private _maybeAbortStreamingEdit(event: AgentEvent): void {
+	#maybeAbortStreamingEdit(event: AgentEvent): void {
 		if (!this.settings.get("edit.streamingAbort")) return;
-		if (this._streamingEditAbortTriggered) return;
+		if (this.#streamingEditAbortTriggered) return;
 		if (event.type !== "message_update") return;
 		const assistantEvent = event.assistantMessageEvent;
 		if (assistantEvent.type !== "toolcall_end" && assistantEvent.type !== "toolcall_delta") return;
@@ -685,9 +685,9 @@ export class AgentSession {
 		if (!hasChangeLine) return;
 
 		const lineCount = lines.length;
-		const lastChecked = this._streamingEditCheckedLineCounts.get(toolCall.id);
+		const lastChecked = this.#streamingEditCheckedLineCounts.get(toolCall.id);
 		if (lastChecked !== undefined && lineCount <= lastChecked) return;
-		this._streamingEditCheckedLineCounts.set(toolCall.id, lineCount);
+		this.#streamingEditCheckedLineCounts.set(toolCall.id, lineCount);
 
 		const rename = typeof args.rename === "string" ? args.rename : undefined;
 
@@ -696,15 +696,15 @@ export class AgentSession {
 			.map(line => line.slice(1));
 		if (removedLines.length > 0) {
 			const resolvedPath = resolveToCwd(path, this.sessionManager.getCwd());
-			let cachedContent = this._streamingEditFileCache.get(resolvedPath);
+			let cachedContent = this.#streamingEditFileCache.get(resolvedPath);
 			if (cachedContent === undefined) {
-				this._ensureFileCache(resolvedPath);
-				cachedContent = this._streamingEditFileCache.get(resolvedPath);
+				this.#ensureFileCache(resolvedPath);
+				cachedContent = this.#streamingEditFileCache.get(resolvedPath);
 			}
 			if (cachedContent !== undefined) {
 				const missing = removedLines.find(line => !cachedContent.includes(normalizeToLF(line)));
 				if (missing) {
-					this._streamingEditAbortTriggered = true;
+					this.#streamingEditAbortTriggered = true;
 					logger.warn("Streaming edit aborted due to patch preview failure", {
 						toolCallId: toolCall.id,
 						path,
@@ -715,27 +715,27 @@ export class AgentSession {
 				return;
 			}
 			if (assistantEvent.type === "toolcall_delta") return;
-			void this._checkRemovedLinesAsync(toolCall.id, path, resolvedPath, removedLines);
+			void this.#checkRemovedLinesAsync(toolCall.id, path, resolvedPath, removedLines);
 			return;
 		}
 
 		if (assistantEvent.type === "toolcall_delta") return;
-		void this._checkPreviewPatchAsync(toolCall.id, path, rename, normalizedDiff);
+		void this.#checkPreviewPatchAsync(toolCall.id, path, rename, normalizedDiff);
 	}
 
-	private async _checkRemovedLinesAsync(
+	async #checkRemovedLinesAsync(
 		toolCallId: string,
 		path: string,
 		resolvedPath: string,
 		removedLines: string[],
 	): Promise<void> {
-		if (this._streamingEditAbortTriggered) return;
+		if (this.#streamingEditAbortTriggered) return;
 		try {
 			const { text } = stripBom(await Bun.file(resolvedPath).text());
 			const normalizedContent = normalizeToLF(text);
 			const missing = removedLines.find(line => !normalizedContent.includes(normalizeToLF(line)));
 			if (missing) {
-				this._streamingEditAbortTriggered = true;
+				this.#streamingEditAbortTriggered = true;
 				logger.warn("Streaming edit aborted due to patch preview failure", {
 					toolCallId,
 					path,
@@ -752,13 +752,13 @@ export class AgentSession {
 		}
 	}
 
-	private async _checkPreviewPatchAsync(
+	async #checkPreviewPatchAsync(
 		toolCallId: string,
 		path: string,
 		rename: string | undefined,
 		normalizedDiff: string,
 	): Promise<void> {
-		if (this._streamingEditAbortTriggered) return;
+		if (this.#streamingEditAbortTriggered) return;
 		try {
 			await previewPatch(
 				{ path, op: "update", rename, diff: normalizedDiff },
@@ -770,7 +770,7 @@ export class AgentSession {
 			);
 		} catch (error) {
 			if (error instanceof ParseError) return;
-			this._streamingEditAbortTriggered = true;
+			this.#streamingEditAbortTriggered = true;
 			logger.warn("Streaming edit aborted due to patch preview failure", {
 				toolCallId,
 				path,
@@ -781,7 +781,7 @@ export class AgentSession {
 	}
 
 	/** Rewrite tool call arguments in agent state and persisted session history. */
-	private async _rewriteToolCallArgs(toolCallId: string, args: Record<string, unknown>): Promise<void> {
+	async #rewriteToolCallArgs(toolCallId: string, args: Record<string, unknown>): Promise<void> {
 		let updated = false;
 		const messages = this.agent.state.messages;
 		for (let i = messages.length - 1; i >= 0; i--) {
@@ -808,30 +808,30 @@ export class AgentSession {
 	}
 
 	/** Emit extension events based on agent events */
-	private async _emitExtensionEvent(event: AgentEvent): Promise<void> {
-		if (!this._extensionRunner) return;
+	async #emitExtensionEvent(event: AgentEvent): Promise<void> {
+		if (!this.#extensionRunner) return;
 
 		if (event.type === "agent_start") {
-			this._turnIndex = 0;
-			await this._extensionRunner.emit({ type: "agent_start" });
+			this.#turnIndex = 0;
+			await this.#extensionRunner.emit({ type: "agent_start" });
 		} else if (event.type === "agent_end") {
-			await this._extensionRunner.emit({ type: "agent_end", messages: event.messages });
+			await this.#extensionRunner.emit({ type: "agent_end", messages: event.messages });
 		} else if (event.type === "turn_start") {
 			const hookEvent: TurnStartEvent = {
 				type: "turn_start",
-				turnIndex: this._turnIndex,
+				turnIndex: this.#turnIndex,
 				timestamp: Date.now(),
 			};
-			await this._extensionRunner.emit(hookEvent);
+			await this.#extensionRunner.emit(hookEvent);
 		} else if (event.type === "turn_end") {
 			const hookEvent: TurnEndEvent = {
 				type: "turn_end",
-				turnIndex: this._turnIndex,
+				turnIndex: this.#turnIndex,
 				message: event.message,
 				toolResults: event.toolResults,
 			};
-			await this._extensionRunner.emit(hookEvent);
-			this._turnIndex++;
+			await this.#extensionRunner.emit(hookEvent);
+			this.#turnIndex++;
 		}
 	}
 
@@ -841,13 +841,13 @@ export class AgentSession {
 	 * Multiple listeners can be added. Returns unsubscribe function for this listener.
 	 */
 	subscribe(listener: AgentSessionEventListener): () => void {
-		this._eventListeners.push(listener);
+		this.#eventListeners.push(listener);
 
 		// Return unsubscribe function for this specific listener
 		return () => {
-			const index = this._eventListeners.indexOf(listener);
+			const index = this.#eventListeners.indexOf(listener);
 			if (index !== -1) {
-				this._eventListeners.splice(index, 1);
+				this.#eventListeners.splice(index, 1);
 			}
 		};
 	}
@@ -857,10 +857,10 @@ export class AgentSession {
 	 * User listeners are preserved and will receive events again after resubscribe().
 	 * Used internally during operations that need to pause event processing.
 	 */
-	private _disconnectFromAgent(): void {
-		if (this._unsubscribeAgent) {
-			this._unsubscribeAgent();
-			this._unsubscribeAgent = undefined;
+	#disconnectFromAgent(): void {
+		if (this.#unsubscribeAgent) {
+			this.#unsubscribeAgent();
+			this.#unsubscribeAgent = undefined;
 		}
 	}
 
@@ -868,9 +868,9 @@ export class AgentSession {
 	 * Reconnect to agent events after _disconnectFromAgent().
 	 * Preserves all existing listeners.
 	 */
-	private _reconnectToAgent(): void {
-		if (this._unsubscribeAgent) return; // Already connected
-		this._unsubscribeAgent = this.agent.subscribe(this._handleAgentEvent);
+	#reconnectToAgent(): void {
+		if (this.#unsubscribeAgent) return; // Already connected
+		this.#unsubscribeAgent = this.agent.subscribe(this.#handleAgentEvent);
 	}
 
 	/**
@@ -880,8 +880,8 @@ export class AgentSession {
 	async dispose(): Promise<void> {
 		await this.sessionManager.flush();
 		await cleanupSshResources();
-		this._disconnectFromAgent();
-		this._eventListeners = [];
+		this.#disconnectFromAgent();
+		this.#eventListeners = [];
 	}
 
 	// =========================================================================
@@ -905,7 +905,7 @@ export class AgentSession {
 
 	/** Whether agent is currently streaming a response */
 	get isStreaming(): boolean {
-		return this.agent.state.isStreaming || this._promptInFlight;
+		return this.agent.state.isStreaming || this.#promptInFlight;
 	}
 
 	/** Current effective system prompt (includes any per-turn extension modifications) */
@@ -915,7 +915,7 @@ export class AgentSession {
 
 	/** Current retry attempt (0 if not retrying) */
 	get retryAttempt(): number {
-		return this._retryAttempt;
+		return this.#retryAttempt;
 	}
 
 	/**
@@ -930,14 +930,14 @@ export class AgentSession {
 	 * Get a tool by name from the registry.
 	 */
 	getToolByName(name: string): AgentTool | undefined {
-		return this._toolRegistry.get(name);
+		return this.#toolRegistry.get(name);
 	}
 
 	/**
 	 * Get all configured tool names (built-in via --tools or default, plus custom tools).
 	 */
 	getAllToolNames(): string[] {
-		return Array.from(this._toolRegistry.keys());
+		return Array.from(this.#toolRegistry.keys());
 	}
 
 	/**
@@ -950,7 +950,7 @@ export class AgentSession {
 		const tools: AgentTool[] = [];
 		const validToolNames: string[] = [];
 		for (const name of toolNames) {
-			const tool = this._toolRegistry.get(name);
+			const tool = this.#toolRegistry.get(name);
 			if (tool) {
 				tools.push(tool);
 				validToolNames.push(name);
@@ -959,15 +959,15 @@ export class AgentSession {
 		this.agent.setTools(tools);
 
 		// Rebuild base system prompt with new tool set
-		if (this._rebuildSystemPrompt) {
-			this._baseSystemPrompt = await this._rebuildSystemPrompt(validToolNames, this._toolRegistry);
-			this.agent.setSystemPrompt(this._baseSystemPrompt);
+		if (this.#rebuildSystemPrompt) {
+			this.#baseSystemPrompt = await this.#rebuildSystemPrompt(validToolNames, this.#toolRegistry);
+			this.agent.setSystemPrompt(this.#baseSystemPrompt);
 		}
 	}
 
 	/** Whether auto-compaction is currently running */
 	get isCompacting(): boolean {
-		return this._autoCompactionAbortController !== undefined || this._compactionAbortController !== undefined;
+		return this.#autoCompactionAbortController !== undefined || this.#compactionAbortController !== undefined;
 	}
 
 	/** All messages including custom types like BashExecutionMessage */
@@ -1007,30 +1007,30 @@ export class AgentSession {
 
 	/** Scoped models for cycling (from --models flag) */
 	get scopedModels(): ReadonlyArray<{ model: Model; thinkingLevel: ThinkingLevel }> {
-		return this._scopedModels;
+		return this.#scopedModels;
 	}
 
 	/** Prompt templates */
 	getPlanModeState(): PlanModeState | undefined {
-		return this._planModeState;
+		return this.#planModeState;
 	}
 
 	setPlanModeState(state: PlanModeState | undefined): void {
-		this._planModeState = state;
+		this.#planModeState = state;
 		if (state?.enabled) {
-			this._planReferenceSent = false;
+			this.#planReferenceSent = false;
 		}
 	}
 
 	markPlanReferenceSent(): void {
-		this._planReferenceSent = true;
+		this.#planReferenceSent = true;
 	}
 
 	/**
 	 * Inject the plan mode context message into the conversation history.
 	 */
 	async sendPlanModeContext(options?: { deliverAs?: "steer" | "followUp" | "nextTurn" }): Promise<void> {
-		const message = await this._buildPlanModeMessage();
+		const message = await this.#buildPlanModeMessage();
 		if (!message) return;
 		await this.sendCustomMessage(
 			{
@@ -1044,16 +1044,16 @@ export class AgentSession {
 	}
 
 	resolveRoleModel(role: ModelRole): Model | undefined {
-		return this._resolveRoleModel(role, this._modelRegistry.getAvailable(), this.model);
+		return this.#resolveRoleModel(role, this.#modelRegistry.getAvailable(), this.model);
 	}
 
 	get promptTemplates(): ReadonlyArray<PromptTemplate> {
-		return this._promptTemplates;
+		return this.#promptTemplates;
 	}
 
 	/** Custom commands (TypeScript slash commands) */
 	get customCommands(): ReadonlyArray<LoadedCustomCommand> {
-		return this._customCommands;
+		return this.#customCommands;
 	}
 
 	// =========================================================================
@@ -1065,9 +1065,9 @@ export class AgentSession {
 	 * Returns null if plan mode is not enabled.
 	 * @returns The plan mode message, or null if plan mode is not enabled.
 	 */
-	private async _buildPlanReferenceMessage(): Promise<CustomMessage | null> {
-		if (this._planModeState?.enabled) return null;
-		if (this._planReferenceSent) return null;
+	async #buildPlanReferenceMessage(): Promise<CustomMessage | null> {
+		if (this.#planModeState?.enabled) return null;
+		if (this.#planReferenceSent) return null;
 
 		const planFilePath = `plan://${this.sessionManager.getSessionId()}/plan.md`;
 		const resolvedPlanPath = resolvePlanUrlToPath(planFilePath, {
@@ -1076,7 +1076,7 @@ export class AgentSession {
 		});
 		let planContent: string;
 		try {
-			planContent = await fs.promises.readFile(resolvedPlanPath, "utf-8");
+			planContent = await Bun.file(resolvedPlanPath).text();
 		} catch (error) {
 			if (isEnoent(error)) {
 				return null;
@@ -1089,7 +1089,7 @@ export class AgentSession {
 			planContent,
 		});
 
-		this._planReferenceSent = true;
+		this.#planReferenceSent = true;
 
 		return {
 			role: "custom",
@@ -1100,8 +1100,8 @@ export class AgentSession {
 		};
 	}
 
-	private async _buildPlanModeMessage(): Promise<CustomMessage | null> {
-		const state = this._planModeState;
+	async #buildPlanModeMessage(): Promise<CustomMessage | null> {
+		const state = this.#planModeState;
 		if (!state?.enabled) return null;
 		const sessionPlanUrl = `plan://${this.sessionManager.getSessionId()}/plan.md`;
 		const resolvedPlanPath = state.planFilePath.startsWith("plan://")
@@ -1119,16 +1119,7 @@ export class AgentSession {
 				? state.planFilePath
 				: sessionPlanUrl;
 
-		let planExists = false;
-		try {
-			const stat = await fs.promises.stat(resolvedPlanPath);
-			planExists = stat.isFile();
-		} catch (error) {
-			if (!isEnoent(error)) {
-				throw error;
-			}
-		}
-
+		const planExists = fs.existsSync(resolvedPlanPath);
 		const content = renderPromptTemplate(planModeActivePrompt, {
 			planFilePath: displayPlanPath,
 			planExists,
@@ -1163,13 +1154,13 @@ export class AgentSession {
 
 		// Handle extension commands first (execute immediately, even during streaming)
 		if (expandPromptTemplates && text.startsWith("/")) {
-			const handled = await this._tryExecuteExtensionCommand(text);
+			const handled = await this.#tryExecuteExtensionCommand(text);
 			if (handled) {
 				return;
 			}
 
 			// Try custom commands (TypeScript slash commands)
-			const customResult = await this._tryExecuteCustomCommand(text);
+			const customResult = await this.#tryExecuteCustomCommand(text);
 			if (customResult !== null) {
 				if (customResult === "") {
 					return;
@@ -1180,12 +1171,12 @@ export class AgentSession {
 			// Try file-based slash commands (markdown files from commands/ directories)
 			// Only if text still starts with "/" (wasn't transformed by custom command)
 			if (text.startsWith("/")) {
-				text = expandSlashCommand(text, this._slashCommands);
+				text = expandSlashCommand(text, this.#slashCommands);
 			}
 		}
 
 		// Expand file-based prompt templates if requested
-		const expandedText = expandPromptTemplates ? expandPromptTemplate(text, [...this._promptTemplates]) : text;
+		const expandedText = expandPromptTemplates ? expandPromptTemplate(text, [...this.#promptTemplates]) : text;
 
 		// If streaming, queue via steer() or followUp() based on option
 		if (this.isStreaming) {
@@ -1195,9 +1186,9 @@ export class AgentSession {
 				);
 			}
 			if (options.streamingBehavior === "followUp") {
-				await this._queueFollowUp(expandedText, options?.images);
+				await this.#queueFollowUp(expandedText, options?.images);
 			} else {
-				await this._queueSteer(expandedText, options?.images);
+				await this.#queueSteer(expandedText, options?.images);
 			}
 			return;
 		}
@@ -1207,7 +1198,7 @@ export class AgentSession {
 			userContent.push(...options.images);
 		}
 
-		await this._promptWithMessage(
+		await this.#promptWithMessage(
 			{
 				role: "user",
 				content: userContent,
@@ -1250,22 +1241,22 @@ export class AgentSession {
 			timestamp: Date.now(),
 		};
 
-		await this._promptWithMessage(customMessage, textContent, options);
+		await this.#promptWithMessage(customMessage, textContent, options);
 	}
 
-	private async _promptWithMessage(
+	async #promptWithMessage(
 		message: AgentMessage,
 		expandedText: string,
 		options?: Pick<PromptOptions, "toolChoice" | "images">,
 	): Promise<void> {
-		this._promptInFlight = true;
+		this.#promptInFlight = true;
 		try {
 			// Flush any pending bash messages before the new prompt
-			this._flushPendingBashMessages();
-			this._flushPendingPythonMessages();
+			this.#flushPendingBashMessages();
+			this.#flushPendingPythonMessages();
 
 			// Reset todo reminder count on new user prompt
-			this._todoReminderCount = 0;
+			this.#todoReminderCount = 0;
 
 			// Validate model
 			if (!this.model) {
@@ -1277,7 +1268,7 @@ export class AgentSession {
 			}
 
 			// Validate API key
-			const apiKey = await this._modelRegistry.getApiKey(this.model, this.sessionId);
+			const apiKey = await this.#modelRegistry.getApiKey(this.model, this.sessionId);
 			if (!apiKey) {
 				throw new Error(
 					`No API key found for ${this.model.provider}.\n\n` +
@@ -1286,18 +1277,18 @@ export class AgentSession {
 			}
 
 			// Check if we need to compact before sending (catches aborted responses)
-			const lastAssistant = this._findLastAssistantMessage();
+			const lastAssistant = this.#findLastAssistantMessage();
 			if (lastAssistant) {
-				await this._checkCompaction(lastAssistant, false);
+				await this.#checkCompaction(lastAssistant, false);
 			}
 
 			// Build messages array (custom messages if any, then user message)
 			const messages: AgentMessage[] = [];
-			const planReferenceMessage = await this._buildPlanReferenceMessage?.();
+			const planReferenceMessage = await this.#buildPlanReferenceMessage?.();
 			if (planReferenceMessage) {
 				messages.push(planReferenceMessage);
 			}
-			const planModeMessage = await this._buildPlanModeMessage();
+			const planModeMessage = await this.#buildPlanModeMessage();
 			if (planModeMessage) {
 				messages.push(planModeMessage);
 			}
@@ -1305,10 +1296,10 @@ export class AgentSession {
 			messages.push(message);
 
 			// Inject any pending "nextTurn" messages as context alongside the user message
-			for (const msg of this._pendingNextTurnMessages) {
+			for (const msg of this.#pendingNextTurnMessages) {
 				messages.push(msg);
 			}
-			this._pendingNextTurnMessages = [];
+			this.#pendingNextTurnMessages = [];
 
 			// Auto-read @filepath mentions
 			const fileMentions = extractFileMentions(expandedText);
@@ -1320,11 +1311,11 @@ export class AgentSession {
 			}
 
 			// Emit before_agent_start extension event
-			if (this._extensionRunner) {
-				const result = await this._extensionRunner.emitBeforeAgentStart(
+			if (this.#extensionRunner) {
+				const result = await this.#extensionRunner.emitBeforeAgentStart(
 					expandedText,
 					options?.images,
-					this._baseSystemPrompt,
+					this.#baseSystemPrompt,
 				);
 				if (result?.messages) {
 					for (const msg of result.messages) {
@@ -1342,41 +1333,41 @@ export class AgentSession {
 				if (result?.systemPrompt !== undefined) {
 					this.agent.setSystemPrompt(result.systemPrompt);
 				} else {
-					this.agent.setSystemPrompt(this._baseSystemPrompt);
+					this.agent.setSystemPrompt(this.#baseSystemPrompt);
 				}
 			}
 
 			const agentPromptOptions = options?.toolChoice ? { toolChoice: options.toolChoice } : undefined;
 			await this.agent.prompt(messages, agentPromptOptions);
-			await this.waitForRetry();
+			await this.#waitForRetry();
 		} finally {
-			this._promptInFlight = false;
+			this.#promptInFlight = false;
 		}
 	}
 
 	/**
 	 * Try to execute an extension command. Returns true if command was found and executed.
 	 */
-	private async _tryExecuteExtensionCommand(text: string): Promise<boolean> {
-		if (!this._extensionRunner) return false;
+	async #tryExecuteExtensionCommand(text: string): Promise<boolean> {
+		if (!this.#extensionRunner) return false;
 
 		// Parse command name and args
 		const spaceIndex = text.indexOf(" ");
 		const commandName = spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex);
 		const args = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1);
 
-		const command = this._extensionRunner.getCommand(commandName);
+		const command = this.#extensionRunner.getCommand(commandName);
 		if (!command) return false;
 
 		// Get command context from extension runner (includes session control methods)
-		const ctx = this._extensionRunner.createCommandContext();
+		const ctx = this.#extensionRunner.createCommandContext();
 
 		try {
 			await command.handler(args, ctx);
 			return true;
 		} catch (err) {
 			// Emit error via extension runner
-			this._extensionRunner.emitError({
+			this.#extensionRunner.emitError({
 				extensionPath: `command:${commandName}`,
 				event: "command",
 				error: err instanceof Error ? err.message : String(err),
@@ -1385,9 +1376,9 @@ export class AgentSession {
 		}
 	}
 
-	private _createCommandContext(): ExtensionCommandContext {
-		if (this._extensionRunner) {
-			return this._extensionRunner.createCommandContext();
+	#createCommandContext(): ExtensionCommandContext {
+		if (this.#extensionRunner) {
+			return this.#extensionRunner.createCommandContext();
 		}
 
 		return {
@@ -1395,7 +1386,7 @@ export class AgentSession {
 			hasUI: false,
 			cwd: this.sessionManager.getCwd(),
 			sessionManager: this.sessionManager,
-			modelRegistry: this._modelRegistry,
+			modelRegistry: this.#modelRegistry,
 			model: this.model ?? undefined,
 			isIdle: () => !this.isStreaming,
 			abort: () => {
@@ -1448,8 +1439,8 @@ export class AgentSession {
 	 * Try to execute a custom command. Returns the prompt string if found, null otherwise.
 	 * If the command returns void, returns empty string to indicate it was handled.
 	 */
-	private async _tryExecuteCustomCommand(text: string): Promise<string | null> {
-		if (this._customCommands.length === 0) return null;
+	async #tryExecuteCustomCommand(text: string): Promise<string | null> {
+		if (this.#customCommands.length === 0) return null;
 
 		// Parse command name and args
 		const spaceIndex = text.indexOf(" ");
@@ -1457,11 +1448,11 @@ export class AgentSession {
 		const argsString = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1);
 
 		// Find matching command
-		const loaded = this._customCommands.find(c => c.command.name === commandName);
+		const loaded = this.#customCommands.find(c => c.command.name === commandName);
 		if (!loaded) return null;
 
 		// Get command context from extension runner (includes session control methods)
-		const baseCtx = this._createCommandContext();
+		const baseCtx = this.#createCommandContext();
 		const ctx = {
 			...baseCtx,
 			hasQueuedMessages: baseCtx.hasPendingMessages,
@@ -1475,8 +1466,8 @@ export class AgentSession {
 			return result ?? "";
 		} catch (err) {
 			// Emit error via extension runner
-			if (this._extensionRunner) {
-				this._extensionRunner.emitError({
+			if (this.#extensionRunner) {
+				this.#extensionRunner.emitError({
 					extensionPath: `custom-command:${commandName}`,
 					event: "command",
 					error: err instanceof Error ? err.message : String(err),
@@ -1494,11 +1485,11 @@ export class AgentSession {
 	 */
 	async steer(text: string, images?: ImageContent[]): Promise<void> {
 		if (text.startsWith("/")) {
-			this._throwIfExtensionCommand(text);
+			this.#throwIfExtensionCommand(text);
 		}
 
-		const expandedText = expandPromptTemplate(text, [...this._promptTemplates]);
-		await this._queueSteer(expandedText, images);
+		const expandedText = expandPromptTemplate(text, [...this.#promptTemplates]);
+		await this.#queueSteer(expandedText, images);
 	}
 
 	/**
@@ -1506,19 +1497,19 @@ export class AgentSession {
 	 */
 	async followUp(text: string, images?: ImageContent[]): Promise<void> {
 		if (text.startsWith("/")) {
-			this._throwIfExtensionCommand(text);
+			this.#throwIfExtensionCommand(text);
 		}
 
-		const expandedText = expandPromptTemplate(text, [...this._promptTemplates]);
-		await this._queueFollowUp(expandedText, images);
+		const expandedText = expandPromptTemplate(text, [...this.#promptTemplates]);
+		await this.#queueFollowUp(expandedText, images);
 	}
 
 	/**
 	 * Internal: Queue a steering message (already expanded, no extension command check).
 	 */
-	private async _queueSteer(text: string, images?: ImageContent[]): Promise<void> {
+	async #queueSteer(text: string, images?: ImageContent[]): Promise<void> {
 		const displayText = text || (images && images.length > 0 ? "[Image]" : "");
-		this._steeringMessages.push(displayText);
+		this.#steeringMessages.push(displayText);
 		const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
 		if (images && images.length > 0) {
 			content.push(...images);
@@ -1533,9 +1524,9 @@ export class AgentSession {
 	/**
 	 * Internal: Queue a follow-up message (already expanded, no extension command check).
 	 */
-	private async _queueFollowUp(text: string, images?: ImageContent[]): Promise<void> {
+	async #queueFollowUp(text: string, images?: ImageContent[]): Promise<void> {
 		const displayText = text || (images && images.length > 0 ? "[Image]" : "");
-		this._followUpMessages.push(displayText);
+		this.#followUpMessages.push(displayText);
 		const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
 		if (images && images.length > 0) {
 			content.push(...images);
@@ -1550,12 +1541,12 @@ export class AgentSession {
 	/**
 	 * Throw an error if the text is an extension command.
 	 */
-	private _throwIfExtensionCommand(text: string): void {
-		if (!this._extensionRunner) return;
+	#throwIfExtensionCommand(text: string): void {
+		if (!this.#extensionRunner) return;
 
 		const spaceIndex = text.indexOf(" ");
 		const commandName = spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex);
-		const command = this._extensionRunner.getCommand(commandName);
+		const command = this.#extensionRunner.getCommand(commandName);
 
 		if (command) {
 			throw new Error(
@@ -1586,7 +1577,7 @@ export class AgentSession {
 		};
 		if (this.isStreaming) {
 			if (options?.deliverAs === "nextTurn") {
-				this._pendingNextTurnMessages.push(appMessage);
+				this.#pendingNextTurnMessages.push(appMessage);
 				return;
 			}
 
@@ -1656,22 +1647,22 @@ export class AgentSession {
 	 * Useful for restoring to editor when user aborts.
 	 */
 	clearQueue(): { steering: string[]; followUp: string[] } {
-		const steering = [...this._steeringMessages];
-		const followUp = [...this._followUpMessages];
-		this._steeringMessages = [];
-		this._followUpMessages = [];
+		const steering = [...this.#steeringMessages];
+		const followUp = [...this.#followUpMessages];
+		this.#steeringMessages = [];
+		this.#followUpMessages = [];
 		this.agent.clearAllQueues();
 		return { steering, followUp };
 	}
 
 	/** Number of pending messages (includes both steering and follow-up) */
 	get queuedMessageCount(): number {
-		return this._steeringMessages.length + this._followUpMessages.length;
+		return this.#steeringMessages.length + this.#followUpMessages.length;
 	}
 
 	/** Get pending messages (read-only) */
 	getQueuedMessages(): { steering: readonly string[]; followUp: readonly string[] } {
-		return { steering: this._steeringMessages, followUp: this._followUpMessages };
+		return { steering: this.#steeringMessages, followUp: this.#followUpMessages };
 	}
 
 	/**
@@ -1680,14 +1671,14 @@ export class AgentSession {
 	 */
 	popLastQueuedMessage(): string | undefined {
 		// Pop from steering first (LIFO)
-		if (this._steeringMessages.length > 0) {
-			const message = this._steeringMessages.pop();
+		if (this.#steeringMessages.length > 0) {
+			const message = this.#steeringMessages.pop();
 			this.agent.popLastSteer();
 			return message;
 		}
 		// Then from follow-up
-		if (this._followUpMessages.length > 0) {
-			const message = this._followUpMessages.pop();
+		if (this.#followUpMessages.length > 0) {
+			const message = this.#followUpMessages.pop();
 			this.agent.popLastFollowUp();
 			return message;
 		}
@@ -1695,17 +1686,17 @@ export class AgentSession {
 	}
 
 	get skillsSettings(): Required<SkillsSettings> | undefined {
-		return this._skillsSettings;
+		return this.#skillsSettings;
 	}
 
 	/** Skills loaded by SDK (empty if --no-skills or skills: [] was passed) */
 	get skills(): readonly Skill[] {
-		return this._skills;
+		return this.#skills;
 	}
 
 	/** Skill loading warnings captured by SDK */
 	get skillWarnings(): readonly SkillWarning[] {
-		return this._skillWarnings;
+		return this.#skillWarnings;
 	}
 
 	/**
@@ -1728,8 +1719,8 @@ export class AgentSession {
 		const previousSessionFile = this.sessionFile;
 
 		// Emit session_before_switch event with reason "new" (can be cancelled)
-		if (this._extensionRunner?.hasHandlers("session_before_switch")) {
-			const result = (await this._extensionRunner.emit({
+		if (this.#extensionRunner?.hasHandlers("session_before_switch")) {
+			const result = (await this.#extensionRunner.emit({
 				type: "session_before_switch",
 				reason: "new",
 			})) as SessionBeforeSwitchResult | undefined;
@@ -1739,25 +1730,25 @@ export class AgentSession {
 			}
 		}
 
-		this._disconnectFromAgent();
+		this.#disconnectFromAgent();
 		await this.abort();
 		this.agent.reset();
 		await this.sessionManager.flush();
 		await this.sessionManager.newSession(options);
 		this.agent.sessionId = this.sessionManager.getSessionId();
-		this._steeringMessages = [];
-		this._followUpMessages = [];
-		this._pendingNextTurnMessages = [];
+		this.#steeringMessages = [];
+		this.#followUpMessages = [];
+		this.#pendingNextTurnMessages = [];
 
 		this.sessionManager.appendThinkingLevelChange(this.thinkingLevel);
 
-		this._todoReminderCount = 0;
-		this._planReferenceSent = false;
-		this._reconnectToAgent();
+		this.#todoReminderCount = 0;
+		this.#planReferenceSent = false;
+		this.#reconnectToAgent();
 
 		// Emit session_switch event with reason "new" to hooks
-		if (this._extensionRunner) {
-			await this._extensionRunner.emit({
+		if (this.#extensionRunner) {
+			await this.#extensionRunner.emit({
 				type: "session_switch",
 				reason: "new",
 				previousSessionFile,
@@ -1784,8 +1775,8 @@ export class AgentSession {
 		const previousSessionFile = this.sessionFile;
 
 		// Emit session_before_switch event with reason "fork" (can be cancelled)
-		if (this._extensionRunner?.hasHandlers("session_before_switch")) {
-			const result = (await this._extensionRunner.emit({
+		if (this.#extensionRunner?.hasHandlers("session_before_switch")) {
+			const result = (await this.#extensionRunner.emit({
 				type: "session_before_switch",
 				reason: "fork",
 			})) as SessionBeforeSwitchResult | undefined;
@@ -1827,8 +1818,8 @@ export class AgentSession {
 		this.agent.sessionId = this.sessionManager.getSessionId();
 
 		// Emit session_switch event with reason "fork" to hooks
-		if (this._extensionRunner) {
-			await this._extensionRunner.emit({
+		if (this.#extensionRunner) {
+			await this.#extensionRunner.emit({
 				type: "session_switch",
 				reason: "fork",
 				previousSessionFile,
@@ -1848,7 +1839,7 @@ export class AgentSession {
 	 * @throws Error if no API key available for the model
 	 */
 	async setModel(model: Model, role: ModelRole = "default"): Promise<void> {
-		const apiKey = await this._modelRegistry.getApiKey(model, this.sessionId);
+		const apiKey = await this.#modelRegistry.getApiKey(model, this.sessionId);
 		if (!apiKey) {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
@@ -1868,7 +1859,7 @@ export class AgentSession {
 	 * @throws Error if no API key available for the model
 	 */
 	async setModelTemporary(model: Model): Promise<void> {
-		const apiKey = await this._modelRegistry.getApiKey(model, this.sessionId);
+		const apiKey = await this.#modelRegistry.getApiKey(model, this.sessionId);
 		if (!apiKey) {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
@@ -1888,10 +1879,10 @@ export class AgentSession {
 	 * @returns The new model info, or undefined if only one model available
 	 */
 	async cycleModel(direction: "forward" | "backward" = "forward"): Promise<ModelCycleResult | undefined> {
-		if (this._scopedModels.length > 0) {
-			return this._cycleScopedModel(direction);
+		if (this.#scopedModels.length > 0) {
+			return this.#cycleScopedModel(direction);
 		}
-		return this._cycleAvailableModel(direction);
+		return this.#cycleAvailableModel(direction);
 	}
 
 	/**
@@ -1904,7 +1895,7 @@ export class AgentSession {
 		roleOrder: readonly ModelRole[],
 		options?: { temporary?: boolean },
 	): Promise<RoleModelCycleResult | undefined> {
-		const availableModels = this._modelRegistry.getAvailable();
+		const availableModels = this.#modelRegistry.getAvailable();
 		if (availableModels.length === 0) return undefined;
 
 		const currentModel = this.model;
@@ -1952,17 +1943,17 @@ export class AgentSession {
 		return { model: next.model, thinkingLevel: this.thinkingLevel, role: next.role };
 	}
 
-	private async _getScopedModelsWithApiKey(): Promise<Array<{ model: Model; thinkingLevel: ThinkingLevel }>> {
+	async #getScopedModelsWithApiKey(): Promise<Array<{ model: Model; thinkingLevel: ThinkingLevel }>> {
 		const apiKeysByProvider = new Map<string, string | undefined>();
 		const result: Array<{ model: Model; thinkingLevel: ThinkingLevel }> = [];
 
-		for (const scoped of this._scopedModels) {
+		for (const scoped of this.#scopedModels) {
 			const provider = scoped.model.provider;
 			let apiKey: string | undefined;
 			if (apiKeysByProvider.has(provider)) {
 				apiKey = apiKeysByProvider.get(provider);
 			} else {
-				apiKey = await this._modelRegistry.getApiKeyForProvider(provider, this.sessionId);
+				apiKey = await this.#modelRegistry.getApiKeyForProvider(provider, this.sessionId);
 				apiKeysByProvider.set(provider, apiKey);
 			}
 
@@ -1974,8 +1965,8 @@ export class AgentSession {
 		return result;
 	}
 
-	private async _cycleScopedModel(direction: "forward" | "backward"): Promise<ModelCycleResult | undefined> {
-		const scopedModels = await this._getScopedModelsWithApiKey();
+	async #cycleScopedModel(direction: "forward" | "backward"): Promise<ModelCycleResult | undefined> {
+		const scopedModels = await this.#getScopedModelsWithApiKey();
 		if (scopedModels.length <= 1) return undefined;
 
 		const currentModel = this.model;
@@ -1998,8 +1989,8 @@ export class AgentSession {
 		return { model: next.model, thinkingLevel: this.thinkingLevel, isScoped: true };
 	}
 
-	private async _cycleAvailableModel(direction: "forward" | "backward"): Promise<ModelCycleResult | undefined> {
-		const availableModels = this._modelRegistry.getAvailable();
+	async #cycleAvailableModel(direction: "forward" | "backward"): Promise<ModelCycleResult | undefined> {
+		const availableModels = this.#modelRegistry.getAvailable();
 		if (availableModels.length <= 1) return undefined;
 
 		const currentModel = this.model;
@@ -2010,7 +2001,7 @@ export class AgentSession {
 		const nextIndex = direction === "forward" ? (currentIndex + 1) % len : (currentIndex - 1 + len) % len;
 		const nextModel = availableModels[nextIndex];
 
-		const apiKey = await this._modelRegistry.getApiKey(nextModel, this.sessionId);
+		const apiKey = await this.#modelRegistry.getApiKey(nextModel, this.sessionId);
 		if (!apiKey) {
 			throw new Error(`No API key for ${nextModel.provider}/${nextModel.id}`);
 		}
@@ -2030,7 +2021,7 @@ export class AgentSession {
 	 * Get all available models with valid API keys.
 	 */
 	getAvailableModels(): Model[] {
-		return this._modelRegistry.getAvailable();
+		return this.#modelRegistry.getAvailable();
 	}
 
 	// =========================================================================
@@ -2044,7 +2035,7 @@ export class AgentSession {
 	 */
 	setThinkingLevel(level: ThinkingLevel, persist: boolean = false): void {
 		const availableLevels = this.getAvailableThinkingLevels();
-		const effectiveLevel = availableLevels.includes(level) ? level : this._clampThinkingLevel(level, availableLevels);
+		const effectiveLevel = availableLevels.includes(level) ? level : this.#clampThinkingLevel(level, availableLevels);
 
 		// Only persist if actually changing
 		const isChanging = effectiveLevel !== this.agent.state.thinkingLevel;
@@ -2098,7 +2089,7 @@ export class AgentSession {
 		return !!this.model?.reasoning;
 	}
 
-	private _clampThinkingLevel(level: ThinkingLevel, availableLevels: ThinkingLevel[]): ThinkingLevel {
+	#clampThinkingLevel(level: ThinkingLevel, availableLevels: ThinkingLevel[]): ThinkingLevel {
 		const ordered = THINKING_LEVELS_WITH_XHIGH;
 		const available = new Set(availableLevels);
 		const requestedIndex = ordered.indexOf(level);
@@ -2151,7 +2142,7 @@ export class AgentSession {
 	// Compaction
 	// =========================================================================
 
-	private async _pruneToolOutputs(): Promise<{ prunedCount: number; tokensSaved: number } | undefined> {
+	async #pruneToolOutputs(): Promise<{ prunedCount: number; tokensSaved: number } | undefined> {
 		const branchEntries = this.sessionManager.getBranch();
 		const result = pruneToolOutputs(branchEntries, DEFAULT_PRUNE_CONFIG);
 		if (result.prunedCount === 0) {
@@ -2171,9 +2162,9 @@ export class AgentSession {
 	 * @param options Optional callbacks for completion/error handling
 	 */
 	async compact(customInstructions?: string, options?: CompactOptions): Promise<CompactionResult> {
-		this._disconnectFromAgent();
+		this.#disconnectFromAgent();
 		await this.abort();
-		this._compactionAbortController = new AbortController();
+		this.#compactionAbortController = new AbortController();
 
 		try {
 			if (!this.model) {
@@ -2182,7 +2173,7 @@ export class AgentSession {
 
 			const compactionSettings = this.settings.getGroup("compaction");
 			const compactionModel = this.model;
-			const apiKey = await this._modelRegistry.getApiKey(compactionModel, this.sessionId);
+			const apiKey = await this.#modelRegistry.getApiKey(compactionModel, this.sessionId);
 			if (!apiKey) {
 				throw new Error(`No API key for ${compactionModel.provider}`);
 			}
@@ -2205,13 +2196,13 @@ export class AgentSession {
 			let hookPrompt: string | undefined;
 			let preserveData: Record<string, unknown> | undefined;
 
-			if (this._extensionRunner?.hasHandlers("session_before_compact")) {
-				const result = (await this._extensionRunner.emit({
+			if (this.#extensionRunner?.hasHandlers("session_before_compact")) {
+				const result = (await this.#extensionRunner.emit({
 					type: "session_before_compact",
 					preparation,
 					branchEntries: pathEntries,
 					customInstructions,
-					signal: this._compactionAbortController.signal,
+					signal: this.#compactionAbortController.signal,
 				})) as SessionBeforeCompactResult | undefined;
 
 				if (result?.cancel) {
@@ -2224,9 +2215,9 @@ export class AgentSession {
 				}
 			}
 
-			if (!hookCompaction && this._extensionRunner?.hasHandlers("session.compacting")) {
+			if (!hookCompaction && this.#extensionRunner?.hasHandlers("session.compacting")) {
 				const compactMessages = preparation.messagesToSummarize.concat(preparation.turnPrefixMessages);
-				const result = (await this._extensionRunner.emit({
+				const result = (await this.#extensionRunner.emit({
 					type: "session.compacting",
 					sessionId: this.sessionId,
 					messages: compactMessages,
@@ -2258,7 +2249,7 @@ export class AgentSession {
 					compactionModel,
 					apiKey,
 					customInstructions,
-					this._compactionAbortController.signal,
+					this.#compactionAbortController.signal,
 					{ promptOverride: hookPrompt, extraContext: hookContext },
 				);
 				summary = result.summary;
@@ -2268,7 +2259,7 @@ export class AgentSession {
 				details = result.details;
 			}
 
-			if (this._compactionAbortController.signal.aborted) {
+			if (this.#compactionAbortController.signal.aborted) {
 				throw new Error("Compaction cancelled");
 			}
 
@@ -2290,8 +2281,8 @@ export class AgentSession {
 				| CompactionEntry
 				| undefined;
 
-			if (this._extensionRunner && savedCompactionEntry) {
-				await this._extensionRunner.emit({
+			if (this.#extensionRunner && savedCompactionEntry) {
+				await this.#extensionRunner.emit({
 					type: "session_compact",
 					compactionEntry: savedCompactionEntry,
 					fromExtension,
@@ -2313,8 +2304,8 @@ export class AgentSession {
 			options?.onError?.(err);
 			throw error;
 		} finally {
-			this._compactionAbortController = undefined;
-			this._reconnectToAgent();
+			this.#compactionAbortController = undefined;
+			this.#reconnectToAgent();
 		}
 	}
 
@@ -2322,29 +2313,29 @@ export class AgentSession {
 	 * Cancel in-progress compaction (manual or auto).
 	 */
 	abortCompaction(): void {
-		this._compactionAbortController?.abort();
-		this._autoCompactionAbortController?.abort();
+		this.#compactionAbortController?.abort();
+		this.#autoCompactionAbortController?.abort();
 	}
 
 	/**
 	 * Cancel in-progress branch summarization.
 	 */
 	abortBranchSummary(): void {
-		this._branchSummaryAbortController?.abort();
+		this.#branchSummaryAbortController?.abort();
 	}
 
 	/**
 	 * Cancel in-progress handoff generation.
 	 */
 	abortHandoff(): void {
-		this._handoffAbortController?.abort();
+		this.#handoffAbortController?.abort();
 	}
 
 	/**
 	 * Check if handoff generation is in progress.
 	 */
 	get isGeneratingHandoff(): boolean {
-		return this._handoffAbortController !== undefined;
+		return this.#handoffAbortController !== undefined;
 	}
 
 	/**
@@ -2364,7 +2355,7 @@ export class AgentSession {
 			throw new Error("Nothing to hand off (no messages yet)");
 		}
 
-		this._handoffAbortController = new AbortController();
+		this.#handoffAbortController = new AbortController();
 
 		// Build the handoff prompt
 		let handoffPrompt = `Write a comprehensive handoff document that will allow another instance of yourself to seamlessly continue this work. The document should capture everything needed to resume without access to this conversation.
@@ -2407,7 +2398,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		let handoffText: string | undefined;
 		const completionPromise = new Promise<void>((resolve, reject) => {
 			const unsubscribe = this.subscribe(event => {
-				if (this._handoffAbortController?.signal.aborted) {
+				if (this.#handoffAbortController?.signal.aborted) {
 					unsubscribe();
 					reject(new Error("Handoff cancelled"));
 					return;
@@ -2440,7 +2431,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			await this.prompt(handoffPrompt, { expandPromptTemplates: false });
 			await completionPromise;
 
-			if (!handoffText || this._handoffAbortController.signal.aborted) {
+			if (!handoffText || this.#handoffAbortController.signal.aborted) {
 				return undefined;
 			}
 
@@ -2449,10 +2440,10 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			await this.sessionManager.newSession();
 			this.agent.reset();
 			this.agent.sessionId = this.sessionManager.getSessionId();
-			this._steeringMessages = [];
-			this._followUpMessages = [];
-			this._pendingNextTurnMessages = [];
-			this._todoReminderCount = 0;
+			this.#steeringMessages = [];
+			this.#followUpMessages = [];
+			this.#pendingNextTurnMessages = [];
+			this.#todoReminderCount = 0;
 
 			// Inject the handoff document as a custom message
 			const handoffContent = `<handoff-context>\n${handoffText}\n</handoff-context>\n\nThe above is a handoff document from a previous session. Use this context to continue the work seamlessly.`;
@@ -2464,7 +2455,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 			return { document: handoffText };
 		} finally {
-			this._handoffAbortController = undefined;
+			this.#handoffAbortController = undefined;
 		}
 	}
 
@@ -2479,11 +2470,11 @@ Be thorough - include exact file paths, function names, error messages, and tech
 	 * @param assistantMessage The assistant message to check
 	 * @param skipAbortedCheck If false, include aborted messages (for pre-prompt check). Default: true
 	 */
-	private async _checkCompaction(assistantMessage: AssistantMessage, skipAbortedCheck = true): Promise<void> {
+	async #checkCompaction(assistantMessage: AssistantMessage, skipAbortedCheck = true): Promise<void> {
 		const compactionSettings = this.settings.getGroup("compaction");
 		if (!compactionSettings.enabled) return;
 
-		const pruneResult = await this._pruneToolOutputs();
+		const pruneResult = await this.#pruneToolOutputs();
 
 		// Skip if message was aborted (user cancelled) - unless skipAbortedCheck is false
 		if (skipAbortedCheck && assistantMessage.stopReason === "aborted") return;
@@ -2514,7 +2505,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			if (messages.length > 0 && messages[messages.length - 1].role === "assistant") {
 				this.agent.replaceMessages(messages.slice(0, -1));
 			}
-			await this._runAutoCompaction("overflow", true);
+			await this.#runAutoCompaction("overflow", true);
 			return;
 		}
 
@@ -2527,24 +2518,24 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			contextTokens = Math.max(0, contextTokens - pruneResult.tokensSaved);
 		}
 		if (shouldCompact(contextTokens, contextWindow, compactionSettings)) {
-			await this._runAutoCompaction("threshold", false);
+			await this.#runAutoCompaction("threshold", false);
 		}
 	}
 
 	/**
 	 * Check if agent stopped with incomplete todos and prompt to continue.
 	 */
-	private async _checkTodoCompletion(): Promise<void> {
+	async #checkTodoCompletion(): Promise<void> {
 		const remindersEnabled = this.settings.get("todo.reminders");
 		const todosEnabled = this.settings.get("todo.enabled");
 		if (!remindersEnabled || !todosEnabled) {
-			this._todoReminderCount = 0;
+			this.#todoReminderCount = 0;
 			return;
 		}
 
 		const remindersMax = this.settings.get("todo.reminders.max");
-		if (this._todoReminderCount >= remindersMax) {
-			logger.debug("Todo completion: max reminders reached", { count: this._todoReminderCount });
+		if (this.#todoReminderCount >= remindersMax) {
+			logger.debug("Todo completion: max reminders reached", { count: this.#todoReminderCount });
 			return;
 		}
 
@@ -2560,7 +2551,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			todos = data?.todos ?? [];
 		} catch (err) {
 			if (isEnoent(err)) {
-				this._todoReminderCount = 0;
+				this.#todoReminderCount = 0;
 			}
 			return;
 		}
@@ -2568,30 +2559,30 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		// Check for incomplete todos
 		const incomplete = todos.filter(t => t.status !== "completed");
 		if (incomplete.length === 0) {
-			this._todoReminderCount = 0;
+			this.#todoReminderCount = 0;
 			return;
 		}
 
 		// Build reminder message
-		this._todoReminderCount++;
+		this.#todoReminderCount++;
 		const todoList = incomplete.map(t => `- ${t.content}`).join("\n");
 		const reminder =
 			`<system_reminder>\n` +
 			`You stopped with ${incomplete.length} incomplete todo item(s):\n${todoList}\n\n` +
 			`Please continue working on these tasks or mark them complete if finished.\n` +
-			`(Reminder ${this._todoReminderCount}/${remindersMax})\n` +
+			`(Reminder ${this.#todoReminderCount}/${remindersMax})\n` +
 			`</system_reminder>`;
 
 		logger.debug("Todo completion: sending reminder", {
 			incomplete: incomplete.length,
-			attempt: this._todoReminderCount,
+			attempt: this.#todoReminderCount,
 		});
 
 		// Emit event for UI to render notification
-		this._emit({
+		this.#emit({
 			type: "todo_reminder",
 			todos: incomplete,
-			attempt: this._todoReminderCount,
+			attempt: this.#todoReminderCount,
 			maxAttempts: remindersMax,
 		});
 
@@ -2604,15 +2595,11 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		this.agent.continue().catch(() => {});
 	}
 
-	private _getModelKey(model: Model): string {
+	#getModelKey(model: Model): string {
 		return `${model.provider}/${model.id}`;
 	}
 
-	private _resolveRoleModel(
-		role: ModelRole,
-		availableModels: Model[],
-		currentModel: Model | undefined,
-	): Model | undefined {
+	#resolveRoleModel(role: ModelRole, availableModels: Model[], currentModel: Model | undefined): Model | undefined {
 		const roleModelStr =
 			role === "default"
 				? (this.settings.getModelRole("default") ??
@@ -2629,13 +2616,13 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		return availableModels.find(m => m.id.toLowerCase() === roleLower);
 	}
 
-	private _getCompactionModelCandidates(availableModels: Model[]): Model[] {
+	#getCompactionModelCandidates(availableModels: Model[]): Model[] {
 		const candidates: Model[] = [];
 		const seen = new Set<string>();
 
 		const addCandidate = (model: Model | undefined): void => {
 			if (!model) return;
-			const key = this._getModelKey(model);
+			const key = this.#getModelKey(model);
 			if (seen.has(key)) return;
 			seen.add(key);
 			candidates.push(model);
@@ -2643,12 +2630,12 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 		const currentModel = this.model;
 		for (const role of MODEL_ROLE_IDS) {
-			addCandidate(this._resolveRoleModel(role, availableModels, currentModel));
+			addCandidate(this.#resolveRoleModel(role, availableModels, currentModel));
 		}
 
 		const sortedByContext = [...availableModels].sort((a, b) => b.contextWindow - a.contextWindow);
 		for (const model of sortedByContext) {
-			if (!seen.has(this._getModelKey(model))) {
+			if (!seen.has(this.#getModelKey(model))) {
 				addCandidate(model);
 				break;
 			}
@@ -2660,25 +2647,25 @@ Be thorough - include exact file paths, function names, error messages, and tech
 	/**
 	 * Internal: Run auto-compaction with events.
 	 */
-	private async _runAutoCompaction(reason: "overflow" | "threshold", willRetry: boolean): Promise<void> {
+	async #runAutoCompaction(reason: "overflow" | "threshold", willRetry: boolean): Promise<void> {
 		const compactionSettings = this.settings.getGroup("compaction");
 
-		this._emit({ type: "auto_compaction_start", reason });
+		this.#emit({ type: "auto_compaction_start", reason });
 		// Properly abort and null existing controller before replacing
-		if (this._autoCompactionAbortController) {
-			this._autoCompactionAbortController.abort();
+		if (this.#autoCompactionAbortController) {
+			this.#autoCompactionAbortController.abort();
 		}
-		this._autoCompactionAbortController = new AbortController();
+		this.#autoCompactionAbortController = new AbortController();
 
 		try {
 			if (!this.model) {
-				this._emit({ type: "auto_compaction_end", result: undefined, aborted: false, willRetry: false });
+				this.#emit({ type: "auto_compaction_end", result: undefined, aborted: false, willRetry: false });
 				return;
 			}
 
-			const availableModels = this._modelRegistry.getAvailable();
+			const availableModels = this.#modelRegistry.getAvailable();
 			if (availableModels.length === 0) {
-				this._emit({ type: "auto_compaction_end", result: undefined, aborted: false, willRetry: false });
+				this.#emit({ type: "auto_compaction_end", result: undefined, aborted: false, willRetry: false });
 				return;
 			}
 
@@ -2686,7 +2673,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 			const preparation = prepareCompaction(pathEntries, compactionSettings);
 			if (!preparation) {
-				this._emit({ type: "auto_compaction_end", result: undefined, aborted: false, willRetry: false });
+				this.#emit({ type: "auto_compaction_end", result: undefined, aborted: false, willRetry: false });
 				return;
 			}
 
@@ -2696,17 +2683,17 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			let hookPrompt: string | undefined;
 			let preserveData: Record<string, unknown> | undefined;
 
-			if (this._extensionRunner?.hasHandlers("session_before_compact")) {
-				const hookResult = (await this._extensionRunner.emit({
+			if (this.#extensionRunner?.hasHandlers("session_before_compact")) {
+				const hookResult = (await this.#extensionRunner.emit({
 					type: "session_before_compact",
 					preparation,
 					branchEntries: pathEntries,
 					customInstructions: undefined,
-					signal: this._autoCompactionAbortController.signal,
+					signal: this.#autoCompactionAbortController.signal,
 				})) as SessionBeforeCompactResult | undefined;
 
 				if (hookResult?.cancel) {
-					this._emit({ type: "auto_compaction_end", result: undefined, aborted: true, willRetry: false });
+					this.#emit({ type: "auto_compaction_end", result: undefined, aborted: true, willRetry: false });
 					return;
 				}
 
@@ -2716,9 +2703,9 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				}
 			}
 
-			if (!hookCompaction && this._extensionRunner?.hasHandlers("session.compacting")) {
+			if (!hookCompaction && this.#extensionRunner?.hasHandlers("session.compacting")) {
 				const compactMessages = preparation.messagesToSummarize.concat(preparation.turnPrefixMessages);
-				const result = (await this._extensionRunner.emit({
+				const result = (await this.#extensionRunner.emit({
 					type: "session.compacting",
 					sessionId: this.sessionId,
 					messages: compactMessages,
@@ -2744,13 +2731,13 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				details = hookCompaction.details;
 				preserveData ??= hookCompaction.preserveData;
 			} else {
-				const candidates = this._getCompactionModelCandidates(availableModels);
+				const candidates = this.#getCompactionModelCandidates(availableModels);
 				const retrySettings = this.settings.getGroup("retry");
 				let compactResult: CompactionResult | undefined;
 				let lastError: unknown;
 
 				for (const candidate of candidates) {
-					const apiKey = await this._modelRegistry.getApiKey(candidate, this.sessionId);
+					const apiKey = await this.#modelRegistry.getApiKey(candidate, this.sessionId);
 					if (!apiKey) continue;
 
 					let attempt = 0;
@@ -2761,21 +2748,21 @@ Be thorough - include exact file paths, function names, error messages, and tech
 								candidate,
 								apiKey,
 								undefined,
-								this._autoCompactionAbortController.signal,
+								this.#autoCompactionAbortController.signal,
 								{ promptOverride: hookPrompt, extraContext: hookContext },
 							);
 							break;
 						} catch (error) {
-							if (this._autoCompactionAbortController.signal.aborted) {
+							if (this.#autoCompactionAbortController.signal.aborted) {
 								throw error;
 							}
 
 							const message = error instanceof Error ? error.message : String(error);
-							const retryAfterMs = this._parseRetryAfterMsFromError(message);
+							const retryAfterMs = this.#parseRetryAfterMsFromError(message);
 							const shouldRetry =
 								retrySettings.enabled &&
 								attempt < retrySettings.maxRetries &&
-								(retryAfterMs !== undefined || this._isRetryableErrorMessage(message));
+								(retryAfterMs !== undefined || this.#isRetryableErrorMessage(message));
 							if (!shouldRetry) {
 								lastError = error;
 								break;
@@ -2810,7 +2797,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 								error: message,
 								model: `${candidate.provider}/${candidate.id}`,
 							});
-							await abortableSleep(delayMs, this._autoCompactionAbortController.signal);
+							await abortableSleep(delayMs, this.#autoCompactionAbortController.signal);
 						}
 					}
 
@@ -2833,8 +2820,8 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				details = compactResult.details;
 			}
 
-			if (this._autoCompactionAbortController.signal.aborted) {
-				this._emit({ type: "auto_compaction_end", result: undefined, aborted: true, willRetry: false });
+			if (this.#autoCompactionAbortController.signal.aborted) {
+				this.#emit({ type: "auto_compaction_end", result: undefined, aborted: true, willRetry: false });
 				return;
 			}
 
@@ -2856,8 +2843,8 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				| CompactionEntry
 				| undefined;
 
-			if (this._extensionRunner && savedCompactionEntry) {
-				await this._extensionRunner.emit({
+			if (this.#extensionRunner && savedCompactionEntry) {
+				await this.#extensionRunner.emit({
 					type: "session_compact",
 					compactionEntry: savedCompactionEntry,
 					fromExtension,
@@ -2872,7 +2859,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				details,
 				preserveData,
 			};
-			this._emit({ type: "auto_compaction_end", result, aborted: false, willRetry });
+			this.#emit({ type: "auto_compaction_end", result, aborted: false, willRetry });
 
 			if (!willRetry && compactionSettings.autoContinue !== false) {
 				await this.prompt("Continue if you have next steps.", {
@@ -2899,12 +2886,12 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				}, 100);
 			}
 		} catch (error) {
-			if (this._autoCompactionAbortController?.signal.aborted) {
-				this._emit({ type: "auto_compaction_end", result: undefined, aborted: true, willRetry: false });
+			if (this.#autoCompactionAbortController?.signal.aborted) {
+				this.#emit({ type: "auto_compaction_end", result: undefined, aborted: true, willRetry: false });
 				return;
 			}
 			const errorMessage = error instanceof Error ? error.message : "compaction failed";
-			this._emit({
+			this.#emit({
 				type: "auto_compaction_end",
 				result: undefined,
 				aborted: false,
@@ -2915,7 +2902,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 						: `Auto-compaction failed: ${errorMessage}`,
 			});
 		} finally {
-			this._autoCompactionAbortController = undefined;
+			this.#autoCompactionAbortController = undefined;
 		}
 	}
 
@@ -2939,7 +2926,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 	 * Check if an error is retryable (overloaded, rate limit, server errors).
 	 * Context overflow errors are NOT retryable (handled by compaction instead).
 	 */
-	private _isRetryableError(message: AssistantMessage): boolean {
+	#isRetryableError(message: AssistantMessage): boolean {
 		if (message.stopReason !== "error" || !message.errorMessage) return false;
 
 		// Context overflow is handled by compaction, not retry
@@ -2947,21 +2934,21 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		if (isContextOverflow(message, contextWindow)) return false;
 
 		const err = message.errorMessage;
-		return this._isRetryableErrorMessage(err);
+		return this.#isRetryableErrorMessage(err);
 	}
 
-	private _isRetryableErrorMessage(errorMessage: string): boolean {
+	#isRetryableErrorMessage(errorMessage: string): boolean {
 		// Match: overloaded_error, rate limit, usage limit, 429, 500, 502, 503, 504, service unavailable, connection error, fetch failed, retry delay exceeded
 		return /overloaded|rate.?limit|usage.?limit|too many requests|429|500|502|503|504|service.?unavailable|server error|internal error|connection.?error|fetch failed|retry delay/i.test(
 			errorMessage,
 		);
 	}
 
-	private _isUsageLimitErrorMessage(errorMessage: string): boolean {
+	#isUsageLimitErrorMessage(errorMessage: string): boolean {
 		return /usage.?limit|usage_limit_reached|limit_reached/i.test(errorMessage);
 	}
 
-	private _parseRetryAfterMsFromError(errorMessage: string): number | undefined {
+	#parseRetryAfterMsFromError(errorMessage: string): number | undefined {
 		const now = Date.now();
 		const retryAfterMsMatch = /retry-after-ms\s*[:=]\s*(\d+)/i.exec(errorMessage);
 		if (retryAfterMsMatch) {
@@ -3010,39 +2997,39 @@ Be thorough - include exact file paths, function names, error messages, and tech
 	 * Handle retryable errors with exponential backoff.
 	 * @returns true if retry was initiated, false if max retries exceeded or disabled
 	 */
-	private async _handleRetryableError(message: AssistantMessage): Promise<boolean> {
+	async #handleRetryableError(message: AssistantMessage): Promise<boolean> {
 		const retrySettings = this.settings.getGroup("retry");
 		if (!retrySettings.enabled) return false;
 
-		this._retryAttempt++;
+		this.#retryAttempt++;
 
 		// Create retry promise on first attempt so waitForRetry() can await it
 		// Ensure only one promise exists (avoid orphaned promises from concurrent calls)
-		if (!this._retryPromise) {
+		if (!this.#retryPromise) {
 			const { promise, resolve } = Promise.withResolvers<void>();
-			this._retryPromise = promise;
-			this._retryResolve = resolve;
+			this.#retryPromise = promise;
+			this.#retryResolve = resolve;
 		}
 
-		if (this._retryAttempt > retrySettings.maxRetries) {
+		if (this.#retryAttempt > retrySettings.maxRetries) {
 			// Max retries exceeded, emit final failure and reset
-			this._emit({
+			this.#emit({
 				type: "auto_retry_end",
 				success: false,
-				attempt: this._retryAttempt - 1,
+				attempt: this.#retryAttempt - 1,
 				finalError: message.errorMessage,
 			});
-			this._retryAttempt = 0;
-			this._resolveRetry(); // Resolve so waitForRetry() completes
+			this.#retryAttempt = 0;
+			this.#resolveRetry(); // Resolve so waitForRetry() completes
 			return false;
 		}
 
 		const errorMessage = message.errorMessage || "Unknown error";
-		let delayMs = retrySettings.baseDelayMs * 2 ** (this._retryAttempt - 1);
+		let delayMs = retrySettings.baseDelayMs * 2 ** (this.#retryAttempt - 1);
 
-		if (this.model && this._isUsageLimitErrorMessage(errorMessage)) {
-			const retryAfterMs = this._parseRetryAfterMsFromError(errorMessage);
-			const switched = await this._modelRegistry.authStorage.markUsageLimitReached(
+		if (this.model && this.#isUsageLimitErrorMessage(errorMessage)) {
+			const retryAfterMs = this.#parseRetryAfterMsFromError(errorMessage);
+			const switched = await this.#modelRegistry.authStorage.markUsageLimitReached(
 				this.model.provider,
 				this.sessionId,
 				{
@@ -3055,9 +3042,9 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			}
 		}
 
-		this._emit({
+		this.#emit({
 			type: "auto_retry_start",
-			attempt: this._retryAttempt,
+			attempt: this.#retryAttempt,
 			maxAttempts: retrySettings.maxRetries,
 			delayMs,
 			errorMessage,
@@ -3071,27 +3058,27 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 		// Wait with exponential backoff (abortable)
 		// Properly abort and null existing controller before replacing
-		if (this._retryAbortController) {
-			this._retryAbortController.abort();
+		if (this.#retryAbortController) {
+			this.#retryAbortController.abort();
 		}
-		this._retryAbortController = new AbortController();
+		this.#retryAbortController = new AbortController();
 		try {
-			await abortableSleep(delayMs, this._retryAbortController.signal);
+			await abortableSleep(delayMs, this.#retryAbortController.signal);
 		} catch {
 			// Aborted during sleep - emit end event so UI can clean up
-			const attempt = this._retryAttempt;
-			this._retryAttempt = 0;
-			this._retryAbortController = undefined;
-			this._emit({
+			const attempt = this.#retryAttempt;
+			this.#retryAttempt = 0;
+			this.#retryAbortController = undefined;
+			this.#emit({
 				type: "auto_retry_end",
 				success: false,
 				attempt,
 				finalError: "Retry cancelled",
 			});
-			this._resolveRetry();
+			this.#resolveRetry();
 			return false;
 		}
-		this._retryAbortController = undefined;
+		this.#retryAbortController = undefined;
 
 		// Retry via continue() - use setTimeout to break out of event handler chain
 		setTimeout(() => {
@@ -3107,24 +3094,24 @@ Be thorough - include exact file paths, function names, error messages, and tech
 	 * Cancel in-progress retry.
 	 */
 	abortRetry(): void {
-		this._retryAbortController?.abort();
+		this.#retryAbortController?.abort();
 		// Note: _retryAttempt is reset in the catch block of _autoRetry
-		this._resolveRetry();
+		this.#resolveRetry();
 	}
 
 	/**
 	 * Wait for any in-progress retry to complete.
 	 * Returns immediately if no retry is in progress.
 	 */
-	private async waitForRetry(): Promise<void> {
-		if (this._retryPromise) {
-			await this._retryPromise;
+	async #waitForRetry(): Promise<void> {
+		if (this.#retryPromise) {
+			await this.#retryPromise;
 		}
 	}
 
 	/** Whether auto-retry is currently in progress */
 	get isRetrying(): boolean {
-		return this._retryPromise !== undefined;
+		return this.#retryPromise !== undefined;
 	}
 
 	/** Whether auto-retry is enabled */
@@ -3155,19 +3142,19 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		onChunk?: (chunk: string) => void,
 		options?: { excludeFromContext?: boolean },
 	): Promise<BashResult> {
-		this._bashAbortController = new AbortController();
+		this.#bashAbortController = new AbortController();
 
 		try {
 			const result = await executeBashCommand(command, {
 				onChunk,
-				signal: this._bashAbortController.signal,
+				signal: this.#bashAbortController.signal,
 				sessionKey: this.sessionId,
 			});
 
 			this.recordBashResult(command, result, options);
 			return result;
 		} finally {
-			this._bashAbortController = undefined;
+			this.#bashAbortController = undefined;
 		}
 	}
 
@@ -3192,7 +3179,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		// If agent is streaming, defer adding to avoid breaking tool_use/tool_result ordering
 		if (this.isStreaming) {
 			// Queue for later - will be flushed on agent_end
-			this._pendingBashMessages.push(bashMessage);
+			this.#pendingBashMessages.push(bashMessage);
 		} else {
 			// Add to agent state immediately
 			this.agent.appendMessage(bashMessage);
@@ -3206,27 +3193,27 @@ Be thorough - include exact file paths, function names, error messages, and tech
 	 * Cancel running bash command.
 	 */
 	abortBash(): void {
-		this._bashAbortController?.abort();
+		this.#bashAbortController?.abort();
 	}
 
 	/** Whether a bash command is currently running */
 	get isBashRunning(): boolean {
-		return this._bashAbortController !== undefined;
+		return this.#bashAbortController !== undefined;
 	}
 
 	/** Whether there are pending bash messages waiting to be flushed */
 	get hasPendingBashMessages(): boolean {
-		return this._pendingBashMessages.length > 0;
+		return this.#pendingBashMessages.length > 0;
 	}
 
 	/**
 	 * Flush pending bash messages to agent state and session.
 	 * Called after agent turn completes to maintain proper message ordering.
 	 */
-	private _flushPendingBashMessages(): void {
-		if (this._pendingBashMessages.length === 0) return;
+	#flushPendingBashMessages(): void {
+		if (this.#pendingBashMessages.length === 0) return;
 
-		for (const bashMessage of this._pendingBashMessages) {
+		for (const bashMessage of this.#pendingBashMessages) {
 			// Add to agent state
 			this.agent.appendMessage(bashMessage);
 
@@ -3234,7 +3221,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			this.sessionManager.appendMessage(bashMessage);
 		}
 
-		this._pendingBashMessages = [];
+		this.#pendingBashMessages = [];
 	}
 
 	// =========================================================================
@@ -3253,7 +3240,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		onChunk?: (chunk: string) => void,
 		options?: { excludeFromContext?: boolean },
 	): Promise<PythonResult> {
-		this._pythonAbortController = new AbortController();
+		this.#pythonAbortController = new AbortController();
 
 		try {
 			// Use the same session ID as the Python tool for kernel sharing
@@ -3267,13 +3254,13 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				kernelMode: this.settings.get("python.kernelMode"),
 				useSharedGateway: this.settings.get("python.sharedGateway"),
 				onChunk,
-				signal: this._pythonAbortController.signal,
+				signal: this.#pythonAbortController.signal,
 			});
 
 			this.recordPythonResult(code, result, options);
 			return result;
 		} finally {
-			this._pythonAbortController = undefined;
+			this.#pythonAbortController = undefined;
 		}
 	}
 
@@ -3296,7 +3283,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 		// If agent is streaming, defer adding to avoid breaking tool_use/tool_result ordering
 		if (this.isStreaming) {
-			this._pendingPythonMessages.push(pythonMessage);
+			this.#pendingPythonMessages.push(pythonMessage);
 		} else {
 			this.agent.appendMessage(pythonMessage);
 			this.sessionManager.appendMessage(pythonMessage);
@@ -3307,31 +3294,31 @@ Be thorough - include exact file paths, function names, error messages, and tech
 	 * Cancel running Python execution.
 	 */
 	abortPython(): void {
-		this._pythonAbortController?.abort();
+		this.#pythonAbortController?.abort();
 	}
 
 	/** Whether a Python execution is currently running */
 	get isPythonRunning(): boolean {
-		return this._pythonAbortController !== undefined;
+		return this.#pythonAbortController !== undefined;
 	}
 
 	/** Whether there are pending Python messages waiting to be flushed */
 	get hasPendingPythonMessages(): boolean {
-		return this._pendingPythonMessages.length > 0;
+		return this.#pendingPythonMessages.length > 0;
 	}
 
 	/**
 	 * Flush pending Python messages to agent state and session.
 	 */
-	private _flushPendingPythonMessages(): void {
-		if (this._pendingPythonMessages.length === 0) return;
+	#flushPendingPythonMessages(): void {
+		if (this.#pendingPythonMessages.length === 0) return;
 
-		for (const pythonMessage of this._pendingPythonMessages) {
+		for (const pythonMessage of this.#pendingPythonMessages) {
 			this.agent.appendMessage(pythonMessage);
 			this.sessionManager.appendMessage(pythonMessage);
 		}
 
-		this._pendingPythonMessages = [];
+		this.#pendingPythonMessages = [];
 	}
 
 	// =========================================================================
@@ -3360,8 +3347,8 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		const previousSessionFile = this.sessionManager.getSessionFile();
 
 		// Emit session_before_switch event (can be cancelled)
-		if (this._extensionRunner?.hasHandlers("session_before_switch")) {
-			const result = (await this._extensionRunner.emit({
+		if (this.#extensionRunner?.hasHandlers("session_before_switch")) {
+			const result = (await this.#extensionRunner.emit({
 				type: "session_before_switch",
 				reason: "resume",
 				targetSessionFile: sessionPath,
@@ -3372,11 +3359,11 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			}
 		}
 
-		this._disconnectFromAgent();
+		this.#disconnectFromAgent();
 		await this.abort();
-		this._steeringMessages = [];
-		this._followUpMessages = [];
-		this._pendingNextTurnMessages = [];
+		this.#steeringMessages = [];
+		this.#followUpMessages = [];
+		this.#pendingNextTurnMessages = [];
 
 		// Flush pending writes before switching
 		await this.sessionManager.flush();
@@ -3389,8 +3376,8 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		const sessionContext = this.sessionManager.buildSessionContext();
 
 		// Emit session_switch event to hooks
-		if (this._extensionRunner) {
-			await this._extensionRunner.emit({
+		if (this.#extensionRunner) {
+			await this.#extensionRunner.emit({
 				type: "session_switch",
 				reason: "resume",
 				previousSessionFile,
@@ -3406,7 +3393,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			if (slashIdx > 0) {
 				const provider = defaultModelStr.slice(0, slashIdx);
 				const modelId = defaultModelStr.slice(slashIdx + 1);
-				const availableModels = this._modelRegistry.getAvailable();
+				const availableModels = this.#modelRegistry.getAvailable();
 				const match = availableModels.find(m => m.provider === provider && m.id === modelId);
 				if (match) {
 					this.agent.setModel(match);
@@ -3424,12 +3411,12 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			const availableLevels = this.getAvailableThinkingLevels();
 			const effectiveLevel = availableLevels.includes(defaultThinkingLevel)
 				? defaultThinkingLevel
-				: this._clampThinkingLevel(defaultThinkingLevel, availableLevels);
+				: this.#clampThinkingLevel(defaultThinkingLevel, availableLevels);
 			this.agent.setThinkingLevel(effectiveLevel);
 			this.sessionManager.appendThinkingLevelChange(effectiveLevel);
 		}
 
-		this._reconnectToAgent();
+		this.#reconnectToAgent();
 		return true;
 	}
 
@@ -3450,13 +3437,13 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			throw new Error("Invalid entry ID for branching");
 		}
 
-		const selectedText = this._extractUserMessageText(selectedEntry.message.content);
+		const selectedText = this.#extractUserMessageText(selectedEntry.message.content);
 
 		let skipConversationRestore = false;
 
 		// Emit session_before_branch event (can be cancelled)
-		if (this._extensionRunner?.hasHandlers("session_before_branch")) {
-			const result = (await this._extensionRunner.emit({
+		if (this.#extensionRunner?.hasHandlers("session_before_branch")) {
+			const result = (await this.#extensionRunner.emit({
 				type: "session_before_branch",
 				entryId,
 			})) as SessionBeforeBranchResult | undefined;
@@ -3468,7 +3455,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		}
 
 		// Clear pending messages (bound to old session state)
-		this._pendingNextTurnMessages = [];
+		this.#pendingNextTurnMessages = [];
 
 		// Flush pending writes before branching
 		await this.sessionManager.flush();
@@ -3484,8 +3471,8 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		const sessionContext = this.sessionManager.buildSessionContext();
 
 		// Emit session_branch event to hooks (after branch completes)
-		if (this._extensionRunner) {
-			await this._extensionRunner.emit({
+		if (this.#extensionRunner) {
+			await this.#extensionRunner.emit({
 				type: "session_branch",
 				previousSessionFile,
 			});
@@ -3549,16 +3536,16 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		};
 
 		// Set up abort controller for summarization
-		this._branchSummaryAbortController = new AbortController();
+		this.#branchSummaryAbortController = new AbortController();
 		let hookSummary: { summary: string; details?: unknown } | undefined;
 		let fromExtension = false;
 
 		// Emit session_before_tree event
-		if (this._extensionRunner?.hasHandlers("session_before_tree")) {
-			const result = (await this._extensionRunner.emit({
+		if (this.#extensionRunner?.hasHandlers("session_before_tree")) {
+			const result = (await this.#extensionRunner.emit({
 				type: "session_before_tree",
 				preparation,
-				signal: this._branchSummaryAbortController.signal,
+				signal: this.#branchSummaryAbortController.signal,
 			})) as SessionBeforeTreeResult | undefined;
 
 			if (result?.cancel) {
@@ -3576,7 +3563,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		let summaryDetails: unknown;
 		if (options.summarize && entriesToSummarize.length > 0 && !hookSummary) {
 			const model = this.model!;
-			const apiKey = await this._modelRegistry.getApiKey(model, this.sessionId);
+			const apiKey = await this.#modelRegistry.getApiKey(model, this.sessionId);
 			if (!apiKey) {
 				throw new Error(`No API key for ${model.provider}`);
 			}
@@ -3584,11 +3571,11 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			const result = await generateBranchSummary(entriesToSummarize, {
 				model,
 				apiKey,
-				signal: this._branchSummaryAbortController.signal,
+				signal: this.#branchSummaryAbortController.signal,
 				customInstructions: options.customInstructions,
 				reserveTokens: branchSummarySettings.reserveTokens,
 			});
-			this._branchSummaryAbortController = undefined;
+			this.#branchSummaryAbortController = undefined;
 			if (result.aborted) {
 				return { cancelled: true, aborted: true };
 			}
@@ -3612,7 +3599,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		if (targetEntry.type === "message" && targetEntry.message.role === "user") {
 			// User message: leaf = parent (null if root), text goes to editor
 			newLeafId = targetEntry.parentId;
-			editorText = this._extractUserMessageText(targetEntry.message.content);
+			editorText = this.#extractUserMessageText(targetEntry.message.content);
 		} else if (targetEntry.type === "custom_message") {
 			// Custom message: leaf = parent (null if root), text goes to editor
 			newLeafId = targetEntry.parentId;
@@ -3648,8 +3635,8 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		this.agent.replaceMessages(sessionContext.messages);
 
 		// Emit session_tree event
-		if (this._extensionRunner) {
-			await this._extensionRunner.emit({
+		if (this.#extensionRunner) {
+			await this.#extensionRunner.emit({
 				type: "session_tree",
 				newLeafId: this.sessionManager.getLeafId(),
 				oldLeafId,
@@ -3658,7 +3645,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			});
 		}
 
-		this._branchSummaryAbortController = undefined;
+		this.#branchSummaryAbortController = undefined;
 		return { editorText, cancelled: false, summaryEntry };
 	}
 
@@ -3673,7 +3660,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			if (entry.type !== "message") continue;
 			if (entry.message.role !== "user") continue;
 
-			const text = this._extractUserMessageText(entry.message.content);
+			const text = this.#extractUserMessageText(entry.message.content);
 			if (text) {
 				result.push({ entryId: entry.id, text });
 			}
@@ -3682,7 +3669,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		return result;
 	}
 
-	private _extractUserMessageText(content: string | Array<{ type: string; text?: string }>): string {
+	#extractUserMessageText(content: string | Array<{ type: string; text?: string }>): string {
 		if (typeof content === "string") return content;
 		if (Array.isArray(content)) {
 			return content
@@ -3771,7 +3758,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		const contextWindow = model.contextWindow ?? 0;
 		if (contextWindow <= 0) return undefined;
 
-		const estimate = this._estimateContextTokens();
+		const estimate = this.#estimateContextTokens();
 		const percent = (estimate.tokens / contextWindow) * 100;
 
 		return {
@@ -3785,17 +3772,17 @@ Be thorough - include exact file paths, function names, error messages, and tech
 	}
 
 	async fetchUsageReports(): Promise<UsageReport[] | null> {
-		const authStorage = this._modelRegistry.authStorage;
+		const authStorage = this.#modelRegistry.authStorage;
 		if (!authStorage.fetchUsageReports) return null;
 		return authStorage.fetchUsageReports({
-			baseUrlResolver: provider => this._modelRegistry.getProviderBaseUrl?.(provider),
+			baseUrlResolver: provider => this.#modelRegistry.getProviderBaseUrl?.(provider),
 		});
 	}
 
 	/**
 	 * Estimate context tokens from messages, using the last assistant usage when available.
 	 */
-	private _estimateContextTokens(): {
+	#estimateContextTokens(): {
 		tokens: number;
 		usageTokens: number;
 		trailingTokens: number;
@@ -4136,14 +4123,14 @@ Be thorough - include exact file paths, function names, error messages, and tech
 	 * Check if extensions have handlers for a specific event type.
 	 */
 	hasExtensionHandlers(eventType: string): boolean {
-		return this._extensionRunner?.hasHandlers(eventType) ?? false;
+		return this.#extensionRunner?.hasHandlers(eventType) ?? false;
 	}
 
 	/**
 	 * Get the extension runner (for setting UI context and error handlers).
 	 */
 	get extensionRunner(): ExtensionRunner | undefined {
-		return this._extensionRunner;
+		return this.#extensionRunner;
 	}
 
 	/**
@@ -4151,8 +4138,8 @@ Be thorough - include exact file paths, function names, error messages, and tech
 	 */
 	async emitCustomToolSessionEvent(reason: "start" | "switch" | "branch" | "tree" | "shutdown"): Promise<void> {
 		if (reason !== "shutdown") return;
-		if (this._extensionRunner?.hasHandlers("session_shutdown")) {
-			await this._extensionRunner.emit({ type: "session_shutdown" });
+		if (this.#extensionRunner?.hasHandlers("session_shutdown")) {
+			await this.#extensionRunner.emit({ type: "session_shutdown" });
 		}
 		await cleanupSshResources();
 	}

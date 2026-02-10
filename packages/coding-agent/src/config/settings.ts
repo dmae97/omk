@@ -120,39 +120,39 @@ function setByPath(obj: RawSettings, segments: string[], value: unknown): void {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export class Settings {
-	private configPath: string | null;
-	private cwd: string;
-	private agentDir: string;
-	private storage: AgentStorage | null = null;
+	#configPath: string | null;
+	#cwd: string;
+	#agentDir: string;
+	#storage: AgentStorage | null = null;
 
 	/** Global settings from config.yml */
-	private global: RawSettings = {};
+	#global: RawSettings = {};
 	/** Project settings from .claude/settings.yml etc */
-	private project: RawSettings = {};
+	#project: RawSettings = {};
 	/** Runtime overrides (not persisted) */
-	private overrides: RawSettings = {};
+	#overrides: RawSettings = {};
 	/** Merged view (global + project + overrides) */
-	private merged: RawSettings = {};
+	#merged: RawSettings = {};
 
 	/** Paths modified during this session (for partial save) */
-	private modified = new Set<string>();
+	#modified = new Set<string>();
 
 	/** Pending save (debounced) */
-	private saveTimer: ReturnType<typeof setTimeout> | null = null;
-	private savePromise: Promise<void> | null = null;
+	#saveTimer?: NodeJS.Timeout;
+	#savePromise?: Promise<void>;
 
 	/** Whether to persist changes */
-	private persist: boolean;
+	#persist: boolean;
 
 	private constructor(options: SettingsOptions = {}) {
-		this.cwd = path.normalize(options.cwd ?? process.cwd());
-		this.agentDir = path.normalize(options.agentDir ?? getAgentDir());
-		this.configPath = options.inMemory ? null : path.join(this.agentDir, "config.yml");
-		this.persist = !options.inMemory;
+		this.#cwd = path.normalize(options.cwd ?? process.cwd());
+		this.#agentDir = path.normalize(options.agentDir ?? getAgentDir());
+		this.#configPath = options.inMemory ? null : path.join(this.#agentDir, "config.yml");
+		this.#persist = !options.inMemory;
 
 		if (options.overrides) {
 			for (const [key, value] of Object.entries(options.overrides)) {
-				setByPath(this.overrides, parsePath(key), value);
+				setByPath(this.#overrides, parsePath(key), value);
 			}
 		}
 	}
@@ -169,7 +169,7 @@ export class Settings {
 		if (globalInstancePromise) return globalInstancePromise;
 
 		const instance = new Settings(options);
-		const promise = instance.load();
+		const promise = instance.#load();
 		globalInstancePromise = promise;
 
 		return promise.then(
@@ -191,7 +191,7 @@ export class Settings {
 	 */
 	static isolated(overrides: Partial<Record<SettingPath, unknown>> = {}): Settings {
 		const instance = new Settings({ inMemory: true, overrides });
-		instance.rebuildMerged();
+		instance.#rebuildMerged();
 		return instance;
 	}
 
@@ -216,7 +216,7 @@ export class Settings {
 	 */
 	get<P extends SettingPath>(path: P): SettingValue<P> {
 		const segments = parsePath(path);
-		const value = getByPath(this.merged, segments);
+		const value = getByPath(this.#merged, segments);
 		if (value !== undefined) {
 			return value as SettingValue<P>;
 		}
@@ -231,10 +231,10 @@ export class Settings {
 	set<P extends SettingPath>(path: P, value: SettingValue<P>): void {
 		const prev = this.get(path);
 		const segments = parsePath(path);
-		setByPath(this.global, segments, value);
-		this.modified.add(path);
-		this.rebuildMerged();
-		this.queueSave();
+		setByPath(this.#global, segments, value);
+		this.#modified.add(path);
+		this.#rebuildMerged();
+		this.#queueSave();
 
 		// Trigger hook if exists
 		const hook = SETTING_HOOKS[path];
@@ -248,8 +248,8 @@ export class Settings {
 	 */
 	override<P extends SettingPath>(path: P, value: SettingValue<P>): void {
 		const segments = parsePath(path);
-		setByPath(this.overrides, segments, value);
-		this.rebuildMerged();
+		setByPath(this.#overrides, segments, value);
+		this.#rebuildMerged();
 	}
 
 	/**
@@ -257,14 +257,14 @@ export class Settings {
 	 */
 	clearOverride(path: SettingPath): void {
 		const segments = parsePath(path);
-		let current = this.overrides;
+		let current = this.#overrides;
 		for (let i = 0; i < segments.length - 1; i++) {
 			const segment = segments[i];
 			if (!(segment in current)) return;
 			current = current[segment] as RawSettings;
 		}
 		delete current[segments[segments.length - 1]];
-		this.rebuildMerged();
+		this.#rebuildMerged();
 	}
 
 	/**
@@ -272,15 +272,15 @@ export class Settings {
 	 * Call before exit to ensure all changes are persisted.
 	 */
 	async flush(): Promise<void> {
-		if (this.saveTimer) {
-			clearTimeout(this.saveTimer);
-			this.saveTimer = null;
+		if (this.#saveTimer) {
+			clearTimeout(this.#saveTimer);
+			this.#saveTimer = undefined;
 		}
-		if (this.savePromise) {
-			await this.savePromise;
+		if (this.#savePromise) {
+			await this.#savePromise;
 		}
-		if (this.modified.size > 0) {
-			await this.saveNow();
+		if (this.#modified.size > 0) {
+			await this.#saveNow();
 		}
 	}
 
@@ -289,19 +289,19 @@ export class Settings {
 	// ─────────────────────────────────────────────────────────────────────────
 
 	getStorage(): AgentStorage | null {
-		return this.storage;
+		return this.#storage;
 	}
 
 	getCwd(): string {
-		return this.cwd;
+		return this.#cwd;
 	}
 
 	getAgentDir(): string {
-		return this.agentDir;
+		return this.#agentDir;
 	}
 
 	getPlansDirectory(): string {
-		return path.join(this.agentDir, "plans");
+		return path.join(this.#agentDir, "plans");
 	}
 
 	/**
@@ -310,13 +310,6 @@ export class Settings {
 	getShellConfig() {
 		const shell = this.get("shellPath");
 		return procmgr.getShellConfig(shell);
-	}
-
-	/**
-	 * Serialize current settings for passing to subagent workers.
-	 */
-	serialize(): RawSettings {
-		return structuredClone(this.merged);
 	}
 
 	/**
@@ -337,7 +330,7 @@ export class Settings {
 	 * Get edit model variants (typed accessor for complex nested config).
 	 */
 	getEditModelVariants(): Record<string, "patch" | "replace"> {
-		const variants = (this.merged.edit as { modelVariants?: Record<string, string> })?.modelVariants ?? {};
+		const variants = (this.#merged.edit as { modelVariants?: Record<string, string> })?.modelVariants ?? {};
 		const result: Record<string, "patch" | "replace"> = {};
 		for (const pattern in variants) {
 			const value = variants[pattern];
@@ -359,7 +352,7 @@ export class Settings {
 	 */
 	getEditVariantForModel(model: string | undefined): "patch" | "replace" | null {
 		if (!model) return null;
-		const variants = (this.merged.edit as { modelVariants?: Record<string, string> })?.modelVariants;
+		const variants = (this.#merged.edit as { modelVariants?: Record<string, string> })?.modelVariants;
 		if (!variants) return null;
 		const modelLower = model.toLowerCase();
 		for (const pattern in variants) {
@@ -379,7 +372,7 @@ export class Settings {
 	 * Get bash interceptor rules (typed accessor for complex array config).
 	 */
 	getBashInterceptorRules(): BashInterceptorRule[] {
-		const patterns = (this.merged.bashInterceptor as { patterns?: unknown[] })?.patterns;
+		const patterns = (this.#merged.bashInterceptor as { patterns?: unknown[] })?.patterns;
 		if (!Array.isArray(patterns)) return [];
 
 		return patterns.filter((p): p is BashInterceptorRule => typeof p === "object" && p !== null && "pattern" in p);
@@ -432,34 +425,34 @@ export class Settings {
 	// Loading
 	// ─────────────────────────────────────────────────────────────────────────
 
-	private async load(): Promise<Settings> {
-		if (this.persist) {
+	async #load(): Promise<Settings> {
+		if (this.#persist) {
 			// Open storage
-			this.storage = await AgentStorage.open(getAgentDbPath(this.agentDir));
+			this.#storage = await AgentStorage.open(getAgentDbPath(this.#agentDir));
 
 			// Migrate from legacy formats if needed
-			await this.migrateFromLegacy();
+			await this.#migrateFromLegacy();
 
 			// Load global settings from config.yml
-			this.global = await this.loadYaml(this.configPath!);
+			this.#global = await this.#loadYaml(this.#configPath!);
 		}
 
 		// Load project settings
-		this.project = await this.loadProjectSettings();
+		this.#project = await this.#loadProjectSettings();
 
 		// Build merged view
-		this.rebuildMerged();
+		this.#rebuildMerged();
 		return this;
 	}
 
-	private async loadYaml(filePath: string): Promise<RawSettings> {
+	async #loadYaml(filePath: string): Promise<RawSettings> {
 		try {
 			const content = await Bun.file(filePath).text();
 			const parsed = YAML.parse(content);
 			if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
 				return {};
 			}
-			return this.migrateRawSettings(parsed as RawSettings);
+			return this.#migrateRawSettings(parsed as RawSettings);
 		} catch (error) {
 			if (isEnoent(error)) return {};
 			logger.warn("Settings: failed to load", { path: filePath, error: String(error) });
@@ -467,27 +460,27 @@ export class Settings {
 		}
 	}
 
-	private async loadProjectSettings(): Promise<RawSettings> {
+	async #loadProjectSettings(): Promise<RawSettings> {
 		try {
-			const result = await loadCapability(settingsCapability.id, { cwd: this.cwd });
+			const result = await loadCapability(settingsCapability.id, { cwd: this.#cwd });
 			let merged: RawSettings = {};
 			for (const item of result.items as SettingsCapabilityItem[]) {
 				if (item.level === "project") {
-					merged = this.deepMerge(merged, item.data as RawSettings);
+					merged = this.#deepMerge(merged, item.data as RawSettings);
 				}
 			}
-			return this.migrateRawSettings(merged);
+			return this.#migrateRawSettings(merged);
 		} catch {
 			return {};
 		}
 	}
 
-	private async migrateFromLegacy(): Promise<void> {
-		if (!this.configPath) return;
+	async #migrateFromLegacy(): Promise<void> {
+		if (!this.#configPath) return;
 
 		// Check if config.yml already exists
 		try {
-			await Bun.file(this.configPath).text();
+			await Bun.file(this.#configPath).text();
 			return; // Already exists, no migration needed
 		} catch (err) {
 			if (!isEnoent(err)) return;
@@ -497,11 +490,11 @@ export class Settings {
 		let migrated = false;
 
 		// 1. Migrate from settings.json
-		const settingsJsonPath = path.join(this.agentDir, "settings.json");
+		const settingsJsonPath = path.join(this.#agentDir, "settings.json");
 		try {
 			const parsed = JSON.parse(await Bun.file(settingsJsonPath).text());
 			if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-				settings = this.deepMerge(settings, this.migrateRawSettings(parsed));
+				settings = this.#deepMerge(settings, this.#migrateRawSettings(parsed));
 				migrated = true;
 				try {
 					fs.renameSync(settingsJsonPath, `${settingsJsonPath}.bak`);
@@ -511,9 +504,9 @@ export class Settings {
 
 		// 2. Migrate from agent.db
 		try {
-			const dbSettings = this.storage?.getSettings();
+			const dbSettings = this.#storage?.getSettings();
 			if (dbSettings) {
-				settings = this.deepMerge(settings, this.migrateRawSettings(dbSettings as RawSettings));
+				settings = this.#deepMerge(settings, this.#migrateRawSettings(dbSettings as RawSettings));
 				migrated = true;
 			}
 		} catch {}
@@ -521,14 +514,14 @@ export class Settings {
 		// 3. Write merged settings
 		if (migrated && Object.keys(settings).length > 0) {
 			try {
-				await Bun.write(this.configPath, YAML.stringify(settings, null, 2));
-				logger.debug("Settings: migrated to config.yml", { path: this.configPath });
+				await Bun.write(this.#configPath, YAML.stringify(settings, null, 2));
+				logger.debug("Settings: migrated to config.yml", { path: this.#configPath });
 			} catch {}
 		}
 	}
 
 	/** Apply schema migrations to raw settings */
-	private migrateRawSettings(raw: RawSettings): RawSettings {
+	#migrateRawSettings(raw: RawSettings): RawSettings {
 		// queueMode -> steeringMode
 		if ("queueMode" in raw && !("steeringMode" in raw)) {
 			raw.steeringMode = raw.queueMode;
@@ -550,65 +543,65 @@ export class Settings {
 	// Saving
 	// ─────────────────────────────────────────────────────────────────────────
 
-	private queueSave(): void {
-		if (!this.persist || !this.configPath) return;
+	#queueSave(): void {
+		if (!this.#persist || !this.#configPath) return;
 
 		// Debounce: wait 100ms for more changes
-		if (this.saveTimer) {
-			clearTimeout(this.saveTimer);
+		if (this.#saveTimer) {
+			clearTimeout(this.#saveTimer);
 		}
-		this.saveTimer = setTimeout(() => {
-			this.saveTimer = null;
-			this.saveNow().catch(err => {
+		this.#saveTimer = setTimeout(() => {
+			this.#saveTimer = undefined;
+			this.#saveNow().catch(err => {
 				logger.warn("Settings: background save failed", { error: String(err) });
 			});
 		}, 100);
 	}
 
-	private async saveNow(): Promise<void> {
-		if (!this.persist || !this.configPath || this.modified.size === 0) return;
+	async #saveNow(): Promise<void> {
+		if (!this.#persist || !this.#configPath || this.#modified.size === 0) return;
 
-		const configPath = this.configPath;
-		const modifiedPaths = [...this.modified];
-		this.modified.clear();
+		const configPath = this.#configPath;
+		const modifiedPaths = [...this.#modified];
+		this.#modified.clear();
 
 		try {
 			await withFileLock(configPath, async () => {
 				// Re-read to preserve external changes
-				const current = await this.loadYaml(configPath);
+				const current = await this.#loadYaml(configPath);
 
 				// Apply only our modified paths
 				for (const modPath of modifiedPaths) {
 					const segments = parsePath(modPath);
-					const value = getByPath(this.global, segments);
+					const value = getByPath(this.#global, segments);
 					setByPath(current, segments, value);
 				}
 
 				// Update our global with any external changes we preserved
-				this.global = current;
-				await Bun.write(configPath, YAML.stringify(this.global, null, 2));
+				this.#global = current;
+				await Bun.write(configPath, YAML.stringify(this.#global, null, 2));
 			});
 		} catch (error) {
 			logger.warn("Settings: save failed", { error: String(error) });
 			// Re-add failed paths for retry
 			for (const p of modifiedPaths) {
-				this.modified.add(p);
+				this.#modified.add(p);
 			}
 		}
 
-		this.rebuildMerged();
+		this.#rebuildMerged();
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────
 	// Utilities
 	// ─────────────────────────────────────────────────────────────────────────
 
-	private rebuildMerged(): void {
-		this.merged = this.deepMerge(this.deepMerge({}, this.global), this.project);
-		this.merged = this.deepMerge(this.merged, this.overrides);
+	#rebuildMerged(): void {
+		this.#merged = this.#deepMerge(this.#deepMerge({}, this.#global), this.#project);
+		this.#merged = this.#deepMerge(this.#merged, this.#overrides);
 	}
 
-	private deepMerge(base: RawSettings, overrides: RawSettings): RawSettings {
+	#deepMerge(base: RawSettings, overrides: RawSettings): RawSettings {
 		const result = { ...base };
 		for (const key of Object.keys(overrides)) {
 			const override = overrides[key];
@@ -624,7 +617,7 @@ export class Settings {
 				baseVal !== null &&
 				!Array.isArray(baseVal)
 			) {
-				result[key] = this.deepMerge(baseVal as RawSettings, override as RawSettings);
+				result[key] = this.#deepMerge(baseVal as RawSettings, override as RawSettings);
 			} else {
 				result[key] = override;
 			}

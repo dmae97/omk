@@ -10,14 +10,14 @@ import type { InternalResource, InternalUrl, ProtocolHandler } from "./types";
  * registered protocol handlers.
  */
 export class InternalUrlRouter {
-	private handlers = new Map<string, ProtocolHandler>();
+	#handlers = new Map<string, ProtocolHandler>();
 
 	/**
 	 * Register a protocol handler.
 	 * @param handler Handler to register (uses handler.scheme as key)
 	 */
 	register(handler: ProtocolHandler): void {
-		this.handlers.set(handler.scheme, handler);
+		this.#handlers.set(handler.scheme, handler);
 	}
 
 	/**
@@ -28,7 +28,7 @@ export class InternalUrlRouter {
 		const match = input.match(/^([a-z][a-z0-9+.-]*):\/\//i);
 		if (!match) return false;
 		const scheme = match[1].toLowerCase();
-		return this.handlers.has(scheme);
+		return this.#handlers.has(scheme);
 	}
 
 	/**
@@ -54,10 +54,10 @@ export class InternalUrlRouter {
 		(parsed as InternalUrl).rawHost = rawHost;
 
 		const scheme = parsed.protocol.replace(/:$/, "").toLowerCase();
-		const handler = this.handlers.get(scheme);
+		const handler = this.#handlers.get(scheme);
 
 		if (!handler) {
-			const available = Array.from(this.handlers.keys())
+			const available = Array.from(this.#handlers.keys())
 				.map(s => `${s}://`)
 				.join(", ");
 			throw new Error(`Unknown protocol: ${scheme}://\nSupported: ${available || "none"}`);

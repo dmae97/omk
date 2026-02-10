@@ -62,17 +62,17 @@ const noOpUIContext: HookUIContext = {
  * HookRunner executes hooks and manages event emission.
  */
 export class HookRunner {
-	private uiContext: HookUIContext;
-	private hasUI: boolean;
-	private errorListeners: Set<HookErrorListener> = new Set();
-	private getModel: () => Model | undefined = () => undefined;
-	private isIdleFn: () => boolean = () => true;
-	private waitForIdleFn: () => Promise<void> = async () => {};
-	private abortFn: () => void = () => {};
-	private hasQueuedMessagesFn: () => boolean = () => false;
-	private newSessionHandler: NewSessionHandler = async () => ({ cancelled: false });
-	private branchHandler: BranchHandler = async () => ({ cancelled: false });
-	private navigateTreeHandler: NavigateTreeHandler = async () => ({ cancelled: false });
+	#uiContext: HookUIContext;
+	#hasUI: boolean;
+	#errorListeners: Set<HookErrorListener> = new Set();
+	#getModel: () => Model | undefined = () => undefined;
+	#isIdleFn: () => boolean = () => true;
+	#waitForIdleFn: () => Promise<void> = async () => {};
+	#abortFn: () => void = () => {};
+	#hasQueuedMessagesFn: () => boolean = () => false;
+	#newSessionHandler: NewSessionHandler = async () => ({ cancelled: false });
+	#branchHandler: BranchHandler = async () => ({ cancelled: false });
+	#navigateTreeHandler: NavigateTreeHandler = async () => ({ cancelled: false });
 
 	constructor(
 		private readonly hooks: LoadedHook[],
@@ -80,8 +80,8 @@ export class HookRunner {
 		private readonly sessionManager: SessionManager,
 		private readonly modelRegistry: ModelRegistry,
 	) {
-		this.uiContext = noOpUIContext;
-		this.hasUI = false;
+		this.#uiContext = noOpUIContext;
+		this.#hasUI = false;
 	}
 
 	/**
@@ -114,42 +114,42 @@ export class HookRunner {
 		/** Whether UI is available */
 		hasUI?: boolean;
 	}): void {
-		this.getModel = options.getModel;
-		this.isIdleFn = options.isIdle ?? (() => true);
-		this.waitForIdleFn = options.waitForIdle ?? (async () => {});
-		this.abortFn = options.abort ?? (() => {});
-		this.hasQueuedMessagesFn = options.hasQueuedMessages ?? (() => false);
+		this.#getModel = options.getModel;
+		this.#isIdleFn = options.isIdle ?? (() => true);
+		this.#waitForIdleFn = options.waitForIdle ?? (async () => {});
+		this.#abortFn = options.abort ?? (() => {});
+		this.#hasQueuedMessagesFn = options.hasQueuedMessages ?? (() => false);
 		// Store session handlers for HookCommandContext
 		if (options.newSessionHandler) {
-			this.newSessionHandler = options.newSessionHandler;
+			this.#newSessionHandler = options.newSessionHandler;
 		}
 		if (options.branchHandler) {
-			this.branchHandler = options.branchHandler;
+			this.#branchHandler = options.branchHandler;
 		}
 		if (options.navigateTreeHandler) {
-			this.navigateTreeHandler = options.navigateTreeHandler;
+			this.#navigateTreeHandler = options.navigateTreeHandler;
 		}
 		// Set per-hook handlers for pi.sendMessage() and pi.appendEntry()
 		for (const hook of this.hooks) {
 			hook.setSendMessageHandler(options.sendMessageHandler);
 			hook.setAppendEntryHandler(options.appendEntryHandler);
 		}
-		this.uiContext = options.uiContext ?? noOpUIContext;
-		this.hasUI = options.hasUI ?? false;
+		this.#uiContext = options.uiContext ?? noOpUIContext;
+		this.#hasUI = options.hasUI ?? false;
 	}
 
 	/**
 	 * Get the UI context (set by mode).
 	 */
 	getUIContext(): HookUIContext | null {
-		return this.uiContext;
+		return this.#uiContext;
 	}
 
 	/**
 	 * Get whether UI is available.
 	 */
 	getHasUI(): boolean {
-		return this.hasUI;
+		return this.#hasUI;
 	}
 
 	/**
@@ -164,8 +164,8 @@ export class HookRunner {
 	 * @returns Unsubscribe function
 	 */
 	onError(listener: HookErrorListener): () => void {
-		this.errorListeners.add(listener);
-		return () => this.errorListeners.delete(listener);
+		this.#errorListeners.add(listener);
+		return () => this.#errorListeners.delete(listener);
 	}
 
 	/**
@@ -175,7 +175,7 @@ export class HookRunner {
 	 * Emit an error to all error listeners.
 	 */
 	emitError(error: HookError): void {
-		for (const listener of this.errorListeners) {
+		for (const listener of this.#errorListeners) {
 			listener(error);
 		}
 	}
@@ -237,17 +237,17 @@ export class HookRunner {
 	/**
 	 * Create the event context for handlers.
 	 */
-	private createContext(): HookContext {
+	#createContext(): HookContext {
 		return {
-			ui: this.uiContext,
-			hasUI: this.hasUI,
+			ui: this.#uiContext,
+			hasUI: this.#hasUI,
 			cwd: this.cwd,
 			sessionManager: this.sessionManager,
 			modelRegistry: this.modelRegistry,
-			model: this.getModel(),
-			isIdle: () => this.isIdleFn(),
-			abort: () => this.abortFn(),
-			hasQueuedMessages: () => this.hasQueuedMessagesFn(),
+			model: this.#getModel(),
+			isIdle: () => this.#isIdleFn(),
+			abort: () => this.#abortFn(),
+			hasQueuedMessages: () => this.#hasQueuedMessagesFn(),
 		};
 	}
 
@@ -257,18 +257,18 @@ export class HookRunner {
 	 */
 	createCommandContext(): HookCommandContext {
 		return {
-			...this.createContext(),
-			waitForIdle: () => this.waitForIdleFn(),
-			newSession: options => this.newSessionHandler(options),
-			branch: entryId => this.branchHandler(entryId),
-			navigateTree: (targetId, options) => this.navigateTreeHandler(targetId, options),
+			...this.#createContext(),
+			waitForIdle: () => this.#waitForIdleFn(),
+			newSession: options => this.#newSessionHandler(options),
+			branch: entryId => this.#branchHandler(entryId),
+			navigateTree: (targetId, options) => this.#navigateTreeHandler(targetId, options),
 		};
 	}
 
 	/**
 	 * Check if event type is a session "before_*" event that can be cancelled.
 	 */
-	private isSessionBeforeEvent(
+	#isSessionBeforeEvent(
 		type: string,
 	): type is "session_before_switch" | "session_before_branch" | "session_before_compact" | "session_before_tree" {
 		return (
@@ -288,7 +288,7 @@ export class HookRunner {
 	): Promise<
 		SessionBeforeCompactResult | SessionBeforeTreeResult | SessionCompactingResult | ToolResultEventResult | undefined
 	> {
-		const ctx = this.createContext();
+		const ctx = this.#createContext();
 		let result:
 			| SessionBeforeCompactResult
 			| SessionBeforeTreeResult
@@ -305,7 +305,7 @@ export class HookRunner {
 					const handlerResult = await handler(event, ctx);
 
 					// For session before_* events, capture the result (for cancellation)
-					if (this.isSessionBeforeEvent(event.type) && handlerResult) {
+					if (this.#isSessionBeforeEvent(event.type) && handlerResult) {
 						result = handlerResult as SessionBeforeCompactResult | SessionBeforeTreeResult;
 						// If cancelled, stop processing further hooks
 						if (result.cancel) {
@@ -340,7 +340,7 @@ export class HookRunner {
 	 * Errors are thrown (not swallowed) so caller can block on failure.
 	 */
 	async emitToolCall(event: ToolCallEvent): Promise<ToolCallEventResult | undefined> {
-		const ctx = this.createContext();
+		const ctx = this.#createContext();
 		let result: ToolCallEventResult | undefined;
 
 		for (const hook of this.hooks) {
@@ -372,7 +372,7 @@ export class HookRunner {
 	 * Note: Messages are already deep-copied by the caller (pi-ai preprocessor).
 	 */
 	async emitContext(messages: AgentMessage[]): Promise<AgentMessage[]> {
-		const ctx = this.createContext();
+		const ctx = this.#createContext();
 		let currentMessages = messages;
 
 		for (const hook of this.hooks) {
@@ -409,7 +409,7 @@ export class HookRunner {
 		prompt: string,
 		images?: import("@oh-my-pi/pi-ai").ImageContent[],
 	): Promise<BeforeAgentStartEventResult | undefined> {
-		const ctx = this.createContext();
+		const ctx = this.#createContext();
 		let result: BeforeAgentStartEventResult | undefined;
 
 		for (const hook of this.hooks) {

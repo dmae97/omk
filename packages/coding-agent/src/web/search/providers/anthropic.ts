@@ -4,7 +4,12 @@
  * Uses Claude's built-in web_search_20250305 tool to search the web.
  * Returns synthesized answers with citations and source metadata.
  */
-import { applyClaudeToolPrefix, buildAnthropicSystemBlocks, stripClaudeToolPrefix } from "@oh-my-pi/pi-ai";
+import {
+	type AnthropicSystemBlock,
+	applyClaudeToolPrefix,
+	buildAnthropicSystemBlocks,
+	stripClaudeToolPrefix,
+} from "@oh-my-pi/pi-ai";
 import { $env } from "@oh-my-pi/pi-utils";
 import { buildAnthropicHeaders, buildAnthropicUrl, findAnthropicAuth } from "../../../web/search/auth";
 import type {
@@ -63,7 +68,7 @@ function buildSystemBlocks(
 	auth: AnthropicAuthConfig,
 	model: string,
 	systemPrompt?: string,
-): ReturnType<typeof buildAnthropicSystemBlocks> {
+): AnthropicSystemBlock[] | undefined {
 	const includeClaudeCode = !model.startsWith("claude-3-5-haiku");
 	const extraInstructions = auth.isOAuth ? ["You are a helpful AI assistant with web search capabilities."] : [];
 

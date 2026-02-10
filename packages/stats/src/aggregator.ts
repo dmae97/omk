@@ -1,4 +1,4 @@
-import * as fs from "node:fs/promises";
+import * as fs from "node:fs";
 import {
 	getRecentErrors as dbGetRecentErrors,
 	getRecentRequests as dbGetRecentRequests,
@@ -24,9 +24,9 @@ import type { DashboardStats, MessageStats, RequestDetails } from "./types";
  */
 async function syncSessionFile(sessionFile: string): Promise<number> {
 	// Get file stats
-	let fileStats: Awaited<ReturnType<typeof fs.stat>>;
+	let fileStats: fs.Stats;
 	try {
-		fileStats = await fs.stat(sessionFile);
+		fileStats = await fs.promises.stat(sessionFile);
 	} catch {
 		return 0;
 	}

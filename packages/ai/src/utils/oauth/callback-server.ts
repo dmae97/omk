@@ -23,11 +23,11 @@ export type CallbackResult = { code: string; state: string };
  * Abstract base class for OAuth flows with local callback servers.
  */
 export abstract class OAuthCallbackFlow {
-	protected ctrl: OAuthController;
-	protected preferredPort: number;
-	protected callbackPath: string;
-	private callbackResolve?: (result: CallbackResult) => void;
-	private callbackReject?: (error: string) => void;
+	ctrl: OAuthController;
+	preferredPort: number;
+	callbackPath: string;
+	#callbackResolve?: (result: CallbackResult) => void;
+	#callbackReject?: (error: string) => void;
 
 	constructor(ctrl: OAuthController, preferredPort: number, callbackPath: string = CALLBACK_PATH) {
 		this.ctrl = ctrl;
@@ -41,10 +41,7 @@ export abstract class OAuthCallbackFlow {
 	 * @param redirectUri - The actual redirect URI to use (may differ from expected if port fallback occurred)
 	 * @returns Authorization URL and optional instructions
 	 */
-	protected abstract generateAuthUrl(
-		state: string,
-		redirectUri: string,
-	): Promise<{ url: string; instructions?: string }>;
+	abstract generateAuthUrl(state: string, redirectUri: string): Promise<{ url: string; instructions?: string }>;
 
 	/**
 	 * Exchange authorization code for OAuth tokens.
@@ -53,12 +50,12 @@ export abstract class OAuthCallbackFlow {
 	 * @param redirectUri - The actual redirect URI used (must match authorization request)
 	 * @returns OAuth credentials
 	 */
-	protected abstract exchangeToken(code: string, state: string, redirectUri: string): Promise<OAuthCredentials>;
+	abstract exchangeToken(code: string, state: string, redirectUri: string): Promise<OAuthCredentials>;
 
 	/**
 	 * Generate CSRF state token. Override if provider needs custom state generation.
 	 */
-	protected generateState(): string {
+	generateState(): string {
 		const bytes = new Uint8Array(16);
 		crypto.getRandomValues(bytes);
 		return Array.from(bytes)
@@ -73,7 +70,7 @@ export abstract class OAuthCallbackFlow {
 		const state = this.generateState();
 
 		// Start callback server first to get actual redirect URI
-		const { server, redirectUri } = await this.startCallbackServer(state);
+		const { server, redirectUri } = await this.#startCallbackServer(state);
 
 		try {
 			// Generate auth URL with the ACTUAL redirect URI (may differ from expected if port was busy)
@@ -84,7 +81,7 @@ export abstract class OAuthCallbackFlow {
 			this.ctrl.onProgress?.("Waiting for browser authentication...");
 
 			// Wait for callback or manual input
-			const { code } = await this.waitForCallback(state);
+			const { code } = await this.#waitForCallback(state);
 
 			this.ctrl.onProgress?.("Exchanging authorization code for tokens...");
 
@@ -97,18 +94,16 @@ export abstract class OAuthCallbackFlow {
 	/**
 	 * Start callback server, trying preferred port first, falling back to random.
 	 */
-	private async startCallbackServer(
-		expectedState: string,
-	): Promise<{ server: Bun.Server<unknown>; redirectUri: string }> {
+	async #startCallbackServer(expectedState: string): Promise<{ server: Bun.Server<unknown>; redirectUri: string }> {
 		// Try preferred port first
 		try {
 			const redirectUri = `http://${DEFAULT_HOSTNAME}:${this.preferredPort}${this.callbackPath}`;
-			const server = this.createServer(this.preferredPort, expectedState);
+			const server = this.#createServer(this.preferredPort, expectedState);
 			return { server, redirectUri };
 		} catch {
 			// Port busy or unavailable, try random port
 			const randomPort = 0; // Let OS assign
-			const server = this.createServer(randomPort, expectedState);
+			const server = this.#createServer(randomPort, expectedState);
 			const actualPort = server.port;
 			const redirectUri = `http://${DEFAULT_HOSTNAME}:${actualPort}${this.callbackPath}`;
 			this.ctrl.onProgress?.(`Preferred port ${this.preferredPort} unavailable, using port ${actualPort}`);
@@ -119,19 +114,19 @@ export abstract class OAuthCallbackFlow {
 	/**
 	 * Create HTTP server for OAuth callback.
 	 */
-	private createServer(port: number, expectedState: string): Bun.Server<unknown> {
+	#createServer(port: number, expectedState: string): Bun.Server<unknown> {
 		return Bun.serve({
 			hostname: DEFAULT_HOSTNAME,
 			port,
 			reusePort: false,
-			fetch: req => this.handleCallback(req, expectedState),
+			fetch: req => this.#handleCallback(req, expectedState),
 		});
 	}
 
 	/**
 	 * Handle OAuth callback HTTP request.
 	 */
-	private handleCallback(req: Request, expectedState: string): Response {
+	#handleCallback(req: Request, expectedState: string): Response {
 		const url = new URL(req.url);
 
 		if (url.pathname !== this.callbackPath) {
@@ -158,8 +153,8 @@ export abstract class OAuthCallbackFlow {
 		}
 
 		// Signal to waitForCallback - capture refs before they could be cleared
-		const resolve = this.callbackResolve;
-		const reject = this.callbackReject;
+		const resolve = this.#callbackResolve;
+		const reject = this.#callbackReject;
 		queueMicrotask(() => {
 			if (resultState.ok) {
 				resolve?.({ code: resultState.code, state: resultState.state });
@@ -180,17 +175,17 @@ export abstract class OAuthCallbackFlow {
 	/**
 	 * Wait for OAuth callback or manual input (whichever comes first).
 	 */
-	private waitForCallback(expectedState: string): Promise<CallbackResult> {
+	#waitForCallback(expectedState: string): Promise<CallbackResult> {
 		const timeoutSignal = AbortSignal.timeout(DEFAULT_TIMEOUT);
 		const signal = this.ctrl.signal ? AbortSignal.any([this.ctrl.signal, timeoutSignal]) : timeoutSignal;
 
 		const callbackPromise = new Promise<CallbackResult>((resolve, reject) => {
-			this.callbackResolve = resolve;
-			this.callbackReject = reject;
+			this.#callbackResolve = resolve;
+			this.#callbackReject = reject;
 
 			signal.addEventListener("abort", () => {
-				this.callbackResolve = undefined;
-				this.callbackReject = undefined;
+				this.#callbackResolve = undefined;
+				this.#callbackReject = undefined;
 				reject(new Error(`OAuth callback cancelled: ${signal.reason}`));
 			});
 		});

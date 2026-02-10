@@ -5,10 +5,10 @@ import { Text } from "./text";
  * Loader component that updates every 80ms with spinning animation
  */
 export class Loader extends Text {
-	private frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-	private currentFrame = 0;
-	private intervalId: NodeJS.Timeout | null = null;
-	private ui: TUI | null = null;
+	#frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+	#currentFrame = 0;
+	#intervalId?: NodeJS.Timeout;
+	#ui: TUI | null = null;
 
 	constructor(
 		ui: TUI,
@@ -18,9 +18,9 @@ export class Loader extends Text {
 		spinnerFrames?: string[],
 	) {
 		super("", 1, 0);
-		this.ui = ui;
+		this.#ui = ui;
 		if (spinnerFrames && spinnerFrames.length > 0) {
-			this.frames = spinnerFrames;
+			this.#frames = spinnerFrames;
 		}
 		this.start();
 	}
@@ -30,30 +30,30 @@ export class Loader extends Text {
 	}
 
 	start() {
-		this.updateDisplay();
-		this.intervalId = setInterval(() => {
-			this.currentFrame = (this.currentFrame + 1) % this.frames.length;
-			this.updateDisplay();
+		this.#updateDisplay();
+		this.#intervalId = setInterval(() => {
+			this.#currentFrame = (this.#currentFrame + 1) % this.#frames.length;
+			this.#updateDisplay();
 		}, 80);
 	}
 
 	stop() {
-		if (this.intervalId) {
-			clearInterval(this.intervalId);
-			this.intervalId = null;
+		if (this.#intervalId) {
+			clearInterval(this.#intervalId);
+			this.#intervalId = undefined;
 		}
 	}
 
 	setMessage(message: string) {
 		this.message = message;
-		this.updateDisplay();
+		this.#updateDisplay();
 	}
 
-	private updateDisplay() {
-		const frame = this.frames[this.currentFrame];
+	#updateDisplay() {
+		const frame = this.#frames[this.#currentFrame];
 		this.setText(`${this.spinnerColorFn(frame)} ${this.messageColorFn(this.message)}`);
-		if (this.ui) {
-			this.ui.requestRender();
+		if (this.#ui) {
+			this.#ui.requestRender();
 		}
 	}
 }

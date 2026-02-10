@@ -317,7 +317,7 @@ export const streamCursor: StreamFunction<"cursor-agent"> = (
 
 		let h2Client: http2.ClientHttp2Session | null = null;
 		let h2Request: http2.ClientHttp2Stream | null = null;
-		let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+		let heartbeatTimer: NodeJS.Timeout | null = null;
 
 		try {
 			const apiKey = options?.apiKey;

@@ -1,3 +1,4 @@
+import type * as fs from "node:fs";
 import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent } from "@oh-my-pi/pi-ai";
@@ -142,31 +143,31 @@ export interface PythonToolOptions {
 }
 
 export class PythonTool implements AgentTool<typeof pythonSchema> {
-	public readonly name = "python";
-	public readonly label = "Python";
-	public readonly description: string;
-	public readonly parameters = pythonSchema;
-	public readonly concurrency = "exclusive";
+	readonly name = "python";
+	readonly label = "Python";
+	readonly description: string;
+	readonly parameters = pythonSchema;
+	readonly concurrency = "exclusive";
 
-	private readonly proxyExecutor?: PythonProxyExecutor;
+	readonly #proxyExecutor?: PythonProxyExecutor;
 
 	constructor(
 		private readonly session: ToolSession | null,
 		options?: PythonToolOptions,
 	) {
-		this.proxyExecutor = options?.proxyExecutor;
+		this.#proxyExecutor = options?.proxyExecutor;
 		this.description = getPythonToolDescription();
 	}
 
-	public async execute(
+	async execute(
 		_toolCallId: string,
 		params: Static<typeof pythonSchema>,
 		signal?: AbortSignal,
 		onUpdate?: AgentToolUpdateCallback,
 		_ctx?: AgentToolContext,
 	): Promise<AgentToolResult<PythonToolDetails | undefined>> {
-		if (this.proxyExecutor) {
-			return this.proxyExecutor(params, signal);
+		if (this.#proxyExecutor) {
+			return this.#proxyExecutor(params, signal);
 		}
 
 		if (!this.session) {
@@ -195,7 +196,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 			}
 
 			const commandCwd = cwd ? resolveToCwd(cwd, this.session.cwd) : this.session.cwd;
-			let cwdStat: Awaited<ReturnType<Bun.BunFile["stat"]>>;
+			let cwdStat: fs.Stats;
 			try {
 				cwdStat = await Bun.file(commandCwd).stat();
 			} catch {

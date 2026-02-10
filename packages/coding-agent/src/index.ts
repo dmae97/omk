@@ -107,7 +107,6 @@ export {
 } from "./modes";
 // UI components for extensions
 export {
-	ArminComponent,
 	AssistantMessageComponent,
 	BashExecutionComponent,
 	BorderedLoader,

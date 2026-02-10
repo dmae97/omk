@@ -20,13 +20,13 @@ interface Component {
 }
 ```
 
-| Member                       | Description                                                                                               |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `render(width)`              | Return array of strings (one per line). Each line **must not exceed `width`**.                            |
-| `handleInput?(data)`         | Receive keyboard input when component has focus.                                                          |
-| `wantsKeyRelease?`           | Opt-in to key release events (Kitty protocol). Default is `false` (release events are filtered out).      |
-| `getCursorPosition?(width)`  | Optional cursor position within the rendered output (0-based row/col) for hardware cursor placement.      |
-| `invalidate()`               | Clear cached render state (called when themes change or the component needs a full re-render).            |
+| Member                      | Description                                                                                          |
+| --------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `render(width)`             | Return array of strings (one per line). Each line **must not exceed `width`**.                       |
+| `handleInput?(data)`        | Receive keyboard input when component has focus.                                                     |
+| `wantsKeyRelease?`          | Opt-in to key release events (Kitty protocol). Default is `false` (release events are filtered out). |
+| `getCursorPosition?(width)` | Optional cursor position within the rendered output (0-based row/col) for hardware cursor placement. |
+| `invalidate()`              | Clear cached render state (called when themes change or the component needs a full re-render).       |
 
 ## Using Components
 
@@ -333,8 +333,8 @@ class MySelector implements Component {
 	private cachedWidth?: number;
 	private cachedLines?: string[];
 
-	public onSelect?: (item: string) => void;
-	public onCancel?: () => void;
+	onSelect?: (item: string) => void;
+	onCancel?: () => void;
 
 	constructor(items: string[]) {
 		this.items = items;

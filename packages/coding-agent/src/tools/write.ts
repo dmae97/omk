@@ -70,26 +70,26 @@ type WriteParams = { path: string; content: string };
  * Creates or overwrites files with optional LSP formatting and diagnostics.
  */
 export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails> {
-	public readonly name = "write";
-	public readonly label = "Write";
-	public readonly description: string;
-	public readonly parameters = writeSchema;
-	public readonly nonAbortable = true;
-	public readonly concurrency = "exclusive";
+	readonly name = "write";
+	readonly label = "Write";
+	readonly description: string;
+	readonly parameters = writeSchema;
+	readonly nonAbortable = true;
+	readonly concurrency = "exclusive";
 
-	private readonly writethrough: WritethroughCallback;
+	readonly #writethrough: WritethroughCallback;
 
 	constructor(private readonly session: ToolSession) {
 		const enableLsp = session.enableLsp ?? true;
 		const enableFormat = enableLsp && session.settings.get("lsp.formatOnWrite");
 		const enableDiagnostics = enableLsp && session.settings.get("lsp.diagnosticsOnWrite");
-		this.writethrough = enableLsp
+		this.#writethrough = enableLsp
 			? createLspWritethrough(session.cwd, { enableFormat, enableDiagnostics })
 			: writethroughNoop;
 		this.description = renderPromptTemplate(writeDescription);
 	}
 
-	public async execute(
+	async execute(
 		_toolCallId: string,
 		{ path, content }: WriteParams,
 		signal?: AbortSignal,
@@ -101,7 +101,7 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 			const absolutePath = resolvePlanPath(this.session, path);
 			const batchRequest = getLspBatchRequest(context?.toolCall);
 
-			const diagnostics = await this.writethrough(absolutePath, content, signal, undefined, batchRequest);
+			const diagnostics = await this.#writethrough(absolutePath, content, signal, undefined, batchRequest);
 
 			const resultText = `Successfully wrote ${content.length} bytes to ${path}`;
 			if (!diagnostics) {

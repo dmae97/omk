@@ -137,13 +137,13 @@ export class BiomeClient implements LinterClient {
 		// Run biome lint with JSON reporter
 		const result = await runBiome(["lint", "--reporter=json", filePath], this.cwd, this.config.resolvedCommand);
 
-		return this.parseJsonOutput(result.stdout, filePath);
+		return this.#parseJsonOutput(result.stdout, filePath);
 	}
 
 	/**
 	 * Parse Biome's JSON output into LSP Diagnostics.
 	 */
-	private parseJsonOutput(jsonOutput: string, targetFile: string): Diagnostic[] {
+	#parseJsonOutput(jsonOutput: string, targetFile: string): Diagnostic[] {
 		const diagnostics: Diagnostic[] = [];
 
 		try {

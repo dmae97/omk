@@ -145,7 +145,6 @@ export interface InteractiveModeContext {
 	handleDumpCommand(): Promise<void>;
 	handleClearCommand(): Promise<void>;
 	handleForkCommand(): Promise<void>;
-	handleArminSaysHi(): void;
 	handleBashCommand(command: string, excludeFromContext?: boolean): Promise<void>;
 	handlePythonCommand(code: string, excludeFromContext?: boolean): Promise<void>;
 	handleCompactCommand(customInstructions?: string): Promise<void>;

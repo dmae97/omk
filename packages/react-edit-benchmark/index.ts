@@ -335,60 +335,60 @@ async function main(): Promise<void> {
 }
 
 class LiveProgress {
-	private readonly totalRuns: number;
-	private readonly runsPerTask: number;
-	private readonly isTty: boolean;
-	private started = 0;
-	private completed = 0;
-	private success = 0;
-	private totalInput = 0;
-	private totalOutput = 0;
-	private totalDuration = 0;
-	private totalReads = 0;
-	private totalEdits = 0;
-	private totalWrites = 0;
-	private totalEditSuccesses = 0;
-	private totalToolInputChars = 0;
-	private indentScores: number[] = [];
-	private lastLineLength = 0;
+	readonly #totalRuns: number;
+	readonly #runsPerTask: number;
+	readonly #isTty: boolean;
+	#started = 0;
+	#completed = 0;
+	#success = 0;
+	#totalInput = 0;
+	#totalOutput = 0;
+	#totalDuration = 0;
+	#totalReads = 0;
+	#totalEdits = 0;
+	#totalWrites = 0;
+	#totalEditSuccesses = 0;
+	#totalToolInputChars = 0;
+	#indentScores: number[] = [];
+	#lastLineLength = 0;
 
 	constructor(totalRuns: number, runsPerTask: number) {
-		this.totalRuns = totalRuns;
-		this.runsPerTask = runsPerTask;
-		this.isTty = Boolean(process.stdout.isTTY);
+		this.#totalRuns = totalRuns;
+		this.#runsPerTask = runsPerTask;
+		this.#isTty = Boolean(process.stdout.isTTY);
 	}
 
 	handleEvent(event: ProgressEvent): void {
 		if (event.status === "started") {
-			this.started += 1;
-			if (!this.isTty) {
-				console.log(`  [${event.taskId}] Run ${event.runIndex + 1}/${this.runsPerTask} started...`);
+			this.#started += 1;
+			if (!this.#isTty) {
+				console.log(`  [${event.taskId}] Run ${event.runIndex + 1}/${this.#runsPerTask} started...`);
 			}
-			this.renderLine();
+			this.#renderLine();
 			return;
 		}
 
-		this.completed += 1;
+		this.#completed += 1;
 		if (event.result) {
 			if (event.result.success) {
-				this.success += 1;
+				this.#success += 1;
 			}
-			this.totalInput += event.result.tokens.input;
-			this.totalOutput += event.result.tokens.output;
-			this.totalDuration += event.result.duration;
-			this.totalReads += event.result.toolCalls.read;
-			this.totalEdits += event.result.toolCalls.edit;
-			this.totalWrites += event.result.toolCalls.write;
-			this.totalEditSuccesses += event.result.toolCalls.editSuccesses;
-			this.totalToolInputChars += event.result.toolCalls.totalInputChars;
+			this.#totalInput += event.result.tokens.input;
+			this.#totalOutput += event.result.tokens.output;
+			this.#totalDuration += event.result.duration;
+			this.#totalReads += event.result.toolCalls.read;
+			this.#totalEdits += event.result.toolCalls.edit;
+			this.#totalWrites += event.result.toolCalls.write;
+			this.#totalEditSuccesses += event.result.toolCalls.editSuccesses;
+			this.#totalToolInputChars += event.result.toolCalls.totalInputChars;
 			if (typeof event.result.indentScore === "number") {
-				this.indentScores.push(event.result.indentScore);
+				this.#indentScores.push(event.result.indentScore);
 			}
 		}
 
 		if (event.result && !event.result.success && event.result.error) {
-			this.flushLine();
-			console.log(`  [${event.taskId}] Run ${event.runIndex + 1}/${this.runsPerTask} failed: ${event.result.error}`);
+			this.#flushLine();
+			console.log(`  [${event.taskId}] Run ${event.runIndex + 1}/${this.#runsPerTask} failed: ${event.result.error}`);
 			if (event.result.diff) {
 				const diffLines = event.result.diff.split("\n").slice(0, 30);
 				if (diffLines.length > 0) {
@@ -403,76 +403,76 @@ class LiveProgress {
 			}
 		}
 
-		if (!this.isTty) {
+		if (!this.#isTty) {
 			const status = event.result?.success ? "completed" : "failed";
-			console.log(`  [${event.taskId}] Run ${event.runIndex + 1}/${this.runsPerTask} ${status}`);
+			console.log(`  [${event.taskId}] Run ${event.runIndex + 1}/${this.#runsPerTask} ${status}`);
 		}
 
-		this.renderLine();
+		this.#renderLine();
 	}
 
 	finish(): void {
-		this.flushLine();
-		this.printSummary();
+		this.#flushLine();
+		this.#printSummary();
 	}
 
-	private printSummary(): void {
-		const n = this.completed;
+	#printSummary(): void {
+		const n = this.#completed;
 		if (n === 0) return;
 
-		const successRate = (this.success / n) * 100;
-		const editSuccessRate = this.totalEdits > 0 ? (this.totalEditSuccesses / this.totalEdits) * 100 : 100;
+		const successRate = (this.#success / n) * 100;
+		const editSuccessRate = this.#totalEdits > 0 ? (this.#totalEditSuccesses / this.#totalEdits) * 100 : 100;
 		const avgIndent =
-			this.indentScores.length > 0 ? this.indentScores.reduce((a, b) => a + b, 0) / this.indentScores.length : 0;
+			this.#indentScores.length > 0 ? this.#indentScores.reduce((a, b) => a + b, 0) / this.#indentScores.length : 0;
 
 		console.log("");
 		console.log("Runtime Stats:");
-		console.log(`  Task success:     ${successRate.toFixed(1)}% (${this.success}/${n})`);
-		console.log(`  Edit success:     ${editSuccessRate.toFixed(1)}% (${this.totalEditSuccesses}/${this.totalEdits})`);
+		console.log(`  Task success:     ${successRate.toFixed(1)}% (${this.#success}/${n})`);
+		console.log(`  Edit success:     ${editSuccessRate.toFixed(1)}% (${this.#totalEditSuccesses}/${this.#totalEdits})`);
 		console.log(`  Avg indent score: ${avgIndent.toFixed(2)}`);
-		console.log(`  Tool calls:       read=${this.totalReads} edit=${this.totalEdits} write=${this.totalWrites}`);
-		console.log(`  Tool input chars: ${this.totalToolInputChars.toLocaleString()}`);
+		console.log(`  Tool calls:       read=${this.#totalReads} edit=${this.#totalEdits} write=${this.#totalWrites}`);
+		console.log(`  Tool input chars: ${this.#totalToolInputChars.toLocaleString()}`);
 		console.log(
-			`  Avg tokens/task:  ${Math.round(this.totalInput / n)} in / ${Math.round(this.totalOutput / n)} out`,
+			`  Avg tokens/task:  ${Math.round(this.#totalInput / n)} in / ${Math.round(this.#totalOutput / n)} out`,
 		);
-		console.log(`  Avg time/task:    ${Math.round(this.totalDuration / n)}ms`);
+		console.log(`  Avg time/task:    ${Math.round(this.#totalDuration / n)}ms`);
 	}
 
-	private renderLine(): void {
-		if (!this.isTty) {
+	#renderLine(): void {
+		if (!this.#isTty) {
 			return;
 		}
-		const successRate = this.completed > 0 ? (this.success / this.completed) * 100 : 0;
-		const editRate = this.totalEdits > 0 ? (this.totalEditSuccesses / this.totalEdits) * 100 : 100;
-		const avgInput = this.completed > 0 ? Math.round(this.totalInput / this.completed) : 0;
-		const avgOutput = this.completed > 0 ? Math.round(this.totalOutput / this.completed) : 0;
-		const avgDuration = this.completed > 0 ? Math.round(this.totalDuration / this.completed) : 0;
-		const inFlight = this.started - this.completed;
-		const bar = this.renderBar(this.completed, this.totalRuns, 20);
-		const line = `  ${bar} ${this.completed}/${this.totalRuns} task=${successRate.toFixed(0)}% edit=${editRate.toFixed(0)}% tok=${avgInput}/${avgOutput} ${avgDuration}ms r/e/w=${this.totalReads}/${this.totalEdits}/${this.totalWrites} fly=${inFlight}`;
-		this.writeLine(line);
+		const successRate = this.#completed > 0 ? (this.#success / this.#completed) * 100 : 0;
+		const editRate = this.#totalEdits > 0 ? (this.#totalEditSuccesses / this.#totalEdits) * 100 : 100;
+		const avgInput = this.#completed > 0 ? Math.round(this.#totalInput / this.#completed) : 0;
+		const avgOutput = this.#completed > 0 ? Math.round(this.#totalOutput / this.#completed) : 0;
+		const avgDuration = this.#completed > 0 ? Math.round(this.#totalDuration / this.#completed) : 0;
+		const inFlight = this.#started - this.#completed;
+		const bar = this.#renderBar(this.#completed, this.#totalRuns, 20);
+		const line = `  ${bar} ${this.#completed}/${this.#totalRuns} task=${successRate.toFixed(0)}% edit=${editRate.toFixed(0)}% tok=${avgInput}/${avgOutput} ${avgDuration}ms r/e/w=${this.#totalReads}/${this.#totalEdits}/${this.#totalWrites} fly=${inFlight}`;
+		this.#writeLine(line);
 	}
 
-	private renderBar(done: number, total: number, width: number): string {
+	#renderBar(done: number, total: number, width: number): string {
 		const ratio = total === 0 ? 0 : done / total;
 		const filled = Math.round(ratio * width);
 		const empty = Math.max(0, width - filled);
 		return `[${"#".repeat(filled)}${"-".repeat(empty)}]`;
 	}
 
-	private writeLine(line: string): void {
-		const pad = this.lastLineLength > line.length ? padding(this.lastLineLength - line.length) : "";
+	#writeLine(line: string): void {
+		const pad = this.#lastLineLength > line.length ? padding(this.#lastLineLength - line.length) : "";
 		process.stdout.write(`\r${line}${pad}`);
-		this.lastLineLength = line.length;
+		this.#lastLineLength = line.length;
 	}
 
-	private flushLine(): void {
-		if (!this.isTty) {
+	#flushLine(): void {
+		if (!this.#isTty) {
 			return;
 		}
-		if (this.lastLineLength > 0) {
-			process.stdout.write("\r" + padding(this.lastLineLength) + "\r");
-			this.lastLineLength = 0;
+		if (this.#lastLineLength > 0) {
+			process.stdout.write("\r" + padding(this.#lastLineLength) + "\r");
+			this.#lastLineLength = 0;
 		}
 	}
 }

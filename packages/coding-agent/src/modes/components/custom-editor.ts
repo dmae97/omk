@@ -4,48 +4,48 @@ import { Editor, type KeyId, matchesKey, parseKittySequence } from "@oh-my-pi/pi
  * Custom editor that handles Escape and Ctrl+C keys for coding-agent
  */
 export class CustomEditor extends Editor {
-	public onEscape?: () => void;
-	public onCtrlC?: () => void;
-	public onCtrlD?: () => void;
-	public onShiftTab?: () => void;
-	public onCtrlP?: () => void;
-	public onShiftCtrlP?: () => void;
-	public onCtrlL?: () => void;
-	public onCtrlR?: () => void;
-	public onCtrlO?: () => void;
-	public onCtrlT?: () => void;
-	public onCtrlG?: () => void;
-	public onCtrlZ?: () => void;
-	public onQuestionMark?: () => void;
-	public onCapsLock?: () => void;
-	public onAltP?: () => void;
+	onEscape?: () => void;
+	onCtrlC?: () => void;
+	onCtrlD?: () => void;
+	onShiftTab?: () => void;
+	onCtrlP?: () => void;
+	onShiftCtrlP?: () => void;
+	onCtrlL?: () => void;
+	onCtrlR?: () => void;
+	onCtrlO?: () => void;
+	onCtrlT?: () => void;
+	onCtrlG?: () => void;
+	onCtrlZ?: () => void;
+	onQuestionMark?: () => void;
+	onCapsLock?: () => void;
+	onAltP?: () => void;
 	/** Called when Ctrl+V is pressed. Returns true if handled (image found), false to fall through to text paste. */
-	public onCtrlV?: () => Promise<boolean>;
+	onCtrlV?: () => Promise<boolean>;
 	/** Called when Alt+Up is pressed (dequeue keybinding). */
-	public onAltUp?: () => void;
+	onAltUp?: () => void;
 
 	/** Custom key handlers from extensions */
-	private customKeyHandlers = new Map<KeyId, () => void>();
+	#customKeyHandlers = new Map<KeyId, () => void>();
 
 	/**
 	 * Register a custom key handler. Extensions use this for shortcuts.
 	 */
 	setCustomKeyHandler(key: KeyId, handler: () => void): void {
-		this.customKeyHandlers.set(key, handler);
+		this.#customKeyHandlers.set(key, handler);
 	}
 
 	/**
 	 * Remove a custom key handler.
 	 */
 	removeCustomKeyHandler(key: KeyId): void {
-		this.customKeyHandlers.delete(key);
+		this.#customKeyHandlers.delete(key);
 	}
 
 	/**
 	 * Clear all custom key handlers.
 	 */
 	clearCustomKeyHandlers(): void {
-		this.customKeyHandlers.clear();
+		this.#customKeyHandlers.clear();
 	}
 
 	handleInput(data: string): void {
@@ -157,7 +157,7 @@ export class CustomEditor extends Editor {
 		}
 
 		// Check custom key handlers (extensions)
-		for (const [keyId, handler] of this.customKeyHandlers) {
+		for (const [keyId, handler] of this.#customKeyHandlers) {
 			if (matchesKey(data, keyId)) {
 				handler();
 				return;

@@ -28,29 +28,29 @@ const DEFAULT_SETTINGS: Required<TtsrSettings> = {
 };
 
 export class TtsrManager {
-	private readonly settings: Required<TtsrSettings>;
-	private readonly rules = new Map<string, TtsrEntry>();
-	private readonly injectionRecords = new Map<string, InjectionRecord>();
-	private buffer = "";
-	private messageCount = 0;
+	readonly #settings: Required<TtsrSettings>;
+	readonly #rules = new Map<string, TtsrEntry>();
+	readonly #injectionRecords = new Map<string, InjectionRecord>();
+	#buffer = "";
+	#messageCount = 0;
 
 	constructor(settings?: TtsrSettings) {
-		this.settings = { ...DEFAULT_SETTINGS, ...settings };
+		this.#settings = { ...DEFAULT_SETTINGS, ...settings };
 	}
 
 	/** Check if a rule can be triggered based on repeat settings */
-	private canTrigger(ruleName: string): boolean {
-		const record = this.injectionRecords.get(ruleName);
+	#canTrigger(ruleName: string): boolean {
+		const record = this.#injectionRecords.get(ruleName);
 		if (!record) {
 			return true;
 		}
 
-		if (this.settings.repeatMode === "once") {
+		if (this.#settings.repeatMode === "once") {
 			return false;
 		}
 
-		const gap = this.messageCount - record.lastInjectedAt;
-		return gap >= this.settings.repeatGap;
+		const gap = this.#messageCount - record.lastInjectedAt;
+		return gap >= this.#settings.repeatGap;
 	}
 
 	/** Add a TTSR rule to be monitored */
@@ -59,13 +59,13 @@ export class TtsrManager {
 			return;
 		}
 
-		if (this.rules.has(rule.name)) {
+		if (this.#rules.has(rule.name)) {
 			return;
 		}
 
 		try {
 			const regex = new RegExp(rule.ttsrTrigger);
-			this.rules.set(rule.name, { rule, regex });
+			this.#rules.set(rule.name, { rule, regex });
 			logger.debug("TTSR rule registered", {
 				ruleName: rule.name,
 				pattern: rule.ttsrTrigger,
@@ -83,8 +83,8 @@ export class TtsrManager {
 	check(streamBuffer: string): Rule[] {
 		const matches: Rule[] = [];
 
-		for (const [name, entry] of this.rules) {
-			if (!this.canTrigger(name)) {
+		for (const [name, entry] of this.#rules) {
+			if (!this.#canTrigger(name)) {
 				continue;
 			}
 
@@ -103,24 +103,24 @@ export class TtsrManager {
 	/** Mark rules as injected (won't trigger again until conditions allow) */
 	markInjected(rulesToMark: Rule[]): void {
 		for (const rule of rulesToMark) {
-			this.injectionRecords.set(rule.name, { lastInjectedAt: this.messageCount });
+			this.#injectionRecords.set(rule.name, { lastInjectedAt: this.#messageCount });
 			logger.debug("TTSR rule marked as injected", {
 				ruleName: rule.name,
-				messageCount: this.messageCount,
-				repeatMode: this.settings.repeatMode,
+				messageCount: this.#messageCount,
+				repeatMode: this.#settings.repeatMode,
 			});
 		}
 	}
 
 	/** Get names of all injected rules (for persistence) */
 	getInjectedRuleNames(): string[] {
-		return Array.from(this.injectionRecords.keys());
+		return Array.from(this.#injectionRecords.keys());
 	}
 
 	/** Restore injected state from a list of rule names */
 	restoreInjected(ruleNames: string[]): void {
 		for (const name of ruleNames) {
-			this.injectionRecords.set(name, { lastInjectedAt: 0 });
+			this.#injectionRecords.set(name, { lastInjectedAt: 0 });
 		}
 		if (ruleNames.length > 0) {
 			logger.debug("TTSR injected state restored", { ruleNames });
@@ -129,36 +129,36 @@ export class TtsrManager {
 
 	/** Reset stream buffer (called on new turn) */
 	resetBuffer(): void {
-		this.buffer = "";
+		this.#buffer = "";
 	}
 
 	/** Get current stream buffer */
 	getBuffer(): string {
-		return this.buffer;
+		return this.#buffer;
 	}
 
 	/** Append to stream buffer */
 	appendToBuffer(text: string): void {
-		this.buffer += text;
+		this.#buffer += text;
 	}
 
 	/** Check if any TTSRs are registered */
 	hasRules(): boolean {
-		return this.rules.size > 0;
+		return this.#rules.size > 0;
 	}
 
 	/** Increment message counter (call after each turn) */
 	incrementMessageCount(): void {
-		this.messageCount++;
+		this.#messageCount++;
 	}
 
 	/** Get current message count */
 	getMessageCount(): number {
-		return this.messageCount;
+		return this.#messageCount;
 	}
 
 	/** Get settings */
 	getSettings(): Required<TtsrSettings> {
-		return this.settings;
+		return this.#settings;
 	}
 }

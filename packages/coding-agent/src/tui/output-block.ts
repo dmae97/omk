@@ -108,23 +108,23 @@ export function renderOutputBlock(options: OutputBlockOptions, theme: Theme): st
  * `padding()` computations on ~99% of render calls.
  */
 export class CachedOutputBlock {
-	private cache?: RenderCache;
+	#cache?: RenderCache;
 
 	/** Render with caching. Returns cached result if options haven't changed. */
 	render(options: OutputBlockOptions, theme: Theme): string[] {
-		const key = this.buildKey(options);
-		if (this.cache?.key === key) return this.cache.lines;
+		const key = this.#buildKey(options);
+		if (this.#cache?.key === key) return this.#cache.lines;
 		const lines = renderOutputBlock(options, theme);
-		this.cache = { key, lines };
+		this.#cache = { key, lines };
 		return lines;
 	}
 
 	/** Invalidate the cache, forcing a rebuild on next render. */
 	invalidate(): void {
-		this.cache = undefined;
+		this.#cache = undefined;
 	}
 
-	private buildKey(options: OutputBlockOptions): bigint {
+	#buildKey(options: OutputBlockOptions): bigint {
 		const h = new Hasher();
 		h.u32(options.width);
 		h.optional(options.header);

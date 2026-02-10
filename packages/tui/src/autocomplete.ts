@@ -169,14 +169,14 @@ export interface AutocompleteProvider {
 
 // Combined provider that handles both slash commands and file paths
 export class CombinedAutocompleteProvider implements AutocompleteProvider {
-	private commands: (SlashCommand | AutocompleteItem)[];
-	private basePath: string;
-	private dirCache: Map<string, { entries: fs.Dirent[]; timestamp: number }> = new Map();
-	private readonly DIR_CACHE_TTL = 2000; // 2 seconds
+	#commands: (SlashCommand | AutocompleteItem)[];
+	#basePath: string;
+	#dirCache: Map<string, { entries: fs.Dirent[]; timestamp: number }> = new Map();
+	readonly #DIR_CACHE_TTL = 2000; // 2 seconds
 
 	constructor(commands: (SlashCommand | AutocompleteItem)[] = [], basePath: string = process.cwd()) {
-		this.commands = commands;
-		this.basePath = basePath;
+		this.#commands = commands;
+		this.#basePath = basePath;
 	}
 
 	async getSuggestions(
@@ -188,15 +188,15 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		const textBeforeCursor = currentLine.slice(0, cursorCol);
 
 		// Check for @ file reference (fuzzy search) - must be after a delimiter or at start
-		const atPrefix = this.extractAtPrefix(textBeforeCursor);
+		const atPrefix = this.#extractAtPrefix(textBeforeCursor);
 		if (atPrefix) {
 			const { rawPrefix, isQuotedPrefix } = parsePathPrefix(atPrefix);
 			const suggestions =
 				rawPrefix.length > 0
-					? await this.getFuzzyFileSuggestions(rawPrefix, { isQuotedPrefix })
-					: await this.getFileSuggestions("@");
+					? await this.#getFuzzyFileSuggestions(rawPrefix, { isQuotedPrefix })
+					: await this.#getFileSuggestions("@");
 			if (suggestions.length === 0 && rawPrefix.length > 0) {
-				const fallback = await this.getFileSuggestions(atPrefix);
+				const fallback = await this.#getFileSuggestions(atPrefix);
 				if (fallback.length === 0) return null;
 				return { items: fallback, prefix: atPrefix };
 			}
@@ -218,7 +218,7 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 				const lowerPrefix = prefix.toLowerCase();
 
 				// Filter commands using fuzzy matching (subsequence match)
-				const matches = this.commands
+				const matches = this.#commands
 					.filter(cmd => {
 						const name = "name" in cmd ? cmd.name : cmd.value;
 						if (!name) return false;
@@ -255,7 +255,7 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 				const commandName = textBeforeCursor.slice(1, spaceIndex); // Command without "/"
 				const argumentText = textBeforeCursor.slice(spaceIndex + 1); // Text after space
 
-				const command = this.commands.find(cmd => {
+				const command = this.#commands.find(cmd => {
 					const name = "name" in cmd ? cmd.name : cmd.value;
 					return name === commandName;
 				});
@@ -276,10 +276,10 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		}
 
 		// Check for file paths - triggered by Tab or if we detect a path pattern
-		const pathMatch = this.extractPathPrefix(textBeforeCursor, false);
+		const pathMatch = this.#extractPathPrefix(textBeforeCursor, false);
 
 		if (pathMatch !== null) {
-			const suggestions = await this.getFileSuggestions(pathMatch);
+			const suggestions = await this.#getFileSuggestions(pathMatch);
 			if (suggestions.length === 0) return null;
 
 			// Check if we have an exact match that is a directory
@@ -372,7 +372,7 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 	}
 
 	// Extract @ prefix for fuzzy file suggestions
-	private extractAtPrefix(text: string): string | null {
+	#extractAtPrefix(text: string): string | null {
 		const quotedPrefix = extractQuotedPrefix(text);
 		if (quotedPrefix?.startsWith('@"')) {
 			return quotedPrefix;
@@ -389,7 +389,7 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 	}
 
 	// Extract a path-like prefix from the text before cursor
-	private extractPathPrefix(text: string, forceExtract: boolean = false): string | null {
+	#extractPathPrefix(text: string, forceExtract: boolean = false): string | null {
 		const quotedPrefix = extractQuotedPrefix(text);
 		if (quotedPrefix) {
 			return quotedPrefix;
@@ -419,7 +419,7 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 	}
 
 	// Expand home directory (~/) to actual home path
-	private expandHomePath(filePath: string): string {
+	#expandHomePath(filePath: string): string {
 		if (filePath.startsWith("~/")) {
 			const expandedPath = path.join(os.homedir(), filePath.slice(2));
 			// Preserve trailing slash if original path had one
@@ -430,40 +430,40 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		return filePath;
 	}
 
-	private async getCachedDirEntries(searchDir: string): Promise<fs.Dirent[]> {
+	async #getCachedDirEntries(searchDir: string): Promise<fs.Dirent[]> {
 		const now = Date.now();
-		const cached = this.dirCache.get(searchDir);
+		const cached = this.#dirCache.get(searchDir);
 
-		if (cached && now - cached.timestamp < this.DIR_CACHE_TTL) {
+		if (cached && now - cached.timestamp < this.#DIR_CACHE_TTL) {
 			return cached.entries;
 		}
 
 		const entries = await fs.promises.readdir(searchDir, { withFileTypes: true });
-		this.dirCache.set(searchDir, { entries, timestamp: now });
+		this.#dirCache.set(searchDir, { entries, timestamp: now });
 
-		if (this.dirCache.size > 100) {
-			const sortedKeys = [...this.dirCache.entries()]
+		if (this.#dirCache.size > 100) {
+			const sortedKeys = [...this.#dirCache.entries()]
 				.sort((a, b) => a[1].timestamp - b[1].timestamp)
 				.slice(0, 50)
 				.map(([key]) => key);
 			for (const key of sortedKeys) {
-				this.dirCache.delete(key);
+				this.#dirCache.delete(key);
 			}
 		}
 
 		return entries;
 	}
 
-	public invalidateDirCache(dir?: string): void {
+	invalidateDirCache(dir?: string): void {
 		if (dir) {
-			this.dirCache.delete(dir);
+			this.#dirCache.delete(dir);
 		} else {
-			this.dirCache.clear();
+			this.#dirCache.clear();
 		}
 	}
 
 	// Get file/directory suggestions for a given path prefix
-	private async getFileSuggestions(prefix: string): Promise<AutocompleteItem[]> {
+	async #getFileSuggestions(prefix: string): Promise<AutocompleteItem[]> {
 		try {
 			let searchDir: string;
 			let searchPrefix: string;
@@ -472,7 +472,7 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 
 			// Handle home directory expansion
 			if (expandedPrefix.startsWith("~")) {
-				expandedPrefix = this.expandHomePath(expandedPrefix);
+				expandedPrefix = this.#expandHomePath(expandedPrefix);
 			}
 
 			const isRootPrefix =
@@ -489,7 +489,7 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 				if (rawPrefix.startsWith("~") || expandedPrefix.startsWith("/")) {
 					searchDir = expandedPrefix;
 				} else {
-					searchDir = path.join(this.basePath, expandedPrefix);
+					searchDir = path.join(this.#basePath, expandedPrefix);
 				}
 				searchPrefix = "";
 			} else if (rawPrefix.endsWith("/")) {
@@ -497,7 +497,7 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 				if (rawPrefix.startsWith("~") || expandedPrefix.startsWith("/")) {
 					searchDir = expandedPrefix;
 				} else {
-					searchDir = path.join(this.basePath, expandedPrefix);
+					searchDir = path.join(this.#basePath, expandedPrefix);
 				}
 				searchPrefix = "";
 			} else {
@@ -507,12 +507,12 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 				if (rawPrefix.startsWith("~") || expandedPrefix.startsWith("/")) {
 					searchDir = dir;
 				} else {
-					searchDir = path.join(this.basePath, dir);
+					searchDir = path.join(this.#basePath, dir);
 				}
 				searchPrefix = file;
 			}
 
-			const entries = await this.getCachedDirEntries(searchDir);
+			const entries = await this.#getCachedDirEntries(searchDir);
 			const suggestions: AutocompleteItem[] = [];
 
 			for (const entry of entries) {
@@ -600,7 +600,7 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 
 	// Score an entry against the query (higher = better match)
 	// isDirectory adds bonus to prioritize folders
-	private scoreEntry(filePath: string, query: string, isDirectory: boolean): number {
+	#scoreEntry(filePath: string, query: string, isDirectory: boolean): number {
 		const fileName = path.basename(filePath);
 		const lowerFileName = fileName.toLowerCase();
 		const lowerQuery = query.toLowerCase();
@@ -622,14 +622,11 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		return score;
 	}
 
-	private async getFuzzyFileSuggestions(
-		query: string,
-		options: { isQuotedPrefix: boolean },
-	): Promise<AutocompleteItem[]> {
+	async #getFuzzyFileSuggestions(query: string, options: { isQuotedPrefix: boolean }): Promise<AutocompleteItem[]> {
 		try {
 			const result = await fuzzyFind({
 				query,
-				path: this.basePath,
+				path: this.#basePath,
 				maxResults: 100,
 				hidden: true,
 				gitignore: true,
@@ -647,7 +644,7 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 				.map(entry => ({
 					path: entry.path,
 					isDirectory: entry.isDirectory,
-					score: query ? this.scoreEntry(entry.path, query, entry.isDirectory) : 1,
+					score: query ? this.#scoreEntry(entry.path, query, entry.isDirectory) : 1,
 				}))
 				.filter(entry => entry.score > 0);
 
@@ -692,9 +689,9 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		}
 
 		// Force extract path prefix - this will always return something
-		const pathMatch = this.extractPathPrefix(textBeforeCursor, true);
+		const pathMatch = this.#extractPathPrefix(textBeforeCursor, true);
 		if (pathMatch !== null) {
-			const suggestions = await this.getFileSuggestions(pathMatch);
+			const suggestions = await this.#getFileSuggestions(pathMatch);
 			if (suggestions.length === 0) return null;
 
 			return {

@@ -1,4 +1,4 @@
-import * as fs from "node:fs/promises";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { FileType, type GlobMatch, glob } from "@oh-my-pi/pi-natives";
@@ -123,22 +123,22 @@ export interface FindToolOptions {
 }
 
 export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
-	public readonly name = "find";
-	public readonly label = "Find";
-	public readonly description: string;
-	public readonly parameters = findSchema;
+	readonly name = "find";
+	readonly label = "Find";
+	readonly description: string;
+	readonly parameters = findSchema;
 
-	private readonly customOps?: FindOperations;
+	readonly #customOps?: FindOperations;
 
 	constructor(
 		private readonly session: ToolSession,
 		options?: FindToolOptions,
 	) {
-		this.customOps = options?.operations;
+		this.#customOps = options?.operations;
 		this.description = renderPromptTemplate(findDescription);
 	}
 
-	public async execute(
+	async execute(
 		_toolCallId: string,
 		params: Static<typeof findSchema>,
 		signal?: AbortSignal,
@@ -177,13 +177,13 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 			const includeHidden = hidden ?? true;
 
 			// If custom operations provided with glob, use that instead of fd
-			if (this.customOps?.glob) {
-				if (!(await this.customOps.exists(searchPath))) {
+			if (this.#customOps?.glob) {
+				if (!(await this.#customOps.exists(searchPath))) {
 					throw new ToolError(`Path not found: ${searchPath}`);
 				}
 
-				if (!hasGlob && this.customOps.stat) {
-					const stat = await this.customOps.stat(searchPath);
+				if (!hasGlob && this.#customOps.stat) {
+					const stat = await this.#customOps.stat(searchPath);
 					if (stat.isFile()) {
 						const files = [scopePath];
 						const details: FindToolDetails = {
@@ -196,7 +196,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 					}
 				}
 
-				const results = await this.customOps.glob(globPattern, searchPath, {
+				const results = await this.#customOps.glob(globPattern, searchPath, {
 					ignore: ["**/node_modules/**", "**/.git/**"],
 					limit: effectiveLimit,
 				});
@@ -239,9 +239,9 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				return resultBuilder.done();
 			}
 
-			let searchStat: Awaited<ReturnType<typeof fs.stat>>;
+			let searchStat: fs.Stats;
 			try {
-				searchStat = await fs.stat(searchPath);
+				searchStat = await fs.promises.stat(searchPath);
 			} catch (err) {
 				if (isEnoent(err)) {
 					throw new ToolError(`Path not found: ${searchPath}`);
@@ -263,7 +263,7 @@ export class FindTool implements AgentTool<typeof findSchema, FindToolDetails> {
 				throw new ToolError(`Path is not a directory: ${searchPath}`);
 			}
 
-			let matches: Awaited<ReturnType<typeof glob>>["matches"];
+			let matches: GlobMatch[];
 			const onUpdateMatches: string[] = [];
 			const updateIntervalMs = 200;
 			let lastUpdate = 0;

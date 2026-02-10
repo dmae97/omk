@@ -19,16 +19,16 @@ function generateId(): string {
  * Spawns a subprocess and communicates via stdin/stdout.
  */
 export class StdioTransport implements MCPTransport {
-	private process: Subprocess<"pipe", "pipe", "pipe"> | null = null;
-	private pendingRequests = new Map<
+	#process: Subprocess<"pipe", "pipe", "pipe"> | null = null;
+	#pendingRequests = new Map<
 		string | number,
 		{
 			resolve: (value: unknown) => void;
 			reject: (error: Error) => void;
 		}
 	>();
-	private _connected = false;
-	private readLoop: Promise<void> | null = null;
+	#connected = false;
+	#readLoop: Promise<void> | null = null;
 
 	onClose?: () => void;
 	onError?: (error: Error) => void;
@@ -37,14 +37,14 @@ export class StdioTransport implements MCPTransport {
 	constructor(private config: MCPStdioServerConfig) {}
 
 	get connected(): boolean {
-		return this._connected;
+		return this.#connected;
 	}
 
 	/**
 	 * Start the subprocess and begin reading.
 	 */
 	async connect(): Promise<void> {
-		if (this._connected) return;
+		if (this.#connected) return;
 
 		const args = this.config.args ?? [];
 		const env = {
@@ -52,7 +52,7 @@ export class StdioTransport implements MCPTransport {
 			...this.config.env,
 		};
 
-		this.process = spawn({
+		this.#process = spawn({
 			cmd: [this.config.command, ...args],
 			cwd: this.config.cwd ?? process.cwd(),
 			env,
@@ -61,43 +61,43 @@ export class StdioTransport implements MCPTransport {
 			stderr: "pipe",
 		});
 
-		this._connected = true;
+		this.#connected = true;
 
 		// Start reading stdout
-		this.readLoop = this.startReadLoop();
+		this.#readLoop = this.#startReadLoop();
 
 		// Log stderr for debugging
-		this.startStderrLoop();
+		this.#startStderrLoop();
 	}
 
-	private async startReadLoop(): Promise<void> {
-		if (!this.process?.stdout) return;
+	async #startReadLoop(): Promise<void> {
+		if (!this.#process?.stdout) return;
 		try {
-			for await (const line of readJsonl(this.process.stdout)) {
-				if (!this._connected) break;
+			for await (const line of readJsonl(this.#process.stdout)) {
+				if (!this.#connected) break;
 				try {
-					this.handleMessage(line as JsonRpcResponse);
+					this.#handleMessage(line as JsonRpcResponse);
 				} catch {
 					// Skip malformed lines
 				}
 			}
 		} catch (error) {
-			if (this._connected) {
+			if (this.#connected) {
 				this.onError?.(error instanceof Error ? error : new Error(String(error)));
 			}
 		} finally {
-			this.handleClose();
+			this.#handleClose();
 		}
 	}
 
-	private async startStderrLoop(): Promise<void> {
-		if (!this.process?.stderr) return;
+	async #startStderrLoop(): Promise<void> {
+		if (!this.#process?.stderr) return;
 
-		const reader = this.process.stderr.getReader();
+		const reader = this.#process.stderr.getReader();
 		const decoder = new TextDecoder();
 
 		try {
-			while (this._connected) {
+			while (this.#connected) {
 				const { done, value } = await reader.read();
 				if (done) break;
 				// Log stderr but don't treat as error - servers use it for logging
@@ -114,12 +114,12 @@ export class StdioTransport implements MCPTransport {
 		}
 	}
 
-	private handleMessage(message: JsonRpcResponse): void {
+	#handleMessage(message: JsonRpcResponse): void {
 		// Check if it's a response (has id)
 		if ("id" in message && message.id !== null) {
-			const pending = this.pendingRequests.get(message.id);
+			const pending = this.#pendingRequests.get(message.id);
 			if (pending) {
-				this.pendingRequests.delete(message.id);
+				this.#pendingRequests.delete(message.id);
 				if (message.error) {
 					pending.reject(new Error(`MCP error ${message.error.code}: ${message.error.message}`));
 				} else {
@@ -133,21 +133,21 @@ export class StdioTransport implements MCPTransport {
 		}
 	}
 
-	private handleClose(): void {
-		if (!this._connected) return;
-		this._connected = false;
+	#handleClose(): void {
+		if (!this.#connected) return;
+		this.#connected = false;
 
 		// Reject all pending requests
-		for (const [, pending] of this.pendingRequests) {
+		for (const [, pending] of this.#pendingRequests) {
 			pending.reject(new Error("Transport closed"));
 		}
-		this.pendingRequests.clear();
+		this.#pendingRequests.clear();
 
 		this.onClose?.();
 	}
 
 	async request<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T> {
-		if (!this._connected || !this.process?.stdin) {
+		if (!this.#connected || !this.#process?.stdin) {
 			throw new Error("Transport not connected");
 		}
 
@@ -160,7 +160,7 @@ export class StdioTransport implements MCPTransport {
 		};
 
 		return new Promise<T>((resolve, reject) => {
-			this.pendingRequests.set(id, {
+			this.#pendingRequests.set(id, {
 				resolve: resolve as (value: unknown) => void,
 				reject,
 			});
@@ -168,17 +168,17 @@ export class StdioTransport implements MCPTransport {
 			const message = `${JSON.stringify(request)}\n`;
 			try {
 				// Bun's FileSink has write() method directly
-				this.process!.stdin.write(message);
-				this.process!.stdin.flush();
+				this.#process!.stdin.write(message);
+				this.#process!.stdin.flush();
 			} catch (error: unknown) {
-				this.pendingRequests.delete(id);
+				this.#pendingRequests.delete(id);
 				reject(error);
 			}
 		});
 	}
 
 	async notify(method: string, params?: Record<string, unknown>): Promise<void> {
-		if (!this._connected || !this.process?.stdin) {
+		if (!this.#connected || !this.#process?.stdin) {
 			throw new Error("Transport not connected");
 		}
 
@@ -190,30 +190,30 @@ export class StdioTransport implements MCPTransport {
 
 		const message = `${JSON.stringify(notification)}\n`;
 		// Bun's FileSink has write() method directly
-		this.process.stdin.write(message);
-		this.process.stdin.flush();
+		this.#process.stdin.write(message);
+		this.#process.stdin.flush();
 	}
 
 	async close(): Promise<void> {
-		if (!this._connected) return;
-		this._connected = false;
+		if (!this.#connected) return;
+		this.#connected = false;
 
 		// Reject pending requests
-		for (const [, pending] of this.pendingRequests) {
+		for (const [, pending] of this.#pendingRequests) {
 			pending.reject(new Error("Transport closed"));
 		}
-		this.pendingRequests.clear();
+		this.#pendingRequests.clear();
 
 		// Kill subprocess
-		if (this.process) {
-			this.process.kill();
-			this.process = null;
+		if (this.#process) {
+			this.#process.kill();
+			this.#process = null;
 		}
 
 		// Wait for read loop to finish
-		if (this.readLoop) {
-			await this.readLoop.catch(() => {});
-			this.readLoop = null;
+		if (this.#readLoop) {
+			await this.#readLoop.catch(() => {});
+			this.#readLoop = null;
 		}
 
 		this.onClose?.();

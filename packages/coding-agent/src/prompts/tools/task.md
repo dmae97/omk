@@ -26,8 +26,26 @@ Agent type for all tasks in this batch.
 Shared background prepended verbatim to every task `assignment`. Use only for session-specific information subagents lack.
 
 <critical>
-Do NOT include project rules, coding conventions, or style guidelines — subagents already have AGENTS.md and context files in their system prompt. Repeating them wastes tokens.
+Do NOT include project rules, coding conventions, or style guidelines — subagents already have AGENTS.md and context files in their system prompt. Repeating them wastes tokens and inflates context. Restating any rule from AGENTS.md in `context` is a bug — treat it like a lint error.
 </critical>
+**Before writing each line of context, ask:** "Would this sentence be true for ANY task in this repo, or only for THIS specific batch?" If it applies to any task → it's a project rule → the subagent already has it → delete the line.
+
+WRONG — restating project rules the subagent already has:
+```
+## Constraints
+- Use X import style, not Y (per AGENTS.md)
+- Use Z for private fields per AGENTS.md
+- Run the formatter after changes
+- Follow the logging convention
+```
+Every line above restates a project convention. The subagent reads AGENTS.md. Delete them all.
+
+RIGHT — only session-specific decisions the subagent cannot infer from project files:
+```
+## Constraints
+- We decided to use approach A over B (session decision)
+- The migration target type is `Foo` from `bar` package (looked up this session)
+```
 
 Use template; omit non-applicable sections:
 
@@ -126,9 +144,11 @@ Use structure every assignment:
 - "Follow conventions."
 - "No WASM."
 **Redundant context** — wastes tokens repeating what subagents already have:
-- Restating AGENTS.md rules (coding style, import conventions, logger usage)
+- Restating AGENTS.md rules (coding style, import conventions, formatting commands, logger usage, etc.)
 - Repeating project constraints from context files
 - Listing tool/framework preferences already documented in the repo
+
+If a constraint appears in AGENTS.md, it MUST NOT appear in `context`. The subagent has the full system prompt.
 
 If tempted to write above, expand using templates.
 **Output format in prose instead of `schema`** — agent returns null:

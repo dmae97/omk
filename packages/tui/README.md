@@ -574,8 +574,8 @@ class MyInteractiveComponent implements Component {
 	private selectedIndex = 0;
 	private items = ["Option 1", "Option 2", "Option 3"];
 
-	public onSelect?: (index: number) => void;
-	public onCancel?: () => void;
+	onSelect?: (index: number) => void;
+	onCancel?: () => void;
 
 	handleInput(data: string): void {
 		if (isArrowUp(data)) {

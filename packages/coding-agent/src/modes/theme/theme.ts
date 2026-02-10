@@ -1126,9 +1126,9 @@ const langMap: Record<string, SymbolKey> = {
 };
 
 export class Theme {
-	private fgColors: Record<ThemeColor, string>;
-	private bgColors: Record<ThemeBg, string>;
-	private symbols: SymbolMap;
+	#fgColors: Record<ThemeColor, string>;
+	#bgColors: Record<ThemeBg, string>;
+	#symbols: SymbolMap;
 
 	constructor(
 		fgColors: Record<ThemeColor, string | number>,
@@ -1137,34 +1137,34 @@ export class Theme {
 		private readonly symbolPreset: SymbolPreset,
 		symbolOverrides: Partial<Record<SymbolKey, string>>,
 	) {
-		this.fgColors = {} as Record<ThemeColor, string>;
+		this.#fgColors = {} as Record<ThemeColor, string>;
 		for (const [key, value] of Object.entries(fgColors) as [ThemeColor, string | number][]) {
-			this.fgColors[key] = fgAnsi(value, mode);
+			this.#fgColors[key] = fgAnsi(value, mode);
 		}
-		this.bgColors = {} as Record<ThemeBg, string>;
+		this.#bgColors = {} as Record<ThemeBg, string>;
 		for (const [key, value] of Object.entries(bgColors) as [ThemeBg, string | number][]) {
-			this.bgColors[key] = bgAnsi(value, mode);
+			this.#bgColors[key] = bgAnsi(value, mode);
 		}
 		// Build symbol map from preset + overrides
 		const baseSymbols = SYMBOL_PRESETS[symbolPreset];
-		this.symbols = { ...baseSymbols };
+		this.#symbols = { ...baseSymbols };
 		for (const [key, value] of Object.entries(symbolOverrides)) {
-			if (key in this.symbols) {
-				this.symbols[key as SymbolKey] = value;
+			if (key in this.#symbols) {
+				this.#symbols[key as SymbolKey] = value;
 			} else {
-				logger.debug("Invalid symbol key in override", { key, availableKeys: Object.keys(this.symbols) });
+				logger.debug("Invalid symbol key in override", { key, availableKeys: Object.keys(this.#symbols) });
 			}
 		}
 	}
 
 	fg(color: ThemeColor, text: string): string {
-		const ansi = this.fgColors[color];
+		const ansi = this.#fgColors[color];
 		if (!ansi) throw new Error(`Unknown theme color: ${color}`);
 		return `${ansi}${text}\x1b[39m`; // Reset only foreground color
 	}
 
 	bg(color: ThemeBg, text: string): string {
-		const ansi = this.bgColors[color];
+		const ansi = this.#bgColors[color];
 		if (!ansi) throw new Error(`Unknown theme background color: ${color}`);
 		return `${ansi}${text}\x1b[49m`; // Reset only background color
 	}
@@ -1190,13 +1190,13 @@ export class Theme {
 	}
 
 	getFgAnsi(color: ThemeColor): string {
-		const ansi = this.fgColors[color];
+		const ansi = this.#fgColors[color];
 		if (!ansi) throw new Error(`Unknown theme color: ${color}`);
 		return ansi;
 	}
 
 	getBgAnsi(color: ThemeBg): string {
-		const ansi = this.bgColors[color];
+		const ansi = this.#bgColors[color];
 		if (!ansi) throw new Error(`Unknown theme background color: ${color}`);
 		return ansi;
 	}
@@ -1241,14 +1241,14 @@ export class Theme {
 	 * Get a symbol by key.
 	 */
 	symbol(key: SymbolKey): string {
-		return this.symbols[key];
+		return this.#symbols[key];
 	}
 
 	/**
 	 * Get a symbol styled with a color.
 	 */
 	styledSymbol(key: SymbolKey, color: ThemeColor): string {
-		return this.fg(color, this.symbols[key]);
+		return this.fg(color, this.#symbols[key]);
 	}
 
 	/**
@@ -1264,150 +1264,150 @@ export class Theme {
 
 	get status() {
 		return {
-			success: this.symbols["status.success"],
-			error: this.symbols["status.error"],
-			warning: this.symbols["status.warning"],
-			info: this.symbols["status.info"],
-			pending: this.symbols["status.pending"],
-			disabled: this.symbols["status.disabled"],
-			enabled: this.symbols["status.enabled"],
-			running: this.symbols["status.running"],
-			shadowed: this.symbols["status.shadowed"],
-			aborted: this.symbols["status.aborted"],
+			success: this.#symbols["status.success"],
+			error: this.#symbols["status.error"],
+			warning: this.#symbols["status.warning"],
+			info: this.#symbols["status.info"],
+			pending: this.#symbols["status.pending"],
+			disabled: this.#symbols["status.disabled"],
+			enabled: this.#symbols["status.enabled"],
+			running: this.#symbols["status.running"],
+			shadowed: this.#symbols["status.shadowed"],
+			aborted: this.#symbols["status.aborted"],
 		};
 	}
 
 	get nav() {
 		return {
-			cursor: this.symbols["nav.cursor"],
-			selected: this.symbols["nav.selected"],
-			expand: this.symbols["nav.expand"],
-			collapse: this.symbols["nav.collapse"],
-			back: this.symbols["nav.back"],
+			cursor: this.#symbols["nav.cursor"],
+			selected: this.#symbols["nav.selected"],
+			expand: this.#symbols["nav.expand"],
+			collapse: this.#symbols["nav.collapse"],
+			back: this.#symbols["nav.back"],
 		};
 	}
 
 	get tree() {
 		return {
-			branch: this.symbols["tree.branch"],
-			last: this.symbols["tree.last"],
-			vertical: this.symbols["tree.vertical"],
-			horizontal: this.symbols["tree.horizontal"],
-			hook: this.symbols["tree.hook"],
+			branch: this.#symbols["tree.branch"],
+			last: this.#symbols["tree.last"],
+			vertical: this.#symbols["tree.vertical"],
+			horizontal: this.#symbols["tree.horizontal"],
+			hook: this.#symbols["tree.hook"],
 		};
 	}
 
 	get boxRound() {
 		return {
-			topLeft: this.symbols["boxRound.topLeft"],
-			topRight: this.symbols["boxRound.topRight"],
-			bottomLeft: this.symbols["boxRound.bottomLeft"],
-			bottomRight: this.symbols["boxRound.bottomRight"],
-			horizontal: this.symbols["boxRound.horizontal"],
-			vertical: this.symbols["boxRound.vertical"],
+			topLeft: this.#symbols["boxRound.topLeft"],
+			topRight: this.#symbols["boxRound.topRight"],
+			bottomLeft: this.#symbols["boxRound.bottomLeft"],
+			bottomRight: this.#symbols["boxRound.bottomRight"],
+			horizontal: this.#symbols["boxRound.horizontal"],
+			vertical: this.#symbols["boxRound.vertical"],
 		};
 	}
 
 	get boxSharp() {
 		return {
-			topLeft: this.symbols["boxSharp.topLeft"],
-			topRight: this.symbols["boxSharp.topRight"],
-			bottomLeft: this.symbols["boxSharp.bottomLeft"],
-			bottomRight: this.symbols["boxSharp.bottomRight"],
-			horizontal: this.symbols["boxSharp.horizontal"],
-			vertical: this.symbols["boxSharp.vertical"],
-			cross: this.symbols["boxSharp.cross"],
-			teeDown: this.symbols["boxSharp.teeDown"],
-			teeUp: this.symbols["boxSharp.teeUp"],
-			teeRight: this.symbols["boxSharp.teeRight"],
-			teeLeft: this.symbols["boxSharp.teeLeft"],
+			topLeft: this.#symbols["boxSharp.topLeft"],
+			topRight: this.#symbols["boxSharp.topRight"],
+			bottomLeft: this.#symbols["boxSharp.bottomLeft"],
+			bottomRight: this.#symbols["boxSharp.bottomRight"],
+			horizontal: this.#symbols["boxSharp.horizontal"],
+			vertical: this.#symbols["boxSharp.vertical"],
+			cross: this.#symbols["boxSharp.cross"],
+			teeDown: this.#symbols["boxSharp.teeDown"],
+			teeUp: this.#symbols["boxSharp.teeUp"],
+			teeRight: this.#symbols["boxSharp.teeRight"],
+			teeLeft: this.#symbols["boxSharp.teeLeft"],
 		};
 	}
 
 	get sep() {
 		return {
-			powerline: this.symbols["sep.powerline"],
-			powerlineThin: this.symbols["sep.powerlineThin"],
-			powerlineLeft: this.symbols["sep.powerlineLeft"],
-			powerlineRight: this.symbols["sep.powerlineRight"],
-			powerlineThinLeft: this.symbols["sep.powerlineThinLeft"],
-			powerlineThinRight: this.symbols["sep.powerlineThinRight"],
-			block: this.symbols["sep.block"],
-			space: this.symbols["sep.space"],
-			asciiLeft: this.symbols["sep.asciiLeft"],
-			asciiRight: this.symbols["sep.asciiRight"],
-			dot: this.symbols["sep.dot"],
-			slash: this.symbols["sep.slash"],
-			pipe: this.symbols["sep.pipe"],
+			powerline: this.#symbols["sep.powerline"],
+			powerlineThin: this.#symbols["sep.powerlineThin"],
+			powerlineLeft: this.#symbols["sep.powerlineLeft"],
+			powerlineRight: this.#symbols["sep.powerlineRight"],
+			powerlineThinLeft: this.#symbols["sep.powerlineThinLeft"],
+			powerlineThinRight: this.#symbols["sep.powerlineThinRight"],
+			block: this.#symbols["sep.block"],
+			space: this.#symbols["sep.space"],
+			asciiLeft: this.#symbols["sep.asciiLeft"],
+			asciiRight: this.#symbols["sep.asciiRight"],
+			dot: this.#symbols["sep.dot"],
+			slash: this.#symbols["sep.slash"],
+			pipe: this.#symbols["sep.pipe"],
 		};
 	}
 
 	get icon() {
 		return {
-			model: this.symbols["icon.model"],
-			plan: this.symbols["icon.plan"],
-			folder: this.symbols["icon.folder"],
-			file: this.symbols["icon.file"],
-			git: this.symbols["icon.git"],
-			branch: this.symbols["icon.branch"],
-			tokens: this.symbols["icon.tokens"],
-			context: this.symbols["icon.context"],
-			cost: this.symbols["icon.cost"],
-			time: this.symbols["icon.time"],
-			pi: this.symbols["icon.pi"],
-			agents: this.symbols["icon.agents"],
-			cache: this.symbols["icon.cache"],
-			input: this.symbols["icon.input"],
-			output: this.symbols["icon.output"],
-			host: this.symbols["icon.host"],
-			session: this.symbols["icon.session"],
-			package: this.symbols["icon.package"],
-			warning: this.symbols["icon.warning"],
-			rewind: this.symbols["icon.rewind"],
-			auto: this.symbols["icon.auto"],
-			extensionSkill: this.symbols["icon.extensionSkill"],
-			extensionTool: this.symbols["icon.extensionTool"],
-			extensionSlashCommand: this.symbols["icon.extensionSlashCommand"],
-			extensionMcp: this.symbols["icon.extensionMcp"],
-			extensionRule: this.symbols["icon.extensionRule"],
-			extensionHook: this.symbols["icon.extensionHook"],
-			extensionPrompt: this.symbols["icon.extensionPrompt"],
-			extensionContextFile: this.symbols["icon.extensionContextFile"],
-			extensionInstruction: this.symbols["icon.extensionInstruction"],
+			model: this.#symbols["icon.model"],
+			plan: this.#symbols["icon.plan"],
+			folder: this.#symbols["icon.folder"],
+			file: this.#symbols["icon.file"],
+			git: this.#symbols["icon.git"],
+			branch: this.#symbols["icon.branch"],
+			tokens: this.#symbols["icon.tokens"],
+			context: this.#symbols["icon.context"],
+			cost: this.#symbols["icon.cost"],
+			time: this.#symbols["icon.time"],
+			pi: this.#symbols["icon.pi"],
+			agents: this.#symbols["icon.agents"],
+			cache: this.#symbols["icon.cache"],
+			input: this.#symbols["icon.input"],
+			output: this.#symbols["icon.output"],
+			host: this.#symbols["icon.host"],
+			session: this.#symbols["icon.session"],
+			package: this.#symbols["icon.package"],
+			warning: this.#symbols["icon.warning"],
+			rewind: this.#symbols["icon.rewind"],
+			auto: this.#symbols["icon.auto"],
+			extensionSkill: this.#symbols["icon.extensionSkill"],
+			extensionTool: this.#symbols["icon.extensionTool"],
+			extensionSlashCommand: this.#symbols["icon.extensionSlashCommand"],
+			extensionMcp: this.#symbols["icon.extensionMcp"],
+			extensionRule: this.#symbols["icon.extensionRule"],
+			extensionHook: this.#symbols["icon.extensionHook"],
+			extensionPrompt: this.#symbols["icon.extensionPrompt"],
+			extensionContextFile: this.#symbols["icon.extensionContextFile"],
+			extensionInstruction: this.#symbols["icon.extensionInstruction"],
 		};
 	}
 
 	get thinking() {
 		return {
-			minimal: this.symbols["thinking.minimal"],
-			low: this.symbols["thinking.low"],
-			medium: this.symbols["thinking.medium"],
-			high: this.symbols["thinking.high"],
-			xhigh: this.symbols["thinking.xhigh"],
+			minimal: this.#symbols["thinking.minimal"],
+			low: this.#symbols["thinking.low"],
+			medium: this.#symbols["thinking.medium"],
+			high: this.#symbols["thinking.high"],
+			xhigh: this.#symbols["thinking.xhigh"],
 		};
 	}
 
 	get checkbox() {
 		return {
-			checked: this.symbols["checkbox.checked"],
-			unchecked: this.symbols["checkbox.unchecked"],
+			checked: this.#symbols["checkbox.checked"],
+			unchecked: this.#symbols["checkbox.unchecked"],
 		};
 	}
 
 	get format() {
 		return {
-			bullet: this.symbols["format.bullet"],
-			dash: this.symbols["format.dash"],
-			bracketLeft: this.symbols["format.bracketLeft"],
-			bracketRight: this.symbols["format.bracketRight"],
+			bullet: this.#symbols["format.bullet"],
+			dash: this.#symbols["format.dash"],
+			bracketLeft: this.#symbols["format.bracketLeft"],
+			bracketRight: this.#symbols["format.bracketRight"],
 		};
 	}
 
 	get md() {
 		return {
-			quoteBorder: this.symbols["md.quoteBorder"],
-			hrChar: this.symbols["md.hrChar"],
-			bullet: this.symbols["md.bullet"],
+			quoteBorder: this.#symbols["md.quoteBorder"],
+			hrChar: this.#symbols["md.hrChar"],
+			bullet: this.#symbols["md.bullet"],
 		};
 	}
 
@@ -1430,10 +1430,10 @@ export class Theme {
 	 * Maps common language names to their corresponding symbol keys.
 	 */
 	getLangIcon(lang: string | undefined): string {
-		if (!lang) return this.symbols["lang.default"];
+		if (!lang) return this.#symbols["lang.default"];
 		const normalized = lang.toLowerCase();
 		const key = langMap[normalized];
-		return key ? this.symbols[key] : this.symbols["lang.default"];
+		return key ? this.#symbols[key] : this.#symbols["lang.default"];
 	}
 }
 

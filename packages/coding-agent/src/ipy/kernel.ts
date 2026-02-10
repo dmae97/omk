@@ -187,6 +187,48 @@ function normalizeDisplayText(text: string): string {
 	return text.endsWith("\n") ? text : `${text}\n`;
 }
 
+/** Renders a Jupyter display_data message into text and structured outputs. */
+export function renderKernelDisplay(content: Record<string, unknown>): {
+	text: string;
+	outputs: KernelDisplayOutput[];
+} {
+	const data = content.data as Record<string, unknown> | undefined;
+	if (!data) return { text: "", outputs: [] };
+
+	const outputs: KernelDisplayOutput[] = [];
+
+	// Handle status events (custom MIME type from prelude helpers)
+	if (data["application/x-omp-status"] !== undefined) {
+		const statusData = data["application/x-omp-status"];
+		if (statusData && typeof statusData === "object" && "op" in statusData) {
+			outputs.push({ type: "status", event: statusData as PythonStatusEvent });
+		}
+		// Status events don't produce text output
+		return { text: "", outputs };
+	}
+
+	if (typeof data["image/png"] === "string") {
+		outputs.push({ type: "image", data: data["image/png"] as string, mimeType: "image/png" });
+	}
+	if (data["application/json"] !== undefined) {
+		outputs.push({ type: "json", data: data["application/json"] });
+	}
+
+	// Check text/markdown before text/plain since Markdown objects provide both
+	// (text/plain is just the repr)
+	if (typeof data["text/markdown"] === "string") {
+		return { text: normalizeDisplayText(String(data["text/markdown"])), outputs };
+	}
+	if (typeof data["text/plain"] === "string") {
+		return { text: normalizeDisplayText(String(data["text/plain"])), outputs };
+	}
+	if (data["text/html"] !== undefined) {
+		const markdown = htmlToBasicMarkdown(String(data["text/html"])) || "";
+		return { text: markdown ? normalizeDisplayText(markdown) : "", outputs };
+	}
+	return { text: "", outputs };
+}
+
 export function deserializeWebSocketMessage(data: ArrayBuffer): JupyterMessage | null {
 	const view = new DataView(data);
 	const offsetCount = view.getUint32(0, true);
@@ -302,7 +344,7 @@ export class PythonKernel {
 
 		const externalConfig = getExternalGatewayConfig();
 		if (externalConfig) {
-			return PythonKernel.startWithExternalGateway(externalConfig, options.cwd, options.env);
+			return PythonKernel.#startWithExternalGateway(externalConfig, options.cwd, options.env);
 		}
 
 		if (options.useSharedGateway === false) {
@@ -319,7 +361,7 @@ export class PythonKernel {
 					throw new Error("Shared Python gateway unavailable");
 				}
 				debugStartup("PythonKernel.start:startShared:start");
-				const kernel = await PythonKernel.startWithSharedGateway(sharedResult.url, options.cwd, options.env);
+				const kernel = await PythonKernel.#startWithSharedGateway(sharedResult.url, options.cwd, options.env);
 				debugStartup("PythonKernel.start:startShared:done");
 				time("PythonKernel.start:startWithSharedGateway");
 				return kernel;
@@ -341,7 +383,7 @@ export class PythonKernel {
 		throw new Error("Shared Python gateway unavailable after retry");
 	}
 
-	private static async startWithExternalGateway(
+	static async #startWithExternalGateway(
 		config: ExternalGatewayConfig,
 		cwd: string,
 		env?: Record<string, string | undefined>,
@@ -375,8 +417,8 @@ export class PythonKernel {
 		);
 
 		try {
-			await kernel.connectWebSocket();
-			await kernel.initializeKernelEnvironment(cwd, env);
+			await kernel.#connectWebSocket();
+			await kernel.#initializeKernelEnvironment(cwd, env);
 			const preludeResult = await kernel.execute(PYTHON_PRELUDE, { silent: true, storeHistory: false });
 			if (preludeResult.cancelled || preludeResult.status === "error") {
 				throw new Error("Failed to initialize Python kernel prelude");
@@ -389,7 +431,7 @@ export class PythonKernel {
 		}
 	}
 
-	private static async startWithSharedGateway(
+	static async #startWithSharedGateway(
 		gatewayUrl: string,
 		cwd: string,
 		env?: Record<string, string | undefined>,
@@ -425,11 +467,11 @@ export class PythonKernel {
 
 		try {
 			debugStartup("sharedGateway:connectWS:start");
-			await kernel.connectWebSocket();
+			await kernel.#connectWebSocket();
 			debugStartup("sharedGateway:connectWS:done");
 			time("startWithSharedGateway:connectWS");
 			debugStartup("sharedGateway:initEnv:start");
-			await kernel.initializeKernelEnvironment(cwd, env);
+			await kernel.#initializeKernelEnvironment(cwd, env);
 			debugStartup("sharedGateway:initEnv:done");
 			time("startWithSharedGateway:initEnv");
 			debugStartup("sharedGateway:prelude:start");
@@ -450,7 +492,7 @@ export class PythonKernel {
 		}
 	}
 
-	private async connectWebSocket(): Promise<void> {
+	async #connectWebSocket(): Promise<void> {
 		const wsBase = this.gatewayUrl.replace(/^http/, "ws");
 		let wsUrl = `${wsBase}/api/kernels/${this.kernelId}/channels`;
 		if (this.#authToken) {
@@ -488,7 +530,7 @@ export class PythonKernel {
 			}
 			this.#alive = false;
 			this.#ws = null;
-			this.abortPendingExecutions(error.message);
+			this.#abortPendingExecutions(error.message);
 		};
 
 		ws.onclose = () => {
@@ -500,7 +542,7 @@ export class PythonKernel {
 				reject(new Error("WebSocket closed before connection"));
 				return;
 			}
-			this.abortPendingExecutions("WebSocket closed");
+			this.#abortPendingExecutions("WebSocket closed");
 		};
 
 		ws.onmessage = event => {
@@ -537,7 +579,7 @@ export class PythonKernel {
 		return promise;
 	}
 
-	private async initializeKernelEnvironment(cwd: string, env?: Record<string, string | undefined>): Promise<void> {
+	async #initializeKernelEnvironment(cwd: string, env?: Record<string, string | undefined>): Promise<void> {
 		const envEntries = Object.entries(env ?? {}).filter(([, value]) => value !== undefined);
 		const envPayload = Object.fromEntries(envEntries);
 		const initScript = [
@@ -554,7 +596,7 @@ export class PythonKernel {
 		}
 	}
 
-	private abortPendingExecutions(reason: string): void {
+	#abortPendingExecutions(reason: string): void {
 		if (this.#pendingExecutions.size === 0) return;
 		for (const cancel of this.#pendingExecutions.values()) {
 			cancel(reason);
@@ -695,7 +737,7 @@ export class PythonKernel {
 				}
 				case "execute_result":
 				case "display_data": {
-					const { text, outputs } = this.renderDisplay(response.content);
+					const { text, outputs } = renderKernelDisplay(response.content);
 					if (text && options?.onChunk) {
 						await options.onChunk(text);
 					}
@@ -736,7 +778,7 @@ export class PythonKernel {
 							"[stdin] Kernel requested input. Interactive stdin is not supported; provide input programmatically.\n",
 						);
 					}
-					this.sendMessage({
+					this.#sendMessage({
 						channel: "stdin",
 						header: {
 							msg_id: Snowflake.next(),
@@ -756,7 +798,7 @@ export class PythonKernel {
 		});
 
 		try {
-			this.sendMessage(msg);
+			this.#sendMessage(msg);
 		} catch {
 			cancelled = true;
 			finalize();
@@ -812,7 +854,7 @@ export class PythonKernel {
 				metadata: {},
 				content: {},
 			};
-			this.sendMessage(msg);
+			this.#sendMessage(msg);
 		} catch (err: unknown) {
 			logger.warn("Failed to send interrupt request", { error: err instanceof Error ? err.message : String(err) });
 		}
@@ -822,7 +864,7 @@ export class PythonKernel {
 		if (this.#disposed) return;
 		this.#disposed = true;
 		this.#alive = false;
-		this.abortPendingExecutions("Kernel shutdown");
+		this.#abortPendingExecutions("Kernel shutdown");
 
 		try {
 			await fetch(`${this.gatewayUrl}/api/kernels/${this.kernelId}`, {
@@ -843,45 +885,7 @@ export class PythonKernel {
 		}
 	}
 
-	private renderDisplay(content: Record<string, unknown>): { text: string; outputs: KernelDisplayOutput[] } {
-		const data = content.data as Record<string, unknown> | undefined;
-		if (!data) return { text: "", outputs: [] };
-
-		const outputs: KernelDisplayOutput[] = [];
-
-		// Handle status events (custom MIME type from prelude helpers)
-		if (data["application/x-omp-status"] !== undefined) {
-			const statusData = data["application/x-omp-status"];
-			if (statusData && typeof statusData === "object" && "op" in statusData) {
-				outputs.push({ type: "status", event: statusData as PythonStatusEvent });
-			}
-			// Status events don't produce text output
-			return { text: "", outputs };
-		}
-
-		if (typeof data["image/png"] === "string") {
-			outputs.push({ type: "image", data: data["image/png"] as string, mimeType: "image/png" });
-		}
-		if (data["application/json"] !== undefined) {
-			outputs.push({ type: "json", data: data["application/json"] });
-		}
-
-		// Check text/markdown before text/plain since Markdown objects provide both
-		// (text/plain is just the repr)
-		if (typeof data["text/markdown"] === "string") {
-			return { text: normalizeDisplayText(String(data["text/markdown"])), outputs };
-		}
-		if (typeof data["text/plain"] === "string") {
-			return { text: normalizeDisplayText(String(data["text/plain"])), outputs };
-		}
-		if (data["text/html"] !== undefined) {
-			const markdown = htmlToBasicMarkdown(String(data["text/html"])) || "";
-			return { text: markdown ? normalizeDisplayText(markdown) : "", outputs };
-		}
-		return { text: "", outputs };
-	}
-
-	private sendMessage(msg: JupyterMessage): void {
+	#sendMessage(msg: JupyterMessage): void {
 		if (!this.#ws || this.#ws.readyState !== WebSocket.OPEN) {
 			throw new Error("WebSocket not connected");
 		}

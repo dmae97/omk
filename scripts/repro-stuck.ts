@@ -12,6 +12,7 @@
  *   --rounds=N    Max rounds to try (default: 1000)
  */
 
+import { Subprocess } from "bun";
 import * as path from "node:path";
 
 const CLI_PATH = path.resolve(import.meta.dir, "../packages/coding-agent/src/cli.ts");
@@ -36,7 +37,7 @@ function parseArgs(): Args {
 }
 
 interface Instance {
-	proc: ReturnType<typeof Bun.spawn>;
+	proc: Subprocess;
 	port: number;
 	stdout: string;
 	stderr: string;

@@ -23,34 +23,34 @@ const hashBytes8 = new Uint8Array(hashBuf, 0, 8);
  * (hashed as a sentinel byte) natively.
  */
 export class Hasher {
-	private h = 0n;
+	#h = 0n;
 
 	/** Feed a string. */
 	str(s: string): this {
 		hashView.setUint32(0, s.length);
-		this.h = Bun.hash.xxHash64(hashBytes4, this.h);
-		this.h = Bun.hash.xxHash64(s, this.h);
+		this.#h = Bun.hash.xxHash64(hashBytes4, this.#h);
+		this.#h = Bun.hash.xxHash64(s, this.#h);
 		return this;
 	}
 
 	/** Feed an unsigned 32-bit integer. */
 	u32(n: number): this {
 		hashView.setUint32(0, n);
-		this.h = Bun.hash.xxHash64(hashBytes4, this.h);
+		this.#h = Bun.hash.xxHash64(hashBytes4, this.#h);
 		return this;
 	}
 
 	/** Feed a 64-bit bigint. */
 	u64(n: bigint): this {
 		hashView.setBigUint64(0, n);
-		this.h = Bun.hash.xxHash64(hashBytes8, this.h);
+		this.#h = Bun.hash.xxHash64(hashBytes8, this.#h);
 		return this;
 	}
 
 	/** Feed a boolean (single byte: 1 = true, 0 = false). */
 	bool(b: boolean): this {
 		hashView.setUint8(0, b ? 1 : 0);
-		this.h = Bun.hash.xxHash64(hashBytes1, this.h);
+		this.#h = Bun.hash.xxHash64(hashBytes1, this.#h);
 		return this;
 	}
 
@@ -58,16 +58,16 @@ export class Hasher {
 	optional(v: string | undefined | null): this {
 		if (v == null) {
 			hashView.setUint8(0, 0xff);
-			this.h = Bun.hash.xxHash64(hashBytes1, this.h);
+			this.#h = Bun.hash.xxHash64(hashBytes1, this.#h);
 		} else {
-			this.h = Bun.hash.xxHash64(v, this.h);
+			this.#h = Bun.hash.xxHash64(v, this.#h);
 		}
 		return this;
 	}
 
 	/** Return the final hash digest. */
 	digest(): bigint {
-		return this.h;
+		return this.#h;
 	}
 }
 

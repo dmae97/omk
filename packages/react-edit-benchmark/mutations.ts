@@ -135,16 +135,16 @@ class SwapComparisonMutation extends BaseMutation {
 	fixHint = "Swap the comparison operator to the correct variant.";
 	description = "A comparison operator is subtly wrong.";
 
-	private pattern = /(?<=[\s(])(?<op><=|>=|<|>)(?=\s*[\d\w(])/;
-	private swap: Record<string, string> = { "<=": "<", "<": "<=", ">=": ">", ">": ">=" };
+	#pattern = /(?<=[\s(])(?<op><=|>=|<|>)(?=\s*[\d\w(])/;
+	#swap: Record<string, string> = { "<=": "<", "<": "<=", ">=": ">", ">": ">=" };
 
 	canApply(content: string): boolean {
-		return this.pattern.test(content);
+		return this.#pattern.test(content);
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.pattern, (m) => this.swap[m.groups?.op ?? m[0]] ?? null, rng);
+		const candidate = pickCandidate(lines, this.#pattern, (m) => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
 		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 		const info = applyCandidate(lines, candidate);
 		return [lines.join("\n"), info];
@@ -157,16 +157,16 @@ class SwapEqualityMutation extends BaseMutation {
 	fixHint = "Fix the equality comparison operator.";
 	description = "An equality operator is inverted.";
 
-	private pattern = /(?<![=!<>])(?<op>===|!==|==|!=)(?!=)/;
-	private swap: Record<string, string> = { "===": "!==", "!==": "===", "==": "!=", "!=": "==" };
+	#pattern = /(?<![=!<>])(?<op>===|!==|==|!=)(?!=)/;
+	#swap: Record<string, string> = { "===": "!==", "!==": "===", "==": "!=", "!=": "==" };
 
 	canApply(content: string): boolean {
-		return this.pattern.test(content);
+		return this.#pattern.test(content);
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.pattern, (m) => this.swap[m.groups?.op ?? m[0]] ?? null, rng);
+		const candidate = pickCandidate(lines, this.#pattern, (m) => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
 		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 		const info = applyCandidate(lines, candidate);
 		return [lines.join("\n"), info];
@@ -179,16 +179,16 @@ class SwapLogicalMutation extends BaseMutation {
 	fixHint = "Use the intended boolean operator.";
 	description = "A boolean operator is incorrect.";
 
-	private pattern = /(?<op>&&|\|\|)/;
-	private swap: Record<string, string> = { "&&": "||", "||": "&&" };
+	#pattern = /(?<op>&&|\|\|)/;
+	#swap: Record<string, string> = { "&&": "||", "||": "&&" };
 
 	canApply(content: string): boolean {
-		return this.pattern.test(content);
+		return this.#pattern.test(content);
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.pattern, (m) => this.swap[m.groups?.op ?? m[0]] ?? null, rng);
+		const candidate = pickCandidate(lines, this.#pattern, (m) => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
 		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 		const info = applyCandidate(lines, candidate);
 		return [lines.join("\n"), info];
@@ -201,15 +201,15 @@ class RemoveNegationMutation extends BaseMutation {
 	fixHint = "Remove the stray logical negation.";
 	description = "A negation operator is accidentally applied.";
 
-	private pattern = /!(?!=)/;
+	#pattern = /!(?!=)/;
 
 	canApply(content: string): boolean {
-		return this.pattern.test(content);
+		return this.#pattern.test(content);
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.pattern, () => "", rng);
+		const candidate = pickCandidate(lines, this.#pattern, () => "", rng);
 		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 		const info = applyCandidate(lines, candidate);
 		return [lines.join("\n"), info];
@@ -222,16 +222,16 @@ class SwapIncDecMutation extends BaseMutation {
 	fixHint = "Replace the increment/decrement operator with the intended one.";
 	description = "An increment/decrement operator points the wrong direction.";
 
-	private pattern = /(?<op>\+\+|--)/;
-	private swap: Record<string, string> = { "++": "--", "--": "++" };
+	#pattern = /(?<op>\+\+|--)/;
+	#swap: Record<string, string> = { "++": "--", "--": "++" };
 
 	canApply(content: string): boolean {
-		return this.pattern.test(content);
+		return this.#pattern.test(content);
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.pattern, (m) => this.swap[m.groups?.op ?? m[0]] ?? null, rng);
+		const candidate = pickCandidate(lines, this.#pattern, (m) => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
 		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 		const info = applyCandidate(lines, candidate);
 		return [lines.join("\n"), info];
@@ -244,16 +244,16 @@ class SwapArithmeticMutation extends BaseMutation {
 	fixHint = "Correct the arithmetic operator.";
 	description = "An arithmetic operator was swapped.";
 
-	private pattern = /(?<=\s)(?<op>[+\-*/])(?=\s)/;
-	private swap: Record<string, string> = { "+": "-", "-": "+", "*": "/", "/": "*" };
+	#pattern = /(?<=\s)(?<op>[+\-*/])(?=\s)/;
+	#swap: Record<string, string> = { "+": "-", "-": "+", "*": "/", "/": "*" };
 
 	canApply(content: string): boolean {
-		return this.pattern.test(content);
+		return this.#pattern.test(content);
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.pattern, (m) => this.swap[m.groups?.op ?? m[0]] ?? null, rng);
+		const candidate = pickCandidate(lines, this.#pattern, (m) => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
 		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 		const info = applyCandidate(lines, candidate);
 		return [lines.join("\n"), info];
@@ -266,16 +266,16 @@ class BooleanLiteralFlipMutation extends BaseMutation {
 	fixHint = "Flip the boolean literal to the intended value.";
 	description = "A boolean literal is inverted.";
 
-	private pattern = /\b(true|false)\b/;
-	private swap: Record<string, string> = { true: "false", false: "true" };
+	#pattern = /\b(true|false)\b/;
+	#swap: Record<string, string> = { true: "false", false: "true" };
 
 	canApply(content: string): boolean {
-		return this.pattern.test(content);
+		return this.#pattern.test(content);
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.pattern, (m) => this.swap[m[1]] ?? null, rng);
+		const candidate = pickCandidate(lines, this.#pattern, (m) => this.#swap[m[1]] ?? null, rng);
 		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 		const info = applyCandidate(lines, candidate);
 		return [lines.join("\n"), info];
@@ -289,15 +289,15 @@ class OptionalChainRemovalMutation extends BaseMutation {
 		"Restore the optional chaining operator (`?.`) at the ONE location where it was removed. Do not add optional chaining elsewhere.";
 	description = "Optional chaining was removed from a property access.";
 
-	private pattern = /\?\.(?=[\w\[(])/;
+	#pattern = /\?\.(?=[\w\[(])/;
 
 	canApply(content: string): boolean {
-		return this.pattern.test(content);
+		return this.#pattern.test(content);
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.pattern, () => ".", rng);
+		const candidate = pickCandidate(lines, this.#pattern, () => ".", rng);
 		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 		const info = applyCandidate(lines, candidate);
 		return [lines.join("\n"), info];
@@ -310,17 +310,17 @@ class CallArgumentSwapMutation extends BaseMutation {
 	fixHint = "Swap the two arguments to their original order.";
 	description = "Two arguments in a call are swapped.";
 
-	private pattern = /(?<callee>[\w.$]+)\(\s*(?<a>[^(),]+?)\s*,\s*(?<b>[^(),]+?)\s*\)/;
+	#pattern = /(?<callee>[\w.$]+)\(\s*(?<a>[^(),]+?)\s*,\s*(?<b>[^(),]+?)\s*\)/;
 
 	canApply(content: string): boolean {
-		return this.pattern.test(content);
+		return this.#pattern.test(content);
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
 		const candidate = pickCandidate(
 			lines,
-			this.pattern,
+			this.#pattern,
 			(m) => {
 				const callee = m.groups?.callee ?? "";
 				const a = m.groups?.a ?? "";
@@ -341,16 +341,16 @@ class NullishCoalescingSwapMutation extends BaseMutation {
 	fixHint = "Use the intended nullish/logical operator.";
 	description = "A nullish coalescing operator was swapped.";
 
-	private pattern = /(?<op>\?\?|\|\|)/;
-	private swap: Record<string, string> = { "??": "||", "||": "??" };
+	#pattern = /(?<op>\?\?|\|\|)/;
+	#swap: Record<string, string> = { "??": "||", "||": "??" };
 
 	canApply(content: string): boolean {
-		return this.pattern.test(content);
+		return this.#pattern.test(content);
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.pattern, (m) => this.swap[m.groups?.op ?? m[0]] ?? null, rng);
+		const candidate = pickCandidate(lines, this.#pattern, (m) => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
 		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 		const info = applyCandidate(lines, candidate);
 		return [lines.join("\n"), info];
@@ -363,17 +363,17 @@ class RegexQuantifierSwapMutation extends BaseMutation {
 	fixHint = "Fix the ONE regex quantifier that was swapped (between `+` and `*`). Do not modify other quantifiers.";
 	description = "A regex quantifier was swapped, changing whitespace matching.";
 
-	private literalPattern = /\/(?<body>(?:\\\/|[^/\n])*)\/(?<flags>[gimsuy]*)/g;
-	private quantPattern = /(\\[A-Za-z]|\\.|\[[^\]]+\])(?<quant>[+*])/g;
+	#literalPattern = /\/(?<body>(?:\\\/|[^/\n])*)\/(?<flags>[gimsuy]*)/g;
+	#quantPattern = /(\\[A-Za-z]|\\.|\[[^\]]+\])(?<quant>[+*])/g;
 
 	canApply(content: string): boolean {
 		const lines = content.split("\n");
-		return this.iterCandidates(lines).length > 0;
+		return this.#iterCandidates(lines).length > 0;
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
-		const candidates = this.iterCandidates(lines);
+		const candidates = this.#iterCandidates(lines);
 		if (candidates.length === 0) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 
 		const lineCounts = new Map<string, number>();
@@ -388,11 +388,11 @@ class RegexQuantifierSwapMutation extends BaseMutation {
 		return [lines.join("\n"), info];
 	}
 
-	private iterCandidates(lines: string[]): Candidate[] {
+	#iterCandidates(lines: string[]): Candidate[] {
 		const candidates: Candidate[] = [];
 		for (let lineNumber = 1; lineNumber <= lines.length; lineNumber++) {
 			const line = lines[lineNumber - 1];
-			const litRegex = new RegExp(this.literalPattern.source, this.literalPattern.flags);
+			const litRegex = new RegExp(this.#literalPattern.source, this.#literalPattern.flags);
 			let litMatch: RegExpExecArray | null;
 			while ((litMatch = litRegex.exec(line)) !== null) {
 				if (isCommented(line, litMatch.index)) continue;
@@ -402,7 +402,7 @@ class RegexQuantifierSwapMutation extends BaseMutation {
 				}
 				const bodyStart = litMatch.index + 1; // after opening /
 				const body = litMatch.groups?.body ?? "";
-				const quantRegex = new RegExp(this.quantPattern.source, this.quantPattern.flags);
+				const quantRegex = new RegExp(this.#quantPattern.source, this.#quantPattern.flags);
 				let tokenMatch: RegExpExecArray | null;
 				while ((tokenMatch = quantRegex.exec(body)) !== null) {
 					const quantifier = tokenMatch.groups?.quant ?? tokenMatch[2];
@@ -428,10 +428,10 @@ class UnicodeHyphenMutation extends BaseMutation {
 	fixHint = "Replace the unicode dash with a plain ASCII hyphen.";
 	description = "A string literal contains a lookalike unicode dash.";
 
-	private stringPattern = /(?<quote>['"])(?<body>(?:\\.|[^\\\n])*?)\k<quote>/g;
+	#stringPattern = /(?<quote>['"])(?<body>(?:\\.|[^\\\n])*?)\k<quote>/g;
 
 	canApply(content: string): boolean {
-		return content.includes("-") && this.stringPattern.test(content);
+		return content.includes("-") && this.#stringPattern.test(content);
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
@@ -439,7 +439,7 @@ class UnicodeHyphenMutation extends BaseMutation {
 		const candidates: Candidate[] = [];
 		for (let lineNumber = 1; lineNumber <= lines.length; lineNumber++) {
 			const line = lines[lineNumber - 1];
-			const regex = new RegExp(this.stringPattern.source, this.stringPattern.flags);
+			const regex = new RegExp(this.#stringPattern.source, this.#stringPattern.flags);
 			let match: RegExpExecArray | null;
 			while ((match = regex.exec(line)) !== null) {
 				if (isCommented(line, match.index)) continue;
@@ -469,8 +469,8 @@ class IdentifierMultiEditMutation extends BaseMutation {
 	fixHint = "Restore the identifier to its original spelling in all affected locations.";
 	description = "An identifier is misspelled in multiple separate locations.";
 
-	private pattern = /\b[A-Za-z_$][\w$]*\b/g;
-	private keywords = new Set([
+	#pattern = /\b[A-Za-z_$][\w$]*\b/g;
+	#keywords = new Set([
 		"await",
 		"break",
 		"case",
@@ -520,7 +520,7 @@ class IdentifierMultiEditMutation extends BaseMutation {
 	]);
 
 	canApply(content: string): boolean {
-		return this.pattern.test(content);
+		return this.#pattern.test(content);
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
@@ -530,12 +530,12 @@ class IdentifierMultiEditMutation extends BaseMutation {
 		for (let lineNumber = 1; lineNumber <= lines.length; lineNumber++) {
 			const line = lines[lineNumber - 1];
 			const masked = stripStrings(line);
-			const regex = new RegExp(this.pattern.source, this.pattern.flags);
+			const regex = new RegExp(this.#pattern.source, this.#pattern.flags);
 			let match: RegExpExecArray | null;
 			while ((match = regex.exec(masked)) !== null) {
 				if (isCommented(line, match.index)) continue;
 				const identifier = match[0];
-				if (this.keywords.has(identifier)) continue;
+				if (this.#keywords.has(identifier)) continue;
 				const mutated = mutateIdentifier(identifier);
 				if (mutated === null) continue;
 				const spans = occurrences.get(identifier) ?? [];
@@ -587,17 +587,17 @@ class DuplicateLineLiteralFlipMutation extends BaseMutation {
 	fixHint = "Fix the literal or operator on the duplicated line.";
 	description = "A duplicated line contains a subtle literal/operator change.";
 
-	private boolPattern = /\b(true|false)\b/;
-	private eqPattern = /(?<![=!<>])(?:===|!==|==|!=)(?!=)/;
-	private compPattern = /(?<=[\s(])(?<comp><=|>=|<|>)(?=\s*[\d\w(])/;
-	private boolSwap: Record<string, string> = { true: "false", false: "true" };
-	private eqSwap: Record<string, string> = { "===": "!==", "!==": "===", "==": "!=", "!=": "==" };
-	private compSwap: Record<string, string> = { "<=": "<", "<": "<=", ">=": ">", ">": ">=" };
+	#boolPattern = /\b(true|false)\b/;
+	#eqPattern = /(?<![=!<>])(?:===|!==|==|!=)(?!=)/;
+	#compPattern = /(?<=[\s(])(?<comp><=|>=|<|>)(?=\s*[\d\w(])/;
+	#boolSwap: Record<string, string> = { true: "false", false: "true" };
+	#eqSwap: Record<string, string> = { "===": "!==", "!==": "===", "==": "!=", "!=": "==" };
+	#compSwap: Record<string, string> = { "<=": "<", "<": "<=", ">=": ">", ">": ">=" };
 
 	canApply(content: string): boolean {
 		const lines = content.split("\n");
 		if (lines.length === new Set(lines).size) return false;
-		return this.boolPattern.test(content) || this.eqPattern.test(content) || this.compPattern.test(content);
+		return this.#boolPattern.test(content) || this.#eqPattern.test(content) || this.#compPattern.test(content);
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
@@ -614,9 +614,9 @@ class DuplicateLineLiteralFlipMutation extends BaseMutation {
 		for (const [line, indices] of lineMap) {
 			if (indices.length < 2) continue;
 			for (const [pattern, swapMap] of [
-				[this.boolPattern, this.boolSwap],
-				[this.eqPattern, this.eqSwap],
-				[this.compPattern, this.compSwap],
+				[this.#boolPattern, this.#boolSwap],
+				[this.#eqPattern, this.#eqSwap],
+				[this.#compPattern, this.#compSwap],
 			] as const) {
 				const regex = new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : pattern.flags + "g");
 				let match: RegExpExecArray | null;
@@ -651,25 +651,25 @@ class SwapAdjacentLinesMutation extends BaseMutation {
 	fixHint = "Swap the two adjacent lines back to their original order.";
 	description = "Two adjacent statements are in the wrong order.";
 
-	private statementPattern =
+	#statementPattern =
 		/^\s*(?:(?:const|let|var)\s+\w+\s*=|return\s+|\w+\s*(?:\.\w+)*\s*\(|\w+\s*(?:\.\w+)*\s*=)/;
 
 	canApply(content: string): boolean {
 		const lines = content.split("\n");
 		for (let i = 0; i < lines.length - 1; i++) {
-			if (this.isSwappablePair(lines, i)) return true;
+			if (this.#isSwappablePair(lines, i)) return true;
 		}
 		return false;
 	}
 
-	private isSwappablePair(lines: string[], i: number): boolean {
+	#isSwappablePair(lines: string[], i: number): boolean {
 		const lineA = lines[i];
 		const lineB = lines[i + 1];
 		if (!lineA.trim() || !lineB.trim()) return false;
 		const indentA = lineA.length - lineA.trimStart().length;
 		const indentB = lineB.length - lineB.trimStart().length;
 		if (indentA !== indentB) return false;
-		if (!this.statementPattern.test(lineA) || !this.statementPattern.test(lineB)) return false;
+		if (!this.#statementPattern.test(lineA) || !this.#statementPattern.test(lineB)) return false;
 		if (lineA.trim() === lineB.trim()) return false;
 		if (lineA.includes("//") || lineB.includes("//")) return false;
 		return true;
@@ -679,7 +679,7 @@ class SwapAdjacentLinesMutation extends BaseMutation {
 		const lines = content.split("\n");
 		const candidates: number[] = [];
 		for (let i = 0; i < lines.length - 1; i++) {
-			if (this.isSwappablePair(lines, i)) candidates.push(i);
+			if (this.#isSwappablePair(lines, i)) candidates.push(i);
 		}
 
 		if (candidates.length === 0) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
@@ -704,11 +704,11 @@ class SwapIfElseBranchesMutation extends BaseMutation {
 		"Swap the if and else branch bodies back to their original positions. The condition should be negated to match.";
 	description = "The if and else branches are swapped (condition should be negated).";
 
-	private ifPattern = /^\s*if\s*\([^)]+\)\s*\{/;
+	#ifPattern = /^\s*if\s*\([^)]+\)\s*\{/;
 
 	canApply(content: string): boolean {
 		if (!content.includes("} else {")) return false;
-		return content.split("\n").some((line) => this.ifPattern.test(line));
+		return content.split("\n").some((line) => this.#ifPattern.test(line));
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
@@ -718,7 +718,7 @@ class SwapIfElseBranchesMutation extends BaseMutation {
 		let i = 0;
 		while (i < lines.length) {
 			const line = lines[i];
-			if (this.ifPattern.test(line)) {
+			if (this.#ifPattern.test(line)) {
 				const ifStart = i;
 				let braceDepth = (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
 				let j = i + 1;
@@ -786,21 +786,21 @@ class RemoveEarlyReturnMutation extends BaseMutation {
 		"Restore the missing guard clause (if statement with early return). Add back the exact 3-line pattern: if condition, return statement, closing brace.";
 	description = "A guard clause (early return) was removed.";
 
-	private guardPattern = /^(?<indent>\s*)if\s*\([^)]+\)\s*\{\s*$/;
-	private returnPattern = /^\s*return\b/;
+	#guardPattern = /^(?<indent>\s*)if\s*\([^)]+\)\s*\{\s*$/;
+	#returnPattern = /^\s*return\b/;
 
 	canApply(content: string): boolean {
 		const lines = content.split("\n");
 		for (let i = 0; i < lines.length - 2; i++) {
-			if (this.isGuardClause(lines, i)) return true;
+			if (this.#isGuardClause(lines, i)) return true;
 		}
 		return false;
 	}
 
-	private isGuardClause(lines: string[], i: number): boolean {
-		if (!this.guardPattern.test(lines[i])) return false;
+	#isGuardClause(lines: string[], i: number): boolean {
+		if (!this.#guardPattern.test(lines[i])) return false;
 		if (i + 2 >= lines.length) return false;
-		if (!this.returnPattern.test(lines[i + 1])) return false;
+		if (!this.#returnPattern.test(lines[i + 1])) return false;
 		if (lines[i + 2].trim() !== "}") return false;
 		return true;
 	}
@@ -809,7 +809,7 @@ class RemoveEarlyReturnMutation extends BaseMutation {
 		const lines = content.split("\n");
 		const candidates: number[] = [];
 		for (let i = 0; i < lines.length - 2; i++) {
-			if (this.isGuardClause(lines, i)) candidates.push(i);
+			if (this.#isGuardClause(lines, i)) candidates.push(i);
 		}
 
 		if (candidates.length === 0) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
@@ -835,10 +835,10 @@ class SwapNamedImportsMutation extends BaseMutation {
 		"Swap ONLY the two imported names that are in the wrong order. Do not reorder other imports or modify other import statements.";
 	description = "Two named imports are swapped in a destructuring import.";
 
-	private importPattern = /import\s*\{(?<imports>[^}]+)\}\s*from\s*['"]/;
+	#importPattern = /import\s*\{(?<imports>[^}]+)\}\s*from\s*['"]/;
 
 	canApply(content: string): boolean {
-		const regex = new RegExp(this.importPattern.source, "g");
+		const regex = new RegExp(this.#importPattern.source, "g");
 		let match: RegExpExecArray | null;
 		while ((match = regex.exec(content)) !== null) {
 			const imports = match.groups?.imports ?? "";
@@ -858,7 +858,7 @@ class SwapNamedImportsMutation extends BaseMutation {
 
 		for (let lineNumber = 1; lineNumber <= lines.length; lineNumber++) {
 			const line = lines[lineNumber - 1];
-			const regex = new RegExp(this.importPattern.source, "g");
+			const regex = new RegExp(this.#importPattern.source, "g");
 			let match: RegExpExecArray | null;
 			while ((match = regex.exec(line)) !== null) {
 				const importsStr = match.groups?.imports ?? "";
@@ -902,17 +902,17 @@ class DeleteStatementMutation extends BaseMutation {
 	fixHint = "Restore the deleted statement.";
 	description = "A critical statement was deleted from the code.";
 
-	private statementPattern = /^\s*(?:(?:const|let|var)\s+\w+\s*=.+;|\w+\s*\+=.+;|\w+\s*-=.+;|\w+\s*=\s*\w+.+;)\s*$/;
+	#statementPattern = /^\s*(?:(?:const|let|var)\s+\w+\s*=.+;|\w+\s*\+=.+;|\w+\s*-=.+;|\w+\s*=\s*\w+.+;)\s*$/;
 
 	canApply(content: string): boolean {
-		return content.split("\n").some((line) => this.statementPattern.test(line));
+		return content.split("\n").some((line) => this.#statementPattern.test(line));
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
 		const candidates: number[] = [];
 		for (let i = 0; i < lines.length; i++) {
-			if (this.statementPattern.test(lines[i])) {
+			if (this.#statementPattern.test(lines[i])) {
 				if (!lines[i].includes("//") && !lines[i].includes("/*")) {
 					candidates.push(i);
 				}
@@ -941,7 +941,7 @@ class OffByOneMutation extends BaseMutation {
 	fixHint = "Fix the off-by-one error in the numeric literal or comparison.";
 	description = "A numeric boundary has an off-by-one error.";
 
-	private patterns: Array<[RegExp, (m: RegExpExecArray) => string]> = [
+	#patterns: Array<[RegExp, (m: RegExpExecArray) => string]> = [
 		[/(?<=[\s(,=<>])0(?=[\s),;])/, () => "1"],
 		[/(?<=[\s(,=<>])1(?=[\s),;])/, () => "0"],
 		[/\.length\s*-\s*1(?=[\s),;\]])/, () => ".length - 2"],
@@ -951,7 +951,7 @@ class OffByOneMutation extends BaseMutation {
 	];
 
 	canApply(content: string): boolean {
-		return this.patterns.some(([pattern]) => pattern.test(content));
+		return this.#patterns.some(([pattern]) => pattern.test(content));
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
@@ -971,7 +971,7 @@ class OffByOneMutation extends BaseMutation {
 				continue;
 			}
 
-			for (const [pattern, replacementFn] of this.patterns) {
+			for (const [pattern, replacementFn] of this.#patterns) {
 				const regex = new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : pattern.flags + "g");
 				let match: RegExpExecArray | null;
 				while ((match = regex.exec(line)) !== null) {

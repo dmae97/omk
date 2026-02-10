@@ -5,43 +5,43 @@ import { getMarkdownTheme, theme } from "../../modes/theme/theme";
 import type { CustomMessage, SkillPromptDetails } from "../../session/messages";
 
 export class SkillMessageComponent extends Container {
-	private box: Box;
-	private contentComponent?: Component;
-	private _expanded = false;
+	#box: Box;
+	#contentComponent?: Component;
+	#expanded = false;
 
 	constructor(private readonly message: CustomMessage<SkillPromptDetails>) {
 		super();
 		this.addChild(new Spacer(1));
 
-		this.box = new Box(1, 1, t => theme.bg("customMessageBg", t));
-		this.rebuild();
+		this.#box = new Box(1, 1, t => theme.bg("customMessageBg", t));
+		this.#rebuild();
 	}
 
 	setExpanded(expanded: boolean): void {
-		if (this._expanded !== expanded) {
-			this._expanded = expanded;
-			this.rebuild();
+		if (this.#expanded !== expanded) {
+			this.#expanded = expanded;
+			this.#rebuild();
 		}
 	}
 
 	override invalidate(): void {
 		super.invalidate();
-		this.rebuild();
+		this.#rebuild();
 	}
 
-	private rebuild(): void {
-		if (this.contentComponent) {
-			this.removeChild(this.contentComponent);
-			this.contentComponent = undefined;
+	#rebuild(): void {
+		if (this.#contentComponent) {
+			this.removeChild(this.#contentComponent);
+			this.#contentComponent = undefined;
 		}
 
-		this.removeChild(this.box);
-		this.addChild(this.box);
-		this.box.clear();
+		this.removeChild(this.#box);
+		this.addChild(this.#box);
+		this.#box.clear();
 
 		const label = theme.fg("customMessageLabel", theme.bold("[skill]"));
-		this.box.addChild(new Text(label, 0, 0));
-		this.box.addChild(new Spacer(1));
+		this.#box.addChild(new Text(label, 0, 0));
+		this.#box.addChild(new Spacer(1));
 
 		const details = this.message.details;
 		const args = details?.args?.trim();
@@ -52,33 +52,33 @@ export class SkillMessageComponent extends Container {
 			typeof details?.lineCount === "number" ? `Prompt: ${details.lineCount} lines` : undefined,
 		].filter((line): line is string => Boolean(line));
 
-		this.box.addChild(
+		this.#box.addChild(
 			new Markdown(infoLines.join("\n"), 0, 0, getMarkdownTheme(), {
 				color: (value: string) => theme.fg("customMessageText", value),
 			}),
 		);
 
-		if (!this._expanded) {
+		if (!this.#expanded) {
 			return;
 		}
 
-		const text = this.extractText();
+		const text = this.#extractText();
 		if (!text) {
 			return;
 		}
 
-		this.box.addChild(new Spacer(1));
+		this.#box.addChild(new Spacer(1));
 		const promptHeader = theme.fg("customMessageLabel", theme.bold("Prompt"));
-		this.box.addChild(new Text(promptHeader, 0, 0));
-		this.box.addChild(new Spacer(1));
+		this.#box.addChild(new Text(promptHeader, 0, 0));
+		this.#box.addChild(new Spacer(1));
 
-		this.contentComponent = new Markdown(text, 0, 0, getMarkdownTheme(), {
+		this.#contentComponent = new Markdown(text, 0, 0, getMarkdownTheme(), {
 			color: (value: string) => theme.fg("customMessageText", value),
 		});
-		this.box.addChild(this.contentComponent);
+		this.#box.addChild(this.#contentComponent);
 	}
 
-	private extractText(): string {
+	#extractText(): string {
 		if (typeof this.message.content === "string") {
 			return this.message.content;
 		}

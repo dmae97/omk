@@ -7,8 +7,8 @@ import { DynamicBorder } from "./dynamic-border";
  * Themes must be pre-loaded and passed to the constructor.
  */
 export class ThemeSelectorComponent extends Container {
-	private selectList: SelectList;
-	private onPreview: (themeName: string) => void;
+	#selectList: SelectList;
+	#onPreview: (themeName: string) => void;
 
 	constructor(
 		currentTheme: string,
@@ -18,7 +18,7 @@ export class ThemeSelectorComponent extends Container {
 		onPreview: (themeName: string) => void,
 	) {
 		super();
-		this.onPreview = onPreview;
+		this.#onPreview = onPreview;
 
 		// Create select items from provided themes
 		const themeItems: SelectItem[] = themes.map(name => ({
@@ -31,33 +31,33 @@ export class ThemeSelectorComponent extends Container {
 		this.addChild(new DynamicBorder());
 
 		// Create selector
-		this.selectList = new SelectList(themeItems, 10, getSelectListTheme());
+		this.#selectList = new SelectList(themeItems, 10, getSelectListTheme());
 
 		// Preselect current theme
 		const currentIndex = themes.indexOf(currentTheme);
 		if (currentIndex !== -1) {
-			this.selectList.setSelectedIndex(currentIndex);
+			this.#selectList.setSelectedIndex(currentIndex);
 		}
 
-		this.selectList.onSelect = item => {
+		this.#selectList.onSelect = item => {
 			onSelect(item.value);
 		};
 
-		this.selectList.onCancel = () => {
+		this.#selectList.onCancel = () => {
 			onCancel();
 		};
 
-		this.selectList.onSelectionChange = item => {
-			this.onPreview(item.value);
+		this.#selectList.onSelectionChange = item => {
+			this.#onPreview(item.value);
 		};
 
-		this.addChild(this.selectList);
+		this.addChild(this.#selectList);
 
 		// Add bottom border
 		this.addChild(new DynamicBorder());
 	}
 
 	getSelectList(): SelectList {
-		return this.selectList;
+		return this.#selectList;
 	}
 }

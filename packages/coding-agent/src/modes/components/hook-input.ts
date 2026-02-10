@@ -12,12 +12,12 @@ export interface HookInputOptions {
 }
 
 export class HookInputComponent extends Container {
-	private input: Input;
-	private onSubmitCallback: (value: string) => void;
-	private onCancelCallback: () => void;
-	private titleText: Text;
-	private baseTitle: string;
-	private countdown: CountdownTimer | undefined;
+	#input: Input;
+	#onSubmitCallback: (value: string) => void;
+	#onCancelCallback: () => void;
+	#titleText: Text;
+	#baseTitle: string;
+	#countdown: CountdownTimer | undefined;
 
 	constructor(
 		title: string,
@@ -28,28 +28,28 @@ export class HookInputComponent extends Container {
 	) {
 		super();
 
-		this.onSubmitCallback = onSubmit;
-		this.onCancelCallback = onCancel;
-		this.baseTitle = title;
+		this.#onSubmitCallback = onSubmit;
+		this.#onCancelCallback = onCancel;
+		this.#baseTitle = title;
 
 		this.addChild(new DynamicBorder());
 		this.addChild(new Spacer(1));
 
-		this.titleText = new Text(theme.fg("accent", title), 1, 0);
-		this.addChild(this.titleText);
+		this.#titleText = new Text(theme.fg("accent", title), 1, 0);
+		this.addChild(this.#titleText);
 		this.addChild(new Spacer(1));
 
 		if (opts?.timeout && opts.timeout > 0 && opts.tui) {
-			this.countdown = new CountdownTimer(
+			this.#countdown = new CountdownTimer(
 				opts.timeout,
 				opts.tui,
-				s => this.titleText.setText(theme.fg("accent", `${this.baseTitle} (${s}s)`)),
-				() => this.onCancelCallback(),
+				s => this.#titleText.setText(theme.fg("accent", `${this.#baseTitle} (${s}s)`)),
+				() => this.#onCancelCallback(),
 			);
 		}
 
-		this.input = new Input();
-		this.addChild(this.input);
+		this.#input = new Input();
+		this.addChild(this.#input);
 		this.addChild(new Spacer(1));
 		this.addChild(new Text(theme.fg("dim", "enter submit  esc cancel"), 1, 0));
 		this.addChild(new Spacer(1));
@@ -58,15 +58,15 @@ export class HookInputComponent extends Container {
 
 	handleInput(keyData: string): void {
 		if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
-			this.onSubmitCallback(this.input.getValue());
+			this.#onSubmitCallback(this.#input.getValue());
 		} else if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc")) {
-			this.onCancelCallback();
+			this.#onCancelCallback();
 		} else {
-			this.input.handleInput(keyData);
+			this.#input.handleInput(keyData);
 		}
 	}
 
 	dispose(): void {
-		this.countdown?.dispose();
+		this.#countdown?.dispose();
 	}
 }

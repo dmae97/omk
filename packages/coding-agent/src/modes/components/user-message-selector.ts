@@ -12,15 +12,15 @@ interface UserMessageItem {
  * Custom user message list component with selection
  */
 class UserMessageList implements Component {
-	private selectedIndex: number = 0;
-	public onSelect?: (entryId: string) => void;
-	public onCancel?: () => void;
-	private maxVisible: number = 10; // Max messages visible
+	#selectedIndex: number = 0;
+	onSelect?: (entryId: string) => void;
+	onCancel?: () => void;
+	#maxVisible: number = 10; // Max messages visible
 
 	constructor(private readonly messages: UserMessageItem[]) {
 		// Store messages in chronological order (oldest to newest)
 		// Start with the last (most recent) message selected
-		this.selectedIndex = Math.max(0, this.messages.length - 1);
+		this.#selectedIndex = Math.max(0, this.messages.length - 1);
 	}
 
 	invalidate(): void {
@@ -38,14 +38,14 @@ class UserMessageList implements Component {
 		// Calculate visible range with scrolling
 		const startIndex = Math.max(
 			0,
-			Math.min(this.selectedIndex - Math.floor(this.maxVisible / 2), this.messages.length - this.maxVisible),
+			Math.min(this.#selectedIndex - Math.floor(this.#maxVisible / 2), this.messages.length - this.#maxVisible),
 		);
-		const endIndex = Math.min(startIndex + this.maxVisible, this.messages.length);
+		const endIndex = Math.min(startIndex + this.#maxVisible, this.messages.length);
 
 		// Render visible messages (2 lines per message + blank line)
 		for (let i = startIndex; i < endIndex; i++) {
 			const message = this.messages[i];
-			const isSelected = i === this.selectedIndex;
+			const isSelected = i === this.#selectedIndex;
 
 			// Normalize message to single line
 			const normalizedMessage = message.text.replace(/\n/g, " ").trim();
@@ -68,7 +68,7 @@ class UserMessageList implements Component {
 
 		// Add scroll indicator if needed
 		if (startIndex > 0 || endIndex < this.messages.length) {
-			const scrollInfo = theme.fg("muted", `  (${this.selectedIndex + 1}/${this.messages.length})`);
+			const scrollInfo = theme.fg("muted", `  (${this.#selectedIndex + 1}/${this.messages.length})`);
 			lines.push(scrollInfo);
 		}
 
@@ -78,15 +78,15 @@ class UserMessageList implements Component {
 	handleInput(keyData: string): void {
 		// Up arrow - go to previous (older) message, wrap to bottom when at top
 		if (matchesKey(keyData, "up")) {
-			this.selectedIndex = this.selectedIndex === 0 ? this.messages.length - 1 : this.selectedIndex - 1;
+			this.#selectedIndex = this.#selectedIndex === 0 ? this.messages.length - 1 : this.#selectedIndex - 1;
 		}
 		// Down arrow - go to next (newer) message, wrap to top when at bottom
 		else if (matchesKey(keyData, "down")) {
-			this.selectedIndex = this.selectedIndex === this.messages.length - 1 ? 0 : this.selectedIndex + 1;
+			this.#selectedIndex = this.#selectedIndex === this.messages.length - 1 ? 0 : this.#selectedIndex + 1;
 		}
 		// Enter - select message and branch
 		else if (matchesKey(keyData, "enter") || matchesKey(keyData, "return") || keyData === "\n") {
-			const selected = this.messages[this.selectedIndex];
+			const selected = this.messages[this.#selectedIndex];
 			if (selected && this.onSelect) {
 				this.onSelect(selected.id);
 			}
@@ -110,7 +110,7 @@ class UserMessageList implements Component {
  * Component that renders a user message selector for branching
  */
 export class UserMessageSelectorComponent extends Container {
-	private messageList: UserMessageList;
+	#messageList: UserMessageList;
 
 	constructor(messages: UserMessageItem[], onSelect: (entryId: string) => void, onCancel: () => void) {
 		super();
@@ -124,11 +124,11 @@ export class UserMessageSelectorComponent extends Container {
 		this.addChild(new Spacer(1));
 
 		// Create message list
-		this.messageList = new UserMessageList(messages);
-		this.messageList.onSelect = onSelect;
-		this.messageList.onCancel = onCancel;
+		this.#messageList = new UserMessageList(messages);
+		this.#messageList.onSelect = onSelect;
+		this.#messageList.onCancel = onCancel;
 
-		this.addChild(this.messageList);
+		this.addChild(this.#messageList);
 
 		// Add bottom border
 		this.addChild(new Spacer(1));
@@ -141,6 +141,6 @@ export class UserMessageSelectorComponent extends Container {
 	}
 
 	getMessageList(): UserMessageList {
-		return this.messageList;
+		return this.#messageList;
 	}
 }

@@ -428,8 +428,16 @@ export function wrapToolWithMetaNotice<T extends AgentTool<any, any, any>>(tool:
 		return result;
 	};
 
-	return Object.create(tool, {
-		execute: { value: wrappedExecute, enumerable: true },
+	// Use Proxy so property access (description, parameters, mode) stays on the original
+	// tool. Object.create(tool) would make getters run with this=wrapper, breaking
+	// private fields on tools like EditTool.
+	return new Proxy(tool, {
+		get(target, prop) {
+			if (prop === "execute") return wrappedExecute;
+			const value = (target as Record<string | symbol, unknown>)[prop];
+			if (typeof value === "function") return value.bind(target);
+			return value;
+		},
 	}) as T;
 }
 

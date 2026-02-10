@@ -535,24 +535,24 @@ type ReadParams = { path: string; offset?: number; limit?: number; lines?: boole
  * Directories return a formatted listing with modification times.
  */
 export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
-	public readonly name = "read";
-	public readonly label = "Read";
-	public readonly description: string;
-	public readonly parameters = readSchema;
-	public readonly nonAbortable = true;
+	readonly name = "read";
+	readonly label = "Read";
+	readonly description: string;
+	readonly parameters = readSchema;
+	readonly nonAbortable = true;
 
-	private readonly autoResizeImages: boolean;
-	private readonly defaultLineNumbers: boolean;
+	readonly #autoResizeImages: boolean;
+	readonly #defaultLineNumbers: boolean;
 
 	constructor(private readonly session: ToolSession) {
-		this.autoResizeImages = session.settings.get("images.autoResize");
-		this.defaultLineNumbers = session.settings.get("readLineNumbers");
+		this.#autoResizeImages = session.settings.get("images.autoResize");
+		this.#defaultLineNumbers = session.settings.get("readLineNumbers");
 		this.description = renderPromptTemplate(readDescription, {
 			DEFAULT_MAX_LINES: String(DEFAULT_MAX_LINES),
 		});
 	}
 
-	public async execute(
+	async execute(
 		_toolCallId: string,
 		params: ReadParams,
 		signal?: AbortSignal,
@@ -564,7 +564,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		// Handle internal URLs (agent://, skill://)
 		const internalRouter = this.session.internalRouter;
 		if (internalRouter?.canHandle(readPath)) {
-			return this.handleInternalUrl(readPath, offset, limit, lines);
+			return this.#handleInternalUrl(readPath, offset, limit, lines);
 		}
 
 		const absolutePath = resolveReadPath(readPath, this.session.cwd);
@@ -604,7 +604,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		}
 
 		if (isDirectory) {
-			return this.readDirectory(absolutePath, limit, signal);
+			return this.#readDirectory(absolutePath, limit, signal);
 		}
 
 		const mimeType = await detectSupportedImageMimeTypeFromFile(absolutePath);
@@ -636,7 +636,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				} else {
 					const base64 = new Uint8Array(buffer).toBase64();
 
-					if (this.autoResizeImages) {
+					if (this.#autoResizeImages) {
 						// Resize image if needed - catch errors from Photon
 						try {
 							const resized = await resizeImage({ type: "image", data: base64, mimeType });
@@ -754,7 +754,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			};
 
 			// Add line numbers if requested (uses setting default if not specified)
-			const shouldAddLineNumbers = lines ?? this.defaultLineNumbers;
+			const shouldAddLineNumbers = lines ?? this.#defaultLineNumbers;
 			const prependLineNumbers = (text: string, startNum: number): string => {
 				const textLines = text.split("\n");
 				const lastLineNum = startNum + textLines.length - 1;
@@ -831,7 +831,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 	 * Handle internal URLs (agent://, skill://).
 	 * Supports pagination via offset/limit but rejects them when query extraction is used.
 	 */
-	private async handleInternalUrl(
+	async #handleInternalUrl(
 		url: string,
 		offset?: number,
 		limit?: number,
@@ -904,7 +904,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		const truncation = truncateHead(selectedContent);
 
 		// Add line numbers if requested
-		const shouldAddLineNumbers = lines ?? this.defaultLineNumbers;
+		const shouldAddLineNumbers = lines ?? this.#defaultLineNumbers;
 		const prependLineNumbers = (text: string, startNum: number): string => {
 			const textLines = text.split("\n");
 			const lastLineNum = startNum + textLines.length - 1;
@@ -976,7 +976,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 	}
 
 	/** Read directory contents as a formatted listing */
-	private async readDirectory(
+	async #readDirectory(
 		absolutePath: string,
 		limit: number | undefined,
 		signal?: AbortSignal,

@@ -12,15 +12,15 @@ import { truncateToVisualLines } from "./visual-truncate";
 const PREVIEW_LINES = 20;
 
 export class PythonExecutionComponent extends Container {
-	private outputLines: string[] = [];
-	private status: "running" | "complete" | "cancelled" | "error" = "running";
-	private exitCode: number | undefined = undefined;
-	private loader: Loader;
-	private truncation?: TruncationMeta;
-	private expanded = false;
-	private contentContainer: Container;
+	#outputLines: string[] = [];
+	#status: "running" | "complete" | "cancelled" | "error" = "running";
+	#exitCode: number | undefined = undefined;
+	#loader: Loader;
+	#truncation?: TruncationMeta;
+	#expanded = false;
+	#contentContainer: Container;
 
-	private formatHeader(colorKey: "dim" | "pythonMode"): Text {
+	#formatHeader(colorKey: "dim" | "pythonMode"): Text {
 		const prompt = theme.fg(colorKey, theme.bold(">>>"));
 		const continuation = theme.fg(colorKey, "    ");
 		const codeLines = highlightCode(this.code, "python");
@@ -43,44 +43,44 @@ export class PythonExecutionComponent extends Container {
 		this.addChild(new Spacer(1));
 		this.addChild(new DynamicBorder(borderColor));
 
-		this.contentContainer = new Container();
-		this.addChild(this.contentContainer);
-		this.contentContainer.addChild(this.formatHeader(colorKey));
+		this.#contentContainer = new Container();
+		this.addChild(this.#contentContainer);
+		this.#contentContainer.addChild(this.#formatHeader(colorKey));
 
-		this.loader = new Loader(
+		this.#loader = new Loader(
 			ui,
 			spinner => theme.fg(colorKey, spinner),
 			text => theme.fg("muted", text),
 			`Running… (esc to cancel)`,
 			getSymbolTheme().spinnerFrames,
 		);
-		this.contentContainer.addChild(this.loader);
+		this.#contentContainer.addChild(this.#loader);
 
 		this.addChild(new DynamicBorder(borderColor));
 	}
 
 	setExpanded(expanded: boolean): void {
-		this.expanded = expanded;
-		this.updateDisplay();
+		this.#expanded = expanded;
+		this.#updateDisplay();
 	}
 
 	override invalidate(): void {
 		super.invalidate();
-		this.updateDisplay();
+		this.#updateDisplay();
 	}
 
 	appendOutput(chunk: string): void {
-		const clean = this.normalizeOutput(chunk);
+		const clean = this.#normalizeOutput(chunk);
 
 		const newLines = clean.split("\n");
-		if (this.outputLines.length > 0 && newLines.length > 0) {
-			this.outputLines[this.outputLines.length - 1] += newLines[0];
-			this.outputLines.push(...newLines.slice(1));
+		if (this.#outputLines.length > 0 && newLines.length > 0) {
+			this.#outputLines[this.#outputLines.length - 1] += newLines[0];
+			this.#outputLines.push(...newLines.slice(1));
 		} else {
-			this.outputLines.push(...newLines);
+			this.#outputLines.push(...newLines);
 		}
 
-		this.updateDisplay();
+		this.#updateDisplay();
 	}
 
 	setComplete(
@@ -88,39 +88,39 @@ export class PythonExecutionComponent extends Container {
 		cancelled: boolean,
 		options?: { output?: string; truncation?: TruncationMeta },
 	): void {
-		this.exitCode = exitCode;
-		this.status = cancelled
+		this.#exitCode = exitCode;
+		this.#status = cancelled
 			? "cancelled"
 			: exitCode !== 0 && exitCode !== undefined && exitCode !== null
 				? "error"
 				: "complete";
-		this.truncation = options?.truncation;
+		this.#truncation = options?.truncation;
 		if (options?.output !== undefined) {
-			this.setOutput(options.output);
+			this.#setOutput(options.output);
 		}
 
-		this.loader.stop();
-		this.updateDisplay();
+		this.#loader.stop();
+		this.#updateDisplay();
 	}
 
-	private updateDisplay(): void {
-		const availableLines = this.outputLines;
+	#updateDisplay(): void {
+		const availableLines = this.#outputLines;
 		const previewLogicalLines = availableLines.slice(-PREVIEW_LINES);
 		const hiddenLineCount = availableLines.length - previewLogicalLines.length;
 
-		this.contentContainer.clear();
+		this.#contentContainer.clear();
 
 		const colorKey = this.excludeFromContext ? "dim" : "pythonMode";
-		this.contentContainer.addChild(this.formatHeader(colorKey));
+		this.#contentContainer.addChild(this.#formatHeader(colorKey));
 
 		if (availableLines.length > 0) {
-			if (this.expanded) {
+			if (this.#expanded) {
 				const displayText = availableLines.map(line => theme.fg("muted", line)).join("\n");
-				this.contentContainer.addChild(new Text(`\n${displayText}`, 1, 0));
+				this.#contentContainer.addChild(new Text(`\n${displayText}`, 1, 0));
 			} else {
 				const styledOutput = previewLogicalLines.map(line => theme.fg("muted", line)).join("\n");
 				const previewText = `\n${styledOutput}`;
-				this.contentContainer.addChild({
+				this.#contentContainer.addChild({
 					render: (width: number) => {
 						const { visualLines } = truncateToVisualLines(previewText, PREVIEW_LINES, width, 1);
 						return visualLines;
@@ -130,8 +130,8 @@ export class PythonExecutionComponent extends Container {
 			}
 		}
 
-		if (this.status === "running") {
-			this.contentContainer.addChild(this.loader);
+		if (this.#status === "running") {
+			this.#contentContainer.addChild(this.#loader);
 		} else {
 			const statusParts: string[] = [];
 
@@ -139,46 +139,46 @@ export class PythonExecutionComponent extends Container {
 				statusParts.push(theme.fg("dim", `… ${hiddenLineCount} more lines (ctrl+o to expand)`));
 			}
 
-			if (this.status === "cancelled") {
+			if (this.#status === "cancelled") {
 				statusParts.push(theme.fg("warning", "(cancelled)"));
-			} else if (this.status === "error") {
-				statusParts.push(theme.fg("error", `(exit ${this.exitCode})`));
+			} else if (this.#status === "error") {
+				statusParts.push(theme.fg("error", `(exit ${this.#exitCode})`));
 			}
 
-			if (this.truncation) {
+			if (this.#truncation) {
 				const warnings: string[] = [];
-				if (this.truncation.artifactId) {
-					warnings.push(`Full output: artifact://${this.truncation.artifactId}`);
+				if (this.#truncation.artifactId) {
+					warnings.push(`Full output: artifact://${this.#truncation.artifactId}`);
 				}
-				if (this.truncation.truncatedBy === "lines") {
+				if (this.#truncation.truncatedBy === "lines") {
 					warnings.push(
-						`Truncated: showing ${this.truncation.outputLines} of ${this.truncation.totalLines} lines`,
+						`Truncated: showing ${this.#truncation.outputLines} of ${this.#truncation.totalLines} lines`,
 					);
 				} else {
 					warnings.push(
-						`Truncated: ${this.truncation.outputLines} lines shown (${formatSize(this.truncation.outputBytes)} limit)`,
+						`Truncated: ${this.#truncation.outputLines} lines shown (${formatSize(this.#truncation.outputBytes)} limit)`,
 					);
 				}
 				statusParts.push(theme.fg("warning", warnings.join(". ")));
 			}
 
 			if (statusParts.length > 0) {
-				this.contentContainer.addChild(new Text(`\n${statusParts.join("\n")}`, 1, 0));
+				this.#contentContainer.addChild(new Text(`\n${statusParts.join("\n")}`, 1, 0));
 			}
 		}
 	}
 
-	private normalizeOutput(text: string): string {
+	#normalizeOutput(text: string): string {
 		return Bun.stripANSI(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 	}
 
-	private setOutput(output: string): void {
-		const clean = this.normalizeOutput(output);
-		this.outputLines = clean ? clean.split("\n") : [];
+	#setOutput(output: string): void {
+		const clean = this.#normalizeOutput(output);
+		this.#outputLines = clean ? clean.split("\n") : [];
 	}
 
 	getOutput(): string {
-		return this.outputLines.join("\n");
+		return this.#outputLines.join("\n");
 	}
 
 	getCode(): string {

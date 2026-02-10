@@ -23,9 +23,9 @@ function generateId(): string {
  * Uses POST for requests, supports SSE responses.
  */
 export class HttpTransport implements MCPTransport {
-	private _connected = false;
-	private sessionId: string | null = null;
-	private sseConnection: AbortController | null = null;
+	#connected = false;
+	#sessionId: string | null = null;
+	#sseConnection: AbortController | null = null;
 
 	onClose?: () => void;
 	onError?: (error: Error) => void;
@@ -34,7 +34,7 @@ export class HttpTransport implements MCPTransport {
 	constructor(private config: MCPHttpServerConfig | MCPSseServerConfig) {}
 
 	get connected(): boolean {
-		return this._connected;
+		return this.#connected;
 	}
 
 	get url(): string {
@@ -46,8 +46,8 @@ export class HttpTransport implements MCPTransport {
 	 * HTTP doesn't need persistent connection, but we track state.
 	 */
 	async connect(): Promise<void> {
-		if (this._connected) return;
-		this._connected = true;
+		if (this.#connected) return;
+		this.#connected = true;
 	}
 
 	/**
@@ -55,40 +55,40 @@ export class HttpTransport implements MCPTransport {
 	 * Optional - only needed if server sends notifications.
 	 */
 	async startSSEListener(): Promise<void> {
-		if (!this._connected) return;
-		if (this.sseConnection) return;
+		if (!this.#connected) return;
+		if (this.#sseConnection) return;
 
-		this.sseConnection = new AbortController();
+		this.#sseConnection = new AbortController();
 		const headers: Record<string, string> = {
 			Accept: "text/event-stream",
 			...this.config.headers,
 		};
 
-		if (this.sessionId) {
-			headers["Mcp-Session-Id"] = this.sessionId;
+		if (this.#sessionId) {
+			headers["Mcp-Session-Id"] = this.#sessionId;
 		}
 
 		try {
 			const response = await fetch(this.config.url, {
 				method: "GET",
 				headers,
-				signal: this.sseConnection.signal,
+				signal: this.#sseConnection.signal,
 			});
 
 			if (response.status === 405) {
 				// Server doesn't support SSE listening, that's OK
-				this.sseConnection = null;
+				this.#sseConnection = null;
 				return;
 			}
 
 			if (!response.ok || !response.body) {
-				this.sseConnection = null;
+				this.#sseConnection = null;
 				return;
 			}
 
 			// Read SSE stream
-			for await (const message of readSseJson<JsonRpcMessage>(response.body, this.sseConnection.signal)) {
-				if (!this._connected) break;
+			for await (const message of readSseJson<JsonRpcMessage>(response.body, this.#sseConnection.signal)) {
+				if (!this.#connected) break;
 				if ("method" in message && !("id" in message)) {
 					this.onNotification?.(message.method, message.params);
 				}
@@ -98,12 +98,12 @@ export class HttpTransport implements MCPTransport {
 				this.onError?.(error);
 			}
 		} finally {
-			this.sseConnection = null;
+			this.#sseConnection = null;
 		}
 	}
 
 	async request<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T> {
-		if (!this._connected) {
+		if (!this.#connected) {
 			throw new Error("Transport not connected");
 		}
 
@@ -121,8 +121,8 @@ export class HttpTransport implements MCPTransport {
 			...this.config.headers,
 		};
 
-		if (this.sessionId) {
-			headers["Mcp-Session-Id"] = this.sessionId;
+		if (this.#sessionId) {
+			headers["Mcp-Session-Id"] = this.#sessionId;
 		}
 
 		const response = await fetch(this.config.url, {
@@ -134,7 +134,7 @@ export class HttpTransport implements MCPTransport {
 		// Check for session ID in response
 		const newSessionId = response.headers.get("Mcp-Session-Id");
 		if (newSessionId) {
-			this.sessionId = newSessionId;
+			this.#sessionId = newSessionId;
 		}
 
 		if (!response.ok) {
@@ -146,7 +146,7 @@ export class HttpTransport implements MCPTransport {
 
 		// Handle SSE response
 		if (contentType.includes("text/event-stream")) {
-			return this.parseSSEResponse<T>(response, id);
+			return this.#parseSSEResponse<T>(response, id);
 		}
 
 		// Handle JSON response
@@ -159,7 +159,7 @@ export class HttpTransport implements MCPTransport {
 		return result.result as T;
 	}
 
-	private async parseSSEResponse<T>(response: Response, expectedId: string | number): Promise<T> {
+	async #parseSSEResponse<T>(response: Response, expectedId: string | number): Promise<T> {
 		if (!response.body) {
 			throw new Error("No response body");
 		}
@@ -191,7 +191,7 @@ export class HttpTransport implements MCPTransport {
 	}
 
 	async notify(method: string, params?: Record<string, unknown>): Promise<void> {
-		if (!this._connected) {
+		if (!this.#connected) {
 			throw new Error("Transport not connected");
 		}
 
@@ -207,8 +207,8 @@ export class HttpTransport implements MCPTransport {
 			...this.config.headers,
 		};
 
-		if (this.sessionId) {
-			headers["Mcp-Session-Id"] = this.sessionId;
+		if (this.#sessionId) {
+			headers["Mcp-Session-Id"] = this.#sessionId;
 		}
 
 		const response = await fetch(this.config.url, {
@@ -225,21 +225,21 @@ export class HttpTransport implements MCPTransport {
 	}
 
 	async close(): Promise<void> {
-		if (!this._connected) return;
-		this._connected = false;
+		if (!this.#connected) return;
+		this.#connected = false;
 
 		// Abort SSE listener
-		if (this.sseConnection) {
-			this.sseConnection.abort();
-			this.sseConnection = null;
+		if (this.#sseConnection) {
+			this.#sseConnection.abort();
+			this.#sseConnection = null;
 		}
 
 		// Send session termination if we have a session
-		if (this.sessionId) {
+		if (this.#sessionId) {
 			try {
 				const headers: Record<string, string> = {
 					...this.config.headers,
-					"Mcp-Session-Id": this.sessionId,
+					"Mcp-Session-Id": this.#sessionId,
 				};
 
 				await fetch(this.config.url, {
@@ -249,7 +249,7 @@ export class HttpTransport implements MCPTransport {
 			} catch {
 				// Ignore termination errors
 			}
-			this.sessionId = null;
+			this.#sessionId = null;
 		}
 
 		this.onClose?.();

@@ -1,7 +1,6 @@
 import { getEditorKeybindings } from "../keybindings";
 import { KillRing } from "../kill-ring";
 import { type Component, CURSOR_MARKER, type Focusable } from "../tui";
-import { UndoStack } from "../undo-stack";
 import { getSegmenter, isPunctuationChar, isWhitespaceChar, padding, visibleWidth } from "../utils";
 
 const segmenter = getSegmenter();
@@ -15,32 +14,32 @@ interface InputState {
  * Input component - single-line text input with horizontal scrolling
  */
 export class Input implements Component, Focusable {
-	private value: string = "";
-	private cursor: number = 0; // Cursor position in the value
-	public onSubmit?: (value: string) => void;
-	public onEscape?: () => void;
+	#value: string = "";
+	#cursor: number = 0; // Cursor position in the value
+	onSubmit?: (value: string) => void;
+	onEscape?: () => void;
 
 	/** Focusable interface - set by TUI when focus changes */
 	focused: boolean = false;
 
 	// Bracketed paste mode buffering
-	private pasteBuffer: string = "";
-	private isInPaste: boolean = false;
+	#pasteBuffer: string = "";
+	#isInPaste: boolean = false;
 
 	// Kill ring for Emacs-style kill/yank operations
-	private killRing = new KillRing();
-	private lastAction: "kill" | "yank" | "type-word" | null = null;
+	#killRing = new KillRing();
+	#lastAction: "kill" | "yank" | "type-word" | null = null;
 
 	// Undo support
-	private undoStack = new UndoStack<InputState>();
+	#undoStack: InputState[] = [];
 
 	getValue(): string {
-		return this.value;
+		return this.#value;
 	}
 
 	setValue(value: string): void {
-		this.value = value;
-		this.cursor = Math.min(this.cursor, value.length);
+		this.#value = value;
+		this.#cursor = Math.min(this.#cursor, value.length);
 	}
 
 	handleInput(data: string): void {
@@ -50,30 +49,30 @@ export class Input implements Component, Focusable {
 
 		// Check if we're starting a bracketed paste
 		if (data.includes("\x1b[200~")) {
-			this.isInPaste = true;
-			this.pasteBuffer = "";
+			this.#isInPaste = true;
+			this.#pasteBuffer = "";
 			data = data.replace("\x1b[200~", "");
 		}
 
 		// If we're in a paste, buffer the data
-		if (this.isInPaste) {
+		if (this.#isInPaste) {
 			// Check if this chunk contains the end marker
-			this.pasteBuffer += data;
+			this.#pasteBuffer += data;
 
-			const endIndex = this.pasteBuffer.indexOf("\x1b[201~");
+			const endIndex = this.#pasteBuffer.indexOf("\x1b[201~");
 			if (endIndex !== -1) {
 				// Extract the pasted content
-				const pasteContent = this.pasteBuffer.substring(0, endIndex);
+				const pasteContent = this.#pasteBuffer.substring(0, endIndex);
 
 				// Process the complete paste
-				this.handlePaste(pasteContent);
+				this.#handlePaste(pasteContent);
 
 				// Reset paste state
-				this.isInPaste = false;
+				this.#isInPaste = false;
 
 				// Handle any remaining input after the paste marker
-				const remaining = this.pasteBuffer.substring(endIndex + 6); // 6 = length of \x1b[201~
-				this.pasteBuffer = "";
+				const remaining = this.#pasteBuffer.substring(endIndex + 6); // 6 = length of \x1b[201~
+				this.#pasteBuffer = "";
 				if (remaining) {
 					this.handleInput(remaining);
 				}
@@ -91,99 +90,99 @@ export class Input implements Component, Focusable {
 
 		// Undo
 		if (kb.matches(data, "undo")) {
-			this.undo();
+			this.#undo();
 			return;
 		}
 
 		// Submit
 		if (kb.matches(data, "submit") || data === "\n") {
-			if (this.onSubmit) this.onSubmit(this.value);
+			if (this.onSubmit) this.onSubmit(this.#value);
 			return;
 		}
 
 		// Deletion
 		if (kb.matches(data, "deleteCharBackward")) {
-			this.handleBackspace();
+			this.#handleBackspace();
 			return;
 		}
 
 		if (kb.matches(data, "deleteCharForward")) {
-			this.handleForwardDelete();
+			this.#handleForwardDelete();
 			return;
 		}
 
 		if (kb.matches(data, "deleteWordBackward")) {
-			this.deleteWordBackwards();
+			this.#deleteWordBackwards();
 			return;
 		}
 
 		if (kb.matches(data, "deleteWordForward")) {
-			this.deleteWordForward();
+			this.#deleteWordForward();
 			return;
 		}
 
 		if (kb.matches(data, "deleteToLineStart")) {
-			this.deleteToLineStart();
+			this.#deleteToLineStart();
 			return;
 		}
 
 		if (kb.matches(data, "deleteToLineEnd")) {
-			this.deleteToLineEnd();
+			this.#deleteToLineEnd();
 			return;
 		}
 
 		// Kill ring actions
 		if (kb.matches(data, "yank")) {
-			this.yank();
+			this.#yank();
 			return;
 		}
 		if (kb.matches(data, "yankPop")) {
-			this.yankPop();
+			this.#yankPop();
 			return;
 		}
 
 		// Cursor movement
 		if (kb.matches(data, "cursorLeft")) {
-			this.lastAction = null;
-			if (this.cursor > 0) {
-				const beforeCursor = this.value.slice(0, this.cursor);
+			this.#lastAction = null;
+			if (this.#cursor > 0) {
+				const beforeCursor = this.#value.slice(0, this.#cursor);
 				const graphemes = [...segmenter.segment(beforeCursor)];
 				const lastGrapheme = graphemes[graphemes.length - 1];
-				this.cursor -= lastGrapheme ? lastGrapheme.segment.length : 1;
+				this.#cursor -= lastGrapheme ? lastGrapheme.segment.length : 1;
 			}
 			return;
 		}
 
 		if (kb.matches(data, "cursorRight")) {
-			this.lastAction = null;
-			if (this.cursor < this.value.length) {
-				const afterCursor = this.value.slice(this.cursor);
+			this.#lastAction = null;
+			if (this.#cursor < this.#value.length) {
+				const afterCursor = this.#value.slice(this.#cursor);
 				const graphemes = [...segmenter.segment(afterCursor)];
 				const firstGrapheme = graphemes[0];
-				this.cursor += firstGrapheme ? firstGrapheme.segment.length : 1;
+				this.#cursor += firstGrapheme ? firstGrapheme.segment.length : 1;
 			}
 			return;
 		}
 
 		if (kb.matches(data, "cursorLineStart")) {
-			this.lastAction = null;
-			this.cursor = 0;
+			this.#lastAction = null;
+			this.#cursor = 0;
 			return;
 		}
 
 		if (kb.matches(data, "cursorLineEnd")) {
-			this.lastAction = null;
-			this.cursor = this.value.length;
+			this.#lastAction = null;
+			this.#cursor = this.#value.length;
 			return;
 		}
 
 		if (kb.matches(data, "cursorWordLeft")) {
-			this.moveWordBackwards();
+			this.#moveWordBackwards();
 			return;
 		}
 
 		if (kb.matches(data, "cursorWordRight")) {
-			this.moveWordForwards();
+			this.#moveWordForwards();
 			return;
 		}
 
@@ -194,181 +193,181 @@ export class Input implements Component, Focusable {
 			return code < 32 || code === 0x7f || (code >= 0x80 && code <= 0x9f);
 		});
 		if (!hasControlChars) {
-			this.insertCharacter(data);
+			this.#insertCharacter(data);
 		}
 	}
 
-	private insertCharacter(text: string): void {
+	#insertCharacter(text: string): void {
 		const isWordChunk = [...text].every(ch => !isWhitespaceChar(ch));
 		// Undo coalescing: consecutive word typing coalesces into one undo unit.
-		if (!isWordChunk || this.lastAction !== "type-word") {
-			this.pushUndo();
+		if (!isWordChunk || this.#lastAction !== "type-word") {
+			this.#pushUndo();
 		}
-		this.lastAction = "type-word";
+		this.#lastAction = "type-word";
 
-		this.value = this.value.slice(0, this.cursor) + text + this.value.slice(this.cursor);
-		this.cursor += text.length;
+		this.#value = this.#value.slice(0, this.#cursor) + text + this.#value.slice(this.#cursor);
+		this.#cursor += text.length;
 	}
 
-	private handleBackspace(): void {
-		this.lastAction = null;
-		if (this.cursor <= 0) {
+	#handleBackspace(): void {
+		this.#lastAction = null;
+		if (this.#cursor <= 0) {
 			return;
 		}
 
-		this.pushUndo();
+		this.#pushUndo();
 
-		const beforeCursor = this.value.slice(0, this.cursor);
+		const beforeCursor = this.#value.slice(0, this.#cursor);
 		const graphemes = [...segmenter.segment(beforeCursor)];
 		const lastGrapheme = graphemes[graphemes.length - 1];
 		const graphemeLength = lastGrapheme ? lastGrapheme.segment.length : 1;
 
-		this.value = this.value.slice(0, this.cursor - graphemeLength) + this.value.slice(this.cursor);
-		this.cursor -= graphemeLength;
+		this.#value = this.#value.slice(0, this.#cursor - graphemeLength) + this.#value.slice(this.#cursor);
+		this.#cursor -= graphemeLength;
 	}
 
-	private handleForwardDelete(): void {
-		this.lastAction = null;
-		if (this.cursor >= this.value.length) {
+	#handleForwardDelete(): void {
+		this.#lastAction = null;
+		if (this.#cursor >= this.#value.length) {
 			return;
 		}
 
-		this.pushUndo();
+		this.#pushUndo();
 
-		const afterCursor = this.value.slice(this.cursor);
+		const afterCursor = this.#value.slice(this.#cursor);
 		const graphemes = [...segmenter.segment(afterCursor)];
 		const firstGrapheme = graphemes[0];
 		const graphemeLength = firstGrapheme ? firstGrapheme.segment.length : 1;
 
-		this.value = this.value.slice(0, this.cursor) + this.value.slice(this.cursor + graphemeLength);
+		this.#value = this.#value.slice(0, this.#cursor) + this.#value.slice(this.#cursor + graphemeLength);
 	}
 
-	private deleteToLineStart(): void {
-		if (this.cursor === 0) {
+	#deleteToLineStart(): void {
+		if (this.#cursor === 0) {
 			return;
 		}
 
-		this.pushUndo();
-		const deletedText = this.value.slice(0, this.cursor);
-		this.killRing.push(deletedText, { prepend: true, accumulate: this.lastAction === "kill" });
-		this.lastAction = "kill";
+		this.#pushUndo();
+		const deletedText = this.#value.slice(0, this.#cursor);
+		this.#killRing.push(deletedText, { prepend: true, accumulate: this.#lastAction === "kill" });
+		this.#lastAction = "kill";
 
-		this.value = this.value.slice(this.cursor);
-		this.cursor = 0;
+		this.#value = this.#value.slice(this.#cursor);
+		this.#cursor = 0;
 	}
 
-	private deleteToLineEnd(): void {
-		if (this.cursor >= this.value.length) {
+	#deleteToLineEnd(): void {
+		if (this.#cursor >= this.#value.length) {
 			return;
 		}
 
-		this.pushUndo();
-		const deletedText = this.value.slice(this.cursor);
-		this.killRing.push(deletedText, { prepend: false, accumulate: this.lastAction === "kill" });
-		this.lastAction = "kill";
+		this.#pushUndo();
+		const deletedText = this.#value.slice(this.#cursor);
+		this.#killRing.push(deletedText, { prepend: false, accumulate: this.#lastAction === "kill" });
+		this.#lastAction = "kill";
 
-		this.value = this.value.slice(0, this.cursor);
+		this.#value = this.#value.slice(0, this.#cursor);
 	}
 
-	private deleteWordBackwards(): void {
-		if (this.cursor === 0) {
+	#deleteWordBackwards(): void {
+		if (this.#cursor === 0) {
 			return;
 		}
 
 		// Save state before cursor movement (moveWordBackwards resets lastAction).
-		const wasKill = this.lastAction === "kill";
-		this.pushUndo();
+		const wasKill = this.#lastAction === "kill";
+		this.#pushUndo();
 
-		const oldCursor = this.cursor;
-		this.moveWordBackwards();
-		const deleteFrom = this.cursor;
-		this.cursor = oldCursor;
+		const oldCursor = this.#cursor;
+		this.#moveWordBackwards();
+		const deleteFrom = this.#cursor;
+		this.#cursor = oldCursor;
 
-		const deletedText = this.value.slice(deleteFrom, this.cursor);
-		this.killRing.push(deletedText, { prepend: true, accumulate: wasKill });
-		this.lastAction = "kill";
+		const deletedText = this.#value.slice(deleteFrom, this.#cursor);
+		this.#killRing.push(deletedText, { prepend: true, accumulate: wasKill });
+		this.#lastAction = "kill";
 
-		this.value = this.value.slice(0, deleteFrom) + this.value.slice(this.cursor);
-		this.cursor = deleteFrom;
+		this.#value = this.#value.slice(0, deleteFrom) + this.#value.slice(this.#cursor);
+		this.#cursor = deleteFrom;
 	}
 
-	private deleteWordForward(): void {
-		if (this.cursor >= this.value.length) {
+	#deleteWordForward(): void {
+		if (this.#cursor >= this.#value.length) {
 			return;
 		}
 
 		// Save state before cursor movement (moveWordForwards resets lastAction).
-		const wasKill = this.lastAction === "kill";
-		this.pushUndo();
+		const wasKill = this.#lastAction === "kill";
+		this.#pushUndo();
 
-		const oldCursor = this.cursor;
-		this.moveWordForwards();
-		const deleteTo = this.cursor;
-		this.cursor = oldCursor;
+		const oldCursor = this.#cursor;
+		this.#moveWordForwards();
+		const deleteTo = this.#cursor;
+		this.#cursor = oldCursor;
 
-		const deletedText = this.value.slice(this.cursor, deleteTo);
-		this.killRing.push(deletedText, { prepend: false, accumulate: wasKill });
-		this.lastAction = "kill";
+		const deletedText = this.#value.slice(this.#cursor, deleteTo);
+		this.#killRing.push(deletedText, { prepend: false, accumulate: wasKill });
+		this.#lastAction = "kill";
 
-		this.value = this.value.slice(0, this.cursor) + this.value.slice(deleteTo);
+		this.#value = this.#value.slice(0, this.#cursor) + this.#value.slice(deleteTo);
 	}
 
-	private yank(): void {
-		const text = this.killRing.peek();
+	#yank(): void {
+		const text = this.#killRing.peek();
 		if (!text) {
 			return;
 		}
 
-		this.pushUndo();
-		this.value = this.value.slice(0, this.cursor) + text + this.value.slice(this.cursor);
-		this.cursor += text.length;
-		this.lastAction = "yank";
+		this.#pushUndo();
+		this.#value = this.#value.slice(0, this.#cursor) + text + this.#value.slice(this.#cursor);
+		this.#cursor += text.length;
+		this.#lastAction = "yank";
 	}
 
-	private yankPop(): void {
-		if (this.lastAction !== "yank" || this.killRing.length <= 1) {
+	#yankPop(): void {
+		if (this.#lastAction !== "yank" || this.#killRing.length <= 1) {
 			return;
 		}
 
-		this.pushUndo();
+		this.#pushUndo();
 
-		const prevText = this.killRing.peek() ?? "";
-		this.value = this.value.slice(0, this.cursor - prevText.length) + this.value.slice(this.cursor);
-		this.cursor -= prevText.length;
+		const prevText = this.#killRing.peek() ?? "";
+		this.#value = this.#value.slice(0, this.#cursor - prevText.length) + this.#value.slice(this.#cursor);
+		this.#cursor -= prevText.length;
 
-		this.killRing.rotate();
-		const text = this.killRing.peek() ?? "";
-		this.value = this.value.slice(0, this.cursor) + text + this.value.slice(this.cursor);
-		this.cursor += text.length;
-		this.lastAction = "yank";
+		this.#killRing.rotate();
+		const text = this.#killRing.peek() ?? "";
+		this.#value = this.#value.slice(0, this.#cursor) + text + this.#value.slice(this.#cursor);
+		this.#cursor += text.length;
+		this.#lastAction = "yank";
 	}
 
-	private pushUndo(): void {
-		this.undoStack.push({ value: this.value, cursor: this.cursor });
+	#pushUndo(): void {
+		this.#undoStack.push({ value: this.#value, cursor: this.#cursor });
 	}
 
-	private undo(): void {
-		const snapshot = this.undoStack.pop();
+	#undo(): void {
+		const snapshot = this.#undoStack.pop();
 		if (!snapshot) {
 			return;
 		}
-		this.value = snapshot.value;
-		this.cursor = snapshot.cursor;
-		this.lastAction = null;
+		this.#value = snapshot.value;
+		this.#cursor = snapshot.cursor;
+		this.#lastAction = null;
 	}
 
-	private moveWordBackwards(): void {
-		if (this.cursor === 0) {
+	#moveWordBackwards(): void {
+		if (this.#cursor === 0) {
 			return;
 		}
-		this.lastAction = null;
+		this.#lastAction = null;
 
-		const textBeforeCursor = this.value.slice(0, this.cursor);
+		const textBeforeCursor = this.#value.slice(0, this.#cursor);
 		const graphemes = [...segmenter.segment(textBeforeCursor)];
 
 		// Skip trailing whitespace
 		while (graphemes.length > 0 && isWhitespaceChar(graphemes[graphemes.length - 1]?.segment || "")) {
-			this.cursor -= graphemes.pop()?.segment.length || 0;
+			this.#cursor -= graphemes.pop()?.segment.length || 0;
 		}
 
 		if (graphemes.length > 0) {
@@ -376,7 +375,7 @@ export class Input implements Component, Focusable {
 			if (isPunctuationChar(lastGrapheme)) {
 				// Skip punctuation run
 				while (graphemes.length > 0 && isPunctuationChar(graphemes[graphemes.length - 1]?.segment || "")) {
-					this.cursor -= graphemes.pop()?.segment.length || 0;
+					this.#cursor -= graphemes.pop()?.segment.length || 0;
 				}
 			} else {
 				// Skip word run
@@ -385,26 +384,26 @@ export class Input implements Component, Focusable {
 					!isWhitespaceChar(graphemes[graphemes.length - 1]?.segment || "") &&
 					!isPunctuationChar(graphemes[graphemes.length - 1]?.segment || "")
 				) {
-					this.cursor -= graphemes.pop()?.segment.length || 0;
+					this.#cursor -= graphemes.pop()?.segment.length || 0;
 				}
 			}
 		}
 	}
 
-	private moveWordForwards(): void {
-		if (this.cursor >= this.value.length) {
+	#moveWordForwards(): void {
+		if (this.#cursor >= this.#value.length) {
 			return;
 		}
 
-		this.lastAction = null;
-		const textAfterCursor = this.value.slice(this.cursor);
+		this.#lastAction = null;
+		const textAfterCursor = this.#value.slice(this.#cursor);
 		const segments = segmenter.segment(textAfterCursor);
 		const iterator = segments[Symbol.iterator]();
 		let next = iterator.next();
 
 		// Skip leading whitespace
 		while (!next.done && isWhitespaceChar(next.value.segment)) {
-			this.cursor += next.value.segment.length;
+			this.#cursor += next.value.segment.length;
 			next = iterator.next();
 		}
 
@@ -413,29 +412,29 @@ export class Input implements Component, Focusable {
 			if (isPunctuationChar(firstGrapheme)) {
 				// Skip punctuation run
 				while (!next.done && isPunctuationChar(next.value.segment)) {
-					this.cursor += next.value.segment.length;
+					this.#cursor += next.value.segment.length;
 					next = iterator.next();
 				}
 			} else {
 				// Skip word run
 				while (!next.done && !isWhitespaceChar(next.value.segment) && !isPunctuationChar(next.value.segment)) {
-					this.cursor += next.value.segment.length;
+					this.#cursor += next.value.segment.length;
 					next = iterator.next();
 				}
 			}
 		}
 	}
 
-	private handlePaste(pastedText: string): void {
-		this.lastAction = null;
-		this.pushUndo();
+	#handlePaste(pastedText: string): void {
+		this.#lastAction = null;
+		this.#pushUndo();
 
 		// Clean the pasted text - remove newlines and carriage returns
 		const cleanText = pastedText.replace(/\r\n/g, "").replace(/\r/g, "").replace(/\n/g, "");
 
 		// Insert at cursor position
-		this.value = this.value.slice(0, this.cursor) + cleanText + this.value.slice(this.cursor);
-		this.cursor += cleanText.length;
+		this.#value = this.#value.slice(0, this.#cursor) + cleanText + this.#value.slice(this.#cursor);
+		this.#cursor += cleanText.length;
 	}
 
 	invalidate(): void {
@@ -452,20 +451,20 @@ export class Input implements Component, Focusable {
 		}
 
 		let visibleText = "";
-		let cursorDisplay = this.cursor;
+		let cursorDisplay = this.#cursor;
 
-		if (this.value.length < availableWidth) {
+		if (this.#value.length < availableWidth) {
 			// Everything fits (leave room for cursor at end)
-			visibleText = this.value;
+			visibleText = this.#value;
 		} else {
 			// Need horizontal scrolling
 			// Reserve one character for cursor if it's at the end
-			const scrollWidth = this.cursor === this.value.length ? availableWidth - 1 : availableWidth;
+			const scrollWidth = this.#cursor === this.#value.length ? availableWidth - 1 : availableWidth;
 			const halfWidth = Math.floor(scrollWidth / 2);
 
 			const findValidStart = (start: number) => {
-				while (start < this.value.length) {
-					const charCode = this.value.charCodeAt(start);
+				while (start < this.#value.length) {
+					const charCode = this.#value.charCodeAt(start);
 					// this is low surrogate, not a valid start
 					if (charCode >= 0xdc00 && charCode < 0xe000) {
 						start++;
@@ -478,7 +477,7 @@ export class Input implements Component, Focusable {
 
 			const findValidEnd = (end: number) => {
 				while (end > 0) {
-					const charCode = this.value.charCodeAt(end - 1);
+					const charCode = this.#value.charCodeAt(end - 1);
 					// this is high surrogate, might be split.
 					if (charCode >= 0xd800 && charCode < 0xdc00) {
 						end--;
@@ -489,20 +488,20 @@ export class Input implements Component, Focusable {
 				return end;
 			};
 
-			if (this.cursor < halfWidth) {
+			if (this.#cursor < halfWidth) {
 				// Cursor near start
-				visibleText = this.value.slice(0, findValidEnd(scrollWidth));
-				cursorDisplay = this.cursor;
-			} else if (this.cursor > this.value.length - halfWidth) {
+				visibleText = this.#value.slice(0, findValidEnd(scrollWidth));
+				cursorDisplay = this.#cursor;
+			} else if (this.#cursor > this.#value.length - halfWidth) {
 				// Cursor near end
-				const start = findValidStart(this.value.length - scrollWidth);
-				visibleText = this.value.slice(start);
-				cursorDisplay = this.cursor - start;
+				const start = findValidStart(this.#value.length - scrollWidth);
+				visibleText = this.#value.slice(start);
+				cursorDisplay = this.#cursor - start;
 			} else {
 				// Cursor in middle
-				const start = findValidStart(this.cursor - halfWidth);
-				visibleText = this.value.slice(start, findValidEnd(start + scrollWidth));
-				cursorDisplay = this.cursor - start;
+				const start = findValidStart(this.#cursor - halfWidth);
+				visibleText = this.#value.slice(start, findValidEnd(start + scrollWidth));
+				cursorDisplay = this.#cursor - start;
 			}
 		}
 

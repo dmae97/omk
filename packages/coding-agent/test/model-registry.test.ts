@@ -25,6 +25,21 @@ describe("ModelRegistry", () => {
 		}
 	});
 
+	type ProviderConfig = {
+		baseUrl: string;
+		apiKey: string;
+		api: string;
+		models: Array<{
+			id: string;
+			name: string;
+			reasoning: boolean;
+			input: string[];
+			cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
+			contextWindow: number;
+			maxTokens: number;
+		}>;
+	};
+
 	/** Create minimal provider config  */
 	function providerConfig(
 		baseUrl: string,
@@ -47,7 +62,7 @@ describe("ModelRegistry", () => {
 		};
 	}
 
-	function writeModelsJson(providers: Record<string, ReturnType<typeof providerConfig>>) {
+	function writeModelsJson(providers: Record<string, ProviderConfig>) {
 		fs.writeFileSync(modelsJsonPath, JSON.stringify({ providers }));
 	}
 

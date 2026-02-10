@@ -1,10 +1,6 @@
-import AjvModule from "ajv";
-import addFormatsModule from "ajv-formats";
+import Ajv from "ajv";
+import addFormats from "ajv-formats";
 import type { Tool, ToolCall } from "../types";
-
-// Handle both default and named exports (ESM/CJS interop)
-const Ajv = (AjvModule as any).default || AjvModule;
-const addFormats = (addFormatsModule as any).default || addFormatsModule;
 
 // ============================================================================
 // Type Coercion Utilities
@@ -281,25 +277,13 @@ function coerceArgsFromErrors(
 	return { value: changed ? nextArgs : args, changed };
 }
 
-// Detect if we're in a browser extension environment with strict CSP
-// Chrome extensions with Manifest V3 don't allow eval/Function constructor
-const isBrowserExtension = typeof globalThis !== "undefined" && (globalThis as any).chrome?.runtime?.id !== undefined;
-
 // Create a singleton AJV instance with formats (only if not in browser extension)
 // AJV requires 'unsafe-eval' CSP which is not allowed in Manifest V3
-let ajv: any = null;
-if (!isBrowserExtension) {
-	try {
-		ajv = new Ajv({
-			allErrors: true,
-			strict: false,
-		});
-		addFormats(ajv);
-	} catch {
-		// AJV initialization failed (likely CSP restriction)
-		console.warn("AJV validation disabled due to CSP restrictions");
-	}
-}
+const ajv = new Ajv({
+	allErrors: true,
+	strict: false,
+});
+addFormats(ajv);
 
 /**
  * Finds a tool by name and validates the tool call arguments against its TypeBox schema
@@ -325,13 +309,6 @@ export function validateToolCall(tools: Tool[], toolCall: ToolCall): any {
  */
 export function validateToolArguments(tool: Tool, toolCall: ToolCall): any {
 	const originalArgs = toolCall.arguments;
-
-	// Skip validation in browser extension environment (CSP restrictions prevent AJV from working)
-	if (!ajv || isBrowserExtension) {
-		// Trust the LLM's output without validation
-		// Browser extensions can't use AJV due to Manifest V3 CSP restrictions
-		return originalArgs;
-	}
 
 	// Compile the schema
 	const validate = ajv.compile(tool.parameters);

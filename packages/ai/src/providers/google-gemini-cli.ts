@@ -4,7 +4,7 @@
  * Uses the Cloud Code Assist API endpoint to access Gemini and Claude models.
  */
 import { createHash } from "node:crypto";
-import type { Content, ThinkingConfig } from "@google/genai";
+import type { Content, FunctionCallingConfigMode, ThinkingConfig } from "@google/genai";
 import { abortableSleep, readSseJson } from "@oh-my-pi/pi-utils";
 import { calculateCost } from "../models";
 import type {
@@ -244,10 +244,10 @@ interface CloudCodeAssistRequest {
 			temperature?: number;
 			thinkingConfig?: ThinkingConfig;
 		};
-		tools?: ReturnType<typeof convertTools>;
+		tools?: { functionDeclarations: Record<string, unknown>[] }[] | undefined;
 		toolConfig?: {
 			functionCallingConfig: {
-				mode: ReturnType<typeof mapToolChoice>;
+				mode: FunctionCallingConfigMode;
 			};
 		};
 	};

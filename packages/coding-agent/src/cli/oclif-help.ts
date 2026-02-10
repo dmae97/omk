@@ -5,7 +5,7 @@ import { CommandHelp, Help } from "@oclif/core";
 import { getExtraHelpText } from "./args";
 
 export default class OclifHelp extends Help {
-	protected async showRootHelp(): Promise<void> {
+	async showRootHelp(): Promise<void> {
 		await super.showRootHelp();
 		const rootCommand = this.config.findCommand("index");
 		if (rootCommand) {

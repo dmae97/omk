@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { createInterface } from "readline";
+import * as readline from "node:readline";
 import { CliAuthStorage } from "./storage";
 import { getOAuthProviders } from "./utils/oauth";
 import { loginAnthropic } from "./utils/oauth/anthropic";
@@ -13,14 +13,14 @@ import type { OAuthCredentials, OAuthProvider } from "./utils/oauth/types";
 
 const PROVIDERS = getOAuthProviders();
 
-function prompt(rl: ReturnType<typeof createInterface>, question: string): Promise<string> {
+function prompt(rl: readline.Interface, question: string): Promise<string> {
 	const { promise, resolve } = Promise.withResolvers<string>();
 	rl.question(question, resolve);
 	return promise;
 }
 
 async function login(provider: OAuthProvider): Promise<void> {
-	const rl = createInterface({ input: process.stdin, output: process.stdout });
+	const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
 	const promptFn = (msg: string) => prompt(rl, `${msg} `);
 	const storage = await CliAuthStorage.create();
@@ -201,7 +201,7 @@ Examples:
 					return;
 				}
 
-				const rl = createInterface({ input: process.stdin, output: process.stdout });
+				const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 				console.log("Select a provider to logout:\n");
 				for (let i = 0; i < providers.length; i++) {
 					console.log(`  ${i + 1}. ${providers[i]}`);
@@ -237,7 +237,7 @@ Examples:
 		let provider = args[1] as OAuthProvider | undefined;
 
 		if (!provider) {
-			const rl = createInterface({ input: process.stdin, output: process.stdout });
+			const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 			console.log("Select a provider:\n");
 			for (let i = 0; i < PROVIDERS.length; i++) {
 				console.log(`  ${i + 1}. ${PROVIDERS[i].name}`);

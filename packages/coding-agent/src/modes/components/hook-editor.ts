@@ -8,10 +8,10 @@ import { getEditorCommand, openInEditor } from "../../utils/external-editor";
 import { DynamicBorder } from "./dynamic-border";
 
 export class HookEditorComponent extends Container {
-	private editor: Editor;
-	private onSubmitCallback: (value: string) => void;
-	private onCancelCallback: () => void;
-	private tui: TUI;
+	#editor: Editor;
+	#onSubmitCallback: (value: string) => void;
+	#onCancelCallback: () => void;
+	#tui: TUI;
 
 	constructor(
 		tui: TUI,
@@ -22,9 +22,9 @@ export class HookEditorComponent extends Container {
 	) {
 		super();
 
-		this.tui = tui;
-		this.onSubmitCallback = onSubmit;
-		this.onCancelCallback = onCancel;
+		this.#tui = tui;
+		this.#onSubmitCallback = onSubmit;
+		this.#onCancelCallback = onCancel;
 
 		// Add top border
 		this.addChild(new DynamicBorder());
@@ -35,11 +35,11 @@ export class HookEditorComponent extends Container {
 		this.addChild(new Spacer(1));
 
 		// Create editor
-		this.editor = new Editor(getEditorTheme());
+		this.#editor = new Editor(getEditorTheme());
 		if (prefill) {
-			this.editor.setText(prefill);
+			this.#editor.setText(prefill);
 		}
-		this.addChild(this.editor);
+		this.addChild(this.#editor);
 
 		this.addChild(new Spacer(1));
 
@@ -56,40 +56,40 @@ export class HookEditorComponent extends Container {
 	handleInput(keyData: string): void {
 		// Ctrl+Enter to submit
 		if (keyData === "\x1b[13;5u" || keyData === "\x1b[27;5;13~") {
-			this.onSubmitCallback(this.editor.getText());
+			this.#onSubmitCallback(this.#editor.getText());
 			return;
 		}
 
 		// Escape to cancel
 		if (matchesKey(keyData, "escape") || matchesKey(keyData, "esc")) {
-			this.onCancelCallback();
+			this.#onCancelCallback();
 			return;
 		}
 
 		// Ctrl+G for external editor
 		if (matchesKey(keyData, "ctrl+g")) {
-			void this.openExternalEditor();
+			void this.#openExternalEditor();
 			return;
 		}
 
 		// Forward to editor
-		this.editor.handleInput(keyData);
+		this.#editor.handleInput(keyData);
 	}
 
-	private async openExternalEditor(): Promise<void> {
+	async #openExternalEditor(): Promise<void> {
 		const editorCmd = getEditorCommand();
 		if (!editorCmd) return;
 
-		const currentText = this.editor.getText();
+		const currentText = this.#editor.getText();
 		try {
-			this.tui.stop();
+			this.#tui.stop();
 			const result = await openInEditor(editorCmd, currentText);
 			if (result !== null) {
-				this.editor.setText(result);
+				this.#editor.setText(result);
 			}
 		} finally {
-			this.tui.start();
-			this.tui.requestRender(true);
+			this.#tui.start();
+			this.#tui.requestRender(true);
 		}
 	}
 }

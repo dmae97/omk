@@ -109,8 +109,8 @@ export type PatchParams = { path: string; op?: string; rename?: string; diff?: s
 // ═══════════════════════════════════════════════════════════════════════════
 
 class LspFileSystem implements FileSystem {
-	private lastDiagnostics: FileDiagnosticsResult | undefined;
-	private fileCache: Record<string, Bun.BunFile> = {};
+	#lastDiagnostics: FileDiagnosticsResult | undefined;
+	#fileCache: Record<string, Bun.BunFile> = {};
 
 	constructor(
 		private readonly writethrough: (
@@ -125,11 +125,11 @@ class LspFileSystem implements FileSystem {
 	) {}
 
 	#getFile(path: string): Bun.BunFile {
-		if (this.fileCache[path]) {
-			return this.fileCache[path];
+		if (this.#fileCache[path]) {
+			return this.#fileCache[path];
 		}
 		const file = Bun.file(path);
-		this.fileCache[path] = file;
+		this.#fileCache[path] = file;
 		return file;
 	}
 
@@ -150,7 +150,7 @@ class LspFileSystem implements FileSystem {
 		const file = this.#getFile(path);
 		const result = await this.writethrough(path, content, this.signal, file, this.batchRequest);
 		if (result) {
-			this.lastDiagnostics = result;
+			this.#lastDiagnostics = result;
 		}
 	}
 
@@ -163,7 +163,7 @@ class LspFileSystem implements FileSystem {
 	}
 
 	getDiagnostics(): FileDiagnosticsResult | undefined {
-		return this.lastDiagnostics;
+		return this.#lastDiagnostics;
 	}
 }
 
@@ -200,15 +200,15 @@ type TInput = typeof replaceEditSchema | typeof patchEditSchema;
  * Creates replace-mode or patch-mode behavior based on session settings.
  */
 export class EditTool implements AgentTool<TInput> {
-	public readonly name = "edit";
-	public readonly label = "Edit";
-	public readonly nonAbortable = true;
-	public readonly concurrency = "exclusive";
+	readonly name = "edit";
+	readonly label = "Edit";
+	readonly nonAbortable = true;
+	readonly concurrency = "exclusive";
 
-	private readonly allowFuzzy: boolean;
-	private readonly fuzzyThreshold: number;
-	private readonly writethrough: WritethroughCallback;
-	private readonly envEditVariant: string;
+	readonly #allowFuzzy: boolean;
+	readonly #fuzzyThreshold: number;
+	readonly #writethrough: WritethroughCallback;
+	readonly #envEditVariant: string;
 
 	constructor(private readonly session: ToolSession) {
 		const {
@@ -216,7 +216,7 @@ export class EditTool implements AgentTool<TInput> {
 			PI_EDIT_FUZZY_THRESHOLD: editFuzzyThreshold = "auto",
 			PI_EDIT_VARIANT: envEditVariant = "auto",
 		} = Bun.env;
-		this.envEditVariant = envEditVariant;
+		this.#envEditVariant = envEditVariant;
 
 		if (envEditVariant !== "replace" && envEditVariant !== "patch" && envEditVariant !== "auto") {
 			throw new Error(`Invalid PI_EDIT_VARIANT: ${envEditVariant}`);
@@ -225,25 +225,25 @@ export class EditTool implements AgentTool<TInput> {
 		switch (editFuzzy) {
 			case "true":
 			case "1":
-				this.allowFuzzy = true;
+				this.#allowFuzzy = true;
 				break;
 			case "false":
 			case "0":
-				this.allowFuzzy = false;
+				this.#allowFuzzy = false;
 				break;
 			case "auto":
-				this.allowFuzzy = session.settings.get("edit.fuzzyMatch");
+				this.#allowFuzzy = session.settings.get("edit.fuzzyMatch");
 				break;
 			default:
 				throw new Error(`Invalid PI_EDIT_FUZZY: ${editFuzzy}`);
 		}
 		switch (editFuzzyThreshold) {
 			case "auto":
-				this.fuzzyThreshold = session.settings.get("edit.fuzzyThreshold");
+				this.#fuzzyThreshold = session.settings.get("edit.fuzzyThreshold");
 				break;
 			default:
-				this.fuzzyThreshold = parseFloat(editFuzzyThreshold);
-				if (Number.isNaN(this.fuzzyThreshold) || this.fuzzyThreshold < 0 || this.fuzzyThreshold > 1) {
+				this.#fuzzyThreshold = parseFloat(editFuzzyThreshold);
+				if (Number.isNaN(this.#fuzzyThreshold) || this.#fuzzyThreshold < 0 || this.#fuzzyThreshold > 1) {
 					throw new Error(`Invalid PI_EDIT_FUZZY_THRESHOLD: ${editFuzzyThreshold}`);
 				}
 				break;
@@ -252,7 +252,7 @@ export class EditTool implements AgentTool<TInput> {
 		const enableLsp = session.enableLsp ?? true;
 		const enableDiagnostics = enableLsp && session.settings.get("lsp.diagnosticsOnEdit");
 		const enableFormat = enableLsp && session.settings.get("lsp.formatOnWrite");
-		this.writethrough = enableLsp
+		this.#writethrough = enableLsp
 			? createLspWritethrough(session.cwd, { enableFormat, enableDiagnostics })
 			: writethroughNoop;
 	}
@@ -261,34 +261,34 @@ export class EditTool implements AgentTool<TInput> {
 	 * Determine patch mode dynamically based on current model.
 	 * This is re-evaluated on each access so tool definitions stay current when model changes.
 	 */
-	private get patchMode(): boolean {
-		if (this.envEditVariant === "replace") return false;
-		if (this.envEditVariant === "patch") return true;
+	get mode(): "replace" | "patch" {
+		if (this.#envEditVariant === "replace") return "replace";
+		if (this.#envEditVariant === "patch") return "patch";
 
 		// Auto mode: check model-specific settings
 		const activeModel = this.session.getActiveModelString?.();
 		const modelVariant = this.session.settings.getEditVariantForModel(activeModel);
-		if (modelVariant === "replace") return false;
-		if (modelVariant === "patch") return true;
+		if (modelVariant === "replace") return "replace";
+		if (modelVariant === "patch") return "patch";
 
-		return this.session.settings.get("edit.patchMode");
+		return this.session.settings.get("edit.patchMode") ? "patch" : "replace";
 	}
 
 	/**
 	 * Dynamic description based on current patch mode (which depends on current model).
 	 */
-	public get description(): string {
-		return this.patchMode ? renderPromptTemplate(patchDescription) : renderPromptTemplate(replaceDescription);
+	get description(): string {
+		return this.mode === "patch" ? renderPromptTemplate(patchDescription) : renderPromptTemplate(replaceDescription);
 	}
 
 	/**
 	 * Dynamic parameters schema based on current patch mode (which depends on current model).
 	 */
-	public get parameters(): TInput {
-		return this.patchMode ? patchEditSchema : replaceEditSchema;
+	get parameters(): TInput {
+		return this.mode === "patch" ? patchEditSchema : replaceEditSchema;
 	}
 
-	public async execute(
+	async execute(
 		_toolCallId: string,
 		params: ReplaceParams | PatchParams,
 		signal?: AbortSignal,
@@ -300,7 +300,7 @@ export class EditTool implements AgentTool<TInput> {
 		// ─────────────────────────────────────────────────────────────────
 		// Patch mode execution
 		// ─────────────────────────────────────────────────────────────────
-		if (this.patchMode) {
+		if (this.mode === "patch") {
 			const { path, op: rawOp, rename, diff } = params as PatchParams;
 
 			// Normalize unrecognized operations to "update"
@@ -318,12 +318,12 @@ export class EditTool implements AgentTool<TInput> {
 			}
 
 			const input: PatchInput = { path: resolvedPath, op, rename: resolvedRename, diff };
-			const fs = new LspFileSystem(this.writethrough, signal, batchRequest);
+			const fs = new LspFileSystem(this.#writethrough, signal, batchRequest);
 			const result = await applyPatch(input, {
 				cwd: this.session.cwd,
 				fs,
-				fuzzyThreshold: this.fuzzyThreshold,
-				allowFuzzy: this.allowFuzzy,
+				fuzzyThreshold: this.#fuzzyThreshold,
+				allowFuzzy: this.#allowFuzzy,
 			});
 			const effRename = result.change.newPath ? rename : undefined;
 
@@ -411,16 +411,16 @@ export class EditTool implements AgentTool<TInput> {
 		const normalizedNewText = normalizeToLF(new_text);
 
 		const result = replaceText(normalizedContent, normalizedOldText, normalizedNewText, {
-			fuzzy: this.allowFuzzy,
+			fuzzy: this.#allowFuzzy,
 			all: all ?? false,
-			threshold: this.fuzzyThreshold,
+			threshold: this.#fuzzyThreshold,
 		});
 
 		if (result.count === 0) {
 			// Get error details
 			const matchOutcome = findMatch(normalizedContent, normalizedOldText, {
-				allowFuzzy: this.allowFuzzy,
-				threshold: this.fuzzyThreshold,
+				allowFuzzy: this.#allowFuzzy,
+				threshold: this.#fuzzyThreshold,
 			});
 
 			if (matchOutcome.occurrences && matchOutcome.occurrences > 1) {
@@ -433,8 +433,8 @@ export class EditTool implements AgentTool<TInput> {
 			}
 
 			throw new EditMatchError(path, normalizedOldText, matchOutcome.closest, {
-				allowFuzzy: this.allowFuzzy,
-				threshold: this.fuzzyThreshold,
+				allowFuzzy: this.#allowFuzzy,
+				threshold: this.#fuzzyThreshold,
 				fuzzyMatches: matchOutcome.fuzzyMatches,
 			});
 		}
@@ -446,7 +446,7 @@ export class EditTool implements AgentTool<TInput> {
 		}
 
 		const finalContent = bom + restoreLineEndings(result.content, originalEnding);
-		const diagnostics = await this.writethrough(absolutePath, finalContent, signal, file, batchRequest);
+		const diagnostics = await this.#writethrough(absolutePath, finalContent, signal, file, batchRequest);
 		const diffResult = generateDiffString(normalizedContent, result.content);
 
 		const resultText =

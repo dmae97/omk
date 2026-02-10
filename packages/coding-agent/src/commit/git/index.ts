@@ -18,21 +18,21 @@ export class ControlledGit {
 	async getDiff(staged: boolean): Promise<string> {
 		const args = staged ? ["diff", "--cached"] : ["diff"];
 		const result = await runGitCommand(this.cwd, args);
-		this.ensureSuccess(result, "git diff");
+		this.#ensureSuccess(result, "git diff");
 		return result.stdout;
 	}
 
 	async getDiffForFiles(files: string[], staged = true): Promise<string> {
 		const args = staged ? ["diff", "--cached", "--", ...files] : ["diff", "--", ...files];
 		const result = await runGitCommand(this.cwd, args);
-		this.ensureSuccess(result, "git diff (files)");
+		this.#ensureSuccess(result, "git diff (files)");
 		return result.stdout;
 	}
 
 	async getChangedFiles(staged: boolean): Promise<string[]> {
 		const args = staged ? ["diff", "--cached", "--name-only"] : ["diff", "--name-only"];
 		const result = await runGitCommand(this.cwd, args);
-		this.ensureSuccess(result, "git diff --name-only");
+		this.#ensureSuccess(result, "git diff --name-only");
 		return result.stdout
 			.split("\n")
 			.map(line => line.trim())
@@ -42,27 +42,27 @@ export class ControlledGit {
 	async getStat(staged: boolean): Promise<string> {
 		const args = staged ? ["diff", "--cached", "--stat"] : ["diff", "--stat"];
 		const result = await runGitCommand(this.cwd, args);
-		this.ensureSuccess(result, "git diff --stat");
+		this.#ensureSuccess(result, "git diff --stat");
 		return result.stdout;
 	}
 
 	async getStatForFiles(files: string[], staged = true): Promise<string> {
 		const args = staged ? ["diff", "--cached", "--stat", "--", ...files] : ["diff", "--stat", "--", ...files];
 		const result = await runGitCommand(this.cwd, args);
-		this.ensureSuccess(result, "git diff --stat (files)");
+		this.#ensureSuccess(result, "git diff --stat (files)");
 		return result.stdout;
 	}
 
 	async getNumstat(staged: boolean): Promise<NumstatEntry[]> {
 		const args = staged ? ["diff", "--cached", "--numstat"] : ["diff", "--numstat"];
 		const result = await runGitCommand(this.cwd, args);
-		this.ensureSuccess(result, "git diff --numstat");
+		this.#ensureSuccess(result, "git diff --numstat");
 		return parseNumstat(result.stdout);
 	}
 
 	async getRecentCommits(count: number): Promise<string[]> {
 		const result = await runGitCommand(this.cwd, ["log", `-n${count}`, "--pretty=format:%s"]);
-		this.ensureSuccess(result, "git log");
+		this.#ensureSuccess(result, "git log");
 		return result.stdout
 			.split("\n")
 			.map(line => line.trim())
@@ -71,7 +71,7 @@ export class ControlledGit {
 
 	async getStagedFiles(): Promise<string[]> {
 		const result = await runGitCommand(this.cwd, ["diff", "--cached", "--name-only"]);
-		this.ensureSuccess(result, "git diff --cached --name-only");
+		this.#ensureSuccess(result, "git diff --cached --name-only");
 		return result.stdout
 			.split("\n")
 			.map(line => line.trim())
@@ -80,7 +80,7 @@ export class ControlledGit {
 
 	async getUntrackedFiles(): Promise<string[]> {
 		const result = await runGitCommand(this.cwd, ["ls-files", "--others", "--exclude-standard"]);
-		this.ensureSuccess(result, "git ls-files --others --exclude-standard");
+		this.#ensureSuccess(result, "git ls-files --others --exclude-standard");
 		return result.stdout
 			.split("\n")
 			.map(line => line.trim())
@@ -89,12 +89,12 @@ export class ControlledGit {
 
 	async stageAll(): Promise<void> {
 		const result = await stageFiles(this.cwd, []);
-		this.ensureSuccess(result, "git add -A");
+		this.#ensureSuccess(result, "git add -A");
 	}
 
 	async stageFiles(files: string[]): Promise<void> {
 		const result = await stageFiles(this.cwd, files);
-		this.ensureSuccess(result, "git add");
+		this.#ensureSuccess(result, "git add");
 	}
 
 	async stageHunks(selections: HunkSelection[]): Promise<void> {
@@ -137,7 +137,7 @@ export class ControlledGit {
 		try {
 			await Bun.write(tempPath, patch);
 			const result = await runGitCommand(this.cwd, ["apply", "--cached", "--binary", tempPath]);
-			this.ensureSuccess(result, "git apply --cached");
+			this.#ensureSuccess(result, "git apply --cached");
 		} finally {
 			await fs.rm(tempPath, { force: true });
 		}
@@ -145,17 +145,17 @@ export class ControlledGit {
 
 	async resetStaging(files: string[] = []): Promise<void> {
 		const result = await resetStaging(this.cwd, files);
-		this.ensureSuccess(result, "git reset");
+		this.#ensureSuccess(result, "git reset");
 	}
 
 	async commit(message: string): Promise<void> {
 		const result = await commit(this.cwd, message);
-		this.ensureSuccess(result, "git commit");
+		this.#ensureSuccess(result, "git commit");
 	}
 
 	async push(): Promise<void> {
 		const result = await push(this.cwd);
-		this.ensureSuccess(result, "git push");
+		this.#ensureSuccess(result, "git push");
 	}
 
 	parseDiffFiles(diff: string): FileDiff[] {
@@ -171,7 +171,7 @@ export class ControlledGit {
 		return this.parseDiffHunks(diff);
 	}
 
-	private ensureSuccess(result: { exitCode: number; stderr: string }, label: string): void {
+	#ensureSuccess(result: { exitCode: number; stderr: string }, label: string): void {
 		if (result.exitCode !== 0) {
 			logger.error("commit git command failed", { label, stderr: result.stderr });
 			throw new GitError(label, result.stderr);

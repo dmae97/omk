@@ -18,14 +18,14 @@ export interface ImageOptions {
 }
 
 export class Image implements Component {
-	private base64Data: string;
-	private mimeType: string;
-	private dimensions: ImageDimensions;
-	private theme: ImageTheme;
-	private options: ImageOptions;
+	#base64Data: string;
+	#mimeType: string;
+	#dimensions: ImageDimensions;
+	#theme: ImageTheme;
+	#options: ImageOptions;
 
-	private cachedLines?: string[];
-	private cachedWidth?: number;
+	#cachedLines?: string[];
+	#cachedWidth?: number;
 
 	constructor(
 		base64Data: string,
@@ -34,29 +34,29 @@ export class Image implements Component {
 		options: ImageOptions = {},
 		dimensions?: ImageDimensions,
 	) {
-		this.base64Data = base64Data;
-		this.mimeType = mimeType;
-		this.theme = theme;
-		this.options = options;
-		this.dimensions = dimensions || getImageDimensions(base64Data, mimeType) || { widthPx: 800, heightPx: 600 };
+		this.#base64Data = base64Data;
+		this.#mimeType = mimeType;
+		this.#theme = theme;
+		this.#options = options;
+		this.#dimensions = dimensions || getImageDimensions(base64Data, mimeType) || { widthPx: 800, heightPx: 600 };
 	}
 
 	invalidate(): void {
-		this.cachedLines = undefined;
-		this.cachedWidth = undefined;
+		this.#cachedLines = undefined;
+		this.#cachedWidth = undefined;
 	}
 
 	render(width: number): string[] {
-		if (this.cachedLines && this.cachedWidth === width) {
-			return this.cachedLines;
+		if (this.#cachedLines && this.#cachedWidth === width) {
+			return this.#cachedLines;
 		}
 
-		const maxWidth = Math.min(width - 2, this.options.maxWidthCells ?? 60);
+		const maxWidth = Math.min(width - 2, this.#options.maxWidthCells ?? 60);
 
 		let lines: string[];
 
 		if (TERMINAL.imageProtocol) {
-			const result = renderImage(this.base64Data, this.dimensions, { maxWidthCells: maxWidth });
+			const result = renderImage(this.#base64Data, this.#dimensions, { maxWidthCells: maxWidth });
 
 			if (result) {
 				// Return `rows` lines so TUI accounts for image height
@@ -70,16 +70,16 @@ export class Image implements Component {
 				const moveUp = result.rows > 1 ? `\x1b[${result.rows - 1}A` : "";
 				lines.push(moveUp + result.sequence);
 			} else {
-				const fallback = imageFallback(this.mimeType, this.dimensions, this.options.filename);
-				lines = [this.theme.fallbackColor(fallback)];
+				const fallback = imageFallback(this.#mimeType, this.#dimensions, this.#options.filename);
+				lines = [this.#theme.fallbackColor(fallback)];
 			}
 		} else {
-			const fallback = imageFallback(this.mimeType, this.dimensions, this.options.filename);
-			lines = [this.theme.fallbackColor(fallback)];
+			const fallback = imageFallback(this.#mimeType, this.#dimensions, this.#options.filename);
+			lines = [this.#theme.fallbackColor(fallback)];
 		}
 
-		this.cachedLines = lines;
-		this.cachedWidth = width;
+		this.#cachedLines = lines;
+		this.#cachedWidth = width;
 
 		return lines;
 	}

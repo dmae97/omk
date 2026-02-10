@@ -479,7 +479,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	type AbortReason = "signal" | "terminate";
 	let abortSent = false;
 	let abortReason: AbortReason | undefined;
-	let pendingTerminationTimeoutId: ReturnType<typeof setTimeout> | null = null;
+	let pendingTerminationTimeoutId: NodeJS.Timeout | null = null;
 	const listenerController = new AbortController();
 	const listenerSignal = listenerController.signal;
 	const abortController = new AbortController();
@@ -543,7 +543,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 
 	const PROGRESS_COALESCE_MS = 150;
 	let lastProgressEmitMs = 0;
-	let progressTimeoutId: ReturnType<typeof setTimeout> | null = null;
+	let progressTimeoutId: NodeJS.Timeout | null = null;
 
 	const emitProgressNow = () => {
 		progress.durationMs = Date.now() - startTime;

@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test, vi } from "bun:test";
-import { InteractiveMode } from "@oh-my-pi/pi-coding-agent/modes/interactive-mode";
 import { initTheme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { UiHelpers } from "@oh-my-pi/pi-coding-agent/modes/utils/ui-helpers";
 import { Container } from "@oh-my-pi/pi-tui";
@@ -17,46 +16,46 @@ describe("InteractiveMode.showStatus", () => {
 	});
 
 	test("coalesces immediately-sequential status messages", () => {
-		const fakeThis: any = {
+		const ctx: any = {
 			chatContainer: new Container(),
 			ui: { requestRender: vi.fn() },
 			isBackgrounded: false,
 			lastStatusSpacer: undefined,
 			lastStatusText: undefined,
 		};
-		fakeThis.uiHelpers = new UiHelpers(fakeThis);
+		const helpers = new UiHelpers(ctx);
 
-		(InteractiveMode as any).prototype.showStatus.call(fakeThis, "STATUS_ONE");
-		expect(fakeThis.chatContainer.children).toHaveLength(2);
-		expect(renderLastLine(fakeThis.chatContainer)).toContain("STATUS_ONE");
+		helpers.showStatus("STATUS_ONE");
+		expect(ctx.chatContainer.children).toHaveLength(2);
+		expect(renderLastLine(ctx.chatContainer)).toContain("STATUS_ONE");
 
-		(InteractiveMode as any).prototype.showStatus.call(fakeThis, "STATUS_TWO");
+		helpers.showStatus("STATUS_TWO");
 		// second status updates the previous line instead of appending
-		expect(fakeThis.chatContainer.children).toHaveLength(2);
-		expect(renderLastLine(fakeThis.chatContainer)).toContain("STATUS_TWO");
-		expect(renderLastLine(fakeThis.chatContainer)).not.toContain("STATUS_ONE");
+		expect(ctx.chatContainer.children).toHaveLength(2);
+		expect(renderLastLine(ctx.chatContainer)).toContain("STATUS_TWO");
+		expect(renderLastLine(ctx.chatContainer)).not.toContain("STATUS_ONE");
 	});
 
 	test("appends a new status line if something else was added in between", () => {
-		const fakeThis: any = {
+		const ctx: any = {
 			chatContainer: new Container(),
 			ui: { requestRender: vi.fn() },
 			isBackgrounded: false,
 			lastStatusSpacer: undefined,
 			lastStatusText: undefined,
 		};
-		fakeThis.uiHelpers = new UiHelpers(fakeThis);
+		const helpers = new UiHelpers(ctx);
 
-		(InteractiveMode as any).prototype.showStatus.call(fakeThis, "STATUS_ONE");
-		expect(fakeThis.chatContainer.children).toHaveLength(2);
+		helpers.showStatus("STATUS_ONE");
+		expect(ctx.chatContainer.children).toHaveLength(2);
 
 		// Something else gets added to the chat in between status updates
-		fakeThis.chatContainer.addChild({ render: () => ["OTHER"], invalidate: () => {} });
-		expect(fakeThis.chatContainer.children).toHaveLength(3);
+		ctx.chatContainer.addChild({ render: () => ["OTHER"], invalidate: () => {} });
+		expect(ctx.chatContainer.children).toHaveLength(3);
 
-		(InteractiveMode as any).prototype.showStatus.call(fakeThis, "STATUS_TWO");
+		helpers.showStatus("STATUS_TWO");
 		// adds spacer + text
-		expect(fakeThis.chatContainer.children).toHaveLength(5);
-		expect(renderLastLine(fakeThis.chatContainer)).toContain("STATUS_TWO");
+		expect(ctx.chatContainer.children).toHaveLength(5);
+		expect(renderLastLine(ctx.chatContainer)).toContain("STATUS_TWO");
 	});
 });

@@ -16,7 +16,7 @@ function truncate(content: string, maxLength: number): string {
 export class FrontmatterError extends Error {
 	constructor(
 		error: Error,
-		public readonly source?: unknown,
+		readonly source?: unknown,
 	) {
 		super(`Failed to parse YAML frontmatter (${source}): ${error.message}`, { cause: error });
 		this.name = "FrontmatterError";

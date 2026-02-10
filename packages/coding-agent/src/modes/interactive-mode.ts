@@ -3,7 +3,7 @@
  * Handles TUI rendering and user interaction, delegating business logic to AgentSession.
  */
 import * as path from "node:path";
-import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
+import type { Agent, AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage, ImageContent, Message, Model, UsageReport } from "@oh-my-pi/pi-ai";
 import type { Component, Loader, SlashCommand } from "@oh-my-pi/pi-tui";
 import {
@@ -74,83 +74,83 @@ export interface InteractiveModeOptions {
 }
 
 export class InteractiveMode implements InteractiveModeContext {
-	public session: AgentSession;
-	public sessionManager: SessionManager;
-	public settings: Settings;
-	public keybindings: KeybindingsManager;
-	public agent: AgentSession["agent"];
-	public historyStorage?: HistoryStorage;
+	session: AgentSession;
+	sessionManager: SessionManager;
+	settings: Settings;
+	keybindings: KeybindingsManager;
+	agent: Agent;
+	historyStorage?: HistoryStorage;
 
-	public ui: TUI;
-	public chatContainer: Container;
-	public pendingMessagesContainer: Container;
-	public statusContainer: Container;
-	public todoContainer: Container;
-	public editor: CustomEditor;
-	public editorContainer: Container;
-	public statusLine: StatusLineComponent;
+	ui: TUI;
+	chatContainer: Container;
+	pendingMessagesContainer: Container;
+	statusContainer: Container;
+	todoContainer: Container;
+	editor: CustomEditor;
+	editorContainer: Container;
+	statusLine: StatusLineComponent;
 
-	public isInitialized = false;
-	public isBackgrounded = false;
-	public isBashMode = false;
-	public toolOutputExpanded = false;
-	public todoExpanded = false;
-	public planModeEnabled = false;
-	public planModePaused = false;
-	public planModePlanFilePath: string | undefined = undefined;
-	public todoItems: TodoItem[] = [];
-	public hideThinkingBlock = false;
-	public pendingImages: ImageContent[] = [];
-	public compactionQueuedMessages: CompactionQueuedMessage[] = [];
-	public pendingTools = new Map<string, ToolExecutionHandle>();
-	public pendingBashComponents: BashExecutionComponent[] = [];
-	public bashComponent: BashExecutionComponent | undefined = undefined;
-	public pendingPythonComponents: PythonExecutionComponent[] = [];
-	public pythonComponent: PythonExecutionComponent | undefined = undefined;
-	public isPythonMode = false;
-	public streamingComponent: AssistantMessageComponent | undefined = undefined;
-	public streamingMessage: AssistantMessage | undefined = undefined;
-	public loadingAnimation: Loader | undefined = undefined;
-	public autoCompactionLoader: Loader | undefined = undefined;
-	public retryLoader: Loader | undefined = undefined;
-	private pendingWorkingMessage: string | undefined;
-	private readonly defaultWorkingMessage = `Working… (esc to interrupt)`;
-	public autoCompactionEscapeHandler?: () => void;
-	public retryEscapeHandler?: () => void;
-	public unsubscribe?: () => void;
-	public onInputCallback?: (input: { text: string; images?: ImageContent[] }) => void;
-	public lastSigintTime = 0;
-	public lastEscapeTime = 0;
-	public shutdownRequested = false;
-	private isShuttingDown = false;
-	public hookSelector: HookSelectorComponent | undefined = undefined;
-	public hookInput: HookInputComponent | undefined = undefined;
-	public hookEditor: HookEditorComponent | undefined = undefined;
-	public lastStatusSpacer: Spacer | undefined = undefined;
-	public lastStatusText: Text | undefined = undefined;
-	public fileSlashCommands: Set<string> = new Set();
-	public skillCommands: Map<string, string> = new Map();
+	isInitialized = false;
+	isBackgrounded = false;
+	isBashMode = false;
+	toolOutputExpanded = false;
+	todoExpanded = false;
+	planModeEnabled = false;
+	planModePaused = false;
+	planModePlanFilePath: string | undefined = undefined;
+	todoItems: TodoItem[] = [];
+	hideThinkingBlock = false;
+	pendingImages: ImageContent[] = [];
+	compactionQueuedMessages: CompactionQueuedMessage[] = [];
+	pendingTools = new Map<string, ToolExecutionHandle>();
+	pendingBashComponents: BashExecutionComponent[] = [];
+	bashComponent: BashExecutionComponent | undefined = undefined;
+	pendingPythonComponents: PythonExecutionComponent[] = [];
+	pythonComponent: PythonExecutionComponent | undefined = undefined;
+	isPythonMode = false;
+	streamingComponent: AssistantMessageComponent | undefined = undefined;
+	streamingMessage: AssistantMessage | undefined = undefined;
+	loadingAnimation: Loader | undefined = undefined;
+	autoCompactionLoader: Loader | undefined = undefined;
+	retryLoader: Loader | undefined = undefined;
+	#pendingWorkingMessage: string | undefined;
+	readonly #defaultWorkingMessage = `Working… (esc to interrupt)`;
+	autoCompactionEscapeHandler?: () => void;
+	retryEscapeHandler?: () => void;
+	unsubscribe?: () => void;
+	onInputCallback?: (input: { text: string; images?: ImageContent[] }) => void;
+	lastSigintTime = 0;
+	lastEscapeTime = 0;
+	shutdownRequested = false;
+	#isShuttingDown = false;
+	hookSelector: HookSelectorComponent | undefined = undefined;
+	hookInput: HookInputComponent | undefined = undefined;
+	hookEditor: HookEditorComponent | undefined = undefined;
+	lastStatusSpacer: Spacer | undefined = undefined;
+	lastStatusText: Text | undefined = undefined;
+	fileSlashCommands: Set<string> = new Set();
+	skillCommands: Map<string, string> = new Map();
 
-	private pendingSlashCommands: SlashCommand[] = [];
-	private cleanupUnsubscribe?: () => void;
-	private readonly version: string;
-	private readonly changelogMarkdown: string | undefined;
-	private planModePreviousTools: string[] | undefined;
-	private planModePreviousModel: Model | undefined;
-	private pendingModelSwitch: Model | undefined;
-	private planModeHasEntered = false;
-	public readonly lspServers:
+	#pendingSlashCommands: SlashCommand[] = [];
+	#cleanupUnsubscribe?: () => void;
+	readonly #version: string;
+	readonly #changelogMarkdown: string | undefined;
+	#planModePreviousTools: string[] | undefined;
+	#planModePreviousModel: Model | undefined;
+	#pendingModelSwitch: Model | undefined;
+	#planModeHasEntered = false;
+	readonly lspServers:
 		| Array<{ name: string; status: "ready" | "error"; fileTypes: string[]; error?: string }>
 		| undefined = undefined;
-	public mcpManager?: import("../mcp").MCPManager;
-	private readonly toolUiContextSetter: (uiContext: ExtensionUIContext, hasUI: boolean) => void;
+	mcpManager?: import("../mcp").MCPManager;
+	readonly #toolUiContextSetter: (uiContext: ExtensionUIContext, hasUI: boolean) => void;
 
-	private readonly commandController: CommandController;
-	private readonly eventController: EventController;
-	private readonly extensionUiController: ExtensionUiController;
-	private readonly inputController: InputController;
-	private readonly selectorController: SelectorController;
-	private readonly uiHelpers: UiHelpers;
+	readonly #commandController: CommandController;
+	readonly #eventController: EventController;
+	readonly #extensionUiController: ExtensionUiController;
+	readonly #inputController: InputController;
+	readonly #selectorController: SelectorController;
+	readonly #uiHelpers: UiHelpers;
 
 	constructor(
 		session: AgentSession,
@@ -167,9 +167,9 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.settings = session.settings;
 		this.keybindings = KeybindingsManager.inMemory();
 		this.agent = session.agent;
-		this.version = version;
-		this.changelogMarkdown = changelogMarkdown;
-		this.toolUiContextSetter = setToolUIContext;
+		this.#version = version;
+		this.#changelogMarkdown = changelogMarkdown;
+		this.#toolUiContextSetter = setToolUIContext;
 		this.lspServers = lspServers;
 		this.mcpManager = mcpManager;
 
@@ -227,14 +227,14 @@ export class InteractiveMode implements InteractiveModeContext {
 		}
 
 		// Store pending commands for init() where file commands are loaded async
-		this.pendingSlashCommands = [...BUILTIN_SLASH_COMMANDS, ...hookCommands, ...customCommands, ...skillCommandList];
+		this.#pendingSlashCommands = [...BUILTIN_SLASH_COMMANDS, ...hookCommands, ...customCommands, ...skillCommandList];
 
-		this.uiHelpers = new UiHelpers(this);
-		this.extensionUiController = new ExtensionUiController(this);
-		this.eventController = new EventController(this);
-		this.commandController = new CommandController(this);
-		this.selectorController = new SelectorController(this);
-		this.inputController = new InputController(this);
+		this.#uiHelpers = new UiHelpers(this);
+		this.#extensionUiController = new ExtensionUiController(this);
+		this.#eventController = new EventController(this);
+		this.#commandController = new CommandController(this);
+		this.#selectorController = new SelectorController(this);
+		this.#inputController = new InputController(this);
 	}
 
 	async init(): Promise<void> {
@@ -245,7 +245,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		debugStartup("InteractiveMode.init:keybindings");
 
 		// Register session manager flush for signal handlers (SIGINT, SIGTERM, SIGHUP)
-		this.cleanupUnsubscribe = postmortem.register("session-manager-flush", () => this.sessionManager.flush());
+		this.#cleanupUnsubscribe = postmortem.register("session-manager-flush", () => this.sessionManager.flush());
 		debugStartup("InteractiveMode.init:cleanupRegistered");
 
 		// Load and convert file commands to SlashCommand format (async)
@@ -259,7 +259,7 @@ export class InteractiveMode implements InteractiveModeContext {
 
 		// Setup autocomplete with all commands
 		const autocompleteProvider = new CombinedAutocompleteProvider(
-			[...this.pendingSlashCommands, ...fileSlashCommands],
+			[...this.#pendingSlashCommands, ...fileSlashCommands],
 			process.cwd(),
 		);
 		this.editor.setAutocompleteProvider(autocompleteProvider);
@@ -288,7 +288,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		if (!startupQuiet) {
 			// Add welcome header
 			debugStartup("InteractiveMode.init:welcomeComponent:start");
-			const welcome = new WelcomeComponent(this.version, modelName, providerName, recentSessions, lspServerInfo);
+			const welcome = new WelcomeComponent(this.#version, modelName, providerName, recentSessions, lspServerInfo);
 			debugStartup("InteractiveMode.init:welcomeComponent:created");
 
 			// Setup UI layout
@@ -297,17 +297,17 @@ export class InteractiveMode implements InteractiveModeContext {
 			this.ui.addChild(new Spacer(1));
 
 			// Add changelog if provided
-			if (this.changelogMarkdown) {
+			if (this.#changelogMarkdown) {
 				this.ui.addChild(new DynamicBorder());
 				if (settings.get("collapseChangelog")) {
-					const versionMatch = this.changelogMarkdown.match(/##\s+\[?(\d+\.\d+\.\d+)\]?/);
-					const latestVersion = versionMatch ? versionMatch[1] : this.version;
+					const versionMatch = this.#changelogMarkdown.match(/##\s+\[?(\d+\.\d+\.\d+)\]?/);
+					const latestVersion = versionMatch ? versionMatch[1] : this.#version;
 					const condensedText = `Updated to v${latestVersion}. Use ${theme.bold("/changelog")} to view full changelog.`;
 					this.ui.addChild(new Text(condensedText, 1, 0));
 				} else {
 					this.ui.addChild(new Text(theme.bold(theme.fg("accent", "What's New")), 1, 0));
 					this.ui.addChild(new Spacer(1));
-					this.ui.addChild(new Markdown(this.changelogMarkdown.trim(), 1, 0, getMarkdownTheme()));
+					this.ui.addChild(new Markdown(this.#changelogMarkdown.trim(), 1, 0, getMarkdownTheme()));
 					this.ui.addChild(new Spacer(1));
 				}
 				this.ui.addChild(new DynamicBorder());
@@ -329,11 +329,11 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.ui.addChild(this.statusLine); // Only renders hook statuses (main status in editor border)
 		this.ui.setFocus(this.editor);
 
-		this.inputController.setupKeyHandlers();
-		this.inputController.setupEditorSubmitHandler();
+		this.#inputController.setupKeyHandlers();
+		this.#inputController.setupEditorSubmitHandler();
 
 		// Load initial todos
-		await this.loadTodoList();
+		await this.#loadTodoList();
 
 		// Start the UI
 		this.ui.start();
@@ -347,10 +347,10 @@ export class InteractiveMode implements InteractiveModeContext {
 		await this.initHooksAndCustomTools();
 
 		// Restore mode from session (e.g. plan mode on resume)
-		await this.restoreModeFromSession();
+		await this.#restoreModeFromSession();
 
 		// Subscribe to agent events
-		this.subscribeToAgent();
+		this.#subscribeToAgent();
 
 		// Set up theme file watcher
 		onThemeChange(() => {
@@ -403,7 +403,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.renderSessionContext(context);
 	}
 
-	private formatTodoLine(todo: TodoItem, prefix: string): string {
+	#formatTodoLine(todo: TodoItem, prefix: string): string {
 		const checkbox = theme.checkbox;
 		const label = todo.content;
 		switch (todo.status) {
@@ -416,7 +416,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		}
 	}
 
-	private getCollapsedTodos(todos: TodoItem[]): TodoItem[] {
+	#getCollapsedTodos(todos: TodoItem[]): TodoItem[] {
 		let startIndex = 0;
 		for (let i = todos.length - 1; i >= 0; i -= 1) {
 			if (todos[i].status === "completed") {
@@ -427,20 +427,20 @@ export class InteractiveMode implements InteractiveModeContext {
 		return todos.slice(startIndex, startIndex + 5);
 	}
 
-	private renderTodoList(): void {
+	#renderTodoList(): void {
 		this.todoContainer.clear();
 		if (this.todoItems.length === 0) {
 			return;
 		}
 
-		const visibleTodos = this.todoExpanded ? this.todoItems : this.getCollapsedTodos(this.todoItems);
+		const visibleTodos = this.todoExpanded ? this.todoItems : this.#getCollapsedTodos(this.todoItems);
 		const indent = "  ";
 		const hook = theme.tree.hook;
 		const lines = [indent + theme.bold(theme.fg("accent", "Todos"))];
 
 		visibleTodos.forEach((todo, index) => {
 			const prefix = `${indent}${index === 0 ? hook : " "} `;
-			lines.push(this.formatTodoLine(todo, prefix));
+			lines.push(this.#formatTodoLine(todo, prefix));
 		});
 
 		if (!this.todoExpanded && visibleTodos.length < this.todoItems.length) {
@@ -451,11 +451,11 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.todoContainer.addChild(new Text(lines.join("\n"), 1, 0));
 	}
 
-	private async loadTodoList(): Promise<void> {
+	async #loadTodoList(): Promise<void> {
 		const sessionFile = this.sessionManager.getSessionFile() ?? null;
 		if (!sessionFile) {
 			this.todoItems = [];
-			this.renderTodoList();
+			this.#renderTodoList();
 			return;
 		}
 		const artifactsDir = sessionFile.slice(0, -6);
@@ -470,20 +470,20 @@ export class InteractiveMode implements InteractiveModeContext {
 		} catch (error) {
 			if (isEnoent(error)) {
 				this.todoItems = [];
-				this.renderTodoList();
+				this.#renderTodoList();
 				return;
 			}
 			logger.warn("Failed to load todos", { path: todoPath, error: String(error) });
 		}
-		this.renderTodoList();
+		this.#renderTodoList();
 	}
 
-	private getPlanFilePath(): string {
+	#getPlanFilePath(): string {
 		const sessionId = this.sessionManager.getSessionId();
 		return `plan://${sessionId}/plan.md`;
 	}
 
-	private resolvePlanFilePath(planFilePath: string): string {
+	#resolvePlanFilePath(planFilePath: string): string {
 		if (planFilePath.startsWith("plan://")) {
 			return resolvePlanUrlToPath(planFilePath, {
 				getPlansDirectory: () => this.settings.getPlansDirectory(),
@@ -493,7 +493,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		return planFilePath;
 	}
 
-	private updatePlanModeStatus(): void {
+	#updatePlanModeStatus(): void {
 		const status =
 			this.planModeEnabled || this.planModePaused
 				? {
@@ -506,16 +506,16 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.ui.requestRender();
 	}
 
-	private async applyPlanModeModel(): Promise<void> {
+	async #applyPlanModeModel(): Promise<void> {
 		const planModel = this.session.resolveRoleModel("plan");
 		if (!planModel) return;
 		const currentModel = this.session.model;
 		if (currentModel && currentModel.provider === planModel.provider && currentModel.id === planModel.id) {
 			return;
 		}
-		this.planModePreviousModel = currentModel;
+		this.#planModePreviousModel = currentModel;
 		if (this.session.isStreaming) {
-			this.pendingModelSwitch = planModel;
+			this.#pendingModelSwitch = planModel;
 			return;
 		}
 		try {
@@ -529,9 +529,9 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	/** Apply any deferred model switch after the current stream ends. */
 	async flushPendingModelSwitch(): Promise<void> {
-		const model = this.pendingModelSwitch;
+		const model = this.#pendingModelSwitch;
 		if (!model) return;
-		this.pendingModelSwitch = undefined;
+		this.#pendingModelSwitch = undefined;
 		try {
 			await this.session.setModelTemporary(model);
 		} catch (error) {
@@ -542,35 +542,32 @@ export class InteractiveMode implements InteractiveModeContext {
 	}
 
 	/** Restore mode state from session entries on resume (e.g. plan mode). */
-	private async restoreModeFromSession(): Promise<void> {
+	async #restoreModeFromSession(): Promise<void> {
 		const sessionContext = this.sessionManager.buildSessionContext();
 		if (sessionContext.mode === "plan") {
 			const planFilePath = sessionContext.modeData?.planFilePath as string | undefined;
-			await this.enterPlanMode({ planFilePath });
+			await this.#enterPlanMode({ planFilePath });
 		} else if (sessionContext.mode === "plan_paused") {
 			this.planModePaused = true;
-			this.planModeHasEntered = true;
-			this.updatePlanModeStatus();
+			this.#planModeHasEntered = true;
+			this.#updatePlanModeStatus();
 		}
 	}
 
-	private async enterPlanMode(options?: {
-		planFilePath?: string;
-		workflow?: "parallel" | "iterative";
-	}): Promise<void> {
+	async #enterPlanMode(options?: { planFilePath?: string; workflow?: "parallel" | "iterative" }): Promise<void> {
 		if (this.planModeEnabled) {
 			return;
 		}
 
 		this.planModePaused = false;
 
-		const planFilePath = options?.planFilePath ?? this.getPlanFilePath();
+		const planFilePath = options?.planFilePath ?? this.#getPlanFilePath();
 		const previousTools = this.session.getActiveToolNames();
 		const hasExitTool = this.session.getToolByName("exit_plan_mode") !== undefined;
 		const planTools = hasExitTool ? [...previousTools, "exit_plan_mode"] : previousTools;
 		const uniquePlanTools = [...new Set(planTools)];
 
-		this.planModePreviousTools = previousTools;
+		this.#planModePreviousTools = previousTools;
 		this.planModePlanFilePath = planFilePath;
 		this.planModeEnabled = true;
 
@@ -579,32 +576,32 @@ export class InteractiveMode implements InteractiveModeContext {
 			enabled: true,
 			planFilePath,
 			workflow: options?.workflow ?? "parallel",
-			reentry: this.planModeHasEntered,
+			reentry: this.#planModeHasEntered,
 		});
 		if (this.session.isStreaming) {
 			await this.session.sendPlanModeContext({ deliverAs: "steer" });
 		}
-		this.planModeHasEntered = true;
-		await this.applyPlanModeModel();
-		this.updatePlanModeStatus();
+		this.#planModeHasEntered = true;
+		await this.#applyPlanModeModel();
+		this.#updatePlanModeStatus();
 		this.sessionManager.appendModeChange("plan", { planFilePath });
 		this.showStatus(`Plan mode enabled. Plan file: ${planFilePath}`);
 	}
 
-	private async exitPlanMode(options?: { silent?: boolean; paused?: boolean }): Promise<void> {
+	async #exitPlanMode(options?: { silent?: boolean; paused?: boolean }): Promise<void> {
 		if (!this.planModeEnabled) {
 			return;
 		}
 
-		const previousTools = this.planModePreviousTools;
+		const previousTools = this.#planModePreviousTools;
 		if (previousTools && previousTools.length > 0) {
 			await this.session.setActiveToolsByName(previousTools);
 		}
-		if (this.planModePreviousModel) {
+		if (this.#planModePreviousModel) {
 			if (this.session.isStreaming) {
-				this.pendingModelSwitch = this.planModePreviousModel;
+				this.#pendingModelSwitch = this.#planModePreviousModel;
 			} else {
-				await this.session.setModelTemporary(this.planModePreviousModel);
+				await this.session.setModelTemporary(this.#planModePreviousModel);
 			}
 		}
 
@@ -612,9 +609,9 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.planModeEnabled = false;
 		this.planModePaused = options?.paused ?? false;
 		this.planModePlanFilePath = undefined;
-		this.planModePreviousTools = undefined;
-		this.planModePreviousModel = undefined;
-		this.updatePlanModeStatus();
+		this.#planModePreviousTools = undefined;
+		this.#planModePreviousModel = undefined;
+		this.#updatePlanModeStatus();
 		const paused = options?.paused ?? false;
 		this.sessionManager.appendModeChange(paused ? "plan_paused" : "none");
 		if (!options?.silent) {
@@ -622,8 +619,8 @@ export class InteractiveMode implements InteractiveModeContext {
 		}
 	}
 
-	private async readPlanFile(planFilePath: string): Promise<string | null> {
-		const resolvedPath = this.resolvePlanFilePath(planFilePath);
+	async #readPlanFile(planFilePath: string): Promise<string | null> {
+		const resolvedPath = this.#resolvePlanFilePath(planFilePath);
 		try {
 			return await Bun.file(resolvedPath).text();
 		} catch (error) {
@@ -634,7 +631,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		}
 	}
 
-	private renderPlanPreview(planContent: string): void {
+	#renderPlanPreview(planContent: string): void {
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new DynamicBorder());
 		this.chatContainer.addChild(new Text(theme.bold(theme.fg("accent", "Plan Review")), 1, 1));
@@ -644,9 +641,9 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.ui.requestRender();
 	}
 
-	private async approvePlan(planContent: string): Promise<void> {
-		const previousTools = this.planModePreviousTools ?? this.session.getActiveToolNames();
-		await this.exitPlanMode({ silent: true, paused: false });
+	async #approvePlan(planContent: string): Promise<void> {
+		const previousTools = this.#planModePreviousTools ?? this.session.getActiveToolNames();
+		await this.#exitPlanMode({ silent: true, paused: false });
 		await this.handleClearCommand();
 		if (previousTools.length > 0) {
 			await this.session.setActiveToolsByName(previousTools);
@@ -663,10 +660,10 @@ export class InteractiveMode implements InteractiveModeContext {
 				"This exits plan mode without approving a plan.",
 			);
 			if (!confirmed) return;
-			await this.exitPlanMode({ paused: true });
+			await this.#exitPlanMode({ paused: true });
 			return;
 		}
-		await this.enterPlanMode();
+		await this.#enterPlanMode();
 	}
 
 	async handleExitPlanModeTool(details: ExitPlanModeDetails): Promise<void> {
@@ -675,15 +672,15 @@ export class InteractiveMode implements InteractiveModeContext {
 			return;
 		}
 
-		const planFilePath = details.planFilePath || this.planModePlanFilePath || this.getPlanFilePath();
+		const planFilePath = details.planFilePath || this.planModePlanFilePath || this.#getPlanFilePath();
 		this.planModePlanFilePath = planFilePath;
-		const planContent = await this.readPlanFile(planFilePath);
+		const planContent = await this.#readPlanFile(planFilePath);
 		if (!planContent) {
 			this.showError(`Plan file not found at ${planFilePath}`);
 			return;
 		}
 
-		this.renderPlanPreview(planContent);
+		this.#renderPlanPreview(planContent);
 		const choice = await this.showHookSelector("Plan mode - next step", [
 			"Approve and execute",
 			"Refine plan",
@@ -691,7 +688,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		]);
 
 		if (choice === "Approve and execute") {
-			await this.approvePlan(planContent);
+			await this.#approvePlan(planContent);
 			return;
 		}
 		if (choice === "Refine plan") {
@@ -711,8 +708,8 @@ export class InteractiveMode implements InteractiveModeContext {
 		if (this.unsubscribe) {
 			this.unsubscribe();
 		}
-		if (this.cleanupUnsubscribe) {
-			this.cleanupUnsubscribe();
+		if (this.#cleanupUnsubscribe) {
+			this.#cleanupUnsubscribe();
 		}
 		if (this.isInitialized) {
 			this.ui.stop();
@@ -721,8 +718,8 @@ export class InteractiveMode implements InteractiveModeContext {
 	}
 
 	async shutdown(): Promise<void> {
-		if (this.isShuttingDown) return;
-		this.isShuttingDown = true;
+		if (this.#isShuttingDown) return;
+		this.#isShuttingDown = true;
 
 		// Flush pending session writes before shutdown
 		await this.sessionManager.flush();
@@ -761,40 +758,40 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	// Extension UI integration
 	setToolUIContext(uiContext: ExtensionUIContext, hasUI: boolean): void {
-		this.toolUiContextSetter(uiContext, hasUI);
+		this.#toolUiContextSetter(uiContext, hasUI);
 	}
 
 	initializeHookRunner(uiContext: ExtensionUIContext, hasUI: boolean): void {
-		this.extensionUiController.initializeHookRunner(uiContext, hasUI);
+		this.#extensionUiController.initializeHookRunner(uiContext, hasUI);
 	}
 
 	createBackgroundUiContext(): ExtensionUIContext {
-		return this.extensionUiController.createBackgroundUiContext();
+		return this.#extensionUiController.createBackgroundUiContext();
 	}
 
 	// Event handling
 	async handleBackgroundEvent(event: AgentSessionEvent): Promise<void> {
-		await this.eventController.handleBackgroundEvent(event);
+		await this.#eventController.handleBackgroundEvent(event);
 	}
 
 	// UI helpers
 	showStatus(message: string, options?: { dim?: boolean }): void {
-		this.uiHelpers.showStatus(message, options);
+		this.#uiHelpers.showStatus(message, options);
 	}
 
 	showError(message: string): void {
-		this.uiHelpers.showError(message);
+		this.#uiHelpers.showError(message);
 	}
 
 	showWarning(message: string): void {
-		this.uiHelpers.showWarning(message);
+		this.#uiHelpers.showWarning(message);
 	}
 
 	setWorkingMessage(message?: string): void {
 		if (message === undefined) {
-			this.pendingWorkingMessage = undefined;
+			this.#pendingWorkingMessage = undefined;
 			if (this.loadingAnimation) {
-				this.loadingAnimation.setMessage(this.defaultWorkingMessage);
+				this.loadingAnimation.setMessage(this.#defaultWorkingMessage);
 			}
 			return;
 		}
@@ -804,276 +801,272 @@ export class InteractiveMode implements InteractiveModeContext {
 			return;
 		}
 
-		this.pendingWorkingMessage = message;
+		this.#pendingWorkingMessage = message;
 	}
 
 	applyPendingWorkingMessage(): void {
-		if (this.pendingWorkingMessage === undefined) {
+		if (this.#pendingWorkingMessage === undefined) {
 			return;
 		}
 
-		const message = this.pendingWorkingMessage;
-		this.pendingWorkingMessage = undefined;
+		const message = this.#pendingWorkingMessage;
+		this.#pendingWorkingMessage = undefined;
 		this.setWorkingMessage(message);
 	}
 
 	showNewVersionNotification(newVersion: string): void {
-		this.uiHelpers.showNewVersionNotification(newVersion);
+		this.#uiHelpers.showNewVersionNotification(newVersion);
 	}
 
 	clearEditor(): void {
-		this.uiHelpers.clearEditor();
+		this.#uiHelpers.clearEditor();
 	}
 
 	updatePendingMessagesDisplay(): void {
-		this.uiHelpers.updatePendingMessagesDisplay();
+		this.#uiHelpers.updatePendingMessagesDisplay();
 	}
 
 	queueCompactionMessage(text: string, mode: "steer" | "followUp"): void {
-		this.uiHelpers.queueCompactionMessage(text, mode);
+		this.#uiHelpers.queueCompactionMessage(text, mode);
 	}
 
 	flushCompactionQueue(options?: { willRetry?: boolean }): Promise<void> {
-		return this.uiHelpers.flushCompactionQueue(options);
+		return this.#uiHelpers.flushCompactionQueue(options);
 	}
 
 	flushPendingBashComponents(): void {
-		this.uiHelpers.flushPendingBashComponents();
+		this.#uiHelpers.flushPendingBashComponents();
 	}
 
 	isKnownSlashCommand(text: string): boolean {
-		return this.uiHelpers.isKnownSlashCommand(text);
+		return this.#uiHelpers.isKnownSlashCommand(text);
 	}
 
 	addMessageToChat(message: AgentMessage, options?: { populateHistory?: boolean }): void {
-		this.uiHelpers.addMessageToChat(message, options);
+		this.#uiHelpers.addMessageToChat(message, options);
 	}
 
 	renderSessionContext(
 		sessionContext: SessionContext,
 		options?: { updateFooter?: boolean; populateHistory?: boolean },
 	): void {
-		this.uiHelpers.renderSessionContext(sessionContext, options);
+		this.#uiHelpers.renderSessionContext(sessionContext, options);
 	}
 
 	renderInitialMessages(): void {
-		this.uiHelpers.renderInitialMessages();
+		this.#uiHelpers.renderInitialMessages();
 	}
 
 	getUserMessageText(message: Message): string {
-		return this.uiHelpers.getUserMessageText(message);
+		return this.#uiHelpers.getUserMessageText(message);
 	}
 
 	findLastAssistantMessage(): AssistantMessage | undefined {
-		return this.uiHelpers.findLastAssistantMessage();
+		return this.#uiHelpers.findLastAssistantMessage();
 	}
 
 	extractAssistantText(message: AssistantMessage): string {
-		return this.uiHelpers.extractAssistantText(message);
+		return this.#uiHelpers.extractAssistantText(message);
 	}
 
 	// Command handling
 	handleExportCommand(text: string): Promise<void> {
-		return this.commandController.handleExportCommand(text);
+		return this.#commandController.handleExportCommand(text);
 	}
 
 	handleDumpCommand(): Promise<void> {
-		return this.commandController.handleDumpCommand();
+		return this.#commandController.handleDumpCommand();
 	}
 
 	handleShareCommand(): Promise<void> {
-		return this.commandController.handleShareCommand();
+		return this.#commandController.handleShareCommand();
 	}
 
 	handleCopyCommand(): Promise<void> {
-		return this.commandController.handleCopyCommand();
+		return this.#commandController.handleCopyCommand();
 	}
 
 	handleSessionCommand(): Promise<void> {
-		return this.commandController.handleSessionCommand();
+		return this.#commandController.handleSessionCommand();
 	}
 
 	handleUsageCommand(reports?: UsageReport[] | null): Promise<void> {
-		return this.commandController.handleUsageCommand(reports);
+		return this.#commandController.handleUsageCommand(reports);
 	}
 
 	async handleChangelogCommand(): Promise<void> {
-		await this.commandController.handleChangelogCommand();
+		await this.#commandController.handleChangelogCommand();
 	}
 
 	handleHotkeysCommand(): void {
-		this.commandController.handleHotkeysCommand();
+		this.#commandController.handleHotkeysCommand();
 	}
 
 	handleClearCommand(): Promise<void> {
-		return this.commandController.handleClearCommand();
+		return this.#commandController.handleClearCommand();
 	}
 
 	handleForkCommand(): Promise<void> {
-		return this.commandController.handleForkCommand();
+		return this.#commandController.handleForkCommand();
 	}
 
 	showDebugSelector(): void {
-		this.selectorController.showDebugSelector();
-	}
-
-	handleArminSaysHi(): void {
-		this.commandController.handleArminSaysHi();
+		this.#selectorController.showDebugSelector();
 	}
 
 	handleBashCommand(command: string, excludeFromContext?: boolean): Promise<void> {
-		return this.commandController.handleBashCommand(command, excludeFromContext);
+		return this.#commandController.handleBashCommand(command, excludeFromContext);
 	}
 
 	handlePythonCommand(code: string, excludeFromContext?: boolean): Promise<void> {
-		return this.commandController.handlePythonCommand(code, excludeFromContext);
+		return this.#commandController.handlePythonCommand(code, excludeFromContext);
 	}
 
 	handleCompactCommand(customInstructions?: string): Promise<void> {
-		return this.commandController.handleCompactCommand(customInstructions);
+		return this.#commandController.handleCompactCommand(customInstructions);
 	}
 
 	handleHandoffCommand(customInstructions?: string): Promise<void> {
-		return this.commandController.handleHandoffCommand(customInstructions);
+		return this.#commandController.handleHandoffCommand(customInstructions);
 	}
 
 	executeCompaction(customInstructionsOrOptions?: string | CompactOptions, isAuto?: boolean): Promise<void> {
-		return this.commandController.executeCompaction(customInstructionsOrOptions, isAuto);
+		return this.#commandController.executeCompaction(customInstructionsOrOptions, isAuto);
 	}
 
 	openInBrowser(urlOrPath: string): void {
-		this.commandController.openInBrowser(urlOrPath);
+		this.#commandController.openInBrowser(urlOrPath);
 	}
 
 	// Selector handling
 	showSettingsSelector(): void {
-		this.selectorController.showSettingsSelector();
+		this.#selectorController.showSettingsSelector();
 	}
 
 	showHistorySearch(): void {
-		this.selectorController.showHistorySearch();
+		this.#selectorController.showHistorySearch();
 	}
 
 	showExtensionsDashboard(): void {
-		void this.selectorController.showExtensionsDashboard();
+		void this.#selectorController.showExtensionsDashboard();
 	}
 
 	showModelSelector(options?: { temporaryOnly?: boolean }): void {
-		this.selectorController.showModelSelector(options);
+		this.#selectorController.showModelSelector(options);
 	}
 
 	showUserMessageSelector(): void {
-		this.selectorController.showUserMessageSelector();
+		this.#selectorController.showUserMessageSelector();
 	}
 
 	showTreeSelector(): void {
-		this.selectorController.showTreeSelector();
+		this.#selectorController.showTreeSelector();
 	}
 
 	showSessionSelector(): void {
-		this.selectorController.showSessionSelector();
+		this.#selectorController.showSessionSelector();
 	}
 
 	handleResumeSession(sessionPath: string): Promise<void> {
-		return this.selectorController.handleResumeSession(sessionPath);
+		return this.#selectorController.handleResumeSession(sessionPath);
 	}
 
 	showOAuthSelector(mode: "login" | "logout"): Promise<void> {
-		return this.selectorController.showOAuthSelector(mode);
+		return this.#selectorController.showOAuthSelector(mode);
 	}
 
 	showHookConfirm(title: string, message: string): Promise<boolean> {
-		return this.extensionUiController.showHookConfirm(title, message);
+		return this.#extensionUiController.showHookConfirm(title, message);
 	}
 
 	// Input handling
 	handleCtrlC(): void {
-		this.inputController.handleCtrlC();
+		this.#inputController.handleCtrlC();
 	}
 
 	handleCtrlD(): void {
-		this.inputController.handleCtrlD();
+		this.#inputController.handleCtrlD();
 	}
 
 	handleCtrlZ(): void {
-		this.inputController.handleCtrlZ();
+		this.#inputController.handleCtrlZ();
 	}
 
 	handleDequeue(): void {
-		this.inputController.handleDequeue();
+		this.#inputController.handleDequeue();
 	}
 
 	handleBackgroundCommand(): void {
-		this.inputController.handleBackgroundCommand();
+		this.#inputController.handleBackgroundCommand();
 	}
 
 	handleImagePaste(): Promise<boolean> {
-		return this.inputController.handleImagePaste();
+		return this.#inputController.handleImagePaste();
 	}
 
 	cycleThinkingLevel(): void {
-		this.inputController.cycleThinkingLevel();
+		this.#inputController.cycleThinkingLevel();
 	}
 
 	cycleRoleModel(options?: { temporary?: boolean }): Promise<void> {
-		return this.inputController.cycleRoleModel(options);
+		return this.#inputController.cycleRoleModel(options);
 	}
 
 	toggleToolOutputExpansion(): void {
-		this.inputController.toggleToolOutputExpansion();
+		this.#inputController.toggleToolOutputExpansion();
 	}
 
 	setToolsExpanded(expanded: boolean): void {
-		this.inputController.setToolsExpanded(expanded);
+		this.#inputController.setToolsExpanded(expanded);
 	}
 
 	toggleThinkingBlockVisibility(): void {
-		this.inputController.toggleThinkingBlockVisibility();
+		this.#inputController.toggleThinkingBlockVisibility();
 	}
 
 	toggleTodoExpansion(): void {
 		this.todoExpanded = !this.todoExpanded;
-		this.renderTodoList();
+		this.#renderTodoList();
 		this.ui.requestRender();
 	}
 
 	setTodos(todos: TodoItem[]): void {
 		this.todoItems = todos;
-		this.renderTodoList();
+		this.#renderTodoList();
 		this.ui.requestRender();
 	}
 
 	async reloadTodos(): Promise<void> {
-		await this.loadTodoList();
+		await this.#loadTodoList();
 		this.ui.requestRender();
 	}
 
 	openExternalEditor(): void {
-		this.inputController.openExternalEditor();
+		this.#inputController.openExternalEditor();
 	}
 
 	registerExtensionShortcuts(): void {
-		this.inputController.registerExtensionShortcuts();
+		this.#inputController.registerExtensionShortcuts();
 	}
 
 	// Hook UI methods
 	initHooksAndCustomTools(): Promise<void> {
-		return this.extensionUiController.initHooksAndCustomTools();
+		return this.#extensionUiController.initHooksAndCustomTools();
 	}
 
 	emitCustomToolSessionEvent(
 		reason: "start" | "switch" | "branch" | "tree" | "shutdown",
 		previousSessionFile?: string,
 	): Promise<void> {
-		return this.extensionUiController.emitCustomToolSessionEvent(reason, previousSessionFile);
+		return this.#extensionUiController.emitCustomToolSessionEvent(reason, previousSessionFile);
 	}
 
 	setHookWidget(key: string, content: unknown): void {
-		this.extensionUiController.setHookWidget(key, content);
+		this.#extensionUiController.setHookWidget(key, content);
 	}
 
 	setHookStatus(key: string, text: string | undefined): void {
-		this.extensionUiController.setHookStatus(key, text);
+		this.#extensionUiController.setHookStatus(key, text);
 	}
 
 	showHookSelector(
@@ -1081,31 +1074,31 @@ export class InteractiveMode implements InteractiveModeContext {
 		options: string[],
 		dialogOptions?: ExtensionUIDialogOptions,
 	): Promise<string | undefined> {
-		return this.extensionUiController.showHookSelector(title, options, dialogOptions);
+		return this.#extensionUiController.showHookSelector(title, options, dialogOptions);
 	}
 
 	hideHookSelector(): void {
-		this.extensionUiController.hideHookSelector();
+		this.#extensionUiController.hideHookSelector();
 	}
 
 	showHookInput(title: string, placeholder?: string): Promise<string | undefined> {
-		return this.extensionUiController.showHookInput(title, placeholder);
+		return this.#extensionUiController.showHookInput(title, placeholder);
 	}
 
 	hideHookInput(): void {
-		this.extensionUiController.hideHookInput();
+		this.#extensionUiController.hideHookInput();
 	}
 
 	showHookEditor(title: string, prefill?: string): Promise<string | undefined> {
-		return this.extensionUiController.showHookEditor(title, prefill);
+		return this.#extensionUiController.showHookEditor(title, prefill);
 	}
 
 	hideHookEditor(): void {
-		this.extensionUiController.hideHookEditor();
+		this.#extensionUiController.hideHookEditor();
 	}
 
 	showHookNotify(message: string, type?: "info" | "warning" | "error"): void {
-		this.extensionUiController.showHookNotify(message, type);
+		this.#extensionUiController.showHookNotify(message, type);
 	}
 
 	showHookCustom<T>(
@@ -1116,18 +1109,18 @@ export class InteractiveMode implements InteractiveModeContext {
 			done: (result: T) => void,
 		) => (Component & { dispose?(): void }) | Promise<Component & { dispose?(): void }>,
 	): Promise<T> {
-		return this.extensionUiController.showHookCustom(factory);
+		return this.#extensionUiController.showHookCustom(factory);
 	}
 
 	showExtensionError(extensionPath: string, error: string): void {
-		this.extensionUiController.showExtensionError(extensionPath, error);
+		this.#extensionUiController.showExtensionError(extensionPath, error);
 	}
 
 	showToolError(toolName: string, error: string): void {
-		this.extensionUiController.showToolError(toolName, error);
+		this.#extensionUiController.showToolError(toolName, error);
 	}
 
-	private subscribeToAgent(): void {
-		this.eventController.subscribeToAgent();
+	#subscribeToAgent(): void {
+		this.#eventController.subscribeToAgent();
 	}
 }

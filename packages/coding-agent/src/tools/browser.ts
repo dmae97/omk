@@ -428,44 +428,44 @@ function formatEvaluateResult(value: unknown): string {
  * Puppeteer tool for headless browser automation.
  */
 export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolDetails> {
-	public readonly name = "puppeteer";
-	public readonly label = "Puppeteer";
-	public readonly description: string;
-	public readonly parameters = browserSchema;
-	private browser: Browser | null = null;
-	private page: Page | null = null;
-	private currentHeadless: boolean | null = null;
-	private browserSession: CDPSession | null = null;
-	private userAgentOverride: UserAgentOverride | null = null;
-	private elementIdCounter = 0;
-	private readonly elementCache = new Map<number, ElementHandle>();
-	private readonly patchedClients = new WeakSet<object>();
+	readonly name = "puppeteer";
+	readonly label = "Puppeteer";
+	readonly description: string;
+	readonly parameters = browserSchema;
+	#browser: Browser | null = null;
+	#page: Page | null = null;
+	#currentHeadless: boolean | null = null;
+	#browserSession: CDPSession | null = null;
+	#userAgentOverride: UserAgentOverride | null = null;
+	#elementIdCounter = 0;
+	readonly #elementCache = new Map<number, ElementHandle>();
+	readonly #patchedClients = new WeakSet<object>();
 
 	constructor(private readonly session: ToolSession) {
 		this.description = renderPromptTemplate(browserDescription, {});
 	}
 
-	private async closeBrowser(): Promise<void> {
-		await this.clearElementCache();
-		if (this.page && !this.page.isClosed()) {
-			await this.page.close();
+	async #closeBrowser(): Promise<void> {
+		await this.#clearElementCache();
+		if (this.#page && !this.#page.isClosed()) {
+			await this.#page.close();
 		}
-		this.page = null;
-		if (this.browser?.connected) {
-			await this.browser.close();
+		this.#page = null;
+		if (this.#browser?.connected) {
+			await this.#browser.close();
 		}
-		this.browser = null;
-		this.browserSession = null;
-		this.userAgentOverride = null;
+		this.#browser = null;
+		this.#browserSession = null;
+		this.#userAgentOverride = null;
 	}
 
-	private async resetBrowser(params?: BrowserParams): Promise<Page> {
-		await this.closeBrowser();
-		this.currentHeadless = this.session.settings.get("browser.headless");
+	async #resetBrowser(params?: BrowserParams): Promise<Page> {
+		await this.#closeBrowser();
+		this.#currentHeadless = this.session.settings.get("browser.headless");
 		const initialViewport = params?.viewport ?? DEFAULT_VIEWPORT;
-		this.browser = await puppeteer.launch({
-			headless: this.currentHeadless,
-			defaultViewport: this.currentHeadless ? initialViewport : null,
+		this.#browser = await puppeteer.launch({
+			headless: this.#currentHeadless,
+			defaultViewport: this.#currentHeadless ? initialViewport : null,
 			args: [
 				"--no-sandbox",
 				"--disable-setuid-sandbox",
@@ -474,46 +474,46 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 			],
 			ignoreDefaultArgs: [...STEALTH_IGNORE_DEFAULT_ARGS],
 		});
-		this.page = await this.browser.newPage();
-		await this.applyStealthPatches(this.page);
-		if (this.currentHeadless || params?.viewport) {
-			await this.applyViewport(this.page, params?.viewport);
+		this.#page = await this.#browser.newPage();
+		await this.#applyStealthPatches(this.#page);
+		if (this.#currentHeadless || params?.viewport) {
+			await this.#applyViewport(this.#page, params?.viewport);
 		}
-		return this.page;
+		return this.#page;
 	}
 
-	private async ensurePage(params?: BrowserParams): Promise<Page> {
+	async #ensurePage(params?: BrowserParams): Promise<Page> {
 		const desiredHeadless = this.session.settings.get("browser.headless");
-		if (this.currentHeadless !== null && this.currentHeadless !== desiredHeadless) {
-			return this.resetBrowser(params);
+		if (this.#currentHeadless !== null && this.#currentHeadless !== desiredHeadless) {
+			return this.#resetBrowser(params);
 		}
-		if (this.page && !this.page.isClosed()) {
-			return this.page;
+		if (this.#page && !this.#page.isClosed()) {
+			return this.#page;
 		}
-		if (!this.browser || !this.browser.isConnected()) {
-			return this.resetBrowser(params);
+		if (!this.#browser || !this.#browser.isConnected()) {
+			return this.#resetBrowser(params);
 		}
-		this.page = await this.browser.newPage();
-		await this.applyStealthPatches(this.page);
-		if (this.currentHeadless || params?.viewport) {
-			await this.applyViewport(this.page, params?.viewport);
+		this.#page = await this.#browser.newPage();
+		await this.#applyStealthPatches(this.#page);
+		if (this.#currentHeadless || params?.viewport) {
+			await this.#applyViewport(this.#page, params?.viewport);
 		}
-		return this.page;
+		return this.#page;
 	}
 
-	private async applyViewport(page: Page, viewport?: BrowserParams["viewport"]): Promise<void> {
+	async #applyViewport(page: Page, viewport?: BrowserParams["viewport"]): Promise<void> {
 		const target = viewport ?? DEFAULT_VIEWPORT;
 		await page.setViewport(target);
 	}
 
-	private async clearElementCache(): Promise<void> {
-		if (this.elementCache.size === 0) {
-			this.elementIdCounter = 0;
+	async #clearElementCache(): Promise<void> {
+		if (this.#elementCache.size === 0) {
+			this.#elementIdCounter = 0;
 			return;
 		}
-		const handles = Array.from(this.elementCache.values());
-		this.elementCache.clear();
-		this.elementIdCounter = 0;
+		const handles = Array.from(this.#elementCache.values());
+		this.#elementCache.clear();
+		this.#elementIdCounter = 0;
 		await Promise.all(
 			handles.map(async handle => {
 				try {
@@ -525,25 +525,25 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 		);
 	}
 
-	private async resolveCachedHandle(id: number): Promise<ElementHandle> {
-		const handle = this.elementCache.get(id);
+	async #resolveCachedHandle(id: number): Promise<ElementHandle> {
+		const handle = this.#elementCache.get(id);
 		if (!handle) {
 			throw new ToolError(`Unknown element_id ${id}. Run observe to refresh the element list.`);
 		}
 		try {
 			const isConnected = (await handle.evaluate(el => el.isConnected)) as boolean;
 			if (!isConnected) {
-				await this.clearElementCache();
+				await this.#clearElementCache();
 				throw new ToolError(`Element_id ${id} is stale. Run observe again.`);
 			}
 		} catch {
-			await this.clearElementCache();
+			await this.#clearElementCache();
 			throw new ToolError(`Element_id ${id} is stale. Run observe again.`);
 		}
 		return handle;
 	}
 
-	private isInteractiveNode(node: SerializedAXNode): boolean {
+	#isInteractiveNode(node: SerializedAXNode): boolean {
 		if (INTERACTIVE_AX_ROLES.has(node.role)) return true;
 		return (
 			node.checked !== undefined ||
@@ -554,12 +554,12 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 		);
 	}
 
-	private async collectObservationEntries(
+	async #collectObservationEntries(
 		node: SerializedAXNode,
 		entries: ObservationEntry[],
 		options: { viewportOnly: boolean; includeAll: boolean },
 	): Promise<void> {
-		if (options.includeAll || this.isInteractiveNode(node)) {
+		if (options.includeAll || this.#isInteractiveNode(node)) {
 			const handle = await node.elementHandle();
 			if (handle) {
 				let inViewport = true;
@@ -571,7 +571,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					}
 				}
 				if (inViewport) {
-					const id = ++this.elementIdCounter;
+					const id = ++this.#elementIdCounter;
 					const states: string[] = [];
 					if (node.disabled) states.push("disabled");
 					if (node.checked !== undefined) states.push(`checked=${String(node.checked)}`);
@@ -584,7 +584,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					if (node.multiline) states.push("multiline");
 					if (node.modal) states.push("modal");
 					if (node.focused) states.push("focused");
-					this.elementCache.set(id, handle);
+					this.#elementCache.set(id, handle);
 					entries.push({
 						id,
 						role: node.role,
@@ -600,11 +600,11 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 			}
 		}
 		for (const child of node.children ?? []) {
-			await this.collectObservationEntries(child, entries, options);
+			await this.#collectObservationEntries(child, entries, options);
 		}
 	}
 
-	private formatObservation(observation: Observation): string {
+	#formatObservation(observation: Observation): string {
 		const viewport = `${observation.viewport.width}x${observation.viewport.height}`;
 		const scroll = `x=${observation.scroll.x} y=${observation.scroll.y} viewport=${observation.scroll.width}x${observation.scroll.height} doc=${observation.scroll.scrollWidth}x${observation.scroll.scrollHeight}`;
 		const lines = [
@@ -628,26 +628,26 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 	/**
 	 * Restart the browser to apply changes like headless mode.
 	 */
-	public async restartForModeChange(): Promise<void> {
-		await this.resetBrowser();
+	async restartForModeChange(): Promise<void> {
+		await this.#resetBrowser();
 	}
 
-	private async applyStealthPatches(page: Page): Promise<void> {
-		this.patchSourceUrl(page);
-		await this.applyUserAgentOverride(page);
-		await this.injectStealthScripts(page);
+	async #applyStealthPatches(page: Page): Promise<void> {
+		this.#patchSourceUrl(page);
+		await this.#applyUserAgentOverride(page);
+		await this.#injectStealthScripts(page);
 	}
 
-	private async applyUserAgentOverride(page: Page): Promise<void> {
+	async #applyUserAgentOverride(page: Page): Promise<void> {
 		const client = resolvePageClient(page);
 		if (!client) return;
-		const override = await this.resolveUserAgentOverride(page);
-		await this.sendUserAgentOverride(client, override);
-		await this.configureUserAgentTargets(override);
+		const override = await this.#resolveUserAgentOverride(page);
+		await this.#sendUserAgentOverride(client, override);
+		await this.#configureUserAgentTargets(override);
 	}
 
-	private async resolveUserAgentOverride(page: Page): Promise<UserAgentOverride> {
-		if (this.userAgentOverride) return this.userAgentOverride;
+	async #resolveUserAgentOverride(page: Page): Promise<UserAgentOverride> {
+		if (this.#userAgentOverride) return this.#userAgentOverride;
 		const rawUserAgent = await page.browser().userAgent();
 		let userAgent = rawUserAgent.replace("HeadlessChrome/", "Chrome/");
 		if (userAgent.includes("Linux") && !userAgent.includes("Android")) {
@@ -699,7 +699,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 		brands[order[1]] = { brand: "Chromium", version: String(majorVersion) };
 		brands[order[2]] = { brand: "Google Chrome", version: String(majorVersion) };
 
-		this.userAgentOverride = {
+		this.#userAgentOverride = {
 			userAgent,
 			platform,
 			acceptLanguage: STEALTH_ACCEPT_LANGUAGE,
@@ -713,42 +713,42 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 				mobile: isAndroid,
 			},
 		};
-		return this.userAgentOverride;
+		return this.#userAgentOverride;
 	}
 
-	private async configureUserAgentTargets(override: UserAgentOverride): Promise<void> {
-		if (!this.browser) return;
-		if (!this.browserSession) {
-			this.browserSession = await this.browser.target().createCDPSession();
-			await this.browserSession.send("Target.setAutoAttach", {
+	async #configureUserAgentTargets(override: UserAgentOverride): Promise<void> {
+		if (!this.#browser) return;
+		if (!this.#browserSession) {
+			this.#browserSession = await this.#browser.target().createCDPSession();
+			await this.#browserSession.send("Target.setAutoAttach", {
 				autoAttach: true,
 				waitForDebuggerOnStart: false,
 				flatten: true,
 			});
-			this.browserSession.on("Target.attachedToTarget", async (event: { sessionId: string }) => {
-				const connection = this.browserSession?.connection();
+			this.#browserSession.on("Target.attachedToTarget", async (event: { sessionId: string }) => {
+				const connection = this.#browserSession?.connection();
 				const session = connection?.session(event.sessionId);
-				if (!session || !this.userAgentOverride) return;
-				await this.sendUserAgentOverride(this.wrapSession(session), this.userAgentOverride);
+				if (!session || !this.#userAgentOverride) return;
+				await this.#sendUserAgentOverride(this.#wrapSession(session), this.#userAgentOverride);
 			});
 		}
 
-		const targets = this.browser.targets();
+		const targets = this.#browser.targets();
 		await Promise.all(
 			targets.map(async target => {
 				const session = await target.createCDPSession();
-				await this.sendUserAgentOverride(this.wrapSession(session), override);
+				await this.#sendUserAgentOverride(this.#wrapSession(session), override);
 			}),
 		);
 	}
 
-	private wrapSession(session: CDPSession): PuppeteerCdpClient {
+	#wrapSession(session: CDPSession): PuppeteerCdpClient {
 		return {
 			send: async (method, params) => session.send(method as never, params as never),
 		};
 	}
 
-	private async sendUserAgentOverride(client: PuppeteerCdpClient, override: UserAgentOverride): Promise<void> {
+	async #sendUserAgentOverride(client: PuppeteerCdpClient, override: UserAgentOverride): Promise<void> {
 		try {
 			await client.send("Network.enable");
 		} catch {}
@@ -768,12 +768,12 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 		}
 	}
 
-	private patchSourceUrl(page: Page): void {
+	#patchSourceUrl(page: Page): void {
 		const client = resolvePageClient(page);
 		if (!client) return;
 		const clientKey = client as object;
-		if (this.patchedClients.has(clientKey)) return;
-		this.patchedClients.add(clientKey);
+		if (this.#patchedClients.has(clientKey)) return;
+		this.#patchedClients.add(clientKey);
 		const originalSend = client.send.bind(client);
 		client.send = async (method: string, params?: Record<string, unknown>) => {
 			const next = async (payload?: Record<string, unknown>) => {
@@ -813,7 +813,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 	}
 
 	/** Injects stealth scripts that cover common puppeteer detection surfaces. */
-	private async injectStealthScripts(page: Page): Promise<void> {
+	async #injectStealthScripts(page: Page): Promise<void> {
 		const scripts = [
 			stealthTamperingScript,
 			stealthActivityScript,
@@ -880,7 +880,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 				document.head.removeChild(iframe);})();`);
 	}
 
-	public async execute(
+	async execute(
 		_toolCallId: string,
 		params: BrowserParams,
 		signal?: AbortSignal,
@@ -895,21 +895,21 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 
 			switch (params.action) {
 				case "open": {
-					const page = await untilAborted(signal, () => this.resetBrowser(params));
+					const page = await untilAborted(signal, () => this.#resetBrowser(params));
 					const viewport = page.viewport();
 					details.viewport = viewport ?? DEFAULT_VIEWPORT;
 					return toolResult(details).text("Opened headless browser session").done();
 				}
 				case "close": {
-					await untilAborted(signal, () => this.closeBrowser());
+					await untilAborted(signal, () => this.#closeBrowser());
 					return toolResult(details).text("Closed headless browser session").done();
 				}
 				case "goto": {
 					const url = ensureParam(params.url, "url", params.action);
 					details.url = url;
-					const page = await this.ensurePage(params);
+					const page = await this.#ensurePage(params);
 					const waitUntil = params.wait_until ?? "networkidle2";
-					await this.clearElementCache();
+					await this.#clearElementCache();
 					await untilAborted(signal, () => page.goto(url, { waitUntil, timeout: timeoutMs }));
 					const finalUrl = page.url();
 					const title = (await untilAborted(signal, () => page.title())) as string;
@@ -920,10 +920,10 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 						.done();
 				}
 				case "observe": {
-					const page = await this.ensurePage(params);
+					const page = await this.#ensurePage(params);
 					const timeoutSignal = AbortSignal.timeout(timeoutMs);
 					const observeSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
-					await this.clearElementCache();
+					await this.#clearElementCache();
 					const snapshot = (await untilAborted(observeSignal, () =>
 						page.accessibility.snapshot({ interestingOnly: !(params.include_all ?? false) }),
 					)) as SerializedAXNode | null;
@@ -931,7 +931,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 						throw new ToolError("Accessibility snapshot unavailable");
 					}
 					const entries: ObservationEntry[] = [];
-					await this.collectObservationEntries(snapshot, entries, {
+					await this.#collectObservationEntries(snapshot, entries, {
 						viewportOnly: params.viewport_only ?? false,
 						includeAll: params.include_all ?? false,
 					});
@@ -969,12 +969,12 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					details.viewport = viewport;
 					details.observation = observation;
 					details.result = `${entries.length} elements`;
-					return toolResult(details).text(this.formatObservation(observation)).done();
+					return toolResult(details).text(this.#formatObservation(observation)).done();
 				}
 				case "click": {
 					const selector = ensureParam(params.selector, "selector", params.action);
 					details.selector = selector;
-					const page = await this.ensurePage(params);
+					const page = await this.#ensurePage(params);
 					const resolvedSelector = normalizeSelector(selector);
 					if (resolvedSelector.startsWith("text/")) {
 						await clickQueryHandlerText(page, resolvedSelector, timeoutMs, signal);
@@ -987,11 +987,11 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 				case "click_id": {
 					const elementId = ensureParam(params.element_id, "element_id", params.action);
 					details.elementId = elementId;
-					const handle = await this.resolveCachedHandle(elementId);
+					const handle = await this.#resolveCachedHandle(elementId);
 					try {
 						await untilAborted(signal, () => handle.click());
 					} catch {
-						await this.clearElementCache();
+						await this.#clearElementCache();
 						throw new ToolError(`Element_id ${elementId} is stale. Run observe again.`);
 					}
 					return toolResult(details).text(`Clicked element ${elementId}`).done();
@@ -1000,7 +1000,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					const selector = ensureParam(params.selector, "selector", params.action);
 					const text = ensureParam(params.text, "text", params.action);
 					details.selector = selector;
-					const page = await this.ensurePage(params);
+					const page = await this.#ensurePage(params);
 					const resolvedSelector = normalizeSelector(selector);
 					const locator = page.locator(resolvedSelector).setTimeout(timeoutMs);
 					const handle = (await untilAborted(signal, () => locator.waitHandle())) as ElementHandle;
@@ -1012,13 +1012,13 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					const elementId = ensureParam(params.element_id, "element_id", params.action);
 					const text = ensureParam(params.text, "text", params.action);
 					details.elementId = elementId;
-					const page = await this.ensurePage(params);
-					const handle = await this.resolveCachedHandle(elementId);
+					const page = await this.#ensurePage(params);
+					const handle = await this.#resolveCachedHandle(elementId);
 					try {
 						await untilAborted(signal, () => handle.focus());
 						await untilAborted(signal, () => page.keyboard.type(text, { delay: 0 }));
 					} catch {
-						await this.clearElementCache();
+						await this.#clearElementCache();
 						throw new ToolError(`Element_id ${elementId} is stale. Run observe again.`);
 					}
 					return toolResult(details).text(`Typed into element ${elementId}`).done();
@@ -1027,7 +1027,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					const selector = ensureParam(params.selector, "selector", params.action);
 					const value = ensureParam(params.value, "value", params.action);
 					details.selector = selector;
-					const page = await this.ensurePage(params);
+					const page = await this.#ensurePage(params);
 					const resolvedSelector = normalizeSelector(selector);
 					const locator = page.locator(resolvedSelector).setTimeout(timeoutMs);
 					await untilAborted(signal, () => locator.fill(value));
@@ -1037,7 +1037,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					const elementId = ensureParam(params.element_id, "element_id", params.action);
 					const value = ensureParam(params.value, "value", params.action);
 					details.elementId = elementId;
-					const handle = await this.resolveCachedHandle(elementId);
+					const handle = await this.#resolveCachedHandle(elementId);
 					try {
 						await untilAborted(signal, () =>
 							handle.evaluate((el, inputValue) => {
@@ -1051,14 +1051,14 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 							}, value),
 						);
 					} catch {
-						await this.clearElementCache();
+						await this.#clearElementCache();
 						throw new ToolError(`Element_id ${elementId} is stale. Run observe again.`);
 					}
 					return toolResult(details).text(`Filled element ${elementId}`).done();
 				}
 				case "press": {
 					const key = ensureParam(params.key, "key", params.action) as KeyInput;
-					const page = await this.ensurePage(params);
+					const page = await this.#ensurePage(params);
 					if (params.selector) {
 						const resolvedSelector = normalizeSelector(params.selector as string);
 						await untilAborted(signal, () => page.focus(resolvedSelector));
@@ -1069,14 +1069,14 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 				case "scroll": {
 					const deltaY = ensureParam(params.delta_y, "delta_y", params.action);
 					const deltaX = params.delta_x ?? 0;
-					const page = await this.ensurePage(params);
+					const page = await this.#ensurePage(params);
 					await untilAborted(signal, () => page.mouse.wheel({ deltaX, deltaY }));
 					return toolResult(details).text(`Scrolled by ${deltaX}, ${deltaY}`).done();
 				}
 				case "drag": {
 					const fromSelector = ensureParam(params.from_selector, "from_selector", params.action);
 					const toSelector = ensureParam(params.to_selector, "to_selector", params.action);
-					const page = await this.ensurePage(params);
+					const page = await this.#ensurePage(params);
 					const resolvedFromSelector = normalizeSelector(fromSelector);
 					const resolvedToSelector = normalizeSelector(toSelector);
 					const fromHandle = (await untilAborted(signal, () =>
@@ -1116,7 +1116,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 				case "wait_for_selector": {
 					const selector = ensureParam(params.selector, "selector", params.action);
 					details.selector = selector;
-					const page = await this.ensurePage(params);
+					const page = await this.#ensurePage(params);
 					const resolvedSelector = normalizeSelector(selector);
 					const locator = page.locator(resolvedSelector).setTimeout(timeoutMs);
 					await untilAborted(signal, () => locator.wait());
@@ -1124,7 +1124,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 				}
 				case "evaluate": {
 					const script = ensureParam(params.script, "script", params.action);
-					const page = await this.ensurePage(params);
+					const page = await this.#ensurePage(params);
 					const value = (await untilAborted(signal, () =>
 						page.evaluate((source: string) => {
 							const evaluator = new Function(`return (${source});`);
@@ -1136,7 +1136,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					return toolResult(details).text(output).done();
 				}
 				case "get_text": {
-					const page = await this.ensurePage(params);
+					const page = await this.#ensurePage(params);
 					if (params.args?.length) {
 						const values = (await Promise.all(
 							params.args.map((arg, index) => {
@@ -1162,7 +1162,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					return toolResult(details).text(value).done();
 				}
 				case "get_html": {
-					const page = await this.ensurePage(params);
+					const page = await this.#ensurePage(params);
 					if (params.args?.length) {
 						const values = (await Promise.all(
 							params.args.map((arg, index) => {
@@ -1188,7 +1188,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					return toolResult(details).text(value).done();
 				}
 				case "get_attribute": {
-					const page = await this.ensurePage(params);
+					const page = await this.#ensurePage(params);
 					if (params.args?.length) {
 						const values = (await Promise.all(
 							params.args.map((arg, index) => {
@@ -1226,7 +1226,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					return toolResult(details).text(output).done();
 				}
 				case "extract_readable": {
-					const page = await this.ensurePage(params);
+					const page = await this.#ensurePage(params);
 					const format = params.format ?? "markdown";
 					const html = (await untilAborted(signal, () => page.content())) as string;
 					const url = page.url();
@@ -1263,7 +1263,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 						.done();
 				}
 				case "screenshot": {
-					const page = await this.ensurePage(params);
+					const page = await this.#ensurePage(params);
 					const fullPage = params.selector ? false : (params.full_page ?? false);
 					let buffer: Buffer;
 

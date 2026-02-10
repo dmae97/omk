@@ -125,30 +125,30 @@ interface SshToolParams {
 }
 
 export class SshTool implements AgentTool<typeof sshSchema, SSHToolDetails> {
-	public readonly name = "ssh";
-	public readonly label = "SSH";
-	public readonly parameters = sshSchema;
-	public readonly concurrency = "exclusive";
+	readonly name = "ssh";
+	readonly label = "SSH";
+	readonly parameters = sshSchema;
+	readonly concurrency = "exclusive";
 
-	private readonly allowedHosts: Set<string>;
+	readonly #allowedHosts: Set<string>;
 
 	constructor(
 		private readonly session: ToolSession,
 		private readonly hostNames: string[],
 		private readonly hostsByName: Map<string, SSHHost>,
-		public readonly description: string,
+		readonly description: string,
 	) {
-		this.allowedHosts = new Set(this.hostNames);
+		this.#allowedHosts = new Set(this.hostNames);
 	}
 
-	public async execute(
+	async execute(
 		_toolCallId: string,
 		{ host, command, cwd, timeout: rawTimeout = 60 }: SshToolParams,
 		signal?: AbortSignal,
 		onUpdate?: AgentToolUpdateCallback<SSHToolDetails>,
 		_ctx?: AgentToolContext,
 	): Promise<AgentToolResult<SSHToolDetails>> {
-		if (!this.allowedHosts.has(host)) {
+		if (!this.#allowedHosts.has(host)) {
 			throw new ToolError(`Unknown SSH host: ${host}. Available hosts: ${this.hostNames.join(", ")}`);
 		}
 
