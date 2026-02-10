@@ -26,7 +26,7 @@ export interface BenchmarkConfig {
 	requireEditToolCall?: boolean;
 	noEditRequired?: boolean;
 	autoFormat?: boolean;
-	editVariant?: "replace" | "patch" | "auto";
+	editVariant?: "replace" | "patch" | "hashline" | "auto";
 	editFuzzy?: boolean | "auto";
 	editFuzzyThreshold?: number | "auto";
 }

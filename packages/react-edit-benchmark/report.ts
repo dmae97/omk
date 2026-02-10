@@ -127,7 +127,7 @@ export function generateReport(result: BenchmarkResult): string {
 	lines.push(`| Verified Rate | ${formatRate(verifiedRuns, summary.totalRuns)} |`);
 	lines.push(`| Edit Tool Usage Rate | ${formatRate(editToolRuns, summary.totalRuns)} |`);
 	lines.push(`| **Edit Success Rate** | **${formatPercent(summary.editSuccessRate)}** |`);
-	if (config.editVariant === "patch") {
+	if (config.editVariant === "patch" || config.editVariant === "hashline") {
 		lines.push(`| Patch Failure Rate | ${formatRate(totalEditFailures, totalEditAttempts)} |`);
 	}
 	lines.push(`| Tasks All Passing | ${summary.tasksWithAllPassing} |`);

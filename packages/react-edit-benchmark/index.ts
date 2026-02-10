@@ -42,14 +42,15 @@ Usage:
   bun run bench:edit [options]
 
 Options:
-  --model <id>              Model ID (default: claude-sonnet-4-20250514)
+  --model <id>              Provider/model ID, e.g. anthropic/claude-sonnet-4-20250514 (default)
+  --provider <id>           Override provider (auto-detected from model prefix if omitted)
   --thinking <level>        Thinking level: off, minimal, low, medium, high, xhigh
   --runs <n>                Runs per task (default: 3)
   --timeout <ms>            Timeout per run in ms (default: 120000)
   --task-concurrency <n>    Max tasks to run in parallel (default: 16)
   --tasks <ids>             Comma-separated task IDs to run (default: all)
   --fixtures <path>         Fixtures directory or .tar.gz archive (default: built-in)
-  --edit-variant <v>        Edit variant: replace, patch, auto (default: auto)
+  --edit-variant <v>        Edit variant: replace, patch, hashline, auto (default: auto)
   --edit-fuzzy <bool>       Fuzzy matching: true, false, auto (default: auto)
   --edit-fuzzy-threshold <n> Fuzzy threshold 0-1 or auto (default: auto)
   --auto-format             Auto-format output files after verify (debug only)
@@ -133,8 +134,8 @@ async function resolveFixtures(fixturesArg?: string): Promise<{ tasks: EditTask[
 async function main(): Promise<void> {
 	const { values } = parseArgs({
 		options: {
-			provider: { type: "string", default: "anthropic" },
-			model: { type: "string", default: "claude-sonnet-4-20250514" },
+			provider: { type: "string" },
+			model: { type: "string", default: "anthropic/claude-sonnet-4-20250514" },
 			thinking: { type: "string" },
 			runs: { type: "string", default: "3" },
 			timeout: { type: "string", default: "120000" },
@@ -155,6 +156,19 @@ async function main(): Promise<void> {
 		},
 		allowPositionals: true,
 	});
+
+	// Auto-detect provider from model string: "provider/model" -> provider="provider", model="model"
+	let provider = values.provider;
+	let model = values.model!;
+	if (!provider) {
+		const slashIndex = model.indexOf("/");
+		if (slashIndex !== -1) {
+			provider = model.slice(0, slashIndex);
+			model = model.slice(slashIndex + 1);
+		} else {
+			provider = "anthropic";
+		}
+	}
 
 	if (values.help) {
 		printUsage();
@@ -230,9 +244,9 @@ async function main(): Promise<void> {
 		}
 	}
 
-	const editVariant = values["edit-variant"] as "replace" | "patch" | "auto" | undefined;
-	if (editVariant && !["replace", "patch", "auto"].includes(editVariant)) {
-		console.error(`Invalid edit-variant: ${editVariant}. Must be replace, patch, or auto.`);
+	const editVariant = values["edit-variant"] as "replace" | "patch" | "hashline" | "auto" | undefined;
+	if (editVariant && !["replace", "patch", "hashline", "auto"].includes(editVariant)) {
+		console.error(`Invalid edit-variant: ${editVariant}. Must be replace, patch, hashline, or auto.`);
 		process.exit(1);
 	}
 
@@ -265,8 +279,8 @@ async function main(): Promise<void> {
 	}
 
 	const config: BenchmarkConfig = {
-		provider: values.provider!,
-		model: values.model!,
+		provider,
+		model,
 		thinkingLevel,
 		runsPerTask,
 		timeout,

@@ -247,6 +247,15 @@ export const SETTINGS_SCHEMA = {
 			description: "Prepend line numbers to read tool output by default",
 		},
 	},
+	readHashLines: {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "config",
+			label: "Read hash lines",
+			description: "Include line hashes in read output for hashline edit mode (LINE:HASH| content)",
+		},
+	},
 	showHardwareCursor: {
 		type: "boolean",
 		default: true, // will be computed based on platform if undefined
@@ -720,10 +729,15 @@ export const SETTINGS_SCHEMA = {
 			submenu: true,
 		},
 	},
-	"edit.patchMode": {
-		type: "boolean",
-		default: true,
-		ui: { tab: "config", label: "Edit patch mode", description: "Use codex-style apply-patch format for edits" },
+	"edit.mode": {
+		type: "enum",
+		values: ["replace", "patch", "hashline"] as const,
+		default: "patch",
+		ui: {
+			tab: "config",
+			label: "Edit mode",
+			description: "Select the edit tool variant (replace, patch, or hashline)",
+		},
 	},
 	"edit.streamingAbort": {
 		type: "boolean",

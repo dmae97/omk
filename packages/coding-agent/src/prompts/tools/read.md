@@ -6,6 +6,7 @@ Reads files from local filesystem or internal URLs.
 - Reads up to {{DEFAULT_MAX_LINES}} lines default
 - Use `offset` and `limit` for large files
 - Use `lines: true` include line numbers
+- Use `hashes: true` to include line hashes for hash-line edit mode (format: `LINE:HASH| content`)
 - Supports images (PNG, JPG) and PDFs
 - For directories, returns formatted listing with modification times
 - Parallelize reads when exploring related files

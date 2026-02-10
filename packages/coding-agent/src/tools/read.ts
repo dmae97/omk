@@ -12,6 +12,7 @@ import { CONFIG_DIR_NAME } from "../config";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { getLanguageFromPath, type Theme } from "../modes/theme/theme";
+import { computeLineHash } from "../patch/hashline";
 import readDescription from "../prompts/tools/read.md" with { type: "text" };
 import type { ToolSession } from "../sdk";
 import { renderCodeCell, renderStatusLine } from "../tui";
@@ -515,6 +516,7 @@ const readSchema = Type.Object({
 	offset: Type.Optional(Type.Number({ description: "Line number to start reading from (1-indexed)" })),
 	limit: Type.Optional(Type.Number({ description: "Maximum number of lines to read" })),
 	lines: Type.Optional(Type.Boolean({ description: "Prepend line numbers to output (default: false)" })),
+	hashes: Type.Optional(Type.Boolean({ description: "Include line hashes (format: LINE:HASH| content)" })),
 });
 
 export type ReadToolInput = Static<typeof readSchema>;
@@ -526,7 +528,7 @@ export interface ReadToolDetails {
 	meta?: OutputMeta;
 }
 
-type ReadParams = { path: string; offset?: number; limit?: number; lines?: boolean };
+type ReadParams = { path: string; offset?: number; limit?: number; lines?: boolean; hashes?: boolean };
 
 /**
  * Read tool implementation.
@@ -543,10 +545,15 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 
 	readonly #autoResizeImages: boolean;
 	readonly #defaultLineNumbers: boolean;
+	readonly #defaultHashLines: boolean;
 
 	constructor(private readonly session: ToolSession) {
 		this.#autoResizeImages = session.settings.get("images.autoResize");
 		this.#defaultLineNumbers = session.settings.get("readLineNumbers");
+		this.#defaultHashLines =
+			session.settings.get("readHashLines") ||
+			session.settings.get("edit.mode") === "hashline" ||
+			Bun.env.PI_EDIT_VARIANT === "hashline";
 		this.description = renderPromptTemplate(readDescription, {
 			DEFAULT_MAX_LINES: String(DEFAULT_MAX_LINES),
 		});
@@ -559,12 +566,12 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		_onUpdate?: AgentToolUpdateCallback<ReadToolDetails>,
 		toolContext?: AgentToolContext,
 	): Promise<AgentToolResult<ReadToolDetails>> {
-		const { path: readPath, offset, limit, lines } = params;
+		const { path: readPath, offset, limit, lines, hashes } = params;
 
 		// Handle internal URLs (agent://, skill://)
 		const internalRouter = this.session.internalRouter;
 		if (internalRouter?.canHandle(readPath)) {
-			return this.#handleInternalUrl(readPath, offset, limit, lines);
+			return this.#handleInternalUrl(readPath, offset, limit, lines, hashes);
 		}
 
 		const absolutePath = resolveReadPath(readPath, this.session.cwd);
@@ -753,8 +760,8 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				maxBytes: DEFAULT_MAX_BYTES,
 			};
 
-			// Add line numbers if requested (uses setting default if not specified)
-			const shouldAddLineNumbers = lines ?? this.#defaultLineNumbers;
+			const shouldAddHashLines = hashes ?? this.#defaultHashLines;
+			const shouldAddLineNumbers = shouldAddHashLines ? false : (lines ?? this.#defaultLineNumbers);
 			const prependLineNumbers = (text: string, startNum: number): string => {
 				const textLines = text.split("\n");
 				const lastLineNum = startNum + textLines.length - 1;
@@ -766,6 +773,17 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 					})
 					.join("\n");
 			};
+			const prependHashLines = (text: string, startNum: number): string => {
+				const textLines = text.split("\n");
+				return textLines
+					.map((line, i) => `${startNum + i}:${computeLineHash(startNum + i, line)}| ${line}`)
+					.join("\n");
+			};
+			const formatText = (text: string, startNum: number): string => {
+				if (shouldAddHashLines) return prependHashLines(text, startNum);
+				if (shouldAddLineNumbers) return prependLineNumbers(text, startNum);
+				return text;
+			};
 
 			let outputText: string;
 
@@ -773,7 +791,13 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				const firstLineBytes = firstLineByteLength ?? 0;
 				const snippet = firstLinePreview ?? { text: "", bytes: 0 };
 
-				outputText = shouldAddLineNumbers ? prependLineNumbers(snippet.text, startLineDisplay) : snippet.text;
+				if (shouldAddHashLines) {
+					outputText = `[Line ${startLineDisplay} is ${formatSize(
+						firstLineBytes,
+					)}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Hashline output requires full lines; cannot compute hashes for a truncated preview.]`;
+				} else {
+					outputText = formatText(snippet.text, startLineDisplay);
+				}
 				if (snippet.text.length === 0) {
 					outputText = `[Line ${startLineDisplay} is ${formatSize(
 						firstLineBytes,
@@ -786,9 +810,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 					options: { direction: "head", startLine: startLineDisplay, totalFileLines },
 				};
 			} else if (truncation.truncated) {
-				outputText = shouldAddLineNumbers
-					? prependLineNumbers(truncation.content, startLineDisplay)
-					: truncation.content;
+				outputText = formatText(truncation.content, startLineDisplay);
 				details = { truncation };
 				sourcePath = absolutePath;
 				truncationInfo = {
@@ -799,17 +821,13 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				const remaining = totalFileLines - (startLine + userLimitedLines);
 				const nextOffset = startLine + userLimitedLines + 1;
 
-				outputText = shouldAddLineNumbers
-					? prependLineNumbers(truncation.content, startLineDisplay)
-					: truncation.content;
+				outputText = formatText(truncation.content, startLineDisplay);
 				outputText += `\n\n[${remaining} more lines in file. Use offset=${nextOffset} to continue]`;
 				details = {};
 				sourcePath = absolutePath;
 			} else {
 				// No truncation, no user limit exceeded
-				outputText = shouldAddLineNumbers
-					? prependLineNumbers(truncation.content, startLineDisplay)
-					: truncation.content;
+				outputText = formatText(truncation.content, startLineDisplay);
 				details = {};
 				sourcePath = absolutePath;
 			}
@@ -836,6 +854,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		offset?: number,
 		limit?: number,
 		lines?: boolean,
+		hashes?: boolean,
 	): Promise<AgentToolResult<ReadToolDetails>> {
 		const internalRouter = this.session.internalRouter!;
 
@@ -903,8 +922,8 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		// Apply truncation
 		const truncation = truncateHead(selectedContent);
 
-		// Add line numbers if requested
-		const shouldAddLineNumbers = lines ?? this.#defaultLineNumbers;
+		const shouldAddHashLines = hashes ?? this.#defaultHashLines;
+		const shouldAddLineNumbers = shouldAddHashLines ? false : (lines ?? this.#defaultLineNumbers);
 		const prependLineNumbers = (text: string, startNum: number): string => {
 			const textLines = text.split("\n");
 			const lastLineNum = startNum + textLines.length - 1;
@@ -915,6 +934,17 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 					return `${lineNum}\t${line}`;
 				})
 				.join("\n");
+		};
+		const prependHashLines = (text: string, startNum: number): string => {
+			const textLines = text.split("\n");
+			return textLines
+				.map((line, i) => `${startNum + i}:${computeLineHash(startNum + i, line)}| ${line}`)
+				.join("\n");
+		};
+		const formatText = (text: string, startNum: number): string => {
+			if (shouldAddHashLines) return prependHashLines(text, startNum);
+			if (shouldAddLineNumbers) return prependLineNumbers(text, startNum);
+			return text;
 		};
 
 		let outputText: string;
@@ -928,7 +958,13 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			const firstLineBytes = Buffer.byteLength(firstLine, "utf-8");
 			const snippet = truncateStringToBytesFromStart(firstLine, DEFAULT_MAX_BYTES);
 
-			outputText = shouldAddLineNumbers ? prependLineNumbers(snippet.text, startLineDisplay) : snippet.text;
+			if (shouldAddHashLines) {
+				outputText = `[Line ${startLineDisplay} is ${formatSize(
+					firstLineBytes,
+				)}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Hashline output requires full lines; cannot compute hashes for a truncated preview.]`;
+			} else {
+				outputText = formatText(snippet.text, startLineDisplay);
+			}
 			if (snippet.text.length === 0) {
 				outputText = `[Line ${startLineDisplay} is ${formatSize(
 					firstLineBytes,
@@ -940,9 +976,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 				options: { direction: "head", startLine: startLineDisplay, totalFileLines: totalLines },
 			};
 		} else if (truncation.truncated) {
-			outputText = shouldAddLineNumbers
-				? prependLineNumbers(truncation.content, startLineDisplay)
-				: truncation.content;
+			outputText = formatText(truncation.content, startLineDisplay);
 			details = { truncation };
 			truncationInfo = {
 				result: truncation,
@@ -952,15 +986,11 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			const remaining = allLines.length - (startLine + userLimitedLines);
 			const nextOffset = startLine + userLimitedLines + 1;
 
-			outputText = shouldAddLineNumbers
-				? prependLineNumbers(truncation.content, startLineDisplay)
-				: truncation.content;
+			outputText = formatText(truncation.content, startLineDisplay);
 			outputText += `\n\n[${remaining} more lines in resource. Use offset=${nextOffset} to continue]`;
 			details = {};
 		} else {
-			outputText = shouldAddLineNumbers
-				? prependLineNumbers(truncation.content, startLineDisplay)
-				: truncation.content;
+			outputText = formatText(truncation.content, startLineDisplay);
 			details = {};
 		}
 

@@ -192,6 +192,28 @@ export interface DiffError {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Hashline Types
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** A single edit operation in hashline mode */
+export interface HashlineEdit {
+	/** Line references to replace (e.g., ["5:abcd", "6:ef01"]) — empty for insert */
+	src: string[];
+	/** Replacement content lines — empty for delete */
+	dst: string[];
+	/** Insert after this line ref (e.g., "3:e7c4") — only when src is empty */
+	after?: string;
+}
+
+/** Input for a hashline edit operation */
+export interface HashlineInput {
+	/** File path (relative or absolute) */
+	path: string;
+	/** Array of edit operations */
+	edits: HashlineEdit[];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Error Classes
 // ═══════════════════════════════════════════════════════════════════════════
 

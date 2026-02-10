@@ -1,0 +1,202 @@
+/**
+ * Hashline edit mode — a line-addressable edit format using content hashes.
+ *
+ * Each line in a file is identified by its 1-indexed line number and a 4-character
+ * hex hash derived from the line content and the line number (xxHash64 with the
+ * line number as seed, truncated to 4 hex chars).
+ * The combined `LINE:HASH` reference acts as both an address and a staleness check:
+ * if the file has changed since the caller last read it, hash mismatches are caught
+ * before any mutation occurs.
+ *
+ * Displayed format: `LINENUM:HASH| CONTENT`
+ * Reference format: `"LINENUM:HASH"` (e.g. `"5:a3f2"`)
+ */
+
+import type { HashlineEdit } from "./types";
+
+/**
+ * Compute the 4-character hex hash of a single line.
+ *
+ * Uses xxHash64 truncated to the first 4 hex characters.
+ * The line number is included as a seed so the same content on different lines
+ * produces different hashes.
+ * The line input should not include a trailing newline.
+ */
+export function computeLineHash(idx: number, line: string): string {
+	return Bun.hash.xxHash64(line, BigInt(idx)).toString(16).padStart(16, "0").slice(0, 4);
+}
+
+/**
+ * Format file content with hashline prefixes for display.
+ *
+ * Each line becomes `LINENUM:HASH| CONTENT` where LINENUM is 1-indexed.
+ *
+ * @param content - Raw file content string
+ * @param startLine - First line number (1-indexed, defaults to 1)
+ * @returns Formatted string with one hashline-prefixed line per input line
+ *
+ * @example
+ * ```
+ * formatHashLines("function hi() {\n  return;\n}")
+ * // "1:a3f2| function hi() {\n2:b1c0|   return;\n3:de45| }"
+ * ```
+ */
+export function formatHashLines(content: string, startLine = 1): string {
+	const lines = content.split("\n");
+	return lines
+		.map((line, i) => {
+			const num = startLine + i;
+			const hash = computeLineHash(num, line);
+			return `${num}:${hash}| ${line}`;
+		})
+		.join("\n");
+}
+
+/**
+ * Parse a line reference string like `"5:abcd"` into structured form.
+ *
+ * @throws Error if the format is invalid (not `NUMBER:HEXHASH`)
+ */
+export function parseLineRef(ref: string): { line: number; hash: string } {
+	const match = ref.match(/^(\d+):([0-9a-fA-F]{1,16})$/);
+	if (!match) {
+		throw new Error(`Invalid line reference "${ref}". Expected format "LINE:HASH" (e.g. "5:a3f2").`);
+	}
+	const line = Number.parseInt(match[1], 10);
+	if (line < 1) {
+		throw new Error(`Line number must be >= 1, got ${line} in "${ref}".`);
+	}
+	return { line, hash: match[2] };
+}
+
+/**
+ * Validate that a line reference points to an existing line with a matching hash.
+ *
+ * @param ref - Parsed line reference (1-indexed line number + expected hash)
+ * @param fileLines - Array of file lines (0-indexed)
+ * @throws Error if the line is out of range or the hash doesn't match
+ */
+export function validateLineRef(ref: { line: number; hash: string }, fileLines: string[]): void {
+	if (ref.line < 1 || ref.line > fileLines.length) {
+		throw new Error(`Line ${ref.line} does not exist (file has ${fileLines.length} lines)`);
+	}
+	const actualHash = computeLineHash(ref.line, fileLines[ref.line - 1]);
+	if (actualHash !== ref.hash.toLowerCase()) {
+		throw new Error(
+			`Line ${ref.line} has changed since last read (expected ${ref.hash}, got ${actualHash}). Re-read the file.`,
+		);
+	}
+}
+
+/**
+ * Apply an array of hashline edits to file content.
+ *
+ * Edits are sorted bottom-up (highest line number first) before application
+ * so that earlier edits don't invalidate line numbers for later ones.
+ *
+ * Supported operations:
+ * - **Replace**: `src` has entries, `dst` has entries — replace src lines with dst
+ * - **Delete**: `src` has entries, `dst` is empty — delete the src lines
+ * - **Insert**: `src` is empty, `dst` has entries, `after` is set — insert after ref line
+ *
+ * @returns The modified content and the 1-indexed first changed line number
+ */
+export function applyHashlineEdits(
+	content: string,
+	edits: HashlineEdit[],
+): { content: string; firstChangedLine: number | undefined } {
+	if (edits.length === 0) {
+		return { content, firstChangedLine: undefined };
+	}
+
+	const fileLines = content.split("\n");
+	let firstChangedLine: number | undefined;
+
+	// Classify and annotate edits with their effective line number for sorting
+	const annotated = edits.map((edit, idx) => {
+		const sortLine = getSortLine(edit, idx);
+		return { edit, sortLine };
+	});
+
+	// Sort descending by line number so bottom edits apply first
+	annotated.sort((a, b) => b.sortLine - a.sortLine);
+
+	for (const { edit } of annotated) {
+		const isInsert = edit.src.length === 0;
+
+		if (isInsert) {
+			// Insert after a referenced line
+			if (!edit.after) {
+				throw new Error("Insert edit (empty src) requires an 'after' line reference.");
+			}
+			const afterRef = parseLineRef(edit.after);
+			validateLineRef(afterRef, fileLines);
+
+			// Insert dst lines after the referenced line (0-indexed splice position)
+			const insertIdx = afterRef.line; // insert after this line = splice at this index
+			fileLines.splice(insertIdx, 0, ...edit.dst);
+
+			trackFirstChanged(afterRef.line + 1);
+		} else {
+			// Replace or Delete
+			const refs = edit.src.map(parseLineRef);
+
+			// Validate all refs
+			for (const ref of refs) {
+				validateLineRef(ref, fileLines);
+			}
+
+			// Validate consecutiveness
+			validateConsecutive(refs);
+
+			const startLine = refs[0].line;
+			const endLine = refs[refs.length - 1].line;
+			const count = endLine - startLine + 1;
+
+			// Splice: remove `count` lines starting at startLine-1, insert dst
+			fileLines.splice(startLine - 1, count, ...edit.dst);
+
+			trackFirstChanged(startLine);
+		}
+	}
+
+	return {
+		content: fileLines.join("\n"),
+		firstChangedLine,
+	};
+
+	function trackFirstChanged(line: number): void {
+		if (firstChangedLine === undefined || line < firstChangedLine) {
+			firstChangedLine = line;
+		}
+	}
+
+	/**
+	 * Determine the effective line number for sorting an edit (descending).
+	 * For replace/delete: use the first src line.
+	 * For insert: use the after line.
+	 */
+	function getSortLine(edit: HashlineEdit, idx: number): number {
+		if (edit.src.length > 0) {
+			return parseLineRef(edit.src[0]).line;
+		}
+		if (edit.after) {
+			return parseLineRef(edit.after).line;
+		}
+		// Shouldn't happen — invalid edit. Place it at the end for now; validation will catch it.
+		return idx;
+	}
+}
+
+/**
+ * Validate that parsed line refs are consecutive (e.g. 5,6,7 — not 5,7,8).
+ *
+ * @throws Error if lines are not consecutive
+ */
+function validateConsecutive(refs: { line: number; hash: string }[]): void {
+	for (let i = 1; i < refs.length; i++) {
+		if (refs[i].line !== refs[i - 1].line + 1) {
+			throw new Error(`Source lines must be consecutive. Got line ${refs[i - 1].line} followed by ${refs[i].line}.`);
+		}
+	}
+}

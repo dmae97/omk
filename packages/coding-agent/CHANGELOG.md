@@ -1,9 +1,21 @@
 # Changelog
 
 ## [Unreleased]
+### Breaking Changes
+
+- Replaced `edit.patchMode` boolean setting with `edit.mode` enum; existing `edit.patchMode: true` configurations should use `edit.mode: patch`
+- Changed `getEditModelVariants()` return type from `Record<string, "patch" | "replace">` to `Record<string, EditMode | null>`
 
 ### Added
 
+- Added hashline edit mode for line-addressed edits using content hashes (LINE:HASH format) with integrity verification
+- Added `readHashLines` setting to include line hashes in read output for hashline edit mode
+- Added `edit.mode` setting (enum: replace, patch, hashline) to select edit tool variant, replacing `edit.patchMode` boolean
+- Added `hashes` parameter to read tool to output line hashes in format `LINE:HASH| content`
+- Added automatic hash line output when using hashline edit mode or `readHashLines` setting is enabled
+- Added `computeLineHash`, `formatHashLines`, `parseLineRef`, `validateLineRef`, and `applyHashlineEdits` functions for hashline operations
+- Added `HashlineEdit` and `HashlineInput` types for structured hashline edit operations
+- Added `normalizeEditMode` function to validate and normalize edit mode strings
 - Added subcommand definitions for `/mcp` command with 10 subcommands (add, list, remove, test, reauth, unauth, enable, disable, reload, help) including usage hints for argument completion
 - Added inline hint support for slash commands with simple arguments (`/export [path]`, `/compact [focus instructions]`, `/handoff [focus instructions]`)
 - Added subcommand dropdown completion for `/browser` command (headless, visible modes)
@@ -15,6 +27,10 @@
 
 ### Changed
 
+- Changed `edit.patchMode` boolean setting to `edit.mode` enum (replace, patch, hashline) with default value patch
+- Changed edit tool to support three modes (replace, patch, hashline) instead of two, with dynamic mode selection based on model and settings
+- Changed read tool to prioritize hash lines over line numbers when both are requested
+- Changed `getEditVariantForModel` to return `EditMode | null` and removed hardcoded Kimi model detection
 - Renamed `settingsInstance` parameter to `settings` in `CreateAgentSessionOptions` for consistency
 - Updated all internal references from `settingsInstance` to `settings` throughout SDK and components
 

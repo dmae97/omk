@@ -14,6 +14,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ModelRole } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+import { type EditMode, normalizeEditMode } from "@oh-my-pi/pi-coding-agent/patch";
 import { isEnoent, logger, procmgr } from "@oh-my-pi/pi-utils";
 import { YAML } from "bun";
 import { type Settings as SettingsCapabilityItem, settingsCapability } from "../capability/settings";
@@ -329,18 +330,13 @@ export class Settings {
 	/**
 	 * Get edit model variants (typed accessor for complex nested config).
 	 */
-	getEditModelVariants(): Record<string, "patch" | "replace"> {
+	getEditModelVariants(): Record<string, EditMode | null> {
 		const variants = (this.#merged.edit as { modelVariants?: Record<string, string> })?.modelVariants ?? {};
-		const result: Record<string, "patch" | "replace"> = {};
+		const result: Record<string, EditMode | null> = {};
 		for (const pattern in variants) {
-			const value = variants[pattern];
-			switch (value) {
-				case "patch":
-					result[pattern] = "patch";
-					break;
-				case "replace":
-					result[pattern] = "replace";
-					break;
+			const value = normalizeEditMode(variants[pattern]);
+			if (value) {
+				result[pattern] = value;
 			}
 		}
 		return result;
@@ -348,24 +344,22 @@ export class Settings {
 
 	/**
 	 * Get the edit variant for a specific model.
-	 * Returns "patch", "replace", or null (use global default).
+	 * Returns "patch", "replace", "hashline", or null (use global default).
 	 */
-	getEditVariantForModel(model: string | undefined): "patch" | "replace" | null {
+	getEditVariantForModel(model: string | undefined): EditMode | null {
 		if (!model) return null;
 		const variants = (this.#merged.edit as { modelVariants?: Record<string, string> })?.modelVariants;
 		if (!variants) return null;
 		const modelLower = model.toLowerCase();
 		for (const pattern in variants) {
 			if (modelLower.includes(pattern)) {
-				switch (variants[pattern]) {
-					case "patch":
-						return "patch";
-					case "replace":
-						return "replace";
+				const value = normalizeEditMode(variants[pattern]);
+				if (value) {
+					return value;
 				}
 			}
 		}
-		return modelLower.includes("kimi") ? "replace" : null;
+		return null;
 	}
 
 	/**

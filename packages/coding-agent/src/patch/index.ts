@@ -1,11 +1,12 @@
 /**
  * Edit tool module.
  *
- * Supports two modes:
+ * Supports three modes:
  * - Replace mode (default): oldText/newText replacement with fuzzy matching
  * - Patch mode: structured diff format with explicit operation type
+ * - Hashline mode: line-addressed edits using content hashes for integrity
  *
- * The mode is determined by the `edit.patchMode` setting.
+ * The mode is determined by the `edit.mode` setting.
  */
 import * as fs from "node:fs/promises";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
@@ -19,6 +20,7 @@ import {
 	type WritethroughCallback,
 	writethroughNoop,
 } from "../lsp";
+import hashlineDescription from "../prompts/tools/hashline.md" with { type: "text" };
 import patchDescription from "../prompts/tools/patch.md" with { type: "text" };
 import replaceDescription from "../prompts/tools/replace.md" with { type: "text" };
 import type { ToolSession } from "../tools";
@@ -27,11 +29,12 @@ import { enforcePlanModeWrite, resolvePlanPath } from "../tools/plan-mode-guard"
 import { applyPatch } from "./applicator";
 import { generateDiffString, generateUnifiedDiffString, replaceText } from "./diff";
 import { findMatch } from "./fuzzy";
+import { applyHashlineEdits } from "./hashline";
 import { detectLineEnding, normalizeToLF, restoreLineEndings, stripBom } from "./normalize";
 import { buildNormativeUpdateInput } from "./normative";
 import { type EditToolDetails, getLspBatchRequest } from "./shared";
 // Internal imports
-import type { FileSystem, Operation, PatchInput } from "./types";
+import type { FileSystem, HashlineEdit, Operation, PatchInput } from "./types";
 import { EditMatchError } from "./types";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -45,10 +48,10 @@ export { computeEditDiff, computePatchDiff, generateDiffString, generateUnifiedD
 
 // Fuzzy matching
 export { DEFAULT_FUZZY_THRESHOLD, findContextLine, findMatch as findEditMatch, findMatch, seekSequence } from "./fuzzy";
-
+// Hashline
+export { applyHashlineEdits, computeLineHash, formatHashLines, parseLineRef, validateLineRef } from "./hashline";
 // Normalization
 export { adjustIndentation, detectLineEnding, normalizeToLF, restoreLineEndings, stripBom } from "./normalize";
-
 // Parsing
 export { normalizeCreateContent, normalizeDiff, parseHunks as parseDiffHunks } from "./parser";
 export type { EditRenderContext, EditToolDetails } from "./shared";
@@ -69,6 +72,8 @@ export type {
 	FileSystem,
 	FuzzyMatch as EditMatch,
 	FuzzyMatch,
+	HashlineEdit,
+	HashlineInput,
 	MatchOutcome as EditMatchOutcome,
 	MatchOutcome,
 	Operation,
@@ -103,6 +108,18 @@ const patchEditSchema = Type.Object({
 
 export type ReplaceParams = { path: string; old_text: string; new_text: string; all?: boolean };
 export type PatchParams = { path: string; op?: string; rename?: string; diff?: string };
+export type HashlineParams = { path: string; edits: HashlineEdit[] };
+
+const hashlineEditItemSchema = Type.Object({
+	src: Type.Array(Type.String({ description: 'Line references to replace (e.g. "5:abcd")' })),
+	dst: Type.Array(Type.String({ description: "Replacement content lines" })),
+	after: Type.Optional(Type.String({ description: "Insert after this line ref (only when src is empty)" })),
+});
+
+const hashlineEditSchema = Type.Object({
+	path: Type.String({ description: "File path (relative or absolute)" }),
+	edits: Type.Array(hashlineEditItemSchema, { description: "Array of edit operations" }),
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LSP FileSystem for patch mode
@@ -192,12 +209,29 @@ function mergeDiagnosticsWithWarnings(
 // Tool Class
 // ═══════════════════════════════════════════════════════════════════════════
 
-type TInput = typeof replaceEditSchema | typeof patchEditSchema;
+type TInput = typeof replaceEditSchema | typeof patchEditSchema | typeof hashlineEditSchema;
+
+export type EditMode = "replace" | "patch" | "hashline";
+
+export const DEFAULT_EDIT_MODE: EditMode = "patch";
+
+export function normalizeEditMode(mode?: string | null): EditMode | null {
+	switch (mode) {
+		case "replace":
+			return "replace";
+		case "patch":
+			return "patch";
+		case "hashline":
+			return "hashline";
+		default:
+			return null;
+	}
+}
 
 /**
  * Edit tool implementation.
  *
- * Creates replace-mode or patch-mode behavior based on session settings.
+ * Creates replace-mode, patch-mode, or hashline-mode behavior based on session settings.
  */
 export class EditTool implements AgentTool<TInput> {
 	readonly name = "edit";
@@ -208,7 +242,7 @@ export class EditTool implements AgentTool<TInput> {
 	readonly #allowFuzzy: boolean;
 	readonly #fuzzyThreshold: number;
 	readonly #writethrough: WritethroughCallback;
-	readonly #envEditVariant: string;
+	readonly #editMode?: EditMode | null;
 
 	constructor(private readonly session: ToolSession) {
 		const {
@@ -216,10 +250,13 @@ export class EditTool implements AgentTool<TInput> {
 			PI_EDIT_FUZZY_THRESHOLD: editFuzzyThreshold = "auto",
 			PI_EDIT_VARIANT: envEditVariant = "auto",
 		} = Bun.env;
-		this.#envEditVariant = envEditVariant;
 
-		if (envEditVariant !== "replace" && envEditVariant !== "patch" && envEditVariant !== "auto") {
-			throw new Error(`Invalid PI_EDIT_VARIANT: ${envEditVariant}`);
+		if (envEditVariant && envEditVariant !== "auto") {
+			const editMode = normalizeEditMode(envEditVariant);
+			if (!editMode) {
+				throw new Error(`Invalid PI_EDIT_VARIANT: ${envEditVariant}`);
+			}
+			this.#editMode = editMode;
 		}
 
 		switch (editFuzzy) {
@@ -258,44 +295,110 @@ export class EditTool implements AgentTool<TInput> {
 	}
 
 	/**
-	 * Determine patch mode dynamically based on current model.
+	 * Determine edit mode dynamically based on current model.
 	 * This is re-evaluated on each access so tool definitions stay current when model changes.
 	 */
-	get mode(): "replace" | "patch" {
-		if (this.#envEditVariant === "replace") return "replace";
-		if (this.#envEditVariant === "patch") return "patch";
-
-		// Auto mode: check model-specific settings
+	get mode(): EditMode {
+		if (this.#editMode) return this.#editMode;
 		const activeModel = this.session.getActiveModelString?.();
-		const modelVariant = this.session.settings.getEditVariantForModel(activeModel);
-		if (modelVariant === "replace") return "replace";
-		if (modelVariant === "patch") return "patch";
-
-		return this.session.settings.get("edit.patchMode") ? "patch" : "replace";
+		const editVariant =
+			this.session.settings.getEditVariantForModel(activeModel) ??
+			normalizeEditMode(this.session.settings.get("edit.mode"));
+		return editVariant ?? DEFAULT_EDIT_MODE;
 	}
 
 	/**
-	 * Dynamic description based on current patch mode (which depends on current model).
+	 * Dynamic description based on current edit mode (which depends on current model).
 	 */
 	get description(): string {
-		return this.mode === "patch" ? renderPromptTemplate(patchDescription) : renderPromptTemplate(replaceDescription);
+		switch (this.mode) {
+			case "patch":
+				return renderPromptTemplate(patchDescription);
+			case "hashline":
+				return renderPromptTemplate(hashlineDescription);
+			default:
+				return renderPromptTemplate(replaceDescription);
+		}
 	}
 
 	/**
-	 * Dynamic parameters schema based on current patch mode (which depends on current model).
+	 * Dynamic parameters schema based on current edit mode (which depends on current model).
 	 */
 	get parameters(): TInput {
-		return this.mode === "patch" ? patchEditSchema : replaceEditSchema;
+		switch (this.mode) {
+			case "patch":
+				return patchEditSchema;
+			case "hashline":
+				return hashlineEditSchema;
+			default:
+				return replaceEditSchema;
+		}
 	}
 
 	async execute(
 		_toolCallId: string,
-		params: ReplaceParams | PatchParams,
+		params: ReplaceParams | PatchParams | HashlineParams,
 		signal?: AbortSignal,
 		_onUpdate?: AgentToolUpdateCallback<EditToolDetails, TInput>,
 		context?: AgentToolContext,
 	): Promise<AgentToolResult<EditToolDetails, TInput>> {
 		const batchRequest = getLspBatchRequest(context?.toolCall);
+
+		// ─────────────────────────────────────────────────────────────────
+		// Hashline mode execution
+		// ─────────────────────────────────────────────────────────────────
+		if (this.mode === "hashline") {
+			const { path, edits } = params as HashlineParams;
+
+			enforcePlanModeWrite(this.session, path);
+
+			if (path.endsWith(".ipynb")) {
+				throw new Error("Cannot edit Jupyter notebooks with the Edit tool. Use the NotebookEdit tool instead.");
+			}
+
+			const absolutePath = resolvePlanPath(this.session, path);
+			const file = Bun.file(absolutePath);
+
+			if (!(await file.exists())) {
+				throw new Error(`File not found: ${path}`);
+			}
+
+			const rawContent = await file.text();
+			const { bom, text: content } = stripBom(rawContent);
+			const originalEnding = detectLineEnding(content);
+			const normalizedContent = normalizeToLF(content);
+
+			const result = applyHashlineEdits(normalizedContent, edits);
+
+			if (normalizedContent === result.content) {
+				throw new Error(`No changes made to ${path}. The edits produced identical content.`);
+			}
+
+			const finalContent = bom + restoreLineEndings(result.content, originalEnding);
+			const diagnostics = await this.#writethrough(absolutePath, finalContent, signal, file, batchRequest);
+			const diffResult = generateDiffString(normalizedContent, result.content);
+
+			const normative = buildNormativeUpdateInput({
+				path,
+				oldContent: rawContent,
+				newContent: finalContent,
+			});
+
+			const meta = outputMeta()
+				.diagnostics(diagnostics?.summary ?? "", diagnostics?.messages ?? [])
+				.get();
+
+			return {
+				content: [{ type: "text", text: `Updated ${path}` }],
+				details: {
+					diff: diffResult.diff,
+					firstChangedLine: result.firstChangedLine ?? diffResult.firstChangedLine,
+					diagnostics,
+					meta,
+				},
+				$normative: normative,
+			};
+		}
 
 		// ─────────────────────────────────────────────────────────────────
 		// Patch mode execution
