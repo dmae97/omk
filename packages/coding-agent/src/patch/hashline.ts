@@ -316,7 +316,9 @@ export function computeLineHash(idx: number, line: string): string {
 	if (line.endsWith("\r")) {
 		line = line.slice(0, -1);
 	}
-	return HEX_DICT[Number(Bun.hash.xxHash64(line, BigInt(idx)) & HASH_MASK)];
+	line = line.replace(/\s+/g, "");
+	void idx; // Might use line, but for now, let's not.
+	return HEX_DICT[Number(Bun.hash.xxHash64(line) & HASH_MASK)];
 }
 
 /**
