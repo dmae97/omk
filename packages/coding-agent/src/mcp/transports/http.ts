@@ -103,7 +103,11 @@ export class HttpTransport implements MCPTransport {
 		}
 	}
 
-	async request<T = unknown>(method: string, params?: Record<string, unknown>, options?: MCPRequestOptions): Promise<T> {
+	async request<T = unknown>(
+		method: string,
+		params?: Record<string, unknown>,
+		options?: MCPRequestOptions,
+	): Promise<T> {
 		if (!this.#connected) {
 			throw new Error("Transport not connected");
 		}

@@ -1,12 +1,13 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Changed `HashlineEdit` API from `old: string | string[]` / `new: string | string[]` to `src: string` / `dst: string`; multi-line content uses `\n`-separated strings, empty string `""` for insert/delete operations
 - Replaced `edit.patchMode` boolean setting with `edit.mode` enum; existing `edit.patchMode: true` configurations should use `edit.mode: patch`
 - Changed `getEditModelVariants()` return type from `Record<string, "patch" | "replace">` to `Record<string, EditMode | null>`
+- Removed `after` field from `HashlineEdit`; insert-after is now expressed via open range syntax `src: "5:ab.."`
+- Changed `HashlineEdit.src` from newline-separated line ref lists to range syntax: `"5:ab"` (single), `"5:ab..9:ef"` (range), `"5:ab.."` (insert after); comma and newline-separated lists are no longer supported
 
 ### Added
 
@@ -33,6 +34,8 @@
 
 ### Changed
 
+- Enhanced bash executor to properly handle abort signals by registering abort event listeners and cleaning up resources in finally block
+- Improved bash tool error handling to distinguish between user-initiated aborts (via AbortSignal) and other cancellations, throwing ToolAbortError for aborted requests
 - Enhanced MCP request handling to propagate abort signals through HTTP, SSE, and stdio transports with proper cleanup
 - Improved stdio transport request handling to use Promise.withResolvers for cleaner async flow and better abort signal integration
 - Updated HTTP transport to combine operation abort signals with timeout signals using AbortSignal.any() for unified cancellation

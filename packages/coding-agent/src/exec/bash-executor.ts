@@ -73,50 +73,64 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 			shellSessions.set(sessionKey, shellSession);
 		}
 
-		const result = await shellSession.run(
-			{
-				command: finalCommand,
-				cwd: options?.cwd,
-				env: options?.env,
-				timeoutMs: options?.timeout,
-				signal: options?.signal,
-			},
-			(err, chunk) => {
-				if (!err) {
-					enqueueChunk(chunk);
-				}
-			},
-		);
-
-		await pendingChunks;
-
-		// Handle timeout
-		if (result.timedOut) {
-			const annotation = options?.timeout
-				? `Command timed out after ${Math.round(options.timeout / 1000)} seconds`
-				: "Command timed out";
-			return {
-				exitCode: undefined,
-				cancelled: true,
-				...(await sink.dump(annotation)),
-			};
-		}
-
-		// Handle cancellation
-		if (result.cancelled) {
-			return {
-				exitCode: undefined,
-				cancelled: true,
-				...(await sink.dump("Command cancelled")),
-			};
-		}
-
-		// Normal completion
-		return {
-			exitCode: result.exitCode,
-			cancelled: false,
-			...(await sink.dump()),
+		const signal = options?.signal;
+		const abortHandler = () => {
+			shellSession.abort(signal?.reason instanceof Error ? signal.reason.message : undefined);
 		};
+		if (signal) {
+			signal.addEventListener("abort", abortHandler, { once: true });
+		}
+
+		try {
+			const result = await shellSession.run(
+				{
+					command: finalCommand,
+					cwd: options?.cwd,
+					env: options?.env,
+					timeoutMs: options?.timeout,
+					signal,
+				},
+				(err, chunk) => {
+					if (!err) {
+						enqueueChunk(chunk);
+					}
+				},
+			);
+
+			await pendingChunks;
+
+			// Handle timeout
+			if (result.timedOut) {
+				const annotation = options?.timeout
+					? `Command timed out after ${Math.round(options.timeout / 1000)} seconds`
+					: "Command timed out";
+				return {
+					exitCode: undefined,
+					cancelled: true,
+					...(await sink.dump(annotation)),
+				};
+			}
+
+			// Handle cancellation
+			if (result.cancelled) {
+				return {
+					exitCode: undefined,
+					cancelled: true,
+					...(await sink.dump("Command cancelled")),
+				};
+			}
+
+			// Normal completion
+			return {
+				exitCode: result.exitCode,
+				cancelled: false,
+				...(await sink.dump()),
+			};
+		} finally {
+			if (signal) {
+				signal.removeEventListener("abort", abortHandler);
+			}
+		}
 	} finally {
 		await pendingChunks;
 	}
