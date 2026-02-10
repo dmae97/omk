@@ -349,7 +349,7 @@ export async function exec(cmd: string[], opts?: ExecOptions): Promise<ExecResul
 	const stdin = typeof input === "string" ? Buffer.from(input) : input;
 	const resolved: ChildSpawnOptions = stdin === undefined ? spawnOpts : { ...spawnOpts, stdin };
 	using child = spawn(cmd, resolved);
-	return child.wait({ stderr, allowAbort, allowNonZero });
+	return await child.wait({ stderr, allowAbort, allowNonZero });
 }
 
 // ── Signal combinators ───────────────────────────────────────────────────────
