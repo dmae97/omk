@@ -34,7 +34,11 @@ export type EditorAction =
 	| "selectConfirm"
 	| "selectCancel"
 	// Clipboard
-	| "copy";
+	| "copy"
+	// Kill ring / undo
+	| "undo"
+	| "yank"
+	| "yankPop";
 
 // Re-export KeyId from keys.ts
 export type { KeyId };
@@ -81,6 +85,10 @@ export const DEFAULT_EDITOR_KEYBINDINGS: Required<EditorKeybindingsConfig> = {
 	selectCancel: ["escape", "ctrl+c"],
 	// Clipboard
 	copy: "ctrl+c",
+	// Kill ring / undo
+	undo: "ctrl+-",
+	yank: "ctrl+y",
+	yankPop: "alt+y",
 };
 
 const SHIFTED_SYMBOL_KEYS = new Set<string>([

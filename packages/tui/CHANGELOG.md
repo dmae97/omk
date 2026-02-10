@@ -1,6 +1,20 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added Alt+Y keybinding to cycle through kill ring entries (yank-pop)
+- Added undo support to Input component with Ctrl+Z keybinding
+- Added kill ring support to Input component for Emacs-style kill/yank operations
+- Added yank (Ctrl+Y) and yank-pop (Alt+Y) support to Input component
+
+### Changed
+
+- Changed Editor kill ring implementation to use dedicated KillRing class for better state management
+- Changed Editor undo stack to use generic UndoStack class with automatic state cloning
+- Changed kill/yank behavior to properly accumulate consecutive kill operations
+- Changed Input component deletion methods to record killed text in kill ring
+- Changed undo coalescing in Input component to group consecutive word typing into single undo units
 
 ## [11.4.1] - 2026-02-06
 ### Fixed

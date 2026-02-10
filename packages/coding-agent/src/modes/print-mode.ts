@@ -114,6 +114,9 @@ export async function runPrintMode(session: AgentSession, options: PrintModeOpti
 					const success = await session.switchSession(sessionPath);
 					return { cancelled: !success };
 				},
+				reload: async () => {
+					await session.reload();
+				},
 				compact: async instructionsOrOptions => {
 					const instructions = typeof instructionsOrOptions === "string" ? instructionsOrOptions : undefined;
 					const options =

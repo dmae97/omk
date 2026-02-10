@@ -225,6 +225,7 @@ const noOpUIContext: ExtensionUIContext = {
 	setTitle: () => {},
 	custom: async () => undefined as never,
 	setEditorText: () => {},
+	pasteToEditor: () => {},
 	getEditorText: () => "",
 	editor: async () => undefined,
 	get theme() {
@@ -1435,6 +1436,9 @@ export class AgentSession {
 			switchSession: async sessionPath => {
 				const success = await this.switchSession(sessionPath);
 				return { cancelled: !success };
+			},
+			reload: async () => {
+				await this.reload();
 			},
 			getSystemPrompt: () => this.systemPrompt,
 		};
@@ -3333,6 +3337,18 @@ Be thorough - include exact file paths, function names, error messages, and tech
 	// =========================================================================
 	// Session Management
 	// =========================================================================
+
+	/**
+	 * Reload the current session from disk.
+	 *
+	 * Intended for extension commands and headless modes to re-read the current session
+	 * file and re-emit session_switch hooks.
+	 */
+	async reload(): Promise<void> {
+		const sessionFile = this.sessionFile;
+		if (!sessionFile) return;
+		await this.switchSession(sessionFile);
+	}
 
 	/**
 	 * Switch to a different session file.

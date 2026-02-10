@@ -1,6 +1,36 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `auto` model alias for OpenRouter with automatic model routing
+- Added `openrouter/aurora-alpha` model with reasoning capabilities
+- Added `qwen/qwen3-max-thinking` model with extended context window support
+- Added support for `parametersJsonSchema` in Google Gemini tool definitions for improved JSON Schema compatibility
+
+### Changed
+
+- Updated Claude Sonnet 4 and 4.5 context window from 1M to 200K tokens to reflect actual limits
+- Updated Claude Opus 4.6 context window to 200K tokens across providers
+- Changed default `reasoningSummary` for OpenAI Codex from `undefined` to `auto`
+- Updated Qwen model pricing and context window specifications across multiple variants
+- Modified Google Gemini CLI system instruction to use compact format
+- Changed tool parameter handling for Claude models on Google Cloud Code Assist to use legacy `parameters` field for API translation
+
+### Removed
+
+- Removed `glm-4.7-free` model from OpenCode provider
+- Removed `qwen3-coder` model from OpenCode provider
+- Removed `ai21/jamba-mini-1.7` model from OpenRouter
+- Removed `stepfun-ai/step3` model from OpenRouter
+- Removed duplicate test suite for Google Antigravity Provider with `gemini-3-pro-high`
+
+### Fixed
+
+- Fixed Amazon Bedrock HTTP/1.1 handler import to use direct import instead of dynamic import
+- Fixed Qwen model context window and pricing inconsistencies across OpenRouter
+- Fixed cache read pricing for multiple Qwen models
+- Fixed OpenAI Codex reasoning effort clamping for `gpt-5.3-codex` model
 
 ## [11.7.1] - 2026-02-07
 

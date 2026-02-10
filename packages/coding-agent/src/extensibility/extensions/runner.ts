@@ -138,6 +138,7 @@ const noOpUIContext: ExtensionUIContext = {
 	setTitle: () => {},
 	custom: async () => undefined as never,
 	setEditorText: () => {},
+	pasteToEditor: () => {},
 	getEditorText: () => "",
 	editor: async () => undefined,
 	setEditorComponent: () => {},
@@ -166,6 +167,7 @@ export class ExtensionRunner {
 	private branchHandler: BranchHandler = async () => ({ cancelled: false });
 	private navigateTreeHandler: NavigateTreeHandler = async () => ({ cancelled: false });
 	private switchSessionHandler: SwitchSessionHandler = async () => ({ cancelled: false });
+	private reloadHandler: () => Promise<void> = async () => {};
 	private shutdownHandler: ShutdownHandler = () => {};
 	private commandDiagnostics: Array<{ type: string; message: string; path: string }> = [];
 
@@ -212,6 +214,7 @@ export class ExtensionRunner {
 			this.branchHandler = commandContextActions.branch;
 			this.navigateTreeHandler = commandContextActions.navigateTree;
 			this.switchSessionHandler = commandContextActions.switchSession;
+			this.reloadHandler = commandContextActions.reload;
 			this.getContextUsageFn = commandContextActions.getContextUsage;
 			this.compactFn = commandContextActions.compact;
 		}
@@ -405,6 +408,7 @@ export class ExtensionRunner {
 			branch: entryId => this.branchHandler(entryId),
 			navigateTree: (targetId, options) => this.navigateTreeHandler(targetId, options),
 			switchSession: sessionPath => this.switchSessionHandler(sessionPath),
+			reload: () => this.reloadHandler(),
 			compact: instructionsOrOptions => this.compactFn(instructionsOrOptions),
 		};
 	}

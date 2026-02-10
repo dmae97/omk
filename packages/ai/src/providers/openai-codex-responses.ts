@@ -176,7 +176,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 
 			const codexOptions: CodexRequestOptions = {
 				reasoningEffort: options?.reasoningEffort,
-				reasoningSummary: options?.reasoningSummary ?? undefined,
+				reasoningSummary: options?.reasoningSummary ?? "auto",
 				textVerbosity: options?.textVerbosity,
 				include: options?.include,
 			};

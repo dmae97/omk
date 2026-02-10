@@ -1,7 +1,7 @@
 /**
  * Shared utilities for Google Generative AI and Google Cloud Code Assist providers.
  */
-import { type Content, FinishReason, FunctionCallingConfigMode, type Part, type Schema } from "@google/genai";
+import { type Content, FinishReason, FunctionCallingConfigMode, type Part } from "@google/genai";
 import type { Context, ImageContent, Model, StopReason, TextContent, Tool } from "../types";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
 import { transformMessages } from "./transform-messages";
@@ -369,23 +369,36 @@ export function sanitizeSchemaForGoogle(value: unknown): unknown {
 	return sanitizeSchemaImpl(value, false);
 }
 
-function sanitizeToolForGoogle(tool: Tool): Tool {
-	return {
-		name: tool.name,
-		description: tool.description,
-		parameters: sanitizeSchemaForGoogle(tool.parameters) as any,
-	};
-}
-
 /**
  * Convert tools to Gemini function declarations format.
+ *
+ * We prefer `parametersJsonSchema` (full JSON Schema: anyOf/oneOf/const/etc.).
+ *
+ * Claude models via Cloud Code Assist require the legacy `parameters` field; the API
+ * translates it into Anthropic's `input_schema`. When using that path, we sanitize the
+ * schema to remove Google-unsupported JSON Schema keywords.
  */
 export function convertTools(
 	tools: Tool[],
-	_model: Model<"google-generative-ai" | "google-gemini-cli" | "google-vertex">,
-): { functionDeclarations: { name: string; description?: string; parameters: Schema }[] }[] | undefined {
+	model: Model<"google-generative-ai" | "google-gemini-cli" | "google-vertex">,
+): { functionDeclarations: Record<string, unknown>[] }[] | undefined {
 	if (tools.length === 0) return undefined;
-	return [{ functionDeclarations: tools.map(sanitizeToolForGoogle) }];
+
+	// Claude models on Cloud Code Assist need the legacy `parameters` field;
+	// the API translates it into Anthropic's `input_schema`.
+	const useParameters = model.id.startsWith("claude-");
+
+	return [
+		{
+			functionDeclarations: tools.map(tool => ({
+				name: tool.name,
+				description: tool.description,
+				...(useParameters
+					? { parameters: sanitizeSchemaForGoogle(tool.parameters) }
+					: { parametersJsonSchema: tool.parameters }),
+			})),
+		},
+	];
 }
 
 /**

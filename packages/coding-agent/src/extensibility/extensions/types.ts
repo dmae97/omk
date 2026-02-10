@@ -112,6 +112,14 @@ export interface ExtensionUIContext {
 	/** Set the text in the core input editor. */
 	setEditorText(text: string): void;
 
+	/**
+	 * Paste text into the core input editor.
+	 *
+	 * Interactive mode should route through the editor's paste handling (e.g. large paste markers).
+	 * Non-interactive modes may fall back to replacing the editor text.
+	 */
+	pasteToEditor(text: string): void;
+
 	/** Get the current text from the core input editor. */
 	getEditorText(): string;
 
@@ -219,6 +227,9 @@ export interface ExtensionCommandContext extends ExtensionContext {
 
 	/** Switch to a different session file. */
 	switchSession(sessionPath: string): Promise<{ cancelled: boolean }>;
+
+	/** Reload the current session/runtime state. */
+	reload(): Promise<void>;
 
 	/** Compact the session context (interactive mode shows UI). */
 	compact(instructionsOrOptions?: string | CompactOptions): Promise<void>;
@@ -1008,6 +1019,7 @@ export interface ExtensionCommandContextActions {
 	navigateTree: (targetId: string, options?: { summarize?: boolean }) => Promise<{ cancelled: boolean }>;
 	compact: (instructionsOrOptions?: string | CompactOptions) => Promise<void>;
 	switchSession: (sessionPath: string) => Promise<{ cancelled: boolean }>;
+	reload: () => Promise<void>;
 }
 
 /** Full runtime = state + actions. */

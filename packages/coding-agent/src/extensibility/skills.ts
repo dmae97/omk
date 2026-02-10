@@ -1,4 +1,5 @@
 import * as fs from "node:fs/promises";
+import * as os from "node:os";
 import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import { skillCapability } from "../capability/skill";
@@ -316,7 +317,17 @@ export async function loadSkills(options: LoadSkillsOptions = {}): Promise<LoadS
 
 	// Process custom directories - scan directly without using full provider system
 	const allCustomSkills: Array<{ skill: Skill; path: string }> = [];
-	const customScanResults = await Promise.all(customDirectories.map(dir => scanDirectoryForSkills(dir)));
+	const customScanResults = await Promise.all(
+		customDirectories.map(dir => {
+			let resolved = dir;
+			if (resolved.startsWith("~/")) {
+				resolved = path.join(os.homedir(), resolved.slice(2));
+			} else if (resolved === "~") {
+				resolved = os.homedir();
+			}
+			return scanDirectoryForSkills(resolved);
+		}),
+	);
 	for (const customSkills of customScanResults) {
 		for (const s of customSkills.skills) {
 			if (matchesIgnorePatterns(s.name)) continue;

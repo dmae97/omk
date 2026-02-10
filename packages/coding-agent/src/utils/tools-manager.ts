@@ -203,12 +203,24 @@ async function downloadTool(tool: ToolName, signal?: AbortSignal): Promise<strin
 	const tmp = await TempDir.create("@omp-tools-extract-");
 
 	try {
-		if (assetName.endsWith(".tar.gz") || assetName.endsWith(".zip")) {
+		if (!assetName.endsWith(".tar.gz") && !assetName.endsWith(".zip")) {
+			throw new Error(`Unsupported archive format: ${assetName}`);
+		}
+
+		try {
 			const archive = new Bun.Archive(await Bun.file(archivePath).arrayBuffer());
 			const files = await archive.files();
+			const extractRoot = path.resolve(tmp.path());
+
 			for (const [filePath, file] of files) {
-				await Bun.write(path.join(tmp.path(), filePath), file);
+				const outputPath = path.resolve(extractRoot, filePath);
+				if (!outputPath.startsWith(extractRoot + path.sep)) {
+					throw new Error(`Archive entry escapes extraction dir: ${filePath}`);
+				}
+				await Bun.write(outputPath, file);
 			}
+		} catch (err) {
+			throw new Error(`Failed to extract ${assetName}: ${err instanceof Error ? err.message : String(err)}`);
 		}
 
 		// Find the binary in extracted files

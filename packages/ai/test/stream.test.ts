@@ -19,6 +19,18 @@ const oauthTokens = await Promise.all([
 ]);
 const [anthropicOAuthToken, githubCopilotToken, geminiCliToken, antigravityToken, openaiCodexToken] = oauthTokens;
 
+function hasBedrockCredentials(): boolean {
+	const region = Bun.env.AWS_REGION ?? Bun.env.AWS_DEFAULT_REGION;
+	if (!region) return false;
+
+	// Conservative check: Bedrock needs a region plus either explicit env creds or a profile.
+	// (There are other ways to authenticate, but we avoid running E2E tests accidentally.)
+	return Boolean(
+		(Bun.env.AWS_ACCESS_KEY_ID && Bun.env.AWS_SECRET_ACCESS_KEY) ||
+			(Bun.env.AWS_PROFILE && Bun.env.AWS_PROFILE.length > 0),
+	);
+}
+
 // Calculator tool definition (same as examples)
 // Note: Using StringEnum helper because Google's API doesn't support anyOf/const patterns
 // that Type.Enum generates. Google requires { type: "string", enum: [...] } format.
@@ -31,7 +43,7 @@ const calculatorSchema = Type.Object({
 });
 
 const calculatorTool: Tool<typeof calculatorSchema> = {
-	name: "calculator",
+	name: "math_operation",
 	description: "Perform basic arithmetic operations",
 	parameters: calculatorSchema,
 };
@@ -71,7 +83,7 @@ async function handleToolCall<TApi extends Api>(model: Model<TApi>, options?: Op
 		messages: [
 			{
 				role: "user",
-				content: "Calculate 15 + 27 using the calculator tool.",
+				content: "Calculate 15 + 27 using the math_operation tool.",
 				timestamp: Date.now(),
 			},
 		],
@@ -91,7 +103,7 @@ async function handleToolCall<TApi extends Api>(model: Model<TApi>, options?: Op
 			index = event.contentIndex;
 			expect(toolCall.type).toBe("toolCall");
 			if (toolCall.type === "toolCall") {
-				expect(toolCall.name).toBe("calculator");
+				expect(toolCall.name).toBe("math_operation");
 				expect(toolCall.id).toBeTruthy();
 			}
 		}
@@ -101,7 +113,7 @@ async function handleToolCall<TApi extends Api>(model: Model<TApi>, options?: Op
 			expect(event.contentIndex).toBe(index);
 			expect(toolCall.type).toBe("toolCall");
 			if (toolCall.type === "toolCall") {
-				expect(toolCall.name).toBe("calculator");
+				expect(toolCall.name).toBe("math_operation");
 				accumulatedToolArgs += event.delta;
 				// Check that we have a parsed arguments object during streaming
 				expect(toolCall.arguments).toBeDefined();
@@ -117,7 +129,7 @@ async function handleToolCall<TApi extends Api>(model: Model<TApi>, options?: Op
 			expect(event.contentIndex).toBe(index);
 			expect(toolCall.type).toBe("toolCall");
 			if (toolCall.type === "toolCall") {
-				expect(toolCall.name).toBe("calculator");
+				expect(toolCall.name).toBe("math_operation");
 				JSON.parse(accumulatedToolArgs);
 				expect(toolCall.arguments).not.toBeUndefined();
 				expect((toolCall.arguments as any).a).toBe(15);
@@ -136,7 +148,7 @@ async function handleToolCall<TApi extends Api>(model: Model<TApi>, options?: Op
 	expect(response.content.some(b => b.type === "toolCall")).toBeTruthy();
 	const toolCall = response.content.find(b => b.type === "toolCall");
 	if (toolCall && toolCall.type === "toolCall") {
-		expect(toolCall.name).toBe("calculator");
+		expect(toolCall.name).toBe("math_operation");
 		expect(toolCall.id).toBeTruthy();
 	} else {
 		throw new Error("No tool call found in response");
@@ -262,7 +274,7 @@ async function multiTurn<TApi extends Api>(model: Model<TApi>, options?: Options
 		messages: [
 			{
 				role: "user",
-				content: "Think about this briefly, then calculate 42 * 17 and 453 + 434 using the calculator tool.",
+				content: "Think about this briefly, then calculate 42 * 17 and 453 + 434 using the math_operation tool.",
 				timestamp: Date.now(),
 			},
 		],
@@ -292,7 +304,7 @@ async function multiTurn<TApi extends Api>(model: Model<TApi>, options?: Options
 				hasSeenToolCalls = true;
 
 				// Process the tool call
-				expect(block.name).toBe("calculator");
+				expect(block.name).toBe("math_operation");
 				expect(block.id).toBeTruthy();
 				expect(block.arguments).toBeTruthy();
 
@@ -417,10 +429,9 @@ describe("Generate E2E Tests", () => {
 		it.skipIf(!isVertexConfigured)(
 			"should handle thinking",
 			async () => {
-				const { ThinkingLevel } = await import("@google/genai");
 				await handleThinking(llm, {
 					...vertexOptions,
-					thinking: { enabled: true, budgetTokens: 1024, level: ThinkingLevel.LOW },
+					thinking: { enabled: true, budgetTokens: 1024, level: "LOW" },
 				});
 			},
 			{ retry: 3 },
@@ -437,10 +448,9 @@ describe("Generate E2E Tests", () => {
 		it.skipIf(!isVertexConfigured)(
 			"should handle multi-turn with thinking and tools",
 			async () => {
-				const { ThinkingLevel } = await import("@google/genai");
 				await multiTurn(llm, {
 					...vertexOptions,
-					thinking: { enabled: true, budgetTokens: 1024, level: ThinkingLevel.MEDIUM },
+					thinking: { enabled: true, budgetTokens: 1024, level: "MEDIUM" },
 				});
 			},
 			{ retry: 3 },
@@ -1158,8 +1168,8 @@ describe("Generate E2E Tests", () => {
 		);
 	});
 
-	describe("Google Antigravity Provider (gemini-3-flash)", () => {
-		const llm = getModel("google-antigravity", "gemini-3-flash");
+	describe("Google Antigravity Provider (gemini-3-pro-high)", () => {
+		const llm = getModel("google-antigravity", "gemini-3-pro-high");
 
 		it.skipIf(!antigravityToken)(
 			"should complete basic text generation",
@@ -1188,7 +1198,7 @@ describe("Generate E2E Tests", () => {
 		it.skipIf(!antigravityToken)(
 			"should handle thinking with thinkingLevel",
 			async () => {
-				// gemini-3-flash supports all four levels: MINIMAL, LOW, MEDIUM, HIGH
+				// gemini-3-pro only supports LOW/HIGH
 				await handleThinking(llm, {
 					apiKey: antigravityToken,
 					thinking: { enabled: true, level: "LOW" },
@@ -1200,7 +1210,7 @@ describe("Generate E2E Tests", () => {
 		it.skipIf(!antigravityToken)(
 			"should handle multi-turn with thinking and tools",
 			async () => {
-				await multiTurn(llm, { apiKey: antigravityToken, thinking: { enabled: true, level: "MEDIUM" } });
+				await multiTurn(llm, { apiKey: antigravityToken, thinking: { enabled: true, level: "HIGH" } });
 			},
 			{ retry: 3 },
 		);
@@ -1209,22 +1219,6 @@ describe("Generate E2E Tests", () => {
 			"should handle image input",
 			async () => {
 				await handleImage(llm, { apiKey: antigravityToken });
-			},
-			{ retry: 3 },
-		);
-	});
-
-	describe("Google Antigravity Provider (gemini-3-pro-high with thinkingLevel)", () => {
-		const llm = getModel("google-antigravity", "gemini-3-pro-high");
-
-		it.skipIf(!antigravityToken)(
-			"should handle thinking with thinkingLevel HIGH",
-			async () => {
-				// gemini-3-pro only supports LOW/HIGH
-				await handleThinking(llm, {
-					apiKey: antigravityToken,
-					thinking: { enabled: true, level: "HIGH" },
-				});
 			},
 			{ retry: 3 },
 		);
@@ -1338,6 +1332,54 @@ describe("Generate E2E Tests", () => {
 			"should handle image input",
 			async () => {
 				await handleImage(llm, { apiKey: openaiCodexToken });
+			},
+			{ retry: 3 },
+		);
+	});
+
+	describe.skipIf(!hasBedrockCredentials())("Amazon Bedrock Provider (claude-opus-4-6 interleaved thinking)", () => {
+		const llm = getModel("amazon-bedrock", "global.anthropic.claude-opus-4-6-v1");
+
+		it(
+			"should use adaptive thinking without anthropic_beta",
+			async () => {
+				let capturedPayload: unknown;
+				const response = await complete(
+					llm,
+					{
+						systemPrompt: "You are a helpful assistant that uses tools when asked.",
+						messages: [
+							{
+								role: "user",
+								content: "Think first, then calculate 15 + 27 using the math_operation tool.",
+								timestamp: Date.now(),
+							},
+						],
+						tools: [calculatorTool],
+					},
+					{
+						reasoning: "xhigh",
+						interleavedThinking: true,
+						onPayload: payload => {
+							capturedPayload = payload;
+						},
+					},
+				);
+
+				expect(response.stopReason, `Error: ${response.errorMessage}`).not.toBe("error");
+				expect(capturedPayload).toBeTruthy();
+
+				const payload = capturedPayload as {
+					additionalModelRequestFields?: {
+						thinking?: { type?: string };
+						output_config?: { effort?: string };
+						anthropic_beta?: string[];
+					};
+				};
+
+				expect(payload.additionalModelRequestFields?.thinking).toEqual({ type: "adaptive" });
+				expect(payload.additionalModelRequestFields?.output_config).toEqual({ effort: "max" });
+				expect(payload.additionalModelRequestFields?.anthropic_beta).toBeUndefined();
 			},
 			{ retry: 3 },
 		);

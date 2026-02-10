@@ -227,6 +227,11 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			return undefined as never;
 		}
 
+		pasteToEditor(text: string): void {
+			// Paste handling not supported in RPC mode - falls back to setEditorText
+			this.setEditorText(text);
+		}
+
 		setEditorText(text: string): void {
 			// Fire and forget - host can implement editor control
 			this.output({
@@ -378,6 +383,9 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				switchSession: async sessionPath => {
 					const success = await session.switchSession(sessionPath);
 					return { cancelled: !success };
+				},
+				reload: async () => {
+					await session.reload();
 				},
 				compact: async instructionsOrOptions => {
 					const instructions = typeof instructionsOrOptions === "string" ? instructionsOrOptions : undefined;

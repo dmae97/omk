@@ -47,6 +47,9 @@ export class ExtensionUiController {
 			setTitle: title => setTerminalTitle(title),
 			custom: (factory, _options) => this.showHookCustom(factory),
 			setEditorText: text => this.ctx.editor.setText(text),
+			pasteToEditor: text => {
+				this.ctx.editor.handleInput(`\x1b[200~${text}\x1b[201~`);
+			},
 			getEditorText: () => this.ctx.editor.getText(),
 			editor: (title, prefill) => this.showHookEditor(title, prefill),
 			get theme() {
@@ -138,6 +141,13 @@ export class ExtensionUiController {
 		const commandActions: ExtensionCommandContextActions = {
 			getContextUsage: () => this.ctx.session.getContextUsage(),
 			waitForIdle: () => this.ctx.session.agent.waitForIdle(),
+			reload: async () => {
+				await this.ctx.session.reload();
+				this.ctx.chatContainer.clear();
+				this.ctx.renderInitialMessages();
+				await this.ctx.reloadTodos();
+				this.ctx.showStatus("Reloaded session");
+			},
 			newSession: async options => {
 				// Stop any loading animation
 				if (this.ctx.loadingAnimation) {
@@ -319,6 +329,16 @@ export class ExtensionUiController {
 		const commandActions: ExtensionCommandContextActions = {
 			getContextUsage: () => this.ctx.session.getContextUsage(),
 			waitForIdle: () => this.ctx.session.agent.waitForIdle(),
+			reload: async () => {
+				if (this.ctx.isBackgrounded) {
+					return;
+				}
+				await this.ctx.session.reload();
+				this.ctx.chatContainer.clear();
+				this.ctx.renderInitialMessages();
+				await this.ctx.reloadTodos();
+				this.ctx.showStatus("Reloaded session");
+			},
 			newSession: async options => {
 				if (this.ctx.isBackgrounded) {
 					return { cancelled: true };
@@ -436,6 +456,7 @@ export class ExtensionUiController {
 			setTitle: () => {},
 			custom: async () => undefined as never,
 			setEditorText: () => {},
+			pasteToEditor: () => {},
 			getEditorText: () => "",
 			editor: async () => undefined,
 			get theme() {

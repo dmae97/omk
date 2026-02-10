@@ -2,6 +2,7 @@
  * CLI argument parsing and help display
  */
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import { logger } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { APP_NAME, CONFIG_DIR_NAME } from "../config";
 import { BUILTIN_TOOLS } from "../tools";
@@ -115,11 +116,10 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 				if (name in BUILTIN_TOOLS) {
 					validTools.push(name);
 				} else {
-					console.error(
-						chalk.yellow(
-							`Warning: Unknown tool "${name}". Valid tools: ${Object.keys(BUILTIN_TOOLS).join(", ")}`,
-						),
-					);
+					logger.warn("Unknown tool passed to --tools", {
+						tool: name,
+						validTools: Object.keys(BUILTIN_TOOLS),
+					});
 				}
 			}
 			result.tools = validTools;
@@ -128,11 +128,10 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 			if (isValidThinkingLevel(level)) {
 				result.thinking = level;
 			} else {
-				console.error(
-					chalk.yellow(
-						`Warning: Invalid thinking level "${level}". Valid values: ${VALID_THINKING_LEVELS.join(", ")}`,
-					),
-				);
+				logger.warn("Invalid thinking level passed to --thinking", {
+					level,
+					validThinkingLevels: [...VALID_THINKING_LEVELS],
+				});
 			}
 		} else if (arg === "--print" || arg === "-p") {
 			result.print = true;
@@ -245,7 +244,8 @@ ${chalk.bold("Available Tools (all enabled by default):")}
 export function printHelp(): void {
 	process.stdout.write(
 		`${chalk.bold(APP_NAME)} - AI coding assistant\n\n` +
-			`Run ${APP_NAME} --help for full command and option details.\n\n` +
+			`Run ${APP_NAME} --help for full command and option details.\n` +
+			`Run ${APP_NAME} <command> --help for command-specific help.\n\n` +
 			`${getExtraHelpText()}\n`,
 	);
 }

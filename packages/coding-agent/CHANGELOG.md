@@ -1,6 +1,26 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `ctx.reload()` method to extension command context to reload extensions, skills, prompts, and themes from disk
+- Added `ctx.ui.pasteToEditor()` method to paste text into the editor with proper handling (e.g., large paste markers in interactive mode)
+- Added extension UI sub-protocol for RPC mode enabling dialog methods (`select`, `confirm`, `input`, `editor`) and fire-and-forget UI methods via client communication
+- Added support for tilde (`~`) expansion in custom skill directory paths
+- Added example extension demonstrating `ctx.reload()` usage with both command and LLM-callable tool patterns
+
+### Changed
+
+- Changed `ctx.hasUI` behavior: now `true` in RPC mode (previously `false`), with dialog methods working via extension UI sub-protocol
+- Changed warning output for invalid CLI arguments to use structured logging instead of console.error
+- Changed help text to indicate command-specific help is available via `<command> --help`
+- Changed tool result event handlers to chain like middleware, allowing each handler to see and modify results from previous handlers with partial patch support
+
+### Fixed
+
+- Fixed archive extraction security vulnerability by validating that extracted paths do not escape the extraction directory
+- Fixed archive format validation to reject unsupported formats before extraction attempt
+- Fixed archive extraction error handling to provide clear error messages on failure
 
 ## [11.7.0] - 2026-02-07
 ### Changed

@@ -1059,6 +1059,21 @@ async function generateModels() {
 		opus45.cost.cacheWrite = 6.25;
 	}
 
+	// Temporary overrides until upstream model metadata is corrected.
+	for (const candidate of allModels) {
+		if (candidate.provider === "amazon-bedrock" && candidate.id.includes("anthropic.claude-opus-4-6-v1")) {
+			candidate.cost.cacheRead = 0.5;
+			candidate.cost.cacheWrite = 6.25;
+		}
+		if ((candidate.provider === "anthropic" || candidate.provider === "opencode") && candidate.id === "claude-opus-4-6") {
+			candidate.contextWindow = 200000;
+		}
+		// opencode lists Claude Sonnet 4/4.5 with 1M context, actual limit is 200K
+		if (candidate.provider === "opencode" && (candidate.id === "claude-sonnet-4-5" || candidate.id === "claude-sonnet-4")) {
+			candidate.contextWindow = 200000;
+		}
+	}
+
 	// Add missing gpt models
 	if (!allModels.some((m) => m.provider === "openai" && m.id === "gpt-5-chat-latest")) {
 		allModels.push({
@@ -1224,11 +1239,11 @@ async function generateModels() {
 		});
 	}
 
-	// Add missing OpenRouter model
-	if (!allModels.some((m) => m.provider === "openrouter" && m.id === "openrouter/auto")) {
+	// Add "auto" alias for openrouter/auto
+	if (!allModels.some((m) => m.provider === "openrouter" && m.id === "auto")) {
 		allModels.push({
-			id: "openrouter/auto",
-			name: "OpenRouter: Auto Router",
+			id: "auto",
+			name: "Auto",
 			api: "openai-completions",
 			provider: "openrouter",
 			baseUrl: "https://openrouter.ai/api/v1",

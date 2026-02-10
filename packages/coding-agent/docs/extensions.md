@@ -583,6 +583,11 @@ pi.on("tool_call", async (event, ctx) => {
 
 Fired after tool executes. **Can modify result.**
 
+`tool_result` handlers chain like middleware:
+- Handlers run in extension load order
+- Each handler sees the latest result after previous handler changes
+- Handlers can return partial patches (`content`, `details`, or `isError`); omitted fields keep their current values
+
 ```typescript
 pi.on("tool_result", async (event, ctx) => {
   // event.toolName, event.toolCallId, event.input
@@ -609,7 +614,7 @@ UI methods for user interaction. See [Custom UI](#custom-ui) for full details.
 
 ### ctx.hasUI
 
-`false` in print mode (`-p`), JSON mode, and RPC mode. UI methods become no-ops, so check before prompting.
+`false` in print mode (`-p`) and JSON mode. `true` in interactive and RPC mode. In RPC mode, dialog methods (`select`, `confirm`, `input`, `editor`) work via the extension UI sub-protocol, and fire-and-forget methods (`notify`, `setStatus`, `setWidget`, `setTitle`, `setEditorText`) emit requests to the client. Some TUI-specific methods are no-ops or return defaults (see [rpc.md](rpc.md#extension-ui-protocol)).
 
 ### ctx.cwd
 
@@ -702,6 +707,62 @@ Navigate to a different point in the session tree:
 const result = await ctx.navigateTree("entry-id-456", {
 	summarize: true,
 });
+```
+
+### ctx.reload()
+
+Run the same reload flow as `/reload`.
+
+```typescript
+pi.registerCommand("reload-runtime", {
+  description: "Reload extensions, skills, prompts, and themes",
+  handler: async (_args, ctx) => {
+    await ctx.reload();
+    return;
+  },
+});
+```
+
+Important behavior:
+- `await ctx.reload()` emits `session_shutdown` for the current extension runtime
+- It then reloads resources and emits `session_start` (and `resources_discover` with reason `"reload"`) for the new runtime
+- The currently running command handler still continues in the old call frame
+- Code after `await ctx.reload()` still runs from the pre-reload version
+- Code after `await ctx.reload()` must not assume old in-memory extension state is still valid
+- After the handler returns, future commands/events/tool calls use the new extension version
+
+For predictable behavior, treat reload as terminal for that handler (`await ctx.reload(); return;`).
+
+Tools run with `ExtensionContext`, so they cannot call `ctx.reload()` directly. Use a command as the reload entrypoint, then expose a tool that queues that command as a follow-up user message.
+
+Example tool the LLM can call to trigger reload:
+
+```typescript
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
+import { Type } from "@sinclair/typebox";
+
+export default function (pi: ExtensionAPI) {
+  pi.registerCommand("reload-runtime", {
+    description: "Reload extensions, skills, prompts, and themes",
+    handler: async (_args, ctx) => {
+      await ctx.reload();
+      return;
+    },
+  });
+
+  pi.registerTool({
+    name: "reload_runtime",
+    label: "Reload Runtime",
+    description: "Reload extensions, skills, prompts, and themes",
+    parameters: Type.Object({}),
+    async execute() {
+      pi.sendUserMessage("/reload-runtime", { deliverAs: "followUp" });
+      return {
+        content: [{ type: "text", text: "Queued /reload-runtime as a follow-up command." }],
+      };
+    },
+  });
+}
 ```
 
 ## ExtensionAPI Methods
@@ -1111,6 +1172,9 @@ ctx.ui.setTitle("omp - my-project");
 ctx.ui.setEditorText("Prefill text");
 const current = ctx.ui.getEditorText();
 
+// Paste into editor (triggers paste handling, including collapse for large content)
+ctx.ui.pasteToEditor("pasted content");
+
 // Custom editor component
 ctx.ui.setEditorComponent((tui, theme, keybindings) => new MyEditor(tui, theme, keybindings)); // EditorComponent
 ctx.ui.setEditorComponent(undefined); // Restore default
@@ -1147,7 +1211,7 @@ The callback receives:
 - `keybindings` - Keybindings manager for resolving bindings
 - `done(value)` - Call to close component and return value
 
-See [tui.md](tui.md) for the full component API and [examples/extensions/](../examples/extensions/) for working examples (todo.ts, tools.ts).
+See [tui.md](tui.md) for the full component API and [examples/extensions/](../examples/extensions/) for working examples (todo.ts, tools.ts, reload-runtime.ts).
 
 ### Message Rendering
 

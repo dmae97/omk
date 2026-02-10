@@ -20,6 +20,7 @@ import {
 	ToolResultStatus,
 } from "@aws-sdk/client-bedrock-runtime";
 import { $env } from "@oh-my-pi/pi-utils";
+import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { calculateCost } from "../models";
 import type {
 	Api,
@@ -112,8 +113,7 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream"> = (
 			}
 
 			if ($env.AWS_BEDROCK_FORCE_HTTP1 === "1") {
-				const nodeHttpHandler = await import("@smithy/node-http-handler");
-				config.requestHandler = new nodeHttpHandler.NodeHttpHandler();
+				config.requestHandler = new NodeHttpHandler();
 			}
 		}
 

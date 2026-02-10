@@ -686,6 +686,42 @@ Response:
 
 Returns an error if the name is empty.
 
+## Extension UI (stdout)
+
+In RPC mode, extensions receive an [`ExtensionUIContext`](./extensions.md#custom-ui) backed by an extension UI sub-protocol.
+When an extension calls a dialog or UI method, the agent emits an `extension_ui_request` JSON line on stdout. The host must
+respond by writing an `extension_ui_response` JSON line on stdin.
+
+If a dialog request includes a `timeout` field, the agent auto-resolves it with a default value when the timeout expires.
+The host does not need to track or enforce timeouts.
+
+Example request (stdout):
+
+```json
+{ "type": "extension_ui_request", "id": "req-123", "method": "confirm", "title": "Confirm", "message": "Continue?", "timeout": 30000 }
+```
+
+Example response (stdin):
+
+```json
+{ "type": "extension_ui_response", "id": "req-123", "confirmed": true }
+```
+
+### Unsupported / degraded UI methods
+
+Some `ExtensionUIContext` methods are not supported or degraded in RPC mode because they require direct TUI access:
+
+- `custom()` returns `undefined`
+- `setWorkingMessage()`, `setFooter()`, `setHeader()`, `setEditorComponent()`, `setToolsExpanded()` are no-ops
+- `getEditorText()` returns `""`
+- `getToolsExpanded()` returns `false`
+- `setWidget()` only supports `string[]` (factory functions/components are ignored)
+- `getAllThemes()` returns `[]`
+- `getTheme()` returns `undefined`
+- `setTheme()` returns `{ success: false, error: "Theme switching not supported in RPC mode" }`
+
+Note: `ctx.hasUI` is `true` in RPC mode because dialog and fire-and-forget UI methods are functional via this sub-protocol.
+
 ## Events
 
 Events are streamed to stdout as JSON lines during agent operation. Events do NOT include an `id` field (only responses do).
