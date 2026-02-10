@@ -190,10 +190,15 @@ export interface MCPToolCallResult {
 // Transport Types
 // =============================================================================
 
+export interface MCPRequestOptions {
+	/** Abort signal (e.g. Escape-to-interrupt) */
+	signal?: AbortSignal;
+}
+
 /** Transport interface - abstracts stdio/http */
 export interface MCPTransport {
 	/** Send a request and wait for response */
-	request<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>;
+	request<T = unknown>(method: string, params?: Record<string, unknown>, options?: MCPRequestOptions): Promise<T>;
 
 	/** Send a notification (no response expected) */
 	notify(method: string, params?: Record<string, unknown>): Promise<void>;

@@ -9,6 +9,7 @@ import type {
 	MCPHttpServerConfig,
 	MCPInitializeParams,
 	MCPInitializeResult,
+	MCPRequestOptions,
 	MCPServerCapabilities,
 	MCPServerConfig,
 	MCPServerConnection,
@@ -160,13 +161,18 @@ export async function callTool(
 	connection: MCPServerConnection,
 	toolName: string,
 	args: Record<string, unknown> = {},
+	options?: MCPRequestOptions,
 ): Promise<MCPToolCallResult> {
 	const params: MCPToolCallParams = {
 		name: toolName,
 		arguments: args,
 	};
 
-	return connection.transport.request<MCPToolCallResult>("tools/call", params as unknown as Record<string, unknown>);
+	return connection.transport.request<MCPToolCallResult>(
+		"tools/call",
+		params as unknown as Record<string, unknown>,
+		options,
+	);
 }
 
 /**

@@ -1,14 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
+- Changed `HashlineEdit` API from `old: string | string[]` / `new: string | string[]` to `src: string` / `dst: string`; multi-line content uses `\n`-separated strings, empty string `""` for insert/delete operations
 - Replaced `edit.patchMode` boolean setting with `edit.mode` enum; existing `edit.patchMode: true` configurations should use `edit.mode: patch`
 - Changed `getEditModelVariants()` return type from `Record<string, "patch" | "replace">` to `Record<string, EditMode | null>`
 
 ### Added
 
-- Added `toArray` helper function to normalize `string | string[]` inputs for hashline edit operations, supporting comma-separated line references
+- Added `MCPRequestOptions` interface with `signal` property to support request cancellation via AbortSignal
+- Added abort signal support to MCP tool execution, allowing requests to be cancelled via Escape-to-interrupt or other abort mechanisms
 - Added `HashlineMismatchError` class that displays grep-style output with `>>>` markers showing correct `LINE:HASH` references when hash validation fails
 - Added `HashMismatch` type to represent individual hash mismatches with line number, expected hash, and actual hash
 - Added hashline edit mode for line-addressed edits using content hashes (LINE:HASH format) with integrity verification
@@ -30,6 +33,10 @@
 
 ### Changed
 
+- Enhanced MCP request handling to propagate abort signals through HTTP, SSE, and stdio transports with proper cleanup
+- Improved stdio transport request handling to use Promise.withResolvers for cleaner async flow and better abort signal integration
+- Updated HTTP transport to combine operation abort signals with timeout signals using AbortSignal.any() for unified cancellation
+- Modified SSE response parsing to support abort signals and distinguish between timeout and user-initiated cancellation
 - Improved hashline edit robustness by automatically stripping `LINE:HASH|` display prefixes and unified-diff `+` markers that models may copy into replacement content
 - Enhanced replace edits to preserve original whitespace on lines where only whitespace differs, preventing spurious formatting diffs when models reformat code
 - Enhanced system prompt to display tool descriptions alongside tool names for improved clarity on available capabilities

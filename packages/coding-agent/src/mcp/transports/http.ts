@@ -9,6 +9,7 @@ import type {
 	JsonRpcMessage,
 	JsonRpcResponse,
 	MCPHttpServerConfig,
+	MCPRequestOptions,
 	MCPSseServerConfig,
 	MCPTransport,
 } from "../../mcp/types";
@@ -102,7 +103,7 @@ export class HttpTransport implements MCPTransport {
 		}
 	}
 
-	async request<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T> {
+	async request<T = unknown>(method: string, params?: Record<string, unknown>, options?: MCPRequestOptions): Promise<T> {
 		if (!this.#connected) {
 			throw new Error("Transport not connected");
 		}
@@ -129,13 +130,16 @@ export class HttpTransport implements MCPTransport {
 		const timeout = this.config.timeout ?? 30000;
 		const abortController = new AbortController();
 		const timeoutId = setTimeout(() => abortController.abort(), timeout);
+		const operationSignal = options?.signal
+			? AbortSignal.any([options.signal, abortController.signal])
+			: abortController.signal;
 
 		try {
 			const response = await fetch(this.config.url, {
 				method: "POST",
 				headers,
 				body: JSON.stringify(body),
-				signal: abortController.signal,
+				signal: operationSignal,
 			});
 
 			clearTimeout(timeoutId);
@@ -164,7 +168,7 @@ export class HttpTransport implements MCPTransport {
 
 			// Handle SSE response
 			if (contentType.includes("text/event-stream")) {
-				return this.#parseSSEResponse<T>(response, id);
+				return this.#parseSSEResponse<T>(response, id, options);
 			}
 
 			// Handle JSON response
@@ -178,21 +182,33 @@ export class HttpTransport implements MCPTransport {
 		} catch (error) {
 			clearTimeout(timeoutId);
 			if (error instanceof Error && error.name === "AbortError") {
+				if (options?.signal?.aborted) {
+					throw error;
+				}
 				throw new Error(`Request timeout after ${timeout}ms`);
 			}
 			throw error;
 		}
 	}
 
-	async #parseSSEResponse<T>(response: Response, expectedId: string | number): Promise<T> {
+	async #parseSSEResponse<T>(
+		response: Response,
+		expectedId: string | number,
+		options?: MCPRequestOptions,
+	): Promise<T> {
 		if (!response.body) {
 			throw new Error("No response body");
 		}
 
 		const timeout = this.config.timeout ?? 30000;
+		const abortController = new AbortController();
+		const timeoutId = setTimeout(() => abortController.abort(), timeout);
+		const operationSignal = options?.signal
+			? AbortSignal.any([options.signal, abortController.signal])
+			: abortController.signal;
 
-		const parse = async (): Promise<T> => {
-			for await (const message of readSseJson<JsonRpcMessage>(response.body!)) {
+		try {
+			for await (const message of readSseJson<JsonRpcMessage>(response.body, operationSignal)) {
 				if ("id" in message && message.id === expectedId && ("result" in message || "error" in message)) {
 					if (message.error) {
 						throw new Error(`MCP error ${message.error.code}: ${message.error.message}`);
@@ -205,14 +221,17 @@ export class HttpTransport implements MCPTransport {
 				}
 			}
 			throw new Error(`No response received for request ID ${expectedId}`);
-		};
-
-		return Promise.race([
-			parse(),
-			new Promise<never>((_, reject) =>
-				setTimeout(() => reject(new Error(`SSE response timeout after ${timeout}ms`)), timeout),
-			),
-		]);
+		} catch (error) {
+			if (error instanceof Error && error.name === "AbortError") {
+				if (options?.signal?.aborted) {
+					throw error;
+				}
+				throw new Error(`SSE response timeout after ${timeout}ms`);
+			}
+			throw error;
+		} finally {
+			clearTimeout(timeoutId);
+		}
 	}
 
 	async notify(method: string, params?: Record<string, unknown>): Promise<void> {

@@ -13,9 +13,26 @@ import type {
 	RenderResultOptions,
 } from "../extensibility/custom-tools/types";
 import type { Theme } from "../modes/theme/theme";
+import { ToolAbortError, throwIfAborted } from "../tools/tool-errors";
 import { callTool } from "./client";
 import { renderMCPCall, renderMCPResult } from "./render";
 import type { MCPContent, MCPServerConnection, MCPToolDefinition } from "./types";
+
+function withAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+	if (!signal) return promise;
+	if (signal.aborted) {
+		return Promise.reject(signal.reason instanceof Error ? signal.reason : new ToolAbortError());
+	}
+
+	const { promise: wrapped, resolve, reject } = Promise.withResolvers<T>();
+	const onAbort = () => {
+		reject(signal.reason instanceof Error ? signal.reason : new ToolAbortError());
+	};
+
+	signal.addEventListener("abort", onAbort, { once: true });
+	promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+	return wrapped;
+}
 
 /** Details included in MCP tool results for rendering */
 export interface MCPToolDetails {
@@ -165,10 +182,11 @@ export class MCPTool implements CustomTool<TSchema, MCPToolDetails> {
 		params: unknown,
 		_onUpdate: AgentToolUpdateCallback<MCPToolDetails> | undefined,
 		_ctx: CustomToolContext,
-		_signal?: AbortSignal,
+		signal?: AbortSignal,
 	): Promise<CustomToolResult<MCPToolDetails>> {
+		throwIfAborted(signal);
 		try {
-			const result = await callTool(this.connection, this.tool.name, params as Record<string, unknown>);
+			const result = await callTool(this.connection, this.tool.name, params as Record<string, unknown>, { signal });
 
 			const text = formatMCPContent(result.content);
 			const details: MCPToolDetails = {
@@ -192,6 +210,15 @@ export class MCPTool implements CustomTool<TSchema, MCPToolDetails> {
 				details,
 			};
 		} catch (error) {
+			if (error instanceof ToolAbortError) {
+				throw error;
+			}
+			if (error instanceof Error && error.name === "AbortError") {
+				throw new ToolAbortError();
+			}
+			if (signal?.aborted) {
+				throw new ToolAbortError();
+			}
 			const message = error instanceof Error ? error.message : String(error);
 			return {
 				content: [{ type: "text", text: `MCP error: ${message}` }],
@@ -261,11 +288,13 @@ export class DeferredMCPTool implements CustomTool<TSchema, MCPToolDetails> {
 		params: unknown,
 		_onUpdate: AgentToolUpdateCallback<MCPToolDetails> | undefined,
 		_ctx: CustomToolContext,
-		_signal?: AbortSignal,
+		signal?: AbortSignal,
 	): Promise<CustomToolResult<MCPToolDetails>> {
+		throwIfAborted(signal);
 		try {
-			const connection = await this.getConnection();
-			const result = await callTool(connection, this.tool.name, params as Record<string, unknown>);
+			const connection = await withAbort(this.getConnection(), signal);
+			throwIfAborted(signal);
+			const result = await callTool(connection, this.tool.name, params as Record<string, unknown>, { signal });
 
 			const text = formatMCPContent(result.content);
 			const details: MCPToolDetails = {
@@ -289,6 +318,15 @@ export class DeferredMCPTool implements CustomTool<TSchema, MCPToolDetails> {
 				details,
 			};
 		} catch (error) {
+			if (error instanceof ToolAbortError) {
+				throw error;
+			}
+			if (error instanceof Error && error.name === "AbortError") {
+				throw new ToolAbortError();
+			}
+			if (signal?.aborted) {
+				throw new ToolAbortError();
+			}
 			const message = error instanceof Error ? error.message : String(error);
 			return {
 				content: [{ type: "text", text: `MCP error: ${message}` }],

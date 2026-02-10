@@ -318,7 +318,7 @@ function createMCPProxyTools(mcpManager: MCPManager): CustomTool<TSchema>[] {
 					const result = await withAbortTimeout(
 						(async () => {
 							const connection = await mcpManager.waitForConnection(serverName);
-							return callTool(connection, mcpToolName, params as Record<string, unknown>);
+							return callTool(connection, mcpToolName, params as Record<string, unknown>, { signal });
 						})(),
 						MCP_CALL_TIMEOUT_MS,
 						signal,

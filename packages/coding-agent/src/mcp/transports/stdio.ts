@@ -7,7 +7,7 @@
 
 import { readJsonl } from "@oh-my-pi/pi-utils";
 import { type Subprocess, spawn } from "bun";
-import type { JsonRpcResponse, MCPStdioServerConfig, MCPTransport } from "../../mcp/types";
+import type { JsonRpcResponse, MCPRequestOptions, MCPStdioServerConfig, MCPTransport } from "../../mcp/types";
 
 /** Generate unique request ID */
 function generateId(): string {
@@ -146,7 +146,7 @@ export class StdioTransport implements MCPTransport {
 		this.onClose?.();
 	}
 
-	async request<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T> {
+	async request<T = unknown>(method: string, params?: Record<string, unknown>, options?: MCPRequestOptions): Promise<T> {
 		if (!this.#connected || !this.#process?.stdin) {
 			throw new Error("Transport not connected");
 		}
@@ -160,36 +160,67 @@ export class StdioTransport implements MCPTransport {
 		};
 
 		const timeout = this.config.timeout ?? 30000;
+		const signal = options?.signal;
 
-		let timer: NodeJS.Timeout | undefined;
-		try {
-			return await Promise.race([
-				new Promise<T>((resolve, reject) => {
-					this.#pendingRequests.set(id, {
-						resolve: resolve as (value: unknown) => void,
-						reject,
-					});
-
-					const message = `${JSON.stringify(request)}\n`;
-					try {
-						// Bun's FileSink has write() method directly
-						this.#process!.stdin.write(message);
-						this.#process!.stdin.flush();
-					} catch (error: unknown) {
-						this.#pendingRequests.delete(id);
-						reject(error);
-					}
-				}),
-				new Promise<never>((_, reject) => {
-					timer = setTimeout(() => {
-						this.#pendingRequests.delete(id);
-						reject(new Error(`Request timeout after ${timeout}ms`));
-					}, timeout);
-				}),
-			]);
-		} finally {
-			clearTimeout(timer);
+		if (signal?.aborted) {
+			const reason = signal.reason instanceof Error ? signal.reason : new Error("Aborted");
+			return Promise.reject(reason);
 		}
+
+		const { promise, resolve, reject } = Promise.withResolvers<T>();
+		let timer: NodeJS.Timeout | undefined;
+		let settled = false;
+
+		const cleanup = () => {
+			if (settled) return;
+			settled = true;
+			if (timer) {
+				clearTimeout(timer);
+				timer = undefined;
+			}
+			if (signal) {
+				signal.removeEventListener("abort", onAbort);
+			}
+			this.#pendingRequests.delete(id);
+		};
+
+		const onAbort = () => {
+			cleanup();
+			const reason = signal?.reason instanceof Error ? signal.reason : new Error("Aborted");
+			reject(reason);
+		};
+
+		if (signal) {
+			signal.addEventListener("abort", onAbort, { once: true });
+		}
+
+		this.#pendingRequests.set(id, {
+			resolve: (value: unknown) => {
+				cleanup();
+				resolve(value as T);
+			},
+			reject: (error: Error) => {
+				cleanup();
+				reject(error);
+			},
+		});
+
+		timer = setTimeout(() => {
+			cleanup();
+			reject(new Error(`Request timeout after ${timeout}ms`));
+		}, timeout);
+
+		const message = `${JSON.stringify(request)}\n`;
+		try {
+			// Bun's FileSink has write() method directly
+			this.#process.stdin.write(message);
+			this.#process.stdin.flush();
+		} catch (error: unknown) {
+			cleanup();
+			reject(error instanceof Error ? error : new Error(String(error)));
+		}
+
+		return promise;
 	}
 
 	async notify(method: string, params?: Record<string, unknown>): Promise<void> {
