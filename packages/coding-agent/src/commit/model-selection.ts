@@ -11,7 +11,7 @@ import type { Settings } from "../config/settings";
 
 export async function resolvePrimaryModel(
 	override: string | undefined,
-	settings,
+	settings: Settings,
 	modelRegistry: {
 		getAvailable: () => Model<Api>[];
 		getApiKey: (model: Model<Api>) => Promise<string | undefined>;
@@ -39,7 +39,7 @@ export async function resolvePrimaryModel(
 }
 
 export async function resolveSmolModel(
-	settings,
+	settings: Settings,
 	modelRegistry: {
 		getAvailable: () => Model<Api>[];
 		getApiKey: (model: Model<Api>) => Promise<string | undefined>;
