@@ -198,9 +198,9 @@ export interface DiffError {
 /** A single edit operation in hashline mode */
 export interface HashlineEdit {
 	/** Line references to replace (e.g., ["5:abcd", "6:ef01"]) — empty for insert */
-	old: string[];
+	old: string | string[];
 	/** Replacement content lines — empty for delete */
-	new: string[];
+	new: string | string[];
 	/** Insert after this line ref (e.g., "3:e7c4") — only when old is empty */
 	after?: string;
 }

@@ -16,7 +16,7 @@ import {
 describe("computeLineHash", () => {
 	test("returns 4-character hex string", () => {
 		const hash = computeLineHash(1, "hello");
-		expect(hash).toMatch(/^[0-9a-f]{4}$/);
+		expect(hash).toMatch(/^[0-9a-f]{2}$/);
 	});
 
 	test("same content at same line produces same hash", () => {
@@ -39,7 +39,7 @@ describe("computeLineHash", () => {
 
 	test("empty line produces valid hash", () => {
 		const hash = computeLineHash(1, "");
-		expect(hash).toMatch(/^[0-9a-f]{4}$/);
+		expect(hash).toMatch(/^[0-9a-f]{2}$/);
 	});
 });
 
@@ -74,7 +74,7 @@ describe("formatHashLines", () => {
 		const result = formatHashLines("foo\n\nbar");
 		const lines = result.split("\n");
 		expect(lines).toHaveLength(3);
-		expect(lines[1]).toMatch(/^2:[0-9a-f]{4}\| $/);
+		expect(lines[1]).toMatch(/^2:[0-9a-f]{2}\| $/);
 	});
 
 	test("round-trips with computeLineHash", () => {

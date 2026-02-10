@@ -14,7 +14,23 @@
 
 import type { HashlineEdit, HashMismatch } from "./types";
 
-const HEX3 = Array.from({ length: 0xfff + 1 }, (_, i) => i.toString(16).padStart(3, "0"));
+/** Coerce `string | string[]` to `string[]` */
+function toArray(v: string | string[]): string[] {
+	if (typeof v !== "string") return v;
+	// Split comma-separated refs: "35:ab,36:cd" → ["35:ab", "36:cd"]
+	if (v.includes(",")) {
+		const parts = v.split(",").map(s => s.trim());
+		if (parts.every(p => /^\d+:[0-9a-fA-F]/.test(p))) {
+			return parts;
+		}
+	}
+	return [v];
+}
+
+const HASH_LEN = 2;
+const HASH_MASK = BigInt((1 << (HASH_LEN * 4)) - 1);
+
+const HEX_DICT = Array.from({ length: Number(HASH_MASK) + 1 }, (_, i) => i.toString(16).padStart(HASH_LEN, "0"));
 
 /**
  * Compute the 4-character hex hash of a single line.
@@ -25,7 +41,10 @@ const HEX3 = Array.from({ length: 0xfff + 1 }, (_, i) => i.toString(16).padStart
  * The line input should not include a trailing newline.
  */
 export function computeLineHash(idx: number, line: string): string {
-	return HEX3[Number(Bun.hash.xxHash64(line, BigInt(idx))) & 0xfff];
+	if (line.endsWith("\r")) {
+		line = line.slice(0, -1);
+	}
+	return HEX_DICT[Number(Bun.hash.xxHash64(line, BigInt(idx)) & HASH_MASK)];
 }
 
 /**
@@ -60,7 +79,10 @@ export function formatHashLines(content: string, startLine = 1): string {
  * @throws Error if the format is invalid (not `NUMBER:HEXHASH`)
  */
 export function parseLineRef(ref: string): { line: number; hash: string } {
-	const match = ref.match(/^(\d+):([0-9a-fA-F]{1,16})$/);
+	// Strip display-format suffix: "5:ab| some content" → "5:ab"
+	// Models often copy the full display format from read output.
+	const cleaned = ref.replace(/\|.*$/, "").trim();
+	const match = cleaned.match(/^(\d+):([0-9a-fA-F]{1,16})$/);
 	if (!match) {
 		throw new Error(`Invalid line reference "${ref}". Expected format "LINE:HASH" (e.g. "5:a3f2").`);
 	}
@@ -69,25 +91,6 @@ export function parseLineRef(ref: string): { line: number; hash: string } {
 		throw new Error(`Line number must be >= 1, got ${line} in "${ref}".`);
 	}
 	return { line, hash: match[2] };
-}
-
-/**
- * Validate that a line reference points to an existing line with a matching hash.
- *
- * @param ref - Parsed line reference (1-indexed line number + expected hash)
- * @param fileLines - Array of file lines (0-indexed)
- * @throws Error if the line is out of range or the hash doesn't match
- */
-export function validateLineRef(ref: { line: number; hash: string }, fileLines: string[]): void {
-	if (ref.line < 1 || ref.line > fileLines.length) {
-		throw new Error(`Line ${ref.line} does not exist (file has ${fileLines.length} lines)`);
-	}
-	const actualHash = computeLineHash(ref.line, fileLines[ref.line - 1]);
-	if (actualHash !== ref.hash.toLowerCase()) {
-		throw new Error(
-			`Line ${ref.line} has changed since last read (expected ${ref.hash}, got ${actualHash}). Re-read the file.`,
-		);
-	}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -159,6 +162,27 @@ export class HashlineMismatchError extends Error {
 	}
 }
 
+/**
+ * Validate that a line reference points to an existing line with a matching hash.
+ *
+ * @param ref - Parsed line reference (1-indexed line number + expected hash)
+ * @param fileLines - Array of file lines (0-indexed)
+ * @throws HashlineMismatchError if the hash doesn't match (includes correct hashes in context)
+ * @throws Error if the line is out of range
+ */
+export function validateLineRef(ref: { line: number; hash: string }, fileLines: string[]): void {
+	if (ref.line < 1 || ref.line > fileLines.length) {
+		throw new Error(`Line ${ref.line} does not exist (file has ${fileLines.length} lines)`);
+	}
+	const actualHash = computeLineHash(ref.line, fileLines[ref.line - 1]);
+	if (actualHash !== ref.hash.toLowerCase()) {
+		throw new HashlineMismatchError(
+			[{ line: ref.line, expected: ref.hash, actual: actualHash }],
+			fileLines,
+		);
+	}
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Edit Application
 // ═══════════════════════════════════════════════════════════════════════════
@@ -187,11 +211,14 @@ export function applyHashlineEdits(
 	const fileLines = content.split("\n");
 	let firstChangedLine: number | undefined;
 
+	// Normalize string → string[] for old/new fields
+	const normalized = edits.map(e => ({ old: toArray(e.old), new: toArray(e.new), after: e.after }));
+
 	// Pre-validate all line refs and collect hash mismatches in one pass.
 	// Structural errors (out of range, malformed, non-consecutive) still throw immediately.
 	const mismatches: HashMismatch[] = [];
 
-	for (const edit of edits) {
+	for (const edit of normalized) {
 		const refs: string[] = edit.old.length > 0 ? edit.old : edit.after ? [edit.after] : [];
 		for (const refStr of refs) {
 			const ref = parseLineRef(refStr);
@@ -210,7 +237,7 @@ export function applyHashlineEdits(
 	}
 
 	// Classify and annotate edits with their effective line number for sorting.
-	const annotated = edits.map((edit, idx) => {
+	const annotated = normalized.map((edit, idx) => {
 		const sortLine = getSortLine(edit, idx);
 		return { edit, sortLine };
 	});
@@ -273,7 +300,7 @@ export function applyHashlineEdits(
 	 * For replace/delete: use the first old line.
 	 * For insert: use the after line.
 	 */
-	function getSortLine(edit: HashlineEdit, idx: number): number {
+	function getSortLine(edit: { old: string[]; after?: string }, idx: number): number {
 		if (edit.old.length > 0) {
 			return parseLineRef(edit.old[0]).line;
 		}

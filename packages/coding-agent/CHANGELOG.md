@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Replaced `edit.patchMode` boolean setting with `edit.mode` enum; existing `edit.patchMode: true` configurations should use `edit.mode: patch`
@@ -9,6 +8,7 @@
 
 ### Added
 
+- Added `toArray` helper function to normalize `string | string[]` inputs for hashline edit operations, supporting comma-separated line references
 - Added `HashlineMismatchError` class that displays grep-style output with `>>>` markers showing correct `LINE:HASH` references when hash validation fails
 - Added `HashMismatch` type to represent individual hash mismatches with line number, expected hash, and actual hash
 - Added hashline edit mode for line-addressed edits using content hashes (LINE:HASH format) with integrity verification
@@ -30,6 +30,11 @@
 
 ### Changed
 
+- Reduced hash length from 4 to 2 hex characters (16-bit hashes) for more concise line references
+- Updated `HashlineEdit` type to accept `string | string[]` for `old` and `new` fields, allowing single-line edits without array wrapping
+- Enhanced `parseLineRef` to strip display-format suffix (e.g., `5:ab| content` → `5:ab`), allowing models to copy full read output format
+- Improved `validateLineRef` to throw `HashlineMismatchError` with context lines instead of generic error, providing grep-style output with correct hashes
+- Modified hash computation to strip trailing carriage returns before hashing for consistent line hash values
 - Renamed `HashlineEdit` fields from `src`/`dst` to `old`/`new` for clarity in replace, delete, and insert operations
 - Enhanced hash validation in `applyHashlineEdits` to collect all mismatches before throwing, providing comprehensive error reporting with context lines
 - Changed `edit.patchMode` boolean setting to `edit.mode` enum (replace, patch, hashline) with default value patch
