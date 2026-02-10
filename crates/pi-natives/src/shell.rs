@@ -549,10 +549,21 @@ async fn run_shell_command(
 		}
 	}
 
-	let reader_cancel = cancel_token.clone();
-	let reader_handle = tokio::spawn(async move {
-		read_output(reader_file, on_chunk, reader_cancel).await;
-		Result::<()>::Ok(())
+	let reader_cancel = CancellationToken::new();
+	let mut reader_handle = tokio::spawn({
+		let reader_cancel = reader_cancel.clone();
+		async move {
+			read_output(reader_file, on_chunk, reader_cancel).await;
+			Result::<()>::Ok(())
+		}
+	});
+	let cancel_bridge = tokio::spawn({
+		let cancel_token = cancel_token.clone();
+		let reader_cancel = reader_cancel.clone();
+		async move {
+			cancel_token.cancelled().await;
+			reader_cancel.cancel();
+		}
 	});
 	let result = session
 		.shell
@@ -573,7 +584,18 @@ async fn run_shell_command(
 
 	drop(params);
 
-	let _ = reader_handle.await;
+	// The foreground command can complete while background jobs keep the
+	// stdout/stderr pipe open. Don't hang forever waiting for EOF; drain briefly,
+	// then cancel.
+	if time::timeout(Duration::from_millis(200), &mut reader_handle)
+		.await
+		.is_err()
+	{
+		reader_cancel.cancel();
+		let _ = reader_handle.await;
+	}
+	cancel_bridge.abort();
+	let _ = cancel_bridge.await;
 
 	result.map_err(|err| Error::from_reason(format!("Shell execution failed: {err}")))
 }

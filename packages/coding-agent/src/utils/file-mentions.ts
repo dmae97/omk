@@ -22,6 +22,11 @@ const TRAILING_PUNCTUATION_REGEX = /[)\]}>.,;:!?"'`]+$/;
 const MENTION_BOUNDARY_REGEX = /[\s([{<"'`]/;
 const DEFAULT_DIR_LIMIT = 500;
 
+// Avoid OOM when users @mention very large files. Above these limits we skip
+// auto-reading and only include the path in the message.
+const MAX_AUTO_READ_TEXT_BYTES = DEFAULT_MAX_BYTES * 100; // 5MB
+const MAX_AUTO_READ_IMAGE_BYTES = 25 * 1024 * 1024; // 25MB
+
 function isMentionBoundary(text: string, index: number): boolean {
 	if (index === 0) return true;
 	return MENTION_BOUNDARY_REGEX.test(text[index - 1]);
@@ -183,6 +188,15 @@ export async function generateFileMentionMessages(
 
 			const mimeType = await detectSupportedImageMimeTypeFromFile(absolutePath);
 			if (mimeType) {
+				if (stat.size > MAX_AUTO_READ_IMAGE_BYTES) {
+					files.push({
+						path: filePath,
+						content: "",
+						byteSize: stat.size,
+						skippedReason: "tooLarge",
+					});
+					continue;
+				}
 				const buffer = await fs.readFile(absolutePath);
 				if (buffer.length === 0) {
 					continue;
@@ -207,6 +221,16 @@ export async function generateFileMentionMessages(
 				}
 
 				files.push({ path: filePath, content: dimensionNote ?? "", image });
+				continue;
+			}
+
+			if (stat.size > MAX_AUTO_READ_TEXT_BYTES) {
+				files.push({
+					path: filePath,
+					content: "",
+					byteSize: stat.size,
+					skippedReason: "tooLarge",
+				});
 				continue;
 			}
 

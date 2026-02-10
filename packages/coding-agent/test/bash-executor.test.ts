@@ -64,6 +64,19 @@ describe("executeBash", () => {
 		expect(seenChunk ?? "").toContain("hello");
 	});
 
+	it("returns even if command spawns a background job", async () => {
+		if (process.platform === "win32") {
+			return;
+		}
+		const start = Date.now();
+		const result = await executeBash("{ sleep 5; } & echo fg", {
+			cwd: tempDir,
+			timeout: 5000,
+		});
+		expect(result.output).toContain("fg");
+		expect(Date.now() - start).toBeLessThan(3000);
+	});
+
 	it("times out commands", async () => {
 		if (process.platform === "win32") {
 			return;

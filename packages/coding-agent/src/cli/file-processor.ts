@@ -7,8 +7,14 @@ import type { ImageContent } from "@oh-my-pi/pi-ai";
 import { isEnoent } from "@oh-my-pi/pi-utils";
 import chalk from "chalk";
 import { resolveReadPath } from "../tools/path-utils";
+import { DEFAULT_MAX_BYTES, formatSize } from "../tools/truncate";
 import { formatDimensionNote, resizeImage } from "../utils/image-resize";
 import { detectSupportedImageMimeTypeFromFile } from "../utils/mime";
+
+// Keep CLI startup responsive and avoid OOM when users pass huge files.
+// If a file exceeds these limits, we include it as a path-only <file/> block.
+const MAX_CLI_TEXT_BYTES = DEFAULT_MAX_BYTES * 100; // 5MB
+const MAX_CLI_IMAGE_BYTES = 25 * 1024 * 1024; // 25MB
 
 export interface ProcessedFiles {
 	text: string;
@@ -30,6 +36,27 @@ export async function processFileArguments(fileArgs: string[], options?: Process
 		// Expand and resolve path (handles ~ expansion and macOS screenshot Unicode spaces)
 		const absolutePath = path.resolve(resolveReadPath(fileArg, process.cwd()));
 
+		let stat: Awaited<ReturnType<typeof fs.stat>>;
+		try {
+			stat = await fs.stat(absolutePath);
+		} catch (err) {
+			if (isEnoent(err)) {
+				console.error(chalk.red(`Error: File not found: ${absolutePath}`));
+				process.exit(1);
+			}
+			throw err;
+		}
+
+		const mimeType = await detectSupportedImageMimeTypeFromFile(absolutePath);
+		const maxBytes = mimeType ? MAX_CLI_IMAGE_BYTES : MAX_CLI_TEXT_BYTES;
+		if (stat.size > maxBytes) {
+			console.error(
+				chalk.yellow(`Warning: Skipping file contents (too large: ${formatSize(stat.size)}): ${absolutePath}`),
+			);
+			text += `<file name="${absolutePath}"></file>\n`;
+			continue;
+		}
+
 		// Read file, handling not-found gracefully
 		let buffer: Buffer;
 		try {
@@ -44,8 +71,6 @@ export async function processFileArguments(fileArgs: string[], options?: Process
 		if (buffer.length === 0) {
 			continue;
 		}
-
-		const mimeType = await detectSupportedImageMimeTypeFromFile(absolutePath);
 
 		if (mimeType) {
 			// Handle image file

@@ -114,6 +114,10 @@ export interface FileMentionMessage {
 		path: string;
 		content: string;
 		lineCount?: number;
+		/** File size in bytes, if known. */
+		byteSize?: number;
+		/** Why the file contents were omitted from auto-read. */
+		skippedReason?: "tooLarge";
 		image?: ImageContent;
 	}>;
 	timestamp: number;

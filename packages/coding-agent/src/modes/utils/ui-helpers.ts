@@ -17,6 +17,7 @@ import { theme } from "../../modes/theme/theme";
 import type { CompactionQueuedMessage, InteractiveModeContext } from "../../modes/types";
 import { type CustomMessage, SKILL_PROMPT_MESSAGE_TYPE, type SkillPromptDetails } from "../../session/messages";
 import type { SessionContext } from "../../session/session-manager";
+import { formatSize } from "../../tools/truncate";
 
 type TextBlock = { type: "text"; text: string };
 
@@ -127,11 +128,17 @@ export class UiHelpers {
 			case "fileMention": {
 				// Render compact file mention display
 				for (const file of message.files) {
-					const suffix = file.image
-						? "(image)"
-						: file.lineCount === undefined
-							? "(unknown lines)"
-							: `(${file.lineCount} lines)`;
+					let suffix: string;
+					if (file.skippedReason === "tooLarge") {
+						const size = typeof file.byteSize === "number" ? formatSize(file.byteSize) : "unknown size";
+						suffix = `(skipped: ${size})`;
+					} else {
+						suffix = file.image
+							? "(image)"
+							: file.lineCount === undefined
+								? "(unknown lines)"
+								: `(${file.lineCount} lines)`;
+					}
 					const text = `${theme.fg("dim", `${theme.tree.last} `)}${theme.fg("muted", "Read")} ${theme.fg(
 						"accent",
 						file.path,
