@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [11.8.1] - 2026-02-10
+
 ### Added
 
 - Added current date to system prompt context in YYYY-MM-DD format for date-aware agent reasoning
