@@ -1,9 +1,9 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added current date to system prompt context in YYYY-MM-DD format for date-aware agent reasoning
 - Added file size display in UI when files are skipped due to size limits
 - Added support for gigabyte (GB) file size formatting in truncate utility
 

@@ -255,6 +255,7 @@ Read `rule://<name>` when working in domain.
 {{/if}}
 
 Current directory: {{cwd}}
+Current date: {{date}}
 
 <north_star>
 Correctness. Usefulness. Fidelity to truth.

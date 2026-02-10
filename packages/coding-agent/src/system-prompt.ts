@@ -473,6 +473,11 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 	const systemPromptCustomization = await loadSystemPromptFiles({ cwd: resolvedCwd });
 
 	const now = new Date();
+	const date = now.toLocaleDateString("en-CA", {
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+	});
 	const dateTime = now.toLocaleString("en-US", {
 		weekday: "long",
 		year: "numeric",
@@ -529,6 +534,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 			skills: filteredSkills,
 			preloadedSkills: preloadedSkillContents,
 			rules: rules ?? [],
+			date,
 			dateTime,
 			cwd: resolvedCwd,
 		});
@@ -544,6 +550,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		skills: filteredSkills,
 		preloadedSkills: preloadedSkillContents,
 		rules: rules ?? [],
+		date,
 		dateTime,
 		cwd: resolvedCwd,
 		appendSystemPrompt: resolvedAppendPrompt ?? "",
