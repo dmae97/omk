@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Changed
 
 - Replaced `setTimeout` with `Bun.sleep()` for improved performance in file lock retry logic
@@ -15,6 +16,10 @@
 - Removed `GrepOperations` interface from public API exports
 - Removed `GrepToolOptions` interface from public API exports
 - Removed unused `_options` parameter from `GrepTool` constructor
+
+### Fixed
+
+- Improved browser script evaluation to handle both expression and statement forms, fixing evaluation failures for certain script types
 
 ## [11.8.1] - 2026-02-10
 

@@ -1127,8 +1127,11 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					const page = await this.#ensurePage(params);
 					const value = (await untilAborted(signal, () =>
 						page.evaluate((source: string) => {
-							const evaluator = new Function(`return (${source});`);
-							return evaluator();
+							try {
+								return new Function(`return (${source});`)();
+							} catch {
+								return new Function(source)();
+							}
 						}, script),
 					)) as unknown;
 					const output = formatEvaluateResult(value);
