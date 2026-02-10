@@ -39,10 +39,13 @@ namespace Snowflake {
 	// Formats a sequence and timestamp into a snowflake hex string.
 	//
 	export function formatParts(dt: number, seq: number): Snowflake {
-		// Keep everything in Number space; dt is < 2^53 for current epochs.
-		const value = dt * 0x400000 + seq; // dt << 22
-		const hi = Math.floor(value / 0x100000000);
-		const lo = (value - hi * 0x100000000) >>> 0;
+		// Split dt into hi/lo to avoid exceeding Number.MAX_SAFE_INTEGER.
+		// dt is ~39 bits; dt<<22 would be ~61 bits, so we split at bit 10:
+		//   lo32 = (dtLo << 22) | seq   (10+22 = 32 bits, no overlap)
+		//   hi32 = dtHi                 (~29 bits)
+		const dtLo = dt % 1024;
+		const hi = (dt - dtLo) / 1024; // dt >>> 10
+		const lo = ((dtLo << 22) | seq) >>> 0;
 		const hi1 = (hi >>> 16) & 0xffff;
 		const hi2 = hi & 0xffff;
 		const lo1 = (lo >>> 16) & 0xffff;
