@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [11.10.0] - 2026-02-10
 ### Added
 
 - Added support for Kimi K2, K2 Turbo Preview, and K2.5 models with reasoning capabilities

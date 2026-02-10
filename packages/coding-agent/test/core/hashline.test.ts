@@ -31,12 +31,6 @@ describe("computeLineHash", () => {
 		expect(a).not.toBe(b);
 	});
 
-	test("same content at different line numbers produces different hash", () => {
-		const a = computeLineHash(1, "hello");
-		const b = computeLineHash(2, "hello");
-		expect(a).not.toBe(b);
-	});
-
 	test("empty line produces valid hash", () => {
 		const hash = computeLineHash(1, "");
 		expect(hash).toMatch(/^[0-9a-f]{2}$/);

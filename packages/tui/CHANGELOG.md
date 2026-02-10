@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [11.10.0] - 2026-02-10
 ### Added
 
 - Added `hint` property to autocomplete items to display dim ghost text after cursor when item is selected

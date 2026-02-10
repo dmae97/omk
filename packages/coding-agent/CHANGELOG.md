@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [11.10.0] - 2026-02-10
 ### Breaking Changes
 
 - Changed `HashlineEdit.src` from string format (e.g., `"5:ab"`, `"5:ab..9:ef"`) to structured `SrcSpec` object with discriminated union types (`{ kind: "single", ref: "..." }`, `{ kind: "range", start: "...", end: "..." }`, etc.)
