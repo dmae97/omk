@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [11.10.4] - 2026-02-10
+
 ### Added
 
 - Hashline diff computation with `computeHashlineDiff` function for preview rendering of hashline-mode edits
