@@ -177,9 +177,9 @@ jobs:
           }
           build_binary darwin arm64 bun-darwin-arm64 packages/coding-agent/binaries/omp-darwin-arm64
           build_binary darwin x64 bun-darwin-x64 packages/coding-agent/binaries/omp-darwin-x64
-          build_binary linux x64 bun-linux-x64 packages/coding-agent/binaries/omp-linux-x64
+          build_binary linux x64 bun-linux-x64-modern packages/coding-agent/binaries/omp-linux-x64
           build_binary linux arm64 bun-linux-arm64 packages/coding-agent/binaries/omp-linux-arm64
-          build_binary win32 x64 bun-windows-x64 packages/coding-agent/binaries/omp-windows-x64.exe
+          build_binary win32 x64 bun-windows-x64-modern packages/coding-agent/binaries/omp-windows-x64.exe
           bun --cwd=packages/natives run embed:native --reset
       - name: Stage native addons for release
         run: cp packages/natives/native/*.node packages/coding-agent/binaries/
