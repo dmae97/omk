@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [11.9.0] - 2026-02-10
+
 ### Added
 
 - Added `/mcp` slash command for runtime MCP server management (add, list, remove, enable, disable, test, reauth)
