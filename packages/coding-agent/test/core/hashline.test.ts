@@ -407,6 +407,98 @@ describe("applyHashlineEdits — heuristics", () => {
 		expect(outLines[2]).toBe("// added");
 		expect(outLines[3]).toBe("const x = 1;");
 	});
+
+	test("repairs single-line replacement that absorbed the next line (prevents duplication)", () => {
+		const content = ["    typeof HOOK === 'undefined' &&", "    typeof HOOK.checkDCE !== 'function'", "tail();"].join(
+			"\n",
+		);
+
+		const edits: HashlineEdit[] = [
+			{
+				src: makeRef(1, "    typeof HOOK === 'undefined' &&"),
+				// Model merged both lines into one and dropped indentation.
+				dst: "typeof HOOK === 'undefined' || typeof HOOK.checkDCE !== 'function'",
+			},
+		];
+
+		const result = applyHashlineEdits(content, edits);
+		expect(result.content).toBe(
+			["    typeof HOOK === 'undefined' || typeof HOOK.checkDCE !== 'function'", "tail();"].join("\n"),
+		);
+	});
+
+	test("repairs single-line replacement that absorbed the previous line (prevents duplication)", () => {
+		const content = [
+			"  const nativeStyleResolver: ResolveNativeStyle | void =",
+			"    resolveRNStyle || hook.resolveRNStyle;",
+			"  after();",
+		].join("\n");
+
+		const edits: HashlineEdit[] = [
+			{
+				src: makeRef(2, "    resolveRNStyle || hook.resolveRNStyle;"),
+				// Model absorbed the declaration line and dropped indentation.
+				dst: "const nativeStyleResolver: ResolveNativeStyle | void = resolveRNStyle ?? hook.resolveRNStyle;",
+			},
+		];
+
+		const result = applyHashlineEdits(content, edits);
+		expect(result.content).toBe(
+			[
+				"  const nativeStyleResolver: ResolveNativeStyle | void = resolveRNStyle ?? hook.resolveRNStyle;",
+				"  after();",
+			].join("\n"),
+		);
+	});
+
+	test("accepts polluted src that starts with LINE:HASH but includes trailing content", () => {
+		const content = "aaa\nbbb\nccc";
+		const srcHash = computeLineHash(2, "bbb");
+		const edits: HashlineEdit[] = [
+			{
+				src: `2:${srcHash}export function foo(a, b) {}`, // comma in trailing content
+				dst: "BBB",
+			},
+		];
+
+		const result = applyHashlineEdits(content, edits);
+		expect(result.content).toBe("aaa\nBBB\nccc");
+	});
+
+	test("treats same-line ranges as single-line replacements", () => {
+		const content = "aaa\nbbb\nccc";
+		const good = makeRef(2, "bbb");
+		const edits: HashlineEdit[] = [{ src: `${good}..2:00`, dst: "BBB" }];
+		const result = applyHashlineEdits(content, edits);
+		expect(result.content).toBe("aaa\nBBB\nccc");
+	});
+
+	test("supports substring src when it matches exactly one line", () => {
+		const content = "aaa\ndevtools–unsupported-bridge-protocol\nccc";
+		const edits: HashlineEdit[] = [
+			{
+				src: "devtools–unsupported-bridge-protocol",
+				dst: "devtools-unsupported-bridge-protocol",
+			},
+		];
+
+		const result = applyHashlineEdits(content, edits);
+		expect(result.content).toBe("aaa\ndevtools-unsupported-bridge-protocol\nccc");
+	});
+
+	test("normalizes unicode-confusable hyphens when an edit would otherwise be a no-op", () => {
+		const content = "aaa\ndevtools–unsupported-bridge-protocol\nccc";
+		// dst is byte-identical to original (en-dash), so this would normally be a no-op.
+		const edits: HashlineEdit[] = [
+			{
+				src: makeRef(2, "devtools–unsupported-bridge-protocol"),
+				dst: "devtools–unsupported-bridge-protocol",
+			},
+		];
+
+		const result = applyHashlineEdits(content, edits);
+		expect(result.content).toBe("aaa\ndevtools-unsupported-bridge-protocol\nccc");
+	});
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -527,11 +619,11 @@ describe("applyHashlineEdits — errors", () => {
 		expect(() => applyHashlineEdits(content, edits)).toThrow(/does not exist/);
 	});
 
-	test("rejects malformed line ref", () => {
+	test("rejects substring src when not found", () => {
 		const content = "aaa\nbbb";
 		const edits: HashlineEdit[] = [{ src: "garbage", dst: "X" }];
 
-		expect(() => applyHashlineEdits(content, edits)).toThrow(/Invalid line reference/);
+		expect(() => applyHashlineEdits(content, edits)).toThrow(/Substring src not found/);
 	});
 
 	test("rejects src with newlines", () => {
@@ -541,11 +633,11 @@ describe("applyHashlineEdits — errors", () => {
 		expect(() => applyHashlineEdits(content, edits)).toThrow();
 	});
 
-	test("rejects src with commas", () => {
+	test("rejects src with commas that appears to include multiple line refs", () => {
 		const content = "aaa\nbbb\nccc";
 		const edits: HashlineEdit[] = [{ src: "2:ab,3:cd", dst: "X" }];
 
-		expect(() => applyHashlineEdits(content, edits)).toThrow();
+		expect(() => applyHashlineEdits(content, edits)).toThrow(/multiple line refs/);
 	});
 
 	test("rejects range with start > end", () => {

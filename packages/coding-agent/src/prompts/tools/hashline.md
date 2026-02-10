@@ -14,7 +14,10 @@ Line-addressed edits using hash-verified line references. Read file with hashes 
 - **Insert after**: `src: "5:ab..", dst: "new line"` — inserts after line 5 (line 5 unchanged)
 - **Insert before**: `src: "..5:ab", dst: "new line"` — inserts before line 5 (line 5 unchanged)
 **Rules:**
-- `src` must be exactly one of: `"LINE:HASH"`, `"LINE:HASH..LINE:HASH"`, `"LINE:HASH.."`, or `"..LINE:HASH"`
+- `src` should be one of: `"LINE:HASH"`, `"LINE:HASH..LINE:HASH"`, `"LINE:HASH.."`, or `"..LINE:HASH"`
+- If you accidentally paste extra text after a `LINE:HASH` (e.g. `"14:abexport function ..."`), the tool will extract the `LINE:HASH` prefix, but you should avoid relying on this.
+- `dst` replaces the **entire line(s)** referenced by `src` — match the original indentation exactly in `dst`
+- Do not merge multiple lines into one `dst` when `src` targets a single line — use a range instead
 - Multiple edits in one call are applied bottom-up (safe for non-overlapping edits)
 - Hashes verify file hasn't changed since your last read — stale hashes produce clear errors
 - Hashes are derived from both line content and line number (copy them verbatim from read output)
@@ -38,7 +41,7 @@ Returns success/failure; on failure, error message indicates:
 - Always read target file before editing — line hashes come from the read output
 - If edit fails with hash mismatch, re-read the file to get fresh hashes
 - Never fabricate hashes — always copy from read output
-- `src` refs use the format `LINE:HASH` exactly as shown in read output (e.g., `"5:ab"`)
+- `src` refs use the format `LINE:HASH` as shown in read output (e.g., `"5:ab"`)
 - `dst` contains plain content lines (no hash prefix)
 </critical>
 

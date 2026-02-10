@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Changed `HashlineEdit` API from `old: string | string[]` / `new: string | string[]` to `src: string` / `dst: string`; src uses range syntax `"5:ab"` (single), `"5:ab..9:ef"` (range), `"5:ab.."` (insert after), or `"..5:ab"` (insert before)
@@ -14,6 +15,10 @@
 
 ### Added
 
+- Added substring-based source matching for hashline edits when line reference format is invalid, allowing fallback to unique substring search within the file
+- Added automatic detection and repair of single-line merges where models absorb adjacent lines, preventing content duplication
+- Added normalization of unicode-confusable hyphens (en-dash, em-dash, etc.) to ASCII hyphens when edits would otherwise be no-ops
+- Added heuristics to restore original indentation and preserve wrapped line formatting in hashline edits
 - Added abort signal support to MCP server connection and tool listing operations, allowing requests to be cancelled via Escape key during testing
 - Added `MCPRequestOptions` interface with `signal` property to support request cancellation via AbortSignal
 - Added abort signal support to MCP tool execution, allowing requests to be cancelled via Escape-to-interrupt or other abort mechanisms
@@ -38,6 +43,11 @@
 
 ### Changed
 
+- Relaxed comma validation in `src` to allow trailing content after line references (e.g., `14:abexport function foo()`), while still rejecting inputs that appear to contain multiple line refs
+- Improved `parseLineRef` to accept hash prefixes shorter than the full hash length, allowing partial hash matches
+- Enhanced error message for hash mismatches to guide users toward re-reading the file and using updated LINE:HASH references
+- Updated hashline tool documentation to clarify that accidental trailing text after LINE:HASH will be extracted, and to discourage merging multiple lines into single-line replacements
+- Treated same-line ranges (e.g., `5:ab..5:cd`) as single-line replacements instead of range operations
 - Enhanced hashline edit robustness with heuristics to strip anchor line echoes and range boundary echoes that models may copy into replacement content
 - Improved whitespace preservation in hashline edits to handle mismatched line counts using loose matching strategy
 - Strengthened hashline edit validation to reject malformed src specs (embedded newlines, commas, invalid ranges)
@@ -69,6 +79,8 @@
 
 ### Fixed
 
+- Fixed substring source matching to reject ambiguous matches and provide helpful error messages showing all occurrences
+- Fixed substring source matching to require exactly one matching line in the file
 - Fixed MCP test command to properly clean up connections even when cancelled or aborted, preventing resource leaks
 
 ## [11.9.0] - 2026-02-10
