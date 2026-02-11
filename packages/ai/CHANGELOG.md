@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Increased maximum retry attempts for Codex requests from 2 to 5 to improve reliability on transient failures
+
+### Fixed
+
+- Fixed tool result content handling in Anthropic provider to provide fallback error message when content is empty
+- Improved retry delay calculation to parse delay values from error response bodies (e.g., 'Please try again in 225ms')
 
 ## [11.11.0] - 2026-02-10
 

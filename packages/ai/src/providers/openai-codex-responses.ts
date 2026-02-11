@@ -72,7 +72,7 @@ export function buildCodexSystemPrompt(args: { userSystemPrompt?: string }): Cod
 }
 
 const CODEX_DEBUG = $env.PI_CODEX_DEBUG === "1" || $env.PI_CODEX_DEBUG === "true";
-const CODEX_MAX_RETRIES = 2;
+const CODEX_MAX_RETRIES = 5;
 const CODEX_RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 const CODEX_RETRY_DELAY_MS = 500;
 
@@ -495,7 +495,7 @@ function logCodexDebug(message: string, details?: Record<string, unknown>): void
 	console.error(`[codex] ${message}`);
 }
 
-function getRetryDelayMs(response: Response | null, attempt: number): number {
+function getRetryDelayMs(response: Response | null, attempt: number, errorBody?: string): number {
 	const retryAfter = response?.headers?.get("retry-after") || null;
 	if (retryAfter) {
 		const seconds = Number(retryAfter);
@@ -507,9 +507,21 @@ function getRetryDelayMs(response: Response | null, attempt: number): number {
 			return Math.max(0, parsedDate - Date.now());
 		}
 	}
+	// Parse retry delay from error body (e.g., "Please try again in 225ms" or "Please try again in 1.5s")
+	if (errorBody) {
+		const msMatch = /try again in\s+(\d+(?:\.\d+)?)\s*ms/i.exec(errorBody);
+		if (msMatch) {
+			const ms = Number(msMatch[1]);
+			if (Number.isFinite(ms)) return Math.max(ms, 100);
+		}
+		const sMatch = /try again in\s+(\d+(?:\.\d+)?)\s*s(?:ec)?/i.exec(errorBody);
+		if (sMatch) {
+			const s = Number(sMatch[1]);
+			if (Number.isFinite(s)) return Math.max(s * 1000, 100);
+		}
+	}
 	return CODEX_RETRY_DELAY_MS * (attempt + 1);
 }
-
 async function fetchWithRetry(url: string, init: RequestInit, signal?: AbortSignal): Promise<Response> {
 	let attempt = 0;
 	while (true) {
@@ -519,7 +531,9 @@ async function fetchWithRetry(url: string, init: RequestInit, signal?: AbortSign
 				return response;
 			}
 			if (signal?.aborted) return response;
-			const delay = getRetryDelayMs(response, attempt);
+			// Read error body for retry delay parsing
+			const errorBody = await response.text();
+			const delay = getRetryDelayMs(response, attempt, errorBody);
 			await abortableSleep(delay, signal);
 		} catch (error) {
 			if (attempt >= CODEX_MAX_RETRIES || signal?.aborted) {

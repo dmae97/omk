@@ -958,7 +958,7 @@ export function convertAnthropicMessages(
 				toolResults.push({
 					type: "tool_result",
 					tool_use_id: sanitizeToolCallId(msg.toolCallId),
-					content: convertContentBlocks(msg.content),
+					content: convertContentBlocks(msg.content) || (msg.isError ? "Tool execution failed" : ""),
 					is_error: msg.isError,
 				});
 			}
@@ -971,7 +971,7 @@ export function convertAnthropicMessages(
 					toolResults.push({
 						type: "tool_result",
 						tool_use_id: sanitizeToolCallId(nextMsg.toolCallId),
-						content: convertContentBlocks(nextMsg.content),
+						content: convertContentBlocks(nextMsg.content) || (nextMsg.isError ? "Tool execution failed" : ""),
 						is_error: nextMsg.isError,
 					});
 				}
