@@ -563,7 +563,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// For subagent sessions using GitHub Copilot, add X-Initiator header
 	// to ensure proper billing (agent-initiated vs user-initiated)
 	const taskDepth = options.taskDepth ?? 0;
-	if (taskDepth > 0 && model?.provider === "github-copilot") {
+	const forceCopilotAgentInitiator = taskDepth > 0;
+	if (forceCopilotAgentInitiator && model?.provider === "github-copilot") {
 		model = {
 			...model,
 			headers: {
@@ -1080,6 +1081,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		toolRegistry,
 		rebuildSystemPrompt,
 		ttsrManager,
+		forceCopilotAgentInitiator,
 	});
 	debugStartup("sdk:createAgentSession");
 	time("createAgentSession");

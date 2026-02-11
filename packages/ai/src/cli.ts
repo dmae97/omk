@@ -8,6 +8,7 @@ import { loginGitHubCopilot } from "./utils/oauth/github-copilot";
 import { loginAntigravity } from "./utils/oauth/google-antigravity";
 import { loginGeminiCli } from "./utils/oauth/google-gemini-cli";
 import { loginKimi } from "./utils/oauth/kimi";
+import { loginMiniMaxCode, loginMiniMaxCodeCn } from "./utils/oauth/minimax-code";
 import { loginOpenAICodex } from "./utils/oauth/openai-codex";
 import type { OAuthCredentials, OAuthProvider } from "./utils/oauth/types";
 import { loginZai } from "./utils/oauth/zai";
@@ -27,7 +28,7 @@ async function login(provider: OAuthProvider): Promise<void> {
 	const storage = await CliAuthStorage.create();
 
 	try {
-		let credentials: OAuthCredentials | string;
+		let credentials: OAuthCredentials;
 
 		switch (provider) {
 			case "anthropic":
@@ -129,6 +130,40 @@ async function login(provider: OAuthProvider): Promise<void> {
 				return;
 			}
 
+			case "minimax-code": {
+				const apiKey = await loginMiniMaxCode({
+					onAuth(info) {
+						const { url, instructions } = info;
+						console.log(`\nOpen this URL in your browser:\n${url}`);
+						if (instructions) console.log(instructions);
+						console.log();
+					},
+					onPrompt(p) {
+						return promptFn(`${p.message}${p.placeholder ? ` (${p.placeholder})` : ""}:`);
+					},
+				});
+				storage.saveApiKey(provider, apiKey);
+				console.log(`\nAPI key saved to ~/.omp/agent/agent.db`);
+				return;
+			}
+
+			case "minimax-code-cn": {
+				const apiKey = await loginMiniMaxCodeCn({
+					onAuth(info) {
+						const { url, instructions } = info;
+						console.log(`\nOpen this URL in your browser:\n${url}`);
+						if (instructions) console.log(instructions);
+						console.log();
+					},
+					onPrompt(p) {
+						return promptFn(`${p.message}${p.placeholder ? ` (${p.placeholder})` : ""}:`);
+					},
+				});
+				storage.saveApiKey(provider, apiKey);
+				console.log(`\nAPI key saved to ~/.omp/agent/agent.db`);
+				return;
+			}
+
 			default:
 				throw new Error(`Unknown provider: ${provider}`);
 		}
@@ -150,8 +185,8 @@ async function main(): Promise<void> {
 		console.log(`Usage: bunx @oh-my-pi/pi-ai <command> [provider]
 
 Commands:
-  login [provider]  Login to an OAuth provider
-  logout [provider] Logout from an OAuth provider
+  login [provider]  Login to a provider
+  logout [provider] Logout from a provider
   status            Show logged-in providers
   list              List available providers
 
@@ -163,6 +198,8 @@ Providers:
   openai-codex      OpenAI Codex (ChatGPT Plus/Pro)
   kimi-code        Kimi Code
   zai              Z.AI (GLM Coding Plan)
+    minimax-code     MiniMax Coding Plan (International)
+    minimax-code-cn  MiniMax Coding Plan (China)
   cursor            Cursor (Claude, GPT, etc.)
 
 Examples:
@@ -180,7 +217,7 @@ Examples:
 		try {
 			const providers = storage.listProviders();
 			if (providers.length === 0) {
-				console.log("No OAuth credentials stored.");
+				console.log("No credentials stored.");
 				console.log(`Use 'bunx @oh-my-pi/pi-ai login' to authenticate.`);
 			} else {
 				console.log("Logged-in providers:\n");
@@ -191,6 +228,11 @@ Examples:
 						const expired = Date.now() >= oauth.expires;
 						const status = expired ? "(expired)" : `(expires ${expires.toLocaleString()})`;
 						console.log(`  ${provider.padEnd(20)} ${status}`);
+						continue;
+					}
+					const apiKey = storage.getApiKey(provider);
+					if (apiKey) {
+						console.log(`  ${provider.padEnd(20)} (api key)`);
 					}
 				}
 			}
@@ -201,7 +243,7 @@ Examples:
 	}
 
 	if (command === "list") {
-		console.log("Available OAuth providers:\n");
+		console.log("Available providers:\n");
 		for (const p of PROVIDERS) {
 			console.log(`  ${p.id.padEnd(20)} ${p.name}`);
 		}
@@ -216,7 +258,7 @@ Examples:
 			if (!provider) {
 				const providers = storage.listProviders();
 				if (providers.length === 0) {
-					console.log("No OAuth credentials stored.");
+					console.log("No credentials stored.");
 					return;
 				}
 
@@ -237,9 +279,14 @@ Examples:
 				}
 				provider = providers[index] as OAuthProvider;
 			}
+			if (!provider) {
+				console.error("No provider selected");
+				process.exit(1);
+			}
 
 			const oauth = storage.getOAuth(provider);
-			if (!oauth) {
+			const apiKey = storage.getApiKey(provider);
+			if (!oauth && !apiKey) {
 				console.error(`Not logged in to ${provider}`);
 				process.exit(1);
 			}
@@ -272,6 +319,10 @@ Examples:
 				process.exit(1);
 			}
 			provider = PROVIDERS[index].id;
+		}
+		if (!provider) {
+			console.error("No provider selected");
+			process.exit(1);
 		}
 
 		if (!PROVIDERS.some(p => p.id === provider)) {

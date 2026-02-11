@@ -152,6 +152,8 @@ export interface AgentSessionConfig {
 	rebuildSystemPrompt?: (toolNames: string[], tools: Map<string, AgentTool>) => Promise<string>;
 	/** TTSR manager for time-traveling stream rules */
 	ttsrManager?: TtsrManager;
+	/** Force X-Initiator: agent for GitHub Copilot model selections in this session. */
+	forceCopilotAgentInitiator?: boolean;
 }
 
 /** Options for AgentSession.prompt() */
@@ -326,6 +328,7 @@ export class AgentSession {
 	#toolRegistry: Map<string, AgentTool>;
 	#rebuildSystemPrompt: ((toolNames: string[], tools: Map<string, AgentTool>) => Promise<string>) | undefined;
 	#baseSystemPrompt: string;
+	#forceCopilotAgentInitiator = false;
 
 	// TTSR manager for time-traveling stream rules
 	#ttsrManager: TtsrManager | undefined = undefined;
@@ -354,6 +357,7 @@ export class AgentSession {
 		this.#rebuildSystemPrompt = config.rebuildSystemPrompt;
 		this.#baseSystemPrompt = this.agent.state.systemPrompt;
 		this.#ttsrManager = config.ttsrManager;
+		this.#forceCopilotAgentInitiator = config.forceCopilotAgentInitiator ?? false;
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, hooks, auto-compaction, retry logic)
@@ -900,6 +904,19 @@ export class AgentSession {
 	/** Current model (may be undefined if not yet selected) */
 	get model(): Model | undefined {
 		return this.agent.state.model;
+	}
+
+	#applySessionModelOverrides(model: Model): Model {
+		if (!this.#forceCopilotAgentInitiator || model.provider !== "github-copilot") {
+			return model;
+		}
+		return {
+			...model,
+			headers: {
+				...model.headers,
+				"X-Initiator": "agent",
+			},
+		};
 	}
 
 	/** Current thinking level */
@@ -1895,7 +1912,7 @@ export class AgentSession {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
 
-		this.agent.setModel(model);
+		this.agent.setModel(this.#applySessionModelOverrides(model));
 		this.sessionManager.appendModelChange(`${model.provider}/${model.id}`, role);
 		this.settings.setModelRole(role, `${model.provider}/${model.id}`);
 		this.settings.getStorage()?.recordModelUsage(`${model.provider}/${model.id}`);
@@ -1915,7 +1932,7 @@ export class AgentSession {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
 
-		this.agent.setModel(model);
+		this.agent.setModel(this.#applySessionModelOverrides(model));
 		this.sessionManager.appendModelChange(`${model.provider}/${model.id}`, "temporary");
 		this.settings.getStorage()?.recordModelUsage(`${model.provider}/${model.id}`);
 
@@ -2029,7 +2046,7 @@ export class AgentSession {
 		const next = scopedModels[nextIndex];
 
 		// Apply model
-		this.agent.setModel(next.model);
+		this.agent.setModel(this.#applySessionModelOverrides(next.model));
 		this.sessionManager.appendModelChange(`${next.model.provider}/${next.model.id}`);
 		this.settings.setModelRole("default", `${next.model.provider}/${next.model.id}`);
 		this.settings.getStorage()?.recordModelUsage(`${next.model.provider}/${next.model.id}`);
@@ -2057,7 +2074,7 @@ export class AgentSession {
 			throw new Error(`No API key for ${nextModel.provider}/${nextModel.id}`);
 		}
 
-		this.agent.setModel(nextModel);
+		this.agent.setModel(this.#applySessionModelOverrides(nextModel));
 		this.sessionManager.appendModelChange(`${nextModel.provider}/${nextModel.id}`);
 		this.settings.setModelRole("default", `${nextModel.provider}/${nextModel.id}`);
 		this.settings.getStorage()?.recordModelUsage(`${nextModel.provider}/${nextModel.id}`);
@@ -3447,7 +3464,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				const availableModels = this.#modelRegistry.getAvailable();
 				const match = availableModels.find(m => m.provider === provider && m.id === modelId);
 				if (match) {
-					this.agent.setModel(match);
+					this.agent.setModel(this.#applySessionModelOverrides(match));
 				}
 			}
 		}
