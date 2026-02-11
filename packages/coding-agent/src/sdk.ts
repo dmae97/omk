@@ -936,13 +936,14 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		? normalizedRequested
 		: normalizedRequested.filter(name => name !== "exit_plan_mode");
 
-	// Custom tools are always included regardless of toolNames filter
-	if (options.customTools) {
-		const customToolNames = options.customTools.map(t => (isCustomTool(t) ? t.name : t.name));
-		for (const name of customToolNames) {
-			if (toolRegistry.has(name) && !initialToolNames.includes(name)) {
-				initialToolNames.push(name);
-			}
+	// Custom tools and extension-registered tools are always included regardless of toolNames filter
+	const alwaysInclude: string[] = [
+		...(options.customTools?.map(t => (isCustomTool(t) ? t.name : t.name)) ?? []),
+		...registeredTools.map(t => t.definition.name),
+	];
+	for (const name of alwaysInclude) {
+		if (toolRegistry.has(name) && !initialToolNames.includes(name)) {
+			initialToolNames.push(name);
 		}
 	}
 
