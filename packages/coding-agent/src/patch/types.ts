@@ -203,7 +203,8 @@ export type SrcSpec<L = LineRef> =
 	| { kind: "single"; ref: L }
 	| { kind: "range"; start: L; end: L }
 	| { kind: "insertAfter"; after: L }
-	| { kind: "insertBefore"; before: L };
+	| { kind: "insertBefore"; before: L }
+	| { type: "substr"; needle: string };
 
 /** A single edit operation in hashline mode. */
 export interface HashlineEdit {

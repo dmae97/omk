@@ -159,6 +159,9 @@ function formatStreamingHashlineEdits(edits: HashlineEdit[], uiTheme: Theme, ui:
 	return text.trimEnd();
 
 	function formatHashlineSrc(src: HashlineEdit["src"]): string {
+		if (!("kind" in src)) {
+			return `• substr ${src.needle}`;
+		}
 		switch (src.kind) {
 			case "single":
 				return `• single ${src.ref}`;

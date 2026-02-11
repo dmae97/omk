@@ -25,6 +25,9 @@ type ParsedRefs = SrcSpec<{ line: number; hash: string }>;
  * `347:aa..347:bb` which hashline mode doesn't support as sub-line addressing).
  */
 function parseSrcSpec(src: SrcSpec): ParsedRefs {
+	if (!("kind" in src)) {
+		return { kind: "substr", needle: src.needle };
+	}
 	switch (src.kind) {
 		case "single":
 			return { kind: "single", ref: parseLineRef(src.ref) };
@@ -43,7 +46,6 @@ function parseSrcSpec(src: SrcSpec): ParsedRefs {
 			return { kind: "insertBefore", before: parseLineRef(src.before) };
 	}
 }
-
 /** Split dst into lines; empty string means delete (no lines). */
 function splitDstLines(dst: string): string[] {
 	return dst === "" ? [] : dst.split("\n");
@@ -711,6 +713,8 @@ export function applyHashlineEdits(
 			case "insertBefore":
 				explicitlyTouchedLines.add(spec.before.line);
 				break;
+			case "substr":
+				break;
 		}
 	}
 
@@ -740,6 +744,11 @@ export function applyHashlineEdits(
 					throw new Error('Insert-before edit (src "..N:HH") requires non-empty dst');
 				}
 				refsToValidate.push(spec.before);
+				break;
+			case "substr":
+				if (dstLines.length !== 1) {
+					throw new Error(`Substr src requires single-line dst (got ${dstLines.length} lines)`);
+				}
 				break;
 		}
 
@@ -778,6 +787,10 @@ export function applyHashlineEdits(
 			case "insertBefore":
 				sortLine = p.spec.before.line;
 				precedence = 2;
+				break;
+			case "substr":
+				sortLine = 0;
+				precedence = 3;
 				break;
 		}
 		return { ...p, idx, sortLine, precedence };
@@ -854,6 +867,32 @@ export function applyHashlineEdits(
 				const inserted = stripInsertAnchorEchoBefore(anchorLine, dstLines);
 				fileLines.splice(spec.before.line - 1, 0, ...inserted);
 				trackFirstChanged(spec.before.line);
+				break;
+			}
+			case "substr": {
+				const indices: number[] = [];
+				for (let i = 0; i < fileLines.length; i++) {
+					if (fileLines[i].includes(spec.needle)) indices.push(i);
+				}
+				if (indices.length === 0) {
+					throw new Error(`Substr src not found in file: "${spec.needle}"`);
+				}
+				if (indices.length > 1) {
+					const previews = indices
+						.slice(0, 5)
+						.map(i => `${i + 1}: ${fileLines[i]}`)
+						.join("\n");
+					const more = indices.length > 5 ? `\n... (${indices.length - 5} more)` : "";
+					throw new Error(
+						`Substr src is ambiguous (found ${indices.length} matches): "${spec.needle}"\n${previews}${more}`,
+					);
+				}
+
+				const lineIdx = indices[0];
+				const original = fileLines[lineIdx];
+				const replaced = original.replace(spec.needle, dstLines[0]);
+				fileLines.splice(lineIdx, 1, replaced);
+				trackFirstChanged(lineIdx + 1);
 				break;
 			}
 		}

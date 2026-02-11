@@ -1,9 +1,9 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added `substr` source specification kind to match and replace lines by unique substring without requiring line-hash references
 - Added `{{hashline}}` Handlebars helper to compute accurate `LINE:HASH` references for prompt examples and documentation
 
 ### Changed

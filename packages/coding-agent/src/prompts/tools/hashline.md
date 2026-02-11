@@ -14,7 +14,6 @@ Line-addressed edits using hash-verified line references. Read file with hashes 
 1. Read target file (output includes `LINE:HASH| content` on every line)
 2. Identify lines to change by their `LINE:HASH` prefix
 3. Submit edit with `src` (line reference) and `dst` (replacement content)
-
 **Operations:**
 - **Replace single**: `src: { kind: "single", ref: "{{hashline 5 'old_value = True'}}" }` — replaces line 5
 - **Replace range**: `src: { kind: "range", start: "{{hashline 5 'old_value = True'}}", end: "{{hashline 9 'return result'}}" }` — replaces lines 5-9 (fewer dst lines = net deletion)
@@ -23,7 +22,6 @@ Line-addressed edits using hash-verified line references. Read file with hashes 
 - **Insert before**: `src: { kind: "insertBefore", before: "{{hashline 5 'old_value = True'}}" }` — inserts before line 5
 
 Multiple edits in one call are applied bottom-up (safe for non-overlapping edits).
-
 **`dst` rules — get this right:**
 - Write only the new content — no `LINE:HASH| ` prefixes, no `+` diff markers.
 - Preserve the original indentation of surrounding code.
@@ -38,6 +36,7 @@ Multiple edits in one call are applied bottom-up (safe for non-overlapping edits
 		- `{ kind: "range", start: "LINE:HASH", end: "LINE:HASH" }`
 		- `{ kind: "insertAfter", after: "LINE:HASH" }`
 		- `{ kind: "insertBefore", before: "LINE:HASH" }`
+		- `{ type: "substr", needle: "text" }`
 	- `dst`: Replacement content (`\n`-separated for multi-line, `""` for delete)
 </input>
 

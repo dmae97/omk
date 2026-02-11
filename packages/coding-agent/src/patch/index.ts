@@ -146,6 +146,10 @@ const srcSpecSchema = Type.Union([
 		kind: Type.Literal("insertBefore"),
 		before: Type.String({ description: 'Insert before this line "LINE:HASH"' }),
 	}),
+	Type.Object({
+		type: Type.Literal("substr"),
+		needle: Type.String({ description: "Unique substring to match" }),
+	}),
 ]);
 
 const hashlineEditItemSchema = Type.Object({

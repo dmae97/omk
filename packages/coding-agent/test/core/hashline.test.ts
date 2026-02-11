@@ -550,6 +550,19 @@ describe("applyHashlineEdits — heuristics", () => {
 		expect(result.content).toBe("aaa\nBBB\nccc");
 	});
 
+	test("supports substr src when it matches exactly one line", () => {
+		const content = "aaa\ndevtools–unsupported-bridge-protocol\nccc";
+		const edits: HashlineEdit[] = [
+			{
+				src: { type: "substr", needle: "devtools–unsupported-bridge-protocol" },
+				dst: "devtools-unsupported-bridge-protocol",
+			},
+		];
+
+		const result = applyHashlineEdits(content, edits);
+		expect(result.content).toBe("aaa\ndevtools-unsupported-bridge-protocol\nccc");
+	});
+
 	test("treats same-line ranges as single-line replacements", () => {
 		const content = "aaa\nbbb\nccc";
 		const good = makeRef(2, "bbb");
@@ -700,6 +713,13 @@ describe("applyHashlineEdits — errors", () => {
 		const edits: HashlineEdit[] = [{ src: { kind: "single", ref: "10:aa" }, dst: "X" }];
 
 		expect(() => applyHashlineEdits(content, edits)).toThrow(/does not exist/);
+	});
+
+	test("rejects substr src when not found", () => {
+		const content = "aaa\nbbb";
+		const edits: HashlineEdit[] = [{ src: { type: "substr", needle: "garbage" }, dst: "X" }];
+
+		expect(() => applyHashlineEdits(content, edits)).toThrow(/Substr src not found/);
 	});
 
 	test("rejects range with start > end", () => {
