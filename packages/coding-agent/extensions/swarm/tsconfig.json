@@ -1,0 +1,16 @@
+{
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"strict": true,
+		"noEmit": true,
+		"skipLibCheck": true,
+		"types": ["bun-types"],
+		"paths": {
+			"@oh-my-pi/pi-coding-agent": ["../../src/index.ts"],
+			"@oh-my-pi/pi-coding-agent/*": ["../../src/*.ts"]
+		}
+	},
+	"include": ["extension.ts", "swarm/**/*.ts"]
+}

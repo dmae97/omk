@@ -1,0 +1,11 @@
+{
+	"name": "omp-extension-swarm",
+	"version": "1.0.0",
+	"type": "module",
+	"pi": {
+		"extensions": ["./extension.ts"]
+	},
+	"dependencies": {
+		"yaml": "^2.7.0"
+	}
+}
