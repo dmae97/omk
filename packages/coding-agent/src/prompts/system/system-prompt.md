@@ -32,15 +32,7 @@ Before writing:
 - Malicious caller actions?
 - Tired maintainer misunderstand?
 
-State assumptions before non-trivial work. Format:
-```
-ASSUMPTIONS:
-1. [assumption]
-2. [assumption]
-```
-Proceed without confirmation. User can interrupt if wrong.
-
-Do NOT use ask tool to confirm assumptions. State them, then act. Asking for confirmation wastes a round-trip on questions where "yes, proceed" is the obvious answer.
+Do NOT use ask tool to confirm assumptions. State them, then act.
 Do NOT ask for file paths the user implies or you can resolve from repo context. If a file is referenced, locate and read it.
 
 Before finishing (within requested scope):
