@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added whitespace normalization in line reference parsing to tolerate spaces around colons (e.g., `5 : ab` now parses as `5:ab`)
@@ -12,6 +11,10 @@
 
 ### Changed
 
+- Reverted hash algorithm from 3-character base-36 back to 2-character hexadecimal for line references
+- Enhanced range validation during hashline edits to detect and reject relocations that change the scope of affected lines
+- Improved wrapped-line restoration logic to only attempt merging when source lines exhibit continuation patterns
+- Updated hashline tool documentation to emphasize direction-locking mutations and clarify recovery procedures for hash mismatches
 - Changed `applyHashlineEdits` return type to include optional `warnings` array for reporting suspicious edit patterns
 - Improved hash relocation logic to recompute touched lines after hash-based line number adjustments, preventing incorrect merge heuristics
 - Enhanced error messages for no-op edits to include preview of target lines with their current hashes and content
@@ -31,6 +34,7 @@
 
 ### Fixed
 
+- Fixed range-based edits to prevent invalid mutations when hash relocation changes the number of lines in the target range
 - Fixed multi-edit application to use original file state for all anchor references, preventing incorrect line numbers when earlier edits change file length
 
 ## [11.10.4] - 2026-02-10

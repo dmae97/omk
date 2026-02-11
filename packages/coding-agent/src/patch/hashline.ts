@@ -280,8 +280,8 @@ function stripNewLinePrefixes(lines: string[]): string[] {
 	});
 }
 
-const HASH_LEN = 3;
-const RADIX = 36;
+const HASH_LEN = 2;
+const RADIX = 16;
 const HASH_MOD = RADIX ** HASH_LEN;
 
 const DICT = Array.from({ length: HASH_MOD }, (_, i) => i.toString(RADIX).padStart(HASH_LEN, "0"));
@@ -741,41 +741,76 @@ export function applyHashlineEdits(
 		}
 		uniqueLineByHash.set(hash, lineNo);
 	}
+
+	function buildMismatch(ref: { line: number; hash: string }, line = ref.line): HashMismatch {
+		return {
+			line,
+			expected: ref.hash,
+			actual: computeLineHash(line, fileLines[line - 1]),
+		};
+	}
+
+	function validateOrRelocateRef(ref: {
+		line: number;
+		hash: string;
+	}): { ok: true; relocated: boolean } | { ok: false } {
+		if (ref.line < 1 || ref.line > fileLines.length) {
+			throw new Error(`Line ${ref.line} does not exist (file has ${fileLines.length} lines)`);
+		}
+		const expected = ref.hash.toLowerCase();
+		const actualHash = computeLineHash(ref.line, fileLines[ref.line - 1]);
+		if (actualHash === expected) {
+			return { ok: true, relocated: false };
+		}
+
+		const relocated = uniqueLineByHash.get(expected);
+		if (relocated === undefined) {
+			mismatches.push({ line: ref.line, expected: ref.hash, actual: actualHash });
+			return { ok: false };
+		}
+		ref.line = relocated;
+		return { ok: true, relocated: true };
+	}
 	for (const { spec, dstLines } of parsed) {
-		const refsToValidate: { line: number; hash: string }[] = [];
 		switch (spec.kind) {
-			case "single":
-				refsToValidate.push(spec.ref);
+			case "single": {
+				const status = validateOrRelocateRef(spec.ref);
+				if (!status.ok) continue;
 				break;
-			case "range":
-				if (spec.start.line > spec.end.line) {
-					throw new Error(`Range start line ${spec.start.line} must be <= end line ${spec.end.line}`);
-				}
-				refsToValidate.push(spec.start, spec.end);
-				break;
-			case "insertAfter":
+			}
+			case "insertAfter": {
 				if (dstLines.length === 0) {
 					throw new Error('Insert-after edit (src "N:HH..") requires non-empty dst');
 				}
-				refsToValidate.push(spec.after);
+				const status = validateOrRelocateRef(spec.after);
+				if (!status.ok) continue;
 				break;
-		}
+			}
+			case "range": {
+				if (spec.start.line > spec.end.line) {
+					throw new Error(`Range start line ${spec.start.line} must be <= end line ${spec.end.line}`);
+				}
 
-		for (const ref of refsToValidate) {
-			if (ref.line < 1 || ref.line > fileLines.length) {
-				throw new Error(`Line ${ref.line} does not exist (file has ${fileLines.length} lines)`);
-			}
-			const actualHash = computeLineHash(ref.line, fileLines[ref.line - 1]);
-			if (actualHash === ref.hash.toLowerCase()) {
-				continue;
-			}
+				const originalStart = spec.start.line;
+				const originalEnd = spec.end.line;
+				const originalCount = originalEnd - originalStart + 1;
 
-			const relocated = uniqueLineByHash.get(ref.hash.toLowerCase());
-			if (relocated !== undefined) {
-				ref.line = relocated;
-				continue;
+				const startStatus = validateOrRelocateRef(spec.start);
+				const endStatus = validateOrRelocateRef(spec.end);
+				if (!startStatus.ok || !endStatus.ok) continue;
+
+				const relocatedCount = spec.end.line - spec.start.line + 1;
+				const changedByRelocation = startStatus.relocated || endStatus.relocated;
+				const invalidRange = spec.start.line > spec.end.line;
+				const scopeChanged = relocatedCount !== originalCount;
+
+				if (changedByRelocation && (invalidRange || scopeChanged)) {
+					spec.start.line = originalStart;
+					spec.end.line = originalEnd;
+					mismatches.push(buildMismatch(spec.start, originalStart), buildMismatch(spec.end, originalEnd));
+				}
+				break;
 			}
-			mismatches.push({ line: ref.line, expected: ref.hash, actual: actualHash });
 		}
 	}
 
@@ -916,13 +951,12 @@ export function applyHashlineEdits(
 		const origCanon = stripAllWhitespace(orig);
 		const origCanonForMatch = stripTrailingContinuationTokens(origCanon);
 		const origCanonForMergeOps = stripMergeOperatorChars(origCanon);
+		const origLooksLikeContinuation = origCanonForMatch.length < origCanon.length;
 		if (origCanon.length === 0) return null;
-
-		const prevIdx = line - 2;
 		const nextIdx = line;
-
+		const prevIdx = line - 2;
 		// Case A: dst absorbed the next continuation line.
-		if (nextIdx < fileLines.length && !explicitlyTouchedLines.has(line + 1)) {
+		if (origLooksLikeContinuation && nextIdx < fileLines.length && !explicitlyTouchedLines.has(line + 1)) {
 			const next = fileLines[nextIdx];
 			const nextCanon = stripAllWhitespace(next);
 			const a = newCanon.indexOf(origCanonForMatch);
@@ -931,12 +965,13 @@ export function applyHashlineEdits(
 				return { startLine: line, deleteCount: 2, newLines: [newLine] };
 			}
 		}
-
 		// Case B: dst absorbed the previous declaration/continuation line.
 		if (prevIdx >= 0 && !explicitlyTouchedLines.has(line - 1)) {
 			const prev = fileLines[prevIdx];
 			const prevCanon = stripAllWhitespace(prev);
 			const prevCanonForMatch = stripTrailingContinuationTokens(prevCanon);
+			const prevLooksLikeContinuation = prevCanonForMatch.length < prevCanon.length;
+			if (!prevLooksLikeContinuation) return null;
 			const a = newCanonForMergeOps.indexOf(stripMergeOperatorChars(prevCanonForMatch));
 			const b = newCanonForMergeOps.indexOf(origCanonForMergeOps);
 			if (a !== -1 && b !== -1 && a < b && newCanon.length <= prevCanon.length + origCanon.length + 32) {

@@ -134,7 +134,7 @@ function isExcluded(filePath: string): boolean {
 }
 
 function hasStructure(content: string): boolean {
-	return ["function ", "class ", "export ", "=>"].some((token) => content.includes(token));
+	return ["function ", "class ", "export ", "=>"].some(token => content.includes(token));
 }
 
 async function collectFiles(reactDir: string): Promise<string[]> {
@@ -149,7 +149,7 @@ async function collectFiles(reactDir: string): Promise<string[]> {
 			if (entry.isDirectory()) {
 				await walk(fullPath);
 			} else if (entry.isFile()) {
-				const ext = "." + entry.name.split(".").pop();
+				const ext = `.${entry.name.split(".").pop()}`;
 				if (SUPPORTED_EXTENSIONS.has(ext) && !isExcluded(fullPath)) {
 					candidates.push(fullPath);
 				}
@@ -353,13 +353,13 @@ function findContainingFunction(entry: FileEntry, lineNumber: number): string | 
 function getCandidatesForDifficulty(files: FileEntry[], difficulty: Difficulty): FileEntry[] {
 	switch (difficulty) {
 		case "easy":
-			return files.filter((f) => f.lineCount < 150 && f.repeatedLines.size < 3);
+			return files.filter(f => f.lineCount < 150 && f.repeatedLines.size < 3);
 		case "medium":
-			return files.filter((f) => f.lineCount >= 100 && f.lineCount <= 300);
+			return files.filter(f => f.lineCount >= 100 && f.lineCount <= 300);
 		case "hard":
-			return files.filter((f) => f.lineCount > 200 && f.similarBlockCount >= 3);
+			return files.filter(f => f.lineCount > 200 && f.similarBlockCount >= 3);
 		case "nightmare":
-			return files.filter((f) => f.repeatedLines.size > 0 && f.lineCount > 200);
+			return files.filter(f => f.repeatedLines.size > 0 && f.lineCount > 200);
 		default:
 			return files;
 	}
@@ -388,7 +388,7 @@ async function isParsable(content: string, suffix: string): Promise<boolean> {
 
 function regionAvailable(usedLines: Map<string, number[]>, filePath: string, lineNumber: number): boolean {
 	const used = usedLines.get(filePath) ?? [];
-	return !used.some((ln) => Math.abs(ln - lineNumber) <= 3);
+	return !used.some(ln => Math.abs(ln - lineNumber) <= 3);
 }
 
 function recordRegion(usedLines: Map<string, number[]>, filePath: string, lineNumber: number): void {
@@ -486,9 +486,9 @@ async function generateCase(
 	let candidates = getCandidatesForDifficulty(files, difficulty);
 	if (candidates.length === 0) candidates = files;
 
-	let applicable = candidates.filter((entry) => mutation.canApply(entry.content));
+	let applicable = candidates.filter(entry => mutation.canApply(entry.content));
 	if (applicable.length === 0 && candidates !== files) {
-		applicable = files.filter((entry) => mutation.canApply(entry.content));
+		applicable = files.filter(entry => mutation.canApply(entry.content));
 	}
 	if (applicable.length === 0) return null;
 
@@ -500,7 +500,7 @@ async function generateCase(
 		if (mutatedContent === entry.content) continue;
 		if (!regionAvailable(usedLines, entry.path, info.lineNumber)) continue;
 
-		const suffix = "." + entry.path.split(".").pop();
+		const suffix = `.${entry.path.split(".").pop()}`;
 		if (!(await isParsable(mutatedContent, suffix))) continue;
 
 		const diffScore = scoreDifficulty(entry, info.lineNumber);
@@ -620,14 +620,14 @@ async function main(): Promise<number> {
 	}
 
 	console.log(`Analyzed ${files.length} files`);
-	const withRepeats = files.filter((f) => f.repeatedLines.size > 0).length;
-	const longFiles = files.filter((f) => f.lineCount > 200).length;
-	const similarBlocks = files.filter((f) => f.similarBlockCount >= 3).length;
+	const withRepeats = files.filter(f => f.repeatedLines.size > 0).length;
+	const longFiles = files.filter(f => f.lineCount > 200).length;
+	const similarBlocks = files.filter(f => f.similarBlockCount >= 3).length;
 	console.log(`  ${withRepeats} with repeated lines, ${longFiles} long files, ${similarBlocks} with similar blocks`);
 
 	const difficulties = args.difficulty
 		.split(",")
-		.map((s) => s.trim())
+		.map(s => s.trim())
 		.filter(Boolean) as Difficulty[];
 	if (difficulties.length === 0) {
 		console.error("No difficulties specified.");
@@ -639,15 +639,15 @@ async function main(): Promise<number> {
 		const categories = new Set(
 			args.categories
 				.split(",")
-				.map((s) => s.trim())
+				.map(s => s.trim())
 				.filter(Boolean),
 		);
-		const unknown = Array.from(categories).filter((c) => !(c in CATEGORY_MAP));
+		const unknown = Array.from(categories).filter(c => !(c in CATEGORY_MAP));
 		if (unknown.length > 0) {
 			console.error(`Unknown categories: ${unknown.join(", ")}`);
 			return 1;
 		}
-		mutations = ALL_MUTATIONS.filter((m) => categories.has(m.category));
+		mutations = ALL_MUTATIONS.filter(m => categories.has(m.category));
 	}
 
 	const usedLines = new Map<string, number[]>();
@@ -715,7 +715,7 @@ async function main(): Promise<number> {
 			}
 		}
 
-		const scores = results.map((r) => r.difficultyScore);
+		const scores = results.map(r => r.difficultyScore);
 		const min = Math.min(...scores);
 		const max = Math.max(...scores);
 		const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
@@ -731,7 +731,7 @@ async function main(): Promise<number> {
 	await writeTarball(tarEntries, args.output);
 
 	console.log(`Generated ${results.length} cases in ${args.output}`);
-	const scores = results.map((r) => r.difficultyScore);
+	const scores = results.map(r => r.difficultyScore);
 	const min = Math.min(...scores);
 	const max = Math.max(...scores);
 	const avg = scores.reduce((a, b) => a + b, 0) / scores.length;

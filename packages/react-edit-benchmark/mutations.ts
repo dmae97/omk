@@ -37,6 +37,11 @@ function isCommented(line: string, index: number): boolean {
 	return commentIndex !== -1 && commentIndex < index;
 }
 
+function* execAll(regex: RegExp, text: string): Generator<RegExpExecArray> {
+	const re = new RegExp(regex.source, regex.flags.includes("g") ? regex.flags : `${regex.flags}g`);
+	for (let m = re.exec(text); m !== null; m = re.exec(text)) yield m;
+}
+
 function iterCandidates(
 	lines: string[],
 	pattern: RegExp,
@@ -45,9 +50,7 @@ function iterCandidates(
 	const candidates: Candidate[] = [];
 	for (let lineNumber = 1; lineNumber <= lines.length; lineNumber++) {
 		const line = lines[lineNumber - 1];
-		const regex = new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : pattern.flags + "g");
-		let match: RegExpExecArray | null;
-		while ((match = regex.exec(line)) !== null) {
+		for (const match of execAll(pattern, line)) {
 			if (isCommented(line, match.index)) continue;
 			const replacement = replacementFn(match);
 			if (replacement === null) continue;
@@ -86,7 +89,7 @@ function applyCandidate(lines: string[], candidate: Candidate): MutationInfo {
 
 function stripStrings(line: string): string {
 	const pattern = /(?<quote>['"])(?<body>(?:\\.|[^\\\n])*?)\k<quote>/g;
-	return line.replace(pattern, (match) => padding(match.length));
+	return line.replace(pattern, match => padding(match.length));
 }
 
 function mutateIdentifier(identifier: string): string | null {
@@ -144,7 +147,7 @@ class SwapComparisonMutation extends BaseMutation {
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.#pattern, (m) => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
+		const candidate = pickCandidate(lines, this.#pattern, m => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
 		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 		const info = applyCandidate(lines, candidate);
 		return [lines.join("\n"), info];
@@ -166,7 +169,7 @@ class SwapEqualityMutation extends BaseMutation {
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.#pattern, (m) => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
+		const candidate = pickCandidate(lines, this.#pattern, m => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
 		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 		const info = applyCandidate(lines, candidate);
 		return [lines.join("\n"), info];
@@ -188,7 +191,7 @@ class SwapLogicalMutation extends BaseMutation {
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.#pattern, (m) => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
+		const candidate = pickCandidate(lines, this.#pattern, m => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
 		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 		const info = applyCandidate(lines, candidate);
 		return [lines.join("\n"), info];
@@ -231,7 +234,7 @@ class SwapIncDecMutation extends BaseMutation {
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.#pattern, (m) => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
+		const candidate = pickCandidate(lines, this.#pattern, m => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
 		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 		const info = applyCandidate(lines, candidate);
 		return [lines.join("\n"), info];
@@ -253,7 +256,7 @@ class SwapArithmeticMutation extends BaseMutation {
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.#pattern, (m) => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
+		const candidate = pickCandidate(lines, this.#pattern, m => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
 		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 		const info = applyCandidate(lines, candidate);
 		return [lines.join("\n"), info];
@@ -275,7 +278,7 @@ class BooleanLiteralFlipMutation extends BaseMutation {
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.#pattern, (m) => this.#swap[m[1]] ?? null, rng);
+		const candidate = pickCandidate(lines, this.#pattern, m => this.#swap[m[1]] ?? null, rng);
 		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 		const info = applyCandidate(lines, candidate);
 		return [lines.join("\n"), info];
@@ -289,7 +292,7 @@ class OptionalChainRemovalMutation extends BaseMutation {
 		"Restore the optional chaining operator (`?.`) at the ONE location where it was removed. Do not add optional chaining elsewhere.";
 	description = "Optional chaining was removed from a property access.";
 
-	#pattern = /\?\.(?=[\w\[(])/;
+	#pattern = /\?\.(?=[\w[(])/;
 
 	canApply(content: string): boolean {
 		return this.#pattern.test(content);
@@ -321,7 +324,7 @@ class CallArgumentSwapMutation extends BaseMutation {
 		const candidate = pickCandidate(
 			lines,
 			this.#pattern,
-			(m) => {
+			m => {
 				const callee = m.groups?.callee ?? "";
 				const a = m.groups?.a ?? "";
 				const b = m.groups?.b ?? "";
@@ -350,7 +353,7 @@ class NullishCoalescingSwapMutation extends BaseMutation {
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
 		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.#pattern, (m) => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
+		const candidate = pickCandidate(lines, this.#pattern, m => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
 		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 		const info = applyCandidate(lines, candidate);
 		return [lines.join("\n"), info];
@@ -381,7 +384,7 @@ class RegexQuantifierSwapMutation extends BaseMutation {
 			lineCounts.set(line, (lineCounts.get(line) ?? 0) + 1);
 		}
 
-		const repeatedCandidates = candidates.filter((c) => (lineCounts.get(lines[c.lineNumber - 1]) ?? 0) > 1);
+		const repeatedCandidates = candidates.filter(c => (lineCounts.get(lines[c.lineNumber - 1]) ?? 0) > 1);
 
 		const candidate = randomChoice(repeatedCandidates.length > 0 ? repeatedCandidates : candidates, rng);
 		const info = applyCandidate(lines, candidate);
@@ -392,9 +395,7 @@ class RegexQuantifierSwapMutation extends BaseMutation {
 		const candidates: Candidate[] = [];
 		for (let lineNumber = 1; lineNumber <= lines.length; lineNumber++) {
 			const line = lines[lineNumber - 1];
-			const litRegex = new RegExp(this.#literalPattern.source, this.#literalPattern.flags);
-			let litMatch: RegExpExecArray | null;
-			while ((litMatch = litRegex.exec(line)) !== null) {
+			for (const litMatch of execAll(this.#literalPattern, line)) {
 				if (isCommented(line, litMatch.index)) continue;
 				const prefix = line.slice(0, litMatch.index);
 				if (prefix && !" =({[,;:!".includes(prefix[prefix.length - 1]) && !/\s/.test(prefix[prefix.length - 1])) {
@@ -402,9 +403,7 @@ class RegexQuantifierSwapMutation extends BaseMutation {
 				}
 				const bodyStart = litMatch.index + 1; // after opening /
 				const body = litMatch.groups?.body ?? "";
-				const quantRegex = new RegExp(this.#quantPattern.source, this.#quantPattern.flags);
-				let tokenMatch: RegExpExecArray | null;
-				while ((tokenMatch = quantRegex.exec(body)) !== null) {
+				for (const tokenMatch of execAll(this.#quantPattern, body)) {
 					const quantifier = tokenMatch.groups?.quant ?? tokenMatch[2];
 					const swapped = quantifier === "+" ? "*" : "+";
 					const start = bodyStart + tokenMatch.index + tokenMatch[0].length - 1;
@@ -439,9 +438,7 @@ class UnicodeHyphenMutation extends BaseMutation {
 		const candidates: Candidate[] = [];
 		for (let lineNumber = 1; lineNumber <= lines.length; lineNumber++) {
 			const line = lines[lineNumber - 1];
-			const regex = new RegExp(this.#stringPattern.source, this.#stringPattern.flags);
-			let match: RegExpExecArray | null;
-			while ((match = regex.exec(line)) !== null) {
+			for (const match of execAll(this.#stringPattern, line)) {
 				if (isCommented(line, match.index)) continue;
 				const body = match.groups?.body ?? "";
 				const dashIndex = body.indexOf("-");
@@ -530,9 +527,7 @@ class IdentifierMultiEditMutation extends BaseMutation {
 		for (let lineNumber = 1; lineNumber <= lines.length; lineNumber++) {
 			const line = lines[lineNumber - 1];
 			const masked = stripStrings(line);
-			const regex = new RegExp(this.#pattern.source, this.#pattern.flags);
-			let match: RegExpExecArray | null;
-			while ((match = regex.exec(masked)) !== null) {
+			for (const match of execAll(this.#pattern, masked)) {
 				if (isCommented(line, match.index)) continue;
 				const identifier = match[0];
 				if (this.#keywords.has(identifier)) continue;
@@ -544,13 +539,9 @@ class IdentifierMultiEditMutation extends BaseMutation {
 			}
 		}
 
-		let candidates = Array.from(occurrences.entries()).filter(
-			([, spans]) => new Set(spans.map((s) => s[0])).size >= 3,
-		);
+		let candidates = Array.from(occurrences.entries()).filter(([, spans]) => new Set(spans.map(s => s[0])).size >= 3);
 		if (candidates.length === 0) {
-			candidates = Array.from(occurrences.entries()).filter(
-				([, spans]) => new Set(spans.map((s) => s[0])).size >= 2,
-			);
+			candidates = Array.from(occurrences.entries()).filter(([, spans]) => new Set(spans.map(s => s[0])).size >= 2);
 		}
 		if (candidates.length === 0) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 
@@ -558,12 +549,12 @@ class IdentifierMultiEditMutation extends BaseMutation {
 		const mutated = mutateIdentifier(identifier);
 		if (mutated === null) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
 
-		const lineNumbers = Array.from(new Set(spans.map((s) => s[0])));
+		const lineNumbers = Array.from(new Set(spans.map(s => s[0])));
 		const editCount = Math.min(lineNumbers.length, randomChoice(lineNumbers.length >= 3 ? [2, 3, 3, 4] : [2], rng));
 		const chosenLines = randomSample(lineNumbers, editCount, rng);
 		const selectedSpans: Array<[number, number, number]> = [];
 		for (const ln of chosenLines) {
-			const lineSpans = spans.filter((s) => s[0] === ln);
+			const lineSpans = spans.filter(s => s[0] === ln);
 			selectedSpans.push(randomChoice(lineSpans, rng));
 		}
 
@@ -618,9 +609,7 @@ class DuplicateLineLiteralFlipMutation extends BaseMutation {
 				[this.#eqPattern, this.#eqSwap],
 				[this.#compPattern, this.#compSwap],
 			] as const) {
-				const regex = new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : pattern.flags + "g");
-				let match: RegExpExecArray | null;
-				while ((match = regex.exec(line)) !== null) {
+				for (const match of execAll(pattern, line)) {
 					if (isCommented(line, match.index)) continue;
 					const token = match[0];
 					const replacement = swapMap[token];
@@ -651,8 +640,7 @@ class SwapAdjacentLinesMutation extends BaseMutation {
 	fixHint = "Swap the two adjacent lines back to their original order.";
 	description = "Two adjacent statements are in the wrong order.";
 
-	#statementPattern =
-		/^\s*(?:(?:const|let|var)\s+\w+\s*=|return\s+|\w+\s*(?:\.\w+)*\s*\(|\w+\s*(?:\.\w+)*\s*=)/;
+	#statementPattern = /^\s*(?:(?:const|let|var)\s+\w+\s*=|return\s+|\w+\s*(?:\.\w+)*\s*\(|\w+\s*(?:\.\w+)*\s*=)/;
 
 	canApply(content: string): boolean {
 		const lines = content.split("\n");
@@ -708,7 +696,7 @@ class SwapIfElseBranchesMutation extends BaseMutation {
 
 	canApply(content: string): boolean {
 		if (!content.includes("} else {")) return false;
-		return content.split("\n").some((line) => this.#ifPattern.test(line));
+		return content.split("\n").some(line => this.#ifPattern.test(line));
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
@@ -821,7 +809,7 @@ class RemoveEarlyReturnMutation extends BaseMutation {
 			newLines.join("\n"),
 			{
 				lineNumber: i + 1,
-				originalSnippet: removedLines.map((l) => l.trim()).join("\n"),
+				originalSnippet: removedLines.map(l => l.trim()).join("\n"),
 				mutatedSnippet: "[removed]",
 			},
 		];
@@ -838,15 +826,13 @@ class SwapNamedImportsMutation extends BaseMutation {
 	#importPattern = /import\s*\{(?<imports>[^}]+)\}\s*from\s*['"]/;
 
 	canApply(content: string): boolean {
-		const regex = new RegExp(this.#importPattern.source, "g");
-		let match: RegExpExecArray | null;
-		while ((match = regex.exec(content)) !== null) {
+		for (const match of execAll(this.#importPattern, content)) {
 			const imports = match.groups?.imports ?? "";
 			const parts = imports
 				.split(",")
-				.map((p) => p.trim())
+				.map(p => p.trim())
 				.filter(Boolean);
-			const simpleParts = parts.filter((p) => !p.includes(" as ") && /^\w+$/.test(p));
+			const simpleParts = parts.filter(p => !p.includes(" as ") && /^\w+$/.test(p));
 			if (simpleParts.length >= 2) return true;
 		}
 		return false;
@@ -858,11 +844,9 @@ class SwapNamedImportsMutation extends BaseMutation {
 
 		for (let lineNumber = 1; lineNumber <= lines.length; lineNumber++) {
 			const line = lines[lineNumber - 1];
-			const regex = new RegExp(this.#importPattern.source, "g");
-			let match: RegExpExecArray | null;
-			while ((match = regex.exec(line)) !== null) {
+			for (const match of execAll(this.#importPattern, line)) {
 				const importsStr = match.groups?.imports ?? "";
-				const parts = importsStr.split(",").map((p) => p.trim());
+				const parts = importsStr.split(",").map(p => p.trim());
 				const simpleIndices = parts
 					.map((p, idx) => ({ p, idx }))
 					.filter(({ p }) => p && !p.includes(" as ") && /^\w+$/.test(p))
@@ -905,7 +889,7 @@ class DeleteStatementMutation extends BaseMutation {
 	#statementPattern = /^\s*(?:(?:const|let|var)\s+\w+\s*=.+;|\w+\s*\+=.+;|\w+\s*-=.+;|\w+\s*=\s*\w+.+;)\s*$/;
 
 	canApply(content: string): boolean {
-		return content.split("\n").some((line) => this.#statementPattern.test(line));
+		return content.split("\n").some(line => this.#statementPattern.test(line));
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
@@ -946,8 +930,8 @@ class OffByOneMutation extends BaseMutation {
 		[/(?<=[\s(,=<>])1(?=[\s),;])/, () => "0"],
 		[/\.length\s*-\s*1(?=[\s),;\]])/, () => ".length - 2"],
 		[/\.length\s*-\s*2(?=[\s),;\]])/, () => ".length - 1"],
-		[/<\s*(\w+\.length)/, (m) => `<= ${m[1]}`],
-		[/<=\s*(\w+\.length)/, (m) => `< ${m[1]}`],
+		[/<\s*(\w+\.length)/, m => `<= ${m[1]}`],
+		[/<=\s*(\w+\.length)/, m => `< ${m[1]}`],
 	];
 
 	canApply(content: string): boolean {
@@ -972,9 +956,7 @@ class OffByOneMutation extends BaseMutation {
 			}
 
 			for (const [pattern, replacementFn] of this.#patterns) {
-				const regex = new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : pattern.flags + "g");
-				let match: RegExpExecArray | null;
-				while ((match = regex.exec(line)) !== null) {
+				for (const match of execAll(pattern, line)) {
 					if (isCommented(line, match.index)) continue;
 					const original = match[0];
 					const replacement = replacementFn(match);
@@ -1021,14 +1003,14 @@ export const ALL_MUTATIONS: Mutation[] = [
 ];
 
 export const CATEGORY_MAP: Record<string, string[]> = {
-	operator: ALL_MUTATIONS.filter((m) => m.category === "operator").map((m) => m.name),
-	literal: ALL_MUTATIONS.filter((m) => m.category === "literal").map((m) => m.name),
-	access: ALL_MUTATIONS.filter((m) => m.category === "access").map((m) => m.name),
-	call: ALL_MUTATIONS.filter((m) => m.category === "call").map((m) => m.name),
-	regex: ALL_MUTATIONS.filter((m) => m.category === "regex").map((m) => m.name),
-	unicode: ALL_MUTATIONS.filter((m) => m.category === "unicode").map((m) => m.name),
-	identifier: ALL_MUTATIONS.filter((m) => m.category === "identifier").map((m) => m.name),
-	duplicate: ALL_MUTATIONS.filter((m) => m.category === "duplicate").map((m) => m.name),
-	structural: ALL_MUTATIONS.filter((m) => m.category === "structural").map((m) => m.name),
-	import: ALL_MUTATIONS.filter((m) => m.category === "import").map((m) => m.name),
+	operator: ALL_MUTATIONS.filter(m => m.category === "operator").map(m => m.name),
+	literal: ALL_MUTATIONS.filter(m => m.category === "literal").map(m => m.name),
+	access: ALL_MUTATIONS.filter(m => m.category === "access").map(m => m.name),
+	call: ALL_MUTATIONS.filter(m => m.category === "call").map(m => m.name),
+	regex: ALL_MUTATIONS.filter(m => m.category === "regex").map(m => m.name),
+	unicode: ALL_MUTATIONS.filter(m => m.category === "unicode").map(m => m.name),
+	identifier: ALL_MUTATIONS.filter(m => m.category === "identifier").map(m => m.name),
+	duplicate: ALL_MUTATIONS.filter(m => m.category === "duplicate").map(m => m.name),
+	structural: ALL_MUTATIONS.filter(m => m.category === "structural").map(m => m.name),
+	import: ALL_MUTATIONS.filter(m => m.category === "import").map(m => m.name),
 };

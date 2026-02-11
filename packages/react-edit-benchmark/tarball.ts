@@ -1,9 +1,4 @@
-/**
- * Tarball utilities for reading fixtures directly from .tar.gz archives.
- * Uses Bun.Archive for native tar.gz handling.
- */
-import * as fs from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, join } from "node:path";
 
 export interface TarballTask {
 	id: string;
@@ -154,11 +149,11 @@ export async function loadTasksFromTarball(tarballPath: string): Promise<Tarball
 	const entries = await readTarball(tarballPath);
 	const { tasks, issues } = parseTarballEntries(entries);
 	if (issues.length > 0) {
-		const details = issues.map((issue) => `- ${issue.taskId}: ${issue.message}`).join("\n");
+		const details = issues.map(issue => `- ${issue.taskId}: ${issue.message}`).join("\n");
 		throw new Error(`Fixture tarball validation failed:\n${details}`);
 	}
 
-	const normalized: TarballTask[] = tasks.map((task) => ({
+	const normalized: TarballTask[] = tasks.map(task => ({
 		id: task.id,
 		prompt: task.prompt?.trim() ?? "",
 		metadata: task.metadata ?? {},

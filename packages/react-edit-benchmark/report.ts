@@ -42,10 +42,10 @@ function escapeMarkdown(text: string): string {
 
 function truncateText(text: string, maxLength: number): string {
 	if (text.length <= maxLength) return text;
-	return text.slice(0, maxLength - 3) + "...";
+	return `${text.slice(0, maxLength - 3)}...`;
 }
 
-function formatEditArgs(args: unknown, maxLength: number): string {
+function _formatEditArgs(args: unknown, maxLength: number): string {
 	if (!args || typeof args !== "object") return "—";
 	const diff = (args as { diff?: unknown }).diff;
 	if (typeof diff === "string") {
@@ -88,10 +88,10 @@ function formatFiles(files: string[]): string {
 export function generateReport(result: BenchmarkResult): string {
 	const { config, tasks, summary } = result;
 	const runsPerTask = config.runsPerTask;
-	const allRuns = tasks.flatMap((task) => task.runs);
-	const verifiedRuns = allRuns.filter((run) => run.verificationPassed).length;
-	const editToolRuns = allRuns.filter((run) => run.patchApplied).length;
-	const successRuns = allRuns.filter((run) => run.success).length;
+	const allRuns = tasks.flatMap(task => task.runs);
+	const verifiedRuns = allRuns.filter(run => run.verificationPassed).length;
+	const editToolRuns = allRuns.filter(run => run.patchApplied).length;
+	const successRuns = allRuns.filter(run => run.success).length;
 	const totalEditAttempts = allRuns.reduce((sum, run) => sum + run.toolCalls.edit, 0);
 	const totalEditFailures = allRuns.reduce((sum, run) => sum + run.toolCalls.editFailures, 0);
 
@@ -114,6 +114,9 @@ export function generateReport(result: BenchmarkResult): string {
 	);
 	lines.push(`| Guided Mode | ${config.guided === false ? "no" : "yes"} |`);
 	lines.push(`| Max Attempts | ${config.maxAttempts ?? 1} |`);
+	lines.push(`| Timeout Retries | ${config.timeoutRetryCount ?? 1} |`);
+	lines.push(`| No-op Retry Limit | ${config.noOpRetryLimit ?? 2} |`);
+	lines.push(`| Mutation Scope Window | ${config.mutationScopeWindow ?? 20} |`);
 	lines.push(`| Require Edit Tool | ${config.requireEditToolCall ? "yes" : "no"} |`);
 	lines.push(`| Require Read Tool | ${config.requireReadToolCall ? "yes" : "no"} |`);
 	lines.push(`| No-Edit Baseline | ${config.noEditRequired ? "yes" : "no"} |`);
@@ -133,6 +136,17 @@ export function generateReport(result: BenchmarkResult): string {
 	lines.push(`| Timeout Runs | ${summary.timeoutRuns} |`);
 	if (typeof summary.mutationIntentMatchRate === "number") {
 		lines.push(`| Mutation Intent Match Rate | ${formatPercent(summary.mutationIntentMatchRate)} |`);
+	}
+	const preventableCounts = summary.preventableFailureCounts ?? {};
+	const preventableTotal = Object.values(preventableCounts).reduce((sum, count) => sum + (count ?? 0), 0);
+	if (preventableTotal > 0) {
+		lines.push(`| Preventable Diagnostics | ${preventableTotal} |`);
+		for (const kind of ["malformed_edit_payload", "stale_hash", "off_target_edit", "no_op_retry_loop", "timeout"]) {
+			const count = preventableCounts[kind as keyof typeof preventableCounts];
+			if (typeof count === "number" && count > 0) {
+				lines.push(`| - ${kind} | ${count} |`);
+			}
+		}
 	}
 	if (config.editVariant === "patch" || config.editVariant === "hashline") {
 		lines.push(`| Patch Failure Rate | ${formatRate(totalEditFailures, totalEditAttempts)} |`);
@@ -213,7 +227,7 @@ export function generateReport(result: BenchmarkResult): string {
 		lines.push("");
 
 		for (const task of tasks) {
-			const taskFailures = task.runs.filter((run) => run.editFailures.length > 0);
+			const taskFailures = task.runs.filter(run => run.editFailures.length > 0);
 			if (taskFailures.length === 0) continue;
 			lines.push(`### ${task.name} (${formatFiles(task.files)})`);
 			lines.push("");
@@ -248,7 +262,7 @@ export function generateReport(result: BenchmarkResult): string {
 		}
 	}
 
-	const flakyTasks = tasks.filter((t) => t.successRate > 0 && t.successRate < 1);
+	const flakyTasks = tasks.filter(t => t.successRate > 0 && t.successRate < 1);
 	if (flakyTasks.length > 0) {
 		lines.push("## Flaky Tasks (partial passing)");
 		lines.push("");
@@ -271,7 +285,7 @@ export function generateReport(result: BenchmarkResult): string {
 		}
 	}
 
-	const failedTasks = tasks.filter((t) => t.successRate === 0);
+	const failedTasks = tasks.filter(t => t.successRate === 0);
 	if (failedTasks.length > 0) {
 		lines.push("## Failed Tasks (0% passing)");
 		lines.push("");
@@ -280,7 +294,7 @@ export function generateReport(result: BenchmarkResult): string {
 			lines.push(`### ${task.name} (${formatFiles(task.files)}) — 0/${runsPerTask}`);
 			lines.push("");
 
-			const errors = task.runs.map((r) => r.error).filter(Boolean);
+			const errors = task.runs.map(r => r.error).filter(Boolean);
 			const uniqueErrors = [...new Set(errors)];
 
 			if (uniqueErrors.length === 1) {
@@ -305,7 +319,7 @@ export function generateReport(result: BenchmarkResult): string {
 				lines.push("");
 			}
 
-			const sampleResponse = task.runs.find((r) => r.agentResponse)?.agentResponse;
+			const sampleResponse = task.runs.find(r => r.agentResponse)?.agentResponse;
 			if (sampleResponse) {
 				lines.push("**Sample agent response (run 1):**");
 				lines.push("```");
@@ -314,7 +328,7 @@ export function generateReport(result: BenchmarkResult): string {
 				lines.push("");
 			}
 
-			const sampleDiff = task.runs.find((r) => r.diff)?.diff;
+			const sampleDiff = task.runs.find(r => r.diff)?.diff;
 			if (sampleDiff) {
 				lines.push("**Diff (expected vs actual):**");
 				lines.push("```diff");
@@ -332,7 +346,7 @@ function formatScore(value: number): string {
 	return value.toFixed(2);
 }
 
-function findTaskPrompt(task: TaskResult): { prompt: string } | undefined {
+function findTaskPrompt(_task: TaskResult): { prompt: string } | undefined {
 	// This is a placeholder - in actual use, we'd pass task definitions alongside results
 	return undefined;
 }
@@ -342,12 +356,12 @@ export function generateJsonReport(result: BenchmarkResult): string {
 }
 
 function appendCategorySummary(lines: string[], tasks: TaskResult[]): void {
-	const runs = tasks.flatMap((task) => task.runs);
+	const runs = tasks.flatMap(task => task.runs);
 	const categoryStats = new Map<string, { runs: number; verified: number; editUsed: number; success: number }>();
 	const difficultyByCategory = new Map<string, number[]>();
 
 	for (const task of tasks) {
-		const metadata = task.runs.find((run) => run.mutationCategory || run.difficultyScore !== undefined);
+		const metadata = task.runs.find(run => run.mutationCategory || run.difficultyScore !== undefined);
 		const category = metadata?.mutationCategory ?? "unknown";
 		if (typeof metadata?.difficultyScore === "number") {
 			const scores = difficultyByCategory.get(category) ?? [];
@@ -383,7 +397,7 @@ function appendCategorySummary(lines: string[], tasks: TaskResult[]): void {
 }
 
 function appendMutationSummary(lines: string[], tasks: TaskResult[]): void {
-	const runs = tasks.flatMap((task) => task.runs);
+	const runs = tasks.flatMap(task => task.runs);
 	const mutationStats = new Map<
 		string,
 		{ category: string; runs: number; verified: number; editUsed: number; success: number }
@@ -422,7 +436,7 @@ function appendMutationSummary(lines: string[], tasks: TaskResult[]): void {
 }
 
 function appendDifficultySummary(lines: string[], tasks: TaskResult[]): void {
-	const runs = tasks.flatMap((task) => task.runs);
+	const runs = tasks.flatMap(task => task.runs);
 	const buckets = [
 		{ label: "0-2", min: 0, max: 2 },
 		{ label: "3-5", min: 3, max: 5 },
@@ -441,7 +455,7 @@ function appendDifficultySummary(lines: string[], tasks: TaskResult[]): void {
 			if (run.success) unknown.success += 1;
 			continue;
 		}
-		const bucket = buckets.find((entry) => score >= entry.min && score <= entry.max);
+		const bucket = buckets.find(entry => score >= entry.min && score <= entry.max);
 		const label = bucket?.label ?? "unknown";
 		const entry = bucketStats.get(label) ?? { runs: 0, verified: 0, editUsed: 0, success: 0 };
 		entry.runs += 1;

@@ -10,14 +10,13 @@ import { join } from "node:path";
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { RpcClient } from "@oh-my-pi/pi-coding-agent";
 import { TempDir } from "@oh-my-pi/pi-utils";
+import { diffLines } from "diff";
 import { renderPromptTemplate } from "../coding-agent/src/config/prompt-templates";
 import { computeLineHash } from "../coding-agent/src/patch/hashline";
-import { diffLines } from "diff";
 import { formatDirectory } from "./formatter";
+import benchmarkTaskPrompt from "./prompts/benchmark-task.md" with { type: "text" };
 import { type EditTask, extractTaskFiles } from "./tasks";
 import { verifyExpectedFileSubset, verifyExpectedFiles } from "./verify";
-
-import benchmarkTaskPrompt from "./prompts/benchmark-task.md" with { type: "text" };
 
 const TMP_DIR = await TempDir.create("@reach-benchmark-");
 const TMP = TMP_DIR.path();
@@ -54,7 +53,7 @@ function getEditPathFromArgs(args: unknown): string | null {
 const HASHLINE_SUBTYPES = ["replaceLine", "replaceLines", "insertAfter"] as const;
 
 function countHashlineEditSubtypes(args: unknown): Record<string, number> {
-	const counts: Record<string, number> = Object.fromEntries(HASHLINE_SUBTYPES.map((k) => [k, 0]));
+	const counts: Record<string, number> = Object.fromEntries(HASHLINE_SUBTYPES.map(k => [k, 0]));
 	if (!args || typeof args !== "object") return counts;
 	const edits = (args as { edits?: unknown[] }).edits;
 	if (!Array.isArray(edits)) return counts;
@@ -121,7 +120,7 @@ async function appendNoChangeMutationHint(
 	error: string,
 	args: unknown,
 	cwd: string,
-	originalFiles: Map<string, string>
+	originalFiles: Map<string, string>,
 ): Promise<string> {
 	if (!error.includes("No changes made")) return error;
 	const editPath = getEditPathFromArgs(args);
@@ -187,7 +186,7 @@ function buildTimeoutRetryContext(telemetry: PromptAttemptTelemetry, retryNumber
 async function evaluateMutationIntent(
 	task: EditTask,
 	cwd: string,
-	expectedDir: string
+	expectedDir: string,
 ): Promise<MutationIntentValidation | null> {
 	const metadata = task.metadata;
 	const file = metadata?.fileName ?? task.files[0];
@@ -280,7 +279,7 @@ function buildGuidedHashlineEdits(actual: string, expected: string): GuidedHashl
 				const firstLine = actualLines[0] ?? "";
 				const firstRef = `1:${computeLineHash(1, firstLine)}`;
 				edits.push({
-					replaceLine: { loc: firstRef, content: pendingAdded.join("\n") + "\n" + firstLine },
+					replaceLine: { loc: firstRef, content: `${pendingAdded.join("\n")}\n${firstLine}` },
 				});
 			} else if (insertLine <= actualLines.length) {
 				const afterLine = actualLines[insertLine - 2] ?? "";
@@ -342,7 +341,7 @@ async function buildGuidedContext(
 	task: EditTask,
 	cwd: string,
 	expectedDir: string,
-	config: BenchmarkConfig
+	config: BenchmarkConfig,
 ): Promise<string | null> {
 	if (!config.guided) return null;
 	if (config.editVariant !== "hashline") return null;
@@ -374,7 +373,7 @@ async function buildGuidedContext(
 	return [
 		`Target file: \`${file}\`${metaParts.length > 0 ? ` (${metaParts.join(", ")})` : ""}.`,
 		"Apply this edit tool call (single call; copy/paste args exactly):",
-		"```diff\n" + argsText + "\n```",
+		`\`\`\`diff\n${argsText}\n\`\`\``,
 	].join("\n\n");
 }
 
@@ -510,7 +509,7 @@ async function copyFixtures(task: EditTask, destDir: string): Promise<void> {
 	} else if (task.inputDir) {
 		const entries = await fs.readdir(task.inputDir, { withFileTypes: true });
 		await Promise.all(
-			entries.map((entry) => fs.cp(join(task.inputDir!, entry.name), join(destDir, entry.name), { recursive: true }))
+			entries.map(entry => fs.cp(join(task.inputDir!, entry.name), join(destDir, entry.name), { recursive: true })),
 		);
 	} else {
 		throw new Error(`Task ${task.id} has neither tarballPath nor inputDir`);
@@ -541,7 +540,7 @@ async function runSingleTask(
 	config: BenchmarkConfig,
 	cwd: string,
 	expectedDir: string,
-	cliPath: string
+	cliPath: string,
 ): Promise<TaskRunResult> {
 	const startTime = Date.now();
 	let client: RpcClient | null = null;
@@ -554,10 +553,10 @@ async function runSingleTask(
 	let tokens: TokenStats = { input: 0, output: 0, total: 0 };
 	let agentResponse: string | undefined;
 	let diff: string | undefined;
-	let editFailures: EditFailure[] = [];
+	const editFailures: EditFailure[] = [];
 	let timeoutTelemetry: PromptAttemptTelemetry | undefined;
 	let mutationIntentValidation: MutationIntentValidation | null = null;
-	let toolStats = {
+	const toolStats = {
 		read: 0,
 		edit: 0,
 		write: 0,
@@ -565,11 +564,11 @@ async function runSingleTask(
 		editFailures: 0,
 		totalInputChars: 0,
 	};
-	const hashlineSubtypes: Record<string, number> = Object.fromEntries(HASHLINE_SUBTYPES.map((k) => [k, 0]));
+	const hashlineSubtypes: Record<string, number> = Object.fromEntries(HASHLINE_SUBTYPES.map(k => [k, 0]));
 
 	const logFile = join(TMP, `run-${task.id}-${runIndex}.jsonl`);
 	const logEvent = async (event: unknown) => {
-		await fs.appendFile(logFile, JSON.stringify(event) + "\n");
+		await fs.appendFile(logFile, `${JSON.stringify(event)}\n`);
 	};
 	const originalFiles = await collectOriginalFileContents(cwd, task.files);
 
@@ -584,7 +583,8 @@ async function runSingleTask(
 			env.PI_EDIT_FUZZY = config.editFuzzy === "auto" ? "auto" : config.editFuzzy ? "1" : "0";
 		}
 		if (config.editFuzzyThreshold !== undefined) {
-			env.PI_EDIT_FUZZY_THRESHOLD = config.editFuzzyThreshold === "auto" ? "auto" : String(config.editFuzzyThreshold);
+			env.PI_EDIT_FUZZY_THRESHOLD =
+				config.editFuzzyThreshold === "auto" ? "auto" : String(config.editFuzzyThreshold);
 		}
 
 		client = new RpcClient({
@@ -620,7 +620,7 @@ async function runSingleTask(
 
 			await fs.appendFile(
 				logFile,
-				`{"type":"prompt","attempt":${attempt + 1},"message":${JSON.stringify(promptWithContext)}}\n`
+				`{"type":"prompt","attempt":${attempt + 1},"message":${JSON.stringify(promptWithContext)}}\n`,
 			);
 
 			const statsBefore = await client.getSessionStats();
@@ -634,6 +634,7 @@ async function runSingleTask(
 					if (timeoutRetriesUsed < timeoutRetryLimit) {
 						timeoutRetriesUsed += 1;
 						retryContext = buildTimeoutRetryContext(err.telemetry, timeoutRetriesUsed, timeoutRetryLimit);
+						attempt--; // Don't consume a regular attempt slot for timeout retries
 						continue;
 					}
 				}
@@ -685,7 +686,7 @@ async function runSingleTask(
 								extractToolErrorMessage(e.result),
 								args,
 								cwd,
-								originalFiles
+								originalFiles,
 							);
 							editFailures.push({ toolCallId: e.toolCallId, args, error });
 						} else {
@@ -739,7 +740,8 @@ async function runSingleTask(
 	const mustUseEditTool = Boolean(config.requireEditToolCall) && !config.noEditRequired;
 	const mustUseReadTool = Boolean(config.requireReadToolCall) && !config.noEditRequired;
 	const editSucceeded = toolStats.editSuccesses > 0;
-	const success = verificationPassed && (!mustUseEditTool || editSucceeded) && (!mustUseReadTool || toolStats.read > 0);
+	const success =
+		verificationPassed && (!mustUseEditTool || editSucceeded) && (!mustUseReadTool || toolStats.read > 0);
 	const metadata = task.metadata;
 
 	await logEvent({
@@ -785,7 +787,7 @@ async function runBatchedTask(
 	config: BenchmarkConfig,
 	cwd: string,
 	expectedDir: string,
-	client: RpcClient
+	client: RpcClient,
 ): Promise<TaskRunResult> {
 	const startTime = Date.now();
 	const task = item.task;
@@ -799,10 +801,10 @@ async function runBatchedTask(
 	let tokens: TokenStats = { input: 0, output: 0, total: 0 };
 	let agentResponse: string | undefined;
 	let diff: string | undefined;
-	let editFailures: EditFailure[] = [];
+	const editFailures: EditFailure[] = [];
 	let timeoutTelemetry: PromptAttemptTelemetry | undefined;
 	let mutationIntentValidation: MutationIntentValidation | null = null;
-	let toolStats = {
+	const toolStats = {
 		read: 0,
 		edit: 0,
 		write: 0,
@@ -810,18 +812,18 @@ async function runBatchedTask(
 		editFailures: 0,
 		totalInputChars: 0,
 	};
-	const hashlineSubtypes: Record<string, number> = Object.fromEntries(HASHLINE_SUBTYPES.map((k) => [k, 0]));
+	const hashlineSubtypes: Record<string, number> = Object.fromEntries(HASHLINE_SUBTYPES.map(k => [k, 0]));
 
 	const logFile = join(TMP, `run-${task.id}-${runIndex}.jsonl`);
 	const logEvent = async (event: unknown) => {
-		await fs.appendFile(logFile, JSON.stringify(event) + "\n");
+		await fs.appendFile(logFile, `${JSON.stringify(event)}\n`);
 	};
 	const originalFiles = await collectOriginalFileContents(cwd, task.files);
 
 	try {
 		await fs.appendFile(
 			logFile,
-			`{"type":"meta","task":"${task.id}","run":${runIndex},"workDir":"${cwd}","batched":true}\n`
+			`{"type":"meta","task":"${task.id}","run":${runIndex},"workDir":"${cwd}","batched":true}\n`,
 		);
 
 		const maxAttempts = Math.max(1, Math.floor(config.maxAttempts ?? 1));
@@ -840,7 +842,7 @@ async function runBatchedTask(
 			});
 			await fs.appendFile(
 				logFile,
-				`{"type":"prompt","attempt":${attempt + 1},"message":${JSON.stringify(promptWithContext)}}\n`
+				`{"type":"prompt","attempt":${attempt + 1},"message":${JSON.stringify(promptWithContext)}}\n`,
 			);
 
 			const statsBefore = await client.getSessionStats();
@@ -854,6 +856,7 @@ async function runBatchedTask(
 					if (timeoutRetriesUsed < timeoutRetryLimit) {
 						timeoutRetriesUsed += 1;
 						retryContext = buildTimeoutRetryContext(err.telemetry, timeoutRetriesUsed, timeoutRetryLimit);
+						attempt--; // Don't consume a regular attempt slot for timeout retries
 						continue;
 					}
 				}
@@ -902,7 +905,7 @@ async function runBatchedTask(
 								extractToolErrorMessage(e.result),
 								args,
 								cwd,
-								originalFiles
+								originalFiles,
 							);
 							editFailures.push({ toolCallId: e.toolCallId, args, error: toolError });
 						} else {
@@ -950,7 +953,8 @@ async function runBatchedTask(
 	const mustUseEditTool = Boolean(config.requireEditToolCall) && !config.noEditRequired;
 	const mustUseReadTool = Boolean(config.requireReadToolCall) && !config.noEditRequired;
 	const editSucceeded = toolStats.editSuccesses > 0;
-	const success = verificationPassed && (!mustUseEditTool || editSucceeded) && (!mustUseReadTool || toolStats.read > 0);
+	const success =
+		verificationPassed && (!mustUseEditTool || editSucceeded) && (!mustUseReadTool || toolStats.read > 0);
 	const metadata = task.metadata;
 
 	await logEvent({
@@ -1041,7 +1045,7 @@ function buildRunBatches(items: TaskRunItem[]): TaskRunItem[][] {
 		for (let i = 0; i < pending.length && batch.length < targetSize; ) {
 			const item = pending[i]!;
 			const files = taskFileKeys(item.task);
-			if (files.some((file) => usedFiles.has(file))) {
+			if (files.some(file => usedFiles.has(file))) {
 				i += 1;
 				continue;
 			}
@@ -1066,7 +1070,7 @@ async function collectPromptEvents(
 	client: RpcClient,
 	prompt: string,
 	config: BenchmarkConfig,
-	logEvent: (event: unknown) => Promise<void>
+	logEvent: (event: unknown) => Promise<void>,
 ): Promise<Array<{ type: string; [key: string]: unknown }>> {
 	const events: Array<{ type: string; [key: string]: unknown }> = [];
 	let unsubscribe: (() => void) | undefined;
@@ -1116,11 +1120,11 @@ async function collectPromptEvents(
 					lastEventType,
 					recentEventTypes: [...recentEventTypes],
 					pendingRetry,
-				})
+				}),
 			);
 		}, config.timeout);
 
-		unsubscribe = client.onEvent(async (event) => {
+		unsubscribe = client.onEvent(async event => {
 			if (!event) {
 				return;
 			}
@@ -1177,7 +1181,7 @@ async function collectPromptEvents(
 
 function diffTokenStats(
 	before: { tokens: { input: number; output: number; total: number } },
-	after: { tokens: { input: number; output: number; total: number } }
+	after: { tokens: { input: number; output: number; total: number } },
 ): TokenStats {
 	const input = Math.max(0, after.tokens.input - before.tokens.input);
 	const output = Math.max(0, after.tokens.output - before.tokens.output);
@@ -1188,7 +1192,7 @@ function diffTokenStats(
 function summarizeTaskRuns(task: EditTask, runs: TaskRunResult[]): TaskResult {
 	const orderedRuns = runs.slice().sort((a, b) => a.runIndex - b.runIndex);
 	const n = orderedRuns.length;
-	const successfulRuns = orderedRuns.filter((r) => r.success).length;
+	const successfulRuns = orderedRuns.filter(r => r.success).length;
 	const successRate = n > 0 ? successfulRuns / n : 0;
 
 	const avgTokens: TokenStats =
@@ -1202,7 +1206,7 @@ function summarizeTaskRuns(task: EditTask, runs: TaskRunResult[]): TaskResult {
 
 	const avgDuration = n > 0 ? Math.round(orderedRuns.reduce((sum, r) => sum + r.duration, 0) / n) : 0;
 	const indentScores = orderedRuns
-		.map((run) => run.indentScore)
+		.map(run => run.indentScore)
 		.filter((score): score is number => typeof score === "number");
 	const avgIndentScore =
 		indentScores.length > 0 ? indentScores.reduce((sum, score) => sum + score, 0) / indentScores.length : 0;
@@ -1262,7 +1266,7 @@ async function runBatch(
 	items: TaskRunItem[],
 	config: BenchmarkConfig,
 	cliPath: string,
-	onProgress?: (event: ProgressEvent) => void
+	onProgress?: (event: ProgressEvent) => void,
 ): Promise<Array<{ task: EditTask; result: TaskRunResult }>> {
 	const workDir = join(TMP, `batch-${crypto.randomUUID()}`);
 	await fs.mkdir(workDir, { recursive: true });
@@ -1275,13 +1279,13 @@ async function runBatch(
 
 	try {
 		await Promise.all(
-			orderedItems.map(async (item) => {
+			orderedItems.map(async item => {
 				const expected = await getExpectedDir(item.task);
 				expectedDirs.set(item.task.id, expected);
-			})
+			}),
 		);
 
-		await Promise.all(orderedItems.map((item) => copyFixtures(item.task, workDir)));
+		await Promise.all(orderedItems.map(item => copyFixtures(item.task, workDir)));
 
 		const env: Record<string, string> = { PI_NO_TITLE: "1" };
 		if (config.editVariant !== undefined) {
@@ -1291,7 +1295,8 @@ async function runBatch(
 			env.PI_EDIT_FUZZY = config.editFuzzy === "auto" ? "auto" : config.editFuzzy ? "1" : "0";
 		}
 		if (config.editFuzzyThreshold !== undefined) {
-			env.PI_EDIT_FUZZY_THRESHOLD = config.editFuzzyThreshold === "auto" ? "auto" : String(config.editFuzzyThreshold);
+			env.PI_EDIT_FUZZY_THRESHOLD =
+				config.editFuzzyThreshold === "auto" ? "auto" : String(config.editFuzzyThreshold);
 		}
 
 		client = new RpcClient({
@@ -1352,7 +1357,7 @@ async function runBatch(
 export async function runTask(
 	task: EditTask,
 	config: BenchmarkConfig,
-	onProgress?: (event: ProgressEvent) => void
+	onProgress?: (event: ProgressEvent) => void,
 ): Promise<TaskResult> {
 	const tempDirs: TempDir[] = [];
 	const { dir: expectedDir, cleanup: cleanupExpected } = await getExpectedDir(task);
@@ -1390,11 +1395,11 @@ export async function runTask(
 export async function runBenchmark(
 	tasks: EditTask[],
 	config: BenchmarkConfig,
-	onProgress?: (event: ProgressEvent) => void
+	onProgress?: (event: ProgressEvent) => void,
 ): Promise<BenchmarkResult> {
 	const startTime = new Date().toISOString();
-	const runItems: TaskRunItem[] = tasks.flatMap((task) =>
-		Array.from({ length: config.runsPerTask }, (_, runIndex) => ({ task, runIndex }))
+	const runItems: TaskRunItem[] = tasks.flatMap(task =>
+		Array.from({ length: config.runsPerTask }, (_, runIndex) => ({ task, runIndex })),
 	);
 
 	const batches = buildRunBatches(runItems);
@@ -1423,13 +1428,13 @@ export async function runBenchmark(
 
 	await Promise.all(running);
 
-	const taskResults = tasks.map((task) => summarizeTaskRuns(task, resultsByTask.get(task.id) ?? []));
+	const taskResults = tasks.map(task => summarizeTaskRuns(task, resultsByTask.get(task.id) ?? []));
 
 	const endTime = new Date().toISOString();
 
-	const allRuns = taskResults.flatMap((t) => t.runs);
+	const allRuns = taskResults.flatMap(t => t.runs);
 	const totalRuns = allRuns.length;
-	const successfulRuns = allRuns.filter((r) => r.success).length;
+	const successfulRuns = allRuns.filter(r => r.success).length;
 
 	const totalTokens: TokenStats = {
 		input: allRuns.reduce((sum, r) => sum + r.tokens.input, 0),
@@ -1439,7 +1444,7 @@ export async function runBenchmark(
 
 	const totalDuration = allRuns.reduce((sum, r) => sum + r.duration, 0);
 	const indentScores = allRuns
-		.map((run) => run.indentScore)
+		.map(run => run.indentScore)
 		.filter((score): score is number => typeof score === "number");
 	const avgIndentScore =
 		indentScores.length > 0 ? indentScores.reduce((sum, score) => sum + score, 0) / indentScores.length : 0;
@@ -1454,20 +1459,20 @@ export async function runBenchmark(
 	};
 
 	const editSuccessRate = totalToolCalls.edit > 0 ? totalToolCalls.editSuccesses / totalToolCalls.edit : 1;
-	const timeoutRuns = allRuns.filter((r) => r.error?.includes("Timeout waiting for agent_end")).length;
-	const runsWithMutationIntent = allRuns.filter((r) => typeof r.mutationIntentMatched === "boolean");
+	const timeoutRuns = allRuns.filter(r => r.error?.includes("Timeout waiting for agent_end")).length;
+	const runsWithMutationIntent = allRuns.filter(r => typeof r.mutationIntentMatched === "boolean");
 	const mutationIntentMatchRate =
 		runsWithMutationIntent.length > 0
-			? runsWithMutationIntent.filter((r) => r.mutationIntentMatched).length / runsWithMutationIntent.length
+			? runsWithMutationIntent.filter(r => r.mutationIntentMatched).length / runsWithMutationIntent.length
 			: undefined;
 
 	const hashlineEditSubtypes: Record<string, number> | undefined =
 		config.editVariant === "hashline"
 			? Object.fromEntries(
-					HASHLINE_SUBTYPES.map((key) => [
+					HASHLINE_SUBTYPES.map(key => [
 						key,
 						allRuns.reduce((sum, r) => sum + (r.hashlineEditSubtypes?.[key] ?? 0), 0),
-					])
+					]),
 				)
 			: undefined;
 
@@ -1476,8 +1481,8 @@ export async function runBenchmark(
 		totalRuns,
 		successfulRuns,
 		overallSuccessRate: successfulRuns / totalRuns,
-		tasksWithAllPassing: taskResults.filter((t) => t.successRate === 1).length,
-		tasksWithAnyFailing: taskResults.filter((t) => t.successRate < 1).length,
+		tasksWithAllPassing: taskResults.filter(t => t.successRate === 1).length,
+		tasksWithAnyFailing: taskResults.filter(t => t.successRate < 1).length,
 		totalTokens,
 		avgTokensPerRun: {
 			input: Math.round(totalTokens.input / totalRuns),

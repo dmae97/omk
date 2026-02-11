@@ -33,7 +33,7 @@ function generateReportFilename(config: BenchmarkConfig, format: "markdown" | "j
 
 function printUsage(tasks?: EditTask[]): void {
 	const taskList = tasks
-		? tasks.map((t) => `  ${t.id.padEnd(30)} ${t.name}`).join("\n")
+		? tasks.map(t => `  ${t.id.padEnd(30)} ${t.name}`).join("\n")
 		: "  (use --list to see available tasks)";
 	console.log(`
 Edit Benchmark - Evaluate patch application success rates
@@ -59,6 +59,8 @@ Options:
   --guided                  Include an authoritative suggested edit payload (default: false)
   --no-guided               Disable guided mode
   --max-attempts <n>        Max prompt attempts per run (default: 1)
+  --no-op-retry-limit <n>   Stop after repeated preventable no-op failures (default: 2)
+  --mutation-scope-window <n> Allowed line-distance from mutation target for hashline refs (default: 20)
   --output <file>           Output file (default: run_<model>_<variant>_<fuzzy>_<threshold>_<timestamp>.md)
   --format <fmt>            Output format: markdown, json (default: markdown)
   --check-fixtures          Validate fixtures and exit
@@ -92,8 +94,8 @@ Examples:
 
 async function resolveExtractedDir(tempDir: string): Promise<string> {
 	const entries = await fs.promises.readdir(tempDir, { withFileTypes: true });
-	const dirs = entries.filter((entry) => entry.isDirectory());
-	const files = entries.filter((entry) => entry.isFile());
+	const dirs = entries.filter(entry => entry.isDirectory());
+	const files = entries.filter(entry => entry.isFile());
 	if (dirs.length === 1 && files.length === 0) {
 		return join(tempDir, dirs[0]!.name);
 	}
@@ -155,6 +157,8 @@ async function main(): Promise<void> {
 			guided: { type: "boolean", default: false },
 			"no-guided": { type: "boolean", default: false },
 			"max-attempts": { type: "string", default: "1" },
+			"no-op-retry-limit": { type: "string", default: "2" },
+			"mutation-scope-window": { type: "string", default: "20" },
 			"timeout-retries": { type: "string", default: "1" },
 			"require-edit-tool-call": { type: "boolean", default: false },
 			"require-read-tool-call": { type: "boolean", default: false },
@@ -218,44 +222,44 @@ async function main(): Promise<void> {
 	}
 
 	const runsPerTask = parseInt(values.runs!, 10);
-	if (isNaN(runsPerTask) || runsPerTask < 1) {
+	if (Number.isNaN(runsPerTask) || runsPerTask < 1) {
 		console.error(`Invalid runs value: ${values.runs}`);
 		process.exit(1);
 	}
 
 	const timeout = parseInt(values.timeout!, 10);
-	if (isNaN(timeout) || timeout < 1000) {
+	if (Number.isNaN(timeout) || timeout < 1000) {
 		console.error(`Invalid timeout value: ${values.timeout}`);
 		process.exit(1);
 	}
 
 	const taskConcurrency = parseInt(values["task-concurrency"]!, 10);
-	if (isNaN(taskConcurrency) || taskConcurrency < 1) {
+	if (Number.isNaN(taskConcurrency) || taskConcurrency < 1) {
 		console.error(`Invalid task concurrency value: ${values["task-concurrency"]}`);
 		process.exit(1);
 	}
 
 	const maxAttempts = parseInt(values["max-attempts"] ?? "2", 10);
-	if (isNaN(maxAttempts) || maxAttempts < 1 || maxAttempts > 5) {
-			console.error(`Invalid max-attempts value: ${values["max-attempts"]}. Must be 1-5.`);
+	if (Number.isNaN(maxAttempts) || maxAttempts < 1 || maxAttempts > 5) {
+		console.error(`Invalid max-attempts value: ${values["max-attempts"]}. Must be 1-5.`);
 		process.exit(1);
 	}
 
 	const timeoutRetryCount = parseInt(values["timeout-retries"] ?? "1", 10);
-	if (isNaN(timeoutRetryCount) || timeoutRetryCount < 0 || timeoutRetryCount > 3) {
+	if (Number.isNaN(timeoutRetryCount) || timeoutRetryCount < 0 || timeoutRetryCount > 3) {
 		console.error(`Invalid timeout-retries value: ${values["timeout-retries"]}. Must be 0-3.`);
 		process.exit(1);
 	}
 
 	let tasksToRun = allTasks;
 	if (values.tasks) {
-		const taskIds = values.tasks.split(",").map((s) => s.trim());
+		const taskIds = values.tasks.split(",").map(s => s.trim());
 		tasksToRun = [];
 		for (const id of taskIds) {
-			const task = allTasks.find((t) => t.id === id);
+			const task = allTasks.find(t => t.id === id);
 			if (!task) {
 				console.error(`Unknown task ID: ${id}`);
-				console.error(`Available tasks: ${allTasks.map((t) => t.id).join(", ")}`);
+				console.error(`Available tasks: ${allTasks.map(t => t.id).join(", ")}`);
 				process.exit(1);
 			}
 			tasksToRun.push(task);
@@ -297,7 +301,7 @@ async function main(): Promise<void> {
 			editFuzzyThreshold = "auto";
 		} else {
 			const parsed = parseFloat(values["edit-fuzzy-threshold"]);
-			if (isNaN(parsed) || parsed < 0 || parsed > 1) {
+			if (Number.isNaN(parsed) || parsed < 0 || parsed > 1) {
 				console.error(`Invalid edit-fuzzy-threshold: ${values["edit-fuzzy-threshold"]}. Must be 0-1 or auto.`);
 				process.exit(1);
 			}
@@ -315,11 +319,11 @@ async function main(): Promise<void> {
 		timeout,
 		taskConcurrency,
 		autoFormat: values["auto-format"],
-			guided,
-			maxAttempts,
+		guided,
+		maxAttempts,
 		timeoutRetryCount,
 		requireEditToolCall: values["require-edit-tool-call"],
-			requireReadToolCall: values["require-read-tool-call"],
+		requireReadToolCall: values["require-read-tool-call"],
 		noEditRequired: values["no-edit-required"],
 		editVariant,
 		editFuzzy,
@@ -346,7 +350,7 @@ async function main(): Promise<void> {
 		console.log("Require edit tool call: yes");
 	}
 	if (config.requireReadToolCall) {
-			console.log("Require read tool call: yes");
+		console.log("Require read tool call: yes");
 	}
 	if (config.noEditRequired) {
 		console.log("No-edit-required baseline: yes");
@@ -364,7 +368,7 @@ async function main(): Promise<void> {
 	console.log("");
 
 	const progress = new LiveProgress(tasksToRun.length * config.runsPerTask, config.runsPerTask);
-	const result = await runBenchmark(tasksToRun, config, (event) => {
+	const result = await runBenchmark(tasksToRun, config, event => {
 		progress.handleEvent(event);
 	});
 	progress.finish();
@@ -441,7 +445,9 @@ class LiveProgress {
 
 		if (event.result && !event.result.success && event.result.error) {
 			this.#flushLine();
-			console.log(`  [${event.taskId}] Run ${event.runIndex + 1}/${this.#runsPerTask} failed: ${event.result.error}`);
+			console.log(
+				`  [${event.taskId}] Run ${event.runIndex + 1}/${this.#runsPerTask} failed: ${event.result.error}`,
+			);
 			if (event.result.diff) {
 				const diffLines = event.result.diff.split("\n").slice(0, 30);
 				if (diffLines.length > 0) {
@@ -481,7 +487,9 @@ class LiveProgress {
 		console.log("");
 		console.log("Runtime Stats:");
 		console.log(`  Task success:     ${successRate.toFixed(1)}% (${this.#success}/${n})`);
-		console.log(`  Edit success:     ${editSuccessRate.toFixed(1)}% (${this.#totalEditSuccesses}/${this.#totalEdits})`);
+		console.log(
+			`  Edit success:     ${editSuccessRate.toFixed(1)}% (${this.#totalEditSuccesses}/${this.#totalEdits})`,
+		);
 		console.log(`  Avg indent score: ${avgIndent.toFixed(2)}`);
 		console.log(`  Tool calls:       read=${this.#totalReads} edit=${this.#totalEdits} write=${this.#totalWrites}`);
 		console.log(`  Tool input chars: ${this.#totalToolInputChars.toLocaleString()}`);
@@ -524,13 +532,13 @@ class LiveProgress {
 			return;
 		}
 		if (this.#lastLineLength > 0) {
-			process.stdout.write("\r" + padding(this.#lastLineLength) + "\r");
+			process.stdout.write(`\r${padding(this.#lastLineLength)}\r`);
 			this.#lastLineLength = 0;
 		}
 	}
 }
 
-main().catch((err) => {
+main().catch(err => {
 	console.error("Benchmark failed:", err);
 	process.exit(1);
 });

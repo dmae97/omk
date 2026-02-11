@@ -9,10 +9,10 @@
 import * as fs from "node:fs/promises";
 import { basename, join } from "node:path";
 import {
-	type FixtureValidationIssue,
-	type TarballTask,
 	extractTaskFiles,
+	type FixtureValidationIssue,
 	loadTasksFromTarball,
+	type TarballTask,
 	validateTarballFixtures,
 } from "./tarball";
 
@@ -48,7 +48,7 @@ export const DEFAULT_TARBALL_PATH = join(import.meta.dir, "fixtures.tar.gz");
 function titleize(id: string): string {
 	return id
 		.split(/[-_]/)
-		.map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
+		.map(part => (part ? part[0].toUpperCase() + part.slice(1) : part))
 		.join(" ");
 }
 
@@ -132,7 +132,7 @@ function tarballTaskToEditTask(task: TarballTask, tarballPath: string): EditTask
 
 export async function loadTasks(): Promise<EditTask[]> {
 	const tarballTasks = await loadTasksFromTarball(DEFAULT_TARBALL_PATH);
-	return tarballTasks.map((t) => tarballTaskToEditTask(t, DEFAULT_TARBALL_PATH));
+	return tarballTasks.map(t => tarballTaskToEditTask(t, DEFAULT_TARBALL_PATH));
 }
 
 export { extractTaskFiles };
@@ -218,13 +218,13 @@ export async function validateFixturesFromDir(fixturesPath: string): Promise<Fix
 			continue;
 		}
 		const fileName = basename(metadata.file_path);
-		if (!inputFiles.some((file) => basename(file) === fileName)) {
+		if (!inputFiles.some(file => basename(file) === fileName)) {
 			issues.push({
 				taskId,
 				message: `metadata file_path ${metadata.file_path} not found in input files`,
 			});
 		}
-		if (!expectedFiles.some((file) => basename(file) === fileName)) {
+		if (!expectedFiles.some(file => basename(file) === fileName)) {
 			issues.push({
 				taskId,
 				message: `metadata file_path ${metadata.file_path} not found in expected files`,

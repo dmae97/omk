@@ -60,16 +60,16 @@ export interface FormatResult {
 export async function formatContent(filePath: string, content: string): Promise<FormatResult> {
 	const parser = parserByExtension[path.extname(filePath).toLowerCase()];
 	if (!parser) {
-	return { formatted: content, didFormat: false };
-		}
-
-		try {
-			const formatted = await prettier.format(content, { ...PRETTIER_OPTIONS, parser });
-			return { formatted, didFormat: true };
-		} catch {
-	return { formatted: content, didFormat: false };
-		}
+		return { formatted: content, didFormat: false };
 	}
+
+	try {
+		const formatted = await prettier.format(content, { ...PRETTIER_OPTIONS, parser });
+		return { formatted, didFormat: true };
+	} catch {
+		return { formatted: content, didFormat: false };
+	}
+}
 
 export async function formatDirectory(rootDir: string): Promise<void> {
 	const files = await listFiles(rootDir);

@@ -109,9 +109,9 @@ export async function verifyExpectedFileSubset(
 		const expectedFiles = files?.length ? files.slice().sort() : expectedFixtureFiles;
 		const actualFiles = await listFiles(actualDir);
 
-		const missingFiles = expectedFiles.filter((file) => !actualFiles.includes(file));
-		const extraFiles = actualFiles.filter((file) => !expectedFiles.includes(file));
-		const missingExpected = expectedFiles.filter((file) => !expectedFixtureFiles.includes(file));
+		const missingFiles = expectedFiles.filter(file => !actualFiles.includes(file));
+		const extraFiles = actualFiles.filter(file => !expectedFiles.includes(file));
+		const missingExpected = expectedFiles.filter(file => !expectedFixtureFiles.includes(file));
 
 		if (missingExpected.length > 0) {
 			return {

@@ -39,6 +39,7 @@
 			"packages/*/src/**/*.tsx",
 			"packages/*/test/**/*.ts",
 			"packages/*/examples/**/*.ts",
+			"packages/*/*.ts",
 			"!**/vendor/**/*",
 			"!**/node_modules/**/*",
 			"!**/test-sessions.ts",

@@ -9,7 +9,7 @@ Line-addressed edits using hash-verified line references. Read file with hashes 
 - If you already edited a file in this turn, re-read that file before the next edit to it
 - For code-change requests, respond with tool calls, not prose
 - Edit only requested lines. Do not reformat unrelated code.
-- Do not submit a replacement whose content is identical to the current line. If unsure, re-read the target lines first.
+- Direction-lock every mutation: replace the exact currently-present token/expression with the intended target token/expression; never reverse the change or "change something nearby".
 </critical>
 
 <instruction>
@@ -18,7 +18,7 @@ Line-addressed edits using hash-verified line references. Read file with hashes 
 2. Collect the exact `LINE:HASH` refs you need
 3. Submit one `edit` call with all known operations for that file
 4. If another change on same file is needed later: re-read first, then edit
-5. Internally verify direction before submitting (`before token/expression` → `after token/expression`). Do not output prose; submit only the tool call.
+5. Direction-lock each operation before submitting (`exact source token/expression on target line` → `intended replacement`) and keep the mutation to one logical locus. Do not output prose; submit only the tool call.
 **Edit variants:**
 - `{ replaceLine: { loc: "LINE:HASH", content: "..." } }`
 - `{ replaceLines: { start: "LINE:HASH", end: "LINE:HASH", content: "..." } }`
@@ -35,21 +35,27 @@ Line-addressed edits using hash-verified line references. Read file with hashes 
 - Use `replaceLines` over a wide range when multiple `replaceLine` ops would work — wide ranges tempt reformatting everything in between
 
 If a change spans multiple non-adjacent lines, use separate `replaceLine` operations for each — not a single `replaceLines` that includes unchanged lines in `content`.
-- Each edit operation must target a single logical change site. If a fix requires changes at two separate locations, use two separate edit operations — never a single `replaceLines` spanning both.
-- Self-check before submitting: if your edit would touch lines unrelated to the stated fix, split or narrow it.
+- Each edit operation must target one logical change site with minimal scope. If a fix requires two locations, use two operations; never span unrelated lines in one `replaceLines`.
+- Self-check before submitting: if your edit touches lines unrelated to the stated fix, split or narrow it.
 </caution>
 <instruction>
 **Recovery:**
-- Hash mismatch (`>>>` error): copy the updated `LINE:HASH` refs from the error verbatim and retry. Do NOT re-read the file unless you need lines not shown in the error.
+- Hash mismatch (`>>>` error): copy the updated `LINE:HASH` refs from the error verbatim and retry with the same intended mutation. Do NOT re-read unless you need lines not shown in the error.
+- If hash mismatch repeats after applying updated refs, stop blind retries and re-read the relevant region before retrying.
 - After a successful edit, always re-read the file before making another edit to the same file (hashes have changed).
-- No-op error ("identical content"): your replacement content matches what's already in the file. Re-read the target lines — the mutation is likely on a different line or the content has already been fixed.
+- No-op error ("identical content"): do not resend the same payload. Re-read the target lines, confirm mutation direction, and change either target refs or replacement content before retrying.
 </instruction>
 
 <instruction>
-**Before submitting each edit call, verify:**
-- `path` is set and points to the correct file
-- Each `loc`/`start`/`end` ref matches `^\d+:[A-Za-z0-9]+$` — no spaces, no content after hash
-- `content` reproduces the original line's formatting with only the targeted change applied
+**Preflight schema and validation (required):**
+- Payload shape is `{"path": string, "edits": [operation, ...]}` with a non-empty `edits` array.
+- Each operation contains exactly one variant key: `replaceLine`, `replaceLines`, or `insertAfter`.
+- Required fields by variant:
+  - `replaceLine`: `loc`, `content`
+  - `replaceLines`: `start`, `end`, `content`
+  - `insertAfter`: `loc`, `content` (non-empty)
+- Each `loc`/`start`/`end` ref matches `^\d+:[A-Za-z0-9]+$` (no spaces, no trailing source text).
+- `content` preserves original formatting and changes only the direction-locked target locus.
 </instruction>
 
 <input>
