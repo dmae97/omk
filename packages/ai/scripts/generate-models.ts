@@ -623,6 +623,48 @@ async function loadModelsDevData(): Promise<Model[]> {
 			}
 		}
 
+		// Process MiniMax Coding Plan models
+
+		// Process MiniMax Coding Plan models
+		// MiniMax Coding Plan uses OpenAI-compatible API with separate API key
+		const minimaxCodeVariants = [
+			{ key: "minimax-coding-plan", provider: "minimax-code", baseUrl: "https://api.minimax.io/v1" },
+			{ key: "minimax-cn-coding-plan", provider: "minimax-code-cn", baseUrl: "https://api.minimaxi.com/v1" },
+		] as const;
+
+		for (const { key, provider, baseUrl } of minimaxCodeVariants) {
+			if (data[key]?.models) {
+				for (const [modelId, model] of Object.entries(data[key].models)) {
+					const m = model as ModelsDevModel;
+					if (m.tool_call !== true) continue;
+					const supportsImage = m.modalities?.input?.includes("image");
+
+					models.push({
+						id: modelId,
+						name: m.name || modelId,
+						api: "openai-completions",
+						provider,
+						baseUrl,
+						reasoning: m.reasoning === true,
+						input: supportsImage ? ["text", "image"] : ["text"],
+						cost: {
+							input: m.cost?.input || 0,
+							output: m.cost?.output || 0,
+							cacheRead: m.cost?.cache_read || 0,
+							cacheWrite: m.cost?.cache_write || 0,
+						},
+						compat: {
+							supportsDeveloperRole: false,
+							thinkingFormat: "zai",
+							reasoningContentField: "reasoning_content",
+						},
+						contextWindow: m.limit?.context || 4096,
+						maxTokens: m.limit?.output || 4096,
+					});
+				}
+			}
+		}
+
 		// Process Mistral models
 		if (data.mistral?.models) {
 			for (const [modelId, model] of Object.entries(data.mistral.models)) {
@@ -1270,6 +1312,98 @@ async function generateModels() {
 			contextWindow: 2000000,
 			maxTokens: 30000,
 		});
+	}
+
+	// MiniMax Coding Plan fallback models
+	// These are subscription-based plans with separate API keys
+	// International endpoint: https://api.minimax.io/v1
+	// China endpoint: https://api.minimaxi.com/v1
+	const minimaxCodeFallbackModels: Model<"openai-completions">[] = [
+		{
+			id: "MiniMax-M2.1",
+			name: "MiniMax M2.1 (Coding Plan)",
+			api: "openai-completions",
+			provider: "minimax-code",
+			baseUrl: "https://api.minimax.io/v1",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			compat: {
+				supportsDeveloperRole: false,
+				thinkingFormat: "zai",
+				reasoningContentField: "reasoning_content",
+			},
+			contextWindow: 1000000,
+			maxTokens: 32000,
+		},
+		{
+			id: "MiniMax-M2.1-lightning",
+			name: "MiniMax M2.1 Lightning (Coding Plan)",
+			api: "openai-completions",
+			provider: "minimax-code",
+			baseUrl: "https://api.minimax.io/v1",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			compat: {
+				supportsDeveloperRole: false,
+				thinkingFormat: "zai",
+				reasoningContentField: "reasoning_content",
+			},
+			contextWindow: 1000000,
+			maxTokens: 32000,
+		},
+	];
+
+	// Only add fallback models if not already present from API
+	for (const model of minimaxCodeFallbackModels) {
+		if (!allModels.some((m) => m.provider === model.provider && m.id === model.id)) {
+			allModels.push(model);
+		}
+	}
+
+	// China variants
+	const minimaxCodeCnFallbackModels: Model<"openai-completions">[] = [
+		{
+			id: "MiniMax-M2.1",
+			name: "MiniMax M2.1 (Coding Plan CN)",
+			api: "openai-completions",
+			provider: "minimax-code-cn",
+			baseUrl: "https://api.minimaxi.com/v1",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			compat: {
+				supportsDeveloperRole: false,
+				thinkingFormat: "zai",
+				reasoningContentField: "reasoning_content",
+			},
+			contextWindow: 1000000,
+			maxTokens: 32000,
+		},
+		{
+			id: "MiniMax-M2.1-lightning",
+			name: "MiniMax M2.1 Lightning (Coding Plan CN)",
+			api: "openai-completions",
+			provider: "minimax-code-cn",
+			baseUrl: "https://api.minimaxi.com/v1",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			compat: {
+				supportsDeveloperRole: false,
+				thinkingFormat: "zai",
+				reasoningContentField: "reasoning_content",
+			},
+			contextWindow: 1000000,
+			maxTokens: 32000,
+		},
+	];
+
+	for (const model of minimaxCodeCnFallbackModels) {
+		if (!allModels.some((m) => m.provider === model.provider && m.id === model.id)) {
+			allModels.push(model);
+		}
 	}
 
 	// Google Cloud Code Assist models (Gemini CLI)

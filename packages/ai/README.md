@@ -57,6 +57,7 @@ Unified LLM API with automatic model discovery, provider configuration, token an
 - **xAI**
 - **OpenRouter**
 - **zAI** (requires `ZAI_API_KEY`)
+- **MiniMax Coding Plan** (requires `MINIMAX_CODE_API_KEY` or `MINIMAX_CODE_CN_API_KEY`)
 - **GitHub Copilot** (requires OAuth, see below)
 - **Google Gemini CLI** (requires OAuth, see below)
 - **Antigravity** (requires OAuth, see below)
@@ -900,6 +901,7 @@ In Node.js environments, you can set environment variables to avoid passing API 
 | xAI            | `XAI_API_KEY`                                                                |
 | OpenRouter     | `OPENROUTER_API_KEY`                                                         |
 | zAI            | `ZAI_API_KEY`                                                                |
+| MiniMax Code   | `MINIMAX_CODE_API_KEY` (international) or `MINIMAX_CODE_CN_API_KEY` (China)  |
 | GitHub Copilot | `COPILOT_GITHUB_TOKEN` or `GH_TOKEN` or `GITHUB_TOKEN`                       |
 
 When set, the library automatically uses these keys:

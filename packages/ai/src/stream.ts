@@ -60,6 +60,8 @@ const serviceProviderMap: Record<string, KeyResolver> = {
 	zai: "ZAI_API_KEY",
 	mistral: "MISTRAL_API_KEY",
 	minimax: "MINIMAX_API_KEY",
+	"minimax-code": "MINIMAX_CODE_API_KEY",
+	"minimax-code-cn": "MINIMAX_CODE_CN_API_KEY",
 	opencode: "OPENCODE_API_KEY",
 	cursor: "CURSOR_ACCESS_TOKEN",
 	"azure-openai-responses": "AZURE_OPENAI_API_KEY",
