@@ -55,10 +55,10 @@ fn get_os_distro(_system: &System) -> Option<String> {
 		.or_else(sysinfo::System::name)
 		.filter(|value| !value.trim().is_empty());
 
-	if cfg!(target_os = "macos") {
-		if let Some(name) = macos_marketing_name() {
-			return base.map(|b| format!("{b} {name}"));
-		}
+	if cfg!(target_os = "macos")
+		&& let Some(name) = macos_marketing_name()
+	{
+		return base.map(|b| format!("{b} {name}"));
 	}
 
 	base
