@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [11.12.0] - 2026-02-11
 ### Added
 
 - Added `resolveFileDisplayMode` utility to centralize file display mode resolution across tools (read, grep, file mentions)

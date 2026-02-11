@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [11.12.0] - 2026-02-11
 ### Changed
 
 - Increased maximum retry attempts for Codex requests from 2 to 5 to improve reliability on transient failures
