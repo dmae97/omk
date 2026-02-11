@@ -51,7 +51,7 @@ function getEditPathFromArgs(args: unknown): string | null {
 	return typeof pathValue === "string" && pathValue.length > 0 ? pathValue : null;
 }
 
-const HASHLINE_SUBTYPES = ["replaceLine", "replaceLines", "insertAfter", "insertBefore", "substr"] as const;
+const HASHLINE_SUBTYPES = ["replaceLine", "replaceLines", "insertAfter"] as const;
 
 function countHashlineEditSubtypes(args: unknown): Record<string, number> {
 	const counts: Record<string, number> = Object.fromEntries(HASHLINE_SUBTYPES.map((k) => [k, 0]));
@@ -253,7 +253,10 @@ async function evaluateMutationIntent(
 	};
 }
 
-type GuidedHashlineEdit = { src: unknown; dst: string };
+type GuidedHashlineEdit =
+	| { replaceLine: { loc: string; content: string } }
+	| { replaceLines: { start: string; end: string; content: string } }
+	| { insertAfter: { loc: string; content: string } };
 
 function buildGuidedHashlineEdits(actual: string, expected: string): GuidedHashlineEdit[] {
 	const changes = diffLines(actual, expected);
@@ -273,19 +276,23 @@ function buildGuidedHashlineEdits(actual: string, expected: string): GuidedHashl
 		if (pendingRemoved.length === 0) {
 			const insertLine = pendingStart;
 			if (pendingAdded.length === 0) return;
-			if (insertLine <= actualLines.length) {
-				const beforeLine = actualLines[insertLine - 1] ?? "";
-				const beforeRef = `${insertLine}:${computeLineHash(insertLine, beforeLine)}`;
+			if (insertLine === 1) {
+				const firstLine = actualLines[0] ?? "";
+				const firstRef = `1:${computeLineHash(1, firstLine)}`;
 				edits.push({
-					src: { kind: "insertBefore", before: beforeRef },
-					dst: pendingAdded.join("\n"),
+					replaceLine: { loc: firstRef, content: pendingAdded.join("\n") + "\n" + firstLine },
+				});
+			} else if (insertLine <= actualLines.length) {
+				const afterLine = actualLines[insertLine - 2] ?? "";
+				const afterRef = `${insertLine - 1}:${computeLineHash(insertLine - 1, afterLine)}`;
+				edits.push({
+					insertAfter: { loc: afterRef, content: pendingAdded.join("\n") },
 				});
 			} else if (insertLine === actualLines.length + 1 && actualLines.length > 0) {
 				const afterLine = actualLines[actualLines.length - 1] ?? "";
 				const afterRef = `${actualLines.length}:${computeLineHash(actualLines.length, afterLine)}`;
 				edits.push({
-					src: { kind: "insertAfter", after: afterRef },
-					dst: pendingAdded.join("\n"),
+					insertAfter: { loc: afterRef, content: pendingAdded.join("\n") },
 				});
 			}
 		} else {
@@ -294,13 +301,12 @@ function buildGuidedHashlineEdits(actual: string, expected: string): GuidedHashl
 			const startContent = actualLines[startLine - 1] ?? "";
 			const startRef = `${startLine}:${computeLineHash(startLine, startContent)}`;
 			if (startLine === endLine) {
-				edits.push({ src: { kind: "single", ref: startRef }, dst: pendingAdded.join("\n") });
+				edits.push({ replaceLine: { loc: startRef, content: pendingAdded.join("\n") } });
 			} else {
 				const endContent = actualLines[endLine - 1] ?? "";
 				const endRef = `${endLine}:${computeLineHash(endLine, endContent)}`;
 				edits.push({
-					src: { kind: "range", start: startRef, end: endRef },
-					dst: pendingAdded.join("\n"),
+					replaceLines: { start: startRef, end: endRef, content: pendingAdded.join("\n") },
 				});
 			}
 		}

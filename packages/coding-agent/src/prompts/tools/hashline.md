@@ -1,4 +1,4 @@
-# Edit (Replace lines)
+# Edit (Hash anchored)
 
 Line-addressed edits using hash-verified line references. Read file with hashes first, then edit by referencing `LINE:HASH` pairs.
 
@@ -23,8 +23,6 @@ Line-addressed edits using hash-verified line references. Read file with hashes 
 - `{ replaceLine: { loc: "LINE:HASH", content: "..." } }`
 - `{ replaceLines: { start: "LINE:HASH", end: "LINE:HASH", content: "..." } }`
 - `{ insertAfter: { loc: "LINE:HASH", content: "..." } }`
-- `{ insertBefore: { loc: "LINE:HASH", content: "..." } }`
-- `{ substr: { needle: "unique substring", content: "..." } }` — use when line hashes unavailable; needle must match exactly one line
 
 `content: ""` means delete (for `replaceLine`/`replaceLines`).
 </instruction>
@@ -73,10 +71,6 @@ edit {"path":"src/app.py","edits":[{"replaceLines":{"start":"{{hashline 5 'old_v
 
 <example name="insert after">
 edit {"path":"src/app.py","edits":[{"insertAfter":{"loc":"{{hashline 3 'def hello'}}","content":"  # new comment"}}]}
-</example>
-
-<example name="insert before">
-edit {"path":"src/app.py","edits":[{"insertBefore":{"loc":"{{hashline 3 'def hello'}}","content":"  # new comment"}}]}
 </example>
 
 <example name="multiple edits (bottom-up safe)">

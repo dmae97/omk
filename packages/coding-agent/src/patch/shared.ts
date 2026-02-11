@@ -88,9 +88,7 @@ interface EditRenderArgs {
 type HashlineEditPreview =
 	| { replaceLine: { loc: string; content: string } }
 	| { replaceLines: { start: string; end: string; content: string } }
-	| { insertAfter: { loc: string; content: string } }
-	| { insertBefore: { loc: string; content: string } }
-	| { substr: { needle: string; content: string } };
+	| { insertAfter: { loc: string; content: string } };
 
 /** Extended context for edit tool rendering */
 export interface EditRenderContext {
@@ -170,21 +168,9 @@ function formatStreamingHashlineEdits(edits: HashlineEditPreview[], uiTheme: The
 				dst: edit.replaceLines.content,
 			};
 		}
-		if ("insertAfter" in edit) {
-			return {
-				srcLabel: `• insertAfter ${edit.insertAfter.loc}..`,
-				dst: edit.insertAfter.content,
-			};
-		}
-		if ("substr" in edit) {
-			return {
-				srcLabel: `• substr "${edit.substr.needle}"`,
-				dst: edit.substr.content,
-			};
-		}
 		return {
-			srcLabel: `• insertBefore ..${edit.insertBefore.loc}`,
-			dst: edit.insertBefore.content,
+			srcLabel: `• insertAfter ${edit.insertAfter.loc}..`,
+			dst: edit.insertAfter.content,
 		};
 	}
 }

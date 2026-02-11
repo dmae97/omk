@@ -144,24 +144,10 @@ const hashlineInsertAfterSchema = Type.Object({
 		content: Type.String({ description: "Content to insert (\\n-separated); must be non-empty" }),
 	}),
 });
-const hashlineInsertBeforeSchema = Type.Object({
-	insertBefore: Type.Object({
-		loc: Type.String({ description: 'Insert before this line "LINE:HASH"' }),
-		content: Type.String({ description: "Content to insert (\\n-separated); must be non-empty" }),
-	}),
-});
-const hashlineSubstrSchema = Type.Object({
-	substr: Type.Object({
-		needle: Type.String({ description: "Unique substring to find in the target line" }),
-		content: Type.String({ description: "Replacement for the needle (single-line only)" }),
-	}),
-});
 const hashlineEditItemSchema = Type.Union([
 	hashlineReplaceLineSchema,
 	hashlineReplaceLinesSchema,
 	hashlineInsertAfterSchema,
-	hashlineInsertBeforeSchema,
-	hashlineSubstrSchema,
 ]);
 const hashlineEditSchema = Type.Object({
 	path: Type.String({ description: "File path (relative or absolute)" }),
@@ -428,7 +414,6 @@ export class EditTool implements AgentTool<TInput> {
 						if ("replaceLine" in edit) refs.push(edit.replaceLine.loc);
 						else if ("replaceLines" in edit) refs.push(edit.replaceLines.start, edit.replaceLines.end);
 						else if ("insertAfter" in edit) refs.push(edit.insertAfter.loc);
-						else if ("insertBefore" in edit) refs.push(edit.insertBefore.loc);
 						for (const ref of refs) {
 							const parsed = parseLineRef(ref);
 							if (parsed.line >= 1 && parsed.line <= lines.length) {

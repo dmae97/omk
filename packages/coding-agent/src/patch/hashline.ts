@@ -18,9 +18,7 @@ import type { HashMismatch } from "./types";
 type ParsedRefs =
 	| { kind: "single"; ref: { line: number; hash: string } }
 	| { kind: "range"; start: { line: number; hash: string }; end: { line: number; hash: string } }
-	| { kind: "insertAfter"; after: { line: number; hash: string } }
-	| { kind: "insertBefore"; before: { line: number; hash: string } }
-	| { kind: "substr"; needle: string; resolvedLine?: number };
+	| { kind: "insertAfter"; after: { line: number; hash: string } };
 
 function parseHashlineEdit(edit: HashlineEdit): { spec: ParsedRefs; dst: string } {
 	if ("replaceLine" in edit) {
@@ -37,21 +35,9 @@ function parseHashlineEdit(edit: HashlineEdit): { spec: ParsedRefs; dst: string 
 			dst: edit.replaceLines.content,
 		};
 	}
-	if ("insertAfter" in edit) {
-		return {
-			spec: { kind: "insertAfter", after: parseLineRef(edit.insertAfter.loc) },
-			dst: edit.insertAfter.content,
-		};
-	}
-	if ("substr" in edit) {
-		return {
-			spec: { kind: "substr", needle: edit.substr.needle },
-			dst: edit.substr.content,
-		};
-	}
 	return {
-		spec: { kind: "insertBefore", before: parseLineRef(edit.insertBefore.loc) },
-		dst: edit.insertBefore.content,
+		spec: { kind: "insertAfter", after: parseLineRef(edit.insertAfter.loc) },
+		dst: edit.insertAfter.content,
 	};
 }
 /** Split dst into lines; empty string means delete (no lines). */
@@ -233,14 +219,6 @@ function stripInsertAnchorEchoAfter(anchorLine: string, dstLines: string[]): str
 	if (dstLines.length <= 1) return dstLines;
 	if (equalsIgnoringWhitespace(dstLines[0], anchorLine)) {
 		return dstLines.slice(1);
-	}
-	return dstLines;
-}
-
-function stripInsertAnchorEchoBefore(anchorLine: string, dstLines: string[]): string[] {
-	if (dstLines.length <= 1) return dstLines;
-	if (equalsIgnoringWhitespace(dstLines[dstLines.length - 1], anchorLine)) {
-		return dstLines.slice(0, -1);
 	}
 	return dstLines;
 }
@@ -699,7 +677,7 @@ export function validateLineRef(ref: { line: number; hash: string }, fileLines: 
  * Apply an array of hashline edits to file content.
  *
  * Each edit operation identifies target lines directly (`replaceLine`, `replaceLines`,
- * `insertAfter`, `insertBefore`). Line references are resolved via {@link parseLineRef}
+ * `insertAfter`). Line references are resolved via {@link parseLineRef}
  * and hashes validated before any mutation.
  *
  * Edits are sorted bottom-up (highest effective line first) so earlier
@@ -728,29 +706,6 @@ export function applyHashlineEdits(
 		};
 	});
 
-	// Resolve substr specs to line numbers
-	for (const p of parsed) {
-		if (p.spec.kind !== "substr") continue;
-		const indices: number[] = [];
-		for (let i = 0; i < fileLines.length; i++) {
-			if (fileLines[i].includes(p.spec.needle)) indices.push(i);
-		}
-		if (indices.length === 0) {
-			throw new Error(`Substr needle not found in file: "${p.spec.needle}"`);
-		}
-		if (indices.length > 1) {
-			const previews = indices
-				.slice(0, 5)
-				.map(i => `${i + 1}: ${fileLines[i]}`)
-				.join("\n");
-			const more = indices.length > 5 ? `\n... (${indices.length - 5} more)` : "";
-			throw new Error(
-				`Substr needle is ambiguous (found ${indices.length} matches): "${p.spec.needle}"\n${previews}${more}`,
-			);
-		}
-		(p.spec as { resolvedLine?: number }).resolvedLine = indices[0] + 1;
-	}
-
 	function collectExplicitlyTouchedLines(): Set<number> {
 		const touched = new Set<number>();
 		for (const { spec } of parsed) {
@@ -763,12 +718,6 @@ export function applyHashlineEdits(
 					break;
 				case "insertAfter":
 					touched.add(spec.after.line);
-					break;
-				case "insertBefore":
-					touched.add(spec.before.line);
-					break;
-				case "substr":
-					touched.add(spec.resolvedLine!);
 					break;
 			}
 		}
@@ -809,17 +758,6 @@ export function applyHashlineEdits(
 					throw new Error('Insert-after edit (src "N:HH..") requires non-empty dst');
 				}
 				refsToValidate.push(spec.after);
-				break;
-			case "insertBefore":
-				if (dstLines.length === 0) {
-					throw new Error('Insert-before edit (src "..N:HH") requires non-empty dst');
-				}
-				refsToValidate.push(spec.before);
-				break;
-			case "substr":
-				if (dstLines.length !== 1) {
-					throw new Error(`Substr edit requires single-line replacement (got ${dstLines.length} lines)`);
-				}
 				break;
 		}
 
@@ -866,14 +804,6 @@ export function applyHashlineEdits(
 			case "insertAfter":
 				sortLine = p.spec.after.line;
 				precedence = 1;
-				break;
-			case "insertBefore":
-				sortLine = p.spec.before.line;
-				precedence = 2;
-				break;
-			case "substr":
-				sortLine = p.spec.resolvedLine ?? 0;
-				precedence = 3;
 				break;
 		}
 		return { ...p, idx, sortLine, precedence };
@@ -943,21 +873,6 @@ export function applyHashlineEdits(
 				const inserted = stripInsertAnchorEchoAfter(anchorLine, dstLines);
 				fileLines.splice(spec.after.line, 0, ...inserted);
 				trackFirstChanged(spec.after.line + 1);
-				break;
-			}
-			case "insertBefore": {
-				const anchorLine = originalFileLines[spec.before.line - 1];
-				const inserted = stripInsertAnchorEchoBefore(anchorLine, dstLines);
-				fileLines.splice(spec.before.line - 1, 0, ...inserted);
-				trackFirstChanged(spec.before.line);
-				break;
-			}
-			case "substr": {
-				const lineIdx = spec.resolvedLine! - 1;
-				const original = fileLines[lineIdx];
-				const replaced = original.replace(spec.needle, dstLines[0]);
-				fileLines.splice(lineIdx, 1, replaced);
-				trackFirstChanged(spec.resolvedLine!);
 				break;
 			}
 		}

@@ -175,7 +175,7 @@ export function generateReport(result: BenchmarkResult): string {
 			lines.push("");
 			lines.push("| Operation | Count | % |");
 			lines.push("|-----------|-------|---|");
-			const order = ["replaceLine", "replaceLines", "insertAfter", "insertBefore", "substr"];
+			const order = ["replaceLine", "replaceLines", "insertAfter"];
 			for (const key of order) {
 				const count = summary.hashlineEditSubtypes[key] ?? 0;
 				const pct = formatPercent(count / total);

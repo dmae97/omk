@@ -364,24 +364,6 @@ describe("applyHashlineEdits — insert", () => {
 
 		expect(() => applyHashlineEdits(content, edits)).toThrow();
 	});
-
-	test("inserts before a line", () => {
-		const content = "aaa\nbbb\nccc";
-		const edits: HashlineEdit[] = [{ insertBefore: { loc: makeRef(2, "bbb"), content: "NEW" } }];
-
-		const result = applyHashlineEdits(content, edits);
-		expect(result.content).toBe("aaa\nNEW\nbbb\nccc");
-		expect(result.firstChangedLine).toBe(2);
-	});
-
-	test("inserts before first line", () => {
-		const content = "aaa\nbbb";
-		const edits: HashlineEdit[] = [{ insertBefore: { loc: makeRef(1, "aaa"), content: "TOP" } }];
-
-		const result = applyHashlineEdits(content, edits);
-		expect(result.content).toBe("TOP\naaa\nbbb");
-		expect(result.firstChangedLine).toBe(1);
-	});
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -399,14 +381,6 @@ describe("applyHashlineEdits — heuristics", () => {
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("aaa\nbbb\nNEW\nccc");
-	});
-
-	test("strips insert-before anchor echo", () => {
-		const content = "aaa\nbbb\nccc";
-		const edits: HashlineEdit[] = [{ insertBefore: { loc: makeRef(2, "bbb"), content: "NEW\nbbb" } }];
-
-		const result = applyHashlineEdits(content, edits);
-		expect(result.content).toBe("aaa\nNEW\nbbb\nccc");
 	});
 
 	test("strips range boundary echo and preserves whitespace on unchanged lines", () => {
@@ -549,21 +523,6 @@ describe("applyHashlineEdits — heuristics", () => {
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("aaa\nBBB\nccc");
-	});
-
-	test("substr replaces needle with content when it matches exactly one line", () => {
-		const content = "aaa\ndevtools–unsupported-bridge-protocol\nccc";
-		const edits: HashlineEdit[] = [
-			{
-				substr: {
-					needle: "devtools–unsupported-bridge-protocol",
-					content: "devtools-unsupported-bridge-protocol",
-				},
-			},
-		];
-
-		const result = applyHashlineEdits(content, edits);
-		expect(result.content).toBe("aaa\ndevtools-unsupported-bridge-protocol\nccc");
 	});
 
 	test("treats same-line ranges as single-line replacements", () => {
@@ -728,20 +687,6 @@ describe("applyHashlineEdits — errors", () => {
 		const edits: HashlineEdit[] = [{ replaceLine: { loc: staleDuplicate, content: "DUP" } }];
 
 		expect(() => applyHashlineEdits(content, edits)).toThrow(HashlineMismatchError);
-	});
-
-	test("rejects substr when needle not found", () => {
-		const content = "aaa\nbbb";
-		const edits: HashlineEdit[] = [{ substr: { needle: "garbage", content: "X" } }];
-
-		expect(() => applyHashlineEdits(content, edits)).toThrow(/Substr needle not found/);
-	});
-
-	test("rejects substr when needle matches multiple lines", () => {
-		const content = "aaa\ndup\nmid\ndup";
-		const edits: HashlineEdit[] = [{ substr: { needle: "dup", content: "X" } }];
-
-		expect(() => applyHashlineEdits(content, edits)).toThrow(/Substr needle is ambiguous/);
 	});
 
 	test("rejects out-of-range line", () => {

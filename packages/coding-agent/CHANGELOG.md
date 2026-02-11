@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added whitespace normalization in line reference parsing to tolerate spaces around colons (e.g., `5 : ab` now parses as `5:ab`)
@@ -8,24 +9,28 @@
 - Added warnings detection in `applyHashlineEdits` to alert users when edits affect significantly more lines than expected, indicating possible unintended reformatting
 - Added diagnostic output showing target line content when an edit produces no changes, helping users identify hash mismatches or incorrect replacement content
 - Added `{{hashline}}` Handlebars helper to compute accurate `LINE:HASH` references for prompt examples and documentation
-- Added `substr` edit variant to match and replace by unique substring when line-hash references are unavailable
 
 ### Changed
 
 - Changed `applyHashlineEdits` return type to include optional `warnings` array for reporting suspicious edit patterns
 - Improved hash relocation logic to recompute touched lines after hash-based line number adjustments, preventing incorrect merge heuristics
 - Enhanced error messages for no-op edits to include preview of target lines with their current hashes and content
-- Changed hashline edit format from `src`/`dst` object structure to direct operation schemas (`replaceLine`, `replaceLines`, `insertAfter`, `insertBefore`, `substr`)
+- Changed hashline edit format from `src`/`dst` object structure to direct operation schemas (`replaceLine`, `replaceLines`, `insertAfter`)
 - Changed hash algorithm from 2-character hexadecimal to 3-character base-36 alphanumeric for improved readability and collision resistance
 - Improved hash mismatch handling to automatically relocate stale line references when the hash uniquely identifies a moved line
-- Changed `HashlineEdit` from `src`/`dst` format to direct operation schemas: `replaceLine`, `replaceLines`, `insertAfter`, `insertBefore`, `substr`
+- Changed `HashlineEdit` from `src`/`dst` format to direct operation schemas: `replaceLine`, `replaceLines`, `insertAfter`
 - Changed hash algorithm from hexadecimal (base-16) to base-36 alphanumeric for shorter, more readable line references
 - Increased maximum wrapped-line restoration from 6 to 10 lines to handle longer reflowed statements
 - Updated prompt examples to use `{{hashline}}` Handlebars helper for generating correct line references in tool instructions
 
+### Removed
+
+- Removed `insertBefore` hashline edit operation for inserting content before a line
+- Removed `substr` hashline edit operation for substring-based line replacement
+- Removed `insertBefore` and `substr` hashline edit variants
+
 ### Fixed
 
-- Fixed substr operation to resolve line numbers during validation phase rather than mutation phase, preventing ambiguity errors from being raised too late
 - Fixed multi-edit application to use original file state for all anchor references, preventing incorrect line numbers when earlier edits change file length
 
 ## [11.10.4] - 2026-02-10
