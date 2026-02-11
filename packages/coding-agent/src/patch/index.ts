@@ -126,9 +126,9 @@ export type PatchParams = Static<typeof patchEditSchema>;
 
 const hashlineSingleSchema = Type.Object(
 	{
-		single: Type.Object({
-			loc: Type.String({ description: 'Line reference "LINE:HASH"' }),
-			replacement: Type.String({ description: 'Replacement content (\\n-separated) — "" for delete' }),
+		set_line: Type.Object({
+			anchor: Type.String({ description: 'Line reference "LINE:HASH"' }),
+			new_text: Type.String({ description: 'Replacement content (\\n-separated) — "" for delete' }),
 		}),
 	},
 	{ additionalProperties: true },
@@ -136,24 +136,39 @@ const hashlineSingleSchema = Type.Object(
 
 const hashlineRangeSchema = Type.Object(
 	{
-		range: Type.Object({
-			start: Type.String({ description: 'Start line ref "LINE:HASH"' }),
-			end: Type.String({ description: 'End line ref "LINE:HASH"' }),
-			replacement: Type.String({ description: 'Replacement content (\\n-separated) — "" for delete' }),
+		replace_lines: Type.Object({
+			start_anchor: Type.String({ description: 'Start line ref "LINE:HASH"' }),
+			end_anchor: Type.String({ description: 'End line ref "LINE:HASH"' }),
+			new_text: Type.String({ description: 'Replacement content (\\n-separated) — "" for delete' }),
 		}),
 	},
 	{ additionalProperties: true },
 );
 const hashlineInsertAfterSchema = Type.Object(
 	{
-		insertAfter: Type.Object({
-			loc: Type.String({ description: 'Insert after this line "LINE:HASH"' }),
-			content: Type.String({ description: "Content to insert (\\n-separated); must be non-empty" }),
+		insert_after: Type.Object({
+			anchor: Type.String({ description: 'Insert after this line "LINE:HASH"' }),
+			text: Type.String({ description: "Content to insert (\\n-separated); must be non-empty" }),
 		}),
 	},
 	{ additionalProperties: true },
 );
-const hashlineEditItemSchema = Type.Union([hashlineSingleSchema, hashlineRangeSchema, hashlineInsertAfterSchema]);
+const hashlineReplaceSchema = Type.Object(
+	{
+		replace: Type.Object({
+			old_text: Type.String({ description: "Text to find (fuzzy whitespace matching enabled)" }),
+			new_text: Type.String({ description: "Replacement text" }),
+			all: Type.Optional(Type.Boolean({ description: "Replace all occurrences (default: unique match required)" })),
+		}),
+	},
+	{ additionalProperties: true },
+);
+const hashlineEditItemSchema = Type.Union([
+	hashlineSingleSchema,
+	hashlineRangeSchema,
+	hashlineInsertAfterSchema,
+	hashlineReplaceSchema,
+]);
 const hashlineEditSchema = Type.Object(
 	{
 		path: Type.String({ description: "File path (relative or absolute)" }),
@@ -403,24 +418,36 @@ export class EditTool implements AgentTool<TInput> {
 			// Detect wrong-format fields from models confusing edit modes
 			for (let i = 0; i < edits.length; i++) {
 				const edit = edits[i] as Record<string, unknown>;
-				if ("old_text" in edit || "new_text" in edit) {
+				if (("old_text" in edit || "new_text" in edit) && !("replace" in edit)) {
 					throw new Error(
-						`edits[${i}] contains 'old_text'/'new_text' fields from replace mode. ` +
-							`Hashline edits use: {single: {loc, replacement}}, {range: {start, end, replacement}}, or {insertAfter: {loc, content}}.`,
+						`edits[${i}] contains 'old_text'/'new_text' at top level (replace mode). ` +
+							`Use {replace: {old_text, new_text}} for hashline content replace, or {set_line}, {replace_lines}, {insert_after}.`,
 					);
 				}
 				if ("diff" in edit) {
 					throw new Error(
 						`edits[${i}] contains 'diff' field from patch mode. ` +
-							`Hashline edits use: {single: {loc, replacement}}, {range: {start, end, replacement}}, or {insertAfter: {loc, content}}.`,
+							`Hashline edits use: {set_line}, {replace_lines}, {insert_after}, or {replace}.`,
 					);
 				}
-				if (!("single" in edit) && !("range" in edit) && !("insertAfter" in edit)) {
+				if (
+					!("set_line" in edit) &&
+					!("replace_lines" in edit) &&
+					!("insert_after" in edit) &&
+					!("replace" in edit)
+				) {
 					throw new Error(
-						`edits[${i}] must contain exactly one of: 'single', 'range', or 'insertAfter'. Got keys: [${Object.keys(edit).join(", ")}].`,
+						`edits[${i}] must contain exactly one of: 'set_line', 'replace_lines', 'insert_after', or 'replace'. Got keys: [${Object.keys(edit).join(", ")}].`,
 					);
 				}
 			}
+
+			const anchorEdits = edits.filter(
+				(e): e is HashlineEdit => "set_line" in e || "replace_lines" in e || "insert_after" in e,
+			);
+			const replaceEdits = edits.filter(
+				(e): e is { replace: { old_text: string; new_text: string; all?: boolean } } => "replace" in e,
+			);
 
 			const absolutePath = resolvePlanPath(this.session, path);
 			const file = Bun.file(absolutePath);
@@ -432,9 +459,33 @@ export class EditTool implements AgentTool<TInput> {
 			const rawContent = await file.text();
 			const { bom, text: content } = stripBom(rawContent);
 			const originalEnding = detectLineEnding(content);
-			const normalizedContent = normalizeToLF(content);
-			const result = applyHashlineEdits(normalizedContent, edits);
-			if (normalizedContent === result.content) {
+			const originalNormalized = normalizeToLF(content);
+			let normalizedContent = originalNormalized;
+
+			// Apply anchor-based edits first (set_line, replace_lines, insert_after)
+			const anchorResult = applyHashlineEdits(normalizedContent, anchorEdits);
+			normalizedContent = anchorResult.content;
+
+			// Apply content-replace edits (substr-style fuzzy replace)
+			for (const r of replaceEdits) {
+				if (r.replace.old_text.length === 0) {
+					throw new Error("replace.old_text must not be empty.");
+				}
+				const rep = replaceText(normalizedContent, r.replace.old_text, r.replace.new_text, {
+					fuzzy: this.#allowFuzzy,
+					all: r.replace.all ?? false,
+					threshold: this.#fuzzyThreshold,
+				});
+				normalizedContent = rep.content;
+			}
+
+			const result = {
+				content: normalizedContent,
+				firstChangedLine: anchorResult.firstChangedLine,
+				warnings: anchorResult.warnings,
+				noopEdits: anchorResult.noopEdits,
+			};
+			if (originalNormalized === result.content) {
 				let diagnostic = `No changes made to ${path}. The edits produced identical content.`;
 				if (result.noopEdits && result.noopEdits.length > 0) {
 					const details = result.noopEdits
@@ -448,13 +499,14 @@ export class EditTool implements AgentTool<TInput> {
 						"\nYour content must differ from what the file already contains. Re-read the file to see the current state.";
 				} else {
 					// Edits were not literally identical but heuristics normalized them back
-					const lines = normalizedContent.split("\n");
+					const lines = result.content.split("\n");
 					const targetLines: string[] = [];
 					for (const edit of edits) {
 						const refs: string[] = [];
-						if ("single" in edit) refs.push(edit.single.loc);
-						else if ("range" in edit) refs.push(edit.range.start, edit.range.end);
-						else if ("insertAfter" in edit) refs.push(edit.insertAfter.loc);
+						if ("set_line" in edit) refs.push(edit.set_line.anchor);
+						else if ("replace_lines" in edit)
+							refs.push(edit.replace_lines.start_anchor, edit.replace_lines.end_anchor);
+						else if ("insert_after" in edit) refs.push(edit.insert_after.anchor);
 						for (const ref of refs) {
 							try {
 								const parsed = parseLineRef(ref);
@@ -478,7 +530,7 @@ export class EditTool implements AgentTool<TInput> {
 
 			const finalContent = bom + restoreLineEndings(result.content, originalEnding);
 			const diagnostics = await this.#writethrough(absolutePath, finalContent, signal, file, batchRequest);
-			const diffResult = generateDiffString(normalizedContent, result.content);
+			const diffResult = generateDiffString(originalNormalized, result.content);
 
 			const normative = buildNormativeUpdateInput({
 				path,

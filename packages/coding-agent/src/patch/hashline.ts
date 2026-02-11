@@ -21,30 +21,33 @@ type ParsedRefs =
 	| { kind: "insertAfter"; after: { line: number; hash: string } };
 
 function parseHashlineEdit(edit: HashlineEdit): { spec: ParsedRefs; dst: string } {
-	if ("single" in edit) {
+	if ("set_line" in edit) {
 		return {
-			spec: { kind: "single", ref: parseLineRef(edit.single.loc) },
-			dst: edit.single.replacement,
+			spec: { kind: "single", ref: parseLineRef(edit.set_line.anchor) },
+			dst: edit.set_line.new_text,
 		};
 	}
-	if ("range" in edit) {
-		const r = edit.range as Record<string, string>;
-		const start = parseLineRef(r.start);
-		if (!r.end) {
+	if ("replace_lines" in edit) {
+		const r = edit.replace_lines as Record<string, string>;
+		const start = parseLineRef(r.start_anchor);
+		if (!r.end_anchor) {
 			return {
 				spec: { kind: "single", ref: start },
-				dst: r.replacement ?? "",
+				dst: r.new_text ?? "",
 			};
 		}
-		const end = parseLineRef(r.end);
+		const end = parseLineRef(r.end_anchor);
 		return {
 			spec: start.line === end.line ? { kind: "single", ref: start } : { kind: "range", start, end },
-			dst: r.replacement ?? "",
+			dst: r.new_text ?? "",
 		};
 	}
+	if ("replace" in edit) {
+		throw new Error("replace edits are applied separately; do not pass them to applyHashlineEdits");
+	}
 	return {
-		spec: { kind: "insertAfter", after: parseLineRef(edit.insertAfter.loc) },
-		dst: edit.insertAfter.content ?? (edit.insertAfter as Record<string, string>).replacement ?? "",
+		spec: { kind: "insertAfter", after: parseLineRef(edit.insert_after.anchor) },
+		dst: edit.insert_after.text ?? (edit.insert_after as Record<string, string>).content ?? "",
 	};
 }
 /** Split dst into lines; empty string means delete (no lines). */
@@ -629,8 +632,8 @@ export function validateLineRef(ref: { line: number; hash: string }, fileLines: 
 /**
  * Apply an array of hashline edits to file content.
  *
- * Each edit operation identifies target lines directly (`single`, `range`,
- * `insertAfter`). Line references are resolved via {@link parseLineRef}
+ * Each edit operation identifies target lines directly (`set_line`, `replace_lines`,
+ * `insert_after`). Line references are resolved via {@link parseLineRef}
  * and hashes validated before any mutation.
  *
  * Edits are sorted bottom-up (highest effective line first) so earlier

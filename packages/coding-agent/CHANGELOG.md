@@ -1,8 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `replace` hashline edit operation for substr-style fuzzy text replacement without line references, with optional `all` flag for replace-all behavior
 - Added `noopEdits` array to `applyHashlineEdits` return value to report edits that produced no changes, including edit index, location, and current content for diagnostics
 - Added validation to detect and reject hashline edits using wrong-format fields (`old_text`/`new_text` from replace mode, `diff` from patch mode) with helpful error messages
 - Added `additionalProperties: true` to all hashline edit schemas (`single`, `range`, `insertAfter`, and root) to tolerate extra fields from models
@@ -18,6 +20,9 @@
 
 ### Changed
 
+- Renamed hashline edit operation keys from `single`/`range`/`insertAfter` to `set_line`/`replace_lines`/`insert_after` for clearer semantics
+- Renamed hashline edit fields: `loc` → `anchor`, `replacement` → `new_text`, `content` → `text` for consistency across all operation types
+- Separated hashline anchor-based edits (`set_line`, `replace_lines`, `insert_after`) from content-replace edits (`replace`) in application pipeline
 - Improved no-op edit diagnostics to use `noopEdits` array from `applyHashlineEdits`, providing precise line-by-line comparison when replacements match current content
 - Enhanced error messages for wrong-format hashline edits to guide users toward correct operation syntax
 - Strengthened hashline prompt guidance to emphasize that `replacement` must differ from current line content and clarify no-op error recovery procedures
