@@ -53,10 +53,15 @@ export interface MCPToolDetails {
 /**
  * Convert JSON Schema from MCP to TypeBox-compatible schema.
  * MCP uses standard JSON Schema, TypeBox uses a compatible subset.
+ *
+ * Also normalizes schemas to work around common issues:
+ * - Adds `properties: {}` to object schemas missing it (some LLM providers require this)
  */
 function convertSchema(mcpSchema: MCPToolDefinition["inputSchema"]): TSchema {
-	// MCP schemas are JSON Schema objects, TypeBox can use them directly
-	// as long as we ensure the structure is correct
+	// Normalize: object schemas must have properties field for some providers
+	if (mcpSchema.type === "object" && !("properties" in mcpSchema)) {
+		return { ...mcpSchema, properties: {} } as unknown as TSchema;
+	}
 	return mcpSchema as unknown as TSchema;
 }
 
