@@ -93,7 +93,11 @@ function normalizeSelector(selector: string): string {
 type ActionabilityResult = { ok: true; x: number; y: number } | { ok: false; reason: string };
 
 async function resolveActionableQueryHandlerClickTarget(handles: ElementHandle[]): Promise<ElementHandle | null> {
-	const candidates: Array<{ handle: ElementHandle; rect: { x: number; y: number; w: number; h: number } }> = [];
+	const candidates: Array<{
+		handle: ElementHandle;
+		rect: { x: number; y: number; w: number; h: number };
+		ownedProxy?: ElementHandle;
+	}> = [];
 
 	for (const handle of handles) {
 		let clickable: ElementHandle = handle;
@@ -123,11 +127,11 @@ async function resolveActionableQueryHandlerClickTarget(handles: ElementHandle[]
 				return { x: r.left, y: r.top, w: r.width, h: r.height };
 			})) as { x: number; y: number; w: number; h: number };
 			if (rect.w < 1 || rect.h < 1) continue;
-			candidates.push({ handle: clickable, rect });
+			candidates.push({ handle: clickable, rect, ownedProxy: clickableProxy ?? undefined });
 		} catch {
 			// ignore
 		} finally {
-			if (clickableProxy && clickableProxy !== handle) {
+			if (clickableProxy && clickableProxy !== handle && clickable !== clickableProxy) {
 				try {
 					await clickableProxy.dispose();
 				} catch {}
@@ -139,7 +143,17 @@ async function resolveActionableQueryHandlerClickTarget(handles: ElementHandle[]
 
 	// Prefer top-most visible element (nav/header usually wins), tie-break by left-most.
 	candidates.sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x);
-	return candidates[0]?.handle ?? null;
+	const winner = candidates[0]?.handle ?? null;
+	// Dispose owned proxies for non-winning candidates
+	for (let i = 1; i < candidates.length; i++) {
+		const c = candidates[i]!;
+		if (c.ownedProxy) {
+			try {
+				await c.ownedProxy.dispose();
+			} catch {}
+		}
+	}
+	return winner;
 }
 
 async function isClickActionable(handle: ElementHandle): Promise<ActionabilityResult> {
@@ -1126,11 +1140,11 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					const script = ensureParam(params.script, "script", params.action);
 					const page = await this.#ensurePage(params);
 					const value = (await untilAborted(signal, () =>
-						page.evaluate((source: string) => {
+						page.evaluate(async (source: string) => {
 							try {
-								return new Function(`return (${source});`)();
+								return await new Function(`return (async () => (${source}))();`)();
 							} catch {
-								return new Function(source)();
+								return await new Function(`return (async () => { ${source} })();`)();
 							}
 						}, script),
 					)) as unknown;

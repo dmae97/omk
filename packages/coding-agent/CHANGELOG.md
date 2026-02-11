@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `replace` hashline edit operation for substr-style fuzzy text replacement without line references, with optional `all` flag for replace-all behavior
@@ -58,6 +57,8 @@
 
 ### Fixed
 
+- Fixed resource leak in browser query handler by properly disposing owned proxy elements for non-winning candidates
+- Fixed script evaluation to support async functions and await expressions in browser evaluate operations
 - Fixed `range` edits with missing `end` field to gracefully degrade to single-line edits instead of crashing
 - Fixed `insertAfter` operations to accept both `content` and `replacement` field names for consistency with other edit types
 - Fixed deduplication logic to correctly identify and remove identical hashline edits targeting the same line(s) in a single call

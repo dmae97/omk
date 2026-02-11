@@ -83,7 +83,7 @@ async function collectOriginalFileContents(cwd: string, files: string[]): Promis
 	return originals;
 }
 
-function buildMutationPreviewAgainstOriginal(original: string, current: string, maxLines = 8): string | null {
+function buildMutationPreviewAgainstOriginal(original: string, current: string): string | null {
 	if (original === current) return null;
 
 	const changes = diffLines(original, current);
@@ -102,7 +102,6 @@ function buildMutationPreviewAgainstOriginal(original: string, current: string, 
 				const hash = computeLineHash(lineNum, line);
 				preview.push(`${lineNum}:${hash}| -${line}`);
 				lineNum += 1;
-				if (preview.length >= maxLines) return preview.join("\n");
 			}
 			continue;
 		}
@@ -110,7 +109,6 @@ function buildMutationPreviewAgainstOriginal(original: string, current: string, 
 		for (const line of lines) {
 			const hash = computeLineHash(lineNum, line);
 			preview.push(`${lineNum}:${hash}| +${line}`);
-			if (preview.length >= maxLines) return preview.join("\n");
 		}
 	}
 
