@@ -9,8 +9,10 @@ import { type Static, Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { Theme } from "../modes/theme/theme";
+import { computeLineHash } from "../patch/hashline";
 import grepDescription from "../prompts/tools/grep.md" with { type: "text" };
 import { Ellipsis, Hasher, type RenderCache, renderStatusLine, renderTreeList, truncateToWidth } from "../tui";
+import { resolveFileDisplayMode } from "../utils/file-display-mode";
 import type { ToolSession } from ".";
 import type { OutputMeta } from "./output-meta";
 import { resolveToCwd } from "./path-utils";
@@ -60,7 +62,11 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 	readonly parameters = grepSchema;
 
 	constructor(private readonly session: ToolSession) {
-		this.description = renderPromptTemplate(grepDescription);
+		const displayMode = resolveFileDisplayMode(session.settings);
+		this.description = renderPromptTemplate(grepDescription, {
+			IS_HASHLINE_MODE: displayMode.hashLines,
+			IS_LINE_NUMBER_MODE: !displayMode.hashLines && displayMode.lineNumbers,
+		});
 	}
 
 	async execute(
@@ -97,6 +103,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 			const patternHasNewline = normalizedPattern.includes("\n") || normalizedPattern.includes("\\n");
 			const effectiveMultiline = multiline ?? patternHasNewline;
 
+			const useHashLines = resolveFileDisplayMode(this.session.settings).hashLines;
 			const searchPath = resolveToCwd(searchDir || ".", this.session.cwd);
 			const scopePath = (() => {
 				const relative = path.relative(this.session.cwd, searchPath).replace(/\\/g, "/");
@@ -200,6 +207,10 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 				const lineWidth = Math.max(...lineNumbers.map(value => value.toString().length));
 
 				const formatLine = (lineNumber: number, line: string, isMatch: boolean): string => {
+					if (useHashLines) {
+						const ref = `${lineNumber}:${computeLineHash(lineNumber, line)}`;
+						return isMatch ? `>>${ref}  ${line}` : `  ${ref}  ${line}`;
+					}
 					const padded = lineNumber.toString().padStart(lineWidth, " ");
 					return isMatch ? `>>${padded} ${line}` : `  ${padded} ${line}`;
 				};

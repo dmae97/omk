@@ -11,7 +11,7 @@ Powerful search tool built on ripgrep.
 </instruction>
 
 <output>
-Results are always content mode: matching lines with file paths and line numbers.
+Results are always content mode. {{#if IS_HASHLINE_MODE}}Lines are hashline-prefixed as `LINE:HASH  content`.{{else}}{{#if IS_LINE_NUMBER_MODE}}Lines are line-number-prefixed.{{else}}Lines are plain text (no prefixes).{{/if}}{{/if}}
 Truncated at 100 matches by default (configurable via `limit`).
 </output>
 

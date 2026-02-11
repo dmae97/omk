@@ -513,7 +513,7 @@ export class EditTool implements AgentTool<TInput> {
 								if (parsed.line >= 1 && parsed.line <= lines.length) {
 									const lineContent = lines[parsed.line - 1];
 									const hash = computeLineHash(parsed.line, lineContent);
-									targetLines.push(`${parsed.line}:${hash}| ${lineContent}`);
+									targetLines.push(`${parsed.line}:${hash}  ${lineContent}`);
 								}
 							} catch {
 								/* skip malformed refs */

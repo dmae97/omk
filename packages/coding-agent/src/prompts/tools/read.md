@@ -5,8 +5,15 @@ Reads files from local filesystem or internal URLs.
 <instruction>
 - Reads up to {{DEFAULT_MAX_LINES}} lines default
 - Use `offset` and `limit` for large files
-- Use `lines: true` include line numbers
-- Use `hashes: true` to include line hashes for hash-line edit mode (format: `LINE:HASH| content`)
+{{#if IS_HASHLINE_MODE}}
+- Text output is hashline-prefixed: `LINE:HASH  content`
+{{else}}
+{{#if IS_LINE_NUMBER_MODE}}
+- Text output is line-number-prefixed
+{{else}}
+- Text output is plain (no line prefixes)
+{{/if}}
+{{/if}}
 - Supports images (PNG, JPG) and PDFs
 - For directories, returns formatted listing with modification times
 - Parallelize reads when exploring related files

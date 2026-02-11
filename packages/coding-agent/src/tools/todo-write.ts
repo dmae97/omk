@@ -4,7 +4,7 @@ import { StringEnum } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { logger, Snowflake } from "@oh-my-pi/pi-utils";
-import { Type } from "@sinclair/typebox";
+import { type Static, Type } from "@sinclair/typebox";
 import chalk from "chalk";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
@@ -46,7 +46,7 @@ export interface TodoWriteToolDetails {
 
 const TODO_FILE_NAME = "todos.json";
 
-type TodoWriteParams = { todos: Array<{ id?: string; content?: string; status?: string }> };
+type TodoWriteParams = Static<typeof todoWriteSchema>;
 
 function normalizeTodoStatus(status?: string): TodoStatus {
 	switch (status) {

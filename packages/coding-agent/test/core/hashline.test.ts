@@ -47,7 +47,7 @@ describe("formatHashLines", () => {
 	test("formats single line", () => {
 		const result = formatHashLines("hello");
 		const hash = computeLineHash(1, "hello");
-		expect(result).toBe(`1:${hash}| hello`);
+		expect(result).toBe(`1:${hash}  hello`);
 	});
 
 	test("formats multiple lines with 1-indexed numbers", () => {
@@ -70,7 +70,7 @@ describe("formatHashLines", () => {
 		const result = formatHashLines("foo\n\nbar");
 		const lines = result.split("\n");
 		expect(lines).toHaveLength(3);
-		expect(lines[1]).toMatch(/^2:[0-9a-z]{2,4}\| $/);
+		expect(lines[1]).toMatch(/^2:[0-9a-z]{2,4} {2}$/);
 	});
 
 	test("round-trips with computeLineHash", () => {
@@ -79,7 +79,7 @@ describe("formatHashLines", () => {
 		const lines = formatted.split("\n");
 
 		for (let i = 0; i < lines.length; i++) {
-			const match = lines[i].match(/^(\d+):([0-9a-z]+)\| (.*)$/);
+			const match = lines[i].match(/^(\d+):([0-9a-z]+) {2}(.*)$/);
 			expect(match).not.toBeNull();
 			const lineNum = Number.parseInt(match![1], 10);
 			const hash = match![2];
@@ -648,10 +648,10 @@ describe("applyHashlineEdits — errors", () => {
 			expect(msg).toContain(">>>");
 			// Should show the correct hash for line 2
 			const correctHash = computeLineHash(2, "bbb");
-			expect(msg).toContain(`2:${correctHash}| bbb`);
+			expect(msg).toContain(`2:${correctHash}  bbb`);
 			// Context lines should NOT have >>> markers
 			const lines = msg.split("\n");
-			const contextLines = lines.filter(l => l.startsWith("    ") && l.includes("|"));
+			const contextLines = lines.filter(l => l.startsWith("    ") && !l.startsWith("    ...") && l.includes(":"));
 			expect(contextLines.length).toBeGreaterThan(0);
 		}
 	});

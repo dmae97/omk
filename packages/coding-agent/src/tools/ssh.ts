@@ -1,7 +1,7 @@
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
-import { Type } from "@sinclair/typebox";
+import { type Static, Type } from "@sinclair/typebox";
 import type { SSHHost } from "../capability/ssh";
 import { sshCapability } from "../capability/ssh";
 import { renderPromptTemplate } from "../config/prompt-templates";
@@ -117,12 +117,7 @@ async function loadHosts(session: ToolSession): Promise<{
 	return { hostNames, hostsByName };
 }
 
-interface SshToolParams {
-	host: string;
-	command: string;
-	cwd?: string;
-	timeout?: number;
-}
+type SshToolParams = Static<typeof sshSchema>;
 
 export class SshTool implements AgentTool<typeof sshSchema, SSHToolDetails> {
 	readonly name = "ssh";

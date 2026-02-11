@@ -1,10 +1,10 @@
 # Edit (Hash anchored)
 
-Line-addressed edits using hash-verified line references. Read file with hashes first, then edit by referencing `LINE:HASH` pairs.
+Line-addressed edits using hash-verified line references. Read file in hashline mode, then edit by referencing `LINE:HASH` pairs.
 
 <critical>
 - Copy `LINE:HASH` refs verbatim from read output — never fabricate or guess hashes
-- `new_text` (set_line/replace_lines) or `text` (insert_after) contains plain replacement lines only — no `LINE:HASH|` prefix, no diff `+` markers
+- `new_text` (set_line/replace_lines) or `text` (insert_after) contains plain replacement lines only — no `LINE:HASH` prefix, no diff `+` markers
 - On hash mismatch: use the updated `LINE:HASH` refs shown by `>>>` directly; only `read` again if you need additional lines/context
 - If you already edited a file in this turn, re-read that file before the next edit to it
 - For code-change requests, respond with tool calls, not prose
@@ -15,7 +15,7 @@ Line-addressed edits using hash-verified line references. Read file with hashes 
 
 <instruction>
 **Workflow:**
-1. Read target file (`read` with `hashes: true`)
+1. Read target file (`read`)
 2. Collect the exact `LINE:HASH` refs you need
 3. Submit one `edit` call with all known operations for that file
 4. If another change on same file is needed later: re-read first, then edit

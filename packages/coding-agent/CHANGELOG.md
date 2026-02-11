@@ -1,8 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `resolveFileDisplayMode` utility to centralize file display mode resolution across tools (read, grep, file mentions)
+- Added automatic hashline formatting to @file mentions when hashline mode is active
 - Added `replace` hashline edit operation for substr-style fuzzy text replacement without line references, with optional `all` flag for replace-all behavior
 - Added `noopEdits` array to `applyHashlineEdits` return value to report edits that produced no changes, including edit index, location, and current content for diagnostics
 - Added validation to detect and reject hashline edits using wrong-format fields (`old_text`/`new_text` from replace mode, `diff` from patch mode) with helpful error messages
@@ -19,6 +22,10 @@
 
 ### Changed
 
+- Changed hashline display format from `LINE:HASH| content` to `LINE:HASH  content` (two spaces instead of pipe separator) for improved readability
+- Removed `lines` and `hashes` parameters from `read` tool—file display mode (line numbers, hashlines) now determined automatically by settings and edit mode
+- Simplified `read` tool prompt to reflect automatic display mode detection based on configuration
+- Updated `grep` tool to respect file display mode settings, showing hashline-prefixed output when hashline mode is active
 - Renamed hashline edit operation keys from `single`/`range`/`insertAfter` to `set_line`/`replace_lines`/`insert_after` for clearer semantics
 - Renamed hashline edit fields: `loc` → `anchor`, `replacement` → `new_text`, `content` → `text` for consistency across all operation types
 - Separated hashline anchor-based edits (`set_line`, `replace_lines`, `insert_after`) from content-replace edits (`replace`) in application pipeline
@@ -57,6 +64,7 @@
 
 ### Fixed
 
+- Fixed `parseLineRef` to handle both legacy pipe-separator format (`LINE:HASH| content`) and new two-space format (`LINE:HASH  content`) for backward compatibility
 - Fixed resource leak in browser query handler by properly disposing owned proxy elements for non-winning candidates
 - Fixed script evaluation to support async functions and await expressions in browser evaluate operations
 - Fixed `range` edits with missing `end` field to gracefully degrade to single-line edits instead of crashing

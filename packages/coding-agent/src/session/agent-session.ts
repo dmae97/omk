@@ -76,6 +76,7 @@ import { unmountAll } from "../ssh/sshfs-mount";
 import { outputMeta } from "../tools/output-meta";
 import { resolveToCwd } from "../tools/path-utils";
 import type { TodoItem } from "../tools/todo-write";
+import { resolveFileDisplayMode } from "../utils/file-display-mode";
 import { extractFileMentions, generateFileMentionMessages } from "../utils/file-mentions";
 import {
 	type CompactionResult,
@@ -1355,6 +1356,7 @@ export class AgentSession {
 			if (fileMentions.length > 0) {
 				const fileMentionMessages = await generateFileMentionMessages(fileMentions, this.sessionManager.getCwd(), {
 					autoResizeImages: this.settings.get("images.autoResize"),
+					useHashLines: resolveFileDisplayMode(this.settings).hashLines,
 				});
 				messages.push(...fileMentionMessages);
 			}

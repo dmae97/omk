@@ -17,7 +17,7 @@
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { TERMINAL, Text } from "@oh-my-pi/pi-tui";
-import { Type } from "@sinclair/typebox";
+import { type Static, Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { type Theme, theme } from "../modes/theme/theme";
@@ -45,6 +45,8 @@ const QuestionItem = Type.Object({
 const askSchema = Type.Object({
 	questions: Type.Array(QuestionItem, { description: "Questions to ask", minItems: 1 }),
 });
+
+export type AskToolInput = Static<typeof askSchema>;
 
 /** Result for a single question */
 export interface QuestionResult {
@@ -233,15 +235,7 @@ function formatQuestionResult(result: QuestionResult): string {
 // Tool Class
 // =============================================================================
 
-interface AskParams {
-	questions: Array<{
-		id: string;
-		question: string;
-		options: Array<{ label: string }>;
-		multi?: boolean;
-		recommended?: number;
-	}>;
-}
+type AskParams = AskToolInput;
 
 /**
  * Ask tool for interactive user prompting during execution.

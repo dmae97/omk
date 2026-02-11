@@ -8,7 +8,7 @@
  * if the file has changed since the caller last read it, hash mismatches are caught
  * before any mutation occurs.
  *
- * Displayed format: `LINENUM:HASH| CONTENT`
+ * Displayed format: `LINENUM:HASH  CONTENT`
  * Reference format: `"LINENUM:HASH"` (e.g. `"5:a3f2"`)
  */
 
@@ -55,8 +55,8 @@ function splitDstLines(dst: string): string[] {
 	return dst === "" ? [] : dst.split("\n");
 }
 
-/** Pattern matching hashline display format: `LINE:HASH| CONTENT` */
-const HASHLINE_PREFIX_RE = /^\d+:[0-9a-zA-Z]{1,16}\| /;
+/** Pattern matching hashline display format: `LINE:HASH  CONTENT` */
+const HASHLINE_PREFIX_RE = /^\d+:[0-9a-zA-Z]{1,16} {2}/;
 
 /** Pattern matching a unified-diff `+` prefix (but not `++`) */
 const DIFF_PLUS_RE = /^\+(?!\+)/;
@@ -206,7 +206,7 @@ function stripRangeBoundaryEcho(fileLines: string[], startLine: number, endLine:
 /**
  * Strip hashline display prefixes and diff `+` markers from replacement lines.
  *
- * Models frequently copy the `LINE:HASH| ` prefix from read output into their
+ * Models frequently copy the `LINE:HASH  ` prefix from read output into their
  * replacement content, or include unified-diff `+` prefixes. Both corrupt the
  * output file. This strips them heuristically before application.
  */
@@ -262,7 +262,7 @@ export function computeLineHash(idx: number, line: string): string {
 /**
  * Format file content with hashline prefixes for display.
  *
- * Each line becomes `LINENUM:HASH| CONTENT` where LINENUM is 1-indexed.
+ * Each line becomes `LINENUM:HASH  CONTENT` where LINENUM is 1-indexed.
  *
  * @param content - Raw file content string
  * @param startLine - First line number (1-indexed, defaults to 1)
@@ -271,7 +271,7 @@ export function computeLineHash(idx: number, line: string): string {
  * @example
  * ```
  * formatHashLines("function hi() {\n  return;\n}")
- * // "1:HH| function hi() {\n2:HH|   return;\n3:HH| }"
+ * // "1:HH  function hi() {\n2:HH    return;\n3:HH  }"
  * ```
  */
 export function formatHashLines(content: string, startLine = 1): string {
@@ -280,7 +280,7 @@ export function formatHashLines(content: string, startLine = 1): string {
 		.map((line, i) => {
 			const num = startLine + i;
 			const hash = computeLineHash(num, line);
-			return `${num}:${hash}| ${line}`;
+			return `${num}:${hash}  ${line}`;
 		})
 		.join("\n");
 }
@@ -352,7 +352,7 @@ export async function* streamHashLinesFromUtf8(
 	};
 
 	const pushLine = (line: string): string[] => {
-		const formatted = `${lineNum}:${computeLineHash(lineNum, line)}| ${line}`;
+		const formatted = `${lineNum}:${computeLineHash(lineNum, line)}  ${line}`;
 		lineNum++;
 
 		const chunksToYield: string[] = [];
@@ -446,7 +446,7 @@ export async function* streamHashLinesFromLines(
 
 	const pushLine = (line: string): string[] => {
 		sawAnyLine = true;
-		const formatted = `${lineNum}:${computeLineHash(lineNum, line)}| ${line}`;
+		const formatted = `${lineNum}:${computeLineHash(lineNum, line)}  ${line}`;
 		lineNum++;
 
 		const chunksToYield: string[] = [];
@@ -503,9 +503,12 @@ export async function* streamHashLinesFromLines(
  * @throws Error if the format is invalid (not `NUMBER:HEXHASH`)
  */
 export function parseLineRef(ref: string): { line: number; hash: string } {
-	// Strip display-format suffix: "5:ab| some content" → "5:ab"
+	// Strip display-format suffix: "5:ab  some content" → "5:ab", or legacy "5:ab| some content" → "5:ab"
 	// Models often copy the full display format from read output.
-	const cleaned = ref.replace(/\|.*$/, "").trim();
+	const cleaned = ref
+		.replace(/\|.*$/, "")
+		.replace(/ {2}.*$/, "")
+		.trim();
 	const normalized = cleaned.replace(/\s*:\s*/, ":");
 	const strictMatch = normalized.match(/^(\d+):([0-9a-zA-Z]{1,16})$/);
 	const prefixMatch = strictMatch ? null : normalized.match(new RegExp(`^(\\d+):([0-9a-zA-Z]{${HASH_LEN}})`));
@@ -586,9 +589,9 @@ export class HashlineMismatchError extends Error {
 			const prefix = `${lineNum}:${hash}`;
 
 			if (mismatchSet.has(lineNum)) {
-				lines.push(`>>> ${prefix}| ${content}`);
+				lines.push(`>>> ${prefix}  ${content}`);
 			} else {
-				lines.push(`    ${prefix}| ${content}`);
+				lines.push(`    ${prefix}  ${content}`);
 			}
 		}
 

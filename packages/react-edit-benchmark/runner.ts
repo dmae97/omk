@@ -100,7 +100,7 @@ function buildMutationPreviewAgainstOriginal(original: string, current: string):
 		if (change.removed) {
 			for (const line of lines) {
 				const hash = computeLineHash(lineNum, line);
-				preview.push(`${lineNum}:${hash}| -${line}`);
+				preview.push(`${lineNum}:${hash}  -${line}`);
 				lineNum += 1;
 			}
 			continue;
@@ -108,7 +108,7 @@ function buildMutationPreviewAgainstOriginal(original: string, current: string):
 
 		for (const line of lines) {
 			const hash = computeLineHash(lineNum, line);
-			preview.push(`${lineNum}:${hash}| +${line}`);
+			preview.push(`${lineNum}:${hash}  +${line}`);
 		}
 	}
 

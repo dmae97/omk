@@ -2,7 +2,7 @@ import type { AgentTool, AgentToolResult } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { untilAborted } from "@oh-my-pi/pi-utils";
-import { Type } from "@sinclair/typebox";
+import { type Static, Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { Theme } from "../modes/theme/theme";
@@ -386,7 +386,7 @@ function formatResult(value: number): string {
 // Tool Class
 // ═══════════════════════════════════════════════════════════════════════════
 
-type CalculatorParams = { calculations: Array<{ expression: string; prefix: string; suffix: string }> };
+type CalculatorParams = Static<typeof calculatorSchema>;
 
 /**
  * Calculator tool for evaluating mathematical expressions.
