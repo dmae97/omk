@@ -37,7 +37,6 @@ export interface BenchmarkConfig {
 	editFuzzyThreshold?: number | "auto";
 	guided?: boolean;
 	maxAttempts?: number;
-	timeoutRetryCount?: number;
 }
 
 function splitLines(value: string): string[] {
@@ -50,7 +49,7 @@ function getEditPathFromArgs(args: unknown): string | null {
 	return typeof pathValue === "string" && pathValue.length > 0 ? pathValue : null;
 }
 
-const HASHLINE_SUBTYPES = ["replaceLine", "replaceLines", "insertAfter"] as const;
+const HASHLINE_SUBTYPES = ["single", "range", "insertAfter"] as const;
 
 function countHashlineEditSubtypes(args: unknown): Record<string, number> {
 	const counts: Record<string, number> = Object.fromEntries(HASHLINE_SUBTYPES.map(k => [k, 0]));
@@ -253,8 +252,8 @@ async function evaluateMutationIntent(
 }
 
 type GuidedHashlineEdit =
-	| { replaceLine: { loc: string; content: string } }
-	| { replaceLines: { start: string; end: string; content: string } }
+	| { single: { loc: string; replacement: string } }
+	| { range: { start: string; end: string; replacement: string } }
 	| { insertAfter: { loc: string; content: string } };
 
 function buildGuidedHashlineEdits(actual: string, expected: string): GuidedHashlineEdit[] {
@@ -279,7 +278,7 @@ function buildGuidedHashlineEdits(actual: string, expected: string): GuidedHashl
 				const firstLine = actualLines[0] ?? "";
 				const firstRef = `1:${computeLineHash(1, firstLine)}`;
 				edits.push({
-					replaceLine: { loc: firstRef, content: `${pendingAdded.join("\n")}\n${firstLine}` },
+					single: { loc: firstRef, replacement: `${pendingAdded.join("\n")}\n${firstLine}` },
 				});
 			} else if (insertLine <= actualLines.length) {
 				const afterLine = actualLines[insertLine - 2] ?? "";
@@ -300,12 +299,12 @@ function buildGuidedHashlineEdits(actual: string, expected: string): GuidedHashl
 			const startContent = actualLines[startLine - 1] ?? "";
 			const startRef = `${startLine}:${computeLineHash(startLine, startContent)}`;
 			if (startLine === endLine) {
-				edits.push({ replaceLine: { loc: startRef, content: pendingAdded.join("\n") } });
+				edits.push({ single: { loc: startRef, replacement: pendingAdded.join("\n") } });
 			} else {
 				const endContent = actualLines[endLine - 1] ?? "";
 				const endRef = `${endLine}:${computeLineHash(endLine, endContent)}`;
 				edits.push({
-					replaceLines: { start: startRef, end: endRef, content: pendingAdded.join("\n") },
+					range: { start: startRef, end: endRef, replacement: pendingAdded.join("\n") },
 				});
 			}
 		}
@@ -603,7 +602,6 @@ async function runSingleTask(
 		}
 
 		const maxAttempts = Math.max(1, Math.floor(config.maxAttempts ?? 1));
-		const timeoutRetryLimit = Math.max(0, Math.floor(config.timeoutRetryCount ?? 1));
 		let timeoutRetriesUsed = 0;
 		let retryContext: string | null = null;
 		let allEvents: Array<{ type: string; [key: string]: unknown }> = [];
@@ -631,12 +629,10 @@ async function runSingleTask(
 				if (err instanceof PromptTimeoutError) {
 					timeoutTelemetry = err.telemetry;
 					await logEvent({ type: "timeout", attempt: attempt + 1, telemetry: err.telemetry });
-					if (timeoutRetriesUsed < timeoutRetryLimit) {
-						timeoutRetriesUsed += 1;
-						retryContext = buildTimeoutRetryContext(err.telemetry, timeoutRetriesUsed, timeoutRetryLimit);
-						attempt--; // Don't consume a regular attempt slot for timeout retries
-						continue;
-					}
+					timeoutRetriesUsed += 1;
+					retryContext = buildTimeoutRetryContext(err.telemetry, timeoutRetriesUsed, timeoutRetriesUsed);
+					attempt--; // Don't consume a regular attempt slot for timeout retries
+					continue;
 				}
 				throw err;
 			}
@@ -827,7 +823,6 @@ async function runBatchedTask(
 		);
 
 		const maxAttempts = Math.max(1, Math.floor(config.maxAttempts ?? 1));
-		const timeoutRetryLimit = Math.max(0, Math.floor(config.timeoutRetryCount ?? 1));
 		let timeoutRetriesUsed = 0;
 		let retryContext: string | null = null;
 
@@ -853,12 +848,10 @@ async function runBatchedTask(
 				if (err instanceof PromptTimeoutError) {
 					timeoutTelemetry = err.telemetry;
 					await logEvent({ type: "timeout", attempt: attempt + 1, telemetry: err.telemetry });
-					if (timeoutRetriesUsed < timeoutRetryLimit) {
-						timeoutRetriesUsed += 1;
-						retryContext = buildTimeoutRetryContext(err.telemetry, timeoutRetriesUsed, timeoutRetryLimit);
-						attempt--; // Don't consume a regular attempt slot for timeout retries
-						continue;
-					}
+					timeoutRetriesUsed += 1;
+					retryContext = buildTimeoutRetryContext(err.telemetry, timeoutRetriesUsed, timeoutRetriesUsed);
+					attempt--; // Don't consume a regular attempt slot for timeout retries
+					continue;
 				}
 				throw err;
 			}

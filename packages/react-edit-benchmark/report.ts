@@ -114,7 +114,6 @@ export function generateReport(result: BenchmarkResult): string {
 	);
 	lines.push(`| Guided Mode | ${config.guided === false ? "no" : "yes"} |`);
 	lines.push(`| Max Attempts | ${config.maxAttempts ?? 1} |`);
-	lines.push(`| Timeout Retries | ${config.timeoutRetryCount ?? 1} |`);
 	lines.push(`| No-op Retry Limit | ${config.noOpRetryLimit ?? 2} |`);
 	lines.push(`| Mutation Scope Window | ${config.mutationScopeWindow ?? 20} |`);
 	lines.push(`| Require Edit Tool | ${config.requireEditToolCall ? "yes" : "no"} |`);
@@ -189,7 +188,7 @@ export function generateReport(result: BenchmarkResult): string {
 			lines.push("");
 			lines.push("| Operation | Count | % |");
 			lines.push("|-----------|-------|---|");
-			const order = ["replaceLine", "replaceLines", "insertAfter"];
+			const order = ["single", "range", "insertAfter"];
 			for (const key of order) {
 				const count = summary.hashlineEditSubtypes[key] ?? 0;
 				const pct = formatPercent(count / total);

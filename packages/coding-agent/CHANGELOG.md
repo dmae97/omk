@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added whitespace normalization in line reference parsing to tolerate spaces around colons (e.g., `5 : ab` now parses as `5:ab`)
@@ -11,6 +12,10 @@
 
 ### Changed
 
+- Renamed hashline edit operation keys from `replaceLine`/`replaceLines` to `single`/`range` for clearer semantics
+- Renamed hashline edit field `content` to `replacement` in `single` and `range` operations to distinguish from `insertAfter.content`
+- Improved no-op edit diagnostics to show specific line-by-line comparisons when replacements match current content, helping users identify hash mismatches or formatting issues
+- Enhanced no-op error messages to distinguish between literally identical replacements and content normalized back by heuristics
 - Reverted hash algorithm from 3-character base-36 back to 2-character hexadecimal for line references
 - Enhanced range validation during hashline edits to detect and reject relocations that change the scope of affected lines
 - Improved wrapped-line restoration logic to only attempt merging when source lines exhibit continuation patterns

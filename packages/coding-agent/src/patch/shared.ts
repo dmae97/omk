@@ -86,8 +86,8 @@ interface EditRenderArgs {
 }
 
 type HashlineEditPreview =
-	| { replaceLine: { loc: string; content: string } }
-	| { replaceLines: { start: string; end: string; content: string } }
+	| { single: { loc: string; replacement: string } }
+	| { range: { start: string; end: string; replacement: string } }
 	| { insertAfter: { loc: string; content: string } };
 
 /** Extended context for edit tool rendering */
@@ -156,16 +156,16 @@ function formatStreamingHashlineEdits(edits: HashlineEditPreview[], uiTheme: The
 
 	return text.trimEnd();
 	function formatHashlineEdit(edit: HashlineEditPreview): { srcLabel: string; dst: string } {
-		if ("replaceLine" in edit) {
+		if ("single" in edit) {
 			return {
-				srcLabel: `• replaceLine ${edit.replaceLine.loc}`,
-				dst: edit.replaceLine.content,
+				srcLabel: `• single ${edit.single.loc}`,
+				dst: edit.single.replacement,
 			};
 		}
-		if ("replaceLines" in edit) {
+		if ("range" in edit) {
 			return {
-				srcLabel: `• replaceLines ${edit.replaceLines.start}..${edit.replaceLines.end}`,
-				dst: edit.replaceLines.content,
+				srcLabel: `• range ${edit.range.start}..${edit.range.end}`,
+				dst: edit.range.replacement,
 			};
 		}
 		return {

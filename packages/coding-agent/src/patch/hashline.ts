@@ -21,18 +21,18 @@ type ParsedRefs =
 	| { kind: "insertAfter"; after: { line: number; hash: string } };
 
 function parseHashlineEdit(edit: HashlineEdit): { spec: ParsedRefs; dst: string } {
-	if ("replaceLine" in edit) {
+	if ("single" in edit) {
 		return {
-			spec: { kind: "single", ref: parseLineRef(edit.replaceLine.loc) },
-			dst: edit.replaceLine.content,
+			spec: { kind: "single", ref: parseLineRef(edit.single.loc) },
+			dst: edit.single.replacement,
 		};
 	}
-	if ("replaceLines" in edit) {
-		const start = parseLineRef(edit.replaceLines.start);
-		const end = parseLineRef(edit.replaceLines.end);
+	if ("range" in edit) {
+		const start = parseLineRef(edit.range.start);
+		const end = parseLineRef(edit.range.end);
 		return {
 			spec: start.line === end.line ? { kind: "single", ref: start } : { kind: "range", start, end },
-			dst: edit.replaceLines.content,
+			dst: edit.range.replacement,
 		};
 	}
 	return {
@@ -676,7 +676,7 @@ export function validateLineRef(ref: { line: number; hash: string }, fileLines: 
 /**
  * Apply an array of hashline edits to file content.
  *
- * Each edit operation identifies target lines directly (`replaceLine`, `replaceLines`,
+ * Each edit operation identifies target lines directly (`single`, `range`,
  * `insertAfter`). Line references are resolved via {@link parseLineRef}
  * and hashes validated before any mutation.
  *

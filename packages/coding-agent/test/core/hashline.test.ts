@@ -232,7 +232,7 @@ describe("applyHashlineEdits — replace", () => {
 
 	test("replaces single line", () => {
 		const content = "aaa\nbbb\nccc";
-		const edits: HashlineEdit[] = [{ replaceLine: { loc: makeRef(2, "bbb"), content: "BBB" } }];
+		const edits: HashlineEdit[] = [{ single: { loc: makeRef(2, "bbb"), replacement: "BBB" } }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("aaa\nBBB\nccc");
@@ -242,7 +242,7 @@ describe("applyHashlineEdits — replace", () => {
 	test("range replace (shrink)", () => {
 		const content = "aaa\nbbb\nccc\nddd";
 		const edits: HashlineEdit[] = [
-			{ replaceLines: { start: makeRef(2, "bbb"), end: makeRef(3, "ccc"), content: "ONE" } },
+			{ range: { start: makeRef(2, "bbb"), end: makeRef(3, "ccc"), replacement: "ONE" } },
 		];
 
 		const result = applyHashlineEdits(content, edits);
@@ -252,7 +252,7 @@ describe("applyHashlineEdits — replace", () => {
 	test("range replace (same count)", () => {
 		const content = "aaa\nbbb\nccc\nddd";
 		const edits: HashlineEdit[] = [
-			{ replaceLines: { start: makeRef(2, "bbb"), end: makeRef(3, "ccc"), content: "XXX\nYYY" } },
+			{ range: { start: makeRef(2, "bbb"), end: makeRef(3, "ccc"), replacement: "XXX\nYYY" } },
 		];
 
 		const result = applyHashlineEdits(content, edits);
@@ -262,7 +262,7 @@ describe("applyHashlineEdits — replace", () => {
 
 	test("replaces first line", () => {
 		const content = "first\nsecond\nthird";
-		const edits: HashlineEdit[] = [{ replaceLine: { loc: makeRef(1, "first"), content: "FIRST" } }];
+		const edits: HashlineEdit[] = [{ single: { loc: makeRef(1, "first"), replacement: "FIRST" } }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("FIRST\nsecond\nthird");
@@ -271,7 +271,7 @@ describe("applyHashlineEdits — replace", () => {
 
 	test("replaces last line", () => {
 		const content = "first\nsecond\nthird";
-		const edits: HashlineEdit[] = [{ replaceLine: { loc: makeRef(3, "third"), content: "THIRD" } }];
+		const edits: HashlineEdit[] = [{ single: { loc: makeRef(3, "third"), replacement: "THIRD" } }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("first\nsecond\nTHIRD");
@@ -290,7 +290,7 @@ describe("applyHashlineEdits — delete", () => {
 
 	test("deletes single line", () => {
 		const content = "aaa\nbbb\nccc";
-		const edits: HashlineEdit[] = [{ replaceLine: { loc: makeRef(2, "bbb"), content: "" } }];
+		const edits: HashlineEdit[] = [{ single: { loc: makeRef(2, "bbb"), replacement: "" } }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("aaa\nccc");
@@ -299,9 +299,7 @@ describe("applyHashlineEdits — delete", () => {
 
 	test("deletes range of lines", () => {
 		const content = "aaa\nbbb\nccc\nddd";
-		const edits: HashlineEdit[] = [
-			{ replaceLines: { start: makeRef(2, "bbb"), end: makeRef(3, "ccc"), content: "" } },
-		];
+		const edits: HashlineEdit[] = [{ range: { start: makeRef(2, "bbb"), end: makeRef(3, "ccc"), replacement: "" } }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("aaa\nddd");
@@ -309,7 +307,7 @@ describe("applyHashlineEdits — delete", () => {
 
 	test("deletes first line", () => {
 		const content = "aaa\nbbb\nccc";
-		const edits: HashlineEdit[] = [{ replaceLine: { loc: makeRef(1, "aaa"), content: "" } }];
+		const edits: HashlineEdit[] = [{ single: { loc: makeRef(1, "aaa"), replacement: "" } }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("bbb\nccc");
@@ -317,7 +315,7 @@ describe("applyHashlineEdits — delete", () => {
 
 	test("deletes last line", () => {
 		const content = "aaa\nbbb\nccc";
-		const edits: HashlineEdit[] = [{ replaceLine: { loc: makeRef(3, "ccc"), content: "" } }];
+		const edits: HashlineEdit[] = [{ single: { loc: makeRef(3, "ccc"), replacement: "" } }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("aaa\nbbb");
@@ -398,11 +396,11 @@ describe("applyHashlineEdits — heuristics", () => {
 		const end = 6;
 		const edits: HashlineEdit[] = [
 			{
-				replaceLines: {
+				range: {
 					start: makeRef(start, "if (cond) {"),
 					end: makeRef(end, "}"),
 					// Echoes line after the range ("after();") and also reformats the import line.
-					content: ["if (cond) {", "  doA();", "} else {", "  doB();", "}", "after();"].join("\n"),
+					replacement: ["if (cond) {", "  doA();", "} else {", "  doB();", "}", "after();"].join("\n"),
 				},
 			},
 		];
@@ -418,10 +416,10 @@ describe("applyHashlineEdits — heuristics", () => {
 
 		const edits: HashlineEdit[] = [
 			{
-				replaceLines: {
+				range: {
 					start: makeRef(1, "import { foo } from 'x';"),
 					end: makeRef(2, "import { bar } from 'y';"),
-					content: ["import {foo} from 'x';", "import { bar } from 'y';", "// added"].join("\n"),
+					replacement: ["import {foo} from 'x';", "import { bar } from 'y';", "// added"].join("\n"),
 				},
 			},
 		];
@@ -440,9 +438,9 @@ describe("applyHashlineEdits — heuristics", () => {
 		const content = ["before();", longLine, "after();"].join("\n");
 		const edits: HashlineEdit[] = [
 			{
-				replaceLine: {
+				single: {
 					loc: makeRef(2, longLine),
-					content: [
+					replacement: [
 						"const",
 						"options",
 						"=",
@@ -469,10 +467,10 @@ describe("applyHashlineEdits — heuristics", () => {
 
 		const edits: HashlineEdit[] = [
 			{
-				replaceLine: {
+				single: {
 					loc: makeRef(1, "    typeof HOOK === 'undefined' &&"),
 					// Model merged both lines into one and dropped indentation.
-					content: "typeof HOOK === 'undefined' || typeof HOOK.checkDCE !== 'function'",
+					replacement: "typeof HOOK === 'undefined' || typeof HOOK.checkDCE !== 'function'",
 				},
 			},
 		];
@@ -492,10 +490,11 @@ describe("applyHashlineEdits — heuristics", () => {
 
 		const edits: HashlineEdit[] = [
 			{
-				replaceLine: {
+				single: {
 					loc: makeRef(2, "    resolveRNStyle || hook.resolveRNStyle;"),
 					// Model absorbed the declaration line and dropped indentation.
-					content: "const nativeStyleResolver: ResolveNativeStyle | void = resolveRNStyle ?? hook.resolveRNStyle;",
+					replacement:
+						"const nativeStyleResolver: ResolveNativeStyle | void = resolveRNStyle ?? hook.resolveRNStyle;",
 				},
 			},
 		];
@@ -514,9 +513,9 @@ describe("applyHashlineEdits — heuristics", () => {
 		const srcHash = computeLineHash(2, "bbb");
 		const edits: HashlineEdit[] = [
 			{
-				replaceLine: {
+				single: {
 					loc: `2:${srcHash}export function foo(a, b) {}`, // comma in trailing content
-					content: "BBB",
+					replacement: "BBB",
 				},
 			},
 		];
@@ -528,7 +527,7 @@ describe("applyHashlineEdits — heuristics", () => {
 	test("treats same-line ranges as single-line replacements", () => {
 		const content = "aaa\nbbb\nccc";
 		const good = makeRef(2, "bbb");
-		const edits: HashlineEdit[] = [{ replaceLines: { start: good, end: "2:00", content: "BBB" } }];
+		const edits: HashlineEdit[] = [{ range: { start: good, end: good, replacement: "BBB" } }];
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("aaa\nBBB\nccc");
 	});
@@ -538,9 +537,9 @@ describe("applyHashlineEdits — heuristics", () => {
 		// dst is byte-identical to original (en-dash), so this would normally be a no-op.
 		const edits: HashlineEdit[] = [
 			{
-				replaceLine: {
+				single: {
 					loc: makeRef(2, "devtools–unsupported-bridge-protocol"),
-					content: "devtools–unsupported-bridge-protocol",
+					replacement: "devtools–unsupported-bridge-protocol",
 				},
 			},
 		];
@@ -562,8 +561,8 @@ describe("applyHashlineEdits — multiple edits", () => {
 	test("applies two non-overlapping replaces (bottom-up safe)", () => {
 		const content = "aaa\nbbb\nccc\nddd\neee";
 		const edits: HashlineEdit[] = [
-			{ replaceLine: { loc: makeRef(2, "bbb"), content: "BBB" } },
-			{ replaceLine: { loc: makeRef(4, "ddd"), content: "DDD" } },
+			{ single: { loc: makeRef(2, "bbb"), replacement: "BBB" } },
+			{ single: { loc: makeRef(4, "ddd"), replacement: "DDD" } },
 		];
 
 		const result = applyHashlineEdits(content, edits);
@@ -574,8 +573,8 @@ describe("applyHashlineEdits — multiple edits", () => {
 	test("applies replace + delete in one call", () => {
 		const content = "aaa\nbbb\nccc\nddd";
 		const edits: HashlineEdit[] = [
-			{ replaceLine: { loc: makeRef(2, "bbb"), content: "BBB" } },
-			{ replaceLine: { loc: makeRef(4, "ddd"), content: "" } },
+			{ single: { loc: makeRef(2, "bbb"), replacement: "BBB" } },
+			{ single: { loc: makeRef(4, "ddd"), replacement: "" } },
 		];
 
 		const result = applyHashlineEdits(content, edits);
@@ -585,7 +584,7 @@ describe("applyHashlineEdits — multiple edits", () => {
 	test("applies replace + insert in one call", () => {
 		const content = "aaa\nbbb\nccc";
 		const edits: HashlineEdit[] = [
-			{ replaceLine: { loc: makeRef(3, "ccc"), content: "CCC" } },
+			{ single: { loc: makeRef(3, "ccc"), replacement: "CCC" } },
 			{ insertAfter: { loc: makeRef(1, "aaa"), content: "INSERTED" } },
 		];
 
@@ -596,8 +595,8 @@ describe("applyHashlineEdits — multiple edits", () => {
 	test("applies non-overlapping edits against original anchors when line counts change", () => {
 		const content = "one\ntwo\nthree\nfour\nfive\nsix";
 		const edits: HashlineEdit[] = [
-			{ replaceLines: { start: makeRef(2, "two"), end: makeRef(3, "three"), content: "TWO_THREE" } },
-			{ replaceLine: { loc: makeRef(6, "six"), content: "SIX" } },
+			{ range: { start: makeRef(2, "two"), end: makeRef(3, "three"), replacement: "TWO_THREE" } },
+			{ single: { loc: makeRef(6, "six"), replacement: "SIX" } },
 		];
 
 		const result = applyHashlineEdits(content, edits);
@@ -623,14 +622,15 @@ describe("applyHashlineEdits — errors", () => {
 
 	test("rejects stale hash", () => {
 		const content = "aaa\nbbb\nccc";
-		const edits: HashlineEdit[] = [{ replaceLine: { loc: "2:00", content: "BBB" } }];
+		// Use a hash that doesn't match any line (avoid 00 — ccc hashes to 00)
+		const edits: HashlineEdit[] = [{ single: { loc: "2:zz", replacement: "BBB" } }];
 
 		expect(() => applyHashlineEdits(content, edits)).toThrow(HashlineMismatchError);
 	});
 
 	test("stale hash error shows >>> markers with correct hashes", () => {
 		const content = "aaa\nbbb\nccc\nddd\neee";
-		const edits: HashlineEdit[] = [{ replaceLine: { loc: "2:00", content: "BBB" } }];
+		const edits: HashlineEdit[] = [{ single: { loc: "2:zz", replacement: "BBB" } }];
 
 		try {
 			applyHashlineEdits(content, edits);
@@ -652,9 +652,10 @@ describe("applyHashlineEdits — errors", () => {
 
 	test("stale hash error collects all mismatches", () => {
 		const content = "aaa\nbbb\nccc\nddd\neee";
+		// Use hashes that don't match any line (avoid 00 — ccc hashes to 00)
 		const edits: HashlineEdit[] = [
-			{ replaceLine: { loc: "2:00", content: "BBB" } },
-			{ replaceLine: { loc: "4:00", content: "DDD" } },
+			{ single: { loc: "2:zz", replacement: "BBB" } },
+			{ single: { loc: "4:zz", replacement: "DDD" } },
 		];
 
 		try {
@@ -675,7 +676,7 @@ describe("applyHashlineEdits — errors", () => {
 	test("relocates stale line refs when hash uniquely identifies a moved line", () => {
 		const content = "aaa\nbbb\nccc";
 		const staleButUnique = `2:${computeLineHash(1, "ccc")}`;
-		const edits: HashlineEdit[] = [{ replaceLine: { loc: staleButUnique, content: "CCC" } }];
+		const edits: HashlineEdit[] = [{ single: { loc: staleButUnique, replacement: "CCC" } }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("aaa\nbbb\nCCC");
@@ -684,23 +685,21 @@ describe("applyHashlineEdits — errors", () => {
 	test("does not relocate when expected hash is non-unique", () => {
 		const content = "dup\nmid\ndup";
 		const staleDuplicate = `2:${computeLineHash(1, "dup")}`;
-		const edits: HashlineEdit[] = [{ replaceLine: { loc: staleDuplicate, content: "DUP" } }];
+		const edits: HashlineEdit[] = [{ single: { loc: staleDuplicate, replacement: "DUP" } }];
 
 		expect(() => applyHashlineEdits(content, edits)).toThrow(HashlineMismatchError);
 	});
 
 	test("rejects out-of-range line", () => {
 		const content = "aaa\nbbb";
-		const edits: HashlineEdit[] = [{ replaceLine: { loc: "10:aa", content: "X" } }];
+		const edits: HashlineEdit[] = [{ single: { loc: "10:aa", replacement: "X" } }];
 
 		expect(() => applyHashlineEdits(content, edits)).toThrow(/does not exist/);
 	});
 
 	test("rejects range with start > end", () => {
 		const content = "aaa\nbbb\nccc\nddd\neee";
-		const edits: HashlineEdit[] = [
-			{ replaceLines: { start: makeRef(5, "eee"), end: makeRef(2, "bbb"), content: "X" } },
-		];
+		const edits: HashlineEdit[] = [{ range: { start: makeRef(5, "eee"), end: makeRef(2, "bbb"), replacement: "X" } }];
 
 		expect(() => applyHashlineEdits(content, edits)).toThrow();
 	});

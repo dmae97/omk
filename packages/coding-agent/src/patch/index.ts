@@ -124,18 +124,18 @@ const patchEditSchema = Type.Object({
 export type ReplaceParams = Static<typeof replaceEditSchema>;
 export type PatchParams = Static<typeof patchEditSchema>;
 
-const hashlineReplaceLineSchema = Type.Object({
-	replaceLine: Type.Object({
+const hashlineSingleSchema = Type.Object({
+	single: Type.Object({
 		loc: Type.String({ description: 'Line reference "LINE:HASH"' }),
-		content: Type.String({ description: 'Replacement content (\\n-separated) — "" for delete' }),
+		replacement: Type.String({ description: 'Replacement content (\\n-separated) — "" for delete' }),
 	}),
 });
 
-const hashlineReplaceLinesSchema = Type.Object({
-	replaceLines: Type.Object({
+const hashlineRangeSchema = Type.Object({
+	range: Type.Object({
 		start: Type.String({ description: 'Start line ref "LINE:HASH"' }),
 		end: Type.String({ description: 'End line ref "LINE:HASH"' }),
-		content: Type.String({ description: 'Replacement content (\\n-separated) — "" for delete' }),
+		replacement: Type.String({ description: 'Replacement content (\\n-separated) — "" for delete' }),
 	}),
 });
 const hashlineInsertAfterSchema = Type.Object({
@@ -144,11 +144,7 @@ const hashlineInsertAfterSchema = Type.Object({
 		content: Type.String({ description: "Content to insert (\\n-separated); must be non-empty" }),
 	}),
 });
-const hashlineEditItemSchema = Type.Union([
-	hashlineReplaceLineSchema,
-	hashlineReplaceLinesSchema,
-	hashlineInsertAfterSchema,
-]);
+const hashlineEditItemSchema = Type.Union([hashlineSingleSchema, hashlineRangeSchema, hashlineInsertAfterSchema]);
 const hashlineEditSchema = Type.Object({
 	path: Type.String({ description: "File path (relative or absolute)" }),
 	edits: Type.Array(hashlineEditItemSchema, { description: "Array of edit operations" }),
@@ -408,27 +404,60 @@ export class EditTool implements AgentTool<TInput> {
 				let diagnostic = `No changes made to ${path}. The edits produced identical content.`;
 				try {
 					const lines = normalizedContent.split("\n");
-					const targetLines: string[] = [];
+					const noopDetails: string[] = [];
 					for (const edit of edits) {
-						const refs: string[] = [];
-						if ("replaceLine" in edit) refs.push(edit.replaceLine.loc);
-						else if ("replaceLines" in edit) refs.push(edit.replaceLines.start, edit.replaceLines.end);
-						else if ("insertAfter" in edit) refs.push(edit.insertAfter.loc);
-						for (const ref of refs) {
-							const parsed = parseLineRef(ref);
+						if ("single" in edit) {
+							const parsed = parseLineRef(edit.single.loc);
 							if (parsed.line >= 1 && parsed.line <= lines.length) {
-								const lineContent = lines[parsed.line - 1];
-								const hash = computeLineHash(parsed.line, lineContent);
-								targetLines.push(`${parsed.line}:${hash}| ${lineContent}`);
+								const current = lines[parsed.line - 1];
+								if (current === edit.single.replacement) {
+									const hash = computeLineHash(parsed.line, current);
+									noopDetails.push(
+										`Line ${parsed.line} \u2014 your replacement is identical to the current content:\n  ${parsed.line}:${hash}| ${current}`,
+									);
+								}
+							}
+						} else if ("range" in edit) {
+							const start = parseLineRef(edit.range.start);
+							const end = parseLineRef(edit.range.end);
+							if (start.line >= 1 && end.line <= lines.length) {
+								const current = lines.slice(start.line - 1, end.line).join("\n");
+								if (current === edit.range.replacement) {
+									noopDetails.push(
+										`Lines ${start.line}-${end.line} \u2014 your replacement is identical to the current content.`,
+									);
+								}
 							}
 						}
 					}
-					if (targetLines.length > 0) {
-						const preview = [...new Set(targetLines)].slice(0, 3).join("\n");
-						diagnostic += `\nThe file currently contains these lines:\n${preview}\nRe-read the file and verify your replacement content differs from the current content.`;
+					if (noopDetails.length > 0) {
+						diagnostic += `\n${noopDetails.join("\n")}`;
+						diagnostic +=
+							"\nYour content must differ from what the file already contains. Re-read the file to see the current state.";
+					} else {
+						// Edits were not literally identical but heuristics normalized them back.
+						const targetLines: string[] = [];
+						for (const edit of edits) {
+							const refs: string[] = [];
+							if ("single" in edit) refs.push(edit.single.loc);
+							else if ("range" in edit) refs.push(edit.range.start, edit.range.end);
+							else if ("insertAfter" in edit) refs.push(edit.insertAfter.loc);
+							for (const ref of refs) {
+								const parsed = parseLineRef(ref);
+								if (parsed.line >= 1 && parsed.line <= lines.length) {
+									const lineContent = lines[parsed.line - 1];
+									const hash = computeLineHash(parsed.line, lineContent);
+									targetLines.push(`${parsed.line}:${hash}| ${lineContent}`);
+								}
+							}
+						}
+						if (targetLines.length > 0) {
+							const preview = [...new Set(targetLines)].slice(0, 5).join("\n");
+							diagnostic += `\nThe file currently contains these lines:\n${preview}\nYour edits were normalized back to the original content (whitespace-only differences are preserved as-is). Ensure your replacement changes actual code, not just formatting.`;
+						}
 					}
 				} catch {
-					// Best-effort diagnostic — don't crash on malformed refs
+					// Best-effort diagnostic \u2014 don't crash on malformed refs
 				}
 				throw new Error(diagnostic);
 			}
