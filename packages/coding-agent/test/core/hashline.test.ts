@@ -623,7 +623,6 @@ describe("applyHashlineEdits — errors", () => {
 		const content = "aaa\nbbb\nccc";
 		// Use a hash that doesn't match any line (avoid 00 — ccc hashes to 00)
 		const edits: HashlineEdit[] = [{ single: { loc: "2:zz", replacement: "BBB" } }];
-
 		expect(() => applyHashlineEdits(content, edits)).toThrow(HashlineMismatchError);
 	});
 

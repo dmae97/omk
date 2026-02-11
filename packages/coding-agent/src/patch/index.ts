@@ -124,31 +124,43 @@ const patchEditSchema = Type.Object({
 export type ReplaceParams = Static<typeof replaceEditSchema>;
 export type PatchParams = Static<typeof patchEditSchema>;
 
-const hashlineSingleSchema = Type.Object({
-	single: Type.Object({
-		loc: Type.String({ description: 'Line reference "LINE:HASH"' }),
-		replacement: Type.String({ description: 'Replacement content (\\n-separated) — "" for delete' }),
-	}),
-});
+const hashlineSingleSchema = Type.Object(
+	{
+		single: Type.Object({
+			loc: Type.String({ description: 'Line reference "LINE:HASH"' }),
+			replacement: Type.String({ description: 'Replacement content (\\n-separated) — "" for delete' }),
+		}),
+	},
+	{ additionalProperties: true },
+);
 
-const hashlineRangeSchema = Type.Object({
-	range: Type.Object({
-		start: Type.String({ description: 'Start line ref "LINE:HASH"' }),
-		end: Type.String({ description: 'End line ref "LINE:HASH"' }),
-		replacement: Type.String({ description: 'Replacement content (\\n-separated) — "" for delete' }),
-	}),
-});
-const hashlineInsertAfterSchema = Type.Object({
-	insertAfter: Type.Object({
-		loc: Type.String({ description: 'Insert after this line "LINE:HASH"' }),
-		content: Type.String({ description: "Content to insert (\\n-separated); must be non-empty" }),
-	}),
-});
+const hashlineRangeSchema = Type.Object(
+	{
+		range: Type.Object({
+			start: Type.String({ description: 'Start line ref "LINE:HASH"' }),
+			end: Type.String({ description: 'End line ref "LINE:HASH"' }),
+			replacement: Type.String({ description: 'Replacement content (\\n-separated) — "" for delete' }),
+		}),
+	},
+	{ additionalProperties: true },
+);
+const hashlineInsertAfterSchema = Type.Object(
+	{
+		insertAfter: Type.Object({
+			loc: Type.String({ description: 'Insert after this line "LINE:HASH"' }),
+			content: Type.String({ description: "Content to insert (\\n-separated); must be non-empty" }),
+		}),
+	},
+	{ additionalProperties: true },
+);
 const hashlineEditItemSchema = Type.Union([hashlineSingleSchema, hashlineRangeSchema, hashlineInsertAfterSchema]);
-const hashlineEditSchema = Type.Object({
-	path: Type.String({ description: "File path (relative or absolute)" }),
-	edits: Type.Array(hashlineEditItemSchema, { description: "Array of edit operations" }),
-});
+const hashlineEditSchema = Type.Object(
+	{
+		path: Type.String({ description: "File path (relative or absolute)" }),
+		edits: Type.Array(hashlineEditItemSchema, { description: "Array of edit operations" }),
+	},
+	{ additionalProperties: true },
+);
 
 export type HashlineEdit = Static<typeof hashlineEditItemSchema>;
 export type HashlineParams = Static<typeof hashlineEditSchema>;
@@ -388,6 +400,28 @@ export class EditTool implements AgentTool<TInput> {
 				throw new Error("Cannot edit Jupyter notebooks with the Edit tool. Use the NotebookEdit tool instead.");
 			}
 
+			// Detect wrong-format fields from models confusing edit modes
+			for (let i = 0; i < edits.length; i++) {
+				const edit = edits[i] as Record<string, unknown>;
+				if ("old_text" in edit || "new_text" in edit) {
+					throw new Error(
+						`edits[${i}] contains 'old_text'/'new_text' fields from replace mode. ` +
+							`Hashline edits use: {single: {loc, replacement}}, {range: {start, end, replacement}}, or {insertAfter: {loc, content}}.`,
+					);
+				}
+				if ("diff" in edit) {
+					throw new Error(
+						`edits[${i}] contains 'diff' field from patch mode. ` +
+							`Hashline edits use: {single: {loc, replacement}}, {range: {start, end, replacement}}, or {insertAfter: {loc, content}}.`,
+					);
+				}
+				if (!("single" in edit) && !("range" in edit) && !("insertAfter" in edit)) {
+					throw new Error(
+						`edits[${i}] must contain exactly one of: 'single', 'range', or 'insertAfter'. Got keys: [${Object.keys(edit).join(", ")}].`,
+					);
+				}
+			}
+
 			const absolutePath = resolvePlanPath(this.session, path);
 			const file = Bun.file(absolutePath);
 
@@ -402,62 +436,42 @@ export class EditTool implements AgentTool<TInput> {
 			const result = applyHashlineEdits(normalizedContent, edits);
 			if (normalizedContent === result.content) {
 				let diagnostic = `No changes made to ${path}. The edits produced identical content.`;
-				try {
+				if (result.noopEdits && result.noopEdits.length > 0) {
+					const details = result.noopEdits
+						.map(
+							e =>
+								`Edit ${e.editIndex}: replacement for ${e.loc} is identical to current content:\n  ${e.loc}| ${e.currentContent}`,
+						)
+						.join("\n");
+					diagnostic += `\n${details}`;
+					diagnostic +=
+						"\nYour content must differ from what the file already contains. Re-read the file to see the current state.";
+				} else {
+					// Edits were not literally identical but heuristics normalized them back
 					const lines = normalizedContent.split("\n");
-					const noopDetails: string[] = [];
+					const targetLines: string[] = [];
 					for (const edit of edits) {
-						if ("single" in edit) {
-							const parsed = parseLineRef(edit.single.loc);
-							if (parsed.line >= 1 && parsed.line <= lines.length) {
-								const current = lines[parsed.line - 1];
-								if (current === edit.single.replacement) {
-									const hash = computeLineHash(parsed.line, current);
-									noopDetails.push(
-										`Line ${parsed.line} \u2014 your replacement is identical to the current content:\n  ${parsed.line}:${hash}| ${current}`,
-									);
-								}
-							}
-						} else if ("range" in edit) {
-							const start = parseLineRef(edit.range.start);
-							const end = parseLineRef(edit.range.end);
-							if (start.line >= 1 && end.line <= lines.length) {
-								const current = lines.slice(start.line - 1, end.line).join("\n");
-								if (current === edit.range.replacement) {
-									noopDetails.push(
-										`Lines ${start.line}-${end.line} \u2014 your replacement is identical to the current content.`,
-									);
-								}
-							}
-						}
-					}
-					if (noopDetails.length > 0) {
-						diagnostic += `\n${noopDetails.join("\n")}`;
-						diagnostic +=
-							"\nYour content must differ from what the file already contains. Re-read the file to see the current state.";
-					} else {
-						// Edits were not literally identical but heuristics normalized them back.
-						const targetLines: string[] = [];
-						for (const edit of edits) {
-							const refs: string[] = [];
-							if ("single" in edit) refs.push(edit.single.loc);
-							else if ("range" in edit) refs.push(edit.range.start, edit.range.end);
-							else if ("insertAfter" in edit) refs.push(edit.insertAfter.loc);
-							for (const ref of refs) {
+						const refs: string[] = [];
+						if ("single" in edit) refs.push(edit.single.loc);
+						else if ("range" in edit) refs.push(edit.range.start, edit.range.end);
+						else if ("insertAfter" in edit) refs.push(edit.insertAfter.loc);
+						for (const ref of refs) {
+							try {
 								const parsed = parseLineRef(ref);
 								if (parsed.line >= 1 && parsed.line <= lines.length) {
 									const lineContent = lines[parsed.line - 1];
 									const hash = computeLineHash(parsed.line, lineContent);
 									targetLines.push(`${parsed.line}:${hash}| ${lineContent}`);
 								}
+							} catch {
+								/* skip malformed refs */
 							}
 						}
-						if (targetLines.length > 0) {
-							const preview = [...new Set(targetLines)].slice(0, 5).join("\n");
-							diagnostic += `\nThe file currently contains these lines:\n${preview}\nYour edits were normalized back to the original content (whitespace-only differences are preserved as-is). Ensure your replacement changes actual code, not just formatting.`;
-						}
 					}
-				} catch {
-					// Best-effort diagnostic \u2014 don't crash on malformed refs
+					if (targetLines.length > 0) {
+						const preview = [...new Set(targetLines)].slice(0, 5).join("\n");
+						diagnostic += `\nThe file currently contains these lines:\n${preview}\nYour edits were normalized back to the original content (whitespace-only differences are preserved as-is). Ensure your replacement changes actual code, not just formatting.`;
+					}
 				}
 				throw new Error(diagnostic);
 			}

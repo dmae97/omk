@@ -10,6 +10,7 @@ Line-addressed edits using hash-verified line references. Read file with hashes 
 - For code-change requests, respond with tool calls, not prose
 - Edit only requested lines. Do not reformat unrelated code.
 - Direction-lock every mutation: replace the exact currently-present token/expression with the intended target token/expression; never reverse the change or "change something nearby".
+- `replacement` must differ from the current line content — sending identical content is rejected as a no-op
 </critical>
 
 <instruction>
@@ -19,6 +20,7 @@ Line-addressed edits using hash-verified line references. Read file with hashes 
 3. Submit one `edit` call with all known operations for that file
 4. If another change on same file is needed later: re-read first, then edit
 5. Direction-lock each operation before submitting (`exact source token/expression on target line` → `intended replacement`) and keep the mutation to one logical locus. Do not output prose; submit only the tool call.
+**Atomicity:** All edits in one call are validated against the file as last read — line numbers and hashes refer to the original state, not after earlier edits in the same array. The applicator sorts and applies bottom-up automatically.
 **Edit variants:**
 - `{ single: { loc: "LINE:HASH", replacement: "..." } }`
 - `{ range: { start: "LINE:HASH", end: "LINE:HASH", replacement: "..." } }`
@@ -37,13 +39,15 @@ Line-addressed edits using hash-verified line references. Read file with hashes 
 If a change spans multiple non-adjacent lines, use separate `single` operations for each — not a single `range` that includes unchanged lines in `replacement`.
 - Each edit operation must target one logical change site with minimal scope. If a fix requires two locations, use two operations; never span unrelated lines in one `range`.
 - Self-check before submitting: if your edit touches lines unrelated to the stated fix, split or narrow it.
+- Do NOT reformat lines you are replacing — preserve exact whitespace, braces (`{ foo }` not `{foo}`), arrow style, and line breaks. Change ONLY the targeted token/expression. Reformatting causes hash verification failure even when the logic is correct.
+- For swaps (exchanging content between two locations), use two `single` operations in one call — the applicator handles ordering. Do not try to account for line number shifts between operations.
 </caution>
 <instruction>
 **Recovery:**
 - Hash mismatch (`>>>` error): copy the updated `LINE:HASH` refs from the error verbatim and retry with the same intended mutation. Do NOT re-read unless you need lines not shown in the error.
 - If hash mismatch repeats after applying updated refs, stop blind retries and re-read the relevant region before retrying.
 - After a successful edit, always re-read the file before making another edit to the same file (hashes have changed).
-- No-op error ("identical content"): do not resend the same payload. Re-read the target lines, confirm mutation direction, and change either target refs or replacement content before retrying.
+- No-op error ("identical content"): your replacement text matches what the file already contains. STOP and re-read the file — you are likely targeting the wrong line or your replacement is not actually different. Do NOT retry with the same content. After 2 consecutive no-op errors on the same line, re-read the entire function/block to understand the current file state.
 </instruction>
 
 <instruction>

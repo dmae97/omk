@@ -605,6 +605,7 @@ async function runSingleTask(
 
 		const maxAttempts = Math.max(1, Math.floor(config.maxAttempts ?? 1));
 		let timeoutRetriesUsed = 0;
+		const maxTimeoutRetries = 3;
 		let zeroToolRetries = 0;
 		const noOpRetryLimit = config.noOpRetryLimit ?? 2;
 		let retryContext: string | null = null;
@@ -634,7 +635,10 @@ async function runSingleTask(
 					timeoutTelemetry = err.telemetry;
 					await logEvent({ type: "timeout", attempt: attempt + 1, telemetry: err.telemetry });
 					timeoutRetriesUsed += 1;
-					retryContext = buildTimeoutRetryContext(err.telemetry, timeoutRetriesUsed, timeoutRetriesUsed);
+					retryContext = buildTimeoutRetryContext(err.telemetry, timeoutRetriesUsed, maxTimeoutRetries);
+					if (timeoutRetriesUsed >= maxTimeoutRetries) {
+						break;
+					}
 					attempt--; // Don't consume a regular attempt slot for timeout retries
 					continue;
 				}
@@ -838,6 +842,7 @@ async function runBatchedTask(
 
 		const maxAttempts = Math.max(1, Math.floor(config.maxAttempts ?? 1));
 		let timeoutRetriesUsed = 0;
+		const maxTimeoutRetries = 3;
 		let zeroToolRetries = 0;
 		const noOpRetryLimit = config.noOpRetryLimit ?? 2;
 		let retryContext: string | null = null;
@@ -865,7 +870,10 @@ async function runBatchedTask(
 					timeoutTelemetry = err.telemetry;
 					await logEvent({ type: "timeout", attempt: attempt + 1, telemetry: err.telemetry });
 					timeoutRetriesUsed += 1;
-					retryContext = buildTimeoutRetryContext(err.telemetry, timeoutRetriesUsed, timeoutRetriesUsed);
+					retryContext = buildTimeoutRetryContext(err.telemetry, timeoutRetriesUsed, maxTimeoutRetries);
+					if (timeoutRetriesUsed >= maxTimeoutRetries) {
+						break;
+					}
 					attempt--; // Don't consume a regular attempt slot for timeout retries
 					continue;
 				}
