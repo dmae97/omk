@@ -56,6 +56,7 @@ Unified LLM API with automatic model discovery, provider configuration, token an
 - **Cerebras**
 - **xAI**
 - **OpenRouter**
+- **zAI** (requires `ZAI_API_KEY`)
 - **GitHub Copilot** (requires OAuth, see below)
 - **Google Gemini CLI** (requires OAuth, see below)
 - **Antigravity** (requires OAuth, see below)
