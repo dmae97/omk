@@ -8,7 +8,7 @@
 import * as os from "node:os";
 import { readSseJson } from "@oh-my-pi/pi-utils";
 import packageJson from "../../../../package.json" with { type: "json" };
-import { getAgentDbPath, getConfigDirPaths } from "../../../config";
+import { getAgentDbPath } from "../../../config";
 import { AgentStorage } from "../../../session/agent-storage";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
@@ -117,35 +117,32 @@ function getAccountId(accessToken: string): string | null {
 
 /**
  * Finds valid Codex OAuth credentials from agent.db.
- * Checks all config directories and returns the first non-expired credential.
+ * Checks agent credentials and returns the first non-expired credential.
  * @returns OAuth credential with access token and account ID, or null if none found
  */
 async function findCodexAuth(): Promise<{ accessToken: string; accountId: string } | null> {
-	const configDirs = getConfigDirPaths("", { project: false });
 	const expiryBuffer = 5 * 60 * 1000; // 5 minutes
 	const now = Date.now();
 
-	for (const configDir of configDirs) {
-		try {
-			const storage = await AgentStorage.open(getAgentDbPath(configDir));
-			const records = storage.listAuthCredentials("openai-codex");
+	try {
+		const storage = await AgentStorage.open(getAgentDbPath());
+		const records = storage.listAuthCredentials("openai-codex");
 
-			for (const record of records) {
-				const credential = record.credential;
-				if (credential.type !== "oauth") continue;
+		for (const record of records) {
+			const credential = record.credential;
+			if (credential.type !== "oauth") continue;
 
-				const oauthCred = credential as CodexOAuthCredential;
-				if (!oauthCred.access) continue;
-				if (oauthCred.expires <= now + expiryBuffer) continue;
+			const oauthCred = credential as CodexOAuthCredential;
+			if (!oauthCred.access) continue;
+			if (oauthCred.expires <= now + expiryBuffer) continue;
 
-				const accountId = oauthCred.accountId ?? getAccountId(oauthCred.access);
-				if (!accountId) continue;
+			const accountId = oauthCred.accountId ?? getAccountId(oauthCred.access);
+			if (!accountId) continue;
 
-				return { accessToken: oauthCred.access, accountId };
-			}
-		} catch {
-			// Continue to next config directory
+			return { accessToken: oauthCred.access, accountId };
 		}
+	} catch {
+		return null;
 	}
 
 	return null;

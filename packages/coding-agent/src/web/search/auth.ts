@@ -9,7 +9,7 @@
  */
 import { buildAnthropicHeaders as buildProviderAnthropicHeaders, getEnvApiKey } from "@oh-my-pi/pi-ai";
 import { $env, logger } from "@oh-my-pi/pi-utils";
-import { getAgentDbPath, getConfigDirPaths } from "../../config";
+import { getAgentDbPath, getAgentDir } from "../../config";
 import { AgentStorage } from "../../session/agent-storage";
 import type { AuthCredential } from "../../session/auth-storage";
 import type { AnthropicAuthConfig, AnthropicOAuthCredential, ModelsJson } from "./types";
@@ -60,11 +60,10 @@ function toAnthropicOAuthCredential(credential: AuthCredential): AnthropicOAuthC
 
 /**
  * Reads Anthropic OAuth credentials from agent.db.
- * @param configDir - Path to the config directory containing agent.db
  * @returns Array of valid Anthropic OAuth credentials
  */
-async function readAnthropicOAuthCredentials(configDir: string): Promise<AnthropicOAuthCredential[]> {
-	const storage = await AgentStorage.open(getAgentDbPath(configDir));
+async function readAnthropicOAuthCredentials(): Promise<AnthropicOAuthCredential[]> {
+	const storage = await AgentStorage.open(getAgentDbPath());
 	const records = storage.listAuthCredentials("anthropic");
 	const credentials: AnthropicOAuthCredential[] = [];
 	for (const record of records) {
@@ -86,8 +85,7 @@ async function readAnthropicOAuthCredentials(configDir: string): Promise<Anthrop
  * @returns The first valid auth configuration found, or null if none available
  */
 export async function findAnthropicAuth(): Promise<AnthropicAuthConfig | null> {
-	// Get all config directories (user-level only) for fallback support
-	const configDirs = getConfigDirPaths("", { project: false });
+	const configDir = getAgentDir();
 
 	// 1. Explicit search-specific env vars
 	const searchApiKey = $env.ANTHROPIC_SEARCH_API_KEY;
@@ -100,47 +98,43 @@ export async function findAnthropicAuth(): Promise<AnthropicAuthConfig | null> {
 		};
 	}
 
-	// 2. Provider with api="anthropic-messages" in models.json (check all config dirs)
-	for (const configDir of configDirs) {
-		const modelsJson = await readJson<ModelsJson>(`${configDir}/models.json`);
-		if (modelsJson?.providers) {
-			// First pass: look for providers with actual API keys
-			for (const [_name, provider] of Object.entries(modelsJson.providers)) {
-				if (provider.api === "anthropic-messages" && provider.apiKey && provider.apiKey !== "none") {
-					return {
-						apiKey: provider.apiKey,
-						baseUrl: provider.baseUrl ?? DEFAULT_BASE_URL,
-						isOAuth: isOAuthToken(provider.apiKey),
-					};
-				}
+	// 2. Provider with api="anthropic-messages" in models.json
+	const modelsJson = await readJson<ModelsJson>(`${configDir}/models.json`);
+	if (modelsJson?.providers) {
+		// First pass: look for providers with actual API keys
+		for (const [_name, provider] of Object.entries(modelsJson.providers)) {
+			if (provider.api === "anthropic-messages" && provider.apiKey && provider.apiKey !== "none") {
+				return {
+					apiKey: provider.apiKey,
+					baseUrl: provider.baseUrl ?? DEFAULT_BASE_URL,
+					isOAuth: isOAuthToken(provider.apiKey),
+				};
 			}
-			// Second pass: check for proxy mode (baseUrl but apiKey="none")
-			for (const [_name, provider] of Object.entries(modelsJson.providers)) {
-				if (provider.api === "anthropic-messages" && provider.baseUrl) {
-					return {
-						apiKey: provider.apiKey ?? "",
-						baseUrl: provider.baseUrl,
-						isOAuth: false,
-					};
-				}
+		}
+		// Second pass: check for proxy mode (baseUrl but apiKey="none")
+		for (const [_name, provider] of Object.entries(modelsJson.providers)) {
+			if (provider.api === "anthropic-messages" && provider.baseUrl) {
+				return {
+					apiKey: provider.apiKey ?? "",
+					baseUrl: provider.baseUrl,
+					isOAuth: false,
+				};
 			}
 		}
 	}
 
-	// 3. OAuth credentials in agent.db (with 5-minute expiry buffer, check all config dirs)
+	// 3. OAuth credentials in agent.db (with 5-minute expiry buffer)
 	const expiryBuffer = 5 * 60 * 1000; // 5 minutes
 	const now = Date.now();
-	for (const configDir of configDirs) {
-		const credentials = await readAnthropicOAuthCredentials(configDir);
-		for (const credential of credentials) {
-			if (!credential.access) continue;
-			if (credential.expires > now + expiryBuffer) {
-				return {
-					apiKey: credential.access,
-					baseUrl: DEFAULT_BASE_URL,
-					isOAuth: true,
-				};
-			}
+	const credentials = await readAnthropicOAuthCredentials();
+	for (const credential of credentials) {
+		if (!credential.access) continue;
+		if (credential.expires > now + expiryBuffer) {
+			return {
+				apiKey: credential.access,
+				baseUrl: DEFAULT_BASE_URL,
+				isOAuth: true,
+			};
 		}
 	}
 

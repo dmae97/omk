@@ -6,7 +6,7 @@
  * Returns synthesized answers with citations and source metadata from grounding chunks.
  */
 import { refreshGoogleCloudToken } from "@oh-my-pi/pi-ai";
-import { getAgentDbPath, getConfigDirPaths } from "../../../config";
+import { getAgentDbPath } from "../../../config";
 import { AgentStorage } from "../../../session/agent-storage";
 import type { SearchCitation, SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
@@ -74,75 +74,72 @@ interface GeminiAuth {
  * @returns OAuth credential with access token and project ID, or null if none found
  */
 export async function findGeminiAuth(): Promise<GeminiAuth | null> {
-	const configDirs = getConfigDirPaths("", { project: false });
 	const expiryBuffer = 5 * 60 * 1000; // 5 minutes
 	const now = Date.now();
 
 	// Try providers in order: antigravity first (more quota), then gemini-cli
 	const providers = ["google-antigravity", "google-gemini-cli"] as const;
 
-	for (const configDir of configDirs) {
-		try {
-			const storage = await AgentStorage.open(getAgentDbPath(configDir));
+	try {
+		const storage = await AgentStorage.open(getAgentDbPath());
 
-			for (const provider of providers) {
-				const records = storage.listAuthCredentials(provider);
+		for (const provider of providers) {
+			const records = storage.listAuthCredentials(provider);
 
-				for (const record of records) {
-					const credential = record.credential;
-					if (credential.type !== "oauth") continue;
+			for (const record of records) {
+				const credential = record.credential;
+				if (credential.type !== "oauth") continue;
 
-					const oauthCred = credential as GeminiOAuthCredential;
-					if (!oauthCred.access) continue;
+				const oauthCred = credential as GeminiOAuthCredential;
+				if (!oauthCred.access) continue;
 
-					// Get projectId from credential
-					const projectId = oauthCred.projectId;
-					if (!projectId) continue;
+				// Get projectId from credential
+				const projectId = oauthCred.projectId;
+				if (!projectId) continue;
 
-					// Check if token is expired (or about to expire)
-					if (oauthCred.expires <= now + expiryBuffer) {
-						// Try to refresh if we have a refresh token
-						if (oauthCred.refresh) {
-							try {
-								const refreshed = await refreshGoogleCloudToken(oauthCred.refresh, projectId);
-								// Update the credential in storage
-								const updated = {
-									...oauthCred,
-									access: refreshed.access,
-									refresh: refreshed.refresh ?? oauthCred.refresh,
-									expires: refreshed.expires,
-								};
-								storage.updateAuthCredential(record.id, updated);
-								return {
-									accessToken: refreshed.access,
-									refreshToken: refreshed.refresh ?? oauthCred.refresh,
-									projectId,
-									isAntigravity: provider === "google-antigravity",
-									storage,
-									credentialId: record.id,
-								};
-							} catch {
-								// Refresh failed, skip this credential
-								continue;
-							}
+				// Check if token is expired (or about to expire)
+				if (oauthCred.expires <= now + expiryBuffer) {
+					// Try to refresh if we have a refresh token
+					if (oauthCred.refresh) {
+						try {
+							const refreshed = await refreshGoogleCloudToken(oauthCred.refresh, projectId);
+							// Update the credential in storage
+							const updated = {
+								...oauthCred,
+								access: refreshed.access,
+								refresh: refreshed.refresh ?? oauthCred.refresh,
+								expires: refreshed.expires,
+							};
+							storage.updateAuthCredential(record.id, updated);
+							return {
+								accessToken: refreshed.access,
+								refreshToken: refreshed.refresh ?? oauthCred.refresh,
+								projectId,
+								isAntigravity: provider === "google-antigravity",
+								storage,
+								credentialId: record.id,
+							};
+						} catch {
+							// Refresh failed, skip this credential
+							continue;
 						}
-						// No refresh token or refresh failed
-						continue;
 					}
-
-					return {
-						accessToken: oauthCred.access,
-						refreshToken: oauthCred.refresh,
-						projectId,
-						isAntigravity: provider === "google-antigravity",
-						storage,
-						credentialId: record.id,
-					};
+					// No refresh token or refresh failed
+					continue;
 				}
+
+				return {
+					accessToken: oauthCred.access,
+					refreshToken: oauthCred.refresh,
+					projectId,
+					isAntigravity: provider === "google-antigravity",
+					storage,
+					credentialId: record.id,
+				};
 			}
-		} catch {
-			// Continue to next config directory
 		}
+	} catch {
+		return null;
 	}
 
 	return null;
