@@ -9,9 +9,12 @@
  * 2. User pastes the API key into the CLI
  */
 
+import { validateOpenAICompatibleApiKey } from "./api-key-validation";
 import type { OAuthController } from "./types";
 
 const AUTH_URL = "https://z.ai/manage-apikey/apikey-list";
+const API_BASE_URL = "https://api.z.ai/api/coding/paas/v4";
+const VALIDATION_MODEL = "glm-5";
 
 /**
  * Login to Z.AI.
@@ -45,5 +48,13 @@ export async function loginZai(options: OAuthController): Promise<string> {
 		throw new Error("API key is required");
 	}
 
+	options.onProgress?.("Validating API key...");
+	await validateOpenAICompatibleApiKey({
+		provider: "Z.AI",
+		apiKey: trimmed,
+		baseUrl: API_BASE_URL,
+		model: VALIDATION_MODEL,
+		signal: options.signal,
+	});
 	return trimmed;
 }

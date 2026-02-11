@@ -16,8 +16,52 @@ import { loginZai } from "./utils/oauth/zai";
 const PROVIDERS = getOAuthProviders();
 
 function prompt(rl: readline.Interface, question: string): Promise<string> {
-	const { promise, resolve } = Promise.withResolvers<string>();
-	rl.question(question, resolve);
+	const { promise, resolve, reject } = Promise.withResolvers<string>();
+	const input = process.stdin as NodeJS.ReadStream;
+	const supportsRawMode = input.isTTY && typeof input.setRawMode === "function";
+	const wasRaw = supportsRawMode ? input.isRaw : false;
+	let settled = false;
+
+	const cleanup = () => {
+		rl.off("SIGINT", onSigint);
+		if (supportsRawMode) {
+			input.off("keypress", onKeypress);
+			input.setRawMode?.(wasRaw);
+		}
+	};
+
+	const finish = (result: () => void) => {
+		if (settled) return;
+		settled = true;
+		cleanup();
+		result();
+	};
+
+	const cancel = () => {
+		finish(() => reject(new Error("Login cancelled")));
+	};
+
+	const onSigint = () => {
+		cancel();
+	};
+
+	const onKeypress = (_str: string, key: readline.Key) => {
+		if (key.name === "escape" || (key.ctrl && key.name === "c")) {
+			cancel();
+			rl.close();
+		}
+	};
+
+	if (supportsRawMode) {
+		readline.emitKeypressEvents(input, rl);
+		input.setRawMode(true);
+		input.on("keypress", onKeypress);
+	}
+
+	rl.once("SIGINT", onSigint);
+	rl.question(question, answer => {
+		finish(() => resolve(answer));
+	});
 	return promise;
 }
 

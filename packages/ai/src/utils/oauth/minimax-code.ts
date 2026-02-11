@@ -13,9 +13,13 @@
  * China: https://api.minimaxi.com/v1
  */
 
+import { validateOpenAICompatibleApiKey } from "./api-key-validation";
 import type { OAuthController } from "./types";
 
 const AUTH_URL = "https://platform.minimax.io/subscribe/coding-plan";
+const API_BASE_URL_INTL = "https://api.minimax.io/v1";
+const API_BASE_URL_CN = "https://api.minimaxi.com/v1";
+const VALIDATION_MODEL = "MiniMax-M2";
 
 /**
  * Login to MiniMax Coding Plan (international).
@@ -24,31 +28,43 @@ const AUTH_URL = "https://platform.minimax.io/subscribe/coding-plan";
  * Returns the API key directly (not OAuthCredentials - this isn't OAuth).
  */
 export async function loginMiniMaxCode(options: OAuthController): Promise<string> {
+	return loginMiniMaxCodeWithBaseUrl(options, API_BASE_URL_INTL, "MiniMax Coding Plan");
+}
+
+async function loginMiniMaxCodeWithBaseUrl(
+	options: OAuthController,
+	baseUrl: string,
+	providerName: string,
+): Promise<string> {
 	if (!options.onPrompt) {
 		throw new Error("MiniMax Coding Plan login requires onPrompt callback");
 	}
-
 	// Open browser to subscription page
 	options.onAuth?.({
 		url: AUTH_URL,
 		instructions: "Subscribe to Coding Plan and copy your API key",
 	});
-
 	// Prompt user to paste their API key
 	const apiKey = await options.onPrompt({
 		message: "Paste your MiniMax Coding Plan API key",
 		placeholder: "sk-...",
 	});
-
 	if (options.signal?.aborted) {
 		throw new Error("Login cancelled");
 	}
-
 	const trimmed = apiKey.trim();
 	if (!trimmed) {
 		throw new Error("API key is required");
 	}
 
+	options.onProgress?.("Validating API key...");
+	await validateOpenAICompatibleApiKey({
+		provider: providerName,
+		apiKey: trimmed,
+		baseUrl,
+		model: VALIDATION_MODEL,
+		signal: options.signal,
+	});
 	return trimmed;
 }
 
@@ -58,6 +74,5 @@ export async function loginMiniMaxCode(options: OAuthController): Promise<string
  * Same flow as international but uses China endpoint.
  */
 export async function loginMiniMaxCodeCn(options: OAuthController): Promise<string> {
-	// Same flow, just different provider ID for storage
-	return loginMiniMaxCode(options);
+	return loginMiniMaxCodeWithBaseUrl(options, API_BASE_URL_CN, "MiniMax Coding Plan (China)");
 }
