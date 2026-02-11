@@ -367,8 +367,11 @@ async function createClient(
 		// no prior message, default to user-initiated.
 		const messages = context.messages || [];
 		const lastMessage = messages[messages.length - 1];
-		const isAgentCall = lastMessage ? lastMessage.role !== "user" : false;
-		headers["X-Initiator"] = isAgentCall ? "agent" : "user";
+		// Only set X-Initiator if not already specified in model headers (allows subagent override)
+		if (!("X-Initiator" in headers)) {
+			const isAgentCall = lastMessage ? lastMessage.role !== "user" : false;
+			headers["X-Initiator"] = isAgentCall ? "agent" : "user";
+		}
 		headers["Openai-Intent"] = "conversation-edits";
 
 		// Copilot requires this header when sending images
