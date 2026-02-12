@@ -1,9 +1,9 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added SwiftLint linter client with JSON reporter support for Swift file linting
 - Added `--no-pty` flag to disable PTY-based interactive bash execution
 - Added `PI_NO_PTY` environment variable to disable PTY-based interactive bash execution
 - Added `bash.virtualTerminal` setting to control PTY-backed interactive execution for bash commands
@@ -12,6 +12,8 @@
 
 ### Changed
 
+- Changed `bash.virtualTerminal` default from `on` to `off` for standard non-interactive bash execution
+- Changed SwiftLint configuration to use `lint` command with JSON reporter instead of `analyze` for improved diagnostic parsing
 - Changed diff line format from space-separated (`+123 content`) to pipe-delimited (`+123|content`) for improved parsing reliability
 - Changed bash tool to use interactive PTY execution by default when UI is available, falling back to standard execution when disabled
 

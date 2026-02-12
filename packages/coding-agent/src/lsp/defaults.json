@@ -456,7 +456,7 @@
 	},
 	"swiftlint": {
 		"command": "swiftlint",
-		"args": ["analyze", "--quiet"],
+		"args": ["lint", "--quiet", "--reporter", "json"],
 		"fileTypes": [".swift"],
 		"rootMarkers": [".swiftlint.yml", ".swiftlint.yaml", "Package.swift", "*.xcodeproj"],
 		"isLinter": true

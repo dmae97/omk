@@ -10,6 +10,7 @@ import { LspLinterClient } from "./lsp-linter-client";
 
 export { BiomeClient } from "./biome-client";
 export { LspLinterClient } from "./lsp-linter-client";
+export { SwiftLintClient } from "./swiftlint-client";
 
 // Cache of linter clients by server name + cwd
 const clientCache = new Map<string, LinterClient>();

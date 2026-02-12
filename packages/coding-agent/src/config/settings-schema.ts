@@ -633,7 +633,7 @@ export const SETTINGS_SCHEMA = {
 	"bash.virtualTerminal": {
 		type: "enum",
 		values: ["on", "off"] as const,
-		default: "on",
+		default: "off",
 		ui: {
 			tab: "bash",
 			label: "Virtual terminal",

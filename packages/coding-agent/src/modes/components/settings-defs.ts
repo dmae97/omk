@@ -139,6 +139,11 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "20", label: "20 messages" },
 		{ value: "30", label: "30 messages" },
 	],
+	// Virtual terminal
+	"bash.virtualTerminal": [
+		{ value: "on", label: "On", description: "PTY-backed interactive execution" },
+		{ value: "off", label: "Off", description: "Standard non-interactive execution" },
+	],
 	// Provider options
 	"providers.webSearch": [
 		{ value: "auto", label: "Auto", description: "Priority: Exa > Perplexity > Anthropic" },

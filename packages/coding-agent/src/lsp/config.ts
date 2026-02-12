@@ -6,6 +6,7 @@ import { YAML } from "bun";
 import { globSync } from "glob";
 import { getConfigDirPaths } from "../config";
 import { BiomeClient } from "./clients/biome-client";
+import { SwiftLintClient } from "./clients/swiftlint-client";
 import DEFAULTS from "./defaults.json" with { type: "json" };
 import type { ServerConfig } from "./types";
 
@@ -135,6 +136,10 @@ function applyRuntimeDefaults(servers: Record<string, ServerConfig>): Record<str
 
 	if (updated.biome) {
 		updated.biome = { ...updated.biome, createClient: BiomeClient.create };
+	}
+
+	if (updated.swiftlint) {
+		updated.swiftlint = { ...updated.swiftlint, createClient: SwiftLintClient.create };
 	}
 
 	if (updated.omnisharp?.args) {
