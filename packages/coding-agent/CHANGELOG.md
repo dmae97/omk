@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [11.13.0] - 2026-02-12
+
 ### Breaking Changes
 
 - Removed support for `.pi` configuration directory alias; use `.omp` instead
