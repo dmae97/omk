@@ -150,8 +150,10 @@ export interface InteractiveModeContext {
 	handleMCPCommand(text: string): Promise<void>;
 	handleCompactCommand(customInstructions?: string): Promise<void>;
 	handleHandoffCommand(customInstructions?: string): Promise<void>;
+	handleMoveCommand(targetPath: string): Promise<void>;
 	executeCompaction(customInstructionsOrOptions?: string | CompactOptions, isAuto?: boolean): Promise<void>;
 	openInBrowser(urlOrPath: string): void;
+	refreshSlashCommandState(cwd?: string): Promise<void>;
 
 	// Selector handling
 	showSettingsSelector(): void;

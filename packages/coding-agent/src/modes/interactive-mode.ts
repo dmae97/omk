@@ -249,21 +249,8 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#cleanupUnsubscribe = postmortem.register("session-manager-flush", () => this.sessionManager.flush());
 		debugStartup("InteractiveMode.init:cleanupRegistered");
 
-		// Load and convert file commands to SlashCommand format (async)
-		const fileCommands = await loadSlashCommands({ cwd: process.cwd() });
+		await this.refreshSlashCommandState(process.cwd());
 		debugStartup("InteractiveMode.init:slashCommands");
-		this.fileSlashCommands = new Set(fileCommands.map(cmd => cmd.name));
-		const fileSlashCommands: SlashCommand[] = fileCommands.map(cmd => ({
-			name: cmd.name,
-			description: cmd.description,
-		}));
-
-		// Setup autocomplete with all commands
-		const autocompleteProvider = new CombinedAutocompleteProvider(
-			[...this.#pendingSlashCommands, ...fileSlashCommands],
-			process.cwd(),
-		);
-		this.editor.setAutocompleteProvider(autocompleteProvider);
 
 		// Get current model info for welcome screen
 		const modelName = this.session.model?.name ?? "Unknown";
@@ -368,6 +355,23 @@ export class InteractiveMode implements InteractiveModeContext {
 
 		// Initial top border update
 		this.updateEditorTopBorder();
+	}
+
+	/** Reload slash commands and autocomplete for the provided working directory. */
+	async refreshSlashCommandState(cwd?: string): Promise<void> {
+		const basePath = cwd ?? this.sessionManager.getCwd();
+		const fileCommands = await loadSlashCommands({ cwd: basePath });
+		this.fileSlashCommands = new Set(fileCommands.map(cmd => cmd.name));
+		const fileSlashCommands: SlashCommand[] = fileCommands.map(cmd => ({
+			name: cmd.name,
+			description: cmd.description,
+		}));
+		const autocompleteProvider = new CombinedAutocompleteProvider(
+			[...this.#pendingSlashCommands, ...fileSlashCommands],
+			basePath,
+		);
+		this.editor.setAutocompleteProvider(autocompleteProvider);
+		this.session.setSlashCommands(fileCommands);
 	}
 
 	async getUserInput(): Promise<{ text: string; images?: ImageContent[] }> {
@@ -909,6 +913,10 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	handleForkCommand(): Promise<void> {
 		return this.#commandController.handleForkCommand();
+	}
+
+	handleMoveCommand(targetPath: string): Promise<void> {
+		return this.#commandController.handleMoveCommand(targetPath);
 	}
 
 	showDebugSelector(): void {

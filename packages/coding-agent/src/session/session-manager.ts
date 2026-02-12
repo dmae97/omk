@@ -1206,6 +1206,89 @@ export class SessionManager {
 		return { oldSessionFile, newSessionFile: this.#sessionFile };
 	}
 
+	/**
+	 * Move the session to a new working directory.
+	 * Moves session files and artifacts on disk, updates all internal references,
+	 * and rewrites the session header with the new cwd.
+	 */
+	async moveTo(newCwd: string): Promise<void> {
+		const resolvedCwd = path.resolve(newCwd);
+		if (resolvedCwd === this.cwd) return;
+
+		const newSessionDir = getDefaultSessionDir(resolvedCwd, this.storage);
+
+		if (this.persist && this.#sessionFile) {
+			// Close the persist writer before moving files
+			await this.#closePersistWriter();
+			this.#persistChain = Promise.resolve();
+			this.#persistError = undefined;
+			this.#persistErrorReported = false;
+
+			const oldSessionFile = this.#sessionFile;
+			const newSessionFile = path.join(newSessionDir, path.basename(oldSessionFile));
+			const oldArtifactDir = oldSessionFile.slice(0, -6); // strip .jsonl
+			const newArtifactDir = newSessionFile.slice(0, -6);
+			let movedSessionFile = false;
+			let movedArtifactDir = false;
+
+			try {
+				await fs.promises.rename(oldSessionFile, newSessionFile);
+				movedSessionFile = true;
+
+				try {
+					const stat = await fs.promises.stat(oldArtifactDir);
+					if (stat.isDirectory()) {
+						await fs.promises.rename(oldArtifactDir, newArtifactDir);
+						movedArtifactDir = true;
+					}
+				} catch (err) {
+					if (!isEnoent(err)) throw err;
+				}
+			} catch (err) {
+				if (movedArtifactDir) {
+					try {
+						await fs.promises.rename(newArtifactDir, oldArtifactDir);
+					} catch (rollbackErr) {
+						throw new Error(
+							`Failed to move artifacts and rollback: ${rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)}`,
+						);
+					}
+				}
+				if (movedSessionFile) {
+					try {
+						await fs.promises.rename(newSessionFile, oldSessionFile);
+					} catch (rollbackErr) {
+						throw new Error(
+							`Failed to move session file and rollback: ${rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)}`,
+						);
+					}
+				}
+				throw err;
+			}
+			this.#sessionFile = newSessionFile;
+		}
+
+		// Update cwd and sessionDir (controlled mutation of readonly fields)
+		(this as unknown as { cwd: string }).cwd = resolvedCwd;
+		(this as unknown as { sessionDir: string }).sessionDir = newSessionDir;
+
+		// Update the session header in fileEntries
+		const header = this.#fileEntries.find(e => e.type === "session") as SessionHeader | undefined;
+		if (header) {
+			header.cwd = resolvedCwd;
+		}
+
+		// Rewrite the session file at its new location with updated header
+		if (this.persist && this.#sessionFile) {
+			await this.#rewriteFile();
+		}
+
+		// Update terminal breadcrumb
+		if (this.#sessionFile) {
+			writeTerminalBreadcrumb(resolvedCwd, this.#sessionFile);
+		}
+	}
+
 	/** Sync version for initial creation (no existing writer to close) */
 	#newSessionSync(options?: NewSessionOptions): string | undefined {
 		this.#persistChain = Promise.resolve();

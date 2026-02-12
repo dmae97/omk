@@ -1118,6 +1118,11 @@ export class AgentSession {
 		return this.#promptTemplates;
 	}
 
+	/** Replace file-based slash commands used for prompt expansion. */
+	setSlashCommands(slashCommands: FileSlashCommand[]): void {
+		this.#slashCommands = [...slashCommands];
+	}
+
 	/** Custom commands (TypeScript slash commands) */
 	get customCommands(): ReadonlyArray<LoadedCustomCommand> {
 		return this.#customCommands;

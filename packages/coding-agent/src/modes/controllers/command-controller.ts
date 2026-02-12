@@ -6,6 +6,7 @@ import { copyToClipboard } from "@oh-my-pi/pi-natives";
 import { Loader, Markdown, padding, Spacer, Text, visibleWidth } from "@oh-my-pi/pi-tui";
 import { Snowflake } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
+import { reset as resetCapabilities } from "../../capability";
 import { loadCustomShare } from "../../export/custom-share";
 import type { CompactOptions } from "../../extensibility/extensions/types";
 import { getGatewayStatus } from "../../ipy/gateway-coordinator";
@@ -17,6 +18,7 @@ import { getMarkdownTheme, getSymbolTheme, theme } from "../../modes/theme/theme
 import type { InteractiveModeContext } from "../../modes/types";
 import { createCompactionSummaryMessage } from "../../session/messages";
 import { outputMeta } from "../../tools/output-meta";
+import { resolveToCwd } from "../../tools/path-utils";
 import { getChangelogPath, parseChangelog } from "../../utils/changelog";
 import { openPath } from "../../utils/open";
 
@@ -433,6 +435,46 @@ export class CommandController {
 			new Text(`${theme.fg("accent", `${theme.status.success} Session forked to ${shortPath}`)}`, 1, 1),
 		);
 		this.ctx.ui.requestRender();
+	}
+
+	async handleMoveCommand(targetPath: string): Promise<void> {
+		if (this.ctx.session.isStreaming) {
+			this.ctx.showWarning("Wait for the current response to finish or abort it before moving.");
+			return;
+		}
+
+		const cwd = this.ctx.sessionManager.getCwd();
+		const resolvedPath = resolveToCwd(targetPath, cwd);
+
+		try {
+			const stat = await fs.stat(resolvedPath);
+			if (!stat.isDirectory()) {
+				this.ctx.showError(`Not a directory: ${resolvedPath}`);
+				return;
+			}
+		} catch {
+			this.ctx.showError(`Directory does not exist: ${resolvedPath}`);
+			return;
+		}
+
+		try {
+			await this.ctx.sessionManager.flush();
+			await this.ctx.sessionManager.moveTo(resolvedPath);
+			process.chdir(resolvedPath);
+			resetCapabilities();
+			await this.ctx.refreshSlashCommandState(resolvedPath);
+
+			this.ctx.statusLine.invalidate();
+			this.ctx.updateEditorTopBorder();
+
+			this.ctx.chatContainer.addChild(new Spacer(1));
+			this.ctx.chatContainer.addChild(
+				new Text(`${theme.fg("accent", `${theme.status.success} Session moved to ${resolvedPath}`)}`, 1, 1),
+			);
+			this.ctx.ui.requestRender();
+		} catch (err) {
+			this.ctx.showError(`Move failed: ${err instanceof Error ? err.message : String(err)}`);
+		}
 	}
 
 	async handleBashCommand(command: string, excludeFromContext = false): Promise<void> {

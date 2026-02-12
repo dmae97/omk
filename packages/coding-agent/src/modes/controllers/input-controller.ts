@@ -300,6 +300,17 @@ export class InputController {
 				await this.ctx.handleForkCommand();
 				return;
 			}
+			if (text === "/move" || text.startsWith("/move ")) {
+				const targetPath = text.slice(6).trim();
+				if (!targetPath) {
+					this.ctx.showError("Usage: /move <path>");
+					this.ctx.editor.setText("");
+					return;
+				}
+				this.ctx.editor.setText("");
+				await this.ctx.handleMoveCommand(targetPath);
+				return;
+			}
 			if (text === "/compact" || text.startsWith("/compact ")) {
 				const customInstructions = text.startsWith("/compact ") ? text.slice(9).trim() : undefined;
 				this.ctx.editor.setText("");

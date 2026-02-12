@@ -145,6 +145,7 @@ const BUILTIN_SLASH_COMMAND_DEFS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "resume", description: "Resume a different session" },
 	{ name: "background", description: "Detach UI and continue running in background" },
 	{ name: "debug", description: "Write debug log (TUI state and messages)" },
+	{ name: "move", description: "Move session to a different working directory", inlineHint: "<path>" },
 	{ name: "exit", description: "Exit the application" },
 	{ name: "quit", description: "Quit the application" },
 ];

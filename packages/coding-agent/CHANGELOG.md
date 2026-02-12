@@ -1,8 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `/move` slash command to move session to a different working directory
+- Added `moveTo()` method to SessionManager for relocating sessions with file migration and header updates
+- Added `refreshSlashCommandState()` method to reload slash commands and autocomplete when working directory changes
+- Added `setSlashCommands()` method to AgentSession for updating file-based slash commands
 - Added OAuth authentication support for Perplexity web search via `www.perplexity.ai/rest/sse/perplexity_ask` endpoint
 - Added automatic OAuth token refresh with 5-minute expiry buffer for Perplexity authentication
 - Added `authMode` field to search responses to indicate authentication method used (oauth or api_key)
