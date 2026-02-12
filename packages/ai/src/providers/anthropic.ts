@@ -89,6 +89,7 @@ export const stripClaudeToolPrefix = (name: string) => {
 };
 
 const claudeCodeBetaDefaults = [
+	"claude-code-20250219",
 	"oauth-2025-04-20",
 	"interleaved-thinking-2025-05-14",
 	"prompt-caching-scope-2026-01-05",
