@@ -8,9 +8,7 @@ import { APP_NAME, VERSION } from "./config";
 
 // Detect known Bun errata that cause TUI crashes (e.g. Bun.stringWidth mishandling OSC sequences).
 if (Bun.stringWidth("\x1b[0m\x1b]8;;\x07") !== 0) {
-	process.stderr.write(
-		`error: Bun runtime errata detected (v${Bun.version}). Please update Bun: bun upgrade\n`,
-	);
+	process.stderr.write(`error: Bun runtime errata detected (v${Bun.version}). Please update Bun: bun upgrade\n`);
 	process.exit(1);
 }
 
