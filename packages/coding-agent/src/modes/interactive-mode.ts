@@ -20,6 +20,7 @@ import { APP_NAME, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
 import { KeybindingsManager } from "../config/keybindings";
 import { renderPromptTemplate } from "../config/prompt-templates";
+import type { SettingPath, SettingValue } from "../config/settings";
 import { type Settings, settings } from "../config/settings";
 import type { ExtensionUIContext, ExtensionUIDialogOptions } from "../extensibility/extensions";
 import type { CompactOptions } from "../extensibility/extensions/types";
@@ -30,6 +31,7 @@ import type { AgentSession, AgentSessionEvent } from "../session/agent-session";
 import { HistoryStorage } from "../session/history-storage";
 import type { SessionContext, SessionManager } from "../session/session-manager";
 import { getRecentSessions } from "../session/session-manager";
+import { checkDependencies, ensureSTTDependencies, formatDependencyStatus, STTController, type SttState } from "../stt";
 import type { ExitPlanModeDetails } from "../tools";
 import { setTerminalTitle } from "../utils/title-generator";
 import type { AssistantMessageComponent } from "./components/assistant-message";
@@ -152,6 +154,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	readonly #inputController: InputController;
 	readonly #selectorController: SelectorController;
 	readonly #uiHelpers: UiHelpers;
+	#sttController: STTController | undefined;
 
 	constructor(
 		session: AgentSession,
@@ -709,6 +712,10 @@ export class InteractiveMode implements InteractiveModeContext {
 			this.loadingAnimation.stop();
 			this.loadingAnimation = undefined;
 		}
+		if (this.#sttController) {
+			this.#sttController.dispose();
+			this.#sttController = undefined;
+		}
 		this.statusLine.dispose();
 		if (this.unsubscribe) {
 			this.unsubscribe();
@@ -921,6 +928,71 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	handleMemoryCommand(text: string): Promise<void> {
 		return this.#commandController.handleMemoryCommand(text);
+	}
+
+	async handleSTTToggle(): Promise<void> {
+		if (!settings.get("stt.enabled")) {
+			this.showWarning("Speech-to-text is disabled. Use /stt on to enable.");
+			return;
+		}
+		if (!this.#sttController) {
+			this.#sttController = new STTController();
+		}
+		await this.#sttController.toggle(this.editor, {
+			showWarning: (msg: string) => this.showWarning(msg),
+			showStatus: (msg: string) => this.showStatus(msg),
+			onStateChange: (state: SttState) => {
+				this.statusLine.setSttState(state);
+				this.updateEditorTopBorder();
+				this.ui.requestRender();
+			},
+		});
+	}
+
+	async handleSTTCommand(text: string): Promise<void> {
+		const args = text.slice(4).trim().toLowerCase();
+		if (args === "on") {
+			settings.set("stt.enabled" as SettingPath, true as SettingValue<SettingPath>);
+			this.showStatus("Speech-to-text enabled. Press Alt+H to start recording.");
+			return;
+		}
+		if (args === "off") {
+			settings.set("stt.enabled" as SettingPath, false as SettingValue<SettingPath>);
+			if (this.#sttController) {
+				this.#sttController.dispose();
+				this.#sttController = undefined;
+			}
+			this.statusLine.setSttState("idle");
+			this.updateEditorTopBorder();
+			this.ui.requestRender();
+			this.showStatus("Speech-to-text disabled.");
+			return;
+		}
+		if (args === "setup") {
+			this.showStatus("Setting up STT dependencies...");
+			try {
+				await ensureSTTDependencies({
+					modelName: settings.get("stt.modelName"),
+					onProgress: p => this.showStatus(p.stage + (p.percent != null ? ` (${p.percent}%)` : "")),
+				});
+				this.showStatus("STT setup complete. All dependencies are ready.");
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : "Setup failed";
+				this.showWarning(msg);
+			}
+			// Also show current status
+			const status = await checkDependencies();
+			this.showStatus(formatDependencyStatus(status));
+			return;
+		}
+		if (args === "status") {
+			const enabled = settings.get("stt.enabled");
+			const state = this.#sttController?.state ?? "idle";
+			this.showStatus(`STT: ${enabled ? "enabled" : "disabled"}, state: ${state}`);
+			return;
+		}
+		// No subcommand or unknown — show usage
+		this.showStatus("Usage: /stt [on|off|status|setup]");
 	}
 
 	showDebugSelector(): void {

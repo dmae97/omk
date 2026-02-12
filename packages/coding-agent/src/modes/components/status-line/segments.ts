@@ -331,6 +331,19 @@ const cacheWriteSegment: StatusLineSegment = {
 	},
 };
 
+const sttSegment: StatusLineSegment = {
+	id: "stt",
+	render(ctx) {
+		if (!ctx.sttState || ctx.sttState === "idle") {
+			return { content: "", visible: false };
+		}
+		if (ctx.sttState === "recording") {
+			return { content: theme.fg("error", withIcon("", "REC")), visible: true };
+		}
+		return { content: theme.fg("warning", withIcon("", "STT...")), visible: true };
+	},
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Segment Registry
 // ═══════════════════════════════════════════════════════════════════════════
@@ -354,6 +367,7 @@ export const SEGMENTS: Record<StatusLineSegmentId, StatusLineSegment> = {
 	hostname: hostnameSegment,
 	cache_read: cacheReadSegment,
 	cache_write: cacheWriteSegment,
+	stt: sttSegment,
 };
 
 export function renderSegment(id: StatusLineSegmentId, ctx: SegmentContext): RenderedSegment {

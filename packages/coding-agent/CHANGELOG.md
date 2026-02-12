@@ -15,6 +15,20 @@
 - Fixed `session.abort()` not clearing `promptInFlight` flag due to microtask ordering, which blocked subsequent prompts
 
 ### Added
+
+- Added speech-to-text (STT) feature with `Alt+H` keybinding and `/stt` slash command
+- Added cross-platform audio recording: SoX, FFmpeg, arecord (Linux), PowerShell mciSendString (Windows fallback)
+- Added recording tool fallback chain — automatically tries each available tool in order
+- Added Python openai-whisper integration for transcription with automatic `pip install`
+- Added custom WAV-to-numpy pipeline in `transcribe.py` bypassing ffmpeg dependency
+- Added STT settings: `stt.enabled`, `stt.language`, `stt.modelName`
+- Added STT status line segment showing recording/transcribing state
+- Added `/stt` command with `on`, `off`, `status`, `setup` subcommands
+- Added auto-download of recording tools (best-effort FFmpeg via winget on Windows)
+
+
+
+### Added
 - Added interactive debug log viewer with selection, copy, and expand/collapse controls
 - Added inline filtering and count display to the debug log viewer
 - Added pid filter toggle and load-older pagination controls to the debug log viewer

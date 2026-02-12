@@ -156,6 +156,16 @@ const BUILTIN_SLASH_COMMAND_DEFS: ReadonlyArray<BuiltinSlashCommand> = [
 			{ name: "rebuild", description: "Alias for enqueue" },
 		],
 	},
+	{
+		name: "stt",
+		description: "Speech-to-text voice input",
+		subcommands: [
+			{ name: "on", description: "Enable speech-to-text" },
+			{ name: "off", description: "Disable speech-to-text" },
+			{ name: "status", description: "Show STT status and dependencies" },
+			{ name: "setup", description: "Check and setup STT dependencies" },
+		],
+	},
 	{ name: "move", description: "Move session to a different working directory", inlineHint: "<path>" },
 	{ name: "exit", description: "Exit the application" },
 	{ name: "quit", description: "Quit the application" },

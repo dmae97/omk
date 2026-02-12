@@ -114,6 +114,9 @@ export class InputController {
 		for (const key of this.ctx.keybindings.getKeys("followUp")) {
 			this.ctx.editor.setCustomKeyHandler(key, () => void this.handleFollowUp());
 		}
+		for (const key of this.ctx.keybindings.getKeys("toggleSTT")) {
+			this.ctx.editor.setCustomKeyHandler(key, () => void this.ctx.handleSTTToggle());
+		}
 
 		this.ctx.editor.onChange = (text: string) => {
 			const wasBashMode = this.ctx.isBashMode;
@@ -348,6 +351,14 @@ export class InputController {
 			if (text === "/quit" || text === "/exit") {
 				this.ctx.editor.setText("");
 				void this.ctx.shutdown();
+				return;
+			}
+
+			// Handle STT commands
+			if (text === "/stt" || text.startsWith("/stt ")) {
+				this.ctx.editor.addToHistory(text);
+				this.ctx.editor.setText("");
+				await this.ctx.handleSTTCommand(text);
 				return;
 			}
 
