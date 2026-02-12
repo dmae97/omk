@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [11.14.1] - 2026-02-12
 ### Added
 
 - Added prompt-caching-scope-2026-01-05 beta feature support

@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [11.14.1] - 2026-02-12
 ### Changed
 
 - Improved Bun binary detection to check `Bun.env.PI_COMPILED` environment variable
