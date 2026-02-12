@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added sourcekit-lsp language server support for Swift files
 
 ## [11.13.1] - 2026-02-12
 

@@ -447,4 +447,18 @@
 		"fileTypes": [".html", ".css", ".scss", ".less", ".jsx", ".tsx", ".vue", ".svelte"],
 		"rootMarkers": [".git"]
 	}
+	,
+	"sourcekit-lsp": {
+		"command": "sourcekit-lsp",
+		"args": [],
+		"fileTypes": [".swift"],
+		"rootMarkers": ["Package.swift", "*.xcodeproj", "*.xcworkspace", "project.yml", ".swiftpm"]
+	},
+	"swiftlint": {
+		"command": "swiftlint",
+		"args": ["analyze", "--quiet"],
+		"fileTypes": [".swift"],
+		"rootMarkers": [".swiftlint.yml", ".swiftlint.yaml", "Package.swift", "*.xcodeproj"],
+		"isLinter": true
+	}
 }
