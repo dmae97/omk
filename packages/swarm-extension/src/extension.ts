@@ -11,7 +11,7 @@
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import type { ExtensionAPI, ExtensionCommandContext } from "@oh-my-pi/pi-coding-agent";
+import type { AuthStorage, ExtensionAPI, ExtensionCommandContext } from "@oh-my-pi/pi-coding-agent";
 import { buildDependencyGraph, buildExecutionWaves, detectCycles } from "./swarm/dag";
 import { PipelineController } from "./swarm/pipeline";
 import { renderSwarmProgress } from "./swarm/render";
@@ -141,7 +141,7 @@ async function handleRun(yamlPath: string, ctx: ExtensionCommandContext, pi: Ext
 	updateWidget();
 
 	// 9. Resolve infrastructure for agent execution
-	let authStorage: Awaited<ReturnType<typeof pi.pi.discoverAuthStorage>> | undefined;
+	let authStorage: AuthStorage | undefined;
 	try {
 		authStorage = await pi.pi.discoverAuthStorage();
 	} catch {

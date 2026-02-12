@@ -1,8 +1,3 @@
-/**
- * YAML schema parsing, validation, and normalized types for swarm definitions.
- */
-import YAML from "yaml";
-
 // ============================================================================
 // Raw YAML shape (snake_case, optional fields)
 // ============================================================================
@@ -58,7 +53,7 @@ const VALID_MODES = new Set<string>(["pipeline", "parallel", "sequential"]);
 const VALID_SWARM_NAME = /^[a-zA-Z0-9._-]+$/;
 
 export function parseSwarmYaml(content: string): SwarmDefinition {
-	const raw = YAML.parse(content) as { swarm?: RawSwarmConfig } | null;
+	const raw = Bun.YAML.parse(content) as { swarm?: RawSwarmConfig } | null;
 	if (!raw?.swarm) {
 		throw new Error("YAML must have a top-level 'swarm' key");
 	}

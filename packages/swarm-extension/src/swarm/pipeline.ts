@@ -6,13 +6,10 @@
  * - Waves execute sequentially (wave N+1 starts after wave N completes)
  * - For pipeline mode, iterations repeat the full DAG execution
  */
-import type { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
-import type { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
-import type { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
-import type { AgentProgress, AgentSource, SingleResult } from "@oh-my-pi/pi-coding-agent/task/types";
+import type { AgentSource, AuthStorage, ModelRegistry, Settings, SingleResult } from "@oh-my-pi/pi-coding-agent";
+import { executeSwarmAgent } from "./executor";
 import type { SwarmDefinition } from "./schema";
 import type { StateTracker } from "./state";
-import { executeSwarmAgent } from "./executor";
 
 // ============================================================================
 // Types
@@ -80,9 +77,7 @@ export class PipelineController {
 				}
 
 				await this.#stateTracker.updatePipeline({ iteration });
-				await this.#stateTracker.appendOrchestratorLog(
-					`--- Iteration ${iteration + 1}/${targetCount} ---`,
-				);
+				await this.#stateTracker.appendOrchestratorLog(`--- Iteration ${iteration + 1}/${targetCount} ---`);
 
 				const emitProgress = (currentWave: number) => {
 					onProgress?.({
@@ -106,12 +101,14 @@ export class PipelineController {
 				for (const [agentName, result] of iterationResults) {
 					allResults.get(agentName)!.push(result);
 					if (result.exitCode !== 0) {
-						errors.push(`${agentName} (iteration ${iteration + 1}): ${result.error || "exit code " + result.exitCode}`);
+						errors.push(
+							`${agentName} (iteration ${iteration + 1}): ${result.error || `exit code ${result.exitCode}`}`,
+						);
 					}
 				}
 			}
 
-			const status = errors.length > 0 ? "failed" as const : "completed" as const;
+			const status = errors.length > 0 ? ("failed" as const) : ("completed" as const);
 			await this.#stateTracker.updatePipeline({ status, completedAt: Date.now() });
 			await this.#stateTracker.appendOrchestratorLog(`Pipeline ${status} (${errors.length} errors)`);
 			return { status, iterations: targetCount, agentResults: allResults, errors };
@@ -159,7 +156,7 @@ export class PipelineController {
 
 			// Execute all agents in wave in parallel, catching per-agent errors
 			const waveResults = await Promise.all(
-				wave.map(async (agentName) => {
+				wave.map(async agentName => {
 					const agent = this.#def.agents.get(agentName)!;
 					const currentIndex = agentIndex++;
 					try {

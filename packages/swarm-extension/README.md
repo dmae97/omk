@@ -9,7 +9,7 @@ Use it for anything: research pipelines, code generation, data processing, conte
 ## Setup
 
 ```bash
-cd packages/omp-extension-swarm
+cd packages/swarm-extension
 bun install
 ```
 
@@ -19,10 +19,10 @@ bun install
 
 ```bash
 # Foreground — runs until complete, no timeout:
-bun packages/omp-extension-swarm/run-pipeline.ts path/to/swarm.yaml
+omp-swarm path/to/swarm.yaml
 
 # Background — survives terminal close:
-nohup bun packages/omp-extension-swarm/run-pipeline.ts path/to/swarm.yaml \
+nohup omp-swarm path/to/swarm.yaml \
   > pipeline.log 2>&1 & disown
 ```
 
@@ -34,7 +34,7 @@ Register the extension in your config (`~/.omp/config.json` or `.omp/config.json
 
 ```json
 {
-  "extensions": ["packages/omp-extension-swarm"]
+	"extensions": ["packages/swarm-extension"]
 }
 ```
 
@@ -76,11 +76,11 @@ Every swarm is a single YAML file with a top-level `swarm` key:
 
 ```yaml
 swarm:
-  name: my-pipeline          # Identifier (state stored in .swarm_<name>/)
-  workspace: ./workspace     # Working directory (relative to YAML file location)
-  mode: pipeline             # pipeline | parallel | sequential
-  target_count: 10           # Iterations (pipeline mode only, default: 1)
-  model: claude-opus-4-6     # Model for all agents (optional)
+  name: my-pipeline # Identifier (state stored in .swarm_<name>/)
+  workspace: ./workspace # Working directory (relative to YAML file location)
+  mode: pipeline # pipeline | parallel | sequential
+  target_count: 10 # Iterations (pipeline mode only, default: 1)
+  model: claude-opus-4-6 # Model for all agents (optional)
 
   agents:
     first_agent:
@@ -97,23 +97,23 @@ swarm:
 
 ### Top-Level Fields
 
-| Field | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `name` | yes | — | Pipeline identifier. State directory is `.swarm_<name>/` |
-| `workspace` | yes | — | Shared working directory. Relative paths resolve from YAML file location |
-| `mode` | no | `sequential` | Execution mode (see below) |
-| `target_count` | no | `1` | How many times to repeat the full pipeline. Only meaningful in `pipeline` mode |
-| `model` | no | session default | Model ID for all agents. Any omp-configured model works |
+| Field          | Required | Default         | Description                                                                    |
+| -------------- | -------- | --------------- | ------------------------------------------------------------------------------ |
+| `name`         | yes      | —               | Pipeline identifier. State directory is `.swarm_<name>/`                       |
+| `workspace`    | yes      | —               | Shared working directory. Relative paths resolve from YAML file location       |
+| `mode`         | no       | `sequential`    | Execution mode (see below)                                                     |
+| `target_count` | no       | `1`             | How many times to repeat the full pipeline. Only meaningful in `pipeline` mode |
+| `model`        | no       | session default | Model ID for all agents. Any omp-configured model works                        |
 
 ### Agent Fields
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `role` | yes | Short role identifier — becomes the agent's system prompt |
-| `task` | yes | Complete instructions sent as user prompt. Use YAML `\|` for multi-line |
-| `extra_context` | no | Additional text appended to system prompt |
-| `reports_to` | no | List of agent names that depend on this agent |
-| `waits_for` | no | List of agent names this agent depends on |
+| Field           | Required | Description                                                             |
+| --------------- | -------- | ----------------------------------------------------------------------- |
+| `role`          | yes      | Short role identifier — becomes the agent's system prompt               |
+| `task`          | yes      | Complete instructions sent as user prompt. Use YAML `\|` for multi-line |
+| `extra_context` | no       | Additional text appended to system prompt                               |
+| `reports_to`    | no       | List of agent names that depend on this agent                           |
+| `waits_for`     | no       | List of agent names this agent depends on                               |
 
 ### Execution Modes
 
@@ -154,7 +154,7 @@ swarm:
       role: researcher
       task: |
         Find ONE new source on the topic defined in workspace/topic.md.
-        
+
         1. Read processed.txt to see what's already been found
         2. Use web_search to find a new, high-quality source
         3. Append the URL to processed.txt
@@ -398,6 +398,7 @@ The orchestrator starts and stops agents in the right order. It does **not** pas
 Design your own protocol. Common patterns:
 
 **Signal files** — lightweight status flags an agent writes when done:
+
 ```
 signals/finder_out.txt    -> "FOUND:https://example.com"
 signals/analyzer_out.txt  -> "DONE:42"
@@ -405,6 +406,7 @@ signals/reviewer_out.txt  -> "APPROVED" or "REJECTED:reason"
 ```
 
 **Structured output** — detailed results other agents read:
+
 ```
 analyzed/item_1.md        -> Full analysis document
 results/report.json       -> Machine-readable data
@@ -412,6 +414,7 @@ output/final.docx         -> Accumulated deliverable
 ```
 
 **Tracking files** — prevent duplicate work across pipeline iterations:
+
 ```
 processed.txt             -> Items already handled (one per line)
 tracking/count.txt        -> Current item counter
@@ -445,9 +448,9 @@ Or omit `model` to use your session's default. Check `packages/ai/src/models.jso
 ## Architecture
 
 ```
-extension.ts          TUI entry point (registers /swarm command)
-run-pipeline.ts       Standalone runner (no TUI, no timeout)
-swarm/
+src/extension.ts      TUI entry point (registers /swarm command)
+src/cli.ts   Standalone runner (no TUI, no timeout)
+src/swarm/
   schema.ts           YAML parsing + validation
   dag.ts              Dependency graph, cycle detection, topological sort
   executor.ts         Spawns agents via oh-my-pi's runSubprocess

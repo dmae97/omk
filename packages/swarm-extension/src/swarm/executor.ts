@@ -5,11 +5,16 @@
  * Each agent runs in the swarm workspace with its task instructions as the user prompt.
  */
 import * as path from "node:path";
-import type { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
-import type { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
-import type { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
-import { runSubprocess } from "@oh-my-pi/pi-coding-agent/task/executor";
-import type { AgentDefinition, AgentProgress, AgentSource, SingleResult } from "@oh-my-pi/pi-coding-agent/task/types";
+import type {
+	AgentDefinition,
+	AgentProgress,
+	AgentSource,
+	AuthStorage,
+	ModelRegistry,
+	Settings,
+	SingleResult,
+} from "@oh-my-pi/pi-coding-agent";
+import { runSubprocess } from "@oh-my-pi/pi-coding-agent";
 import type { SwarmAgent } from "./schema";
 import type { StateTracker } from "./state";
 
@@ -40,7 +45,18 @@ export async function executeSwarmAgent(
 	index: number,
 	options: SwarmExecutorOptions,
 ): Promise<SingleResult> {
-	const { workspace, swarmName, iteration, modelOverride, signal, onProgress, authStorage, modelRegistry, settings, stateTracker } = options;
+	const {
+		workspace,
+		swarmName,
+		iteration,
+		modelOverride,
+		signal,
+		onProgress,
+		authStorage,
+		modelRegistry,
+		settings,
+		stateTracker,
+	} = options;
 
 	const agentId = `swarm-${swarmName}-${agent.name}-${iteration}`;
 
@@ -67,7 +83,7 @@ export async function executeSwarmAgent(
 			id: agentId,
 			modelOverride,
 			signal,
-			onProgress: (progress) => onProgress?.(agent.name, progress),
+			onProgress: progress => onProgress?.(agent.name, progress),
 			authStorage,
 			modelRegistry,
 			settings,
@@ -75,7 +91,7 @@ export async function executeSwarmAgent(
 			artifactsDir: path.join(stateTracker.swarmDir, "context"),
 		});
 
-		const status = result.exitCode === 0 ? "completed" as const : "failed" as const;
+		const status = result.exitCode === 0 ? ("completed" as const) : ("failed" as const);
 		await stateTracker.updateAgent(agent.name, {
 			status,
 			completedAt: Date.now(),

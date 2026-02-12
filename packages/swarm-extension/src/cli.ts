@@ -1,7 +1,8 @@
+#!/usr/bin/env bun
 /**
  * Direct pipeline runner — executes a swarm pipeline outside of the TUI.
  *
- * Usage: bun run-pipeline.ts <path-to-yaml>
+ * Usage: bun cli.ts <path-to-yaml>
  */
 
 import * as fs from "node:fs/promises";
@@ -17,7 +18,7 @@ import { StateTracker } from "./swarm/state";
 
 const yamlPath = process.argv[2];
 if (!yamlPath) {
-	console.error("Usage: bun run-pipeline.ts <path-to-yaml>");
+	console.error("Usage: omp-swarm <path-to-yaml>");
 	process.exit(1);
 }
 
