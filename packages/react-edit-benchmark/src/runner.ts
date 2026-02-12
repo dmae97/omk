@@ -16,10 +16,9 @@ import benchmarkTaskPrompt from "./prompts/benchmark-task.md" with { type: "text
 import { type EditTask, extractTaskFiles } from "./tasks";
 import { verifyExpectedFileSubset, verifyExpectedFiles } from "./verify";
 
-const CLI_PATH = import.meta.resolve("@oh-my-pi/pi-coding-agent/cli");
-
 const TMP_DIR = await TempDir.create("@reach-benchmark-");
 const TMP = TMP_DIR.path();
+const CLI_PATH = Bun.fileURLToPath(import.meta.resolve("@oh-my-pi/pi-coding-agent/cli"));
 
 export interface BenchmarkConfig {
 	provider: string;

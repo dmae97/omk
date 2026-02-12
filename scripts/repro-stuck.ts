@@ -15,7 +15,7 @@
 import { Subprocess } from "bun";
 import * as path from "node:path";
 
-const CLI_PATH = path.resolve(import.meta.dir, "../packages/coding-agent/src/cli.ts");
+const CLI_PATH = Bun.fileURLToPath(import.meta.resolve("@oh-my-pi/pi-coding-agent/cli"));
 const TRACE_LOADER = path.resolve(import.meta.dir, "trace-loader.ts");
 const POLL_INTERVAL = 200;
 
