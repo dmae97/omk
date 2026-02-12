@@ -3,10 +3,10 @@ import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
-import { isEnoent } from "@oh-my-pi/pi-utils";
+import { $env, isEnoent } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
-import { type BashExecutorOptions, executeBash } from "../exec/bash-executor";
+import { type BashResult, executeBash } from "../exec/bash-executor";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { truncateToVisualLines } from "../modes/components/visual-truncate";
 import type { Theme } from "../modes/theme/theme";
@@ -14,6 +14,7 @@ import bashDescription from "../prompts/tools/bash.md" with { type: "text" };
 import { renderStatusLine } from "../tui";
 import { CachedOutputBlock } from "../tui/output-block";
 import type { ToolSession } from ".";
+import { type BashInteractiveResult, runInteractiveBashPty } from "./bash-interactive";
 import { checkBashInterception } from "./bash-interceptor";
 import { applyHeadTail, normalizeBashCommand } from "./bash-normalize";
 import type { OutputMeta } from "./output-meta";
@@ -42,6 +43,13 @@ export interface BashToolDetails {
 
 export interface BashToolOptions {}
 
+function normalizeResultOutput(result: BashResult | BashInteractiveResult): string {
+	return result.output || "";
+}
+
+function isInteractiveResult(result: BashResult | BashInteractiveResult): result is BashInteractiveResult {
+	return "timedOut" in result;
+}
 /**
  * Bash tool implementation.
  *
@@ -108,35 +116,49 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 		const extraEnv = artifactsDir ? { ARTIFACTS: artifactsDir } : undefined;
 		const { artifactPath, artifactId } = await allocateOutputArtifact(this.session, "bash");
 
-		const executorOptions: BashExecutorOptions = {
-			cwd: commandCwd,
-			timeout: timeoutMs,
-			signal,
-			env: extraEnv,
-			artifactPath,
-			artifactId,
-			onChunk: chunk => {
-				tailBuffer.append(chunk);
-				if (onUpdate) {
-					onUpdate({
-						content: [{ type: "text", text: tailBuffer.text() }],
-						details: {},
-					});
-				}
-			},
-		};
-
-		// Handle errors
-		const result = await executeBash(command, executorOptions);
+		const usePty =
+			this.session.settings.get("bash.virtualTerminal") === "on" &&
+			$env.PI_NO_PTY !== "1" &&
+			ctx?.hasUI === true &&
+			ctx.ui !== undefined;
+		const result: BashResult | BashInteractiveResult = usePty
+			? await runInteractiveBashPty(ctx.ui!, {
+					command,
+					cwd: commandCwd,
+					timeoutMs,
+					signal,
+					env: extraEnv,
+					artifactPath,
+					artifactId,
+				})
+			: await executeBash(command, {
+					cwd: commandCwd,
+					timeout: timeoutMs,
+					signal,
+					env: extraEnv,
+					artifactPath,
+					artifactId,
+					onChunk: chunk => {
+						tailBuffer.append(chunk);
+						if (onUpdate) {
+							onUpdate({
+								content: [{ type: "text", text: tailBuffer.text() }],
+								details: {},
+							});
+						}
+					},
+				});
 		if (result.cancelled) {
 			if (signal?.aborted) {
-				throw new ToolAbortError(result.output || "Command aborted");
+				throw new ToolAbortError(normalizeResultOutput(result) || "Command aborted");
 			}
-			throw new ToolError(result.output || "Command aborted");
+			throw new ToolError(normalizeResultOutput(result) || "Command aborted");
 		}
-
+		if (isInteractiveResult(result) && result.timedOut) {
+			throw new ToolError(normalizeResultOutput(result) || `Command timed out after ${timeoutSec} seconds`);
+		}
 		// Apply head/tail filtering if specified
-		let outputText = result.output || "";
+		let outputText = normalizeResultOutput(result);
 		const headTailResult = applyHeadTail(outputText, headLines, tailLines);
 		if (headTailResult.applied) {
 			outputText = headTailResult.text;
@@ -144,10 +166,11 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 		if (!outputText) {
 			outputText = "(no output)";
 		}
-
 		const details: BashToolDetails = {};
 		const resultBuilder = toolResult(details).text(outputText).truncationFromSummary(result, { direction: "tail" });
-
+		if (result.exitCode === undefined) {
+			throw new ToolError(`${outputText}\n\nCommand failed: missing exit status`);
+		}
 		if (result.exitCode !== 0 && result.exitCode !== undefined) {
 			throw new ToolError(`${outputText}\n\nCommand exited with code ${result.exitCode}`);
 		}

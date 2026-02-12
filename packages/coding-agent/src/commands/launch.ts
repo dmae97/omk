@@ -77,6 +77,9 @@ export default class Index extends Command {
 		"no-lsp": Flags.boolean({
 			description: "Disable LSP tools, formatting, and diagnostics",
 		}),
+		"no-pty": Flags.boolean({
+			description: "Disable PTY-based interactive bash execution",
+		}),
 		tools: Flags.string({
 			description: "Comma-separated list of tools to enable (default: all)",
 		}),

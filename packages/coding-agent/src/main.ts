@@ -526,6 +526,10 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	await Settings.init({ cwd });
 	debugStartup("main:Settings.init");
 	time("Settings.init");
+	if (parsedArgs.noPty) {
+		settings.override("bash.virtualTerminal", "off");
+		Bun.env.PI_NO_PTY = "1";
+	}
 	const pipedInput = await readPipedInput();
 	let { initialMessage, initialImages } = await prepareInitialMessage(parsedArgs, settings.get("images.autoResize"));
 	if (pipedInput) {

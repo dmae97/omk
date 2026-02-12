@@ -1,9 +1,19 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `--no-pty` flag to disable PTY-based interactive bash execution
+- Added `PI_NO_PTY` environment variable to disable PTY-based interactive bash execution
+- Added `bash.virtualTerminal` setting to control PTY-backed interactive execution for bash commands
+- Added interactive PTY-based bash execution with real-time terminal rendering and input forwarding
 - Added sourcekit-lsp language server support for Swift files
+
+### Changed
+
+- Changed diff line format from space-separated (`+123 content`) to pipe-delimited (`+123|content`) for improved parsing reliability
+- Changed bash tool to use interactive PTY execution by default when UI is available, falling back to standard execution when disabled
 
 ## [11.13.1] - 2026-02-12
 

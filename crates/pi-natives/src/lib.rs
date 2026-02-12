@@ -30,6 +30,7 @@ pub mod image;
 pub mod keys;
 pub mod prof;
 pub mod ps;
+pub mod pty;
 pub mod shell;
 pub mod system_info;
 pub mod task;

@@ -18,6 +18,19 @@ import { EditMatchError } from "./types";
 // Diff String Generation
 // ═══════════════════════════════════════════════════════════════════════════
 
+function countContentLines(content: string): number {
+	const lines = content.split("\n");
+	if (lines.length > 1 && lines[lines.length - 1] === "") {
+		lines.pop();
+	}
+	return Math.max(1, lines.length);
+}
+
+function formatNumberedDiffLine(prefix: "+" | "-" | " ", lineNum: number, width: number, content: string): string {
+	const padded = String(lineNum).padStart(width, " ");
+	return `${prefix}${padded}|${content}`;
+}
+
 /**
  * Generate a unified diff string with line numbers and context.
  * Returns both the diff string and the first changed line number (in the new file).
@@ -26,15 +39,7 @@ export function generateDiffString(oldContent: string, newContent: string, conte
 	const parts = Diff.diffLines(oldContent, newContent);
 	const output: string[] = [];
 
-	const countLines = (content: string): number => {
-		const lines = content.split("\n");
-		if (lines.length > 1 && lines[lines.length - 1] === "") {
-			lines.pop();
-		}
-		return Math.max(1, lines.length);
-	};
-
-	const maxLineNum = Math.max(countLines(oldContent), countLines(newContent));
+	const maxLineNum = Math.max(countContentLines(oldContent), countContentLines(newContent));
 	const lineNumWidth = String(maxLineNum).length;
 
 	let oldLineNum = 1;
@@ -58,12 +63,10 @@ export function generateDiffString(oldContent: string, newContent: string, conte
 			// Show the change
 			for (const line of raw) {
 				if (part.added) {
-					const lineNum = String(newLineNum).padStart(lineNumWidth, " ");
-					output.push(`+${lineNum} ${line}`);
+					output.push(formatNumberedDiffLine("+", newLineNum, lineNumWidth, line));
 					newLineNum++;
 				} else {
-					const lineNum = String(oldLineNum).padStart(lineNumWidth, " ");
-					output.push(`-${lineNum} ${line}`);
+					output.push(formatNumberedDiffLine("-", oldLineNum, lineNumWidth, line));
 					oldLineNum++;
 				}
 			}
@@ -91,21 +94,20 @@ export function generateDiffString(oldContent: string, newContent: string, conte
 
 				// Add ellipsis if we skipped lines at start
 				if (skipStart > 0) {
-					output.push(` ${"".padStart(lineNumWidth, " ")} ...`);
+					output.push(formatNumberedDiffLine(" ", oldLineNum, lineNumWidth, "..."));
 					oldLineNum += skipStart;
 					newLineNum += skipStart;
 				}
 
 				for (const line of linesToShow) {
-					const lineNum = String(oldLineNum).padStart(lineNumWidth, " ");
-					output.push(` ${lineNum} ${line}`);
+					output.push(formatNumberedDiffLine(" ", oldLineNum, lineNumWidth, line));
 					oldLineNum++;
 					newLineNum++;
 				}
 
 				// Add ellipsis if we skipped lines at end
 				if (skipEnd > 0) {
-					output.push(` ${"".padStart(lineNumWidth, " ")} ...`);
+					output.push(formatNumberedDiffLine(" ", oldLineNum, lineNumWidth, "..."));
 					oldLineNum += skipEnd;
 					newLineNum += skipEnd;
 				}
@@ -150,18 +152,32 @@ export function generateUnifiedDiffString(oldContent: string, newContent: string
 	const patch = Diff.structuredPatch("", "", oldContent, newContent, "", "", { context: contextLines });
 	const output: string[] = [];
 	let firstChangedLine: number | undefined;
-
+	const maxLineNum = Math.max(countContentLines(oldContent), countContentLines(newContent));
+	const lineNumWidth = String(maxLineNum).length;
 	for (const hunk of patch.hunks) {
 		output.push(`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`);
+		let oldLine = hunk.oldStart;
 		let newLine = hunk.newStart;
 		for (const line of hunk.lines) {
-			output.push(line);
-			if (firstChangedLine === undefined && (line.startsWith("+") || line.startsWith("-"))) {
-				firstChangedLine = newLine;
+			if (line.startsWith("-")) {
+				if (firstChangedLine === undefined) firstChangedLine = newLine;
+				output.push(formatNumberedDiffLine("-", oldLine, lineNumWidth, line.slice(1)));
+				oldLine++;
+				continue;
 			}
-			if (line.startsWith("+") || line.startsWith(" ")) {
+			if (line.startsWith("+")) {
+				if (firstChangedLine === undefined) firstChangedLine = newLine;
+				output.push(formatNumberedDiffLine("+", newLine, lineNumWidth, line.slice(1)));
 				newLine++;
+				continue;
 			}
+			if (line.startsWith(" ")) {
+				output.push(formatNumberedDiffLine(" ", oldLine, lineNumWidth, line.slice(1)));
+				oldLine++;
+				newLine++;
+				continue;
+			}
+			output.push(line);
 		}
 	}
 

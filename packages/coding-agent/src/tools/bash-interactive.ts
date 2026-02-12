@@ -1,0 +1,339 @@
+import type { AgentToolContext } from "@oh-my-pi/pi-agent-core";
+import { type PtyRunResult, PtySession } from "@oh-my-pi/pi-natives";
+import {
+	type Component,
+	matchesKey,
+	padding,
+	parseKey,
+	parseKittySequence,
+	truncateToWidth,
+	visibleWidth,
+} from "@oh-my-pi/pi-tui";
+import type { Terminal as XtermTerminalType } from "@xterm/headless";
+import xterm from "@xterm/headless";
+import type { Theme } from "../modes/theme/theme";
+import { OutputSink, type OutputSummary } from "../session/streaming-output";
+import { getStateIcon } from "../tui";
+import { replaceTabs, wrapBrackets } from "./render-utils";
+
+export interface BashInteractiveResult extends OutputSummary {
+	exitCode: number | undefined;
+	cancelled: boolean;
+	timedOut: boolean;
+}
+
+function normalizeCaptureChunk(chunk: string): string {
+	const noAnsi = Bun.stripANSI(chunk);
+	const normalized = noAnsi.replace(/\r\n/gu, "\n").replace(/\r/gu, "\n");
+	return normalized.replace(/[\x00-\x08\x0B-\x1F\x7F]/gu, "");
+}
+
+const XtermTerminal = xterm.Terminal;
+
+function normalizeInputForPty(data: string, applicationCursorKeysMode: boolean): string {
+	const kitty = parseKittySequence(data);
+	if (!kitty) {
+		return data;
+	}
+	if (kitty.eventType === 3) {
+		return "";
+	}
+	const keyId = parseKey(data);
+	if (!keyId) {
+		return data;
+	}
+	const normalizedKey = keyId.toLowerCase();
+	if (normalizedKey === "up") return applicationCursorKeysMode ? "\x1bOA" : "\x1b[A";
+	if (normalizedKey === "down") return applicationCursorKeysMode ? "\x1bOB" : "\x1b[B";
+	if (normalizedKey === "right") return applicationCursorKeysMode ? "\x1bOC" : "\x1b[C";
+	if (normalizedKey === "left") return applicationCursorKeysMode ? "\x1bOD" : "\x1b[D";
+	if (normalizedKey === "home") return applicationCursorKeysMode ? "\x1bOH" : "\x1b[H";
+	if (normalizedKey === "end") return applicationCursorKeysMode ? "\x1bOF" : "\x1b[F";
+	if (normalizedKey === "pageup") return "\x1b[5~";
+	if (normalizedKey === "pagedown") return "\x1b[6~";
+	if (normalizedKey === "insert") return "\x1b[2~";
+	if (normalizedKey === "delete") return "\x1b[3~";
+	if (normalizedKey === "shift+tab") return "\x1b[Z";
+	if (normalizedKey === "enter") return "\r";
+	if (normalizedKey === "tab") return "\t";
+	if (normalizedKey === "space") return " ";
+	if (normalizedKey === "backspace") return "\x7f";
+	if (normalizedKey === "escape") return "\x1b";
+	const ctrlMatch = /^ctrl\+([a-z])$/u.exec(normalizedKey);
+	if (ctrlMatch) {
+		const letter = ctrlMatch[1]!;
+		return String.fromCharCode(letter.charCodeAt(0) - 96);
+	}
+	const altMatch = /^alt\+([a-z])$/u.exec(normalizedKey);
+	if (altMatch) {
+		return `\x1b${altMatch[1]!}`;
+	}
+	// For any other Kitty sequence with a printable codepoint, emit the character directly
+	if (kitty.codepoint >= 32 && kitty.codepoint < 127) {
+		let ch = String.fromCharCode(kitty.codepoint);
+		// Apply ctrl modifier if present (modifier bit 4 = ctrl)
+		if (kitty.modifier & 4) {
+			const code = kitty.codepoint;
+			if (code >= 97 && code <= 122) {
+				ch = String.fromCharCode(code - 96);
+			}
+		}
+		// Apply alt modifier if present (modifier bit 2 = alt)
+		if (kitty.modifier & 2) {
+			ch = `\x1b${ch}`;
+		}
+		return ch;
+	}
+	return data;
+}
+class BashInteractiveOverlayComponent implements Component {
+	#terminal: XtermTerminalType;
+	#state: "running" | "complete" | "timed_out" | "killed" = "running";
+	#exitCode: number | undefined;
+	#onInput: (data: string) => void = () => {};
+	#onDismiss: () => void = () => {};
+	#onDispose: () => void = () => {};
+	#session: PtySession | null = null;
+	#lastCols = 0;
+	#lastRows = 0;
+
+	constructor(
+		private readonly command: string,
+		private readonly uiTheme: Theme,
+		private readonly getTerminalRows: () => number,
+	) {
+		this.#terminal = new XtermTerminal({
+			cols: 120,
+			rows: 40,
+			disableStdin: true,
+			allowProposedApi: true,
+			scrollback: 10_000,
+		});
+	}
+
+	setHandlers(onInput: (data: string) => void, onDismiss: () => void, onDispose: () => void): void {
+		this.#onInput = onInput;
+		this.#onDismiss = onDismiss;
+		this.#onDispose = onDispose;
+	}
+
+	appendOutput(chunk: string): void {
+		this.#terminal.write(chunk);
+	}
+
+	setSession(session: PtySession): void {
+		this.#session = session;
+	}
+
+	setComplete(result: { exitCode: number | undefined; cancelled: boolean; timedOut: boolean }): void {
+		this.#exitCode = result.exitCode;
+		if (result.timedOut) {
+			this.#state = "timed_out";
+			return;
+		}
+		if (result.cancelled) {
+			this.#state = "killed";
+			return;
+		}
+		this.#state = "complete";
+	}
+
+	handleInput(data: string): void {
+		if (this.#state === "running" && (matchesKey(data, "escape") || matchesKey(data, "esc"))) {
+			this.#onDismiss();
+			return;
+		}
+		if (this.#state !== "running") {
+			return;
+		}
+		const normalizedInput = normalizeInputForPty(data, this.#terminal.modes.applicationCursorKeysMode);
+		if (!normalizedInput) {
+			return;
+		}
+		this.#onInput(normalizedInput);
+	}
+	#stateText(): string {
+		if (this.#state === "running") return this.uiTheme.fg("warning", "running");
+		if (this.#state === "timed_out") return this.uiTheme.fg("warning", "timed out");
+		if (this.#state === "killed") return this.uiTheme.fg("warning", "killed");
+		if (this.#exitCode === 0) return this.uiTheme.fg("success", "exit 0");
+		if (this.#exitCode === undefined) return this.uiTheme.fg("warning", "exited");
+		return this.uiTheme.fg("error", `exit ${this.#exitCode}`);
+	}
+
+	#readViewport(innerWidth: number, maxContentRows: number): string[] {
+		this.#terminal.resize(innerWidth, maxContentRows);
+		const buffer = this.#terminal.buffer.active;
+		const viewportY = buffer.viewportY;
+		const visibleLines: string[] = [];
+		for (let i = 0; i < maxContentRows; i++) {
+			const line = buffer.getLine(viewportY + i)?.translateToString(true) ?? "";
+			visibleLines.push(truncateToWidth(replaceTabs(line), innerWidth));
+		}
+		return visibleLines;
+	}
+	render(width: number): string[] {
+		const safeWidth = Math.max(20, width);
+		const innerWidth = Math.max(1, safeWidth - 2);
+		const maxOverlayRows = Math.max(5, Math.floor(this.getTerminalRows() * 0.8));
+		const chromeRows = 4;
+		const maxContentRows = Math.max(1, maxOverlayRows - chromeRows);
+		// Propagate terminal resize to PTY session
+		const currentCols = innerWidth;
+		const currentRows = maxContentRows;
+		if (this.#session && (currentCols !== this.#lastCols || currentRows !== this.#lastRows)) {
+			this.#lastCols = currentCols;
+			this.#lastRows = currentRows;
+			try {
+				this.#session.resize(currentCols, currentRows);
+			} catch {
+				// Session may have ended
+			}
+		}
+		const statusIcon =
+			this.#state === "running"
+				? getStateIcon("running", this.uiTheme)
+				: this.#state === "complete" && this.#exitCode === 0
+					? getStateIcon("success", this.uiTheme)
+					: getStateIcon("warning", this.uiTheme);
+		const title = this.uiTheme.fg("accent", "InteractiveTerm");
+		const statusBadge = this.uiTheme.fg("dim", wrapBrackets(this.#stateText(), this.uiTheme));
+		const prefix = `${statusIcon} ${title} `;
+		const suffix = ` ${statusBadge}`;
+		const available = Math.max(1, innerWidth - visibleWidth(prefix) - visibleWidth(suffix));
+		const cmd = truncateToWidth(this.uiTheme.fg("muted", replaceTabs(this.command)), available);
+		const header = truncateToWidth(`${prefix}${cmd}${suffix}`, innerWidth);
+		const footer =
+			this.#state === "running"
+				? truncateToWidth(
+						`${this.uiTheme.fg("warning", "esc")} ${this.uiTheme.fg("dim", "force-kill")} ${this.uiTheme.fg("dim", "· input forwarded to PTY")}`,
+						innerWidth,
+					)
+				: truncateToWidth(this.uiTheme.fg("dim", "session finished"), innerWidth);
+		const visibleLines = this.#readViewport(innerWidth, maxContentRows);
+		const content = visibleLines.length > 0 ? visibleLines : [padding(innerWidth)];
+		const borderHorizontal = this.uiTheme.fg("border", this.uiTheme.boxSharp.horizontal.repeat(innerWidth));
+		const borderVertical = this.uiTheme.fg("border", this.uiTheme.boxSharp.vertical);
+		const boxLine = (line: string) =>
+			`${borderVertical}${line}${padding(Math.max(0, innerWidth - visibleWidth(line)))}${borderVertical}`;
+		return [
+			`${this.uiTheme.fg("border", this.uiTheme.boxSharp.topLeft)}${borderHorizontal}${this.uiTheme.fg("border", this.uiTheme.boxSharp.topRight)}`,
+			boxLine(header),
+			...content.map(boxLine),
+			boxLine(footer),
+			`${this.uiTheme.fg("border", this.uiTheme.boxSharp.bottomLeft)}${borderHorizontal}${this.uiTheme.fg("border", this.uiTheme.boxSharp.bottomRight)}`,
+		];
+	}
+
+	invalidate(): void {}
+
+	dispose(): void {
+		this.#terminal.dispose();
+		this.#onDispose();
+	}
+}
+
+export async function runInteractiveBashPty(
+	ui: NonNullable<AgentToolContext["ui"]>,
+	options: {
+		command: string;
+		cwd: string;
+		timeoutMs: number;
+		signal?: AbortSignal;
+		env?: Record<string, string>;
+		artifactPath?: string;
+		artifactId?: string;
+	},
+): Promise<BashInteractiveResult> {
+	const sink = new OutputSink({ artifactPath: options.artifactPath, artifactId: options.artifactId });
+	let pendingChunks = Promise.resolve();
+	const result = await ui.custom<BashInteractiveResult>(
+		(tui, uiTheme, _keybindings, done) => {
+			const session = new PtySession();
+			const component = new BashInteractiveOverlayComponent(options.command, uiTheme, () => tui.terminal.rows);
+			component.setSession(session);
+			let finished = false;
+			const finalize = (run: PtyRunResult) => {
+				if (finished) return;
+				finished = true;
+				component.setComplete({ exitCode: run.exitCode, cancelled: run.cancelled, timedOut: run.timedOut });
+				tui.requestRender();
+				void (async () => {
+					await pendingChunks;
+					const summary = await sink.dump();
+					done({
+						exitCode: run.exitCode,
+						cancelled: run.cancelled,
+						timedOut: run.timedOut,
+						...summary,
+					});
+				})();
+			};
+			const cols = Math.max(20, tui.terminal.columns - 2);
+			const rows = Math.max(5, tui.terminal.rows - 4);
+			component.setHandlers(
+				data => {
+					try {
+						session.write(data);
+					} catch {
+						// ignore writes after command exits
+					}
+				},
+				() => {
+					try {
+						session.kill();
+					} catch {
+						// ignore
+					}
+				},
+				() => {
+					try {
+						session.kill();
+					} catch {
+						// ignore
+					}
+				},
+			);
+			void session
+				.start(
+					{
+						command: options.command,
+						cwd: options.cwd,
+						timeoutMs: options.timeoutMs,
+						env: {
+							...options.env,
+							PAGER: "cat",
+							GIT_PAGER: "cat",
+							MANPAGER: "cat",
+							SYSTEMD_PAGER: "cat",
+							BAT_PAGER: "cat",
+							DELTA_PAGER: "cat",
+							AWS_PAGER: "",
+							HOMEBREW_PAGER: "cat",
+							LESS: "FRX",
+						},
+						signal: options.signal,
+						cols,
+						rows,
+					},
+					(err, chunk) => {
+						if (err || !chunk) return;
+						component.appendOutput(chunk);
+						const normalizedChunk = normalizeCaptureChunk(chunk);
+						pendingChunks = pendingChunks.then(() => sink.push(normalizedChunk)).catch(() => {});
+						tui.requestRender();
+					},
+				)
+				.then(finalize)
+				.catch(error => {
+					pendingChunks = pendingChunks
+						.then(() => sink.push(`PTY error: ${error instanceof Error ? error.message : String(error)}\n`))
+						.catch(() => {});
+					finalize({ exitCode: undefined, cancelled: false, timedOut: false });
+				});
+			return component;
+		},
+		{ overlay: true },
+	);
+	return result;
+}

@@ -23,6 +23,7 @@ import "./html/types";
 import "./image/types";
 import "./keys/types";
 import "./ps/types";
+import "./pty/types";
 import "./shell/types";
 import "./system-info/types";
 import "./text/types";
@@ -170,6 +171,7 @@ function validateNative(bindings: NativeBindings, source: string): void {
 	checkFn("extractSegments");
 	checkFn("matchesKittySequence");
 	checkFn("executeShell");
+	checkFn("PtySession");
 	checkFn("Shell");
 	checkFn("parseKey");
 	checkFn("matchesLegacySequence");

@@ -22,6 +22,7 @@ brush-builtins = { version = "0.1.0", path = "../brush-builtins-vendored" }
 parking_lot = "0.12.5"
 clap = { version = "4", features = ["derive"] }
 os_pipe = "1"
+portable-pty = "0.9"
 sysinfo = "0.38"
 grep-regex = "0.1"
 grep-searcher = "0.1"

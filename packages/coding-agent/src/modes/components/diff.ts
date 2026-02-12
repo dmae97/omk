@@ -36,12 +36,16 @@ function visualizeIndent(text: string): string {
 
 /**
  * Parse diff line to extract prefix, line number, and content.
- * Format: "+123 content" or "-123 content" or " 123 content" or "     ..."
+ * Supported formats: "+123|content" (canonical) and "+123 content" (legacy).
  */
 function parseDiffLine(line: string): { prefix: string; lineNum: string; content: string } | null {
-	const match = line.match(/^([+-\s])(?:(\s*\d+)\s)?(.*)$/);
-	if (!match) return null;
-	return { prefix: match[1], lineNum: match[2] ?? "", content: match[3] };
+	const canonical = line.match(/^([+-\s])(\s*\d+)\|(.*)$/);
+	if (canonical) {
+		return { prefix: canonical[1], lineNum: canonical[2], content: canonical[3] };
+	}
+	const legacy = line.match(/^([+-\s])(?:(\s*\d+)\s)?(.*)$/);
+	if (!legacy) return null;
+	return { prefix: legacy[1], lineNum: legacy[2] ?? "", content: legacy[3] };
 }
 
 /**
@@ -110,7 +114,7 @@ export function renderDiff(diffText: string, _options: RenderDiffOptions = {}): 
 		if (lineNum.trim().length === 0) {
 			return `${prefix}${content}`;
 		}
-		return `${prefix}${lineNum} ${content}`;
+		return `${prefix}${lineNum}|${content}`;
 	};
 
 	let i = 0;

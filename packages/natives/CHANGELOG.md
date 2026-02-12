@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `PtySession` class for PTY-backed interactive command execution with streaming output
+- Added `PtyStartOptions` interface to configure pseudo-terminal sessions with command, working directory, environment variables, and terminal dimensions
+- Added `PtyRunResult` interface to report command exit code, cancellation, and timeout status
+- Added `write()` method to send raw input to PTY stdin
+- Added `resize()` method to dynamically adjust PTY column and row dimensions
+- Added `kill()` method to force-terminate active commands
 
 ## [11.3.0] - 2026-02-06
 

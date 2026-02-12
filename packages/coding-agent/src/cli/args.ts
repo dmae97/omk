@@ -32,6 +32,7 @@ export interface Args {
 	tools?: string[];
 	noTools?: boolean;
 	noLsp?: boolean;
+	noPty?: boolean;
 	hooks?: string[];
 	extensions?: string[];
 	noExtensions?: boolean;
@@ -109,6 +110,8 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 			result.noTools = true;
 		} else if (arg === "--no-lsp") {
 			result.noLsp = true;
+		} else if (arg === "--no-pty") {
+			result.noPty = true;
 		} else if (arg === "--tools" && i + 1 < args.length) {
 			const toolNames = args[++i].split(",").map(s => s.trim());
 			const validTools: string[] = [];
@@ -219,6 +222,7 @@ export function getExtraHelpText(): string {
   PI_SMOL_MODEL              - Override smol/fast model (see --smol)
   PI_SLOW_MODEL              - Override slow/reasoning model (see --slow)
   PI_PLAN_MODEL              - Override planning model (see --plan)
+  PI_NO_PTY                  - Disable PTY-based interactive bash execution
 
   For complete environment variable reference, see:
   ${chalk.dim("docs/environment-variables.md")}

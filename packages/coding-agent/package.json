@@ -91,6 +91,7 @@
 		"@oh-my-pi/pi-tui": "workspace:*",
 		"@oh-my-pi/pi-utils": "workspace:*",
 		"@sinclair/typebox": "^0.34.48",
+		"@xterm/headless": "^6.0.0",
 		"ajv": "^8.17.1",
 		"chalk": "^5.6.2",
 		"diff": "^8.0.3",
