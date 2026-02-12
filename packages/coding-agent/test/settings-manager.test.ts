@@ -24,7 +24,7 @@ describe("Settings", () => {
 			fs.rmSync(testDir, { recursive: true });
 		}
 		fs.mkdirSync(agentDir, { recursive: true });
-		fs.mkdirSync(path.join(projectDir, ".pi"), { recursive: true });
+		fs.mkdirSync(path.join(projectDir, ".omp"), { recursive: true });
 	});
 
 	const getConfigPath = () => path.join(agentDir, "config.yml");

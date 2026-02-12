@@ -1,11 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import {
-	discoverPythonModules,
-	loadPythonModules,
-	type PythonModuleExecutor,
-} from "@oh-my-pi/pi-coding-agent/ipy/modules";
+import { loadPythonModules, type PythonModuleExecutor } from "@oh-my-pi/pi-coding-agent/ipy/modules";
 import { TempDir } from "@oh-my-pi/pi-utils";
 
 const fixturesDir = path.resolve(import.meta.dir, "../../test/fixtures/python-modules");
@@ -26,32 +22,6 @@ describe("python modules", () => {
 			tempRoot.removeSync();
 		}
 		tempRoot = null;
-	});
-
-	it("discovers modules with project override and sorted order", async () => {
-		tempRoot = TempDir.createSync("@omp-python-modules-");
-		const homeDir = path.join(tempRoot.path(), "home");
-		const cwd = path.join(tempRoot.path(), "project");
-
-		await writeModule(path.join(homeDir, ".omp", "agent", "modules"), "alpha.py", "user-omp");
-		await writeModule(path.join(homeDir, ".pi", "agent", "modules"), "beta.py", "user-pi");
-		await writeModule(path.join(homeDir, ".pi", "agent", "modules"), "delta.py", "user-pi");
-
-		await writeModule(path.join(cwd, ".omp", "modules"), "alpha.py", "project-omp");
-		await writeModule(path.join(cwd, ".omp", "modules"), "beta.py", "project-omp");
-		await writeModule(path.join(cwd, ".pi", "modules"), "gamma.py", "project-pi");
-
-		const modules = await discoverPythonModules({ cwd, homeDir });
-		const names = modules.map(module => path.basename(module.path));
-		expect(names).toEqual(["alpha.py", "beta.py", "delta.py", "gamma.py"]);
-		expect(modules.map(module => ({ name: path.basename(module.path), source: module.source }))).toEqual([
-			{ name: "alpha.py", source: "project" },
-			{ name: "beta.py", source: "project" },
-			{ name: "delta.py", source: "user" },
-			{ name: "gamma.py", source: "project" },
-		]);
-		expect(modules.find(module => module.path.endsWith("alpha.py"))?.content).toContain("project-omp");
-		expect(modules.find(module => module.path.endsWith("delta.py"))?.content).toContain("user-pi");
 	});
 
 	it("loads modules in sorted order with silent execution", async () => {

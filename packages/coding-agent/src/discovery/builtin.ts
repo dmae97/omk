@@ -1,8 +1,7 @@
 /**
- * Builtin Provider (.omp / .pi)
+ * Builtin Provider (.omp)
  *
  * Primary provider for OMP native configs. Supports all capabilities.
- * .pi is an alias for backwards compatibility.
  */
 import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
@@ -40,31 +39,54 @@ const DESCRIPTION = "Native OMP configuration from ~/.omp and .omp/";
 const PRIORITY = 100;
 
 const PATHS = SOURCE_PATHS.native;
-const PROJECT_DIRS = [PATHS.projectDir, ...PATHS.aliases];
-const USER_DIRS = [PATHS.userBase, ...PATHS.aliases];
+
+async function ifNonEmptyDir(...seg: string[]): Promise<string | null> {
+	let dir = path.join(...seg);
+	const entries = await readDirEntries(dir);
+	if (entries.length > 0) {
+		if (!path.isAbsolute(dir)) {
+			dir = path.resolve(dir);
+		}
+		return dir;
+	}
+	return null;
+}
 
 async function getConfigDirs(ctx: LoadContext): Promise<Array<{ dir: string; level: "user" | "project" }>> {
 	const result: Array<{ dir: string; level: "user" | "project" }> = [];
 
-	for (const name of PROJECT_DIRS) {
-		const projectDir = path.join(ctx.cwd, name);
-		const entries = await readDirEntries(projectDir);
-		if (entries.length > 0) {
-			result.push({ dir: projectDir, level: "project" });
-			break;
-		}
+	const projectDir = await ifNonEmptyDir(ctx.cwd, PATHS.projectDir);
+	if (projectDir) {
+		result.push({ dir: projectDir, level: "project" });
 	}
-
-	for (const name of USER_DIRS) {
-		const userDir = path.join(ctx.home, name, PATHS.userAgent.replace(`${PATHS.userBase}/`, ""));
-		const entries = await readDirEntries(userDir);
-		if (entries.length > 0) {
-			result.push({ dir: userDir, level: "user" });
-			break;
-		}
+	const userDir = await ifNonEmptyDir(ctx.home, PATHS.userAgent);
+	if (userDir) {
+		result.push({ dir: userDir, level: "user" });
 	}
 
 	return result;
+}
+
+function getAncestorDirs(cwd: string): Array<{ dir: string; depth: number }> {
+	const ancestors: Array<{ dir: string; depth: number }> = [];
+	let current = cwd;
+	let depth = 0;
+	while (true) {
+		ancestors.push({ dir: current, depth });
+		const parent = path.dirname(current);
+		if (parent === current) break;
+		current = parent;
+		depth++;
+	}
+	return ancestors;
+}
+
+async function findNearestProjectConfigDir(cwd: string): Promise<{ dir: string; depth: number } | null> {
+	for (const ancestor of getAncestorDirs(cwd)) {
+		const configDir = await ifNonEmptyDir(ancestor.dir, PATHS.projectDir);
+		if (configDir) return { dir: configDir, depth: ancestor.depth };
+	}
+	return null;
 }
 
 // MCP
@@ -141,34 +163,27 @@ async function loadMCPServers(ctx: LoadContext): Promise<LoadResult<MCPServer>> 
 		return result;
 	};
 
-	const projectDirs = await Promise.all(
-		PROJECT_DIRS.map(async name => {
-			const dir = path.join(ctx.cwd, name);
-			const entries = await readDirEntries(dir);
-			return entries.length > 0 ? dir : null;
+	const paths = [
+		{ path: path.join(ctx.cwd, PATHS.projectDir, "mcp.json"), level: "project" as const },
+		{ path: path.join(ctx.cwd, PATHS.projectDir, ".mcp.json"), level: "project" as const },
+		{ path: path.join(ctx.home, PATHS.userAgent, "mcp.json"), level: "user" as const },
+		{ path: path.join(ctx.home, PATHS.userAgent, ".mcp.json"), level: "user" as const },
+	];
+
+	const contents = await Promise.allSettled(
+		paths.map(async p => {
+			const content = await readFile(p.path);
+			if (content) {
+				return { path: p.path, content, level: p.level };
+			}
+			return null;
 		}),
 	);
-	const userPaths = USER_DIRS.map(name => path.join(ctx.home, name, "mcp.json"));
 
-	const projectDir = projectDirs.find(dir => dir !== null);
-	if (projectDir) {
-		const projectCandidates = ["mcp.json", ".mcp.json"].map(filename => path.join(projectDir, filename));
-		const projectContents = await Promise.all(projectCandidates.map(path => readFile(path)));
-		for (let i = 0; i < projectCandidates.length; i++) {
-			const content = projectContents[i];
-			if (content) {
-				items.push(...parseMcpServers(content, projectCandidates[i], "project"));
-				break;
-			}
-		}
-	}
-
-	const userContents = await Promise.all(userPaths.map(path => readFile(path)));
-	for (let i = 0; i < userPaths.length; i++) {
-		const content = userContents[i];
-		if (content) {
-			items.push(...parseMcpServers(content, userPaths[i], "user"));
-			break;
+	for (const result of contents) {
+		if (result.status === "fulfilled" && result.value) {
+			const { path, content, level } = result.value;
+			items.push(...parseMcpServers(content, path, level));
 		}
 	}
 
@@ -187,49 +202,29 @@ registerProvider<MCPServer>(mcpCapability.id, {
 async function loadSystemPrompt(ctx: LoadContext): Promise<LoadResult<SystemPrompt>> {
 	const items: SystemPrompt[] = [];
 
-	const userPaths = USER_DIRS.map(name =>
-		path.join(ctx.home, name, PATHS.userAgent.replace(`${PATHS.userBase}/`, ""), "SYSTEM.md"),
-	);
-	const userContents = await Promise.all(userPaths.map(p => readFile(p)));
-	for (let i = 0; i < userPaths.length; i++) {
-		const content = userContents[i];
-		if (content) {
-			items.push({
-				path: userPaths[i],
-				content,
-				level: "user",
-				_source: createSourceMeta(PROVIDER_ID, userPaths[i], "user"),
-			});
-			break;
-		}
+	const userPath = path.join(ctx.home, PATHS.userAgent, "SYSTEM.md");
+	const userContent = await readFile(userPath);
+	if (userContent) {
+		items.push({
+			path: userPath,
+			content: userContent,
+			level: "user",
+			_source: createSourceMeta(PROVIDER_ID, userPath, "user"),
+		});
 	}
 
-	const ancestors: string[] = [];
-	let current = ctx.cwd;
-	while (true) {
-		ancestors.push(current);
-		const parent = path.dirname(current);
-		if (parent === current) break;
-		current = parent;
-	}
-
-	for (const dir of ancestors) {
-		const configDirs = PROJECT_DIRS.map(name => path.join(dir, name));
-		const entriesResults = await Promise.all(configDirs.map(d => readDirEntries(d)));
-		const validConfigDir = configDirs.find((_, i) => entriesResults[i].length > 0);
-		if (!validConfigDir) continue;
-
-		const projectPath = path.join(validConfigDir, "SYSTEM.md");
-		const content = await readFile(projectPath);
-		if (content) {
+	const nearestProjectConfigDir = await findNearestProjectConfigDir(ctx.cwd);
+	if (nearestProjectConfigDir) {
+		const projectPath = path.join(nearestProjectConfigDir.dir, "SYSTEM.md");
+		const projectContent = await readFile(projectPath);
+		if (projectContent) {
 			items.push({
 				path: projectPath,
-				content,
+				content: projectContent,
 				level: "project",
 				_source: createSourceMeta(PROVIDER_ID, projectPath, "project"),
 			});
 		}
-		break;
 	}
 
 	return { items, warnings: [] };
@@ -782,55 +777,32 @@ async function loadContextFiles(ctx: LoadContext): Promise<LoadResult<ContextFil
 	const items: ContextFile[] = [];
 	const warnings: string[] = [];
 
-	const userPaths = USER_DIRS.map(name =>
-		path.join(ctx.home, name, PATHS.userAgent.replace(`${PATHS.userBase}/`, ""), "AGENTS.md"),
-	);
-	const userContents = await Promise.all(userPaths.map(p => readFile(p)));
-	for (let i = 0; i < userPaths.length; i++) {
-		const content = userContents[i];
-		if (content) {
-			items.push({
-				path: userPaths[i],
-				content,
-				level: "user",
-				_source: createSourceMeta(PROVIDER_ID, userPaths[i], "user"),
-			});
-			break;
-		}
+	const userPath = path.join(ctx.home, PATHS.userAgent, "AGENTS.md");
+	const userContent = await readFile(userPath);
+	if (userContent) {
+		items.push({
+			path: userPath,
+			content: userContent,
+			level: "user",
+			_source: createSourceMeta(PROVIDER_ID, userPath, "user"),
+		});
 	}
 
-	const ancestors: Array<{ dir: string; depth: number }> = [];
-	let current = ctx.cwd;
-	let depth = 0;
-	while (true) {
-		ancestors.push({ dir: current, depth });
-		const parent = path.dirname(current);
-		if (parent === current) break;
-		current = parent;
-		depth++;
-	}
-
-	for (const { dir, depth: ancestorDepth } of ancestors) {
-		const configDirs = PROJECT_DIRS.map(name => path.join(dir, name));
-		const entriesResults = await Promise.all(configDirs.map(d => readDirEntries(d)));
-		const validConfigDir = configDirs.find((_, i) => entriesResults[i].length > 0);
-		if (!validConfigDir) continue;
-
-		const projectPath = path.join(validConfigDir, "AGENTS.md");
-		const content = await readFile(projectPath);
-		if (content) {
+	const nearestProjectConfigDir = await findNearestProjectConfigDir(ctx.cwd);
+	if (nearestProjectConfigDir) {
+		const projectPath = path.join(nearestProjectConfigDir.dir, "AGENTS.md");
+		const projectContent = await readFile(projectPath);
+		if (projectContent) {
 			items.push({
 				path: projectPath,
-				content,
+				content: projectContent,
 				level: "project",
-				depth: ancestorDepth,
+				depth: nearestProjectConfigDir.depth,
 				_source: createSourceMeta(PROVIDER_ID, projectPath, "project"),
 			});
 			return { items, warnings };
 		}
-		break;
 	}
-
 	return { items, warnings };
 }
 

@@ -42,7 +42,6 @@ export const SOURCE_PATHS = {
 		userBase: ".omp",
 		userAgent: ".omp/agent",
 		projectDir: ".omp",
-		aliases: [".pi"], // .pi is an alias for backwards compat
 	},
 	claude: {
 		userBase: ".claude",

@@ -20,7 +20,6 @@ export const VERSION: string = (packageJson as { version: string }).version;
 
 const priorityList = [
 	{ dir: ".omp", globalAgentDir: ".omp/agent" },
-	{ dir: ".pi", globalAgentDir: ".pi/agent" },
 	{ dir: ".claude" },
 	{ dir: ".codex" },
 	{ dir: ".gemini" },
@@ -309,8 +308,8 @@ export function getDebugLogPath(): string {
 
 /**
  * Config directory bases in priority order (highest first).
- * User-level: ~/.omp/agent, ~/.pi/agent, ~/.claude, ~/.codex, ~/.gemini
- * Project-level: .omp, .pi, .claude, .codex, .gemini
+ * User-level: ~/.omp/agent, ~/.claude, ~/.codex, ~/.gemini
+ * Project-level: .omp, .claude, .codex, .gemini
  */
 const USER_CONFIG_BASES = priorityList.map(({ dir, globalAgentDir }) => ({
 	base: () => path.join(os.homedir(), globalAgentDir ?? dir),
@@ -324,7 +323,7 @@ const PROJECT_CONFIG_BASES = priorityList.map(({ dir }) => ({
 
 export interface ConfigDirEntry {
 	path: string;
-	source: string; // e.g., ".omp", ".pi", ".claude"
+	source: string; // e.g., ".omp", ".claude"
 	level: "user" | "project";
 }
 
@@ -439,7 +438,7 @@ export function findConfigFileWithMeta(
 
 /**
  * Find all nearest config directories by walking up from cwd.
- * Returns one entry per config base (.omp, .pi, .claude) - the nearest one found.
+ * Returns one entry per config base (.omp, .claude) - the nearest one found.
  * Results are in priority order (highest first).
  */
 export function findAllNearestProjectConfigDirs(subpath: string, cwd: string = process.cwd()): ConfigDirEntry[] {

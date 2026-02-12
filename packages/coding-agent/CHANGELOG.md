@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+
+### Breaking Changes
+
+- Removed support for `.pi` configuration directory alias; use `.omp` instead
+
 ### Added
 
 - Added `openPath` utility function to centralize cross-platform URL and file path opening

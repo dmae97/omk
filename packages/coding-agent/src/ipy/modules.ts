@@ -68,11 +68,11 @@ export async function discoverPythonModules(options: DiscoverPythonModulesOption
 	const cwd = options.cwd ?? process.cwd();
 	const homeDir = options.homeDir ?? os.homedir();
 
-	const userDirs = [path.join(homeDir, ".omp", "agent", "modules"), path.join(homeDir, ".pi", "agent", "modules")];
-	const projectDirs = [path.resolve(cwd, ".omp", "modules"), path.resolve(cwd, ".pi", "modules")];
+	const userDir = path.join(homeDir, ".omp", "agent", "modules");
+	const projectDir = path.resolve(cwd, ".omp", "modules");
 
-	const userCandidates = (await Promise.all(userDirs.map(dir => listModuleCandidates(dir, "user")))).flat();
-	const projectCandidates = (await Promise.all(projectDirs.map(dir => listModuleCandidates(dir, "project")))).flat();
+	const userCandidates = await listModuleCandidates(userDir, "user");
+	const projectCandidates = await listModuleCandidates(projectDir, "project");
 
 	const byName = new Map<string, ModuleCandidate>();
 	for (const candidate of userCandidates) {

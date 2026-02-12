@@ -73,11 +73,10 @@ describe("CombinedAutocompleteProvider", () => {
 		});
 
 		it("includes hidden paths but excludes .git", async () => {
-			for (const dir of [".pi", ".github", ".git"]) {
+			for (const dir of [".github", ".git"]) {
 				fs.mkdirSync(path.join(baseDir, dir), { recursive: true });
 			}
 			fs.mkdirSync(path.join(baseDir, ".github", "workflows"), { recursive: true });
-			fs.writeFileSync(path.join(baseDir, ".pi", "config.json"), "{}");
 			fs.writeFileSync(path.join(baseDir, ".github", "workflows", "ci.yml"), "name: ci");
 			fs.writeFileSync(path.join(baseDir, ".git", "config"), "[core]");
 
@@ -86,7 +85,6 @@ describe("CombinedAutocompleteProvider", () => {
 			const result = await provider.getSuggestions([line], 0, line.length);
 
 			const values = result?.items.map(item => item.value) ?? [];
-			expect(values).toContain("@.pi/");
 			expect(values).toContain("@.github/");
 			expect(values.some(value => value === "@.git" || value.startsWith("@.git/"))).toBe(false);
 		});
