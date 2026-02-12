@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Claude Code marketplace plugin discovery: automatically loads skills, commands, hooks, tools, and agents from `~/.claude/plugins/cache/` based on `installed_plugins.json` registry ([#48](https://github.com/can1357/oh-my-pi/issues/48))
+
 ## [12.0.0] - 2026-02-12
 
 ### Added

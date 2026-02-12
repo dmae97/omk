@@ -546,3 +546,110 @@ export function getExtensionNameFromPath(extensionPath: string): string {
 
 	return base;
 }
+
+// =============================================================================
+// Claude Code Plugin Cache Helpers
+// =============================================================================
+
+/**
+ * Entry for an installed Claude Code plugin.
+ */
+export interface ClaudePluginEntry {
+	scope: "user" | "project";
+	installPath: string;
+	version: string;
+	installedAt: string;
+	lastUpdated: string;
+	gitCommitSha?: string;
+}
+
+/**
+ * Claude Code installed_plugins.json registry format.
+ */
+export interface ClaudePluginsRegistry {
+	version: number;
+	plugins: Record<string, ClaudePluginEntry[]>;
+}
+
+/**
+ * Resolved plugin root for loading.
+ */
+export interface ClaudePluginRoot {
+	/** Plugin ID (e.g., "simpleclaude-core@simpleclaude") */
+	id: string;
+	/** Marketplace name */
+	marketplace: string;
+	/** Plugin name */
+	plugin: string;
+	/** Version string */
+	version: string;
+	/** Absolute path to plugin root */
+	path: string;
+	/** Whether this is a user or project scope plugin */
+	scope: "user" | "project";
+}
+
+/**
+ * Parse Claude Code installed_plugins.json content.
+ */
+export function parseClaudePluginsRegistry(content: string): ClaudePluginsRegistry | null {
+	const data = parseJSON<ClaudePluginsRegistry>(content);
+	if (!data || typeof data !== "object") return null;
+	if (typeof data.version !== "number" || typeof data.plugins !== "object") return null;
+	return data;
+}
+
+/**
+ * List all installed Claude Code plugin roots from the plugin cache.
+ * Reads ~/.claude/plugins/installed_plugins.json and resolves plugin paths.
+ */
+export async function listClaudePluginRoots(home: string): Promise<{ roots: ClaudePluginRoot[]; warnings: string[] }> {
+	const roots: ClaudePluginRoot[] = [];
+	const warnings: string[] = [];
+
+	const registryPath = path.join(home, ".claude", "plugins", "installed_plugins.json");
+	const content = await readFile(registryPath);
+
+	if (!content) {
+		// No registry file - not an error, just no plugins
+		return { roots, warnings };
+	}
+
+	const registry = parseClaudePluginsRegistry(content);
+	if (!registry) {
+		warnings.push(`Failed to parse Claude Code plugin registry: ${registryPath}`);
+		return { roots, warnings };
+	}
+
+	for (const [pluginId, entries] of Object.entries(registry.plugins)) {
+		if (!Array.isArray(entries) || entries.length === 0) continue;
+
+		// Parse plugin ID format: "plugin-name@marketplace"
+		const atIndex = pluginId.lastIndexOf("@");
+		if (atIndex === -1) {
+			warnings.push(`Invalid plugin ID format (missing @marketplace): ${pluginId}`);
+			continue;
+		}
+
+		const pluginName = pluginId.slice(0, atIndex);
+		const marketplace = pluginId.slice(atIndex + 1);
+
+		// Use the first (most recent) entry
+		const entry = entries[0];
+		if (!entry.installPath || typeof entry.installPath !== "string") {
+			warnings.push(`Plugin ${pluginId} has no installPath`);
+			continue;
+		}
+
+		roots.push({
+			id: pluginId,
+			marketplace,
+			plugin: pluginName,
+			version: entry.version || "unknown",
+			path: entry.installPath,
+			scope: entry.scope || "user",
+		});
+	}
+
+	return { roots, warnings };
+}
