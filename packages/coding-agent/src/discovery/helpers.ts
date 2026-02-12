@@ -602,8 +602,15 @@ export function parseClaudePluginsRegistry(content: string): ClaudePluginsRegist
 /**
  * List all installed Claude Code plugin roots from the plugin cache.
  * Reads ~/.claude/plugins/installed_plugins.json and resolves plugin paths.
+ *
+ * Results are cached per home directory to avoid repeated parsing.
  */
+const pluginRootsCache = new Map<string, { roots: ClaudePluginRoot[]; warnings: string[] }>();
+
 export async function listClaudePluginRoots(home: string): Promise<{ roots: ClaudePluginRoot[]; warnings: string[] }> {
+	const cached = pluginRootsCache.get(home);
+	if (cached) return cached;
+
 	const roots: ClaudePluginRoot[] = [];
 	const warnings: string[] = [];
 
@@ -612,13 +619,17 @@ export async function listClaudePluginRoots(home: string): Promise<{ roots: Clau
 
 	if (!content) {
 		// No registry file - not an error, just no plugins
-		return { roots, warnings };
+		const result = { roots, warnings };
+		pluginRootsCache.set(home, result);
+		return result;
 	}
 
 	const registry = parseClaudePluginsRegistry(content);
 	if (!registry) {
 		warnings.push(`Failed to parse Claude Code plugin registry: ${registryPath}`);
-		return { roots, warnings };
+		const result = { roots, warnings };
+		pluginRootsCache.set(home, result);
+		return result;
 	}
 
 	for (const [pluginId, entries] of Object.entries(registry.plugins)) {
@@ -634,22 +645,33 @@ export async function listClaudePluginRoots(home: string): Promise<{ roots: Clau
 		const pluginName = pluginId.slice(0, atIndex);
 		const marketplace = pluginId.slice(atIndex + 1);
 
-		// Use the first (most recent) entry
-		const entry = entries[0];
-		if (!entry.installPath || typeof entry.installPath !== "string") {
-			warnings.push(`Plugin ${pluginId} has no installPath`);
-			continue;
-		}
+		// Process all valid entries, not just the first one.
+		// This handles plugins with multiple installs (different scopes/versions).
+		for (const entry of entries) {
+			if (!entry.installPath || typeof entry.installPath !== "string") {
+				warnings.push(`Plugin ${pluginId} entry has no installPath`);
+				continue;
+			}
 
-		roots.push({
-			id: pluginId,
-			marketplace,
-			plugin: pluginName,
-			version: entry.version || "unknown",
-			path: entry.installPath,
-			scope: entry.scope || "user",
-		});
+			roots.push({
+				id: pluginId,
+				marketplace,
+				plugin: pluginName,
+				version: entry.version || "unknown",
+				path: entry.installPath,
+				scope: entry.scope || "user",
+			});
+		}
 	}
 
-	return { roots, warnings };
+	const result = { roots, warnings };
+	pluginRootsCache.set(home, result);
+	return result;
+}
+
+/**
+ * Clear the plugin roots cache (useful for testing or when plugins change).
+ */
+export function clearClaudePluginRootsCache(): void {
+	pluginRootsCache.clear();
 }

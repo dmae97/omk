@@ -34,7 +34,7 @@ async function loadSkills(ctx: LoadContext): Promise<LoadResult<Skill>> {
 			return loadSkillsFromDir(ctx, {
 				dir: skillsDir,
 				providerId: PROVIDER_ID,
-				level: "user", // Plugin cache is always user-level
+				level: root.scope,
 			});
 		}),
 	);
@@ -61,7 +61,7 @@ async function loadSlashCommands(ctx: LoadContext): Promise<LoadResult<SlashComm
 	const results = await Promise.all(
 		roots.map(async root => {
 			const commandsDir = path.join(root.path, "commands");
-			return loadFilesFromDir<SlashCommand>(ctx, commandsDir, PROVIDER_ID, "user", {
+			return loadFilesFromDir<SlashCommand>(ctx, commandsDir, PROVIDER_ID, root.scope, {
 				extensions: ["md"],
 				transform: (name, content, filePath, source) => {
 					const cmdName = name.replace(/\.md$/, "");
@@ -69,7 +69,7 @@ async function loadSlashCommands(ctx: LoadContext): Promise<LoadResult<SlashComm
 						name: cmdName,
 						path: filePath,
 						content,
-						level: "user" as const,
+						level: root.scope,
 						_source: source,
 					};
 				},
@@ -108,7 +108,7 @@ async function loadHooks(ctx: LoadContext): Promise<LoadResult<Hook>> {
 	const results = await Promise.all(
 		loadTasks.map(async ({ root, hookType }) => {
 			const hooksDir = path.join(root.path, "hooks", hookType);
-			return loadFilesFromDir<Hook>(ctx, hooksDir, PROVIDER_ID, "user", {
+			return loadFilesFromDir<Hook>(ctx, hooksDir, PROVIDER_ID, root.scope, {
 				transform: (name, _content, filePath, source) => {
 					const toolName = name.replace(/\.(sh|bash|zsh|fish)$/, "");
 					return {
@@ -116,7 +116,7 @@ async function loadHooks(ctx: LoadContext): Promise<LoadResult<Hook>> {
 						path: filePath,
 						type: hookType,
 						tool: toolName,
-						level: "user" as const,
+						level: root.scope,
 						_source: source,
 					};
 				},
@@ -146,13 +146,13 @@ async function loadTools(ctx: LoadContext): Promise<LoadResult<CustomTool>> {
 	const results = await Promise.all(
 		roots.map(async root => {
 			const toolsDir = path.join(root.path, "tools");
-			return loadFilesFromDir<CustomTool>(ctx, toolsDir, PROVIDER_ID, "user", {
+			return loadFilesFromDir<CustomTool>(ctx, toolsDir, PROVIDER_ID, root.scope, {
 				transform: (name, _content, filePath, source) => {
 					const toolName = name.replace(/\.(ts|js|sh|bash|py)$/, "");
 					return {
 						name: toolName,
 						path: filePath,
-						level: "user" as const,
+						level: root.scope,
 						_source: source,
 					};
 				},

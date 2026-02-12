@@ -55,7 +55,7 @@ async function loadAgentsFromDir(dir: string, source: AgentSource): Promise<Agen
  *
  * @param cwd - Current working directory for project agent discovery
  */
-export async function discoverAgents(cwd: string): Promise<DiscoveryResult> {
+export async function discoverAgents(cwd: string, home: string = os.homedir()): Promise<DiscoveryResult> {
 	const resolvedCwd = path.resolve(cwd);
 	const agentSources = Array.from(new Set(getConfigDirs("", { project: false }).map(entry => entry.source)));
 
@@ -88,10 +88,10 @@ export async function discoverAgents(cwd: string): Promise<DiscoveryResult> {
 	}
 
 	// Load agents from Claude Code marketplace plugins
-	const { roots: pluginRoots } = await listClaudePluginRoots(os.homedir());
+	const { roots: pluginRoots } = await listClaudePluginRoots(home);
 	for (const plugin of pluginRoots) {
 		const agentsDir = path.join(plugin.path, "agents");
-		orderedDirs.push({ dir: agentsDir, source: "user" });
+		orderedDirs.push({ dir: agentsDir, source: plugin.scope === "project" ? "project" : "user" });
 	}
 
 	const seen = new Set<string>();
