@@ -48,6 +48,15 @@ function ensureInvalidate(component: unknown): Component {
 	return c as Component;
 }
 
+function cloneToolArgs<T>(args: T): T {
+	if (args === null || args === undefined) return args;
+	try {
+		return structuredClone(args);
+	} catch {
+		return args;
+	}
+}
+
 export interface ToolExecutionOptions {
 	showImages?: boolean; // default: true (only used if terminal supports images)
 	editFuzzyThreshold?: number;
@@ -125,7 +134,7 @@ export class ToolExecutionComponent extends Container {
 		super();
 		this.#toolName = toolName;
 		this.#toolLabel = tool?.label ?? toolName;
-		this.#args = args;
+		this.#args = cloneToolArgs(args);
 		this.#showImages = options.showImages ?? true;
 		this.#editFuzzyThreshold = options.editFuzzyThreshold;
 		this.#editAllowFuzzy = options.editAllowFuzzy;
@@ -152,7 +161,7 @@ export class ToolExecutionComponent extends Container {
 	}
 
 	updateArgs(args: any, _toolCallId?: string): void {
-		this.#args = args;
+		this.#args = cloneToolArgs(args);
 		this.#updateSpinnerAnimation();
 		this.#updateDisplay();
 	}
@@ -207,9 +216,6 @@ export class ToolExecutionComponent extends Container {
 			computeHashlineDiff({ path, edits }, this.#cwd).then(result => {
 				if (this.#editDiffArgsKey === argsKey) {
 					this.#editDiffPreview = result;
-					if ("diff" in result && result.diff) {
-						(this.#args as Record<string, unknown>).previewDiff = result.diff;
-					}
 					this.#updateDisplay();
 					this.#ui.requestRender();
 				}
@@ -383,7 +389,7 @@ export class ToolExecutionComponent extends Container {
 			const shouldRenderCall = !this.#result || !mergeCallAndResult;
 			if (shouldRenderCall && tool.renderCall) {
 				try {
-					const callComponent = tool.renderCall(this.#args, theme);
+					const callComponent = tool.renderCall(this.#getCallArgsForRender(), theme);
 					if (callComponent) {
 						this.#contentBox.addChild(ensureInvalidate(callComponent));
 					}
@@ -445,7 +451,7 @@ export class ToolExecutionComponent extends Container {
 			if (shouldRenderCall) {
 				// Render call component
 				try {
-					const callComponent = renderer.renderCall(this.#args, theme, this.#renderState);
+					const callComponent = renderer.renderCall(this.#getCallArgsForRender(), theme, this.#renderState);
 					if (callComponent) {
 						this.#contentBox.addChild(ensureInvalidate(callComponent));
 					}
@@ -531,6 +537,16 @@ export class ToolExecutionComponent extends Container {
 				}
 			}
 		}
+	}
+
+	#getCallArgsForRender(): any {
+		if (this.#toolName !== "edit") {
+			return this.#args;
+		}
+		if (!this.#editDiffPreview || !("diff" in this.#editDiffPreview) || !this.#editDiffPreview.diff) {
+			return this.#args;
+		}
+		return { ...(this.#args as Record<string, unknown>), previewDiff: this.#editDiffPreview.diff };
 	}
 
 	/**
