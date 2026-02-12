@@ -1,6 +1,6 @@
 {
 	"name": "@oh-my-pi/swarm-extension",
-	"version": "11.11.0",
+	"version": "11.14.2",
 	"description": "Swarm orchestration extension for omp",
 	"type": "module",
 	"bin": {
@@ -15,7 +15,7 @@
 		"yaml": "^2.7.0"
 	},
 	"peerDependencies": {
-		"@oh-my-pi/pi-coding-agent": "^11.11.0"
+		"@oh-my-pi/pi-coding-agent": "*"
 	},
 	"devDependencies": {
 		"@oh-my-pi/pi-coding-agent": "workspace:*",
