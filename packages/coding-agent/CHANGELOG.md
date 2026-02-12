@@ -1,9 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `getAllServerNames()` method to MCPManager for enumerating all known servers
+
+### Changed
+
+- Changed default edit mode from `patch` to `hashline` for more precise code modifications
+- Changed `readHashLines` setting default from false to true to enable hash line reading by default
 
 ### Fixed
 

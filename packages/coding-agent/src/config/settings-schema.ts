@@ -249,7 +249,7 @@ export const SETTINGS_SCHEMA = {
 	},
 	readHashLines: {
 		type: "boolean",
-		default: false,
+		default: true,
 		ui: {
 			tab: "config",
 			label: "Read hash lines",
@@ -743,7 +743,7 @@ export const SETTINGS_SCHEMA = {
 	"edit.mode": {
 		type: "enum",
 		values: ["replace", "patch", "hashline"] as const,
-		default: "patch",
+		default: "hashline",
 		ui: {
 			tab: "config",
 			label: "Edit mode",
