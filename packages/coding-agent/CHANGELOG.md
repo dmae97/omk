@@ -1,11 +1,20 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Exported `renderPromptTemplate` function for programmatic prompt template rendering
 - Exported `computeLineHash` function from patch utilities
 - Added `./cli` export path for direct CLI module access
+
+### Changed
+
+- Replaced jsdom with linkedom for improved HTML parsing performance and reduced memory footprint
+
+### Removed
+
+- Removed @types/jsdom dependency
 
 ## [11.14.1] - 2026-02-12
 ### Changed

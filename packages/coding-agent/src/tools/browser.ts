@@ -5,7 +5,7 @@ import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallb
 import { StringEnum } from "@oh-my-pi/pi-ai";
 import { logger, Snowflake, untilAborted } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
-import { JSDOM, VirtualConsole } from "jsdom";
+import { type HTMLElement, parseHTML } from "linkedom";
 import type { Browser, CDPSession, ElementHandle, KeyInput, Page, SerializedAXNode } from "puppeteer";
 import puppeteer from "puppeteer";
 import { renderPromptTemplate } from "../config/prompt-templates";
@@ -60,6 +60,17 @@ const INTERACTIVE_AX_ROLES = new Set([
 	"searchbox",
 	"treeitem",
 ]);
+
+declare global {
+	interface Element extends HTMLElement {}
+
+	function getComputedStyle(element: Element): Record<string, unknown>;
+	var innerWidth: number;
+	var innerHeight: number;
+	var document: {
+		elementFromPoint(x: number, y: number): Element | null;
+	};
+}
 
 const LEGACY_SELECTOR_PREFIXES = ["p-aria/", "p-text/", "p-xpath/", "p-pierce/"] as const;
 
@@ -1247,17 +1258,9 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 					const format = params.format ?? "markdown";
 					const html = (await untilAborted(signal, () => page.content())) as string;
 					const url = page.url();
-					const virtualConsole = new VirtualConsole();
-					virtualConsole.on("jsdomError", err => {
-						if (err?.message?.includes("Could not parse CSS stylesheet")) return;
-						logger.debug("JSDOM error during readable extraction", {
-							error: err instanceof Error ? err.message : String(err),
-						});
-					});
-					const dom = new JSDOM(html, { url, virtualConsole });
-					const reader = new Readability(dom.window.document);
+					const { document } = parseHTML(html);
+					const reader = new Readability(document);
 					const article = reader.parse();
-					dom.window.close();
 					if (!article) {
 						throw new ToolError("Readable content not found");
 					}
