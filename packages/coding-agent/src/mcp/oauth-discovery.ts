@@ -235,7 +235,7 @@ export async function discoverOAuthEndpoints(serverUrl: string): Promise<OAuthEn
 			});
 
 			if (response.ok) {
-				const metadata = await response.json();
+				const metadata = (await response.json()) as Record<string, any>;
 
 				// Check for standard OAuth discovery format
 				if (metadata.authorization_endpoint && metadata.token_endpoint) {
