@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.0.0] - 2026-02-12
+
 ### Added
 
 - Added `getAllServerNames()` method to MCPManager for enumerating all known servers

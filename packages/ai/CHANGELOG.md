@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.0.0] - 2026-02-12
+
 ### Added
 
 - Added GPT-5.3 Codex Spark model with 128K context window and extended reasoning capabilities
