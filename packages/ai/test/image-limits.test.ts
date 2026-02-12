@@ -14,7 +14,7 @@
  * BASIC LIMITS (small images):
  * | Provider    | Model              | Max Images | Max Size | Max Dim  |
  * |-------------|--------------------|------------|----------|----------|
- * | Anthropic   | claude-3-5-haiku   | 100        | 5MB      | 8000px   |
+ * | Anthropic   | claude-haiku-4-5   | 100        | 5MB      | 8000px   |
  * | OpenAI      | gpt-4o-mini        | 500        | ≥25MB    | ≥20000px |
  * | Gemini      | gemini-2.5-flash   | ~2000*     | ≥40MB    | 8000px   |
  * | Mistral     | pixtral-12b        | 8          | ~15MB    | 8000px   |
@@ -275,11 +275,11 @@ describe("Image Limits E2E Tests", () => {
 	});
 
 	// -------------------------------------------------------------------------
-	// Anthropic (claude-3-5-haiku-20241022)
+	// Anthropic (claude-haiku-4-5-20251001)
 	// Limits: 100 images, 5MB per image, 8000px max dimension
 	// -------------------------------------------------------------------------
-	describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("Anthropic (claude-3-5-haiku-20241022)", () => {
-		const model = getModel("anthropic", "claude-3-5-haiku-20241022");
+	describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("Anthropic (claude-haiku-4-5-20251001)", () => {
+		const model = getModel("anthropic", "claude-haiku-4-5-20251001");
 
 		it("should accept a small number of images (5)", async () => {
 			const result = await testImageCount(model, 5, smallImage);
@@ -979,7 +979,7 @@ describe("Image Limits E2E Tests", () => {
 		it.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))(
 			"Anthropic: max ~3MB images before rejection",
 			async () => {
-				const model = getModel("anthropic", "claude-3-5-haiku-20241022");
+				const model = getModel("anthropic", "claude-haiku-4-5-20251001");
 				const image3mb = await getImageAtSize(3);
 				// 32MB total limit / ~4MB actual = ~8 images
 				const counts = [1, 2, 4, 6, 8, 10, 12];

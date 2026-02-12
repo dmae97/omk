@@ -362,7 +362,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("Anthropic Provider Unicode Handling", () => {
-		const llm = getModel("anthropic", "claude-3-5-haiku-20241022");
+		const llm = getModel("anthropic", "claude-haiku-4-5-20251001");
 
 		it(
 			"should handle emoji in tool results",
@@ -390,7 +390,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 	});
 
 	describe("Anthropic OAuth Provider Unicode Handling", () => {
-		const llm = getModel("anthropic", "claude-3-5-haiku-20241022");
+		const llm = getModel("anthropic", "claude-haiku-4-5-20251001");
 
 		it.skipIf(!anthropicOAuthToken)(
 			"should handle emoji in tool results",

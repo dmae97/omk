@@ -553,8 +553,8 @@ describe("Generate E2E Tests", () => {
 		);
 	});
 
-	describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("Anthropic Provider (claude-3-5-haiku-20241022)", () => {
-		const model = getModel("anthropic", "claude-3-5-haiku-20241022");
+	describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("Anthropic Provider (claude-haiku-4-5-20251001)", () => {
+		const model = getModel("anthropic", "claude-haiku-4-5-20251001");
 
 		it(
 			"should complete basic text generation",

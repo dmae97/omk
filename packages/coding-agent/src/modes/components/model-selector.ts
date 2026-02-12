@@ -203,6 +203,9 @@ export class ModelSelectorComponent extends Container {
 			return i;
 		};
 
+		const dateRe = /-(\d{8})$/;
+		const latestRe = /-latest$/;
+
 		models.sort((a, b) => {
 			const aKey = `${a.provider}/${a.id}`;
 			const bKey = `${b.provider}/${b.id}`;
@@ -216,10 +219,33 @@ export class ModelSelectorComponent extends Container {
 			const bMru = mruIndex.get(bKey) ?? Number.MAX_SAFE_INTEGER;
 			if (aMru !== bMru) return aMru - bMru;
 
-			// Finally alphabetical by provider, then id
+			// By provider, then recency within provider
 			const providerCmp = a.provider.localeCompare(b.provider);
 			if (providerCmp !== 0) return providerCmp;
-			return a.id.localeCompare(b.id);
+
+			const aIsLatest = latestRe.test(a.id);
+			const bIsLatest = latestRe.test(b.id);
+			const aDate = a.id.match(dateRe)?.[1] ?? "";
+			const bDate = b.id.match(dateRe)?.[1] ?? "";
+
+			// Both have dates or latest tags — sort by recency
+			const aHasRecency = aIsLatest || aDate !== "";
+			const bHasRecency = bIsLatest || bDate !== "";
+
+			// Models with recency info come before those without
+			if (aHasRecency !== bHasRecency) return aHasRecency ? -1 : 1;
+
+			// If neither has recency info, fall back to alphabetical
+			if (!aHasRecency) return a.id.localeCompare(b.id);
+
+			// -latest always sorts first within recency group
+			if (aIsLatest !== bIsLatest) return aIsLatest ? -1 : 1;
+
+			// Both have dates — descending (newest first)
+			if (aDate && bDate) return bDate.localeCompare(aDate);
+
+			// One has date, other is latest — latest first
+			return aIsLatest ? -1 : bIsLatest ? 1 : a.id.localeCompare(b.id);
 		});
 	}
 

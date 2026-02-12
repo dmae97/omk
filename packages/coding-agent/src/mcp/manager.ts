@@ -344,6 +344,15 @@ export class MCPManager {
 	}
 
 	/**
+	 * Get all known server names (connected, connecting, or discovered).
+	 */
+	getAllServerNames(): string[] {
+		return Array.from(
+			new Set([...this.#sources.keys(), ...this.#connections.keys(), ...this.#pendingConnections.keys()]),
+		);
+	}
+
+	/**
 	 * Disconnect from a specific server.
 	 */
 	async disconnectServer(name: string): Promise<void> {

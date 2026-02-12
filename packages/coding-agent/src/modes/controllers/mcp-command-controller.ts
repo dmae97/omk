@@ -4,6 +4,7 @@
  * Handles /mcp subcommands for managing MCP servers.
  */
 import { Spacer, Text } from "@oh-my-pi/pi-tui";
+import type { SourceMeta } from "../../capability/types";
 import { analyzeAuthError, discoverOAuthEndpoints, MCPManager } from "../../mcp";
 import { connectToServer, disconnectServer, listTools } from "../../mcp/client";
 import {
@@ -765,7 +766,20 @@ export class MCPCommandController {
 			const userServers = Object.keys(userConfig.mcpServers ?? {});
 			const projectServers = Object.keys(projectConfig.mcpServers ?? {});
 
-			if (userServers.length === 0 && projectServers.length === 0) {
+			// Collect runtime-discovered servers not in config files
+			const configServerNames = new Set([...userServers, ...projectServers]);
+			const discoveredServers: { name: string; source: SourceMeta }[] = [];
+			if (this.ctx.mcpManager) {
+				for (const name of this.ctx.mcpManager.getAllServerNames()) {
+					if (configServerNames.has(name)) continue;
+					const source = this.ctx.mcpManager.getSource(name);
+					if (source) {
+						discoveredServers.push({ name, source });
+					}
+				}
+			}
+
+			if (userServers.length === 0 && projectServers.length === 0 && discoveredServers.length === 0) {
 				this.#showMessage(
 					[
 						"",
@@ -826,6 +840,39 @@ export class MCPCommandController {
 				lines.push("");
 			}
 
+			// Show discovered servers (from .claude.json, .cursor/mcp.json, .vscode/mcp.json, etc.)
+			if (discoveredServers.length > 0) {
+				// Group by source display name + path
+				const bySource = new Map<string, typeof discoveredServers>();
+				for (const entry of discoveredServers) {
+					const key = `${entry.source.providerName}|${entry.source.path}`;
+					let group = bySource.get(key);
+					if (!group) {
+						group = [];
+						bySource.set(key, group);
+					}
+					group.push(entry);
+				}
+
+				for (const [key, entries] of bySource) {
+					const sepIdx = key.indexOf("|");
+					const providerName = key.slice(0, sepIdx);
+					const sourcePath = key.slice(sepIdx + 1);
+					const shortPath = sourcePath.replace(process.env.HOME ?? "", "~");
+					lines.push(theme.fg("accent", providerName) + theme.fg("muted", ` (${shortPath}):`));
+					for (const { name } of entries) {
+						const state = this.ctx.mcpManager!.getConnectionStatus(name);
+						const status =
+							state === "connected"
+								? theme.fg("success", " ● connected")
+								: state === "connecting"
+									? theme.fg("muted", " ◌ connecting")
+									: theme.fg("muted", " ○ not connected");
+						lines.push(`  ${theme.fg("accent", name)}${status}`);
+					}
+					lines.push("");
+				}
+			}
 			this.#showMessage(lines.join("\n"));
 		} catch (error) {
 			this.ctx.showError(`Failed to list servers: ${error instanceof Error ? error.message : String(error)}`);

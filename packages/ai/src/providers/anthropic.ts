@@ -642,7 +642,7 @@ function buildParams(
 		stream: true,
 	};
 
-	const includeClaudeCodeSystem = !model.id.startsWith("claude-3-5-haiku");
+	const includeClaudeCodeSystem = !model.id.includes("haiku");
 	const systemBlocks = buildAnthropicSystemBlocks(context.systemPrompt, {
 		includeClaudeCodeInstruction: includeClaudeCodeSystem,
 	});

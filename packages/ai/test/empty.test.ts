@@ -250,7 +250,7 @@ describe("AI Providers Empty Message Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("Anthropic Provider Empty Messages", () => {
-		const llm = getModel("anthropic", "claude-3-5-haiku-20241022");
+		const llm = getModel("anthropic", "claude-haiku-4-5-20251001");
 
 		it(
 			"should handle empty content array",
@@ -466,7 +466,7 @@ describe("AI Providers Empty Message Tests", () => {
 	});
 
 	describe("Anthropic OAuth Provider Empty Messages", () => {
-		const llm = getModel("anthropic", "claude-3-5-haiku-20241022");
+		const llm = getModel("anthropic", "claude-haiku-4-5-20251001");
 
 		it.skipIf(!anthropicOAuthToken)(
 			"should handle empty content array",

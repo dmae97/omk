@@ -1,6 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+### Removed
+
+- Removed deprecated Anthropic model entries: `claude-3-5-haiku-latest`, `claude-3-5-haiku-20241022`, `claude-3-7-sonnet-20250219`, `claude-3-7-sonnet-latest`, `claude-3-opus-20240229`, `claude-3-sonnet-20240229` ([#33](https://github.com/can1357/oh-my-pi/issues/33))
+
+### Fixed
+
+- Added deprecation filter in model generation script to prevent re-adding deprecated Anthropic models ([#33](https://github.com/can1357/oh-my-pi/issues/33))
 
 ## [11.14.1] - 2026-02-12
 ### Added

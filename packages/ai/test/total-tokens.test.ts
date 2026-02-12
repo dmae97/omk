@@ -101,9 +101,9 @@ describe("totalTokens field", () => {
 
 	describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("Anthropic (API Key)", () => {
 		it(
-			"claude-3-5-haiku - should return totalTokens equal to sum of components",
+			"claude-haiku-4-5 - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("anthropic", "claude-3-5-haiku-20241022");
+				const llm = getModel("anthropic", "claude-haiku-4-5-20251001");
 
 				console.log(`\nAnthropic / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: Bun.env.ANTHROPIC_API_KEY });

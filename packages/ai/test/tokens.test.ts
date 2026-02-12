@@ -109,7 +109,7 @@ describe("Token Statistics on Abort", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("Anthropic Provider", () => {
-		const llm = getModel("anthropic", "claude-3-5-haiku-20241022");
+		const llm = getModel("anthropic", "claude-haiku-4-5-20251001");
 
 		it(
 			"should include token stats when aborted mid-stream",
@@ -181,7 +181,7 @@ describe("Token Statistics on Abort", () => {
 	});
 
 	describe("Anthropic OAuth Provider", () => {
-		const llm = getModel("anthropic", "claude-3-5-haiku-20241022");
+		const llm = getModel("anthropic", "claude-haiku-4-5-20251001");
 
 		it.skipIf(!anthropicOAuthToken)(
 			"should include token stats when aborted mid-stream",

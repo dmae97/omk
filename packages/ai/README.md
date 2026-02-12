@@ -856,7 +856,7 @@ const restored: Context = JSON.parse(localStorage.getItem("conversation")!);
 restored.messages.push({ role: "user", content: "Tell me more about its type system" });
 
 // Continue with any model
-const newModel = getModel("anthropic", "claude-3-5-haiku-20241022");
+const newModel = getModel("anthropic", "claude-haiku-4-5-20251001");
 const continuation = await complete(newModel, restored);
 ```
 
@@ -870,7 +870,7 @@ The library supports browser environments. You must pass the API key explicitly 
 import { getModel, complete } from "@oh-my-pi/pi-ai";
 
 // API key must be passed explicitly in browser
-const model = getModel("anthropic", "claude-3-5-haiku-20241022");
+const model = getModel("anthropic", "claude-haiku-4-5-20251001");
 
 const response = await complete(
 	model,

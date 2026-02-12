@@ -442,6 +442,16 @@ async function loadModelsDevData(): Promise<Model[]> {
 				const m = model as ModelsDevModel;
 				if (m.tool_call !== true) continue;
 
+				// Skip deprecated Anthropic models (old naming convention)
+				if (
+					modelId.startsWith("claude-3-5-haiku") ||
+					modelId.startsWith("claude-3-7-sonnet") ||
+					modelId === "claude-3-opus-20240229" ||
+					modelId === "claude-3-sonnet-20240229"
+				) {
+					continue;
+				}
+
 				models.push({
 					id: modelId,
 					name: m.name || modelId,

@@ -331,17 +331,17 @@ function resolveCacheRetention(cacheRetention?: CacheRetention): CacheRetention 
 
 /**
  * Check if the model supports prompt caching.
- * Supported: Claude 3.5 Haiku, Claude 3.7 Sonnet, Claude 4.x models
+ * Supported: Claude 3.5 Haiku, Claude 3.7 Sonnet, Claude 4.x+ models, Haiku 4.5+
  */
 function supportsPromptCaching(model: Model<"bedrock-converse-stream">): boolean {
 	if (model.cost.cacheRead || model.cost.cacheWrite) return true;
 	const id = model.id.toLowerCase();
 	// Claude 4.x models (opus-4, sonnet-4, haiku-4)
 	if (id.includes("claude") && (id.includes("-4-") || id.includes("-4."))) return true;
-	// Claude 3.7 Sonnet
-	if (id.includes("claude-3-7-sonnet")) return true;
-	// Claude 3.5 Haiku
-	if (id.includes("claude-3-5-haiku")) return true;
+	// Claude 3.5 Haiku, Claude 3.7 Sonnet (legacy naming)
+	if (id.includes("claude-3-7-sonnet") || id.includes("claude-3-5-haiku")) return true;
+	// Claude Haiku 4.5+ (new naming)
+	if (id.includes("claude-haiku")) return true;
 	return false;
 }
 
