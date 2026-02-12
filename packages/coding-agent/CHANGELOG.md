@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [11.14.4] - 2026-02-12
+
 ### Added
 
 - Exported `renderPromptTemplate` function for programmatic prompt template rendering

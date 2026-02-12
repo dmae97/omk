@@ -1,6 +1,6 @@
 {
 	"name": "@oh-my-pi/swarm-extension",
-	"version": "11.14.3",
+	"version": "11.14.4",
 	"description": "Swarm orchestration extension for omp",
 	"type": "module",
 	"bin": {
