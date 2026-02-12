@@ -131,6 +131,10 @@ export function renderSearchResult(
 
 	const metaLines: string[] = [];
 	metaLines.push(`${theme.fg("muted", "Provider:")} ${theme.fg("text", providerLabel)}`);
+	if (response.authMode)
+		metaLines.push(
+			`${theme.fg("muted", "Auth:")} ${theme.fg("text", response.authMode === "oauth" ? "OAuth" : response.authMode === "api_key" ? "API key" : response.authMode)}`,
+		);
 	if (response.model) metaLines.push(`${theme.fg("muted", "Model:")} ${theme.fg("text", response.model)}`);
 	metaLines.push(`${theme.fg("muted", "Sources:")} ${theme.fg("text", String(sourceCount))}`);
 	if (citationCount > 0)

@@ -55,6 +55,8 @@ export interface SearchResponse {
 	model?: string;
 	/** Request ID for debugging */
 	requestId?: string;
+	/** Authentication mode used by the provider (e.g. oauth, api-key) */
+	authMode?: string;
 }
 
 /** Provider-specific error with optional HTTP status */

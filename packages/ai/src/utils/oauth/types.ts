@@ -19,7 +19,8 @@ export type OAuthProvider =
 	| "zai"
 	| "minimax-code"
 	| "minimax-code-cn"
-	| "cursor";
+	| "cursor"
+	| "perplexity";
 
 export type OAuthPrompt = {
 	message: string;

@@ -20,6 +20,7 @@ import {
 	loginMiniMaxCodeCn,
 	loginOpenAICodex,
 	loginOpenCode,
+	loginPerplexity,
 	loginZai,
 	type OAuthController,
 	type OAuthCredentials,
@@ -684,6 +685,9 @@ export class AuthStorage {
 					url => ctrl.onAuth({ url }),
 					ctrl.onProgress ? () => ctrl.onProgress?.("Waiting for browser authentication...") : undefined,
 				);
+				break;
+			case "perplexity":
+				credentials = await loginPerplexity(ctrl);
 				break;
 			case "opencode": {
 				const apiKey = await loginOpenCode(ctrl);

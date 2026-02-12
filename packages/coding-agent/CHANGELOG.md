@@ -1,6 +1,20 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added OAuth authentication support for Perplexity web search via `www.perplexity.ai/rest/sse/perplexity_ask` endpoint
+- Added automatic OAuth token refresh with 5-minute expiry buffer for Perplexity authentication
+- Added `authMode` field to search responses to indicate authentication method used (oauth or api_key)
+- Added display of authentication mode in search result output
+- Added support for streaming SSE responses from Perplexity OAuth API with proper event merging
+
+### Changed
+
+- Changed Perplexity provider to support both API key and OAuth authentication methods
+- Changed `isAvailable()` method to async to check for both API key and OAuth token availability
+- Changed error message to guide users to set PERPLEXITY_API_KEY or login via OAuth
+- Changed `callPerplexity` to `callPerplexityApi` to clarify it uses the API key endpoint
 
 ## [11.13.0] - 2026-02-12
 

@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added Perplexity (Pro/Max) OAuth login support via native macOS app extraction or email OTP authentication
+- Added `loginPerplexity` and `refreshPerplexityToken` functions for Perplexity account integration
+- Added Socket.IO v4 client implementation for authenticated WebSocket communication with Perplexity API
 
 ## [11.12.0] - 2026-02-11
 ### Changed

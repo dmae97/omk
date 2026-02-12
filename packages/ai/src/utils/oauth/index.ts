@@ -9,6 +9,7 @@ import { refreshAntigravityToken } from "./google-antigravity";
 import { refreshGoogleCloudToken } from "./google-gemini-cli";
 import { refreshKimiToken } from "./kimi";
 import { refreshOpenAICodexToken } from "./openai-codex";
+import { refreshPerplexityToken } from "./perplexity";
 import type { OAuthCredentials, OAuthProvider, OAuthProviderInfo } from "./types";
 
 /**
@@ -21,6 +22,7 @@ import type { OAuthCredentials, OAuthProvider, OAuthProviderInfo } from "./types
  * - Google Cloud Code Assist (Gemini CLI)
  * - Antigravity (Gemini 3, Claude, GPT-OSS via Google Cloud)
  * - Kimi Code
+ * - Perplexity (Pro/Max — desktop app extraction or manual cookie)
  */
 
 // Anthropic
@@ -53,6 +55,8 @@ export type { OpenAICodexLoginOptions } from "./openai-codex";
 export { loginOpenAICodex, refreshOpenAICodexToken } from "./openai-codex";
 // OpenCode (API key)
 export { loginOpenCode } from "./opencode";
+// Perplexity
+export { loginPerplexity, refreshPerplexityToken } from "./perplexity";
 export * from "./types";
 // Z.AI (API key)
 export { loginZai } from "./zai";
@@ -98,6 +102,9 @@ export async function refreshOAuthToken(
 			break;
 		case "cursor":
 			newCredentials = await refreshCursorToken(credentials.refresh);
+			break;
+		case "perplexity":
+			newCredentials = await refreshPerplexityToken(credentials.refresh);
 			break;
 		case "opencode":
 		case "zai":
@@ -204,6 +211,11 @@ export function getOAuthProviders(): OAuthProviderInfo[] {
 		{
 			id: "minimax-code-cn",
 			name: "MiniMax Coding Plan (China)",
+			available: true,
+		},
+		{
+			id: "perplexity",
+			name: "Perplexity (Pro/Max)",
 			available: true,
 		},
 	];
