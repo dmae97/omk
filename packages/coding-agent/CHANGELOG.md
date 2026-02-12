@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Exported `renderPromptTemplate` function for programmatic prompt template rendering
+- Exported `computeLineHash` function from patch utilities
+- Added `./cli` export path for direct CLI module access
 
 ## [11.14.1] - 2026-02-12
 ### Changed

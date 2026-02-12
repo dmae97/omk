@@ -43,7 +43,7 @@ export interface TaskMetadata {
 	mutatedSnippet?: string;
 }
 
-export const DEFAULT_TARBALL_PATH = join(import.meta.dir, "fixtures.tar.gz");
+export const DEFAULT_TARBALL_PATH = join(import.meta.dir, "../fixtures.tar.gz");
 
 function titleize(id: string): string {
 	return id

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { formatContent } from "../formatter";
+import { formatContent } from "../src/formatter";
 
 describe("formatContent", () => {
 	it("pins .js files to the flow parser (no fallback to babel-ts)", async () => {

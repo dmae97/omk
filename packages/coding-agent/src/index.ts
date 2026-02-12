@@ -12,6 +12,7 @@ export { formatKeyHint, formatKeyHints } from "./config/keybindings";
 export { ModelRegistry } from "./config/model-registry";
 // Prompt templates
 export type { PromptTemplate } from "./config/prompt-templates";
+export { renderPromptTemplate } from "./config/prompt-templates";
 export type { CompactionSettings, RetrySettings, SkillsSettings } from "./config/settings";
 export { Settings, settings } from "./config/settings";
 // Custom commands
@@ -149,6 +150,7 @@ export {
 	Theme,
 	type ThemeColor,
 } from "./modes/theme/theme";
+export { computeLineHash } from "./patch/hashline";
 // SDK for programmatic usage
 export {
 	// Factory
@@ -237,7 +239,6 @@ export {
 	type ThinkingLevelChangeEntry,
 } from "./session/session-manager";
 export { runSubprocess } from "./task/executor";
-
 export type { AgentDefinition, AgentProgress, AgentSource, SingleResult, TaskParams } from "./task/types";
 // Tools (detail types and utilities)
 export {

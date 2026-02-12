@@ -62,6 +62,10 @@
 			"types": "./src/patch/*.ts",
 			"import": "./src/patch/*.ts"
 		},
+		"./cli": {
+			"types": "./src/cli.ts",
+			"import": "./src/cli.ts"
+		},
 		"./*": {
 			"types": "./src/*.ts",
 			"import": "./src/*.ts"

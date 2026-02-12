@@ -8,15 +8,15 @@
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
-import { RpcClient } from "@oh-my-pi/pi-coding-agent";
+import { computeLineHash, RpcClient, renderPromptTemplate } from "@oh-my-pi/pi-coding-agent";
 import { TempDir } from "@oh-my-pi/pi-utils";
 import { diffLines } from "diff";
-import { renderPromptTemplate } from "../coding-agent/src/config/prompt-templates";
-import { computeLineHash } from "../coding-agent/src/patch/hashline";
 import { formatDirectory } from "./formatter";
 import benchmarkTaskPrompt from "./prompts/benchmark-task.md" with { type: "text" };
 import { type EditTask, extractTaskFiles } from "./tasks";
 import { verifyExpectedFileSubset, verifyExpectedFiles } from "./verify";
+
+const CLI_PATH = import.meta.resolve("@oh-my-pi/pi-coding-agent/cli");
 
 const TMP_DIR = await TempDir.create("@reach-benchmark-");
 const TMP = TMP_DIR.path();
@@ -543,7 +543,6 @@ async function runSingleTask(
 	config: BenchmarkConfig,
 	cwd: string,
 	expectedDir: string,
-	cliPath: string,
 ): Promise<TaskRunResult> {
 	const startTime = Date.now();
 	let client: RpcClient | null = null;
@@ -591,7 +590,7 @@ async function runSingleTask(
 		}
 
 		client = new RpcClient({
-			cliPath,
+			cliPath: CLI_PATH,
 			cwd,
 			provider: config.provider,
 			model: config.model,
@@ -1294,7 +1293,6 @@ function buildFailureResult(item: TaskRunItem, error: string): TaskRunResult {
 async function runBatch(
 	items: TaskRunItem[],
 	config: BenchmarkConfig,
-	cliPath: string,
 	onProgress?: (event: ProgressEvent) => void,
 ): Promise<Array<{ task: EditTask; result: TaskRunResult }>> {
 	const workDir = join(TMP, `batch-${crypto.randomUUID()}`);
@@ -1329,7 +1327,7 @@ async function runBatch(
 		}
 
 		client = new RpcClient({
-			cliPath,
+			cliPath: CLI_PATH,
 			cwd: workDir,
 			provider: config.provider,
 			model: config.model,
@@ -1391,8 +1389,6 @@ export async function runTask(
 	const tempDirs: TempDir[] = [];
 	const { dir: expectedDir, cleanup: cleanupExpected } = await getExpectedDir(task);
 
-	const cliPath = join(import.meta.dir, "../coding-agent/src/cli.ts");
-
 	try {
 		for (let i = 0; i < config.runsPerTask; i++) {
 			const tempDir = await TempDir.create(join(TMP, `${task.id}-`));
@@ -1402,7 +1398,7 @@ export async function runTask(
 
 		const runPromises = tempDirs.map(async (tempDirObj, index) => {
 			onProgress?.({ taskId: task.id, runIndex: index, status: "started" });
-			const result = await runSingleTask(task, index, config, tempDirObj.path(), expectedDir, cliPath);
+			const result = await runSingleTask(task, index, config, tempDirObj.path(), expectedDir);
 			onProgress?.({ taskId: task.id, runIndex: index, status: "completed", result });
 			return result;
 		});
@@ -1436,12 +1432,11 @@ export async function runBenchmark(
 	const concurrency = Math.max(1, Math.floor(config.taskConcurrency));
 	const pendingBatches = [...batches];
 	const running: Promise<void>[] = [];
-	const cliPath = join(import.meta.dir, "../coding-agent/src/cli.ts");
 
 	const runNext = async (): Promise<void> => {
 		const nextBatch = pendingBatches.shift();
 		if (!nextBatch) return;
-		const batchResults = await runBatch(nextBatch, config, cliPath, onProgress);
+		const batchResults = await runBatch(nextBatch, config, onProgress);
 		for (const { task, result } of batchResults) {
 			const list = resultsByTask.get(task.id) ?? [];
 			list.push(result);

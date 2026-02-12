@@ -28,7 +28,7 @@ import { ALL_MUTATIONS, CATEGORY_MAP, type Mutation, type MutationInfo } from ".
 const SCRIPT_DIR = import.meta.dir;
 const SUPPORTED_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx"]);
 using DEFAULT_REACT_DIR = TempDir.createSync("@react-source");
-const DEFAULT_OUTPUT = join(SCRIPT_DIR, "fixtures.tar.gz");
+const DEFAULT_OUTPUT = join(SCRIPT_DIR, "../fixtures.tar.gz");
 const REACT_REPO_URL = "https://github.com/facebook/react.git";
 
 const EXCLUDE_DIRS = new Set([

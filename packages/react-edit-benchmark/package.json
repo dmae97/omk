@@ -4,13 +4,13 @@
 	"private": true,
 	"description": "Edit benchmark suite using React source code mutations",
 	"type": "module",
-	"main": "./index.ts",
+	"main": "./src/index.ts",
 	"bin": {
-		"react-edit-benchmark": "index.ts"
+		"react-edit-benchmark": "src/index.ts"
 	},
 	"scripts": {
-		"start": "bun run index.ts",
-		"generate": "bun run generate.ts --react-dir /tmp/react-source --count-per-type 4",
+		"start": "bun run src/index.ts",
+		"generate": "bun run src/generate.ts --react-dir /tmp/react-source --count-per-type 4",
 		"check": "tsgo -p tsconfig.json --noEmit"
 	},
 	"dependencies": {
@@ -21,7 +21,6 @@
 		"prettier": "^3.8.1"
 	},
 	"devDependencies": {
-		"@types/diff": "^8.0.0",
 		"@types/bun": "^1.3.9"
 	}
 }
