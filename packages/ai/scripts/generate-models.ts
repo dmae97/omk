@@ -1278,6 +1278,18 @@ async function generateModels() {
 			contextWindow: 400000,
 			maxTokens: CODEX_MAX_TOKENS,
 		},
+		{
+			id: "gpt-5.3-codex-spark",
+			name: "GPT-5.3 Codex Spark",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: CODEX_BASE_URL,
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 1.75, output: 14, cacheRead: 0.175, cacheWrite: 0 },
+			contextWindow: 128000,
+			maxTokens: CODEX_MAX_TOKENS,
+		},
 	];
 	allModels.push(...codexModels);
 
@@ -1365,6 +1377,40 @@ async function generateModels() {
 			contextWindow: 1000000,
 			maxTokens: 32000,
 		},
+		{
+			id: "MiniMax-M2.5",
+			name: "MiniMax M2.5 (Coding Plan)",
+			api: "openai-completions",
+			provider: "minimax-code",
+			baseUrl: "https://api.minimax.io/v1",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			compat: {
+				supportsDeveloperRole: false,
+				thinkingFormat: "zai",
+				reasoningContentField: "reasoning_content",
+			},
+			contextWindow: 204800,
+			maxTokens: 32000,
+		},
+		{
+			id: "MiniMax-M2.5-lightning",
+			name: "MiniMax M2.5 Lightning (Coding Plan)",
+			api: "openai-completions",
+			provider: "minimax-code",
+			baseUrl: "https://api.minimax.io/v1",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			compat: {
+				supportsDeveloperRole: false,
+				thinkingFormat: "zai",
+				reasoningContentField: "reasoning_content",
+			},
+			contextWindow: 204800,
+			maxTokens: 32000,
+		},
 	];
 
 	// Only add fallback models if not already present from API
@@ -1410,11 +1456,78 @@ async function generateModels() {
 			contextWindow: 1000000,
 			maxTokens: 32000,
 		},
+		{
+			id: "MiniMax-M2.5",
+			name: "MiniMax M2.5 (Coding Plan CN)",
+			api: "openai-completions",
+			provider: "minimax-code-cn",
+			baseUrl: "https://api.minimaxi.com/v1",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			compat: {
+				supportsDeveloperRole: false,
+				thinkingFormat: "zai",
+				reasoningContentField: "reasoning_content",
+			},
+			contextWindow: 204800,
+			maxTokens: 32000,
+		},
+		{
+			id: "MiniMax-M2.5-lightning",
+			name: "MiniMax M2.5 Lightning (Coding Plan CN)",
+			api: "openai-completions",
+			provider: "minimax-code-cn",
+			baseUrl: "https://api.minimaxi.com/v1",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			compat: {
+				supportsDeveloperRole: false,
+				thinkingFormat: "zai",
+				reasoningContentField: "reasoning_content",
+			},
+			contextWindow: 204800,
+			maxTokens: 32000,
+		},
 	];
 
 	for (const model of minimaxCodeCnFallbackModels) {
 		if (!allModels.some((m) => m.provider === model.provider && m.id === model.id)) {
 			allModels.push(model);
+		}
+	}
+
+	// MiniMax M2.5 Anthropic API fallback models (in case models.dev hasn't been updated yet)
+	const minimaxAnthropicFallbacks: { id: string; name: string; inputCost: number; outputCost: number }[] = [
+		{ id: "MiniMax-M2.5", name: "MiniMax M2.5", inputCost: 0.15, outputCost: 1.2 },
+		{ id: "MiniMax-M2.5-lightning", name: "MiniMax M2.5 Lightning", inputCost: 0.3, outputCost: 2.4 },
+	];
+	const minimaxAnthropicVariants = [
+		{ provider: "minimax" as const, baseUrl: "https://api.minimax.io/anthropic", suffix: "" },
+		{ provider: "minimax-cn" as const, baseUrl: "https://api.minimaxi.com/anthropic", suffix: " (CN)" },
+	];
+	for (const { provider, baseUrl, suffix } of minimaxAnthropicVariants) {
+		for (const { id, name, inputCost, outputCost } of minimaxAnthropicFallbacks) {
+			if (!allModels.some((m) => m.provider === provider && m.id === id)) {
+				allModels.push({
+					id,
+					name: name + suffix,
+					api: "anthropic-messages",
+					provider,
+					baseUrl,
+					reasoning: true,
+					input: ["text"],
+					cost: {
+						input: inputCost,
+						output: outputCost,
+						cacheRead: 0,
+						cacheWrite: 0,
+					},
+					contextWindow: 204800,
+					maxTokens: 32000,
+				});
+			}
 		}
 	}
 

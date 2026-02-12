@@ -1,8 +1,38 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Added GPT-5.3 Codex Spark model with 128K context window and extended reasoning capabilities
+- Added MiniMax M2.5 and M2.5 Lightning models via OpenAI-compatible API (minimax-code provider)
+- Added MiniMax M2.5 and M2.5 Lightning models via OpenAI-compatible API (minimax-code-cn provider for China region)
+- Added MiniMax M2.5 and M2.5 Lightning models via Anthropic API (minimax and minimax-cn providers)
+- Added Llama 3.1 8B model via Cerebras API
+- Added MiniMax M2.5 model via OpenRouter
+- Added MiniMax M2.5 model via Vercel AI Gateway
+- Added MiniMax M2.5 Free model via OpenCode
+- Added Qwen3 VL 32B Instruct multimodal model via OpenRouter
+
+### Changed
+
+- Updated Z.ai GLM-5 pricing and context window configuration on OpenRouter
+- Updated Qwen3 Max Thinking max tokens from 32768 to 65536 on OpenRouter
+- Updated OpenAI GPT-5 Image Mini pricing on OpenRouter
+- Updated OpenAI GPT-5 Pro pricing and context window on OpenRouter
+- Updated OpenAI o4-mini pricing and context window on OpenRouter
+- Updated Claude Opus 4.5 Thinking model name formatting (removed parentheses)
+- Updated Claude Opus 4.6 Thinking model name formatting (removed parentheses)
+- Updated Claude Sonnet 4.5 Thinking model name formatting (removed parentheses)
+- Updated Gemini 2.5 Flash Thinking model name formatting (removed parentheses)
+- Updated Gemini 3 Pro High and Low model name formatting (removed parentheses)
+- Updated GPT-OSS 120B Medium model name formatting (removed parentheses) and context window to 131072
+
 ### Removed
 
+- Removed GLM-5 model from Z.ai provider
+- Removed Trinity Large Preview Free model from OpenCode provider
+- Removed MiniMax M2.1 Free model from OpenCode provider
 - Removed deprecated Anthropic model entries: `claude-3-5-haiku-latest`, `claude-3-5-haiku-20241022`, `claude-3-7-sonnet-20250219`, `claude-3-7-sonnet-latest`, `claude-3-opus-20240229`, `claude-3-sonnet-20240229` ([#33](https://github.com/can1357/oh-my-pi/issues/33))
 
 ### Fixed
