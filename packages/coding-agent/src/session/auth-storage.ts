@@ -1156,7 +1156,7 @@ export class AuthStorage {
 		let usage: UsageReport | null = null;
 		let usageChecked = false;
 
-		if (checkUsage) {
+		if (checkUsage && !allowBlocked) {
 			usage = await this.#getUsageReport(provider, selection.credential, options);
 			usageChecked = true;
 			if (usage && this.#isUsageLimitReached(usage)) {
@@ -1190,7 +1190,7 @@ export class AuthStorage {
 			};
 			this.#replaceCredentialAt(provider, selection.index, updated);
 
-			if (checkUsage) {
+			if (checkUsage && !allowBlocked) {
 				const sameAccount = selection.credential.accountId === updated.accountId;
 				if (!usageChecked || !sameAccount) {
 					usage = await this.#getUsageReport(provider, updated, options);
