@@ -47,6 +47,8 @@
     "url": "git+https://github.com/can1357/oh-my-pi.git",
     "directory": "packages/stats"
   },
+  "homepage": "https://github.com/can1357/oh-my-pi",
+  "bugs": { "url": "https://github.com/can1357/oh-my-pi/issues" },
   "dependencies": {
     "@oh-my-pi/pi-ai": "workspace:*",
     "date-fns": "^4.1.0",

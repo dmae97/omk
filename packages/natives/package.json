@@ -2,6 +2,7 @@
 	"name": "@oh-my-pi/pi-natives",
 	"version": "12.1.0",
 	"description": "Native Rust functionality via N-API",
+	"keywords": ["napi", "rust", "native", "grep", "text-processing"],
 	"type": "module",
 	"main": "./src/index.ts",
 	"types": "./src/index.ts",
@@ -31,6 +32,8 @@
 		"url": "git+https://github.com/can1357/oh-my-pi.git",
 		"directory": "packages/natives"
 	},
+	"homepage": "https://github.com/can1357/oh-my-pi",
+	"bugs": { "url": "https://github.com/can1357/oh-my-pi/issues" },
 	"dependencies": {
 		"@oh-my-pi/pi-utils": "workspace:*"
 	},

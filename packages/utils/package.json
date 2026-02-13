@@ -2,6 +2,7 @@
 	"name": "@oh-my-pi/pi-utils",
 	"version": "12.1.0",
 	"description": "Shared utilities for pi packages",
+	"keywords": ["utilities", "cli", "logging", "streams"],
 	"type": "module",
 	"main": "./src/index.ts",
 	"types": "./src/index.ts",
@@ -34,6 +35,8 @@
 		"url": "git+https://github.com/can1357/oh-my-pi.git",
 		"directory": "packages/utils"
 	},
+	"homepage": "https://github.com/can1357/oh-my-pi",
+	"bugs": { "url": "https://github.com/can1357/oh-my-pi/issues" },
 	"dependencies": {
 		"winston": "^3.19.0",
 		"winston-daily-rotate-file": "^5.0.0"

@@ -35,13 +35,16 @@
 		"transport",
 		"state-management"
 	],
-	"author": "Mario Zechner",
+	"author": "Can Bölük",
+	"contributors": ["Mario Zechner"],
 	"license": "MIT",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/can1357/oh-my-pi.git",
 		"directory": "packages/agent"
 	},
+	"homepage": "https://github.com/can1357/oh-my-pi",
+	"bugs": { "url": "https://github.com/can1357/oh-my-pi/issues" },
 	"engines": {
 		"bun": ">=1.3.7"
 	},
