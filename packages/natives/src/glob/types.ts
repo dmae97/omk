@@ -29,6 +29,10 @@ export interface GlobOptions extends Cancellable {
 	gitignore?: boolean;
 	/** Sort results by mtime (most recent first) before applying limit. */
 	sortByMtime?: boolean;
+	/** Include node_modules entries even when pattern does not mention node_modules. */
+	includeNodeModules?: boolean;
+	/** Cache scan results for this root/options for the given TTL (milliseconds). */
+	cacheTtlMs?: number;
 }
 
 /** A single filesystem match. */

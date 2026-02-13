@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { FileType, type GlobMatch, glob, grep, htmlToMarkdown } from "../src/index";
+import { FileType, type GlobMatch, fuzzyFind, glob, grep, htmlToMarkdown } from "../src/index";
 
 let testDir: string;
 
@@ -34,6 +34,8 @@ async function setupFixtures() {
 This is a test file.
 `,
 	);
+
+	await fs.writeFile(path.join(testDir, "history-search.ts"), "export const historySearch = true;\n");
 }
 
 async function cleanupFixtures() {
@@ -82,6 +84,21 @@ describe("pi-natives", () => {
 		});
 	});
 
+	describe("fuzzyFind", () => {
+		it("should match abbreviated fuzzy queries across separators", async () => {
+			const result = await fuzzyFind({
+				query: "histsr",
+				path: testDir,
+				hidden: true,
+				gitignore: true,
+				maxResults: 20,
+				cacheTtlMs: 1_000,
+			});
+
+			expect(result.matches.some(match => match.path === "history-search.ts")).toBe(true);
+		});
+	});
+
 	describe("find", () => {
 		it("should find files matching pattern", async () => {
 			const result = await glob({
@@ -89,7 +106,7 @@ describe("pi-natives", () => {
 				path: testDir,
 			});
 
-			expect(result.totalMatches).toBe(2);
+			expect(result.totalMatches).toBe(3);
 			expect(result.matches.every((m: GlobMatch) => m.path.endsWith(".ts"))).toBe(true);
 		});
 
@@ -100,7 +117,7 @@ describe("pi-natives", () => {
 				fileType: FileType.File,
 			});
 
-			expect(result.totalMatches).toBe(3);
+			expect(result.totalMatches).toBe(4);
 		});
 	});
 

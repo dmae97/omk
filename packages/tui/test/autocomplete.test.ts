@@ -72,6 +72,16 @@ describe("CombinedAutocompleteProvider", () => {
 			fs.rmSync(baseDir, { recursive: true, force: true });
 		});
 
+		it("matches segmented filenames from abbreviated fuzzy query", async () => {
+			fs.writeFileSync(path.join(baseDir, "history-search.ts"), "export const x = 1;\n");
+
+			const provider = new CombinedAutocompleteProvider([], baseDir);
+			const line = "@histsr";
+			const result = await provider.getSuggestions([line], 0, line.length);
+
+			const values = result?.items.map(item => item.value) ?? [];
+			expect(values).toContain("@history-search.ts");
+		});
 		it("includes hidden paths but excludes .git", async () => {
 			for (const dir of [".github", ".git"]) {
 				fs.mkdirSync(path.join(baseDir, dir), { recursive: true });

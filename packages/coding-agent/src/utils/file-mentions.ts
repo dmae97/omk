@@ -8,6 +8,7 @@
 import * as fs from "node:fs/promises";
 import path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
+import { glob } from "@oh-my-pi/pi-natives";
 import { formatHashLines } from "../patch/hashline";
 import type { FileMentionMessage } from "../session/messages";
 import { resolveReadPath } from "../tools/path-utils";
@@ -25,6 +26,7 @@ const MENTION_BOUNDARY_REGEX = /[\s([{<"'`]/;
 const DEFAULT_DIR_LIMIT = 500;
 const MIN_FUZZY_QUERY_LENGTH = 5;
 const MAX_RESOLUTION_CANDIDATES = 20_000;
+const MENTION_GLOB_CACHE_TTL_MS = 1_000;
 const PATH_SEPARATOR_REGEX = /[\/._\-\s]+/g;
 
 // Avoid OOM when users @mention very large files. Above these limits we skip
@@ -67,19 +69,23 @@ async function pathExists(filePath: string): Promise<boolean> {
 async function listMentionCandidates(cwd: string): Promise<MentionCandidate[]> {
 	let entries: string[];
 	try {
-		entries = await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd, dot: true, onlyFiles: false }));
+		const result = await glob({
+			pattern: "**/*",
+			path: cwd,
+			hidden: true,
+			gitignore: true,
+			includeNodeModules: true,
+			maxResults: MAX_RESOLUTION_CANDIDATES,
+			cacheTtlMs: MENTION_GLOB_CACHE_TTL_MS,
+		});
+		entries = result.matches.map(match => match.path);
 	} catch {
 		return [];
 	}
 
 	entries.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-
 	const candidates: MentionCandidate[] = [];
 	for (const entry of entries) {
-		if (candidates.length >= MAX_RESOLUTION_CANDIDATES) {
-			break;
-		}
-
 		const pathLower = entry.toLowerCase();
 		const normalizedPath = normalizeMentionQuery(entry);
 		if (normalizedPath.length === 0) {
@@ -87,7 +93,6 @@ async function listMentionCandidates(cwd: string): Promise<MentionCandidate[]> {
 		}
 		candidates.push({ path: entry, pathLower, normalizedPath });
 	}
-
 	return candidates;
 }
 
