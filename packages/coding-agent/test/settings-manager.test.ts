@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { _resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { Snowflake } from "@oh-my-pi/pi-utils";
+import { getProjectAgentDir } from "@oh-my-pi/pi-utils/dirs";
 import { YAML } from "bun";
 
 describe("Settings", () => {
@@ -24,7 +25,7 @@ describe("Settings", () => {
 			fs.rmSync(testDir, { recursive: true });
 		}
 		fs.mkdirSync(agentDir, { recursive: true });
-		fs.mkdirSync(path.join(projectDir, ".omp"), { recursive: true });
+		fs.mkdirSync(getProjectAgentDir(projectDir), { recursive: true });
 	});
 
 	const getConfigPath = () => path.join(agentDir, "config.yml");

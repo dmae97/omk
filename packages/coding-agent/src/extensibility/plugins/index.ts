@@ -14,13 +14,6 @@ export {
 } from "./loader";
 export { PluginManager, parseSettingValue, validateSetting } from "./manager";
 export { extractPackageName, formatPluginSpec, parsePluginSpec } from "./parser";
-export {
-	getPluginsDir,
-	getPluginsLockfile,
-	getPluginsNodeModules,
-	getPluginsPackageJson,
-	getProjectPluginOverrides,
-} from "./paths";
 export type {
 	BooleanSetting,
 	DoctorCheck,

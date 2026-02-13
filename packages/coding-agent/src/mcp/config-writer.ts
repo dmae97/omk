@@ -4,23 +4,11 @@
  * Utilities for reading/writing .omp/mcp.json files at user or project level.
  */
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { isEnoent } from "@oh-my-pi/pi-utils";
+
 import { validateServerConfig } from "./config";
 import type { MCPConfigFile, MCPServerConfig } from "./types";
-
-/**
- * Get the path to the MCP config file.
- * @param scope - "user" for ~/.omp/mcp.json or "project" for .omp/mcp.json
- * @param cwd - Current working directory (used for project scope)
- */
-export function getMCPConfigPath(scope: "user" | "project", cwd: string): string {
-	if (scope === "user") {
-		return path.join(os.homedir(), ".omp", "mcp.json");
-	}
-	return path.join(cwd, ".omp", "mcp.json");
-}
 
 /**
  * Read an MCP config file.

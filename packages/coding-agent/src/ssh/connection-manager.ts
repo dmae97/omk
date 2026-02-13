@@ -1,9 +1,8 @@
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { isEnoent, logger } from "@oh-my-pi/pi-utils";
+import { getRemoteHostDir, getSshControlDir } from "@oh-my-pi/pi-utils/dirs";
 import { $ } from "bun";
-import { CONFIG_DIR_NAME } from "../config";
 
 export interface SSHConnectionTarget {
 	name: string;
@@ -25,9 +24,9 @@ export interface SSHHostInfo {
 	compatEnabled: boolean;
 }
 
-const CONTROL_DIR = path.join(os.homedir(), CONFIG_DIR_NAME, "ssh-control");
+const CONTROL_DIR = getSshControlDir();
 const CONTROL_PATH = path.join(CONTROL_DIR, "%h.sock");
-const HOST_INFO_DIR = path.join(os.homedir(), CONFIG_DIR_NAME, "remote-host");
+const HOST_INFO_DIR = getRemoteHostDir();
 const HOST_INFO_VERSION = 2;
 
 const activeHosts = new Map<string, SSHConnectionTarget>();

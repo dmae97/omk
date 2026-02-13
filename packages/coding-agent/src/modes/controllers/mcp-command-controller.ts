@@ -4,16 +4,11 @@
  * Handles /mcp subcommands for managing MCP servers.
  */
 import { Spacer, Text } from "@oh-my-pi/pi-tui";
+import { getMCPConfigPath } from "@oh-my-pi/pi-utils/dirs";
 import type { SourceMeta } from "../../capability/types";
 import { analyzeAuthError, discoverOAuthEndpoints, MCPManager } from "../../mcp";
 import { connectToServer, disconnectServer, listTools } from "../../mcp/client";
-import {
-	addMCPServer,
-	getMCPConfigPath,
-	readMCPConfigFile,
-	removeMCPServer,
-	updateMCPServer,
-} from "../../mcp/config-writer";
+import { addMCPServer, readMCPConfigFile, removeMCPServer, updateMCPServer } from "../../mcp/config-writer";
 import { MCPOAuthFlow } from "../../mcp/oauth-flow";
 import type { MCPServerConfig, MCPServerConnection } from "../../mcp/types";
 import type { OAuthCredential } from "../../session/auth-storage";

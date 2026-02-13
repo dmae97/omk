@@ -14,9 +14,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { isEnoent, logger, procmgr } from "@oh-my-pi/pi-utils";
+import { getAgentDbPath, getAgentDir } from "@oh-my-pi/pi-utils/dirs";
 import { YAML } from "bun";
 import { type Settings as SettingsCapabilityItem, settingsCapability } from "../capability/settings";
-import { getAgentDbPath, getAgentDir } from "../config";
 import type { ModelRole } from "../config/model-registry";
 import { loadCapability } from "../discovery";
 import { setColorBlindMode, setSymbolPreset, setTheme } from "../modes/theme/theme";

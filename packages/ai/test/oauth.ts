@@ -7,11 +7,10 @@
  * E2E tests are disabled by default. Set E2E=1 environment variable to enable.
  */
 import * as fs from "node:fs/promises";
-import * as os from "node:os";
-import * as path from "node:path";
 import { getOAuthApiKey } from "@oh-my-pi/pi-ai/utils/oauth";
 import type { OAuthCredentials, OAuthProvider } from "@oh-my-pi/pi-ai/utils/oauth/types";
 import { isEnoent } from "@oh-my-pi/pi-utils";
+import { getTestAuthPath } from "@oh-my-pi/pi-utils/dirs";
 
 /**
  * E2E tests require explicit opt-in via E2E=1 environment variable.
@@ -28,7 +27,7 @@ export function e2eApiKey(envVar: string): string | undefined {
 	return Bun.env[envVar];
 }
 
-const AUTH_PATH = path.join(os.homedir(), ".omp", "agent", "testauth.db");
+const AUTH_PATH = getTestAuthPath();
 
 type ApiKeyCredential = {
 	type: "api_key";

@@ -6,8 +6,8 @@
 import * as path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Shell } from "@oh-my-pi/pi-natives";
+import { APP_NAME } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
-import { APP_NAME } from "../config";
 import { Settings } from "../config/settings";
 import { getOrCreateSnapshot } from "../utils/shell-snapshot";
 

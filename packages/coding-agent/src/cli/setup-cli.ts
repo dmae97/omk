@@ -3,11 +3,10 @@
  *
  * Handles `omp setup <component>` to install dependencies for optional features.
  */
-import * as os from "node:os";
 import * as path from "node:path";
+import { APP_NAME, getPythonEnvDir } from "@oh-my-pi/pi-utils/dirs";
 import { $ } from "bun";
 import chalk from "chalk";
-import { APP_NAME, CONFIG_DIR_NAME } from "../config";
 import { theme } from "../modes/theme/theme";
 
 export type SetupComponent = "python";
@@ -23,7 +22,7 @@ export interface SetupCommandArgs {
 const VALID_COMPONENTS: SetupComponent[] = ["python"];
 
 const PYTHON_PACKAGES = ["jupyter_kernel_gateway", "ipykernel"];
-const MANAGED_PYTHON_ENV = path.join(os.homedir(), CONFIG_DIR_NAME, "python-env");
+const MANAGED_PYTHON_ENV = getPythonEnvDir();
 
 /**
  * Parse setup subcommand arguments.

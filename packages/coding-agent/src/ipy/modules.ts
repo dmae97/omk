@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
+import { getAgentModulesDir, getProjectModulesDir } from "@oh-my-pi/pi-utils/dirs";
 
 export type PythonModuleSource = "user" | "project";
 
@@ -26,8 +26,8 @@ export interface PythonModuleExecutor {
 export interface DiscoverPythonModulesOptions {
 	/** Working directory for project-level modules. Default: process.cwd() */
 	cwd?: string;
-	/** Home directory for user-level modules. Default: os.homedir() */
-	homeDir?: string;
+	/** Agent directory for user-level modules. Default: from getAgentDir() */
+	agentDir?: string;
 }
 
 interface ModuleCandidate {
@@ -66,10 +66,9 @@ async function readModuleContent(candidate: ModuleCandidate): Promise<PythonModu
  */
 export async function discoverPythonModules(options: DiscoverPythonModulesOptions = {}): Promise<PythonModuleEntry[]> {
 	const cwd = options.cwd ?? process.cwd();
-	const homeDir = options.homeDir ?? os.homedir();
 
-	const userDir = path.join(homeDir, ".omp", "agent", "modules");
-	const projectDir = path.resolve(cwd, ".omp", "modules");
+	const userDir = getAgentModulesDir(options.agentDir);
+	const projectDir = getProjectModulesDir(cwd);
 
 	const userCandidates = await listModuleCandidates(userDir, "user");
 	const projectCandidates = await listModuleCandidates(projectDir, "project");

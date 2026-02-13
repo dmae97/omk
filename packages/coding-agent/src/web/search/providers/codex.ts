@@ -7,8 +7,8 @@
  */
 import * as os from "node:os";
 import { readSseJson } from "@oh-my-pi/pi-utils";
+import { getAgentDbPath } from "@oh-my-pi/pi-utils/dirs";
 import packageJson from "../../../../package.json" with { type: "json" };
-import { getAgentDbPath } from "../../../config";
 import { AgentStorage } from "../../../session/agent-storage";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";

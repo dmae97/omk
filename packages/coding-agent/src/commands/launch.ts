@@ -2,8 +2,8 @@
  * Root command for the coding agent CLI.
  */
 import { Args, Command, Flags } from "@oh-my-pi/pi-utils/cli";
+import { APP_NAME } from "@oh-my-pi/pi-utils/dirs";
 import { parseArgs } from "../cli/args";
-import { APP_NAME } from "../config";
 import { runRootCommand } from "../main";
 
 export default class Index extends Command {

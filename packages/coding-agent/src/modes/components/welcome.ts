@@ -1,5 +1,5 @@
 import { type Component, padding, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
-import { APP_NAME } from "../../config";
+import { APP_NAME } from "@oh-my-pi/pi-utils/dirs";
 import { theme } from "../../modes/theme/theme";
 
 export interface RecentSession {

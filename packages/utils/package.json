@@ -13,6 +13,10 @@
 		"./cli": {
 			"types": "./src/cli.ts",
 			"import": "./src/cli.ts"
+		},
+		"./dirs": {
+			"types": "./src/dirs.ts",
+			"import": "./src/dirs.ts"
 		}
 	},
 	"files": [

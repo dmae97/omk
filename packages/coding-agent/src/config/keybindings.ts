@@ -9,7 +9,7 @@ import {
 	setEditorKeybindings,
 } from "@oh-my-pi/pi-tui";
 import { logger } from "@oh-my-pi/pi-utils";
-import { getAgentDir } from "../config";
+import { getAgentDir } from "@oh-my-pi/pi-utils/dirs";
 
 /**
  * Application-level actions (coding agent specific).

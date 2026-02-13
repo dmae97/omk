@@ -5,11 +5,10 @@
  * for both the shared gateway and local kernel spawning.
  */
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 
 import { $env } from "@oh-my-pi/pi-utils";
-import { CONFIG_DIR_NAME } from "../config";
+import { getPythonEnvDir } from "@oh-my-pi/pi-utils/dirs";
 
 const DEFAULT_ENV_ALLOWLIST = new Set([
 	"PATH",
@@ -106,7 +105,7 @@ function resolvePathKey(env: Record<string, string | undefined>): string {
 }
 
 function resolveManagedPythonEnv(): string {
-	return path.join(os.homedir(), CONFIG_DIR_NAME, "python-env");
+	return getPythonEnvDir();
 }
 
 function resolveManagedPythonCandidate(): { venvPath: string; pythonPath: string } {

@@ -1,14 +1,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { isEnoent, logger } from "@oh-my-pi/pi-utils";
-import { extractPackageName, parsePluginSpec } from "./parser";
 import {
 	getPluginsDir,
 	getPluginsLockfile,
 	getPluginsNodeModules,
 	getPluginsPackageJson,
-	getProjectPluginOverrides,
-} from "./paths";
+	getProjectPluginOverridesPath,
+} from "@oh-my-pi/pi-utils/dirs";
+import { extractPackageName, parsePluginSpec } from "./parser";
 import type {
 	DoctorCheck,
 	DoctorOptions,
@@ -82,7 +82,7 @@ export class PluginManager {
 	}
 
 	async #loadProjectOverrides(): Promise<ProjectPluginOverrides> {
-		const overridesPath = getProjectPluginOverrides(this.#cwd);
+		const overridesPath = getProjectPluginOverridesPath(this.#cwd);
 		try {
 			return await Bun.file(overridesPath).json();
 		} catch (err) {

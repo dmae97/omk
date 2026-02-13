@@ -3,8 +3,9 @@
  *
  * Handles `omp plugin <command>` subcommands for plugin lifecycle management.
  */
+
+import { APP_NAME } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
-import { APP_NAME } from "../config";
 import { PluginManager, parseSettingValue, validateSetting } from "../extensibility/plugins";
 import { theme } from "../modes/theme/theme";
 

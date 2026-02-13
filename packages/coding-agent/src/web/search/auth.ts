@@ -9,7 +9,7 @@
  */
 import { buildAnthropicHeaders as buildProviderAnthropicHeaders, getEnvApiKey } from "@oh-my-pi/pi-ai";
 import { $env, logger } from "@oh-my-pi/pi-utils";
-import { getAgentDbPath, getAgentDir } from "../../config";
+import { getAgentDbPath, getAgentDir } from "@oh-my-pi/pi-utils/dirs";
 import { AgentStorage } from "../../session/agent-storage";
 import type { AuthCredential } from "../../session/auth-storage";
 import type { AnthropicAuthConfig, AnthropicOAuthCredential, ModelsJson } from "./types";

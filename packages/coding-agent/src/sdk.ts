@@ -2,10 +2,10 @@ import { Agent, type AgentEvent, type AgentMessage, type AgentTool, type Thinkin
 import { type Message, type Model, supportsXhigh } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { $env, logger, postmortem } from "@oh-my-pi/pi-utils";
+import { getAgentDbPath, getAgentDir } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
 import { loadCapability } from "./capability";
 import { type Rule, ruleCapability } from "./capability/rule";
-import { getAgentDbPath, getAgentDir } from "./config";
 import { ModelRegistry } from "./config/model-registry";
 import { formatModelString, parseModelString } from "./config/model-resolver";
 import { loadPromptTemplates as loadPromptTemplatesInternal, type PromptTemplate } from "./config/prompt-templates";

@@ -7,7 +7,7 @@ export { StringEnum } from "@oh-my-pi/pi-ai";
 export { Container, Markdown, Spacer, Text } from "@oh-my-pi/pi-tui";
 // Logging
 export { logger } from "@oh-my-pi/pi-utils";
-export { getAgentDir, VERSION } from "./config";
+export { getAgentDir, VERSION } from "@oh-my-pi/pi-utils/dirs";
 export { formatKeyHint, formatKeyHints } from "./config/keybindings";
 export { ModelRegistry } from "./config/model-registry";
 // Prompt templates

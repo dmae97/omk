@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
-
 import { Agent } from "@oh-my-pi/pi-agent-core";
 import { getModel } from "@oh-my-pi/pi-ai/models";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
@@ -12,6 +11,7 @@ import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { TempDir } from "@oh-my-pi/pi-utils";
+import { getProjectAgentDir } from "@oh-my-pi/pi-utils/dirs";
 
 /**
  * Regression test: auto-compaction completion should resume the agent loop when
@@ -30,7 +30,7 @@ describe("AgentSession auto-compaction queue resume", () => {
 
 		// Provide an extension that short-circuits compaction so the test doesn't
 		// make any LLM calls.
-		const extensionsDir = path.join(tempDir.path(), ".omp", "extensions");
+		const extensionsDir = path.join(getProjectAgentDir(tempDir.path()), "extensions");
 		fs.mkdirSync(extensionsDir, { recursive: true });
 		fs.writeFileSync(
 			path.join(extensionsDir, "compaction-short-circuit.ts"),

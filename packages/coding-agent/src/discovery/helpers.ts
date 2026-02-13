@@ -4,6 +4,7 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import { CONFIG_DIR_NAME } from "@oh-my-pi/pi-utils/dirs";
 import { readDirEntries, readFile } from "../capability/fs";
 import type { Skill, SkillFrontmatter } from "../capability/skill";
 import type { LoadContext, LoadResult, SourceMeta } from "../capability/types";
@@ -39,9 +40,9 @@ export function expandPath(p: string): string {
  */
 export const SOURCE_PATHS = {
 	native: {
-		userBase: ".omp",
-		userAgent: ".omp/agent",
-		projectDir: ".omp",
+		userBase: CONFIG_DIR_NAME,
+		userAgent: `${CONFIG_DIR_NAME}/agent`,
+		projectDir: CONFIG_DIR_NAME,
 	},
 	claude: {
 		userBase: ".claude",

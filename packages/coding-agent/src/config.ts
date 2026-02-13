@@ -1,25 +1,15 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { $env, isEnoent, logger } from "@oh-my-pi/pi-utils";
+import { isEnoent, logger } from "@oh-my-pi/pi-utils";
+import { CONFIG_DIR_NAME, getAgentDir } from "@oh-my-pi/pi-utils/dirs";
 import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { Ajv, type ErrorObject, type ValidateFunction } from "ajv";
 import { JSONC, YAML } from "bun";
-// Embed package.json at build time for config
-import packageJson from "../package.json" with { type: "json" };
-
-// =============================================================================
-// App Config (from embedded package.json)
-// =============================================================================
-
-export const APP_NAME: string = (packageJson as { ompConfig?: { name?: string } }).ompConfig?.name || "omp";
-export const CONFIG_DIR_NAME: string =
-	(packageJson as { ompConfig?: { configDir?: string } }).ompConfig?.configDir || ".omp";
-export const VERSION: string = (packageJson as { version: string }).version;
 
 const priorityList = [
-	{ dir: ".omp", globalAgentDir: ".omp/agent" },
+	{ dir: CONFIG_DIR_NAME, globalAgentDir: `${CONFIG_DIR_NAME}/agent` },
 	{ dir: ".claude" },
 	{ dir: ".codex" },
 	{ dir: ".gemini" },
@@ -251,55 +241,6 @@ export class ConfigFile<T> implements IConfigFile<T> {
 	invalidate() {
 		this.#cache = undefined;
 	}
-}
-
-/** Get the agent config directory (e.g., ~/.omp/agent/) */
-export function getAgentDir(): string {
-	return $env.PI_CODING_AGENT_DIR || path.join(os.homedir(), CONFIG_DIR_NAME, "agent");
-}
-
-/** Get path to user's custom themes directory */
-export function getCustomThemesDir(): string {
-	return path.join(getAgentDir(), "themes");
-}
-
-/**
- * Gets the path to agent.db (SQLite database for settings and auth storage).
- * @param agentDir - Base agent directory, defaults to ~/.omp/agent
- * @returns Absolute path to the agent.db file
- */
-export function getAgentDbPath(agentDir: string = getAgentDir()): string {
-	return path.join(agentDir, "agent.db");
-}
-
-/** Get path to tools directory */
-export function getToolsDir(): string {
-	return path.join(getAgentDir(), "tools");
-}
-
-/** Get path to slash commands directory */
-export function getCommandsDir(): string {
-	return path.join(getAgentDir(), "commands");
-}
-
-/** Get path to prompts directory */
-export function getPromptsDir(): string {
-	return path.join(getAgentDir(), "prompts");
-}
-
-/** Get path to content-addressed blob store directory */
-export function getBlobsDir(): string {
-	return path.join(getAgentDir(), "blobs");
-}
-
-/** Get path to sessions directory */
-export function getSessionsDir(): string {
-	return path.join(getAgentDir(), "sessions");
-}
-
-/** Get path to debug log file */
-export function getDebugLogPath(): string {
-	return path.join(getAgentDir(), `${APP_NAME}-debug.log`);
 }
 
 // =============================================================================

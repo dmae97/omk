@@ -2,8 +2,8 @@
  * Minimal TUI implementation with differential rendering
  */
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
+import { getCrashLogPath, getDebugLogPath } from "@oh-my-pi/pi-utils/dirs";
 import { isKeyRelease, matchesKey } from "./keys";
 import type { Terminal } from "./terminal";
 import { setCellDimensions, TERMINAL } from "./terminal-capabilities";
@@ -872,7 +872,7 @@ export class TUI extends Container {
 		const debugRedraw = process.env.PI_DEBUG_REDRAW === "1";
 		const logRedraw = (reason: string): void => {
 			if (!debugRedraw) return;
-			const logPath = path.join(os.homedir(), ".omp", "agent", "omp-debug.log");
+			const logPath = getDebugLogPath();
 			const msg = `[${new Date().toISOString()}] fullRender: ${reason} (prev=${this.#previousLines.length}, new=${newLines.length}, height=${height})\n`;
 			fs.appendFileSync(logPath, msg);
 		};
@@ -1018,7 +1018,7 @@ export class TUI extends Container {
 			const isImage = TERMINAL.isImageLine(line);
 			if (!isImage && visibleWidth(line) > width) {
 				// Log all lines to crash file for debugging
-				const crashLogPath = path.join(os.homedir(), ".omp", "agent", "omp-crash.log");
+				const crashLogPath = getCrashLogPath();
 				const crashData = [
 					`Crash at ${new Date().toISOString()}`,
 					`Terminal width: ${width}`,

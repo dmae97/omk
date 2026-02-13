@@ -8,8 +8,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as piCodingAgent from "@oh-my-pi/pi-coding-agent";
 import { isEnoent, logger } from "@oh-my-pi/pi-utils";
+import { getAgentDir } from "@oh-my-pi/pi-utils/dirs";
 import * as typebox from "@sinclair/typebox";
-import { getAgentDir, getConfigDirs } from "../../config";
+import { getConfigDirs } from "../../config";
 import { execCommand } from "../../exec/exec";
 import { ReviewCommand } from "./bundled/review";
 import type {

@@ -3,8 +3,8 @@
  */
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { logger } from "@oh-my-pi/pi-utils";
+import { APP_NAME, CONFIG_DIR_NAME } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
-import { APP_NAME, CONFIG_DIR_NAME } from "../config";
 import { BUILTIN_TOOLS } from "../tools";
 
 export type Mode = "text" | "json" | "rpc";

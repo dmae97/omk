@@ -2,9 +2,9 @@
  * System prompt construction and project context loading
  */
 import * as os from "node:os";
-import * as path from "node:path";
 import { getSystemInfo as getNativeSystemInfo, type SystemInfo } from "@oh-my-pi/pi-natives";
 import { $env, logger } from "@oh-my-pi/pi-utils";
+import { getGpuCachePath } from "@oh-my-pi/pi-utils/dirs";
 import { $ } from "bun";
 import { contextFileCapability } from "./capability/context-file";
 import { systemPromptCapability } from "./capability/system-prompt";
@@ -272,7 +272,7 @@ interface GpuCache {
 }
 
 function getSystemInfoCachePath(): string {
-	return path.join(os.homedir(), ".omp", "gpu_cache.json");
+	return getGpuCachePath();
 }
 
 async function loadGpuCache(): Promise<GpuCache | null> {

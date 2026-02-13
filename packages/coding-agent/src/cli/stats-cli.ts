@@ -3,8 +3,9 @@
  *
  * Handles `omp stats` subcommand for viewing AI usage statistics.
  */
+
+import { APP_NAME } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
-import { APP_NAME } from "../config";
 import { openPath } from "../utils/open";
 
 // =============================================================================

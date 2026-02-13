@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { loadPythonModules, type PythonModuleExecutor } from "@oh-my-pi/pi-coding-agent/ipy/modules";
 import { TempDir } from "@oh-my-pi/pi-utils";
+import { getAgentModulesDir, getProjectModulesDir } from "@oh-my-pi/pi-utils/dirs";
 
 const fixturesDir = path.resolve(import.meta.dir, "../../test/fixtures/python-modules");
 
@@ -26,11 +27,11 @@ describe("python modules", () => {
 
 	it("loads modules in sorted order with silent execution", async () => {
 		tempRoot = TempDir.createSync("@omp-python-modules-");
-		const homeDir = path.join(tempRoot.path(), "home");
+		const agentDir = path.join(tempRoot.path(), "agent");
 		const cwd = path.join(tempRoot.path(), "project");
 
-		await writeModule(path.join(homeDir, ".omp", "agent", "modules"), "beta.py", "user-omp");
-		await writeModule(path.join(homeDir, ".omp", "agent", "modules"), "alpha.py", "user-omp");
+		await writeModule(getAgentModulesDir(agentDir), "beta.py", "user-omp");
+		await writeModule(getAgentModulesDir(agentDir), "alpha.py", "user-omp");
 
 		const calls: Array<{ name: string; options?: { silent?: boolean; storeHistory?: boolean } }> = [];
 		const executor: PythonModuleExecutor = {
@@ -41,7 +42,7 @@ describe("python modules", () => {
 			},
 		};
 
-		await loadPythonModules(executor, { cwd, homeDir });
+		await loadPythonModules(executor, { cwd, agentDir });
 		expect(calls.map(call => call.name)).toEqual(["alpha", "beta"]);
 		for (const call of calls) {
 			expect(call.options).toEqual({ silent: true, storeHistory: false });
@@ -50,11 +51,11 @@ describe("python modules", () => {
 
 	it("fails fast when a module fails to execute", async () => {
 		tempRoot = TempDir.createSync("@omp-python-modules-");
-		const homeDir = path.join(tempRoot.path(), "home");
+		const agentDir = path.join(tempRoot.path(), "agent");
 		const cwd = path.join(tempRoot.path(), "project");
 
-		await writeModule(path.join(homeDir, ".omp", "agent", "modules"), "alpha.py", "user-omp");
-		await writeModule(path.join(cwd, ".omp", "modules"), "beta.py", "project-omp");
+		await writeModule(getAgentModulesDir(agentDir), "alpha.py", "user-omp");
+		await writeModule(getProjectModulesDir(cwd), "beta.py", "project-omp");
 
 		const executor: PythonModuleExecutor = {
 			execute: async (code: string) => {
@@ -69,6 +70,6 @@ describe("python modules", () => {
 			},
 		};
 
-		await expect(loadPythonModules(executor, { cwd, homeDir })).rejects.toThrow("Failed to load Python module");
+		await expect(loadPythonModules(executor, { cwd, agentDir })).rejects.toThrow("Failed to load Python module");
 	});
 });

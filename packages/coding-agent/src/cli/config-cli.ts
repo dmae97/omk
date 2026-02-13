@@ -4,8 +4,9 @@
  * Handles `omp config <command>` subcommands for managing settings.
  * Uses settings-defs as the source of truth for available settings.
  */
+
+import { APP_NAME, getAgentDir } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
-import { APP_NAME, getAgentDir } from "../config";
 import {
 	getDefault,
 	getEnumValues,

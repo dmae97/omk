@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
 import { isEnoent, Snowflake } from "@oh-my-pi/pi-utils";
+import { getWorktreeDir } from "@oh-my-pi/pi-utils/dirs";
 import { $ } from "bun";
 
 export interface WorktreeBaseline {
@@ -30,7 +31,7 @@ export async function getRepoRoot(cwd: string): Promise<string> {
 export async function ensureWorktree(baseCwd: string, id: string): Promise<string> {
 	const repoRoot = await getRepoRoot(baseCwd);
 	const encodedProject = getEncodedProjectName(repoRoot);
-	const worktreeDir = path.join(os.homedir(), ".omp", "wt", encodedProject, id);
+	const worktreeDir = getWorktreeDir(encodedProject, id);
 	await fs.mkdir(path.dirname(worktreeDir), { recursive: true });
 	await $`git worktree remove -f ${worktreeDir}`.cwd(repoRoot).quiet().nothrow();
 	await fs.rm(worktreeDir, { recursive: true, force: true });

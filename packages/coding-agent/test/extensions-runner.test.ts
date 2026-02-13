@@ -11,6 +11,7 @@ import { ExtensionRunner } from "@oh-my-pi/pi-coding-agent/extensibility/extensi
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { logger, TempDir } from "@oh-my-pi/pi-utils";
+import { getProjectAgentDir } from "@oh-my-pi/pi-utils/dirs";
 
 describe("ExtensionRunner", () => {
 	let tempDir: TempDir;
@@ -20,7 +21,7 @@ describe("ExtensionRunner", () => {
 
 	beforeEach(async () => {
 		tempDir = TempDir.createSync("@pi-runner-test-");
-		extensionsDir = path.join(tempDir.path(), ".omp", "extensions");
+		extensionsDir = path.join(getProjectAgentDir(tempDir.path()), "extensions");
 		fs.mkdirSync(extensionsDir, { recursive: true });
 		sessionManager = SessionManager.inMemory();
 		const authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));

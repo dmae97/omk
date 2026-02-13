@@ -5,6 +5,7 @@ import * as path from "node:path";
 import type { Skill } from "@oh-my-pi/pi-coding-agent/sdk";
 import { createAgentSession } from "@oh-my-pi/pi-coding-agent/sdk";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+import { getProjectAgentDir } from "@oh-my-pi/pi-utils/dirs";
 
 describe("createAgentSession skills option", () => {
 	let tempDir: string;
@@ -13,7 +14,7 @@ describe("createAgentSession skills option", () => {
 	beforeEach(() => {
 		tempDir = path.join(os.tmpdir(), `pi-sdk-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		// Create skill in .omp/skills/ for native project-level discovery
-		skillsDir = path.join(tempDir, ".omp", "skills", "test-skill");
+		skillsDir = path.join(getProjectAgentDir(tempDir), "skills", "test-skill");
 		fs.mkdirSync(skillsDir, { recursive: true });
 
 		// Create a test skill in the pi skills directory

@@ -7,6 +7,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { $env, abortableSleep, isEnoent } from "@oh-my-pi/pi-utils";
+import { getAgentDir } from "@oh-my-pi/pi-utils/dirs";
 import packageJson from "../../../package.json" with { type: "json" };
 import type { OAuthController, OAuthCredentials } from "./types";
 
@@ -34,11 +35,6 @@ interface TokenResponse {
 	error?: string;
 	error_description?: string;
 	interval?: number;
-}
-
-function getAgentDir(): string {
-	const configDir = $env.PI_CODING_AGENT_DIR || path.join(os.homedir(), ".omp", "agent");
-	return configDir;
 }
 
 function resolveOAuthHost(): string {

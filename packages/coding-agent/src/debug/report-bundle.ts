@@ -4,23 +4,12 @@
  * Creates a .tar.gz archive with session data, logs, system info, and optional profiling data.
  */
 import * as fs from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
 import type { WorkProfile } from "@oh-my-pi/pi-natives";
 import { isEnoent } from "@oh-my-pi/pi-utils";
+import { getLogPath, getReportsDir } from "@oh-my-pi/pi-utils/dirs";
 import type { CpuProfile, HeapSnapshot } from "./profiler";
 import { collectSystemInfo, sanitizeEnv } from "./system-info";
-
-/** Reports directory path */
-export function getReportsDir(): string {
-	return path.join(os.homedir(), ".omp", "reports");
-}
-
-/** Get today's log file path */
-function getLogPath(): string {
-	const today = new Date().toISOString().slice(0, 10);
-	return path.join(os.homedir(), ".omp", "logs", `omp.${today}.log`);
-}
 
 /** Read last N lines from a file */
 async function readLastLines(filePath: string, n: number): Promise<string> {

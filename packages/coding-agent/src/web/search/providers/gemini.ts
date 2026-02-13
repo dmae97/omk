@@ -6,7 +6,7 @@
  * Returns synthesized answers with citations and source metadata from grounding chunks.
  */
 import { refreshGoogleCloudToken } from "@oh-my-pi/pi-ai";
-import { getAgentDbPath } from "../../../config";
+import { getAgentDbPath } from "@oh-my-pi/pi-utils/dirs";
 import { AgentStorage } from "../../../session/agent-storage";
 import type { SearchCitation, SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";

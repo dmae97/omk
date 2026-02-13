@@ -7,12 +7,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { isEnoent } from "@oh-my-pi/pi-utils";
-import {
-	getAllProjectPluginOverridePaths,
-	getPluginsLockfile,
-	getPluginsNodeModules,
-	getPluginsPackageJson,
-} from "./paths";
+import { getPluginsLockfile, getPluginsNodeModules, getPluginsPackageJson } from "@oh-my-pi/pi-utils/dirs";
+import { getConfigDirPaths } from "../../config";
 import type { InstalledPlugin, PluginManifest, PluginRuntimeConfig, ProjectPluginOverrides } from "./types";
 
 // =============================================================================
@@ -36,7 +32,7 @@ async function loadRuntimeConfig(): Promise<PluginRuntimeConfig> {
  * Load project-local plugin overrides (checks .omp and .pi directories).
  */
 async function loadProjectOverrides(cwd: string): Promise<ProjectPluginOverrides> {
-	for (const overridesPath of getAllProjectPluginOverridePaths(cwd)) {
+	for (const overridesPath of getConfigDirPaths("plugin-overrides.json", { user: false, cwd })) {
 		try {
 			return await Bun.file(overridesPath).json();
 		} catch (err) {

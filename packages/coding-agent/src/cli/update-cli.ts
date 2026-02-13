@@ -9,8 +9,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { isEnoent } from "@oh-my-pi/pi-utils";
+import { APP_NAME, VERSION } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
-import { APP_NAME, VERSION } from "../config";
 import { theme } from "../modes/theme/theme";
 
 /**

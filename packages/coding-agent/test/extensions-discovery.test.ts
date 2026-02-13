@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { discoverAndLoadExtensions, loadExtensions } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/loader";
 import { TempDir } from "@oh-my-pi/pi-utils";
+import { getProjectAgentDir } from "@oh-my-pi/pi-utils/dirs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -13,7 +14,7 @@ describe("extensions discovery", () => {
 
 	beforeEach(() => {
 		tempDir = TempDir.createSync("@pi-ext-test-");
-		extensionsDir = path.join(tempDir.path(), ".omp", "extensions");
+		extensionsDir = path.join(getProjectAgentDir(tempDir.path()), "extensions");
 		fs.mkdirSync(extensionsDir, { recursive: true });
 	});
 
