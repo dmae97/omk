@@ -565,8 +565,12 @@ function getCloudCodeAssistSchemaValidator(): Ajv2020 {
  * Keep validation synchronous in this request path.
  */
 function isValidCloudCodeAssistClaudeSchema(schema: unknown): boolean {
-	const result = getCloudCodeAssistSchemaValidator().validateSchema(schema as AnySchema);
-	return typeof result === "boolean" ? result : false;
+	try {
+		const result = getCloudCodeAssistSchemaValidator().validateSchema(schema as AnySchema);
+		return typeof result === "boolean" ? result : false;
+	} catch {
+		return false;
+	}
 }
 
 const CLOUD_CODE_ASSIST_CLAUDE_FALLBACK_SCHEMA = {
