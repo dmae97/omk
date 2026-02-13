@@ -11,6 +11,7 @@ import { DynamicBorder } from "../modes/components/dynamic-border";
 import { getSelectListTheme, getSymbolTheme, theme } from "../modes/theme/theme";
 import type { InteractiveModeContext } from "../modes/types";
 import { openPath } from "../utils/open";
+import { formatDebugLogLine } from "./log-formatting";
 import { generateHeapSnapshotData, type ProfilerSession, startCpuProfile } from "./profiler";
 import { clearArtifactCache, createReportBundle, getArtifactCacheStats, getRecentLogs } from "./report-bundle";
 import { collectSystemInfo, formatSystemInfo } from "./system-info";
@@ -284,10 +285,12 @@ export class DebugSelectorComponent extends Container {
 			this.ctx.chatContainer.addChild(new Spacer(1));
 
 			// Display logs with dim styling
+			const maxWidth = Math.max(1, this.ctx.ui.terminal.columns - 2);
 			const lines = logs.split("\n").slice(-50);
 			for (const line of lines) {
-				if (line.trim()) {
-					this.ctx.chatContainer.addChild(new Text(theme.fg("dim", line), 1, 0));
+				const formatted = formatDebugLogLine(line, maxWidth);
+				if (formatted.trim()) {
+					this.ctx.chatContainer.addChild(new Text(theme.fg("dim", formatted), 1, 0));
 				}
 			}
 
