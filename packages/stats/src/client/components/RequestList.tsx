@@ -1,4 +1,5 @@
 import { formatDistanceToNow } from "date-fns";
+import { CheckCircle2, XCircle } from "lucide-react";
 import type { MessageStats } from "../types";
 
 interface RequestListProps {
@@ -9,94 +10,20 @@ interface RequestListProps {
 
 export function RequestList({ requests, onSelect, title }: RequestListProps) {
 	return (
-		<div
-			style={{
-				background: "var(--bg-secondary)",
-				borderRadius: "12px",
-				border: "1px solid var(--border)",
-				overflow: "hidden",
-				display: "flex",
-				flexDirection: "column",
-				height: "100%",
-			}}
-		>
-			<div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
-				<h3 style={{ margin: 0, fontSize: "1rem" }}>{title}</h3>
+		<div className="surface overflow-hidden flex flex-col h-full">
+			<div className="px-5 py-4 border-b border-[var(--border-subtle)]">
+				<h3 className="text-sm font-semibold text-[var(--text-primary)]">{title}</h3>
 			</div>
-			<div style={{ overflowY: "auto", flex: 1 }}>
-				<table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem" }}>
-					<thead style={{ background: "rgba(0,0,0,0.2)", position: "sticky", top: 0 }}>
+			<div className="overflow-auto flex-1">
+				<table className="w-full">
+					<thead className="bg-[var(--bg-elevated)] sticky top-0 z-10">
 						<tr>
-							<th
-								style={{
-									textAlign: "left",
-									padding: "12px 20px",
-									color: "var(--text-secondary)",
-									fontWeight: 500,
-								}}
-							>
-								Time
-							</th>
-							<th
-								style={{
-									textAlign: "left",
-									padding: "12px 20px",
-									color: "var(--text-secondary)",
-									fontWeight: 500,
-								}}
-							>
-								Model
-							</th>
-							<th
-								style={{
-									textAlign: "right",
-									padding: "12px 20px",
-									color: "var(--text-secondary)",
-									fontWeight: 500,
-								}}
-							>
-								Tokens
-							</th>
-							<th
-								style={{
-									textAlign: "right",
-									padding: "12px 20px",
-									color: "var(--text-secondary)",
-									fontWeight: 500,
-								}}
-							>
-								Cost
-							</th>
-							<th
-								style={{
-									textAlign: "right",
-									padding: "12px 20px",
-									color: "var(--text-secondary)",
-									fontWeight: 500,
-								}}
-							>
-								Duration
-							</th>
-							<th
-								style={{
-									textAlign: "right",
-									padding: "12px 20px",
-									color: "var(--text-secondary)",
-									fontWeight: 500,
-								}}
-							>
-								TTFT
-							</th>
-							<th
-								style={{
-									textAlign: "right",
-									padding: "12px 20px",
-									color: "var(--text-secondary)",
-									fontWeight: 500,
-								}}
-							>
-								Tokens/s
-							</th>
+							<th className="text-left py-3 px-4 table-header">Model</th>
+							<th className="text-left py-3 px-4 table-header">Time</th>
+							<th className="text-right py-3 px-4 table-header">Tokens</th>
+							<th className="text-right py-3 px-4 table-header">Cost</th>
+							<th className="text-right py-3 px-4 table-header">Duration</th>
+							<th className="text-center py-3 px-4 table-header">Status</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -104,42 +31,40 @@ export function RequestList({ requests, onSelect, title }: RequestListProps) {
 							<tr
 								key={`${req.sessionFile}-${req.entryId}`}
 								onClick={() => onSelect(req)}
-								style={{
-									cursor: "pointer",
-									borderBottom: "1px solid var(--border)",
-									transition: "background 0.1s",
-								}}
-								onMouseEnter={e => {
-									e.currentTarget.style.background = "rgba(255,255,255,0.05)";
-								}}
-								onMouseLeave={e => {
-									e.currentTarget.style.background = "transparent";
-								}}
+								className="table-row cursor-pointer border-b border-[var(--border-subtle)] last:border-b-0"
 							>
-								<td style={{ padding: "12px 20px" }}>
+								<td className="py-3 px-4">
+									<div className="font-medium text-[var(--text-primary)] text-sm">{req.model}</div>
+									<div className="text-xs text-[var(--text-muted)]">{req.provider}</div>
+								</td>
+								<td className="py-3 px-4 text-sm text-[var(--text-secondary)]">
 									{formatDistanceToNow(req.timestamp, { addSuffix: true })}
 								</td>
-								<td style={{ padding: "12px 20px" }}>
-									<div style={{ fontWeight: 500 }}>{req.model}</div>
-									<div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>{req.provider}</div>
-								</td>
-								<td style={{ padding: "12px 20px", textAlign: "right" }}>
+								<td className="py-3 px-4 text-right text-sm text-[var(--text-secondary)] font-mono">
 									{req.usage.totalTokens.toLocaleString()}
 								</td>
-								<td style={{ padding: "12px 20px", textAlign: "right" }}>${req.usage.cost.total.toFixed(4)}</td>
-								<td style={{ padding: "12px 20px", textAlign: "right" }}>
+								<td className="py-3 px-4 text-right text-sm text-[var(--text-secondary)] font-mono">
+									${req.usage.cost.total.toFixed(4)}
+								</td>
+								<td className="py-3 px-4 text-right text-sm text-[var(--text-secondary)] font-mono">
 									{req.duration ? `${(req.duration / 1000).toFixed(1)}s` : "-"}
 								</td>
-								<td style={{ padding: "12px 20px", textAlign: "right" }}>
-									{req.ttft ? `${(req.ttft / 1000).toFixed(2)}s` : "-"}
-								</td>
-								<td style={{ padding: "12px 20px", textAlign: "right" }}>
-									{req.duration && req.usage.output
-										? ((req.usage.output * 1000) / req.duration).toFixed(1)
-										: "-"}
+								<td className="py-3 px-4 text-center">
+									{req.errorMessage ? (
+										<XCircle size={16} className="text-[var(--accent-red)] mx-auto" />
+									) : (
+										<CheckCircle2 size={16} className="text-[var(--accent-green)] mx-auto" />
+									)}
 								</td>
 							</tr>
 						))}
+						{requests.length === 0 && (
+							<tr>
+								<td colSpan={6} className="py-12 text-center text-[var(--text-muted)] text-sm">
+									No requests found
+								</td>
+							</tr>
+						)}
 					</tbody>
 				</table>
 			</div>

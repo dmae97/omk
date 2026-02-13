@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { Clock, Coins, FileJson, Gauge, Hash, X, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getRequestDetails } from "../api";
 import type { RequestDetails } from "../types";
@@ -21,18 +21,13 @@ export function RequestDetail({ id, onClose }: RequestDetailProps) {
 
 	if (!details && loading) {
 		return (
-			<div
-				style={{
-					position: "fixed",
-					inset: 0,
-					background: "rgba(0,0,0,0.5)",
-					display: "flex",
-					justifyContent: "center",
-					alignItems: "center",
-					zIndex: 100,
-				}}
-			>
-				<div style={{ background: "var(--bg-secondary)", padding: "20px", borderRadius: "8px" }}>Loading...</div>
+			<div className="fixed inset-0 bg-[var(--bg-overlay)] flex justify-center items-center z-[100]">
+				<div className="surface px-8 py-6">
+					<div className="flex items-center gap-3 text-[var(--text-secondary)]">
+						<div className="w-5 h-5 border-2 border-[var(--border-default)] border-t-[var(--accent-cyan)] rounded-full spin" />
+						<span>Loading...</span>
+					</div>
+				</div>
 			</div>
 		);
 	}
@@ -43,118 +38,127 @@ export function RequestDetail({ id, onClose }: RequestDetailProps) {
 		// biome-ignore lint/a11y/noStaticElementInteractions: modal backdrop dismissal
 		<div
 			role="presentation"
-			style={{
-				position: "fixed",
-				inset: 0,
-				background: "rgba(0,0,0,0.8)",
-				display: "flex",
-				justifyContent: "end",
-				zIndex: 100,
-			}}
+			className="fixed inset-0 bg-[var(--bg-overlay)] backdrop-blur-sm flex justify-end z-[100] animate-fade-in"
 			onClick={onClose}
 		>
 			{/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation for modal content */}
 			<div
 				role="dialog"
 				aria-modal="true"
-				style={{
-					width: "800px",
-					maxWidth: "100%",
-					background: "var(--bg-primary)",
-					height: "100%",
-					overflowY: "auto",
-					borderLeft: "1px solid var(--border)",
-					padding: "30px",
-				}}
+				className="w-[600px] max-w-full bg-[var(--bg-page)] h-full overflow-y-auto border-l border-[var(--border-subtle)] animate-slide-up"
 				onClick={e => e.stopPropagation()}
 			>
-				<div style={{ display: "flex", justifyContent: "space-between", marginBottom: "20px" }}>
-					<h2 style={{ margin: 0 }}>Request Details</h2>
+				{/* Header */}
+				<div className="sticky top-0 bg-[var(--bg-page)]/95 backdrop-blur border-b border-[var(--border-subtle)] px-6 py-4 flex justify-between items-center z-10">
+					<div className="flex items-center gap-3">
+						<div className="w-8 h-8 rounded-[var(--radius-sm)] bg-gradient-to-br from-[var(--accent-pink)]/20 to-[var(--accent-cyan)]/20 flex items-center justify-center">
+							<FileJson size={16} className="text-[var(--accent-cyan)]" />
+						</div>
+						<h2 className="text-lg font-semibold text-[var(--text-primary)]">Request Details</h2>
+					</div>
 					<button
 						type="button"
 						onClick={onClose}
-						style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer" }}
+						className="p-2 rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
 					>
-						<X />
+						<X size={20} />
 					</button>
 				</div>
 
-				<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "30px" }}>
-					<div>
-						<div style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Model</div>
-						<div>
-							{details.model} ({details.provider})
+				<div className="p-6 space-y-6">
+					{/* Model Info */}
+					<div className="surface p-5">
+						<div className="flex items-center justify-between mb-4">
+							<div>
+								<div className="text-2xl font-bold text-[var(--text-primary)]">{details.model}</div>
+								<div className="text-sm text-[var(--text-muted)]">{details.provider}</div>
+							</div>
+							{details.errorMessage ? (
+								<span className="badge badge-error">Error</span>
+							) : (
+								<span className="badge badge-success">Success</span>
+							)}
 						</div>
 					</div>
-					<div>
-						<div style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Cost</div>
-						<div>${details.usage.cost.total.toFixed(4)}</div>
-					</div>
-					<div>
-						<div style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Tokens</div>
-						<div>
-							{details.usage.totalTokens} (In: {details.usage.input}, Out: {details.usage.output})
+
+					{/* Stats Grid */}
+					<div className="grid grid-cols-2 gap-4">
+						<div className="surface p-4">
+							<div className="flex items-center gap-2 text-[var(--text-muted)] mb-2">
+								<Coins size={14} />
+								<span className="text-xs uppercase tracking-wide">Cost</span>
+							</div>
+							<div className="text-xl font-semibold text-[var(--text-primary)]">
+								${details.usage.cost.total.toFixed(4)}
+							</div>
+						</div>
+
+						<div className="surface p-4">
+							<div className="flex items-center gap-2 text-[var(--text-muted)] mb-2">
+								<Hash size={14} />
+								<span className="text-xs uppercase tracking-wide">Tokens</span>
+							</div>
+							<div className="text-xl font-semibold text-[var(--text-primary)]">
+								{details.usage.totalTokens.toLocaleString()}
+							</div>
+							<div className="text-xs text-[var(--text-muted)] mt-1">
+								{details.usage.input.toLocaleString()} in · {details.usage.output.toLocaleString()} out
+							</div>
+						</div>
+
+						<div className="surface p-4">
+							<div className="flex items-center gap-2 text-[var(--text-muted)] mb-2">
+								<Clock size={14} />
+								<span className="text-xs uppercase tracking-wide">Duration</span>
+							</div>
+							<div className="text-xl font-semibold text-[var(--text-primary)]">
+								{details.duration ? `${(details.duration / 1000).toFixed(2)}s` : "-"}
+							</div>
+						</div>
+
+						<div className="surface p-4">
+							<div className="flex items-center gap-2 text-[var(--text-muted)] mb-2">
+								<Zap size={14} />
+								<span className="text-xs uppercase tracking-wide">TTFT</span>
+							</div>
+							<div className="text-xl font-semibold text-[var(--text-primary)]">
+								{details.ttft ? `${(details.ttft / 1000).toFixed(2)}s` : "-"}
+							</div>
 						</div>
 					</div>
-					<div>
-						<div style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Duration</div>
-						<div>{details.duration ? `${(details.duration / 1000).toFixed(2)}s` : "-"}</div>
-					</div>
-					<div>
-						<div style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>TTFT</div>
-						<div>{details.ttft ? `${(details.ttft / 1000).toFixed(2)}s` : "-"}</div>
-					</div>
-					<div>
-						<div style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Tokens/sec</div>
-						<div>
-							{details.duration && details.usage.output
-								? ((details.usage.output * 1000) / details.duration).toFixed(1)
-								: "-"}
+
+					{/* Tokens/Sec */}
+					{details.duration && details.usage.output > 0 && (
+						<div className="surface p-4">
+							<div className="flex items-center justify-between">
+								<div className="flex items-center gap-2 text-[var(--text-muted)]">
+									<Gauge size={14} />
+									<span className="text-xs uppercase tracking-wide">Throughput</span>
+								</div>
+								<span className="text-2xl font-bold gradient-text">
+									{((details.usage.output * 1000) / details.duration).toFixed(1)}
+								</span>
+							</div>
+							<div className="text-xs text-[var(--text-muted)] mt-1 text-right">tokens/second</div>
 						</div>
+					)}
+
+					{/* Output */}
+					<div>
+						<h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Output</h3>
+						<pre className="surface bg-[var(--bg-elevated)] p-4 rounded-[var(--radius-md)] text-sm font-mono text-[var(--text-secondary)] overflow-x-auto">
+							{JSON.stringify(details.output, null, 2)}
+						</pre>
+					</div>
+
+					{/* Raw Metadata */}
+					<div>
+						<h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Raw Metadata</h3>
+						<pre className="surface bg-[var(--bg-elevated)] p-4 rounded-[var(--radius-md)] text-xs font-mono text-[var(--text-muted)] overflow-x-auto">
+							{JSON.stringify(details, null, 2)}
+						</pre>
 					</div>
 				</div>
-
-				<h3 style={{ borderBottom: "1px solid var(--border)", paddingBottom: "10px", marginBottom: "15px" }}>
-					Output
-				</h3>
-				<pre
-					style={{
-						background: "var(--bg-secondary)",
-						padding: "20px",
-						borderRadius: "8px",
-						whiteSpace: "pre-wrap",
-						overflowX: "auto",
-						fontSize: "0.9rem",
-						fontFamily: "monospace",
-					}}
-				>
-					{JSON.stringify(details.output, null, 2)}
-				</pre>
-
-				<h3
-					style={{
-						borderBottom: "1px solid var(--border)",
-						paddingBottom: "10px",
-						marginBottom: "15px",
-						marginTop: "30px",
-					}}
-				>
-					Raw Metadata
-				</h3>
-				<pre
-					style={{
-						background: "var(--bg-secondary)",
-						padding: "20px",
-						borderRadius: "8px",
-						whiteSpace: "pre-wrap",
-						overflowX: "auto",
-						fontSize: "0.8rem",
-						fontFamily: "monospace",
-						color: "var(--text-secondary)",
-					}}
-				>
-					{JSON.stringify(details, null, 2)}
-				</pre>
 			</div>
 		</div>
 	);

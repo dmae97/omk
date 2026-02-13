@@ -1,6 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added real-time authentication validation in OAuth provider selector with visual status indicators (checking, valid, invalid)
+- Added `validateAuth` and `requestRender` options to OAuthSelectorComponent for custom authentication validation and UI refresh callbacks
+
+### Changed
+
+- Changed OAuth provider selector to display live authentication status instead of static login state
+- Changed logout flow to refresh OAuth provider authentication state before showing selector
 
 ## [12.1.0] - 2026-02-13
 

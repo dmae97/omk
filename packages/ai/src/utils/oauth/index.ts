@@ -9,7 +9,6 @@ import { refreshAntigravityToken } from "./google-antigravity";
 import { refreshGoogleCloudToken } from "./google-gemini-cli";
 import { refreshKimiToken } from "./kimi";
 import { refreshOpenAICodexToken } from "./openai-codex";
-import { refreshPerplexityToken } from "./perplexity";
 import type { OAuthCredentials, OAuthProvider, OAuthProviderInfo } from "./types";
 
 /**
@@ -56,7 +55,7 @@ export { loginOpenAICodex, refreshOpenAICodexToken } from "./openai-codex";
 // OpenCode (API key)
 export { loginOpenCode } from "./opencode";
 // Perplexity
-export { loginPerplexity, refreshPerplexityToken } from "./perplexity";
+export { loginPerplexity } from "./perplexity";
 export * from "./types";
 // Z.AI (API key)
 export { loginZai } from "./zai";
@@ -104,8 +103,6 @@ export async function refreshOAuthToken(
 			newCredentials = await refreshCursorToken(credentials.refresh);
 			break;
 		case "perplexity":
-			newCredentials = await refreshPerplexityToken(credentials.refresh);
-			break;
 		case "opencode":
 		case "zai":
 		case "minimax-code":
@@ -118,6 +115,20 @@ export async function refreshOAuthToken(
 	}
 
 	return newCredentials;
+}
+
+function getPerplexityJwtExpiryMs(token: string): number | undefined {
+	const parts = token.split(".");
+	if (parts.length !== 3) return undefined;
+	const payload = parts[1];
+	if (!payload) return undefined;
+	try {
+		const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { exp?: unknown };
+		if (typeof decoded.exp !== "number" || !Number.isFinite(decoded.exp)) return undefined;
+		return decoded.exp * 1000 - 5 * 60_000;
+	} catch {
+		return undefined;
+	}
 }
 
 /**
@@ -138,11 +149,28 @@ export async function getOAuthApiKey(
 		return null;
 	}
 
+	if (provider === "perplexity") {
+		const normalizedExpires =
+			creds.expires > 0 && creds.expires < 10_000_000_000 ? creds.expires * 1000 : creds.expires;
+		const jwtExpiry = getPerplexityJwtExpiryMs(creds.access);
+		const expires = jwtExpiry && jwtExpiry > normalizedExpires ? jwtExpiry : normalizedExpires;
+		if (expires !== creds.expires) {
+			creds = { ...creds, expires };
+		}
+	}
+
 	// Refresh if expired
 	if (Date.now() >= creds.expires) {
 		try {
 			creds = await refreshOAuthToken(provider, creds);
 		} catch {
+			if (provider === "perplexity") {
+				const jwtExpiry = getPerplexityJwtExpiryMs(creds.access);
+				if (jwtExpiry && Date.now() < jwtExpiry) {
+					const fallbackCredentials = { ...creds, expires: jwtExpiry };
+					return { newCredentials: fallbackCredentials, apiKey: fallbackCredentials.access };
+				}
+			}
 			throw new Error(`Failed to refresh OAuth token for ${provider}`);
 		}
 	}

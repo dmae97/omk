@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Perplexity OAuth token refresh now uses JWT expiry extraction instead of Socket.IO RPC, improving reliability when server is unreachable
+- Removed Socket.IO client implementation for Perplexity token refresh; tokens are now validated using embedded JWT expiry claims
+
+### Removed
+
+- Removed `refreshPerplexityToken` export; token refresh is now handled internally via JWT expiry detection
 
 ## [12.0.0] - 2026-02-12
 

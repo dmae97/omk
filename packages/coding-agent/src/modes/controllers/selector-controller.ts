@@ -1,5 +1,5 @@
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
-import type { OAuthProvider } from "@oh-my-pi/pi-ai";
+import { getOAuthProviders, type OAuthProvider } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Input, Loader, Spacer, Text } from "@oh-my-pi/pi-tui";
 import { getAgentDbPath } from "@oh-my-pi/pi-utils/dirs";
@@ -32,6 +32,16 @@ import { setPreferredImageProvider, setPreferredSearchProvider } from "../../too
 export class SelectorController {
 	constructor(private ctx: InteractiveModeContext) {}
 
+	async #refreshOAuthProviderAuthState(): Promise<void> {
+		const oauthProviders = getOAuthProviders();
+		await Promise.all(
+			oauthProviders.map(provider =>
+				this.ctx.session.modelRegistry
+					.getApiKeyForProvider(provider.id, this.ctx.session.sessionId)
+					.catch(() => undefined),
+			),
+		);
+	}
 	/**
 	 * Shows a selector component in place of the editor.
 	 * @param create Factory that receives a `done` callback and returns the component and focus target
@@ -536,8 +546,11 @@ export class SelectorController {
 
 	async showOAuthSelector(mode: "login" | "logout"): Promise<void> {
 		if (mode === "logout") {
-			const providers = this.ctx.session.modelRegistry.authStorage.list();
-			const loggedInProviders = providers.filter(p => this.ctx.session.modelRegistry.authStorage.hasOAuth(p));
+			await this.#refreshOAuthProviderAuthState();
+			const oauthProviders = getOAuthProviders();
+			const loggedInProviders = oauthProviders.filter(provider =>
+				this.ctx.session.modelRegistry.authStorage.hasAuth(provider.id),
+			);
 			if (loggedInProviders.length === 0) {
 				this.ctx.showStatus("No OAuth providers logged in. Use /login first.");
 				return;
@@ -545,15 +558,15 @@ export class SelectorController {
 		}
 
 		this.showSelector(done => {
-			const selector = new OAuthSelectorComponent(
+			let selector: OAuthSelectorComponent;
+			selector = new OAuthSelectorComponent(
 				mode,
 				this.ctx.session.modelRegistry.authStorage,
 				async (providerId: string) => {
+					selector.stopValidation();
 					done();
-
 					if (mode === "login") {
 						this.ctx.showStatus(`Logging in to ${providerId}…`);
-
 						try {
 							await this.ctx.session.modelRegistry.authStorage.login(providerId as OAuthProvider, {
 								onAuth: (info: { url: string; instructions?: string }) => {
@@ -567,7 +580,6 @@ export class SelectorController {
 										this.ctx.chatContainer.addChild(new Text(theme.fg("warning", info.instructions), 1, 0));
 									}
 									this.ctx.ui.requestRender();
-
 									this.ctx.openInBrowser(info.url);
 								},
 								onPrompt: async (prompt: { message: string; placeholder?: string }) => {
@@ -577,7 +589,6 @@ export class SelectorController {
 										this.ctx.chatContainer.addChild(new Text(theme.fg("dim", prompt.placeholder), 1, 0));
 									}
 									this.ctx.ui.requestRender();
-
 									return new Promise<string>(resolve => {
 										const codeInput = new Input();
 										codeInput.onSubmit = () => {
@@ -638,8 +649,21 @@ export class SelectorController {
 					}
 				},
 				() => {
+					selector.stopValidation();
 					done();
 					this.ctx.ui.requestRender();
+				},
+				{
+					validateAuth: async (providerId: string) => {
+						const apiKey = await this.ctx.session.modelRegistry.getApiKeyForProvider(
+							providerId,
+							this.ctx.session.sessionId,
+						);
+						return !!apiKey;
+					},
+					requestRender: () => {
+						this.ctx.ui.requestRender();
+					},
 				},
 			);
 			return { component: selector, focus: selector };

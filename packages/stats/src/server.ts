@@ -1,5 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import postcss from "postcss";
+import tailwindcss from "tailwindcss";
 import {
 	getDashboardStats,
 	getRecentErrors,
@@ -11,6 +13,17 @@ import {
 
 const CLIENT_DIR = path.join(import.meta.dir, "client");
 const STATIC_DIR = path.join(import.meta.dir, "..", "dist", "client");
+
+async function buildTailwindCss(inputPath: string, outputPath: string): Promise<void> {
+	const sourceCss = await Bun.file(inputPath).text();
+	const result = await postcss([
+		tailwindcss({ config: path.join(import.meta.dir, "..", "tailwind.config.js") }),
+	]).process(sourceCss, {
+		from: inputPath,
+		to: outputPath,
+	});
+	await Bun.write(outputPath, result.css);
+}
 
 async function getLatestMtime(dir: string): Promise<number> {
 	let latest = 0;
@@ -31,12 +44,24 @@ async function getLatestMtime(dir: string): Promise<number> {
 
 const ensureClientBuild = async () => {
 	const indexPath = path.join(STATIC_DIR, "index.html");
-	const sourceMtime = await getLatestMtime(CLIENT_DIR);
-	let shouldBuild = true;
-
+	const cssPath = path.join(STATIC_DIR, "styles.css");
+	const clientSourceMtime = await getLatestMtime(CLIENT_DIR);
+	const tailwindConfigPath = path.join(import.meta.dir, "..", "tailwind.config.js");
+	let tailwindConfigMtime = 0;
 	try {
-		const indexStats = await fs.stat(indexPath);
-		if (indexStats.isFile() && indexStats.mtimeMs >= sourceMtime) {
+		const tailwindConfigStats = await fs.stat(tailwindConfigPath);
+		tailwindConfigMtime = tailwindConfigStats.mtimeMs;
+	} catch {}
+	const sourceMtime = Math.max(clientSourceMtime, tailwindConfigMtime);
+	let shouldBuild = true;
+	try {
+		const [indexStats, cssStats] = await Promise.all([fs.stat(indexPath), fs.stat(cssPath)]);
+		if (
+			indexStats.isFile() &&
+			cssStats.isFile() &&
+			indexStats.mtimeMs >= sourceMtime &&
+			cssStats.mtimeMs >= sourceMtime
+		) {
 			shouldBuild = false;
 		}
 	} catch {
@@ -47,6 +72,15 @@ const ensureClientBuild = async () => {
 
 	await fs.rm(STATIC_DIR, { recursive: true, force: true });
 
+	// Build Tailwind CSS with the library API
+	console.log("Building Tailwind CSS...");
+	try {
+		await buildTailwindCss(path.join(CLIENT_DIR, "styles.css"), path.join(STATIC_DIR, "styles.css"));
+	} catch (error) {
+		console.error("Tailwind build failed:", error);
+	}
+
+	console.log("Building React app...");
 	const result = await Bun.build({
 		entrypoints: [path.join(CLIENT_DIR, "index.tsx")],
 		outdir: STATIC_DIR,
@@ -65,32 +99,7 @@ const ensureClientBuild = async () => {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Usage Statistics</title>
-    <style>
-        :root {
-            --bg-primary: #1a1a2e;
-            --bg-secondary: #16213e;
-            --bg-card: #0f3460;
-            --text-primary: #eee;
-            --text-secondary: #aaa;
-            --accent: #e94560;
-            --success: #4ade80;
-            --error: #f87171;
-            --border: #1f2937;
-        }
-        body { 
-            margin: 0; 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-        }
-        * { box-sizing: border-box; }
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: var(--bg-primary); }
-        ::-webkit-scrollbar-thumb { background: var(--bg-card); border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
-        .spin { animation: spin 1s linear infinite; }
-        @keyframes spin { 100% { transform: rotate(360deg); } }
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div id="root"></div>
