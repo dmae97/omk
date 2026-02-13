@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
-import { readImageFromClipboard } from "@oh-my-pi/pi-natives";
+import { copyToClipboard, readImageFromClipboard } from "@oh-my-pi/pi-natives";
 import { $env } from "@oh-my-pi/pi-utils";
 import type { SettingPath, SettingValue } from "../../config/settings";
 import { settings } from "../../config/settings";
@@ -74,6 +74,7 @@ export class InputController {
 		this.ctx.editor.onCtrlG = () => void this.openExternalEditor();
 		this.ctx.editor.onQuestionMark = () => this.ctx.handleHotkeysCommand();
 		this.ctx.editor.onCtrlV = () => this.handleImagePaste();
+		this.ctx.editor.onCopyPrompt = () => this.handleCopyPrompt();
 
 		// Wire up extension shortcuts
 		this.registerExtensionShortcuts();
@@ -662,6 +663,23 @@ export class InputController {
 			this.ctx.showStatus("Failed to read clipboard");
 			return false;
 		}
+	}
+
+	/** Copy current prompt text to system clipboard. */
+	handleCopyPrompt(): void {
+		const text = this.ctx.editor.getText();
+		if (!text) {
+			this.ctx.showStatus("Nothing to copy");
+			return;
+		}
+		copyToClipboard(text)
+			.then(() => {
+				const preview = text.length > 30 ? `${text.slice(0, 30)}...` : text;
+				this.ctx.showStatus(`Copied: ${preview}`);
+			})
+			.catch(() => {
+				this.ctx.showWarning("Failed to copy to clipboard");
+			});
 	}
 
 	cycleThinkingLevel(): void {
