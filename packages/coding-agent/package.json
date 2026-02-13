@@ -3,10 +3,6 @@
 	"version": "12.0.0",
 	"description": "Coding agent CLI with read, bash, edit, write tools and session management",
 	"type": "module",
-	"ompConfig": {
-		"name": "omp",
-		"configDir": ".omp"
-	},
 	"bin": {
 		"omp": "src/cli.ts"
 	},

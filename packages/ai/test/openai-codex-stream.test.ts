@@ -2,24 +2,21 @@ import { afterEach, describe, expect, it, vi } from "bun:test";
 import { streamOpenAICodexResponses } from "@oh-my-pi/pi-ai/providers/openai-codex-responses";
 import type { Context, Model } from "@oh-my-pi/pi-ai/types";
 import { TempDir } from "@oh-my-pi/pi-utils";
+import { getAgentDir, setAgentDir } from "@oh-my-pi/pi-utils/dirs";
 
 const originalFetch = global.fetch;
-const originalAgentDir = Bun.env.PI_CODING_AGENT_DIR;
+const originalAgentDir = getAgentDir();
 
 afterEach(() => {
 	global.fetch = originalFetch;
-	if (originalAgentDir === undefined) {
-		delete Bun.env.PI_CODING_AGENT_DIR;
-	} else {
-		Bun.env.PI_CODING_AGENT_DIR = originalAgentDir;
-	}
+	setAgentDir(originalAgentDir);
 	vi.restoreAllMocks();
 });
 
 describe("openai-codex streaming", () => {
 	it("streams SSE responses into AssistantMessageEventStream", async () => {
 		const tempDir = TempDir.createSync("@pi-codex-stream-");
-		Bun.env.PI_CODING_AGENT_DIR = tempDir.path();
+		setAgentDir(tempDir.path());
 
 		const payload = Buffer.from(
 			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),
@@ -130,7 +127,7 @@ describe("openai-codex streaming", () => {
 
 	it("sets conversation_id/session_id headers and prompt_cache_key when sessionId is provided", async () => {
 		const tempDir = TempDir.createSync("@pi-codex-stream-");
-		Bun.env.PI_CODING_AGENT_DIR = tempDir.path();
+		setAgentDir(tempDir.path());
 
 		const payload = Buffer.from(
 			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),
@@ -230,7 +227,7 @@ describe("openai-codex streaming", () => {
 
 	it("clamps gpt-5.3-codex minimal reasoning effort to low", async () => {
 		const tempDir = TempDir.createSync("@pi-codex-stream-");
-		Bun.env.PI_CODING_AGENT_DIR = tempDir.path();
+		setAgentDir(tempDir.path());
 
 		const payload = Buffer.from(
 			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),
@@ -326,7 +323,7 @@ describe("openai-codex streaming", () => {
 
 	it("does not set conversation_id/session_id headers when sessionId is not provided", async () => {
 		const tempDir = TempDir.createSync("@pi-codex-stream-");
-		Bun.env.PI_CODING_AGENT_DIR = tempDir.path();
+		setAgentDir(tempDir.path());
 
 		const payload = Buffer.from(
 			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),

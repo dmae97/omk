@@ -448,6 +448,7 @@ The `--system-prompt` CLI flag overrides both files. Use `--append-system-prompt
 ### Custom Models and Providers
 
 Add custom models (Ollama, vLLM, LM Studio, etc.) via `~/.omp/agent/models.yml` (`models.json` is still supported for legacy configs):
+
 > See [models.yml provider integration guide](docs/models.md) for full schema, merge behavior, and provider integration patterns.
 
 ```json
@@ -751,7 +752,7 @@ export default function (omp: HookAPI) {
 						content,
 						display: true,
 					},
-					true
+					true,
 				); // triggerTurn: start agent loop
 			}
 		});
@@ -1035,33 +1036,6 @@ Omp is a fork of [Pi](https://github.com/badlogic/pi) by [Mario Zechner](https:/
 ---
 
 ## Development
-
-### Forking / Rebranding
-
-Configure via `package.json`:
-
-```json
-{
-	"ompConfig": {
-		"name": "omp",
-		"configDir": ".omp"
-	}
-}
-```
-
-Change `name`, `configDir`, and `bin` field for your fork. Affects CLI banner, config paths, and environment variable names.
-
-### Path Resolution
-
-Three execution modes: npm install, standalone binary, tsx from source.
-
-**Always use `src/config.ts`** for package assets:
-
-```typescript
-import { getPackageDir } from "./config.js";
-```
-
-Never use `__dirname` directly for package assets.
 
 ### Debug Command
 
