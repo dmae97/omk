@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added real-time authentication validation in OAuth provider selector with visual status indicators (checking, valid, invalid)
@@ -8,6 +9,8 @@
 
 ### Changed
 
+- Improved git context loading performance with configurable timeouts and parallel status/commit queries
+- Enhanced git context reliability with better error handling for timeout and command failures
 - Changed OAuth provider selector to display live authentication status instead of static login state
 - Changed logout flow to refresh OAuth provider authentication state before showing selector
 

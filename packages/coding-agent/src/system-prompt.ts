@@ -50,41 +50,54 @@ async function loadPreloadedSkillContents(preloadedSkills: Skill[]): Promise<Pre
  * Returns structured git data or null if not in a git repo.
  */
 export async function loadGitContext(cwd: string): Promise<GitContext | null> {
-	const git = (...args: string[]) =>
-		$`git ${args}`
-			.cwd(cwd)
-			.quiet()
-			.text()
-			.catch(() => null)
-			.then(text => text?.trim() ?? null);
+	const runGit = async (args: string[], timeoutMs = 1500): Promise<string | null> => {
+		const proc = Bun.spawn(["git", ...args], {
+			cwd,
+			stdout: "pipe",
+			stderr: "ignore",
+		});
+		const stdoutPromise = proc.stdout ? new Response(proc.stdout).text() : Promise.resolve("");
+		const race = await Promise.race([
+			proc.exited.then(() => "exited" as const),
+			Bun.sleep(timeoutMs).then(() => "timeout" as const),
+		]);
 
+		if (race === "timeout") {
+			proc.kill();
+			await stdoutPromise.catch(() => null);
+			logger.debug("Git context command timed out", { cwd, args, timeoutMs });
+			return null;
+		}
+
+		const exitCode = await proc.exited;
+		const stdout = await stdoutPromise.catch(() => "");
+		if (exitCode !== 0) return null;
+
+		const trimmed = stdout.trim();
+		return trimmed.length > 0 ? trimmed : "";
+	};
 	// Check if inside a git repo
-	const isGitRepo = await git("rev-parse", "--is-inside-work-tree");
+	const isGitRepo = await runGit(["rev-parse", "--is-inside-work-tree"]);
 	if (isGitRepo !== "true") return null;
-
-	// Get current branch
-	const currentBranch = await git("rev-parse", "--abbrev-ref", "HEAD");
+	const currentBranch = await runGit(["rev-parse", "--abbrev-ref", "HEAD"]);
 	if (!currentBranch) return null;
-
-	// Detect main branch (check for 'main' first, then 'master')
 	let mainBranch = "main";
-	const mainExists = await git("rev-parse", "--verify", "main");
+	const mainExists = await runGit(["rev-parse", "--verify", "main"]);
 	if (mainExists === null) {
-		const masterExists = await git("rev-parse", "--verify", "master");
+		const masterExists = await runGit(["rev-parse", "--verify", "master"]);
 		if (masterExists !== null) mainBranch = "master";
 	}
 
-	// Get git status (porcelain format for parsing)
-	const status = (await git("status", "--porcelain")) || "(clean)";
-
-	// Get recent commits
-	const commits = (await git("log", "--oneline", "-5")) || "(no commits)";
+	const [status, commits] = await Promise.all([
+		runGit(["status", "--porcelain", "--untracked-files=no"], 2000),
+		runGit(["log", "--oneline", "-5"]),
+	]);
 	return {
 		isRepo: true,
 		currentBranch,
 		mainBranch,
-		status,
-		commits,
+		status: status === "" ? "(clean)" : (status ?? "(status unavailable)"),
+		commits: commits && commits.length > 0 ? commits : "(no commits)",
 	};
 }
 
