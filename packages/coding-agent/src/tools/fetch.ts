@@ -555,13 +555,13 @@ async function renderUrl(url: string, timeout: number, raw: boolean, signal?: Ab
 	if (!response.ok) {
 		return {
 			url,
-			finalUrl: url,
-			contentType: "unknown",
+			finalUrl: response.finalUrl || url,
+			contentType: response.contentType || "unknown",
 			method: "failed",
 			content: "",
 			fetchedAt,
 			truncated: false,
-			notes: ["Failed to fetch URL"],
+			notes: [response.status ? `Failed to fetch URL (HTTP ${response.status})` : "Failed to fetch URL"],
 		};
 	}
 

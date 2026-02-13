@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `providerSessionState` property to AgentSession for managing provider-scoped transport and session caches
@@ -23,6 +22,11 @@
 - Enhanced git context reliability with better error handling for timeout and command failures
 - Changed OAuth provider selector to display live authentication status instead of static login state
 - Changed logout flow to refresh OAuth provider authentication state before showing selector
+
+### Fixed
+
+- Improved error reporting in fetch tool to include HTTP status codes when URL fetching fails
+- Fixed fetch tool to preserve actual response metadata (finalUrl, contentType) instead of defaults when requests fail
 
 ## [12.1.0] - 2026-02-13
 
