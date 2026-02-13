@@ -226,6 +226,7 @@ interface CustomModelsResult {
 	modelOverrides?: Map<string, Map<string, ModelOverride>>;
 	keylessProviders?: Set<string>;
 	discoverableProviders?: DiscoveryProviderConfig[];
+	configuredProviders?: Set<string>;
 	error?: ConfigError;
 	found: boolean;
 }
@@ -340,6 +341,7 @@ export class ModelRegistry {
 			modelOverrides = new Map(),
 			keylessProviders = new Set(),
 			discoverableProviders = [],
+			configuredProviders = new Set(),
 			error: configError,
 		} = this.#loadCustomModels();
 		this.#configError = configError;
@@ -347,6 +349,7 @@ export class ModelRegistry {
 		this.#discoverableProviders = discoverableProviders;
 		this.#modelOverrides = modelOverrides;
 
+		this.#addImplicitDiscoverableProviders(configuredProviders);
 		const builtInModels = this.#loadBuiltInModels(overrides, modelOverrides);
 		const combined = this.#mergeCustomModels(builtInModels, customModels);
 
@@ -405,6 +408,17 @@ export class ModelRegistry {
 		return merged;
 	}
 
+	#addImplicitDiscoverableProviders(configuredProviders: Set<string>): void {
+		if (configuredProviders.has("ollama")) return;
+		this.#discoverableProviders.push({
+			provider: "ollama",
+			api: "openai-completions",
+			baseUrl: Bun.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
+			discovery: { type: "ollama" },
+		});
+		this.#keylessProviders.add("ollama");
+	}
+
 	#loadCustomModels(): CustomModelsResult {
 		const { value, error, status } = this.#modelsConfigFile.tryLoad();
 
@@ -415,6 +429,7 @@ export class ModelRegistry {
 				modelOverrides: new Map(),
 				keylessProviders: new Set(),
 				discoverableProviders: [],
+				configuredProviders: new Set(),
 				error,
 				found: true,
 			};
@@ -425,6 +440,7 @@ export class ModelRegistry {
 				modelOverrides: new Map(),
 				keylessProviders: new Set(),
 				discoverableProviders: [],
+				configuredProviders: new Set(),
 				found: false,
 			};
 		}
@@ -433,6 +449,7 @@ export class ModelRegistry {
 		const allModelOverrides = new Map<string, Map<string, ModelOverride>>();
 		const keylessProviders = new Set<string>();
 		const discoverableProviders: DiscoveryProviderConfig[] = [];
+		const configuredProviders = new Set(Object.keys(value.providers));
 
 		for (const [providerName, providerConfig] of Object.entries(value.providers)) {
 			// Always set overrides when baseUrl/headers present
@@ -480,6 +497,7 @@ export class ModelRegistry {
 			modelOverrides: allModelOverrides,
 			keylessProviders,
 			discoverableProviders,
+			configuredProviders,
 			found: true,
 		};
 	}

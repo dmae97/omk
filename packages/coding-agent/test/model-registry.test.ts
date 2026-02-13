@@ -546,6 +546,28 @@ describe("ModelRegistry", () => {
 	});
 
 	describe("runtime discovery", () => {
+		test("auto-discovers ollama models without provider config", async () => {
+			const originalFetch = globalThis.fetch;
+			globalThis.fetch = (async (input: string | URL | Request) => {
+				expect(String(input)).toBe("http://127.0.0.1:11434/api/tags");
+				return new Response(JSON.stringify({ models: [{ name: "phi4-mini" }] }), {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				});
+			}) as unknown as typeof fetch;
+
+			try {
+				const registry = new ModelRegistry(authStorage, modelsJsonPath);
+				await registry.refresh();
+				const ollamaModels = getModelsForProvider(registry, "ollama");
+				expect(ollamaModels.some(m => m.id === "phi4-mini")).toBe(true);
+				expect(registry.getAvailable().some(m => m.provider === "ollama" && m.id === "phi4-mini")).toBe(true);
+				expect(await registry.getApiKey(ollamaModels[0])).toBe("<no-auth>");
+			} finally {
+				globalThis.fetch = originalFetch;
+			}
+		});
+
 		test("discovers ollama models at runtime and treats auth:none providers as available", async () => {
 			writeRawModelsJson({
 				ollama: {
