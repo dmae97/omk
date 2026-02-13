@@ -447,7 +447,8 @@ The `--system-prompt` CLI flag overrides both files. Use `--append-system-prompt
 
 ### Custom Models and Providers
 
-Add custom models (Ollama, vLLM, LM Studio, etc.) via `~/.omp/agent/models.json`:
+Add custom models (Ollama, vLLM, LM Studio, etc.) via `~/.omp/agent/models.yml` (`models.json` is still supported for legacy configs):
+> See [models.yml provider integration guide](docs/models.md) for full schema, merge behavior, and provider integration patterns.
 
 ```json
 {
