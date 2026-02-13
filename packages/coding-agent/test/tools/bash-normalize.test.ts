@@ -62,6 +62,17 @@ describe("normalizeBashCommand", () => {
 			expect(result.headLines).toBeUndefined();
 			expect(result.tailLines).toBeUndefined();
 		});
+
+		it("preserves internal spacing and tabs", () => {
+			const result = normalizeBashCommand("echo 'a    b\t\tc'");
+			expect(result.command).toBe("echo 'a    b\t\tc'");
+		});
+
+		it("preserves heredoc indentation", () => {
+			const command = "python3 - <<'PY'\nfor i in [1]:\n    if True:\n        x = 1\nPY";
+			const result = normalizeBashCommand(command);
+			expect(result.command).toBe(command);
+		});
 	});
 });
 

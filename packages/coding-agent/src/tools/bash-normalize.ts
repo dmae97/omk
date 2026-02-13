@@ -57,8 +57,8 @@ export function normalizeBashCommand(command: string): NormalizedCommand {
 		normalized = normalized.slice(0, -fullMatch.length);
 	}
 
-	// Clean up multiple horizontal spaces (preserve newlines for heredocs/multiline)
-	normalized = normalized.replace(/[ \t]{2,}/g, " ").trim();
+	// Preserve internal whitespace (important for heredocs / indentation-sensitive scripts)
+	normalized = normalized.trim();
 
 	return {
 		command: normalized,
