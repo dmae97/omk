@@ -595,7 +595,13 @@ export interface ClaudePluginRoot {
 export function parseClaudePluginsRegistry(content: string): ClaudePluginsRegistry | null {
 	const data = parseJSON<ClaudePluginsRegistry>(content);
 	if (!data || typeof data !== "object") return null;
-	if (typeof data.version !== "number" || typeof data.plugins !== "object") return null;
+	if (
+		typeof data.version !== "number" ||
+		!data.plugins ||
+		typeof data.plugins !== "object" ||
+		Array.isArray(data.plugins)
+	)
+		return null;
 	return data;
 }
 
