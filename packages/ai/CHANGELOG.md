@@ -36,6 +36,7 @@
 - Fixed WebSocket append state not being reset after aborted requests, preventing stale state from affecting subsequent turns
 - Fixed WebSocket append state not being reset after stream errors, preventing failed append attempts from blocking future requests
 
+- Fixed Codex model context window metadata to use 272000 input tokens (instead of 400000 total budget) for non-Spark Codex variants
 ## [12.0.0] - 2026-02-12
 
 ### Added

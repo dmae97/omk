@@ -1174,7 +1174,7 @@ async function generateModels() {
 				cacheRead: 0.125,
 				cacheWrite: 1.25,
 			},
-			contextWindow: 400000,
+			contextWindow: 272000,
 			maxTokens: 128000,
 		});
 	}
@@ -1194,7 +1194,7 @@ async function generateModels() {
 				cacheRead: 0.125,
 				cacheWrite: 0,
 			},
-			contextWindow: 400000,
+			contextWindow: 272000,
 			maxTokens: 128000,
 		});
 	}
@@ -1275,7 +1275,7 @@ async function generateModels() {
 			reasoning: true,
 			input: ["text", "image"],
 			cost: { input: 1.75, output: 14, cacheRead: 0.175, cacheWrite: 0 },
-			contextWindow: 400000,
+			contextWindow: CODEX_CONTEXT,
 			maxTokens: CODEX_MAX_TOKENS,
 		},
 		{
@@ -1903,6 +1903,13 @@ async function generateModels() {
 		},
 	];
 	allModels.push(...cursorModels);
+
+	// Normalize Codex models to input-token window (272K). The 400K figure includes output budget.
+	for (const candidate of allModels) {
+		if (candidate.id.includes("codex") && !candidate.id.includes("codex-spark")) {
+			candidate.contextWindow = 272000;
+		}
+	}
 
 	// Group by provider and deduplicate by model ID
 	const providers: Record<string, Record<string, Model>> = {};
