@@ -12,9 +12,11 @@
  * Agent files use markdown with YAML frontmatter.
  */
 import * as fs from "node:fs/promises";
+import * as os from "node:os";
 import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
 import { findAllNearestProjectConfigDirs, getConfigDirs } from "../config";
+import { listClaudePluginRoots } from "../discovery/helpers";
 import { loadBundledAgents, parseAgent } from "./agents";
 import type { AgentDefinition, AgentSource } from "./types";
 
@@ -53,7 +55,7 @@ async function loadAgentsFromDir(dir: string, source: AgentSource): Promise<Agen
  *
  * @param cwd - Current working directory for project agent discovery
  */
-export async function discoverAgents(cwd: string): Promise<DiscoveryResult> {
+export async function discoverAgents(cwd: string, home: string = os.homedir()): Promise<DiscoveryResult> {
 	const resolvedCwd = path.resolve(cwd);
 	const agentSources = Array.from(new Set(getConfigDirs("", { project: false }).map(entry => entry.source)));
 
@@ -83,6 +85,17 @@ export async function discoverAgents(cwd: string): Promise<DiscoveryResult> {
 		if (project) orderedDirs.push({ dir: project.path, source: "project" });
 		const user = userDirs.find(entry => entry.source === source);
 		if (user) orderedDirs.push({ dir: user.path, source: "user" });
+	}
+
+	// Load agents from Claude Code marketplace plugins
+	const { roots: pluginRoots } = await listClaudePluginRoots(home);
+	const sortedPluginRoots = [...pluginRoots].sort((a, b) => {
+		if (a.scope === b.scope) return 0;
+		return a.scope === "project" ? -1 : 1;
+	});
+	for (const plugin of sortedPluginRoots) {
+		const agentsDir = path.join(plugin.path, "agents");
+		orderedDirs.push({ dir: agentsDir, source: plugin.scope === "project" ? "project" : "user" });
 	}
 
 	const seen = new Set<string>();

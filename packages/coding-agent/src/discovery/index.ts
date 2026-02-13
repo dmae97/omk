@@ -23,6 +23,7 @@ import "../capability/tool";
 import "./agents-md";
 import "./builtin";
 import "./claude";
+import "./claude-plugins";
 import "./cline";
 import "./agents";
 import "./codex";
