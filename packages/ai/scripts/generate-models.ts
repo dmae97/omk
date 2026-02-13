@@ -1285,6 +1285,7 @@ async function generateModels() {
 			provider: "openai-codex",
 			baseUrl: CODEX_BASE_URL,
 			reasoning: true,
+			preferWebsockets: true,
 			input: ["text"],
 			cost: { input: 1.75, output: 14, cacheRead: 0.175, cacheWrite: 0 },
 			contextWindow: 128000,

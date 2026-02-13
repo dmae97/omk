@@ -1,14 +1,17 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added `providers.openaiWebsockets` setting to prefer websocket transport for OpenAI Codex models
+- Added provider details display in session info showing authentication mode, transport, and connection settings
+- Added automatic prewarm of OpenAI Codex websocket connections on session creation for improved performance
 - Added real-time authentication validation in OAuth provider selector with visual status indicators (checking, valid, invalid)
 - Added `validateAuth` and `requestRender` options to OAuthSelectorComponent for custom authentication validation and UI refresh callbacks
 
 ### Changed
 
+- Enhanced session info output to display active provider configuration and authentication details
 - Replaced `process.cwd()` with `getProjectDir()` throughout codebase for improved project directory detection and handling
 - Made `SessionManager.list()` async to support asynchronous session discovery operations
 - Preserved internal whitespace and indentation in bash command normalization to support heredocs and indentation-sensitive scripts

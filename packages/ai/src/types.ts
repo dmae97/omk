@@ -164,6 +164,8 @@ export interface SimpleStreamOptions extends StreamOptions {
 	toolChoice?: ToolChoice;
 	/** API format for Kimi Code provider: "openai" or "anthropic" (default: "anthropic") */
 	kimiApiFormat?: "openai" | "anthropic";
+	/** Hint that websocket transport should be preferred when supported by the provider implementation. */
+	preferWebsockets?: boolean;
 }
 
 // Generic StreamFunction with typed options
@@ -390,6 +392,8 @@ export interface Model<TApi extends Api = any> {
 	contextWindow: number;
 	maxTokens: number;
 	headers?: Record<string, string>;
+	/** Hint that websocket transport should be preferred when supported by the provider implementation. */
+	preferWebsockets?: boolean;
 	/** Compatibility overrides for openai-completions API. If not set, auto-detected from baseUrl. */
 	compat?: TApi extends "openai-completions" ? OpenAICompat : never;
 }

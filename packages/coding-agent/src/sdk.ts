@@ -1,5 +1,6 @@
 import { Agent, type AgentEvent, type AgentMessage, type AgentTool, type ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { type Message, type Model, supportsXhigh } from "@oh-my-pi/pi-ai";
+import { prewarmOpenAICodexResponses } from "@oh-my-pi/pi-ai/providers/openai-codex-responses";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { $env, logger, postmortem } from "@oh-my-pi/pi-utils";
 import { getAgentDbPath, getAgentDir, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
@@ -1036,6 +1037,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		thinkingBudgets: settings.getGroup("thinkingBudgets"),
 		temperature: settings.get("temperature") >= 0 ? settings.get("temperature") : undefined,
 		kimiApiFormat: settings.get("providers.kimiApiFormat") ?? "anthropic",
+		preferWebsockets: settings.get("providers.openaiWebsockets") ?? false,
 		getToolContext: tc => toolContextStore.getContext(tc),
 		getApiKey: async provider => {
 			// Use the provider argument from the in-flight request;
@@ -1086,6 +1088,26 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	});
 	debugStartup("sdk:createAgentSession");
 	time("createAgentSession");
+
+	if (model?.api === "openai-codex-responses") {
+		try {
+			debugStartup("sdk:prewarmCodexWebsocket:start");
+			await prewarmOpenAICodexResponses(model, {
+				apiKey: await modelRegistry.getApiKey(model, sessionId),
+				sessionId,
+				preferWebsockets: settings.get("providers.openaiWebsockets") ?? false,
+			});
+			debugStartup("sdk:prewarmCodexWebsocket:done");
+			time("prewarmCodexWebsocket");
+		} catch (error) {
+			logger.debug("Codex websocket prewarm failed", {
+				error: error instanceof Error ? error.message : String(error),
+				provider: model.provider,
+				model: model.id,
+			});
+		}
+	}
+
 
 	// Warm up LSP servers (connects to detected servers)
 	let lspServers: CreateAgentSessionResult["lspServers"];

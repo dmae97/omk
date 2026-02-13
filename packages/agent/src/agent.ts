@@ -74,6 +74,9 @@ export interface AgentOptions {
 	 */
 	kimiApiFormat?: "openai" | "anthropic";
 
+	/** Hint that websocket transport should be preferred when supported by the provider implementation. */
+	preferWebsockets?: boolean;
+
 	/**
 	 * Custom stream function (for proxy backends, etc.). Default uses streamSimple.
 	 */
@@ -168,6 +171,7 @@ export class Agent {
 	#runningPrompt?: Promise<void>;
 	#resolveRunningPrompt?: () => void;
 	#kimiApiFormat?: "openai" | "anthropic";
+	#preferWebsockets?: boolean;
 
 	/** Buffered Cursor tool results with text length at time of call (for correct ordering) */
 	#cursorToolResultBuffer: CursorToolResultEntry[] = [];
@@ -192,6 +196,7 @@ export class Agent {
 		this.#cursorExecHandlers = opts.cursorExecHandlers;
 		this.#cursorOnToolResult = opts.cursorOnToolResult;
 		this.#kimiApiFormat = opts.kimiApiFormat;
+		this.#preferWebsockets = opts.preferWebsockets;
 	}
 
 	/**
@@ -591,6 +596,7 @@ export class Agent {
 			thinkingBudgets: this.#thinkingBudgets,
 			maxRetryDelayMs: this.#maxRetryDelayMs,
 			kimiApiFormat: this.#kimiApiFormat,
+			preferWebsockets: this.#preferWebsockets,
 			toolChoice: options?.toolChoice,
 			convertToLlm: this.#convertToLlm,
 			transformContext: this.#transformContext,

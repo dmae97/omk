@@ -1,6 +1,7 @@
 export type { Static, TSchema } from "@sinclair/typebox";
 export { Type } from "@sinclair/typebox";
 export * from "./models";
+export * from "./provider-details";
 export * from "./providers/anthropic";
 export * from "./providers/azure-openai-responses";
 export * from "./providers/cursor";

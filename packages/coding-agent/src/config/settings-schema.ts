@@ -592,6 +592,15 @@ export const SETTINGS_SCHEMA = {
 			submenu: true,
 		},
 	},
+	"providers.openaiWebsockets": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "services",
+			label: "OpenAI websockets",
+			description: "Prefer websocket transport for OpenAI Codex models",
+		},
+	},
 
 	// ─────────────────────────────────────────────────────────────────────────
 	// Exa settings

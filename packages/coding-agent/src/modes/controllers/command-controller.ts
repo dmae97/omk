@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { UsageLimit, UsageReport } from "@oh-my-pi/pi-ai";
+import { getEnvApiKey, getProviderDetails, type ProviderDetails, type UsageLimit, type UsageReport } from "@oh-my-pi/pi-ai";
 import { copyToClipboard } from "@oh-my-pi/pi-natives";
 import { Loader, Markdown, padding, Spacer, Text, visibleWidth } from "@oh-my-pi/pi-tui";
 import { Snowflake } from "@oh-my-pi/pi-utils";
@@ -18,6 +18,7 @@ import { PythonExecutionComponent } from "../../modes/components/python-executio
 import { getMarkdownTheme, getSymbolTheme, theme } from "../../modes/theme/theme";
 import type { InteractiveModeContext } from "../../modes/types";
 import { createCompactionSummaryMessage } from "../../session/messages";
+import type { AuthStorage } from "../../session/auth-storage";
 import { outputMeta } from "../../tools/output-meta";
 import { resolveToCwd } from "../../tools/path-utils";
 import { getChangelogPath, parseChangelog } from "../../utils/changelog";
@@ -207,6 +208,21 @@ export class CommandController {
 		let info = `${theme.bold("Session Info")}\n\n`;
 		info += `${theme.fg("dim", "File:")} ${stats.sessionFile ?? "In-memory"}\n`;
 		info += `${theme.fg("dim", "ID:")} ${stats.sessionId}\n\n`;
+		info += `\n${theme.bold("Provider")}\n`;
+		const model = this.ctx.session.model;
+		if (!model) {
+			info += `${theme.fg("dim", "No model selected")}\n`;
+		} else {
+			const authMode = resolveProviderAuthMode(this.ctx.session.modelRegistry.authStorage, model.provider);
+			const providerDetails = getProviderDetails({
+				model,
+				sessionId: stats.sessionId,
+				authMode,
+				preferWebsockets: this.ctx.settings.get("providers.openaiWebsockets") ?? false,
+			});
+			info += renderProviderSection(providerDetails, theme);
+		}
+		info += `\n`;
 		info += `${theme.bold("Messages")}\n`;
 		info += `${theme.fg("dim", "User:")} ${stats.userMessages}\n`;
 		info += `${theme.fg("dim", "Assistant:")} ${stats.assistantMessages}\n`;
@@ -739,6 +755,32 @@ function formatDurationShort(ms: number): string {
 	if (minutes > 0) return `${minutes}m`;
 	return `${totalSeconds}s`;
 }
+
+function resolveProviderAuthMode(authStorage: AuthStorage, provider: string): string {
+	if (authStorage.hasOAuth(provider)) {
+		return "oauth";
+	}
+	if (authStorage.has(provider)) {
+		return "api key";
+	}
+	if (getEnvApiKey(provider)) {
+		return "env api key";
+	}
+	if (authStorage.hasAuth(provider)) {
+		return "runtime/fallback";
+	}
+	return "unknown";
+}
+
+export function renderProviderSection(details: ProviderDetails, uiTheme: Pick<typeof theme, "fg">): string {
+	const lines: string[] = [];
+	lines.push(`${uiTheme.fg("dim", "Name:")} ${details.provider}`);
+	for (const field of details.fields) {
+		lines.push(`${uiTheme.fg("dim", `${field.label}:`)} ${field.value}`);
+	}
+	return `${lines.join("\n")}\n`;
+}
+
 
 function resolveFraction(limit: UsageLimit): number | undefined {
 	const amount = limit.amount;

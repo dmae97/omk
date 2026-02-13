@@ -12965,6 +12965,7 @@
 			"provider": "openai-codex",
 			"baseUrl": "https://chatgpt.com/backend-api",
 			"reasoning": true,
+			"preferWebsockets": true,
 			"input": [
 				"text"
 			],

@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `preferWebsockets` option to hint that websocket transport should be preferred when supported by the provider implementation
 
 ## [11.10.0] - 2026-02-10
 ### Added

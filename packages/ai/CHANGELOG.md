@@ -1,8 +1,21 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Added `preferWebsockets` option to enable WebSocket transport for OpenAI Codex responses when supported
+- Added `prewarmOpenAICodexResponses()` function to establish and reuse WebSocket connections across multiple requests
+- Added `getOpenAICodexTransportDetails()` function to inspect transport layer details including WebSocket status and fallback information
+- Added `getProviderDetails()` function to retrieve formatted provider configuration and transport information
+- Added automatic fallback from WebSocket to SSE when connection fails, with transparent retry logic
+- Added session state management to reuse WebSocket connections and enable request appending across turns
+- Added support for x-codex-turn-state header to maintain conversation state across SSE requests
+
 ### Changed
 
+- Changed OpenAI Codex model configuration to prefer WebSocket transport by default with `preferWebsockets: true`
+- Changed header handling to use appropriate OpenAI-Beta header values for WebSocket vs SSE transports
 - Perplexity OAuth token refresh now uses JWT expiry extraction instead of Socket.IO RPC, improving reliability when server is unreachable
 - Removed Socket.IO client implementation for Perplexity token refresh; tokens are now validated using embedded JWT expiry claims
 
