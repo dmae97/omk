@@ -8,6 +8,7 @@ import { Markdown } from "@oh-my-pi/pi-tui/components/markdown";
 import { Text } from "@oh-my-pi/pi-tui/components/text";
 import { ProcessTerminal } from "@oh-my-pi/pi-tui/terminal";
 import { TUI } from "@oh-my-pi/pi-tui/tui";
+import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
 import { defaultEditorTheme, defaultMarkdownTheme } from "./test-themes";
 
@@ -31,7 +32,7 @@ const autocompleteProvider = new CombinedAutocompleteProvider(
 		{ name: "delete", description: "Delete the last message" },
 		{ name: "clear", description: "Clear all messages" },
 	],
-	process.cwd(),
+	getProjectDir(),
 );
 editor.setAutocompleteProvider(autocompleteProvider);
 

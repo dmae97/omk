@@ -8,7 +8,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as piCodingAgent from "@oh-my-pi/pi-coding-agent";
 import { isEnoent, logger } from "@oh-my-pi/pi-utils";
-import { getAgentDir } from "@oh-my-pi/pi-utils/dirs";
+import { getAgentDir, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import * as typebox from "@sinclair/typebox";
 import { getConfigDirs } from "../../config";
 import { execCommand } from "../../exec/exec";
@@ -62,7 +62,7 @@ async function loadCommandModule(
 }
 
 export interface DiscoverCustomCommandsOptions {
-	/** Current working directory. Default: process.cwd() */
+	/** Current working directory. Default: getProjectDir() */
 	cwd?: string;
 	/** Agent config directory. Default: from getAgentDir() */
 	agentDir?: string;
@@ -80,7 +80,7 @@ export interface DiscoverCustomCommandsResult {
 export async function discoverCustomCommands(
 	options: DiscoverCustomCommandsOptions = {},
 ): Promise<DiscoverCustomCommandsResult> {
-	const cwd = options.cwd ?? process.cwd();
+	const cwd = options.cwd ?? getProjectDir();
 	const agentDir = options.agentDir ?? getAgentDir();
 	const paths: Array<{ path: string; source: CustomCommandSource }> = [];
 	const seen = new Set<string>();
@@ -136,7 +136,7 @@ export async function discoverCustomCommands(
 }
 
 export interface LoadCustomCommandsOptions {
-	/** Current working directory. Default: process.cwd() */
+	/** Current working directory. Default: getProjectDir() */
 	cwd?: string;
 	/** Agent config directory. Default: from getAgentDir() */
 	agentDir?: string;
@@ -163,7 +163,7 @@ function loadBundledCommands(sharedApi: CustomCommandAPI): LoadedCustomCommand[]
  * Discover and load custom commands from standard locations.
  */
 export async function loadCustomCommands(options: LoadCustomCommandsOptions = {}): Promise<CustomCommandsLoadResult> {
-	const cwd = options.cwd ?? process.cwd();
+	const cwd = options.cwd ?? getProjectDir();
 	const agentDir = options.agentDir ?? getAgentDir();
 
 	const { paths } = await discoverCustomCommands({ cwd, agentDir });

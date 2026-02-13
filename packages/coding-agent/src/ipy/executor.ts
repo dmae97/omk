@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import { $env, isEnoent, logger } from "@oh-my-pi/pi-utils";
-import { getAgentDir } from "@oh-my-pi/pi-utils/dirs";
+import { getAgentDir, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import { OutputSink } from "../session/streaming-output";
 import { time } from "../utils/timings";
 import { shutdownSharedGateway } from "./gateway-coordinator";
@@ -523,7 +523,7 @@ export async function executePythonWithKernel(
 }
 
 export async function executePython(code: string, options?: PythonExecutorOptions): Promise<PythonResult> {
-	const cwd = options?.cwd ?? process.cwd();
+	const cwd = options?.cwd ?? getProjectDir();
 	await ensureKernelAvailable(cwd);
 
 	const kernelMode = options?.kernelMode ?? "session";

@@ -1,8 +1,9 @@
 import * as path from "node:path";
 import { Glob } from "bun";
+import { getProjectDir } from "./dirs";
 
 export interface GlobPathsOptions {
-	/** Base directory for glob patterns. Defaults to process.cwd(). */
+	/** Base directory for glob patterns. Defaults to getProjectDir(). */
 	cwd?: string;
 	/** Glob exclusion patterns. */
 	exclude?: string[];
@@ -126,7 +127,7 @@ export async function loadGitignorePatterns(baseDir: string): Promise<string[]> 
 
 /**
  * Resolve filesystem paths matching glob patterns with optional exclude filters.
- * Returns paths relative to the provided cwd (or process.cwd()).
+ * Returns paths relative to the provided cwd (or getProjectDir()).
  * Errors and abort/timeouts are surfaced to the caller.
  */
 export async function globPaths(patterns: string | string[], options: GlobPathsOptions = {}): Promise<string[]> {
@@ -140,11 +141,11 @@ export async function globPaths(patterns: string | string[], options: GlobPathsO
 	let effectiveExclude = exclude ? [...baseExclude, ...exclude] : baseExclude;
 
 	if (gitignore) {
-		const gitignorePatterns = await loadGitignorePatterns(cwd ?? process.cwd());
+		const gitignorePatterns = await loadGitignorePatterns(cwd ?? getProjectDir());
 		effectiveExclude = [...effectiveExclude, ...gitignorePatterns];
 	}
 
-	const base = cwd ?? process.cwd();
+	const base = cwd ?? getProjectDir();
 	const allResults: string[] = [];
 
 	// Combine timeout and abort signals

@@ -281,7 +281,7 @@ export function substituteArgs(content: string, args: string[]): string {
 }
 
 export interface LoadSlashCommandsOptions {
-	/** Working directory for project-local commands. Default: process.cwd() */
+	/** Working directory for project-local commands. Default: getProjectDir() */
 	cwd?: string;
 }
 

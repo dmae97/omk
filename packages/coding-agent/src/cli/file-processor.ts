@@ -5,6 +5,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ImageContent } from "@oh-my-pi/pi-ai";
 import { isEnoent } from "@oh-my-pi/pi-utils";
+import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
 import { resolveReadPath } from "../tools/path-utils";
 import { formatSize } from "../tools/truncate";
@@ -34,7 +35,7 @@ export async function processFileArguments(fileArgs: string[], options?: Process
 
 	for (const fileArg of fileArgs) {
 		// Expand and resolve path (handles ~ expansion and macOS screenshot Unicode spaces)
-		const absolutePath = path.resolve(resolveReadPath(fileArg, process.cwd()));
+		const absolutePath = path.resolve(resolveReadPath(fileArg, getProjectDir()));
 
 		const stat = fs.statSync(absolutePath, { throwIfNoEntry: false });
 		if (!stat) {

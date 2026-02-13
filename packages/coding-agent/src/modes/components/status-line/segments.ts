@@ -1,4 +1,5 @@
 import * as os from "node:os";
+import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import { theme } from "../../../modes/theme/theme";
 import { shortenPath } from "../../../tools/render-utils";
 import type { RenderedSegment, SegmentContext, StatusLineSegment, StatusLineSegmentId } from "./types";
@@ -91,7 +92,7 @@ const pathSegment: StatusLineSegment = {
 	render(ctx) {
 		const opts = ctx.options.path ?? {};
 
-		let pwd = process.cwd();
+		let pwd = getProjectDir();
 
 		if (opts.abbreviate !== false) {
 			pwd = shortenPath(pwd);

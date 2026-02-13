@@ -62,7 +62,7 @@ export interface LoadOptions {
 	providers?: string[];
 	/** Exclude these providers (by ID). Default: none */
 	excludeProviders?: string[];
-	/** Custom cwd. Default: process.cwd() */
+	/** Custom cwd. Default: getProjectDir() */
 	cwd?: string;
 	/** Include items even if they fail validation. Default: false */
 	includeInvalid?: boolean;

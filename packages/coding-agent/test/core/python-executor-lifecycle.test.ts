@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "bun:test";
 import { disposeAllKernelSessions, executePython } from "@oh-my-pi/pi-coding-agent/ipy/executor";
 import type { KernelExecuteResult } from "@oh-my-pi/pi-coding-agent/ipy/kernel";
 import * as pythonKernel from "@oh-my-pi/pi-coding-agent/ipy/kernel";
+import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 
 class FakeKernel {
 	execute = vi.fn(async () => this.result);
@@ -36,7 +37,7 @@ describe("executePython lifecycle", () => {
 			.spyOn(pythonKernel.PythonKernel, "start")
 			.mockResolvedValue(kernel as unknown as pythonKernel.PythonKernel);
 
-		await executePython("print('hi')", { kernelMode: "per-call", cwd: process.cwd() });
+		await executePython("print('hi')", { kernelMode: "per-call", cwd: getProjectDir() });
 
 		expect(startSpy).toHaveBeenCalledTimes(1);
 		expect(kernel.execute).toHaveBeenCalledTimes(1);
@@ -50,8 +51,8 @@ describe("executePython lifecycle", () => {
 			.spyOn(pythonKernel.PythonKernel, "start")
 			.mockResolvedValue(kernel as unknown as pythonKernel.PythonKernel);
 
-		await executePython("1 + 1", { kernelMode: "session", sessionId: "test-session", cwd: process.cwd() });
-		await executePython("2 + 2", { kernelMode: "session", sessionId: "test-session", cwd: process.cwd() });
+		await executePython("1 + 1", { kernelMode: "session", sessionId: "test-session", cwd: getProjectDir() });
+		await executePython("2 + 2", { kernelMode: "session", sessionId: "test-session", cwd: getProjectDir() });
 
 		expect(startSpy).toHaveBeenCalledTimes(1);
 		expect(kernel.execute).toHaveBeenCalledTimes(2);
@@ -66,12 +67,12 @@ describe("executePython lifecycle", () => {
 			.mockResolvedValueOnce(kernel as unknown as pythonKernel.PythonKernel)
 			.mockResolvedValueOnce(kernelNext as unknown as pythonKernel.PythonKernel);
 
-		await executePython("1 + 1", { kernelMode: "session", sessionId: "reset-session", cwd: process.cwd() });
+		await executePython("1 + 1", { kernelMode: "session", sessionId: "reset-session", cwd: getProjectDir() });
 		await executePython("2 + 2", {
 			kernelMode: "session",
 			sessionId: "reset-session",
 			reset: true,
-			cwd: process.cwd(),
+			cwd: getProjectDir(),
 		});
 
 		expect(startSpy).toHaveBeenCalledTimes(2);
@@ -89,7 +90,7 @@ describe("executePython lifecycle", () => {
 			.mockResolvedValueOnce(kernel as unknown as pythonKernel.PythonKernel)
 			.mockResolvedValueOnce(kernelNext as unknown as pythonKernel.PythonKernel);
 
-		await executePython("1 + 1", { kernelMode: "session", sessionId: "dead-session", cwd: process.cwd() });
+		await executePython("1 + 1", { kernelMode: "session", sessionId: "dead-session", cwd: getProjectDir() });
 
 		expect(startSpy).toHaveBeenCalledTimes(2);
 		expect(kernel.shutdown).toHaveBeenCalledTimes(1);

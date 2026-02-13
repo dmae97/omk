@@ -4,7 +4,7 @@
  * Handles /mcp subcommands for managing MCP servers.
  */
 import { Spacer, Text } from "@oh-my-pi/pi-tui";
-import { getMCPConfigPath } from "@oh-my-pi/pi-utils/dirs";
+import { getMCPConfigPath, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import type { SourceMeta } from "../../capability/types";
 import { analyzeAuthError, discoverOAuthEndpoints, MCPManager } from "../../mcp";
 import { connectToServer, disconnectServer, listTools } from "../../mcp/client";
@@ -528,7 +528,7 @@ export class MCPCommandController {
 		if (this.ctx.mcpManager) {
 			resolvedConfig = await this.ctx.mcpManager.prepareConfig(config);
 		} else {
-			const tempManager = new MCPManager(process.cwd());
+			const tempManager = new MCPManager(getProjectDir());
 			tempManager.setAuthStorage(this.ctx.session.modelRegistry.authStorage);
 			resolvedConfig = await tempManager.prepareConfig(config);
 		}
@@ -540,7 +540,7 @@ export class MCPCommandController {
 	async #findConfiguredServer(
 		name: string,
 	): Promise<{ filePath: string; scope: "user" | "project"; config: MCPServerConfig } | null> {
-		const cwd = process.cwd();
+		const cwd = getProjectDir();
 		const userPath = getMCPConfigPath("user", cwd);
 		const projectPath = getMCPConfigPath("project", cwd);
 
@@ -665,7 +665,7 @@ export class MCPCommandController {
 	async #handleWizardComplete(name: string, config: MCPServerConfig, scope: "user" | "project"): Promise<void> {
 		try {
 			// Determine file path
-			const cwd = process.cwd();
+			const cwd = getProjectDir();
 			const filePath = getMCPConfigPath(scope, cwd);
 
 			// Add server to config
@@ -747,7 +747,7 @@ export class MCPCommandController {
 	 */
 	async #handleList(): Promise<void> {
 		try {
-			const cwd = process.cwd();
+			const cwd = getProjectDir();
 
 			// Load from both user and project configs
 			const userPath = getMCPConfigPath("user", cwd);
@@ -913,7 +913,7 @@ export class MCPCommandController {
 		}
 
 		try {
-			const cwd = process.cwd();
+			const cwd = getProjectDir();
 			const userPath = getMCPConfigPath("user", cwd);
 			const projectPath = getMCPConfigPath("project", cwd);
 			const filePath = scope === "user" ? userPath : projectPath;
@@ -957,7 +957,7 @@ export class MCPCommandController {
 
 		let connection: MCPServerConnection | undefined;
 		try {
-			const cwd = process.cwd();
+			const cwd = getProjectDir();
 			const userPath = getMCPConfigPath("user", cwd);
 			const projectPath = getMCPConfigPath("project", cwd);
 
@@ -989,7 +989,7 @@ export class MCPCommandController {
 			if (this.ctx.mcpManager) {
 				resolvedConfig = await this.ctx.mcpManager.prepareConfig(config);
 			} else {
-				const tempManager = new MCPManager(process.cwd());
+				const tempManager = new MCPManager(getProjectDir());
 				tempManager.setAuthStorage(this.ctx.session.modelRegistry.authStorage);
 				resolvedConfig = await tempManager.prepareConfig(config);
 			}

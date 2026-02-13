@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import type { Api, Model } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
+import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import { ModelRegistry } from "../config/model-registry";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import { Settings } from "../config/settings";
@@ -38,7 +39,7 @@ export async function runCommitCommand(args: CommitCommandArgs): Promise<void> {
 }
 
 async function runLegacyCommitCommand(args: CommitCommandArgs): Promise<void> {
-	const cwd = process.cwd();
+	const cwd = getProjectDir();
 	const settings = await Settings.init();
 	const commitSettings = settings.getGroup("commit");
 	const authStorage = await discoverAuthStorage();

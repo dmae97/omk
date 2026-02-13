@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { type Component, padding, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
+import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import { $ } from "bun";
 import { settings } from "../../config/settings";
 import type { StatusLinePreset, StatusLineSegmentId, StatusLineSeparatorStyle } from "../../config/settings-schema";
@@ -41,7 +42,7 @@ function sanitizeStatusText(text: string): string {
 
 /** Find the git root directory by walking up from cwd */
 function findGitHeadPath(): string | null {
-	let dir = process.cwd();
+	let dir = getProjectDir();
 	while (true) {
 		const gitHeadPath = path.join(dir, ".git", "HEAD");
 		if (fs.existsSync(gitHeadPath)) {

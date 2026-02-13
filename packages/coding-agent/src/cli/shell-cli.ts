@@ -6,7 +6,7 @@
 import * as path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Shell } from "@oh-my-pi/pi-natives";
-import { APP_NAME } from "@oh-my-pi/pi-utils/dirs";
+import { APP_NAME, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
 import { Settings } from "../config/settings";
 import { getOrCreateSnapshot } from "../utils/shell-snapshot";
@@ -47,7 +47,7 @@ export async function runShellCommand(cmd: ShellCommandArgs): Promise<void> {
 		process.exit(1);
 	}
 
-	const cwd = cmd.cwd ? path.resolve(cmd.cwd) : process.cwd();
+	const cwd = cmd.cwd ? path.resolve(cmd.cwd) : getProjectDir();
 	const settings = await Settings.init({ cwd });
 	const { shell, env: shellEnv } = settings.getShellConfig();
 	const snapshotPath = cmd.noSnapshot || !shell.includes("bash") ? null : await getOrCreateSnapshot(shell, shellEnv);

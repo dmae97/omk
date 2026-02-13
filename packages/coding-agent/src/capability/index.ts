@@ -9,6 +9,7 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import { $env } from "@oh-my-pi/pi-utils";
+import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 
 /** Conditional startup debug prints (stderr) when PI_DEBUG_STARTUP is set */
 const debugStartup = $env.PI_DEBUG_STARTUP ? (stage: string) => process.stderr.write(`[startup] ${stage}\n`) : () => {};
@@ -221,7 +222,7 @@ export async function loadCapability<T>(capabilityId: string, options: LoadOptio
 		throw new Error(`Unknown capability: "${capabilityId}"`);
 	}
 
-	const cwd = options.cwd ?? process.cwd();
+	const cwd = options.cwd ?? getProjectDir();
 	const home = os.homedir();
 	const ctx: LoadContext = { cwd, home };
 	const providers = filterProviders(capability, options);

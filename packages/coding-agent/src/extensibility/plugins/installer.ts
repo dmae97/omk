@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { isEnoent } from "@oh-my-pi/pi-utils";
-import { getAgentDir } from "@oh-my-pi/pi-utils/dirs";
+import { getAgentDir, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import type { InstalledPlugin } from "./types";
 
 const PLUGINS_DIR = path.join(getAgentDir(), "plugins");
@@ -131,7 +131,7 @@ export async function listPlugins(): Promise<InstalledPlugin[]> {
 }
 
 export async function linkPlugin(localPath: string): Promise<void> {
-	const cwd = process.cwd();
+	const cwd = getProjectDir();
 	const absolutePath = path.resolve(cwd, localPath);
 
 	// Validate that resolved path is within cwd to prevent path traversal

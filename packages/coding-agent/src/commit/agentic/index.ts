@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { $env } from "@oh-my-pi/pi-utils";
+import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import { applyChangelogProposals } from "../../commit/changelog";
 import { detectChangelogBoundaries } from "../../commit/changelog/detect";
 import { parseUnreleasedSection } from "../../commit/changelog/parse";
@@ -26,7 +27,7 @@ interface CommitExecutionContext {
 }
 
 export async function runAgenticCommit(args: CommitCommandArgs): Promise<void> {
-	const cwd = process.cwd();
+	const cwd = getProjectDir();
 	const git = new ControlledGit(cwd);
 	const [settings, authStorage] = await Promise.all([Settings.init({ cwd }), discoverAuthStorage()]);
 

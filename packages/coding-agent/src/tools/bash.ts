@@ -4,6 +4,7 @@ import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallb
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { $env, isEnoent } from "@oh-my-pi/pi-utils";
+import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import { type Static, Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import { type BashResult, executeBash } from "../exec/bash-executor";
@@ -205,7 +206,7 @@ interface BashRenderContext {
 function formatBashCommand(args: BashRenderArgs, _uiTheme: Theme): string {
 	const command = args.command || "…";
 	const prompt = "$";
-	const cwd = process.cwd();
+	const cwd = getProjectDir();
 	let displayWorkdir = args.cwd;
 
 	if (displayWorkdir) {

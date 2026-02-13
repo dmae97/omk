@@ -1,3 +1,4 @@
+import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import type { AutocompleteProvider, CombinedAutocompleteProvider } from "../autocomplete";
 import { type EditorKeybindingsManager, getEditorKeybindings } from "../keybindings";
 import { matchesKey } from "../keys";
@@ -419,7 +420,7 @@ export class Editor implements Component, Focusable {
 			this.#history.pop();
 		}
 
-		this.#historyStorage?.add(trimmed, process.cwd());
+		this.#historyStorage?.add(trimmed, getProjectDir());
 	}
 
 	#isEditorEmpty(): boolean {

@@ -6,6 +6,7 @@
  */
 
 import { readJsonl } from "@oh-my-pi/pi-utils";
+import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import { type Subprocess, spawn } from "bun";
 import type { JsonRpcResponse, MCPRequestOptions, MCPStdioServerConfig, MCPTransport } from "../../mcp/types";
 
@@ -54,7 +55,7 @@ export class StdioTransport implements MCPTransport {
 
 		this.#process = spawn({
 			cmd: [this.config.command, ...args],
-			cwd: this.config.cwd ?? process.cwd(),
+			cwd: this.config.cwd ?? getProjectDir(),
 			env,
 			stdin: "pipe",
 			stdout: "pipe",

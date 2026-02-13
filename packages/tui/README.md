@@ -443,6 +443,7 @@ Supports both slash commands and file paths.
 
 ```typescript
 import { CombinedAutocompleteProvider } from "@oh-my-pi/pi-tui";
+import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 
 const provider = new CombinedAutocompleteProvider(
 	[
@@ -450,7 +451,7 @@ const provider = new CombinedAutocompleteProvider(
 		{ name: "clear", description: "Clear screen" },
 		{ name: "delete", description: "Delete last message" },
 	],
-	process.cwd() // base path for file completion
+	getProjectDir() // base path for file completion
 );
 
 editor.setAutocompleteProvider(provider);

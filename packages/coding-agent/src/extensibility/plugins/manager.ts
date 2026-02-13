@@ -6,6 +6,7 @@ import {
 	getPluginsLockfile,
 	getPluginsNodeModules,
 	getPluginsPackageJson,
+	getProjectDir,
 	getProjectPluginOverridesPath,
 } from "@oh-my-pi/pi-utils/dirs";
 import { extractPackageName, parsePluginSpec } from "./parser";
@@ -50,7 +51,7 @@ export class PluginManager {
 	#runtimeConfig: PluginRuntimeConfig | null = null;
 	#cwd: string;
 
-	constructor(cwd: string = process.cwd()) {
+	constructor(cwd: string = getProjectDir()) {
 		this.#cwd = cwd;
 	}
 

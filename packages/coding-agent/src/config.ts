@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { isEnoent, logger } from "@oh-my-pi/pi-utils";
-import { CONFIG_DIR_NAME, getAgentDir } from "@oh-my-pi/pi-utils/dirs";
+import { CONFIG_DIR_NAME, getAgentDir, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { Ajv, type ErrorObject, type ValidateFunction } from "ajv";
@@ -39,8 +39,8 @@ export function getPackageDir(): string {
 		}
 		dir = path.dirname(dir);
 	}
-	// Fallback to cwd (docs/examples won't be found, but that's fine)
-	return process.cwd();
+	// Fallback to project dir (docs/examples won't be found, but that's fine)
+	return getProjectDir();
 }
 
 /** Get path to CHANGELOG.md (optional, may not exist in binary) */
@@ -273,7 +273,7 @@ export interface GetConfigDirsOptions {
 	user?: boolean;
 	/** Include project-level directories (.omp/...). Default: true */
 	project?: boolean;
-	/** Current working directory for project paths. Default: process.cwd() */
+	/** Current working directory for project paths. Default: getProjectDir() */
 	cwd?: string;
 	/** Only return directories that exist. Default: false */
 	existingOnly?: boolean;
@@ -296,7 +296,7 @@ export interface GetConfigDirsOptions {
  * getConfigDirs("skills", { user: false, existingOnly: true })
  */
 export function getConfigDirs(subpath: string, options: GetConfigDirsOptions = {}): ConfigDirEntry[] {
-	const { user = true, project = true, cwd = process.cwd(), existingOnly = false } = options;
+	const { user = true, project = true, cwd = getProjectDir(), existingOnly = false } = options;
 	const results: ConfigDirEntry[] = [];
 
 	// User-level directories (highest priority)
@@ -382,7 +382,7 @@ export function findConfigFileWithMeta(
  * Returns one entry per config base (.omp, .claude) - the nearest one found.
  * Results are in priority order (highest first).
  */
-export function findAllNearestProjectConfigDirs(subpath: string, cwd: string = process.cwd()): ConfigDirEntry[] {
+export function findAllNearestProjectConfigDirs(subpath: string, cwd: string = getProjectDir()): ConfigDirEntry[] {
 	const results: ConfigDirEntry[] = [];
 	const foundBases = new Set<string>();
 

@@ -2,7 +2,7 @@ import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { getOAuthProviders, type OAuthProvider } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Input, Loader, Spacer, Text } from "@oh-my-pi/pi-tui";
-import { getAgentDbPath } from "@oh-my-pi/pi-utils/dirs";
+import { getAgentDbPath, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import { MODEL_ROLES } from "../../config/model-registry";
 import { settings } from "../../config/settings";
 import { DebugSelectorComponent } from "../../debug";
@@ -67,7 +67,7 @@ export class SelectorController {
 						availableThinkingLevels: this.ctx.session.getAvailableThinkingLevels(),
 						thinkingLevel: this.ctx.session.thinkingLevel,
 						availableThemes,
-						cwd: process.cwd(),
+						cwd: getProjectDir(),
 					},
 					{
 						onChange: (id, value) => this.handleSettingChange(id, value),
@@ -146,7 +146,7 @@ export class SelectorController {
 	 * Replaces /status with a unified view of all providers and extensions.
 	 */
 	async showExtensionsDashboard(): Promise<void> {
-		const dashboard = await ExtensionDashboard.create(process.cwd(), this.ctx.settings, this.ctx.ui.terminal.rows);
+		const dashboard = await ExtensionDashboard.create(getProjectDir(), this.ctx.settings, this.ctx.ui.terminal.rows);
 		this.showSelector(done => {
 			dashboard.onClose = () => {
 				done();

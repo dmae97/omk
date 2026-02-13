@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
+import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import { skillCapability } from "../capability/skill";
 import type { SourceMeta } from "../capability/types";
 import type { SkillsSettings } from "../config/settings";
@@ -207,7 +208,7 @@ async function scanDirectoryForSkills(dir: string): Promise<LoadSkillsResult> {
 }
 
 export interface LoadSkillsOptions extends SkillsSettings {
-	/** Working directory for project-local skills. Default: process.cwd() */
+	/** Working directory for project-local skills. Default: getProjectDir() */
 	cwd?: string;
 }
 
@@ -217,7 +218,7 @@ export interface LoadSkillsOptions extends SkillsSettings {
  */
 export async function loadSkills(options: LoadSkillsOptions = {}): Promise<LoadSkillsResult> {
 	const {
-		cwd = process.cwd(),
+		cwd = getProjectDir(),
 		enabled = true,
 		enableCodexUser = true,
 		enableClaudeUser = true,

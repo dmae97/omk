@@ -4,10 +4,11 @@ import * as path from "node:path";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { resetPreludeDocsCache, warmPythonEnvironment } from "@oh-my-pi/pi-coding-agent/ipy/executor";
 import { getPythonToolDescription, PythonTool } from "@oh-my-pi/pi-coding-agent/tools/python";
+import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 
 const resolvePythonPath = (): string | null => {
 	const venvPath = Bun.env.VIRTUAL_ENV;
-	const candidates = [venvPath, path.join(process.cwd(), ".venv"), path.join(process.cwd(), "venv")].filter(
+	const candidates = [venvPath, path.join(getProjectDir(), ".venv"), path.join(getProjectDir(), "venv")].filter(
 		Boolean,
 	) as string[];
 	for (const candidate of candidates) {
@@ -42,7 +43,7 @@ describe.skipIf(!shouldRun)("PYTHON_PRELUDE integration", () => {
 		const helpers = ["env", "read", "write", "append", "rm", "mv", "cp", "find", "grep"];
 
 		const session = {
-			cwd: process.cwd(),
+			cwd: getProjectDir(),
 			hasUI: false,
 			getSessionFile: () => null,
 			getSessionSpawns: () => null,
@@ -75,7 +76,7 @@ describe.skipIf(!shouldRun)("PYTHON_PRELUDE integration", () => {
 
 	it("exposes prelude docs via warmup", async () => {
 		resetPreludeDocsCache();
-		const result = await warmPythonEnvironment(process.cwd());
+		const result = await warmPythonEnvironment(getProjectDir());
 		expect(result.ok).toBe(true);
 		const names = result.docs.map(doc => doc.name);
 		expect(names).toContain("read");
@@ -83,7 +84,7 @@ describe.skipIf(!shouldRun)("PYTHON_PRELUDE integration", () => {
 
 	it("renders prelude docs in python tool description", async () => {
 		resetPreludeDocsCache();
-		const result = await warmPythonEnvironment(process.cwd());
+		const result = await warmPythonEnvironment(getProjectDir());
 		expect(result.ok).toBe(true);
 		const description = getPythonToolDescription();
 		expect(description).toContain("read");

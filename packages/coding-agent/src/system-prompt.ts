@@ -4,7 +4,7 @@
 import * as os from "node:os";
 import { getSystemInfo as getNativeSystemInfo, type SystemInfo } from "@oh-my-pi/pi-natives";
 import { $env, logger } from "@oh-my-pi/pi-utils";
-import { getGpuCachePath } from "@oh-my-pi/pi-utils/dirs";
+import { getGpuCachePath, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import { $ } from "bun";
 import { contextFileCapability } from "./capability/context-file";
 import { systemPromptCapability } from "./capability/system-prompt";
@@ -362,7 +362,7 @@ export async function resolvePromptInput(input: string | undefined, description:
 }
 
 export interface LoadContextFilesOptions {
-	/** Working directory to start walking up from. Default: process.cwd() */
+	/** Working directory to start walking up from. Default: getProjectDir() */
 	cwd?: string;
 }
 
@@ -374,7 +374,7 @@ export interface LoadContextFilesOptions {
 export async function loadProjectContextFiles(
 	options: LoadContextFilesOptions = {},
 ): Promise<Array<{ path: string; content: string; depth?: number }>> {
-	const resolvedCwd = options.cwd ?? process.cwd();
+	const resolvedCwd = options.cwd ?? getProjectDir();
 
 	const result = await loadCapability(contextFileCapability.id, { cwd: resolvedCwd });
 
@@ -404,7 +404,7 @@ export async function loadProjectContextFiles(
  * Returns combined content from all discovered SYSTEM.md files.
  */
 export async function loadSystemPromptFiles(options: LoadContextFilesOptions = {}): Promise<string | null> {
-	const resolvedCwd = options.cwd ?? process.cwd();
+	const resolvedCwd = options.cwd ?? getProjectDir();
 
 	const result = await loadCapability<SystemPromptFile>(systemPromptCapability.id, { cwd: resolvedCwd });
 
@@ -433,7 +433,7 @@ export interface BuildSystemPromptOptions {
 	appendSystemPrompt?: string;
 	/** Skills settings for discovery. */
 	skillsSettings?: SkillsSettings;
-	/** Working directory. Default: process.cwd() */
+	/** Working directory. Default: getProjectDir() */
 	cwd?: string;
 	/** Pre-loaded context files (skips discovery if provided). */
 	contextFiles?: Array<{ path: string; content: string; depth?: number }>;
@@ -463,7 +463,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		preloadedSkills: providedPreloadedSkills,
 		rules,
 	} = options;
-	const resolvedCwd = cwd ?? process.cwd();
+	const resolvedCwd = cwd ?? getProjectDir();
 	const resolvedCustomPrompt = await resolvePromptInput(customPrompt, "system prompt");
 	const resolvedAppendPrompt = await resolvePromptInput(appendSystemPrompt, "append system prompt");
 

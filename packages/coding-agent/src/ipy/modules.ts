@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { getAgentModulesDir, getProjectModulesDir } from "@oh-my-pi/pi-utils/dirs";
+import { getAgentModulesDir, getProjectDir, getProjectModulesDir } from "@oh-my-pi/pi-utils/dirs";
 
 export type PythonModuleSource = "user" | "project";
 
@@ -24,7 +24,7 @@ export interface PythonModuleExecutor {
 }
 
 export interface DiscoverPythonModulesOptions {
-	/** Working directory for project-level modules. Default: process.cwd() */
+	/** Working directory for project-level modules. Default: getProjectDir() */
 	cwd?: string;
 	/** Agent directory for user-level modules. Default: from getAgentDir() */
 	agentDir?: string;
@@ -65,7 +65,7 @@ async function readModuleContent(candidate: ModuleCandidate): Promise<PythonModu
  * Discover Python prelude extension modules from user and project directories.
  */
 export async function discoverPythonModules(options: DiscoverPythonModulesOptions = {}): Promise<PythonModuleEntry[]> {
-	const cwd = options.cwd ?? process.cwd();
+	const cwd = options.cwd ?? getProjectDir();
 
 	const userDir = getAgentModulesDir(options.agentDir);
 	const projectDir = getProjectModulesDir(cwd);

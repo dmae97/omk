@@ -3,7 +3,7 @@ import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Message, TextContent, Usage } from "@oh-my-pi/pi-ai";
 import { isEnoent, logger, parseJsonlLenient, Snowflake } from "@oh-my-pi/pi-utils";
-import { getBlobsDir, getAgentDir as getDefaultAgentDir } from "@oh-my-pi/pi-utils/dirs";
+import { getBlobsDir, getAgentDir as getDefaultAgentDir, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import { type BlobPutResult, BlobStore, externalizeImageData, isBlobRef, resolveImageData } from "./blob-store";
 import {
 	type BashExecutionMessage,
@@ -2153,10 +2153,10 @@ export class SessionManager {
 		sessionDir?: string,
 		storage: SessionStorage = new FileSessionStorage(),
 	): Promise<SessionManager> {
-		// Extract cwd from session header if possible, otherwise use process.cwd()
+		// Extract cwd from session header if possible, otherwise use getProjectDir()
 		const entries = await loadEntriesFromFile(filePath, storage);
 		const header = entries.find(e => e.type === "session") as SessionHeader | undefined;
-		const cwd = header?.cwd ?? process.cwd();
+		const cwd = header?.cwd ?? getProjectDir();
 		// If no sessionDir provided, derive from file's parent directory
 		const dir = sessionDir ?? path.resolve(filePath, "..");
 		const manager = new SessionManager(cwd, dir, true, storage);
@@ -2188,7 +2188,10 @@ export class SessionManager {
 	}
 
 	/** Create an in-memory session (no file persistence) */
-	static inMemory(cwd: string = process.cwd(), storage: SessionStorage = new MemorySessionStorage()): SessionManager {
+	static inMemory(
+		cwd: string = getProjectDir(),
+		storage: SessionStorage = new MemorySessionStorage(),
+	): SessionManager {
 		const manager = new SessionManager(cwd, "", false, storage);
 		manager.#initNewSession();
 		return manager;

@@ -2,7 +2,7 @@
  * System information collection for debug reports.
  */
 import * as os from "node:os";
-import { VERSION } from "@oh-my-pi/pi-utils/dirs";
+import { getProjectDir, VERSION } from "@oh-my-pi/pi-utils/dirs";
 
 export interface SystemInfo {
 	os: string;
@@ -65,7 +65,7 @@ export async function collectSystemInfo(): Promise<SystemInfo> {
 			bun: Bun.version,
 			node: process.version,
 		},
-		cwd: process.cwd(),
+		cwd: getProjectDir(),
 		shell,
 		terminal,
 	};

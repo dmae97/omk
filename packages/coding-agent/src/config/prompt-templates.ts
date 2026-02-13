@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
-import { getProjectPromptsDir, getPromptsDir } from "@oh-my-pi/pi-utils/dirs";
+import { getProjectDir, getProjectPromptsDir, getPromptsDir } from "@oh-my-pi/pi-utils/dirs";
 import Handlebars from "handlebars";
 import { computeLineHash } from "../patch/hashline";
 import { jtdToTypeScript } from "../tools/jtd-to-typescript";
@@ -459,7 +459,7 @@ async function loadTemplatesFromDir(
 }
 
 export interface LoadPromptTemplatesOptions {
-	/** Working directory for project-local templates. Default: process.cwd() */
+	/** Working directory for project-local templates. Default: getProjectDir() */
 	cwd?: string;
 	/** Agent config directory for global templates. Default: from getPromptsDir() */
 	agentDir?: string;
@@ -471,7 +471,7 @@ export interface LoadPromptTemplatesOptions {
  * 2. Project: cwd/.omp/prompts/
  */
 export async function loadPromptTemplates(options: LoadPromptTemplatesOptions = {}): Promise<PromptTemplate[]> {
-	const resolvedCwd = options.cwd ?? process.cwd();
+	const resolvedCwd = options.cwd ?? getProjectDir();
 	const resolvedAgentDir = options.agentDir ?? getPromptsDir();
 
 	const templates: PromptTemplate[] = [];

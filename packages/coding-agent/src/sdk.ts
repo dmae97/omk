@@ -2,7 +2,7 @@ import { Agent, type AgentEvent, type AgentMessage, type AgentTool, type Thinkin
 import { type Message, type Model, supportsXhigh } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { $env, logger, postmortem } from "@oh-my-pi/pi-utils";
-import { getAgentDbPath, getAgentDir } from "@oh-my-pi/pi-utils/dirs";
+import { getAgentDbPath, getAgentDir, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
 import { loadCapability } from "./capability";
 import { type Rule, ruleCapability } from "./capability/rule";
@@ -85,7 +85,7 @@ const debugStartup = $env.PI_DEBUG_STARTUP ? (stage: string) => process.stderr.w
 
 // Types
 export interface CreateAgentSessionOptions {
-	/** Working directory for project-local discovery. Default: process.cwd() */
+	/** Working directory for project-local discovery. Default: getProjectDir() */
 	cwd?: string;
 	/** Global config directory. Default: ~/.omp/agent */
 	agentDir?: string;
@@ -240,7 +240,7 @@ export async function discoverAuthStorage(agentDir: string = getDefaultAgentDir(
  * Discover extensions from cwd.
  */
 export async function discoverExtensions(cwd?: string): Promise<LoadExtensionsResult> {
-	const resolvedCwd = cwd ?? process.cwd();
+	const resolvedCwd = cwd ?? getProjectDir();
 
 	return discoverAndLoadExtensions([], resolvedCwd);
 }
@@ -255,7 +255,7 @@ export async function discoverSkills(
 ): Promise<{ skills: Skill[]; warnings: SkillWarning[] }> {
 	return await loadSkillsInternal({
 		...settings,
-		cwd: cwd ?? process.cwd(),
+		cwd: cwd ?? getProjectDir(),
 	});
 }
 
@@ -268,7 +268,7 @@ export async function discoverContextFiles(
 	_agentDir?: string,
 ): Promise<Array<{ path: string; content: string; depth?: number }>> {
 	return await loadContextFilesInternal({
-		cwd: cwd ?? process.cwd(),
+		cwd: cwd ?? getProjectDir(),
 	});
 }
 
@@ -277,7 +277,7 @@ export async function discoverContextFiles(
  */
 export async function discoverPromptTemplates(cwd?: string, agentDir?: string): Promise<PromptTemplate[]> {
 	return await loadPromptTemplatesInternal({
-		cwd: cwd ?? process.cwd(),
+		cwd: cwd ?? getProjectDir(),
 		agentDir: agentDir ?? getDefaultAgentDir(),
 	});
 }
@@ -286,14 +286,14 @@ export async function discoverPromptTemplates(cwd?: string, agentDir?: string): 
  * Discover file-based slash commands from commands/ directories.
  */
 export async function discoverSlashCommands(cwd?: string): Promise<FileSlashCommand[]> {
-	return loadSlashCommandsInternal({ cwd: cwd ?? process.cwd() });
+	return loadSlashCommandsInternal({ cwd: cwd ?? getProjectDir() });
 }
 
 /**
  * Discover custom commands (TypeScript slash commands) from cwd and agentDir.
  */
 export async function discoverCustomTSCommands(cwd?: string, agentDir?: string): Promise<CustomCommandsLoadResult> {
-	const resolvedCwd = cwd ?? process.cwd();
+	const resolvedCwd = cwd ?? getProjectDir();
 	const resolvedAgentDir = agentDir ?? getDefaultAgentDir();
 
 	return loadCustomCommandsInternal({
@@ -307,7 +307,7 @@ export async function discoverCustomTSCommands(cwd?: string, agentDir?: string):
  * Returns the manager and loaded tools.
  */
 export async function discoverMCPServers(cwd?: string): Promise<MCPToolsLoadResult> {
-	const resolvedCwd = cwd ?? process.cwd();
+	const resolvedCwd = cwd ?? getProjectDir();
 	return discoverAndLoadMCPTools(resolvedCwd);
 }
 
@@ -469,7 +469,7 @@ function createCustomToolsExtension(tools: CustomTool[]): ExtensionFactory {
  *   model: myModel,
  *   getApiKey: async () => Bun.env.MY_KEY,
  *   systemPrompt: 'You are helpful.',
- *   tools: codingTools({ cwd: process.cwd() }),
+ *   tools: codingTools({ cwd: getProjectDir() }),
  *   skills: [],
  *   sessionManager: SessionManager.inMemory(),
  * });
@@ -477,7 +477,7 @@ function createCustomToolsExtension(tools: CustomTool[]): ExtensionFactory {
  */
 export async function createAgentSession(options: CreateAgentSessionOptions = {}): Promise<CreateAgentSessionResult> {
 	debugStartup("sdk:createAgentSession:entry");
-	const cwd = options.cwd ?? process.cwd();
+	const cwd = options.cwd ?? getProjectDir();
 	const agentDir = options.agentDir ?? getDefaultAgentDir();
 	const eventBus = options.eventBus ?? new EventBus();
 

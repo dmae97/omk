@@ -16,7 +16,7 @@ import {
 	TUI,
 } from "@oh-my-pi/pi-tui";
 import { $env, isEnoent, logger, postmortem } from "@oh-my-pi/pi-utils";
-import { APP_NAME } from "@oh-my-pi/pi-utils/dirs";
+import { APP_NAME, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
 import { KeybindingsManager } from "../config/keybindings";
 import { renderPromptTemplate } from "../config/prompt-templates";
@@ -249,7 +249,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#cleanupUnsubscribe = postmortem.register("session-manager-flush", () => this.sessionManager.flush());
 		debugStartup("InteractiveMode.init:cleanupRegistered");
 
-		await this.refreshSlashCommandState(process.cwd());
+		await this.refreshSlashCommandState(getProjectDir());
 		debugStartup("InteractiveMode.init:slashCommands");
 
 		// Get current model info for welcome screen

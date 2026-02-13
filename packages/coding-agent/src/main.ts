@@ -4,13 +4,15 @@
  * This file handles CLI argument parsing and translates them into
  * createAgentSession() options. The SDK does the heavy lifting.
  */
+
+import { realpathSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { type ImageContent, supportsXhigh } from "@oh-my-pi/pi-ai";
 import { $env, postmortem } from "@oh-my-pi/pi-utils";
-import { VERSION } from "@oh-my-pi/pi-utils/dirs";
+import { getProjectDir, setProjectDir, VERSION } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
 import type { Args } from "./cli/args";
 import { processFileArguments } from "./cli/file-processor";
@@ -278,11 +280,11 @@ async function maybeAutoChdir(parsed: Args): Promise<void> {
 	}
 
 	const normalizePath = (value: string) => {
-		const resolved = path.resolve(value);
+		const resolved = realpathSync(path.resolve(value));
 		return process.platform === "win32" ? resolved.toLowerCase() : resolved;
 	};
 
-	const cwd = normalizePath(process.cwd());
+	const cwd = normalizePath(getProjectDir());
 	const normalizedHome = normalizePath(home);
 	if (cwd !== normalizedHome) {
 		return;
@@ -303,7 +305,7 @@ async function maybeAutoChdir(parsed: Args): Promise<void> {
 			if (!(await isDirectory(candidate))) {
 				continue;
 			}
-			process.chdir(candidate);
+			setProjectDir(candidate);
 			return;
 		} catch {
 			// Try next candidate.
@@ -313,7 +315,7 @@ async function maybeAutoChdir(parsed: Args): Promise<void> {
 	try {
 		const fallback = os.tmpdir();
 		if (fallback && normalizePath(fallback) !== cwd && (await isDirectory(fallback))) {
-			process.chdir(fallback);
+			setProjectDir(fallback);
 		}
 	} catch {
 		// Ignore fallback errors.
@@ -355,7 +357,7 @@ async function buildSessionOptions(
 	modelRegistry: ModelRegistry,
 ): Promise<CreateAgentSessionOptions> {
 	const options: CreateAgentSessionOptions = {
-		cwd: parsed.cwd ?? process.cwd(),
+		cwd: parsed.cwd ?? getProjectDir(),
 	};
 
 	// Auto-discover SYSTEM.md if no CLI system prompt provided
@@ -524,7 +526,7 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		process.exit(1);
 	}
 
-	const cwd = process.cwd();
+	const cwd = getProjectDir();
 	await Settings.init({ cwd });
 	debugStartup("main:Settings.init");
 	time("Settings.init");

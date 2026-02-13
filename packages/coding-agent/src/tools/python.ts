@@ -4,6 +4,7 @@ import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallb
 import type { ImageContent } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
+import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import { type Static, Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
@@ -836,7 +837,7 @@ export const pythonToolRenderer = {
 	renderCall(args: PythonRenderArgs, uiTheme: Theme): Component {
 		const ui = new ToolUIKit(uiTheme);
 		const cells = args.cells ?? [];
-		const cwd = process.cwd();
+		const cwd = getProjectDir();
 		let displayWorkdir = args.cwd;
 
 		if (displayWorkdir) {

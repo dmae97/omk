@@ -4,6 +4,8 @@
  * Uses PI_CONFIG_DIR (default ".omp") for the config root and
  * PI_CODING_AGENT_DIR to override the agent directory.
  */
+
+import { realpathSync } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { version } from "../package.json" with { type: "json" };
@@ -21,6 +23,24 @@ export const VERSION: string = version;
 // =============================================================================
 // Root directories
 // =============================================================================
+
+let projectDir = process.cwd();
+if ($env.PWD) {
+	if (realpathSync($env.PWD) === projectDir) {
+		projectDir = $env.PWD;
+	}
+}
+
+/** Get the project directory. */
+export function getProjectDir(): string {
+	return projectDir;
+}
+
+/** Set the project directory. */
+export function setProjectDir(dir: string): void {
+	projectDir = path.resolve(dir);
+	process.chdir(projectDir);
+}
 
 /** Get the config root directory (~/.omp). */
 export function getConfigRootDir(): string {
@@ -42,7 +62,7 @@ export function getAgentDir(): string {
 }
 
 /** Get the project-local config directory (.omp). */
-export function getProjectAgentDir(cwd: string = process.cwd()): string {
+export function getProjectAgentDir(cwd: string = getProjectDir()): string {
 	return path.join(cwd, CONFIG_DIR_NAME);
 }
 
@@ -225,17 +245,17 @@ export function getDebugLogPath(agentDir?: string): string {
 // =============================================================================
 
 /** Get the project-level Python modules directory (.omp/modules). */
-export function getProjectModulesDir(cwd: string = process.cwd()): string {
+export function getProjectModulesDir(cwd: string = getProjectDir()): string {
 	return path.join(getProjectAgentDir(cwd), "modules");
 }
 
 /** Get the project-level prompts directory (.omp/prompts). */
-export function getProjectPromptsDir(cwd: string = process.cwd()): string {
+export function getProjectPromptsDir(cwd: string = getProjectDir()): string {
 	return path.join(getProjectAgentDir(cwd), "prompts");
 }
 
 /** Get the project-level plugin overrides path (.omp/plugin-overrides.json). */
-export function getProjectPluginOverridesPath(cwd: string = process.cwd()): string {
+export function getProjectPluginOverridesPath(cwd: string = getProjectDir()): string {
 	return path.join(getProjectAgentDir(cwd), "plugin-overrides.json");
 }
 
@@ -244,7 +264,7 @@ export function getProjectPluginOverridesPath(cwd: string = process.cwd()): stri
 // =============================================================================
 
 /** Get the primary MCP config file path (first candidate). */
-export function getMCPConfigPath(scope: "user" | "project", cwd: string = process.cwd()): string {
+export function getMCPConfigPath(scope: "user" | "project", cwd: string = getProjectDir()): string {
 	if (scope === "user") {
 		return path.join(getAgentDir(), "mcp.json");
 	}

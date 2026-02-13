@@ -5,6 +5,7 @@ import type { UsageLimit, UsageReport } from "@oh-my-pi/pi-ai";
 import { copyToClipboard } from "@oh-my-pi/pi-natives";
 import { Loader, Markdown, padding, Spacer, Text, visibleWidth } from "@oh-my-pi/pi-tui";
 import { Snowflake } from "@oh-my-pi/pi-utils";
+import { setProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import { $ } from "bun";
 import { reset as resetCapabilities } from "../../capability";
 import { loadCustomShare } from "../../export/custom-share";
@@ -466,7 +467,7 @@ export class CommandController {
 		try {
 			await this.ctx.sessionManager.flush();
 			await this.ctx.sessionManager.moveTo(resolvedPath);
-			process.chdir(resolvedPath);
+			setProjectDir(resolvedPath);
 			resetCapabilities();
 			await this.ctx.refreshSlashCommandState(resolvedPath);
 
