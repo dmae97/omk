@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import * as ai from "@oh-my-pi/pi-ai";
 import type { OAuthCredentials, UsageProvider } from "@oh-my-pi/pi-ai";
+import * as ai from "@oh-my-pi/pi-ai";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { Snowflake } from "@oh-my-pi/pi-utils";
 

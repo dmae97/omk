@@ -833,6 +833,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			const authStorage = options.authStorage ?? (await discoverAuthStorage());
 			checkAbort();
 			const modelRegistry = options.modelRegistry ?? new ModelRegistry(authStorage);
+			await modelRegistry.refresh();
 			checkAbort();
 
 			const { model, thinkingLevel: resolvedThinkingLevel } = resolveModelOverride(

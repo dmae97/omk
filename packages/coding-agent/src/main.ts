@@ -489,6 +489,7 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	// Create AuthStorage and ModelRegistry upfront
 	const authStorage = await discoverAuthStorage();
 	const modelRegistry = new ModelRegistry(authStorage);
+	await modelRegistry.refresh();
 	debugStartup("main:discoverModels");
 	time("discoverModels");
 

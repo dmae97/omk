@@ -267,7 +267,9 @@ async function handlePythonSetup(flags: { json?: boolean; check?: boolean }): Pr
 		if (install.usedManagedEnv) {
 			if (check.uvPath) {
 				console.error(chalk.dim(`  uv venv ${MANAGED_PYTHON_ENV}`));
-				console.error(chalk.dim(`  uv pip install --python ${MANAGED_PYTHON_ENV} ${check.missingPackages.join(" ")}`));
+				console.error(
+					chalk.dim(`  uv pip install --python ${MANAGED_PYTHON_ENV} ${check.missingPackages.join(" ")}`),
+				);
 			} else {
 				console.error(chalk.dim(`  ${check.pythonPath} -m venv ${MANAGED_PYTHON_ENV}`));
 				console.error(chalk.dim(`  ${managedPythonPath()} -m pip install ${check.missingPackages.join(" ")}`));
@@ -284,7 +286,6 @@ async function handlePythonSetup(flags: { json?: boolean; check?: boolean }): Pr
 		if (recheck.usingManagedEnv) {
 			console.log(chalk.dim(`Managed Python environment: ${recheck.managedEnvPath}`));
 		}
-
 	} else {
 		console.error(chalk.red(`\n${theme.status.error} Setup incomplete`));
 		console.error(chalk.dim(`Still missing: ${recheck.missingPackages.join(", ")}`));

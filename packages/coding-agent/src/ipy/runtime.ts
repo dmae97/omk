@@ -202,7 +202,8 @@ export function resolvePythonRuntime(cwd: string, baseEnv: Record<string, string
 		env.VIRTUAL_ENV = managed.venvPath;
 		const pathKey = resolvePathKey(env);
 		const currentPath = env[pathKey];
-		const managedBin = process.platform === "win32" ? path.join(managed.venvPath, "Scripts") : path.join(managed.venvPath, "bin");
+		const managedBin =
+			process.platform === "win32" ? path.join(managed.venvPath, "Scripts") : path.join(managed.venvPath, "bin");
 		env[pathKey] = currentPath ? `${managedBin}${path.delimiter}${currentPath}` : managedBin;
 		return {
 			pythonPath: resolveWindowlessPython(managed.pythonPath),

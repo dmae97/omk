@@ -161,7 +161,7 @@ describe("ModelRegistry", () => {
 			expect(googleModels.some(m => m.id === "gemini-custom")).toBe(true);
 		});
 
-		test("refresh() picks up baseUrl override changes", () => {
+		test("refresh() picks up baseUrl override changes", async () => {
 			writeRawModelsJson({
 				anthropic: overrideConfig("https://first-proxy.example.com/v1"),
 			});
@@ -173,7 +173,7 @@ describe("ModelRegistry", () => {
 			writeRawModelsJson({
 				anthropic: overrideConfig("https://second-proxy.example.com/v1"),
 			});
-			registry.refresh();
+			await registry.refresh();
 
 			expect(getModelsForProvider(registry, "anthropic")[0].baseUrl).toBe("https://second-proxy.example.com/v1");
 		});
@@ -270,7 +270,7 @@ describe("ModelRegistry", () => {
 			);
 		});
 
-		test("refresh() reloads merged custom models from disk", () => {
+		test("refresh() reloads merged custom models from disk", async () => {
 			writeModelsJson({
 				anthropic: providerConfig("https://first-proxy.example.com/v1", [{ id: "claude-custom" }]),
 			});
@@ -281,7 +281,7 @@ describe("ModelRegistry", () => {
 			writeModelsJson({
 				anthropic: providerConfig("https://second-proxy.example.com/v1", [{ id: "claude-custom-2" }]),
 			});
-			registry.refresh();
+			await registry.refresh();
 
 			const anthropicModels = getModelsForProvider(registry, "anthropic");
 			expect(anthropicModels.some(m => m.id === "claude-custom")).toBe(false);
@@ -289,7 +289,7 @@ describe("ModelRegistry", () => {
 			expect(anthropicModels.some(m => m.id.includes("claude"))).toBe(true);
 		});
 
-		test("removing custom models from models.json keeps built-in provider models", () => {
+		test("removing custom models from models.json keeps built-in provider models", async () => {
 			writeModelsJson({
 				anthropic: providerConfig("https://proxy.example.com/v1", [{ id: "claude-custom" }]),
 			});
@@ -299,7 +299,7 @@ describe("ModelRegistry", () => {
 
 			// Remove custom models and refresh
 			writeModelsJson({});
-			registry.refresh();
+			await registry.refresh();
 
 			const anthropicModels = getModelsForProvider(registry, "anthropic");
 			expect(anthropicModels.length).toBeGreaterThan(1);
@@ -484,7 +484,7 @@ describe("ModelRegistry", () => {
 			expect(sonnet?.headers?.["X-Custom-Model-Header"]).toBe("value");
 		});
 
-		test("refresh() picks up model override changes", () => {
+		test("refresh() picks up model override changes", async () => {
 			writeRawModelsJson({
 				openrouter: {
 					modelOverrides: {
@@ -510,14 +510,14 @@ describe("ModelRegistry", () => {
 					},
 				},
 			});
-			registry.refresh();
+			await registry.refresh();
 
 			expect(
 				getModelsForProvider(registry, "openrouter").find(m => m.id === "anthropic/claude-sonnet-4")?.name,
 			).toBe("Second Name");
 		});
 
-		test("removing model override restores built-in values", () => {
+		test("removing model override restores built-in values", async () => {
 			writeRawModelsJson({
 				openrouter: {
 					modelOverrides: {
@@ -536,12 +536,76 @@ describe("ModelRegistry", () => {
 
 			// Remove override and refresh
 			writeRawModelsJson({});
-			registry.refresh();
+			await registry.refresh();
 
 			const restoredName = getModelsForProvider(registry, "openrouter").find(
 				m => m.id === "anthropic/claude-sonnet-4",
 			)?.name;
 			expect(restoredName).not.toBe("Custom Name");
+		});
+	});
+
+	describe("runtime discovery", () => {
+		test("discovers ollama models at runtime and treats auth:none providers as available", async () => {
+			writeRawModelsJson({
+				ollama: {
+					baseUrl: "http://127.0.0.1:11434/v1",
+					api: "openai-completions",
+					auth: "none",
+					discovery: { type: "ollama" },
+				},
+			});
+
+			const originalFetch = globalThis.fetch;
+			globalThis.fetch = (async (input: string | URL | Request) => {
+				expect(String(input)).toBe("http://127.0.0.1:11434/api/tags");
+				return new Response(
+					JSON.stringify({
+						models: [{ name: "qwen2.5-coder:7b" }, { model: "llama3.2:3b", name: "llama3.2:3b" }],
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+			}) as unknown as typeof fetch;
+
+			try {
+				const registry = new ModelRegistry(authStorage, modelsJsonPath);
+				await registry.refresh();
+
+				const ollamaModels = getModelsForProvider(registry, "ollama");
+				expect(ollamaModels.some(m => m.id === "qwen2.5-coder:7b")).toBe(true);
+				expect(ollamaModels.some(m => m.id === "llama3.2:3b")).toBe(true);
+
+				const available = registry.getAvailable().filter(m => m.provider === "ollama");
+				expect(available.length).toBe(2);
+				expect(await registry.getApiKey(available[0])).toBe("<no-auth>");
+			} finally {
+				globalThis.fetch = originalFetch;
+			}
+		});
+
+		test("discovery failure does not fail model registry refresh", async () => {
+			writeRawModelsJson({
+				ollama: {
+					baseUrl: "http://127.0.0.1:11434",
+					api: "openai-completions",
+					auth: "none",
+					discovery: { type: "ollama" },
+				},
+			});
+
+			const originalFetch = globalThis.fetch;
+			globalThis.fetch = (async () => {
+				throw new Error("connection refused");
+			}) as unknown as typeof fetch;
+
+			try {
+				const registry = new ModelRegistry(authStorage, modelsJsonPath);
+				await registry.refresh();
+				expect(getModelsForProvider(registry, "ollama")).toHaveLength(0);
+				expect(registry.getError()).toBeUndefined();
+			} finally {
+				globalThis.fetch = originalFetch;
+			}
 		});
 	});
 });

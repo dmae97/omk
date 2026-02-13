@@ -6,6 +6,7 @@ import {
 	type Model,
 	normalizeDomain,
 } from "@oh-my-pi/pi-ai";
+import { logger } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import AjvModule from "ajv";
 import { type ConfigError, ConfigFile } from "../config";
@@ -106,6 +107,12 @@ const ModelOverrideSchema = Type.Object({
 
 type ModelOverride = Static<typeof ModelOverrideSchema>;
 
+const ProviderDiscoverySchema = Type.Object({
+	type: Type.Union([Type.Literal("ollama")]),
+});
+
+const ProviderAuthSchema = Type.Union([Type.Literal("apiKey"), Type.Literal("none")]);
+
 const ProviderConfigSchema = Type.Object({
 	baseUrl: Type.Optional(Type.String({ minLength: 1 })),
 	apiKey: Type.Optional(Type.String({ minLength: 1 })),
@@ -122,6 +129,8 @@ const ProviderConfigSchema = Type.Object({
 	),
 	headers: Type.Optional(Type.Record(Type.String(), Type.String())),
 	authHeader: Type.Optional(Type.Boolean()),
+	auth: Type.Optional(ProviderAuthSchema),
+	discovery: Type.Optional(ProviderDiscoverySchema),
 	models: Type.Optional(Type.Array(ModelDefinitionSchema)),
 	modelOverrides: Type.Optional(Type.Record(Type.String(), ModelOverrideSchema)),
 });
@@ -132,6 +141,9 @@ const ModelsConfigSchema = Type.Object({
 
 type ModelsConfig = Static<typeof ModelsConfigSchema>;
 
+type ProviderAuthMode = Static<typeof ProviderAuthSchema>;
+type ProviderDiscovery = Static<typeof ProviderDiscoverySchema>;
+
 export const ModelsConfigFile = new ConfigFile<ModelsConfig>("models", ModelsConfigSchema).withValidation(
 	"models",
 	config => {
@@ -140,20 +152,28 @@ export const ModelsConfigFile = new ConfigFile<ModelsConfig>("models", ModelsCon
 			const models = providerConfig.models ?? [];
 
 			if (models.length === 0) {
-				// Override-only config: needs baseUrl or modelOverrides
+				// Override-only config: needs baseUrl, modelOverrides, or discovery
 				const hasModelOverrides =
 					providerConfig.modelOverrides && Object.keys(providerConfig.modelOverrides).length > 0;
-				if (!providerConfig.baseUrl && !hasModelOverrides) {
-					throw new Error(`Provider ${providerName}: must specify "baseUrl", "modelOverrides", or "models".`);
+				if (!providerConfig.baseUrl && !hasModelOverrides && !providerConfig.discovery) {
+					throw new Error(
+						`Provider ${providerName}: must specify "baseUrl", "modelOverrides", "discovery", or "models".`,
+					);
 				}
 			} else {
-				// Full replacement: needs baseUrl and apiKey
+				// Full replacement: needs baseUrl and apiKey unless auth is disabled
 				if (!providerConfig.baseUrl) {
 					throw new Error(`Provider ${providerName}: "baseUrl" is required when defining custom models.`);
 				}
-				if (!providerConfig.apiKey) {
-					throw new Error(`Provider ${providerName}: "apiKey" is required when defining custom models.`);
+				if (!providerConfig.apiKey && providerConfig.auth !== "none") {
+					throw new Error(
+						`Provider ${providerName}: "apiKey" is required when defining custom models unless auth is "none".`,
+					);
 				}
+			}
+
+			if (providerConfig.discovery && !providerConfig.api) {
+				throw new Error(`Provider ${providerName}: "api" is required when discovery is enabled at provider level.`);
 			}
 
 			for (const modelDef of models) {
@@ -183,6 +203,14 @@ interface ProviderOverride {
 	apiKey?: string;
 }
 
+interface DiscoveryProviderConfig {
+	provider: string;
+	api: Api;
+	baseUrl?: string;
+	headers?: Record<string, string>;
+	discovery: ProviderDiscovery;
+}
+
 /**
  * Serialized representation of ModelRegistry for passing to subagent workers.
  */
@@ -196,6 +224,8 @@ interface CustomModelsResult {
 	models?: Model<Api>[];
 	overrides?: Map<string, ProviderOverride>;
 	modelOverrides?: Map<string, Map<string, ModelOverride>>;
+	keylessProviders?: Set<string>;
+	discoverableProviders?: DiscoveryProviderConfig[];
 	error?: ConfigError;
 	found: boolean;
 }
@@ -255,6 +285,9 @@ function applyModelOverride(model: Model<Api>, override: ModelOverride): Model<A
 export class ModelRegistry {
 	#models: Model<Api>[] = [];
 	#customProviderApiKeys: Map<string, string> = new Map();
+	#keylessProviders: Set<string> = new Set();
+	#discoverableProviders: DiscoveryProviderConfig[] = [];
+	#modelOverrides: Map<string, Map<string, ModelOverride>> = new Map();
 	#configError: ConfigError | undefined = undefined;
 	#modelsConfigFile: ConfigFile<ModelsConfig>;
 
@@ -281,11 +314,15 @@ export class ModelRegistry {
 	/**
 	 * Reload models from disk (built-in + custom from models.json).
 	 */
-	refresh(): void {
+	async refresh(): Promise<void> {
 		this.#modelsConfigFile.invalidate();
 		this.#customProviderApiKeys.clear();
+		this.#keylessProviders.clear();
+		this.#discoverableProviders = [];
+		this.#modelOverrides.clear();
 		this.#configError = undefined;
 		this.#loadModels();
+		await this.#refreshRuntimeDiscoveries();
 	}
 
 	/**
@@ -301,9 +338,14 @@ export class ModelRegistry {
 			models: customModels = [],
 			overrides = new Map(),
 			modelOverrides = new Map(),
+			keylessProviders = new Set(),
+			discoverableProviders = [],
 			error: configError,
 		} = this.#loadCustomModels();
 		this.#configError = configError;
+		this.#keylessProviders = keylessProviders;
+		this.#discoverableProviders = discoverableProviders;
+		this.#modelOverrides = modelOverrides;
 
 		const builtInModels = this.#loadBuiltInModels(overrides, modelOverrides);
 		const combined = this.#mergeCustomModels(builtInModels, customModels);
@@ -367,13 +409,30 @@ export class ModelRegistry {
 		const { value, error, status } = this.#modelsConfigFile.tryLoad();
 
 		if (status === "error") {
-			return { models: [], overrides: new Map(), modelOverrides: new Map(), error, found: true };
+			return {
+				models: [],
+				overrides: new Map(),
+				modelOverrides: new Map(),
+				keylessProviders: new Set(),
+				discoverableProviders: [],
+				error,
+				found: true,
+			};
 		} else if (status === "not-found") {
-			return { models: [], overrides: new Map(), modelOverrides: new Map(), found: false };
+			return {
+				models: [],
+				overrides: new Map(),
+				modelOverrides: new Map(),
+				keylessProviders: new Set(),
+				discoverableProviders: [],
+				found: false,
+			};
 		}
 
 		const overrides = new Map<string, ProviderOverride>();
 		const allModelOverrides = new Map<string, Map<string, ModelOverride>>();
+		const keylessProviders = new Set<string>();
+		const discoverableProviders: DiscoveryProviderConfig[] = [];
 
 		for (const [providerName, providerConfig] of Object.entries(value.providers)) {
 			// Always set overrides when baseUrl/headers present
@@ -382,6 +441,21 @@ export class ModelRegistry {
 					baseUrl: providerConfig.baseUrl,
 					headers: providerConfig.headers,
 					apiKey: providerConfig.apiKey,
+				});
+			}
+
+			const authMode = (providerConfig.auth ?? "apiKey") as ProviderAuthMode;
+			if (authMode === "none") {
+				keylessProviders.add(providerName);
+			}
+
+			if (providerConfig.discovery && providerConfig.api) {
+				discoverableProviders.push({
+					provider: providerName,
+					api: providerConfig.api as Api,
+					baseUrl: providerConfig.baseUrl,
+					headers: providerConfig.headers,
+					discovery: providerConfig.discovery,
 				});
 			}
 
@@ -400,7 +474,108 @@ export class ModelRegistry {
 			}
 		}
 
-		return { models: this.#parseModels(value), overrides, modelOverrides: allModelOverrides, found: true };
+		return {
+			models: this.#parseModels(value),
+			overrides,
+			modelOverrides: allModelOverrides,
+			keylessProviders,
+			discoverableProviders,
+			found: true,
+		};
+	}
+
+	async #refreshRuntimeDiscoveries(): Promise<void> {
+		if (this.#discoverableProviders.length === 0) return;
+		const discovered = await Promise.all(
+			this.#discoverableProviders.map(provider => this.#discoverProviderModels(provider)),
+		);
+		const merged = this.#mergeCustomModels(this.#models, discovered.flat());
+		this.#models = this.#applyModelOverrides(merged, this.#modelOverrides);
+	}
+
+	async #discoverProviderModels(providerConfig: DiscoveryProviderConfig): Promise<Model<Api>[]> {
+		switch (providerConfig.discovery.type) {
+			case "ollama":
+				return this.#discoverOllamaModels(providerConfig);
+		}
+	}
+
+	async #discoverOllamaModels(providerConfig: DiscoveryProviderConfig): Promise<Model<Api>[]> {
+		const endpoint = this.#normalizeOllamaBaseUrl(providerConfig.baseUrl);
+		const tagsUrl = `${endpoint}/api/tags`;
+		try {
+			const response = await fetch(tagsUrl, {
+				headers: { ...(providerConfig.headers ?? {}) },
+				signal: AbortSignal.timeout(3000),
+			});
+			if (!response.ok) {
+				logger.warn("model discovery failed for provider", {
+					provider: providerConfig.provider,
+					status: response.status,
+					url: tagsUrl,
+				});
+				return [];
+			}
+			const payload = (await response.json()) as { models?: Array<{ name?: string; model?: string }> };
+			const models = payload.models ?? [];
+			const discovered: Model<Api>[] = [];
+			for (const item of models) {
+				const id = item.model || item.name;
+				if (!id) continue;
+				discovered.push({
+					id,
+					name: item.name || id,
+					api: providerConfig.api,
+					provider: providerConfig.provider,
+					baseUrl: `${endpoint}/v1`,
+					reasoning: false,
+					input: ["text"],
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: 128000,
+					maxTokens: 8192,
+					headers: providerConfig.headers,
+				});
+			}
+			return this.#applyProviderModelOverrides(providerConfig.provider, discovered);
+		} catch (error) {
+			logger.warn("model discovery failed for provider", {
+				provider: providerConfig.provider,
+				url: tagsUrl,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return [];
+		}
+	}
+
+	#normalizeOllamaBaseUrl(baseUrl?: string): string {
+		const raw = baseUrl || "http://127.0.0.1:11434";
+		try {
+			const parsed = new URL(raw);
+			return `${parsed.protocol}//${parsed.host}`;
+		} catch {
+			return "http://127.0.0.1:11434";
+		}
+	}
+
+	#applyProviderModelOverrides(provider: string, models: Model<Api>[]): Model<Api>[] {
+		const overrides = this.#modelOverrides.get(provider);
+		if (!overrides || overrides.size === 0) return models;
+		return models.map(model => {
+			const override = overrides.get(model.id);
+			if (!override) return model;
+			return applyModelOverride(model, override);
+		});
+	}
+
+	#applyModelOverrides(models: Model<Api>[], overrides: Map<string, Map<string, ModelOverride>>): Model<Api>[] {
+		if (overrides.size === 0) return models;
+		return models.map(model => {
+			const providerOverrides = overrides.get(model.provider);
+			if (!providerOverrides) return model;
+			const override = providerOverrides.get(model.id);
+			if (!override) return model;
+			return applyModelOverride(model, override);
+		});
 	}
 
 	#parseModels(config: ModelsConfig): Model<Api>[] {
@@ -469,7 +644,7 @@ export class ModelRegistry {
 	 * This is a fast check that doesn't refresh OAuth tokens.
 	 */
 	getAvailable(): Model<Api>[] {
-		return this.#models.filter(m => this.authStorage.hasAuth(m.provider));
+		return this.#models.filter(m => this.#keylessProviders.has(m.provider) || this.authStorage.hasAuth(m.provider));
 	}
 
 	/**
@@ -490,6 +665,9 @@ export class ModelRegistry {
 	 * Get API key for a model.
 	 */
 	async getApiKey(model: Model<Api>, sessionId?: string): Promise<string | undefined> {
+		if (this.#keylessProviders.has(model.provider)) {
+			return "<no-auth>";
+		}
 		return this.authStorage.getApiKey(model.provider, sessionId, { baseUrl: model.baseUrl });
 	}
 
@@ -497,6 +675,9 @@ export class ModelRegistry {
 	 * Get API key for a provider (e.g., "openai").
 	 */
 	async getApiKeyForProvider(provider: string, sessionId?: string, baseUrl?: string): Promise<string | undefined> {
+		if (this.#keylessProviders.has(provider)) {
+			return "<no-auth>";
+		}
 		return this.authStorage.getApiKey(provider, sessionId, { baseUrl });
 	}
 
