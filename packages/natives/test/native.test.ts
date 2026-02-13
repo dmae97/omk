@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { FileType, fuzzyFind, type GlobMatch, glob, grep, htmlToMarkdown } from "../src/index";
+import { FileType, fuzzyFind, type GlobMatch, glob, grep, htmlToMarkdown, invalidateFsScanCache } from "../src/index";
 
 let testDir: string;
 
@@ -82,6 +82,17 @@ describe("pi-natives", () => {
 
 			expect(result.filesWithMatches).toBeGreaterThan(0);
 		});
+
+		it("should treat unknown grep type filter as a strict extension filter", async () => {
+			const result = await grep({
+				pattern: "return",
+				path: testDir,
+				type: "definitelynotatype",
+			});
+
+			expect(result.totalMatches).toBe(0);
+			expect(result.filesWithMatches).toBe(0);
+		});
 	});
 
 	describe("fuzzyFind", () => {
@@ -118,8 +129,43 @@ describe("pi-natives", () => {
 
 			expect(result.totalMatches).toBe(4);
 		});
-	});
 
+		it("should invalidate scan cache when invalidateFsScanCache receives a relative path", async () => {
+			await glob({ pattern: "*.ts", path: testDir, cache: true });
+			const newFile = path.join(testDir, "newly-added.ts");
+			await fs.writeFile(newFile, "export const newer = true;\n");
+
+			const relativePath = path.relative(process.cwd(), newFile);
+			invalidateFsScanCache(relativePath);
+
+			const result = await glob({ pattern: "newly-added.ts", path: testDir, cache: true });
+			expect(result.matches.some(match => match.path === "newly-added.ts")).toBe(true);
+		});
+
+		it("should avoid scan work when maxResults is zero", async () => {
+			const result = await glob({
+				pattern: "**/*",
+				path: testDir,
+				maxResults: 0,
+			});
+
+			expect(result.totalMatches).toBe(0);
+			expect(result.matches).toHaveLength(0);
+		});
+
+		it("should fast-recheck empty cached results when threshold is reached", async () => {
+			const fileName = "cache-empty-recheck-target.txt";
+			const filePath = path.join(testDir, fileName);
+			await fs.rm(filePath, { force: true });
+			invalidateFsScanCache();
+			const first = await glob({ pattern: fileName, path: testDir, hidden: true, gitignore: true, cache: true });
+			expect(first.totalMatches).toBe(0);
+			await fs.writeFile(filePath, "created after empty cached query\n");
+			await Bun.sleep(250);
+			const second = await glob({ pattern: fileName, path: testDir, hidden: true, gitignore: true, cache: true });
+			expect(second.totalMatches).toBe(1);
+		});
+	});
 	describe("htmlToMarkdown", () => {
 		it("should convert basic HTML to markdown", async () => {
 			const html = "<h1>Hello World</h1><p>This is a paragraph.</p>";

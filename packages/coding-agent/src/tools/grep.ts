@@ -132,6 +132,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 					ignoreCase,
 					multiline: effectiveMultiline,
 					hidden: true,
+					cache: false,
 					maxCount: effectiveLimit,
 					offset: normalizedOffset > 0 ? normalizedOffset : undefined,
 					contextBefore: normalizedContextBefore,

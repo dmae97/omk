@@ -25,6 +25,8 @@ pub struct FuzzyFindOptions<'env> {
 	pub hidden:      Option<bool>,
 	/// Respect .gitignore (default: true).
 	pub gitignore:   Option<bool>,
+	/// Enable shared filesystem scan cache (default: false).
+	pub cache:       Option<bool>,
 	/// Maximum number of matches to return (default: 100).
 	#[napi(js_name = "maxResults")]
 	pub max_results: Option<u32>,
@@ -156,6 +158,7 @@ struct FuzzyFindConfig {
 	hidden:      Option<bool>,
 	gitignore:   Option<bool>,
 	max_results: Option<u32>,
+	cache:       Option<bool>,
 }
 
 fn clamp_u32(value: u64) -> u32 {
@@ -177,18 +180,24 @@ fn fuzzy_find_sync(config: FuzzyFindConfig, ct: task::CancelToken) -> Result<Fuz
 		return Ok(FuzzyFindResult { matches: Vec::new(), total_matches: 0 });
 	}
 
-	let scan = fs_cache::get_or_scan(&root, include_hidden, respect_gitignore, &ct)?;
-	let mut scored = score_entries(&scan.entries, &query_lower, &normalized_query, &ct)?;
-
-	// Empty-result recheck: if the query was non-trivial but produced zero matches
-	// from a cached scan that's old enough, force one rescan before giving up.
-	if scored.is_empty()
-		&& !query_lower.is_empty()
-		&& scan.cache_age_ms >= fs_cache::empty_recheck_ms()
-	{
-		let fresh = fs_cache::force_rescan(&root, include_hidden, respect_gitignore, &ct)?;
-		scored = score_entries(&fresh, &query_lower, &normalized_query, &ct)?;
-	}
+	let use_cache = config.cache.unwrap_or(false);
+	let mut scored = if use_cache {
+		let scan = fs_cache::get_or_scan(&root, include_hidden, respect_gitignore, &ct)?;
+		let mut scored = score_entries(&scan.entries, &query_lower, &normalized_query, &ct)?;
+		// Empty-result recheck: if the query was non-trivial but produced zero matches
+		// from a cached scan that's old enough, force one rescan before giving up.
+		if scored.is_empty()
+			&& !query_lower.is_empty()
+			&& scan.cache_age_ms >= fs_cache::empty_recheck_ms()
+		{
+			let fresh = fs_cache::force_rescan(&root, include_hidden, respect_gitignore, true, &ct)?;
+			scored = score_entries(&fresh, &query_lower, &normalized_query, &ct)?;
+		}
+		scored
+	} else {
+		let fresh = fs_cache::force_rescan(&root, include_hidden, respect_gitignore, false, &ct)?;
+		score_entries(&fresh, &query_lower, &normalized_query, &ct)?
+	};
 
 	scored.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.path.cmp(&b.path)));
 	let total_matches = clamp_u32(scored.len() as u64);
@@ -235,9 +244,9 @@ fn score_entries(
 /// Matching file and directory entries sorted by match quality.
 #[napi(js_name = "fuzzyFind")]
 pub fn fuzzy_find(options: FuzzyFindOptions<'_>) -> task::Async<FuzzyFindResult> {
-	let FuzzyFindOptions { query, path, hidden, gitignore, max_results, timeout_ms, signal } =
+	let FuzzyFindOptions { query, path, hidden, gitignore, cache, max_results, timeout_ms, signal } =
 		options;
 	let ct = task::CancelToken::new(timeout_ms, signal);
-	let config = FuzzyFindConfig { query, path, hidden, gitignore, max_results };
+	let config = FuzzyFindConfig { query, path, hidden, gitignore, max_results, cache };
 	task::blocking("fuzzy_find", ct, move |ct| fuzzy_find_sync(config, ct))
 }

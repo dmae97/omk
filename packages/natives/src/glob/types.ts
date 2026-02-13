@@ -27,6 +27,8 @@ export interface GlobOptions extends Cancellable {
 	maxResults?: number;
 	/** Respect .gitignore files (default: true). */
 	gitignore?: boolean;
+	/** Enable shared filesystem scan cache (default: false). */
+	cache?: boolean;
 	/** Sort results by mtime (most recent first) before applying limit. */
 	sortByMtime?: boolean;
 	/** Include node_modules entries even when pattern does not mention node_modules. */

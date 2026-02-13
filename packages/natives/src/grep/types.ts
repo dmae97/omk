@@ -20,6 +20,8 @@ export interface GrepOptions extends Cancellable {
 	multiline?: boolean;
 	/** Include hidden files (default: true) */
 	hidden?: boolean;
+	/** Enable shared filesystem scan cache (default: false). */
+	cache?: boolean;
 	/** Maximum number of matches to return */
 	maxCount?: number;
 	/** Skip first N matches */
@@ -140,6 +142,8 @@ export interface FuzzyFindOptions extends Cancellable {
 	hidden?: boolean;
 	/** Respect .gitignore (default: true). */
 	gitignore?: boolean;
+	/** Enable shared filesystem scan cache (default: false). */
+	cache?: boolean;
 	/** Maximum number of matches to return (default: 100). */
 	maxResults?: number;
 }

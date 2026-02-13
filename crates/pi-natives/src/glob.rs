@@ -44,6 +44,8 @@ pub struct GlobOptions<'env> {
 	pub max_results:          Option<u32>,
 	/// Respect .gitignore files (default: true).
 	pub gitignore:            Option<bool>,
+	/// Enable shared filesystem scan cache (default: false).
+	pub cache:                Option<bool>,
 	/// Sort results by mtime (most recent first) before applying limit.
 	#[napi(js_name = "sortByMtime")]
 	pub sort_by_mtime:        Option<bool>,
@@ -101,6 +103,7 @@ struct GlobConfig {
 	use_gitignore:         bool,
 	mentions_node_modules: bool,
 	sort_by_mtime:         bool,
+	use_cache:             bool,
 }
 
 /// Filter and collect matching entries from a pre-scanned list.
@@ -152,18 +155,37 @@ fn run_glob(
 	ct: task::CancelToken,
 ) -> Result<GlobResult> {
 	let glob_set = compile_glob(&config.pattern)?;
-
-	let scan =
-		fs_cache::get_or_scan(&config.root, config.include_hidden, config.use_gitignore, &ct)?;
-	let mut matches = filter_entries(&scan.entries, &glob_set, &config, on_match, &ct)?;
-
-	// Empty-result recheck: if we got zero matches from a cached scan that's old
-	// enough, force a rescan and try once more before returning empty.
-	if matches.is_empty() && scan.cache_age_ms >= fs_cache::empty_recheck_ms() {
-		let fresh =
-			fs_cache::force_rescan(&config.root, config.include_hidden, config.use_gitignore, &ct)?;
-		matches = filter_entries(&fresh, &glob_set, &config, on_match, &ct)?;
+	if config.max_results == 0 {
+		return Ok(GlobResult { matches: Vec::new(), total_matches: 0 });
 	}
+
+	let mut matches = if config.use_cache {
+		let scan =
+			fs_cache::get_or_scan(&config.root, config.include_hidden, config.use_gitignore, &ct)?;
+		let mut matches = filter_entries(&scan.entries, &glob_set, &config, on_match, &ct)?;
+		// Empty-result recheck: if we got zero matches from a cached scan that's old
+		// enough, force a rescan and try once more before returning empty.
+		if matches.is_empty() && scan.cache_age_ms >= fs_cache::empty_recheck_ms() {
+			let fresh = fs_cache::force_rescan(
+				&config.root,
+				config.include_hidden,
+				config.use_gitignore,
+				true,
+				&ct,
+			)?;
+			matches = filter_entries(&fresh, &glob_set, &config, on_match, &ct)?;
+		}
+		matches
+	} else {
+		let fresh = fs_cache::force_rescan(
+			&config.root,
+			config.include_hidden,
+			config.use_gitignore,
+			false,
+			&ct,
+		)?;
+		filter_entries(&fresh, &glob_set, &config, on_match, &ct)?
+	};
 
 	if config.sort_by_mtime {
 		// Sorting mode: rank by mtime descending, then apply max-results truncation.
@@ -207,6 +229,7 @@ pub fn glob(
 		max_results,
 		gitignore,
 		sort_by_mtime,
+		cache,
 		include_node_modules,
 		timeout_ms,
 		signal,
@@ -229,6 +252,7 @@ pub fn glob(
 				mentions_node_modules: include_node_modules
 					.unwrap_or_else(|| pattern.contains("node_modules")),
 				sort_by_mtime: sort_by_mtime.unwrap_or(false),
+				use_cache: cache.unwrap_or(false),
 				pattern,
 			},
 			on_match.as_ref(),

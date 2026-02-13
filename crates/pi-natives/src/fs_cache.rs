@@ -147,7 +147,7 @@ pub fn resolve_search_path(path: &str) -> Result<PathBuf> {
 	if !metadata.is_dir() {
 		return Err(Error::from_reason("Search path must be a directory".to_string()));
 	}
-	Ok(root)
+	Ok(std::fs::canonicalize(&root).unwrap_or(root))
 }
 
 /// Normalize a filesystem path to a forward-slash relative string.
@@ -324,20 +324,24 @@ pub fn get_or_scan(
 /// Force a fresh scan, replacing any existing cache entry.
 ///
 /// Use when a cached query produced zero matches and the cache was old enough
-/// to warrant a recheck.
+/// to warrant a recheck. When `store` is false, the fresh scan result is
+/// returned without repopulating the cache.
 pub fn force_rescan(
 	root: &Path,
 	include_hidden: bool,
 	use_gitignore: bool,
+	store: bool,
 	ct: &task::CancelToken,
 ) -> Result<Vec<GlobMatch>> {
 	let key = CacheKey { root: root.to_path_buf(), include_hidden, use_gitignore };
 	FS_CACHE.remove(&key);
 
 	let entries = collect_entries(root, include_hidden, use_gitignore, ct)?;
-	let now = Instant::now();
-	FS_CACHE.insert(key, CacheEntry { created_at: now, entries: entries.clone() });
-	evict_oldest();
+	if store {
+		let now = Instant::now();
+		FS_CACHE.insert(key, CacheEntry { created_at: now, entries: entries.clone() });
+		evict_oldest();
+	}
 	Ok(entries)
 }
 
@@ -375,7 +379,26 @@ pub fn invalidate_all() {
 #[napi(js_name = "invalidateFsScanCache")]
 pub fn invalidate_fs_scan_cache(path: Option<String>) {
 	match path {
-		Some(p) => invalidate_path(Path::new(&p)),
+		Some(p) => {
+			let candidate = PathBuf::from(&p);
+			let absolute = if candidate.is_absolute() {
+				candidate
+			} else if let Ok(cwd) = std::env::current_dir() {
+				cwd.join(candidate)
+			} else {
+				PathBuf::from(&p)
+			};
+			let target = std::fs::canonicalize(&absolute)
+				.or_else(|_| {
+					absolute
+						.parent()
+						.and_then(|parent| std::fs::canonicalize(parent).ok())
+						.and_then(|parent| absolute.file_name().map(|name| parent.join(name)))
+						.ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))
+				})
+				.unwrap_or(absolute);
+			invalidate_path(&target);
+		},
 		None => invalidate_all(),
 	}
 }

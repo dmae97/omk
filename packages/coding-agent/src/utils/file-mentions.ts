@@ -33,12 +33,14 @@ type MentionDiscoveryProfile = {
 	gitignore: boolean;
 	includeNodeModules: boolean;
 	maxResults: number;
+	cache: boolean;
 };
 
 function getMentionCandidateDiscoveryProfile(): MentionDiscoveryProfile {
 	return {
 		hidden: true,
 		gitignore: true,
+		cache: true,
 		includeNodeModules: true,
 		maxResults: MAX_RESOLUTION_CANDIDATES,
 	};

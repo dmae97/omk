@@ -87,6 +87,8 @@ pub struct GrepOptions<'env> {
 	pub multiline:      Option<bool>,
 	/// Include hidden files (default: true).
 	pub hidden:         Option<bool>,
+	/// Enable shared filesystem scan cache (default: false).
+	pub cache:          Option<bool>,
 	/// Maximum number of matches to return.
 	#[napi(js_name = "maxCount")]
 	pub max_count:      Option<u32>,
@@ -207,7 +209,7 @@ impl TypeFilter {
 	fn match_ext(&self, ext: &str) -> bool {
 		match self {
 			Self::Known { exts, .. } => exts.iter().any(|e| ext.eq_ignore_ascii_case(e)),
-			Self::Custom(ext) => ext.eq_ignore_ascii_case(ext),
+			Self::Custom(custom_ext) => ext.eq_ignore_ascii_case(custom_ext),
 		}
 	}
 
@@ -612,6 +614,7 @@ struct GrepConfig {
 	ignore_case:    Option<bool>,
 	multiline:      Option<bool>,
 	hidden:         Option<bool>,
+	cache:          Option<bool>,
 	max_count:      Option<u32>,
 	offset:         Option<u32>,
 	context_before: Option<u32>,
@@ -816,6 +819,7 @@ fn grep_sync(
 	let max_count = options.max_count.map(u64::from);
 	let offset = options.offset.unwrap_or(0) as u64;
 	let include_hidden = options.hidden.unwrap_or(true);
+	let use_cache = options.cache.unwrap_or(false);
 	let glob_set = compile_glob(options.glob.as_deref())?;
 	let type_filter = resolve_type_filter(options.type_filter.as_deref());
 
@@ -897,13 +901,19 @@ fn grep_sync(
 		});
 	}
 
-	let scan = fs_cache::get_or_scan(&search_path, include_hidden, true, &ct)?;
-	let mut entries =
-		collect_files(&search_path, &scan.entries, glob_set.as_ref(), type_filter.as_ref());
-	if entries.is_empty() && scan.cache_age_ms >= fs_cache::empty_recheck_ms() {
-		let fresh = fs_cache::force_rescan(&search_path, include_hidden, true, &ct)?;
-		entries = collect_files(&search_path, &fresh, glob_set.as_ref(), type_filter.as_ref());
-	}
+	let entries = if use_cache {
+		let scan = fs_cache::get_or_scan(&search_path, include_hidden, true, &ct)?;
+		let mut entries =
+			collect_files(&search_path, &scan.entries, glob_set.as_ref(), type_filter.as_ref());
+		if entries.is_empty() && scan.cache_age_ms >= fs_cache::empty_recheck_ms() {
+			let fresh = fs_cache::force_rescan(&search_path, include_hidden, true, true, &ct)?;
+			entries = collect_files(&search_path, &fresh, glob_set.as_ref(), type_filter.as_ref());
+		}
+		entries
+	} else {
+		let fresh = fs_cache::force_rescan(&search_path, include_hidden, true, false, &ct)?;
+		collect_files(&search_path, &fresh, glob_set.as_ref(), type_filter.as_ref())
+	};
 	// Check cancellation before heavy work
 	ct.heartbeat()?;
 	if entries.is_empty() {
@@ -1093,6 +1103,7 @@ pub fn grep(
 		ignore_case,
 		multiline,
 		hidden,
+		cache,
 		max_count,
 		offset,
 		context_before,
@@ -1112,6 +1123,7 @@ pub fn grep(
 		ignore_case,
 		multiline,
 		hidden,
+		cache,
 		max_count,
 		offset,
 		context_before,

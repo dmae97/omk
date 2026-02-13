@@ -14,6 +14,7 @@ function buildAutocompleteFuzzyDiscoveryProfile(
 	maxResults: number;
 	hidden: boolean;
 	gitignore: boolean;
+	cache: boolean;
 } {
 	return {
 		query,
@@ -21,6 +22,7 @@ function buildAutocompleteFuzzyDiscoveryProfile(
 		maxResults: 100,
 		hidden: true,
 		gitignore: true,
+		cache: true,
 	};
 }
 
