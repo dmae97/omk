@@ -5,6 +5,7 @@ import type {
 	AgentToolUpdateCallback,
 	ToolCallContext,
 } from "@oh-my-pi/pi-agent-core";
+import { invalidateFsScanCache } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { untilAborted } from "@oh-my-pi/pi-utils";
@@ -102,6 +103,7 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 			const batchRequest = getLspBatchRequest(context?.toolCall);
 
 			const diagnostics = await this.#writethrough(absolutePath, content, signal, undefined, batchRequest);
+			invalidateFsScanCache(absolutePath);
 
 			const resultText = `Successfully wrote ${content.length} bytes to ${path}`;
 			if (!diagnostics) {

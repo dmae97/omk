@@ -603,7 +603,6 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		}
 	}
 
-
 	async #getFuzzyFileSuggestions(query: string, options: { isQuotedPrefix: boolean }): Promise<AutocompleteItem[]> {
 		try {
 			const result = await fuzzyFind({
@@ -612,7 +611,6 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 				maxResults: 100,
 				hidden: true,
 				gitignore: true,
-				cacheTtlMs: 1_000,
 			});
 			const filteredMatches = result.matches.filter(entry => {
 				const p = entry.path.endsWith("/") ? entry.path.slice(0, -1) : entry.path;

@@ -14,9 +14,9 @@ import type { FileMentionMessage } from "../session/messages";
 import { resolveReadPath } from "../tools/path-utils";
 import { formatAge } from "../tools/render-utils";
 import { DEFAULT_MAX_BYTES, formatSize, truncateHead, truncateStringToBytesFromStart } from "../tools/truncate";
+import { fuzzyMatch } from "./fuzzy";
 import { formatDimensionNote, resizeImage } from "./image-resize";
 import { detectSupportedImageMimeTypeFromFile } from "./mime";
-import { fuzzyMatch } from "./fuzzy";
 
 /** Regex to match @filepath patterns in text */
 const FILE_MENTION_REGEX = /@([^\s@]+)/g;
@@ -26,8 +26,7 @@ const MENTION_BOUNDARY_REGEX = /[\s([{<"'`]/;
 const DEFAULT_DIR_LIMIT = 500;
 const MIN_FUZZY_QUERY_LENGTH = 5;
 const MAX_RESOLUTION_CANDIDATES = 20_000;
-const MENTION_GLOB_CACHE_TTL_MS = 1_000;
-const PATH_SEPARATOR_REGEX = /[\/._\-\s]+/g;
+const PATH_SEPARATOR_REGEX = /[/._\-\s]+/g;
 
 // Avoid OOM when users @mention very large files. Above these limits we skip
 // auto-reading and only include the path in the message.
@@ -76,7 +75,6 @@ async function listMentionCandidates(cwd: string): Promise<MentionCandidate[]> {
 			gitignore: true,
 			includeNodeModules: true,
 			maxResults: MAX_RESOLUTION_CANDIDATES,
-			cacheTtlMs: MENTION_GLOB_CACHE_TTL_MS,
 		});
 		entries = result.matches.map(match => match.path);
 	} catch {
@@ -139,7 +137,6 @@ async function resolveMentionPath(
 
 	return best?.candidate.path ?? null;
 }
-
 
 function buildTextOutput(textContent: string): { output: string; lineCount: number } {
 	const allLines = textContent.split("\n");

@@ -142,8 +142,6 @@ export interface FuzzyFindOptions extends Cancellable {
 	gitignore?: boolean;
 	/** Maximum number of matches to return (default: 100). */
 	maxResults?: number;
-	/** Cache scan results for this root/options for the given TTL (milliseconds). */
-	cacheTtlMs?: number;
 }
 
 /** A single match in fuzzy find results. */

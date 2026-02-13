@@ -11,6 +11,7 @@
 import * as fs from "node:fs/promises";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
+import { invalidateFsScanCache } from "@oh-my-pi/pi-natives";
 import { type Static, Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import {
@@ -530,6 +531,7 @@ export class EditTool implements AgentTool<TInput> {
 
 			const finalContent = bom + restoreLineEndings(result.content, originalEnding);
 			const diagnostics = await this.#writethrough(absolutePath, finalContent, signal, file, batchRequest);
+			invalidateFsScanCache(absolutePath);
 			const diffResult = generateDiffString(originalNormalized, result.content);
 
 			const normative = buildNormativeUpdateInput({
@@ -587,6 +589,8 @@ export class EditTool implements AgentTool<TInput> {
 				fuzzyThreshold: this.#fuzzyThreshold,
 				allowFuzzy: this.#allowFuzzy,
 			});
+			invalidateFsScanCache(resolvedPath);
+			if (resolvedRename) invalidateFsScanCache(resolvedRename);
 			const effRename = result.change.newPath ? rename : undefined;
 
 			// Generate diff for display
@@ -709,6 +713,7 @@ export class EditTool implements AgentTool<TInput> {
 
 		const finalContent = bom + restoreLineEndings(result.content, originalEnding);
 		const diagnostics = await this.#writethrough(absolutePath, finalContent, signal, file, batchRequest);
+		invalidateFsScanCache(absolutePath);
 		const diffResult = generateDiffString(normalizedContent, result.content);
 
 		const resultText =

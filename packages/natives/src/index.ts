@@ -37,6 +37,7 @@ export {
 	type GlobOptions,
 	type GlobResult,
 	glob,
+	invalidateFsScanCache,
 } from "./glob";
 
 // =============================================================================

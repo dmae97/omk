@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { FileType, type GlobMatch, fuzzyFind, glob, grep, htmlToMarkdown } from "../src/index";
+import { FileType, fuzzyFind, type GlobMatch, glob, grep, htmlToMarkdown } from "../src/index";
 
 let testDir: string;
 
@@ -92,7 +92,6 @@ describe("pi-natives", () => {
 				hidden: true,
 				gitignore: true,
 				maxResults: 20,
-				cacheTtlMs: 1_000,
 			});
 
 			expect(result.matches.some(match => match.path === "history-search.ts")).toBe(true);

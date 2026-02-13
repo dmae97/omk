@@ -34,3 +34,13 @@ export async function glob(options: GlobOptions, onMatch?: (match: GlobMatch) =>
 		cb,
 	);
 }
+
+/**
+ * Invalidate the filesystem scan cache.
+ *
+ * When called with a path, removes entries for roots containing that path.
+ * When called without a path, clears the entire cache.
+ */
+export function invalidateFsScanCache(path?: string): void {
+	native.invalidateFsScanCache(path);
+}

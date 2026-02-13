@@ -31,8 +31,6 @@ export interface GlobOptions extends Cancellable {
 	sortByMtime?: boolean;
 	/** Include node_modules entries even when pattern does not mention node_modules. */
 	includeNodeModules?: boolean;
-	/** Cache scan results for this root/options for the given TTL (milliseconds). */
-	cacheTtlMs?: number;
 }
 
 /** A single filesystem match. */
@@ -61,5 +59,7 @@ declare module "../bindings" {
 		 * @param onMatch Optional callback for streaming matches as they are found.
 		 */
 		glob(options: GlobOptions, onMatch?: TsFunc<GlobMatch>): Promise<GlobResult>;
+		/** Invalidate the filesystem scan cache for the given path (or all caches if omitted). */
+		invalidateFsScanCache(path?: string): void;
 	}
 }

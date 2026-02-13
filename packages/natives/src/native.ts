@@ -9,6 +9,7 @@ import { createRequire } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
 import { $env } from "@oh-my-pi/pi-utils";
+import { getNativesDir } from "@oh-my-pi/pi-utils/dirs";
 
 import packageJson from "../package.json";
 import type { NativeBindings } from "./bindings";
@@ -37,7 +38,7 @@ const addonFilename = `pi_natives.${platformTag}.node`;
 const packageVersion = (packageJson as { version: string }).version;
 const nativeDir = path.join(import.meta.dir, "..", "native");
 const execDir = path.dirname(process.execPath);
-const versionedDir = path.join(os.homedir(), ".omp", "natives", packageVersion);
+const versionedDir = path.join(getNativesDir(), packageVersion);
 const versionedAddonPath = path.join(versionedDir, addonFilename);
 const legacyUserDataDir =
 	process.platform === "win32"
@@ -185,6 +186,7 @@ function validateNative(bindings: NativeBindings, source: string): void {
 	checkFn("listDescendants");
 	checkFn("getSystemInfo");
 	checkFn("getWorkProfile");
+	checkFn("invalidateFsScanCache");
 
 	if (missing.length) {
 		throw new Error(
