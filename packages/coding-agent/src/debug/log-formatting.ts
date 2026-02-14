@@ -40,3 +40,21 @@ export function parseDebugLogTimestampMs(line: string): number | undefined {
 		return undefined;
 	}
 }
+
+export function parseDebugLogPid(line: string): number | undefined {
+	try {
+		const parsed: unknown = JSON.parse(line);
+		if (!parsed || typeof parsed !== "object") {
+			return undefined;
+		}
+
+		const pid = (parsed as { pid?: unknown }).pid;
+		if (typeof pid !== "number") {
+			return undefined;
+		}
+
+		return Number.isFinite(pid) ? pid : undefined;
+	} catch {
+		return undefined;
+	}
+}

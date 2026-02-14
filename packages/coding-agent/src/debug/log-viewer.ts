@@ -3,18 +3,31 @@ import { type Component, matchesKey, padding, truncateToWidth, visibleWidth } fr
 import { sanitizeText } from "@oh-my-pi/pi-utils";
 import { theme } from "../modes/theme/theme";
 import { replaceTabs } from "../tools/render-utils";
-import { formatDebugLogExpandedLines, formatDebugLogLine, parseDebugLogTimestampMs } from "./log-formatting";
+import {
+	formatDebugLogExpandedLines,
+	formatDebugLogLine,
+	parseDebugLogPid,
+	parseDebugLogTimestampMs,
+} from "./log-formatting";
 
 export const SESSION_BOUNDARY_WARNING = "### WARNING - Logs above are older than current session!";
+export const LOAD_OLDER_LABEL = "### LOAD UP TO 50 OLDER ENTRIES";
+
+const INITIAL_LOG_CHUNK = 50;
+const LOAD_OLDER_CHUNK = 50;
 
 type LogEntry = {
 	rawLine: string;
 	timestampMs: number | undefined;
+	pid: number | undefined;
 };
 
 type ViewerRow =
 	| {
 			kind: "warning";
+	  }
+	| {
+			kind: "load-older";
 	  }
 	| {
 			kind: "log";
@@ -40,20 +53,28 @@ export class DebugLogViewerModel {
 	#entries: LogEntry[];
 	#rows: ViewerRow[];
 	#visibleLogIndices: number[];
-	#cursorVisibleIndex = 0;
-	#selectionAnchorVisibleIndex: number | undefined;
+	#selectableRowIndices: number[];
+	#cursorSelectableIndex = 0;
+	#selectionAnchorSelectableIndex: number | undefined;
 	#expandedLogIndices = new Set<number>();
 	#filterQuery = "";
 	#processStartMs: number;
+	#loadedStartIndex: number;
+	#processFilterEnabled = false;
+	#processPid: number;
 
-	constructor(logText: string, processStartMs: number = getProcessStartMs()) {
+	constructor(logText: string, processStartMs: number = getProcessStartMs(), processPid: number = process.pid) {
 		this.#entries = splitLogText(logText).map(rawLine => ({
 			rawLine,
 			timestampMs: parseDebugLogTimestampMs(rawLine),
+			pid: parseDebugLogPid(rawLine),
 		}));
 		this.#processStartMs = processStartMs;
+		this.#processPid = processPid;
+		this.#loadedStartIndex = Math.max(0, this.#entries.length - INITIAL_LOG_CHUNK);
 		this.#rows = [];
 		this.#visibleLogIndices = [];
+		this.#selectableRowIndices = [];
 		this.#rebuildRows();
 	}
 
@@ -69,16 +90,33 @@ export class DebugLogViewerModel {
 		return this.#rows;
 	}
 
+	get cursorRowIndex(): number | undefined {
+		return this.#selectableRowIndices[this.#cursorSelectableIndex];
+	}
+
+	get cursorLogIndex(): number | undefined {
+		const row = this.#getCursorRow();
+		return row?.kind === "log" ? row.logIndex : undefined;
+	}
+
 	get filterQuery(): string {
 		return this.#filterQuery;
 	}
 
-	get cursorLogIndex(): number {
-		return this.#visibleLogIndices[this.#cursorVisibleIndex] ?? 0;
+	get cursorRowKind(): ViewerRow["kind"] | undefined {
+		return this.#getCursorRow()?.kind;
 	}
 
 	get expandedCount(): number {
 		return this.#expandedLogIndices.size;
+	}
+
+	isProcessFilterEnabled(): boolean {
+		return this.#processFilterEnabled;
+	}
+
+	isCursorAtFirstSelectableRow(): boolean {
+		return this.#cursorSelectableIndex === 0;
 	}
 
 	getRawLine(logIndex: number): string {
@@ -93,41 +131,58 @@ export class DebugLogViewerModel {
 		this.#rebuildRows();
 	}
 
+	toggleProcessFilter(): void {
+		this.#processFilterEnabled = !this.#processFilterEnabled;
+		this.#rebuildRows();
+	}
+
 	moveCursor(delta: number, extendSelection: boolean): void {
-		if (this.#visibleLogIndices.length === 0) {
+		if (this.#selectableRowIndices.length === 0) {
 			return;
 		}
 
-		if (extendSelection && this.#selectionAnchorVisibleIndex === undefined) {
-			this.#selectionAnchorVisibleIndex = this.#cursorVisibleIndex;
+		if (extendSelection && this.#selectionAnchorSelectableIndex === undefined) {
+			const row = this.#getCursorRow();
+			if (row?.kind === "log") {
+				this.#selectionAnchorSelectableIndex = this.#cursorSelectableIndex;
+			}
 		}
 
-		this.#cursorVisibleIndex = Math.max(
+		this.#cursorSelectableIndex = Math.max(
 			0,
-			Math.min(this.#visibleLogIndices.length - 1, this.#cursorVisibleIndex + delta),
+			Math.min(this.#selectableRowIndices.length - 1, this.#cursorSelectableIndex + delta),
 		);
 
 		if (!extendSelection) {
-			this.#selectionAnchorVisibleIndex = undefined;
+			this.#selectionAnchorSelectableIndex = undefined;
+		}
+
+		if (this.#getCursorRow()?.kind !== "log" && !extendSelection) {
+			this.#selectionAnchorSelectableIndex = undefined;
 		}
 	}
 
 	getSelectedLogIndices(): number[] {
-		if (this.#visibleLogIndices.length === 0) {
+		if (this.#selectableRowIndices.length === 0) {
 			return [];
 		}
 
-		if (this.#selectionAnchorVisibleIndex === undefined) {
-			return [this.cursorLogIndex];
+		const cursorRow = this.#getCursorRow();
+		if (this.#selectionAnchorSelectableIndex === undefined) {
+			if (cursorRow?.kind !== "log") {
+				return [];
+			}
+			return [cursorRow.logIndex];
 		}
 
-		const min = Math.min(this.#selectionAnchorVisibleIndex, this.#cursorVisibleIndex);
-		const max = Math.max(this.#selectionAnchorVisibleIndex, this.#cursorVisibleIndex);
+		const min = Math.min(this.#selectionAnchorSelectableIndex, this.#cursorSelectableIndex);
+		const max = Math.max(this.#selectionAnchorSelectableIndex, this.#cursorSelectableIndex);
 		const selected: number[] = [];
 		for (let i = min; i <= max; i++) {
-			const logIndex = this.#visibleLogIndices[i];
-			if (logIndex !== undefined) {
-				selected.push(logIndex);
+			const rowIndex = this.#selectableRowIndices[i];
+			const row = rowIndex === undefined ? undefined : this.#rows[rowIndex];
+			if (row?.kind === "log") {
+				selected.push(row.logIndex);
 			}
 		}
 		return selected;
@@ -163,28 +218,72 @@ export class DebugLogViewerModel {
 		return selectedIndices.map(index => this.getRawLine(index));
 	}
 
+	selectAllVisible(): void {
+		if (this.#selectableRowIndices.length === 0) {
+			return;
+		}
+
+		let firstLogIndex: number | undefined;
+		let lastLogIndex: number | undefined;
+		for (let i = 0; i < this.#selectableRowIndices.length; i++) {
+			const rowIndex = this.#selectableRowIndices[i];
+			const row = rowIndex === undefined ? undefined : this.#rows[rowIndex];
+			if (row?.kind === "log") {
+				if (firstLogIndex === undefined) {
+					firstLogIndex = i;
+				}
+				lastLogIndex = i;
+			}
+		}
+
+		if (firstLogIndex === undefined || lastLogIndex === undefined) {
+			return;
+		}
+
+		this.#selectionAnchorSelectableIndex = firstLogIndex;
+		this.#cursorSelectableIndex = lastLogIndex;
+	}
+
+	canLoadOlder(): boolean {
+		return this.#loadedStartIndex > 0;
+	}
+
+	loadOlder(additionalCount: number = LOAD_OLDER_CHUNK): void {
+		if (!this.canLoadOlder()) {
+			return;
+		}
+
+		const requested = Math.max(1, additionalCount);
+		const nextStart = Math.max(0, this.#loadedStartIndex - requested);
+		if (nextStart === this.#loadedStartIndex) {
+			return;
+		}
+
+		this.#loadedStartIndex = nextStart;
+		this.#rebuildRows();
+	}
+
 	#rebuildRows(): void {
-		const previousVisible = this.#visibleLogIndices;
-		const previousCursorLogIndex = previousVisible[this.#cursorVisibleIndex];
-		const previousAnchorLogIndex =
-			this.#selectionAnchorVisibleIndex === undefined
-				? undefined
-				: previousVisible[this.#selectionAnchorVisibleIndex];
+		const previousCursor = this.#getCursorToken();
+		const previousAnchorLogIndex = this.#getAnchorLogIndex();
 
 		const query = this.#filterQuery.toLowerCase();
 		const visible: number[] = [];
-		for (let i = 0; i < this.#entries.length; i++) {
+		for (let i = this.#loadedStartIndex; i < this.#entries.length; i++) {
 			const entry = this.#entries[i];
 			if (!entry) {
 				continue;
 			}
-			if (query.length === 0 || entry.rawLine.toLowerCase().includes(query)) {
+			if (this.#matchesFilters(entry, query)) {
 				visible.push(i);
 			}
 		}
 		this.#visibleLogIndices = visible;
 
 		const rows: ViewerRow[] = [];
+		if (this.#hasOlderEntries(query)) {
+			rows.push({ kind: "load-older" });
+		}
 		let olderSeen = false;
 		let warningInserted = false;
 		for (const logIndex of visible) {
@@ -200,30 +299,90 @@ export class DebugLogViewerModel {
 			rows.push({ kind: "log", logIndex });
 		}
 		this.#rows = rows;
+		this.#selectableRowIndices = rows
+			.map((row, index) => (row.kind === "warning" ? undefined : index))
+			.filter((index): index is number => index !== undefined);
 
-		if (visible.length === 0) {
-			this.#cursorVisibleIndex = 0;
-			this.#selectionAnchorVisibleIndex = undefined;
+		if (this.#selectableRowIndices.length === 0) {
+			this.#cursorSelectableIndex = 0;
+			this.#selectionAnchorSelectableIndex = undefined;
 			return;
 		}
 
-		if (previousCursorLogIndex !== undefined) {
-			const cursorIndex = visible.indexOf(previousCursorLogIndex);
-			if (cursorIndex >= 0) {
-				this.#cursorVisibleIndex = cursorIndex;
+		if (previousCursor?.kind === "log") {
+			const rowIndex = this.#rows.findIndex(row => row.kind === "log" && row.logIndex === previousCursor.logIndex);
+			const selectableIndex = this.#selectableRowIndices.indexOf(rowIndex);
+			if (selectableIndex >= 0) {
+				this.#cursorSelectableIndex = selectableIndex;
 			} else {
-				this.#cursorVisibleIndex = Math.min(this.#cursorVisibleIndex, visible.length - 1);
+				this.#cursorSelectableIndex = this.#selectableRowIndices.length - 1;
 			}
+		} else if (previousCursor?.kind === "load-older") {
+			const rowIndex = this.#rows.findIndex(row => row.kind === "load-older");
+			const selectableIndex = this.#selectableRowIndices.indexOf(rowIndex);
+			this.#cursorSelectableIndex = selectableIndex >= 0 ? selectableIndex : this.#selectableRowIndices.length - 1;
 		} else {
-			this.#cursorVisibleIndex = Math.min(this.#cursorVisibleIndex, visible.length - 1);
+			this.#cursorSelectableIndex = this.#selectableRowIndices.length - 1;
 		}
 
 		if (previousAnchorLogIndex !== undefined) {
-			const anchorIndex = visible.indexOf(previousAnchorLogIndex);
-			this.#selectionAnchorVisibleIndex = anchorIndex >= 0 ? anchorIndex : undefined;
+			const rowIndex = this.#rows.findIndex(row => row.kind === "log" && row.logIndex === previousAnchorLogIndex);
+			const selectableIndex = this.#selectableRowIndices.indexOf(rowIndex);
+			this.#selectionAnchorSelectableIndex = selectableIndex >= 0 ? selectableIndex : undefined;
 		} else {
-			this.#selectionAnchorVisibleIndex = undefined;
+			this.#selectionAnchorSelectableIndex = undefined;
 		}
+	}
+
+	#matchesFilters(entry: LogEntry, query: string): boolean {
+		if (query.length > 0 && !entry.rawLine.toLowerCase().includes(query)) {
+			return false;
+		}
+		if (!this.#processFilterEnabled) {
+			return true;
+		}
+		return entry.pid === this.#processPid;
+	}
+
+	#hasOlderEntries(query: string): boolean {
+		if (this.#loadedStartIndex === 0) {
+			return false;
+		}
+		for (let i = 0; i < this.#loadedStartIndex; i++) {
+			const entry = this.#entries[i];
+			if (entry && this.#matchesFilters(entry, query)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	#getCursorRow(): ViewerRow | undefined {
+		const rowIndex = this.cursorRowIndex;
+		return rowIndex === undefined ? undefined : this.#rows[rowIndex];
+	}
+
+	#getCursorToken(): { kind: "log"; logIndex: number } | { kind: "load-older" } | undefined {
+		const row = this.#getCursorRow();
+		if (!row) {
+			return undefined;
+		}
+		if (row.kind === "log") {
+			return { kind: "log", logIndex: row.logIndex };
+		}
+		if (row.kind === "load-older") {
+			return { kind: "load-older" };
+		}
+		return undefined;
+	}
+
+	#getAnchorLogIndex(): number | undefined {
+		if (this.#selectionAnchorSelectableIndex === undefined) {
+			return undefined;
+		}
+		const rowIndex = this.#selectableRowIndices[this.#selectionAnchorSelectableIndex];
+		const row = rowIndex === undefined ? undefined : this.#rows[rowIndex];
+		return row?.kind === "log" ? row.logIndex : undefined;
 	}
 }
 
@@ -265,8 +424,41 @@ export class DebugLogViewerComponent implements Component {
 			return;
 		}
 
+		if (matchesKey(keyData, "ctrl+p")) {
+			this.#statusMessage = undefined;
+			this.#model.toggleProcessFilter();
+			this.#ensureCursorVisible();
+			return;
+		}
+
+		if (matchesKey(keyData, "ctrl+a")) {
+			this.#statusMessage = undefined;
+			this.#model.selectAllVisible();
+			this.#ensureCursorVisible();
+			return;
+		}
+
+		if (matchesKey(keyData, "ctrl+o")) {
+			this.#statusMessage = undefined;
+			this.#model.loadOlder(this.#bodyHeight() + 1);
+			this.#ensureCursorVisible();
+			return;
+		}
+
+		if (matchesKey(keyData, "enter") || matchesKey(keyData, "return")) {
+			if (this.#model.cursorRowKind === "load-older") {
+				this.#statusMessage = undefined;
+				this.#model.loadOlder();
+				this.#ensureCursorVisible();
+			}
+			return;
+		}
+
 		if (matchesKey(keyData, "shift+up")) {
 			this.#statusMessage = undefined;
+			if (this.#maybeLoadOlderOnUp(true)) {
+				return;
+			}
 			this.#model.moveCursor(-1, true);
 			this.#ensureCursorVisible();
 			return;
@@ -281,6 +473,9 @@ export class DebugLogViewerComponent implements Component {
 
 		if (matchesKey(keyData, "up")) {
 			this.#statusMessage = undefined;
+			if (this.#maybeLoadOlderOnUp(false)) {
+				return;
+			}
 			this.#model.moveCursor(-1, false);
 			this.#ensureCursorVisible();
 			return;
@@ -295,6 +490,11 @@ export class DebugLogViewerComponent implements Component {
 
 		if (matchesKey(keyData, "right")) {
 			this.#statusMessage = undefined;
+			if (this.#model.cursorRowKind === "load-older") {
+				this.#model.loadOlder();
+				this.#ensureCursorVisible();
+				return;
+			}
 			this.#model.expandSelected();
 			return;
 		}
@@ -334,7 +534,7 @@ export class DebugLogViewerComponent implements Component {
 		this.#ensureCursorVisible();
 
 		const innerWidth = Math.max(1, this.#lastRenderWidth - 2);
-		const bodyHeight = Math.max(3, this.#terminalRows - 8);
+		const bodyHeight = this.#bodyHeight();
 
 		const rows = this.#renderRows(innerWidth);
 		const visibleBodyLines = this.#renderVisibleBodyLines(rows, innerWidth, bodyHeight);
@@ -357,13 +557,16 @@ export class DebugLogViewerComponent implements Component {
 	}
 
 	#controlsText(): string {
-		return "Up/Down: move  Shift+Up/Down: select range  Left/Right: collapse/expand  Ctrl+C: copy  Esc: back";
+		return "Up/Down: move  Shift+Up/Down: select range  Left/Right: collapse/expand  Ctrl+A: select all  Ctrl+P: pid filter  Ctrl+O: load older  Ctrl+C: copy  Esc: back";
 	}
 
 	#filterText(): string {
 		const sanitized = replaceTabs(sanitizeText(this.#model.filterQuery));
 		const query = sanitized.length === 0 ? "" : theme.fg("accent", sanitized);
-		return ` filter: ${query}`;
+		const pidStatus = this.#model.isProcessFilterEnabled()
+			? theme.fg("success", "pid:on")
+			: theme.fg("muted", "pid:off");
+		return ` filter: ${query}  ${pidStatus}`;
 	}
 
 	#statusText(): string {
@@ -372,6 +575,27 @@ export class DebugLogViewerComponent implements Component {
 			return `${base}  ${this.#statusMessage}`;
 		}
 		return base;
+	}
+
+	#bodyHeight(): number {
+		return Math.max(3, this.#terminalRows - 8);
+	}
+
+	#maybeLoadOlderOnUp(extendSelection: boolean): boolean {
+		if (this.#model.cursorRowKind === "load-older") {
+			this.#model.loadOlder();
+			this.#ensureCursorVisible();
+			return true;
+		}
+
+		if (!this.#model.canLoadOlder() || !this.#model.isCursorAtFirstSelectableRow()) {
+			return false;
+		}
+
+		this.#model.loadOlder();
+		this.#model.moveCursor(-1, extendSelection);
+		this.#ensureCursorVisible();
+		return true;
 	}
 
 	#renderRows(innerWidth: number): Array<{ lines: string[]; rowIndex: number }> {
@@ -386,14 +610,28 @@ export class DebugLogViewerComponent implements Component {
 			if (row.kind === "warning") {
 				rendered.push({
 					rowIndex,
-					lines: [theme.fg("warning", truncateToWidth(SESSION_BOUNDARY_WARNING, innerWidth))],
+					lines: [theme.fg("muted", truncateToWidth(SESSION_BOUNDARY_WARNING, innerWidth))],
+				});
+				continue;
+			}
+
+			if (row.kind === "load-older") {
+				const active = this.#model.cursorRowIndex === rowIndex;
+				const marker = active ? theme.fg("accent", "❯") : " ";
+				const prefix = `${marker}  `;
+				const contentWidth = Math.max(1, innerWidth - visibleWidth(prefix));
+				const label = truncateToWidth(LOAD_OLDER_LABEL, contentWidth);
+				rendered.push({
+					rowIndex,
+					lines: [truncateToWidth(`${prefix}${theme.fg("muted", label)}`, innerWidth)],
 				});
 				continue;
 			}
 
 			const logIndex = row.logIndex;
 			const selected = this.#model.isSelected(logIndex);
-			const active = this.#model.cursorLogIndex === logIndex;
+			const cursorLogIndex = this.#model.cursorLogIndex;
+			const active = cursorLogIndex !== undefined && cursorLogIndex === logIndex;
 			const expanded = this.#model.isExpanded(logIndex);
 			const marker = active ? theme.fg("accent", "❯") : selected ? theme.fg("accent", "•") : " ";
 			const fold = expanded ? theme.fg("accent", "▾") : theme.fg("muted", "▸");
@@ -454,15 +692,13 @@ export class DebugLogViewerComponent implements Component {
 	}
 
 	#ensureCursorVisible(): void {
-		const cursorRowIndex = this.#model.rows.findIndex(
-			row => row.kind === "log" && row.logIndex === this.#model.cursorLogIndex,
-		);
-		if (cursorRowIndex < 0) {
+		const cursorRowIndex = this.#model.cursorRowIndex;
+		if (cursorRowIndex === undefined) {
 			this.#scrollRowOffset = 0;
 			return;
 		}
 
-		const maxVisibleRows = Math.max(1, Math.max(3, this.#terminalRows - 8));
+		const maxVisibleRows = Math.max(1, this.#bodyHeight());
 		if (cursorRowIndex < this.#scrollRowOffset) {
 			this.#scrollRowOffset = cursorRowIndex;
 			return;

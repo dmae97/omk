@@ -210,9 +210,14 @@ async function addSubagentSessions(
 }
 
 /** Get recent log entries for display */
-export async function getRecentLogs(lines: number): Promise<string> {
+export async function getLogText(): Promise<string> {
 	const logPath = getLogPath();
-	return readLastLines(logPath, lines);
+	try {
+		return await Bun.file(logPath).text();
+	} catch (err) {
+		if (isEnoent(err)) return "";
+		throw err;
+	}
 }
 
 /** Calculate total size of artifact cache */

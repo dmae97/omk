@@ -13,7 +13,7 @@ import type { InteractiveModeContext } from "../modes/types";
 import { openPath } from "../utils/open";
 import { DebugLogViewerComponent } from "./log-viewer";
 import { generateHeapSnapshotData, type ProfilerSession, startCpuProfile } from "./profiler";
-import { clearArtifactCache, createReportBundle, getArtifactCacheStats, getRecentLogs } from "./report-bundle";
+import { clearArtifactCache, createReportBundle, getArtifactCacheStats, getLogText } from "./report-bundle";
 import { collectSystemInfo, formatSystemInfo } from "./system-info";
 
 /** Debug menu options */
@@ -273,7 +273,7 @@ export class DebugSelectorComponent extends Container {
 
 	async #handleViewLogs(): Promise<void> {
 		try {
-			const logs = await getRecentLogs(50);
+			const logs = await getLogText();
 			if (!logs) {
 				this.ctx.showWarning("No log entries found for today.");
 				return;

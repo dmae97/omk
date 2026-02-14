@@ -1,7 +1,30 @@
 import { describe, expect, it } from "bun:test";
-import { buildLogCopyPayload, DebugLogViewerModel, SESSION_BOUNDARY_WARNING } from "../../src/debug/log-viewer";
+import {
+	buildLogCopyPayload,
+	DebugLogViewerModel,
+	LOAD_OLDER_LABEL,
+	SESSION_BOUNDARY_WARNING,
+} from "../../src/debug/log-viewer";
 
 describe("DebugLogViewerModel", () => {
+	const describeRow = (row: { kind: string; logIndex?: number }): string => {
+		switch (row.kind) {
+			case "warning":
+				return SESSION_BOUNDARY_WARNING;
+			case "load-older":
+				return LOAD_OLDER_LABEL;
+			case "log":
+				return `log:${row.logIndex}`;
+			default:
+				return row.kind;
+		}
+	};
+
+	it("defaults cursor to the newest log entry", () => {
+		const logs = ["alpha", "beta", "gamma"].join("\n");
+		const model = new DebugLogViewerModel(logs, Date.now());
+		expect(model.cursorLogIndex).toBe(2);
+	});
 	it("inserts session boundary warning between older and current-session logs", () => {
 		const processStartMs = Date.parse("2026-02-14T12:00:00.000Z");
 		const logs = [
@@ -11,9 +34,7 @@ describe("DebugLogViewerModel", () => {
 		].join("\n");
 
 		const model = new DebugLogViewerModel(logs, processStartMs);
-		const rowKinds = model.rows.map(row =>
-			row.kind === "warning" ? SESSION_BOUNDARY_WARNING : `log:${row.logIndex}`,
-		);
+		const rowKinds = model.rows.map(row => describeRow(row as { kind: string; logIndex?: number }));
 
 		expect(rowKinds).toEqual(["log:0", "log:1", SESSION_BOUNDARY_WARNING, "log:2"]);
 	});
@@ -23,11 +44,52 @@ describe("DebugLogViewerModel", () => {
 		const model = new DebugLogViewerModel(logs, Date.now());
 
 		model.setFilterQuery("be");
-		const rowKinds = model.rows.map(row =>
-			row.kind === "warning" ? SESSION_BOUNDARY_WARNING : `log:${row.logIndex}`,
-		);
+		const rowKinds = model.rows.map(row => describeRow(row as { kind: string; logIndex?: number }));
 		expect(rowKinds).toEqual(["log:1", "log:3"]);
 		expect(model.visibleLogCount).toBe(2);
+	});
+
+	it("filters to current process pid when enabled", () => {
+		const logs = [
+			'{"pid":42,"level":"info","message":"alpha"}',
+			'{"pid":84,"level":"info","message":"beta"}',
+			'{"level":"info","message":"missing"}',
+		].join("\n");
+		const model = new DebugLogViewerModel(logs, Date.now(), 42);
+
+		expect(model.visibleLogCount).toBe(3);
+		model.toggleProcessFilter();
+		expect(model.visibleLogCount).toBe(1);
+		expect(model.rows.map(row => describeRow(row as { kind: string; logIndex?: number }))).toEqual(["log:0"]);
+	});
+
+	it("selects all visible log rows", () => {
+		const logs = ["alpha", "beta", "gamma"].join("\n");
+		const model = new DebugLogViewerModel(logs, Date.now());
+
+		model.selectAllVisible();
+		expect(model.getSelectedLogIndices()).toEqual([0, 1, 2]);
+	});
+
+	it("progressively loads older entries in chunks", () => {
+		const logs = Array.from({ length: 120 }, (_, index) => `log-${index}`).join("\n");
+		const model = new DebugLogViewerModel(logs, Date.now());
+
+		expect(model.visibleLogCount).toBe(50);
+		const initialKinds = model.rows.slice(0, 2).map(row => describeRow(row as { kind: string; logIndex?: number }));
+		expect(initialKinds).toEqual([LOAD_OLDER_LABEL, "log:70"]);
+
+		model.loadOlder(5);
+		expect(model.visibleLogCount).toBe(55);
+		const expandedKinds = model.rows.slice(0, 2).map(row => describeRow(row as { kind: string; logIndex?: number }));
+		expect(expandedKinds).toEqual([LOAD_OLDER_LABEL, "log:65"]);
+
+		model.loadOlder(50);
+		expect(model.visibleLogCount).toBe(105);
+		const expandedAgainKinds = model.rows
+			.slice(0, 2)
+			.map(row => describeRow(row as { kind: string; logIndex?: number }));
+		expect(expandedAgainKinds).toEqual([LOAD_OLDER_LABEL, "log:15"]);
 	});
 
 	it("clamps cursor when filtered list shrinks", () => {
@@ -46,6 +108,7 @@ describe("DebugLogViewerModel", () => {
 		const logs = ["alpha", "beta", "gamma", "delta"].join("\n");
 		const model = new DebugLogViewerModel(logs, Date.now());
 
+		model.moveCursor(-999, false);
 		model.moveCursor(2, true);
 		expect(model.getSelectedLogIndices()).toEqual([0, 1, 2]);
 
@@ -69,15 +132,11 @@ describe("DebugLogViewerModel", () => {
 		expect(model.rows.map(row => row.kind)).toEqual(["log"]);
 
 		model.setFilterQuery("current");
-		const rowKinds = model.rows.map(row =>
-			row.kind === "warning" ? SESSION_BOUNDARY_WARNING : `log:${row.logIndex}`,
-		);
+		const rowKinds = model.rows.map(row => describeRow(row as { kind: string; logIndex?: number }));
 		expect(rowKinds).toEqual(["log:1", "log:2"]);
 
 		model.setFilterQuery("");
-		const fullRowKinds = model.rows.map(row =>
-			row.kind === "warning" ? SESSION_BOUNDARY_WARNING : `log:${row.logIndex}`,
-		);
+		const fullRowKinds = model.rows.map(row => describeRow(row as { kind: string; logIndex?: number }));
 		expect(fullRowKinds).toEqual(["log:0", SESSION_BOUNDARY_WARNING, "log:1", "log:2"]);
 	});
 
@@ -86,6 +145,7 @@ describe("DebugLogViewerModel", () => {
 		const model = new DebugLogViewerModel(logs, Date.now());
 
 		model.setFilterQuery("ba");
+		model.moveCursor(-999, false);
 		model.moveCursor(1, true);
 		const payload = buildLogCopyPayload(model.getSelectedRawLines());
 		expect(payload).toBe("bar\nbaz");
@@ -95,6 +155,7 @@ describe("DebugLogViewerModel", () => {
 		const logs = ["a", "b", "c", "d"].join("\n");
 		const model = new DebugLogViewerModel(logs, Date.now());
 
+		model.moveCursor(-999, false);
 		model.moveCursor(1, true);
 		model.moveCursor(1, true);
 		expect(model.getSelectedLogIndices()).toEqual([0, 1, 2]);
@@ -107,6 +168,7 @@ describe("DebugLogViewerModel", () => {
 		const logs = ["a", "b", "c"].join("\n");
 		const model = new DebugLogViewerModel(logs, Date.now());
 
+		model.moveCursor(-999, false);
 		model.moveCursor(1, true);
 		model.expandSelected();
 		expect(model.isExpanded(0)).toBe(true);
