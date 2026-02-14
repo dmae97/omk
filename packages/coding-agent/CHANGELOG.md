@@ -14,6 +14,7 @@
 - Added inline filtering and count display to the debug log viewer
 - Added pid filter toggle and load-older pagination controls to the debug log viewer
 - Enabled loading older debug logs from archived files in viewer
+- Added file hyperlinks for debug report paths in viewer
 
 ### Fixed
 - Sanitized debug log display to strip control codes, normalize tabs, and trim width

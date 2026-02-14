@@ -4,6 +4,7 @@
  * Provides tools for debugging, bug report generation, and system diagnostics.
  */
 import * as fs from "node:fs/promises";
+import * as url from "node:url";
 import { getWorkProfile } from "@oh-my-pi/pi-natives";
 import { Container, Loader, type SelectItem, SelectList, Spacer, Text } from "@oh-my-pi/pi-tui";
 import { getSessionsDir } from "@oh-my-pi/pi-utils/dirs";
@@ -27,6 +28,11 @@ const DEBUG_MENU_ITEMS: SelectItem[] = [
 	{ value: "system", label: "View: system info", description: "Show environment details" },
 	{ value: "clear-cache", label: "Clear: artifact cache", description: "Remove old session artifacts" },
 ];
+
+const formatFileHyperlink = (path: string): string => {
+	const fileUrl = url.pathToFileURL(path).href;
+	return `\x1b]8;;${fileUrl}\x07${path}\x1b]8;;\x07`;
+};
 
 /**
  * Debug selector component.
@@ -160,7 +166,7 @@ export class DebugSelectorComponent extends Container {
 			this.ctx.chatContainer.addChild(
 				new Text(theme.fg("success", `${theme.status.success} Performance report saved`), 1, 0),
 			);
-			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", result.path), 1, 0));
+			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", formatFileHyperlink(result.path)), 1, 0));
 			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", `Files: ${result.files.length}`), 1, 0));
 		} catch (err) {
 			loader.stop();
@@ -221,7 +227,7 @@ export class DebugSelectorComponent extends Container {
 			this.ctx.chatContainer.addChild(
 				new Text(theme.fg("success", `${theme.status.success} Report bundle saved`), 1, 0),
 			);
-			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", result.path), 1, 0));
+			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", formatFileHyperlink(result.path)), 1, 0));
 			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", `Files: ${result.files.length}`), 1, 0));
 		} catch (err) {
 			loader.stop();
@@ -260,7 +266,7 @@ export class DebugSelectorComponent extends Container {
 			this.ctx.chatContainer.addChild(
 				new Text(theme.fg("success", `${theme.status.success} Memory report saved`), 1, 0),
 			);
-			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", result.path), 1, 0));
+			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", formatFileHyperlink(result.path)), 1, 0));
 			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", `Files: ${result.files.length}`), 1, 0));
 		} catch (err) {
 			loader.stop();
