@@ -8,7 +8,7 @@ import {
 	matchesKey,
 	setEditorKeybindings,
 } from "@oh-my-pi/pi-tui";
-import { logger } from "@oh-my-pi/pi-utils";
+import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { getAgentDir } from "@oh-my-pi/pi-utils/dirs";
 
 /**
@@ -204,6 +204,7 @@ export class KeybindingsManager {
 		try {
 			return await Bun.file(path).json();
 		} catch (error) {
+			if (isEnoent(error)) return {};
 			logger.warn("Failed to parse keybindings config", { path, error: String(error) });
 			return {};
 		}
