@@ -1,4 +1,5 @@
 import type { AgentTool } from "@oh-my-pi/pi-agent-core";
+import { sanitizeText } from "@oh-my-pi/pi-natives";
 import {
 	Box,
 	type Component,
@@ -12,7 +13,7 @@ import {
 	Text,
 	type TUI,
 } from "@oh-my-pi/pi-tui";
-import { logger, sanitizeText } from "@oh-my-pi/pi-utils";
+import { logger } from "@oh-my-pi/pi-utils";
 import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import type { Theme } from "../../modes/theme/theme";
 import { theme } from "../../modes/theme/theme";

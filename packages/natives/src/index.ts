@@ -55,6 +55,7 @@ export {
 	type ExtractSegmentsResult,
 	extractSegments,
 	type SliceWithWidthResult,
+	sanitizeText,
 	sliceWithWidth,
 	truncateToWidth,
 	visibleWidth,

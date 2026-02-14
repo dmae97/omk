@@ -282,7 +282,7 @@ function renderHover(
 }
 
 /**
- * Syntax highlight code using native WASM highlighter.
+ * Syntax highlight code using native highlighter.
  */
 function highlightCode(codeText: string, language: string, theme: Theme): string[] {
 	const validLang = language && supportsLanguage(language) ? language : undefined;

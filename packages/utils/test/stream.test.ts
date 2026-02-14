@@ -1,12 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import {
-	parseJsonlLenient,
-	readJsonl,
-	readLines,
-	readSseJson,
-	sanitizeBinaryOutput,
-	sanitizeText,
-} from "../src/stream";
+import { sanitizeText } from "@oh-my-pi/pi-natives";
+import { parseJsonlLenient, readJsonl, readLines, readSseJson } from "../src/stream";
 
 const encoder = new TextEncoder();
 
@@ -33,23 +27,6 @@ async function collectAsync<T>(iter: AsyncIterable<T>): Promise<T[]> {
 	for await (const item of iter) output.push(item);
 	return output;
 }
-
-describe("sanitizeBinaryOutput", () => {
-	it("removes control characters but keeps tabs/newlines", () => {
-		const input = "a\u0000b\tline\ncarriage\r\u0001";
-		expect(sanitizeBinaryOutput(input)).toBe("ab\tline\ncarriage\r");
-	});
-
-	it("removes lone surrogates", () => {
-		const input = `a\ud800b\udc00c`;
-		expect(sanitizeBinaryOutput(input)).toBe("abc");
-	});
-
-	it("removes C1 control characters", () => {
-		const input = `a\u0085b`;
-		expect(sanitizeBinaryOutput(input)).toBe("ab");
-	});
-});
 
 describe("sanitizeText", () => {
 	it("strips ANSI and normalizes CR", () => {

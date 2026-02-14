@@ -1,13 +1,16 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Changed
 
+- Moved `sanitizeText` function from `@oh-my-pi/pi-utils` to `@oh-my-pi/pi-natives` for better code organization
+- Replaced internal `#normalizeOutput` methods with `sanitizeText` utility function in bash and Python execution components
+- Added line length clamping (4000 characters) to bash and Python execution output to prevent display of excessively long lines
 - Modified memory storage to isolate memories by project working directory, preventing cross-project memory contamination
 
 ### Fixed
 
+- Fixed bash interactive tool to gracefully handle malformed output chunks by normalizing them before display
 - Fixed fetch tool incorrectly treating HTML content as plain text or markdown
 - Fixed output truncation notice displaying incorrect byte limit when maxBytes differs from outputBytes
 - Fixed Cloudflare returning corrupted bytes when compression is negotiated in web scraper requests

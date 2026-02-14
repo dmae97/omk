@@ -8,16 +8,16 @@ This repo contains multiple packages, but **`packages/coding-agent/`** is the pr
 
 ### Package Structure
 
-| Package                 | Description                                            |
-| ----------------------- | ------------------------------------------------------ |
-| `packages/ai`           | Multi-provider LLM client with streaming support       |
-| `packages/agent`        | Agent runtime with tool calling and state management   |
-| `packages/coding-agent` | Main CLI application (primary focus)                   |
-| `packages/tui`          | Terminal UI library with differential rendering        |
-| `packages/natives`      | WASM bindings for native text/image/grep operations    |
-| `packages/stats`        | Local observability dashboard (`omp stats`)            |
-| `packages/utils`        | Shared utilities (logger, streams, temp files)         |
-| `crates/pi-natives`     | Rust WASM crate for performance-critical text/grep ops |
+| Package                 | Description                                          |
+| ----------------------- | ---------------------------------------------------- |
+| `packages/ai`           | Multi-provider LLM client with streaming support     |
+| `packages/agent`        | Agent runtime with tool calling and state management |
+| `packages/coding-agent` | Main CLI application (primary focus)                 |
+| `packages/tui`          | Terminal UI library with differential rendering      |
+| `packages/natives`      | bindings for native text/image/grep operations       |
+| `packages/stats`        | Local observability dashboard (`omp stats`)          |
+| `packages/utils`        | Shared utilities (logger, streams, temp files)       |
+| `crates/pi-natives`     | Rust crate for performance-critical text/grep ops    |
 
 ## Code Quality
 
@@ -78,26 +78,6 @@ This repo contains multiple packages, but **`packages/coding-agent/`** is the pr
   // GOOD: Clean destructuring, typed resolvers
   const { promise, resolve, reject } = Promise.withResolvers<string>();
   ```
-
-## WASM Bindgen Resources
-
-**Use `using` declarations** for wasm-bindgen objects — they implement `Symbol.dispose`:
-
-```typescript
-// BAD: Manual try/finally with .free()
-const image = PhotonImage.new_from_byteslice(bytes);
-try {
-	return image.get_bytes();
-} finally {
-	image.free();
-}
-
-// GOOD: Automatic cleanup via Symbol.dispose
-using image = PhotonImage.new_from_byteslice(bytes);
-return image.get_bytes();
-```
-
-This applies to all wasm-bindgen generated classes (`CompiledPattern`, `PhotonImage`, etc.).
 
 ## Bun Over Node
 

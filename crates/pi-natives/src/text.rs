@@ -322,6 +322,25 @@ fn ansi_seq_len_u16(data: &[u16], pos: usize) -> Option<usize> {
 			}
 			None
 		},
+		0x50 | 0x58 | 0x5e | 0x5f => {
+			// 'P' DCS, 'X' SOS, '^' PM, '_' APC (terminated by ST)
+			for (i, &b) in data[pos + 2..].iter().enumerate() {
+				if b == ESC && data.get(pos + 2 + i + 1) == Some(&0x5c) {
+					return Some(i + 4);
+				}
+			}
+			None
+		},
+		0x20..=0x2f => {
+			// ESC + intermediates + final byte
+			for (i, b) in data[pos + 2..].iter().enumerate() {
+				if (0x30..=0x7e).contains(b) {
+					return Some(i + 3);
+				}
+			}
+			None
+		},
+		0x40..=0x7e => Some(2),
 		_ => None,
 	}
 }
@@ -1189,6 +1208,89 @@ pub fn extract_segments(
 		after:        build_utf16_string(after),
 		after_width:  clamp_u32(aw),
 	})
+}
+
+// ============================================================================
+// sanitizeText
+// ============================================================================
+
+/// Strip ANSI escape sequences, remove control characters / lone surrogates,
+/// and normalize line endings.
+#[napi(js_name = "sanitizeText")]
+pub fn sanitize_text(text: JsString<'_>) -> Result<Either<JsString<'_>, Utf16String>> {
+	let original = text;
+	let text_u16 = text.into_utf16()?;
+	let data = text_u16.as_slice();
+
+	let mut did_change = false;
+	let mut out: Vec<u16> = Vec::new();
+	let mut last = 0usize;
+	let mut i = 0usize;
+	let len = data.len();
+
+	while i < len {
+		let u = data[i];
+
+		// Allow tab + newline; normalize CR by removing it.
+		if u == 0x09 || u == 0x0a {
+			i += 1;
+			continue;
+		}
+
+		let mut remove_len = if u == ESC
+			&& let Some(seq_len) = ansi_seq_len_u16(data, i)
+		{
+			seq_len
+		} else {
+			0usize
+		};
+
+		if remove_len == 0 {
+			// Drop CR to normalize line endings.
+			if u == 0x0d {
+				remove_len = 1;
+			} else if u <= 0x1f || u == 0x7f || (0x80..=0x9f).contains(&u) {
+				// C0 + DEL + C1 controls.
+				remove_len = 1;
+			} else if (0xd800..=0xdbff).contains(&u) {
+				// High surrogate: keep only if followed by a valid low surrogate.
+				if i + 1 < len {
+					let lo = data[i + 1];
+					if (0xdc00..=0xdfff).contains(&lo) {
+						i += 2;
+						continue;
+					}
+				}
+				remove_len = 1;
+			} else if (0xdc00..=0xdfff).contains(&u) {
+				// Lone low surrogate.
+				remove_len = 1;
+			}
+		}
+
+		if remove_len == 0 {
+			i += 1;
+			continue;
+		}
+
+		if !did_change {
+			did_change = true;
+			out = Vec::with_capacity(len);
+		}
+		if last != i {
+			out.extend_from_slice(&data[last..i]);
+		}
+		i += remove_len;
+		last = i;
+	}
+
+	if !did_change {
+		return Ok(Either::A(original));
+	}
+	if last < len {
+		out.extend_from_slice(&data[last..]);
+	}
+	Ok(Either::B(build_utf16_string(out)))
 }
 
 // ============================================================================

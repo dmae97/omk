@@ -1,5 +1,5 @@
 import type { AgentToolContext } from "@oh-my-pi/pi-agent-core";
-import { type PtyRunResult, PtySession } from "@oh-my-pi/pi-natives";
+import { type PtyRunResult, PtySession, sanitizeText } from "@oh-my-pi/pi-natives";
 import {
 	type Component,
 	matchesKey,
@@ -23,9 +23,8 @@ export interface BashInteractiveResult extends OutputSummary {
 }
 
 function normalizeCaptureChunk(chunk: string): string {
-	const noAnsi = Bun.stripANSI(chunk);
-	const normalized = noAnsi.replace(/\r\n/gu, "\n").replace(/\r/gu, "\n");
-	return normalized.replace(/[\x00-\x08\x0B-\x1F\x7F]/gu, "");
+	const normalized = chunk.replace(/\r\n/gu, "\n").replace(/\r/gu, "\n");
+	return sanitizeText(normalized);
 }
 
 const XtermTerminal = xterm.Terminal;
@@ -168,7 +167,7 @@ class BashInteractiveOverlayComponent implements Component {
 		const visibleLines: string[] = [];
 		for (let i = 0; i < maxContentRows; i++) {
 			const line = buffer.getLine(viewportY + i)?.translateToString(true) ?? "";
-			visibleLines.push(truncateToWidth(replaceTabs(line), innerWidth));
+			visibleLines.push(truncateToWidth(replaceTabs(sanitizeText(line)), innerWidth));
 		}
 		return visibleLines;
 	}
@@ -350,7 +349,12 @@ export async function runInteractiveBashPty(
 					},
 					(err, chunk) => {
 						if (err || !chunk) return;
-						component.appendOutput(chunk);
+						try {
+							component.appendOutput(chunk);
+						} catch {
+							const normalizedChunk = normalizeCaptureChunk(chunk);
+							component.appendOutput(normalizedChunk);
+						}
 						const normalizedChunk = normalizeCaptureChunk(chunk);
 						pendingChunks = pendingChunks.then(() => sink.push(normalizedChunk)).catch(() => {});
 						tui.requestRender();

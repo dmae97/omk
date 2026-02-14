@@ -170,6 +170,8 @@ function validateNative(bindings: NativeBindings, source: string): void {
 	checkFn("supportsLanguage");
 	checkFn("getSupportedLanguages");
 	checkFn("truncateToWidth");
+	checkFn("sanitizeText");
+
 	checkFn("wrapTextWithAnsi");
 	checkFn("sliceWithWidth");
 	checkFn("extractSegments");

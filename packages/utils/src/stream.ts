@@ -1,55 +1,5 @@
 import { createAbortableStream } from "./abortable";
 
-/**
- * Sanitize binary output for display/storage.
- * Removes characters that crash string-width or cause display issues:
- * - Control characters (except tab, newline, carriage return)
- * - Lone surrogates
- * - Characters with undefined code points
- */
-export function sanitizeBinaryOutput(str: string): string {
-	let out: string[] | undefined;
-	let last = 0;
-
-	for (let i = 0; i < str.length; ) {
-		const code = str.codePointAt(i)!;
-		const width = code > 0xffff ? 2 : 1;
-		const next = i + width;
-
-		// Allow tab, newline, carriage return.
-		const isAllowedControl = code === 0x09 || code === 0x0a || code === 0x0d;
-		if (isAllowedControl) {
-			i = next;
-			continue;
-		}
-
-		// Filter out characters that crash `Bun.stringWidth()` or cause display issues:
-		// - ASCII control chars (C0)
-		// - DEL + C1 control block
-		// - Lone surrogates
-		const isControl = code <= 0x1f || code === 0x7f || (code >= 0x80 && code <= 0x9f);
-		const isSurrogate = code >= 0xd800 && code <= 0xdfff;
-		if (isControl || isSurrogate) {
-			out ??= [];
-			if (last !== i) out.push(str.slice(last, i));
-			last = next;
-		}
-
-		i = next;
-	}
-
-	if (!out) return str;
-	if (last < str.length) out.push(str.slice(last));
-	return out.join("");
-}
-
-/**
- * Sanitize text output: strip ANSI codes, remove binary garbage, normalize line endings.
- */
-export function sanitizeText(text: string): string {
-	return sanitizeBinaryOutput(Bun.stripANSI(text)).replaceAll("\r", "");
-}
-
 const LF = 0x0a;
 const CR = 0x0d;
 const decoder = new TextDecoder();

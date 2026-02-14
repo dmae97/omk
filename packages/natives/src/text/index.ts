@@ -41,4 +41,4 @@ export function sliceWithWidth(line: string, startCol: number, length: number, s
 	return native.sliceWithWidth(line, startCol, length, strict);
 }
 
-export const { wrapTextWithAnsi, visibleWidth, extractSegments } = native;
+export const { wrapTextWithAnsi, visibleWidth, extractSegments, sanitizeText } = native;

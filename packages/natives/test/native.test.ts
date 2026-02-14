@@ -2,7 +2,16 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { FileType, fuzzyFind, type GlobMatch, glob, grep, htmlToMarkdown, invalidateFsScanCache } from "../src/index";
+import {
+	FileType,
+	fuzzyFind,
+	type GlobMatch,
+	glob,
+	grep,
+	htmlToMarkdown,
+	invalidateFsScanCache,
+	sanitizeText,
+} from "../src/index";
 
 let testDir: string;
 
@@ -213,6 +222,24 @@ describe("pi-natives", () => {
 
 			expect(cleaned).toContain("Main content");
 			// Navigation/footer may or may not be removed depending on preprocessing
+		});
+	});
+
+	describe("sanitizeText", () => {
+		it("should strip ANSI, remove control chars and normalize CR", () => {
+			const input = "\x1b[31mred\x1b[0m\ra\u0000b\tline\ncarriage\r\u0001\u0085";
+			expect(sanitizeText(input)).toBe("redab\tline\ncarriage");
+		});
+
+		it("should remove lone surrogates but keep valid pairs", () => {
+			expect(sanitizeText(`a\ud800b\udc00c`)).toBe("abc");
+			const validPair = "a\u{1f600}b";
+			expect(sanitizeText(validPair)).toBe(validPair);
+		});
+
+		it("should strip OSC sequences", () => {
+			const input = "\x1b]0;title\x07hello";
+			expect(sanitizeText(input)).toBe("hello");
 		});
 	});
 });

@@ -1,4 +1,4 @@
-import { sanitizeText } from "@oh-my-pi/pi-utils";
+import { sanitizeText } from "@oh-my-pi/pi-natives";
 import { DEFAULT_MAX_BYTES } from "../tools/truncate";
 
 export interface OutputSummary {

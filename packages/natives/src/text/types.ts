@@ -43,6 +43,11 @@ declare module "../bindings" {
 		 */
 		truncateToWidth(text: string, maxWidth: number, ellipsisKind: number, pad: boolean): string;
 		/**
+		 * Sanitize text output: strip ANSI codes, remove binary garbage, normalize line endings.
+		 */
+		sanitizeText(text: string): string;
+
+		/**
 		 * Wrap text to a visible width, preserving ANSI codes across line breaks.
 		 * @param text UTF-16 input text with optional ANSI escapes.
 		 * @param width Maximum visible width per line.
