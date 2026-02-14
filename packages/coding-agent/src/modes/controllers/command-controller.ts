@@ -432,7 +432,7 @@ export class CommandController {
 
 		if (action === "reset" || action === "clear") {
 			try {
-				await clearMemoryData(agentDir);
+				await clearMemoryData(agentDir, this.ctx.sessionManager.getCwd());
 				await this.ctx.session.refreshBaseSystemPrompt();
 				this.ctx.showStatus("Memory data cleared and system prompt refreshed.");
 			} catch (error) {

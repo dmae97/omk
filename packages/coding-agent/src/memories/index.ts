@@ -152,7 +152,7 @@ export async function buildMemoryToolDeveloperInstructions(
 ): Promise<string | undefined> {
 	const cfg = loadMemoryConfig(settings);
 	if (!cfg.enabled) return undefined;
-	const memoryRoot = getMemoryRoot(agentDir);
+	const memoryRoot = getMemoryRoot(agentDir, settings.getCwd());
 	const summaryPath = path.join(memoryRoot, "memory_summary.md");
 
 	let text: string;
@@ -176,14 +176,14 @@ export async function buildMemoryToolDeveloperInstructions(
 /**
  * Clear all persisted memory state and generated artifacts.
  */
-export async function clearMemoryData(agentDir: string): Promise<void> {
+export async function clearMemoryData(agentDir: string, cwd: string): Promise<void> {
 	const db = openMemoryDb(getAgentDbPath(agentDir));
 	try {
 		clearMemoryDataInDb(db);
 	} finally {
 		closeMemoryDb(db);
 	}
-	await fs.rm(getMemoryRoot(agentDir), { recursive: true, force: true });
+	await fs.rm(getMemoryRoot(agentDir, cwd), { recursive: true, force: true });
 }
 
 /**
@@ -221,7 +221,7 @@ async function runPhase1(options: {
 	const db = openMemoryDb(getAgentDbPath(agentDir));
 	const nowSec = unixNow();
 	const workerId = `memory-${process.pid}`;
-	const memoryRoot = getMemoryRoot(agentDir);
+	const memoryRoot = getMemoryRoot(agentDir, session.sessionManager.getCwd());
 	const currentThreadId = session.sessionManager.getSessionId();
 
 	try {
@@ -345,7 +345,7 @@ async function runPhase2(options: {
 	const db = openMemoryDb(getAgentDbPath(agentDir));
 	const nowSec = unixNow();
 	const workerId = `memory-${process.pid}`;
-	const memoryRoot = getMemoryRoot(agentDir);
+	const memoryRoot = getMemoryRoot(agentDir, session.sessionManager.getCwd());
 
 	try {
 		const claimResult = tryClaimGlobalPhase2Job(db, {
@@ -1077,8 +1077,12 @@ function loadMemoryConfig(settings: Settings): MemoryRuntimeConfig {
 	};
 }
 
-function getMemoryRoot(agentDir: string): string {
-	return path.join(agentDir, "memories");
+function getMemoryRoot(agentDir: string, cwd: string): string {
+	return path.join(agentDir, "memories", encodeProjectPath(cwd));
+}
+
+function encodeProjectPath(cwd: string): string {
+	return `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
 }
 
 function unixNow(): number {

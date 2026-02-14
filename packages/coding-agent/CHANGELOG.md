@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+
+### Changed
+
+- Modified memory storage to isolate memories by project working directory, preventing cross-project memory contamination
+
 ### Fixed
 
 - Fixed fetch tool incorrectly treating HTML content as plain text or markdown

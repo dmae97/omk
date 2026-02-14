@@ -80,6 +80,14 @@ async function createFixture(overrides?: Partial<Record<string, unknown>>): Prom
 	return { agentDir, sessionDir, sessionFile, settings, session, modelRegistry, model };
 }
 
+function encodeProjectPath(cwd: string): string {
+	return `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
+}
+
+function getMemoryRoot(agentDir: string, cwd: string): string {
+	return path.join(agentDir, "memories", encodeProjectPath(cwd));
+}
+
 async function waitFor(assertion: () => Promise<void> | void, timeoutMs = 3000): Promise<void> {
 	const start = Date.now();
 	let lastError: unknown;
@@ -196,7 +204,7 @@ describe("memories runtime", () => {
 			taskDepth: 0,
 		});
 
-		const memoryRoot = path.join(fx.agentDir, "memories");
+		const memoryRoot = getMemoryRoot(fx.agentDir, fx.session.sessionManager.getCwd());
 		await waitFor(async () => {
 			expect((await fs.readFile(path.join(memoryRoot, "MEMORY.md"), "utf8")).trim()).toBe(
 				"# Memory\n\nConsolidated body",
@@ -244,7 +252,7 @@ describe("memories runtime", () => {
 		memoryStorage.enqueueGlobalWatermark(db, 200, { forceDirtyWhenNotAdvanced: true });
 		memoryStorage.closeMemoryDb(db);
 
-		const memoryRoot = path.join(fx.agentDir, "memories");
+		const memoryRoot = getMemoryRoot(fx.agentDir, fx.session.sessionManager.getCwd());
 		await fs.mkdir(path.join(memoryRoot, "rollout_summaries"), { recursive: true });
 		await fs.writeFile(path.join(memoryRoot, "rollout_summaries", "old.md"), "stale");
 
@@ -267,7 +275,7 @@ describe("memories runtime", () => {
 
 	test("phase2 empty-input cleanup removes consolidated files and skills dir", async () => {
 		const fx = await createFixture();
-		const memoryRoot = path.join(fx.agentDir, "memories");
+		const memoryRoot = getMemoryRoot(fx.agentDir, fx.session.sessionManager.getCwd());
 		await fs.mkdir(path.join(memoryRoot, "skills", "legacy"), { recursive: true });
 		await fs.writeFile(path.join(memoryRoot, "MEMORY.md"), "legacy memory");
 		await fs.writeFile(path.join(memoryRoot, "memory_summary.md"), "legacy summary");
@@ -311,7 +319,7 @@ describe("buildMemoryToolDeveloperInstructions", () => {
 
 		expect(await buildMemoryToolDeveloperInstructions(agentDir, settings)).toBeUndefined();
 
-		const memoryRoot = path.join(agentDir, "memories");
+		const memoryRoot = getMemoryRoot(agentDir, settings.getCwd());
 		await fs.mkdir(memoryRoot, { recursive: true });
 		await fs.writeFile(path.join(memoryRoot, "memory_summary.md"), "   \n\t\n");
 		expect(await buildMemoryToolDeveloperInstructions(agentDir, settings)).toBeUndefined();
@@ -323,7 +331,7 @@ describe("buildMemoryToolDeveloperInstructions", () => {
 			"memories.enabled": true,
 			"memories.summaryInjectionTokenLimit": 8,
 		});
-		const memoryRoot = path.join(agentDir, "memories");
+		const memoryRoot = getMemoryRoot(agentDir, settings.getCwd());
 		await fs.mkdir(memoryRoot, { recursive: true });
 		await fs.writeFile(
 			path.join(memoryRoot, "memory_summary.md"),
