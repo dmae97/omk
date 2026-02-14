@@ -9,6 +9,9 @@
 
 - Fixed `session.abort()` not clearing `promptInFlight` flag due to microtask ordering, which blocked subsequent prompts
 
+### Added
+- Added interactive debug log viewer with selection, copy, and expand/collapse controls
+
 ### Fixed
 - Sanitized debug log display to strip control codes, normalize tabs, and trim width
 

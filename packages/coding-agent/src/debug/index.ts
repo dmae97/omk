@@ -11,7 +11,7 @@ import { DynamicBorder } from "../modes/components/dynamic-border";
 import { getSelectListTheme, getSymbolTheme, theme } from "../modes/theme/theme";
 import type { InteractiveModeContext } from "../modes/types";
 import { openPath } from "../utils/open";
-import { formatDebugLogLine } from "./log-formatting";
+import { DebugLogViewerComponent } from "./log-viewer";
 import { generateHeapSnapshotData, type ProfilerSession, startCpuProfile } from "./profiler";
 import { clearArtifactCache, createReportBundle, getArtifactCacheStats, getRecentLogs } from "./report-bundle";
 import { collectSystemInfo, formatSystemInfo } from "./system-info";
@@ -279,22 +279,17 @@ export class DebugSelectorComponent extends Container {
 				return;
 			}
 
-			this.ctx.chatContainer.addChild(new Spacer(1));
-			this.ctx.chatContainer.addChild(new DynamicBorder());
-			this.ctx.chatContainer.addChild(new Text(theme.bold(theme.fg("accent", "Recent Logs")), 1, 0));
-			this.ctx.chatContainer.addChild(new Spacer(1));
+			const viewer = new DebugLogViewerComponent({
+				logs,
+				terminalRows: this.ctx.ui.terminal.rows,
+				onExit: () => this.ctx.showDebugSelector(),
+				onStatus: message => this.ctx.showStatus(message, { dim: true }),
+				onError: message => this.ctx.showError(message),
+			});
 
-			// Display logs with dim styling
-			const maxWidth = Math.max(1, this.ctx.ui.terminal.columns - 2);
-			const lines = logs.split("\n").slice(-50);
-			for (const line of lines) {
-				const formatted = formatDebugLogLine(line, maxWidth);
-				if (formatted.trim()) {
-					this.ctx.chatContainer.addChild(new Text(theme.fg("dim", formatted), 1, 0));
-				}
-			}
-
-			this.ctx.chatContainer.addChild(new DynamicBorder());
+			this.ctx.editorContainer.clear();
+			this.ctx.editorContainer.addChild(viewer);
+			this.ctx.ui.setFocus(viewer);
 		} catch (err) {
 			this.ctx.showError(`Failed to read logs: ${err instanceof Error ? err.message : String(err)}`);
 		}
