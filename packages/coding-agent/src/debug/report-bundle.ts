@@ -7,7 +7,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { WorkProfile } from "@oh-my-pi/pi-natives";
 import { isEnoent } from "@oh-my-pi/pi-utils";
-import { getLogPath, getReportsDir } from "@oh-my-pi/pi-utils/dirs";
+import { APP_NAME, getLogPath, getLogsDir, getReportsDir } from "@oh-my-pi/pi-utils/dirs";
 import type { CpuProfile, HeapSnapshot } from "./profiler";
 import { collectSystemInfo, sanitizeEnv } from "./system-info";
 
@@ -39,6 +39,12 @@ export interface ReportBundleOptions {
 export interface ReportBundleResult {
 	path: string;
 	files: string[];
+}
+
+export interface DebugLogSource {
+	getInitialText(): Promise<string>;
+	hasOlderLogs(): boolean;
+	loadOlderLogs(limitDays?: number): Promise<string>;
 }
 
 /**
@@ -218,6 +224,73 @@ export async function getLogText(): Promise<string> {
 		if (isEnoent(err)) return "";
 		throw err;
 	}
+}
+
+const LOG_FILE_PATTERN = new RegExp(`^${APP_NAME}\\.(\\d{4}-\\d{2}-\\d{2})\\.log$`);
+
+export async function createDebugLogSource(): Promise<DebugLogSource> {
+	const logsDir = getLogsDir();
+	const todayPath = getLogPath();
+	const todayName = path.basename(todayPath);
+	let olderFiles: string[] = [];
+	try {
+		const entries = await fs.readdir(logsDir, { withFileTypes: true });
+		const datedFiles = entries
+			.filter(entry => entry.isFile())
+			.map(entry => {
+				const match = LOG_FILE_PATTERN.exec(entry.name);
+				return match ? { name: entry.name, date: match[1] } : undefined;
+			})
+			.filter((entry): entry is { name: string; date: string } => entry !== undefined)
+			.filter(entry => entry.name !== todayName)
+			.sort((a, b) => b.date.localeCompare(a.date));
+		olderFiles = datedFiles.map(entry => entry.name);
+	} catch {
+		olderFiles = [];
+	}
+
+	let cursor = 0;
+
+	const getInitialText = async (): Promise<string> => {
+		try {
+			return await Bun.file(todayPath).text();
+		} catch (err) {
+			if (isEnoent(err)) return "";
+			throw err;
+		}
+	};
+
+	const hasOlderLogs = (): boolean => cursor < olderFiles.length;
+
+	const loadOlderLogs = async (limitDays: number = 1): Promise<string> => {
+		if (!hasOlderLogs()) {
+			return "";
+		}
+		const count = Math.max(1, limitDays);
+		const slice = olderFiles.slice(cursor, cursor + count);
+		cursor += slice.length;
+		const chunks: string[] = [];
+		for (const filename of slice.reverse()) {
+			const filePath = path.join(logsDir, filename);
+			try {
+				const content = await Bun.file(filePath).text();
+				if (content.length > 0) {
+					chunks.push(content);
+				}
+			} catch (err) {
+				if (!isEnoent(err)) {
+					throw err;
+				}
+			}
+		}
+		return chunks.filter(chunk => chunk.length > 0).join("\n");
+	};
+
+	return {
+		getInitialText,
+		hasOlderLogs,
+		loadOlderLogs,
+	};
 }
 
 /** Calculate total size of artifact cache */

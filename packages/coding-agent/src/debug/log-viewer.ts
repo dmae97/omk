@@ -9,9 +9,10 @@ import {
 	parseDebugLogPid,
 	parseDebugLogTimestampMs,
 } from "./log-formatting";
+import type { DebugLogSource } from "./report-bundle";
 
 export const SESSION_BOUNDARY_WARNING = "### WARNING - Logs above are older than current session!";
-export const LOAD_OLDER_LABEL = "### LOAD UP TO 50 OLDER ENTRIES";
+export const LOAD_OLDER_LABEL = "### MOVE UP TO LOAD MORE...";
 
 const INITIAL_LOG_CHUNK = 50;
 const LOAD_OLDER_CHUNK = 50;
@@ -20,6 +21,15 @@ type LogEntry = {
 	rawLine: string;
 	timestampMs: number | undefined;
 	pid: number | undefined;
+};
+
+type CursorToken = { kind: "log"; logIndex: number } | { kind: "load-older" };
+
+type DebugLogViewerModelOptions = {
+	processStartMs?: number;
+	processPid?: number;
+	hasOlderLogs?: () => boolean;
+	loadOlderLogs?: (limitDays?: number) => Promise<string>;
 };
 
 type ViewerRow =
@@ -62,8 +72,11 @@ export class DebugLogViewerModel {
 	#loadedStartIndex: number;
 	#processFilterEnabled = false;
 	#processPid: number;
+	#hasOlderLogs?: () => boolean;
+	#loadOlderLogs?: (limitDays?: number) => Promise<string>;
 
-	constructor(logText: string, processStartMs: number = getProcessStartMs(), processPid: number = process.pid) {
+	constructor(logText: string, options: DebugLogViewerModelOptions = {}) {
+		const { processStartMs = getProcessStartMs(), processPid = process.pid, hasOlderLogs, loadOlderLogs } = options;
 		this.#entries = splitLogText(logText).map(rawLine => ({
 			rawLine,
 			timestampMs: parseDebugLogTimestampMs(rawLine),
@@ -71,6 +84,8 @@ export class DebugLogViewerModel {
 		}));
 		this.#processStartMs = processStartMs;
 		this.#processPid = processPid;
+		this.#hasOlderLogs = hasOlderLogs;
+		this.#loadOlderLogs = loadOlderLogs;
 		this.#loadedStartIndex = Math.max(0, this.#entries.length - INITIAL_LOG_CHUNK);
 		this.#rows = [];
 		this.#visibleLogIndices = [];
@@ -245,28 +260,73 @@ export class DebugLogViewerModel {
 	}
 
 	canLoadOlder(): boolean {
-		return this.#loadedStartIndex > 0;
+		return this.#loadedStartIndex > 0 || this.#hasExternalOlderLogs();
 	}
 
-	loadOlder(additionalCount: number = LOAD_OLDER_CHUNK): void {
-		if (!this.canLoadOlder()) {
-			return;
+	async loadOlder(additionalCount: number = LOAD_OLDER_CHUNK): Promise<boolean> {
+		if (this.#loadedStartIndex > 0) {
+			return this.#loadOlderInMemory(additionalCount);
 		}
+		if (!this.#loadOlderLogs || !this.#hasExternalOlderLogs()) {
+			return false;
+		}
+		const olderText = await this.#loadOlderLogs();
+		if (olderText.length === 0) {
+			if (!this.#hasExternalOlderLogs()) {
+				this.#rebuildRows();
+			}
+			return false;
+		}
+		const added = this.prependLogs(olderText);
+		if (added === 0) {
+			if (!this.#hasExternalOlderLogs()) {
+				this.#rebuildRows();
+			}
+			return false;
+		}
+		return this.#loadOlderInMemory(additionalCount);
+	}
 
+	prependLogs(logText: string): number {
+		const previousCursor = this.#getCursorToken();
+		const previousAnchorLogIndex = this.#getAnchorLogIndex();
+		const newEntries = splitLogText(logText).map(rawLine => ({
+			rawLine,
+			timestampMs: parseDebugLogTimestampMs(rawLine),
+			pid: parseDebugLogPid(rawLine),
+		}));
+		if (newEntries.length === 0) {
+			return 0;
+		}
+		const offset = newEntries.length;
+		this.#entries = [...newEntries, ...this.#entries];
+		this.#loadedStartIndex += offset;
+		this.#expandedLogIndices = new Set([...this.#expandedLogIndices].map(logIndex => logIndex + offset));
+		const adjustedCursor: CursorToken | undefined =
+			previousCursor?.kind === "log" ? { kind: "log", logIndex: previousCursor.logIndex + offset } : previousCursor;
+		const adjustedAnchor = previousAnchorLogIndex === undefined ? undefined : previousAnchorLogIndex + offset;
+		this.#rebuildRows(adjustedCursor, adjustedAnchor);
+		return offset;
+	}
+
+	#loadOlderInMemory(additionalCount: number = LOAD_OLDER_CHUNK): boolean {
+		if (this.#loadedStartIndex === 0) {
+			return false;
+		}
 		const requested = Math.max(1, additionalCount);
 		const nextStart = Math.max(0, this.#loadedStartIndex - requested);
 		if (nextStart === this.#loadedStartIndex) {
-			return;
+			return false;
 		}
-
 		this.#loadedStartIndex = nextStart;
 		this.#rebuildRows();
+		return true;
 	}
 
-	#rebuildRows(): void {
-		const previousCursor = this.#getCursorToken();
-		const previousAnchorLogIndex = this.#getAnchorLogIndex();
-
+	#rebuildRows(
+		previousCursor: CursorToken | undefined = this.#getCursorToken(),
+		previousAnchorLogIndex = this.#getAnchorLogIndex(),
+	): void {
 		const query = this.#filterQuery.toLowerCase();
 		const visible: number[] = [];
 		for (let i = this.#loadedStartIndex; i < this.#entries.length; i++) {
@@ -345,6 +405,9 @@ export class DebugLogViewerModel {
 	}
 
 	#hasOlderEntries(query: string): boolean {
+		if (this.#hasExternalOlderLogs()) {
+			return true;
+		}
 		if (this.#loadedStartIndex === 0) {
 			return false;
 		}
@@ -357,12 +420,16 @@ export class DebugLogViewerModel {
 		return false;
 	}
 
+	#hasExternalOlderLogs(): boolean {
+		return this.#hasOlderLogs?.() ?? false;
+	}
+
 	#getCursorRow(): ViewerRow | undefined {
 		const rowIndex = this.cursorRowIndex;
 		return rowIndex === undefined ? undefined : this.#rows[rowIndex];
 	}
 
-	#getCursorToken(): { kind: "log"; logIndex: number } | { kind: "load-older" } | undefined {
+	#getCursorToken(): CursorToken | undefined {
 		const row = this.#getCursorRow();
 		if (!row) {
 			return undefined;
@@ -393,6 +460,9 @@ interface DebugLogViewerComponentOptions {
 	onStatus?: (message: string) => void;
 	onError?: (message: string) => void;
 	processStartMs?: number;
+	processPid?: number;
+	logSource?: DebugLogSource;
+	onUpdate?: () => void;
 }
 
 export class DebugLogViewerComponent implements Component {
@@ -401,16 +471,26 @@ export class DebugLogViewerComponent implements Component {
 	#onExit: () => void;
 	#onStatus?: (message: string) => void;
 	#onError?: (message: string) => void;
+	#onUpdate?: () => void;
+	#logSource?: DebugLogSource;
 	#lastRenderWidth = 80;
 	#scrollRowOffset = 0;
 	#statusMessage: string | undefined;
+	#loadingOlder = false;
 
 	constructor(options: DebugLogViewerComponentOptions) {
-		this.#model = new DebugLogViewerModel(options.logs, options.processStartMs);
+		this.#logSource = options.logSource;
+		this.#model = new DebugLogViewerModel(options.logs, {
+			processStartMs: options.processStartMs,
+			processPid: options.processPid,
+			hasOlderLogs: this.#logSource?.hasOlderLogs.bind(this.#logSource),
+			loadOlderLogs: this.#logSource?.loadOlderLogs.bind(this.#logSource),
+		});
 		this.#terminalRows = options.terminalRows;
 		this.#onExit = options.onExit;
 		this.#onStatus = options.onStatus;
 		this.#onError = options.onError;
+		this.#onUpdate = options.onUpdate;
 	}
 
 	handleInput(keyData: string): void {
@@ -440,27 +520,21 @@ export class DebugLogViewerComponent implements Component {
 
 		if (matchesKey(keyData, "ctrl+o")) {
 			this.#statusMessage = undefined;
-			this.#model.loadOlder(this.#bodyHeight() + 1);
-			this.#ensureCursorVisible();
+			void this.#handleLoadOlder(this.#bodyHeight() + 1);
 			return;
 		}
 
 		if (matchesKey(keyData, "enter") || matchesKey(keyData, "return")) {
 			if (this.#model.cursorRowKind === "load-older") {
 				this.#statusMessage = undefined;
-				this.#model.loadOlder();
-				this.#ensureCursorVisible();
+				void this.#handleLoadOlder();
 			}
 			return;
 		}
 
 		if (matchesKey(keyData, "shift+up")) {
 			this.#statusMessage = undefined;
-			if (this.#maybeLoadOlderOnUp(true)) {
-				return;
-			}
-			this.#model.moveCursor(-1, true);
-			this.#ensureCursorVisible();
+			void this.#handleMoveUp(true);
 			return;
 		}
 
@@ -473,11 +547,7 @@ export class DebugLogViewerComponent implements Component {
 
 		if (matchesKey(keyData, "up")) {
 			this.#statusMessage = undefined;
-			if (this.#maybeLoadOlderOnUp(false)) {
-				return;
-			}
-			this.#model.moveCursor(-1, false);
-			this.#ensureCursorVisible();
+			void this.#handleMoveUp(false);
 			return;
 		}
 
@@ -491,8 +561,7 @@ export class DebugLogViewerComponent implements Component {
 		if (matchesKey(keyData, "right")) {
 			this.#statusMessage = undefined;
 			if (this.#model.cursorRowKind === "load-older") {
-				this.#model.loadOlder();
-				this.#ensureCursorVisible();
+				void this.#handleLoadOlder();
 				return;
 			}
 			this.#model.expandSelected();
@@ -541,7 +610,6 @@ export class DebugLogViewerComponent implements Component {
 
 		return [
 			this.#frameTop(innerWidth),
-			this.#frameSeparator(innerWidth),
 			this.#frameLine(this.#summaryText(), innerWidth),
 			this.#frameSeparator(innerWidth),
 			this.#frameLine(this.#filterText(), innerWidth),
@@ -557,7 +625,7 @@ export class DebugLogViewerComponent implements Component {
 	}
 
 	#controlsText(): string {
-		return "Up/Down: move  Shift+Up/Down: select range  Left/Right: collapse/expand  Ctrl+A: select all  Ctrl+P: pid filter  Ctrl+O: load older  Ctrl+C: copy  Esc: back";
+		return "Esc: back  Ctrl+C: copy  Up/Down: move  Shift+Up/Down: select range  Left/Right: collapse/expand  Ctrl+A: select all  Ctrl+O: load older  Ctrl+P: pid filter";
 	}
 
 	#filterText(): string {
@@ -581,21 +649,72 @@ export class DebugLogViewerComponent implements Component {
 		return Math.max(3, this.#terminalRows - 8);
 	}
 
-	#maybeLoadOlderOnUp(extendSelection: boolean): boolean {
-		if (this.#model.cursorRowKind === "load-older") {
-			this.#model.loadOlder();
+	async #handleLoadOlder(additionalCount: number = LOAD_OLDER_CHUNK): Promise<void> {
+		const loaded = await this.#loadOlder(additionalCount);
+		if (loaded) {
 			this.#ensureCursorVisible();
-			return true;
+			this.#onUpdate?.();
+		}
+	}
+
+	async #handleMoveUp(extendSelection: boolean): Promise<void> {
+		if (this.#model.cursorRowKind === "load-older") {
+			const loaded = await this.#loadOlder(LOAD_OLDER_CHUNK);
+			if (loaded) {
+				this.#ensureCursorVisible();
+				this.#onUpdate?.();
+				return;
+			}
 		}
 
-		if (!this.#model.canLoadOlder() || !this.#model.isCursorAtFirstSelectableRow()) {
-			return false;
+		if (this.#model.canLoadOlder() && this.#model.isCursorAtFirstSelectableRow()) {
+			const loaded = await this.#loadOlder(LOAD_OLDER_CHUNK);
+			if (loaded) {
+				this.#model.moveCursor(-1, extendSelection);
+				this.#ensureCursorVisible();
+				this.#onUpdate?.();
+				return;
+			}
 		}
 
-		this.#model.loadOlder();
 		this.#model.moveCursor(-1, extendSelection);
 		this.#ensureCursorVisible();
-		return true;
+		this.#onUpdate?.();
+	}
+
+	async #loadOlder(additionalCount: number): Promise<boolean> {
+		if (this.#loadingOlder || !this.#model.canLoadOlder()) {
+			return false;
+		}
+		this.#loadingOlder = true;
+		const previousCursorRowIndex = this.#model.cursorRowIndex;
+		const previousScrollOffset = this.#scrollRowOffset;
+		try {
+			const didLoad = await this.#model.loadOlder(additionalCount);
+			if (didLoad) {
+				this.#preserveScrollPosition(previousCursorRowIndex, previousScrollOffset);
+			}
+			return didLoad;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			this.#statusMessage = `Load older failed: ${message}`;
+			this.#onError?.(`Failed to load older logs: ${message}`);
+			this.#onUpdate?.();
+			return false;
+		} finally {
+			this.#loadingOlder = false;
+		}
+	}
+
+	#preserveScrollPosition(previousCursorRowIndex: number | undefined, previousScrollOffset: number): void {
+		const cursorRowIndex = this.#model.cursorRowIndex;
+		if (previousCursorRowIndex === undefined || cursorRowIndex === undefined) {
+			return;
+		}
+		const delta = cursorRowIndex - previousCursorRowIndex;
+		const nextOffset = previousScrollOffset + delta;
+		const maxOffset = Math.max(0, this.#model.rows.length - this.#bodyHeight());
+		this.#scrollRowOffset = Math.max(0, Math.min(maxOffset, nextOffset));
 	}
 
 	#renderRows(innerWidth: number): Array<{ lines: string[]; rowIndex: number }> {

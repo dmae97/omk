@@ -22,7 +22,7 @@ describe("DebugLogViewerModel", () => {
 
 	it("defaults cursor to the newest log entry", () => {
 		const logs = ["alpha", "beta", "gamma"].join("\n");
-		const model = new DebugLogViewerModel(logs, Date.now());
+		const model = new DebugLogViewerModel(logs, { processStartMs: Date.now() });
 		expect(model.cursorLogIndex).toBe(2);
 	});
 	it("inserts session boundary warning between older and current-session logs", () => {
@@ -33,7 +33,7 @@ describe("DebugLogViewerModel", () => {
 			'{"timestamp":"2026-02-14T12:00:05.000Z","level":"info","message":"current"}',
 		].join("\n");
 
-		const model = new DebugLogViewerModel(logs, processStartMs);
+		const model = new DebugLogViewerModel(logs, { processStartMs });
 		const rowKinds = model.rows.map(row => describeRow(row as { kind: string; logIndex?: number }));
 
 		expect(rowKinds).toEqual(["log:0", "log:1", SESSION_BOUNDARY_WARNING, "log:2"]);
@@ -41,7 +41,7 @@ describe("DebugLogViewerModel", () => {
 
 	it("filters logs with case-insensitive substring matching", () => {
 		const logs = ["Alpha", "beta", "Gamma", "BETTER"].join("\n");
-		const model = new DebugLogViewerModel(logs, Date.now());
+		const model = new DebugLogViewerModel(logs, { processStartMs: Date.now() });
 
 		model.setFilterQuery("be");
 		const rowKinds = model.rows.map(row => describeRow(row as { kind: string; logIndex?: number }));
@@ -55,7 +55,7 @@ describe("DebugLogViewerModel", () => {
 			'{"pid":84,"level":"info","message":"beta"}',
 			'{"level":"info","message":"missing"}',
 		].join("\n");
-		const model = new DebugLogViewerModel(logs, Date.now(), 42);
+		const model = new DebugLogViewerModel(logs, { processStartMs: Date.now(), processPid: 42 });
 
 		expect(model.visibleLogCount).toBe(3);
 		model.toggleProcessFilter();
@@ -65,26 +65,26 @@ describe("DebugLogViewerModel", () => {
 
 	it("selects all visible log rows", () => {
 		const logs = ["alpha", "beta", "gamma"].join("\n");
-		const model = new DebugLogViewerModel(logs, Date.now());
+		const model = new DebugLogViewerModel(logs, { processStartMs: Date.now() });
 
 		model.selectAllVisible();
 		expect(model.getSelectedLogIndices()).toEqual([0, 1, 2]);
 	});
 
-	it("progressively loads older entries in chunks", () => {
+	it("progressively loads older entries in chunks", async () => {
 		const logs = Array.from({ length: 120 }, (_, index) => `log-${index}`).join("\n");
-		const model = new DebugLogViewerModel(logs, Date.now());
+		const model = new DebugLogViewerModel(logs, { processStartMs: Date.now() });
 
 		expect(model.visibleLogCount).toBe(50);
 		const initialKinds = model.rows.slice(0, 2).map(row => describeRow(row as { kind: string; logIndex?: number }));
 		expect(initialKinds).toEqual([LOAD_OLDER_LABEL, "log:70"]);
 
-		model.loadOlder(5);
+		await model.loadOlder(5);
 		expect(model.visibleLogCount).toBe(55);
 		const expandedKinds = model.rows.slice(0, 2).map(row => describeRow(row as { kind: string; logIndex?: number }));
 		expect(expandedKinds).toEqual([LOAD_OLDER_LABEL, "log:65"]);
 
-		model.loadOlder(50);
+		await model.loadOlder(50);
 		expect(model.visibleLogCount).toBe(105);
 		const expandedAgainKinds = model.rows
 			.slice(0, 2)
@@ -92,9 +92,27 @@ describe("DebugLogViewerModel", () => {
 		expect(expandedAgainKinds).toEqual([LOAD_OLDER_LABEL, "log:15"]);
 	});
 
+	it("loads older entries from external sources while keeping cursor stable", async () => {
+		const logs = ["new-1", "new-2", "new-3"].join("\n");
+		let hasOlder = true;
+		const model = new DebugLogViewerModel(logs, {
+			processStartMs: Date.now(),
+			hasOlderLogs: () => hasOlder,
+			loadOlderLogs: async () => {
+				hasOlder = false;
+				return ["old-1", "old-2"].join("\n");
+			},
+		});
+
+		expect(model.rows[0]?.kind).toBe("load-older");
+		await model.loadOlder(1);
+		expect(model.getRawLine(model.cursorLogIndex ?? 0)).toBe("new-3");
+		expect(model.rows[0]?.kind).toBe("load-older");
+	});
+
 	it("clamps cursor when filtered list shrinks", () => {
 		const logs = ["alpha", "beta", "gamma"].join("\n");
-		const model = new DebugLogViewerModel(logs, Date.now());
+		const model = new DebugLogViewerModel(logs, { processStartMs: Date.now() });
 
 		model.moveCursor(2, false);
 		expect(model.cursorLogIndex).toBe(2);
@@ -106,7 +124,7 @@ describe("DebugLogViewerModel", () => {
 
 	it("resets selection anchor when filtered view drops the anchor log", () => {
 		const logs = ["alpha", "beta", "gamma", "delta"].join("\n");
-		const model = new DebugLogViewerModel(logs, Date.now());
+		const model = new DebugLogViewerModel(logs, { processStartMs: Date.now() });
 
 		model.moveCursor(-999, false);
 		model.moveCursor(2, true);
@@ -123,7 +141,7 @@ describe("DebugLogViewerModel", () => {
 			'{"timestamp":"2026-02-14T12:00:05.000Z","level":"info","message":"current"}',
 			'{"timestamp":"2026-02-14T12:00:10.000Z","level":"info","message":"current-2"}',
 		].join("\n");
-		const model = new DebugLogViewerModel(logs, processStartMs);
+		const model = new DebugLogViewerModel(logs, { processStartMs });
 
 		model.setFilterQuery("old");
 		expect(model.rows.map(row => row.kind)).toEqual(["log"]);
@@ -142,7 +160,7 @@ describe("DebugLogViewerModel", () => {
 
 	it("copies only selected visible entries", () => {
 		const logs = ["alpha", "bar", "baz"].join("\n");
-		const model = new DebugLogViewerModel(logs, Date.now());
+		const model = new DebugLogViewerModel(logs, { processStartMs: Date.now() });
 
 		model.setFilterQuery("ba");
 		model.moveCursor(-999, false);
@@ -153,7 +171,7 @@ describe("DebugLogViewerModel", () => {
 
 	it("supports shift-range selection and reset on plain movement", () => {
 		const logs = ["a", "b", "c", "d"].join("\n");
-		const model = new DebugLogViewerModel(logs, Date.now());
+		const model = new DebugLogViewerModel(logs, { processStartMs: Date.now() });
 
 		model.moveCursor(-999, false);
 		model.moveCursor(1, true);
@@ -166,7 +184,7 @@ describe("DebugLogViewerModel", () => {
 
 	it("expands and collapses all selected rows", () => {
 		const logs = ["a", "b", "c"].join("\n");
-		const model = new DebugLogViewerModel(logs, Date.now());
+		const model = new DebugLogViewerModel(logs, { processStartMs: Date.now() });
 
 		model.moveCursor(-999, false);
 		model.moveCursor(1, true);
