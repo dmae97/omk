@@ -109,6 +109,7 @@ async function fetchOpenRouterModels(): Promise<Model[]> {
 			models.push(normalizedModel);
 		}
 
+		models.sort((a, b) => a.id.localeCompare(b.id));
 		console.log(`Fetched ${models.length} tool-capable models from OpenRouter`);
 		return models;
 	} catch (error) {
@@ -167,6 +168,7 @@ async function fetchAiGatewayModels(): Promise<Model[]> {
 			});
 		}
 
+		models.sort((a, b) => a.id.localeCompare(b.id));
 		console.log(`Fetched ${models.length} tool-capable models from Vercel AI Gateway`);
 		return models;
 	} catch (error) {
@@ -258,6 +260,7 @@ async function fetchKimiCodeModels(): Promise<Model<"openai-completions">[]> {
 					models.push(fb);
 				}
 			}
+			models.sort((a, b) => a.id.localeCompare(b.id));
 			console.log(`Fetched ${fetchedIds.size} models from Kimi Code API, ${models.length} total with fallbacks`);
 			return models;
 		} catch (error) {
@@ -830,6 +833,7 @@ async function loadModelsDevData(): Promise<Model[]> {
 			}
 		}
 
+		models.sort((a, b) => a.id.localeCompare(b.id));
 		console.log(`Loaded ${models.length} tool-capable models from models.dev`);
 		return models;
 	} catch (error) {
@@ -1911,7 +1915,7 @@ async function generateModels() {
 		}
 	}
 
-	// Group by provider and deduplicate by model ID
+	// Group by provider and sort each provider's models
 	const providers: Record<string, Record<string, Model>> = {};
 	for (const model of allModels) {
 		if (!providers[model.provider]) {
@@ -1921,6 +1925,17 @@ async function generateModels() {
 		// Only add if not already present (models.dev takes priority over OpenRouter)
 		if (!providers[model.provider][model.id]) {
 			providers[model.provider][model.id] = model;
+		}
+	}
+
+	// Sort models within each provider by ID
+	for (const provider of Object.keys(providers)) {
+		const models = Object.values(providers[provider]);
+		models.sort((a, b) => a.id.localeCompare(b.id));
+		// Rebuild the object with sorted keys
+		providers[provider] = {};
+		for (const model of models) {
+			providers[provider][model.id] = model;
 		}
 	}
 
