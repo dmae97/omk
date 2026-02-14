@@ -1799,6 +1799,11 @@ export class AgentSession {
 		this.abortRetry();
 		this.agent.abort();
 		await this.agent.waitForIdle();
+		// Clear promptInFlight: waitForIdle resolves when the agent loop's finally
+		// block runs (#resolveRunningPrompt), but #promptWithMessage's finally
+		// (#promptInFlight = false) fires on a later microtask. Without this,
+		// isStreaming stays true and a subsequent prompt() throws.
+		this.#promptInFlight = false;
 	}
 
 	/**

@@ -208,6 +208,13 @@ export class RpcClient {
 	}
 
 	/**
+	 * Abort current operation and immediately start a new turn with the given message.
+	 */
+	async abortAndPrompt(message: string): Promise<void> {
+		await this.#send({ type: "abort_and_prompt", message });
+	}
+
+	/**
 	 * Start a new session, optionally with parent tracking.
 	 * @param parentSession - Optional parent session path for lineage tracking
 	 * @returns Object with `cancelled: true` if an extension cancelled the new session

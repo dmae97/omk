@@ -449,6 +449,12 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				return success(id, "abort");
 			}
 
+			case "abort_and_prompt": {
+				await session.abort();
+				session.prompt(command.message).catch(e => output(error(id, "abort_and_prompt", e.message)));
+				return success(id, "abort_and_prompt");
+			}
+
 			case "new_session": {
 				const options = command.parentSession ? { parentSession: command.parentSession } : undefined;
 				const cancelled = !(await session.newSession(options));
