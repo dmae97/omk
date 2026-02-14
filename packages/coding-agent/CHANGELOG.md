@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.4.0] - 2026-02-14
 ### Changed
 
 - Moved `sanitizeText` function from `@oh-my-pi/pi-utils` to `@oh-my-pi/pi-natives` for better code organization
