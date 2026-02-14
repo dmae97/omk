@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.3.0] - 2026-02-14
 ### Added
 
 - Added autonomous memory extraction and consolidation system with configurable settings
