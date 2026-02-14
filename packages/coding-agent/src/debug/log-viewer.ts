@@ -1,14 +1,8 @@
 import { copyToClipboard } from "@oh-my-pi/pi-natives";
-import {
-	type Component,
-	isKittyProtocolActive,
-	matchesKey,
-	padding,
-	truncateToWidth,
-	visibleWidth,
-} from "@oh-my-pi/pi-tui";
+import { type Component, matchesKey, padding, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
 import { sanitizeText } from "@oh-my-pi/pi-utils";
 import { theme } from "../modes/theme/theme";
+import { replaceTabs } from "../tools/render-utils";
 import { formatDebugLogExpandedLines, formatDebugLogLine, parseDebugLogTimestampMs } from "./log-formatting";
 
 export const SESSION_BOUNDARY_WARNING = "### WARNING - Logs above are older than current session!";
@@ -42,62 +36,45 @@ export function buildLogCopyPayload(lines: string[]): string {
 		.join("\n");
 }
 
-function findSessionBoundaryIndex(entries: LogEntry[], processStartMs: number): number | undefined {
-	let olderSeen = false;
-
-	for (let i = 0; i < entries.length; i++) {
-		const timestampMs = entries[i]?.timestampMs;
-		if (timestampMs === undefined) {
-			continue;
-		}
-
-		if (timestampMs < processStartMs) {
-			olderSeen = true;
-			continue;
-		}
-
-		if (olderSeen) {
-			return i;
-		}
-	}
-
-	return undefined;
-}
-
 export class DebugLogViewerModel {
 	#entries: LogEntry[];
 	#rows: ViewerRow[];
-	#cursorLogIndex = 0;
-	#selectionAnchorLogIndex: number | undefined;
+	#visibleLogIndices: number[];
+	#cursorVisibleIndex = 0;
+	#selectionAnchorVisibleIndex: number | undefined;
 	#expandedLogIndices = new Set<number>();
+	#filterQuery = "";
+	#processStartMs: number;
 
 	constructor(logText: string, processStartMs: number = getProcessStartMs()) {
 		this.#entries = splitLogText(logText).map(rawLine => ({
 			rawLine,
 			timestampMs: parseDebugLogTimestampMs(rawLine),
 		}));
-
-		const boundaryIndex = findSessionBoundaryIndex(this.#entries, processStartMs);
-		const rows: ViewerRow[] = [];
-		for (let i = 0; i < this.#entries.length; i++) {
-			if (boundaryIndex !== undefined && i === boundaryIndex) {
-				rows.push({ kind: "warning" });
-			}
-			rows.push({ kind: "log", logIndex: i });
-		}
-		this.#rows = rows;
+		this.#processStartMs = processStartMs;
+		this.#rows = [];
+		this.#visibleLogIndices = [];
+		this.#rebuildRows();
 	}
 
 	get logCount(): number {
 		return this.#entries.length;
 	}
 
+	get visibleLogCount(): number {
+		return this.#visibleLogIndices.length;
+	}
+
 	get rows(): readonly ViewerRow[] {
 		return this.#rows;
 	}
 
+	get filterQuery(): string {
+		return this.#filterQuery;
+	}
+
 	get cursorLogIndex(): number {
-		return this.#cursorLogIndex;
+		return this.#visibleLogIndices[this.#cursorVisibleIndex] ?? 0;
 	}
 
 	get expandedCount(): number {
@@ -108,36 +85,50 @@ export class DebugLogViewerModel {
 		return this.#entries[logIndex]?.rawLine ?? "";
 	}
 
+	setFilterQuery(query: string): void {
+		if (query === this.#filterQuery) {
+			return;
+		}
+		this.#filterQuery = query;
+		this.#rebuildRows();
+	}
+
 	moveCursor(delta: number, extendSelection: boolean): void {
-		if (this.#entries.length === 0) {
+		if (this.#visibleLogIndices.length === 0) {
 			return;
 		}
 
-		if (extendSelection && this.#selectionAnchorLogIndex === undefined) {
-			this.#selectionAnchorLogIndex = this.#cursorLogIndex;
+		if (extendSelection && this.#selectionAnchorVisibleIndex === undefined) {
+			this.#selectionAnchorVisibleIndex = this.#cursorVisibleIndex;
 		}
 
-		this.#cursorLogIndex = Math.max(0, Math.min(this.#entries.length - 1, this.#cursorLogIndex + delta));
+		this.#cursorVisibleIndex = Math.max(
+			0,
+			Math.min(this.#visibleLogIndices.length - 1, this.#cursorVisibleIndex + delta),
+		);
 
 		if (!extendSelection) {
-			this.#selectionAnchorLogIndex = undefined;
+			this.#selectionAnchorVisibleIndex = undefined;
 		}
 	}
 
 	getSelectedLogIndices(): number[] {
-		if (this.#entries.length === 0) {
+		if (this.#visibleLogIndices.length === 0) {
 			return [];
 		}
 
-		if (this.#selectionAnchorLogIndex === undefined) {
-			return [this.#cursorLogIndex];
+		if (this.#selectionAnchorVisibleIndex === undefined) {
+			return [this.cursorLogIndex];
 		}
 
-		const min = Math.min(this.#selectionAnchorLogIndex, this.#cursorLogIndex);
-		const max = Math.max(this.#selectionAnchorLogIndex, this.#cursorLogIndex);
+		const min = Math.min(this.#selectionAnchorVisibleIndex, this.#cursorVisibleIndex);
+		const max = Math.max(this.#selectionAnchorVisibleIndex, this.#cursorVisibleIndex);
 		const selected: number[] = [];
 		for (let i = min; i <= max; i++) {
-			selected.push(i);
+			const logIndex = this.#visibleLogIndices[i];
+			if (logIndex !== undefined) {
+				selected.push(logIndex);
+			}
 		}
 		return selected;
 	}
@@ -170,6 +161,69 @@ export class DebugLogViewerModel {
 	getSelectedRawLines(): string[] {
 		const selectedIndices = this.getSelectedLogIndices();
 		return selectedIndices.map(index => this.getRawLine(index));
+	}
+
+	#rebuildRows(): void {
+		const previousVisible = this.#visibleLogIndices;
+		const previousCursorLogIndex = previousVisible[this.#cursorVisibleIndex];
+		const previousAnchorLogIndex =
+			this.#selectionAnchorVisibleIndex === undefined
+				? undefined
+				: previousVisible[this.#selectionAnchorVisibleIndex];
+
+		const query = this.#filterQuery.toLowerCase();
+		const visible: number[] = [];
+		for (let i = 0; i < this.#entries.length; i++) {
+			const entry = this.#entries[i];
+			if (!entry) {
+				continue;
+			}
+			if (query.length === 0 || entry.rawLine.toLowerCase().includes(query)) {
+				visible.push(i);
+			}
+		}
+		this.#visibleLogIndices = visible;
+
+		const rows: ViewerRow[] = [];
+		let olderSeen = false;
+		let warningInserted = false;
+		for (const logIndex of visible) {
+			const timestampMs = this.#entries[logIndex]?.timestampMs;
+			if (timestampMs !== undefined) {
+				if (timestampMs < this.#processStartMs) {
+					olderSeen = true;
+				} else if (olderSeen && !warningInserted) {
+					rows.push({ kind: "warning" });
+					warningInserted = true;
+				}
+			}
+			rows.push({ kind: "log", logIndex });
+		}
+		this.#rows = rows;
+
+		if (visible.length === 0) {
+			this.#cursorVisibleIndex = 0;
+			this.#selectionAnchorVisibleIndex = undefined;
+			return;
+		}
+
+		if (previousCursorLogIndex !== undefined) {
+			const cursorIndex = visible.indexOf(previousCursorLogIndex);
+			if (cursorIndex >= 0) {
+				this.#cursorVisibleIndex = cursorIndex;
+			} else {
+				this.#cursorVisibleIndex = Math.min(this.#cursorVisibleIndex, visible.length - 1);
+			}
+		} else {
+			this.#cursorVisibleIndex = Math.min(this.#cursorVisibleIndex, visible.length - 1);
+		}
+
+		if (previousAnchorLogIndex !== undefined) {
+			const anchorIndex = visible.indexOf(previousAnchorLogIndex);
+			this.#selectionAnchorVisibleIndex = anchorIndex >= 0 ? anchorIndex : undefined;
+		} else {
+			this.#selectionAnchorVisibleIndex = undefined;
+		}
 	}
 }
 
@@ -248,6 +302,26 @@ export class DebugLogViewerComponent implements Component {
 		if (matchesKey(keyData, "left")) {
 			this.#statusMessage = undefined;
 			this.#model.collapseSelected();
+			return;
+		}
+
+		if (matchesKey(keyData, "backspace")) {
+			if (this.#model.filterQuery.length > 0) {
+				this.#statusMessage = undefined;
+				this.#model.setFilterQuery(this.#model.filterQuery.slice(0, -1));
+				this.#ensureCursorVisible();
+			}
+			return;
+		}
+
+		const hasControlChars = [...keyData].some(ch => {
+			const code = ch.charCodeAt(0);
+			return code < 32 || code === 0x7f || (code >= 0x80 && code <= 0x9f);
+		});
+		if (!hasControlChars && keyData.length > 0) {
+			this.#statusMessage = undefined;
+			this.#model.setFilterQuery(this.#model.filterQuery + keyData);
+			this.#ensureCursorVisible();
 		}
 	}
 
@@ -260,15 +334,17 @@ export class DebugLogViewerComponent implements Component {
 		this.#ensureCursorVisible();
 
 		const innerWidth = Math.max(1, this.#lastRenderWidth - 2);
-		const bodyHeight = Math.max(3, this.#terminalRows - 7);
+		const bodyHeight = Math.max(3, this.#terminalRows - 8);
 
 		const rows = this.#renderRows(innerWidth);
 		const visibleBodyLines = this.#renderVisibleBodyLines(rows, innerWidth, bodyHeight);
 
 		return [
 			this.#frameTop(innerWidth),
-			this.#frameLine(` Debug Logs (${this.#model.logCount}) `, innerWidth),
-			this.#frameLine(this.#helpText(), innerWidth),
+			this.#frameSeparator(innerWidth),
+			this.#frameLine(this.#summaryText(), innerWidth),
+			this.#frameSeparator(innerWidth),
+			this.#frameLine(this.#filterText(), innerWidth),
 			this.#frameSeparator(innerWidth),
 			...visibleBodyLines,
 			this.#frameLine(this.#statusText(), innerWidth),
@@ -276,13 +352,22 @@ export class DebugLogViewerComponent implements Component {
 		];
 	}
 
-	#helpText(): string {
-		const shiftHint = isKittyProtocolActive() ? "" : " (Shift+Arrows may require Kitty keyboard protocol)";
-		return ` Up/Down: move  Shift+Up/Down: select range  Left/Right: collapse/expand  Ctrl+C: copy  Esc: back${shiftHint}`;
+	#summaryText(): string {
+		return ` # ${this.#model.visibleLogCount}/${this.#model.logCount} logs | ${this.#controlsText()}`;
+	}
+
+	#controlsText(): string {
+		return "Up/Down: move  Shift+Up/Down: select range  Left/Right: collapse/expand  Ctrl+C: copy  Esc: back";
+	}
+
+	#filterText(): string {
+		const sanitized = replaceTabs(sanitizeText(this.#model.filterQuery));
+		const query = sanitized.length === 0 ? "" : theme.fg("accent", sanitized);
+		return ` filter: ${query}`;
 	}
 
 	#statusText(): string {
-		const base = ` Selected: ${this.#model.getSelectedCount()}  Expanded: ${this.#model.expandedCount}  Total: ${this.#model.logCount}`;
+		const base = ` Selected: ${this.#model.getSelectedCount()}  Expanded: ${this.#model.expandedCount}`;
 		if (this.#statusMessage) {
 			return `${base}  ${this.#statusMessage}`;
 		}
@@ -340,6 +425,9 @@ export class DebugLogViewerComponent implements Component {
 		bodyHeight: number,
 	): string[] {
 		const lines: string[] = [];
+		if (rows.length === 0) {
+			lines.push(this.#frameLine(theme.fg("muted", "no matches"), innerWidth));
+		}
 		for (let i = this.#scrollRowOffset; i < rows.length; i++) {
 			const row = rows[i];
 			if (!row) {
@@ -374,7 +462,7 @@ export class DebugLogViewerComponent implements Component {
 			return;
 		}
 
-		const maxVisibleRows = Math.max(1, Math.max(3, this.#terminalRows - 7));
+		const maxVisibleRows = Math.max(1, Math.max(3, this.#terminalRows - 8));
 		if (cursorRowIndex < this.#scrollRowOffset) {
 			this.#scrollRowOffset = cursorRowIndex;
 			return;

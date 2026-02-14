@@ -11,6 +11,7 @@
 
 ### Added
 - Added interactive debug log viewer with selection, copy, and expand/collapse controls
+- Added inline filtering and count display to the debug log viewer
 
 ### Fixed
 - Sanitized debug log display to strip control codes, normalize tabs, and trim width
