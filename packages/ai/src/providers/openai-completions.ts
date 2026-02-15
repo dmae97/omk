@@ -83,15 +83,20 @@ export interface OpenAICompletionsOptions extends StreamOptions {
 	reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
 }
 
+// LIMITATION: The think tag parser uses naive string matching for <think>/<thinking> tags.
+// If MiniMax models output these literal strings in code blocks, XML examples, or explanations,
+// they will be incorrectly consumed as thinking delimiters, truncating visible output.
+// A streaming parser with arbitrary chunk boundaries cannot reliably detect code block context.
+// This is acceptable because: (1) only enabled for minimax-code providers, (2) MiniMax models
+// use these tags as their actual thinking format, and (3) false positives are rare in practice.
 const MINIMAX_THINK_OPEN_TAGS = ["<think>", "<thinking>"] as const;
 const MINIMAX_THINK_CLOSE_TAGS = ["</think>", "</thinking>"] as const;
 
 function findFirstTag(text: string, tags: readonly string[]): { index: number; tag: string } | undefined {
-	const lowerText = text.toLowerCase();
 	let earliestIndex = Number.POSITIVE_INFINITY;
 	let earliestTag: string | undefined;
 	for (const tag of tags) {
-		const index = lowerText.indexOf(tag);
+		const index = text.indexOf(tag);
 		if (index !== -1 && index < earliestIndex) {
 			earliestIndex = index;
 			earliestTag = tag;
@@ -102,12 +107,11 @@ function findFirstTag(text: string, tags: readonly string[]): { index: number; t
 }
 
 function getTrailingPartialTag(text: string, tags: readonly string[]): string {
-	const lowerText = text.toLowerCase();
 	let maxLength = 0;
 	for (const tag of tags) {
-		const maxCandidateLength = Math.min(tag.length - 1, lowerText.length);
+		const maxCandidateLength = Math.min(tag.length - 1, text.length);
 		for (let length = maxCandidateLength; length > 0; length--) {
-			if (lowerText.endsWith(tag.slice(0, length))) {
+			if (text.endsWith(tag.slice(0, length))) {
 				if (length > maxLength) maxLength = length;
 				break;
 			}
