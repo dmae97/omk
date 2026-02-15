@@ -83,6 +83,40 @@ export interface OpenAICompletionsOptions extends StreamOptions {
 	reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
 }
 
+const MINIMAX_THINK_OPEN_TAGS = ["<think>", "<thinking>"] as const;
+const MINIMAX_THINK_CLOSE_TAGS = ["</think>", "</thinking>"] as const;
+
+function findFirstTag(text: string, tags: readonly string[]): { index: number; tag: string } | undefined {
+	const lowerText = text.toLowerCase();
+	let earliestIndex = Number.POSITIVE_INFINITY;
+	let earliestTag: string | undefined;
+	for (const tag of tags) {
+		const index = lowerText.indexOf(tag);
+		if (index !== -1 && index < earliestIndex) {
+			earliestIndex = index;
+			earliestTag = tag;
+		}
+	}
+	if (!earliestTag) return undefined;
+	return { index: earliestIndex, tag: earliestTag };
+}
+
+function getTrailingPartialTag(text: string, tags: readonly string[]): string {
+	const lowerText = text.toLowerCase();
+	let maxLength = 0;
+	for (const tag of tags) {
+		const maxCandidateLength = Math.min(tag.length - 1, lowerText.length);
+		for (let length = maxCandidateLength; length > 0; length--) {
+			if (lowerText.endsWith(tag.slice(0, length))) {
+				if (length > maxLength) maxLength = length;
+				break;
+			}
+		}
+	}
+	if (maxLength === 0) return "";
+	return text.slice(-maxLength);
+}
+
 export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 	model: Model<"openai-completions">,
 	context: Context,
@@ -152,6 +186,93 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 				}
 			};
 
+			const parseMiniMaxThinkTags = model.provider === "minimax-code" || model.provider === "minimax-code-cn";
+			let taggedTextBuffer = "";
+			let insideTaggedThinking = false;
+
+			const appendTextDelta = (delta: string) => {
+				if (delta.length === 0) return;
+				if (!currentBlock || currentBlock.type !== "text") {
+					finishCurrentBlock(currentBlock);
+					currentBlock = { type: "text", text: "" };
+					output.content.push(currentBlock);
+					stream.push({ type: "text_start", contentIndex: blockIndex(), partial: output });
+				}
+				if (currentBlock.type === "text") {
+					currentBlock.text += delta;
+					stream.push({
+						type: "text_delta",
+						contentIndex: blockIndex(),
+						delta,
+						partial: output,
+					});
+				}
+			};
+
+			const appendThinkingDelta = (delta: string, signature?: string) => {
+				if (delta.length === 0) return;
+				if (
+					!currentBlock ||
+					currentBlock.type !== "thinking" ||
+					(signature !== undefined && currentBlock.thinkingSignature !== signature)
+				) {
+					finishCurrentBlock(currentBlock);
+					currentBlock = {
+						type: "thinking",
+						thinking: "",
+						thinkingSignature: signature,
+					};
+					output.content.push(currentBlock);
+					stream.push({ type: "thinking_start", contentIndex: blockIndex(), partial: output });
+				}
+				if (currentBlock.type === "thinking") {
+					if (signature !== undefined && !currentBlock.thinkingSignature) {
+						currentBlock.thinkingSignature = signature;
+					}
+					currentBlock.thinking += delta;
+					stream.push({
+						type: "thinking_delta",
+						contentIndex: blockIndex(),
+						delta,
+						partial: output,
+					});
+				}
+			};
+
+			const flushTaggedTextBuffer = () => {
+				while (taggedTextBuffer.length > 0) {
+					if (insideTaggedThinking) {
+						const closingTag = findFirstTag(taggedTextBuffer, MINIMAX_THINK_CLOSE_TAGS);
+						if (closingTag) {
+							appendThinkingDelta(taggedTextBuffer.slice(0, closingTag.index));
+							taggedTextBuffer = taggedTextBuffer.slice(closingTag.index + closingTag.tag.length);
+							insideTaggedThinking = false;
+							continue;
+						}
+
+						const trailingPartialTag = getTrailingPartialTag(taggedTextBuffer, MINIMAX_THINK_CLOSE_TAGS);
+						const flushLength = taggedTextBuffer.length - trailingPartialTag.length;
+						appendThinkingDelta(taggedTextBuffer.slice(0, flushLength));
+						taggedTextBuffer = trailingPartialTag;
+						break;
+					}
+
+					const openingTag = findFirstTag(taggedTextBuffer, MINIMAX_THINK_OPEN_TAGS);
+					if (openingTag) {
+						appendTextDelta(taggedTextBuffer.slice(0, openingTag.index));
+						taggedTextBuffer = taggedTextBuffer.slice(openingTag.index + openingTag.tag.length);
+						insideTaggedThinking = true;
+						continue;
+					}
+
+					const trailingPartialTag = getTrailingPartialTag(taggedTextBuffer, MINIMAX_THINK_OPEN_TAGS);
+					const flushLength = taggedTextBuffer.length - trailingPartialTag.length;
+					appendTextDelta(taggedTextBuffer.slice(0, flushLength));
+					taggedTextBuffer = trailingPartialTag;
+					break;
+				}
+			};
+
 			for await (const chunk of openaiStream) {
 				if (chunk.usage) {
 					// Check for cached_tokens at root level (Kimi) or in prompt_tokens_details (OpenAI)
@@ -196,21 +317,11 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 						choice.delta.content.length > 0
 					) {
 						if (!firstTokenTime) firstTokenTime = Date.now();
-						if (!currentBlock || currentBlock.type !== "text") {
-							finishCurrentBlock(currentBlock);
-							currentBlock = { type: "text", text: "" };
-							output.content.push(currentBlock);
-							stream.push({ type: "text_start", contentIndex: blockIndex(), partial: output });
-						}
-
-						if (currentBlock.type === "text") {
-							currentBlock.text += choice.delta.content;
-							stream.push({
-								type: "text_delta",
-								contentIndex: blockIndex(),
-								delta: choice.delta.content,
-								partial: output,
-							});
+						if (parseMiniMaxThinkTags) {
+							taggedTextBuffer += choice.delta.content;
+							flushTaggedTextBuffer();
+						} else {
+							appendTextDelta(choice.delta.content);
 						}
 					}
 
@@ -234,27 +345,8 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 					}
 
 					if (foundReasoningField) {
-						if (!currentBlock || currentBlock.type !== "thinking") {
-							finishCurrentBlock(currentBlock);
-							currentBlock = {
-								type: "thinking",
-								thinking: "",
-								thinkingSignature: foundReasoningField,
-							};
-							output.content.push(currentBlock);
-							stream.push({ type: "thinking_start", contentIndex: blockIndex(), partial: output });
-						}
-
-						if (currentBlock.type === "thinking") {
-							const delta = (choice.delta as any)[foundReasoningField];
-							currentBlock.thinking += delta;
-							stream.push({
-								type: "thinking_delta",
-								contentIndex: blockIndex(),
-								delta,
-								partial: output,
-							});
-						}
+						const delta = (choice.delta as any)[foundReasoningField];
+						appendThinkingDelta(delta, foundReasoningField);
 					}
 
 					if (choice?.delta?.tool_calls) {
@@ -309,6 +401,15 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions"> = (
 						}
 					}
 				}
+			}
+
+			if (parseMiniMaxThinkTags && taggedTextBuffer.length > 0) {
+				if (insideTaggedThinking) {
+					appendThinkingDelta(taggedTextBuffer);
+				} else {
+					appendTextDelta(taggedTextBuffer);
+				}
+				taggedTextBuffer = "";
 			}
 
 			finishCurrentBlock(currentBlock);
