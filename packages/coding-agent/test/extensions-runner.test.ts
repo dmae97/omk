@@ -12,6 +12,7 @@ import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { logger, TempDir } from "@oh-my-pi/pi-utils";
 import { getProjectAgentDir } from "@oh-my-pi/pi-utils/dirs";
+import { filterUserExtensions, filterUserExtensionErrors } from "./utils/filter-user-extensions";
 
 describe("ExtensionRunner", () => {
 	let tempDir: TempDir;
@@ -32,6 +33,15 @@ describe("ExtensionRunner", () => {
 		tempDir.removeSync();
 	});
 
+	const loadTestExtensions = async () => {
+		const result = await discoverAndLoadExtensions([], tempDir.path());
+		return {
+			...result,
+			extensions: filterUserExtensions(result.extensions),
+			errors: filterUserExtensionErrors(result.errors),
+		};
+	};
+
 	describe("shortcut conflicts", () => {
 		it("warns when extension shortcut conflicts with built-in", async () => {
 			const extCode = `
@@ -46,7 +56,7 @@ describe("ExtensionRunner", () => {
 
 			const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
 
-			const result = await discoverAndLoadExtensions([], tempDir.path());
+			const result = await loadTestExtensions();
 			const runner = new ExtensionRunner(
 				result.extensions,
 				result.runtime,
@@ -85,7 +95,7 @@ describe("ExtensionRunner", () => {
 
 			const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
 
-			const result = await discoverAndLoadExtensions([], tempDir.path());
+			const result = await loadTestExtensions();
 			const runner = new ExtensionRunner(
 				result.extensions,
 				result.runtime,
@@ -120,7 +130,7 @@ describe("ExtensionRunner", () => {
 			fs.writeFileSync(path.join(extensionsDir, "tool-a.ts"), toolCode("tool_a"));
 			fs.writeFileSync(path.join(extensionsDir, "tool-b.ts"), toolCode("tool_b"));
 
-			const result = await discoverAndLoadExtensions([], tempDir.path());
+			const result = await loadTestExtensions();
 			const runner = new ExtensionRunner(
 				result.extensions,
 				result.runtime,
@@ -148,7 +158,7 @@ describe("ExtensionRunner", () => {
 			fs.writeFileSync(path.join(extensionsDir, "cmd-a.ts"), cmdCode("cmd-a"));
 			fs.writeFileSync(path.join(extensionsDir, "cmd-b.ts"), cmdCode("cmd-b"));
 
-			const result = await discoverAndLoadExtensions([], tempDir.path());
+			const result = await loadTestExtensions();
 			const runner = new ExtensionRunner(
 				result.extensions,
 				result.runtime,
@@ -173,7 +183,7 @@ describe("ExtensionRunner", () => {
 			`;
 			fs.writeFileSync(path.join(extensionsDir, "cmd.ts"), cmdCode);
 
-			const result = await discoverAndLoadExtensions([], tempDir.path());
+			const result = await loadTestExtensions();
 			const runner = new ExtensionRunner(
 				result.extensions,
 				result.runtime,
@@ -203,7 +213,7 @@ describe("ExtensionRunner", () => {
 			`;
 			fs.writeFileSync(path.join(extensionsDir, "throws.ts"), extCode);
 
-			const result = await discoverAndLoadExtensions([], tempDir.path());
+			const result = await loadTestExtensions();
 			const runner = new ExtensionRunner(
 				result.extensions,
 				result.runtime,
@@ -235,7 +245,7 @@ describe("ExtensionRunner", () => {
 			`;
 			fs.writeFileSync(path.join(extensionsDir, "renderer.ts"), extCode);
 
-			const result = await discoverAndLoadExtensions([], tempDir.path());
+			const result = await loadTestExtensions();
 			const runner = new ExtensionRunner(
 				result.extensions,
 				result.runtime,
@@ -264,7 +274,7 @@ describe("ExtensionRunner", () => {
 			`;
 			fs.writeFileSync(path.join(extensionsDir, "with-flag.ts"), extCode);
 
-			const result = await discoverAndLoadExtensions([], tempDir.path());
+			const result = await loadTestExtensions();
 			const runner = new ExtensionRunner(
 				result.extensions,
 				result.runtime,
@@ -288,7 +298,7 @@ describe("ExtensionRunner", () => {
 			`;
 			fs.writeFileSync(path.join(extensionsDir, "flag.ts"), extCode);
 
-			const result = await discoverAndLoadExtensions([], tempDir.path());
+			const result = await loadTestExtensions();
 			const runner = new ExtensionRunner(
 				result.extensions,
 				result.runtime,
@@ -328,7 +338,7 @@ describe("ExtensionRunner", () => {
 			fs.writeFileSync(path.join(extensionsDir, "tool-result-1.ts"), extCode1);
 			fs.writeFileSync(path.join(extensionsDir, "tool-result-2.ts"), extCode2);
 
-			const result = await discoverAndLoadExtensions([], tempDir.path());
+			const result = await loadTestExtensions();
 			const runner = new ExtensionRunner(
 				result.extensions,
 				result.runtime,
@@ -382,7 +392,7 @@ describe("ExtensionRunner", () => {
 			fs.writeFileSync(path.join(extensionsDir, "tool-result-partial-1.ts"), extCode1);
 			fs.writeFileSync(path.join(extensionsDir, "tool-result-partial-2.ts"), extCode2);
 
-			const result = await discoverAndLoadExtensions([], tempDir.path());
+			const result = await loadTestExtensions();
 			const runner = new ExtensionRunner(
 				result.extensions,
 				result.runtime,
@@ -418,7 +428,7 @@ describe("ExtensionRunner", () => {
 			`;
 			fs.writeFileSync(path.join(extensionsDir, "handler.ts"), extCode);
 
-			const result = await discoverAndLoadExtensions([], tempDir.path());
+			const result = await loadTestExtensions();
 			const runner = new ExtensionRunner(
 				result.extensions,
 				result.runtime,

@@ -12,6 +12,7 @@ import type { ImageContent, Model, TextContent, ToolResultMessage } from "@oh-my
 import type * as piCodingAgent from "@oh-my-pi/pi-coding-agent";
 import type { AutocompleteItem, Component, EditorComponent, EditorTheme, KeyId, TUI } from "@oh-my-pi/pi-tui";
 import type { Static, TSchema } from "@sinclair/typebox";
+import type { Rule } from "../../capability/rule";
 import type { KeybindingsManager } from "../../config/keybindings";
 import type { ModelRegistry } from "../../config/model-registry";
 import type { BashResult } from "../../exec/bash-executor";
@@ -39,6 +40,7 @@ import type {
 	ReadToolInput,
 	WriteToolInput,
 } from "../../tools";
+import type { TodoItem } from "../../tools/todo-write";
 import type { EventBus } from "../../utils/event-bus";
 import type { SlashCommandInfo } from "../slash-commands";
 
@@ -459,6 +461,52 @@ export interface TurnEndEvent {
 	toolResults: ToolResultMessage[];
 }
 
+/** Fired when auto-compaction starts */
+export interface AutoCompactionStartEvent {
+	type: "auto_compaction_start";
+	reason: "threshold" | "overflow";
+}
+
+/** Fired when auto-compaction ends */
+export interface AutoCompactionEndEvent {
+	type: "auto_compaction_end";
+	result: CompactionResult | undefined;
+	aborted: boolean;
+	willRetry: boolean;
+	errorMessage?: string;
+}
+
+/** Fired when auto-retry starts */
+export interface AutoRetryStartEvent {
+	type: "auto_retry_start";
+	attempt: number;
+	maxAttempts: number;
+	delayMs: number;
+	errorMessage: string;
+}
+
+/** Fired when auto-retry ends */
+export interface AutoRetryEndEvent {
+	type: "auto_retry_end";
+	success: boolean;
+	attempt: number;
+	finalError?: string;
+}
+
+/** Fired when TTSR rule matching interrupts generation */
+export interface TtsrTriggeredEvent {
+	type: "ttsr_triggered";
+	rules: Rule[];
+}
+
+/** Fired when todo reminder logic detects unfinished todos */
+export interface TodoReminderEvent {
+	type: "todo_reminder";
+	todos: TodoItem[];
+	attempt: number;
+	maxAttempts: number;
+}
+
 // ============================================================================
 // User Bash Events
 // ============================================================================
@@ -652,6 +700,12 @@ export type ExtensionEvent =
 	| AgentEndEvent
 	| TurnStartEvent
 	| TurnEndEvent
+	| AutoCompactionStartEvent
+	| AutoCompactionEndEvent
+	| AutoRetryStartEvent
+	| AutoRetryEndEvent
+	| TtsrTriggeredEvent
+	| TodoReminderEvent
 	| UserBashEvent
 	| UserPythonEvent
 	| InputEvent
@@ -814,6 +868,12 @@ export interface ExtensionAPI {
 	on(event: "agent_end", handler: ExtensionHandler<AgentEndEvent>): void;
 	on(event: "turn_start", handler: ExtensionHandler<TurnStartEvent>): void;
 	on(event: "turn_end", handler: ExtensionHandler<TurnEndEvent>): void;
+	on(event: "auto_compaction_start", handler: ExtensionHandler<AutoCompactionStartEvent>): void;
+	on(event: "auto_compaction_end", handler: ExtensionHandler<AutoCompactionEndEvent>): void;
+	on(event: "auto_retry_start", handler: ExtensionHandler<AutoRetryStartEvent>): void;
+	on(event: "auto_retry_end", handler: ExtensionHandler<AutoRetryEndEvent>): void;
+	on(event: "ttsr_triggered", handler: ExtensionHandler<TtsrTriggeredEvent>): void;
+	on(event: "todo_reminder", handler: ExtensionHandler<TodoReminderEvent>): void;
 	on(event: "input", handler: ExtensionHandler<InputEvent, InputEventResult>): void;
 	on(event: "tool_call", handler: ExtensionHandler<ToolCallEvent, ToolCallEventResult>): void;
 	on(event: "tool_result", handler: ExtensionHandler<ToolResultEvent, ToolResultEventResult>): void;

@@ -235,6 +235,8 @@ export async function loadSkills(options: LoadSkillsOptions = {}): Promise<LoadS
 		return { skills: [], warnings: [] };
 	}
 
+	const anyBuiltInSkillSourceEnabled =
+		enableCodexUser || enableClaudeUser || enableClaudeProject || enablePiUser || enablePiProject;
 	// Helper to check if a source is enabled
 	function isSourceEnabled(source: SourceMeta): boolean {
 		const { provider, level } = source;
@@ -243,8 +245,8 @@ export async function loadSkills(options: LoadSkillsOptions = {}): Promise<LoadS
 		if (provider === "claude" && level === "project") return enableClaudeProject;
 		if (provider === "native" && level === "user") return enablePiUser;
 		if (provider === "native" && level === "project") return enablePiProject;
-		// For other providers (gemini, cursor, etc.) or custom, default to enabled
-		return true;
+		// For other providers (agents, claude-plugins, etc.), treat them as built-in skill sources.
+		return anyBuiltInSkillSourceEnabled;
 	}
 
 	// Use capability API to load all skills

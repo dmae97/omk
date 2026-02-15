@@ -7,6 +7,7 @@
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Message, Model, TextContent, ToolResultMessage } from "@oh-my-pi/pi-ai";
 import type { Component, TUI } from "@oh-my-pi/pi-tui";
+import type { Rule } from "../../capability/rule";
 import type { ModelRegistry } from "../../config/model-registry";
 import type { ExecOptions, ExecResult } from "../../exec/exec";
 import type { Theme } from "../../modes/theme/theme";
@@ -21,6 +22,7 @@ import type {
 	SessionManager,
 } from "../../session/session-manager";
 import type { BashToolDetails, FindToolDetails, GrepToolDetails, ReadToolDetails } from "../../tools";
+import type { TodoItem } from "../../tools/todo-write";
 
 // Re-export for backward compatibility
 export type { ExecOptions, ExecResult } from "../../exec/exec";
@@ -389,6 +391,52 @@ export interface TurnEndEvent {
 	toolResults: ToolResultMessage[];
 }
 
+/** Event data for auto_compaction_start event. */
+export interface AutoCompactionStartEvent {
+	type: "auto_compaction_start";
+	reason: "threshold" | "overflow";
+}
+
+/** Event data for auto_compaction_end event. */
+export interface AutoCompactionEndEvent {
+	type: "auto_compaction_end";
+	result: CompactionResult | undefined;
+	aborted: boolean;
+	willRetry: boolean;
+	errorMessage?: string;
+}
+
+/** Event data for auto_retry_start event. */
+export interface AutoRetryStartEvent {
+	type: "auto_retry_start";
+	attempt: number;
+	maxAttempts: number;
+	delayMs: number;
+	errorMessage: string;
+}
+
+/** Event data for auto_retry_end event. */
+export interface AutoRetryEndEvent {
+	type: "auto_retry_end";
+	success: boolean;
+	attempt: number;
+	finalError?: string;
+}
+
+/** Event data for ttsr_triggered event. */
+export interface TtsrTriggeredEvent {
+	type: "ttsr_triggered";
+	rules: Rule[];
+}
+
+/** Event data for todo_reminder event. */
+export interface TodoReminderEvent {
+	type: "todo_reminder";
+	todos: TodoItem[];
+	attempt: number;
+	maxAttempts: number;
+}
+
 /**
  * Event data for tool_call event.
  * Fired before a tool is executed. Hooks can block execution.
@@ -485,6 +533,12 @@ export type HookEvent =
 	| AgentEndEvent
 	| TurnStartEvent
 	| TurnEndEvent
+	| AutoCompactionStartEvent
+	| AutoCompactionEndEvent
+	| AutoRetryStartEvent
+	| AutoRetryEndEvent
+	| TtsrTriggeredEvent
+	| TodoReminderEvent
 	| ToolCallEvent
 	| ToolResultEvent;
 
@@ -658,6 +712,12 @@ export interface HookAPI {
 	on(event: "agent_end", handler: HookHandler<AgentEndEvent>): void;
 	on(event: "turn_start", handler: HookHandler<TurnStartEvent>): void;
 	on(event: "turn_end", handler: HookHandler<TurnEndEvent>): void;
+	on(event: "auto_compaction_start", handler: HookHandler<AutoCompactionStartEvent>): void;
+	on(event: "auto_compaction_end", handler: HookHandler<AutoCompactionEndEvent>): void;
+	on(event: "auto_retry_start", handler: HookHandler<AutoRetryStartEvent>): void;
+	on(event: "auto_retry_end", handler: HookHandler<AutoRetryEndEvent>): void;
+	on(event: "ttsr_triggered", handler: HookHandler<TtsrTriggeredEvent>): void;
+	on(event: "todo_reminder", handler: HookHandler<TodoReminderEvent>): void;
 	on(event: "tool_call", handler: HookHandler<ToolCallEvent, ToolCallEventResult>): void;
 	on(event: "tool_result", handler: HookHandler<ToolResultEvent, ToolResultEventResult>): void;
 

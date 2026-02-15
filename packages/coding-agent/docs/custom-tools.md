@@ -324,19 +324,34 @@ async execute(toolCallId, params, onUpdate, ctx, signal) {
 Tools can implement `onSession` to react to session changes:
 
 ```typescript
-interface CustomToolSessionEvent {
-	reason: "start" | "switch" | "branch" | "tree" | "shutdown";
-	previousSessionFile: string | undefined;
-}
+type CustomToolSessionEvent =
+	| { reason: "start" | "switch" | "branch" | "tree" | "shutdown"; previousSessionFile: string | undefined }
+	| { reason: "auto_compaction_start"; trigger: "threshold" | "overflow" }
+	| {
+			reason: "auto_compaction_end";
+			result: CompactionResult | undefined;
+			aborted: boolean;
+			willRetry: boolean;
+			errorMessage?: string;
+	  }
+	| { reason: "auto_retry_start"; attempt: number; maxAttempts: number; delayMs: number; errorMessage: string }
+	| { reason: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
+	| { reason: "ttsr_triggered"; rules: Rule[] }
+	| { reason: "todo_reminder"; todos: TodoItem[]; attempt: number; maxAttempts: number };
 ```
 
 **Reasons:**
-
-- `start`: Initial session load on startup
+- `start`: Initial session load (fresh start or resuming an existing session) - use to reconstruct state from session entries
 - `switch`: User started a new session (`/new`) or switched to a different session (`/resume`)
 - `branch`: User branched from a previous message (`/branch`)
 - `tree`: User navigated to a different point in the session tree (`/tree`)
 - `shutdown`: Process is exiting (Ctrl+C, Ctrl+D, or SIGTERM) - use to cleanup resources
+- `auto_compaction_start`: Auto-compaction kicked off (`threshold` or `overflow`)
+- `auto_compaction_end`: Auto-compaction finished (includes result/abort/error metadata)
+- `auto_retry_start`: Automatic retry scheduled after an assistant error
+- `auto_retry_end`: Automatic retry completed/failed/cancelled
+- `ttsr_triggered`: Time-travel stream rule interrupted generation
+- `todo_reminder`: Todo reminder fired with outstanding items
 
 To check if a session is fresh (no messages), use `ctx.sessionManager.getEntries().length === 0`.
 

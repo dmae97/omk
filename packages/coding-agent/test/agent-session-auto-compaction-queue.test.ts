@@ -5,13 +5,25 @@ import { Agent } from "@oh-my-pi/pi-agent-core";
 import { getModel } from "@oh-my-pi/pi-ai/models";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
-import { discoverAndLoadExtensions } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/loader";
+import { loadExtensions } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/loader";
 import { ExtensionRunner } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/runner";
 import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { TempDir } from "@oh-my-pi/pi-utils";
 import { getProjectAgentDir } from "@oh-my-pi/pi-utils/dirs";
+
+const runtimeSignalStoreKey = "__ompRuntimeSignals";
+
+type RuntimeSignalGlobal = typeof globalThis & { [runtimeSignalStoreKey]?: string[] };
+
+function getRuntimeSignals(): string[] {
+	const globalWithSignals = globalThis as RuntimeSignalGlobal;
+	if (!globalWithSignals[runtimeSignalStoreKey]) {
+		globalWithSignals[runtimeSignalStoreKey] = [];
+	}
+	return globalWithSignals[runtimeSignalStoreKey];
+}
 
 /**
  * Regression test: auto-compaction completion should resume the agent loop when
@@ -32,8 +44,9 @@ describe("AgentSession auto-compaction queue resume", () => {
 		// make any LLM calls.
 		const extensionsDir = path.join(getProjectAgentDir(tempDir.path()), "extensions");
 		fs.mkdirSync(extensionsDir, { recursive: true });
+		const extensionPath = path.join(extensionsDir, "compaction-short-circuit.ts");
 		fs.writeFileSync(
-			path.join(extensionsDir, "compaction-short-circuit.ts"),
+			extensionPath,
 			[
 				"export default function(pi) {",
 				'\tpi.on("session_before_compact", async (event) => {',
@@ -47,6 +60,18 @@ describe("AgentSession auto-compaction queue resume", () => {
 				"\t\t\t},",
 				"\t\t};",
 				"\t});",
+				'\tpi.on("auto_compaction_start", async (event) => {',
+				`\t\tconst signals = globalThis.${runtimeSignalStoreKey} ?? (globalThis.${runtimeSignalStoreKey} = []);`,
+				'\t\tsignals.push("compaction:start:" + event.reason);',
+				"\t});",
+				'\tpi.on("auto_compaction_end", async (event) => {',
+				`\t\tconst signals = globalThis.${runtimeSignalStoreKey} ?? (globalThis.${runtimeSignalStoreKey} = []);`,
+				'\t\tsignals.push("compaction:end:" + (event.aborted ? "aborted" : "ok"));',
+				"\t});",
+				'\tpi.on("todo_reminder", async (event) => {',
+				`\t\tconst signals = globalThis.${runtimeSignalStoreKey} ?? (globalThis.${runtimeSignalStoreKey} = []);`,
+				'\t\tsignals.push("todo:" + event.attempt + "/" + event.maxAttempts);',
+				"\t});",
 				"}",
 			].join("\n"),
 		);
@@ -54,9 +79,10 @@ describe("AgentSession auto-compaction queue resume", () => {
 		authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));
 		authStorage.setRuntimeApiKey("anthropic", "test-key");
 		modelRegistry = new ModelRegistry(authStorage);
-		sessionManager = SessionManager.inMemory();
+		sessionManager = SessionManager.create(tempDir.path());
+		getRuntimeSignals().length = 0;
 
-		const extensionsResult = await discoverAndLoadExtensions([], tempDir.path());
+		const extensionsResult = await loadExtensions([extensionPath], tempDir.path());
 		const extensionRunner = new ExtensionRunner(
 			extensionsResult.extensions,
 			extensionsResult.runtime,
@@ -89,16 +115,21 @@ describe("AgentSession auto-compaction queue resume", () => {
 		session = new AgentSession({
 			agent,
 			sessionManager,
-			settings: Settings.isolated({ "compaction.autoContinue": false }),
+			settings: Settings.isolated({
+				"compaction.autoContinue": false,
+				"todo.reminders": true,
+				"todo.reminders.max": 3,
+			}),
 			modelRegistry,
 			extensionRunner,
 		});
 	});
 
-	afterEach(() => {
-		session.dispose();
+	afterEach(async () => {
+		await session.dispose();
 		tempDir.removeSync();
 		vi.useRealTimers();
+		getRuntimeSignals().length = 0;
 		vi.restoreAllMocks();
 	});
 
@@ -149,8 +180,60 @@ describe("AgentSession auto-compaction queue resume", () => {
 
 		// Wait for the async compaction handler to finish, then advance past setTimeout(100)
 		await compactionDone;
+		await Promise.resolve();
 		vi.advanceTimersByTime(200);
 
+		expect(continueSpy).toHaveBeenCalledTimes(1);
+		const runtimeSignals = getRuntimeSignals();
+		expect(runtimeSignals).toContain("compaction:start:threshold");
+		expect(runtimeSignals.some(signal => signal.startsWith("compaction:end:"))).toBe(true);
+	});
+
+	it("forwards todo reminder lifecycle signals to extensions", async () => {
+		const continueSpy = vi.spyOn(session.agent, "continue").mockResolvedValue();
+
+		const sessionFile = sessionManager.getSessionFile();
+		if (!sessionFile) {
+			throw new Error("Expected session file to exist");
+		}
+		const todoPath = `${sessionFile.slice(0, -6)}/todos.json`;
+		await Bun.write(
+			todoPath,
+			JSON.stringify({
+				todos: [{ id: "todo-1", content: "Finish pending task", status: "in_progress" }],
+			}),
+		);
+
+		const { promise: reminderDone, resolve: onReminderDone } = Promise.withResolvers<void>();
+		session.subscribe(event => {
+			if (event.type === "todo_reminder") onReminderDone();
+		});
+
+		const assistantMsg = {
+			role: "assistant" as const,
+			content: [],
+			api: "anthropic-messages" as const,
+			provider: "anthropic" as const,
+			model: "claude-sonnet-4-5",
+			stopReason: "stop" as const,
+			usage: {
+				input: 100,
+				output: 20,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 120,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			timestamp: Date.now(),
+		};
+
+		session.agent.emitExternalEvent({ type: "message_end", message: assistantMsg });
+		session.agent.emitExternalEvent({ type: "agent_end", messages: [assistantMsg] });
+
+		await reminderDone;
+		await Promise.resolve();
+
+		expect(getRuntimeSignals()).toContain("todo:1/3");
 		expect(continueSpy).toHaveBeenCalledTimes(1);
 	});
 });

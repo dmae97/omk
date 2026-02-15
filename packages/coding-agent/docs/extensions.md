@@ -499,6 +499,26 @@ pi.on("turn_end", async (event, ctx) => {
 
 **Examples:** [plan-mode.ts](../examples/extensions/plan-mode.ts)
 
+#### Runtime reliability events
+
+Fired for internal recovery/continuation mechanics:
+
+- `auto_compaction_start` / `auto_compaction_end`
+- `auto_retry_start` / `auto_retry_end`
+- `ttsr_triggered`
+- `todo_reminder`
+
+```typescript
+pi.on("todo_reminder", async (event, _ctx) => {
+	// event.todos, event.attempt, event.maxAttempts
+});
+
+pi.on("auto_retry_start", async (event, _ctx) => {
+	// event.attempt, event.maxAttempts, event.delayMs, event.errorMessage
+});
+```
+
+
 #### context
 
 Fired before each LLM call. Modify messages non-destructively.

@@ -8,11 +8,14 @@ import type { AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agen
 import type { Model } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import type { Static, TSchema } from "@sinclair/typebox";
+import type { Rule } from "../../capability/rule";
 import type { ModelRegistry } from "../../config/model-registry";
 import type { ExecOptions, ExecResult } from "../../exec/exec";
 import type { HookUIContext } from "../../extensibility/hooks/types";
 import type { Theme } from "../../modes/theme/theme";
+import type { CompactionResult } from "../../session/compaction";
 import type { ReadonlySessionManager } from "../../session/session-manager";
+import type { TodoItem } from "../../tools/todo-write";
 
 /** Alias for clarity */
 export type CustomToolUIContext = HookUIContext;
@@ -61,12 +64,47 @@ export interface CustomToolContext {
 }
 
 /** Session event passed to onSession callback */
-export interface CustomToolSessionEvent {
-	/** Reason for the session event */
-	reason: "start" | "switch" | "branch" | "tree" | "shutdown";
-	/** Previous session file path, or undefined for "start" and "shutdown" */
-	previousSessionFile: string | undefined;
-}
+export type CustomToolSessionEvent =
+	| {
+			/** Reason for the session event */
+			reason: "start" | "switch" | "branch" | "tree" | "shutdown";
+			/** Previous session file path, or undefined for "start" and "shutdown" */
+			previousSessionFile: string | undefined;
+	  }
+	| {
+			reason: "auto_compaction_start";
+			trigger: "threshold" | "overflow";
+	  }
+	| {
+			reason: "auto_compaction_end";
+			result: CompactionResult | undefined;
+			aborted: boolean;
+			willRetry: boolean;
+			errorMessage?: string;
+	  }
+	| {
+			reason: "auto_retry_start";
+			attempt: number;
+			maxAttempts: number;
+			delayMs: number;
+			errorMessage: string;
+	  }
+	| {
+			reason: "auto_retry_end";
+			success: boolean;
+			attempt: number;
+			finalError?: string;
+	  }
+	| {
+			reason: "ttsr_triggered";
+			rules: Rule[];
+	  }
+	| {
+			reason: "todo_reminder";
+			todos: TodoItem[];
+			attempt: number;
+			maxAttempts: number;
+	  };
 
 /** Rendering options passed to renderResult */
 export interface RenderResultOptions {

@@ -35,6 +35,10 @@ const OVERFLOW_PATTERNS = [
 	/maximum context length is \d+ tokens/i, // OpenRouter (all backends)
 	/exceeds the limit of \d+/i, // GitHub Copilot
 	/exceeds the available context size/i, // llama.cpp server
+	/requested tokens?.*exceed.*context (window|length|size)/i, // llama.cpp / OpenAI-compatible local servers
+	/context (window|length|size).*(exceeded|overflow|too small)/i, // Generic local server variants
+	/(prompt|input).*(too long|too large).*(context|n_ctx)/i, // llama.cpp phrasing variants
+	/requested tokens?.*(exceeds?|greater than).*(n_ctx|context)/i, // llama.cpp n_ctx variants
 	/greater than the context length/i, // LM Studio
 	/context window exceeds limit/i, // MiniMax
 	/exceeded model token limit/i, // Kimi For Coding
@@ -105,8 +109,8 @@ export function isContextOverflow(message: AssistantMessage, contextWindow?: num
 		}
 	}
 
-	// Case 2: Silent overflow (z.ai style) - successful but usage exceeds context
-	if (contextWindow && message.stopReason === "stop") {
+	// Case 2: Usage-based overflow (silent or provider-specific)
+	if (contextWindow) {
 		const inputTokens = message.usage.input + message.usage.cacheRead;
 		if (inputTokens > contextWindow) {
 			return true;
