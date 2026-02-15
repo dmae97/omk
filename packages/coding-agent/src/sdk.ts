@@ -8,7 +8,7 @@ import chalk from "chalk";
 import { loadCapability } from "./capability";
 import { type Rule, ruleCapability } from "./capability/rule";
 import { ModelRegistry } from "./config/model-registry";
-import { formatModelString, parseModelString } from "./config/model-resolver";
+import { formatModelString, parseModelPattern, parseModelString } from "./config/model-resolver";
 import { loadPromptTemplates as loadPromptTemplatesInternal, type PromptTemplate } from "./config/prompt-templates";
 import { Settings, type SkillsSettings } from "./config/settings";
 import { CursorExecHandlers } from "./cursor";
@@ -101,6 +101,9 @@ export interface CreateAgentSessionOptions {
 
 	/** Model to use. Default: from settings, else first available */
 	model?: Model;
+	/** Raw model pattern string (e.g. from --model CLI flag) to resolve after extensions load.
+	 * Used when model lookup is deferred because extension-provided models aren't registered yet. */
+	modelPattern?: string;
 	/** Thinking level. Default: from settings, else 'off' (clamped to model capabilities) */
 	thinkingLevel?: ThinkingLevel;
 	/** Models available for cycling (Ctrl+P in interactive mode) */
@@ -908,8 +911,21 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		}
 		extensionsResult.runtime.pendingProviderRegistrations = [];
 
-		// Re-run model selection if no model was found earlier but extensions added models
-		if (!model) {
+		// Resolve deferred --model pattern now that extension models are registered
+		if (!model && options.modelPattern) {
+			const available = modelRegistry.getAvailable();
+			const { model: resolved } = parseModelPattern(options.modelPattern, available);
+			if (resolved) {
+				model = resolved;
+				modelFallbackMessage = undefined;
+			} else {
+				modelFallbackMessage = `Model "${options.modelPattern}" not found`;
+			}
+		}
+
+		// Re-run model selection if no model was found earlier but extensions added models.
+		// Skip fallback if the user explicitly requested a model via --model that wasn't found.
+		if (!model && !options.modelPattern) {
 			const allModels = modelRegistry.getAll();
 			for (const candidate of allModels) {
 				if (await hasModelApiKey(candidate)) {
