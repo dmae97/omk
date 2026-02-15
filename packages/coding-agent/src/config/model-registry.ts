@@ -1,10 +1,14 @@
 import {
 	type Api,
+	type AssistantMessageEventStream,
+	type Context,
 	getGitHubCopilotBaseUrl,
 	getModels,
 	getProviders,
 	type Model,
 	normalizeDomain,
+	registerCustomApi,
+	type SimpleStreamOptions,
 } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
@@ -705,4 +709,105 @@ export class ModelRegistry {
 	isUsingOAuth(model: Model<Api>): boolean {
 		return this.authStorage.hasOAuth(model.provider);
 	}
+
+	/**
+	 * Register a provider dynamically (from extensions).
+	 *
+	 * If provider has models: replaces all existing models for this provider.
+	 * If provider has only baseUrl/headers: overrides existing models' URLs.
+	 * If provider has streamSimple: registers a custom API streaming function.
+	 */
+	registerProvider(providerName: string, config: ProviderConfigInput): void {
+		// Register custom streaming function if provided
+		if (config.streamSimple) {
+			if (!config.api) {
+				throw new Error(`Provider ${providerName}: "api" is required when registering streamSimple.`);
+			}
+			registerCustomApi(config.api, config.streamSimple);
+		}
+
+		// Store API key for auth resolution
+		if (config.apiKey) {
+			this.#customProviderApiKeys.set(providerName, config.apiKey);
+		}
+
+		if (config.models && config.models.length > 0) {
+			// Full replacement: remove existing models for this provider
+			this.#models = this.#models.filter(m => m.provider !== providerName);
+
+			if (!config.baseUrl) {
+				throw new Error(`Provider ${providerName}: "baseUrl" is required when defining models.`);
+			}
+			if (!config.apiKey) {
+				throw new Error(`Provider ${providerName}: "apiKey" is required when defining models.`);
+			}
+
+			for (const modelDef of config.models) {
+				const api = (modelDef.api || config.api) as Api;
+				if (!api) {
+					throw new Error(`Provider ${providerName}, model ${modelDef.id}: no "api" specified.`);
+				}
+
+				// Merge headers: provider headers are base, model headers override
+				let headers = config.headers || modelDef.headers ? { ...config.headers, ...modelDef.headers } : undefined;
+
+				// If authHeader is true, add Authorization header with resolved API key
+				if (config.authHeader && config.apiKey) {
+					const resolvedKey = resolveApiKeyConfig(config.apiKey);
+					if (resolvedKey) {
+						headers = { ...headers, Authorization: `Bearer ${resolvedKey}` };
+					}
+				}
+
+				this.#models.push({
+					id: modelDef.id,
+					name: modelDef.name,
+					api,
+					provider: providerName,
+					baseUrl: config.baseUrl,
+					reasoning: modelDef.reasoning,
+					input: modelDef.input as ("text" | "image")[],
+					cost: modelDef.cost,
+					contextWindow: modelDef.contextWindow,
+					maxTokens: modelDef.maxTokens,
+					headers,
+					compat: modelDef.compat,
+				} as Model<Api>);
+			}
+		} else if (config.baseUrl) {
+			// Override-only: update baseUrl/headers for existing models
+			this.#models = this.#models.map(m => {
+				if (m.provider !== providerName) return m;
+				return {
+					...m,
+					baseUrl: config.baseUrl ?? m.baseUrl,
+					headers: config.headers ? { ...m.headers, ...config.headers } : m.headers,
+				};
+			});
+		}
+	}
+}
+
+/**
+ * Input type for registerProvider API (from extensions).
+ */
+export interface ProviderConfigInput {
+	baseUrl?: string;
+	apiKey?: string;
+	api?: string;
+	streamSimple?: (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
+	headers?: Record<string, string>;
+	authHeader?: boolean;
+	models?: Array<{
+		id: string;
+		name: string;
+		api?: string;
+		reasoning: boolean;
+		input: ("text" | "image")[];
+		cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
+		contextWindow: number;
+		maxTokens: number;
+		headers?: Record<string, string>;
+		compat?: Model<Api>["compat"];
+	}>;
 }

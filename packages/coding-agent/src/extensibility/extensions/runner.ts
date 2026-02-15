@@ -220,6 +220,12 @@ export class ExtensionRunner {
 		}
 
 		this.#uiContext = uiContext ?? noOpUIContext;
+
+		// Process provider registrations queued during extension loading
+		for (const { name, config } of this.runtime.pendingProviderRegistrations) {
+			this.modelRegistry.registerProvider(name, config);
+		}
+		this.runtime.pendingProviderRegistrations = [];
 	}
 
 	getUIContext(): ExtensionUIContext {

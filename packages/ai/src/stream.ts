@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { $env } from "@oh-my-pi/pi-utils";
+import { getCustomApi } from "./api-registry";
 import { supportsXhigh } from "./models";
 import { type BedrockOptions, streamBedrock } from "./providers/amazon-bedrock";
 import { type AnthropicOptions, streamAnthropic } from "./providers/anthropic";
@@ -122,6 +123,12 @@ export function stream<TApi extends Api>(
 	context: Context,
 	options?: OptionsForApi<TApi>,
 ): AssistantMessageEventStream {
+	// Check custom API registry first (extension-provided APIs like "vertex-claude-api")
+	const customStreamFn = getCustomApi(model.api);
+	if (customStreamFn) {
+		return customStreamFn(model, context, options as SimpleStreamOptions);
+	}
+
 	// Vertex AI uses Application Default Credentials, not API keys
 	if (model.api === "google-vertex") {
 		return streamGoogleVertex(model as Model<"google-vertex">, context, options as GoogleVertexOptions);
@@ -188,6 +195,12 @@ export function streamSimple<TApi extends Api>(
 	context: Context,
 	options?: SimpleStreamOptions,
 ): AssistantMessageEventStream {
+	// Check custom API registry first (extension-provided APIs)
+	const customStreamFn = getCustomApi(model.api);
+	if (customStreamFn) {
+		return customStreamFn(model, context, options);
+	}
+
 	// Vertex AI uses Application Default Credentials, not API keys
 	if (model.api === "google-vertex") {
 		const providerOptions = mapOptionsForApi(model, options, undefined);
