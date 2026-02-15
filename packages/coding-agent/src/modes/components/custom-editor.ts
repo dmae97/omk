@@ -19,6 +19,8 @@ export class CustomEditor extends Editor {
 	onQuestionMark?: () => void;
 	onCapsLock?: () => void;
 	onAltP?: () => void;
+	/** Called when Alt+Shift+C is pressed to copy prompt to clipboard. */
+	onCopyPrompt?: () => void;
 	/** Called when Ctrl+V is pressed. Returns true if handled (image found), false to fall through to text paste. */
 	onCtrlV?: () => Promise<boolean>;
 	/** Called when Alt+Up is pressed (dequeue keybinding). */
@@ -147,6 +149,12 @@ export class CustomEditor extends Editor {
 		// Intercept Alt+Up for dequeue (restore queued message to editor)
 		if (matchesKey(data, "alt+up") && this.onAltUp) {
 			this.onAltUp();
+			return;
+		}
+
+		// Intercept Alt+Shift+C to copy prompt to clipboard
+		if (matchesKey(data, "alt+shift+c") && this.onCopyPrompt) {
+			this.onCopyPrompt();
 			return;
 		}
 

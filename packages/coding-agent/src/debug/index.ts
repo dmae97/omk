@@ -4,6 +4,7 @@
  * Provides tools for debugging, bug report generation, and system diagnostics.
  */
 import * as fs from "node:fs/promises";
+import * as url from "node:url";
 import { getWorkProfile } from "@oh-my-pi/pi-natives";
 import { Container, Loader, type SelectItem, SelectList, Spacer, Text } from "@oh-my-pi/pi-tui";
 import { getSessionsDir } from "@oh-my-pi/pi-utils/dirs";
@@ -11,8 +12,9 @@ import { DynamicBorder } from "../modes/components/dynamic-border";
 import { getSelectListTheme, getSymbolTheme, theme } from "../modes/theme/theme";
 import type { InteractiveModeContext } from "../modes/types";
 import { openPath } from "../utils/open";
+import { DebugLogViewerComponent } from "./log-viewer";
 import { generateHeapSnapshotData, type ProfilerSession, startCpuProfile } from "./profiler";
-import { clearArtifactCache, createReportBundle, getArtifactCacheStats, getRecentLogs } from "./report-bundle";
+import { clearArtifactCache, createDebugLogSource, createReportBundle, getArtifactCacheStats } from "./report-bundle";
 import { collectSystemInfo, formatSystemInfo } from "./system-info";
 
 /** Debug menu options */
@@ -26,6 +28,11 @@ const DEBUG_MENU_ITEMS: SelectItem[] = [
 	{ value: "system", label: "View: system info", description: "Show environment details" },
 	{ value: "clear-cache", label: "Clear: artifact cache", description: "Remove old session artifacts" },
 ];
+
+const formatFileHyperlink = (path: string): string => {
+	const fileUrl = url.pathToFileURL(path).href;
+	return `\x1b]8;;${fileUrl}\x07${path}\x1b]8;;\x07`;
+};
 
 /**
  * Debug selector component.
@@ -159,7 +166,7 @@ export class DebugSelectorComponent extends Container {
 			this.ctx.chatContainer.addChild(
 				new Text(theme.fg("success", `${theme.status.success} Performance report saved`), 1, 0),
 			);
-			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", result.path), 1, 0));
+			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", formatFileHyperlink(result.path)), 1, 0));
 			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", `Files: ${result.files.length}`), 1, 0));
 		} catch (err) {
 			loader.stop();
@@ -220,7 +227,7 @@ export class DebugSelectorComponent extends Container {
 			this.ctx.chatContainer.addChild(
 				new Text(theme.fg("success", `${theme.status.success} Report bundle saved`), 1, 0),
 			);
-			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", result.path), 1, 0));
+			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", formatFileHyperlink(result.path)), 1, 0));
 			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", `Files: ${result.files.length}`), 1, 0));
 		} catch (err) {
 			loader.stop();
@@ -259,7 +266,7 @@ export class DebugSelectorComponent extends Container {
 			this.ctx.chatContainer.addChild(
 				new Text(theme.fg("success", `${theme.status.success} Memory report saved`), 1, 0),
 			);
-			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", result.path), 1, 0));
+			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", formatFileHyperlink(result.path)), 1, 0));
 			this.ctx.chatContainer.addChild(new Text(theme.fg("dim", `Files: ${result.files.length}`), 1, 0));
 		} catch (err) {
 			loader.stop();
@@ -272,26 +279,26 @@ export class DebugSelectorComponent extends Container {
 
 	async #handleViewLogs(): Promise<void> {
 		try {
-			const logs = await getRecentLogs(50);
-			if (!logs) {
+			const logSource = await createDebugLogSource();
+			const logs = await logSource.getInitialText();
+			if (!logs && !logSource.hasOlderLogs()) {
 				this.ctx.showWarning("No log entries found for today.");
 				return;
 			}
 
-			this.ctx.chatContainer.addChild(new Spacer(1));
-			this.ctx.chatContainer.addChild(new DynamicBorder());
-			this.ctx.chatContainer.addChild(new Text(theme.bold(theme.fg("accent", "Recent Logs")), 1, 0));
-			this.ctx.chatContainer.addChild(new Spacer(1));
+			const viewer = new DebugLogViewerComponent({
+				logs,
+				terminalRows: this.ctx.ui.terminal.rows,
+				onExit: () => this.ctx.showDebugSelector(),
+				onStatus: message => this.ctx.showStatus(message, { dim: true }),
+				onError: message => this.ctx.showError(message),
+				onUpdate: () => this.ctx.ui.requestRender(),
+				logSource,
+			});
 
-			// Display logs with dim styling
-			const lines = logs.split("\n").slice(-50);
-			for (const line of lines) {
-				if (line.trim()) {
-					this.ctx.chatContainer.addChild(new Text(theme.fg("dim", line), 1, 0));
-				}
-			}
-
-			this.ctx.chatContainer.addChild(new DynamicBorder());
+			this.ctx.editorContainer.clear();
+			this.ctx.editorContainer.addChild(viewer);
+			this.ctx.ui.setFocus(viewer);
 		} catch (err) {
 			this.ctx.showError(`Failed to read logs: ${err instanceof Error ? err.message : String(err)}`);
 		}

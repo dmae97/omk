@@ -7,15 +7,27 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { WorkProfile } from "@oh-my-pi/pi-natives";
 import { isEnoent } from "@oh-my-pi/pi-utils";
-import { getLogPath, getReportsDir } from "@oh-my-pi/pi-utils/dirs";
+import { APP_NAME, getLogPath, getLogsDir, getReportsDir } from "@oh-my-pi/pi-utils/dirs";
 import type { CpuProfile, HeapSnapshot } from "./profiler";
 import { collectSystemInfo, sanitizeEnv } from "./system-info";
 
-/** Read last N lines from a file */
-async function readLastLines(filePath: string, n: number): Promise<string> {
+/** Maximum number of log lines to load into memory at once. */
+const MAX_LOG_LINES = 5000;
+
+/** Maximum bytes to read from the tail of a log file (2 MB). */
+const MAX_LOG_BYTES = 2 * 1024 * 1024;
+/** Read last N lines from a file, reading at most `maxBytes` from the tail. */
+async function readLastLines(filePath: string, n: number, maxBytes = MAX_LOG_BYTES): Promise<string> {
 	try {
-		const content = await Bun.file(filePath).text();
+		const file = Bun.file(filePath);
+		const size = file.size;
+		const start = Math.max(0, size - maxBytes);
+		const content = start > 0 ? await file.slice(start, size).text() : await file.text();
 		const lines = content.split("\n");
+		// If we sliced mid-file, drop the first (partial) line
+		if (start > 0 && lines.length > 0) {
+			lines.shift();
+		}
 		return lines.slice(-n).join("\n");
 	} catch (err) {
 		if (isEnoent(err)) return "";
@@ -39,6 +51,12 @@ export interface ReportBundleOptions {
 export interface ReportBundleResult {
 	path: string;
 	files: string[];
+}
+
+export interface DebugLogSource {
+	getInitialText(): Promise<string>;
+	hasOlderLogs(): boolean;
+	loadOlderLogs(limitDays?: number): Promise<string>;
 }
 
 /**
@@ -209,10 +227,71 @@ async function addSubagentSessions(
 	}
 }
 
-/** Get recent log entries for display */
-export async function getRecentLogs(lines: number): Promise<string> {
-	const logPath = getLogPath();
-	return readLastLines(logPath, lines);
+/** Get recent log entries for display (tail-limited to avoid OOM on large files). */
+export async function getLogText(): Promise<string> {
+	return readLastLines(getLogPath(), MAX_LOG_LINES);
+}
+
+const LOG_FILE_PATTERN = new RegExp(`^${APP_NAME}\\.(\\d{4}-\\d{2}-\\d{2})\\.log$`);
+
+export async function createDebugLogSource(): Promise<DebugLogSource> {
+	const logsDir = getLogsDir();
+	const todayPath = getLogPath();
+	const todayName = path.basename(todayPath);
+	let olderFiles: string[] = [];
+	try {
+		const entries = await fs.readdir(logsDir, { withFileTypes: true });
+		const datedFiles = entries
+			.filter(entry => entry.isFile())
+			.map(entry => {
+				const match = LOG_FILE_PATTERN.exec(entry.name);
+				return match ? { name: entry.name, date: match[1] } : undefined;
+			})
+			.filter((entry): entry is { name: string; date: string } => entry !== undefined)
+			.filter(entry => entry.name !== todayName)
+			.sort((a, b) => b.date.localeCompare(a.date));
+		olderFiles = datedFiles.map(entry => entry.name);
+	} catch {
+		olderFiles = [];
+	}
+
+	let cursor = 0;
+
+	const getInitialText = async (): Promise<string> => {
+		return readLastLines(todayPath, MAX_LOG_LINES);
+	};
+
+	const hasOlderLogs = (): boolean => cursor < olderFiles.length;
+
+	const loadOlderLogs = async (limitDays: number = 1): Promise<string> => {
+		if (!hasOlderLogs()) {
+			return "";
+		}
+		const count = Math.max(1, limitDays);
+		const slice = olderFiles.slice(cursor, cursor + count);
+		cursor += slice.length;
+		const chunks: string[] = [];
+		for (const filename of slice.reverse()) {
+			const filePath = path.join(logsDir, filename);
+			try {
+				const content = await readLastLines(filePath, MAX_LOG_LINES);
+				if (content.length > 0) {
+					chunks.push(content);
+				}
+			} catch (err) {
+				if (!isEnoent(err)) {
+					throw err;
+				}
+			}
+		}
+		return chunks.filter(chunk => chunk.length > 0).join("\n");
+	};
+
+	return {
+		getInitialText,
+		hasOlderLogs,
+		loadOlderLogs,
+	};
 }
 
 /** Calculate total size of artifact cache */

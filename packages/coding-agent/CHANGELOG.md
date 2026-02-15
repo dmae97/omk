@@ -14,6 +14,16 @@
 
 - Fixed `session.abort()` not clearing `promptInFlight` flag due to microtask ordering, which blocked subsequent prompts
 
+### Added
+- Added interactive debug log viewer with selection, copy, and expand/collapse controls
+- Added inline filtering and count display to the debug log viewer
+- Added pid filter toggle and load-older pagination controls to the debug log viewer
+- Enabled loading older debug logs from archived files in viewer
+- Added file hyperlinks for debug report paths in viewer
+
+### Fixed
+- Sanitized debug log display to strip control codes, normalize tabs, and trim width
+
 ## [12.4.0] - 2026-02-14
 ### Changed
 
@@ -74,6 +84,7 @@
 - Improved error reporting in fetch tool to include HTTP status codes when URL fetching fails
 - Fixed fetch tool to preserve actual response metadata (finalUrl, contentType) instead of defaults when requests fail
 
+||||||| parent of a70a34c8b (fix(coding-agent/debug): Sanitized debug log rendering)
 ## [12.1.0] - 2026-02-13
 
 ### Added
