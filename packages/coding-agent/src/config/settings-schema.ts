@@ -253,6 +253,15 @@ export const SETTINGS_SCHEMA = {
 			description: "Rewrite tool call arguments to normalized format in session history",
 		},
 	},
+	repeatToolDescriptions: {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "agent",
+			label: "Repeat tool descriptions",
+			description: "Render full tool descriptions in the system prompt instead of a tool name list",
+		},
+	},
 	readLineNumbers: {
 		type: "boolean",
 		default: false,

@@ -430,6 +430,8 @@ export interface BuildSystemPromptOptions {
 	toolNames?: string[];
 	/** Text to append to system prompt. */
 	appendSystemPrompt?: string;
+	/** Repeat full tool descriptions in system prompt. Default: false */
+	repeatToolDescriptions?: boolean;
 	/** Skills settings for discovery. */
 	skillsSettings?: SkillsSettings;
 	/** Working directory. Default: getProjectDir() */
@@ -454,6 +456,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		customPrompt,
 		tools,
 		appendSystemPrompt,
+		repeatToolDescriptions = false,
 		skillsSettings,
 		toolNames,
 		cwd,
@@ -553,6 +556,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 	return renderPromptTemplate(systemPromptTemplate, {
 		tools: toolNamesArray,
 		toolDescriptions,
+		repeatToolDescriptions,
 		environment,
 		systemPromptCustomization: systemPromptCustomization ?? "",
 		contextFiles,

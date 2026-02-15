@@ -56,11 +56,15 @@ The question is not "does this work?" but "under what conditions? What happens o
 
 <tools>
 ## Available Tools
+{{#if repeatToolDescriptions}}
 {{#each toolDescriptions}}
 <tool name="{{name}}">
 {{description}}
 </tool>
 {{/each}}
+{{else}}
+{{#list tools join="\n"}}- {{this}}{{/list}}
+{{/if}}
 
 {{#ifAny (includes tools "python") (includes tools "bash")}}
 ### Precedence: Specialized → Python → Bash
