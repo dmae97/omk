@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.5.0] - 2026-02-15
 ### Added
 
 - Added `recursive` option to `GlobOptions` to control whether simple patterns match recursively (defaults to true)

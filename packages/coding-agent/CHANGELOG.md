@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.5.0] - 2026-02-15
 ### Breaking Changes
 
 - Replaced `theme` setting with `theme.dark` and `theme.light` (auto-migrated)

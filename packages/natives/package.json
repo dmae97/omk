@@ -1,6 +1,6 @@
 {
 	"name": "@oh-my-pi/pi-natives",
-	"version": "12.4.0",
+	"version": "12.5.0",
 	"description": "Native Rust functionality via N-API",
 	"keywords": ["napi", "rust", "native", "grep", "text-processing"],
 	"type": "module",

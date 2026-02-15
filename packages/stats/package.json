@@ -1,6 +1,6 @@
 {
   "name": "@oh-my-pi/omp-stats",
-  "version": "12.4.0",
+  "version": "12.5.0",
   "description": "Local observability dashboard for pi AI usage statistics",
   "type": "module",
   "main": "./src/index.ts",

@@ -1,6 +1,6 @@
 {
 	"name": "@oh-my-pi/pi-utils",
-	"version": "12.4.0",
+	"version": "12.5.0",
 	"description": "Shared utilities for pi packages",
 	"keywords": ["utilities", "cli", "logging", "streams"],
 	"type": "module",

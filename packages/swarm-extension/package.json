@@ -1,6 +1,6 @@
 {
 	"name": "@oh-my-pi/swarm-extension",
-	"version": "12.4.0",
+	"version": "12.5.0",
 	"description": "Swarm orchestration extension for omp",
 	"keywords": ["swarm", "orchestration", "agent", "extension"],
 	"author": "Derek Rynd",

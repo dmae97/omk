@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.5.0] - 2026-02-15
 ### Added
 
 - Added `cursorOverride` and `cursorOverrideWidth` properties to customize the end-of-text cursor glyph with ANSI-styled strings
