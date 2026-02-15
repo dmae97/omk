@@ -1,7 +1,6 @@
 import * as fs from "node:fs/promises";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
-import { copyToClipboard, readImageFromClipboard } from "@oh-my-pi/pi-natives";
-import { sanitizeText } from "@oh-my-pi/pi-natives";
+import { copyToClipboard, readImageFromClipboard, sanitizeText } from "@oh-my-pi/pi-natives";
 import { $env } from "@oh-my-pi/pi-utils";
 import type { SettingPath, SettingValue } from "../../config/settings";
 import { settings } from "../../config/settings";
@@ -113,6 +112,9 @@ export class InputController {
 		}
 		for (const key of this.ctx.keybindings.getKeys("followUp")) {
 			this.ctx.editor.setCustomKeyHandler(key, () => void this.handleFollowUp());
+		}
+		for (const key of this.ctx.keybindings.getKeys("toggleSTT")) {
+			this.ctx.editor.setCustomKeyHandler(key, () => void this.ctx.handleSTTToggle());
 		}
 
 		this.ctx.editor.onChange = (text: string) => {
@@ -350,7 +352,6 @@ export class InputController {
 				void this.ctx.shutdown();
 				return;
 			}
-
 			// Handle MCP server management commands
 			if (text === "/mcp" || text.startsWith("/mcp ")) {
 				this.ctx.editor.addToHistory(text);

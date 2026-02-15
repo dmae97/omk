@@ -30,6 +30,7 @@ import type { AgentSession, AgentSessionEvent } from "../session/agent-session";
 import { HistoryStorage } from "../session/history-storage";
 import type { SessionContext, SessionManager } from "../session/session-manager";
 import { getRecentSessions } from "../session/session-manager";
+import { STTController, type SttState } from "../stt";
 import type { ExitPlanModeDetails } from "../tools";
 import { setTerminalTitle } from "../utils/title-generator";
 import type { AssistantMessageComponent } from "./components/assistant-message";
@@ -152,6 +153,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	readonly #inputController: InputController;
 	readonly #selectorController: SelectorController;
 	readonly #uiHelpers: UiHelpers;
+	#sttController: STTController | undefined;
 
 	constructor(
 		session: AgentSession,
@@ -709,6 +711,10 @@ export class InteractiveMode implements InteractiveModeContext {
 			this.loadingAnimation.stop();
 			this.loadingAnimation = undefined;
 		}
+		if (this.#sttController) {
+			this.#sttController.dispose();
+			this.#sttController = undefined;
+		}
 		this.statusLine.dispose();
 		if (this.unsubscribe) {
 			this.unsubscribe();
@@ -921,6 +927,25 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	handleMemoryCommand(text: string): Promise<void> {
 		return this.#commandController.handleMemoryCommand(text);
+	}
+
+	async handleSTTToggle(): Promise<void> {
+		if (!settings.get("stt.enabled")) {
+			this.showWarning("Speech-to-text is disabled. Enable it in settings: stt.enabled");
+			return;
+		}
+		if (!this.#sttController) {
+			this.#sttController = new STTController();
+		}
+		await this.#sttController.toggle(this.editor, {
+			showWarning: (msg: string) => this.showWarning(msg),
+			showStatus: (msg: string) => this.showStatus(msg),
+			onStateChange: (state: SttState) => {
+				this.statusLine.setSttState(state);
+				this.updateEditorTopBorder();
+				this.ui.requestRender();
+			},
+		});
 	}
 
 	showDebugSelector(): void {

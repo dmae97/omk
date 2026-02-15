@@ -9,7 +9,7 @@ import { $ } from "bun";
 import chalk from "chalk";
 import { theme } from "../modes/theme/theme";
 
-export type SetupComponent = "python";
+export type SetupComponent = "python" | "stt";
 
 export interface SetupCommandArgs {
 	component: SetupComponent;
@@ -19,7 +19,7 @@ export interface SetupCommandArgs {
 	};
 }
 
-const VALID_COMPONENTS: SetupComponent[] = ["python"];
+const VALID_COMPONENTS: SetupComponent[] = ["python", "stt"];
 
 const PYTHON_PACKAGES = ["jupyter_kernel_gateway", "ipykernel"];
 const MANAGED_PYTHON_ENV = getPythonEnvDir();
@@ -206,6 +206,9 @@ export async function runSetupCommand(cmd: SetupCommandArgs): Promise<void> {
 		case "python":
 			await handlePythonSetup(cmd.flags);
 			break;
+		case "stt":
+			await handleSttSetup(cmd.flags);
+			break;
 	}
 }
 
@@ -292,6 +295,60 @@ async function handlePythonSetup(flags: { json?: boolean; check?: boolean }): Pr
 	}
 }
 
+async function handleSttSetup(flags: { json?: boolean; check?: boolean }): Promise<void> {
+	const { checkDependencies, formatDependencyStatus } = await import("../stt/setup");
+	const status = await checkDependencies();
+
+	if (flags.json) {
+		console.log(JSON.stringify(status, null, 2));
+		if (!status.recorder.available || !status.python.available || !status.whisper.available) process.exit(1);
+		return;
+	}
+
+	console.log(formatDependencyStatus(status));
+
+	if (status.recorder.available && status.python.available && status.whisper.available) {
+		console.log(chalk.green(`\n${theme.status.success} Speech-to-text is ready`));
+		return;
+	}
+
+	if (flags.check) {
+		process.exit(1);
+	}
+
+	if (!status.python.available) {
+		console.error(chalk.red(`\n${theme.status.error} Python not found`));
+		console.error(chalk.dim("Install Python 3.8+ and ensure it's in your PATH"));
+		process.exit(1);
+	}
+
+	if (!status.recorder.available) {
+		console.error(chalk.yellow(`\n${theme.status.warning} No recording tool found`));
+		console.error(chalk.dim(status.recorder.installHint));
+	}
+
+	if (!status.whisper.available) {
+		console.log(chalk.dim(`\nInstalling openai-whisper...`));
+		const { resolvePython } = await import("../stt/transcriber");
+		const pythonCmd = resolvePython()!;
+		const result = await $`${pythonCmd} -m pip install -q openai-whisper`.nothrow();
+		if (result.exitCode !== 0) {
+			console.error(chalk.red(`\n${theme.status.error} Failed to install openai-whisper`));
+			console.error(chalk.dim("Try manually: pip install openai-whisper"));
+			process.exit(1);
+		}
+	}
+
+	const recheck = await checkDependencies();
+	if (recheck.recorder.available && recheck.python.available && recheck.whisper.available) {
+		console.log(chalk.green(`\n${theme.status.success} Speech-to-text is ready`));
+	} else {
+		console.error(chalk.red(`\n${theme.status.error} Setup incomplete`));
+		console.log(formatDependencyStatus(recheck));
+		process.exit(1);
+	}
+}
+
 /**
  * Print setup command help.
  */
@@ -303,6 +360,7 @@ ${chalk.bold("Usage:")}
 
 ${chalk.bold("Components:")}
   python    Install Jupyter kernel dependencies for Python code execution
+  stt       Install speech-to-text dependencies (openai-whisper, recording tools)
             Packages: ${PYTHON_PACKAGES.join(", ")}
 
 ${chalk.bold("Options:")}
@@ -311,6 +369,8 @@ ${chalk.bold("Options:")}
 
 ${chalk.bold("Examples:")}
   ${APP_NAME} setup python           Install Python execution dependencies
+  ${APP_NAME} setup stt              Install speech-to-text dependencies
+  ${APP_NAME} setup stt --check      Check if STT dependencies are available
   ${APP_NAME} setup python --check   Check if Python execution is available
 `);
 }
