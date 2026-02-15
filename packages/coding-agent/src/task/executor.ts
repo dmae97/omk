@@ -887,7 +887,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 
 			activeSession = session;
 
-			const subagentToolNames = session.getAllToolNames();
+			const subagentToolNames = session.getActiveToolNames();
 			const parentOwnedToolNames = new Set(["todo_write"]);
 			const filteredSubagentTools = subagentToolNames.filter(name => !parentOwnedToolNames.has(name));
 			if (filteredSubagentTools.length !== subagentToolNames.length) {
@@ -897,7 +897,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			session.sessionManager.appendSessionInit({
 				systemPrompt: session.agent.state.systemPrompt,
 				task,
-				tools: session.getAllToolNames(),
+				tools: session.getActiveToolNames(),
 				outputSchema,
 			});
 
