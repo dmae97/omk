@@ -11,11 +11,23 @@ import { APP_NAME, getLogPath, getLogsDir, getReportsDir } from "@oh-my-pi/pi-ut
 import type { CpuProfile, HeapSnapshot } from "./profiler";
 import { collectSystemInfo, sanitizeEnv } from "./system-info";
 
-/** Read last N lines from a file */
-async function readLastLines(filePath: string, n: number): Promise<string> {
+/** Maximum number of log lines to load into memory at once. */
+const MAX_LOG_LINES = 5000;
+
+/** Maximum bytes to read from the tail of a log file (2 MB). */
+const MAX_LOG_BYTES = 2 * 1024 * 1024;
+/** Read last N lines from a file, reading at most `maxBytes` from the tail. */
+async function readLastLines(filePath: string, n: number, maxBytes = MAX_LOG_BYTES): Promise<string> {
 	try {
-		const content = await Bun.file(filePath).text();
+		const file = Bun.file(filePath);
+		const size = file.size;
+		const start = Math.max(0, size - maxBytes);
+		const content = start > 0 ? await file.slice(start, size).text() : await file.text();
 		const lines = content.split("\n");
+		// If we sliced mid-file, drop the first (partial) line
+		if (start > 0 && lines.length > 0) {
+			lines.shift();
+		}
 		return lines.slice(-n).join("\n");
 	} catch (err) {
 		if (isEnoent(err)) return "";
@@ -215,15 +227,9 @@ async function addSubagentSessions(
 	}
 }
 
-/** Get recent log entries for display */
+/** Get recent log entries for display (tail-limited to avoid OOM on large files). */
 export async function getLogText(): Promise<string> {
-	const logPath = getLogPath();
-	try {
-		return await Bun.file(logPath).text();
-	} catch (err) {
-		if (isEnoent(err)) return "";
-		throw err;
-	}
+	return readLastLines(getLogPath(), MAX_LOG_LINES);
 }
 
 const LOG_FILE_PATTERN = new RegExp(`^${APP_NAME}\\.(\\d{4}-\\d{2}-\\d{2})\\.log$`);
@@ -252,12 +258,7 @@ export async function createDebugLogSource(): Promise<DebugLogSource> {
 	let cursor = 0;
 
 	const getInitialText = async (): Promise<string> => {
-		try {
-			return await Bun.file(todayPath).text();
-		} catch (err) {
-			if (isEnoent(err)) return "";
-			throw err;
-		}
+		return readLastLines(todayPath, MAX_LOG_LINES);
 	};
 
 	const hasOlderLogs = (): boolean => cursor < olderFiles.length;
@@ -273,7 +274,7 @@ export async function createDebugLogSource(): Promise<DebugLogSource> {
 		for (const filename of slice.reverse()) {
 			const filePath = path.join(logsDir, filename);
 			try {
-				const content = await Bun.file(filePath).text();
+				const content = await readLastLines(filePath, MAX_LOG_LINES);
 				if (content.length > 0) {
 					chunks.push(content);
 				}
