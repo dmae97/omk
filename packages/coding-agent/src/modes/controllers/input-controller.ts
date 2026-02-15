@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import { copyToClipboard, readImageFromClipboard } from "@oh-my-pi/pi-natives";
+import { sanitizeText } from "@oh-my-pi/pi-natives";
 import { $env } from "@oh-my-pi/pi-utils";
 import type { SettingPath, SettingValue } from "../../config/settings";
 import { settings } from "../../config/settings";
@@ -674,7 +675,8 @@ export class InputController {
 		}
 		copyToClipboard(text)
 			.then(() => {
-				const preview = text.length > 30 ? `${text.slice(0, 30)}...` : text;
+				const sanitized = sanitizeText(text);
+				const preview = sanitized.length > 30 ? `${sanitized.slice(0, 30)}...` : sanitized;
 				this.ctx.showStatus(`Copied: ${preview}`);
 			})
 			.catch(() => {
