@@ -225,6 +225,20 @@ export function parseAgentFields(frontmatter: Record<string, unknown>): ParsedAg
 	return { name, description, tools, spawns, model, output, thinkingLevel };
 }
 
+async function globIf(
+	dir: string,
+	pattern: string,
+	fileType: FileType,
+	recursive: boolean = true,
+): Promise<Array<{ path: string }>> {
+	try {
+		const result = await glob({ pattern, path: dir, gitignore: true, hidden: false, fileType, recursive });
+		return result.matches;
+	} catch {
+		return [];
+	}
+}
+
 export async function loadSkillsFromDir(
 	_ctx: LoadContext,
 	options: {
@@ -239,18 +253,19 @@ export async function loadSkillsFromDir(
 	const { dir, level, providerId, requireDescription = false } = options;
 	// Use native glob to find all SKILL.md files one level deep
 	// Pattern */SKILL.md matches <dir>/<subdir>/SKILL.md
-	let matches: Array<{ path: string }>;
-	try {
-		const result = await glob({
-			pattern: "*/SKILL.md",
-			path: dir,
-			gitignore: true,
-			hidden: false,
-			fileType: FileType.File,
-		});
-		matches = result.matches;
-	} catch {
-		// Directory doesn't exist or isn't readable
+	const discoveredMatches = new Set<string>();
+	for (const match of await globIf(dir, "*/SKILL.md", FileType.File)) {
+		discoveredMatches.add(match.path);
+	}
+	for (const match of await globIf(dir, "*", FileType.Dir, false)) {
+		const skillRelPath = `${match.path}/SKILL.md`;
+		const content = await readFile(path.join(dir, skillRelPath));
+		if (content !== null) {
+			discoveredMatches.add(skillRelPath);
+		}
+	}
+	const matches = [...discoveredMatches].map(path => ({ path }));
+	if (matches.length === 0) {
 		return { items, warnings };
 	}
 
@@ -456,48 +471,55 @@ async function readExtensionModuleManifest(
  * Uses native glob for fast filesystem scanning with gitignore support.
  */
 export async function discoverExtensionModulePaths(_ctx: LoadContext, dir: string): Promise<string[]> {
-	const discovered: string[] = [];
+	const discovered = new Set<string>();
 	// Find all candidate files in parallel using glob
 	const [directFiles, indexFiles, packageJsonFiles] = await Promise.all([
 		// 1. Direct *.ts or *.js files
-		glob({ pattern: "*.{ts,js}", path: dir, gitignore: true, hidden: false, fileType: FileType.File }),
+		globIf(dir, "*.{ts,js}", FileType.File, false),
 		// 2. Subdirectory index files
-		glob({ pattern: "*/index.{ts,js}", path: dir, gitignore: true, hidden: false, fileType: FileType.File }),
+		globIf(dir, "*/index.{ts,js}", FileType.File),
 		// 3. Subdirectory package.json files
-		glob({ pattern: "*/package.json", path: dir, gitignore: true, hidden: false, fileType: FileType.File }),
+		globIf(dir, "*/package.json", FileType.File),
 	]);
 
 	// Process direct files
-	for (const match of directFiles.matches) {
-		discovered.push(path.join(dir, match.path));
+	for (const match of directFiles) {
+		if (match.path.includes("/")) continue;
+		discovered.add(path.join(dir, match.path));
 	}
-
-	// Track which subdirectories have package.json
-	const subdirsWithPackageJson = new Set<string>();
-	for (const match of packageJsonFiles.matches) {
+	// Track which subdirectories have package.json manifests with declared extensions
+	const subdirsWithDeclaredExtensions = new Set<string>();
+	for (const match of packageJsonFiles) {
 		const subdir = path.dirname(match.path); // e.g., "my-extension"
-		subdirsWithPackageJson.add(subdir);
 		const packageJsonPath = path.join(dir, match.path);
 		const manifest = await readExtensionModuleManifest(_ctx, packageJsonPath);
-		if (manifest?.extensions && Array.isArray(manifest.extensions)) {
-			const subdirPath = path.join(dir, subdir);
-			for (const extPath of manifest.extensions) {
-				const resolvedExtPath = path.resolve(subdirPath, extPath);
-				const content = await readFile(resolvedExtPath);
-				if (content !== null) {
-					discovered.push(resolvedExtPath);
-				}
+		const declaredExtensions =
+			manifest?.extensions?.filter((extPath): extPath is string => typeof extPath === "string") ?? [];
+		if (declaredExtensions.length === 0) continue;
+		subdirsWithDeclaredExtensions.add(subdir);
+		const subdirPath = path.join(dir, subdir);
+		for (const extPath of declaredExtensions) {
+			const resolvedExtPath = path.resolve(subdirPath, extPath);
+			const content = await readFile(resolvedExtPath);
+			if (content !== null) {
+				discovered.add(resolvedExtPath);
 			}
 		}
 	}
-
-	// Process index files (skip if subdirectory has package.json)
-	for (const match of indexFiles.matches) {
+	const preferredIndexBySubdir = new Map<string, string>();
+	for (const match of indexFiles) {
+		if (match.path.split("/").length !== 2) continue;
 		const subdir = path.dirname(match.path);
-		if (subdirsWithPackageJson.has(subdir)) continue; // package.json takes precedence
-		discovered.push(path.join(dir, match.path));
+		if (subdirsWithDeclaredExtensions.has(subdir)) continue;
+		const existing = preferredIndexBySubdir.get(subdir);
+		if (!existing || (existing.endsWith("index.js") && match.path.endsWith("index.ts"))) {
+			preferredIndexBySubdir.set(subdir, match.path);
+		}
 	}
-	return discovered;
+	for (const preferredPath of preferredIndexBySubdir.values()) {
+		discovered.add(path.join(dir, preferredPath));
+	}
+	return [...discovered];
 }
 
 /**

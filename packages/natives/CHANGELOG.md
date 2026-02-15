@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `recursive` option to `GlobOptions` to control whether simple patterns match recursively (defaults to true)
+
+### Changed
+
+- Changed default glob pattern behavior to always use recursive matching for simple patterns instead of requiring explicit `**/` prefix
+- Updated `fileType` filter documentation to clarify that symlinks match file/dir filters based on their target type
 
 ## [12.4.0] - 2026-02-14
 ### Added

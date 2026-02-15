@@ -16,10 +16,6 @@ export { FileType } from "./types";
 export async function glob(options: GlobOptions, onMatch?: (match: GlobMatch) => void): Promise<GlobResult> {
 	const searchPath = path.resolve(options.path);
 	const pattern = options.pattern || "*";
-
-	// Convert simple patterns to recursive globs if needed
-	const globPattern = pattern.includes("/") || pattern.startsWith("**") ? pattern : `**/${pattern}`;
-
 	// napi-rs ThreadsafeFunction passes (error, value) - skip callback on error
 	const cb = onMatch ? (err: Error | null, m: GlobMatch) => !err && onMatch(m) : undefined;
 
@@ -27,9 +23,10 @@ export async function glob(options: GlobOptions, onMatch?: (match: GlobMatch) =>
 		{
 			...options,
 			path: searchPath,
-			pattern: globPattern,
+			pattern,
 			hidden: options.hidden ?? false,
 			gitignore: options.gitignore ?? true,
+			recursive: options.recursive ?? true,
 		},
 		cb,
 	);

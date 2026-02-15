@@ -12,6 +12,33 @@ import {
 } from "./aggregator";
 import { EMBEDDED_CLIENT_ARCHIVE_TAR_GZ_BASE64 } from "./embedded-client.generated";
 
+/**
+ * Extract Tailwind class names from source files by scanning for className attributes.
+ */
+async function extractTailwindClasses(dir: string): Promise<Set<string>> {
+	const classes = new Set<string>();
+	const classPattern = /className\s*=\s*["'`]([^"'`]+)["'`]/g;
+	async function scanDir(currentDir: string): Promise<void> {
+		const entries = await fs.readdir(currentDir, { withFileTypes: true });
+		for (const entry of entries) {
+			const fullPath = path.join(currentDir, entry.name);
+			if (entry.isDirectory()) {
+				await scanDir(fullPath);
+			} else if (entry.isFile() && /\.(tsx|ts|jsx|js)$/.test(entry.name)) {
+				const content = await Bun.file(fullPath).text();
+				const matches = content.matchAll(classPattern);
+				for (const match of matches) {
+					for (const cls of match[1].split(/\s+/)) {
+						if (cls) classes.add(cls);
+					}
+				}
+			}
+		}
+	}
+	await scanDir(dir);
+	return classes;
+}
+
 const CLIENT_DIR = path.join(import.meta.dir, "client");
 const STATIC_DIR = path.join(import.meta.dir, "..", "dist", "client");
 const IS_BUN_COMPILED =
@@ -74,10 +101,28 @@ async function getCompiledClientDir(): Promise<string> {
 
 async function buildTailwindCss(inputPath: string, outputPath: string): Promise<void> {
 	const sourceCss = await Bun.file(inputPath).text();
+	const clientDir = path.dirname(inputPath);
+	const candidates = await extractTailwindClasses(clientDir);
 	const compiler = await compile(sourceCss, {
-		base: path.dirname(inputPath),
+		base: clientDir,
+		loadStylesheet: async (id: string, base: string) => {
+			if (id === "tailwindcss/index.css" || id === "tailwindcss") {
+				const tailwindPath = require.resolve("tailwindcss/index.css", { paths: [base] });
+				return {
+					path: tailwindPath,
+					base: path.dirname(tailwindPath),
+					content: await Bun.file(tailwindPath).text(),
+				};
+			}
+			const resolved = path.resolve(base, id);
+			return {
+				path: resolved,
+				base: path.dirname(resolved),
+				content: await Bun.file(resolved).text(),
+			};
+		},
 	});
-	const result = compiler.build([]);
+	const result = compiler.build([...candidates]);
 	await Bun.write(outputPath, result);
 }
 

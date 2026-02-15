@@ -1,7 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
+@import "tailwindcss/index.css";
 :root {
   --bg-page: #0a0a0f;
   --bg-surface: #111118;

@@ -19,8 +19,10 @@ export interface GlobOptions extends Cancellable {
 	pattern: string;
 	/** Directory to search. */
 	path: string;
-	/** Filter by file type: "file", "dir", or "symlink". */
+	/** Filter by file type: "file", "dir", or "symlink". Symlinks match file/dir filters when their target type matches. */
 	fileType?: FileType;
+	/** Match simple patterns recursively by default (example: *.ts -> recursive match). Set false to keep patterns relative to the search root only. */
+	recursive?: boolean;
 	/** Include hidden files (default: false). */
 	hidden?: boolean;
 	/** Maximum number of results to return. */
@@ -39,7 +41,7 @@ export interface GlobOptions extends Cancellable {
 export interface GlobMatch {
 	/** Relative path from the search root. */
 	path: string;
-	/** Resolved filesystem type for the match. */
+	/** Resolved filesystem type for the match (for fileType=file/dir filters, symlink targets are reported as file/dir). */
 	fileType: FileType;
 	/** Modification time in milliseconds since epoch, if available. */
 	mtime?: number;
