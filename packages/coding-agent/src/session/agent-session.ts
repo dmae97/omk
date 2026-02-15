@@ -340,6 +340,7 @@ export class AgentSession {
 	#streamingEditCheckedLineCounts = new Map<string, number>();
 	#streamingEditFileCache = new Map<string, string>();
 	#promptInFlight = false;
+	#promptGeneration = 0;
 	#providerSessionState = new Map<string, ProviderSessionState>();
 
 	constructor(config: AgentSessionConfig) {
@@ -1342,6 +1343,7 @@ export class AgentSession {
 		options?: Pick<PromptOptions, "toolChoice" | "images">,
 	): Promise<void> {
 		this.#promptInFlight = true;
+		const generation = this.#promptGeneration;
 		try {
 			// Flush any pending bash messages before the new prompt
 			this.#flushPendingBashMessages();
@@ -1387,6 +1389,12 @@ export class AgentSession {
 
 			messages.push(message);
 
+			// Early bail-out: if a newer abort/prompt cycle started during setup,
+			// return before mutating shared state (nextTurn messages, system prompt).
+			if (this.#promptGeneration !== generation) {
+				return;
+			}
+
 			// Inject any pending "nextTurn" messages as context alongside the user message
 			for (const msg of this.#pendingNextTurnMessages) {
 				messages.push(msg);
@@ -1428,6 +1436,11 @@ export class AgentSession {
 				} else {
 					this.agent.setSystemPrompt(this.#baseSystemPrompt);
 				}
+			}
+
+			// Bail out if a newer abort/prompt cycle has started since we began setup
+			if (this.#promptGeneration !== generation) {
+				return;
 			}
 
 			const agentPromptOptions = options?.toolChoice ? { toolChoice: options.toolChoice } : undefined;
@@ -1797,8 +1810,14 @@ export class AgentSession {
 	 */
 	async abort(): Promise<void> {
 		this.abortRetry();
+		this.#promptGeneration++;
 		this.agent.abort();
 		await this.agent.waitForIdle();
+		// Clear promptInFlight: waitForIdle resolves when the agent loop's finally
+		// block runs (#resolveRunningPrompt), but #promptWithMessage's finally
+		// (#promptInFlight = false) fires on a later microtask. Without this,
+		// isStreaming stays true and a subsequent prompt() throws.
+		this.#promptInFlight = false;
 	}
 
 	/**
