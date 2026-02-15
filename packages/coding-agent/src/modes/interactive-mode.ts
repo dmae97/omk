@@ -20,7 +20,6 @@ import { APP_NAME, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
 import { KeybindingsManager } from "../config/keybindings";
 import { renderPromptTemplate } from "../config/prompt-templates";
-import type { SettingPath, SettingValue } from "../config/settings";
 import { type Settings, settings } from "../config/settings";
 import type { ExtensionUIContext, ExtensionUIDialogOptions } from "../extensibility/extensions";
 import type { CompactOptions } from "../extensibility/extensions/types";
@@ -952,12 +951,12 @@ export class InteractiveMode implements InteractiveModeContext {
 	async handleSTTCommand(text: string): Promise<void> {
 		const args = text.slice(4).trim().toLowerCase();
 		if (args === "on") {
-			settings.set("stt.enabled" as SettingPath, true as SettingValue<SettingPath>);
+			settings.set("stt.enabled", true);
 			this.showStatus("Speech-to-text enabled. Press Alt+H to start recording.");
 			return;
 		}
 		if (args === "off") {
-			settings.set("stt.enabled" as SettingPath, false as SettingValue<SettingPath>);
+			settings.set("stt.enabled", false);
 			if (this.#sttController) {
 				this.#sttController.dispose();
 				this.#sttController = undefined;

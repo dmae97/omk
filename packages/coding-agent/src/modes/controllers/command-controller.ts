@@ -395,7 +395,7 @@ export class CommandController {
 | \`${expandToolsKey}\` | Toggle tool output expansion |
 | \`Ctrl+T\` | Toggle todo list expansion |
 | \`Ctrl+G\` | Edit message in external editor |
-|| \`${sttKey}\` | Toggle speech-to-text recording |
+| \`${sttKey}\` | Toggle speech-to-text recording |
 | \`/\` | Slash commands |
 | \`!\` | Run bash command |
 | \`!!\` | Run bash command (excluded from context) |

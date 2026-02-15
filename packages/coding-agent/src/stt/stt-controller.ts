@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { logger } from "@oh-my-pi/pi-utils";
+import { logger, Snowflake } from "@oh-my-pi/pi-utils";
 import { settings } from "../config/settings";
 import { ensureSTTDependencies } from "./downloader";
 import { type RecordingHandle, startRecording, verifyRecordingFile } from "./recorder";
@@ -73,8 +73,8 @@ export class STTController {
 				return;
 			}
 		}
-		const random = Math.random().toString(36).slice(2, 10);
-		this.#tempFile = path.join(os.tmpdir(), `omp-stt-${random}.wav`);
+		const id = Snowflake.next();
+		this.#tempFile = path.join(os.tmpdir(), `omp-stt-${id}.wav`);
 
 		try {
 			this.#recordingHandle = await startRecording(this.#tempFile);
@@ -114,8 +114,12 @@ export class STTController {
 			const text = await transcribe(tempFile, { ...sttSettings, signal: this.#transcriptionAbort.signal });
 			this.#transcriptionAbort = null;
 			if (this.#disposed) return;
-			if (text) {
+			if (text.length > 0) {
 				editor.insertText(text);
+			} else {
+				const msg = "Transcription completed, but no speech was detected.";
+				options.showStatus(msg);
+				logger.debug(msg);
 			}
 			if (!this.#disposed) this.#setState("idle", options);
 		} catch (err) {

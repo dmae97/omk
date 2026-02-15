@@ -801,26 +801,6 @@ export const SETTINGS_SCHEMA = {
 			submenu: true,
 		},
 	},
-	"stt.whisperPath": {
-		type: "string",
-		default: undefined,
-		ui: {
-			tab: "input",
-			label: "Whisper binary path",
-			description: "Path to whisper.cpp binary (auto-detected if not set)",
-			submenu: true,
-		},
-	},
-	"stt.modelPath": {
-		type: "string",
-		default: undefined,
-		ui: {
-			tab: "input",
-			label: "Whisper model path",
-			description: "Path to GGML model file (auto-detected if not set)",
-			submenu: true,
-		},
-	},
 
 	// ─────────────────────────────────────────────────────────────────────────
 	// Edit settings

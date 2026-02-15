@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { logger } from "@oh-my-pi/pi-utils";
+import { logger, Snowflake } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
 
 export interface RecordingHandle {
@@ -77,6 +77,22 @@ async function startFFmpegRecording(outputPath: string): Promise<RecordingHandle
 			"-y",
 			outputPath,
 		];
+	} else if (process.platform === "darwin") {
+		args = [
+			"ffmpeg",
+			"-f",
+			"avfoundation",
+			"-i",
+			":0",
+			"-ar",
+			"16000",
+			"-ac",
+			"1",
+			"-sample_fmt",
+			"s16",
+			"-y",
+			outputPath,
+		];
 	} else {
 		args = [
 			"ffmpeg",
@@ -136,6 +152,12 @@ async function startArecordRecording(outputPath: string): Promise<RecordingHandl
 const PS_RECORD_SCRIPT = `
 param([string]$outPath)
 
+if ($outPath -match '["\r\n]') {
+    [Console]::Error.WriteLine("Invalid output path: $outPath")
+    exit 1
+}
+
+
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
@@ -192,13 +214,17 @@ if (Test-Path $outPath) {
 
 async function startPowerShellRecording(outputPath: string): Promise<RecordingHandle> {
 	// Write script to temp file — avoids quoting/escaping issues with -Command
-	const scriptPath = path.join(os.tmpdir(), `omp-stt-record-${Date.now()}.ps1`);
+	const scriptPath = path.join(os.tmpdir(), `omp-stt-record-${Snowflake.next()}.ps1`);
 	await Bun.write(scriptPath, PS_RECORD_SCRIPT);
 
 	const proc = Bun.spawn(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath, outputPath], {
 		stdin: "pipe",
 		stdout: "pipe",
 		stderr: "ignore",
+	});
+
+	proc.exited.then(() => {
+		fs.unlink(scriptPath).catch(() => {});
 	});
 
 	// Wait for "RECORDING" on stdout to confirm it started

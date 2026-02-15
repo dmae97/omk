@@ -54,8 +54,11 @@ export async function transcribe(audioPath: string, options?: TranscribeOptions)
 	const onAbort = () => proc.kill();
 	options?.signal?.addEventListener("abort", onAbort, { once: true });
 
+	let timedOut = false;
+
 	const killTimer = setTimeout(() => {
-		logger.error("Python whisper transcription timed out, killing process");
+		timedOut = true;
+		logger.error("Python whisper transcription timed out, killing process", { timeoutMs: TRANSCRIBE_TIMEOUT_MS });
 		proc.kill();
 	}, TRANSCRIBE_TIMEOUT_MS);
 
@@ -67,6 +70,10 @@ export async function transcribe(audioPath: string, options?: TranscribeOptions)
 
 	const stdout = await new Response(proc.stdout).text();
 	const stderr = await new Response(proc.stderr).text();
+
+	if (timedOut) {
+		throw new Error(`Transcription timed out after ${Math.round(TRANSCRIBE_TIMEOUT_MS / 1000)}s`);
+	}
 
 	if (exitCode !== 0) {
 		logger.error("Python whisper transcription failed", { exitCode, stderr: stderr.trim() });
