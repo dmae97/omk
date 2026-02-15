@@ -548,6 +548,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	time("settings");
 	initializeWithSettings(settings);
 	time("initializeWithSettings");
+	const skillsSettings = settings.getGroup("skills") as SkillsSettings;
+	const discoveredSkillsPromise =
+		options.skills === undefined ? discoverSkills(cwd, agentDir, skillsSettings) : undefined;
 
 	// Initialize provider preferences from settings
 	setPreferredSearchProvider(settings.get("providers.webSearch") ?? "auto");
@@ -556,6 +559,20 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const sessionManager = options.sessionManager ?? SessionManager.create(cwd);
 	time("sessionManager");
 	const sessionId = sessionManager.getSessionId();
+	const modelApiKeyAvailability = new Map<string, boolean>();
+	const getModelAvailabilityKey = (candidate: Model): string =>
+		`${candidate.provider}\u0000${candidate.baseUrl ?? ""}`;
+	const hasModelApiKey = async (candidate: Model): Promise<boolean> => {
+		const availabilityKey = getModelAvailabilityKey(candidate);
+		const cached = modelApiKeyAvailability.get(availabilityKey);
+		if (cached !== undefined) {
+			return cached;
+		}
+
+		const hasKey = !!(await modelRegistry.getApiKey(candidate, sessionId));
+		modelApiKeyAvailability.set(availabilityKey, hasKey);
+		return hasKey;
+	};
 
 	// Check if session has existing data to restore
 	const existingSession = sessionManager.buildSessionContext();
@@ -573,7 +590,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		const parsedModel = parseModelString(defaultModelStr);
 		if (parsedModel) {
 			const restoredModel = modelRegistry.find(parsedModel.provider, parsedModel.id);
-			if (restoredModel && (await modelRegistry.getApiKey(restoredModel, sessionId))) {
+			if (restoredModel && (await hasModelApiKey(restoredModel))) {
 				model = restoredModel;
 			}
 		}
@@ -589,7 +606,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			const parsedModel = parseModelString(settingsDefaultModel);
 			if (parsedModel) {
 				const settingsModel = modelRegistry.find(parsedModel.provider, parsedModel.id);
-				if (settingsModel && (await modelRegistry.getApiKey(settingsModel, sessionId))) {
+				if (settingsModel && (await hasModelApiKey(settingsModel))) {
 					model = settingsModel;
 				}
 			}
@@ -599,10 +616,12 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// Fall back to first available model with a valid API key
 	if (!model) {
 		const allModels = modelRegistry.getAll();
-		const keyResults = await Promise.all(
-			allModels.map(async m => ({ model: m, hasKey: !!(await modelRegistry.getApiKey(m, sessionId)) })),
-		);
-		model = keyResults.find(r => r.hasKey)?.model;
+		for (const candidate of allModels) {
+			if (await hasModelApiKey(candidate)) {
+				model = candidate;
+				break;
+			}
+		}
 		time("findAvailableModel");
 		if (model) {
 			if (modelFallbackMessage) {
@@ -658,8 +677,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		skills = options.skills;
 		skillWarnings = [];
 	} else {
-		const skillsSettings = settings.getGroup("skills") as SkillsSettings;
-		const discovered = await discoverSkills(cwd, agentDir, skillsSettings);
+		const discovered = discoveredSkillsPromise ? await discoveredSkillsPromise : { skills: [], warnings: [] };
 		time("discoverSkills");
 		skills = discovered.skills;
 		skillWarnings = discovered.warnings;
