@@ -20,6 +20,7 @@ import { UserMessageSelectorComponent } from "../../modes/components/user-messag
 import {
 	getAvailableThemes,
 	getSymbolTheme,
+	previewTheme,
 	setColorBlindMode,
 	setSymbolPreset,
 	setTheme,
@@ -71,13 +72,14 @@ export class SelectorController {
 					},
 					{
 						onChange: (id, value) => this.handleSettingChange(id, value),
-						onThemePreview: themeName => {
-							setTheme(themeName, true).then(result => {
-								if (result.success) {
-									this.ctx.ui.invalidate();
-									this.ctx.ui.requestRender();
-								}
-							});
+						onThemePreview: async themeName => {
+							const result = await previewTheme(themeName);
+							if (result.success) {
+								this.ctx.statusLine.invalidate();
+								this.ctx.updateEditorTopBorder();
+								this.ctx.ui.invalidate();
+								this.ctx.ui.requestRender();
+							}
 						},
 						onStatusLinePreview: previewSettings => {
 							// Update status line with preview settings

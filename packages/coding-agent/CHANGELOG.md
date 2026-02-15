@@ -1,13 +1,13 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Replaced `theme` setting with `theme.dark` and `theme.light` (auto-migrated)
 
 ### Added
 
+- Added `previewTheme()` function for non-destructive theme preview during settings browsing
 - Added animated microphone icon with color cycling during voice recording
 - Added support for discovering skills via symbolic links in skill directories
 - Added `abort_and_prompt` RPC command for atomic abort-and-reprompt without race conditions ([#357](https://github.com/can1357/oh-my-pi/pull/357))
@@ -29,6 +29,8 @@
 
 ### Changed
 
+- Changed theme preview to support asynchronous theme loading with request deduplication to prevent race conditions
+- Enhanced theme preview cancellation to restore the previously active theme instead of the last selected value
 - Refactored file discovery to use native glob with gitignore support instead of manual directory traversal, improving performance and consistency
 - Updated dependencies: glob to ^13.0.3, marked to ^17.0.2, puppeteer to ^24.37.3
 - Optimized skill and file discovery using native glob (Rust ignore crate) — reduces startup time by ~80% (1254ms → 6ms for skills)
@@ -43,6 +45,7 @@
 
 ### Fixed
 
+- Fixed theme preview updates being applied out-of-order when rapidly browsing theme options
 - Fixed skill discovery to correctly extract skill names from directory paths when frontmatter name is missing
 - Fixed `session.abort()` not clearing `promptInFlight` flag due to microtask ordering, which blocked subsequent prompts
 - Sanitized debug log display to strip control codes, normalize tabs, and trim width

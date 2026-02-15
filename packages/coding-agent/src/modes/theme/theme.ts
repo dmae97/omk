@@ -1656,6 +1656,7 @@ var autoDetectedTheme: boolean = false;
 var autoDarkTheme: string = "dark";
 var autoLightTheme: string = "light";
 var onThemeChangeCallback: (() => void) | undefined;
+var themeLoadRequestId: number = 0;
 
 function getCurrentThemeOptions(): CreateThemeOptions {
 	return {
@@ -1698,8 +1699,13 @@ export async function setTheme(
 ): Promise<{ success: boolean; error?: string }> {
 	autoDetectedTheme = false;
 	currentThemeName = name;
+	const requestId = ++themeLoadRequestId;
 	try {
-		theme = await loadTheme(name, getCurrentThemeOptions());
+		const loadedTheme = await loadTheme(name, getCurrentThemeOptions());
+		if (requestId !== themeLoadRequestId) {
+			return { success: false, error: "Theme change superseded by a newer request" };
+		}
+		theme = loadedTheme;
 		if (enableWatcher) {
 			await startThemeWatcher();
 		}
@@ -1708,10 +1714,36 @@ export async function setTheme(
 		}
 		return { success: true };
 	} catch (error) {
+		if (requestId !== themeLoadRequestId) {
+			return { success: false, error: "Theme change superseded by a newer request" };
+		}
 		// Theme is invalid - fall back to dark theme
 		currentThemeName = "dark";
 		theme = await loadTheme("dark", getCurrentThemeOptions());
 		// Don't start watcher for fallback theme
+		return {
+			success: false,
+			error: error instanceof Error ? error.message : String(error),
+		};
+	}
+}
+
+export async function previewTheme(name: string): Promise<{ success: boolean; error?: string }> {
+	const requestId = ++themeLoadRequestId;
+	try {
+		const loadedTheme = await loadTheme(name, getCurrentThemeOptions());
+		if (requestId !== themeLoadRequestId) {
+			return { success: false, error: "Theme preview superseded by a newer request" };
+		}
+		theme = loadedTheme;
+		if (onThemeChangeCallback) {
+			onThemeChangeCallback();
+		}
+		return { success: true };
+	} catch (error) {
+		if (requestId !== themeLoadRequestId) {
+			return { success: false, error: "Theme preview superseded by a newer request" };
+		}
 		return {
 			success: false,
 			error: error instanceof Error ? error.message : String(error),

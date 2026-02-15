@@ -20,7 +20,7 @@ import type {
 	StatusLineSeparatorStyle,
 } from "../../config/settings-schema";
 import { SETTING_TABS, TAB_METADATA } from "../../config/settings-schema";
-import { getSelectListTheme, getSettingsListTheme, theme } from "../../modes/theme/theme";
+import { getCurrentThemeName, getSelectListTheme, getSettingsListTheme, theme } from "../../modes/theme/theme";
 import { DynamicBorder } from "./dynamic-border";
 import { PluginSettingsComponent } from "./plugin-settings";
 import { getSettingsForTab, type SettingDef } from "./settings-defs";
@@ -41,6 +41,7 @@ function getTabBarTheme(): TabBarTheme {
 class SelectSubmenu extends Container {
 	#selectList: SelectList;
 	#previewText: Text | null = null;
+	#previewUpdateRequestId: number = 0;
 
 	constructor(
 		title: string,
@@ -49,7 +50,7 @@ class SelectSubmenu extends Container {
 		currentValue: string,
 		onSelect: (value: string) => void,
 		onCancel: () => void,
-		onSelectionChange?: (value: string) => void,
+		onSelectionChange?: (value: string) => void | Promise<void>,
 		private readonly getPreview?: () => string,
 	) {
 		super();
@@ -91,9 +92,19 @@ class SelectSubmenu extends Container {
 
 		if (onSelectionChange) {
 			this.#selectList.onSelectionChange = item => {
-				onSelectionChange(item.value);
-				// Update preview after the preview callback has applied changes
-				this.#updatePreview();
+				const requestId = ++this.#previewUpdateRequestId;
+				const result = onSelectionChange(item.value);
+				if (result && typeof (result as Promise<void>).then === "function") {
+					void (result as Promise<void>).finally(() => {
+						if (requestId === this.#previewUpdateRequestId) {
+							this.#updatePreview();
+						}
+					});
+					return;
+				}
+				if (requestId === this.#previewUpdateRequestId) {
+					this.#updatePreview();
+				}
 			};
 		}
 
@@ -153,7 +164,7 @@ export interface SettingsCallbacks {
 	/** Called when any setting value changes */
 	onChange: (path: SettingPath, newValue: unknown) => void;
 	/** Called for theme preview while browsing */
-	onThemePreview?: (theme: string) => void;
+	onThemePreview?: (theme: string) => void | Promise<void>;
 	/** Called for status line preview while configuring */
 	onStatusLinePreview?: (settings: StatusLinePreviewSettings) => void;
 	/** Get current rendered status line for inline preview */
@@ -304,15 +315,16 @@ export class SettingsSelectorComponent extends Container {
 		}
 
 		// Preview handlers
-		let onPreview: ((value: string) => void) | undefined;
+		let onPreview: ((value: string) => void | Promise<void>) | undefined;
 		let onPreviewCancel: (() => void) | undefined;
 
+		const activeThemeBeforePreview = getCurrentThemeName() ?? currentValue;
 		if (def.path === "theme.dark" || def.path === "theme.light") {
 			onPreview = value => {
-				this.callbacks.onThemePreview?.(value);
+				return this.callbacks.onThemePreview?.(value);
 			};
 			onPreviewCancel = () => {
-				this.callbacks.onThemePreview?.(currentValue);
+				this.callbacks.onThemePreview?.(activeThemeBeforePreview);
 			};
 		} else if (def.path === "statusLine.preset") {
 			onPreview = value => {
