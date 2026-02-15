@@ -615,6 +615,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		}
 	}
 
+	time("findModel");
+
 	// For subagent sessions using GitHub Copilot, add X-Initiator header
 	// to ensure proper billing (agent-initiated vs user-initiated)
 	const taskDepth = options.taskDepth ?? 0;
@@ -658,10 +660,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	} else {
 		const skillsSettings = settings.getGroup("skills") as SkillsSettings;
 		const discovered = await discoverSkills(cwd, agentDir, skillsSettings);
+		time("discoverSkills");
 		skills = discovered.skills;
 		skillWarnings = discovered.warnings;
 	}
-	time("discoverSkills");
+
 	debugStartup("sdk:discoverSkills");
 
 	// Discover rules

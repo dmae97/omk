@@ -54,7 +54,7 @@
 		"@oh-my-pi/pi-utils": "workspace:*",
 		"@types/mime-types": "^3.0.1",
 		"chalk": "^5.6.2",
-		"marked": "^17.0.1",
+		"marked": "^17.0.2",
 		"mime-types": "^3.0.2"
 	},
 	"devDependencies": {

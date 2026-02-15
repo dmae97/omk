@@ -1,8 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import postcss from "postcss";
-import tailwindcss from "tailwindcss";
+import { compile } from "tailwindcss";
 import {
 	getDashboardStats,
 	getRecentErrors,
@@ -75,13 +74,11 @@ async function getCompiledClientDir(): Promise<string> {
 
 async function buildTailwindCss(inputPath: string, outputPath: string): Promise<void> {
 	const sourceCss = await Bun.file(inputPath).text();
-	const result = await postcss([
-		tailwindcss({ config: path.join(import.meta.dir, "..", "tailwind.config.js") }),
-	]).process(sourceCss, {
-		from: inputPath,
-		to: outputPath,
+	const compiler = await compile(sourceCss, {
+		base: path.dirname(inputPath),
 	});
-	await Bun.write(outputPath, result.css);
+	const result = compiler.build([]);
+	await Bun.write(outputPath, result);
 }
 
 async function getLatestMtime(dir: string): Promise<number> {

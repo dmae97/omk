@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Replaced `theme` setting with `theme.dark` and `theme.light` (auto-migrated)
@@ -28,7 +29,9 @@
 
 ### Changed
 
-- Improved skill discovery to use native glob for better performance and symlink support
+- Refactored file discovery to use native glob with gitignore support instead of manual directory traversal, improving performance and consistency
+- Updated dependencies: glob to ^13.0.3, marked to ^17.0.2, puppeteer to ^24.37.3
+- Optimized skill and file discovery using native glob (Rust ignore crate) — reduces startup time by ~80% (1254ms → 6ms for skills)
 - Enhanced hashline reference parsing to handle prefixes like `>>>` and `>>` in line references
 - Strengthened type safety in hashline edit formatting with defensive null checks for incomplete edits
 - Changed STT status messages to display via state change callbacks instead of explicit status calls
