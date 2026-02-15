@@ -341,6 +341,7 @@ type CustomToolSessionEvent =
 ```
 
 **Reasons:**
+- `start`: Initial session load (fresh start or resuming an existing session) - use to reconstruct state from session entries
 - `switch`: User started a new session (`/new`) or switched to a different session (`/resume`)
 - `branch`: User branched from a previous message (`/branch`)
 - `tree`: User navigated to a different point in the session tree (`/tree`)
