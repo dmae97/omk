@@ -809,22 +809,54 @@ export class DebugLogViewerComponent implements Component {
 		return lines;
 	}
 
+	/** Returns the number of rendered screen lines for a given row index. */
+	#getRowRenderedLineCount(rowIndex: number, innerWidth: number): number {
+		const row = this.#model.rows[rowIndex];
+		if (!row || row.kind === "warning" || row.kind === "load-older") {
+			return 1;
+		}
+
+		if (!this.#model.isExpanded(row.logIndex)) {
+			return 1;
+		}
+
+		// Expanded row: compute prefix visible width and get wrapped line count
+		// Prefix is marker(1) + fold(1) + space(1) = 3 visible chars
+		const prefixVisibleWidth = 3;
+		const contentWidth = Math.max(1, innerWidth - prefixVisibleWidth);
+		const wrapped = formatDebugLogExpandedLines(this.#model.getRawLine(row.logIndex), contentWidth);
+		return Math.max(1, wrapped.length);
+	}
+
 	#ensureCursorVisible(): void {
 		const cursorRowIndex = this.#model.cursorRowIndex;
 		if (cursorRowIndex === undefined) {
 			this.#scrollRowOffset = 0;
 			return;
 		}
+		const bodyHeight = Math.max(1, this.#bodyHeight());
+		const innerWidth = Math.max(1, this.#lastRenderWidth - 2);
 
-		const maxVisibleRows = Math.max(1, this.#bodyHeight());
+		// Scroll up: cursor is above viewport
 		if (cursorRowIndex < this.#scrollRowOffset) {
 			this.#scrollRowOffset = cursorRowIndex;
 			return;
 		}
-
-		const maxIndex = this.#scrollRowOffset + maxVisibleRows - 1;
-		if (cursorRowIndex > maxIndex) {
-			this.#scrollRowOffset = cursorRowIndex - maxVisibleRows + 1;
+		// Scroll down: sum rendered line heights from scrollRowOffset to cursorRowIndex (inclusive)
+		// to check if the cursor row actually fits in the viewport
+		let usedLines = 0;
+		for (let i = this.#scrollRowOffset; i <= cursorRowIndex; i++) {
+			usedLines += this.#getRowRenderedLineCount(i, innerWidth);
+		}
+		if (usedLines > bodyHeight) {
+			// Advance scrollRowOffset until the cursor row fits
+			while (this.#scrollRowOffset < cursorRowIndex) {
+				usedLines -= this.#getRowRenderedLineCount(this.#scrollRowOffset, innerWidth);
+				this.#scrollRowOffset++;
+				if (usedLines <= bodyHeight) {
+					break;
+				}
+			}
 		}
 	}
 
