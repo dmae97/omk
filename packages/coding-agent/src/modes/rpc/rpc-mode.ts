@@ -451,7 +451,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 
 			case "abort_and_prompt": {
 				await session.abort();
-				session.prompt(command.message).catch(e => output(error(id, "abort_and_prompt", e.message)));
+				session.prompt(command.message, { images: command.images }).catch(e => output(error(id, "abort_and_prompt", e.message)));
 				return success(id, "abort_and_prompt");
 			}
 

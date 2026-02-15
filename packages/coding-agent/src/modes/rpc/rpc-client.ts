@@ -210,8 +210,8 @@ export class RpcClient {
 	/**
 	 * Abort current operation and immediately start a new turn with the given message.
 	 */
-	async abortAndPrompt(message: string): Promise<void> {
-		await this.#send({ type: "abort_and_prompt", message });
+	async abortAndPrompt(message: string, images?: ImageContent[]): Promise<void> {
+		await this.#send({ type: "abort_and_prompt", message, images });
 	}
 
 	/**
