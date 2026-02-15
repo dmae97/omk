@@ -688,6 +688,6 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 		}
 	}
 
-	// Keep process alive forever
-	return new Promise(() => {});
+	// stdin closed — RPC client is gone, exit cleanly
+	process.exit(0);
 }
