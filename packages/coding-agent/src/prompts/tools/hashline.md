@@ -1,7 +1,6 @@
 # Edit (Hash Anchored)
 
 Line-addressed edits using hash-verified line references. Read files in hashline mode, collect exact `LINE:HASH` references, and submit edits that change only the targeted token or expression.
-
 **CRITICAL: Copy `LINE:HASH` refs verbatim from read output. Use only the anchor prefix (e.g., `{{hashline 42 "const x = 1"}}`), never the trailing source text after `|`.**
 
 <workflow>
@@ -15,20 +14,15 @@ Line-addressed edits using hash-verified line references. Read files in hashline
 
 <operations>
 Four edit variants are available:
-
 - **`set_line`**: Replace a single line
   `{ set_line: { anchor: "LINE:HASH", new_text: "..." } }`
   `new_text: ""` keeps the line but makes it blank.
-
 - **`replace_lines`**: Replace a contiguous range (use for deletions with `new_text: ""`)
   `{ replace_lines: { start_anchor: "LINE:HASH", end_anchor: "LINE:HASH", new_text: "..." } }`
-
 - **`insert_after`**: Add new content after an anchor line
   `{ insert_after: { anchor: "LINE:HASH", text: "..." } }`
-
 - **`replace`**: Substring-style fuzzy match (when line refs are unavailable)
   `{ replace: { old_text: "...", new_text: "...", all?: boolean } }`
-
 **Atomicity:** All edits in one call validate against the file as last read. Line numbers and hashes refer to the original state, not post-edit state. The applicator sorts and applies bottom-up automatically.
 </operations>
 
@@ -46,7 +40,6 @@ Four edit variants are available:
 → Copy the updated `LINE:HASH` refs from the error output verbatim and retry with the same intended mutation.
 → Re-read only if you need lines not shown in the error.
 → If mismatch repeats after applying updated refs, stop and re-read the relevant region.
-
 **No-op error ("identical content"):**
 → Stop. Re-read the file — you are targeting the wrong line or your replacement is not different.
 → After 2 consecutive no-op errors on the same line, re-read the entire function/block.
@@ -89,5 +82,4 @@ Before submitting, verify:
 - [ ] Each operation targets one logical change site with minimal scope
 - [ ] Formatting of replaced lines matches the original exactly, except for the targeted change
 </validation>
-
 **REMINDER: Copy `LINE:HASH` refs verbatim. Anchors are `LINE:HASH` only — never `LINE:HASH|content`. Preserve exact formatting. Change only the targeted token.**
