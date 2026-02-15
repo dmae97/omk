@@ -454,11 +454,11 @@ export class AgentSession {
 					this.#ttsrManager.markInjected(matches);
 					// Store for injection on retry
 					this.#pendingTtsrInjections.push(...matches);
-					// Emit TTSR event before aborting (so UI can handle it)
+					// Abort the stream immediately — do not gate on extension callbacks
 					this.#ttsrAbortPending = true;
-					await this.#emitSessionEvent({ type: "ttsr_triggered", rules: matches });
-					// Abort the stream
 					this.agent.abort();
+					// Notify extensions (fire-and-forget, does not block abort)
+					this.#emitSessionEvent({ type: "ttsr_triggered", rules: matches }).catch(() => {});
 					// Schedule retry after a short delay
 					setTimeout(async () => {
 						this.#ttsrAbortPending = false;
@@ -526,7 +526,7 @@ export class AgentSession {
 				// Reset retry counter immediately on successful assistant response
 				// This prevents accumulation across multiple LLM calls within a turn
 				const assistantMsg = event.message as AssistantMessage;
-				if (assistantMsg.stopReason !== "error" && this.#retryAttempt > 0) {
+				if (assistantMsg.stopReason !== "error" && assistantMsg.stopReason !== "aborted" && this.#retryAttempt > 0) {
 					await this.#emitSessionEvent({
 						type: "auto_retry_end",
 						success: true,
