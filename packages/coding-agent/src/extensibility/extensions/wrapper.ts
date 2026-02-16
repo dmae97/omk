@@ -18,11 +18,31 @@ export class RegisteredToolAdapter implements AgentTool<any, any, any> {
 	declare parameters: any;
 	declare label: string;
 
+	renderCall?: (args: any, theme: any) => any;
+	renderResult?: (result: any, options: any, theme: any, args?: any) => any;
+
 	constructor(
 		private registeredTool: RegisteredTool,
 		private runner: ExtensionRunner,
 	) {
 		applyToolProxy(registeredTool.definition, this);
+
+		// Only define render methods when the underlying definition provides them.
+		// If these exist unconditionally on the prototype, ToolExecutionComponent
+		// enters the custom-renderer path, gets undefined back, and silently
+		// discards tool result text (extensions without renderers show blank).
+		if (registeredTool.definition.renderCall) {
+			this.renderCall = (args: any, theme: any) => registeredTool.definition.renderCall!(args, theme as Theme);
+		}
+		if (registeredTool.definition.renderResult) {
+			this.renderResult = (result: any, options: any, theme: any, args?: any) =>
+				registeredTool.definition.renderResult!(
+					result,
+					{ expanded: options.expanded, isPartial: options.isPartial, spinnerFrame: options.spinnerFrame },
+					theme as Theme,
+					args,
+				);
+		}
 	}
 
 	async execute(
@@ -33,19 +53,6 @@ export class RegisteredToolAdapter implements AgentTool<any, any, any> {
 		_context?: AgentToolContext,
 	) {
 		return this.registeredTool.definition.execute(toolCallId, params, signal, onUpdate, this.runner.createContext());
-	}
-
-	renderCall?(args: any, theme: any) {
-		return this.registeredTool.definition.renderCall?.(args, theme as Theme);
-	}
-
-	renderResult?(result: any, options: any, theme: any, args?: any) {
-		return this.registeredTool.definition.renderResult?.(
-			result,
-			{ expanded: options.expanded, isPartial: options.isPartial, spinnerFrame: options.spinnerFrame },
-			theme as Theme,
-			args,
-		);
 	}
 }
 
