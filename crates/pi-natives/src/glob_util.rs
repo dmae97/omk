@@ -1,4 +1,5 @@
-//! Shared glob-pattern helpers used by both [`crate::glob`] and [`crate::grep`].
+//! Shared glob-pattern helpers used by both [`crate::glob`] and
+//! [`crate::grep`].
 
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use napi::bindgen_prelude::*;
@@ -88,26 +89,17 @@ mod tests {
 
 	#[test]
 	fn unclosed_brace_gets_closed() {
-		assert_eq!(
-			build_glob_pattern("*.{ts,tsx,js", true),
-			"**/*.{ts,tsx,js}"
-		);
+		assert_eq!(build_glob_pattern("*.{ts,tsx,js", true), "**/*.{ts,tsx,js}");
 	}
 
 	#[test]
 	fn deeply_unclosed_braces_all_closed() {
-		assert_eq!(
-			build_glob_pattern("{a,{b,c}", true),
-			"**/{a,{b,c}}"
-		);
+		assert_eq!(build_glob_pattern("{a,{b,c}", true), "**/{a,{b,c}}");
 	}
 
 	#[test]
 	fn balanced_braces_unchanged() {
-		assert_eq!(
-			build_glob_pattern("*.{ts,js}", true),
-			"**/*.{ts,js}"
-		);
+		assert_eq!(build_glob_pattern("*.{ts,js}", true), "**/*.{ts,js}");
 	}
 
 	#[test]

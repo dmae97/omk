@@ -17,7 +17,6 @@
 use std::path::Path;
 
 use globset::GlobSet;
-
 use napi::{
 	bindgen_prelude::*,
 	threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
@@ -72,7 +71,6 @@ pub struct GlobResult {
 	/// Number of returned matches (`matches.len()`), clamped to `u32::MAX`.
 	pub total_matches: u32,
 }
-
 
 /// Internal runtime config for a single glob execution.
 struct GlobConfig {

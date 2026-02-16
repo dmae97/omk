@@ -405,7 +405,6 @@ fn resolve_search_path(path: &str) -> Result<PathBuf> {
 	Ok(cwd.join(candidate))
 }
 
-
 fn resolve_type_filter(type_name: Option<&str>) -> Option<TypeFilter> {
 	let normalized = type_name
 		.map(str::trim)
