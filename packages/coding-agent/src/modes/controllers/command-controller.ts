@@ -334,23 +334,27 @@ export class CommandController {
 		this.ctx.ui.requestRender();
 	}
 
-	async handleChangelogCommand(): Promise<void> {
+	async handleChangelogCommand(showFull = false): Promise<void> {
 		const changelogPath = getChangelogPath();
 		const allEntries = await parseChangelog(changelogPath);
-
+		// Default to showing only the latest 3 versions unless --full is specified
+		// allEntries comes from parseChangelog with newest first, reverse to show oldest->newest
+		const entriesToShow = showFull ? allEntries : allEntries.slice(0, 3);
 		const changelogMarkdown =
-			allEntries.length > 0
-				? allEntries
+			entriesToShow.length > 0
+				? [...entriesToShow]
 						.reverse()
 						.map(e => e.content)
 						.join("\n\n")
 				: "No changelog entries found.";
+		const title = showFull ? "Full Changelog" : "Recent Changes";
+		const hint = showFull ? "" : `\n\n${theme.fg("dim", "Use")} ${theme.bold("/changelog --full")} ${theme.fg("dim", "to view the complete changelog.")}`;
 
 		this.ctx.chatContainer.addChild(new Spacer(1));
 		this.ctx.chatContainer.addChild(new DynamicBorder());
-		this.ctx.chatContainer.addChild(new Text(theme.bold(theme.fg("accent", "What's New")), 1, 0));
+		this.ctx.chatContainer.addChild(new Text(theme.bold(theme.fg("accent", title)), 1, 0));
 		this.ctx.chatContainer.addChild(new Spacer(1));
-		this.ctx.chatContainer.addChild(new Markdown(changelogMarkdown, 1, 1, getMarkdownTheme()));
+		this.ctx.chatContainer.addChild(new Markdown(changelogMarkdown + hint, 1, 1, getMarkdownTheme()));
 		this.ctx.chatContainer.addChild(new DynamicBorder());
 		this.ctx.ui.requestRender();
 	}

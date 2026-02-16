@@ -140,7 +140,7 @@ export interface InteractiveModeContext {
 	handleCopyCommand(): Promise<void>;
 	handleSessionCommand(): Promise<void>;
 	handleUsageCommand(reports?: UsageReport[] | null): Promise<void>;
-	handleChangelogCommand(): Promise<void>;
+	handleChangelogCommand(showFull?: boolean): Promise<void>;
 	handleHotkeysCommand(): void;
 	handleDumpCommand(): Promise<void>;
 	handleClearCommand(): Promise<void>;

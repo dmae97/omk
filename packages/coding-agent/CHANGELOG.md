@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+- Improved `/changelog` performance by displaying only the most recent 3 versions by default, with a `--full` flag for the complete history ([#85](https://github.com/can1357/oh-my-pi/pull/85) by [@tctev](https://github.com/tctev))
+
+## [12.7.0] - 2026-02-16
 ### Added
 - Added abort signal support to LSP file operations (`ensureFileOpen`, `refreshFile`) for cancellable file synchronization
 - Added abort signal propagation through LSP request handlers (definition, references, hover, symbols, rename) enabling operation cancellation
