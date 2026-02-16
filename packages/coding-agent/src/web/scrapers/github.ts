@@ -11,6 +11,12 @@ interface GitHubUrl {
 	number?: number;
 }
 
+interface GitHubIssueComment {
+	user: { login: string };
+	created_at: string;
+	body: string;
+}
+
 /**
  * Parse GitHub URL into components
  */
@@ -106,6 +112,44 @@ export async function fetchGitHubApi(
 }
 
 /**
+ * Fetch all issue comments with pagination.
+ */
+async function fetchGitHubIssueComments(
+	owner: string,
+	repo: string,
+	issueNumber: number,
+	expectedCount: number,
+	timeout: number,
+	signal?: AbortSignal,
+): Promise<GitHubIssueComment[]> {
+	const perPage = 100;
+	const comments: GitHubIssueComment[] = [];
+
+	for (let page = 1; comments.length < expectedCount; page++) {
+		const result = await fetchGitHubApi(
+			`/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=${perPage}&page=${page}`,
+			timeout,
+			signal,
+		);
+		if (!result.ok || !Array.isArray(result.data)) {
+			break;
+		}
+
+		const pageComments = result.data as GitHubIssueComment[];
+		if (pageComments.length === 0) {
+			break;
+		}
+
+		comments.push(...pageComments);
+		if (pageComments.length < perPage) {
+			break;
+		}
+	}
+
+	return comments;
+}
+
+/**
  * Render GitHub issue/PR to markdown
  */
 async function renderGitHubIssue(
@@ -146,18 +190,12 @@ async function renderGitHubIssue(
 
 	// Fetch comments if any
 	if (issue.comments > 0) {
-		const commentsResult = await fetchGitHubApi(
-			`/repos/${gh.owner}/${gh.repo}/issues/${gh.number}/comments?per_page=50`,
-			timeout,
-			signal,
-		);
-		if (commentsResult.ok && Array.isArray(commentsResult.data)) {
-			md += `## Comments (${issue.comments})\n\n`;
-			for (const comment of commentsResult.data as Array<{
-				user: { login: string };
-				created_at: string;
-				body: string;
-			}>) {
+		const comments = await fetchGitHubIssueComments(gh.owner, gh.repo, issue.number, issue.comments, timeout, signal);
+		if (comments.length > 0) {
+			const commentCount =
+				issue.comments > comments.length ? `${comments.length} of ${issue.comments}` : `${comments.length}`;
+			md += `## Comments (${commentCount})\n\n`;
+			for (const comment of comments) {
 				md += `### @${comment.user.login} · ${comment.created_at}\n\n`;
 				md += `${comment.body}\n\n---\n\n`;
 			}

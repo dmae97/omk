@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added pagination support for fetching GitHub issue comments, allowing retrieval of all comments beyond the initial 50-comment limit
+- Added comment count display showing partial results when not all comments could be fetched (e.g., '5 of 10 comments')
+
+### Changed
+
+- Changed GitHub issue comment fetching to use paginated API requests with 100 comments per page instead of single request with 50-comment limit
 
 ## [12.7.5] - 2026-02-16
 ### Changed
