@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.7.1] - 2026-02-16
 ### Changed
 
 - Restructured execution procedure guidance to emphasize scope assessment and continuous tool-driven progress over planning-first approach
