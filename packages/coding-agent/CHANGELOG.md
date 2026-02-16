@@ -1,8 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added abort signal support to LSP file operations (`ensureFileOpen`, `refreshFile`) for cancellable file synchronization
+- Added abort signal propagation through LSP request handlers (definition, references, hover, symbols, rename) enabling operation cancellation
+- Added `shouldBypassAutocompleteOnEscape` callback to custom editor for context-aware escape key handling during active operations
 - Added `contextPromotionTarget` model configuration option to specify a custom target model for context promotion
 - Added automatic context promotion feature that switches to a larger-context model when approaching context limits
 - Added `contextPromotion.enabled` setting to control automatic model promotion (enabled by default)
@@ -14,6 +18,10 @@
 
 ### Changed
 
+- Changed escape key handling in custom editor to allow bypassing autocomplete dismissal when specified by parent controller
+- Changed workspace diagnostics to support abort signals for cancellable diagnostic runs
+- Changed LSP request cancellation to send `$/cancelRequest` notification to language servers when operations are aborted
+- Changed input controller to bypass autocomplete on escape when loading animations, streaming, compacting, or running external processes
 - Changed context promotion logic to use configured `contextPromotionTarget` when available, allowing per-model promotion customization
 - Updated session compaction reserve token calculation to enforce a minimum 15% context window floor, ensuring more predictable compaction behavior regardless of configuration
 - Improved session compaction to limit file operation summaries to 20 files per category, with indication of omitted files when exceeded
@@ -21,6 +29,11 @@
 - Updated web search provider priority order to include Brave (Exa → Brave → Jina → Perplexity → Anthropic → Gemini → Codex → Z.AI)
 - Extended recency filter support to Brave provider alongside Perplexity
 - Changed GitHub issue comment fetching to use paginated API requests with 100 comments per page instead of single request with 50-comment limit
+
+### Fixed
+
+- Fixed LSP operations to properly respect abort signals and throw `ToolAbortError` when cancelled
+- Fixed workspace diagnostics process cleanup to remove abort event listeners in finally block
 
 ## [12.7.5] - 2026-02-16
 ### Changed

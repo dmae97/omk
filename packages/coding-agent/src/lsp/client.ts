@@ -499,7 +499,8 @@ export async function getOrCreateClient(config: ServerConfig, cwd: string, initT
  * Ensure a file is opened in the LSP client.
  * Sends didOpen notification if the file is not already tracked.
  */
-export async function ensureFileOpen(client: LspClient, filePath: string): Promise<void> {
+export async function ensureFileOpen(client: LspClient, filePath: string, signal?: AbortSignal): Promise<void> {
+	throwIfAborted(signal);
 	const uri = fileToUri(filePath);
 	const lockKey = `${client.name}:${uri}`;
 
@@ -512,11 +513,13 @@ export async function ensureFileOpen(client: LspClient, filePath: string): Promi
 	const existingLock = fileOperationLocks.get(lockKey);
 	if (existingLock) {
 		await existingLock;
+		throwIfAborted(signal);
 		return;
 	}
 
 	// Lock and open file
 	const openPromise = (async () => {
+		throwIfAborted(signal);
 		// Double-check after acquiring lock
 		if (client.openFiles.has(uri)) {
 			return;
@@ -525,11 +528,13 @@ export async function ensureFileOpen(client: LspClient, filePath: string): Promi
 		let content: string;
 		try {
 			content = await Bun.file(filePath).text();
+			throwIfAborted(signal);
 		} catch (err) {
 			if (isEnoent(err)) return;
 			throw err;
 		}
 		const languageId = detectLanguageId(filePath);
+		throwIfAborted(signal);
 
 		await sendNotification(client, "textDocument/didOpen", {
 			textDocument: {
@@ -569,6 +574,7 @@ export async function syncContent(
 	const existingLock = fileOperationLocks.get(lockKey);
 	if (existingLock) {
 		await existingLock;
+		throwIfAborted(signal);
 	}
 
 	const syncPromise = (async () => {
@@ -631,7 +637,8 @@ export async function notifySaved(client: LspClient, filePath: string, signal?: 
  * Refresh a file in the LSP client.
  * Increments version, sends didChange and didSave notifications.
  */
-export async function refreshFile(client: LspClient, filePath: string): Promise<void> {
+export async function refreshFile(client: LspClient, filePath: string, signal?: AbortSignal): Promise<void> {
+	throwIfAborted(signal);
 	const uri = fileToUri(filePath);
 	const lockKey = `${client.name}:${uri}`;
 
@@ -639,30 +646,35 @@ export async function refreshFile(client: LspClient, filePath: string): Promise<
 	const existingLock = fileOperationLocks.get(lockKey);
 	if (existingLock) {
 		await existingLock;
+		throwIfAborted(signal);
 	}
 
 	// Lock and refresh file
 	const refreshPromise = (async () => {
+		throwIfAborted(signal);
 		const info = client.openFiles.get(uri);
 
 		if (!info) {
-			await ensureFileOpen(client, filePath);
+			await ensureFileOpen(client, filePath, signal);
 			return;
 		}
 
 		let content: string;
 		try {
 			content = await Bun.file(filePath).text();
+			throwIfAborted(signal);
 		} catch (err) {
 			if (isEnoent(err)) return;
 			throw err;
 		}
 		const version = ++info.version;
+		throwIfAborted(signal);
 
 		await sendNotification(client, "textDocument/didChange", {
 			textDocument: { uri, version },
 			contentChanges: [{ text: content }],
 		});
+		throwIfAborted(signal);
 
 		await sendNotification(client, "textDocument/didSave", {
 			textDocument: { uri },
@@ -745,6 +757,7 @@ export async function sendRequest(
 		if (client.pendingRequests.has(id)) {
 			client.pendingRequests.delete(id);
 		}
+		void sendNotification(client, "$/cancelRequest", { id }).catch(() => {});
 		if (timeout) clearTimeout(timeout);
 		cleanup();
 		const reason = signal?.reason instanceof Error ? signal.reason : new ToolAbortError();
