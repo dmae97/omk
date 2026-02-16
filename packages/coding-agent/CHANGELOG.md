@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added abort signal support to LSP file operations (`ensureFileOpen`, `refreshFile`) for cancellable file synchronization
@@ -18,6 +17,7 @@
 
 ### Changed
 
+- Changed default grep context lines from 1 before/3 after to 0 before/0 after for more focused search results
 - Changed escape key handling in custom editor to allow bypassing autocomplete dismissal when specified by parent controller
 - Changed workspace diagnostics to support abort signals for cancellable diagnostic runs
 - Changed LSP request cancellation to send `$/cancelRequest` notification to language servers when operations are aborted

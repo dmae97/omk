@@ -419,7 +419,7 @@ export const SETTINGS_SCHEMA = {
 	},
 	"grep.contextBefore": {
 		type: "number",
-		default: 1,
+		default: 0,
 		ui: {
 			tab: "tools",
 			label: "Grep context before",
@@ -429,7 +429,7 @@ export const SETTINGS_SCHEMA = {
 	},
 	"grep.contextAfter": {
 		type: "number",
-		default: 3,
+		default: 0,
 		ui: {
 			tab: "tools",
 			label: "Grep context after",
