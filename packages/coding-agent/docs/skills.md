@@ -1,254 +1,218 @@
-> omp can create skills. Ask it to build one for your use case.
-
 # Skills
 
-Skills are self-contained capability packages that the agent loads on-demand. A skill provides specialized workflows, setup instructions, helper scripts, and reference documentation for specific tasks.
+Skills are file-backed capability packs discovered at startup and exposed to the model as:
 
-OMP follows the [Agent Skills](https://agentskills.io/specification) SKILL.md format (YAML frontmatter + markdown body) and exposes skills via `skill://` URLs.
+- lightweight metadata in the system prompt (name + description)
+- on-demand content via `read skill://...`
+- optional interactive `/skill:<name>` commands
 
-**Example use cases:**
-- Web search and content extraction (Brave Search API)
-- Browser automation via Chrome DevTools Protocol
-- Google Calendar, Gmail, Drive integration
-- PDF/DOCX processing and creation
-- Speech-to-text transcription
-- YouTube transcript extraction
+This document covers current runtime behavior in `src/extensibility/skills.ts`, `src/discovery/builtin.ts`, `src/internal-urls/skill-protocol.ts`, and `src/discovery/agents-md.ts`.
 
-See [Skill Repositories](#skill-repositories) for ready-to-use skills.
+## What a skill is in this codebase
 
-## When to Use Skills
+A discovered skill is represented as:
 
-| Need | Solution |
-|------|----------|
-| Always-needed context (conventions, commands) | AGENTS.md |
-| User triggers a specific prompt template | Slash command |
-| Additional tool directly callable by the LLM (like read/write/edit/bash) | Custom tool |
-| On-demand capability package (workflows, scripts, setup) | Skill |
+- `name`
+- `description`
+- `filePath` (the `SKILL.md` path)
+- `baseDir` (skill directory)
+- source metadata (`provider`, `level`, path)
 
-Skills are loaded when:
-- The agent decides the task matches a skill's description
-- The user explicitly asks to use a skill (e.g., "use the pdf skill to extract tables")
+The runtime only requires `name` and `path` for validity. In practice, matching quality depends on `description` being meaningful.
 
-**Good skill examples:**
-- Browser automation with helper scripts and CDP workflow
-- Google Calendar CLI with setup instructions and usage patterns
-- PDF processing with multiple tools and extraction patterns
-- Speech-to-text transcription with API setup
+## Required layout and SKILL.md expectations
 
-**Not a good fit for skills:**
-- "Always use TypeScript strict mode" → put in AGENTS.md
-- "Review my code" → make a slash command
-- Need user confirmation dialogs or custom TUI rendering → make a custom tool
+### Directory layout
 
-## Skill Structure
+For provider-based discovery (native/Claude/Codex/Agents/plugin providers), skills are discovered as **one level under `skills/`**:
 
-A skill is a directory with a `SKILL.md` file. Everything else is freeform. Example structure:
+- `<skills-root>/<skill-name>/SKILL.md`
 
-```
-my-skill/
-├── SKILL.md              # Required: frontmatter + instructions
-├── scripts/              # Helper scripts (bash, python, node)
-│   └── process.sh
-├── references/           # Detailed docs loaded on-demand
-│   └── api-reference.md
-└── assets/               # Templates, images, etc.
-    └── template.json
+Nested patterns like `<skills-root>/group/<skill>/SKILL.md` are not discovered by provider loaders.
+
+For `skills.customDirectories`, scanning is recursive and treats any directory containing `SKILL.md` as a skill root.
+
+```text
+Provider-discovered layout (non-recursive under skills/):
+
+<root>/skills/
+  ├─ postgres/
+  │   └─ SKILL.md      ✅ discovered
+  ├─ pdf/
+  │   └─ SKILL.md      ✅ discovered
+  └─ team/
+      └─ internal/
+          └─ SKILL.md  ❌ not discovered by provider loaders
+
+Custom-directory scanning is recursive, so the same nested path is valid when that parent is listed in `skills.customDirectories`.
 ```
 
-### SKILL.md Format
 
-```markdown
----
-name: my-skill
-description: What this skill does and when to use it. Be specific.
----
+### `SKILL.md` frontmatter
 
-# My Skill
+Supported frontmatter fields on the skill type:
 
-## Setup
+- `name?: string`
+- `description?: string`
+- `globs?: string[]`
+- `alwaysApply?: boolean`
+- additional keys are preserved as unknown metadata
 
-Run once before first use:
-\`\`\`bash
-cd /path/to/skill && npm install
-\`\`\`
+Current runtime behavior:
 
-## Usage
+- `name` defaults to the skill directory name
+- `description` is required for:
+  - native `.omp` provider skill discovery (`requireDescription: true`)
+  - `skills.customDirectories` scan in `extensibility/skills.ts`
+- non-native providers can load skills without description
 
-\`\`\`bash
-./scripts/process.sh <input>
-\`\`\`
+## Discovery pipeline
 
-## Workflow
+`loadSkills()` in `src/extensibility/skills.ts` does two passes:
 
-1. First step
-2. Second step
-3. Third step
+1. **Capability providers** via `loadCapability("skills")`
+2. **Custom directories** via recursive scan of `skills.customDirectories`
+
+If `skills.enabled` is `false`, discovery returns no skills.
+
+### Built-in skill providers and precedence
+
+Provider ordering is priority-first (higher wins), then registration order for ties.
+
+Current registered skill providers:
+
+1. `native` (priority 100) — `.omp` user/project skills via `src/discovery/builtin.ts`
+2. `claude` (priority 80)
+3. priority 70 group (in registration order):
+   - `claude-plugins`
+   - `agents`
+   - `codex`
+
+Dedup key is skill name. First item with a given name wins.
+
+### Source toggles and filtering
+
+`loadSkills()` applies these controls:
+
+- source toggles: `enableCodexUser`, `enableClaudeUser`, `enableClaudeProject`, `enablePiUser`, `enablePiProject`
+- glob filters on skill name:
+  - `ignoredSkills` (exclude)
+  - `includeSkills` (include allowlist; empty means include all)
+
+Filter order is:
+
+1. source enabled
+2. not ignored
+3. included (if include list present)
+
+For providers other than codex/claude/native (for example `agents`, `claude-plugins`), enablement currently falls back to: enabled if **any** built-in source toggle is enabled.
+
+### Collision and duplicate handling
+
+- Capability dedup already keeps first skill per name (highest-precedence provider)
+- `extensibility/skills.ts` additionally:
+  - de-duplicates identical files by `realpath` (symlink-safe)
+  - emits collision warnings when a later skill name conflicts
+- Custom-directory skills are merged after provider skills and follow the same collision behavior
+
+## Runtime usage behavior
+
+### System prompt exposure
+
+System prompt construction (`src/system-prompt.ts`) uses discovered skills as follows:
+
+- if `read` tool is available **and** no explicit preloaded skills are supplied:
+  - include discovered skills list in prompt
+- otherwise:
+  - omit discovered list
+- if preloaded skills are provided (for example from Task tool skill pinning):
+  - inline full preloaded skill contents in `<preloaded_skills>`
+
+### Task tool skill pinning
+
+When a Task call specifies `skills`, runtime resolves names against session skills:
+
+- unknown names cause an immediate error with available skill names
+- resolved skills are passed as preloaded skills to subagents
+
+### Interactive `/skill:<name>` commands
+
+If `skills.enableSkillCommands` is true, interactive mode registers one slash command per discovered skill.
+
+`/skill:<name> [args]` behavior:
+
+- reads the skill file directly from `filePath`
+- strips frontmatter
+- injects skill body as a follow-up custom message
+- appends metadata (`Skill: <path>`, optional `User: <args>`)
+
+## `skill://` URL behavior
+
+`src/internal-urls/skill-protocol.ts` supports:
+
+- `skill://<name>` → resolves to that skill's `SKILL.md`
+- `skill://<name>/<relative-path>` → resolves inside that skill directory
+
+```text
+skill:// URL resolution
+
+skill://pdf
+  -> <pdf-base>/SKILL.md
+
+skill://pdf/references/tables.md
+  -> <pdf-base>/references/tables.md
+
+Guards:
+- reject absolute paths
+- reject `..` traversal
+- reject any resolved path escaping <pdf-base>
 ```
 
-### Frontmatter Fields
+Resolution details:
 
-| Field | Required | Notes |
-|-------|----------|-------|
-| `name` | No | Defaults to the skill directory name. Use lowercase + hyphens for compatibility. |
-| `description` | Yes (OMP/custom), recommended everywhere | Used for skill matching and shown in the system prompt. |
+- skill name must match exactly
+- relative paths are URL-decoded
+- absolute paths are rejected
+- path traversal (`..`) is rejected
+- resolved path must remain within `baseDir`
+- missing files return an explicit `File not found` error
 
-OMP ignores additional frontmatter fields, but other tooling may use them.
+Content type:
 
-#### Naming Guidance
+- `.md` => `text/markdown`
+- everything else => `text/plain`
 
-OMP does not enforce naming rules, but skill names must match exactly for `skill://<name>` and `/skill:<name>` lookups. For cross-tool compatibility, keep names lowercase, hyphenated, and aligned with the directory name.
+No fallback search is performed for missing assets.
 
-### File References
+## Skills vs AGENTS.md, commands, tools, hooks
 
-Use `skill://` URLs to reference files inside a skill directory:
+### Skills vs AGENTS.md
 
-```markdown
-Read the full skill:
-\`\`\`
-skill://my-skill
-\`\`\`
+- **Skills**: named, optional capability packs selected by task context or explicitly requested
+- **AGENTS.md/context files**: persistent instruction files loaded as context-file capability and merged by level/depth rules
 
-Read a reference file:
-\`\`\`
-skill://my-skill/references/api-reference.md
-\`\`\`
-```
+`src/discovery/agents-md.ts` specifically walks ancestor directories from `cwd` to discover standalone `AGENTS.md` files (up to depth 20), excluding hidden-directory segments.
 
-## Skill Locations
+### Skills vs slash commands
 
-Skills are discovered from these sources (first match wins on name collisions):
+- **Skills**: model-readable knowledge/workflow content
+- **Slash commands**: user-invoked command entry points
+- `/skill:<name>` is a convenience wrapper that injects skill text; it does not change skill discovery semantics
 
-- OMP user: `~/.omp/agent/skills/<skill>/SKILL.md` (legacy alias: `~/.pi/agent/skills/...`)
-- OMP project: `<cwd>/.omp/skills/<skill>/SKILL.md` (legacy alias: `<cwd>/.pi/skills/...`)
-- Claude Code: `~/.claude/skills/<skill>/SKILL.md` and `<cwd>/.claude/skills/<skill>/SKILL.md`
-- Agents standard: `~/.agents/skills/<skill>/SKILL.md`
-- Codex CLI: `~/.codex/skills/<skill>/SKILL.md` and `<cwd>/.codex/skills/<skill>/SKILL.md`
-- Custom directories from `skills.customDirectories` (scanned recursively)
+### Skills vs custom tools
 
-Discovery skips hidden directories and `node_modules`, and respects `.gitignore`, `.ignore`, and `.fdignore` rules.
+- **Skills**: documentation/workflow content loaded through prompt context and `read`
+- **Custom tools**: executable tool APIs callable by the model with schemas and runtime side effects
 
-## Configuration
+### Skills vs hooks
 
-Global settings live in `~/.omp/agent/config.yml` (migrated from legacy `settings.json`). Project overrides live in `<cwd>/.omp/settings.json` or `<cwd>/.pi/settings.json`.
+- **Skills**: passive content
+- **Hooks**: event-driven runtime interceptors that can block/modify behavior during execution
 
-```yaml
-skills:
-  enabled: true
-  enableSkillCommands: true
-  enableCodexUser: true
-  enableClaudeUser: true
-  enableClaudeProject: true
-  enablePiUser: true
-  enablePiProject: true
-  customDirectories: []
-  ignoredSkills: []
-  includeSkills: []
-```
+## Practical authoring guidance tied to discovery logic
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `enabled` | `true` | Master toggle for all skills |
-| `enableSkillCommands` | `true` | Register `/skill:<name>` commands in interactive mode |
-| `enableCodexUser` | `true` | Load from `~/.codex/skills/` |
-| `enableClaudeUser` | `true` | Load from `~/.claude/skills/` |
-| `enableClaudeProject` | `true` | Load from `<cwd>/.claude/skills/` |
-| `enablePiUser` | `true` | Load from `~/.omp/agent/skills/` (or `~/.pi/agent/skills/`) |
-| `enablePiProject` | `true` | Load from `<cwd>/.omp/skills/` (or `<cwd>/.pi/skills/`) |
-| `customDirectories` | `[]` | Additional directories to scan recursively (use absolute paths) |
-| `ignoredSkills` | `[]` | Glob patterns to exclude (e.g., `"deprecated-*"`) |
-| `includeSkills` | `[]` | Glob patterns to include (empty = all) |
-
-**Note:** `ignoredSkills` takes precedence over both `includeSkills` and the `--skills` CLI flag.
-
-### CLI Filtering
-
-Use `--skills` to filter skills for a specific invocation:
-
-```bash
-# Only load specific skills
-omp --skills git,docker
-
-# Glob patterns
-omp --skills "git-*,docker-*"
-
-# All skills matching a prefix
-omp --skills "aws-*"
-```
-
-This overrides the `includeSkills` setting for the current session.
-
-## How Skills Work
-
-1. At startup, omp scans enabled skill locations and filters them by settings and CLI flags.
-2. If the `read` tool is available, skill names + descriptions are injected into the system prompt as XML.
-3. When a task matches a skill, the agent loads it with `read skill://<name>` or `skill://<name>/<path>`.
-4. When skills are preloaded (e.g., Task tool with explicit skills), their full contents are inlined under `<preloaded_skills>` and no `read` call is needed.
-
-This is progressive disclosure: only descriptions are always in context, full instructions load on-demand unless explicitly preloaded.
-
-## Warnings
-
-OMP emits warnings when:
-
-- A skill directory or file cannot be read
-- Two skills share the same name (the first loaded wins; later ones are skipped)
-
-## Example: Web Search Skill
-
-```
-brave-search/
-├── SKILL.md
-├── search.js
-└── content.js
-```
-
-**SKILL.md:**
-```markdown
----
-name: brave-search
-description: Web search and content extraction via Brave Search API. Use for searching documentation, facts, or any web content.
----
-
-# Brave Search
-
-## Setup
-
-\`\`\`bash
-cd /path/to/brave-search && npm install
-\`\`\`
-
-## Search
-
-\`\`\`bash
-./search.js "query"              # Basic search
-./search.js "query" --content    # Include page content
-\`\`\`
-
-## Extract Page Content
-
-\`\`\`bash
-./content.js https://example.com
-\`\`\`
-```
-
-## Skill Repositories
-
-For inspiration and ready-to-use skills:
-
-- [Anthropic Skills](https://github.com/anthropics/skills) - Official skills for document processing (docx, pdf, pptx, xlsx), web development, and more
-- [Pi Skills](https://github.com/badlogic/pi-skills) - Skills for web search, browser automation, Google APIs, transcription
-
-## Disabling Skills
-
-CLI:
-```bash
-omp --no-skills
-```
-
-Settings:
-```yaml
-skills:
-  enabled: false
-```
-
-Use the granular `enable*` flags to disable individual sources (e.g., `enableClaudeUser: false` to skip `~/.claude/skills`).
+- Put each skill in its own directory: `<skills-root>/<skill-name>/SKILL.md`
+- Always include explicit `name` and `description` frontmatter
+- Keep referenced assets under the same skill directory and access with `skill://<name>/...`
+- If you need nested taxonomy (`team/domain/skill`), use `skills.customDirectories` (recursive scanner), not provider `skills/` roots
+- Avoid duplicate skill names across sources; first match wins by provider precedence

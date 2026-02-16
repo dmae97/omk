@@ -1,1173 +1,325 @@
-# RPC Mode
+# RPC Protocol Reference
 
-RPC mode enables headless operation of the coding agent via a JSON protocol over stdin/stdout. This is useful for embedding the agent in other applications, IDEs, or custom UIs.
+RPC mode runs the coding agent as a newline-delimited JSON protocol over stdio.
 
-**Note for Node.js/TypeScript users**: If you're building a Node.js application, consider using `createAgentSession()` from `@oh-my-pi/pi-coding-agent` instead of spawning a subprocess. See [`src/sdk.ts`](../src/sdk.ts) for the SDK API. For a subprocess-based TypeScript client, see [`src/modes/rpc/rpc-client.ts`](../src/modes/rpc/rpc-client.ts).
+- **stdin**: commands (`RpcCommand`) and extension UI responses
+- **stdout**: command responses (`RpcResponse`), session/agent events, extension UI requests
 
-## Starting RPC Mode
+Primary implementation:
+
+- `src/modes/rpc/rpc-mode.ts`
+- `src/modes/rpc/rpc-types.ts`
+- `src/session/agent-session.ts`
+- `packages/agent/src/agent.ts`
+- `packages/agent/src/agent-loop.ts`
+
+## Startup
 
 ```bash
-omp --mode rpc [options]
+omp --mode rpc [regular CLI options]
 ```
 
-Common options:
+Behavior notes:
 
-- `--provider <name>`: Set the LLM provider (anthropic, openai, google, etc.)
-- `--model <id>`: Set the model ID
-- `--no-session`: Disable session persistence
-- `--session-dir <path>`: Custom session storage directory
+- `@file` CLI arguments are rejected in RPC mode.
+- The process reads stdin as JSONL (`readJsonl(Bun.stdin.stream())`).
+- When stdin closes, the process exits with code `0`.
+- Responses/events are written as one JSON object per line.
 
-## Protocol Overview
+## Transport and Framing
 
-- **Commands**: JSON objects sent to stdin, one per line
-- **Responses**: JSON objects with `type: "response"` indicating command success/failure
-- **Events**: Agent events streamed to stdout as JSON lines
+Each frame is a single JSON object followed by `\n`.
 
-If you're consuming output in Bun, prefer `Bun.JSONL.parse(text)` for buffered JSONL or `Bun.JSONL.parseChunk()` for streaming output instead of splitting and `JSON.parse`.
+There is no envelope beyond the object shape itself.
 
-All commands support an optional `id` field for request/response correlation. If provided, the corresponding response will include the same `id`.
+### Outbound frame categories (stdout)
 
-## Commands
+1. `RpcResponse` (`{ type: "response", ... }`)
+2. `AgentSessionEvent` objects (`agent_start`, `message_update`, etc.)
+3. `RpcExtensionUIRequest` (`{ type: "extension_ui_request", ... }`)
+4. Extension errors (`{ type: "extension_error", extensionPath, event, error }`)
+
+### Inbound frame categories (stdin)
+
+1. `RpcCommand`
+2. `RpcExtensionUIResponse` (`{ type: "extension_ui_response", ... }`)
+
+## Request/Response Correlation
+
+All commands accept optional `id?: string`.
+
+- If provided, normal command responses echo the same `id`.
+- `RpcClient` relies on this for pending-request resolution.
+
+Important edge behavior from runtime:
+
+- Unknown command responses are emitted with `id: undefined` (even if the request had an `id`).
+- Parse/handler exceptions in the input loop emit `command: "parse"` with `id: undefined`.
+- `prompt` and `abort_and_prompt` return immediate success, then may emit a later error response with the **same** id if async prompt scheduling fails.
+
+## Command Schema (canonical)
+
+`RpcCommand` is defined in `src/modes/rpc/rpc-types.ts`:
 
 ### Prompting
 
-#### prompt
-
-Send a user prompt to the agent. Returns immediately; events stream asynchronously.
-
-```json
-{ "id": "req-1", "type": "prompt", "message": "Hello, world!" }
-```
-
-With images:
-
-```json
-{
-	"type": "prompt",
-	"message": "What's in this image?",
-	"images": [{ "type": "image", "source": { "type": "base64", "mediaType": "image/png", "data": "..." } }]
-}
-```
-
-Response:
-
-```json
-{ "id": "req-1", "type": "response", "command": "prompt", "success": true }
-```
-
-The `images` field is optional. Each image uses `ImageContent` format with base64 or URL source.
-When prompting during streaming, set `"streamingBehavior": "steer"` or `"followUp"` to queue the message.
-
-#### steer
-
-Queue a steering message to interrupt the agent mid-run. Useful for injecting corrections while streaming.
-
-```json
-{ "type": "steer", "message": "Additional context" }
-```
-
-Response:
-
-```json
-{ "type": "response", "command": "steer", "success": true }
-```
-
-#### follow_up
-
-Queue a follow-up message to be processed after the current run completes.
-
-```json
-{ "type": "follow_up", "message": "Additional context" }
-```
-
-Response:
-
-```json
-{ "type": "response", "command": "follow_up", "success": true }
-```
-
-See [set_steering_mode](#set_steering_mode), [set_follow_up_mode](#set_follow_up_mode), and
-[set_interrupt_mode](#set_interrupt_mode) for controlling queued message handling.
-
-#### abort
-
-Abort the current agent operation.
-
-```json
-{ "type": "abort" }
-```
-
-Response:
-
-```json
-{ "type": "response", "command": "abort", "success": true }
-```
-
-#### new_session
-
-Start a fresh session. Can be cancelled by a `session_before_switch` extension handler.
-
-```json
-{ "type": "new_session" }
-```
-
-With optional parent session tracking:
-
-```json
-{ "type": "new_session", "parentSession": "/path/to/parent-session.jsonl" }
-```
-
-Response:
-
-```json
-{ "type": "response", "command": "new_session", "success": true, "data": { "cancelled": false } }
-```
-
-If an extension cancelled:
-
-```json
-{ "type": "response", "command": "new_session", "success": true, "data": { "cancelled": true } }
-```
+- `{ id?, type: "prompt", message: string, images?: ImageContent[], streamingBehavior?: "steer" | "followUp" }`
+- `{ id?, type: "steer", message: string, images?: ImageContent[] }`
+- `{ id?, type: "follow_up", message: string, images?: ImageContent[] }`
+- `{ id?, type: "abort" }`
+- `{ id?, type: "abort_and_prompt", message: string, images?: ImageContent[] }`
+- `{ id?, type: "new_session", parentSession?: string }`
 
 ### State
 
-#### get_state
-
-Get current session state.
-
-```json
-{ "type": "get_state" }
-```
-
-Response:
-
-```json
-{
-  "type": "response",
-  "command": "get_state",
-  "success": true,
-  "data": {
-    "model": {...},
-    "thinkingLevel": "medium",
-    "isStreaming": false,
-    "isCompacting": false,
-    "steeringMode": "all",
-    "followUpMode": "one-at-a-time",
-    "interruptMode": "immediate",
-    "sessionFile": "/path/to/session.jsonl",
-    "sessionId": "abc123",
-    "sessionName": "my-session",
-    "autoCompactionEnabled": true,
-    "messageCount": 5,
-    "queuedMessageCount": 0
-  }
-}
-```
-
-The `model` field is a full [Model](#model) object or `null`.
-
-#### get_messages
-
-Get all messages in the conversation.
-
-```json
-{ "type": "get_messages" }
-```
-
-Response:
-
-```json
-{
-  "type": "response",
-  "command": "get_messages",
-  "success": true,
-  "data": {"messages": [...]}
-}
-```
-
-Messages are `AgentMessage` objects (see [Message Types](#message-types)).
+- `{ id?, type: "get_state" }`
 
 ### Model
 
-#### set_model
-
-Switch to a specific model.
-
-```json
-{ "type": "set_model", "provider": "anthropic", "modelId": "claude-sonnet-4-20250514" }
-```
-
-Response contains the full [Model](#model) object:
-
-```json
-{
-  "type": "response",
-  "command": "set_model",
-  "success": true,
-  "data": {...}
-}
-```
-
-#### cycle_model
-
-Cycle to the next available model. Returns `null` data if only one model available.
-
-```json
-{ "type": "cycle_model" }
-```
-
-Response:
-
-```json
-{
-  "type": "response",
-  "command": "cycle_model",
-  "success": true,
-  "data": {
-    "model": {...},
-    "thinkingLevel": "medium",
-    "isScoped": false
-  }
-}
-```
-
-The `model` field is a full [Model](#model) object.
-
-#### get_available_models
-
-List all configured models.
-
-```json
-{ "type": "get_available_models" }
-```
-
-Response contains an array of full [Model](#model) objects:
-
-```json
-{
-  "type": "response",
-  "command": "get_available_models",
-  "success": true,
-  "data": {
-    "models": [...]
-  }
-}
-```
+- `{ id?, type: "set_model", provider: string, modelId: string }`
+- `{ id?, type: "cycle_model" }`
+- `{ id?, type: "get_available_models" }`
 
 ### Thinking
 
-#### set_thinking_level
+- `{ id?, type: "set_thinking_level", level: ThinkingLevel }`
+- `{ id?, type: "cycle_thinking_level" }`
 
-Set the reasoning/thinking level for models that support it.
+### Queue modes
 
-```json
-{ "type": "set_thinking_level", "level": "high" }
-```
-
-Levels: `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`
-
-Note: `"xhigh"` is only supported by OpenAI codex-max models.
-
-Response:
-
-```json
-{ "type": "response", "command": "set_thinking_level", "success": true }
-```
-
-#### cycle_thinking_level
-
-Cycle through available thinking levels. Returns `null` data if model doesn't support thinking.
-
-```json
-{ "type": "cycle_thinking_level" }
-```
-
-Response:
-
-```json
-{
-	"type": "response",
-	"command": "cycle_thinking_level",
-	"success": true,
-	"data": { "level": "high" }
-}
-```
-
-### Queue Modes
-
-#### set_steering_mode
-
-Control how steering messages are injected into the conversation.
-
-```json
-{ "type": "set_steering_mode", "mode": "one-at-a-time" }
-```
-
-Modes:
-
-- `"all"`: Inject all steering messages at the next turn
-- `"one-at-a-time"`: Inject one steering message per turn (default)
-
-Response:
-
-```json
-{ "type": "response", "command": "set_steering_mode", "success": true }
-```
-
-#### set_follow_up_mode
-
-Control how follow-up messages are injected into the conversation.
-
-```json
-{ "type": "set_follow_up_mode", "mode": "one-at-a-time" }
-```
-
-Modes:
-
-- `"all"`: Inject all follow-up messages at the next turn
-- `"one-at-a-time"`: Inject one follow-up message per turn (default)
-
-Response:
-
-```json
-{ "type": "response", "command": "set_follow_up_mode", "success": true }
-```
-
-#### set_interrupt_mode
-
-Control how the agent handles incoming steering messages while streaming.
-
-```json
-{ "type": "set_interrupt_mode", "mode": "wait" }
-```
-
-Modes:
-
-- `"immediate"`: Interrupt immediately when steering arrives
-- `"wait"`: Wait to apply steering until current tool call completes
-
-Response:
-
-```json
-{ "type": "response", "command": "set_interrupt_mode", "success": true }
-```
+- `{ id?, type: "set_steering_mode", mode: "all" | "one-at-a-time" }`
+- `{ id?, type: "set_follow_up_mode", mode: "all" | "one-at-a-time" }`
+- `{ id?, type: "set_interrupt_mode", mode: "immediate" | "wait" }`
 
 ### Compaction
 
-#### compact
-
-Manually compact conversation context to reduce token usage.
-
-```json
-{ "type": "compact" }
-```
-
-With custom instructions:
-
-```json
-{ "type": "compact", "customInstructions": "Focus on code changes" }
-```
-
-Response:
-
-```json
-{
-	"type": "response",
-	"command": "compact",
-	"success": true,
-	"data": {
-		"summary": "Summary of conversation...",
-		"firstKeptEntryId": "abc123",
-		"tokensBefore": 150000,
-		"details": {}
-	}
-}
-```
-
-#### set_auto_compaction
-
-Enable or disable automatic compaction when context is nearly full.
-
-```json
-{ "type": "set_auto_compaction", "enabled": true }
-```
-
-Response:
-
-```json
-{ "type": "response", "command": "set_auto_compaction", "success": true }
-```
+- `{ id?, type: "compact", customInstructions?: string }`
+- `{ id?, type: "set_auto_compaction", enabled: boolean }`
 
 ### Retry
 
-#### set_auto_retry
-
-Enable or disable automatic retry on transient errors (overloaded, rate limit, 5xx).
-
-```json
-{ "type": "set_auto_retry", "enabled": true }
-```
-
-Response:
-
-```json
-{ "type": "response", "command": "set_auto_retry", "success": true }
-```
-
-#### abort_retry
-
-Abort an in-progress retry (cancel the delay and stop retrying).
-
-```json
-{ "type": "abort_retry" }
-```
-
-Response:
-
-```json
-{ "type": "response", "command": "abort_retry", "success": true }
-```
+- `{ id?, type: "set_auto_retry", enabled: boolean }`
+- `{ id?, type: "abort_retry" }`
 
 ### Bash
 
-#### bash
-
-Execute a shell command and add output to conversation context.
-
-```json
-{ "type": "bash", "command": "ls -la" }
-```
-
-Response:
-
-```json
-{
-	"type": "response",
-	"command": "bash",
-	"success": true,
-	"data": {
-		"output": "total 48\ndrwxr-xr-x ...",
-		"exitCode": 0,
-		"cancelled": false,
-		"truncated": false,
-		"totalLines": 48,
-		"totalBytes": 2048,
-		"outputLines": 48,
-		"outputBytes": 2048
-	}
-}
-```
-
-If output was truncated, includes `artifactId`:
-
-```json
-{
-	"type": "response",
-	"command": "bash",
-	"success": true,
-	"data": {
-		"output": "truncated output...",
-		"exitCode": 0,
-		"cancelled": false,
-		"truncated": true,
-		"totalLines": 5000,
-		"totalBytes": 102400,
-		"outputLines": 2000,
-		"outputBytes": 51200,
-		"artifactId": "abc123"
-	}
-}
-```
-
-**How bash results reach the LLM:**
-
-The `bash` command executes immediately and returns a `BashResult`. Internally, a `BashExecutionMessage` is created and stored in the agent's message state. This message does NOT emit an event.
-
-When the next `prompt` command is sent, all messages (including `BashExecutionMessage`) are transformed before being sent to the LLM. The `BashExecutionMessage` is converted to a `UserMessage` with this format:
-
-```
-Ran `ls -la`
-\`\`\`
-total 48
-drwxr-xr-x ...
-\`\`\`
-```
-
-This means:
-
-1. Bash output is included in the LLM context on the **next prompt**, not immediately
-2. Multiple bash commands can be executed before a prompt; all outputs will be included
-3. No event is emitted for the `BashExecutionMessage` itself
-
-#### abort_bash
-
-Abort a running bash command.
-
-```json
-{ "type": "abort_bash" }
-```
-
-Response:
-
-```json
-{ "type": "response", "command": "abort_bash", "success": true }
-```
+- `{ id?, type: "bash", command: string }`
+- `{ id?, type: "abort_bash" }`
 
 ### Session
 
-#### get_session_stats
+- `{ id?, type: "get_session_stats" }`
+- `{ id?, type: "export_html", outputPath?: string }`
+- `{ id?, type: "switch_session", sessionPath: string }`
+- `{ id?, type: "branch", entryId: string }`
+- `{ id?, type: "get_branch_messages" }`
+- `{ id?, type: "get_last_assistant_text" }`
+- `{ id?, type: "set_session_name", name: string }`
 
-Get token usage and cost statistics.
+### Messages
 
-```json
-{ "type": "get_session_stats" }
-```
+- `{ id?, type: "get_messages" }`
 
-Response:
+## Response Schema
 
-```json
-{
-	"type": "response",
-	"command": "get_session_stats",
-	"success": true,
-	"data": {
-		"sessionFile": "/path/to/session.jsonl",
-		"sessionId": "abc123",
-		"userMessages": 5,
-		"assistantMessages": 5,
-		"toolCalls": 12,
-		"toolResults": 12,
-		"totalMessages": 22,
-		"tokens": {
-			"input": 50000,
-			"output": 10000,
-			"cacheRead": 40000,
-			"cacheWrite": 5000,
-			"total": 105000
-		},
-		"cost": 0.45
-	}
-}
-```
+All command results use `RpcResponse`:
 
-#### export_html
+- Success: `{ id?, type: "response", command: <command>, success: true, data?: ... }`
+- Failure: `{ id?, type: "response", command: string, success: false, error: string }`
 
-Export session to an HTML file.
+Data payloads are command-specific and defined in `rpc-types.ts`.
 
-```json
-{ "type": "export_html" }
-```
-
-With custom path:
-
-```json
-{ "type": "export_html", "outputPath": "/tmp/session.html" }
-```
-
-Response:
+### `get_state` payload
 
 ```json
 {
-	"type": "response",
-	"command": "export_html",
-	"success": true,
-	"data": { "path": "/tmp/session.html" }
+  "model": { "provider": "...", "id": "..." },
+  "thinkingLevel": "off|minimal|low|medium|high|xhigh",
+  "isStreaming": false,
+  "isCompacting": false,
+  "steeringMode": "all|one-at-a-time",
+  "followUpMode": "all|one-at-a-time",
+  "interruptMode": "immediate|wait",
+  "sessionFile": "...",
+  "sessionId": "...",
+  "sessionName": "...",
+  "autoCompactionEnabled": true,
+  "messageCount": 0,
+  "queuedMessageCount": 0
 }
 ```
 
-#### switch_session
+## Event Stream Schema
 
-Load a different session file. Can be cancelled by a `session_before_switch` extension handler.
+RPC mode forwards `AgentSessionEvent` objects from `AgentSession.subscribe(...)`.
+
+Common event types:
+
+- `agent_start`, `agent_end`
+- `turn_start`, `turn_end`
+- `message_start`, `message_update`, `message_end`
+- `tool_execution_start`, `tool_execution_update`, `tool_execution_end`
+- `auto_compaction_start`, `auto_compaction_end`
+- `auto_retry_start`, `auto_retry_end`
+- `ttsr_triggered`
+- `todo_reminder`
+
+Extension runner errors are emitted separately as:
 
 ```json
-{ "type": "switch_session", "sessionPath": "/path/to/session.jsonl" }
+{ "type": "extension_error", "extensionPath": "...", "event": "...", "error": "..." }
 ```
 
-Response:
+`message_update` includes streaming deltas in `assistantMessageEvent` (text/thinking/toolcall deltas).
+
+## Prompt/Queue Concurrency and Ordering
+
+This is the most important operational behavior.
+
+### Immediate ack vs completion
+
+`prompt` and `abort_and_prompt` are **acknowledged immediately**:
 
 ```json
-{ "type": "response", "command": "switch_session", "success": true, "data": { "cancelled": false } }
+{ "id": "req_1", "type": "response", "command": "prompt", "success": true }
 ```
 
-If an extension cancelled the switch:
+That means:
+
+- command acceptance != run completion
+- final completion is observed via `agent_end`
+
+### While streaming
+
+`AgentSession.prompt()` requires `streamingBehavior` during active streaming:
+
+- `"steer"` => queued steering message (interrupt path)
+- `"followUp"` => queued follow-up message (post-turn path)
+
+If omitted during streaming, prompt fails.
+
+### Queue defaults
+
+From `packages/agent/src/agent.ts` defaults:
+
+- `steeringMode`: `"one-at-a-time"`
+- `followUpMode`: `"one-at-a-time"`
+- `interruptMode`: `"immediate"`
+
+### Mode semantics
+
+- `set_steering_mode` / `set_follow_up_mode`
+  - `"one-at-a-time"`: dequeue one queued message per turn
+  - `"all"`: dequeue entire queue at once
+- `set_interrupt_mode`
+  - `"immediate"`: tool execution checks steering between tool calls; pending steering can abort remaining tool calls in the turn
+  - `"wait"`: defer steering until turn completion
+
+## Extension UI Sub-Protocol
+
+Extensions in RPC mode use request/response UI frames.
+
+### Outbound request
+
+`RpcExtensionUIRequest` (`type: "extension_ui_request"`) methods:
+
+- `select`, `confirm`, `input`, `editor`
+- `notify`, `setStatus`, `setWidget`, `setTitle`, `set_editor_text`
+
+Example:
 
 ```json
-{ "type": "response", "command": "switch_session", "success": true, "data": { "cancelled": true } }
+{ "type": "extension_ui_request", "id": "123", "method": "confirm", "title": "Confirm", "message": "Continue?", "timeout": 30000 }
 ```
 
-#### branch
+### Inbound response
 
-Create a new branch from a previous user message. Can be cancelled by a `session_before_branch` extension handler. Returns the text of the message being branched from.
+`RpcExtensionUIResponse` (`type: "extension_ui_response"`):
+
+- `{ type: "extension_ui_response", id: string, value: string }`
+- `{ type: "extension_ui_response", id: string, confirmed: boolean }`
+- `{ type: "extension_ui_response", id: string, cancelled: true }`
+
+If a dialog has a timeout, RPC mode resolves to a default value when timeout/abort fires.
+
+## Error Model and Recoverability
+
+### Command-level failures
+
+Failures are `success: false` with string `error`.
 
 ```json
-{ "type": "branch", "entryId": "abc123" }
+{ "id": "req_2", "type": "response", "command": "set_model", "success": false, "error": "Model not found: provider/model" }
 ```
 
-Response:
+### Recoverability expectations
+
+- Most command failures are recoverable; process remains alive.
+- Malformed JSONL / parse-loop exceptions emit a `parse` error response and continue reading subsequent lines.
+- Empty `set_session_name` is rejected (`Session name cannot be empty`).
+- Extension UI responses with unknown `id` are ignored.
+- Process termination conditions are stdin close or explicit extension-triggered shutdown.
+
+## Compact Command Flows
+
+### 1) Prompt and stream
+
+stdin:
 
 ```json
-{
-	"type": "response",
-	"command": "branch",
-	"success": true,
-	"data": { "text": "The original prompt text...", "cancelled": false }
-}
+{ "id": "req_1", "type": "prompt", "message": "Summarize this repo" }
 ```
 
-If an extension cancelled the branch:
+stdout sequence (typical):
 
 ```json
-{
-	"type": "response",
-	"command": "branch",
-	"success": true,
-	"data": { "text": "The original prompt text...", "cancelled": true }
-}
-```
-
-#### get_branch_messages
-
-Get user messages available for branching.
-
-```json
-{ "type": "get_branch_messages" }
-```
-
-Response:
-
-```json
-{
-	"type": "response",
-	"command": "get_branch_messages",
-	"success": true,
-	"data": {
-		"messages": [
-			{ "entryId": "abc123", "text": "First prompt..." },
-			{ "entryId": "def456", "text": "Second prompt..." }
-		]
-	}
-}
-```
-
-#### get_last_assistant_text
-
-Get the text content of the last assistant message.
-
-```json
-{ "type": "get_last_assistant_text" }
-```
-
-Response:
-
-```json
-{
-	"type": "response",
-	"command": "get_last_assistant_text",
-	"success": true,
-	"data": { "text": "The assistant's response..." }
-}
-```
-
-Returns `{"text": null}` if no assistant messages exist.
-
-#### set_session_name
-
-Set a display name for the current session.
-
-```json
-{ "type": "set_session_name", "name": "my-session" }
-```
-
-Response:
-
-```json
-{ "type": "response", "command": "set_session_name", "success": true }
-```
-
-Returns an error if the name is empty.
-
-## Extension UI (stdout)
-
-In RPC mode, extensions receive an [`ExtensionUIContext`](./extensions.md#custom-ui) backed by an extension UI sub-protocol.
-When an extension calls a dialog or UI method, the agent emits an `extension_ui_request` JSON line on stdout. The host must
-respond by writing an `extension_ui_response` JSON line on stdin.
-
-If a dialog request includes a `timeout` field, the agent auto-resolves it with a default value when the timeout expires.
-The host does not need to track or enforce timeouts.
-
-Example request (stdout):
-
-```json
-{ "type": "extension_ui_request", "id": "req-123", "method": "confirm", "title": "Confirm", "message": "Continue?", "timeout": 30000 }
-```
-
-Example response (stdin):
-
-```json
-{ "type": "extension_ui_response", "id": "req-123", "confirmed": true }
-```
-
-### Unsupported / degraded UI methods
-
-Some `ExtensionUIContext` methods are not supported or degraded in RPC mode because they require direct TUI access:
-
-- `custom()` returns `undefined`
-- `setWorkingMessage()`, `setFooter()`, `setHeader()`, `setEditorComponent()`, `setToolsExpanded()` are no-ops
-- `getEditorText()` returns `""`
-- `getToolsExpanded()` returns `false`
-- `setWidget()` only supports `string[]` (factory functions/components are ignored)
-- `getAllThemes()` returns `[]`
-- `getTheme()` returns `undefined`
-- `setTheme()` returns `{ success: false, error: "Theme switching not supported in RPC mode" }`
-
-Note: `ctx.hasUI` is `true` in RPC mode because dialog and fire-and-forget UI methods are functional via this sub-protocol.
-
-## Events
-
-Events are streamed to stdout as JSON lines during agent operation. Events do NOT include an `id` field (only responses do).
-
-### Event Types
-
-| Event                   | Description                                                  |
-| ----------------------- | ------------------------------------------------------------ |
-| `agent_start`           | Agent begins processing                                      |
-| `agent_end`             | Agent completes (includes all generated messages)            |
-| `turn_start`            | New turn begins                                              |
-| `turn_end`              | Turn completes (includes assistant message and tool results) |
-| `message_start`         | Message begins                                               |
-| `message_update`        | Streaming update (text/thinking/toolcall deltas)             |
-| `message_end`           | Message completes                                            |
-| `tool_execution_start`  | Tool begins execution                                        |
-| `tool_execution_update` | Tool execution progress (streaming output)                   |
-| `tool_execution_end`    | Tool completes                                               |
-| `auto_compaction_start` | Auto-compaction begins                                       |
-| `auto_compaction_end`   | Auto-compaction completes                                    |
-| `auto_retry_start`      | Auto-retry begins (after transient error)                    |
-| `auto_retry_end`        | Auto-retry completes (success or final failure)              |
-| `extension_error`       | Extension threw an error                                     |
-
-### agent_start
-
-Emitted when the agent begins processing a prompt.
-
-```json
+{ "id": "req_1", "type": "response", "command": "prompt", "success": true }
 { "type": "agent_start" }
+{ "type": "message_update", "assistantMessageEvent": { "type": "text_delta", "delta": "..." }, "message": { "role": "assistant", "content": [] } }
+{ "type": "agent_end", "messages": [] }
 ```
 
-### agent_end
+### 2) Prompt during streaming with explicit queue policy
 
-Emitted when the agent completes. Contains all messages generated during this run.
+stdin:
 
 ```json
-{
-  "type": "agent_end",
-  "messages": [...]
-}
+{ "id": "req_2", "type": "prompt", "message": "Also include risks", "streamingBehavior": "followUp" }
 ```
 
-### turn_start / turn_end
+### 3) Inspect and tune queue behavior
 
-A turn consists of one assistant response plus any resulting tool calls and results.
+stdin:
 
 ```json
-{ "type": "turn_start" }
+{ "id": "q1", "type": "get_state" }
+{ "id": "q2", "type": "set_steering_mode", "mode": "all" }
+{ "id": "q3", "type": "set_interrupt_mode", "mode": "wait" }
 ```
+
+### 4) Extension UI round trip
+
+stdout:
 
 ```json
-{
-  "type": "turn_end",
-  "message": {...},
-  "toolResults": [...]
-}
+{ "type": "extension_ui_request", "id": "ui_7", "method": "input", "title": "Branch name", "placeholder": "feature/..." }
 ```
 
-### message_start / message_end
-
-Emitted when a message begins and completes. The `message` field contains an `AgentMessage`.
+stdin:
 
 ```json
-{"type": "message_start", "message": {...}}
-{"type": "message_end", "message": {...}}
+{ "type": "extension_ui_response", "id": "ui_7", "value": "feature/rpc-host" }
 ```
 
-### message_update (Streaming)
+## Notes on `RpcClient` helper
 
-Emitted during streaming of assistant messages. Contains both the partial message and a streaming delta event.
+`src/modes/rpc/rpc-client.ts` is a convenience wrapper, not the protocol definition.
 
-```json
-{
-  "type": "message_update",
-  "message": {...},
-  "assistantMessageEvent": {
-    "type": "text_delta",
-    "contentIndex": 0,
-    "delta": "Hello ",
-    "partial": {...}
-  }
-}
-```
+Current helper characteristics:
 
-The `assistantMessageEvent` field contains one of these delta types:
+- Spawns `bun <cliPath> --mode rpc`
+- Correlates responses by generated `req_<n>` ids
+- Dispatches only recognized `AgentEvent` types to listeners
+- Does **not** expose helper methods for every protocol command (for example, `set_interrupt_mode` and `set_session_name` are in protocol types but not wrapped as dedicated methods)
 
-| Type             | Description                                                  |
-| ---------------- | ------------------------------------------------------------ |
-| `start`          | Message generation started                                   |
-| `text_start`     | Text content block started                                   |
-| `text_delta`     | Text content chunk                                           |
-| `text_end`       | Text content block ended                                     |
-| `thinking_start` | Thinking block started                                       |
-| `thinking_delta` | Thinking content chunk                                       |
-| `thinking_end`   | Thinking block ended                                         |
-| `toolcall_start` | Tool call started                                            |
-| `toolcall_delta` | Tool call arguments chunk                                    |
-| `toolcall_end`   | Tool call ended (includes full `toolCall` object)            |
-| `done`           | Message complete (reason: `"stop"`, `"length"`, `"toolUse"`) |
-| `error`          | Error occurred (reason: `"aborted"`, `"error"`)              |
-
-Example streaming a text response:
-
-```json
-{"type":"message_update","message":{...},"assistantMessageEvent":{"type":"text_start","contentIndex":0,"partial":{...}}}
-{"type":"message_update","message":{...},"assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"Hello","partial":{...}}}
-{"type":"message_update","message":{...},"assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":" world","partial":{...}}}
-{"type":"message_update","message":{...},"assistantMessageEvent":{"type":"text_end","contentIndex":0,"content":"Hello world","partial":{...}}}
-```
-
-### tool_execution_start / tool_execution_update / tool_execution_end
-
-Emitted when a tool begins, streams progress, and completes execution.
-
-```json
-{
-	"type": "tool_execution_start",
-	"toolCallId": "call_abc123",
-	"toolName": "bash",
-	"args": { "command": "ls -la" }
-}
-```
-
-During execution, `tool_execution_update` events stream partial results (e.g., bash output as it arrives):
-
-```json
-{
-	"type": "tool_execution_update",
-	"toolCallId": "call_abc123",
-	"toolName": "bash",
-	"args": { "command": "ls -la" },
-	"partialResult": {
-		"content": [{ "type": "text", "text": "partial output so far..." }],
-		"details": {...}
-	}
-}
-```
-
-When complete:
-
-```json
-{
-  "type": "tool_execution_end",
-  "toolCallId": "call_abc123",
-  "toolName": "bash",
-  "result": {
-    "content": [{"type": "text", "text": "total 48\n..."}],
-    "details": {...}
-  },
-  "isError": false
-}
-```
-
-Use `toolCallId` to correlate events. The `partialResult` in `tool_execution_update` contains the accumulated output so far (not just the delta), allowing clients to simply replace their display on each update.
-
-### auto_compaction_start / auto_compaction_end
-
-Emitted when automatic compaction runs (when context is nearly full).
-
-```json
-{ "type": "auto_compaction_start", "reason": "threshold" }
-```
-
-The `reason` field is `"threshold"` (context getting large) or `"overflow"` (context exceeded limit).
-
-```json
-{
-	"type": "auto_compaction_end",
-	"result": {
-		"summary": "Summary of conversation...",
-		"firstKeptEntryId": "abc123",
-		"tokensBefore": 150000,
-		"details": {}
-	},
-	"aborted": false,
-	"willRetry": false
-}
-```
-
-If `reason` was `"overflow"` and compaction succeeds, `willRetry` is `true` and the agent will automatically retry the prompt.
-
-If compaction was aborted, `result` is `null` and `aborted` is `true`.
-
-### auto_retry_start / auto_retry_end
-
-Emitted when automatic retry is triggered after a transient error (overloaded, rate limit, 5xx).
-
-```json
-{
-	"type": "auto_retry_start",
-	"attempt": 1,
-	"maxAttempts": 3,
-	"delayMs": 2000,
-	"errorMessage": "529 {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded\"}}"
-}
-```
-
-```json
-{
-	"type": "auto_retry_end",
-	"success": true,
-	"attempt": 2
-}
-```
-
-On final failure (max retries exceeded):
-
-```json
-{
-	"type": "auto_retry_end",
-	"success": false,
-	"attempt": 3,
-	"finalError": "529 overloaded_error: Overloaded"
-}
-```
-
-### extension_error
-
-Emitted when an extension throws an error.
-
-```json
-{
-	"type": "extension_error",
-	"extensionPath": "/path/to/extension.ts",
-	"event": "turn_start",
-	"error": "Error message..."
-}
-```
-
-## Error Handling
-
-Failed commands return a response with `success: false`:
-
-```json
-{
-	"type": "response",
-	"command": "set_model",
-	"success": false,
-	"error": "Model not found: invalid/model"
-}
-```
-
-Parse errors:
-
-```json
-{
-	"type": "response",
-	"command": "parse",
-	"success": false,
-	"error": "Failed to parse command: Unexpected token..."
-}
-```
-
-## Types
-
-Source files:
-
-- [`packages/ai/src/types.ts`](../../ai/src/types.ts) - `Model`, `UserMessage`, `AssistantMessage`, `ToolResultMessage`
-- [`packages/agent/src/types.ts`](../../agent/src/types.ts) - `AgentMessage`, `AgentEvent`
-- [`src/session/messages.ts`](../src/session/messages.ts) - `BashExecutionMessage`
-- [`src/modes/rpc/rpc-types.ts`](../src/modes/rpc/rpc-types.ts) - RPC command/response types
-
-### Model
-
-```json
-{
-	"id": "claude-sonnet-4-20250514",
-	"name": "Claude Sonnet 4",
-	"api": "anthropic-messages",
-	"provider": "anthropic",
-	"baseUrl": "https://api.anthropic.com",
-	"reasoning": true,
-	"input": ["text", "image"],
-	"contextWindow": 200000,
-	"maxTokens": 16384,
-	"cost": {
-		"input": 3.0,
-		"output": 15.0,
-		"cacheRead": 0.3,
-		"cacheWrite": 3.75
-	}
-}
-```
-
-### UserMessage
-
-```json
-{
-	"role": "user",
-	"content": "Hello!",
-	"timestamp": 1733234567890,
-	"attachments": []
-}
-```
-
-The `content` field can be a string or an array of `TextContent`/`ImageContent` blocks.
-
-### AssistantMessage
-
-```json
-{
-	"role": "assistant",
-	"content": [
-		{ "type": "text", "text": "Hello! How can I help?" },
-		{ "type": "thinking", "thinking": "User is greeting me..." },
-		{ "type": "toolCall", "id": "call_123", "name": "bash", "arguments": { "command": "ls" } }
-	],
-	"api": "anthropic-messages",
-	"provider": "anthropic",
-	"model": "claude-sonnet-4-20250514",
-	"usage": {
-		"input": 100,
-		"output": 50,
-		"cacheRead": 0,
-		"cacheWrite": 0,
-		"cost": { "input": 0.0003, "output": 0.00075, "cacheRead": 0, "cacheWrite": 0, "total": 0.00105 }
-	},
-	"stopReason": "stop",
-	"timestamp": 1733234567890
-}
-```
-
-Stop reasons: `"stop"`, `"length"`, `"toolUse"`, `"error"`, `"aborted"`
-
-### ToolResultMessage
-
-```json
-{
-	"role": "toolResult",
-	"toolCallId": "call_123",
-	"toolName": "bash",
-	"content": [{ "type": "text", "text": "total 48\ndrwxr-xr-x ..." }],
-	"isError": false,
-	"timestamp": 1733234567890
-}
-```
-
-### BashExecutionMessage
-
-Created by the `bash` RPC command (not by LLM tool calls):
-
-```json
-{
-	"role": "bashExecution",
-	"command": "ls -la",
-	"output": "total 48\ndrwxr-xr-x ...",
-	"exitCode": 0,
-	"cancelled": false,
-	"truncated": false,
-	"timestamp": 1733234567890
-}
-```
-
-### Attachment
-
-```json
-{
-	"id": "img1",
-	"type": "image",
-	"fileName": "photo.jpg",
-	"mimeType": "image/jpeg",
-	"size": 102400,
-	"content": "base64-encoded-data...",
-	"extractedText": null,
-	"preview": null
-}
-```
-
-## Example: Basic Client (Python)
-
-```python
-import subprocess
-import json
-import jsonlines
-
-proc = subprocess.Popen(
-    ["omp", "--mode", "rpc", "--no-session"],
-    stdin=subprocess.PIPE,
-    stdout=subprocess.PIPE,
-    text=True
-)
-
-def send(cmd):
-    proc.stdin.write(json.dumps(cmd) + "\n")
-    proc.stdin.flush()
-
-def read_events():
-    with jsonlines.Reader(proc.stdout) as reader:
-        for event in reader:
-            yield event
-
-# Send prompt
-send({"type": "prompt", "message": "Hello!"})
-
-# Process events
-for event in read_events():
-    if event.get("type") == "message_update":
-        delta = event.get("assistantMessageEvent", {})
-        if delta.get("type") == "text_delta":
-            print(delta["delta"], end="", flush=True)
-
-    if event.get("type") == "agent_end":
-        print()
-        break
-```
-
-## Example: Interactive Client (Bun)
-
-See [`test/rpc-example.ts`](../test/rpc-example.ts) for a complete interactive example, or [`src/modes/rpc/rpc-client.ts`](../src/modes/rpc/rpc-client.ts) for a typed client implementation.
-
-```javascript
-const agent = Bun.spawn(["omp", "--mode", "rpc", "--no-session"], {
-	stdin: "pipe",
-	stdout: "pipe",
-});
-
-const decoder = new TextDecoder();
-let buffer = "";
-
-async function readEvents() {
-	const reader = agent.stdout.getReader();
-	while (true) {
-		const { value, done } = await reader.read();
-		if (done) break;
-		buffer += decoder.decode(value, { stream: true });
-		const result = Bun.JSONL.parseChunk(buffer);
-		buffer = buffer.slice(result.read);
-		for (const event of result.values) {
-			if (event.type === "message_update") {
-				const { assistantMessageEvent } = event;
-				if (assistantMessageEvent.type === "text_delta") {
-					process.stdout.write(assistantMessageEvent.delta);
-				}
-			}
-		}
-	}
-}
-
-readEvents();
-
-// Send prompt
-agent.stdin.write(JSON.stringify({ type: "prompt", message: "Hello" }) + "\n");
-
-// Abort on Ctrl+C
-process.on("SIGINT", () => {
-	agent.stdin.write(JSON.stringify({ type: "abort" }) + "\n");
-});
-```
+Use raw protocol frames if you need complete surface coverage.

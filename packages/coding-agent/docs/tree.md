@@ -1,206 +1,244 @@
-# Session Tree Navigation
+# `/tree` Command Reference
 
-The `/tree` command provides tree-based navigation of the session history.
+`/tree` opens the interactive **Session Tree** navigator. It lets you jump to any entry in the current session file and continue from that point.
 
-## Overview
+This is an in-file leaf move, not a new session export.
 
-Sessions are stored as trees where each entry has an `id` and `parentId`. The "leaf" pointer tracks the current position. `/tree` lets you navigate to any point and optionally summarize the branch you're leaving.
+## What `/tree` does
 
-### Comparison with `/branch`
+- Builds a tree from current session entries (`SessionManager.getTree()`)
+- Opens `TreeSelectorComponent` with keyboard navigation, filters, and search
+- On selection, calls `AgentSession.navigateTree(targetId, { summarize, customInstructions })`
+- Rebuilds visible chat from the new leaf path
+- Optionally prefills editor text when selecting a user/custom message
 
-| Feature | `/branch` | `/tree` |
-|---------|-----------|---------|
-| View | Flat list of user messages | Full tree structure |
-| Action | Extracts path to **new session file** | Changes leaf in **same session** |
-| Summary | Never | Optional (user prompted) |
-| Events | `session_before_branch` / `session_branch` | `session_before_tree` / `session_tree` |
+Primary implementation:
 
-## Tree UI
+- `src/modes/controllers/input-controller.ts` (`/tree`, keybinding wiring, double-escape behavior)
+- `src/modes/controllers/selector-controller.ts` (tree UI launch + summary prompt flow)
+- `src/modes/components/tree-selector.ts` (navigation, filters, search, labels, rendering)
+- `src/session/agent-session.ts` (`navigateTree` leaf switching + optional summary)
+- `src/session/session-manager.ts` (`getTree`, `branch`, `branchWithSummary`, `resetLeaf`, label persistence)
 
-```
-├─ user: "Hello, can you help..."
-│  └─ assistant: "Of course! I can..."
-│     ├─ • user: "Let's try approach A..."
-│     │  └─ • assistant: "For approach A..."
-│     │     └─ • [label-name] user: "That worked..."
-│     └─ user: "Actually, approach B..."
-│        └─ assistant: "For approach B..."
-```
+## How to open it
 
-### Controls
+Any of the following opens the same selector:
 
-| Key | Action |
-|-----|--------|
-| ↑/↓ | Move selection |
-| ←/→ | Page up/down |
-| Enter | Select node |
-| Escape | Clear search (if active) or cancel |
-| Ctrl+C | Cancel |
-| Ctrl+O / Shift+Ctrl+O | Cycle filter forward/back |
-| Alt+D/T/U/L/A | Set filter: default / no-tools / user-only / labeled-only / all |
-| Shift+L | Edit label for selected entry |
-| Type | Search (space-separated tokens) |
-| Backspace | Remove last search character |
+- `/tree`
+- configured keybinding action `tree`
+- double-escape on empty editor when `doubleEscapeAction = "tree"` (default)
+- `/branch` when `doubleEscapeAction = "tree"` (routes to tree selector instead of user-only branch picker)
 
-### Display
+## Tree UI model
 
-- Tree list height: `max(5, floor(terminalHeight / 2))` lines
-- Active path marked with a bullet (`•`) before each entry (current leaf is last node on the path)
-- Labels shown inline: `[label-name]` before the entry text
-- Default filter hides `label`, `custom`, `model_change`, and `thinking_level_change` entries
-- Assistant messages with only tool calls are hidden unless they contain errors/aborts (current leaf is always shown)
-- `no-tools` filter hides tool result messages
-- Children sorted by timestamp (oldest first)
+The tree is rendered from session entry parent pointers (`id` / `parentId`).
 
-## Selection Behavior
+- Children are sorted by timestamp ascending (older first, newer lower)
+- Active branch (path from root to current leaf) is marked with a bullet
+- Labels (if present) render as `[label]` before node text
+- If multiple roots exist (orphaned/broken parent chains), they are shown under a virtual branching root
 
-### User Message or Custom Message
-1. Leaf set to **parent** of selected node (or `null` if root)
-2. Message text placed in **editor** for re-submission
-3. User edits and submits, creating a new branch
+```text
+Example tree view (active path marked with •):
 
-### Non-User Message (assistant, compaction, etc.)
-1. Leaf set to **selected node**
-2. Editor stays empty
-3. User continues from that point
-
-### Selecting Root User Message
-If user selects the very first message (has no parent):
-1. Leaf reset to `null` (empty conversation)
-2. Message text placed in editor
-3. User effectively restarts from scratch
-
-## Branch Summarization
-
-If branch summaries are enabled (`branchSummary.enabled`), the user is prompted:
-
-- No summary
-- Summarize
-- Summarize with custom prompt (passed as `customInstructions`)
-
-### What Gets Summarized
-
-Path from old leaf back to common ancestor with target:
-
-```
-A → B → C → D → E → F  ← old leaf
-        ↘ G → H        ← target
+├─ user: "Start task"
+│  └─ assistant: "Plan"
+│     ├─ • user: "Try approach A"
+│     │  └─ • assistant: "A result"
+│     │     └─ • [milestone] user: "Continue A"
+│     └─ user: "Try approach B"
+│        └─ assistant: "B result"
 ```
 
-Abandoned path: D → E → F (summarized)
+The selector recenters around current selection and shows up to:
 
-Summarization stops at the common ancestor only.
-Compaction and branch summary entries are included; tool results are ignored.
+- `max(5, floor(terminalHeight / 2))` rows
 
-### Summary Storage
+## Keybindings inside tree selector
 
-Stored as `BranchSummaryEntry`:
+- `Up` / `Down`: move selection (wraps)
+- `Left` / `Right`: page up / page down
+- `Enter`: select node
+- `Esc`: clear search if active; otherwise close selector
+- `Ctrl+C`: close selector
+- `Type`: append to search query
+- `Backspace`: delete search character
+- `Shift+L`: edit/clear label on selected entry
+- `Ctrl+O`: cycle filter forward
+- `Shift+Ctrl+O`: cycle filter backward
+- `Alt+D/T/U/L/A`: jump directly to specific filter mode
 
-```typescript
-interface BranchSummaryEntry {
-  type: "branch_summary";
-  id: string;
-  parentId: string | null; // New leaf position (null when navigating to root)
-  timestamp: string;
-  fromId: string;        // Entry the summary is attached to ("root" if null)
-  summary: string;       // LLM-generated summary
-  details?: unknown;     // Optional hook data
-  fromExtension?: boolean;
-}
+## Filters and search semantics
+
+Filter modes (`TreeList`):
+
+1. `default`
+2. `no-tools`
+3. `user-only`
+4. `labeled-only`
+5. `all`
+
+### `default`
+
+Shows most conversational nodes, but hides bookkeeping entry types:
+
+- `label`
+- `custom`
+- `model_change`
+- `thinking_level_change`
+
+### `no-tools`
+
+Same as `default`, plus hides `toolResult` messages.
+
+### `user-only`
+
+Only `message` entries where role is `user`.
+
+### `labeled-only`
+
+Only entries that currently resolve to a label.
+
+### `all`
+
+Everything in the session tree, including bookkeeping/custom entries.
+
+### Tool-only assistant node behavior
+
+Assistant messages that contain **only tool calls** (no text) are hidden by default in all filtered views unless:
+
+- message is error/aborted (`stopReason` not `stop`/`toolUse`), or
+- it is the current leaf (always kept visible)
+
+### Search behavior
+
+- Query is tokenized by spaces
+- Matching is case-insensitive
+- All tokens must match (AND semantics)
+- Searchable text includes label, role, and type-specific content (message text, branch summary text, custom type, tool command snippets, etc.)
+
+## Selection outcomes (important)
+
+`navigateTree` computes new leaf behavior from selected entry type:
+
+### Selecting `user` message
+
+- New leaf becomes selected entry’s `parentId`
+- If parent is `null` (root user message), leaf resets to root (`resetLeaf()`)
+- Selected message text is copied to editor for editing/resubmit
+
+### Selecting `custom_message`
+
+- Same leaf rule as user messages (`parentId`)
+- Text content is extracted and copied to editor
+
+### Selecting non-user node (assistant/tool/summary/compaction/custom bookkeeping/etc.)
+
+- New leaf becomes selected node id
+- Editor is not prefilled
+
+### Selecting current leaf
+
+- No-op; selector closes with “Already at this point”
+
+```text
+Selection decision (simplified):
+
+selected node
+   │
+   ├─ is current leaf? ── yes ──> close selector (no-op)
+   │
+   ├─ is user/custom_message? ── yes ──> leaf := parentId (or resetLeaf for root)
+   │                                     + prefill editor text
+   │
+   └─ otherwise ──> leaf := selected node id
+                    + no editor prefill
 ```
 
-## Implementation
+## Summary-on-switch flow
 
-### AgentSession.navigateTree()
+Summary prompt is controlled by `branchSummary.enabled` (default: `false`).
 
-```typescript
-async navigateTree(
-  targetId: string,
-  options?: { summarize?: boolean; customInstructions?: string }
-): Promise<{ editorText?: string; cancelled: boolean; aborted?: boolean; summaryEntry?: BranchSummaryEntry }>
-```
+When enabled, after picking a node the UI asks:
 
-Flow:
-1. Validate target, check no-op (target === current leaf)
-2. Find common ancestor between old leaf and target
-3. Collect entries to summarize (if requested, includes compaction entries)
-4. Fire `session_before_tree` event (hook can cancel or provide summary)
-5. Run default summarizer if needed (respects `customInstructions`)
-6. Switch leaf via `branch()` or `branchWithSummary()`
-7. Update agent: `agent.replaceMessages(sessionManager.buildSessionContext().messages)`
-8. Fire `session_tree` event (includes `summaryEntry`/`fromExtension` when applicable)
-9. Return result with `editorText` if user message was selected
+- `No summary`
+- `Summarize`
+- `Summarize with custom prompt`
 
-### SessionManager
+Flow details:
 
-- `getLeafId(): string | null` - Current leaf (null if empty)
-- `resetLeaf(): void` - Set leaf to null (for root user message navigation)
-- `getTree(): SessionTreeNode[]` - Full tree with children sorted by timestamp
-- `branch(id)` - Change leaf pointer
-- `branchWithSummary(id: string | null, summary, details?, fromExtension?)` - Change leaf and create summary entry
+- Escape in summary prompt reopens tree selector
+- Custom prompt cancellation returns to summary choice loop
+- During summarization, UI shows loader and binds `Esc` to `abortBranchSummary()`
+- If summarization aborts, tree selector reopens and no move is applied
 
-### InteractiveMode
+`navigateTree` internals:
 
-`/tree` command shows `TreeSelectorComponent`, then:
-1. If `branchSummary.enabled`, prompt for summary type (including custom prompt)
-2. Call `session.navigateTree()` with `summarize`/`customInstructions`
-3. Clear and re-render chat
-4. Set editor text if applicable
+- Collects abandoned-branch entries from old leaf to common ancestor
+- Emits `session_before_tree` (extensions can cancel or inject summary)
+- Uses default summarizer only if requested and needed
+- Applies move with:
+  - `branchWithSummary(...)` when summary exists
+  - `branch(newLeafId)` for non-root move without summary
+  - `resetLeaf()` for root move without summary
+- Replaces agent conversation with rebuilt session context
+- Emits `session_tree`
 
-## Hook Events
+Note: if user requests summary but there is nothing to summarize, navigation proceeds without creating a summary entry.
 
-### `session_before_tree`
+## Labels
 
-```typescript
-interface TreePreparation {
-  targetId: string;
-  oldLeafId: string | null;
-  commonAncestorId: string | null;
-  entriesToSummarize: SessionEntry[];
-  userWantsSummary: boolean;
-}
+Label edits in tree UI call `appendLabelChange(targetId, label)`.
 
-interface SessionBeforeTreeEvent {
-  type: "session_before_tree";
-  preparation: TreePreparation;
-  signal: AbortSignal;
-}
+- non-empty label sets/updates resolved label
+- empty label clears it
+- labels are stored as append-only `label` entries
+- tree nodes display resolved label state, not raw label-entry history
 
-interface SessionBeforeTreeResult {
-  cancel?: boolean;
-  summary?: { summary: string; details?: unknown };
-}
-```
+## `/tree` vs adjacent operations
 
-### `session_tree`
+| Operation | Scope | Result |
+|---|---|---|
+| `/tree` | Current session file | Moves leaf to selected point (same file) |
+| `/branch` | Usually current session file -> new session file | By default branches from selected **user** message into a new session file; if `doubleEscapeAction = "tree"`, `/branch` opens tree navigation UI instead |
+| `/fork` | Whole current session | Duplicates session into a new persisted session file |
+| `/resume` | Session list | Switches to another session file |
 
-```typescript
-interface SessionTreeEvent {
-  type: "session_tree";
-  newLeafId: string | null;
-  oldLeafId: string | null;
-  summaryEntry?: BranchSummaryEntry;
-  fromExtension?: boolean;
-}
-```
+Key distinction: `/tree` is a navigation/repositioning tool inside one session file. `/branch`, `/fork`, and `/resume` all change session-file context.
 
-### Example: Custom Summarizer
+## Operator workflows
 
-```typescript
-export default function(pi: HookAPI) {
-  pi.on("session_before_tree", async (event, ctx) => {
-    if (!event.preparation.userWantsSummary) return;
-    if (event.preparation.entriesToSummarize.length === 0) return;
-    
-    const summary = await myCustomSummarizer(event.preparation.entriesToSummarize);
-    return { summary: { summary, details: { custom: true } } };
-  });
-}
-```
+### Re-run from an earlier user prompt without losing current branch
 
-## Error Handling
+1. `/tree`
+2. search/select earlier user message
+3. choose `No summary` (or summarize if needed)
+4. edit prefilled text in editor
+5. submit
 
-- Summarization failure: navigation is cancelled and the caller shows the error
-- Escape during summarization: returns `{ cancelled: true, aborted: true }` and the selector reopens
-- Hook returns `cancel: true`: navigation is cancelled (caller decides UI)
-- Escape in the tree selector clears search first, then cancels if empty
+Effect: new branch grows from selected point within same session file.
+
+### Leave current branch with context breadcrumb
+
+1. enable `branchSummary.enabled`
+2. `/tree` and select target node
+3. choose `Summarize` (or custom prompt)
+
+Effect: a `branch_summary` entry is appended at the target position before continuing.
+
+### Investigate hidden bookkeeping entries
+
+1. `/tree`
+2. press `Alt+A` (all)
+3. search for `model`, `thinking`, `custom`, or labels
+
+Effect: inspect full internal timeline, not just conversational nodes.
+
+### Bookmark pivot points for later jumps
+
+1. `/tree`
+2. move to entry
+3. `Shift+L` and set label
+4. later use `Alt+L` (`labeled-only`) to jump quickly
+
+Effect: fast navigation among durable branch landmarks.

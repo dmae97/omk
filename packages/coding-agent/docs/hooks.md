@@ -1,906 +1,336 @@
-> omp can create hooks. Ask it to build one for your use case.
-
 # Hooks
 
-Hooks are TypeScript modules that extend omp's behavior by subscribing to lifecycle events. They can intercept tool calls, prompt the user, modify results, inject messages, and more.
+This document describes the **current hook subsystem code** in `src/extensibility/hooks/*`.
 
-**Key capabilities:**
+## Current status in runtime
 
-- **User interaction** - Hooks can prompt users via `ctx.ui` (select, confirm, input, notify)
-- **Custom UI components** - Full TUI components with keyboard input via `ctx.ui.custom()`
-- **Custom slash commands** - Register commands like `/mycommand` via `pi.registerCommand()`
-- **Event interception** - Block or modify tool calls, inject context, customize compaction
-- **Session persistence** - Store hook state that survives restarts via `pi.appendEntry()`
+The hook package (`src/extensibility/hooks/`) is still exported and usable as an API surface, but the default CLI runtime now initializes the **extension runner** path. In current startup flow:
 
-**Example use cases:**
+- `--hook` is treated as an alias for `--extension` (CLI paths are merged into `additionalExtensionPaths`)
+- tools are wrapped by `ExtensionToolWrapper`, not `HookToolWrapper`
+- context transforms and lifecycle emissions go through `ExtensionRunner`
 
-- Permission gates (confirm before `rm -rf`, `sudo`, etc.)
-- Git checkpointing (stash at each turn, restore on `/branch`)
-- Path protection (block writes to `.env`, `node_modules/`)
-- External integrations (file watchers, webhooks, CI triggers)
-- Interactive tools (games, wizards, custom dialogs)
+So this file documents the hook subsystem implementation itself (types/loader/runner/wrapper), including legacy behavior and constraints.
 
-See [examples/hooks/](../examples/hooks/) for working implementations, including a [snake game](../examples/hooks/snake.ts) demonstrating custom UI.
+## Key files
 
-## Quick Start
+- `src/extensibility/hooks/types.ts` — hook context, event types, and result contracts
+- `src/extensibility/hooks/loader.ts` — module loading and hook discovery bridge
+- `src/extensibility/hooks/runner.ts` — event dispatch, command lookup, error signaling
+- `src/extensibility/hooks/tool-wrapper.ts` — pre/post tool interception wrapper
+- `src/extensibility/hooks/index.ts` — exports/re-exports
 
-Create `~/.omp/agent/hooks/pre/my-hook.ts` (or project-local `.omp/hooks/pre/`):
+## What a hook module is
 
-```typescript
+A hook module must default-export a factory:
+
+```ts
 import type { HookAPI } from "@oh-my-pi/pi-coding-agent/hooks";
 
-export default function (pi: HookAPI) {
-	pi.on("session_start", async (_event, ctx) => {
-		ctx.ui.notify("Hook loaded!", "info");
-	});
-
+export default function hook(pi: HookAPI): void {
 	pi.on("tool_call", async (event, ctx) => {
-		if (event.toolName === "bash" && event.input.command?.includes("rm -rf")) {
-			const ok = await ctx.ui.confirm("Dangerous!", "Allow rm -rf?");
-			if (!ok) return { block: true, reason: "Blocked by user" };
+		if (event.toolName === "bash" && String(event.input.command ?? "").includes("rm -rf")) {
+			return { block: true, reason: "blocked by policy" };
 		}
 	});
 }
 ```
 
-Test with `--hook` flag:
+The factory can:
 
-```bash
-omp --hook ./my-hook.ts
-```
+- register event handlers with `pi.on(...)`
+- send persistent custom messages with `pi.sendMessage(...)`
+- persist non-LLM state with `pi.appendEntry(...)`
+- register slash commands via `pi.registerCommand(...)`
+- register custom message renderers via `pi.registerMessageRenderer(...)`
+- run shell commands via `pi.exec(...)`
 
-## Hook Locations
+## Discovery and loading
 
-Hooks are auto-discovered from config directories under `hooks/`:
+`discoverAndLoadHooks(configuredPaths, cwd)` does:
 
-Native (`.omp`, `.pi`) and Claude (`.claude`) use subdirectory structure:
+1. Load discovered hooks from capability registry (`loadCapability("hooks")`)
+2. Append explicitly configured paths (deduped by absolute path)
+3. Call `loadHooks(allPaths, cwd)`
 
-- User-level:
-  - Native: `~/.omp/agent/hooks/{pre,post}/*.ts` (or `~/.pi/agent`)
-  - Claude: `~/.claude/hooks/{pre,post}/*.ts`
-- Project-level: `.omp/hooks/{pre,post}/*.ts` (or `.pi`, `.claude`)
+`loadHooks` then imports each path and expects a `default` function.
 
-Codex (`.codex`) uses flat structure with filename prefixes (`pre-*.ts`, `post-*.ts`):
+### Path resolution
 
-- User-level: `~/.codex/hooks/*.ts`
-- Project-level: `.codex/hooks/*.ts`
+`loader.ts` resolves hook paths as:
 
-Hooks can also be loaded from plugin manifests or explicitly via `--hook`.
+- absolute path: used as-is
+- `~` path: expanded
+- relative path: resolved against `cwd`
 
-## Available Imports
+### Important legacy mismatch
 
-| Package                           | Purpose                                              |
-| --------------------------------- | ---------------------------------------------------- |
-| `@oh-my-pi/pi-coding-agent/hooks` | Hook types (`HookAPI`, `HookContext`, events)        |
-| `@oh-my-pi/pi-coding-agent`       | Components (`BorderedLoader`), utilities, type re-exports |
-| `@oh-my-pi/pi-ai`                 | AI utilities (`complete`, message types)             |
-| `@oh-my-pi/pi-tui`                | TUI components (`CancellableLoader`, etc.)           |
+Discovery providers for `hookCapability` still model pre/post shell-style hook files (for example `.claude/hooks/pre/*`, `.omp/.../hooks/pre/*`).
 
-Node.js built-ins (`node:fs`, `node:path`, etc.) are also available.
+The hook loader here uses dynamic module import and requires a default JS/TS hook factory. If a discovered hook path is not importable as a module, load fails and is reported in `LoadHooksResult.errors`.
 
-## Writing a Hook
+## Event surfaces
 
-A hook exports a default function that receives `HookAPI`:
+Hook events are strongly typed in `types.ts`.
 
-```typescript
-import type { HookAPI } from "@oh-my-pi/pi-coding-agent/hooks";
+### Session events
 
-export default function (pi: HookAPI) {
-	// Subscribe to events
-	pi.on("event_name", async (event, ctx) => {
-		// Handle event
-	});
-}
-```
+- `session_start`
+- `session_before_switch` → can return `{ cancel?: boolean }`
+- `session_switch`
+- `session_before_branch` → can return `{ cancel?: boolean; skipConversationRestore?: boolean }`
+- `session_branch`
+- `session_before_compact` → can return `{ cancel?: boolean; compaction?: CompactionResult }`
+- `session.compacting` → can return `{ context?: string[]; prompt?: string; preserveData?: Record<string, unknown> }`
+- `session_compact`
+- `session_before_tree` → can return `{ cancel?: boolean; summary?: { summary: string; details?: unknown } }`
+- `session_tree`
+- `session_shutdown`
 
-Hooks are loaded via native Bun import, so TypeScript works without compilation.
+### Agent/context events
 
-## Events
+- `context` → can return `{ messages?: Message[] }`
+- `before_agent_start` → can return `{ message?: { customType; content; display; details } }`
+- `agent_start`
+- `agent_end`
+- `turn_start`
+- `turn_end`
+- `auto_compaction_start`
+- `auto_compaction_end`
+- `auto_retry_start`
+- `auto_retry_end`
+- `ttsr_triggered`
+- `todo_reminder`
 
-### Lifecycle Overview
+### Tool events (pre/post model)
 
-```
-omp starts
-  │
-  └─► session_start
+- `tool_call` (pre-execution) → can return `{ block?: boolean; reason?: string }`
+- `tool_result` (post-execution) → can return `{ content?; details?; isError? }`
+
+This is the hook subsystem’s core pre/post interception model.
+
+```text
+Hook tool interception flow
+
+tool_call handlers
+   │
+   ├─ any { block: true }? ── yes ──> throw (tool blocked)
+   │
+   └─ no
       │
       ▼
-user sends prompt ─────────────────────────────────────────┐
-  │                                                        │
-  ├─► before_agent_start (can inject message)              │
-  ├─► agent_start                                          │
-  │                                                        │
-  │   ┌─── turn (repeats while LLM calls tools) ───┐       │
-  │   │                                            │       │
-  │   ├─► turn_start                               │       │
-  │   ├─► context (can modify messages)            │       │
-  │   │                                            │       │
-  │   │   LLM responds, may call tools:            │       │
-  │   │     ├─► tool_call (can block)              │       │
-  │   │     │   tool executes                      │       │
-  │   │     └─► tool_result (can modify)           │       │
-  │   │                                            │       │
-  │   └─► turn_end                                 │       │
-  │                                                        │
-  └─► agent_end                                            │
-                                                           │
-user sends another prompt ◄────────────────────────────────┘
-
-/new, /resume, or /fork
-  ├─► session_before_switch (can cancel, has reason: "new" | "resume" | "fork")
-  └─► session_switch (has reason: "new" | "resume" | "fork")
-
-/branch
-  ├─► session_before_branch (can cancel)
-  └─► session_branch
-
-/compact or auto-compaction
-  ├─► session_before_compact (can cancel or customize)
-  ├─► session.compacting (customize prompt/context)
-  └─► session_compact
-
-/tree navigation
-  ├─► session_before_tree (can cancel or customize)
-  └─► session_tree
-
-exit (Ctrl+C, Ctrl+D)
-  └─► session_shutdown
+   execute underlying tool
+      │
+      ├─ success ──> tool_result handlers can override { content, details }
+      │
+      └─ error   ──> emit tool_result(isError=true) then rethrow original error
 ```
 
-### Session Events
 
-#### session_start
+## Execution model and mutation semantics
 
-Fired on initial session load.
+### 1) Pre-execution: `tool_call`
 
-```typescript
-pi.on("session_start", async (_event, ctx) => {
-	ctx.ui.notify(`Session: ${ctx.sessionManager.getSessionFile() ?? "ephemeral"}`, "info");
-});
-```
+`HookToolWrapper.execute()` emits `tool_call` before tool execution.
 
-#### session_before_switch / session_switch
+- if any handler returns `{ block: true }`, execution stops
+- if handler throws, wrapper fails closed and blocks execution
+- returned `reason` becomes the thrown error text
 
-Fired when starting a new session (`/new`), resuming (`/resume`), or forking (`/fork`).
+### 2) Tool execution
 
-```typescript
-pi.on("session_before_switch", async (event, ctx) => {
-	// event.reason - "new" (starting fresh), "resume" (switching to existing), or "fork" (branch switch)
-	// event.targetSessionFile - session we're switching to (only for "resume")
+Underlying tool executes normally if not blocked.
 
-	if (event.reason === "new") {
-		const ok = await ctx.ui.confirm("Clear?", "Delete all messages?");
-		if (!ok) return { cancel: true };
-	}
+### 3) Post-execution: `tool_result`
 
-	return { cancel: true }; // Cancel the switch/new
-});
+After success, wrapper emits `tool_result` with:
 
-pi.on("session_switch", async (event, ctx) => {
-	// event.reason - "new", "resume", or "fork"
-	// event.previousSessionFile - session we came from
-});
-```
+- `toolName`, `toolCallId`, `input`
+- `content`
+- `details`
+- `isError: false`
 
-#### session_before_branch / session_branch
+If handler returns overrides:
 
-Fired when branching via `/branch`.
+- `content` can replace result content
+- `details` can replace result details
 
-```typescript
-pi.on("session_before_branch", async (event, ctx) => {
-	// event.entryId - ID of the entry being branched from
+On tool failure, wrapper emits `tool_result` with `isError: true` and error text content, then rethrows original error.
 
-	return { cancel: true }; // Cancel branch
-	// OR
-	return { skipConversationRestore: true }; // Branch but don't rewind messages
-});
+### What hooks can mutate
 
-pi.on("session_branch", async (event, ctx) => {
-	// event.previousSessionFile - previous session file
-});
-```
+- LLM context for a single call via `context` (`messages` replacement chain)
+- tool output content/details on successful tool calls (`tool_result` path)
+- pre-agent injected message via `before_agent_start`
+- cancellation/custom compaction/tree behavior via `session_before_*` and `session.compacting`
 
-The `skipConversationRestore` option is useful for checkpoint hooks that restore code state separately.
+### What hooks cannot mutate in this implementation
 
-#### session_before_compact / session.compacting / session_compact
+- raw tool input parameters in-place (only block/allow on `tool_call`)
+- execution continuation after thrown tool errors (error path rethrows)
+- final success/error status in wrapper behavior (returned `isError` is typed but not applied by `HookToolWrapper`)
 
-Fired on compaction. See [compaction.md](compaction.md) for details.
+## Ordering and conflict behavior
 
-```typescript
-pi.on("session_before_compact", async (event, ctx) => {
-	const { preparation, branchEntries, customInstructions, signal } = event;
+### Discovery-level ordering
 
-	// Cancel:
-	return { cancel: true };
+Capability providers are priority-sorted (higher first). Dedupe is by capability key, first wins.
 
-	// Custom summary:
-	return {
-		compaction: {
-			summary: "...",
-			firstKeptEntryId: preparation.firstKeptEntryId,
-			tokensBefore: preparation.tokensBefore,
-		},
-	};
-});
+For `hooks`, capability key is `${type}:${tool}:${name}`. Shadowed duplicates from lower-priority providers are marked and excluded from effective discovered list.
 
-```
+### Load order
 
-#### session.compacting
+`discoverAndLoadHooks` builds a flat `allPaths` list, deduped by resolved absolute path, then `loadHooks` iterates in that order.
+File order within each discovered directory depends on `readdir` output; the hook loader does not perform an additional sort.
 
-Fired after preparation but before the default summarizer runs. Use it to customize the prompt or add context
-when you are not returning a full compaction result from `session_before_compact`.
+### Runtime handler order
 
-```typescript
-pi.on("session.compacting", async (event, ctx) => {
-	// event.sessionId
-	// event.messages - messages about to be summarized
+Inside `HookRunner`, order is deterministic by registration sequence:
 
-	return {
-		context: ["Additional context line"],
-		prompt: "Custom compaction prompt...",
-		preserveData: { source: "my-hook" },
-	};
-});
-```
+1. hooks array order
+2. handler registration order per hook/event
 
-```typescript
-pi.on("session_compact", async (event, ctx) => {
-	// event.compactionEntry - the saved compaction
-	// event.fromExtension - whether hook provided it
-});
-```
+Conflict behavior by event type:
 
-#### session_before_tree / session_tree
+- `tool_call`: last returned result wins unless a handler blocks; first block short-circuits
+- `tool_result`: last returned override wins (no short-circuit)
+- `context`: chained; each handler receives prior handler’s message output
+- `before_agent_start`: first returned message is kept; later messages ignored
+- `session_before_*`: latest returned result is tracked; `cancel: true` short-circuits immediately
+- `session.compacting`: latest returned result wins
 
-Fired on `/tree` navigation. Always fires regardless of user's summarization choice. See [compaction.md](compaction.md) for details.
+Command/renderer conflicts:
 
-```typescript
-pi.on("session_before_tree", async (event, ctx) => {
-	const { preparation, signal } = event;
-	// preparation.targetId, oldLeafId, commonAncestorId, entriesToSummarize
-	// preparation.userWantsSummary - whether user chose to summarize
+- `getCommand(name)` returns first match across hooks (first loaded wins)
+- `getMessageRenderer(customType)` returns first match
+- `getRegisteredCommands()` returns all commands (no dedupe)
 
-	return { cancel: true };
-	// OR provide custom summary (only used if userWantsSummary is true):
-	return { summary: { summary: "...", details: {} } };
-});
+## UI interactions (`HookContext.ui`)
 
-pi.on("session_tree", async (event, ctx) => {
-	// event.newLeafId, oldLeafId, summaryEntry, fromExtension
-});
-```
+`HookUIContext` includes:
 
-#### session_shutdown
+- `select`, `confirm`, `input`, `editor`
+- `notify`
+- `setStatus`
+- `custom`
+- `setEditorText`, `getEditorText`
+- `theme` getter
 
-Fired on exit (Ctrl+C, Ctrl+D, SIGTERM).
+`ctx.hasUI` indicates whether interactive UI is available.
 
-```typescript
-pi.on("session_shutdown", async (_event, ctx) => {
-	// Cleanup, save state, etc.
-});
-```
+When running with no UI, the default no-op context behavior is:
 
-### Agent Events
+- `select/input/editor` return `undefined`
+- `confirm` returns `false`
+- `notify`, `setStatus`, `setEditorText` are no-ops
+- `getEditorText` returns `""`
 
-#### before_agent_start
+### Status line behavior
 
-Fired after user submits prompt, before agent loop. Can inject a persistent message.
+Hook status text set via `ctx.ui.setStatus(key, text)` is:
 
-```typescript
-pi.on("before_agent_start", async (event, ctx) => {
-	// event.prompt - user's prompt text
-	// event.images - attached images (if any)
+- stored per key
+- sorted by key name
+- sanitized (`\r`, `\n`, `\t` → spaces; repeated spaces collapsed)
+- joined and width-truncated for display
 
-	return {
-		message: {
-			customType: "my-hook",
-			content: "Additional context for the LLM",
-			display: true, // Show in TUI
-		},
-	};
-});
-```
+## Error propagation and fallback
 
-The injected message is persisted as `CustomMessageEntry` and sent to the LLM.
+### Load-time
 
-#### agent_start / agent_end
+- invalid module or missing default export → captured in `LoadHooksResult.errors`
+- loading continues for other hooks
 
-Fired once per user prompt.
+### Event-time
 
-```typescript
-pi.on("agent_start", async (_event, ctx) => {});
+`HookRunner.emit(...)` catches handler errors for most events and emits `HookError` to listeners (`hookPath`, `event`, `error`), then continues.
 
-pi.on("agent_end", async (event, ctx) => {
-	// event.messages - messages from this prompt
-});
-```
+`emitToolCall(...)` is stricter: handler errors are not swallowed there; they propagate to caller. In `HookToolWrapper`, this blocks the tool call (fail-safe).
 
-#### turn_start / turn_end
+## Realistic API examples
 
-Fired for each turn (one LLM response + tool calls).
+### Block unsafe bash commands
 
-```typescript
-pi.on("turn_start", async (event, ctx) => {
-	// event.turnIndex, event.timestamp
-});
-
-pi.on("turn_end", async (event, ctx) => {
-	// event.turnIndex
-	// event.message - assistant's response
-	// event.toolResults - tool results from this turn
-});
-```
-
-#### context
-
-Fired before each LLM call. Modify messages non-destructively (session unchanged).
-
-```typescript
-pi.on("context", async (event, ctx) => {
-	// event.messages - deep copy, safe to modify
-
-	// Filter or transform messages
-	const filtered = event.messages.filter((m) => !shouldPrune(m));
-	return { messages: filtered };
-});
-```
-
-### Tool Events
-
-#### tool_call
-
-Fired before tool executes. **Can block.**
-
-```typescript
-pi.on("tool_call", async (event, ctx) => {
-	// event.toolName - "bash", "read", "write", "edit", etc.
-	// event.toolCallId
-	// event.input - tool parameters
-
-	if (shouldBlock(event)) {
-		return { block: true, reason: "Not allowed" };
-	}
-});
-```
-
-Tool inputs (common built-ins):
-
-- `bash`: `{ command, timeout?, cwd?, head?, tail? }`
-- `read`: `{ path, offset?, limit?, lines? }`
-- `write`: `{ path, content }`
-- `edit` (replace mode): `{ path, old_text, new_text, all? }`
-- `edit` (patch mode): `{ path, op?, rename?, diff? }`
-- `find`: `{ pattern, hidden?, limit? }`
-- `grep`: `{ pattern, path?, glob?, type?, i?, pre?, post?, multiline?, limit?, offset? }`
-
-The edit input shape depends on the current edit variant (replace vs patch). Inspect `event.input` to
-see which schema is active.
-
-Other tools (ask, browser, task, todo_write, fetch, web_search, python, notebook, lsp, ssh, calc) use
-their own schemas; inspect the tool prompt or `src/tools/*.ts` for details.
-
-#### tool_result
-
-Fired after tool executes (including errors). **Can modify result.**
-
-Check `event.isError` to distinguish successful executions from failures.
-
-```typescript
-pi.on("tool_result", async (event, ctx) => {
-  // event.toolName, event.toolCallId, event.input
-  // event.content - array of TextContent | ImageContent
-  // event.details - tool-specific (see below)
-  // event.isError - true if the tool threw an error
-
-  if (event.isError) {
-    // Handle error case
-  }
-
-  // Modify result:
-  return { content: [...], details: {...}, isError: false };
-});
-```
-
-Use `event.toolName` to narrow tool-specific details:
-
-```typescript
-pi.on("tool_result", async (event, ctx) => {
-	if (event.toolName === "bash") {
-		// event.details is BashToolDetails | undefined
-		const artifactId = event.details?.meta?.truncation?.artifactId;
-		if (artifactId) {
-			// Full output is stored under the artifact ID
-		}
-	}
-});
-```
-
-## HookContext
-
-Every handler receives `ctx: HookContext`:
-
-### ctx.ui
-
-UI methods for user interaction. Hooks can prompt users and even render custom TUI components.
-
-**Built-in dialogs:**
-
-```typescript
-// Select from options
-const choice = await ctx.ui.select("Pick one:", ["A", "B", "C"]);
-// Returns selected string or undefined if cancelled
-
-// Confirm dialog
-const ok = await ctx.ui.confirm("Delete?", "This cannot be undone");
-// Returns true or false
-
-// Text input (single line)
-const name = await ctx.ui.input("Name:", "placeholder");
-// Returns string or undefined if cancelled
-
-// Multi-line editor (with Ctrl+G for external editor)
-const text = await ctx.ui.editor("Edit prompt:", "prefilled text");
-// Returns edited text or undefined if cancelled (Escape)
-// Ctrl+Enter to submit, Ctrl+G to open $VISUAL or $EDITOR
-
-// Notification (non-blocking)
-ctx.ui.notify("Done!", "info"); // "info" | "warning" | "error"
-
-// Set status text in footer (persistent until cleared)
-ctx.ui.setStatus("my-hook", "Processing 5/10..."); // Set status
-ctx.ui.setStatus("my-hook", undefined); // Clear status
-
-// Set the core input editor text (pre-fill prompts, generated content)
-ctx.ui.setEditorText("Generated prompt text here...");
-
-// Get current editor text
-const currentText = ctx.ui.getEditorText();
-```
-
-**Status text notes:**
-
-- Multiple hooks can set their own status using unique keys
-- Statuses are displayed on a single line in the footer, sorted alphabetically by key
-- Text is sanitized (newlines/tabs replaced with spaces) and truncated to terminal width
-- Use `ctx.ui.theme` to style status text with theme colors (see below)
-
-**Styling with theme colors:**
-
-Use `ctx.ui.theme` to apply consistent colors that respect the user's theme:
-
-```typescript
-const theme = ctx.ui.theme;
-
-// Foreground colors
-ctx.ui.setStatus("my-hook", theme.fg("success", "✓") + theme.fg("dim", " Ready"));
-ctx.ui.setStatus("my-hook", theme.fg("error", "✗") + theme.fg("dim", " Failed"));
-ctx.ui.setStatus("my-hook", theme.fg("accent", "●") + theme.fg("dim", " Working..."));
-
-// Available fg colors: accent, success, error, warning, muted, dim, text, and more
-// See docs/theme.md for the full list of theme colors
-```
-
-See [examples/hooks/status-line.ts](../examples/hooks/status-line.ts) for a complete example.
-
-**Custom components:**
-
-Show a custom TUI component with keyboard focus:
-
-```typescript
-import { BorderedLoader } from "@oh-my-pi/pi-coding-agent";
-
-const result = await ctx.ui.custom((tui, theme, done) => {
-	const loader = new BorderedLoader(tui, theme, "Working...");
-	loader.onAbort = () => done(null);
-
-	doWork(loader.signal)
-		.then(done)
-		.catch(() => done(null));
-
-	return loader;
-});
-```
-
-Your component can:
-
-- Implement `handleInput(data: string)` to receive keyboard input
-- Implement `render(width: number): string[]` to render lines
-- Implement `invalidate()` to clear cached render
-- Implement `dispose()` for cleanup when closed
-- Call `tui.requestRender()` to trigger re-render
-- Call `done(result)` when done to restore normal UI
-
-See [examples/hooks/qna.ts](../examples/hooks/qna.ts) for a loader pattern and [examples/hooks/snake.ts](../examples/hooks/snake.ts) for a game. See [tui.md](tui.md) for the full component API.
-
-### ctx.hasUI
-
-`false` in print mode (`-p`) and JSON print mode. RPC mode provides UI via the host, so `ctx.hasUI` is true.
-Always check before using `ctx.ui`:
-
-```typescript
-if (ctx.hasUI) {
-  const choice = await ctx.ui.select(...);
-} else {
-  // Default behavior
-}
-```
-
-### ctx.cwd
-
-Current working directory.
-
-### ctx.sessionManager
-
-Read-only access to session state. See `ReadonlySessionManager` in [`src/session/session-manager.ts`](../src/session/session-manager.ts).
-
-```typescript
-// Session info
-ctx.sessionManager.getCwd(); // Working directory
-ctx.sessionManager.getSessionDir(); // Session directory (~/.omp/agent/sessions)
-ctx.sessionManager.getSessionId(); // Current session ID
-ctx.sessionManager.getSessionFile(); // Session file path (undefined with --no-session)
-
-// Entries
-ctx.sessionManager.getEntries(); // All entries (excludes header)
-ctx.sessionManager.getHeader(); // Session header entry
-ctx.sessionManager.getEntry(id); // Specific entry by ID
-ctx.sessionManager.getLabel(id); // Entry label (if any)
-
-// Tree navigation
-ctx.sessionManager.getBranch(); // Current branch (root to leaf)
-ctx.sessionManager.getBranch(leafId); // Specific branch
-ctx.sessionManager.getTree(); // Full tree structure
-ctx.sessionManager.getLeafId(); // Current leaf entry ID
-ctx.sessionManager.getLeafEntry(); // Current leaf entry
-```
-
-Use `pi.sendMessage()` or `pi.appendEntry()` for writes.
-
-### ctx.modelRegistry
-
-Access to models and API keys:
-
-```typescript
-// Get API key for a model
-const apiKey = await ctx.modelRegistry.getApiKey(model);
-
-// Get available models
-const models = ctx.modelRegistry.getAvailable();
-```
-
-### ctx.model
-
-Current model, or `undefined` if none selected yet. Use for LLM calls in hooks:
-
-```typescript
-if (ctx.model) {
-	const apiKey = await ctx.modelRegistry.getApiKey(ctx.model);
-	// Use with @oh-my-pi/pi-ai complete()
-}
-```
-
-### ctx.isIdle()
-
-Returns `true` if the agent is not currently streaming:
-
-```typescript
-if (ctx.isIdle()) {
-	// Agent is not processing
-}
-```
-
-### ctx.abort()
-
-Abort the current agent operation (fire-and-forget, does not wait):
-
-```typescript
-ctx.abort();
-```
-
-### ctx.hasQueuedMessages()
-
-Check if there are messages queued (user typed while agent was streaming):
-
-```typescript
-if (ctx.hasQueuedMessages()) {
-	// Skip interactive prompt, let queued message take over
-	return;
-}
-```
-
-## HookCommandContext (Slash Commands Only)
-
-Slash command handlers receive `HookCommandContext`, which extends `HookContext` with session control methods. These methods are only safe in user-initiated commands because they can cause deadlocks if called from event handlers (which run inside the agent loop).
-
-### ctx.waitForIdle()
-
-Wait for the agent to finish streaming:
-
-```typescript
-await ctx.waitForIdle();
-// Agent is now idle
-```
-
-### ctx.newSession(options?)
-
-Create a new session, optionally with initialization:
-
-```typescript
-const result = await ctx.newSession({
-	parentSession: ctx.sessionManager.getSessionFile(), // Track lineage
-	setup: async (sm) => {
-		// Initialize the new session
-		sm.appendMessage({
-			role: "user",
-			content: [{ type: "text", text: "Context from previous session..." }],
-			timestamp: Date.now(),
-		});
-	},
-});
-
-if (result.cancelled) {
-	// A hook cancelled the new session
-}
-```
-
-### ctx.branch(entryId)
-
-Branch from a specific entry, creating a new session file:
-
-```typescript
-const result = await ctx.branch("entry-id-123");
-if (!result.cancelled) {
-	// Now in the branched session
-}
-```
-
-### ctx.navigateTree(targetId, options?)
-
-Navigate to a different point in the session tree:
-
-```typescript
-const result = await ctx.navigateTree("entry-id-456", {
-	summarize: true, // Summarize the abandoned branch
-});
-```
-
-## HookAPI Methods
-
-### pi.on(event, handler)
-
-Subscribe to events. See [Events](#events) for all event types.
-
-### pi.sendMessage(message, options?)
-
-Inject a message into the session. Creates a `CustomMessageEntry` that participates in the LLM context.
-
-```typescript
-pi.sendMessage(
-	{
-		customType: "my-hook",      // Your hook's identifier
-		content: "Message text",    // string or (TextContent | ImageContent)[]
-		display: true,              // Show in TUI
-		details: { ... },           // Optional metadata (not sent to LLM)
-	},
-	{ triggerTurn: true },        // Trigger a new LLM response if idle
-);
-```
-
-**Storage and timing:**
-
-- The message is appended to the session file immediately as a `CustomMessageEntry`
-- If the agent is currently streaming, the message is queued and appended after the current turn
-- If `options.triggerTurn` is true and the agent is idle, a new agent loop starts
-- `options.deliverAs` chooses how to enqueue the message (`"steer"` or `"followUp"`)
-
-**LLM context:**
-
-- `CustomMessageEntry` is converted to a user message when building context for the LLM
-- Only `content` is sent to the LLM; `details` is for rendering/state only
-
-**TUI display:**
-
-- If `display: true`, the message appears in the chat with purple styling (customMessageBg, customMessageText, customMessageLabel theme colors)
-- If `display: false`, the message is hidden from the TUI but still sent to the LLM
-- Use `pi.registerMessageRenderer()` to customize how your messages render (see below)
-
-### pi.appendEntry(customType, data?)
-
-Persist hook state. Creates `CustomEntry` (does NOT participate in LLM context).
-
-```typescript
-// Save state
-pi.appendEntry("my-hook-state", { count: 42 });
-
-// Restore on reload
-pi.on("session_start", async (_event, ctx) => {
-	for (const entry of ctx.sessionManager.getEntries()) {
-		if (entry.type === "custom" && entry.customType === "my-hook-state") {
-			// Reconstruct from entry.data
-		}
-	}
-});
-```
-
-### pi.registerCommand(name, options)
-
-Register a custom slash command:
-
-```typescript
-pi.registerCommand("stats", {
-	description: "Show session statistics",
-	handler: async (args, ctx) => {
-		// args = everything after /stats
-		const count = ctx.sessionManager.getEntries().length;
-		ctx.ui.notify(`${count} entries`, "info");
-	},
-});
-```
-
-For long-running commands (e.g., LLM calls), use `ctx.ui.custom()` with a loader. See [examples/hooks/qna.ts](../examples/hooks/qna.ts).
-
-To trigger the LLM after a command, call `pi.sendMessage(..., { triggerTurn: true })`.
-
-### pi.registerMessageRenderer(customType, renderer)
-
-Register a custom TUI renderer for `CustomMessageEntry` messages with your `customType`. Without a custom renderer, messages display with default purple styling showing the content as-is.
-
-```typescript
-import { Text } from "@oh-my-pi/pi-tui";
-
-pi.registerMessageRenderer("my-hook", (message, options, theme) => {
-	// message.content - the message content (string or content array)
-	// message.details - your custom metadata
-	// options.expanded - true if user pressed Ctrl+O
-
-	const prefix = theme.fg("accent", `[${message.details?.label ?? "INFO"}] `);
-	const text =
-		typeof message.content === "string"
-			? message.content
-			: message.content.map((c) => (c.type === "text" ? c.text : "[image]")).join("");
-
-	return new Text(prefix + theme.fg("text", text), 0, 0);
-});
-```
-
-**Renderer signature:**
-
-```typescript
-type HookMessageRenderer = (
-	message: HookMessage,
-	options: { expanded: boolean },
-	theme: Theme
-) => Component | undefined;
-```
-
-Return `undefined` to use default rendering. The returned component is wrapped in a styled Box by the TUI. See [tui.md](tui.md) for component details.
-
-### pi.exec(command, args, options?)
-
-Execute a shell command:
-
-```typescript
-const result = await pi.exec("git", ["status"], {
-	signal, // AbortSignal
-	timeout, // Milliseconds
-});
-
-// result.stdout, result.stderr, result.code, result.killed
-```
-
-### pi.logger / pi.typebox / pi.pi
-
-- `pi.logger` is the shared logger (avoid `console.*` to keep the TUI clean)
-- `pi.typebox` exposes `@sinclair/typebox` for schema definitions
-- `pi.pi` exposes `@oh-my-pi/pi-coding-agent` exports (components, helpers)
-
-## Examples
-
-### Permission Gate
-
-```typescript
+```ts
 import type { HookAPI } from "@oh-my-pi/pi-coding-agent/hooks";
 
-export default function (pi: HookAPI) {
-	const dangerous = [/\brm\s+(-rf?|--recursive)/i, /\bsudo\b/i];
-
+export default function (pi: HookAPI): void {
 	pi.on("tool_call", async (event, ctx) => {
 		if (event.toolName !== "bash") return;
+		const cmd = String(event.input.command ?? "");
+		if (!cmd.includes("rm -rf")) return;
 
-		const cmd = event.input.command as string;
-		if (dangerous.some((p) => p.test(cmd))) {
-			if (!ctx.hasUI) {
-				return { block: true, reason: "Dangerous (no UI)" };
-			}
-			const ok = await ctx.ui.confirm("Dangerous!", `Allow: ${cmd}?`);
-			if (!ok) return { block: true, reason: "Blocked by user" };
-		}
+		if (!ctx.hasUI) return { block: true, reason: "rm -rf blocked (no UI)" };
+		const ok = await ctx.ui.confirm("Dangerous command", `Allow: ${cmd}`);
+		if (!ok) return { block: true, reason: "user denied command" };
 	});
 }
 ```
 
-### Protected Paths
+### Redact tool output on post-execution
 
-```typescript
+```ts
 import type { HookAPI } from "@oh-my-pi/pi-coding-agent/hooks";
 
-export default function (pi: HookAPI) {
-	const protectedPaths = [".env", ".git/", "node_modules/"];
+export default function (pi: HookAPI): void {
+	pi.on("tool_result", async event => {
+		if (event.toolName !== "read" || event.isError) return;
 
-	pi.on("tool_call", async (event, ctx) => {
-		if (event.toolName !== "write" && event.toolName !== "edit") return;
+		const redacted = event.content.map(chunk => {
+			if (chunk.type !== "text") return chunk;
+			return { ...chunk, text: chunk.text.replaceAll(/API_KEY=\S+/g, "API_KEY=[REDACTED]") };
+		});
 
-		const path = event.input.path as string;
-		if (protectedPaths.some((p) => path.includes(p))) {
-			ctx.ui.notify(`Blocked: ${path}`, "warning");
-			return { block: true, reason: `Protected: ${path}` };
-		}
+		return { content: redacted };
 	});
 }
 ```
 
-### Git Checkpoint
+### Modify model context per LLM call
 
-```typescript
+```ts
 import type { HookAPI } from "@oh-my-pi/pi-coding-agent/hooks";
 
-export default function (pi: HookAPI) {
-	const checkpoints = new Map<string, string>();
-	let currentEntryId: string | undefined;
-
-	pi.on("tool_result", async (_event, ctx) => {
-		const leaf = ctx.sessionManager.getLeafEntry();
-		if (leaf) currentEntryId = leaf.id;
+export default function (pi: HookAPI): void {
+	pi.on("context", async event => {
+		const filtered = event.messages.filter(msg => !(msg.role === "custom" && msg.customType === "debug-only"));
+		return { messages: filtered };
 	});
-
-	pi.on("turn_start", async () => {
-		const { stdout } = await pi.exec("git", ["stash", "create"]);
-		if (stdout.trim() && currentEntryId) {
-			checkpoints.set(currentEntryId, stdout.trim());
-		}
-	});
-
-	pi.on("session_before_branch", async (event, ctx) => {
-		const ref = checkpoints.get(event.entryId);
-		if (!ref || !ctx.hasUI) return;
-
-		const ok = await ctx.ui.confirm("Restore?", "Restore code to checkpoint?");
-		if (ok) {
-			await pi.exec("git", ["stash", "apply", ref]);
-			ctx.ui.notify("Code restored", "info");
-		}
-	});
-
-	pi.on("agent_end", () => checkpoints.clear());
 }
 ```
 
-### Custom Command
+### Register slash command with command-safe context methods
 
-See [examples/hooks/snake.ts](../examples/hooks/snake.ts) for a complete example with `registerCommand()`, `ui.custom()`, and session persistence.
+```ts
+import type { HookAPI } from "@oh-my-pi/pi-coding-agent/hooks";
 
-## Mode Behavior
+export default function (pi: HookAPI): void {
+	pi.registerCommand("handoff", {
+		description: "Create a new session with setup message",
+		handler: async (_args, ctx) => {
+			await ctx.waitForIdle();
+			await ctx.newSession({
+				parentSession: ctx.sessionManager.getSessionFile(),
+				setup: async sm => {
+					sm.appendMessage({
+						role: "user",
+						content: [{ type: "text", text: "Continue from prior session summary." }],
+						timestamp: Date.now(),
+					});
+				},
+			});
+		},
+	});
+}
+```
 
-| Mode            | UI Methods                 | Notes                                      |
-| --------------- | -------------------------- | ------------------------------------------ |
-| Interactive     | Full TUI                   | Normal operation                           |
-| RPC             | UI via RPC                 | Host handles UI, `ctx.hasUI` is true       |
-| Print (`-p`)    | No-op (returns undefined/false) | Hooks run but can't prompt (`ctx.hasUI`=false) |
+## Export surface
 
-In print mode (including JSON output), `select()` returns `undefined`, `confirm()` returns `false`, `input()` returns
-`undefined`, `getEditorText()` returns `""`, and `setEditorText()`/`setStatus()` are no-ops. Design hooks to handle this
-by checking `ctx.hasUI`.
+`src/extensibility/hooks/index.ts` exports:
 
-## Error Handling
+- loading APIs (`discoverAndLoadHooks`, `loadHooks`)
+- runner and wrapper (`HookRunner`, `HookToolWrapper`)
+- all hook types
+- `execCommand` re-export
 
-- Hook errors are logged, agent continues
-- `tool_call` errors block the tool (fail-safe)
-- Errors display in UI with hook path and message
-- If a hook hangs, use Ctrl+C to abort
-
-## Debugging
-
-1. Open VS Code in hooks directory
-2. Open JavaScript Debug Terminal (Ctrl+Shift+P → "JavaScript Debug Terminal")
-3. Set breakpoints
-4. Run `omp --hook ./my-hook.ts`
+And package root (`src/index.ts`) re-exports hook **types** as a legacy compatibility surface.

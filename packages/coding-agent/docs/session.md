@@ -1,368 +1,437 @@
-# Session File Format
+# Session Storage and Entry Model
 
-Sessions are stored as JSONL (JSON Lines) files. Each line is a JSON object with a `type` field. Session entries form a tree structure via `id`/`parentId` fields, enabling in-place branching without creating new files.
+This document is the source of truth for how coding-agent sessions are represented, persisted, migrated, and reconstructed at runtime.
 
-## File Location
+## Scope
 
-```
-~/.omp/agent/sessions/--<cwd>--/<timestamp>_<sessionId>.jsonl
-```
+Covers:
 
-Default base directory comes from `getAgentDir()` (overridable via `PI_CODING_AGENT_DIR`).
-`<cwd>` is the working directory with the leading slash removed and `/`, `\`, `:` replaced by `-`.
-`<timestamp>` is ISO-8601 with `:`/`.` replaced by `-`. `sessionId` is a snowflake hex string.
+- Session JSONL format and versioning
+- Entry taxonomy and tree semantics (`id`/`parentId` + leaf pointer)
+- Migration/compatibility behavior when loading old or malformed files
+- Context reconstruction (`buildSessionContext`)
+- Persistence guarantees, failure behavior, truncation/blob externalization
+- Storage abstractions (`FileSessionStorage`, `MemorySessionStorage`) and related utilities
 
-## Session Version
+Does not cover `/tree` UI rendering behavior beyond semantics that affect session data.
 
-Sessions have a version field in the header:
+## Implementation Files
 
-- **Version 1**: Linear entry sequence (legacy, auto-migrated on load)
-- **Version 2**: Tree structure with `id`/`parentId` linking
-- **Version 3**: Renamed legacy `hookMessage` role to `custom`
+- [`src/session/session-manager.ts`](../src/session/session-manager.ts)
+- [`src/session/messages.ts`](../src/session/messages.ts)
+- [`src/session/session-storage.ts`](../src/session/session-storage.ts)
+- [`src/session/history-storage.ts`](../src/session/history-storage.ts)
+- [`src/session/blob-store.ts`](../src/session/blob-store.ts)
 
-Existing sessions are automatically migrated to the latest version when loaded.
+## On-Disk Layout
 
-## Type Definitions
+Default session file location:
 
-- [`src/session/session-manager.ts`](../src/session/session-manager.ts) - Session entry types and `SessionManager`
-- [`src/session/messages.ts`](../src/session/messages.ts) - Custom message roles and LLM conversion
-- [`packages/agent/src/types.ts`](../../agent/src/types.ts) - `AgentMessage`, `ThinkingLevel`
-- [`packages/ai/src/types.ts`](../../ai/src/types.ts) - `Message`, content blocks, `Usage`, `ToolCall`
-
-## Entry Base
-
-All entries (except `SessionHeader`) extend `SessionEntryBase`:
-
-```typescript
-interface SessionEntryBase {
-	type: string;
-	id: string; // Short snowflake suffix (8 hex chars)
-	parentId: string | null; // Parent entry ID (null for first entry)
-	timestamp: string; // ISO timestamp
-}
+```text
+~/.omp/agent/sessions/--<cwd-encoded>--/<timestamp>_<sessionId>.jsonl
 ```
 
-## Entry Types
+`<cwd-encoded>` is derived from the working directory by stripping leading slash and replacing `/`, `\\`, and `:` with `-`.
 
-### SessionHeader
+Blob store location:
 
-First line of the file. Metadata only, not part of the tree (no `id`/`parentId`). `version` is absent in v1 sessions.
+```text
+~/.omp/agent/blobs/<sha256>
+```
+
+Terminal breadcrumb files are written under:
+
+```text
+~/.omp/agent/terminal-sessions/<terminal-id>
+```
+
+Breadcrumb content is two lines: original cwd, then session file path. `continueRecent()` prefers this terminal-scoped pointer before scanning most-recent mtime.
+
+## File Format
+
+Session files are JSONL: one JSON object per line.
+
+- Line 1 is always the session header (`type: "session"`).
+- Remaining lines are `SessionEntry` values.
+- Entries are append-only at runtime; branch navigation moves a pointer (`leafId`) rather than mutating existing entries.
+
+### Header (`SessionHeader`)
 
 ```json
 {
-	"type": "session",
-	"version": 3,
-	"id": "a1b2c3d4e5f60001",
-	"timestamp": "2024-12-03T14:00:00.000Z",
-	"cwd": "/path/to/project",
-	"title": "Optional title"
+  "type": "session",
+  "version": 3,
+  "id": "1f9d2a6b9c0d1234",
+  "timestamp": "2026-02-16T10:20:30.000Z",
+  "cwd": "/work/pi",
+  "title": "optional session title",
+  "parentSession": "optional lineage marker"
 }
 ```
 
-For sessions with a parent (created via `/branch`, `newSession({ parentSession })`, or fork operations):
+Notes:
+
+- `version` is optional in v1 files; absence means v1.
+- `parentSession` is an opaque lineage string. Current code writes either a session id or a session path depending on flow (`fork`, `forkFrom`, `createBranchedSession`, or explicit `newSession({ parentSession })`). Treat as metadata, not a typed foreign key.
+
+### Entry Base (`SessionEntryBase`)
+
+All non-header entries include:
 
 ```json
 {
-	"type": "session",
-	"version": 3,
-	"id": "a1b2c3d4e5f60001",
-	"timestamp": "2024-12-03T14:00:00.000Z",
-	"cwd": "/path/to/project",
-	"parentSession": "/path/to/original/session.jsonl"
+  "type": "...",
+  "id": "8-char-id",
+  "parentId": "previous-or-branch-parent",
+  "timestamp": "2026-02-16T10:20:30.000Z"
 }
 ```
 
-`parentSession` is an opaque string used for lineage tracking (typically a session file path).
+`parentId` can be `null` for a root entry (first append, or after `resetLeaf()`).
 
-### SessionMessageEntry
+## Entry Taxonomy
 
-A message in the conversation. The `message` field contains an `AgentMessage`,
-including base LLM messages plus coding-agent custom roles (bash/python execution,
-custom/legacy `hookMessage` messages from v2 sessions, file mentions, etc.).
+`SessionEntry` is the union of:
 
-```json
-{"type":"message","id":"a1b2c3d4","parentId":"prev1234","timestamp":"2024-12-03T14:00:01.000Z","message":{"role":"user","content":"Hello"}}
-{"type":"message","id":"b2c3d4e5","parentId":"a1b2c3d4","timestamp":"2024-12-03T14:00:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Hi!"}],"provider":"anthropic","model":"claude-sonnet-4-5","usage":{...},"stopReason":"stop"}}
-{"type":"message","id":"c3d4e5f6","parentId":"b2c3d4e5","timestamp":"2024-12-03T14:00:03.000Z","message":{"role":"toolResult","toolCallId":"call_123","toolName":"bash","content":[{"type":"text","text":"output"}],"isError":false}}
-```
+- `message`
+- `thinking_level_change`
+- `model_change`
+- `compaction`
+- `branch_summary`
+- `custom`
+- `custom_message`
+- `label`
+- `ttsr_injection`
+- `session_init`
+- `mode_change`
 
-### ModelChangeEntry
+### `message`
 
-Emitted when the user switches models mid-session. `model` is stored as `provider/modelId`.
-
-```json
-{
-	"type": "model_change",
-	"id": "d4e5f6g7",
-	"parentId": "c3d4e5f6",
-	"timestamp": "2024-12-03T14:05:00.000Z",
-	"model": "openai/gpt-4o",
-	"role": "default"
-}
-```
-
-### ThinkingLevelChangeEntry
-
-Emitted when the user changes the thinking/reasoning level.
+Stores an `AgentMessage` directly.
 
 ```json
 {
-	"type": "thinking_level_change",
-	"id": "e5f6g7h8",
-	"parentId": "d4e5f6g7",
-	"timestamp": "2024-12-03T14:06:00.000Z",
-	"thinkingLevel": "high"
+  "type": "message",
+  "id": "a1b2c3d4",
+  "parentId": null,
+  "timestamp": "2026-02-16T10:21:00.000Z",
+  "message": {
+    "role": "assistant",
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-5",
+    "content": [{ "type": "text", "text": "Done." }],
+    "usage": { "input": 100, "output": 20, "cacheRead": 0, "cacheWrite": 0, "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "total": 0 } },
+    "timestamp": 1760000000000
+  }
 }
 ```
 
-`thinkingLevel` matches `ThinkingLevel` from `packages/agent` (e.g., `off`, `minimal`, `low`, `medium`, `high`, `xhigh`).
-
-### CompactionEntry
-
-Created when context is compacted. Stores a summary of earlier messages.
+### `model_change`
 
 ```json
 {
-	"type": "compaction",
-	"id": "f6g7h8i9",
-	"parentId": "e5f6g7h8",
-	"timestamp": "2024-12-03T14:10:00.000Z",
-	"summary": "User discussed X, Y, Z...",
-	"shortSummary": "Quick recap...",
-	"firstKeptEntryId": "c3d4e5f6",
-	"tokensBefore": 50000,
-	"fromExtension": false
+  "type": "model_change",
+  "id": "b1c2d3e4",
+  "parentId": "a1b2c3d4",
+  "timestamp": "2026-02-16T10:21:30.000Z",
+  "model": "openai/gpt-4o",
+  "role": "default"
 }
 ```
 
-Optional fields:
+`role` is optional; missing is treated as `default` in context reconstruction.
 
-- `details`: Compaction-implementation specific data (extension data, version markers, etc.)
-- `shortSummary`: Short-form summary for UI contexts
-- `preserveData`: Hook/extension data to persist across compaction
-- `fromExtension`: `true` if generated by an extension, `false`/`undefined` if pi-generated
-
-### BranchSummaryEntry
-
-Created when switching branches with an LLM-generated summary of the abandoned path. Captures context from the previous branch.
+### `thinking_level_change`
 
 ```json
 {
-	"type": "branch_summary",
-	"id": "g7h8i9j0",
-	"parentId": "a1b2c3d4",
-	"timestamp": "2024-12-03T14:15:00.000Z",
-	"fromId": "f6g7h8i9",
-	"summary": "Branch explored approach A..."
+  "type": "thinking_level_change",
+  "id": "c1d2e3f4",
+  "parentId": "b1c2d3e4",
+  "timestamp": "2026-02-16T10:22:00.000Z",
+  "thinkingLevel": "high"
 }
 ```
 
-`fromId` is the branch point entry id; when branching from the root it is `"root"`.
-
-Optional fields:
-
-- `details`: Extension-specific data (not sent to LLM)
-- `fromExtension`: `true` if generated by an extension
-
-### CustomEntry
-
-Extension state persistence. Does NOT participate in LLM context.
+### `compaction`
 
 ```json
 {
-	"type": "custom",
-	"id": "h8i9j0k1",
-	"parentId": "g7h8i9j0",
-	"timestamp": "2024-12-03T14:20:00.000Z",
-	"customType": "my-extension",
-	"data": { "count": 42 }
+  "type": "compaction",
+  "id": "d1e2f3a4",
+  "parentId": "c1d2e3f4",
+  "timestamp": "2026-02-16T10:23:00.000Z",
+  "summary": "Conversation summary",
+  "shortSummary": "Short recap",
+  "firstKeptEntryId": "a1b2c3d4",
+  "tokensBefore": 42000,
+  "details": { "readFiles": ["src/a.ts"] },
+  "preserveData": { "hookState": true },
+  "fromExtension": false
 }
 ```
 
-Use `customType` to identify your extension's entries on reload.
-
-### CustomMessageEntry
-
-Extension-injected messages that DO participate in LLM context.
+### `branch_summary`
 
 ```json
 {
-	"type": "custom_message",
-	"id": "i9j0k1l2",
-	"parentId": "h8i9j0k1",
-	"timestamp": "2024-12-03T14:25:00.000Z",
-	"customType": "my-extension",
-	"content": "Injected context...",
-	"display": true
+  "type": "branch_summary",
+  "id": "e1f2a3b4",
+  "parentId": "a1b2c3d4",
+  "timestamp": "2026-02-16T10:24:00.000Z",
+  "fromId": "a1b2c3d4",
+  "summary": "Summary of abandoned path",
+  "details": { "note": "optional" },
+  "fromExtension": true
 }
 ```
 
-Fields:
+If branching from root (`branchFromId === null`), `fromId` is the literal string `"root"`.
 
-- `content`: String or `(TextContent | ImageContent)[]` (same as UserMessage)
-- `display`: `true` = show in TUI with distinct styling, `false` = hidden
-- `details`: Optional extension-specific metadata (not sent to LLM)
+### `custom`
 
-### LabelEntry
-
-User-defined bookmark/marker on an entry.
+Extension state persistence; ignored by `buildSessionContext`.
 
 ```json
 {
-	"type": "label",
-	"id": "j0k1l2m3",
-	"parentId": "i9j0k1l2",
-	"timestamp": "2024-12-03T14:30:00.000Z",
-	"targetId": "a1b2c3d4",
-	"label": "checkpoint-1"
+  "type": "custom",
+  "id": "f1a2b3c4",
+  "parentId": "e1f2a3b4",
+  "timestamp": "2026-02-16T10:25:00.000Z",
+  "customType": "my-extension",
+  "data": { "state": 1 }
 }
 ```
 
-Set `label` to `undefined` to clear a label.
+### `custom_message`
 
-### TtsrInjectionEntry
-
-Tracks which time-traveling stream rules were injected during the session.
+Extension-provided message that does participate in LLM context.
 
 ```json
 {
-	"type": "ttsr_injection",
-	"id": "k1l2m3n4",
-	"parentId": "j0k1l2m3",
-	"timestamp": "2024-12-03T14:31:00.000Z",
-	"injectedRules": ["rule-a", "rule-b"]
+  "type": "custom_message",
+  "id": "a2b3c4d5",
+  "parentId": "f1a2b3c4",
+  "timestamp": "2026-02-16T10:26:00.000Z",
+  "customType": "my-extension",
+  "content": "Injected context",
+  "display": true,
+  "details": { "debug": false }
 }
 ```
 
-### SessionInitEntry
-
-Captures initial context for subagent sessions (debugging/replay). Not used in LLM context building.
+### `label`
 
 ```json
 {
-	"type": "session_init",
-	"id": "l2m3n4o5",
-	"parentId": "k1l2m3n4",
-	"timestamp": "2024-12-03T14:32:00.000Z",
-	"systemPrompt": "...",
-	"task": "Initial task...",
-	"tools": ["bash", "read"],
-	"outputSchema": { "type": "object" }
+  "type": "label",
+  "id": "b2c3d4e5",
+  "parentId": "a2b3c4d5",
+  "timestamp": "2026-02-16T10:27:00.000Z",
+  "targetId": "a1b2c3d4",
+  "label": "checkpoint"
 }
 ```
 
-## Tree Structure
+`label: undefined` clears a label for `targetId`.
 
-Entries form a tree:
+### `ttsr_injection`
 
-- First entry has `parentId: null`
-- Each subsequent entry points to its parent via `parentId`
-- Branching creates new children from an earlier entry
-- The "leaf" is the current position in the tree
-
-```
-[user msg] ─── [assistant] ─── [user msg] ─── [assistant] ─┬─ [user msg] ← current leaf
-                                                            │
-                                                            └─ [branch_summary] ─── [user msg] ← alternate branch
-```
-
-## Context Building
-
-`buildSessionContext()` walks from the current leaf to the root, producing the message list for the LLM:
-
-1. Collects all entries on the path
-2. Extracts current model map, thinking level, and injected TTSR rules
-3. If a `CompactionEntry` is on the path:
-   - Emits the summary first
-   - Then messages from `firstKeptEntryId` to compaction
-   - Then messages after compaction
-4. Converts `BranchSummaryEntry` and `CustomMessageEntry` to appropriate message formats
-
-Return value is a `SessionContext` containing `messages`, `models`, `thinkingLevel`, and `injectedTtsrRules`.
-
-## Parsing Example
-
-```typescript
-const text = await Bun.file("session.jsonl").text();
-const entries = Bun.JSONL.parse(text);
-
-for (const entry of entries) {
-	switch (entry.type) {
-		case "session":
-			console.log(`Session v${entry.version ?? 1}: ${entry.id}`);
-			break;
-		case "message":
-			console.log(`[${entry.id}] ${entry.message.role}: ${JSON.stringify(entry.message.content)}`);
-			break;
-		case "compaction":
-			console.log(`[${entry.id}] Compaction: ${entry.tokensBefore} tokens summarized`);
-			break;
-		case "branch_summary":
-			console.log(`[${entry.id}] Branch from ${entry.fromId}`);
-			break;
-		case "custom":
-			console.log(`[${entry.id}] Custom (${entry.customType}): ${JSON.stringify(entry.data)}`);
-			break;
-		case "custom_message":
-			console.log(`[${entry.id}] Custom message (${entry.customType}): ${entry.content}`);
-			break;
-		case "ttsr_injection":
-			console.log(`[${entry.id}] TTSR rules: ${entry.injectedRules.join(", ")}`);
-			break;
-		case "session_init":
-			console.log(`[${entry.id}] Init: ${entry.tools.join(", ")}`);
-			break;
-		case "label":
-			console.log(`[${entry.id}] Label "${entry.label}" on ${entry.targetId}`);
-			break;
-		case "model_change":
-			console.log(`[${entry.id}] Model: ${entry.model} (${entry.role ?? "default"})`);
-			break;
-		case "thinking_level_change":
-			console.log(`[${entry.id}] Thinking: ${entry.thinkingLevel}`);
-			break;
-	}
+```json
+{
+  "type": "ttsr_injection",
+  "id": "c2d3e4f5",
+  "parentId": "b2c3d4e5",
+  "timestamp": "2026-02-16T10:28:00.000Z",
+  "injectedRules": ["ruleA", "ruleB"]
 }
 ```
 
-## SessionManager API
+### `session_init`
 
-Key methods for working with sessions programmatically:
+```json
+{
+  "type": "session_init",
+  "id": "d2e3f4a5",
+  "parentId": "c2d3e4f5",
+  "timestamp": "2026-02-16T10:29:00.000Z",
+  "systemPrompt": "...",
+  "task": "...",
+  "tools": ["read", "edit"],
+  "outputSchema": { "type": "object" }
+}
+```
 
-### Creation
+### `mode_change`
 
-- `SessionManager.create(cwd, sessionDir?)` - New session
-- `SessionManager.open(path, sessionDir?)` - Open existing
-- `SessionManager.continueRecent(cwd, sessionDir?)` - Continue most recent or create new
-- `SessionManager.inMemory(cwd?)` - No file persistence
+```json
+{
+  "type": "mode_change",
+  "id": "e2f3a4b5",
+  "parentId": "d2e3f4a5",
+  "timestamp": "2026-02-16T10:30:00.000Z",
+  "mode": "plan",
+  "data": { "planFile": "/tmp/plan.md" }
+}
+```
 
-### Appending (all return entry ID)
+## Versioning and Migration
 
-- `appendMessage(message)` - Add message
-- `appendThinkingLevelChange(level)` - Record thinking change
-- `appendModelChange(model, role?)` - Record model change (`model` = `provider/modelId`)
-- `appendSessionInit(init)` - Record initial subagent context
-- `appendCompaction(summary, shortSummary, firstKeptEntryId, tokensBefore, details?, fromExtension?, preserveData?)`
-- `appendCustomEntry(customType, data?)` - Extension state (not in context)
-- `appendCustomMessageEntry(customType, content, display, details?)` - Extension message (in context)
-- `appendTtsrInjection(ruleNames)` - Record injected TTSR rules
-- `appendLabelChange(targetId, label)` - Set/clear label
+Current session version: `3`.
 
-### Tree Navigation
+### v1 -> v2
 
-- `getLeafId()` - Current position
-- `getLeafEntry()` - Current leaf entry
-- `getEntry(id)` - Get entry by ID
-- `getBranch(fromId?)` - Walk from entry to root
-- `getTree()` - Get full tree structure
-- `getChildren(parentId)` - Get direct children
-- `getLabel(id)` - Get label for entry
-- `branch(entryId)` - Move leaf to earlier entry
-- `branchWithSummary(entryId | null, summary, details?, fromExtension?)` - Branch with context summary
-- `resetLeaf()` - Move leaf to before first entry
+Applied when header `version` is missing or `< 2`:
 
-### Context
+- Adds `id` and `parentId` to each non-header entry.
+- Reconstructs a linear parent chain using file order.
+- Migrates compaction field `firstKeptEntryIndex` -> `firstKeptEntryId` when present.
+- Sets header `version = 2`.
 
-- `buildSessionContext()` - Get messages for LLM
-- `getEntries()` - All entries (excluding header)
-- `getHeader()` - Session metadata
+### v2 -> v3
+
+Applied when header `version < 3`:
+
+- For `message` entries: rewrites legacy `message.role === "hookMessage"` to `"custom"`.
+- Sets header `version = 3`.
+
+### Migration Trigger and Persistence
+
+- Migrations run during session load (`setSessionFile`).
+- If any migration ran, the entire file is rewritten to disk immediately.
+- Migration mutates in-memory entries first, then persists rewritten JSONL.
+
+## Load and Compatibility Behavior
+
+`loadEntriesFromFile(path)` behavior:
+
+- Missing file (`ENOENT`) -> returns `[]`.
+- Non-parseable lines are handled by lenient JSONL parser (`parseJsonlLenient`).
+- If first parsed entry is not a valid session header (`type !== "session"` or missing string `id`) -> returns `[]`.
+
+`SessionManager.setSessionFile()` behavior:
+
+- `[]` from loader is treated as empty/nonexistent session and replaced with a new initialized session file at that path.
+- Valid files are loaded, migrated if needed, blob refs resolved, then indexed.
+
+## Tree and Leaf Semantics
+
+The underlying model is append-only tree + mutable leaf pointer:
+
+- Every append method creates exactly one new entry whose `parentId` is current `leafId`.
+- The new entry becomes the new `leafId`.
+- `branch(entryId)` moves only `leafId`; existing entries remain unchanged.
+- `resetLeaf()` sets `leafId = null`; next append creates a new root entry (`parentId: null`).
+- `branchWithSummary()` sets leaf to branch target and appends a `branch_summary` entry.
+
+`getEntries()` returns all non-header entries in insertion order. Existing entries are not deleted in normal operation; rewrites preserve logical history while updating representation (migrations, move, targeted rewrite helpers).
+
+## Context Reconstruction (`buildSessionContext`)
+
+`buildSessionContext(entries, leafId, byId?)` resolves what is sent to the model.
+
+Algorithm:
+
+1. Determine leaf:
+   - `leafId === null` -> return empty context.
+   - explicit `leafId` -> use that entry if found.
+   - otherwise fallback to last entry.
+2. Walk `parentId` chain from leaf to root and reverse to root->leaf path.
+3. Derive runtime state across path:
+   - `thinkingLevel` from latest `thinking_level_change` (default `"off"`)
+   - model map from `model_change` entries (`role ?? "default"`)
+   - fallback `models.default` from assistant message provider/model if no explicit model change
+   - deduplicated `injectedTtsrRules` from all `ttsr_injection` entries
+   - mode/modeData from latest `mode_change` (default mode `"none"`)
+4. Build message list:
+   - `message` entries pass through
+   - `custom_message` entries become `custom` AgentMessages via `createCustomMessage`
+   - `branch_summary` entries become `branchSummary` AgentMessages via `createBranchSummaryMessage`
+   - if a `compaction` exists on path:
+     - emit compaction summary first (`createCompactionSummaryMessage`)
+     - emit path entries starting at `firstKeptEntryId` up to the compaction boundary
+     - emit entries after the compaction boundary
+
+`custom` and `session_init` entries do not inject model context directly.
+
+## Persistence Guarantees and Failure Model
+
+### Persist vs in-memory
+
+- `SessionManager.create/open/continueRecent/forkFrom` -> persistent mode (`persist = true`).
+- `SessionManager.inMemory` -> non-persistent mode (`persist = false`) with `MemorySessionStorage`.
+
+### Write pipeline
+
+Writes are serialized through an internal promise chain (`#persistChain`) and `NdjsonFileWriter`.
+
+- `append*` updates in-memory state immediately.
+- Persistence is deferred until at least one assistant message exists.
+  - Before first assistant: entries are retained in memory; no file append occurs.
+  - When first assistant exists: full in-memory session is flushed to file.
+  - Afterwards: new entries append incrementally.
+
+Rationale in code: avoid persisting sessions that never produced an assistant response.
+
+### Durability operations
+
+- `flush()` flushes writer and calls `fsync()`.
+- Atomic full rewrites (`#rewriteFile`) write to temp file, flush+fsync, close, then rename over target.
+- Used for migrations, `setSessionName`, `rewriteEntries`, move operations, and tool-call arg rewrites.
+
+### Error behavior
+
+- Persistence errors are latched (`#persistError`) and rethrown on subsequent operations.
+- First error is logged once with session file context.
+- Writer close is best-effort but propagates the first meaningful error.
+
+## Data Size Controls and Blob Externalization
+
+Before persisting entries:
+
+- Large strings are truncated to `MAX_PERSIST_CHARS` (500,000 chars) with notice:
+  - `"[Session persistence truncated large content]"`
+- Transient fields `partialJson` and `jsonlEvents` are removed.
+- If object has both `content` and `lineCount`, line count is recomputed after truncation.
+- Image blocks in `content` arrays with base64 length >= 1024 are externalized to blob refs:
+  - stored as `blob:sha256:<hash>`
+  - raw bytes written to blob store (`BlobStore.put`)
+
+On load, blob refs are resolved back to base64 for message/custom_message image blocks.
+
+## Storage Abstractions
+
+`SessionStorage` interface provides all filesystem operations used by `SessionManager`:
+
+- sync: `ensureDirSync`, `existsSync`, `writeTextSync`, `statSync`, `listFilesSync`
+- async: `exists`, `readText`, `readTextPrefix`, `writeText`, `rename`, `unlink`, `openWriter`
+
+Implementations:
+
+- `FileSessionStorage`: real filesystem (Bun + node fs)
+- `MemorySessionStorage`: map-backed in-memory implementation for tests/non-persistent sessions
+
+`SessionStorageWriter` exposes `writeLine`, `flush`, `fsync`, `close`, `getError`.
+
+## Session Discovery Utilities
+
+Defined in `session-manager.ts`:
+
+- `getRecentSessions(sessionDir, limit)` -> lightweight metadata for UI/session picker
+- `findMostRecentSession(sessionDir)` -> newest by mtime
+- `list(cwd, sessionDir?)` -> sessions in one project scope
+- `listAll()` -> sessions across all project scopes under `~/.omp/agent/sessions`
+
+Metadata extraction reads only a prefix (`readTextPrefix(..., 4096)`) where possible.
+
+## Related but Distinct: Prompt History Storage
+
+`HistoryStorage` (`history-storage.ts`) is a separate SQLite subsystem for prompt recall/search, not session replay.
+
+- DB: `~/.omp/agent/history.db`
+- Table: `history(id, prompt, created_at, cwd)`
+- FTS5 index: `history_fts` with trigger-maintained sync
+- Deduplicates consecutive identical prompts using in-memory last-prompt cache
+- Async insertion (`setImmediate`) so prompt capture does not block turn execution
+
+Use session files for conversation graph/state replay; use `HistoryStorage` for prompt history UX.

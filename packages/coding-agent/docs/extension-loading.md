@@ -1,106 +1,253 @@
-# Extension Loading
+# Extension Loading (TypeScript/JavaScript Modules)
 
-This document describes how omp discovers and loads extensions at runtime. It covers two related systems:
+This document covers how the coding agent discovers and loads **extension modules** (`.ts`/`.js`) at startup.
 
-- **Extension modules**: TypeScript/JavaScript modules that register tools, hooks, commands, etc.
-- **Gemini-style extensions**: `gemini-extension.json` manifests that declare MCP servers, tools, and context.
+It does **not** cover `gemini-extension.json` manifest extensions (documented separately).
 
-## Extension Modules (TypeScript/JavaScript)
+## What this subsystem does
 
-### Discovery Locations
+Extension loading builds a list of module entry files, imports each module with Bun, executes its factory, and returns:
 
-Extension modules are auto-discovered from native config roots:
+- loaded extension definitions
+- per-path load errors (without aborting the whole load)
+- a shared extension runtime object used later by `ExtensionRunner`
 
-- `.omp` (primary)
-- `.pi` (legacy alias)
+## Primary implementation files
 
-For each root:
+- `src/extensibility/extensions/loader.ts` — path discovery + import/execution
+- `src/extensibility/extensions/index.ts` — public exports
+- `src/extensibility/extensions/runner.ts` — runtime/event execution after load
+- `src/discovery/builtin.ts` — native auto-discovery provider for extension modules
+- `src/config/settings.ts` — loads merged `extensions` / `disabledExtensions` settings
 
-- **User-level**: `~/.omp/agent/extensions/`
-- **Project-level**: `<cwd>/.omp/extensions/`
+---
 
-### Configured Paths
+## Inputs to extension loading
 
-Additional extension paths can be provided via settings and CLI:
+### 1) Auto-discovered native extension modules
 
-- **Global settings**: `~/.omp/agent/config.yml` (or `$PI_CODING_AGENT_DIR/config.yml`)
-- **Project settings**: `<cwd>/.omp/settings.json`
-- **CLI**: `--extension` or `-e`
+`discoverAndLoadExtensions()` first asks discovery providers for `extension-module` capability items, then keeps only provider `native` items.
 
-The settings schema uses the `extensions` array (paths are files or directories):
+Effective native locations:
+
+- Project: `<cwd>/.omp/extensions`
+- User: `~/.omp/agent/extensions`
+
+Path roots come from the native provider (`SOURCE_PATHS.native`).
+
+Notes:
+
+- Native auto-discovery is currently `.omp` based.
+- Legacy `.pi` is still accepted in `package.json` manifest keys (`pi.extensions`), but not as a native root here.
+
+### 2) Explicitly configured paths
+
+After auto-discovery, configured paths are appended and resolved.
+
+Configured path sources in the main session startup path (`sdk.ts`):
+
+1. CLI-provided paths (`--extension/-e`, and `--hook` is also treated as an extension path)
+2. Settings `extensions` array (merged global + project settings)
+
+Global settings file:
+
+- `~/.omp/agent/config.yml` (or custom agent dir via `PI_CODING_AGENT_DIR`)
+
+Project settings file:
+
+- `<cwd>/.omp/settings.json`
+
+Examples:
 
 ```yaml
 # ~/.omp/agent/config.yml
 extensions:
-  - ./local-extension.ts
-  - ~/extensions/pack
+  - ~/my-exts/safety.ts
+  - ./local/ext-pack
 ```
 
 ```json
-// .omp/settings.json
 {
-	"extensions": ["./project-extension.ts"]
+  "extensions": ["./.omp/extensions/my-extra"]
 }
 ```
 
-Path resolution rules:
+---
 
-- `~` expands to the home directory
-- Relative paths resolve against the current working directory
+## Enable/disable controls
 
-To disable all extension loading:
+### Disable discovery
 
-```bash
-omp --no-extensions
-```
+- CLI: `--no-extensions`
+- SDK option: `disableExtensionDiscovery`
 
-### Entry Point Resolution
+Behavior split:
 
-Within an `extensions/` directory (auto-discovered or provided as a configured path):
+- SDK: when `disableExtensionDiscovery=true`, it still loads `additionalExtensionPaths` via `loadExtensions()`.
+- CLI path building (`main.ts`) currently clears CLI extension paths when `--no-extensions` is set, so explicit `-e/--hook` are not forwarded in that mode.
 
-1. **Direct files**: `extensions/*.ts` or `extensions/*.js`
-2. **Subdirectory with index**: `extensions/<name>/index.ts` or `index.js`
-3. **Subdirectory with package.json**: `extensions/<name>/package.json` containing `omp.extensions` or `pi.extensions`
+### Disable specific extension modules
 
-Example `package.json` manifest:
+`disabledExtensions` setting filters by extension id format:
 
-```json
-{
-	"name": "my-extension-pack",
-	"omp": {
-		"extensions": ["./src/safety-gates.ts", "./src/custom-tools.ts"]
-	}
-}
-```
+- `extension-module:<derivedName>`
 
-Notes:
+`derivedName` is based on entry path (`getExtensionNameFromPath`), for example:
 
-- No recursion beyond one directory level. Use `package.json` manifests for nested layouts.
-- Extension discovery ignores dotfiles and `node_modules`.
-- `.gitignore`, `.ignore`, and `.fdignore` are honored for auto-discovered directories.
+- `/x/foo.ts` -> `foo`
+- `/x/bar/index.ts` -> `bar`
 
-### Extension Naming and Disabling
-
-Extension names are derived from the entry point path:
-
-- `extensions/foo.ts` → `foo`
-- `extensions/foo/index.ts` → `foo`
-
-To disable an extension module, add its ID to `disabledExtensions`:
+Example:
 
 ```yaml
 disabledExtensions:
-  - "extension-module:foo"
+  - extension-module:foo
 ```
 
-## Gemini-Style Extensions (gemini-extension.json)
+---
 
-`gemini-extension.json` manifests are discovered in config roots under:
+## Path and entry resolution
 
+### Path normalization
+
+For configured paths:
+
+1. Normalize unicode spaces
+2. Expand `~`
+3. If relative, resolve against current `cwd`
+
+### If configured path is a file
+
+It is used directly as a module entry candidate.
+
+### If configured path is a directory
+
+Resolution order:
+
+1. `package.json` in that directory with `omp.extensions` (or legacy `pi.extensions`) -> use declared entries
+2. `index.ts`
+3. `index.js`
+4. Otherwise scan one level for extension entries:
+   - direct `*.ts` / `*.js`
+   - subdir `index.ts` / `index.js`
+   - subdir `package.json` with `omp.extensions` / `pi.extensions`
+
+Rules and constraints:
+
+- no recursive discovery beyond one subdirectory level
+- declared `extensions` manifest entries are resolved relative to that package directory
+- declared entries are included only if file exists/access is allowed
+- in `*/index.{ts,js}` pairs, TypeScript is preferred over JavaScript
+- symlinks are treated as eligible files/directories
+
+### Ignore behavior differs by source
+
+- Native auto-discovery (`discoverExtensionModulePaths` in discovery helpers) uses native glob with `gitignore: true` and `hidden: false`.
+- Explicit configured directory scanning in `loader.ts` uses `readdir` rules and does **not** apply gitignore filtering.
+
+---
+
+## Load order and precedence
+
+`discoverAndLoadExtensions()` builds one ordered list and then calls `loadExtensions()`.
+
+Order:
+
+1. Native auto-discovered modules
+2. Explicit configured paths (in provided order)
+
+In `sdk.ts`, configured order is:
+
+1. CLI additional paths
+2. Settings `extensions`
+
+De-duplication:
+
+- absolute path based
+- first seen path wins
+- later duplicates are ignored
+
+Implication: if the same module path is both auto-discovered and explicitly configured, it is loaded once at the first position (auto-discovered stage).
+
+---
+
+## Module import and factory contract
+
+Each candidate path is loaded with dynamic import:
+
+- `await import(resolvedPath)`
+- factory is `module.default ?? module`
+- factory must be a function (`ExtensionFactory`)
+
+If export is not a function, that path fails with a structured error and loading continues.
+
+---
+
+## Failure handling and isolation
+
+### During loading
+
+Per extension path, failures are captured as `{ path, error }` and do not stop other paths from loading.
+
+Common cases:
+
+- import failure / missing file
+- invalid factory export (non-function)
+- exception thrown while executing factory
+
+### Runtime isolation model
+
+- Extensions are **not sandboxed** (same process/runtime).
+- They share one `EventBus` and one `ExtensionRuntime` instance.
+- During load, runtime action methods intentionally throw `ExtensionRuntimeNotInitializedError`; action wiring happens later in `ExtensionRunner.initialize()`.
+
+### After loading
+
+When events run through `ExtensionRunner`, handler exceptions are caught and emitted as extension errors instead of crashing the runner loop.
+
+---
+
+## Minimal user/project layout examples
+
+### User-level
+
+```text
+~/.omp/agent/
+  config.yml
+  extensions/
+    guardrails.ts
+    audit/
+      index.ts
 ```
-<root>/extensions/<name>/gemini-extension.json
+
+### Project-level
+
+```text
+<repo>/
+  .omp/
+    settings.json
+    extensions/
+      checks/
+        package.json
+      lint-gates.ts
 ```
 
-Where `<root>` is one of `.omp`, `.pi`, `.gemini` (at both user and project level).
+`checks/package.json`:
 
-These manifests describe MCP servers, tools, and context. They are parsed as data (not executed as TypeScript modules). If `name` is missing from the manifest, the directory name is used instead.
+```json
+{
+  "omp": {
+    "extensions": ["./src/check-a.ts", "./src/check-b.js"]
+  }
+}
+```
+
+Legacy manifest key still accepted:
+
+```json
+{
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}
+```

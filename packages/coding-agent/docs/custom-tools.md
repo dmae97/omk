@@ -1,585 +1,198 @@
-> omp can create custom tools. Ask it to build one for your use case.
-
 # Custom Tools
 
-Custom tools are additional tools that the LLM can call directly, just like the built-in `read`, `write`, `edit`, and `bash` tools. They are TypeScript modules that define callable functions with parameters, return values, and optional TUI rendering.
+Custom tools are model-callable functions that plug into the same tool execution pipeline as built-in tools.
 
-**Key capabilities:**
+A custom tool is a TypeScript/JavaScript module that exports a factory. The factory receives a host API (`CustomToolAPI`) and returns one tool or an array of tools.
 
-- **User interaction** - Prompt users via `pi.ui` (select, confirm, input dialogs)
-- **Custom rendering** - Control how tool calls and results appear via `renderCall`/`renderResult`
-- **TUI components** - Render custom components with `pi.ui.custom()` (see [tui.md](tui.md))
-- **State management** - Persist state in tool result `details` for proper branching support
-- **Streaming results** - Send partial updates via `onUpdate` callback
+## What this is (and is not)
 
-**Example use cases:**
+- **Custom tool**: callable by the model during a turn (`execute` + TypeBox schema).
+- **Extension**: lifecycle/event framework that can register tools and intercept/modify events.
+- **Hook**: external pre/post command scripts.
+- **Skill**: static guidance/context package, not executable tool code.
 
-- Interactive dialogs (questions with selectable options)
-- Stateful tools (todo lists, connection pools)
-- Rich output rendering (progress indicators, structured views)
-- External service integrations with confirmation flows
+If you need the model to call code directly, use a custom tool.
 
-**When to use custom tools vs. alternatives:**
+## Integration paths in current code
 
-| Need                                                     | Solution        |
-| -------------------------------------------------------- | --------------- |
-| Always-needed context (conventions, commands)            | AGENTS.md       |
-| User triggers a specific prompt template                 | Slash command   |
-| On-demand capability package (workflows, scripts, setup) | Skill           |
-| Additional tool directly callable by the LLM             | **Custom tool** |
+There are two active integration styles:
 
-See [examples/custom-tools/](../examples/custom-tools/) for working examples.
+1. **SDK-provided custom tools** (`options.customTools`)
+   - Wrapped into agent tools via `CustomToolAdapter` or extension wrappers.
+   - Always included in the initial active tool set in SDK bootstrap.
 
-## Quick Start
+2. **Filesystem-discovered modules via loader API** (`discoverAndLoadCustomTools` / `loadCustomTools`)
+   - Exposed as library APIs in `src/extensibility/custom-tools/loader.ts`.
+   - Host code can call these to discover and load tool modules from config/provider/plugin paths.
 
-Create a file `~/.omp/agent/tools/hello/index.ts`:
+```text
+Model tool call flow
 
-```typescript
+LLM tool call
+   │
+   ▼
+Tool registry (built-ins + custom tool adapters)
+   │
+   ▼
+CustomTool.execute(toolCallId, params, onUpdate, ctx, signal)
+   │
+   ├─ onUpdate(...)  -> streamed partial result
+   └─ return result  -> final tool content/details
+```
+
+## Discovery locations (loader API)
+
+`discoverAndLoadCustomTools(configuredPaths, cwd, builtInToolNames)` merges:
+
+1. Capability providers (`toolCapability`), including:
+   - Native OMP config (`~/.omp/agent/tools`, `.omp/tools`)
+   - Claude config (`~/.claude/tools`, `.claude/tools`)
+   - Codex config (`~/.codex/tools`, `.codex/tools`)
+   - Claude marketplace plugin cache provider
+2. Installed plugin manifests (`~/.omp/plugins/node_modules/*` via plugin loader)
+3. Explicit configured paths passed to the loader
+
+### Important behavior
+
+- Duplicate resolved paths are deduplicated.
+- Tool name conflicts are rejected against built-ins and already-loaded custom tools.
+- `.md` and `.json` files are discovered as tool metadata by some providers, but the executable module loader rejects them as runnable tools.
+- Relative configured paths are resolved from `cwd`; `~` is expanded.
+
+## Module contract
+
+A custom tool module must export a function (default export preferred):
+
+```ts
 import type { CustomToolFactory } from "@oh-my-pi/pi-coding-agent";
 
 const factory: CustomToolFactory = (pi) => ({
-	name: "hello",
-	label: "Hello",
-	description: "A simple greeting tool",
+	name: "repo_stats",
+	label: "Repo Stats",
+	description: "Counts tracked TypeScript files",
 	parameters: pi.typebox.Type.Object({
-		name: pi.typebox.Type.String({ description: "Name to greet" }),
+		glob: pi.typebox.Type.Optional(pi.typebox.Type.String({ default: "**/*.ts" })),
 	}),
 
 	async execute(toolCallId, params, onUpdate, ctx, signal) {
-		const { name } = params;
+		onUpdate?.({
+			content: [{ type: "text", text: "Scanning files..." }],
+			details: { phase: "scan" },
+		});
+
+		const result = await pi.exec("git", ["ls-files", params.glob ?? "**/*.ts"], { signal, cwd: pi.cwd });
+		if (result.killed) {
+			throw new Error("Scan was cancelled");
+		}
+		if (result.code !== 0) {
+			throw new Error(result.stderr || "git ls-files failed");
+		}
+
+		const files = result.stdout.split("\n").filter(Boolean);
 		return {
-			content: [{ type: "text", text: `Hello, ${name}!` }],
-			details: { greeted: name },
+			content: [{ type: "text", text: `Found ${files.length} files` }],
+			details: { count: files.length, sample: files.slice(0, 10) },
 		};
+	},
+
+	onSession(event) {
+		if (event.reason === "shutdown") {
+			// cleanup resources if needed
+		}
 	},
 });
 
 export default factory;
 ```
 
-The tool is automatically discovered and available in your next omp session.
+Factory return type:
 
-## Tool Locations
+- `CustomTool`
+- `CustomTool[]`
+- `Promise<CustomTool | CustomTool[]>`
 
-OMP discovers custom tools through the capability system. Native OMP tools live in a subdirectory with an `index.ts`
-entry point; `.pi` mirrors the same layout as a compatibility alias.
+## API surface passed to factories (`CustomToolAPI`)
 
-| Location                        | Scope          | Auto-discovered |
-| ------------------------------- | -------------- | --------------- |
-| `~/.omp/agent/tools/*/index.ts` | User (OMP)     | Yes             |
-| `.omp/tools/*/index.ts`         | Project (OMP)  | Yes             |
-| `~/.pi/agent/tools/*/index.ts`  | User (alias)   | Yes             |
-| `.pi/tools/*/index.ts`          | Project (alias) | Yes             |
+From `types.ts` and `loader.ts`:
 
-Compatibility sources load flat modules (no subdirectory):
+- `cwd`: host working directory
+- `exec(command, args, options?)`: process execution helper
+- `ui`: UI context (can be no-op in headless modes)
+- `hasUI`: `false` in non-interactive flows
+- `logger`: shared file logger
+- `typebox`: injected `@sinclair/typebox`
+- `pi`: injected `@oh-my-pi/pi-coding-agent` exports
 
-- `~/.claude/tools/<tool>.ts` (or `.js`, `.sh`, `.bash`, `.py`), `.claude/tools/<tool>.*`
-- `~/.codex/tools/<tool>.ts` or `<tool>.js`, `.codex/tools/<tool>.ts` or `<tool>.js`
+Loader starts with a no-op UI context and requires host code to call `setUIContext(...)` when real UI is ready.
 
-Tools declared by installed plugins (via `~/.omp/plugins/node_modules` manifests) are also auto-discovered.
+## Execution contract and typing
 
-Only TypeScript/JavaScript modules are executable. `.md` and `.json` files in tools directories are treated as metadata
-and are not loaded as tool modules.
+`CustomTool.execute` signature:
 
-**Example structure:**
-
-```
-~/.omp/agent/tools/
-├── hello/
-│   └── index.ts        # Entry point (auto-discovered)
-└── complex-tool/
-    ├── index.ts        # Entry point (auto-discovered)
-    ├── helpers.ts      # Helper module (not loaded directly)
-    └── types.ts        # Type definitions (not loaded directly)
+```ts
+execute(toolCallId, params, onUpdate, ctx, signal)
 ```
 
-**Name conflicts:** Duplicate tool names are rejected; the first loaded tool keeps its name and later conflicts are
-reported as load errors.
-
-**Reserved names:** Custom tools cannot use built-in tool names (`read`, `write`, `edit`, `bash`, `grep`, `find`, `python`, `fetch`, `task`, `browser`, `web_search`, etc.).
-
-## Available Imports
-
-Custom tools can import from these packages:
-
-| Package                     | Purpose                                                   | Import Method                                       |
-| --------------------------- | --------------------------------------------------------- | --------------------------------------------------- |
-| `@sinclair/typebox`         | Schema definitions (`Type.Object`, `Type.String`, etc.)   | Via `pi.typebox.*` (injected)                       |
-| `@oh-my-pi/pi-coding-agent` | Types and utilities                                       | Via `pi.pi.*` (injected) or direct import for types |
-| `@oh-my-pi/pi-ai`           | AI utilities (`StringEnum` for Google-compatible enums)   | Via `pi.pi.*` (re-exported through coding-agent)    |
-| `@oh-my-pi/pi-tui`          | TUI components (`Text`, `Box`, etc. for custom rendering) | Via `pi.pi.*` (re-exported through coding-agent)    |
-| `@oh-my-pi/pi-utils`        | Logging (`logger`)                                        | Via `pi.logger` (injected)                          |
-
-Node.js built-in modules (`node:fs`, `node:path`, etc.) are also available.
-
-**Important:** Use `pi.typebox.Type.*` instead of importing from `@sinclair/typebox` directly. Dependencies are injected via the `CustomToolAPI` to avoid import resolution issues.
-
-## Tool Definition
-
-```typescript
-import type {
-	CustomTool,
-	CustomToolContext,
-	CustomToolFactory,
-	CustomToolSessionEvent,
-} from "@oh-my-pi/pi-coding-agent";
-
-const factory: CustomToolFactory = (pi) => {
-	// Destructure injected dependencies
-	const { Type } = pi.typebox;
-	const { StringEnum } = pi.pi;
-	const { Text } = pi.pi;
-
-	return {
-		name: "my_tool",
-		label: "My Tool",
-		description: "What this tool does (be specific for LLM)",
-		parameters: Type.Object({
-			// Use StringEnum for string enums (Google API compatible)
-			action: StringEnum(["list", "add", "remove"] as const),
-			text: Type.Optional(Type.String()),
-		}),
-
-		async execute(toolCallId, params, onUpdate, ctx, signal) {
-			// signal - AbortSignal for cancellation
-			// onUpdate - Callback for streaming partial results
-			// ctx - CustomToolContext with sessionManager, modelRegistry, model
-			return {
-				content: [{ type: "text", text: "Result for LLM" }],
-				details: {
-					/* structured data for rendering */
-				},
-			};
-		},
-
-		// Optional: Session lifecycle callback
-		onSession(event, ctx) {
-			if (event.reason === "shutdown") {
-				// Cleanup resources (close connections, save state, etc.)
-				return;
-			}
-			// Reconstruct state from ctx.sessionManager.getBranch()
-		},
-
-		// Optional: Custom rendering
-		renderCall(args, theme) {
-			/* return Component */
-		},
-		renderResult(result, options, theme, args) {
-			/* return Component */
-		},
-	};
-};
-
-export default factory;
-```
-
-Set `hidden: true` to exclude a tool from the default tool list; hidden tools must be explicitly enabled by the session.
-
-**Important:** Use `StringEnum` from `pi.pi` instead of `Type.Union`/`Type.Literal` for string enums. The latter doesn't work with Google's API.
-
-## CustomToolAPI Object
-
-The factory receives a `CustomToolAPI` object (named `pi` by convention):
-
-```typescript
-interface CustomToolAPI {
-	cwd: string; // Current working directory
-	exec(command: string, args: string[], options?: ExecOptions): Promise<ExecResult>;
-	ui: ToolUIContext;
-	hasUI: boolean; // false in --print or --mode rpc
-	logger: typeof import("@oh-my-pi/pi-utils").logger; // File logger
-	typebox: typeof import("@sinclair/typebox"); // Injected @sinclair/typebox
-	pi: typeof import("@oh-my-pi/pi-coding-agent"); // Injected pi-coding-agent exports
-}
-
-interface ToolUIContext {
-	select(title: string, options: string[]): Promise<string | undefined>;
-	confirm(title: string, message: string): Promise<boolean>;
-	input(title: string, placeholder?: string): Promise<string | undefined>;
-	notify(message: string, type?: "info" | "warning" | "error"): void;
-	setStatus(key: string, text: string | undefined): void;
-	custom<T>(
-		factory: (tui: TUI, theme: Theme, done: (result: T) => void) =>
-			| (Component & { dispose?(): void })
-			| Promise<Component & { dispose?(): void }>,
-	): Promise<T>;
-	setEditorText(text: string): void;
-	getEditorText(): string;
-	editor(title: string, prefill?: string): Promise<string | undefined>;
-	readonly theme: Theme;
-}
-
-interface ExecOptions {
-	signal?: AbortSignal; // Cancel the process
-	timeout?: number; // Timeout in milliseconds
-	cwd?: string; // Working directory
-}
-
-interface ExecResult {
-	stdout: string;
-	stderr: string;
-	code: number;
-	killed: boolean; // True if process was killed by signal/timeout
-}
-```
-
-`TUI` and `Theme` are from `@oh-my-pi/pi-tui` (available via `pi.pi`).
-
-Always check `pi.hasUI` before using UI methods.
-
-### Cancellation Example
-
-Pass the `signal` from `execute` to `pi.exec` to support cancellation:
-
-```typescript
-async execute(toolCallId, params, onUpdate, ctx, signal) {
-  const result = await pi.exec("long-running-command", ["arg"], { signal });
-  if (result.killed) {
-    return { content: [{ type: "text", text: "Cancelled" }] };
-  }
-  return { content: [{ type: "text", text: result.stdout }] };
-}
-```
-
-### Error Handling
-
-**Throw an error** when the tool fails. Do not return an error message as content.
-
-```typescript
-async execute(toolCallId, params, onUpdate, ctx, signal) {
-  const { path } = params as { path: string };
-
-  // Throw on error - omp will catch it and report to the LLM
-  if (!fs.existsSync(path)) {
-    throw new Error(`File not found: ${path}`);
-  }
-
-  // Return content only on success
-  return { content: [{ type: "text", text: "Success" }] };
-}
-```
-
-Thrown errors are:
-
-- Reported to the LLM as tool errors (with `isError: true`)
-- Emitted to hooks via `tool_result` event (hooks can inspect `event.isError`)
-- Displayed in the TUI with error styling
-
-## CustomToolContext
-
-The `execute` and `onSession` callbacks receive a `CustomToolContext`:
-
-```typescript
-interface CustomToolContext {
-	sessionManager: ReadonlySessionManager; // Read-only access to session
-	modelRegistry: ModelRegistry; // For API key resolution
-	model: Model | undefined; // Current model (may be undefined)
-	isIdle(): boolean; // Whether agent is idle (not streaming)
-	hasQueuedMessages(): boolean; // Whether user has queued messages
-	abort(): void; // Abort current operation (fire-and-forget)
-}
-```
-
-Use `ctx.sessionManager.getBranch()` to get entries on the current branch for state reconstruction.
-
-### Checking Queue State
-
-Interactive tools can skip prompts when the user has already queued a message:
-
-```typescript
-async execute(toolCallId, params, onUpdate, ctx, signal) {
-  // If user already queued a message, skip the interactive prompt
-  if (ctx.hasQueuedMessages()) {
-    return {
-      content: [{ type: "text", text: "Skipped - user has queued input" }],
-    };
-  }
-
-  // Otherwise, prompt for input
-  const answer = await pi.ui.input("What would you like to do?");
-  // ...
-}
-```
-
-### Multi-line Editor
-
-For longer text editing, use `pi.ui.editor()` which supports Ctrl+G for external editor:
-
-```typescript
-async execute(toolCallId, params, onUpdate, ctx, signal) {
-  const text = await pi.ui.editor("Edit your response:", "prefilled text");
-  // Returns edited text or undefined if cancelled (Escape)
-  // Ctrl+Enter to submit, Ctrl+G to open $VISUAL or $EDITOR
-
-  if (!text) {
-    return { content: [{ type: "text", text: "Cancelled" }] };
-  }
-  // ...
-}
-```
-
-## Session Lifecycle
-
-Tools can implement `onSession` to react to session changes:
-
-```typescript
-type CustomToolSessionEvent =
-	| { reason: "start" | "switch" | "branch" | "tree" | "shutdown"; previousSessionFile: string | undefined }
-	| { reason: "auto_compaction_start"; trigger: "threshold" | "overflow" }
-	| {
-			reason: "auto_compaction_end";
-			result: CompactionResult | undefined;
-			aborted: boolean;
-			willRetry: boolean;
-			errorMessage?: string;
-	  }
-	| { reason: "auto_retry_start"; attempt: number; maxAttempts: number; delayMs: number; errorMessage: string }
-	| { reason: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
-	| { reason: "ttsr_triggered"; rules: Rule[] }
-	| { reason: "todo_reminder"; todos: TodoItem[]; attempt: number; maxAttempts: number };
-```
-
-**Reasons:**
-- `start`: Initial session load (fresh start or resuming an existing session) - use to reconstruct state from session entries
-- `switch`: User started a new session (`/new`) or switched to a different session (`/resume`)
-- `branch`: User branched from a previous message (`/branch`)
-- `tree`: User navigated to a different point in the session tree (`/tree`)
-- `shutdown`: Process is exiting (Ctrl+C, Ctrl+D, or SIGTERM) - use to cleanup resources
-- `auto_compaction_start`: Auto-compaction kicked off (`threshold` or `overflow`)
-- `auto_compaction_end`: Auto-compaction finished (includes result/abort/error metadata)
-- `auto_retry_start`: Automatic retry scheduled after an assistant error
-- `auto_retry_end`: Automatic retry completed/failed/cancelled
-- `ttsr_triggered`: Time-travel stream rule interrupted generation
-- `todo_reminder`: Todo reminder fired with outstanding items
-
-To check if a session is fresh (no messages), use `ctx.sessionManager.getEntries().length === 0`.
-
-### State Management Pattern
-
-Tools that maintain state should store it in `details` of their results, not external files. This allows branching to work correctly, as the state is reconstructed from the session history.
-
-```typescript
-interface MyToolDetails {
-  items: string[];
-}
-
-const factory: CustomToolFactory = (pi) => {
-  const { Type } = pi.typebox;
-
-  // In-memory state
-  let items: string[] = [];
-
-  // Reconstruct state from session entries
-  const reconstructState = (event: CustomToolSessionEvent, ctx: CustomToolContext) => {
-    if (event.reason === "shutdown") return;
-
-    items = [];
-    for (const entry of ctx.sessionManager.getBranch()) {
-      if (entry.type !== "message") continue;
-      const msg = entry.message;
-      if (msg.role !== "toolResult") continue;
-      if (msg.toolName !== "my_tool") continue;
-
-      const details = msg.details as MyToolDetails | undefined;
-      if (details) {
-        items = details.items;
-      }
-    }
-  };
-
-  return {
-    name: "my_tool",
-    label: "My Tool",
-    description: "...",
-    parameters: Type.Object({ ... }),
-
-    onSession: reconstructState,
-
-    async execute(toolCallId, params, onUpdate, ctx, signal) {
-      // Modify items...
-      items.push("new item");
-
-      return {
-        content: [{ type: "text", text: "Added item" }],
-        // Store current state in details for reconstruction
-        details: { items: [...items] },
-      };
-    },
-  };
-};
-```
-
-This pattern ensures:
-
-- When user branches, state is correct for that point in history
-- When user switches sessions, state matches that session
-- When user starts a new session, state resets
-
-## Custom Rendering
-
-Custom tools can provide `renderCall` and `renderResult` methods to control how they appear in the TUI. Both are optional. See [tui.md](tui.md) for the full component API.
-
-### How It Works
-
-Tool output is wrapped in a `Box` component that handles:
-
-- Padding (1 character horizontal, 1 line vertical)
-- Background color based on state (pending/success/error)
-
-Your render methods return `Component` instances (typically `Text`) that go inside this box. Use `Text(content, 0, 0)` since the Box handles padding.
-
-### renderCall
-
-Renders the tool call (before/during execution):
-
-```typescript
-renderCall(args, theme) {
-  let text = theme.fg("toolTitle", theme.bold("my_tool "));
-  text += theme.fg("muted", args.action);
-  if (args.text) {
-    text += " " + theme.fg("dim", `"${args.text}"`);
-  }
-  return new Text(text, 0, 0);
-}
-```
-
-Called when:
-
-- Tool call starts (may have partial args during streaming)
-- Args are updated during streaming
-
-### renderResult
-
-Renders the tool result:
-
-```typescript
-renderResult(result, { expanded, isPartial }, theme) {
-  const { details } = result;
-
-  // Handle streaming/partial results
-  if (isPartial) {
-    return new Text(theme.fg("warning", "Processing..."), 0, 0);
-  }
-
-  // Handle errors
-  if (details?.error) {
-    return new Text(theme.fg("error", `Error: ${details.error}`), 0, 0);
-  }
-
-  // Normal result
-  let text = theme.fg("success", "✓ ") + theme.fg("muted", "Done");
-
-  // Support expanded view (Ctrl+O)
-  if (expanded && details?.items) {
-    for (const item of details.items) {
-      text += "\n" + theme.fg("dim", `  ${item}`);
-    }
-  }
-
-  return new Text(text, 0, 0);
-}
-```
-
-**Options:**
-
-- `expanded`: User pressed Ctrl+O to expand
-- `isPartial`: Result is from `onUpdate` (streaming), not final
-- `spinnerFrame`: Spinner frame index (0-9) during partial updates
-
-### Best Practices
-
-1. **Use `Text` with padding `(0, 0)`** - The Box handles padding
-2. **Use `\n` for multi-line content** - Not multiple Text components
-3. **Handle `isPartial`** - Show progress during streaming
-4. **Support `expanded`** - Show more detail when user requests
-5. **Use theme colors** - For consistent appearance
-6. **Keep it compact** - Show summary by default, details when expanded
-
-### Theme Colors
-
-```typescript
-// Foreground
-theme.fg("toolTitle", text); // Tool names
-theme.fg("accent", text); // Highlights
-theme.fg("success", text); // Success
-theme.fg("error", text); // Errors
-theme.fg("warning", text); // Warnings
-theme.fg("muted", text); // Secondary text
-theme.fg("dim", text); // Tertiary text
-theme.fg("toolOutput", text); // Output content
-
-// Styles
-theme.bold(text);
-theme.italic(text);
-```
-
-### Fallback Behavior
-
-If `renderCall` or `renderResult` is not defined or throws an error:
-
-- `renderCall`: Shows tool name
-- `renderResult`: Shows raw text output from `content`
-
-## Execute Function
-
-```typescript
-async execute(toolCallId, args, onUpdate, ctx, signal) {
-  // Type assertion for params (TypeBox schema doesn't flow through)
-  const params = args as { action: "list" | "add"; text?: string };
-
-  // Check for abort
-  if (signal?.aborted) {
-    return { content: [...], details: { status: "aborted" } };
-  }
-
-  // Stream progress
-  onUpdate?.({
-    content: [{ type: "text", text: "Working..." }],
-    details: { progress: 50 },
-  });
-
-  // Return final result
-  return {
-    content: [{ type: "text", text: "Done" }],  // Sent to LLM
-    details: { data: result },  // For rendering only
-  };
-}
-```
-
-## Multiple Tools from One File
-
-Return an array to share state between related tools:
-
-```typescript
-const factory: CustomToolFactory = (pi) => {
-  // Shared state
-  let connection = null;
-
-  const handleSession = (event: CustomToolSessionEvent, ctx: CustomToolContext) => {
-    if (event.reason === "shutdown") {
-      connection?.close();
-    }
-  };
-
-  return [
-    { name: "db_connect", onSession: handleSession, ... },
-    { name: "db_query", onSession: handleSession, ... },
-    { name: "db_close", onSession: handleSession, ... },
-  ];
-};
-```
-
-## Examples
-
-See [`examples/custom-tools/todo/index.ts`](../examples/custom-tools/todo/index.ts) for a complete example with:
-
-- `onSession` for state reconstruction
-- Custom `renderCall` and `renderResult`
-- Proper branching support via details storage
-
-Test by copying the example into your tools directory and restarting omp:
-
-```bash
-cp -r packages/coding-agent/examples/custom-tools/todo ~/.omp/agent/tools/
-```
+- `params` is statically typed from your TypeBox schema via `Static<TParams>`.
+- Runtime argument validation happens before execution in the agent loop.
+- `onUpdate` emits partial results for UI streaming.
+- `ctx` includes session/model state and an `abort()` helper.
+- `signal` carries cancellation.
+
+`CustomToolAdapter` bridges this to the agent tool interface and forwards calls in the correct argument order.
+
+## How tools are exposed to the model
+
+- Tools are wrapped into `AgentTool` instances (`CustomToolAdapter` or extension wrappers).
+- They are inserted into the session tool registry by name.
+- In SDK bootstrap, custom and extension-registered tools are force-included in the initial active set.
+- CLI `--tools` currently validates only built-in tool names; custom tool inclusion is handled through discovery/registration paths and SDK options.
+
+## Rendering hooks
+
+Optional rendering hooks:
+
+- `renderCall(args, theme)`
+- `renderResult(result, options, theme, args?)`
+
+Runtime behavior in TUI:
+
+- If hooks exist, tool output is rendered inside a `Box` container.
+- `renderResult` receives `{ expanded, isPartial, spinnerFrame? }`.
+- Renderer errors are caught and logged; UI falls back to default text rendering.
+
+## Session/state handling
+
+Optional `onSession(event, ctx)` receives session lifecycle events, including:
+
+- `start`, `switch`, `branch`, `tree`, `shutdown`
+- `auto_compaction_start`, `auto_compaction_end`
+- `auto_retry_start`, `auto_retry_end`
+- `ttsr_triggered`, `todo_reminder`
+
+Use `ctx.sessionManager` to reconstruct state from history when branch/session context changes.
+
+## Failures and cancellation semantics
+
+### Synchronous/async failures
+
+- Throwing (or rejected promises) in `execute` is treated as tool failure.
+- Agent runtime converts failures into tool result messages with `isError: true` and error text content.
+- With extension wrappers, `tool_result` handlers can further rewrite content/details and even override error status.
+
+### Cancellation
+
+- Agent abort propagates through `AbortSignal` to `execute`.
+- Forward `signal` to subprocess work (`pi.exec(..., { signal })`) for cooperative cancellation.
+- `ctx.abort()` lets a tool request abort of the current agent operation.
+
+### onSession errors
+
+- `onSession` errors are caught and logged as warnings; they do not crash the session.
+
+## Real constraints to design for
+
+- Tool names must be globally unique in the active registry.
+- Prefer deterministic, schema-shaped outputs in `details` for renderer/state reconstruction.
+- Guard UI usage with `pi.hasUI`.
+- Treat `.md`/`.json` in tool directories as metadata, not executable modules.

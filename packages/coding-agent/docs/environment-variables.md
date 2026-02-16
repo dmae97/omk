@@ -1,257 +1,308 @@
-# Environment Variables Reference
+# Environment Variables (Current Runtime Reference)
 
-This document lists all environment variables used by the coding agent.
+This reference is derived from current code paths in:
 
-## API Keys
+- `packages/coding-agent/src/**`
+- `packages/ai/src/**` (provider/auth resolution used by coding-agent)
+- `packages/utils/src/**` and `packages/tui/src/**` where those vars directly affect coding-agent runtime
 
-### Multi-Provider Support
+It documents only active behavior.
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OPENAI_API_KEY` | OpenAI API key for GPT models | - |
-| `ANTHROPIC_API_KEY` | Anthropic API key for Claude models | - |
-| `ANTHROPIC_OAUTH_TOKEN` | Anthropic OAuth token (takes precedence over `ANTHROPIC_API_KEY`) | - |
-| `GOOGLE_API_KEY` | Google Gemini API key | - |
-| `COPILOT_GITHUB_TOKEN` | GitHub Copilot personal access token | `$GH_TOKEN` or `$GITHUB_TOKEN` |
-| `GH_TOKEN` | GitHub CLI token (fallback for Copilot) | - |
-| `GITHUB_TOKEN` | GitHub token (fallback for Copilot and API access) | - |
-| `EXA_API_KEY` | Exa search API key | - |
-| `GROQ_API_KEY` | Groq API key for Llama and other models | - |
-| `CEREBRAS_API_KEY` | Cerebras API key | - |
-| `XAI_API_KEY` | xAI API key for Grok models | - |
-| `OPENROUTER_API_KEY` | OpenRouter aggregated models API key | - |
-| `MISTRAL_API_KEY` | Mistral AI API key | - |
-| `ZAI_API_KEY` | z.ai API key (ZhipuAI/GLM models) | - |
-| `MINIMAX_API_KEY` | MiniMax API key | - |
-| `OPENCODE_API_KEY` | OpenCode API key | - |
-| `CURSOR_ACCESS_TOKEN` | Cursor AI access token | - |
-| `AI_GATEWAY_API_KEY` | Vercel AI Gateway API key | - |
-| `PERPLEXITY_API_KEY` | Perplexity search API key | - |
+## Resolution model and precedence
 
-### Provider-Specific Configuration
+Most runtime lookups use `$env` from `@oh-my-pi/pi-utils` (`packages/utils/src/env.ts`).
 
-#### AWS Bedrock
+`$env` loading order:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `AWS_REGION` | AWS region for Bedrock | `$AWS_DEFAULT_REGION` or `us-east-1` |
-| `AWS_DEFAULT_REGION` | AWS default region | - |
-| `AWS_PROFILE` | AWS CLI profile name | - |
-| `AWS_ACCESS_KEY_ID` | AWS access key ID | - |
-| `AWS_SECRET_ACCESS_KEY` | AWS secret access key | - |
-| `AWS_BEARER_TOKEN_BEDROCK` | AWS bearer token for Bedrock | - |
-| `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` | ECS container credentials URI | - |
-| `AWS_CONTAINER_CREDENTIALS_FULL_URI` | ECS container credentials full URI | - |
-| `AWS_WEB_IDENTITY_TOKEN_FILE` | Web identity token file path | - |
-| `AWS_ROLE_ARN` | IAM role ARN for web identity | - |
+1. Existing process environment (`Bun.env`)
+2. Project `.env` (`$PWD/.env`) for keys not already set
+3. Home `.env` (`~/.env`) for keys not already set
 
-#### Azure OpenAI
+Additional rule in `.env` files: `OMP_*` keys are mirrored to `PI_*` keys during parse.
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `AZURE_OPENAI_API_KEY` | Azure OpenAI API key (required) | - |
-| `AZURE_OPENAI_API_VERSION` | Azure OpenAI API version | `2024-10-01-preview` |
-| `AZURE_OPENAI_BASE_URL` | Azure OpenAI base URL | Constructed from resource name |
-| `AZURE_OPENAI_RESOURCE_NAME` | Azure OpenAI resource name | - |
-| `AZURE_OPENAI_DEPLOYMENT_NAME_MAP` | JSON map of model IDs to deployment names | `{}` |
+---
 
-#### Google Cloud (Vertex AI)
+## 1) Model/provider authentication
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GOOGLE_CLOUD_PROJECT` | Google Cloud project ID (required for Vertex AI) | `$GCLOUD_PROJECT` |
-| `GCLOUD_PROJECT` | Google Cloud project ID (alternative) | - |
-| `GOOGLE_CLOUD_PROJECT_ID` | Google Cloud project ID (used during OAuth discovery) | `$GOOGLE_CLOUD_PROJECT` |
-| `GOOGLE_CLOUD_LOCATION` | Google Cloud location (required for Vertex AI) | - |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Path to Google service account JSON | - |
+These are consumed via `getEnvApiKey()` (`packages/ai/src/stream.ts`) unless noted otherwise.
 
-#### Anthropic Search & Custom Base URLs
+### Core provider credentials
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `ANTHROPIC_BASE_URL` | Custom Anthropic API base URL | - |
-| `ANTHROPIC_SEARCH_API_KEY` | API key for Anthropic search (separate from main API) | - |
-| `ANTHROPIC_SEARCH_BASE_URL` | Custom base URL for Anthropic search | - |
-| `ANTHROPIC_SEARCH_MODEL` | Model to use for web search | `claude-sonnet-4` |
+| Variable | Used for | Required when | Notes / precedence |
+|---|---|---|---|
+| `ANTHROPIC_OAUTH_TOKEN` | Anthropic API auth | Using Anthropic with OAuth token auth | Takes precedence over `ANTHROPIC_API_KEY` for provider auth resolution |
+| `ANTHROPIC_API_KEY` | Anthropic API auth | Using Anthropic without OAuth token | Fallback after `ANTHROPIC_OAUTH_TOKEN` |
+| `OPENAI_API_KEY` | OpenAI auth | Using OpenAI-family providers without explicit apiKey argument | Used by OpenAI Completions/Responses providers |
+| `GEMINI_API_KEY` | Google Gemini auth | Using `google` provider models | Primary key for Gemini provider mapping |
+| `GOOGLE_API_KEY` | Gemini image tool auth fallback | Using `gemini_image` tool without `GEMINI_API_KEY` | Used by coding-agent image tool fallback path |
+| `GROQ_API_KEY` | Groq auth | Using Groq models |  |
+| `CEREBRAS_API_KEY` | Cerebras auth | Using Cerebras models |  |
+| `XAI_API_KEY` | xAI auth | Using xAI models |  |
+| `OPENROUTER_API_KEY` | OpenRouter auth | Using OpenRouter models | Also used by image tool when preferred/auto provider is OpenRouter |
+| `MISTRAL_API_KEY` | Mistral auth | Using Mistral models |  |
+| `ZAI_API_KEY` | z.ai auth | Using z.ai models | Also used by z.ai web search provider |
+| `MINIMAX_API_KEY` | MiniMax auth | Using `minimax` provider |  |
+| `MINIMAX_CODE_API_KEY` | MiniMax Code auth | Using `minimax-code` provider |  |
+| `MINIMAX_CODE_CN_API_KEY` | MiniMax Code CN auth | Using `minimax-code-cn` provider |  |
+| `OPENCODE_API_KEY` | OpenCode auth | Using OpenCode models |  |
+| `CURSOR_ACCESS_TOKEN` | Cursor provider auth | Using Cursor provider |  |
+| `AI_GATEWAY_API_KEY` | Vercel AI Gateway auth | Using `vercel-ai-gateway` provider |  |
 
-#### Kimi
+### GitHub/Copilot token chains
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `KIMI_CODE_BASE_URL` | Kimi Code API base URL | `https://kimi.moonshot.cn` |
-| `KIMI_CODE_OAUTH_HOST` | Kimi Code OAuth host | `$KIMI_OAUTH_HOST` or `https://kimi.moonshot.cn` |
-| `KIMI_OAUTH_HOST` | Kimi OAuth host (fallback) | - |
+| Variable | Used for | Chain |
+|---|---|---|
+| `COPILOT_GITHUB_TOKEN` | GitHub Copilot provider auth | `COPILOT_GITHUB_TOKEN` → `GH_TOKEN` → `GITHUB_TOKEN` |
+| `GH_TOKEN` | Copilot fallback; GitHub API auth in web scraper | In web scraper: `GITHUB_TOKEN` → `GH_TOKEN` |
+| `GITHUB_TOKEN` | Copilot fallback; GitHub API auth in web scraper | In web scraper: checked before `GH_TOKEN` |
 
-## Model Configuration
+---
 
-### Model Role Overrides
+## 2) Provider-specific runtime configuration
 
-Override model roles via environment variables (ephemeral, not persisted):
+### Amazon Bedrock
 
-| Variable | Description | CLI Flag |
-|----------|-------------|----------|
-| `PI_SMOL_MODEL` | Fast model for lightweight tasks | `--smol` |
-| `PI_SLOW_MODEL` | Reasoning model for thorough analysis | `--slow` |
-| `PI_PLAN_MODEL` | Model for architectural planning | `--plan` |
+| Variable | Default / behavior |
+|---|---|
+| `AWS_REGION` | Primary region source |
+| `AWS_DEFAULT_REGION` | Fallback if `AWS_REGION` unset |
+| `AWS_PROFILE` | Enables named profile auth path |
+| `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` | Enables IAM key auth path |
+| `AWS_BEARER_TOKEN_BEDROCK` | Enables bearer token auth path |
+| `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` / `AWS_CONTAINER_CREDENTIALS_FULL_URI` | Enables ECS task credential path |
+| `AWS_WEB_IDENTITY_TOKEN_FILE` + `AWS_ROLE_ARN` | Enables web identity auth path |
+| `AWS_BEDROCK_SKIP_AUTH` | If `1`, injects dummy credentials (proxy/non-auth scenarios) |
+| `AWS_BEDROCK_FORCE_HTTP1` | If `1`, forces Node HTTP/1 request handler |
 
-## Agent Configuration
+Region fallback in provider code: `options.region` → `AWS_REGION` → `AWS_DEFAULT_REGION` → `us-east-1`.
 
-### Core Settings
+### Azure OpenAI Responses
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PI_CODING_AGENT_DIR` | Directory for agent data (sessions, auth, cache) | `~/.omp/agent` |
-| `PI_SUBPROCESS_CMD` | Custom command for spawning subagents | Auto-detected |
-| `PI_NO_TITLE` | Disable automatic session title generation | `false` |
-| `NULL_PROMPT` | Use empty system prompt (testing) | `false` |
-| `PI_BLOCKED_AGENT` | Override agent type in task tool | - |
+| Variable | Default / behavior |
+|---|---|
+| `AZURE_OPENAI_API_KEY` | Required unless API key passed as option |
+| `AZURE_OPENAI_API_VERSION` | Default `v1` |
+| `AZURE_OPENAI_BASE_URL` | Direct base URL override |
+| `AZURE_OPENAI_RESOURCE_NAME` | Used to construct base URL: `https://<resource>.openai.azure.com/openai/v1` |
+| `AZURE_OPENAI_DEPLOYMENT_NAME_MAP` | Optional mapping string: `modelId=deploymentName,model2=deployment2` |
 
-### Caching
+Base URL resolution: option `azureBaseUrl` → env `AZURE_OPENAI_BASE_URL` → option/env resource name → `model.baseUrl`.
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PI_CACHE_RETENTION` | Prompt cache retention (`long` = 24h for OpenAI) | - |
+### Google Vertex AI
 
-## Python Configuration
+| Variable | Required? | Notes |
+|---|---|---|
+| `GOOGLE_CLOUD_PROJECT` | Yes (unless passed in options) | Fallback: `GCLOUD_PROJECT` |
+| `GCLOUD_PROJECT` | Fallback | Used as alternate project ID source |
+| `GOOGLE_CLOUD_LOCATION` | Yes (unless passed in options) | No default in provider |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Conditional | If set, file must exist; otherwise ADC fallback path is checked (`~/.config/gcloud/application_default_credentials.json`) |
 
-### Python Kernel
+### Kimi
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `VIRTUAL_ENV` | Python virtual environment path | Auto-detected (`.venv` or `venv`) |
-| `PI_PY` | Python tool mode (`per-session`, `per-call`, `off`) | `per-session` |
-| `PI_PYTHON_SKIP_CHECK` | Skip Python availability check (testing) | `false` |
+| Variable | Default / behavior |
+|---|---|
+| `KIMI_CODE_OAUTH_HOST` | Primary OAuth host override |
+| `KIMI_OAUTH_HOST` | Fallback OAuth host override |
+| `KIMI_CODE_BASE_URL` | Overrides Kimi usage endpoint base URL (`usage/kimi.ts`) |
 
-### External Python Gateway
+OAuth host chain: `KIMI_CODE_OAUTH_HOST` → `KIMI_OAUTH_HOST` → `https://auth.kimi.com`.
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PI_PYTHON_GATEWAY_URL` | External Python gateway URL | - |
-| `PI_PYTHON_GATEWAY_TOKEN` | Authentication token for gateway | - |
+### Antigravity/Gemini image compatibility
 
-### Debugging
+| Variable | Default / behavior |
+|---|---|
+| `PI_AI_ANTIGRAVITY_VERSION` | Overrides Antigravity user-agent version tag in Gemini CLI provider |
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PI_PYTHON_IPC_TRACE` | Trace Python IPC messages (`1` = enabled) | `false` |
+### OpenAI Codex responses (feature/debug controls)
 
-## Task & Subagent Configuration
+| Variable | Behavior |
+|---|---|
+| `PI_CODEX_DEBUG` | `1`/`true` enables Codex provider debug logging |
+| `PI_CODEX_WEBSOCKET` | `1`/`true` enables websocket transport preference |
+| `PI_CODEX_WEBSOCKET_V2` | `1`/`true` enables websocket v2 path |
+| `PI_CODEX_WEBSOCKET_IDLE_TIMEOUT_MS` | Positive integer override (default 300000) |
+| `PI_CODEX_WEBSOCKET_RETRY_BUDGET` | Non-negative integer override (default 5) |
+| `PI_CODEX_WEBSOCKET_RETRY_DELAY_MS` | Positive integer base backoff override (default 500) |
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PI_TASK_MAX_OUTPUT_BYTES` | Maximum output bytes per subagent | `500000` |
-| `PI_TASK_MAX_OUTPUT_LINES` | Maximum output lines per subagent | `5000` |
+### Cursor provider debug
 
-## TUI & Terminal Configuration
+| Variable | Behavior |
+|---|---|
+| `DEBUG_CURSOR` | Enables provider debug logs; `2`/`verbose` for detailed payload snippets |
+| `DEBUG_CURSOR_LOG` | Optional file path for JSONL debug log output |
 
-### Terminal Capabilities
+### Prompt cache compatibility switch
 
-| Variable | Description | Auto-Detected |
-|----------|-------------|---------------|
-| `COLORTERM` | Terminal color support (`truecolor`, `24bit`) | Yes |
-| `COLORFGBG` | Terminal foreground/background colors | Yes |
-| `TERM` | Terminal type | Yes |
-| `TERM_PROGRAM` | Terminal program name | Yes |
-| `TERM_PROGRAM_VERSION` | Terminal program version | Yes |
-| `TERMINAL_EMULATOR` | Terminal emulator name | Yes |
-| `WT_SESSION` | Windows Terminal session ID | Yes |
+| Variable | Behavior |
+|---|---|
+| `PI_CACHE_RETENTION` | If `long`, enables long retention where supported (`anthropic`, `openai-responses`, Bedrock retention resolution) |
 
-### TUI Behavior
+---
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PI_NOTIFICATIONS` | Desktop notifications (`off`, `0`, `false` = disabled) | Enabled |
-| `PI_TUI_WRITE_LOG` | Log all TUI write operations to file | - |
-| `PI_HARDWARE_CURSOR` | Show hardware cursor (`1` = enabled) | `false` |
+## 3) Web search subsystem
 
-## Bash & Shell Configuration
+### Search provider credentials
 
-### Shell Detection
+| Variable | Used by |
+|---|---|
+| `EXA_API_KEY` | Exa search provider and Exa MCP tools |
+| `PERPLEXITY_API_KEY` | Perplexity search provider API-key mode |
+| `ZAI_API_KEY` | z.ai search provider (also checks stored OAuth in `agent.db`) |
+| `OPENAI_API_KEY` / Codex OAuth in DB | Codex search provider availability/auth |
 
-| Variable | Description | Auto-Detected |
-|----------|-------------|---------------|
-| `SHELL` | User's default shell | Yes (Unix) |
-| `ComSpec` | Command processor | Yes (Windows) |
+### Anthropic web search auth chain
 
-### Editor
+`packages/coding-agent/src/web/search/auth.ts` resolves Anthropic web-search credentials in this order:
 
-| Variable | Description | Fallback |
-|----------|-------------|----------|
-| `VISUAL` | Visual editor for external editing (Ctrl+G) | `$EDITOR` |
-| `EDITOR` | Default text editor | - |
+1. `ANTHROPIC_SEARCH_API_KEY` (+ optional `ANTHROPIC_SEARCH_BASE_URL`)
+2. `models.json` provider entry with `api: "anthropic-messages"`
+3. Anthropic OAuth credentials from `agent.db` (must not expire within 5-minute buffer)
+4. Generic Anthropic env fallback: provider key (`ANTHROPIC_OAUTH_TOKEN`/`ANTHROPIC_API_KEY`) + optional `ANTHROPIC_BASE_URL`
 
-### Bash Tool Behavior
+Related vars:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PI_BASH_NO_CI` | Don't set `CI=true` in bash environment | `$CLAUDE_BASH_NO_CI` |
-| `CLAUDE_BASH_NO_CI` | Legacy name for `PI_BASH_NO_CI` | - |
-| `PI_BASH_NO_LOGIN` | Don't use login shell for bash | `$CLAUDE_BASH_NO_LOGIN` |
-| `CLAUDE_BASH_NO_LOGIN` | Legacy name for `PI_BASH_NO_LOGIN` | - |
-| `PI_SHELL_PREFIX` | Prefix for bash commands | `$CLAUDE_CODE_SHELL_PREFIX` |
-| `CLAUDE_CODE_SHELL_PREFIX` | Legacy name for `PI_SHELL_PREFIX` | - |
+| Variable | Default / behavior |
+|---|---|
+| `ANTHROPIC_SEARCH_API_KEY` | Highest-priority explicit search key |
+| `ANTHROPIC_SEARCH_BASE_URL` | Defaults to `https://api.anthropic.com` when omitted |
+| `ANTHROPIC_SEARCH_MODEL` | Defaults to `claude-haiku-4-5` |
+| `ANTHROPIC_BASE_URL` | Generic fallback base URL for tier-4 auth path |
 
-## Desktop Environment Detection
+### Perplexity OAuth flow behavior flag
 
-These are auto-detected for system prompt context:
+| Variable | Behavior |
+|---|---|
+| `PI_AUTH_NO_BORROW` | If set, disables macOS native-app token borrowing path in Perplexity login flow |
 
-| Variable | Purpose |
-|----------|---------|
-| `KDE_FULL_SESSION` | Detect KDE desktop |
-| `XDG_CURRENT_DESKTOP` | Current desktop environment |
-| `DESKTOP_SESSION` | Desktop session name |
-| `XDG_SESSION_DESKTOP` | XDG desktop session |
-| `GDMSESSION` | GDM session type |
-| `WINDOWMANAGER` | Window manager name |
-| `XDG_CONFIG_HOME` | User config directory |
-| `APPDATA` | Windows app data directory |
-| `HOME` | User home directory |
+---
 
-## LSP Configuration
+## 4) Python tooling and kernel runtime
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PI_DISABLE_LSPMUX` | Disable lspmux integration (`1` = disabled) | `false` |
+| Variable | Default / behavior |
+|---|---|
+| `PI_PY` | Python tool mode override: `0`/`bash`=`bash-only`, `1`/`py`=`ipy-only`, `mix`/`both`=`both`; invalid values ignored |
+| `PI_PYTHON_SKIP_CHECK` | If `1`, skips Python kernel availability checks/warm checks |
+| `PI_PYTHON_GATEWAY_URL` | If set, uses external kernel gateway instead of local shared gateway |
+| `PI_PYTHON_GATEWAY_TOKEN` | Optional auth token for external gateway (`Authorization: token <value>`) |
+| `PI_PYTHON_IPC_TRACE` | If `1`, enables low-level IPC trace path in kernel module |
+| `VIRTUAL_ENV` | Highest-priority venv path for Python runtime resolution |
 
-## Debugging & Development
+Extra conditional behavior:
 
-### General Debugging
+- If `BUN_ENV=test` or `NODE_ENV=test`, Python availability checks are treated as OK and warming is skipped.
+- Python env filtering denies common API keys and allows safe base vars + `LC_`, `XDG_`, `PI_` prefixes.
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DEBUG` | Enable debug logging | `false` |
-| `PI_DEV` | Development mode (verbose native addon loading) | `false` |
-| `PI_TIMING` | Log tool factory and operation timings (`1` = enabled) | `false` |
+---
 
-### Startup Debugging
+## 5) Agent/runtime behavior toggles
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PI_DEBUG_STARTUP` | Print startup stage timings to stderr | `false` |
+| Variable | Default / behavior |
+|---|---|
+| `PI_SMOL_MODEL` | Ephemeral model-role override for `smol` (CLI `--smol` takes precedence) |
+| `PI_SLOW_MODEL` | Ephemeral model-role override for `slow` (CLI `--slow` takes precedence) |
+| `PI_PLAN_MODEL` | Ephemeral model-role override for `plan` (CLI `--plan` takes precedence) |
+| `PI_NO_TITLE` | If set (any non-empty value), disables auto session title generation on first user message |
+| `NULL_PROMPT` | If `true`, system prompt builder returns empty string |
+| `PI_BLOCKED_AGENT` | Blocks a specific subagent type in task tool |
+| `PI_SUBPROCESS_CMD` | Overrides subagent spawn command (`omp` / `omp.cmd` resolution bypass) |
+| `PI_TASK_MAX_OUTPUT_BYTES` | Max captured output bytes per subagent (default `500000`) |
+| `PI_TASK_MAX_OUTPUT_LINES` | Max captured output lines per subagent (default `5000`) |
+| `PI_TIMING` | If `1`, enables startup/tool timing instrumentation logs |
+| `PI_DEBUG_STARTUP` | Enables startup stage debug prints to stderr in multiple startup paths |
+| `PI_PACKAGE_DIR` | Overrides package asset base dir resolution (docs/examples/changelog path lookup) |
+| `PI_DISABLE_LSPMUX` | If `1`, disables lspmux detection/integration and forces direct LSP server spawning |
+| `OLLAMA_BASE_URL` | Default implicit Ollama discovery base URL override (`http://127.0.0.1:11434` if unset) |
+| `PI_EDIT_VARIANT` | If `hashline`, forces hashline read/grep display mode when edit tool available |
+| `PI_NO_PTY` | If `1`, disables interactive PTY path for bash tool |
 
-### Provider-Specific Debugging
+`PI_NO_PTY` is also set internally when CLI `--no-pty` is used.
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DEBUG_CURSOR` | Cursor provider debug logging (`1` = basic, `2` or `verbose` = detailed) | `false` |
-| `DEBUG_CURSOR_LOG` | Path to write Cursor debug log file | - |
-| `PI_CODEX_DEBUG` | OpenAI Codex debug logging (`1` or `true` = enabled) | `false` |
+---
 
-## Commit Message Generation
+## 6) Storage and config root paths
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PI_COMMIT_TEST_FALLBACK` | Force fallback commit generation (testing) | `false` |
-| `PI_COMMIT_NO_FALLBACK` | Disable fallback commit generation | `false` |
-| `PI_COMMIT_MAP_REDUCE` | Enable/disable map-reduce for large diffs (`false` = disabled) | Enabled |
+These are consumed via `@oh-my-pi/pi-utils/dirs` and affect where coding-agent stores data.
 
-## Testing & CI
+| Variable | Default / behavior |
+|---|---|
+| `PI_CONFIG_DIR` | Config root dirname under home (default `.omp`) |
+| `PI_CODING_AGENT_DIR` | Full override for agent directory (default `~/<PI_CONFIG_DIR or .omp>/agent`) |
+| `PWD` | Used when matching canonical current working directory in path helpers |
 
-These are auto-detected but documented for completeness:
+---
 
-| Variable | Description |
-|----------|-------------|
-| `BUN_ENV` | Bun environment (`test` skips certain checks) |
-| `NODE_ENV` | Node environment (`test` skips certain checks) |
-| `E2E` | Enable end-to-end tests (`1` or `true`) |
-| `PI_NO_LOCAL_LLM` | Skip local LLM tests (Ollama, LM Studio) |
+## 7) Shell/tool execution environment
+
+(From `packages/utils/src/procmgr.ts` and coding-agent bash tool integration.)
+
+| Variable | Behavior |
+|---|---|
+| `PI_BASH_NO_CI` | Suppresses automatic `CI=true` injection into spawned shell env |
+| `CLAUDE_BASH_NO_CI` | Legacy alias fallback for `PI_BASH_NO_CI` |
+| `PI_BASH_NO_LOGIN` | Intended to disable login shell mode |
+| `CLAUDE_BASH_NO_LOGIN` | Legacy alias fallback for `PI_BASH_NO_LOGIN` |
+| `PI_SHELL_PREFIX` | Optional command prefix wrapper |
+| `CLAUDE_CODE_SHELL_PREFIX` | Legacy alias fallback for `PI_SHELL_PREFIX` |
+| `VISUAL` | Preferred external editor command |
+| `EDITOR` | Fallback external editor command |
+
+Current implementation note: `PI_BASH_NO_LOGIN`/`CLAUDE_BASH_NO_LOGIN` are read, but current `getShellArgs()` returns `['-l','-c']` in both branches (effectively no-op today).
+
+---
+
+## 8) UI/theme/session detection (auto-detected env)
+
+These are read as runtime signals; they are usually set by the terminal/OS rather than manually configured.
+
+| Variable | Used for |
+|---|---|
+| `COLORTERM`, `TERM`, `WT_SESSION` | Color capability detection (theme color mode) |
+| `COLORFGBG` | Terminal background light/dark auto-detection |
+| `TERM_PROGRAM`, `TERM_PROGRAM_VERSION`, `TERMINAL_EMULATOR` | Terminal identity in system prompt/context |
+| `KDE_FULL_SESSION`, `XDG_CURRENT_DESKTOP`, `DESKTOP_SESSION`, `XDG_SESSION_DESKTOP`, `GDMSESSION`, `WINDOWMANAGER` | Desktop/window-manager detection in system prompt/context |
+| `KITTY_WINDOW_ID`, `TMUX_PANE`, `TERM_SESSION_ID`, `WT_SESSION` | Stable per-terminal session breadcrumb IDs |
+| `SHELL`, `ComSpec`, `TERM_PROGRAM`, `TERM` | System info diagnostics |
+| `APPDATA`, `XDG_CONFIG_HOME` | lspmux config path resolution |
+| `HOME` | Path shortening in MCP command UI |
+
+---
+
+## 9) Native loader/debug flags
+
+| Variable | Behavior |
+|---|---|
+| `PI_DEV` | Enables verbose native addon load diagnostics in `packages/natives` |
+
+## 10) TUI runtime flags (shared package, affects coding-agent UX)
+
+| Variable | Behavior |
+|---|---|
+| `PI_NOTIFICATIONS` | `off` / `0` / `false` suppress desktop notifications |
+| `PI_TUI_WRITE_LOG` | If set, logs TUI writes to file |
+| `PI_HARDWARE_CURSOR` | If `1`, enables hardware cursor mode |
+| `PI_CLEAR_ON_SHRINK` | If `1`, clears empty rows when content shrinks |
+| `PI_DEBUG_REDRAW` | If `1`, enables redraw debug logging |
+| `PI_TUI_DEBUG` | If `1`, enables deep TUI debug dump path |
+
+---
+
+## 11) Commit generation controls
+
+| Variable | Behavior |
+|---|---|
+| `PI_COMMIT_TEST_FALLBACK` | If `true` (case-insensitive), force commit fallback generation path |
+| `PI_COMMIT_NO_FALLBACK` | If `true`, disables fallback when agent returns no proposal |
+| `PI_COMMIT_MAP_REDUCE` | If `false`, disables map-reduce commit analysis path |
+| `DEBUG` | If set, commit agent error stack traces are printed |
+
+---
+
+## Security-sensitive variables
+
+Treat these as secrets; do not log or commit them:
+
+- Provider/API keys and OAuth/bearer credentials (all `*_API_KEY`, `*_TOKEN`, OAuth access/refresh tokens)
+- Cloud credentials (`AWS_*`, `GOOGLE_APPLICATION_CREDENTIALS` path may expose service-account material)
+- Search/provider auth vars (`EXA_API_KEY`, `PERPLEXITY_API_KEY`, Anthropic search keys)
+
+Python runtime also explicitly strips many common key vars before spawning kernel subprocesses (`packages/coding-agent/src/ipy/runtime.ts`).

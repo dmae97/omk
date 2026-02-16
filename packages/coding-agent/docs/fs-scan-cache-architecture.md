@@ -1,50 +1,162 @@
-# FS scan cache architecture
+# Filesystem Scan Cache Architecture Contract
 
-This document defines the shared filesystem-scan cache contract used by `pi-natives` discovery/search callers.
+This document defines the current contract for the shared filesystem scan cache implemented in Rust (`crates/pi-natives/src/fs_cache.rs`) and consumed by native discovery/search APIs exposed to `packages/coding-agent`.
 
-## Cache key contract
+## What this cache is
 
-Cache entries are keyed by:
+The cache stores full directory-scan entry lists (`GlobMatch[]`) keyed by scan scope and traversal policy, then lets higher-level operations (glob filtering, fuzzy scoring, grep file selection) run against those cached entries.
 
-- `root` (absolute search root path)
-- `include_hidden` (hidden-file visibility)
-- `use_gitignore` (ignore-rule behavior)
+Primary goals:
+- avoid repeated filesystem walks for repeated discovery/search calls
+- keep consistency across `glob`, `fuzzyFind`, and `grep` when they share the same scan policy
+- allow explicit staleness recovery for empty results and explicit invalidation after file mutations
 
-Callers with different visibility/ignore semantics must use different profiles so they do not share incompatible cache entries.
+## Ownership and public surface
 
-## Freshness and recheck contract
+- Cache implementation and policy: `crates/pi-natives/src/fs_cache.rs`
+- Native consumers:
+  - `crates/pi-natives/src/glob.rs`
+  - `crates/pi-natives/src/fd.rs` (`fuzzyFind`)
+  - `crates/pi-natives/src/grep.rs`
+- JS binding/export:
+  - `packages/natives/src/glob/index.ts` (`invalidateFsScanCache`)
+  - `packages/natives/src/glob/types.ts`
+  - `packages/natives/src/grep/types.ts`
+- Coding-agent mutation invalidation helpers:
+  - `packages/coding-agent/src/tools/fs-cache-invalidation.ts`
 
-`crates/pi-natives/src/fs_cache.rs` owns global policy:
+## Cache key partitioning (hard contract)
 
+Each entry is keyed by:
+- canonicalized `root` directory path
+- `include_hidden` boolean
+- `use_gitignore` boolean
+
+Implications:
+- Hidden and non-hidden scans do **not** share entries.
+- Gitignore-respecting and ignore-disabled scans do **not** share entries.
+- Consumers must pass stable semantics for hidden/gitignore behavior; changing either flag creates a different cache partition.
+
+`node_modules` inclusion is **not** in the cache key. The cache stores entries with `node_modules` included; per-consumer filtering is applied after retrieval.
+
+## Scan collection behavior
+
+Cache population uses a deterministic walker (`ignore::WalkBuilder`) configured by `include_hidden` and `use_gitignore`:
+- `follow_links(false)`
+- sorted by file path
+- `.git` is always skipped
+- `node_modules` is always collected at cache-scan time (and optionally filtered later)
+- entry file type + `mtime` are captured via `symlink_metadata`
+
+Search roots are resolved by `resolve_search_path`:
+- relative paths are resolved against current cwd
+- target must be an existing directory
+- root is canonicalized when possible
+
+## Freshness and eviction policy
+
+Global policy (environment-overridable):
 - `FS_SCAN_CACHE_TTL_MS` (default `1000`)
 - `FS_SCAN_EMPTY_RECHECK_MS` (default `200`)
 - `FS_SCAN_CACHE_MAX_ENTRIES` (default `16`)
 
-`get_or_scan()` returns `cache_age_ms` so callers can decide whether an empty filtered result should trigger `force_rescan()`.
+Behavior:
+- `get_or_scan(...)`
+  - if TTL is `0`: bypass cache entirely, always fresh scan (`cache_age_ms = 0`)
+  - on cache hit within TTL: return cached entries + non-zero `cache_age_ms`
+  - on expired hit: evict key, rescan, store fresh entry
+- max entry enforcement is oldest-first eviction by `created_at`
 
-Current callers using this contract:
+## Empty-result fast recheck (separate from normal hits)
 
-- `fd` (`fuzzyFind`) uses empty-result fast recheck.
-- `grep` consumes shared scan entries and applies grep-specific glob/type filtering on top.
+Normal cache hit:
+- a cache hit inside TTL returns cached entries and does nothing else.
+
+Empty-result fast recheck:
+- this is a **caller-side** policy using `ScanResult.cache_age_ms`
+- if filtered/query result is empty and cached scan age is at least `empty_recheck_ms()`, caller performs one `force_rescan(...)` and retries
+- intended to reduce stale-negative results when files were recently added but cache is still within TTL
+
+Current consumers:
+- `glob`: rechecks when filtered matches are empty and scan age exceeds threshold
+- `fuzzyFind` (`fd.rs`): rechecks only when query is non-empty and scored matches are empty
+- `grep`: rechecks when selected candidate file list is empty
+
+## Consumer defaults and cache usage
+
+Cache is opt-in on all exposed APIs (`cache?: boolean`, default `false`).
+
+Current defaults in native APIs:
+- `glob`: `hidden=false`, `gitignore=true`, `cache=false`
+- `fuzzyFind`: `hidden=false`, `gitignore=true`, `cache=false`
+- `grep`: `hidden=true`, `cache=false`, and cache scan always uses `use_gitignore=true`
+
+Coding-agent callers today:
+- High-volume mention candidate discovery enables cache:
+  - `packages/coding-agent/src/utils/file-mentions.ts`
+  - profile: `hidden=true`, `gitignore=true`, `includeNodeModules=true`, `cache=true`
+- Tool-level `grep` integration currently disables scan cache (`cache: false`):
+  - `packages/coding-agent/src/tools/grep.ts`
 
 ## Invalidation contract
 
-Mutation-triggered invalidation is explicit and path-based via `invalidateFsScanCache`.
+Native invalidation entrypoint:
+- `invalidateFsScanCache(path?: string)`
+  - with `path`: remove cache entries whose root is a prefix of target path
+  - without path: clear all scan cache entries
 
-Coding-agent routes invalidation through `packages/coding-agent/src/tools/fs-cache-invalidation.ts`:
+Path handling details:
+- relative invalidation paths are resolved against cwd
+- invalidation attempts canonicalization
+- if target does not exist (e.g., delete), fallback canonicalizes parent and reattaches filename when possible
+- this preserves invalidation behavior for create/delete/rename where one side may not exist
 
+## Coding-agent mutation flow responsibilities
+
+Coding-agent code must invalidate after successful filesystem mutations.
+
+Central helpers:
 - `invalidateFsScanAfterWrite(path)`
 - `invalidateFsScanAfterDelete(path)`
-- `invalidateFsScanAfterRename(oldPath, newPath)` (invalidates both paths)
+- `invalidateFsScanAfterRename(oldPath, newPath)` (invalidates both sides when paths differ)
 
-Write/edit flows call these helpers after successful filesystem mutation.
+Current mutation tool callsites:
+- `packages/coding-agent/src/tools/write.ts`
+- `packages/coding-agent/src/patch/index.ts` (hashline/patch/replace flows)
 
-## Caller discovery profiles
+Rule: if a flow mutates filesystem content or location and bypasses these helpers, cache staleness bugs are expected.
 
-Callers should not build ad-hoc discovery flags inline. Use named profile/policy helpers at callsites.
+## Adding a new cache consumer safely
 
-Current profile boundaries:
+When introducing cache use in a new scanner/search path:
 
-- File mention candidate discovery (`file-mentions.ts`): hidden on, gitignore on, node_modules included.
-- TUI fuzzy `@` discovery (`autocomplete.ts`): hidden on, gitignore on, bounded result count.
-- TUI local path prefix completion keeps a separate per-directory `readdir` cache as an intentional latency fast-path; global fuzzy discovery remains on natives shared scan cache.
+1. **Use stable scan policy inputs**
+   - decide hidden/gitignore semantics first
+   - pass them consistently to `get_or_scan`/`force_rescan` so cache partitions are intentional
+
+2. **Treat cache data as pre-filtered only by traversal policy**
+   - apply tool-specific filtering (glob patterns, type filters, node_modules rules) after retrieval
+   - never assume cached entries already reflect your higher-level filters
+
+3. **Implement empty-result fast recheck only for stale-negative risk**
+   - use `scan.cache_age_ms >= empty_recheck_ms()`
+   - retry once with `force_rescan(..., store=true, ...)`
+   - keep this path separate from normal cache-hit logic
+
+4. **Respect no-cache mode explicitly**
+   - when caller disables cache, call `force_rescan(..., store=false, ...)`
+   - do not populate shared cache in a no-cache request path
+
+5. **Wire mutation invalidation for any new write path**
+   - after successful write/edit/delete/rename, call the coding-agent invalidation helper
+   - for rename/move, invalidate both old and new paths
+
+6. **Do not add per-call TTL knobs**
+   - current contract is global policy only (env-configured), no per-request TTL override
+
+## Known boundaries
+
+- Cache scope is process-local in-memory (`DashMap`), not persisted across process restarts.
+- Cache stores scan entries, not final tool results.
+- `glob`/`fuzzyFind`/`grep` share scan entries only when key dimensions (`root`, `hidden`, `gitignore`) match.
+- `.git` is always excluded at scan collection time regardless of caller options.
