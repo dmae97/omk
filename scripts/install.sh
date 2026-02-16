@@ -202,45 +202,33 @@ install_binary() {
     esac
 
     BINARY="omp-${PLATFORM}-${ARCH}"
-    NATIVE_ADDON="pi_natives.${PLATFORM}-${ARCH}.node"
-
-    # Get release tag
-    if [ -n "$REF" ]; then
-        echo "Fetching release $REF..."
-        if RELEASE_JSON=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/tags/${REF}"); then
-            LATEST=$(echo "$RELEASE_JSON" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
-        else
-            echo "Release tag not found: $REF"
-            echo "For branch/commit installs, use --source with --ref."
-            exit 1
-        fi
-    else
-        echo "Fetching latest release..."
-        RELEASE_JSON=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest")
-        LATEST=$(echo "$RELEASE_JSON" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
-    fi
-    if [ -z "$LATEST" ]; then
-        echo "Failed to fetch release tag"
-        exit 1
-    fi
-    echo "Using version: $LATEST"
-
-    mkdir -p "$INSTALL_DIR"
-
     # Download binary
     BINARY_URL="https://github.com/${REPO}/releases/download/${LATEST}/${BINARY}"
     echo "Downloading ${BINARY}..."
     curl -fsSL "$BINARY_URL" -o "${INSTALL_DIR}/omp"
     chmod +x "${INSTALL_DIR}/omp"
-
-    # Download native addon
-    NATIVE_URL="https://github.com/${REPO}/releases/download/${LATEST}/${NATIVE_ADDON}"
-    echo "Downloading ${NATIVE_ADDON}..."
-    curl -fsSL "$NATIVE_URL" -o "${INSTALL_DIR}/${NATIVE_ADDON}"
-
+    downloaded_native=0
+    if [ "$ARCH" = "x64" ]; then
+        for variant in modern baseline; do
+            NATIVE_ADDON="pi_natives.${PLATFORM}-${ARCH}-${variant}.node"
+            NATIVE_URL="https://github.com/${REPO}/releases/download/${LATEST}/${NATIVE_ADDON}"
+            echo "Downloading ${NATIVE_ADDON}..."
+            curl -fsSL "$NATIVE_URL" -o "${INSTALL_DIR}/${NATIVE_ADDON}" || {
+                echo "Failed to download ${NATIVE_ADDON}"
+                exit 1
+            }
+            downloaded_native=$((downloaded_native + 1))
+        done
+    else
+        NATIVE_ADDON="pi_natives.${PLATFORM}-${ARCH}.node"
+        NATIVE_URL="https://github.com/${REPO}/releases/download/${LATEST}/${NATIVE_ADDON}"
+        echo "Downloading ${NATIVE_ADDON}..."
+        curl -fsSL "$NATIVE_URL" -o "${INSTALL_DIR}/${NATIVE_ADDON}"
+        downloaded_native=1
+    fi
     echo ""
     echo "✓ Installed omp to ${INSTALL_DIR}/omp"
-    echo "✓ Installed native addon to ${INSTALL_DIR}/${NATIVE_ADDON}"
+    echo "✓ Installed ${downloaded_native} native addon file(s) to ${INSTALL_DIR}"
 
     # Check if in PATH
     case ":$PATH:" in

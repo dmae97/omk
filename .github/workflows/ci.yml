@@ -43,22 +43,50 @@ jobs:
           - os: ubuntu-latest
             platform: linux
             arch: x64
+            variant: modern
+            variant_suffix: "-modern"
             rustflags: "-C target-cpu=x86-64-v3"
           - os: ubuntu-latest
             platform: linux
+            arch: x64
+            variant: baseline
+            variant_suffix: "-baseline"
+            rustflags: "-C target-cpu=x86-64-v2"
+          - os: ubuntu-latest
+            platform: linux
             arch: arm64
+            variant: ""
+            variant_suffix: ""
             target: aarch64-unknown-linux-gnu
           - os: macos-15-intel
             platform: darwin
             arch: x64
+            variant: modern
+            variant_suffix: "-modern"
             rustflags: "-C target-cpu=x86-64-v3"
+          - os: macos-15-intel
+            platform: darwin
+            arch: x64
+            variant: baseline
+            variant_suffix: "-baseline"
+            rustflags: "-C target-cpu=x86-64-v2"
           - os: macos-14
             platform: darwin
             arch: arm64
+            variant: ""
+            variant_suffix: ""
           - os: windows-latest
             platform: win32
             arch: x64
+            variant: modern
+            variant_suffix: "-modern"
             rustflags: "-C target-cpu=x86-64-v3"
+          - os: windows-latest
+            platform: win32
+            arch: x64
+            variant: baseline
+            variant_suffix: "-baseline"
+            rustflags: "-C target-cpu=x86-64-v2"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -83,14 +111,15 @@ jobs:
           CROSS_TARGET: ${{ matrix.target }}
           TARGET_PLATFORM: ${{ matrix.platform }}
           TARGET_ARCH: ${{ matrix.arch }}
+          TARGET_VARIANT: ${{ matrix.variant }}
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
           RUSTFLAGS: ${{ matrix.rustflags }}
         run: bun --cwd=packages/natives run build:native
       - name: Upload native addon
         uses: actions/upload-artifact@v4
         with:
-          name: pi-natives-${{ matrix.platform }}-${{ matrix.arch }}
-          path: packages/natives/native/pi_natives.${{ matrix.platform }}-${{ matrix.arch }}.node
+          name: pi-natives-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.variant_suffix }}
+          path: packages/natives/native/pi_natives.${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.variant_suffix }}.node
           if-no-files-found: error
 
   test:
@@ -160,8 +189,8 @@ jobs:
           echo "Native addons downloaded:"
           ls -la packages/natives/native/
           echo ""
-          echo "Expected platforms: linux-x64, linux-arm64, darwin-x64, darwin-arm64, win32-x64"
-          for plat in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
+          echo "Expected addons: linux-x64-modern, linux-x64-baseline, linux-arm64, darwin-x64-modern, darwin-x64-baseline, darwin-arm64, win32-x64-modern, win32-x64-baseline"
+          for plat in linux-x64-modern linux-x64-baseline linux-arm64 darwin-x64-modern darwin-x64-baseline darwin-arm64 win32-x64-modern win32-x64-baseline; do
             if [ -f "packages/natives/native/pi_natives.${plat}.node" ]; then
               echo "✓ pi_natives.${plat}.node"
             else

@@ -20,7 +20,7 @@ $Repo = "can1357/oh-my-pi"
 $Package = "@oh-my-pi/pi-coding-agent"
 $InstallDir = if ($env:PI_INSTALL_DIR) { $env:PI_INSTALL_DIR } else { "$env:LOCALAPPDATA\omp" }
 $BinaryName = "omp-windows-x64.exe"
-$NativeAddonName = "pi_natives.win32-x64.node"
+$NativeAddonNames = @("pi_natives.win32-x64-modern.node", "pi_natives.win32-x64-baseline.node")
 $MinimumBunVersion = "1.3.7"
 
 function Test-BunInstalled {
@@ -263,15 +263,18 @@ function Install-Binary {
     $OutPath = Join-Path $InstallDir "omp.exe"
     Invoke-WebRequest -Uri $BinaryUrl -OutFile $OutPath
 
-    # Download native addon
-    $NativeUrl = "https://github.com/$Repo/releases/download/$Latest/$NativeAddonName"
-    Write-Host "Downloading $NativeAddonName..."
-    $NativeOutPath = Join-Path $InstallDir $NativeAddonName
-    Invoke-WebRequest -Uri $NativeUrl -OutFile $NativeOutPath
-
+    # Download native addons
+    $downloadedNative = 0
+    foreach ($nativeAddonName in $NativeAddonNames) {
+        $nativeUrl = "https://github.com/$Repo/releases/download/$Latest/$nativeAddonName"
+        Write-Host "Downloading $nativeAddonName..."
+        $nativeOutPath = Join-Path $InstallDir $nativeAddonName
+        Invoke-WebRequest -Uri $nativeUrl -OutFile $nativeOutPath
+        $downloadedNative += 1
+    }
     Write-Host ""
     Write-Host "✓ Installed omp to $OutPath" -ForegroundColor Green
-    Write-Host "✓ Installed native addon to $NativeOutPath" -ForegroundColor Green
+    Write-Host "✓ Installed $downloadedNative native addon file(s) to $InstallDir" -ForegroundColor Green
 
     # Add to PATH if not already there
     $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")

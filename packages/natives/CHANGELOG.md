@@ -1,6 +1,23 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added support for x64 CPU variant selection with `TARGET_VARIANT` environment variable (modern/baseline) during build to optimize for specific ISA levels
+- Added automatic AVX2 detection on Linux, macOS, and Windows to select optimal native addon variant at runtime
+- Added `PI_NATIVE_VARIANT` environment variable to override CPU variant selection at runtime
+- Added support for multiple native addon variants per platform (modern with AVX2, baseline without AVX2) for improved performance portability
+
+### Changed
+
+- Changed native addon filename scheme to include CPU variant suffix for x64 builds (e.g., `pi_natives.linux-x64-modern.node`)
+- Changed embedded addon structure to support multiple variant files per platform instead of single file
+- Changed native addon loader to automatically select appropriate variant based on CPU capabilities or explicit override
+- Changed build output to include variant information in console messages
+
+### Removed
+
+- Removed fallback untagged `pi_natives.node` binary creation for native builds; platform-tagged variants are now required
 
 ### Fixed
 

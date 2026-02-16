@@ -80,7 +80,7 @@ async function getLatestRelease(): Promise<ReleaseInfo> {
 	return {
 		tag,
 		version,
-		assets: [makeAsset(getBinaryName()), makeAsset(getNativeAddonName())],
+		assets: [makeAsset(getBinaryName()), ...getNativeAddonNames().map(makeAsset)],
 	};
 }
 
@@ -143,13 +143,11 @@ function getBinaryName(): string {
 }
 
 /**
- * Get the appropriate native addon name for this platform.
- * Uses process.platform directly (linux, darwin, win32).
+ * Get native addon names for this platform, ordered by preference.
  */
-function getNativeAddonName(): string {
+function getNativeAddonNames(): string[] {
 	const platform = process.platform;
 	const arch = process.arch;
-
 	if (!["linux", "darwin", "win32"].includes(platform)) {
 		throw new Error(`Unsupported platform: ${platform}`);
 	}
@@ -157,7 +155,12 @@ function getNativeAddonName(): string {
 		throw new Error(`Unsupported architecture: ${arch}`);
 	}
 
-	return `pi_natives.${platform}-${arch}.node`;
+	const baseName = `pi_natives.${platform}-${arch}.node`;
+	if (arch !== "x64") {
+		return [baseName];
+	}
+
+	return [`pi_natives.${platform}-${arch}-modern.node`, `pi_natives.${platform}-${arch}-baseline.node`];
 }
 
 /**
@@ -197,50 +200,58 @@ async function updateViaBun(expectedVersion: string): Promise<void> {
  */
 async function updateViaBinary(release: ReleaseInfo): Promise<void> {
 	const binaryName = getBinaryName();
-	const nativeAddonName = getNativeAddonName();
-
+	const nativeAddonNames = getNativeAddonNames();
 	const asset = release.assets.find(a => a.name === binaryName);
-	const nativeAsset = release.assets.find(a => a.name === nativeAddonName);
-
 	if (!asset) {
 		throw new Error(`No binary found for ${binaryName}`);
 	}
-	if (!nativeAsset) {
-		throw new Error(`No native addon found for ${nativeAddonName}`);
-	}
-
 	const execPath = process.execPath;
 	const execDir = path.dirname(execPath);
 	const tempPath = `${execPath}.new`;
 	const backupPath = `${execPath}.bak`;
-	const nativePath = path.join(execDir, nativeAddonName);
-	const nativeTempPath = `${nativePath}.new`;
+	const nativeDownloads: Array<{ name: string; tempPath: string; finalPath: string }> = [];
+
+	const downloadNativeAsset = async (name: string, required: boolean): Promise<boolean> => {
+		const nativeAsset = release.assets.find(assetEntry => assetEntry.name === name);
+		if (!nativeAsset) {
+			if (required) throw new Error(`No native addon found for ${name}`);
+			return false;
+		}
+
+		console.log(chalk.dim(`Downloading ${name}…`));
+		try {
+			const nativeResponse = await fetch(nativeAsset.url, { redirect: "follow" });
+			if (!nativeResponse.ok || !nativeResponse.body) {
+				if (required) throw new Error(`Native addon download failed for ${name}: ${nativeResponse.statusText}`);
+				return false;
+			}
+
+			const nativeFinalPath = path.join(execDir, name);
+			const nativeTempPath = `${nativeFinalPath}.new`;
+			const nativeFileStream = fs.createWriteStream(nativeTempPath, { mode: 0o755 });
+			await pipeline(nativeResponse.body, nativeFileStream);
+			nativeDownloads.push({ name, tempPath: nativeTempPath, finalPath: nativeFinalPath });
+			return true;
+		} catch (err) {
+			if (required) throw err;
+			return false;
+		}
+	};
 
 	console.log(chalk.dim(`Downloading ${binaryName}…`));
 
-	// Download to temp file
+	// Download binary to temp file
 	const response = await fetch(asset.url, { redirect: "follow" });
 	if (!response.ok || !response.body) {
 		throw new Error(`Download failed: ${response.statusText}`);
 	}
-
 	const fileStream = fs.createWriteStream(tempPath, { mode: 0o755 });
 	await pipeline(response.body, fileStream);
-
-	// Download native addon
-	console.log(chalk.dim(`Downloading ${nativeAddonName}…`));
-
-	const nativeResponse = await fetch(nativeAsset.url, { redirect: "follow" });
-	if (!nativeResponse.ok || !nativeResponse.body) {
-		throw new Error(`Native addon download failed: ${nativeResponse.statusText}`);
+	for (const nativeAddonName of nativeAddonNames) {
+		await downloadNativeAsset(nativeAddonName, true);
 	}
-
-	const nativeFileStream = fs.createWriteStream(nativeTempPath, { mode: 0o755 });
-	await pipeline(nativeResponse.body, nativeFileStream);
-
 	// Replace current binary
 	console.log(chalk.dim("Installing update..."));
-
 	try {
 		try {
 			await fs.promises.unlink(backupPath);
@@ -251,10 +262,11 @@ async function updateViaBinary(release: ReleaseInfo): Promise<void> {
 		await fs.promises.rename(tempPath, execPath);
 		await fs.promises.unlink(backupPath);
 
-		// Replace native addon (no backup needed, just overwrite)
-		await fs.promises.rename(nativeTempPath, nativePath);
-
+		for (const nativeDownload of nativeDownloads) {
+			await fs.promises.rename(nativeDownload.tempPath, nativeDownload.finalPath);
+		}
 		console.log(chalk.green(`\n${theme.status.success} Updated to ${release.version}`));
+		console.log(chalk.dim(`Installed ${nativeDownloads.length} native addon file(s)`));
 		console.log(chalk.dim(`Restart ${APP_NAME} to use the new version`));
 	} catch (err) {
 		if (fs.existsSync(backupPath) && !fs.existsSync(execPath)) {
@@ -263,8 +275,10 @@ async function updateViaBinary(release: ReleaseInfo): Promise<void> {
 		if (fs.existsSync(tempPath)) {
 			await fs.promises.unlink(tempPath);
 		}
-		if (fs.existsSync(nativeTempPath)) {
-			await fs.promises.unlink(nativeTempPath);
+		for (const nativeDownload of nativeDownloads) {
+			if (fs.existsSync(nativeDownload.tempPath)) {
+				await fs.promises.unlink(nativeDownload.tempPath);
+			}
 		}
 		throw err;
 	}
