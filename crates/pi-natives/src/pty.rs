@@ -9,7 +9,7 @@ use std::{
 	io::{Read, Write},
 	str,
 	sync::{Arc, Mutex, mpsc},
-	time::Duration,
+	time::{Duration, Instant},
 };
 
 use napi::{
@@ -17,7 +17,7 @@ use napi::{
 	threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
 };
 use napi_derive::napi;
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use portable_pty::{Child, CommandBuilder, PtySize, native_pty_system};
 
 use crate::task;
 
@@ -71,6 +71,14 @@ enum ControlMessage {
 	Resize { cols: u16, rows: u16 },
 	Kill,
 }
+
+const CONTROL_MESSAGES_PER_TICK: usize = 64;
+const READER_EVENTS_PER_TICK: usize = 256;
+const POST_CANCEL_DRAIN_TIMEOUT: Duration = Duration::from_millis(300);
+const POST_EXIT_DRAIN_TIMEOUT: Duration = Duration::from_millis(300);
+const FINAL_READER_DRAIN_TIMEOUT: Duration = Duration::from_millis(50);
+const TERM_SIGNAL: i32 = 15;
+const KILL_SIGNAL: i32 = 9;
 
 struct PtySessionCore {
 	control_tx: mpsc::Sender<ControlMessage>,
@@ -183,6 +191,32 @@ impl PtySession {
 	}
 }
 
+fn terminate_pty_processes(
+	child: &mut Box<dyn Child + Send + Sync>,
+	child_pid: Option<i32>,
+	process_group_id: Option<i32>,
+) {
+	#[cfg(unix)]
+	if let Some(pgid) = process_group_id {
+		let _ = crate::ps::kill_process_group(pgid, TERM_SIGNAL);
+	}
+
+	if let Some(pid) = child_pid {
+		let _ = crate::ps::kill_tree(pid, TERM_SIGNAL);
+	}
+
+	let _ = child.kill();
+
+	#[cfg(unix)]
+	if let Some(pgid) = process_group_id {
+		let _ = crate::ps::kill_process_group(pgid, KILL_SIGNAL);
+	}
+
+	if let Some(pid) = child_pid {
+		let _ = crate::ps::kill_tree(pid, KILL_SIGNAL);
+	}
+}
+
 fn run_pty_sync(
 	config: PtyRunConfig,
 	on_chunk: Option<ThreadsafeFunction<String>>,
@@ -286,20 +320,30 @@ fn run_pty_sync(
 		let _ = reader_tx.send(ReaderEvent::Done);
 	});
 
+	let child_pid = child
+		.process_id()
+		.and_then(|value| i32::try_from(value).ok());
+	#[cfg(unix)]
+	let process_group_id = master.process_group_leader().filter(|pgid| *pgid > 0);
+	#[cfg(not(unix))]
+	let process_group_id: Option<i32> = None;
 	let mut timed_out = false;
 	let mut cancelled = false;
 	let mut reader_done = false;
 	let mut exit_code: Option<i32> = None;
-
+	let mut terminate_requested = false;
+	let mut reader_drain_deadline: Option<Instant> = None;
 	while exit_code.is_none() || !reader_done {
-		if let Err(err) = ct.heartbeat() {
+		if !terminate_requested && let Err(err) = ct.heartbeat() {
 			let message = err.to_string();
 			timed_out = message.contains("Timeout");
 			cancelled = !timed_out;
-			let _ = child.kill();
+			terminate_pty_processes(&mut child, child_pid, process_group_id);
+			terminate_requested = true;
+			reader_drain_deadline = Some(Instant::now() + POST_CANCEL_DRAIN_TIMEOUT);
 		}
 
-		loop {
+		for _ in 0..CONTROL_MESSAGES_PER_TICK {
 			match control_rx.try_recv() {
 				Ok(ControlMessage::Input(data)) => {
 					let _ = writer.write_all(data.as_bytes());
@@ -310,14 +354,18 @@ fn run_pty_sync(
 				},
 				Ok(ControlMessage::Kill) => {
 					cancelled = true;
-					let _ = child.kill();
+					if !terminate_requested {
+						terminate_pty_processes(&mut child, child_pid, process_group_id);
+						terminate_requested = true;
+						reader_drain_deadline = Some(Instant::now() + POST_CANCEL_DRAIN_TIMEOUT);
+					}
 				},
 				Err(mpsc::TryRecvError::Empty) => break,
 				Err(mpsc::TryRecvError::Disconnected) => break,
 			}
 		}
 
-		loop {
+		for _ in 0..READER_EVENTS_PER_TICK {
 			match reader_rx.try_recv() {
 				Ok(ReaderEvent::Chunk(chunk)) => emit_chunk(&chunk, on_chunk.as_ref()),
 				Ok(ReaderEvent::Done) => {
@@ -331,29 +379,68 @@ fn run_pty_sync(
 				},
 			}
 		}
-
 		if exit_code.is_none()
 			&& let Some(status) = child
 				.try_wait()
 				.map_err(|err| Error::from_reason(format!("Failed checking PTY status: {err}")))?
 		{
 			exit_code = Some(i32::try_from(status.exit_code()).unwrap_or(i32::MAX));
+			if !reader_done && reader_drain_deadline.is_none() {
+				reader_drain_deadline = Some(Instant::now() + POST_EXIT_DRAIN_TIMEOUT);
+			}
 		}
 
+		if let Some(deadline) = reader_drain_deadline
+			&& Instant::now() >= deadline
+		{
+			break;
+		}
 		if exit_code.is_none() || !reader_done {
 			std::thread::sleep(Duration::from_millis(16));
 		}
 	}
-
 	if exit_code.is_none() {
-		let status = child
-			.wait()
-			.map_err(|err| Error::from_reason(format!("Failed waiting PTY process: {err}")))?;
-		exit_code = Some(i32::try_from(status.exit_code()).unwrap_or(i32::MAX));
+		if terminate_requested {
+			if let Some(status) = child
+				.try_wait()
+				.map_err(|err| Error::from_reason(format!("Failed checking PTY status: {err}")))?
+			{
+				exit_code = Some(i32::try_from(status.exit_code()).unwrap_or(i32::MAX));
+			}
+		} else {
+			let status = child
+				.wait()
+				.map_err(|err| Error::from_reason(format!("Failed waiting PTY process: {err}")))?;
+			exit_code = Some(i32::try_from(status.exit_code()).unwrap_or(i32::MAX));
+		}
 	}
 
-	let _ = reader_thread.join();
+	drop(writer);
+	drop(master);
 
+	if !reader_done {
+		let finalize_deadline = Instant::now() + FINAL_READER_DRAIN_TIMEOUT;
+		while Instant::now() < finalize_deadline {
+			match reader_rx.try_recv() {
+				Ok(ReaderEvent::Chunk(chunk)) => emit_chunk(&chunk, on_chunk.as_ref()),
+				Ok(ReaderEvent::Done) => {
+					reader_done = true;
+					break;
+				},
+				Err(mpsc::TryRecvError::Empty) => std::thread::sleep(Duration::from_millis(5)),
+				Err(mpsc::TryRecvError::Disconnected) => {
+					reader_done = true;
+					break;
+				},
+			}
+		}
+	}
+
+	// A detached descendant can keep the PTY slave open forever; do not block
+	// completion waiting on join when the reader thread did not reach EOF.
+	if reader_done {
+		let _ = reader_thread.join();
+	}
 	Ok(PtyRunResult { exit_code, cancelled, timed_out })
 }
 

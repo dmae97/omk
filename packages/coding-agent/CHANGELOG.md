@@ -41,6 +41,7 @@
 
 - Fixed LSP operations to properly respect abort signals and throw `ToolAbortError` when cancelled
 - Fixed workspace diagnostics process cleanup to remove abort event listeners in finally block
+- Fixed PTY-backed bash execution to enforce timeout completion when detached child processes keep the PTY stream open ([#88](https://github.com/can1357/oh-my-pi/issues/88))
 
 ## [12.7.5] - 2026-02-16
 ### Changed

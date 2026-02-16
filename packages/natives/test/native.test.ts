@@ -10,6 +10,7 @@ import {
 	grep,
 	htmlToMarkdown,
 	invalidateFsScanCache,
+	PtySession,
 	sanitizeText,
 } from "../src/index";
 
@@ -173,6 +174,46 @@ describe("pi-natives", () => {
 			await Bun.sleep(250);
 			const second = await glob({ pattern: fileName, path: testDir, hidden: true, gitignore: true, cache: true });
 			expect(second.totalMatches).toBe(1);
+		});
+	});
+
+	describe("pty", () => {
+		it("should time out detached background workloads without hanging", async () => {
+			if (process.platform === "win32" || !Bun.which("bash")) {
+				return;
+			}
+
+			const session = new PtySession();
+			const started = Date.now();
+			try {
+				const outcome = await Promise.race([
+					session
+						.start(
+							{
+								command: 'bash -lc "set -m; sleep 30 & disown; sleep 30"',
+								cwd: testDir,
+								timeoutMs: 150,
+								cols: 120,
+								rows: 40,
+							},
+							undefined,
+						)
+						.then(result => ({ kind: "done" as const, result })),
+					Bun.sleep(4000).then(() => ({ kind: "hang" as const })),
+				]);
+
+				expect(outcome.kind).toBe("done");
+				if (outcome.kind !== "done") {
+					return;
+				}
+
+				expect(outcome.result.timedOut).toBe(true);
+				expect(Date.now() - started).toBeLessThan(4000);
+			} finally {
+				try {
+					session.kill();
+				} catch {}
+			}
 		});
 	});
 	describe("htmlToMarkdown", () => {
