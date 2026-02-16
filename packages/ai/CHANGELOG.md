@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.6.0] - 2026-02-16
+
 ### Added
 
 - Added source-scoped custom API and OAuth provider registration helpers for extension-defined providers.

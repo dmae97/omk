@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.6.0] - 2026-02-16
 ### Added
 
 - Added runtime tests covering extension provider registration and deferred model pattern resolution behavior.
