@@ -1,17 +1,19 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added runtime tests covering extension provider registration and deferred model pattern resolution behavior.
 
 ### Changed
 
+- Improved welcome screen responsiveness to dynamically show or hide the right column based on available terminal width
 - Extended extension `registerProvider()` typing with OAuth provider support and source-aware registration metadata.
 
 ### Fixed
 
+- Fixed welcome screen layout to gracefully handle small terminal widths and prevent rendering errors on narrow displays
+- Fixed welcome screen title truncation to prevent overflow when content exceeds available width
 - Fixed deferred `--model` resolution so extension-provided models are matched before fallback selection and unresolved explicit patterns no longer silently fallback.
 - Fixed CLI `--api-key` handling for deferred model resolution by applying runtime API key overrides after extension model selection.
 - Fixed extension provider registration cleanup to remove stale source-scoped custom API/OAuth providers across extension reloads.

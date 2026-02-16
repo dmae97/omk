@@ -41,12 +41,31 @@ export class WelcomeComponent implements Component {
 	}
 
 	render(termWidth: number): string[] {
-		// Box dimensions - responsive with min/max
-		const minWidth = 80;
+		// Box dimensions - responsive with max width and small-terminal support
 		const maxWidth = 100;
-		const boxWidth = Math.max(minWidth, Math.min(termWidth - 2, maxWidth));
-		const leftCol = 26;
-		const rightCol = boxWidth - leftCol - 3; // 3 = │ + │ + │
+		const boxWidth = Math.min(maxWidth, Math.max(0, termWidth - 2));
+		if (boxWidth < 4) {
+			return [];
+		}
+		const dualContentWidth = boxWidth - 3; // 3 = │ + │ + │
+		const preferredLeftCol = 26;
+		const minLeftCol = 14; // logo width
+		const minRightCol = 20;
+		const leftMinContentWidth = Math.max(
+			minLeftCol,
+			visibleWidth("Welcome back!"),
+			visibleWidth(this.modelName),
+			visibleWidth(this.providerName),
+		);
+		const desiredLeftCol = Math.min(preferredLeftCol, Math.max(minLeftCol, Math.floor(dualContentWidth * 0.35)));
+		const dualLeftCol =
+			dualContentWidth >= minRightCol + 1
+				? Math.min(desiredLeftCol, dualContentWidth - minRightCol)
+				: Math.max(1, dualContentWidth - 1);
+		const dualRightCol = Math.max(1, dualContentWidth - dualLeftCol);
+		const showRightColumn = dualLeftCol >= leftMinContentWidth && dualRightCol >= minRightCol;
+		const leftCol = showRightColumn ? dualLeftCol : boxWidth - 2;
+		const rightCol = showRightColumn ? dualRightCol : 0;
 
 		// Block-based OMP logo (gradient: magenta → cyan)
 		// biome-ignore format: preserve ASCII art layout
@@ -67,7 +86,7 @@ export class WelcomeComponent implements Component {
 		];
 
 		// Right column separator
-		const separatorWidth = rightCol - 2; // padding on each side
+		const separatorWidth = Math.max(0, rightCol - 2); // padding on each side
 		const separator = ` ${theme.fg("dim", theme.boxRound.horizontal.repeat(separatorWidth))}`;
 
 		// Recent sessions content
@@ -131,20 +150,31 @@ export class WelcomeComponent implements Component {
 		const titlePrefixRaw = hChar.repeat(3);
 		const titleStyled = theme.fg("dim", titlePrefixRaw) + theme.fg("muted", title);
 		const titleVisLen = visibleWidth(titlePrefixRaw) + visibleWidth(title);
-		const afterTitle = boxWidth - 2 - titleVisLen;
-		const afterTitleText = afterTitle > 0 ? theme.fg("dim", hChar.repeat(afterTitle)) : "";
-		lines.push(tl + titleStyled + afterTitleText + tr);
-
-		// Content rows
-		const maxRows = Math.max(leftLines.length, rightLines.length);
-		for (let i = 0; i < maxRows; i++) {
-			const left = this.#fitToWidth(leftLines[i] ?? "", leftCol);
-			const right = this.#fitToWidth(rightLines[i] ?? "", rightCol);
-			lines.push(v + left + v + right + v);
+		const titleSpace = boxWidth - 2;
+		if (titleVisLen >= titleSpace) {
+			lines.push(tl + truncateToWidth(titleStyled, titleSpace) + tr);
+		} else {
+			const afterTitle = titleSpace - titleVisLen;
+			lines.push(tl + titleStyled + theme.fg("dim", hChar.repeat(afterTitle)) + tr);
 		}
 
+		// Content rows
+		const maxRows = showRightColumn ? Math.max(leftLines.length, rightLines.length) : leftLines.length;
+		for (let i = 0; i < maxRows; i++) {
+			const left = this.#fitToWidth(leftLines[i] ?? "", leftCol);
+			if (showRightColumn) {
+				const right = this.#fitToWidth(rightLines[i] ?? "", rightCol);
+				lines.push(v + left + v + right + v);
+			} else {
+				lines.push(v + left + v);
+			}
+		}
 		// Bottom border
-		lines.push(bl + h.repeat(leftCol) + theme.fg("dim", theme.boxSharp.teeUp) + h.repeat(rightCol) + br);
+		if (showRightColumn) {
+			lines.push(bl + h.repeat(leftCol) + theme.fg("dim", theme.boxSharp.teeUp) + h.repeat(rightCol) + br);
+		} else {
+			lines.push(bl + h.repeat(leftCol) + br);
+		}
 
 		return lines;
 	}
