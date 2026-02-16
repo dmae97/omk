@@ -269,7 +269,7 @@ export class InputController {
 				return;
 			}
 			if (text === "/changelog" || text.startsWith("/changelog ")) {
-				const showFull = text.split(/\s+/).slice(1).includes("--full");
+				const showFull = text.split(/\s+/).slice(1).includes("full");
 				await this.ctx.handleChangelogCommand(showFull);
 				this.ctx.editor.setText("");
 				return;

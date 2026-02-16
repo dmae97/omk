@@ -111,7 +111,7 @@ const BUILTIN_SLASH_COMMAND_DEFS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "copy", description: "Copy last agent message to clipboard" },
 	{ name: "session", description: "Show session info and stats" },
 	{ name: "usage", description: "Show provider usage and limits" },
-	{ name: "changelog", description: "Show changelog entries" },
+	{ name: "changelog", description: "Show changelog entries", subcommands: [{ name: "full", description: "Show complete changelog" }] },
 	{ name: "hotkeys", description: "Show all keyboard shortcuts" },
 	{ name: "extensions", description: "Open Extension Control Center dashboard" },
 	{ name: "branch", description: "Create a new branch from a previous message" },
