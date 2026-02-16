@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.7.0] - 2026-02-16
 ### Added
 
 - Added Z.AI web search provider support via remote MCP endpoint (webSearchPrime)

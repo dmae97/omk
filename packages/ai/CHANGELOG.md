@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.7.0] - 2026-02-16
 ### Added
 
 - Added DeepSeek-V3.2 model support via Amazon Bedrock
