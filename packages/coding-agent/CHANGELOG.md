@@ -1,6 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Restructured execution procedure guidance to emphasize scope assessment and continuous tool-driven progress over planning-first approach
+- Updated task tracking instructions to prohibit metadata-only turns and require immediate completion marking of todo items
+- Clarified parallel execution guidance to distinguish between genuine parallelization and sequential work, with explicit criteria for Task tool usage
+- Modified output style requirements to mandate stating intent before tool calls and reordered style constraints for clarity
+- Reinforced requirement that every turn must include at least one tool call advancing the deliverable, with explicit failure condition for planning-only turns
 
 ## [12.7.0] - 2026-02-16
 ### Added
