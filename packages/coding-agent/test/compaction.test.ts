@@ -194,8 +194,10 @@ describe("shouldCompact", () => {
 			keepRecentTokens: 20000,
 		};
 
+		// effective reserve = max(floor(100000 * 0.15), 10000) = 15000, threshold = 85000
 		expect(shouldCompact(95000, 100000, settings)).toBe(true);
-		expect(shouldCompact(89000, 100000, settings)).toBe(false);
+		expect(shouldCompact(86000, 100000, settings)).toBe(true);
+		expect(shouldCompact(84000, 100000, settings)).toBe(false);
 	});
 
 	it("should return false when disabled", () => {
