@@ -180,3 +180,36 @@ export async function listMCPServers(filePath: string): Promise<string[]> {
 	const config = await readMCPConfigFile(filePath);
 	return Object.keys(config.mcpServers ?? {});
 }
+
+/**
+ * Read the disabled servers list from a config file.
+ */
+export async function readDisabledServers(filePath: string): Promise<string[]> {
+	const config = await readMCPConfigFile(filePath);
+	return config.disabledServers ?? [];
+}
+
+/**
+ * Add or remove a server name from the disabled servers list.
+ */
+export async function setServerDisabled(filePath: string, name: string, disabled: boolean): Promise<void> {
+	const config = await readMCPConfigFile(filePath);
+	const current = new Set(config.disabledServers ?? []);
+
+	if (disabled) {
+		current.add(name);
+	} else {
+		current.delete(name);
+	}
+
+	const updated: MCPConfigFile = {
+		...config,
+		disabledServers: current.size > 0 ? Array.from(current).sort() : undefined,
+	};
+
+	if (!updated.disabledServers) {
+		delete updated.disabledServers;
+	}
+
+	await writeMCPConfigFile(filePath, updated);
+}

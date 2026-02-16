@@ -89,6 +89,7 @@ export type MCPServerConfig = MCPStdioServerConfig | MCPHttpServerConfig | MCPSs
 /** Root .mcp.json file structure */
 export interface MCPConfigFile {
 	mcpServers?: Record<string, MCPServerConfig>;
+	disabledServers?: string[];
 }
 
 // =============================================================================

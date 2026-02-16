@@ -8,7 +8,14 @@ import { getMCPConfigPath, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import type { SourceMeta } from "../../capability/types";
 import { analyzeAuthError, discoverOAuthEndpoints, MCPManager } from "../../mcp";
 import { connectToServer, disconnectServer, listTools } from "../../mcp/client";
-import { addMCPServer, readMCPConfigFile, removeMCPServer, updateMCPServer } from "../../mcp/config-writer";
+import {
+	addMCPServer,
+	readDisabledServers,
+	readMCPConfigFile,
+	removeMCPServer,
+	setServerDisabled,
+	updateMCPServer,
+} from "../../mcp/config-writer";
 import { MCPOAuthFlow } from "../../mcp/oauth-flow";
 import type { MCPServerConfig, MCPServerConnection } from "../../mcp/types";
 import type { OAuthCredential } from "../../session/auth-storage";
@@ -774,7 +781,12 @@ export class MCPCommandController {
 				}
 			}
 
-			if (userServers.length === 0 && projectServers.length === 0 && discoveredServers.length === 0) {
+			if (
+				userServers.length === 0 &&
+				projectServers.length === 0 &&
+				discoveredServers.length === 0 &&
+				(userConfig.disabledServers ?? []).length === 0
+			) {
 				this.#showMessage(
 					[
 						"",
@@ -867,6 +879,17 @@ export class MCPCommandController {
 					}
 					lines.push("");
 				}
+			}
+
+			// Show servers disabled via /mcp disable (from third-party configs)
+			const disabledServers = await readDisabledServers(userPath);
+			const relevantDisabled = disabledServers.filter(n => !configServerNames.has(n));
+			if (relevantDisabled.length > 0) {
+				lines.push(theme.fg("accent", "Disabled") + theme.fg("muted", " (discovered servers):"));
+				for (const name of relevantDisabled) {
+					lines.push(`  ${theme.fg("accent", name)}${theme.fg("warning", " ◌ disabled")}`);
+				}
+				lines.push("");
 			}
 			this.#showMessage(lines.join("\n"));
 		} catch (error) {
@@ -1061,7 +1084,41 @@ export class MCPCommandController {
 		try {
 			const found = await this.#findConfiguredServer(name);
 			if (!found) {
-				this.ctx.showError(`Server "${name}" not found.`);
+				// Check if this is a discovered server from a third-party config
+				const userConfigPath = getMCPConfigPath("user", getProjectDir());
+				const disabledServers = new Set(await readDisabledServers(userConfigPath));
+				const isDiscovered = this.ctx.mcpManager?.getSource(name);
+				const isCurrentlyDisabled = disabledServers.has(name);
+				if (!isDiscovered && !isCurrentlyDisabled) {
+					this.ctx.showError(`Server "${name}" not found.`);
+					return;
+				}
+				if (isCurrentlyDisabled === !enabled) {
+					this.#showMessage(
+						["", theme.fg("muted", `Server "${name}" is already ${enabled ? "enabled" : "disabled"}.`), ""].join(
+							"\n",
+						),
+					);
+					return;
+				}
+				await setServerDisabled(userConfigPath, name, !enabled);
+				if (enabled) {
+					await this.#reloadMCP();
+					const state = await this.#waitForServerConnectionWithAnimation(name);
+					const status =
+						state === "connected"
+							? theme.fg("success", "Connected")
+							: state === "connecting"
+								? theme.fg("muted", "Connecting")
+								: theme.fg("warning", "Not connected yet");
+					this.#showMessage(
+						["", theme.fg("success", `\u2713 Enabled "${name}"`), "", `  Status: ${status}`, ""].join("\n"),
+					);
+				} else {
+					await this.ctx.mcpManager?.disconnectServer(name);
+					await this.ctx.session.refreshMCPTools(this.ctx.mcpManager?.getTools() ?? []);
+					this.#showMessage(["", theme.fg("success", `\u2713 Disabled "${name}"`), ""].join("\n"));
+				}
 				return;
 			}
 

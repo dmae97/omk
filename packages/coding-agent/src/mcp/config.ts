@@ -3,10 +3,13 @@
  *
  * Uses the capability system to load MCP servers from multiple sources.
  */
+
+import { getMCPConfigPath } from "@oh-my-pi/pi-utils/dirs";
 import { mcpCapability } from "../capability/mcp";
 import type { SourceMeta } from "../capability/types";
 import type { MCPServer } from "../discovery";
 import { loadCapability } from "../discovery";
+import { readDisabledServers } from "./config-writer";
 import type { MCPServerConfig } from "./types";
 
 /** Options for loading MCP configs */
@@ -97,12 +100,14 @@ export async function loadAllMCPConfigs(cwd: string, options?: LoadMCPConfigsOpt
 		? result.items
 		: result.items.filter(server => server._source.level !== "project");
 
+	// Load user-level disabled servers list
+	const disabledServers = new Set(await readDisabledServers(getMCPConfigPath("user", cwd)));
 	// Convert to legacy format and preserve source metadata
 	const configs: Record<string, MCPServerConfig> = {};
 	const sources: Record<string, SourceMeta> = {};
 	for (const server of servers) {
 		const config = convertToLegacyConfig(server);
-		if (config.enabled === false) {
+		if (config.enabled === false || disabledServers.has(server.name)) {
 			continue;
 		}
 		configs[server.name] = config;
