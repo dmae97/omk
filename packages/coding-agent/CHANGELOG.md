@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.7.5] - 2026-02-16
 ### Changed
 
 - Updated SMOL_MODEL_PRIORITY to include additional model variants (gpt-5.3-spark, cerebras/zai-glm-4.7, haiku-4-5, haiku-4.5) for improved fast model discovery
