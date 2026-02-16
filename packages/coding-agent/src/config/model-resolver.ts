@@ -44,7 +44,9 @@ export interface ScopedModel {
 /** Priority chain for auto-discovering smol/fast models */
 export const SMOL_MODEL_PRIORITY = [
 	// any spark
+	"gpt-5.3-codex-spark",
 	"gpt-5.3-spark",
+	"spark",
 	// cerebras zai
 	"cerebras/zai-glm-4.7",
 	"cerebras/zai-glm-4.6",
