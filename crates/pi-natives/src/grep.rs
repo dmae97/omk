@@ -13,7 +13,7 @@ use std::{
 	path::{Path, PathBuf},
 };
 
-use globset::{Glob, GlobSet, GlobSetBuilder};
+use globset::GlobSet;
 use grep_matcher::Matcher;
 use grep_regex::RegexMatcherBuilder;
 use grep_searcher::{
@@ -28,7 +28,7 @@ use napi_derive::napi;
 use rayon::prelude::*;
 use smallvec::SmallVec;
 
-use crate::{fs_cache, task};
+use crate::{fs_cache, glob_util, task};
 
 const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -405,29 +405,6 @@ fn resolve_search_path(path: &str) -> Result<PathBuf> {
 	Ok(cwd.join(candidate))
 }
 
-fn build_glob_pattern(glob: &str) -> String {
-	let normalized = glob.replace('\\', "/");
-	if normalized.contains('/') || normalized.starts_with("**/") {
-		normalized
-	} else {
-		format!("**/{normalized}")
-	}
-}
-
-fn compile_glob(glob: Option<&str>) -> Result<Option<GlobSet>> {
-	let Some(glob) = glob.map(str::trim).filter(|value| !value.is_empty()) else {
-		return Ok(None);
-	};
-	let mut builder = GlobSetBuilder::new();
-	let pattern = build_glob_pattern(glob);
-	let glob = Glob::new(&pattern)
-		.map_err(|err| Error::from_reason(format!("Invalid glob pattern: {err}")))?;
-	builder.add(glob);
-	builder
-		.build()
-		.map(Some)
-		.map_err(|err| Error::from_reason(format!("Failed to build glob matcher: {err}")))
-}
 
 fn resolve_type_filter(type_name: Option<&str>) -> Option<TypeFilter> {
 	let normalized = type_name
@@ -820,7 +797,7 @@ fn grep_sync(
 	let offset = options.offset.unwrap_or(0) as u64;
 	let include_hidden = options.hidden.unwrap_or(true);
 	let use_cache = options.cache.unwrap_or(false);
-	let glob_set = compile_glob(options.glob.as_deref())?;
+	let glob_set = glob_util::try_compile_glob(options.glob.as_deref(), true)?;
 	let type_filter = resolve_type_filter(options.type_filter.as_deref());
 
 	if metadata.is_file() {

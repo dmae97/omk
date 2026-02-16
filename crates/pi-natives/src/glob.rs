@@ -16,7 +16,8 @@
 
 use std::path::Path;
 
-use globset::{Glob, GlobSet, GlobSetBuilder};
+use globset::GlobSet;
+
 use napi::{
 	bindgen_prelude::*,
 	threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
@@ -25,7 +26,7 @@ use napi_derive::napi;
 
 // Re-export entry types so existing `glob::FileType` / `glob::GlobMatch` paths still work.
 pub use crate::fs_cache::{FileType, GlobMatch};
-use crate::{fs_cache, task};
+use crate::{fs_cache, glob_util, task};
 
 /// Input options for `glob`, including traversal, filtering, and cancellation.
 #[napi(object)]
@@ -72,29 +73,6 @@ pub struct GlobResult {
 	pub total_matches: u32,
 }
 
-fn build_glob_pattern(glob: &str, recursive: bool) -> String {
-	let normalized = if cfg!(windows) && glob.contains('\\') {
-		std::borrow::Cow::Owned(glob.replace('\\', "/"))
-	} else {
-		std::borrow::Cow::Borrowed(glob)
-	};
-	if !recursive || normalized.contains('/') || normalized.starts_with("**") {
-		normalized.into_owned()
-	} else {
-		format!("**/{normalized}")
-	}
-}
-
-fn compile_glob(glob: &str, recursive: bool) -> Result<GlobSet> {
-	let mut builder = GlobSetBuilder::new();
-	let pattern = build_glob_pattern(glob, recursive);
-	let glob = Glob::new(&pattern)
-		.map_err(|err| Error::from_reason(format!("Invalid glob pattern: {err}")))?;
-	builder.add(glob);
-	builder
-		.build()
-		.map_err(|err| Error::from_reason(format!("Failed to build glob matcher: {err}")))
-}
 
 /// Internal runtime config for a single glob execution.
 struct GlobConfig {
@@ -192,7 +170,7 @@ fn run_glob(
 	on_match: Option<&ThreadsafeFunction<GlobMatch>>,
 	ct: task::CancelToken,
 ) -> Result<GlobResult> {
-	let glob_set = compile_glob(&config.pattern, config.recursive)?;
+	let glob_set = glob_util::compile_glob(&config.pattern, config.recursive)?;
 	if config.max_results == 0 {
 		return Ok(GlobResult { matches: Vec::new(), total_matches: 0 });
 	}
