@@ -684,7 +684,7 @@ function renderFindings(
 		const findingContinue = isLastFinding ? "   " : `${theme.tree.vertical}  `;
 
 		const { color } = getPriorityInfo(finding.priority);
-		const titleText = finding.title.replace(/^\[P\d\]\s*/, "");
+		const titleText = finding.title?.replace(/^\[P\d\]\s*/, "") ?? "Untitled";
 		const loc = `${path.basename(finding.file_path)}:${finding.line_start}`;
 
 		lines.push(
