@@ -255,8 +255,9 @@ export class InputController {
 				this.ctx.editor.setText("");
 				return;
 			}
-			if (text === "/changelog") {
-				await this.ctx.handleChangelogCommand();
+			if (text === "/changelog" || text.startsWith("/changelog ")) {
+				const showFull = text.includes("--full");
+				await this.ctx.handleChangelogCommand(showFull);
 				this.ctx.editor.setText("");
 				return;
 			}

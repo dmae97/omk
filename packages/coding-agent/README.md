@@ -210,7 +210,7 @@ The agent reads, writes, and edits files, and executes commands via bash.
 | `/share`                  | Upload session as secret GitHub gist, get shareable URL (requires `gh` CLI)                     |
 | `/session`                | Show session info: path, message counts, token usage, cost                                      |
 | `/hotkeys`                | Show all keyboard shortcuts                                                                     |
-| `/changelog`              | Display full version history                                                                    |
+| `/changelog`              | Display recent changes (last 3 versions). Use `/changelog --full` for complete history         |
 | `/tree`                   | Navigate session tree in-place (search, filter, label entries)                                  |
 | `/branch`                 | Create new conversation branch from a previous message                                          |
 | `/resume`                 | Switch to a different session (interactive selector)                                            |
