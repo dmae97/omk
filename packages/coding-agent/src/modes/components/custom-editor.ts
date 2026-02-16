@@ -5,6 +5,7 @@ import { Editor, type KeyId, matchesKey, parseKittySequence } from "@oh-my-pi/pi
  */
 export class CustomEditor extends Editor {
 	onEscape?: () => void;
+	shouldBypassAutocompleteOnEscape?: () => boolean;
 	onCtrlC?: () => void;
 	onCtrlD?: () => void;
 	onShiftTab?: () => void;
@@ -124,11 +125,13 @@ export class CustomEditor extends Editor {
 			return;
 		}
 
-		// Intercept Escape key - but only if autocomplete is NOT active
-		// (let parent handle escape for autocomplete cancellation)
-		if ((matchesKey(data, "escape") || matchesKey(data, "esc")) && this.onEscape && !this.isShowingAutocomplete()) {
-			this.onEscape();
-			return;
+		// Intercept Escape key.
+		// Default behavior keeps autocomplete dismissal, but parent can prioritize global escape handling.
+		if ((matchesKey(data, "escape") || matchesKey(data, "esc")) && this.onEscape) {
+			if (!this.isShowingAutocomplete() || this.shouldBypassAutocompleteOnEscape?.()) {
+				this.onEscape();
+				return;
+			}
 		}
 
 		// Intercept Ctrl+C

@@ -8,7 +8,7 @@ import { type Theme, theme } from "../modes/theme/theme";
 import lspDescription from "../prompts/tools/lsp.md" with { type: "text" };
 import type { ToolSession } from "../tools";
 import { resolveToCwd } from "../tools/path-utils";
-import { throwIfAborted } from "../tools/tool-errors";
+import { ToolAbortError, throwIfAborted } from "../tools/tool-errors";
 import {
 	ensureFileOpen,
 	getActiveClients,
@@ -308,41 +308,52 @@ function detectProjectType(cwd: string): ProjectType {
 }
 
 /** Run workspace diagnostics command and parse output */
-async function runWorkspaceDiagnostics(cwd: string): Promise<{ output: string; projectType: ProjectType }> {
+async function runWorkspaceDiagnostics(
+	cwd: string,
+	signal?: AbortSignal,
+): Promise<{ output: string; projectType: ProjectType }> {
+	throwIfAborted(signal);
 	const projectType = detectProjectType(cwd);
-
 	if (!projectType.command) {
 		return {
 			output: `Cannot detect project type. Supported: Rust (Cargo.toml), TypeScript (tsconfig.json), Go (go.mod), Python (pyproject.toml)`,
 			projectType,
 		};
 	}
+	const proc = Bun.spawn(projectType.command, {
+		cwd,
+		stdout: "pipe",
+		stderr: "pipe",
+		windowsHide: true,
+	});
+	const abortHandler = () => {
+		proc.kill();
+	};
+	if (signal) {
+		signal.addEventListener("abort", abortHandler, { once: true });
+	}
 
 	try {
-		const proc = Bun.spawn(projectType.command, {
-			cwd,
-			stdout: "pipe",
-			stderr: "pipe",
-			windowsHide: true,
-		});
-
 		const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
 		await proc.exited;
-
+		throwIfAborted(signal);
 		const combined = (stdout + stderr).trim();
 		if (!combined) {
 			return { output: "No issues found", projectType };
 		}
-
 		// Limit output length
 		const lines = combined.split("\n");
 		if (lines.length > 50) {
 			return { output: `${lines.slice(0, 50).join("\n")}\n... and ${lines.length - 50} more lines`, projectType };
 		}
-
 		return { output: combined, projectType };
 	} catch (e) {
+		if (signal?.aborted) {
+			throw new ToolAbortError();
+		}
 		return { output: `Failed to run ${projectType.command.join(" ")}: ${e}`, projectType };
+	} finally {
+		signal?.removeEventListener("abort", abortHandler);
 	}
 }
 
@@ -871,11 +882,12 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 	async execute(
 		_toolCallId: string,
 		params: LspParams,
-		_signal?: AbortSignal,
+		signal?: AbortSignal,
 		_onUpdate?: AgentToolUpdateCallback<LspToolDetails>,
 		_context?: AgentToolContext,
 	): Promise<AgentToolResult<LspToolDetails>> {
 		const { action, file, files, line, column, query, new_name, apply, include_declaration } = params;
+		throwIfAborted(signal);
 
 		const config = getConfig(this.session.cwd);
 
@@ -906,7 +918,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 			const targets = files?.length ? files : file ? [file] : null;
 			if (!targets) {
 				// No file specified - run workspace diagnostics
-				const result = await runWorkspaceDiagnostics(this.session.cwd);
+				const result = await runWorkspaceDiagnostics(this.session.cwd, signal);
 				return {
 					content: [
 						{
@@ -923,6 +935,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 			const allServerNames = new Set<string>();
 
 			for (const target of targets) {
+				throwIfAborted(signal);
 				const resolved = resolveToCwd(target, this.session.cwd);
 				const servers = getServersForFile(config, resolved);
 				if (servers.length === 0) {
@@ -938,6 +951,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 				for (const [serverName, serverConfig] of servers) {
 					allServerNames.add(serverName);
 					try {
+						throwIfAborted(signal);
 						if (serverConfig.createClient) {
 							const linterClient = getLinterClient(serverName, serverConfig, this.session.cwd);
 							const diagnostics = await linterClient.lint(resolved);
@@ -946,10 +960,13 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 						}
 						const client = await getOrCreateClient(serverConfig, this.session.cwd);
 						const minVersion = client.diagnosticsVersion;
-						await refreshFile(client, resolved);
-						const diagnostics = await waitForDiagnostics(client, uri, 3000, undefined, minVersion);
+						await refreshFile(client, resolved, signal);
+						const diagnostics = await waitForDiagnostics(client, uri, 3000, signal, minVersion);
 						allDiagnostics.push(...diagnostics);
-					} catch {
+					} catch (err) {
+						if (err instanceof ToolAbortError || signal?.aborted) {
+							throw err;
+						}
 						// Server failed, continue with others
 					}
 				}
@@ -1029,7 +1046,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 			const targetFile = resolvedFile;
 
 			if (targetFile) {
-				await ensureFileOpen(client, targetFile);
+				await ensureFileOpen(client, targetFile, signal);
 			}
 
 			const uri = targetFile ? fileToUri(targetFile) : "";
@@ -1043,10 +1060,15 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 				// =====================================================================
 
 				case "definition": {
-					const result = (await sendRequest(client, "textDocument/definition", {
-						textDocument: { uri },
-						position,
-					})) as Location | Location[] | LocationLink | LocationLink[] | null;
+					const result = (await sendRequest(
+						client,
+						"textDocument/definition",
+						{
+							textDocument: { uri },
+							position,
+						},
+						signal,
+					)) as Location | Location[] | LocationLink | LocationLink[] | null;
 
 					if (!result) {
 						output = "No definition found";
@@ -1076,11 +1098,16 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 				}
 
 				case "references": {
-					const result = (await sendRequest(client, "textDocument/references", {
-						textDocument: { uri },
-						position,
-						context: { includeDeclaration: include_declaration ?? true },
-					})) as Location[] | null;
+					const result = (await sendRequest(
+						client,
+						"textDocument/references",
+						{
+							textDocument: { uri },
+							position,
+							context: { includeDeclaration: include_declaration ?? true },
+						},
+						signal,
+					)) as Location[] | null;
 
 					if (!result || result.length === 0) {
 						output = "No references found";
@@ -1092,10 +1119,15 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 				}
 
 				case "hover": {
-					const result = (await sendRequest(client, "textDocument/hover", {
-						textDocument: { uri },
-						position,
-					})) as Hover | null;
+					const result = (await sendRequest(
+						client,
+						"textDocument/hover",
+						{
+							textDocument: { uri },
+							position,
+						},
+						signal,
+					)) as Hover | null;
 
 					if (!result || !result.contents) {
 						output = "No hover information";
@@ -1116,7 +1148,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 								details: { action, serverName, success: false },
 							};
 						}
-						const result = (await sendRequest(client, "workspace/symbol", { query })) as
+						const result = (await sendRequest(client, "workspace/symbol", { query }, signal)) as
 							| SymbolInformation[]
 							| null;
 						if (!result || result.length === 0) {
@@ -1127,9 +1159,14 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 						}
 					} else {
 						// File-based document symbols
-						const result = (await sendRequest(client, "textDocument/documentSymbol", {
-							textDocument: { uri },
-						})) as (DocumentSymbol | SymbolInformation)[] | null;
+						const result = (await sendRequest(
+							client,
+							"textDocument/documentSymbol",
+							{
+								textDocument: { uri },
+							},
+							signal,
+						)) as (DocumentSymbol | SymbolInformation)[] | null;
 
 						if (!result || result.length === 0) {
 							output = "No symbols found";
@@ -1159,11 +1196,16 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 						};
 					}
 
-					const result = (await sendRequest(client, "textDocument/rename", {
-						textDocument: { uri },
-						position,
-						newName: new_name,
-					})) as WorkspaceEdit | null;
+					const result = (await sendRequest(
+						client,
+						"textDocument/rename",
+						{
+							textDocument: { uri },
+							position,
+							newName: new_name,
+						},
+						signal,
+					)) as WorkspaceEdit | null;
 
 					if (!result) {
 						output = "Rename returned no edits";
@@ -1186,7 +1228,12 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 					const reloadMethods = ["rust-analyzer/reloadWorkspace", "workspace/didChangeConfiguration"];
 					for (const method of reloadMethods) {
 						try {
-							await sendRequest(client, method, method.includes("Configuration") ? { settings: {} } : null);
+							await sendRequest(
+								client,
+								method,
+								method.includes("Configuration") ? { settings: {} } : null,
+								signal,
+							);
 							output = `Reloaded ${serverName}`;
 							break;
 						} catch {
@@ -1208,6 +1255,9 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 				details: { serverName, action, success: true, request: params },
 			};
 		} catch (err) {
+			if (err instanceof ToolAbortError || signal?.aborted) {
+				throw new ToolAbortError();
+			}
 			const errorMessage = err instanceof Error ? err.message : String(err);
 			return {
 				content: [{ type: "text", text: `LSP error: ${errorMessage}` }],
