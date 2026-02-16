@@ -372,7 +372,7 @@ async function buildSessionOptions(
 
 	// Model from CLI (--model) - uses same fuzzy matching as --models
 	if (parsed.model) {
-		const available = modelRegistry.getAvailable();
+		const available = modelRegistry.getAll();
 		const modelMatchPreferences = {
 			usageOrder: settings.getStorage()?.getModelUsageOrder(),
 		};
@@ -612,11 +612,13 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 
 	// Handle CLI --api-key as runtime override (not persisted)
 	if (parsedArgs.apiKey) {
-		if (!sessionOptions.model) {
+		if (!sessionOptions.model && !sessionOptions.modelPattern) {
 			writeStderr(chalk.red("--api-key requires a model to be specified via --provider/--model or -m/--models"));
 			process.exit(1);
 		}
-		authStorage.setRuntimeApiKey(sessionOptions.model.provider, parsedArgs.apiKey);
+		if (sessionOptions.model) {
+			authStorage.setRuntimeApiKey(sessionOptions.model.provider, parsedArgs.apiKey);
+		}
 	}
 
 	time("buildSessionOptions");
@@ -624,6 +626,9 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		await createAgentSession(sessionOptions);
 	debugStartup("main:createAgentSession");
 	time("createAgentSession");
+	if (parsedArgs.apiKey && !sessionOptions.model && session.model) {
+		authStorage.setRuntimeApiKey(session.model.provider, parsedArgs.apiKey);
+	}
 
 	if (modelFallbackMessage) {
 		notifs.push({ kind: "warn", message: modelFallbackMessage });

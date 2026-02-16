@@ -886,6 +886,37 @@ pi.registerCommand("stats", {
 	},
 });
 ```
+### pi.registerProvider(name, config)
+
+Register or override providers/models at runtime:
+
+```typescript
+pi.registerProvider("my-provider", {
+	baseUrl: "https://api.example.com/v1",
+	apiKey: "MY_PROVIDER_API_KEY",
+	api: "openai-completions",
+	models: [
+		{
+			id: "my-model",
+			name: "My Model",
+			reasoning: false,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 128000,
+			maxTokens: 8192,
+		},
+	],
+});
+```
+
+`registerProvider()` also supports:
+
+- `streamSimple` for custom API adapters
+- `headers` / `authHeader` for request customization
+- `oauth` for `/login <provider>` support with extension-defined login/refresh behavior
+
+Provider registrations are queued during extension load and applied when the session initializes.
+
 
 ### pi.registerMessageRenderer(customType, renderer)
 

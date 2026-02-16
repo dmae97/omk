@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added runtime tests covering extension provider registration and deferred model pattern resolution behavior.
+
+### Changed
+
+- Extended extension `registerProvider()` typing with OAuth provider support and source-aware registration metadata.
+
+### Fixed
+
+- Fixed deferred `--model` resolution so extension-provided models are matched before fallback selection and unresolved explicit patterns no longer silently fallback.
+- Fixed CLI `--api-key` handling for deferred model resolution by applying runtime API key overrides after extension model selection.
+- Fixed extension provider registration cleanup to remove stale source-scoped custom API/OAuth providers across extension reloads.
+
 ## [12.5.1] - 2026-02-15
 ### Added
 

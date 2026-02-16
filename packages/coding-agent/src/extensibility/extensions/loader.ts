@@ -52,7 +52,8 @@ export class ExtensionRuntimeNotInitializedError extends Error {
  */
 export class ExtensionRuntime implements IExtensionRuntime {
 	flagValues = new Map<string, boolean | string>();
-	pendingProviderRegistrations: Array<{ name: string; config: import("./types").ProviderConfig }> = [];
+	pendingProviderRegistrations: Array<{ name: string; config: import("./types").ProviderConfig; sourceId: string }> =
+		[];
 
 	sendMessage(): void {
 		throw new ExtensionRuntimeNotInitializedError();
@@ -109,7 +110,11 @@ class ConcreteExtensionAPI implements ExtensionAPI, IExtensionRuntime {
 	readonly typebox = TypeBox;
 	readonly pi = piCodingAgent;
 	readonly flagValues = new Map<string, boolean | string>();
-	readonly pendingProviderRegistrations: Array<{ name: string; config: import("./types").ProviderConfig }> = [];
+	readonly pendingProviderRegistrations: Array<{
+		name: string;
+		config: import("./types").ProviderConfig;
+		sourceId: string;
+	}> = [];
 
 	constructor(
 		private readonly extension: Extension,
@@ -226,7 +231,7 @@ class ConcreteExtensionAPI implements ExtensionAPI, IExtensionRuntime {
 	}
 
 	registerProvider(name: string, config: import("./types").ProviderConfig): void {
-		this.runtime.pendingProviderRegistrations.push({ name, config });
+		this.runtime.pendingProviderRegistrations.push({ name, config, sourceId: this.extension.path });
 	}
 }
 

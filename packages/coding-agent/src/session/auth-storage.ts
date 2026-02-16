@@ -7,6 +7,7 @@ import {
 	claudeUsageProvider,
 	getEnvApiKey,
 	getOAuthApiKey,
+	getOAuthProvider,
 	githubCopilotUsageProvider,
 	googleGeminiCliUsageProvider,
 	kimiUsageProvider,
@@ -25,6 +26,7 @@ import {
 	type OAuthController,
 	type OAuthCredentials,
 	type OAuthProvider,
+	type OAuthProviderId,
 	openaiCodexUsageProvider,
 	type Provider,
 	type UsageCache,
@@ -634,7 +636,7 @@ export class AuthStorage {
 	 * Login to an OAuth provider.
 	 */
 	async login(
-		provider: OAuthProvider,
+		provider: OAuthProviderId,
 		ctrl: OAuthController & {
 			/** onAuth is required by auth-storage but optional in OAuthController */
 			onAuth: (info: { url: string; instructions?: string }) => void;
@@ -709,8 +711,26 @@ export class AuthStorage {
 				await saveApiKeyCredential(apiKey);
 				return;
 			}
-			default:
-				throw new Error(`Unknown OAuth provider: ${provider}`);
+			default: {
+				const customProvider = getOAuthProvider(provider);
+				if (!customProvider) {
+					throw new Error(`Unknown OAuth provider: ${provider}`);
+				}
+				const customLoginResult = await customProvider.login({
+					onAuth: info => ctrl.onAuth(info),
+					onProgress: ctrl.onProgress,
+					onPrompt: ctrl.onPrompt,
+					onManualCodeInput: async () =>
+						ctrl.onPrompt({ message: "Paste the authorization code (or full redirect URL):" }),
+					signal: ctrl.signal,
+				});
+				if (typeof customLoginResult === "string") {
+					await saveApiKeyCredential(customLoginResult);
+					return;
+				}
+				credentials = customLoginResult;
+				break;
+			}
 		}
 		const newCredential: OAuthCredential = { type: "oauth", ...credentials };
 		const existing = this.#getCredentialsForProvider(provider);
@@ -1170,14 +1190,28 @@ export class AuthStorage {
 			}
 		}
 
-		const oauthCreds: Record<string, OAuthCredentials> = {
-			[provider]: selection.credential,
-		};
-
 		try {
-			const result = await getOAuthApiKey(provider as OAuthProvider, oauthCreds);
+			let result: { newCredentials: OAuthCredentials; apiKey: string } | null;
+			const customProvider = getOAuthProvider(provider);
+			if (customProvider) {
+				let refreshedCredentials: OAuthCredentials = selection.credential;
+				if (Date.now() >= refreshedCredentials.expires) {
+					if (!customProvider.refreshToken) {
+						throw new Error(`OAuth provider "${provider}" does not support token refresh`);
+					}
+					refreshedCredentials = await customProvider.refreshToken(refreshedCredentials);
+				}
+				const apiKey = customProvider.getApiKey
+					? customProvider.getApiKey(refreshedCredentials)
+					: refreshedCredentials.access;
+				result = { newCredentials: refreshedCredentials, apiKey };
+			} else {
+				const oauthCreds: Record<string, OAuthCredentials> = {
+					[provider]: selection.credential,
+				};
+				result = await getOAuthApiKey(provider as OAuthProvider, oauthCreds);
+			}
 			if (!result) return undefined;
-
 			const updated: OAuthCredential = {
 				type: "oauth",
 				access: result.newCredentials.access,
@@ -1189,7 +1223,6 @@ export class AuthStorage {
 				enterpriseUrl: result.newCredentials.enterpriseUrl ?? selection.credential.enterpriseUrl,
 			};
 			this.#replaceCredentialAt(provider, selection.index, updated);
-
 			if (checkUsage && !allowBlocked) {
 				const sameAccount = selection.credential.accountId === updated.accountId;
 				if (!usageChecked || !sameAccount) {
@@ -1205,7 +1238,6 @@ export class AuthStorage {
 					return undefined;
 				}
 			}
-
 			this.#recordSessionCredential(provider, sessionId, "oauth", selection.index);
 			return result.apiKey;
 		} catch (error) {

@@ -27,6 +27,7 @@ import type {
 	Model,
 	OptionsForApi,
 	SimpleStreamOptions,
+	StreamOptions,
 	ThinkingBudgets,
 	ThinkingLevel,
 	ToolChoice,
@@ -124,9 +125,9 @@ export function stream<TApi extends Api>(
 	options?: OptionsForApi<TApi>,
 ): AssistantMessageEventStream {
 	// Check custom API registry first (extension-provided APIs like "vertex-claude-api")
-	const customStreamFn = getCustomApi(model.api);
-	if (customStreamFn) {
-		return customStreamFn(model, context, options as SimpleStreamOptions);
+	const customApiProvider = getCustomApi(model.api);
+	if (customApiProvider) {
+		return customApiProvider.stream(model, context, options as StreamOptions);
 	}
 
 	// Vertex AI uses Application Default Credentials, not API keys
@@ -173,11 +174,8 @@ export function stream<TApi extends Api>(
 		case "cursor-agent":
 			return streamCursor(model as Model<"cursor-agent">, context, providerOptions as CursorOptions);
 
-		default: {
-			// This should never be reached if all Api cases are handled
-			const _exhaustive: never = api;
-			throw new Error(`Unhandled API: ${_exhaustive}`);
-		}
+		default:
+			throw new Error(`Unhandled API: ${api}`);
 	}
 }
 
@@ -196,9 +194,9 @@ export function streamSimple<TApi extends Api>(
 	options?: SimpleStreamOptions,
 ): AssistantMessageEventStream {
 	// Check custom API registry first (extension-provided APIs)
-	const customStreamFn = getCustomApi(model.api);
-	if (customStreamFn) {
-		return customStreamFn(model, context, options);
+	const customApiProvider = getCustomApi(model.api);
+	if (customApiProvider) {
+		return customApiProvider.streamSimple(model, context, options);
 	}
 
 	// Vertex AI uses Application Default Credentials, not API keys
@@ -619,11 +617,8 @@ function mapOptionsForApi<TApi extends Api>(
 			} as OptionsForApi<TApi>;
 		}
 
-		default: {
-			// Exhaustiveness check
-			const _exhaustive: never = model.api;
-			throw new Error(`Unhandled API in mapOptionsForApi: ${_exhaustive}`);
-		}
+		default:
+			throw new Error(`Unhandled API in mapOptionsForApi: ${model.api}`);
 	}
 }
 

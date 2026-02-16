@@ -362,7 +362,7 @@ Examples:
 				console.error("Invalid selection");
 				process.exit(1);
 			}
-			provider = PROVIDERS[index].id;
+			provider = PROVIDERS[index].id as OAuthProvider;
 		}
 		if (!provider) {
 			console.error("No provider selected");

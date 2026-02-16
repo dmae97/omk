@@ -14,6 +14,8 @@ import type {
 	Context,
 	ImageContent,
 	Model,
+	OAuthCredentials,
+	OAuthLoginCallbacks,
 	SimpleStreamOptions,
 	TextContent,
 	ToolResultMessage,
@@ -1036,10 +1038,10 @@ export interface ExtensionAPI {
 export interface ProviderConfig {
 	/** Base URL for the API endpoint. Required when defining models. */
 	baseUrl?: string;
-	/** API key or environment variable name. Required when defining models. */
+	/** API key or environment variable name. Required when defining models unless oauth is provided. */
 	apiKey?: string;
 	/** API type identifier. Required when registering streamSimple or when models don't specify one. */
-	api?: Api | string;
+	api?: Api;
 	/** Custom streaming function for non-built-in APIs. */
 	streamSimple?: (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
 	/** Custom headers to include in requests. */
@@ -1048,6 +1050,19 @@ export interface ProviderConfig {
 	authHeader?: boolean;
 	/** Models to register. If provided, replaces all existing models for this provider. */
 	models?: ProviderModelConfig[];
+	/** OAuth provider for /login support. */
+	oauth?: {
+		/** Display name in login UI. */
+		name: string;
+		/** Run the provider login flow and return credentials (or a plain API key) to persist. */
+		login(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials | string>;
+		/** Refresh expired credentials. */
+		refreshToken?(credentials: OAuthCredentials): Promise<OAuthCredentials>;
+		/** Convert credentials to an API key string for requests. */
+		getApiKey?(credentials: OAuthCredentials): string;
+		/** Optional model rewrite hook for credential-aware routing (e.g., enterprise URLs). */
+		modifyModels?(models: Model<Api>[], credentials: OAuthCredentials): Model<Api>[];
+	};
 }
 
 /** Configuration for a model within a provider. */
@@ -1057,7 +1072,7 @@ export interface ProviderModelConfig {
 	/** Display name (e.g., "Claude Sonnet 4 (Vertex)"). */
 	name: string;
 	/** API type override for this model. */
-	api?: Api | string;
+	api?: Api;
 	/** Whether the model supports extended thinking. */
 	reasoning: boolean;
 	/** Supported input types. */
@@ -1132,8 +1147,8 @@ export type SetThinkingLevelHandler = (level: ThinkingLevel, persist?: boolean) 
 /** Shared state created by loader, used during registration and runtime. */
 export interface ExtensionRuntimeState {
 	flagValues: Map<string, boolean | string>;
-	/** Provider registrations queued during extension loading, processed when runner binds */
-	pendingProviderRegistrations: Array<{ name: string; config: ProviderConfig }>;
+	/** Provider registrations queued during extension loading, processed during session initialization */
+	pendingProviderRegistrations: Array<{ name: string; config: ProviderConfig; sourceId: string }>;
 }
 
 /** Action implementations for ExtensionAPI methods. */

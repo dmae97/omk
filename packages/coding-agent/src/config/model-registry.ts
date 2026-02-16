@@ -7,8 +7,13 @@ import {
 	getProviders,
 	type Model,
 	normalizeDomain,
+	type OAuthCredentials,
+	type OAuthLoginCallbacks,
 	registerCustomApi,
+	registerOAuthProvider,
 	type SimpleStreamOptions,
+	unregisterCustomApis,
+	unregisterOAuthProviders,
 } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
@@ -295,6 +300,7 @@ export class ModelRegistry {
 	#modelOverrides: Map<string, Map<string, ModelOverride>> = new Map();
 	#configError: ConfigError | undefined = undefined;
 	#modelsConfigFile: ConfigFile<ModelsConfig>;
+	#registeredProviderSources: Set<string> = new Set();
 
 	/**
 	 * @param authStorage - Auth storage for API key resolution
@@ -711,47 +717,85 @@ export class ModelRegistry {
 	}
 
 	/**
+	 * Remove custom API/OAuth registrations for a specific extension source.
+	 */
+	clearSourceRegistrations(sourceId: string): void {
+		unregisterCustomApis(sourceId);
+		unregisterOAuthProviders(sourceId);
+	}
+
+	/**
+	 * Remove registrations for extension sources that are no longer active.
+	 */
+	syncExtensionSources(activeSourceIds: string[]): void {
+		const activeSources = new Set(activeSourceIds);
+		for (const sourceId of this.#registeredProviderSources) {
+			if (activeSources.has(sourceId)) {
+				continue;
+			}
+			this.clearSourceRegistrations(sourceId);
+			this.#registeredProviderSources.delete(sourceId);
+		}
+	}
+
+	/**
 	 * Register a provider dynamically (from extensions).
 	 *
 	 * If provider has models: replaces all existing models for this provider.
 	 * If provider has only baseUrl/headers: overrides existing models' URLs.
 	 * If provider has streamSimple: registers a custom API streaming function.
+	 * If provider has oauth: registers OAuth provider for /login support.
 	 */
-	registerProvider(providerName: string, config: ProviderConfigInput): void {
-		// Register custom streaming function if provided
-		if (config.streamSimple) {
-			if (!config.api) {
-				throw new Error(`Provider ${providerName}: "api" is required when registering streamSimple.`);
-			}
-			registerCustomApi(config.api, config.streamSimple);
+	registerProvider(providerName: string, config: ProviderConfigInput, sourceId?: string): void {
+		if (config.streamSimple && !config.api) {
+			throw new Error(`Provider ${providerName}: "api" is required when registering streamSimple.`);
 		}
 
-		// Store API key for auth resolution
+		if (config.models && config.models.length > 0) {
+			if (!config.baseUrl) {
+				throw new Error(`Provider ${providerName}: "baseUrl" is required when defining models.`);
+			}
+			if (!config.apiKey && !config.oauth) {
+				throw new Error(`Provider ${providerName}: "apiKey" or "oauth" is required when defining models.`);
+			}
+			for (const modelDef of config.models) {
+				const api = modelDef.api || config.api;
+				if (!api) {
+					throw new Error(`Provider ${providerName}, model ${modelDef.id}: no "api" specified.`);
+				}
+			}
+		}
+
+		if (config.streamSimple && config.api) {
+			const streamSimple = config.streamSimple;
+			registerCustomApi(config.api, streamSimple, sourceId, (model, context, options) =>
+				streamSimple(model, context, options as SimpleStreamOptions),
+			);
+		}
+
+		if (config.oauth) {
+			registerOAuthProvider({
+				...config.oauth,
+				id: providerName,
+				sourceId,
+			});
+		}
+
+		if (sourceId) {
+			this.#registeredProviderSources.add(sourceId);
+		}
 		if (config.apiKey) {
 			this.#customProviderApiKeys.set(providerName, config.apiKey);
 		}
 
 		if (config.models && config.models.length > 0) {
-			// Full replacement: remove existing models for this provider
-			this.#models = this.#models.filter(m => m.provider !== providerName);
-
-			if (!config.baseUrl) {
-				throw new Error(`Provider ${providerName}: "baseUrl" is required when defining models.`);
-			}
-			if (!config.apiKey) {
-				throw new Error(`Provider ${providerName}: "apiKey" is required when defining models.`);
-			}
-
+			const nextModels = this.#models.filter(m => m.provider !== providerName);
 			for (const modelDef of config.models) {
-				const api = (modelDef.api || config.api) as Api;
+				const api = modelDef.api || config.api;
 				if (!api) {
 					throw new Error(`Provider ${providerName}, model ${modelDef.id}: no "api" specified.`);
 				}
-
-				// Merge headers: provider headers are base, model headers override
 				let headers = config.headers || modelDef.headers ? { ...config.headers, ...modelDef.headers } : undefined;
-
-				// If authHeader is true, add Authorization header with resolved API key
 				if (config.authHeader && config.apiKey) {
 					const resolvedKey = resolveApiKeyConfig(config.apiKey);
 					if (resolvedKey) {
@@ -759,12 +803,12 @@ export class ModelRegistry {
 					}
 				}
 
-				this.#models.push({
+				nextModels.push({
 					id: modelDef.id,
 					name: modelDef.name,
 					api,
 					provider: providerName,
-					baseUrl: config.baseUrl,
+					baseUrl: config.baseUrl!,
 					reasoning: modelDef.reasoning,
 					input: modelDef.input as ("text" | "image")[],
 					cost: modelDef.cost,
@@ -774,8 +818,20 @@ export class ModelRegistry {
 					compat: modelDef.compat,
 				} as Model<Api>);
 			}
-		} else if (config.baseUrl) {
-			// Override-only: update baseUrl/headers for existing models
+
+			if (config.oauth?.modifyModels) {
+				const credential = this.authStorage.getOAuthCredential(providerName);
+				if (credential) {
+					this.#models = config.oauth.modifyModels(nextModels, credential);
+					return;
+				}
+			}
+
+			this.#models = nextModels;
+			return;
+		}
+
+		if (config.baseUrl) {
 			this.#models = this.#models.map(m => {
 				if (m.provider !== providerName) return m;
 				return {
@@ -794,14 +850,21 @@ export class ModelRegistry {
 export interface ProviderConfigInput {
 	baseUrl?: string;
 	apiKey?: string;
-	api?: string;
+	api?: Api;
 	streamSimple?: (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
 	headers?: Record<string, string>;
 	authHeader?: boolean;
+	oauth?: {
+		name: string;
+		login(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials | string>;
+		refreshToken?(credentials: OAuthCredentials): Promise<OAuthCredentials>;
+		getApiKey?(credentials: OAuthCredentials): string;
+		modifyModels?(models: Model<Api>[], credentials: OAuthCredentials): Model<Api>[];
+	};
 	models?: Array<{
 		id: string;
 		name: string;
-		api?: string;
+		api?: Api;
 		reasoning: boolean;
 		input: ("text" | "image")[];
 		cost: { input: number; output: number; cacheRead: number; cacheWrite: number };

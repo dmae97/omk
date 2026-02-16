@@ -585,13 +585,13 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const hasExistingSession = existingSession.messages.length > 0;
 	const hasThinkingEntry = sessionManager.getBranch().some(entry => entry.type === "thinking_level_change");
 
-	const hasExplicitModel = options.model !== undefined;
+	const hasExplicitModel = options.model !== undefined || options.modelPattern !== undefined;
 	let model = options.model;
 	let modelFallbackMessage: string | undefined;
-
-	// If session has data, try to restore model from it
+	// If session has data, try to restore model from it.
+	// Skip restore when an explicit model was requested.
 	const defaultModelStr = existingSession.models.default;
-	if (!model && hasExistingSession && defaultModelStr) {
+	if (!hasExplicitModel && !model && hasExistingSession && defaultModelStr) {
 		const parsedModel = parseModelString(defaultModelStr);
 		if (parsedModel) {
 			const restoredModel = modelRegistry.find(parsedModel.provider, parsedModel.id);
@@ -604,8 +604,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		}
 	}
 
-	// If still no model, try settings default
-	if (!model) {
+	// If still no model, try settings default.
+	// Skip settings fallback when an explicit model was requested.
+	if (!hasExplicitModel && !model) {
 		const settingsDefaultModel = settings.getModelRole("default");
 		if (settingsDefaultModel) {
 			const parsedModel = parseModelString(settingsDefaultModel);
@@ -617,29 +618,6 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			}
 		}
 	}
-
-	// Fall back to first available model with a valid API key
-	if (!model) {
-		const allModels = modelRegistry.getAll();
-		for (const candidate of allModels) {
-			if (await hasModelApiKey(candidate)) {
-				model = candidate;
-				break;
-			}
-		}
-		time("findAvailableModel");
-		if (model) {
-			if (modelFallbackMessage) {
-				modelFallbackMessage += `. Using ${model.provider}/${model.id}`;
-			}
-		} else {
-			// No models available - set message so user knows to /login or configure keys
-			modelFallbackMessage =
-				"No models available. Use /login or set an API key environment variable. Then use /model to select a model.";
-		}
-	}
-
-	time("findModel");
 
 	// For subagent sessions using GitHub Copilot, add X-Initiator header
 	// to ensure proper billing (agent-initiated vs user-initiated)
@@ -905,40 +883,55 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// Process provider registrations queued during extension loading.
 	// This must happen before the runner is created so that models registered by
 	// extensions are available for model selection on session resume / fallback.
+	const activeExtensionSources = extensionsResult.extensions.map(extension => extension.path);
+	modelRegistry.syncExtensionSources(activeExtensionSources);
+	for (const sourceId of new Set(activeExtensionSources)) {
+		modelRegistry.clearSourceRegistrations(sourceId);
+	}
 	if (extensionsResult.runtime.pendingProviderRegistrations.length > 0) {
-		for (const { name, config } of extensionsResult.runtime.pendingProviderRegistrations) {
-			modelRegistry.registerProvider(name, config);
+		for (const { name, config, sourceId } of extensionsResult.runtime.pendingProviderRegistrations) {
+			modelRegistry.registerProvider(name, config, sourceId);
 		}
 		extensionsResult.runtime.pendingProviderRegistrations = [];
+	}
 
-		// Resolve deferred --model pattern now that extension models are registered
-		if (!model && options.modelPattern) {
-			const available = modelRegistry.getAvailable();
-			const { model: resolved } = parseModelPattern(options.modelPattern, available);
-			if (resolved) {
-				model = resolved;
-				modelFallbackMessage = undefined;
-			} else {
-				modelFallbackMessage = `Model "${options.modelPattern}" not found`;
-			}
-		}
-
-		// Re-run model selection if no model was found earlier but extensions added models.
-		// Skip fallback if the user explicitly requested a model via --model that wasn't found.
-		if (!model && !options.modelPattern) {
-			const allModels = modelRegistry.getAll();
-			for (const candidate of allModels) {
-				if (await hasModelApiKey(candidate)) {
-					model = candidate;
-					break;
-				}
-			}
-			if (model && modelFallbackMessage) {
-				modelFallbackMessage = undefined;
-			}
+	// Resolve deferred --model pattern now that extension models are registered.
+	if (!model && options.modelPattern) {
+		const availableModels = modelRegistry.getAll();
+		const matchPreferences = {
+			usageOrder: settings.getStorage()?.getModelUsageOrder(),
+		};
+		const { model: resolved } = parseModelPattern(options.modelPattern, availableModels, matchPreferences);
+		if (resolved) {
+			model = resolved;
+			modelFallbackMessage = undefined;
+		} else {
+			modelFallbackMessage = `Model "${options.modelPattern}" not found`;
 		}
 	}
 
+	// Fall back to first available model with a valid API key.
+	// Skip fallback if the user explicitly requested a model via --model that wasn't found.
+	if (!model && !options.modelPattern) {
+		const allModels = modelRegistry.getAll();
+		for (const candidate of allModels) {
+			if (await hasModelApiKey(candidate)) {
+				model = candidate;
+				break;
+			}
+		}
+		time("findAvailableModel");
+		if (model) {
+			if (modelFallbackMessage) {
+				modelFallbackMessage += `. Using ${model.provider}/${model.id}`;
+			}
+		} else {
+			modelFallbackMessage =
+				"No models available. Use /login or set an API key environment variable. Then use /model to select a model.";
+		}
+	}
+
+	time("findModel");
 	// Discover custom commands (TypeScript slash commands)
 	const customCommandsResult: CustomCommandsLoadResult = options.disableExtensionDiscovery
 		? { commands: [], errors: [] }
