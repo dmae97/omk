@@ -74,6 +74,12 @@ curl -fsSL .../install.sh | sh -s -- --source --ref main
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/can1357/oh-my-pi/main/scripts/install.ps1))) -Source -Ref main
 ```
 
+### Via [mise](https://mise.jdx.dev)
+
+```bash
+mise use -g github:can1357/oh-my-pi
+```
+
 ### Manual download
 
 Download binaries directly from [GitHub Releases](https://github.com/can1357/oh-my-pi/releases/latest).
