@@ -62,7 +62,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 	readonly parameters = grepSchema;
 
 	constructor(private readonly session: ToolSession) {
-		const displayMode = resolveFileDisplayMode(session.settings);
+		const displayMode = resolveFileDisplayMode(session);
 		this.description = renderPromptTemplate(grepDescription, {
 			IS_HASHLINE_MODE: displayMode.hashLines,
 			IS_LINE_NUMBER_MODE: !displayMode.hashLines && displayMode.lineNumbers,
@@ -103,7 +103,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 			const patternHasNewline = normalizedPattern.includes("\n") || normalizedPattern.includes("\\n");
 			const effectiveMultiline = multiline ?? patternHasNewline;
 
-			const useHashLines = resolveFileDisplayMode(this.session.settings).hashLines;
+			const useHashLines = resolveFileDisplayMode(this.session).hashLines;
 			const searchPath = resolveToCwd(searchDir || ".", this.session.cwd);
 			const scopePath = (() => {
 				const relative = path.relative(this.session.cwd, searchPath).replace(/\\/g, "/");

@@ -1072,6 +1072,11 @@ export class AgentSession {
 		return this.agent.state.tools.map(t => t.name);
 	}
 
+	/** Whether the edit tool is registered in this session. */
+	get hasEditTool(): boolean {
+		return this.#toolRegistry.has("edit");
+	}
+
 	/**
 	 * Get a tool by name from the registry.
 	 */
@@ -1518,7 +1523,7 @@ export class AgentSession {
 			if (fileMentions.length > 0) {
 				const fileMentionMessages = await generateFileMentionMessages(fileMentions, this.sessionManager.getCwd(), {
 					autoResizeImages: this.settings.get("images.autoResize"),
-					useHashLines: resolveFileDisplayMode(this.settings).hashLines,
+					useHashLines: resolveFileDisplayMode(this).hashLines,
 				});
 				messages.push(...fileMentionMessages);
 			}

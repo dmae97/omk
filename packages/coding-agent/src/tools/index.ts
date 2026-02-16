@@ -119,6 +119,8 @@ export interface ToolSession {
 	promptTemplates?: PromptTemplate[];
 	/** Whether LSP integrations are enabled */
 	enableLsp?: boolean;
+	/** Whether the edit tool is available in this session (controls hashline output) */
+	hasEditTool?: boolean;
 	/** Event bus for tool/extension communication */
 	eventBus?: EventBus;
 	/** Output schema for structured completion (subagents) */

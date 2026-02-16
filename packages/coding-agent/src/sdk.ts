@@ -701,6 +701,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		cwd,
 		hasUI: options.hasUI ?? false,
 		enableLsp,
+		get hasEditTool() {
+			return !options.toolNames || options.toolNames.includes("edit");
+		},
 		skipPythonPreflight: options.skipPythonPreflight,
 		contextFiles,
 		skills,

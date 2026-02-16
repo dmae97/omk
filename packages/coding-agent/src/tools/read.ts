@@ -544,7 +544,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 	readonly #autoResizeImages: boolean;
 
 	constructor(private readonly session: ToolSession) {
-		const displayMode = resolveFileDisplayMode(session.settings);
+		const displayMode = resolveFileDisplayMode(session);
 		this.#autoResizeImages = session.settings.get("images.autoResize");
 		this.description = renderPromptTemplate(readDescription, {
 			DEFAULT_MAX_LINES: String(DEFAULT_MAX_LINES),
@@ -562,7 +562,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 	): Promise<AgentToolResult<ReadToolDetails>> {
 		const { path: readPath, offset, limit } = params;
 
-		const displayMode = resolveFileDisplayMode(this.session.settings);
+		const displayMode = resolveFileDisplayMode(this.session);
 
 		// Handle internal URLs (agent://, skill://)
 		const internalRouter = this.session.internalRouter;
@@ -848,7 +848,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 	async #handleInternalUrl(url: string, offset?: number, limit?: number): Promise<AgentToolResult<ReadToolDetails>> {
 		const internalRouter = this.session.internalRouter!;
 
-		const displayMode = resolveFileDisplayMode(this.session.settings);
+		const displayMode = resolveFileDisplayMode(this.session);
 
 		// Check if URL has query extraction (agent:// only)
 		let parsed: URL;

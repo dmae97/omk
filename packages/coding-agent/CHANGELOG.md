@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- Suppressed hashline output for subagents without the edit tool (e.g. explore agents)
+
 ## [12.7.1] - 2026-02-16
 ### Changed
 
