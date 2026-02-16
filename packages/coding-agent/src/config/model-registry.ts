@@ -93,6 +93,7 @@ const ModelDefinitionSchema = Type.Object({
 	maxTokens: Type.Optional(Type.Number()),
 	headers: Type.Optional(Type.Record(Type.String(), Type.String())),
 	compat: Type.Optional(OpenAICompatSchema),
+	contextPromotionTarget: Type.Optional(Type.String({ minLength: 1 })),
 });
 
 // Schema for per-model overrides (all fields optional, merged with built-in model)
@@ -112,6 +113,7 @@ const ModelOverrideSchema = Type.Object({
 	maxTokens: Type.Optional(Type.Number()),
 	headers: Type.Optional(Type.Record(Type.String(), Type.String())),
 	compat: Type.Optional(OpenAICompatSchema),
+	contextPromotionTarget: Type.Optional(Type.String({ minLength: 1 })),
 });
 
 type ModelOverride = Static<typeof ModelOverrideSchema>;
@@ -274,6 +276,7 @@ function applyModelOverride(model: Model<Api>, override: ModelOverride): Model<A
 	if (override.input !== undefined) result.input = override.input as ("text" | "image")[];
 	if (override.contextWindow !== undefined) result.contextWindow = override.contextWindow;
 	if (override.maxTokens !== undefined) result.maxTokens = override.maxTokens;
+	if (override.contextPromotionTarget !== undefined) result.contextPromotionTarget = override.contextPromotionTarget;
 	if (override.cost) {
 		result.cost = {
 			input: override.cost.input ?? model.cost.input,
@@ -652,6 +655,7 @@ export class ModelRegistry {
 					maxTokens: modelDef.maxTokens ?? 16384,
 					headers,
 					compat: modelDef.compat,
+					contextPromotionTarget: modelDef.contextPromotionTarget,
 				} as Model<Api>);
 			}
 		}
@@ -872,5 +876,6 @@ export interface ProviderConfigInput {
 		maxTokens: number;
 		headers?: Record<string, string>;
 		compat?: Model<Api>["compat"];
+		contextPromotionTarget?: string;
 	}>;
 }

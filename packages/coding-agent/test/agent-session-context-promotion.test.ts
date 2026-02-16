@@ -70,7 +70,6 @@ describe("AgentSession context promotion", () => {
 			"contextPromotion.enabled": true,
 			"contextPromotion.thresholdPercent": 90,
 		});
-		settings.overrideModelRoles({ slow: `${codexModel.provider}/${codexModel.id}` });
 
 		const agent = new Agent({
 			initialState: {

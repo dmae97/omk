@@ -3852,7 +3852,8 @@
 				"cacheWrite": 0
 			},
 			"contextWindow": 128000,
-			"maxTokens": 32000
+			"maxTokens": 32000,
+			"contextPromotionTarget": "openai/gpt-5.3-codex"
 		},
 		"o1": {
 			"id": "o1",
@@ -9710,8 +9711,8 @@
 				"cacheRead": 0,
 				"cacheWrite": 0
 			},
-			"contextWindow": 256000,
-			"maxTokens": 64000
+			"contextWindow": 262144,
+			"maxTokens": 65536
 		},
 		"qwen/qwen3.5-plus-02-15": {
 			"id": "qwen/qwen3.5-plus-02-15",
@@ -9731,7 +9732,7 @@
 				"cacheWrite": 0
 			},
 			"contextWindow": 1000000,
-			"maxTokens": 64000
+			"maxTokens": 65536
 		},
 		"qwen/qwq-32b": {
 			"id": "qwen/qwq-32b",
@@ -13069,7 +13070,8 @@
 				"cacheWrite": 0
 			},
 			"contextWindow": 128000,
-			"maxTokens": 128000
+			"maxTokens": 128000,
+			"contextPromotionTarget": "openai-codex/gpt-5.3-codex"
 		}
 	},
 	"google-gemini-cli": {

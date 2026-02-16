@@ -1918,6 +1918,16 @@ async function generateModels() {
 		}
 	}
 
+	for (const candidate of allModels) {
+		if (!candidate.id.endsWith("-spark")) continue;
+		const baseId = candidate.id.slice(0, -"-spark".length);
+		const fallback = allModels.find(
+			model => model.provider === candidate.provider && model.api === candidate.api && model.id === baseId,
+		);
+		if (!fallback) continue;
+		candidate.contextPromotionTarget = `${fallback.provider}/${fallback.id}`;
+	}
+
 	// Group by provider and sort each provider's models
 	const providers: Record<string, Record<string, Model>> = {};
 	for (const model of allModels) {

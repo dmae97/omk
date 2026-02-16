@@ -408,6 +408,8 @@ export interface Model<TApi extends Api = any> {
 	headers?: Record<string, string>;
 	/** Hint that websocket transport should be preferred when supported by the provider implementation. */
 	preferWebsockets?: boolean;
+	/** Preferred model to switch to when context promotion is triggered (model id or provider/id). */
+	contextPromotionTarget?: string;
 	/** Compatibility overrides for openai-completions API. If not set, auto-detected from baseUrl. */
 	compat?: TApi extends "openai-completions" ? OpenAICompat : never;
 }

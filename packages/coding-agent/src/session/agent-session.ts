@@ -2879,8 +2879,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			candidates.push(candidate);
 		};
 
-		addCandidate(this.#resolveRoleModel("default", availableModels, currentModel));
-		addCandidate(this.#resolveRoleModel("slow", availableModels, currentModel));
+		addCandidate(this.#resolveContextPromotionConfiguredTarget(currentModel, availableModels));
 
 		const sameProviderLarger = [...availableModels]
 			.filter(
@@ -2928,6 +2927,18 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 	#getModelKey(model: Model): string {
 		return `${model.provider}/${model.id}`;
+	}
+
+	#resolveContextPromotionConfiguredTarget(currentModel: Model, availableModels: Model[]): Model | undefined {
+		const configuredTarget = currentModel.contextPromotionTarget?.trim();
+		if (!configuredTarget) return undefined;
+
+		const parsed = parseModelString(configuredTarget);
+		if (parsed) {
+			return availableModels.find(m => m.provider === parsed.provider && m.id === parsed.id);
+		}
+
+		return availableModels.find(m => m.provider === currentModel.provider && m.id === configuredTarget);
 	}
 
 	#resolveRoleModel(role: ModelRole, availableModels: Model[], currentModel: Model | undefined): Model | undefined {
