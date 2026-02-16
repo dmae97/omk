@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { compile } from "tailwindcss";
+import { compile } from "@tailwindcss/node";
 
 /**
  * Extract Tailwind class names from source files by scanning for className attributes.
@@ -40,27 +40,9 @@ const sourceCss = await Bun.file("./src/client/styles.css").text();
 const candidates = await extractTailwindClasses("./src/client");
 const baseDir = path.resolve("./src/client");
 
-// Provide loadStylesheet for @import "tailwindcss" to work
 const compiler = await compile(sourceCss, {
 	base: baseDir,
-	loadStylesheet: async (id: string, base: string) => {
-		// Handle tailwindcss import
-		if (id === "tailwindcss/index.css" || id === "tailwindcss") {
-			const tailwindPath = require.resolve("tailwindcss/index.css", { paths: [base] });
-			return {
-				path: tailwindPath,
-				base: path.dirname(tailwindPath),
-				content: await Bun.file(tailwindPath).text(),
-			};
-		}
-		// Handle other imports relative to base
-		const resolved = path.resolve(base, id);
-		return {
-			path: resolved,
-			base: path.dirname(resolved),
-			content: await Bun.file(resolved).text(),
-		};
-	},
+	onDependency: () => {},
 });
 const tailwindOutput = compiler.build([...candidates]);
 await Bun.write("./dist/client/styles.css", tailwindOutput);

@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { compile } from "tailwindcss";
+import { compile } from "@tailwindcss/node";
 import {
 	getDashboardStats,
 	getRecentErrors,
@@ -105,22 +105,7 @@ async function buildTailwindCss(inputPath: string, outputPath: string): Promise<
 	const candidates = await extractTailwindClasses(clientDir);
 	const compiler = await compile(sourceCss, {
 		base: clientDir,
-		loadStylesheet: async (id: string, base: string) => {
-			if (id === "tailwindcss/index.css" || id === "tailwindcss") {
-				const tailwindPath = require.resolve("tailwindcss/index.css", { paths: [base] });
-				return {
-					path: tailwindPath,
-					base: path.dirname(tailwindPath),
-					content: await Bun.file(tailwindPath).text(),
-				};
-			}
-			const resolved = path.resolve(base, id);
-			return {
-				path: resolved,
-				base: path.dirname(resolved),
-				content: await Bun.file(resolved).text(),
-			};
-		},
+		onDependency: () => {},
 	});
 	const result = compiler.build([...candidates]);
 	await Bun.write(outputPath, result);
