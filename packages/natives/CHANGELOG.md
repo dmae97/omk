@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.8.0] - 2026-02-16
 ### Added
 
 - Added support for x64 CPU variant selection with `TARGET_VARIANT` environment variable (modern/baseline) during build to optimize for specific ISA levels

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.8.0] - 2026-02-16
+
 ### Added
 
 - Added `transformToolCallArguments` option to `AgentOptions` and `AgentLoopConfig` for transforming tool call arguments before execution (e.g. secret deobfuscation)

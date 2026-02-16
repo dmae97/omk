@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.8.0] - 2026-02-16
+
 ### Added
 
 - Added `contextPromotionTarget` model property to specify preferred fallback model when context promotion is triggered

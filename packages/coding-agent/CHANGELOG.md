@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.8.0] - 2026-02-16
+
 ### Changed
 - Improved `/changelog` performance by displaying only the most recent 3 versions by default, with a `--full` flag for the complete history ([#85](https://github.com/can1357/oh-my-pi/pull/85) by [@tctev](https://github.com/tctev))
 - Centralized builtin slash command definitions and handlers into a shared registry, replacing the large input-controller if-chain dispatch
