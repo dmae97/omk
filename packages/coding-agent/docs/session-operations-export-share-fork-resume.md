@@ -1,0 +1,288 @@
+# Session Operations: export, dump, share, fork, resume/continue
+
+This document describes operator-visible behavior for session export/share/fork/resume operations as currently implemented.
+
+## Implementation files
+
+- [`../src/modes/controllers/command-controller.ts`](../src/modes/controllers/command-controller.ts)
+- [`../src/session/agent-session.ts`](../src/session/agent-session.ts)
+- [`../src/session/session-manager.ts`](../src/session/session-manager.ts)
+- [`../src/export/html/index.ts`](../src/export/html/index.ts)
+- [`../src/export/custom-share.ts`](../src/export/custom-share.ts)
+- [`../src/main.ts`](../src/main.ts)
+
+## Operation matrix
+
+| Operation | Entry path | Session mutation | Session file creation/switch | Output artifact |
+|---|---|---|---|---|
+| `/dump` | Interactive slash command | No | No | Clipboard text |
+| `/export [path]` | Interactive slash command | No | No | HTML file |
+| `--export <session.jsonl> [outputPath]` | CLI startup fast-path | No runtime session mutation | No active session; reads target file | HTML file |
+| `/share` | Interactive slash command | No | No | Temp HTML + share URL/gist |
+| `/fork` | Interactive slash command | Yes (active session identity changes) | Creates new session file and switches current session to it (persistent mode only) | Copies artifact directory to new session namespace when present |
+| `/resume` | Interactive slash command | Yes (active in-memory state replaced) | Switches to selected existing session file | None |
+| `--resume` | CLI startup (picker) | Yes after session creation | Opens selected existing session file | None |
+| `--resume <id|path>` | CLI startup | Yes after session creation | Opens existing session; cross-project case can fork into current project | None |
+| `--continue` | CLI startup | Yes after session creation | Opens terminal breadcrumb or most-recent session; creates new one if none exists | None |
+
+## Export and dump
+
+### `/export [outputPath]` (interactive)
+
+Flow:
+
+1. `InputController` routes `/export...` to `CommandController.handleExportCommand`.
+2. The command splits on whitespace and uses only the first argument after `/export` as `outputPath`.
+3. `AgentSession.exportToHtml()` calls `exportSessionToHtml(sessionManager, state, { outputPath, themeName })`.
+4. On success, UI shows path and opens the file in browser.
+
+Behavior details:
+
+- `--copy`, `clipboard`, and `copy` arguments are explicitly rejected with a warning to use `/dump`.
+- Export embeds session header/entries/leaf plus current `systemPrompt` and tool descriptions from agent state.
+- No session entries are appended during export.
+
+Caveat:
+
+- Argument parsing is whitespace-based (`text.split(/\s+/)`), so quoted paths with spaces are not preserved as a single path by this command path.
+
+### `--export <inputSessionFile> [outputPath]` (CLI)
+
+Flow in `main.ts`:
+
+1. Handled early (before interactive/session startup).
+2. Calls `exportFromFile(inputPath, outputPath?)`.
+3. `SessionManager.open(inputPath)` loads entries, then HTML is generated and written.
+4. Process prints `Exported to: ...` and exits.
+
+Behavior details:
+
+- Missing input file surfaces as `File not found: <path>`.
+- This path does not create an `AgentSession` and does not mutate any running session.
+
+### `/dump` (interactive clipboard export)
+
+Flow:
+
+1. `CommandController.handleDumpCommand()` calls `session.formatSessionAsText()`.
+2. If empty string, reports `No messages to dump yet.`
+3. Otherwise copies to clipboard via native `copyToClipboard`.
+
+Dump content includes:
+
+- System prompt
+- Active model/thinking level
+- Tool definitions + parameters
+- User/assistant messages
+- Thinking blocks and tool calls
+- Tool results and execution blocks (except `excludeFromContext` bash/python entries)
+- Custom/hook/file mention/branch summary/compaction summary entries
+
+No session persistence changes are made by dumping.
+
+## Share
+
+`/share` is interactive-only and always starts by exporting current session to a temp HTML file.
+
+### Phase 1: temp export
+
+- Temp file path: `${os.tmpdir()}/${Snowflake.next()}.html`
+- Uses `session.exportToHtml(tmpFile)`
+- If export fails (notably in-memory sessions), share ends with error.
+
+### Phase 2: custom share handler (if present)
+
+`loadCustomShare()` checks `~/.omp/agent` for first existing candidate:
+
+- `share.ts`
+- `share.js`
+- `share.mjs`
+
+Requirements:
+
+- Module must default-export a function `(htmlPath) => Promise<CustomShareResult | string | undefined>`.
+
+If present and valid:
+
+- UI enters `Sharing...` loader state.
+- Handler result interpretation:
+  - string => treated as URL, shown and opened
+  - object => `url` and/or `message` shown; `url` opened
+  - `undefined`/falsy => generic `Session shared`
+- Temp file is removed after completion.
+
+Critical fallback behavior:
+
+- If custom handler exists but loading fails, command errors and returns.
+- If custom handler executes and throws, command errors and returns.
+- In both failure cases, it **does not** fall back to GitHub gist.
+- Gist fallback happens only when no custom share script exists.
+
+### Phase 3: default gist fallback
+
+Only when no custom share handler is found:
+
+1. Validates `gh auth status`.
+2. Shows `Creating gist...` loader.
+3. Runs `gh gist create --public=false <tmpFile>`.
+4. Parses gist URL, derives gist id, builds preview URL `https://gistpreview.github.io/?<id>`.
+5. Shows both preview and gist URLs; opens preview.
+
+Cancellation/abort semantics in share:
+
+- Loader has `onAbort` hook that restores editor UI and reports `Share cancelled`.
+- The underlying `gh gist create` command is not passed an abort signal in this code path; cancellation is UI-level and checked after command returns.
+
+## Fork
+
+`/fork` creates a new session from the current one and switches the active session identity.
+
+### Preconditions and immediate guards
+
+- If agent is streaming, `/fork` is rejected with warning.
+- UI status/loading indicators are cleared before operation.
+
+### Session-level flow
+
+`AgentSession.fork()`:
+
+1. Emits `session_before_switch` with `reason: "fork"` (cancellable).
+2. Flushes pending writes.
+3. Calls `SessionManager.fork()`.
+4. Copies artifacts directory from old session namespace to new namespace (best-effort; non-ENOENT copy failures are logged, not fatal).
+5. Updates `agent.sessionId`.
+6. Emits `session_switch` with `reason: "fork"`.
+
+`SessionManager.fork()` behavior:
+
+- Requires persistent mode and existing session file.
+- Creates new session id and new JSONL file path.
+- Rewrites header with:
+  - new `id`
+  - new timestamp
+  - `cwd` unchanged
+  - `parentSession` set to previous session id
+- Keeps all non-header entries unchanged in the new file.
+
+### Non-persistent behavior
+
+- In-memory session manager returns `undefined` from `fork()`.
+- `AgentSession.fork()` returns `false`.
+- UI reports `Fork failed (session not persisted or cancelled)`.
+
+## Resume and continue
+
+## Interactive `/resume`
+
+Flow:
+
+1. Opens session selector populated via `SessionManager.list(currentCwd, currentSessionDir)`.
+2. On selection, `SelectorController.handleResumeSession(sessionPath)` calls `session.switchSession(sessionPath)`.
+3. UI clears/rebuilds chat and todos, then reports `Resumed session`.
+
+Notes:
+
+- This picker only lists sessions in the current session directory scope.
+- It does not use global cross-project search.
+
+## CLI `--resume`
+
+### `--resume` (no value)
+
+- `main.ts` lists sessions for current cwd/sessionDir and opens picker.
+- Selected path is opened with `SessionManager.open(selectedPath)` before session creation.
+
+### `--resume <value>`
+
+`createSessionManager()` resolution order:
+
+1. If value looks like path (`/`, `\`, or `.jsonl`), open directly.
+2. Else treat as id prefix:
+   - search current scope (`SessionManager.list(cwd, sessionDir)`)
+   - if not found and no explicit `sessionDir`, search global (`SessionManager.listAll()`)
+
+Cross-project id match behavior:
+
+- If matched session cwd differs from current cwd, CLI asks:
+  - `Session found in different project ... Fork into current directory? [y/N]`
+- On yes: `SessionManager.forkFrom(match.path, cwd, sessionDir)` creates a new local forked file.
+- On no/non-TTY default: command errors.
+
+## CLI `--continue`
+
+`SessionManager.continueRecent(cwd, sessionDir)`:
+
+1. Resolves session dir for current cwd.
+2. Reads terminal-scoped breadcrumb first.
+3. Falls back to most recently modified session file.
+4. Opens found session; if none exists, creates new session.
+
+This is startup-only behavior; there is no interactive `/continue` slash command.
+
+## How session switching actually mutates runtime state
+
+`AgentSession.switchSession(sessionPath)` does the runtime transition used by resume-like operations:
+
+1. Emit `session_before_switch` with `reason: "resume"` and `targetSessionFile` (cancellable).
+2. Disconnect agent event subscription and abort in-flight work.
+3. Clear queued steering/follow-up/next-turn messages.
+4. Flush current session manager writes.
+5. `sessionManager.setSessionFile(sessionPath)` and update `agent.sessionId`.
+6. Build session context from loaded entries.
+7. Emit `session_switch` with `reason: "resume"`.
+8. Replace agent messages from context.
+9. Restore model (if available in current registry).
+10. Restore or initialize thinking level.
+11. Reconnect agent event subscription.
+
+No new session file is created by `switchSession()` itself.
+
+## Event emissions and cancellation points
+
+### Switch/fork lifecycle hooks
+
+For `newSession`, `fork`, and `switchSession`:
+
+- Before event: `session_before_switch`
+  - reasons: `new`, `fork`, `resume`
+  - cancellable by returning `{ cancel: true }`
+- After event: `session_switch`
+  - same reason set
+  - includes `previousSessionFile`
+
+`ExtensionRunner.emit()` returns early on the first cancelling before-event result.
+
+### Custom tool `onSession` behavior
+
+SDK bridges extension session events to custom tool `onSession` callbacks:
+
+- `session_switch` -> `onSession({ reason: "switch", previousSessionFile })`
+- `session_branch` -> `reason: "branch"`
+- `session_start` -> `reason: "start"`
+- `session_tree` -> `reason: "tree"`
+- `session_shutdown` -> `reason: "shutdown"`
+
+These callbacks are observational; they do not cancel switch/fork.
+
+### Other cancellation surfaces relevant to this doc
+
+- `/fork` is blocked while streaming (user must wait/abort current response first).
+- `/resume` selector can be cancelled by user closing selector.
+- Cross-project `--resume <id>` can be cancelled by declining fork prompt.
+- `/share` has UI abort path (`Share cancelled`) for gist flow; it does not wire process-kill semantics for `gh gist create` in this code path.
+
+## Non-persistent (in-memory) session behavior
+
+When session manager is created with `SessionManager.inMemory()` (`--no-session`):
+
+- Session file path is absent.
+- `/export` and `/share` fail with `Cannot export in-memory session to HTML` (propagated to command error UI).
+- `/fork` fails because `SessionManager.fork()` requires persistence.
+- `/dump` still works because it serializes in-memory agent state.
+- CLI resume/continue semantics are bypassed if `--no-session` is set, because manager creation returns in-memory immediately.
+
+## Known implementation caveats (as of current code)
+
+- `SelectorController.handleResumeSession()` does not check the boolean result from `session.switchSession(...)`; a hook-cancelled switch can still proceed through UI "Resumed session" repaint/status path.
+- `/share` custom-share failures do not degrade to default gist fallback; they terminate the command with error.
+- `/export` argument tokenization is simplistic and does not preserve quoted paths with spaces.

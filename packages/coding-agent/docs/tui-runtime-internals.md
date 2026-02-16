@@ -1,0 +1,215 @@
+# TUI runtime internals
+
+This document maps the non-theme runtime path from terminal input to rendered output in interactive mode. It focuses on behavior in `packages/tui` and its integration from `packages/coding-agent` controllers.
+
+## Runtime layers and ownership
+
+- **`packages/tui` engine**: terminal lifecycle, stdin normalization, focus routing, render scheduling, differential painting, overlay composition, hardware cursor placement.
+- **`packages/coding-agent` interactive mode**: builds component tree, binds editor callbacks and keymaps, reacts to agent/session events, and translates domain state (streaming, tool execution, retries, plan mode) into UI components.
+
+Boundary rule: the TUI engine is message-agnostic. It only knows `Component.render(width)`, `handleInput(data)`, focus, and overlays. Agent semantics stay in interactive controllers.
+
+## Implementation files
+
+- [`../src/modes/interactive-mode.ts`](../src/modes/interactive-mode.ts)
+- [`../src/modes/controllers/event-controller.ts`](../src/modes/controllers/event-controller.ts)
+- [`../src/modes/controllers/input-controller.ts`](../src/modes/controllers/input-controller.ts)
+- [`../src/modes/components/custom-editor.ts`](../src/modes/components/custom-editor.ts)
+- [`../../tui/src/tui.ts`](../../tui/src/tui.ts)
+- [`../../tui/src/terminal.ts`](../../tui/src/terminal.ts)
+- [`../../tui/src/editor-component.ts`](../../tui/src/editor-component.ts)
+- [`../../tui/src/stdin-buffer.ts`](../../tui/src/stdin-buffer.ts)
+- [`../../tui/src/components/loader.ts`](../../tui/src/components/loader.ts)
+
+## Boot and component tree assembly
+
+`InteractiveMode` constructs `TUI(new ProcessTerminal(), showHardwareCursor)` and creates persistent containers:
+
+- `chatContainer`
+- `pendingMessagesContainer`
+- `statusContainer`
+- `todoContainer`
+- `statusLine`
+- `editorContainer` (holds `CustomEditor`)
+
+`init()` wires the tree in that order, focuses the editor, registers input handlers via `InputController`, starts TUI, and requests a forced render.
+
+A forced render (`requestRender(true)`) resets previous-line caches and cursor bookkeeping before repainting.
+
+## Terminal lifecycle and stdin normalization
+
+`ProcessTerminal.start()`:
+
+1. Enables raw mode and bracketed paste.
+2. Attaches resize handler.
+3. Creates a `StdinBuffer` to split partial escape chunks into complete sequences.
+4. Queries Kitty keyboard protocol support (`CSI ? u`), then enables protocol flags if supported.
+5. On Windows, attempts VT input enablement via `kernel32` mode flags.
+
+`StdinBuffer` behavior:
+
+- Buffers fragmented escape sequences (CSI/OSC/DCS/APC/SS3).
+- Emits `data` only when a sequence is complete or timeout-flushed.
+- Detects bracketed paste and emits a `paste` event with raw pasted text.
+
+This prevents partial escape chunks from being misinterpreted as normal keypresses.
+
+## Input routing and focus model
+
+Input path:
+
+`stdin -> ProcessTerminal -> StdinBuffer -> TUI.#handleInput -> focusedComponent.handleInput`
+
+Routing details:
+
+1. TUI runs registered input listeners first (`addInputListener`), allowing consume/transform behavior.
+2. TUI handles global debug shortcut (`shift+ctrl+d`) before component dispatch.
+3. If focused component belongs to an overlay that is now hidden/invisible, TUI reassigns focus to next visible overlay or saved pre-overlay focus.
+4. Key release events are filtered unless focused component sets `wantsKeyRelease = true`.
+5. After dispatch, TUI schedules render.
+
+`setFocus()` also toggles `Focusable.focused`, which controls whether components emit `CURSOR_MARKER` for hardware cursor placement.
+
+## Key handling split: editor vs controller
+
+`CustomEditor` intercepts high-priority combos first (escape, ctrl-c/d/z, ctrl-v, ctrl-p variants, ctrl-t, alt-up, extension custom keys) and delegates the rest to base `Editor` behavior (text editing, history, autocomplete, cursor movement).
+
+`InputController.setupKeyHandlers()` then binds editor callbacks to mode actions:
+
+- cancellation / mode exits on `Escape`
+- shutdown on double `Ctrl+C` or empty-editor `Ctrl+D`
+- suspend/resume on `Ctrl+Z`
+- slash-command and selector hotkeys
+- follow-up/dequeue toggles and expansion toggles
+
+This keeps key parsing/editor mechanics in `packages/tui` and mode semantics in coding-agent controllers.
+
+## Render loop and diffing strategy
+
+`TUI.requestRender()` is debounced to one render per tick using `process.nextTick`. Multiple state changes in the same turn coalesce.
+
+`#doRender()` pipeline:
+
+1. Render root component tree to `newLines`.
+2. Composite visible overlays (if any).
+3. Extract and strip `CURSOR_MARKER` from visible viewport lines.
+4. Append segment reset suffixes for non-image lines.
+5. Choose full repaint vs differential patch:
+   - first frame
+   - width change
+   - shrink with `clearOnShrink` enabled and no overlays
+   - edits above previous viewport
+6. For differential updates, patch only changed line range and clear stale trailing lines when needed.
+7. Reposition hardware cursor for IME support.
+
+Render writes use synchronized output mode (`CSI ? 2026 h/l`) to reduce flicker/tearing.
+
+## Render safety constraints
+
+Critical safety checks in `TUI`:
+
+- Non-image rendered lines must not exceed terminal width; overflow throws and writes crash diagnostics.
+- Overlay compositing includes defensive truncation and post-composite width verification.
+- Width changes force full redraw because wrapping semantics change.
+- Cursor position is clamped before movement.
+
+These constraints are runtime enforcement, not just conventions.
+
+## Resize handling
+
+Resize events are event-driven from `ProcessTerminal` to `TUI.requestRender()`.
+
+Effects:
+
+- Any width change triggers full redraw.
+- Viewport/top tracking (`#previousViewportTop`, `#maxLinesRendered`) avoids invalid relative cursor math when content or terminal size changes.
+- Overlay visibility can depend on terminal dimensions (`OverlayOptions.visible`); focus is corrected when overlays become non-visible after resize.
+
+## Streaming and incremental UI updates
+
+`EventController` subscribes to `AgentSessionEvent` and updates UI incrementally:
+
+- `agent_start`: starts loader in `statusContainer`.
+- `message_start` assistant: creates `streamingComponent` and mounts it.
+- `message_update`: updates streaming assistant content; creates/updates tool execution components as tool calls appear.
+- `tool_execution_update/end`: updates tool result components and completion state.
+- `message_end`: finalizes assistant stream, handles aborted/error annotations, marks pending tool args complete on normal stop.
+- `agent_end`: stops loaders, clears transient stream state, flushes deferred model switch, issues completion notification if backgrounded.
+
+Read-tool grouping is intentionally stateful (`#lastReadGroup`) to coalesce consecutive read tool calls into one visual block until a non-read break occurs.
+
+## Status and loader orchestration
+
+Status lane ownership:
+
+- `statusContainer` holds transient loaders (`loadingAnimation`, `autoCompactionLoader`, `retryLoader`).
+- `statusLine` renders persistent status/hooks/plan indicators and drives editor top border updates.
+
+Loader behavior:
+
+- `Loader` updates every 80ms via interval and requests render each frame.
+- Escape handlers are temporarily overridden during auto-compaction and auto-retry to cancel those operations.
+- On end/cancel paths, controllers restore prior escape handlers and stop/clear loader components.
+
+## Mode transitions and backgrounding
+
+### Bash/Python input modes
+
+Input text prefixes toggle editor border mode flags:
+
+- `!` -> bash mode
+- `$` (non-template literal prefix) -> python mode
+
+Escape exits inactive mode by clearing editor text and restoring border color; when execution is active, escape aborts the running task instead.
+
+### Plan mode
+
+`InteractiveMode` tracks plan mode flags, status-line state, active tools, and model switching. Enter/exit updates session mode entries and status/UI state, including deferred model switch if streaming is active.
+
+### Suspend/resume (`Ctrl+Z`)
+
+`InputController.handleCtrlZ()`:
+
+1. Registers one-shot `SIGCONT` handler to restart TUI and force render.
+2. Stops TUI before suspend.
+3. Sends `SIGTSTP` to process group.
+
+### Background mode (`/background` or `/bg`)
+
+`handleBackgroundCommand()`:
+
+- Rejects when idle.
+- Switches tool UI context to non-interactive (`hasUI=false`) so interactive UI tools fail fast.
+- Stops loaders/status line and unsubscribes foreground event handler.
+- Subscribes background event handler (primarily waits for `agent_end`).
+- Stops TUI and sends `SIGTSTP` (POSIX job control path).
+
+On `agent_end` in background with no queued work, controller sends completion notification and shuts down.
+
+## Cancellation paths
+
+Primary cancellation inputs:
+
+- `Escape` during active stream loader: restores queued messages to editor and aborts agent.
+- `Escape` during bash/python execution: aborts running command.
+- `Escape` during auto-compaction/retry: invokes dedicated abort methods through temporary escape handlers.
+- `Ctrl+C` single press: clear editor; double press within 500ms: shutdown.
+
+Cancellation is state-conditional; same key can mean abort, mode-exit, selector trigger, or no-op depending on runtime state.
+
+## Event-driven vs throttled behavior
+
+Event-driven updates:
+
+- Agent session events (`EventController`)
+- Key input callbacks (`InputController`)
+- terminal resize callback
+- theme/branch watchers in `InteractiveMode`
+
+Throttled/debounced paths:
+
+- TUI rendering is tick-debounced (`requestRender` coalescing).
+- Loader animation is fixed-interval (80ms), each frame requesting render.
+- Editor autocomplete updates (inside `Editor`) use debounce timers, reducing recompute churn during typing.
+
+The runtime therefore mixes event-driven state transitions with bounded render cadence to keep interactivity responsive without repaint storms.
