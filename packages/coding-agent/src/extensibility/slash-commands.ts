@@ -1,4 +1,15 @@
 import type { AutocompleteItem } from "@oh-my-pi/pi-tui";
+import { slashCommandCapability } from "../capability/slash-command";
+import { renderPromptTemplate } from "../config/prompt-templates";
+import type { SlashCommand } from "../discovery";
+import { loadCapability } from "../discovery";
+import {
+	BUILTIN_SLASH_COMMAND_DEFS,
+	type BuiltinSlashCommand,
+	type SubcommandDef,
+} from "../slash-commands/builtin-registry";
+import { EMBEDDED_COMMAND_TEMPLATES } from "../task/commands";
+import { parseFrontmatter } from "../utils/frontmatter";
 
 export type SlashCommandSource = "extension" | "prompt" | "skill";
 
@@ -12,22 +23,7 @@ export interface SlashCommandInfo {
 	path?: string;
 }
 
-/** Declarative subcommand definition for commands like /mcp */
-export interface SubcommandDef {
-	name: string;
-	description: string;
-	/** Usage hint shown as dim ghost text, e.g. "<name> [--scope project|user]" */
-	usage?: string;
-}
-
-export interface BuiltinSlashCommand {
-	name: string;
-	description: string;
-	/** Subcommands for dropdown completion (e.g. /mcp add, /mcp list) */
-	subcommands?: SubcommandDef[];
-	/** Static inline hint when command takes a simple argument (no subcommands) */
-	inlineHint?: string;
-}
+export type { BuiltinSlashCommand, SubcommandDef } from "../slash-commands/builtin-registry";
 
 /**
  * Build getArgumentCompletions from declarative subcommand definitions.
@@ -93,74 +89,6 @@ function buildStaticInlineHint(hint: string): (argumentText: string) => string |
 	return (argumentText: string) => (argumentText.trim().length === 0 ? hint : null);
 }
 
-const BUILTIN_SLASH_COMMAND_DEFS: ReadonlyArray<BuiltinSlashCommand> = [
-	{ name: "settings", description: "Open settings menu" },
-	{ name: "plan", description: "Toggle plan mode (agent plans before executing)" },
-	{ name: "model", description: "Select model (opens selector UI)" },
-	{ name: "export", description: "Export session to HTML file", inlineHint: "[path]" },
-	{ name: "dump", description: "Copy session transcript to clipboard" },
-	{ name: "share", description: "Share session as a secret GitHub gist" },
-	{
-		name: "browser",
-		description: "Toggle browser headless vs visible mode",
-		subcommands: [
-			{ name: "headless", description: "Switch to headless mode" },
-			{ name: "visible", description: "Switch to visible mode" },
-		],
-	},
-	{ name: "copy", description: "Copy last agent message to clipboard" },
-	{ name: "session", description: "Show session info and stats" },
-	{ name: "usage", description: "Show provider usage and limits" },
-	{ name: "changelog", description: "Show changelog entries", subcommands: [{ name: "full", description: "Show complete changelog" }] },
-	{ name: "hotkeys", description: "Show all keyboard shortcuts" },
-	{ name: "extensions", description: "Open Extension Control Center dashboard" },
-	{ name: "branch", description: "Create a new branch from a previous message" },
-	{ name: "fork", description: "Create a new fork from a previous message" },
-	{ name: "tree", description: "Navigate session tree (switch branches)" },
-	{ name: "login", description: "Login with OAuth provider" },
-	{ name: "logout", description: "Logout from OAuth provider" },
-	{
-		name: "mcp",
-		description: "Manage MCP servers (add, list, remove, test)",
-		subcommands: [
-			{
-				name: "add",
-				description: "Add a new MCP server",
-				usage: "<name> [--scope project|user] [--url <url>] [-- <command...>]",
-			},
-			{ name: "list", description: "List all configured MCP servers" },
-			{ name: "remove", description: "Remove an MCP server", usage: "<name> [--scope project|user]" },
-			{ name: "test", description: "Test connection to a server", usage: "<name>" },
-			{ name: "reauth", description: "Reauthorize OAuth for a server", usage: "<name>" },
-			{ name: "unauth", description: "Remove OAuth auth from a server", usage: "<name>" },
-			{ name: "enable", description: "Enable an MCP server", usage: "<name>" },
-			{ name: "disable", description: "Disable an MCP server", usage: "<name>" },
-			{ name: "reload", description: "Force reload MCP runtime tools" },
-			{ name: "help", description: "Show help message" },
-		],
-	},
-	{ name: "new", description: "Start a new session" },
-	{ name: "compact", description: "Manually compact the session context", inlineHint: "[focus instructions]" },
-	{ name: "handoff", description: "Hand off session context to a new session", inlineHint: "[focus instructions]" },
-	{ name: "resume", description: "Resume a different session" },
-	{ name: "background", description: "Detach UI and continue running in background" },
-	{ name: "debug", description: "Write debug log (TUI state and messages)" },
-	{
-		name: "memory",
-		description: "Inspect and operate memory maintenance",
-		subcommands: [
-			{ name: "view", description: "Show current memory injection payload" },
-			{ name: "clear", description: "Clear persisted memory data and artifacts" },
-			{ name: "reset", description: "Alias for clear" },
-			{ name: "enqueue", description: "Enqueue memory consolidation maintenance" },
-			{ name: "rebuild", description: "Alias for enqueue" },
-		],
-	},
-	{ name: "move", description: "Move session to a different working directory", inlineHint: "<path>" },
-	{ name: "exit", description: "Exit the application" },
-	{ name: "quit", description: "Quit the application" },
-];
-
 /**
  * Materialized builtin slash commands with completion functions derived from
  * declarative subcommand/hint definitions.
@@ -186,13 +114,6 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<
 	}
 	return cmd;
 });
-
-import { slashCommandCapability } from "../capability/slash-command";
-import { renderPromptTemplate } from "../config/prompt-templates";
-import type { SlashCommand } from "../discovery";
-import { loadCapability } from "../discovery";
-import { EMBEDDED_COMMAND_TEMPLATES } from "../task/commands";
-import { parseFrontmatter } from "../utils/frontmatter";
 
 /**
  * Represents a custom slash command loaded from a file

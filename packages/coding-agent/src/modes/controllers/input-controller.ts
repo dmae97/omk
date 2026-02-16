@@ -2,12 +2,12 @@ import * as fs from "node:fs/promises";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import { copyToClipboard, readImageFromClipboard, sanitizeText } from "@oh-my-pi/pi-natives";
 import { $env } from "@oh-my-pi/pi-utils";
-import type { SettingPath, SettingValue } from "../../config/settings";
 import { settings } from "../../config/settings";
 import { theme } from "../../modes/theme/theme";
 import type { InteractiveModeContext } from "../../modes/types";
 import type { AgentSessionEvent } from "../../session/agent-session";
 import { SKILL_PROMPT_MESSAGE_TYPE, type SkillPromptDetails } from "../../session/messages";
+import { executeBuiltinSlashCommand } from "../../slash-commands/builtin-registry";
 import { getEditorCommand, openInEditor } from "../../utils/external-editor";
 import { resizeImage } from "../../utils/image-resize";
 import { generateSessionTitle, setTerminalTitle } from "../../utils/title-generator";
@@ -185,192 +185,13 @@ export class InputController {
 
 			if (!text) return;
 
-			// Handle slash commands
-			if (text === "/settings") {
-				this.ctx.showSettingsSelector();
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text === "/plan") {
-				await this.ctx.handlePlanModeCommand();
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text === "/model" || text === "/models") {
-				this.ctx.showModelSelector();
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text.startsWith("/export")) {
-				await this.ctx.handleExportCommand(text);
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text === "/dump") {
-				await this.ctx.handleDumpCommand();
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text === "/share") {
-				await this.ctx.handleShareCommand();
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text === "/browser" || text.startsWith("/browser ")) {
-				const arg = text.slice(8).trim().toLowerCase();
-				const current = settings.get("browser.headless" as SettingPath) as boolean;
-				let next = current;
-				if (!(settings.get("browser.enabled" as SettingPath) as boolean)) {
-					this.ctx.showWarning("Browser tool is disabled (enable in settings)");
-					this.ctx.editor.setText("");
-					return;
-				}
-				if (!arg) {
-					next = !current;
-				} else if (["headless", "hidden"].includes(arg)) {
-					next = true;
-				} else if (["visible", "show", "headful"].includes(arg)) {
-					next = false;
-				} else {
-					this.ctx.showStatus("Usage: /browser [headless|visible]");
-					this.ctx.editor.setText("");
-					return;
-				}
-				settings.set("browser.headless" as SettingPath, next as SettingValue<SettingPath>);
-				const tool = this.ctx.session.getToolByName("browser");
-				if (tool && "restartForModeChange" in tool) {
-					try {
-						await (tool as { restartForModeChange: () => Promise<void> }).restartForModeChange();
-					} catch (error) {
-						this.ctx.showWarning(
-							`Failed to restart browser: ${error instanceof Error ? error.message : String(error)}`,
-						);
-						this.ctx.editor.setText("");
-						return;
-					}
-				}
-				this.ctx.showStatus(`Browser mode: ${next ? "headless" : "visible"}`);
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text === "/copy") {
-				await this.ctx.handleCopyCommand();
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text === "/session") {
-				await this.ctx.handleSessionCommand();
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text === "/usage") {
-				await this.ctx.handleUsageCommand();
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text === "/changelog" || text.startsWith("/changelog ")) {
-				const showFull = text.split(/\s+/).slice(1).includes("full");
-				await this.ctx.handleChangelogCommand(showFull);
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text === "/hotkeys") {
-				this.ctx.handleHotkeysCommand();
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text === "/extensions" || text === "/status") {
-				this.ctx.showExtensionsDashboard();
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text === "/branch") {
-				if (settings.get("doubleEscapeAction") === "tree") {
-					this.ctx.showTreeSelector();
-				} else {
-					this.ctx.showUserMessageSelector();
-				}
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text === "/tree") {
-				this.ctx.showTreeSelector();
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text === "/login") {
-				this.ctx.showOAuthSelector("login");
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text === "/logout") {
-				this.ctx.showOAuthSelector("logout");
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text === "/new") {
-				this.ctx.editor.setText("");
-				await this.ctx.handleClearCommand();
-				return;
-			}
-			if (text === "/fork") {
-				this.ctx.editor.setText("");
-				await this.ctx.handleForkCommand();
-				return;
-			}
-			if (text === "/move" || text.startsWith("/move ")) {
-				const targetPath = text.slice(6).trim();
-				if (!targetPath) {
-					this.ctx.showError("Usage: /move <path>");
-					this.ctx.editor.setText("");
-					return;
-				}
-				this.ctx.editor.setText("");
-				await this.ctx.handleMoveCommand(targetPath);
-				return;
-			}
-			if (text === "/compact" || text.startsWith("/compact ")) {
-				const customInstructions = text.startsWith("/compact ") ? text.slice(9).trim() : undefined;
-				this.ctx.editor.setText("");
-				await this.ctx.handleCompactCommand(customInstructions);
-				return;
-			}
-			if (text === "/handoff" || text.startsWith("/handoff ")) {
-				const customInstructions = text.startsWith("/handoff ") ? text.slice(9).trim() : undefined;
-				this.ctx.editor.setText("");
-				await this.ctx.handleHandoffCommand(customInstructions);
-				return;
-			}
-			if (text === "/background" || text === "/bg") {
-				this.ctx.editor.setText("");
-				this.handleBackgroundCommand();
-				return;
-			}
-			if (text === "/debug") {
-				this.ctx.showDebugSelector();
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text === "/memory" || text.startsWith("/memory ")) {
-				this.ctx.editor.setText("");
-				await this.ctx.handleMemoryCommand(text);
-				return;
-			}
-			if (text === "/resume") {
-				this.ctx.showSessionSelector();
-				this.ctx.editor.setText("");
-				return;
-			}
-			if (text === "/quit" || text === "/exit") {
-				this.ctx.editor.setText("");
-				void this.ctx.shutdown();
-				return;
-			}
-			// Handle MCP server management commands
-			if (text === "/mcp" || text.startsWith("/mcp ")) {
-				this.ctx.editor.addToHistory(text);
-				this.ctx.editor.setText("");
-				await this.ctx.handleMCPCommand(text);
+			// Handle built-in slash commands
+			if (
+				await executeBuiltinSlashCommand(text, {
+					ctx: this.ctx,
+					handleBackgroundCommand: () => this.handleBackgroundCommand(),
+				})
+			) {
 				return;
 			}
 
