@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Updated SMOL_MODEL_PRIORITY to include additional model variants (gpt-5.3-spark, cerebras/zai-glm-4.7, haiku-4-5, haiku-4.5) for improved fast model discovery
+- Updated SLOW_MODEL_PRIORITY to include additional model variants (gpt-5.3-codex, gpt-5.3, gpt-5.1-codex, gpt-5.1, opus-4.6, opus-4-6, opus-4.5, opus-4-5, opus-4.1, opus-4-1) for improved comprehensive model discovery
 
 ## [12.7.3] - 2026-02-16
 

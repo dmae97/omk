@@ -42,10 +42,43 @@ export interface ScopedModel {
 }
 
 /** Priority chain for auto-discovering smol/fast models */
-export const SMOL_MODEL_PRIORITY = ["cerebras/zai-glm-4.6", "claude-haiku-4-5", "haiku", "flash", "mini"];
+export const SMOL_MODEL_PRIORITY = [
+	// any spark
+	"gpt-5.3-spark",
+	// cerebras zai
+	"cerebras/zai-glm-4.7",
+	"cerebras/zai-glm-4.6",
+	"cerebras/zai-glm",
+	// any haiku
+	"haiku-4-5",
+	"haiku-4.5",
+	"haiku",
+	// any flash
+	"flash",
+	// any mini
+	"mini",
+];
 
 /** Priority chain for auto-discovering slow/comprehensive models (reasoning, codex) */
-export const SLOW_MODEL_PRIORITY = ["gpt-5.2-codex", "gpt-5.2", "codex", "gpt", "opus", "pro"];
+export const SLOW_MODEL_PRIORITY = [
+	// any codex
+	"gpt-5.3-codex",
+	"gpt-5.3",
+	"gpt-5.2-codex",
+	"gpt-5.2",
+	"gpt-5.1-codex",
+	"gpt-5.1",
+	"codex",
+	// any opus
+	"opus-4.6",
+	"opus-4-6",
+	"opus-4.5",
+	"opus-4-5",
+	"opus-4.1",
+	"opus-4-1",
+	// whatever
+	"pro",
+];
 
 /**
  * Parse a model string in "provider/modelId" format.
