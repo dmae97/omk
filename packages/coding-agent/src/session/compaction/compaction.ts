@@ -170,11 +170,18 @@ export function getLastAssistantUsage(entries: SessionEntry[]): Usage | undefine
 }
 
 /**
+ * Effective reserve: at least 15% of context window or the configured floor, whichever is larger.
+ */
+export function effectiveReserveTokens(contextWindow: number, settings: CompactionSettings): number {
+	return Math.max(Math.floor(contextWindow * 0.15), settings.reserveTokens);
+}
+
+/**
  * Check if compaction should trigger based on context usage.
  */
 export function shouldCompact(contextTokens: number, contextWindow: number, settings: CompactionSettings): boolean {
 	if (!settings.enabled) return false;
-	return contextTokens > contextWindow - settings.reserveTokens;
+	return contextTokens > contextWindow - effectiveReserveTokens(contextWindow, settings);
 }
 
 // ============================================================================
