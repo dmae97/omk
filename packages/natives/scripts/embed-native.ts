@@ -59,12 +59,9 @@ for (const candidate of candidates) {
 	}
 }
 
-if (available.length !== candidates.length) {
+if (available.length === 0) {
 	const expected = candidates.map(candidate => `  - ${candidate.filename}`).join("\n");
-	const found = available.map(candidate => `  - ${candidate.filename}`).join("\n");
-	throw new Error(
-		`Incomplete native addons for ${platformTag}. Expected:\n${expected}\nFound:\n${found || "  (none)"}`,
-	);
+	throw new Error(`No native addons found for ${platformTag}. Expected one of:\n${expected}`);
 }
 const packageJson = (await Bun.file(packageJsonPath).json()) as { version: string };
 const imports = available

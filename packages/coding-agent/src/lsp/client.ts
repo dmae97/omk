@@ -1,4 +1,4 @@
-import { isEnoent, logger, ptree } from "@oh-my-pi/pi-utils";
+import { isEnoent, logger, ptree, untilAborted } from "@oh-my-pi/pi-utils";
 import { ToolAbortError, throwIfAborted } from "../tools/tool-errors";
 import { applyWorkspaceEdit } from "./edits";
 import { getLspmuxCommand, isLspmuxSupported } from "./lspmux";
@@ -157,8 +157,8 @@ const CLIENT_CAPABILITIES = {
  * Returns the parsed message and remaining buffer, or null if incomplete.
  */
 function parseMessage(
-	buffer: Uint8Array,
-): { message: LspJsonRpcResponse | LspJsonRpcNotification; remaining: Uint8Array } | null {
+	buffer: Buffer,
+): { message: LspJsonRpcResponse | LspJsonRpcNotification; remaining: Buffer } | null {
 	// Only decode enough to find the header
 	const headerEndIndex = findHeaderEnd(buffer);
 	if (headerEndIndex === -1) return null;
@@ -173,9 +173,9 @@ function parseMessage(
 
 	if (buffer.length < messageEnd) return null;
 
-	const messageBytes = buffer.slice(messageStart, messageEnd);
+	const messageBytes = buffer.subarray(messageStart, messageEnd);
 	const messageText = new TextDecoder().decode(messageBytes);
-	const remaining = buffer.slice(messageEnd);
+	const remaining = buffer.subarray(messageEnd);
 
 	return {
 		message: JSON.parse(messageText),
@@ -195,26 +195,13 @@ function findHeaderEnd(buffer: Uint8Array): number {
 	return -1;
 }
 
-/**
- * Concatenate two Uint8Arrays efficiently
- */
-function concatBuffers(a: Uint8Array, b: Uint8Array): Uint8Array {
-	const result = new Uint8Array(a.length + b.length);
-	result.set(a);
-	result.set(b, a.length);
-	return result;
-}
-
 async function writeMessage(
 	sink: Bun.FileSink,
 	message: LspJsonRpcRequest | LspJsonRpcNotification | LspJsonRpcResponse,
 ): Promise<void> {
 	const content = JSON.stringify(message);
-	const contentBytes = new TextEncoder().encode(content);
-	const header = `Content-Length: ${contentBytes.length}\r\n\r\n`;
-	const fullMessage = new TextEncoder().encode(header + content);
-
-	sink.write(fullMessage);
+	sink.write(`Content-Length: ${Buffer.byteLength(content, "utf-8")}\r\n\r\n`);
+	sink.write(content);
 	await sink.flush();
 }
 
@@ -238,7 +225,7 @@ async function startMessageReader(client: LspClient): Promise<void> {
 			if (done) break;
 
 			// Atomically update buffer before processing
-			const currentBuffer = concatBuffers(client.messageBuffer, value);
+			const currentBuffer: Buffer = Buffer.concat([client.messageBuffer, value]);
 			client.messageBuffer = currentBuffer;
 
 			// Process all complete messages in buffer
@@ -512,8 +499,7 @@ export async function ensureFileOpen(client: LspClient, filePath: string, signal
 	// Check if another operation is already opening this file
 	const existingLock = fileOperationLocks.get(lockKey);
 	if (existingLock) {
-		await existingLock;
-		throwIfAborted(signal);
+		await untilAborted(signal, () => existingLock);
 		return;
 	}
 
@@ -573,8 +559,7 @@ export async function syncContent(
 
 	const existingLock = fileOperationLocks.get(lockKey);
 	if (existingLock) {
-		await existingLock;
-		throwIfAborted(signal);
+		await untilAborted(signal, () => existingLock);
 	}
 
 	const syncPromise = (async () => {
@@ -645,8 +630,7 @@ export async function refreshFile(client: LspClient, filePath: string, signal?: 
 	// Check if another operation is in progress
 	const existingLock = fileOperationLocks.get(lockKey);
 	if (existingLock) {
-		await existingLock;
-		throwIfAborted(signal);
+		await untilAborted(signal, () => existingLock);
 	}
 
 	// Lock and refresh file
