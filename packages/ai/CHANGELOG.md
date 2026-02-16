@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added source-scoped custom API and OAuth provider registration helpers for extension-defined providers.
+
+### Changed
+
+- Expanded `Api` typing to allow extension-defined API identifiers while preserving built-in API exhaustiveness checks.
+
+### Fixed
+
+- Fixed custom API registration to reject built-in API identifiers and prevent accidental provider overrides.
+
 ## [12.2.0] - 2026-02-13
 
 ### Added

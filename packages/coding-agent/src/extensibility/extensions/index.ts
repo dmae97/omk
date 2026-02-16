@@ -70,6 +70,9 @@ export type {
 	// Message Rendering
 	MessageRenderer,
 	MessageRenderOptions,
+	// Provider Registration
+	ProviderConfig,
+	ProviderModelConfig,
 	ReadToolCallEvent,
 	ReadToolResultEvent,
 	// Commands

@@ -1,7 +1,6 @@
 // ============================================================================
 // High-level API
 // ============================================================================
-
 import { refreshAnthropicToken } from "./anthropic";
 import { refreshCursorToken } from "./cursor";
 import { refreshGitHubCopilotToken } from "./github-copilot";
@@ -9,7 +8,13 @@ import { refreshAntigravityToken } from "./google-antigravity";
 import { refreshGoogleCloudToken } from "./google-gemini-cli";
 import { refreshKimiToken } from "./kimi";
 import { refreshOpenAICodexToken } from "./openai-codex";
-import type { OAuthCredentials, OAuthProvider, OAuthProviderInfo } from "./types";
+import type {
+	OAuthCredentials,
+	OAuthProvider,
+	OAuthProviderId,
+	OAuthProviderInfo,
+	OAuthProviderInterface,
+} from "./types";
 
 /**
  * OAuth credential management for AI providers.
@@ -23,7 +28,6 @@ import type { OAuthCredentials, OAuthProvider, OAuthProviderInfo } from "./types
  * - Kimi Code
  * - Perplexity (Pro/Max — desktop app extraction or manual cookie)
  */
-
 // Anthropic
 export { loginAnthropic, refreshAnthropicToken } from "./anthropic";
 // Cursor
@@ -60,6 +64,96 @@ export * from "./types";
 // Z.AI (API key)
 export { loginZai } from "./zai";
 
+const builtInOAuthProviders: OAuthProviderInfo[] = [
+	{
+		id: "anthropic",
+		name: "Anthropic (Claude Pro/Max)",
+		available: true,
+	},
+	{
+		id: "openai-codex",
+		name: "ChatGPT Plus/Pro (Codex Subscription)",
+		available: true,
+	},
+	{
+		id: "kimi-code",
+		name: "Kimi Code",
+		available: true,
+	},
+	{
+		id: "github-copilot",
+		name: "GitHub Copilot",
+		available: true,
+	},
+	{
+		id: "google-gemini-cli",
+		name: "Google Cloud Code Assist (Gemini CLI)",
+		available: true,
+	},
+	{
+		id: "google-antigravity",
+		name: "Antigravity (Gemini 3, Claude, GPT-OSS)",
+		available: true,
+	},
+	{
+		id: "cursor",
+		name: "Cursor (Claude, GPT, etc.)",
+		available: true,
+	},
+	{
+		id: "opencode",
+		name: "OpenCode Zen",
+		available: true,
+	},
+	{
+		id: "zai",
+		name: "Z.AI (GLM Coding Plan)",
+		available: true,
+	},
+	{
+		id: "minimax-code",
+		name: "MiniMax Coding Plan (International)",
+		available: true,
+	},
+	{
+		id: "minimax-code-cn",
+		name: "MiniMax Coding Plan (China)",
+		available: true,
+	},
+	{
+		id: "perplexity",
+		name: "Perplexity (Pro/Max)",
+		available: true,
+	},
+];
+
+const customOAuthProviders = new Map<string, OAuthProviderInterface>();
+
+/**
+ * Register a custom OAuth provider.
+ */
+export function registerOAuthProvider(provider: OAuthProviderInterface): void {
+	customOAuthProviders.set(provider.id, provider);
+}
+
+/**
+ * Get a custom OAuth provider by ID.
+ */
+export function getOAuthProvider(id: OAuthProviderId): OAuthProviderInterface | undefined {
+	return customOAuthProviders.get(id);
+}
+
+/**
+ * Remove all custom OAuth providers registered by a source.
+ */
+export function unregisterOAuthProviders(sourceId: string): void {
+	for (const [id, provider] of customOAuthProviders.entries()) {
+		if (provider.sourceId === sourceId) {
+			customOAuthProviders.delete(id);
+		}
+	}
+}
+
 /**
  * Refresh token for any OAuth provider.
  * Saves the new credentials and returns the new access token.
@@ -73,7 +167,6 @@ export async function refreshOAuthToken(
 	}
 
 	let newCredentials: OAuthCredentials;
-
 	switch (provider) {
 		case "anthropic":
 			newCredentials = await refreshAnthropicToken(credentials.refresh);
@@ -113,10 +206,8 @@ export async function refreshOAuthToken(
 		default:
 			throw new Error(`Unknown OAuth provider: ${provider}`);
 	}
-
 	return newCredentials;
 }
-
 function getPerplexityJwtExpiryMs(token: string): number | undefined {
 	const parts = token.split(".");
 	if (parts.length !== 3) return undefined;
@@ -158,7 +249,6 @@ export async function getOAuthApiKey(
 			creds = { ...creds, expires };
 		}
 	}
-
 	// Refresh if expired
 	if (Date.now() >= creds.expires) {
 		try {
@@ -174,7 +264,6 @@ export async function getOAuthApiKey(
 			throw new Error(`Failed to refresh OAuth token for ${provider}`);
 		}
 	}
-
 	// For providers that need projectId, return JSON
 	const needsProjectId = provider === "google-gemini-cli" || provider === "google-antigravity";
 	const apiKey = needsProjectId ? JSON.stringify({ token: creds.access, projectId: creds.projectId }) : creds.access;
@@ -182,69 +271,13 @@ export async function getOAuthApiKey(
 }
 
 /**
- * Get list of OAuth providers
+ * Get list of OAuth providers.
  */
 export function getOAuthProviders(): OAuthProviderInfo[] {
-	return [
-		{
-			id: "anthropic",
-			name: "Anthropic (Claude Pro/Max)",
-			available: true,
-		},
-		{
-			id: "openai-codex",
-			name: "ChatGPT Plus/Pro (Codex Subscription)",
-			available: true,
-		},
-		{
-			id: "kimi-code",
-			name: "Kimi Code",
-			available: true,
-		},
-		{
-			id: "github-copilot",
-			name: "GitHub Copilot",
-			available: true,
-		},
-		{
-			id: "google-gemini-cli",
-			name: "Google Cloud Code Assist (Gemini CLI)",
-			available: true,
-		},
-		{
-			id: "google-antigravity",
-			name: "Antigravity (Gemini 3, Claude, GPT-OSS)",
-			available: true,
-		},
-		{
-			id: "cursor",
-			name: "Cursor (Claude, GPT, etc.)",
-			available: true,
-		},
-		{
-			id: "opencode",
-			name: "OpenCode Zen",
-			available: true,
-		},
-		{
-			id: "zai",
-			name: "Z.AI (GLM Coding Plan)",
-			available: true,
-		},
-		{
-			id: "minimax-code",
-			name: "MiniMax Coding Plan (International)",
-			available: true,
-		},
-		{
-			id: "minimax-code-cn",
-			name: "MiniMax Coding Plan (China)",
-			available: true,
-		},
-		{
-			id: "perplexity",
-			name: "Perplexity (Pro/Max)",
-			available: true,
-		},
-	];
+	const customProviders = Array.from(customOAuthProviders.values(), provider => ({
+		id: provider.id,
+		name: provider.name,
+		available: true,
+	}));
+	return [...builtInOAuthProviders, ...customProviders];
 }

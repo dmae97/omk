@@ -372,7 +372,7 @@ async function buildSessionOptions(
 
 	// Model from CLI (--model) - uses same fuzzy matching as --models
 	if (parsed.model) {
-		const available = modelRegistry.getAvailable();
+		const available = modelRegistry.getAll();
 		const modelMatchPreferences = {
 			usageOrder: settings.getStorage()?.getModelUsageOrder(),
 		};
@@ -381,11 +381,13 @@ async function buildSessionOptions(
 			writeStderr(chalk.yellow(`Warning: ${warning}`));
 		}
 		if (!model) {
-			writeStderr(chalk.red(`Model "${parsed.model}" not found`));
-			process.exit(1);
+			// Model not found in built-in registry — defer resolution to after extensions load
+			// (extensions may register additional providers/models via registerProvider)
+			options.modelPattern = parsed.model;
+		} else {
+			options.model = model;
+			settings.overrideModelRoles({ default: `${model.provider}/${model.id}` });
 		}
-		options.model = model;
-		settings.overrideModelRoles({ default: `${model.provider}/${model.id}` });
 	} else if (scopedModels.length > 0 && !parsed.continue && !parsed.resume) {
 		const remembered = settings.getModelRole("default");
 		if (remembered) {
@@ -610,11 +612,13 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 
 	// Handle CLI --api-key as runtime override (not persisted)
 	if (parsedArgs.apiKey) {
-		if (!sessionOptions.model) {
+		if (!sessionOptions.model && !sessionOptions.modelPattern) {
 			writeStderr(chalk.red("--api-key requires a model to be specified via --provider/--model or -m/--models"));
 			process.exit(1);
 		}
-		authStorage.setRuntimeApiKey(sessionOptions.model.provider, parsedArgs.apiKey);
+		if (sessionOptions.model) {
+			authStorage.setRuntimeApiKey(sessionOptions.model.provider, parsedArgs.apiKey);
+		}
 	}
 
 	time("buildSessionOptions");
@@ -622,6 +626,9 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		await createAgentSession(sessionOptions);
 	debugStartup("main:createAgentSession");
 	time("createAgentSession");
+	if (parsedArgs.apiKey && !sessionOptions.model && session.model) {
+		authStorage.setRuntimeApiKey(session.model.provider, parsedArgs.apiKey);
+	}
 
 	if (modelFallbackMessage) {
 		notifs.push({ kind: "warn", message: modelFallbackMessage });
@@ -660,7 +667,11 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	debugStartup("main:applyExtensionFlags");
 
 	if (!isInteractive && !session.model) {
-		writeStderr(chalk.red("No models available."));
+		if (modelFallbackMessage) {
+			writeStderr(chalk.red(modelFallbackMessage));
+		} else {
+			writeStderr(chalk.red("No models available."));
+		}
 		writeStderr(chalk.yellow("\nSet an API key environment variable:"));
 		writeStderr("  ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, etc.");
 		writeStderr(chalk.yellow(`\nOr create ${ModelsConfigFile.path()}`));
