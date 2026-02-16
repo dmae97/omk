@@ -146,10 +146,16 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 	],
 	// Provider options
 	"providers.webSearch": [
-		{ value: "auto", label: "Auto", description: "Priority: Exa > Perplexity > Anthropic" },
+		{
+			value: "auto",
+			label: "Auto",
+			description: "Priority: Exa > Jina > Perplexity > Anthropic > Gemini > Codex > Z.AI",
+		},
 		{ value: "exa", label: "Exa", description: "Requires EXA_API_KEY" },
+		{ value: "jina", label: "Jina", description: "Requires JINA_API_KEY" },
 		{ value: "perplexity", label: "Perplexity", description: "Requires PERPLEXITY_API_KEY" },
 		{ value: "anthropic", label: "Anthropic", description: "Uses Anthropic web search" },
+		{ value: "zai", label: "Z.AI", description: "Calls Z.AI webSearchPrime MCP" },
 	],
 	"providers.image": [
 		{ value: "auto", label: "Auto", description: "Priority: OpenRouter > Gemini" },

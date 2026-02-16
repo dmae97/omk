@@ -5,6 +5,7 @@ import { ExaProvider } from "./providers/exa";
 import { GeminiProvider } from "./providers/gemini";
 import { JinaProvider } from "./providers/jina";
 import { PerplexityProvider } from "./providers/perplexity";
+import { ZaiProvider } from "./providers/zai";
 import type { SearchProviderId } from "./types";
 
 export type { SearchParams } from "./providers/base";
@@ -14,12 +15,13 @@ const SEARCH_PROVIDERS: Record<SearchProviderId, SearchProvider> = {
 	exa: new ExaProvider(),
 	jina: new JinaProvider(),
 	perplexity: new PerplexityProvider(),
+	zai: new ZaiProvider(),
 	anthropic: new AnthropicProvider(),
 	gemini: new GeminiProvider(),
 	codex: new CodexProvider(),
 } as const;
 
-const SEARCH_PROVIDER_ORDER: SearchProviderId[] = ["exa", "jina", "perplexity", "anthropic", "gemini", "codex"];
+const SEARCH_PROVIDER_ORDER: SearchProviderId[] = ["exa", "jina", "perplexity", "anthropic", "gemini", "codex", "zai"];
 
 export function getSearchProvider(provider: SearchProviderId): SearchProvider {
 	return SEARCH_PROVIDERS[provider];

@@ -25,6 +25,7 @@ const PROVIDERS: Array<SearchProviderId | "auto"> = [
 	"perplexity",
 	"exa",
 	"jina",
+	"zai",
 	"gemini",
 	"codex",
 ];
@@ -99,6 +100,7 @@ export async function runSearchCommand(cmd: SearchCommandArgs): Promise<void> {
 		provider: cmd.provider,
 		recency: cmd.recency,
 		limit: cmd.limit,
+		no_fallback: cmd.provider !== undefined && cmd.provider !== "auto",
 	};
 
 	const result = await runSearchQuery(params);

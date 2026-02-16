@@ -5,7 +5,7 @@
  */
 
 /** Supported web search providers */
-export type SearchProviderId = "exa" | "jina" | "anthropic" | "perplexity" | "gemini" | "codex";
+export type SearchProviderId = "exa" | "jina" | "zai" | "anthropic" | "perplexity" | "gemini" | "codex";
 
 /** Source returned by search (all providers) */
 export interface SearchSource {

@@ -11,6 +11,7 @@ const PROVIDERS: Array<SearchProviderId | "auto"> = [
 	"perplexity",
 	"exa",
 	"jina",
+	"zai",
 	"gemini",
 	"codex",
 ];

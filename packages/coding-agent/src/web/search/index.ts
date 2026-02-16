@@ -1,7 +1,7 @@
 /**
  * Unified Web Search Tool
  *
- * Single tool supporting Anthropic, Perplexity, Exa, Jina, Gemini, and Codex
+ * Single tool supporting Anthropic, Perplexity, Exa, Jina, Gemini, Codex, and Z.AI
  * providers with provider-specific parameters exposed conditionally.
  *
  * When EXA_API_KEY is available, additional specialized tools are exposed:
@@ -33,7 +33,7 @@ import { SearchProviderError } from "./types";
 export const webSearchSchema = Type.Object({
 	query: Type.String({ description: "Search query" }),
 	provider: Type.Optional(
-		StringEnum(["auto", "exa", "jina", "anthropic", "perplexity", "gemini", "codex"], {
+		StringEnum(["auto", "exa", "jina", "zai", "anthropic", "perplexity", "gemini", "codex"], {
 			description: "Search provider (default: auto)",
 		}),
 	),
@@ -47,7 +47,7 @@ export const webSearchSchema = Type.Object({
 
 export type SearchParams = {
 	query: string;
-	provider?: "auto" | "exa" | "jina" | "anthropic" | "perplexity" | "gemini" | "codex";
+	provider?: "auto" | "exa" | "jina" | "zai" | "anthropic" | "perplexity" | "gemini" | "codex";
 	recency?: "day" | "week" | "month" | "year";
 	limit?: number;
 	/** Maximum output tokens. Defaults to 4096. */
@@ -56,6 +56,8 @@ export type SearchParams = {
 	temperature?: number;
 	/** Number of search results to retrieve. Defaults to 10. */
 	num_search_results?: number;
+	/** Disable provider fallback when explicit provider is selected (CLI/debug use). */
+	no_fallback?: boolean;
 };
 
 function formatProviderList(providers: SearchProvider[]): string {
@@ -68,6 +70,9 @@ function formatProviderError(error: unknown, provider: SearchProvider): string {
 			return "Anthropic web search returned 404 (model or endpoint not found).";
 		}
 		if (error.status === 401 || error.status === 403) {
+			if (error.provider === "zai") {
+				return error.message;
+			}
 			return `${getSearchProvider(error.provider).label} authorization failed (${error.status}). Check API key or base URL.`;
 		}
 		return error.message;
@@ -165,7 +170,12 @@ async function executeSearch(
 	_toolCallId: string,
 	params: SearchParams,
 ): Promise<{ content: Array<{ type: "text"; text: string }>; details: SearchRenderDetails }> {
-	const providers = await resolveProviderChain(params.provider);
+	const providers =
+		params.provider && params.provider !== "auto" && params.no_fallback
+			? (await getSearchProvider(params.provider).isAvailable())
+				? [getSearchProvider(params.provider)]
+				: []
+			: await resolveProviderChain(params.provider);
 
 	if (providers.length === 0) {
 		const message = "No web search provider configured.";
@@ -226,7 +236,7 @@ export async function runSearchQuery(
 /**
  * Web search tool implementation.
  *
- * Supports Anthropic, Perplexity, Exa, Jina, Gemini, and Codex providers with automatic fallback.
+ * Supports Anthropic, Perplexity, Exa, Jina, Gemini, Codex, and Z.AI providers with automatic fallback.
  * Session is accepted for interface consistency but not used.
  */
 export class SearchTool implements AgentTool<typeof webSearchSchema, SearchRenderDetails> {

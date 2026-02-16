@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added Z.AI web search provider support via remote MCP endpoint (webSearchPrime)
+- Added `zai` as a selectable web search provider option in settings
+- Added Z.AI to automatic provider fallback chain for web search
 
 ## [12.6.0] - 2026-02-16
 ### Added
