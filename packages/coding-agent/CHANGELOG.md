@@ -1,6 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Added OpenCode discovery provider to load configuration from ~/.config/opencode/ and .opencode/ directories
+- Added support for loading MCP servers from opencode.json mcp key
+- Added support for loading skills from ~/.config/opencode/skills/ and .opencode/skills/
+- Added support for loading slash commands from ~/.config/opencode/commands/ and .opencode/commands/
+- Added support for loading extension modules (plugins) from ~/.config/opencode/plugins/ and .opencode/plugins/
+- Added support for loading context files (AGENTS.md) from ~/.config/opencode/
+- Added support for loading settings from opencode.json configuration files
+
 ### Changed
 
 - Improved path display in status line to strip both `/work/` and `~/Projects/` prefixes when abbreviating paths

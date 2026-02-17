@@ -29,6 +29,7 @@ import "./agents";
 import "./codex";
 import "./cursor";
 import "./gemini";
+import "./opencode";
 import "./github";
 import "./mcp-json";
 import "./ssh";
