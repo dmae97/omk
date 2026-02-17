@@ -1,6 +1,26 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added Claude Sonnet 4.6 and Claude Sonnet 4.6 Thinking models to Antigravity provider
+- Added GLM-5 Free model via OpenCode provider
+- Added GLM-4.7-FlashX model via ZAI provider
+- Added MiniMax-M2.5-highspeed model across multiple providers (minimax-code, minimax-code-cn, minimax, minimax-cn)
+- Added Claude Sonnet 4.6 model to OpenRouter provider
+- Added Qwen 3.5 Plus model to Vercel AI Gateway provider
+- Added Claude Sonnet 4.6 model to Vercel AI Gateway provider
+
+### Changed
+
+- Updated pricing for deepseek/deepseek-v3 model on OpenRouter
+- Updated maxTokens from 65536 to 4096 for deepseek/deepseek-v3 on OpenRouter
+- Updated pricing and maxTokens for mistralai/mistral-large-2411 on OpenRouter
+- Updated pricing for qwen/qwen-max on Together AI
+- Updated pricing for qwen/qwen-vl-plus on Together AI
+- Updated pricing for qwen/qwen-plus on Together AI
+- Updated pricing for qwen/qwen-turbo on Together AI
+- Expanded EU cross-region inference variant support to all Claude models on Bedrock (previously limited to Haiku, Sonnet, and Opus 4.5)
 
 ## [12.8.0] - 2026-02-16
 

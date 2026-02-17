@@ -425,11 +425,7 @@ async function loadModelsDevData(): Promise<Model[]> {
 				models.push(bedrockModel);
 
 				// Add EU cross-region inference variants for Claude models
-				if (
-					modelId.startsWith("anthropic.claude-haiku-4-5") ||
-					modelId.startsWith("anthropic.claude-sonnet-4-5") ||
-					modelId.startsWith("anthropic.claude-opus-4-5")
-				) {
+				if (modelId.startsWith("anthropic.claude-")) {
 					models.push({
 						...bedrockModel,
 						id: "eu." + modelId,
@@ -1032,6 +1028,30 @@ function getAntigravityFallbackModels(): Model<"google-gemini-cli">[] {
 			maxTokens: 64000,
 		},
 		{
+			id: "claude-sonnet-4-6",
+			name: "Claude Sonnet 4.6 (Antigravity)",
+			api: "google-gemini-cli",
+			provider: "google-antigravity",
+			baseUrl: ANTIGRAVITY_ENDPOINT,
+			reasoning: false,
+			input: ["text", "image"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 200000,
+			maxTokens: 128000,
+		},
+		{
+			id: "claude-sonnet-4-6-thinking",
+			name: "Claude Sonnet 4.6 Thinking (Antigravity)",
+			api: "google-gemini-cli",
+			provider: "google-antigravity",
+			baseUrl: ANTIGRAVITY_ENDPOINT,
+			reasoning: true,
+			input: ["text", "image"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 200000,
+			maxTokens: 128000,
+		},
+		{
 			id: "claude-opus-4-5-thinking",
 			name: "Claude Opus 4.5 Thinking (Antigravity)",
 			api: "google-gemini-cli",
@@ -1135,8 +1155,8 @@ async function generateModels() {
 			candidate.cost.cacheRead = 0.5;
 			candidate.cost.cacheWrite = 6.25;
 		}
-		// Opus 4.6 1M context is API-only; all providers should use 200K
-		if (candidate.id.includes("opus-4-6") || candidate.id.includes("opus-4.6")) {
+		// Opus 4.6 / Sonnet 4.6 1M context is beta; all providers should use 200K
+		if (candidate.id.includes("opus-4-6") || candidate.id.includes("opus-4.6") || candidate.id.includes("sonnet-4-6") || candidate.id.includes("sonnet-4.6")) {
 			candidate.contextWindow = 200000;
 		}
 		// opencode lists Claude Sonnet 4/4.5 with 1M context, actual limit is 200K
