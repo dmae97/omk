@@ -21,8 +21,8 @@ import { ruleCapability } from "../capability/rule";
 import type { Settings } from "../capability/settings";
 import { settingsCapability } from "../capability/settings";
 import type { LoadContext, LoadResult, SourceMeta } from "../capability/types";
-import { parseFrontmatter } from "../utils/frontmatter";
 import {
+	buildRuleFromMarkdown,
 	createSourceMeta,
 	expandEnvVarsDeep,
 	getProjectPath,
@@ -137,34 +137,7 @@ async function loadRules(ctx: LoadContext): Promise<LoadResult<Rule>> {
 }
 
 function transformMDCRule(name: string, content: string, path: string, source: SourceMeta): Rule {
-	const { frontmatter, body } = parseFrontmatter(content, { source: path });
-
-	// Extract frontmatter fields
-	const description = typeof frontmatter.description === "string" ? frontmatter.description : undefined;
-	const alwaysApply = frontmatter.alwaysApply === true;
-	const ttsrTrigger = typeof frontmatter.ttsr_trigger === "string" ? frontmatter.ttsr_trigger : undefined;
-
-	// Parse globs (can be array or single string)
-	let globs: string[] | undefined;
-	if (Array.isArray(frontmatter.globs)) {
-		globs = frontmatter.globs.filter((g): g is string => typeof g === "string");
-	} else if (typeof frontmatter.globs === "string") {
-		globs = [frontmatter.globs];
-	}
-
-	// Derive name from filename (strip extension)
-	const ruleName = name.replace(/\.(mdc|md)$/, "");
-
-	return {
-		name: ruleName,
-		path,
-		content: body,
-		description,
-		alwaysApply,
-		globs,
-		ttsrTrigger,
-		_source: source,
-	};
+	return buildRuleFromMarkdown(name, content, path, source, { stripNamePattern: /\.(mdc|md)$/ });
 }
 
 // =============================================================================

@@ -1,0 +1,274 @@
+import { describe, expect, it } from "bun:test";
+import * as path from "node:path";
+import { parseRuleConditionAndScope, type Rule } from "@oh-my-pi/pi-coding-agent/capability/rule";
+import { TtsrManager } from "@oh-my-pi/pi-coding-agent/export/ttsr";
+
+function makeRule(partial: Partial<Rule>): Rule {
+	return {
+		name: partial.name ?? "rule",
+		path: partial.path ?? "/tmp/rule.md",
+		content: partial.content ?? "Do not use as any",
+		globs: partial.globs,
+		alwaysApply: partial.alwaysApply,
+		description: partial.description,
+		condition: partial.condition,
+		scope: partial.scope,
+		_source: partial._source ?? {
+			provider: "test",
+			providerName: "test",
+			path: "/tmp/rule.md",
+			level: "project",
+		},
+	};
+}
+
+describe("parseRuleConditionAndScope", () => {
+	it("accepts condition and scope as literal strings", () => {
+		const parsed = parseRuleConditionAndScope({
+			condition: "\\bas any\\b",
+			scope: "tool:edit",
+		});
+
+		expect(parsed.condition).toEqual(["\\bas any\\b"]);
+		expect(parsed.scope).toEqual(["tool:edit"]);
+	});
+
+	it("accepts condition and scope as arrays", () => {
+		const parsed = parseRuleConditionAndScope({
+			condition: ["foo", "bar"],
+			scope: ["tool:edit", "tool:write"],
+		});
+
+		expect(parsed.condition).toEqual(["foo", "bar"]);
+		expect(parsed.scope).toEqual(["tool:edit", "tool:write"]);
+	});
+
+	it("accepts legacy ttsr_trigger as condition fallback", () => {
+		const parsed = parseRuleConditionAndScope({
+			ttsr_trigger: "forbidden",
+		});
+
+		expect(parsed.condition).toEqual(["forbidden"]);
+		expect(parsed.scope).toBeUndefined();
+	});
+
+	it("accepts legacy ttsrTrigger as condition fallback", () => {
+		const parsed = parseRuleConditionAndScope({
+			ttsrTrigger: "legacy-camel-case",
+		});
+
+		expect(parsed.condition).toEqual(["legacy-camel-case"]);
+		expect(parsed.scope).toBeUndefined();
+	});
+
+	it("keeps regex-like conditions as regex and does not infer file scope", () => {
+		const parsed = parseRuleConditionAndScope({
+			condition: "error.*timeout",
+		});
+
+		expect(parsed.condition).toEqual(["error.*timeout"]);
+		expect(parsed.scope).toBeUndefined();
+	});
+
+	it("splits comma-delimited scope without corrupting brace globs", () => {
+		const parsed = parseRuleConditionAndScope({
+			scope: "text, tool:edit(*.{ts,tsx})",
+		});
+
+		expect(parsed.condition).toBeUndefined();
+		expect(parsed.scope).toEqual(["text", "tool:edit(*.{ts,tsx})"]);
+	});
+
+	it("maps glob-like condition to edit/write scoped shorthand", () => {
+		const parsed = parseRuleConditionAndScope({
+			condition: "*.rs",
+		});
+
+		expect(parsed.condition).toEqual([".*"]);
+		expect(parsed.scope).toEqual(["tool:edit(*.rs)", "tool:write(*.rs)"]);
+	});
+});
+
+describe("TtsrManager scope matching", () => {
+	it("applies file-scoped tool rules without cross-language contamination", () => {
+		const manager = new TtsrManager();
+		const rule = makeRule({
+			name: "ts-no-as-any",
+			condition: ["\\bas any\\b"],
+			scope: ["tool:edit(*.ts)", "tool:write(*.ts)"],
+		});
+
+		manager.addRule(rule);
+
+		expect(
+			manager.checkDelta("as any", {
+				source: "tool",
+				toolName: "edit",
+				filePaths: ["src/main.ts"],
+			}),
+		).toEqual([rule]);
+
+		expect(
+			manager.checkDelta("as any", {
+				source: "tool",
+				toolName: "edit",
+				filePaths: ["src/main.rs"],
+			}),
+		).toEqual([]);
+
+		expect(
+			manager.checkDelta("as any", {
+				source: "text",
+			}),
+		).toEqual([]);
+	});
+
+	it("treats bare tool names as specific tools, not as the generic tool scope", () => {
+		const manager = new TtsrManager();
+		const rule = makeRule({
+			name: "tooling-only",
+			condition: ["forbidden"],
+			scope: ["tooling"],
+		});
+
+		manager.addRule(rule);
+
+		expect(
+			manager.checkDelta("forbidden", {
+				source: "tool",
+				toolName: "edit",
+			}),
+		).toEqual([]);
+
+		expect(
+			manager.checkDelta("forbidden", {
+				source: "tool",
+				toolName: "tooling",
+			}),
+		).toEqual([rule]);
+	});
+
+	it("preserves path glob casing in tool scope matching", () => {
+		const manager = new TtsrManager();
+		const rule = makeRule({
+			name: "upper-ext-only",
+			condition: ["forbidden"],
+			scope: ["tool:edit(*.TS)"],
+		});
+
+		manager.addRule(rule);
+
+		expect(
+			manager.checkDelta("forbidden", {
+				source: "tool",
+				toolName: "edit",
+				filePaths: ["src/main.ts"],
+			}),
+		).toEqual([]);
+
+		expect(
+			manager.checkDelta("forbidden", {
+				source: "tool",
+				toolName: "edit",
+				filePaths: ["src/main.TS"],
+			}),
+		).toEqual([rule]);
+	});
+
+	it("returns false when registering rules with only invalid condition regex", () => {
+		const manager = new TtsrManager();
+		const added = manager.addRule(
+			makeRule({
+				name: "invalid-regex",
+				condition: ["("],
+			}),
+		);
+
+		expect(added).toBe(false);
+	});
+
+	it("returns false when registering rules with unreachable malformed scope", () => {
+		const manager = new TtsrManager();
+		const added = manager.addRule(
+			makeRule({
+				name: "invalid-scope",
+				condition: ["forbidden"],
+				scope: ["tool:edit(*.ts"],
+			}),
+		);
+
+		expect(added).toBe(false);
+		expect(
+			manager.checkDelta("forbidden", {
+				source: "tool",
+				toolName: "edit",
+				filePaths: ["src/main.ts"],
+			}),
+		).toEqual([]);
+	});
+
+	it("matches write scope and rejects thinking/tool mismatches for the same rule", () => {
+		const manager = new TtsrManager();
+		const rule = makeRule({
+			name: "ts-no-write-as-any",
+			condition: ["\\bas any\\b"],
+			scope: ["tool:write(*.ts)"],
+		});
+
+		manager.addRule(rule);
+
+		expect(
+			manager.checkDelta("as any", {
+				source: "tool",
+				toolName: "write",
+				filePaths: ["src/main.ts"],
+			}),
+		).toEqual([rule]);
+		expect(
+			manager.checkDelta("as any", {
+				source: "thinking",
+			}),
+		).toEqual([]);
+		expect(
+			manager.checkDelta("as any", {
+				source: "tool",
+				toolName: "edit",
+				filePaths: ["src/main.ts"],
+			}),
+		).toEqual([]);
+	});
+
+	it("matches file-scoped rules across relative and absolute path variants", () => {
+		const manager = new TtsrManager();
+		const rule = makeRule({
+			name: "variant-paths",
+			condition: ["forbidden"],
+			scope: ["tool:edit(*.ts)"],
+		});
+		const absolutePath = path.resolve("/tmp", "src", "main.ts");
+
+		manager.addRule(rule);
+
+		expect(
+			manager.checkDelta("forbidden", {
+				source: "tool",
+				toolName: "edit",
+				filePaths: ["./src/main.ts"],
+			}),
+		).toEqual([rule]);
+		expect(
+			manager.checkDelta("forbidden", {
+				source: "tool",
+				toolName: "edit",
+				filePaths: ["src/main.ts"],
+			}),
+		).toEqual([rule]);
+		expect(
+			manager.checkDelta("forbidden", {
+				source: "tool",
+				toolName: "edit",
+				filePaths: [absolutePath],
+			}),
+		).toEqual([rule]);
+	});
+});

@@ -10,8 +10,7 @@ import { readDirEntries, readFile } from "../capability/fs";
 import type { Rule } from "../capability/rule";
 import { ruleCapability } from "../capability/rule";
 import type { LoadContext, LoadResult } from "../capability/types";
-import { parseFrontmatter } from "../utils/frontmatter";
-import { createSourceMeta, loadFilesFromDir } from "./helpers";
+import { buildRuleFromMarkdown, createSourceMeta, loadFilesFromDir } from "./helpers";
 
 const PROVIDER_ID = "cline";
 const DISPLAY_NAME = "Cline";
@@ -53,29 +52,8 @@ async function loadRules(ctx: LoadContext): Promise<LoadResult<Rule>> {
 		// Directory format: load all *.md files
 		const result = await loadFilesFromDir(ctx, found.path, PROVIDER_ID, "project", {
 			extensions: ["md"],
-			transform: (name, content, path, source) => {
-				const { frontmatter, body } = parseFrontmatter(content, { source: path });
-				const ruleName = name.replace(/\.md$/, "");
-
-				// Parse globs (can be array or single string)
-				let globs: string[] | undefined;
-				if (Array.isArray(frontmatter.globs)) {
-					globs = frontmatter.globs.filter((g): g is string => typeof g === "string");
-				} else if (typeof frontmatter.globs === "string") {
-					globs = [frontmatter.globs];
-				}
-
-				return {
-					name: ruleName,
-					path,
-					content: body,
-					globs,
-					alwaysApply: typeof frontmatter.alwaysApply === "boolean" ? frontmatter.alwaysApply : undefined,
-					description: typeof frontmatter.description === "string" ? frontmatter.description : undefined,
-					ttsrTrigger: typeof frontmatter.ttsr_trigger === "string" ? frontmatter.ttsr_trigger : undefined,
-					_source: source,
-				};
-			},
+			transform: (name, content, path, source) =>
+				buildRuleFromMarkdown(name, content, path, source, { stripNamePattern: /\.md$/ }),
 		});
 
 		items.push(...result.items);
@@ -88,27 +66,8 @@ async function loadRules(ctx: LoadContext): Promise<LoadResult<Rule>> {
 			return { items, warnings };
 		}
 
-		const { frontmatter, body } = parseFrontmatter(content, { source: found.path });
 		const source = createSourceMeta(PROVIDER_ID, found.path, "project");
-
-		// Parse globs (can be array or single string)
-		let globs: string[] | undefined;
-		if (Array.isArray(frontmatter.globs)) {
-			globs = frontmatter.globs.filter((g): g is string => typeof g === "string");
-		} else if (typeof frontmatter.globs === "string") {
-			globs = [frontmatter.globs];
-		}
-
-		items.push({
-			name: "clinerules",
-			path: found.path,
-			content: body,
-			globs,
-			alwaysApply: typeof frontmatter.alwaysApply === "boolean" ? frontmatter.alwaysApply : undefined,
-			description: typeof frontmatter.description === "string" ? frontmatter.description : undefined,
-			ttsrTrigger: typeof frontmatter.ttsr_trigger === "string" ? frontmatter.ttsr_trigger : undefined,
-			_source: source,
-		});
+		items.push(buildRuleFromMarkdown("clinerules.md", content, found.path, source, { ruleName: "clinerules" }));
 	}
 
 	return { items, warnings };

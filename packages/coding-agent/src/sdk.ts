@@ -672,16 +672,19 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	const ttsrSettings = settings.getGroup("ttsr");
 	const ttsrManager = new TtsrManager(ttsrSettings);
 	const rulesResult = await loadCapability<Rule>(ruleCapability.id, { cwd });
+	const registeredTtsrRuleNames = new Set<string>();
 	for (const rule of rulesResult.items) {
-		if (rule.ttsrTrigger) {
-			ttsrManager.addRule(rule);
+		if (rule.condition && rule.condition.length > 0) {
+			if (ttsrManager.addRule(rule)) {
+				registeredTtsrRuleNames.add(rule.name);
+			}
 		}
 	}
 	time("discoverTtsrRules");
 
 	// Filter rules for the rulebook (non-TTSR, non-alwaysApply, with descriptions)
 	const rulebookRules = rulesResult.items.filter((rule: Rule) => {
-		if (rule.ttsrTrigger) return false;
+		if (registeredTtsrRuleNames.has(rule.name)) return false;
 		if (rule.alwaysApply) return false;
 		if (!rule.description) return false;
 		return true;

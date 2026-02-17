@@ -139,6 +139,12 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "20", label: "20 messages" },
 		{ value: "30", label: "30 messages" },
 	],
+	"ttsr.interruptMode": [
+		{ value: "always", label: "always", description: "Interrupt on prose and tool streams" },
+		{ value: "prose-only", label: "prose-only", description: "Interrupt only on reply/thinking matches" },
+		{ value: "tool-only", label: "tool-only", description: "Interrupt only on tool-call argument matches" },
+		{ value: "never", label: "never", description: "Never interrupt; inject warning after completion" },
+	],
 	// Virtual terminal
 	"bash.virtualTerminal": [
 		{ value: "on", label: "On", description: "PTY-backed interactive execution" },

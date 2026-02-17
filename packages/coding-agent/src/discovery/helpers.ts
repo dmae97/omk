@@ -7,6 +7,7 @@ import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { FileType, glob } from "@oh-my-pi/pi-natives";
 import { CONFIG_DIR_NAME } from "@oh-my-pi/pi-utils/dirs";
 import { readFile } from "../capability/fs";
+import { parseRuleConditionAndScope, type Rule, type RuleFrontmatter } from "../capability/rule";
 import type { Skill, SkillFrontmatter } from "../capability/skill";
 import type { LoadContext, LoadResult, SourceMeta } from "../capability/types";
 import { parseFrontmatter } from "../utils/frontmatter";
@@ -161,6 +162,43 @@ export function parseArrayOrCSV(value: unknown): string[] | undefined {
 		return parsed.length > 0 ? parsed : undefined;
 	}
 	return undefined;
+}
+
+/**
+ * Build a canonical rule item from a markdown/markdown-frontmatter document.
+ */
+export function buildRuleFromMarkdown(
+	name: string,
+	content: string,
+	filePath: string,
+	source: SourceMeta,
+	options?: {
+		ruleName?: string;
+		stripNamePattern?: RegExp;
+	},
+): Rule {
+	const { frontmatter, body } = parseFrontmatter(content, { source: filePath });
+	const { condition, scope } = parseRuleConditionAndScope(frontmatter as RuleFrontmatter);
+
+	let globs: string[] | undefined;
+	if (Array.isArray(frontmatter.globs)) {
+		globs = frontmatter.globs.filter((item): item is string => typeof item === "string");
+	} else if (typeof frontmatter.globs === "string") {
+		globs = [frontmatter.globs];
+	}
+
+	const resolvedName = options?.ruleName ?? name.replace(options?.stripNamePattern ?? /\.(md|mdc)$/, "");
+	return {
+		name: resolvedName,
+		path: filePath,
+		content: body,
+		globs,
+		alwaysApply: frontmatter.alwaysApply === true,
+		description: typeof frontmatter.description === "string" ? frontmatter.description : undefined,
+		condition,
+		scope,
+		_source: source,
+	};
 }
 
 /**

@@ -889,6 +889,17 @@ export const SETTINGS_SCHEMA = {
 		default: "discard",
 		ui: { tab: "ttsr", label: "TTSR context mode", description: "What to do with partial output when TTSR triggers" },
 	},
+	"ttsr.interruptMode": {
+		type: "enum",
+		values: ["never", "prose-only", "tool-only", "always"] as const,
+		default: "always",
+		ui: {
+			tab: "ttsr",
+			label: "TTSR interrupt mode",
+			description: "When to interrupt mid-stream vs inject warning after completion",
+			submenu: true,
+		},
+	},
 	"ttsr.repeatMode": {
 		type: "enum",
 		values: ["once", "after-gap"] as const,
@@ -1107,6 +1118,7 @@ export interface CommitSettings {
 export interface TtsrSettings {
 	enabled: boolean;
 	contextMode: "discard" | "keep";
+	interruptMode: "never" | "prose-only" | "tool-only" | "always";
 	repeatMode: "once" | "after-gap";
 	repeatGap: number;
 }

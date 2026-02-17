@@ -14,6 +14,7 @@
  */
 
 import * as fs from "node:fs";
+import * as path from "node:path";
 
 import type { Agent, AgentEvent, AgentMessage, AgentState, AgentTool, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type {
@@ -43,7 +44,7 @@ import {
 import type { Settings, SkillsSettings } from "../config/settings";
 import { type BashResult, executeBash as executeBashCommand } from "../exec/bash-executor";
 import { exportSessionToHtml } from "../export/html";
-import type { TtsrManager } from "../export/ttsr";
+import type { TtsrManager, TtsrMatchContext } from "../export/ttsr";
 import type { LoadedCustomCommand } from "../extensibility/custom-commands";
 import type { CustomTool, CustomToolContext } from "../extensibility/custom-tools/types";
 import { CustomToolAdapter } from "../extensibility/custom-tools/wrapper";
@@ -346,6 +347,7 @@ export class AgentSession {
 	#ttsrManager: TtsrManager | undefined = undefined;
 	#pendingTtsrInjections: Rule[] = [];
 	#ttsrAbortPending = false;
+	#ttsrRetryToken = 0;
 
 	#streamingEditAbortTriggered = false;
 	#streamingEditCheckedLineCounts = new Map<string, number>();
@@ -456,46 +458,75 @@ export class AgentSession {
 			this.#ttsrManager.incrementMessageCount();
 		}
 
-		// TTSR: Check for pattern matches on text deltas and tool call argument deltas
+		// TTSR: Check for pattern matches on assistant text/thinking and tool argument deltas
 		if (event.type === "message_update" && this.#ttsrManager?.hasRules()) {
 			const assistantEvent = event.assistantMessageEvent;
-			// Monitor both assistant prose (text_delta) and tool call arguments (toolcall_delta)
-			if (assistantEvent.type === "text_delta" || assistantEvent.type === "toolcall_delta") {
-				this.#ttsrManager.appendToBuffer(assistantEvent.delta);
-				const matches = this.#ttsrManager.check(this.#ttsrManager.getBuffer());
+			let matchContext: TtsrMatchContext | undefined;
+
+			if (assistantEvent.type === "text_delta") {
+				matchContext = { source: "text" };
+			} else if (assistantEvent.type === "thinking_delta") {
+				matchContext = { source: "thinking" };
+			} else if (assistantEvent.type === "toolcall_delta") {
+				matchContext = this.#getTtsrToolMatchContext(event.message, assistantEvent.contentIndex);
+			}
+
+			if (matchContext && "delta" in assistantEvent) {
+				const matches = this.#ttsrManager.checkDelta(assistantEvent.delta, matchContext);
 				if (matches.length > 0) {
-					// Mark rules as injected so they don't trigger again
-					this.#ttsrManager.markInjected(matches);
-					// Store for injection on retry
-					this.#pendingTtsrInjections.push(...matches);
-					// Abort the stream immediately — do not gate on extension callbacks
-					this.#ttsrAbortPending = true;
-					this.agent.abort();
-					// Notify extensions (fire-and-forget, does not block abort)
-					this.#emitSessionEvent({ type: "ttsr_triggered", rules: matches }).catch(() => {});
-					// Schedule retry after a short delay
-					setTimeout(async () => {
-						this.#ttsrAbortPending = false;
+					// Queue rules for injection; mark as injected only after successful enqueue.
 
-						// Handle context mode: discard partial output if configured
-						const ttsrSettings = this.#ttsrManager?.getSettings();
-						if (ttsrSettings?.contextMode === "discard") {
-							// Remove the partial/aborted message from agent state
-							this.agent.popMessage();
-						}
+					this.#addPendingTtsrInjections(matches);
 
-						// Inject TTSR rules as system reminder before retry
-						const injectionContent = this.#getTtsrInjectionContent();
-						if (injectionContent) {
-							this.agent.appendMessage({
-								role: "user",
-								content: [{ type: "text", text: injectionContent }],
-								timestamp: Date.now(),
-							});
-						}
-						this.agent.continue().catch(() => {});
-					}, 50);
-					return;
+					if (this.#shouldInterruptForTtsrMatch(matchContext)) {
+						// Abort the stream immediately — do not gate on extension callbacks
+						this.#ttsrAbortPending = true;
+						this.agent.abort();
+						// Notify extensions (fire-and-forget, does not block abort)
+						this.#emitSessionEvent({ type: "ttsr_triggered", rules: matches }).catch(() => {});
+						// Schedule retry after a short delay
+						const retryToken = ++this.#ttsrRetryToken;
+						const generation = this.#promptGeneration;
+						const targetMessageTimestamp =
+							event.message.role === "assistant" ? event.message.timestamp : undefined;
+						setTimeout(async () => {
+							if (this.#ttsrRetryToken !== retryToken) {
+								return;
+							}
+
+							const latestMessage = this.agent.state.messages[this.agent.state.messages.length - 1];
+							if (
+								!this.#ttsrAbortPending ||
+								this.#promptGeneration !== generation ||
+								!latestMessage ||
+								latestMessage.role !== "assistant" ||
+								(targetMessageTimestamp !== undefined && latestMessage.timestamp !== targetMessageTimestamp)
+							) {
+								this.#ttsrAbortPending = false;
+								this.#pendingTtsrInjections = [];
+								return;
+							}
+							this.#ttsrAbortPending = false;
+							const ttsrSettings = this.#ttsrManager?.getSettings();
+							if (ttsrSettings?.contextMode === "discard") {
+								// Remove the partial/aborted message from agent state
+								this.agent.popMessage();
+							}
+							// Inject TTSR rules as system reminder before retry
+							const injection = this.#getTtsrInjectionContent();
+							if (injection) {
+								this.agent.appendMessage({
+									role: "user",
+									content: [{ type: "text", text: injection.content }],
+									timestamp: Date.now(),
+									synthetic: true,
+								});
+								this.#ttsrManager?.markInjected(injection.rules);
+							}
+							this.agent.continue().catch(() => {});
+						}, 50);
+						return;
+					}
 				}
 			}
 		}
@@ -536,10 +567,8 @@ export class AgentSession {
 			// Track assistant message for auto-compaction (checked on agent_end)
 			if (event.message.role === "assistant") {
 				this.#lastAssistantMessage = event.message;
-
-				// Reset retry counter immediately on successful assistant response
-				// This prevents accumulation across multiple LLM calls within a turn
 				const assistantMsg = event.message as AssistantMessage;
+				this.#queueDeferredTtsrInjectionIfNeeded(assistantMsg);
 				if (
 					assistantMsg.stopReason !== "error" &&
 					assistantMsg.stopReason !== "aborted" &&
@@ -622,16 +651,140 @@ export class AgentSession {
 		}
 	}
 
-	/** Get TTSR injection content and clear pending injections */
-	#getTtsrInjectionContent(): string | undefined {
+	/** Get TTSR injection payload and clear pending injections. */
+	#getTtsrInjectionContent(): { content: string; rules: Rule[] } | undefined {
 		if (this.#pendingTtsrInjections.length === 0) return undefined;
-		const content = this.#pendingTtsrInjections
+		const rules = this.#pendingTtsrInjections;
+		const content = rules
 			.map(r => renderPromptTemplate(ttsrInterruptTemplate, { name: r.name, path: r.path, content: r.content }))
 			.join("\n\n");
 		this.#pendingTtsrInjections = [];
-		return content;
+		return { content, rules };
 	}
 
+	#addPendingTtsrInjections(rules: Rule[]): void {
+		const seen = new Set(this.#pendingTtsrInjections.map(rule => rule.name));
+		for (const rule of rules) {
+			if (seen.has(rule.name)) continue;
+			this.#pendingTtsrInjections.push(rule);
+			seen.add(rule.name);
+		}
+	}
+
+	#shouldInterruptForTtsrMatch(matchContext: TtsrMatchContext): boolean {
+		const mode = this.#ttsrManager?.getSettings().interruptMode ?? "always";
+		if (mode === "never") {
+			return false;
+		}
+		if (mode === "prose-only") {
+			return matchContext.source === "text" || matchContext.source === "thinking";
+		}
+		if (mode === "tool-only") {
+			return matchContext.source === "tool";
+		}
+		return true;
+	}
+
+	#queueDeferredTtsrInjectionIfNeeded(assistantMsg: AssistantMessage): void {
+		if (this.#ttsrAbortPending || this.#pendingTtsrInjections.length === 0) {
+			return;
+		}
+		if (assistantMsg.stopReason === "aborted" || assistantMsg.stopReason === "error") {
+			this.#pendingTtsrInjections = [];
+			return;
+		}
+
+		const injection = this.#getTtsrInjectionContent();
+		if (!injection) {
+			return;
+		}
+		this.agent.followUp({
+			role: "user",
+			content: [{ type: "text", text: injection.content }],
+			timestamp: Date.now(),
+			synthetic: true,
+		});
+		this.#ttsrManager?.markInjected(injection.rules);
+	}
+
+	/** Build TTSR match context for tool call argument deltas. */
+	#getTtsrToolMatchContext(message: AgentMessage, contentIndex: number): TtsrMatchContext {
+		const context: TtsrMatchContext = { source: "tool" };
+		if (message.role !== "assistant") {
+			return context;
+		}
+
+		const content = message.content;
+		if (!Array.isArray(content) || contentIndex < 0 || contentIndex >= content.length) {
+			return context;
+		}
+
+		const block = content[contentIndex];
+		if (!block || typeof block !== "object" || block.type !== "toolCall") {
+			return context;
+		}
+
+		const toolCall = block as ToolCall;
+		context.toolName = toolCall.name;
+		context.streamKey = toolCall.id ? `toolcall:${toolCall.id}` : `tool:${toolCall.name}:${contentIndex}`;
+		context.filePaths = this.#extractTtsrFilePathsFromArgs(toolCall.arguments);
+		return context;
+	}
+
+	/** Extract path-like arguments from tool call payload for TTSR glob matching. */
+	#extractTtsrFilePathsFromArgs(args: unknown): string[] | undefined {
+		if (!args || typeof args !== "object" || Array.isArray(args)) {
+			return undefined;
+		}
+
+		const rawPaths: string[] = [];
+		for (const [key, value] of Object.entries(args)) {
+			const normalizedKey = key.toLowerCase();
+			if (typeof value === "string" && (normalizedKey === "path" || normalizedKey.endsWith("path"))) {
+				rawPaths.push(value);
+				continue;
+			}
+			if (Array.isArray(value) && (normalizedKey === "paths" || normalizedKey.endsWith("paths"))) {
+				for (const candidate of value) {
+					if (typeof candidate === "string") {
+						rawPaths.push(candidate);
+					}
+				}
+			}
+		}
+
+		const normalizedPaths = rawPaths.flatMap(pathValue => this.#normalizeTtsrPathCandidates(pathValue));
+		if (normalizedPaths.length === 0) {
+			return undefined;
+		}
+
+		return Array.from(new Set(normalizedPaths));
+	}
+
+	/** Convert a path argument into stable relative/absolute candidates for glob checks. */
+	#normalizeTtsrPathCandidates(rawPath: string): string[] {
+		const trimmed = rawPath.trim();
+		if (trimmed.length === 0) {
+			return [];
+		}
+
+		const normalizedInput = trimmed.replaceAll("\\", "/");
+		const candidates = new Set<string>([normalizedInput]);
+		if (normalizedInput.startsWith("./")) {
+			candidates.add(normalizedInput.slice(2));
+		}
+
+		const cwd = this.sessionManager.getCwd();
+		const absolutePath = path.isAbsolute(trimmed) ? path.normalize(trimmed) : path.resolve(cwd, trimmed);
+		candidates.add(absolutePath.replaceAll("\\", "/"));
+
+		const relativePath = path.relative(cwd, absolutePath).replaceAll("\\", "/");
+		if (relativePath && relativePath !== "." && !relativePath.startsWith("../") && relativePath !== "..") {
+			candidates.add(relativePath);
+		}
+
+		return Array.from(candidates);
+	}
 	/** Extract text content from a message */
 	#getUserMessageText(message: Message): string {
 		if (message.role !== "user") return "";

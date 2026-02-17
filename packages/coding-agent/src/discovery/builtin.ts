@@ -23,6 +23,7 @@ import { type CustomTool, toolCapability } from "../capability/tool";
 import type { LoadContext, LoadResult } from "../capability/types";
 import { parseFrontmatter } from "../utils/frontmatter";
 import {
+	buildRuleFromMarkdown,
 	createSourceMeta,
 	discoverExtensionModulePaths,
 	expandEnvVarsDeep,
@@ -307,19 +308,8 @@ async function loadRules(ctx: LoadContext): Promise<LoadResult<Rule>> {
 		const rulesDir = path.join(dir, "rules");
 		const result = await loadFilesFromDir<Rule>(ctx, rulesDir, PROVIDER_ID, level, {
 			extensions: ["md", "mdc"],
-			transform: (name, content, path, source) => {
-				const { frontmatter, body } = parseFrontmatter(content, { source: path });
-				return {
-					name: name.replace(/\.(md|mdc)$/, ""),
-					path,
-					content: body,
-					globs: frontmatter.globs as string[] | undefined,
-					alwaysApply: frontmatter.alwaysApply as boolean | undefined,
-					description: frontmatter.description as string | undefined,
-					ttsrTrigger: typeof frontmatter.ttsr_trigger === "string" ? frontmatter.ttsr_trigger : undefined,
-					_source: source,
-				};
-			},
+			transform: (name, content, path, source) =>
+				buildRuleFromMarkdown(name, content, path, source, { stripNamePattern: /\.(md|mdc)$/ }),
 		});
 		items.push(...result.items);
 		if (result.warnings) warnings.push(...result.warnings);

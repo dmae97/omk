@@ -15,8 +15,8 @@ import { readFile } from "../capability/fs";
 import { type MCPServer, mcpCapability } from "../capability/mcp";
 import { type Rule, ruleCapability } from "../capability/rule";
 import type { LoadContext, LoadResult } from "../capability/types";
-import { parseFrontmatter } from "../utils/frontmatter";
 import {
+	buildRuleFromMarkdown,
 	createSourceMeta,
 	expandEnvVarsDeep,
 	getProjectPath,
@@ -104,26 +104,8 @@ async function loadRules(ctx: LoadContext): Promise<LoadResult<Rule>> {
 	if (userPath) {
 		const content = await readFile(userPath);
 		if (content) {
-			const { frontmatter, body } = parseFrontmatter(content, { source: userPath });
-
-			// Validate and normalize globs
-			let globs: string[] | undefined;
-			if (Array.isArray(frontmatter.globs)) {
-				globs = frontmatter.globs.filter((g): g is string => typeof g === "string");
-			} else if (typeof frontmatter.globs === "string") {
-				globs = [frontmatter.globs];
-			}
-
-			items.push({
-				name: "global_rules",
-				path: userPath,
-				content: body,
-				globs,
-				alwaysApply: frontmatter.alwaysApply as boolean | undefined,
-				description: frontmatter.description as string | undefined,
-				ttsrTrigger: typeof frontmatter.ttsr_trigger === "string" ? frontmatter.ttsr_trigger : undefined,
-				_source: createSourceMeta(PROVIDER_ID, userPath, "user"),
-			});
+			const source = createSourceMeta(PROVIDER_ID, userPath, "user");
+			items.push(buildRuleFromMarkdown("global_rules.md", content, userPath, source, { ruleName: "global_rules" }));
 		}
 	}
 
@@ -132,29 +114,8 @@ async function loadRules(ctx: LoadContext): Promise<LoadResult<Rule>> {
 	if (projectRulesDir) {
 		const result = await loadFilesFromDir<Rule>(ctx, projectRulesDir, PROVIDER_ID, "project", {
 			extensions: ["md"],
-			transform: (name, content, path, source) => {
-				const { frontmatter, body } = parseFrontmatter(content, { source: path });
-				const ruleName = name.replace(/\.md$/, "");
-
-				// Validate and normalize globs
-				let globs: string[] | undefined;
-				if (Array.isArray(frontmatter.globs)) {
-					globs = frontmatter.globs.filter((g): g is string => typeof g === "string");
-				} else if (typeof frontmatter.globs === "string") {
-					globs = [frontmatter.globs];
-				}
-
-				return {
-					name: ruleName,
-					path,
-					content: body,
-					globs,
-					alwaysApply: frontmatter.alwaysApply as boolean | undefined,
-					description: frontmatter.description as string | undefined,
-					ttsrTrigger: typeof frontmatter.ttsr_trigger === "string" ? frontmatter.ttsr_trigger : undefined,
-					_source: source,
-				};
-			},
+			transform: (name, content, path, source) =>
+				buildRuleFromMarkdown(name, content, path, source, { stripNamePattern: /\.md$/ }),
 		});
 		items.push(...result.items);
 		if (result.warnings) warnings.push(...result.warnings);

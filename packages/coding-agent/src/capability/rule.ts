@@ -7,15 +7,23 @@
 import { defineCapability } from ".";
 import type { SourceMeta } from "./types";
 
+const CONDITION_GLOB_SCOPE_TOOLS = ["edit", "write"] as const;
+
 /**
- * Parsed frontmatter from MDC rule files (Cursor format).
+ * Parsed frontmatter from rule files.
  */
 export interface RuleFrontmatter {
 	description?: string;
 	globs?: string[];
 	alwaysApply?: boolean;
-	/** Regex pattern that triggers time-traveling rule injection */
-	ttsr_trigger?: string;
+	/** New key for TTSR match conditions. */
+	condition?: string | string[];
+	/** New key for TTSR stream scope. */
+	scope?: string | string[];
+	/** Legacy key accepted for backward compatibility with existing rules. */
+	ttsr_trigger?: string | string[];
+	/** Legacy camelCase key accepted for backward compatibility with existing rules. */
+	ttsrTrigger?: string | string[];
 	[key: string]: unknown;
 }
 
@@ -35,10 +43,170 @@ export interface Rule {
 	alwaysApply?: boolean;
 	/** Description (for agent-requested rules) */
 	description?: string;
-	/** Regex pattern that triggers time-traveling rule injection */
-	ttsrTrigger?: string;
+	/** Regex condition(s) that can trigger TTSR interruption. */
+	condition?: string[];
+	/** Optional stream scope tokens (for example: text, thinking, tool:edit(*.ts)). */
+	scope?: string[];
 	/** Source metadata */
 	_source: SourceMeta;
+}
+
+function normalizeRuleField(value: unknown): string[] | undefined {
+	if (typeof value === "string") {
+		const token = value.trim();
+		return token.length > 0 ? [token] : undefined;
+	}
+	if (!Array.isArray(value)) {
+		return undefined;
+	}
+
+	const tokens = value
+		.filter((item): item is string => typeof item === "string")
+		.map(item => item.trim())
+		.filter(item => item.length > 0);
+	if (tokens.length === 0) {
+		return undefined;
+	}
+
+	return Array.from(new Set(tokens));
+}
+
+function splitScopeTokens(value: string): string[] {
+	const tokens: string[] = [];
+	let current = "";
+	let parenDepth = 0;
+	let bracketDepth = 0;
+	let braceDepth = 0;
+	let quote: '"' | "'" | undefined;
+	for (let i = 0; i < value.length; i++) {
+		const char = value[i];
+		if (quote) {
+			current += char;
+			if (char === quote && value[i - 1] !== "\\") {
+				quote = undefined;
+			}
+			continue;
+		}
+		if (char === '"' || char === "'") {
+			quote = char;
+			current += char;
+			continue;
+		}
+		if (char === "(") {
+			parenDepth++;
+			current += char;
+			continue;
+		}
+		if (char === ")") {
+			parenDepth = Math.max(0, parenDepth - 1);
+			current += char;
+			continue;
+		}
+		if (char === "[") {
+			bracketDepth++;
+			current += char;
+			continue;
+		}
+		if (char === "]") {
+			bracketDepth = Math.max(0, bracketDepth - 1);
+			current += char;
+			continue;
+		}
+		if (char === "{") {
+			braceDepth++;
+			current += char;
+			continue;
+		}
+		if (char === "}") {
+			braceDepth = Math.max(0, braceDepth - 1);
+			current += char;
+			continue;
+		}
+		if (char === "," && parenDepth === 0 && bracketDepth === 0 && braceDepth === 0) {
+			const token = current.trim();
+			if (token.length > 0) {
+				tokens.push(token);
+			}
+			current = "";
+			continue;
+		}
+		current += char;
+	}
+
+	const tail = current.trim();
+	if (tail.length > 0) {
+		tokens.push(tail);
+	}
+
+	return tokens;
+}
+function normalizeScopeField(value: unknown): string[] | undefined {
+	const normalized = normalizeRuleField(value);
+	if (!normalized) {
+		return undefined;
+	}
+
+	const tokens = normalized.flatMap(splitScopeTokens).filter(item => item.length > 0);
+	if (tokens.length === 0) {
+		return undefined;
+	}
+	return Array.from(new Set(tokens));
+}
+/**
+ * Heuristic for condition shorthand that looks like a file glob (for example `*.rs`).
+ */
+function isLikelyFileGlob(value: string): boolean {
+	const token = value.trim();
+	if (token.length === 0) {
+		return false;
+	}
+	if (/[\\^$+|()]/.test(token)) {
+		return false;
+	}
+	if (!/[?*[\]{}]/.test(token)) {
+		return false;
+	}
+	if (token.includes("/")) {
+		return true;
+	}
+	return /^\*\.[^\s/]+$/.test(token);
+}
+
+/**
+ * Parse `condition` + `scope` from rule frontmatter.
+ *
+ * - `condition` accepts string or string[]
+ * - `scope` accepts string or string[]
+ * - legacy `ttsr_trigger` / `ttsrTrigger` are accepted as a `condition` fallback
+ * - condition tokens that look like file globs become scope shorthands:
+ *   `*.rs` => `tool:edit(*.rs)`, `tool:write(*.rs)` and a catch-all condition `.*`
+ */
+export function parseRuleConditionAndScope(frontmatter: RuleFrontmatter): Pick<Rule, "condition" | "scope"> {
+	const rawCondition = frontmatter.condition ?? frontmatter.ttsr_trigger ?? frontmatter.ttsrTrigger;
+	const parsedCondition = normalizeRuleField(rawCondition);
+	const parsedScope = normalizeScopeField(frontmatter.scope);
+
+	const inferredScope: string[] = [];
+	const condition: string[] = [];
+	for (const token of parsedCondition ?? []) {
+		if (isLikelyFileGlob(token)) {
+			for (const toolName of CONDITION_GLOB_SCOPE_TOOLS) {
+				inferredScope.push(`tool:${toolName}(${token})`);
+			}
+			continue;
+		}
+		condition.push(token);
+	}
+
+	if (condition.length === 0 && inferredScope.length > 0) {
+		condition.push(".*");
+	}
+
+	const scope = [...(parsedScope ?? []), ...inferredScope];
+	return {
+		condition: condition.length > 0 ? Array.from(new Set(condition)) : undefined,
+		scope: scope.length > 0 ? Array.from(new Set(scope)) : undefined,
+	};
 }
 
 export const ruleCapability = defineCapability<Rule>({

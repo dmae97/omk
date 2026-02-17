@@ -1,6 +1,27 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `condition` and `scope` fields to rule frontmatter for advanced TTSR matching and stream filtering
+- Added `ttsr.interruptMode` setting to control when TTSR rules interrupt mid-stream vs inject warnings after completion
+- Added support for loading rules, prompts, commands, context files (AGENTS.md), and system prompts (SYSTEM.md) from ~/.agent/ directory (with fallback to ~/.agents/)
+- Added scoped stream buffering for TTSR matching to isolate prose, thinking, and tool argument streams
+- Added file-path-aware TTSR scope matching for tool calls with glob patterns (e.g., `tool:edit(*.ts)`)
+- Added legacy field support: `ttsr_trigger` and `ttsrTrigger` are accepted as fallback for `condition`
+
+### Changed
+
+- Changed TTSR rule matching from single `ttsrTrigger` regex to multiple `condition` patterns with scope filtering
+- Changed TTSR buffer management to use per-stream-key buffers instead of a single global buffer
+- Changed rule discovery to use unified `buildRuleFromMarkdown` helper across all providers (builtin, cline, cursor, windsurf, agents)
+- Changed TTSR injection to defer warnings until stream completion when `interruptMode` is not `always`
+- Changed `TtsrManager.addRule()` to return boolean indicating successful registration instead of void
+
+### Fixed
+
+- Fixed TTSR matching to respect tool-specific scope filters, preventing cross-tool rule contamination
+- Fixed path normalization in TTSR glob matching to handle both relative and absolute path variants
 
 ## [12.9.0] - 2026-02-17
 
