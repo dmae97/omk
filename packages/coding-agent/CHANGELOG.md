@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Improved path display in status line to strip both `/work/` and `~/Projects/` prefixes when abbreviating paths
+- Refactored session directory naming to use single-dash format for home-relative paths and double-dash format for absolute paths, with automatic migration of legacy session directories on first access
 
 ## [12.8.2] - 2026-02-17
 ### Changed

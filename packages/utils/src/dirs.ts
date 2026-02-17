@@ -5,7 +5,7 @@
  * PI_CODING_AGENT_DIR to override the agent directory.
  */
 
-import { realpathSync } from "node:fs";
+import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { version } from "../package.json" with { type: "json" };
@@ -24,12 +24,22 @@ export const VERSION: string = version;
 // Root directories
 // =============================================================================
 
-let projectDir = process.cwd();
-if ($env.PWD) {
-	if (realpathSync($env.PWD) === projectDir) {
-		projectDir = $env.PWD;
-	}
+/**
+ * On macOS, strip /private prefix only when both paths resolve to the same location.
+ * This preserves aliases like /private/tmp -> /tmp without rewriting unrelated paths.
+ */
+function standardizeMacOSPath(p: string): string {
+	if (process.platform !== "darwin" || !p.startsWith("/private/")) return p;
+	const stripped = p.slice("/private".length);
+	try {
+		if (fs.realpathSync(p) === fs.realpathSync(stripped)) {
+			return stripped;
+		}
+	} catch {}
+	return p;
 }
+
+let projectDir = standardizeMacOSPath(process.cwd());
 
 /** Get the project directory. */
 export function getProjectDir(): string {
@@ -38,7 +48,7 @@ export function getProjectDir(): string {
 
 /** Set the project directory. */
 export function setProjectDir(dir: string): void {
-	projectDir = path.resolve(dir);
+	projectDir = standardizeMacOSPath(path.resolve(dir));
 	process.chdir(projectDir);
 }
 

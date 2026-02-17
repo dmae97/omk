@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Exported `getTerminalId()` function to get a stable identifier for the current terminal, with support for TTY device paths and terminal multiplexers
+- Exported `getTtyPath()` function to resolve the TTY device path for stdin via POSIX `ttyname(3)`
 
 ## [12.5.0] - 2026-02-15
 ### Added

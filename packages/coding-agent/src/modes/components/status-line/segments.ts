@@ -97,8 +97,9 @@ const pathSegment: StatusLineSegment = {
 		if (opts.abbreviate !== false) {
 			pwd = shortenPath(pwd);
 		}
-		if (opts.stripWorkPrefix !== false && pwd.startsWith("/work/")) {
-			pwd = pwd.slice(6);
+		if (opts.stripWorkPrefix !== false) {
+			if (pwd.startsWith("/work/")) pwd = pwd.slice(6);
+			else if (pwd.startsWith("~/Projects/")) pwd = pwd.slice(11);
 		}
 
 		const maxLen = opts.maxLength ?? 40;

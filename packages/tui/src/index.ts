@@ -60,6 +60,8 @@ export type { BoxSymbols, SymbolTheme } from "./symbols";
 export { emergencyTerminalRestore, ProcessTerminal, type Terminal } from "./terminal";
 // Terminal image support
 export * from "./terminal-capabilities";
+// TTY ID
+export { getTerminalId, getTtyPath } from "./ttyid";
 export { type Component, Container, type OverlayHandle, type SizeValue, TUI } from "./tui";
 // Utilities
 export { Ellipsis, padding, replaceTabs, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "./utils";

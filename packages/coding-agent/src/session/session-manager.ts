@@ -1,7 +1,9 @@
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, Message, TextContent, Usage } from "@oh-my-pi/pi-ai";
+import { getTerminalId } from "@oh-my-pi/pi-tui";
 import { isEnoent, logger, parseJsonlLenient, Snowflake } from "@oh-my-pi/pi-utils";
 import { getBlobsDir, getAgentDir as getDefaultAgentDir, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import { type BlobPutResult, BlobStore, externalizeImageData, isBlobRef, resolveImageData } from "./blob-store";
@@ -302,6 +304,67 @@ export function migrateSessionEntries(entries: FileEntry[]): void {
 	migrateToCurrentVersion(entries);
 }
 
+let sessionDirsMigrated = false;
+
+/**
+ * Migrate old `--<home-encoded>-*--` session dirs to the new `-*` format.
+ * Runs once on first access, best-effort.
+ */
+function migrateHomeSessionDirs(): void {
+	if (sessionDirsMigrated) return;
+	sessionDirsMigrated = true;
+
+	const home = os.homedir();
+	const homeEncoded = home.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-");
+	const oldPrefix = `--${homeEncoded}-`;
+	const oldExact = `--${homeEncoded}--`;
+	const sessionsRoot = path.join(getDefaultAgentDir(), "sessions");
+
+	let entries: string[];
+	try {
+		entries = fs.readdirSync(sessionsRoot);
+	} catch {
+		return;
+	}
+
+	for (const entry of entries) {
+		let remainder: string;
+		if (entry === oldExact) {
+			remainder = "";
+		} else if (entry.startsWith(oldPrefix) && entry.endsWith("--")) {
+			remainder = entry.slice(oldPrefix.length, -2);
+		} else {
+			continue;
+		}
+
+		const newName = `-${remainder}`;
+		const oldPath = path.join(sessionsRoot, entry);
+		const newPath = path.join(sessionsRoot, newName);
+
+		try {
+			const existing = fs.statSync(newPath, { throwIfNoEntry: false });
+			if (existing?.isDirectory()) {
+				// Merge files from old dir into existing new dir
+				for (const file of fs.readdirSync(oldPath)) {
+					const src = path.join(oldPath, file);
+					const dst = path.join(newPath, file);
+					if (!fs.existsSync(dst)) {
+						fs.renameSync(src, dst);
+					}
+				}
+				fs.rmSync(oldPath, { recursive: true, force: true });
+			} else {
+				if (existing) {
+					fs.rmSync(newPath, { recursive: true, force: true });
+				}
+				fs.renameSync(oldPath, newPath);
+			}
+		} catch {
+			// Best effort
+		}
+	}
+}
+
 /** Exported for compaction.test.ts */
 export function parseSessionEntries(content: string): FileEntry[] {
 	return parseJsonlLenient<FileEntry>(content);
@@ -460,12 +523,26 @@ export function buildSessionContext(
 }
 
 /**
+ * Encode a cwd into a safe directory name for session storage.
+ * Home-relative paths use single-dash format: `/Users/x/Projects/pi` → `-Projects-pi`
+ * Absolute paths use double-dash format: `/tmp/foo` → `--tmp-foo--`
+ */
+function encodeSessionDirName(cwd: string): string {
+	const home = os.homedir();
+	if (cwd === home || cwd.startsWith(`${home}/`) || cwd.startsWith(`${home}\\`)) {
+		const relative = cwd.slice(home.length).replace(/^[/\\]/, "");
+		return `-${relative.replace(/[/\\:]/g, "-")}`;
+	}
+	return `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
+}
+/**
  * Compute the default session directory for a cwd.
  * Encodes cwd into a safe directory name under ~/.omp/agent/sessions/.
  */
 function getDefaultSessionDir(cwd: string, storage: SessionStorage): string {
-	const safePath = `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
-	const sessionDir = path.join(getDefaultAgentDir(), "sessions", safePath);
+	migrateHomeSessionDirs();
+	const dirName = encodeSessionDirName(cwd);
+	const sessionDir = path.join(getDefaultAgentDir(), "sessions", dirName);
 	storage.ensureDirSync(sessionDir);
 	return sessionDir;
 }
@@ -475,40 +552,6 @@ function getDefaultSessionDir(cwd: string, storage: SessionStorage): string {
 // =============================================================================
 
 const TERMINAL_SESSIONS_DIR = "terminal-sessions";
-
-/**
- * Get a stable identifier for the current terminal.
- * Uses the TTY device path (e.g., /dev/pts/3), falling back to environment
- * variables for terminal multiplexers or terminal emulators.
- * Returns null if no terminal can be identified (e.g., piped input).
- */
-function getTerminalId(): string | null {
-	// TTY device path — most reliable, unique per terminal tab
-	if (process.stdin.isTTY) {
-		try {
-			// On Linux/macOS, /proc/self/fd/0 -> /dev/pts/N
-			const ttyPath = fs.readlinkSync("/proc/self/fd/0");
-			if (ttyPath.startsWith("/dev/")) {
-				return ttyPath.slice(5).replace(/\//g, "-"); // /dev/pts/3 -> pts-3
-			}
-		} catch {}
-	}
-
-	// Fallback to terminal-specific env vars
-	const kittyId = process.env.KITTY_WINDOW_ID;
-	if (kittyId) return `kitty-${kittyId}`;
-
-	const tmuxPane = process.env.TMUX_PANE;
-	if (tmuxPane) return `tmux-${tmuxPane}`;
-
-	const terminalSessionId = process.env.TERM_SESSION_ID; // macOS Terminal.app
-	if (terminalSessionId) return `apple-${terminalSessionId}`;
-
-	const wtSession = process.env.WT_SESSION; // Windows Terminal
-	if (wtSession) return `wt-${wtSession}`;
-
-	return null;
-}
 
 /**
  * Write a breadcrumb linking the current terminal to a session file.
