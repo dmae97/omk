@@ -16,6 +16,7 @@ import {
 } from "./providers/google-gemini-cli";
 import { type GoogleVertexOptions, streamGoogleVertex } from "./providers/google-vertex";
 import { isKimiModel, streamKimi } from "./providers/kimi";
+import { isSyntheticModel, streamSynthetic } from "./providers/synthetic";
 import { streamOpenAICodexResponses } from "./providers/openai-codex-responses";
 import { type OpenAICompletionsOptions, streamOpenAICompletions } from "./providers/openai-completions";
 import { streamOpenAIResponses } from "./providers/openai-responses";
@@ -104,6 +105,7 @@ const serviceProviderMap: Record<string, KeyResolver> = {
 			return "<authenticated>";
 		}
 	},
+	synthetic: "SYNTHETIC_API_KEY",
 };
 
 /**
@@ -222,6 +224,16 @@ export function streamSimple<TApi extends Api>(
 			...options,
 			apiKey,
 			format: options?.kimiApiFormat ?? "anthropic",
+		});
+	}
+
+	// Synthetic - route to dedicated handler that wraps OpenAI or Anthropic API
+	if (isSyntheticModel(model)) {
+		// Pass raw SimpleStreamOptions - streamSynthetic handles mapping internally
+		return streamSynthetic(model as Model<"openai-completions">, context, {
+			...options,
+			apiKey,
+			format: options?.syntheticApiFormat ?? "openai", // Default to OpenAI format
 		});
 	}
 

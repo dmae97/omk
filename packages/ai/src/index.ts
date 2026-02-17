@@ -14,6 +14,7 @@ export * from "./providers/google-gemini-cli-usage";
 export * from "./providers/google-vertex";
 export * from "./providers/kimi";
 export * from "./providers/openai-completions";
+export * from "./providers/synthetic";
 export * from "./providers/openai-responses";
 export * from "./stream";
 export * from "./types";

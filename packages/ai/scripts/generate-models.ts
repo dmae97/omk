@@ -266,6 +266,90 @@ async function fetchKimiCodeModels(): Promise<Model<"openai-completions">[]> {
 	}
 }
 
+const SYNTHETIC_BASE_URL = "https://api.synthetic.new/v1";
+
+interface SyntheticModelInfo {
+	id: string;
+	name?: string;
+	context_length?: number;
+	supports_reasoning?: boolean;
+	supports_vision?: boolean;
+}
+
+async function fetchSyntheticModels(): Promise<Model<"openai-completions">[]> {
+	// Synthetic.new /models endpoint requires authentication
+	// Use SYNTHETIC_API_KEY env var if available, otherwise return fallback models
+	const apiKey = $env.SYNTHETIC_API_KEY;
+	if (apiKey) {
+		try {
+			console.log("Fetching models from Synthetic.new API...");
+			const response = await fetch(`${SYNTHETIC_BASE_URL}/models`, {
+				headers: { Authorization: `Bearer ${apiKey}` },
+			});
+
+			if (!response.ok) {
+				console.warn(`Synthetic.new API returned ${response.status}, using fallback models`);
+				return getSyntheticFallbackModels();
+			}
+
+			const data = await response.json();
+			const items = Array.isArray(data.data) ? (data.data as SyntheticModelInfo[]) : [];
+			const models: Model<"openai-completions">[] = [];
+
+			for (const model of items) {
+				if (!model.id) continue;
+
+				// Derive capabilities from model info
+				const hasThinking = model.supports_reasoning || false;
+				const hasImage = model.supports_vision || false;
+
+				const input: ("text" | "image")[] = ["text"];
+				if (hasImage) input.push("image");
+
+				models.push({
+					id: model.id,
+					name: model.name || model.id,
+					api: "openai-completions",
+					provider: "synthetic",
+					baseUrl: SYNTHETIC_BASE_URL,
+					reasoning: hasThinking,
+					input,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: model.context_length || 200000,
+					maxTokens: 8192,
+				});
+			}
+
+			if (models.length > 0) {
+				console.log(`Fetched ${models.length} models from Synthetic.new API`);
+				return models;
+			}
+		} catch (error) {
+			console.error("Failed to fetch Synthetic.new models:", error);
+		}
+	}
+
+	console.log("No Synthetic.new credentials found, using fallback models");
+	return getSyntheticFallbackModels();
+}
+
+function getSyntheticFallbackModels(): Model<"openai-completions">[] {
+	return [
+		{
+			id: "default",
+			name: "Synthetic Default",
+			api: "openai-completions",
+			provider: "synthetic",
+			baseUrl: SYNTHETIC_BASE_URL,
+			reasoning: true,
+			input: ["text", "image"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 200000,
+			maxTokens: 8192,
+		},
+	];
+}
+
 async function loadModelsDevData(): Promise<Model[]> {
 	try {
 		console.log("Fetching models from models.dev API...");
@@ -899,8 +983,10 @@ async function generateModels() {
 	const openRouterModels = await fetchOpenRouterModels();
 	const aiGatewayModels = await fetchAiGatewayModels();
 	const kimiCodeModels = await fetchKimiCodeModels();
+	const syntheticNewModels = await fetchSyntheticModels();
 
-	const allModels = [...modelsDevModels, ...openRouterModels, ...aiGatewayModels, ...kimiCodeModels];
+	// Combine models (models.dev has priority)
+	const allModels = [...modelsDevModels, ...openRouterModels, ...aiGatewayModels, ...kimiCodeModels, ...syntheticNewModels];
 
 	// Fix incorrect cache pricing for Claude Opus 4.5 from models.dev
 	// models.dev has 3x the correct pricing (1.5/18.75 instead of 0.5/6.25)

@@ -92,7 +92,8 @@ export type KnownProvider =
 	| "zai"
 	| "mistral"
 	| "minimax"
-	| "opencode";
+	| "opencode"
+	| "synthetic";
 export type Provider = KnownProvider | string;
 
 export type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh";
@@ -178,6 +179,8 @@ export interface SimpleStreamOptions extends StreamOptions {
 	toolChoice?: ToolChoice;
 	/** API format for Kimi Code provider: "openai" or "anthropic" (default: "anthropic") */
 	kimiApiFormat?: "openai" | "anthropic";
+	/** API format for Synthetic provider: "openai" or "anthropic" (default: "openai") */
+	syntheticApiFormat?: "openai" | "anthropic";
 	/** Hint that websocket transport should be preferred when supported by the provider implementation. */
 	preferWebsockets?: boolean;
 }
