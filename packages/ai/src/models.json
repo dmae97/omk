@@ -2222,26 +2222,6 @@
 			"contextWindow": 200000,
 			"maxTokens": 64000
 		},
-		"claude-sonnet-4-6[1m]": {
-			"id": "claude-sonnet-4-6[1m]",
-			"name": "Claude Sonnet 4.6 (1M)",
-			"api": "anthropic-messages",
-			"provider": "anthropic",
-			"baseUrl": "https://api.anthropic.com",
-			"reasoning": true,
-			"input": [
-				"text",
-				"image"
-			],
-			"cost": {
-				"input": 3,
-				"output": 15,
-				"cacheRead": 0.3,
-				"cacheWrite": 3.75
-			},
-			"contextWindow": 1000000,
-			"maxTokens": 64000
-		},
 		"claude-sonnet-4-0": {
 			"id": "claude-sonnet-4-0",
 			"name": "Claude Sonnet 4 (latest)",
