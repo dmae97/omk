@@ -208,7 +208,7 @@ Success payload structure:
   - `shownRange`,
   - `artifactId` when available.
 
-Because built-in tools are wrapped with `wrapToolsWithMetaNotice()`, truncation notice text is appended to final text content automatically (for example: `Full: artifact://<id>`).
+Because built-in tools are wrapped with `wrapToolWithMetaNotice()`, truncation notice text is appended to final text content automatically (for example: `Full: artifact://<id>`).
 
 ## Rendering paths
 
@@ -239,13 +239,13 @@ This component is wired by `CommandController.handleBashCommand()` and fed from 
 
 ## Mode-specific behavior differences
 
-| Surface | Entry path | PTY eligible | Live output UX | Error surfacing |
-| --- | --- | --- | --- | --- |
-| Interactive tool call | `BashTool.execute` | Yes, when `bash.virtualTerminal=on` and UI exists and `PI_NO_PTY!=1` | PTY overlay (interactive) or streamed tail updates | Tool errors become `toolResult.isError` |
-| Print mode tool call | `BashTool.execute` | No (no UI context) | No TUI overlay; output appears in event stream/final assistant text flow | Same tool error mapping |
-| RPC tool call (agent tooling) | `BashTool.execute` | Usually no UI -> non-PTY | Structured tool events/results | Same tool error mapping |
-| Interactive bang command (`!`) | `AgentSession.executeBash` + `BashExecutionComponent` | No (uses executor directly) | Dedicated bash execution component | Controller catches exceptions and shows UI error |
-| RPC `bash` command | `rpc-mode` -> `session.executeBash` | No | Returns `BashResult` directly | Consumer handles returned fields |
+| Surface                        | Entry path                                            | PTY eligible                                                         | Live output UX                                                           | Error surfacing                                  |
+| ------------------------------ | ----------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------ |
+| Interactive tool call          | `BashTool.execute`                                    | Yes, when `bash.virtualTerminal=on` and UI exists and `PI_NO_PTY!=1` | PTY overlay (interactive) or streamed tail updates                       | Tool errors become `toolResult.isError`          |
+| Print mode tool call           | `BashTool.execute`                                    | No (no UI context)                                                   | No TUI overlay; output appears in event stream/final assistant text flow | Same tool error mapping                          |
+| RPC tool call (agent tooling)  | `BashTool.execute`                                    | Usually no UI -> non-PTY                                             | Structured tool events/results                                           | Same tool error mapping                          |
+| Interactive bang command (`!`) | `AgentSession.executeBash` + `BashExecutionComponent` | No (uses executor directly)                                          | Dedicated bash execution component                                       | Controller catches exceptions and shows UI error |
+| RPC `bash` command             | `rpc-mode` -> `session.executeBash`                   | No                                                                   | Returns `BashResult` directly                                            | Consumer handles returned fields                 |
 
 ## Operational caveats
 

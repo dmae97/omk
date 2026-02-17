@@ -172,7 +172,7 @@ export interface AgentState {
 	error?: string;
 }
 
-export interface AgentToolResult<T, TNormative extends TSchema = any> {
+export interface AgentToolResult<T = any, TNormative extends TSchema = any> {
 	// Content blocks supporting text and images
 	content: (TextContent | ImageContent)[];
 	// Details to be displayed in a UI or logged
@@ -204,6 +204,15 @@ export interface AgentToolContext {
 	// Empty by default - apps extend via declaration merging
 }
 
+export type AgentToolExecFn<TParameters extends TSchema = TSchema, TDetails = any, TTheme = unknown> = (
+	this: AgentTool<TParameters, TDetails, TTheme>,
+	toolCallId: string,
+	params: Static<TParameters>,
+	signal?: AbortSignal,
+	onUpdate?: AgentToolUpdateCallback<TDetails, TParameters>,
+	context?: AgentToolContext,
+) => Promise<AgentToolResult<TDetails, TParameters>>;
+
 // AgentTool extends Tool but adds the execute function
 export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any, TTheme = unknown>
 	extends Tool<TParameters> {
@@ -219,13 +228,7 @@ export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any
 	 * - "exclusive": runs alone; other tools wait until it finishes
 	 */
 	concurrency?: "shared" | "exclusive";
-	execute: (
-		toolCallId: string,
-		params: Static<TParameters>,
-		signal?: AbortSignal,
-		onUpdate?: AgentToolUpdateCallback<TDetails, TParameters>,
-		context?: AgentToolContext,
-	) => Promise<AgentToolResult<TDetails, TParameters>>;
+	execute: AgentToolExecFn<TParameters, TDetails, TTheme>;
 
 	/** Optional custom rendering for tool call display (returns UI component) */
 	renderCall?: (args: Static<TParameters>, theme: TTheme) => unknown;

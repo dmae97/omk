@@ -5,7 +5,7 @@ import type { AgentTool, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core
 import type { Static, TSchema } from "@sinclair/typebox";
 import type { Theme } from "../../modes/theme/theme";
 import { applyToolProxy } from "../tool-proxy";
-import type { CustomTool, CustomToolContext, LoadedCustomTool } from "./types";
+import type { CustomTool, CustomToolContext } from "./types";
 
 export class CustomToolAdapter<TParams extends TSchema = TSchema, TDetails = any, TTheme extends Theme = Theme>
 	implements AgentTool<TParams, TDetails, TTheme>
@@ -41,15 +41,5 @@ export class CustomToolAdapter<TParams extends TSchema = TSchema, TDetails = any
 		getContext: () => CustomToolContext,
 	): AgentTool<TParams, TDetails, TTheme> {
 		return new CustomToolAdapter(tool, getContext);
-	}
-
-	/**
-	 * Wrap all loaded custom tools into AgentTools.
-	 */
-	static wrapTools<TParams extends TSchema = TSchema, TDetails = any, TTheme extends Theme = Theme>(
-		loadedTools: LoadedCustomTool<TParams, TDetails>[],
-		getContext: () => CustomToolContext,
-	): AgentTool<TParams, TDetails, TTheme>[] {
-		return loadedTools.map(lt => CustomToolAdapter.wrap(lt.tool, getContext));
 	}
 }

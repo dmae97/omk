@@ -24,12 +24,13 @@ import { allocateOutputArtifact } from "./output-utils";
 import { formatExpandHint } from "./render-utils";
 import { ToolAbortError } from "./tool-errors";
 import { toolResult } from "./tool-result";
-import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, truncateHead } from "./truncate";
+import { DEFAULT_MAX_BYTES, truncateHead } from "./truncate";
 
 // =============================================================================
 // Types and Constants
 // =============================================================================
 
+const FETCH_DEFAULT_MAX_LINES = 300;
 // Convertible document types (markitdown supported)
 const CONVERTIBLE_MIMES = new Set([
 	"application/pdf",
@@ -878,7 +879,10 @@ export class FetchTool implements AgentTool<typeof fetchSchema, FetchToolDetails
 		}
 
 		const result = await renderUrl(url, effectiveTimeout, raw, signal);
-		const truncation = truncateHead(result.content, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
+		const truncation = truncateHead(result.content, {
+			maxBytes: DEFAULT_MAX_BYTES,
+			maxLines: FETCH_DEFAULT_MAX_LINES,
+		});
 		const needsArtifact = truncation.truncated;
 		let artifactId: string | undefined;
 

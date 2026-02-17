@@ -4,7 +4,13 @@
  * Tools populate details.meta using the fluent OutputMetaBuilder.
  * The tool wrapper automatically formats and appends notices at message boundary.
  */
-import type { AgentTool, AgentToolResult } from "@oh-my-pi/pi-agent-core";
+import type {
+	AgentTool,
+	AgentToolContext,
+	AgentToolExecFn,
+	AgentToolResult,
+	AgentToolUpdateCallback,
+} from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
 import type { OutputSummary } from "../session/streaming-output";
 import { renderError } from "./tool-errors";
@@ -335,7 +341,8 @@ export function formatOutputNotice(meta: OutputMeta | undefined): string {
 
 		if (t.nextOffset != null) {
 			notice += `. Use offset=${t.nextOffset} to continue`;
-		} else if (t.artifactId != null) {
+		}
+		if (t.artifactId != null) {
 			notice += `. Full: artifact://${t.artifactId}`;
 		}
 
@@ -396,31 +403,21 @@ function appendOutputNotice(
 	return result;
 }
 
-/**
- * Wrap a tool to:
- * 1. Automatically append output notices based on details.meta
- * 2. Handle ToolError rendering
- */
-export function wrapToolWithMetaNotice<T extends AgentTool<any, any, any>>(tool: T): T {
-	const originalExecute = tool.execute.bind(tool);
+const kUnwrappedExecute = Symbol("OutputMeta.UnwrappedExecute");
 
-	const wrappedExecute: typeof tool.execute = async (
-		toolCallId,
-		params,
-		signal,
-		onUpdate,
-		context,
-	): Promise<AgentToolResult<any, any>> => {
-		let result: AgentToolResult<any, any>;
+async function wrappedExecute(
+	this: AgentTool & { [kUnwrappedExecute]: AgentToolExecFn },
+	toolCallId: string,
+	params: any,
+	signal?: AbortSignal,
+	onUpdate?: AgentToolUpdateCallback,
+	context?: AgentToolContext,
+): Promise<AgentToolResult> {
+	const originalExecute = this[kUnwrappedExecute];
 
-		try {
-			result = await originalExecute(toolCallId, params, signal, onUpdate, context);
-		} catch (e) {
-			// Re-throw with formatted message so agent-loop sets isError flag
-			throw new Error(renderError(e));
-		}
-
+	try {
 		// Append notices from meta
+		const result = await originalExecute.call(this, toolCallId, params, signal, onUpdate, context);
 		const meta = (result.details as { meta?: OutputMeta } | undefined)?.meta;
 		if (meta) {
 			return {
@@ -428,26 +425,36 @@ export function wrapToolWithMetaNotice<T extends AgentTool<any, any, any>>(tool:
 				content: appendOutputNotice(result.content, meta) as (TextContent | ImageContent)[],
 			};
 		}
-
 		return result;
-	};
-
-	// Use Proxy so property access (description, parameters, mode) stays on the original
-	// tool. Object.create(tool) would make getters run with this=wrapper, breaking
-	// private fields on tools like EditTool.
-	return new Proxy(tool, {
-		get(target, prop) {
-			if (prop === "execute") return wrappedExecute;
-			const value = (target as Record<string | symbol, unknown>)[prop];
-			if (typeof value === "function") return value.bind(target);
-			return value;
-		},
-	}) as T;
+	} catch (e) {
+		// Re-throw with formatted message so agent-loop sets isError flag
+		throw new Error(renderError(e));
+	}
 }
 
 /**
- * Wrap all tools with meta notice formatting and error handling.
+ * Wrap a tool to:
+ * 1. Automatically append output notices based on details.meta
+ * 2. Handle ToolError rendering
  */
-export function wrapToolsWithMetaNotice<T extends AgentTool<any, any, any>>(tools: T[]): T[] {
-	return tools.map(wrapToolWithMetaNotice);
+export function wrapToolWithMetaNotice<T extends AgentTool<any, any, any>>(tool: T): T {
+	if (kUnwrappedExecute in tool) {
+		return tool;
+	}
+
+	const originalExecute = tool.execute;
+
+	return Object.defineProperties(tool, {
+		[kUnwrappedExecute]: {
+			value: originalExecute,
+			enumerable: false,
+			configurable: true,
+		},
+		execute: {
+			value: wrappedExecute,
+			enumerable: false,
+			configurable: true,
+			writable: true,
+		},
+	});
 }

@@ -24,7 +24,7 @@ import { FetchTool } from "./fetch";
 import { FindTool } from "./find";
 import { GrepTool } from "./grep";
 import { NotebookTool } from "./notebook";
-import { wrapToolsWithMetaNotice } from "./output-meta";
+import { wrapToolWithMetaNotice } from "./output-meta";
 import { PythonTool } from "./python";
 import { ReadTool } from "./read";
 import { reportFindingTool } from "./review";
@@ -328,7 +328,7 @@ export async function createTools(session: ToolSession, toolNames?: string[]): P
 		logger.debug("Tool factory timings", { slowTools });
 	}
 	const tools = results.filter(r => r.tool !== null).map(r => r.tool as Tool);
-	const wrappedTools = wrapToolsWithMetaNotice(tools);
+	const wrappedTools = tools.map(wrapToolWithMetaNotice);
 
 	if (filteredRequestedTools !== undefined) {
 		const allowed = new Set(filteredRequestedTools);

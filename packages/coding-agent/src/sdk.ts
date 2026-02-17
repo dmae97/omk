@@ -79,7 +79,6 @@ import {
 } from "./tools";
 import { ToolContextStore } from "./tools/context";
 import { getGeminiImageTools } from "./tools/gemini-image";
-import { wrapToolsWithMetaNotice } from "./tools/output-meta";
 import { EventBus } from "./utils/event-bus";
 import { time } from "./utils/timings";
 
@@ -762,9 +761,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	);
 
 	debugStartup("sdk:createTools:start");
-	// Create and wrap tools with meta notice formatting
-	const rawBuiltinTools = await createTools(toolSession, options.toolNames);
-	const builtinTools = wrapToolsWithMetaNotice(rawBuiltinTools);
+	// Create built-in tools (already wrapped with meta notice formatting)
+	const builtinTools = await createTools(toolSession, options.toolNames);
 	debugStartup("sdk:createTools");
 	time("createAllTools");
 
