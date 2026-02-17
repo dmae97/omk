@@ -1,13 +1,12 @@
 # Natives media + system utilities
 
-This document is a subsystem deep-dive for the **system/media/conversion primitives** layer described in [`docs/natives-architecture.md`](./natives-architecture.md): `image`, `html`, `clipboard`, `system-info`, and `work` profiling.
+This document is a subsystem deep-dive for the **system/media/conversion primitives** layer described in [`docs/natives-architecture.md`](./natives-architecture.md): `image`, `html`, `clipboard`, and `work` profiling.
 
 ## Implementation files
 
 - `crates/pi-natives/src/image.rs`
 - `crates/pi-natives/src/html.rs`
 - `crates/pi-natives/src/clipboard.rs`
-- `crates/pi-natives/src/system_info.rs`
 - `crates/pi-natives/src/prof.rs`
 - `crates/pi-natives/src/task.rs`
 - `packages/natives/src/image/index.ts`
@@ -16,8 +15,6 @@ This document is a subsystem deep-dive for the **system/media/conversion primiti
 - `packages/natives/src/html/types.ts`
 - `packages/natives/src/clipboard/index.ts`
 - `packages/natives/src/clipboard/types.ts`
-- `packages/natives/src/system-info/index.ts`
-- `packages/natives/src/system-info/types.ts`
 - `packages/natives/src/work/index.ts`
 - `packages/natives/src/work/types.ts`
 
@@ -25,16 +22,15 @@ This document is a subsystem deep-dive for the **system/media/conversion primiti
 
 ## TS API ↔ Rust export/module mapping
 
-| TS export (packages/natives) | Rust N-API export | Rust module |
-| --- | --- | --- |
-| `PhotonImage.parse(bytes)` | `PhotonImage::parse` (`js_name = "parse"`) | `image.rs` |
-| `PhotonImage#resize(width, height, filter)` | `PhotonImage::resize` (`js_name = "resize"`) | `image.rs` |
-| `PhotonImage#encode(format, quality)` | `PhotonImage::encode` (`js_name = "encode"`) | `image.rs` |
-| `htmlToMarkdown(html, options)` | `html_to_markdown` (`js_name = "htmlToMarkdown"`) | `html.rs` |
-| `copyToClipboard(text)` | `copy_to_clipboard` (`js_name = "copyToClipboard"`) + TS fallback logic | `clipboard.rs` + `clipboard/index.ts` |
-| `readImageFromClipboard()` | `read_image_from_clipboard` (`js_name = "readImageFromClipboard"`) | `clipboard.rs` |
-| `getSystemInfo()` | `get_system_info` (`js_name = "getSystemInfo"`) | `system_info.rs` |
-| `getWorkProfile(lastSeconds)` | `get_work_profile` | `prof.rs` |
+| TS export (packages/natives)                | Rust N-API export                                                       | Rust module                           |
+| ------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------- |
+| `PhotonImage.parse(bytes)`                  | `PhotonImage::parse` (`js_name = "parse"`)                              | `image.rs`                            |
+| `PhotonImage#resize(width, height, filter)` | `PhotonImage::resize` (`js_name = "resize"`)                            | `image.rs`                            |
+| `PhotonImage#encode(format, quality)`       | `PhotonImage::encode` (`js_name = "encode"`)                            | `image.rs`                            |
+| `htmlToMarkdown(html, options)`             | `html_to_markdown` (`js_name = "htmlToMarkdown"`)                       | `html.rs`                             |
+| `copyToClipboard(text)`                     | `copy_to_clipboard` (`js_name = "copyToClipboard"`) + TS fallback logic | `clipboard.rs` + `clipboard/index.ts` |
+| `readImageFromClipboard()`                  | `read_image_from_clipboard` (`js_name = "readImageFromClipboard"`)      | `clipboard.rs`                        |
+| `getWorkProfile(lastSeconds)`               | `get_work_profile`                                                      | `prof.rs`                             |
 
 ## Data format boundaries and conversions
 
@@ -80,15 +76,6 @@ Conversion behavior:
   - Rust reads raw image from `arboard`.
   - Rust re-encodes it to PNG bytes (`image` crate), returns `{ data: Uint8Array, mimeType: "image/png" }`.
   - TS returns `null` early on Termux or Linux sessions without display server (`DISPLAY`/`WAYLAND_DISPLAY` missing).
-
-### System info (`system-info`)
-
-- **Output boundary**: plain object returned synchronously.
-- Rust currently populates: `distro`, `kernel`, `cpu`, `disk`.
-- Linux distro comes from `/etc/os-release` parsing; macOS may append a marketing name (`Tahoe`, `Sequoia`, etc.) to OS version text.
-- Disk summary is normalized to human-readable strings (`used/total (pct%)`), with platform-dependent selection:
-  - Windows: aggregates each mount entry.
-  - non-Windows: prefers `/`, falls back to first disk.
 
 ### Work profiling (`work`)
 
@@ -141,18 +128,6 @@ Failure transitions:
 3. `ContentNotAvailable` maps to `null`.
 4. Other Rust errors reject.
 
-### System info lifecycle
-
-1. `getSystemInfo()` refreshes `sysinfo::System` and disk list synchronously.
-2. Per-platform helpers derive distro/kernel/cpu/disk snapshots.
-3. Object is returned directly; no async task scheduling.
-
-Failure transitions:
-
-- Missing optional data degrades to omitted fields (`Option::None`), not thrown errors.
-- `/etc/os-release` parse failures are soft-fail (`None` distro).
-- Disk total space `0` is treated as unavailable (`None` disk).
-
 ### Work profiling lifecycle
 
 1. No explicit start: profiling is always on when task helpers execute.
@@ -184,11 +159,6 @@ Failure transitions:
 - Image read distinguishes "no image" (`null`) from operational failure (rejection).
 - Termux/headless Linux are treated as unsupported contexts for image read (`null`).
 
-### System info
-
-- Designed for partial success: fields are optional and may be absent by platform.
-- Current TS type is broader than current Rust-populated fields; maintainers should expect sparse payloads unless Rust expands output.
-
 ### Work profiling
 
 - Retrieval is strict for function call itself, but artifact generation is partially best-effort (`svg` nullable).
@@ -198,5 +168,3 @@ Failure transitions:
 
 - **Clipboard text**: OSC 52 depends on terminal support; native clipboard access depends on desktop environment/session.
 - **Clipboard image read**: blocked in TS for Termux and Linux without display server.
-- **System info distro**: Linux distro name quality depends on `/etc/os-release` fields; macOS marketing name mapping is version-table-based and may lag new releases.
-- **Disk reporting**: Windows returns a comma-separated multi-volume summary; non-Windows returns one primary mount summary.
