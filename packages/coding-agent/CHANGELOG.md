@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.8.2] - 2026-02-17
 ### Changed
 
 - Changed system environment context to use built-in `os` values for distro, kernel, and CPU model instead of native system-info data

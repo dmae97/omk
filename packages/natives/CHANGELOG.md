@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.8.2] - 2026-02-17
 ### Breaking Changes
 
 - Removed `getSystemInfo()` and `SystemInfo` from package exports, breaking consumers that imported system info APIs from this package
