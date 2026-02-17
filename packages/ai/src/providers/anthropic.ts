@@ -705,20 +705,34 @@ function disableThinkingIfToolChoiceForced(params: MessageCreateParamsStreaming)
 }
 
 /**
- * Check if a model supports adaptive thinking (Opus 4.6+)
+ * Check if a model supports adaptive thinking (Opus 4.6+ and Sonnet 4.6+)
  */
 function supportsAdaptiveThinking(modelId: string): boolean {
-	// Opus 4.6 model IDs (with or without date suffix)
-	return modelId.includes("opus-4-6") || modelId.includes("opus-4.6");
+	// Opus 4.6 and Sonnet 4.6 model IDs (with or without date suffix)
+	return (
+		modelId.includes("opus-4-6") ||
+		modelId.includes("opus-4.6") ||
+		modelId.includes("sonnet-4-6") ||
+		modelId.includes("sonnet-4.6")
+	);
 }
 
 function ensureMaxTokensForThinking(params: MessageCreateParamsStreaming, model: Model<"anthropic-messages">): void {
-	const thinking = params.thinking;
-	if (!thinking || thinking.type !== "enabled") return;
+	const thinking = params.thinking as { type: string; budget_tokens?: number } | undefined;
+	if (!thinking) return;
+	if (thinking.type === "adaptive") {
+		// Adaptive mode: ensure max_tokens is at least the model's full output capacity
+		const maxTokens = params.max_tokens ?? 0;
+		const required = model.maxTokens > 0 ? model.maxTokens : OUTPUT_FALLBACK_BUFFER;
+		if (maxTokens < required) {
+			params.max_tokens = required;
+		}
+		return;
+	}
 
+	if (thinking.type !== "enabled") return;
 	const budgetTokens = thinking.budget_tokens ?? 0;
 	if (budgetTokens <= 0) return;
-
 	const maxTokens = params.max_tokens ?? 0;
 	const requiredMaxTokens = model.maxTokens > 0 ? model.maxTokens : budgetTokens + OUTPUT_FALLBACK_BUFFER;
 	if (maxTokens < requiredMaxTokens) {

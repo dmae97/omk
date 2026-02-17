@@ -12,7 +12,7 @@ import type { Settings } from "./settings";
 /** Default model IDs for each known provider */
 export const defaultModelPerProvider: Record<KnownProvider, string> = {
 	"amazon-bedrock": "us.anthropic.claude-opus-4-6-v1",
-	anthropic: "claude-opus-4-6",
+	anthropic: "claude-sonnet-4-6",
 	openai: "gpt-5.1-codex",
 	"openai-codex": "gpt-5.3-codex",
 	google: "gemini-2.5-pro",
@@ -20,9 +20,9 @@ export const defaultModelPerProvider: Record<KnownProvider, string> = {
 	"google-antigravity": "gemini-3-pro-high",
 	"google-vertex": "gemini-3-pro-preview",
 	"github-copilot": "gpt-4o",
-	cursor: "claude-opus-4-6",
+	cursor: "claude-sonnet-4-6",
 	openrouter: "openai/gpt-5.1-codex",
-	"vercel-ai-gateway": "anthropic/claude-opus-4-6",
+	"vercel-ai-gateway": "anthropic/claude-sonnet-4-6",
 	xai: "grok-4-fast-non-reasoning",
 	groq: "openai/gpt-oss-120b",
 	cerebras: "zai-glm-4.6",
@@ -31,7 +31,7 @@ export const defaultModelPerProvider: Record<KnownProvider, string> = {
 	minimax: "MiniMax-M2.5",
 	"minimax-code": "MiniMax-M2.5",
 	"minimax-code-cn": "MiniMax-M2.5",
-	opencode: "claude-opus-4-6",
+	opencode: "claude-sonnet-4-6",
 	"kimi-code": "kimi-k2.5",
 };
 

@@ -387,10 +387,18 @@ function mapOptionsForApi<TApi extends Api>(
 				} as OptionsForApi<TApi>;
 			}
 
-			// For Opus 4.6+: use adaptive thinking with effort level
+			// For Opus 4.6+ and Sonnet 4.6+: use adaptive thinking with effort level
 			// For older models: use budget-based thinking
-			if (model.id.includes("opus-4-6") || model.id.includes("opus-4.6")) {
-				const effort = mapThinkingLevelToAnthropicEffort(reasoning);
+			if (
+				model.id.includes("opus-4-6") ||
+				model.id.includes("opus-4.6") ||
+				model.id.includes("sonnet-4-6") ||
+				model.id.includes("sonnet-4.6")
+			) {
+				const supportsMaxEffort = model.id.includes("opus-4-6") || model.id.includes("opus-4.6");
+				const effort = mapThinkingLevelToAnthropicEffort(
+					supportsMaxEffort ? reasoning : (clampReasoning(reasoning) ?? reasoning),
+				);
 				return {
 					...base,
 					thinkingEnabled: true,
