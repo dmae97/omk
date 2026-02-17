@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.9.0] - 2026-02-17
 ### Added
 
 - Exported `getTerminalId()` function to get a stable identifier for the current terminal, with support for TTY device paths and terminal multiplexers

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.9.0] - 2026-02-17
+
 ### Added
 
 - Added OpenCode discovery provider to load configuration from ~/.config/opencode/ and .opencode/ directories
