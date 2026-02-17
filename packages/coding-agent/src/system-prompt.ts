@@ -2,7 +2,6 @@
  * System prompt construction and project context loading
  */
 import * as os from "node:os";
-import { getSystemInfo as getNativeSystemInfo, type SystemInfo } from "@oh-my-pi/pi-natives";
 import { $env, hasFsCode, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { getGpuCachePath, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import { $ } from "bun";
@@ -310,35 +309,33 @@ async function saveGpuCache(info: GpuCache): Promise<void> {
 }
 
 async function getCachedGpu(): Promise<string | undefined> {
+	debugStartup("system-prompt:getEnvironmentInfo:getCachedGpu:start");
 	const cached = await loadGpuCache();
 	if (cached) return cached.gpu;
+	debugStartup("system-prompt:getEnvironmentInfo:getGpuModel");
 	const gpu = await getGpuModel();
+	debugStartup("system-prompt:getEnvironmentInfo:saveGpuCache");
 	if (gpu) await saveGpuCache({ gpu });
 	return gpu ?? undefined;
 }
 async function getEnvironmentInfo(): Promise<Array<{ label: string; value: string }>> {
-	let nativeInfo: SystemInfo | null = null;
-	try {
-		nativeInfo = getNativeSystemInfo();
-	} catch {
-		nativeInfo = null;
-	}
-
+	debugStartup("system-prompt:getEnvironmentInfo:getCachedGpu");
 	const gpu = await getCachedGpu();
+	debugStartup("system-prompt:getEnvironmentInfo:getCpuInfo");
 	const cpus = os.cpus();
+	debugStartup("system-prompt:getEnvironmentInfo:buildEntries");
 	const entries: Array<{ label: string; value: string | undefined }> = [
 		{ label: "OS", value: `${os.platform()} ${os.release()}` },
-		{ label: "Distro", value: nativeInfo?.distro ?? os.type() },
-		{ label: "Kernel", value: nativeInfo?.kernel ?? os.version() },
+		{ label: "Distro", value: os.type() },
+		{ label: "Kernel", value: os.version() },
 		{ label: "Arch", value: os.arch() },
-		{ label: "CPU", value: `${cpus.length}x ${nativeInfo?.cpu ?? cpus[0]?.model}` },
+		{ label: "CPU", value: `${cpus.length}x ${cpus[0]?.model}` },
 		{ label: "GPU", value: gpu },
-		{ label: "Disk", value: nativeInfo?.disk ?? undefined },
 		{ label: "Terminal", value: getTerminalName() },
 		{ label: "DE", value: getDesktopEnvironment() },
 		{ label: "WM", value: getWindowManager() },
 	];
-
+	debugStartup("system-prompt:getEnvironmentInfo:done");
 	return entries.filter((e): e is { label: string; value: string } => e.value != null && e.value !== "unknown");
 }
 

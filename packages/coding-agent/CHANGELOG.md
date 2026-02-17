@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Changed system environment context to use built-in `os` values for distro, kernel, and CPU model instead of native system-info data
+- Changed environment info generation to stop including unavailable native system detail fallbacks
+
+### Removed
+
+- Removed the `Disk` field from generated environment information
 
 ## [12.8.0] - 2026-02-16
 
