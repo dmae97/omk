@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { getModel } from "@oh-my-pi/pi-ai/models";
+import { getBundledModel } from "@oh-my-pi/pi-ai/models";
 import { complete } from "@oh-my-pi/pi-ai/stream";
 import type { Api, Context, Model, OptionsForApi, ToolResultMessage } from "@oh-my-pi/pi-ai/types";
 import { Type } from "@sinclair/typebox";
@@ -278,7 +278,7 @@ async function testUnpairedHighSurrogate<TApi extends Api>(llm: Model<TApi>, opt
 
 describe("AI Providers Unicode Surrogate Pair Tests", () => {
 	describe.skipIf(!e2eApiKey("GEMINI_API_KEY"))("Google Provider Unicode Handling", () => {
-		const llm = getModel("google", "gemini-2.5-flash");
+		const llm = getBundledModel("google", "gemini-2.5-flash");
 
 		it(
 			"should handle emoji in tool results",
@@ -306,7 +306,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("OPENAI_API_KEY"))("OpenAI Completions Provider Unicode Handling", () => {
-		const llm = getModel("openai", "gpt-4o-mini");
+		const llm = getBundledModel("openai", "gpt-4o-mini");
 
 		it(
 			"should handle emoji in tool results",
@@ -334,7 +334,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("OPENAI_API_KEY"))("OpenAI Responses Provider Unicode Handling", () => {
-		const llm = getModel("openai", "gpt-5-mini");
+		const llm = getBundledModel("openai", "gpt-5-mini");
 
 		it(
 			"should handle emoji in tool results",
@@ -362,7 +362,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("Anthropic Provider Unicode Handling", () => {
-		const llm = getModel("anthropic", "claude-haiku-4-5-20251001");
+		const llm = getBundledModel("anthropic", "claude-haiku-4-5-20251001");
 
 		it(
 			"should handle emoji in tool results",
@@ -390,7 +390,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 	});
 
 	describe("Anthropic OAuth Provider Unicode Handling", () => {
-		const llm = getModel("anthropic", "claude-haiku-4-5-20251001");
+		const llm = getBundledModel("anthropic", "claude-haiku-4-5-20251001");
 
 		it.skipIf(!anthropicOAuthToken)(
 			"should handle emoji in tool results",
@@ -421,7 +421,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!githubCopilotToken)(
 			"gpt-4o - should handle emoji in tool results",
 			async () => {
-				const llm = getModel("github-copilot", "gpt-4o");
+				const llm = getBundledModel("github-copilot", "gpt-4o");
 				await testEmojiInToolResults(llm, { apiKey: githubCopilotToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -430,7 +430,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!githubCopilotToken)(
 			"gpt-4o - should handle real-world LinkedIn comment data with emoji",
 			async () => {
-				const llm = getModel("github-copilot", "gpt-4o");
+				const llm = getBundledModel("github-copilot", "gpt-4o");
 				await testRealWorldLinkedInData(llm, { apiKey: githubCopilotToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -439,7 +439,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!githubCopilotToken)(
 			"gpt-4o - should handle unpaired high surrogate (0xD83D) in tool results",
 			async () => {
-				const llm = getModel("github-copilot", "gpt-4o");
+				const llm = getBundledModel("github-copilot", "gpt-4o");
 				await testUnpairedHighSurrogate(llm, { apiKey: githubCopilotToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -448,7 +448,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!githubCopilotToken)(
 			"claude-sonnet-4 - should handle emoji in tool results",
 			async () => {
-				const llm = getModel("github-copilot", "claude-sonnet-4");
+				const llm = getBundledModel("github-copilot", "claude-sonnet-4");
 				await testEmojiInToolResults(llm, { apiKey: githubCopilotToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -457,7 +457,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!githubCopilotToken)(
 			"claude-sonnet-4 - should handle real-world LinkedIn comment data with emoji",
 			async () => {
-				const llm = getModel("github-copilot", "claude-sonnet-4");
+				const llm = getBundledModel("github-copilot", "claude-sonnet-4");
 				await testRealWorldLinkedInData(llm, { apiKey: githubCopilotToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -466,7 +466,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!githubCopilotToken)(
 			"claude-sonnet-4 - should handle unpaired high surrogate (0xD83D) in tool results",
 			async () => {
-				const llm = getModel("github-copilot", "claude-sonnet-4");
+				const llm = getBundledModel("github-copilot", "claude-sonnet-4");
 				await testUnpairedHighSurrogate(llm, { apiKey: githubCopilotToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -477,7 +477,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!geminiCliToken)(
 			"gemini-2.5-flash - should handle emoji in tool results",
 			async () => {
-				const llm = getModel("google-gemini-cli", "gemini-2.5-flash");
+				const llm = getBundledModel("google-gemini-cli", "gemini-2.5-flash");
 				await testEmojiInToolResults(llm, { apiKey: geminiCliToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -486,7 +486,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!geminiCliToken)(
 			"gemini-2.5-flash - should handle real-world LinkedIn comment data with emoji",
 			async () => {
-				const llm = getModel("google-gemini-cli", "gemini-2.5-flash");
+				const llm = getBundledModel("google-gemini-cli", "gemini-2.5-flash");
 				await testRealWorldLinkedInData(llm, { apiKey: geminiCliToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -495,7 +495,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!geminiCliToken)(
 			"gemini-2.5-flash - should handle unpaired high surrogate (0xD83D) in tool results",
 			async () => {
-				const llm = getModel("google-gemini-cli", "gemini-2.5-flash");
+				const llm = getBundledModel("google-gemini-cli", "gemini-2.5-flash");
 				await testUnpairedHighSurrogate(llm, { apiKey: geminiCliToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -506,7 +506,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!antigravityToken)(
 			"gemini-3-flash - should handle emoji in tool results",
 			async () => {
-				const llm = getModel("google-antigravity", "gemini-3-flash");
+				const llm = getBundledModel("google-antigravity", "gemini-3-flash");
 				await testEmojiInToolResults(llm, { apiKey: antigravityToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -515,7 +515,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!antigravityToken)(
 			"gemini-3-flash - should handle real-world LinkedIn comment data with emoji",
 			async () => {
-				const llm = getModel("google-antigravity", "gemini-3-flash");
+				const llm = getBundledModel("google-antigravity", "gemini-3-flash");
 				await testRealWorldLinkedInData(llm, { apiKey: antigravityToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -524,7 +524,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!antigravityToken)(
 			"gemini-3-flash - should handle unpaired high surrogate (0xD83D) in tool results",
 			async () => {
-				const llm = getModel("google-antigravity", "gemini-3-flash");
+				const llm = getBundledModel("google-antigravity", "gemini-3-flash");
 				await testUnpairedHighSurrogate(llm, { apiKey: antigravityToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -533,7 +533,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!antigravityToken)(
 			"claude-sonnet-4-5 - should handle emoji in tool results",
 			async () => {
-				const llm = getModel("google-antigravity", "claude-sonnet-4-5");
+				const llm = getBundledModel("google-antigravity", "claude-sonnet-4-5");
 				await testEmojiInToolResults(llm, { apiKey: antigravityToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -542,7 +542,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!antigravityToken)(
 			"claude-sonnet-4-5 - should handle real-world LinkedIn comment data with emoji",
 			async () => {
-				const llm = getModel("google-antigravity", "claude-sonnet-4-5");
+				const llm = getBundledModel("google-antigravity", "claude-sonnet-4-5");
 				await testRealWorldLinkedInData(llm, { apiKey: antigravityToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -551,7 +551,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!antigravityToken)(
 			"claude-sonnet-4-5 - should handle unpaired high surrogate (0xD83D) in tool results",
 			async () => {
-				const llm = getModel("google-antigravity", "claude-sonnet-4-5");
+				const llm = getBundledModel("google-antigravity", "claude-sonnet-4-5");
 				await testUnpairedHighSurrogate(llm, { apiKey: antigravityToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -560,7 +560,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!antigravityToken)(
 			"gpt-oss-120b-medium - should handle emoji in tool results",
 			async () => {
-				const llm = getModel("google-antigravity", "gpt-oss-120b-medium");
+				const llm = getBundledModel("google-antigravity", "gpt-oss-120b-medium");
 				await testEmojiInToolResults(llm, { apiKey: antigravityToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -569,7 +569,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!antigravityToken)(
 			"gpt-oss-120b-medium - should handle real-world LinkedIn comment data with emoji",
 			async () => {
-				const llm = getModel("google-antigravity", "gpt-oss-120b-medium");
+				const llm = getBundledModel("google-antigravity", "gpt-oss-120b-medium");
 				await testRealWorldLinkedInData(llm, { apiKey: antigravityToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -578,7 +578,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!antigravityToken)(
 			"gpt-oss-120b-medium - should handle unpaired high surrogate (0xD83D) in tool results",
 			async () => {
-				const llm = getModel("google-antigravity", "gpt-oss-120b-medium");
+				const llm = getBundledModel("google-antigravity", "gpt-oss-120b-medium");
 				await testUnpairedHighSurrogate(llm, { apiKey: antigravityToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -586,7 +586,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("XAI_API_KEY"))("xAI Provider Unicode Handling", () => {
-		const llm = getModel("xai", "grok-3");
+		const llm = getBundledModel("xai", "grok-3");
 
 		it(
 			"should handle emoji in tool results",
@@ -614,7 +614,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("GROQ_API_KEY"))("Groq Provider Unicode Handling", () => {
-		const llm = getModel("groq", "openai/gpt-oss-20b");
+		const llm = getBundledModel("groq", "openai/gpt-oss-20b");
 
 		it(
 			"should handle emoji in tool results",
@@ -642,7 +642,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("CEREBRAS_API_KEY"))("Cerebras Provider Unicode Handling", () => {
-		const llm = getModel("cerebras", "gpt-oss-120b");
+		const llm = getBundledModel("cerebras", "gpt-oss-120b");
 
 		it(
 			"should handle emoji in tool results",
@@ -670,7 +670,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("ZAI_API_KEY"))("zAI Provider Unicode Handling", () => {
-		const llm = getModel("zai", "glm-4.5-air");
+		const llm = getBundledModel("zai", "glm-4.5-air");
 
 		it(
 			"should handle emoji in tool results",
@@ -698,7 +698,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("MISTRAL_API_KEY"))("Mistral Provider Unicode Handling", () => {
-		const llm = getModel("mistral", "devstral-medium-latest");
+		const llm = getBundledModel("mistral", "devstral-medium-latest");
 
 		it(
 			"should handle emoji in tool results",
@@ -729,7 +729,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!openaiCodexToken)(
 			"gpt-5.2-codex - should handle emoji in tool results",
 			async () => {
-				const llm = getModel("openai-codex", "gpt-5.2-codex");
+				const llm = getBundledModel("openai-codex", "gpt-5.2-codex");
 				await testEmojiInToolResults(llm, { apiKey: openaiCodexToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -738,7 +738,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!openaiCodexToken)(
 			"gpt-5.2-codex - should handle real-world LinkedIn comment data with emoji",
 			async () => {
-				const llm = getModel("openai-codex", "gpt-5.2-codex");
+				const llm = getBundledModel("openai-codex", "gpt-5.2-codex");
 				await testRealWorldLinkedInData(llm, { apiKey: openaiCodexToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -747,7 +747,7 @@ describe("AI Providers Unicode Surrogate Pair Tests", () => {
 		it.skipIf(!openaiCodexToken)(
 			"gpt-5.2-codex - should handle unpaired high surrogate (0xD83D) in tool results",
 			async () => {
-				const llm = getModel("openai-codex", "gpt-5.2-codex");
+				const llm = getBundledModel("openai-codex", "gpt-5.2-codex");
 				await testUnpairedHighSurrogate(llm, { apiKey: openaiCodexToken });
 			},
 			{ retry: 3, timeout: 30000 },

@@ -1,26 +1,49 @@
 import {
 	type Api,
 	type AssistantMessageEventStream,
+	anthropicModelManagerOptions,
 	type Context,
+	cerebrasModelManagerOptions,
+	createModelManager,
+	cursorModelManagerOptions,
+	getBundledModels,
+	getBundledProviders,
 	getGitHubCopilotBaseUrl,
-	getModels,
-	getProviders,
+	githubCopilotModelManagerOptions,
+	googleAntigravityModelManagerOptions,
+	googleGeminiCliModelManagerOptions,
+	googleModelManagerOptions,
+	groqModelManagerOptions,
+	kimiCodeModelManagerOptions,
 	type Model,
+	type ModelManagerOptions,
+	mistralModelManagerOptions,
 	normalizeDomain,
 	type OAuthCredentials,
 	type OAuthLoginCallbacks,
+	openaiCodexModelManagerOptions,
+	openaiModelManagerOptions,
+	opencodeModelManagerOptions,
+	openrouterModelManagerOptions,
 	registerCustomApi,
 	registerOAuthProvider,
 	type SimpleStreamOptions,
 	unregisterCustomApis,
 	unregisterOAuthProviders,
+	vercelAiGatewayModelManagerOptions,
+	xaiModelManagerOptions,
 } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
-import AjvModule from "ajv";
 import { type ConfigError, ConfigFile } from "../config";
 import type { ThemeColor } from "../modes/theme/theme";
 import type { AuthStorage } from "../session/auth-storage";
+
+export const kNoAuth = "N/A";
+
+export function isAuthenticated(apiKey: string | undefined | null): apiKey is string {
+	return Boolean(apiKey) && apiKey !== kNoAuth;
+}
 
 export type ModelRole = "default" | "smol" | "slow" | "plan" | "commit";
 
@@ -39,8 +62,6 @@ export const MODEL_ROLES: Record<ModelRole, ModelRoleInfo> = {
 };
 
 export const MODEL_ROLE_IDS: ModelRole[] = ["default", "smol", "slow", "plan", "commit"];
-
-const _Ajv = (AjvModule as any).default || AjvModule;
 
 const OpenRouterRoutingSchema = Type.Object({
 	only: Type.Optional(Type.Array(Type.String())),
@@ -252,19 +273,36 @@ function resolveApiKeyConfig(keyConfig: string): string | undefined {
 	return keyConfig;
 }
 
+function extractGoogleOAuthToken(value: string | undefined): string | undefined {
+	if (!isAuthenticated(value)) return undefined;
+	try {
+		const parsed = JSON.parse(value) as { token?: unknown };
+		if (Object.hasOwn(parsed, "token")) {
+			if (typeof parsed.token !== "string") {
+				return undefined;
+			}
+			const token = parsed.token.trim();
+			return token.length > 0 ? token : undefined;
+		}
+	} catch {
+		// OAuth values for Google providers are expected to be JSON, but custom setups may already provide raw token.
+	}
+	return value;
+}
+
 function mergeCompat(
 	baseCompat: Model<Api>["compat"],
 	overrideCompat: ModelOverride["compat"],
 ): Model<Api>["compat"] | undefined {
 	if (!overrideCompat) return baseCompat;
-	const base = baseCompat as any;
-	const override = overrideCompat as any;
-	const merged = { ...base, ...override };
-	if (base?.openRouterRouting || override.openRouterRouting) {
-		merged.openRouterRouting = { ...base?.openRouterRouting, ...override.openRouterRouting };
+	const base = baseCompat ?? {};
+	const override = overrideCompat;
+	const merged: NonNullable<Model<Api>["compat"]> = { ...base, ...override };
+	if (baseCompat?.openRouterRouting || overrideCompat.openRouterRouting) {
+		merged.openRouterRouting = { ...baseCompat?.openRouterRouting, ...overrideCompat.openRouterRouting };
 	}
-	if (base?.vercelGatewayRouting || override.vercelGatewayRouting) {
-		merged.vercelGatewayRouting = { ...base?.vercelGatewayRouting, ...override.vercelGatewayRouting };
+	if (baseCompat?.vercelGatewayRouting || overrideCompat.vercelGatewayRouting) {
+		merged.vercelGatewayRouting = { ...baseCompat?.vercelGatewayRouting, ...overrideCompat.vercelGatewayRouting };
 	}
 	return merged;
 }
@@ -384,8 +422,8 @@ export class ModelRegistry {
 		overrides: Map<string, ProviderOverride>,
 		modelOverrides: Map<string, Map<string, ModelOverride>>,
 	): Model<Api>[] {
-		return getProviders().flatMap(provider => {
-			const models = getModels(provider as any) as Model<Api>[];
+		return getBundledProviders().flatMap(provider => {
+			const models = getBundledModels(provider as Parameters<typeof getBundledModels>[0]) as Model<Api>[];
 			const providerOverride = overrides.get(provider);
 			const perModelOverrides = modelOverrides.get(provider);
 
@@ -516,11 +554,35 @@ export class ModelRegistry {
 	}
 
 	async #refreshRuntimeDiscoveries(): Promise<void> {
-		if (this.#discoverableProviders.length === 0) return;
-		const discovered = await Promise.all(
-			this.#discoverableProviders.map(provider => this.#discoverProviderModels(provider)),
+		const configuredDiscoveriesPromise =
+			this.#discoverableProviders.length === 0
+				? Promise.resolve<Model<Api>[]>([])
+				: Promise.all(this.#discoverableProviders.map(provider => this.#discoverProviderModels(provider))).then(
+						results => results.flat(),
+					);
+		const [configuredDiscovered, builtInDiscovered] = await Promise.all([
+			configuredDiscoveriesPromise,
+			this.#discoverBuiltInProviderModels(),
+		]);
+		const discovered = [...configuredDiscovered, ...builtInDiscovered];
+		if (discovered.length === 0) {
+			return;
+		}
+		const merged = this.#mergeCustomModels(
+			this.#models,
+			discovered.map(model => {
+				const existing =
+					this.find(model.provider, model.id) ??
+					this.#models.find(candidate => candidate.provider === model.provider);
+				return existing
+					? {
+							...model,
+							baseUrl: existing.baseUrl,
+							headers: existing.headers ? { ...existing.headers, ...model.headers } : model.headers,
+						}
+					: model;
+			}),
 		);
-		const merged = this.#mergeCustomModels(this.#models, discovered.flat());
 		this.#models = this.#applyModelOverrides(merged, this.#modelOverrides);
 	}
 
@@ -528,6 +590,198 @@ export class ModelRegistry {
 		switch (providerConfig.discovery.type) {
 			case "ollama":
 				return this.#discoverOllamaModels(providerConfig);
+		}
+	}
+
+	async #discoverBuiltInProviderModels(): Promise<Model<Api>[]> {
+		const managerOptions = await this.#collectBuiltInModelManagerOptions();
+		if (managerOptions.length === 0) {
+			return [];
+		}
+		const discoveries = await Promise.all(managerOptions.map(options => this.#discoverWithModelManager(options)));
+		return discoveries.flat();
+	}
+
+	async #collectBuiltInModelManagerOptions(): Promise<ModelManagerOptions<Api>[]> {
+		const [
+			anthropicApiKey,
+			openaiApiKey,
+			groqApiKey,
+			cerebrasApiKey,
+			xaiApiKey,
+			mistralApiKey,
+			opencodeApiKey,
+			openrouterApiKey,
+			vercelGatewayApiKey,
+			kimiApiKey,
+			githubCopilotApiKey,
+			googleApiKey,
+			cursorApiKey,
+			googleAntigravityApiKey,
+			googleGeminiCliApiKey,
+			codexAccessToken,
+		] = await Promise.all([
+			this.getApiKeyForProvider("anthropic"),
+			this.getApiKeyForProvider("openai"),
+			this.getApiKeyForProvider("groq"),
+			this.getApiKeyForProvider("cerebras"),
+			this.getApiKeyForProvider("xai"),
+			this.getApiKeyForProvider("mistral"),
+			this.getApiKeyForProvider("opencode"),
+			this.getApiKeyForProvider("openrouter"),
+			this.getApiKeyForProvider("vercel-ai-gateway"),
+			this.getApiKeyForProvider("kimi-code"),
+			this.getApiKeyForProvider("github-copilot"),
+			this.getApiKeyForProvider("google"),
+			this.getApiKeyForProvider("cursor"),
+			this.getApiKeyForProvider("google-antigravity"),
+			this.getApiKeyForProvider("google-gemini-cli"),
+			this.getApiKeyForProvider("openai-codex"),
+		]);
+
+		const options: ModelManagerOptions<Api>[] = [];
+		if (isAuthenticated(anthropicApiKey)) {
+			options.push(
+				anthropicModelManagerOptions({
+					apiKey: anthropicApiKey,
+					baseUrl: this.getProviderBaseUrl("anthropic"),
+				}),
+			);
+		}
+		if (isAuthenticated(openaiApiKey)) {
+			options.push(
+				openaiModelManagerOptions({
+					apiKey: openaiApiKey,
+					baseUrl: this.getProviderBaseUrl("openai"),
+				}),
+			);
+		}
+		if (isAuthenticated(groqApiKey)) {
+			options.push(
+				groqModelManagerOptions({
+					apiKey: groqApiKey,
+					baseUrl: this.getProviderBaseUrl("groq"),
+				}),
+			);
+		}
+		if (isAuthenticated(cerebrasApiKey)) {
+			options.push(
+				cerebrasModelManagerOptions({
+					apiKey: cerebrasApiKey,
+					baseUrl: this.getProviderBaseUrl("cerebras"),
+				}),
+			);
+		}
+		if (isAuthenticated(xaiApiKey)) {
+			options.push(
+				xaiModelManagerOptions({
+					apiKey: xaiApiKey,
+					baseUrl: this.getProviderBaseUrl("xai"),
+				}),
+			);
+		}
+		if (isAuthenticated(mistralApiKey)) {
+			options.push(
+				mistralModelManagerOptions({
+					apiKey: mistralApiKey,
+					baseUrl: this.getProviderBaseUrl("mistral"),
+				}),
+			);
+		}
+		if (isAuthenticated(opencodeApiKey)) {
+			options.push(
+				opencodeModelManagerOptions({
+					apiKey: opencodeApiKey,
+					baseUrl: this.getProviderBaseUrl("opencode"),
+				}),
+			);
+		}
+		if (isAuthenticated(openrouterApiKey)) {
+			options.push(
+				openrouterModelManagerOptions({
+					apiKey: openrouterApiKey,
+					baseUrl: this.getProviderBaseUrl("openrouter"),
+				}),
+			);
+		}
+		if (isAuthenticated(vercelGatewayApiKey)) {
+			options.push(
+				vercelAiGatewayModelManagerOptions({
+					apiKey: vercelGatewayApiKey,
+					baseUrl: this.getProviderBaseUrl("vercel-ai-gateway"),
+				}),
+			);
+		}
+		if (isAuthenticated(kimiApiKey)) {
+			options.push(
+				kimiCodeModelManagerOptions({
+					apiKey: kimiApiKey,
+					baseUrl: this.getProviderBaseUrl("kimi-code"),
+				}),
+			);
+		}
+		if (isAuthenticated(githubCopilotApiKey)) {
+			options.push(
+				githubCopilotModelManagerOptions({
+					apiKey: githubCopilotApiKey,
+					baseUrl: this.getProviderBaseUrl("github-copilot"),
+				}),
+			);
+		}
+		if (isAuthenticated(googleApiKey)) options.push(googleModelManagerOptions({ apiKey: googleApiKey }));
+		if (isAuthenticated(cursorApiKey)) {
+			options.push(
+				cursorModelManagerOptions({
+					apiKey: cursorApiKey,
+					baseUrl: this.getProviderBaseUrl("cursor"),
+				}),
+			);
+		}
+
+		const antigravityToken = extractGoogleOAuthToken(googleAntigravityApiKey);
+		if (isAuthenticated(antigravityToken)) {
+			options.push(
+				googleAntigravityModelManagerOptions({
+					oauthToken: antigravityToken,
+					endpoint: this.getProviderBaseUrl("google-antigravity"),
+				}),
+			);
+		}
+
+		const geminiCliToken = extractGoogleOAuthToken(googleGeminiCliApiKey);
+		if (isAuthenticated(geminiCliToken)) {
+			options.push(
+				googleGeminiCliModelManagerOptions({
+					oauthToken: geminiCliToken,
+					endpoint: this.getProviderBaseUrl("google-gemini-cli"),
+				}),
+			);
+		}
+
+		const codexCredentials = this.authStorage.getOAuthCredential("openai-codex");
+		if (isAuthenticated(codexAccessToken)) {
+			options.push(
+				openaiCodexModelManagerOptions({
+					accessToken: codexAccessToken,
+					accountId: codexCredentials?.accountId,
+				}),
+			);
+		}
+
+		return options;
+	}
+
+	async #discoverWithModelManager(options: ModelManagerOptions<Api>): Promise<Model<Api>[]> {
+		try {
+			const manager = createModelManager(options);
+			const result = await manager.refresh();
+			return result.models;
+		} catch (error) {
+			logger.warn("model discovery failed for provider", {
+				provider: options.providerId,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return [];
 		}
 	}
 
@@ -698,7 +952,7 @@ export class ModelRegistry {
 	 */
 	async getApiKey(model: Model<Api>, sessionId?: string): Promise<string | undefined> {
 		if (this.#keylessProviders.has(model.provider)) {
-			return "<no-auth>";
+			return kNoAuth;
 		}
 		return this.authStorage.getApiKey(model.provider, sessionId, { baseUrl: model.baseUrl });
 	}
@@ -708,7 +962,7 @@ export class ModelRegistry {
 	 */
 	async getApiKeyForProvider(provider: string, sessionId?: string, baseUrl?: string): Promise<string | undefined> {
 		if (this.#keylessProviders.has(provider)) {
-			return "<no-auth>";
+			return kNoAuth;
 		}
 		return this.authStorage.getApiKey(provider, sessionId, { baseUrl });
 	}

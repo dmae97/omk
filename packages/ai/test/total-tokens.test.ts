@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { getModel } from "@oh-my-pi/pi-ai/models";
+import { getBundledModel } from "@oh-my-pi/pi-ai/models";
 import { complete } from "@oh-my-pi/pi-ai/stream";
 import type { Api, Context, Model, OptionsForApi, Usage } from "@oh-my-pi/pi-ai/types";
 import { e2eApiKey, resolveApiKey } from "./oauth";
@@ -103,7 +103,7 @@ describe("totalTokens field", () => {
 		it(
 			"claude-haiku-4-5 - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("anthropic", "claude-haiku-4-5-20251001");
+				const llm = getBundledModel("anthropic", "claude-haiku-4-5-20251001");
 
 				console.log(`\nAnthropic / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: Bun.env.ANTHROPIC_API_KEY });
@@ -126,7 +126,7 @@ describe("totalTokens field", () => {
 		it.skipIf(!anthropicOAuthToken)(
 			"claude-sonnet-4 - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("anthropic", "claude-sonnet-4-20250514");
+				const llm = getBundledModel("anthropic", "claude-sonnet-4-20250514");
 
 				console.log(`\nAnthropic OAuth / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: anthropicOAuthToken });
@@ -154,7 +154,7 @@ describe("totalTokens field", () => {
 			"gpt-4o-mini - should return totalTokens equal to sum of components",
 			async () => {
 				const llm: Model<"openai-completions"> = {
-					...getModel("openai", "gpt-4o-mini")!,
+					...getBundledModel("openai", "gpt-4o-mini")!,
 					api: "openai-completions",
 				};
 
@@ -175,7 +175,7 @@ describe("totalTokens field", () => {
 		it(
 			"gpt-4o - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("openai", "gpt-4o");
+				const llm = getBundledModel("openai", "gpt-4o");
 
 				console.log(`\nOpenAI Responses / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm);
@@ -198,7 +198,7 @@ describe("totalTokens field", () => {
 		it(
 			"gemini-2.0-flash - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("google", "gemini-2.0-flash");
+				const llm = getBundledModel("google", "gemini-2.0-flash");
 
 				console.log(`\nGoogle / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm);
@@ -221,7 +221,7 @@ describe("totalTokens field", () => {
 		it(
 			"grok-3-fast - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("xai", "grok-3-fast");
+				const llm = getBundledModel("xai", "grok-3-fast");
 
 				console.log(`\nxAI / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: Bun.env.XAI_API_KEY });
@@ -244,7 +244,7 @@ describe("totalTokens field", () => {
 		it(
 			"openai/gpt-oss-120b - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("groq", "openai/gpt-oss-120b");
+				const llm = getBundledModel("groq", "openai/gpt-oss-120b");
 
 				console.log(`\nGroq / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: Bun.env.GROQ_API_KEY });
@@ -267,7 +267,7 @@ describe("totalTokens field", () => {
 		it(
 			"gpt-oss-120b - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("cerebras", "gpt-oss-120b");
+				const llm = getBundledModel("cerebras", "gpt-oss-120b");
 
 				console.log(`\nCerebras / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: Bun.env.CEREBRAS_API_KEY });
@@ -290,7 +290,7 @@ describe("totalTokens field", () => {
 		it(
 			"glm-4.5-flash - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("zai", "glm-4.5-flash");
+				const llm = getBundledModel("zai", "glm-4.5-flash");
 
 				console.log(`\nz.ai / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: Bun.env.ZAI_API_KEY });
@@ -313,7 +313,7 @@ describe("totalTokens field", () => {
 		it(
 			"devstral-medium-latest - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("mistral", "devstral-medium-latest");
+				const llm = getBundledModel("mistral", "devstral-medium-latest");
 
 				console.log(`\nMistral / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: Bun.env.MISTRAL_API_KEY });
@@ -336,7 +336,7 @@ describe("totalTokens field", () => {
 		it(
 			"anthropic/claude-sonnet-4 - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("openrouter", "anthropic/claude-sonnet-4");
+				const llm = getBundledModel("openrouter", "anthropic/claude-sonnet-4");
 
 				console.log(`\nOpenRouter / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: Bun.env.OPENROUTER_API_KEY });
@@ -353,7 +353,7 @@ describe("totalTokens field", () => {
 		it(
 			"deepseek/deepseek-chat - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("openrouter", "deepseek/deepseek-chat");
+				const llm = getBundledModel("openrouter", "deepseek/deepseek-chat");
 
 				console.log(`\nOpenRouter / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: Bun.env.OPENROUTER_API_KEY });
@@ -370,7 +370,7 @@ describe("totalTokens field", () => {
 		it(
 			"mistralai/mistral-small-3.1-24b-instruct - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("openrouter", "mistralai/mistral-small-3.1-24b-instruct");
+				const llm = getBundledModel("openrouter", "mistralai/mistral-small-3.1-24b-instruct");
 
 				console.log(`\nOpenRouter / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: Bun.env.OPENROUTER_API_KEY });
@@ -387,7 +387,7 @@ describe("totalTokens field", () => {
 		it(
 			"google/gemini-2.0-flash-001 - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("openrouter", "google/gemini-2.0-flash-001");
+				const llm = getBundledModel("openrouter", "google/gemini-2.0-flash-001");
 
 				console.log(`\nOpenRouter / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: Bun.env.OPENROUTER_API_KEY });
@@ -404,7 +404,7 @@ describe("totalTokens field", () => {
 		it(
 			"meta-llama/llama-4-maverick - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("openrouter", "meta-llama/llama-4-maverick");
+				const llm = getBundledModel("openrouter", "meta-llama/llama-4-maverick");
 
 				console.log(`\nOpenRouter / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: Bun.env.OPENROUTER_API_KEY });
@@ -427,7 +427,7 @@ describe("totalTokens field", () => {
 		it.skipIf(!githubCopilotToken)(
 			"gpt-4o - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("github-copilot", "gpt-4o");
+				const llm = getBundledModel("github-copilot", "gpt-4o");
 
 				console.log(`\nGitHub Copilot / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: githubCopilotToken });
@@ -444,7 +444,7 @@ describe("totalTokens field", () => {
 		it.skipIf(!githubCopilotToken)(
 			"claude-sonnet-4 - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("github-copilot", "claude-sonnet-4");
+				const llm = getBundledModel("github-copilot", "claude-sonnet-4");
 
 				console.log(`\nGitHub Copilot / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: githubCopilotToken });
@@ -467,7 +467,7 @@ describe("totalTokens field", () => {
 		it.skipIf(!geminiCliToken)(
 			"gemini-2.5-flash - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("google-gemini-cli", "gemini-2.5-flash");
+				const llm = getBundledModel("google-gemini-cli", "gemini-2.5-flash");
 
 				console.log(`\nGoogle Gemini CLI / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: geminiCliToken });
@@ -490,7 +490,7 @@ describe("totalTokens field", () => {
 		it.skipIf(!antigravityToken)(
 			"gemini-3-flash - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("google-antigravity", "gemini-3-flash");
+				const llm = getBundledModel("google-antigravity", "gemini-3-flash");
 
 				console.log(`\nGoogle Antigravity / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: antigravityToken });
@@ -507,7 +507,7 @@ describe("totalTokens field", () => {
 		it.skipIf(!antigravityToken)(
 			"claude-sonnet-4-5 - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("google-antigravity", "claude-sonnet-4-5");
+				const llm = getBundledModel("google-antigravity", "claude-sonnet-4-5");
 
 				console.log(`\nGoogle Antigravity / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: antigravityToken });
@@ -524,7 +524,7 @@ describe("totalTokens field", () => {
 		it.skipIf(!antigravityToken)(
 			"gpt-oss-120b-medium - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("google-antigravity", "gpt-oss-120b-medium");
+				const llm = getBundledModel("google-antigravity", "gpt-oss-120b-medium");
 
 				console.log(`\nGoogle Antigravity / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: antigravityToken });
@@ -547,7 +547,7 @@ describe("totalTokens field", () => {
 		it.skipIf(!openaiCodexToken)(
 			"gpt-5.2-codex - should return totalTokens equal to sum of components",
 			async () => {
-				const llm = getModel("openai-codex", "gpt-5.2-codex");
+				const llm = getBundledModel("openai-codex", "gpt-5.2-codex");
 
 				console.log(`\nOpenAI Codex / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: openaiCodexToken });

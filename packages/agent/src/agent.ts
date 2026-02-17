@@ -6,7 +6,7 @@ import {
 	type AssistantMessage,
 	type CursorExecHandlers,
 	type CursorToolResultHandler,
-	getModel,
+	getBundledModel,
 	type ImageContent,
 	type Message,
 	type Model,
@@ -153,7 +153,7 @@ interface CursorToolResultEntry {
 export class Agent {
 	#state: AgentState = {
 		systemPrompt: "",
-		model: getModel("google", "gemini-2.5-flash-lite-preview-06-17"),
+		model: getBundledModel("google", "gemini-2.5-flash-lite-preview-06-17"),
 		thinkingLevel: "off",
 		tools: [],
 		messages: [],

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { getModel } from "@oh-my-pi/pi-ai/models";
+import { getBundledModel } from "@oh-my-pi/pi-ai/models";
 import { convertMessages } from "@oh-my-pi/pi-ai/providers/openai-completions";
 import type { AssistantMessage, Context, Model, OpenAICompat, ToolResultMessage, Usage } from "@oh-my-pi/pi-ai/types";
 
@@ -48,7 +48,7 @@ function buildToolResult(toolCallId: string, timestamp: number): ToolResultMessa
 
 describe("openai-completions convertMessages", () => {
 	it("batches tool-result images after consecutive tool results", () => {
-		const baseModel = getModel("openai", "gpt-4o-mini");
+		const baseModel = getBundledModel("openai", "gpt-4o-mini");
 		const model: Model<"openai-completions"> = {
 			...baseModel,
 			api: "openai-completions",

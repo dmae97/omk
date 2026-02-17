@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { OpenAICompat } from "@oh-my-pi/pi-ai";
-import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+import { kNoAuth, ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { Snowflake } from "@oh-my-pi/pi-utils";
 
@@ -562,7 +562,7 @@ describe("ModelRegistry", () => {
 				const ollamaModels = getModelsForProvider(registry, "ollama");
 				expect(ollamaModels.some(m => m.id === "phi4-mini")).toBe(true);
 				expect(registry.getAvailable().some(m => m.provider === "ollama" && m.id === "phi4-mini")).toBe(true);
-				expect(await registry.getApiKey(ollamaModels[0])).toBe("<no-auth>");
+				expect(await registry.getApiKey(ollamaModels[0])).toBe(kNoAuth);
 			} finally {
 				globalThis.fetch = originalFetch;
 			}
@@ -599,7 +599,7 @@ describe("ModelRegistry", () => {
 
 				const available = registry.getAvailable().filter(m => m.provider === "ollama");
 				expect(available.length).toBe(2);
-				expect(await registry.getApiKey(available[0])).toBe("<no-auth>");
+				expect(await registry.getApiKey(available[0])).toBe(kNoAuth);
 			} finally {
 				globalThis.fetch = originalFetch;
 			}

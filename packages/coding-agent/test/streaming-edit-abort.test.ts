@@ -7,7 +7,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Agent, type AgentTool } from "@oh-my-pi/pi-agent-core";
-import { type AssistantMessage, getModel, type StopReason, type ToolCall } from "@oh-my-pi/pi-ai";
+import { type AssistantMessage, getBundledModel, type StopReason, type ToolCall } from "@oh-my-pi/pi-ai";
 import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
@@ -80,7 +80,7 @@ function chunkStringRandomly(text: string, seed: number): string[] {
 }
 
 async function createSession(tempDir: string, streamFn: Agent["streamFn"], tool: AgentTool): Promise<AgentSession> {
-	const model = getModel("anthropic", "claude-sonnet-4-5")!;
+	const model = getBundledModel("anthropic", "claude-sonnet-4-5")!;
 	const agent = new Agent({
 		getApiKey: () => "test-key",
 		initialState: {

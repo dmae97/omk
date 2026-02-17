@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `condition` and `scope` fields to rule frontmatter for advanced TTSR matching and stream filtering
@@ -12,6 +13,8 @@
 
 ### Changed
 
+- Changed model discovery to automatically discover built-in provider models (Anthropic, OpenAI, Groq, Cerebras, Xai, Mistral, OpenCode, OpenRouter, Vercel AI Gateway, Kimi Code, GitHub Copilot, Google, Cursor, Google Antigravity, Google Gemini CLI, OpenAI Codex) when credentials are configured
+- Changed `getModel()` and `getModels()` imports to `getBundledModel()` and `getBundledModels()` across test utilities
 - Changed TTSR rule matching from single `ttsrTrigger` regex to multiple `condition` patterns with scope filtering
 - Changed TTSR buffer management to use per-stream-key buffers instead of a single global buffer
 - Changed rule discovery to use unified `buildRuleFromMarkdown` helper across all providers (builtin, cline, cursor, windsurf, agents)

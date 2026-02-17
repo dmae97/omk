@@ -216,6 +216,146 @@
 			"contextWindow": 163840,
 			"maxTokens": 81920
 		},
+		"eu.anthropic.claude-3-5-haiku-20241022-v1:0": {
+			"id": "eu.anthropic.claude-3-5-haiku-20241022-v1:0",
+			"name": "Claude Haiku 3.5 (EU)",
+			"api": "bedrock-converse-stream",
+			"provider": "amazon-bedrock",
+			"baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+			"reasoning": false,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0.8,
+				"output": 4,
+				"cacheRead": 0.08,
+				"cacheWrite": 1
+			},
+			"contextWindow": 200000,
+			"maxTokens": 8192
+		},
+		"eu.anthropic.claude-3-5-sonnet-20240620-v1:0": {
+			"id": "eu.anthropic.claude-3-5-sonnet-20240620-v1:0",
+			"name": "Claude Sonnet 3.5 (EU)",
+			"api": "bedrock-converse-stream",
+			"provider": "amazon-bedrock",
+			"baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+			"reasoning": false,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 3,
+				"output": 15,
+				"cacheRead": 0.3,
+				"cacheWrite": 3.75
+			},
+			"contextWindow": 200000,
+			"maxTokens": 8192
+		},
+		"eu.anthropic.claude-3-5-sonnet-20241022-v2:0": {
+			"id": "eu.anthropic.claude-3-5-sonnet-20241022-v2:0",
+			"name": "Claude Sonnet 3.5 v2 (EU)",
+			"api": "bedrock-converse-stream",
+			"provider": "amazon-bedrock",
+			"baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+			"reasoning": false,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 3,
+				"output": 15,
+				"cacheRead": 0.3,
+				"cacheWrite": 3.75
+			},
+			"contextWindow": 200000,
+			"maxTokens": 8192
+		},
+		"eu.anthropic.claude-3-7-sonnet-20250219-v1:0": {
+			"id": "eu.anthropic.claude-3-7-sonnet-20250219-v1:0",
+			"name": "Claude Sonnet 3.7 (EU)",
+			"api": "bedrock-converse-stream",
+			"provider": "amazon-bedrock",
+			"baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+			"reasoning": false,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 3,
+				"output": 15,
+				"cacheRead": 0.3,
+				"cacheWrite": 3.75
+			},
+			"contextWindow": 200000,
+			"maxTokens": 8192
+		},
+		"eu.anthropic.claude-3-haiku-20240307-v1:0": {
+			"id": "eu.anthropic.claude-3-haiku-20240307-v1:0",
+			"name": "Claude Haiku 3 (EU)",
+			"api": "bedrock-converse-stream",
+			"provider": "amazon-bedrock",
+			"baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+			"reasoning": false,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0.25,
+				"output": 1.25,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 4096
+		},
+		"eu.anthropic.claude-3-opus-20240229-v1:0": {
+			"id": "eu.anthropic.claude-3-opus-20240229-v1:0",
+			"name": "Claude Opus 3 (EU)",
+			"api": "bedrock-converse-stream",
+			"provider": "amazon-bedrock",
+			"baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+			"reasoning": false,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 15,
+				"output": 75,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 4096
+		},
+		"eu.anthropic.claude-3-sonnet-20240229-v1:0": {
+			"id": "eu.anthropic.claude-3-sonnet-20240229-v1:0",
+			"name": "Claude Sonnet 3 (EU)",
+			"api": "bedrock-converse-stream",
+			"provider": "amazon-bedrock",
+			"baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+			"reasoning": false,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 3,
+				"output": 15,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 4096
+		},
 		"eu.anthropic.claude-haiku-4-5-20251001-v1:0": {
 			"id": "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
 			"name": "Claude Haiku 4.5 (EU)",
@@ -235,6 +375,46 @@
 			},
 			"contextWindow": 200000,
 			"maxTokens": 64000
+		},
+		"eu.anthropic.claude-opus-4-1-20250805-v1:0": {
+			"id": "eu.anthropic.claude-opus-4-1-20250805-v1:0",
+			"name": "Claude Opus 4.1 (EU)",
+			"api": "bedrock-converse-stream",
+			"provider": "amazon-bedrock",
+			"baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 15,
+				"output": 75,
+				"cacheRead": 1.5,
+				"cacheWrite": 18.75
+			},
+			"contextWindow": 200000,
+			"maxTokens": 32000
+		},
+		"eu.anthropic.claude-opus-4-20250514-v1:0": {
+			"id": "eu.anthropic.claude-opus-4-20250514-v1:0",
+			"name": "Claude Opus 4 (EU)",
+			"api": "bedrock-converse-stream",
+			"provider": "amazon-bedrock",
+			"baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 15,
+				"output": 75,
+				"cacheRead": 1.5,
+				"cacheWrite": 18.75
+			},
+			"contextWindow": 200000,
+			"maxTokens": 32000
 		},
 		"eu.anthropic.claude-opus-4-5-20251101-v1:0": {
 			"id": "eu.anthropic.claude-opus-4-5-20251101-v1:0",
@@ -299,6 +479,26 @@
 		"eu.anthropic.claude-sonnet-4-5-20250929-v1:0": {
 			"id": "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
 			"name": "Claude Sonnet 4.5 (EU)",
+			"api": "bedrock-converse-stream",
+			"provider": "amazon-bedrock",
+			"baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 3,
+				"output": 15,
+				"cacheRead": 0.3,
+				"cacheWrite": 3.75
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
+		"eu.anthropic.claude-sonnet-4-6": {
+			"id": "eu.anthropic.claude-sonnet-4-6",
+			"name": "Claude Sonnet 4.6 (EU)",
 			"api": "bedrock-converse-stream",
 			"provider": "amazon-bedrock",
 			"baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
@@ -419,6 +619,26 @@
 		"global.anthropic.claude-sonnet-4-5-20250929-v1:0": {
 			"id": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
 			"name": "Claude Sonnet 4.5",
+			"api": "bedrock-converse-stream",
+			"provider": "amazon-bedrock",
+			"baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 3,
+				"output": 15,
+				"cacheRead": 0.3,
+				"cacheWrite": 3.75
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
+		"global.anthropic.claude-sonnet-4-6": {
+			"id": "global.anthropic.claude-sonnet-4-6",
+			"name": "Claude Sonnet 4.6",
 			"api": "bedrock-converse-stream",
 			"provider": "amazon-bedrock",
 			"baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
@@ -1155,6 +1375,26 @@
 			"contextWindow": 200000,
 			"maxTokens": 64000
 		},
+		"us.anthropic.claude-sonnet-4-6": {
+			"id": "us.anthropic.claude-sonnet-4-6",
+			"name": "Claude Sonnet 4.6 (US)",
+			"api": "bedrock-converse-stream",
+			"provider": "amazon-bedrock",
+			"baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 3,
+				"output": 15,
+				"cacheRead": 0.3,
+				"cacheWrite": 3.75
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
 		"us.deepseek.r1-v1:0": {
 			"id": "us.deepseek.r1-v1:0",
 			"name": "DeepSeek-R1",
@@ -1531,6 +1771,26 @@
 		"claude-sonnet-4-5": {
 			"id": "claude-sonnet-4-5",
 			"name": "Claude Sonnet 4.5",
+			"api": "anthropic-messages",
+			"provider": "opencode",
+			"baseUrl": "https://opencode.ai/zen",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 3,
+				"output": 15,
+				"cacheRead": 0.3,
+				"cacheWrite": 3.75
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
+		"claude-sonnet-4-6": {
+			"id": "claude-sonnet-4-6",
+			"name": "Claude Sonnet 4.6",
 			"api": "anthropic-messages",
 			"provider": "opencode",
 			"baseUrl": "https://opencode.ai/zen",
@@ -2221,26 +2481,6 @@
 			"contextWindow": 200000,
 			"maxTokens": 128000
 		},
-		"claude-sonnet-4-6": {
-			"id": "claude-sonnet-4-6",
-			"name": "Claude Sonnet 4.6",
-			"api": "anthropic-messages",
-			"provider": "anthropic",
-			"baseUrl": "https://api.anthropic.com",
-			"reasoning": true,
-			"input": [
-				"text",
-				"image"
-			],
-			"cost": {
-				"input": 3,
-				"output": 15,
-				"cacheRead": 0.3,
-				"cacheWrite": 3.75
-			},
-			"contextWindow": 200000,
-			"maxTokens": 64000
-		},
 		"claude-sonnet-4-0": {
 			"id": "claude-sonnet-4-0",
 			"name": "Claude Sonnet 4 (latest)",
@@ -2304,6 +2544,26 @@
 		"claude-sonnet-4-5-20250929": {
 			"id": "claude-sonnet-4-5-20250929",
 			"name": "Claude Sonnet 4.5",
+			"api": "anthropic-messages",
+			"provider": "anthropic",
+			"baseUrl": "https://api.anthropic.com",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 3,
+				"output": 15,
+				"cacheRead": 0.3,
+				"cacheWrite": 3.75
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
+		"claude-sonnet-4-6": {
+			"id": "claude-sonnet-4-6",
+			"name": "Claude Sonnet 4.6",
 			"api": "anthropic-messages",
 			"provider": "anthropic",
 			"baseUrl": "https://api.anthropic.com",
@@ -2445,6 +2705,32 @@
 				"cacheWrite": 0
 			},
 			"contextWindow": 128000,
+			"maxTokens": 32000,
+			"headers": {
+				"User-Agent": "GitHubCopilotChat/0.35.0",
+				"Editor-Version": "vscode/1.107.0",
+				"Editor-Plugin-Version": "copilot-chat/0.35.0",
+				"Copilot-Integration-Id": "vscode-chat"
+			}
+		},
+		"claude-sonnet-4.6": {
+			"id": "claude-sonnet-4.6",
+			"name": "Claude Sonnet 4.6",
+			"api": "anthropic-messages",
+			"provider": "github-copilot",
+			"baseUrl": "https://api.individual.githubcopilot.com",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
 			"maxTokens": 32000,
 			"headers": {
 				"User-Agent": "GitHubCopilotChat/0.35.0",
@@ -6376,7 +6662,7 @@
 				"cacheRead": 0.3,
 				"cacheWrite": 3.75
 			},
-			"contextWindow": 1000000,
+			"contextWindow": 200000,
 			"maxTokens": 128000
 		},
 		"arcee-ai/trinity-large-preview:free": {
@@ -7343,13 +7629,13 @@
 				"text"
 			],
 			"cost": {
-				"input": 0.049999999999999996,
-				"output": 0.22,
-				"cacheRead": 0.024999999999999998,
+				"input": 0.39999999999999997,
+				"output": 2,
+				"cacheRead": 0,
 				"cacheWrite": 0
 			},
 			"contextWindow": 262144,
-			"maxTokens": 65536
+			"maxTokens": 4096
 		},
 		"mistralai/devstral-medium": {
 			"id": "mistralai/devstral-medium",
@@ -11007,8 +11293,8 @@
 				"cacheRead": 0.3,
 				"cacheWrite": 3.75
 			},
-			"contextWindow": 1000000,
-			"maxTokens": 64000
+			"contextWindow": 200000,
+			"maxTokens": 128000
 		},
 		"arcee-ai/trinity-large-preview": {
 			"id": "arcee-ai/trinity-large-preview",
@@ -13136,9 +13422,9 @@
 		}
 	},
 	"openai-codex": {
-		"gpt-5.1": {
-			"id": "gpt-5.1",
-			"name": "GPT-5.1",
+		"gpt-5": {
+			"id": "gpt-5",
+			"name": "gpt-5",
 			"api": "openai-codex-responses",
 			"provider": "openai-codex",
 			"baseUrl": "https://chatgpt.com/backend-api",
@@ -13148,9 +13434,89 @@
 				"image"
 			],
 			"cost": {
-				"input": 1.25,
-				"output": 10,
-				"cacheRead": 0.125,
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 128000
+		},
+		"gpt-5-codex": {
+			"id": "gpt-5-codex",
+			"name": "gpt-5-codex",
+			"api": "openai-codex-responses",
+			"provider": "openai-codex",
+			"baseUrl": "https://chatgpt.com/backend-api",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 128000
+		},
+		"gpt-5-codex-mini": {
+			"id": "gpt-5-codex-mini",
+			"name": "gpt-5-codex-mini",
+			"api": "openai-codex-responses",
+			"provider": "openai-codex",
+			"baseUrl": "https://chatgpt.com/backend-api",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 128000
+		},
+		"gpt-5.1": {
+			"id": "gpt-5.1",
+			"name": "gpt-5.1",
+			"api": "openai-codex-responses",
+			"provider": "openai-codex",
+			"baseUrl": "https://chatgpt.com/backend-api",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 128000
+		},
+		"gpt-5.1-codex": {
+			"id": "gpt-5.1-codex",
+			"name": "gpt-5.1-codex",
+			"api": "openai-codex-responses",
+			"provider": "openai-codex",
+			"baseUrl": "https://chatgpt.com/backend-api",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
 				"cacheWrite": 0
 			},
 			"contextWindow": 272000,
@@ -13158,7 +13524,7 @@
 		},
 		"gpt-5.1-codex-max": {
 			"id": "gpt-5.1-codex-max",
-			"name": "GPT-5.1 Codex Max",
+			"name": "gpt-5.1-codex-max",
 			"api": "openai-codex-responses",
 			"provider": "openai-codex",
 			"baseUrl": "https://chatgpt.com/backend-api",
@@ -13168,9 +13534,9 @@
 				"image"
 			],
 			"cost": {
-				"input": 1.25,
-				"output": 10,
-				"cacheRead": 0.125,
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
 				"cacheWrite": 0
 			},
 			"contextWindow": 272000,
@@ -13178,7 +13544,7 @@
 		},
 		"gpt-5.1-codex-mini": {
 			"id": "gpt-5.1-codex-mini",
-			"name": "GPT-5.1 Codex Mini",
+			"name": "gpt-5.1-codex-mini",
 			"api": "openai-codex-responses",
 			"provider": "openai-codex",
 			"baseUrl": "https://chatgpt.com/backend-api",
@@ -13188,9 +13554,9 @@
 				"image"
 			],
 			"cost": {
-				"input": 0.25,
-				"output": 2,
-				"cacheRead": 0.025,
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
 				"cacheWrite": 0
 			},
 			"contextWindow": 272000,
@@ -13198,7 +13564,7 @@
 		},
 		"gpt-5.2": {
 			"id": "gpt-5.2",
-			"name": "GPT-5.2",
+			"name": "gpt-5.2",
 			"api": "openai-codex-responses",
 			"provider": "openai-codex",
 			"baseUrl": "https://chatgpt.com/backend-api",
@@ -13208,9 +13574,9 @@
 				"image"
 			],
 			"cost": {
-				"input": 1.75,
-				"output": 14,
-				"cacheRead": 0.175,
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
 				"cacheWrite": 0
 			},
 			"contextWindow": 272000,
@@ -13218,7 +13584,7 @@
 		},
 		"gpt-5.2-codex": {
 			"id": "gpt-5.2-codex",
-			"name": "GPT-5.2 Codex",
+			"name": "gpt-5.2-codex",
 			"api": "openai-codex-responses",
 			"provider": "openai-codex",
 			"baseUrl": "https://chatgpt.com/backend-api",
@@ -13228,9 +13594,9 @@
 				"image"
 			],
 			"cost": {
-				"input": 1.75,
-				"output": 14,
-				"cacheRead": 0.175,
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
 				"cacheWrite": 0
 			},
 			"contextWindow": 272000,
@@ -13238,7 +13604,7 @@
 		},
 		"gpt-5.3-codex": {
 			"id": "gpt-5.3-codex",
-			"name": "GPT-5.3 Codex",
+			"name": "gpt-5.3-codex",
 			"api": "openai-codex-responses",
 			"provider": "openai-codex",
 			"baseUrl": "https://chatgpt.com/backend-api",
@@ -13248,9 +13614,9 @@
 				"image"
 			],
 			"cost": {
-				"input": 1.75,
-				"output": 14,
-				"cacheRead": 0.175,
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
 				"cacheWrite": 0
 			},
 			"contextWindow": 272000,
@@ -13460,6 +13826,46 @@
 			},
 			"contextWindow": 200000,
 			"maxTokens": 64000
+		},
+		"claude-sonnet-4-6": {
+			"id": "claude-sonnet-4-6",
+			"name": "Claude Sonnet 4.6 (Antigravity)",
+			"api": "google-gemini-cli",
+			"provider": "google-antigravity",
+			"baseUrl": "https://daily-cloudcode-pa.sandbox.googleapis.com",
+			"reasoning": false,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 128000
+		},
+		"claude-sonnet-4-6-thinking": {
+			"id": "claude-sonnet-4-6-thinking",
+			"name": "Claude Sonnet 4.6 Thinking (Antigravity)",
+			"api": "google-gemini-cli",
+			"provider": "google-antigravity",
+			"baseUrl": "https://daily-cloudcode-pa.sandbox.googleapis.com",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 128000
 		},
 		"gemini-2.5-flash": {
 			"id": "gemini-2.5-flash",

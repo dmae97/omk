@@ -1,8 +1,20 @@
 # Changelog
 
 ## [Unreleased]
+
+### Breaking Changes
+
+- Renamed public API functions: `getModel()` → `getBundledModel()`, `getModels()` → `getBundledModels()`, `getProviders()` → `getBundledProviders()`
+
 ### Added
 
+- Exported `ModelManager` API for runtime-aware model resolution with dynamic endpoint discovery
+- Exported provider-specific model manager configuration helpers for Google, OpenAI-compatible, Codex, and Cursor providers
+- Exported discovery utilities for fetching models from Antigravity, Codex, Cursor, Gemini, and OpenAI-compatible endpoints
+- Added `createModelManager()` function to manage bundled and dynamically discovered models with configurable refresh strategies
+- Added support for on-disk model caching with TTL-based invalidation
+- Added `resolveProviderModels()` function for runtime model resolution across multiple providers
+- Added EU cross-region inference variants for Claude Haiku 3.5 on Bedrock
 - Added Claude Sonnet 4.6 and Claude Sonnet 4.6 Thinking models to Antigravity provider
 - Added GLM-5 Free model via OpenCode provider
 - Added GLM-4.7-FlashX model via ZAI provider
@@ -13,6 +25,11 @@
 
 ### Changed
 
+- Renamed `getModel()` to `getBundledModel()` to clarify it returns compile-time bundled models only
+- Renamed `getModels()` to `getBundledModels()` for consistency
+- Renamed `getProviders()` to `getBundledProviders()` for consistency
+- Refactored model generation script to use modular discovery functions instead of monolithic provider-specific logic
+- Updated models.json with new model entries and pricing updates across multiple providers
 - Updated pricing for deepseek/deepseek-v3 model on OpenRouter
 - Updated maxTokens from 65536 to 4096 for deepseek/deepseek-v3 on OpenRouter
 - Updated pricing and maxTokens for mistralai/mistral-large-2411 on OpenRouter

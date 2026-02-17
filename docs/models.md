@@ -195,7 +195,7 @@ If `authHeader: true` and provider `apiKey` is set, models get:
 Keyless providers:
 
 - Providers marked `auth: none` are treated as available without credentials.
-- `getApiKey*` returns `"<no-auth>"` for them.
+- `getApiKey*` returns `kNoAuth` for them.
 
 ## Model availability vs all models
 
@@ -295,6 +295,7 @@ providers:
 ```
 
 The built-in model generator also assigns this automatically for `*-spark` models when a same-provider base model exists.
+
 ## Compatibility and routing fields
 
 `models.yml` supports this `compat` subset:

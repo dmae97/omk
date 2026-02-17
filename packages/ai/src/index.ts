@@ -1,8 +1,10 @@
 export type { Static, TSchema } from "@sinclair/typebox";
 export { Type } from "@sinclair/typebox";
 export * from "./api-registry";
+export * from "./model-manager";
 export * from "./models";
 export * from "./provider-details";
+export * from "./provider-models";
 export * from "./providers/anthropic";
 export * from "./providers/azure-openai-responses";
 export * from "./providers/cursor";
@@ -23,6 +25,7 @@ export * from "./usage/kimi";
 export * from "./usage/minimax-code";
 export * from "./usage/openai-codex";
 export * from "./usage/zai";
+export * from "./utils/discovery";
 export * from "./utils/event-stream";
 export * from "./utils/oauth";
 export * from "./utils/overflow";

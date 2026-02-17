@@ -71,7 +71,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getModel } from "@oh-my-pi/pi-ai/models";
+import { getBundledModel } from "@oh-my-pi/pi-ai/models";
 import { complete } from "@oh-my-pi/pi-ai/stream";
 import type { Api, Context, ImageContent, Model, OptionsForApi, UserMessage } from "@oh-my-pi/pi-ai/types";
 import { e2eApiKey } from "./oauth";
@@ -279,7 +279,7 @@ describe("Image Limits E2E Tests", () => {
 	// Limits: 100 images, 5MB per image, 8000px max dimension
 	// -------------------------------------------------------------------------
 	describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("Anthropic (claude-haiku-4-5-20251001)", () => {
-		const model = getModel("anthropic", "claude-haiku-4-5-20251001");
+		const model = getBundledModel("anthropic", "claude-haiku-4-5-20251001");
 
 		it("should accept a small number of images (5)", async () => {
 			const result = await testImageCount(model, 5, smallImage);
@@ -369,7 +369,10 @@ describe("Image Limits E2E Tests", () => {
 	// Limits: 500 images, ~20MB per image (documented)
 	// -------------------------------------------------------------------------
 	describe.skipIf(!e2eApiKey("OPENAI_API_KEY"))("OpenAI (gpt-4o-mini)", () => {
-		const model: Model<"openai-completions"> = { ...getModel("openai", "gpt-4o-mini"), api: "openai-completions" };
+		const model: Model<"openai-completions"> = {
+			...getBundledModel("openai", "gpt-4o-mini"),
+			api: "openai-completions",
+		};
 
 		it("should accept a small number of images (5)", async () => {
 			const result = await testImageCount(model, 5, smallImage);
@@ -457,7 +460,7 @@ describe("Image Limits E2E Tests", () => {
 	// Limits: Very high (~2500 images), large size support
 	// -------------------------------------------------------------------------
 	describe.skipIf(!e2eApiKey("GEMINI_API_KEY"))("Gemini (gemini-2.5-flash)", () => {
-		const model = getModel("google", "gemini-2.5-flash");
+		const model = getBundledModel("google", "gemini-2.5-flash");
 
 		it("should accept a small number of images (5)", async () => {
 			const result = await testImageCount(model, 5, smallImage);
@@ -544,7 +547,7 @@ describe("Image Limits E2E Tests", () => {
 	// Limits: ~8 images, ~15MB per image
 	// -------------------------------------------------------------------------
 	describe.skipIf(!e2eApiKey("MISTRAL_API_KEY"))("Mistral (pixtral-12b)", () => {
-		const model = getModel("mistral", "pixtral-12b");
+		const model = getBundledModel("mistral", "pixtral-12b");
 
 		it("should accept a small number of images (5)", async () => {
 			const result = await testImageCount(model, 5, smallImage);
@@ -625,7 +628,7 @@ describe("Image Limits E2E Tests", () => {
 	// Limits: Context-window limited (~45 images at 100x100), ~15MB per image
 	// -------------------------------------------------------------------------
 	describe.skipIf(!e2eApiKey("OPENROUTER_API_KEY"))("OpenRouter (z-ai/glm-4.5v)", () => {
-		const model = getModel("openrouter", "z-ai/glm-4.5v");
+		const model = getBundledModel("openrouter", "z-ai/glm-4.5v");
 
 		it("should accept a small number of images (5)", async () => {
 			const result = await testImageCount(model, 5, smallImage);
@@ -705,7 +708,7 @@ describe("Image Limits E2E Tests", () => {
 	// xAI (grok-2-vision)
 	// -------------------------------------------------------------------------
 	describe.skipIf(!e2eApiKey("XAI_API_KEY"))("xAI (grok-2-vision)", () => {
-		const model = getModel("xai", "grok-2-vision");
+		const model = getBundledModel("xai", "grok-2-vision");
 
 		it("should accept a small number of images (5)", async () => {
 			const result = await testImageCount(model, 5, smallImage);
@@ -789,7 +792,7 @@ describe("Image Limits E2E Tests", () => {
 	// Groq (llama-4-scout-17b)
 	// -------------------------------------------------------------------------
 	describe.skipIf(!e2eApiKey("GROQ_API_KEY"))("Groq (llama-4-scout-17b)", () => {
-		const model = getModel("groq", "meta-llama/llama-4-scout-17b-16e-instruct");
+		const model = getBundledModel("groq", "meta-llama/llama-4-scout-17b-16e-instruct");
 
 		it("should accept a small number of images (5)", async () => {
 			const result = await testImageCount(model, 5, smallImage);
@@ -868,7 +871,7 @@ describe("Image Limits E2E Tests", () => {
 	// zAI (glm-4.5v)
 	// -------------------------------------------------------------------------
 	describe.skipIf(!e2eApiKey("ZAI_API_KEY"))("zAI (glm-4.5v)", () => {
-		const model = getModel("zai", "glm-4.5v");
+		const model = getBundledModel("zai", "glm-4.5v");
 
 		it("should accept a small number of images (5)", async () => {
 			const result = await testImageCount(model, 5, smallImage);
@@ -979,7 +982,7 @@ describe("Image Limits E2E Tests", () => {
 		it.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))(
 			"Anthropic: max ~3MB images before rejection",
 			async () => {
-				const model = getModel("anthropic", "claude-haiku-4-5-20251001");
+				const model = getBundledModel("anthropic", "claude-haiku-4-5-20251001");
 				const image3mb = await getImageAtSize(3);
 				// 32MB total limit / ~4MB actual = ~8 images
 				const counts = [1, 2, 4, 6, 8, 10, 12];
@@ -1011,7 +1014,7 @@ describe("Image Limits E2E Tests", () => {
 		it.skipIf(!e2eApiKey("OPENAI_API_KEY"))(
 			"OpenAI: max ~15MB images before rejection",
 			async () => {
-				const model = getModel("openai", "gpt-4o-mini");
+				const model = getBundledModel("openai", "gpt-4o-mini");
 				const image15mb = await getImageAtSize(15);
 				// Test progressively
 				const counts = [1, 2, 5, 10, 20];
@@ -1043,7 +1046,7 @@ describe("Image Limits E2E Tests", () => {
 		it.skipIf(!e2eApiKey("GEMINI_API_KEY"))(
 			"Gemini: max ~20MB images before rejection",
 			async () => {
-				const model = getModel("google", "gemini-2.5-flash");
+				const model = getBundledModel("google", "gemini-2.5-flash");
 				const image20mb = await getImageAtSize(20);
 				// Test progressively
 				const counts = [1, 2, 5, 10, 20, 50];
@@ -1075,7 +1078,7 @@ describe("Image Limits E2E Tests", () => {
 		it.skipIf(!e2eApiKey("MISTRAL_API_KEY"))(
 			"Mistral: max ~10MB images before rejection",
 			async () => {
-				const model = getModel("mistral", "pixtral-12b");
+				const model = getBundledModel("mistral", "pixtral-12b");
 				const image10mb = await getImageAtSize(10);
 				// Known limit is 8 images
 				const counts = [1, 2, 4, 6, 8, 9];
@@ -1107,7 +1110,7 @@ describe("Image Limits E2E Tests", () => {
 		it.skipIf(!e2eApiKey("XAI_API_KEY"))(
 			"xAI: max ~20MB images before rejection",
 			async () => {
-				const model = getModel("xai", "grok-2-vision");
+				const model = getBundledModel("xai", "grok-2-vision");
 				const image20mb = await getImageAtSize(20);
 				// Test progressively
 				const counts = [1, 2, 5, 10, 20];
@@ -1139,7 +1142,7 @@ describe("Image Limits E2E Tests", () => {
 		it.skipIf(!e2eApiKey("GROQ_API_KEY"))(
 			"Groq: max 5760px images before rejection",
 			async () => {
-				const model = getModel("groq", "meta-llama/llama-4-scout-17b-16e-instruct");
+				const model = getBundledModel("groq", "meta-llama/llama-4-scout-17b-16e-instruct");
 				// Generate 5760x5760 image (33177600 pixels = Groq's limit)
 				console.log("  Generating 5760x5760 test image for Groq...");
 				const image5760 = await generateImage(5760, 5760, "stress-5760.png");
@@ -1174,7 +1177,7 @@ describe("Image Limits E2E Tests", () => {
 		it.skipIf(!e2eApiKey("ZAI_API_KEY"))(
 			"zAI: max ~15MB images before rejection",
 			async () => {
-				const model = getModel("zai", "glm-4.5v");
+				const model = getBundledModel("zai", "glm-4.5v");
 				const image15mb = await getImageAtSize(15);
 				// Context-limited, test progressively
 				const counts = [1, 2, 5, 10, 20];
@@ -1206,7 +1209,7 @@ describe("Image Limits E2E Tests", () => {
 		it.skipIf(!e2eApiKey("OPENROUTER_API_KEY"))(
 			"OpenRouter: max ~5MB images before rejection",
 			async () => {
-				const model = getModel("openrouter", "z-ai/glm-4.5v");
+				const model = getBundledModel("openrouter", "z-ai/glm-4.5v");
 				const image5mb = await getImageAtSize(5);
 				// Context-limited, test progressively
 				const counts = [1, 2, 5, 10, 20];

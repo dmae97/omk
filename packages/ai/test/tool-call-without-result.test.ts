@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { getModel } from "@oh-my-pi/pi-ai/models";
+import { getBundledModel } from "@oh-my-pi/pi-ai/models";
 import { complete } from "@oh-my-pi/pi-ai/stream";
 import type { Api, Context, Model, OptionsForApi, Tool } from "@oh-my-pi/pi-ai/types";
 import { Type } from "@sinclair/typebox";
@@ -96,7 +96,7 @@ describe("Tool Call Without Result Tests", () => {
 	// =========================================================================
 
 	describe.skipIf(!e2eApiKey("GEMINI_API_KEY"))("Google Provider", () => {
-		const model = getModel("google", "gemini-2.5-flash");
+		const model = getBundledModel("google", "gemini-2.5-flash");
 
 		it(
 			"should filter out tool calls without corresponding tool results",
@@ -109,7 +109,7 @@ describe("Tool Call Without Result Tests", () => {
 
 	describe.skipIf(!e2eApiKey("OPENAI_API_KEY"))("OpenAI Completions Provider", () => {
 		const model: Model<"openai-completions"> = {
-			...getModel("openai", "gpt-4o-mini")!,
+			...getBundledModel("openai", "gpt-4o-mini")!,
 			api: "openai-completions",
 		};
 
@@ -123,7 +123,7 @@ describe("Tool Call Without Result Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("OPENAI_API_KEY"))("OpenAI Responses Provider", () => {
-		const model = getModel("openai", "gpt-5-mini");
+		const model = getBundledModel("openai", "gpt-5-mini");
 
 		it(
 			"should filter out tool calls without corresponding tool results",
@@ -135,7 +135,7 @@ describe("Tool Call Without Result Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("Anthropic Provider", () => {
-		const model = getModel("anthropic", "claude-haiku-4-5-20251001");
+		const model = getBundledModel("anthropic", "claude-haiku-4-5-20251001");
 
 		it(
 			"should filter out tool calls without corresponding tool results",
@@ -147,7 +147,7 @@ describe("Tool Call Without Result Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("XAI_API_KEY"))("xAI Provider", () => {
-		const model = getModel("xai", "grok-3-fast");
+		const model = getBundledModel("xai", "grok-3-fast");
 
 		it(
 			"should filter out tool calls without corresponding tool results",
@@ -159,7 +159,7 @@ describe("Tool Call Without Result Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("GROQ_API_KEY"))("Groq Provider", () => {
-		const model = getModel("groq", "openai/gpt-oss-20b");
+		const model = getBundledModel("groq", "openai/gpt-oss-20b");
 
 		it(
 			"should filter out tool calls without corresponding tool results",
@@ -171,7 +171,7 @@ describe("Tool Call Without Result Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("CEREBRAS_API_KEY"))("Cerebras Provider", () => {
-		const model = getModel("cerebras", "gpt-oss-120b");
+		const model = getBundledModel("cerebras", "gpt-oss-120b");
 
 		it(
 			"should filter out tool calls without corresponding tool results",
@@ -183,7 +183,7 @@ describe("Tool Call Without Result Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("ZAI_API_KEY"))("zAI Provider", () => {
-		const model = getModel("zai", "glm-4.5-flash");
+		const model = getBundledModel("zai", "glm-4.5-flash");
 
 		it(
 			"should filter out tool calls without corresponding tool results",
@@ -195,7 +195,7 @@ describe("Tool Call Without Result Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("MISTRAL_API_KEY"))("Mistral Provider", () => {
-		const model = getModel("mistral", "devstral-medium-latest");
+		const model = getBundledModel("mistral", "devstral-medium-latest");
 
 		it(
 			"should filter out tool calls without corresponding tool results",
@@ -207,7 +207,7 @@ describe("Tool Call Without Result Tests", () => {
 	});
 
 	describe("Anthropic OAuth Provider", () => {
-		const model = getModel("anthropic", "claude-haiku-4-5-20251001");
+		const model = getBundledModel("anthropic", "claude-haiku-4-5-20251001");
 
 		it.skipIf(!anthropicOAuthToken)(
 			"should filter out tool calls without corresponding tool results",
@@ -222,7 +222,7 @@ describe("Tool Call Without Result Tests", () => {
 		it.skipIf(!githubCopilotToken)(
 			"gpt-4o - should filter out tool calls without corresponding tool results",
 			async () => {
-				const model = getModel("github-copilot", "gpt-4o");
+				const model = getBundledModel("github-copilot", "gpt-4o");
 				await testToolCallWithoutResult(model, { apiKey: githubCopilotToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -231,7 +231,7 @@ describe("Tool Call Without Result Tests", () => {
 		it.skipIf(!githubCopilotToken)(
 			"claude-sonnet-4 - should filter out tool calls without corresponding tool results",
 			async () => {
-				const model = getModel("github-copilot", "claude-sonnet-4");
+				const model = getBundledModel("github-copilot", "claude-sonnet-4");
 				await testToolCallWithoutResult(model, { apiKey: githubCopilotToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -242,7 +242,7 @@ describe("Tool Call Without Result Tests", () => {
 		it.skipIf(!geminiCliToken)(
 			"gemini-2.5-flash - should filter out tool calls without corresponding tool results",
 			async () => {
-				const model = getModel("google-gemini-cli", "gemini-2.5-flash");
+				const model = getBundledModel("google-gemini-cli", "gemini-2.5-flash");
 				await testToolCallWithoutResult(model, { apiKey: geminiCliToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -253,7 +253,7 @@ describe("Tool Call Without Result Tests", () => {
 		it.skipIf(!antigravityToken)(
 			"gemini-3-flash - should filter out tool calls without corresponding tool results",
 			async () => {
-				const model = getModel("google-antigravity", "gemini-3-flash");
+				const model = getBundledModel("google-antigravity", "gemini-3-flash");
 				await testToolCallWithoutResult(model, { apiKey: antigravityToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -262,7 +262,7 @@ describe("Tool Call Without Result Tests", () => {
 		it.skipIf(!antigravityToken)(
 			"claude-sonnet-4-5 - should filter out tool calls without corresponding tool results",
 			async () => {
-				const model = getModel("google-antigravity", "claude-sonnet-4-5");
+				const model = getBundledModel("google-antigravity", "claude-sonnet-4-5");
 				await testToolCallWithoutResult(model, { apiKey: antigravityToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -271,7 +271,7 @@ describe("Tool Call Without Result Tests", () => {
 		it.skipIf(!antigravityToken)(
 			"gpt-oss-120b-medium - should filter out tool calls without corresponding tool results",
 			async () => {
-				const model = getModel("google-antigravity", "gpt-oss-120b-medium");
+				const model = getBundledModel("google-antigravity", "gpt-oss-120b-medium");
 				await testToolCallWithoutResult(model, { apiKey: antigravityToken });
 			},
 			{ retry: 3, timeout: 30000 },
@@ -282,7 +282,7 @@ describe("Tool Call Without Result Tests", () => {
 		it.skipIf(!openaiCodexToken)(
 			"gpt-5.2-codex - should filter out tool calls without corresponding tool results",
 			async () => {
-				const model = getModel("openai-codex", "gpt-5.2-codex");
+				const model = getBundledModel("openai-codex", "gpt-5.2-codex");
 				await testToolCallWithoutResult(model, { apiKey: openaiCodexToken });
 			},
 			{ retry: 3, timeout: 30000 },

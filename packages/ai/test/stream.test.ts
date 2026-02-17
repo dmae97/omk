@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { type ChildProcess, execSync, spawn } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { getModel } from "@oh-my-pi/pi-ai/models";
+import { getBundledModel } from "@oh-my-pi/pi-ai/models";
 import { complete, stream } from "@oh-my-pi/pi-ai/stream";
 import type { Api, Context, ImageContent, Model, OptionsForApi, Tool, ToolResultMessage } from "@oh-my-pi/pi-ai/types";
 import { StringEnum } from "@oh-my-pi/pi-ai/utils/typebox-helpers";
@@ -352,7 +352,7 @@ async function multiTurn<TApi extends Api>(model: Model<TApi>, options?: Options
 
 describe("Generate E2E Tests", () => {
 	describe.skipIf(!e2eApiKey("GEMINI_API_KEY"))("Gemini Provider (gemini-2.5-flash)", () => {
-		const llm = getModel("google", "gemini-2.5-flash");
+		const llm = getBundledModel("google", "gemini-2.5-flash");
 
 		it(
 			"should complete basic text generation",
@@ -408,7 +408,7 @@ describe("Generate E2E Tests", () => {
 		const vertexLocation = Bun.env.GOOGLE_CLOUD_LOCATION;
 		const isVertexConfigured = Boolean(vertexProject && vertexLocation);
 		const vertexOptions = { project: vertexProject, location: vertexLocation } as const;
-		const llm = getModel("google-vertex", "gemini-3-flash-preview");
+		const llm = getBundledModel("google-vertex", "gemini-3-flash-preview");
 
 		it.skipIf(!isVertexConfigured)(
 			"should complete basic text generation",
@@ -466,7 +466,10 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("OPENAI_API_KEY"))("OpenAI Completions Provider (gpt-4o-mini)", () => {
-		const llm: Model<"openai-completions"> = { ...getModel("openai", "gpt-4o-mini"), api: "openai-completions" };
+		const llm: Model<"openai-completions"> = {
+			...getBundledModel("openai", "gpt-4o-mini"),
+			api: "openai-completions",
+		};
 
 		it(
 			"should complete basic text generation",
@@ -502,7 +505,7 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("OPENAI_API_KEY"))("OpenAI Responses Provider (gpt-5-mini)", () => {
-		const llm = getModel("openai", "gpt-5-mini");
+		const llm = getBundledModel("openai", "gpt-5-mini");
 
 		it(
 			"should complete basic text generation",
@@ -554,7 +557,7 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("Anthropic Provider (claude-haiku-4-5-20251001)", () => {
-		const model = getModel("anthropic", "claude-haiku-4-5-20251001");
+		const model = getBundledModel("anthropic", "claude-haiku-4-5-20251001");
 
 		it(
 			"should complete basic text generation",
@@ -590,7 +593,7 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("OPENAI_API_KEY"))("OpenAI Responses Provider (gpt-5-mini)", () => {
-		const model = getModel("openai", "gpt-5-mini");
+		const model = getBundledModel("openai", "gpt-5-mini");
 
 		it(
 			"should complete basic text generation",
@@ -626,7 +629,7 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("XAI_API_KEY"))("xAI Provider (grok-code-fast-1 via OpenAI Completions)", () => {
-		const llm = getModel("xai", "grok-code-fast-1");
+		const llm = getBundledModel("xai", "grok-code-fast-1");
 
 		it(
 			"should complete basic text generation",
@@ -670,7 +673,7 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("GROQ_API_KEY"))("Groq Provider (gpt-oss-20b via OpenAI Completions)", () => {
-		const llm = getModel("groq", "openai/gpt-oss-20b");
+		const llm = getBundledModel("groq", "openai/gpt-oss-20b");
 
 		it(
 			"should complete basic text generation",
@@ -714,7 +717,7 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("CEREBRAS_API_KEY"))("Cerebras Provider (gpt-oss-120b via OpenAI Completions)", () => {
-		const llm = getModel("cerebras", "gpt-oss-120b");
+		const llm = getBundledModel("cerebras", "gpt-oss-120b");
 
 		it(
 			"should complete basic text generation",
@@ -758,7 +761,7 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("OPENROUTER_API_KEY"))("OpenRouter Provider (glm-4.5v via OpenAI Completions)", () => {
-		const llm = getModel("openrouter", "z-ai/glm-4.5v");
+		const llm = getBundledModel("openrouter", "z-ai/glm-4.5v");
 
 		it(
 			"should complete basic text generation",
@@ -810,7 +813,7 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("ZAI_API_KEY"))("zAI Provider (glm-4.5-air via OpenAI Completions)", () => {
-		const llm = getModel("zai", "glm-4.5-air");
+		const llm = getBundledModel("zai", "glm-4.5-air");
 
 		it(
 			"should complete basic text generation",
@@ -854,7 +857,7 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("ZAI_API_KEY"))("zAI Provider (glm-4.5v via OpenAI Completions)", () => {
-		const llm = getModel("zai", "glm-4.5v");
+		const llm = getBundledModel("zai", "glm-4.5v");
 
 		it(
 			"should complete basic text generation",
@@ -908,7 +911,7 @@ describe("Generate E2E Tests", () => {
 	describe.skipIf(!e2eApiKey("MISTRAL_API_KEY"))(
 		"Mistral Provider (devstral-medium-latest via OpenAI Completions)",
 		() => {
-			const llm = getModel("mistral", "devstral-medium-latest");
+			const llm = getBundledModel("mistral", "devstral-medium-latest");
 
 			it(
 				"should complete basic text generation",
@@ -955,7 +958,7 @@ describe("Generate E2E Tests", () => {
 	);
 
 	describe.skipIf(!e2eApiKey("MISTRAL_API_KEY"))("Mistral Provider (pixtral-12b with image support)", () => {
-		const llm = getModel("mistral", "pixtral-12b");
+		const llm = getBundledModel("mistral", "pixtral-12b");
 
 		it(
 			"should complete basic text generation",
@@ -991,7 +994,7 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe("Anthropic OAuth Provider (claude-sonnet-4-20250514)", () => {
-		const model = getModel("anthropic", "claude-sonnet-4-20250514");
+		const model = getBundledModel("anthropic", "claude-sonnet-4-20250514");
 
 		it.skipIf(!anthropicOAuthToken)(
 			"should complete basic text generation",
@@ -1043,7 +1046,7 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe("GitHub Copilot Provider (gpt-4o via OpenAI Completions)", () => {
-		const llm = getModel("github-copilot", "gpt-4o");
+		const llm = getBundledModel("github-copilot", "gpt-4o");
 
 		it.skipIf(!githubCopilotToken)(
 			"should complete basic text generation",
@@ -1072,7 +1075,7 @@ describe("Generate E2E Tests", () => {
 		it.skipIf(!githubCopilotToken)(
 			"should handle thinking",
 			async () => {
-				const thinkingModel = getModel("github-copilot", "gpt-5-mini");
+				const thinkingModel = getBundledModel("github-copilot", "gpt-5-mini");
 				await handleThinking(thinkingModel, { apiKey: githubCopilotToken, reasoningEffort: "high" });
 			},
 			{ retry: 2 },
@@ -1081,7 +1084,7 @@ describe("Generate E2E Tests", () => {
 		it.skipIf(!githubCopilotToken)(
 			"should handle multi-turn with thinking and tools",
 			async () => {
-				const thinkingModel = getModel("github-copilot", "gpt-5-mini");
+				const thinkingModel = getBundledModel("github-copilot", "gpt-5-mini");
 				await multiTurn(thinkingModel, { apiKey: githubCopilotToken, reasoningEffort: "high" });
 			},
 			{ retry: 3 },
@@ -1097,7 +1100,7 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe("Google Gemini CLI Provider (gemini-2.5-flash)", () => {
-		const llm = getModel("google-gemini-cli", "gemini-2.5-flash");
+		const llm = getBundledModel("google-gemini-cli", "gemini-2.5-flash");
 
 		it.skipIf(!geminiCliToken)(
 			"should complete basic text generation",
@@ -1149,7 +1152,7 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe("Google Gemini CLI Provider (gemini-3-flash-preview with thinkingLevel)", () => {
-		const llm = getModel("google-gemini-cli", "gemini-3-flash-preview");
+		const llm = getBundledModel("google-gemini-cli", "gemini-3-flash-preview");
 
 		it.skipIf(!geminiCliToken)(
 			"should handle thinking with thinkingLevel",
@@ -1169,7 +1172,7 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe("Google Antigravity Provider (gemini-3-pro-high)", () => {
-		const llm = getModel("google-antigravity", "gemini-3-pro-high");
+		const llm = getBundledModel("google-antigravity", "gemini-3-pro-high");
 
 		it.skipIf(!antigravityToken)(
 			"should complete basic text generation",
@@ -1225,7 +1228,7 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe("Google Antigravity Provider (claude-sonnet-4-5)", () => {
-		const llm = getModel("google-antigravity", "claude-sonnet-4-5");
+		const llm = getBundledModel("google-antigravity", "claude-sonnet-4-5");
 
 		it.skipIf(!antigravityToken)(
 			"should complete basic text generation",
@@ -1255,7 +1258,7 @@ describe("Generate E2E Tests", () => {
 			"should handle thinking",
 			async () => {
 				// claude-sonnet-4-5 has reasoning: false, use claude-sonnet-4-5-thinking
-				const thinkingModel = getModel("google-antigravity", "claude-sonnet-4-5-thinking");
+				const thinkingModel = getBundledModel("google-antigravity", "claude-sonnet-4-5-thinking");
 				await handleThinking(thinkingModel, {
 					apiKey: antigravityToken,
 					thinking: { enabled: true, budgetTokens: 4096 },
@@ -1267,7 +1270,7 @@ describe("Generate E2E Tests", () => {
 		it.skipIf(!antigravityToken)(
 			"should handle multi-turn with thinking and tools",
 			async () => {
-				const thinkingModel = getModel("google-antigravity", "claude-sonnet-4-5-thinking");
+				const thinkingModel = getBundledModel("google-antigravity", "claude-sonnet-4-5-thinking");
 				await multiTurn(thinkingModel, {
 					apiKey: antigravityToken,
 					thinking: { enabled: true, budgetTokens: 4096 },
@@ -1286,7 +1289,7 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe("OpenAI Codex Provider (gpt-5.2-codex)", () => {
-		const llm = getModel("openai-codex", "gpt-5.2-codex");
+		const llm = getBundledModel("openai-codex", "gpt-5.2-codex");
 
 		it.skipIf(!openaiCodexToken)(
 			"should complete basic text generation",
@@ -1338,7 +1341,7 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe.skipIf(!hasBedrockCredentials())("Amazon Bedrock Provider (claude-opus-4-6 interleaved thinking)", () => {
-		const llm = getModel("amazon-bedrock", "global.anthropic.claude-opus-4-6-v1");
+		const llm = getBundledModel("amazon-bedrock", "global.anthropic.claude-opus-4-6-v1");
 
 		it(
 			"should use adaptive thinking without anthropic_beta",

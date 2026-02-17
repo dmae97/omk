@@ -1,9 +1,15 @@
 import MODELS from "./models.json" with { type: "json" };
 import type { Api, KnownProvider, Model, Usage } from "./types";
 
+/**
+ * Static bundled model registry loaded from `models.json`.
+ *
+ * This module intentionally exposes compile-time defaults only.
+ * It does not include runtime discovery, models.dev overlays, or on-disk cache state.
+ *
+ * For runtime-aware resolution, use `createModelManager()` / `resolveProviderModels()`.
+ */
 const modelRegistry: Map<string, Map<string, Model<Api>>> = new Map();
-
-// Initialize registry from MODELS on module load
 for (const [provider, models] of Object.entries(MODELS)) {
 	const providerModels = new Map<string, Model<Api>>();
 	for (const [id, model] of Object.entries(models)) {
@@ -12,18 +18,18 @@ for (const [provider, models] of Object.entries(MODELS)) {
 	modelRegistry.set(provider, providerModels);
 }
 
-type GeneratedProvider = keyof typeof MODELS;
+export type GeneratedProvider = keyof typeof MODELS;
 
-export function getModel(provider: GeneratedProvider, modelId: string): Model<Api> {
+export function getBundledModel(provider: GeneratedProvider, modelId: string): Model<Api> {
 	const providerModels = modelRegistry.get(provider);
 	return providerModels?.get(modelId) as Model<Api>;
 }
 
-export function getProviders(): KnownProvider[] {
+export function getBundledProviders(): KnownProvider[] {
 	return Array.from(modelRegistry.keys()) as KnownProvider[];
 }
 
-export function getModels(provider: GeneratedProvider): Model<Api>[] {
+export function getBundledModels(provider: GeneratedProvider): Model<Api>[] {
 	const models = modelRegistry.get(provider);
 	return models ? (Array.from(models.values()) as Model<Api>[]) : [];
 }

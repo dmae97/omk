@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Agent } from "@oh-my-pi/pi-agent-core";
-import { type AssistantMessage, getModel, type ThinkingBudgets, type Usage } from "@oh-my-pi/pi-ai";
+import { type AssistantMessage, getBundledModel, type ThinkingBudgets, type Usage } from "@oh-my-pi/pi-ai";
 import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
 
 class MockAssistantStream extends AssistantMessageEventStream {}
@@ -49,7 +49,7 @@ describe("Agent", () => {
 	});
 
 	it("should create an agent instance with custom initial state", () => {
-		const customModel = getModel("openai", "gpt-4o-mini");
+		const customModel = getBundledModel("openai", "gpt-4o-mini");
 		const agent = new Agent({
 			initialState: {
 				systemPrompt: "You are a helpful assistant.",
@@ -93,7 +93,7 @@ describe("Agent", () => {
 		expect(agent.state.systemPrompt).toBe("Custom prompt");
 
 		// Test setModel
-		const newModel = getModel("google", "gemini-2.5-flash");
+		const newModel = getBundledModel("google", "gemini-2.5-flash");
 		agent.setModel(newModel);
 		expect(agent.state.model).toBe(newModel);
 

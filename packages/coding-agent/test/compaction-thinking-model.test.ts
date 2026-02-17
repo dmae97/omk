@@ -13,7 +13,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Agent, type ThinkingLevel } from "@oh-my-pi/pi-agent-core";
-import { getModel, type Model } from "@oh-my-pi/pi-ai";
+import { getBundledModel, type Model } from "@oh-my-pi/pi-ai";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
@@ -58,7 +58,7 @@ describe.skipIf(!HAS_ANTIGRAVITY_AUTH)("Compaction with thinking models (Antigra
 		};
 		const tools = await createTools(toolSession);
 
-		const model = getModel("google-antigravity", modelId);
+		const model = getBundledModel("google-antigravity", modelId);
 		if (!model) {
 			throw new Error(`Model not found: google-antigravity/${modelId}`);
 		}
@@ -195,7 +195,7 @@ describe.skipIf(!HAS_ANTHROPIC_AUTH)("Compaction with thinking models (Anthropic
 	}
 
 	it("should compact successfully with claude-3-7-sonnet and thinking level high", async () => {
-		const model = getModel("anthropic", "claude-3-7-sonnet-latest")!;
+		const model = getBundledModel("anthropic", "claude-3-7-sonnet-latest")!;
 		createSession(model, "high");
 
 		// Send a simple prompt

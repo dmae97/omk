@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { getModel } from "@oh-my-pi/pi-ai/models";
+import { getBundledModel } from "@oh-my-pi/pi-ai/models";
 import { complete, stream } from "@oh-my-pi/pi-ai/stream";
 import type { Api, Context, Model, OptionsForApi } from "@oh-my-pi/pi-ai/types";
 import { e2eApiKey, resolveApiKey } from "./oauth";
@@ -68,7 +68,7 @@ async function testImmediateAbort<TApi extends Api>(llm: Model<TApi>, options: O
 
 describe("AI Providers Abort Tests", () => {
 	describe.skipIf(!e2eApiKey("GEMINI_API_KEY"))("Google Provider Abort", () => {
-		const llm = getModel("google", "gemini-2.5-flash");
+		const llm = getBundledModel("google", "gemini-2.5-flash");
 
 		it(
 			"should abort mid-stream",
@@ -89,7 +89,7 @@ describe("AI Providers Abort Tests", () => {
 
 	describe.skipIf(!e2eApiKey("OPENAI_API_KEY"))("OpenAI Completions Provider Abort", () => {
 		const llm: Model<"openai-completions"> = {
-			...getModel("openai", "gpt-4o-mini")!,
+			...getBundledModel("openai", "gpt-4o-mini")!,
 			api: "openai-completions",
 		};
 
@@ -111,7 +111,7 @@ describe("AI Providers Abort Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("OPENAI_API_KEY"))("OpenAI Responses Provider Abort", () => {
-		const llm = getModel("openai", "gpt-5-mini");
+		const llm = getBundledModel("openai", "gpt-5-mini");
 
 		it(
 			"should abort mid-stream",
@@ -131,7 +131,7 @@ describe("AI Providers Abort Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("Anthropic Provider Abort", () => {
-		const llm = getModel("anthropic", "claude-opus-4-1-20250805");
+		const llm = getBundledModel("anthropic", "claude-opus-4-1-20250805");
 
 		it(
 			"should abort mid-stream",
@@ -151,7 +151,7 @@ describe("AI Providers Abort Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("MISTRAL_API_KEY"))("Mistral Provider Abort", () => {
-		const llm = getModel("mistral", "devstral-medium-latest");
+		const llm = getBundledModel("mistral", "devstral-medium-latest");
 
 		it(
 			"should abort mid-stream",
@@ -175,7 +175,7 @@ describe("AI Providers Abort Tests", () => {
 		it.skipIf(!geminiCliToken)(
 			"should abort mid-stream",
 			async () => {
-				const llm = getModel("google-gemini-cli", "gemini-2.5-flash");
+				const llm = getBundledModel("google-gemini-cli", "gemini-2.5-flash");
 				await testAbortSignal(llm, { apiKey: geminiCliToken });
 			},
 			{ retry: 3 },
@@ -184,7 +184,7 @@ describe("AI Providers Abort Tests", () => {
 		it.skipIf(!geminiCliToken)(
 			"should handle immediate abort",
 			async () => {
-				const llm = getModel("google-gemini-cli", "gemini-2.5-flash");
+				const llm = getBundledModel("google-gemini-cli", "gemini-2.5-flash");
 				await testImmediateAbort(llm, { apiKey: geminiCliToken });
 			},
 			{ retry: 3 },
@@ -195,7 +195,7 @@ describe("AI Providers Abort Tests", () => {
 		it.skipIf(!openaiCodexToken)(
 			"should abort mid-stream",
 			async () => {
-				const llm = getModel("openai-codex", "gpt-5.2-codex");
+				const llm = getBundledModel("openai-codex", "gpt-5.2-codex");
 				await testAbortSignal(llm, { apiKey: openaiCodexToken });
 			},
 			{ retry: 3 },
@@ -204,7 +204,7 @@ describe("AI Providers Abort Tests", () => {
 		it.skipIf(!openaiCodexToken)(
 			"should handle immediate abort",
 			async () => {
-				const llm = getModel("openai-codex", "gpt-5.2-codex");
+				const llm = getBundledModel("openai-codex", "gpt-5.2-codex");
 				await testImmediateAbort(llm, { apiKey: openaiCodexToken });
 			},
 			{ retry: 3 },

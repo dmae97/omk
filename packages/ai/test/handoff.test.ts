@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { getModel } from "@oh-my-pi/pi-ai/models";
+import { getBundledModel } from "@oh-my-pi/pi-ai/models";
 import { complete } from "@oh-my-pi/pi-ai/stream";
 import type { Api, AssistantMessage, Context, Message, Model, Tool, ToolResultMessage } from "@oh-my-pi/pi-ai/types";
 import { Type } from "@sinclair/typebox";
@@ -368,7 +368,7 @@ async function testProviderHandoff<TApi extends Api>(
 
 describe("Cross-Provider Handoff Tests", () => {
 	describe.skipIf(!e2eApiKey("ANTHROPIC_API_KEY"))("Anthropic Provider Handoff", () => {
-		const model = getModel("anthropic", "claude-haiku-4-5-20251001");
+		const model = getBundledModel("anthropic", "claude-haiku-4-5-20251001");
 
 		it("should handle contexts from all providers", async () => {
 			console.log("\nTesting Anthropic with pre-built contexts:\n");
@@ -404,7 +404,7 @@ describe("Cross-Provider Handoff Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("GEMINI_API_KEY"))("Google Provider Handoff", () => {
-		const model = getModel("google", "gemini-2.5-flash");
+		const model = getBundledModel("google", "gemini-2.5-flash");
 
 		it("should handle contexts from all providers", async () => {
 			console.log("\nTesting Google with pre-built contexts:\n");
@@ -440,7 +440,10 @@ describe("Cross-Provider Handoff Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("OPENAI_API_KEY"))("OpenAI Completions Provider Handoff", () => {
-		const model: Model<"openai-completions"> = { ...getModel("openai", "gpt-4o-mini"), api: "openai-completions" };
+		const model: Model<"openai-completions"> = {
+			...getBundledModel("openai", "gpt-4o-mini"),
+			api: "openai-completions",
+		};
 
 		it("should handle contexts from all providers", async () => {
 			console.log("\nTesting OpenAI Completions with pre-built contexts:\n");
@@ -476,7 +479,7 @@ describe("Cross-Provider Handoff Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("OPENAI_API_KEY"))("OpenAI Responses Provider Handoff", () => {
-		const model = getModel("openai", "gpt-5-mini");
+		const model = getBundledModel("openai", "gpt-5-mini");
 
 		it("should handle contexts from all providers", async () => {
 			console.log("\nTesting OpenAI Responses with pre-built contexts:\n");
@@ -512,7 +515,7 @@ describe("Cross-Provider Handoff Tests", () => {
 	});
 
 	describe.skipIf(!e2eApiKey("MISTRAL_API_KEY"))("Mistral Provider Handoff", () => {
-		const model = getModel("mistral", "devstral-medium-latest");
+		const model = getBundledModel("mistral", "devstral-medium-latest");
 
 		it("should handle contexts from all providers", async () => {
 			console.log("\nTesting Mistral with pre-built contexts:\n");
