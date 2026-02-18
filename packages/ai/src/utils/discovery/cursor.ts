@@ -1,6 +1,7 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { z } from "zod";
 import { GetUsableModelsRequestSchema, GetUsableModelsResponseSchema } from "../../providers/cursor/gen/agent_pb";
+import { getBundledModels } from "../../models";
 import type { Model } from "../../types";
 
 const CURSOR_DEFAULT_BASE_URL = "https://api2.cursor.sh";
@@ -93,7 +94,9 @@ export async function fetchCursorUsableModels(
 			return null;
 		}
 
-		return normalizeCursorModels(parsedDecoded.data.models, options.baseUrl);
+		const references = createCursorReferenceMap();
+
+		return normalizeCursorModels(parsedDecoded.data.models, options.baseUrl, references);
 	} catch {
 		return null;
 	}
@@ -119,6 +122,14 @@ function normalizeCustomModelIds(customModelIds: readonly string[] | undefined):
 		normalized.add(trimmed);
 	}
 	return [...normalized];
+}
+
+function createCursorReferenceMap(): Map<string, Model<"cursor-agent">> {
+	const references = new Map<string, Model<"cursor-agent">>();
+	for (const model of getBundledModels("cursor") as Model<"cursor-agent">[]) {
+		references.set(model.id, model);
+	}
+	return references;
 }
 
 function encodeConnectUnaryMessage(payload: Uint8Array): Uint8Array {
@@ -156,30 +167,34 @@ function decodeConnectUnaryBody(payload: Uint8Array): Uint8Array | null {
 		return null;
 	}
 
-	const flags = payload[0];
-	if (typeof flags !== "number") {
-		return null;
+	let offset = 0;
+	while (offset + 5 <= payload.length) {
+		const flags = payload[offset];
+		const view = new DataView(payload.buffer, payload.byteOffset + offset, payload.byteLength - offset);
+		const messageLength = view.getUint32(1, false);
+		const frameEnd = offset + 5 + messageLength;
+		if (frameEnd > payload.length) {
+			return null;
+		}
+		const compressionFlagSet = (flags & 0b0000_0001) !== 0;
+		if (compressionFlagSet) {
+			return null;
+		}
+		const endStreamFlagSet = (flags & 0b0000_0010) !== 0;
+		if (!endStreamFlagSet) {
+			return payload.subarray(offset + 5, frameEnd);
+		}
+
+		offset = frameEnd;
 	}
 
-	const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
-	const messageLength = view.getUint32(1, false);
-	const totalLength = 5 + messageLength;
-	if (totalLength !== payload.length) {
-		return null;
-	}
-
-	const compressionFlagSet = (flags & 0b0000_0001) !== 0;
-	const endStreamFlagSet = (flags & 0b0000_0010) !== 0;
-	if (compressionFlagSet || endStreamFlagSet) {
-		return null;
-	}
-
-	return payload.subarray(5);
+	return null;
 }
 
 function normalizeCursorModels(
 	models: readonly unknown[] | undefined,
-	baseUrlOverride?: string,
+	baseUrlOverride: string | undefined,
+	references: Map<string, Model<"cursor-agent">>,
 ): Model<"cursor-agent">[] {
 	if (!models || models.length === 0) {
 		return [];
@@ -187,7 +202,7 @@ function normalizeCursorModels(
 
 	const byId = new Map<string, Model<"cursor-agent">>();
 	for (const model of models) {
-		const normalized = normalizeCursorModel(model, baseUrlOverride);
+		const normalized = normalizeCursorModel(model, baseUrlOverride, references);
 		if (!normalized) {
 			continue;
 		}
@@ -197,7 +212,11 @@ function normalizeCursorModels(
 	return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
-function normalizeCursorModel(model: unknown, baseUrlOverride?: string): Model<"cursor-agent"> | null {
+function normalizeCursorModel(
+	model: unknown,
+	baseUrlOverride: string | undefined,
+	references: Map<string, Model<"cursor-agent">>,
+): Model<"cursor-agent"> | null {
 	const parsedModel = CursorModelDetailsSchema.safeParse(model);
 	if (!parsedModel.success) {
 		return null;
@@ -210,14 +229,26 @@ function normalizeCursorModel(model: unknown, baseUrlOverride?: string): Model<"
 	}
 
 	const name = pickModelDisplayName(details, id);
+	const reference = references.get(id);
+	const reasoning = Boolean(details.thinkingDetails) || reference?.reasoning === true;
+
+	if (reference) {
+		return {
+			...reference,
+			id,
+			name,
+			baseUrl: baseUrlOverride ?? reference.baseUrl,
+			reasoning,
+		};
+	}
 	return {
 		id,
 		name,
 		api: "cursor-agent",
 		provider: "cursor",
 		baseUrl: baseUrlOverride ?? CURSOR_DEFAULT_BASE_URL,
-		reasoning: Boolean(details.thinkingDetails),
-		input: ["text", "image"],
+		reasoning,
+		input: ["text"],
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 		contextWindow: DEFAULT_CONTEXT_WINDOW,
 		maxTokens: DEFAULT_MAX_TOKENS,

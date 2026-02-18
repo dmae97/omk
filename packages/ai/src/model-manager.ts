@@ -46,9 +46,10 @@ export interface ModelManagerOptions<TApi extends Api = Api, TModelsDevPayload =
 /**
  * Resolution result.
  *
- * `stale` is false only when dynamic endpoint data is authoritative:
- * - freshly fetched in this call, or
- * - a still-fresh dynamic cache hit in `online-if-uncached` mode.
+ * `stale` is false when the resolved catalog is authoritative for the selected provider:
+ * - dynamic endpoint data was fetched in this call,
+ * - a still-fresh authoritative cache was reused in `online-if-uncached` mode, or
+ * - the provider has no dynamic fetcher configured.
  */
 export interface ModelResolutionResult<TApi extends Api = Api> {
 	models: Model<TApi>[];
@@ -105,16 +106,14 @@ export async function resolveProviderModels<TApi extends Api = Api, TModelsDevPa
 		options.staticModels ?? getBundledModels(options.providerId as GeneratedProvider),
 	);
 	const cache = await readCache<TApi>(cachePath, options.providerId, ttlMs, now);
-	const shouldFetchFromNetwork = shouldFetchRemoteSources(
-		strategy,
-		cache?.fresh ?? false,
-		cache?.authoritative ?? false,
-	);
+	const dynamicFetcher = options.fetchDynamicModels;
+	const hasDynamicFetcher = typeof dynamicFetcher === "function";
+	const hasAuthoritativeCache = (cache?.authoritative ?? false) || !hasDynamicFetcher;
+	const shouldFetchFromNetwork = shouldFetchRemoteSources(strategy, cache?.fresh ?? false, hasAuthoritativeCache);
 	const fetchedModelsDevModels = shouldFetchFromNetwork ? await fetchModelsDev(options) : null;
 	const modelsDevModels = normalizeModelList<TApi>(fetchedModelsDevModels ?? []);
-	const dynamicFetcher = options.fetchDynamicModels;
 	const shouldUseFreshCacheAsAuthoritative =
-		strategy === "online-if-uncached" && (cache?.fresh ?? false) && (cache?.authoritative ?? false);
+		strategy === "online-if-uncached" && (cache?.fresh ?? false) && hasAuthoritativeCache;
 	let fetchedDynamicModels: Model<TApi>[] | null = null;
 	if (dynamicFetcher && shouldFetchFromNetwork) {
 		fetchedDynamicModels = await fetchDynamicModels(dynamicFetcher);
@@ -124,7 +123,7 @@ export async function resolveProviderModels<TApi extends Api = Api, TModelsDevPa
 	const dynamicModels = fetchedDynamicModels ?? [];
 	const mergedWithoutDynamic = mergeModelSources(staticModels, modelsDevModels, cacheModels);
 	const models = mergeDynamicModels(mergedWithoutDynamic, dynamicModels);
-	const dynamicAuthoritative = dynamicFetchSucceeded || shouldUseFreshCacheAsAuthoritative;
+	const dynamicAuthoritative = !hasDynamicFetcher || dynamicFetchSucceeded || shouldUseFreshCacheAsAuthoritative;
 	if (shouldFetchFromNetwork) {
 		if (dynamicFetchSucceeded) {
 			const snapshotModels = mergeDynamicModels(mergeModelSources(staticModels, modelsDevModels), dynamicModels);
@@ -135,14 +134,17 @@ export async function resolveProviderModels<TApi extends Api = Api, TModelsDevPa
 				models: snapshotModels,
 				authoritative: true,
 			});
-		} else if (!cache && fetchedModelsDevModels !== null) {
-			await writeCache(cachePath, {
-				version: CACHE_SCHEMA_VERSION,
-				providerId: options.providerId,
-				updatedAt: now(),
-				models: mergeModelSources(staticModels, modelsDevModels),
-				authoritative: false,
-			});
+		} else if (fetchedModelsDevModels !== null) {
+			const latestCache = await readCache<TApi>(cachePath, options.providerId, ttlMs, now);
+			if (!latestCache?.authoritative) {
+				await writeCache(cachePath, {
+					version: CACHE_SCHEMA_VERSION,
+					providerId: options.providerId,
+					updatedAt: now(),
+					models: mergeModelSources(staticModels, modelsDevModels),
+					authoritative: false,
+				});
+			}
 		}
 	}
 	return {

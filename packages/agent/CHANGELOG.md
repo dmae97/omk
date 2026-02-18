@@ -1,10 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-### Changed
-
-- Renamed `getModel` to `getBundledModel` for clarity on bundled model initialization
-
 ## [12.8.0] - 2026-02-16
 
 ### Added

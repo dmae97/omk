@@ -188,6 +188,45 @@ function createBundledReferenceMap<TApi extends Api>(
 	return references;
 }
 
+const OPENAI_NON_RESPONSES_PREFIXES = [
+	"text-embedding",
+	"whisper-",
+	"tts-",
+	"omni-moderation",
+	"omni-transcribe",
+	"omni-speech",
+	"gpt-image-",
+	"gpt-realtime",
+] as const;
+
+function isLikelyOpenAIResponsesModelId(
+	id: string,
+	references: Map<string, Model<"openai-responses">>,
+): boolean {
+	const trimmed = id.trim();
+	if (!trimmed) {
+		return false;
+	}
+	if (references.has(trimmed)) {
+		return true;
+	}
+	const normalized = trimmed.toLowerCase();
+	if (OPENAI_NON_RESPONSES_PREFIXES.some(prefix => normalized.startsWith(prefix))) {
+		return false;
+	}
+	if (normalized.includes("embedding")) {
+		return false;
+	}
+	return (
+		normalized.startsWith("gpt-") ||
+		normalized.startsWith("o1") ||
+		normalized.startsWith("o3") ||
+		normalized.startsWith("o4") ||
+		normalized.startsWith("chatgpt")
+	);
+}
+
+
 // ---------------------------------------------------------------------------
 // 1. OpenAI
 // ---------------------------------------------------------------------------
@@ -210,6 +249,7 @@ export function openaiModelManagerOptions(config?: OpenAIModelManagerConfig): Mo
 					provider: "openai",
 					baseUrl,
 					apiKey,
+					filterModel: (_entry, model) => isLikelyOpenAIResponsesModelId(model.id, references),
 					mapModel: (entry, defaults) => {
 						const reference = references.get(defaults.id);
 						return mapWithBundledReference(entry, defaults, reference);

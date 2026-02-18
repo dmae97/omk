@@ -33,7 +33,7 @@ const geminiModelListResponseSchema = z.object({
 			}
 			return parsedItems;
 		}),
-	nextPageToken: z.string().optional(),
+	nextPageToken: z.string().optional().catch(undefined),
 });
 
 type GeminiModelListItem = z.infer<typeof geminiModelListItemSchema>;
@@ -152,7 +152,8 @@ function normalizePositiveInt(value: number | undefined, fallback: number): numb
 	if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
 		return fallback;
 	}
-	return Math.floor(value);
+	const normalized = Math.floor(value);
+	return normalized > 0 ? normalized : fallback;
 }
 
 function normalizePageToken(value: unknown): string | undefined {

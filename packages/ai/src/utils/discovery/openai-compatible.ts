@@ -37,7 +37,7 @@ export interface OpenAICompatibleModelsEnvelope {
 const openAICompatibleModelRecordSchema = z
 	.object({
 		id: z.string().min(1),
-		name: z.string().min(1).optional(),
+		name: z.string().optional().nullable(),
 		object: z.unknown().optional(),
 		owned_by: z.unknown().optional(),
 	})

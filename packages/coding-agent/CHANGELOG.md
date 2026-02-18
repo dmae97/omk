@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+
+### Breaking Changes
+
+- Changed keyless provider auth sentinel from `"<no-auth>"` to `kNoAuth` (`"N/A"`) for `ModelRegistry.getApiKey()` and `ModelRegistry.getApiKeyForProvider()`
+
 ### Added
 
 - Added `condition` and `scope` fields to rule frontmatter for advanced TTSR matching and stream filtering
