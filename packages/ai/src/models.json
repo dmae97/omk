@@ -16108,103 +16108,6 @@
 			}
 		}
 	},
-	"ollama": {
-		"Glm-4.7-flash:latest": {
-			"id": "Glm-4.7-flash:latest",
-			"name": "Glm-4.7-flash:latest",
-			"api": "openai-completions",
-			"provider": "ollama",
-			"baseUrl": "http://127.0.0.1:11434/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 128000,
-			"maxTokens": 8192
-		},
-		"gpt-oss:120b": {
-			"id": "gpt-oss:120b",
-			"name": "gpt-oss:120b",
-			"api": "openai-completions",
-			"provider": "ollama",
-			"baseUrl": "http://127.0.0.1:11434/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 128000,
-			"maxTokens": 8192
-		},
-		"gpt-oss:20b": {
-			"id": "gpt-oss:20b",
-			"name": "gpt-oss:20b",
-			"api": "openai-completions",
-			"provider": "ollama",
-			"baseUrl": "http://127.0.0.1:11434/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 128000,
-			"maxTokens": 8192
-		},
-		"hf.co/DavidAU/GLM-4.7-Flash-Uncensored-Heretic-NEO-CODE-Imatrix-MAX-GGUF:latest": {
-			"id": "hf.co/DavidAU/GLM-4.7-Flash-Uncensored-Heretic-NEO-CODE-Imatrix-MAX-GGUF:latest",
-			"name": "hf.co/DavidAU/GLM-4.7-Flash-Uncensored-Heretic-NEO-CODE-Imatrix-MAX-GGUF:latest",
-			"api": "openai-completions",
-			"provider": "ollama",
-			"baseUrl": "http://127.0.0.1:11434/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 128000,
-			"maxTokens": 8192
-		},
-		"llama3.3": {
-			"id": "llama3.3",
-			"name": "Llama 3.3",
-			"api": "openai-completions",
-			"provider": "ollama",
-			"baseUrl": "http://127.0.0.1:11434/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 128000,
-			"maxTokens": 8192
-		}
-	},
 	"litellm": {
 		"claude-3-5-haiku": {
 			"id": "claude-3-5-haiku",
@@ -17194,27 +17097,6 @@
 			},
 			"contextWindow": 4096,
 			"maxTokens": 4096
-		}
-	},
-	"vllm": {
-		"gpt-oss-20b": {
-			"id": "gpt-oss-20b",
-			"name": "gpt-oss-20b",
-			"api": "openai-completions",
-			"provider": "vllm",
-			"baseUrl": "http://127.0.0.1:8000/v1",
-			"reasoning": false,
-			"input": [
-				"text"
-			],
-			"cost": {
-				"input": 0,
-				"output": 0,
-				"cacheRead": 0,
-				"cacheWrite": 0
-			},
-			"contextWindow": 128000,
-			"maxTokens": 8192
 		}
 	},
 	"openai-codex": {

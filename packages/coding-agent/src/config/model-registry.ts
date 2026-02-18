@@ -1,50 +1,25 @@
 import {
 	type Api,
 	type AssistantMessageEventStream,
-	anthropicModelManagerOptions,
 	type Context,
-	cerebrasModelManagerOptions,
-	cloudflareAiGatewayModelManagerOptions,
 	createModelManager,
-	cursorModelManagerOptions,
 	getBundledModels,
 	getBundledProviders,
 	getGitHubCopilotBaseUrl,
-	githubCopilotModelManagerOptions,
 	googleAntigravityModelManagerOptions,
 	googleGeminiCliModelManagerOptions,
-	googleModelManagerOptions,
-	groqModelManagerOptions,
-	huggingfaceModelManagerOptions,
-	kimiCodeModelManagerOptions,
-	litellmModelManagerOptions,
 	type Model,
 	type ModelManagerOptions,
-	mistralModelManagerOptions,
-	moonshotModelManagerOptions,
 	normalizeDomain,
-	nvidiaModelManagerOptions,
 	type OAuthCredentials,
 	type OAuthLoginCallbacks,
-	ollamaModelManagerOptions,
 	openaiCodexModelManagerOptions,
-	openaiModelManagerOptions,
-	opencodeModelManagerOptions,
-	openrouterModelManagerOptions,
-	qianfanModelManagerOptions,
-	qwenPortalModelManagerOptions,
+	RUNTIME_PROVIDER_DESCRIPTORS,
 	registerCustomApi,
 	registerOAuthProvider,
 	type SimpleStreamOptions,
-	syntheticModelManagerOptions,
-	togetherModelManagerOptions,
 	unregisterCustomApis,
 	unregisterOAuthProviders,
-	veniceModelManagerOptions,
-	vercelAiGatewayModelManagerOptions,
-	vllmModelManagerOptions,
-	xaiModelManagerOptions,
-	xiaomiModelManagerOptions,
 } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
@@ -632,7 +607,11 @@ export class ModelRegistry {
 	}
 
 	async #discoverBuiltInProviderModels(): Promise<Model<Api>[]> {
-		const managerOptions = await this.#collectBuiltInModelManagerOptions();
+		// Skip providers already handled by configured discovery (e.g. user-configured ollama with discovery.type)
+		const configuredDiscoveryProviders = new Set(this.#discoverableProviders.map(p => p.provider));
+		const managerOptions = (await this.#collectBuiltInModelManagerOptions()).filter(
+			opts => !configuredDiscoveryProviders.has(opts.providerId),
+		);
 		if (managerOptions.length === 0) {
 			return [];
 		}
@@ -641,271 +620,31 @@ export class ModelRegistry {
 	}
 
 	async #collectBuiltInModelManagerOptions(): Promise<ModelManagerOptions<Api>[]> {
-		const [
-			anthropicApiKey,
-			openaiApiKey,
-			groqApiKey,
-			huggingfaceApiKey,
-			cerebrasApiKey,
-			xaiApiKey,
-			mistralApiKey,
-			nvidiaApiKey,
-			opencodeApiKey,
-			openrouterApiKey,
-			vercelGatewayApiKey,
-			ollamaApiKey,
-			cloudflareAiGatewayApiKey,
-			kimiApiKey,
-			qwenPortalApiKey,
-			syntheticApiKey,
-			veniceApiKey,
-			litellmApiKey,
-			moonshotApiKey,
-			qianfanApiKey,
-			togetherApiKey,
-			vllmApiKey,
-			xiaomiApiKey,
-			githubCopilotApiKey,
-			googleApiKey,
-			cursorApiKey,
-			googleAntigravityApiKey,
-			googleGeminiCliApiKey,
-			codexAccessToken,
-		] = await Promise.all([
-			this.getApiKeyForProvider("anthropic"),
-			this.getApiKeyForProvider("openai"),
-			this.getApiKeyForProvider("groq"),
-			this.getApiKeyForProvider("huggingface"),
-			this.getApiKeyForProvider("cerebras"),
-			this.getApiKeyForProvider("xai"),
-			this.getApiKeyForProvider("mistral"),
-			this.getApiKeyForProvider("nvidia"),
-			this.getApiKeyForProvider("opencode"),
-			this.getApiKeyForProvider("openrouter"),
-			this.getApiKeyForProvider("vercel-ai-gateway"),
-			this.getApiKeyForProvider("ollama"),
-			this.getApiKeyForProvider("cloudflare-ai-gateway"),
-			this.getApiKeyForProvider("kimi-code"),
-			this.getApiKeyForProvider("qwen-portal"),
-			this.getApiKeyForProvider("synthetic"),
-			this.getApiKeyForProvider("venice"),
-			this.getApiKeyForProvider("litellm"),
-			this.getApiKeyForProvider("moonshot"),
-			this.getApiKeyForProvider("qianfan"),
-			this.getApiKeyForProvider("together"),
-			this.getApiKeyForProvider("vllm"),
-			this.getApiKeyForProvider("xiaomi"),
-			this.getApiKeyForProvider("github-copilot"),
-			this.getApiKeyForProvider("google"),
-			this.getApiKeyForProvider("cursor"),
+		// Fetch API keys for all standard providers + special providers in parallel
+		const [standardKeys, googleAntigravityApiKey, googleGeminiCliApiKey, codexAccessToken] = await Promise.all([
+			Promise.all(RUNTIME_PROVIDER_DESCRIPTORS.map(d => this.getApiKeyForProvider(d.providerId))),
 			this.getApiKeyForProvider("google-antigravity"),
 			this.getApiKeyForProvider("google-gemini-cli"),
 			this.getApiKeyForProvider("openai-codex"),
 		]);
 
 		const options: ModelManagerOptions<Api>[] = [];
-		if (isAuthenticated(anthropicApiKey)) {
-			options.push(
-				anthropicModelManagerOptions({
-					apiKey: anthropicApiKey,
-					baseUrl: this.getProviderBaseUrl("anthropic"),
-				}),
-			);
-		}
-		if (isAuthenticated(openaiApiKey)) {
-			options.push(
-				openaiModelManagerOptions({
-					apiKey: openaiApiKey,
-					baseUrl: this.getProviderBaseUrl("openai"),
-				}),
-			);
-		}
-		if (isAuthenticated(groqApiKey)) {
-			options.push(
-				groqModelManagerOptions({
-					apiKey: groqApiKey,
-					baseUrl: this.getProviderBaseUrl("groq"),
-				}),
-			);
-		}
-		if (isAuthenticated(huggingfaceApiKey)) {
-			options.push(
-				huggingfaceModelManagerOptions({
-					apiKey: huggingfaceApiKey,
-					baseUrl: this.getProviderBaseUrl("huggingface"),
-				}),
-			);
-		}
-		if (isAuthenticated(cerebrasApiKey)) {
-			options.push(
-				cerebrasModelManagerOptions({
-					apiKey: cerebrasApiKey,
-					baseUrl: this.getProviderBaseUrl("cerebras"),
-				}),
-			);
-		}
-		if (isAuthenticated(xaiApiKey)) {
-			options.push(
-				xaiModelManagerOptions({
-					apiKey: xaiApiKey,
-					baseUrl: this.getProviderBaseUrl("xai"),
-				}),
-			);
-		}
-		if (isAuthenticated(mistralApiKey)) {
-			options.push(
-				mistralModelManagerOptions({
-					apiKey: mistralApiKey,
-					baseUrl: this.getProviderBaseUrl("mistral"),
-				}),
-			);
-		}
-		if (isAuthenticated(nvidiaApiKey)) {
-			options.push(
-				nvidiaModelManagerOptions({
-					apiKey: nvidiaApiKey,
-					baseUrl: this.getProviderBaseUrl("nvidia"),
-				}),
-			);
-		}
-		if (isAuthenticated(opencodeApiKey)) {
-			options.push(
-				opencodeModelManagerOptions({
-					apiKey: opencodeApiKey,
-					baseUrl: this.getProviderBaseUrl("opencode"),
-				}),
-			);
-		}
-		if (isAuthenticated(openrouterApiKey)) {
-			options.push(
-				openrouterModelManagerOptions({
-					apiKey: openrouterApiKey,
-					baseUrl: this.getProviderBaseUrl("openrouter"),
-				}),
-			);
-		}
-		if (isAuthenticated(vercelGatewayApiKey)) {
-			options.push(
-				vercelAiGatewayModelManagerOptions({
-					apiKey: vercelGatewayApiKey,
-					baseUrl: this.getProviderBaseUrl("vercel-ai-gateway"),
-				}),
-			);
-		}
-		if (isAuthenticated(ollamaApiKey) || ollamaApiKey === kNoAuth) {
-			options.push(
-				ollamaModelManagerOptions({
-					apiKey: isAuthenticated(ollamaApiKey) ? ollamaApiKey : undefined,
-					baseUrl: this.getProviderBaseUrl("ollama"),
-				}),
-			);
-		}
-		if (isAuthenticated(cloudflareAiGatewayApiKey)) {
-			options.push(
-				cloudflareAiGatewayModelManagerOptions({
-					apiKey: cloudflareAiGatewayApiKey,
-					baseUrl: this.getProviderBaseUrl("cloudflare-ai-gateway"),
-				}),
-			);
-		}
-		if (isAuthenticated(kimiApiKey)) {
-			options.push(
-				kimiCodeModelManagerOptions({
-					apiKey: kimiApiKey,
-					baseUrl: this.getProviderBaseUrl("kimi-code"),
-				}),
-			);
-		}
-		if (isAuthenticated(qwenPortalApiKey)) {
-			options.push(
-				qwenPortalModelManagerOptions({
-					apiKey: qwenPortalApiKey,
-					baseUrl: this.getProviderBaseUrl("qwen-portal"),
-				}),
-			);
-		}
-		if (isAuthenticated(syntheticApiKey)) {
-			options.push(
-				syntheticModelManagerOptions({
-					apiKey: syntheticApiKey,
-					baseUrl: this.getProviderBaseUrl("synthetic"),
-				}),
-			);
-		}
-		if (isAuthenticated(litellmApiKey)) {
-			options.push(
-				litellmModelManagerOptions({
-					apiKey: litellmApiKey,
-					baseUrl: this.getProviderBaseUrl("litellm"),
-				}),
-			);
-		}
-		if (isAuthenticated(vllmApiKey)) {
-			options.push(
-				vllmModelManagerOptions({
-					apiKey: vllmApiKey,
-					baseUrl: this.getProviderBaseUrl("vllm"),
-				}),
-			);
-		}
-		if (isAuthenticated(moonshotApiKey)) {
-			options.push(
-				moonshotModelManagerOptions({
-					apiKey: moonshotApiKey,
-					baseUrl: this.getProviderBaseUrl("moonshot"),
-				}),
-			);
-		}
-		if (isAuthenticated(veniceApiKey)) {
-			options.push(
-				veniceModelManagerOptions({
-					apiKey: veniceApiKey,
-					baseUrl: this.getProviderBaseUrl("venice"),
-				}),
-			);
-		}
-		if (isAuthenticated(qianfanApiKey)) {
-			options.push(
-				qianfanModelManagerOptions({
-					apiKey: qianfanApiKey,
-					baseUrl: this.getProviderBaseUrl("qianfan"),
-				}),
-			);
-		}
-		if (isAuthenticated(togetherApiKey)) {
-			options.push(
-				togetherModelManagerOptions({
-					apiKey: togetherApiKey,
-					baseUrl: this.getProviderBaseUrl("together"),
-				}),
-			);
-		}
-		if (isAuthenticated(xiaomiApiKey)) {
-			options.push(
-				xiaomiModelManagerOptions({
-					apiKey: xiaomiApiKey,
-					baseUrl: this.getProviderBaseUrl("xiaomi"),
-				}),
-			);
-		}
-		if (isAuthenticated(githubCopilotApiKey)) {
-			options.push(
-				githubCopilotModelManagerOptions({
-					apiKey: githubCopilotApiKey,
-					baseUrl: this.getProviderBaseUrl("github-copilot"),
-				}),
-			);
-		}
-		if (isAuthenticated(googleApiKey)) options.push(googleModelManagerOptions({ apiKey: googleApiKey }));
-		if (isAuthenticated(cursorApiKey)) {
-			options.push(
-				cursorModelManagerOptions({
-					apiKey: cursorApiKey,
-					baseUrl: this.getProviderBaseUrl("cursor"),
-				}),
-			);
+
+		// Standard providers: all follow the { apiKey, baseUrl } pattern
+		for (let i = 0; i < RUNTIME_PROVIDER_DESCRIPTORS.length; i++) {
+			const desc = RUNTIME_PROVIDER_DESCRIPTORS[i];
+			const key = standardKeys[i];
+			if (isAuthenticated(key) || desc.allowUnauthenticated) {
+				options.push(
+					desc.createModelManagerOptions({
+						apiKey: isAuthenticated(key) ? key : undefined,
+						baseUrl: this.getProviderBaseUrl(desc.providerId),
+					}),
+				);
+			}
 		}
 
+		// Special providers: different config shapes
 		const antigravityToken = extractGoogleOAuthToken(googleAntigravityApiKey);
 		if (isAuthenticated(antigravityToken)) {
 			options.push(
@@ -915,7 +654,6 @@ export class ModelRegistry {
 				}),
 			);
 		}
-
 		const geminiCliToken = extractGoogleOAuthToken(googleGeminiCliApiKey);
 		if (isAuthenticated(geminiCliToken)) {
 			options.push(
@@ -925,7 +663,6 @@ export class ModelRegistry {
 				}),
 			);
 		}
-
 		if (isAuthenticated(codexAccessToken)) {
 			const codexAccountId = resolveOAuthAccountIdForAccessToken(this.authStorage, "openai-codex", codexAccessToken);
 			options.push(
@@ -935,7 +672,6 @@ export class ModelRegistry {
 				}),
 			);
 		}
-
 		return options;
 	}
 

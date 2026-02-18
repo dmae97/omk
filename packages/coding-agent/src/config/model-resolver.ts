@@ -2,7 +2,7 @@
  * Model resolution, scoping, and initial selection
  */
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
-import { type Api, type KnownProvider, type Model, modelsAreEqual } from "@oh-my-pi/pi-ai";
+import { type Api, DEFAULT_MODEL_PER_PROVIDER, type KnownProvider, type Model, modelsAreEqual } from "@oh-my-pi/pi-ai";
 import chalk from "chalk";
 import { isValidThinkingLevel } from "../cli/args";
 import MODEL_PRIO from "../priority.json" with { type: "json" };
@@ -10,62 +10,8 @@ import { fuzzyMatch } from "../utils/fuzzy";
 import { MODEL_ROLE_IDS, type ModelRegistry, type ModelRole } from "./model-registry";
 import type { Settings } from "./settings";
 
-/** Default model IDs for context providers added via provider integration */
-const defaultModelPerContextProvider: Record<
-	| "cloudflare-ai-gateway"
-	| "huggingface"
-	| "litellm"
-	| "moonshot"
-	| "nvidia"
-	| "ollama"
-	| "qianfan"
-	| "qwen-portal"
-	| "together"
-	| "venice"
-	| "vllm"
-	| "xiaomi",
-	string
-> = {
-	"cloudflare-ai-gateway": "claude-sonnet-4-5",
-	huggingface: "deepseek-ai/DeepSeek-R1",
-	litellm: "claude-opus-4-6",
-	moonshot: "kimi-k2.5",
-	nvidia: "nvidia/llama-3.1-nemotron-70b-instruct",
-	ollama: "gpt-oss:20b",
-	qianfan: "deepseek-v3.2",
-	"qwen-portal": "coder-model",
-	together: "moonshotai/Kimi-K2.5",
-	venice: "llama-3.3-70b",
-	vllm: "gpt-oss-20b",
-	xiaomi: "mimo-v2-flash",
-};
 /** Default model IDs for each known provider */
-export const defaultModelPerProvider: Record<KnownProvider, string> = {
-	"amazon-bedrock": "us.anthropic.claude-opus-4-6-v1",
-	anthropic: "claude-sonnet-4-6",
-	openai: "gpt-5.1-codex",
-	"openai-codex": "gpt-5.3-codex",
-	google: "gemini-2.5-pro",
-	"google-gemini-cli": "gemini-2.5-pro",
-	"google-antigravity": "gemini-3-pro-high",
-	"google-vertex": "gemini-3-pro-preview",
-	"github-copilot": "gpt-4o",
-	cursor: "claude-sonnet-4-6",
-	openrouter: "openai/gpt-5.1-codex",
-	"vercel-ai-gateway": "anthropic/claude-sonnet-4-6",
-	xai: "grok-4-fast-non-reasoning",
-	groq: "openai/gpt-oss-120b",
-	cerebras: "zai-glm-4.6",
-	zai: "glm-4.6",
-	mistral: "devstral-medium-latest",
-	minimax: "MiniMax-M2.5",
-	"minimax-code": "MiniMax-M2.5",
-	"minimax-code-cn": "MiniMax-M2.5",
-	opencode: "claude-sonnet-4-6",
-	"kimi-code": "kimi-k2.5",
-	synthetic: "hf:moonshotai/Kimi-K2.5",
-	...defaultModelPerContextProvider,
-};
+export const defaultModelPerProvider: Record<KnownProvider, string> = DEFAULT_MODEL_PER_PROVIDER;
 
 export interface ScopedModel {
 	model: Model<Api>;
