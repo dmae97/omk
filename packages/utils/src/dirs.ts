@@ -165,6 +165,11 @@ export function getPythonEnvDir(): string {
 	return getRootSubdir("python-env");
 }
 
+/** Get the puppeteer sandbox directory (~/.omp/puppeteer). */
+export function getPuppeteerDir(): string {
+	return getRootSubdir("puppeteer");
+}
+
 /** Get the worktree base directory (~/.omp/wt). */
 export function getWorktreeBaseDir(): string {
 	return getRootSubdir("wt");

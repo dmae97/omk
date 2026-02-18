@@ -4,10 +4,18 @@ import { Readability } from "@mozilla/readability";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
 import { logger, Snowflake, untilAborted } from "@oh-my-pi/pi-utils";
+import { getPuppeteerDir } from "@oh-my-pi/pi-utils/dirs";
 import { type Static, Type } from "@sinclair/typebox";
 import { type HTMLElement, parseHTML } from "linkedom";
-import type { Browser, CDPSession, ElementHandle, KeyInput, Page, SerializedAXNode } from "puppeteer";
-import puppeteer from "puppeteer";
+import type {
+	Browser,
+	CDPSession,
+	ElementHandle,
+	KeyInput,
+	Page,
+	default as Puppeteer,
+	SerializedAXNode,
+} from "puppeteer";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import browserDescription from "../prompts/tools/browser.md" with { type: "text" };
 import type { ToolSession } from "../sdk";
@@ -30,6 +38,25 @@ import stealthCodecsScript from "./puppeteer/12_stealth_codecs.txt" with { type:
 import stealthWorkerScript from "./puppeteer/13_stealth_worker.txt" with { type: "text" };
 import { ToolAbortError, ToolError, throwIfAborted } from "./tool-errors";
 import { toolResult } from "./tool-result";
+
+/**
+ * Lazy-import puppeteer from a safe CWD so cosmiconfig doesn't choke
+ * on malformed package.json files in the user's project tree.
+ */
+let puppeteerModule: typeof Puppeteer | undefined;
+async function loadPuppeteer(): Promise<typeof Puppeteer> {
+	if (puppeteerModule) return puppeteerModule;
+	const prev = process.cwd();
+	const safeDir = getPuppeteerDir();
+	await Bun.write(path.join(safeDir, "package.json"), "{}");
+	try {
+		process.chdir(safeDir);
+		puppeteerModule = (await import("puppeteer")).default;
+		return puppeteerModule;
+	} finally {
+		process.chdir(prev);
+	}
+}
 
 const DEFAULT_TIMEOUT_SECONDS = 30;
 const MAX_TIMEOUT_SECONDS = 120;
@@ -488,6 +515,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 		await this.#closeBrowser();
 		this.#currentHeadless = this.session.settings.get("browser.headless");
 		const initialViewport = params?.viewport ?? DEFAULT_VIEWPORT;
+		const puppeteer = await loadPuppeteer();
 		this.#browser = await puppeteer.launch({
 			headless: this.#currentHeadless,
 			defaultViewport: this.#currentHeadless ? initialViewport : null,
