@@ -42,10 +42,10 @@ interface TtsrEntry {
 	globalPathGlobs?: Bun.Glob[];
 }
 
-/** Tracks the turns where a rule was injected (for repeat gating). */
+/** Tracks when a rule was last injected (for repeat gating). */
 interface InjectionRecord {
-	/** Message counts (turn indexes) when the rule was injected. */
-	injectedAtTurns: number[];
+	/** Message count (turn index) when the rule was last injected. */
+	lastInjectedAt: number;
 }
 
 const DEFAULT_SETTINGS: Required<TtsrSettings> = {
@@ -85,8 +85,7 @@ export class TtsrManager {
 			return false;
 		}
 
-		const lastInjectedAt = record.injectedAtTurns[record.injectedAtTurns.length - 1];
-		const gap = this.#messageCount - lastInjectedAt;
+		const gap = this.#messageCount - record.lastInjectedAt;
 		return gap >= this.#settings.repeatGap;
 	}
 
@@ -369,15 +368,24 @@ export class TtsrManager {
 
 	/** Mark rules as injected (won't trigger again until conditions allow). */
 	markInjected(rulesToMark: Rule[]): void {
-		for (const rule of rulesToMark) {
-			const record = this.#injectionRecords.get(rule.name);
+		this.markInjectedByNames(rulesToMark.map(rule => rule.name));
+	}
+
+	/** Mark rule names as injected (won't trigger again until conditions allow). */
+	markInjectedByNames(ruleNames: string[]): void {
+		for (const rawName of ruleNames) {
+			const ruleName = rawName.trim();
+			if (ruleName.length === 0) {
+				continue;
+			}
+			const record = this.#injectionRecords.get(ruleName);
 			if (!record) {
-				this.#injectionRecords.set(rule.name, { injectedAtTurns: [this.#messageCount] });
-			} else if (record.injectedAtTurns[record.injectedAtTurns.length - 1] !== this.#messageCount) {
-				record.injectedAtTurns.push(this.#messageCount);
+				this.#injectionRecords.set(ruleName, { lastInjectedAt: this.#messageCount });
+			} else {
+				record.lastInjectedAt = this.#messageCount;
 			}
 			logger.debug("TTSR rule marked as injected", {
-				ruleName: rule.name,
+				ruleName,
 				messageCount: this.#messageCount,
 				repeatMode: this.#settings.repeatMode,
 			});
@@ -392,7 +400,7 @@ export class TtsrManager {
 	/** Restore injected state from a list of rule names. */
 	restoreInjected(ruleNames: string[]): void {
 		for (const name of ruleNames) {
-			this.#injectionRecords.set(name, { injectedAtTurns: [0] });
+			this.#injectionRecords.set(name, { lastInjectedAt: 0 });
 		}
 		if (ruleNames.length > 0) {
 			logger.debug("TTSR injected state restored", { ruleNames });

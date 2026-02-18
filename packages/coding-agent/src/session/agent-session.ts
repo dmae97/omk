@@ -522,8 +522,13 @@ export class AgentSession {
 									details,
 									timestamp: Date.now(),
 								});
-								this.sessionManager.appendCustomMessageEntry("ttsr-injection", injection.content, false, details);
-								this.#markTtsrInjected(injection.rules);
+								this.sessionManager.appendCustomMessageEntry(
+									"ttsr-injection",
+									injection.content,
+									false,
+									details,
+								);
+								this.#markTtsrInjected(details.rules);
 							}
 							this.agent.continue().catch(() => {});
 						}, 50);
@@ -555,6 +560,9 @@ export class AgentSession {
 					event.message.display,
 					event.message.details,
 				);
+				if (event.message.role === "custom" && event.message.customType === "ttsr-injection") {
+					this.#markTtsrInjected(this.#extractTtsrRuleNames(event.message.details));
+				}
 			} else if (
 				event.message.role === "user" ||
 				event.message.role === "assistant" ||
@@ -673,12 +681,26 @@ export class AgentSession {
 		}
 	}
 
-	#markTtsrInjected(rules: Rule[]): void {
-		if (rules.length === 0) {
+	#extractTtsrRuleNames(details: unknown): string[] {
+		if (!details || typeof details !== "object" || Array.isArray(details)) {
+			return [];
+		}
+		const rules = (details as { rules?: unknown }).rules;
+		if (!Array.isArray(rules)) {
+			return [];
+		}
+		return rules.filter((ruleName): ruleName is string => typeof ruleName === "string");
+	}
+
+	#markTtsrInjected(ruleNames: string[]): void {
+		const uniqueRuleNames = Array.from(
+			new Set(ruleNames.map(ruleName => ruleName.trim()).filter(ruleName => ruleName.length > 0)),
+		);
+		if (uniqueRuleNames.length === 0) {
 			return;
 		}
-		this.#ttsrManager?.markInjected(rules);
-		this.sessionManager.appendTtsrInjection(rules.map(rule => rule.name));
+		this.#ttsrManager?.markInjectedByNames(uniqueRuleNames);
+		this.sessionManager.appendTtsrInjection(uniqueRuleNames);
 	}
 
 	#findTtsrAssistantIndex(targetTimestamp: number | undefined): number {
@@ -730,7 +752,7 @@ export class AgentSession {
 			details: { rules: injection.rules.map(rule => rule.name) },
 			timestamp: Date.now(),
 		});
-		this.#markTtsrInjected(injection.rules);
+		// Mark as injected after this custom message is delivered and persisted (handled in message_end).
 		// followUp() only enqueues; resume on the next tick once streaming settles.
 		setTimeout(() => {
 			if (this.agent.state.isStreaming || !this.agent.hasQueuedMessages()) {
