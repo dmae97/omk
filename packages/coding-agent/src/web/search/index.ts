@@ -1,7 +1,7 @@
 /**
  * Unified Web Search Tool
  *
- * Single tool supporting Anthropic, Perplexity, Exa, Brave, Jina, Gemini, Codex, and Z.AI
+ * Single tool supporting Anthropic, Perplexity, Exa, Brave, Jina, Gemini, Codex, Z.AI, and Synthetic
  * providers with provider-specific parameters exposed conditionally.
  *
  * When EXA_API_KEY is available, additional specialized tools are exposed:
@@ -33,7 +33,7 @@ import { SearchProviderError } from "./types";
 export const webSearchSchema = Type.Object({
 	query: Type.String({ description: "Search query" }),
 	provider: Type.Optional(
-		StringEnum(["auto", "exa", "brave", "jina", "zai", "anthropic", "perplexity", "gemini", "codex"], {
+		StringEnum(["auto", "exa", "brave", "jina", "zai", "anthropic", "perplexity", "gemini", "codex", "synthetic"], {
 			description: "Search provider (default: auto)",
 		}),
 	),
@@ -47,7 +47,7 @@ export const webSearchSchema = Type.Object({
 
 export type SearchParams = {
 	query: string;
-	provider?: "auto" | "exa" | "brave" | "jina" | "zai" | "anthropic" | "perplexity" | "gemini" | "codex";
+	provider?: "auto" | "exa" | "brave" | "jina" | "zai" | "anthropic" | "perplexity" | "gemini" | "codex" | "synthetic";
 	recency?: "day" | "week" | "month" | "year";
 	limit?: number;
 	/** Maximum output tokens. Defaults to 4096. */
@@ -236,7 +236,7 @@ export async function runSearchQuery(
 /**
  * Web search tool implementation.
  *
- * Supports Anthropic, Perplexity, Exa, Brave, Jina, Gemini, Codex, and Z.AI providers with automatic fallback.
+ * Supports Anthropic, Perplexity, Exa, Brave, Jina, Gemini, Codex, Z.AI, and Synthetic providers with automatic fallback.
  * Session is accepted for interface consistency but not used.
  */
 export class SearchTool implements AgentTool<typeof webSearchSchema, SearchRenderDetails> {

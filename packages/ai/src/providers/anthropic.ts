@@ -494,7 +494,7 @@ export function buildAnthropicHeaders(options: AnthropicHeaderOptions): Record<s
 	};
 
 	if (oauthToken) {
-		headers["Authorization"] = `Bearer ${options.apiKey}`;
+		headers.Authorization = `Bearer ${options.apiKey}`;
 	} else {
 		headers["X-Api-Key"] = options.apiKey;
 	}

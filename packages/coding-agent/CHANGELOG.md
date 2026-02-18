@@ -1,9 +1,9 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Support for Synthetic model provider with API key authentication
 - Support for Hugging Face model provider with API key authentication
 - Support for NVIDIA model provider with API key authentication
 - Support for Ollama model provider with optional API key authentication

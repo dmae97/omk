@@ -6,6 +6,7 @@ import { ExaProvider } from "./providers/exa";
 import { GeminiProvider } from "./providers/gemini";
 import { JinaProvider } from "./providers/jina";
 import { PerplexityProvider } from "./providers/perplexity";
+import { SyntheticProvider } from "./providers/synthetic";
 import { ZaiProvider } from "./providers/zai";
 import type { SearchProviderId } from "./types";
 
@@ -21,6 +22,7 @@ const SEARCH_PROVIDERS: Record<SearchProviderId, SearchProvider> = {
 	anthropic: new AnthropicProvider(),
 	gemini: new GeminiProvider(),
 	codex: new CodexProvider(),
+	synthetic: new SyntheticProvider(),
 } as const;
 
 const SEARCH_PROVIDER_ORDER: SearchProviderId[] = [
@@ -32,6 +34,7 @@ const SEARCH_PROVIDER_ORDER: SearchProviderId[] = [
 	"gemini",
 	"codex",
 	"zai",
+	"synthetic",
 ];
 
 export function getSearchProvider(provider: SearchProviderId): SearchProvider {
@@ -46,7 +49,7 @@ export function setPreferredSearchProvider(provider: SearchProviderId | "auto"):
 	preferredProvId = provider;
 }
 
-/** Determine which providers are configured (priority: Exa → Brave → Jina → Perplexity → Anthropic → Gemini → Codex → Z.AI) */
+/** Determine which providers are configured (priority: Exa → Brave → Jina → Perplexity → Anthropic → Gemini → Codex → Z.AI → Synthetic) */
 export async function resolveProviderChain(
 	preferredProvider: SearchProviderId | "auto" = preferredProvId,
 ): Promise<SearchProvider[]> {

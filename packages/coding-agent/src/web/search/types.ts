@@ -5,7 +5,16 @@
  */
 
 /** Supported web search providers */
-export type SearchProviderId = "exa" | "brave" | "jina" | "zai" | "anthropic" | "perplexity" | "gemini" | "codex";
+export type SearchProviderId =
+	| "exa"
+	| "brave"
+	| "jina"
+	| "zai"
+	| "anthropic"
+	| "perplexity"
+	| "gemini"
+	| "codex"
+	| "synthetic";
 
 /** Source returned by search (all providers) */
 export interface SearchSource {

@@ -29,6 +29,7 @@ const PROVIDERS: Array<SearchProviderId | "auto"> = [
 	"zai",
 	"gemini",
 	"codex",
+	"synthetic",
 ];
 
 const RECENCY_OPTIONS: SearchCommandArgs["recency"][] = ["day", "week", "month", "year"];
