@@ -22,6 +22,7 @@
 - Added `rules` option to CreateAgentSessionOptions for explicit rule configuration
 - Added `sessionDir` option to RpcClientOptions for specifying agent session directory
 - Added `Symbol.dispose` method to RpcClient for resource cleanup support
+- Added `autocompleteMaxVisible` setting to configure the number of items shown in the autocomplete dropdown (3-20, default 5) ([#98](https://github.com/can1357/oh-my-pi/pull/98) by [@masonc15](https://github.com/masonc15))
 - Added `condition` and `scope` fields to rule frontmatter for advanced TTSR matching and stream filtering
 - Added `ttsr.interruptMode` setting to control when TTSR rules interrupt mid-stream vs inject warnings after completion
 - Added support for loading rules, prompts, commands, context files (AGENTS.md), and system prompts (SYSTEM.md) from ~/.agent/ directory (with fallback to ~/.agents/)

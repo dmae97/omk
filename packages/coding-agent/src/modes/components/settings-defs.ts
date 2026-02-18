@@ -116,6 +116,15 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "5", label: "5 lines" },
 		{ value: "10", label: "10 lines" },
 	],
+	// Autocomplete max visible
+	autocompleteMaxVisible: [
+		{ value: "3", label: "3 items" },
+		{ value: "5", label: "5 items" },
+		{ value: "7", label: "7 items" },
+		{ value: "10", label: "10 items" },
+		{ value: "15", label: "15 items" },
+		{ value: "20", label: "20 items" },
+	],
 	// Ask timeout
 	"ask.timeout": [
 		{ value: "0", label: "Disabled" },

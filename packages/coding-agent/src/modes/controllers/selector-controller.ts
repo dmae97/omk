@@ -201,6 +201,10 @@ export class SelectorController {
 				this.ctx.ui.setClearOnShrink(value as boolean);
 				break;
 
+			case "autocompleteMaxVisible":
+				this.ctx.editor.setAutocompleteMaxVisible(typeof value === "number" ? value : Number(value));
+				break;
+
 			// Settings with UI side effects
 			case "showImages":
 				for (const child of this.ctx.chatContainer.children) {

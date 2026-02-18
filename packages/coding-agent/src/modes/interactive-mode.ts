@@ -189,6 +189,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.todoContainer = new Container();
 		this.editor = new CustomEditor(getEditorTheme());
 		this.editor.setUseTerminalCursor(this.ui.getShowHardwareCursor());
+		this.editor.setAutocompleteMaxVisible(settings.get("autocompleteMaxVisible"));
 		this.editor.onAutocompleteCancel = () => {
 			this.ui.requestRender(true);
 		};

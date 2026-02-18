@@ -244,6 +244,16 @@ export const SETTINGS_SCHEMA = {
 		default: false,
 		ui: { tab: "input", label: "Collapse changelog", description: "Show condensed changelog after updates" },
 	},
+	autocompleteMaxVisible: {
+		type: "number",
+		default: 5,
+		ui: {
+			tab: "input",
+			label: "Autocomplete max items",
+			description: "Max visible items in autocomplete dropdown (3-20)",
+			submenu: true,
+		},
+	},
 	normativeRewrite: {
 		type: "boolean",
 		default: false,
