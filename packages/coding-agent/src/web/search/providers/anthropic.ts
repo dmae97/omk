@@ -6,7 +6,6 @@
  */
 import {
 	type AnthropicSystemBlock,
-	applyClaudeToolPrefix,
 	buildAnthropicSystemBlocks,
 	stripClaudeToolPrefix,
 } from "@oh-my-pi/pi-ai";
@@ -29,15 +28,6 @@ const DEFAULT_MAX_TOKENS = 4096;
 const WEB_SEARCH_TOOL_NAME = "web_search";
 const WEB_SEARCH_TOOL_TYPE = "web_search_20250305";
 
-/**
- * Applies OAuth-specific tool prefix to search tool name.
- * @param name - The base tool name
- * @param isOAuth - Whether OAuth authentication is being used
- * @returns Tool name with prefix if OAuth, otherwise unchanged
- */
-const applySearchToolPrefix = (name: string, isOAuth: boolean): string => {
-	return isOAuth ? applyClaudeToolPrefix(name) : name;
-};
 
 export interface AnthropicSearchParams {
 	query: string;
@@ -107,7 +97,7 @@ async function callSearch(
 		tools: [
 			{
 				type: WEB_SEARCH_TOOL_TYPE,
-				name: applySearchToolPrefix(WEB_SEARCH_TOOL_NAME, auth.isOAuth),
+				name: WEB_SEARCH_TOOL_NAME,
 			},
 		],
 	};

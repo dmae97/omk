@@ -493,7 +493,9 @@ export function buildAnthropicHeaders(options: AnthropicHeaderOptions): Record<s
 		"X-App": "cli",
 	};
 
-	if (!oauthToken) {
+	if (oauthToken) {
+		headers["Authorization"] = `Bearer ${options.apiKey}`;
+	} else {
 		headers["X-Api-Key"] = options.apiKey;
 	}
 
