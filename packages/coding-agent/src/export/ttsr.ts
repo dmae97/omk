@@ -42,10 +42,10 @@ interface TtsrEntry {
 	globalPathGlobs?: Bun.Glob[];
 }
 
-/** Tracks when a rule was last injected (for repeat-after-gap mode). */
+/** Tracks the turns where a rule was injected (for repeat gating). */
 interface InjectionRecord {
-	/** Message count when the rule was last injected. */
-	lastInjectedAt: number;
+	/** Message counts (turn indexes) when the rule was injected. */
+	injectedAtTurns: number[];
 }
 
 const DEFAULT_SETTINGS: Required<TtsrSettings> = {
@@ -85,7 +85,8 @@ export class TtsrManager {
 			return false;
 		}
 
-		const gap = this.#messageCount - record.lastInjectedAt;
+		const lastInjectedAt = record.injectedAtTurns[record.injectedAtTurns.length - 1];
+		const gap = this.#messageCount - lastInjectedAt;
 		return gap >= this.#settings.repeatGap;
 	}
 
@@ -369,7 +370,12 @@ export class TtsrManager {
 	/** Mark rules as injected (won't trigger again until conditions allow). */
 	markInjected(rulesToMark: Rule[]): void {
 		for (const rule of rulesToMark) {
-			this.#injectionRecords.set(rule.name, { lastInjectedAt: this.#messageCount });
+			const record = this.#injectionRecords.get(rule.name);
+			if (!record) {
+				this.#injectionRecords.set(rule.name, { injectedAtTurns: [this.#messageCount] });
+			} else if (record.injectedAtTurns[record.injectedAtTurns.length - 1] !== this.#messageCount) {
+				record.injectedAtTurns.push(this.#messageCount);
+			}
 			logger.debug("TTSR rule marked as injected", {
 				ruleName: rule.name,
 				messageCount: this.#messageCount,
@@ -386,7 +392,7 @@ export class TtsrManager {
 	/** Restore injected state from a list of rule names. */
 	restoreInjected(ruleNames: string[]): void {
 		for (const name of ruleNames) {
-			this.#injectionRecords.set(name, { lastInjectedAt: 0 });
+			this.#injectionRecords.set(name, { injectedAtTurns: [0] });
 		}
 		if (ruleNames.length > 0) {
 			logger.debug("TTSR injected state restored", { ruleNames });

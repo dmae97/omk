@@ -680,6 +680,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			}
 		}
 	}
+	if (existingSession.injectedTtsrRules.length > 0) {
+		ttsrManager.restoreInjected(existingSession.injectedTtsrRules);
+	}
 	time("discoverTtsrRules");
 
 	// Filter rules for the rulebook (non-TTSR, non-alwaysApply, with descriptions)

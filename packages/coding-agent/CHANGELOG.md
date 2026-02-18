@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `condition` and `scope` fields to rule frontmatter for advanced TTSR matching and stream filtering
@@ -13,6 +12,9 @@
 
 ### Changed
 
+- Changed TTSR injection tracking to record all turns where rules were injected (instead of only the last turn) to support repeat-after-gap mode across resumed sessions
+- Changed TTSR injection messages to use custom message type with metadata instead of synthetic user messages for better session tracking
+- Changed TTSR rule injection to persist injected rule names in session state for restoration when resuming sessions
 - Changed model discovery to automatically discover built-in provider models (Anthropic, OpenAI, Groq, Cerebras, Xai, Mistral, OpenCode, OpenRouter, Vercel AI Gateway, Kimi Code, GitHub Copilot, Google, Cursor, Google Antigravity, Google Gemini CLI, OpenAI Codex) when credentials are configured
 - Changed `getModel()` and `getModels()` imports to `getBundledModel()` and `getBundledModels()` across test utilities
 - Changed TTSR rule matching from single `ttsrTrigger` regex to multiple `condition` patterns with scope filtering
@@ -23,6 +25,7 @@
 
 ### Fixed
 
+- Fixed TTSR repeat-after-gap mode to correctly calculate gaps when rules are restored from previous sessions
 - Fixed TTSR matching to respect tool-specific scope filters, preventing cross-tool rule contamination
 - Fixed path normalization in TTSR glob matching to handle both relative and absolute path variants
 

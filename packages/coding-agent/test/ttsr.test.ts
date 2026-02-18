@@ -272,3 +272,128 @@ describe("TtsrManager scope matching", () => {
 		).toEqual([rule]);
 	});
 });
+
+describe("TtsrManager repeat behavior", () => {
+	const turnContext = { source: "text" as const };
+
+	function createRepeatRule(name = "repeat-rule"): Rule {
+		return makeRule({
+			name,
+			condition: ["forbidden"],
+			scope: ["text"],
+		});
+	}
+
+	function runTurn(manager: TtsrManager, rule: Rule): Rule[] {
+		manager.resetBuffer();
+		const matches = manager.checkDelta("forbidden", turnContext);
+		if (matches.length > 0) {
+			manager.markInjected([rule]);
+		}
+		manager.incrementMessageCount();
+		return matches;
+	}
+
+	it("never repeats when repeat mode is once", () => {
+		const manager = new TtsrManager({
+			enabled: true,
+			contextMode: "discard",
+			interruptMode: "always",
+			repeatMode: "once",
+			repeatGap: 10,
+		});
+		const rule = createRepeatRule("once");
+		manager.addRule(rule);
+
+		expect(runTurn(manager, rule)).toEqual([rule]);
+		expect(runTurn(manager, rule)).toEqual([]);
+		expect(runTurn(manager, rule)).toEqual([]);
+	});
+
+	it("repeats every turn when repeat mode is after-gap and gap is 1", () => {
+		const manager = new TtsrManager({
+			enabled: true,
+			contextMode: "discard",
+			interruptMode: "always",
+			repeatMode: "after-gap",
+			repeatGap: 1,
+		});
+		const rule = createRepeatRule("gap-1");
+		manager.addRule(rule);
+
+		expect(runTurn(manager, rule)).toEqual([rule]);
+		expect(runTurn(manager, rule)).toEqual([rule]);
+		expect(runTurn(manager, rule)).toEqual([rule]);
+	});
+
+	it("respects repeat gap when repeat mode is after-gap", () => {
+		const manager = new TtsrManager({
+			enabled: true,
+			contextMode: "discard",
+			interruptMode: "always",
+			repeatMode: "after-gap",
+			repeatGap: 2,
+		});
+		const rule = createRepeatRule("gap-2");
+		manager.addRule(rule);
+
+		expect(runTurn(manager, rule)).toEqual([rule]);
+		expect(runTurn(manager, rule)).toEqual([]);
+		expect(runTurn(manager, rule)).toEqual([rule]);
+		expect(runTurn(manager, rule)).toEqual([]);
+		expect(runTurn(manager, rule)).toEqual([rule]);
+	});
+
+	it("blocks restored rules in once mode across resumed sessions", () => {
+		const manager = new TtsrManager({
+			enabled: true,
+			contextMode: "discard",
+			interruptMode: "always",
+			repeatMode: "once",
+			repeatGap: 10,
+		});
+		const rule = createRepeatRule("restored-once");
+		manager.addRule(rule);
+		manager.restoreInjected([rule.name]);
+
+		expect(runTurn(manager, rule)).toEqual([]);
+		expect(runTurn(manager, rule)).toEqual([]);
+	});
+
+	it("applies repeat gap to restored rules in after-gap mode", () => {
+		const manager = new TtsrManager({
+			enabled: true,
+			contextMode: "discard",
+			interruptMode: "always",
+			repeatMode: "after-gap",
+			repeatGap: 2,
+		});
+		const rule = createRepeatRule("restored-gap");
+		manager.addRule(rule);
+		manager.restoreInjected([rule.name]);
+
+		expect(runTurn(manager, rule)).toEqual([]);
+		expect(runTurn(manager, rule)).toEqual([]);
+		expect(runTurn(manager, rule)).toEqual([rule]);
+	});
+
+	it("tracks only one injection record per rule per turn", () => {
+		const manager = new TtsrManager({
+			enabled: true,
+			contextMode: "discard",
+			interruptMode: "always",
+			repeatMode: "after-gap",
+			repeatGap: 1,
+		});
+		const rule = createRepeatRule("single-record");
+		manager.addRule(rule);
+
+		manager.markInjected([rule]);
+		manager.markInjected([rule]);
+		manager.markInjected([rule]);
+		expect(manager.getInjectedRuleNames()).toEqual([rule.name]);
+
+		manager.incrementMessageCount();
+		expect(manager.checkDelta("forbidden", turnContext)).toEqual([rule]);
+	});
+});
