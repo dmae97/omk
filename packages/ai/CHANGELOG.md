@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.10.1] - 2026-02-18
 - Added Synthetic provider
 - Added API-key login helpers for Synthetic and Cerebras providers
 
