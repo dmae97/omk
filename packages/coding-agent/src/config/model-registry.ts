@@ -784,11 +784,7 @@ export class ModelRegistry {
 		}
 
 		if (isAuthenticated(codexAccessToken)) {
-			const codexAccountId = resolveOAuthAccountIdForAccessToken(
-				this.authStorage,
-				"openai-codex",
-				codexAccessToken,
-			);
+			const codexAccountId = resolveOAuthAccountIdForAccessToken(this.authStorage, "openai-codex", codexAccessToken);
 			options.push(
 				openaiCodexModelManagerOptions({
 					accessToken: codexAccessToken,

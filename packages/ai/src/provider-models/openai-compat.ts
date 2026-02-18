@@ -199,10 +199,7 @@ const OPENAI_NON_RESPONSES_PREFIXES = [
 	"gpt-realtime",
 ] as const;
 
-function isLikelyOpenAIResponsesModelId(
-	id: string,
-	references: Map<string, Model<"openai-responses">>,
-): boolean {
+function isLikelyOpenAIResponsesModelId(id: string, references: Map<string, Model<"openai-responses">>): boolean {
 	const trimmed = id.trim();
 	if (!trimmed) {
 		return false;
@@ -225,7 +222,6 @@ function isLikelyOpenAIResponsesModelId(
 		normalized.startsWith("chatgpt")
 	);
 }
-
 
 // ---------------------------------------------------------------------------
 // 1. OpenAI

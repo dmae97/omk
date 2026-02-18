@@ -30,7 +30,7 @@ function getContentType(filePath: string): InternalResource["contentType"] {
 /**
  * Validate that a path is safe (no traversal, no absolute paths).
  */
-function validateRelativePath(relativePath: string): void {
+export function validateRelativePath(relativePath: string): void {
 	if (path.isAbsolute(relativePath)) {
 		throw new Error("Absolute paths are not allowed in skill:// URLs");
 	}

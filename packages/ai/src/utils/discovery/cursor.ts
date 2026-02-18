@@ -1,7 +1,7 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { z } from "zod";
-import { GetUsableModelsRequestSchema, GetUsableModelsResponseSchema } from "../../providers/cursor/gen/agent_pb";
 import { getBundledModels } from "../../models";
+import { GetUsableModelsRequestSchema, GetUsableModelsResponseSchema } from "../../providers/cursor/gen/agent_pb";
 import type { Model } from "../../types";
 
 const CURSOR_DEFAULT_BASE_URL = "https://api2.cursor.sh";

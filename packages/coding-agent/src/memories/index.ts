@@ -168,7 +168,6 @@ export async function buildMemoryToolDeveloperInstructions(
 	if (!truncated.trim()) return undefined;
 
 	return renderPromptTemplate(readPathTemplate, {
-		base_path: memoryRoot,
 		memory_summary: truncated,
 	});
 }
@@ -575,8 +574,7 @@ async function runStage1Job(options: {
 		const budgetTokens = Math.floor(modelMaxTokens * config.rolloutPayloadPercent);
 		const truncatedItems = truncateByApproxTokens(serializedItems, budgetTokens);
 		const inputPrompt = renderPromptTemplate(stageOneInputTemplate, {
-			rollout_path: claim.rolloutPath,
-			cwd: claim.cwd,
+			thread_id: claim.threadId,
 			response_items_json: truncatedItems,
 		});
 
@@ -635,13 +633,9 @@ async function syncPhase2Artifacts(memoryRoot: string, outputs: Stage1OutputRow[
 		const stem = formatRolloutFilename(row.threadId, row.rolloutSlug);
 		const filename = `${stem}.md`;
 		keepFiles.add(filename);
-		const body = [
-			`thread_id: ${row.threadId}`,
-			`updated_at: ${row.sourceUpdatedAt}`,
-			`cwd: ${row.cwd}`,
-			"",
-			row.rolloutSummary,
-		].join("\n");
+		const body = [`thread_id: ${row.threadId}`, `updated_at: ${row.sourceUpdatedAt}`, "", row.rolloutSummary].join(
+			"\n",
+		);
 		await Bun.write(path.join(summariesDir, filename), `${body.trim()}\n`);
 	}
 
@@ -668,7 +662,7 @@ function buildRawMemoriesMarkdown(outputs: Stage1OutputRow[]): string {
 	}
 
 	const blocks = outputs.map(row => {
-		const header = [`## ${row.threadId}`, `updated_at: ${row.sourceUpdatedAt}`, `cwd: ${row.cwd}`, ""].join("\n");
+		const header = [`## ${row.threadId}`, `updated_at: ${row.sourceUpdatedAt}`, ""].join("\n");
 		return `${header}${row.rawMemory.trim()}\n`;
 	});
 	return `# Raw Memories\n\n${blocks.join("\n")}`;
@@ -707,7 +701,6 @@ async function runConsolidationModel(options: { memoryRoot: string; model: Model
 	const rawMemories = await Bun.file(path.join(memoryRoot, "raw_memories.md")).text();
 	const rolloutSummaries = await readRolloutSummaries(memoryRoot);
 	const input = renderPromptTemplate(consolidationTemplate, {
-		memory_root: memoryRoot,
 		raw_memories: truncateByApproxTokens(rawMemories, 20_000),
 		rollout_summaries: truncateByApproxTokens(rolloutSummaries, 12_000),
 	});
@@ -1077,7 +1070,7 @@ function loadMemoryConfig(settings: Settings): MemoryRuntimeConfig {
 	};
 }
 
-function getMemoryRoot(agentDir: string, cwd: string): string {
+export function getMemoryRoot(agentDir: string, cwd: string): string {
 	return path.join(agentDir, "memories", encodeProjectPath(cwd));
 }
 

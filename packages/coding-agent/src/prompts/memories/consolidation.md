@@ -1,5 +1,5 @@
 You are the memory consolidation agent.
-Memory root: {{memory_root}}
+Memory root: memory://root
 Input corpus (raw memories):
 {{raw_memories}}
 Input corpus (rollout summaries):

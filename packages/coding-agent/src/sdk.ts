@@ -40,13 +40,14 @@ import {
 	AgentProtocolHandler,
 	ArtifactProtocolHandler,
 	InternalUrlRouter,
+	MemoryProtocolHandler,
 	PlanProtocolHandler,
 	RuleProtocolHandler,
 	SkillProtocolHandler,
 } from "./internal-urls";
 import { disposeAllKernelSessions } from "./ipy/executor";
 import { discoverAndLoadMCPTools, type MCPManager, type MCPToolsLoadResult } from "./mcp";
-import { buildMemoryToolDeveloperInstructions, startMemoryStartupTask } from "./memories";
+import { buildMemoryToolDeveloperInstructions, getMemoryRoot, startMemoryStartupTask } from "./memories";
 import { collectEnvSecrets, loadSecrets, obfuscateMessages, SecretObfuscator } from "./secrets";
 import { AgentSession } from "./session/agent-session";
 import { AuthStorage } from "./session/auth-storage";
@@ -740,7 +741,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		modelRegistry,
 	};
 
-	// Initialize internal URL router for agent:// and skill:// URLs
+	// Initialize internal URL router for internal protocols (agent://, artifact://, plan://, memory://, skill://, rule://)
 	const internalRouter = new InternalUrlRouter();
 	const getArtifactsDir = () => {
 		const sessionFile = sessionManager.getSessionFile();
@@ -752,6 +753,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		new PlanProtocolHandler({
 			getPlansDirectory: () => settings.getPlansDirectory(),
 			cwd,
+		}),
+	);
+	internalRouter.register(
+		new MemoryProtocolHandler({
+			getMemoryRoot: () => getMemoryRoot(agentDir, settings.getCwd()),
 		}),
 	);
 	internalRouter.register(

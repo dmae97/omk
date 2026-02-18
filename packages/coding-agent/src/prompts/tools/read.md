@@ -21,6 +21,8 @@ Reads files from local filesystem or internal URLs.
   - `skill://<name>` - read SKILL.md for a skill
   - `skill://<name>/<path>` - read relative path within skill directory
   - `rule://<name>` - read rule content
+  - `memory://root` - read memory summary (`memory_summary.md`)
+  - `memory://root/<path>` - read relative path within project memory root
   - `agent://<id>` - read agent output artifact
   - `agent://<id>/<path>` or `agent://<id>?q=<query>` - extract JSON from agent output
 </instruction>

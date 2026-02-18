@@ -1,12 +1,12 @@
 /**
- * Internal URL router for resolving agent:// and skill:// URLs.
+ * Internal URL router for internal protocols (agent://, artifact://, plan://, memory://, skill://, rule://).
  */
 import type { InternalResource, InternalUrl, ProtocolHandler } from "./types";
 
 /**
  * Router for internal URL schemes.
  *
- * Dispatches URLs like `agent://output_id` or `skill://skill-name` to
+ * Dispatches URLs like `agent://output_id` or `memory://root/memory_summary.md` to
  * registered protocol handlers.
  */
 export class InternalUrlRouter {
@@ -52,6 +52,8 @@ export class InternalUrlRouter {
 			// Leave rawHost as-is if decoding fails.
 		}
 		(parsed as InternalUrl).rawHost = rawHost;
+		const pathMatch = input.match(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*(\/[^?#]*)?/i);
+		(parsed as InternalUrl).rawPathname = pathMatch?.[1] ?? parsed.pathname;
 
 		const scheme = parsed.protocol.replace(/:$/, "").toLowerCase();
 		const handler = this.#handlers.get(scheme);

@@ -18,6 +18,7 @@ import type { ToolSession } from ".";
 import { type BashInteractiveResult, runInteractiveBashPty } from "./bash-interactive";
 import { checkBashInterception } from "./bash-interceptor";
 import { applyHeadTail, normalizeBashCommand } from "./bash-normalize";
+import { expandInternalUrls } from "./bash-skill-urls";
 import type { OutputMeta } from "./output-meta";
 import { allocateOutputArtifact, createTailBuffer } from "./output-utils";
 import { resolveToCwd } from "./path-utils";
@@ -76,7 +77,7 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 	): Promise<AgentToolResult<BashToolDetails>> {
 		// Normalize command: strip head/tail pipes and 2>&1
 		const normalized = normalizeBashCommand(rawCommand);
-		const command = normalized.command;
+		let command = normalized.command;
 
 		// Merge explicit params with extracted ones (explicit takes precedence)
 		const headLines = head ?? normalized.headLines;
@@ -90,6 +91,11 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 				throw new ToolError(interception.message ?? "Command blocked");
 			}
 		}
+
+		command = await expandInternalUrls(command, {
+			skills: this.session.skills ?? [],
+			internalRouter: this.session.internalRouter,
+		});
 
 		const commandCwd = cwd ? resolveToCwd(cwd, this.session.cwd) : this.session.cwd;
 		let cwdStat: fs.Stats;
