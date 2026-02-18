@@ -27,10 +27,9 @@ import { diffLines } from "diff";
 import { formatContent } from "./formatter";
 import { ALL_MUTATIONS, CATEGORY_MAP, type Mutation, type MutationInfo } from "./mutations";
 
-const SCRIPT_DIR = import.meta.dir;
 const SUPPORTED_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx"]);
 using DEFAULT_REACT_DIR = TempDir.createSync("@react-source");
-const DEFAULT_OUTPUT = path.join(SCRIPT_DIR, "../fixtures.tar.gz");
+const DEFAULT_OUTPUT = path.join(import.meta.dir, "../fixtures.tar.gz");
 const REACT_REPO_URL = "https://github.com/facebook/react.git";
 
 const EXCLUDE_DIRS = new Set([
@@ -440,11 +439,7 @@ function buildPrompt(
 			"Find all occurrences and fix them.",
 		].join("\n\n");
 	}
-	return [
-		header,
-		"There is a subtle bug in this file.",
-		"Track it down and fix it with a minimal edit.",
-	].join("\n\n");
+	return [header, "There is a subtle bug in this file.", "Track it down and fix it with a minimal edit."].join("\n\n");
 }
 
 function createSeededRng(seed: number): () => number {
@@ -515,9 +510,6 @@ function countPositionalLineHunks(original: string, mutated: string): number {
 	}
 	return hunks;
 }
-
-
-
 
 async function generateCase(
 	rng: () => number,

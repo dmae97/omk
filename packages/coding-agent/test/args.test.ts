@@ -181,6 +181,13 @@ describe("parseArgs", () => {
 		});
 	});
 
+	describe("--no-rules flag", () => {
+		test("parses --no-rules flag", () => {
+			const result = parseArgs(["--no-rules"]);
+			expect(result.noRules).toBe(true);
+		});
+	});
+
 	describe("--no-tools flag", () => {
 		test("parses --no-tools flag", () => {
 			const result = parseArgs(["--no-tools"]);

@@ -699,6 +699,7 @@ Key CLI flags for development:
 - `--no-tools`: Disable all built-in tools (extension-only setups)
 - `--no-extensions`: Disable extension discovery (explicit `-e` paths still work)
 - `--no-skills`: Disable skill discovery
+- `--no-rules`: Disable rules discovery
 - `--session <id>`: Resume by session ID prefix (UUID match) or path
 
 ## SDK Exports

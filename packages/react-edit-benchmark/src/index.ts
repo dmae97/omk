@@ -16,7 +16,7 @@ import { padding } from "@oh-my-pi/pi-tui";
 import { TempDir } from "@oh-my-pi/pi-utils";
 import { generateJsonReport, generateReport } from "./report";
 import { type BenchmarkConfig, type ProgressEvent, runBenchmark } from "./runner";
-import { type EditTask, loadTasks, loadTasksFromDir, validateFixtures } from "./tasks";
+import { type EditTask, loadTasksFromDir, validateFixturesFromDir } from "./tasks";
 
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
 
@@ -123,9 +123,7 @@ async function extractTarGz(archivePath: string): Promise<{ dir: string; cleanup
 }
 
 async function resolveFixtures(fixturesArg?: string): Promise<{ tasks: EditTask[]; cleanup?: () => Promise<void> }> {
-	if (!fixturesArg) {
-		return { tasks: await loadTasks() };
-	}
+	fixturesArg ??= join(import.meta.dir, "../fixtures.tar.gz");
 
 	if (fixturesArg.endsWith(".tar.gz") || fixturesArg.endsWith(".tgz")) {
 		const extracted = await extractTarGz(fixturesArg);
@@ -143,7 +141,7 @@ async function main(): Promise<void> {
 		options: {
 			provider: { type: "string" },
 			model: { type: "string", default: "anthropic/claude-sonnet-4-20250514" },
-			thinking: { type: "string" },
+			thinking: { type: "string", default: "low" },
 			runs: { type: "string", default: "1" },
 			timeout: { type: "string", default: "120000" },
 			"task-concurrency": { type: "string", default: "16" },
@@ -183,8 +181,8 @@ async function main(): Promise<void> {
 		process.exit(0);
 	}
 
-	if (values["check-fixtures"]) {
-		const issues = await validateFixtures(values.fixtures);
+	if (values["check-fixtures"] && values.fixtures) {
+		const issues = await validateFixturesFromDir(values.fixtures);
 		if (issues.length === 0) {
 			console.log("Fixtures OK");
 			process.exit(0);
@@ -209,7 +207,7 @@ async function main(): Promise<void> {
 		process.exit(0);
 	}
 
-	let thinkingLevel: ThinkingLevel | undefined;
+	let thinkingLevel: ThinkingLevel = "low";
 	if (values.thinking) {
 		if (!THINKING_LEVELS.includes(values.thinking as ThinkingLevel)) {
 			console.error(`Invalid thinking level: ${values.thinking}`);

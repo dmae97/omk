@@ -28,6 +28,8 @@ export interface RpcClientOptions {
 	provider?: string;
 	/** Model ID to use */
 	model?: string;
+	/** Session directory for the agent */
+	sessionDir?: string;
 	/** Additional CLI arguments */
 	args?: string[];
 }
@@ -108,6 +110,9 @@ export class RpcClient {
 		if (this.options.model) {
 			args.push("--model", this.options.model);
 		}
+		if (this.options.sessionDir) {
+			args.push("--session-dir", this.options.sessionDir);
+		}
 		if (this.options.args) {
 			args.push(...this.options.args);
 		}
@@ -151,6 +156,17 @@ export class RpcClient {
 		this.#abortController.abort();
 		this.#process = null;
 		this.#pendingRequests.clear();
+	}
+
+	/**
+	 * Stop the RPC agent process and clean up resources.
+	 */
+	[Symbol.dispose](): void {
+		try {
+			this.stop();
+		} catch {
+			// Ignore cleanup errors
+		}
 	}
 
 	/**

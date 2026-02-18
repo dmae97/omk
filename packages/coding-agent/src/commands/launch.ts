@@ -105,6 +105,9 @@ export default class Index extends Command {
 		skills: Flags.string({
 			description: "Comma-separated glob patterns to filter skills (e.g., git-*,docker)",
 		}),
+		"no-rules": Flags.boolean({
+			description: "Disable rules discovery and loading",
+		}),
 		export: Flags.string({
 			description: "Export session file to HTML and exit",
 		}),

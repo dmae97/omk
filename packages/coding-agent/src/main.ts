@@ -477,6 +477,11 @@ async function buildSessionOptions(
 		settings.override("skills.includeSkills", parsed.skills as string[]);
 	}
 
+	// Rules
+	if (parsed.noRules) {
+		options.rules = [];
+	}
+
 	// Additional extension paths from CLI
 	const cliExtensionPaths = parsed.noExtensions ? [] : [...(parsed.extensions ?? []), ...(parsed.hooks ?? [])];
 	if (cliExtensionPaths.length > 0) {

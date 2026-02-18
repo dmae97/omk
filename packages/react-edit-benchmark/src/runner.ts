@@ -5,20 +5,27 @@
  * and verifying results. Supports parallel runs for reliability measurement.
  */
 /// <reference types="./bun-imports.d.ts" />
-import * as fs from "node:fs/promises";
+import * as fs from "node:fs";
 import { join } from "node:path";
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { computeLineHash, RpcClient, renderPromptTemplate } from "@oh-my-pi/pi-coding-agent";
-import { TempDir } from "@oh-my-pi/pi-utils";
+import { Snowflake } from "@oh-my-pi/pi-utils";
 import { diffLines } from "diff";
 import { formatDirectory } from "./formatter";
 import benchmarkTaskPrompt from "./prompts/benchmark-task.md" with { type: "text" };
-import { type EditTask, extractTaskFiles } from "./tasks";
+import type { EditTask } from "./tasks";
 import { verifyExpectedFileSubset, verifyExpectedFiles } from "./verify";
 
-const TMP_DIR = await TempDir.create("@reach-benchmark-");
-const TMP = TMP_DIR.path();
+const TMP = `/tmp/rb-${crypto.randomUUID()}`;
 const CLI_PATH = Bun.fileURLToPath(import.meta.resolve("@oh-my-pi/pi-coding-agent/cli"));
+
+fs.mkdirSync(TMP);
+
+function makeTempDir(pre?: string): string {
+	const dir = join(TMP, `${pre ?? ""}${Snowflake.next()}`);
+	fs.mkdirSync(dir);
+	return dir;
+}
 
 export interface BenchmarkConfig {
 	provider: string;
@@ -506,34 +513,15 @@ const BATCH_MIN_SIZE = 1;
 const BATCH_MAX_SIZE = 1;
 
 async function copyFixtures(task: EditTask, destDir: string): Promise<void> {
-	if (task.tarballPath) {
-		await extractTaskFiles(task.tarballPath, task.id, destDir, "input");
-	} else if (task.inputDir) {
-		const entries = await fs.readdir(task.inputDir, { withFileTypes: true });
-		await Promise.all(
-			entries.map(entry => fs.cp(join(task.inputDir!, entry.name), join(destDir, entry.name), { recursive: true })),
-		);
-	} else {
-		throw new Error(`Task ${task.id} has neither tarballPath nor inputDir`);
+	if (!task.inputDir) {
+		throw new Error(`Task ${task.id} has no inputDir`);
 	}
-}
-
-async function getExpectedDir(task: EditTask): Promise<{ dir: string; cleanup: () => Promise<void> }> {
-	if (task.expectedDir) {
-		return { dir: task.expectedDir, cleanup: async () => {} };
-	}
-	if (task.tarballPath) {
-		const tempDir = join(TMP, `expected-${task.id}-${crypto.randomUUID()}`);
-		await fs.mkdir(tempDir, { recursive: true });
-		await extractTaskFiles(task.tarballPath, task.id, tempDir, "expected");
-		return {
-			dir: tempDir,
-			cleanup: async () => {
-				await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-			},
-		};
-	}
-	throw new Error(`Task ${task.id} has neither tarballPath nor expectedDir`);
+	const entries = await fs.promises.readdir(task.inputDir, { withFileTypes: true });
+	await Promise.all(
+		entries.map(entry =>
+			fs.promises.cp(join(task.inputDir!, entry.name), join(destDir, entry.name), { recursive: true }),
+		),
+	);
 }
 
 async function runSingleTask(
@@ -544,7 +532,6 @@ async function runSingleTask(
 	expectedDir: string,
 ): Promise<TaskRunResult> {
 	const startTime = Date.now();
-	let client: RpcClient | null = null;
 	let error: string | undefined;
 	let patchApplied = false;
 	let verificationPassed = false;
@@ -569,12 +556,15 @@ async function runSingleTask(
 
 	const logFile = join(TMP, `run-${task.id}-${runIndex}.jsonl`);
 	const logEvent = async (event: unknown) => {
-		await fs.appendFile(logFile, `${JSON.stringify(event)}\n`);
+		await fs.promises.appendFile(logFile, `${JSON.stringify(event)}\n`);
 	};
 	const originalFiles = await collectOriginalFileContents(cwd, task.files);
 
 	try {
-		await fs.appendFile(logFile, `{"type":"meta","task":"${task.id}","run":${runIndex},"workDir":"${cwd}"}\n`);
+		await fs.promises.appendFile(
+			logFile,
+			`{"type":"meta","task":"${task.id}","run":${runIndex},"workDir":"${cwd}"}\n`,
+		);
 
 		const env: Record<string, string> = { PI_NO_TITLE: "1" };
 		if (config.editVariant !== undefined) {
@@ -588,12 +578,12 @@ async function runSingleTask(
 				config.editFuzzyThreshold === "auto" ? "auto" : String(config.editFuzzyThreshold);
 		}
 
-		client = new RpcClient({
+		using client = new RpcClient({
 			cliPath: CLI_PATH,
 			cwd,
 			provider: config.provider,
 			model: config.model,
-			args: ["--tools", "read,edit,write", "--no-skills"],
+			args: ["--tools", "read,edit,write", "--no-skills", "--no-title", "--no-rules"],
 			env,
 		});
 
@@ -621,7 +611,7 @@ async function runSingleTask(
 				config,
 			});
 
-			await fs.appendFile(
+			await fs.promises.appendFile(
 				logFile,
 				`{"type":"prompt","attempt":${attempt + 1},"message":${JSON.stringify(promptWithContext)}}\n`,
 			);
@@ -740,14 +730,6 @@ async function runSingleTask(
 	} catch (err) {
 		error = err instanceof Error ? err.message : String(err);
 		await logEvent({ type: "error", error });
-	} finally {
-		if (client) {
-			try {
-				await client.stop();
-			} catch {
-				// Ignore stop errors
-			}
-		}
 	}
 
 	const duration = Date.now() - startTime;
@@ -801,6 +783,7 @@ async function runBatchedTask(
 	config: BenchmarkConfig,
 	cwd: string,
 	expectedDir: string,
+	sessionDir: string,
 	client: RpcClient,
 ): Promise<TaskRunResult> {
 	const startTime = Date.now();
@@ -828,14 +811,14 @@ async function runBatchedTask(
 	};
 	const hashlineSubtypes: Record<string, number> = Object.fromEntries(HASHLINE_SUBTYPES.map(k => [k, 0]));
 
-	const logFile = join(TMP, `run-${task.id}-${runIndex}.jsonl`);
+	const logFile = join(sessionDir, `run-${task.id}-${runIndex}.jsonl`);
 	const logEvent = async (event: unknown) => {
-		await fs.appendFile(logFile, `${JSON.stringify(event)}\n`);
+		await fs.promises.appendFile(logFile, `${JSON.stringify(event)}\n`);
 	};
 	const originalFiles = await collectOriginalFileContents(cwd, task.files);
 
 	try {
-		await fs.appendFile(
+		await fs.promises.appendFile(
 			logFile,
 			`{"type":"meta","task":"${task.id}","run":${runIndex},"workDir":"${cwd}","batched":true}\n`,
 		);
@@ -856,7 +839,7 @@ async function runBatchedTask(
 				retryContext,
 				config,
 			});
-			await fs.appendFile(
+			await fs.promises.appendFile(
 				logFile,
 				`{"type":"prompt","attempt":${attempt + 1},"message":${JSON.stringify(promptWithContext)}}\n`,
 			);
@@ -1294,23 +1277,14 @@ async function runBatch(
 	config: BenchmarkConfig,
 	onProgress?: (event: ProgressEvent) => void,
 ): Promise<Array<{ task: EditTask; result: TaskRunResult }>> {
-	const workDir = join(TMP, `batch-${crypto.randomUUID()}`);
-	await fs.mkdir(workDir, { recursive: true });
+	const workDir = makeTempDir("b");
+	const sessionDir = makeTempDir("s");
 	const results: Array<{ task: EditTask; result: TaskRunResult }> = [];
-	let client: RpcClient | null = null;
-	const expectedDirs = new Map<string, { dir: string; cleanup: () => Promise<void> }>();
 
 	const orderedItems = shuffle(items);
 	const remaining = orderedItems.slice();
 
 	try {
-		await Promise.all(
-			orderedItems.map(async item => {
-				const expected = await getExpectedDir(item.task);
-				expectedDirs.set(item.task.id, expected);
-			}),
-		);
-
 		await Promise.all(orderedItems.map(item => copyFixtures(item.task, workDir)));
 
 		const env: Record<string, string> = { PI_NO_TITLE: "1" };
@@ -1325,12 +1299,13 @@ async function runBatch(
 				config.editFuzzyThreshold === "auto" ? "auto" : String(config.editFuzzyThreshold);
 		}
 
-		client = new RpcClient({
+		using client = new RpcClient({
 			cliPath: CLI_PATH,
 			cwd: workDir,
 			provider: config.provider,
 			model: config.model,
-			args: ["--tools", "read,edit,write", "--no-skills"],
+			args: ["--tools", "read,edit,write", "--no-skills", "--no-title", "--no-rules"],
+			sessionDir,
 			env,
 		});
 
@@ -1341,13 +1316,8 @@ async function runBatch(
 		}
 
 		for (const item of orderedItems) {
-			const expectedDir = expectedDirs.get(item.task.id)?.dir;
-			if (!expectedDir) {
-				throw new Error(`Missing expected directory for task ${item.task.id}`);
-			}
-
 			onProgress?.({ taskId: item.task.id, runIndex: item.runIndex, status: "started" });
-			const result = await runBatchedTask(item, config, workDir, expectedDir, client);
+			const result = await runBatchedTask(item, config, workDir, item.task.expectedDir, sessionDir, client);
 			onProgress?.({ taskId: item.task.id, runIndex: item.runIndex, status: "completed", result });
 			results.push({ task: item.task, result });
 			remaining.shift();
@@ -1359,22 +1329,6 @@ async function runBatch(
 			onProgress?.({ taskId: item.task.id, runIndex: item.runIndex, status: "completed", result });
 			results.push({ task: item.task, result });
 		}
-	} finally {
-		for (const expected of expectedDirs.values()) {
-			await expected.cleanup();
-		}
-		if (client) {
-			try {
-				await client.stop();
-			} catch {
-				// Ignore stop errors
-			}
-		}
-		try {
-			await fs.rm(workDir, { recursive: true, force: true });
-		} catch {
-			// Ignore cleanup errors
-		}
 	}
 
 	return results;
@@ -1385,35 +1339,17 @@ export async function runTask(
 	config: BenchmarkConfig,
 	onProgress?: (event: ProgressEvent) => void,
 ): Promise<TaskResult> {
-	const tempDirs: TempDir[] = [];
-	const { dir: expectedDir, cleanup: cleanupExpected } = await getExpectedDir(task);
+	const runPromises = Array.from({ length: config.runsPerTask }, async (_, index) => {
+		const tempDir = makeTempDir(task.id);
+		await copyFixtures(task, tempDir);
+		onProgress?.({ taskId: task.id, runIndex: index, status: "started" });
+		const result = await runSingleTask(task, index, config, tempDir, task.expectedDir);
+		onProgress?.({ taskId: task.id, runIndex: index, status: "completed", result });
+		return result;
+	});
 
-	try {
-		for (let i = 0; i < config.runsPerTask; i++) {
-			const tempDir = await TempDir.create(join(TMP, `${task.id}-`));
-			tempDirs.push(tempDir);
-			await copyFixtures(task, tempDir.path());
-		}
-
-		const runPromises = tempDirs.map(async (tempDirObj, index) => {
-			onProgress?.({ taskId: task.id, runIndex: index, status: "started" });
-			const result = await runSingleTask(task, index, config, tempDirObj.path(), expectedDir);
-			onProgress?.({ taskId: task.id, runIndex: index, status: "completed", result });
-			return result;
-		});
-
-		const runs = await Promise.all(runPromises);
-		return summarizeTaskRuns(task, runs);
-	} finally {
-		await cleanupExpected();
-		for (const tempDirObj of tempDirs) {
-			try {
-				await tempDirObj.remove();
-			} catch {
-				// Ignore cleanup errors
-			}
-		}
-	}
+	const runs = await Promise.all(runPromises);
+	return summarizeTaskRuns(task, runs);
 }
 
 export async function runBenchmark(

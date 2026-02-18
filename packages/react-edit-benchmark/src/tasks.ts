@@ -8,13 +8,6 @@
 /// <reference types="./bun-imports.d.ts" />
 import * as fs from "node:fs/promises";
 import { basename, join } from "node:path";
-import {
-	extractTaskFiles,
-	type FixtureValidationIssue,
-	loadTasksFromTarball,
-	type TarballTask,
-	validateTarballFixtures,
-} from "./tarball";
 
 export interface EditTask {
 	id: string;
@@ -22,12 +15,8 @@ export interface EditTask {
 	prompt: string;
 	files: string[];
 	metadata?: TaskMetadata;
-	/** Set when loading from directory */
-	inputDir?: string;
-	/** Set when loading from directory */
-	expectedDir?: string;
-	/** Set when loading from tarball */
-	tarballPath?: string;
+	inputDir: string;
+	expectedDir: string;
 }
 
 export interface TaskMetadata {
@@ -119,32 +108,9 @@ export async function loadTasksFromDir(fixturesDir: string): Promise<EditTask[]>
 	return tasks.sort((a, b) => a.id.localeCompare(b.id));
 }
 
-function tarballTaskToEditTask(task: TarballTask, tarballPath: string): EditTask {
-	return {
-		id: task.id,
-		name: titleize(task.id),
-		prompt: task.prompt,
-		files: task.inputFiles,
-		metadata: parseTaskMetadata(task.metadata),
-		tarballPath,
-	};
-}
-
-export async function loadTasks(): Promise<EditTask[]> {
-	const tarballTasks = await loadTasksFromTarball(DEFAULT_TARBALL_PATH);
-	return tarballTasks.map(t => tarballTaskToEditTask(t, DEFAULT_TARBALL_PATH));
-}
-
-export { extractTaskFiles };
-
-export async function validateFixtures(fixturesPath?: string): Promise<FixtureValidationIssue[]> {
-	if (!fixturesPath) {
-		return validateTarballFixtures(DEFAULT_TARBALL_PATH);
-	}
-	if (fixturesPath.endsWith(".tar.gz") || fixturesPath.endsWith(".tgz")) {
-		return validateTarballFixtures(fixturesPath);
-	}
-	return validateFixturesFromDir(fixturesPath);
+export interface FixtureValidationIssue {
+	taskId: string;
+	message: string;
 }
 
 export async function validateFixturesFromDir(fixturesPath: string): Promise<FixtureValidationIssue[]> {

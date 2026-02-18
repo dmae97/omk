@@ -125,14 +125,18 @@ function parseCode(code: string): Parsed | null {
 t.VISITOR_KEYS.TSTypeCastExpression = ["expression", "typeAnnotation"];
 {
 	const { generatorInfosMap } = require("@babel/generator/lib/nodes") as {
-		generatorInfosMap: Map<string, [Function, number, unknown]>;
+		generatorInfosMap: Map<string, [any, number, unknown]>;
 	};
 	if (!generatorInfosMap.has("TSTypeCastExpression")) {
 		const tsAs = generatorInfosMap.get("TSAsExpression");
 		if (tsAs) {
 			// Custom handler: like TSAsExpression but unwraps TSTypeAnnotation → TSType
 			function TSTypeCastExpression(
-				this: { print: Function; space: Function; word: Function },
+				this: {
+					print: (node: unknown, printComments?: boolean) => void;
+					space: () => void;
+					word: (word: string) => void;
+				},
 				node: Record<string, unknown>,
 			): void {
 				this.print(node.expression, true);
@@ -546,7 +550,6 @@ class CallArgumentSwapMutation extends BaseAstMutation {
 		];
 	}
 
-
 	applyCandidate(parsed: Parsed, candidate: Candidate<t.CallExpression>): MutationInfo {
 		const node = candidate.path.node;
 		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
@@ -853,7 +856,6 @@ class IdentifierMultiEditMutation extends BaseAstMutation {
 		];
 	}
 
-
 	applyCandidate(_parsed: Parsed, candidate: Candidate<t.Program>, rng: () => number): MutationInfo {
 		const bindings: Array<{ name: string; binding: Binding }> = [];
 		candidate.path.traverse({
@@ -1107,7 +1109,6 @@ class SwapAdjacentLinesMutation extends BaseAstMutation {
 		];
 	}
 
-
 	applyCandidate(
 		_parsed: Parsed,
 		candidate: Candidate<t.Program | t.BlockStatement, { index: number }>,
@@ -1265,7 +1266,6 @@ class SwapNamedImportsMutation extends BaseAstMutation {
 			},
 		];
 	}
-
 
 	applyCandidate(parsed: Parsed, candidate: Candidate<t.ImportDeclaration, { i: number; j: number }>): MutationInfo {
 		const node = candidate.path.node;

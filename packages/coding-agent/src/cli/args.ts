@@ -40,6 +40,7 @@ export interface Args {
 	export?: string;
 	noSkills?: boolean;
 	skills?: string[];
+	noRules?: boolean;
 	listModels?: string | true;
 	noTitle?: boolean;
 	messages: string[];
@@ -150,6 +151,8 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 			result.noExtensions = true;
 		} else if (arg === "--no-skills") {
 			result.noSkills = true;
+		} else if (arg === "--no-rules") {
+			result.noRules = true;
 		} else if (arg === "--no-title") {
 			result.noTitle = true;
 		} else if (arg === "--skills" && i + 1 < args.length) {

@@ -133,6 +133,8 @@ export interface CreateAgentSessionOptions {
 	skills?: Skill[];
 	/** Skills to inline into the system prompt instead of listing available skills. */
 	preloadedSkills?: Skill[];
+	/** Rules. Default: discovered from multiple locations */
+	rules?: Rule[];
 	/** Context files (AGENTS.md content). Default: discovered walking up from cwd */
 	contextFiles?: Array<{ path: string; content: string }>;
 	/** Prompt templates. Default: discovered from cwd/.omp/prompts/ + agentDir/prompts/ */
@@ -671,7 +673,10 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// Discover rules
 	const ttsrSettings = settings.getGroup("ttsr");
 	const ttsrManager = new TtsrManager(ttsrSettings);
-	const rulesResult = await loadCapability<Rule>(ruleCapability.id, { cwd });
+	const rulesResult =
+		options.rules !== undefined
+			? { items: options.rules, warnings: undefined }
+			: await loadCapability<Rule>(ruleCapability.id, { cwd });
 	const registeredTtsrRuleNames = new Set<string>();
 	for (const rule of rulesResult.items) {
 		if (rule.condition && rule.condition.length > 0) {

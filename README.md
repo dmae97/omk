@@ -1019,6 +1019,7 @@ omp <command> [args] [flags]
 | `--no-extensions`                     | Disable extension discovery (`-e` paths still load)                |
 | `--no-skills`                         | Disable skills discovery and loading                               |
 | `--skills <patterns>`                 | Comma-separated glob patterns to filter skills                     |
+| `--no-rules`                          | Disable rules discovery and loading                               |
 | `--allow-home`                        | Allow starting from home dir without auto-chdir                    |
 | `--no-title`                          | Disable automatic session title generation                         |
 | `--export <file> [output]`            | Export session to HTML                                             |
