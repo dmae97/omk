@@ -1,4 +1,14 @@
-import { padding } from "@oh-my-pi/pi-tui";
+import generate from "@babel/generator";
+import { type ParserPlugin, parse } from "@babel/parser";
+import traverse, { type Binding, type NodePath } from "@babel/traverse";
+import * as t from "@babel/types";
+import {
+	generate as generateRegex,
+	parse as parseRegex,
+	type NodePath as RegexNodePath,
+	traverse as traverseRegex,
+} from "regexp-tree";
+import type { AstRegExp, Quantifier as RegexQuantifier } from "regexp-tree/ast";
 
 /**
  * Code mutations for edit benchmark generation.
@@ -7,7 +17,6 @@ import { padding } from "@oh-my-pi/pi-tui";
  * ability. The mutation can be trivial - what matters is whether the model can
  * surgically apply the patch in difficult contexts.
  */
-
 export interface MutationInfo {
 	lineNumber: number;
 	originalSnippet: string;
@@ -24,85 +33,10 @@ export interface Mutation {
 	describe(info: MutationInfo): string;
 }
 
-interface Candidate {
-	lineNumber: number;
-	start: number;
-	end: number;
-	original: string;
-	replacement: string;
-}
-
-function isCommented(line: string, index: number): boolean {
-	const commentIndex = line.indexOf("//");
-	return commentIndex !== -1 && commentIndex < index;
-}
-
-function* execAll(regex: RegExp, text: string): Generator<RegExpExecArray> {
-	const re = new RegExp(regex.source, regex.flags.includes("g") ? regex.flags : `${regex.flags}g`);
-	for (let m = re.exec(text); m !== null; m = re.exec(text)) yield m;
-}
-
-function iterCandidates(
-	lines: string[],
-	pattern: RegExp,
-	replacementFn: (match: RegExpExecArray) => string | null,
-): Candidate[] {
-	const candidates: Candidate[] = [];
-	for (let lineNumber = 1; lineNumber <= lines.length; lineNumber++) {
-		const line = lines[lineNumber - 1];
-		for (const match of execAll(pattern, line)) {
-			if (isCommented(line, match.index)) continue;
-			const replacement = replacementFn(match);
-			if (replacement === null) continue;
-			candidates.push({
-				lineNumber,
-				start: match.index,
-				end: match.index + match[0].length,
-				original: match[0],
-				replacement,
-			});
-		}
-	}
-	return candidates;
-}
-
-function pickCandidate(
-	lines: string[],
-	pattern: RegExp,
-	replacementFn: (match: RegExpExecArray) => string | null,
-	rng: () => number,
-): Candidate | null {
-	const candidates = iterCandidates(lines, pattern, replacementFn);
-	if (candidates.length === 0) return null;
-	return candidates[Math.floor(rng() * candidates.length)];
-}
-
-function applyCandidate(lines: string[], candidate: Candidate): MutationInfo {
-	const line = lines[candidate.lineNumber - 1];
-	lines[candidate.lineNumber - 1] = line.slice(0, candidate.start) + candidate.replacement + line.slice(candidate.end);
-	return {
-		lineNumber: candidate.lineNumber,
-		originalSnippet: candidate.original,
-		mutatedSnippet: candidate.replacement,
-	};
-}
-
-function stripStrings(line: string): string {
-	const pattern = /(?<quote>['"])(?<body>(?:\\.|[^\\\n])*?)\k<quote>/g;
-	return line.replace(pattern, match => padding(match.length));
-}
-
-function mutateIdentifier(identifier: string): string | null {
-	if (identifier.length < 2) return null;
-	let mutated: string;
-	if (identifier.length >= 3 && identifier[0] === identifier[1]) {
-		mutated = identifier[identifier.length - 1] + identifier.slice(1, -1) + identifier[0];
-	} else {
-		mutated = identifier[1] + identifier[0] + identifier.slice(2);
-	}
-	if (mutated === identifier) return null;
-	return mutated;
-}
+type Candidate<TNode extends t.Node = t.Node, TMeta = unknown> = {
+	path: NodePath<TNode>;
+	meta?: TMeta;
+};
 
 function randomChoice<T>(arr: T[], rng: () => number): T {
 	return arr[Math.floor(rng() * arr.length)];
@@ -118,355 +52,646 @@ function randomSample<T>(arr: T[], count: number, rng: () => number): T[] {
 	return result;
 }
 
-abstract class BaseMutation implements Mutation {
+function mutateIdentifier(identifier: string): string | null {
+	if (identifier.length < 2) return null;
+	let mutated: string;
+	if (identifier.length >= 3 && identifier[0] === identifier[1]) {
+		mutated = identifier[identifier.length - 1] + identifier.slice(1, -1) + identifier[0];
+	} else {
+		mutated = identifier[1] + identifier[0] + identifier.slice(2);
+	}
+	return mutated === identifier ? null : mutated;
+}
+
+type Parsed = {
+	ast: t.File;
+	code: string;
+};
+
+function parseWithPlugins(code: string, plugins: ParserPlugin[]): t.File {
+	return parse(code, {
+		sourceType: "unambiguous",
+		allowReturnOutsideFunction: true,
+		errorRecovery: true,
+		plugins,
+	});
+}
+
+function parseCode(code: string): Parsed | null {
+	const pluginSets: ParserPlugin[][] = [
+		[
+			"flow",
+			"flowComments",
+			"jsx",
+			"importAssertions",
+			"decorators-legacy",
+			"classPrivateMethods",
+			"classPrivateProperties",
+			"classProperties",
+			"privateIn",
+			"topLevelAwait",
+			"optionalChaining",
+			"nullishCoalescingOperator",
+		],
+		[
+			"typescript",
+			"jsx",
+			"importAssertions",
+			"decorators-legacy",
+			"classPrivateMethods",
+			"classPrivateProperties",
+			"classProperties",
+			"privateIn",
+			"topLevelAwait",
+			"optionalChaining",
+			"nullishCoalescingOperator",
+		],
+	];
+
+	for (const plugins of pluginSets) {
+		try {
+			return { ast: parseWithPlugins(code, plugins), code };
+		} catch {}
+	}
+
+	return null;
+}
+
+/*
+ * Babel parser 7.29 emits TSTypeCastExpression but generator/types don't define it.
+ * Register it in VISITOR_KEYS (so the printer's isLastChild doesn't crash) and in
+ * generatorInfosMap with a custom handler that unwraps the TSTypeAnnotation wrapper.
+ */
+t.VISITOR_KEYS.TSTypeCastExpression = ["expression", "typeAnnotation"];
+{
+	const { generatorInfosMap } = require("@babel/generator/lib/nodes") as {
+		generatorInfosMap: Map<string, [Function, number, unknown]>;
+	};
+	if (!generatorInfosMap.has("TSTypeCastExpression")) {
+		const tsAs = generatorInfosMap.get("TSAsExpression");
+		if (tsAs) {
+			// Custom handler: like TSAsExpression but unwraps TSTypeAnnotation → TSType
+			function TSTypeCastExpression(
+				this: { print: Function; space: Function; word: Function },
+				node: Record<string, unknown>,
+			): void {
+				this.print(node.expression, true);
+				this.space();
+				this.word("as");
+				this.space();
+				const annot = node.typeAnnotation as Record<string, unknown> | undefined;
+				// TSTypeCastExpression.typeAnnotation is TSTypeAnnotation {typeAnnotation: TSType}
+				this.print(annot && "typeAnnotation" in annot ? annot.typeAnnotation : annot);
+			}
+			generatorInfosMap.set("TSTypeCastExpression", [TSTypeCastExpression, tsAs[1], tsAs[2]]);
+		}
+	}
+}
+
+type SourceRange = {
+	start: number;
+	end: number;
+};
+
+type SourceEdit = SourceRange & {
+	replacement: string;
+};
+
+function nodeLine(node: t.Node): number {
+	return node.loc?.start.line ?? 0;
+}
+
+function nodeRange(node: t.Node): SourceRange | null {
+	if (typeof node.start === "number" && typeof node.end === "number" && node.start <= node.end) {
+		return { start: node.start, end: node.end };
+	}
+	return null;
+}
+
+function snippetFromSource(src: string, node: t.Node, fallback = ""): string {
+	const range = nodeRange(node);
+	if (range) {
+		return src.slice(range.start, range.end);
+	}
+	return fallback;
+}
+
+function trimSnippet(snippet: string): string {
+	return snippet.replace(/^\n+/, "").replace(/\n+$/, "");
+}
+
+function snippetFromNode(node: t.Node): string {
+	try {
+		return trimSnippet(generate(node, { comments: false, compact: false, retainLines: false }).code);
+	} catch {
+		return "";
+	}
+}
+
+function applySourceEdits(content: string, edits: SourceEdit[]): string | null {
+	if (edits.length === 0) return content;
+	const sorted = [...edits].sort((a, b) => b.start - a.start);
+	let previousStart = content.length + 1;
+	let out = content;
+	for (const edit of sorted) {
+		if (edit.start < 0 || edit.end < edit.start || edit.end > out.length) {
+			return null;
+		}
+		if (edit.end > previousStart) {
+			return null;
+		}
+		out = `${out.slice(0, edit.start)}${edit.replacement}${out.slice(edit.end)}`;
+		previousStart = edit.start;
+	}
+	return out;
+}
+
+function noopInfo(): MutationInfo {
+	return { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" };
+}
+
+function isLengthMemberExpression(node: t.Node): node is t.MemberExpression {
+	return t.isMemberExpression(node) && !node.computed && t.isIdentifier(node.property, { name: "length" });
+}
+
+abstract class BaseAstMutation implements Mutation {
 	abstract name: string;
 	abstract category: string;
 	abstract fixHint: string;
 	abstract description: string;
 
-	abstract canApply(content: string): boolean;
-	abstract mutate(content: string, rng: () => number): [string, MutationInfo];
-
 	describe(_info: MutationInfo): string {
 		return this.description;
 	}
+
+	abstract collectCandidates(parsed: Parsed): Candidate[];
+	abstract applyCandidate(parsed: Parsed, candidate: Candidate, rng: () => number): MutationInfo;
+
+	protected buildEdits(_parsed: Parsed, candidate: Candidate, originalRange: SourceRange | null): SourceEdit[] | null {
+		if (!originalRange) return null;
+		if (candidate.path.removed) {
+			return [{ ...originalRange, replacement: "" }];
+		}
+		const replacement = snippetFromNode(candidate.path.node);
+		if (!replacement) return null;
+		return [{ ...originalRange, replacement }];
+	}
+
+	canApply(content: string): boolean {
+		const parsed = parseCode(content);
+		if (!parsed) return false;
+		return this.collectCandidates(parsed).length > 0;
+	}
+
+	mutate(content: string, rng: () => number): [string, MutationInfo] {
+		const parsed = parseCode(content);
+		if (!parsed) return [content, noopInfo()];
+		const candidates = this.collectCandidates(parsed);
+		if (candidates.length === 0) return [content, noopInfo()];
+
+		const chosen = randomChoice(candidates, rng);
+		const originalRange = nodeRange(chosen.path.node);
+		const info = this.applyCandidate(parsed, chosen, rng);
+		if (info.lineNumber === 0) return [content, noopInfo()];
+		const edits = this.buildEdits(parsed, chosen, originalRange);
+		if (!edits) return [content, noopInfo()];
+		const mutated = applySourceEdits(content, edits);
+		if (!mutated || mutated === content) return [content, noopInfo()];
+		return [mutated, info];
+	}
 }
 
-class SwapComparisonMutation extends BaseMutation {
+class SwapComparisonMutation extends BaseAstMutation {
 	name = "swap-comparison";
 	category = "operator";
 	fixHint = "Swap the comparison operator to the correct variant.";
 	description = "A comparison operator is subtly wrong.";
 
-	#pattern = /(?<=[\s(])(?<op><=|>=|<|>)(?=\s*[\d\w(])/;
-	#swap: Record<string, string> = { "<=": "<", "<": "<=", ">=": ">", ">": ">=" };
+	#swap: Record<string, t.BinaryExpression["operator"]> = {
+		"<=": "<",
+		"<": "<=",
+		">=": ">",
+		">": ">=",
+	};
 
-	canApply(content: string): boolean {
-		return this.#pattern.test(content);
+	collectCandidates(parsed: Parsed): Candidate<t.BinaryExpression>[] {
+		const out: Candidate<t.BinaryExpression>[] = [];
+		traverse(parsed.ast, {
+			BinaryExpression: path => {
+				const op = path.node.operator;
+				if (op === "<" || op === "<=" || op === ">" || op === ">=") out.push({ path });
+			},
+		});
+		return out;
 	}
 
-	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.#pattern, m => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
-		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
-		const info = applyCandidate(lines, candidate);
-		return [lines.join("\n"), info];
+	applyCandidate(parsed: Parsed, candidate: Candidate<t.BinaryExpression>): MutationInfo {
+		const node = candidate.path.node;
+		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
+		const swapped = this.#swap[node.operator];
+		if (!swapped) return noopInfo();
+		node.operator = swapped;
+		return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: snippetFromNode(node) };
 	}
 }
 
-class SwapEqualityMutation extends BaseMutation {
+class SwapEqualityMutation extends BaseAstMutation {
 	name = "swap-equality";
 	category = "operator";
 	fixHint = "Fix the equality comparison operator.";
 	description = "An equality operator is inverted.";
 
-	#pattern = /(?<![=!<>])(?<op>===|!==|==|!=)(?!=)/;
-	#swap: Record<string, string> = { "===": "!==", "!==": "===", "==": "!=", "!=": "==" };
+	#swap: Record<string, t.BinaryExpression["operator"]> = {
+		"===": "!==",
+		"!==": "===",
+		"==": "!=",
+		"!=": "==",
+	};
 
-	canApply(content: string): boolean {
-		return this.#pattern.test(content);
+	collectCandidates(parsed: Parsed): Candidate<t.BinaryExpression>[] {
+		const out: Candidate<t.BinaryExpression>[] = [];
+		traverse(parsed.ast, {
+			BinaryExpression: path => {
+				const op = path.node.operator;
+				if (op === "===" || op === "!==" || op === "==" || op === "!=") out.push({ path });
+			},
+		});
+		return out;
 	}
 
-	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.#pattern, m => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
-		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
-		const info = applyCandidate(lines, candidate);
-		return [lines.join("\n"), info];
+	applyCandidate(parsed: Parsed, candidate: Candidate<t.BinaryExpression>): MutationInfo {
+		const node = candidate.path.node;
+		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
+		const swapped = this.#swap[node.operator];
+		if (!swapped) return noopInfo();
+		node.operator = swapped;
+		return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: snippetFromNode(node) };
 	}
 }
 
-class SwapLogicalMutation extends BaseMutation {
+class SwapLogicalMutation extends BaseAstMutation {
 	name = "swap-logical";
 	category = "operator";
 	fixHint = "Use the intended boolean operator.";
 	description = "A boolean operator is incorrect.";
 
-	#pattern = /(?<op>&&|\|\|)/;
-	#swap: Record<string, string> = { "&&": "||", "||": "&&" };
-
-	canApply(content: string): boolean {
-		return this.#pattern.test(content);
+	collectCandidates(parsed: Parsed): Candidate<t.LogicalExpression>[] {
+		const out: Candidate<t.LogicalExpression>[] = [];
+		traverse(parsed.ast, {
+			LogicalExpression: path => {
+				const op = path.node.operator;
+				if (op === "&&" || op === "||") out.push({ path });
+			},
+		});
+		return out;
 	}
 
-	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.#pattern, m => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
-		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
-		const info = applyCandidate(lines, candidate);
-		return [lines.join("\n"), info];
+	applyCandidate(parsed: Parsed, candidate: Candidate<t.LogicalExpression>): MutationInfo {
+		const node = candidate.path.node;
+		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
+		node.operator = node.operator === "&&" ? "||" : "&&";
+		return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: snippetFromNode(node) };
 	}
 }
 
-class RemoveNegationMutation extends BaseMutation {
+class RemoveNegationMutation extends BaseAstMutation {
 	name = "remove-negation";
 	category = "operator";
-	fixHint = "Remove the stray logical negation.";
-	description = "A negation operator is accidentally applied.";
+	fixHint = "Add back the missing logical negation (`!`).";
+	description = "A logical negation (`!`) was accidentally removed.";
 
-	#pattern = /!(?!=)/;
-
-	canApply(content: string): boolean {
-		return this.#pattern.test(content);
+	collectCandidates(parsed: Parsed): Candidate<t.UnaryExpression>[] {
+		const out: Candidate<t.UnaryExpression>[] = [];
+		traverse(parsed.ast, {
+			UnaryExpression: path => {
+				if (path.node.operator === "!" && path.node.prefix) out.push({ path });
+			},
+		});
+		return out;
 	}
 
-	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.#pattern, () => "", rng);
-		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
-		const info = applyCandidate(lines, candidate);
-		return [lines.join("\n"), info];
+	applyCandidate(parsed: Parsed, candidate: Candidate<t.UnaryExpression>): MutationInfo {
+		const node = candidate.path.node;
+		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
+		const replacement = node.argument;
+		candidate.path.replaceWith(replacement);
+		return {
+			lineNumber: nodeLine(node),
+			originalSnippet: before,
+			mutatedSnippet: snippetFromNode(replacement),
+		};
 	}
 }
 
-class SwapIncDecMutation extends BaseMutation {
+class SwapIncDecMutation extends BaseAstMutation {
 	name = "swap-increment-decrement";
 	category = "operator";
 	fixHint = "Replace the increment/decrement operator with the intended one.";
 	description = "An increment/decrement operator points the wrong direction.";
 
-	#pattern = /(?<op>\+\+|--)/;
-	#swap: Record<string, string> = { "++": "--", "--": "++" };
-
-	canApply(content: string): boolean {
-		return this.#pattern.test(content);
+	collectCandidates(parsed: Parsed): Candidate<t.UpdateExpression>[] {
+		const out: Candidate<t.UpdateExpression>[] = [];
+		traverse(parsed.ast, {
+			UpdateExpression: path => {
+				if (path.node.operator === "++" || path.node.operator === "--") out.push({ path });
+			},
+		});
+		return out;
 	}
 
-	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.#pattern, m => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
-		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
-		const info = applyCandidate(lines, candidate);
-		return [lines.join("\n"), info];
+	applyCandidate(parsed: Parsed, candidate: Candidate<t.UpdateExpression>): MutationInfo {
+		const node = candidate.path.node;
+		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
+		node.operator = node.operator === "++" ? "--" : "++";
+		return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: snippetFromNode(node) };
 	}
 }
 
-class SwapArithmeticMutation extends BaseMutation {
+class SwapArithmeticMutation extends BaseAstMutation {
 	name = "swap-arithmetic";
 	category = "operator";
 	fixHint = "Correct the arithmetic operator.";
 	description = "An arithmetic operator was swapped.";
 
-	#pattern = /(?<=\s)(?<op>[+\-*/])(?=\s)/;
-	#swap: Record<string, string> = { "+": "-", "-": "+", "*": "/", "/": "*" };
+	#swap: Record<string, t.BinaryExpression["operator"]> = { "+": "-", "-": "+", "*": "/", "/": "*" };
 
-	canApply(content: string): boolean {
-		return this.#pattern.test(content);
+	collectCandidates(parsed: Parsed): Candidate<t.BinaryExpression>[] {
+		const out: Candidate<t.BinaryExpression>[] = [];
+		traverse(parsed.ast, {
+			BinaryExpression: path => {
+				const op = path.node.operator;
+				if (op === "+" || op === "-" || op === "*" || op === "/") out.push({ path });
+			},
+		});
+		return out;
 	}
 
-	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.#pattern, m => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
-		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
-		const info = applyCandidate(lines, candidate);
-		return [lines.join("\n"), info];
+	applyCandidate(parsed: Parsed, candidate: Candidate<t.BinaryExpression>): MutationInfo {
+		const node = candidate.path.node;
+		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
+		const swapped = this.#swap[node.operator];
+		if (!swapped) return noopInfo();
+		node.operator = swapped;
+		return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: snippetFromNode(node) };
 	}
 }
 
-class BooleanLiteralFlipMutation extends BaseMutation {
+class BooleanLiteralFlipMutation extends BaseAstMutation {
 	name = "flip-boolean";
 	category = "literal";
 	fixHint = "Flip the boolean literal to the intended value.";
 	description = "A boolean literal is inverted.";
 
-	#pattern = /\b(true|false)\b/;
-	#swap: Record<string, string> = { true: "false", false: "true" };
-
-	canApply(content: string): boolean {
-		return this.#pattern.test(content);
+	collectCandidates(parsed: Parsed): Candidate<t.BooleanLiteral>[] {
+		const out: Candidate<t.BooleanLiteral>[] = [];
+		traverse(parsed.ast, {
+			BooleanLiteral: path => {
+				out.push({ path });
+			},
+		});
+		return out;
 	}
 
-	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.#pattern, m => this.#swap[m[1]] ?? null, rng);
-		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
-		const info = applyCandidate(lines, candidate);
-		return [lines.join("\n"), info];
+	applyCandidate(parsed: Parsed, candidate: Candidate<t.BooleanLiteral>): MutationInfo {
+		const node = candidate.path.node;
+		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
+		node.value = !node.value;
+		return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: snippetFromNode(node) };
 	}
 }
 
-class OptionalChainRemovalMutation extends BaseMutation {
+class OptionalChainRemovalMutation extends BaseAstMutation {
 	name = "remove-optional-chain";
 	category = "access";
 	fixHint =
 		"Restore the optional chaining operator (`?.`) at the ONE location where it was removed. Do not add optional chaining elsewhere.";
 	description = "Optional chaining was removed from a property access.";
 
-	#pattern = /\?\.(?=[\w[(])/;
-
-	canApply(content: string): boolean {
-		return this.#pattern.test(content);
+	collectCandidates(parsed: Parsed): Candidate<t.OptionalMemberExpression | t.OptionalCallExpression>[] {
+		const out: Candidate<t.OptionalMemberExpression | t.OptionalCallExpression>[] = [];
+		traverse(parsed.ast, {
+			OptionalMemberExpression: path => {
+				if (path.node.optional)
+					out.push({ path: path as NodePath<t.OptionalMemberExpression | t.OptionalCallExpression> });
+			},
+			OptionalCallExpression: path => {
+				if (path.node.optional)
+					out.push({ path: path as NodePath<t.OptionalMemberExpression | t.OptionalCallExpression> });
+			},
+		});
+		return out;
 	}
 
-	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.#pattern, () => ".", rng);
-		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
-		const info = applyCandidate(lines, candidate);
-		return [lines.join("\n"), info];
+	applyCandidate(
+		parsed: Parsed,
+		candidate: Candidate<t.OptionalMemberExpression | t.OptionalCallExpression>,
+	): MutationInfo {
+		const node = candidate.path.node;
+		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
+		node.optional = false;
+		return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: snippetFromNode(node) };
 	}
 }
 
-class CallArgumentSwapMutation extends BaseMutation {
+class CallArgumentSwapMutation extends BaseAstMutation {
 	name = "swap-call-args";
 	category = "call";
 	fixHint = "Swap the two arguments to their original order.";
 	description = "Two arguments in a call are swapped.";
 
-	#pattern = /(?<callee>[\w.$]+)\(\s*(?<a>[^(),]+?)\s*,\s*(?<b>[^(),]+?)\s*\)/;
-
-	canApply(content: string): boolean {
-		return this.#pattern.test(content);
+	collectCandidates(parsed: Parsed): Candidate<t.CallExpression>[] {
+		const out: Candidate<t.CallExpression>[] = [];
+		traverse(parsed.ast, {
+			CallExpression: path => {
+				const args = path.node.arguments;
+				if (args.length >= 2 && !t.isSpreadElement(args[0]) && !t.isSpreadElement(args[1])) out.push({ path });
+			},
+		});
+		return out;
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const candidate = pickCandidate(
-			lines,
-			this.#pattern,
-			m => {
-				const callee = m.groups?.callee ?? "";
-				const a = m.groups?.a ?? "";
-				const b = m.groups?.b ?? "";
-				return `${callee}(${b}, ${a})`;
+		const parsed = parseCode(content);
+		if (!parsed) return [content, noopInfo()];
+		const candidates = this.collectCandidates(parsed);
+		if (candidates.length === 0) return [content, noopInfo()];
+
+		const chosen = randomChoice(candidates, rng);
+		const node = chosen.path.node;
+		const first = node.arguments[0];
+		const second = node.arguments[1];
+		if (!first || !second || t.isSpreadElement(first) || t.isSpreadElement(second)) return [content, noopInfo()];
+
+		const firstRange = nodeRange(first);
+		const secondRange = nodeRange(second);
+		const callRange = nodeRange(node);
+		if (!firstRange || !secondRange || !callRange) return [content, noopInfo()];
+		if (firstRange.start >= firstRange.end || secondRange.start >= secondRange.end) return [content, noopInfo()];
+		if (firstRange.end > secondRange.start) return [content, noopInfo()];
+
+		const betweenArgs = content.slice(firstRange.end, secondRange.start);
+		const swappedArgs = `${content.slice(secondRange.start, secondRange.end)}${betweenArgs}${content.slice(firstRange.start, firstRange.end)}`;
+		const mutated = applySourceEdits(content, [
+			{ start: firstRange.start, end: secondRange.end, replacement: swappedArgs },
+		]);
+		if (!mutated || mutated === content) return [content, noopInfo()];
+
+		return [
+			mutated,
+			{
+				lineNumber: nodeLine(node),
+				originalSnippet: content.slice(callRange.start, callRange.end),
+				mutatedSnippet: mutated.slice(callRange.start, callRange.end),
 			},
-			rng,
-		);
-		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
-		const info = applyCandidate(lines, candidate);
-		return [lines.join("\n"), info];
+		];
+	}
+
+
+	applyCandidate(parsed: Parsed, candidate: Candidate<t.CallExpression>): MutationInfo {
+		const node = candidate.path.node;
+		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
+		const first = node.arguments[0];
+		const second = node.arguments[1];
+		if (!first || !second) return noopInfo();
+		node.arguments[0] = second;
+		node.arguments[1] = first;
+		return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: snippetFromNode(node) };
 	}
 }
 
-class NullishCoalescingSwapMutation extends BaseMutation {
+class NullishCoalescingSwapMutation extends BaseAstMutation {
 	name = "swap-nullish";
 	category = "operator";
 	fixHint = "Use the intended nullish/logical operator.";
 	description = "A nullish coalescing operator was swapped.";
 
-	#pattern = /(?<op>\?\?|\|\|)/;
-	#swap: Record<string, string> = { "??": "||", "||": "??" };
-
-	canApply(content: string): boolean {
-		return this.#pattern.test(content);
+	collectCandidates(parsed: Parsed): Candidate<t.LogicalExpression>[] {
+		const out: Candidate<t.LogicalExpression>[] = [];
+		traverse(parsed.ast, {
+			LogicalExpression: path => {
+				const op = path.node.operator;
+				if (op === "??" || op === "||") out.push({ path });
+			},
+		});
+		return out;
 	}
 
-	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const candidate = pickCandidate(lines, this.#pattern, m => this.#swap[m.groups?.op ?? m[0]] ?? null, rng);
-		if (!candidate) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
-		const info = applyCandidate(lines, candidate);
-		return [lines.join("\n"), info];
+	applyCandidate(parsed: Parsed, candidate: Candidate<t.LogicalExpression>): MutationInfo {
+		const node = candidate.path.node;
+		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
+		node.operator = node.operator === "??" ? "||" : "??";
+		return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: snippetFromNode(node) };
 	}
 }
 
-class RegexQuantifierSwapMutation extends BaseMutation {
+class RegexQuantifierSwapMutation extends BaseAstMutation {
 	name = "swap-regex-quantifier";
 	category = "regex";
 	fixHint = "Fix the ONE regex quantifier that was swapped (between `+` and `*`). Do not modify other quantifiers.";
 	description = "A regex quantifier was swapped, changing whitespace matching.";
 
-	#literalPattern = /\/(?<body>(?:\\\/|[^/\n])*)\/(?<flags>[gimsuy]*)/g;
-	#quantPattern = /(\\[A-Za-z]|\\.|\[[^\]]+\])(?<quant>[+*])/g;
-
-	canApply(content: string): boolean {
-		const lines = content.split("\n");
-		return this.#iterCandidates(lines).length > 0;
-	}
-
-	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const candidates = this.#iterCandidates(lines);
-		if (candidates.length === 0) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
-
-		const lineCounts = new Map<string, number>();
-		for (const line of lines) {
-			lineCounts.set(line, (lineCounts.get(line) ?? 0) + 1);
-		}
-
-		const repeatedCandidates = candidates.filter(c => (lineCounts.get(lines[c.lineNumber - 1]) ?? 0) > 1);
-
-		const candidate = randomChoice(repeatedCandidates.length > 0 ? repeatedCandidates : candidates, rng);
-		const info = applyCandidate(lines, candidate);
-		return [lines.join("\n"), info];
-	}
-
-	#iterCandidates(lines: string[]): Candidate[] {
-		const candidates: Candidate[] = [];
-		for (let lineNumber = 1; lineNumber <= lines.length; lineNumber++) {
-			const line = lines[lineNumber - 1];
-			for (const litMatch of execAll(this.#literalPattern, line)) {
-				if (isCommented(line, litMatch.index)) continue;
-				const prefix = line.slice(0, litMatch.index);
-				if (prefix && !" =({[,;:!".includes(prefix[prefix.length - 1]) && !/\s/.test(prefix[prefix.length - 1])) {
-					continue;
-				}
-				const bodyStart = litMatch.index + 1; // after opening /
-				const body = litMatch.groups?.body ?? "";
-				for (const tokenMatch of execAll(this.#quantPattern, body)) {
-					const quantifier = tokenMatch.groups?.quant ?? tokenMatch[2];
-					const swapped = quantifier === "+" ? "*" : "+";
-					const start = bodyStart + tokenMatch.index + tokenMatch[0].length - 1;
-					candidates.push({
-						lineNumber,
-						start,
-						end: start + 1,
-						original: quantifier,
-						replacement: swapped,
+	collectCandidates(parsed: Parsed): Candidate<t.RegExpLiteral>[] {
+		const out: Candidate<t.RegExpLiteral>[] = [];
+		traverse(parsed.ast, {
+			RegExpLiteral: path => {
+				const source = `/${path.node.pattern}/${path.node.flags ?? ""}`;
+				try {
+					const ast = parseRegex(source);
+					let hasQuantifier = false;
+					traverseRegex(ast, {
+						Quantifier: quantPath => {
+							const kind = quantPath.node.kind;
+							if (kind === "+" || kind === "*") hasQuantifier = true;
+						},
 					});
+					if (hasQuantifier) out.push({ path });
+				} catch {
+					return;
 				}
-			}
+			},
+		});
+		return out;
+	}
+
+	applyCandidate(parsed: Parsed, candidate: Candidate<t.RegExpLiteral>, rng: () => number): MutationInfo {
+		const node = candidate.path.node;
+		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
+		const source = `/${node.pattern}/${node.flags ?? ""}`;
+
+		try {
+			const ast: AstRegExp = parseRegex(source);
+			const quantifiers: Array<RegexNodePath<RegexQuantifier>> = [];
+			traverseRegex(ast, {
+				Quantifier: quantPath => {
+					const kind = quantPath.node.kind;
+					if (kind === "+" || kind === "*") quantifiers.push(quantPath as RegexNodePath<RegexQuantifier>);
+				},
+			});
+			if (quantifiers.length === 0) return noopInfo();
+
+			const chosen = randomChoice(quantifiers, rng);
+			chosen.node.kind = chosen.node.kind === "+" ? "*" : "+";
+
+			const regenerated = generateRegex(ast);
+			const firstSlash = regenerated.indexOf("/");
+			const lastSlash = regenerated.lastIndexOf("/");
+			if (firstSlash === -1 || lastSlash <= firstSlash) return noopInfo();
+
+			node.pattern = regenerated.slice(firstSlash + 1, lastSlash);
+			node.flags = regenerated.slice(lastSlash + 1);
+			return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: snippetFromNode(node) };
+		} catch {
+			return noopInfo();
 		}
-		return candidates;
 	}
 }
 
-class UnicodeHyphenMutation extends BaseMutation {
+class UnicodeHyphenMutation extends BaseAstMutation {
 	name = "unicode-hyphen";
 	category = "unicode";
 	fixHint = "Replace the unicode dash with a plain ASCII hyphen.";
 	description = "A string literal contains a lookalike unicode dash.";
 
-	#stringPattern = /(?<quote>['"])(?<body>(?:\\.|[^\\\n])*?)\k<quote>/g;
-
-	canApply(content: string): boolean {
-		return content.includes("-") && this.#stringPattern.test(content);
+	collectCandidates(parsed: Parsed): Candidate<t.StringLiteral | t.TemplateElement>[] {
+		const out: Candidate<t.StringLiteral | t.TemplateElement>[] = [];
+		traverse(parsed.ast, {
+			StringLiteral: path => {
+				if (path.node.value.includes("-"))
+					out.push({ path: path as NodePath<t.StringLiteral | t.TemplateElement> });
+			},
+			TemplateElement: path => {
+				if (path.node.value.raw.includes("-"))
+					out.push({ path: path as NodePath<t.StringLiteral | t.TemplateElement> });
+			},
+		});
+		return out;
 	}
 
-	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const candidates: Candidate[] = [];
-		for (let lineNumber = 1; lineNumber <= lines.length; lineNumber++) {
-			const line = lines[lineNumber - 1];
-			for (const match of execAll(this.#stringPattern, line)) {
-				if (isCommented(line, match.index)) continue;
-				const body = match.groups?.body ?? "";
-				const dashIndex = body.indexOf("-");
-				if (dashIndex === -1) continue;
-				const start = match.index + 1 + dashIndex; // +1 for opening quote
-				candidates.push({
-					lineNumber,
-					start,
-					end: start + 1,
-					original: "-",
-					replacement: "–", // en-dash
-				});
-			}
+	applyCandidate(parsed: Parsed, candidate: Candidate<t.StringLiteral | t.TemplateElement>): MutationInfo {
+		const node = candidate.path.node;
+		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
+
+		if (t.isStringLiteral(node)) {
+			const idx = node.value.indexOf("-");
+			if (idx === -1) return noopInfo();
+			node.value = `${node.value.slice(0, idx)}–${node.value.slice(idx + 1)}`;
+			return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: snippetFromNode(node) };
 		}
-		if (candidates.length === 0) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
-		const candidate = randomChoice(candidates, rng);
-		const info = applyCandidate(lines, candidate);
-		return [lines.join("\n"), info];
+
+		const idx = node.value.raw.indexOf("-");
+		if (idx === -1) return noopInfo();
+		node.value.raw = `${node.value.raw.slice(0, idx)}–${node.value.raw.slice(idx + 1)}`;
+		node.value.cooked = (node.value.cooked ?? node.value.raw).replace("-", "–");
+		return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: snippetFromNode(node) };
 	}
 }
 
-class IdentifierMultiEditMutation extends BaseMutation {
+class IdentifierMultiEditMutation extends BaseAstMutation {
 	name = "identifier-multi-edit";
 	category = "identifier";
 	fixHint = "Restore the identifier to its original spelling in all affected locations.";
 	description = "An identifier is misspelled in multiple separate locations.";
 
-	#pattern = /\b[A-Za-z_$][\w$]*\b/g;
 	#keywords = new Set([
 		"await",
 		"break",
@@ -516,466 +741,650 @@ class IdentifierMultiEditMutation extends BaseMutation {
 		"false",
 	]);
 
-	canApply(content: string): boolean {
-		return this.#pattern.test(content);
+	collectCandidates(parsed: Parsed): Candidate<t.Program>[] {
+		const out: Candidate<t.Program>[] = [];
+		traverse(parsed.ast, {
+			Program: path => {
+				out.push({ path });
+			},
+		});
+		return out;
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const occurrences = new Map<string, Array<[number, number, number]>>();
+		const parsed = parseCode(content);
+		if (!parsed) return [content, noopInfo()];
+		const candidates = this.collectCandidates(parsed);
+		if (candidates.length === 0) return [content, noopInfo()];
+		const candidate = randomChoice(candidates, rng);
 
-		for (let lineNumber = 1; lineNumber <= lines.length; lineNumber++) {
-			const line = lines[lineNumber - 1];
-			const masked = stripStrings(line);
-			for (const match of execAll(this.#pattern, masked)) {
-				if (isCommented(line, match.index)) continue;
-				const identifier = match[0];
-				if (this.#keywords.has(identifier)) continue;
-				const mutated = mutateIdentifier(identifier);
-				if (mutated === null) continue;
-				const spans = occurrences.get(identifier) ?? [];
-				spans.push([lineNumber, match.index, match.index + identifier.length]);
-				occurrences.set(identifier, spans);
+		const bindings: Array<{ name: string; binding: Binding }> = [];
+		candidate.path.traverse({
+			Scope: path => {
+				for (const [name, binding] of Object.entries(path.scope.bindings)) {
+					if (name.length < 2) continue;
+					if (name.startsWith("_")) continue;
+					if (name === "arguments") continue;
+					if (this.#keywords.has(name)) continue;
+					bindings.push({ name, binding });
+				}
+			},
+		});
+
+		const distinctRefLines = (paths: NodePath<t.Identifier>[]): number => {
+			return new Set(paths.map(p => p.node.loc?.start.line ?? -1)).size;
+		};
+
+		let bindingCandidates = bindings.filter(item => {
+			const refs = item.binding.referencePaths.filter((p): p is NodePath<t.Identifier> => t.isIdentifier(p.node));
+			return refs.length >= 3 && distinctRefLines(refs) >= 3;
+		});
+
+		if (bindingCandidates.length === 0) {
+			bindingCandidates = bindings.filter(item => {
+				const refs = item.binding.referencePaths.filter((p): p is NodePath<t.Identifier> => t.isIdentifier(p.node));
+				return refs.length >= 2 && distinctRefLines(refs) >= 2;
+			});
+		}
+
+		if (bindingCandidates.length === 0) return [content, noopInfo()];
+
+		const chosen = randomChoice(bindingCandidates, rng);
+		const mutated = mutateIdentifier(chosen.name);
+		if (!mutated) return [content, noopInfo()];
+
+		const refPaths = chosen.binding.referencePaths.filter((p): p is NodePath<t.Identifier> => t.isIdentifier(p.node));
+		const lineMap = new Map<number, NodePath<t.Identifier>[]>();
+		for (const refPath of refPaths) {
+			const line = refPath.node.loc?.start.line;
+			if (!line) continue;
+			const list = lineMap.get(line) ?? [];
+			list.push(refPath);
+			lineMap.set(line, list);
+		}
+
+		const lines = [...lineMap.keys()];
+		if (lines.length < 2) return [content, noopInfo()];
+
+		const editCount = Math.min(lines.length, randomChoice(lines.length >= 3 ? [2, 3, 3, 4] : [2], rng));
+		const chosenLines = randomSample(lines, editCount, rng);
+
+		const selectedPaths: NodePath<t.Identifier>[] = [];
+		for (const line of chosenLines) {
+			const options = lineMap.get(line) ?? [];
+			if (options.length === 0) continue;
+			selectedPaths.push(randomChoice(options, rng));
+		}
+		if (selectedPaths.length < 2) return [content, noopInfo()];
+
+		const edits: SourceEdit[] = [];
+		for (const selectedPath of selectedPaths) {
+			const range = nodeRange(selectedPath.node);
+			if (range) {
+				edits.push({ ...range, replacement: mutated });
 			}
 		}
 
-		let candidates = Array.from(occurrences.entries()).filter(([, spans]) => new Set(spans.map(s => s[0])).size >= 3);
+		const bindingId = chosen.binding.identifier;
+		const bindingLine = bindingId.loc?.start.line;
+		if (bindingLine && chosenLines.includes(bindingLine)) {
+			const range = nodeRange(bindingId);
+			if (range) {
+				edits.push({ ...range, replacement: mutated });
+			}
+		}
+
+		const deduped = new Map<string, SourceEdit>();
+		for (const edit of edits) {
+			deduped.set(`${edit.start}:${edit.end}`, edit);
+		}
+		if (deduped.size < 2) return [content, noopInfo()];
+
+		const mutatedContent = applySourceEdits(content, Array.from(deduped.values()));
+		if (!mutatedContent || mutatedContent === content) return [content, noopInfo()];
+
+		return [
+			mutatedContent,
+			{
+				lineNumber: selectedPaths[0]?.node.loc?.start.line ?? 0,
+				originalSnippet: chosen.name,
+				mutatedSnippet: mutated,
+			},
+		];
+	}
+
+
+	applyCandidate(_parsed: Parsed, candidate: Candidate<t.Program>, rng: () => number): MutationInfo {
+		const bindings: Array<{ name: string; binding: Binding }> = [];
+		candidate.path.traverse({
+			Scope: path => {
+				for (const [name, binding] of Object.entries(path.scope.bindings)) {
+					if (name.length < 2) continue;
+					if (name.startsWith("_")) continue;
+					if (name === "arguments") continue;
+					if (this.#keywords.has(name)) continue;
+					bindings.push({ name, binding });
+				}
+			},
+		});
+
+		const distinctRefLines = (paths: NodePath<t.Identifier>[]): number => {
+			return new Set(paths.map(p => p.node.loc?.start.line ?? -1)).size;
+		};
+
+		let candidates = bindings.filter(item => {
+			const refs = item.binding.referencePaths.filter((p): p is NodePath<t.Identifier> => t.isIdentifier(p.node));
+			return refs.length >= 3 && distinctRefLines(refs) >= 3;
+		});
+
 		if (candidates.length === 0) {
-			candidates = Array.from(occurrences.entries()).filter(([, spans]) => new Set(spans.map(s => s[0])).size >= 2);
-		}
-		if (candidates.length === 0) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
-
-		const [identifier, spans] = randomChoice(candidates, rng);
-		const mutated = mutateIdentifier(identifier);
-		if (mutated === null) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
-
-		const lineNumbers = Array.from(new Set(spans.map(s => s[0])));
-		const editCount = Math.min(lineNumbers.length, randomChoice(lineNumbers.length >= 3 ? [2, 3, 3, 4] : [2], rng));
-		const chosenLines = randomSample(lineNumbers, editCount, rng);
-		const selectedSpans: Array<[number, number, number]> = [];
-		for (const ln of chosenLines) {
-			const lineSpans = spans.filter(s => s[0] === ln);
-			selectedSpans.push(randomChoice(lineSpans, rng));
+			candidates = bindings.filter(item => {
+				const refs = item.binding.referencePaths.filter((p): p is NodePath<t.Identifier> => t.isIdentifier(p.node));
+				return refs.length >= 2 && distinctRefLines(refs) >= 2;
+			});
 		}
 
-		for (const [lineNumber, start, end] of selectedSpans) {
-			const line = lines[lineNumber - 1];
-			lines[lineNumber - 1] = line.slice(0, start) + mutated + line.slice(end);
+		if (candidates.length === 0) return noopInfo();
+
+		const chosen = randomChoice(candidates, rng);
+		const mutated = mutateIdentifier(chosen.name);
+		if (!mutated) return noopInfo();
+
+		const refPaths = chosen.binding.referencePaths.filter((p): p is NodePath<t.Identifier> => t.isIdentifier(p.node));
+		const lineMap = new Map<number, NodePath<t.Identifier>[]>();
+		for (const refPath of refPaths) {
+			const line = refPath.node.loc?.start.line;
+			if (!line) continue;
+			const list = lineMap.get(line) ?? [];
+			list.push(refPath);
+			lineMap.set(line, list);
 		}
 
-		const info: MutationInfo = {
-			lineNumber: selectedSpans[0][0],
-			originalSnippet: identifier,
+		const lines = [...lineMap.keys()];
+		if (lines.length < 2) return noopInfo();
+
+		const editCount = Math.min(lines.length, randomChoice(lines.length >= 3 ? [2, 3, 3, 4] : [2], rng));
+		const chosenLines = randomSample(lines, editCount, rng);
+
+		const selectedPaths: NodePath<t.Identifier>[] = [];
+		for (const line of chosenLines) {
+			const options = lineMap.get(line) ?? [];
+			if (options.length === 0) continue;
+			selectedPaths.push(randomChoice(options, rng));
+		}
+		if (selectedPaths.length < 2) return noopInfo();
+
+		for (const selectedPath of selectedPaths) {
+			selectedPath.node.name = mutated;
+		}
+
+		const bindingId = chosen.binding.identifier;
+		const bindingLine = bindingId.loc?.start.line;
+		if (bindingLine && chosenLines.includes(bindingLine)) {
+			bindingId.name = mutated;
+		}
+
+		return {
+			lineNumber: selectedPaths[0]?.node.loc?.start.line ?? 0,
+			originalSnippet: chosen.name,
 			mutatedSnippet: mutated,
 		};
-		return [lines.join("\n"), info];
 	}
 }
 
-class DuplicateLineLiteralFlipMutation extends BaseMutation {
+class DuplicateLineLiteralFlipMutation extends BaseAstMutation {
 	name = "duplicate-line-flip";
 	category = "duplicate";
 	fixHint = "Fix the literal or operator on the duplicated line.";
 	description = "A duplicated line contains a subtle literal/operator change.";
 
-	#boolPattern = /\b(true|false)\b/;
-	#eqPattern = /(?<![=!<>])(?:===|!==|==|!=)(?!=)/;
-	#compPattern = /(?<=[\s(])(?<comp><=|>=|<|>)(?=\s*[\d\w(])/;
-	#boolSwap: Record<string, string> = { true: "false", false: "true" };
-	#eqSwap: Record<string, string> = { "===": "!==", "!==": "===", "==": "!=", "!=": "==" };
-	#compSwap: Record<string, string> = { "<=": "<", "<": "<=", ">=": ">", ">": ">=" };
+	collectCandidates(parsed: Parsed): Candidate<t.Statement, { group: string }>[] {
+		const out: Candidate<t.Statement, { group: string }>[] = [];
+		const statements: Array<{ path: NodePath<t.Statement>; text: string }> = [];
 
-	canApply(content: string): boolean {
-		const lines = content.split("\n");
-		if (lines.length === new Set(lines).size) return false;
-		return this.#boolPattern.test(content) || this.#eqPattern.test(content) || this.#compPattern.test(content);
+		traverse(parsed.ast, {
+			Statement: path => {
+				if (!path.node.loc) return;
+				if (t.isBlockStatement(path.node)) return;
+				const text = snippetFromSource(parsed.code, path.node, "");
+				if (text.trim().length === 0) return;
+				statements.push({ path, text });
+			},
+		});
+
+		const counts = new Map<string, number>();
+		for (const statement of statements) {
+			counts.set(statement.text, (counts.get(statement.text) ?? 0) + 1);
+		}
+
+		for (const statement of statements) {
+			if ((counts.get(statement.text) ?? 0) < 2) continue;
+			out.push({ path: statement.path, meta: { group: statement.text } });
+		}
+
+		return out;
 	}
 
-	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const lineMap = new Map<string, number[]>();
-		for (let i = 1; i <= lines.length; i++) {
-			const line = lines[i - 1];
-			const indices = lineMap.get(line) ?? [];
-			indices.push(i);
-			lineMap.set(line, indices);
-		}
-
-		const candidates: Candidate[] = [];
-		for (const [line, indices] of lineMap) {
-			if (indices.length < 2) continue;
-			for (const [pattern, swapMap] of [
-				[this.#boolPattern, this.#boolSwap],
-				[this.#eqPattern, this.#eqSwap],
-				[this.#compPattern, this.#compSwap],
-			] as const) {
-				for (const match of execAll(pattern, line)) {
-					if (isCommented(line, match.index)) continue;
-					const token = match[0];
-					const replacement = swapMap[token];
-					if (!replacement) continue;
-					for (const lineNumber of indices) {
-						candidates.push({
-							lineNumber,
-							start: match.index,
-							end: match.index + token.length,
-							original: token,
-							replacement,
-						});
-					}
+	applyCandidate(
+		parsed: Parsed,
+		candidate: Candidate<t.Statement, { group: string }>,
+		rng: () => number,
+	): MutationInfo {
+		const flips: Candidate<t.BooleanLiteral | t.BinaryExpression>[] = [];
+		candidate.path.traverse({
+			BooleanLiteral: path => {
+				flips.push({ path: path as NodePath<t.BooleanLiteral | t.BinaryExpression> });
+			},
+			BinaryExpression: path => {
+				const op = path.node.operator;
+				if (
+					op === "===" ||
+					op === "!==" ||
+					op === "==" ||
+					op === "!=" ||
+					op === "<" ||
+					op === "<=" ||
+					op === ">" ||
+					op === ">="
+				) {
+					flips.push({ path: path as NodePath<t.BooleanLiteral | t.BinaryExpression> });
 				}
-			}
+			},
+		});
+
+		if (flips.length === 0) return noopInfo();
+
+		const chosen = randomChoice(flips, rng);
+		const node = chosen.path.node;
+		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
+
+		if (t.isBooleanLiteral(node)) {
+			node.value = !node.value;
+			return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: snippetFromNode(node) };
 		}
 
-		if (candidates.length === 0) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
-		const candidate = randomChoice(candidates, rng);
-		const info = applyCandidate(lines, candidate);
-		return [lines.join("\n"), info];
+		const eqSwap: Partial<Record<t.BinaryExpression["operator"], t.BinaryExpression["operator"]>> = {
+			"===": "!==",
+			"!==": "===",
+			"==": "!=",
+			"!=": "==",
+		};
+		const compSwap: Partial<Record<t.BinaryExpression["operator"], t.BinaryExpression["operator"]>> = {
+			"<=": "<",
+			"<": "<=",
+			">=": ">",
+			">": ">=",
+		};
+		const swapped = eqSwap[node.operator] ?? compSwap[node.operator];
+		if (!swapped) return noopInfo();
+		node.operator = swapped;
+		return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: snippetFromNode(node) };
 	}
 }
 
-class SwapAdjacentLinesMutation extends BaseMutation {
+class SwapAdjacentLinesMutation extends BaseAstMutation {
 	name = "swap-adjacent-lines";
 	category = "structural";
 	fixHint = "Swap the two adjacent lines back to their original order.";
 	description = "Two adjacent statements are in the wrong order.";
 
-	#statementPattern = /^\s*(?:(?:const|let|var)\s+\w+\s*=|return\s+|\w+\s*(?:\.\w+)*\s*\(|\w+\s*(?:\.\w+)*\s*=)/;
+	collectCandidates(parsed: Parsed): Candidate<t.Program | t.BlockStatement, { index: number }>[] {
+		const out: Candidate<t.Program | t.BlockStatement, { index: number }>[] = [];
 
-	canApply(content: string): boolean {
-		const lines = content.split("\n");
-		for (let i = 0; i < lines.length - 1; i++) {
-			if (this.#isSwappablePair(lines, i)) return true;
-		}
-		return false;
-	}
+		const considerList = (
+			path: NodePath<t.Program | t.BlockStatement>,
+			body: Array<t.Statement | t.ModuleDeclaration>,
+		): void => {
+			for (let i = 0; i < body.length - 1; i++) {
+				const left = body[i];
+				const right = body[i + 1];
+				if (!left || !right) continue;
+				if (!t.isStatement(left) || !t.isStatement(right)) continue;
+				if (!left.loc || !right.loc) continue;
+				if (left.loc.start.line !== left.loc.end.line) continue;
+				if (right.loc.start.line !== right.loc.end.line) continue;
 
-	#isSwappablePair(lines: string[], i: number): boolean {
-		const lineA = lines[i];
-		const lineB = lines[i + 1];
-		if (!lineA.trim() || !lineB.trim()) return false;
-		const indentA = lineA.length - lineA.trimStart().length;
-		const indentB = lineB.length - lineB.trimStart().length;
-		if (indentA !== indentB) return false;
-		if (!this.#statementPattern.test(lineA) || !this.#statementPattern.test(lineB)) return false;
-		if (lineA.trim() === lineB.trim()) return false;
-		if (lineA.includes("//") || lineB.includes("//")) return false;
-		return true;
+				const leftText = snippetFromSource(parsed.code, left, "").trim();
+				const rightText = snippetFromSource(parsed.code, right, "").trim();
+				if (!leftText || !rightText) continue;
+				if (leftText === rightText) continue;
+
+				const gap = right.loc.start.line - left.loc.end.line;
+				if (gap > 2) continue;
+
+				out.push({ path, meta: { index: i } });
+			}
+		};
+
+		traverse(parsed.ast, {
+			Program: path => {
+				considerList(path as NodePath<t.Program | t.BlockStatement>, path.node.body);
+			},
+			BlockStatement: path => {
+				considerList(path as NodePath<t.Program | t.BlockStatement>, path.node.body);
+			},
+		});
+
+		return out;
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const candidates: number[] = [];
-		for (let i = 0; i < lines.length - 1; i++) {
-			if (this.#isSwappablePair(lines, i)) candidates.push(i);
-		}
+		const parsed = parseCode(content);
+		if (!parsed) return [content, noopInfo()];
+		const candidates = this.collectCandidates(parsed);
+		if (candidates.length === 0) return [content, noopInfo()];
 
-		if (candidates.length === 0) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
+		const chosen = randomChoice(candidates, rng);
+		const container = chosen.path.node;
+		const index = chosen.meta?.index;
+		if (index === undefined) return [content, noopInfo()];
 
-		const i = randomChoice(candidates, rng);
-		[lines[i], lines[i + 1]] = [lines[i + 1], lines[i]];
+		const body = t.isProgram(container) ? container.body : container.body;
+		const left = body[index];
+		const right = body[index + 1];
+		if (!left || !right) return [content, noopInfo()];
+		if (!t.isStatement(left) || !t.isStatement(right)) return [content, noopInfo()];
+
+		const leftRange = nodeRange(left);
+		const rightRange = nodeRange(right);
+		if (!leftRange || !rightRange) return [content, noopInfo()];
+		if (leftRange.end > rightRange.start) return [content, noopInfo()];
+
+		const between = content.slice(leftRange.end, rightRange.start);
+		const swapped = `${content.slice(rightRange.start, rightRange.end)}${between}${content.slice(leftRange.start, leftRange.end)}`;
+		const mutated = applySourceEdits(content, [
+			{ start: leftRange.start, end: rightRange.end, replacement: swapped },
+		]);
+		if (!mutated || mutated === content) return [content, noopInfo()];
+
 		return [
-			lines.join("\n"),
+			mutated,
 			{
-				lineNumber: i + 1,
-				originalSnippet: `[lines ${i + 1}-${i + 2}]`,
+				lineNumber: left.loc?.start.line ?? 0,
+				originalSnippet: `lines ${left.loc?.start.line ?? 0}-${right.loc?.end.line ?? 0}`,
 				mutatedSnippet: "[swapped]",
 			},
 		];
 	}
+
+
+	applyCandidate(
+		_parsed: Parsed,
+		candidate: Candidate<t.Program | t.BlockStatement, { index: number }>,
+	): MutationInfo {
+		const container = candidate.path.node;
+		const index = candidate.meta?.index;
+		if (index === undefined) return noopInfo();
+
+		const body = t.isProgram(container) ? container.body : container.body;
+		const left = body[index];
+		const right = body[index + 1];
+		if (!left || !right) return noopInfo();
+		if (!t.isStatement(left) || !t.isStatement(right)) return noopInfo();
+
+		const before = `lines ${left.loc?.start.line ?? 0}-${right.loc?.end.line ?? 0}`;
+		[body[index], body[index + 1]] = [body[index + 1]!, body[index]!];
+		return {
+			lineNumber: left.loc?.start.line ?? 0,
+			originalSnippet: before,
+			mutatedSnippet: "[swapped]",
+		};
+	}
 }
 
-class SwapIfElseBranchesMutation extends BaseMutation {
+class SwapIfElseBranchesMutation extends BaseAstMutation {
 	name = "swap-if-else";
 	category = "structural";
-	fixHint =
-		"Swap the if and else branch bodies back to their original positions. The condition should be negated to match.";
-	description = "The if and else branches are swapped (condition should be negated).";
+	fixHint = "Swap the if and else branch bodies back to their original positions.";
+	description = "The if and else branches are swapped.";
 
-	#ifPattern = /^\s*if\s*\([^)]+\)\s*\{/;
-
-	canApply(content: string): boolean {
-		if (!content.includes("} else {")) return false;
-		return content.split("\n").some(line => this.#ifPattern.test(line));
+	collectCandidates(parsed: Parsed): Candidate<t.IfStatement>[] {
+		const out: Candidate<t.IfStatement>[] = [];
+		traverse(parsed.ast, {
+			IfStatement: path => {
+				const node = path.node;
+				if (!node.alternate) return;
+				if (!t.isBlockStatement(node.consequent) || !t.isBlockStatement(node.alternate)) return;
+				if (node.consequent.body.length === 0 || node.alternate.body.length === 0) return;
+				if (node.consequent.body.length > 5 || node.alternate.body.length > 5) return;
+				out.push({ path });
+			},
+		});
+		return out;
 	}
 
-	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const candidates: Array<[number, number, number]> = [];
-
-		let i = 0;
-		while (i < lines.length) {
-			const line = lines[i];
-			if (this.#ifPattern.test(line)) {
-				const ifStart = i;
-				let braceDepth = (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
-				let j = i + 1;
-				let elseStart = -1;
-				let elseEnd = -1;
-
-				while (j < lines.length && braceDepth > 0) {
-					const jline = lines[j];
-					if (jline.trim().startsWith("} else {")) {
-						elseStart = j;
-						braceDepth = 1;
-						j++;
-						while (j < lines.length && braceDepth > 0) {
-							braceDepth += (lines[j].match(/\{/g) ?? []).length - (lines[j].match(/\}/g) ?? []).length;
-							j++;
-						}
-						elseEnd = j - 1;
-						break;
-					}
-					braceDepth += (jline.match(/\{/g) ?? []).length - (jline.match(/\}/g) ?? []).length;
-					j++;
-				}
-
-				if (elseStart !== -1 && elseEnd !== -1) {
-					const ifBodyLines = elseStart - ifStart - 1;
-					const elseBodyLines = elseEnd - elseStart - 1;
-					if (ifBodyLines > 0 && elseBodyLines > 0 && ifBodyLines <= 5 && elseBodyLines <= 5) {
-						candidates.push([ifStart, elseStart, elseEnd]);
-					}
-				}
-				i = j;
-			} else {
-				i++;
-			}
-		}
-
-		if (candidates.length === 0) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
-
-		const [ifStart, elseStart, elseEnd] = randomChoice(candidates, rng);
-		const ifBody = lines.slice(ifStart + 1, elseStart);
-		const elseBody = lines.slice(elseStart + 1, elseEnd);
-
-		const newLines = [
-			...lines.slice(0, ifStart + 1),
-			...elseBody,
-			lines[elseStart],
-			...ifBody,
-			...lines.slice(elseEnd),
-		];
-		return [
-			newLines.join("\n"),
-			{
-				lineNumber: ifStart + 1,
-				originalSnippet: "if/else branches",
-				mutatedSnippet: "[swapped]",
-			},
-		];
+	applyCandidate(parsed: Parsed, candidate: Candidate<t.IfStatement>): MutationInfo {
+		const node = candidate.path.node;
+		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
+		if (!t.isBlockStatement(node.consequent) || !t.isBlockStatement(node.alternate)) return noopInfo();
+		const consequent = node.consequent;
+		node.consequent = node.alternate;
+		node.alternate = consequent;
+		return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: "[swapped]" };
 	}
 }
 
-class RemoveEarlyReturnMutation extends BaseMutation {
+class RemoveEarlyReturnMutation extends BaseAstMutation {
 	name = "remove-early-return";
 	category = "structural";
 	fixHint =
 		"Restore the missing guard clause (if statement with early return). Add back the exact 3-line pattern: if condition, return statement, closing brace.";
 	description = "A guard clause (early return) was removed.";
 
-	#guardPattern = /^(?<indent>\s*)if\s*\([^)]+\)\s*\{\s*$/;
-	#returnPattern = /^\s*return\b/;
-
-	canApply(content: string): boolean {
-		const lines = content.split("\n");
-		for (let i = 0; i < lines.length - 2; i++) {
-			if (this.#isGuardClause(lines, i)) return true;
-		}
-		return false;
-	}
-
-	#isGuardClause(lines: string[], i: number): boolean {
-		if (!this.#guardPattern.test(lines[i])) return false;
-		if (i + 2 >= lines.length) return false;
-		if (!this.#returnPattern.test(lines[i + 1])) return false;
-		if (lines[i + 2].trim() !== "}") return false;
-		return true;
-	}
-
-	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const candidates: number[] = [];
-		for (let i = 0; i < lines.length - 2; i++) {
-			if (this.#isGuardClause(lines, i)) candidates.push(i);
-		}
-
-		if (candidates.length === 0) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
-
-		const i = randomChoice(candidates, rng);
-		const removedLines = lines.slice(i, i + 3);
-		const newLines = [...lines.slice(0, i), ...lines.slice(i + 3)];
-		return [
-			newLines.join("\n"),
-			{
-				lineNumber: i + 1,
-				originalSnippet: removedLines.map(l => l.trim()).join("\n"),
-				mutatedSnippet: "[removed]",
+	collectCandidates(parsed: Parsed): Candidate<t.IfStatement>[] {
+		const out: Candidate<t.IfStatement>[] = [];
+		traverse(parsed.ast, {
+			IfStatement: path => {
+				const node = path.node;
+				if (node.alternate) return;
+				if (!t.isBlockStatement(node.consequent)) return;
+				if (node.consequent.body.length !== 1) return;
+				if (!t.isReturnStatement(node.consequent.body[0])) return;
+				out.push({ path });
 			},
-		];
+		});
+		return out;
+	}
+
+	applyCandidate(parsed: Parsed, candidate: Candidate<t.IfStatement>): MutationInfo {
+		const node = candidate.path.node;
+		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
+		candidate.path.remove();
+		return { lineNumber: nodeLine(node), originalSnippet: before.trim(), mutatedSnippet: "[removed]" };
 	}
 }
 
-class SwapNamedImportsMutation extends BaseMutation {
+class SwapNamedImportsMutation extends BaseAstMutation {
 	name = "swap-named-imports";
 	category = "import";
 	fixHint =
 		"Swap ONLY the two imported names that are in the wrong order. Do not reorder other imports or modify other import statements.";
 	description = "Two named imports are swapped in a destructuring import.";
 
-	#importPattern = /import\s*\{(?<imports>[^}]+)\}\s*from\s*['"]/;
-
-	canApply(content: string): boolean {
-		for (const match of execAll(this.#importPattern, content)) {
-			const imports = match.groups?.imports ?? "";
-			const parts = imports
-				.split(",")
-				.map(p => p.trim())
-				.filter(Boolean);
-			const simpleParts = parts.filter(p => !p.includes(" as ") && /^\w+$/.test(p));
-			if (simpleParts.length >= 2) return true;
-		}
-		return false;
+	collectCandidates(parsed: Parsed): Candidate<t.ImportDeclaration, { i: number; j: number }>[] {
+		const out: Candidate<t.ImportDeclaration, { i: number; j: number }>[] = [];
+		traverse(parsed.ast, {
+			ImportDeclaration: path => {
+				const named = path.node.specifiers
+					.map((spec, idx) => ({ spec, idx }))
+					.filter((entry): entry is { spec: t.ImportSpecifier; idx: number } => t.isImportSpecifier(entry.spec))
+					.filter(({ spec }) => t.isIdentifier(spec.imported) && t.isIdentifier(spec.local))
+					.filter(
+						({ spec }) =>
+							t.isIdentifier(spec.imported) &&
+							t.isIdentifier(spec.local) &&
+							spec.imported.name === spec.local.name,
+					);
+				if (named.length < 2) return;
+				for (let i = 0; i < named.length; i++) {
+					for (let j = i + 1; j < named.length; j++) {
+						out.push({ path, meta: { i: named[i]!.idx, j: named[j]!.idx } });
+					}
+				}
+			},
+		});
+		return out;
 	}
 
 	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const candidates: Array<[number, number, number, string, string]> = [];
+		const parsed = parseCode(content);
+		if (!parsed) return [content, noopInfo()];
+		const candidates = this.collectCandidates(parsed);
+		if (candidates.length === 0) return [content, noopInfo()];
 
-		for (let lineNumber = 1; lineNumber <= lines.length; lineNumber++) {
-			const line = lines[lineNumber - 1];
-			for (const match of execAll(this.#importPattern, line)) {
-				const importsStr = match.groups?.imports ?? "";
-				const parts = importsStr.split(",").map(p => p.trim());
-				const simpleIndices = parts
-					.map((p, idx) => ({ p, idx }))
-					.filter(({ p }) => p && !p.includes(" as ") && /^\w+$/.test(p))
-					.map(({ idx }) => idx);
+		const chosen = randomChoice(candidates, rng);
+		const node = chosen.path.node;
+		const indices = chosen.meta;
+		if (!indices) return [content, noopInfo()];
+		const { i, j } = indices;
+		if (i < 0 || j < 0 || i >= node.specifiers.length || j >= node.specifiers.length) return [content, noopInfo()];
 
-				if (simpleIndices.length >= 2) {
-					const [i, j] = randomSample(simpleIndices, 2, rng);
-					const newParts = [...parts];
-					[newParts[i], newParts[j]] = [newParts[j], newParts[i]];
-					const newImports = newParts.join(", ");
-					const start = match.index + match[0].indexOf("{") + 1;
-					const end = start + importsStr.length;
-					candidates.push([lineNumber, start, end, importsStr, newImports]);
-				}
-			}
-		}
+		const left = node.specifiers[i];
+		const right = node.specifiers[j];
+		if (!left || !right) return [content, noopInfo()];
+		const leftRange = nodeRange(left);
+		const rightRange = nodeRange(right);
+		const importRange = nodeRange(node);
+		if (!leftRange || !rightRange || !importRange) return [content, noopInfo()];
+		if (leftRange.end > rightRange.start) return [content, noopInfo()];
 
-		if (candidates.length === 0) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
+		const leftText = content.slice(leftRange.start, leftRange.end);
+		const rightText = content.slice(rightRange.start, rightRange.end);
+		const mutated = applySourceEdits(content, [
+			{ start: leftRange.start, end: leftRange.end, replacement: rightText },
+			{ start: rightRange.start, end: rightRange.end, replacement: leftText },
+		]);
+		if (!mutated || mutated === content) return [content, noopInfo()];
 
-		const [lineNumber, start, end, original, replacement] = randomChoice(candidates, rng);
-		const line = lines[lineNumber - 1];
-		lines[lineNumber - 1] = line.slice(0, start) + replacement + line.slice(end);
 		return [
-			lines.join("\n"),
+			mutated,
 			{
-				lineNumber,
-				originalSnippet: original.trim(),
-				mutatedSnippet: replacement.trim(),
+				lineNumber: nodeLine(node),
+				originalSnippet: content.slice(importRange.start, importRange.end).trim(),
+				mutatedSnippet: mutated.slice(importRange.start, importRange.end).trim(),
 			},
 		];
 	}
+
+
+	applyCandidate(parsed: Parsed, candidate: Candidate<t.ImportDeclaration, { i: number; j: number }>): MutationInfo {
+		const node = candidate.path.node;
+		const indices = candidate.meta;
+		if (!indices) return noopInfo();
+		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
+		const { i, j } = indices;
+		if (i < 0 || j < 0 || i >= node.specifiers.length || j >= node.specifiers.length) return noopInfo();
+		[node.specifiers[i], node.specifiers[j]] = [node.specifiers[j]!, node.specifiers[i]!];
+		return {
+			lineNumber: nodeLine(node),
+			originalSnippet: before.trim(),
+			mutatedSnippet: snippetFromNode(node).trim(),
+		};
+	}
 }
 
-class DeleteStatementMutation extends BaseMutation {
+class DeleteStatementMutation extends BaseAstMutation {
 	name = "delete-statement";
 	category = "structural";
 	fixHint = "Restore the deleted statement.";
 	description = "A critical statement was deleted from the code.";
 
-	#statementPattern = /^\s*(?:(?:const|let|var)\s+\w+\s*=.+;|\w+\s*\+=.+;|\w+\s*-=.+;|\w+\s*=\s*\w+.+;)\s*$/;
-
-	canApply(content: string): boolean {
-		return content.split("\n").some(line => this.#statementPattern.test(line));
+	collectCandidates(parsed: Parsed): Candidate<t.Statement>[] {
+		const out: Candidate<t.Statement>[] = [];
+		traverse(parsed.ast, {
+			Statement: path => {
+				if (!path.node.loc) return;
+				if (t.isVariableDeclaration(path.node)) {
+					out.push({ path: path as NodePath<t.Statement> });
+					return;
+				}
+				if (!t.isExpressionStatement(path.node)) return;
+				if (t.isAssignmentExpression(path.node.expression) || t.isUpdateExpression(path.node.expression)) {
+					out.push({ path: path as NodePath<t.Statement> });
+				}
+			},
+		});
+		return out;
 	}
 
-	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const candidates: number[] = [];
-		for (let i = 0; i < lines.length; i++) {
-			if (this.#statementPattern.test(lines[i])) {
-				if (!lines[i].includes("//") && !lines[i].includes("/*")) {
-					candidates.push(i);
-				}
-			}
-		}
-
-		if (candidates.length === 0) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
-
-		const i = randomChoice(candidates, rng);
-		const deleted = lines[i];
-		const newLines = [...lines.slice(0, i), ...lines.slice(i + 1)];
-		return [
-			newLines.join("\n"),
-			{
-				lineNumber: i + 1,
-				originalSnippet: deleted.trim(),
-				mutatedSnippet: "[deleted]",
-			},
-		];
+	applyCandidate(parsed: Parsed, candidate: Candidate<t.Statement>): MutationInfo {
+		const node = candidate.path.node;
+		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
+		candidate.path.remove();
+		return { lineNumber: nodeLine(node), originalSnippet: before.trim(), mutatedSnippet: "[removed]" };
 	}
 }
 
-class OffByOneMutation extends BaseMutation {
+class OffByOneMutation extends BaseAstMutation {
 	name = "off-by-one";
 	category = "literal";
 	fixHint = "Fix the off-by-one error in the numeric literal or comparison.";
 	description = "A numeric boundary has an off-by-one error.";
 
-	#patterns: Array<[RegExp, (m: RegExpExecArray) => string]> = [
-		[/(?<=[\s(,=<>])0(?=[\s),;])/, () => "1"],
-		[/(?<=[\s(,=<>])1(?=[\s),;])/, () => "0"],
-		[/\.length\s*-\s*1(?=[\s),;\]])/, () => ".length - 2"],
-		[/\.length\s*-\s*2(?=[\s),;\]])/, () => ".length - 1"],
-		[/<\s*(\w+\.length)/, m => `<= ${m[1]}`],
-		[/<=\s*(\w+\.length)/, m => `< ${m[1]}`],
-	];
-
-	canApply(content: string): boolean {
-		return this.#patterns.some(([pattern]) => pattern.test(content));
+	collectCandidates(parsed: Parsed): Candidate<t.NumericLiteral | t.BinaryExpression>[] {
+		const out: Candidate<t.NumericLiteral | t.BinaryExpression>[] = [];
+		traverse(parsed.ast, {
+			NumericLiteral: path => {
+				if (path.node.value !== 0 && path.node.value !== 1) return;
+				const hasBoundaryAncestor =
+					path.findParent(parent => {
+						return (
+							parent.isForStatement() ||
+							parent.isWhileStatement() ||
+							parent.isDoWhileStatement() ||
+							parent.isIfStatement() ||
+							(parent.isBinaryExpression() && ["<", "<=", ">", ">="].includes(parent.node.operator))
+						);
+					}) != null;
+				if (hasBoundaryAncestor) out.push({ path: path as NodePath<t.NumericLiteral | t.BinaryExpression> });
+			},
+			BinaryExpression: path => {
+				if (
+					(path.node.operator === "<" || path.node.operator === "<=") &&
+					isLengthMemberExpression(path.node.right)
+				) {
+					out.push({ path: path as NodePath<t.NumericLiteral | t.BinaryExpression> });
+					return;
+				}
+				if (
+					path.node.operator === "-" &&
+					isLengthMemberExpression(path.node.left) &&
+					t.isNumericLiteral(path.node.right) &&
+					(path.node.right.value === 1 || path.node.right.value === 2)
+				) {
+					out.push({ path: path as NodePath<t.NumericLiteral | t.BinaryExpression> });
+				}
+			},
+		});
+		return out;
 	}
 
-	mutate(content: string, rng: () => number): [string, MutationInfo] {
-		const lines = content.split("\n");
-		const candidates: Candidate[] = [];
+	applyCandidate(parsed: Parsed, candidate: Candidate<t.NumericLiteral | t.BinaryExpression>): MutationInfo {
+		const node = candidate.path.node;
+		const before = snippetFromSource(parsed.code, node, snippetFromNode(node));
 
-		for (let lineNumber = 1; lineNumber <= lines.length; lineNumber++) {
-			const line = lines[lineNumber - 1];
-			if (isCommented(line, 0)) continue;
-			const lineLower = line.toLowerCase();
-			if (
-				!lineLower.includes("for") &&
-				!lineLower.includes("while") &&
-				!lineLower.includes("if") &&
-				!line.includes("[")
-			) {
-				continue;
-			}
-
-			for (const [pattern, replacementFn] of this.#patterns) {
-				for (const match of execAll(pattern, line)) {
-					if (isCommented(line, match.index)) continue;
-					const original = match[0];
-					const replacement = replacementFn(match);
-					candidates.push({
-						lineNumber,
-						start: match.index,
-						end: match.index + original.length,
-						original,
-						replacement,
-					});
-				}
-			}
+		if (t.isNumericLiteral(node)) {
+			node.value = node.value === 0 ? 1 : 0;
+			return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: snippetFromNode(node) };
 		}
 
-		if (candidates.length === 0) return [content, { lineNumber: 0, originalSnippet: "", mutatedSnippet: "" }];
+		if (node.operator === "<" || node.operator === "<=") {
+			if (!isLengthMemberExpression(node.right)) return noopInfo();
+			node.operator = node.operator === "<" ? "<=" : "<";
+			return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: snippetFromNode(node) };
+		}
 
-		const candidate = randomChoice(candidates, rng);
-		const info = applyCandidate(lines, candidate);
-		return [lines.join("\n"), info];
+		if (
+			node.operator === "-" &&
+			isLengthMemberExpression(node.left) &&
+			t.isNumericLiteral(node.right) &&
+			(node.right.value === 1 || node.right.value === 2)
+		) {
+			node.right.value = node.right.value === 1 ? 2 : 1;
+			return { lineNumber: nodeLine(node), originalSnippet: before, mutatedSnippet: snippetFromNode(node) };
+		}
+
+		return noopInfo();
 	}
 }
 

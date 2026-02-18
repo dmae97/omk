@@ -19,16 +19,18 @@
  * - nightmare: Long files where target line repeats, minimal info
  */
 import * as fs from "node:fs";
-import { basename, dirname, join, relative } from "node:path";
+import * as path from "node:path";
 import { parseArgs } from "node:util";
 import { TempDir } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
+import { diffLines } from "diff";
+import { formatContent } from "./formatter";
 import { ALL_MUTATIONS, CATEGORY_MAP, type Mutation, type MutationInfo } from "./mutations";
 
 const SCRIPT_DIR = import.meta.dir;
 const SUPPORTED_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx"]);
 using DEFAULT_REACT_DIR = TempDir.createSync("@react-source");
-const DEFAULT_OUTPUT = join(SCRIPT_DIR, "../fixtures.tar.gz");
+const DEFAULT_OUTPUT = path.join(SCRIPT_DIR, "../fixtures.tar.gz");
 const REACT_REPO_URL = "https://github.com/facebook/react.git";
 
 const EXCLUDE_DIRS = new Set([
@@ -105,13 +107,13 @@ function parseArguments(): Args {
 
 async function ensureReactSource(reactDir: string): Promise<void> {
 	if (fs.existsSync(reactDir)) {
-		const packagesDir = join(reactDir, "packages");
+		const packagesDir = path.join(reactDir, "packages");
 		if (fs.existsSync(packagesDir)) return;
 		throw new Error(`Directory exists but missing packages/: ${reactDir}`);
 	}
 
 	console.log(`Cloning React repository to ${reactDir}…`);
-	fs.mkdirSync(dirname(reactDir), { recursive: true });
+	fs.mkdirSync(path.dirname(reactDir), { recursive: true });
 	const result = await $`git clone --depth 1 ${REACT_REPO_URL} ${reactDir}`.quiet().nothrow();
 	if (result.exitCode !== 0) {
 		const decoder = new TextDecoder();
@@ -126,7 +128,7 @@ function isExcluded(filePath: string): boolean {
 	for (const part of parts) {
 		if (EXCLUDE_DIRS.has(part)) return true;
 	}
-	const filename = basename(filePath);
+	const filename = path.basename(filePath);
 	if (filename.includes(".test.") || filename.includes(".spec.") || filename.includes(".fixture.")) {
 		return true;
 	}
@@ -138,14 +140,14 @@ function hasStructure(content: string): boolean {
 }
 
 async function collectFiles(reactDir: string): Promise<string[]> {
-	const packagesDir = join(reactDir, "packages");
+	const packagesDir = path.join(reactDir, "packages");
 	const candidates: string[] = [];
 
 	async function walk(dir: string): Promise<void> {
 		if (isExcluded(dir)) return;
 		const entries = await fs.promises.readdir(dir, { withFileTypes: true });
 		for (const entry of entries) {
-			const fullPath = join(dir, entry.name);
+			const fullPath = path.join(dir, entry.name);
 			if (entry.isDirectory()) {
 				await walk(fullPath);
 			} else if (entry.isFile()) {
@@ -365,27 +367,6 @@ function getCandidatesForDifficulty(files: FileEntry[], difficulty: Difficulty):
 	}
 }
 
-async function bunCheck(content: string, suffix: string): Promise<boolean> {
-	await using tempPath = await TempDir.create("@rb-bench-check-");
-	try {
-		const absPath = join(tempPath.path(), suffix);
-		await Bun.write(absPath, content);
-		const result = await $`timeout 5s bun build ${absPath} --no-bundle`;
-		return result.exitCode === 0;
-	} catch {
-		return false;
-	}
-}
-
-async function isParsable(content: string, suffix: string): Promise<boolean> {
-	if (content.includes("@flow")) return true;
-	try {
-		return await bunCheck(content, suffix);
-	} catch {
-		return true;
-	}
-}
-
 function regionAvailable(usedLines: Map<string, number[]>, filePath: string, lineNumber: number): boolean {
 	const used = usedLines.get(filePath) ?? [];
 	return !used.some(ln => Math.abs(ln - lineNumber) <= 3);
@@ -404,7 +385,7 @@ function buildPrompt(
 	difficulty: Difficulty,
 	entry: FileEntry,
 ): string {
-	const header = `# Fix the bug in \`${basename(filePath)}\``;
+	const header = `# Fix the bug in \`${path.basename(filePath)}\``;
 
 	const isStructural = mutation.category === "structural";
 	const isMultiEdit = mutation.name === "identifier-multi-edit";
@@ -461,7 +442,7 @@ function buildPrompt(
 	}
 	return [
 		header,
-		"There is a subtle bug in this file. The fix is a one-character change.",
+		"There is a subtle bug in this file.",
 		"Track it down and fix it with a minimal edit.",
 	].join("\n\n");
 }
@@ -473,6 +454,70 @@ function createSeededRng(seed: number): () => number {
 		return state / 0x7fffffff;
 	};
 }
+
+function countChangedHunks(original: string, mutated: string): number {
+	const changes = diffLines(original, mutated);
+	let hunks = 0;
+	let inChangedChunk = false;
+	for (const change of changes) {
+		if (change.added || change.removed) {
+			if (!inChangedChunk) {
+				hunks++;
+				inChangedChunk = true;
+			}
+		} else {
+			inChangedChunk = false;
+		}
+	}
+	return hunks;
+}
+
+function countChangedLines(original: string, mutated: string): number {
+	const changes = diffLines(original, mutated);
+	let changedLines = 0;
+	for (const change of changes) {
+		if (!change.added && !change.removed) continue;
+		const split = change.value.split("\n");
+		changedLines += split.filter((line, idx) => idx < split.length - 1 || line.length > 0).length;
+	}
+	return changedLines;
+}
+
+function countPositionalLineChanges(original: string, mutated: string): number {
+	const originalLines = original.split("\n");
+	const mutatedLines = mutated.split("\n");
+	const max = Math.max(originalLines.length, mutatedLines.length);
+	let changed = 0;
+	for (let i = 0; i < max; i++) {
+		if ((originalLines[i] ?? "") !== (mutatedLines[i] ?? "")) {
+			changed++;
+		}
+	}
+	return changed;
+}
+
+function countPositionalLineHunks(original: string, mutated: string): number {
+	const originalLines = original.split("\n");
+	const mutatedLines = mutated.split("\n");
+	const max = Math.max(originalLines.length, mutatedLines.length);
+	let hunks = 0;
+	let inChanged = false;
+	for (let i = 0; i < max; i++) {
+		const changed = (originalLines[i] ?? "") !== (mutatedLines[i] ?? "");
+		if (changed) {
+			if (!inChanged) {
+				hunks++;
+				inChanged = true;
+			}
+		} else {
+			inChanged = false;
+		}
+	}
+	return hunks;
+}
+
+
+
 
 async function generateCase(
 	rng: () => number,
@@ -486,9 +531,17 @@ async function generateCase(
 	let candidates = getCandidatesForDifficulty(files, difficulty);
 	if (candidates.length === 0) candidates = files;
 
-	let applicable = candidates.filter(entry => mutation.canApply(entry.content));
+	function canApply(entry: FileEntry): boolean {
+		try {
+			return mutation.canApply(entry.content);
+		} catch {
+			return false;
+		}
+	}
+
+	let applicable = candidates.filter(canApply);
 	if (applicable.length === 0 && candidates !== files) {
-		applicable = files.filter(entry => mutation.canApply(entry.content));
+		applicable = files.filter(canApply);
 	}
 	if (applicable.length === 0) return null;
 
@@ -496,12 +549,27 @@ async function generateCase(
 
 	for (let attempt = 0; attempt < attemptLimit; attempt++) {
 		const entry = applicable[Math.floor(rng() * applicable.length)];
-		const [mutatedContent, info] = mutation.mutate(entry.content, rng);
+		let mutatedContent: string;
+		let info: { lineNumber: number; originalSnippet: string; mutatedSnippet: string };
+		try {
+			[mutatedContent, info] = mutation.mutate(entry.content, rng);
+		} catch {
+			continue;
+		}
 		if (mutatedContent === entry.content) continue;
-		if (!regionAvailable(usedLines, entry.path, info.lineNumber)) continue;
+		const changedHunks = countChangedHunks(entry.content, mutatedContent);
+		const changedLines = countChangedLines(entry.content, mutatedContent);
+		const positionalHunks = countPositionalLineHunks(entry.content, mutatedContent);
+		const positionalChanges = countPositionalLineChanges(entry.content, mutatedContent);
+		const isStructural = mutation.category === "structural";
+		const isMultiEdit = mutation.name === "identifier-multi-edit";
+		if (!isStructural && !isMultiEdit) {
+			if (changedHunks !== 1) continue;
+			if (positionalHunks !== 1) continue;
+			if (changedLines > 30 || positionalChanges > 30) continue;
+		}
 
-		const suffix = `.${entry.path.split(".").pop()}`;
-		if (!(await isParsable(mutatedContent, suffix))) continue;
+		if (!regionAvailable(usedLines, entry.path, info.lineNumber)) continue;
 
 		const diffScore = scoreDifficulty(entry, info.lineNumber);
 
@@ -548,9 +616,9 @@ async function writeTarball(entries: TarEntry[], outputPath: string): Promise<vo
 	await Bun.Archive.write(outputPath, data, { compress: "gzip" });
 }
 
-function buildCaseEntries(result: CaseResult, reactDir: string): TarEntry[] {
-	const filename = basename(result.filePath);
-	const relativePath = relative(reactDir, result.filePath);
+async function buildCaseEntries(result: CaseResult, reactDir: string): Promise<TarEntry[]> {
+	const filename = path.basename(result.filePath);
+	const relativePath = path.relative(reactDir, result.filePath);
 	const caseDir = `fixtures/${result.caseId}`;
 
 	const lines = result.originalContent.split("\n");
@@ -593,9 +661,13 @@ function buildCaseEntries(result: CaseResult, reactDir: string): TarEntry[] {
 		},
 	};
 
+	const [formattedInput, formattedExpected] = await Promise.all([
+		formatContent(filename, result.mutatedContent),
+		formatContent(filename, result.originalContent),
+	]);
 	return [
-		{ name: `${caseDir}/input/${filename}`, content: ensureTrailingNewline(result.mutatedContent) },
-		{ name: `${caseDir}/expected/${filename}`, content: ensureTrailingNewline(result.originalContent) },
+		{ name: `${caseDir}/input/${filename}`, content: ensureTrailingNewline(formattedInput.formatted) },
+		{ name: `${caseDir}/expected/${filename}`, content: ensureTrailingNewline(formattedExpected.formatted) },
 		{ name: `${caseDir}/prompt.md`, content: prompt },
 		{ name: `${caseDir}/metadata.json`, content: JSON.stringify(metadata, null, 2) },
 	];
@@ -706,7 +778,7 @@ async function main(): Promise<number> {
 			const cases = byDifficulty.get(diff) ?? [];
 			console.log(`\n${diff.toUpperCase()} (${cases.length} cases):`);
 			for (const result of cases.slice(0, 5)) {
-				const rel = relative(reactDir, result.filePath);
+				const rel = path.relative(reactDir, result.filePath);
 				console.log(`  ${result.caseId}: ${rel}`);
 				console.log(`    score=${result.difficultyScore}, lines=${result.originalContent.split("\n").length}`);
 			}
@@ -723,12 +795,12 @@ async function main(): Promise<number> {
 		return 0;
 	}
 
-	const tarEntries: TarEntry[] = [];
+	const tarEntries: Promise<TarEntry[]>[] = [];
 	for (const result of results) {
-		tarEntries.push(...buildCaseEntries(result, reactDir));
+		tarEntries.push(buildCaseEntries(result, reactDir));
 	}
 
-	await writeTarball(tarEntries, args.output);
+	await writeTarball((await Promise.all(tarEntries)).flat(), args.output);
 
 	console.log(`Generated ${results.length} cases in ${args.output}`);
 	const scores = results.map(r => r.difficultyScore);
