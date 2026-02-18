@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { getAgentDir, getConfigRootDir } from "./dirs";
 
 /**
  * Parses a .env file synchronously and extracts key-value string pairs.
@@ -46,9 +47,11 @@ function parseEnvFile(filePath: string): Record<string, string> {
 
 // Eagerly parse the user's $HOME/.env and the current project's .env (from cwd)
 const homeEnv = parseEnvFile(path.join(os.homedir(), ".env"));
+const piEnv = parseEnvFile(path.join(getConfigRootDir(), ".env"));
+const agentEnv = parseEnvFile(path.join(getAgentDir(), ".env"));
 const projectEnv = parseEnvFile(path.join(process.cwd(), ".env"));
 
-for (const file of [projectEnv, homeEnv]) {
+for (const file of [projectEnv, agentEnv, piEnv, homeEnv]) {
 	for (const [key, value] of Object.entries(file)) {
 		if (!Bun.env[key]) {
 			Bun.env[key] = value;

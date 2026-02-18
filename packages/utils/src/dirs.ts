@@ -9,7 +9,6 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { version } from "../package.json" with { type: "json" };
-import { $env } from "./env";
 
 /** App name (e.g. "omp") */
 export const APP_NAME: string = "omp";
@@ -54,16 +53,16 @@ export function setProjectDir(dir: string): void {
 
 /** Get the config root directory (~/.omp). */
 export function getConfigRootDir(): string {
-	return path.join(os.homedir(), $env.PI_CONFIG_DIR || CONFIG_DIR_NAME);
+	return path.join(os.homedir(), process.env.PI_CONFIG_DIR || CONFIG_DIR_NAME);
 }
 
-let agentDir = $env.PI_CODING_AGENT_DIR || path.join(getConfigRootDir(), "agent");
+let agentDir = process.env.PI_CODING_AGENT_DIR || path.join(getConfigRootDir(), "agent");
 
 /** Set the coding agent directory. */
 export function setAgentDir(dir: string): void {
 	agentDir = dir;
 	agentCache.clear();
-	$env.PI_CODING_AGENT_DIR = dir;
+	process.env.PI_CODING_AGENT_DIR = dir;
 }
 
 /** Get the agent config directory (~/.omp/agent). */
