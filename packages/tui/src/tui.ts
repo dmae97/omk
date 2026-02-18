@@ -885,10 +885,13 @@ export class TUI extends Container {
 				if (i > 0) buffer += "\r\n";
 				buffer += newLines[i];
 			}
+			const renderCursorRow = Math.max(0, newLines.length - 1);
+			const cursorUpdate = this.#buildHardwareCursorSequence(cursorPos, newLines.length, renderCursorRow);
+			buffer += cursorUpdate.sequence;
 			buffer += "\x1b[?2026l"; // End synchronized output
 			this.terminal.write(buffer);
-			this.#cursorRow = Math.max(0, newLines.length - 1);
-			this.#hardwareCursorRow = this.#cursorRow;
+			this.#cursorRow = renderCursorRow;
+			this.#hardwareCursorRow = cursorUpdate.row;
 			// Reset max lines when clearing, otherwise track growth
 			if (clear) {
 				this.#maxLinesRendered = newLines.length;
@@ -896,7 +899,6 @@ export class TUI extends Container {
 				this.#maxLinesRendered = Math.max(this.#maxLinesRendered, newLines.length);
 			}
 			this.#previousViewportTop = Math.max(0, this.#maxLinesRendered - height);
-			this.#positionHardwareCursor(cursorPos, newLines.length);
 			this.#previousLines = newLines;
 			this.#previousWidth = width;
 		};
@@ -965,10 +967,9 @@ export class TUI extends Container {
 
 		// All changes are in deleted lines (nothing to render, just clear)
 		if (firstChanged >= newLines.length) {
+			const targetRow = Math.max(0, newLines.length - 1);
 			if (this.#previousLines.length > newLines.length) {
 				let buffer = "\x1b[?2026h";
-				// Move to end of new content (clamp to 0 for empty content)
-				const targetRow = Math.max(0, newLines.length - 1);
 				const lineDiff = computeLineDiff(targetRow);
 				if (lineDiff > 0) buffer += `\x1b[${lineDiff}B`;
 				else if (lineDiff < 0) buffer += `\x1b[${-lineDiff}A`;
@@ -990,12 +991,15 @@ export class TUI extends Container {
 				if (extraLines > 0) {
 					buffer += `\x1b[${extraLines}A`;
 				}
+				const cursorUpdate = this.#buildHardwareCursorSequence(cursorPos, newLines.length, targetRow);
+				buffer += cursorUpdate.sequence;
 				buffer += "\x1b[?2026l";
 				this.terminal.write(buffer);
-				this.#cursorRow = targetRow;
-				this.#hardwareCursorRow = targetRow;
+				this.#hardwareCursorRow = cursorUpdate.row;
+			} else {
+				this.#positionHardwareCursor(cursorPos, newLines.length);
 			}
-			this.#positionHardwareCursor(cursorPos, newLines.length);
+			this.#cursorRow = targetRow;
 			this.#previousLines = newLines;
 			this.#previousWidth = width;
 			this.#previousViewportTop = Math.max(0, this.#maxLinesRendered - height);
@@ -1098,8 +1102,9 @@ export class TUI extends Container {
 			buffer += `\x1b[${extraLines}A`;
 		}
 
+		const cursorUpdate = this.#buildHardwareCursorSequence(cursorPos, newLines.length, finalCursorRow);
+		buffer += cursorUpdate.sequence;
 		buffer += "\x1b[?2026l"; // End synchronized output
-
 		if (process.env.PI_TUI_DEBUG === "1") {
 			const debugDir = "/tmp/tui";
 			fs.mkdirSync(debugDir, { recursive: true });
@@ -1128,24 +1133,45 @@ export class TUI extends Container {
 			].join("\n");
 			fs.writeFileSync(debugPath, debugData);
 		}
-
 		// Write entire buffer at once
 		this.terminal.write(buffer);
-
-		// Track cursor position for next render
 		// cursorRow tracks end of content (for viewport calculation)
 		// hardwareCursorRow tracks actual terminal cursor position (for movement)
 		this.#cursorRow = Math.max(0, newLines.length - 1);
-		this.#hardwareCursorRow = finalCursorRow;
+		this.#hardwareCursorRow = cursorUpdate.row;
 		// Track terminal's working area (grows but doesn't shrink unless cleared)
 		this.#maxLinesRendered = Math.max(this.#maxLinesRendered, newLines.length);
 		this.#previousViewportTop = Math.max(0, this.#maxLinesRendered - height);
-
-		// Position hardware cursor for IME
-		this.#positionHardwareCursor(cursorPos, newLines.length);
-
 		this.#previousLines = newLines;
 		this.#previousWidth = width;
+	}
+
+	/**
+	 * Build cursor movement and visibility escape sequence and return resulting row.
+	 * Used by differential rendering so cursor placement stays inside synchronized output.
+	 */
+	#buildHardwareCursorSequence(
+		cursorPos: { row: number; col: number } | null,
+		totalLines: number,
+		currentRow: number,
+	): { sequence: string; row: number } {
+		if (!cursorPos || totalLines <= 0) {
+			return { sequence: "\x1b[?25l", row: currentRow };
+		}
+		// Clamp cursor position to valid range
+		const targetRow = Math.max(0, Math.min(cursorPos.row, totalLines - 1));
+		const targetCol = Math.max(0, cursorPos.col);
+		let sequence = "";
+		const rowDelta = targetRow - currentRow;
+		if (rowDelta > 0) {
+			sequence += `\x1b[${rowDelta}B`; // Move down
+		} else if (rowDelta < 0) {
+			sequence += `\x1b[${-rowDelta}A`; // Move up
+		}
+		sequence += `\x1b[${targetCol + 1}G`; // Move to absolute column (1-indexed)
+		sequence += this.#showHardwareCursor ? "\x1b[?25h" : "\x1b[?25l";
+
+		return { sequence, row: targetRow };
 	}
 
 	/**
@@ -1154,35 +1180,8 @@ export class TUI extends Container {
 	 * @param totalLines Total number of rendered lines
 	 */
 	#positionHardwareCursor(cursorPos: { row: number; col: number } | null, totalLines: number): void {
-		if (!cursorPos || totalLines <= 0) {
-			this.terminal.hideCursor();
-			return;
-		}
-
-		// Clamp cursor position to valid range
-		const targetRow = Math.max(0, Math.min(cursorPos.row, totalLines - 1));
-		const targetCol = Math.max(0, cursorPos.col);
-
-		// Move cursor from current position to target
-		const rowDelta = targetRow - this.#hardwareCursorRow;
-		let buffer = "";
-		if (rowDelta > 0) {
-			buffer += `\x1b[${rowDelta}B`; // Move down
-		} else if (rowDelta < 0) {
-			buffer += `\x1b[${-rowDelta}A`; // Move up
-		}
-		// Move to absolute column (1-indexed)
-		buffer += `\x1b[${targetCol + 1}G`;
-
-		if (buffer) {
-			this.terminal.write(buffer);
-		}
-
-		this.#hardwareCursorRow = targetRow;
-		if (this.#showHardwareCursor) {
-			this.terminal.showCursor();
-		} else {
-			this.terminal.hideCursor();
-		}
+		const update = this.#buildHardwareCursorSequence(cursorPos, totalLines, this.#hardwareCursorRow);
+		this.terminal.write(update.sequence);
+		this.#hardwareCursorRow = update.row;
 	}
 }
