@@ -1656,9 +1656,7 @@ export class AgentSession {
 
 		if (this.isStreaming) {
 			if (!options?.streamingBehavior) {
-				throw new AgentBusyError(
-					"Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.",
-				);
+				throw new AgentBusyError();
 			}
 			await this.sendCustomMessage(message, { deliverAs: options.streamingBehavior });
 			return;

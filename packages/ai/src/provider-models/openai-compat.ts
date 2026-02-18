@@ -1,12 +1,12 @@
 import type { ModelManagerOptions } from "../model-manager";
 import { getBundledModels } from "../models";
 import type { Api, KnownProvider, Model } from "../types";
-import type { OAuthProvider } from "../utils/oauth/types";
 import {
 	fetchOpenAICompatibleModels,
 	type OpenAICompatibleModelMapperContext,
 	type OpenAICompatibleModelRecord,
 } from "../utils/discovery/openai-compatible";
+import type { OAuthProvider } from "../utils/oauth/types";
 
 // ---------------------------------------------------------------------------
 // Shared helper
@@ -621,9 +621,7 @@ export function openrouterModelManagerOptions(
 					_context: OpenAICompatibleModelMapperContext<"openai-completions">,
 				): Model<"openai-completions"> => {
 					const pricing = entry.pricing as Record<string, unknown> | undefined;
-					const params = Array.isArray(entry.supported_parameters)
-						? (entry.supported_parameters as string[])
-						: [];
+					const params = Array.isArray(entry.supported_parameters) ? (entry.supported_parameters as string[]) : [];
 					const modality = String((entry.architecture as Record<string, unknown> | undefined)?.modality ?? "");
 					const topProvider = entry.top_provider as Record<string, unknown> | undefined;
 

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { Agent } from "@oh-my-pi/pi-agent-core";
+import { Agent, AgentBusyError } from "@oh-my-pi/pi-agent-core";
 import { type AssistantMessage, getBundledModel } from "@oh-my-pi/pi-ai";
 import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
@@ -116,9 +116,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		expect(session.isStreaming).toBe(true);
 
 		// Second prompt should reject
-		await expect(session.prompt("Second message")).rejects.toThrow(
-			"Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.",
-		);
+		await expect(session.prompt("Second message")).rejects.toBeInstanceOf(AgentBusyError);
 
 		// Cleanup
 		await session.abort();
