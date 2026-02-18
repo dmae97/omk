@@ -4,11 +4,13 @@ import * as path from "node:path";
 import { $env } from "@oh-my-pi/pi-utils";
 import { createModelManager } from "../src/model-manager";
 import {
-	GENERATE_MODELS_PROVIDER_DESCRIPTORS,
-	type GenerateModelsProviderDescriptor,
-	MODELS_DEV_PROVIDER_DESCRIPTORS,
-	mapModelsDevToModels,
-} from "../src/provider-models/openai-compat";
+	type CatalogDiscoveryConfig,
+	type CatalogProviderDescriptor,
+	isCatalogDescriptor,
+	allowsUnauthenticatedCatalogDiscovery,
+	PROVIDER_DESCRIPTORS,
+} from "../src/provider-models/descriptors";
+import { MODELS_DEV_PROVIDER_DESCRIPTORS, mapModelsDevToModels } from "../src/provider-models/openai-compat";
 import {
 	CLOUDFLARE_FALLBACK_MODEL,
 	applyGeneratedModelPolicies,
@@ -19,21 +21,14 @@ import { CliAuthStorage } from "../src/storage";
 import type { Model } from "../src/types";
 import { fetchAntigravityDiscoveryModels } from "../src/utils/discovery/antigravity";
 import { fetchCodexModels } from "../src/utils/discovery/codex";
-import { fetchCursorUsableModels } from "../src/utils/discovery/cursor";
 import { getOAuthApiKey } from "../src/utils/oauth";
-import type { OAuthProvider } from "../src/utils/oauth/types";
+import type { OAuthCredentials, OAuthProvider } from "../src/utils/oauth/types";
 import prevModelsJson from "../src/models.json" with { type: "json" };
 
 const packageRoot = path.join(import.meta.dir, "..");
 
-interface ProviderApiKeyOptions {
-	provider: string;
-	envVars: string[];
-	oauthProvider?: OAuthProvider;
-}
-
-async function resolveProviderApiKey({ provider, envVars, oauthProvider }: ProviderApiKeyOptions): Promise<string | undefined> {
-	for (const envVar of envVars) {
+async function resolveProviderApiKey(providerId: string, catalog: CatalogDiscoveryConfig): Promise<string | undefined> {
+	for (const envVar of catalog.envVars) {
 		const value = $env[envVar as keyof typeof $env];
 		if (typeof value === "string" && value.length > 0) {
 			return value;
@@ -43,16 +38,16 @@ async function resolveProviderApiKey({ provider, envVars, oauthProvider }: Provi
 	try {
 		const storage = await CliAuthStorage.create();
 		try {
-			const storedApiKey = storage.getApiKey(provider);
+			const storedApiKey = storage.getApiKey(providerId);
 			if (storedApiKey) {
 				return storedApiKey;
 			}
-			if (oauthProvider) {
-				const storedOAuth = storage.getOAuth(oauthProvider);
+			if (catalog.oauthProvider) {
+				const storedOAuth = storage.getOAuth(catalog.oauthProvider);
 				if (storedOAuth) {
-					const result = await getOAuthApiKey(oauthProvider, { [oauthProvider]: storedOAuth });
+					const result = await getOAuthApiKey(catalog.oauthProvider, { [catalog.oauthProvider]: storedOAuth });
 					if (result) {
-						storage.saveOAuth(oauthProvider, result.newCredentials);
+						storage.saveOAuth(catalog.oauthProvider, result.newCredentials);
 						return result.apiKey;
 					}
 				}
@@ -67,31 +62,27 @@ async function resolveProviderApiKey({ provider, envVars, oauthProvider }: Provi
 	return undefined;
 }
 
-async function fetchProviderModelsFromCatalog(descriptor: GenerateModelsProviderDescriptor): Promise<Model[]> {
-	const apiKey = await resolveProviderApiKey({
-		provider: descriptor.providerId,
-		envVars: descriptor.envVars,
-		oauthProvider: descriptor.oauthProvider,
-	});
+async function fetchProviderModelsFromCatalog(descriptor: CatalogProviderDescriptor): Promise<Model[]> {
+	const apiKey = await resolveProviderApiKey(descriptor.providerId, descriptor.catalogDiscovery);
 
-	if (!apiKey && !descriptor.allowUnauthenticated) {
-		console.log(`No ${descriptor.label} credentials found (env or agent.db), using fallback models`);
+	if (!apiKey && !allowsUnauthenticatedCatalogDiscovery(descriptor)) {
+		console.log(`No ${descriptor.catalogDiscovery.label} credentials found (env or agent.db), using fallback models`);
 		return [];
 	}
 
 	try {
-		console.log(`Fetching models from ${descriptor.label} model manager...`);
+		console.log(`Fetching models from ${descriptor.catalogDiscovery.label} model manager...`);
 		const manager = createModelManager(descriptor.createModelManagerOptions({ apiKey }));
 		const result = await manager.refresh("online");
 		const models = result.models.filter(model => model.provider === descriptor.providerId);
 		if (models.length === 0) {
-			console.warn(`${descriptor.label} discovery returned no models, using fallback models`);
+			console.warn(`${descriptor.catalogDiscovery.label} discovery returned no models, using fallback models`);
 			return [];
 		}
-		console.log(`Fetched ${models.length} models from ${descriptor.label} model manager`);
+		console.log(`Fetched ${models.length} models from ${descriptor.catalogDiscovery.label} model manager`);
 		return models;
 	} catch (error) {
-		console.error(`Failed to fetch ${descriptor.label} models:`, error);
+		console.error(`Failed to fetch ${descriptor.catalogDiscovery.label} models:`, error);
 		return [];
 	}
 }
@@ -112,25 +103,24 @@ async function loadModelsDevData(): Promise<Model[]> {
 }
 
 const ANTIGRAVITY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
-/**
- * Try to get a fresh Antigravity access token from agent.db credentials.
- */
-async function getAntigravityToken(): Promise<{ token: string; storage: CliAuthStorage } | null> {
+
+async function getOAuthCredentialsFromStorage(
+	provider: OAuthProvider,
+): Promise<{ credentials: OAuthCredentials; storage: CliAuthStorage } | null> {
 	try {
 		const storage = await CliAuthStorage.create();
-		const creds = storage.getOAuth("google-antigravity");
+		const creds = storage.getOAuth(provider);
 		if (!creds) {
 			storage.close();
 			return null;
 		}
-		const result = await getOAuthApiKey("google-antigravity", { "google-antigravity": creds });
+		const result = await getOAuthApiKey(provider, { [provider]: creds });
 		if (!result) {
 			storage.close();
 			return null;
 		}
-		// Save refreshed credentials back
-		storage.saveOAuth("google-antigravity", result.newCredentials);
-		return { token: result.newCredentials.access, storage };
+		storage.saveOAuth(provider, result.newCredentials);
+		return { credentials: result.newCredentials, storage };
 	} catch {
 		return null;
 	}
@@ -141,7 +131,7 @@ async function getAntigravityToken(): Promise<{ token: string; storage: CliAuthS
  * Returns empty array if no auth is available (previous models used as fallback).
  */
 async function fetchAntigravityModels(): Promise<Model<"google-gemini-cli">[]> {
-	const auth = await getAntigravityToken();
+	const auth = await getOAuthCredentialsFromStorage("google-antigravity");
 	if (!auth) {
 		console.log("No Antigravity credentials found, will use previous models");
 		return [];
@@ -149,7 +139,7 @@ async function fetchAntigravityModels(): Promise<Model<"google-gemini-cli">[]> {
 	try {
 		console.log("Fetching models from Antigravity API...");
 		const discovered = await fetchAntigravityDiscoveryModels({
-			token: auth.token,
+			token: auth.credentials.access,
 			endpoint: ANTIGRAVITY_ENDPOINT,
 		});
 		if (discovered === null) {
@@ -186,59 +176,33 @@ function extractCodexAccountId(accessToken: string): string | null {
 	}
 }
 
-/**
- * Try to get Codex (ChatGPT) OAuth credentials from agent.db.
- */
-async function getCodexCredentials(): Promise<{ accessToken: string; accountId?: string; storage: CliAuthStorage } | null> {
+async function fetchCodexDiscoveryModels(): Promise<Model<"openai-codex-responses">[]> {
+	const codexAuth = await getOAuthCredentialsFromStorage("openai-codex");
+	if (!codexAuth) {
+		return [];
+	}
 	try {
-		const storage = await CliAuthStorage.create();
-		const creds = storage.getOAuth("openai-codex");
-		if (!creds) {
-			storage.close();
-			return null;
-		}
-
-		const result = await getOAuthApiKey("openai-codex", { "openai-codex": creds });
-		if (!result) {
-			storage.close();
-			return null;
-		}
-
-		storage.saveOAuth("openai-codex", result.newCredentials);
-		const accessToken = result.newCredentials.access;
-		const accountId = result.newCredentials.accountId ?? extractCodexAccountId(accessToken);
-		return {
+		console.log("Fetching models from Codex API...");
+		const accessToken = codexAuth.credentials.access;
+		const accountId = codexAuth.credentials.accountId ?? extractCodexAccountId(accessToken);
+		const codexDiscovery = await fetchCodexModels({
 			accessToken,
 			accountId: accountId ?? undefined,
-			storage,
-		};
-	} catch {
-		return null;
-	}
-}
-
-/**
- * Try to get Cursor API key from agent.db.
- */
-async function getCursorApiKey(): Promise<{ apiKey: string; storage: CliAuthStorage } | null> {
-	try {
-		const storage = await CliAuthStorage.create();
-		const creds = storage.getOAuth("cursor");
-		if (!creds) {
-			storage.close();
-			return null;
+		});
+		if (codexDiscovery === null) {
+			console.warn("Codex API fetch failed");
+			return [];
 		}
-
-		const result = await getOAuthApiKey("cursor", { cursor: creds });
-		if (!result) {
-			storage.close();
-			return null;
+		if (codexDiscovery.models.length > 0) {
+			console.log(`Fetched ${codexDiscovery.models.length} models from Codex API`);
+			return codexDiscovery.models;
 		}
-
-		storage.saveOAuth("cursor", result.newCredentials);
-		return { apiKey: result.newCredentials.access, storage };
-	} catch {
-		return null;
+		return [];
+	} catch (error) {
+		console.error("Failed to fetch Codex models:", error);
+		return [];
+	} finally {
+		codexAuth.storage.close();
 	}
 }
 
@@ -246,7 +210,7 @@ async function generateModels() {
 	// Fetch models from dynamic sources
 	const modelsDevModels = await loadModelsDevData();
 	const catalogProviderModels = (
-		await Promise.all(GENERATE_MODELS_PROVIDER_DESCRIPTORS.map(descriptor => fetchProviderModelsFromCatalog(descriptor)))
+		await Promise.all(PROVIDER_DESCRIPTORS.filter(isCatalogDescriptor).map(descriptor => fetchProviderModelsFromCatalog(descriptor)))
 	).flat();
 
 	// Combine models (models.dev has priority)
@@ -256,50 +220,15 @@ async function generateModels() {
 		allModels.push(CLOUDFLARE_FALLBACK_MODEL);
 	}
 
-	// Antigravity models (Gemini 3, Claude, GPT-OSS via Google Cloud)
-	const antigravityModels = await fetchAntigravityModels();
-	allModels.push(...antigravityModels);
-
-	// OpenAI Codex (ChatGPT OAuth) models
-	const codexAuth = await getCodexCredentials();
-	if (codexAuth) {
-		try {
-			console.log("Fetching models from Codex API...");
-			const codexDiscovery = await fetchCodexModels({
-				accessToken: codexAuth.accessToken,
-				accountId: codexAuth.accountId,
-			});
-			if (codexDiscovery === null) {
-				console.warn("Codex API fetch failed");
-			} else if (codexDiscovery.models.length > 0) {
-				console.log(`Fetched ${codexDiscovery.models.length} models from Codex API`);
-				allModels.push(...codexDiscovery.models);
-			}
-		} catch (error) {
-			console.error("Failed to fetch Codex models:", error);
-		} finally {
-			codexAuth.storage.close();
-		}
-	}
-
-	// Cursor Agent models
-	const cursorAuth = await getCursorApiKey();
-	if (cursorAuth) {
-		try {
-			console.log("Fetching models from Cursor API...");
-			const discoveredCursor = await fetchCursorUsableModels({
-				apiKey: cursorAuth.apiKey,
-			});
-			if (discoveredCursor === null) {
-				console.warn("Cursor API fetch failed");
-			} else if (discoveredCursor.length > 0) {
-				console.log(`Fetched ${discoveredCursor.length} models from Cursor API`);
-				allModels.push(...discoveredCursor);
-			}
-		} catch (error) {
-			console.error("Failed to fetch Cursor models:", error);
-		} finally {
-			cursorAuth.storage.close();
+	const specialDiscoverySources = [
+		{ label: "Antigravity", fetch: fetchAntigravityModels },
+		{ label: "Codex", fetch: fetchCodexDiscoveryModels },
+	] as const;
+	for (const source of specialDiscoverySources) {
+		const discoveredModels = await source.fetch();
+		if (discoveredModels.length > 0) {
+			console.log(`Added ${discoveredModels.length} models from ${source.label} discovery`);
+			allModels.push(...discoveredModels);
 		}
 	}
 
@@ -314,6 +243,7 @@ async function generateModels() {
 	// Discovery-only providers (local inference servers) — never bundle static models.
 	const discoveryOnlyProviders = new Set(["ollama", "vllm"]);
 	const fetchedKeys = new Set(allModels.map((m) => `${m.provider}/${m.id}`));
+
 	for (const models of Object.values(prevModelsJson as Record<string, Record<string, Model>>)) {
 		for (const model of Object.values(models)) {
 			if (!fetchedKeys.has(`${model.provider}/${model.id}`) && !discoveryOnlyProviders.has(model.provider)) {

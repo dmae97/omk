@@ -1,8 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Support for Synthetic model provider in web search command
+- Model sorting by priority field and version number in model selector for improved model ranking
 - Support for Synthetic model provider with API key authentication
 - Support for Hugging Face model provider with API key authentication
 - Support for NVIDIA model provider with API key authentication
@@ -19,6 +22,7 @@
 
 ### Changed
 
+- Refactored custom model building logic into reusable `buildCustomModel` function for consistency across provider configurations
 - Replaced generic error with AgentBusyError when attempting to send messages while agent is processing
 - Added automatic retry logic with idle waiting when agent is busy during prompt operations, with 30-second timeout
 

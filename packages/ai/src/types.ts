@@ -421,6 +421,8 @@ export interface Model<TApi extends Api = any> {
 	preferWebsockets?: boolean;
 	/** Preferred model to switch to when context promotion is triggered (model id or provider/id). */
 	contextPromotionTarget?: string;
+	/** Provider-assigned priority value (lower = higher priority). */
+	priority?: number;
 	/** Compatibility overrides for openai-completions API. If not set, auto-detected from baseUrl. */
 	compat?: TApi extends "openai-completions" ? OpenAICompat : never;
 }

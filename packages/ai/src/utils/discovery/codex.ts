@@ -282,6 +282,7 @@ function normalizeCodexModelEntry(entry: unknown, baseUrl: string): NormalizedCo
 			contextWindow,
 			maxTokens,
 			...(preferWebsockets ? { preferWebsockets: true } : {}),
+			...(priority !== Number.MAX_SAFE_INTEGER ? { priority } : {}),
 		},
 	};
 }

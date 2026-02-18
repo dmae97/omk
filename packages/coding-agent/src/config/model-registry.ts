@@ -14,7 +14,7 @@ import {
 	type OAuthCredentials,
 	type OAuthLoginCallbacks,
 	openaiCodexModelManagerOptions,
-	RUNTIME_PROVIDER_DESCRIPTORS,
+	PROVIDER_DESCRIPTORS,
 	registerCustomApi,
 	registerOAuthProvider,
 	type SimpleStreamOptions,
@@ -343,6 +343,72 @@ function applyModelOverride(model: Model<Api>, override: ModelOverride): Model<A
 	return result;
 }
 
+interface CustomModelDefinitionLike {
+	id: string;
+	name?: string;
+	api?: Api;
+	reasoning?: boolean;
+	input?: ("text" | "image")[];
+	cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+	contextWindow?: number;
+	maxTokens?: number;
+	headers?: Record<string, string>;
+	compat?: Model<Api>["compat"];
+	contextPromotionTarget?: string;
+}
+
+interface CustomModelBuildOptions {
+	useDefaults: boolean;
+}
+
+function mergeCustomModelHeaders(
+	providerHeaders: Record<string, string> | undefined,
+	modelHeaders: Record<string, string> | undefined,
+	authHeader: boolean | undefined,
+	apiKeyConfig: string | undefined,
+): Record<string, string> | undefined {
+	let headers = providerHeaders || modelHeaders ? { ...providerHeaders, ...modelHeaders } : undefined;
+	if (authHeader && apiKeyConfig) {
+		const resolvedKey = resolveApiKeyConfig(apiKeyConfig);
+		if (resolvedKey) {
+			headers = { ...headers, Authorization: `Bearer ${resolvedKey}` };
+		}
+	}
+	return headers;
+}
+
+function buildCustomModel(
+	providerName: string,
+	providerBaseUrl: string,
+	providerApi: Api | undefined,
+	providerHeaders: Record<string, string> | undefined,
+	providerApiKey: string | undefined,
+	authHeader: boolean | undefined,
+	modelDef: CustomModelDefinitionLike,
+	options: CustomModelBuildOptions,
+): Model<Api> | undefined {
+	const api = modelDef.api ?? providerApi;
+	if (!api) return undefined;
+	const withDefaults = options.useDefaults;
+	const cost = modelDef.cost ?? (withDefaults ? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } : undefined);
+	const input = modelDef.input ?? (withDefaults ? ["text"] : undefined);
+	return {
+		id: modelDef.id,
+		name: modelDef.name ?? (withDefaults ? modelDef.id : undefined),
+		api,
+		provider: providerName,
+		baseUrl: providerBaseUrl,
+		reasoning: modelDef.reasoning ?? (withDefaults ? false : undefined),
+		input: input as ("text" | "image")[],
+		cost,
+		contextWindow: modelDef.contextWindow ?? (withDefaults ? 128000 : undefined),
+		maxTokens: modelDef.maxTokens ?? (withDefaults ? 16384 : undefined),
+		headers: mergeCustomModelHeaders(providerHeaders, modelDef.headers, authHeader, providerApiKey),
+		compat: modelDef.compat,
+		contextPromotionTarget: modelDef.contextPromotionTarget,
+	} as Model<Api>;
+}
+
 /**
  * Model registry - loads and manages models, resolves API keys via AuthStorage.
  */
@@ -620,57 +686,66 @@ export class ModelRegistry {
 	}
 
 	async #collectBuiltInModelManagerOptions(): Promise<ModelManagerOptions<Api>[]> {
-		// Fetch API keys for all standard providers + special providers in parallel
-		const [standardKeys, googleAntigravityApiKey, googleGeminiCliApiKey, codexAccessToken] = await Promise.all([
-			Promise.all(RUNTIME_PROVIDER_DESCRIPTORS.map(d => this.getApiKeyForProvider(d.providerId))),
-			this.getApiKeyForProvider("google-antigravity"),
-			this.getApiKeyForProvider("google-gemini-cli"),
-			this.getApiKeyForProvider("openai-codex"),
+		const specialProviderDescriptors: Array<{
+			providerId: string;
+			resolveKey: (value: string | undefined) => string | undefined;
+			createOptions: (key: string) => ModelManagerOptions<Api>;
+		}> = [
+			{
+				providerId: "google-antigravity",
+				resolveKey: extractGoogleOAuthToken,
+				createOptions: oauthToken =>
+					googleAntigravityModelManagerOptions({
+						oauthToken,
+						endpoint: this.getProviderBaseUrl("google-antigravity"),
+					}),
+			},
+			{
+				providerId: "google-gemini-cli",
+				resolveKey: extractGoogleOAuthToken,
+				createOptions: oauthToken =>
+					googleGeminiCliModelManagerOptions({
+						oauthToken,
+						endpoint: this.getProviderBaseUrl("google-gemini-cli"),
+					}),
+			},
+			{
+				providerId: "openai-codex",
+				resolveKey: value => value,
+				createOptions: accessToken => {
+					const accountId = resolveOAuthAccountIdForAccessToken(this.authStorage, "openai-codex", accessToken);
+					return openaiCodexModelManagerOptions({
+						accessToken,
+						accountId,
+					});
+				},
+			},
+		];
+		const [standardProviderKeys, specialKeys] = await Promise.all([
+			Promise.all(PROVIDER_DESCRIPTORS.map(descriptor => this.getApiKeyForProvider(descriptor.providerId))),
+			Promise.all(specialProviderDescriptors.map(descriptor => this.getApiKeyForProvider(descriptor.providerId))),
 		]);
-
 		const options: ModelManagerOptions<Api>[] = [];
-
-		// Standard providers: all follow the { apiKey, baseUrl } pattern
-		for (let i = 0; i < RUNTIME_PROVIDER_DESCRIPTORS.length; i++) {
-			const desc = RUNTIME_PROVIDER_DESCRIPTORS[i];
-			const key = standardKeys[i];
-			if (isAuthenticated(key) || desc.allowUnauthenticated) {
+		for (let i = 0; i < PROVIDER_DESCRIPTORS.length; i++) {
+			const descriptor = PROVIDER_DESCRIPTORS[i];
+			const apiKey = standardProviderKeys[i];
+			if (isAuthenticated(apiKey) || descriptor.allowUnauthenticated) {
 				options.push(
-					desc.createModelManagerOptions({
-						apiKey: isAuthenticated(key) ? key : undefined,
-						baseUrl: this.getProviderBaseUrl(desc.providerId),
+					descriptor.createModelManagerOptions({
+						apiKey: isAuthenticated(apiKey) ? apiKey : undefined,
+						baseUrl: this.getProviderBaseUrl(descriptor.providerId),
 					}),
 				);
 			}
 		}
 
-		// Special providers: different config shapes
-		const antigravityToken = extractGoogleOAuthToken(googleAntigravityApiKey);
-		if (isAuthenticated(antigravityToken)) {
-			options.push(
-				googleAntigravityModelManagerOptions({
-					oauthToken: antigravityToken,
-					endpoint: this.getProviderBaseUrl("google-antigravity"),
-				}),
-			);
-		}
-		const geminiCliToken = extractGoogleOAuthToken(googleGeminiCliApiKey);
-		if (isAuthenticated(geminiCliToken)) {
-			options.push(
-				googleGeminiCliModelManagerOptions({
-					oauthToken: geminiCliToken,
-					endpoint: this.getProviderBaseUrl("google-gemini-cli"),
-				}),
-			);
-		}
-		if (isAuthenticated(codexAccessToken)) {
-			const codexAccountId = resolveOAuthAccountIdForAccessToken(this.authStorage, "openai-codex", codexAccessToken);
-			options.push(
-				openaiCodexModelManagerOptions({
-					accessToken: codexAccessToken,
-					accountId: codexAccountId,
-				}),
-			);
+		for (let i = 0; i < specialProviderDescriptors.length; i++) {
+			const descriptor = specialProviderDescriptors[i];
+			const key = descriptor.resolveKey(specialKeys[i]);
+			if (!isAuthenticated(key)) {
+				continue;
+			}
+			options.push(descriptor.createOptions(key));
 		}
 		return options;
 	}
@@ -775,51 +850,24 @@ export class ModelRegistry {
 		for (const [providerName, providerConfig] of Object.entries(config.providers)) {
 			const modelDefs = providerConfig.models ?? [];
 			if (modelDefs.length === 0) continue; // Override-only, no custom models
-
-			// Store API key config for fallback resolver
 			if (providerConfig.apiKey) {
 				this.#customProviderApiKeys.set(providerName, providerConfig.apiKey);
 			}
-
 			for (const modelDef of modelDefs) {
-				const api = modelDef.api || providerConfig.api;
-				if (!api) continue;
-
-				// Merge headers: provider headers are base, model headers override
-				let headers =
-					providerConfig.headers || modelDef.headers
-						? { ...providerConfig.headers, ...modelDef.headers }
-						: undefined;
-
-				// If authHeader is true, add Authorization header with resolved API key
-				if (providerConfig.authHeader && providerConfig.apiKey) {
-					const resolvedKey = resolveApiKeyConfig(providerConfig.apiKey);
-					if (resolvedKey) {
-						headers = { ...headers, Authorization: `Bearer ${resolvedKey}` };
-					}
-				}
-
-				// baseUrl is validated to exist for providers with models
-				// Apply defaults for optional fields
-				const defaultCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-				models.push({
-					id: modelDef.id,
-					name: modelDef.name ?? modelDef.id,
-					api: api as Api,
-					provider: providerName,
-					baseUrl: providerConfig.baseUrl!,
-					reasoning: modelDef.reasoning ?? false,
-					input: (modelDef.input ?? ["text"]) as ("text" | "image")[],
-					cost: modelDef.cost ?? defaultCost,
-					contextWindow: modelDef.contextWindow ?? 128000,
-					maxTokens: modelDef.maxTokens ?? 16384,
-					headers,
-					compat: modelDef.compat,
-					contextPromotionTarget: modelDef.contextPromotionTarget,
-				} as Model<Api>);
+				const model = buildCustomModel(
+					providerName,
+					providerConfig.baseUrl!,
+					providerConfig.api as Api | undefined,
+					providerConfig.headers,
+					providerConfig.apiKey,
+					providerConfig.authHeader,
+					modelDef,
+					{ useDefaults: true },
+				);
+				if (!model) continue;
+				models.push(model);
 			}
 		}
-
 		return models;
 	}
 
@@ -955,33 +1003,20 @@ export class ModelRegistry {
 		if (config.models && config.models.length > 0) {
 			const nextModels = this.#models.filter(m => m.provider !== providerName);
 			for (const modelDef of config.models) {
-				const api = modelDef.api || config.api;
-				if (!api) {
+				const model = buildCustomModel(
+					providerName,
+					config.baseUrl!,
+					config.api,
+					config.headers,
+					config.apiKey,
+					config.authHeader,
+					modelDef,
+					{ useDefaults: false },
+				);
+				if (!model) {
 					throw new Error(`Provider ${providerName}, model ${modelDef.id}: no "api" specified.`);
 				}
-				let headers = config.headers || modelDef.headers ? { ...config.headers, ...modelDef.headers } : undefined;
-				if (config.authHeader && config.apiKey) {
-					const resolvedKey = resolveApiKeyConfig(config.apiKey);
-					if (resolvedKey) {
-						headers = { ...headers, Authorization: `Bearer ${resolvedKey}` };
-					}
-				}
-
-				nextModels.push({
-					id: modelDef.id,
-					name: modelDef.name,
-					api,
-					provider: providerName,
-					baseUrl: config.baseUrl!,
-					reasoning: modelDef.reasoning,
-					input: modelDef.input as ("text" | "image")[],
-					cost: modelDef.cost,
-					contextWindow: modelDef.contextWindow,
-					maxTokens: modelDef.maxTokens,
-					headers,
-					compat: modelDef.compat,
-					contextPromotionTarget: modelDef.contextPromotionTarget,
-				} as Model<Api>);
+				nextModels.push(model);
 			}
 
 			if (config.oauth?.modifyModels) {

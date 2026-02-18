@@ -1,9 +1,12 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added `priority` field to Model interface for provider-assigned model prioritization
+- Added `CatalogDiscoveryConfig` interface to standardize catalog discovery configuration across providers
+- Added type guards `isCatalogDescriptor()` and `allowsUnauthenticatedCatalogDiscovery()` for safer descriptor handling
+- Added `DEFAULT_MODEL_PER_PROVIDER` export from descriptors module for centralized default model management
 - Support for 11 new AI providers: Cloudflare AI Gateway, Hugging Face Inference, LiteLLM, Moonshot, NVIDIA, Ollama, Qianfan, Qwen Portal, Together, Venice, vLLM, and Xiaomi MiMo
 - Login flows for new providers with API key validation and OAuth token support
 - Extended `KnownProvider` type to include all newly supported providers
@@ -12,6 +15,10 @@
 
 ### Changed
 
+- Unified provider descriptors into single source of truth in `descriptors.ts` for both runtime model discovery and catalog generation, improving maintainability
+- Refactored model generation script to use declarative `CatalogProviderDescriptor` interface instead of separate descriptor types, reducing code duplication
+- Reorganized models.dev provider descriptors into logical groups (Bedrock, Core, Coding Plans, Specialized) for better code organization
+- Simplified API resolution for OpenCode and GitHub Copilot providers using rule-based matching instead of inline conditionals
 - Refactored model generation script to use declarative provider descriptors instead of inline provider-specific logic, improving maintainability and reducing code duplication
 - Extracted model post-processing policies (cache pricing corrections, context window normalization) into dedicated `model-policies.ts` module for better testability and clarity
 - Removed static bundled models for Ollama and vLLM from `models.json` to rely on dynamic discovery instead, reducing static catalog size

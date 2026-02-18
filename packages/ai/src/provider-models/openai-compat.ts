@@ -1,14 +1,11 @@
 import type { ModelManagerOptions } from "../model-manager";
 import { getBundledModels } from "../models";
-import type { Api, KnownProvider, Model } from "../types";
+import type { Api, Model } from "../types";
 import {
 	fetchOpenAICompatibleModels,
 	type OpenAICompatibleModelMapperContext,
 	type OpenAICompatibleModelRecord,
 } from "../utils/discovery/openai-compatible";
-import type { OAuthProvider } from "../utils/oauth/types";
-import { googleModelManagerOptions } from "./google";
-import { cursorModelManagerOptions } from "./special";
 
 // ---------------------------------------------------------------------------
 // Shared helper
@@ -1282,295 +1279,6 @@ export function anthropicModelManagerOptions(
 	};
 }
 
-export interface GenerateModelsProviderDescriptor {
-	providerId: KnownProvider;
-	label: string;
-	envVars: string[];
-	oauthProvider?: OAuthProvider;
-	allowUnauthenticated?: boolean;
-	createModelManagerOptions(config: { apiKey?: string }): ModelManagerOptions<Api>;
-}
-
-export const GENERATE_MODELS_PROVIDER_DESCRIPTORS: readonly GenerateModelsProviderDescriptor[] = [
-	{
-		providerId: "cerebras",
-		label: "Cerebras",
-		envVars: ["CEREBRAS_API_KEY"],
-		createModelManagerOptions: config => cerebrasModelManagerOptions(config),
-	},
-	{
-		providerId: "openrouter",
-		label: "OpenRouter",
-		envVars: ["OPENROUTER_API_KEY"],
-		allowUnauthenticated: true,
-		createModelManagerOptions: config => openrouterModelManagerOptions(config),
-	},
-	{
-		providerId: "vercel-ai-gateway",
-		label: "Vercel AI Gateway",
-		envVars: ["VERCEL_AI_GATEWAY_API_KEY"],
-		allowUnauthenticated: true,
-		createModelManagerOptions: config => vercelAiGatewayModelManagerOptions(config),
-	},
-	{
-		providerId: "kimi-code",
-		label: "Kimi Code",
-		envVars: ["KIMI_API_KEY"],
-		createModelManagerOptions: config => kimiCodeModelManagerOptions(config),
-	},
-	{
-		providerId: "synthetic",
-		label: "Synthetic",
-		envVars: ["SYNTHETIC_API_KEY"],
-		createModelManagerOptions: config => syntheticModelManagerOptions(config),
-	},
-	{
-		providerId: "moonshot",
-		label: "Moonshot",
-		envVars: ["MOONSHOT_API_KEY"],
-		createModelManagerOptions: config => moonshotModelManagerOptions(config),
-	},
-	{
-		providerId: "qianfan",
-		label: "Qianfan",
-		envVars: ["QIANFAN_API_KEY"],
-		createModelManagerOptions: config => qianfanModelManagerOptions(config),
-	},
-	{
-		providerId: "together",
-		label: "Together",
-		envVars: ["TOGETHER_API_KEY"],
-		createModelManagerOptions: config => togetherModelManagerOptions(config),
-	},
-	{
-		providerId: "nvidia",
-		label: "NVIDIA",
-		envVars: ["NVIDIA_API_KEY"],
-		createModelManagerOptions: config => nvidiaModelManagerOptions(config),
-	},
-	{
-		providerId: "huggingface",
-		label: "Hugging Face",
-		envVars: ["HUGGINGFACE_HUB_TOKEN", "HF_TOKEN"],
-		createModelManagerOptions: config => huggingfaceModelManagerOptions(config),
-	},
-	{
-		providerId: "venice",
-		label: "Venice",
-		envVars: ["VENICE_API_KEY"],
-		allowUnauthenticated: true,
-		createModelManagerOptions: config => veniceModelManagerOptions(config),
-	},
-	{
-		providerId: "xiaomi",
-		label: "Xiaomi",
-		envVars: ["XIAOMI_API_KEY"],
-		createModelManagerOptions: config => xiaomiModelManagerOptions(config),
-	},
-	{
-		providerId: "ollama",
-		label: "Ollama",
-		envVars: ["OLLAMA_API_KEY"],
-		allowUnauthenticated: true,
-		createModelManagerOptions: config => ollamaModelManagerOptions(config),
-	},
-	{
-		providerId: "litellm",
-		label: "LiteLLM",
-		envVars: ["LITELLM_API_KEY"],
-		allowUnauthenticated: true,
-		createModelManagerOptions: config => litellmModelManagerOptions(config),
-	},
-	{
-		providerId: "vllm",
-		label: "vLLM",
-		envVars: ["VLLM_API_KEY"],
-		allowUnauthenticated: true,
-		createModelManagerOptions: config => vllmModelManagerOptions(config),
-	},
-	{
-		providerId: "cloudflare-ai-gateway",
-		label: "Cloudflare AI Gateway",
-		envVars: ["CLOUDFLARE_AI_GATEWAY_API_KEY"],
-		createModelManagerOptions: config => cloudflareAiGatewayModelManagerOptions(config),
-	},
-	{
-		providerId: "qwen-portal",
-		label: "Qwen Portal",
-		envVars: ["QWEN_OAUTH_TOKEN", "QWEN_PORTAL_API_KEY"],
-		oauthProvider: "qwen-portal",
-		createModelManagerOptions: config => qwenPortalModelManagerOptions(config),
-	},
-] as const;
-
-// ---------------------------------------------------------------------------
-// Runtime provider descriptors for model-registry.ts
-// ---------------------------------------------------------------------------
-
-/** Describes a provider for runtime model manager option collection. */
-export interface RuntimeProviderDescriptor {
-	providerId: KnownProvider;
-	createModelManagerOptions(config: { apiKey?: string; baseUrl?: string }): ModelManagerOptions<Api>;
-	/** When true, the provider is included even without a valid API key (e.g. ollama). */
-	allowUnauthenticated?: boolean;
-	/** Preferred model ID when no explicit selection is made. */
-	defaultModel: string;
-}
-
-/**
- * Standard providers whose model manager options follow the `{ apiKey, baseUrl }` pattern.
- * Special providers (google-antigravity, google-gemini-cli, openai-codex) are handled
- * separately in model-registry.ts because they require different config shapes.
- */
-export const RUNTIME_PROVIDER_DESCRIPTORS: readonly RuntimeProviderDescriptor[] = [
-	{
-		providerId: "anthropic",
-		defaultModel: "claude-sonnet-4-6",
-		createModelManagerOptions: config => anthropicModelManagerOptions(config),
-	},
-	{
-		providerId: "openai",
-		defaultModel: "gpt-5.1-codex",
-		createModelManagerOptions: config => openaiModelManagerOptions(config),
-	},
-	{
-		providerId: "groq",
-		defaultModel: "openai/gpt-oss-120b",
-		createModelManagerOptions: config => groqModelManagerOptions(config),
-	},
-	{
-		providerId: "huggingface",
-		defaultModel: "deepseek-ai/DeepSeek-R1",
-		createModelManagerOptions: config => huggingfaceModelManagerOptions(config),
-	},
-	{
-		providerId: "cerebras",
-		defaultModel: "zai-glm-4.6",
-		createModelManagerOptions: config => cerebrasModelManagerOptions(config),
-	},
-	{
-		providerId: "xai",
-		defaultModel: "grok-4-fast-non-reasoning",
-		createModelManagerOptions: config => xaiModelManagerOptions(config),
-	},
-	{
-		providerId: "mistral",
-		defaultModel: "devstral-medium-latest",
-		createModelManagerOptions: config => mistralModelManagerOptions(config),
-	},
-	{
-		providerId: "nvidia",
-		defaultModel: "nvidia/llama-3.1-nemotron-70b-instruct",
-		createModelManagerOptions: config => nvidiaModelManagerOptions(config),
-	},
-	{
-		providerId: "opencode",
-		defaultModel: "claude-sonnet-4-6",
-		createModelManagerOptions: config => opencodeModelManagerOptions(config),
-	},
-	{
-		providerId: "openrouter",
-		defaultModel: "openai/gpt-5.1-codex",
-		createModelManagerOptions: config => openrouterModelManagerOptions(config),
-	},
-	{
-		providerId: "vercel-ai-gateway",
-		defaultModel: "anthropic/claude-sonnet-4-6",
-		createModelManagerOptions: config => vercelAiGatewayModelManagerOptions(config),
-	},
-	{
-		providerId: "ollama",
-		defaultModel: "gpt-oss:20b",
-		createModelManagerOptions: config => ollamaModelManagerOptions(config),
-		allowUnauthenticated: true,
-	},
-	{
-		providerId: "cloudflare-ai-gateway",
-		defaultModel: "claude-sonnet-4-5",
-		createModelManagerOptions: config => cloudflareAiGatewayModelManagerOptions(config),
-	},
-	{
-		providerId: "kimi-code",
-		defaultModel: "kimi-k2.5",
-		createModelManagerOptions: config => kimiCodeModelManagerOptions(config),
-	},
-	{
-		providerId: "qwen-portal",
-		defaultModel: "coder-model",
-		createModelManagerOptions: config => qwenPortalModelManagerOptions(config),
-	},
-	{
-		providerId: "synthetic",
-		defaultModel: "hf:moonshotai/Kimi-K2.5",
-		createModelManagerOptions: config => syntheticModelManagerOptions(config),
-	},
-	{
-		providerId: "venice",
-		defaultModel: "llama-3.3-70b",
-		createModelManagerOptions: config => veniceModelManagerOptions(config),
-	},
-	{
-		providerId: "litellm",
-		defaultModel: "claude-opus-4-6",
-		createModelManagerOptions: config => litellmModelManagerOptions(config),
-	},
-	{
-		providerId: "vllm",
-		defaultModel: "gpt-oss-20b",
-		createModelManagerOptions: config => vllmModelManagerOptions(config),
-	},
-	{
-		providerId: "moonshot",
-		defaultModel: "kimi-k2.5",
-		createModelManagerOptions: config => moonshotModelManagerOptions(config),
-	},
-	{
-		providerId: "qianfan",
-		defaultModel: "deepseek-v3.2",
-		createModelManagerOptions: config => qianfanModelManagerOptions(config),
-	},
-	{
-		providerId: "together",
-		defaultModel: "moonshotai/Kimi-K2.5",
-		createModelManagerOptions: config => togetherModelManagerOptions(config),
-	},
-	{
-		providerId: "xiaomi",
-		defaultModel: "mimo-v2-flash",
-		createModelManagerOptions: config => xiaomiModelManagerOptions(config),
-	},
-	{
-		providerId: "github-copilot",
-		defaultModel: "gpt-4o",
-		createModelManagerOptions: config => githubCopilotModelManagerOptions(config),
-	},
-	{
-		providerId: "google",
-		defaultModel: "gemini-2.5-pro",
-		createModelManagerOptions: config => googleModelManagerOptions(config),
-	},
-	{
-		providerId: "cursor",
-		defaultModel: "claude-sonnet-4-6",
-		createModelManagerOptions: config => cursorModelManagerOptions(config),
-	},
-] as const;
-
-/** Default model IDs for all known providers, built from runtime descriptors + special providers. */
-export const DEFAULT_MODEL_PER_PROVIDER: Record<KnownProvider, string> = {
-	...Object.fromEntries(RUNTIME_PROVIDER_DESCRIPTORS.map(d => [d.providerId, d.defaultModel])),
-	// Providers not in RUNTIME_PROVIDER_DESCRIPTORS (special auth or no standard discovery)
-	"amazon-bedrock": "us.anthropic.claude-opus-4-6-v1",
-	"google-antigravity": "gemini-3-pro-high",
-	"google-gemini-cli": "gemini-2.5-pro",
-	"google-vertex": "gemini-3-pro-preview",
-	minimax: "MiniMax-M2.5",
-	"minimax-code": "MiniMax-M2.5",
-	"minimax-code-cn": "MiniMax-M2.5",
-	"openai-codex": "gpt-5.3-codex",
-	zai: "glm-4.6",
-} as Record<KnownProvider, string>;
-
 // ---------------------------------------------------------------------------
 // Models.dev provider descriptors for generate-models.ts
 // ---------------------------------------------------------------------------
@@ -1709,9 +1417,62 @@ const COPILOT_HEADERS = {
 	"Editor-Plugin-Version": "copilot-chat/0.35.0",
 	"Copilot-Integration-Id": "vscode-chat",
 } as const;
+interface ApiResolutionRule {
+	matches: (modelId: string, raw: ModelsDevModel) => boolean;
+	resolved: { api: Api; baseUrl: string };
+}
 
-/** All provider descriptors for models.dev data mapping in generate-models.ts. */
-export const MODELS_DEV_PROVIDER_DESCRIPTORS: readonly ModelsDevProviderDescriptor[] = [
+function resolveApiByRules(
+	modelId: string,
+	raw: ModelsDevModel,
+	rules: readonly ApiResolutionRule[],
+	fallback: { api: Api; baseUrl: string },
+): { api: Api; baseUrl: string } {
+	for (const rule of rules) {
+		if (rule.matches(modelId, raw)) return rule.resolved;
+	}
+	return fallback;
+}
+
+const OPENCODE_DEFAULT_RESOLUTION = {
+	api: "openai-completions",
+	baseUrl: "https://opencode.ai/zen/v1",
+} as const satisfies { api: Api; baseUrl: string };
+
+const OPENCODE_API_RESOLUTION_RULES: readonly ApiResolutionRule[] = [
+	{
+		matches: (_modelId, raw) => raw.provider?.npm === "@ai-sdk/openai",
+		resolved: { api: "openai-responses", baseUrl: "https://opencode.ai/zen/v1" },
+	},
+	{
+		matches: (_modelId, raw) => raw.provider?.npm === "@ai-sdk/anthropic",
+		resolved: { api: "anthropic-messages", baseUrl: "https://opencode.ai/zen" },
+	},
+	{
+		matches: (_modelId, raw) => raw.provider?.npm === "@ai-sdk/google",
+		resolved: { api: "google-generative-ai", baseUrl: "https://opencode.ai/zen/v1" },
+	},
+];
+
+const COPILOT_BASE_URL = "https://api.individual.githubcopilot.com";
+
+const COPILOT_DEFAULT_RESOLUTION = {
+	api: "openai-completions",
+	baseUrl: COPILOT_BASE_URL,
+} as const satisfies { api: Api; baseUrl: string };
+
+const COPILOT_API_RESOLUTION_RULES: readonly ApiResolutionRule[] = [
+	{
+		matches: modelId => /^claude-(haiku|sonnet|opus)-4([.-]|$)/.test(modelId),
+		resolved: { api: "anthropic-messages", baseUrl: COPILOT_BASE_URL },
+	},
+	{
+		matches: modelId => modelId.startsWith("gpt-5") || modelId.startsWith("oswe"),
+		resolved: { api: "openai-responses", baseUrl: COPILOT_BASE_URL },
+	},
+];
+
+const MODELS_DEV_PROVIDER_DESCRIPTORS_BEDROCK: readonly ModelsDevProviderDescriptor[] = [
 	// --- Amazon Bedrock ---
 	{
 		modelsDevKey: "amazon-bedrock",
@@ -1746,6 +1507,9 @@ export const MODELS_DEV_PROVIDER_DESCRIPTORS: readonly ModelsDevProviderDescript
 			return bedrockModel;
 		},
 	},
+];
+
+const MODELS_DEV_PROVIDER_DESCRIPTORS_CORE: readonly ModelsDevProviderDescriptor[] = [
 	// --- Anthropic ---
 	{
 		modelsDevKey: "anthropic",
@@ -1814,6 +1578,9 @@ export const MODELS_DEV_PROVIDER_DESCRIPTORS: readonly ModelsDevProviderDescript
 		api: "openai-completions",
 		baseUrl: "https://api.x.ai/v1",
 	},
+];
+
+const MODELS_DEV_PROVIDER_DESCRIPTORS_CODING_PLANS: readonly ModelsDevProviderDescriptor[] = [
 	// --- zAI ---
 	{
 		modelsDevKey: "zai-coding-plan",
@@ -1853,6 +1620,9 @@ export const MODELS_DEV_PROVIDER_DESCRIPTORS: readonly ModelsDevProviderDescript
 			reasoningContentField: "reasoning_content",
 		},
 	},
+];
+
+const MODELS_DEV_PROVIDER_DESCRIPTORS_SPECIALIZED: readonly ModelsDevProviderDescriptor[] = [
 	// --- Cloudflare AI Gateway ---
 	{
 		modelsDevKey: "cloudflare-ai-gateway",
@@ -1878,20 +1648,15 @@ export const MODELS_DEV_PROVIDER_DESCRIPTORS: readonly ModelsDevProviderDescript
 			if (m.status === "deprecated") return false;
 			return true;
 		},
-		resolveApi: (_modelId, raw) => {
-			const npm = raw.provider?.npm;
-			if (npm === "@ai-sdk/openai") return { api: "openai-responses", baseUrl: "https://opencode.ai/zen/v1" };
-			if (npm === "@ai-sdk/anthropic") return { api: "anthropic-messages", baseUrl: "https://opencode.ai/zen" };
-			if (npm === "@ai-sdk/google") return { api: "google-generative-ai", baseUrl: "https://opencode.ai/zen/v1" };
-			return { api: "openai-completions", baseUrl: "https://opencode.ai/zen/v1" };
-		},
+		resolveApi: (modelId, raw) =>
+			resolveApiByRules(modelId, raw, OPENCODE_API_RESOLUTION_RULES, OPENCODE_DEFAULT_RESOLUTION),
 	},
 	// --- GitHub Copilot ---
 	{
 		modelsDevKey: "github-copilot",
 		providerId: "github-copilot",
 		api: "openai-completions",
-		baseUrl: "https://api.individual.githubcopilot.com",
+		baseUrl: COPILOT_BASE_URL,
 		defaultContextWindow: 128000,
 		defaultMaxTokens: 8192,
 		headers: { ...COPILOT_HEADERS },
@@ -1900,14 +1665,8 @@ export const MODELS_DEV_PROVIDER_DESCRIPTORS: readonly ModelsDevProviderDescript
 			if (m.status === "deprecated") return false;
 			return true;
 		},
-		resolveApi: modelId => {
-			const isClaude4 = /^claude-(haiku|sonnet|opus)-4([.-]|$)/.test(modelId);
-			const needsResponses = modelId.startsWith("gpt-5") || modelId.startsWith("oswe");
-			const baseUrl = "https://api.individual.githubcopilot.com";
-			if (isClaude4) return { api: "anthropic-messages", baseUrl };
-			if (needsResponses) return { api: "openai-responses", baseUrl };
-			return { api: "openai-completions", baseUrl };
-		},
+		resolveApi: (modelId, raw) =>
+			resolveApiByRules(modelId, raw, COPILOT_API_RESOLUTION_RULES, COPILOT_DEFAULT_RESOLUTION),
 		transformModel: model => {
 			// compat only applies to openai-completions models
 			if (model.api === "openai-completions") {
@@ -1945,4 +1704,11 @@ export const MODELS_DEV_PROVIDER_DESCRIPTORS: readonly ModelsDevProviderDescript
 		defaultContextWindow: 128000,
 		defaultMaxTokens: 8192,
 	},
+];
+/** All provider descriptors for models.dev data mapping in generate-models.ts. */
+export const MODELS_DEV_PROVIDER_DESCRIPTORS: readonly ModelsDevProviderDescriptor[] = [
+	...MODELS_DEV_PROVIDER_DESCRIPTORS_BEDROCK,
+	...MODELS_DEV_PROVIDER_DESCRIPTORS_CORE,
+	...MODELS_DEV_PROVIDER_DESCRIPTORS_CODING_PLANS,
+	...MODELS_DEV_PROVIDER_DESCRIPTORS_SPECIALIZED,
 ];
