@@ -810,7 +810,7 @@ export class ModelRegistry {
 	async #discoverWithModelManager(options: ModelManagerOptions<Api>): Promise<Model<Api>[]> {
 		try {
 			const manager = createModelManager(options);
-			const result = await manager.refresh("online");
+			const result = await manager.refresh();
 			return result.models;
 		} catch (error) {
 			logger.warn("model discovery failed for provider", {

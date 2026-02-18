@@ -38,6 +38,14 @@ function defaultConvertToLlm(messages: AgentMessage[]): Message[] {
 	return messages.filter(m => m.role === "user" || m.role === "assistant" || m.role === "toolResult");
 }
 
+export class AgentBusyError extends Error {
+	constructor(
+		message: string = "Agent is already processing. Use steer() or followUp() to queue messages, or wait for completion.",
+	) {
+		super(message);
+		this.name = "AgentBusyError";
+	}
+}
 export interface AgentOptions {
 	initialState?: Partial<AgentState>;
 
@@ -491,9 +499,7 @@ export class Agent {
 		options?: AgentPromptOptions,
 	) {
 		if (this.#state.isStreaming) {
-			throw new Error(
-				"Agent is already processing a prompt. Use steer() or followUp() to queue messages, or wait for completion.",
-			);
+			throw new AgentBusyError();
 		}
 
 		const model = this.#state.model;
@@ -537,7 +543,7 @@ export class Agent {
 	 */
 	async continue() {
 		if (this.#state.isStreaming) {
-			throw new Error("Agent is already processing. Wait for completion before continuing.");
+			throw new AgentBusyError();
 		}
 
 		const messages = this.#state.messages;

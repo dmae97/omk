@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Replaced generic error with AgentBusyError when attempting to send messages while agent is processing
+- Added automatic retry logic with idle waiting when agent is busy during prompt operations, with 30-second timeout
+
+### Fixed
+
+- Fixed model discovery to use default refresh mode instead of explicit 'online' parameter
 
 ## [12.10.1] - 2026-02-18
 

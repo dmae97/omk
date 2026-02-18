@@ -16,7 +16,15 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import type { Agent, AgentEvent, AgentMessage, AgentState, AgentTool, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import {
+	type Agent,
+	AgentBusyError,
+	type AgentEvent,
+	type AgentMessage,
+	type AgentState,
+	type AgentTool,
+	type ThinkingLevel,
+} from "@oh-my-pi/pi-agent-core";
 import type {
 	AssistantMessage,
 	ImageContent,
@@ -1607,9 +1615,7 @@ export class AgentSession {
 		// If streaming, queue via steer() or followUp() based on option
 		if (this.isStreaming) {
 			if (!options?.streamingBehavior) {
-				throw new Error(
-					"Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.",
-				);
+				throw new AgentBusyError();
 			}
 			if (options.streamingBehavior === "followUp") {
 				await this.#queueFollowUp(expandedText, options?.images);
@@ -1650,7 +1656,7 @@ export class AgentSession {
 
 		if (this.isStreaming) {
 			if (!options?.streamingBehavior) {
-				throw new Error(
+				throw new AgentBusyError(
 					"Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.",
 				);
 			}
@@ -1777,7 +1783,7 @@ export class AgentSession {
 			}
 
 			const agentPromptOptions = options?.toolChoice ? { toolChoice: options.toolChoice } : undefined;
-			await this.agent.prompt(messages, agentPromptOptions);
+			await this.#promptAgentWithIdleRetry(messages, agentPromptOptions);
 			await this.#waitForRetry();
 		} finally {
 			this.#promptInFlight = false;
@@ -3690,6 +3696,24 @@ Be thorough - include exact file paths, function names, error messages, and tech
 	async #waitForRetry(): Promise<void> {
 		if (this.#retryPromise) {
 			await this.#retryPromise;
+		}
+	}
+
+	async #promptAgentWithIdleRetry(messages: AgentMessage[], options?: { toolChoice?: ToolChoice }): Promise<void> {
+		const deadline = Date.now() + 30_000;
+		for (;;) {
+			try {
+				await this.agent.prompt(messages, options);
+				return;
+			} catch (err) {
+				if (!(err instanceof AgentBusyError)) {
+					throw err;
+				}
+				if (Date.now() >= deadline) {
+					throw new Error("Timed out waiting for prior agent run to finish before prompting.");
+				}
+				await this.agent.waitForIdle();
+			}
 		}
 	}
 
