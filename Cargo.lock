@@ -1215,9 +1215,9 @@ dependencies = [
 
 [[package]]
 name = "html-to-markdown-rs"
-version = "2.25.0"
+version = "2.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb31d75f2fdbc8d889d78a912e10c22c30451afb44ee3310f5bfcabf79a31a17"
+checksum = "c05335c6bf406653110ad8447c84461c6d0cda5e0aff9d3d3518f87502d30abe"
 dependencies = [
  "ahash",
  "astral-tl",
@@ -2058,7 +2058,7 @@ dependencies = [
 
 [[package]]
 name = "pi-natives"
-version = "12.9.0"
+version = "12.10.0"
 dependencies = [
  "arboard",
  "brush-builtins",

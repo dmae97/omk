@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.10.0] - 2026-02-18
+
 ### Breaking Changes
 
 - Changed keyless provider auth sentinel from `"<no-auth>"` to `kNoAuth` (`"N/A"`) for `ModelRegistry.getApiKey()` and `ModelRegistry.getApiKeyForProvider()`

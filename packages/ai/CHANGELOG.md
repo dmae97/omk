@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.10.0] - 2026-02-18
+
 ### Breaking Changes
 
 - Renamed public API functions: `getModel()` → `getBundledModel()`, `getModels()` → `getBundledModels()`, `getProviders()` → `getBundledProviders()`
