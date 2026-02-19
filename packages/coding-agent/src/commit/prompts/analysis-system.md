@@ -76,7 +76,6 @@ Call create_conventional_analysis with:
 }
 </output_format>
 
-<examples>
 <example name="feature-with-api">
 {
   "type": "feat",
@@ -147,4 +146,3 @@ Call create_conventional_analysis with:
   "issue_refs": []
 }
 </example>
-</examples>

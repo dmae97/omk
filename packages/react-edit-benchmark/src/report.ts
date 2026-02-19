@@ -158,13 +158,13 @@ export function generateReport(result: BenchmarkResult): string {
 	lines.push("");
 
 	if (summary.hashlineEditSubtypes) {
-		const total = Object.values(summary.hashlineEditSubtypes).reduce((a, b) => a + b, 0);
+		const order = ["set", "set_range", "insert"] as const;
+		const total = order.reduce((sum, key) => sum + (summary.hashlineEditSubtypes?.[key] ?? 0), 0);
 		if (total > 0) {
 			lines.push("### Hashline Edit Subtypes");
 			lines.push("");
 			lines.push("| Operation | Count | % |");
 			lines.push("|-----------|-------|---|");
-			const order = ["set_line", "replace_lines", "insert_after", "replace"];
 			for (const key of order) {
 				const count = summary.hashlineEditSubtypes[key] ?? 0;
 				const pct = formatPercent(count / total);

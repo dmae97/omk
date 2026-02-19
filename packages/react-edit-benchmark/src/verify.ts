@@ -148,8 +148,11 @@ export async function verifyExpectedFileSubset(
 				expectedNormalized,
 				actualNormalized,
 			);
-			const expectedFormatted = await formatContent(expectedPath, expectedNormalized);
-			const actualFormatted = await formatContent(actualPath, actualNormalizedWithPreservedWhitespace);
+			const expectedFormatted = await formatContent(expectedPath, normalizeBlankLines(expectedNormalized));
+			const actualFormatted = await formatContent(
+				actualPath,
+				normalizeBlankLines(actualNormalizedWithPreservedWhitespace),
+			);
 			const formattedEquivalent = expectedFormatted.formatted === actualFormatted.formatted;
 
 			// Indent score: distance between agent's raw output and formatted output
@@ -249,6 +252,11 @@ function computeIndentDistanceForDiff(expected: string, actual: string): number 
 
 function normalizeLineEndings(value: string): string {
 	return value.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+/** Collapse runs of 2+ blank lines into a single blank line. */
+function normalizeBlankLines(text: string): string {
+	return text.replace(/\n{3,}/g, "\n\n");
 }
 
 function restoreWhitespaceOnlyLineDiffs(expected: string, actual: string): string {

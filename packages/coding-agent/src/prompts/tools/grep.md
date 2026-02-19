@@ -11,14 +11,18 @@ Powerful search tool built on ripgrep.
 </instruction>
 
 <output>
-Results are always content mode. {{#if IS_HASHLINE_MODE}}Lines are hashline-prefixed as `LINE:HASH|content`.{{else}}{{#if IS_LINE_NUMBER_MODE}}Lines are line-number-prefixed.{{else}}Lines are plain text (no prefixes).{{/if}}{{/if}}
-Truncated at 100 matches by default (configurable via `limit`).
+- Results are always content mode.
+{{#if IS_HASHLINE_MODE}}
+- Text output is CID prefixed: `LINE#ID|content`
+{{else}}
+{{#if IS_LINE_NUMBER_MODE}}
+- Text output is line-number-prefixed
+{{/if}}
+{{/if}}
 </output>
 
 <critical>
-- ALWAYS use Grep for search tasks—NEVER invoke `grep` or `rg` via Bash. Has correct permissions and access.
+- ALWAYS use Grep when searching for content.
+- NEVER invoke `grep` or `rg` via Bash.
+- If the search is open-ended, requiring multiple rounds, use Task tool with explore subagent instead
 </critical>
-
-<avoid>
-- Open-ended searches requiring multiple rounds—use Task tool with explore subagent instead
-</avoid>

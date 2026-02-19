@@ -772,7 +772,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 			const prependHashLines = (text: string, startNum: number): string => {
 				const textLines = text.split("\n");
 				return textLines
-					.map((line, i) => `${startNum + i}:${computeLineHash(startNum + i, line)}|${line}`)
+					.map((line, i) => `${startNum + i}#${computeLineHash(startNum + i, line)}|${line}`)
 					.join("\n");
 			};
 			const formatText = (text: string, startNum: number): string => {
@@ -929,7 +929,7 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 		};
 		const prependHashLines = (text: string, startNum: number): string => {
 			const textLines = text.split("\n");
-			return textLines.map((line, i) => `${startNum + i}:${computeLineHash(startNum + i, line)}|${line}`).join("\n");
+			return textLines.map((line, i) => `${startNum + i}#${computeLineHash(startNum + i, line)}|${line}`).join("\n");
 		};
 		const formatText = (text: string, startNum: number): string => {
 			if (shouldAddHashLines) return prependHashLines(text, startNum);

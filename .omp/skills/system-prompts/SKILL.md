@@ -379,7 +379,6 @@ Output final answer after ####.
 When using: 3-5 diverse examples covering edge cases.
 
 ```xml
-<examples>
 <example name="simple">
 Input: X
 Output: Y
@@ -389,7 +388,6 @@ Output: Y
 Input: X'
 Output: Y'
 </example>
-</examples>
 ```
 
 ### Long Context Handling

@@ -86,9 +86,9 @@ interface EditRenderArgs {
 }
 
 type HashlineEditPreview =
-	| { set_line: { anchor: string; new_text: string } }
-	| { replace_lines: { start_anchor: string; end_anchor: string; new_text: string } }
-	| { insert_after: { anchor: string; text: string } }
+	| { set: { ref: string; body: string[] } }
+	| { set_range: { beg: string; end: string; body: string[] } }
+	| { insert: { before?: string; after?: string; body: string[] } }
 	| { replace: { old_text: string; new_text: string; all?: boolean } };
 
 /** Extended context for edit tool rendering */
@@ -168,20 +168,28 @@ function formatStreamingHashlineEdits(edits: unknown[], uiTheme: Theme, ui: Tool
 				dst: "",
 			};
 		}
-		if ("set_line" in editRecord) {
-			const setLine = asRecord(editRecord.set_line);
+		if ("set" in editRecord) {
+			const setLine = asRecord(editRecord.set);
 			return {
-				srcLabel: `• set_line ${typeof setLine?.anchor === "string" ? setLine.anchor : "…"}`,
-				dst: typeof setLine?.new_text === "string" ? setLine.new_text : "",
+				srcLabel: `• set ${typeof setLine?.ref === "string" ? setLine.ref : "…"}`,
+				dst: Array.isArray(setLine?.body)
+					? (setLine.body as string[]).join("\n")
+					: typeof setLine?.body === "string"
+						? setLine.body
+						: "",
 			};
 		}
-		if ("replace_lines" in editRecord) {
-			const replaceLines = asRecord(editRecord.replace_lines);
-			const start = typeof replaceLines?.start_anchor === "string" ? replaceLines.start_anchor : "…";
-			const end = typeof replaceLines?.end_anchor === "string" ? replaceLines.end_anchor : "…";
+		if ("set_range" in editRecord) {
+			const setRange = asRecord(editRecord.set_range);
+			const start = typeof setRange?.beg === "string" ? setRange.beg : "…";
+			const end = typeof setRange?.end === "string" ? setRange.end : "…";
 			return {
-				srcLabel: `• replace_lines ${start}..${end}`,
-				dst: typeof replaceLines?.new_text === "string" ? replaceLines.new_text : "",
+				srcLabel: `• set_range ${start}..${end}`,
+				dst: Array.isArray(setRange?.body)
+					? (setRange.body as string[]).join("\n")
+					: typeof setRange?.body === "string"
+						? setRange.body
+						: "",
 			};
 		}
 		if ("replace" in editRecord) {
@@ -192,17 +200,23 @@ function formatStreamingHashlineEdits(edits: unknown[], uiTheme: Theme, ui: Tool
 				dst: typeof replace?.new_text === "string" ? replace.new_text : "",
 			};
 		}
-		if ("insert_after" in editRecord) {
-			const insertAfter = asRecord(editRecord.insert_after);
-			const anchor = typeof insertAfter?.anchor === "string" ? insertAfter.anchor : "…";
-			const text =
-				typeof insertAfter?.text === "string"
-					? insertAfter.text
-					: typeof insertAfter?.content === "string"
-						? insertAfter.content
-						: "";
+		if ("insert" in editRecord) {
+			const insertOp = asRecord(editRecord.insert);
+			const after = typeof insertOp?.after === "string" ? insertOp.after : undefined;
+			const before = typeof insertOp?.before === "string" ? insertOp.before : undefined;
+			const body = insertOp?.body;
+			const text = Array.isArray(body)
+				? (body as string[]).join("\n")
+				: typeof body === "string"
+					? body
+					: typeof insertOp?.text === "string"
+						? insertOp.text
+						: typeof insertOp?.content === "string"
+							? (insertOp.content as string)
+							: "";
+			const refs = [after, before].filter(Boolean).join("..") || "…";
 			return {
-				srcLabel: `• insert_after ${anchor}..`,
+				srcLabel: `• insert ${refs}`,
 				dst: text,
 			};
 		}

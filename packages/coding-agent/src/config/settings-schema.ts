@@ -287,7 +287,7 @@ export const SETTINGS_SCHEMA = {
 		ui: {
 			tab: "config",
 			label: "Read hash lines",
-			description: "Include line hashes in read output for hashline edit mode (LINE:HASH|content)",
+			description: "Include line hashes in read output for hashline edit mode (LINE#ID|content)",
 		},
 	},
 	showHardwareCursor: {

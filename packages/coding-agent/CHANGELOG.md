@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Removed automatic line relocation when hash references become stale; edits with mismatched line hashes now fail with an error instead of silently relocating to matching lines elsewhere in the file
@@ -17,11 +16,18 @@
 
 ### Changed
 
+- Updated hashline reference format from `LINE:HASH` to `LINE#ID` throughout the codebase for improved clarity
+- Renamed hashline edit operations: `set_line` → `set`, `replace_lines` → `set_range`, `insert_after` → `insert` with support for `before` and `between` anchors
+- Changed hashline edit `body` field from string to array of strings for clearer multiline handling
+- Updated handlebars helpers: renamed `hashline` to `hlineref` and added `hlinefull` for formatted line output
+- Improved insert operation to support `before`, `after`, and `between` (both anchors) positioning modes
+- Made autocorrect heuristics (boundary echo stripping, indent restoration) conditional on `PI_HL_AUTOCORRECT` environment variable
 - Updated SSH host discovery to load from managed omp config paths (.omp/ssh.json and ~/.omp/agent/ssh.json) in addition to legacy root-level ssh.json and .ssh.json files
 - Improved terminal output handling in interactive bash sessions to ensure all queued writes complete before returning results
 
 ### Fixed
 
+- Fixed insert-between operation to properly validate adjacent anchor lines and strip boundary echoes from both sides
 - Fixed terminal output handling to properly queue and serialize writes, preventing dropped or corrupted output in interactive bash sessions
 
 ## [12.12.1] - 2026-02-19

@@ -129,35 +129,38 @@ const patchEditSchema = Type.Object({
 export type ReplaceParams = Static<typeof replaceEditSchema>;
 export type PatchParams = Static<typeof patchEditSchema>;
 
-const hashlineSingleSchema = Type.Object(
+const hashlineSetSchema = Type.Object(
 	{
-		set_line: Type.Object({
-			anchor: Type.String({ description: 'Line reference "LINE:HASH"' }),
-			new_text: Type.String({ description: 'Replacement content (\\n-separated) — "" for delete' }),
+		set: Type.Object({
+			ref: Type.String({ description: 'Line reference "LINE#ID"' }),
+			body: Type.Array(Type.String(), { description: "Replacement lines (empty array to delete)" }),
 		}),
 	},
 	{ additionalProperties: true },
 );
 
-const hashlineRangeSchema = Type.Object(
+const hashlineSetRangeSchema = Type.Object(
 	{
-		replace_lines: Type.Object({
-			start_anchor: Type.String({ description: 'Start line ref "LINE:HASH"' }),
-			end_anchor: Type.String({ description: 'End line ref "LINE:HASH"' }),
-			new_text: Type.String({ description: 'Replacement content (\\n-separated) — "" for delete' }),
+		set_range: Type.Object({
+			beg: Type.String({ description: 'Start line ref "LINE#ID"' }),
+			end: Type.String({ description: 'End line ref "LINE#ID"' }),
+			body: Type.Array(Type.String(), { description: "Replacement lines (empty array to delete)" }),
 		}),
 	},
 	{ additionalProperties: true },
 );
-const hashlineInsertAfterSchema = Type.Object(
-	{
-		insert_after: Type.Object({
-			anchor: Type.String({ description: 'Insert after this line "LINE:HASH"' }),
-			text: Type.String({ description: "Content to insert (\\n-separated); must be non-empty" }),
-		}),
-	},
-	{ additionalProperties: true },
-);
+const hashlineInsertSchema = Type.Union([
+	Type.Object(
+		{
+			insert: Type.Object({
+				before: Type.Optional(Type.String({ minLength: 1, description: 'Insert before this line "LINE#ID"' })),
+				after: Type.Optional(Type.String({ minLength: 1, description: 'Insert after this line "LINE#ID"' })),
+				body: Type.Array(Type.String(), { description: "Lines to insert; must be non-empty" }),
+			}),
+		},
+		{ additionalProperties: true },
+	),
+]);
 const hashlineReplaceSchema = Type.Object(
 	{
 		replace: Type.Object({
@@ -169,9 +172,9 @@ const hashlineReplaceSchema = Type.Object(
 	{ additionalProperties: true },
 );
 const hashlineEditItemSchema = Type.Union([
-	hashlineSingleSchema,
-	hashlineRangeSchema,
-	hashlineInsertAfterSchema,
+	hashlineSetSchema,
+	hashlineSetRangeSchema,
+	hashlineInsertSchema,
 	hashlineReplaceSchema,
 ]);
 const hashlineEditSchema = Type.Object(
@@ -426,30 +429,23 @@ export class EditTool implements AgentTool<TInput> {
 				if (("old_text" in edit || "new_text" in edit) && !("replace" in edit)) {
 					throw new Error(
 						`edits[${i}] contains 'old_text'/'new_text' at top level (replace mode). ` +
-							`Use {replace: {old_text, new_text}} for hashline content replace, or {set_line}, {replace_lines}, {insert_after}.`,
+							`Use {replace: {old_text, new_text}} for hashline content replace, or {set}, {set_range}, {insert}.`,
 					);
 				}
 				if ("diff" in edit) {
 					throw new Error(
 						`edits[${i}] contains 'diff' field from patch mode. ` +
-							`Hashline edits use: {set_line}, {replace_lines}, {insert_after}, or {replace}.`,
+							`Hashline edits use: {set}, {set_range}, {insert}, or {replace}.`,
 					);
 				}
-				if (
-					!("set_line" in edit) &&
-					!("replace_lines" in edit) &&
-					!("insert_after" in edit) &&
-					!("replace" in edit)
-				) {
+				if (!("set" in edit) && !("set_range" in edit) && !("insert" in edit) && !("replace" in edit)) {
 					throw new Error(
-						`edits[${i}] must contain exactly one of: 'set_line', 'replace_lines', 'insert_after', or 'replace'. Got keys: [${Object.keys(edit).join(", ")}].`,
+						`edits[${i}] must contain exactly one of: 'set', 'set_range', 'insert', or 'replace'. Got keys: [${Object.keys(edit).join(", ")}].`,
 					);
 				}
 			}
 
-			const anchorEdits = edits.filter(
-				(e): e is HashlineEdit => "set_line" in e || "replace_lines" in e || "insert_after" in e,
-			);
+			const anchorEdits = edits.filter((e): e is HashlineEdit => "set" in e || "set_range" in e || "insert" in e);
 			const replaceEdits = edits.filter(
 				(e): e is { replace: { old_text: string; new_text: string; all?: boolean } } => "replace" in e,
 			);
@@ -467,7 +463,7 @@ export class EditTool implements AgentTool<TInput> {
 			const originalNormalized = normalizeToLF(content);
 			let normalizedContent = originalNormalized;
 
-			// Apply anchor-based edits first (set_line, replace_lines, insert_after)
+			// Apply anchor-based edits first (set, set_range, insert)
 			const anchorResult = applyHashlineEdits(normalizedContent, anchorEdits);
 			normalizedContent = anchorResult.content;
 
@@ -508,17 +504,19 @@ export class EditTool implements AgentTool<TInput> {
 					const targetLines: string[] = [];
 					for (const edit of edits) {
 						const refs: string[] = [];
-						if ("set_line" in edit) refs.push(edit.set_line.anchor);
-						else if ("replace_lines" in edit)
-							refs.push(edit.replace_lines.start_anchor, edit.replace_lines.end_anchor);
-						else if ("insert_after" in edit) refs.push(edit.insert_after.anchor);
+						if ("set" in edit) refs.push(edit.set.ref);
+						else if ("set_range" in edit) refs.push(edit.set_range.beg, edit.set_range.end);
+						else if ("insert" in edit) {
+							if (edit.insert.after) refs.push(edit.insert.after);
+							if (edit.insert.before) refs.push(edit.insert.before);
+						}
 						for (const ref of refs) {
 							try {
 								const parsed = parseLineRef(ref);
 								if (parsed.line >= 1 && parsed.line <= lines.length) {
 									const lineContent = lines[parsed.line - 1];
 									const hash = computeLineHash(parsed.line, lineContent);
-									targetLines.push(`${parsed.line}:${hash}|${lineContent}`);
+									targetLines.push(`${parsed.line}#${hash}|${lineContent}`);
 								}
 							} catch {
 								/* skip malformed refs */

@@ -4,12 +4,12 @@
  * Each line in a file is identified by its 1-indexed line number and a short
  * base36 hash derived from the normalized line content (xxHash32, truncated to 4
  * base36 chars).
- * The combined `LINE:HASH` reference acts as both an address and a staleness check:
+ * The combined `LINE#ID` reference acts as both an address and a staleness check:
  * if the file has changed since the caller last read it, hash mismatches are caught
  * before any mutation occurs.
  *
- * Displayed format: `LINENUM:HASH|CONTENT`
- * Reference format: `"LINENUM:HASH"` (e.g. `"5:a3f2"`)
+ * Displayed format: `LINENUM#HASH|CONTENT`
+ * Reference format: `"LINENUM#HASH"` (e.g. `"5#a3f2"`)
  */
 
 import type { HashlineEdit } from "./index";
@@ -18,45 +18,84 @@ import type { HashMismatch } from "./types";
 type ParsedRefs =
 	| { kind: "single"; ref: { line: number; hash: string } }
 	| { kind: "range"; start: { line: number; hash: string }; end: { line: number; hash: string } }
-	| { kind: "insertAfter"; after: { line: number; hash: string } };
+	| { kind: "insertAfter"; after: { line: number; hash: string } }
+	| { kind: "insertBefore"; before: { line: number; hash: string } }
+	| { kind: "insertBetween"; after: { line: number; hash: string }; before: { line: number; hash: string } }
+	| { kind: "insertAtEof" };
 
-function parseHashlineEdit(edit: HashlineEdit): { spec: ParsedRefs; dst: string } {
-	if ("set_line" in edit) {
+function parseHashlineEdit(edit: HashlineEdit): { spec: ParsedRefs; dstLines: string[] } {
+	if ("set" in edit) {
 		return {
-			spec: { kind: "single", ref: parseLineRef(edit.set_line.anchor) },
-			dst: edit.set_line.new_text,
+			spec: { kind: "single", ref: parseLineRef(edit.set.ref) },
+			dstLines: edit.set.body,
 		};
 	}
-	if ("replace_lines" in edit) {
-		const r = edit.replace_lines as Record<string, string>;
-		const start = parseLineRef(r.start_anchor);
-		if (!r.end_anchor) {
+	if ("set_range" in edit) {
+		const r = edit.set_range as Record<string, unknown>;
+		const start = parseLineRef(r.beg as string);
+		if (!r.end) {
 			return {
 				spec: { kind: "single", ref: start },
-				dst: r.new_text ?? "",
+				dstLines: Array.isArray(r.body) ? (r.body as string[]) : splitDstLines(String(r.body ?? "")),
 			};
 		}
-		const end = parseLineRef(r.end_anchor);
+		const end = parseLineRef(r.end as string);
 		return {
 			spec: start.line === end.line ? { kind: "single", ref: start } : { kind: "range", start, end },
-			dst: r.new_text ?? "",
+			dstLines: Array.isArray(r.body) ? (r.body as string[]) : splitDstLines(String(r.body ?? "")),
 		};
+	}
+	if ("insert" in edit) {
+		const r = edit.insert as Record<string, unknown>;
+		const dstLines = Array.isArray(r.body) ? (r.body as string[]) : splitDstLines(String(r.text ?? r.content ?? ""));
+		const hasAfterField = "after" in r;
+		const hasBeforeField = "before" in r;
+		const afterRef = r.after;
+		const beforeRef = r.before;
+		if (hasAfterField && (typeof afterRef !== "string" || afterRef.trim().length === 0)) {
+			throw new Error('insert.after must be a non-empty "LINE#ID" string when provided');
+		}
+		if (hasBeforeField && (typeof beforeRef !== "string" || beforeRef.trim().length === 0)) {
+			throw new Error('insert.before must be a non-empty "LINE#ID" string when provided');
+		}
+		const hasAfter = hasAfterField && typeof afterRef === "string";
+		const hasBefore = hasBeforeField && typeof beforeRef === "string";
+		if (hasAfter && hasBefore) {
+			return {
+				spec: {
+					kind: "insertBetween",
+					after: parseLineRef(afterRef),
+					before: parseLineRef(beforeRef),
+				},
+				dstLines,
+			};
+		}
+		if (hasAfter) {
+			return {
+				spec: { kind: "insertAfter", after: parseLineRef(afterRef) },
+				dstLines,
+			};
+		}
+		if (hasBefore) {
+			return {
+				spec: { kind: "insertBefore", before: parseLineRef(beforeRef) },
+				dstLines,
+			};
+		}
+		return { spec: { kind: "insertAtEof" }, dstLines };
 	}
 	if ("replace" in edit) {
 		throw new Error("replace edits are applied separately; do not pass them to applyHashlineEdits");
 	}
-	return {
-		spec: { kind: "insertAfter", after: parseLineRef(edit.insert_after.anchor) },
-		dst: edit.insert_after.text ?? (edit.insert_after as Record<string, string>).content ?? "",
-	};
+	throw new Error("Unknown hashline edit operation");
 }
 /** Split dst into lines; empty string means delete (no lines). */
 function splitDstLines(dst: string): string[] {
 	return dst === "" ? [] : dst.split("\n");
 }
 
-/** Pattern matching hashline display format: `LINE:HASH|CONTENT` */
-const HASHLINE_PREFIX_RE = /^\s*(?:>>>|>>)?\s*\d+:[0-9a-zA-Z]{1,16}\|/;
+/** Pattern matching hashline display format: `LINE#ID|CONTENT` */
+const HASHLINE_PREFIX_RE = /^\s*(?:>>>|>>)?\s*\d+#[0-9a-zA-Z]{1,16}\|/;
 
 /** Pattern matching a unified-diff `+` prefix (but not `++`) */
 const DIFF_PLUS_RE = /^\+(?!\+)/;
@@ -179,6 +218,25 @@ function stripInsertAnchorEchoAfter(anchorLine: string, dstLines: string[]): str
 	return dstLines;
 }
 
+function stripInsertAnchorEchoBefore(anchorLine: string, dstLines: string[]): string[] {
+	if (dstLines.length <= 1) return dstLines;
+	if (equalsIgnoringWhitespace(dstLines[dstLines.length - 1], anchorLine)) {
+		return dstLines.slice(0, -1);
+	}
+	return dstLines;
+}
+
+function stripInsertBoundaryEcho(afterLine: string, beforeLine: string, dstLines: string[]): string[] {
+	let out = dstLines;
+	if (out.length > 1 && equalsIgnoringWhitespace(out[0], afterLine)) {
+		out = out.slice(1);
+	}
+	if (out.length > 1 && equalsIgnoringWhitespace(out[out.length - 1], beforeLine)) {
+		out = out.slice(0, -1);
+	}
+	return out;
+}
+
 function stripRangeBoundaryEcho(fileLines: string[], startLine: number, endLine: number, dstLines: string[]): string[] {
 	// Only strip when the model replaced with multiple lines and grew the edit.
 	// This avoids turning a single-line replacement into a deletion.
@@ -206,7 +264,7 @@ function stripRangeBoundaryEcho(fileLines: string[], startLine: number, endLine:
 /**
  * Strip hashline display prefixes and diff `+` markers from replacement lines.
  *
- * Models frequently copy the `LINE:HASH  ` prefix from read output into their
+ * Models frequently copy the `LINE#ID  ` prefix from read output into their
  * replacement content, or include unified-diff `+` prefixes. Both corrupt the
  * output file. This strips them heuristically before application.
  */
@@ -262,7 +320,7 @@ export function computeLineHash(idx: number, line: string): string {
 /**
  * Format file content with hashline prefixes for display.
  *
- * Each line becomes `LINENUM:HASH|CONTENT` where LINENUM is 1-indexed.
+ * Each line becomes `LINENUM#HASH|CONTENT` where LINENUM is 1-indexed.
  *
  * @param content - Raw file content string
  * @param startLine - First line number (1-indexed, defaults to 1)
@@ -271,7 +329,7 @@ export function computeLineHash(idx: number, line: string): string {
  * @example
  * ```
  * formatHashLines("function hi() {\n  return;\n}")
- * // "1:HH|function hi() {\n2:HH|  return;\n3:HH|}"
+ * // "1#HH|function hi() {\n2#HH|  return;\n3#HH|}"
  * ```
  */
 export function formatHashLines(content: string, startLine = 1): string {
@@ -280,7 +338,7 @@ export function formatHashLines(content: string, startLine = 1): string {
 		.map((line, i) => {
 			const num = startLine + i;
 			const hash = computeLineHash(num, line);
-			return `${num}:${hash}|${line}`;
+			return `${num}#${hash}|${line}`;
 		})
 		.join("\n");
 }
@@ -352,7 +410,7 @@ export async function* streamHashLinesFromUtf8(
 	};
 
 	const pushLine = (line: string): string[] => {
-		const formatted = `${lineNum}:${computeLineHash(lineNum, line)}|${line}`;
+		const formatted = `${lineNum}#${computeLineHash(lineNum, line)}|${line}`;
 		lineNum++;
 
 		const chunksToYield: string[] = [];
@@ -446,7 +504,7 @@ export async function* streamHashLinesFromLines(
 
 	const pushLine = (line: string): string[] => {
 		sawAnyLine = true;
-		const formatted = `${lineNum}:${computeLineHash(lineNum, line)}|${line}`;
+		const formatted = `${lineNum}#${computeLineHash(lineNum, line)}|${line}`;
 		lineNum++;
 
 		const chunksToYield: string[] = [];
@@ -498,24 +556,24 @@ export async function* streamHashLinesFromLines(
 }
 
 /**
- * Parse a line reference string like `"5:abcd"` into structured form.
+ * Parse a line reference string like `"5#abcd"` into structured form.
  *
- * @throws Error if the format is invalid (not `NUMBER:HEXHASH`)
+ * @throws Error if the format is invalid (not `NUMBER#HEXHASH`)
  */
 export function parseLineRef(ref: string): { line: number; hash: string } {
-	// Strip display-format suffix: "5:ab|some content" → "5:ab", or legacy "5:ab  some content" → "5:ab"
+	// Strip display-format suffix: "5#ab|some content" → "5#ab", or legacy "5#ab  some content" → "5#ab"
 	// Models often copy the full display format from read output.
 	const cleaned = ref
 		.replace(/\|.*$/, "")
 		.replace(/ {2}.*$/, "")
 		.replace(/^>+\s*/, "")
 		.trim();
-	const normalized = cleaned.replace(/\s*:\s*/, ":");
-	const strictMatch = normalized.match(/^(\d+):([0-9a-zA-Z]{1,16})$/);
-	const prefixMatch = strictMatch ? null : normalized.match(new RegExp(`^(\\d+):([0-9a-zA-Z]{${HASH_LEN}})`));
+	const normalized = cleaned.replace(/\s*#\s*/, "#");
+	const strictMatch = normalized.match(/^(\d+)#([0-9a-zA-Z]{1,16})$/);
+	const prefixMatch = strictMatch ? null : normalized.match(new RegExp(`^(\\d+)#([0-9a-zA-Z]{${HASH_LEN}})`));
 	const match = strictMatch ?? prefixMatch;
 	if (!match) {
-		throw new Error(`Invalid line reference "${ref}". Expected format "LINE:HASH" (e.g. "5:aa").`);
+		throw new Error(`Invalid line reference "${ref}". Expected format "LINE#ID" (e.g. "5#aa").`);
 	}
 	const line = Number.parseInt(match[1], 10);
 	if (line < 1) {
@@ -535,7 +593,7 @@ const MISMATCH_CONTEXT = 2;
  * Error thrown when one or more hashline references have stale hashes.
  *
  * Displays grep-style output with `>>>` markers on mismatched lines,
- * showing the correct `LINE:HASH` so the caller can fix all refs at once.
+ * showing the correct `LINE#ID` so the caller can fix all refs at once.
  */
 export class HashlineMismatchError extends Error {
 	readonly remaps: ReadonlyMap<string, string>;
@@ -548,7 +606,7 @@ export class HashlineMismatchError extends Error {
 		const remaps = new Map<string, string>();
 		for (const m of mismatches) {
 			const actual = computeLineHash(m.line, fileLines[m.line - 1]);
-			remaps.set(`${m.line}:${m.expected}`, `${m.line}:${actual}`);
+			remaps.set(`${m.line}#${m.expected}`, `${m.line}#${actual}`);
 		}
 		this.remaps = remaps;
 	}
@@ -573,7 +631,7 @@ export class HashlineMismatchError extends Error {
 		const lines: string[] = [];
 
 		lines.push(
-			`${mismatches.length} line${mismatches.length > 1 ? "s have" : " has"} changed since last read. Use the updated LINE:HASH references shown below (>>> marks changed lines).`,
+			`${mismatches.length} line${mismatches.length > 1 ? "s have" : " has"} changed since last read. Use the updated LINE#ID references shown below (>>> marks changed lines).`,
 		);
 		lines.push("");
 
@@ -587,7 +645,7 @@ export class HashlineMismatchError extends Error {
 
 			const content = fileLines[lineNum - 1];
 			const hash = computeLineHash(lineNum, content);
-			const prefix = `${lineNum}:${hash}`;
+			const prefix = `${lineNum}#${hash}`;
 
 			if (mismatchSet.has(lineNum)) {
 				lines.push(`>>> ${prefix}|${content}`);
@@ -624,8 +682,8 @@ export function validateLineRef(ref: { line: number; hash: string }, fileLines: 
 /**
  * Apply an array of hashline edits to file content.
  *
- * Each edit operation identifies target lines directly (`set_line`, `replace_lines`,
- * `insert_after`). Line references are resolved via {@link parseLineRef}
+ * Each edit operation identifies target lines directly (`set`, `set_range`,
+ * `insert`). Line references are resolved via {@link parseLineRef}
  * and hashes validated before any mutation.
  *
  * Edits are sorted bottom-up (highest effective line first) so earlier
@@ -651,12 +709,14 @@ export function applyHashlineEdits(
 	let firstChangedLine: number | undefined;
 	const noopEdits: Array<{ editIndex: number; loc: string; currentContent: string }> = [];
 
+	const autocorrect = Bun.env.PI_HL_AUTOCORRECT === "1";
+
 	// Parse src specs and dst lines up front
 	const parsed = edits.map(edit => {
 		const parsedEdit = parseHashlineEdit(edit);
 		return {
 			spec: parsedEdit.spec,
-			dstLines: stripNewLinePrefixes(splitDstLines(parsedEdit.dst)),
+			dstLines: stripNewLinePrefixes(parsedEdit.dstLines),
 		};
 	});
 
@@ -672,6 +732,15 @@ export function applyHashlineEdits(
 					break;
 				case "insertAfter":
 					touched.add(spec.after.line);
+					break;
+				case "insertBefore":
+					touched.add(spec.before.line);
+					break;
+				case "insertBetween":
+					touched.add(spec.after.line);
+					touched.add(spec.before.line);
+					break;
+				case "insertAtEof":
 					break;
 			}
 		}
@@ -700,9 +769,36 @@ export function applyHashlineEdits(
 			}
 			case "insertAfter": {
 				if (dstLines.length === 0) {
-					throw new Error('Insert-after edit (src "N:HH..") requires non-empty dst');
+					throw new Error('Insert-after edit (src "N#HH..") requires non-empty dst');
 				}
 				if (!validateRef(spec.after)) continue;
+				break;
+			}
+			case "insertBefore": {
+				if (dstLines.length === 0) {
+					throw new Error('Insert-before edit (src "N#HH..") requires non-empty dst');
+				}
+				if (!validateRef(spec.before)) continue;
+				break;
+			}
+			case "insertBetween": {
+				if (dstLines.length === 0) {
+					throw new Error('Insert-between edit (src "A#HH.. B#HH..") requires non-empty dst');
+				}
+				if (spec.before.line !== spec.after.line + 1) {
+					throw new Error(
+						`insert requires adjacent anchors (after ${spec.after.line}, before ${spec.before.line})`,
+					);
+				}
+				const afterValid = validateRef(spec.after);
+				const beforeValid = validateRef(spec.before);
+				if (!afterValid || !beforeValid) continue;
+				break;
+			}
+			case "insertAtEof": {
+				if (dstLines.length === 0) {
+					throw new Error("Insert-at-EOF edit requires non-empty dst");
+				}
 				break;
 			}
 			case "range": {
@@ -736,6 +832,15 @@ export function applyHashlineEdits(
 			case "insertAfter":
 				lineKey = `i:${p.spec.after.line}`;
 				break;
+			case "insertBefore":
+				lineKey = `ib:${p.spec.before.line}`;
+				break;
+			case "insertBetween":
+				lineKey = `ix:${p.spec.after.line}:${p.spec.before.line}`;
+				break;
+			case "insertAtEof":
+				lineKey = "ieof";
+				break;
 		}
 		const dstKey = `${lineKey}|${p.dstLines.join("\n")}`;
 		if (seenEditKeys.has(dstKey)) {
@@ -767,6 +872,18 @@ export function applyHashlineEdits(
 				sortLine = p.spec.after.line;
 				precedence = 1;
 				break;
+			case "insertBefore":
+				sortLine = p.spec.before.line;
+				precedence = 2;
+				break;
+			case "insertBetween":
+				sortLine = p.spec.before.line;
+				precedence = 3;
+				break;
+			case "insertAtEof":
+				sortLine = fileLines.length + 1;
+				precedence = 4;
+				break;
 		}
 		return { ...p, idx, sortLine, precedence };
 	});
@@ -777,7 +894,7 @@ export function applyHashlineEdits(
 	for (const { spec, dstLines, idx } of annotated) {
 		switch (spec.kind) {
 			case "single": {
-				const merged = maybeExpandSingleLineMerge(spec.ref.line, dstLines);
+				const merged = autocorrect ? maybeExpandSingleLineMerge(spec.ref.line, dstLines) : null;
 				if (merged) {
 					const origLines = originalFileLines.slice(
 						merged.startLine - 1,
@@ -794,7 +911,7 @@ export function applyHashlineEdits(
 					if (origLines.join("\n") === nextLines.join("\n")) {
 						noopEdits.push({
 							editIndex: idx,
-							loc: `${spec.ref.line}:${spec.ref.hash}`,
+							loc: `${spec.ref.line}#${spec.ref.hash}`,
 							currentContent: origLines.join("\n"),
 						});
 						break;
@@ -806,16 +923,22 @@ export function applyHashlineEdits(
 
 				const count = 1;
 				const origLines = originalFileLines.slice(spec.ref.line - 1, spec.ref.line);
-				let stripped = stripRangeBoundaryEcho(originalFileLines, spec.ref.line, spec.ref.line, dstLines);
-				stripped = restoreOldWrappedLines(origLines, stripped);
-				let newLines = restoreIndentForPairedReplacement(origLines, stripped);
-				if (origLines.join("\n") === newLines.join("\n") && origLines.some(l => CONFUSABLE_HYPHENS_RE.test(l))) {
+				let stripped = autocorrect
+					? stripRangeBoundaryEcho(originalFileLines, spec.ref.line, spec.ref.line, dstLines)
+					: dstLines;
+				stripped = autocorrect ? restoreOldWrappedLines(origLines, stripped) : stripped;
+				let newLines = autocorrect ? restoreIndentForPairedReplacement(origLines, stripped) : stripped;
+				if (
+					autocorrect &&
+					origLines.join("\n") === newLines.join("\n") &&
+					origLines.some(l => CONFUSABLE_HYPHENS_RE.test(l))
+				) {
 					newLines = normalizeConfusableHyphensInLines(newLines);
 				}
 				if (origLines.join("\n") === newLines.join("\n")) {
 					noopEdits.push({
 						editIndex: idx,
-						loc: `${spec.ref.line}:${spec.ref.hash}`,
+						loc: `${spec.ref.line}#${spec.ref.hash}`,
 						currentContent: origLines.join("\n"),
 					});
 					break;
@@ -827,16 +950,22 @@ export function applyHashlineEdits(
 			case "range": {
 				const count = spec.end.line - spec.start.line + 1;
 				const origLines = originalFileLines.slice(spec.start.line - 1, spec.start.line - 1 + count);
-				let stripped = stripRangeBoundaryEcho(originalFileLines, spec.start.line, spec.end.line, dstLines);
-				stripped = restoreOldWrappedLines(origLines, stripped);
-				let newLines = restoreIndentForPairedReplacement(origLines, stripped);
-				if (origLines.join("\n") === newLines.join("\n") && origLines.some(l => CONFUSABLE_HYPHENS_RE.test(l))) {
+				let stripped = autocorrect
+					? stripRangeBoundaryEcho(originalFileLines, spec.start.line, spec.end.line, dstLines)
+					: dstLines;
+				stripped = autocorrect ? restoreOldWrappedLines(origLines, stripped) : stripped;
+				let newLines = autocorrect ? restoreIndentForPairedReplacement(origLines, stripped) : stripped;
+				if (
+					autocorrect &&
+					origLines.join("\n") === newLines.join("\n") &&
+					origLines.some(l => CONFUSABLE_HYPHENS_RE.test(l))
+				) {
 					newLines = normalizeConfusableHyphensInLines(newLines);
 				}
 				if (origLines.join("\n") === newLines.join("\n")) {
 					noopEdits.push({
 						editIndex: idx,
-						loc: `${spec.start.line}:${spec.start.hash}`,
+						loc: `${spec.start.line}#${spec.start.hash}`,
 						currentContent: origLines.join("\n"),
 					});
 					break;
@@ -847,11 +976,11 @@ export function applyHashlineEdits(
 			}
 			case "insertAfter": {
 				const anchorLine = originalFileLines[spec.after.line - 1];
-				const inserted = stripInsertAnchorEchoAfter(anchorLine, dstLines);
+				const inserted = autocorrect ? stripInsertAnchorEchoAfter(anchorLine, dstLines) : dstLines;
 				if (inserted.length === 0) {
 					noopEdits.push({
 						editIndex: idx,
-						loc: `${spec.after.line}:${spec.after.hash}`,
+						loc: `${spec.after.line}#${spec.after.hash}`,
 						currentContent: originalFileLines[spec.after.line - 1],
 					});
 					break;
@@ -860,23 +989,53 @@ export function applyHashlineEdits(
 				trackFirstChanged(spec.after.line + 1);
 				break;
 			}
+			case "insertBefore": {
+				const anchorLine = originalFileLines[spec.before.line - 1];
+				const inserted = autocorrect ? stripInsertAnchorEchoBefore(anchorLine, dstLines) : dstLines;
+				if (inserted.length === 0) {
+					noopEdits.push({
+						editIndex: idx,
+						loc: `${spec.before.line}#${spec.before.hash}`,
+						currentContent: originalFileLines[spec.before.line - 1],
+					});
+					break;
+				}
+				fileLines.splice(spec.before.line - 1, 0, ...inserted);
+				trackFirstChanged(spec.before.line);
+				break;
+			}
+			case "insertBetween": {
+				const afterLine = originalFileLines[spec.after.line - 1];
+				const beforeLine = originalFileLines[spec.before.line - 1];
+				const inserted = autocorrect ? stripInsertBoundaryEcho(afterLine, beforeLine, dstLines) : dstLines;
+				if (inserted.length === 0) {
+					noopEdits.push({
+						editIndex: idx,
+						loc: `${spec.after.line}#${spec.after.hash}..${spec.before.line}#${spec.before.hash}`,
+						currentContent: `${afterLine}\n${beforeLine}`,
+					});
+					break;
+				}
+				fileLines.splice(spec.before.line - 1, 0, ...inserted);
+				trackFirstChanged(spec.before.line);
+				break;
+			}
+			case "insertAtEof": {
+				if (fileLines.length === 1 && fileLines[0] === "") {
+					fileLines.splice(0, 1, ...dstLines);
+					trackFirstChanged(1);
+					break;
+				}
+				fileLines.splice(fileLines.length, 0, ...dstLines);
+				trackFirstChanged(fileLines.length - dstLines.length + 1);
+				break;
+			}
 		}
 	}
 
-	const warnings: string[] = [];
-	let diffLineCount = Math.abs(fileLines.length - originalFileLines.length);
-	for (let i = 0; i < Math.min(fileLines.length, originalFileLines.length); i++) {
-		if (fileLines[i] !== originalFileLines[i]) diffLineCount++;
-	}
-	if (diffLineCount > edits.length * 4) {
-		warnings.push(
-			`Edit changed ${diffLineCount} lines across ${edits.length} operations — verify no unintended reformatting.`,
-		);
-	}
 	return {
 		content: fileLines.join("\n"),
 		firstChangedLine,
-		...(warnings.length > 0 ? { warnings } : {}),
 		...(noopEdits.length > 0 ? { noopEdits } : {}),
 	};
 

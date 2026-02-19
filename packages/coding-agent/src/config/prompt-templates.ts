@@ -230,13 +230,28 @@ handlebars.registerHelper("jtdToTypeScript", (schema: unknown): string => jtdToT
 handlebars.registerHelper("jsonStringify", (value: unknown): string => JSON.stringify(value));
 
 /**
- * {{hashline lineNum "content"}} — compute a real hashline ref for prompt examples.
- * Returns `"lineNum:hash"` using the actual hash algorithm.
+ * {{hlineref lineNum "content"}} — compute a real hashline ref for prompt examples.
+ * Returns `"lineNum#hash"` using the actual hash algorithm.
  */
-handlebars.registerHelper("hashline", (lineNum: unknown, content: unknown): string => {
+function formatHashlineRef(lineNum: unknown, content: unknown): { num: number; text: string; ref: string } {
 	const num = typeof lineNum === "number" ? lineNum : Number.parseInt(String(lineNum), 10);
-	const str = typeof content === "string" ? content : String(content ?? "");
-	return `${num}:${computeLineHash(num, str)}`;
+	const text = typeof content === "string" ? content : String(content ?? "");
+	const ref = `${num}#${computeLineHash(num, text)}`;
+	return { num, text, ref };
+}
+
+handlebars.registerHelper("hlineref", (lineNum: unknown, content: unknown): string => {
+	const { ref } = formatHashlineRef(lineNum, content);
+	return ref;
+});
+
+/**
+ * {{hlinefull lineNum "content"}} — format a full read-style line with prefix.
+ * Returns `"lineNum#hash|content"`.
+ */
+handlebars.registerHelper("hlinefull", (lineNum: unknown, content: unknown): string => {
+	const { ref, text } = formatHashlineRef(lineNum, content);
+	return `${ref}|${text}`;
 });
 
 export function renderPromptTemplate(template: string, context: TemplateContext = {}): string {
