@@ -130,6 +130,5 @@ describe("TUI overlays", () => {
 		expect(term.getViewport().every(line => line.trim().length === 0)).toBeTruthy();
 
 		tui.stop();
-
 	});
 });
