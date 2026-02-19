@@ -387,6 +387,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 				const websocketV2Enabled = isCodexWebSocketV2Enabled();
 				let websocketRetries = 0;
 				while (true) {
+					const websocketRequest = buildCodexWebSocketRequest(transformedBody, websocketState, websocketV2Enabled);
 					const websocketHeaders = createCodexHeaders(
 						requestHeaders,
 						accountId,
@@ -396,13 +397,14 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 						websocketState,
 						websocketV2Enabled,
 					);
-					const websocketRequest = buildCodexWebSocketRequest(transformedBody, websocketState, websocketV2Enabled);
 					requestBodyForState = cloneRequestBody(transformedBody);
 					logCodexDebug("codex websocket request", {
 						url: toWebSocketUrl(url),
 						model: params.model,
 						reasoningEffort,
 						headers: redactHeaders(websocketHeaders),
+						sentTurnStateHeader: websocketHeaders.has(X_CODEX_TURN_STATE_HEADER),
+						sentModelsEtagHeader: websocketHeaders.has(X_MODELS_ETAG_HEADER),
 						requestType: websocketRequest.type,
 						retry: websocketRetries,
 						retryBudget: websocketRetryBudget,
@@ -467,6 +469,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 			const blocks = output.content;
 			const blockIndex = () => blocks.length - 1;
 			let websocketStreamRetries = 0;
+			let sawTerminalEvent = false;
 			while (true) {
 				try {
 					for await (const rawEvent of eventStream) {
@@ -645,6 +648,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 								}
 							}
 						} else if (eventType === "response.completed" || eventType === "response.done") {
+							sawTerminalEvent = true;
 							const response = (
 								rawEvent as {
 									response?: {
@@ -712,17 +716,17 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 							websocketStreamRetries += 1;
 							await abortableSleep(getCodexWebSocketRetryDelayMs(websocketStreamRetries), options?.signal);
 							const websocketV2Enabled = isCodexWebSocketV2Enabled();
+							const websocketRequest = buildCodexWebSocketRequest(
+								transformedBody,
+								websocketState,
+								websocketV2Enabled,
+							);
 							const websocketHeaders = createCodexHeaders(
 								requestHeaders,
 								accountId,
 								apiKey,
 								options?.sessionId,
 								"websocket",
-								websocketState,
-								websocketV2Enabled,
-							);
-							const websocketRequest = buildCodexWebSocketRequest(
-								transformedBody,
 								websocketState,
 								websocketV2Enabled,
 							);
@@ -761,6 +765,21 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 				throw new Error("Request was aborted");
 			}
 
+			if (!sawTerminalEvent) {
+				if (usingWebsocket && websocketState) {
+					resetCodexWebSocketAppendState(websocketState);
+					resetCodexSessionMetadata(websocketState);
+				}
+				logCodexDebug("codex stream ended unexpectedly", {
+					transport: usingWebsocket ? "websocket" : "sse",
+					terminalEventSeen: sawTerminalEvent,
+					unexpectedStreamEnd: true,
+					sentTurnStateHeader: Boolean(websocketState?.turnState),
+					sentModelsEtagHeader: Boolean(websocketState?.modelsEtag),
+				});
+				throw new Error("Codex stream ended before terminal completion event");
+			}
+
 			if (output.stopReason === "aborted" || output.stopReason === "error") {
 				throw new Error("Codex response failed");
 			}
@@ -773,6 +792,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 			for (const block of output.content) delete (block as { index?: number }).index;
 			if (usingWebsocket && websocketState) {
 				resetCodexWebSocketAppendState(websocketState);
+				resetCodexSessionMetadata(websocketState);
 			}
 			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
 			output.errorMessage = formatErrorMessageWithRetryAfter(error);
@@ -864,6 +884,12 @@ function resetCodexWebSocketAppendState(state: CodexWebSocketSessionState): void
 	state.canAppend = false;
 	state.lastRequest = undefined;
 	state.lastResponseId = undefined;
+}
+
+function resetCodexSessionMetadata(state: CodexWebSocketSessionState): void {
+	state.turnState = undefined;
+	state.modelsEtag = undefined;
+	state.reasoningIncluded = undefined;
 }
 
 function recordCodexWebSocketFailure(state: CodexWebSocketSessionState, activateFallback: boolean): void {
@@ -969,6 +995,14 @@ function buildCodexWebSocketRequest(
 			type: "response.append",
 			input: appendInput,
 		};
+	}
+	if (state?.canAppend) {
+		logCodexDebug("codex websocket append reset", {
+			hadTurnStateHeader: Boolean(state.turnState),
+			hadModelsEtagHeader: Boolean(state.modelsEtag),
+		});
+		resetCodexWebSocketAppendState(state);
+		resetCodexSessionMetadata(state);
 	}
 	return {
 		type: "response.create",
@@ -1245,6 +1279,8 @@ async function openCodexSseEventStream(
 		url,
 		model: body.model,
 		headers: redactHeaders(headers),
+		sentTurnStateHeader: headers.has(X_CODEX_TURN_STATE_HEADER),
+		sentModelsEtagHeader: headers.has(X_MODELS_ETAG_HEADER),
 	});
 	const response = await fetchWithRetry(
 		url,

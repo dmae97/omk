@@ -147,6 +147,70 @@ describe("openai-codex streaming", () => {
 		expect(sawDone).toBe(true);
 	});
 
+	it("fails truncated SSE streams that never emit a terminal response event", async () => {
+		const tempDir = TempDir.createSync("@pi-codex-stream-");
+		setAgentDir(tempDir.path());
+
+		const payload = Buffer.from(
+			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),
+			"utf8",
+		).toBase64();
+		const token = `aaa.${payload}.bbb`;
+
+		const sse = `${[
+			`data: ${JSON.stringify({
+				type: "response.output_item.added",
+				item: { type: "message", id: "msg_1", role: "assistant", status: "in_progress", content: [] },
+			})}`,
+			`data: ${JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } })}`,
+			`data: ${JSON.stringify({ type: "response.output_text.delta", delta: "Hello" })}`,
+			`data: ${JSON.stringify({
+				type: "response.output_item.done",
+				item: {
+					type: "message",
+					id: "msg_1",
+					role: "assistant",
+					status: "completed",
+					content: [{ type: "output_text", text: "Hello" }],
+				},
+			})}`,
+		].join("\n\n")}\n\n`;
+
+		const fetchMock = vi.fn(async (input: string | URL) => {
+			const url = typeof input === "string" ? input : input.toString();
+			if (url === "https://chatgpt.com/backend-api/codex/responses") {
+				return new Response(sse, {
+					status: 200,
+					headers: { "content-type": "text/event-stream" },
+				});
+			}
+			return new Response("not found", { status: 404 });
+		});
+		global.fetch = fetchMock as unknown as typeof fetch;
+
+		const model: Model<"openai-codex-responses"> = {
+			id: "gpt-5.1-codex",
+			name: "GPT-5.1 Codex",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: "https://chatgpt.com/backend-api",
+			reasoning: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 400000,
+			maxTokens: 128000,
+		};
+
+		const context: Context = {
+			systemPrompt: "You are a helpful assistant.",
+			messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
+		};
+
+		const result = await streamOpenAICodexResponses(model, context, { apiKey: token }).result();
+		expect(result.stopReason).toBe("error");
+		expect(result.errorMessage).toContain("terminal completion event");
+	});
+
 	it("sets conversation_id/session_id headers and prompt_cache_key when sessionId is provided", async () => {
 		const tempDir = TempDir.createSync("@pi-codex-stream-");
 		setAgentDir(tempDir.path());
@@ -1609,6 +1673,182 @@ describe("openai-codex streaming", () => {
 		expect(constructorCount).toBe(1);
 		expect(sentTypes).toEqual(["response.create", "response.append", "response.create"]);
 		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("resets append state and stale turn headers when websocket requests diverge", async () => {
+		const tempDir = TempDir.createSync("@pi-codex-stream-");
+		setAgentDir(tempDir.path());
+
+		const payload = Buffer.from(
+			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),
+			"utf8",
+		).toBase64();
+		const token = `aaa.${payload}.bbb`;
+
+		const sseTurnStates: Array<string | null> = [];
+		const sseModelsEtags: Array<string | null> = [];
+		const sse = `${[
+			`data: ${JSON.stringify({ type: "response.output_item.added", item: { type: "message", id: "msg_sse", role: "assistant", status: "in_progress", content: [] } })}`,
+			`data: ${JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } })}`,
+			`data: ${JSON.stringify({ type: "response.output_text.delta", delta: "Hello SSE" })}`,
+			`data: ${JSON.stringify({ type: "response.output_item.done", item: { type: "message", id: "msg_sse", role: "assistant", status: "completed", content: [{ type: "output_text", text: "Hello SSE" }] } })}`,
+			`data: ${JSON.stringify({ type: "response.completed", response: { status: "completed", usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8, input_tokens_details: { cached_tokens: 0 } } } })}`,
+		].join("\n\n")}\n\n`;
+		const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+			const headers = init?.headers instanceof Headers ? init.headers : new Headers(init?.headers);
+			sseTurnStates.push(headers.get("x-codex-turn-state"));
+			sseModelsEtags.push(headers.get("x-models-etag"));
+			return new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } });
+		});
+		global.fetch = fetchMock as unknown as typeof fetch;
+
+		type WsListener = (event: Event) => void;
+		const requestTypes: string[] = [];
+		class DivergedAppendWebSocket {
+			static readonly CONNECTING = 0;
+			static readonly OPEN = 1;
+			static readonly CLOSING = 2;
+			static readonly CLOSED = 3;
+			readyState = DivergedAppendWebSocket.CONNECTING;
+			handshakeHeaders = {
+				"x-codex-turn-state": "ws-turn-state-1",
+				"x-models-etag": "ws-models-etag-1",
+			};
+			#listeners = new Map<string, Set<WsListener>>();
+			#sendCount = 0;
+
+			constructor(_url: string, _options?: { headers?: Record<string, string> }) {
+				setTimeout(() => {
+					this.readyState = DivergedAppendWebSocket.OPEN;
+					this.#emit("open", new Event("open"));
+				}, 0);
+			}
+
+			addEventListener(type: string, listener: unknown): void {
+				if (typeof listener !== "function") return;
+				const listeners = this.#listeners.get(type) ?? new Set<WsListener>();
+				listeners.add(listener as WsListener);
+				this.#listeners.set(type, listeners);
+			}
+
+			removeEventListener(type: string, listener: unknown): void {
+				if (typeof listener !== "function") return;
+				const listeners = this.#listeners.get(type);
+				listeners?.delete(listener as WsListener);
+			}
+
+			send(data: string): void {
+				this.#sendCount += 1;
+				const request = JSON.parse(data) as { type?: string };
+				requestTypes.push(typeof request.type === "string" ? request.type : "");
+				const idSuffix = String(this.#sendCount);
+				this.#emitCompleted(`msg_${idSuffix}`, `resp_${idSuffix}`, `Hello WS ${idSuffix}`);
+			}
+
+			close(): void {
+				this.readyState = DivergedAppendWebSocket.CLOSED;
+			}
+
+			#emitCompleted(messageId: string, responseId: string, text: string): void {
+				this.#emit("message", {
+					data: JSON.stringify({
+						type: "response.output_item.added",
+						item: { type: "message", id: messageId, role: "assistant", status: "in_progress", content: [] },
+					}),
+				} as unknown as Event);
+				this.#emit("message", {
+					data: JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } }),
+				} as unknown as Event);
+				this.#emit("message", {
+					data: JSON.stringify({ type: "response.output_text.delta", delta: text }),
+				} as unknown as Event);
+				this.#emit("message", {
+					data: JSON.stringify({
+						type: "response.output_item.done",
+						item: {
+							type: "message",
+							id: messageId,
+							role: "assistant",
+							status: "completed",
+							content: [{ type: "output_text", text }],
+						},
+					}),
+				} as unknown as Event);
+				this.#emit("message", {
+					data: JSON.stringify({
+						type: "response.done",
+						response: {
+							id: responseId,
+							status: "completed",
+							usage: {
+								input_tokens: 5,
+								output_tokens: 3,
+								total_tokens: 8,
+								input_tokens_details: { cached_tokens: 0 },
+							},
+						},
+					}),
+				} as unknown as Event);
+			}
+
+			#emit(type: string, event: Event): void {
+				const listeners = this.#listeners.get(type);
+				if (!listeners) return;
+				for (const listener of listeners) {
+					listener(event);
+				}
+			}
+		}
+
+		global.WebSocket = DivergedAppendWebSocket as unknown as typeof WebSocket;
+
+		const websocketModel: Model<"openai-codex-responses"> = {
+			id: "gpt-5.3-codex-spark",
+			name: "GPT-5.3 Codex Spark",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: "https://chatgpt.com/backend-api",
+			reasoning: true,
+			preferWebsockets: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 128000,
+			maxTokens: 128000,
+		};
+		const sseModel: Model<"openai-codex-responses"> = {
+			...websocketModel,
+			preferWebsockets: false,
+		};
+		const firstContext: Context = {
+			systemPrompt: "Prompt A",
+			messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
+		};
+		const secondContext: Context = {
+			systemPrompt: "Prompt B",
+			messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
+		};
+		const providerSessionState = new Map<string, ProviderSessionState>();
+
+		await streamOpenAICodexResponses(websocketModel, firstContext, {
+			apiKey: token,
+			sessionId: "ws-diverged-session",
+			providerSessionState,
+		}).result();
+		await streamOpenAICodexResponses(websocketModel, secondContext, {
+			apiKey: token,
+			sessionId: "ws-diverged-session",
+			providerSessionState,
+		}).result();
+		await streamOpenAICodexResponses(sseModel, secondContext, {
+			apiKey: token,
+			sessionId: "ws-diverged-session",
+			providerSessionState,
+		}).result();
+
+		expect(requestTypes).toEqual(["response.create", "response.create"]);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(sseTurnStates[0]).toBeNull();
+		expect(sseModelsEtags[0]).toBeNull();
 	});
 
 	it("reuses a prewarmed websocket connection across turns", async () => {

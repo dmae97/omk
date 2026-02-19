@@ -2302,7 +2302,7 @@ export class AgentSession {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
 
-		this.agent.setModel(this.#applySessionModelOverrides(model));
+		this.#setModelWithProviderSessionReset(model);
 		this.sessionManager.appendModelChange(`${model.provider}/${model.id}`, role);
 		this.settings.setModelRole(role, `${model.provider}/${model.id}`);
 		this.settings.getStorage()?.recordModelUsage(`${model.provider}/${model.id}`);
@@ -2322,7 +2322,7 @@ export class AgentSession {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
 
-		this.agent.setModel(this.#applySessionModelOverrides(model));
+		this.#setModelWithProviderSessionReset(model);
 		this.sessionManager.appendModelChange(`${model.provider}/${model.id}`, "temporary");
 		this.settings.getStorage()?.recordModelUsage(`${model.provider}/${model.id}`);
 
@@ -2436,7 +2436,7 @@ export class AgentSession {
 		const next = scopedModels[nextIndex];
 
 		// Apply model
-		this.agent.setModel(this.#applySessionModelOverrides(next.model));
+		this.#setModelWithProviderSessionReset(next.model);
 		this.sessionManager.appendModelChange(`${next.model.provider}/${next.model.id}`);
 		this.settings.setModelRole("default", `${next.model.provider}/${next.model.id}`);
 		this.settings.getStorage()?.recordModelUsage(`${next.model.provider}/${next.model.id}`);
@@ -2464,7 +2464,7 @@ export class AgentSession {
 			throw new Error(`No API key for ${nextModel.provider}/${nextModel.id}`);
 		}
 
-		this.agent.setModel(this.#applySessionModelOverrides(nextModel));
+		this.#setModelWithProviderSessionReset(nextModel);
 		this.sessionManager.appendModelChange(`${nextModel.provider}/${nextModel.id}`);
 		this.settings.setModelRole("default", `${nextModel.provider}/${nextModel.id}`);
 		this.settings.getStorage()?.recordModelUsage(`${nextModel.provider}/${nextModel.id}`);
@@ -2610,6 +2610,7 @@ export class AgentSession {
 		await this.sessionManager.rewriteEntries();
 		const sessionContext = this.sessionManager.buildSessionContext();
 		this.agent.replaceMessages(sessionContext.messages);
+		this.#closeCodexProviderSessionsForHistoryRewrite();
 		return result;
 	}
 
@@ -2733,6 +2734,7 @@ export class AgentSession {
 			const newEntries = this.sessionManager.getEntries();
 			const sessionContext = this.sessionManager.buildSessionContext();
 			this.agent.replaceMessages(sessionContext.messages);
+			this.#closeCodexProviderSessionsForHistoryRewrite();
 
 			// Get the saved compaction entry for the hook
 			const savedCompactionEntry = newEntries.find(e => e.type === "compaction" && e.summary === summary) as
@@ -3082,7 +3084,6 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		if (!targetModel) return false;
 
 		try {
-			this.#closeProviderSessionsForModelSwitch(currentModel, targetModel);
 			await this.setModelTemporary(targetModel);
 			logger.debug("Context promotion switched model on overflow", {
 				from: `${currentModel.provider}/${currentModel.id}`,
@@ -3130,6 +3131,20 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		}
 
 		return undefined;
+	}
+
+	#setModelWithProviderSessionReset(model: Model): void {
+		const currentModel = this.model;
+		if (currentModel) {
+			this.#closeProviderSessionsForModelSwitch(currentModel, model);
+		}
+		this.agent.setModel(this.#applySessionModelOverrides(model));
+	}
+
+	#closeCodexProviderSessionsForHistoryRewrite(): void {
+		const currentModel = this.model;
+		if (!currentModel || currentModel.api !== "openai-codex-responses") return;
+		this.#closeProviderSessionsForModelSwitch(currentModel, currentModel);
 	}
 
 	#closeProviderSessionsForModelSwitch(currentModel: Model, nextModel: Model): void {
@@ -3431,6 +3446,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			const newEntries = this.sessionManager.getEntries();
 			const sessionContext = this.sessionManager.buildSessionContext();
 			this.agent.replaceMessages(sessionContext.messages);
+			this.#closeCodexProviderSessionsForHistoryRewrite();
 
 			// Get the saved compaction entry for the hook
 			const savedCompactionEntry = newEntries.find(e => e.type === "compaction" && e.summary === summary) as
@@ -4013,7 +4029,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				const availableModels = this.#modelRegistry.getAvailable();
 				const match = availableModels.find(m => m.provider === provider && m.id === modelId);
 				if (match) {
-					this.agent.setModel(this.#applySessionModelOverrides(match));
+					this.#setModelWithProviderSessionReset(match);
 				}
 			}
 		}

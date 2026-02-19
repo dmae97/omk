@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed model selector search initialization to apply the latest live query after asynchronous model loading.
+- Fixed Codex provider session lifecycle on model switches and history rewrites to clear stale session metadata before continuing the conversation.
+
 ## [12.11.0] - 2026-02-19
 
 ### Added

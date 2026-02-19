@@ -161,8 +161,11 @@ export class ModelSelectorComponent extends Container {
 		this.#loadModels().then(() => {
 			this.#buildProviderTabs();
 			this.#updateTabBar();
-			if (initialSearchInput) {
-				this.#filterModels(initialSearchInput);
+			// Always apply the current search query — the user may have typed
+			// while models were loading asynchronously.
+			const currentQuery = this.#searchInput.getValue();
+			if (currentQuery) {
+				this.#filterModels(currentQuery);
 			} else {
 				this.#updateList();
 			}

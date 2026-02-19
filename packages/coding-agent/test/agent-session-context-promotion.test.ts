@@ -104,6 +104,80 @@ describe("AgentSession context promotion", () => {
 		expect(session.providerSessionState.size).toBe(0);
 	});
 
+	it("clears codex provider session state on manual setModel switch away from codex", async () => {
+		const codexModel = modelRegistry.find("openai-codex", "gpt-5.3-codex");
+		const nonCodexModel = modelRegistry.getAvailable().find(model => model.api !== "openai-codex-responses");
+		if (!codexModel || !nonCodexModel) {
+			throw new Error("Expected codex and non-codex models to exist");
+		}
+		authStorage.setRuntimeApiKey(nonCodexModel.provider, "test-other-key");
+
+		const agent = new Agent({
+			initialState: {
+				model: codexModel,
+				systemPrompt: "Test",
+				tools: [],
+				messages: [],
+			},
+		});
+
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings: Settings.isolated({ "compaction.enabled": false }),
+			modelRegistry,
+		});
+
+		const closeSpy = vi.fn();
+		session.providerSessionState.set("openai-codex-responses", {
+			close: closeSpy,
+		} satisfies ProviderSessionState);
+
+		await session.setModel(nonCodexModel);
+
+		expect(session.model?.provider).toBe(nonCodexModel.provider);
+		expect(session.model?.id).toBe(nonCodexModel.id);
+		expect(closeSpy).toHaveBeenCalledTimes(1);
+		expect(session.providerSessionState.size).toBe(0);
+	});
+
+	it("clears codex provider session state on manual temporary switch into codex", async () => {
+		const codexModel = modelRegistry.find("openai-codex", "gpt-5.3-codex");
+		const nonCodexModel = modelRegistry.getAvailable().find(model => model.api !== "openai-codex-responses");
+		if (!codexModel || !nonCodexModel) {
+			throw new Error("Expected codex and non-codex models to exist");
+		}
+		authStorage.setRuntimeApiKey(nonCodexModel.provider, "test-other-key");
+
+		const agent = new Agent({
+			initialState: {
+				model: nonCodexModel,
+				systemPrompt: "Test",
+				tools: [],
+				messages: [],
+			},
+		});
+
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings: Settings.isolated({ "compaction.enabled": false }),
+			modelRegistry,
+		});
+
+		const closeSpy = vi.fn();
+		session.providerSessionState.set("openai-codex-responses", {
+			close: closeSpy,
+		} satisfies ProviderSessionState);
+
+		await session.setModelTemporary(codexModel);
+
+		expect(session.model?.provider).toBe(codexModel.provider);
+		expect(session.model?.id).toBe(codexModel.id);
+		expect(closeSpy).toHaveBeenCalledTimes(1);
+		expect(session.providerSessionState.size).toBe(0);
+	});
+
 	it("does not promote when promotion is disabled", async () => {
 		const sparkModel = modelRegistry.find("openai-codex", "gpt-5.3-codex-spark");
 		if (!sparkModel) {

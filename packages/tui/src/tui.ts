@@ -967,30 +967,24 @@ export class TUI extends Container {
 
 		// All changes are in deleted lines (nothing to render, just clear)
 		if (firstChanged >= newLines.length) {
+			const extraLines = this.#previousLines.length - newLines.length;
+			if (extraLines > height) {
+				logRedraw(`deletedLines > height (${extraLines} > ${height})`);
+				fullRender(true);
+				return;
+			}
 			const targetRow = Math.max(0, newLines.length - 1);
 			let buffer = "\x1b[?2026h";
 			const lineDiff = computeLineDiff(targetRow);
 			if (lineDiff > 0) buffer += `\x1b[${lineDiff}B`;
 			else if (lineDiff < 0) buffer += `\x1b[${-lineDiff}A`;
 			buffer += "\r";
-			// Clear extra lines without scrolling
-			// For empty content we clear starting at targetRow; otherwise clear starts on the next line.
-			const extraLines = this.#previousLines.length - newLines.length;
-			if (extraLines > height) {
-				logRedraw(`extraLines > height (${extraLines} > ${height})`);
-				fullRender(true);
-				return;
-			}
-			if (extraLines > 0 && newLines.length > 0) {
-				buffer += "\x1b[1B";
-			}
-			for (let i = 0; i < extraLines; i++) {
-				buffer += "\r\x1b[2K";
-				if (i < extraLines - 1) buffer += "\x1b[1B";
-			}
-			const moveUpLines = newLines.length > 0 ? extraLines : Math.max(0, extraLines - 1);
-			if (moveUpLines > 0) {
-				buffer += `\x1b[${moveUpLines}A`;
+			// Erase all stale lines below the new content
+			if (newLines.length > 0) {
+				buffer += "\x1b[1B\x1b[J\x1b[1A";
+			} else {
+				// Content is completely empty — clear from cursor row
+				buffer += "\x1b[J";
 			}
 			const cursorUpdate = this.#buildHardwareCursorSequence(cursorPos, newLines.length, targetRow);
 			buffer += cursorUpdate.sequence;

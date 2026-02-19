@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed differential deleted-line rendering when content shrinks to empty so stale first-row content is cleared reliably.
+- Fixed incremental stale-row clearing to use erase-below semantics in synchronized output, reducing leftover-line artifacts after shrink operations.
+
 ## [12.9.0] - 2026-02-17
 ### Added
 

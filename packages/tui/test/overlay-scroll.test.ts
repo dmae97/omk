@@ -20,7 +20,10 @@ class LineComponent implements Component {
 class MutableLineComponent implements Component {
 	#count: number;
 
-	constructor(private readonly prefix: string, count: number) {
+	constructor(
+		private readonly prefix: string,
+		count: number,
+	) {
 		this.#count = count;
 	}
 
