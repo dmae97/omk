@@ -1,9 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
-- Added `intentTracing` option to enable intent goal extraction from tool calls, allowing models to specify high-level goals via a `$intent` field that is automatically injected into tool schemas and stripped from arguments before execution
+- Added `intentTracing` option to enable intent goal extraction from tool calls, allowing models to specify high-level goals via a required `_intent` field that is automatically injected into tool schemas and stripped from arguments before execution
 
 ## [12.11.0] - 2026-02-19
 
@@ -29,6 +30,7 @@
 - Added `preferWebsockets` option to hint that websocket transport should be preferred when supported by the provider implementation
 
 ## [11.10.0] - 2026-02-10
+
 ### Added
 
 - Added `temperature` option to `AgentOptions` to control LLM sampling temperature
@@ -47,6 +49,7 @@
 - Added `skipInitialSteeringPoll` option to `_runLoop()` for correct queue resume ordering
 
 ## [11.3.0] - 2026-02-06
+
 ### Added
 
 - Added `maxRetryDelayMs` option to AgentOptions to cap server-requested retry delays, allowing higher-level retry logic to handle long waits with user visibility
@@ -56,11 +59,13 @@
 - Updated ThinkingLevel documentation to include support for gpt-5.3 and gpt-5.3-codex models with 'xhigh' thinking level
 
 ## [11.2.0] - 2026-02-05
+
 ### Fixed
 
 - Fixed handling of aborted requests to properly throw abort errors when stream terminates without a terminal event
 
 ## [10.5.0] - 2026-02-04
+
 ### Added
 
 - Added `concurrency` option to `AgentTool` to control tool scheduling: "shared" (default, runs in parallel) or "exclusive" (runs alone)
@@ -73,34 +78,42 @@
 ## [9.2.2] - 2026-01-31
 
 ### Added
+
 - Added toolChoice option to AgentPromptOptions for controlling tool selection
 
 ## [8.2.0] - 2026-01-24
 
 ### Changed
+
 - Updated TypeScript configuration for better publish-time configuration handling with tsconfig.publish.json
+
 ## [8.0.0] - 2026-01-23
+
 ### Added
 
 - Added `nonAbortable` option to tools to ignore abort signals during execution
 
 ## [6.8.0] - 2026-01-20
+
 ### Changed
 
 - Updated proxy stream processing to use utility function for reading lines
 
 ## [6.2.0] - 2026-01-19
+
 ### Added
 
 - Enhanced getToolContext to receive tool call batch information including batchId, index, total count, and tool call details
 
 ## [5.6.7] - 2026-01-18
+
 ### Fixed
 
 - Added proper tool result messages for tool calls that are aborted or error out
 - Ensured tool_use/tool_result pairing is maintained when tool execution fails
 
 ## [4.6.0] - 2026-01-12
+
 ### Changed
 
 - Modified assistant message handling to split messages around tool results for improved readability when using Cursor tools
@@ -110,12 +123,14 @@
 - Fixed tool result ordering in Cursor mode by buffering results and emitting them at the correct position within assistant messages
 
 ## [4.3.0] - 2026-01-11
+
 ### Added
 
 - Added `cursorExecHandlers` and `cursorOnToolResult` options for local tool execution with cursor-based streaming
 - Added `emitExternalEvent` method to allow external event injection into the agent state
 
 ## [4.0.0] - 2026-01-10
+
 ### Added
 
 - Added `popLastSteer()` and `popLastFollowUp()` methods to remove and return the last queued message (LIFO) for dequeue operations
@@ -197,7 +212,6 @@ Initial release under @oh-my-pi scope. See previous releases at [badlogic/pi-mon
 - **Transport abstraction removed**: `ProviderTransport`, `AppTransport`, and `AgentTransport` interface have been removed. Use the `streamFn` option directly for custom streaming implementations.
 
 - **Agent options renamed**:
-
   - `transport` → removed (use `streamFn` instead)
   - `messageTransformer` → `convertToLlm`
   - `preprocessor` → `transformContext`

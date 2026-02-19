@@ -1,4 +1,4 @@
-# Edit (Hash Anchored)
+# Edit
 
 Apply precise file edits using `LINE#ID` anchors from `read` output.
 **CRITICAL:** anchors are `LINE#ID` only. Copy verbatim from the prefix (example: `{{hlineref 42 "const x = 1"}}`). Never include `|content`.
@@ -15,10 +15,10 @@ Apply precise file edits using `LINE#ID` anchors from `read` output.
 <operations>
 - **Single line replace/delete**
   - `{ target: "LINE#ID", new_content: ["..."] }`
-  - `new_content: []` deletes the line; `new_content: [""]` keeps a blank line.
+  - `new_content: null` deletes the line; `new_content: [""]` keeps a blank line.
 - **Range replace/delete**
   - `{ first: "LINE#ID", last: "LINE#ID", new_content: ["..."] }`
-  - Use for swaps, block rewrites, or deleting a full span (`new_content: []`).
+  - Use for swaps, block rewrites, or deleting a full span (`new_content: null`).
 - **Insert** (new content)
   - `{ before: "LINE#ID", inserted_lines: ["..."] }`
   - `{ after: "LINE#ID", inserted_lines: ["..."] }`
@@ -67,82 +67,153 @@ Apply precise file edits using `LINE#ID` anchors from `read` output.
 - After two no-ops on same area, re-read the full function/block before retry.
 </recovery>
 
-<example name="single-line token fix (set)">
+<example name="single line replace — fix a value or type">
 ```ts
-{{hlinefull 41 "  return record != null && record.status === 'fulfilled';"}}
+{{hlinefull 23 "  const timeout: number = 5000;"}}
 ```
-```json
-{ target: "{{hlineref 41 "  return record != null && record.status === 'fulfilled';"}}", new_content: ["  return record != null && record?.status === 'fulfilled';"] }
+```
+target: "{{hlineref 23 "  const timeout: number = 5000;"}}"
+new_content: ["  const timeout: number = 30_000;"]
 ```
 </example>
 
-<example name="restore missing declaration (insert before)">
+<example name="single line delete — remove a line entirely">
 ```ts
-{{hlinefull 15 "export function useX(...): boolean {"}}
-{{hlinefull 16 "  useEffect(() => {"}}
+{{hlinefull 7 "// @ts-ignore"}}
+{{hlinefull 8 "const data = fetchSync(url);"}}
 ```
-```json
-{ before: "{{hlineref 16 "  useEffect(() => {"}}", inserted_lines: ["  const [isVisible, setIsVisible] = useState(true);"] }
+```
+target: "{{hlineref 7 "// @ts-ignore"}}"
+new_content: null
 ```
 </example>
 
-<example name="insert between siblings (after+before)">
+<example name="single line blank — clear content but keep the line break">
 ```ts
-{{hlinefull 120 "      doFirst();"}}
-{{hlinefull 121 "      doThird();"}}
+{{hlinefull 14 "  placeholder: \"DO NOT SHIP\","}}
 ```
-```json
-{ after: "{{hlineref 120 "      doFirst();"}}", before: "{{hlineref 121 "      doThird();"}}", inserted_lines: ["      doSecond();"] }
+```
+target: "{{hlineref 14 "  placeholder: \"DO NOT SHIP\","}}"
+new_content: [""]
 ```
 </example>
 
-<example name="swap adjacent lines atomically (set_range)">
+<example name="range replace — rewrite a block of logic">
 ```ts
-{{hlinefull 190 "      thenable.then(resolve, ignoreReject);"}}
-{{hlinefull 191 "      chunkCache.set(chunkId, thenable);"}}
+{{hlinefull 60 "    } catch (err) {"}}
+{{hlinefull 61 "      console.error(err);"}}
+{{hlinefull 62 "      return null;"}}
+{{hlinefull 63 "    }"}}
 ```
-```json
-{ first: "{{hlineref 190 "      thenable.then(resolve, ignoreReject);"}}", last: "{{hlineref 191 "      chunkCache.set(chunkId, thenable);"}}", new_content: ["      chunkCache.set(chunkId, thenable);", "      thenable.then(resolve, ignoreReject);"] }
+```
+first: "{{hlineref 60 "    } catch (err) {"}}"
+last: "{{hlineref 63 "    }"}}"
+new_content: ["    } catch (err) {", "      if (isEnoent(err)) return null;", "      throw err;", "    }"]
 ```
 </example>
 
-<example name="insert guard before comment">
+<example name="range delete — remove a full block">
 ```ts
-{{hlinefull 188 ""}}
-{{hlinefull 189 "          // If we don't find a Fiber on the comment..."}}
+{{hlinefull 80 "  // TODO: remove after migration"}}
+{{hlinefull 81 "  if (legacy) {"}}
+{{hlinefull 82 "    legacyHandler(req);"}}
+{{hlinefull 83 "  }"}}
 ```
-```json
-{ after: "{{hlineref 188 ""}}", inserted_lines: ["          if (targetFiber) {", "            targetInst = targetFiber;", "          }"] }
+```
+first: "{{hlineref 80 "  // TODO: remove after migration"}}"
+last: "{{hlineref 83 "  }"}}"
+new_content: null
 ```
 </example>
 
-<example name="anti-pattern: interior anchor vs boundary anchor">
-Bad:
-```json
-{ after: "195#d3", inserted_lines: ["  { id: \"nanogpt\", available: true },"] }
+<example name="insert with before — add an import above the first import">
+```ts
+{{hlinefull 1 "import * as fs from \"node:fs/promises\";"}}
+{{hlinefull 2 "import * as path from \"node:path\";"}}
 ```
-Good:
-```json
-{ after: "196#f6", before: "197#fc", inserted_lines: [" { id: \"nanogpt\", available: true },"] }
 ```
+before: "{{hlineref 1 "import * as fs from \"node:fs/promises\";"}}"
+inserted_lines: ["import * as os from \"node:os\";"]
+```
+Use `before` when prepending at the top of a block or file — there is no meaningful anchor above.
 </example>
 
-<example name="explicit EOF append">
+<example name="insert with after — append at end of file">
 ```ts
-{{hlinefull 260 "// last existing line"}}
+{{hlinefull 260 "export { serialize, deserialize };"}}
 ```
-```json
-{ after: "{{hlineref 260 "// last existing line"}}", inserted_lines: ["// end marker"] }
 ```
+after: "{{hlineref 260 "export { serialize, deserialize };"}}"
+inserted_lines: ["export { validate };"]
+```
+Use `after` when appending at the bottom — there is no anchor below.
+</example>
+
+<example name="insert with after + before (dual anchor) — add an entry between known siblings">
+```ts
+{{hlinefull 44 "  \"build\": \"bun run compile\","}}
+{{hlinefull 45 "  \"test\": \"bun test\""}}
+```
+```
+after: "{{hlineref 44 "  \"build\": \"bun run compile\","}}"
+before: "{{hlineref 45 "  \"test\": \"bun test\""}}"
+inserted_lines: ["  \"lint\": \"biome check\","]
+```
+Dual anchors pin the insert to exactly one gap, preventing drift from edits elsewhere in the file. **Always prefer dual anchors when both boundaries are content lines.**
+</example>
+
+<example name="insert a function before another function — anchor to the target, not whitespace">
+```ts
+{{hlinefull 100 "  return buf.toString(\"hex\");"}}
+{{hlinefull 101 "}"}}
+{{hlinefull 102 ""}}
+{{hlinefull 103 "export function serialize(data: unknown): string {"}}
+```
+```
+before: "{{hlineref 103 "export function serialize(data: unknown): string {"}}"
+inserted_lines: ["function validate(data: unknown): boolean {", "  return data != null && typeof data === \"object\";", "}", ""]
+```
+The trailing `""` in `inserted_lines` preserves the blank-line separator. **Anchor to the structural line (`export function ...`), not the blank line above it** — blank lines are ambiguous and may be added or removed by other edits.
 </example>
 
 {{#if allowReplaceText}}
-<example name="replace fallback only">
-```json
-{ old_text: "x = 42", new_text: "x = 99" }
+<example name="content replace (fallback) — when anchors are unavailable">
 ```
+old_text: "x = 42"
+new_text: "x = 99"
+```
+Use only when line anchors aren't available. `old_text` must match exactly one location in the file (or set `"all": true` for all occurrences).
 </example>
 {{/if}}
+
+<example name="file delete">
+```
+path: "src/deprecated/legacy.ts"
+delete: true
+```
+</example>
+
+<example name="file rename with edits — move and modify in one atomic call">
+```
+path: "src/utils.ts"
+rename: "src/helpers/utils.ts"
+edits: [..]
+```
+</example>
+
+<example name="anti-pattern: anchoring to whitespace">
+Bad — anchors to a blank line; fragile if blank lines shift:
+```
+after: "{{hlineref 102 ""}}"
+inserted_lines: ["function validate() { ... }"]
+```
+
+Good — anchors to the structural target:
+```
+before: "{{hlineref 103 "export function serialize(data: unknown): string {"}}"
+inserted_lines: ["function validate() { ... }", ""]
+```
+</example>
 
 <validation>
 - [ ] Payload shape is `{ "path": string, "edits": [operation, ...], "delete"?: true, "rename"?: string }`

@@ -1,3 +1,4 @@
+import { INTENT_FIELD } from "@oh-my-pi/pi-agent-core";
 import { Loader, TERMINAL, Text } from "@oh-my-pi/pi-tui";
 import { settings } from "../../config/settings";
 import { AssistantMessageComponent } from "../../modes/components/assistant-message";
@@ -14,6 +15,7 @@ export class EventController {
 	#lastReadGroup: ReadToolGroupComponent | undefined = undefined;
 	#lastThinkingCount = 0;
 	#renderedCustomMessages = new Set<string>();
+	#lastIntent: string | undefined = undefined;
 
 	constructor(private ctx: InteractiveModeContext) {}
 
@@ -32,6 +34,13 @@ export class EventController {
 		return this.#lastReadGroup;
 	}
 
+	#updateWorkingMessageFromIntent(intent: string | undefined): void {
+		const trimmed = intent?.trim();
+		if (!trimmed || trimmed === this.#lastIntent) return;
+		this.#lastIntent = trimmed;
+		this.ctx.setWorkingMessage(`${trimmed} (esc to interrupt)`);
+	}
+
 	subscribeToAgent(): void {
 		this.ctx.unsubscribe = this.ctx.session.subscribe(async (event: AgentSessionEvent) => {
 			await this.handleEvent(event);
@@ -48,6 +57,7 @@ export class EventController {
 
 		switch (event.type) {
 			case "agent_start":
+				this.#lastIntent = undefined;
 				if (this.ctx.retryEscapeHandler) {
 					this.ctx.editor.onEscape = this.ctx.retryEscapeHandler;
 					this.ctx.retryEscapeHandler = undefined;
@@ -155,6 +165,15 @@ export class EventController {
 							}
 						}
 					}
+
+					// Update working message with intent from streamed tool arguments
+					for (const content of this.ctx.streamingMessage.content) {
+						if (content.type !== "toolCall") continue;
+						const args = content.arguments;
+						if (!args || typeof args !== "object" || !(INTENT_FIELD in args)) continue;
+						this.#updateWorkingMessageFromIntent(args[INTENT_FIELD] as string | undefined);
+					}
+
 					this.ctx.ui.requestRender();
 				}
 				break;
@@ -196,6 +215,7 @@ export class EventController {
 				break;
 
 			case "tool_execution_start": {
+				this.#updateWorkingMessageFromIntent(event.intent);
 				if (!this.ctx.pendingTools.has(event.toolCallId)) {
 					if (event.toolName === "read") {
 						const group = this.#getReadGroup();

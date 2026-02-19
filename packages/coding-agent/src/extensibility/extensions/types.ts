@@ -503,6 +503,7 @@ export interface ToolExecutionStartEvent {
 	toolCallId: string;
 	toolName: string;
 	args: unknown;
+	intent?: string;
 }
 
 /** Fired during tool execution with partial/streaming output */

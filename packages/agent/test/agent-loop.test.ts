@@ -444,6 +444,7 @@ describe("agentLoop with AgentMessage", () => {
 			value: { type: "string" },
 			[INTENT_FIELD]: { type: "string" },
 		});
+		expect(firstRequestToolSchema?.required).toEqual(expect.arrayContaining([INTENT_FIELD]));
 		expect(executedParams).toEqual([{ value: "hello" }]);
 		expect(tracedToolCall?.type).toBe("toolCall");
 		if (tracedToolCall?.type === "toolCall") {

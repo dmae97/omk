@@ -140,8 +140,8 @@ export type HashlineEdit =
 const hashlineContentFormat = (kind: string) =>
 	Type.Union([
 		Type.Null(),
-		Type.Array(Type.String(), { minItems: 1, description: `${kind} lines` }),
-		Type.String({ minLength: 1, description: `${kind} text, \\n delimited if multiple lines` }),
+		Type.Array(Type.String(), { description: `${kind} lines` }),
+		Type.String({ description: `${kind} line` }),
 	]);
 
 function hashlineParseContent(edit: string | string[] | null): string[] {
@@ -151,6 +151,12 @@ function hashlineParseContent(edit: string | string[] | null): string[] {
 	if (lines.length === 0) return [];
 	if (lines[lines.length - 1].trim() === "") return lines.slice(0, -1);
 	return lines;
+}
+
+function hashlineParseContentString(edit: string | string[] | null): string {
+	if (edit === null) return "";
+	if (Array.isArray(edit)) return edit.join("\n");
+	return edit;
 }
 
 const hashlineTargetEditSchema = Type.Object({
@@ -190,18 +196,19 @@ function hashlineParseRangeEdit(edit: HashlineEditUnion): HashlineEdit | null {
 }
 
 const hashlineInsertEditSchema = Type.Object({
-	before: Type.Optional(Type.String({ minLength: 1, description: 'Insert before this line "LINE#ID"' })),
-	after: Type.Optional(Type.String({ minLength: 1, description: 'Insert after this line "LINE#ID"' })),
+	before: Type.Optional(Type.String({ description: 'Insert before this line "LINE#ID"' })),
+	after: Type.Optional(Type.String({ description: 'Insert after this line "LINE#ID"' })),
 	inserted_lines: hashlineContentFormat("Inserted"),
 });
 
 function hashlineParseInsertEdit(edit: HashlineEditUnion): HashlineEdit | null {
 	if ("inserted_lines" in edit) {
+		const { before = "", after = "", inserted_lines } = edit;
 		return {
 			insert: {
-				before: edit.before,
-				after: edit.after,
-				body: hashlineParseContent(edit.inserted_lines),
+				before: before.length > 0 ? before : undefined,
+				after: after.length > 0 ? after : undefined,
+				body: hashlineParseContent(inserted_lines),
 			},
 		};
 	}
@@ -216,11 +223,12 @@ const hashlineReplaceTextEditSchema = Type.Object({
 
 function hashlineParseReplaceTextEdit(edit: HashlineEditUnion): HashlineReplaceEdit | null {
 	if ("old_text" in edit && "new_text" in edit) {
+		const { old_text, new_text, all } = edit;
 		return {
 			replace: {
-				old_text: edit.old_text,
-				new_text: hashlineParseContent(edit.new_text).join("\n"),
-				all: edit.all,
+				old_text: old_text,
+				new_text: hashlineParseContentString(new_text),
+				all: all,
 			},
 		};
 	}
@@ -239,24 +247,18 @@ const hashlineEditItemSchemaWithReplace = Type.Union([
 	hashlineReplaceTextEditSchema,
 ]);
 
-const hashlineEditSchema = Type.Object(
-	{
-		path: Type.String({ description: "File path (relative or absolute)" }),
-		edits: Type.Array(hashlineEditItemSchema, { description: "Array of edit operations" }),
-		delete: Type.Optional(Type.Literal(true, { description: "Delete the file" })),
-		rename: Type.Optional(Type.String({ description: "New path for move" })),
-	},
-	{ additionalProperties: true },
-);
-const hashlineEditSchemaWithReplace = Type.Object(
-	{
-		path: Type.String({ description: "File path (relative or absolute)" }),
-		edits: Type.Array(hashlineEditItemSchemaWithReplace, { description: "Array of edit operations" }),
-		delete: Type.Optional(Type.Literal(true, { description: "Delete the file" })),
-		rename: Type.Optional(Type.String({ description: "New path for move" })),
-	},
-	{ additionalProperties: true },
-);
+const hashlineEditSchema = Type.Object({
+	path: Type.String({ description: "File path (relative or absolute)" }),
+	edits: Type.Array(hashlineEditItemSchema, { description: "Array of edit operations" }),
+	delete: Type.Optional(Type.Literal(true, { description: "Delete the file" })),
+	rename: Type.Optional(Type.String({ description: "New path for move" })),
+});
+const hashlineEditSchemaWithReplace = Type.Object({
+	path: Type.String({ description: "File path (relative or absolute)" }),
+	edits: Type.Array(hashlineEditItemSchemaWithReplace, { description: "Array of edit operations" }),
+	delete: Type.Optional(Type.Literal(true, { description: "Delete the file" })),
+	rename: Type.Optional(Type.String({ description: "New path for move" })),
+});
 
 export type HashlineToolEdit = Static<typeof hashlineEditItemSchemaWithReplace>;
 export type HashlineParams = Static<typeof hashlineEditSchemaWithReplace>;

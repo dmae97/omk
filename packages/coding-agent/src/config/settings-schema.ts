@@ -508,7 +508,7 @@ export const SETTINGS_SCHEMA = {
 		ui: {
 			tab: "tools",
 			label: "Intent tracing",
-			description: "Inject `$intent` into all tool schemas and strip it before tool execution",
+			description: "Ask the agent to describe the intent of each tool call before executing it",
 		},
 	},
 
