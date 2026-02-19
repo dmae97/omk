@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.11.0] - 2026-02-19
+
 ### Added
 
 - Exported `AgentBusyError` exception class for handling concurrent agent operations

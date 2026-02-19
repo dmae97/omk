@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.11.0] - 2026-02-19
+
 ### Added
 
 - Added `priority` field to Model interface for provider-assigned model prioritization
