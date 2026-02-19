@@ -40,6 +40,26 @@ class MutableLineComponent implements Component {
 	}
 }
 
+class MutableContentComponent implements Component {
+	#lines: string[];
+
+	constructor(lines: string[]) {
+		this.#lines = [...lines];
+	}
+
+	setLines(lines: string[]): void {
+		this.#lines = [...lines];
+	}
+
+	invalidate(): void {
+		// No cached state
+	}
+
+	render(_width: number): string[] {
+		return [...this.#lines];
+	}
+}
+
 describe("TUI overlays", () => {
 	it("does not scroll the terminal when an overlay is shown with a large historical working area", async () => {
 		const term = new VirtualTerminal(80, 24);
@@ -67,6 +87,29 @@ describe("TUI overlays", () => {
 		expect(term.getScrollBuffer().length).toBeLessThan(200);
 	});
 
+	it("preserves terminal scrollback on non-forced full rerender", async () => {
+		const term = new VirtualTerminal(40, 4);
+		term.write("shell-0\r\nshell-1\r\nshell-2\r\nshell-3\r\nshell-4\r\n");
+		await term.flush();
+
+		const tui = new TUI(term);
+		const component = new MutableContentComponent(["ui-0", "ui-1", "ui-2", "ui-3", "ui-4", "ui-5"]);
+		tui.addChild(component);
+
+		tui.start();
+		await Bun.sleep(0);
+		await term.flush();
+
+		term.resize(39, 4);
+		await Bun.sleep(0);
+		await term.flush();
+
+		const scrollback = term.getScrollBuffer().join("\n");
+		expect(scrollback.includes("shell-0")).toBeTruthy();
+
+		tui.stop();
+	});
+
 	it("clears first row when shrinking to empty with clearOnShrink disabled", async () => {
 		const term = new VirtualTerminal(40, 10);
 		const tui = new TUI(term);
@@ -87,5 +130,6 @@ describe("TUI overlays", () => {
 		expect(term.getViewport().every(line => line.trim().length === 0)).toBeTruthy();
 
 		tui.stop();
+
 	});
 });

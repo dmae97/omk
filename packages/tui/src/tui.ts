@@ -218,6 +218,7 @@ export class TUI extends Container {
 	#maxLinesRendered = 0; // Track terminal's working area (max lines ever rendered)
 	#previousViewportTop = 0; // Track previous viewport top for resize-aware cursor moves
 	#fullRedrawCount = 0;
+	#clearScrollbackOnNextFullRender = false;
 	#stopped = false;
 
 	// Overlay stack for modal components rendered on top of base content
@@ -430,6 +431,7 @@ export class TUI extends Container {
 			this.#hardwareCursorRow = 0;
 			this.#maxLinesRendered = 0;
 			this.#previousViewportTop = 0;
+			this.#clearScrollbackOnNextFullRender = true;
 		}
 		if (this.#renderRequested) return;
 		this.#renderRequested = true;
@@ -880,7 +882,7 @@ export class TUI extends Container {
 		const fullRender = (clear: boolean): void => {
 			this.#fullRedrawCount += 1;
 			let buffer = "\x1b[?2026h"; // Begin synchronized output
-			if (clear) buffer += "\x1b[3J\x1b[2J\x1b[H"; // Clear scrollback, screen, and home
+			if (clear) buffer += this.#clearScrollbackOnNextFullRender ? "\x1b[3J\x1b[2J\x1b[H" : "\x1b[2J\x1b[H"; // Clear viewport (and optionally scrollback), then home
 			for (let i = 0; i < newLines.length; i++) {
 				if (i > 0) buffer += "\r\n";
 				buffer += newLines[i];
@@ -898,6 +900,7 @@ export class TUI extends Container {
 			} else {
 				this.#maxLinesRendered = Math.max(this.#maxLinesRendered, newLines.length);
 			}
+			this.#clearScrollbackOnNextFullRender = false;
 			this.#previousViewportTop = Math.max(0, this.#maxLinesRendered - height);
 			this.#previousLines = newLines;
 			this.#previousWidth = width;
