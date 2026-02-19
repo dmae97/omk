@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.12.1] - 2026-02-19
+
 ### Added
 
 - Added Kimi (Moonshot) as a web search provider with OAuth and API key support ([#110](https://github.com/can1357/oh-my-pi/pull/110) by [@oglassdev](https://github.com/oglassdev))
