@@ -467,6 +467,7 @@ return config
 | Hugging Face (`huggingface`) | `HUGGINGFACE_HUB_TOKEN` or `HF_TOKEN` |
 | Synthetic  | `SYNTHETIC_API_KEY`  |
 | NVIDIA (`nvidia`) | `NVIDIA_API_KEY` |
+| NanoGPT (`nanogpt`) | `NANO_GPT_API_KEY` |
 | Together (`together`) | `TOGETHER_API_KEY` |
 | Ollama (`ollama`) | `OLLAMA_API_KEY` *(optional)* |
 | LiteLLM (`litellm`) | `LITELLM_API_KEY` |
@@ -496,6 +497,7 @@ Use `/login` with supported providers:
 - Kimi Code
 - Perplexity
 - NVIDIA (`nvidia`)
+- NanoGPT (`nanogpt`)
 - Hugging Face Inference (`huggingface`)
 - OpenCode Zen
 - Qianfan (`qianfan`)
@@ -514,6 +516,7 @@ Use `/login` with supported providers:
 
 For `ollama`, API key is optional. Leave it unset for local no-auth instances, or set `OLLAMA_API_KEY` for authenticated hosts.
 For `vllm`, paste your key in `/login` (or use `VLLM_API_KEY`). For local no-auth servers, any placeholder value works (for example `vllm-local`).
+For `nanogpt`, `/login nanogpt` opens `https://nano-gpt.com/api` and prompts for your `sk-...` key (or set `NANO_GPT_API_KEY`).
 For `cloudflare-ai-gateway`, set provider base URL to
 `https://gateway.ai.cloudflare.com/v1/<account_id>/<gateway_id>/anthropic`
 (for example in `~/.omp/agent/models.yml`).

@@ -42,6 +42,7 @@ These are consumed via `getEnvApiKey()` (`packages/ai/src/stream.ts`) unless not
 | `HF_TOKEN` | Hugging Face auth | Using `huggingface` provider | Fallback when `HUGGINGFACE_HUB_TOKEN` is unset |
 | `SYNTHETIC_API_KEY` | Synthetic auth | Using Synthetic models |  |
 | `NVIDIA_API_KEY` | NVIDIA auth | Using `nvidia` provider |  |
+| `NANO_GPT_API_KEY` | NanoGPT auth | Using `nanogpt` provider | |
 | `VENICE_API_KEY` | Venice auth | Using `venice` provider |  |
 | `LITELLM_API_KEY` | LiteLLM auth | Using `litellm` provider | OpenAI-compatible LiteLLM proxy key |
 | `OLLAMA_API_KEY` | Ollama auth (optional) | Using `ollama` provider with authenticated hosts | Local Ollama usually runs without auth; any non-empty token works when a key is required |
