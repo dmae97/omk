@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.14.0] - 2026-02-19
 ### Added
 
 - Added `gemini-3.1-pro` model to opencode provider with text and image input support

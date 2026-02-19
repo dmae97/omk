@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.14.0] - 2026-02-19
+
 ### Added
 
 - Support for `docs://` internal URL protocol to access embedded documentation files (e.g., `docs://sdk.md`)
