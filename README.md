@@ -516,7 +516,7 @@ Use `/login` with supported providers:
 
 For `ollama`, API key is optional. Leave it unset for local no-auth instances, or set `OLLAMA_API_KEY` for authenticated hosts.
 For `vllm`, paste your key in `/login` (or use `VLLM_API_KEY`). For local no-auth servers, any placeholder value works (for example `vllm-local`).
-For `nanogpt`, `/login nanogpt` opens `https://nano-gpt.com/api` and prompts for your `sk-...` key (or set `NANO_GPT_API_KEY`).
+For `nanogpt`, `/login nanogpt` opens `https://nano-gpt.com/api` and prompts for your `sk-...` key (or set `NANO_GPT_API_KEY`). Login validates the key via NanoGPT's models endpoint (not a fixed model entitlement).
 For `cloudflare-ai-gateway`, set provider base URL to
 `https://gateway.ai.cloudflare.com/v1/<account_id>/<gateway_id>/anthropic`
 (for example in `~/.omp/agent/models.yml`).

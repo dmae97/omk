@@ -8,12 +8,12 @@
  * 3. Paste key into CLI
  */
 
-import { validateOpenAICompatibleApiKey } from "./api-key-validation";
+import { validateApiKeyAgainstModelsEndpoint } from "./api-key-validation";
 import type { OAuthController } from "./types";
 
 const AUTH_URL = "https://nano-gpt.com/api";
 const API_BASE_URL = "https://nano-gpt.com/api/v1";
-const VALIDATION_MODEL = "openai/gpt-4o-mini";
+const MODELS_URL = `${API_BASE_URL}/models`;
 
 export async function loginNanoGPT(options: OAuthController): Promise<string> {
 	if (!options.onPrompt) {
@@ -40,11 +40,10 @@ export async function loginNanoGPT(options: OAuthController): Promise<string> {
 	}
 
 	options.onProgress?.("Validating API key...");
-	await validateOpenAICompatibleApiKey({
+	await validateApiKeyAgainstModelsEndpoint({
 		provider: "NanoGPT",
 		apiKey: trimmed,
-		baseUrl: API_BASE_URL,
-		model: VALIDATION_MODEL,
+		modelsUrl: MODELS_URL,
 		signal: options.signal,
 	});
 

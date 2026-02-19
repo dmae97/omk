@@ -6,6 +6,13 @@ type OpenAICompatibleValidationOptions = {
 	signal?: AbortSignal;
 };
 
+type ModelListValidationOptions = {
+	provider: string;
+	apiKey: string;
+	modelsUrl: string;
+	signal?: AbortSignal;
+};
+
 const VALIDATION_TIMEOUT_MS = 15_000;
 
 /**
@@ -29,6 +36,41 @@ export async function validateOpenAICompatibleApiKey(options: OpenAICompatibleVa
 			max_tokens: 1,
 			temperature: 0,
 		}),
+		signal,
+	});
+
+	if (response.ok) {
+		return;
+	}
+
+	let details = "";
+	try {
+		details = (await response.text()).trim();
+	} catch {
+		// ignore body parse errors, status is enough
+	}
+
+	const message = details
+		? `${options.provider} API key validation failed (${response.status}): ${details}`
+		: `${options.provider} API key validation failed (${response.status})`;
+	throw new Error(message);
+}
+
+/**
+ * Validate an API key against a provider models endpoint.
+ *
+ * Useful for providers where access to specific models may vary by plan and
+ * should not block key validation.
+ */
+export async function validateApiKeyAgainstModelsEndpoint(options: ModelListValidationOptions): Promise<void> {
+	const timeoutSignal = AbortSignal.timeout(VALIDATION_TIMEOUT_MS);
+	const signal = options.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal;
+
+	const response = await fetch(options.modelsUrl, {
+		method: "GET",
+		headers: {
+			Authorization: `Bearer ${options.apiKey}`,
+		},
 		signal,
 	});
 
