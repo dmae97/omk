@@ -3554,7 +3554,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 	#isRetryableErrorMessage(errorMessage: string): boolean {
 		// Match: overloaded_error, rate limit, usage limit, 429, 500, 502, 503, 504, service unavailable, connection error, fetch failed, retry delay exceeded
-		return /overloaded|rate.?limit|usage.?limit|too many requests|429|500|502|503|504|service.?unavailable|server error|internal error|connection.?error|fetch failed|retry delay/i.test(
+		return /overloaded|rate.?limit|usage.?limit|too many requests|429|500|502|503|504|service.?unavailable|server error|internal error|connection.?error|unable to connect|fetch failed|retry delay/i.test(
 			errorMessage,
 		);
 	}

@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Fixed retry logic to recognize 'unable to connect' errors as transient failures
 
 ## [12.11.3] - 2026-02-19
 
