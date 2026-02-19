@@ -137,6 +137,9 @@ export interface AgentOptions {
 	 */
 	transformToolCallArguments?: (args: Record<string, unknown>, toolName: string) => Record<string, unknown>;
 
+	/** Enable intent tracing schema injection/stripping in the harness. */
+	intentTracing?: boolean;
+
 	/**
 	 * Cursor exec handlers for local tool execution.
 	 */
@@ -193,6 +196,7 @@ export class Agent {
 	#kimiApiFormat?: "openai" | "anthropic";
 	#preferWebsockets?: boolean;
 	#transformToolCallArguments?: (args: Record<string, unknown>, toolName: string) => Record<string, unknown>;
+	#intentTracing: boolean;
 
 	/** Buffered Cursor tool results with text length at time of call (for correct ordering) */
 	#cursorToolResultBuffer: CursorToolResultEntry[] = [];
@@ -220,6 +224,7 @@ export class Agent {
 		this.#kimiApiFormat = opts.kimiApiFormat;
 		this.#preferWebsockets = opts.preferWebsockets;
 		this.#transformToolCallArguments = opts.transformToolCallArguments;
+		this.#intentTracing = opts.intentTracing === true;
 	}
 
 	/**
@@ -641,6 +646,7 @@ export class Agent {
 			cursorExecHandlers: this.#cursorExecHandlers,
 			cursorOnToolResult,
 			transformToolCallArguments: this.#transformToolCallArguments,
+			intentTracing: this.#intentTracing,
 			getSteeringMessages: async () => {
 				if (skipInitialSteeringPoll) {
 					skipInitialSteeringPoll = false;

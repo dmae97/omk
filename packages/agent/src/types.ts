@@ -117,6 +117,12 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 * Use for deobfuscating secrets or rewriting arguments.
 	 */
 	transformToolCallArguments?: (args: Record<string, unknown>, toolName: string) => Record<string, unknown>;
+	/**
+	 * Enable intent tracing for tool calls.
+	 * When enabled, the harness injects a `$intent: string` field into tool schemas sent to the model,
+	 * then strips `$intent` from arguments before executing tools.
+	 */
+	intentTracing?: boolean;
 }
 
 export interface ToolCallContext {

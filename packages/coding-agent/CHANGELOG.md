@@ -1,9 +1,9 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added `tools.intentTracing` setting to enable intent tracing, which injects `$intent` into all tool schemas and strips it before tool execution
 - Support for file deletion in hashline edit mode via `delete: true` parameter
 - Support for file renaming/moving in hashline edit mode via `rename` parameter
 - Optional content-replace edit variant in hashline mode (enabled via `PI_HL_REPLACETXT=1` environment variable)

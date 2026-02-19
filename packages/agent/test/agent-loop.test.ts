@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { agentLoop, agentLoopContinue } from "@oh-my-pi/pi-agent-core/agent-loop";
+import { agentLoop, agentLoopContinue, INTENT_FIELD } from "@oh-my-pi/pi-agent-core/agent-loop";
 import type {
 	AgentContext,
 	AgentEvent,
@@ -9,7 +9,7 @@ import type {
 	AgentToolContext,
 	ToolCallContext,
 } from "@oh-my-pi/pi-agent-core/types";
-import type { AssistantMessage, Message, Model, ToolResultMessage, UserMessage } from "@oh-my-pi/pi-ai";
+import type { AssistantMessage, Context, Message, Model, ToolResultMessage, UserMessage } from "@oh-my-pi/pi-ai";
 import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
 import { Type } from "@sinclair/typebox";
 
@@ -368,6 +368,87 @@ describe("agentLoop with AgentMessage", () => {
 		expect(toolEnd).toBeDefined();
 		if (toolEnd?.type === "tool_execution_end") {
 			expect(toolEnd.isError).toBeFalsy();
+		}
+	});
+
+	it("injects and strips intent when intent tracing is enabled", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		const executedParams: Record<string, unknown>[] = [];
+		let firstRequestToolSchema: Record<string, unknown> | undefined;
+		const tool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "echo",
+			label: "Echo",
+			description: "Echo tool",
+			parameters: toolSchema,
+			async execute(_toolCallId, params) {
+				executedParams.push(params as Record<string, unknown>);
+				return {
+					content: [{ type: "text", text: `echoed: ${params.value}` }],
+					details: { value: params.value },
+				};
+			},
+		};
+
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [tool],
+		};
+
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			intentTracing: true,
+		};
+
+		let callIndex = 0;
+		const streamFn = (_model: Model, llmContext: Context) => {
+			if (callIndex === 0) {
+				firstRequestToolSchema = llmContext.tools?.[0]?.parameters;
+			}
+			const stream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					const message = createAssistantMessage(
+						[
+							{
+								type: "toolCall",
+								id: "tool-1",
+								name: "echo",
+								arguments: { value: "hello", [INTENT_FIELD]: "Read one file" },
+							},
+						],
+						"toolUse",
+					);
+					stream.push({ type: "done", reason: "toolUse", message });
+				} else {
+					const message = createAssistantMessage([{ type: "text", text: "done" }]);
+					stream.push({ type: "done", reason: "stop", message });
+				}
+				callIndex++;
+			});
+			return stream;
+		};
+
+		const stream = agentLoop([createUserMessage("run")], context, config, undefined, streamFn);
+		for await (const _ of stream) {
+			// consume
+		}
+		const messages = await stream.result();
+		const assistantWithToolCall = messages.find(
+			message => message.role === "assistant" && message.content.some(content => content.type === "toolCall"),
+		) as AssistantMessage | undefined;
+		const tracedToolCall = assistantWithToolCall?.content.find(content => content.type === "toolCall");
+
+		expect(firstRequestToolSchema?.properties).toMatchObject({
+			value: { type: "string" },
+			[INTENT_FIELD]: { type: "string" },
+		});
+		expect(executedParams).toEqual([{ value: "hello" }]);
+		expect(tracedToolCall?.type).toBe("toolCall");
+		if (tracedToolCall?.type === "toolCall") {
+			expect(tracedToolCall.intent).toBe("Read one file");
+			expect(tracedToolCall.arguments).toEqual({ value: "hello" });
 		}
 	});
 

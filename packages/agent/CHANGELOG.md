@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `intentTracing` option to enable intent goal extraction from tool calls, allowing models to specify high-level goals via a `$intent` field that is automatically injected into tool schemas and stripped from arguments before execution
 
 ## [12.11.0] - 2026-02-19
 

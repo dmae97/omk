@@ -123,6 +123,50 @@ function normalizeMessagesForProvider(
 	return changed ? normalized : messages;
 }
 
+export const INTENT_FIELD = "$intent";
+
+function injectIntentGoalIntoSchema(schema: unknown): unknown {
+	if (!schema || typeof schema !== "object" || Array.isArray(schema)) return schema;
+	const schemaRecord = schema as Record<string, unknown>;
+	const propertiesValue = schemaRecord.properties;
+	const properties =
+		propertiesValue && typeof propertiesValue === "object" && !Array.isArray(propertiesValue)
+			? (propertiesValue as Record<string, unknown>)
+			: {};
+	if (INTENT_FIELD in properties) return schema;
+	return {
+		...schemaRecord,
+		properties: {
+			...properties,
+			[INTENT_FIELD]: {
+				type: "string",
+				description: "High-level goal for this tool call.",
+			},
+		},
+	};
+}
+
+function injectIntentGoalIntoTools(tools: Context["tools"]): Context["tools"] {
+	if (!tools || tools.length === 0) return tools;
+	return tools.map(tool => ({
+		...tool,
+		parameters: injectIntentGoalIntoSchema(tool.parameters) as typeof tool.parameters,
+	}));
+}
+
+function stripIntentGoalFromArgs(args: Record<string, unknown>): Record<string, unknown> {
+	if (!(INTENT_FIELD in args)) return args;
+	const { [INTENT_FIELD]: _goal, ...rest } = args;
+	return rest;
+}
+
+function extractIntentGoal(args: Record<string, unknown>): string | undefined {
+	const goal = args[INTENT_FIELD];
+	if (typeof goal !== "string") return undefined;
+	const trimmed = goal.trim();
+	return trimmed.length > 0 ? trimmed : undefined;
+}
+
 /**
  * Main loop logic shared by agentLoop and agentLoopContinue.
  */
@@ -199,6 +243,7 @@ async function runLoop(
 					config.getToolContext,
 					config.interruptMode,
 					config.transformToolCallArguments,
+					config.intentTracing,
 				);
 				toolResults.push(...toolExecution.toolResults);
 				steeringAfterTools = toolExecution.steeringMessages ?? null;
@@ -261,7 +306,7 @@ async function streamAssistantResponse(
 	const llmContext: Context = {
 		systemPrompt: context.systemPrompt,
 		messages: normalizedMessages,
-		tools: context.tools,
+		tools: config.intentTracing ? injectIntentGoalIntoTools(context.tools) : context.tools,
 	};
 
 	const streamFunction = streamFn || streamSimple;
@@ -373,6 +418,7 @@ async function executeToolCalls(
 	getToolContext?: AgentLoopConfig["getToolContext"],
 	interruptMode: AgentLoopConfig["interruptMode"] = "immediate",
 	transformToolCallArguments?: AgentLoopConfig["transformToolCallArguments"],
+	intentTracing?: AgentLoopConfig["intentTracing"],
 ): Promise<{ toolResults: ToolResultMessage[]; steeringMessages?: AgentMessage[] }> {
 	type ToolCallContent = Extract<AssistantMessage["content"][number], { type: "toolCall" }>;
 	const toolCalls = assistantMessage.content.filter((c): c is ToolCallContent => c.type === "toolCall");
@@ -425,6 +471,19 @@ async function executeToolCalls(
 		}
 
 		const { toolCall, tool } = record;
+		if (
+			intentTracing &&
+			toolCall.arguments &&
+			typeof toolCall.arguments === "object" &&
+			!Array.isArray(toolCall.arguments)
+		) {
+			const toolArgs = toolCall.arguments as Record<string, unknown>;
+			const intent = extractIntentGoal(toolArgs);
+			if (intent) {
+				toolCall.intent = intent;
+			}
+			toolCall.arguments = stripIntentGoalFromArgs(toolArgs);
+		}
 		record.started = true;
 		stream.push({
 			type: "tool_execution_start",

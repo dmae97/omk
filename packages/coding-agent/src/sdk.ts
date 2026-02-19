@@ -1207,6 +1207,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		},
 		cursorExecHandlers,
 		transformToolCallArguments: obfuscator?.hasSecrets() ? args => obfuscator!.deobfuscateObject(args) : undefined,
+		intentTracing: settings.get("tools.intentTracing") || $env.PI_INTENT_TRACING === "1",
 	});
 	cursorEventEmitter = event => agent.emitExternalEvent(event);
 	debugStartup("sdk:createAgent");

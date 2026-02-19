@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added optional `intent` field to `ToolCall` interface for harness-level intent metadata
 
 ## [12.13.0] - 2026-02-19
 

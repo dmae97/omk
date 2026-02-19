@@ -502,6 +502,15 @@ export const SETTINGS_SCHEMA = {
 			description: "Launch browser in headless mode (disable to show browser UI)",
 		},
 	},
+	"tools.intentTracing": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "tools",
+			label: "Intent tracing",
+			description: "Inject `$intent` into all tool schemas and strip it before tool execution",
+		},
+	},
 
 	// ─────────────────────────────────────────────────────────────────────────
 	// Task tool settings
