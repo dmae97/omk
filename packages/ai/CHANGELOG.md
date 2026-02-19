@@ -1,9 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added optional `intent` field to `ToolCall` interface for harness-level intent metadata
+
+### Fixed
+
+- Fixed tool argument validation to iteratively coerce nested JSON strings across multiple passes, enabling proper handling of deeply nested JSON-serialized objects and arrays
 
 ## [12.13.0] - 2026-02-19
 

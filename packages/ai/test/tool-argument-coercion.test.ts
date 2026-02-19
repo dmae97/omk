@@ -96,6 +96,63 @@ describe("Tool argument coercion", () => {
 		expect(result.payload.items).toEqual([4, 5]);
 	});
 
+	it("iteratively coerces when both root arguments and nested fields are JSON strings", () => {
+		const tool: Tool = {
+			name: "t7",
+			description: "",
+			parameters: Type.Object({
+				path: Type.String(),
+				edits: Type.Array(
+					Type.Object({
+						target: Type.String(),
+						new_content: Type.String(),
+					}),
+				),
+			}),
+		};
+
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-7",
+			name: "t7",
+			arguments:
+				'{"path":"somefile.js","edits":"[{\\"target\\":\\"13#cf\\",\\"new_content\\":\\"...\\"}]"}' as unknown as Record<string, unknown>,
+		};
+
+		const result = validateToolArguments(tool, toolCall);
+		expect(result.path).toBe("somefile.js");
+		expect(result.edits).toEqual([{ target: "13#cf", new_content: "..." }]);
+	});
+
+	it("iteratively coerces nested array items that are JSON-serialized objects", () => {
+		const tool: Tool = {
+			name: "t8",
+			description: "",
+			parameters: Type.Object({
+				path: Type.String(),
+				edits: Type.Array(
+					Type.Object({
+						target: Type.String(),
+						new_content: Type.String(),
+					}),
+				),
+			}),
+		};
+
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-8",
+			name: "t8",
+			arguments: {
+				path: "somefile.js",
+				edits: '["{\\"target\\":\\"13#cf\\",\\"new_content\\":\\"...\\"}"]',
+			},
+		};
+
+		const result = validateToolArguments(tool, toolCall);
+		expect(result.edits).toEqual([{ target: "13#cf", new_content: "..." }]);
+	});
+
 	it("does not parse quoted JSON strings when schema expects number", () => {
 		const tool: Tool = {
 			name: "t6",

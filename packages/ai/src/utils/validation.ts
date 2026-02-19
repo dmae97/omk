@@ -285,6 +285,8 @@ const ajv = new Ajv({
 });
 addFormats(ajv);
 
+const MAX_TYPE_COERCION_PASSES = 5;
+
 /**
  * Finds a tool by name and validates the tool call arguments against its TypeBox schema
  * @param tools Array of tool definitions
@@ -318,9 +320,19 @@ export function validateToolArguments(tool: Tool, toolCall: ToolCall): any {
 		return originalArgs;
 	}
 
-	const { value: coercedArgs, changed } = coerceArgsFromErrors(originalArgs, validate.errors);
-	if (changed && validate(coercedArgs)) {
-		return coercedArgs;
+	let normalizedArgs: unknown = originalArgs;
+	let changed = false;
+
+	for (let pass = 0; pass < MAX_TYPE_COERCION_PASSES; pass += 1) {
+		const coercion = coerceArgsFromErrors(normalizedArgs, validate.errors);
+		if (!coercion.changed) break;
+
+		normalizedArgs = coercion.value;
+		changed = true;
+
+		if (validate(normalizedArgs)) {
+			return normalizedArgs;
+		}
 	}
 
 	// Format validation errors nicely
@@ -335,7 +347,7 @@ export function validateToolArguments(tool: Tool, toolCall: ToolCall): any {
 	const receivedArgs = changed
 		? {
 				original: originalArgs,
-				normalized: coercedArgs,
+				normalized: normalizedArgs,
 			}
 		: originalArgs;
 
