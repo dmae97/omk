@@ -72,7 +72,7 @@ export interface OpenAIResponsesOptions extends StreamOptions {
 	toolChoice?: ToolChoice;
 	/**
 	 * Enforce strict tool call/result pairing when building Responses API inputs.
-	 * Azure OpenAI Responses API requires tool results to have a matching tool call.
+	 * Azure OpenAI and GitHub Copilot Responses paths require tool results to match prior tool calls.
 	 */
 	strictResponsesPairing?: boolean;
 }
@@ -402,7 +402,7 @@ function createClient(
 }
 
 function buildParams(model: Model<"openai-responses">, context: Context, options?: OpenAIResponsesOptions) {
-	const strictResponsesPairing = options?.strictResponsesPairing ?? isAzureOpenAIBaseUrl(model.baseUrl ?? "");
+	const strictResponsesPairing = options?.strictResponsesPairing ?? (isAzureOpenAIBaseUrl(model.baseUrl ?? "") || model.provider === "github-copilot");
 	const messages = convertMessages(model, context, strictResponsesPairing);
 
 	const cacheRetention = resolveCacheRetention(options?.cacheRetention);
