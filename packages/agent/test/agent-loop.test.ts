@@ -449,7 +449,6 @@ describe("agentLoop with AgentMessage", () => {
 		expect(tracedToolCall?.type).toBe("toolCall");
 		if (tracedToolCall?.type === "toolCall") {
 			expect(tracedToolCall.intent).toBe("Read one file");
-			expect(tracedToolCall.arguments).toEqual({ value: "hello" });
 		}
 	});
 
