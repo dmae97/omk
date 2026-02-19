@@ -25,6 +25,8 @@
   "files": [
     "src",
     "public",
+    "build.ts",
+    "tailwind.config.js",
     "README.md"
   ],
   "keywords": [
