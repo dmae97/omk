@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Replaced nerd font pie-chart spinner with clock-outline icons for smoother looping
+- Moved status icon to front of code-cell headers in formatHeader
+
+### Fixed
+
+- Fixed ReadToolGroupComponent to show status icon before title instead of trailing
+- Fixed bash-interactive status badge to dim only bracket characters, not the enclosed text
+
 ## [12.14.1] - 2026-02-19
 
 ### Fixed

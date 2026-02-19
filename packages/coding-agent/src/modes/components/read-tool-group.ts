@@ -84,9 +84,7 @@ export class ReadToolGroupComponent extends Container implements ToolExecutionHa
 			const entry = entries[0];
 			const statusSymbol = this.#formatStatus(entry.status);
 			const pathDisplay = this.#formatPath(entry);
-			this.#text.setText(
-				` ${theme.format.bullet} ${theme.fg("toolTitle", theme.bold("Read"))} ${pathDisplay} ${statusSymbol}`.trimEnd(),
-			);
+			this.#text.setText(` ${statusSymbol} ${theme.fg("toolTitle", theme.bold("Read"))} ${pathDisplay}`.trimEnd());
 			return;
 		}
 

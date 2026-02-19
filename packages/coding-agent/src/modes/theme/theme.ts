@@ -765,7 +765,7 @@ const SPINNER_FRAMES: Record<SymbolPreset, Record<SpinnerType, string[]>> = {
 		activity: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
 	},
 	nerd: {
-		status: ["󰪥", "󰪤", "󰪣", "󰪢", "󰪡", "󰪠", "󰪟", "󰪞", "󰪥"],
+		status: ["󱑖", "󱑋", "󱑌", "󱑍", "󱑎", "󱑏", "󱑐", "󱑑", "󱑒", "󱑓", "󱑔", "󱑕"],
 		activity: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
 	},
 	ascii: {
