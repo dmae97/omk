@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.13.0] - 2026-02-19
 ### Breaking Changes
 
 - Removed automatic line relocation when hash references become stale; edits with mismatched line hashes now fail with an error instead of silently relocating to matching lines elsewhere in the file
