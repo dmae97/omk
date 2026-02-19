@@ -104,7 +104,17 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 			const effectiveMultiline = multiline ?? patternHasNewline;
 
 			const useHashLines = resolveFileDisplayMode(this.session).hashLines;
-			const searchPath = resolveToCwd(searchDir || ".", this.session.cwd);
+			let searchPath: string;
+			const internalRouter = this.session.internalRouter;
+			if (searchDir && internalRouter?.canHandle(searchDir)) {
+				const resource = await internalRouter.resolve(searchDir);
+				if (!resource.sourcePath) {
+					throw new ToolError(`Cannot grep internal URL without a backing file: ${searchDir}`);
+				}
+				searchPath = resource.sourcePath;
+			} else {
+				searchPath = resolveToCwd(searchDir || ".", this.session.cwd);
+			}
 			const scopePath = (() => {
 				const relative = path.relative(this.session.cwd, searchPath).replace(/\\/g, "/");
 				return relative.length === 0 ? "." : relative;

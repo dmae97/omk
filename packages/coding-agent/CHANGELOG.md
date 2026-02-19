@@ -1,6 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Support for grepping internal URLs (artifact://) by resolving them to their backing files
+
+### Fixed
+
+- Grep tool now properly handles internal URL resolution when searching artifact paths
 
 ## [12.13.0] - 2026-02-19
 ### Breaking Changes
