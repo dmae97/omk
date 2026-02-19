@@ -1,6 +1,21 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added support for Claude 4.6 Opus and Sonnet models via Cursor API
+- Added support for Composer 1.5 model via Cursor API
+- Added support for GPT-5.1 Codex Mini and GPT-5.1 High models via Cursor API
+- Added support for GPT-5.2 and GPT-5.3 Codex variants (Fast, High, Low, Extra High) via Cursor API
+- Added HTTP/2 transport support for Cursor API requests (required by Cursor API)
+
+### Changed
+
+- Updated pricing for Claude 3.5 Sonnet model
+- Updated Claude 3.5 Sonnet context window from 262,144 to 131,072 tokens
+- Simplified Cursor model display names by removing '(Cursor)' suffix
+- Changed Cursor API timeout from 15 seconds to 5 seconds
+- Switched Cursor API transport from HTTP/1.1 to HTTP/2
 
 ## [12.11.0] - 2026-02-19
 

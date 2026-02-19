@@ -8593,8 +8593,8 @@
 				"text"
 			],
 			"cost": {
-				"input": 0.3,
-				"output": 1.2,
+				"input": 0.32,
+				"output": 0.8899999999999999,
 				"cacheRead": 0.15,
 				"cacheWrite": 0
 			},
@@ -9834,12 +9834,12 @@
 				"text"
 			],
 			"cost": {
-				"input": 0.39999999999999997,
-				"output": 1.75,
-				"cacheRead": 0.19999999999999998,
+				"input": 0.47,
+				"output": 2,
+				"cacheRead": 0.14100000000000001,
 				"cacheWrite": 0
 			},
-			"contextWindow": 262144,
+			"contextWindow": 131072,
 			"maxTokens": 65535
 		},
 		"moonshotai/kimi-k2.5": {
@@ -17102,7 +17102,7 @@
 	"cursor": {
 		"claude-4.5-opus-high": {
 			"id": "claude-4.5-opus-high",
-			"name": "Claude 4.5 Opus (Cursor)",
+			"name": "Claude 4.5 Opus",
 			"api": "cursor-agent",
 			"provider": "cursor",
 			"baseUrl": "https://api2.cursor.sh",
@@ -17122,7 +17122,7 @@
 		},
 		"claude-4.5-opus-high-thinking": {
 			"id": "claude-4.5-opus-high-thinking",
-			"name": "Claude 4.5 Opus Thinking (Cursor)",
+			"name": "Claude 4.5 Opus (Thinking)",
 			"api": "cursor-agent",
 			"provider": "cursor",
 			"baseUrl": "https://api2.cursor.sh",
@@ -17142,7 +17142,7 @@
 		},
 		"claude-4.5-sonnet": {
 			"id": "claude-4.5-sonnet",
-			"name": "Claude 4.5 Sonnet (Cursor)",
+			"name": "Claude 4.5 Sonnet",
 			"api": "cursor-agent",
 			"provider": "cursor",
 			"baseUrl": "https://api2.cursor.sh",
@@ -17162,7 +17162,7 @@
 		},
 		"claude-4.5-sonnet-thinking": {
 			"id": "claude-4.5-sonnet-thinking",
-			"name": "Claude 4.5 Sonnet Thinking (Cursor)",
+			"name": "Claude 4.5 Sonnet (Thinking)",
 			"api": "cursor-agent",
 			"provider": "cursor",
 			"baseUrl": "https://api2.cursor.sh",
@@ -17180,9 +17180,104 @@
 			"contextWindow": 200000,
 			"maxTokens": 64000
 		},
+		"claude-4.6-opus-high": {
+			"id": "claude-4.6-opus-high",
+			"name": "Claude 4.6 Opus",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
+		"claude-4.6-opus-high-thinking": {
+			"id": "claude-4.6-opus-high-thinking",
+			"name": "Claude 4.6 Opus (Thinking)",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
+		"claude-4.6-sonnet-medium": {
+			"id": "claude-4.6-sonnet-medium",
+			"name": "Claude 4.6 Sonnet",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
+		"claude-4.6-sonnet-medium-thinking": {
+			"id": "claude-4.6-sonnet-medium-thinking",
+			"name": "Claude 4.6 Sonnet (Thinking)",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
 		"composer-1": {
 			"id": "composer-1",
-			"name": "Composer 1 (Cursor)",
+			"name": "Composer 1",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
+		"composer-1.5": {
+			"id": "composer-1.5",
+			"name": "Composer 1.5",
 			"api": "cursor-agent",
 			"provider": "cursor",
 			"baseUrl": "https://api2.cursor.sh",
@@ -17201,7 +17296,7 @@
 		},
 		"default": {
 			"id": "default",
-			"name": "Auto (Cursor)",
+			"name": "Auto",
 			"api": "cursor-agent",
 			"provider": "cursor",
 			"baseUrl": "https://api2.cursor.sh",
@@ -17221,7 +17316,7 @@
 		},
 		"gemini-3-flash": {
 			"id": "gemini-3-flash",
-			"name": "Gemini 3 Flash (Cursor)",
+			"name": "Gemini 3 Flash",
 			"api": "cursor-agent",
 			"provider": "cursor",
 			"baseUrl": "https://api2.cursor.sh",
@@ -17241,7 +17336,7 @@
 		},
 		"gemini-3-pro": {
 			"id": "gemini-3-pro",
-			"name": "Gemini 3 Pro (Cursor)",
+			"name": "Gemini 3 Pro",
 			"api": "cursor-agent",
 			"provider": "cursor",
 			"baseUrl": "https://api2.cursor.sh",
@@ -17261,7 +17356,7 @@
 		},
 		"gpt-5.1-codex-max": {
 			"id": "gpt-5.1-codex-max",
-			"name": "GPT-5.1 Codex Max (Cursor)",
+			"name": "GPT-5.1 Codex Max",
 			"api": "cursor-agent",
 			"provider": "cursor",
 			"baseUrl": "https://api2.cursor.sh",
@@ -17281,7 +17376,7 @@
 		},
 		"gpt-5.1-codex-max-high": {
 			"id": "gpt-5.1-codex-max-high",
-			"name": "GPT-5.1 Codex Max High (Cursor)",
+			"name": "GPT-5.1 Codex Max High",
 			"api": "cursor-agent",
 			"provider": "cursor",
 			"baseUrl": "https://api2.cursor.sh",
@@ -17299,9 +17394,47 @@
 			"contextWindow": 272000,
 			"maxTokens": 128000
 		},
+		"gpt-5.1-codex-mini": {
+			"id": "gpt-5.1-codex-mini",
+			"name": "GPT-5.1 Codex Mini",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 64000
+		},
+		"gpt-5.1-high": {
+			"id": "gpt-5.1-high",
+			"name": "GPT-5.1 High",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
 		"gpt-5.2": {
 			"id": "gpt-5.2",
-			"name": "GPT-5.2 (Cursor)",
+			"name": "GPT-5.2",
 			"api": "cursor-agent",
 			"provider": "cursor",
 			"baseUrl": "https://api2.cursor.sh",
@@ -17318,10 +17451,162 @@
 			},
 			"contextWindow": 400000,
 			"maxTokens": 128000
+		},
+		"gpt-5.2-codex": {
+			"id": "gpt-5.2-codex",
+			"name": "GPT-5.2 Codex",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 64000
+		},
+		"gpt-5.2-codex-fast": {
+			"id": "gpt-5.2-codex-fast",
+			"name": "GPT-5.2 Codex Fast",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 64000
+		},
+		"gpt-5.2-codex-high": {
+			"id": "gpt-5.2-codex-high",
+			"name": "GPT-5.2 Codex High",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 64000
+		},
+		"gpt-5.2-codex-high-fast": {
+			"id": "gpt-5.2-codex-high-fast",
+			"name": "GPT-5.2 Codex High Fast",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 64000
+		},
+		"gpt-5.2-codex-low": {
+			"id": "gpt-5.2-codex-low",
+			"name": "GPT-5.2 Codex Low",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 64000
+		},
+		"gpt-5.2-codex-low-fast": {
+			"id": "gpt-5.2-codex-low-fast",
+			"name": "GPT-5.2 Codex Low Fast",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 64000
+		},
+		"gpt-5.2-codex-xhigh": {
+			"id": "gpt-5.2-codex-xhigh",
+			"name": "GPT-5.2 Codex Extra High",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 64000
+		},
+		"gpt-5.2-codex-xhigh-fast": {
+			"id": "gpt-5.2-codex-xhigh-fast",
+			"name": "GPT-5.2 Codex Extra High Fast",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 64000
 		},
 		"gpt-5.2-high": {
 			"id": "gpt-5.2-high",
-			"name": "GPT-5.2 High (Cursor)",
+			"name": "GPT-5.2 High",
 			"api": "cursor-agent",
 			"provider": "cursor",
 			"baseUrl": "https://api2.cursor.sh",
@@ -17339,9 +17624,161 @@
 			"contextWindow": 400000,
 			"maxTokens": 128000
 		},
+		"gpt-5.3-codex": {
+			"id": "gpt-5.3-codex",
+			"name": "GPT-5.3 Codex",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 64000
+		},
+		"gpt-5.3-codex-fast": {
+			"id": "gpt-5.3-codex-fast",
+			"name": "GPT-5.3 Codex Fast",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 64000
+		},
+		"gpt-5.3-codex-high": {
+			"id": "gpt-5.3-codex-high",
+			"name": "GPT-5.3 Codex High",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 64000
+		},
+		"gpt-5.3-codex-high-fast": {
+			"id": "gpt-5.3-codex-high-fast",
+			"name": "GPT-5.3 Codex High Fast",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 64000
+		},
+		"gpt-5.3-codex-low": {
+			"id": "gpt-5.3-codex-low",
+			"name": "GPT-5.3 Codex Low",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 64000
+		},
+		"gpt-5.3-codex-low-fast": {
+			"id": "gpt-5.3-codex-low-fast",
+			"name": "GPT-5.3 Codex Low Fast",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 64000
+		},
+		"gpt-5.3-codex-xhigh": {
+			"id": "gpt-5.3-codex-xhigh",
+			"name": "GPT-5.3 Codex Extra High",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 64000
+		},
+		"gpt-5.3-codex-xhigh-fast": {
+			"id": "gpt-5.3-codex-xhigh-fast",
+			"name": "GPT-5.3 Codex Extra High Fast",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": false,
+			"input": [
+				"text"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 64000
+		},
 		"grok-code-fast-1": {
 			"id": "grok-code-fast-1",
-			"name": "Grok (Cursor)",
+			"name": "Grok",
 			"api": "cursor-agent",
 			"provider": "cursor",
 			"baseUrl": "https://api2.cursor.sh",

@@ -1,3 +1,4 @@
+import * as http2 from "node:http2";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { z } from "zod";
 import { getBundledModels } from "../../models";
@@ -5,7 +6,7 @@ import { GetUsableModelsRequestSchema, GetUsableModelsResponseSchema } from "../
 import type { Model } from "../../types";
 
 const CURSOR_DEFAULT_BASE_URL = "https://api2.cursor.sh";
-const CURSOR_DEFAULT_CLIENT_VERSION = "cli-2026.01.09-231024f";
+const CURSOR_DEFAULT_CLIENT_VERSION = "cli-2026.02.13-41ac335";
 const CURSOR_GET_USABLE_MODELS_PATH = "/agent.v1.AgentService/GetUsableModels";
 
 const DEFAULT_CONTEXT_WINDOW = 200_000;
@@ -47,8 +48,6 @@ export interface CursorModelDiscoveryOptions {
 	timeoutMs?: number;
 	/** Optional list of custom Cursor model ids to include in request context. */
 	customModelIds?: string[];
-	/** Optional fetch implementation override for tests. */
-	fetchImpl?: typeof fetch;
 }
 
 /**
@@ -60,34 +59,19 @@ export interface CursorModelDiscoveryOptions {
 export async function fetchCursorUsableModels(
 	options: CursorModelDiscoveryOptions,
 ): Promise<Model<"cursor-agent">[] | null> {
-	const fetchImpl = options.fetchImpl ?? fetch;
-	const timeoutMs = options.timeoutMs ?? 15_000;
-	const signal = AbortSignal.timeout(timeoutMs);
-
+	const timeoutMs = options.timeoutMs ?? 5_000;
 	try {
 		const requestPayload = create(GetUsableModelsRequestSchema, {
 			customModelIds: normalizeCustomModelIds(options.customModelIds),
 		});
-		const response = await fetchImpl(buildCursorUrl(options.baseUrl), {
-			method: "POST",
-			headers: {
-				"content-type": "application/connect+proto",
-				"connect-protocol-version": "1",
-				te: "trailers",
-				authorization: `Bearer ${options.apiKey}`,
-				"x-ghost-mode": "true",
-				"x-cursor-client-version": options.clientVersion ?? CURSOR_DEFAULT_CLIENT_VERSION,
-				"x-cursor-client-type": "cli",
-			},
-			body: encodeConnectUnaryMessage(toBinary(GetUsableModelsRequestSchema, requestPayload)),
-			signal,
-		});
+		const body = toBinary(GetUsableModelsRequestSchema, requestPayload);
+		const baseUrl = (options.baseUrl ?? CURSOR_DEFAULT_BASE_URL).replace(/\/+$/, "");
 
-		if (!response.ok) {
+		const responseBuffer = await fetchViaHttp2(baseUrl, body, options, timeoutMs);
+
+		if (!responseBuffer) {
 			return null;
 		}
-
-		const responseBuffer = new Uint8Array(await response.arrayBuffer());
 		const decoded = decodeGetUsableModelsResponse(responseBuffer);
 		const parsedDecoded = CursorDecodedResponseSchema.safeParse(decoded);
 		if (!parsedDecoded.success) {
@@ -95,15 +79,76 @@ export async function fetchCursorUsableModels(
 		}
 
 		const references = createCursorReferenceMap();
-
 		return normalizeCursorModels(parsedDecoded.data.models, options.baseUrl, references);
 	} catch {
 		return null;
 	}
 }
 
-function buildCursorUrl(baseUrl?: string): string {
-	return `${(baseUrl ?? CURSOR_DEFAULT_BASE_URL).replace(/\/+$/, "")}${CURSOR_GET_USABLE_MODELS_PATH}`;
+function buildRequestHeaders(options: CursorModelDiscoveryOptions): Record<string, string> {
+	return {
+		"content-type": "application/proto",
+		te: "trailers",
+		authorization: `Bearer ${options.apiKey}`,
+		"x-ghost-mode": "true",
+		"x-cursor-client-version": options.clientVersion ?? CURSOR_DEFAULT_CLIENT_VERSION,
+		"x-cursor-client-type": "cli",
+	};
+}
+
+/** HTTP/2 transport required by Cursor API (HTTP/1.1 is rejected with 464). */
+async function fetchViaHttp2(
+	baseUrl: string,
+	body: Uint8Array,
+	options: CursorModelDiscoveryOptions,
+	timeoutMs: number,
+): Promise<Uint8Array | null> {
+	const { promise, resolve } = Promise.withResolvers<Uint8Array | null>();
+	const client = http2.connect(baseUrl);
+	const timer = setTimeout(() => {
+		client.destroy();
+		resolve(null);
+	}, timeoutMs);
+
+	client.on("error", () => {
+		clearTimeout(timer);
+		resolve(null);
+	});
+
+	const req = client.request({
+		":method": "POST",
+		":path": CURSOR_GET_USABLE_MODELS_PATH,
+		...buildRequestHeaders(options),
+	});
+
+	const chunks: Buffer[] = [];
+	req.on("data", (chunk: Buffer) => chunks.push(chunk));
+	req.on("end", () => {
+		clearTimeout(timer);
+		client.close();
+		resolve(new Uint8Array(Buffer.concat(chunks)));
+	});
+	req.on("error", () => {
+		clearTimeout(timer);
+		client.close();
+		resolve(null);
+	});
+	req.on("response", headers => {
+		const status = Number(headers[":status"] ?? 0);
+		if (status < 200 || status >= 300) {
+			clearTimeout(timer);
+			client.close();
+			resolve(null);
+		}
+	});
+
+	if (body.length > 0) {
+		req.end(Buffer.from(body));
+	} else {
+		req.end();
+	}
+
+	return promise;
 }
 
 function normalizeCustomModelIds(customModelIds: readonly string[] | undefined): string[] {
@@ -130,15 +175,6 @@ function createCursorReferenceMap(): Map<string, Model<"cursor-agent">> {
 		references.set(model.id, model);
 	}
 	return references;
-}
-
-function encodeConnectUnaryMessage(payload: Uint8Array): Uint8Array {
-	const framed = new Uint8Array(5 + payload.length);
-	framed[0] = 0;
-	const view = new DataView(framed.buffer, framed.byteOffset, framed.byteLength);
-	view.setUint32(1, payload.length, false);
-	framed.set(payload, 5);
-	return framed;
 }
 
 function decodeGetUsableModelsResponse(payload: Uint8Array) {
