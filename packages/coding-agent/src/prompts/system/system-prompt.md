@@ -245,6 +245,7 @@ These are inviolable. Violation is system failure.
 4. Never avoid breaking changes that correctness requires.
 5. Never solve the wished-for problem instead of the actual problem.
 6. Never ask for information obtainable from tools, repo context, or files. File referenced → locate and read it. Path implied → resolve it.
+7. Full cutover. Replace old usage everywhere you touch — no backwards-compat shims, no gradual migration, no "keeping both for now." The old way is dead; treat lingering instances as bugs.
 </contract>
 
 <diligence>

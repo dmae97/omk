@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Fixed terminal output handling to properly queue and serialize writes, preventing dropped or corrupted output in interactive bash sessions
 
 ## [12.12.1] - 2026-02-19
 

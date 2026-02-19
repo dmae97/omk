@@ -95,6 +95,8 @@ class BashInteractiveOverlayComponent implements Component {
 	#session: PtySession | null = null;
 	#lastCols = 0;
 	#lastRows = 0;
+	#writeQueue: string[] = [];
+	#writing = false;
 
 	constructor(
 		private readonly command: string,
@@ -117,7 +119,18 @@ class BashInteractiveOverlayComponent implements Component {
 	}
 
 	appendOutput(chunk: string): void {
-		this.#terminal.write(chunk);
+		this.#writeQueue.push(chunk);
+		this.#drainQueue();
+	}
+
+	#drainQueue(): void {
+		if (this.#writing || this.#writeQueue.length === 0) return;
+		this.#writing = true;
+		const data = this.#writeQueue.shift()!;
+		this.#terminal.write(data, () => {
+			this.#writing = false;
+			this.#drainQueue();
+		});
 	}
 
 	setSession(session: PtySession): void {
@@ -349,12 +362,7 @@ export async function runInteractiveBashPty(
 					},
 					(err, chunk) => {
 						if (err || !chunk) return;
-						try {
-							component.appendOutput(chunk);
-						} catch {
-							const normalizedChunk = normalizeCaptureChunk(chunk);
-							component.appendOutput(normalizedChunk);
-						}
+						component.appendOutput(chunk);
 						const normalizedChunk = normalizeCaptureChunk(chunk);
 						pendingChunks = pendingChunks.then(() => sink.push(normalizedChunk)).catch(() => {});
 						tui.requestRender();
