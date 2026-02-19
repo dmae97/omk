@@ -28,7 +28,6 @@ import {
 	shortenPath,
 	ToolUIKit,
 } from "./render-utils";
-import type { RenderCallOptions } from "./renderers";
 
 const writeSchema = Type.Object({
 	path: Type.String({ description: "Path to the file to write (relative or absolute)" }),
@@ -189,7 +188,7 @@ function renderContentPreview(content: string, expanded: boolean, uiTheme: Theme
 }
 
 export const writeToolRenderer = {
-	renderCall(args: WriteRenderArgs, uiTheme: Theme, options?: RenderCallOptions): Component {
+	renderCall(args: WriteRenderArgs, options: RenderResultOptions, uiTheme: Theme): Component {
 		const ui = new ToolUIKit(uiTheme);
 		const rawPath = args.file_path || args.path || "";
 		const filePath = shortenPath(rawPath);

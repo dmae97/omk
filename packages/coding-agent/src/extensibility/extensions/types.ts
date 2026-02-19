@@ -304,7 +304,7 @@ export interface ToolDefinition<TParams extends TSchema = TSchema, TDetails = un
 	onSession?: (event: ToolSessionEvent, ctx: ExtensionContext) => void | Promise<void>;
 
 	/** Custom rendering for tool call display */
-	renderCall?: (args: Static<TParams>, theme: Theme) => Component;
+	renderCall?: (args: Static<TParams>, options: ToolRenderResultOptions, theme: Theme) => Component;
 
 	/** Custom rendering for tool result display */
 	renderResult?: (

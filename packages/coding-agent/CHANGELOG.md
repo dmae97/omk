@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Unified `renderCall` signatures to `(args, options, theme)` across all tool renderers and extension types
+
 ## [12.16.0] - 2026-02-21
 
 ### Added

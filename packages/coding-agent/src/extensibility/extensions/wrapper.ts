@@ -18,7 +18,7 @@ export class RegisteredToolAdapter implements AgentTool<any, any, any> {
 	declare parameters: any;
 	declare label: string;
 
-	renderCall?: (args: any, theme: any) => any;
+	renderCall?: (args: any, options: any, theme: any) => any;
 	renderResult?: (result: any, options: any, theme: any, args?: any) => any;
 
 	constructor(
@@ -32,7 +32,8 @@ export class RegisteredToolAdapter implements AgentTool<any, any, any> {
 		// enters the custom-renderer path, gets undefined back, and silently
 		// discards tool result text (extensions without renderers show blank).
 		if (registeredTool.definition.renderCall) {
-			this.renderCall = (args: any, theme: any) => registeredTool.definition.renderCall!(args, theme as Theme);
+			this.renderCall = (args: any, options: any, theme: any) =>
+				registeredTool.definition.renderCall!(args, options, theme as Theme);
 		}
 		if (registeredTool.definition.renderResult) {
 			this.renderResult = (result: any, options: any, theme: any, args?: any) =>

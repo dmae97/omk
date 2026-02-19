@@ -967,6 +967,7 @@ function countNonEmptyLines(text: string): number {
 /** Render fetch call (URL preview) */
 export function renderFetchCall(
 	args: { url?: string; timeout?: number; raw?: boolean },
+	_options: RenderResultOptions,
 	uiTheme: Theme = theme,
 ): Component {
 	const url = args.url ?? "";

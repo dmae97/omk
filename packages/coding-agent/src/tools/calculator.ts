@@ -444,7 +444,7 @@ export const calculatorToolRenderer = {
 	 * Render the tool call header showing the first expression and count.
 	 * Format: "Calc <expression> (N calcs)"
 	 */
-	renderCall(args: CalculatorRenderArgs, uiTheme: Theme): Component {
+	renderCall(args: CalculatorRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
 		const count = args.calculations?.length ?? 0;
 		const firstExpression = args.calculations?.[0]?.expression;
 		const description = firstExpression ? truncateToWidth(firstExpression, TRUNCATE_LENGTHS.TITLE) : undefined;

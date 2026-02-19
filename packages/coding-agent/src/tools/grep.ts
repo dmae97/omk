@@ -309,7 +309,7 @@ const COLLAPSED_TEXT_LIMIT = PREVIEW_LIMITS.COLLAPSED_LINES * 2;
 
 export const grepToolRenderer = {
 	inline: true,
-	renderCall(args: GrepRenderArgs, uiTheme: Theme): Component {
+	renderCall(args: GrepRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
 		const meta: string[] = [];
 		if (args.path) meta.push(`in ${args.path}`);
 		if (args.glob) meta.push(`glob:${args.glob}`);

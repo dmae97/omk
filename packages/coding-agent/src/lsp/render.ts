@@ -31,7 +31,7 @@ import type { LspParams, LspToolDetails } from "./types";
  * Render the LSP tool call in the TUI.
  * Shows: "lsp <operation> <file/filecount>"
  */
-export function renderCall(args: LspParams, theme: Theme): Text {
+export function renderCall(args: LspParams, _options: RenderResultOptions, theme: Theme): Text {
 	const actionLabel = (args.action ?? "request").replace(/_/g, " ");
 	const queryPreview = args.query ? truncateToWidth(args.query, TRUNCATE_LENGTHS.SHORT) : undefined;
 

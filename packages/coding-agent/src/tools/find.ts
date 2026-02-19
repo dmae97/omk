@@ -407,7 +407,7 @@ const COLLAPSED_LIST_LIMIT = PREVIEW_LIMITS.COLLAPSED_ITEMS;
 
 export const findToolRenderer = {
 	inline: true,
-	renderCall(args: FindRenderArgs, uiTheme: Theme): Component {
+	renderCall(args: FindRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
 		const meta: string[] = [];
 		if (args.limit !== undefined) meta.push(`limit:${args.limit}`);
 

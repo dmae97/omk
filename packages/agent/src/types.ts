@@ -237,7 +237,7 @@ export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any
 	execute: AgentToolExecFn<TParameters, TDetails, TTheme>;
 
 	/** Optional custom rendering for tool call display (returns UI component) */
-	renderCall?: (args: Static<TParameters>, theme: TTheme) => unknown;
+	renderCall?: (args: Static<TParameters>, options: RenderResultOptions, theme: TTheme) => unknown;
 
 	/** Optional custom rendering for tool result display (returns UI component) */
 	renderResult?: (

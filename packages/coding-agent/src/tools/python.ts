@@ -834,7 +834,7 @@ function formatCellOutputLines(
 }
 
 export const pythonToolRenderer = {
-	renderCall(args: PythonRenderArgs, uiTheme: Theme): Component {
+	renderCall(args: PythonRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
 		const ui = new ToolUIKit(uiTheme);
 		const cells = args.cells ?? [];
 		const cwd = getProjectDir();

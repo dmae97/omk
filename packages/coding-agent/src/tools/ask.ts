@@ -380,7 +380,7 @@ interface AskRenderArgs {
 }
 
 export const askToolRenderer = {
-	renderCall(args: AskRenderArgs, uiTheme: Theme): Component {
+	renderCall(args: AskRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
 		const ui = new ToolUIKit(uiTheme);
 		const label = ui.title("Ask");
 

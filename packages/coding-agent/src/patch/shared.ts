@@ -19,7 +19,6 @@ import {
 	ToolUIKit,
 	truncateDiffByHunk,
 } from "../tools/render-utils";
-import type { RenderCallOptions } from "../tools/renderers";
 import { Ellipsis, Hasher, type RenderCache, renderStatusLine, truncateToWidth } from "../tui";
 import type { DiffError, DiffResult, Operation } from "./types";
 
@@ -254,7 +253,7 @@ function renderDiffSection(
 export const editToolRenderer = {
 	mergeCallAndResult: true,
 
-	renderCall(args: EditRenderArgs, uiTheme: Theme, options?: RenderCallOptions): Component {
+	renderCall(args: EditRenderArgs, options: RenderResultOptions, uiTheme: Theme): Component {
 		const ui = new ToolUIKit(uiTheme);
 		const rawPath = args.file_path || args.path || "";
 		const filePath = shortenPath(rawPath);

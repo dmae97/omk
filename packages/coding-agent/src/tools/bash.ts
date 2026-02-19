@@ -237,7 +237,7 @@ function formatBashCommand(args: BashRenderArgs, _uiTheme: Theme): string {
 export const BASH_PREVIEW_LINES = 10;
 
 export const bashToolRenderer = {
-	renderCall(args: BashRenderArgs, uiTheme: Theme): Component {
+	renderCall(args: BashRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
 		const cmdText = formatBashCommand(args, uiTheme);
 		const text = renderStatusLine({ icon: "pending", title: "Bash", description: cmdText }, uiTheme);
 		return new Text(text, 0, 0);

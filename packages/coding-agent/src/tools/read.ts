@@ -1077,7 +1077,7 @@ interface ReadRenderArgs {
 }
 
 export const readToolRenderer = {
-	renderCall(args: ReadRenderArgs, uiTheme: Theme): Component {
+	renderCall(args: ReadRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
 		const rawPath = args.file_path || args.path || "";
 		const filePath = shortenPath(rawPath);
 		const offset = args.offset;

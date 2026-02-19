@@ -391,7 +391,7 @@ export class ToolExecutionComponent extends Container {
 			const shouldRenderCall = !this.#result || !mergeCallAndResult;
 			if (shouldRenderCall && tool.renderCall) {
 				try {
-					const callComponent = tool.renderCall(this.#getCallArgsForRender(), theme);
+					const callComponent = tool.renderCall(this.#getCallArgsForRender(), this.#renderState, theme);
 					if (callComponent) {
 						this.#contentBox.addChild(ensureInvalidate(callComponent));
 					}
@@ -453,7 +453,7 @@ export class ToolExecutionComponent extends Container {
 			if (shouldRenderCall) {
 				// Render call component
 				try {
-					const callComponent = renderer.renderCall(this.#getCallArgsForRender(), theme, this.#renderState);
+					const callComponent = renderer.renderCall(this.#getCallArgsForRender(), this.#renderState, theme);
 					if (callComponent) {
 						this.#contentBox.addChild(ensureInvalidate(callComponent));
 					}

@@ -203,7 +203,7 @@ interface NotebookRenderArgs {
 const COLLAPSED_TEXT_LIMIT = PREVIEW_LIMITS.COLLAPSED_LINES * 2;
 
 export const notebookToolRenderer = {
-	renderCall(args: NotebookRenderArgs, uiTheme: Theme): Component {
+	renderCall(args: NotebookRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
 		const meta: string[] = [];
 		const notebookPath = args.notebookPath ?? args.notebook_path;
 		const cellNumber = args.cellNumber ?? args.cell_index;

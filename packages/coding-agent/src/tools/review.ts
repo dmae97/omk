@@ -104,7 +104,7 @@ export const reportFindingTool: AgentTool<typeof ReportFindingParams, ReportFind
 		};
 	},
 
-	renderCall(args, theme): Component {
+	renderCall(args, _options, theme): Component {
 		const { label, icon, color } = getPriorityDisplay(args.priority, theme);
 		const titleText = String(args.title).replace(/^\[P\d\]\s*/, "");
 		return new Text(

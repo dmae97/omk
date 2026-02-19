@@ -214,7 +214,7 @@ interface TodoWriteRenderArgs {
 }
 
 export const todoWriteToolRenderer = {
-	renderCall(args: TodoWriteRenderArgs, uiTheme: Theme): Component {
+	renderCall(args: TodoWriteRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
 		const count = args.todos?.length ?? 0;
 		const meta = count > 0 ? [`${count} items`] : ["empty"];
 		const text = renderStatusLine({ icon: "pending", title: "Todo Write", meta }, uiTheme);

@@ -283,6 +283,7 @@ export function renderSearchResult(
 /** Render web search call (query preview) */
 export function renderSearchCall(
 	args: { query?: string; provider?: string; [key: string]: unknown },
+	_options: RenderResultOptions,
 	theme: Theme,
 ): Component {
 	const provider = args.provider ?? "auto";
