@@ -1,10 +1,17 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Removed automatic line relocation when hash references become stale; edits with mismatched line hashes now fail with an error instead of silently relocating to matching lines elsewhere in the file
+
+### Added
+
+- Added `ssh` command for managing SSH host configurations (add, list, remove)
+- Added `/ssh` slash command in interactive mode to manage SSH hosts with subcommands
+- Added support for SSH host configuration at project and user scopes (.omp/ssh.json and ~/.omp/agent/ssh.json)
+- Added `--host`, `--user`, `--port`, `--key`, `--desc`, `--compat`, and `--scope` flags for SSH host configuration
+- Added discovery of SSH hosts from project configuration files alongside manually configured hosts
 
 ### Fixed
 

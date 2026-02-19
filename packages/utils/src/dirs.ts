@@ -284,3 +284,11 @@ export function getMCPConfigPath(scope: "user" | "project", cwd: string = getPro
 	}
 	return path.join(getProjectAgentDir(cwd), "mcp.json");
 }
+
+/** Get the SSH config file path. */
+export function getSSHConfigPath(scope: "user" | "project", cwd: string = getProjectDir()): string {
+	if (scope === "user") {
+		return path.join(getAgentDir(), "ssh.json");
+	}
+	return path.join(getProjectAgentDir(cwd), "ssh.json");
+}

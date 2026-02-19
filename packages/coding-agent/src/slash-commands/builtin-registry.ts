@@ -291,6 +291,26 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 		},
 	},
 	{
+		name: "ssh",
+		description: "Manage SSH hosts (add, list, remove)",
+		subcommands: [
+			{
+				name: "add",
+				description: "Add an SSH host",
+				usage: "<name> --host <host> [--user <user>] [--port <port>] [--key <keyPath>]",
+			},
+			{ name: "list", description: "List all configured SSH hosts" },
+			{ name: "remove", description: "Remove an SSH host", usage: "<name> [--scope project|user]" },
+			{ name: "help", description: "Show help message" },
+		],
+		allowArgs: true,
+		handle: async (command, runtime) => {
+			runtime.ctx.editor.addToHistory(command.text);
+			runtime.ctx.editor.setText("");
+			await runtime.ctx.handleSSHCommand(command.text);
+		},
+	},
+	{
 		name: "new",
 		description: "Start a new session",
 		handle: async (_command, runtime) => {
