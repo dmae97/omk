@@ -4,9 +4,11 @@ import {
 	type MermaidRenderOptions,
 	renderMermaidToPng,
 } from "@oh-my-pi/pi-tui";
+import { logger } from "@oh-my-pi/pi-utils";
 
 const cache = new Map<string, MermaidImage>();
 const pending = new Map<string, Promise<MermaidImage | null>>();
+const failed = new Set<string>();
 
 const defaultOptions: MermaidRenderOptions = {
 	theme: "dark",
@@ -45,7 +47,7 @@ export async function prerenderMermaid(
 	const promises: Promise<boolean>[] = [];
 
 	for (const { source, hash } of blocks) {
-		if (cache.has(hash)) continue;
+		if (cache.has(hash) || failed.has(hash)) continue;
 
 		let promise = pending.get(hash);
 		if (!promise) {
@@ -54,14 +56,26 @@ export async function prerenderMermaid(
 		}
 
 		promises.push(
-			promise.then(image => {
-				pending.delete(hash);
-				if (image) {
-					cache.set(hash, image);
-					return true;
-				}
-				return false;
-			}),
+			promise
+				.then(image => {
+					pending.delete(hash);
+					if (image) {
+						cache.set(hash, image);
+						failed.delete(hash);
+						return true;
+					}
+					failed.add(hash);
+					return false;
+				})
+				.catch(error => {
+					pending.delete(hash);
+					failed.add(hash);
+					logger.warn("Mermaid render failed", {
+						hash,
+						error: error instanceof Error ? error.message : String(error),
+					});
+					return false;
+				}),
 		);
 	}
 
@@ -69,7 +83,13 @@ export async function prerenderMermaid(
 	const newImages = results.some(added => added);
 
 	if (newImages && onRenderNeeded) {
-		onRenderNeeded();
+		try {
+			onRenderNeeded();
+		} catch (error) {
+			logger.warn("Mermaid render callback failed", {
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
 	}
 }
 
@@ -78,7 +98,7 @@ export async function prerenderMermaid(
  */
 export function hasPendingMermaid(markdown: string): boolean {
 	const blocks = extractMermaidBlocks(markdown);
-	return blocks.some(({ hash }) => !cache.has(hash));
+	return blocks.some(({ hash }) => !cache.has(hash) && !failed.has(hash));
 }
 
 /**
@@ -86,4 +106,6 @@ export function hasPendingMermaid(markdown: string): boolean {
  */
 export function clearMermaidCache(): void {
 	cache.clear();
+	failed.clear();
+	pending.clear();
 }

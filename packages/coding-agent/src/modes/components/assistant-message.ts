@@ -1,5 +1,6 @@
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { Container, Markdown, Spacer, TERMINAL, Text } from "@oh-my-pi/pi-tui";
+import { logger } from "@oh-my-pi/pi-utils";
 import { hasPendingMermaid, prerenderMermaid } from "../../modes/theme/mermaid-cache";
 import { getMarkdownTheme, theme } from "../../modes/theme/theme";
 
@@ -47,15 +48,22 @@ export class AssistantMessageComponent extends Container {
 		this.#prerenderInFlight = true;
 
 		// Fire off background prerender
-		(async () => {
-			for (const content of message.content) {
-				if (content.type === "text" && content.text.trim() && hasPendingMermaid(content.text)) {
-					await prerenderMermaid(content.text);
+		void (async () => {
+			try {
+				for (const content of message.content) {
+					if (content.type === "text" && content.text.trim() && hasPendingMermaid(content.text)) {
+						await prerenderMermaid(content.text);
+					}
 				}
+			} catch (error) {
+				logger.warn("Background mermaid prerender failed", {
+					error: error instanceof Error ? error.message : String(error),
+				});
+			} finally {
+				this.#prerenderInFlight = false;
+				// Invalidate to re-render with cached images
+				this.invalidate();
 			}
-			this.#prerenderInFlight = false;
-			// Invalidate to re-render with cached images
-			this.invalidate();
 		})();
 	}
 
