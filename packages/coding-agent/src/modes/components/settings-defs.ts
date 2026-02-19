@@ -164,11 +164,12 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{
 			value: "auto",
 			label: "Auto",
-			description: "Priority: Exa > Brave > Jina > Perplexity > Anthropic > Gemini > Codex > Z.AI > Synthetic",
+			description: "Priority: Exa > Brave > Jina > Kimi > Perplexity > Anthropic > Gemini > Codex > Z.AI > Synthetic",
 		},
 		{ value: "exa", label: "Exa", description: "Requires EXA_API_KEY" },
 		{ value: "brave", label: "Brave", description: "Requires BRAVE_API_KEY" },
 		{ value: "jina", label: "Jina", description: "Requires JINA_API_KEY" },
+		{ value: "kimi", label: "Kimi", description: "Requires MOONSHOT_SEARCH_API_KEY or MOONSHOT_API_KEY" },
 		{ value: "perplexity", label: "Perplexity", description: "Requires PERPLEXITY_API_KEY" },
 		{ value: "anthropic", label: "Anthropic", description: "Uses Anthropic web search" },
 		{ value: "zai", label: "Z.AI", description: "Calls Z.AI webSearchPrime MCP" },

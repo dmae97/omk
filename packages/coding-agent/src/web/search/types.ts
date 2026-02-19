@@ -9,6 +9,7 @@ export type SearchProviderId =
 	| "exa"
 	| "brave"
 	| "jina"
+	| "kimi"
 	| "zai"
 	| "anthropic"
 	| "perplexity"
