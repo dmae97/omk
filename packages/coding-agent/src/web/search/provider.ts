@@ -27,15 +27,15 @@ const SEARCH_PROVIDERS: Record<SearchProviderId, SearchProvider> = {
 	synthetic: new SyntheticProvider(),
 } as const;
 
-const SEARCH_PROVIDER_ORDER: SearchProviderId[] = [
+export const SEARCH_PROVIDER_ORDER: SearchProviderId[] = [
+	"perplexity",
 	"exa",
 	"brave",
 	"jina",
-	"perplexity",
+	"kimi",
 	"anthropic",
 	"gemini",
 	"codex",
-	"kimi",
 	"zai",
 	"synthetic",
 ];
@@ -52,7 +52,7 @@ export function setPreferredSearchProvider(provider: SearchProviderId | "auto"):
 	preferredProvId = provider;
 }
 
-/** Determine which providers are configured (priority: Exa → Brave → Jina → Kimi → Perplexity → Anthropic → Gemini → Codex → Z.AI → Synthetic) */
+/** Determine which providers are configured (priority: Perplexity → Exa → Brave → Jina → Kimi → Anthropic → Gemini → Codex → Z.AI → Synthetic) */
 export async function resolveProviderChain(
 	preferredProvider: SearchProviderId | "auto" = preferredProvId,
 ): Promise<SearchProvider[]> {

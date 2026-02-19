@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added Kimi (Moonshot) as a web search provider with OAuth and API key support ([#110](https://github.com/can1357/oh-my-pi/pull/110) by [@oglassdev](https://github.com/oglassdev))
+
+### Changed
+
+- Changed web search auto-resolve priority to prefer Perplexity first
+
 ### Fixed
 
 - Fixed Mermaid pre-render failures from repeatedly re-triggering background renders (freeze loop) and restored resilient rendering when diagram conversion/callbacks fail ([#109](https://github.com/can1357/oh-my-pi/issues/109)).

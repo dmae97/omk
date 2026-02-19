@@ -8,6 +8,7 @@ import { APP_NAME } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
 import { initTheme, theme } from "../modes/theme/theme";
 import { runSearchQuery, type SearchParams } from "../web/search/index";
+import { SEARCH_PROVIDER_ORDER } from "../web/search/provider";
 import { renderSearchResult } from "../web/search/render";
 import type { SearchProviderId } from "../web/search/types";
 
@@ -19,19 +20,7 @@ export interface SearchCommandArgs {
 	expanded: boolean;
 }
 
-const PROVIDERS: Array<SearchProviderId | "auto"> = [
-	"auto",
-	"anthropic",
-	"perplexity",
-	"exa",
-	"brave",
-	"jina",
-	"kimi",
-	"zai",
-	"gemini",
-	"codex",
-	"synthetic",
-];
+const PROVIDERS: Array<SearchProviderId | "auto"> = ["auto", ...SEARCH_PROVIDER_ORDER];
 
 const RECENCY_OPTIONS: SearchCommandArgs["recency"][] = ["day", "week", "month", "year"];
 

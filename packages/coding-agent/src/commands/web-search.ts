@@ -3,20 +3,9 @@
  */
 import { Args, Command, Flags } from "@oh-my-pi/pi-utils/cli";
 import { runSearchCommand, type SearchCommandArgs } from "../cli/web-search-cli";
-import type { SearchProviderId } from "../web/search/types";
+import { SEARCH_PROVIDER_ORDER } from "../web/search/provider";
 
-const PROVIDERS: Array<SearchProviderId | "auto"> = [
-	"auto",
-	"anthropic",
-	"perplexity",
-	"exa",
-	"brave",
-	"jina",
-	"zai",
-	"gemini",
-	"codex",
-	"synthetic",
-];
+const PROVIDERS: Array<string> = ["auto", ...SEARCH_PROVIDER_ORDER];
 
 const RECENCY: NonNullable<SearchCommandArgs["recency"]>[] = ["day", "week", "month", "year"];
 
@@ -42,7 +31,7 @@ export default class Search extends Command {
 
 		const cmd: SearchCommandArgs = {
 			query,
-			provider: flags.provider as SearchProviderId | "auto" | undefined,
+			provider: flags.provider as SearchCommandArgs["provider"],
 			recency: flags.recency as SearchCommandArgs["recency"],
 			limit: flags.limit,
 			expanded: !flags.compact,

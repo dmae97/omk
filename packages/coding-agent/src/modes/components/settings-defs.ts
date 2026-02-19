@@ -165,7 +165,7 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 			value: "auto",
 			label: "Auto",
 			description:
-				"Priority: Exa > Brave > Jina > Kimi > Perplexity > Anthropic > Gemini > Codex > Z.AI > Synthetic",
+				"Priority: Perplexity > Exa > Brave > Jina > Kimi > Anthropic > Gemini > Codex > Z.AI > Synthetic",
 		},
 		{ value: "exa", label: "Exa", description: "Requires EXA_API_KEY" },
 		{ value: "brave", label: "Brave", description: "Requires BRAVE_API_KEY" },
