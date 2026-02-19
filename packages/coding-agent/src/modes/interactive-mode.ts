@@ -200,7 +200,7 @@ export class InteractiveMode implements InteractiveModeContext {
 			this.ui.requestRender(true);
 		};
 		this.editor.onAutocompleteUpdate = () => {
-			this.ui.requestRender(true);
+			this.ui.requestRender();
 		};
 		this.#syncEditorMaxHeight();
 		this.#resizeHandler = () => {
