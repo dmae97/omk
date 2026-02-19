@@ -1,9 +1,21 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Support for file deletion in hashline edit mode via `delete: true` parameter
+- Support for file renaming/moving in hashline edit mode via `rename` parameter
+- Optional content-replace edit variant in hashline mode (enabled via `PI_HL_REPLACETXT=1` environment variable)
 - Support for grepping internal URLs (artifact://) by resolving them to their backing files
+
+### Changed
+
+- Hashline edit API: renamed `set` operation to `target`/`new_content` for clearer semantics
+- Hashline edit API: renamed `set_range` operation to `first`/`last`/`new_content`
+- Hashline edit API: renamed `insert` operation fields from `body` to `inserted_lines` and made `inserted_lines` required non-empty
+- Hashline edit API: flattened `replace` operation to top-level fields (`old_text`, `new_text`, `all`) when enabled
+- Hashline edit validation now provides more specific error messages indicating which variant is expected
 
 ### Fixed
 

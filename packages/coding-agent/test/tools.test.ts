@@ -655,7 +655,9 @@ describe("edit tool CRLF handling", () => {
 
 	it("should apply hashline replace (substr-style) when edit variant is hashline", async () => {
 		const originalEditVariant = Bun.env.PI_EDIT_VARIANT;
+		const originalHashlineReplace = Bun.env.PI_HL_REPLACETXT;
 		Bun.env.PI_EDIT_VARIANT = "hashline";
+		Bun.env.PI_HL_REPLACETXT = "1";
 
 		const hashDir = path.join(os.tmpdir(), `coding-agent-hashline-replace-${Snowflake.next()}`);
 		fs.mkdirSync(hashDir, { recursive: true });
@@ -667,12 +669,71 @@ describe("edit tool CRLF handling", () => {
 			const hashlineEditTool = new EditTool(session);
 			const result = await hashlineEditTool.execute("hashline-replace-1", {
 				path: testFile,
-				edits: [{ replace: { old_text: "x = 42", new_text: "x = 99" } }],
+				edits: [{ old_text: "x = 42", new_text: "x = 99" }],
 			});
 
 			expect(getTextOutput(result)).toContain("Updated");
 			const content = await Bun.file(testFile).text();
 			expect(content).toBe("x = 99\ny = 10\n");
+		} finally {
+			fs.rmSync(hashDir, { recursive: true, force: true });
+			if (originalEditVariant === undefined) delete Bun.env.PI_EDIT_VARIANT;
+			else Bun.env.PI_EDIT_VARIANT = originalEditVariant;
+			if (originalHashlineReplace === undefined) delete Bun.env.PI_HL_REPLACETXT;
+			else Bun.env.PI_HL_REPLACETXT = originalHashlineReplace;
+		}
+	});
+
+	it("should delete file in hashline mode with delete:true", async () => {
+		const originalEditVariant = Bun.env.PI_EDIT_VARIANT;
+		Bun.env.PI_EDIT_VARIANT = "hashline";
+
+		const hashDir = path.join(os.tmpdir(), `coding-agent-hashline-delete-${Snowflake.next()}`);
+		fs.mkdirSync(hashDir, { recursive: true });
+		const testFile = path.join(hashDir, "delete-me.txt");
+		fs.writeFileSync(testFile, "to be deleted\n");
+
+		try {
+			const session = createTestToolSession(hashDir);
+			const hashlineEditTool = new EditTool(session);
+			const result = await hashlineEditTool.execute("hashline-delete-1", {
+				path: testFile,
+				edits: [],
+				delete: true,
+			});
+
+			expect(getTextOutput(result)).toContain("Deleted");
+			expect(fs.existsSync(testFile)).toBe(false);
+		} finally {
+			fs.rmSync(hashDir, { recursive: true, force: true });
+			if (originalEditVariant === undefined) delete Bun.env.PI_EDIT_VARIANT;
+			else Bun.env.PI_EDIT_VARIANT = originalEditVariant;
+		}
+	});
+
+	it("should rename file in hashline mode with rename", async () => {
+		const originalEditVariant = Bun.env.PI_EDIT_VARIANT;
+		Bun.env.PI_EDIT_VARIANT = "hashline";
+
+		const hashDir = path.join(os.tmpdir(), `coding-agent-hashline-rename-${Snowflake.next()}`);
+		fs.mkdirSync(hashDir, { recursive: true });
+		const sourceFile = path.join(hashDir, "source.txt");
+		const targetFile = path.join(hashDir, "moved", "target.txt");
+		fs.writeFileSync(sourceFile, "unchanged content\n");
+
+		try {
+			const session = createTestToolSession(hashDir);
+			const hashlineEditTool = new EditTool(session);
+			const result = await hashlineEditTool.execute("hashline-rename-1", {
+				path: sourceFile,
+				edits: [],
+				rename: targetFile,
+			});
+
+			expect(getTextOutput(result)).toContain("Updated and moved");
+			expect(fs.existsSync(sourceFile)).toBe(false);
+			expect(fs.existsSync(targetFile)).toBe(true);
+			expect(await Bun.file(targetFile).text()).toBe("unchanged content\n");
 		} finally {
 			fs.rmSync(hashDir, { recursive: true, force: true });
 			if (originalEditVariant === undefined) delete Bun.env.PI_EDIT_VARIANT;
