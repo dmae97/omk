@@ -1,53 +1,53 @@
+# Dependencies
 node_modules/
+.npm/
+
+# Build output
 dist/
-*.log
-.DS_Store
-*.tsbuildinfo
-# packages/*/node_modules/
 packages/*/dist/
 packages/*/dist-chrome/
 packages/*/dist-firefox/
+target/
+*.tsbuildinfo
+*.node
+*.b64.js
 
 # Environment
 .env
 
-# Editor files
+# Editors
 .vscode/
 .zed/
 .idea/
 *.swp
 *.swo
+*.kate-swp
 *~
 
-# Package specific
-.npm/
-coverage/
-.nyc_output/
-.pi_config/
+# OS
+.DS_Store
+
+# Logs & profiling
+*.log
 tui-debug.log
-compaction-results/
-.opencode/
-.omp/
-syntax.jsonl
-out.jsonl
-pi-*.html
-out.html
-
-*.kate-swp
-
-# Claude Code - allow commands to be tracked
-!.claude/
-packages/ai/test/.temp-images/
-
-changes/
-
-__pycache__/
-*.b64.js
-
 *.cpuprofile
 
-target/
+# Test & coverage
+coverage/
+.nyc_output/
+packages/ai/test/.temp-images/
 
+# Project specific
+!.omp/
+.pi_config/
+.opencode/
 .worktrees/
+compaction-results/
+changes/
+__pycache__/
 
-*.node
+# Scratch files
+syntax.jsonl
+out.jsonl
+out.html
+pi-*.html
