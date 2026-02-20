@@ -102,6 +102,7 @@ mkdir -p "$TARBALL_APP_DIR"
 
 	bun add "$utils_tgz" "$natives_tgz" "$ai_tgz" "$agent_tgz" "$tui_tgz" "$stats_tgz" "$coding_agent_tgz"
 	smoke_cli ./node_modules/.bin/omp
+)
 
 echo ""
 echo "All install method smoke tests passed"
