@@ -4,7 +4,8 @@
 ### Fixed
 
 - Improved error messages for OAuth token refresh failures by including detailed error information from the provider
-- Separated rate limit and usage limit error handling to provide distinct user-friendly messages for ChatGPT rate limits vs usage limits
+- Separated rate limit and usage limit error handling to provide distinct user-friendly messages for ChatGPT rate limits vs subscription usage limits
+- Changed 429 retry strategy for OpenAI Codex to use a 5-minute time budget when the server provides a retry delay, instead of a fixed 5-attempt cap
 
 ## [12.14.0] - 2026-02-19
 ### Added
