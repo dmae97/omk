@@ -1,6 +1,12 @@
 # Changelog
 
 ## [Unreleased]
+
+### Changed
+
+- Implemented time-budget-based retry strategy for Google Gemini rate limits (429 errors), allowing retries within a 5-minute window instead of a fixed attempt cap
+- Set default `maxRetries` to 5 for Anthropic, Azure OpenAI, and OpenAI client configurations to improve resilience against transient failures
+
 ### Fixed
 
 - Improved error messages for OAuth token refresh failures by including detailed error information from the provider
