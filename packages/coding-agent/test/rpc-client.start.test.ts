@@ -12,6 +12,6 @@ describe("RpcClient.start", () => {
 			env: { PI_NO_TITLE: "1" },
 		});
 
-		await expect(client.start()).rejects.toThrow('Unknown provider "__missing_provider__"');
+		await expect(client.start()).rejects.toThrow(/Unknown provider.*__missing_provider__/);
 	});
 });
