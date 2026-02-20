@@ -380,7 +380,7 @@ export async function getOAuthApiKey(
 	if (Date.now() >= creds.expires) {
 		try {
 			creds = await refreshOAuthToken(provider, creds);
-		} catch {
+		} catch (refreshError) {
 			if (provider === "perplexity") {
 				const jwtExpiry = getPerplexityJwtExpiryMs(creds.access);
 				if (jwtExpiry && Date.now() < jwtExpiry) {
@@ -388,7 +388,8 @@ export async function getOAuthApiKey(
 					return { newCredentials: fallbackCredentials, apiKey: fallbackCredentials.access };
 				}
 			}
-			throw new Error(`Failed to refresh OAuth token for ${provider}`);
+			const reason = refreshError instanceof Error ? refreshError.message : String(refreshError);
+			throw new Error(`Failed to refresh OAuth token for ${provider}: ${reason}`);
 		}
 	}
 	// For providers that need projectId, return JSON

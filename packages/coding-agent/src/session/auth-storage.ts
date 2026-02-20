@@ -1340,7 +1340,7 @@ export class AuthStorage {
 			// Keep credentials for transient errors (network, 5xx) and block temporarily
 			const isDefinitiveFailure =
 				/invalid_grant|invalid_token|revoked|unauthorized|expired.*refresh|refresh.*expired/i.test(errorMsg) ||
-				(/401|403/.test(errorMsg) && !/timeout|network|fetch failed|ECONNREFUSED/i.test(errorMsg));
+				(/\b(401|403)\b/.test(errorMsg) && !/timeout|network|fetch failed|ECONNREFUSED/i.test(errorMsg));
 
 			logger.warn("OAuth token refresh failed", {
 				provider,
