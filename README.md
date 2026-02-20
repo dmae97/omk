@@ -39,6 +39,7 @@
   - [Session Management](#session-management)
   - [Context Compaction](#context-compaction)
   - [Branching](#branching)
+  - [Autonomous Memory](#autonomous-memory)
 - [Configuration](#configuration)
   - [Project Context Files](#project-context-files)
   - [Custom System Prompt](#custom-system-prompt)
@@ -756,6 +757,20 @@ See [docs/compaction.md](docs/compaction.md) for internals and hook integration.
 - Press `Shift+L` to label entries as bookmarks
 
 **Create new session (`/branch` / `/fork`):** Branch to a new session file from a selected previous message.
+
+### Autonomous Memory
+
+When enabled, the agent extracts durable knowledge from past sessions and injects it at startup. The pipeline runs in the background and never blocks the active session.
+
+Memory is isolated per project (working directory) and stored under `~/.omp/agent/memories/`. At session start, a compact summary is injected into the system prompt. The agent can read deeper context via `memory://root/MEMORY.md` and `memory://root/skills/<name>/SKILL.md`.
+
+Manage via the `/memory` slash command:
+
+- `/memory view` — show current injection payload
+- `/memory clear` — delete all memory data and artifacts
+- `/memory enqueue` — force consolidation at next startup
+
+> See [Memory Documentation](docs/memory.md).
 
 ---
 
