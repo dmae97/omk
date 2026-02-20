@@ -37,7 +37,7 @@ export interface StoredAuthCredential {
 }
 
 /** Bump when schema changes require migration */
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 /**
  * Type guard for plain objects.
@@ -124,11 +124,14 @@ export class AgentStorage {
 	#deleteExpiredCacheStmt: Statement;
 	#listAuthStmt: Statement;
 	#listAuthByProviderStmt: Statement;
+	#listActiveAuthStmt: Statement;
+	#listActiveAuthByProviderStmt: Statement;
 	#insertAuthStmt: Statement;
 	#updateAuthStmt: Statement;
 	#deleteAuthStmt: Statement;
 	#deleteAuthByProviderStmt: Statement;
 	#countAuthStmt: Statement;
+	#disableAuthStmt: Statement;
 	#upsertModelUsageStmt: Statement;
 	#listModelUsageStmt: Statement;
 	#modelUsageCache: string[] | null = null;
@@ -165,6 +168,12 @@ export class AgentStorage {
 		this.#listAuthByProviderStmt = this.#db.prepare(
 			"SELECT id, provider, credential_type, data FROM auth_credentials WHERE provider = ? ORDER BY id ASC",
 		);
+		this.#listActiveAuthStmt = this.#db.prepare(
+			"SELECT id, provider, credential_type, data FROM auth_credentials WHERE disabled = 0 ORDER BY id ASC",
+		);
+		this.#listActiveAuthByProviderStmt = this.#db.prepare(
+			"SELECT id, provider, credential_type, data FROM auth_credentials WHERE provider = ? AND disabled = 0 ORDER BY id ASC",
+		);
 		this.#insertAuthStmt = this.#db.prepare(
 			"INSERT INTO auth_credentials (provider, credential_type, data) VALUES (?, ?, ?) RETURNING id",
 		);
@@ -173,6 +182,9 @@ export class AgentStorage {
 		);
 		this.#deleteAuthStmt = this.#db.prepare("DELETE FROM auth_credentials WHERE id = ?");
 		this.#deleteAuthByProviderStmt = this.#db.prepare("DELETE FROM auth_credentials WHERE provider = ?");
+		this.#disableAuthStmt = this.#db.prepare(
+			"UPDATE auth_credentials SET disabled = 1, updated_at = unixepoch() WHERE id = ?",
+		);
 		this.#countAuthStmt = this.#db.prepare("SELECT COUNT(*) as count FROM auth_credentials");
 
 		this.#upsertModelUsageStmt = this.#db.prepare(
@@ -198,6 +210,7 @@ CREATE TABLE IF NOT EXISTS auth_credentials (
 	provider TEXT NOT NULL,
 	credential_type TEXT NOT NULL,
 	data TEXT NOT NULL,
+	disabled INTEGER NOT NULL DEFAULT 0,
 	created_at INTEGER NOT NULL DEFAULT (unixepoch()),
 	updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
@@ -281,8 +294,19 @@ CREATE TABLE settings (
 				current: versionRow.version,
 				expected: SCHEMA_VERSION,
 			});
+			this.#migrateSchema(versionRow.version);
 		}
 		this.#db.prepare("INSERT OR REPLACE INTO schema_version(version) VALUES (?)").run(SCHEMA_VERSION);
+	}
+
+	#migrateSchema(fromVersion: number): void {
+		if (fromVersion < 4) {
+			// v3 → v4: Add disabled column to auth_credentials
+			const cols = this.#db.prepare("PRAGMA table_info(auth_credentials)").all() as Array<{ name?: string }>;
+			if (!cols.some(c => c.name === "disabled")) {
+				this.#db.exec("ALTER TABLE auth_credentials ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0");
+			}
+		}
 	}
 
 	/**
@@ -429,14 +453,19 @@ CREATE TABLE settings (
 
 	/**
 	 * Lists auth credentials, optionally filtered by provider.
+	 * Only returns active (non-disabled) credentials by default.
 	 * @param provider - Optional provider name to filter by
+	 * @param includeDisabled - If true, includes disabled credentials
 	 * @returns Array of stored credentials with their database IDs
 	 */
-	listAuthCredentials(provider?: string): StoredAuthCredential[] {
-		const rows =
-			(provider
-				? (this.#listAuthByProviderStmt.all(provider) as AuthRow[])
-				: (this.#listAuthStmt.all() as AuthRow[])) ?? [];
+	listAuthCredentials(provider?: string, includeDisabled = false): StoredAuthCredential[] {
+		const rows = includeDisabled
+			? ((provider
+					? (this.#listAuthByProviderStmt.all(provider) as AuthRow[])
+					: (this.#listAuthStmt.all() as AuthRow[])) ?? [])
+			: ((provider
+					? (this.#listActiveAuthByProviderStmt.all(provider) as AuthRow[])
+					: (this.#listActiveAuthStmt.all() as AuthRow[])) ?? []);
 
 		const results: StoredAuthCredential[] = [];
 		for (const row of rows) {
@@ -495,6 +524,19 @@ CREATE TABLE settings (
 			this.#deleteAuthStmt.run(id);
 		} catch (error) {
 			logger.warn("AgentStorage deleteAuthCredential failed", { id, error: String(error) });
+		}
+	}
+
+	/**
+	 * Disables an auth credential by ID (soft-delete).
+	 * Disabled credentials are excluded from normal listing but remain in the database.
+	 * @param id - Database row ID of the credential to disable
+	 */
+	disableAuthCredential(id: number): void {
+		try {
+			this.#disableAuthStmt.run(id);
+		} catch (error) {
+			logger.warn("AgentStorage disableAuthCredential failed", { id, error: String(error) });
 		}
 	}
 
