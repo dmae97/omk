@@ -60,6 +60,7 @@ Options:
   --max-attempts <n>        Max prompt attempts per run (default: 1)
   --no-op-retry-limit <n>   Stop after repeated preventable no-op failures (default: 2)
   --mutation-scope-window <n> Allowed line-distance from mutation target for hashline refs (default: 20)
+  --max-turns <n>           Max turn_start events per attempt before failing (default: 10)
   --output <file>           Output file (default: run_<model>_<variant>_<fuzzy>_<threshold>_<timestamp>.md)
   --format <fmt>            Output format: markdown, json (default: markdown)
   --check-fixtures          Validate fixtures and exit
@@ -144,6 +145,7 @@ async function main(): Promise<void> {
 			thinking: { type: "string", default: "low" },
 			runs: { type: "string", default: "1" },
 			timeout: { type: "string", default: "120000" },
+			"max-turns": { type: "string", default: "10" },
 			"task-concurrency": { type: "string", default: "16" },
 			tasks: { type: "string" },
 			fixtures: { type: "string" },
@@ -229,6 +231,12 @@ async function main(): Promise<void> {
 		process.exit(1);
 	}
 
+	const maxTurns = parseInt(values["max-turns"]!, 10);
+	if (Number.isNaN(maxTurns) || maxTurns < 1) {
+		console.error(`Invalid max-turns value: ${values["max-turns"]}. Must be >= 1.`);
+		process.exit(1);
+	}
+
 	const taskConcurrency = parseInt(values["task-concurrency"]!, 10);
 	if (Number.isNaN(taskConcurrency) || taskConcurrency < 1) {
 		console.error(`Invalid task concurrency value: ${values["task-concurrency"]}`);
@@ -310,6 +318,7 @@ async function main(): Promise<void> {
 		thinkingLevel,
 		runsPerTask,
 		timeout,
+		maxTurns,
 		taskConcurrency,
 		autoFormat: values["auto-format"],
 		guided,
@@ -339,6 +348,9 @@ async function main(): Promise<void> {
 	}
 	console.log(`Guided mode: ${config.guided ? "enabled" : "disabled"}`);
 	console.log(`Max attempts: ${config.maxAttempts}`);
+	if (config.maxTurns !== undefined) {
+		console.log(`Max turns per attempt: ${config.maxTurns}`);
+	}
 	if (config.requireEditToolCall) {
 		console.log("Require edit tool call: yes");
 	}
