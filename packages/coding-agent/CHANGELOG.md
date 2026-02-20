@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+
+### Changed
+
+- Updated browser tool prompt to bias towards `observe` over `screenshot` by default
+
 ## [12.15.0] - 2026-02-20
 
 ### Added
