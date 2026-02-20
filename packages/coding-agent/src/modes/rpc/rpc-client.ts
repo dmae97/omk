@@ -134,15 +134,11 @@ export class RpcClient {
 		// Wait a moment for process to initialize
 		await Bun.sleep(100);
 
-		try {
-			const exitCode = await Promise.race([this.#process.exited, Bun.sleep(500).then(() => null)]);
-			if (exitCode !== null) {
-				throw new Error(
-					`Agent process exited immediately with code ${exitCode}. Stderr: ${this.#process.peekStderr()}`,
-				);
-			}
-		} catch {
-			// Process still running, which is what we want
+		const exitCode = await Promise.race([this.#process.exited, Bun.sleep(500).then(() => null)]);
+		if (exitCode !== null) {
+			throw new Error(
+				`Agent process exited immediately with code ${exitCode}. Stderr: ${this.#process.peekStderr()}`,
+			);
 		}
 	}
 

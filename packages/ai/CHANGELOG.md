@@ -1,17 +1,15 @@
 # Changelog
 
 ## [Unreleased]
-
-### Changed
-
-- Implemented time-budget-based retry strategy for Google Gemini rate limits (429 errors), allowing retries within a 5-minute window instead of a fixed attempt cap
-- Set default `maxRetries` to 5 for Anthropic, Azure OpenAI, and OpenAI client configurations to improve resilience against transient failures
-
 ### Fixed
 
 - Improved error messages for OAuth token refresh failures by including detailed error information from the provider
 - Separated rate limit and usage limit error handling to provide distinct user-friendly messages for ChatGPT rate limits vs subscription usage limits
-- Changed 429 retry strategy for OpenAI Codex to use a 5-minute time budget when the server provides a retry delay, instead of a fixed 5-attempt cap
+
+### Changed
+
+- Increased SDK retry attempts to 5 for OpenAI, Azure OpenAI, and Anthropic clients (was SDK default of 2)
+- Changed 429 retry strategy for OpenAI Codex and Google Gemini CLI to use a 5-minute time budget when the server provides a retry delay, instead of a fixed attempt cap
 
 ## [12.14.0] - 2026-02-19
 ### Added
