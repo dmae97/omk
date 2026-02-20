@@ -29,6 +29,7 @@ import type {
 	ToolChoice,
 } from "../types";
 import { AssistantMessageEventStream } from "../utils/event-stream";
+import { appendRawHttpRequestDumpFor400, type RawHttpRequestDump } from "../utils/http-inspector";
 import { parseStreamingJson } from "../utils/json-parse";
 import { formatErrorMessageWithRetryAfter } from "../utils/retry-after";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
@@ -109,6 +110,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			stopReason: "stop",
 			timestamp: Date.now(),
 		};
+		let rawRequestDump: RawHttpRequestDump | undefined;
 
 		try {
 			// Create OpenAI client
@@ -116,6 +118,14 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 			const client = createClient(model, context, apiKey, options?.headers);
 			const params = buildParams(model, context, options);
 			options?.onPayload?.(params);
+			rawRequestDump = {
+				provider: model.provider,
+				api: output.api,
+				model: model.id,
+				method: "POST",
+				url: `${model.baseUrl ?? "https://api.openai.com/v1"}/responses`,
+				body: params,
+			};
 			const openaiStream = await client.responses.create(
 				params,
 				options?.signal ? { signal: options.signal } : undefined,
@@ -357,7 +367,11 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses"> = (
 		} catch (error) {
 			for (const block of output.content) delete (block as any).index;
 			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
-			output.errorMessage = formatErrorMessageWithRetryAfter(error);
+			output.errorMessage = await appendRawHttpRequestDumpFor400(
+				formatErrorMessageWithRetryAfter(error),
+				error,
+				rawRequestDump,
+			);
 			output.duration = Date.now() - startTime;
 			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "error", reason: output.stopReason, error: output });

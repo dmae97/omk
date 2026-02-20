@@ -28,6 +28,7 @@ import type {
 	ToolChoice,
 } from "../types";
 import { AssistantMessageEventStream } from "../utils/event-stream";
+import { appendRawHttpRequestDumpFor400, type RawHttpRequestDump } from "../utils/http-inspector";
 import { parseStreamingJson } from "../utils/json-parse";
 import { formatErrorMessageWithRetryAfter } from "../utils/retry-after";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
@@ -312,6 +313,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 		};
 		let websocketState: CodexWebSocketSessionState | undefined;
 		let usingWebsocket = false;
+		let rawRequestDump: RawHttpRequestDump | undefined;
 
 		try {
 			const apiKey = options?.apiKey || getEnvApiKey(model.provider) || "";
@@ -368,6 +370,14 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 
 			const reasoningEffort = transformedBody.reasoning?.effort ?? null;
 			const requestHeaders = { ...(model.headers ?? {}), ...(options?.headers ?? {}) };
+			rawRequestDump = {
+				provider: model.provider,
+				api: output.api,
+				model: model.id,
+				method: "POST",
+				url,
+				body: transformedBody,
+			};
 			const providerSessionState = getCodexProviderSessionState(options?.providerSessionState);
 			const sessionKey = getCodexWebSocketSessionKey(options?.sessionId, model, accountId, baseUrl);
 			const publicSessionKey = getCodexPublicSessionKey(options?.sessionId, model, baseUrl);
@@ -795,7 +805,11 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 				resetCodexSessionMetadata(websocketState);
 			}
 			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
-			output.errorMessage = formatErrorMessageWithRetryAfter(error);
+			output.errorMessage = await appendRawHttpRequestDumpFor400(
+				formatErrorMessageWithRetryAfter(error),
+				error,
+				rawRequestDump,
+			);
 			output.duration = Date.now() - startTime;
 			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "error", reason: output.stopReason, error: output });
@@ -1302,7 +1316,8 @@ async function openCodexSseEventStream(
 	if (!response.ok) {
 		const info = await parseCodexError(response);
 		const error = new Error(info.friendlyMessage || info.message);
-		(error as { headers?: Headers }).headers = response.headers;
+		(error as { headers?: Headers; status?: number }).headers = response.headers;
+		(error as { headers?: Headers; status?: number }).status = response.status;
 		throw error;
 	}
 	if (!response.body) {

@@ -19,6 +19,7 @@ import type {
 	ToolCall,
 } from "../types";
 import { AssistantMessageEventStream } from "../utils/event-stream";
+import { appendRawHttpRequestDumpFor400, type RawHttpRequestDump, withHttpStatus } from "../utils/http-inspector";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
 import {
 	convertMessages,
@@ -316,6 +317,7 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 			stopReason: "stop",
 			timestamp: Date.now(),
 		};
+		let rawRequestDump: RawHttpRequestDump | undefined;
 
 		try {
 			// apiKey is JSON-encoded: { token, projectId }
@@ -356,6 +358,14 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 				...(options?.headers ?? {}),
 			};
 			const requestBodyJson = JSON.stringify(requestBody);
+			rawRequestDump = {
+				provider: model.provider,
+				api: output.api,
+				model: model.id,
+				method: "POST",
+				body: requestBody,
+				headers: requestHeaders,
+			};
 
 			// Fetch with retry logic for rate limits and transient errors
 			let response: Response | undefined;
@@ -416,7 +426,10 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 					}
 
 					// Not retryable or budget exceeded
-					throw new Error(`Cloud Code Assist API error (${response.status}): ${extractErrorMessage(errorText)}`);
+					throw withHttpStatus(
+						new Error(`Cloud Code Assist API error (${response.status}): ${extractErrorMessage(errorText)}`),
+						response.status,
+					);
 				} catch (error) {
 					// Check for abort - fetch throws AbortError, our code throws "Request was aborted"
 					if (error instanceof Error) {
@@ -693,7 +706,10 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 
 					if (!currentResponse.ok) {
 						const retryErrorText = await currentResponse.text();
-						throw new Error(`Cloud Code Assist API error (${currentResponse.status}): ${retryErrorText}`);
+						throw withHttpStatus(
+							new Error(`Cloud Code Assist API error (${currentResponse.status}): ${retryErrorText}`),
+							currentResponse.status,
+						);
 					}
 				}
 
@@ -731,7 +747,11 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 				}
 			}
 			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
-			output.errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
+			output.errorMessage = await appendRawHttpRequestDumpFor400(
+				error instanceof Error ? error.message : JSON.stringify(error),
+				error,
+				rawRequestDump,
+			);
 			output.duration = Date.now() - startTime;
 			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "error", reason: output.stopReason, error: output });

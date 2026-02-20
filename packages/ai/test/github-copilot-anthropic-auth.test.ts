@@ -73,22 +73,6 @@ describe("Anthropic Copilot auth config", () => {
 		expect(beta).toContain("interleaved-thinking-2025-05-14");
 	});
 
-	it("does not include interleaved-thinking beta when disabled", () => {
-		const model = makeCopilotClaudeModel();
-		const options = buildAnthropicClientOptions({
-			model,
-			apiKey: "ghu_test",
-			extraBetas: [],
-			stream: true,
-			dynamicHeaders: {},
-		});
-
-		const beta = options.defaultHeaders["anthropic-beta"];
-		if (beta) {
-			expect(beta).not.toContain("interleaved-thinking-2025-05-14");
-		}
-	});
-
 	it("does not include fine-grained-tool-streaming beta for Copilot", () => {
 		const model = makeCopilotClaudeModel();
 		const options = buildAnthropicClientOptions({

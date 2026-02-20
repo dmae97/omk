@@ -95,6 +95,7 @@ export function transformMessages<TApi extends Api>(
 	const result: Message[] = [];
 	let pendingToolCalls: ToolCall[] = [];
 	let existingToolResultIds = new Set<string>();
+	const skippedToolCallIds = new Set<string>();
 
 	for (let i = 0; i < transformed.length; i++) {
 		const msg = transformed[i];
@@ -118,13 +119,20 @@ export function transformMessages<TApi extends Api>(
 				existingToolResultIds = new Set();
 			}
 
-			// Skip errored/aborted assistant messages entirely.
-			// These are incomplete turns that shouldn't be replayed:
-			// - May have partial content (reasoning without message, incomplete tool calls)
-			// - Replaying them can cause API errors (e.g., OpenAI "reasoning without following item")
-			// - The model should retry from the last valid state
+			// For errored/aborted assistant messages, convert tool calls to text summaries
+			// so the model retains awareness of what it attempted. This avoids orphaned
+			// tool_use blocks while preserving context for the retry.
 			const assistantMsg = msg as AssistantMessage;
 			if (assistantMsg.stopReason === "error" || assistantMsg.stopReason === "aborted") {
+				const patchedContent = assistantMsg.content.flatMap(block => {
+					if (block.type !== "toolCall") return block;
+					const tc = block as ToolCall;
+					skippedToolCallIds.add(tc.id);
+					return { type: "text" as const, text: `[Tool call aborted: ${tc.name}]` };
+				});
+				if (patchedContent.length > 0) {
+					result.push({ ...assistantMsg, content: patchedContent });
+				}
 				continue;
 			}
 
@@ -137,6 +145,8 @@ export function transformMessages<TApi extends Api>(
 
 			result.push(msg);
 		} else if (msg.role === "toolResult") {
+			// Skip tool results whose corresponding assistant tool_use was from a skipped (aborted/errored) message
+			if (skippedToolCallIds.has(msg.toolCallId)) continue;
 			existingToolResultIds.add(msg.toolCallId);
 			result.push(msg);
 		} else if (msg.role === "user") {

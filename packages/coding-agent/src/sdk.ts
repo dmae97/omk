@@ -551,7 +551,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	// Use provided or create AuthStorage and ModelRegistry
 	const authStorage = options.authStorage ?? (await discoverAuthStorage(agentDir));
 	const modelRegistry = options.modelRegistry ?? new ModelRegistry(authStorage);
-	await modelRegistry.refresh();
+	if (!options.modelRegistry) {
+		await modelRegistry.refresh();
+	}
 	time("discoverModels");
 
 	const settings = options.settings ?? (await Settings.init({ cwd, agentDir }));

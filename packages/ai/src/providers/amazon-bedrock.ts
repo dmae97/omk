@@ -41,6 +41,7 @@ import type {
 	ToolResultMessage,
 } from "../types";
 import { AssistantMessageEventStream } from "../utils/event-stream";
+import { appendRawHttpRequestDumpFor400, type RawHttpRequestDump, withHttpStatus } from "../utils/http-inspector";
 import { parseStreamingJson } from "../utils/json-parse";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
 import { transformMessages } from "./transform-messages";
@@ -94,6 +95,7 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream"> = (
 		};
 
 		const blocks = output.content as Block[];
+		let rawRequestDump: RawHttpRequestDump | undefined;
 
 		const config: BedrockRuntimeClientConfig = {
 			region: options.region,
@@ -133,6 +135,14 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream"> = (
 				additionalModelRequestFields: buildAdditionalModelRequestFields(model, options),
 			};
 			options?.onPayload?.(commandInput);
+			rawRequestDump = {
+				provider: model.provider,
+				api: output.api,
+				model: model.id,
+				method: "POST",
+				url: `https://bedrock-runtime.${config.region}.amazonaws.com/model/${model.id}/converse-stream`,
+				body: commandInput,
+			};
 			const command = new ConverseStreamCommand(commandInput);
 
 			const response = await client.send(command, { abortSignal: options.signal });
@@ -160,7 +170,7 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream"> = (
 				} else if (item.modelStreamErrorException) {
 					throw new Error(`Model stream error: ${item.modelStreamErrorException.message}`);
 				} else if (item.validationException) {
-					throw new Error(`Validation error: ${item.validationException.message}`);
+					throw withHttpStatus(new Error(`Validation error: ${item.validationException.message}`), 400);
 				} else if (item.throttlingException) {
 					throw new Error(`Throttling error: ${item.throttlingException.message}`);
 				} else if (item.serviceUnavailableException) {
@@ -186,7 +196,11 @@ export const streamBedrock: StreamFunction<"bedrock-converse-stream"> = (
 				delete (block as Block).partialJson;
 			}
 			output.stopReason = options.signal?.aborted ? "aborted" : "error";
-			output.errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
+			output.errorMessage = await appendRawHttpRequestDumpFor400(
+				error instanceof Error ? error.message : JSON.stringify(error),
+				error,
+				rawRequestDump,
+			);
 			output.duration = Date.now() - startTime;
 			if (firstTokenTime) output.ttft = firstTokenTime - startTime;
 			stream.push({ type: "error", reason: output.stopReason, error: output });
