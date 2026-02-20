@@ -980,7 +980,14 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 			const MAX_SUBMIT_RESULT_RETRIES = 3;
 			unsubscribe = session.subscribe(event => {
 				if (event.type === "tool_execution_end" && event.toolName === "submit_result") {
-					submitResultCalled = true;
+					const details = event.result?.details;
+					const status =
+						details && typeof details === "object"
+							? (details as { status?: unknown }).status
+							: undefined;
+					if (!event.isError && (status === "success" || status === "aborted")) {
+						submitResultCalled = true;
+					}
 				}
 				if (isAgentEvent(event)) {
 					try {

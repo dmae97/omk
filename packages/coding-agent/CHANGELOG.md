@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Fixed submit_result tool extraction to properly validate status field and only accept 'success' or 'aborted' results
 
 ## [12.15.1] - 2026-02-20
 

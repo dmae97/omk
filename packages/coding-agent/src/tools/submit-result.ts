@@ -136,6 +136,17 @@ export class SubmitResultTool implements AgentTool<TObject, SubmitResultDetails>
 
 // Register subprocess tool handler for extraction + termination.
 subprocessToolRegistry.register<SubmitResultDetails>("submit_result", {
-	extractData: event => event.result?.details as SubmitResultDetails | undefined,
+	extractData: event => {
+		const details = event.result?.details;
+		if (!details || typeof details !== "object") return undefined;
+		const record = details as Record<string, unknown>;
+		const status = record.status;
+		if (status !== "success" && status !== "aborted") return undefined;
+		return {
+			data: record.data,
+			status,
+			error: typeof record.error === "string" ? record.error : undefined,
+		};
+	},
 	shouldTerminate: () => true,
 });
