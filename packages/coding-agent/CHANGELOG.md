@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.15.1] - 2026-02-20
+
 ### Changed
 
 - Replaced nerd font pie-chart spinner with clock-outline icons for smoother looping
