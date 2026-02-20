@@ -842,11 +842,19 @@ describe("applyHashlineEdits — errors", () => {
 		expect(() => applyHashlineEdits(content, edits)).toThrow();
 	});
 
-	it("rejects insert with non-adjacent anchors", () => {
+	it("inserts with non-adjacent anchors (before the 'before' anchor)", () => {
 		const content = "aaa\nbbb\nccc";
 		const edits: HashlineEdit[] = [
 			{ op: "insert", after: makeTag(1, "aaa"), before: makeTag(3, "ccc"), content: ["NEW"] },
 		];
-		expect(() => applyHashlineEdits(content, edits)).toThrow(/adjacent anchors/);
+		const result = applyHashlineEdits(content, edits);
+		expect(result.content).toBe("aaa\nbbb\nNEW\nccc");
+	});
+	it("rejects insert with reversed anchors (before <= after)", () => {
+		const content = "aaa\nbbb\nccc";
+		const edits: HashlineEdit[] = [
+			{ op: "insert", after: makeTag(3, "ccc"), before: makeTag(1, "aaa"), content: ["NEW"] },
+		];
+		expect(() => applyHashlineEdits(content, edits)).toThrow(/after.*<.*before/);
 	});
 });
