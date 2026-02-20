@@ -14,7 +14,7 @@ import xterm from "@xterm/headless";
 import type { Theme } from "../modes/theme/theme";
 import { OutputSink, type OutputSummary } from "../session/streaming-output";
 import { getStateIcon } from "../tui";
-import { replaceTabs, wrapBrackets } from "./render-utils";
+import { replaceTabs } from "./render-utils";
 
 export interface BashInteractiveResult extends OutputSummary {
 	exitCode: number | undefined;
@@ -240,7 +240,7 @@ class BashInteractiveOverlayComponent implements Component {
 					? getStateIcon("success", this.uiTheme)
 					: getStateIcon("warning", this.uiTheme);
 		const title = this.uiTheme.fg("accent", "Console");
-		const statusBadge = this.uiTheme.fg("dim", wrapBrackets(this.#stateText(), this.uiTheme));
+		const statusBadge = `${this.uiTheme.fg("dim", this.uiTheme.format.bracketLeft)}${this.#stateText()}${this.uiTheme.fg("dim", this.uiTheme.format.bracketRight)}`;
 		const prefix = `${statusIcon} ${title} `;
 		const suffix = ` ${statusBadge}`;
 		const available = Math.max(1, innerWidth - visibleWidth(prefix) - visibleWidth(suffix));

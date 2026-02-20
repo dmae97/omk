@@ -34,18 +34,6 @@ function getState(status?: CodeCellOptions["status"]): State | undefined {
 function formatHeader(options: CodeCellOptions, theme: Theme): { title: string; meta?: string } {
 	const { index, total, title, status, spinnerFrame, duration } = options;
 	const parts: string[] = [];
-	if (index !== undefined && total !== undefined) {
-		parts.push(theme.fg("accent", `[${index + 1}/${total}]`));
-	}
-	if (title) {
-		parts.push(theme.fg("toolTitle", title));
-	}
-	const headerTitle = parts.length > 0 ? parts.join(" ") : theme.fg("toolTitle", "Code");
-
-	const metaParts: string[] = [];
-	if (duration !== undefined) {
-		metaParts.push(theme.fg("dim", `(${formatDuration(duration)})`));
-	}
 	if (status) {
 		const icon = getStateIcon(
 			status === "complete"
@@ -59,12 +47,23 @@ function formatHeader(options: CodeCellOptions, theme: Theme): { title: string; 
 			spinnerFrame,
 		);
 		if (status === "pending" || status === "running") {
-			metaParts.push(`${icon} ${theme.fg("muted", status)}`);
+			parts.push(`${icon} ${theme.fg("muted", status)}`);
 		} else {
-			metaParts.push(icon);
+			parts.push(icon);
 		}
 	}
+	if (index !== undefined && total !== undefined) {
+		parts.push(theme.fg("accent", `[${index + 1}/${total}]`));
+	}
+	if (title) {
+		parts.push(theme.fg("toolTitle", title));
+	}
+	const headerTitle = parts.length > 0 ? parts.join(" ") : theme.fg("toolTitle", "Code");
 
+	const metaParts: string[] = [];
+	if (duration !== undefined) {
+		metaParts.push(theme.fg("dim", `(${formatDuration(duration)})`));
+	}
 	if (metaParts.length === 0) return { title: headerTitle };
 	return { title: headerTitle, meta: metaParts.join(theme.fg("dim", theme.sep.dot)) };
 }
