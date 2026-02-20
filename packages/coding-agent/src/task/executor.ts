@@ -379,6 +379,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		status: "running",
 		task,
 		description: options.description,
+		lastIntent: undefined,
 		recentTools: [],
 		recentOutput: [],
 		toolCount: 0,
@@ -645,14 +646,19 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				}
 				break;
 
-			case "tool_execution_start":
+			case "tool_execution_start": {
 				progress.toolCount++;
 				progress.currentTool = event.toolName;
 				progress.currentToolArgs = extractToolArgsPreview(
 					(event as { toolArgs?: Record<string, unknown> }).toolArgs || event.args || {},
 				);
 				progress.currentToolStartMs = now;
+				const intent = event.intent?.trim();
+				if (intent) {
+					progress.lastIntent = intent;
+				}
 				break;
+			}
 
 			case "tool_execution_end": {
 				if (progress.currentTool) {
@@ -1174,6 +1180,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 		agentSource: agent.source,
 		task,
 		description: options.description,
+		lastIntent: progress.lastIntent,
 		exitCode,
 		output: truncatedOutput,
 		stderr,
