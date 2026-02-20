@@ -504,7 +504,7 @@ export const SETTINGS_SCHEMA = {
 	},
 	"tools.intentTracing": {
 		type: "boolean",
-		default: false,
+		default: true,
 		ui: {
 			tab: "tools",
 			label: "Intent tracing",

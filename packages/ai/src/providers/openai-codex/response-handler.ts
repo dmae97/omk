@@ -47,11 +47,14 @@ export async function parseCodexError(response: Response): Promise<CodexErrorInf
 		const resetsAt = (err as { resets_at?: number }).resets_at ?? primary.resets_at ?? secondary.resets_at;
 		const mins = resetsAt ? Math.max(0, Math.round((resetsAt * 1000 - Date.now()) / 60000)) : undefined;
 
-		if (/usage_limit_reached|usage_not_included|rate_limit_exceeded/i.test(code) || response.status === 429) {
+		if (/usage_limit_reached|usage_not_included/i.test(code)) {
 			const planType = (err as { plan_type?: string }).plan_type;
 			const plan = planType ? ` (${String(planType).toLowerCase()} plan)` : "";
 			const when = mins !== undefined ? ` Try again in ~${mins} min.` : "";
 			friendlyMessage = `You have hit your ChatGPT usage limit${plan}.${when}`.trim();
+		} else if (/rate_limit_exceeded/i.test(code) || response.status === 429) {
+			const when = mins !== undefined ? ` Try again in ~${mins} min.` : "";
+			friendlyMessage = `ChatGPT rate limit exceeded.${when}`.trim();
 		}
 
 		const errMessage = (err as { message?: string }).message;

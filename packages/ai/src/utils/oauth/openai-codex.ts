@@ -147,7 +147,13 @@ export async function refreshOpenAICodexToken(refreshToken: string): Promise<OAu
 	});
 
 	if (!response.ok) {
-		throw new Error(`OpenAI Codex token refresh failed: ${response.status}`);
+		let detail = `${response.status}`;
+		try {
+			const body = (await response.json()) as { error?: string; error_description?: string };
+			if (body.error)
+				detail = `${response.status} ${body.error}${body.error_description ? `: ${body.error_description}` : ""}`;
+		} catch {}
+		throw new Error(`OpenAI Codex token refresh failed: ${detail}`);
 	}
 
 	const tokenData = (await response.json()) as {

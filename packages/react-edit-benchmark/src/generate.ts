@@ -59,10 +59,10 @@ interface FileEntry {
 interface CaseResult {
 	caseId: string;
 	mutation: Mutation;
-	info: MutationInfo;
+	finalInfo: MutationInfo;
 	filePath: string;
-	mutatedContent: string;
-	originalContent: string;
+	formattedMutatedContent: string;
+	formattedOriginalContent: string;
 	difficulty: Difficulty;
 	difficultyScore: number;
 }
@@ -511,6 +511,127 @@ function countPositionalLineHunks(original: string, mutated: string): number {
 	return hunks;
 }
 
+function splitChangedLines(value: string): string[] {
+	const lines = value.split("\n");
+	if (lines.length > 0 && lines[lines.length - 1] === "") {
+		lines.pop();
+	}
+	return lines;
+}
+
+interface DiffHunk {
+	oldStart: number;
+	oldEnd: number;
+	newStart: number;
+	newEnd: number;
+	removedLines: string[];
+	addedLines: string[];
+}
+
+function distanceToRange(lineNumber: number, start: number, end: number): number {
+	if (start > end) return Math.abs(lineNumber - start);
+	if (lineNumber < start) return start - lineNumber;
+	if (lineNumber > end) return lineNumber - end;
+	return 0;
+}
+
+function resolveLineForHunk(hunk: DiffHunk, fallbackLine: number, maxLine: number): number {
+	if (maxLine <= 0) return 1;
+	if (hunk.newStart <= hunk.newEnd) {
+		return Math.max(hunk.newStart, Math.min(fallbackLine, hunk.newEnd));
+	}
+	return Math.max(1, Math.min(hunk.newStart, maxLine));
+}
+
+function snippetFromChangedLines(changedLines: string[], fallbackLines: string[], lineNumber: number): string {
+	if (changedLines.length > 0) {
+		return changedLines.slice(0, 3).join("\n");
+	}
+	const fallback = fallbackLines[lineNumber - 1] ?? "";
+	return fallback.trim() ? fallback : "";
+}
+
+function resolveFormattedMutationInfo(
+	originalContent: string,
+	mutatedContent: string,
+	fallbackInfo: MutationInfo,
+): MutationInfo | null {
+	const changes = diffLines(originalContent, mutatedContent);
+	const hunks: DiffHunk[] = [];
+	let oldLine = 1;
+	let newLine = 1;
+	let index = 0;
+
+	while (index < changes.length) {
+		const change = changes[index];
+		if (!change.added && !change.removed) {
+			const unchangedCount = splitChangedLines(change.value).length;
+			oldLine += unchangedCount;
+			newLine += unchangedCount;
+			index++;
+			continue;
+		}
+
+		const hunk: DiffHunk = {
+			oldStart: oldLine,
+			oldEnd: oldLine - 1,
+			newStart: newLine,
+			newEnd: newLine - 1,
+			removedLines: [],
+			addedLines: [],
+		};
+
+		while (index < changes.length) {
+			const part = changes[index];
+			if (!part.added && !part.removed) break;
+			const lines = splitChangedLines(part.value);
+			if (part.removed) {
+				hunk.removedLines.push(...lines);
+				oldLine += lines.length;
+				hunk.oldEnd = oldLine - 1;
+			}
+			if (part.added) {
+				hunk.addedLines.push(...lines);
+				newLine += lines.length;
+				hunk.newEnd = newLine - 1;
+			}
+			index++;
+		}
+
+		hunks.push(hunk);
+	}
+
+	if (hunks.length === 0) return null;
+
+	let chosen = hunks[0];
+	let bestDistance = Number.POSITIVE_INFINITY;
+	for (const hunk of hunks) {
+		const oldDistance = distanceToRange(fallbackInfo.lineNumber, hunk.oldStart, hunk.oldEnd);
+		const newDistance = distanceToRange(fallbackInfo.lineNumber, hunk.newStart, hunk.newEnd);
+		const distance = Math.min(oldDistance, newDistance);
+		if (distance < bestDistance) {
+			bestDistance = distance;
+			chosen = hunk;
+		}
+	}
+
+	const mutatedLines = mutatedContent.split("\n");
+	const originalLines = originalContent.split("\n");
+	const lineNumber = resolveLineForHunk(chosen, fallbackInfo.lineNumber, mutatedLines.length);
+	if (lineNumber < 1 || lineNumber > Math.max(mutatedLines.length, 1)) return null;
+
+	const resolved: MutationInfo = {
+		lineNumber,
+		originalSnippet: snippetFromChangedLines(chosen.removedLines, originalLines, Math.max(1, chosen.oldStart)),
+		mutatedSnippet: snippetFromChangedLines(chosen.addedLines, mutatedLines, lineNumber),
+	};
+
+	if (resolved.originalSnippet && !originalContent.includes(resolved.originalSnippet)) return null;
+	if (resolved.mutatedSnippet && !mutatedContent.includes(resolved.mutatedSnippet)) return null;
+
+	return resolved;
+}
+
 async function generateCase(
 	rng: () => number,
 	mutation: Mutation,
@@ -542,9 +663,9 @@ async function generateCase(
 	for (let attempt = 0; attempt < attemptLimit; attempt++) {
 		const entry = applicable[Math.floor(rng() * applicable.length)];
 		let mutatedContent: string;
-		let info: { lineNumber: number; originalSnippet: string; mutatedSnippet: string };
+		let rawInfo: MutationInfo;
 		try {
-			[mutatedContent, info] = mutation.mutate(entry.content, rng);
+			[mutatedContent, rawInfo] = mutation.mutate(entry.content, rng);
 		} catch {
 			continue;
 		}
@@ -561,28 +682,38 @@ async function generateCase(
 			if (changedLines > 30 || positionalChanges > 30) continue;
 		}
 
-		if (!regionAvailable(usedLines, entry.path, info.lineNumber)) continue;
+		if (!regionAvailable(usedLines, entry.path, rawInfo.lineNumber)) continue;
 
-		const diffScore = scoreDifficulty(entry, info.lineNumber);
+		const diffScore = scoreDifficulty(entry, rawInfo.lineNumber);
 
 		if (difficulty === "nightmare") {
 			const lines = entry.content.split("\n");
-			if (info.lineNumber <= lines.length) {
-				const lineContent = lines[info.lineNumber - 1].trim();
+			if (rawInfo.lineNumber <= lines.length) {
+				const lineContent = lines[rawInfo.lineNumber - 1].trim();
 				if (!entry.repeatedLines.has(lineContent)) continue;
 			}
 		}
 
 		if (diffScore < targetMinScore) continue;
 
-		recordRegion(usedLines, entry.path, info.lineNumber);
+		const filename = path.basename(entry.path);
+		const [formattedInput, formattedExpected] = await Promise.all([
+			formatContent(filename, mutatedContent),
+			formatContent(filename, entry.content),
+		]);
+		const normalizedMutated = ensureTrailingNewline(formattedInput.formatted);
+		const normalizedOriginal = ensureTrailingNewline(formattedExpected.formatted);
+		const finalInfo = resolveFormattedMutationInfo(normalizedOriginal, normalizedMutated, rawInfo);
+		if (!finalInfo) continue;
+
+		recordRegion(usedLines, entry.path, rawInfo.lineNumber);
 		return {
 			caseId: "",
 			mutation,
-			info,
+			finalInfo,
 			filePath: entry.path,
-			mutatedContent,
-			originalContent: entry.content,
+			formattedMutatedContent: normalizedMutated,
+			formattedOriginalContent: normalizedOriginal,
 			difficulty,
 			difficultyScore: diffScore,
 		};
@@ -613,31 +744,31 @@ async function buildCaseEntries(result: CaseResult, reactDir: string): Promise<T
 	const relativePath = path.relative(reactDir, result.filePath);
 	const caseDir = `fixtures/${result.caseId}`;
 
-	const lines = result.originalContent.split("\n");
-	const lineContent = result.info.lineNumber <= lines.length ? lines[result.info.lineNumber - 1].trim() : "";
+	const lines = result.formattedOriginalContent.split("\n");
+	const lineContent = result.finalInfo.lineNumber <= lines.length ? lines[result.finalInfo.lineNumber - 1].trim() : "";
 
 	const entry: FileEntry = {
 		path: result.filePath,
-		content: result.originalContent,
+		content: result.formattedOriginalContent,
 		lineCount: lines.length,
-		repeatedLines: findRepeatedLines(result.originalContent),
-		similarBlockCount: countSimilarBlocks(result.originalContent),
-		density: computeDensity(result.originalContent),
-		maxIndent: findMaxIndent(result.originalContent),
-		functionRanges: findFunctionRanges(result.originalContent),
+		repeatedLines: findRepeatedLines(result.formattedOriginalContent),
+		similarBlockCount: countSimilarBlocks(result.formattedOriginalContent),
+		density: computeDensity(result.formattedOriginalContent),
+		maxIndent: findMaxIndent(result.formattedOriginalContent),
+		functionRanges: findFunctionRanges(result.formattedOriginalContent),
 	};
 
 	const isRepeated = entry.repeatedLines.has(lineContent);
-	const prompt = buildPrompt(result.filePath, result.mutation, result.info, result.difficulty, entry);
+	const prompt = buildPrompt(result.filePath, result.mutation, result.finalInfo, result.difficulty, entry);
 
 	const metadata = {
 		mutation_type: result.mutation.name,
 		mutation_category: result.mutation.category,
 		difficulty: result.difficulty,
 		difficulty_score: result.difficultyScore,
-		line_number: result.info.lineNumber,
-		original_snippet: result.info.originalSnippet,
-		mutated_snippet: result.info.mutatedSnippet,
+		line_number: result.finalInfo.lineNumber,
+		original_snippet: result.finalInfo.originalSnippet,
+		mutated_snippet: result.finalInfo.mutatedSnippet,
 		file_path: relativePath,
 		context: {
 			file_lines: entry.lineCount,
@@ -646,20 +777,24 @@ async function buildCaseEntries(result: CaseResult, reactDir: string): Promise<T
 			similar_block_count: entry.similarBlockCount,
 			density: Math.round(entry.density * 1000) / 1000,
 			line_indent:
-				result.info.lineNumber <= lines.length
-					? lines[result.info.lineNumber - 1].length - lines[result.info.lineNumber - 1].trimStart().length
+				result.finalInfo.lineNumber <= lines.length
+					? lines[result.finalInfo.lineNumber - 1].length -
+						lines[result.finalInfo.lineNumber - 1].trimStart().length
 					: 0,
-			containing_function: findContainingFunction(entry, result.info.lineNumber),
+			containing_function: findContainingFunction(entry, result.finalInfo.lineNumber),
 		},
 	};
 
-	const [formattedInput, formattedExpected] = await Promise.all([
-		formatContent(filename, result.mutatedContent),
-		formatContent(filename, result.originalContent),
-	]);
+	if (!result.formattedOriginalContent.includes(result.finalInfo.originalSnippet)) {
+		throw new Error(`Generated case ${result.caseId} has invalid original snippet metadata`);
+	}
+	if (!result.formattedMutatedContent.includes(result.finalInfo.mutatedSnippet)) {
+		throw new Error(`Generated case ${result.caseId} has invalid mutated snippet metadata`);
+	}
+
 	return [
-		{ name: `${caseDir}/input/${filename}`, content: ensureTrailingNewline(formattedInput.formatted) },
-		{ name: `${caseDir}/expected/${filename}`, content: ensureTrailingNewline(formattedExpected.formatted) },
+		{ name: `${caseDir}/input/${filename}`, content: result.formattedMutatedContent },
+		{ name: `${caseDir}/expected/${filename}`, content: result.formattedOriginalContent },
 		{ name: `${caseDir}/prompt.md`, content: prompt },
 		{ name: `${caseDir}/metadata.json`, content: JSON.stringify(metadata, null, 2) },
 	];
@@ -772,7 +907,9 @@ async function main(): Promise<number> {
 			for (const result of cases.slice(0, 5)) {
 				const rel = path.relative(reactDir, result.filePath);
 				console.log(`  ${result.caseId}: ${rel}`);
-				console.log(`    score=${result.difficultyScore}, lines=${result.originalContent.split("\n").length}`);
+				console.log(
+					`    score=${result.difficultyScore}, lines=${result.formattedOriginalContent.split("\n").length}`,
+				);
 			}
 			if (cases.length > 5) {
 				console.log(`  ... and ${cases.length - 5} more`);

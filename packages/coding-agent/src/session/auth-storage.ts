@@ -547,13 +547,14 @@ export class AuthStorage {
 	}
 
 	/**
-	 * Removes credential at index (used when OAuth refresh fails).
-	 * Cleans up provider entry if last credential removed.
+	 * Disables credential at index (used when OAuth refresh fails).
+	 * The credential remains in the database but is excluded from active queries.
+	 * Cleans up provider entry if last credential disabled.
 	 */
 	#removeCredentialAt(provider: string, index: number): void {
 		const entries = this.#getStoredCredentials(provider);
 		if (index < 0 || index >= entries.length) return;
-		this.storage.deleteAuthCredential(entries[index].id);
+		this.storage.disableAuthCredential(entries[index].id);
 		const updated = entries.filter((_value, idx) => idx !== index);
 		this.#setStoredCredentials(provider, updated);
 		this.#resetProviderAssignments(provider);
@@ -1339,7 +1340,7 @@ export class AuthStorage {
 			// Keep credentials for transient errors (network, 5xx) and block temporarily
 			const isDefinitiveFailure =
 				/invalid_grant|invalid_token|revoked|unauthorized|expired.*refresh|refresh.*expired/i.test(errorMsg) ||
-				(/401|403/.test(errorMsg) && !/timeout|network|fetch failed|ECONNREFUSED/i.test(errorMsg));
+				(/\b(401|403)\b/.test(errorMsg) && !/timeout|network|fetch failed|ECONNREFUSED/i.test(errorMsg));
 
 			logger.warn("OAuth token refresh failed", {
 				provider,

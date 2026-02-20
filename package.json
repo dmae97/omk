@@ -31,6 +31,7 @@
 		"version:major": "npm version major -ws --no-git-tag-version && bun scripts/sync-versions.ts && rm -rf node_modules packages/*/node_modules bun.lock && bun install",
 		"version:set": "npm version -ws",
 		"prepublishOnly": "bun run check",
+		"prepare": "bun --cwd=packages/coding-agent run generate-docs-index",
 		"publish": "bun run prepublishOnly && npm publish -ws --access public",
 		"publish:dry": "bun run prepublishOnly && npm publish -ws --access public --dry-run",
 		"release": "bun scripts/release.ts",

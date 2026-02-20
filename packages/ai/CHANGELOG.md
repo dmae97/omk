@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [12.15.0] - 2026-02-20
+### Fixed
+
+- Improved error messages for OAuth token refresh failures by including detailed error information from the provider
+- Separated rate limit and usage limit error handling to provide distinct user-friendly messages for ChatGPT rate limits vs subscription usage limits
+
+### Changed
+
+- Increased SDK retry attempts to 5 for OpenAI, Azure OpenAI, and Anthropic clients (was SDK default of 2)
+- Changed 429 retry strategy for OpenAI Codex and Google Gemini CLI to use a 5-minute time budget when the server provides a retry delay, instead of a fixed attempt cap
+
 ## [12.14.0] - 2026-02-19
 ### Added
 

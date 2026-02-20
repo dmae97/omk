@@ -629,6 +629,7 @@ function createClient(
 		baseURL: config.baseURL,
 		defaultHeaders: config.defaultHeaders,
 		dangerouslyAllowBrowser: config.dangerouslyAllowBrowser,
+		maxRetries: 5,
 	});
 
 	return { client, isOAuthToken: config.isOAuthToken };

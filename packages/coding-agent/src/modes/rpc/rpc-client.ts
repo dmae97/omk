@@ -123,27 +123,54 @@ export class RpcClient {
 			stdin: "pipe",
 		});
 
-		// Process lines in background
+		// Wait for the "ready" signal or process exit
+		const { promise: readyPromise, resolve: readyResolve, reject: readyReject } = Promise.withResolvers<void>();
+		let readySettled = false;
+
+		// Process lines in background, intercepting the ready signal
 		const lines = readJsonl(this.#process.stdout, this.#abortController.signal);
 		void (async () => {
 			for await (const line of lines) {
+				if (!readySettled && isRecord(line) && line.type === "ready") {
+					readySettled = true;
+					readyResolve();
+					continue;
+				}
 				this.#handleLine(line);
 			}
-		})().catch(() => {});
+			// Stream ended without ready signal — process exited
+			if (!readySettled) {
+				readySettled = true;
+				readyReject(new Error(`Agent process exited before ready. Stderr: ${this.#process?.peekStderr() ?? ""}`));
+			}
+		})().catch((err: Error) => {
+			if (!readySettled) {
+				readySettled = true;
+				readyReject(err);
+			}
+		});
 
-		// Wait a moment for process to initialize
-		await Bun.sleep(100);
-
-		try {
-			const exitCode = await Promise.race([this.#process.exited, Bun.sleep(500).then(() => null)]);
-			if (exitCode !== null) {
-				throw new Error(
-					`Agent process exited immediately with code ${exitCode}. Stderr: ${this.#process.peekStderr()}`,
+		// Also race against process exit (in case stdout closes before we read it)
+		void this.#process.exited.then((exitCode: number) => {
+			if (!readySettled) {
+				readySettled = true;
+				readyReject(
+					new Error(`Agent process exited with code ${exitCode}. Stderr: ${this.#process?.peekStderr() ?? ""}`),
 				);
 			}
-		} catch {
-			// Process still running, which is what we want
-		}
+		});
+
+		// Timeout to prevent hanging forever
+		void Bun.sleep(30000).then(() => {
+			if (!readySettled) {
+				readySettled = true;
+				readyReject(
+					new Error(`Timeout waiting for agent to become ready. Stderr: ${this.#process?.peekStderr() ?? ""}`),
+				);
+			}
+		});
+
+		await readyPromise;
 	}
 
 	/**

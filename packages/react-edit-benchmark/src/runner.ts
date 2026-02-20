@@ -33,6 +33,7 @@ export interface BenchmarkConfig {
 	thinkingLevel?: ThinkingLevel;
 	runsPerTask: number;
 	timeout: number;
+	maxTurns?: number;
 	taskConcurrency: number;
 	requireEditToolCall?: boolean;
 	requireReadToolCall?: boolean;
@@ -165,6 +166,27 @@ class PromptTimeoutError extends Error {
 	constructor(telemetry: PromptAttemptTelemetry) {
 		super("Timeout waiting for agent_end");
 		this.name = "PromptTimeoutError";
+		this.telemetry = telemetry;
+	}
+}
+
+export interface PromptTurnLimitTelemetry {
+	elapsedMs: number;
+	observedTurns: number;
+	maxTurns: number;
+	pendingRetry: boolean;
+	lastEventType?: string;
+	recentEventTypes: string[];
+}
+
+class PromptTurnLimitError extends Error {
+	telemetry: PromptTurnLimitTelemetry;
+
+	constructor(telemetry: PromptTurnLimitTelemetry) {
+		super(
+			`Max turn limit exceeded: observed ${telemetry.observedTurns} turn_start events (limit ${telemetry.maxTurns}).`,
+		);
+		this.name = "PromptTurnLimitError";
 		this.telemetry = telemetry;
 	}
 }
@@ -669,6 +691,11 @@ async function runSingleTask(
 			try {
 				events = await collectPromptEvents(client, promptWithContext, config, logEvent);
 			} catch (err) {
+				if (err instanceof PromptTurnLimitError) {
+					error = err.message;
+					await logEvent({ type: "turn_limit_exceeded", attempt: attempt + 1, telemetry: err.telemetry });
+					break;
+				}
 				if (err instanceof PromptTimeoutError) {
 					timeoutTelemetry = err.telemetry;
 					await logEvent({ type: "timeout", attempt: attempt + 1, telemetry: err.telemetry });
@@ -944,6 +971,11 @@ async function runBatchedTask(
 			try {
 				events = await collectPromptEvents(client, promptWithContext, config, logEvent);
 			} catch (err) {
+				if (err instanceof PromptTurnLimitError) {
+					error = err.message;
+					await logEvent({ type: "turn_limit_exceeded", attempt: attempt + 1, telemetry: err.telemetry });
+					break;
+				}
 				if (err instanceof PromptTimeoutError) {
 					timeoutTelemetry = err.telemetry;
 					await logEvent({ type: "timeout", attempt: attempt + 1, telemetry: err.telemetry });
@@ -1231,6 +1263,7 @@ async function collectPromptEvents(
 	let messageEnds = 0;
 	let lastEventType: string | undefined;
 	const recentEventTypes: string[] = [];
+	let observedTurns = 0;
 	let timer: NodeJS.Timeout | undefined;
 	let settled = false;
 
@@ -1302,10 +1335,26 @@ async function collectPromptEvents(
 			) {
 				await logEvent(typedEvent);
 			}
-			if (typedEvent.type === "auto_retry_start") {
+			if (typedEvent.type === "turn_start") {
+				observedTurns += 1;
+				if (typeof config.maxTurns === "number" && observedTurns > config.maxTurns) {
+					rejectWait(
+						new PromptTurnLimitError({
+							elapsedMs: Date.now() - startedAt,
+							observedTurns,
+							maxTurns: config.maxTurns,
+							pendingRetry,
+							lastEventType,
+							recentEventTypes: [...recentEventTypes],
+						}),
+					);
+					return;
+				}
+				if (pendingRetry) {
+					pendingRetry = false;
+				}
+			} else if (typedEvent.type === "auto_retry_start") {
 				pendingRetry = true;
-			} else if (typedEvent.type === "turn_start" && pendingRetry) {
-				pendingRetry = false;
 			}
 			if (typedEvent.type === "agent_end") {
 				if (pendingRetry) {

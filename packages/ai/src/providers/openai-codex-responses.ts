@@ -1377,16 +1377,20 @@ function logCodexDebug(message: string, details?: Record<string, unknown>): void
 	console.error(`[codex] ${message}`);
 }
 
-function getRetryDelayMs(response: Response | null, attempt: number, errorBody?: string): number {
+function getRetryDelayMs(
+	response: Response | null,
+	attempt: number,
+	errorBody?: string,
+): { delay: number; serverProvided: boolean } {
 	const retryAfter = response?.headers?.get("retry-after") || null;
 	if (retryAfter) {
 		const seconds = Number(retryAfter);
 		if (Number.isFinite(seconds)) {
-			return Math.max(0, seconds * 1000);
+			return { delay: Math.max(0, seconds * 1000), serverProvided: true };
 		}
 		const parsedDate = Date.parse(retryAfter);
 		if (!Number.isNaN(parsedDate)) {
-			return Math.max(0, parsedDate - Date.now());
+			return { delay: Math.max(0, parsedDate - Date.now()), serverProvided: true };
 		}
 	}
 	// Parse retry delay from error body (e.g., "Please try again in 225ms" or "Please try again in 1.5s")
@@ -1394,28 +1398,41 @@ function getRetryDelayMs(response: Response | null, attempt: number, errorBody?:
 		const msMatch = /try again in\s+(\d+(?:\.\d+)?)\s*ms/i.exec(errorBody);
 		if (msMatch) {
 			const ms = Number(msMatch[1]);
-			if (Number.isFinite(ms)) return Math.max(ms, 100);
+			if (Number.isFinite(ms)) return { delay: Math.max(ms, 100), serverProvided: true };
 		}
 		const sMatch = /try again in\s+(\d+(?:\.\d+)?)\s*s(?:ec)?/i.exec(errorBody);
 		if (sMatch) {
 			const s = Number(sMatch[1]);
-			if (Number.isFinite(s)) return Math.max(s * 1000, 100);
+			if (Number.isFinite(s)) return { delay: Math.max(s * 1000, 100), serverProvided: true };
 		}
 	}
-	return CODEX_RETRY_DELAY_MS * (attempt + 1);
+	return { delay: CODEX_RETRY_DELAY_MS * (attempt + 1), serverProvided: false };
 }
+/** Max total time to spend retrying 429s with server-provided delays (5 minutes). */
+const CODEX_RATE_LIMIT_BUDGET_MS = 5 * 60 * 1000;
+
 async function fetchWithRetry(url: string, init: RequestInit, signal?: AbortSignal): Promise<Response> {
 	let attempt = 0;
+	let rateLimitTimeSpent = 0;
 	while (true) {
 		try {
 			const response = await fetch(url, { ...init, signal: signal ?? init.signal });
-			if (!CODEX_RETRYABLE_STATUS.has(response.status) || attempt >= CODEX_MAX_RETRIES) {
+			if (!CODEX_RETRYABLE_STATUS.has(response.status)) {
 				return response;
 			}
 			if (signal?.aborted) return response;
 			// Read error body for retry delay parsing
 			const errorBody = await response.text();
-			const delay = getRetryDelayMs(response, attempt, errorBody);
+			const { delay, serverProvided } = getRetryDelayMs(response, attempt, errorBody);
+			// For 429s with a server-provided delay, use a time budget instead of attempt count
+			if (response.status === 429 && serverProvided) {
+				if (rateLimitTimeSpent + delay > CODEX_RATE_LIMIT_BUDGET_MS) {
+					return response;
+				}
+				rateLimitTimeSpent += delay;
+			} else if (attempt >= CODEX_MAX_RETRIES) {
+				return response;
+			}
 			await abortableSleep(delay, signal);
 		} catch (error) {
 			if (attempt >= CODEX_MAX_RETRIES || signal?.aborted) {

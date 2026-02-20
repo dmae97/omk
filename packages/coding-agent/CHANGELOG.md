@@ -12,6 +12,19 @@
 - Fixed ReadToolGroupComponent to show status icon before title instead of trailing
 - Fixed bash-interactive status badge to dim only bracket characters, not the enclosed text
 
+## [12.15.0] - 2026-02-20
+
+### Added
+
+- Added `includeDisabled` parameter to `listAuthCredentials()` to optionally retrieve disabled credentials
+- Added `disableAuthCredential()` method for soft-deleting auth credentials while preserving database records
+
+### Changed
+
+- Updated browser tool prompt to bias towards `observe` over `screenshot` by default
+- Changed auth credential removal to use soft-delete (disable) instead of hard-delete when OAuth refresh fails, keeping credentials in database for audit purposes
+- Changed default value of `tools.intentTracing` setting from false to true
+
 ## [12.14.1] - 2026-02-19
 
 ### Fixed

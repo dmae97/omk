@@ -480,6 +480,7 @@ async function createClient(
 		apiKey,
 		baseURL: model.baseUrl,
 		dangerouslyAllowBrowser: true,
+		maxRetries: 5,
 		defaultHeaders: headers,
 	});
 }

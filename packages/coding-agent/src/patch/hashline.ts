@@ -663,10 +663,8 @@ export function applyHashlineEdits(
 				if (edit.content.length === 0) {
 					throw new Error('Insert-between edit (src "A#HH.. B#HH..") requires non-empty dst');
 				}
-				if (edit.before.line !== edit.after.line + 1) {
-					throw new Error(
-						`insert requires adjacent anchors (after ${edit.after.line}, before ${edit.before.line})`,
-					);
+				if (edit.before.line <= edit.after.line) {
+					throw new Error(`insert requires after (${edit.after.line}) < before (${edit.before.line})`);
 				}
 				const afterValid = validateRef(edit.after);
 				const beforeValid = validateRef(edit.before);

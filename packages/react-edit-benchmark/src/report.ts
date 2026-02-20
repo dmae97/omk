@@ -101,6 +101,7 @@ export function generateReport(result: BenchmarkResult): string {
 	);
 	lines.push(`| Guided Mode | ${config.guided === false ? "no" : "yes"} |`);
 	lines.push(`| Max Attempts | ${config.maxAttempts ?? 1} |`);
+	lines.push(`| Max Turns | ${config.maxTurns ?? "unset"} |`);
 	lines.push(`| No-op Retry Limit | ${config.noOpRetryLimit ?? 2} |`);
 	lines.push(`| Mutation Scope Window | ${config.mutationScopeWindow ?? 20} |`);
 	lines.push(`| Require Edit Tool | ${config.requireEditToolCall ? "yes" : "no"} |`);

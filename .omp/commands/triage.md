@@ -1,35 +1,37 @@
 # Triage Command
 
-Classify and label open GitHub issues that are missing labels.
+Classify and label **newly opened** GitHub issues that are missing labels.
 
 ## Arguments
 
-- `$ARGUMENTS`: Scope filter — `open` (default), `closed`, or `all`. Append `--relabel` to re-classify issues that already have labels.
+- `$ARGUMENTS`: Optional window flag `--days <n>` (default: `7`). Only open issues created within this window are triaged.
 
 ## Steps
 
 ### 1. Fetch Issues
 
-Parse `$ARGUMENTS` to determine scope and whether `--relabel` is set.
+Parse `$ARGUMENTS` to determine the new-issue window (`--days`, default `7`).
 
 ```bash
-# For open (default):
-gh issue list --state open --json number,title,body,labels,comments,createdAt --limit 50
+# Build cutoff date (UTC) for "new" issues
+CUTOFF_DATE="$(python - <<'PY'
+from datetime import datetime, timedelta, timezone
+print((datetime.now(timezone.utc) - timedelta(days=7)).strftime('%Y-%m-%d'))
+PY
+ )"
 
-# For closed:
-gh issue list --state closed --json number,title,body,labels,comments,createdAt --limit 30
+# Fetch only newly created open issues (default 7-day window)
+gh issue list --state open --search "created:>=${CUTOFF_DATE}" --json number,title,body,labels,comments,createdAt --limit 50
 
-# For all: run both commands and merge results
-```
+### 2. Filter New Candidates
 
-### 2. Filter Candidates
-
-- If `--relabel` is NOT set, skip any issue that already has at least one label.
-- If `--relabel` IS set, process all fetched issues.
+- Skip any issue older than the cutoff window; this command only triages new issues.
+- Skip issues with label `triaged` (already handled).
+- For remaining issues, if type + area + platform are already present, skip unless metadata is clearly missing.
 
 ### 3. Classify Each Issue
 
-For each candidate issue, read the title, body, and **all comments** (comments often contain critical context). Apply labels from the categories below. An issue can receive multiple labels.
+For each candidate issue, read the title, body, and **all comments** (comments often contain critical context). Apply labels from the categories below. An issue can receive multiple labels. For each category, skip it only if the issue already has a label in that category — always fill in missing categories.
 
 **Type labels** (pick exactly one):
 | Label | Signals |
@@ -68,10 +70,10 @@ For each candidate issue, read the title, body, and **all comments** (comments o
 
 ### 4. Apply Labels
 
-For each issue, apply the chosen labels. **Never remove existing labels.**
+For each issue, apply the chosen labels and add `triaged`. **Never remove existing labels.**
 
 ```bash
-gh issue edit <number> --add-label "bug,tui,platform:linux"
+gh issue edit <number> --add-label "bug,tui,platform:linux,triaged"
 ```
 
 ### 5. Print Summary
