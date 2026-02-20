@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { transformMessages } from "@oh-my-pi/pi-ai/providers/transform-messages";
-import type { AssistantMessage, Model, ToolResultMessage } from "@oh-my-pi/pi-ai/types";
+import type { AssistantMessage, Model, ToolCall, ToolResultMessage, UserMessage } from "@oh-my-pi/pi-ai/types";
 
 /**
  * Regression test for: "each tool_use must have a single result. Found multiple tool_result blocks with id"
@@ -252,5 +252,188 @@ describe("Duplicate Tool Results Regression", () => {
 		expect(result1.length).toBe(1);
 		expect(result2.length).toBe(1);
 		expect(result3.length).toBe(1);
+	});
+});
+
+/**
+ * Tests for Codex-style abort handling:
+ * - Tool calls are preserved (not converted to text summaries)
+ * - Synthetic "aborted" tool results are injected
+ * - A <turn_aborted> guidance marker is added as synthetic user message
+ */
+describe("Codex-style Abort Handling", () => {
+	const model: Model<"anthropic-messages"> = {
+		api: "anthropic-messages",
+		provider: "anthropic",
+		id: "claude-3-5-sonnet-20241022",
+		name: "Claude 3.5 Sonnet",
+		baseUrl: "https://api.anthropic.com",
+		input: ["text"],
+		cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+		maxTokens: 8192,
+		contextWindow: 200000,
+		reasoning: true,
+	};
+
+	it("should preserve tool call structure in aborted messages", () => {
+		const toolCallId = "toolu_preserve_test";
+
+		const assistantMessage: AssistantMessage = {
+			role: "assistant",
+			content: [
+				{ type: "text", text: "Let me read that file" },
+				{ type: "toolCall", id: toolCallId, name: "read", arguments: { path: "/test.ts" } },
+			],
+			api: "anthropic-messages",
+			provider: "anthropic",
+			model: "claude-3-5-sonnet-20241022",
+			usage: {
+				input: 100,
+				output: 50,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 150,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "aborted",
+			timestamp: Date.now(),
+		};
+
+		const messages = [{ role: "user" as const, content: "Read the file", timestamp: Date.now() }, assistantMessage];
+
+		const transformed = transformMessages(messages, model);
+
+		// Find the assistant message
+		const assistantMsg = transformed.find(m => m.role === "assistant") as AssistantMessage;
+		expect(assistantMsg).toBeDefined();
+
+		// Tool call should be preserved, not converted to text
+		const toolCall = assistantMsg.content.find(b => b.type === "toolCall") as ToolCall;
+		expect(toolCall).toBeDefined();
+		expect(toolCall.id).toBe(toolCallId);
+		expect(toolCall.name).toBe("read");
+
+		// Text content should also be preserved
+		const textContent = assistantMsg.content.find(b => b.type === "text");
+		expect(textContent).toBeDefined();
+	});
+
+	it("should inject turn_aborted guidance marker as synthetic user message", () => {
+		const assistantMessage: AssistantMessage = {
+			role: "assistant",
+			content: [{ type: "toolCall", id: "toolu_marker_test", name: "bash", arguments: { command: "sleep 10" } }],
+			api: "anthropic-messages",
+			provider: "anthropic",
+			model: "claude-3-5-sonnet-20241022",
+			usage: {
+				input: 100,
+				output: 50,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 150,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "error",
+			errorMessage: "Request was aborted",
+			timestamp: 1000,
+		};
+
+		const messages = [{ role: "user" as const, content: "Run command", timestamp: 500 }, assistantMessage];
+
+		const transformed = transformMessages(messages, model);
+
+		// Should have: user, assistant, toolResult, user(guidance)
+		expect(transformed.length).toBe(4);
+
+		// Last message should be the guidance marker
+		const guidanceMsg = transformed[3] as UserMessage;
+		expect(guidanceMsg.role).toBe("user");
+		expect(guidanceMsg.synthetic).toBe(true);
+		expect(guidanceMsg.content).toContain("<turn_aborted>");
+		expect(guidanceMsg.content).toContain("verify current state before retrying");
+	});
+
+	it("should inject synthetic 'aborted' tool results with isError true", () => {
+		const toolCallId = "toolu_synthetic_test";
+
+		const assistantMessage: AssistantMessage = {
+			role: "assistant",
+			content: [{ type: "toolCall", id: toolCallId, name: "edit", arguments: { path: "/file.ts" } }],
+			api: "anthropic-messages",
+			provider: "anthropic",
+			model: "claude-3-5-sonnet-20241022",
+			usage: {
+				input: 100,
+				output: 50,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 150,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "aborted",
+			timestamp: Date.now(),
+		};
+
+		const messages = [{ role: "user" as const, content: "Edit file", timestamp: Date.now() }, assistantMessage];
+
+		const transformed = transformMessages(messages, model);
+
+		const toolResult = transformed.find(
+			m => m.role === "toolResult" && (m as ToolResultMessage).toolCallId === toolCallId,
+		) as ToolResultMessage;
+
+		expect(toolResult).toBeDefined();
+		expect(toolResult.isError).toBe(true);
+		expect(toolResult.content).toEqual([{ type: "text", text: "aborted" }]);
+	});
+
+	it("should skip existing tool results and use synthetic ones for aborted messages", () => {
+		const toolCallId = "toolu_skip_existing";
+
+		const assistantMessage: AssistantMessage = {
+			role: "assistant",
+			content: [{ type: "toolCall", id: toolCallId, name: "read", arguments: { path: "/file.ts" } }],
+			api: "anthropic-messages",
+			provider: "anthropic",
+			model: "claude-3-5-sonnet-20241022",
+			usage: {
+				input: 100,
+				output: 50,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 150,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "aborted",
+			timestamp: Date.now(),
+		};
+
+		// Existing result with different content (e.g., partial execution)
+		const existingToolResult: ToolResultMessage = {
+			role: "toolResult",
+			toolCallId: toolCallId,
+			toolName: "read",
+			content: [{ type: "text", text: "Partial file content..." }],
+			isError: false,
+			timestamp: Date.now(),
+		};
+
+		const messages = [
+			{ role: "user" as const, content: "Read file", timestamp: Date.now() },
+			assistantMessage,
+			existingToolResult,
+		];
+
+		const transformed = transformMessages(messages, model);
+
+		// Should have exactly one tool result with "aborted" content
+		const toolResults = transformed.filter(
+			m => m.role === "toolResult" && (m as ToolResultMessage).toolCallId === toolCallId,
+		) as ToolResultMessage[];
+
+		expect(toolResults.length).toBe(1);
+		// The synthetic one should win, not the existing one
+		expect(toolResults[0].content).toEqual([{ type: "text", text: "aborted" }]);
+		expect(toolResults[0].isError).toBe(true);
 	});
 });

@@ -1,9 +1,27 @@
-import type { Api, AssistantMessage, Message, Model, ToolCall, ToolResultMessage } from "../types";
+import type { Api, AssistantMessage, Message, Model, ToolCall, ToolResultMessage, UserMessage } from "../types";
+
+const TURN_ABORTED_GUIDANCE =
+	"<turn_aborted>\n" +
+	"The previous turn was aborted. Any running tools/commands were terminated. " +
+	"If tools were aborted, they may have partially executed; verify current state before retrying.\n" +
+	"</turn_aborted>";
+
+const enum ToolCallStatus {
+	/** Tool call has received a result (real or synthetic for orphan) */
+	Resolved = 1,
+	/** Tool call was from an aborted message; synthetic result injected, skip real results */
+	Aborted = 2,
+}
 
 /**
  * Normalize tool call ID for cross-provider compatibility.
  * OpenAI Responses API generates IDs that are 450+ chars with special characters like `|`.
  * Anthropic APIs require IDs matching ^[a-zA-Z0-9_-]+$ (max 64 chars).
+ *
+ * For aborted/errored turns, this function:
+ * - Preserves tool call structure (unlike converting to text summaries)
+ * - Injects synthetic "aborted" tool results
+ * - Adds a <turn_aborted> guidance marker for the model
  */
 export function transformMessages<TApi extends Api>(
 	messages: Message[],
@@ -94,8 +112,8 @@ export function transformMessages<TApi extends Api>(
 	// This preserves thinking signatures and satisfies API requirements
 	const result: Message[] = [];
 	let pendingToolCalls: ToolCall[] = [];
-	let existingToolResultIds = new Set<string>();
-	const skippedToolCallIds = new Set<string>();
+	// Track tool call status: whether resolved (has result) or aborted (skip real results)
+	const toolCallStatus = new Map<string, ToolCallStatus>();
 
 	for (let i = 0; i < transformed.length; i++) {
 		const msg = transformed[i];
@@ -104,7 +122,7 @@ export function transformMessages<TApi extends Api>(
 			// If we have pending orphaned tool calls from a previous assistant, insert synthetic results now
 			if (pendingToolCalls.length > 0) {
 				for (const tc of pendingToolCalls) {
-					if (!existingToolResultIds.has(tc.id)) {
+					if (!toolCallStatus.has(tc.id)) {
 						result.push({
 							role: "toolResult",
 							toolCallId: tc.id,
@@ -113,47 +131,62 @@ export function transformMessages<TApi extends Api>(
 							isError: true,
 							timestamp: Date.now(),
 						} as ToolResultMessage);
+						toolCallStatus.set(tc.id, ToolCallStatus.Resolved);
 					}
 				}
 				pendingToolCalls = [];
-				existingToolResultIds = new Set();
 			}
 
-			// For errored/aborted assistant messages, convert tool calls to text summaries
-			// so the model retains awareness of what it attempted. This avoids orphaned
-			// tool_use blocks while preserving context for the retry.
+			// For errored/aborted assistant messages: keep tool calls intact,
+			// inject synthetic "aborted" results, and add guidance marker.
+			// This preserves structure so the model knows what was attempted.
 			const assistantMsg = msg as AssistantMessage;
+			const toolCalls = assistantMsg.content.filter(b => b.type === "toolCall") as ToolCall[];
+
 			if (assistantMsg.stopReason === "error" || assistantMsg.stopReason === "aborted") {
-				const patchedContent = assistantMsg.content.flatMap(block => {
-					if (block.type !== "toolCall") return block;
-					const tc = block as ToolCall;
-					skippedToolCallIds.add(tc.id);
-					return { type: "text" as const, text: `[Tool call aborted: ${tc.name}]` };
-				});
-				if (patchedContent.length > 0) {
-					result.push({ ...assistantMsg, content: patchedContent });
+				// Push the assistant message with tool calls intact
+				result.push(msg);
+
+				// Inject synthetic "aborted" results for each tool call
+				for (const tc of toolCalls) {
+					toolCallStatus.set(tc.id, ToolCallStatus.Aborted);
+					result.push({
+						role: "toolResult",
+						toolCallId: tc.id,
+						toolName: tc.name,
+						content: [{ type: "text", text: "aborted" }],
+						isError: true,
+						timestamp: assistantMsg.timestamp,
+					} as ToolResultMessage);
 				}
+
+				// Inject turn_aborted guidance marker as synthetic user message
+				result.push({
+					role: "user",
+					content: TURN_ABORTED_GUIDANCE,
+					synthetic: true,
+					timestamp: assistantMsg.timestamp + 1,
+				} as UserMessage);
+
 				continue;
 			}
 
-			// Track tool calls from this assistant message
-			const toolCalls = assistantMsg.content.filter(b => b.type === "toolCall") as ToolCall[];
+			// Track tool calls from this normal assistant message
 			if (toolCalls.length > 0) {
 				pendingToolCalls = toolCalls;
-				existingToolResultIds = new Set();
 			}
 
 			result.push(msg);
 		} else if (msg.role === "toolResult") {
-			// Skip tool results whose corresponding assistant tool_use was from a skipped (aborted/errored) message
-			if (skippedToolCallIds.has(msg.toolCallId)) continue;
-			existingToolResultIds.add(msg.toolCallId);
+			// Skip tool results for aborted tool calls (we already injected synthetic ones)
+			if (toolCallStatus.get(msg.toolCallId) === ToolCallStatus.Aborted) continue;
+			toolCallStatus.set(msg.toolCallId, ToolCallStatus.Resolved);
 			result.push(msg);
 		} else if (msg.role === "user") {
 			// User message interrupts tool flow - insert synthetic results for orphaned calls
 			if (pendingToolCalls.length > 0) {
 				for (const tc of pendingToolCalls) {
-					if (!existingToolResultIds.has(tc.id)) {
+					if (!toolCallStatus.has(tc.id)) {
 						result.push({
 							role: "toolResult",
 							toolCallId: tc.id,
@@ -162,10 +195,10 @@ export function transformMessages<TApi extends Api>(
 							isError: true,
 							timestamp: Date.now(),
 						} as ToolResultMessage);
+						toolCallStatus.set(tc.id, ToolCallStatus.Resolved);
 					}
 				}
 				pendingToolCalls = [];
-				existingToolResultIds = new Set();
 			}
 			result.push(msg);
 		} else {

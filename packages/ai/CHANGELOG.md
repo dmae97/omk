@@ -1,9 +1,16 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `<turn_aborted>` guidance marker as synthetic user message when assistant messages are aborted or errored, informing the model that tools may have partially executed
 - Added support for Sonnet 4.6 models in adaptive thinking detection
+
+### Changed
+
+- Modified handling of aborted/errored assistant messages to preserve tool call structure instead of converting to text summaries, with synthetic 'aborted' tool results injected
+- Updated tool call tracking to use status map (Resolved/Aborted) instead of separate sets for better handling of duplicate and aborted tool results
 
 ## [12.15.0] - 2026-02-20
 ### Fixed
