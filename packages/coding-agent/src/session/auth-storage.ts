@@ -1365,6 +1365,38 @@ export class AuthStorage {
 	}
 
 	/**
+	 * Peek at API key for a provider without refreshing OAuth tokens.
+	 * Used for model discovery where we only need to know if credentials exist
+	 * and get a best-effort token. The actual refresh happens lazily when the
+	 * provider is used for an API call.
+	 */
+	async peekApiKey(provider: string): Promise<string | undefined> {
+		const runtimeKey = this.#runtimeOverrides.get(provider);
+		if (runtimeKey) {
+			return runtimeKey;
+		}
+
+		const apiKeySelection = this.#selectCredentialByType(provider, "api_key");
+		if (apiKeySelection) {
+			return resolveConfigValue(apiKeySelection.credential.key);
+		}
+
+		// Return current OAuth access token only if it is not already expired.
+		const oauthSelection = this.#selectCredentialByType(provider, "oauth");
+		if (oauthSelection) {
+			const expiresAt = oauthSelection.credential.expires;
+			if (Number.isFinite(expiresAt) && expiresAt > Date.now()) {
+				return oauthSelection.credential.access;
+			}
+		}
+
+		const envKey = getEnvApiKey(provider);
+		if (envKey) return envKey;
+
+		return this.#fallbackResolver?.(provider) ?? undefined;
+	}
+
+	/**
 	 * Get API key for a provider.
 	 * Priority:
 	 * 1. Runtime override (CLI --api-key)

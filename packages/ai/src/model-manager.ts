@@ -1,12 +1,9 @@
-import * as fs from "node:fs/promises";
-import * as path from "node:path";
-import { isEnoent } from "@oh-my-pi/pi-utils";
-import { getAgentDir } from "@oh-my-pi/pi-utils/dirs";
+import { readModelCache, writeModelCache } from "./model-cache";
 import { type GeneratedProvider, getBundledModels } from "./models";
 import type { Api, Model, Provider } from "./types";
 
-const CACHE_SCHEMA_VERSION = 1;
 const DEFAULT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const NON_AUTHORITATIVE_RETRY_MS = 5 * 60 * 1000;
 
 /**
  * Controls when dynamic endpoint models should be fetched.
@@ -31,8 +28,8 @@ export interface ModelManagerOptions<TApi extends Api = Api, TModelsDevPayload =
 	providerId: Provider;
 	/** Optional static list override. When omitted, bundled models.json is used. */
 	staticModels?: readonly Model<TApi>[];
-	/** Optional absolute cache path override. Default: <agent-dir>/models/<provider>.json. */
-	cachePath?: string;
+	/** Optional override for the cache database path. Default: <agent-dir>/models.db. */
+	cacheDbPath?: string;
 	/** Maximum cache age in milliseconds before considered stale. Default: 24h. */
 	cacheTtlMs?: number;
 	/** Optional dynamic endpoint fetcher. */
@@ -63,19 +60,6 @@ export interface ModelManager<TApi extends Api = Api> {
 	refresh(strategy?: ModelRefreshStrategy): Promise<ModelResolutionResult<TApi>>;
 }
 
-interface CachedProviderModels<TApi extends Api = Api> {
-	version: number;
-	providerId: string;
-	updatedAt: number;
-	models: Model<TApi>[];
-	authoritative: boolean;
-}
-interface CacheReadResult<TApi extends Api = Api> {
-	models: Model<TApi>[];
-	fresh: boolean;
-	authoritative: boolean;
-}
-
 /**
  * Creates a reusable provider model manager.
  */
@@ -101,23 +85,27 @@ export async function resolveProviderModels<TApi extends Api = Api, TModelsDevPa
 ): Promise<ModelResolutionResult<TApi>> {
 	const now = options.now ?? Date.now;
 	const ttlMs = options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
-	const cachePath = options.cachePath ?? getDefaultCachePath(options.providerId);
+	const dbPath = options.cacheDbPath;
 	const staticModels = normalizeModelList<TApi>(
 		options.staticModels ?? getBundledModels(options.providerId as GeneratedProvider),
 	);
-	const cache = await readCache<TApi>(cachePath, options.providerId, ttlMs, now);
+	const cache = readModelCache<TApi>(options.providerId, ttlMs, now, dbPath);
 	const dynamicFetcher = options.fetchDynamicModels;
 	const hasDynamicFetcher = typeof dynamicFetcher === "function";
 	const hasAuthoritativeCache = (cache?.authoritative ?? false) || !hasDynamicFetcher;
-	const shouldFetchFromNetwork = shouldFetchRemoteSources(strategy, cache?.fresh ?? false, hasAuthoritativeCache);
-	const fetchedModelsDevModels = shouldFetchFromNetwork ? await fetchModelsDev(options) : null;
+	const cacheAgeMs = cache ? now() - cache.updatedAt : Number.POSITIVE_INFINITY;
+	const shouldFetchFromNetwork = shouldFetchRemoteSources(
+		strategy,
+		cache?.fresh ?? false,
+		hasAuthoritativeCache,
+		cacheAgeMs,
+	);
+	const [fetchedModelsDevModels, fetchedDynamicModels] = shouldFetchFromNetwork
+		? await Promise.all([fetchModelsDev(options), dynamicFetcher ? fetchDynamicModels(dynamicFetcher) : null])
+		: [null, null];
 	const modelsDevModels = normalizeModelList<TApi>(fetchedModelsDevModels ?? []);
 	const shouldUseFreshCacheAsAuthoritative =
 		strategy === "online-if-uncached" && (cache?.fresh ?? false) && hasAuthoritativeCache;
-	let fetchedDynamicModels: Model<TApi>[] | null = null;
-	if (dynamicFetcher && shouldFetchFromNetwork) {
-		fetchedDynamicModels = await fetchDynamicModels(dynamicFetcher);
-	}
 	const dynamicFetchSucceeded = fetchedDynamicModels !== null;
 	const cacheModels = dynamicFetchSucceeded ? [] : (cache?.models ?? []);
 	const dynamicModels = fetchedDynamicModels ?? [];
@@ -127,35 +115,24 @@ export async function resolveProviderModels<TApi extends Api = Api, TModelsDevPa
 	if (shouldFetchFromNetwork) {
 		if (dynamicFetchSucceeded) {
 			const snapshotModels = mergeDynamicModels(mergeModelSources(staticModels, modelsDevModels), dynamicModels);
-			await writeCache(cachePath, {
-				version: CACHE_SCHEMA_VERSION,
-				providerId: options.providerId,
-				updatedAt: now(),
-				models: snapshotModels,
-				authoritative: true,
-			});
-		} else if (fetchedModelsDevModels !== null) {
-			const latestCache = await readCache<TApi>(cachePath, options.providerId, ttlMs, now);
-			if (!latestCache?.authoritative) {
-				await writeCache(cachePath, {
-					version: CACHE_SCHEMA_VERSION,
-					providerId: options.providerId,
-					updatedAt: now(),
-					models: mergeModelSources(staticModels, modelsDevModels),
-					authoritative: false,
-				});
-			}
+			writeModelCache(options.providerId, now(), snapshotModels, true, dbPath);
+		} else {
+			// Dynamic fetch failed — update cache with a non-authoritative snapshot so
+			// stale state remains visible while retry backoff still applies.
+			const latestCache = readModelCache<TApi>(options.providerId, ttlMs, now, dbPath);
+			writeModelCache(
+				options.providerId,
+				now(),
+				mergeModelSources(staticModels, modelsDevModels, latestCache?.models ?? cache?.models ?? []),
+				false,
+				dbPath,
+			);
 		}
 	}
 	return {
 		models,
 		stale: !dynamicAuthoritative,
 	};
-}
-
-function getDefaultCachePath(providerId: string): string {
-	const encodedProvider = encodeURIComponent(providerId);
-	return path.join(getAgentDir(), "models", `${encodedProvider}.json`);
 }
 
 async function fetchModelsDev<TApi extends Api, TModelsDevPayload>(
@@ -191,6 +168,7 @@ function shouldFetchRemoteSources(
 	strategy: ModelRefreshStrategy,
 	hasFreshCache: boolean,
 	hasAuthoritativeCache: boolean,
+	cacheAgeMs: number,
 ): boolean {
 	if (strategy === "offline") {
 		return false;
@@ -198,86 +176,16 @@ function shouldFetchRemoteSources(
 	if (strategy === "online") {
 		return true;
 	}
-	return !hasFreshCache || !hasAuthoritativeCache;
-}
-
-async function readCache<TApi extends Api>(
-	cachePath: string,
-	expectedProviderId: string,
-	ttlMs: number,
-	now: () => number,
-): Promise<CacheReadResult<TApi> | null> {
-	let raw: string;
-	try {
-		raw = await Bun.file(cachePath).text();
-	} catch (error) {
-		if (isEnoent(error)) {
-			return null;
-		}
-		return null;
+	// online-if-uncached: skip fetch if cache is fresh.
+	// For non-authoritative caches (dynamic fetch previously failed),
+	// use a shorter retry interval instead of retrying every startup.
+	if (!hasFreshCache) {
+		return true;
 	}
-
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(raw);
-	} catch {
-		return null;
+	if (!hasAuthoritativeCache) {
+		return cacheAgeMs >= NON_AUTHORITATIVE_RETRY_MS;
 	}
-
-	const cache = parseCache<TApi>(parsed);
-	if (!cache || cache.providerId !== expectedProviderId) {
-		return null;
-	}
-
-	const ageMs = now() - cache.updatedAt;
-	const fresh = Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= ttlMs;
-	return {
-		models: cache.models,
-		fresh,
-		authoritative: cache.authoritative,
-	};
-}
-
-function parseCache<TApi extends Api>(value: unknown): CachedProviderModels<TApi> | null {
-	if (!isRecord(value)) {
-		return null;
-	}
-	if (value.version !== CACHE_SCHEMA_VERSION) {
-		return null;
-	}
-	if (typeof value.providerId !== "string") {
-		return null;
-	}
-	if (typeof value.updatedAt !== "number" || !Number.isFinite(value.updatedAt)) {
-		return null;
-	}
-	const rawModels = Array.isArray(value.models)
-		? value.models
-		: Array.isArray(value.dynamicModels)
-			? value.dynamicModels
-			: null;
-	if (!rawModels) {
-		return null;
-	}
-	const authoritative =
-		typeof value.authoritative === "boolean" ? value.authoritative : Array.isArray(value.dynamicModels);
-	return {
-		version: value.version,
-		providerId: value.providerId,
-		updatedAt: value.updatedAt,
-		models: normalizeModelList<TApi>(rawModels),
-		authoritative,
-	};
-}
-
-async function writeCache<TApi extends Api>(cachePath: string, cache: CachedProviderModels<TApi>): Promise<void> {
-	const content = `${JSON.stringify(cache, null, 2)}\n`;
-	try {
-		await Bun.write(cachePath, content);
-		await fs.chmod(cachePath, 0o600).catch(() => undefined);
-	} catch {
-		// Cache writes are best-effort; failures should not break model resolution.
-	}
+	return false;
 }
 
 function mergeModelSources<TApi extends Api>(...sources: readonly (readonly Model<TApi>[])[]): Model<TApi>[] {

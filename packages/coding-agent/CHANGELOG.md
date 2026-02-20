@@ -1,8 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `peekApiKey` method to AuthStorage for non-blocking API key retrieval during model discovery without triggering OAuth token refresh
 - Exported `finalizeSubprocessOutput` function to handle subprocess output finalization with submit_result validation
 - Exported `SubmitResultItem` interface for type-safe submit_result tool data extraction
 - Added automatic reminders when subagent stops without calling submit_result tool (up to 3 reminders before aborting)
@@ -10,6 +12,7 @@
 
 ### Changed
 
+- Changed model discovery to use non-blocking API key peek instead of full key retrieval, improving performance by avoiding unnecessary OAuth token refreshes
 - Simplified submit_result termination logic to immediately abort on successful tool execution instead of waiting for message_end event
 - Updated submit_result tool to only terminate on successful execution (when isError is false), allowing retries on tool errors
 - Refactored subprocess output finalization logic into dedicated `finalizeSubprocessOutput` function for better testability and maintainability

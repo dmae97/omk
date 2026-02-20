@@ -8,12 +8,10 @@ import {
 	type AnthropicSystemBlock,
 	buildAnthropicHeaders,
 	buildAnthropicSystemBlocks,
-	claudeCodeHeaders,
-	claudeCodeVersion,
 	stripClaudeToolPrefix,
 } from "@oh-my-pi/pi-ai";
 import { $env } from "@oh-my-pi/pi-utils";
-import { buildAnthropicUrl, findAnthropicAuth, isOAuthToken } from "../../../web/search/auth";
+import { buildAnthropicUrl, findAnthropicAuth } from "../../../web/search/auth";
 import type {
 	AnthropicApiResponse,
 	AnthropicAuthConfig,

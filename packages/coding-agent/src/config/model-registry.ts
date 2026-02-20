@@ -770,9 +770,13 @@ export class ModelRegistry {
 				},
 			},
 		];
+		// Use peekApiKey to avoid OAuth token refresh during discovery.
+		// The token is only needed if the dynamic fetch fires (cache miss),
+		// and failures there are handled gracefully.
+		const peekKey = (descriptor: { providerId: string }) => this.#peekApiKeyForProvider(descriptor.providerId);
 		const [standardProviderKeys, specialKeys] = await Promise.all([
-			Promise.all(PROVIDER_DESCRIPTORS.map(descriptor => this.getApiKeyForProvider(descriptor.providerId))),
-			Promise.all(specialProviderDescriptors.map(descriptor => this.getApiKeyForProvider(descriptor.providerId))),
+			Promise.all(PROVIDER_DESCRIPTORS.map(peekKey)),
+			Promise.all(specialProviderDescriptors.map(peekKey)),
 		]);
 		const options: ModelManagerOptions<Api>[] = [];
 		for (let i = 0; i < PROVIDER_DESCRIPTORS.length; i++) {
@@ -968,6 +972,13 @@ export class ModelRegistry {
 			return kNoAuth;
 		}
 		return this.authStorage.getApiKey(provider, sessionId, { baseUrl });
+	}
+
+	async #peekApiKeyForProvider(provider: string): Promise<string | undefined> {
+		if (this.#keylessProviders.has(provider)) {
+			return kNoAuth;
+		}
+		return this.authStorage.peekApiKey(provider);
 	}
 
 	/**

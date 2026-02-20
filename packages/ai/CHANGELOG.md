@@ -1,14 +1,17 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Exported `readModelCache` and `writeModelCache` functions for direct SQLite-backed model cache access
 - Added `<turn_aborted>` guidance marker as synthetic user message when assistant messages are aborted or errored, informing the model that tools may have partially executed
 - Added support for Sonnet 4.6 models in adaptive thinking detection
 
 ### Changed
 
+- Migrated model cache from per-provider JSON files to unified SQLite database (models.db) for atomic cross-process access
+- Renamed `cachePath` option to `cacheDbPath` in ModelManagerOptions to reflect database-backed storage
+- Improved non-authoritative cache handling with 5-minute retry backoff instead of retrying on every startup
 - Modified handling of aborted/errored assistant messages to preserve tool call structure instead of converting to text summaries, with synthetic 'aborted' tool results injected
 - Updated tool call tracking to use status map (Resolved/Aborted) instead of separate sets for better handling of duplicate and aborted tool results
 

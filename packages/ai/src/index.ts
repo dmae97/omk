@@ -1,6 +1,7 @@
 export type { Static, TSchema } from "@sinclair/typebox";
 export { Type } from "@sinclair/typebox";
 export * from "./api-registry";
+export * from "./model-cache";
 export * from "./model-manager";
 export * from "./models";
 export * from "./provider-details";
