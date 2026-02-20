@@ -83,8 +83,7 @@ mkdir -p "$TARBALL_APP_DIR"
 (
 	cd "$TARBALL_APP_DIR"
 	bun init -y >/dev/null
-	bun add "$utils_tgz" "$natives_tgz" "$ai_tgz" "$agent_tgz" "$tui_tgz" "$stats_tgz"
-	bun add "$coding_agent_tgz"
+	bun add "$utils_tgz" "$natives_tgz" "$ai_tgz" "$agent_tgz" "$tui_tgz" "$stats_tgz" "$coding_agent_tgz"
 	smoke_cli ./node_modules/.bin/omp
 )
 
