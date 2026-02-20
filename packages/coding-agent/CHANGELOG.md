@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.15.0] - 2026-02-20
+
 ### Added
 
 - Added `includeDisabled` parameter to `listAuthCredentials()` to optionally retrieve disabled credentials

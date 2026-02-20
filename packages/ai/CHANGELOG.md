@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.15.0] - 2026-02-20
 ### Fixed
 
 - Improved error messages for OAuth token refresh failures by including detailed error information from the provider
