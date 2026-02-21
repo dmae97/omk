@@ -660,7 +660,7 @@ async function handleShellStreamArgs(
 ): Promise<void> {
 	const { execResult } = await resolveExecHandler(
 		args as any,
-		execHandlers?.shell,
+		execHandlers?.shell?.bind(execHandlers),
 		onToolResult,
 		toolResult => buildShellResultFromToolResult(args as any, toolResult),
 		reason => buildShellRejectedResult((args as any).command, (args as any).workingDirectory, reason),
@@ -808,7 +808,7 @@ async function handleExecServerMessage(
 			const args = execMsg.message.value;
 			const { execResult } = await resolveExecHandler(
 				args,
-				execHandlers?.read,
+				execHandlers?.read?.bind(execHandlers),
 				onToolResult,
 				toolResult => buildReadResultFromToolResult(args.path, toolResult),
 				reason => buildReadRejectedResult(args.path, reason),
@@ -821,7 +821,7 @@ async function handleExecServerMessage(
 			const args = execMsg.message.value;
 			const { execResult } = await resolveExecHandler(
 				args,
-				execHandlers?.ls,
+				execHandlers?.ls?.bind(execHandlers),
 				onToolResult,
 				toolResult => buildLsResultFromToolResult(args.path, toolResult),
 				reason => buildLsRejectedResult(args.path, reason),
@@ -834,7 +834,7 @@ async function handleExecServerMessage(
 			const args = execMsg.message.value;
 			const { execResult } = await resolveExecHandler(
 				args,
-				execHandlers?.grep,
+				execHandlers?.grep?.bind(execHandlers),
 				onToolResult,
 				toolResult => buildGrepResultFromToolResult(args, toolResult),
 				reason => buildGrepErrorResult(reason),
@@ -847,7 +847,7 @@ async function handleExecServerMessage(
 			const args = execMsg.message.value;
 			const { execResult } = await resolveExecHandler(
 				args,
-				execHandlers?.write,
+				execHandlers?.write?.bind(execHandlers),
 				onToolResult,
 				toolResult =>
 					buildWriteResultFromToolResult(
@@ -869,7 +869,7 @@ async function handleExecServerMessage(
 			const args = execMsg.message.value;
 			const { execResult } = await resolveExecHandler(
 				args,
-				execHandlers?.delete,
+				execHandlers?.delete?.bind(execHandlers),
 				onToolResult,
 				toolResult => buildDeleteResultFromToolResult(args.path, toolResult),
 				reason => buildDeleteRejectedResult(args.path, reason),
@@ -882,7 +882,7 @@ async function handleExecServerMessage(
 			const args = execMsg.message.value;
 			const { execResult } = await resolveExecHandler(
 				args,
-				execHandlers?.shell,
+				execHandlers?.shell?.bind(execHandlers),
 				onToolResult,
 				toolResult => buildShellResultFromToolResult(args, toolResult),
 				reason => buildShellRejectedResult(args.command, args.workingDirectory, reason),
@@ -942,7 +942,7 @@ async function handleExecServerMessage(
 			const args = execMsg.message.value;
 			const { execResult } = await resolveExecHandler(
 				args,
-				execHandlers?.diagnostics,
+				execHandlers?.diagnostics?.bind(execHandlers),
 				onToolResult,
 				toolResult => buildDiagnosticsResultFromToolResult(args.path, toolResult),
 				reason => buildDiagnosticsRejectedResult(args.path, reason),
@@ -956,7 +956,7 @@ async function handleExecServerMessage(
 			const mcpCall = decodeMcpCall(args);
 			const { execResult } = await resolveExecHandler(
 				mcpCall,
-				execHandlers?.mcp,
+				execHandlers?.mcp?.bind(execHandlers),
 				onToolResult,
 				toolResult => buildMcpResultFromToolResult(mcpCall, toolResult),
 				_reason => buildMcpToolNotFoundResult(mcpCall),
