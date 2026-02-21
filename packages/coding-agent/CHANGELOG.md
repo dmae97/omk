@@ -1,9 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added timeout protection (5 seconds) for system prompt preparation with graceful fallback to minimal context on timeout
 
 ### Changed
 
+- Replaced glob-based AGENTS.md discovery with depth-limited directory traversal (depth 1-4) for improved performance and control
+- Refactored system prompt preparation to parallelize file loading operations with a 5-second timeout to prevent startup hangs
 - Unified `renderCall` signatures to `(args, options, theme)` across all tool renderers and extension types
 
 ## [12.16.0] - 2026-02-21
