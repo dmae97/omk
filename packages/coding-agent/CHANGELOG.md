@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `peekApiKey` method to AuthStorage for non-blocking API key retrieval during model discovery without triggering OAuth token refresh
@@ -11,6 +12,7 @@
 
 ### Changed
 
+- Changed model refresh behavior to support configurable strategies: uses 'online' mode when listing models and 'online-if-uncached' mode otherwise for improved performance
 - Changed default thinking level from 'off' to 'high' for improved reasoning and planning
 - Changed model discovery to use non-blocking API key peek instead of full key retrieval, improving performance by avoiding unnecessary OAuth token refreshes
 - Simplified submit_result termination logic to immediately abort on successful tool execution instead of waiting for message_end event

@@ -10,6 +10,7 @@ import {
 	googleGeminiCliModelManagerOptions,
 	type Model,
 	type ModelManagerOptions,
+	type ModelRefreshStrategy,
 	normalizeDomain,
 	type OAuthCredentials,
 	type OAuthLoginCallbacks,
@@ -494,7 +495,7 @@ export class ModelRegistry {
 	/**
 	 * Reload models from disk (built-in + custom from models.json).
 	 */
-	async refresh(): Promise<void> {
+	async refresh(strategy: ModelRefreshStrategy = "online-if-uncached"): Promise<void> {
 		this.#modelsConfigFile.invalidate();
 		this.#customProviderApiKeys.clear();
 		this.#keylessProviders.clear();
@@ -502,7 +503,7 @@ export class ModelRegistry {
 		this.#modelOverrides.clear();
 		this.#configError = undefined;
 		this.#loadModels();
-		await this.#refreshRuntimeDiscoveries();
+		await this.#refreshRuntimeDiscoveries(strategy);
 	}
 
 	/**
@@ -681,7 +682,7 @@ export class ModelRegistry {
 		};
 	}
 
-	async #refreshRuntimeDiscoveries(): Promise<void> {
+	async #refreshRuntimeDiscoveries(strategy: ModelRefreshStrategy): Promise<void> {
 		const configuredDiscoveriesPromise =
 			this.#discoverableProviders.length === 0
 				? Promise.resolve<Model<Api>[]>([])
@@ -690,7 +691,7 @@ export class ModelRegistry {
 					);
 		const [configuredDiscovered, builtInDiscovered] = await Promise.all([
 			configuredDiscoveriesPromise,
-			this.#discoverBuiltInProviderModels(),
+			this.#discoverBuiltInProviderModels(strategy),
 		]);
 		const discovered = [...configuredDiscovered, ...builtInDiscovered];
 		if (discovered.length === 0) {
@@ -721,7 +722,7 @@ export class ModelRegistry {
 		}
 	}
 
-	async #discoverBuiltInProviderModels(): Promise<Model<Api>[]> {
+	async #discoverBuiltInProviderModels(strategy: ModelRefreshStrategy): Promise<Model<Api>[]> {
 		// Skip providers already handled by configured discovery (e.g. user-configured ollama with discovery.type)
 		const configuredDiscoveryProviders = new Set(this.#discoverableProviders.map(p => p.provider));
 		const managerOptions = (await this.#collectBuiltInModelManagerOptions()).filter(
@@ -730,7 +731,9 @@ export class ModelRegistry {
 		if (managerOptions.length === 0) {
 			return [];
 		}
-		const discoveries = await Promise.all(managerOptions.map(options => this.#discoverWithModelManager(options)));
+		const discoveries = await Promise.all(
+			managerOptions.map(options => this.#discoverWithModelManager(options, strategy)),
+		);
 		return discoveries.flat();
 	}
 
@@ -803,10 +806,13 @@ export class ModelRegistry {
 		return options;
 	}
 
-	async #discoverWithModelManager(options: ModelManagerOptions<Api>): Promise<Model<Api>[]> {
+	async #discoverWithModelManager(
+		options: ModelManagerOptions<Api>,
+		strategy: ModelRefreshStrategy,
+	): Promise<Model<Api>[]> {
 		try {
 			const manager = createModelManager(options);
-			const result = await manager.refresh();
+			const result = await manager.refresh(strategy);
 			return result.models.map(model =>
 				model.provider === options.providerId ? model : { ...model, provider: options.providerId },
 			);

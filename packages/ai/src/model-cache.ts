@@ -7,7 +7,7 @@ import * as path from "node:path";
 import { getAgentDir } from "@oh-my-pi/pi-utils/dirs";
 import type { Api, Model } from "./types";
 
-const CACHE_SCHEMA_VERSION = 1;
+const CACHE_SCHEMA_VERSION = 2;
 
 interface CacheRow {
 	provider_id: string;

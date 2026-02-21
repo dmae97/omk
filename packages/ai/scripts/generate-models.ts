@@ -102,6 +102,47 @@ async function loadModelsDevData(): Promise<Model[]> {
 	}
 }
 
+function createGlobalModelsDevReferenceMap(modelsDevModels: readonly Model[]): Map<string, Model> {
+	const references = new Map<string, Model>();
+	for (const model of modelsDevModels) {
+		const existing = references.get(model.id);
+		if (!existing) {
+			references.set(model.id, model);
+			continue;
+		}
+		if (model.contextWindow > existing.contextWindow) {
+			references.set(model.id, model);
+			continue;
+		}
+		if (model.contextWindow === existing.contextWindow && model.maxTokens > existing.maxTokens) {
+			references.set(model.id, model);
+		}
+	}
+	return references;
+}
+
+function applyGlobalModelsDevFallback(models: readonly Model[], modelsDevModels: readonly Model[]): Model[] {
+	const providerScopedKeys = new Set(modelsDevModels.map(model => `${model.provider}/${model.id}`));
+	const globalReferences = createGlobalModelsDevReferenceMap(modelsDevModels);
+	return models.map(model => {
+		if (providerScopedKeys.has(`${model.provider}/${model.id}`)) {
+			return model;
+		}
+		const reference = globalReferences.get(model.id);
+		if (!reference) {
+			return model;
+		}
+		return {
+			...model,
+			name: reference.name,
+			reasoning: reference.reasoning,
+			input: reference.input,
+			contextWindow: reference.contextWindow,
+			maxTokens: reference.maxTokens,
+		};
+	});
+}
+
 const ANTIGRAVITY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
 
 async function getOAuthCredentialsFromStorage(provider: OAuthProvider): Promise<OAuthCredentials | null> {
@@ -210,7 +251,7 @@ async function generateModels() {
 	).flat();
 
 	// Combine models (models.dev has priority)
-	const allModels = [...modelsDevModels, ...catalogProviderModels];
+	let allModels = applyGlobalModelsDevFallback([...modelsDevModels, ...catalogProviderModels], modelsDevModels);
 
 	if (!allModels.some((model) => model.provider === "cloudflare-ai-gateway")) {
 		allModels.push(CLOUDFLARE_FALLBACK_MODEL);
@@ -243,7 +284,7 @@ async function generateModels() {
 	// through the existing models.json seed.
 	// Discovery-only providers (local inference servers) — never bundle static models.
 	const discoveryOnlyProviders = new Set(["ollama", "vllm"]);
-	const fetchedKeys = new Set(allModels.map((m) => `${m.provider}/${m.id}`));
+	const fetchedKeys = new Set(allModels.map(model => `${model.provider}/${model.id}`));
 
 	for (const models of Object.values(prevModelsJson as Record<string, Record<string, Model>>)) {
 		for (const model of Object.values(models)) {
@@ -252,6 +293,8 @@ async function generateModels() {
 			}
 		}
 	}
+
+	allModels = applyGlobalModelsDevFallback(allModels, modelsDevModels);
 
 	// Group by provider and sort each provider's models
 	const providers: Record<string, Record<string, Model>> = {};

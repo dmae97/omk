@@ -515,7 +515,8 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	// Create AuthStorage and ModelRegistry upfront
 	const authStorage = await discoverAuthStorage();
 	const modelRegistry = new ModelRegistry(authStorage);
-	await modelRegistry.refresh();
+	const refreshStrategy = parsedArgs.listModels !== undefined ? "online" : "online-if-uncached";
+	await modelRegistry.refresh(refreshStrategy);
 	debugStartup("main:discoverModels");
 	time("discoverModels");
 
