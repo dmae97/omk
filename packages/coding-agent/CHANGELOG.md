@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.17.1] - 2026-02-21
 ### Added
 
 - Added `filterBrowser` option to filter out browser automation MCP servers when builtin browser tool is enabled

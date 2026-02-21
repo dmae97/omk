@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.17.1] - 2026-02-21
+
 ### Added
 
 - Expanded package exports to support subpath imports for clipboard, glob, grep, highlight, html, image, keys, ps, pty, shell, text, and work modules

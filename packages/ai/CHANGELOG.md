@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.17.1] - 2026-02-21
 ### Added
 
 - Added new export paths for provider models via `./provider-models` and `./provider-models/*`
