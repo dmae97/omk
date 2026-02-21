@@ -5,6 +5,7 @@
  * Each log entry includes process.pid for traceability.
  */
 import * as fs from "node:fs";
+import { RingBuffer } from "@oh-my-pi/pi-utils/ring";
 import winston from "winston";
 import DailyRotateFile from "winston-daily-rotate-file";
 import { getLogsDir } from "./dirs";
@@ -57,13 +58,6 @@ const winstonLogger = winston.createLogger({
 	exitOnError: false,
 });
 
-/** Logger type exposed to plugins and internal code */
-export interface Logger {
-	error(message: string, context?: Record<string, unknown>): void;
-	warn(message: string, context?: Record<string, unknown>): void;
-	debug(message: string, context?: Record<string, unknown>): void;
-}
-
 /**
  * Centralized logger for omp.
  *
@@ -79,6 +73,19 @@ export interface Logger {
  * logger.debug("LSP fallback triggered", { reason });
  * ```
  */
+export interface Logger {
+	error(message: string, context?: Record<string, unknown>): void;
+	warn(message: string, context?: Record<string, unknown>): void;
+	debug(message: string, context?: Record<string, unknown>): void;
+	time<T>(op: string, fn: () => T): T;
+	timeAsync<T>(op: string, fn: () => PromiseLike<T>): Promise<T>;
+}
+
+/**
+ * Log an error message.
+ * @param message - The message to log.
+ * @param context - The context to log.
+ */
 export function error(message: string, context?: Record<string, unknown>): void {
 	try {
 		winstonLogger.error(message, context);
@@ -87,6 +94,11 @@ export function error(message: string, context?: Record<string, unknown>): void 
 	}
 }
 
+/**
+ * Log a warning message.
+ * @param message - The message to log.
+ * @param context - The context to log.
+ */
 export function warn(message: string, context?: Record<string, unknown>): void {
 	try {
 		winstonLogger.warn(message, context);
@@ -95,10 +107,99 @@ export function warn(message: string, context?: Record<string, unknown>): void {
 	}
 }
 
+/**
+ * Log a debug message.
+ * @param message - The message to log.
+ * @param context - The context to log.
+ */
 export function debug(message: string, context?: Record<string, unknown>): void {
 	try {
 		winstonLogger.debug(message, context);
 	} catch {
 		// Silently ignore logging failures
+	}
+}
+
+const LOGGED_TIMING_THRESHOLD_MS = 5;
+
+const longOpBuffer = new RingBuffer<[op: string, duration: number]>(1000);
+let longOpRecord = false;
+
+function logTiming(op: string, duration: number): void {
+	if (duration > LOGGED_TIMING_THRESHOLD_MS) {
+		warn(`${op} took ${duration}ms`, { duration, op });
+		if (longOpRecord) {
+			longOpBuffer.push([op, duration]);
+		}
+	} else {
+		debug(`${op} took ${duration}ms`, { duration, op });
+	}
+}
+
+/**
+ * Print all collected long operation timings to stderr.
+ * To be called at the end of a startup or timing window.
+ */
+export function printTimings(): void {
+	// Use stderr for timings output, do not use logger (see AGENTS.md).
+	console.error("\n--- Startup Timings ---");
+	let totalDuration = 0;
+	for (const [op, duration] of longOpBuffer) {
+		console.error(`  ${op}: ${duration}ms`);
+		totalDuration += duration;
+	}
+	console.error(`  TOTAL: ${totalDuration}ms`);
+	console.error("------------------------\n");
+}
+
+/**
+ * Begin recording long operation timings.
+ * Typically called at the beginning of startup.
+ */
+export function startTiming(): void {
+	longOpBuffer.clear();
+	longOpRecord = true;
+}
+
+/**
+ * End timing window and print all timings.
+ * Disables further buffering until next startTiming().
+ */
+export function endTiming(): void {
+	longOpBuffer.clear();
+	longOpRecord = false;
+}
+
+/**
+ * Time a synchronous operation and log the duration.
+ * @param op - The operation name.
+ * @param fn - The function to time.
+ * @returns The result of the function.
+ */
+export function time<T, A extends unknown[]>(op: string, fn: (...args: A) => T, ...args: A): T {
+	const start = performance.now();
+	try {
+		return fn(...args);
+	} finally {
+		logTiming(op, performance.now() - start);
+	}
+}
+
+/**
+ * Time an asynchronous operation and log the duration.
+ * @param op - The operation name.
+ * @param fn - The function to time.
+ * @returns The result of the function.
+ */
+export async function timeAsync<R, A extends unknown[]>(
+	op: string,
+	fn: (...args: A) => R,
+	...args: A
+): Promise<Awaited<R>> {
+	const start = performance.now();
+	try {
+		return await fn(...args);
+	} finally {
+		logTiming(op, performance.now() - start);
 	}
 }

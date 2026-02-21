@@ -18,9 +18,6 @@ import customSystemPromptTemplate from "./prompts/system/custom-system-prompt.md
 import systemPromptTemplate from "./prompts/system/system-prompt.md" with { type: "text" };
 import type { ToolName } from "./tools";
 
-/** Conditional startup debug prints (stderr) when PI_DEBUG_STARTUP is set */
-const debugStartup = $env.PI_DEBUG_STARTUP ? (stage: string) => process.stderr.write(`[startup] ${stage}\n`) : () => {};
-
 interface GitContext {
 	isRepo: boolean;
 	currentBranch: string;
@@ -355,21 +352,15 @@ async function saveGpuCache(info: GpuCache): Promise<void> {
 }
 
 async function getCachedGpu(): Promise<string | undefined> {
-	debugStartup("system-prompt:getEnvironmentInfo:getCachedGpu:start");
-	const cached = await loadGpuCache();
+	const cached = await logger.timeAsync("getCachedGpu:loadGpuCache", loadGpuCache);
 	if (cached) return cached.gpu;
-	debugStartup("system-prompt:getEnvironmentInfo:getGpuModel");
-	const gpu = await getGpuModel();
-	debugStartup("system-prompt:getEnvironmentInfo:saveGpuCache");
-	if (gpu) await saveGpuCache({ gpu });
+	const gpu = await logger.timeAsync("getCachedGpu:getGpuModel", getGpuModel);
+	if (gpu) await logger.timeAsync("getCachedGpu:saveGpuCache", saveGpuCache, { gpu });
 	return gpu ?? undefined;
 }
 async function getEnvironmentInfo(): Promise<Array<{ label: string; value: string }>> {
-	debugStartup("system-prompt:getEnvironmentInfo:getCachedGpu");
-	const gpu = await getCachedGpu();
-	debugStartup("system-prompt:getEnvironmentInfo:getCpuInfo");
+	const gpu = await logger.timeAsync("getEnvironmentInfo:getCachedGpu", getCachedGpu);
 	const cpus = os.cpus();
-	debugStartup("system-prompt:getEnvironmentInfo:buildEntries");
 	const entries: Array<{ label: string; value: string | undefined }> = [
 		{ label: "OS", value: `${os.platform()} ${os.release()}` },
 		{ label: "Distro", value: os.type() },
@@ -381,7 +372,6 @@ async function getEnvironmentInfo(): Promise<Array<{ label: string; value: strin
 		{ label: "DE", value: getDesktopEnvironment() },
 		{ label: "WM", value: getWindowManager() },
 	];
-	debugStartup("system-prompt:getEnvironmentInfo:done");
 	return entries.filter((e): e is { label: string; value: string } => e.value != null && e.value !== "unknown");
 }
 
@@ -512,33 +502,23 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 	const preloadedSkills = providedPreloadedSkills;
 
 	const prepPromise = (async () => {
-		const systemPromptCustomizationPromise = (async () => {
-			const customization = await loadSystemPromptFiles({ cwd: resolvedCwd });
-			debugStartup("system-prompt:loadSystemPromptFiles:done");
-			return customization;
-		})();
+		const systemPromptCustomizationPromise = logger.timeAsync("loadSystemPromptFiles", loadSystemPromptFiles, {
+			cwd: resolvedCwd,
+		});
 		const contextFilesPromise = providedContextFiles
 			? Promise.resolve(providedContextFiles)
-			: loadProjectContextFiles({ cwd: resolvedCwd });
-		const agentsMdSearchPromise = buildAgentsMdSearch(resolvedCwd);
+			: logger.timeAsync("loadProjectContextFiles", loadProjectContextFiles, { cwd: resolvedCwd });
+		const agentsMdSearchPromise = logger.timeAsync("buildAgentsMdSearch", buildAgentsMdSearch, resolvedCwd);
 		const skillsPromise: Promise<Skill[]> =
 			providedSkills !== undefined
 				? Promise.resolve(providedSkills)
 				: skillsSettings?.enabled !== false
 					? loadSkills({ ...skillsSettings, cwd: resolvedCwd }).then(result => result.skills)
 					: Promise.resolve([]);
-		const preloadedSkillContentsPromise = (async () => {
-			debugStartup("system-prompt:loadPreloadedSkills:start");
-			const loaded = preloadedSkills ? await loadPreloadedSkillContents(preloadedSkills) : [];
-			debugStartup("system-prompt:loadPreloadedSkills:done");
-			return loaded;
-		})();
-		const gitPromise = (async () => {
-			debugStartup("system-prompt:loadGitContext:start");
-			const loaded = await loadGitContext(resolvedCwd);
-			debugStartup("system-prompt:loadGitContext:done");
-			return loaded;
-		})();
+		const preloadedSkillContentsPromise = preloadedSkills
+			? await logger.timeAsync("loadPreloadedSkills", loadPreloadedSkillContents, preloadedSkills)
+			: [];
+		const gitPromise = logger.timeAsync("loadGitContext", loadGitContext, resolvedCwd);
 
 		const [
 			resolvedCustomPrompt,
@@ -678,9 +658,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		});
 	}
 
-	debugStartup("system-prompt:getEnvironmentInfo:start");
-	const environment = await getEnvironmentInfo();
-	debugStartup("system-prompt:getEnvironmentInfo:done");
+	const environment = await logger.timeAsync("getEnvironmentInfo", getEnvironmentInfo);
 	return renderPromptTemplate(systemPromptTemplate, {
 		tools: toolNamesArray,
 		toolDescriptions,

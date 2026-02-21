@@ -15,7 +15,7 @@ import {
 	Text,
 	TUI,
 } from "@oh-my-pi/pi-tui";
-import { $env, hsvToRgb, isEnoent, logger, postmortem } from "@oh-my-pi/pi-utils";
+import { hsvToRgb, isEnoent, logger, postmortem } from "@oh-my-pi/pi-utils";
 import { APP_NAME, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
 import { KeybindingsManager } from "../config/keybindings";
@@ -56,9 +56,6 @@ import type { Theme } from "./theme/theme";
 import { getEditorTheme, getMarkdownTheme, onThemeChange, theme } from "./theme/theme";
 import type { CompactionQueuedMessage, InteractiveModeContext, TodoItem } from "./types";
 import { UiHelpers } from "./utils/ui-helpers";
-
-/** Conditional startup debug prints (stderr) when PI_DEBUG_STARTUP is set */
-const debugStartup = $env.PI_DEBUG_STARTUP ? (stage: string) => process.stderr.write(`[startup] ${stage}\n`) : () => {};
 
 const TODO_FILE_NAME = "todos.json";
 const EDITOR_MAX_HEIGHT_MIN = 6;
@@ -258,28 +255,29 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	async init(): Promise<void> {
 		if (this.isInitialized) return;
-		debugStartup("InteractiveMode.init:entry");
 
-		this.keybindings = await KeybindingsManager.create();
-		debugStartup("InteractiveMode.init:keybindings");
+		this.keybindings = await logger.timeAsync("InteractiveMode.init:keybindings", () => KeybindingsManager.create());
 
 		// Register session manager flush for signal handlers (SIGINT, SIGTERM, SIGHUP)
 		this.#cleanupUnsubscribe = postmortem.register("session-manager-flush", () => this.sessionManager.flush());
-		debugStartup("InteractiveMode.init:cleanupRegistered");
 
-		await this.refreshSlashCommandState(getProjectDir());
-		debugStartup("InteractiveMode.init:slashCommands");
+		await logger.timeAsync("InteractiveMode.init:slashCommands", () =>
+			this.refreshSlashCommandState(getProjectDir()),
+		);
 
 		// Get current model info for welcome screen
 		const modelName = this.session.model?.name ?? "Unknown";
 		const providerName = this.session.model?.provider ?? "Unknown";
 
 		// Get recent sessions
-		const recentSessions = (await getRecentSessions(this.sessionManager.getSessionDir())).map(s => ({
-			name: s.name,
-			timeAgo: s.timeAgo,
-		}));
-		debugStartup("InteractiveMode.init:recentSessions");
+		const recentSessions = await logger.timeAsync("InteractiveMode.init:recentSessions", () =>
+			getRecentSessions(this.sessionManager.getSessionDir()).then(sessions =>
+				sessions.map(s => ({
+					name: s.name,
+					timeAgo: s.timeAgo,
+				})),
+			),
+		);
 
 		// Convert LSP servers to welcome format
 		const lspServerInfo =
@@ -293,9 +291,7 @@ export class InteractiveMode implements InteractiveModeContext {
 
 		if (!startupQuiet) {
 			// Add welcome header
-			debugStartup("InteractiveMode.init:welcomeComponent:start");
 			const welcome = new WelcomeComponent(this.#version, modelName, providerName, recentSessions, lspServerInfo);
-			debugStartup("InteractiveMode.init:welcomeComponent:created");
 
 			// Setup UI layout
 			this.ui.addChild(new Spacer(1));

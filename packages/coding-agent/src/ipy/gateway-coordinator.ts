@@ -6,7 +6,6 @@ import { getAgentDir } from "@oh-my-pi/pi-utils/dirs";
 import type { Subprocess } from "bun";
 import { Settings } from "../config/settings";
 import { getOrCreateSnapshot } from "../utils/shell-snapshot";
-import { time } from "../utils/timings";
 import { filterEnv, resolvePythonRuntime } from "./runtime";
 
 const GATEWAY_DIR_NAME = "python-gateway";
@@ -315,12 +314,9 @@ async function killGateway(pid: number, context: string): Promise<void> {
 export async function acquireSharedGateway(cwd: string): Promise<AcquireResult | null> {
 	try {
 		return await withGatewayLock(async () => {
-			time("acquireSharedGateway:lockAcquired");
-			const existingInfo = await readGatewayInfo();
-			time("acquireSharedGateway:readInfo");
+			const existingInfo = await logger.timeAsync("acquireSharedGateway:readInfo", () => readGatewayInfo());
 			if (existingInfo) {
-				if (await isGatewayAlive(existingInfo)) {
-					time("acquireSharedGateway:isAlive");
+				if (await logger.timeAsync("acquireSharedGateway:isAlive", () => isGatewayAlive(existingInfo))) {
 					localGatewayUrl = existingInfo.url;
 					isCoordinatorInitialized = true;
 					logger.debug("Reusing global Python gateway", { url: existingInfo.url });
@@ -334,8 +330,9 @@ export async function acquireSharedGateway(cwd: string): Promise<AcquireResult |
 				await clearGatewayInfo();
 			}
 
-			const { url, pid, pythonPath, venvPath } = await startGatewayProcess(cwd);
-			time("acquireSharedGateway:startGateway");
+			const { url, pid, pythonPath, venvPath } = await logger.timeAsync("acquireSharedGateway:startGateway", () =>
+				startGatewayProcess(cwd),
+			);
 			const info: GatewayInfo = {
 				url,
 				pid,

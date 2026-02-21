@@ -7,7 +7,7 @@ import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
-import { $env } from "@oh-my-pi/pi-utils";
+import { $env, logger } from "@oh-my-pi/pi-utils";
 import { getNativesDir } from "@oh-my-pi/pi-utils/dirs";
 import packageJson from "../package.json";
 import type { NativeBindings } from "./bindings";
@@ -27,11 +27,8 @@ import "./work/types";
 
 export type { NativeBindings, TsFunc } from "./bindings";
 
-const debugStartup = $env.PI_DEBUG_STARTUP ? (stage: string) => process.stderr.write(`[startup] ${stage}\n`) : () => {};
-
 type CpuVariant = "modern" | "baseline";
 const require = createRequire(import.meta.url);
-const textDecoder = new TextDecoder();
 const platformTag = `${process.platform}-${process.arch}`;
 const packageVersion = (packageJson as { version: string }).version;
 const nativeDir = path.join(import.meta.dir, "..", "native");
@@ -66,22 +63,17 @@ const releaseCandidates = isCompiledBinary ? [...compiledCandidates, ...baseRele
 const candidates = $env.PI_DEV ? [...debugCandidates, ...releaseCandidates] : releaseCandidates;
 const dedupedCandidates = [...new Set(candidates)];
 
-function decodeOutput(output: string | ArrayBufferView | ArrayBuffer | null | undefined): string {
-	if (!output) return "";
-	if (typeof output === "string") return output;
-	if (ArrayBuffer.isView(output))
-		return textDecoder.decode(new Uint8Array(output.buffer, output.byteOffset, output.byteLength));
-	return textDecoder.decode(new Uint8Array(output));
-}
-
 function runCommand(command: string, args: string[]): string | null {
-	try {
-		const result = Bun.spawnSync([command, ...args], { stdout: "pipe", stderr: "pipe" });
-		if (result.exitCode !== 0) return null;
-		return decodeOutput(result.stdout).trim();
-	} catch {
-		return null;
-	}
+	const cmdLine = `${command} '${args.join(" ")}'`;
+	return logger.time(`runCommand:${cmdLine}`, () => {
+		try {
+			const result = Bun.spawnSync([command, ...args], { stdout: "pipe", stderr: "pipe" });
+			if (result.exitCode !== 0) return null;
+			return result.stdout.toString("utf-8").trim();
+		} catch {
+			return null;
+		}
+	});
 }
 
 function getVariantOverride(): CpuVariant | null {
@@ -92,56 +84,45 @@ function getVariantOverride(): CpuVariant | null {
 }
 
 function detectAvx2Support(): boolean {
-	debugStartup("native:detectAvx2Support:start");
 	if (process.arch !== "x64") {
-		debugStartup("native:detectAvx2Support:done");
 		return false;
 	}
 
 	if (process.platform === "linux") {
 		try {
-			debugStartup("native:detectAvx2Support:readCpuinfo");
 			const cpuInfo = fs.readFileSync("/proc/cpuinfo", "utf8");
-			debugStartup("native:detectAvx2Support:done");
 			return /\bavx2\b/i.test(cpuInfo);
 		} catch {
-			debugStartup("native:detectAvx2Support:done");
 			return false;
 		}
 	}
 
 	if (process.platform === "darwin") {
-		debugStartup("native:detectAvx2Support:sysctl");
 		const leaf7 = runCommand("sysctl", ["-n", "machdep.cpu.leaf7_features"]);
 		if (leaf7 && /\bAVX2\b/i.test(leaf7)) {
-			debugStartup("native:detectAvx2Support:done");
 			return true;
 		}
 		const features = runCommand("sysctl", ["-n", "machdep.cpu.features"]);
-		debugStartup("native:detectAvx2Support:done");
 		return Boolean(features && /\bAVX2\b/i.test(features));
 	}
 
 	if (process.platform === "win32") {
-		debugStartup("native:detectAvx2Support:powershell");
 		const output = runCommand("powershell.exe", [
 			"-NoProfile",
 			"-NonInteractive",
 			"-Command",
 			"[System.Runtime.Intrinsics.X86.Avx2]::IsSupported",
 		]);
-		debugStartup("native:detectAvx2Support:done");
 		return output?.toLowerCase() === "true";
 	}
 
-	debugStartup("native:detectAvx2Support:done");
 	return false;
 }
 
 function resolveCpuVariant(override: CpuVariant | null): CpuVariant | null {
 	if (process.arch !== "x64") return null;
 	if (override) return override;
-	return detectAvx2Support() ? "modern" : "baseline";
+	return logger.time("native:detectAvx2Support", () => detectAvx2Support()) ? "modern" : "baseline";
 }
 
 function getAddonFilenames(tag: string, variant: CpuVariant | null): string[] {
@@ -169,7 +150,6 @@ function selectEmbeddedAddonFile(): { filename: string; filePath: string } | nul
 	return embeddedAddon.files.find(file => file.variant === "baseline") ?? null;
 }
 function maybeExtractEmbeddedAddon(errors: string[]): string | null {
-	debugStartup("native:maybeExtractEmbeddedAddon:start");
 	if (!isCompiledBinary || !embeddedAddon) return null;
 	if (embeddedAddon.platformTag !== platformTag || embeddedAddon.version !== packageVersion) return null;
 
@@ -178,7 +158,6 @@ function maybeExtractEmbeddedAddon(errors: string[]): string | null {
 	const targetPath = path.join(versionedDir, selectedEmbeddedFile.filename);
 
 	try {
-		debugStartup("native:maybeExtractEmbeddedAddon:mkdir");
 		fs.mkdirSync(versionedDir, { recursive: true });
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
@@ -186,18 +165,13 @@ function maybeExtractEmbeddedAddon(errors: string[]): string | null {
 		return null;
 	}
 
-	debugStartup("native:maybeExtractEmbeddedAddon:exists");
 	if (fs.existsSync(targetPath)) {
-		debugStartup("native:maybeExtractEmbeddedAddon:done");
 		return targetPath;
 	}
 
 	try {
-		debugStartup("native:maybeExtractEmbeddedAddon:read");
 		const buffer = fs.readFileSync(selectedEmbeddedFile.filePath);
-		debugStartup("native:maybeExtractEmbeddedAddon:write");
 		fs.writeFileSync(targetPath, buffer);
-		debugStartup("native:maybeExtractEmbeddedAddon:done");
 		return targetPath;
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
@@ -206,19 +180,18 @@ function maybeExtractEmbeddedAddon(errors: string[]): string | null {
 	}
 }
 function loadNative(): NativeBindings {
-	debugStartup("native:loadNative:start");
 	const errors: string[] = [];
-	const embeddedCandidate = maybeExtractEmbeddedAddon(errors);
+	const embeddedCandidate = logger.time("native:maybeExtractEmbeddedAddon", () => maybeExtractEmbeddedAddon(errors));
 	const runtimeCandidates = embeddedCandidate ? [embeddedCandidate, ...dedupedCandidates] : dedupedCandidates;
 	for (const candidate of runtimeCandidates) {
 		try {
-			debugStartup(`native:loadNative:require:${path.basename(candidate)}`);
-			const bindings = require(candidate) as NativeBindings;
+			const bindings = logger.time(`native:loadNative:require:${path.basename(candidate)}`, () =>
+				require(candidate),
+			) as NativeBindings;
 			validateNative(bindings, candidate);
 			if ($env.PI_DEV) {
 				console.log(`Loaded native addon from ${candidate}`);
 			}
-			debugStartup("native:loadNative:done");
 			return bindings;
 		} catch (err) {
 			if ($env.PI_DEV) {
@@ -302,4 +275,4 @@ function validateNative(bindings: NativeBindings, source: string): void {
 		);
 	}
 }
-export const native = loadNative();
+export const native = logger.time("native:loadNative", () => loadNative());

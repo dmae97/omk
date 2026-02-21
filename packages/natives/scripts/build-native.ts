@@ -30,22 +30,13 @@ if (configuredVariantRaw) {
 	configuredVariant = configuredVariantRaw;
 }
 
-const textDecoder = new TextDecoder();
 
-function decodeOutput(output: string | ArrayBufferView | ArrayBuffer | null | undefined): string {
-	if (!output) return "";
-	if (typeof output === "string") return output;
-	if (ArrayBuffer.isView(output)) {
-		return textDecoder.decode(new Uint8Array(output.buffer, output.byteOffset, output.byteLength));
-	}
-	return textDecoder.decode(new Uint8Array(output));
-}
 
 function runCommand(command: string, args: string[]): string | null {
 	try {
 		const result = Bun.spawnSync([command, ...args], { stdout: "pipe", stderr: "pipe" });
 		if (result.exitCode !== 0) return null;
-		return decodeOutput(result.stdout).trim();
+		return result.stdout.toString("utf-8").trim();
 	} catch {
 		return null;
 	}
@@ -157,12 +148,7 @@ if (crossTarget) cargoArgs.push("--target", crossTarget);
 console.log(`Building pi-natives for ${targetPlatform}-${targetArch}${variantSuffix}${isDev ? " (debug)" : ""}…`);
 const buildResult = await $`cargo ${cargoArgs}`.cwd(rustDir).nothrow();
 if (buildResult.exitCode !== 0) {
-	const stderr =
-		typeof buildResult.stderr === "string"
-			? buildResult.stderr
-			: buildResult.stderr?.length
-				? textDecoder.decode(buildResult.stderr)
-				: "";
+	const stderr = buildResult.stderr?.toString("utf-8") ?? "";
 	throw new Error(`cargo build --release failed${stderr ? `:\n${stderr}` : ""}`);
 }
 

@@ -11,7 +11,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { type ImageContent, supportsXhigh } from "@oh-my-pi/pi-ai";
-import { $env, postmortem } from "@oh-my-pi/pi-utils";
+import { $env, logger, postmortem } from "@oh-my-pi/pi-utils";
 import { getProjectDir, setProjectDir, VERSION } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
 import type { Args } from "./cli/args";
@@ -32,10 +32,6 @@ import type { AgentSession } from "./session/agent-session";
 import { type SessionInfo, SessionManager } from "./session/session-manager";
 import { resolvePromptInput } from "./system-prompt";
 import { getChangelogPath, getNewEntries, parseChangelog } from "./utils/changelog";
-import { printTimings, time } from "./utils/timings";
-
-/** Conditional startup debug prints (stderr) when PI_DEBUG_STARTUP is set */
-const debugStartup = $env.PI_DEBUG_STARTUP ? (stage: string) => process.stderr.write(`[startup] ${stage}\n`) : () => {};
 
 async function checkForNewVersion(currentVersion: string): Promise<string | undefined> {
 	try {
@@ -497,28 +493,25 @@ async function buildSessionOptions(
 }
 
 export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<void> {
-	time("start");
-	debugStartup("main:entry");
+	logger.startTiming();
 
 	// Initialize theme early with defaults (CLI commands need symbols)
 	// Will be re-initialized with user preferences later
-	await initTheme();
-	debugStartup("main:initTheme");
+	await logger.timeAsync("initTheme:initial", () => initTheme());
 
 	const parsedArgs = parsed;
-	debugStartup("main:parseArgs");
-	time("parseArgs");
-	await maybeAutoChdir(parsedArgs);
+	await logger.timeAsync("maybeAutoChdir", () => maybeAutoChdir(parsedArgs));
 
 	const notifs: (InteractiveModeNotify | null)[] = [];
 
 	// Create AuthStorage and ModelRegistry upfront
-	const authStorage = await discoverAuthStorage();
-	const modelRegistry = new ModelRegistry(authStorage);
-	const refreshStrategy = parsedArgs.listModels !== undefined ? "online" : "online-if-uncached";
-	await modelRegistry.refresh(refreshStrategy);
-	debugStartup("main:discoverModels");
-	time("discoverModels");
+	const { authStorage, modelRegistry } = await logger.timeAsync("discoverModels", async () => {
+		const authStorage = await discoverAuthStorage();
+		const modelRegistry = new ModelRegistry(authStorage);
+		const refreshStrategy = parsedArgs.listModels !== undefined ? "online" : "online-if-uncached";
+		await modelRegistry.refresh(refreshStrategy);
+		return { authStorage, modelRegistry };
+	});
 
 	if (parsedArgs.version) {
 		writeStdout(VERSION);
@@ -551,26 +544,33 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	}
 
 	const cwd = getProjectDir();
-	await Settings.init({ cwd });
-	debugStartup("main:Settings.init");
-	time("Settings.init");
+	await logger.timeAsync("settings:init", () => Settings.init({ cwd }));
 	if (parsedArgs.noPty) {
 		settings.override("bash.virtualTerminal", "off");
 		Bun.env.PI_NO_PTY = "1";
 	}
-	const pipedInput = await readPipedInput();
-	let { initialMessage, initialImages } = await prepareInitialMessage(parsedArgs, settings.get("images.autoResize"));
-	if (pipedInput) {
-		initialMessage = initialMessage ? `${initialMessage}\n${pipedInput}` : pipedInput;
-	}
-	time("prepareInitialMessage");
+	const {
+		pipedInput,
+		initialMessage: initMsg,
+		initialImages,
+	} = await logger.timeAsync("prepareInitialMessage", async () => {
+		const pipedInput = await readPipedInput();
+		let { initialMessage, initialImages } = await prepareInitialMessage(
+			parsedArgs,
+			settings.get("images.autoResize"),
+		);
+		if (pipedInput) {
+			initialMessage = initialMessage ? `${initialMessage}\n${pipedInput}` : pipedInput;
+		}
+		return { pipedInput, initialMessage, initialImages };
+	});
+	const initialMessage = initMsg;
 	const autoPrint = pipedInput !== undefined && !parsedArgs.print && parsedArgs.mode === undefined;
 	const isInteractive = !parsedArgs.print && !autoPrint && parsedArgs.mode === undefined;
 	const mode = parsedArgs.mode || "text";
 
 	// Initialize discovery system with settings for provider persistence
-	initializeWithSettings(settings);
-	time("initializeWithSettings");
+	logger.time("initializeWithSettings", () => initializeWithSettings(settings));
 
 	// Apply model role overrides from CLI args or env vars (ephemeral, not persisted)
 	const smolModel = parsedArgs.smol ?? $env.PI_SMOL_MODEL;
@@ -584,15 +584,15 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		});
 	}
 
-	await initTheme(
-		isInteractive,
-		settings.get("symbolPreset"),
-		settings.get("colorBlindMode"),
-		settings.get("theme.dark"),
-		settings.get("theme.light"),
+	await logger.timeAsync("initTheme:final", () =>
+		initTheme(
+			isInteractive,
+			settings.get("symbolPreset"),
+			settings.get("colorBlindMode"),
+			settings.get("theme.dark"),
+			settings.get("theme.light"),
+		),
 	);
-	debugStartup("main:initTheme2");
-	time("initTheme");
 
 	let scopedModels: ScopedModel[] = [];
 	const modelPatterns = parsedArgs.models ?? settings.get("enabledModels");
@@ -600,25 +600,24 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		usageOrder: settings.getStorage()?.getModelUsageOrder(),
 	};
 	if (modelPatterns && modelPatterns.length > 0) {
-		scopedModels = await resolveModelScope(modelPatterns, modelRegistry, modelMatchPreferences);
-		time("resolveModelScope");
+		scopedModels = await logger.timeAsync("resolveModelScope", () =>
+			resolveModelScope(modelPatterns, modelRegistry, modelMatchPreferences),
+		);
 	}
 
 	// Create session manager based on CLI flags
-	let sessionManager = await createSessionManager(parsedArgs, cwd);
-	debugStartup("main:createSessionManager");
-	time("createSessionManager");
+	let sessionManager = await logger.timeAsync("createSessionManager", () => createSessionManager(parsedArgs, cwd));
 
 	// Handle --resume (no value): show session picker
 	if (parsedArgs.resume === true) {
-		const sessions = await SessionManager.list(cwd, parsedArgs.sessionDir);
-		time("SessionManager.list");
+		const sessions = await logger.timeAsync("SessionManager.list", () =>
+			SessionManager.list(cwd, parsedArgs.sessionDir),
+		);
 		if (sessions.length === 0) {
 			writeStdout(chalk.dim("No sessions found"));
 			return;
 		}
-		const selectedPath = await selectSession(sessions);
-		time("selectSession");
+		const selectedPath = await logger.timeAsync("selectSession", () => selectSession(sessions));
 		if (!selectedPath) {
 			writeStdout(chalk.dim("No session selected"));
 			return;
@@ -626,13 +625,9 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		sessionManager = await SessionManager.open(selectedPath);
 	}
 
-	const { options: sessionOptions, cliThinkingFromModel } = await buildSessionOptions(
-		parsedArgs,
-		scopedModels,
-		sessionManager,
-		modelRegistry,
+	const { options: sessionOptions, cliThinkingFromModel } = await logger.timeAsync("buildSessionOptions", () =>
+		buildSessionOptions(parsedArgs, scopedModels, sessionManager, modelRegistry),
 	);
-	debugStartup("main:buildSessionOptions");
 	sessionOptions.authStorage = authStorage;
 	sessionOptions.modelRegistry = modelRegistry;
 	sessionOptions.hasUI = isInteractive;
@@ -650,11 +645,10 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 		}
 	}
 
-	time("buildSessionOptions");
-	const { session, setToolUIContext, modelFallbackMessage, lspServers, mcpManager } =
-		await createAgentSession(sessionOptions);
-	debugStartup("main:createAgentSession");
-	time("createAgentSession");
+	const { session, setToolUIContext, modelFallbackMessage, lspServers, mcpManager } = await logger.timeAsync(
+		"createAgentSession",
+		() => createAgentSession(sessionOptions),
+	);
 	if (parsedArgs.apiKey && !sessionOptions.model && session.model) {
 		authStorage.setRuntimeApiKey(session.model.provider, parsedArgs.apiKey);
 	}
@@ -692,8 +686,6 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 			}
 		}
 	}
-	time("applyExtensionFlags");
-	debugStartup("main:applyExtensionFlags");
 
 	if (!isInteractive && !session.model) {
 		if (modelFallbackMessage) {
@@ -739,8 +731,11 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 			writeStdout(chalk.dim(`Model scope: ${modelList} ${chalk.gray("(Ctrl+P to cycle)")}`));
 		}
 
-		printTimings();
-		debugStartup("main:runInteractiveMode:start");
+		if ($env.PI_TIMING === "1") {
+			logger.printTimings();
+		}
+
+		logger.endTiming();
 		await runInteractiveMode(
 			session,
 			VERSION,

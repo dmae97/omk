@@ -1,7 +1,6 @@
 import { $env, logger, Snowflake } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
 import { Settings } from "../config/settings";
-import { time } from "../utils/timings";
 import { htmlToBasicMarkdown } from "../web/scrapers/types";
 import { acquireSharedGateway, releaseSharedGateway, shutdownSharedGateway } from "./gateway-coordinator";
 import { loadPythonModules } from "./modules";
@@ -12,8 +11,6 @@ const TEXT_ENCODER = new TextEncoder();
 const TEXT_DECODER = new TextDecoder();
 const TRACE_IPC = $env.PI_PYTHON_IPC_TRACE === "1";
 const PRELUDE_INTROSPECTION_SNIPPET = "import json\nprint(json.dumps(__omp_prelude_docs__()))";
-
-const debugStartup = $env.PI_DEBUG_STARTUP ? (stage: string) => process.stderr.write(`[startup] ${stage}\n`) : () => {};
 
 class SharedGatewayCreateError extends Error {
 	constructor(
@@ -334,10 +331,9 @@ export class PythonKernel {
 	}
 
 	static async start(options: KernelStartOptions): Promise<PythonKernel> {
-		debugStartup("PythonKernel.start:entry");
-		const availability = await checkPythonKernelAvailability(options.cwd);
-		debugStartup("PythonKernel.start:availCheck");
-		time("PythonKernel.start:availabilityCheck");
+		const availability = await logger.timeAsync("PythonKernel.start:availabilityCheck", () =>
+			checkPythonKernelAvailability(options.cwd),
+		);
 		if (!availability.ok) {
 			throw new Error(availability.reason ?? "Python kernel unavailable");
 		}
@@ -353,20 +349,18 @@ export class PythonKernel {
 
 		for (let attempt = 0; attempt < 2; attempt += 1) {
 			try {
-				debugStartup("PythonKernel.start:acquireShared:start");
-				const sharedResult = await acquireSharedGateway(options.cwd);
-				debugStartup("PythonKernel.start:acquireShared:done");
-				time("PythonKernel.start:acquireSharedGateway");
+				const sharedResult = await logger.timeAsync("PythonKernel.start:acquireSharedGateway", () =>
+					acquireSharedGateway(options.cwd),
+				);
 				if (!sharedResult) {
 					throw new Error("Shared Python gateway unavailable");
 				}
-				debugStartup("PythonKernel.start:startShared:start");
-				const kernel = await PythonKernel.#startWithSharedGateway(sharedResult.url, options.cwd, options.env);
-				debugStartup("PythonKernel.start:startShared:done");
-				time("PythonKernel.start:startWithSharedGateway");
+				const kernel = await logger.timeAsync("PythonKernel.start:startWithSharedGateway", () =>
+					PythonKernel.#startWithSharedGateway(sharedResult.url, options.cwd, options.env),
+				);
 				return kernel;
 			} catch (err) {
-				debugStartup("PythonKernel.start:sharedFailed");
+				logger.debug("PythonKernel.start:sharedFailed");
 				if (attempt === 0 && err instanceof SharedGatewayCreateError && err.status >= 500) {
 					logger.warn("Shared gateway kernel creation failed, retrying", {
 						status: err.status,
@@ -436,55 +430,42 @@ export class PythonKernel {
 		cwd: string,
 		env?: Record<string, string | undefined>,
 	): Promise<PythonKernel> {
-		debugStartup("sharedGateway:fetch:start");
-		const createResponse = await fetch(`${gatewayUrl}/api/kernels`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ name: "python3" }),
-		});
-		debugStartup("sharedGateway:fetch:done");
-		time("startWithSharedGateway:createKernel");
+		const createResponse = await logger.timeAsync("startWithSharedGateway:createKernel", () =>
+			fetch(`${gatewayUrl}/api/kernels`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ name: "python3" }),
+			}),
+		);
 
 		if (!createResponse.ok) {
-			debugStartup(`sharedGateway:fetch:notOk:${createResponse.status}`);
+			logger.debug(`sharedGateway:fetch:notOk:${createResponse.status}`);
 			await shutdownSharedGateway();
-			debugStartup("sharedGateway:fetch:shutdown");
 			const text = await createResponse.text();
-			debugStartup("sharedGateway:fetch:textRead");
 			throw new SharedGatewayCreateError(
 				createResponse.status,
 				`Failed to create kernel on shared gateway: ${text}`,
 			);
 		}
 
-		debugStartup("sharedGateway:json:start");
-		const kernelInfo = (await createResponse.json()) as { id: string };
-		debugStartup("sharedGateway:json:done");
+		const kernelInfo = await logger.timeAsync(
+			"startWithSharedGateway:parseJson",
+			() => createResponse.json() as Promise<{ id: string }>,
+		);
 		const kernelId = kernelInfo.id;
 
 		const kernel = new PythonKernel(Snowflake.next(), kernelId, gatewayUrl, Snowflake.next(), "omp", true);
-		debugStartup("sharedGateway:kernelCreated");
 
 		try {
-			debugStartup("sharedGateway:connectWS:start");
-			await kernel.#connectWebSocket();
-			debugStartup("sharedGateway:connectWS:done");
-			time("startWithSharedGateway:connectWS");
-			debugStartup("sharedGateway:initEnv:start");
-			await kernel.#initializeKernelEnvironment(cwd, env);
-			debugStartup("sharedGateway:initEnv:done");
-			time("startWithSharedGateway:initEnv");
-			debugStartup("sharedGateway:prelude:start");
-			const preludeResult = await kernel.execute(PYTHON_PRELUDE, { silent: true, storeHistory: false });
-			debugStartup("sharedGateway:prelude:done");
-			time("startWithSharedGateway:prelude");
+			await logger.timeAsync("startWithSharedGateway:connectWS", () => kernel.#connectWebSocket());
+			await logger.timeAsync("startWithSharedGateway:initEnv", () => kernel.#initializeKernelEnvironment(cwd, env));
+			const preludeResult = await logger.timeAsync("startWithSharedGateway:prelude", () =>
+				kernel.execute(PYTHON_PRELUDE, { silent: true, storeHistory: false }),
+			);
 			if (preludeResult.cancelled || preludeResult.status === "error") {
 				throw new Error("Failed to initialize Python kernel prelude");
 			}
-			debugStartup("sharedGateway:loadModules:start");
-			await loadPythonModules(kernel, { cwd });
-			debugStartup("sharedGateway:loadModules:done");
-			time("startWithSharedGateway:loadModules");
+			await logger.timeAsync("startWithSharedGateway:loadModules", () => loadPythonModules(kernel, { cwd }));
 			return kernel;
 		} catch (err: unknown) {
 			await kernel.shutdown();

@@ -1,6 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Replaced custom timing instrumentation with logger.timeAsync() and logger.time() from pi-utils for consistent startup profiling
+- Removed PI_DEBUG_STARTUP environment variable in favor of logger.debug() for conditional debug output
+- Consolidated timing calls throughout initialization pipeline to use unified logger-based timing system
+
+### Removed
+
+- Deleted utils/timings.ts module - timing functionality now provided by pi-utils logger
 
 ## [12.17.2] - 2026-02-21
 ### Changed

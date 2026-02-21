@@ -8,11 +8,8 @@
  */
 import * as os from "node:os";
 import * as path from "node:path";
-import { $env } from "@oh-my-pi/pi-utils";
+import { logger } from "@oh-my-pi/pi-utils";
 import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
-
-/** Conditional startup debug prints (stderr) when PI_DEBUG_STARTUP is set */
-const debugStartup = $env.PI_DEBUG_STARTUP ? (stage: string) => process.stderr.write(`[startup] ${stage}\n`) : () => {};
 
 import type { Settings } from "../config/settings";
 import { clearCache as clearFsCache, cacheStats as fsCacheStats, invalidate as invalidateFs } from "./fs";
@@ -115,12 +112,12 @@ async function loadImpl<T>(
 	const results = await Promise.all(
 		providers.map(async provider => {
 			try {
-				debugStartup(`capability:${capability.id}:${provider.id}:start`);
-				const result = await provider.load(ctx);
-				debugStartup(`capability:${capability.id}:${provider.id}:done`);
+				const result = await logger.timeAsync(`capability:${capability.id}:${provider.id}`, () =>
+					provider.load(ctx),
+				);
 				return { provider, result };
 			} catch (error) {
-				debugStartup(`capability:${capability.id}:${provider.id}:error`);
+				logger.debug(`capability:${capability.id}:${provider.id}:error`);
 				return { provider, error };
 			}
 		}),
