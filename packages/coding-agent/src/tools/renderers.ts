@@ -23,10 +23,6 @@ import { sshToolRenderer } from "./ssh";
 import { todoWriteToolRenderer } from "./todo-write";
 import { writeToolRenderer } from "./write";
 
-export interface RenderCallOptions {
-	spinnerFrame?: number;
-}
-
 type ToolRenderer = {
 	renderCall: (args: unknown, options: RenderResultOptions, theme: Theme) => Component;
 	renderResult: (
