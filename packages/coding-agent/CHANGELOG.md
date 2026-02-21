@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.18.0] - 2026-02-21
+
 ### Added
 
 - Added `overlay` option to custom UI hooks to display components as bottom-centered overlays instead of replacing the editor

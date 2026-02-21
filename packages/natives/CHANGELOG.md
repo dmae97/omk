@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.18.0] - 2026-02-21
 ### Changed
 
 - Replaced custom `TextDecoder` usage with native `toString('utf-8')` for buffer decoding
