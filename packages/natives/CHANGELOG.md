@@ -1,10 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Expanded package exports to support subpath imports for clipboard, glob, grep, highlight, html, image, keys, ps, pty, shell, text, and work modules
 - Added wildcard export patterns (`./*`) for all submodules to enable flexible import paths
+
+### Changed
+
+- Updated package description to clarify native bindings for grep, clipboard, image processing, syntax highlighting, PTY, and shell operations
+- Expanded package keywords to include clipboard, image, pty, shell, and syntax-highlighting for better discoverability
+- Added README.md to package distribution files
 
 ## [12.10.0] - 2026-02-18
 ### Changed

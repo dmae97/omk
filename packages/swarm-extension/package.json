@@ -39,6 +39,7 @@
 		]
 	},
 	"files": [
-		"src"
+		"src",
+		"README.md"
 	]
 }

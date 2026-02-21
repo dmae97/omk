@@ -2,7 +2,7 @@
 	"type": "module",
 	"name": "@oh-my-pi/pi-natives",
 	"version": "12.17.0",
-	"description": "Native Rust functionality via N-API",
+	"description": "Native Rust bindings for grep, clipboard, image processing, syntax highlighting, PTY, and shell operations via N-API",
 	"homepage": "https://github.com/can1357/oh-my-pi",
 	"author": "Can Bölük",
 	"license": "MIT",
@@ -19,7 +19,12 @@
 		"rust",
 		"native",
 		"grep",
-		"text-processing"
+		"text-processing",
+		"clipboard",
+		"image",
+		"pty",
+		"shell",
+		"syntax-highlighting"
 	],
 	"main": "./src/index.ts",
 	"types": "./src/index.ts",
@@ -43,7 +48,8 @@
 	},
 	"files": [
 		"src",
-		"native"
+		"native",
+		"README.md"
 	],
 	"exports": {
 		".": {

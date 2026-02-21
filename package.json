@@ -36,7 +36,8 @@
 		"publish:dry": "bun run prepublishOnly && npm publish -ws --access public --dry-run",
 		"release": "bun scripts/release.ts",
 		"generate-models": "bun --cwd=packages/ai scripts/generate-models.ts",
-		"generate-docs-index": "bun --cwd=packages/coding-agent run generate-docs-index"
+		"generate-docs-index": "bun --cwd=packages/coding-agent run generate-docs-index",
+		"sync-exports": "bun scripts/sync-exports.ts"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2",
