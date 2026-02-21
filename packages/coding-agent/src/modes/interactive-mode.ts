@@ -1244,8 +1244,9 @@ export class InteractiveMode implements InteractiveModeContext {
 			keybindings: KeybindingsManager,
 			done: (result: T) => void,
 		) => (Component & { dispose?(): void }) | Promise<Component & { dispose?(): void }>,
+		options?: { overlay?: boolean },
 	): Promise<T> {
-		return this.#extensionUiController.showHookCustom(factory);
+		return this.#extensionUiController.showHookCustom(factory, options);
 	}
 
 	showExtensionError(extensionPath: string, error: string): void {

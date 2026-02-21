@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+
+- Fixed viewport synchronization issue by clearing scrollback when terminal state becomes desynced during full re-renders
 
 ## [12.12.2] - 2026-02-19
 

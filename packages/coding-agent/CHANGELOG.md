@@ -1,8 +1,16 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Added `overlay` option to custom UI hooks to display components as bottom-centered overlays instead of replacing the editor
+- Added automatic chat transcript rebuild when returning from custom or debug UI to prevent message duplication
+
 ### Changed
 
+- Changed custom UI hook cleanup to conditionally restore editor state only when not using overlay mode
+- Extracted environment variable configuration for non-interactive bash execution into reusable `NO_PAGER_ENV` constant
 - Replaced custom timing instrumentation with logger.timeAsync() and logger.time() from pi-utils for consistent startup profiling
 - Removed PI_DEBUG_STARTUP environment variable in favor of logger.debug() for conditional debug output
 - Consolidated timing calls throughout initialization pipeline to use unified logger-based timing system
@@ -10,6 +18,10 @@
 ### Removed
 
 - Deleted utils/timings.ts module - timing functionality now provided by pi-utils logger
+
+### Fixed
+
+- Fixed potential race condition in bash interactive component where output could be appended after the component was closed
 
 ## [12.17.2] - 2026-02-21
 ### Changed

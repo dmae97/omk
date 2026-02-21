@@ -1005,8 +1005,10 @@ export class TUI extends Container {
 		// Use previousLines.length (not maxLinesRendered) to avoid false positives after content shrinks
 		const previousContentViewportTop = Math.max(0, this.#previousLines.length - height);
 		if (firstChanged < previousContentViewportTop) {
-			// First change is above previous viewport - need full re-render
+			// First change is above previous viewport - need hard full re-render
+			// Force scrollback clear here because terminal state is likely desynced.
 			logRedraw(`firstChanged < viewportTop (${firstChanged} < ${previousContentViewportTop})`);
+			this.#clearScrollbackOnNextFullRender = true;
 			fullRender(true);
 			return;
 		}

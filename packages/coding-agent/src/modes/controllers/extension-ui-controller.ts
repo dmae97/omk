@@ -48,7 +48,7 @@ export class ExtensionUiController {
 			setWorkingMessage: message => this.ctx.setWorkingMessage(message),
 			setWidget: (key, content) => this.setHookWidget(key, content),
 			setTitle: title => setTerminalTitle(title),
-			custom: (factory, _options) => this.showHookCustom(factory),
+			custom: (factory, options) => this.showHookCustom(factory, options),
 			setEditorText: text => this.ctx.editor.setText(text),
 			pasteToEditor: text => {
 				this.ctx.editor.handleInput(`\x1b[200~${text}\x1b[201~`);
@@ -702,25 +702,47 @@ export class ExtensionUiController {
 			keybindings: KeybindingsManager,
 			done: (result: T) => void,
 		) => (Component & { dispose?(): void }) | Promise<Component & { dispose?(): void }>,
+		options?: { overlay?: boolean },
 	): Promise<T> {
 		const savedText = this.ctx.editor.getText();
 		const keybindings = KeybindingsManager.inMemory();
 
 		const { promise, resolve } = Promise.withResolvers<T>();
-		let component: Component & { dispose?(): void };
+		let component: (Component & { dispose?(): void }) | undefined;
+		let overlayHandle: OverlayHandle | undefined;
+		let closed = false;
 
 		const close = (result: T) => {
-			component.dispose?.();
-			this.ctx.editorContainer.clear();
-			this.ctx.editorContainer.addChild(this.ctx.editor);
-			this.ctx.editor.setText(savedText);
+			if (closed) return;
+			closed = true;
+			component?.dispose?.();
+			overlayHandle?.hide();
+			overlayHandle = undefined;
+			if (!options?.overlay) {
+				this.ctx.editorContainer.clear();
+				this.ctx.editorContainer.addChild(this.ctx.editor);
+				this.ctx.editor.setText(savedText);
+			}
 			this.ctx.ui.setFocus(this.ctx.editor);
 			this.ctx.ui.requestRender();
 			resolve(result);
 		};
 
 		Promise.try(() => factory(this.ctx.ui, theme, keybindings, close)).then(c => {
+			if (closed) {
+				c.dispose?.();
+				return;
+			}
 			component = c;
+			if (options?.overlay) {
+				overlayHandle = this.ctx.ui.showOverlay(component, {
+					anchor: "bottom-center",
+					width: "100%",
+					maxHeight: "100%",
+					margin: 0,
+				});
+				return;
+			}
 			this.ctx.editorContainer.clear();
 			this.ctx.editorContainer.addChild(component);
 			this.ctx.ui.setFocus(component);

@@ -276,6 +276,50 @@ class BashInteractiveOverlayComponent implements Component {
 	}
 }
 
+const NO_PAGER_ENV = {
+	// Disable pagers so commands don't block on interactive views.
+	PAGER: "cat",
+	GIT_PAGER: "cat",
+	MANPAGER: "cat",
+	SYSTEMD_PAGER: "cat",
+	BAT_PAGER: "cat",
+	DELTA_PAGER: "cat",
+	GH_PAGER: "cat",
+	GLAB_PAGER: "cat",
+	PSQL_PAGER: "cat",
+	MYSQL_PAGER: "cat",
+	AWS_PAGER: "",
+	HOMEBREW_PAGER: "cat",
+	LESS: "FRX",
+	// Disable editor and terminal credential prompts.
+	GIT_EDITOR: "true",
+	VISUAL: "true",
+	EDITOR: "true",
+	GIT_TERMINAL_PROMPT: "0",
+	SSH_ASKPASS: "/usr/bin/false",
+	CI: "1",
+	// Package manager defaults for unattended execution.
+	npm_config_yes: "true",
+	npm_config_update_notifier: "false",
+	npm_config_fund: "false",
+	npm_config_audit: "false",
+	npm_config_progress: "false",
+	PNPM_DISABLE_SELF_UPDATE_CHECK: "true",
+	PNPM_UPDATE_NOTIFIER: "false",
+	YARN_ENABLE_TELEMETRY: "0",
+	YARN_ENABLE_PROGRESS_BARS: "0",
+	// Cross-language/tooling non-interactive defaults.
+	CARGO_TERM_PROGRESS_WHEN: "never",
+	DEBIAN_FRONTEND: "noninteractive",
+	PIP_NO_INPUT: "1",
+	PIP_DISABLE_PIP_VERSION_CHECK: "1",
+	TF_INPUT: "0",
+	TF_IN_AUTOMATION: "1",
+	GH_PROMPT_DISABLED: "1",
+	COMPOSER_NO_INTERACTION: "1",
+	CLOUDSDK_CORE_DISABLE_PROMPTS: "1",
+};
+
 export async function runInteractiveBashPty(
 	ui: NonNullable<AgentToolContext["ui"]>,
 	options: {
@@ -346,54 +390,14 @@ export async function runInteractiveBashPty(
 						timeoutMs: options.timeoutMs,
 						env: {
 							...options.env,
-							// Disable pagers so commands don't block on interactive views.
-							PAGER: "cat",
-							GIT_PAGER: "cat",
-							MANPAGER: "cat",
-							SYSTEMD_PAGER: "cat",
-							BAT_PAGER: "cat",
-							DELTA_PAGER: "cat",
-							GH_PAGER: "cat",
-							GLAB_PAGER: "cat",
-							PSQL_PAGER: "cat",
-							MYSQL_PAGER: "cat",
-							AWS_PAGER: "",
-							HOMEBREW_PAGER: "cat",
-							LESS: "FRX",
-							// Disable editor and terminal credential prompts.
-							GIT_EDITOR: "true",
-							VISUAL: "true",
-							EDITOR: "true",
-							GIT_TERMINAL_PROMPT: "0",
-							SSH_ASKPASS: "/usr/bin/false",
-							CI: "1",
-							// Package manager defaults for unattended execution.
-							npm_config_yes: "true",
-							npm_config_update_notifier: "false",
-							npm_config_fund: "false",
-							npm_config_audit: "false",
-							npm_config_progress: "false",
-							PNPM_DISABLE_SELF_UPDATE_CHECK: "true",
-							PNPM_UPDATE_NOTIFIER: "false",
-							YARN_ENABLE_TELEMETRY: "0",
-							YARN_ENABLE_PROGRESS_BARS: "0",
-							// Cross-language/tooling non-interactive defaults.
-							CARGO_TERM_PROGRESS_WHEN: "never",
-							DEBIAN_FRONTEND: "noninteractive",
-							PIP_NO_INPUT: "1",
-							PIP_DISABLE_PIP_VERSION_CHECK: "1",
-							TF_INPUT: "0",
-							TF_IN_AUTOMATION: "1",
-							GH_PROMPT_DISABLED: "1",
-							COMPOSER_NO_INTERACTION: "1",
-							CLOUDSDK_CORE_DISABLE_PROMPTS: "1",
+							...NO_PAGER_ENV,
 						},
 						signal: options.signal,
 						cols,
 						rows,
 					},
 					(err, chunk) => {
-						if (err || !chunk) return;
+						if (finished || err || !chunk) return;
 						component.appendOutput(chunk);
 						const normalizedChunk = normalizeCaptureChunk(chunk);
 						pendingChunks = pendingChunks.then(() => sink.push(normalizedChunk)).catch(() => {});
