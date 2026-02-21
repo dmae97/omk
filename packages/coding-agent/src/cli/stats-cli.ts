@@ -85,9 +85,9 @@ function formatPercent(n: number): string {
 
 export async function runStatsCommand(cmd: StatsCommandArgs): Promise<void> {
 	// Lazy import to avoid loading stats module when not needed
-	const { getDashboardStats, syncAllSessions, getTotalMessageCount } = await import("@oh-my-pi/omp-stats");
-	const { startServer } = await import("@oh-my-pi/omp-stats/src/server");
-	const { closeDb } = await import("@oh-my-pi/omp-stats/src/db");
+	const { getDashboardStats, syncAllSessions, getTotalMessageCount, startServer, closeDb } = await import(
+		"@oh-my-pi/omp-stats"
+	);
 
 	// Sync session files first
 	console.log("Syncing session files...");

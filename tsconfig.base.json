@@ -34,7 +34,6 @@
 			"@oh-my-pi/pi-natives": ["./packages/natives/src/index.ts"],
 			"@oh-my-pi/pi-natives/*": ["./packages/natives/src/*"],
 			"@oh-my-pi/omp-stats": ["./packages/stats/src/index.ts"],
-			"@oh-my-pi/omp-stats/src/*": ["./packages/stats/src/*"],
 			"@oh-my-pi/omp-stats/*": ["./packages/stats/src/*"],
 			"@oh-my-pi/pi-tui": ["./packages/tui/src/index.ts"],
 			"@oh-my-pi/pi-tui/*": ["./packages/tui/src/*"],

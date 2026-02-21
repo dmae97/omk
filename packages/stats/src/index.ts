@@ -6,6 +6,8 @@ import { closeDb } from "./db";
 import { startServer } from "./server";
 
 export { getDashboardStats, getTotalMessageCount, syncAllSessions } from "./aggregator";
+export { closeDb } from "./db";
+export { startServer } from "./server";
 export type {
 	AggregatedStats,
 	DashboardStats,
