@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Expanded package exports to support subpath imports for clipboard, glob, grep, highlight, html, image, keys, ps, pty, shell, text, and work modules
+- Added wildcard export patterns (`./*`) for all submodules to enable flexible import paths
 
 ## [12.10.0] - 2026-02-18
 ### Changed

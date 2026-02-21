@@ -1,21 +1,28 @@
 {
+	"type": "module",
 	"name": "@oh-my-pi/pi-natives",
 	"version": "12.17.0",
 	"description": "Native Rust functionality via N-API",
-	"keywords": ["napi", "rust", "native", "grep", "text-processing"],
-	"type": "module",
+	"homepage": "https://github.com/can1357/oh-my-pi",
+	"author": "Can Bölük",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/can1357/oh-my-pi.git",
+		"directory": "packages/natives"
+	},
+	"bugs": {
+		"url": "https://github.com/can1357/oh-my-pi/issues"
+	},
+	"keywords": [
+		"napi",
+		"rust",
+		"native",
+		"grep",
+		"text-processing"
+	],
 	"main": "./src/index.ts",
 	"types": "./src/index.ts",
-	"exports": {
-		".": {
-			"types": "./src/index.ts",
-			"import": "./src/index.ts"
-		}
-	},
-	"files": [
-		"src",
-		"native"
-	],
 	"scripts": {
 		"build:native": "bun scripts/build-native.ts",
 		"dev:native": "bun scripts/build-native.ts --dev",
@@ -25,15 +32,6 @@
 		"test": "bun run build:native && bun test",
 		"bench": "bun bench/grep.ts"
 	},
-	"author": "Can Bölük",
-	"license": "MIT",
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/can1357/oh-my-pi.git",
-		"directory": "packages/natives"
-	},
-	"homepage": "https://github.com/can1357/oh-my-pi",
-	"bugs": { "url": "https://github.com/can1357/oh-my-pi/issues" },
 	"dependencies": {
 		"@oh-my-pi/pi-utils": "workspace:*"
 	},
@@ -42,5 +40,115 @@
 	},
 	"engines": {
 		"bun": ">=1.3.7"
+	},
+	"files": [
+		"src",
+		"native"
+	],
+	"exports": {
+		".": {
+			"types": "./src/index.ts",
+			"import": "./src/index.ts"
+		},
+		"./*": {
+			"types": "./src/*.ts",
+			"import": "./src/*.ts"
+		},
+		"./clipboard": {
+			"types": "./src/clipboard/index.ts",
+			"import": "./src/clipboard/index.ts"
+		},
+		"./clipboard/*": {
+			"types": "./src/clipboard/*.ts",
+			"import": "./src/clipboard/*.ts"
+		},
+		"./glob": {
+			"types": "./src/glob/index.ts",
+			"import": "./src/glob/index.ts"
+		},
+		"./glob/*": {
+			"types": "./src/glob/*.ts",
+			"import": "./src/glob/*.ts"
+		},
+		"./grep": {
+			"types": "./src/grep/index.ts",
+			"import": "./src/grep/index.ts"
+		},
+		"./grep/*": {
+			"types": "./src/grep/*.ts",
+			"import": "./src/grep/*.ts"
+		},
+		"./highlight": {
+			"types": "./src/highlight/index.ts",
+			"import": "./src/highlight/index.ts"
+		},
+		"./highlight/*": {
+			"types": "./src/highlight/*.ts",
+			"import": "./src/highlight/*.ts"
+		},
+		"./html": {
+			"types": "./src/html/index.ts",
+			"import": "./src/html/index.ts"
+		},
+		"./html/*": {
+			"types": "./src/html/*.ts",
+			"import": "./src/html/*.ts"
+		},
+		"./image": {
+			"types": "./src/image/index.ts",
+			"import": "./src/image/index.ts"
+		},
+		"./image/*": {
+			"types": "./src/image/*.ts",
+			"import": "./src/image/*.ts"
+		},
+		"./keys": {
+			"types": "./src/keys/index.ts",
+			"import": "./src/keys/index.ts"
+		},
+		"./keys/*": {
+			"types": "./src/keys/*.ts",
+			"import": "./src/keys/*.ts"
+		},
+		"./ps": {
+			"types": "./src/ps/index.ts",
+			"import": "./src/ps/index.ts"
+		},
+		"./ps/*": {
+			"types": "./src/ps/*.ts",
+			"import": "./src/ps/*.ts"
+		},
+		"./pty": {
+			"types": "./src/pty/index.ts",
+			"import": "./src/pty/index.ts"
+		},
+		"./pty/*": {
+			"types": "./src/pty/*.ts",
+			"import": "./src/pty/*.ts"
+		},
+		"./shell": {
+			"types": "./src/shell/index.ts",
+			"import": "./src/shell/index.ts"
+		},
+		"./shell/*": {
+			"types": "./src/shell/*.ts",
+			"import": "./src/shell/*.ts"
+		},
+		"./text": {
+			"types": "./src/text/index.ts",
+			"import": "./src/text/index.ts"
+		},
+		"./text/*": {
+			"types": "./src/text/*.ts",
+			"import": "./src/text/*.ts"
+		},
+		"./work": {
+			"types": "./src/work/index.ts",
+			"import": "./src/work/index.ts"
+		},
+		"./work/*": {
+			"types": "./src/work/*.ts",
+			"import": "./src/work/*.ts"
+		}
 	}
 }

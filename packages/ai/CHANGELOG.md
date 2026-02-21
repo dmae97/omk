@@ -1,6 +1,18 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added new export paths for provider models via `./provider-models` and `./provider-models/*`
+- Added new export paths for Cursor and OpenAI Codex providers via `./providers/cursor/gen/*` and `./providers/openai-codex/*`
+- Added new export paths for usage utilities via `./usage/*`
+- Added new export paths for discovery and OAuth utilities via `./utils/discovery` and `./utils/oauth` with subpath exports
+
+### Changed
+
+- Simplified main export path to use wildcard pattern `./src/*.ts` for broader module access
+- Updated `models.json` export to include TypeScript declaration file at `./src/models.json.d.ts`
+- Reorganized package.json field ordering for improved readability
 
 ## [12.17.0] - 2026-02-21
 ### Fixed
