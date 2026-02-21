@@ -51,18 +51,42 @@ export interface MCPToolDetails {
 }
 
 /**
+ * Recursively strip JSON Schema fields that cause AJV validation errors.
+ *
+ * - `$schema`: AJV throws on unknown meta-schema URIs (e.g. draft 2020-12 from schemars 1.x / rmcp 0.15+)
+ * - `nullable`: OpenAPI 3.0 extension, not standard JSON Schema — AJV rejects it as an unknown keyword.
+ */
+function sanitizeSchema(schema: unknown): unknown {
+	if (Array.isArray(schema)) {
+		return schema.map(sanitizeSchema);
+	}
+	if (schema !== null && typeof schema === "object") {
+		const { $schema: _, nullable: __, ...rest } = schema as Record<string, unknown>;
+		const out: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries(rest)) {
+			out[k] = sanitizeSchema(v);
+		}
+		return out;
+	}
+	return schema;
+}
+
+/**
  * Convert JSON Schema from MCP to TypeBox-compatible schema.
  * MCP uses standard JSON Schema, TypeBox uses a compatible subset.
  *
  * Also normalizes schemas to work around common issues:
  * - Adds `properties: {}` to object schemas missing it (some LLM providers require this)
+ * - Strips `$schema` and `nullable` fields (see sanitizeSchema)
  */
 function convertSchema(mcpSchema: MCPToolDefinition["inputSchema"]): TSchema {
+	const schema = sanitizeSchema(mcpSchema) as Record<string, unknown>;
+
 	// Normalize: object schemas must have properties field for some providers
-	if (mcpSchema.type === "object" && !("properties" in mcpSchema)) {
-		return { ...mcpSchema, properties: {} } as unknown as TSchema;
+	if (schema.type === "object" && !("properties" in schema)) {
+		return { ...schema, properties: {} } as unknown as TSchema;
 	}
-	return mcpSchema as unknown as TSchema;
+	return schema as unknown as TSchema;
 }
 
 /**
