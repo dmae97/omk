@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added Buffer.toBase64() polyfill for Bun compatibility to enable base64 encoding of buffers
 
 ## [12.18.0] - 2026-02-21
 

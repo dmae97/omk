@@ -37,6 +37,11 @@ function pickSmaller(
 	return a.buffer.length <= b.buffer.length ? a : b;
 }
 
+/** Polyfill for Buffer.toBase64, technically since it derives from Uint8Array it should exist but Bun reasons... */
+Buffer.prototype.toBase64 = function (this: Buffer) {
+	return new Uint8Array(this.buffer, this.byteOffset, this.byteLength).toBase64();
+};
+
 /**
  * Resize an image to fit within the specified max dimensions and file size.
  * Returns the original image if it already fits within the limits.
