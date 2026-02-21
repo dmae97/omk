@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.16.0] - 2026-02-21
+
 ### Added
 
 - Added `peekApiKey` method to AuthStorage for non-blocking API key retrieval during model discovery without triggering OAuth token refresh

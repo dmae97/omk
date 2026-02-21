@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.16.0] - 2026-02-21
 ### Added
 
 - Exported `readModelCache` and `writeModelCache` functions for direct SQLite-backed model cache access
