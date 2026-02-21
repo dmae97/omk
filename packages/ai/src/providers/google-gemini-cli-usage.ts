@@ -8,19 +8,10 @@ import type {
 	UsageWindow,
 } from "../usage";
 import { refreshGoogleCloudToken } from "../utils/oauth/google-gemini-cli";
+import { getGeminiCliHeaders } from "./google-gemini-cli";
 
 const DEFAULT_ENDPOINT = "https://cloudcode-pa.googleapis.com";
 const CACHE_TTL_MS = 60_000;
-
-const GEMINI_CLI_HEADERS = {
-	"User-Agent": "google-cloud-sdk vscode_cloudshelleditor/0.1",
-	"X-Goog-Api-Client": "gl-node/22.17.0",
-	"Client-Metadata": JSON.stringify({
-		ideType: "IDE_UNSPECIFIED",
-		platform: "PLATFORM_UNSPECIFIED",
-		pluginType: "GEMINI",
-	}),
-};
 
 const GEMINI_TIER_MAP: Array<{ tier: string; models: string[] }> = [
 	{
@@ -140,7 +131,7 @@ async function loadCodeAssist(
 		headers: {
 			Authorization: `Bearer ${accessToken}`,
 			"Content-Type": "application/json",
-			...GEMINI_CLI_HEADERS,
+			...getGeminiCliHeaders(),
 		},
 		body: JSON.stringify({
 			...(projectId ? { cloudaicompanionProject: projectId } : {}),
@@ -177,7 +168,7 @@ async function fetchQuota(
 		headers: {
 			Authorization: `Bearer ${accessToken}`,
 			"Content-Type": "application/json",
-			...GEMINI_CLI_HEADERS,
+			...getGeminiCliHeaders(),
 		},
 		body: JSON.stringify(projectId ? { project: projectId } : {}),
 		signal: params.signal,

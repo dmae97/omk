@@ -5,7 +5,7 @@
  * Requires OAuth credentials stored in agent.db for provider "google-gemini-cli" or "google-antigravity".
  * Returns synthesized answers with citations and source metadata from grounding chunks.
  */
-import { getAntigravityHeaders, refreshGoogleCloudToken } from "@oh-my-pi/pi-ai";
+import { getAntigravityHeaders, getGeminiCliHeaders, refreshGoogleCloudToken } from "@oh-my-pi/pi-ai";
 import { getAgentDbPath } from "@oh-my-pi/pi-utils/dirs";
 import { AgentStorage } from "../../../session/agent-storage";
 import type { SearchCitation, SearchResponse, SearchSource } from "../../../web/search/types";
@@ -16,20 +16,6 @@ import { SearchProvider } from "./base";
 const DEFAULT_ENDPOINT = "https://cloudcode-pa.googleapis.com";
 const ANTIGRAVITY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
 const DEFAULT_MODEL = "gemini-2.5-flash";
-
-// Headers for Gemini CLI (prod endpoint)
-const GEMINI_CLI_HEADERS = {
-	"User-Agent": "google-cloud-sdk vscode_cloudshelleditor/0.1",
-	"X-Goog-Api-Client": "gl-node/22.17.0",
-	"Client-Metadata": JSON.stringify({
-		ideType: "IDE_UNSPECIFIED",
-		platform: "PLATFORM_UNSPECIFIED",
-		pluginType: "GEMINI",
-	}),
-};
-
-// Headers for Antigravity (sandbox endpoint)
-const ANTIGRAVITY_HEADERS = getAntigravityHeaders();
 
 export interface GeminiSearchParams {
 	query: string;
@@ -204,7 +190,7 @@ async function callGeminiSearch(
 }> {
 	const endpoint = auth.isAntigravity ? ANTIGRAVITY_ENDPOINT : DEFAULT_ENDPOINT;
 	const url = `${endpoint}/v1internal:streamGenerateContent?alt=sse`;
-	const headers = auth.isAntigravity ? ANTIGRAVITY_HEADERS : GEMINI_CLI_HEADERS;
+	const headers = auth.isAntigravity ? getAntigravityHeaders() : getGeminiCliHeaders();
 
 	const requestBody: Record<string, unknown> = {
 		project: auth.projectId,

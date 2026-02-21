@@ -17,7 +17,6 @@ const DEFAULT_TIMEOUT_SECONDS = 120;
 const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
 
 const ANTIGRAVITY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
-const ANTIGRAVITY_HEADERS = getAntigravityHeaders();
 const IMAGE_SYSTEM_INSTRUCTION =
 	"You are an AI image generator. Generate images based on user descriptions. Focus on creating high-quality, visually appealing images that match the user's request.";
 
@@ -670,7 +669,7 @@ export const geminiImageTool: CustomTool<typeof geminiImageSchema, GeminiImageTo
 						Authorization: `Bearer ${apiKey.apiKey}`,
 						"Content-Type": "application/json",
 						Accept: "text/event-stream",
-						...ANTIGRAVITY_HEADERS,
+						...getAntigravityHeaders(),
 					},
 					body: JSON.stringify(requestBody),
 					signal: requestSignal,

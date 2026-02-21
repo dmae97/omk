@@ -58,35 +58,55 @@ export interface GoogleGeminiCliOptions extends StreamOptions {
 const DEFAULT_ENDPOINT = "https://cloudcode-pa.googleapis.com";
 const ANTIGRAVITY_DAILY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
 const ANTIGRAVITY_ENDPOINT_FALLBACKS = [ANTIGRAVITY_DAILY_ENDPOINT, DEFAULT_ENDPOINT] as const;
-// Headers for Gemini CLI (prod endpoint)
-const GEMINI_CLI_HEADERS = {
-	"User-Agent": "google-cloud-sdk vscode_cloudshelleditor/0.1",
+
+const GEMINI_CLI_USER_AGENT = process.env.PI_AI_GEMINI_CLI_USER_AGENT || "google-api-nodejs-client/9.15.1";
+
+const ANTIGRAVITY_USER_AGENT = (() => {
+	const DEFAULT_ANTIGRAVITY_VERSION = "1.104.0";
+	const version = process.env.PI_AI_ANTIGRAVITY_VERSION || DEFAULT_ANTIGRAVITY_VERSION;
+	return `antigravity/${version} darwin/arm64`;
+})();
+
+const GEMINI_CLI_HEADERS = Object.freeze({
+	"User-Agent": GEMINI_CLI_USER_AGENT,
 	"X-Goog-Api-Client": "gl-node/22.17.0",
+	"Client-Metadata": "ideType=IDE_UNSPECIFIED,platform=PLATFORM_UNSPECIFIED,pluginType=GEMINI",
+});
+
+// Antigravity auth headers (project discovery/onboarding) — matches CLIProxyAPI antigravity auth module.
+// Same User-Agent as Gemini CLI, but different X-Goog-Api-Client.
+const ANTIGRAVITY_AUTH_HEADERS = Object.freeze({
+	"User-Agent": GEMINI_CLI_USER_AGENT,
+	"X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
 	"Client-Metadata": JSON.stringify({
 		ideType: "IDE_UNSPECIFIED",
 		platform: "PLATFORM_UNSPECIFIED",
 		pluginType: "GEMINI",
 	}),
-};
+});
 
-// Headers for Antigravity (sandbox endpoint) - requires specific User-Agent
-const DEFAULT_ANTIGRAVITY_VERSION = "1.18.3";
+// Antigravity executor headers (streaming/generation) — only User-Agent per CLIProxyAPI executor.
+const ANTIGRAVITY_STREAMING_HEADERS = Object.freeze({
+	"User-Agent": ANTIGRAVITY_USER_AGENT,
+});
 
-export function getAntigravityUserAgent() {
-	const version = process.env.PI_AI_ANTIGRAVITY_VERSION || DEFAULT_ANTIGRAVITY_VERSION;
-	return `antigravity/${version} darwin/arm64`;
+// Headers for Gemini CLI (prod endpoint)
+export function getGeminiCliHeaders() {
+	return GEMINI_CLI_HEADERS;
+}
+export function getGeminiCliUserAgent() {
+	return GEMINI_CLI_USER_AGENT;
 }
 
+// Headers for Antigravity (sandbox endpoint)
+export function getAntigravityAuthHeaders() {
+	return ANTIGRAVITY_AUTH_HEADERS;
+}
 export function getAntigravityHeaders() {
-	return {
-		"User-Agent": getAntigravityUserAgent(),
-		"X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
-		"Client-Metadata": JSON.stringify({
-			ideType: "IDE_UNSPECIFIED",
-			platform: "PLATFORM_UNSPECIFIED",
-			pluginType: "GEMINI",
-		}),
-	};
+	return ANTIGRAVITY_STREAMING_HEADERS;
+}
+export function getAntigravityUserAgent() {
+	return ANTIGRAVITY_USER_AGENT;
 }
 
 // Antigravity system instruction (compact version from CLIProxyAPI).

@@ -4,6 +4,7 @@
  */
 
 import { $env } from "@oh-my-pi/pi-utils";
+import { getGeminiCliHeaders } from "../../providers/google-gemini-cli";
 import { OAuthCallbackFlow } from "./callback-server";
 import { generatePKCE } from "./pkce";
 import type { OAuthController, OAuthCredentials } from "./types";
@@ -98,8 +99,7 @@ async function discoverProject(accessToken: string, onProgress?: (message: strin
 	const headers = {
 		Authorization: `Bearer ${accessToken}`,
 		"Content-Type": "application/json",
-		"User-Agent": "google-api-nodejs-client/9.15.1",
-		"X-Goog-Api-Client": "gl-node/22.17.0",
+		...getGeminiCliHeaders(),
 	};
 
 	onProgress?.("Checking for existing Cloud Code Assist project...");
