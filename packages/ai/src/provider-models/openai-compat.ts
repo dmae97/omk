@@ -1234,7 +1234,8 @@ function inferCopilotApi(modelId: string): Api {
 export function githubCopilotModelManagerOptions(config?: GithubCopilotModelManagerConfig): ModelManagerOptions<Api> {
 	const apiKey = config?.apiKey;
 	const baseUrl = config?.baseUrl ?? "https://api.individual.githubcopilot.com";
-	const references = new Map((getBundledModels("github-copilot") as Model<Api>[]).map(model => [model.id, model]));
+	const references = createBundledReferenceMap<Api>("github-copilot");
+	const globalReferences = createGlobalReferenceMap();
 	return {
 		providerId: "github-copilot",
 		...(apiKey && {
@@ -1250,7 +1251,14 @@ export function githubCopilotModelManagerOptions(config?: GithubCopilotModelMana
 						defaults: Model<Api>,
 						_context: OpenAICompatibleModelMapperContext<Api>,
 					): Model<Api> => {
-						const reference = references.get(defaults.id);
+						const providerReference = references.get(defaults.id);
+						const globalReference = globalReferences.get(defaults.id) as Model<Api> | undefined;
+						const reference =
+							providerReference && globalReference
+								? providerReference.contextWindow >= globalReference.contextWindow
+									? providerReference
+									: globalReference
+								: (providerReference ?? globalReference);
 						const contextWindow =
 							typeof entry.context_length === "number"
 								? entry.context_length
@@ -1263,17 +1271,28 @@ export function githubCopilotModelManagerOptions(config?: GithubCopilotModelMana
 							typeof entry.name === "string" && entry.name.trim().length > 0
 								? entry.name
 								: (reference?.name ?? defaults.name);
+						const api = inferCopilotApi(defaults.id);
 						if (reference) {
 							return {
 								...reference,
+								api,
+								provider: "github-copilot",
 								baseUrl,
 								name,
 								contextWindow,
 								maxTokens,
-								headers: { ...GITHUB_COPILOT_HEADERS, ...reference.headers },
+								headers: { ...GITHUB_COPILOT_HEADERS, ...(providerReference?.headers ?? {}) },
+								...(api === "openai-completions"
+									? {
+											compat: {
+												supportsStore: false,
+												supportsDeveloperRole: false,
+												supportsReasoningEffort: false,
+											},
+										}
+									: {}),
 							};
 						}
-						const api = inferCopilotApi(defaults.id);
 						return {
 							...defaults,
 							api,

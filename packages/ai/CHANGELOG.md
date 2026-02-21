@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Exported `readModelCache` and `writeModelCache` functions for direct SQLite-backed model cache access
@@ -9,6 +10,7 @@
 
 ### Changed
 
+- Improved GitHub Copilot model resolution to prefer provider-specific model definitions over global references when context window is larger, ensuring optimal model capabilities
 - Migrated model cache from per-provider JSON files to unified SQLite database (models.db) for atomic cross-process access
 - Renamed `cachePath` option to `cacheDbPath` in ModelManagerOptions to reflect database-backed storage
 - Improved non-authoritative cache handling with 5-minute retry backoff instead of retrying on every startup
