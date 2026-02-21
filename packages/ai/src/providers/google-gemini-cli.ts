@@ -77,7 +77,7 @@ export function getAntigravityUserAgent() {
 	return `antigravity/${version} darwin/arm64`;
 }
 
-function getAntigravityHeaders() {
+export function getAntigravityHeaders() {
 	return {
 		"User-Agent": getAntigravityUserAgent(),
 		"X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",

@@ -5,7 +5,7 @@
  * Requires OAuth credentials stored in agent.db for provider "google-gemini-cli" or "google-antigravity".
  * Returns synthesized answers with citations and source metadata from grounding chunks.
  */
-import { getAntigravityUserAgent, refreshGoogleCloudToken } from "@oh-my-pi/pi-ai";
+import { getAntigravityHeaders, refreshGoogleCloudToken } from "@oh-my-pi/pi-ai";
 import { getAgentDbPath } from "@oh-my-pi/pi-utils/dirs";
 import { AgentStorage } from "../../../session/agent-storage";
 import type { SearchCitation, SearchResponse, SearchSource } from "../../../web/search/types";
@@ -29,15 +29,7 @@ const GEMINI_CLI_HEADERS = {
 };
 
 // Headers for Antigravity (sandbox endpoint)
-const ANTIGRAVITY_HEADERS = {
-	"User-Agent": getAntigravityUserAgent(),
-	"X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
-	"Client-Metadata": JSON.stringify({
-		ideType: "IDE_UNSPECIFIED",
-		platform: "PLATFORM_UNSPECIFIED",
-		pluginType: "GEMINI",
-	}),
-};
+const ANTIGRAVITY_HEADERS = getAntigravityHeaders();
 
 export interface GeminiSearchParams {
 	query: string;
