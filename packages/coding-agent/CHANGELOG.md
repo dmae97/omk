@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.17.0] - 2026-02-21
 ### Added
 
 - Added timeout protection (5 seconds) for system prompt preparation with graceful fallback to minimal context on timeout
