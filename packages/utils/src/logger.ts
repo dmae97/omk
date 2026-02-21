@@ -126,13 +126,14 @@ const longOpBuffer = new RingBuffer<[op: string, duration: number]>(1000);
 let longOpRecord = false;
 
 function logTiming(op: string, duration: number): void {
+	duration = Math.round(duration * 100) / 100;
 	if (duration > LOGGED_TIMING_THRESHOLD_MS) {
-		warn(`${op} took ${duration}ms`, { duration, op });
+		warn(`${op} done`, { duration, op });
 		if (longOpRecord) {
 			longOpBuffer.push([op, duration]);
 		}
 	} else {
-		debug(`${op} took ${duration}ms`, { duration, op });
+		debug(`${op} done`, { duration, op });
 	}
 }
 
