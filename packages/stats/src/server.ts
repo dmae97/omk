@@ -10,7 +10,13 @@ import {
 	getTotalMessageCount,
 	syncAllSessions,
 } from "./aggregator";
-import { EMBEDDED_CLIENT_ARCHIVE_TAR_GZ_BASE64 } from "./embedded-client.generated";
+import embeddedClientArchiveTxt from "./embedded-client.generated.txt";
+
+const getEmbeddedClientArchive = (() => {
+	const txt = embeddedClientArchiveTxt.replaceAll(/[\s\r\n]/g, "").trim();
+	if (!txt) return null;
+	return () => Buffer.from(txt, "base64");
+})();
 
 const CLIENT_DIR = path.join(import.meta.dir, "client");
 const STATIC_DIR = path.join(import.meta.dir, "..", "dist", "client");
@@ -30,8 +36,7 @@ function sanitizeArchivePath(archivePath: string): string | null {
 	return normalized;
 }
 
-async function extractEmbeddedClientArchive(outputDir: string): Promise<void> {
-	const archiveBytes = Buffer.from(EMBEDDED_CLIENT_ARCHIVE_TAR_GZ_BASE64, "base64");
+async function extractEmbeddedClientArchive(archiveBytes: Buffer, outputDir: string): Promise<void> {
 	const archive = new Bun.Archive(archiveBytes);
 	const files = await archive.files();
 	const extractRoot = path.resolve(outputDir);
@@ -49,13 +54,15 @@ async function extractEmbeddedClientArchive(outputDir: string): Promise<void> {
 
 async function getCompiledClientDir(): Promise<string> {
 	if (!IS_BUN_COMPILED) return STATIC_DIR;
-	if (!EMBEDDED_CLIENT_ARCHIVE_TAR_GZ_BASE64) {
-		throw new Error("Compiled stats client bundle missing. Rebuild binary with embedded stats assets.");
-	}
 	if (compiledClientDirPromise) return compiledClientDirPromise;
 
+	const archiveBytes = getEmbeddedClientArchive?.();
+	if (!archiveBytes) {
+		throw new Error("Compiled stats client bundle missing. Rebuild binary with embedded stats assets.");
+	}
+
 	compiledClientDirPromise = (async () => {
-		const bundleHash = Bun.hash(EMBEDDED_CLIENT_ARCHIVE_TAR_GZ_BASE64).toString(16);
+		const bundleHash = Bun.hash(archiveBytes).toString(16);
 		const outputDir = path.join(COMPILED_CLIENT_DIR_ROOT, bundleHash);
 		const markerPath = path.join(outputDir, "index.html");
 		try {
@@ -65,7 +72,7 @@ async function getCompiledClientDir(): Promise<string> {
 
 		await fs.rm(outputDir, { recursive: true, force: true });
 		await fs.mkdir(outputDir, { recursive: true });
-		await extractEmbeddedClientArchive(outputDir);
+		await extractEmbeddedClientArchive(archiveBytes, outputDir);
 		return outputDir;
 	})();
 
@@ -73,19 +80,26 @@ async function getCompiledClientDir(): Promise<string> {
 }
 
 async function getLatestMtime(dir: string): Promise<number> {
-	let latest = 0;
 	const entries = await fs.readdir(dir, { withFileTypes: true });
 
+	const promises = [];
 	for (const entry of entries) {
 		const fullPath = path.join(dir, entry.name);
 		if (entry.isDirectory()) {
-			latest = Math.max(latest, await getLatestMtime(fullPath));
+			promises.push(getLatestMtime(fullPath));
 		} else if (entry.isFile()) {
-			const stats = await fs.stat(fullPath);
-			latest = Math.max(latest, stats.mtimeMs);
+			promises.push(fs.stat(fullPath).then(stats => stats.mtimeMs));
 		}
 	}
 
+	let latest = 0;
+	await Promise.allSettled(promises).then(results => {
+		for (const result of results) {
+			if (result.status === "fulfilled") {
+				latest = Math.max(latest, result.value);
+			}
+		}
+	});
 	return latest;
 }
 

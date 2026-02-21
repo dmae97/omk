@@ -27,7 +27,7 @@ const hasDisplay = process.platform !== "linux" || Boolean(process.env.DISPLAY |
  */
 export async function copyToClipboard(text: string): Promise<void> {
 	if (process.stdout.isTTY) {
-		const encoded = Buffer.from(text).toString("base64");
+		const encoded = btoa(text);
 		const osc52 = `\x1b]52;c;${encoded}\x07`;
 		const onError = (err: unknown) => {
 			process.stdout.off("error", onError);
