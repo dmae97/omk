@@ -169,11 +169,9 @@ export async function expandInternalUrls(command: string, options: InternalUrlEx
 		if (index === undefined) continue;
 
 		const url = unquoteToken(token);
-		try {
-			const resolvedPath = await resolveInternalUrlToPath(url, options.skills, options.internalRouter);
-			const replacement = options.noEscape ? resolvedPath : shellEscape(resolvedPath);
-			expanded = `${expanded.slice(0, index)}${replacement}${expanded.slice(index + token.length)}`;
-		} catch {}
+		const resolvedPath = await resolveInternalUrlToPath(url, options.skills, options.internalRouter);
+		const replacement = options.noEscape ? resolvedPath : shellEscape(resolvedPath);
+		expanded = `${expanded.slice(0, index)}${replacement}${expanded.slice(index + token.length)}`;
 	}
 
 	return expanded;
