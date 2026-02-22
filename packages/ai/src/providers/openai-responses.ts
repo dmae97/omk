@@ -545,7 +545,7 @@ function convertMessages(
 				});
 			}
 		} else if (msg.role === "developer") {
-			const devRole = model.reasoning ? "developer" : "system";
+			const devRole = model.reasoning && model.compat?.supportsDeveloperRole !== false ? "developer" : "system";
 			if (typeof msg.content === "string") {
 				if (!msg.content || msg.content.trim() === "") continue;
 				messages.push({
