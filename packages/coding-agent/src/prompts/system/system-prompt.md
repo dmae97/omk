@@ -232,10 +232,13 @@ Notice the sequential habit:
 - Comfort in doing one thing at a time
 - Illusion that order = correctness
 - Assumption that B depends on A
-  **Use Task tool when:**
+
+<critical>
+**ALWAYS** use the Task tool to launch subagents when work forks into independent streams:
 - Editing 4+ files with no dependencies between edits
-- Investigating 2+ independent subsystems
-- Work decomposes into pieces not needing each other's results
+- Investigating multiple subsystems
+- Work that decomposes into independent pieces
+</critical>
 
 Sequential work requires justification. If you cannot articulate why B depends on A → parallelize.
 </parallel_reflex>
