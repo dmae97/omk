@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added support for rendering markdown output from Python cells with proper formatting and theme styling
@@ -16,6 +15,9 @@
 
 ### Changed
 
+- Improved parallel task execution to schedule multiple background jobs independently instead of batching all tasks into a single job, enabling true concurrent execution
+- Enhanced task progress tracking to report per-task status (pending, running, completed, failed, aborted) with individual timing and token metrics for each background task
+- Updated background task messaging to provide real-time progress counts (e.g., '2/5 finished') and distinguish between single and multiple task jobs
 - Hid internal `agent__intent` parameter from tool argument displays in UI and logs to reduce visual clutter
 - Updated Python tool to detect and handle markdown display output separately from plain text
 - Updated bash tool to support async execution mode with streaming progress updates

@@ -191,75 +191,171 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 			};
 		}
 
-		const taskCount = params.tasks?.length ?? 0;
-		const label = `${params.agent} (${taskCount} tasks)`;
-		const jobId = manager.register(
-			"task",
-			label,
-			async ({ signal: runSignal, reportProgress }) => {
-				try {
-					const result = await this.#executeSync(_toolCallId, params, runSignal, update => {
-						const baseDetails: TaskToolDetails = update.details ?? {
-							projectAgentsDir: null,
-							results: [],
-							totalDurationMs: 0,
-						};
-						onUpdate?.({
-							...update,
-							details: {
-								...baseDetails,
-								async: { state: "running", jobId, type: "task" },
-							},
-						});
-					});
-					const finalText = result.content.find(part => part.type === "text")?.text ?? "(no output)";
-					const finalDetails: TaskToolDetails = result.details ?? {
-						projectAgentsDir: null,
-						results: [],
-						totalDurationMs: 0,
-					};
-					await reportProgress(finalText, {
-						...finalDetails,
-						async: { state: "completed", jobId, type: "task" },
-					});
-					return finalText;
-				} catch (error) {
-					const message = error instanceof Error ? error.message : String(error);
-					await reportProgress(message, {
-						projectAgentsDir: null,
-						results: [],
-						totalDurationMs: 0,
-						async: { state: "failed", jobId, type: "task" },
-					});
-					throw error;
-				}
-			},
-			{
-				id: label,
-				onProgress: (text, details) => {
-					const progressDetails: TaskToolDetails = (details as TaskToolDetails | undefined) ?? {
-						projectAgentsDir: null,
-						results: [],
-						totalDurationMs: 0,
-					};
-					onUpdate?.({ content: [{ type: "text", text }], details: progressDetails });
+		const taskItems = params.tasks ?? [];
+		if (taskItems.length === 0) {
+			return this.#executeSync(_toolCallId, params, signal, onUpdate);
+		}
+
+		const fallbackAgentSource =
+			this.#discoveredAgents.find(agent => agent.name === params.agent)?.source ?? "bundled";
+		const renderedTasks = taskItems.map(taskItem => renderTemplate(params.context, taskItem));
+		const progressByTaskId = new Map<string, AgentProgress>();
+		for (let index = 0; index < renderedTasks.length; index++) {
+			const renderedTask = renderedTasks[index];
+			progressByTaskId.set(renderedTask.id, {
+				index,
+				id: renderedTask.id,
+				agent: params.agent,
+				agentSource: fallbackAgentSource,
+				status: "pending",
+				task: renderedTask.task,
+				description: renderedTask.description,
+				recentTools: [],
+				recentOutput: [],
+				toolCount: 0,
+				tokens: 0,
+				durationMs: 0,
+			});
+		}
+
+		const startedJobs: Array<{ jobId: string; taskId: string }> = [];
+		const failedSchedules: string[] = [];
+		let completedJobs = 0;
+		let failedJobs = 0;
+
+		const getProgressSnapshot = (): AgentProgress[] => {
+			return Array.from(progressByTaskId.values())
+				.sort((a, b) => a.index - b.index)
+				.map(progress => structuredClone(progress));
+		};
+
+		const emitAsyncUpdate = (state: "running" | "completed" | "failed", text: string): void => {
+			const primaryJobId = startedJobs[0]?.jobId ?? "task";
+			onUpdate?.({
+				content: [{ type: "text", text }],
+				details: {
+					projectAgentsDir: null,
+					results: [],
+					totalDurationMs: 0,
+					progress: getProgressSnapshot(),
+					async: { state, jobId: primaryJobId, type: "task" },
 				},
-			},
+			});
+		};
+
+		for (let i = 0; i < taskItems.length; i++) {
+			const taskItem = taskItems[i];
+			if (signal?.aborted) {
+				failedSchedules.push(`${taskItem.id}: cancelled before scheduling`);
+				const progress = progressByTaskId.get(taskItem.id);
+				if (progress) {
+					progress.status = "aborted";
+				}
+				continue;
+			}
+
+			const singleParams: TaskParams = { ...params, tasks: [taskItem] };
+			const label = `${i}-${taskItem.id}`;
+			try {
+				const jobId = manager.register(
+					"task",
+					label,
+					async ({ signal: runSignal }) => {
+						const startedAt = Date.now();
+						const progress = progressByTaskId.get(taskItem.id);
+						if (progress) {
+							progress.status = "running";
+						}
+						emitAsyncUpdate("running", `Running background task ${taskItem.id}...`);
+						try {
+							const result = await this.#executeSync(_toolCallId, singleParams, runSignal);
+							const finalText = result.content.find(part => part.type === "text")?.text ?? "(no output)";
+							const singleResult = result.details?.results[0];
+							if (progress) {
+								progress.status = singleResult?.aborted
+									? "aborted"
+									: (singleResult?.exitCode ?? 0) === 0
+										? "completed"
+										: "failed";
+								progress.durationMs = singleResult?.durationMs ?? Math.max(0, Date.now() - startedAt);
+								progress.tokens = singleResult?.tokens ?? 0;
+								progress.extractedToolData = singleResult?.extractedToolData;
+							}
+							completedJobs += 1;
+							if (singleResult && ((singleResult.aborted ?? false) || singleResult.exitCode !== 0)) {
+								failedJobs += 1;
+							}
+							const remaining = taskItems.length - completedJobs;
+							const isDone = remaining === 0;
+							emitAsyncUpdate(
+								isDone ? (failedJobs > 0 || failedSchedules.length > 0 ? "failed" : "completed") : "running",
+								isDone
+									? `Background task batch complete: ${completedJobs}/${taskItems.length} finished.`
+									: `Background task batch progress: ${completedJobs}/${taskItems.length} finished (${remaining} running).`,
+							);
+							return finalText;
+						} catch (error) {
+							if (progress) {
+								progress.status = "failed";
+								progress.durationMs = Math.max(0, Date.now() - startedAt);
+							}
+							completedJobs += 1;
+							failedJobs += 1;
+							const remaining = taskItems.length - completedJobs;
+							const isDone = remaining === 0;
+							emitAsyncUpdate(
+								isDone ? "failed" : "running",
+								isDone
+									? `Background task batch complete with failures: ${failedJobs} failed.`
+									: `Background task batch progress: ${completedJobs}/${taskItems.length} finished (${remaining} running).`,
+							);
+							throw error;
+						}
+					},
+					{ id: label },
+				);
+				startedJobs.push({ jobId, taskId: taskItem.id });
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				failedSchedules.push(`${taskItem.id}: ${message}`);
+				const progress = progressByTaskId.get(taskItem.id);
+				if (progress) {
+					progress.status = "failed";
+				}
+			}
+		}
+
+		if (startedJobs.length === 0) {
+			const failureText = `Failed to start background task jobs: ${failedSchedules.join("; ")}`;
+			return {
+				content: [{ type: "text", text: failureText }],
+				details: { projectAgentsDir: null, results: [], totalDurationMs: 0 },
+			};
+		}
+
+		emitAsyncUpdate(
+			"running",
+			`Launching ${startedJobs.length} background ${startedJobs.length === 1 ? "task" : "tasks"}...`,
 		);
+
+		const scheduleFailureSummary =
+			failedSchedules.length > 0
+				? ` Failed to schedule ${failedSchedules.length} task${failedSchedules.length === 1 ? "" : "s"}.`
+				: "";
 
 		return {
 			content: [
 				{
 					type: "text",
-					text: `Background task ${jobId} started: ${taskCount} subtasks using ${params.agent}. Results will be delivered when complete.`,
+					text: `Started ${startedJobs.length} background task job${startedJobs.length === 1 ? "" : "s"} using ${params.agent}.${scheduleFailureSummary} Results will be delivered when complete.`,
 				},
 			],
 			details: {
 				projectAgentsDir: null,
 				results: [],
 				totalDurationMs: 0,
-				progress: [],
-				async: { state: "running", jobId, type: "task" },
+				progress: getProgressSnapshot(),
+				async: { state: "running", jobId: startedJobs[0].jobId, type: "task" },
 			},
 		};
 	}
