@@ -61,7 +61,7 @@ Apply precise file edits using `LINE#ID` tags, anchoring to the file content.
 {{hlinefull 23 "  const timeout: number = 5000;"}}
 ```
 ```
-op: "set"
+op: "replace"
 tag: "{{hlineref 23 "  const timeout: number = 5000;"}}"
 content: ["  const timeout: number = 30_000;"]
 ```
@@ -73,7 +73,7 @@ content: ["  const timeout: number = 30_000;"]
 {{hlinefull 8 "const data = fetchSync(url);"}}
 ```
 ```
-op: "set"
+op: "replace"
 tag: "{{hlineref 7 "// @ts-ignore"}}"
 content: null
 ```
@@ -84,7 +84,7 @@ content: null
 {{hlinefull 14 "  placeholder: \"DO NOT SHIP\","}}
 ```
 ```
-op: "set"
+op: "replace"
 tag: "{{hlineref 14 "  placeholder: \"DO NOT SHIP\","}}"
 content: [""]
 ```
