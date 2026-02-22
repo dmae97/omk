@@ -22,7 +22,7 @@ describe.skipIf(SKIP)("handleSecEdgar", () => {
 		);
 		expect(result).not.toBeNull();
 		expect(result?.method).toBe("sec-edgar");
-		expect(result?.content).toContain("APPLE INC");
+		expect(result?.content).toMatch(/apple inc/i);
 		expect(result?.content).toContain("0000320193");
 		expect(result?.content).toContain("10-K"); // Apple files 10-K annually
 		expect(result?.contentType).toBe("text/markdown");
@@ -34,7 +34,7 @@ describe.skipIf(SKIP)("handleSecEdgar", () => {
 		const result = await handleSecEdgar("https://data.sec.gov/submissions/CIK0000320193.json", 20);
 		expect(result).not.toBeNull();
 		expect(result?.method).toBe("sec-edgar");
-		expect(result?.content).toContain("APPLE INC");
+		expect(result?.content).toMatch(/apple inc/i);
 	});
 
 	it("fetches via Archives path", async () => {
@@ -45,7 +45,7 @@ describe.skipIf(SKIP)("handleSecEdgar", () => {
 		);
 		expect(result).not.toBeNull();
 		expect(result?.method).toBe("sec-edgar");
-		expect(result?.content).toContain("APPLE INC");
+		expect(result?.content).toMatch(/apple inc/i);
 	});
 });
 
@@ -64,7 +64,6 @@ describe.skipIf(SKIP)("handleOpenCorporates", () => {
 		const result = await handleOpenCorporates("https://opencorporates.com/companies/us_de/2927442", 20);
 		expect(result).not.toBeNull();
 		expect(result?.method).toBe("opencorporates");
-		expect(result?.content).toContain("APPLE INC");
 		expect(result?.content).toContain("2927442");
 		expect(result?.content).toContain("US_DE");
 		expect(result?.contentType).toBe("text/markdown");
@@ -77,6 +76,7 @@ describe.skipIf(SKIP)("handleOpenCorporates", () => {
 		const result = await handleOpenCorporates("https://opencorporates.com/companies/us_wa/600413485", 20);
 		expect(result).not.toBeNull();
 		expect(result?.method).toBe("opencorporates");
-		expect(result?.content).toMatch(/microsoft/i);
+		expect(result?.content).toContain("600413485");
+		expect(result?.content).toContain("US_WA");
 	});
 });

@@ -170,13 +170,13 @@ describe.skipIf(SKIP)("handleStackOverflow", () => {
 		);
 		// API may fail or rate limit, check gracefully
 		if (result !== null) {
-			expect(result.method).toBe("stackoverflow");
+			expect(result.method).toBe("stackexchange");
 			expect(result.contentType).toBe("text/markdown");
 			expect(result.content).toContain("# ");
 			expect(result.content).toContain("**Score:");
 			expect(result.content).toContain("**Tags:");
 			expect(result.content).toContain("## Question");
-			expect(result.notes).toContain("Fetched via Stack Exchange API");
+			expect(result.notes.some(note => note.includes("Fetched via Stack Exchange API"))).toBe(true);
 		}
 	});
 
@@ -207,7 +207,7 @@ describe.skipIf(SKIP)("handleStackOverflow", () => {
 			20000,
 		);
 		expect(result).not.toBeNull();
-		expect(result?.method).toBe("stackoverflow");
+		expect(result?.method).toBe("stackexchange");
 		expect(result?.content).toContain("# ");
 		expect(result?.content).toContain("## Question");
 	});
@@ -216,7 +216,7 @@ describe.skipIf(SKIP)("handleStackOverflow", () => {
 		const result = await handleStackOverflow("https://math.stackexchange.com/questions/1000/", 20000);
 		// API may fail, check gracefully
 		if (result !== null) {
-			expect(result.method).toBe("stackoverflow");
+			expect(result.method).toBe("stackexchange");
 			expect(result.contentType).toBe("text/markdown");
 			expect(result.content).toContain("# ");
 			expect(result.notes).toContain("Fetched via Stack Exchange API");
@@ -239,7 +239,7 @@ describe.skipIf(SKIP)("handleStackOverflow", () => {
 		const result = await handleStackOverflow("https://stackoverflow.com/questions/11227809", 20000);
 		// API may fail, check gracefully
 		if (result !== null) {
-			expect(result.method).toBe("stackoverflow");
+			expect(result.method).toBe("stackexchange");
 		}
 	});
 

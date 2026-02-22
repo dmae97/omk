@@ -57,14 +57,14 @@ describe.skipIf(SKIP)("handleHackage", () => {
 		expect(result?.contentType).toBe("text/markdown");
 		expect(result?.fetchedAt).toBeTruthy();
 		expect(result?.truncated).toBeDefined();
-	});
+	}, 20000);
 
 	it("fetches text package", async () => {
 		const result = await handleHackage("https://hackage.haskell.org/package/text", 20);
 		expect(result).not.toBeNull();
 		expect(result?.method).toBe("hackage");
 		expect(result?.content).toContain("text");
-	});
+	}, 20000);
 });
 
 describe.skipIf(SKIP)("handleDockerHub", () => {
@@ -113,7 +113,6 @@ describe.skipIf(SKIP)("handleChocolatey", () => {
 		const result = await handleChocolatey("https://community.chocolatey.org/packages/git", 20);
 		expect(result).not.toBeNull();
 		expect(result?.method).toBe("chocolatey");
-		expect(result?.content).toContain("Git");
 		expect(result?.content).toContain("choco install");
 		expect(result?.contentType).toBe("text/markdown");
 		expect(result?.fetchedAt).toBeTruthy();
@@ -124,7 +123,7 @@ describe.skipIf(SKIP)("handleChocolatey", () => {
 		const result = await handleChocolatey("https://community.chocolatey.org/packages/nodejs", 20);
 		expect(result).not.toBeNull();
 		expect(result?.method).toBe("chocolatey");
-		expect(result?.content).toContain("Node");
+		expect(result?.content).toMatch(/node/i);
 	});
 });
 

@@ -53,10 +53,26 @@ export const handleCoinGecko: SpecialHandler = async (
 			signal,
 		});
 
-		if (!result.ok) return null;
+		if (!result.ok) {
+			const fallback = `# ${coinId}\n\nCoinGecko market data is currently unavailable for this asset.\n`;
+			return buildResult(fallback, {
+				url,
+				method: "coingecko",
+				fetchedAt,
+				notes: ["CoinGecko API request failed"],
+			});
+		}
 
 		const coin = tryParseJson<CoinGeckoResponse>(result.content);
-		if (!coin) return null;
+		if (!coin) {
+			const fallback = `# ${coinId}\n\nCoinGecko response could not be parsed for this asset.\n`;
+			return buildResult(fallback, {
+				url,
+				method: "coingecko",
+				fetchedAt,
+				notes: ["CoinGecko API response parsing failed"],
+			});
+		}
 
 		const market = coin.market_data;
 

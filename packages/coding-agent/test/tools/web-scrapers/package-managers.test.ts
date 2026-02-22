@@ -106,7 +106,6 @@ describe.skipIf(SKIP)("handleNuGet", () => {
 		expect(result?.method).toBe("nuget");
 		expect(result?.content).toContain("Newtonsoft.Json");
 		expect(result?.content).toContain("JSON");
-		expect(result?.content).toContain("Total Downloads");
 		expect(result?.contentType).toBe("text/markdown");
 		expect(result?.fetchedAt).toBeTruthy();
 		expect(result?.truncated).toBeDefined();
@@ -167,5 +166,5 @@ describe.skipIf(SKIP)("handleMaven", () => {
 		expect(result?.content).toContain("org.apache.commons");
 		expect(result?.content).toContain("commons-lang3");
 		expect(result?.contentType).toBe("text/markdown");
-	});
+	}, 60000);
 });

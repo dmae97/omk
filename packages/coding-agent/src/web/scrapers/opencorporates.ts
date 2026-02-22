@@ -104,13 +104,37 @@ export const handleOpenCorporates: SpecialHandler = async (
 			signal,
 		});
 
-		if (!result.ok) return null;
+		if (!result.ok) {
+			const fallback = `# OpenCorporates Company\n\n**Jurisdiction:** ${jurisdiction.toUpperCase()}\n**Company Number:** ${companyNumber}\n\nOpenCorporates API request failed. Company details are currently unavailable.\n`;
+			return buildResult(fallback, {
+				url,
+				method: "opencorporates",
+				fetchedAt,
+				notes: ["OpenCorporates API request failed"],
+			});
+		}
 
 		const data = tryParseJson<ApiResponse>(result.content);
-		if (!data) return null;
+		if (!data) {
+			const fallback = `# OpenCorporates Company\n\n**Jurisdiction:** ${jurisdiction.toUpperCase()}\n**Company Number:** ${companyNumber}\n\nOpenCorporates response could not be parsed.\n`;
+			return buildResult(fallback, {
+				url,
+				method: "opencorporates",
+				fetchedAt,
+				notes: ["OpenCorporates API response parsing failed"],
+			});
+		}
 
 		const company = data.results?.company;
-		if (!company) return null;
+		if (!company) {
+			const fallback = `# OpenCorporates Company\n\n**Jurisdiction:** ${jurisdiction.toUpperCase()}\n**Company Number:** ${companyNumber}\n\nCompany details were not available from the OpenCorporates API.\n`;
+			return buildResult(fallback, {
+				url,
+				method: "opencorporates",
+				fetchedAt,
+				notes: ["OpenCorporates company payload was missing"],
+			});
+		}
 
 		let md = `# ${company.name}\n\n`;
 

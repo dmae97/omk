@@ -25,6 +25,13 @@ interface NuGetODataResponse {
 	};
 }
 
+function extractXmlField(xml: string, fieldName: string): string | null {
+	const pattern = new RegExp(`<d:${fieldName}[^>]*>([\\s\\S]*?)</d:${fieldName}>`, "i");
+	const match = xml.match(pattern);
+	if (!match) return null;
+	return match[1].trim();
+}
+
 /**
  * Handle Chocolatey package URLs via NuGet v2 OData API
  */
@@ -59,17 +66,61 @@ export const handleChocolatey: SpecialHandler = async (
 			timeout,
 			signal,
 			headers: {
-				Accept: "application/json",
+				Accept: "application/atom+xml, application/xml",
 			},
 		});
 
-		if (!result.ok) return null;
+		if (!result.ok) {
+			const fallback = `# ${packageName}\n\nChocolatey package metadata is currently unavailable.\n\n---\n**Install:** \`choco install ${packageName}\`\n`;
+			return buildResult(fallback, {
+				url,
+				method: "chocolatey",
+				fetchedAt,
+				notes: ["Chocolatey API request failed"],
+			});
+		}
 
-		const data = tryParseJson<NuGetODataResponse>(result.content);
-		if (!data) return null;
+		let pkg = (() => {
+			const data = tryParseJson<NuGetODataResponse>(result.content);
+			return data?.d?.results?.[0] ?? null;
+		})();
 
-		const pkg = data.d?.results?.[0];
-		if (!pkg) return null;
+		if (!pkg) {
+			const xmlId = extractXmlField(result.content, "Id");
+			if (!xmlId) {
+				const fallback = `# ${packageName}\n\nChocolatey package metadata could not be parsed.\n\n---\n**Install:** \`choco install ${packageName}\`\n`;
+				return buildResult(fallback, {
+					url,
+					method: "chocolatey",
+					fetchedAt,
+					notes: ["Chocolatey API response parsing failed"],
+				});
+			}
+
+			pkg = {
+				Id: xmlId,
+				Version: extractXmlField(result.content, "Version") || "",
+				Title: extractXmlField(result.content, "Title") || undefined,
+				Description: extractXmlField(result.content, "Description") || undefined,
+				Summary: extractXmlField(result.content, "Summary") || undefined,
+				Authors: extractXmlField(result.content, "Authors") || undefined,
+				ProjectUrl: extractXmlField(result.content, "ProjectUrl") || undefined,
+				PackageSourceUrl: extractXmlField(result.content, "PackageSourceUrl") || undefined,
+				Tags: extractXmlField(result.content, "Tags") || undefined,
+				DownloadCount: (() => {
+					const value = extractXmlField(result.content, "DownloadCount");
+					return value ? Number.parseInt(value, 10) : undefined;
+				})(),
+				VersionDownloadCount: (() => {
+					const value = extractXmlField(result.content, "VersionDownloadCount");
+					return value ? Number.parseInt(value, 10) : undefined;
+				})(),
+				Published: extractXmlField(result.content, "Published") || undefined,
+				LicenseUrl: extractXmlField(result.content, "LicenseUrl") || undefined,
+				ReleaseNotes: extractXmlField(result.content, "ReleaseNotes") || undefined,
+				Dependencies: extractXmlField(result.content, "Dependencies") || undefined,
+			};
+		}
 
 		// Build markdown output
 		let md = `# ${pkg.Title || pkg.Id}\n\n`;

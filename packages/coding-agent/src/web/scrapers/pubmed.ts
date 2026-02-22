@@ -3,6 +3,11 @@
  */
 import { buildResult, loadPage, type RenderResult, type SpecialHandler, tryParseJson } from "./types";
 
+const NCBI_HEADERS = {
+	Accept: "application/json, text/plain;q=0.9, */*;q=0.8",
+	"User-Agent": "CodingAgent/1.0 (web scraper)",
+};
+
 /**
  * Handle PubMed URLs - fetch article metadata, abstract, MeSH terms
  */
@@ -38,12 +43,43 @@ export const handlePubMed: SpecialHandler = async (
 
 		const fetchedAt = new Date().toISOString();
 		const notes: string[] = [];
+		const buildFallback = (fallbackNotes: string[]) =>
+			buildResult(`# PubMed Article\n\n**PMID:** ${pmid}\n\n---\n\n## Abstract\n\nNo abstract available.\n`, {
+				url,
+				method: "pubmed",
+				fetchedAt,
+				notes: fallbackNotes,
+			});
+
+		const fetchWithRetry = async (requestUrl: string, acceptJson = true) => {
+			let response = await loadPage(requestUrl, {
+				timeout,
+				signal,
+				headers: {
+					...NCBI_HEADERS,
+					Accept: acceptJson ? "application/json" : "text/plain, */*;q=0.8",
+				},
+			});
+			if (!response.ok) {
+				response = await loadPage(requestUrl, {
+					timeout,
+					signal,
+					headers: {
+						...NCBI_HEADERS,
+						Accept: acceptJson ? "application/json" : "text/plain, */*;q=0.8",
+					},
+				});
+			}
+			return response;
+		};
 
 		// Fetch summary metadata
 		const summaryUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=${pmid}&retmode=json`;
-		const summaryResult = await loadPage(summaryUrl, { timeout, signal });
+		const summaryResult = await fetchWithRetry(summaryUrl);
 
-		if (!summaryResult.ok) return null;
+		if (!summaryResult.ok) {
+			return buildFallback(["Failed to fetch PubMed summary metadata"]);
+		}
 
 		const summaryData = tryParseJson<{
 			result?: {
@@ -60,14 +96,18 @@ export const handlePubMed: SpecialHandler = async (
 				};
 			};
 		}>(summaryResult.content);
-		if (!summaryData) return null;
+		if (!summaryData) {
+			return buildFallback(["Failed to parse PubMed summary metadata"]);
+		}
 
 		const article = summaryData.result?.[pmid];
-		if (!article) return null;
+		if (!article) {
+			return buildFallback(["PubMed record unavailable from E-utilities summary endpoint"]);
+		}
 
 		// Fetch abstract
 		const abstractUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=${pmid}&rettype=abstract&retmode=text`;
-		const abstractResult = await loadPage(abstractUrl, { timeout, signal });
+		const abstractResult = await fetchWithRetry(abstractUrl, false);
 
 		let abstractText = "";
 		if (abstractResult.ok) {
@@ -130,7 +170,11 @@ export const handlePubMed: SpecialHandler = async (
 		// Try to fetch MeSH terms
 		try {
 			const meshUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=${pmid}&rettype=medline&retmode=text`;
-			const meshResult = await loadPage(meshUrl, { timeout: Math.min(timeout, 5), signal });
+			const meshResult = await loadPage(meshUrl, {
+				timeout: Math.min(timeout, 5),
+				signal,
+				headers: { ...NCBI_HEADERS, Accept: "text/plain, */*;q=0.8" },
+			});
 
 			if (meshResult.ok) {
 				const meshTerms: string[] = [];

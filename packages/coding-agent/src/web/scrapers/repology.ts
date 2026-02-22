@@ -121,7 +121,10 @@ export const handleRepology: SpecialHandler = async (
 		const apiUrl = `https://repology.org/api/v1/project/${encodeURIComponent(packageName)}`;
 		const result = await loadPage(apiUrl, {
 			timeout,
-			headers: { Accept: "application/json" },
+			headers: {
+				Accept: "application/json",
+				"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+			},
 			signal,
 		});
 

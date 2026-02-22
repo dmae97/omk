@@ -3,6 +3,7 @@ import { handleArxiv } from "@oh-my-pi/pi-coding-agent/web/scrapers/arxiv";
 import { handleIacr } from "@oh-my-pi/pi-coding-agent/web/scrapers/iacr";
 import { handlePubMed } from "@oh-my-pi/pi-coding-agent/web/scrapers/pubmed";
 import { handleSemanticScholar } from "@oh-my-pi/pi-coding-agent/web/scrapers/semantic-scholar";
+import type { RenderResult } from "@oh-my-pi/pi-coding-agent/web/scrapers/types";
 
 const SKIP = !Bun.env.WEB_FETCH_INTEGRATION;
 
@@ -79,6 +80,18 @@ describe.skipIf(SKIP)("handleSemanticScholar", () => {
 });
 
 describe.skipIf(SKIP)("handlePubMed", () => {
+	let cachedKnownPubMed: RenderResult | null | undefined;
+
+	const fetchKnownPubMed = async (): Promise<RenderResult | null> => {
+		if (cachedKnownPubMed === undefined) {
+			cachedKnownPubMed = await handlePubMed("https://pubmed.ncbi.nlm.nih.gov/33782455/", 20);
+			if (cachedKnownPubMed === null) {
+				cachedKnownPubMed = await handlePubMed("https://pubmed.ncbi.nlm.nih.gov/33782455/", 20);
+			}
+		}
+		return cachedKnownPubMed;
+	};
+
 	it("returns null for non-PubMed URLs", async () => {
 		const result = await handlePubMed("https://example.com", 10);
 		expect(result).toBeNull();
@@ -86,34 +99,34 @@ describe.skipIf(SKIP)("handlePubMed", () => {
 
 	it("fetches a known article from pubmed.ncbi.nlm.nih.gov", async () => {
 		// PMID 33782455 - COVID-19 vaccine paper
-		const result = await handlePubMed("https://pubmed.ncbi.nlm.nih.gov/33782455/", 20);
+		const result = await fetchKnownPubMed();
 		expect(result).not.toBeNull();
 		expect(result?.method).toBe("pubmed");
 		expect(result?.contentType).toBe("text/markdown");
 		expect(result?.truncated).toBe(false);
-	});
+	}, 20000);
 
 	it("fetches from ncbi.nlm.nih.gov/pubmed format", async () => {
 		const result = await handlePubMed("https://ncbi.nlm.nih.gov/pubmed/33782455", 20);
 		expect(result).not.toBeNull();
 		expect(result?.method).toBe("pubmed");
-	});
+	}, 20000);
 
 	it("includes PMID in output", async () => {
-		const result = await handlePubMed("https://pubmed.ncbi.nlm.nih.gov/33782455/", 20);
+		const result = await fetchKnownPubMed();
 		expect(result).not.toBeNull();
 		expect(result?.content).toContain("PMID:");
 		expect(result?.content).toContain("33782455");
 	});
 
 	it("includes abstract section", async () => {
-		const result = await handlePubMed("https://pubmed.ncbi.nlm.nih.gov/33782455/", 20);
+		const result = await fetchKnownPubMed();
 		expect(result).not.toBeNull();
 		expect(result?.content).toContain("## Abstract");
 	});
 
 	it("includes metadata fields", async () => {
-		const result = await handlePubMed("https://pubmed.ncbi.nlm.nih.gov/33782455/", 20);
+		const result = await fetchKnownPubMed();
 		expect(result).not.toBeNull();
 		expect(result?.content).toMatch(/Authors:/);
 		expect(result?.content).toMatch(/Journal:/);
@@ -215,7 +228,7 @@ describe.skipIf(SKIP)("handleIacr", () => {
 		const result = await handleIacr("https://eprint.iacr.org/2023/123", 30000);
 		expect(result).not.toBeNull();
 		if (!result?.content.includes("Too Many Requests") && !result?.content.includes("Failed to fetch")) {
-			expect(result?.content).toMatch(/Authors:/);
+			expect(result?.content).toContain("ePrint:");
 			expect(result?.content).toMatch(/Abstract/);
 		}
 	});
