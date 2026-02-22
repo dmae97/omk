@@ -87,10 +87,11 @@ interface EditRenderArgs {
 }
 
 type HashlineEditPreview =
-	| { target: string; new_content: string[] }
-	| { first: string; last: string; new_content: string[] }
-	| { before?: string; after?: string; inserted_lines: string[] }
-	| { old_text: string; new_text: string; all?: boolean };
+	| { op: "replace"; tag: string; content: string[] }
+	| { op: "replace"; first: string; last: string; content: string[] }
+	| { op: "append"; after?: string; content: string[] }
+	| { op: "prepend"; before?: string; content: string[] }
+	| { op: "insert"; before: string; after: string; content: string[] };
 
 /** Extended context for edit tool rendering */
 export interface EditRenderContext {
@@ -158,56 +159,33 @@ function formatStreamingHashlineEdits(edits: unknown[], uiTheme: Theme): string 
 
 	return text.trimEnd();
 	function formatHashlineEdit(edit: unknown): { srcLabel: string; dst: string } {
-		const asRecord = (value: unknown): Record<string, unknown> | undefined => {
-			if (typeof value === "object" && value !== null) return value as Record<string, unknown>;
-			return undefined;
-		};
-		const editRecord = asRecord(edit);
+		const editRecord = typeof edit === "object" && edit !== null ? (edit as Record<string, unknown>) : undefined;
 		if (!editRecord) {
-			return {
-				srcLabel: "• (incomplete edit)",
-				dst: "",
-			};
+			return { srcLabel: "• (incomplete edit)", dst: "" };
 		}
-		if ("target" in editRecord) {
-			const target = typeof editRecord.target === "string" ? editRecord.target : "…";
-			const newContent = editRecord.new_content;
-			return {
-				srcLabel: `• line ${target}`,
-				dst: Array.isArray(newContent) ? (newContent as string[]).join("\n") : "",
-			};
+
+		const contentLines = Array.isArray(editRecord.content) ? (editRecord.content as string[]).join("\n") : "";
+
+		// replace with tag (single line)
+		if ("tag" in editRecord && !("first" in editRecord)) {
+			const tag = typeof editRecord.tag === "string" ? editRecord.tag : "…";
+			return { srcLabel: `• line ${tag}`, dst: contentLines };
 		}
+		// replace with first..last (range)
 		if ("first" in editRecord || "last" in editRecord) {
 			const first = typeof editRecord.first === "string" ? editRecord.first : "…";
 			const last = typeof editRecord.last === "string" ? editRecord.last : "…";
-			const newContent = editRecord.new_content;
-			return {
-				srcLabel: `• range ${first}..${last}`,
-				dst: Array.isArray(newContent) ? (newContent as string[]).join("\n") : "",
-			};
+			return { srcLabel: `• range ${first}..${last}`, dst: contentLines };
 		}
-		if ("old_text" in editRecord || "new_text" in editRecord) {
-			const all = typeof editRecord.all === "boolean" ? editRecord.all : false;
-			return {
-				srcLabel: `• replace old_text→new_text${all ? " (all)" : ""}`,
-				dst: typeof editRecord.new_text === "string" ? editRecord.new_text : "",
-			};
-		}
-		if ("inserted_lines" in editRecord || "before" in editRecord || "after" in editRecord) {
+		// append/prepend/insert
+		if ("before" in editRecord || "after" in editRecord) {
 			const after = typeof editRecord.after === "string" ? editRecord.after : undefined;
 			const before = typeof editRecord.before === "string" ? editRecord.before : undefined;
-			const insertedLines = editRecord.inserted_lines;
-			const text = Array.isArray(insertedLines) ? (insertedLines as string[]).join("\n") : "";
 			const refs = [after, before].filter(Boolean).join("..") || "…";
-			return {
-				srcLabel: `• insert ${refs}`,
-				dst: text,
-			};
+			return { srcLabel: `• insert ${refs}`, dst: contentLines };
 		}
-		return {
-			srcLabel: "• (incomplete edit)",
-			dst: "",
-		};
+
+		return { srcLabel: "• (incomplete edit)", dst: "" };
 	}
 }
 function formatMetadataLine(lineCount: number | null, language: string | undefined, uiTheme: Theme): string {

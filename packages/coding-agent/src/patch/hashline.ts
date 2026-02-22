@@ -16,7 +16,7 @@ import type { HashMismatch } from "./types";
 
 export type LineTag = { line: number; hash: string };
 export type HashlineEdit =
-	| { op: "set"; tag: LineTag; content: string[] }
+	| { op: "replace"; tag: LineTag; content: string[] }
 	| { op: "replace"; first: LineTag; last: LineTag; content: string[] }
 	| { op: "append"; after?: LineTag; content: string[] }
 	| { op: "prepend"; before?: LineTag; content: string[] }
@@ -414,7 +414,7 @@ export function validateLineRef(ref: { line: number; hash: string }, fileLines: 
 /**
  * Apply an array of hashline edits to file content.
  *
- * Each edit operation identifies target lines directly (`set`, `set_range`,
+ * Each edit operation identifies target lines directly (`replace`,
  * `insert`). Line references are resolved via {@link parseTag}
  * and hashes validated before any mutation.
  *
@@ -456,8 +456,17 @@ export function applyHashlineEdits(
 	}
 	for (const edit of edits) {
 		switch (edit.op) {
-			case "set": {
-				if (!validateRef(edit.tag)) continue;
+			case "replace": {
+				if ("tag" in edit) {
+					if (!validateRef(edit.tag)) continue;
+				} else {
+					if (edit.first.line > edit.last.line) {
+						throw new Error(`Range start line ${edit.first.line} must be <= end line ${edit.last.line}`);
+					}
+					const startValid = validateRef(edit.first);
+					const endValid = validateRef(edit.last);
+					if (!startValid || !endValid) continue;
+				}
 				break;
 			}
 			case "append": {
@@ -486,16 +495,6 @@ export function applyHashlineEdits(
 				if (!afterValid || !beforeValid) continue;
 				break;
 			}
-			case "replace": {
-				if (edit.first.line > edit.last.line) {
-					throw new Error(`Range start line ${edit.first.line} must be <= end line ${edit.last.line}`);
-				}
-
-				const startValid = validateRef(edit.first);
-				const endValid = validateRef(edit.last);
-				if (!startValid || !endValid) continue;
-				break;
-			}
 		}
 	}
 	if (mismatches.length > 0) {
@@ -508,11 +507,12 @@ export function applyHashlineEdits(
 		const edit = edits[i];
 		let lineKey: string;
 		switch (edit.op) {
-			case "set":
-				lineKey = `s:${edit.tag.line}`;
-				break;
 			case "replace":
-				lineKey = `r:${edit.first.line}:${edit.last.line}`;
+				if ("tag" in edit) {
+					lineKey = `s:${edit.tag.line}`;
+				} else {
+					lineKey = `r:${edit.first.line}:${edit.last.line}`;
+				}
 				break;
 			case "append":
 				if (edit.after) {
@@ -550,12 +550,12 @@ export function applyHashlineEdits(
 		let sortLine: number;
 		let precedence: number;
 		switch (edit.op) {
-			case "set":
-				sortLine = edit.tag.line;
-				precedence = 0;
-				break;
 			case "replace":
-				sortLine = edit.last.line;
+				if ("tag" in edit) {
+					sortLine = edit.tag.line;
+				} else {
+					sortLine = edit.last.line;
+				}
 				precedence = 0;
 				break;
 			case "append":
@@ -579,26 +579,26 @@ export function applyHashlineEdits(
 	// Apply edits bottom-up
 	for (const { edit, idx } of annotated) {
 		switch (edit.op) {
-			case "set": {
-				const origLines = originalFileLines.slice(edit.tag.line - 1, edit.tag.line);
-				const newLines = edit.content;
-				if (origLines.every((line, i) => line === newLines[i])) {
-					noopEdits.push({
-						editIndex: idx,
-						loc: `${edit.tag.line}#${edit.tag.hash}`,
-						currentContent: origLines.join("\n"),
-					});
-					break;
-				}
-				fileLines.splice(edit.tag.line - 1, 1, ...newLines);
-				trackFirstChanged(edit.tag.line);
-				break;
-			}
 			case "replace": {
-				const count = edit.last.line - edit.first.line + 1;
-				const newLines = edit.content;
-				fileLines.splice(edit.first.line - 1, count, ...newLines);
-				trackFirstChanged(edit.first.line);
+				if ("tag" in edit) {
+					const origLines = originalFileLines.slice(edit.tag.line - 1, edit.tag.line);
+					const newLines = edit.content;
+					if (origLines.every((line, i) => line === newLines[i])) {
+						noopEdits.push({
+							editIndex: idx,
+							loc: `${edit.tag.line}#${edit.tag.hash}`,
+							currentContent: origLines.join("\n"),
+						});
+						break;
+					}
+					fileLines.splice(edit.tag.line - 1, 1, ...newLines);
+					trackFirstChanged(edit.tag.line);
+				} else {
+					const count = edit.last.line - edit.first.line + 1;
+					const newLines = edit.content;
+					fileLines.splice(edit.first.line - 1, count, ...newLines);
+					trackFirstChanged(edit.first.line);
+				}
 				break;
 			}
 			case "append": {

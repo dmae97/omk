@@ -12,10 +12,8 @@ Apply precise file edits using `LINE#ID` tags, anchoring to the file content.
 </workflow>
 
 <operations>
-- **Single line replace/delete**
-  - `{ op: "set", tag: "N#ID", content: […] }`
-  - `content: null` deletes the line; `content: [""]` keeps a blank line.
-- **Range replace/delete**
+- **Line or range replace/delete**
+  - `{ op: "replace", tag: "N#ID", content: […] }`
   - `{ op: "replace", first: "N#ID", last: "N#ID", content: […] }`
   - Use for swaps, block rewrites, or deleting a full span (`content: null`).
 - **Insert** (new content)

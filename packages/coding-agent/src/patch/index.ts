@@ -194,9 +194,9 @@ export function hashlineParseContent(edit: string | string[] | null): string[] {
 	if (lines[lines.length - 1].trim() === "") return lines.slice(0, -1);
 	return lines;
 }
-const hashlineTargetEditSchema = Type.Object(
+const hashlineReplaceTagEditSchema = Type.Object(
 	{
-		op: Type.Literal("set"),
+		op: Type.Literal("replace"),
 		tag: hashlineTagFormat("line being replaced"),
 		content: hashlineReplaceContentFormat("Replacement"),
 	},
@@ -221,7 +221,7 @@ const hashlinePrependEditSchema = Type.Object(
 	{ additionalProperties: false },
 );
 
-const hashlineRangeEditSchema = Type.Object(
+const hashlineReplaceRangeEditSchema = Type.Object(
 	{
 		op: Type.Literal("replace"),
 		first: hashlineTagFormat("first line"),
@@ -242,8 +242,8 @@ const hashlineInsertEditSchema = Type.Object(
 );
 
 const hashlineEditSpecSchema = Type.Union([
-	hashlineTargetEditSchema,
-	hashlineRangeEditSchema,
+	hashlineReplaceTagEditSchema,
+	hashlineReplaceRangeEditSchema,
 	hashlineAppendEditSchema,
 	hashlinePrependEditSchema,
 	hashlineInsertEditSchema,
@@ -556,19 +556,21 @@ export class EditTool implements AgentTool<TInput> {
 			const anchorEdits: HashlineEdit[] = [];
 			for (const edit of edits) {
 				switch (edit.op) {
-					case "set": {
-						const { tag, content } = edit;
-						anchorEdits.push({ op: "set", tag: parseTag(tag), content: hashlineParseContent(content) });
-						break;
-					}
 					case "replace": {
-						const { first, last, content } = edit;
-						anchorEdits.push({
-							op: "replace",
-							first: parseTag(first),
-							last: parseTag(last),
-							content: hashlineParseContent(content),
-						});
+						if ("tag" in edit) {
+							anchorEdits.push({
+								op: "replace",
+								tag: parseTag(edit.tag),
+								content: hashlineParseContent(edit.content),
+							});
+						} else {
+							anchorEdits.push({
+								op: "replace",
+								first: parseTag(edit.first),
+								last: parseTag(edit.last),
+								content: hashlineParseContent(edit.content),
+							});
+						}
 						break;
 					}
 					case "append": {
@@ -656,11 +658,12 @@ export class EditTool implements AgentTool<TInput> {
 					for (const edit of anchorEdits) {
 						refs.length = 0;
 						switch (edit.op) {
-							case "set":
-								refs.push(edit.tag);
-								break;
 							case "replace":
-								refs.push(edit.first, edit.last);
+								if ("tag" in edit) {
+									refs.push(edit.tag);
+								} else {
+									refs.push(edit.first, edit.last);
+								}
 								break;
 							case "append":
 								if (edit.after) refs.push(edit.after);

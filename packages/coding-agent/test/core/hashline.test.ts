@@ -233,7 +233,7 @@ describe("validateLineRef", () => {
 describe("applyHashlineEdits — replace", () => {
 	it("replaces single line", () => {
 		const content = "aaa\nbbb\nccc";
-		const edits: HashlineEdit[] = [{ op: "set", tag: makeTag(2, "bbb"), content: ["BBB"] }];
+		const edits: HashlineEdit[] = [{ op: "replace", tag: makeTag(2, "bbb"), content: ["BBB"] }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("aaa\nBBB\nccc");
@@ -263,7 +263,7 @@ describe("applyHashlineEdits — replace", () => {
 
 	it("replaces first line", () => {
 		const content = "first\nsecond\nthird";
-		const edits: HashlineEdit[] = [{ op: "set", tag: makeTag(1, "first"), content: ["FIRST"] }];
+		const edits: HashlineEdit[] = [{ op: "replace", tag: makeTag(1, "first"), content: ["FIRST"] }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("FIRST\nsecond\nthird");
@@ -272,7 +272,7 @@ describe("applyHashlineEdits — replace", () => {
 
 	it("replaces last line", () => {
 		const content = "first\nsecond\nthird";
-		const edits: HashlineEdit[] = [{ op: "set", tag: makeTag(3, "third"), content: ["THIRD"] }];
+		const edits: HashlineEdit[] = [{ op: "replace", tag: makeTag(3, "third"), content: ["THIRD"] }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("first\nsecond\nTHIRD");
@@ -287,7 +287,7 @@ describe("applyHashlineEdits — replace", () => {
 describe("applyHashlineEdits — delete", () => {
 	it("deletes single line", () => {
 		const content = "aaa\nbbb\nccc";
-		const edits: HashlineEdit[] = [{ op: "set", tag: makeTag(2, "bbb"), content: [] }];
+		const edits: HashlineEdit[] = [{ op: "replace", tag: makeTag(2, "bbb"), content: [] }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("aaa\nccc");
@@ -304,7 +304,7 @@ describe("applyHashlineEdits — delete", () => {
 
 	it("deletes first line", () => {
 		const content = "aaa\nbbb\nccc";
-		const edits: HashlineEdit[] = [{ op: "set", tag: makeTag(1, "aaa"), content: [] }];
+		const edits: HashlineEdit[] = [{ op: "replace", tag: makeTag(1, "aaa"), content: [] }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("bbb\nccc");
@@ -312,7 +312,7 @@ describe("applyHashlineEdits — delete", () => {
 
 	it("deletes last line", () => {
 		const content = "aaa\nbbb\nccc";
-		const edits: HashlineEdit[] = [{ op: "set", tag: makeTag(3, "ccc"), content: [] }];
+		const edits: HashlineEdit[] = [{ op: "replace", tag: makeTag(3, "ccc"), content: [] }];
 
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("aaa\nbbb");
@@ -437,7 +437,7 @@ describe("applyHashlineEdits — insert (before)", () => {
 		const content = "aaa\nbbb\nccc";
 		const edits: HashlineEdit[] = [
 			{ op: "prepend", before: makeTag(2, "bbb"), content: ["BEFORE"] },
-			{ op: "set", tag: makeTag(2, "bbb"), content: ["BBB"] },
+			{ op: "replace", tag: makeTag(2, "bbb"), content: ["BBB"] },
 		];
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("aaa\nBEFORE\nBBB\nccc");
@@ -484,7 +484,7 @@ describe("applyHashlineEdits — heuristics", () => {
 		const srcHash = computeLineHash(2, "bbb");
 		const edits: HashlineEdit[] = [
 			{
-				op: "set",
+				op: "replace",
 				tag: parseTag(`2#${srcHash}export function foo(a, b) {}`), // comma in trailing content
 				content: ["BBB"],
 			},
@@ -530,8 +530,8 @@ describe("applyHashlineEdits — multiple edits", () => {
 	it("applies two non-overlapping replaces (bottom-up safe)", () => {
 		const content = "aaa\nbbb\nccc\nddd\neee";
 		const edits: HashlineEdit[] = [
-			{ op: "set", tag: makeTag(2, "bbb"), content: ["BBB"] },
-			{ op: "set", tag: makeTag(4, "ddd"), content: ["DDD"] },
+			{ op: "replace", tag: makeTag(2, "bbb"), content: ["BBB"] },
+			{ op: "replace", tag: makeTag(4, "ddd"), content: ["DDD"] },
 		];
 
 		const result = applyHashlineEdits(content, edits);
@@ -542,8 +542,8 @@ describe("applyHashlineEdits — multiple edits", () => {
 	it("applies replace + delete in one call", () => {
 		const content = "aaa\nbbb\nccc\nddd";
 		const edits: HashlineEdit[] = [
-			{ op: "set", tag: makeTag(2, "bbb"), content: ["BBB"] },
-			{ op: "set", tag: makeTag(4, "ddd"), content: [] },
+			{ op: "replace", tag: makeTag(2, "bbb"), content: ["BBB"] },
+			{ op: "replace", tag: makeTag(4, "ddd"), content: [] },
 		];
 
 		const result = applyHashlineEdits(content, edits);
@@ -553,7 +553,7 @@ describe("applyHashlineEdits — multiple edits", () => {
 	it("applies replace + insert in one call", () => {
 		const content = "aaa\nbbb\nccc";
 		const edits: HashlineEdit[] = [
-			{ op: "set", tag: makeTag(3, "ccc"), content: ["CCC"] },
+			{ op: "replace", tag: makeTag(3, "ccc"), content: ["CCC"] },
 			{ op: "append", after: makeTag(1, "aaa"), content: ["INSERTED"] },
 		];
 
@@ -570,7 +570,7 @@ describe("applyHashlineEdits — multiple edits", () => {
 				last: makeTag(3, "three"),
 				content: ["TWO_THREE"],
 			},
-			{ op: "set", tag: makeTag(6, "six"), content: ["SIX"] },
+			{ op: "replace", tag: makeTag(6, "six"), content: ["SIX"] },
 		];
 
 		const result = applyHashlineEdits(content, edits);
@@ -593,13 +593,13 @@ describe("applyHashlineEdits — errors", () => {
 	it("rejects stale hash", () => {
 		const content = "aaa\nbbb\nccc";
 		// Use a hash that doesn't match any line (avoid 00 — ccc hashes to 00)
-		const edits: HashlineEdit[] = [{ op: "set", tag: parseTag("2#QQ"), content: ["BBB"] }];
+		const edits: HashlineEdit[] = [{ op: "replace", tag: parseTag("2#QQ"), content: ["BBB"] }];
 		expect(() => applyHashlineEdits(content, edits)).toThrow(HashlineMismatchError);
 	});
 
 	it("stale hash error shows >>> markers with correct hashes", () => {
 		const content = "aaa\nbbb\nccc\nddd\neee";
-		const edits: HashlineEdit[] = [{ op: "set", tag: parseTag("2#QQ"), content: ["BBB"] }];
+		const edits: HashlineEdit[] = [{ op: "replace", tag: parseTag("2#QQ"), content: ["BBB"] }];
 
 		try {
 			applyHashlineEdits(content, edits);
@@ -623,8 +623,8 @@ describe("applyHashlineEdits — errors", () => {
 		const content = "aaa\nbbb\nccc\nddd\neee";
 		// Use hashes that don't match any line (avoid 00 — ccc hashes to 00)
 		const edits: HashlineEdit[] = [
-			{ op: "set", tag: parseTag("2#ZZ"), content: ["BBB"] },
-			{ op: "set", tag: parseTag("4#ZZ"), content: ["DDD"] },
+			{ op: "replace", tag: parseTag("2#ZZ"), content: ["BBB"] },
+			{ op: "replace", tag: parseTag("4#ZZ"), content: ["DDD"] },
 		];
 
 		try {
@@ -645,7 +645,7 @@ describe("applyHashlineEdits — errors", () => {
 	it("does not relocate stale line refs even when hash uniquely matches another line", () => {
 		const content = "aaa\nbbb\nccc";
 		const staleButUnique = parseTag(`2#${computeLineHash(1, "ccc")}`);
-		const edits: HashlineEdit[] = [{ op: "set", tag: staleButUnique, content: ["CCC"] }];
+		const edits: HashlineEdit[] = [{ op: "replace", tag: staleButUnique, content: ["CCC"] }];
 		try {
 			applyHashlineEdits(content, edits);
 			expect.unreachable("should have thrown");
@@ -659,14 +659,14 @@ describe("applyHashlineEdits — errors", () => {
 	it("does not relocate when expected hash is non-unique", () => {
 		const content = "dup\nmid\ndup";
 		const staleDuplicate = parseTag(`2#${computeLineHash(1, "dup")}`);
-		const edits: HashlineEdit[] = [{ op: "set", tag: staleDuplicate, content: ["DUP"] }];
+		const edits: HashlineEdit[] = [{ op: "replace", tag: staleDuplicate, content: ["DUP"] }];
 
 		expect(() => applyHashlineEdits(content, edits)).toThrow(HashlineMismatchError);
 	});
 
 	it("rejects out-of-range line", () => {
 		const content = "aaa\nbbb";
-		const edits: HashlineEdit[] = [{ op: "set", tag: parseTag("10#ZZ"), content: ["X"] }];
+		const edits: HashlineEdit[] = [{ op: "replace", tag: parseTag("10#ZZ"), content: ["X"] }];
 
 		expect(() => applyHashlineEdits(content, edits)).toThrow(/does not exist/);
 	});
@@ -784,7 +784,7 @@ describe("hashlineParseContent", () => {
 		const fileContent = "# Title\n- old item\n- old item 2\nfooter";
 		const edits: HashlineEdit[] = [
 			{
-				op: "set",
+				op: "replace",
 				tag: makeTag(2, "- old item"),
 				content: hashlineParseContent("- [x] new item"),
 			},
@@ -797,7 +797,7 @@ describe("hashlineParseContent", () => {
 		// All replacement lines start with '- ', triggering the 50% heuristic when '-' matched.
 		const fileContent = "- [x] done\n- [ ] pending\n- [ ] also pending";
 		const newContent = hashlineParseContent("- [x] done");
-		const edits: HashlineEdit[] = [{ op: "set", tag: makeTag(2, "- [ ] pending"), content: newContent }];
+		const edits: HashlineEdit[] = [{ op: "replace", tag: makeTag(2, "- [ ] pending"), content: newContent }];
 		const result = applyHashlineEdits(fileContent, edits);
 		expect(result.content).toBe("- [x] done\n- [x] done\n- [ ] also pending");
 	});
