@@ -81,34 +81,6 @@ export class SearchProviderError extends Error {
 	}
 }
 
-/** Auth configuration for Anthropic */
-export interface AnthropicAuthConfig {
-	apiKey: string;
-	baseUrl: string;
-	isOAuth: boolean;
-}
-
-/** models.json structure for provider resolution */
-export interface ModelsJson {
-	providers?: Record<
-		string,
-		{
-			baseUrl?: string;
-			apiKey?: string;
-			api?: string;
-		}
-	>;
-}
-
-/** OAuth credential for Anthropic API access */
-export interface AnthropicOAuthCredential {
-	type: "oauth";
-	access: string;
-	refresh?: string;
-	/** Expiry timestamp in milliseconds */
-	expires: number;
-}
-
 /** Anthropic API response types */
 export interface AnthropicSearchResult {
 	type: "web_search_result";

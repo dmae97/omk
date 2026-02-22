@@ -1,5 +1,6 @@
 import * as os from "node:os";
 import * as path from "node:path";
+import { extractHttpStatusFromError } from "./retry.js";
 
 export type RawHttpRequestDump = {
 	provider: string;
@@ -25,7 +26,7 @@ export async function appendRawHttpRequestDumpFor400(
 	error: unknown,
 	dump: RawHttpRequestDump | undefined,
 ): Promise<string> {
-	if (!dump || getStatusCode(error) !== 400) {
+	if (!dump || extractHttpStatusFromError(error) !== 400) {
 		return message;
 	}
 
@@ -46,42 +47,6 @@ export function withHttpStatus(error: unknown, status: number): Error {
 	const wrapped = error instanceof Error ? error : new Error(String(error));
 	(wrapped as ErrorWithStatus).status = status;
 	return wrapped;
-}
-
-function getStatusCode(error: unknown): number | undefined {
-	if (!error || typeof error !== "object") {
-		return undefined;
-	}
-
-	const typedError = error as ErrorWithStatus;
-	const directStatus = toStatusCode(typedError.status) ?? toStatusCode(typedError.statusCode);
-	if (directStatus !== undefined) {
-		return directStatus;
-	}
-
-	const responseStatus = toStatusCode(typedError.response?.status);
-	if (responseStatus !== undefined) {
-		return responseStatus;
-	}
-
-	if (typedError.cause) {
-		return getStatusCode(typedError.cause);
-	}
-
-	return undefined;
-}
-
-function toStatusCode(value: unknown): number | undefined {
-	if (typeof value === "number" && Number.isFinite(value)) {
-		return value;
-	}
-	if (typeof value === "string") {
-		const parsed = Number(value);
-		if (Number.isFinite(parsed)) {
-			return parsed;
-		}
-	}
-	return undefined;
 }
 
 function sanitizeDump(dump: RawHttpRequestDump): RawHttpRequestDump {

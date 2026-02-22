@@ -16,8 +16,7 @@ import { executeSSH } from "../ssh/ssh-executor";
 import { renderStatusLine } from "../tui";
 import { CachedOutputBlock } from "../tui/output-block";
 import type { ToolSession } from ".";
-import type { OutputMeta } from "./output-meta";
-import { formatBytes, wrapBrackets } from "./render-utils";
+import { formatStyledTruncationWarning, type OutputMeta } from "./output-meta";
 import { ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
 
@@ -252,7 +251,6 @@ export const sshToolRenderer = {
 			uiTheme,
 		);
 		const textContent = result.content?.find(c => c.type === "text")?.text ?? "";
-		const truncation = details?.meta?.truncation;
 		const outputBlock = new CachedOutputBlock();
 
 		return {
@@ -291,19 +289,9 @@ export const sshToolRenderer = {
 					}
 				}
 
-				if (truncation) {
-					const warnings: string[] = [];
-					if (truncation.artifactId) {
-						warnings.push(`Full output: artifact://${truncation.artifactId}`);
-					}
-					if (truncation.truncatedBy === "lines") {
-						warnings.push(`Truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines`);
-					} else {
-						warnings.push(
-							`Truncated: ${truncation.outputLines} lines shown (${formatBytes(truncation.outputBytes)} limit)`,
-						);
-					}
-					outputLines.push(uiTheme.fg("warning", wrapBrackets(warnings.join(". "), uiTheme)));
+				if (details?.meta?.truncation) {
+					const warning = formatStyledTruncationWarning(details.meta, uiTheme);
+					if (warning) outputLines.push(warning);
 				}
 
 				return outputBlock.render(

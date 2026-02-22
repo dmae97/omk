@@ -323,7 +323,7 @@ function resolveBedrockThinkingBudget(
 	return { budget, level };
 }
 
-function mapAnthropicToolChoice(choice?: ToolChoice): AnthropicOptions["toolChoice"] {
+export function mapAnthropicToolChoice(choice?: ToolChoice): AnthropicOptions["toolChoice"] {
 	if (!choice) return undefined;
 	if (typeof choice === "string") {
 		if (choice === "required") return "any";

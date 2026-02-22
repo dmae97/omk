@@ -5,50 +5,16 @@
  * helping models understand expected output structure.
  */
 
-type JTDPrimitive =
-	| "boolean"
-	| "string"
-	| "timestamp"
-	| "float32"
-	| "float64"
-	| "int8"
-	| "uint8"
-	| "int16"
-	| "uint16"
-	| "int32"
-	| "uint32";
-
-interface JTDType {
-	type: JTDPrimitive;
-}
-
-interface JTDEnum {
-	enum: string[];
-}
-
-interface JTDElements {
-	elements: JTDSchema;
-}
-
-interface JTDValues {
-	values: JTDSchema;
-}
-
-interface JTDProperties {
-	properties?: Record<string, JTDSchema>;
-	optionalProperties?: Record<string, JTDSchema>;
-}
-
-interface JTDDiscriminator {
-	discriminator: string;
-	mapping: Record<string, JTDProperties>;
-}
-
-interface JTDRef {
-	ref: string;
-}
-
-type JTDSchema = JTDType | JTDEnum | JTDElements | JTDValues | JTDProperties | JTDDiscriminator | JTDRef | object;
+import type { JTDPrimitive } from "./jtd-utils.js";
+import {
+	isJTDDiscriminator,
+	isJTDElements,
+	isJTDEnum,
+	isJTDProperties,
+	isJTDRef,
+	isJTDType,
+	isJTDValues,
+} from "./jtd-utils.js";
 
 const primitiveMap: Record<JTDPrimitive, string> = {
 	boolean: "boolean",
@@ -63,34 +29,6 @@ const primitiveMap: Record<JTDPrimitive, string> = {
 	int32: "number",
 	uint32: "number",
 };
-
-function isJTDType(schema: unknown): schema is JTDType {
-	return typeof schema === "object" && schema !== null && "type" in schema;
-}
-
-function isJTDEnum(schema: unknown): schema is JTDEnum {
-	return typeof schema === "object" && schema !== null && "enum" in schema && Array.isArray((schema as JTDEnum).enum);
-}
-
-function isJTDElements(schema: unknown): schema is JTDElements {
-	return typeof schema === "object" && schema !== null && "elements" in schema;
-}
-
-function isJTDValues(schema: unknown): schema is JTDValues {
-	return typeof schema === "object" && schema !== null && "values" in schema;
-}
-
-function isJTDProperties(schema: unknown): schema is JTDProperties {
-	return typeof schema === "object" && schema !== null && ("properties" in schema || "optionalProperties" in schema);
-}
-
-function isJTDDiscriminator(schema: unknown): schema is JTDDiscriminator {
-	return typeof schema === "object" && schema !== null && "discriminator" in schema && "mapping" in schema;
-}
-
-function isJTDRef(schema: unknown): schema is JTDRef {
-	return typeof schema === "object" && schema !== null && "ref" in schema;
-}
 
 function convertToTypeScript(schema: unknown, inline = false): string {
 	if (schema === null || schema === undefined || (typeof schema === "object" && Object.keys(schema).length === 0)) {

@@ -1,23 +1,15 @@
 import { Database, type Statement } from "bun:sqlite";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { type AuthCredential, AuthCredentialStore, type StoredAuthCredential } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
 import { getAgentDbPath } from "@oh-my-pi/pi-utils/dirs";
 import type { RawSettings as Settings } from "../config/settings";
-import type { AuthCredential } from "./auth-storage";
 
 /** Row shape for settings table queries */
 type SettingsRow = {
 	key: string;
 	value: string;
-};
-
-/** Row shape for auth_credentials table queries */
-type AuthRow = {
-	id: number;
-	provider: string;
-	credential_type: string;
-	data: string;
 };
 
 /** Row shape for model_usage table queries */
@@ -26,18 +18,11 @@ type ModelUsageRow = {
 	last_used_at: number;
 };
 
-/**
- * Auth credential with database row ID for updates/deletes.
- * Wraps AuthCredential with storage metadata.
- */
-export interface StoredAuthCredential {
-	id: number;
-	provider: string;
-	credential: AuthCredential;
-}
-
 /** Bump when schema changes require migration */
 const SCHEMA_VERSION = 4;
+
+/** Singleton instances per database path */
+const instances = new Map<string, AgentStorage>();
 
 /**
  * Type guard for plain objects.
@@ -49,89 +34,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Converts credential to DB format, stripping the type discriminant from the data blob.
- * @param credential - The credential to serialize
- * @returns Object with credentialType and JSON data string, or null for unknown types
- */
-function serializeCredential(
-	credential: AuthCredential,
-): { credentialType: AuthCredential["type"]; data: string } | null {
-	if (credential.type === "api_key") {
-		return {
-			credentialType: "api_key",
-			data: JSON.stringify({ key: credential.key }),
-		};
-	}
-	if (credential.type === "oauth") {
-		const { type: _type, ...rest } = credential;
-		return {
-			credentialType: "oauth",
-			data: JSON.stringify(rest),
-		};
-	}
-	return null;
-}
-
-/**
- * Reconstructs credential from DB row, re-adding the type discriminant.
- * @param row - Database row containing credential data
- * @returns Reconstructed AuthCredential, or null if parsing fails or type is unknown
- */
-function deserializeCredential(row: AuthRow): AuthCredential | null {
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(row.data);
-	} catch (error) {
-		logger.warn("AgentStorage failed to parse auth credential", {
-			provider: row.provider,
-			id: row.id,
-			error: String(error),
-		});
-		return null;
-	}
-	if (!isRecord(parsed)) {
-		logger.warn("AgentStorage auth credential data invalid", {
-			provider: row.provider,
-			id: row.id,
-		});
-		return null;
-	}
-	if (row.credential_type === "api_key") {
-		return { type: "api_key", ...(parsed as Record<string, unknown>) } as AuthCredential;
-	}
-	if (row.credential_type === "oauth") {
-		return { type: "oauth", ...(parsed as Record<string, unknown>) } as AuthCredential;
-	}
-	logger.warn("AgentStorage unknown credential type", {
-		provider: row.provider,
-		id: row.id,
-		type: row.credential_type,
-	});
-	return null;
-}
-
-/**
- * Unified SQLite storage for agent settings and auth credentials.
+ * Unified SQLite storage for agent settings, model usage, and auth credentials.
+ * Delegates auth credential operations to AuthCredentialStore from @oh-my-pi/pi-ai.
  * Uses singleton pattern per database path; access via AgentStorage.open().
  */
 export class AgentStorage {
 	#db: Database;
-	static #instances = new Map<string, AgentStorage>();
+	#authStore: AuthCredentialStore;
 
 	#listSettingsStmt: Statement;
-	#getCacheStmt: Statement;
-	#upsertCacheStmt: Statement;
-	#deleteExpiredCacheStmt: Statement;
-	#listAuthStmt: Statement;
-	#listAuthByProviderStmt: Statement;
-	#listActiveAuthStmt: Statement;
-	#listActiveAuthByProviderStmt: Statement;
-	#insertAuthStmt: Statement;
-	#updateAuthStmt: Statement;
-	#deleteAuthStmt: Statement;
-	#deleteAuthByProviderStmt: Statement;
-	#countAuthStmt: Statement;
-	#disableAuthStmt: Statement;
 	#upsertModelUsageStmt: Statement;
 	#listModelUsageStmt: Statement;
 	#modelUsageCache: string[] | null = null;
@@ -154,38 +65,10 @@ export class AgentStorage {
 		this.#initializeSchema();
 		this.#hardenPermissions(dbPath);
 
+		// Create AuthCredentialStore with our open database
+		this.#authStore = new AuthCredentialStore(this.#db);
+
 		this.#listSettingsStmt = this.#db.prepare("SELECT key, value FROM settings");
-
-		this.#getCacheStmt = this.#db.prepare("SELECT value FROM cache WHERE key = ? AND expires_at > unixepoch()");
-		this.#upsertCacheStmt = this.#db.prepare(
-			"INSERT INTO cache (key, value, expires_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at",
-		);
-		this.#deleteExpiredCacheStmt = this.#db.prepare("DELETE FROM cache WHERE expires_at <= unixepoch()");
-
-		this.#listAuthStmt = this.#db.prepare(
-			"SELECT id, provider, credential_type, data FROM auth_credentials ORDER BY id ASC",
-		);
-		this.#listAuthByProviderStmt = this.#db.prepare(
-			"SELECT id, provider, credential_type, data FROM auth_credentials WHERE provider = ? ORDER BY id ASC",
-		);
-		this.#listActiveAuthStmt = this.#db.prepare(
-			"SELECT id, provider, credential_type, data FROM auth_credentials WHERE disabled = 0 ORDER BY id ASC",
-		);
-		this.#listActiveAuthByProviderStmt = this.#db.prepare(
-			"SELECT id, provider, credential_type, data FROM auth_credentials WHERE provider = ? AND disabled = 0 ORDER BY id ASC",
-		);
-		this.#insertAuthStmt = this.#db.prepare(
-			"INSERT INTO auth_credentials (provider, credential_type, data) VALUES (?, ?, ?) RETURNING id",
-		);
-		this.#updateAuthStmt = this.#db.prepare(
-			"UPDATE auth_credentials SET credential_type = ?, data = ?, updated_at = unixepoch() WHERE id = ?",
-		);
-		this.#deleteAuthStmt = this.#db.prepare("DELETE FROM auth_credentials WHERE id = ?");
-		this.#deleteAuthByProviderStmt = this.#db.prepare("DELETE FROM auth_credentials WHERE provider = ?");
-		this.#disableAuthStmt = this.#db.prepare(
-			"UPDATE auth_credentials SET disabled = 1, updated_at = unixepoch() WHERE id = ?",
-		);
-		this.#countAuthStmt = this.#db.prepare("SELECT COUNT(*) as count FROM auth_credentials");
 
 		this.#upsertModelUsageStmt = this.#db.prepare(
 			"INSERT INTO model_usage (model_key, last_used_at) VALUES (?, unixepoch()) ON CONFLICT(model_key) DO UPDATE SET last_used_at = unixepoch()",
@@ -196,32 +79,14 @@ export class AgentStorage {
 	}
 
 	/**
-	 * Creates tables if missing and migrates legacy single-blob settings to key-value format.
-	 * Handles v1 to v2 schema migration for settings table.
+	 * Creates tables if missing and migrates legacy settings.
+	 * AuthCredentialStore handles auth_credentials and cache tables.
 	 */
 	#initializeSchema(): void {
 		this.#db.exec(`
 PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
 PRAGMA busy_timeout=5000;
-
-CREATE TABLE IF NOT EXISTS auth_credentials (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	provider TEXT NOT NULL,
-	credential_type TEXT NOT NULL,
-	data TEXT NOT NULL,
-	disabled INTEGER NOT NULL DEFAULT 0,
-	created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-	updated_at INTEGER NOT NULL DEFAULT (unixepoch())
-);
-CREATE INDEX IF NOT EXISTS idx_auth_provider ON auth_credentials(provider);
-
-CREATE TABLE IF NOT EXISTS cache (
-	key TEXT PRIMARY KEY,
-	value TEXT NOT NULL,
-	expires_at INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
 
 CREATE TABLE IF NOT EXISTS model_usage (
 	model_key TEXT PRIMARY KEY,
@@ -301,11 +166,8 @@ CREATE TABLE settings (
 
 	#migrateSchema(fromVersion: number): void {
 		if (fromVersion < 4) {
-			// v3 → v4: Add disabled column to auth_credentials
-			const cols = this.#db.prepare("PRAGMA table_info(auth_credentials)").all() as Array<{ name?: string }>;
-			if (!cols.some(c => c.name === "disabled")) {
-				this.#db.exec("ALTER TABLE auth_credentials ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0");
-			}
+			// v3 → v4: Add disabled column to auth_credentials (handled by AuthCredentialStore)
+			// Nothing to do here - AuthCredentialStore will handle this migration
 		}
 	}
 
@@ -316,7 +178,7 @@ CREATE TABLE settings (
 	 * @returns AgentStorage instance for the given path
 	 */
 	static async open(dbPath: string = getAgentDbPath()): Promise<AgentStorage> {
-		const existing = AgentStorage.#instances.get(dbPath);
+		const existing = instances.get(dbPath);
 		if (existing) return existing;
 
 		const maxRetries = 3;
@@ -326,7 +188,7 @@ CREATE TABLE settings (
 		for (let attempt = 0; attempt < maxRetries; attempt++) {
 			try {
 				const storage = new AgentStorage(dbPath);
-				AgentStorage.#instances.set(dbPath, storage);
+				instances.set(dbPath, storage);
 				return storage;
 			} catch (err) {
 				const isSqliteBusy = err && typeof err === "object" && (err as { code?: string }).code === "SQLITE_BUSY";
@@ -377,40 +239,6 @@ CREATE TABLE settings (
 	}
 
 	/**
-	 * Gets a cached value by key. Returns null if not found or expired.
-	 */
-	getCache(key: string): string | null {
-		try {
-			const row = this.#getCacheStmt.get(key) as { value?: string } | undefined;
-			return row?.value ?? null;
-		} catch {
-			return null;
-		}
-	}
-
-	/**
-	 * Sets a cached value with expiry time (unix seconds).
-	 */
-	setCache(key: string, value: string, expiresAtSec: number): void {
-		try {
-			this.#upsertCacheStmt.run(key, value, expiresAtSec);
-		} catch (error) {
-			logger.warn("AgentStorage failed to set cache", { key, error: String(error) });
-		}
-	}
-
-	/**
-	 * Deletes expired cache entries. Call periodically for cleanup.
-	 */
-	cleanExpiredCache(): void {
-		try {
-			this.#deleteExpiredCacheStmt.run();
-		} catch {
-			// Ignore cleanup errors
-		}
-	}
-
-	/**
 	 * Records model usage, updating the last-used timestamp.
 	 * @param modelKey - Model key in "provider/modelId" format
 	 */
@@ -447,8 +275,7 @@ CREATE TABLE settings (
 	 * @returns True if at least one credential is stored
 	 */
 	hasAuthCredentials(): boolean {
-		const row = this.#countAuthStmt.get() as { count?: number } | undefined;
-		return (row?.count ?? 0) > 0;
+		return this.#authStore.listAuthCredentials().length > 0;
 	}
 
 	/**
@@ -459,19 +286,41 @@ CREATE TABLE settings (
 	 * @returns Array of stored credentials with their database IDs
 	 */
 	listAuthCredentials(provider?: string, includeDisabled = false): StoredAuthCredential[] {
-		const rows = includeDisabled
-			? ((provider
-					? (this.#listAuthByProviderStmt.all(provider) as AuthRow[])
-					: (this.#listAuthStmt.all() as AuthRow[])) ?? [])
-			: ((provider
-					? (this.#listActiveAuthByProviderStmt.all(provider) as AuthRow[])
-					: (this.#listActiveAuthStmt.all() as AuthRow[])) ?? []);
+		// AuthCredentialStore doesn't expose includeDisabled yet, so we filter if needed
+		const credentials = this.#authStore.listAuthCredentials(provider);
+		if (!includeDisabled) return credentials;
+
+		// For now, includeDisabled requires direct DB access
+		// This is only used internally, so it's acceptable
+		const stmt = this.#db.prepare(
+			provider
+				? "SELECT id, provider, credential_type, data FROM auth_credentials WHERE provider = ? ORDER BY id ASC"
+				: "SELECT id, provider, credential_type, data FROM auth_credentials ORDER BY id ASC",
+		);
+		const rows = (provider ? stmt.all(provider) : stmt.all()) as Array<{
+			id: number;
+			provider: string;
+			credential_type: string;
+			data: string;
+		}>;
 
 		const results: StoredAuthCredential[] = [];
 		for (const row of rows) {
-			const credential = deserializeCredential(row);
-			if (!credential) continue;
-			results.push({ id: row.id, provider: row.provider, credential });
+			try {
+				const parsed = JSON.parse(row.data);
+				if (!parsed || typeof parsed !== "object") continue;
+
+				let credential: AuthCredential;
+				if (row.credential_type === "api_key" && typeof (parsed as { key?: unknown }).key === "string") {
+					credential = { type: "api_key", key: (parsed as { key: string }).key };
+				} else if (row.credential_type === "oauth") {
+					credential = { type: "oauth", ...(parsed as Record<string, unknown>) } as AuthCredential;
+				} else {
+					continue;
+				}
+
+				results.push({ id: row.id, provider: row.provider, credential });
+			} catch {}
 		}
 		return results;
 	}
@@ -484,17 +333,7 @@ CREATE TABLE settings (
 	 * @returns Array of newly stored credentials with their database IDs
 	 */
 	replaceAuthCredentialsForProvider(provider: string, credentials: AuthCredential[]): StoredAuthCredential[] {
-		const replace = this.#db.transaction((providerName: string, items: AuthCredential[]) => {
-			this.#deleteAuthByProviderStmt.run(providerName);
-			const inserted: StoredAuthCredential[] = [];
-			for (const credential of items) {
-				const record = this.#insertAuthCredential(providerName, credential);
-				if (record) inserted.push(record);
-			}
-			return inserted;
-		});
-
-		return replace(provider, credentials);
+		return this.#authStore.replaceAuthCredentialsForProvider(provider, credentials);
 	}
 
 	/**
@@ -503,16 +342,7 @@ CREATE TABLE settings (
 	 * @param credential - New credential data
 	 */
 	updateAuthCredential(id: number, credential: AuthCredential): void {
-		const serialized = serializeCredential(credential);
-		if (!serialized) {
-			logger.warn("AgentStorage updateAuthCredential invalid type", { id, type: credential.type });
-			return;
-		}
-		try {
-			this.#updateAuthStmt.run(serialized.credentialType, serialized.data, id);
-		} catch (error) {
-			logger.warn("AgentStorage updateAuthCredential failed", { id, error: String(error) });
-		}
+		this.#authStore.updateAuthCredential(id, credential);
 	}
 
 	/**
@@ -520,11 +350,7 @@ CREATE TABLE settings (
 	 * @param id - Database row ID of the credential to delete
 	 */
 	deleteAuthCredential(id: number): void {
-		try {
-			this.#deleteAuthStmt.run(id);
-		} catch (error) {
-			logger.warn("AgentStorage deleteAuthCredential failed", { id, error: String(error) });
-		}
+		this.#authStore.deleteAuthCredential(id);
 	}
 
 	/**
@@ -533,11 +359,7 @@ CREATE TABLE settings (
 	 * @param id - Database row ID of the credential to disable
 	 */
 	disableAuthCredential(id: number): void {
-		try {
-			this.#disableAuthStmt.run(id);
-		} catch (error) {
-			logger.warn("AgentStorage disableAuthCredential failed", { id, error: String(error) });
-		}
+		this.#authStore.disableAuthCredential(id);
 	}
 
 	/**
@@ -545,41 +367,28 @@ CREATE TABLE settings (
 	 * @param provider - Provider name whose credentials should be deleted
 	 */
 	deleteAuthCredentialsForProvider(provider: string): void {
-		try {
-			this.#deleteAuthByProviderStmt.run(provider);
-		} catch (error) {
-			logger.warn("AgentStorage deleteAuthCredentialsForProvider failed", {
-				provider,
-				error: String(error),
-			});
-		}
+		this.#authStore.deleteAuthCredentialsForProvider(provider);
 	}
 
 	/**
-	 * Inserts a new auth credential for a provider.
-	 * @param provider - Provider name (e.g., "anthropic", "openai")
-	 * @param credential - Credential to insert
-	 * @returns Stored credential with database ID, or null on failure
+	 * Gets a cached value by key. Returns null if not found or expired.
 	 */
-	#insertAuthCredential(provider: string, credential: AuthCredential): StoredAuthCredential | null {
-		const serialized = serializeCredential(credential);
-		if (!serialized) {
-			logger.warn("AgentStorage insertAuthCredential invalid type", { provider, type: credential.type });
-			return null;
-		}
-		try {
-			const row = this.#insertAuthStmt.get(provider, serialized.credentialType, serialized.data) as
-				| { id?: number }
-				| undefined;
-			if (!row?.id) {
-				logger.warn("AgentStorage insertAuthCredential missing id", { provider });
-				return null;
-			}
-			return { id: row.id, provider, credential };
-		} catch (error) {
-			logger.warn("AgentStorage insertAuthCredential failed", { provider, error: String(error) });
-			return null;
-		}
+	getCache(key: string): string | null {
+		return this.#authStore.getCache(key);
+	}
+
+	/**
+	 * Sets a cached value with expiry time (unix seconds).
+	 */
+	setCache(key: string, value: string, expiresAtSec: number): void {
+		this.#authStore.setCache(key, value, expiresAtSec);
+	}
+
+	/**
+	 * Deletes expired cache entries. Call periodically for cleanup.
+	 */
+	cleanExpiredCache(): void {
+		this.#authStore.cleanExpiredCache();
 	}
 
 	/**

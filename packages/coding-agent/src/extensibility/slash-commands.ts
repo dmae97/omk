@@ -9,6 +9,7 @@ import {
 	type SubcommandDef,
 } from "../slash-commands/builtin-registry";
 import { EMBEDDED_COMMAND_TEMPLATES } from "../task/commands";
+import { parseCommandArgs, substituteArgs } from "../utils/command-args";
 import { parseFrontmatter } from "../utils/frontmatter";
 
 export type SlashCommandSource = "extension" | "prompt" | "skill";
@@ -147,69 +148,6 @@ function parseCommandTemplate(
 	}
 
 	return { description, body };
-}
-
-/**
- * Parse command arguments respecting quoted strings (bash-style)
- * Returns array of arguments
- */
-export function parseCommandArgs(argsString: string): string[] {
-	const args: string[] = [];
-	let current = "";
-	let inQuote: string | null = null;
-
-	for (let i = 0; i < argsString.length; i++) {
-		const char = argsString[i];
-
-		if (inQuote) {
-			if (char === inQuote) {
-				inQuote = null;
-			} else {
-				current += char;
-			}
-		} else if (char === '"' || char === "'") {
-			inQuote = char;
-		} else if (char === " " || char === "\t") {
-			if (current) {
-				args.push(current);
-				current = "";
-			}
-		} else {
-			current += char;
-		}
-	}
-
-	if (current) {
-		args.push(current);
-	}
-
-	return args;
-}
-
-/**
- * Substitute argument placeholders in command content
- * Supports $1, $2, ... for positional args, $@ and $ARGUMENTS for all args
- */
-export function substituteArgs(content: string, args: string[]): string {
-	let result = content;
-
-	// Replace $1, $2, etc. with positional args FIRST (before wildcards)
-	// This prevents wildcard replacement values containing $<digit> patterns from being re-substituted
-	result = result.replace(/\$(\d+)/g, (_, num) => {
-		const index = parseInt(num, 10) - 1;
-		return args[index] ?? "";
-	});
-
-	// Pre-compute all args joined
-	const allArgs = args.join(" ");
-
-	// Replace $ARGUMENTS with all args joined (aligns with Claude, Codex)
-	result = result.replace(/\$ARGUMENTS/g, allArgs);
-
-	// Replace $@ with all args joined
-	result = result.replace(/\$@/g, allArgs);
-
-	return result;
 }
 
 export interface LoadSlashCommandsOptions {

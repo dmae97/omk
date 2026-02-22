@@ -5,16 +5,17 @@
  * Returns synthesized answers with citations and source metadata.
  */
 import {
+	type AnthropicAuthConfig,
 	type AnthropicSystemBlock,
 	buildAnthropicHeaders,
 	buildAnthropicSystemBlocks,
+	buildAnthropicUrl,
+	findAnthropicAuth,
 	stripClaudeToolPrefix,
 } from "@oh-my-pi/pi-ai";
 import { $env } from "@oh-my-pi/pi-utils";
-import { buildAnthropicUrl, findAnthropicAuth } from "../../../web/search/auth";
 import type {
 	AnthropicApiResponse,
-	AnthropicAuthConfig,
 	AnthropicCitation,
 	SearchCitation,
 	SearchResponse,

@@ -28,7 +28,7 @@ import { formatDimensionNote, resizeImage } from "../utils/image-resize";
 import { detectSupportedImageMimeTypeFromFile } from "../utils/mime";
 import { ensureTool } from "../utils/tools-manager";
 import { applyListLimit } from "./list-limit";
-import type { OutputMeta } from "./output-meta";
+import { formatFullOutputReference, formatStyledTruncationWarning, type OutputMeta } from "./output-meta";
 import { resolveReadPath, resolveToCwd } from "./path-utils";
 import { formatAge, formatBytes, shortenPath, wrapBrackets } from "./render-utils";
 import { ToolAbortError, ToolError, throwIfAborted } from "./tool-errors";
@@ -42,6 +42,34 @@ const REMOTE_MOUNT_PREFIX = getRemoteDir() + path.sep;
 
 function isRemoteMountPath(absolutePath: string): boolean {
 	return absolutePath.startsWith(REMOTE_MOUNT_PREFIX);
+}
+
+function prependLineNumbers(text: string, startNum: number): string {
+	const textLines = text.split("\n");
+	const lastLineNum = startNum + textLines.length - 1;
+	const padWidth = String(lastLineNum).length;
+	return textLines
+		.map((line, i) => {
+			const lineNum = String(startNum + i).padStart(padWidth, " ");
+			return `${lineNum}|${line}`;
+		})
+		.join("\n");
+}
+
+function prependHashLines(text: string, startNum: number): string {
+	const textLines = text.split("\n");
+	return textLines.map((line, i) => `${startNum + i}#${computeLineHash(startNum + i, line)}:${line}`).join("\n");
+}
+
+function formatTextWithMode(
+	text: string,
+	startNum: number,
+	shouldAddHashLines: boolean,
+	shouldAddLineNumbers: boolean,
+): string {
+	if (shouldAddHashLines) return prependHashLines(text, startNum);
+	if (shouldAddLineNumbers) return prependLineNumbers(text, startNum);
+	return text;
 }
 
 const READ_CHUNK_SIZE = 8 * 1024;
@@ -748,27 +776,8 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 
 			const shouldAddHashLines = displayMode.hashLines;
 			const shouldAddLineNumbers = shouldAddHashLines ? false : displayMode.lineNumbers;
-			const prependLineNumbers = (text: string, startNum: number): string => {
-				const textLines = text.split("\n");
-				const lastLineNum = startNum + textLines.length - 1;
-				const padWidth = String(lastLineNum).length;
-				return textLines
-					.map((line, i) => {
-						const lineNum = String(startNum + i).padStart(padWidth, " ");
-						return `${lineNum}|${line}`;
-					})
-					.join("\n");
-			};
-			const prependHashLines = (text: string, startNum: number): string => {
-				const textLines = text.split("\n");
-				return textLines
-					.map((line, i) => `${startNum + i}#${computeLineHash(startNum + i, line)}:${line}`)
-					.join("\n");
-			};
 			const formatText = (text: string, startNum: number): string => {
-				if (shouldAddHashLines) return prependHashLines(text, startNum);
-				if (shouldAddLineNumbers) return prependLineNumbers(text, startNum);
-				return text;
+				return formatTextWithMode(text, startNum, shouldAddHashLines, shouldAddLineNumbers);
 			};
 
 			let outputText: string;
@@ -906,25 +915,8 @@ export class ReadTool implements AgentTool<typeof readSchema, ReadToolDetails> {
 
 		const shouldAddHashLines = displayMode.hashLines;
 		const shouldAddLineNumbers = shouldAddHashLines ? false : displayMode.lineNumbers;
-		const prependLineNumbers = (text: string, startNum: number): string => {
-			const textLines = text.split("\n");
-			const lastLineNum = startNum + textLines.length - 1;
-			const padWidth = String(lastLineNum).length;
-			return textLines
-				.map((line, i) => {
-					const lineNum = String(startNum + i).padStart(padWidth, " ");
-					return `${lineNum}|${line}`;
-				})
-				.join("\n");
-		};
-		const prependHashLines = (text: string, startNum: number): string => {
-			const textLines = text.split("\n");
-			return textLines.map((line, i) => `${startNum + i}#${computeLineHash(startNum + i, line)}:${line}`).join("\n");
-		};
 		const formatText = (text: string, startNum: number): string => {
-			if (shouldAddHashLines) return prependHashLines(text, startNum);
-			if (shouldAddLineNumbers) return prependLineNumbers(text, startNum);
-			return text;
+			return formatTextWithMode(text, startNum, shouldAddHashLines, shouldAddLineNumbers);
 		};
 
 		let outputText: string;
@@ -1104,19 +1096,16 @@ export const readToolRenderer = {
 			warningLines.push(uiTheme.fg("dim", wrapBrackets(`Resolved path: ${details.resolvedPath}`, uiTheme)));
 		}
 		if (truncation) {
-			let warning: string;
 			if (fallback?.firstLineExceedsLimit) {
-				warning = `First line exceeds ${formatBytes(fallback.maxBytes ?? DEFAULT_MAX_BYTES)} limit`;
-			} else if (truncation.truncatedBy === "lines") {
-				warning = `Truncated: ${truncation.outputLines} of ${truncation.totalLines} lines (${DEFAULT_MAX_LINES} line limit)`;
+				let warning = `First line exceeds ${formatBytes(fallback.maxBytes ?? DEFAULT_MAX_BYTES)} limit`;
+				if (truncation.artifactId) {
+					warning += `. ${formatFullOutputReference(truncation.artifactId)}`;
+				}
+				warningLines.push(uiTheme.fg("warning", wrapBrackets(warning, uiTheme)));
 			} else {
-				const maxBytes = fallback?.maxBytes ?? DEFAULT_MAX_BYTES;
-				warning = `Truncated: ${truncation.outputLines} lines (${formatBytes(maxBytes)} limit)`;
+				const warning = formatStyledTruncationWarning(details?.meta, uiTheme);
+				if (warning) warningLines.push(warning);
 			}
-			if (truncation.artifactId) {
-				warning += `. Full output: artifact://${truncation.artifactId}`;
-			}
-			warningLines.push(uiTheme.fg("warning", wrapBrackets(warning, uiTheme)));
 		}
 
 		if (imageContent) {

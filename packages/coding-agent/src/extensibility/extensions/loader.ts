@@ -13,10 +13,11 @@ import type { TSchema } from "@sinclair/typebox";
 import * as TypeBox from "@sinclair/typebox";
 import { type ExtensionModule, extensionModuleCapability } from "../../capability/extension-module";
 import { loadCapability } from "../../discovery";
-import { expandPath, getExtensionNameFromPath } from "../../discovery/helpers";
+import { getExtensionNameFromPath } from "../../discovery/helpers";
 import type { ExecOptions } from "../../exec/exec";
 import { execCommand } from "../../exec/exec";
 import type { CustomMessage } from "../../session/messages";
+import { expandPath } from "../../tools/path-utils";
 import { EventBus } from "../../utils/event-bus";
 import type {
 	Extension,

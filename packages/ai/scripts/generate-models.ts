@@ -17,7 +17,7 @@ import {
 	linkSparkPromotionTargets,
 } from "../src/provider-models/model-policies";
 import { JWT_CLAIM_PATH } from "../src/providers/openai-codex/constants";
-import { CliAuthStorage } from "../src/storage";
+import { AuthCredentialStore } from "../src/auth-storage";
 import type { Model } from "../src/types";
 import { fetchAntigravityDiscoveryModels } from "../src/utils/discovery/antigravity";
 import { fetchCodexModels } from "../src/utils/discovery/codex";
@@ -37,7 +37,7 @@ async function resolveProviderApiKey(providerId: string, catalog: CatalogDiscove
 	}
 
 	try {
-		const storage = await CliAuthStorage.create();
+		const storage = await AuthCredentialStore.open();
 		try {
 			const storedApiKey = storage.getApiKey(providerId);
 			if (storedApiKey) {
@@ -148,7 +148,7 @@ const ANTIGRAVITY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com"
 
 async function getOAuthCredentialsFromStorage(provider: OAuthProvider): Promise<OAuthCredentials | null> {
 	try {
-		const storage = await CliAuthStorage.create();
+		const storage = await AuthCredentialStore.open();
 		try {
 			const creds = storage.getOAuth(provider);
 			if (!creds) {

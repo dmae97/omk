@@ -37,11 +37,22 @@ export function isRetryableError(error: unknown): boolean {
 export function extractHttpStatusFromError(error: unknown, depth = 0): number | undefined {
 	if (!error || typeof error !== "object" || depth > 3) return undefined;
 	const info = error as ErrorLike;
-	const status =
+	const rawStatus =
 		info.status ??
 		info.statusCode ??
 		(info.response && typeof info.response === "object" ? info.response.status : undefined);
-	if (typeof status === "number" && status >= 100 && status <= 599) {
+
+	let status: number | undefined;
+	if (typeof rawStatus === "number" && Number.isFinite(rawStatus)) {
+		status = rawStatus;
+	} else if (typeof rawStatus === "string") {
+		const parsed = Number(rawStatus);
+		if (Number.isFinite(parsed)) {
+			status = parsed;
+		}
+	}
+
+	if (status !== undefined && status >= 100 && status <= 599) {
 		return status;
 	}
 

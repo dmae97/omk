@@ -7,12 +7,39 @@
  *   3. OAuth credentials in ~/.omp/agent/agent.db (with expiry check)
  *   4. ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL fallback
  */
-import { buildAnthropicHeaders as buildProviderAnthropicHeaders, getEnvApiKey } from "@oh-my-pi/pi-ai";
 import { $env, logger } from "@oh-my-pi/pi-utils";
 import { getAgentDbPath, getAgentDir } from "@oh-my-pi/pi-utils/dirs";
-import { AgentStorage } from "../../session/agent-storage";
-import type { AuthCredential } from "../../session/auth-storage";
-import type { AnthropicAuthConfig, AnthropicOAuthCredential, ModelsJson } from "./types";
+import { type AuthCredential, AuthCredentialStore } from "../auth-storage";
+import { buildAnthropicHeaders as buildProviderAnthropicHeaders } from "../providers/anthropic";
+import { getEnvApiKey } from "../stream";
+
+/** Auth configuration for Anthropic */
+export interface AnthropicAuthConfig {
+	apiKey: string;
+	baseUrl: string;
+	isOAuth: boolean;
+}
+
+/** models.json structure for provider resolution */
+export interface ModelsJson {
+	providers?: Record<
+		string,
+		{
+			baseUrl?: string;
+			apiKey?: string;
+			api?: string;
+		}
+	>;
+}
+
+/** OAuth credential for Anthropic API access */
+export interface AnthropicOAuthCredential {
+	type: "oauth";
+	access: string;
+	refresh?: string;
+	/** Expiry timestamp in milliseconds */
+	expires: number;
+}
 
 const DEFAULT_BASE_URL = "https://api.anthropic.com";
 
@@ -59,12 +86,13 @@ function toAnthropicOAuthCredential(credential: AuthCredential): AnthropicOAuthC
 }
 
 /**
- * Reads Anthropic OAuth credentials from agent.db.
+ * Reads Anthropic OAuth credentials from an AuthCredentialStore.
+ * @param store - Credential store to read from (creates AuthCredentialStore if not provided)
  * @returns Array of valid Anthropic OAuth credentials
  */
-async function readAnthropicOAuthCredentials(): Promise<AnthropicOAuthCredential[]> {
-	const storage = await AgentStorage.open(getAgentDbPath());
-	const records = storage.listAuthCredentials("anthropic");
+async function readAnthropicOAuthCredentials(store?: AuthCredentialStore): Promise<AnthropicOAuthCredential[]> {
+	const effectiveStore = store ?? (await AuthCredentialStore.open(getAgentDbPath()));
+	const records = effectiveStore.listAuthCredentials("anthropic");
 	const credentials: AnthropicOAuthCredential[] = [];
 	for (const record of records) {
 		const mapped = toAnthropicOAuthCredential(record.credential);
@@ -82,9 +110,10 @@ async function readAnthropicOAuthCredentials(): Promise<AnthropicOAuthCredential
  *   2. Provider with api="anthropic-messages" in models.json
  *   3. OAuth in agent.db (with 5-minute expiry buffer)
  *   4. ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL fallback
+ * @param store - Optional credential store (creates one from default db path if not provided)
  * @returns The first valid auth configuration found, or null if none available
  */
-export async function findAnthropicAuth(): Promise<AnthropicAuthConfig | null> {
+export async function findAnthropicAuth(store?: AuthCredentialStore): Promise<AnthropicAuthConfig | null> {
 	const configDir = getAgentDir();
 
 	// 1. Explicit search-specific env vars
@@ -126,7 +155,7 @@ export async function findAnthropicAuth(): Promise<AnthropicAuthConfig | null> {
 	// 3. OAuth credentials in agent.db (with 5-minute expiry buffer)
 	const expiryBuffer = 5 * 60 * 1000; // 5 minutes
 	const now = Date.now();
-	const credentials = await readAnthropicOAuthCredentials();
+	const credentials = await readAnthropicOAuthCredentials(store);
 	for (const credential of credentials) {
 		if (!credential.access) continue;
 		if (credential.expires > now + expiryBuffer) {
@@ -153,11 +182,11 @@ export async function findAnthropicAuth(): Promise<AnthropicAuthConfig | null> {
 }
 
 /**
- * Builds HTTP headers for Anthropic API requests.
+ * Builds HTTP headers for Anthropic API requests (search variant).
  * @param auth - The authentication configuration
  * @returns Headers object ready for use in fetch requests
  */
-export function buildAnthropicHeaders(auth: AnthropicAuthConfig): Record<string, string> {
+export function buildAnthropicSearchHeaders(auth: AnthropicAuthConfig): Record<string, string> {
 	return buildProviderAnthropicHeaders({
 		apiKey: auth.apiKey,
 		baseUrl: auth.baseUrl,

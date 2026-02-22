@@ -14,6 +14,7 @@ import { Settings, type SkillsSettings } from "./config/settings";
 import { CursorExecHandlers } from "./cursor";
 import "./discovery";
 import { ArtifactManager } from "@oh-my-pi/pi-coding-agent/session/artifacts";
+import { resolveConfigValue } from "./config/resolve-config-value";
 import { initializeWithSettings } from "./discovery";
 import { TtsrManager } from "./export/ttsr";
 import {
@@ -238,7 +239,7 @@ export async function discoverAuthStorage(agentDir: string = getDefaultAgentDir(
 	const dbPath = getAgentDbPath(agentDir);
 	logger.debug("discoverAuthStorage", { agentDir, dbPath });
 
-	const storage = await AuthStorage.create(dbPath);
+	const storage = await AuthStorage.create(dbPath, { configValueResolver: resolveConfigValue });
 	await storage.reload();
 	return storage;
 }

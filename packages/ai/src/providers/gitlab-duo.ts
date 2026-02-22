@@ -1,6 +1,6 @@
+import { mapAnthropicToolChoice } from "../stream";
 import type { Api, Context, Model, SimpleStreamOptions } from "../types";
 import { AssistantMessageEventStream } from "../utils/event-stream";
-import type { AnthropicOptions } from "./anthropic";
 import { streamAnthropic } from "./anthropic";
 import type { OpenAICompletionsOptions } from "./openai-completions";
 import { streamOpenAICompletions } from "./openai-completions";
@@ -175,23 +175,6 @@ const ANTHROPIC_THINKING_BUDGETS = {
 	high: 16384,
 	xhigh: 32768,
 } as const;
-
-function mapAnthropicToolChoice(choice?: SimpleStreamOptions["toolChoice"]): AnthropicOptions["toolChoice"] {
-	if (!choice) return undefined;
-	if (typeof choice === "string") {
-		if (choice === "required" || choice === "any") return "any";
-		if (choice === "auto" || choice === "none") return choice;
-		return undefined;
-	}
-	if (choice.type === "tool") {
-		return choice.name ? { type: "tool", name: choice.name } : undefined;
-	}
-	if (choice.type === "function") {
-		const name = "function" in choice ? choice.function?.name : choice.name;
-		return name ? { type: "tool", name } : undefined;
-	}
-	return undefined;
-}
 
 async function getDirectAccessToken(gitlabAccessToken: string): Promise<DirectAccessToken> {
 	const cached = directAccessCache.get(gitlabAccessToken);

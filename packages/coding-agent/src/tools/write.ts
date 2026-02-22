@@ -24,9 +24,9 @@ import {
 	formatExpandHint,
 	formatMoreItems,
 	formatStatusIcon,
+	formatTitle,
 	replaceTabs,
 	shortenPath,
-	ToolUIKit,
 } from "./render-utils";
 
 const writeSchema = Type.Object({
@@ -151,7 +151,7 @@ function formatMetadataLine(lineCount: number | null, language: string | undefin
 	return uiTheme.fg("dim", `${icon}`);
 }
 
-function formatStreamingContent(content: string, uiTheme: Theme, ui: ToolUIKit): string {
+function formatStreamingContent(content: string, uiTheme: Theme): string {
 	if (!content) return "";
 	const lines = content.split("\n");
 	const displayLines = lines.slice(-WRITE_STREAMING_PREVIEW_LINES);
@@ -162,13 +162,13 @@ function formatStreamingContent(content: string, uiTheme: Theme, ui: ToolUIKit):
 		text += uiTheme.fg("dim", `… (${hidden} earlier lines)\n`);
 	}
 	for (const line of displayLines) {
-		text += `${uiTheme.fg("toolOutput", ui.truncate(replaceTabs(line), 80))}\n`;
+		text += `${uiTheme.fg("toolOutput", truncateToWidth(replaceTabs(line), 80))}\n`;
 	}
 	text += uiTheme.fg("dim", `… (streaming)`);
 	return text;
 }
 
-function renderContentPreview(content: string, expanded: boolean, uiTheme: Theme, ui: ToolUIKit): string {
+function renderContentPreview(content: string, expanded: boolean, uiTheme: Theme): string {
 	if (!content) return "";
 	const lines = content.split("\n");
 	const maxLines = expanded ? lines.length : Math.min(lines.length, WRITE_PREVIEW_LINES);
@@ -177,7 +177,7 @@ function renderContentPreview(content: string, expanded: boolean, uiTheme: Theme
 
 	let text = "\n\n";
 	for (const line of displayLines) {
-		text += `${uiTheme.fg("toolOutput", ui.truncate(replaceTabs(line), 80))}\n`;
+		text += `${uiTheme.fg("toolOutput", truncateToWidth(replaceTabs(line), 80))}\n`;
 	}
 	if (!expanded && hidden > 0) {
 		const hint = formatExpandHint(uiTheme, expanded, hidden > 0);
@@ -189,7 +189,6 @@ function renderContentPreview(content: string, expanded: boolean, uiTheme: Theme
 
 export const writeToolRenderer = {
 	renderCall(args: WriteRenderArgs, options: RenderResultOptions, uiTheme: Theme): Component {
-		const ui = new ToolUIKit(uiTheme);
 		const rawPath = args.file_path || args.path || "";
 		const filePath = shortenPath(rawPath);
 		const lang = getLanguageFromPath(rawPath) ?? "text";
@@ -198,14 +197,14 @@ export const writeToolRenderer = {
 		const spinner =
 			options?.spinnerFrame !== undefined ? formatStatusIcon("running", uiTheme, options.spinnerFrame) : "";
 
-		let text = `${ui.title("Write")} ${spinner ? `${spinner} ` : ""}${langIcon} ${pathDisplay}`;
+		let text = `${formatTitle("Write", uiTheme)} ${spinner ? `${spinner} ` : ""}${langIcon} ${pathDisplay}`;
 
 		if (!args.content) {
 			return new Text(text, 0, 0);
 		}
 
 		// Show streaming preview of content (tail)
-		text += formatStreamingContent(args.content, uiTheme, ui);
+		text += formatStreamingContent(args.content, uiTheme);
 
 		return new Text(text, 0, 0);
 	},
@@ -216,7 +215,6 @@ export const writeToolRenderer = {
 		uiTheme: Theme,
 		args?: WriteRenderArgs,
 	): Component {
-		const ui = new ToolUIKit(uiTheme);
 		const rawPath = args?.file_path || args?.path || "";
 		const filePath = shortenPath(rawPath);
 		const fileContent = args?.content || "";
@@ -247,7 +245,7 @@ export const writeToolRenderer = {
 
 				let text = header;
 				text += `\n${metadataLine}`;
-				text += renderContentPreview(fileContent, expanded, uiTheme, ui);
+				text += renderContentPreview(fileContent, expanded, uiTheme);
 
 				if (diagnostics) {
 					const diagText = formatDiagnostics(diagnostics, expanded, uiTheme, fp =>

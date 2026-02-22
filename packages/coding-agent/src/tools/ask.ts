@@ -24,7 +24,7 @@ import { type Theme, theme } from "../modes/theme/theme";
 import askDescription from "../prompts/tools/ask.md" with { type: "text" };
 import { renderStatusLine } from "../tui";
 import type { ToolSession } from ".";
-import { ToolUIKit } from "./render-utils";
+import { formatErrorMessage, formatMeta, formatTitle } from "./render-utils";
 
 // =============================================================================
 // Types
@@ -75,8 +75,6 @@ export interface AskToolDetails {
 
 const OTHER_OPTION = "Other (type your own)";
 const RECOMMENDED_SUFFIX = " (Recommended)";
-/** Default timeout in milliseconds (used when settings unavailable) */
-const _DEFAULT_ASK_TIMEOUT_MS = 30000;
 
 function getDoneOptionLabel(): string {
 	return `${theme.status.success} Done selecting`;
@@ -381,8 +379,7 @@ interface AskRenderArgs {
 
 export const askToolRenderer = {
 	renderCall(args: AskRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
-		const ui = new ToolUIKit(uiTheme);
-		const label = ui.title("Ask");
+		const label = formatTitle("Ask", uiTheme);
 
 		// Multi-part questions
 		if (args.questions && args.questions.length > 0) {
@@ -417,14 +414,14 @@ export const askToolRenderer = {
 
 		// Single question
 		if (!args.question) {
-			return new Text(ui.errorMessage("No question provided"), 0, 0);
+			return new Text(formatErrorMessage("No question provided", uiTheme), 0, 0);
 		}
 
 		let text = `${label} ${uiTheme.fg("accent", args.question)}`;
 		const meta: string[] = [];
 		if (args.multi) meta.push("multi");
 		if (args.options?.length) meta.push(`options:${args.options.length}`);
-		text += ui.meta(meta);
+		text += formatMeta(meta, uiTheme);
 
 		if (args.options?.length) {
 			for (let i = 0; i < args.options.length; i++) {

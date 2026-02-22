@@ -6,6 +6,7 @@
 import * as os from "node:os";
 import { type Component, truncateToWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-tui";
 import { theme } from "../../../modes/theme/theme";
+import { shortenPath } from "../../../tools/render-utils";
 import type { Extension, ExtensionState } from "./types";
 
 export class InspectorPanel implements Component {
@@ -46,7 +47,13 @@ export class InspectorPanel implements Component {
 		lines.push(theme.fg("muted", "Origin:"));
 		const levelLabel = ext.source.level === "user" ? "User" : ext.source.level === "project" ? "Project" : "Native";
 		lines.push(`  ${theme.italic(`via ${ext.source.providerName} (${levelLabel})`)}`);
-		lines.push(`  ${theme.fg("dim", this.#shortenPath(ext.path))}`);
+		const shortened = shortenPath(ext.path, os.homedir());
+		// If path is very long, show just the last parts
+		const displayPath =
+			shortened.length > 40 && shortened.split("/").length > 3
+				? `.../${shortened.split("/").slice(-3).join("/")}`
+				: shortened;
+		lines.push(`  ${theme.fg("dim", displayPath)}`);
 		lines.push("");
 
 		// Status badge
@@ -300,22 +307,5 @@ export class InspectorPanel implements Component {
 			case "shadowed":
 				return theme.fg("warning", `${theme.status.shadowed} Shadowed${shadowedBy ? ` by ${shadowedBy}` : ""}`);
 		}
-	}
-
-	#shortenPath(path: string): string {
-		const home = os.homedir();
-		if (home && path.startsWith(home)) {
-			return `~${path.slice(home.length)}`;
-		}
-
-		// If path is very long, show just the last parts
-		if (path.length > 40) {
-			const parts = path.split("/");
-			if (parts.length > 3) {
-				return `.../${parts.slice(-3).join("/")}`;
-			}
-		}
-
-		return path;
 	}
 }

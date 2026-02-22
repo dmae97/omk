@@ -6,8 +6,7 @@
 import { sanitizeText } from "@oh-my-pi/pi-natives";
 import { Container, Loader, Spacer, Text, type TUI } from "@oh-my-pi/pi-tui";
 import { getSymbolTheme, highlightCode, theme } from "../../modes/theme/theme";
-import type { TruncationMeta } from "../../tools/output-meta";
-import { formatBytes } from "../../tools/render-utils";
+import { formatTruncationMetaNotice, type TruncationMeta } from "../../tools/output-meta";
 import { DynamicBorder } from "./dynamic-border";
 import { truncateToVisualLines } from "./visual-truncate";
 
@@ -151,20 +150,7 @@ export class PythonExecutionComponent extends Container {
 			}
 
 			if (this.#truncation) {
-				const warnings: string[] = [];
-				if (this.#truncation.artifactId) {
-					warnings.push(`Full output: artifact://${this.#truncation.artifactId}`);
-				}
-				if (this.#truncation.truncatedBy === "lines") {
-					warnings.push(
-						`Truncated: showing ${this.#truncation.outputLines} of ${this.#truncation.totalLines} lines`,
-					);
-				} else {
-					warnings.push(
-						`Truncated: ${this.#truncation.outputLines} lines shown (${formatBytes(this.#truncation.outputBytes)} limit)`,
-					);
-				}
-				statusParts.push(theme.fg("warning", warnings.join(". ")));
+				statusParts.push(theme.fg("warning", formatTruncationMetaNotice(this.#truncation)));
 			}
 
 			if (statusParts.length > 0) {

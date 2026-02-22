@@ -10,13 +10,15 @@ import { renderDiff as renderDiffColored } from "../modes/components/diff";
 import { getLanguageFromPath, type Theme } from "../modes/theme/theme";
 import type { OutputMeta } from "../tools/output-meta";
 import {
+	formatDiagnostics,
+	formatDiffStats,
 	formatExpandHint,
 	formatStatusIcon,
+	formatTitle,
 	getDiffStats,
 	PREVIEW_LIMITS,
 	replaceTabs,
 	shortenPath,
-	ToolUIKit,
 	truncateDiffByHunk,
 } from "../tools/render-utils";
 import { Ellipsis, Hasher, type RenderCache, renderStatusLine, truncateToWidth } from "../tui";
@@ -120,7 +122,7 @@ function formatStreamingDiff(diff: string, rawPath: string, uiTheme: Theme, labe
 	return text;
 }
 
-function formatStreamingHashlineEdits(edits: unknown[], uiTheme: Theme, ui: ToolUIKit): string {
+function formatStreamingHashlineEdits(edits: unknown[], uiTheme: Theme): string {
 	const MAX_EDITS = 4;
 	const MAX_DST_LINES = 8;
 	let text = "\n\n";
@@ -132,17 +134,17 @@ function formatStreamingHashlineEdits(edits: unknown[], uiTheme: Theme, ui: Tool
 		shownEdits++;
 		if (shownEdits > MAX_EDITS) break;
 		const formatted = formatHashlineEdit(edit);
-		text += uiTheme.fg("toolOutput", ui.truncate(replaceTabs(formatted.srcLabel), 120));
+		text += uiTheme.fg("toolOutput", truncateToWidth(replaceTabs(formatted.srcLabel), 120));
 		text += "\n";
 		if (formatted.dst === "") {
-			text += uiTheme.fg("dim", ui.truncate("  (delete)", 120));
+			text += uiTheme.fg("dim", truncateToWidth("  (delete)", 120));
 			text += "\n";
 			continue;
 		}
 		for (const dstLine of formatted.dst.split("\n")) {
 			shownDstLines++;
 			if (shownDstLines > MAX_DST_LINES) break;
-			text += uiTheme.fg("toolOutput", ui.truncate(replaceTabs(`+ ${dstLine}`), 120));
+			text += uiTheme.fg("toolOutput", truncateToWidth(replaceTabs(`+ ${dstLine}`), 120));
 			text += "\n";
 		}
 		if (shownDstLines > MAX_DST_LINES) break;
@@ -221,15 +223,15 @@ function renderDiffSection(
 	rawPath: string,
 	expanded: boolean,
 	uiTheme: Theme,
-	ui: ToolUIKit,
 	renderDiffFn: (t: string, o?: { filePath?: string }) => string,
 ): string {
 	let text = "";
 	const diffStats = getDiffStats(diff);
-	text += `\n${uiTheme.fg("dim", uiTheme.format.bracketLeft)}${ui.formatDiffStats(
+	text += `\n${uiTheme.fg("dim", uiTheme.format.bracketLeft)}${formatDiffStats(
 		diffStats.added,
 		diffStats.removed,
 		diffStats.hunks,
+		uiTheme,
 	)}${uiTheme.fg("dim", uiTheme.format.bracketRight)}`;
 
 	const {
@@ -254,7 +256,6 @@ export const editToolRenderer = {
 	mergeCallAndResult: true,
 
 	renderCall(args: EditRenderArgs, options: RenderResultOptions, uiTheme: Theme): Component {
-		const ui = new ToolUIKit(uiTheme);
 		const rawPath = args.file_path || args.path || "";
 		const filePath = shortenPath(rawPath);
 		const editLanguage = getLanguageFromPath(rawPath) ?? "text";
@@ -270,7 +271,7 @@ export const editToolRenderer = {
 		const opTitle = args.op === "create" ? "Create" : args.op === "delete" ? "Delete" : "Edit";
 		const spinner =
 			options?.spinnerFrame !== undefined ? formatStatusIcon("running", uiTheme, options.spinnerFrame) : "";
-		let text = `${ui.title(opTitle)} ${spinner ? `${spinner} ` : ""}${editIcon} ${pathDisplay}`;
+		let text = `${formatTitle(opTitle, uiTheme)} ${spinner ? `${spinner} ` : ""}${editIcon} ${pathDisplay}`;
 
 		// Show streaming preview of diff/content
 		if (args.previewDiff) {
@@ -278,13 +279,13 @@ export const editToolRenderer = {
 		} else if (args.diff && args.op) {
 			text += formatStreamingDiff(args.diff, rawPath, uiTheme);
 		} else if (args.edits && args.edits.length > 0) {
-			text += formatStreamingHashlineEdits(args.edits, uiTheme, ui);
+			text += formatStreamingHashlineEdits(args.edits, uiTheme);
 		} else if (args.diff) {
 			const previewLines = args.diff.split("\n");
 			const maxLines = 6;
 			text += "\n\n";
 			for (const line of previewLines.slice(0, maxLines)) {
-				text += `${uiTheme.fg("toolOutput", ui.truncate(replaceTabs(line), 80))}\n`;
+				text += `${uiTheme.fg("toolOutput", truncateToWidth(replaceTabs(line), 80))}\n`;
 			}
 			if (previewLines.length > maxLines) {
 				text += uiTheme.fg("dim", `… ${previewLines.length - maxLines} more lines`);
@@ -294,7 +295,7 @@ export const editToolRenderer = {
 			const maxLines = 6;
 			text += "\n\n";
 			for (const line of previewLines.slice(0, maxLines)) {
-				text += `${uiTheme.fg("toolOutput", ui.truncate(replaceTabs(line), 80))}\n`;
+				text += `${uiTheme.fg("toolOutput", truncateToWidth(replaceTabs(line), 80))}\n`;
 			}
 			if (previewLines.length > maxLines) {
 				text += uiTheme.fg("dim", `… ${previewLines.length - maxLines} more lines`);
@@ -310,7 +311,6 @@ export const editToolRenderer = {
 		uiTheme: Theme,
 		args?: EditRenderArgs,
 	): Component {
-		const ui = new ToolUIKit(uiTheme);
 		const rawPath = args?.file_path || args?.path || "";
 		const filePath = shortenPath(rawPath);
 		const editLanguage = getLanguageFromPath(rawPath) ?? "text";
@@ -370,18 +370,18 @@ export const editToolRenderer = {
 						text += `\n\n${uiTheme.fg("error", replaceTabs(errorText))}`;
 					}
 				} else if (result.details?.diff) {
-					text += renderDiffSection(result.details.diff, rawPath, expanded, uiTheme, ui, renderDiffFn);
+					text += renderDiffSection(result.details.diff, rawPath, expanded, uiTheme, renderDiffFn);
 				} else if (editDiffPreview) {
 					if ("error" in editDiffPreview) {
 						text += `\n\n${uiTheme.fg("error", replaceTabs(editDiffPreview.error))}`;
 					} else if (editDiffPreview.diff) {
-						text += renderDiffSection(editDiffPreview.diff, rawPath, expanded, uiTheme, ui, renderDiffFn);
+						text += renderDiffSection(editDiffPreview.diff, rawPath, expanded, uiTheme, renderDiffFn);
 					}
 				}
 
 				// Show LSP diagnostics if available
 				if (result.details?.diagnostics) {
-					text += ui.formatDiagnostics(result.details.diagnostics, expanded, (fp: string) =>
+					text += formatDiagnostics(result.details.diagnostics, expanded, uiTheme, (fp: string) =>
 						uiTheme.getLangIcon(getLanguageFromPath(fp)),
 					);
 				}

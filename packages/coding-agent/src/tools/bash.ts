@@ -20,9 +20,9 @@ import { type BashInteractiveResult, runInteractiveBashPty } from "./bash-intera
 import { checkBashInterception } from "./bash-interceptor";
 import { applyHeadTail } from "./bash-normalize";
 import { expandInternalUrls } from "./bash-skill-urls";
-import type { OutputMeta } from "./output-meta";
+import { formatStyledTruncationWarning, type OutputMeta } from "./output-meta";
 import { resolveToCwd } from "./path-utils";
-import { formatBytes, replaceTabs, wrapBrackets } from "./render-utils";
+import { replaceTabs } from "./render-utils";
 import { ToolAbortError, ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
 
@@ -255,7 +255,6 @@ export const bashToolRenderer = {
 		const isError = result.isError === true;
 		const header = renderStatusLine({ icon: isError ? "error" : "success", title: "Bash" }, uiTheme);
 		const details = result.details;
-		const truncation = details?.meta?.truncation;
 		const outputBlock = new CachedOutputBlock();
 
 		return {
@@ -280,21 +279,8 @@ export const bashToolRenderer = {
 							)
 						: undefined;
 				let warningLine: string | undefined;
-				if (truncation && !showingFullOutput) {
-					const warnings: string[] = [];
-					if (truncation?.artifactId) {
-						warnings.push(`Full output: artifact://${truncation.artifactId}`);
-					}
-					if (truncation.truncatedBy === "lines") {
-						warnings.push(`Truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines`);
-					} else {
-						warnings.push(
-							`Truncated: ${truncation.outputLines} lines shown (${formatBytes(truncation.outputBytes)} limit)`,
-						);
-					}
-					if (warnings.length > 0) {
-						warningLine = uiTheme.fg("warning", wrapBrackets(warnings.join(". "), uiTheme));
-					}
+				if (details?.meta?.truncation && !showingFullOutput) {
+					warningLine = formatStyledTruncationWarning(details.meta, uiTheme) ?? undefined;
 				}
 
 				const outputLines: string[] = [];

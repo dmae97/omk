@@ -192,7 +192,14 @@ export {
 	type SessionStats,
 } from "./session/agent-session";
 // Auth and model registry
-export { type ApiKeyCredential, type AuthCredential, AuthStorage, type OAuthCredential } from "./session/auth-storage";
+export {
+	type ApiKeyCredential,
+	type AuthCredential,
+	type AuthCredentialStore,
+	AuthStorage,
+	type OAuthCredential,
+	type StoredAuthCredential,
+} from "./session/auth-storage";
 // Compaction
 export {
 	type BranchPreparation,

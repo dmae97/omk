@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import * as readline from "node:readline";
-import { CliAuthStorage } from "./storage";
+import { AuthCredentialStore } from "./auth-storage";
 import { getOAuthProviders } from "./utils/oauth";
 import { loginAnthropic } from "./utils/oauth/anthropic";
 import { loginCursor } from "./utils/oauth/cursor";
@@ -70,7 +70,7 @@ async function login(provider: OAuthProvider): Promise<void> {
 	const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
 	const promptFn = (msg: string) => prompt(rl, `${msg} `);
-	const storage = await CliAuthStorage.create();
+	const storage = await AuthCredentialStore.open();
 
 	try {
 		let credentials: OAuthCredentials;
@@ -276,7 +276,7 @@ Examples:
 	}
 
 	if (command === "status") {
-		const storage = await CliAuthStorage.create();
+		const storage = await AuthCredentialStore.open();
 		try {
 			const providers = storage.listProviders();
 			if (providers.length === 0) {
@@ -315,7 +315,7 @@ Examples:
 
 	if (command === "logout") {
 		let provider = args[1] as OAuthProvider | undefined;
-		const storage = await CliAuthStorage.create();
+		const storage = await AuthCredentialStore.open();
 
 		try {
 			if (!provider) {

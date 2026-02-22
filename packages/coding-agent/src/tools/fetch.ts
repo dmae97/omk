@@ -20,8 +20,8 @@ import { finalizeOutput, loadPage, MAX_OUTPUT_CHARS } from "../web/scrapers/type
 import { convertWithMarkitdown, fetchBinary } from "../web/scrapers/utils";
 import type { ToolSession } from ".";
 import { applyListLimit } from "./list-limit";
-import type { OutputMeta } from "./output-meta";
-import { formatExpandHint } from "./render-utils";
+import { formatStyledArtifactReference, type OutputMeta } from "./output-meta";
+import { formatExpandHint, getDomain } from "./render-utils";
 import { ToolAbortError } from "./tool-errors";
 import { toolResult } from "./tool-result";
 
@@ -948,16 +948,6 @@ function truncate(text: string, maxLen: number, ellipsis: string): string {
 	return `${text.slice(0, sliceLen)}${ellipsis}`;
 }
 
-/** Extract domain from URL */
-function getDomain(url: string): string {
-	try {
-		const u = new URL(url);
-		return u.hostname.replace(/^www\./, "");
-	} catch {
-		return url;
-	}
-}
-
 /** Count non-empty lines */
 function countNonEmptyLines(text: string): number {
 	return text.split("\n").filter(l => l.trim()).length;
@@ -1028,9 +1018,7 @@ export function renderFetchResult(
 	metadataLines.push(`${uiTheme.fg("muted", "Chars:")} ${charCount}`);
 	if (truncated) {
 		metadataLines.push(uiTheme.fg("warning", `${uiTheme.status.warning} Output truncated`));
-		if (truncation?.artifactId) {
-			metadataLines.push(uiTheme.fg("warning", `Full output: artifact://${truncation.artifactId}`));
-		}
+		if (truncation?.artifactId) metadataLines.push(formatStyledArtifactReference(truncation.artifactId, uiTheme));
 	}
 	if (hasNotes) {
 		metadataLines.push(`${uiTheme.fg("muted", "Notes:")} ${details.notes.join("; ")}`);

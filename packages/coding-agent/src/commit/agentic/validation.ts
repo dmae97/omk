@@ -1,6 +1,7 @@
 import { stripTypePrefix } from "../../commit/analysis/summary";
 import { validateSummary } from "../../commit/analysis/validation";
 import type { CommitType, ConventionalDetail } from "../../commit/types";
+import { normalizeUnicode } from "../../patch/normalize";
 
 export const SUMMARY_MAX_CHARS = 72;
 export const MAX_DETAIL_ITEMS = 6;
@@ -61,27 +62,9 @@ const pastTenseVerbs = new Set([
 ]);
 const pastTenseEdExceptions = new Set(["hundred", "red", "bed"]);
 
-const unicodeReplacements: Array<[RegExp, string]> = [
-	[/[\u2018\u2019]/g, "'"],
-	[/[\u201C\u201D]/g, '"'],
-	[/[\u2013\u2014\u2212]/g, "-"],
-	[/\u2260/g, "!="],
-	[/\u00BD/g, "1/2"],
-	[/\u03BB/g, "lambda"],
-	[/[\u200B-\u200D\uFEFF]/g, ""],
-];
-
 export function normalizeSummary(summary: string, type: CommitType, scope: string | null): string {
 	const stripped = stripTypePrefix(summary, type, scope);
 	return normalizeUnicode(stripped).replace(/\s+/g, " ").trim();
-}
-
-export function normalizeUnicode(text: string): string {
-	let result = text;
-	for (const [pattern, replacement] of unicodeReplacements) {
-		result = result.replace(pattern, replacement);
-	}
-	return result.normalize("NFC");
 }
 
 export function validateSummaryRules(summary: string): { errors: string[]; warnings: string[] } {

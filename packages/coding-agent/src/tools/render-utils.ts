@@ -217,7 +217,7 @@ export function formatEmptyMessage(message: string, theme: Theme): string {
 }
 
 // =============================================================================
-// Tool UI Kit
+// Tool UI Helpers
 // =============================================================================
 
 export type ToolUIStatus = "success" | "error" | "warning" | "info" | "pending" | "running" | "aborted";
@@ -227,98 +227,14 @@ export interface ToolUITitleOptions {
 	bold?: boolean;
 }
 
+export function formatTitle(label: string, theme: Theme, options?: ToolUITitleOptions): string {
+	const content = options?.bold === false ? label : theme.bold(label);
+	return theme.fg("toolTitle", content);
+}
+
 // =============================================================================
 // Diagnostic Formatting
 // =============================================================================
-
-export class ToolUIKit {
-	constructor(public theme: Theme) {}
-
-	title(label: string, options?: ToolUITitleOptions): string {
-		const content = options?.bold === false ? label : this.theme.bold(label);
-		return this.theme.fg("toolTitle", content);
-	}
-
-	meta(meta: string[]): string {
-		return formatMeta(meta, this.theme);
-	}
-
-	count(label: string, count: number): string {
-		return formatCount(label, count);
-	}
-
-	moreItems(remaining: number, itemType: string): string {
-		return formatMoreItems(remaining, itemType);
-	}
-
-	expandHint(expanded: boolean, hasMore: boolean): string {
-		return formatExpandHint(this.theme, expanded, hasMore);
-	}
-
-	scope(scopePath?: string): string {
-		return formatScope(scopePath, this.theme);
-	}
-
-	truncationSuffix(truncated: boolean): string {
-		return formatTruncationSuffix(truncated, this.theme);
-	}
-
-	errorMessage(message: string | undefined): string {
-		return formatErrorMessage(message, this.theme);
-	}
-
-	emptyMessage(message: string): string {
-		return formatEmptyMessage(message, this.theme);
-	}
-
-	badge(label: string, color: ToolUIColor): string {
-		return formatBadge(label, color, this.theme);
-	}
-
-	statusIcon(status: ToolUIStatus, spinnerFrame?: number): string {
-		return formatStatusIcon(status, this.theme, spinnerFrame);
-	}
-
-	wrapBrackets(text: string): string {
-		return wrapBrackets(text, this.theme);
-	}
-
-	truncate(text: string, maxLen: number): string {
-		return truncateToWidth(text, maxLen);
-	}
-
-	previewLines(text: string, maxLines: number, maxLineLen: number): string[] {
-		return getPreviewLines(text, maxLines, maxLineLen);
-	}
-
-	formatBytes(bytes: number): string {
-		return formatBytes(bytes);
-	}
-
-	formatTokens(tokens: number): string {
-		return formatTokens(tokens);
-	}
-
-	formatDuration(ms: number): string {
-		return formatDuration(ms);
-	}
-
-	formatAge(ageSeconds: number | null | undefined): string {
-		return formatAge(ageSeconds);
-	}
-
-	formatDiagnostics(
-		diag: { errored: boolean; summary: string; messages: string[] },
-		expanded: boolean,
-		getLangIcon: (filePath: string) => string,
-	): string {
-		return formatDiagnostics(diag, expanded, this.theme, getLangIcon);
-	}
-
-	formatDiffStats(added: number, removed: number, hunks: number): string {
-		return formatDiffStats(added, removed, hunks, this.theme);
-	}
-}
 
 interface ParsedDiagnostic {
 	filePath: string;

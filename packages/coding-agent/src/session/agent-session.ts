@@ -43,12 +43,7 @@ import { getAgentDbPath } from "@oh-my-pi/pi-utils/dirs";
 import type { Rule } from "../capability/rule";
 import { MODEL_ROLE_IDS, type ModelRegistry, type ModelRole } from "../config/model-registry";
 import { expandRoleAlias, parseModelString } from "../config/model-resolver";
-import {
-	expandPromptTemplate,
-	type PromptTemplate,
-	parseCommandArgs,
-	renderPromptTemplate,
-} from "../config/prompt-templates";
+import { expandPromptTemplate, type PromptTemplate, renderPromptTemplate } from "../config/prompt-templates";
 import type { Settings, SkillsSettings } from "../config/settings";
 import { type BashResult, executeBash as executeBashCommand } from "../exec/bash-executor";
 import { exportSessionToHtml } from "../export/html";
@@ -93,6 +88,7 @@ import { unmountAll } from "../ssh/sshfs-mount";
 import { outputMeta } from "../tools/output-meta";
 import { resolveToCwd } from "../tools/path-utils";
 import type { TodoItem } from "../tools/todo-write";
+import { parseCommandArgs } from "../utils/command-args";
 import { resolveFileDisplayMode } from "../utils/file-display-mode";
 import { extractFileMentions, generateFileMentionMessages } from "../utils/file-mentions";
 import {

@@ -15,7 +15,7 @@ import { DEFAULT_MAX_COLUMN, type TruncationResult, truncateHead } from "../sess
 import { Ellipsis, Hasher, type RenderCache, renderStatusLine, renderTreeList, truncateToWidth } from "../tui";
 import { resolveFileDisplayMode } from "../utils/file-display-mode";
 import type { ToolSession } from ".";
-import type { OutputMeta } from "./output-meta";
+import { formatFullOutputReference, type OutputMeta } from "./output-meta";
 import { resolveToCwd } from "./path-utils";
 import { formatCount, formatEmptyMessage, formatErrorMessage, PREVIEW_LIMITS } from "./render-utils";
 import { ToolError } from "./tool-errors";
@@ -452,7 +452,7 @@ export const grepToolRenderer = {
 		if (limits?.resultLimit) truncationReasons.push(`limit ${limits.resultLimit.reached} results`);
 		if (truncation) truncationReasons.push(truncation.truncatedBy === "lines" ? "line limit" : "size limit");
 		if (limits?.columnTruncated) truncationReasons.push(`line length ${limits.columnTruncated.maxColumn}`);
-		if (truncation?.artifactId) truncationReasons.push(`full output: artifact://${truncation.artifactId}`);
+		if (truncation?.artifactId) truncationReasons.push(formatFullOutputReference(truncation.artifactId));
 
 		const extraLines =
 			truncationReasons.length > 0 ? [uiTheme.fg("warning", `truncated: ${truncationReasons.join(", ")}`)] : [];

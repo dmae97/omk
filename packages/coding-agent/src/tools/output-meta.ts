@@ -12,8 +12,9 @@ import type {
 	AgentToolUpdateCallback,
 } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent, TextContent } from "@oh-my-pi/pi-ai";
+import type { Theme } from "../modes/theme/theme";
 import type { OutputSummary, TruncationResult } from "../session/streaming-output";
-import { formatBytes } from "./render-utils";
+import { formatBytes, wrapBrackets } from "./render-utils";
 import { renderError } from "./tool-errors";
 
 /**
@@ -312,6 +313,44 @@ export function outputMeta(): OutputMetaBuilder {
 // Notice formatting
 // =============================================================================
 
+export function formatFullOutputReference(artifactId: string): string {
+	return `Full output: artifact://${artifactId}`;
+}
+
+export function formatTruncationMetaNotice(truncation: TruncationMeta): string {
+	const range = truncation.shownRange;
+	let notice: string;
+
+	if (range && range.end >= range.start) {
+		notice = `Showing lines ${range.start}-${range.end} of ${truncation.totalLines}`;
+	} else {
+		notice = `Showing ${truncation.outputLines} of ${truncation.totalLines} lines`;
+	}
+
+	if (truncation.truncatedBy === "bytes") {
+		const maxBytes = truncation.maxBytes ?? truncation.outputBytes;
+		notice += ` (${formatBytes(maxBytes)} limit)`;
+	}
+
+	if (truncation.nextOffset != null) {
+		notice += `. Use offset=${truncation.nextOffset} to continue`;
+	}
+
+	if (truncation.artifactId != null) {
+		notice += `. ${formatFullOutputReference(truncation.artifactId)}`;
+	}
+
+	return notice;
+}
+
+/**
+ * Format styled artifact reference with warning color and brackets.
+ * For TUI rendering of truncation warnings.
+ */
+export function formatStyledArtifactReference(artifactId: string, theme: Theme): string {
+	return theme.fg("warning", formatFullOutputReference(artifactId));
+}
+
 /**
  * Format notices from OutputMeta for LLM consumption.
  * Returns empty string if no notices needed.
@@ -323,29 +362,7 @@ export function formatOutputNotice(meta: OutputMeta | undefined): string {
 
 	// Truncation notice
 	if (meta.truncation) {
-		const t = meta.truncation;
-		const range = t.shownRange;
-		let notice: string;
-
-		if (range && range.end >= range.start) {
-			notice = `Showing lines ${range.start}-${range.end} of ${t.totalLines}`;
-		} else {
-			notice = `Showing ${t.outputLines} of ${t.totalLines} lines`;
-		}
-
-		if (t.truncatedBy === "bytes") {
-			const maxBytes = t.maxBytes ?? t.outputBytes;
-			notice += ` (${formatBytes(maxBytes)} limit)`;
-		}
-
-		if (t.nextOffset != null) {
-			notice += `. Use offset=${t.nextOffset} to continue`;
-		}
-		if (t.artifactId != null) {
-			notice += `. Full: artifact://${t.artifactId}`;
-		}
-
-		parts.push(notice);
+		parts.push(formatTruncationMetaNotice(meta.truncation));
 	}
 
 	// Limit notices
@@ -374,6 +391,16 @@ export function formatOutputNotice(meta: OutputMeta | undefined): string {
 
 	const notice = parts.length ? `\n\n[${parts.join(". ")}]` : "";
 	return notice + diagnosticsNotice;
+}
+
+/**
+ * Format a styled truncation warning message.
+ * Returns null if no truncation metadata present.
+ */
+export function formatStyledTruncationWarning(meta: OutputMeta | undefined, theme: Theme): string | null {
+	if (!meta?.truncation) return null;
+	const message = formatTruncationMetaNotice(meta.truncation);
+	return theme.fg("warning", wrapBrackets(message, theme));
 }
 
 // =============================================================================

@@ -11,7 +11,12 @@ import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import { glob } from "@oh-my-pi/pi-natives";
 import { formatHashLines } from "../patch/hashline";
 import type { FileMentionMessage } from "../session/messages";
-import { DEFAULT_MAX_BYTES, truncateHead, truncateHeadBytes } from "../session/streaming-output";
+import {
+	DEFAULT_MAX_BYTES,
+	formatHeadTruncationNotice,
+	truncateHead,
+	truncateHeadBytes,
+} from "../session/streaming-output";
 import { resolveReadPath } from "../tools/path-utils";
 import { formatAge, formatBytes } from "../tools/render-utils";
 import { fuzzyMatch } from "./fuzzy";
@@ -181,16 +186,7 @@ function buildTextOutput(textContent: string): { output: string; lineCount: numb
 	let outputText = truncation.content;
 
 	if (truncation.truncated) {
-		const endLineDisplay = truncation.outputLines;
-		const nextOffset = endLineDisplay + 1;
-
-		if (truncation.truncatedBy === "lines") {
-			outputText += `\n\n[Showing lines 1-${endLineDisplay} of ${totalFileLines}. Use offset=${nextOffset} to continue]`;
-		} else {
-			outputText += `\n\n[Showing lines 1-${endLineDisplay} of ${totalFileLines} (${formatBytes(
-				DEFAULT_MAX_BYTES,
-			)} limit). Use offset=${nextOffset} to continue]`;
-		}
+		outputText += formatHeadTruncationNotice(truncation, { startLine: 1, totalFileLines });
 	}
 
 	return { output: outputText, lineCount: totalFileLines };

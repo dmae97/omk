@@ -8,9 +8,9 @@ import * as typebox from "@sinclair/typebox";
 import { hookCapability } from "../../capability/hook";
 import type { Hook } from "../../discovery";
 import { loadCapability } from "../../discovery";
-import { expandPath } from "../../discovery/helpers";
 import type { HookMessage } from "../../session/messages";
 import type { SessionManager } from "../../session/session-manager";
+import { expandPath } from "../../tools/path-utils";
 import { execCommand } from "./runner";
 import type { ExecOptions, HookAPI, HookFactory, HookMessageRenderer, RegisteredCommand } from "./types";
 

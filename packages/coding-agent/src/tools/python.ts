@@ -22,9 +22,9 @@ import {
 } from "../session/streaming-output";
 import { getTreeBranch, getTreeContinuePrefix, renderCodeCell } from "../tui";
 import type { ToolSession } from ".";
-import type { OutputMeta } from "./output-meta";
+import { formatStyledTruncationWarning, type OutputMeta } from "./output-meta";
 import { resolveToCwd } from "./path-utils";
-import { replaceTabs, shortenPath, ToolUIKit, truncateToWidth } from "./render-utils";
+import { formatTitle, replaceTabs, shortenPath, truncateToWidth, wrapBrackets } from "./render-utils";
 import { ToolAbortError, ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
 
@@ -839,7 +839,6 @@ function formatCellOutputLines(
 
 export const pythonToolRenderer = {
 	renderCall(args: PythonRenderArgs, _options: RenderResultOptions, uiTheme: Theme): Component {
-		const ui = new ToolUIKit(uiTheme);
 		const cells = args.cells ?? [];
 		const cwd = getProjectDir();
 		let displayWorkdir = args.cwd;
@@ -863,7 +862,7 @@ export const pythonToolRenderer = {
 		if (cells.length === 0) {
 			const prompt = uiTheme.fg("accent", ">>>");
 			const prefix = workdirLabel ? `${uiTheme.fg("dim", `${workdirLabel} && `)}` : "";
-			const text = ui.title(`${prompt} ${prefix}…`);
+			const text = formatTitle(`${prompt} ${prefix}…`, uiTheme);
 			return new Text(text, 0, 0);
 		}
 
@@ -915,7 +914,6 @@ export const pythonToolRenderer = {
 		options: RenderResultOptions & { renderContext?: PythonRenderContext },
 		uiTheme: Theme,
 	): Component {
-		const ui = new ToolUIKit(uiTheme);
 		const details = result.details;
 
 		const output =
@@ -928,28 +926,14 @@ export const pythonToolRenderer = {
 			return [header, ...treeLines];
 		});
 
-		const truncation = details?.meta?.truncation;
 		const timeoutSeconds = options.renderContext?.timeout;
 		const timeoutLine =
 			typeof timeoutSeconds === "number"
-				? uiTheme.fg("dim", ui.wrapBrackets(`Timeout: ${timeoutSeconds}s`))
+				? uiTheme.fg("dim", wrapBrackets(`Timeout: ${timeoutSeconds}s`, uiTheme))
 				: undefined;
 		let warningLine: string | undefined;
-		if (truncation) {
-			const warnings: string[] = [];
-			if (truncation.artifactId) {
-				warnings.push(`Full output: artifact://${truncation.artifactId}`);
-			}
-			if (truncation.truncatedBy === "lines") {
-				warnings.push(`Truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines`);
-			} else {
-				warnings.push(
-					`Truncated: ${truncation.outputLines} lines shown (${ui.formatBytes(truncation.outputBytes)} limit)`,
-				);
-			}
-			if (warnings.length > 0) {
-				warningLine = uiTheme.fg("warning", ui.wrapBrackets(warnings.join(". ")));
-			}
+		if (details?.meta?.truncation) {
+			warningLine = formatStyledTruncationWarning(details.meta, uiTheme) ?? undefined;
 		}
 
 		const cellResults = details?.cells;

@@ -1,9 +1,17 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added `AuthCredentialStore` and `StoredAuthCredential` types to public API exports
+- Added `formatFullOutputReference`, `formatStyledArtifactReference`, `formatTruncationMetaNotice`, and `formatStyledTruncationWarning` functions for consistent artifact and truncation message formatting
+- Added `formatTitle`, `formatErrorMessage`, and `formatMeta` helper functions for tool UI rendering
+- Added `shortenPath` function to render-utils for consistent path abbreviation
+- Added `getDomain` function to extract domain from URLs
+- Added `formatHeadTruncationNotice` function to streaming-output for consistent truncation notices
+- Added `jtd-utils.ts` module with shared JTD type definitions and type guard functions
+- Added `command-args.ts` utility module with `parseCommandArgs` and `substituteArgs` functions
+- Added `path-utils.ts` module with `expandPath` function for path expansion with home directory support
 - Added support for GitLab Duo authentication provider
 - Exported truncation utilities and streaming output types from `session/streaming-output` module for public use
 - Added `TailBuffer` class for efficient ring-style buffering with lazy joining and windowed truncation
@@ -14,6 +22,14 @@
 
 ### Changed
 
+- Moved `parseCommandArgs` and `substituteArgs` from prompt-templates and slash-commands to new `utils/command-args` module
+- Moved `expandPath` from discovery/helpers to new `tools/path-utils` module
+- Moved JTD type definitions and type guards from jtd-to-json-schema and jtd-to-typescript to shared `tools/jtd-utils` module
+- Refactored truncation warning formatting in bash, python, and ssh tool renderers to use centralized `formatStyledTruncationWarning` function
+- Refactored tool UI rendering to use standalone formatting functions instead of `ToolUIKit` class
+- Moved `normalizeUnicode` function from validation.ts to `patch/normalize` module
+- Updated `AuthStorage.create()` to accept options parameter with `configValueResolver`
+- Simplified truncation notice generation in multiple tool renderers by using shared formatting utilities
 - Moved truncation logic from `tools/truncate.ts` to `session/streaming-output.ts` for better architectural separation
 - Renamed `formatSize()` to `formatBytes()` across codebase for consistency
 - Refactored `OutputSink` to use windowed byte truncation for memory efficiency when spilling to files
@@ -24,6 +40,12 @@
 
 ### Removed
 
+- Removed `ToolUIKit` class from render-utils (replaced with standalone formatting functions)
+- Removed `normalizeUnicodeSpaces` and `expandPath` from discovery/helpers (moved to path-utils)
+- Removed duplicate JTD type definitions from jtd-to-json-schema and jtd-to-typescript (now in jtd-utils)
+- Removed `AnthropicAuthConfig` and related types from web/search/types (moved to @oh-my-pi/pi-ai)
+- Removed `getDomain` function from fetch.ts (moved to render-utils)
+- Removed inline truncation warning formatting logic from bash, python, ssh, and read tool renderers
 - Deleted `tools/truncate.ts` module (functionality moved to `session/streaming-output.ts`)
 - Deleted `tools/output-utils.ts` module (functionality moved to `session/streaming-output.ts`)
 - Removed `formatSize` export from public API (renamed to `formatBytes`)
@@ -31,6 +53,7 @@
 
 ### Fixed
 
+- Fixed truncation notice formatting consistency across all tool renderers by centralizing logic
 - Fixed UTF-8 boundary handling in byte truncation to prevent invalid character sequences
 - Fixed memory efficiency in `OutputSink` by using windowed truncation instead of full-buffer encoding
 - Fixed line counting to handle chunk boundaries correctly across multiple `push()` calls

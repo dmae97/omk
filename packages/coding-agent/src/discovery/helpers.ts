@@ -1,7 +1,3 @@
-/**
- * Shared helpers for discovery providers.
- */
-import * as os from "node:os";
 import * as path from "node:path";
 import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import { FileType, glob } from "@oh-my-pi/pi-natives";
@@ -14,28 +10,6 @@ import { parseFrontmatter } from "../utils/frontmatter";
 import type { IgnoreMatcher } from "../utils/ignore-files";
 
 const VALID_THINKING_LEVELS: readonly string[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
-const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
-
-/**
- * Normalize unicode spaces to regular spaces.
- */
-export function normalizeUnicodeSpaces(str: string): string {
-	return str.replace(UNICODE_SPACES, " ");
-}
-
-/**
- * Expand ~ to home directory and normalize unicode spaces.
- */
-export function expandPath(p: string): string {
-	const normalized = normalizeUnicodeSpaces(p);
-	if (normalized.startsWith("~/")) {
-		return path.join(os.homedir(), normalized.slice(2));
-	}
-	if (normalized.startsWith("~")) {
-		return path.join(os.homedir(), normalized.slice(1));
-	}
-	return normalized;
-}
 
 /**
  * Standard paths for each config source.
