@@ -10,6 +10,8 @@ export const DEFAULT_MAX_LINES = 3000;
 export const DEFAULT_MAX_BYTES = 50 * 1024; // 50KB
 export const DEFAULT_MAX_COLUMN = 1024; // Max chars per grep match line
 
+const NL = "\n";
+
 // =============================================================================
 // Interfaces
 // =============================================================================
@@ -71,25 +73,101 @@ export interface HeadTruncationNoticeOptions {
 }
 
 // =============================================================================
-// Low-level byte utilities
-//
-// Both use a "windowed encoding" strategy for strings: instead of encoding the
-// entire input with Buffer.from(), we encode a window of at most `maxBytes`
-// code units from the relevant end. Every JS code unit produces ≥1 UTF-8 byte,
-// so this window is guaranteed to contain ≥ maxBytes encoded bytes (unless the
-// input is shorter), avoiding O(N) encoding cost on large strings.
+// Internal low-level helpers
 // =============================================================================
+
+/** Count newline characters via native substring search. */
+function countNewlines(text: string): number {
+	let count = 0;
+	let pos = text.indexOf(NL);
+	while (pos !== -1) {
+		count++;
+		pos = text.indexOf(NL, pos + 1);
+	}
+	return count;
+}
+
+/** Zero-copy view of a Uint8Array as a Buffer (copies only if already a Buffer). */
+function asBuffer(data: Uint8Array): Buffer {
+	return Buffer.isBuffer(data) ? (data as Buffer) : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+}
 
 /** Advance past UTF-8 continuation bytes (10xxxxxx) to a leading byte. */
 function findUtf8BoundaryForward(buf: Buffer, pos: number): number {
-	while (pos < buf.length && (buf[pos] & 0xc0) === 0x80) pos++;
-	return pos;
+	let i = Math.max(0, pos);
+	while (i < buf.length && (buf[i] & 0xc0) === 0x80) i++;
+	return i;
 }
 
 /** Retreat past UTF-8 continuation bytes to land on a leading byte. */
-function findUtf8BoundaryBackward(buf: Buffer, pos: number): number {
-	while (pos > 0 && (buf[pos] & 0xc0) === 0x80) pos--;
-	return pos;
+function findUtf8BoundaryBackward(buf: Buffer, cut: number): number {
+	let i = Math.min(buf.length, Math.max(0, cut));
+	// If the cut is at end-of-buffer, it's already a valid boundary.
+	if (i >= buf.length) return buf.length;
+	while (i > 0 && (buf[i] & 0xc0) === 0x80) i--;
+	return i;
+}
+
+// =============================================================================
+// Byte-level truncation (windowed encoding)
+// =============================================================================
+
+function truncateBytesWindowed(
+	data: string | Uint8Array,
+	maxBytesRaw: number,
+	mode: "head" | "tail",
+): ByteTruncationResult {
+	const maxBytes = maxBytesRaw;
+	if (maxBytes === 0) return { text: "", bytes: 0 };
+
+	// --------------------------
+	// String path (windowed)
+	// --------------------------
+	if (typeof data === "string") {
+		// Fast non-truncation check only when it *might* fit.
+		if (data.length <= maxBytes) {
+			const len = Buffer.byteLength(data, "utf-8");
+			if (len <= maxBytes) return { text: data, bytes: len };
+			// else: multibyte-heavy string; fall through to truncation using full string as window.
+		}
+
+		const window =
+			mode === "head"
+				? data.substring(0, Math.min(data.length, maxBytes))
+				: data.substring(Math.max(0, data.length - maxBytes));
+
+		const buf = Buffer.from(window, "utf-8");
+
+		if (mode === "head") {
+			const end = findUtf8BoundaryBackward(buf, maxBytes);
+			if (end <= 0) return { text: "", bytes: 0 };
+			const slice = buf.subarray(0, end);
+			return { text: slice.toString("utf-8"), bytes: slice.length };
+		} else {
+			const startAt = Math.max(0, buf.length - maxBytes);
+			const start = findUtf8BoundaryForward(buf, startAt);
+			const slice = buf.subarray(start);
+			return { text: slice.toString("utf-8"), bytes: slice.length };
+		}
+	}
+
+	// --------------------------
+	// Uint8Array / Buffer path
+	// --------------------------
+	const buf = asBuffer(data);
+	if (buf.length <= maxBytes) return { text: buf.toString("utf-8"), bytes: buf.length };
+
+	if (mode === "head") {
+		const end = findUtf8BoundaryBackward(buf, maxBytes);
+		if (end <= 0) return { text: "", bytes: 0 };
+		const slice = buf.subarray(0, end);
+		return { text: slice.toString("utf-8"), bytes: slice.length };
+	} else {
+		const startAt = buf.length - maxBytes;
+		const start = findUtf8BoundaryForward(buf, startAt);
+		const slice = buf.subarray(start);
+		return { text: slice.toString("utf-8"), bytes: slice.length };
+	}
 }
 
 /**
@@ -97,24 +175,7 @@ function findUtf8BoundaryBackward(buf: Buffer, pos: number): number {
  * Handles multi-byte UTF-8 boundaries correctly.
  */
 export function truncateTailBytes(data: string | Uint8Array, maxBytes: number): ByteTruncationResult {
-	if (typeof data === "string") {
-		const len = Buffer.byteLength(data, "utf-8");
-		if (len <= maxBytes) return { text: data, bytes: len };
-
-		// Windowed: encode only the last `maxBytes` code units (≥ maxBytes bytes).
-		const window = data.substring(Math.max(0, data.length - maxBytes));
-		const buf = Buffer.from(window, "utf-8");
-		const start = findUtf8BoundaryForward(buf, buf.length - maxBytes);
-		const slice = buf.subarray(start);
-		return { text: slice.toString("utf-8"), bytes: slice.length };
-	}
-
-	// Uint8Array / Buffer path
-	if (data.length <= maxBytes) return { text: Buffer.from(data).toString("utf-8"), bytes: data.length };
-	const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-	const start = findUtf8BoundaryForward(buf, buf.length - maxBytes);
-	const slice = buf.subarray(start);
-	return { text: slice.toString("utf-8"), bytes: slice.length };
+	return truncateBytesWindowed(data, maxBytes, "tail");
 }
 
 /**
@@ -122,43 +183,12 @@ export function truncateTailBytes(data: string | Uint8Array, maxBytes: number): 
  * Handles multi-byte UTF-8 boundaries correctly.
  */
 export function truncateHeadBytes(data: string | Uint8Array, maxBytes: number): ByteTruncationResult {
-	if (typeof data === "string") {
-		const len = Buffer.byteLength(data, "utf-8");
-		if (len <= maxBytes) return { text: data, bytes: len };
-
-		// Windowed: encode only the first `maxBytes` code units.
-		const window = data.substring(0, maxBytes);
-		const buf = Buffer.from(window, "utf-8");
-		const end = findUtf8BoundaryBackward(buf, maxBytes);
-		if (end <= 0) return { text: "", bytes: 0 };
-		const slice = buf.subarray(0, end);
-		return { text: slice.toString("utf-8"), bytes: slice.length };
-	}
-
-	if (data.length <= maxBytes) return { text: Buffer.from(data).toString("utf-8"), bytes: data.length };
-	const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-	const end = findUtf8BoundaryBackward(buf, maxBytes);
-	if (end <= 0) return { text: "", bytes: 0 };
-	const slice = buf.subarray(0, end);
-	return { text: slice.toString("utf-8"), bytes: slice.length };
+	return truncateBytesWindowed(data, maxBytes, "head");
 }
 
 // =============================================================================
 // Line-level utilities
 // =============================================================================
-
-/**
- * Count newline characters. Uses indexOf for V8-optimized native string scanning.
- */
-function countNewlines(text: string): number {
-	let count = 0;
-	let pos = text.indexOf("\n", 0);
-	while (pos !== -1) {
-		count++;
-		pos = text.indexOf("\n", pos + 1);
-	}
-	return count;
-}
 
 /**
  * Truncate a single line to max characters, appending '…' if truncated.
@@ -172,11 +202,7 @@ export function truncateLine(
 }
 
 // =============================================================================
-// Content truncation (line + byte aware)
-//
-// Both truncateHead and truncateTail encode the content to a Buffer once and
-// collect newline byte-offsets in a single forward pass, avoiding split("\n")
-// which would allocate N intermediate strings for N lines.
+// Content truncation (line + byte aware, no full Buffer allocation)
 // =============================================================================
 
 /** Shared helper to build a no-truncation result. */
@@ -203,68 +229,48 @@ function noTruncResult(
 }
 
 /**
- * Collect byte-offsets of every 0x0a in a Buffer. Avoids re-scanning.
- *
- * For a buffer with lines [L0 \n L1 \n L2]:
- *   nlOffsets = [offset_of_first_\n, offset_of_second_\n]
- *   Line k starts at (k === 0 ? 0 : nlOffsets[k-1] + 1)
- *   Line k ends at (k < nlOffsets.length ? nlOffsets[k] - 1 : buf.length - 1)
- */
-function collectNewlineOffsets(buf: Buffer): number[] {
-	const offsets: number[] = [];
-	let pos = Bun.indexOfLine(buf, 0);
-	while (pos !== -1) {
-		offsets.push(pos);
-		pos = Bun.indexOfLine(buf, pos + 1);
-	}
-	return offsets;
-}
-
-/**
  * Truncate content from the head (keep first N lines/bytes).
- * Suitable for file reads where you want to see the beginning.
- *
- * Uses indexOfLine to scan forward incrementally — stops as soon as the
- * line or byte limit is hit without ever collecting all newline positions.
- *
  * Never returns partial lines. If the first line exceeds the byte limit,
  * returns empty content with firstLineExceedsLimit=true.
+ *
+ * This implementation avoids Buffer.from(content) for the whole input.
+ * It only computes UTF-8 byteLength for candidate lines that can still fit.
  */
 export function truncateHead(content: string, options: TruncationOptions = {}): TruncationResult {
 	const maxLines = options.maxLines ?? DEFAULT_MAX_LINES;
 	const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
+
 	const totalBytes = Buffer.byteLength(content, "utf-8");
-
-	// Fast path: if under byte limit, only need a string-level newline count
-	if (totalBytes <= maxBytes) {
-		const totalLines = countNewlines(content) + 1;
-		if (totalLines <= maxLines) {
-			return noTruncResult(content, totalLines, totalBytes, maxLines, maxBytes);
-		}
-	}
-
-	// Slow path: encode once, scan with native indexOfLine
 	const totalLines = countNewlines(content) + 1;
+
 	if (totalLines <= maxLines && totalBytes <= maxBytes) {
 		return noTruncResult(content, totalLines, totalBytes, maxLines, maxBytes);
 	}
 
-	// Forward scan: include complete lines that fit within both limits.
-	// Uses indexOfLine incrementally — no offset array needed.
 	let includedLines = 0;
-	let cutByte = 0;
+	let bytesUsed = 0;
+	let cutIndex = 0; // char index where we cut (exclusive)
+	let cursor = 0;
+
 	let truncatedBy: "lines" | "bytes" = "lines";
-	let scanPos = 0;
 
-	const buf = Buffer.from(content, "utf-8");
 	while (includedLines < maxLines) {
-		const nlPos = Bun.indexOfLine(buf, scanPos);
-		// Byte position right after this line's trailing \n, or end-of-buffer
-		const lineEnd = nlPos === -1 ? buf.length : nlPos + 1;
-		// Output strips a trailing \n from the final slice; enforce limit on displayed bytes
-		const outputEnd = nlPos === -1 ? lineEnd : lineEnd - 1;
+		const nl = content.indexOf(NL, cursor);
+		const lineEnd = nl === -1 ? content.length : nl;
 
-		if (outputEnd > maxBytes) {
+		const sepBytes = includedLines > 0 ? 1 : 0;
+		const remaining = maxBytes - bytesUsed - sepBytes;
+
+		// No room even for separators / bytes.
+		if (remaining < 0) {
+			truncatedBy = "bytes";
+			break;
+		}
+
+		// Fast reject huge lines without slicing/encoding:
+		// UTF-8 bytes >= UTF-16 code units, so if code units exceed remaining, bytes must exceed too.
+		const lineCodeUnits = lineEnd - cursor;
+		if (lineCodeUnits > remaining) {
 			truncatedBy = "bytes";
 			if (includedLines === 0) {
 				return {
@@ -284,29 +290,49 @@ export function truncateHead(content: string, options: TruncationOptions = {}): 
 			break;
 		}
 
-		cutByte = lineEnd;
+		// Small slice (bounded by remaining <= maxBytes) for exact UTF-8 byte count.
+		const lineText = content.slice(cursor, lineEnd);
+		const lineBytes = Buffer.byteLength(lineText, "utf-8");
+
+		if (lineBytes > remaining) {
+			truncatedBy = "bytes";
+			if (includedLines === 0) {
+				return {
+					content: "",
+					truncated: true,
+					truncatedBy: "bytes",
+					totalLines,
+					totalBytes,
+					outputLines: 0,
+					outputBytes: 0,
+					lastLinePartial: false,
+					firstLineExceedsLimit: true,
+					maxLines,
+					maxBytes,
+				};
+			}
+			break;
+		}
+
+		// Include the line (join semantics: no trailing newline after the last included line).
+		bytesUsed += sepBytes + lineBytes;
 		includedLines++;
 
-		if (nlPos === -1) break; // no more lines
-		scanPos = nlPos + 1;
+		cutIndex = nl === -1 ? content.length : nl; // exclude the newline after the last included line
+		if (nl === -1) break;
+		cursor = nl + 1;
 	}
 
-	if (includedLines >= maxLines && cutByte <= maxBytes) {
-		truncatedBy = "lines";
-	}
-
-	// Strip trailing \n so output matches join("\n") semantics
-	const sliceEnd = cutByte > 0 && buf[cutByte - 1] === 0x0a ? cutByte - 1 : cutByte;
-	const outputContent = buf.subarray(0, sliceEnd).toString("utf-8");
+	if (includedLines >= maxLines && bytesUsed <= maxBytes) truncatedBy = "lines";
 
 	return {
-		content: outputContent,
+		content: content.slice(0, cutIndex),
 		truncated: true,
 		truncatedBy,
 		totalLines,
 		totalBytes,
 		outputLines: includedLines,
-		outputBytes: sliceEnd,
+		outputBytes: bytesUsed,
 		lastLinePartial: false,
 		firstLineExceedsLimit: false,
 		maxLines,
@@ -316,13 +342,14 @@ export function truncateHead(content: string, options: TruncationOptions = {}): 
 
 /**
  * Truncate content from the tail (keep last N lines/bytes).
- * Suitable for bash output where you want to see the end (errors, final results).
- *
  * May return a partial first line if the last line exceeds the byte limit.
+ *
+ * Also avoids Buffer.from(content) for the whole input.
  */
 export function truncateTail(content: string, options: TruncationOptions = {}): TruncationResult {
 	const maxLines = options.maxLines ?? DEFAULT_MAX_LINES;
 	const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
+
 	const totalBytes = Buffer.byteLength(content, "utf-8");
 	const totalLines = countNewlines(content) + 1;
 
@@ -330,32 +357,43 @@ export function truncateTail(content: string, options: TruncationOptions = {}): 
 		return noTruncResult(content, totalLines, totalBytes, maxLines, maxBytes);
 	}
 
-	const buf = Buffer.from(content, "utf-8");
-	const nlOffsets = collectNewlineOffsets(buf);
-	const lineCount = nlOffsets.length + 1;
-
-	// Walk backward, accumulating complete lines that fit.
 	let includedLines = 0;
-	let startByte = buf.length;
+	let bytesUsed = 0;
+	let startIndex = content.length; // char index where output starts
+	let end = content.length; // char index where current line ends (exclusive)
+
 	let truncatedBy: "lines" | "bytes" = "lines";
 
-	for (let lineIdx = lineCount - 1; lineIdx >= 0 && includedLines < maxLines; lineIdx--) {
-		const lineStart = lineIdx === 0 ? 0 : nlOffsets[lineIdx - 1] + 1;
-		const spanBytes = buf.length - lineStart;
+	while (includedLines < maxLines) {
+		const nl = content.lastIndexOf(NL, end - 1);
+		const lineStart = nl === -1 ? 0 : nl + 1;
 
-		if (spanBytes > maxBytes) {
+		const sepBytes = includedLines > 0 ? 1 : 0;
+		const remaining = maxBytes - bytesUsed - sepBytes;
+
+		if (remaining < 0) {
+			truncatedBy = "bytes";
+			break;
+		}
+
+		const lineCodeUnits = end - lineStart;
+
+		// Fast reject huge line without slicing/encoding.
+		if (lineCodeUnits > remaining) {
 			truncatedBy = "bytes";
 			if (includedLines === 0) {
-				// Last line alone exceeds byte limit — take its tail
-				const tailResult = truncateTailBytes(buf, maxBytes);
+				// Window the line substring to avoid materializing a giant string.
+				const windowStart = Math.max(lineStart, end - maxBytes);
+				const window = content.substring(windowStart, end);
+				const tail = truncateTailBytes(window, maxBytes);
 				return {
-					content: tailResult.text,
+					content: tail.text,
 					truncated: true,
 					truncatedBy: "bytes",
 					totalLines,
 					totalBytes,
 					outputLines: 1,
-					outputBytes: tailResult.bytes,
+					outputBytes: tail.bytes,
 					lastLinePartial: true,
 					firstLineExceedsLimit: false,
 					maxLines,
@@ -365,25 +403,48 @@ export function truncateTail(content: string, options: TruncationOptions = {}): 
 			break;
 		}
 
-		startByte = lineStart;
+		const lineText = content.slice(lineStart, end);
+		const lineBytes = Buffer.byteLength(lineText, "utf-8");
+
+		if (lineBytes > remaining) {
+			truncatedBy = "bytes";
+			if (includedLines === 0) {
+				const tail = truncateTailBytes(lineText, maxBytes);
+				return {
+					content: tail.text,
+					truncated: true,
+					truncatedBy: "bytes",
+					totalLines,
+					totalBytes,
+					outputLines: 1,
+					outputBytes: tail.bytes,
+					lastLinePartial: true,
+					firstLineExceedsLimit: false,
+					maxLines,
+					maxBytes,
+				};
+			}
+			break;
+		}
+
+		bytesUsed += sepBytes + lineBytes;
 		includedLines++;
+		startIndex = lineStart;
+
+		if (nl === -1) break;
+		end = nl; // exclude the newline itself; it'll be accounted as sepBytes in the next iteration
 	}
 
-	if (includedLines >= maxLines && buf.length - startByte <= maxBytes) {
-		truncatedBy = "lines";
-	}
-
-	const outputBytes = buf.length - startByte;
-	const outputContent = buf.subarray(startByte).toString("utf-8");
+	if (includedLines >= maxLines && bytesUsed <= maxBytes) truncatedBy = "lines";
 
 	return {
-		content: outputContent,
+		content: content.slice(startIndex),
 		truncated: true,
 		truncatedBy,
 		totalLines,
 		totalBytes,
 		outputLines: includedLines,
-		outputBytes,
+		outputBytes: bytesUsed,
 		lastLinePartial: false,
 		firstLineExceedsLimit: false,
 		maxLines,
@@ -393,40 +454,60 @@ export function truncateTail(content: string, options: TruncationOptions = {}): 
 
 // =============================================================================
 // TailBuffer — ring-style tail buffer with lazy joining
-//
-// Uses windowed truncateTailBytes for trimming, so only a suffix of the
-// accumulated string is ever encoded — not the entire buffer.
 // =============================================================================
 
 const MAX_PENDING = 10;
 
 export class TailBuffer {
 	#pending: string[] = [];
-	#pos = 0; // tracked byte count (approximate after trims)
+	#pos = 0; // byte count of the currently-held tail (after trims)
 
 	constructor(readonly maxBytes: number) {}
 
 	append(text: string): void {
 		if (!text) return;
+
+		const max = this.maxBytes;
+		if (max === 0) {
+			this.#pending.length = 0;
+			this.#pos = 0;
+			return;
+		}
+
 		const n = Buffer.byteLength(text, "utf-8");
+
+		// If the incoming chunk alone is >= budget, it fully dominates the tail.
+		if (n >= max) {
+			const { text: t, bytes } = truncateTailBytes(text, max);
+			this.#pending[0] = t;
+			this.#pending.length = 1;
+			this.#pos = bytes;
+			return;
+		}
+
 		this.#pos += n;
 
-		if (this.#pending.length > 0) {
-			this.#pending.push(text);
-			if (this.#pending.length > MAX_PENDING) this.#compact();
-			// Trim when we exceed 2× budget to amortise cost
-			if (this.#pos > this.maxBytes * 2) this.#trim();
-		} else {
+		if (this.#pending.length === 0) {
 			this.#pending[0] = text;
 			this.#pending.length = 1;
+		} else {
+			this.#pending.push(text);
+			if (this.#pending.length > MAX_PENDING) this.#compact();
 		}
+
+		// Trim when we exceed 2× budget to amortize cost.
+		if (this.#pos > max * 2) this.#trimTo(max);
 	}
 
 	text(): string {
-		return this.#trim();
+		const max = this.maxBytes;
+		this.#trimTo(max);
+		return this.#flush();
 	}
 
 	bytes(): number {
+		const max = this.maxBytes;
+		this.#trimTo(max);
 		return this.#pos;
 	}
 
@@ -443,31 +524,30 @@ export class TailBuffer {
 		return this.#pending[0];
 	}
 
-	/** Trim the buffer to maxBytes using windowed tail truncation. */
-	#trim(): string {
-		if (this.#pos <= this.maxBytes) return this.#flush();
+	#trimTo(max: number): void {
+		if (max === 0) {
+			this.#pending.length = 0;
+			this.#pos = 0;
+			return;
+		}
+		if (this.#pos <= max) return;
 
 		const joined = this.#flush();
-		const { text, bytes } = truncateTailBytes(joined, this.maxBytes);
+		const { text, bytes } = truncateTailBytes(joined, max);
 		this.#pos = bytes;
 		this.#pending[0] = text;
 		this.#pending.length = 1;
-		return text;
 	}
 }
 
 // =============================================================================
 // OutputSink — line-buffered output with file spill support
-//
-// Uses a string buffer with byte tracking. When the spill threshold is
-// exceeded, all data is written to a file sink and the in-memory buffer is
-// trimmed to a tail window via windowed truncateTailBytes.
 // =============================================================================
 
 export class OutputSink {
 	#buffer = "";
 	#bufferBytes = 0;
-	#totalLines = 0;
+	#totalLines = 0; // newline count
 	#totalBytes = 0;
 	#sawData = false;
 	#truncated = false;
@@ -503,7 +583,8 @@ export class OutputSink {
 			this.#totalLines += countNewlines(chunk);
 		}
 
-		const willOverflow = this.#bufferBytes + dataBytes > this.#spillThreshold;
+		const threshold = this.#spillThreshold;
+		const willOverflow = this.#bufferBytes + dataBytes > threshold;
 
 		// Write to file if already spilling or about to overflow
 		if (this.#file != null || willOverflow) {
@@ -511,13 +592,26 @@ export class OutputSink {
 			await sink?.write(chunk);
 		}
 
-		this.#buffer += chunk;
-		this.#bufferBytes += dataBytes;
+		if (!willOverflow) {
+			this.#buffer += chunk;
+			this.#bufferBytes += dataBytes;
+			return;
+		}
 
-		// Keep only a tail window in memory when overflowing
-		if (willOverflow) {
-			this.#truncated = true;
-			const { text, bytes } = truncateTailBytes(this.#buffer, this.#spillThreshold);
+		// Overflow: keep only a tail window in memory.
+		this.#truncated = true;
+
+		// Avoid creating a giant intermediate string when chunk alone dominates.
+		if (dataBytes >= threshold) {
+			const { text, bytes } = truncateTailBytes(chunk, threshold);
+			this.#buffer = text;
+			this.#bufferBytes = bytes;
+		} else {
+			// Intermediate size is bounded (<= threshold + dataBytes), safe to concat.
+			this.#buffer += chunk;
+			this.#bufferBytes += dataBytes;
+
+			const { text, bytes } = truncateTailBytes(this.#buffer, threshold);
 			this.#buffer = text;
 			this.#bufferBytes = bytes;
 		}
@@ -566,8 +660,11 @@ export class OutputSink {
 		try {
 			const sink = Bun.file(this.#artifactPath).writer();
 			this.#file = { path: this.#artifactPath, artifactId: this.#artifactId, sink };
-			// Flush existing buffer to file BEFORE it gets trimmed
-			await sink.write(this.#buffer);
+
+			// Flush existing buffer to file BEFORE it gets trimmed further.
+			if (this.#buffer.length > 0) {
+				await sink.write(this.#buffer);
+			}
 			return sink;
 		} catch {
 			try {
@@ -622,7 +719,7 @@ export function formatTailTruncationNotice(
 	if (truncation.lastLinePartial) {
 		let lastLineSizePart = "";
 		if (originalContent) {
-			const lastNl = originalContent.lastIndexOf("\n");
+			const lastNl = originalContent.lastIndexOf(NL);
 			const lastLine = lastNl === -1 ? originalContent : originalContent.substring(lastNl + 1);
 			lastLineSizePart = ` (line is ${formatBytes(Buffer.byteLength(lastLine, "utf-8"))})`;
 		}

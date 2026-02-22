@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added support for GitLab Duo authentication provider
@@ -13,6 +14,11 @@
 
 ### Changed
 
+- Refactored byte truncation to use unified `truncateBytesWindowed` function supporting both head and tail modes, reducing code duplication
+- Optimized `truncateHead` and `truncateTail` to avoid full Buffer allocation by processing content incrementally with character-level scanning
+- Improved `TailBuffer.append()` to handle large incoming chunks more efficiently by detecting when a single chunk dominates the tail budget
+- Enhanced `OutputSink.push()` to avoid creating giant intermediate strings when spilling to files by windowing large chunks before concatenation
+- Refactored newline counting to use a constant `NL` for consistency across the module
 - Re-exported `AuthCredentialStore` and `StoredAuthCredential` after migrating credential primitives to shared modules
 - Extracted output/truncation formatting helpers (`formatFullOutputReference`, `formatStyledArtifactReference`, `formatTruncationMetaNotice`, `formatStyledTruncationWarning`, `formatTitle`, `formatErrorMessage`, `formatMeta`, `shortenPath`, `formatHeadTruncationNotice`) into standalone utility functions
 - Moved `getDomain` from fetch internals into render utilities for shared use
