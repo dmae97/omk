@@ -225,7 +225,7 @@ async function runLoop(
 				const toolCalls = message.content.filter((c): c is ToolCallContent => c.type === "toolCall");
 				const toolResults: ToolResultMessage[] = [];
 				for (const toolCall of toolCalls) {
-					const result = createAbortedToolResult(toolCall, stream, message.stopReason);
+					const result = createAbortedToolResult(toolCall, stream, message.stopReason, message.errorMessage);
 					currentContext.messages.push(result);
 					newMessages.push(result);
 					toolResults.push(result);
@@ -622,10 +622,11 @@ function createAbortedToolResult(
 	toolCall: Extract<AssistantMessage["content"][number], { type: "toolCall" }>,
 	stream: EventStream<AgentEvent, AgentMessage[]>,
 	reason: "aborted" | "error",
+	errorMessage?: string,
 ): ToolResultMessage {
 	const message = reason === "aborted" ? "Tool execution was aborted." : "Tool execution failed due to an error.";
 	const result: AgentToolResult<any> = {
-		content: [{ type: "text", text: message }],
+		content: [{ type: "text", text: errorMessage ? `${message}: ${errorMessage}` : message }],
 		details: {},
 	};
 

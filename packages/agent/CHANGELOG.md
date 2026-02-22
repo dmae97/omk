@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Updated tool result messages to include error details when tool execution fails
 
 ## [12.14.0] - 2026-02-19
 
