@@ -8,8 +8,8 @@ import {
 	parseTag,
 	streamHashLinesFromLines,
 	streamHashLinesFromUtf8,
-	validateLineRef,
 	stripNewLinePrefixes,
+	validateLineRef,
 } from "@oh-my-pi/pi-coding-agent/patch";
 import { formatLineTag, type HashlineEdit, type LineTag } from "@oh-my-pi/pi-coding-agent/patch/hashline";
 
@@ -940,9 +940,7 @@ describe("hashlineParseContent", () => {
 		// All replacement lines start with '- ', triggering the 50% heuristic when '-' matched.
 		const fileContent = "- [x] done\n- [ ] pending\n- [ ] also pending";
 		const newContent = hashlineParseContent("- [x] done");
-		const edits: HashlineEdit[] = [
-			{ op: "set", tag: makeTag(2, "- [ ] pending"), content: newContent },
-		];
+		const edits: HashlineEdit[] = [{ op: "set", tag: makeTag(2, "- [ ] pending"), content: newContent }];
 		const result = applyHashlineEdits(fileContent, edits);
 		expect(result.content).toBe("- [x] done\n- [x] done\n- [ ] also pending");
 	});
