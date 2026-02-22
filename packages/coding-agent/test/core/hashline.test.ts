@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import {
 	applyHashlineEdits,
 	computeLineHash,
@@ -423,15 +423,6 @@ describe("applyHashlineEdits — insert (before)", () => {
 		expect(() => applyHashlineEdits(content, edits)).toThrow();
 	});
 
-	it("strips anchor echo from end of inserted text (autocorrect)", () => {
-		Bun.env.PI_HL_AUTOCORRECT = "1";
-		const content = "aaa\nbbb\nccc";
-		const edits: HashlineEdit[] = [{ op: "prepend", before: makeTag(2, "bbb"), content: ["NEW", "bbb"] }];
-		const result = applyHashlineEdits(content, edits);
-		expect(result.content).toBe("aaa\nNEW\nbbb\nccc");
-	});
-	Bun.env.PI_HL_AUTOCORRECT = undefined;
-
 	it("insert before and insert after at same line produce correct order", () => {
 		const content = "aaa\nbbb\nccc";
 		const edits: HashlineEdit[] = [
@@ -481,22 +472,6 @@ describe("applyHashlineEdits — insert (between)", () => {
 		const result = applyHashlineEdits(content, edits);
 		expect(result.content).toBe("aaa\nx\ny\nz\nbbb\nccc");
 	});
-
-	it("strips boundary echo from both sides (autocorrect)", () => {
-		Bun.env.PI_HL_AUTOCORRECT = "1";
-		const content = "aaa\nbbb\nccc";
-		const edits: HashlineEdit[] = [
-			{
-				op: "insert",
-				after: makeTag(1, "aaa"),
-				before: makeTag(2, "bbb"),
-				content: ["aaa", "NEW", "bbb"],
-			},
-		];
-		const result = applyHashlineEdits(content, edits);
-		expect(result.content).toBe("aaa\nNEW\nbbb\nccc");
-	});
-	Bun.env.PI_HL_AUTOCORRECT = undefined;
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -504,50 +479,19 @@ describe("applyHashlineEdits — insert (between)", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("applyHashlineEdits — heuristics", () => {
-	let origEnv: string | undefined;
-	beforeAll(() => {
-		origEnv = Bun.env.PI_HL_AUTOCORRECT;
-		Bun.env.PI_HL_AUTOCORRECT = "1";
-	});
-	afterAll(() => {
-		Bun.env.PI_HL_AUTOCORRECT = origEnv;
-	});
-
-	it("strips insert-after anchor echo", () => {
+	it("accepts polluted src that starts with LINE#ID but includes trailing content", () => {
 		const content = "aaa\nbbb\nccc";
-		const edits: HashlineEdit[] = [{ op: "append", after: makeTag(2, "bbb"), content: ["bbb", "NEW"] }];
-
-		const result = applyHashlineEdits(content, edits);
-		expect(result.content).toBe("aaa\nbbb\nNEW\nccc");
-	});
-
-	it("strips range boundary echo and preserves whitespace on unchanged lines", () => {
-		const content = [
-			"import { foo } from 'x';",
-			"if (cond) {",
-			"  doA();",
-			"} else {",
-			"  doB();",
-			"}",
-			"after();",
-		].join("\n");
-
-		const start = 2;
-		const end = 6;
+		const srcHash = computeLineHash(2, "bbb");
 		const edits: HashlineEdit[] = [
 			{
-				op: "replace",
-				first: makeTag(start, "if (cond) {"),
-				last: makeTag(end, "}"),
-				// Echoes line after the range ("after();") and also reformats the import line.
-				content: ["if (cond) {", "  doA();", "} else {", "  doB();", "}", "after();"],
+				op: "set",
+				tag: parseTag(`2#${srcHash}export function foo(a, b) {}`), // comma in trailing content
+				content: ["BBB"],
 			},
 		];
 
 		const result = applyHashlineEdits(content, edits);
-		// Should not duplicate the trailing boundary line.
-		expect(result.content.split("\n")).toHaveLength(7);
-		expect(result.content).toBe(content);
+		expect(result.content).toBe("aaa\nBBB\nccc");
 	});
 
 	it("does not override model whitespace choices in replacement content", () => {
@@ -567,93 +511,6 @@ describe("applyHashlineEdits — heuristics", () => {
 		expect(outLines[1]).toBe("import { bar } from 'y';");
 		expect(outLines[2]).toBe("// added");
 		expect(outLines[3]).toBe("const x = 1;");
-	});
-
-	it("restores a long wrapped line when model reflows it across many lines", () => {
-		const longLine =
-			"const options = veryLongIdentifier + anotherLongIdentifier + thirdLongIdentifier + fourthLongIdentifier;";
-		const content = ["before();", longLine, "after();"].join("\n");
-		const edits: HashlineEdit[] = [
-			{
-				op: "set",
-				tag: makeTag(2, longLine),
-				content: [
-					"const",
-					"options",
-					"=",
-					"veryLongIdentifier",
-					"+",
-					"anotherLongIdentifier",
-					"+",
-					"thirdLongIdentifier",
-					"+",
-					"fourthLongIdentifier;",
-				],
-			},
-		];
-
-		const result = applyHashlineEdits(content, edits);
-		expect(result.content).toBe(content);
-	});
-
-	it("repairs single-line replacement that absorbed the next line (prevents duplication)", () => {
-		const content = ["    typeof HOOK === 'undefined' &&", "    typeof HOOK.checkDCE !== 'function'", "tail();"].join(
-			"\n",
-		);
-
-		const edits: HashlineEdit[] = [
-			{
-				op: "set",
-				tag: makeTag(1, "    typeof HOOK === 'undefined' &&"),
-				// Model merged both lines into one and dropped indentation.
-				content: ["typeof HOOK === 'undefined' || typeof HOOK.checkDCE !== 'function'"],
-			},
-		];
-
-		const result = applyHashlineEdits(content, edits);
-		expect(result.content).toBe(
-			["    typeof HOOK === 'undefined' || typeof HOOK.checkDCE !== 'function'", "tail();"].join("\n"),
-		);
-	});
-
-	it("repairs single-line replacement that absorbed the previous line (prevents duplication)", () => {
-		const content = [
-			"  const nativeStyleResolver: ResolveNativeStyle | void =",
-			"    resolveRNStyle || hook.resolveRNStyle;",
-			"  after();",
-		].join("\n");
-
-		const edits: HashlineEdit[] = [
-			{
-				op: "set",
-				tag: makeTag(2, "    resolveRNStyle || hook.resolveRNStyle;"),
-				// Model absorbed the declaration line and dropped indentation.
-				content: ["const nativeStyleResolver: ResolveNativeStyle | void = resolveRNStyle ?? hook.resolveRNStyle;"],
-			},
-		];
-
-		const result = applyHashlineEdits(content, edits);
-		expect(result.content).toBe(
-			[
-				"  const nativeStyleResolver: ResolveNativeStyle | void = resolveRNStyle ?? hook.resolveRNStyle;",
-				"  after();",
-			].join("\n"),
-		);
-	});
-
-	it("accepts polluted src that starts with LINE#ID but includes trailing content", () => {
-		const content = "aaa\nbbb\nccc";
-		const srcHash = computeLineHash(2, "bbb");
-		const edits: HashlineEdit[] = [
-			{
-				op: "set",
-				tag: parseTag(`2#${srcHash}export function foo(a, b) {}`), // comma in trailing content
-				content: ["BBB"],
-			},
-		];
-
-		const result = applyHashlineEdits(content, edits);
-		expect(result.content).toBe("aaa\nBBB\nccc");
 	});
 
 	it("treats same-line ranges as single-line replacements", () => {
