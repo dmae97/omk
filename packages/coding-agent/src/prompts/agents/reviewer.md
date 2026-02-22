@@ -5,6 +5,7 @@ tools: read, grep, find, bash, report_finding
 spawns: explore, task
 model: pi/slow
 thinking-level: high
+blocking: true
 output:
   properties:
     overall_correctness:

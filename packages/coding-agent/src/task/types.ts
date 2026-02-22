@@ -127,6 +127,7 @@ export interface AgentDefinition {
 	model?: string[];
 	thinkingLevel?: ThinkingLevel;
 	output?: unknown;
+	blocking?: boolean;
 	source: AgentSource;
 	filePath?: string;
 }

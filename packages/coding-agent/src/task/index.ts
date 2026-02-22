@@ -179,7 +179,8 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 		onUpdate?: AgentToolUpdateCallback<TaskToolDetails>,
 	): Promise<AgentToolResult<TaskToolDetails>> {
 		const asyncEnabled = this.session.settings.get("async.enabled");
-		if (!asyncEnabled) {
+		const selectedAgent = this.#discoveredAgents.find(agent => agent.name === params.agent);
+		if (!asyncEnabled || selectedAgent?.blocking === true) {
 			return this.#executeSync(_toolCallId, params, signal, onUpdate);
 		}
 

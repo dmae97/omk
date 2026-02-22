@@ -112,6 +112,16 @@ export function parseThinkingLevel(frontmatter: Record<string, unknown>): Thinki
 	return undefined;
 }
 
+export function parseBoolean(value: unknown): boolean | undefined {
+	if (typeof value === "boolean") return value;
+	if (typeof value === "string") {
+		const normalized = value.trim().toLowerCase();
+		if (normalized === "true") return true;
+		if (normalized === "false") return false;
+	}
+	return undefined;
+}
+
 /**
  * Parse a comma-separated string into an array of trimmed, non-empty strings.
  */
@@ -194,6 +204,7 @@ export interface ParsedAgentFields {
 	model?: string[];
 	output?: unknown;
 	thinkingLevel?: ThinkingLevel;
+	blocking?: boolean;
 }
 
 /**
@@ -238,8 +249,9 @@ export function parseAgentFields(frontmatter: Record<string, unknown>): ParsedAg
 	const output = frontmatter.output !== undefined ? frontmatter.output : undefined;
 	const model = parseModelList(frontmatter.model);
 	const thinkingLevel = parseThinkingLevel(frontmatter);
+	const blocking = parseBoolean(frontmatter.blocking);
 
-	return { name, description, tools, spawns, model, output, thinkingLevel };
+	return { name, description, tools, spawns, model, output, thinkingLevel, blocking };
 }
 
 async function globIf(
