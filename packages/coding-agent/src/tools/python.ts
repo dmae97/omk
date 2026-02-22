@@ -3,7 +3,7 @@ import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
-import { Text } from "@oh-my-pi/pi-tui";
+import { Markdown, Text } from "@oh-my-pi/pi-tui";
 import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import { type Static, Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
@@ -11,7 +11,7 @@ import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { executePython, getPreludeDocs, type PythonExecutorOptions } from "../ipy/executor";
 import type { PreludeHelper, PythonStatusEvent } from "../ipy/kernel";
 import { truncateToVisualLines } from "../modes/components/visual-truncate";
-import type { Theme } from "../modes/theme/theme";
+import { getMarkdownTheme, type Theme } from "../modes/theme/theme";
 import pythonDescription from "../prompts/tools/python.md" with { type: "text" };
 import { DEFAULT_MAX_BYTES, OutputSink, type OutputSummary, TailBuffer } from "../session/streaming-output";
 import { getTreeBranch, getTreeContinuePrefix, renderCodeCell } from "../tui";
@@ -74,6 +74,7 @@ export interface PythonCellResult {
 	durationMs?: number;
 	exitCode?: number;
 	statusEvents?: PythonStatusEvent[];
+	hasMarkdown?: boolean;
 }
 
 export interface PythonToolDetails {
@@ -298,6 +299,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 				const durationMs = Date.now() - startTime;
 
 				const cellStatusEvents: PythonStatusEvent[] = [];
+				let cellHasMarkdown = false;
 				for (const output of result.displayOutputs) {
 					if (output.type === "json") {
 						jsonOutputs.push(output.data);
@@ -309,6 +311,9 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 						statusEvents.push(output.event);
 						cellStatusEvents.push(output.event);
 					}
+					if (output.type === "markdown") {
+						cellHasMarkdown = true;
+					}
 				}
 
 				const cellOutput = result.output.trim();
@@ -316,6 +321,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 				cellResult.exitCode = result.exitCode;
 				cellResult.durationMs = durationMs;
 				cellResult.statusEvents = cellStatusEvents.length > 0 ? cellStatusEvents : undefined;
+				cellResult.hasMarkdown = cellHasMarkdown || undefined;
 
 				let combinedCellOutput = "";
 				if (cells.length > 1) {
@@ -815,18 +821,27 @@ function formatCellOutputLines(
 	expanded: boolean,
 	previewLines: number,
 	theme: Theme,
+	width: number,
 ): { lines: string[]; hiddenCount: number } {
-	const rawLines = cell.output ? cell.output.split("\n") : [];
+	if (!cell.output) {
+		return { lines: [], hiddenCount: 0 };
+	}
+
+	if (cell.hasMarkdown && cell.status !== "error") {
+		const md = new Markdown(cell.output, 0, 0, getMarkdownTheme());
+		const allLines = md.render(width);
+		const displayLines = expanded ? allLines : allLines.slice(-previewLines);
+		const hiddenCount = allLines.length - displayLines.length;
+		return { lines: displayLines, hiddenCount };
+	}
+
+	const rawLines = cell.output.split("\n");
 	const displayLines = expanded ? rawLines : rawLines.slice(-previewLines);
 	const hiddenCount = rawLines.length - displayLines.length;
 	const outputLines = displayLines.map(line => {
 		const cleaned = replaceTabs(line);
 		return cell.status === "error" ? theme.fg("error", cleaned) : theme.fg("toolOutput", cleaned);
 	});
-
-	if (outputLines.length === 0) {
-		return { lines: [], hiddenCount: 0 };
-	}
 
 	return { lines: outputLines, hiddenCount };
 }
@@ -949,7 +964,7 @@ export const pythonToolRenderer = {
 					for (let i = 0; i < cellResults.length; i++) {
 						const cell = cellResults[i];
 						const statusLines = renderStatusEvents(cell.statusEvents ?? [], uiTheme, expanded);
-						const outputContent = formatCellOutputLines(cell, expanded, previewLines, uiTheme);
+						const outputContent = formatCellOutputLines(cell, expanded, previewLines, uiTheme, width);
 						const outputLines = [...outputContent.lines];
 						if (!expanded && outputContent.hiddenCount > 0) {
 							outputLines.push(

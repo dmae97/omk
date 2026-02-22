@@ -1,9 +1,9 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added support for rendering markdown output from Python cells with proper formatting and theme styling
 - Added async background job execution for bash commands and tasks with `async: true` parameter
 - Added `cancel_job` tool to cancel running background jobs
 - Added `jobs://` internal protocol to inspect background job status and results
@@ -15,6 +15,7 @@
 
 ### Changed
 
+- Updated Python tool to detect and handle markdown display output separately from plain text
 - Updated bash tool to support async execution mode with streaming progress updates
 - Updated task tool to support async execution mode for parallel subagent execution
 - Modified subagent settings to disable async execution in child agents to prevent nesting

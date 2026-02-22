@@ -64,6 +64,7 @@ export interface PythonStatusEvent {
 export type KernelDisplayOutput =
 	| { type: "json"; data: unknown }
 	| { type: "image"; data: string; mimeType: string }
+	| { type: "markdown" }
 	| { type: "status"; event: PythonStatusEvent };
 
 export interface KernelExecuteOptions {
@@ -214,6 +215,7 @@ export function renderKernelDisplay(content: Record<string, unknown>): {
 	// Check text/markdown before text/plain since Markdown objects provide both
 	// (text/plain is just the repr)
 	if (typeof data["text/markdown"] === "string") {
+		outputs.push({ type: "markdown" });
 		return { text: normalizeDisplayText(String(data["text/markdown"])), outputs };
 	}
 	if (typeof data["text/plain"] === "string") {
