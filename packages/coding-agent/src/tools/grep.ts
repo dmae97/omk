@@ -1,7 +1,7 @@
 import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 
-import { type GrepResult, grep } from "@oh-my-pi/pi-natives";
+import { type GrepMatch, type GrepResult, grep } from "@oh-my-pi/pi-natives";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { untilAborted } from "@oh-my-pi/pi-utils";
@@ -30,13 +30,13 @@ const grepSchema = Type.Object({
 	pre: Type.Optional(Type.Number({ description: "Lines of context before matches" })),
 	post: Type.Optional(Type.Number({ description: "Lines of context after matches" })),
 	multiline: Type.Optional(Type.Boolean({ description: "Enable multiline matching" })),
-	limit: Type.Optional(Type.Number({ description: "Limit output to first N matches (default: 100)" })),
+	limit: Type.Optional(Type.Number({ description: "Limit output to first N matches (default: 20)" })),
 	offset: Type.Optional(Type.Number({ description: "Skip first N entries before applying limit (default: 0)" })),
 });
 
 export type GrepToolInput = Static<typeof grepSchema>;
 
-const DEFAULT_MATCH_LIMIT = 100;
+const DEFAULT_MATCH_LIMIT = 20;
 
 export interface GrepToolDetails {
 	truncation?: TruncationResult;
@@ -130,6 +130,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 
 			const effectiveOutputMode = "content";
 			const effectiveLimit = normalizedLimit ?? DEFAULT_MATCH_LIMIT;
+			const internalLimit = Math.min(effectiveLimit * 5, 2000);
 
 			// Run grep
 			let result: GrepResult;
@@ -143,7 +144,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 					multiline: effectiveMultiline,
 					hidden: true,
 					cache: false,
-					maxCount: effectiveLimit,
+					maxCount: internalLimit,
 					offset: normalizedOffset > 0 ? normalizedOffset : undefined,
 					contextBefore: normalizedContextBefore,
 					contextAfter: normalizedContextAfter,
@@ -167,19 +168,49 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 			};
 
 			// Build output
+			const roundRobinSelect = (matches: GrepMatch[], limit: number): GrepMatch[] => {
+				if (matches.length <= limit) return matches;
+				const fileOrder: string[] = [];
+				const byFile = new Map<string, GrepMatch[]>();
+				for (const match of matches) {
+					if (!byFile.has(match.path)) {
+						fileOrder.push(match.path);
+						byFile.set(match.path, []);
+					}
+					byFile.get(match.path)!.push(match);
+				}
+				const selected: GrepMatch[] = [];
+				const indices = new Map<string, number>(fileOrder.map(file => [file, 0]));
+				while (selected.length < limit) {
+					let anyAdded = false;
+					for (const file of fileOrder) {
+						if (selected.length >= limit) break;
+						const fileMatches = byFile.get(file)!;
+						const idx = indices.get(file)!;
+						if (idx < fileMatches.length) {
+							selected.push(fileMatches[idx]);
+							indices.set(file, idx + 1);
+							anyAdded = true;
+						}
+					}
+					if (!anyAdded) break;
+				}
+				return selected;
+			};
+			const selectedMatches = isDirectory
+				? roundRobinSelect(result.matches, effectiveLimit)
+				: result.matches.slice(0, effectiveLimit);
+			const matchLimitReached = result.matches.length > effectiveLimit;
 			const files = new Set<string>();
 			const fileList: string[] = [];
 			const fileMatchCounts = new Map<string, number>();
-
-			const recordFile = (filePath: string) => {
-				const relative = formatPath(filePath);
-				if (!files.has(relative)) {
-					files.add(relative);
-					fileList.push(relative);
+			const recordFile = (relativePath: string) => {
+				if (!files.has(relativePath)) {
+					files.add(relativePath);
+					fileList.push(relativePath);
 				}
 			};
-
-			if (result.totalMatches === 0) {
+			if (selectedMatches.length === 0) {
 				const details: GrepToolDetails = {
 					scopePath,
 					matchCount: 0,
@@ -189,100 +220,120 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 				};
 				return toolResult(details).text("No matches found").done();
 			}
-
 			const outputLines: string[] = [];
 			let linesTruncated = false;
-			let matchIndex = 0;
-
-			for (const match of result.matches) {
-				recordFile(match.path);
+			const matchesByFile = new Map<string, GrepMatch[]>();
+			for (const match of selectedMatches) {
 				const relativePath = formatPath(match.path);
-
-				matchIndex += 1;
-				if (matchIndex > 1) {
-					outputLines.push("");
+				recordFile(relativePath);
+				if (!matchesByFile.has(relativePath)) {
+					matchesByFile.set(relativePath, []);
 				}
-				outputLines.push(`${matchIndex}. ${relativePath}:${match.lineNumber}`);
-
-				const lineNumbers: number[] = [match.lineNumber];
-				if (match.contextBefore) {
-					for (const ctx of match.contextBefore) {
-						lineNumbers.push(ctx.lineNumber);
-					}
-				}
-				if (match.contextAfter) {
-					for (const ctx of match.contextAfter) {
-						lineNumbers.push(ctx.lineNumber);
-					}
-				}
-				const lineWidth = Math.max(...lineNumbers.map(value => value.toString().length));
-
-				const formatLine = (lineNumber: number, line: string, isMatch: boolean): string => {
-					if (useHashLines) {
-						const ref = `${lineNumber}#${computeLineHash(lineNumber, line)}`;
-						return isMatch ? `>>${ref}:${line}` : `  ${ref}:${line}`;
-					}
-					const padded = lineNumber.toString().padStart(lineWidth, " ");
-					return isMatch ? `>>${padded}:${line}` : `  ${padded}:${line}`;
-				};
-
-				// Add context before
-				if (match.contextBefore) {
-					for (const ctx of match.contextBefore) {
-						outputLines.push(formatLine(ctx.lineNumber, ctx.line, false));
-					}
-				}
-
-				// Add match line
-				outputLines.push(formatLine(match.lineNumber, match.line, true));
-
-				if (match.truncated) {
-					linesTruncated = true;
-				}
-
-				// Add context after
-				if (match.contextAfter) {
-					for (const ctx of match.contextAfter) {
-						outputLines.push(formatLine(ctx.lineNumber, ctx.line, false));
-					}
-				}
-
-				// Track per-file counts
-				fileMatchCounts.set(relativePath, (fileMatchCounts.get(relativePath) ?? 0) + 1);
+				matchesByFile.get(relativePath)!.push(match);
 			}
-
+			const renderMatchesForFile = (relativePath: string) => {
+				const fileMatches = matchesByFile.get(relativePath) ?? [];
+				for (const match of fileMatches) {
+					const lineNumbers: number[] = [match.lineNumber];
+					if (match.contextBefore) {
+						for (const ctx of match.contextBefore) {
+							lineNumbers.push(ctx.lineNumber);
+						}
+					}
+					if (match.contextAfter) {
+						for (const ctx of match.contextAfter) {
+							lineNumbers.push(ctx.lineNumber);
+						}
+					}
+					const lineWidth = Math.max(...lineNumbers.map(value => value.toString().length));
+					const formatLine = (lineNumber: number, line: string, isMatch: boolean): string => {
+						if (useHashLines) {
+							const ref = `${lineNumber}#${computeLineHash(lineNumber, line)}`;
+							return isMatch ? `>>${ref}:${line}` : `  ${ref}:${line}`;
+						}
+						const padded = lineNumber.toString().padStart(lineWidth, " ");
+						return isMatch ? `>>${padded}:${line}` : `  ${padded}:${line}`;
+					};
+					if (match.contextBefore) {
+						for (const ctx of match.contextBefore) {
+							outputLines.push(formatLine(ctx.lineNumber, ctx.line, false));
+						}
+					}
+					outputLines.push(formatLine(match.lineNumber, match.line, true));
+					if (match.truncated) {
+						linesTruncated = true;
+					}
+					if (match.contextAfter) {
+						for (const ctx of match.contextAfter) {
+							outputLines.push(formatLine(ctx.lineNumber, ctx.line, false));
+						}
+					}
+					fileMatchCounts.set(relativePath, (fileMatchCounts.get(relativePath) ?? 0) + 1);
+				}
+			};
+			if (isDirectory) {
+				const filesByDirectory = new Map<string, string[]>();
+				for (const relativePath of fileList) {
+					const directory = path.dirname(relativePath).replace(/\\/g, "/");
+					if (!filesByDirectory.has(directory)) {
+						filesByDirectory.set(directory, []);
+					}
+					filesByDirectory.get(directory)!.push(relativePath);
+				}
+				for (const [directory, directoryFiles] of filesByDirectory) {
+					if (directory === ".") {
+						for (const relativePath of directoryFiles) {
+							if (outputLines.length > 0) {
+								outputLines.push("");
+							}
+							outputLines.push(`# ${path.basename(relativePath)}`);
+							renderMatchesForFile(relativePath);
+						}
+						continue;
+					}
+					if (outputLines.length > 0) {
+						outputLines.push("");
+					}
+					outputLines.push(`# ${directory}`);
+					for (const relativePath of directoryFiles) {
+						outputLines.push(`## └─ ${path.basename(relativePath)}`);
+						renderMatchesForFile(relativePath);
+					}
+				}
+			} else {
+				for (const relativePath of fileList) {
+					renderMatchesForFile(relativePath);
+				}
+			}
 			const rawOutput = outputLines.join("\n");
 			const truncation = truncateHead(rawOutput, { maxLines: Number.MAX_SAFE_INTEGER });
 			const output = truncation.content;
-
-			const truncated = Boolean(result.limitReached || truncation.truncated || linesTruncated);
+			const truncated = Boolean(matchLimitReached || result.limitReached || truncation.truncated || linesTruncated);
 			const details: GrepToolDetails = {
 				scopePath,
-				matchCount: result.totalMatches,
-				fileCount: result.filesWithMatches,
+				matchCount: selectedMatches.length,
+				fileCount: fileList.length,
 				files: fileList,
 				fileMatches: fileList.map(path => ({
 					path,
 					count: fileMatchCounts.get(path) ?? 0,
 				})),
 				truncated,
-				matchLimitReached: result.limitReached ? effectiveLimit : undefined,
+				matchLimitReached: matchLimitReached ? effectiveLimit : undefined,
+				resultLimitReached: result.limitReached ? internalLimit : undefined,
 			};
-
 			if (truncation.truncated) details.truncation = truncation;
 			if (linesTruncated) details.linesTruncated = true;
-
 			const resultBuilder = toolResult(details)
 				.text(output)
 				.limits({
-					matchLimit: result.limitReached ? effectiveLimit : undefined,
+					matchLimit: matchLimitReached ? effectiveLimit : undefined,
+					resultLimit: result.limitReached ? internalLimit : undefined,
 					columnMax: linesTruncated ? DEFAULT_MAX_COLUMN : undefined,
 				});
-
 			if (truncation.truncated) {
 				resultBuilder.truncation(truncation, { direction: "head" });
 			}
-
 			return resultBuilder.done();
 		});
 	}
@@ -428,9 +479,9 @@ export const grepToolRenderer = {
 			}
 			if (current.length > 0) matchGroups.push(current);
 		} else {
-			for (const line of rawLines) {
-				if (line.trim().length === 0) continue;
-				matchGroups.push([line]);
+			const nonEmpty = rawLines.filter(line => line.trim().length > 0);
+			if (nonEmpty.length > 0) {
+				matchGroups.push(nonEmpty);
 			}
 		}
 
@@ -472,7 +523,12 @@ export const grepToolRenderer = {
 						expanded,
 						maxCollapsed,
 						itemType: "match",
-						renderItem: group => group.map(line => uiTheme.fg("toolOutput", line)),
+						renderItem: group =>
+							group.map(line => {
+								if (line.startsWith("## ")) return uiTheme.fg("dim", line);
+								if (line.startsWith("# ")) return uiTheme.fg("accent", line);
+								return uiTheme.fg("toolOutput", line);
+							}),
 					},
 					uiTheme,
 				);

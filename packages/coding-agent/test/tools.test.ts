@@ -497,7 +497,7 @@ function b() {
 			});
 
 			const output = getTextOutput(result);
-			expect(output).toContain("1. example.txt:2");
+			expect(output).not.toContain("# example.txt");
 			expect(output).toMatch(/>>\s*2#[ZPMQVRWSNKTXJBYH]{2}:match line/);
 		});
 
@@ -515,13 +515,92 @@ function b() {
 			});
 
 			const output = getTextOutput(result);
-			expect(output).toContain("1. context.txt:2");
+			expect(output).not.toContain("# context.txt");
 			expect(output).toMatch(/\b1#[ZPMQVRWSNKTXJBYH]{2}:before/);
 			expect(output).toMatch(/>>\s*2#[ZPMQVRWSNKTXJBYH]{2}:match one/);
 			expect(output).toMatch(/\b3#[ZPMQVRWSNKTXJBYH]{2}:after/);
 			expect(output).toContain("[1 matches limit reached. Use limit=2 for more]");
 			// Ensure second match is not present
 			expect(output).not.toContain("match two");
+		});
+
+		it("should group multi-file matches and distribute limit with round-robin", async () => {
+			for (let i = 1; i <= 3; i++) {
+				fs.writeFileSync(path.join(testDir, `file-${i}.txt`), `needle in file ${i}\nextra needle ${i}`);
+			}
+			fs.writeFileSync(path.join(testDir, "dominant.txt"), "needle a\nneedle b\nneedle c\nneedle d");
+
+			const result = await grepTool.execute("test-call-13-round-robin", {
+				pattern: "needle",
+				path: testDir,
+				limit: 4,
+			});
+
+			const output = getTextOutput(result);
+			expect(output).toContain("# file-1.txt");
+			expect(output).toContain("# file-2.txt");
+			expect(output).toContain("# file-3.txt");
+			expect(output).toContain("# dominant.txt");
+			expect(output).not.toContain("# .");
+			expect(output).toContain("[4 matches limit reached. Use limit=8 for more]");
+			expect(result.details?.fileCount).toBe(4);
+			expect(result.details?.matchCount).toBe(4);
+		});
+
+		it("should not repeat file headings when round-robin selects multiple matches per file", async () => {
+			fs.writeFileSync(path.join(testDir, "alpha.txt"), "needle a1\nneedle a2\nneedle a3");
+			fs.writeFileSync(path.join(testDir, "beta.txt"), "needle b1\nneedle b2\nneedle b3");
+
+			const result = await grepTool.execute("test-call-14-grouped-headings", {
+				pattern: "needle",
+				path: testDir,
+				limit: 4,
+			});
+
+			const output = getTextOutput(result);
+			const alphaHeadings = output.match(/# alpha\.txt/g)?.length ?? 0;
+			const betaHeadings = output.match(/# beta\.txt/g)?.length ?? 0;
+			expect(alphaHeadings).toBe(1);
+			expect(betaHeadings).toBe(1);
+			expect(result.details?.fileMatches).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({ path: "alpha.txt", count: 2 }),
+					expect.objectContaining({ path: "beta.txt", count: 2 }),
+				]),
+			);
+		});
+
+		it("should group files under directory headings", async () => {
+			const nestedDir = path.join(testDir, "packages", "ai");
+			fs.mkdirSync(nestedDir, { recursive: true });
+			fs.writeFileSync(path.join(nestedDir, "CHANGELOG.md"), "Claude Opus\n");
+			fs.writeFileSync(path.join(nestedDir, "models.json"), '{ "name": "Claude Opus" }\n');
+
+			const result = await grepTool.execute("test-call-15-directory-headings", {
+				pattern: "Claude Opus",
+				path: testDir,
+			});
+
+			const output = getTextOutput(result);
+			expect(output).toContain("# packages/ai");
+			expect(output).toContain("## └─ CHANGELOG.md");
+			expect(output).toContain("## └─ models.json");
+			expect(result.details?.fileCount).toBeGreaterThanOrEqual(2);
+		});
+
+		it("should apply default limit of 20 when limit is not provided", async () => {
+			const lines = Array.from({ length: 60 }, (_, i) => `needle ${i + 1}`);
+			fs.writeFileSync(path.join(testDir, "default-limit.txt"), lines.join("\n"));
+
+			const result = await grepTool.execute("test-call-14-default-limit", {
+				pattern: "needle",
+				path: testDir,
+			});
+
+			const output = getTextOutput(result);
+			expect(output).toContain("[20 matches limit reached. Use limit=40 for more]");
+			expect(result.details?.matchCount).toBe(20);
+			expect(result.details?.matchLimitReached).toBe(20);
 		});
 	});
 

@@ -12,6 +12,7 @@ Powerful search tool built on ripgrep.
 
 <output>
 - Results are always content mode.
+- Results grouped by directory (`# dir`) and file (`## └─ file`) headings
 {{#if IS_HASHLINE_MODE}}
 - Text output is CID prefixed: `LINE#ID:content`
 {{else}}
