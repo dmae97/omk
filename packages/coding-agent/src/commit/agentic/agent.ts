@@ -245,6 +245,7 @@ function formatToolArgs(args?: Record<string, unknown>): string[] {
 		}
 	};
 	for (const [key, value] of Object.entries(args)) {
+		if (key === "agent__intent") continue;
 		visit(value, key);
 	}
 	return lines;

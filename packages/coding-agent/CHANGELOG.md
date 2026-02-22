@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added support for rendering markdown output from Python cells with proper formatting and theme styling
@@ -15,6 +16,7 @@
 
 ### Changed
 
+- Hid internal `agent__intent` parameter from tool argument displays in UI and logs to reduce visual clutter
 - Updated Python tool to detect and handle markdown display output separately from plain text
 - Updated bash tool to support async execution mode with streaming progress updates
 - Updated task tool to support async execution mode for parallel subagent execution

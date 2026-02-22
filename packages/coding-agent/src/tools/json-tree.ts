@@ -12,6 +12,17 @@ export const JSON_TREE_MAX_LINES_EXPANDED = 200;
 export const JSON_TREE_SCALAR_LEN_COLLAPSED = 60;
 export const JSON_TREE_SCALAR_LEN_EXPANDED = 2000;
 
+/** Keys injected by the harness that should not be displayed to users */
+const HIDDEN_ARG_KEYS = new Set(["agent__intent"]);
+
+/** Strip harness-internal keys from tool args for display */
+export function stripInternalArgs(args: Record<string, unknown>): Record<string, unknown> {
+	const result: Record<string, unknown> = {};
+	for (const [key, value] of Object.entries(args)) {
+		if (!HIDDEN_ARG_KEYS.has(key)) result[key] = value;
+	}
+	return result;
+}
 /**
  * Format a scalar value for inline display.
  */
@@ -37,7 +48,7 @@ export function formatScalar(value: unknown, maxLen: number): string {
  * Format args inline for collapsed view.
  */
 export function formatArgsInline(args: Record<string, unknown>, maxWidth: number): string {
-	const entries = Object.entries(args);
+	const entries = Object.entries(args).filter(([k]) => !HIDDEN_ARG_KEYS.has(k));
 	if (entries.length === 0) return "";
 
 	// Single arg: show key=value
