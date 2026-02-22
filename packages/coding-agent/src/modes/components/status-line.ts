@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
-import { type Component, padding, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
+import { type Component, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
 import { formatCount } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
 import { settings } from "../../config/settings";
@@ -382,7 +382,8 @@ export class StatusLineComponent implements Component {
 		leftWidth = groupWidth(left, leftCapWidth, leftSepWidth);
 		rightWidth = groupWidth(right, rightCapWidth, rightSepWidth);
 		const gapWidth = Math.max(1, topFillWidth - leftWidth - rightWidth);
-		return leftGroup + padding(gapWidth) + rightGroup;
+		const gapFill = theme.fg("border", theme.boxRound.horizontal.repeat(gapWidth));
+		return leftGroup + gapFill + rightGroup;
 	}
 
 	getTopBorder(width: number): { content: string; width: number } {
