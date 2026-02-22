@@ -7,8 +7,8 @@ Classify git diff into conventional commit format.
 ## 1. Determine Scope
 
 Apply scope when 60%+ line changes target single component:
-- 150 lines in src/api/, 30 in src/lib.rs -> "api"
-- 50 lines in src/api/, 50 in src/types/ -> null (50/50 split)
+- 150 lines in src/api/, 30 in src/lib.rs → "api"
+- 50 lines in src/api/, 50 in src/types/ → null (50/50 split)
 
 Use null for: cross-cutting changes, project-wide refactoring.
 
@@ -32,7 +32,7 @@ Group 3+ similar changes: "Updated 5 test files for new API." (not five bullets)
 
 Issue references inline: (#123), (#123, #456), (#123-#125).
 
-Priority: user-visible -> perf/security -> architecture -> internal.
+Priority: user-visible → perf/security → architecture → internal.
 
 Exclude: import changes, whitespace, formatting, trivial renames, debug prints, comment-only, file moves without modification.
 

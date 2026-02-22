@@ -62,6 +62,12 @@ function compactTableSep(line: string): string {
 }
 
 function formatPrompt(content: string): string {
+	// Replace common ascii ellipsis and arrow patterns with their unicode equivalents
+	content = content
+		.replace(/\.{3}/g, "…")
+		.replace(/->/g, "→")
+		.replace(/<-/g, "←")
+		.replace(/<->/g, "↔");
 	const lines = content.split("\n");
 	const result: string[] = [];
 	let inCodeBlock = false;

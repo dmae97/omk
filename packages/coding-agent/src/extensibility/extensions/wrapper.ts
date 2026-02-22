@@ -17,6 +17,7 @@ export class RegisteredToolAdapter implements AgentTool<any, any, any> {
 	declare description: string;
 	declare parameters: any;
 	declare label: string;
+	declare strict: boolean;
 
 	renderCall?: (args: any, options: any, theme: any) => any;
 	renderResult?: (result: any, options: any, theme: any, args?: any) => any;
@@ -83,6 +84,7 @@ export class ExtensionToolWrapper<TParameters extends TSchema = TSchema, TDetail
 	declare description: string;
 	declare parameters: TParameters;
 	declare label: string;
+	declare strict: boolean;
 
 	constructor(
 		private tool: AgentTool<TParameters, TDetails>,

@@ -258,6 +258,7 @@ export class SearchTool implements AgentTool<typeof webSearchSchema, SearchRende
 	readonly label = "Web Search";
 	readonly description: string;
 	readonly parameters = webSearchSchema;
+	readonly strict = true;
 
 	constructor(_session: ToolSession) {
 		this.description = renderPromptTemplate(webSearchDescription);

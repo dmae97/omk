@@ -3,7 +3,7 @@
 Executes bash command in shell session for terminal operations like git, bun, cargo, python.
 
 <instruction>
-- You MUST use `cwd` parameter to set working directory instead of `cd dir && ...`
+- You MUST use `cwd` parameter to set working directory instead of `cd dir && …`
 - PTY mode is opt-in: set `pty: true` only when command expects a real terminal (for example `sudo`, `ssh` where you need input from the user); default is `false`
 - You MUST use `;` only when later commands should run regardless of earlier failures
 - `skill://` URIs are auto-resolved to filesystem paths before execution

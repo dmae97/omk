@@ -50,8 +50,8 @@ When a user describes what they want an agent to do, you will:
 Your output MUST be a valid JSON object with exactly these fields:
 {
   "identifier": "A unique, descriptive identifier using lowercase letters, numbers, and hyphens (e.g., 'test-runner', 'api-docs-writer', 'code-formatter')",
-  "whenToUse": "A precise, actionable description starting with 'Use this agent when...' that clearly defines the triggering conditions and use cases. Ensure you include examples as described above.",
-  "systemPrompt": "The complete system prompt that will govern the agent's behavior, written in second person ('You are...', 'You will...') and structured for maximum clarity and effectiveness"
+  "whenToUse": "A precise, actionable description starting with 'Use this agent when…' that clearly defines the triggering conditions and use cases. Ensure you include examples as described above.",
+  "systemPrompt": "The complete system prompt that will govern the agent's behavior, written in second person ('You are…', 'You will…') and structured for maximum clarity and effectiveness"
 }
 
 Key principles for your system prompts:

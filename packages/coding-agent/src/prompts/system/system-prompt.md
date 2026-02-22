@@ -90,7 +90,7 @@ Semantic questions MUST be answered with semantic tools.
 {{#has tools "ssh"}}
 ### SSH: match commands to host shell
 Commands MUST match the host shell. linux/bash, macos/zsh: Unix. windows/cmd: dir, type, findstr. windows/powershell: Get-ChildItem, Get-Content.
-Remote filesystems: `~/.omp/remote/<hostname>/`. Windows paths need colons: `C:/Users/...`
+Remote filesystems: `~/.omp/remote/<hostname>/`. Windows paths need colons: `C:/Users/…`
 {{/has}}
 
 {{#ifAny (includes tools "grep") (includes tools "find")}}

@@ -33,6 +33,7 @@ import { parseStreamingJson } from "../utils/json-parse";
 import { getKimiCommonHeaders } from "../utils/oauth/kimi";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
 import { mapToOpenAICompletionsToolChoice } from "../utils/tool-choice";
+import { enforceStrictSchema, NO_STRICT } from "../utils/typebox-helpers";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers";
 import { transformMessages } from "./transform-messages";
 
@@ -888,16 +889,21 @@ export function convertMessages(
 }
 
 function convertTools(tools: Tool[], compat: ResolvedOpenAICompat): OpenAI.Chat.Completions.ChatCompletionTool[] {
-	return tools.map(tool => ({
-		type: "function",
-		function: {
-			name: tool.name,
-			description: tool.description,
-			parameters: tool.parameters as any, // TypeBox already generates JSON Schema
-			// Only include strict if provider supports it. Some reject unknown fields.
-			...(compat.supportsStrictMode !== false && { strict: false }),
-		},
-	}));
+	return tools.map(tool => {
+		const strict = !NO_STRICT && compat.supportsStrictMode !== false && tool.strict;
+		return {
+			type: "function",
+			function: {
+				name: tool.name,
+				description: tool.description,
+				parameters: strict
+					? enforceStrictSchema(tool.parameters as unknown as Record<string, unknown>)
+					: (tool.parameters as unknown as Record<string, unknown>),
+				// Only include strict if provider supports it. Some reject unknown fields.
+				...(strict && { strict: true }),
+			},
+		};
+	});
 }
 
 function mapStopReason(reason: ChatCompletionChunk.Choice["finish_reason"]): StopReason {
@@ -917,6 +923,21 @@ function mapStopReason(reason: ChatCompletionChunk.Choice["finish_reason"]): Sto
 			throw new Error(`Unhandled stop reason: ${_exhaustive}`);
 		}
 	}
+}
+
+function detectStrictModeSupport(provider: string, baseUrl: string): boolean {
+	if (provider === "openai" || provider === "cerebras" || provider === "together") return true;
+
+	const normalizedBaseUrl = baseUrl.toLowerCase();
+	return (
+		normalizedBaseUrl.includes("api.openai.com") ||
+		normalizedBaseUrl.includes(".openai.azure.com") ||
+		normalizedBaseUrl.includes("models.inference.ai.azure.com") ||
+		normalizedBaseUrl.includes("api.cerebras.ai") ||
+		normalizedBaseUrl.includes("api.together.xyz") ||
+		normalizedBaseUrl.includes("api.deepseek.com") ||
+		normalizedBaseUrl.includes("deepseek.com")
+	);
 }
 
 /**
@@ -967,7 +988,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAICompat 
 		requiresAssistantContentForToolCalls: isOpenRouterKimi,
 		openRouterRouting: undefined,
 		vercelGatewayRouting: undefined,
-		supportsStrictMode: true,
+		supportsStrictMode: detectStrictModeSupport(provider, baseUrl),
 	};
 }
 

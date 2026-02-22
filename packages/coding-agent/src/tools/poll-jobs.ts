@@ -39,6 +39,7 @@ export class PollJobsTool implements AgentTool<typeof pollJobsSchema, PollJobsTo
 	readonly label = "PollJobs";
 	readonly description: string;
 	readonly parameters = pollJobsSchema;
+	readonly strict = true;
 
 	constructor(private readonly session: ToolSession) {
 		this.description = renderPromptTemplate(pollJobsDescription);

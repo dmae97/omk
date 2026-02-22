@@ -60,6 +60,7 @@ export class GrepTool implements AgentTool<typeof grepSchema, GrepToolDetails> {
 	readonly label = "Grep";
 	readonly description: string;
 	readonly parameters = grepSchema;
+	readonly strict = true;
 
 	constructor(private readonly session: ToolSession) {
 		const displayMode = resolveFileDisplayMode(session);

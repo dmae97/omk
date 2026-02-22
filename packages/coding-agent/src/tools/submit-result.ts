@@ -59,6 +59,7 @@ export class SubmitResultTool implements AgentTool<TObject, SubmitResultDetails>
 		"Finish the task with structured JSON output. Call exactly once at the end of the task.\n\n" +
 		"If you cannot complete the task, call with status='aborted' and an error message.";
 	readonly parameters: TObject;
+	readonly strict = true;
 
 	readonly #validate?: ValidateFunction;
 	readonly #schemaError?: string;

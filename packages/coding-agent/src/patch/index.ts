@@ -34,9 +34,8 @@ import { enforcePlanModeWrite, resolvePlanPath } from "../tools/plan-mode-guard"
 import { applyPatch } from "./applicator";
 import { generateDiffString, generateUnifiedDiffString, replaceText } from "./diff";
 import { findMatch } from "./fuzzy";
-import { applyHashlineEdits, computeLineHash, type HashlineEdit, type LineTag, parseTag } from "./hashline";
+import { type Anchor, applyHashlineEdits, computeLineHash, type HashlineEdit, parseTag } from "./hashline";
 import { detectLineEnding, normalizeToLF, restoreLineEndings, stripBom } from "./normalize";
-import { buildNormativeUpdateInput } from "./normative";
 import { type EditToolDetails, getLspBatchRequest } from "./shared";
 // Internal imports
 import type { FileSystem, Operation, PatchInput } from "./types";
@@ -109,14 +108,14 @@ export { ApplyPatchError, EditMatchError, ParseError } from "./types";
 // ═══════════════════════════════════════════════════════════════════════════
 
 const replaceEditSchema = Type.Object({
-	path: Type.String({ description: "File path (relative or absolute)" }),
+	file: Type.String({ description: "File path (relative or absolute)" }),
 	old_text: Type.String({ description: "Text to find (fuzzy whitespace matching enabled)" }),
 	new_text: Type.String({ description: "Replacement text" }),
 	all: Type.Optional(Type.Boolean({ description: "Replace all occurrences (default: unique match required)" })),
 });
 
 const patchEditSchema = Type.Object({
-	path: Type.String({ description: "File path" }),
+	file: Type.String({ description: "File path" }),
 	op: Type.Optional(
 		StringEnum(["create", "delete", "update"], {
 			description: "Operation (default: update)",
@@ -168,7 +167,7 @@ export function stripNewLinePrefixes(lines: string[]): string[] {
 	});
 }
 
-export function hashlineParseContent(edit: string | string[] | null): string[] {
+export function hashlineParseText(edit: string[] | string | null): string[] {
 	if (edit === null) return [];
 	if (Array.isArray(edit)) return edit;
 	const lines = stripNewLinePrefixes(edit.split("\n"));
@@ -177,52 +176,45 @@ export function hashlineParseContent(edit: string | string[] | null): string[] {
 	return lines;
 }
 
-const hashlineEditSpecSchema = Type.Object(
+const hashlineEditSchema = Type.Object(
 	{
-		op: StringEnum(["replace", "append", "prepend", "insert"], {
-			description: "Operation type",
-		}),
-		first: Type.Optional(Type.String({ description: 'First/start anchor tag in "LINE#ID" format' })),
-		last: Type.Optional(Type.String({ description: 'Last/end anchor tag in "LINE#ID" format' })),
-		content: Type.Union([
+		op: StringEnum(["replace", "append", "prepend"]),
+		pos: Type.Optional(Type.String({ description: "anchor" })),
+		end: Type.Optional(Type.String({ description: "limit position" })),
+		lines: Type.Union([
+			Type.Array(Type.String(), { description: "content (preferred format)" }),
+			Type.String(),
 			Type.Null(),
-			Type.Array(Type.String(), { description: "Content lines" }),
-			Type.String({ description: "Content line" }),
 		]),
 	},
 	{ additionalProperties: false },
 );
 
-const hashlineEditSchema = Type.Object(
+const hashlineEditParamsSchema = Type.Object(
 	{
-		path: Type.String({ description: "File path (relative or absolute)" }),
-		edits: Type.Array(hashlineEditSpecSchema, {
-			description: "Changes to apply to the file at `path`",
-			minItems: 0,
-		}),
-		delete: Type.Optional(Type.Boolean({ description: "Delete the file when true" })),
-		rename: Type.Optional(Type.String({ description: "New path if moving" })),
+		file: Type.String({ description: "path" }),
+		edits: Type.Array(hashlineEditSchema, { description: "edits over $file" }),
+		delete: Type.Optional(Type.Boolean({ description: "If true, delete $file" })),
+		move: Type.Optional(Type.String({ description: "If set, move $file to $move" })),
 	},
 	{ additionalProperties: false },
 );
 
-export type HashlineToolEdit = Static<typeof hashlineEditSpecSchema>;
-export type HashlineParams = Static<typeof hashlineEditSchema>;
+export type HashlineToolEdit = Static<typeof hashlineEditSchema>;
+export type HashlineParams = Static<typeof hashlineEditParamsSchema>;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Resilient anchor resolution
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Map flat tool-schema edits (first/last) into typed HashlineEdit objects.
+ * Map flat tool-schema edits (tag/end) into typed HashlineEdit objects.
  *
  * Resilient: as long as at least one anchor exists, we execute.
- * - replace + first only → single-line replace (tag = first)
- * - replace + first + last → range replace
- * - append + first or last → append after that anchor
- * - prepend + first or last → prepend before that anchor
- * - insert + first + last → insert between them
- * - insert + one anchor → degrade to append/prepend
+ * - replace + tag only → single-line replace
+ * - replace + tag + end → range replace
+ * - append + tag or end → append after that anchor
+ * - prepend + tag or end → prepend before that anchor
  * - no anchors → file-level append/prepend (only for those ops)
  *
  * Unknown ops default to "replace".
@@ -230,51 +222,29 @@ export type HashlineParams = Static<typeof hashlineEditSchema>;
 function resolveEditAnchors(edits: HashlineToolEdit[]): HashlineEdit[] {
 	const result: HashlineEdit[] = [];
 	for (const edit of edits) {
-		const content = hashlineParseContent(edit.content);
-		const first = edit.first ? tryParseTag(edit.first) : undefined;
-		const last = edit.last ? tryParseTag(edit.last) : undefined;
+		const lines = hashlineParseText(edit.lines);
+		const tag = edit.pos ? tryParseTag(edit.pos) : undefined;
+		const end = edit.end ? tryParseTag(edit.end) : undefined;
 
 		// Normalize op — default unknown values to "replace"
-		const op = edit.op === "append" || edit.op === "prepend" || edit.op === "insert" ? edit.op : "replace";
-
+		const op = edit.op === "append" || edit.op === "prepend" ? edit.op : "replace";
 		switch (op) {
 			case "replace": {
-				if (first && last) {
-					result.push({ op: "replace", first, last, content });
-				} else if (first) {
-					result.push({ op: "replace", tag: first, content });
-				} else if (last) {
-					result.push({ op: "replace", tag: last, content });
+				if (tag && end) {
+					result.push({ op: "replace", pos: tag, end, lines });
+				} else if (tag || end) {
+					result.push({ op: "replace", pos: tag || end!, lines });
 				} else {
-					throw new Error("Replace requires at least one anchor (first or last).");
+					throw new Error("Replace requires at least one anchor (tag or end).");
 				}
 				break;
 			}
 			case "append": {
-				// Prefer first as the "after" anchor; fall back to last
-				const anchor = first ?? last;
-				result.push({ op: "append", ...(anchor ? { after: anchor } : {}), content });
+				result.push({ op: "append", pos: tag ?? end, lines });
 				break;
 			}
 			case "prepend": {
-				// Prefer last as the "before" anchor; fall back to first
-				const anchor = last ?? first;
-				result.push({ op: "prepend", ...(anchor ? { before: anchor } : {}), content });
-				break;
-			}
-			case "insert": {
-				if (first && last) {
-					result.push({ op: "insert", after: first, before: last, content });
-				} else if (first) {
-					// Degrade: insert after first
-					result.push({ op: "append", after: first, content });
-				} else if (last) {
-					// Degrade: insert before last
-					result.push({ op: "prepend", before: last, content });
-				} else {
-					// No anchors — append to end
-					result.push({ op: "append", content });
-				}
+				result.push({ op: "prepend", pos: end ?? tag, lines });
 				break;
 			}
 		}
@@ -283,7 +253,7 @@ function resolveEditAnchors(edits: HashlineToolEdit[]): HashlineEdit[] {
 }
 
 /** Parse a tag, returning undefined instead of throwing on garbage. */
-function tryParseTag(raw: string): LineTag | undefined {
+function tryParseTag(raw: string): Anchor | undefined {
 	try {
 		return parseTag(raw);
 	} catch {
@@ -379,11 +349,11 @@ function mergeDiagnosticsWithWarnings(
 // Tool Class
 // ═══════════════════════════════════════════════════════════════════════════
 
-type TInput = typeof replaceEditSchema | typeof patchEditSchema | typeof hashlineEditSchema;
+type TInput = typeof replaceEditSchema | typeof patchEditSchema | typeof hashlineEditParamsSchema;
 
 export type EditMode = "replace" | "patch" | "hashline";
 
-export const DEFAULT_EDIT_MODE: EditMode = "patch";
+export const DEFAULT_EDIT_MODE: EditMode = "hashline";
 
 export function normalizeEditMode(mode?: string | null): EditMode | null {
 	switch (mode) {
@@ -408,6 +378,7 @@ export class EditTool implements AgentTool<TInput> {
 	readonly label = "Edit";
 	readonly nonAbortable = true;
 	readonly concurrency = "exclusive";
+	readonly strict = true;
 
 	readonly #allowFuzzy: boolean;
 	readonly #fuzzyThreshold: number;
@@ -499,7 +470,7 @@ export class EditTool implements AgentTool<TInput> {
 			case "patch":
 				return patchEditSchema;
 			case "hashline":
-				return hashlineEditSchema;
+				return hashlineEditParamsSchema;
 			default:
 				return replaceEditSchema;
 		}
@@ -518,21 +489,20 @@ export class EditTool implements AgentTool<TInput> {
 		// Hashline mode execution
 		// ─────────────────────────────────────────────────────────────────
 		if (this.mode === "hashline") {
-			const { path, edits, delete: deleteFile, rename } = params as HashlineParams;
+			const { file: path, edits, delete: deleteFile, move } = params as HashlineParams;
 
-			enforcePlanModeWrite(this.session, path, { op: deleteFile ? "delete" : "update", rename });
+			enforcePlanModeWrite(this.session, path, { op: deleteFile ? "delete" : "update", move });
 
 			if (path.endsWith(".ipynb") && edits?.length > 0) {
 				throw new Error("Cannot edit Jupyter notebooks with the Edit tool. Use the NotebookEdit tool instead.");
 			}
 
 			const absolutePath = resolvePlanPath(this.session, path);
-			const resolvedRename = rename ? resolvePlanPath(this.session, rename) : undefined;
-			const file = Bun.file(absolutePath);
+			const resolvedMove = move ? resolvePlanPath(this.session, move) : undefined;
 
 			if (deleteFile) {
-				if (await file.exists()) {
-					await file.unlink();
+				if (await fs.exists(absolutePath)) {
+					await fs.unlink(absolutePath);
 				}
 				invalidateFsScanAfterDelete(absolutePath);
 				return {
@@ -545,21 +515,21 @@ export class EditTool implements AgentTool<TInput> {
 				};
 			}
 
-			if (!(await file.exists())) {
-				const content: string[] = [];
+			if (!(await fs.exists(absolutePath))) {
+				const lines: string[] = [];
 				for (const edit of edits) {
 					// For file creation, only anchorless appends/prepends are valid
-					if ((edit.op === "append" || edit.op === "prepend") && !edit.first && !edit.last) {
+					if ((edit.op === "append" || edit.op === "prepend") && !edit.pos && !edit.end) {
 						if (edit.op === "prepend") {
-							content.unshift(...hashlineParseContent(edit.content));
+							lines.unshift(...hashlineParseText(edit.lines));
 						} else {
-							content.push(...hashlineParseContent(edit.content));
+							lines.push(...hashlineParseText(edit.lines));
 						}
 					} else {
 						throw new Error(`File not found: ${path}`);
 					}
 				}
-				await file.write(content.join("\n"));
+				await fs.writeFile(absolutePath, lines.join("\n"));
 				return {
 					content: [{ type: "text", text: `Created ${path}` }],
 					details: {
@@ -572,29 +542,29 @@ export class EditTool implements AgentTool<TInput> {
 
 			const anchorEdits = resolveEditAnchors(edits);
 
-			const rawContent = await file.text();
-			const { bom, text: content } = stripBom(rawContent);
-			const originalEnding = detectLineEnding(content);
-			const originalNormalized = normalizeToLF(content);
-			let normalizedContent = originalNormalized;
+			const rawContent = await fs.readFile(absolutePath, "utf-8");
+			const { bom, text } = stripBom(rawContent);
+			const originalEnding = detectLineEnding(text);
+			const originalNormalized = normalizeToLF(text);
+			let normalizedText = originalNormalized;
 
-			// Apply anchor-based edits first (set, set_range, insert)
-			const anchorResult = applyHashlineEdits(normalizedContent, anchorEdits);
-			normalizedContent = anchorResult.content;
+			// Apply anchor-based edits first (replace, append, prepend)
+			const anchorResult = applyHashlineEdits(normalizedText, anchorEdits);
+			normalizedText = anchorResult.lines;
 
 			const result = {
-				content: normalizedContent,
+				text: normalizedText,
 				firstChangedLine: anchorResult.firstChangedLine,
 				warnings: anchorResult.warnings,
 				noopEdits: anchorResult.noopEdits,
 			};
-			if (originalNormalized === result.content && !rename) {
+			if (originalNormalized === result.text && !move) {
 				let diagnostic = `No changes made to ${path}. The edits produced identical content.`;
 				if (result.noopEdits && result.noopEdits.length > 0) {
 					const details = result.noopEdits
 						.map(
 							e =>
-								`Edit ${e.editIndex}: replacement for ${e.loc} is identical to current content:\n  ${e.loc}| ${e.currentContent}`,
+								`Edit ${e.editIndex}: replacement for ${e.loc} is identical to current content:\n  ${e.loc}| ${e.current}`,
 						)
 						.join("\n");
 					diagnostic += `\n${details}`;
@@ -602,27 +572,24 @@ export class EditTool implements AgentTool<TInput> {
 						"\nYour content must differ from what the file already contains. Re-read the file to see the current state.";
 				} else {
 					// Edits were not literally identical but heuristics normalized them back
-					const lines = result.content.split("\n");
+					const lines = result.text.split("\n");
 					const targetLines: string[] = [];
-					const refs: LineTag[] = [];
+					const refs: Anchor[] = [];
 					for (const edit of anchorEdits) {
 						refs.length = 0;
 						switch (edit.op) {
 							case "replace":
-								if ("tag" in edit) {
-									refs.push(edit.tag);
+								if (edit.end) {
+									refs.push(edit.end, edit.pos);
 								} else {
-									refs.push(edit.first, edit.last);
+									refs.push(edit.pos);
 								}
 								break;
 							case "append":
-								if (edit.after) refs.push(edit.after);
+								if (edit.pos) refs.push(edit.pos);
 								break;
 							case "prepend":
-								if (edit.before) refs.push(edit.before);
-								break;
-							case "insert":
-								refs.push(edit.after, edit.before);
+								if (edit.pos) refs.push(edit.pos);
 								break;
 							default:
 								break;
@@ -631,9 +598,9 @@ export class EditTool implements AgentTool<TInput> {
 						for (const ref of refs) {
 							try {
 								if (ref.line >= 1 && ref.line <= lines.length) {
-									const lineContent = lines[ref.line - 1];
-									const hash = computeLineHash(ref.line, lineContent);
-									targetLines.push(`${ref.line}#${hash}:${lineContent}`);
+									const text = lines[ref.line - 1];
+									const hash = computeLineHash(ref.line, text);
+									targetLines.push(`${ref.line}#${hash}:${text}`);
 								}
 							} catch {
 								/* skip malformed refs */
@@ -648,8 +615,8 @@ export class EditTool implements AgentTool<TInput> {
 				throw new Error(diagnostic);
 			}
 
-			const finalContent = bom + restoreLineEndings(result.content, originalEnding);
-			const writePath = resolvedRename ?? absolutePath;
+			const finalContent = bom + restoreLineEndings(result.text, originalEnding);
+			const writePath = resolvedMove ?? absolutePath;
 			const diagnostics = await this.#writethrough(
 				writePath,
 				finalContent,
@@ -657,26 +624,19 @@ export class EditTool implements AgentTool<TInput> {
 				Bun.file(writePath),
 				batchRequest,
 			);
-			if (resolvedRename && resolvedRename !== absolutePath) {
-				await file.unlink();
-				invalidateFsScanAfterRename(absolutePath, resolvedRename);
+			if (resolvedMove && resolvedMove !== absolutePath) {
+				await fs.unlink(absolutePath);
+				invalidateFsScanAfterRename(absolutePath, resolvedMove);
 			} else {
 				invalidateFsScanAfterWrite(absolutePath);
 			}
-			const diffResult = generateDiffString(originalNormalized, result.content);
-
-			const normative = buildNormativeUpdateInput({
-				path,
-				...(rename ? { rename } : {}),
-				oldContent: rawContent,
-				newContent: finalContent,
-			});
+			const diffResult = generateDiffString(originalNormalized, result.text);
 
 			const meta = outputMeta()
 				.diagnostics(diagnostics?.summary ?? "", diagnostics?.messages ?? [])
 				.get();
 
-			const resultText = rename ? `Updated and moved ${path} to ${rename}` : `Updated ${path}`;
+			const resultText = move ? `Moved ${path} to ${move}` : `Updated ${path}`;
 			return {
 				content: [
 					{
@@ -689,10 +649,9 @@ export class EditTool implements AgentTool<TInput> {
 					firstChangedLine: result.firstChangedLine ?? diffResult.firstChangedLine,
 					diagnostics,
 					op: "update",
-					rename,
+					move,
 					meta,
 				},
-				$normative: normative,
 			};
 		}
 
@@ -700,12 +659,12 @@ export class EditTool implements AgentTool<TInput> {
 		// Patch mode execution
 		// ─────────────────────────────────────────────────────────────────
 		if (this.mode === "patch") {
-			const { path, op: rawOp, rename, diff } = params as PatchParams;
+			const { file: path, op: rawOp, rename, diff } = params as PatchParams;
 
 			// Normalize unrecognized operations to "update"
 			const op: Operation = rawOp === "create" || rawOp === "delete" ? rawOp : "update";
 
-			enforcePlanModeWrite(this.session, path, { op, rename });
+			enforcePlanModeWrite(this.session, path, { op, move: rename });
 			const resolvedPath = resolvePlanPath(this.session, path);
 			const resolvedRename = rename ? resolvePlanPath(this.session, rename) : undefined;
 
@@ -773,7 +732,7 @@ export class EditTool implements AgentTool<TInput> {
 					firstChangedLine: diffResult.firstChangedLine,
 					diagnostics: mergedDiagnostics,
 					op,
-					rename: effRename,
+					move: effRename,
 					meta,
 				},
 			};
@@ -782,7 +741,7 @@ export class EditTool implements AgentTool<TInput> {
 		// ─────────────────────────────────────────────────────────────────
 		// Replace mode execution
 		// ─────────────────────────────────────────────────────────────────
-		const { path, old_text, new_text, all } = params as ReplaceParams;
+		const { file: path, old_text, new_text, all } = params as ReplaceParams;
 
 		enforcePlanModeWrite(this.session, path);
 
@@ -795,13 +754,12 @@ export class EditTool implements AgentTool<TInput> {
 		}
 
 		const absolutePath = resolvePlanPath(this.session, path);
-		const file = Bun.file(absolutePath);
 
-		if (!(await file.exists())) {
+		if (!(await fs.exists(absolutePath))) {
 			throw new Error(`File not found: ${path}`);
 		}
 
-		const rawContent = await file.text();
+		const rawContent = await fs.readFile(absolutePath, "utf-8");
 		const { bom, text: content } = stripBom(rawContent);
 		const originalEnding = detectLineEnding(content);
 		const normalizedContent = normalizeToLF(content);
@@ -844,7 +802,13 @@ export class EditTool implements AgentTool<TInput> {
 		}
 
 		const finalContent = bom + restoreLineEndings(result.content, originalEnding);
-		const diagnostics = await this.#writethrough(absolutePath, finalContent, signal, file, batchRequest);
+		const diagnostics = await this.#writethrough(
+			absolutePath,
+			finalContent,
+			signal,
+			Bun.file(absolutePath),
+			batchRequest,
+		);
 		invalidateFsScanAfterWrite(absolutePath);
 		const diffResult = generateDiffString(normalizedContent, result.content);
 

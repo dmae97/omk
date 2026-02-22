@@ -172,7 +172,7 @@ Micromanaging (you think, agent types):
 ```
 assignment: "In src/api/handler.ts, line 47, change `throw err` to `throw new ApiError(err.message, 500)`.
 On line 63, wrap fetch call try/catch return 502 on failure.
-On line 89, add null check before accessing resp.body..."
+On line 89, add null check before accessing resp.body…"
 ```
 
 Delegating (agent thinks within constraints):
@@ -226,8 +226,8 @@ Do not touch TS bindings or downstream consumers — separate phase.
 
 ## Change
 - Implement three N-API exports in grep.rs:
-  - `search(pattern: JsString, path: JsString, env: Env) -> napi::Result<Vec<Match>>`
-...
+  - `search(pattern: JsString, path: JsString, env: Env) → napi::Result<Vec<Match>>`
+…
 
 ## Acceptance (task-local)
 - Three functions exported with correct signatures (caller verifies build after all tasks)

@@ -866,6 +866,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 	readonly label = "LSP";
 	readonly description: string;
 	readonly parameters = lspSchema;
+	readonly strict = true;
 	readonly renderCall = renderCall;
 	readonly renderResult = renderResult;
 	readonly mergeCallAndResult = true;

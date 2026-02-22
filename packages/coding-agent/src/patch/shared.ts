@@ -22,6 +22,7 @@ import {
 	truncateDiffByHunk,
 } from "../tools/render-utils";
 import { Ellipsis, Hasher, type RenderCache, renderStatusLine, truncateToWidth } from "../tui";
+import type { HashlineToolEdit } from "./index";
 import type { DiffError, DiffResult, Operation } from "./types";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -58,7 +59,7 @@ export interface EditToolDetails {
 	/** Operation type (patch mode only) */
 	op?: Operation;
 	/** New path after move/rename (patch mode only) */
-	rename?: string;
+	move?: string;
 	/** Structured output metadata */
 	meta?: OutputMeta;
 }
@@ -70,6 +71,7 @@ export interface EditToolDetails {
 interface EditRenderArgs {
 	path?: string;
 	file_path?: string;
+	file?: string;
 	oldText?: string;
 	newText?: string;
 	patch?: string;
@@ -83,15 +85,8 @@ interface EditRenderArgs {
 	 */
 	previewDiff?: string;
 	// Hashline mode fields
-	edits?: HashlineEditPreview[];
+	edits?: Partial<HashlineToolEdit>[];
 }
-
-type HashlineEditPreview = {
-	op: string;
-	first?: string;
-	last?: string;
-	content: string | string[] | null;
-};
 
 /** Extended context for edit tool rendering */
 export interface EditRenderContext {
@@ -123,7 +118,7 @@ function formatStreamingDiff(diff: string, rawPath: string, uiTheme: Theme, labe
 	return text;
 }
 
-function formatStreamingHashlineEdits(edits: unknown[], uiTheme: Theme): string {
+function formatStreamingHashlineEdits(edits: Partial<HashlineToolEdit>[], uiTheme: Theme): string {
 	const MAX_EDITS = 4;
 	const MAX_DST_LINES = 8;
 	let text = "\n\n";
@@ -158,22 +153,21 @@ function formatStreamingHashlineEdits(edits: unknown[], uiTheme: Theme): string 
 	}
 
 	return text.trimEnd();
-	function formatHashlineEdit(edit: unknown): { srcLabel: string; dst: string } {
-		const editRecord = typeof edit === "object" && edit !== null ? (edit as Record<string, unknown>) : undefined;
-		if (!editRecord) {
+	function formatHashlineEdit(edit: Partial<HashlineToolEdit>): { srcLabel: string; dst: string } {
+		if (typeof edit !== "object" || !edit) {
 			return { srcLabel: "• (incomplete edit)", dst: "" };
 		}
 
-		const contentLines = Array.isArray(editRecord.content) ? (editRecord.content as string[]).join("\n") : "";
+		const contentLines = Array.isArray(edit.lines) ? (edit.lines as string[]).join("\n") : "";
 
-		const op = typeof editRecord.op === "string" ? editRecord.op : "?";
-		const first = typeof editRecord.first === "string" ? editRecord.first : undefined;
-		const last = typeof editRecord.last === "string" ? editRecord.last : undefined;
+		const op = typeof edit.op === "string" ? edit.op : "?";
+		const pos = typeof edit.pos === "string" ? edit.pos : undefined;
+		const end = typeof edit.end === "string" ? edit.end : undefined;
 
-		if (first && last && first !== last) {
-			return { srcLabel: `\u2022 ${op} ${first}..${last}`, dst: contentLines };
+		if (pos && end && pos !== end) {
+			return { srcLabel: `• ${op} ${pos}…${end}`, dst: contentLines };
 		}
-		const anchor = first ?? last;
+		const anchor = pos ?? end;
 		if (anchor) {
 			return { srcLabel: `\u2022 ${op} ${anchor}`, dst: contentLines };
 		}
@@ -226,7 +220,7 @@ export const editToolRenderer = {
 	mergeCallAndResult: true,
 
 	renderCall(args: EditRenderArgs, options: RenderResultOptions, uiTheme: Theme): Component {
-		const rawPath = args.file_path || args.path || "";
+		const rawPath = args.file_path || args.path || args.file || "";
 		const filePath = shortenPath(rawPath);
 		const editLanguage = getLanguageFromPath(rawPath) ?? "text";
 		const editIcon = uiTheme.fg("muted", uiTheme.getLangIcon(editLanguage));
@@ -281,13 +275,13 @@ export const editToolRenderer = {
 		uiTheme: Theme,
 		args?: EditRenderArgs,
 	): Component {
-		const rawPath = args?.file_path || args?.path || "";
+		const rawPath = args?.file_path || args?.path || args?.file || "";
 		const filePath = shortenPath(rawPath);
 		const editLanguage = getLanguageFromPath(rawPath) ?? "text";
 		const editIcon = uiTheme.fg("muted", uiTheme.getLangIcon(editLanguage));
 
 		const op = args?.op || result.details?.op;
-		const rename = args?.rename || result.details?.rename;
+		const rename = args?.rename || result.details?.move;
 		const opTitle = op === "create" ? "Create" : op === "delete" ? "Delete" : "Edit";
 
 		// Pre-compute metadata line (static across renders)

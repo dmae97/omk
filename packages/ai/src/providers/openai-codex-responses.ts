@@ -32,6 +32,7 @@ import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
 import { parseStreamingJson } from "../utils/json-parse";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
+import { enforceStrictSchema, NO_STRICT } from "../utils/typebox-helpers";
 import {
 	CODEX_BASE_URL,
 	JWT_CLAIM_PATH,
@@ -1681,16 +1682,26 @@ function convertMessages(model: Model<"openai-codex-responses">, context: Contex
 	return messages;
 }
 
-function convertTools(
-	tools: Tool[],
-): Array<{ type: "function"; name: string; description: string; parameters: Record<string, unknown>; strict: null }> {
-	return tools.map(tool => ({
-		type: "function",
-		name: tool.name,
-		description: tool.description,
-		parameters: tool.parameters as unknown as Record<string, unknown>,
-		strict: null,
-	}));
+function convertTools(tools: Tool[]): Array<{
+	type: "function";
+	name: string;
+	description: string;
+	parameters: Record<string, unknown>;
+	strict?: boolean;
+}> {
+	return tools.map(tool => {
+		const strict = !NO_STRICT && tool.strict;
+		return {
+			type: "function",
+			name: tool.name,
+			description: tool.description,
+			parameters: strict
+				? enforceStrictSchema(tool.parameters as unknown as Record<string, unknown>)
+				: (tool.parameters as unknown as Record<string, unknown>),
+			// Only include strict if provider supports it. Some reject unknown fields.
+			...(strict && { strict: true }),
+		};
+	});
 }
 
 function mapStopReason(status: string | undefined): StopReason {

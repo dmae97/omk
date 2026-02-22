@@ -30,9 +30,9 @@ Good:
 - Changed default timeout from 30s to 60s for slow connections
 
 Bad:
-- **cli**: Added dry-run flag -> redundant scope prefix
-- Added new feature. -> vague, trailing period
-- Refactored parser internals -> not user-visible
+- **cli**: Added dry-run flag → redundant scope prefix
+- Added new feature. → vague, trailing period
+- Refactored parser internals → not user-visible
 
 Breaking Changes:
 - Removed legacy auth flow; users must re-authenticate with OAuth tokens

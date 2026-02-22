@@ -484,6 +484,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 	readonly label = "Puppeteer";
 	readonly description: string;
 	readonly parameters = browserSchema;
+	readonly strict = true;
 	#browser: Browser | null = null;
 	#page: Page | null = null;
 	#currentHeadless: boolean | null = null;

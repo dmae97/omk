@@ -289,6 +289,7 @@ export class TodoWriteTool implements AgentTool<typeof todoWriteSchema, TodoWrit
 	readonly description: string;
 	readonly parameters = todoWriteSchema;
 	readonly concurrency = "exclusive";
+	readonly strict = true;
 
 	constructor(private readonly session: ToolSession) {
 		this.description = renderPromptTemplate(todoWriteDescription);

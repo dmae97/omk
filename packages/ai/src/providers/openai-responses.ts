@@ -34,6 +34,7 @@ import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-ins
 import { parseStreamingJson } from "../utils/json-parse";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
 import { mapToOpenAIResponsesToolChoice } from "../utils/tool-choice";
+import { enforceStrictSchema, NO_STRICT } from "../utils/typebox-helpers";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers";
 import { transformMessages } from "./transform-messages";
 
@@ -428,7 +429,7 @@ function buildParams(model: Model<"openai-responses">, context: Context, options
 	}
 
 	if (context.tools) {
-		params.tools = convertTools(context.tools);
+		params.tools = convertTools(context.tools, supportsStrictMode(model));
 		if (options?.toolChoice) {
 			params.tool_choice = mapToOpenAIResponsesToolChoice(options.toolChoice);
 		}
@@ -467,6 +468,17 @@ function buildParams(model: Model<"openai-responses">, context: Context, options
 
 function isAzureOpenAIBaseUrl(baseUrl: string): boolean {
 	return baseUrl.includes(".openai.azure.com") || baseUrl.includes("azure.com/openai");
+}
+
+function supportsStrictMode(model: Model<"openai-responses">): boolean {
+	if (model.provider === "openai" || model.provider === "azure") return true;
+
+	const baseUrl = model.baseUrl.toLowerCase();
+	return (
+		baseUrl.includes("api.openai.com") ||
+		baseUrl.includes(".openai.azure.com") ||
+		baseUrl.includes("models.inference.ai.azure.com")
+	);
 }
 
 function convertMessages(
@@ -656,14 +668,20 @@ function convertMessages(
 	return messages;
 }
 
-function convertTools(tools: Tool[]): OpenAITool[] {
-	return tools.map(tool => ({
-		type: "function",
-		name: tool.name,
-		description: tool.description,
-		parameters: tool.parameters as any, // TypeBox already generates JSON Schema
-		strict: false,
-	}));
+function convertTools(tools: Tool[], strictMode: boolean): OpenAITool[] {
+	return tools.map(tool => {
+		const strict = !NO_STRICT && strictMode && tool.strict;
+		const parameters = strict
+			? enforceStrictSchema(tool.parameters as unknown as Record<string, unknown>)
+			: (tool.parameters as unknown as Record<string, unknown>);
+		return {
+			type: "function",
+			name: tool.name,
+			description: tool.description,
+			parameters,
+			...(strict && { strict: true }),
+		} as OpenAITool;
+	});
 }
 
 function mapStopReason(status: OpenAI.Responses.ResponseStatus | undefined): StopReason {

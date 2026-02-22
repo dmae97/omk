@@ -134,6 +134,7 @@ function renderDescription(
 export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 	readonly name = "task";
 	readonly label = "Task";
+	readonly strict = true;
 	readonly parameters: TaskSchema;
 	readonly renderCall = renderCall;
 	readonly renderResult = renderResult;

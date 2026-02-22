@@ -20,6 +20,7 @@ export class CancelJobTool implements AgentTool<typeof cancelJobSchema, CancelJo
 	readonly label = "CancelJob";
 	readonly description: string;
 	readonly parameters = cancelJobSchema;
+	readonly strict = true;
 
 	constructor(private readonly session: ToolSession) {
 		this.description = renderPromptTemplate(cancelJobDescription);

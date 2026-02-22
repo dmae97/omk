@@ -91,6 +91,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 	readonly description: string;
 	readonly parameters: BashToolSchema;
 	readonly concurrency = "exclusive";
+	readonly strict = true;
 	readonly #asyncEnabled: boolean;
 
 	constructor(private readonly session: ToolSession) {

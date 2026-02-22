@@ -228,6 +228,116 @@ function cloneJsonValue<T>(value: T): T {
 	return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function normalizeOptionalNullsForSchema(schema: unknown, value: unknown): { value: unknown; changed: boolean } {
+	if (value === null || value === undefined) return { value, changed: false };
+	if (schema === null || typeof schema !== "object") return { value, changed: false };
+
+	const schemaObject = schema as Record<string, unknown>;
+
+	const normalizeAnyOfLike = (keyword: "anyOf" | "oneOf"): { value: unknown; changed: boolean } => {
+		const branches = schemaObject[keyword];
+		if (!Array.isArray(branches)) return { value, changed: false };
+
+		let changedCandidate: { value: unknown; changed: true } | null = null;
+
+		for (const branch of branches) {
+			const normalized = normalizeOptionalNullsForSchema(branch, value);
+			if (!normalized.changed) continue;
+
+			try {
+				const validateBranch = ajv.compile(branch);
+				if (validateBranch(normalized.value)) {
+					return normalized;
+				}
+			} catch {
+				// Ignore branch-level compilation/validation errors and keep scanning.
+			}
+
+			if (!changedCandidate) {
+				changedCandidate = { value: normalized.value, changed: true };
+			}
+		}
+
+		return changedCandidate ?? { value, changed: false };
+	};
+
+	const anyOfNormalization = normalizeAnyOfLike("anyOf");
+	if (anyOfNormalization.changed) return anyOfNormalization;
+
+	const oneOfNormalization = normalizeAnyOfLike("oneOf");
+	if (oneOfNormalization.changed) return oneOfNormalization;
+
+	if (Array.isArray(schemaObject.allOf)) {
+		let changed = false;
+		let nextValue: unknown = value;
+		for (const branch of schemaObject.allOf) {
+			const normalized = normalizeOptionalNullsForSchema(branch, nextValue);
+			if (!normalized.changed) continue;
+			nextValue = normalized.value;
+			changed = true;
+		}
+		if (changed) return { value: nextValue, changed: true };
+	}
+
+	if (Array.isArray(value)) {
+		const itemSchema = schemaObject.items;
+		if (itemSchema === null || typeof itemSchema !== "object" || Array.isArray(itemSchema)) {
+			return { value, changed: false };
+		}
+
+		let changed = false;
+		let nextValue = value;
+		for (let i = 0; i < value.length; i += 1) {
+			const normalized = normalizeOptionalNullsForSchema(itemSchema, value[i]);
+			if (!normalized.changed) continue;
+			if (!changed) {
+				nextValue = [...value];
+				changed = true;
+			}
+			nextValue[i] = normalized.value;
+		}
+		return { value: changed ? nextValue : value, changed };
+	}
+
+	if (schemaObject.type !== "object") return { value, changed: false };
+	if (typeof value !== "object" || value === null) return { value, changed: false };
+	if (Array.isArray(value)) return { value, changed: false };
+	if (schemaObject.properties === null || typeof schemaObject.properties !== "object") {
+		return { value, changed: false };
+	}
+
+	const properties = schemaObject.properties as Record<string, unknown>;
+	const required = new Set(Array.isArray(schemaObject.required) ? (schemaObject.required as string[]) : []);
+
+	let changed = false;
+	let nextValue = value as Record<string, unknown>;
+
+	for (const [key, propertySchema] of Object.entries(properties)) {
+		if (!(key in nextValue)) continue;
+		const currentValue = nextValue[key];
+
+		if (currentValue === null && !required.has(key)) {
+			if (!changed) {
+				nextValue = { ...nextValue };
+				changed = true;
+			}
+			delete nextValue[key];
+			continue;
+		}
+
+		const normalized = normalizeOptionalNullsForSchema(propertySchema, currentValue);
+		if (!normalized.changed) continue;
+
+		if (!changed) {
+			nextValue = { ...nextValue };
+			changed = true;
+		}
+		nextValue[key] = normalized.value;
+	}
+
+	return { value: changed ? nextValue : value, changed };
+}
+
 /**
  * Attempts to fix type errors by parsing JSON-encoded strings.
  *
@@ -323,12 +433,26 @@ export function validateToolArguments(tool: Tool, toolCall: ToolCall): any {
 	let normalizedArgs: unknown = originalArgs;
 	let changed = false;
 
+	const optionalNullNormalization = normalizeOptionalNullsForSchema(tool.parameters, normalizedArgs);
+	if (optionalNullNormalization.changed) {
+		normalizedArgs = optionalNullNormalization.value;
+		changed = true;
+		if (validate(normalizedArgs)) {
+			return normalizedArgs;
+		}
+	}
+
 	for (let pass = 0; pass < MAX_TYPE_COERCION_PASSES; pass += 1) {
 		const coercion = coerceArgsFromErrors(normalizedArgs, validate.errors);
 		if (!coercion.changed) break;
 
 		normalizedArgs = coercion.value;
 		changed = true;
+
+		const nullNormalization = normalizeOptionalNullsForSchema(tool.parameters, normalizedArgs);
+		if (nullNormalization.changed) {
+			normalizedArgs = nullNormalization.value;
+		}
 
 		if (validate(normalizedArgs)) {
 			return normalizedArgs;

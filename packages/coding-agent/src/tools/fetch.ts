@@ -856,6 +856,7 @@ export class FetchTool implements AgentTool<typeof fetchSchema, FetchToolDetails
 	readonly label = "Fetch";
 	readonly description: string;
 	readonly parameters = fetchSchema;
+	readonly strict = true;
 
 	constructor(private readonly session: ToolSession) {
 		this.description = renderPromptTemplate(fetchDescription);

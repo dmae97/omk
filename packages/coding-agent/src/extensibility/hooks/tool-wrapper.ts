@@ -22,6 +22,7 @@ export class HookToolWrapper<TParameters extends TSchema = TSchema, TDetails = u
 	declare description: string;
 	declare parameters: TParameters;
 	declare label: string;
+	declare strict: boolean;
 
 	constructor(
 		private tool: AgentTool<TParameters, TDetails>,

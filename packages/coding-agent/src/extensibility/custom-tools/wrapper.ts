@@ -14,6 +14,7 @@ export class CustomToolAdapter<TParams extends TSchema = TSchema, TDetails = any
 	declare label: string;
 	declare description: string;
 	declare parameters: TParams;
+	readonly strict = true;
 
 	constructor(
 		private tool: CustomTool<TParams, TDetails>,

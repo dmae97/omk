@@ -96,6 +96,58 @@ describe("Tool argument coercion", () => {
 		expect(result.payload.items).toEqual([4, 5]);
 	});
 
+	it("coerces JSON-stringified object arrays when schema expects array of objects", () => {
+		const tool: Tool = {
+			name: "t9",
+			description: "",
+			parameters: Type.Object({
+				a: Type.String(),
+				b: Type.Array(
+					Type.Object({
+						k: Type.String(),
+					}),
+				),
+			}),
+		};
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-9",
+			name: "t9",
+			arguments: {
+				a: "hello",
+				b: '[{"k":"y"}]',
+			},
+		};
+		const result = validateToolArguments(tool, toolCall);
+		expect(result.b).toEqual([{ k: "y" }]);
+	});
+
+	it("coerces JSON-stringified root arguments containing array-of-object fields", () => {
+		const tool: Tool = {
+			name: "t10",
+			description: "",
+			parameters: Type.Object({
+				a: Type.String(),
+				b: Type.Array(
+					Type.Object({
+						k: Type.String(),
+					}),
+				),
+			}),
+		};
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-10",
+			name: "t10",
+			arguments: '{"a":"hello","b":"[{\\"k\\":\\"y\\"}]"}' as unknown as Record<string, unknown>,
+		};
+		const result = validateToolArguments(tool, toolCall);
+		expect(result).toEqual({
+			a: "hello",
+			b: [{ k: "y" }],
+		});
+	});
+
 	it("iteratively coerces when both root arguments and nested fields are JSON strings", () => {
 		const tool: Tool = {
 			name: "t7",
@@ -154,6 +206,107 @@ describe("Tool argument coercion", () => {
 
 		const result = validateToolArguments(tool, toolCall);
 		expect(result.edits).toEqual([{ target: "13#cf", new_content: "..." }]);
+	});
+
+	it("accepts null for optional properties by treating them as omitted", () => {
+		const tool: Tool = {
+			name: "t11",
+			description: "",
+			parameters: Type.Object({
+				requiredText: Type.String(),
+				optionalCount: Type.Optional(Type.Number()),
+			}),
+		};
+
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-11",
+			name: "t11",
+			arguments: { requiredText: "ok", optionalCount: null },
+		};
+
+		const result = validateToolArguments(tool, toolCall);
+		expect(result).toEqual({ requiredText: "ok" });
+	});
+
+	it("drops null optional properties nested in array objects", () => {
+		const tool: Tool = {
+			name: "t12",
+			description: "",
+			parameters: Type.Object({
+				edits: Type.Array(
+					Type.Object({
+						target: Type.String(),
+						pos: Type.Optional(Type.String()),
+						end: Type.Optional(Type.String()),
+					}),
+				),
+			}),
+		};
+
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-12",
+			name: "t12",
+			arguments: { edits: [{ target: "a", pos: null, end: "e" }] },
+		};
+
+		const result = validateToolArguments(tool, toolCall);
+		expect(result).toEqual({ edits: [{ target: "a", end: "e" }] });
+	});
+
+	it("drops null optional properties in anyOf object branches", () => {
+		const opSchema = Type.Union([
+			Type.Object({
+				op: Type.Literal("add_task"),
+				phase: Type.String(),
+				content: Type.String(),
+			}),
+			Type.Object({
+				op: Type.Literal("update"),
+				id: Type.String(),
+				status: Type.Optional(Type.String()),
+				content: Type.Optional(Type.String()),
+				notes: Type.Optional(Type.String()),
+			}),
+		]);
+
+		const tool: Tool = {
+			name: "t13",
+			description: "",
+			parameters: Type.Object({
+				ops: Type.Array(opSchema),
+			}),
+		};
+
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-13",
+			name: "t13",
+			arguments: {
+				ops: [
+					{
+						op: "update",
+						id: "task-1",
+						status: "completed",
+						content: null,
+						notes: "",
+					},
+				],
+			},
+		};
+
+		const result = validateToolArguments(tool, toolCall);
+		expect(result).toEqual({
+			ops: [
+				{
+					op: "update",
+					id: "task-1",
+					status: "completed",
+					notes: "",
+				},
+			],
+		});
 	});
 
 	it("does not parse quoted JSON strings when schema expects number", () => {
