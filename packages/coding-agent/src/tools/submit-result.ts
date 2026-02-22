@@ -89,7 +89,7 @@ export class SubmitResultTool implements AgentTool<TObject, SubmitResultDetails>
 					...(normalizedSchema as object),
 					description: `Structured output matching the schema:\n${schemaHint}`,
 				})
-			: Type.Any({ description: "Structured JSON output (no schema specified)" });
+			: Type.Object({}, { additionalProperties: true, description: "Structured JSON output (no schema specified)" });
 
 		this.parameters = Type.Object({
 			data: Type.Optional(dataSchema),
