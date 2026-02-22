@@ -205,7 +205,12 @@ async fn run_shell_session(
 				run_task.abort();
 				let _ = run_task.await;
 			}
-			*session.lock().await = None;
+			// Use try_lock to avoid deadlocking if another task holds the session.
+			// If we can't acquire the lock, the session will be cleaned up when the
+			// holding task finishes.
+			if let Ok(mut guard) = session.try_lock() {
+				*guard = None;
+			}
 			return Ok(ShellRunResult {
 				exit_code: None,
 				cancelled: matches!(reason, task::AbortReason::Signal),

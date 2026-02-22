@@ -538,7 +538,6 @@ export async function runRootCommand(parsed: Args, rawArgs: string[]): Promise<v
 	const cwd = getProjectDir();
 	await logger.timeAsync("settings:init", () => Settings.init({ cwd }));
 	if (parsedArgs.noPty) {
-		settings.override("bash.virtualTerminal", "off");
 		Bun.env.PI_NO_PTY = "1";
 	}
 	const {

@@ -756,17 +756,6 @@ export const SETTINGS_SCHEMA = {
 	// ─────────────────────────────────────────────────────────────────────────
 	// Bash interceptor settings
 	// ─────────────────────────────────────────────────────────────────────────
-	"bash.virtualTerminal": {
-		type: "enum",
-		values: ["on", "off"] as const,
-		default: "off",
-		ui: {
-			tab: "bash",
-			label: "Virtual terminal",
-			description: "Use PTY-backed interactive execution for bash",
-			submenu: true,
-		},
-	},
 	"bashInterceptor.enabled": {
 		type: "boolean",
 		default: false,

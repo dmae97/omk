@@ -1,6 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added `pty` parameter to bash tool to enable PTY mode for commands requiring a real terminal (e.g., sudo, ssh, top, less)
+
+### Changed
+
+- Changed bash tool to use per-command PTY control instead of global virtual terminal setting
+
+### Removed
+
+- Removed `bash.virtualTerminal` setting; use the `pty` parameter on individual bash commands instead
 
 ## [12.19.1] - 2026-02-22
 ### Removed

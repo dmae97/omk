@@ -154,11 +154,6 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "tool-only", label: "tool-only", description: "Interrupt only on tool-call argument matches" },
 		{ value: "never", label: "never", description: "Never interrupt; inject warning after completion" },
 	],
-	// Virtual terminal
-	"bash.virtualTerminal": [
-		{ value: "on", label: "On", description: "PTY-backed interactive execution" },
-		{ value: "off", label: "Off", description: "Standard non-interactive execution" },
-	],
 	// Provider options
 	"providers.webSearch": [
 		{

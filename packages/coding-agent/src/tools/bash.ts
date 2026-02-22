@@ -34,6 +34,11 @@ const bashSchemaBase = Type.Object({
 	cwd: Type.Optional(Type.String({ description: "Working directory (default: cwd)" })),
 	head: Type.Optional(Type.Number({ description: "Return only first N lines of output" })),
 	tail: Type.Optional(Type.Number({ description: "Return only last N lines of output" })),
+	pty: Type.Optional(
+		Type.Boolean({
+			description: "Run in PTY mode when command needs a real terminal (e.g. sudo/ssh/top/less); default: false",
+		}),
+	),
 });
 
 const bashSchemaWithAsync = Type.Object({
@@ -54,6 +59,7 @@ export interface BashToolInput {
 	head?: number;
 	tail?: number;
 	async?: boolean;
+	pty?: boolean;
 }
 
 export interface BashToolDetails {
@@ -123,7 +129,15 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 
 	async execute(
 		_toolCallId: string,
-		{ command: rawCommand, timeout: rawTimeout = 300, cwd, head, tail, async: asyncRequested = false }: BashToolInput,
+		{
+			command: rawCommand,
+			timeout: rawTimeout = 300,
+			cwd,
+			head,
+			tail,
+			async: asyncRequested = false,
+			pty = false,
+		}: BashToolInput,
 		signal?: AbortSignal,
 		onUpdate?: AgentToolUpdateCallback<BashToolDetails>,
 		ctx?: AgentToolContext,
@@ -188,7 +202,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 					try {
 						const result = await executeBash(command, {
 							cwd: commandCwd,
-							sessionKey: this.session.getSessionId?.() ?? undefined,
+							sessionKey: `${this.session.getSessionId?.() ?? ""}:async:${jobId}`,
 							timeout: timeoutMs,
 							signal: runSignal,
 							env: extraEnv,
@@ -229,11 +243,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 		const extraEnv = artifactsDir ? { ARTIFACTS: artifactsDir } : undefined;
 		const { path: artifactPath, id: artifactId } = (await this.session.allocateOutputArtifact?.("bash")) ?? {};
 
-		const usePty =
-			this.session.settings.get("bash.virtualTerminal") === "on" &&
-			$env.PI_NO_PTY !== "1" &&
-			ctx?.hasUI === true &&
-			ctx.ui !== undefined;
+		const usePty = pty && $env.PI_NO_PTY !== "1" && ctx?.hasUI === true && ctx.ui !== undefined;
 		const result: BashResult | BashInteractiveResult = usePty
 			? await runInteractiveBashPty(ctx.ui!, {
 					command,
