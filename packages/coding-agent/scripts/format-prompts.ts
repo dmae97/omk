@@ -6,7 +6,7 @@
  * 1. No blank line before list items
  * 2. No blank line after opening XML tag or Handlebars block
  * 3. No blank line before closing XML tag or Handlebars block
- * 4. Strip leading whitespace from closing XML tags and Handlebars (lines starting with {{)
+ * 4. Strip leading whitespace from top-level closing XML tags (opened at col 0) and Handlebars (lines starting with {{)
  * 5. Compact markdown tables (remove padding)
  * 6. Collapse 2+ blank lines to single blank line
  * 7. Trim trailing whitespace (preserve indentation)
@@ -65,6 +65,8 @@ function formatPrompt(content: string): string {
 	const lines = content.split("\n");
 	const result: string[] = [];
 	let inCodeBlock = false;
+	// Stack of tag names whose opening tag was at column 0 (top-level)
+	const topLevelTags: string[] = [];
 
 	for (let i = 0; i < lines.length; i++) {
 		let line = lines[i];
@@ -83,8 +85,30 @@ function formatPrompt(content: string): string {
 			continue;
 		}
 
-		// Strip leading whitespace from closing XML tags and Handlebars
-		if (CLOSING_XML.test(trimmed) || trimmed.startsWith("{{")) {
+		// Track top-level XML opening tags for depth-aware indent stripping
+		const isOpeningXml =
+			OPENING_XML.test(trimmed) && !trimmed.endsWith("/>");
+		if (isOpeningXml && line.length === trimmed.length) {
+			// Opening tag at column 0 — track as top-level
+			const match = OPENING_XML.exec(trimmed);
+			if (match) topLevelTags.push(match[1]);
+		}
+
+		// Strip leading whitespace from top-level closing XML tags and Handlebars
+		const closingMatch = CLOSING_XML.exec(trimmed);
+		if (closingMatch) {
+			const tagName = closingMatch[1];
+			if (
+				topLevelTags.length > 0 &&
+				topLevelTags[topLevelTags.length - 1] === tagName
+			) {
+				// Closing tag matches a top-level opener — strip indent
+				line = trimmed;
+				topLevelTags.pop();
+			} else {
+				line = line.trimEnd();
+			}
+		} else if (trimmed.startsWith("{{")) {
 			line = trimmed;
 		} else if (TABLE_SEP.test(trimmed)) {
 			// Compact table separator
