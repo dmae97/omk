@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.19.1] - 2026-02-22
 ### Removed
 
 - Removed `replaceText` edit operation from hashline mode (substring-based text replacement)

@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.19.1] - 2026-02-22
 ### Added
 
 - Exported `isProviderRetryableError` function for detecting rate-limit and transient stream errors
