@@ -2224,6 +2224,7 @@ export class AgentSession {
 
 		this.#disconnectFromAgent();
 		await this.abort();
+		this.#asyncJobManager?.cancelAll();
 		this.agent.reset();
 		await this.sessionManager.flush();
 		await this.sessionManager.newSession(options);
