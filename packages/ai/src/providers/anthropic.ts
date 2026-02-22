@@ -285,13 +285,19 @@ const PROVIDER_MAX_RETRIES = 3;
 const PROVIDER_BASE_DELAY_MS = 2000;
 
 /**
- * Check if an error from the Anthropic SDK is a rate-limit or transient error
- * that the SDK itself didn't retry (e.g. z.ai returns non-429 status with rate limit in body).
+ * Check if an error from the Anthropic SDK is a rate-limit/transient error that
+ * should be retried before any content has been emitted.
+ *
+ * Includes malformed JSON stream-envelope parse errors seen from some
+ * Anthropic-compatible proxy endpoints.
  */
-function isProviderRetryableError(error: unknown): boolean {
+export function isProviderRetryableError(error: unknown): boolean {
 	if (!(error instanceof Error)) return false;
 	const msg = error.message;
-	return /rate.?limit|too many requests|overloaded|service.?unavailable|1302/i.test(msg);
+	return (
+		/rate.?limit|too many requests|overloaded|service.?unavailable|1302/i.test(msg) ||
+		/json parse error|unterminated string|unexpected end of json input/i.test(msg)
+	);
 }
 
 export const streamAnthropic: StreamFunction<"anthropic-messages"> = (

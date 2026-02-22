@@ -1,6 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Exported `isProviderRetryableError` function for detecting rate-limit and transient stream errors
+- Support for retrying malformed JSON stream-envelope parse errors from Anthropic-compatible proxy endpoints
+
+### Changed
+
+- Expanded retry detection to include JSON parse errors (unterminated strings, unexpected end of input) in addition to rate-limit errors
 
 ## [12.19.0] - 2026-02-22
 ### Added
