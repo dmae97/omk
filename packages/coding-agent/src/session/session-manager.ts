@@ -6,6 +6,7 @@ import type { ImageContent, Message, TextContent, Usage } from "@oh-my-pi/pi-ai"
 import { getTerminalId } from "@oh-my-pi/pi-tui";
 import { isEnoent, logger, parseJsonlLenient, Snowflake, toError } from "@oh-my-pi/pi-utils";
 import { getBlobsDir, getAgentDir as getDefaultAgentDir, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
+import { ArtifactManager } from "./artifacts";
 import { type BlobPutResult, BlobStore, externalizeImageData, isBlobRef, resolveImageData } from "./blob-store";
 import {
 	type BashExecutionMessage,
@@ -216,6 +217,10 @@ export type ReadonlySessionManager = Pick<
 	| "getSessionDir"
 	| "getSessionId"
 	| "getSessionFile"
+	| "getArtifactsDir"
+	| "allocateArtifactPath"
+	| "saveArtifact"
+	| "getArtifactPath"
 	| "getLeafId"
 	| "getLeafEntry"
 	| "getEntry"
@@ -1129,6 +1134,8 @@ export class SessionManager {
 	#persistChain: Promise<void> = Promise.resolve();
 	#persistError: Error | undefined;
 	#persistErrorReported = false;
+	#artifactManager: ArtifactManager | null = null;
+	#artifactManagerSessionFile: string | null = null;
 	readonly #blobStore: BlobStore;
 
 	private constructor(
@@ -1528,6 +1535,67 @@ export class SessionManager {
 
 	getSessionFile(): string | undefined {
 		return this.#sessionFile;
+	}
+
+	/**
+	 * Returns the session artifacts directory path (session file path without .jsonl).
+	 * Returns null when the session is not persisted to a file.
+	 */
+	getArtifactsDir(): string | null {
+		const sessionFile = this.#sessionFile;
+		return sessionFile ? sessionFile.slice(0, -6) : null;
+	}
+
+	/**
+	 * Returns an artifact manager bound to the current session file.
+	 * Recreates the manager when the active session file changes.
+	 */
+	#getOrCreateArtifactManager(): ArtifactManager | null {
+		const sessionFile = this.#sessionFile;
+		if (!sessionFile) {
+			this.#artifactManager = null;
+			this.#artifactManagerSessionFile = null;
+			return null;
+		}
+
+		if (this.#artifactManager && this.#artifactManagerSessionFile === sessionFile) {
+			return this.#artifactManager;
+		}
+
+		const manager = new ArtifactManager(sessionFile);
+		this.#artifactManager = manager;
+		this.#artifactManagerSessionFile = sessionFile;
+		return manager;
+	}
+
+	/**
+	 * Allocate a new artifact path and ID for the current session.
+	 * Returns an empty object when the session is not persisted.
+	 */
+	async allocateArtifactPath(toolType: string): Promise<{ id?: string; path?: string }> {
+		const manager = this.#getOrCreateArtifactManager();
+		if (!manager) return {};
+		return manager.allocatePath(toolType);
+	}
+
+	/**
+	 * Save artifact content under the current session and return artifact ID.
+	 * Returns undefined when the session is not persisted.
+	 */
+	async saveArtifact(content: string, toolType: string): Promise<string | undefined> {
+		const manager = this.#getOrCreateArtifactManager();
+		if (!manager) return undefined;
+		return manager.save(content, toolType);
+	}
+
+	/**
+	 * Resolve an artifact ID to an on-disk path for the current session.
+	 * Returns null when missing or when the session is not persisted.
+	 */
+	async getArtifactPath(id: string): Promise<string | null> {
+		const manager = this.#getOrCreateArtifactManager();
+		if (!manager) return null;
+		return manager.getPath(id);
 	}
 
 	getSessionName(): string | undefined {

@@ -4,7 +4,6 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { EditTool } from "@oh-my-pi/pi-coding-agent/patch";
-import { ArtifactManager } from "@oh-my-pi/pi-coding-agent/session/artifacts";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { BashTool } from "@oh-my-pi/pi-coding-agent/tools/bash";
 import { FindTool } from "@oh-my-pi/pi-coding-agent/tools/find";
@@ -26,13 +25,12 @@ function getTextOutput(result: any): string {
 
 function createTestToolSession(cwd: string): ToolSession {
 	const sessionFile = path.join(cwd, "session.jsonl");
-	const artifactManager = new ArtifactManager(sessionFile);
 	return {
 		cwd,
 		hasUI: false,
 		getSessionFile: () => sessionFile,
 		getSessionSpawns: () => "*",
-		getArtifactManager: () => artifactManager,
+		allocateOutputArtifact: async () => ({}),
 		settings: Settings.isolated(),
 	};
 }

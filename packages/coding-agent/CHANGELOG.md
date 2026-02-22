@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added support for GitLab Duo authentication provider
@@ -14,6 +13,9 @@
 
 ### Changed
 
+- Moved artifact management from `ToolSession.getArtifactManager()` to `SessionManager`, providing centralized artifact lifecycle management
+- Replaced `getArtifactManager()` method with `allocateOutputArtifact()` in `ToolSession` for simpler artifact allocation without exposing manager internals
+- Simplified artifact allocation in bash, fetch, python, and ssh tools by calling `session.allocateOutputArtifact()` directly instead of importing helper function
 - Changed default value of `todo.reminders` setting from false to true to enable todo reminders by default
 - Updated system prompt discipline guidelines with new guidance on code cleanup, root-cause fixes, and avoiding breadcrumb comments
 - Enhanced work procedure with architecture-first approach, idiomatic code standards, and ruthless dead code cleanup
@@ -45,6 +47,7 @@
 
 ### Removed
 
+- Removed `allocateOutputArtifact()` helper function from `streaming-output` module (functionality moved to `SessionManager`)
 - Removed git context (branch, status, commit history) from system prompt — version control information is no longer injected into agent instructions
 - Removed `ToolUIKit` class from render-utils (replaced with standalone formatting functions)
 - Removed `normalizeUnicodeSpaces` and `expandPath` from discovery/helpers (moved to path-utils)
@@ -59,6 +62,7 @@
 
 ### Fixed
 
+- Fixed Lobsters scraper to correctly parse API responses where user fields are strings instead of objects, resolving undefined user display in story listings
 - Fixed artifact manager caching to properly invalidate when session file changes, preventing stale artifact references
 - Fixed truncation notice formatting consistency across all tool renderers by centralizing logic
 - Fixed UTF-8 boundary handling in byte truncation to prevent invalid character sequences

@@ -2,9 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { ArtifactManager } from "../src/session/artifacts";
 import {
-	allocateOutputArtifact,
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_COLUMN,
 	DEFAULT_MAX_LINES,
@@ -18,7 +16,6 @@ import {
 	truncateTail,
 	truncateTailBytes,
 } from "../src/session/streaming-output";
-import type { ToolSession } from "../src/tools";
 
 const createdTempDirs: string[] = [];
 
@@ -30,17 +27,6 @@ async function createTempDir(): Promise<string> {
 
 function byteLength(text: string): number {
 	return Buffer.byteLength(text, "utf-8");
-}
-
-function createSession(overrides: Partial<ToolSession> = {}): ToolSession {
-	return {
-		cwd: "/",
-		hasUI: false,
-		getSessionFile: () => null,
-		getSessionSpawns: () => null,
-		settings: {} as ToolSession["settings"],
-		...overrides,
-	};
 }
 
 afterEach(async () => {
@@ -285,25 +271,6 @@ describe("OutputSink", () => {
 		const dumped = await sink.dump();
 		expect(dumped.output).toBe("😀X");
 		expect(dumped.totalBytes).toBe(byteLength("😀X"));
-	});
-});
-
-describe("allocateOutputArtifact", () => {
-	test("returns empty object when session has no artifact manager", async () => {
-		const session = createSession({ getArtifactManager: undefined });
-		expect(await allocateOutputArtifact(session, "bash")).toEqual({});
-	});
-
-	test("allocates artifact path via session artifact manager", async () => {
-		const dir = await createTempDir();
-		const sessionFile = path.join(dir, "session.jsonl");
-		await Bun.write(sessionFile, "");
-		const manager = new ArtifactManager(sessionFile);
-		const session = createSession({ getArtifactManager: () => manager });
-
-		const result = await allocateOutputArtifact(session, "bash");
-		expect(result.id).toBeDefined();
-		expect(result.path).toContain(`${path.sep}${result.id}.bash.log`);
 	});
 });
 

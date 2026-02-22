@@ -12,7 +12,7 @@ import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { truncateToVisualLines } from "../modes/components/visual-truncate";
 import type { Theme } from "../modes/theme/theme";
 import bashDescription from "../prompts/tools/bash.md" with { type: "text" };
-import { allocateOutputArtifact, DEFAULT_MAX_BYTES, TailBuffer } from "../session/streaming-output";
+import { DEFAULT_MAX_BYTES, TailBuffer } from "../session/streaming-output";
 import { renderStatusLine } from "../tui";
 import { CachedOutputBlock } from "../tui/output-block";
 import type { ToolSession } from ".";
@@ -118,7 +118,7 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 		// Set up artifacts environment and allocation
 		const artifactsDir = this.session.getArtifactsDir?.();
 		const extraEnv = artifactsDir ? { ARTIFACTS: artifactsDir } : undefined;
-		const { path: artifactPath, id: artifactId } = await allocateOutputArtifact(this.session, "bash");
+		const { path: artifactPath, id: artifactId } = (await this.session.allocateOutputArtifact?.("bash")) ?? {};
 
 		const usePty =
 			this.session.settings.get("bash.virtualTerminal") === "on" &&

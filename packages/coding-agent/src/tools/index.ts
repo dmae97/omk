@@ -9,7 +9,6 @@ import { checkPythonKernelAvailability } from "../ipy/kernel";
 import { LspTool } from "../lsp";
 import { EditTool } from "../patch";
 import type { PlanModeState } from "../plan-mode/state";
-import type { ArtifactManager } from "../session/artifacts";
 import { TaskTool } from "../task";
 import type { AgentOutputManager } from "../task/output-manager";
 import type { EventBus } from "../utils/event-bus";
@@ -108,10 +107,10 @@ export interface ToolSession {
 	getSessionFile: () => string | null;
 	/** Get session ID */
 	getSessionId?: () => string | null;
-	/** Get artifact manager (allocated per ToolSession) */
-	getArtifactManager?: () => ArtifactManager | null;
 	/** Get artifacts directory for artifact:// URLs and $ARTIFACTS env var */
 	getArtifactsDir?: () => string | null;
+	/** Allocate a new artifact path and ID for session-scoped truncated output. */
+	allocateOutputArtifact?: (toolType: string) => Promise<{ id?: string; path?: string }>;
 	/** Get session spawns */
 	getSessionSpawns: () => string | null;
 	/** Get resolved model string if explicitly set for this session */

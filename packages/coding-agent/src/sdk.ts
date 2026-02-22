@@ -13,7 +13,6 @@ import { loadPromptTemplates as loadPromptTemplatesInternal, type PromptTemplate
 import { Settings, type SkillsSettings } from "./config/settings";
 import { CursorExecHandlers } from "./cursor";
 import "./discovery";
-import { ArtifactManager } from "@oh-my-pi/pi-coding-agent/session/artifacts";
 import { resolveConfigValue } from "./config/resolve-config-value";
 import { initializeWithSettings } from "./discovery";
 import { TtsrManager } from "./export/ttsr";
@@ -717,8 +716,6 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	const enableLsp = options.enableLsp ?? true;
 
-	let artifactManager: ArtifactManager | null = null;
-	let artifactManagerSessionFile: string | null = null;
 	const toolSession: ToolSession = {
 		cwd,
 		hasUI: options.hasUI ?? false,
@@ -746,20 +743,12 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		},
 		getPlanModeState: () => session.getPlanModeState(),
 		getCompactContext: () => session.formatCompactContext(),
-		getArtifactManager: () => {
-			const sessionFile = sessionManager.getSessionFile();
-			if (!sessionFile) {
-				artifactManager = null;
-				artifactManagerSessionFile = null;
-				return null;
+		allocateOutputArtifact: async toolType => {
+			try {
+				return await sessionManager.allocateArtifactPath(toolType);
+			} catch {
+				return {};
 			}
-			if (artifactManager && artifactManagerSessionFile === sessionFile) {
-				return artifactManager;
-			}
-			const manager = new ArtifactManager(sessionFile);
-			artifactManager = manager;
-			artifactManagerSessionFile = sessionFile;
-			return manager;
 		},
 		settings,
 		authStorage,
@@ -768,10 +757,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	// Initialize internal URL router for internal protocols (agent://, artifact://, plan://, memory://, skill://, rule://)
 	const internalRouter = new InternalUrlRouter();
-	const getArtifactsDir = () => {
-		const sessionFile = sessionManager.getSessionFile();
-		return sessionFile ? sessionFile.slice(0, -6) : null; // strip .jsonl
-	};
+	const getArtifactsDir = () => sessionManager.getArtifactsDir();
 	internalRouter.register(new AgentProtocolHandler({ getArtifactsDir }));
 	internalRouter.register(new ArtifactProtocolHandler({ getArtifactsDir }));
 	internalRouter.register(

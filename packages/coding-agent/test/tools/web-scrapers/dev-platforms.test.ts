@@ -80,11 +80,12 @@ describe.skipIf(SKIP)("handleLobsters", () => {
 		expect(result).toBeNull();
 	});
 
-	it("returns null for front page due to handler bug", async () => {
-		// Note: handler has bug with "https://lobste.rs.json" URL construction
-		// Should use "/hottest.json" but currently constructs invalid URL
+	it("fetches front page", async () => {
 		const result = await handleLobsters("https://lobste.rs/", 20000);
-		expect(result).toBeNull();
+		expect(result).not.toBeNull();
+		expect(result?.method).toBe("lobsters");
+		expect(result?.content).toContain("Lobste.rs Front Page");
+		expect(result?.content).not.toContain("by undefined");
 	});
 
 	it("fetches newest page", async () => {

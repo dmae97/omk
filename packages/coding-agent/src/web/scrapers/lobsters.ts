@@ -10,9 +10,7 @@ interface LobstersStory {
 	title: string;
 	url?: string;
 	description?: string;
-	submitter_user: {
-		username: string;
-	};
+	submitter_user: string;
 	score: number;
 	comment_count: number;
 	created_at: string;
@@ -22,9 +20,7 @@ interface LobstersStory {
 interface LobstersComment {
 	short_id: string;
 	comment: string;
-	commenting_user: {
-		username: string;
-	};
+	commenting_user: string;
 	score: number;
 	created_at: string;
 	indent_level: number;
@@ -36,9 +32,7 @@ interface LobstersStoryResponse {
 	title: string;
 	url?: string;
 	description?: string;
-	submitter_user: {
-		username: string;
-	};
+	submitter_user: string;
 	score: number;
 	comment_count: number;
 	created_at: string;
@@ -59,7 +53,7 @@ function renderComments(comments: LobstersComment[], maxDepth = 5): string {
 		if (comment.indent_level >= maxDepth) continue;
 
 		const indent = "  ".repeat(comment.indent_level);
-		md += `${indent}### ${comment.commenting_user.username} · ${comment.score} points\n\n`;
+		md += `${indent}### ${comment.commenting_user} · ${comment.score} points\n\n`;
 		md += `${indent}${comment.comment.split("\n").join(`\n${indent}`)}\n\n`;
 
 		if (comment.comments && comment.comments.length > 0) {
@@ -94,7 +88,7 @@ export const handleLobsters: SpecialHandler = async (url: string, timeout: numbe
 			if (!story) return null;
 
 			md = `# ${story.title}\n\n`;
-			md += `**${story.submitter_user.username}** · ${story.score} points · ${story.comment_count} comments`;
+			md += `**${story.submitter_user}** · ${story.score} points · ${story.comment_count} comments`;
 			if (story.tags.length > 0) {
 				md += ` · [${story.tags.join(", ")}]`;
 			}
@@ -155,7 +149,7 @@ export const handleLobsters: SpecialHandler = async (url: string, timeout: numbe
 
 			for (const story of listingStories) {
 				md += `- **${story.title}** (${story.score} pts, ${story.comment_count} comments)\n`;
-				md += `  by ${story.submitter_user.username}`;
+				md += `  by ${story.submitter_user}`;
 				if (story.tags.length > 0) {
 					md += ` · [${story.tags.join(", ")}]`;
 				}

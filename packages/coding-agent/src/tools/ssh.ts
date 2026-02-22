@@ -9,7 +9,7 @@ import { loadCapability } from "../discovery";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { Theme } from "../modes/theme/theme";
 import sshDescriptionBase from "../prompts/tools/ssh.md" with { type: "text" };
-import { allocateOutputArtifact, DEFAULT_MAX_BYTES, TailBuffer } from "../session/streaming-output";
+import { DEFAULT_MAX_BYTES, TailBuffer } from "../session/streaming-output";
 import type { SSHHostInfo } from "../ssh/connection-manager";
 import { ensureHostInfo, getHostInfoForHost } from "../ssh/connection-manager";
 import { executeSSH } from "../ssh/ssh-executor";
@@ -158,7 +158,7 @@ export class SshTool implements AgentTool<typeof sshSchema, SSHToolDetails> {
 		const timeoutMs = timeoutSec * 1000;
 
 		const tailBuffer = new TailBuffer(DEFAULT_MAX_BYTES);
-		const { path: artifactPath, id: artifactId } = await allocateOutputArtifact(this.session, "ssh");
+		const { path: artifactPath, id: artifactId } = (await this.session.allocateOutputArtifact?.("ssh")) ?? {};
 
 		const result = await executeSSH(hostConfig, remoteCommand, {
 			timeout: timeoutMs,

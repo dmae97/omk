@@ -13,13 +13,7 @@ import type { PreludeHelper, PythonStatusEvent } from "../ipy/kernel";
 import { truncateToVisualLines } from "../modes/components/visual-truncate";
 import type { Theme } from "../modes/theme/theme";
 import pythonDescription from "../prompts/tools/python.md" with { type: "text" };
-import {
-	allocateOutputArtifact,
-	DEFAULT_MAX_BYTES,
-	OutputSink,
-	type OutputSummary,
-	TailBuffer,
-} from "../session/streaming-output";
+import { DEFAULT_MAX_BYTES, OutputSink, type OutputSummary, TailBuffer } from "../session/streaming-output";
 import { getTreeBranch, getTreeContinuePrefix, renderCodeCell } from "../tui";
 import type { ToolSession } from ".";
 import { formatStyledTruncationWarning, type OutputMeta } from "./output-meta";
@@ -259,7 +253,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 
 			const sessionFile = this.session.getSessionFile?.() ?? undefined;
 			const artifactsDir = this.session.getArtifactsDir?.() ?? undefined;
-			const { path: artifactPath, id: artifactId } = await allocateOutputArtifact(this.session, "python");
+			const { path: artifactPath, id: artifactId } = (await this.session.allocateOutputArtifact?.("python")) ?? {};
 			outputSink = new OutputSink({
 				artifactPath,
 				artifactId,

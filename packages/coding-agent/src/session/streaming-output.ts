@@ -1,5 +1,4 @@
 import { sanitizeText } from "@oh-my-pi/pi-natives";
-import type { ToolSession } from "../tools";
 import { formatBytes } from "../tools/render-utils";
 
 // =============================================================================
@@ -675,24 +674,6 @@ export class OutputSink {
 			this.#file = undefined;
 			return null;
 		}
-	}
-}
-
-// =============================================================================
-// Session helpers
-// =============================================================================
-
-const kEmpty = Object.freeze({} as { id?: string; path?: string });
-
-/** Allocate a new artifact path and ID without writing content. */
-export async function allocateOutputArtifact(session: ToolSession, toolType: string) {
-	const manager = session.getArtifactManager?.();
-	if (!manager) return kEmpty;
-
-	try {
-		return await manager.allocatePath(toolType);
-	} catch {
-		return kEmpty;
 	}
 }
 
