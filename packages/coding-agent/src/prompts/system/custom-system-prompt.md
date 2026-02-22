@@ -16,16 +16,6 @@
 </file>
 {{/list}}
 </instructions>
-{{/if}}
-{{#if git.isRepo}}
-## Version Control
-Snapshot; does not update during conversation.
-Current branch: {{git.currentBranch}}
-Main branch: {{git.mainBranch}}
-{{git.status}}
-### History
-{{git.commits}}
-{{/if}}
 </project>
 {{/ifAny}}
 {{#if skills.length}}

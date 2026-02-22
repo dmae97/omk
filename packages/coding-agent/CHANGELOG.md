@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added support for GitLab Duo authentication provider
@@ -14,6 +13,10 @@
 
 ### Changed
 
+- Updated system prompt discipline guidelines with new guidance on code cleanup, root-cause fixes, and avoiding breadcrumb comments
+- Enhanced work procedure with architecture-first approach, idiomatic code standards, and ruthless dead code cleanup
+- Added testing section emphasizing rigorous tests and preference for unit/e2e tests over mocks
+- Added handoff section requiring test confirmation, change summaries, and transparency about TODOs before finishing
 - Refactored byte truncation to use unified `truncateBytesWindowed` function supporting both head and tail modes, reducing code duplication
 - Optimized `truncateHead` and `truncateTail` to avoid full Buffer allocation by processing content incrementally with character-level scanning
 - Improved `TailBuffer.append()` to handle large incoming chunks more efficiently by detecting when a single chunk dominates the tail budget
@@ -40,6 +43,7 @@
 
 ### Removed
 
+- Removed git context (branch, status, commit history) from system prompt — version control information is no longer injected into agent instructions
 - Removed `ToolUIKit` class from render-utils (replaced with standalone formatting functions)
 - Removed `normalizeUnicodeSpaces` and `expandPath` from discovery/helpers (moved to path-utils)
 - Removed duplicate JTD type definitions from jtd-to-json-schema and jtd-to-typescript (now in jtd-utils)
