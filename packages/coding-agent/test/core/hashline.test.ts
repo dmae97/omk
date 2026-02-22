@@ -4,10 +4,12 @@ import {
 	computeLineHash,
 	formatHashLines,
 	HashlineMismatchError,
+	hashlineParseContent,
 	parseTag,
 	streamHashLinesFromLines,
 	streamHashLinesFromUtf8,
 	validateLineRef,
+	stripNewLinePrefixes,
 } from "@oh-my-pi/pi-coding-agent/patch";
 import { formatLineTag, type HashlineEdit, type LineTag } from "@oh-my-pi/pi-coding-agent/patch/hashline";
 
@@ -856,5 +858,92 @@ describe("applyHashlineEdits — errors", () => {
 			{ op: "insert", after: makeTag(3, "ccc"), before: makeTag(1, "aaa"), content: ["NEW"] },
 		];
 		expect(() => applyHashlineEdits(content, edits)).toThrow(/after.*<.*before/);
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// stripNewLinePrefixes — regression tests for DIFF_PLUS_RE
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("stripNewLinePrefixes", () => {
+	it("strips leading '+' when majority of lines start with '+'", () => {
+		const lines = ["+line one", "+line two", "+line three"];
+		expect(stripNewLinePrefixes(lines)).toEqual(["line one", "line two", "line three"]);
+	});
+
+	it("does NOT strip leading '-' from Markdown list items", () => {
+		const lines = ["- item one", "- item two", "- item three"];
+		expect(stripNewLinePrefixes(lines)).toEqual(["- item one", "- item two", "- item three"]);
+	});
+
+	it("does NOT strip leading '-' from checkbox list items", () => {
+		const lines = ["- [ ] task one", "- [x] task two", "- [ ] task three"];
+		expect(stripNewLinePrefixes(lines)).toEqual(["- [ ] task one", "- [x] task two", "- [ ] task three"]);
+	});
+
+	it("does NOT strip when fewer than 50% of lines start with '+'", () => {
+		const lines = ["+added", "regular", "regular", "regular"];
+		expect(stripNewLinePrefixes(lines)).toEqual(["+added", "regular", "regular", "regular"]);
+	});
+
+	it("strips hashline prefixes when majority of lines carry them", () => {
+		const lines = ["1#AB:foo", "2#CD:bar", "3#EF:baz"];
+		expect(stripNewLinePrefixes(lines)).toEqual(["foo", "bar", "baz"]);
+	});
+
+	it("does NOT strip '+' when line starts with '++'", () => {
+		const lines = ["++conflict marker", "++another"];
+		expect(stripNewLinePrefixes(lines)).toEqual(["++conflict marker", "++another"]);
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// hashlineParseContent — string vs array input
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("hashlineParseContent", () => {
+	it("returns empty array for null", () => {
+		expect(hashlineParseContent(null)).toEqual([]);
+	});
+
+	it("returns array as-is (bypasses stripNewLinePrefixes)", () => {
+		const input = ["- [x] done", "- [ ] todo"];
+		expect(hashlineParseContent(input)).toBe(input);
+	});
+
+	it("splits string on newline and preserves Markdown list '-' prefix", () => {
+		const result = hashlineParseContent("- item one\n- item two\n- item three");
+		expect(result).toEqual(["- item one", "- item two", "- item three"]);
+	});
+
+	it("strips '+' diff markers from string input", () => {
+		const result = hashlineParseContent("+line one\n+line two");
+		expect(result).toEqual(["line one", "line two"]);
+	});
+
+	it("regression: set op with Markdown list string content preserves '-' in file", () => {
+		// Reproducer for the bug where DIFF_PLUS_RE = /^[+-](?![+-])/ matched '-'
+		// and stripped it from every line, corrupting list-item replacements.
+		const fileContent = "# Title\n- old item\n- old item 2\nfooter";
+		const edits: HashlineEdit[] = [
+			{
+				op: "set",
+				tag: makeTag(2, "- old item"),
+				content: hashlineParseContent("- [x] new item"),
+			},
+		];
+		const result = applyHashlineEdits(fileContent, edits);
+		expect(result.content).toBe("# Title\n- [x] new item\n- old item 2\nfooter");
+	});
+
+	it("regression: set op replacing multiple list items preserves all '-' prefixes", () => {
+		// All replacement lines start with '- ', triggering the 50% heuristic when '-' matched.
+		const fileContent = "- [x] done\n- [ ] pending\n- [ ] also pending";
+		const newContent = hashlineParseContent("- [x] done");
+		const edits: HashlineEdit[] = [
+			{ op: "set", tag: makeTag(2, "- [ ] pending"), content: newContent },
+		];
+		const result = applyHashlineEdits(fileContent, edits);
+		expect(result.content).toBe("- [x] done\n- [x] done\n- [ ] also pending");
 	});
 });

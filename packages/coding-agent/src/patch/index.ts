@@ -139,8 +139,8 @@ export type PatchParams = Static<typeof patchEditSchema>;
 /** Pattern matching hashline display format: `LINE#ID:CONTENT` */
 const HASHLINE_PREFIX_RE = /^\s*(?:>>>|>>)?\s*\d+#[0-9a-zA-Z]{1,16}:/;
 
-/** Pattern matching a unified-diff `+` prefix (but not `++`) */
-const DIFF_PLUS_RE = /^[+-](?![+-])/;
+/** Pattern matching a unified-diff added-line `+` prefix (but not `++`). Does NOT match `-` to avoid corrupting Markdown list items. */
+const DIFF_PLUS_RE = /^[+](?![+])/;
 
 /**
  * Strip hashline display prefixes and diff `+` markers from replacement lines.
@@ -149,7 +149,7 @@ const DIFF_PLUS_RE = /^[+-](?![+-])/;
  * replacement content, or include unified-diff `+` prefixes. Both corrupt the
  * output file. This strips them heuristically before application.
  */
-function stripNewLinePrefixes(lines: string[]): string[] {
+export function stripNewLinePrefixes(lines: string[]): string[] {
 	// Detect whether the *majority* of non-empty lines carry a prefix —
 	// if only one line out of many has a match it's likely real content.
 	let hashPrefixCount = 0;
@@ -193,7 +193,7 @@ const hashlineTagFormat = (what: string) =>
 		description: `Tag identifying the ${what} in "LINE#ID" format`,
 	});
 
-function hashlineParseContent(edit: string | string[] | null): string[] {
+export function hashlineParseContent(edit: string | string[] | null): string[] {
 	if (edit === null) return [];
 	if (Array.isArray(edit)) return edit;
 	const lines = stripNewLinePrefixes(edit.split("\n"));
