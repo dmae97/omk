@@ -14,9 +14,6 @@ export type RawHttpRequestDump = {
 
 type ErrorWithStatus = {
 	status?: unknown;
-	statusCode?: unknown;
-	response?: { status?: unknown };
-	cause?: unknown;
 };
 
 const SENSITIVE_HEADERS = ["authorization", "x-api-key", "api-key", "cookie", "set-cookie", "proxy-authorization"];

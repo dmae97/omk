@@ -206,72 +206,29 @@ export function convertLeadingTabsToSpaces(text: string, spacesPerTab: number): 
 // Unicode Normalization
 // ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Normalize common Unicode punctuation to ASCII equivalents.
- * Allows diffs with ASCII characters to match source files with typographic punctuation.
- */
+const UNICODE_REPLACEMENTS: [RegExp, string][] = [
+	// Various dash/hyphen code-points → ASCII '-'
+	[/[\u2010-\u2015\u2212]/g, "-"],
+	// Fancy single quotes → '
+	[/[\u2018-\u201B]/g, "'"],
+	// Fancy double quotes → "
+	[/[\u201C-\u201F]/g, '"'],
+	// Non-breaking space and other odd spaces → normal space
+	[/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, " "],
+	// Not-equal sign → !=
+	[/\u2260/g, "!="],
+	// Vulgar fraction ½ → 1/2
+	[/\u00BD/g, "1/2"],
+	// Zero-width characters → remove
+	[/[\u200B-\u200D\uFEFF]/g, ""],
+];
+
 export function normalizeUnicode(s: string): string {
-	return s
-		.trim()
-		.split("")
-		.map(c => {
-			const code = c.charCodeAt(0);
-
-			// Various dash/hyphen code-points → ASCII '-'
-			if (
-				code === 0x2010 || // HYPHEN
-				code === 0x2011 || // NON-BREAKING HYPHEN
-				code === 0x2012 || // FIGURE DASH
-				code === 0x2013 || // EN DASH
-				code === 0x2014 || // EM DASH
-				code === 0x2015 || // HORIZONTAL BAR
-				code === 0x2212 // MINUS SIGN
-			) {
-				return "-";
-			}
-
-			// Fancy single quotes → '
-			if (
-				code === 0x2018 || // LEFT SINGLE QUOTATION MARK
-				code === 0x2019 || // RIGHT SINGLE QUOTATION MARK
-				code === 0x201a || // SINGLE LOW-9 QUOTATION MARK
-				code === 0x201b // SINGLE HIGH-REVERSED-9 QUOTATION MARK
-			) {
-				return "'";
-			}
-
-			// Fancy double quotes → "
-			if (
-				code === 0x201c || // LEFT DOUBLE QUOTATION MARK
-				code === 0x201d || // RIGHT DOUBLE QUOTATION MARK
-				code === 0x201e || // DOUBLE LOW-9 QUOTATION MARK
-				code === 0x201f // DOUBLE HIGH-REVERSED-9 QUOTATION MARK
-			) {
-				return '"';
-			}
-
-			// Non-breaking space and other odd spaces → normal space
-			if (
-				code === 0x00a0 || // NO-BREAK SPACE
-				code === 0x2002 || // EN SPACE
-				code === 0x2003 || // EM SPACE
-				code === 0x2004 || // THREE-PER-EM SPACE
-				code === 0x2005 || // FOUR-PER-EM SPACE
-				code === 0x2006 || // SIX-PER-EM SPACE
-				code === 0x2007 || // FIGURE SPACE
-				code === 0x2008 || // PUNCTUATION SPACE
-				code === 0x2009 || // THIN SPACE
-				code === 0x200a || // HAIR SPACE
-				code === 0x202f || // NARROW NO-BREAK SPACE
-				code === 0x205f || // MEDIUM MATHEMATICAL SPACE
-				code === 0x3000 // IDEOGRAPHIC SPACE
-			) {
-				return " ";
-			}
-
-			return c;
-		})
-		.join("");
+	let result = s.trim();
+	for (const [pattern, replacement] of UNICODE_REPLACEMENTS) {
+		result = result.replace(pattern, replacement);
+	}
+	return result.normalize("NFC");
 }
 
 /**

@@ -69,7 +69,7 @@ export function isJTDType(schema: unknown): schema is JTDType {
 }
 
 export function isJTDEnum(schema: unknown): schema is JTDEnum {
-	return typeof schema === "object" && schema !== null && "enum" in schema;
+	return typeof schema === "object" && schema !== null && "enum" in schema && Array.isArray(schema.enum);
 }
 
 export function isJTDElements(schema: unknown): schema is JTDElements {
@@ -85,7 +85,16 @@ export function isJTDProperties(schema: unknown): schema is JTDProperties {
 }
 
 export function isJTDDiscriminator(schema: unknown): schema is JTDDiscriminator {
-	return typeof schema === "object" && schema !== null && "discriminator" in schema;
+	return (
+		typeof schema === "object" &&
+		schema !== null &&
+		"discriminator" in schema &&
+		"mapping" in schema &&
+		typeof schema.discriminator === "string" &&
+		typeof schema.mapping === "object" &&
+		schema.mapping !== null &&
+		!Array.isArray(schema.mapping)
+	);
 }
 
 export function isJTDRef(schema: unknown): schema is JTDRef {

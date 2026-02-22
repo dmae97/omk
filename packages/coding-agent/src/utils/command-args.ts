@@ -67,10 +67,10 @@ export function substituteArgs(content: string, args: string[]): string {
 	const allArgs = args.join(" ");
 
 	// Replace $ARGUMENTS with all args joined (new syntax, aligns with Claude, Codex, OpenCode)
-	result = result.replace(/\$ARGUMENTS/g, allArgs);
+	result = result.replaceAll("$ARGUMENTS", allArgs);
 
 	// Replace $@ with all args joined (existing syntax)
-	result = result.replace(/\$@/g, allArgs);
+	result = result.replaceAll("$@", allArgs);
 
 	return result;
 }

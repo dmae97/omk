@@ -3,15 +3,6 @@
 ## [Unreleased]
 ### Added
 
-- Added `AuthCredentialStore` and `StoredAuthCredential` types to public API exports
-- Added `formatFullOutputReference`, `formatStyledArtifactReference`, `formatTruncationMetaNotice`, and `formatStyledTruncationWarning` functions for consistent artifact and truncation message formatting
-- Added `formatTitle`, `formatErrorMessage`, and `formatMeta` helper functions for tool UI rendering
-- Added `shortenPath` function to render-utils for consistent path abbreviation
-- Added `getDomain` function to extract domain from URLs
-- Added `formatHeadTruncationNotice` function to streaming-output for consistent truncation notices
-- Added `jtd-utils.ts` module with shared JTD type definitions and type guard functions
-- Added `command-args.ts` utility module with `parseCommandArgs` and `substituteArgs` functions
-- Added `path-utils.ts` module with `expandPath` function for path expansion with home directory support
 - Added support for GitLab Duo authentication provider
 - Exported truncation utilities and streaming output types from `session/streaming-output` module for public use
 - Added `TailBuffer` class for efficient ring-style buffering with lazy joining and windowed truncation
@@ -22,6 +13,9 @@
 
 ### Changed
 
+- Re-exported `AuthCredentialStore` and `StoredAuthCredential` after migrating credential primitives to shared modules
+- Extracted output/truncation formatting helpers (`formatFullOutputReference`, `formatStyledArtifactReference`, `formatTruncationMetaNotice`, `formatStyledTruncationWarning`, `formatTitle`, `formatErrorMessage`, `formatMeta`, `shortenPath`, `formatHeadTruncationNotice`) into standalone utility functions
+- Moved `getDomain` from fetch internals into render utilities for shared use
 - Moved `parseCommandArgs` and `substituteArgs` from prompt-templates and slash-commands to new `utils/command-args` module
 - Moved `expandPath` from discovery/helpers to new `tools/path-utils` module
 - Moved JTD type definitions and type guards from jtd-to-json-schema and jtd-to-typescript to shared `tools/jtd-utils` module

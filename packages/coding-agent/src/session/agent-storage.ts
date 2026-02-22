@@ -354,15 +354,6 @@ CREATE TABLE settings (
 	}
 
 	/**
-	 * Disables an auth credential by ID (soft-delete).
-	 * Disabled credentials are excluded from normal listing but remain in the database.
-	 * @param id - Database row ID of the credential to disable
-	 */
-	disableAuthCredential(id: number): void {
-		this.#authStore.disableAuthCredential(id);
-	}
-
-	/**
 	 * Deletes all auth credentials for a provider.
 	 * @param provider - Provider name whose credentials should be deleted
 	 */

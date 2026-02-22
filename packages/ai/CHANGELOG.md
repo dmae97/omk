@@ -4,13 +4,6 @@
 
 ### Added
 
-- Added `AuthCredentialStore` class for SQLite-backed credential persistence with support for multiple credentials per provider, OAuth token refresh, and usage tracking
-- Added `AuthStorage` class for comprehensive credential management with round-robin load balancing, session-based credential selection, and automatic OAuth token refresh
-- Added `findAnthropicAuth` function to resolve Anthropic authentication from multiple sources (env vars, models.json, OAuth storage, fallback)
-- Added `isOAuthToken` function to detect OAuth tokens by sk-ant-oat prefix
-- Added `buildAnthropicSearchHeaders` and `buildAnthropicUrl` functions for Anthropic search API integration
-- Added `mapAnthropicToolChoice` export from stream module for use in provider implementations
-- Added `extractHttpStatusFromError` utility function to parse HTTP status codes from various error formats
 - Added GitLab Duo provider with support for Claude, GPT-5, and other models via GitLab AI Gateway
 - Added OAuth authentication for GitLab Duo with automatic token refresh and direct access caching
 - Added 16 new GitLab Duo models including Claude Opus/Sonnet/Haiku variants and GPT-5 series models
@@ -21,6 +14,8 @@
 
 ### Changed
 
+- Migrated `AuthCredentialStore` and `AuthStorage` into `@oh-my-pi/pi-ai` as shared credential primitives for downstream packages
+- Moved Anthropic auth helpers (`findAnthropicAuth`, `isOAuthToken`, `buildAnthropicSearchHeaders`, `buildAnthropicUrl`) into shared AI utilities for reuse across providers
 - Replaced `CliAuthStorage` with `AuthCredentialStore` for improved credential management with multiple credentials per provider
 - Updated models.json pricing for Claude 3.5 Sonnet (input: 0.23→0.45, output: 3→2.2, added cache read: 0.225) and Claude 3 Opus (input: 0.3→0.95)
 - Moved `mapAnthropicToolChoice` function from gitlab-duo provider to stream module for broader reusability

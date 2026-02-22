@@ -34,8 +34,12 @@ export function isRetryableError(error: unknown): boolean {
 	return TRANSIENT_MESSAGE_PATTERN.test(message);
 }
 
-export function extractHttpStatusFromError(error: unknown, depth = 0): number | undefined {
-	if (!error || typeof error !== "object" || depth > 3) return undefined;
+export function extractHttpStatusFromError(error: unknown): number | undefined {
+	return extractHttpStatusFromErrorInternal(error, 0);
+}
+
+function extractHttpStatusFromErrorInternal(error: unknown, depth: number): number | undefined {
+	if (!error || typeof error !== "object" || depth > 2) return undefined;
 	const info = error as ErrorLike;
 	const rawStatus =
 		info.status ??
@@ -62,7 +66,7 @@ export function extractHttpStatusFromError(error: unknown, depth = 0): number | 
 	}
 
 	if (info.cause) {
-		return extractHttpStatusFromError(info.cause, depth + 1);
+		return extractHttpStatusFromErrorInternal(info.cause, depth + 1);
 	}
 
 	return undefined;

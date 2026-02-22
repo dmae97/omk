@@ -610,7 +610,7 @@ export class AuthStorage {
 	#removeCredentialAt(provider: string, index: number): void {
 		const entries = this.#getStoredCredentials(provider);
 		if (index < 0 || index >= entries.length) return;
-		this.#store.disableAuthCredential(entries[index].id);
+		this.#store.deleteAuthCredential(entries[index].id);
 		const updated = entries.filter((_value, idx) => idx !== index);
 		this.#setStoredCredentials(provider, updated);
 		this.#resetProviderAssignments(provider);
@@ -1564,7 +1564,6 @@ export class AuthCredentialStore {
 	#updateStmt: Statement;
 	#deleteStmt: Statement;
 	#deleteByProviderStmt: Statement;
-	#disableStmt: Statement;
 	#getCacheStmt: Statement;
 	#upsertCacheStmt: Statement;
 	#deleteExpiredCacheStmt: Statement;
@@ -1582,10 +1581,10 @@ export class AuthCredentialStore {
 			"SELECT id, provider, credential_type, data FROM auth_credentials WHERE provider = ? AND disabled = 0 ORDER BY id ASC",
 		);
 		this.#listAllStmt = this.#db.prepare(
-			"SELECT id, provider, credential_type, data FROM auth_credentials ORDER BY id ASC",
+			"SELECT id, provider, credential_type, data FROM auth_credentials WHERE disabled = 0 ORDER BY id ASC",
 		);
 		this.#listByProviderStmt = this.#db.prepare(
-			"SELECT id, provider, credential_type, data FROM auth_credentials WHERE provider = ? ORDER BY id ASC",
+			"SELECT id, provider, credential_type, data FROM auth_credentials WHERE provider = ? AND disabled = 0 ORDER BY id ASC",
 		);
 		this.#insertStmt = this.#db.prepare(
 			"INSERT INTO auth_credentials (provider, credential_type, data) VALUES (?, ?, ?) RETURNING id",
@@ -1593,10 +1592,11 @@ export class AuthCredentialStore {
 		this.#updateStmt = this.#db.prepare(
 			"UPDATE auth_credentials SET credential_type = ?, data = ?, updated_at = unixepoch() WHERE id = ?",
 		);
-		this.#deleteStmt = this.#db.prepare("DELETE FROM auth_credentials WHERE id = ?");
-		this.#deleteByProviderStmt = this.#db.prepare("DELETE FROM auth_credentials WHERE provider = ?");
-		this.#disableStmt = this.#db.prepare(
-			"UPDATE auth_credentials SET disabled = 1, updated_at = unixepoch() WHERE id = ?",
+		this.#deleteStmt = this.#db.prepare(
+			"UPDATE auth_credentials SET disabled = 1 AND updated_at = unixepoch() WHERE id = ?",
+		);
+		this.#deleteByProviderStmt = this.#db.prepare(
+			"UPDATE auth_credentials SET disabled = 1 AND updated_at = unixepoch() WHERE provider = ?",
 		);
 		this.#getCacheStmt = this.#db.prepare("SELECT value FROM cache WHERE key = ? AND expires_at > unixepoch()");
 		this.#upsertCacheStmt = this.#db.prepare(
@@ -1709,14 +1709,6 @@ CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
 			this.#deleteStmt.run(id);
 		} catch {
 			// Ignore delete failures
-		}
-	}
-
-	disableAuthCredential(id: number): void {
-		try {
-			this.#disableStmt.run(id);
-		} catch {
-			// Ignore disable failures
 		}
 	}
 
