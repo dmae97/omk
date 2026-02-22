@@ -13,6 +13,7 @@
 
 ### Changed
 
+- Changed default value of `todo.reminders` setting from false to true to enable todo reminders by default
 - Updated system prompt discipline guidelines with new guidance on code cleanup, root-cause fixes, and avoiding breadcrumb comments
 - Enhanced work procedure with architecture-first approach, idiomatic code standards, and ruthless dead code cleanup
 - Added testing section emphasizing rigorous tests and preference for unit/e2e tests over mocks

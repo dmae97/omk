@@ -403,7 +403,7 @@ export const SETTINGS_SCHEMA = {
 	// ─────────────────────────────────────────────────────────────────────────
 	"todo.reminders": {
 		type: "boolean",
-		default: false,
+		default: true,
 		ui: { tab: "agent", label: "Todo reminders", description: "Remind agent to complete todos before stopping" },
 	},
 	"todo.reminders.max": {
