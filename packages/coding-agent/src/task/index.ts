@@ -109,6 +109,7 @@ function renderDescription(
 	agents: AgentDefinition[],
 	maxConcurrency: number,
 	isolationEnabled: boolean,
+	asyncEnabled: boolean,
 	disabledAgents: string[],
 ): string {
 	const filteredAgents = disabledAgents.length > 0 ? agents.filter(a => !disabledAgents.includes(a.name)) : agents;
@@ -116,6 +117,7 @@ function renderDescription(
 		agents: filteredAgents,
 		MAX_CONCURRENCY: maxConcurrency,
 		isolationEnabled,
+		asyncEnabled,
 	});
 }
 
@@ -143,7 +145,13 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 		const disabledAgents = this.session.settings.get("task.disabledAgents") as string[];
 		const maxConcurrency = this.session.settings.get("task.maxConcurrency");
 		const isolationEnabled = this.session.settings.get("task.isolation.enabled");
-		return renderDescription(this.#discoveredAgents, maxConcurrency, isolationEnabled, disabledAgents);
+		return renderDescription(
+			this.#discoveredAgents,
+			maxConcurrency,
+			isolationEnabled,
+			this.session.settings.get("async.enabled"),
+			disabledAgents,
+		);
 	}
 	private constructor(
 		private readonly session: ToolSession,
@@ -165,6 +173,98 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 	}
 
 	async execute(
+		_toolCallId: string,
+		params: TaskParams,
+		signal?: AbortSignal,
+		onUpdate?: AgentToolUpdateCallback<TaskToolDetails>,
+	): Promise<AgentToolResult<TaskToolDetails>> {
+		const asyncEnabled = this.session.settings.get("async.enabled");
+		if (!asyncEnabled) {
+			return this.#executeSync(_toolCallId, params, signal, onUpdate);
+		}
+
+		const manager = this.session.asyncJobManager;
+		if (!manager) {
+			return {
+				content: [{ type: "text", text: "Async execution is enabled but no async job manager is available." }],
+				details: { projectAgentsDir: null, results: [], totalDurationMs: 0 },
+			};
+		}
+
+		const taskCount = params.tasks?.length ?? 0;
+		const label = `${params.agent} (${taskCount} tasks)`;
+		const jobId = manager.register(
+			"task",
+			label,
+			async ({ signal: runSignal, reportProgress }) => {
+				try {
+					const result = await this.#executeSync(_toolCallId, params, runSignal, update => {
+						const baseDetails: TaskToolDetails = update.details ?? {
+							projectAgentsDir: null,
+							results: [],
+							totalDurationMs: 0,
+						};
+						onUpdate?.({
+							...update,
+							details: {
+								...baseDetails,
+								async: { state: "running", jobId, type: "task" },
+							},
+						});
+					});
+					const finalText = result.content.find(part => part.type === "text")?.text ?? "(no output)";
+					const finalDetails: TaskToolDetails = result.details ?? {
+						projectAgentsDir: null,
+						results: [],
+						totalDurationMs: 0,
+					};
+					await reportProgress(finalText, {
+						...finalDetails,
+						async: { state: "completed", jobId, type: "task" },
+					});
+					return finalText;
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					await reportProgress(message, {
+						projectAgentsDir: null,
+						results: [],
+						totalDurationMs: 0,
+						async: { state: "failed", jobId, type: "task" },
+					});
+					throw error;
+				}
+			},
+			{
+				id: label,
+				onProgress: (text, details) => {
+					const progressDetails: TaskToolDetails = (details as TaskToolDetails | undefined) ?? {
+						projectAgentsDir: null,
+						results: [],
+						totalDurationMs: 0,
+					};
+					onUpdate?.({ content: [{ type: "text", text }], details: progressDetails });
+				},
+			},
+		);
+
+		return {
+			content: [
+				{
+					type: "text",
+					text: `Background task ${jobId} started: ${taskCount} subtasks using ${params.agent}. Results will be delivered when complete.`,
+				},
+			],
+			details: {
+				projectAgentsDir: null,
+				results: [],
+				totalDurationMs: 0,
+				progress: [],
+				async: { state: "running", jobId, type: "task" },
+			},
+		};
+	}
+
+	async #executeSync(
 		_toolCallId: string,
 		params: TaskParams,
 		signal?: AbortSignal,

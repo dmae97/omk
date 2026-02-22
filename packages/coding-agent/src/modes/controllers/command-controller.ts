@@ -24,6 +24,7 @@ import { DynamicBorder } from "../../modes/components/dynamic-border";
 import { PythonExecutionComponent } from "../../modes/components/python-execution";
 import { getMarkdownTheme, getSymbolTheme, theme } from "../../modes/theme/theme";
 import type { InteractiveModeContext } from "../../modes/types";
+import type { AsyncJobSnapshotItem } from "../../session/agent-session";
 import type { AuthStorage } from "../../session/auth-storage";
 import { createCompactionSummaryMessage } from "../../session/messages";
 import { outputMeta } from "../../tools/output-meta";
@@ -304,6 +305,47 @@ export class CommandController {
 
 		this.ctx.chatContainer.addChild(new Spacer(1));
 		this.ctx.chatContainer.addChild(new Text(info, 1, 0));
+		this.ctx.ui.requestRender();
+	}
+
+	async handleJobsCommand(): Promise<void> {
+		const snapshot = this.ctx.session.getAsyncJobSnapshot({ recentLimit: 5 });
+		if (!snapshot) {
+			this.ctx.showWarning("Async background jobs are unavailable in this session.");
+			return;
+		}
+
+		const now = Date.now();
+		const lineWidth = Math.max(24, (this.ctx.ui.terminal.columns ?? 100) - 24);
+		let info = `${theme.bold("Background Jobs")}\n\n`;
+		info += `${theme.fg("dim", "Running:")} ${snapshot.running.length}\n`;
+
+		if (snapshot.running.length === 0 && snapshot.recent.length === 0) {
+			info += `\n${theme.fg("dim", "No async jobs yet.")}\n`;
+			this.ctx.chatContainer.addChild(new Spacer(1));
+			this.ctx.chatContainer.addChild(new Text(info, 1, 0));
+			this.ctx.ui.requestRender();
+			return;
+		}
+
+		if (snapshot.running.length > 0) {
+			info += `\n${theme.bold("Running Jobs")}\n`;
+			for (const job of snapshot.running) {
+				info += `${renderJobLine(job, now)}\n`;
+				info += `  ${theme.fg("dim", truncateJobLabel(job.label, lineWidth))}\n`;
+			}
+		}
+
+		if (snapshot.recent.length > 0) {
+			info += `\n${theme.bold("Recent Jobs")}\n`;
+			for (const job of snapshot.recent) {
+				info += `${renderJobLine(job, now)}\n`;
+				info += `  ${theme.fg("dim", truncateJobLabel(job.label, lineWidth))}\n`;
+			}
+		}
+
+		this.ctx.chatContainer.addChild(new Spacer(1));
+		this.ctx.chatContainer.addChild(new Text(info.trimEnd(), 1, 0));
 		this.ctx.ui.requestRender();
 	}
 
@@ -778,6 +820,32 @@ export class CommandController {
 const BAR_WIDTH = 24;
 const COLUMN_WIDTH = BAR_WIDTH + 2;
 
+function renderJobLine(job: AsyncJobSnapshotItem, now: number): string {
+	const duration = formatDuration(Math.max(0, now - job.startTime));
+	const status = formatJobStatus(job.status);
+	return `${theme.fg("dim", job.id)} ${theme.fg("dim", `[${job.type}]`)} ${status} ${theme.fg("dim", `(${duration})`)}`;
+}
+
+function formatJobStatus(status: AsyncJobSnapshotItem["status"]): string {
+	if (status === "running") return theme.fg("warning", "running");
+	if (status === "completed") return theme.fg("success", "completed");
+	if (status === "cancelled") return theme.fg("dim", "cancelled");
+	return theme.fg("error", "failed");
+}
+
+function truncateJobLabel(label: string, maxWidth: number): string {
+	if (visibleWidth(label) <= maxWidth) return label;
+	if (maxWidth <= 1) return "…";
+
+	let out = "";
+	for (const char of label) {
+		const next = `${out}${char}`;
+		if (visibleWidth(`${next}…`) > maxWidth) break;
+		out = next;
+	}
+
+	return `${out}…`;
+}
 function formatProviderName(provider: string): string {
 	return provider
 		.split(/[-_]/g)

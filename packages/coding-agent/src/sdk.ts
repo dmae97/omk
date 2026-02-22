@@ -5,11 +5,16 @@ import type { Component } from "@oh-my-pi/pi-tui";
 import { $env, logger, postmortem } from "@oh-my-pi/pi-utils";
 import { getAgentDbPath, getAgentDir, getProjectDir } from "@oh-my-pi/pi-utils/dirs";
 import chalk from "chalk";
+import { AsyncJobManager } from "./async";
 import { loadCapability } from "./capability";
 import { type Rule, ruleCapability } from "./capability/rule";
 import { ModelRegistry } from "./config/model-registry";
 import { formatModelString, parseModelPattern, parseModelString } from "./config/model-resolver";
-import { loadPromptTemplates as loadPromptTemplatesInternal, type PromptTemplate } from "./config/prompt-templates";
+import {
+	loadPromptTemplates as loadPromptTemplatesInternal,
+	type PromptTemplate,
+	renderPromptTemplate,
+} from "./config/prompt-templates";
 import { Settings, type SkillsSettings } from "./config/settings";
 import { CursorExecHandlers } from "./cursor";
 import "./discovery";
@@ -43,6 +48,7 @@ import {
 	ArtifactProtocolHandler,
 	DocsProtocolHandler,
 	InternalUrlRouter,
+	JobsProtocolHandler,
 	MemoryProtocolHandler,
 	PlanProtocolHandler,
 	RuleProtocolHandler,
@@ -51,6 +57,7 @@ import {
 import { disposeAllKernelSessions } from "./ipy/executor";
 import { discoverAndLoadMCPTools, type MCPManager, type MCPToolsLoadResult } from "./mcp";
 import { buildMemoryToolDeveloperInstructions, getMemoryRoot, startMemoryStartupTask } from "./memories";
+import asyncResultTemplate from "./prompts/tools/async-result.md" with { type: "text" };
 import { collectEnvSecrets, loadSecrets, obfuscateMessages, SecretObfuscator } from "./secrets";
 import { AgentSession } from "./session/agent-session";
 import { AuthStorage } from "./session/auth-storage";
@@ -715,6 +722,55 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	let session: AgentSession;
 
 	const enableLsp = options.enableLsp ?? true;
+	const asyncEnabled = settings.get("async.enabled");
+	const asyncMaxJobs = Math.min(100, Math.max(1, settings.get("async.maxJobs") ?? 15));
+	const ASYNC_INLINE_RESULT_MAX_CHARS = 12_000;
+	const ASYNC_PREVIEW_MAX_CHARS = 4_000;
+	const formatAsyncResultForFollowUp = async (result: string): Promise<string> => {
+		if (result.length <= ASYNC_INLINE_RESULT_MAX_CHARS) {
+			return result;
+		}
+
+		const preview = `${result.slice(0, ASYNC_PREVIEW_MAX_CHARS)}\n\n[Output truncated. Showing first ${ASYNC_PREVIEW_MAX_CHARS.toLocaleString()} characters.]`;
+		try {
+			const { path: artifactPath, id: artifactId } = await sessionManager.allocateArtifactPath("async");
+			if (artifactPath && artifactId) {
+				await Bun.write(artifactPath, result);
+				return `${preview}\nFull output: artifact://${artifactId}`;
+			}
+		} catch (error) {
+			logger.warn("Failed to persist async follow-up artifact", {
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+
+		return preview;
+	};
+	const asyncJobManager = asyncEnabled
+		? new AsyncJobManager({
+				maxRunningJobs: asyncMaxJobs,
+				onJobComplete: async (jobId, result, job) => {
+					if (!session) return;
+					const formattedResult = await formatAsyncResultForFollowUp(result);
+					const message = renderPromptTemplate(asyncResultTemplate, { jobId, result: formattedResult });
+					const durationMs = job ? Math.max(0, Date.now() - job.startTime) : undefined;
+					await session.sendCustomMessage(
+						{
+							customType: "async-result",
+							content: message,
+							display: true,
+							details: {
+								jobId,
+								type: job?.type,
+								label: job?.label,
+								durationMs,
+							},
+						},
+						{ deliverAs: "followUp", triggerTurn: true },
+					);
+				},
+			})
+		: undefined;
 
 	const toolSession: ToolSession = {
 		cwd,
@@ -753,6 +809,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		settings,
 		authStorage,
 		modelRegistry,
+		asyncJobManager,
 	};
 
 	// Initialize internal URL router for internal protocols (agent://, artifact://, plan://, memory://, skill://, rule://)
@@ -782,6 +839,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		}),
 	);
 	internalRouter.register(new DocsProtocolHandler());
+	internalRouter.register(new JobsProtocolHandler({ getAsyncJobManager: () => asyncJobManager }));
 	toolSession.internalRouter = internalRouter;
 	toolSession.getArtifactsDir = getArtifactsDir;
 	toolSession.agentOutputManager = new AgentOutputManager(
@@ -1259,6 +1317,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		ttsrManager,
 		forceCopilotAgentInitiator,
 		obfuscator,
+		asyncJobManager,
 	});
 
 	if (model?.api === "openai-codex-responses") {

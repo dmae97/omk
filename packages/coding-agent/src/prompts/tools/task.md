@@ -1,6 +1,10 @@
 # Task
 
 Launch subagents to execute parallel, well-scoped tasks.
+{{#if asyncEnabled}}
+Use `read jobs://` to inspect background task state and `read jobs://<job_id>` for detailed status/output when needed.
+Do NOT `sleep` or poll in loops waiting for async completion. Results are delivered automatically; continue with other work or yield.
+{{/if}}
 
 ## What subagents inherit automatically
 Subagents receive the **full system prompt**, including AGENTS.md, context files, and skills. Do NOT repeat project rules, coding conventions, or style guidelines in `context` — they already have them.

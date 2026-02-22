@@ -177,6 +177,14 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 		},
 	},
 	{
+		name: "jobs",
+		description: "Show async background jobs status",
+		handle: async (_command, runtime) => {
+			await runtime.ctx.handleJobsCommand();
+			runtime.ctx.editor.setText("");
+		},
+	},
+	{
 		name: "usage",
 		description: "Show provider usage and limits",
 		handle: async (_command, runtime) => {

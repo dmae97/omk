@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { type Component, padding, truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui";
+import { formatCount } from "@oh-my-pi/pi-utils";
 import { $ } from "bun";
 import { settings } from "../../config/settings";
 import type { StatusLinePreset, StatusLineSegmentId, StatusLineSeparatorStyle } from "../../config/settings-schema";
@@ -312,7 +313,13 @@ export class StatusLineComponent implements Component {
 			}
 		}
 
-		const topFillWidth = width > 0 ? Math.max(0, width - 4) : 0;
+		const runningBackgroundJobs = this.session.getAsyncJobSnapshot()?.running.length ?? 0;
+		if (runningBackgroundJobs > 0) {
+			const icon = theme.icon.agents ? `${theme.icon.agents} ` : "";
+			const label = `${formatCount("job", runningBackgroundJobs)} running`;
+			rightParts.push(theme.fg("statusLineSubagents", `${icon}${label}`));
+		}
+		const topFillWidth = Math.max(0, width);
 		const left = [...leftParts];
 		const right = [...rightParts];
 

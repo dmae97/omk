@@ -1,13 +1,26 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added async background job execution for bash commands and tasks with `async: true` parameter
+- Added `cancel_job` tool to cancel running background jobs
+- Added `jobs://` internal protocol to inspect background job status and results
+- Added `/jobs` slash command to display running and recent background jobs in interactive mode
+- Added `async.enabled` and `async.maxJobs` settings to control background job execution
+- Added background job status indicator in status line showing count of running jobs
 - Added support for GitLab Duo authentication provider
 - Added clearer truncation notices across tools with consistent line/size context and continuation hints
 
 ### Changed
 
+- Updated bash tool to support async execution mode with streaming progress updates
+- Updated task tool to support async execution mode for parallel subagent execution
+- Modified subagent settings to disable async execution in child agents to prevent nesting
+- Updated tool execution component to handle background async task state without spinner animation
+- Changed event controller to keep background tool calls pending until async completion
+- Updated status line width calculation to accommodate background job indicator
 - Updated the system prompt pipeline to reduce injected environment noise and make instructions more focused on execution quality
 - Updated system prompt/workflow guidance to emphasize root-cause fixes, code quality, and explicit handoff/testing expectations
 - Changed default value of `todo.reminders` setting from false to true to enable todo reminders by default

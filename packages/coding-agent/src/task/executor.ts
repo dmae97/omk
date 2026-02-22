@@ -13,6 +13,7 @@ import { ModelRegistry } from "../config/model-registry";
 import { resolveModelOverride } from "../config/model-resolver";
 import { type PromptTemplate, renderPromptTemplate } from "../config/prompt-templates";
 import { Settings } from "../config/settings";
+import { SETTINGS_SCHEMA, type SettingPath } from "../config/settings-schema";
 import type { CustomTool } from "../extensibility/custom-tools/types";
 import type { Skill } from "../extensibility/skills";
 import { callTool } from "../mcp/client";
@@ -442,6 +443,14 @@ function createMCPProxyTools(mcpManager: MCPManager): CustomTool<TSchema>[] {
 	});
 }
 
+function createSubagentSettings(baseSettings: Settings): Settings {
+	const snapshot: Partial<Record<SettingPath, unknown>> = {};
+	for (const key of Object.keys(SETTINGS_SCHEMA) as SettingPath[]) {
+		snapshot[key] = baseSettings.get(key);
+	}
+	return Settings.isolated({ ...snapshot, "async.enabled": false });
+}
+
 /**
  * Run a single agent in-process.
  */
@@ -507,6 +516,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 	}
 
 	const settings = options.settings ?? Settings.isolated();
+	const subagentSettings = createSubagentSettings(settings);
 	const maxRecursionDepth = settings.get("task.maxRecursionDepth") ?? 2;
 	const parentDepth = options.taskDepth ?? 0;
 	const childDepth = parentDepth + 1;
@@ -932,7 +942,7 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				cwd: worktree ?? cwd,
 				authStorage,
 				modelRegistry,
-				settings,
+				settings: subagentSettings,
 				model,
 				thinkingLevel: effectiveThinkingLevel,
 				toolNames,

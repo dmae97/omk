@@ -380,6 +380,16 @@ export class Editor implements Component, Focusable {
 	}
 
 	/**
+	 * Get the available width for top border content given a total terminal width.
+	 * Accounts for the border characters and horizontal padding.
+	 */
+	getTopBorderAvailableWidth(terminalWidth: number): number {
+		const paddingX = this.#getEditorPaddingX();
+		const borderWidth = paddingX + 1;
+		return Math.max(0, terminalWidth - borderWidth * 2);
+	}
+
+	/**
 	 * Use the real terminal cursor instead of rendering a cursor glyph.
 	 */
 	setUseTerminalCursor(useTerminalCursor: boolean): void {

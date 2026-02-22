@@ -110,7 +110,6 @@ describe("TUI overlays", () => {
 		tui.stop();
 	});
 
-
 	it("fully redraws on height increase to avoid stale viewport rows", async () => {
 		const term = new VirtualTerminal(40, 4);
 		term.write("shell-0\r\nshell-1\r\nshell-2\r\nshell-3\r\nshell-4\r\n");

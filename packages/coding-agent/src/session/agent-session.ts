@@ -40,6 +40,7 @@ import type {
 import { isContextOverflow, modelsAreEqual, supportsXhigh } from "@oh-my-pi/pi-ai";
 import { abortableSleep, isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { getAgentDbPath } from "@oh-my-pi/pi-utils/dirs";
+import type { AsyncJob, AsyncJobManager } from "../async";
 import type { Rule } from "../capability/rule";
 import { MODEL_ROLE_IDS, type ModelRegistry, type ModelRole } from "../config/model-registry";
 import { expandRoleAlias, parseModelString } from "../config/model-resolver";
@@ -135,6 +136,13 @@ export type AgentSessionEvent =
 /** Listener function for agent session events */
 export type AgentSessionEventListener = (event: AgentSessionEvent) => void;
 
+export type AsyncJobSnapshotItem = Pick<AsyncJob, "id" | "type" | "status" | "label" | "startTime">;
+
+export interface AsyncJobSnapshot {
+	running: AsyncJobSnapshotItem[];
+	recent: AsyncJobSnapshotItem[];
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -143,6 +151,8 @@ export interface AgentSessionConfig {
 	agent: Agent;
 	sessionManager: SessionManager;
 	settings: Settings;
+	/** Async background jobs launched by tools */
+	asyncJobManager?: AsyncJobManager;
 	/** Models to cycle through with Ctrl+P (from --models flag) */
 	scopedModels?: Array<{ model: Model; thinkingLevel: ThinkingLevel }>;
 	/** Prompt templates for expansion */
@@ -282,6 +292,8 @@ export class AgentSession {
 	readonly sessionManager: SessionManager;
 	readonly settings: Settings;
 
+	#asyncJobManager: AsyncJobManager | undefined = undefined;
+
 	#scopedModels: Array<{ model: Model; thinkingLevel: ThinkingLevel }>;
 	#promptTemplates: PromptTemplate[];
 	#slashCommands: FileSlashCommand[];
@@ -366,6 +378,7 @@ export class AgentSession {
 		this.agent = config.agent;
 		this.sessionManager = config.sessionManager;
 		this.settings = config.settings;
+		this.#asyncJobManager = config.asyncJobManager;
 		this.#scopedModels = config.scopedModels ?? [];
 		this.#promptTemplates = config.promptTemplates ?? [];
 		this.#slashCommands = config.slashCommands ?? [];
@@ -406,6 +419,25 @@ export class AgentSession {
 	/** Whether a TTSR abort is pending (stream was aborted to inject rules) */
 	get isTtsrAbortPending(): boolean {
 		return this.#ttsrAbortPending;
+	}
+
+	getAsyncJobSnapshot(options?: { recentLimit?: number }): AsyncJobSnapshot | null {
+		if (!this.#asyncJobManager) return null;
+		const running = this.#asyncJobManager.getRunningJobs().map(job => ({
+			id: job.id,
+			type: job.type,
+			status: job.status,
+			label: job.label,
+			startTime: job.startTime,
+		}));
+		const recent = this.#asyncJobManager.getRecentJobs(options?.recentLimit ?? 5).map(job => ({
+			id: job.id,
+			type: job.type,
+			status: job.status,
+			label: job.label,
+			startTime: job.startTime,
+		}));
+		return { running, recent };
 	}
 
 	// =========================================================================
@@ -1237,6 +1269,11 @@ export class AgentSession {
 	 * Call this when completely done with the session.
 	 */
 	async dispose(): Promise<void> {
+		const drained = await this.#asyncJobManager?.dispose({ timeoutMs: 3_000 });
+		const deliveryState = this.#asyncJobManager?.getDeliveryState();
+		if (drained === false && deliveryState) {
+			logger.warn("Async job completion deliveries still pending during dispose", { ...deliveryState });
+		}
 		await this.sessionManager.flush();
 		await cleanupSshResources();
 		for (const state of this.#providerSessionState.values()) {

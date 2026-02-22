@@ -1,0 +1,210 @@
+import { describe, expect, test } from "bun:test";
+import { AsyncJobManager } from "@oh-my-pi/pi-coding-agent/async/job-manager";
+
+describe("AsyncJobManager", () => {
+	test("forwards progress updates and delivers completion", async () => {
+		const progressEvents: Array<{ text: string; details?: Record<string, unknown> }> = [];
+		const completions: Array<{ jobId: string; text: string }> = [];
+		const manager = new AsyncJobManager({
+			onJobComplete: async (jobId, text) => {
+				completions.push({ jobId, text });
+			},
+		});
+
+		const jobId = manager.register(
+			"bash",
+			"echo hi",
+			async ({ reportProgress }) => {
+				await reportProgress("running step", { async: { state: "running" } });
+				return "final output";
+			},
+			{
+				onProgress: async (text, details) => {
+					progressEvents.push({ text, details });
+				},
+			},
+		);
+
+		await manager.waitForAll();
+		await manager.drainDeliveries({ timeoutMs: 2_000 });
+
+		expect(progressEvents).toEqual([{ text: "running step", details: { async: { state: "running" } } }]);
+		expect(completions).toEqual([{ jobId, text: "final output" }]);
+		expect(manager.getJob(jobId)?.status).toBe("completed");
+	});
+
+	test("swallows progress callback errors without failing the job", async () => {
+		const completions: Array<{ jobId: string; text: string }> = [];
+		const manager = new AsyncJobManager({
+			onJobComplete: async (jobId, text) => {
+				completions.push({ jobId, text });
+			},
+		});
+
+		const jobId = manager.register(
+			"task",
+			"agent task",
+			async ({ reportProgress }) => {
+				await reportProgress("subagent started");
+				return "task done";
+			},
+			{
+				onProgress: async () => {
+					throw new Error("progress renderer exploded");
+				},
+			},
+		);
+
+		await manager.waitForAll();
+		await manager.drainDeliveries({ timeoutMs: 2_000 });
+
+		expect(completions).toEqual([{ jobId, text: "task done" }]);
+		expect(manager.getJob(jobId)?.status).toBe("completed");
+	});
+
+	test("delivers error text when run fails", async () => {
+		const completions: Array<{ jobId: string; text: string }> = [];
+		const manager = new AsyncJobManager({
+			onJobComplete: async (jobId, text) => {
+				completions.push({ jobId, text });
+			},
+		});
+
+		const jobId = manager.register("bash", "bad command", async () => {
+			throw new Error("command failed");
+		});
+
+		await manager.waitForAll();
+		await manager.drainDeliveries({ timeoutMs: 2_000 });
+
+		expect(completions).toEqual([{ jobId, text: "command failed" }]);
+		expect(manager.getJob(jobId)?.status).toBe("failed");
+		expect(manager.getJob(jobId)?.errorText).toBe("command failed");
+	});
+
+	test("cancels a running job by id", async () => {
+		const completions: Array<{ jobId: string; text: string }> = [];
+		const manager = new AsyncJobManager({
+			onJobComplete: async (jobId, text) => {
+				completions.push({ jobId, text });
+			},
+		});
+
+		const jobId = manager.register("bash", "sleep", async ({ signal }) => {
+			await new Promise<never>((_resolve, reject) => {
+				signal.addEventListener(
+					"abort",
+					() => {
+						reject(new Error("aborted"));
+					},
+					{ once: true },
+				);
+			});
+			throw new Error("unreachable");
+		});
+
+		expect(manager.cancel(jobId)).toBe(true);
+		expect(manager.cancel(jobId)).toBe(false);
+
+		await manager.waitForAll();
+		await manager.drainDeliveries({ timeoutMs: 2_000 });
+
+		expect(manager.getJob(jobId)?.status).toBe("cancelled");
+		expect(completions).toHaveLength(0);
+	});
+
+	test("enforces maxRunningJobs cap", () => {
+		const manager = new AsyncJobManager({
+			maxRunningJobs: 1,
+			onJobComplete: async () => {},
+		});
+
+		const firstJobId = manager.register("bash", "first", async ({ signal }) => {
+			await new Promise<void>(resolve => {
+				signal.addEventListener("abort", () => resolve(), { once: true });
+			});
+			return "done";
+		});
+
+		expect(() =>
+			manager.register("bash", "second", async () => {
+				return "second";
+			}),
+		).toThrow(/Background job limit reached/);
+
+		manager.cancel(firstJobId);
+	});
+
+	test("evicts completed jobs after retention period", async () => {
+		const manager = new AsyncJobManager({
+			retentionMs: 25,
+			onJobComplete: async () => {},
+		});
+
+		const jobId = manager.register("task", "short", async () => "done");
+		await manager.waitForAll();
+		await manager.drainDeliveries({ timeoutMs: 2_000 });
+
+		expect(manager.getJob(jobId)?.status).toBe("completed");
+		await Bun.sleep(60);
+		expect(manager.getJob(jobId)).toBeUndefined();
+	});
+
+	test("cancelAll does not clear retention timers for already completed jobs", async () => {
+		const manager = new AsyncJobManager({
+			retentionMs: 30,
+			onJobComplete: async () => {},
+		});
+
+		const completedJobId = manager.register("task", "completed", async () => "done");
+		const runningJobId = manager.register("bash", "running", async ({ signal }) => {
+			await new Promise<void>(resolve => {
+				signal.addEventListener("abort", () => resolve(), { once: true });
+			});
+			throw new Error("aborted");
+		});
+
+		await manager.waitForAll();
+		manager.cancelAll();
+		await manager.waitForAll();
+		await manager.drainDeliveries({ timeoutMs: 2_000 });
+
+		expect(manager.getJob(completedJobId)?.status).toBe("completed");
+		expect(manager.getJob(runningJobId)?.status).toBe("cancelled");
+
+		await Bun.sleep(80);
+		expect(manager.getJob(completedJobId)).toBeUndefined();
+		expect(manager.getJob(runningJobId)).toBeUndefined();
+	});
+
+	test("dispose clears jobs and pending deliveries", async () => {
+		const manager = new AsyncJobManager({
+			onJobComplete: async () => {
+				throw new Error("delivery failed");
+			},
+		});
+
+		manager.register("bash", "will-complete", async () => "output");
+		await manager.waitForAll();
+		expect(manager.hasPendingDeliveries()).toBe(true);
+
+		const drained = await manager.dispose({ timeoutMs: 25 });
+		expect(drained).toBe(false);
+		expect(manager.getAllJobs()).toHaveLength(0);
+		expect(manager.hasPendingDeliveries()).toBe(false);
+	});
+
+	test("uses custom id when provided and deduplicates collisions", async () => {
+		const manager = new AsyncJobManager({
+			onJobComplete: async () => {},
+		});
+
+		const first = manager.register("task", "alpha", async () => "ok", { id: "2-CheckRustCrate" });
+		const second = manager.register("task", "beta", async () => "ok", { id: "2-CheckRustCrate" });
+
+		expect(first).toBe("2-CheckRustCrate");
+		expect(second).toBe("2-CheckRustCrate-2");
+
+		await manager.waitForAll();
+	});
+});

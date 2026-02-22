@@ -511,6 +511,25 @@ export const SETTINGS_SCHEMA = {
 			description: "Ask the agent to describe the intent of each tool call before executing it",
 		},
 	},
+	"async.enabled": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "tools",
+			label: "Async execution",
+			description: "Enable async bash commands and background task execution",
+		},
+	},
+	"async.maxJobs": {
+		type: "number",
+		default: 15,
+		ui: {
+			tab: "tools",
+			label: "Async max jobs",
+			description: "Maximum concurrent background jobs (1-100)",
+			submenu: true,
+		},
+	},
 
 	// ─────────────────────────────────────────────────────────────────────────
 	// Task tool settings

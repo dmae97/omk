@@ -17,7 +17,7 @@ import { theme } from "../../modes/theme/theme";
 import type { CompactionQueuedMessage, InteractiveModeContext } from "../../modes/types";
 import { type CustomMessage, SKILL_PROMPT_MESSAGE_TYPE, type SkillPromptDetails } from "../../session/messages";
 import type { SessionContext } from "../../session/session-manager";
-import { formatBytes } from "../../tools/render-utils";
+import { formatBytes, formatDuration } from "../../tools/render-utils";
 
 type TextBlock = { type: "text"; text: string };
 
@@ -97,6 +97,30 @@ export class UiHelpers {
 			case "hookMessage":
 			case "custom": {
 				if (message.display) {
+					if (message.customType === "async-result") {
+						const details = (
+							message as CustomMessage<{
+								jobId?: string;
+								type?: "bash" | "task";
+								label?: string;
+								durationMs?: number;
+							}>
+						).details;
+						const jobId = details?.jobId ?? "unknown";
+						const typeLabel = details?.type ? `[${details.type}]` : "[job]";
+						const duration =
+							typeof details?.durationMs === "number" ? formatDuration(details.durationMs) : undefined;
+						const line = [
+							theme.fg("success", `${theme.status.success} Background job completed`),
+							theme.fg("dim", typeLabel),
+							theme.fg("accent", jobId),
+							duration ? theme.fg("dim", `(${duration})`) : undefined,
+						]
+							.filter(Boolean)
+							.join(" ");
+						this.ctx.chatContainer.addChild(new Text(line, 1, 0));
+						break;
+					}
 					if (message.customType === SKILL_PROMPT_MESSAGE_TYPE) {
 						const component = new SkillMessageComponent(message as CustomMessage<SkillPromptDetails>);
 						component.setExpanded(this.ctx.toolOutputExpanded);

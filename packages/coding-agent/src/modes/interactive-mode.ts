@@ -423,8 +423,8 @@ export class InteractiveMode implements InteractiveModeContext {
 	}
 
 	updateEditorTopBorder(): void {
-		const width = this.ui.terminal.columns;
-		const topBorder = this.statusLine.getTopBorder(width);
+		const availableWidth = this.editor.getTopBorderAvailableWidth(this.ui.terminal.columns);
+		const topBorder = this.statusLine.getTopBorder(availableWidth);
 		this.editor.setTopBorder(topBorder);
 	}
 
@@ -929,6 +929,10 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	handleSessionCommand(): Promise<void> {
 		return this.#commandController.handleSessionCommand();
+	}
+
+	handleJobsCommand(): Promise<void> {
+		return this.#commandController.handleJobsCommand();
 	}
 
 	handleUsageCommand(reports?: UsageReport[] | null): Promise<void> {

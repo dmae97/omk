@@ -5,7 +5,7 @@ import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { $env, isEnoent } from "@oh-my-pi/pi-utils";
 import { getProjectDir } from "@oh-my-pi/pi-utils/dirs";
-import { type Static, Type } from "@sinclair/typebox";
+import { Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import { type BashResult, executeBash } from "../exec/bash-executor";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
@@ -28,7 +28,7 @@ import { toolResult } from "./tool-result";
 
 export const BASH_DEFAULT_PREVIEW_LINES = 10;
 
-const bashSchema = Type.Object({
+const bashSchemaBase = Type.Object({
 	command: Type.String({ description: "Command to execute" }),
 	timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (default: 300)" })),
 	cwd: Type.Optional(Type.String({ description: "Working directory (default: cwd)" })),
@@ -36,10 +36,33 @@ const bashSchema = Type.Object({
 	tail: Type.Optional(Type.Number({ description: "Return only last N lines of output" })),
 });
 
-export type BashToolInput = Static<typeof bashSchema>;
+const bashSchemaWithAsync = Type.Object({
+	...bashSchemaBase.properties,
+	async: Type.Optional(
+		Type.Boolean({
+			description: "Run in background; returns immediately with a job ID. Result delivered as follow-up.",
+		}),
+	),
+});
+
+type BashToolSchema = typeof bashSchemaBase | typeof bashSchemaWithAsync;
+
+export interface BashToolInput {
+	command: string;
+	timeout?: number;
+	cwd?: string;
+	head?: number;
+	tail?: number;
+	async?: boolean;
+}
 
 export interface BashToolDetails {
 	meta?: OutputMeta;
+	async?: {
+		state: "running" | "completed" | "failed";
+		jobId: string;
+		type: "bash";
+	};
 }
 
 export interface BashToolOptions {}
@@ -56,25 +79,60 @@ function isInteractiveResult(result: BashResult | BashInteractiveResult): result
  *
  * Executes bash commands with optional timeout and working directory.
  */
-export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
+export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 	readonly name = "bash";
 	readonly label = "Bash";
 	readonly description: string;
-	readonly parameters = bashSchema;
+	readonly parameters: BashToolSchema;
 	readonly concurrency = "exclusive";
+	readonly #asyncEnabled: boolean;
 
 	constructor(private readonly session: ToolSession) {
-		this.description = renderPromptTemplate(bashDescription);
+		this.#asyncEnabled = this.session.settings.get("async.enabled");
+		this.parameters = this.#asyncEnabled ? bashSchemaWithAsync : bashSchemaBase;
+		this.description = renderPromptTemplate(bashDescription, { asyncEnabled: this.#asyncEnabled });
+	}
+
+	#formatResultOutput(result: BashResult | BashInteractiveResult, headLines?: number, tailLines?: number): string {
+		let outputText = normalizeResultOutput(result);
+		const headTailResult = applyHeadTail(outputText, headLines, tailLines);
+		if (headTailResult.applied) {
+			outputText = headTailResult.text;
+		}
+		if (!outputText) {
+			outputText = "(no output)";
+		}
+		return outputText;
+	}
+
+	#buildResultText(result: BashResult | BashInteractiveResult, timeoutSec: number, outputText: string): string {
+		if (result.cancelled) {
+			throw new ToolError(normalizeResultOutput(result) || "Command aborted");
+		}
+		if (isInteractiveResult(result) && result.timedOut) {
+			throw new ToolError(normalizeResultOutput(result) || `Command timed out after ${timeoutSec} seconds`);
+		}
+		if (result.exitCode === undefined) {
+			throw new ToolError(`${outputText}\n\nCommand failed: missing exit status`);
+		}
+		if (result.exitCode !== 0) {
+			throw new ToolError(`${outputText}\n\nCommand exited with code ${result.exitCode}`);
+		}
+		return outputText;
 	}
 
 	async execute(
 		_toolCallId: string,
-		{ command: rawCommand, timeout: rawTimeout = 300, cwd, head, tail }: BashToolInput,
+		{ command: rawCommand, timeout: rawTimeout = 300, cwd, head, tail, async: asyncRequested = false }: BashToolInput,
 		signal?: AbortSignal,
 		onUpdate?: AgentToolUpdateCallback<BashToolDetails>,
 		ctx?: AgentToolContext,
 	): Promise<AgentToolResult<BashToolDetails>> {
 		let command = rawCommand;
+
+		if (asyncRequested && !this.#asyncEnabled) {
+			throw new ToolError("Async bash execution is disabled. Enable async.enabled to use async mode.");
+		}
 
 		// Only apply explicit head/tail params from tool input.
 		const headLines = head;
@@ -111,6 +169,57 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 		// Clamp to reasonable range: 1s - 3600s (1 hour)
 		const timeoutSec = Math.max(1, Math.min(3600, rawTimeout));
 		const timeoutMs = timeoutSec * 1000;
+
+		if (asyncRequested) {
+			const manager = this.session.asyncJobManager;
+			if (!manager) {
+				throw new ToolError("Async job manager unavailable for this session.");
+			}
+			const label = command.length > 120 ? `${command.slice(0, 117)}...` : command;
+			const tailBuffer = new TailBuffer(DEFAULT_MAX_BYTES);
+			const jobId = manager.register(
+				"bash",
+				label,
+				async ({ signal: runSignal, reportProgress }) => {
+					const artifactsDir = this.session.getArtifactsDir?.();
+					const extraEnv = artifactsDir ? { ARTIFACTS: artifactsDir } : undefined;
+					const { path: artifactPath, id: artifactId } =
+						(await this.session.allocateOutputArtifact?.("bash")) ?? {};
+					try {
+						const result = await executeBash(command, {
+							cwd: commandCwd,
+							sessionKey: this.session.getSessionId?.() ?? undefined,
+							timeout: timeoutMs,
+							signal: runSignal,
+							env: extraEnv,
+							artifactPath,
+							artifactId,
+							onChunk: chunk => {
+								tailBuffer.append(chunk);
+								void reportProgress(tailBuffer.text(), { async: { state: "running", jobId, type: "bash" } });
+							},
+						});
+						const outputText = this.#formatResultOutput(result, headLines, tailLines);
+						const finalText = this.#buildResultText(result, timeoutSec, outputText);
+						await reportProgress(finalText, { async: { state: "completed", jobId, type: "bash" } });
+						return finalText;
+					} catch (error) {
+						const message = error instanceof Error ? error.message : String(error);
+						await reportProgress(message, { async: { state: "failed", jobId, type: "bash" } });
+						throw error;
+					}
+				},
+				{
+					onProgress: (text, details) => {
+						onUpdate?.({ content: [{ type: "text", text }], details: details ?? {} });
+					},
+				},
+			);
+			return {
+				content: [{ type: "text", text: `Background job ${jobId} started: ${label}` }],
+				details: { async: { state: "running", jobId, type: "bash" } },
+			};
+		}
 
 		// Track output for streaming updates (tail only)
 		const tailBuffer = new TailBuffer(DEFAULT_MAX_BYTES);
@@ -162,15 +271,8 @@ export class BashTool implements AgentTool<typeof bashSchema, BashToolDetails> {
 		if (isInteractiveResult(result) && result.timedOut) {
 			throw new ToolError(normalizeResultOutput(result) || `Command timed out after ${timeoutSec} seconds`);
 		}
-		// Apply head/tail filtering if specified
-		let outputText = normalizeResultOutput(result);
-		const headTailResult = applyHeadTail(outputText, headLines, tailLines);
-		if (headTailResult.applied) {
-			outputText = headTailResult.text;
-		}
-		if (!outputText) {
-			outputText = "(no output)";
-		}
+
+		const outputText = this.#formatResultOutput(result, headLines, tailLines);
 		const details: BashToolDetails = {};
 		const resultBuilder = toolResult(details).text(outputText).truncationFromSummary(result, { direction: "tail" });
 		if (result.exitCode === undefined) {

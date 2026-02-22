@@ -323,7 +323,10 @@ export class ToolExecutionComponent extends Container {
 	#updateSpinnerAnimation(): void {
 		// Spinner for: task tool with partial result, or edit/write while args streaming
 		const isStreamingArgs = !this.#argsComplete && (this.#toolName === "edit" || this.#toolName === "write");
-		const isPartialTask = this.#isPartial && this.#toolName === "task";
+		const isBackgroundAsyncTask =
+			this.#toolName === "task" &&
+			(this.#result?.details as { async?: { state?: string } } | undefined)?.async?.state === "running";
+		const isPartialTask = this.#isPartial && this.#toolName === "task" && !isBackgroundAsyncTask;
 		const needsSpinner = isStreamingArgs || isPartialTask;
 		if (needsSpinner && !this.#spinnerInterval) {
 			this.#spinnerInterval = setInterval(() => {
