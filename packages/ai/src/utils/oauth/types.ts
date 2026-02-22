@@ -16,6 +16,7 @@ export type OAuthProvider =
 	| "github-copilot"
 	| "google-gemini-cli"
 	| "google-antigravity"
+	| "gitlab-duo"
 	| "huggingface"
 	| "kimi-code"
 	| "litellm"

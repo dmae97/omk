@@ -9,6 +9,7 @@ export * from "./provider-models";
 export * from "./providers/anthropic";
 export * from "./providers/azure-openai-responses";
 export * from "./providers/cursor";
+export * from "./providers/gitlab-duo";
 export * from "./providers/google";
 export * from "./providers/google-gemini-cli";
 export * from "./providers/google-gemini-cli-usage";

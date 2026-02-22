@@ -8,6 +8,7 @@ import { type BedrockOptions, streamBedrock } from "./providers/amazon-bedrock";
 import { type AnthropicOptions, streamAnthropic } from "./providers/anthropic";
 import { streamAzureOpenAIResponses } from "./providers/azure-openai-responses";
 import { type CursorOptions, streamCursor } from "./providers/cursor";
+import { isGitLabDuoModel, streamGitLabDuo } from "./providers/gitlab-duo";
 import { type GoogleOptions, streamGoogle } from "./providers/google";
 import {
 	type GoogleGeminiCliOptions,
@@ -75,6 +76,7 @@ const serviceProviderMap: Record<string, KeyResolver> = {
 	"github-copilot": () => $pickenv("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"),
 	// ANTHROPIC_OAUTH_TOKEN takes precedence over ANTHROPIC_API_KEY
 	anthropic: () => $pickenv("ANTHROPIC_OAUTH_TOKEN", "ANTHROPIC_API_KEY"),
+	"gitlab-duo": "GITLAB_TOKEN",
 	// Vertex AI uses Application Default Credentials, not API keys.
 	// Auth is configured via `gcloud auth application-default login`.
 	"google-vertex": () => {
@@ -144,6 +146,17 @@ export function stream<TApi extends Api>(
 	const customApiProvider = getCustomApi(model.api);
 	if (customApiProvider) {
 		return customApiProvider.stream(model, context, options as StreamOptions);
+	}
+
+	if (isGitLabDuoModel(model)) {
+		const apiKey = (options as StreamOptions | undefined)?.apiKey || getEnvApiKey(model.provider);
+		if (!apiKey) {
+			throw new Error(`No API key for provider: ${model.provider}`);
+		}
+		return streamGitLabDuo(model, context, {
+			...(options as SimpleStreamOptions | undefined),
+			apiKey,
+		});
 	}
 
 	// Vertex AI uses Application Default Credentials, not API keys
@@ -228,6 +241,14 @@ export function streamSimple<TApi extends Api>(
 	const apiKey = options?.apiKey || getEnvApiKey(model.provider);
 	if (!apiKey) {
 		throw new Error(`No API key for provider: ${model.provider}`);
+	}
+
+	// GitLab Duo - wraps Anthropic/OpenAI behind GitLab AI Gateway direct access tokens
+	if (isGitLabDuoModel(model)) {
+		return streamGitLabDuo(model, context, {
+			...options,
+			apiKey,
+		});
 	}
 
 	// Kimi Code - route to dedicated handler that wraps OpenAI or Anthropic API

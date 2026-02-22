@@ -28518,6 +28518,348 @@
 			},
 			"contextWindow": 256000,
 			"maxTokens": 10000
+		},
+		"kimi-k2.5": {
+			"id": "kimi-k2.5",
+			"name": "Kimi K2.5",
+			"api": "cursor-agent",
+			"provider": "cursor",
+			"baseUrl": "https://api2.cursor.sh",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 262144,
+			"maxTokens": 65536
+		}
+	},
+	"gitlab-duo": {
+		"claude-haiku-4-5-20251001": {
+			"id": "claude-haiku-4-5-20251001",
+			"name": "Claude Haiku 4.5",
+			"api": "anthropic-messages",
+			"baseUrl": "https://cloud.gitlab.com/ai/v1/proxy/anthropic/",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 1,
+				"output": 5,
+				"cacheRead": 0.1,
+				"cacheWrite": 1.25
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000,
+			"provider": "gitlab-duo"
+		},
+		"claude-opus-4-5-20251101": {
+			"id": "claude-opus-4-5-20251101",
+			"name": "Claude Opus 4.5",
+			"api": "anthropic-messages",
+			"baseUrl": "https://cloud.gitlab.com/ai/v1/proxy/anthropic/",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 15,
+				"output": 75,
+				"cacheRead": 1.5,
+				"cacheWrite": 18.75
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000,
+			"provider": "gitlab-duo"
+		},
+		"claude-sonnet-4-5-20250929": {
+			"id": "claude-sonnet-4-5-20250929",
+			"name": "Claude Sonnet 4.5",
+			"api": "anthropic-messages",
+			"baseUrl": "https://cloud.gitlab.com/ai/v1/proxy/anthropic/",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 3,
+				"output": 15,
+				"cacheRead": 0.3,
+				"cacheWrite": 3.75
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000,
+			"provider": "gitlab-duo"
+		},
+		"duo-chat-gpt-5-1": {
+			"id": "duo-chat-gpt-5-1",
+			"name": "Duo Chat GPT-5.1",
+			"api": "openai-completions",
+			"provider": "gitlab-duo",
+			"baseUrl": "https://cloud.gitlab.com/ai/v1/proxy/openai/v1",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 2.5,
+				"output": 10,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 128000,
+			"maxTokens": 16384
+		},
+		"duo-chat-gpt-5-2": {
+			"id": "duo-chat-gpt-5-2",
+			"name": "Duo Chat GPT-5.2",
+			"api": "openai-completions",
+			"provider": "gitlab-duo",
+			"baseUrl": "https://cloud.gitlab.com/ai/v1/proxy/openai/v1",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 128000,
+			"maxTokens": 16384
+		},
+		"duo-chat-gpt-5-2-codex": {
+			"id": "duo-chat-gpt-5-2-codex",
+			"name": "Duo Chat GPT-5.2 Codex",
+			"api": "openai-responses",
+			"provider": "gitlab-duo",
+			"baseUrl": "https://cloud.gitlab.com/ai/v1/proxy/openai/v1",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 128000
+		},
+		"duo-chat-gpt-5-codex": {
+			"id": "duo-chat-gpt-5-codex",
+			"name": "Duo Chat GPT-5 Codex",
+			"api": "openai-responses",
+			"provider": "gitlab-duo",
+			"baseUrl": "https://cloud.gitlab.com/ai/v1/proxy/openai/v1",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 2.5,
+				"output": 10,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 128000
+		},
+		"duo-chat-gpt-5-mini": {
+			"id": "duo-chat-gpt-5-mini",
+			"name": "Duo Chat GPT-5 Mini",
+			"api": "openai-completions",
+			"provider": "gitlab-duo",
+			"baseUrl": "https://cloud.gitlab.com/ai/v1/proxy/openai/v1",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0.15,
+				"output": 0.6,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 128000,
+			"maxTokens": 16384
+		},
+		"duo-chat-haiku-4-5": {
+			"id": "duo-chat-haiku-4-5",
+			"name": "Duo Chat Haiku 4.5",
+			"api": "anthropic-messages",
+			"provider": "gitlab-duo",
+			"baseUrl": "https://cloud.gitlab.com/ai/v1/proxy/anthropic/",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 1,
+				"output": 5,
+				"cacheRead": 0.1,
+				"cacheWrite": 1.25
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
+		"duo-chat-opus-4-5": {
+			"id": "duo-chat-opus-4-5",
+			"name": "Duo Chat Opus 4.5",
+			"api": "anthropic-messages",
+			"provider": "gitlab-duo",
+			"baseUrl": "https://cloud.gitlab.com/ai/v1/proxy/anthropic/",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 15,
+				"output": 75,
+				"cacheRead": 1.5,
+				"cacheWrite": 18.75
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
+		"duo-chat-opus-4-6": {
+			"id": "duo-chat-opus-4-6",
+			"name": "Duo Chat Opus 4.6",
+			"api": "anthropic-messages",
+			"provider": "gitlab-duo",
+			"baseUrl": "https://cloud.gitlab.com/ai/v1/proxy/anthropic/",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
+		"duo-chat-sonnet-4-5": {
+			"id": "duo-chat-sonnet-4-5",
+			"name": "Duo Chat Sonnet 4.5",
+			"api": "anthropic-messages",
+			"provider": "gitlab-duo",
+			"baseUrl": "https://cloud.gitlab.com/ai/v1/proxy/anthropic/",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 3,
+				"output": 15,
+				"cacheRead": 0.3,
+				"cacheWrite": 3.75
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
+		"duo-chat-sonnet-4-6": {
+			"id": "duo-chat-sonnet-4-6",
+			"name": "Duo Chat Sonnet 4.6",
+			"api": "anthropic-messages",
+			"provider": "gitlab-duo",
+			"baseUrl": "https://cloud.gitlab.com/ai/v1/proxy/anthropic/",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0,
+				"output": 0,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 200000,
+			"maxTokens": 64000
+		},
+		"gpt-5-codex": {
+			"id": "gpt-5-codex",
+			"name": "GPT-5-Codex",
+			"api": "openai-responses",
+			"baseUrl": "https://cloud.gitlab.com/ai/v1/proxy/openai/v1",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 2.5,
+				"output": 10,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 272000,
+			"maxTokens": 128000,
+			"provider": "gitlab-duo"
+		},
+		"gpt-5-mini-2025-08-07": {
+			"id": "gpt-5-mini-2025-08-07",
+			"name": "GPT-5 Mini",
+			"api": "openai-responses",
+			"baseUrl": "https://cloud.gitlab.com/ai/v1/proxy/openai/v1",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 0.15,
+				"output": 0.6,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 128000,
+			"maxTokens": 16384,
+			"provider": "gitlab-duo"
+		},
+		"gpt-5.1-2025-11-13": {
+			"id": "gpt-5.1-2025-11-13",
+			"name": "GPT-5.1",
+			"api": "openai-responses",
+			"baseUrl": "https://cloud.gitlab.com/ai/v1/proxy/openai/v1",
+			"reasoning": true,
+			"input": [
+				"text",
+				"image"
+			],
+			"cost": {
+				"input": 2.5,
+				"output": 10,
+				"cacheRead": 0,
+				"cacheWrite": 0
+			},
+			"contextWindow": 128000,
+			"maxTokens": 16384,
+			"provider": "gitlab-duo"
 		}
 	},
 	"openai-codex": {

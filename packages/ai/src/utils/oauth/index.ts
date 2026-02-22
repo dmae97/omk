@@ -4,6 +4,7 @@
 import { refreshAnthropicToken } from "./anthropic";
 import { refreshCursorToken } from "./cursor";
 import { refreshGitHubCopilotToken } from "./github-copilot";
+import { refreshGitLabDuoToken } from "./gitlab-duo";
 import { refreshAntigravityToken } from "./google-antigravity";
 import { refreshGoogleCloudToken } from "./google-gemini-cli";
 import { refreshKimiToken } from "./kimi";
@@ -56,6 +57,8 @@ export {
 	normalizeDomain,
 	refreshGitHubCopilotToken,
 } from "./github-copilot";
+// GitLab Duo
+export { loginGitLabDuo, refreshGitLabDuoToken } from "./gitlab-duo";
 // Google Antigravity
 export { loginAntigravity, refreshAntigravityToken } from "./google-antigravity";
 // Google Gemini CLI
@@ -110,6 +113,11 @@ const builtInOAuthProviders: OAuthProviderInfo[] = [
 	{
 		id: "openai-codex",
 		name: "ChatGPT Plus/Pro (Codex Subscription)",
+		available: true,
+	},
+	{
+		id: "gitlab-duo",
+		name: "GitLab Duo",
 		available: true,
 	},
 	{
@@ -303,6 +311,9 @@ export async function refreshOAuthToken(
 			break;
 		case "kimi-code":
 			newCredentials = await refreshKimiToken(credentials.refresh);
+			break;
+		case "gitlab-duo":
+			newCredentials = await refreshGitLabDuoToken(credentials);
 			break;
 		case "cursor":
 			newCredentials = await refreshCursorToken(credentials.refresh);

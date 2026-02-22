@@ -255,4 +255,5 @@ export const DEFAULT_MODEL_PER_PROVIDER: Record<KnownProvider, string> = {
 	"minimax-code-cn": "MiniMax-M2.5",
 	"openai-codex": "gpt-5.3-codex",
 	zai: "glm-4.6",
+	"gitlab-duo": "duo-chat-sonnet-4-5",
 } as Record<KnownProvider, string>;

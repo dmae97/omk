@@ -260,6 +260,8 @@ export interface AnthropicOptions extends StreamOptions {
 	interleavedThinking?: boolean;
 	toolChoice?: "auto" | "any" | "none" | { type: "tool"; name: string };
 	betas?: string[] | string;
+	/** Force OAuth bearer auth mode for proxy tokens that don't match Anthropic token prefixes. */
+	isOAuth?: boolean;
 }
 
 export type AnthropicClientOptionsArgs = {
@@ -270,6 +272,7 @@ export type AnthropicClientOptionsArgs = {
 	interleavedThinking?: boolean;
 	headers?: Record<string, string>;
 	dynamicHeaders?: Record<string, string>;
+	isOAuth?: boolean;
 };
 
 export type AnthropicClientOptionsResult = {
@@ -355,6 +358,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 				interleavedThinking: options?.interleavedThinking ?? true,
 				headers: options?.headers,
 				dynamicHeaders: copilotDynamicHeaders,
+				isOAuth: options?.isOAuth,
 			});
 			const params = buildParams(model, context, isOAuthToken, options);
 			options?.onPayload?.(params);
@@ -670,8 +674,17 @@ export function normalizeExtraBetas(betas?: string[] | string): string[] {
 }
 
 export function buildAnthropicClientOptions(args: AnthropicClientOptionsArgs): AnthropicClientOptionsResult {
-	const { model, apiKey, extraBetas = [], stream = true, interleavedThinking = true, headers, dynamicHeaders } = args;
-	const oauthToken = isOAuthToken(apiKey);
+	const {
+		model,
+		apiKey,
+		extraBetas = [],
+		stream = true,
+		interleavedThinking = true,
+		headers,
+		dynamicHeaders,
+		isOAuth,
+	} = args;
+	const oauthToken = isOAuth ?? isOAuthToken(apiKey);
 
 	if (model.provider === "github-copilot") {
 		const betaFeatures = [...extraBetas];

@@ -18,6 +18,7 @@ import {
 	loginCursor,
 	loginGeminiCli,
 	loginGitHubCopilot,
+	loginGitLabDuo,
 	loginHuggingface,
 	loginKimi,
 	loginLiteLLM,
@@ -694,6 +695,9 @@ export class AuthStorage {
 				break;
 			case "openai-codex":
 				credentials = await loginOpenAICodex(ctrl);
+				break;
+			case "gitlab-duo":
+				credentials = await loginGitLabDuo(ctrl);
 				break;
 			case "kimi-code":
 				credentials = await loginKimi(ctrl);

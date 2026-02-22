@@ -114,7 +114,6 @@ describe("truncateHead", () => {
 		expect(result.firstLineExceedsLimit).toBe(true);
 	});
 
-
 	test("includes first line when text fits exact byte budget", () => {
 		const result = truncateHead("abc\nx", { maxBytes: 3, maxLines: 10 });
 		expect(result.content).toBe("abc");
@@ -212,7 +211,6 @@ describe("OutputSink", () => {
 		expect(dumped.outputLines).toBe(2);
 		expect(dumped.outputBytes).toBe(byteLength("hello\nworld"));
 	});
-
 
 	test("counts lines correctly when chunks contain no newlines", async () => {
 		const sink = new OutputSink();

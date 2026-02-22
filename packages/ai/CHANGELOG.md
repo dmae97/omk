@@ -1,6 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added GitLab Duo provider with support for Claude, GPT-5, and other models via GitLab AI Gateway
+- Added OAuth authentication for GitLab Duo with automatic token refresh and direct access caching
+- Added 16 new GitLab Duo models including Claude Opus/Sonnet/Haiku variants and GPT-5 series models
+- Added `isOAuth` option to Anthropic provider to force OAuth bearer auth mode for proxy tokens
+- Added `streamGitLabDuo` function to route requests through GitLab AI Gateway with direct access tokens
+- Added `getGitLabDuoModels` function to retrieve available GitLab Duo model configurations
+- Added `clearGitLabDuoDirectAccessCache` function to manually clear cached direct access tokens
 
 ## [12.17.2] - 2026-02-21
 ### Added

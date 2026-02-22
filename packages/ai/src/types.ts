@@ -79,6 +79,7 @@ export type KnownProvider =
 	| "minimax-code"
 	| "minimax-code-cn"
 	| "github-copilot"
+	| "gitlab-duo"
 	| "cursor"
 	| "xai"
 	| "groq"

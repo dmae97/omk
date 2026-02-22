@@ -1,8 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added support for GitLab Duo authentication provider
 - Exported truncation utilities and streaming output types from `session/streaming-output` module for public use
 - Added `TailBuffer` class for efficient ring-style buffering with lazy joining and windowed truncation
 - Added `truncateTailBytes` and `truncateHeadBytes` functions for UTF-8-aware byte-level truncation
