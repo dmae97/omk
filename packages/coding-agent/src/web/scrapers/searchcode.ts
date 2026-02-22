@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, loadPage, tryParseJson } from "./types";
+import { buildResult, formatNumber, loadPage, tryParseJson } from "./types";
 
 interface SearchcodeResult {
 	id?: number | string;
@@ -144,7 +144,7 @@ export const handleSearchcode: SpecialHandler = async (
 		md += `## Metadata\n\n`;
 		md += `**Query:** \`${query}\`\n`;
 		md += `**Page:** ${page}\n`;
-		if (total !== null) md += `**Total Results:** ${formatCount(total)}\n`;
+		if (total !== null) md += `**Total Results:** ${formatNumber(total)}\n`;
 		md += `**Result Count:** ${results.length}\n`;
 		if (typeof data.nextpage === "number") md += `**Next Page:** ${data.nextpage}\n`;
 

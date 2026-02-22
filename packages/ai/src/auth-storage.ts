@@ -1593,10 +1593,10 @@ export class AuthCredentialStore {
 			"UPDATE auth_credentials SET credential_type = ?, data = ?, updated_at = unixepoch() WHERE id = ?",
 		);
 		this.#deleteStmt = this.#db.prepare(
-			"UPDATE auth_credentials SET disabled = 1 AND updated_at = unixepoch() WHERE id = ?",
+			"UPDATE auth_credentials SET disabled = 1, updated_at = unixepoch() WHERE id = ?",
 		);
 		this.#deleteByProviderStmt = this.#db.prepare(
-			"UPDATE auth_credentials SET disabled = 1 AND updated_at = unixepoch() WHERE provider = ?",
+			"UPDATE auth_credentials SET disabled = 1, updated_at = unixepoch() WHERE provider = ?",
 		);
 		this.#getCacheStmt = this.#db.prepare("SELECT value FROM cache WHERE key = ? AND expires_at > unixepoch()");
 		this.#upsertCacheStmt = this.#db.prepare(

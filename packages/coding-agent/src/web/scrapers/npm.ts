@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, loadPage, tryParseJson } from "./types";
+import { buildResult, formatNumber, loadPage, tryParseJson } from "./types";
 
 /**
  * Handle npm URLs via registry API
@@ -69,7 +69,7 @@ export const handleNpm: SpecialHandler = async (
 		}
 		md += "\n";
 		if (weeklyDownloads !== null) {
-			md += `**Weekly Downloads:** ${formatCount(weeklyDownloads)}\n`;
+			md += `**Weekly Downloads:** ${formatNumber(weeklyDownloads)}\n`;
 		}
 		md += "\n";
 

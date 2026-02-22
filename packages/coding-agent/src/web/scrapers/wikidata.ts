@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, loadPage, tryParseJson } from "./types";
+import { buildResult, formatNumber, loadPage, tryParseJson } from "./types";
 
 /**
  * Common Wikidata property IDs mapped to human-readable names
@@ -130,7 +130,7 @@ export const handleWikidata: SpecialHandler = async (
 		// Count sitelinks
 		const sitelinkCount = entity.sitelinks ? Object.keys(entity.sitelinks).length : 0;
 		if (sitelinkCount > 0) {
-			md += `**Wikipedia articles:** ${formatCount(sitelinkCount)} languages\n\n`;
+			md += `**Wikipedia articles:** ${formatNumber(sitelinkCount)} languages\n\n`;
 		}
 
 		// Process claims

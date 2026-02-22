@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, loadPage, tryParseJson } from "./types";
+import { buildResult, formatNumber, loadPage, tryParseJson } from "./types";
 
 interface SnapcraftPublisher {
 	"display-name"?: string;
@@ -159,7 +159,7 @@ export const handleSnapcraft: SpecialHandler = async (
 		if (base) md += ` · **Base:** ${base}`;
 		md += "\n";
 		if (publisher) md += `**Publisher:** ${publisher}\n`;
-		if (downloads !== null) md += `**Downloads:** ${formatCount(downloads)}\n`;
+		if (downloads !== null) md += `**Downloads:** ${formatNumber(downloads)}\n`;
 		md += "\n";
 
 		if (channels.size > 0) {

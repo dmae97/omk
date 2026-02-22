@@ -1,4 +1,4 @@
-import { buildResult, formatCount, loadPage, type RenderResult, type SpecialHandler, tryParseJson } from "./types";
+import { buildResult, formatNumber, loadPage, type RenderResult, type SpecialHandler, tryParseJson } from "./types";
 
 interface RubyGemsDependency {
 	name: string;
@@ -67,8 +67,8 @@ export const handleRubyGems: SpecialHandler = async (
 		md += "\n";
 
 		// Downloads
-		md += `**Total Downloads:** ${formatCount(gem.downloads)}`;
-		if (gem.version_downloads) md += ` · **Version Downloads:** ${formatCount(gem.version_downloads)}`;
+		md += `**Total Downloads:** ${formatNumber(gem.downloads)}`;
+		if (gem.version_downloads) md += ` · **Version Downloads:** ${formatNumber(gem.version_downloads)}`;
 		md += "\n\n";
 
 		// Links

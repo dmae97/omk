@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, formatIsoDate, loadPage, tryParseJson } from "./types";
+import { buildResult, formatIsoDate, formatNumber, loadPage, tryParseJson } from "./types";
 
 interface MavenDoc {
 	id: string;
@@ -92,7 +92,7 @@ export const handleMaven: SpecialHandler = async (
 		md += "\n";
 
 		if (doc.p) md += `**Packaging:** ${doc.p}\n`;
-		if (doc.versionCount) md += `**Versions:** ${formatCount(doc.versionCount)}\n`;
+		if (doc.versionCount) md += `**Versions:** ${formatNumber(doc.versionCount)}\n`;
 		if (doc.timestamp) {
 			md += `**Last Updated:** ${formatIsoDate(doc.timestamp)}\n`;
 		}

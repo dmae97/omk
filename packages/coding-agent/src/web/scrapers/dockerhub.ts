@@ -1,6 +1,6 @@
 import { formatBytes } from "../../tools/render-utils";
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, formatIsoDate, loadPage, tryParseJson } from "./types";
+import { buildResult, formatIsoDate, formatNumber, loadPage, tryParseJson } from "./types";
 
 interface DockerHubRepo {
 	name: string;
@@ -91,8 +91,8 @@ export const handleDockerHub: SpecialHandler = async (
 
 		// Stats line
 		const stats: string[] = [];
-		if (repo.pull_count !== undefined) stats.push(`**Pulls:** ${formatCount(repo.pull_count)}`);
-		if (repo.star_count !== undefined) stats.push(`**Stars:** ${formatCount(repo.star_count)}`);
+		if (repo.pull_count !== undefined) stats.push(`**Pulls:** ${formatNumber(repo.pull_count)}`);
+		if (repo.star_count !== undefined) stats.push(`**Stars:** ${formatNumber(repo.star_count)}`);
 		if (repo.is_official) stats.push("**Official Image**");
 		if (repo.is_automated) stats.push("**Automated Build**");
 		if (stats.length > 0) {

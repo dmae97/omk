@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, loadPage, tryParseJson } from "./types";
+import { buildResult, formatNumber, loadPage, tryParseJson } from "./types";
 
 interface OpenVsxFileLinks {
 	readme?: string;
@@ -77,7 +77,7 @@ export const handleOpenVsx: SpecialHandler = async (
 		md += "\n";
 
 		if (downloads !== null) {
-			md += `**Downloads:** ${formatCount(downloads)}\n`;
+			md += `**Downloads:** ${formatNumber(downloads)}\n`;
 		}
 
 		if (rating !== null) {

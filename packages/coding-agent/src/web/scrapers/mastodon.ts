@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, htmlToBasicMarkdown, loadPage, tryParseJson } from "./types";
+import { buildResult, formatNumber, htmlToBasicMarkdown, loadPage, tryParseJson } from "./types";
 
 interface MastodonAccount {
 	id: string;
@@ -141,9 +141,9 @@ function formatStatus(status: MastodonStatus, isReblog = false): string {
 
 	// Stats
 	md += `---\n`;
-	md += `💬 ${formatCount(status.replies_count)} replies · `;
-	md += `🔁 ${formatCount(status.reblogs_count)} boosts · `;
-	md += `⭐ ${formatCount(status.favourites_count)} favorites\n`;
+	md += `💬 ${formatNumber(status.replies_count)} replies · `;
+	md += `🔁 ${formatNumber(status.reblogs_count)} boosts · `;
+	md += `⭐ ${formatNumber(status.favourites_count)} favorites\n`;
 
 	return md;
 }
@@ -167,9 +167,9 @@ function formatAccount(account: MastodonAccount): string {
 	}
 
 	// Stats
-	md += `**Followers:** ${formatCount(account.followers_count)} · `;
-	md += `**Following:** ${formatCount(account.following_count)} · `;
-	md += `**Posts:** ${formatCount(account.statuses_count)}\n\n`;
+	md += `**Followers:** ${formatNumber(account.followers_count)} · `;
+	md += `**Following:** ${formatNumber(account.following_count)} · `;
+	md += `**Posts:** ${formatNumber(account.statuses_count)}\n\n`;
 
 	md += `**Joined:** ${formatDate(account.created_at)}\n`;
 	md += `**Profile:** ${account.url}\n`;

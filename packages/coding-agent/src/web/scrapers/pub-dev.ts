@@ -1,4 +1,4 @@
-import { buildResult, formatCount, htmlToBasicMarkdown, loadPage, type SpecialHandler, tryParseJson } from "./types";
+import { buildResult, formatNumber, htmlToBasicMarkdown, loadPage, type SpecialHandler, tryParseJson } from "./types";
 
 /**
  * Handle pub.dev URLs via API
@@ -65,7 +65,7 @@ export const handlePubDev: SpecialHandler = async (url: string, timeout: number,
 			const maxPoints = score.maxPoints;
 			const popularity = score.popularityScore;
 
-			if (likes !== undefined) md += `**Likes:** ${formatCount(likes)}`;
+			if (likes !== undefined) md += `**Likes:** ${formatNumber(likes)}`;
 			if (points !== undefined && maxPoints !== undefined) {
 				md += ` · **Pub Points:** ${points}/${maxPoints}`;
 			}

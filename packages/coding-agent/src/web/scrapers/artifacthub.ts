@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, formatIsoDate, loadPage, tryParseJson } from "./types";
+import { buildResult, formatIsoDate, formatNumber, loadPage, tryParseJson } from "./types";
 
 interface ArtifactHubMaintainer {
 	name: string;
@@ -99,7 +99,7 @@ export const handleArtifactHub: SpecialHandler = async (
 		const badges: string[] = [];
 		if (pkg.official) badges.push("Official");
 		if (pkg.signed) badges.push("Signed");
-		if (pkg.stars) badges.push(`${formatCount(pkg.stars)} stars`);
+		if (pkg.stars) badges.push(`${formatNumber(pkg.stars)} stars`);
 		if (badges.length > 0) md += `**${badges.join(" · ")}**\n`;
 		md += "\n";
 

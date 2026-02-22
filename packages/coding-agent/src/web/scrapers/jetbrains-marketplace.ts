@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, htmlToBasicMarkdown, loadPage, tryParseJson } from "./types";
+import { buildResult, formatNumber, htmlToBasicMarkdown, loadPage, tryParseJson } from "./types";
 
 interface PluginVendor {
 	name?: string;
@@ -118,11 +118,11 @@ export const handleJetBrainsMarketplace: SpecialHandler = async (
 		md += `**Plugin ID:** ${pluginId}\n`;
 		if (vendorName) md += `**Vendor:** ${vendorName}\n`;
 		if (plugin.downloads !== undefined) {
-			md += `**Downloads:** ${formatCount(plugin.downloads)}\n`;
+			md += `**Downloads:** ${formatNumber(plugin.downloads)}\n`;
 		}
 		if (rating.value !== null) {
 			md += `**Rating:** ${rating.value.toFixed(2)}`;
-			if (rating.votes !== null) md += ` (${formatCount(rating.votes)} votes)`;
+			if (rating.votes !== null) md += ` (${formatNumber(rating.votes)} votes)`;
 			md += "\n";
 		}
 		if (tags.length) md += `**Tags:** ${tags.join(", ")}\n`;
@@ -133,7 +133,7 @@ export const handleJetBrainsMarketplace: SpecialHandler = async (
 			if (update.channel) md += `**Channel:** ${update.channel}\n`;
 			if (buildCompatibility) md += `**Build Compatibility:** ${buildCompatibility}\n`;
 			if (update.downloads !== undefined) {
-				md += `**Release Downloads:** ${formatCount(update.downloads)}\n`;
+				md += `**Release Downloads:** ${formatNumber(update.downloads)}\n`;
 			}
 		}
 

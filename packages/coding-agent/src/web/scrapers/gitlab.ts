@@ -1,7 +1,7 @@
 import {
 	buildResult,
-	formatCount,
 	formatIsoDate,
+	formatNumber,
 	htmlToBasicMarkdown,
 	loadPage,
 	type RenderResult,
@@ -131,7 +131,7 @@ async function renderGitLabRepo(
 
 	let md = `# ${repo.name}\n\n`;
 	if (repo.description) md += `${repo.description}\n\n`;
-	md += `**Stars:** ${formatCount(repo.star_count)} · **Forks:** ${formatCount(repo.forks_count)} · **Issues:** ${formatCount(repo.open_issues_count)}\n`;
+	md += `**Stars:** ${formatNumber(repo.star_count)} · **Forks:** ${formatNumber(repo.forks_count)} · **Issues:** ${formatNumber(repo.open_issues_count)}\n`;
 	md += `**Visibility:** ${repo.visibility} · **Default Branch:** ${repo.default_branch}\n`;
 	if (repo.topics && repo.topics.length > 0) {
 		md += `**Topics:** ${repo.topics.join(", ")}\n`;

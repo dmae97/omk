@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, loadPage, tryParseJson } from "./types";
+import { buildResult, formatNumber, loadPage, tryParseJson } from "./types";
 
 interface TerraformModule {
 	id: string;
@@ -124,7 +124,7 @@ async function handleModuleUrl(
 	md += `**Version:** ${mod.version}`;
 	if (mod.verified) md += " ✓ Verified";
 	md += `\n`;
-	md += `**Downloads:** ${formatCount(mod.downloads)}\n`;
+	md += `**Downloads:** ${formatNumber(mod.downloads)}\n`;
 	if (mod.published_at) {
 		md += `**Published:** ${new Date(mod.published_at).toLocaleDateString()}\n`;
 	}
@@ -238,7 +238,7 @@ async function handleProviderUrl(
 	// Metadata
 	md += `**Version:** ${provider.version}\n`;
 	if (provider.tier) md += `**Tier:** ${provider.tier}\n`;
-	md += `**Downloads:** ${formatCount(provider.downloads)}\n`;
+	md += `**Downloads:** ${formatNumber(provider.downloads)}\n`;
 	if (provider.published_at) {
 		md += `**Published:** ${new Date(provider.published_at).toLocaleDateString()}\n`;
 	}

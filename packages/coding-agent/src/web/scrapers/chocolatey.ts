@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, formatIsoDate, loadPage, tryParseJson } from "./types";
+import { buildResult, formatIsoDate, formatNumber, loadPage, tryParseJson } from "./types";
 
 interface NuGetODataEntry {
 	Id: string;
@@ -87,9 +87,9 @@ export const handleChocolatey: SpecialHandler = async (
 		md += "\n";
 
 		if (pkg.DownloadCount !== undefined) {
-			md += `**Total Downloads:** ${formatCount(pkg.DownloadCount)}`;
+			md += `**Total Downloads:** ${formatNumber(pkg.DownloadCount)}`;
 			if (pkg.VersionDownloadCount !== undefined) {
-				md += ` · **Version Downloads:** ${formatCount(pkg.VersionDownloadCount)}`;
+				md += ` · **Version Downloads:** ${formatNumber(pkg.VersionDownloadCount)}`;
 			}
 			md += "\n";
 		}

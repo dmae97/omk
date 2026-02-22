@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, loadPage, tryParseJson } from "./types";
+import { buildResult, formatNumber, loadPage, tryParseJson } from "./types";
 
 interface CoinGeckoResponse {
 	id: string;
@@ -74,11 +74,11 @@ export const handleCoinGecko: SpecialHandler = async (
 		}
 
 		if (market?.market_cap?.usd) {
-			md += `**Market Cap:** $${formatCount(market.market_cap.usd)}\n`;
+			md += `**Market Cap:** $${formatNumber(market.market_cap.usd)}\n`;
 		}
 
 		if (market?.total_volume?.usd) {
-			md += `**24h Volume:** $${formatCount(market.total_volume.usd)}\n`;
+			md += `**24h Volume:** $${formatNumber(market.total_volume.usd)}\n`;
 		}
 
 		if (market?.ath?.usd !== undefined) {
@@ -98,12 +98,12 @@ export const handleCoinGecko: SpecialHandler = async (
 
 		// Supply info
 		if (market?.circulating_supply) {
-			md += `**Circulating Supply:** ${formatCount(Math.round(market.circulating_supply))}`;
+			md += `**Circulating Supply:** ${formatNumber(Math.round(market.circulating_supply))}`;
 			if (market.max_supply) {
 				const percent = ((market.circulating_supply / market.max_supply) * 100).toFixed(1);
-				md += ` / ${formatCount(Math.round(market.max_supply))} (${percent}%)`;
+				md += ` / ${formatNumber(Math.round(market.max_supply))} (${percent}%)`;
 			} else if (market.total_supply) {
-				md += ` / ${formatCount(Math.round(market.total_supply))} total`;
+				md += ` / ${formatNumber(Math.round(market.total_supply))} total`;
 			}
 			md += "\n";
 		}

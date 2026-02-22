@@ -1,4 +1,4 @@
-import { buildResult, formatCount, loadPage, type RenderResult, type SpecialHandler, tryParseJson } from "./types";
+import { buildResult, formatNumber, loadPage, type RenderResult, type SpecialHandler, tryParseJson } from "./types";
 
 /**
  * Handle PyPI URLs via JSON API
@@ -68,7 +68,7 @@ export const handlePyPI: SpecialHandler = async (
 		md += "\n";
 
 		if (weeklyDownloads !== null) {
-			md += `**Weekly Downloads:** ${formatCount(weeklyDownloads)}\n`;
+			md += `**Weekly Downloads:** ${formatNumber(weeklyDownloads)}\n`;
 		}
 
 		md += "\n";

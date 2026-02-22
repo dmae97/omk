@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, loadPage, tryParseJson } from "./types";
+import { buildResult, formatNumber, loadPage, tryParseJson } from "./types";
 
 /**
  * Handle Packagist URLs via JSON API
@@ -101,9 +101,9 @@ export const handlePackagist: SpecialHandler = async (
 		md += "\n";
 
 		if (pkg.downloads) {
-			md += `**Downloads:** ${formatCount(pkg.downloads.total)} total · ${formatCount(pkg.downloads.monthly)}/month\n`;
+			md += `**Downloads:** ${formatNumber(pkg.downloads.total)} total · ${formatNumber(pkg.downloads.monthly)}/month\n`;
 		}
-		if (pkg.favers) md += `**Stars:** ${formatCount(pkg.favers)}\n`;
+		if (pkg.favers) md += `**Stars:** ${formatNumber(pkg.favers)}\n`;
 		md += "\n";
 
 		// Authors
@@ -130,8 +130,8 @@ export const handlePackagist: SpecialHandler = async (
 		// GitHub stats
 		if (pkg.github_stars || pkg.github_forks) {
 			const stats: string[] = [];
-			if (pkg.github_stars) stats.push(`${formatCount(pkg.github_stars)} stars`);
-			if (pkg.github_forks) stats.push(`${formatCount(pkg.github_forks)} forks`);
+			if (pkg.github_stars) stats.push(`${formatNumber(pkg.github_stars)} stars`);
+			if (pkg.github_forks) stats.push(`${formatNumber(pkg.github_forks)} forks`);
 			if (pkg.github_open_issues) stats.push(`${pkg.github_open_issues} open issues`);
 			md += `**GitHub:** ${stats.join(" · ")}\n`;
 		}

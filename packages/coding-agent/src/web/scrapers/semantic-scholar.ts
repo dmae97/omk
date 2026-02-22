@@ -1,5 +1,5 @@
 import type { SpecialHandler } from "./types";
-import { buildResult, formatCount, loadPage, tryParseJson } from "./types";
+import { buildResult, formatNumber, loadPage, tryParseJson } from "./types";
 
 interface SemanticScholarAuthor {
 	name: string;
@@ -114,10 +114,10 @@ export const handleSemanticScholar: SpecialHandler = async (url: string, timeout
 	if (paper.year) metadata.push(`Year: ${paper.year}`);
 	if (paper.journal?.name) metadata.push(`Venue: ${paper.journal.name}`);
 	if (paper.citationCount !== undefined) {
-		metadata.push(`Citations: ${formatCount(paper.citationCount)}`);
+		metadata.push(`Citations: ${formatNumber(paper.citationCount)}`);
 	}
 	if (paper.referenceCount !== undefined) {
-		metadata.push(`References: ${formatCount(paper.referenceCount)}`);
+		metadata.push(`References: ${formatNumber(paper.referenceCount)}`);
 	}
 	if (metadata.length > 0) {
 		sections.push(metadata.join(" • "));

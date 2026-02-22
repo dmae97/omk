@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, loadPage, tryParseJson } from "./types";
+import { buildResult, formatNumber, loadPage, tryParseJson } from "./types";
 
 /**
  * Check if content looks like HTML
@@ -78,7 +78,7 @@ export const handleCratesIo: SpecialHandler = async (
 		if (latestVersion?.license) md += ` · **License:** ${latestVersion.license}`;
 		if (latestVersion?.rust_version) md += ` · **MSRV:** ${latestVersion.rust_version}`;
 		md += "\n";
-		md += `**Downloads:** ${formatCount(crate.downloads)} total · ${formatCount(crate.recent_downloads)} recent\n\n`;
+		md += `**Downloads:** ${formatNumber(crate.downloads)} total · ${formatNumber(crate.recent_downloads)} recent\n\n`;
 
 		if (crate.repository) md += `**Repository:** ${crate.repository}\n`;
 		if (crate.homepage && crate.homepage !== crate.repository) md += `**Homepage:** ${crate.homepage}\n`;
@@ -91,7 +91,7 @@ export const handleCratesIo: SpecialHandler = async (
 			md += `\n## Recent Versions\n\n`;
 			for (const ver of data.versions.slice(0, 5)) {
 				const date = ver.created_at.split("T")[0];
-				md += `- **${ver.num}** (${date}) - ${formatCount(ver.downloads)} downloads\n`;
+				md += `- **${ver.num}** (${date}) - ${formatNumber(ver.downloads)} downloads\n`;
 			}
 		}
 

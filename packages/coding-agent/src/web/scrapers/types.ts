@@ -4,7 +4,7 @@
 import { ptree } from "@oh-my-pi/pi-utils";
 import { ToolAbortError } from "../../tools/tool-errors";
 
-export { formatCount } from "@oh-my-pi/pi-utils";
+export { formatNumber } from "@oh-my-pi/pi-utils";
 
 export interface RenderResult {
 	url: string;

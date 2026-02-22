@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, loadPage, tryParseJson } from "./types";
+import { buildResult, formatNumber, loadPage, tryParseJson } from "./types";
 import { asNumber, asString, isRecord } from "./utils";
 
 function formatLicenses(licenses: unknown): string[] {
@@ -135,7 +135,7 @@ export const handleClojars: SpecialHandler = async (
 		if (groupName) md += `**Group:** ${groupName}\n`;
 		if (artifactName) md += `**Artifact:** ${artifactName}\n`;
 		if (version) md += `**Latest:** ${version}\n`;
-		if (downloads !== null) md += `**Downloads:** ${formatCount(downloads)}\n`;
+		if (downloads !== null) md += `**Downloads:** ${formatNumber(downloads)}\n`;
 		if (homepage) md += `**Homepage:** ${homepage}\n`;
 		if (licenses.length > 0) md += `**Licenses:** ${licenses.join(", ")}\n`;
 

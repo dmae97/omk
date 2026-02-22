@@ -1,5 +1,5 @@
 import type { SpecialHandler } from "./types";
-import { buildResult, formatCount, loadPage, tryParseJson } from "./types";
+import { buildResult, formatNumber, loadPage, tryParseJson } from "./types";
 
 interface HfModelData {
 	modelId: string;
@@ -133,8 +133,8 @@ export const handleHuggingFace: SpecialHandler = async (url: string, timeout: nu
 
 				if (model.pipeline_tag) md += `**Task:** ${model.pipeline_tag}\n`;
 				if (model.library_name) md += `**Library:** ${model.library_name}\n`;
-				if (model.downloads !== undefined) md += `**Downloads:** ${formatCount(model.downloads)}\n`;
-				if (model.likes !== undefined) md += `**Likes:** ${formatCount(model.likes)}\n`;
+				if (model.downloads !== undefined) md += `**Downloads:** ${formatNumber(model.downloads)}\n`;
+				if (model.likes !== undefined) md += `**Likes:** ${formatNumber(model.likes)}\n`;
 				if (model.private) md += `**Visibility:** Private\n`;
 				if (model.gated) md += `**Access:** Gated\n`;
 
@@ -184,8 +184,8 @@ export const handleHuggingFace: SpecialHandler = async (url: string, timeout: nu
 				let md = `# ${dataset.id}\n\n`;
 				if (dataset.description) md += `${dataset.description}\n\n`;
 
-				if (dataset.downloads !== undefined) md += `**Downloads:** ${formatCount(dataset.downloads)}\n`;
-				if (dataset.likes !== undefined) md += `**Likes:** ${formatCount(dataset.likes)}\n`;
+				if (dataset.downloads !== undefined) md += `**Downloads:** ${formatNumber(dataset.downloads)}\n`;
+				if (dataset.likes !== undefined) md += `**Likes:** ${formatNumber(dataset.likes)}\n`;
 				if (dataset.private) md += `**Visibility:** Private\n`;
 				if (dataset.gated) md += `**Access:** Gated\n`;
 
@@ -237,7 +237,7 @@ export const handleHuggingFace: SpecialHandler = async (url: string, timeout: nu
 
 				if (space.author) md += `**Author:** ${space.author}\n`;
 				if (space.sdk) md += `**SDK:** ${space.sdk}\n`;
-				if (space.likes !== undefined) md += `**Likes:** ${formatCount(space.likes)}\n`;
+				if (space.likes !== undefined) md += `**Likes:** ${formatNumber(space.likes)}\n`;
 				if (space.private) md += `**Visibility:** Private\n`;
 
 				if (space.cardData) {
@@ -272,8 +272,8 @@ export const handleHuggingFace: SpecialHandler = async (url: string, timeout: nu
 						let md = `# ${model.modelId}\n\n`;
 						if (model.pipeline_tag) md += `**Task:** ${model.pipeline_tag}\n`;
 						if (model.library_name) md += `**Library:** ${model.library_name}\n`;
-						if (model.downloads !== undefined) md += `**Downloads:** ${formatCount(model.downloads)}\n`;
-						if (model.likes !== undefined) md += `**Likes:** ${formatCount(model.likes)}\n`;
+						if (model.downloads !== undefined) md += `**Downloads:** ${formatNumber(model.downloads)}\n`;
+						if (model.likes !== undefined) md += `**Likes:** ${formatNumber(model.likes)}\n`;
 						if (model.tags?.length) md += `**Tags:** ${model.tags.join(", ")}\n`;
 						md += "\n";
 						if (readmeResult.ok && readmeResult.content.trim()) {
@@ -300,9 +300,9 @@ export const handleHuggingFace: SpecialHandler = async (url: string, timeout: nu
 
 				let md = `# ${user.user || parsed.id}\n\n`;
 				if (user.fullname) md += `**Name:** ${user.fullname}\n`;
-				if (user.numModels !== undefined) md += `**Models:** ${formatCount(user.numModels)}\n`;
-				if (user.numDatasets !== undefined) md += `**Datasets:** ${formatCount(user.numDatasets)}\n`;
-				if (user.numSpaces !== undefined) md += `**Spaces:** ${formatCount(user.numSpaces)}\n`;
+				if (user.numModels !== undefined) md += `**Models:** ${formatNumber(user.numModels)}\n`;
+				if (user.numDatasets !== undefined) md += `**Datasets:** ${formatNumber(user.numDatasets)}\n`;
+				if (user.numSpaces !== undefined) md += `**Spaces:** ${formatNumber(user.numSpaces)}\n`;
 
 				if (user.orgs?.length) {
 					md += `**Organizations:** ${user.orgs.map(o => o.name).join(", ")}\n`;

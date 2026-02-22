@@ -1,5 +1,5 @@
 import type { LocalizedText, RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, getLocalizedText, htmlToBasicMarkdown, loadPage, tryParseJson } from "./types";
+import { buildResult, formatNumber, getLocalizedText, htmlToBasicMarkdown, loadPage, tryParseJson } from "./types";
 
 type AddonFile = {
 	permissions?: string[];
@@ -143,11 +143,11 @@ export const handleFirefoxAddons: SpecialHandler = async (
 
 		if (ratingAverage !== undefined) {
 			md += `**Rating:** ${ratingAverage.toFixed(2)}`;
-			if (ratingCount !== undefined) md += ` (${formatCount(ratingCount)} reviews)`;
+			if (ratingCount !== undefined) md += ` (${formatNumber(ratingCount)} reviews)`;
 			md += "\n";
 		}
 
-		if (users !== undefined) md += `**Users:** ${formatCount(users)}\n`;
+		if (users !== undefined) md += `**Users:** ${formatNumber(users)}\n`;
 		if (version) md += `**Version:** ${version}\n`;
 		if (categories.length > 0) md += `**Categories:** ${categories.join(", ")}\n`;
 

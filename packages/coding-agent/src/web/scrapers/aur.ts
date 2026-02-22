@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, formatIsoDate, loadPage, tryParseJson } from "./types";
+import { buildResult, formatIsoDate, formatNumber, loadPage, tryParseJson } from "./types";
 
 interface AurPackage {
 	Name: string;
@@ -81,7 +81,7 @@ export const handleAur: SpecialHandler = async (
 			md += "**Maintainer:** Orphaned\n";
 		}
 
-		md += `**Votes:** ${formatCount(pkg.NumVotes)} · **Popularity:** ${pkg.Popularity.toFixed(2)}\n`;
+		md += `**Votes:** ${formatNumber(pkg.NumVotes)} · **Popularity:** ${pkg.Popularity.toFixed(2)}\n`;
 
 		// Timestamps
 		const lastModified = formatIsoDate(pkg.LastModified * 1000);

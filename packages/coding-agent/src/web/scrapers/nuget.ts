@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, formatIsoDate, loadPage, tryParseJson } from "./types";
+import { buildResult, formatIsoDate, formatNumber, loadPage, tryParseJson } from "./types";
 
 interface NuGetCatalogEntry {
 	id: string;
@@ -137,7 +137,7 @@ export const handleNuGet: SpecialHandler = async (
 		md += "\n";
 
 		if (totalDownloads !== null) {
-			md += `**Total Downloads:** ${formatCount(totalDownloads)}\n`;
+			md += `**Total Downloads:** ${formatNumber(totalDownloads)}\n`;
 		}
 
 		if (targetEntry.authors) md += `**Authors:** ${targetEntry.authors}\n`;

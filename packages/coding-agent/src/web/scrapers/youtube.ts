@@ -5,7 +5,7 @@ import { ptree, Snowflake } from "@oh-my-pi/pi-utils";
 import { throwIfAborted } from "../../tools/tool-errors";
 import { ensureTool } from "../../utils/tools-manager";
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, formatMediaDuration } from "./types";
+import { buildResult, formatMediaDuration, formatNumber } from "./types";
 
 interface YouTubeUrl {
 	videoId: string;
@@ -263,7 +263,7 @@ export const handleYouTube: SpecialHandler = async (
 	if (channel) md += `**Channel:** ${channel}\n`;
 	if (formattedDate) md += `**Uploaded:** ${formattedDate}\n`;
 	if (duration > 0) md += `**Duration:** ${formatMediaDuration(duration)}\n`;
-	if (viewCount > 0) md += `**Views:** ${formatCount(viewCount)}\n`;
+	if (viewCount > 0) md += `**Views:** ${formatNumber(viewCount)}\n`;
 	md += `**Video ID:** ${yt.videoId}\n\n`;
 
 	if (description) {

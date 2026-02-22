@@ -1,5 +1,5 @@
 import type { SpecialHandler } from "./types";
-import { buildResult, formatCount, formatIsoDate, loadPage, tryParseJson } from "./types";
+import { buildResult, formatIsoDate, formatNumber, loadPage, tryParseJson } from "./types";
 
 /**
  * Handle Hex.pm (Elixir package registry) URLs via API
@@ -52,8 +52,8 @@ export const handleHex: SpecialHandler = async (url, timeout, signal) => {
 		md += "\n";
 
 		if (data.downloads?.all) {
-			md += `**Total Downloads:** ${formatCount(data.downloads.all)}`;
-			if (data.downloads.week) md += ` · **This Week:** ${formatCount(data.downloads.week)}`;
+			md += `**Total Downloads:** ${formatNumber(data.downloads.all)}`;
+			if (data.downloads.week) md += ` · **This Week:** ${formatNumber(data.downloads.week)}`;
 			md += "\n";
 		}
 		md += "\n";

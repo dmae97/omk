@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, loadPage } from "./types";
+import { buildResult, formatNumber, loadPage } from "./types";
 
 interface BrewFormula {
 	name: string;
@@ -97,7 +97,7 @@ export const handleBrew: SpecialHandler = async (
 
 			const installs = getInstallCount(formula.analytics);
 			if (installs !== null) {
-				md += `**Installs (30d):** ${formatCount(installs)}\n`;
+				md += `**Installs (30d):** ${formatNumber(installs)}\n`;
 			}
 			md += "\n";
 
@@ -140,7 +140,7 @@ export const handleBrew: SpecialHandler = async (
 
 			const installs = getInstallCount(cask.analytics);
 			if (installs !== null) {
-				md += `**Installs (30d):** ${formatCount(installs)}\n`;
+				md += `**Installs (30d):** ${formatNumber(installs)}\n`;
 			}
 			md += "\n";
 

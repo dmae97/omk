@@ -1,5 +1,5 @@
 import type { RenderResult, SpecialHandler } from "./types";
-import { buildResult, formatCount, formatIsoDate, htmlToBasicMarkdown, loadPage, tryParseJson } from "./types";
+import { buildResult, formatIsoDate, formatNumber, htmlToBasicMarkdown, loadPage, tryParseJson } from "./types";
 
 interface FlathubScreenshotSize {
 	src?: string;
@@ -159,7 +159,7 @@ export const handleFlathub: SpecialHandler = async (
 		if (app.developer_name) md += `**Developer:** ${app.developer_name}\n`;
 
 		const installs = extractInstalls(app);
-		if (installs !== null) md += `**Installs:** ${formatCount(installs)}\n`;
+		if (installs !== null) md += `**Installs:** ${formatNumber(installs)}\n`;
 
 		if (app.categories?.length) {
 			md += "\n## Categories\n\n";
