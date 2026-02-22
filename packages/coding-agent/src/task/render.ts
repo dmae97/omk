@@ -888,7 +888,8 @@ export function renderResult(
 
 			const lines: string[] = [];
 
-			if (isPartial && details.progress) {
+			const shouldRenderProgress = Boolean(details.progress && details.progress.length > 0) && (isPartial || details.results.length === 0);
+			if (shouldRenderProgress && details.progress) {
 				details.progress.forEach((progress, i) => {
 					const isLast = i === details.progress!.length - 1;
 					lines.push(...renderAgentProgress(progress, isLast, expanded, theme, spinnerFrame));
