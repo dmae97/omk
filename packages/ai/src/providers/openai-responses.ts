@@ -670,7 +670,7 @@ function convertMessages(
 
 function convertTools(tools: Tool[], strictMode: boolean): OpenAITool[] {
 	return tools.map(tool => {
-		const strict = !NO_STRICT && strictMode && tool.strict;
+		const strict = !NO_STRICT && strictMode && tool.strict !== false;
 		const parameters = strict
 			? enforceStrictSchema(tool.parameters as unknown as Record<string, unknown>)
 			: (tool.parameters as unknown as Record<string, unknown>);

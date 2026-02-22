@@ -890,7 +890,7 @@ export function convertMessages(
 
 function convertTools(tools: Tool[], compat: ResolvedOpenAICompat): OpenAI.Chat.Completions.ChatCompletionTool[] {
 	return tools.map(tool => {
-		const strict = !NO_STRICT && compat.supportsStrictMode !== false && tool.strict;
+		const strict = !NO_STRICT && compat.supportsStrictMode !== false && tool.strict !== false;
 		return {
 			type: "function",
 			function: {
