@@ -1,9 +1,10 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added `getTodoPhases()` and `setTodoPhases()` methods to ToolSession API for managing todo state programmatically
+- Added `getLatestTodoPhasesFromEntries()` export to retrieve todo phases from session history
 - Added `local://` protocol for session-scoped scratch space to store large intermediate artifacts, subagent handoffs, and reusable planning artifacts
 - Added `title` parameter to `exit_plan_mode` tool to specify the final plan artifact name when approving a plan
 - Added `LocalProtocolHandler` for resolving `local://` URLs to session-scoped file storage
@@ -11,6 +12,9 @@
 
 ### Changed
 
+- Changed todo state management from file-based (`todos.json`) to in-memory session cache for improved performance and consistency
+- Changed todo phases to sync from session branch history when branching or rewriting entries
+- Changed `TodoWriteTool` to update session cache instead of writing to disk, with automatic persistence through session entries
 - Changed XML tag from `<swarm-context>` to `<context>` in subagent prompts and task rendering
 - Changed system reminder XML tags from underscore to kebab-case format (`<system-reminder>`)
 - Changed plan storage from `plan://` protocol to `local://PLAN.md` for draft plans and `local://<title>.md` for finalized approved plans

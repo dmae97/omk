@@ -31,7 +31,7 @@ import { ReadTool } from "./read";
 import { reportFindingTool } from "./review";
 import { loadSshTool } from "./ssh";
 import { SubmitResultTool } from "./submit-result";
-import { TodoWriteTool } from "./todo-write";
+import { type TodoPhase, TodoWriteTool } from "./todo-write";
 import { WriteTool } from "./write";
 
 // Exa MCP tools (22 tools)
@@ -70,7 +70,13 @@ export { ReadTool, type ReadToolDetails, type ReadToolInput } from "./read";
 export { reportFindingTool, type SubmitReviewDetails } from "./review";
 export { loadSshTool, type SSHToolDetails, SshTool } from "./ssh";
 export { SubmitResultTool } from "./submit-result";
-export { type TodoItem, type TodoPhase, TodoWriteTool, type TodoWriteToolDetails } from "./todo-write";
+export {
+	getLatestTodoPhasesFromEntries,
+	type TodoItem,
+	type TodoPhase,
+	TodoWriteTool,
+	type TodoWriteToolDetails,
+} from "./todo-write";
 export { WriteTool, type WriteToolDetails, type WriteToolInput } from "./write";
 
 /** Tool type (AgentTool from pi-ai) */
@@ -140,6 +146,10 @@ export interface ToolSession {
 	getPlanModeState?: () => PlanModeState | undefined;
 	/** Get compact conversation context for subagents (excludes tool results, system prompts) */
 	getCompactContext?: () => string;
+	/** Get cached todo phases for this session. */
+	getTodoPhases?: () => TodoPhase[];
+	/** Replace cached todo phases for this session. */
+	setTodoPhases?: (phases: TodoPhase[]) => void;
 }
 
 type ToolFactory = (session: ToolSession) => Tool | null | Promise<Tool | null>;

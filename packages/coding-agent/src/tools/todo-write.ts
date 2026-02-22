@@ -1,9 +1,7 @@
-import * as path from "node:path";
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
-import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
 import chalk from "chalk";
 import { renderPromptTemplate } from "../config/prompt-templates";
@@ -11,6 +9,7 @@ import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import type { Theme } from "../modes/theme/theme";
 import todoWriteDescription from "../prompts/tools/todo-write.md" with { type: "text" };
 import type { ToolSession } from "../sdk";
+import type { SessionEntry } from "../session/session-manager";
 import { renderStatusLine, renderTreeList } from "../tui";
 import { PREVIEW_LIMITS } from "./render-utils";
 
@@ -100,8 +99,6 @@ interface TodoFile {
 	nextPhaseId: number;
 }
 
-const TODO_FILE_NAME = "todos.json";
-
 // =============================================================================
 // State helpers
 // =============================================================================
@@ -131,14 +128,52 @@ function buildPhaseFromInput(
 	return { phase: { id: phaseId, name: input.name, tasks }, nextTaskId: tid };
 }
 
-async function loadTodoFile(filePath: string): Promise<TodoFile> {
-	try {
-		const data = await Bun.file(filePath).json();
-		if (data && Array.isArray(data.phases)) return data as TodoFile;
-	} catch (err) {
-		if (!isEnoent(err)) logger.warn("Failed to read todo file", { path: filePath, error: String(err) });
+function getNextIds(phases: TodoPhase[]): { nextTaskId: number; nextPhaseId: number } {
+	let maxTaskId = 0;
+	let maxPhaseId = 0;
+
+	for (const phase of phases) {
+		const phaseMatch = /^phase-(\d+)$/.exec(phase.id);
+		if (phaseMatch) {
+			const value = Number.parseInt(phaseMatch[1], 10);
+			if (Number.isFinite(value) && value > maxPhaseId) maxPhaseId = value;
+		}
+
+		for (const task of phase.tasks) {
+			const taskMatch = /^task-(\d+)$/.exec(task.id);
+			if (!taskMatch) continue;
+			const value = Number.parseInt(taskMatch[1], 10);
+			if (Number.isFinite(value) && value > maxTaskId) maxTaskId = value;
+		}
 	}
-	return makeEmptyFile();
+
+	return { nextTaskId: maxTaskId + 1, nextPhaseId: maxPhaseId + 1 };
+}
+
+function fileFromPhases(phases: TodoPhase[]): TodoFile {
+	const { nextTaskId, nextPhaseId } = getNextIds(phases);
+	return { phases, nextTaskId, nextPhaseId };
+}
+
+function clonePhases(phases: TodoPhase[]): TodoPhase[] {
+	return phases.map(phase => ({ ...phase, tasks: phase.tasks.map(task => ({ ...task })) }));
+}
+
+export function getLatestTodoPhasesFromEntries(entries: SessionEntry[]): TodoPhase[] {
+	for (let i = entries.length - 1; i >= 0; i--) {
+		const entry = entries[i];
+		if (entry.type !== "message") continue;
+
+		const message = entry.message as { role?: string; toolName?: string; details?: unknown; isError?: boolean };
+		if (message.role !== "toolResult" || message.toolName !== "todo_write" || message.isError) continue;
+
+		const details = message.details as { phases?: unknown } | undefined;
+		if (!details || !Array.isArray(details.phases)) continue;
+
+		return clonePhases(details.phases as TodoPhase[]);
+	}
+
+	return [];
 }
 
 function applyOps(file: TodoFile, ops: TodoWriteParams["ops"]): { file: TodoFile; errors: string[] } {
@@ -266,34 +301,15 @@ export class TodoWriteTool implements AgentTool<typeof todoWriteSchema, TodoWrit
 		_onUpdate?: AgentToolUpdateCallback<TodoWriteToolDetails>,
 		_context?: AgentToolContext,
 	): Promise<AgentToolResult<TodoWriteToolDetails>> {
-		const sessionFile = this.session.getSessionFile();
-
-		if (!sessionFile) {
-			// Memory-only: apply ops against empty state
-			const { file, errors } = applyOps(makeEmptyFile(), params.ops);
-			return {
-				content: [{ type: "text", text: formatSummary(file.phases, errors) }],
-				details: { phases: file.phases, storage: "memory" },
-			};
-		}
-
-		const todoPath = path.join(sessionFile.slice(0, -6), TODO_FILE_NAME);
-		const current = await loadTodoFile(todoPath);
+		const previousPhases = this.session.getTodoPhases?.() ?? [];
+		const current = fileFromPhases(previousPhases);
 		const { file: updated, errors } = applyOps(current, params.ops);
-
-		try {
-			await Bun.write(todoPath, JSON.stringify(updated, null, 2));
-		} catch (err) {
-			logger.error("Failed to write todo file", { path: todoPath, error: String(err) });
-			return {
-				content: [{ type: "text", text: "Failed to save todos." }],
-				details: { phases: current.phases, storage: "session" },
-			};
-		}
+		this.session.setTodoPhases?.(updated.phases);
+		const storage = this.session.getSessionFile() ? "session" : "memory";
 
 		return {
 			content: [{ type: "text", text: formatSummary(updated.phases, errors) }],
-			details: { phases: updated.phases, storage: "session" },
+			details: { phases: updated.phases, storage },
 		};
 	}
 }

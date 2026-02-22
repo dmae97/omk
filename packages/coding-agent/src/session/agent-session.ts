@@ -88,7 +88,7 @@ import { closeAllConnections } from "../ssh/connection-manager";
 import { unmountAll } from "../ssh/sshfs-mount";
 import { outputMeta } from "../tools/output-meta";
 import { resolveToCwd } from "../tools/path-utils";
-import type { TodoItem } from "../tools/todo-write";
+import { getLatestTodoPhasesFromEntries, type TodoItem, type TodoPhase } from "../tools/todo-write";
 import { parseCommandArgs } from "../utils/command-args";
 import { resolveFileDisplayMode } from "../utils/file-display-mode";
 import { extractFileMentions, generateFileMentionMessages } from "../utils/file-mentions";
@@ -135,17 +135,6 @@ export type AgentSessionEvent =
 
 /** Listener function for agent session events */
 export type AgentSessionEventListener = (event: AgentSessionEvent) => void;
-type TodoPhaseTask = {
-	id: string;
-	content: string;
-	status: "pending" | "in_progress" | "completed" | "abandoned";
-};
-
-type TodoPhase = {
-	id: string;
-	name: string;
-	tasks: TodoPhaseTask[];
-};
 export type AsyncJobSnapshotItem = Pick<AsyncJob, "id" | "type" | "status" | "label" | "startTime">;
 
 export interface AsyncJobSnapshot {
@@ -341,6 +330,7 @@ export class AgentSession {
 
 	// Todo completion reminder state
 	#todoReminderCount = 0;
+	#todoPhases: TodoPhase[] = [];
 
 	// Bash execution state
 	#bashAbortController: AbortController | undefined = undefined;
@@ -406,6 +396,7 @@ export class AgentSession {
 		this.#forceCopilotAgentInitiator = config.forceCopilotAgentInitiator ?? false;
 		this.#obfuscator = config.obfuscator;
 		this.agent.providerSessionState = this.#providerSessionState;
+		this.#syncTodoPhasesFromBranch();
 
 		// Always subscribe to agent events for internal handling
 		// (session persistence, hooks, auto-compaction, retry logic)
@@ -650,7 +641,7 @@ export class AgentSession {
 				const { toolName, $normative, toolCallId, details, isError, content } = event.message as {
 					toolName?: string;
 					toolCallId?: string;
-					details?: { path?: string };
+					details?: { path?: string; phases?: TodoPhase[] };
 					$normative?: Record<string, unknown>;
 					isError?: boolean;
 					content?: Array<TextContent | ImageContent>;
@@ -661,6 +652,9 @@ export class AgentSession {
 				// Invalidate streaming edit cache when edit tool completes to prevent stale data
 				if (toolName === "edit" && details?.path) {
 					this.#invalidateFileCacheForPath(details.path);
+				}
+				if (toolName === "todo_write" && !isError && Array.isArray(details?.phases)) {
+					this.setTodoPhases(details.phases);
 				}
 				if (toolName === "todo_write" && isError) {
 					const errorText = content?.find(part => part.type === "text")?.text;
@@ -2197,6 +2191,31 @@ export class AgentSession {
 		return this.#skillWarnings;
 	}
 
+	getTodoPhases(): TodoPhase[] {
+		return this.#cloneTodoPhases(this.#todoPhases);
+	}
+
+	setTodoPhases(phases: TodoPhase[]): void {
+		this.#todoPhases = this.#cloneTodoPhases(phases);
+	}
+
+	#syncTodoPhasesFromBranch(): void {
+		this.setTodoPhases(getLatestTodoPhasesFromEntries(this.sessionManager.getBranch()));
+	}
+
+	#cloneTodoPhases(phases: TodoPhase[]): TodoPhase[] {
+		return phases.map(phase => ({
+			id: phase.id,
+			name: phase.name,
+			tasks: phase.tasks.map(task => ({
+				id: task.id,
+				content: task.content,
+				status: task.status,
+				notes: task.notes,
+			})),
+		}));
+	}
+
 	/**
 	 * Abort current operation and wait for agent to become idle.
 	 */
@@ -2240,6 +2259,7 @@ export class AgentSession {
 		this.agent.reset();
 		await this.sessionManager.flush();
 		await this.sessionManager.newSession(options);
+		this.setTodoPhases([]);
 		this.agent.sessionId = this.sessionManager.getSessionId();
 		this.#steeringMessages = [];
 		this.#followUpMessages = [];
@@ -2658,6 +2678,7 @@ export class AgentSession {
 		await this.sessionManager.rewriteEntries();
 		const sessionContext = this.sessionManager.buildSessionContext();
 		this.agent.replaceMessages(sessionContext.messages);
+		this.#syncTodoPhasesFromBranch();
 		this.#closeCodexProviderSessionsForHistoryRewrite();
 		return result;
 	}
@@ -2782,6 +2803,7 @@ export class AgentSession {
 			const newEntries = this.sessionManager.getEntries();
 			const sessionContext = this.sessionManager.buildSessionContext();
 			this.agent.replaceMessages(sessionContext.messages);
+			this.#syncTodoPhasesFromBranch();
 			this.#closeCodexProviderSessionsForHistoryRewrite();
 
 			// Get the saved compaction entry for the hook
@@ -2963,6 +2985,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			// Rebuild agent messages from session
 			const sessionContext = this.sessionManager.buildSessionContext();
 			this.agent.replaceMessages(sessionContext.messages);
+			this.#syncTodoPhasesFromBranch();
 
 			return { document: handoffText };
 		} finally {
@@ -3060,20 +3083,9 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			return;
 		}
 
-		// Load current todos from artifacts
-		const sessionFile = this.sessionManager.getSessionFile();
-		if (!sessionFile) return;
-
-		const todoPath = `${sessionFile.slice(0, -6)}/todos.json`;
-
-		let phases: TodoPhase[];
-		try {
-			const data = (await Bun.file(todoPath).json()) as { phases?: TodoPhase[] };
-			phases = data?.phases ?? [];
-		} catch (err) {
-			if (isEnoent(err)) {
-				this.#todoReminderCount = 0;
-			}
+		const phases = this.getTodoPhases();
+		if (phases.length === 0) {
+			this.#todoReminderCount = 0;
 			return;
 		}
 
@@ -3082,7 +3094,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 				name: phase.name,
 				tasks: phase.tasks
 					.filter(
-						(task): task is TodoPhaseTask & { status: "pending" | "in_progress" } =>
+						(task): task is TodoItem & { status: "pending" | "in_progress" } =>
 							task.status === "pending" || task.status === "in_progress",
 					)
 					.map(task => ({ id: task.id, content: task.content, status: task.status })),
@@ -3507,6 +3519,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			const newEntries = this.sessionManager.getEntries();
 			const sessionContext = this.sessionManager.buildSessionContext();
 			this.agent.replaceMessages(sessionContext.messages);
+			this.#syncTodoPhasesFromBranch();
 			this.#closeCodexProviderSessionsForHistoryRewrite();
 
 			// Get the saved compaction entry for the hook
@@ -4079,6 +4092,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		}
 
 		this.agent.replaceMessages(sessionContext.messages);
+		this.#syncTodoPhasesFromBranch();
 
 		// Restore model if saved
 		const defaultModelStr = sessionContext.models.default;
@@ -4160,6 +4174,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		} else {
 			this.sessionManager.createBranchedSession(selectedEntry.parentId);
 		}
+		this.#syncTodoPhasesFromBranch();
 		this.agent.sessionId = this.sessionManager.getSessionId();
 
 		// Reload messages from entries (works for both file and in-memory mode)
@@ -4328,6 +4343,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		// Update agent state
 		const sessionContext = this.sessionManager.buildSessionContext();
 		this.agent.replaceMessages(sessionContext.messages);
+		this.#syncTodoPhasesFromBranch();
 
 		// Emit session_tree event
 		if (this.#extensionRunner) {

@@ -58,7 +58,6 @@ import { getEditorTheme, getMarkdownTheme, onThemeChange, theme } from "./theme/
 import type { CompactionQueuedMessage, InteractiveModeContext, TodoItem, TodoPhase } from "./types";
 import { UiHelpers } from "./utils/ui-helpers";
 
-const TODO_FILE_NAME = "todos.json";
 const EDITOR_MAX_HEIGHT_MIN = 6;
 const EDITOR_MAX_HEIGHT_MAX = 18;
 const EDITOR_RESERVED_ROWS = 12;
@@ -497,29 +496,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	}
 
 	async #loadTodoList(): Promise<void> {
-		const sessionFile = this.sessionManager.getSessionFile() ?? null;
-		if (!sessionFile) {
-			this.todoPhases = [];
-			this.#renderTodoList();
-			return;
-		}
-		const artifactsDir = sessionFile.slice(0, -6);
-		const todoPath = path.join(artifactsDir, TODO_FILE_NAME);
-		try {
-			const data = (await Bun.file(todoPath).json()) as { phases?: TodoPhase[] };
-			if (data?.phases && Array.isArray(data.phases)) {
-				this.todoPhases = data.phases;
-			} else {
-				this.todoPhases = [];
-			}
-		} catch (error) {
-			if (isEnoent(error)) {
-				this.todoPhases = [];
-				this.#renderTodoList();
-				return;
-			}
-			logger.warn("Failed to load todos", { path: todoPath, error: String(error) });
-		}
+		this.todoPhases = this.session.getTodoPhases();
 		this.#renderTodoList();
 	}
 

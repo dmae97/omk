@@ -192,22 +192,13 @@ describe("AgentSession auto-compaction queue resume", () => {
 	it("forwards todo reminder lifecycle signals to extensions", async () => {
 		const continueSpy = vi.spyOn(session.agent, "continue").mockResolvedValue();
 
-		const sessionFile = sessionManager.getSessionFile();
-		if (!sessionFile) {
-			throw new Error("Expected session file to exist");
-		}
-		const todoPath = `${sessionFile.slice(0, -6)}/todos.json`;
-		await Bun.write(
-			todoPath,
-			JSON.stringify({
-				phases: [
-					{
-						name: "Execution",
-						tasks: [{ id: "todo-1", content: "Finish pending task", status: "in_progress" }],
-					},
-				],
-			}),
-		);
+		session.setTodoPhases([
+			{
+				id: "phase-1",
+				name: "Execution",
+				tasks: [{ id: "task-1", content: "Finish pending task", status: "in_progress" }],
+			},
+		]);
 
 		const { promise: reminderDone, resolve: onReminderDone } = Promise.withResolvers<void>();
 		session.subscribe(event => {

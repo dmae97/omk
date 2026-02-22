@@ -76,32 +76,50 @@ describe("AgentSession newSession clears todo artifacts", () => {
 		}
 	});
 
-	it("should not carry over todos.json to the new session", async () => {
+	it("should not carry over todo state to the new session branch", async () => {
 		const oldSessionFile = session.sessionFile;
 		expect(oldSessionFile).toBeDefined();
 
-		const todoTool = new TodoWriteTool({
-			cwd: tempDir,
-			hasUI: false,
-			getSessionFile: () => sessionManager.getSessionFile() ?? null,
-			getSessionSpawns: () => "*",
-			settings: session.settings,
-		});
-
-		await todoTool.execute("1", {
-			ops: [{ op: "replace", phases: [{ name: "Tasks", tasks: [{ content: "do the thing" }] }] }],
-		});
-
-		const oldTodoPath = path.join(oldSessionFile!.slice(0, -6), "todos.json");
-		expect(fs.existsSync(oldTodoPath)).toBe(true);
-
+		session.setTodoPhases([
+			{
+				id: "phase-1",
+				name: "Tasks",
+				tasks: [{ id: "task-1", content: "do the thing", status: "pending" }],
+			},
+		]);
+		expect(session.getTodoPhases()).toHaveLength(1);
+		expect(session.getTodoPhases()[0]?.tasks).toHaveLength(1);
 		await session.newSession();
 
 		const newSessionFile = session.sessionFile;
 		expect(newSessionFile).toBeDefined();
 		expect(newSessionFile).not.toBe(oldSessionFile);
 
-		const newTodoPath = path.join(newSessionFile!.slice(0, -6), "todos.json");
-		expect(fs.existsSync(newTodoPath)).toBe(false);
+		expect(session.getTodoPhases()).toHaveLength(0);
+	});
+
+	it("should clear stale todo cache when branching from the first user message", async () => {
+		sessionManager.appendMessage({
+			role: "user",
+			content: "start task",
+			timestamp: Date.now(),
+		});
+
+		const branchCandidates = session.getUserMessagesForBranching();
+		expect(branchCandidates).toHaveLength(1);
+
+		session.setTodoPhases([
+			{
+				id: "phase-1",
+				name: "Execution",
+				tasks: [{ id: "task-1", content: "stale from old branch", status: "in_progress" }],
+			},
+		]);
+		expect(session.getTodoPhases()).toHaveLength(1);
+
+		const result = await session.branch(branchCandidates[0].entryId);
+		expect(result.cancelled).toBe(false);
+		expect(result.selectedText).toBe("start task");
+		expect(session.getTodoPhases()).toHaveLength(0);
 	});
 });
