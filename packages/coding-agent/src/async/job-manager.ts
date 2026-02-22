@@ -178,7 +178,7 @@ export class AsyncJobManager {
 	}
 
 	hasPendingDeliveries(): boolean {
-		return this.#deliveries.length > 0 || this.#deliveryLoop !== undefined;
+		return this.#deliveries.length > 0;
 	}
 
 	cancelAll(): void {

@@ -164,7 +164,11 @@ describe("AsyncJobManager", () => {
 			throw new Error("aborted");
 		});
 
-		await manager.waitForAll();
+		const completedDeadline = Date.now() + 2_000;
+		while (manager.getJob(completedJobId)?.status === "running") {
+			if (Date.now() >= completedDeadline) throw new Error("Timed out waiting for completed job");
+			await Bun.sleep(5);
+		}
 		manager.cancelAll();
 		await manager.waitForAll();
 		await manager.drainDeliveries({ timeoutMs: 2_000 });
