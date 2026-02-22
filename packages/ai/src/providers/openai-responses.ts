@@ -505,7 +505,7 @@ function convertMessages(
 
 	let msgIndex = 0;
 	for (const msg of transformedMessages) {
-		if (msg.role === "user") {
+		if (msg.role === "user" || msg.role === "developer") {
 			if (typeof msg.content === "string") {
 				// Skip empty user messages
 				if (!msg.content || msg.content.trim() === "") continue;
@@ -541,44 +541,6 @@ function convertMessages(
 				if (filteredContent.length === 0) continue;
 				messages.push({
 					role: "user",
-					content: filteredContent,
-				});
-			}
-		} else if (msg.role === "developer") {
-			const devRole = model.reasoning && model.compat?.supportsDeveloperRole !== false ? "developer" : "system";
-			if (typeof msg.content === "string") {
-				if (!msg.content || msg.content.trim() === "") continue;
-				messages.push({
-					role: devRole,
-					content: [{ type: "input_text", text: sanitizeSurrogates(msg.content) }],
-				});
-			} else {
-				const content: ResponseInputContent[] = msg.content.map((item): ResponseInputContent => {
-					if (item.type === "text") {
-						return {
-							type: "input_text",
-							text: sanitizeSurrogates(item.text),
-						} satisfies ResponseInputText;
-					} else {
-						return {
-							type: "input_image",
-							detail: "auto",
-							image_url: `data:${item.mimeType};base64,${item.data}`,
-						} satisfies ResponseInputImage;
-					}
-				});
-				let filteredContent = !model.input.includes("image")
-					? content.filter(c => c.type !== "input_image")
-					: content;
-				filteredContent = filteredContent.filter(c => {
-					if (c.type === "input_text") {
-						return c.text.trim().length > 0;
-					}
-					return true;
-				});
-				if (filteredContent.length === 0) continue;
-				messages.push({
-					role: devRole,
 					content: filteredContent,
 				});
 			}

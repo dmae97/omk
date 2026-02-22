@@ -654,12 +654,14 @@ export function convertMessages(
 			});
 		}
 
-		if (msg.role === "user") {
+		const devAsUser = !compat.supportsDeveloperRole;
+		if (msg.role === "user" || msg.role === "developer") {
+			const role = !devAsUser && msg.role === "developer" ? "developer" : "user";
 			if (typeof msg.content === "string") {
 				const text = sanitizeSurrogates(msg.content);
 				if (text.trim().length === 0) continue;
 				params.push({
-					role: "user",
+					role: role,
 					content: text,
 				});
 			} else {
@@ -688,31 +690,6 @@ export function convertMessages(
 				params.push({
 					role: "user",
 					content: filteredContent,
-				});
-			}
-		} else if (msg.role === "developer") {
-			const useDeveloperRole = model.reasoning && compat.supportsDeveloperRole;
-			const devRole = useDeveloperRole ? "developer" : "system";
-			if (typeof msg.content === "string") {
-				const text = sanitizeSurrogates(msg.content);
-				if (text.trim().length === 0) continue;
-				params.push({
-					role: devRole,
-					content: text,
-				});
-			} else {
-				// system/developer role only accepts string content, not content parts
-				const textParts: string[] = [];
-				for (const item of msg.content) {
-					if (item.type === "text") {
-						const text = sanitizeSurrogates(item.text);
-						if (text.trim().length > 0) textParts.push(text);
-					}
-				}
-				if (textParts.length === 0) continue;
-				params.push({
-					role: devRole,
-					content: textParts.join("\n"),
 				});
 			}
 		} else if (msg.role === "assistant") {
