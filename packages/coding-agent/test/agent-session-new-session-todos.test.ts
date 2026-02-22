@@ -89,7 +89,7 @@ describe("AgentSession newSession clears todo artifacts", () => {
 		});
 
 		await todoTool.execute("1", {
-			todos: [{ content: "do the thing", status: "pending" }],
+			ops: [{ op: "replace", phases: [{ name: "Tasks", tasks: [{ content: "do the thing" }] }] }],
 		});
 
 		const oldTodoPath = path.join(oldSessionFile!.slice(0, -6), "todos.json");

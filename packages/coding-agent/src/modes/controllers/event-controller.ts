@@ -7,7 +7,7 @@ import { TodoReminderComponent } from "../../modes/components/todo-reminder";
 import { ToolExecutionComponent } from "../../modes/components/tool-execution";
 import { TtsrNotificationComponent } from "../../modes/components/ttsr-notification";
 import { getSymbolTheme, theme } from "../../modes/theme/theme";
-import type { InteractiveModeContext, TodoItem } from "../../modes/types";
+import type { InteractiveModeContext, TodoPhase } from "../../modes/types";
 import type { AgentSessionEvent } from "../../session/agent-session";
 import type { ExitPlanModeDetails } from "../../tools";
 
@@ -288,9 +288,9 @@ export class EventController {
 				}
 				// Update todo display when todo_write tool completes
 				if (event.toolName === "todo_write" && !event.isError) {
-					const details = event.result.details as { todos?: TodoItem[] } | undefined;
-					if (details?.todos) {
-						this.ctx.setTodos(details.todos);
+					const details = event.result.details as { phases?: TodoPhase[] } | undefined;
+					if (details?.phases) {
+						this.ctx.setTodos(details.phases);
 					}
 				} else if (event.toolName === "todo_write" && event.isError) {
 					const textContent = event.result.content.find(

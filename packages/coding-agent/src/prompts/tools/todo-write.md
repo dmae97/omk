@@ -1,65 +1,81 @@
 # Todo Write
 
-Create/manage structured task list for coding session.
+Manage a phased task list. Submit an `ops` array — each op mutates state incrementally.
+**Primary op: `update`.** Use it to mark tasks `in_progress` or `completed`. Only reach for other ops when the structure itself needs to change.
+
+<critical>
+You MUST call this tool twice per task:
+1. Before beginning — `{op: "update", id: "task-N", status: "in_progress"}`
+2. Immediately after finishing — `{op: "update", id: "task-N", status: "completed"}`
+
+You MUST keep exactly one task `in_progress` at all times. Mark `completed` immediately — no batching.
+</critical>
 
 <conditions>
-Use proactively:
-1. Complex multi-step tasks requiring 3+ steps/actions
-2. User requests todo list
-3. User provides multiple tasks (numbered/comma-separated)
-4. After new instructions—capture requirements as todos
-5. Starting task—mark in_progress BEFORE beginning
-6. After completing—mark completed, add follow-up tasks found
+Create a todo list when:
+1. Task requires 3+ distinct steps
+2. User explicitly requests one
+3. User provides a set of tasks to complete
+4. New instructions arrive mid-task — capture before proceeding
 </conditions>
 
 <protocol>
-1. **Task States**:
-	 - pending: not started
-	 - in_progress: working
-	 - completed: finished
-2. **Task Management**:
-   - You MUST update status in real time
-   - You MUST mark complete IMMEDIATELY after finishing (no batching)
-   - You MUST keep exactly ONE task in_progress at a time
-   - You MUST remove tasks no longer relevant
-   - You MUST complete tasks in list order (MUST NOT mark later tasks completed while earlier tasks remain incomplete)
-3. **Task Completion Requirements**:
-   - You MUST ONLY mark completed when FULLY accomplished
-   - On errors/blockers/inability to finish, you MUST keep in_progress
-   - When blocked, you MUST create a task describing what needs resolving
-4. **Task Breakdown**:
-	 - You MUST create specific, actionable items
-	 - You MUST keep each todo scoped to one logical unit of work; you MUST split unrelated work into separate items
-	 - You MUST break complex tasks into smaller steps
-	 - You MUST use clear, descriptive names
+## Operations
+
+|op|When to use|
+|---|---|
+|`update`|Mark a task in_progress / completed / abandoned, or edit content/notes|
+|`replace`|Initial setup, or full restructure when the plan changes significantly|
+|`add_phase`|Add a new phase of work discovered mid-task|
+|`add_task`|Add a task to an existing phase|
+|`remove_task`|Remove a task that is no longer relevant|
+
+## Statuses
+
+|Status|Meaning|
+|---|---|
+|`pending`|Not started|
+|`in_progress`|Currently working — exactly one at a time|
+|`completed`|Fully done|
+|`abandoned`|Dropped intentionally|
+
+## Rules
+- You MUST mark `in_progress` **before** starting work, not after
+- You MUST mark `completed` **immediately** — never defer
+- You MUST keep exactly **one** task `in_progress`
+- You MUST complete phases in order — do not mark later tasks `completed` while earlier ones are `pending`
+- On blockers: keep `in_progress`, add a new task describing the blocker
+- Multiple ops can be batched in one call (e.g., complete current + start next)
 </protocol>
 
-<output>
-Returns confirmation todo list updated.
-</output>
+<avoid>
+- Single-step tasks — act directly
+- Conversational or informational requests
+- Tasks completable in under 3 trivial steps
+</avoid>
 
-<caution>
-When in doubt, use this.
-</caution>
-
-<example name="use-dark-mode">
-User: Add dark mode toggle to settings. Run tests when done.
-→ Creates todos: toggle component, state management, theme styles, update components, run tests
+<example name="start-task">
+Mark task-2 in_progress before beginning work:
+ops: [{op: "update", id: "task-2", status: "in_progress"}]
 </example>
 
-<example name="use-features">
-User: Implement user registration, product catalog, shopping cart, checkout.
-→ Creates todos per feature with subtasks
+<example name="complete-and-advance">
+Finish task-2 and start task-3 in one call:
+ops: [
+  {op: "update", id: "task-2", status: "completed"},
+  {op: "update", id: "task-3", status: "in_progress"}
+]
+</example>
+
+<example name="initial-setup">
+Replace is for setup only. Prefer add_phase / add_task for incremental additions.
+ops: [{op: "replace", phases: [
+  {name: "Investigation", tasks: [{content: "Read source"}, {content: "Map callsites"}]},
+  {name: "Implementation", tasks: [{content: "Apply fix"}, {content: "Run tests"}]}
+]}]
 </example>
 
 <example name="skip">
-User: Run npm install / Add a comment to this function / What does git status do?
-→ Do directly. Single-step/informational tasks need no tracking.
+User: "What does this function do?" / "Add a comment" / "Run npm install"
+→ Do it directly. No list needed.
 </example>
-
-<avoid>
-You MUST skip when:
-1. Single straightforward task
-2. Task completable in <3 trivial steps
-3. Task purely conversational/informational
-</avoid>

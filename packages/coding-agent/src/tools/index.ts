@@ -70,7 +70,7 @@ export { ReadTool, type ReadToolDetails, type ReadToolInput } from "./read";
 export { reportFindingTool, type SubmitReviewDetails } from "./review";
 export { loadSshTool, type SSHToolDetails, SshTool } from "./ssh";
 export { SubmitResultTool } from "./submit-result";
-export { type TodoItem, TodoWriteTool, type TodoWriteToolDetails } from "./todo-write";
+export { type TodoItem, type TodoPhase, TodoWriteTool, type TodoWriteToolDetails } from "./todo-write";
 export { WriteTool, type WriteToolDetails, type WriteToolInput } from "./write";
 
 /** Tool type (AgentTool from pi-ai) */

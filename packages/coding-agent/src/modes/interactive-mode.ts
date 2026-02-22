@@ -55,7 +55,7 @@ import { SSHCommandController } from "./controllers/ssh-command-controller";
 import { setMermaidRenderCallback } from "./theme/mermaid-cache";
 import type { Theme } from "./theme/theme";
 import { getEditorTheme, getMarkdownTheme, onThemeChange, theme } from "./theme/theme";
-import type { CompactionQueuedMessage, InteractiveModeContext, TodoItem } from "./types";
+import type { CompactionQueuedMessage, InteractiveModeContext, TodoItem, TodoPhase } from "./types";
 import { UiHelpers } from "./utils/ui-helpers";
 
 const TODO_FILE_NAME = "todos.json";
@@ -103,7 +103,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	planModeEnabled = false;
 	planModePaused = false;
 	planModePlanFilePath: string | undefined = undefined;
-	todoItems: TodoItem[] = [];
+	todoPhases: TodoPhase[] = [];
 	hideThinkingBlock = false;
 	pendingImages: ImageContent[] = [];
 	compactionQueuedMessages: CompactionQueuedMessage[] = [];
@@ -437,47 +437,60 @@ export class InteractiveMode implements InteractiveModeContext {
 
 	#formatTodoLine(todo: TodoItem, prefix: string): string {
 		const checkbox = theme.checkbox;
-		const label = todo.content;
 		switch (todo.status) {
 			case "completed":
 				return theme.fg("success", `${prefix}${checkbox.checked} ${chalk.strikethrough(todo.content)}`);
 			case "in_progress":
-				return theme.fg("accent", `${prefix}${checkbox.unchecked} ${label}`);
+				return theme.fg("accent", `${prefix}${checkbox.unchecked} ${todo.content}`);
+			case "abandoned":
+				return theme.fg("error", `${prefix}${checkbox.unchecked} ${chalk.strikethrough(todo.content)}`);
 			default:
-				return theme.fg("dim", `${prefix}${checkbox.unchecked} ${label}`);
+				return theme.fg("dim", `${prefix}${checkbox.unchecked} ${todo.content}`);
 		}
 	}
 
-	#getCollapsedTodos(todos: TodoItem[]): TodoItem[] {
-		let startIndex = 0;
-		for (let i = todos.length - 1; i >= 0; i -= 1) {
-			if (todos[i].status === "completed") {
-				startIndex = i;
-				break;
-			}
-		}
-		return todos.slice(startIndex, startIndex + 5);
+	#getActivePhase(phases: TodoPhase[]): TodoPhase | undefined {
+		const nonEmpty = phases.filter(phase => phase.tasks.length > 0);
+		const active = nonEmpty.find(phase =>
+			phase.tasks.some(task => task.status === "pending" || task.status === "in_progress"),
+		);
+		return active ?? nonEmpty[nonEmpty.length - 1];
 	}
 
 	#renderTodoList(): void {
 		this.todoContainer.clear();
-		if (this.todoItems.length === 0) {
+		const phases = this.todoPhases.filter(phase => phase.tasks.length > 0);
+		if (phases.length === 0) {
 			return;
 		}
 
-		const visibleTodos = this.todoExpanded ? this.todoItems : this.#getCollapsedTodos(this.todoItems);
 		const indent = "  ";
 		const hook = theme.tree.hook;
 		const lines = [indent + theme.bold(theme.fg("accent", "Todos"))];
 
-		visibleTodos.forEach((todo, index) => {
-			const prefix = `${indent}${index === 0 ? hook : " "} `;
-			lines.push(this.#formatTodoLine(todo, prefix));
-		});
+		if (!this.todoExpanded) {
+			const activePhase = this.#getActivePhase(phases);
+			if (!activePhase) return;
+			lines.push(`${indent}${theme.fg("accent", `${hook} ${activePhase.name}`)}`);
+			const visibleTasks = activePhase.tasks.slice(0, 5);
+			visibleTasks.forEach((todo, index) => {
+				const prefix = `${indent}${index === 0 ? hook : " "} `;
+				lines.push(this.#formatTodoLine(todo, prefix));
+			});
+			if (visibleTasks.length < activePhase.tasks.length) {
+				const remaining = activePhase.tasks.length - visibleTasks.length;
+				lines.push(theme.fg("muted", `${indent}  ${hook} +${remaining} more (Ctrl+T to expand)`));
+			}
+			this.todoContainer.addChild(new Text(lines.join("\n"), 1, 0));
+			return;
+		}
 
-		if (!this.todoExpanded && visibleTodos.length < this.todoItems.length) {
-			const remaining = this.todoItems.length - visibleTodos.length;
-			lines.push(theme.fg("muted", `${indent}  ${hook} +${remaining} more (Ctrl+T to expand)`));
+		for (const phase of phases) {
+			lines.push(`${indent}${theme.fg("accent", `${hook} ${phase.name}`)}`);
+			phase.tasks.forEach((todo, index) => {
+				const prefix = `${indent}${index === 0 ? hook : " "} `;
+				lines.push(this.#formatTodoLine(todo, prefix));
+			});
 		}
 
 		this.todoContainer.addChild(new Text(lines.join("\n"), 1, 0));
@@ -486,22 +499,22 @@ export class InteractiveMode implements InteractiveModeContext {
 	async #loadTodoList(): Promise<void> {
 		const sessionFile = this.sessionManager.getSessionFile() ?? null;
 		if (!sessionFile) {
-			this.todoItems = [];
+			this.todoPhases = [];
 			this.#renderTodoList();
 			return;
 		}
 		const artifactsDir = sessionFile.slice(0, -6);
 		const todoPath = path.join(artifactsDir, TODO_FILE_NAME);
 		try {
-			const data = (await Bun.file(todoPath).json()) as { todos?: TodoItem[] };
-			if (data?.todos && Array.isArray(data.todos)) {
-				this.todoItems = data.todos;
+			const data = (await Bun.file(todoPath).json()) as { phases?: TodoPhase[] };
+			if (data?.phases && Array.isArray(data.phases)) {
+				this.todoPhases = data.phases;
 			} else {
-				this.todoItems = [];
+				this.todoPhases = [];
 			}
 		} catch (error) {
 			if (isEnoent(error)) {
-				this.todoItems = [];
+				this.todoPhases = [];
 				this.#renderTodoList();
 				return;
 			}
@@ -694,7 +707,7 @@ export class InteractiveMode implements InteractiveModeContext {
 			planContent,
 			finalPlanFilePath: options.finalPlanFilePath,
 		});
-		await this.session.prompt(prompt);
+		await this.session.prompt(prompt, { synthetic: true });
 	}
 
 	async handlePlanModeCommand(): Promise<void> {
@@ -1190,8 +1203,18 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.ui.requestRender();
 	}
 
-	setTodos(todos: TodoItem[]): void {
-		this.todoItems = todos;
+	setTodos(todos: TodoItem[] | TodoPhase[]): void {
+		if (todos.length > 0 && "tasks" in todos[0]) {
+			this.todoPhases = todos as TodoPhase[];
+		} else {
+			this.todoPhases = [
+				{
+					id: "default",
+					name: "Todos",
+					tasks: todos as TodoItem[],
+				},
+			];
+		}
 		this.#renderTodoList();
 		this.ui.requestRender();
 	}

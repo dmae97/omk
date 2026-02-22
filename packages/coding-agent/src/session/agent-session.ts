@@ -135,7 +135,17 @@ export type AgentSessionEvent =
 
 /** Listener function for agent session events */
 export type AgentSessionEventListener = (event: AgentSessionEvent) => void;
+type TodoPhaseTask = {
+	id: string;
+	content: string;
+	status: "pending" | "in_progress" | "completed" | "abandoned";
+};
 
+type TodoPhase = {
+	id: string;
+	name: string;
+	tasks: TodoPhaseTask[];
+};
 export type AsyncJobSnapshotItem = Pick<AsyncJob, "id" | "type" | "status" | "label" | "startTime">;
 
 export interface AsyncJobSnapshot {
@@ -3056,10 +3066,10 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 		const todoPath = `${sessionFile.slice(0, -6)}/todos.json`;
 
-		let todos: TodoItem[];
+		let phases: TodoPhase[];
 		try {
-			const data = await Bun.file(todoPath).json();
-			todos = data?.todos ?? [];
+			const data = (await Bun.file(todoPath).json()) as { phases?: TodoPhase[] };
+			phases = data?.phases ?? [];
 		} catch (err) {
 			if (isEnoent(err)) {
 				this.#todoReminderCount = 0;
@@ -3067,8 +3077,18 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			return;
 		}
 
-		// Check for incomplete todos
-		const incomplete = todos.filter(t => t.status !== "completed");
+		const incompleteByPhase = phases
+			.map(phase => ({
+				name: phase.name,
+				tasks: phase.tasks
+					.filter(
+						(task): task is TodoPhaseTask & { status: "pending" | "in_progress" } =>
+							task.status === "pending" || task.status === "in_progress",
+					)
+					.map(task => ({ id: task.id, content: task.content, status: task.status })),
+			}))
+			.filter(phase => phase.tasks.length > 0);
+		const incomplete = incompleteByPhase.flatMap(phase => phase.tasks);
 		if (incomplete.length === 0) {
 			this.#todoReminderCount = 0;
 			return;
@@ -3076,7 +3096,9 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 		// Build reminder message
 		this.#todoReminderCount++;
-		const todoList = incomplete.map(t => `- ${t.content}`).join("\n");
+		const todoList = incompleteByPhase
+			.map(phase => `- ${phase.name}\n${phase.tasks.map(task => `  - ${task.content}`).join("\n")}`)
+			.join("\n");
 		const reminder =
 			`<system-reminder>\n` +
 			`You stopped with ${incomplete.length} incomplete todo item(s):\n${todoList}\n\n` +
@@ -3099,7 +3121,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 		// Inject reminder and continue the conversation
 		this.agent.appendMessage({
-			role: "user",
+			role: "developer",
 			content: [{ type: "text", text: reminder }],
 			timestamp: Date.now(),
 		});

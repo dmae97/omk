@@ -26,10 +26,18 @@ export type CompactionQueuedMessage = {
 	mode: "steer" | "followUp";
 };
 
+export type TodoStatus = "pending" | "in_progress" | "completed" | "abandoned";
+
 export type TodoItem = {
 	id: string;
 	content: string;
-	status: "pending" | "in_progress" | "completed";
+	status: TodoStatus;
+};
+
+export type TodoPhase = {
+	id: string;
+	name: string;
+	tasks: TodoItem[];
 };
 
 export interface InteractiveModeContext {
@@ -89,7 +97,7 @@ export interface InteractiveModeContext {
 	lastStatusText: Text | undefined;
 	fileSlashCommands: Set<string>;
 	skillCommands: Map<string, string>;
-	todoItems: TodoItem[];
+	todoPhases: TodoPhase[];
 
 	// Lifecycle
 	init(): Promise<void>;
@@ -130,7 +138,7 @@ export interface InteractiveModeContext {
 	updateEditorTopBorder(): void;
 	updateEditorBorderColor(): void;
 	rebuildChatFromMessages(): void;
-	setTodos(todos: TodoItem[]): void;
+	setTodos(todos: TodoItem[] | TodoPhase[]): void;
 	reloadTodos(): Promise<void>;
 	toggleTodoExpansion(): void;
 
