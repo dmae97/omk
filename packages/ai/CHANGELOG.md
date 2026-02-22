@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.19.0] - 2026-02-22
 ### Added
 
 - Added GitLab Duo provider with support for Claude, GPT-5, and other models via GitLab AI Gateway

@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [12.19.0] - 2026-02-22
 ### Added
 
 - Added `poll_jobs` tool to block until background jobs complete, providing an alternative to polling `read jobs://` in loops

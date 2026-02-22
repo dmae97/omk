@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [12.19.0] - 2026-02-22
+
 ### Added
 
 - Added `getTopBorderAvailableWidth()` method to calculate available width for top border content accounting for border characters and padding
