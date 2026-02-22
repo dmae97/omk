@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.0.0] - 2026-02-22
 ### Added
 
 - Added `getTodoPhases()` and `setTodoPhases()` methods to ToolSession API for managing todo state programmatically
