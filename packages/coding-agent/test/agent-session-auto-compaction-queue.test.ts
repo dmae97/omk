@@ -10,7 +10,7 @@ import { ExtensionRunner } from "@oh-my-pi/pi-coding-agent/extensibility/extensi
 import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
-import { TempDir } from "@oh-my-pi/pi-utils";
+import { TempDir, withTimeout } from "@oh-my-pi/pi-utils";
 import { getProjectAgentDir } from "@oh-my-pi/pi-utils/dirs";
 
 const runtimeSignalStoreKey = "__ompRuntimeSignals";
@@ -200,7 +200,12 @@ describe("AgentSession auto-compaction queue resume", () => {
 		await Bun.write(
 			todoPath,
 			JSON.stringify({
-				todos: [{ id: "todo-1", content: "Finish pending task", status: "in_progress" }],
+				phases: [
+					{
+						name: "Execution",
+						tasks: [{ id: "todo-1", content: "Finish pending task", status: "in_progress" }],
+					},
+				],
 			}),
 		);
 
@@ -230,7 +235,7 @@ describe("AgentSession auto-compaction queue resume", () => {
 		session.agent.emitExternalEvent({ type: "message_end", message: assistantMsg });
 		session.agent.emitExternalEvent({ type: "agent_end", messages: [assistantMsg] });
 
-		await reminderDone;
+		await withTimeout(reminderDone, 1000, "Todo reminder timed out");
 		await Promise.resolve();
 
 		expect(getRuntimeSignals()).toContain("todo:1/3");

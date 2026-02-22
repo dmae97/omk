@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { transformMessages } from "@oh-my-pi/pi-ai/providers/transform-messages";
-import type { AssistantMessage, Model, ToolCall, ToolResultMessage, UserMessage } from "@oh-my-pi/pi-ai/types";
+import type { AssistantMessage, DeveloperMessage, Model, ToolCall, ToolResultMessage } from "@oh-my-pi/pi-ai/types";
 
 /**
  * Regression test for: "each tool_use must have a single result. Found multiple tool_result blocks with id"
@@ -342,13 +342,12 @@ describe("Codex-style Abort Handling", () => {
 
 		const transformed = transformMessages(messages, model);
 
-		// Should have: user, assistant, toolResult, user(guidance)
+		// Should have: user, assistant, toolResult, developer(guidance)
 		expect(transformed.length).toBe(4);
 
 		// Last message should be the guidance marker
-		const guidanceMsg = transformed[3] as UserMessage;
-		expect(guidanceMsg.role).toBe("user");
-		expect(guidanceMsg.synthetic).toBe(true);
+		const guidanceMsg = transformed[3] as DeveloperMessage;
+		expect(guidanceMsg.role).toBe("developer");
 		expect(guidanceMsg.content).toContain("<turn-aborted>");
 		expect(guidanceMsg.content).toContain("verify current state before retrying");
 	});
