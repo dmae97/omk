@@ -259,7 +259,7 @@ describe("Duplicate Tool Results Regression", () => {
  * Tests for Codex-style abort handling:
  * - Tool calls are preserved (not converted to text summaries)
  * - Synthetic "aborted" tool results are injected
- * - A <turn_aborted> guidance marker is added as synthetic user message
+ * - A <turn-aborted> guidance marker is added as synthetic user message
  */
 describe("Codex-style Abort Handling", () => {
 	const model: Model<"anthropic-messages"> = {
@@ -349,7 +349,7 @@ describe("Codex-style Abort Handling", () => {
 		const guidanceMsg = transformed[3] as UserMessage;
 		expect(guidanceMsg.role).toBe("user");
 		expect(guidanceMsg.synthetic).toBe(true);
-		expect(guidanceMsg.content).toContain("<turn_aborted>");
+		expect(guidanceMsg.content).toContain("<turn-aborted>");
 		expect(guidanceMsg.content).toContain("verify current state before retrying");
 	});
 

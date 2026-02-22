@@ -24,7 +24,7 @@ import { type Settings, settings } from "../config/settings";
 import type { ExtensionUIContext, ExtensionUIDialogOptions } from "../extensibility/extensions";
 import type { CompactOptions } from "../extensibility/extensions/types";
 import { BUILTIN_SLASH_COMMANDS, loadSlashCommands } from "../extensibility/slash-commands";
-import { resolveNotesUrlToPath } from "../internal-urls";
+import { resolveLocalUrlToPath } from "../internal-urls";
 import { renameApprovedPlanFile } from "../plan-mode/approved-plan";
 import planModeApprovedPrompt from "../prompts/system/plan-mode-approved.md" with { type: "text" };
 import type { AgentSession, AgentSessionEvent } from "../session/agent-session";
@@ -511,12 +511,12 @@ export class InteractiveMode implements InteractiveModeContext {
 	}
 
 	async #getPlanFilePath(): Promise<string> {
-		return "notes://PLAN.md";
+		return "local://PLAN.md";
 	}
 
 	#resolvePlanFilePath(planFilePath: string): string {
-		if (planFilePath.startsWith("notes://")) {
-			return resolveNotesUrlToPath(planFilePath, {
+		if (planFilePath.startsWith("local://")) {
+			return resolveLocalUrlToPath(planFilePath, {
 				getArtifactsDir: () => this.sessionManager.getArtifactsDir(),
 				getSessionId: () => this.sessionManager.getSessionId(),
 			});

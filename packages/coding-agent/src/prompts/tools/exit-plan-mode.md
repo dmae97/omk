@@ -2,7 +2,7 @@ Signals plan completion, requests user approval, and provides the final plan tit
 
 <conditions>
 Use when:
-- Plan written to `notes://PLAN.md`
+- Plan written to `local://PLAN.md`
 - No unresolved questions about requirements or approach
 - Ready for user review and approval
 </conditions>
@@ -16,11 +16,11 @@ Use when:
 </instruction>
 
 <output>
-Presents plan to user for approval. If approved, plan mode exits with full tool access restored and the plan is renamed to `notes://<title>.md`.
+Presents plan to user for approval. If approved, plan mode exits with full tool access restored and the plan is renamed to `local://<title>.md`.
 </output>
 
 <example name="ready">
-Plan complete at notes://PLAN.md, no open questions.
+Plan complete at local://PLAN.md, no open questions.
 → Call `exit_plan_mode` with `{ "title": "WP_MIGRATION_PLAN" }`
 </example>
 

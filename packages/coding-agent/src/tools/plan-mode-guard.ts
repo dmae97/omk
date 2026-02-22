@@ -1,13 +1,13 @@
-import { resolveNotesUrlToPath } from "../internal-urls";
+import { resolveLocalUrlToPath } from "../internal-urls";
 import type { ToolSession } from ".";
 import { resolveToCwd } from "./path-utils";
 import { ToolError } from "./tool-errors";
 
-const NOTES_URL_PREFIX = "notes://";
+const LOCAL_URL_PREFIX = "local://";
 
 export function resolvePlanPath(session: ToolSession, targetPath: string): string {
-	if (targetPath.startsWith(NOTES_URL_PREFIX)) {
-		return resolveNotesUrlToPath(targetPath, {
+	if (targetPath.startsWith(LOCAL_URL_PREFIX)) {
+		return resolveLocalUrlToPath(targetPath, {
 			getArtifactsDir: session.getArtifactsDir,
 			getSessionId: session.getSessionId,
 		});

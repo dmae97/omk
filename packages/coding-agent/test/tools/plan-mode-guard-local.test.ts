@@ -22,18 +22,18 @@ function makeSession(overrides: {
 	} as unknown as ToolSession;
 }
 
-describe("resolvePlanPath notes:// support", () => {
-	it("resolves notes:// paths under session artifacts notes root", () => {
+describe("resolvePlanPath local:// support", () => {
+	it("resolves local:// paths under session artifacts local root", () => {
 		const session = makeSession({ artifactsDir: "/tmp/agent-artifacts", sessionId: "abc" });
-		expect(resolvePlanPath(session, "notes://handoffs/result.json")).toBe(
-			path.join("/tmp/agent-artifacts", "notes", "handoffs", "result.json"),
+		expect(resolvePlanPath(session, "local://handoffs/result.json")).toBe(
+			path.join("/tmp/agent-artifacts", "local", "handoffs", "result.json"),
 		);
 	});
 
 	it("falls back to os tmp root when artifacts dir is unavailable", () => {
 		const session = makeSession({ artifactsDir: null, sessionId: "session-42" });
-		expect(resolvePlanPath(session, "notes://memo.txt")).toBe(
-			path.join(os.tmpdir(), "omp-notes", "session-42", "memo.txt"),
+		expect(resolvePlanPath(session, "local://memo.txt")).toBe(
+			path.join(os.tmpdir(), "omp-local", "session-42", "memo.txt"),
 		);
 	});
 });

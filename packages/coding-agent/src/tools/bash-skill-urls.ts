@@ -153,7 +153,7 @@ export function expandSkillUrls(command: string, skills: readonly Skill[]): stri
 
 /**
  * Expand supported internal URLs in a bash command string to shell-escaped absolute paths.
- * Supported schemes: skill://, agent://, artifact://, memory://, rule://, notes://
+ * Supported schemes: skill://, agent://, artifact://, memory://, rule://, local://
  */
 export async function expandInternalUrls(command: string, options: InternalUrlExpansionOptions): Promise<string> {
 	if (!command.includes("://")) return command;

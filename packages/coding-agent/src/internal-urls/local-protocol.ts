@@ -5,12 +5,12 @@ import { isEnoent } from "@oh-my-pi/pi-utils";
 import { validateRelativePath } from "./skill-protocol";
 import type { InternalResource, InternalUrl, ProtocolHandler } from "./types";
 
-export interface NotesProtocolOptions {
+export interface LocalProtocolOptions {
 	getArtifactsDir?: () => string | null;
 	getSessionId?: () => string | null;
 }
 
-function parseNotesUrl(input: string): InternalUrl {
+function parseLocalUrl(input: string): InternalUrl {
 	let parsed: URL;
 	try {
 		parsed = new URL(input);
@@ -34,13 +34,13 @@ function parseNotesUrl(input: string): InternalUrl {
 
 function ensureWithinRoot(targetPath: string, rootPath: string): void {
 	if (targetPath !== rootPath && !targetPath.startsWith(`${rootPath}${path.sep}`)) {
-		throw new Error("notes:// URL escapes notes root");
+		throw new Error("local:// URL escapes local root");
 	}
 }
 
-function toNotesValidationError(error: unknown): Error {
+function toLocalValidationError(error: unknown): Error {
 	const message = error instanceof Error ? error.message : String(error);
-	return new Error(message.replace("skill://", "notes://"));
+	return new Error(message.replace("skill://", "local://"));
 }
 
 function getContentType(filePath: string): InternalResource["contentType"] {
@@ -75,13 +75,13 @@ async function listFilesRecursively(rootPath: string): Promise<string[]> {
 	return files.sort((a, b) => a.localeCompare(b));
 }
 
-async function buildListing(url: InternalUrl, notesRoot: string): Promise<InternalResource> {
-	const files = await listFilesRecursively(notesRoot);
-	const listing = files.length === 0 ? "(empty)" : files.map(file => `- [${file}](notes://${file})`).join("\n");
+async function buildListing(url: InternalUrl, localRoot: string): Promise<InternalResource> {
+	const files = await listFilesRecursively(localRoot);
+	const listing = files.length === 0 ? "(empty)" : files.map(file => `- [${file}](local://${file})`).join("\n");
 	const content =
-		`# Notes\n\n` +
-		`Session-scoped scratch space for large intermediate data, subagent handoffs, and reusable planning notes.\n\n` +
-		`Root: ${notesRoot}\n\n` +
+		`# Local\n\n` +
+		`Session-scoped scratch space for large intermediate data, subagent handoffs, and reusable planning artifacts.\n\n` +
+		`Root: ${localRoot}\n\n` +
 		`${files.length} file${files.length === 1 ? "" : "s"} available:\n\n` +
 		`${listing}\n`;
 
@@ -90,7 +90,7 @@ async function buildListing(url: InternalUrl, notesRoot: string): Promise<Intern
 		content,
 		contentType: "text/markdown",
 		size: Buffer.byteLength(content, "utf-8"),
-		sourcePath: notesRoot,
+		sourcePath: localRoot,
 	};
 }
 
@@ -114,63 +114,63 @@ function extractRelativePath(url: InternalUrl): string {
 	try {
 		decoded = decodeURIComponent(combined.replaceAll("\\", "/"));
 	} catch {
-		throw new Error(`Invalid URL encoding in notes:// path: ${url.href}`);
+		throw new Error(`Invalid URL encoding in local:// path: ${url.href}`);
 	}
 	try {
 		validateRelativePath(decoded);
 	} catch (error) {
-		throw toNotesValidationError(error);
+		throw toLocalValidationError(error);
 	}
 	return decoded;
 }
 
-export function resolveNotesRoot(options: NotesProtocolOptions): string {
+export function resolveLocalRoot(options: LocalProtocolOptions): string {
 	const artifactsDir = options.getArtifactsDir?.();
 	if (artifactsDir) {
-		return path.resolve(artifactsDir, "notes");
+		return path.resolve(artifactsDir, "local");
 	}
 
 	const sessionId = options.getSessionId?.() ?? "session";
 	const safeSessionId = sessionId.replace(/[^a-zA-Z0-9_.-]/g, "_");
-	return path.join(os.tmpdir(), "omp-notes", safeSessionId);
+	return path.join(os.tmpdir(), "omp-local", safeSessionId);
 }
 
-export function resolveNotesUrlToPath(input: string | InternalUrl, options: NotesProtocolOptions): string {
-	const url = typeof input === "string" ? parseNotesUrl(input) : input;
-	const notesRoot = path.resolve(resolveNotesRoot(options));
+export function resolveLocalUrlToPath(input: string | InternalUrl, options: LocalProtocolOptions): string {
+	const url = typeof input === "string" ? parseLocalUrl(input) : input;
+	const localRoot = path.resolve(resolveLocalRoot(options));
 	const relativePath = extractRelativePath(url);
 
 	if (!relativePath) {
-		return notesRoot;
+		return localRoot;
 	}
 
-	const resolved = path.resolve(notesRoot, relativePath);
-	ensureWithinRoot(resolved, notesRoot);
+	const resolved = path.resolve(localRoot, relativePath);
+	ensureWithinRoot(resolved, localRoot);
 	return resolved;
 }
 
 /**
- * Protocol handler for notes:// URLs.
+ * Protocol handler for local:// URLs.
  *
  * URL forms:
- * - notes:// - Lists all session notes
- * - notes://<path> - Reads a file under session notes root
+ * - local:// - Lists all session local files
+ * - local://<path> - Reads a file under session local root
  */
-export class NotesProtocolHandler implements ProtocolHandler {
-	readonly scheme = "notes";
+export class LocalProtocolHandler implements ProtocolHandler {
+	readonly scheme = "local";
 
-	constructor(private readonly options: NotesProtocolOptions) {}
+	constructor(private readonly options: LocalProtocolOptions) {}
 
 	async resolve(url: InternalUrl): Promise<InternalResource> {
-		const notesRoot = path.resolve(resolveNotesRoot(this.options));
-		await fs.mkdir(notesRoot, { recursive: true });
+		const localRoot = path.resolve(resolveLocalRoot(this.options));
+		await fs.mkdir(localRoot, { recursive: true });
 
 		let resolvedRoot: string;
 		try {
-			resolvedRoot = await fs.realpath(notesRoot);
+			resolvedRoot = await fs.realpath(localRoot);
 		} catch (error) {
 			if (isEnoent(error)) {
-				throw new Error("Unable to initialize notes:// root");
+				throw new Error("Unable to initialize local:// root");
 			}
 			throw error;
 		}
@@ -198,7 +198,7 @@ export class NotesProtocolHandler implements ProtocolHandler {
 			realTargetPath = await fs.realpath(targetPath);
 		} catch (error) {
 			if (isEnoent(error)) {
-				throw new Error(`Notes file not found: ${url.href}`);
+				throw new Error(`Local file not found: ${url.href}`);
 			}
 			throw error;
 		}
@@ -207,7 +207,7 @@ export class NotesProtocolHandler implements ProtocolHandler {
 
 		const stat = await fs.stat(realTargetPath);
 		if (!stat.isFile()) {
-			throw new Error(`notes:// URL must resolve to a file: ${url.href}`);
+			throw new Error(`local:// URL must resolve to a file: ${url.href}`);
 		}
 
 		const content = await Bun.file(realTargetPath).text();
@@ -217,7 +217,7 @@ export class NotesProtocolHandler implements ProtocolHandler {
 			contentType: getContentType(realTargetPath),
 			size: Buffer.byteLength(content, "utf-8"),
 			sourcePath: realTargetPath,
-			notes: ["Use write path notes://<file> to persist large intermediate artifacts across turns."],
+			notes: ["Use write path local://<file> to persist large intermediate artifacts across turns."],
 		};
 	}
 }

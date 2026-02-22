@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import { isEnoent } from "@oh-my-pi/pi-utils";
-import { resolveNotesUrlToPath } from "../internal-urls";
+import { resolveLocalUrlToPath } from "../internal-urls";
 
 interface RenameApprovedPlanFileOptions {
 	planFilePath: string;
@@ -9,23 +9,23 @@ interface RenameApprovedPlanFileOptions {
 	getSessionId: () => string | null;
 }
 
-function assertNotesUrl(path: string, label: "source" | "destination"): void {
-	if (!path.startsWith("notes://")) {
-		throw new Error(`Approved plan ${label} path must use notes:// (received ${path}).`);
+function assertLocalUrl(path: string, label: "source" | "destination"): void {
+	if (!path.startsWith("local://")) {
+		throw new Error(`Approved plan ${label} path must use local:// (received ${path}).`);
 	}
 }
 
 export async function renameApprovedPlanFile(options: RenameApprovedPlanFileOptions): Promise<void> {
 	const { planFilePath, finalPlanFilePath, getArtifactsDir, getSessionId } = options;
-	assertNotesUrl(planFilePath, "source");
-	assertNotesUrl(finalPlanFilePath, "destination");
+	assertLocalUrl(planFilePath, "source");
+	assertLocalUrl(finalPlanFilePath, "destination");
 
 	const resolveOptions = {
 		getArtifactsDir: () => getArtifactsDir(),
 		getSessionId: () => getSessionId(),
 	};
-	const resolvedSource = resolveNotesUrlToPath(planFilePath, resolveOptions);
-	const resolvedDestination = resolveNotesUrlToPath(finalPlanFilePath, resolveOptions);
+	const resolvedSource = resolveLocalUrlToPath(planFilePath, resolveOptions);
+	const resolvedDestination = resolveLocalUrlToPath(finalPlanFilePath, resolveOptions);
 
 	if (resolvedSource === resolvedDestination) {
 		return;

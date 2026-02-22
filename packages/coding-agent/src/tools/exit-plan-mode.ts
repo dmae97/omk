@@ -63,7 +63,7 @@ export class ExitPlanModeTool implements AgentTool<typeof exitPlanModeSchema, Ex
 		}
 
 		const normalized = normalizePlanTitle(params.title);
-		const finalPlanFilePath = `notes://${normalized.fileName}`;
+		const finalPlanFilePath = `local://${normalized.fileName}`;
 		const resolvedPlanPath = resolvePlanPath(this.session, state.planFilePath);
 		resolvePlanPath(this.session, finalPlanFilePath);
 		let planExists = false;

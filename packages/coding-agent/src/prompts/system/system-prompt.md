@@ -201,8 +201,8 @@ Tools like `read`, `grep`, and `bash` resolve custom protocol URLs to internal r
 - `agent://<id>/<path>` — JSON field extraction via path (jq-like: `.foo.bar[0]`)
 - `agent://<id>?q=<query>` — JSON field extraction via query param
 - `artifact://<id>` — Raw artifact content (truncated tool output)
-- `notes://PLAN.md` — Default plan scratch file for the current session
-- `notes://<TITLE>.md` — Finalized plan artifact created after `exit_plan_mode` approval
+- `local://PLAN.md` — Default plan scratch file for the current session
+- `local://<TITLE>.md` — Finalized plan artifact created after `exit_plan_mode` approval
 - `jobs://` — All background job statuses
 - `jobs://<job-id>` — Specific job status and result
 

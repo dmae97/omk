@@ -8,9 +8,9 @@ describe("plan-mode-approved prompt", () => {
 	it("includes final plan artifact path in injected execution prompt", () => {
 		const rendered = renderPromptTemplate(planModeApprovedPrompt, {
 			planContent: "1. Do work",
-			finalPlanFilePath: "notes://WP_MIGRATION_PLAN.md",
+			finalPlanFilePath: "local://WP_MIGRATION_PLAN.md",
 		});
 
-		expect(rendered).toContain("notes://WP_MIGRATION_PLAN.md");
+		expect(rendered).toContain("local://WP_MIGRATION_PLAN.md");
 	});
 });

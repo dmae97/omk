@@ -4,21 +4,21 @@
 
 ### Added
 
-- Added `notes://` protocol for session-scoped scratch space to store large intermediate artifacts, subagent handoffs, and reusable planning notes
+- Added `local://` protocol for session-scoped scratch space to store large intermediate artifacts, subagent handoffs, and reusable planning artifacts
 - Added `title` parameter to `exit_plan_mode` tool to specify the final plan artifact name when approving a plan
-- Added `NotesProtocolHandler` for resolving `notes://` URLs to session-scoped file storage
+- Added `LocalProtocolHandler` for resolving `local://` URLs to session-scoped file storage
 - Added `renameApprovedPlanFile` function to finalize approved plans with user-specified titles
 
 ### Changed
 
 - Changed XML tag from `<swarm-context>` to `<context>` in subagent prompts and task rendering
 - Changed system reminder XML tags from underscore to kebab-case format (`<system-reminder>`)
-- Changed plan storage from `plan://` protocol to `notes://PLAN.md` for draft plans and `notes://<title>.md` for finalized approved plans
+- Changed plan storage from `plan://` protocol to `local://PLAN.md` for draft plans and `local://<title>.md` for finalized approved plans
 - Changed plan mode to use session artifacts directory for plan storage instead of separate plans directory
-- Updated system prompt to document `notes://` protocol and internal URL expansion behavior
+- Updated system prompt to document `local://` protocol and internal URL expansion behavior
 - Updated `exit_plan_mode` tool documentation to require `title` parameter and explain plan finalization workflow
-- Updated `write` tool documentation to recommend `notes://` for large temporary artifacts and subagent handoffs
-- Updated `task` tool documentation to recommend using `notes://` for large intermediate outputs in subagent context
+- Updated `write` tool documentation to recommend `local://` for large temporary artifacts and subagent handoffs
+- Updated `task` tool documentation to recommend using `local://` for large intermediate outputs in subagent context
 - Replaced `docs://` protocol with `pi://` for accessing embedded documentation files
 - Renamed `DocsProtocolHandler` to `PiProtocolHandler` for internal documentation URL resolution
 - Removed `artifactsDir` parameter from Python executor options; artifact storage now uses `artifactPath` only

@@ -49,7 +49,7 @@ import {
 	InternalUrlRouter,
 	JobsProtocolHandler,
 	MemoryProtocolHandler,
-	NotesProtocolHandler,
+	LocalProtocolHandler,
 	PiProtocolHandler,
 	RuleProtocolHandler,
 	SkillProtocolHandler,
@@ -812,7 +812,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		asyncJobManager,
 	};
 
-	// Initialize internal URL router for internal protocols (agent://, artifact://, memory://, skill://, rule://, notes://)
+	// Initialize internal URL router for internal protocols (agent://, artifact://, memory://, skill://, rule://, local://)
 	const internalRouter = new InternalUrlRouter();
 	const getArtifactsDir = () => sessionManager.getArtifactsDir();
 	internalRouter.register(new AgentProtocolHandler({ getArtifactsDir }));
@@ -823,7 +823,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		}),
 	);
 	internalRouter.register(
-		new NotesProtocolHandler({
+		new LocalProtocolHandler({
 			getArtifactsDir,
 			getSessionId: () => sessionManager.getSessionId(),
 		}),

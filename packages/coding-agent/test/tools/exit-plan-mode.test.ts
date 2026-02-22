@@ -13,8 +13,8 @@ describe("ExitPlanModeTool", () => {
 	beforeEach(async () => {
 		tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "exit-plan-mode-"));
 		artifactsDir = path.join(tmpDir, "artifacts");
-		await fs.mkdir(path.join(artifactsDir, "notes"), { recursive: true });
-		await Bun.write(path.join(artifactsDir, "notes", "PLAN.md"), "# Plan\n");
+		await fs.mkdir(path.join(artifactsDir, "local"), { recursive: true });
+		await Bun.write(path.join(artifactsDir, "local", "PLAN.md"), "# Plan\n");
 	});
 
 	afterEach(async () => {
@@ -30,7 +30,7 @@ describe("ExitPlanModeTool", () => {
 			settings: Settings.isolated(),
 			getArtifactsDir: () => artifactsDir,
 			getSessionId: () => "session-a",
-			getPlanModeState: () => ({ enabled: true, planFilePath: "notes://PLAN.md" }),
+			getPlanModeState: () => ({ enabled: true, planFilePath: "local://PLAN.md" }),
 			...overrides,
 		};
 	}
@@ -45,9 +45,9 @@ describe("ExitPlanModeTool", () => {
 		const tool = new ExitPlanModeTool(createSession());
 		const result = await tool.execute("call-1", { title: "WP_MIGRATION_PLAN" });
 
-		expect(result.details?.planFilePath).toBe("notes://PLAN.md");
+		expect(result.details?.planFilePath).toBe("local://PLAN.md");
 		expect(result.details?.title).toBe("WP_MIGRATION_PLAN");
-		expect(result.details?.finalPlanFilePath).toBe("notes://WP_MIGRATION_PLAN.md");
+		expect(result.details?.finalPlanFilePath).toBe("local://WP_MIGRATION_PLAN.md");
 		expect(result.details?.planExists).toBe(true);
 	});
 
@@ -55,7 +55,7 @@ describe("ExitPlanModeTool", () => {
 		const tool = new ExitPlanModeTool(createSession());
 		const result = await tool.execute("call-2", { title: "WP_MIGRATION_PLAN.md" });
 		expect(result.details?.title).toBe("WP_MIGRATION_PLAN");
-		expect(result.details?.finalPlanFilePath).toBe("notes://WP_MIGRATION_PLAN.md");
+		expect(result.details?.finalPlanFilePath).toBe("local://WP_MIGRATION_PLAN.md");
 	});
 
 	it("rejects invalid title characters", async () => {

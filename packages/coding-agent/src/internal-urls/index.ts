@@ -1,5 +1,5 @@
 /**
- * Internal URL routing system for internal protocols like agent://, memory://, skill://, and notes://.
+ * Internal URL routing system for internal protocols like agent://, memory://, skill://, and local://.
  *
  * This module provides a unified way to resolve internal URLs without
  * exposing filesystem paths to the agent.
@@ -26,11 +26,11 @@ export { JobsProtocolHandler, type JobsProtocolOptions } from "./jobs-protocol";
 export { applyQuery, parseQuery, pathToQuery } from "./json-query";
 export { MemoryProtocolHandler, type MemoryProtocolOptions, resolveMemoryUrlToPath } from "./memory-protocol";
 export {
-	NotesProtocolHandler,
-	type NotesProtocolOptions,
-	resolveNotesRoot,
-	resolveNotesUrlToPath,
-} from "./notes-protocol";
+	LocalProtocolHandler,
+	type LocalProtocolOptions,
+	resolveLocalRoot,
+	resolveLocalUrlToPath,
+} from "./local-protocol";
 export { PiProtocolHandler } from "./pi-protocol";
 export { InternalUrlRouter } from "./router";
 export { RuleProtocolHandler, type RuleProtocolOptions } from "./rule-protocol";
