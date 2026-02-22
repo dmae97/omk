@@ -23,14 +23,21 @@ function getTextOutput(result: any): string {
 	);
 }
 
+let artifactCounter = 0;
 function createTestToolSession(cwd: string): ToolSession {
 	const sessionFile = path.join(cwd, "session.jsonl");
+	const sessionDir = path.join(cwd, "session");
 	return {
 		cwd,
 		hasUI: false,
 		getSessionFile: () => sessionFile,
 		getSessionSpawns: () => "*",
-		allocateOutputArtifact: async () => ({}),
+		getArtifactsDir: () => sessionDir,
+		allocateOutputArtifact: async (toolType: string) => {
+			fs.mkdirSync(sessionDir, { recursive: true });
+			const id = `artifact-${++artifactCounter}`;
+			return { id, path: path.join(sessionDir, `${id}.${toolType}.log`) };
+		},
 		settings: Settings.isolated(),
 	};
 }
