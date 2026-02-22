@@ -583,7 +583,7 @@ function maybeAddOpenRouterAnthropicCacheControl(
 	// on the last user/assistant message (walking backwards until we find text content).
 	for (let i = messages.length - 1; i >= 0; i--) {
 		const msg = messages[i];
-		if (msg.role !== "user" && msg.role !== "assistant") continue;
+		if (msg.role !== "user" && msg.role !== "assistant" && msg.role !== "developer") continue;
 
 		const content = msg.content;
 		if (typeof content === "string") {
@@ -643,7 +643,11 @@ export function convertMessages(
 		const msg = transformedMessages[i];
 		// Some providers (e.g. Mistral/Devstral) don't allow user messages directly after tool results
 		// Insert a synthetic assistant message to bridge the gap
-		if (compat.requiresAssistantAfterToolResult && lastRole === "toolResult" && msg.role === "user") {
+		if (
+			compat.requiresAssistantAfterToolResult &&
+			lastRole === "toolResult" &&
+			(msg.role === "user" || msg.role === "developer")
+		) {
 			params.push({
 				role: "assistant",
 				content: "I have processed the tool results.",
@@ -684,6 +688,31 @@ export function convertMessages(
 				params.push({
 					role: "user",
 					content: filteredContent,
+				});
+			}
+		} else if (msg.role === "developer") {
+			const useDeveloperRole = model.reasoning && compat.supportsDeveloperRole;
+			const devRole = useDeveloperRole ? "developer" : "system";
+			if (typeof msg.content === "string") {
+				const text = sanitizeSurrogates(msg.content);
+				if (text.trim().length === 0) continue;
+				params.push({
+					role: devRole,
+					content: text,
+				});
+			} else {
+				// system/developer role only accepts string content, not content parts
+				const textParts: string[] = [];
+				for (const item of msg.content) {
+					if (item.type === "text") {
+						const text = sanitizeSurrogates(item.text);
+						if (text.trim().length > 0) textParts.push(text);
+					}
+				}
+				if (textParts.length === 0) continue;
+				params.push({
+					role: devRole,
+					content: textParts.join("\n"),
 				});
 			}
 		} else if (msg.role === "assistant") {
@@ -870,7 +899,12 @@ export function convertMessages(
 			continue;
 		}
 
-		lastRole = msg.role;
+		lastRole =
+			msg.role === "developer"
+				? model.reasoning && compat.supportsDeveloperRole
+					? "developer"
+					: "system"
+				: msg.role;
 	}
 
 	return params;

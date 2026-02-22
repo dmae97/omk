@@ -254,6 +254,12 @@ export interface UserMessage {
 	timestamp: number; // Unix timestamp in milliseconds
 }
 
+export interface DeveloperMessage {
+	role: "developer";
+	content: string | (TextContent | ImageContent)[];
+	timestamp: number; // Unix timestamp in milliseconds
+}
+
 export interface AssistantMessage {
 	role: "assistant";
 	content: (TextContent | ThinkingContent | ToolCall)[];
@@ -281,7 +287,7 @@ export interface ToolResultMessage<TDetails = any, TInput = unknown> {
 	$normative?: TInput;
 }
 
-export type Message = UserMessage | AssistantMessage | ToolResultMessage;
+export type Message = UserMessage | DeveloperMessage | AssistantMessage | ToolResultMessage;
 
 export type CursorExecHandlerResult<T> = { result: T; toolResult?: ToolResultMessage } | T | ToolResultMessage;
 

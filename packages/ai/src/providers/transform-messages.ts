@@ -1,10 +1,10 @@
-import type { Api, AssistantMessage, Message, Model, ToolCall, ToolResultMessage, UserMessage } from "../types";
+import type { Api, AssistantMessage, DeveloperMessage, Message, Model, ToolCall, ToolResultMessage } from "../types";
 
 const TURN_ABORTED_GUIDANCE =
-	"<turn_aborted>\n" +
+	"<turn-aborted>\n" +
 	"The previous turn was aborted. Any running tools/commands were terminated. " +
 	"If tools were aborted, they may have partially executed; verify current state before retrying.\n" +
-	"</turn_aborted>";
+	"</turn-aborted>";
 
 const enum ToolCallStatus {
 	/** Tool call has received a result (real or synthetic for orphan) */
@@ -21,7 +21,7 @@ const enum ToolCallStatus {
  * For aborted/errored turns, this function:
  * - Preserves tool call structure (unlike converting to text summaries)
  * - Injects synthetic "aborted" tool results
- * - Adds a <turn_aborted> guidance marker for the model
+ * - Adds a <turn-aborted> guidance marker for the model
  */
 export function transformMessages<TApi extends Api>(
 	messages: Message[],
@@ -33,8 +33,8 @@ export function transformMessages<TApi extends Api>(
 
 	// First pass: transform messages (thinking blocks, tool call ID normalization)
 	const transformed = messages.map(msg => {
-		// User messages pass through unchanged
-		if (msg.role === "user") {
+		// User and developer messages pass through unchanged
+		if (msg.role === "user" || msg.role === "developer") {
 			return msg;
 		}
 
@@ -160,13 +160,12 @@ export function transformMessages<TApi extends Api>(
 					} as ToolResultMessage);
 				}
 
-				// Inject turn_aborted guidance marker as synthetic user message
+				// Inject turn_aborted guidance marker as developer message
 				result.push({
-					role: "user",
+					role: "developer",
 					content: TURN_ABORTED_GUIDANCE,
-					synthetic: true,
 					timestamp: assistantMsg.timestamp + 1,
-				} as UserMessage);
+				} as DeveloperMessage);
 
 				continue;
 			}
@@ -182,8 +181,8 @@ export function transformMessages<TApi extends Api>(
 			if (toolCallStatus.get(msg.toolCallId) === ToolCallStatus.Aborted) continue;
 			toolCallStatus.set(msg.toolCallId, ToolCallStatus.Resolved);
 			result.push(msg);
-		} else if (msg.role === "user") {
-			// User message interrupts tool flow - insert synthetic results for orphaned calls
+		} else if (msg.role === "user" || msg.role === "developer") {
+			// User/developer message interrupts tool flow - insert synthetic results for orphaned calls
 			if (pendingToolCalls.length > 0) {
 				for (const tc of pendingToolCalls) {
 					if (!toolCallStatus.has(tc.id)) {

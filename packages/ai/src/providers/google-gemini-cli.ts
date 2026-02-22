@@ -788,7 +788,7 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 
 function deriveSessionId(context: Context): string | undefined {
 	for (const message of context.messages) {
-		if (message.role !== "user") {
+		if (message.role !== "user" && message.role !== "developer") {
 			continue;
 		}
 

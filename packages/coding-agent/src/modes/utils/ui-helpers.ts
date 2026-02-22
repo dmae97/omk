@@ -171,12 +171,14 @@ export class UiHelpers {
 				}
 				break;
 			}
-			case "user": {
+			case "user":
+			case "developer": {
 				const textContent = this.ctx.getUserMessageText(message);
 				if (textContent) {
-					const userComponent = new UserMessageComponent(textContent, message.synthetic ?? false);
+					const isSynthetic = message.role === "developer" ? true : (message.synthetic ?? false);
+					const userComponent = new UserMessageComponent(textContent, isSynthetic);
 					this.ctx.chatContainer.addChild(userComponent);
-					if (options?.populateHistory && !message.synthetic) {
+					if (options?.populateHistory && message.role === "user" && !isSynthetic) {
 						this.ctx.editor.addToHistory(textContent);
 					}
 				}

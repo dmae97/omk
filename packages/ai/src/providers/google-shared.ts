@@ -83,7 +83,7 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 	const transformedMessages = transformMessages(context.messages, model, normalizeToolCallId);
 
 	for (const msg of transformedMessages) {
-		if (msg.role === "user") {
+		if (msg.role === "user" || msg.role === "developer") {
 			if (typeof msg.content === "string") {
 				// Skip empty user messages
 				if (!msg.content || msg.content.trim() === "") continue;

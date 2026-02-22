@@ -1834,10 +1834,10 @@ function buildMcpToolDefinitions(tools: Tool[] | undefined): McpToolDefinition[]
 }
 
 /**
- * Extract text content from a user message.
+ * Extract text content from a user or developer message.
  */
 function extractUserMessageText(msg: Message): string {
-	if (msg.role !== "user") return "";
+	if (msg.role !== "user" && msg.role !== "developer") return "";
 	const content = msg.content;
 	if (typeof content === "string") return content.trim();
 	const text = content
@@ -1874,7 +1874,7 @@ function buildConversationTurns(messages: Message[]): Uint8Array[] {
 		const msg = messages[i];
 
 		// Skip non-user messages at the start
-		if (msg.role !== "user") {
+		if (msg.role !== "user" && msg.role !== "developer") {
 			i++;
 			continue;
 		}
@@ -1882,7 +1882,7 @@ function buildConversationTurns(messages: Message[]): Uint8Array[] {
 		// Check if this is the last user message (which goes in the action, not turns)
 		let isLastUserMessage = true;
 		for (let j = i + 1; j < messages.length; j++) {
-			if (messages[j].role === "user") {
+			if (messages[j].role === "user" || messages[j].role === "developer") {
 				isLastUserMessage = false;
 				break;
 			}
@@ -1908,7 +1908,7 @@ function buildConversationTurns(messages: Message[]): Uint8Array[] {
 		const stepBytes: Uint8Array[] = [];
 		i++;
 
-		while (i < messages.length && messages[i].role !== "user") {
+		while (i < messages.length && messages[i].role !== "user" && messages[i].role !== "developer") {
 			const stepMsg = messages[i];
 
 			if (stepMsg.role === "assistant") {
@@ -1982,7 +1982,7 @@ function buildGrpcRequest(
 
 	const lastMessage = context.messages[context.messages.length - 1];
 	const userText =
-		lastMessage?.role === "user"
+		lastMessage?.role === "user" || lastMessage?.role === "developer"
 			? typeof lastMessage.content === "string"
 				? lastMessage.content.trim()
 				: extractText(lastMessage.content)

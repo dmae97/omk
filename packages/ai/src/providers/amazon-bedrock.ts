@@ -387,6 +387,7 @@ function convertMessages(
 		const m = transformedMessages[i];
 
 		switch (m.role) {
+			case "developer":
 			case "user":
 				if (typeof m.content === "string") {
 					// Skip empty user messages

@@ -967,7 +967,7 @@ export function convertAnthropicMessages(
 	for (let i = 0; i < transformedMessages.length; i++) {
 		const msg = transformedMessages[i];
 
-		if (msg.role === "user") {
+		if (msg.role === "user" || msg.role === "developer") {
 			if (!msg.content) continue;
 
 			if (typeof msg.content === "string") {

@@ -300,6 +300,7 @@ export function convertToLlm(messages: AgentMessage[]): Message[] {
 					};
 				}
 				case "user":
+				case "developer":
 				case "assistant":
 					return m;
 				case "toolResult":

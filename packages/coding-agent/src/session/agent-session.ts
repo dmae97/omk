@@ -192,7 +192,7 @@ export interface PromptOptions {
 	streamingBehavior?: "steer" | "followUp";
 	/** Optional tool choice override for the next LLM call. */
 	toolChoice?: ToolChoice;
-	/** Mark the user message as synthetic (system-injected). */
+	/** Send as developer/system message instead of user. Providers that support it use the developer role; others fall back to user. */
 	synthetic?: boolean;
 }
 
@@ -310,7 +310,7 @@ export class AgentSession {
 	#pendingNextTurnMessages: CustomMessage[] = [];
 	#planModeState: PlanModeState | undefined;
 	#planReferenceSent = false;
-	#planReferencePath = "notes://PLAN.md";
+	#planReferencePath = "local://PLAN.md";
 
 	// Compaction state
 	#compactionAbortController: AbortController | undefined = undefined;
@@ -603,6 +603,7 @@ export class AgentSession {
 				}
 			} else if (
 				event.message.role === "user" ||
+				event.message.role === "developer" ||
 				event.message.role === "assistant" ||
 				event.message.role === "toolResult" ||
 				event.message.role === "fileMention"
@@ -1679,16 +1680,11 @@ export class AgentSession {
 			userContent.push(...options.images);
 		}
 
-		await this.#promptWithMessage(
-			{
-				role: "user",
-				content: userContent,
-				synthetic: options?.synthetic,
-				timestamp: Date.now(),
-			},
-			expandedText,
-			options,
-		);
+		const message = options?.synthetic
+			? { role: "developer" as const, content: userContent, timestamp: Date.now() }
+			: { role: "user" as const, content: userContent, timestamp: Date.now() };
+
+		await this.#promptWithMessage(message, expandedText, options);
 	}
 
 	async promptCustomMessage<T = unknown>(
@@ -2932,7 +2928,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 
 		try {
 			// Send the prompt and wait for completion
-			await this.prompt(handoffPrompt, { expandPromptTemplates: false });
+			await this.prompt(handoffPrompt, { expandPromptTemplates: false, synthetic: true });
 			await completionPromise;
 
 			if (!handoffText || this.#handoffAbortController.signal.aborted) {
