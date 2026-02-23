@@ -1,12 +1,17 @@
 # Changelog
 
 ## [Unreleased]
-### Breaking Changes
 
+### Breaking Changes
 - Removed `timeout` parameter from await tool—tool now waits indefinitely until jobs complete or the call is aborted
 - Renamed `job_ids` parameter to `jobs` in await tool schema
 - Removed `timedOut` field from await tool result details
 
+### Added
+- Added manual OAuth login flow that lets users paste redirect URLs with /login for callback-server providers and prevents overlapping logins
+
+### Changed
+- Resolved docs index generation paths using path.resolve relative to the script directory
 ## [13.1.1] - 2026-02-23
 
 ### Fixed

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+### Changed
+- Allowed OAuth provider logins to supply a manual authorization code handler with a default prompt when none is provided
 ## [12.19.1] - 2026-02-22
 ### Added
 

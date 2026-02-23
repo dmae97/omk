@@ -31,6 +31,16 @@ import { ToolExecutionComponent } from "../components/tool-execution";
 import { TreeSelectorComponent } from "../components/tree-selector";
 import { UserMessageSelectorComponent } from "../components/user-message-selector";
 
+const CALLBACK_SERVER_PROVIDERS = new Set<OAuthProvider>([
+	"anthropic",
+	"openai-codex",
+	"gitlab-duo",
+	"google-gemini-cli",
+	"google-antigravity",
+]);
+
+const MANUAL_LOGIN_TIP = "Tip: You can complete pairing with /login <redirect URL>.";
+
 export class SelectorController {
 	constructor(private ctx: InteractiveModeContext) {}
 
@@ -600,6 +610,9 @@ export class SelectorController {
 					done();
 					if (mode === "login") {
 						this.ctx.showStatus(`Logging in to ${providerId}…`);
+						const manualInput = this.ctx.oauthManualInput;
+						const useManualInput = CALLBACK_SERVER_PROVIDERS.has(providerId as OAuthProvider);
+						const manualInputPromise = useManualInput ? manualInput.waitForInput(providerId) : undefined;
 						try {
 							await this.ctx.session.modelRegistry.authStorage.login(providerId as OAuthProvider, {
 								onAuth: (info: { url: string; instructions?: string }) => {
@@ -611,6 +624,10 @@ export class SelectorController {
 									if (info.instructions) {
 										this.ctx.chatContainer.addChild(new Spacer(1));
 										this.ctx.chatContainer.addChild(new Text(theme.fg("warning", info.instructions), 1, 0));
+									}
+									if (useManualInput) {
+										this.ctx.chatContainer.addChild(new Spacer(1));
+										this.ctx.chatContainer.addChild(new Text(theme.fg("dim", MANUAL_LOGIN_TIP), 1, 0));
 									}
 									this.ctx.ui.requestRender();
 									this.ctx.openInBrowser(info.url);
@@ -641,6 +658,7 @@ export class SelectorController {
 									this.ctx.chatContainer.addChild(new Text(theme.fg("dim", message), 1, 0));
 									this.ctx.ui.requestRender();
 								},
+								onManualCodeInput: manualInputPromise ? () => manualInputPromise : undefined,
 							});
 							// Refresh models to pick up new baseUrl (e.g., github-copilot)
 							await this.ctx.session.modelRegistry.refresh();
@@ -658,6 +676,10 @@ export class SelectorController {
 							this.ctx.ui.requestRender();
 						} catch (error: unknown) {
 							this.ctx.showError(`Login failed: ${error instanceof Error ? error.message : String(error)}`);
+						} finally {
+							if (useManualInput) {
+								manualInput.clear(`Manual OAuth input cleared for ${providerId}`);
+							}
 						}
 					} else {
 						try {
