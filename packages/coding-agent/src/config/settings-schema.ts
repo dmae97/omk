@@ -555,6 +555,17 @@ export const SETTINGS_SCHEMA = {
 			submenu: true,
 		},
 	},
+	"task.isolation.merge": {
+		type: "enum",
+		values: ["patch", "branch"] as const,
+		default: "patch",
+		ui: {
+			tab: "tools",
+			label: "Task isolation merge",
+			description: "How isolated task changes are integrated (patch apply or branch merge)",
+			submenu: true,
+		},
+	},
 	"task.maxConcurrency": {
 		type: "number",
 		default: 32,

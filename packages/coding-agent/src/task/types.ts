@@ -2,6 +2,7 @@ import type { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Usage } from "@oh-my-pi/pi-ai";
 import { $env } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
+import type { NestedRepoPatch } from "./worktree";
 
 /** Source of an agent definition */
 export type AgentSource = "bundled" | "user" | "project";
@@ -179,6 +180,10 @@ export interface SingleResult {
 	outputPath?: string;
 	/** Patch path for isolated worktree output */
 	patchPath?: string;
+	/** Branch name for isolated branch-mode output */
+	branchName?: string;
+	/** Nested repo patches to apply after parent merge */
+	nestedPatches?: NestedRepoPatch[];
 	/** Data extracted by registered subprocess tool handlers (keyed by tool name) */
 	extractedToolData?: Record<string, unknown[]>;
 	/** Output metadata for agent:// URL integration */

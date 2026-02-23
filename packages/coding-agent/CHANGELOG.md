@@ -9,6 +9,7 @@
 ### Added
 
 - Added `fuse-overlay` isolation mode for subagents using `fuse-overlayfs` (copy-on-write overlay, no baseline patch apply needed)
+- Added `task.isolation.merge` setting (`patch` or `branch`) to control how isolated task changes are integrated back. `branch` mode commits each task to a temp branch and merges with `--no-ff` for proper commit history
 
 ## [13.2.0] - 2026-02-23
 ### Breaking Changes

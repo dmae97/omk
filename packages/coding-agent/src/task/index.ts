@@ -47,13 +47,17 @@ import {
 } from "./types";
 import {
 	applyBaseline,
+	applyNestedPatches,
 	captureBaseline,
 	captureDeltaPatch,
 	cleanupFuseOverlay,
+	cleanupTaskBranches,
 	cleanupWorktree,
+	commitToBranch,
 	ensureFuseOverlay,
 	ensureWorktree,
 	getRepoRoot,
+	mergeTaskBranches,
 	type WorktreeBaseline,
 } from "./worktree";
 
@@ -427,6 +431,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 		const isolationMode = this.session.settings.get("task.isolation.mode");
 		const isolationRequested = "isolated" in params ? params.isolated === true : false;
 		const isIsolated = isolationMode !== "none" && isolationRequested;
+		const mergeMode = this.session.settings.get("task.isolation.merge");
 		const maxConcurrency = this.session.settings.get("task.maxConcurrency");
 		const taskDepth = this.session.taskDepth ?? 0;
 
@@ -839,12 +844,21 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 						preloadedSkills: task.preloadedSkills,
 						promptTemplates,
 					});
-					const patch = await captureDeltaPatch(isolationDir, baseline);
+					if (mergeMode === "branch") {
+						const commitResult = await commitToBranch(isolationDir, baseline, task.id, task.description);
+						return {
+							...result,
+							branchName: commitResult?.branchName,
+							nestedPatches: commitResult?.nestedPatches,
+						};
+					}
+					const delta = await captureDeltaPatch(isolationDir, baseline);
 					const patchPath = path.join(effectiveArtifactsDir, `${task.id}.patch`);
-					await Bun.write(patchPath, patch);
+					await Bun.write(patchPath, delta.rootPatch);
 					return {
 						...result,
 						patchPath,
+						nestedPatches: delta.nestedPatches,
 					};
 				} catch (err) {
 					const message = err instanceof Error ? err.message : String(err);
@@ -930,64 +944,111 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 				}
 			}
 
-			let patchApplySummary = "";
-			let patchesApplied: boolean | null = null;
-			if (isIsolated) {
-				const patchesInOrder = results.map(result => result.patchPath).filter(Boolean) as string[];
-				const missingPatch = results.some(result => !result.patchPath);
-				if (!repoRoot || missingPatch) {
-					patchesApplied = false;
-				} else {
-					const patchStats = await Promise.all(
-						patchesInOrder.map(async patchPath => ({
-							patchPath,
-							size: (await fs.stat(patchPath)).size,
-						})),
-					);
-					const nonEmptyPatches = patchStats.filter(patch => patch.size > 0).map(patch => patch.patchPath);
-					if (nonEmptyPatches.length === 0) {
-						patchesApplied = true;
+			let mergeSummary = "";
+			let changesApplied: boolean | null = null;
+			if (isIsolated && repoRoot) {
+				if (mergeMode === "branch") {
+					// Branch mode: merge task branches sequentially
+					const branchEntries = results
+						.filter(r => r.branchName && r.exitCode === 0 && !r.aborted)
+						.map(r => ({ branchName: r.branchName!, taskId: r.id, description: r.description }));
+
+					if (branchEntries.length === 0) {
+						changesApplied = true;
 					} else {
-						const patchTexts = await Promise.all(
-							nonEmptyPatches.map(async patchPath => Bun.file(patchPath).text()),
-						);
-						const combinedPatch = patchTexts.map(text => (text.endsWith("\n") ? text : `${text}\n`)).join("");
-						if (!combinedPatch.trim()) {
-							patchesApplied = true;
+						const mergeResult = await mergeTaskBranches(repoRoot, branchEntries);
+						changesApplied = mergeResult.failed.length === 0;
+
+						if (changesApplied) {
+							mergeSummary = `\n\nMerged ${mergeResult.merged.length} branch${mergeResult.merged.length === 1 ? "" : "es"}: ${mergeResult.merged.join(", ")}`;
 						} else {
-							const combinedPatchPath = path.join(os.tmpdir(), `omp-task-combined-${Snowflake.next()}.patch`);
-							try {
-								await Bun.write(combinedPatchPath, combinedPatch);
-								const checkResult = await $`git apply --check --binary ${combinedPatchPath}`
-									.cwd(repoRoot)
-									.quiet()
-									.nothrow();
-								if (checkResult.exitCode !== 0) {
-									patchesApplied = false;
-								} else {
-									const applyResult = await $`git apply --binary ${combinedPatchPath}`
+							const mergedPart =
+								mergeResult.merged.length > 0 ? `Merged: ${mergeResult.merged.join(", ")}.\n` : "";
+							const failedPart = `Failed: ${mergeResult.failed.join(", ")}.`;
+							const conflictPart = mergeResult.conflict ? `\nConflict: ${mergeResult.conflict}` : "";
+							mergeSummary = `\n\n<system-notification>Branch merge failed. ${mergedPart}${failedPart}${conflictPart}\nUnmerged branches remain for manual resolution.</system-notification>`;
+						}
+					}
+
+					// Clean up merged branches (keep failed ones for manual resolution)
+					const allBranches = branchEntries.map(b => b.branchName);
+					if (changesApplied) {
+						await cleanupTaskBranches(repoRoot, allBranches);
+					}
+				} else {
+					// Patch mode: combine and apply patches
+					const patchesInOrder = results.map(result => result.patchPath).filter(Boolean) as string[];
+					const missingPatch = results.some(result => !result.patchPath);
+					if (missingPatch) {
+						changesApplied = false;
+					} else {
+						const patchStats = await Promise.all(
+							patchesInOrder.map(async patchPath => ({
+								patchPath,
+								size: (await fs.stat(patchPath)).size,
+							})),
+						);
+						const nonEmptyPatches = patchStats.filter(patch => patch.size > 0).map(patch => patch.patchPath);
+						if (nonEmptyPatches.length === 0) {
+							changesApplied = true;
+						} else {
+							const patchTexts = await Promise.all(
+								nonEmptyPatches.map(async patchPath => Bun.file(patchPath).text()),
+							);
+							const combinedPatch = patchTexts.map(text => (text.endsWith("\n") ? text : `${text}\n`)).join("");
+							if (!combinedPatch.trim()) {
+								changesApplied = true;
+							} else {
+								const combinedPatchPath = path.join(os.tmpdir(), `omp-task-combined-${Snowflake.next()}.patch`);
+								try {
+									await Bun.write(combinedPatchPath, combinedPatch);
+									const checkResult = await $`git apply --check --binary ${combinedPatchPath}`
 										.cwd(repoRoot)
 										.quiet()
 										.nothrow();
-									patchesApplied = applyResult.exitCode === 0;
+									if (checkResult.exitCode !== 0) {
+										changesApplied = false;
+									} else {
+										const applyResult = await $`git apply --binary ${combinedPatchPath}`
+											.cwd(repoRoot)
+											.quiet()
+											.nothrow();
+										changesApplied = applyResult.exitCode === 0;
+									}
+								} finally {
+									await fs.rm(combinedPatchPath, { force: true });
 								}
-							} finally {
-								await fs.rm(combinedPatchPath, { force: true });
 							}
 						}
 					}
-				}
 
-				if (patchesApplied) {
-					patchApplySummary = "\n\nApplied patches: yes";
-				} else {
-					const notification =
-						"<system-notification>Patches were not applied and must be handled manually.</system-notification>";
-					const patchList =
-						patchPaths.length > 0
-							? `\n\nPatch artifacts:\n${patchPaths.map(patch => `- ${patch}`).join("\n")}`
-							: "";
-					patchApplySummary = `\n\n${notification}${patchList}`;
+					if (changesApplied) {
+						mergeSummary = "\n\nApplied patches: yes";
+					} else {
+						const notification =
+							"<system-notification>Patches were not applied and must be handled manually.</system-notification>";
+						const patchList =
+							patchPaths.length > 0
+								? `\n\nPatch artifacts:\n${patchPaths.map(patch => `- ${patch}`).join("\n")}`
+								: "";
+						mergeSummary = `\n\n${notification}${patchList}`;
+					}
+				}
+			}
+
+			// Apply nested repo patches (separate from parent git)
+			if (isIsolated && repoRoot && changesApplied !== false) {
+				const allNestedPatches = results
+					.filter(r => r.nestedPatches && r.nestedPatches.length > 0 && r.exitCode === 0 && !r.aborted)
+					.flatMap(r => r.nestedPatches!);
+				if (allNestedPatches.length > 0) {
+					try {
+						await applyNestedPatches(repoRoot, allNestedPatches);
+					} catch {
+						// Nested patch failures are non-fatal to the parent merge
+						mergeSummary +=
+							"\n\n<system-notification>Some nested repository patches failed to apply.</system-notification>";
+					}
 				}
 			}
 
@@ -1034,12 +1095,12 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 				summaries,
 				outputIds,
 				agentName,
-				patchApplySummary,
+				mergeSummary,
 			});
 
 			// Cleanup temp directory if used
 			const shouldCleanupTempArtifacts =
-				tempArtifactsDir && (!isIsolated || patchesApplied === true || patchesApplied === null);
+				tempArtifactsDir && (!isIsolated || changesApplied === true || changesApplied === null);
 			if (shouldCleanupTempArtifacts) {
 				await fs.rm(tempArtifactsDir, { recursive: true, force: true });
 			}

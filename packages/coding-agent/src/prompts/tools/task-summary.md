@@ -20,9 +20,9 @@
 {{/unless}}
 {{/each}}
 
-{{#if patchApplySummary}}
-<patch-summary>
-{{patchApplySummary}}
-</patch-summary>
+{{#if mergeSummary}}
+<merge-summary>
+{{mergeSummary}}
+</merge-summary>
 {{/if}}
 </task-summary>

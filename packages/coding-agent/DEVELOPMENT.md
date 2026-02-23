@@ -909,6 +909,9 @@ What _is_ isolated is execution context and artifacts, not process memory:
 - Optional filesystem isolation is controlled by the `task.isolation.mode` setting (`"none"`, `"worktree"`, or `"fuse-overlay"`).
   - **worktree**: `ensureWorktree(...)`, `applyBaseline(...)`, `captureDeltaPatch(...)`, `cleanupWorktree(...)`.
   - **fuse-overlay**: `ensureFuseOverlay(...)` (mounts a copy-on-write overlay via `fuse-overlayfs`), `captureDeltaPatch(...)`, `cleanupFuseOverlay(...)`. No baseline apply step needed since the overlay reflects the full working tree.
+- The `task.isolation.merge` setting controls how isolated changes are integrated back:
+  - **patch** (default): captures a diff via `captureDeltaPatch(...)`, combines patches, and applies with `git apply`.
+  - **branch**: each task commits to a temp branch (`omp/task/<id>`) via `commitToBranch(...)`, then `mergeTaskBranches(...)` merges them sequentially with `--no-ff` merge commits.
 - Child session JSONL/markdown outputs are written under the task artifacts directory (`<id>.jsonl`, `<id>.md`, and in isolated mode `<id>.patch`).
 
 ### Tooling Surface in Child Sessions

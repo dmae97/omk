@@ -847,6 +847,8 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 
 	if (result.patchPath && !aborted && result.exitCode === 0) {
 		lines.push(`${continuePrefix}${theme.fg("dim", `Patch: ${result.patchPath}`)}`);
+	} else if (result.branchName && !aborted && result.exitCode === 0) {
+		lines.push(`${continuePrefix}${theme.fg("dim", `Branch: ${result.branchName}`)}`);
 	}
 
 	// Error message
