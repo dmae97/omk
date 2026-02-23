@@ -546,6 +546,16 @@ export class Settings {
 			}
 		}
 
+		// task.isolation.enabled (boolean) -> task.isolation.mode (enum)
+		const taskObj = raw.task as Record<string, unknown> | undefined;
+		const isolationObj = taskObj?.isolation as Record<string, unknown> | undefined;
+		if (isolationObj && "enabled" in isolationObj) {
+			if (typeof isolationObj.enabled === "boolean") {
+				isolationObj.mode = isolationObj.enabled ? "worktree" : "none";
+			}
+			delete isolationObj.enabled;
+		}
+
 		return raw;
 	}
 

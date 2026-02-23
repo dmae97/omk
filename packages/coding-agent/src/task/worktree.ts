@@ -168,3 +168,59 @@ export async function cleanupWorktree(dir: string): Promise<void> {
 		await fs.rm(dir, { recursive: true, force: true });
 	}
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Fuse-overlay isolation
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function ensureFuseOverlay(baseCwd: string, id: string): Promise<string> {
+	const repoRoot = await getRepoRoot(baseCwd);
+	const encodedProject = getEncodedProjectName(repoRoot);
+	const baseDir = getWorktreeDir(encodedProject, id);
+	const upperDir = path.join(baseDir, "upper");
+	const workDir = path.join(baseDir, "work");
+	const mergedDir = path.join(baseDir, "merged");
+
+	// Clean up any stale mount at this path
+	const fusermount = Bun.which("fusermount3") ?? Bun.which("fusermount");
+	if (fusermount) {
+		await $`${fusermount} -u ${mergedDir}`.quiet().nothrow();
+	}
+	await fs.rm(baseDir, { recursive: true, force: true });
+
+	await fs.mkdir(upperDir, { recursive: true });
+	await fs.mkdir(workDir, { recursive: true });
+	await fs.mkdir(mergedDir, { recursive: true });
+
+	const binary = Bun.which("fuse-overlayfs");
+	if (!binary) {
+		await fs.rm(baseDir, { recursive: true, force: true });
+		throw new Error(
+			"fuse-overlayfs not found. Install it (e.g. `apt install fuse-overlayfs` or `pacman -S fuse-overlayfs`) to use fuse-overlay isolation.",
+		);
+	}
+
+	const result = await $`${binary} -o lowerdir=${repoRoot},upperdir=${upperDir},workdir=${workDir} ${mergedDir}`
+		.quiet()
+		.nothrow();
+	if (result.exitCode !== 0) {
+		const stderr = result.stderr.toString().trim();
+		await fs.rm(baseDir, { recursive: true, force: true });
+		throw new Error(`fuse-overlayfs mount failed (exit ${result.exitCode}): ${stderr}`);
+	}
+
+	return mergedDir;
+}
+
+export async function cleanupFuseOverlay(mergedDir: string): Promise<void> {
+	try {
+		const fusermount = Bun.which("fusermount3") ?? Bun.which("fusermount");
+		if (fusermount) {
+			await $`${fusermount} -u ${mergedDir}`.quiet().nothrow();
+		}
+	} finally {
+		// baseDir is the parent of the merged directory
+		const baseDir = path.dirname(mergedDir);
+		await fs.rm(baseDir, { recursive: true, force: true });
+	}
+}

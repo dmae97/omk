@@ -49,7 +49,9 @@ import {
 	applyBaseline,
 	captureBaseline,
 	captureDeltaPatch,
+	cleanupFuseOverlay,
 	cleanupWorktree,
+	ensureFuseOverlay,
 	ensureWorktree,
 	getRepoRoot,
 	type WorktreeBaseline,
@@ -145,11 +147,11 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 	get description(): string {
 		const disabledAgents = this.session.settings.get("task.disabledAgents") as string[];
 		const maxConcurrency = this.session.settings.get("task.maxConcurrency");
-		const isolationEnabled = this.session.settings.get("task.isolation.enabled");
+		const isolationMode = this.session.settings.get("task.isolation.mode");
 		return renderDescription(
 			this.#discoveredAgents,
 			maxConcurrency,
-			isolationEnabled,
+			isolationMode !== "none",
 			this.session.settings.get("async.enabled"),
 			disabledAgents,
 		);
@@ -168,9 +170,9 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 	 * Create a TaskTool instance with async agent discovery.
 	 */
 	static async create(session: ToolSession): Promise<TaskTool> {
-		const isolationEnabled = session.settings.get("task.isolation.enabled");
+		const isolationMode = session.settings.get("task.isolation.mode");
 		const { agents } = await discoverAgents(session.cwd);
-		return new TaskTool(session, agents, isolationEnabled);
+		return new TaskTool(session, agents, isolationMode !== "none");
 	}
 
 	async execute(
@@ -422,18 +424,18 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 		const startTime = Date.now();
 		const { agents, projectAgentsDir } = await discoverAgents(this.session.cwd);
 		const { agent: agentName, context, schema: outputSchema } = params;
-		const isolationEnabled = this.session.settings.get("task.isolation.enabled");
+		const isolationMode = this.session.settings.get("task.isolation.mode");
 		const isolationRequested = "isolated" in params ? params.isolated === true : false;
-		const isIsolated = isolationEnabled && isolationRequested;
+		const isIsolated = isolationMode !== "none" && isolationRequested;
 		const maxConcurrency = this.session.settings.get("task.maxConcurrency");
 		const taskDepth = this.session.taskDepth ?? 0;
 
-		if (!isolationEnabled && "isolated" in params) {
+		if (isolationMode === "none" && "isolated" in params) {
 			return {
 				content: [
 					{
 						type: "text",
-						text: "Task isolation is disabled. Remove the isolated argument to run subagents.",
+						text: "Task isolation is disabled. Remove the isolated argument or set task.isolation.mode to 'worktree' or 'fuse-overlay'.",
 					},
 				],
 				details: {
@@ -789,16 +791,23 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 				}
 
 				const taskStart = Date.now();
-				let worktreeDir: string | undefined;
+				let isolationDir: string | undefined;
 				try {
 					if (!repoRoot || !baseline) {
 						throw new Error("Isolated task execution not initialized.");
 					}
-					worktreeDir = await ensureWorktree(repoRoot, task.id);
-					await applyBaseline(worktreeDir, baseline);
+
+					if (isolationMode === "fuse-overlay") {
+						isolationDir = await ensureFuseOverlay(repoRoot, task.id);
+						// Overlay already reflects the full working tree state — no baseline apply needed
+					} else {
+						isolationDir = await ensureWorktree(repoRoot, task.id);
+						await applyBaseline(isolationDir, baseline);
+					}
+
 					const result = await runSubprocess({
 						cwd: this.session.cwd,
-						worktree: worktreeDir,
+						worktree: isolationDir,
 						agent,
 						task: task.task,
 						description: task.description,
@@ -830,7 +839,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 						preloadedSkills: task.preloadedSkills,
 						promptTemplates,
 					});
-					const patch = await captureDeltaPatch(worktreeDir, baseline);
+					const patch = await captureDeltaPatch(isolationDir, baseline);
 					const patchPath = path.join(effectiveArtifactsDir, `${task.id}.patch`);
 					await Bun.write(patchPath, patch);
 					return {
@@ -856,8 +865,12 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 						error: message,
 					};
 				} finally {
-					if (worktreeDir) {
-						await cleanupWorktree(worktreeDir);
+					if (isolationDir) {
+						if (isolationMode === "fuse-overlay") {
+							await cleanupFuseOverlay(isolationDir);
+						} else {
+							await cleanupWorktree(isolationDir);
+						}
 					}
 				}
 			};

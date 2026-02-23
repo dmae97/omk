@@ -544,13 +544,14 @@ export const SETTINGS_SCHEMA = {
 	// ─────────────────────────────────────────────────────────────────────────
 	// Task tool settings
 	// ─────────────────────────────────────────────────────────────────────────
-	"task.isolation.enabled": {
-		type: "boolean",
-		default: false,
+	"task.isolation.mode": {
+		type: "enum",
+		values: ["none", "worktree", "fuse-overlay"] as const,
+		default: "none",
 		ui: {
 			tab: "tools",
 			label: "Task isolation",
-			description: "Run subagents in isolated git worktrees",
+			description: "Isolation mode for subagents (none, git worktree, or fuse-overlay)",
 			submenu: true,
 		},
 	},

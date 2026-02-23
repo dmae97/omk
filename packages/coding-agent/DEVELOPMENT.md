@@ -906,7 +906,9 @@ Despite the name `runSubprocess`, `packages/coding-agent/src/task/executor.ts` c
 
 What _is_ isolated is execution context and artifacts, not process memory:
 
-- Optional git worktree isolation is handled by `TaskTool.execute(...)` in `index.ts` using `ensureWorktree(...)`, `applyBaseline(...)`, `captureDeltaPatch(...)`, `cleanupWorktree(...)`.
+- Optional filesystem isolation is controlled by the `task.isolation.mode` setting (`"none"`, `"worktree"`, or `"fuse-overlay"`).
+  - **worktree**: `ensureWorktree(...)`, `applyBaseline(...)`, `captureDeltaPatch(...)`, `cleanupWorktree(...)`.
+  - **fuse-overlay**: `ensureFuseOverlay(...)` (mounts a copy-on-write overlay via `fuse-overlayfs`), `captureDeltaPatch(...)`, `cleanupFuseOverlay(...)`. No baseline apply step needed since the overlay reflects the full working tree.
 - Child session JSONL/markdown outputs are written under the task artifacts directory (`<id>.jsonl`, `<id>.md`, and in isolated mode `<id>.patch`).
 
 ### Tooling Surface in Child Sessions

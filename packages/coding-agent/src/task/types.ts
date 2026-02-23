@@ -77,7 +77,7 @@ const createTaskSchema = (options: { isolationEnabled: boolean }) => {
 			...properties,
 			isolated: Type.Optional(
 				Type.Boolean({
-					description: "Run in isolated git worktree; returns patches. Use when tasks edit overlapping files.",
+					description: "Run in isolated environment; returns patches. Use when tasks edit overlapping files.",
 				}),
 			),
 		});

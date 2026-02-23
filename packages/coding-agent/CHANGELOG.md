@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Renamed `task.isolation.enabled` (boolean) setting to `task.isolation.mode` (enum: `none`, `worktree`, `fuse-overlay`). Existing `true`/`false` values are auto-migrated to `worktree`/`none`.
+
+### Added
+
+- Added `fuse-overlay` isolation mode for subagents using `fuse-overlayfs` (copy-on-write overlay, no baseline patch apply needed)
+
 ## [13.2.0] - 2026-02-23
 ### Breaking Changes
 

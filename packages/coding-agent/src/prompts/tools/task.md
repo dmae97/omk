@@ -18,7 +18,7 @@ Subagents lack your conversation history. Every decision, file content, and user
 - `context`: Shared background prepended to every assignment. Session-specific info only.
 - `schema`: JTD schema for expected output. Format lives here — MUST NOT be duplicated in assignments.
 - `tasks`: Tasks to execute in parallel.
-- `isolated`: Run in isolated git worktree; returns patches. Use when tasks edit overlapping files.
+- `isolated`: Run in isolated environment; returns patches. Use when tasks edit overlapping files.
 </parameters>
 
 <critical>
