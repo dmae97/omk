@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.1.2] - 2026-02-23
 ### Breaking Changes
 
 - Removed `timeout` parameter from await tool—tool now waits indefinitely until jobs complete or the call is aborted
