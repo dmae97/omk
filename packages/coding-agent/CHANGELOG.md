@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.1.1] - 2026-02-23
+
 ### Fixed
 
 - Fixed bash internal URL expansion to resolve `local://` targets to concrete filesystem paths, including newly created destination files for commands like `mv src.json local://dest.json`
