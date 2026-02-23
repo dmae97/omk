@@ -16,8 +16,25 @@ use smallvec::{SmallVec, smallvec};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-const TAB_WIDTH: usize = 3;
+const DEFAULT_TAB_WIDTH: usize = 3;
+const MIN_TAB_WIDTH: usize = 1;
+const MAX_TAB_WIDTH: usize = 16;
 const ESC: u16 = 0x1b;
+
+#[inline]
+const fn clamp_tab_width(tab_width: Option<u32>) -> usize {
+	let width = match tab_width {
+		Some(tab_width) => tab_width as usize,
+		None => DEFAULT_TAB_WIDTH,
+	};
+	if width < MIN_TAB_WIDTH {
+		MIN_TAB_WIDTH
+	} else if width > MAX_TAB_WIDTH {
+		MAX_TAB_WIDTH
+	} else {
+		width
+	}
+}
 
 fn build_utf16_string(mut data: Vec<u16>) -> Utf16String {
 	while data.last() == Some(&0) {
@@ -350,19 +367,19 @@ fn is_sgr_u16(seq: &[u16]) -> bool {
 // ============================================================================
 
 #[inline]
-const fn ascii_cell_width_u16(u: u16) -> usize {
+const fn ascii_cell_width_u16(u: u16, tab_width: usize) -> usize {
 	let b = u as u8;
 	match b {
-		b'\t' => TAB_WIDTH,
+		b'\t' => tab_width,
 		0x20..=0x7e => 1,
 		_ => 0,
 	}
 }
 
 #[inline]
-fn grapheme_width_str(g: &str) -> usize {
+fn grapheme_width_str(g: &str, tab_width: usize) -> usize {
 	if g == "\t" {
-		return TAB_WIDTH;
+		return tab_width;
 	}
 	let mut it = g.chars();
 	let Some(c0) = it.next() else {
@@ -382,7 +399,7 @@ thread_local! {
 ///
 /// Callback returns `true` to continue, `false` to stop early.
 #[inline]
-fn for_each_grapheme_u16_slow<F>(segment: &[u16], mut f: F) -> bool
+fn for_each_grapheme_u16_slow<F>(segment: &[u16], tab_width: usize, mut f: F) -> bool
 where
 	F: FnMut(&[u16], usize) -> bool,
 {
@@ -400,7 +417,7 @@ where
 
 		let mut utf16_pos = 0usize;
 		for g in scratch.graphemes(true) {
-			let w = grapheme_width_str(g);
+			let w = grapheme_width_str(g, tab_width);
 
 			let g_u16_len: usize = g.chars().map(|c| c.len_utf16()).sum();
 			let u16_slice = &segment[utf16_pos..utf16_pos + g_u16_len];
@@ -416,7 +433,7 @@ where
 }
 
 /// Visible width, with early-exit if width exceeds `limit`.
-fn visible_width_u16_up_to(data: &[u16], limit: usize) -> (usize, bool) {
+fn visible_width_u16_up_to(data: &[u16], limit: usize, tab_width: usize) -> (usize, bool) {
 	let mut width = 0usize;
 	let mut i = 0usize;
 	let len = data.len();
@@ -443,13 +460,13 @@ fn visible_width_u16_up_to(data: &[u16], limit: usize) -> (usize, bool) {
 
 		if is_ascii {
 			for &u in seg {
-				width += ascii_cell_width_u16(u);
+				width += ascii_cell_width_u16(u, tab_width);
 				if width > limit {
 					return (width, true);
 				}
 			}
 		} else {
-			let ok = for_each_grapheme_u16_slow(seg, |_, w| {
+			let ok = for_each_grapheme_u16_slow(seg, tab_width, |_, w| {
 				width += w;
 				width <= limit
 			});
@@ -462,8 +479,8 @@ fn visible_width_u16_up_to(data: &[u16], limit: usize) -> (usize, bool) {
 	(width, width > limit)
 }
 
-fn visible_width_u16(data: &[u16]) -> usize {
-	visible_width_u16_up_to(data, usize::MAX).0
+fn visible_width_u16(data: &[u16], tab_width: usize) -> usize {
+	visible_width_u16_up_to(data, usize::MAX, tab_width).0
 }
 
 // ============================================================================
@@ -572,7 +589,12 @@ fn split_into_tokens_with_ansi(line: &[u16]) -> SmallVec<[Vec<u16>; 4]> {
 	tokens
 }
 
-fn break_long_word(word: &[u16], width: usize, state: &mut AnsiState) -> SmallVec<[Vec<u16>; 4]> {
+fn break_long_word(
+	word: &[u16],
+	width: usize,
+	tab_width: usize,
+	state: &mut AnsiState,
+) -> SmallVec<[Vec<u16>; 4]> {
 	let mut lines = SmallVec::<[Vec<u16>; 4]>::new();
 	let mut current_line = Vec::<u16>::new();
 	write_active_codes(state, &mut current_line);
@@ -604,7 +626,7 @@ fn break_long_word(word: &[u16], width: usize, state: &mut AnsiState) -> SmallVe
 
 		if is_ascii {
 			for &u in seg {
-				let gw = ascii_cell_width_u16(u);
+				let gw = ascii_cell_width_u16(u, tab_width);
 				if current_width + gw > width {
 					write_line_end_reset(state, &mut current_line);
 					lines.push(current_line);
@@ -616,7 +638,7 @@ fn break_long_word(word: &[u16], width: usize, state: &mut AnsiState) -> SmallVe
 				current_width += gw;
 			}
 		} else {
-			let _ = for_each_grapheme_u16_slow(seg, |gu16, gw| {
+			let _ = for_each_grapheme_u16_slow(seg, tab_width, |gu16, gw| {
 				if current_width + gw > width {
 					write_line_end_reset(state, &mut current_line);
 					lines.push(std::mem::take(&mut current_line));
@@ -637,12 +659,12 @@ fn break_long_word(word: &[u16], width: usize, state: &mut AnsiState) -> SmallVe
 	lines
 }
 
-fn wrap_single_line(line: &[u16], width: usize) -> SmallVec<[Vec<u16>; 4]> {
+fn wrap_single_line(line: &[u16], width: usize, tab_width: usize) -> SmallVec<[Vec<u16>; 4]> {
 	if line.is_empty() {
 		return smallvec![Vec::new()];
 	}
 
-	if visible_width_u16(line) <= width {
+	if visible_width_u16(line, tab_width) <= width {
 		return smallvec![line.to_vec()];
 	}
 
@@ -653,7 +675,7 @@ fn wrap_single_line(line: &[u16], width: usize) -> SmallVec<[Vec<u16>; 4]> {
 	let mut state = AnsiState::new();
 
 	for token in tokens {
-		let token_width = visible_width_u16(&token);
+		let token_width = visible_width_u16(&token, tab_width);
 		let is_whitespace = token_is_whitespace(&token);
 
 		if token_width > width && !is_whitespace {
@@ -664,11 +686,11 @@ fn wrap_single_line(line: &[u16], width: usize) -> SmallVec<[Vec<u16>; 4]> {
 				current_width = 0;
 			}
 
-			let mut broken = break_long_word(&token, width, &mut state);
+			let mut broken = break_long_word(&token, width, tab_width, &mut state);
 			if let Some(last) = broken.pop() {
 				wrapped.extend(broken);
 				current_line = last;
-				current_width = visible_width_u16(&current_line);
+				current_width = visible_width_u16(&current_line, tab_width);
 			}
 			continue;
 		}
@@ -711,7 +733,11 @@ fn wrap_single_line(line: &[u16], width: usize) -> SmallVec<[Vec<u16>; 4]> {
 	wrapped
 }
 
-fn wrap_text_with_ansi_impl(text: &[u16], width: usize) -> SmallVec<[Vec<u16>; 4]> {
+fn wrap_text_with_ansi_impl(
+	text: &[u16],
+	width: usize,
+	tab_width: usize,
+) -> SmallVec<[Vec<u16>; 4]> {
 	if text.is_empty() {
 		return smallvec![Vec::new()];
 	}
@@ -729,7 +755,7 @@ fn wrap_text_with_ansi_impl(text: &[u16], width: usize) -> SmallVec<[Vec<u16>; 4
 			}
 			line_with_prefix.extend_from_slice(line);
 
-			let wrapped = wrap_single_line(&line_with_prefix, width);
+			let wrapped = wrap_single_line(&line_with_prefix, width, tab_width);
 			result.extend(wrapped);
 			update_state_from_text(line, &mut state);
 			line_start = i + 1;
@@ -748,9 +774,14 @@ fn wrap_text_with_ansi_impl(text: &[u16], width: usize) -> SmallVec<[Vec<u16>; 4
 ///
 /// Returns UTF-16 lines with active SGR codes carried across line boundaries.
 #[napi(js_name = "wrapTextWithAnsi")]
-pub fn wrap_text_with_ansi(text: JsString, width: u32) -> Result<Vec<Utf16String>> {
+pub fn wrap_text_with_ansi(
+	text: JsString,
+	width: u32,
+	tab_width: Option<u32>,
+) -> Result<Vec<Utf16String>> {
 	let text_u16 = text.into_utf16()?;
-	let lines = wrap_text_with_ansi_impl(text_u16.as_slice(), width as usize);
+	let tab_width = clamp_tab_width(tab_width);
+	let lines = wrap_text_with_ansi_impl(text_u16.as_slice(), width as usize, tab_width);
 	Ok(lines.into_iter().map(build_utf16_string).collect())
 }
 
@@ -768,8 +799,10 @@ pub fn truncate_to_width(
 	max_width: u32,
 	ellipsis_kind: u8,
 	pad: bool,
+	tab_width: Option<u32>,
 ) -> Result<Either<JsString<'_>, Utf16String>> {
 	let max_width = max_width as usize;
+	let tab_width = clamp_tab_width(tab_width);
 
 	// Keep original handle so we can return it without allocating.
 	let original = text;
@@ -778,7 +811,7 @@ pub fn truncate_to_width(
 	let text = text_u16.as_slice();
 
 	// Fast path: early-exit width check
-	let (text_w, exceeded) = visible_width_u16_up_to(text, max_width);
+	let (text_w, exceeded) = visible_width_u16_up_to(text, max_width, tab_width);
 	if !exceeded {
 		if !pad {
 			// Return original JsString handle: zero output allocation.
@@ -814,7 +847,7 @@ pub fn truncate_to_width(
 	if target_w == 0 {
 		let mut out = Vec::with_capacity(ellipsis.len().min(max_width * 2));
 		let mut w = 0usize;
-		let _ = for_each_grapheme_u16_slow(ellipsis, |gu16, gw| {
+		let _ = for_each_grapheme_u16_slow(ellipsis, tab_width, |gu16, gw| {
 			if w + gw > max_width {
 				return false;
 			}
@@ -865,7 +898,7 @@ pub fn truncate_to_width(
 
 		if is_ascii {
 			for &u in seg {
-				let gw = ascii_cell_width_u16(u);
+				let gw = ascii_cell_width_u16(u, tab_width);
 				if w + gw > target_w {
 					break;
 				}
@@ -876,7 +909,7 @@ pub fn truncate_to_width(
 				break;
 			}
 		} else {
-			let keep_going = for_each_grapheme_u16_slow(seg, |gu16, gw| {
+			let keep_going = for_each_grapheme_u16_slow(seg, tab_width, |gu16, gw| {
 				if w + gw > target_w {
 					return false;
 				}
@@ -915,6 +948,7 @@ fn slice_with_width_impl(
 	start_col: usize,
 	length: usize,
 	strict: bool,
+	tab_width: usize,
 ) -> (Vec<u16>, usize) {
 	let end_col = start_col.saturating_add(length);
 
@@ -961,7 +995,7 @@ fn slice_with_width_impl(
 				if current_col >= end_col {
 					break;
 				}
-				let gw = ascii_cell_width_u16(u);
+				let gw = ascii_cell_width_u16(u, tab_width);
 				let in_range = current_col >= start_col;
 				let fits = !strict || current_col + gw <= end_col;
 
@@ -978,7 +1012,7 @@ fn slice_with_width_impl(
 				current_col += gw;
 			}
 		} else {
-			let _ = for_each_grapheme_u16_slow(seg, |gu16, gw| {
+			let _ = for_each_grapheme_u16_slow(seg, tab_width, |gu16, gw| {
 				if current_col >= end_col {
 					return false;
 				}
@@ -1028,11 +1062,14 @@ pub fn slice_with_width(
 	start_col: u32,
 	length: u32,
 	strict: bool,
+	tab_width: Option<u32>,
 ) -> Result<SliceResult> {
 	let line_u16 = line.into_utf16()?;
 	let line = line_u16.as_slice();
 
-	let (out, w) = slice_with_width_impl(line, start_col as usize, length as usize, strict);
+	let tab_width = clamp_tab_width(tab_width);
+	let (out, w) =
+		slice_with_width_impl(line, start_col as usize, length as usize, strict, tab_width);
 
 	Ok(SliceResult { text: build_utf16_string(out), width: crate::utils::clamp_u32(w as u64) })
 }
@@ -1047,6 +1084,7 @@ fn extract_segments_impl(
 	after_start: usize,
 	after_len: usize,
 	strict_after: bool,
+	tab_width: usize,
 ) -> (Vec<u16>, usize, Vec<u16>, usize) {
 	let after_end = after_start.saturating_add(after_len);
 
@@ -1114,7 +1152,7 @@ fn extract_segments_impl(
 				if current_col >= done_col {
 					break;
 				}
-				let gw = ascii_cell_width_u16(u);
+				let gw = ascii_cell_width_u16(u, tab_width);
 
 				if current_col < before_end {
 					if !pending_before_ansi.is_empty() {
@@ -1139,7 +1177,7 @@ fn extract_segments_impl(
 				current_col += gw;
 			}
 		} else {
-			let _ = for_each_grapheme_u16_slow(seg, |gu16, gw| {
+			let _ = for_each_grapheme_u16_slow(seg, tab_width, |gu16, gw| {
 				if current_col >= done_col {
 					return false;
 				}
@@ -1185,16 +1223,19 @@ pub fn extract_segments(
 	after_start: u32,
 	after_len: u32,
 	strict_after: bool,
+	tab_width: Option<u32>,
 ) -> Result<ExtractSegmentsResult> {
 	let line_u16 = line.into_utf16()?;
 	let line = line_u16.as_slice();
 
+	let tab_width = clamp_tab_width(tab_width);
 	let (before, bw, after, aw) = extract_segments_impl(
 		line,
 		before_end as usize,
 		after_start as usize,
 		after_len as usize,
 		strict_after,
+		tab_width,
 	);
 
 	Ok(ExtractSegmentsResult {
@@ -1296,9 +1337,10 @@ pub fn sanitize_text(text: JsString<'_>) -> Result<Either<JsString<'_>, Utf16Str
 ///
 /// Tabs count as a fixed-width cell.
 #[napi(js_name = "visibleWidth")]
-pub fn visible_width_napi(text: JsString) -> Result<u32> {
+pub fn visible_width_napi(text: JsString, tab_width: Option<u32>) -> Result<u32> {
 	let text_u16 = text.into_utf16()?;
-	Ok(crate::utils::clamp_u32(visible_width_u16(text_u16.as_slice()) as u64))
+	let tab_width = clamp_tab_width(tab_width);
+	Ok(crate::utils::clamp_u32(visible_width_u16(text_u16.as_slice(), tab_width) as u64))
 }
 
 #[cfg(test)]
@@ -1311,10 +1353,10 @@ mod tests {
 
 	#[test]
 	fn test_visible_width() {
-		assert_eq!(visible_width_u16(&to_u16("hello")), 5);
-		assert_eq!(visible_width_u16(&to_u16("\x1b[31mhello\x1b[0m")), 5);
-		assert_eq!(visible_width_u16(&to_u16("\x1b[38;5;196mred\x1b[0m")), 3);
-		assert_eq!(visible_width_u16(&to_u16("a\tb")), 1 + TAB_WIDTH + 1);
+		assert_eq!(visible_width_u16(&to_u16("hello"), DEFAULT_TAB_WIDTH), 5);
+		assert_eq!(visible_width_u16(&to_u16("\x1b[31mhello\x1b[0m"), DEFAULT_TAB_WIDTH), 5);
+		assert_eq!(visible_width_u16(&to_u16("\x1b[38;5;196mred\x1b[0m"), DEFAULT_TAB_WIDTH), 3);
+		assert_eq!(visible_width_u16(&to_u16("a\tb"), DEFAULT_TAB_WIDTH), 1 + DEFAULT_TAB_WIDTH + 1);
 	}
 
 	#[test]
@@ -1327,7 +1369,7 @@ mod tests {
 	#[test]
 	fn test_slice_basic() {
 		let data = to_u16("hello world");
-		let (out, width) = slice_with_width_impl(&data, 0, 5, false);
+		let (out, width) = slice_with_width_impl(&data, 0, 5, false, DEFAULT_TAB_WIDTH);
 		assert_eq!(String::from_utf16_lossy(&out), "hello");
 		assert_eq!(width, 5);
 	}
@@ -1335,7 +1377,7 @@ mod tests {
 	#[test]
 	fn test_slice_with_ansi() {
 		let data = to_u16("\x1b[31mhello\x1b[0m world");
-		let (out, width) = slice_with_width_impl(&data, 0, 5, false);
+		let (out, width) = slice_with_width_impl(&data, 0, 5, false, DEFAULT_TAB_WIDTH);
 		assert_eq!(String::from_utf16_lossy(&out), "\x1b[31mhello\x1b[0m");
 		assert_eq!(width, 5);
 	}
@@ -1356,7 +1398,7 @@ mod tests {
 	#[test]
 	fn test_early_exit() {
 		let data = to_u16(&"a]b".repeat(1000));
-		let (w, exceeded) = visible_width_u16_up_to(&data, 10);
+		let (w, exceeded) = visible_width_u16_up_to(&data, 10, DEFAULT_TAB_WIDTH);
 		assert!(exceeded);
 		assert!(w > 10);
 	}
@@ -1364,7 +1406,7 @@ mod tests {
 	#[test]
 	fn test_wrap_text_with_ansi_preserves_color() {
 		let data = to_u16("\x1b[38;2;156;163;176mhello world\x1b[0m");
-		let lines = wrap_text_with_ansi_impl(&data, 5);
+		let lines = wrap_text_with_ansi_impl(&data, 5, DEFAULT_TAB_WIDTH);
 		assert_eq!(lines.len(), 2);
 		let first = String::from_utf16_lossy(&lines[0]);
 		let second = String::from_utf16_lossy(&lines[1]);

@@ -12,6 +12,9 @@ import {
 	invalidateFsScanCache,
 	PtySession,
 	sanitizeText,
+	truncateToWidth,
+	visibleWidth,
+	wrapTextWithAnsi,
 } from "../src/index";
 
 let testDir: string;
@@ -174,6 +177,19 @@ describe("pi-natives", () => {
 			await Bun.sleep(250);
 			const second = await glob({ pattern: fileName, path: testDir, hidden: true, gitignore: true, cache: true });
 			expect(second.totalMatches).toBe(1);
+		});
+	});
+
+	describe("text tab width", () => {
+		it("uses default tab width and supports explicit overrides", () => {
+			expect(visibleWidth("a\tb")).toBe(5);
+			expect(visibleWidth("a\tb", 4)).toBe(6);
+			expect(visibleWidth("a\tb", 2)).toBe(4);
+		});
+
+		it("applies explicit tab width in truncate and wrap", () => {
+			expect(truncateToWidth("\tfoo", 6, undefined, false, 4)).toBe("\tf…");
+			expect(wrapTextWithAnsi("\tfoo", 4, 4)).toEqual(["\t", "foo"]);
 		});
 	});
 

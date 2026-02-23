@@ -176,6 +176,16 @@ export const SETTINGS_SCHEMA = {
 			description: "Use blue instead of green for diff additions",
 		},
 	},
+	"display.tabWidth": {
+		type: "number",
+		default: 3,
+		ui: {
+			tab: "display",
+			label: "Tab width",
+			description: "Default number of spaces used when rendering tab characters",
+			submenu: true,
+		},
+	},
 	defaultThinkingLevel: {
 		type: "enum",
 		values: ["off", "minimal", "low", "medium", "high", "xhigh"] as const,

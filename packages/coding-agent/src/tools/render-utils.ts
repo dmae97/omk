@@ -6,11 +6,14 @@
  */
 import * as os from "node:os";
 import { type Ellipsis, truncateToWidth } from "@oh-my-pi/pi-tui";
-import { pluralize } from "@oh-my-pi/pi-utils";
+import { getIndentation, pluralize } from "@oh-my-pi/pi-utils";
 import type { Theme } from "../modes/theme/theme";
 
-export { Ellipsis, replaceTabs, truncateToWidth } from "@oh-my-pi/pi-tui";
+export { Ellipsis, truncateToWidth } from "@oh-my-pi/pi-tui";
 
+export function replaceTabs(text: string, file?: string): string {
+	return text.replaceAll("\t", getIndentation(file));
+}
 // =============================================================================
 // Standardized Display Constants
 // =============================================================================

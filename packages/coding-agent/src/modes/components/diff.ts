@@ -1,3 +1,4 @@
+import { getIndentation } from "@oh-my-pi/pi-utils";
 import * as Diff from "diff";
 import { theme } from "../../modes/theme/theme";
 import { replaceTabs } from "../../tools/render-utils";
@@ -12,26 +13,30 @@ const DIM_OFF = "\x1b[22m";
  * before the first non-whitespace character; remaining tabs in code
  * content are replaced with spaces (like replaceTabs).
  */
-function visualizeIndent(text: string): string {
+function visualizeIndent(text: string, filePath?: string): string {
 	const match = text.match(/^([ \t]+)/);
-	if (!match) return replaceTabs(text);
+	if (!match) return replaceTabs(text, filePath);
 	const indent = match[1];
 	const rest = text.slice(indent.length);
-	// Normalize: collapse 3-space groups (tab-width) into tab arrows,
-	// then handle remaining tabs and lone spaces.
-	const normalized = indent.replaceAll("\t", "   ");
+	const indentation = getIndentation(filePath);
+	const tabWidth = indentation.length;
+	const leftPadding = Math.floor(tabWidth / 2);
+	const rightPadding = Math.max(0, tabWidth - leftPadding - 1);
+	const tabMarker = `${DIM}${" ".repeat(leftPadding)}→${" ".repeat(rightPadding)}${DIM_OFF}`;
+	// Normalize: collapse configured tab-width groups into tab markers, then handle remaining spaces.
+	const normalized = indent.replaceAll("\t", indentation);
 	let visible = "";
 	let pos = 0;
 	while (pos < normalized.length) {
-		if (pos + 3 <= normalized.length && normalized.slice(pos, pos + 3) === "   ") {
-			visible += `${DIM} → ${DIM_OFF}`;
-			pos += 3;
+		if (pos + tabWidth <= normalized.length && normalized.slice(pos, pos + tabWidth) === indentation) {
+			visible += tabMarker;
+			pos += tabWidth;
 		} else {
 			visible += `${DIM}·${DIM_OFF}`;
 			pos++;
 		}
 	}
-	return `${visible}${replaceTabs(rest)}`;
+	return `${visible}${replaceTabs(rest, filePath)}`;
 }
 
 /**
@@ -96,7 +101,7 @@ function renderIntraLineDiff(oldContent: string, newContent: string): { removedL
 }
 
 export interface RenderDiffOptions {
-	/** File path (unused, kept for API compatibility) */
+	/** File path used to resolve indentation (.editorconfig + defaults) */
 	filePath?: string;
 }
 
@@ -106,7 +111,7 @@ export interface RenderDiffOptions {
  * - Removed lines: red, with inverse on changed tokens
  * - Added lines: green, with inverse on changed tokens
  */
-export function renderDiff(diffText: string, _options: RenderDiffOptions = {}): string {
+export function renderDiff(diffText: string, options: RenderDiffOptions = {}): string {
 	const lines = diffText.split("\n");
 	const result: string[] = [];
 
@@ -154,30 +159,55 @@ export function renderDiff(diffText: string, _options: RenderDiffOptions = {}): 
 				const added = addedLines[0];
 
 				const { removedLine, addedLine } = renderIntraLineDiff(
-					replaceTabs(removed.content),
-					replaceTabs(added.content),
+					replaceTabs(removed.content, options.filePath),
+					replaceTabs(added.content, options.filePath),
 				);
 
-				result.push(theme.fg("toolDiffRemoved", formatLine("-", removed.lineNum, visualizeIndent(removedLine))));
-				result.push(theme.fg("toolDiffAdded", formatLine("+", added.lineNum, visualizeIndent(addedLine))));
+				result.push(
+					theme.fg(
+						"toolDiffRemoved",
+						formatLine("-", removed.lineNum, visualizeIndent(removedLine, options.filePath)),
+					),
+				);
+				result.push(
+					theme.fg("toolDiffAdded", formatLine("+", added.lineNum, visualizeIndent(addedLine, options.filePath))),
+				);
 			} else {
 				// Show all removed lines first, then all added lines
 				for (const removed of removedLines) {
 					result.push(
-						theme.fg("toolDiffRemoved", formatLine("-", removed.lineNum, visualizeIndent(removed.content))),
+						theme.fg(
+							"toolDiffRemoved",
+							formatLine("-", removed.lineNum, visualizeIndent(removed.content, options.filePath)),
+						),
 					);
 				}
 				for (const added of addedLines) {
-					result.push(theme.fg("toolDiffAdded", formatLine("+", added.lineNum, visualizeIndent(added.content))));
+					result.push(
+						theme.fg(
+							"toolDiffAdded",
+							formatLine("+", added.lineNum, visualizeIndent(added.content, options.filePath)),
+						),
+					);
 				}
 			}
 		} else if (parsed.prefix === "+") {
 			// Standalone added line
-			result.push(theme.fg("toolDiffAdded", formatLine("+", parsed.lineNum, visualizeIndent(parsed.content))));
+			result.push(
+				theme.fg(
+					"toolDiffAdded",
+					formatLine("+", parsed.lineNum, visualizeIndent(parsed.content, options.filePath)),
+				),
+			);
 			i++;
 		} else {
 			// Context line
-			result.push(theme.fg("toolDiffContext", formatLine(" ", parsed.lineNum, visualizeIndent(parsed.content))));
+			result.push(
+				theme.fg(
+					"toolDiffContext",
+					formatLine(" ", parsed.lineNum, visualizeIndent(parsed.content, options.filePath)),
+				),
+			);
 			i++;
 		}
 	}

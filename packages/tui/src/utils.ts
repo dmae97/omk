@@ -1,4 +1,5 @@
 import { sliceWithWidth } from "@oh-my-pi/pi-natives";
+import { getDefaultTabWidth, getIndentation } from "@oh-my-pi/pi-utils";
 
 export { Ellipsis, extractSegments, sliceWithWidth, truncateToWidth, wrapTextWithAnsi } from "@oh-my-pi/pi-natives";
 
@@ -6,10 +7,10 @@ export { Ellipsis, extractSegments, sliceWithWidth, truncateToWidth, wrapTextWit
 const SPACE_BUFFER = " ".repeat(512);
 
 /*
- * Replace tabs with 3 spaces for consistent rendering.
+ * Replace tabs with configured spacing for consistent rendering.
  */
 export function replaceTabs(text: string): string {
-	return text.replaceAll("\t", "   ");
+	return text.replaceAll("\t", getIndentation());
 }
 
 /**
@@ -42,10 +43,11 @@ export function visibleWidthRaw(str: string): number {
 	// Fast path: pure ASCII printable
 	let isPureAscii = true;
 	let tabLength = 0;
+	const tabWidth = getDefaultTabWidth();
 	for (let i = 0; i < str.length; i++) {
 		const code = str.charCodeAt(i);
 		if (code === 9) {
-			tabLength += 3;
+			tabLength += tabWidth;
 		} else if (code < 0x20 || code > 0x7e) {
 			isPureAscii = false;
 		}

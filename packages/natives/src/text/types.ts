@@ -41,7 +41,7 @@ declare module "../bindings" {
 		 * @param ellipsisKind Ellipsis strategy (see {@link Ellipsis}).
 		 * @param pad Whether to pad the output to `maxWidth`.
 		 */
-		truncateToWidth(text: string, maxWidth: number, ellipsisKind: number, pad: boolean): string;
+		truncateToWidth(text: string, maxWidth: number, ellipsisKind: number, pad: boolean, tabWidth?: number): string;
 		/**
 		 * Sanitize text output: strip ANSI codes, remove binary garbage, normalize line endings.
 		 */
@@ -52,7 +52,7 @@ declare module "../bindings" {
 		 * @param text UTF-16 input text with optional ANSI escapes.
 		 * @param width Maximum visible width per line.
 		 */
-		wrapTextWithAnsi(text: string, width: number): string[];
+		wrapTextWithAnsi(text: string, width: number, tabWidth?: number): string[];
 		/**
 		 * Slice a range of visible columns from a line.
 		 * @param line UTF-16 input line with optional ANSI escapes.
@@ -60,12 +60,18 @@ declare module "../bindings" {
 		 * @param length Number of visible cells to include.
 		 * @param strict Whether to drop graphemes that overflow the range.
 		 */
-		sliceWithWidth(line: string, startCol: number, length: number, strict: boolean): SliceWithWidthResult;
+		sliceWithWidth(
+			line: string,
+			startCol: number,
+			length: number,
+			strict: boolean,
+			tabWidth?: number,
+		): SliceWithWidthResult;
 		/**
 		 * Measure the visible width of text (excluding ANSI codes).
 		 * @param text UTF-16 input text with optional ANSI escapes.
 		 */
-		visibleWidth(text: string): number;
+		visibleWidth(text: string, tabWidth?: number): number;
 		/** Extract before/after segments around an overlay region.
 		 * @param line UTF-16 input line with optional ANSI escapes.
 		 * @param beforeEnd Column where the "before" segment ends.
@@ -79,6 +85,7 @@ declare module "../bindings" {
 			afterStart: number,
 			afterLen: number,
 			strictAfter: boolean,
+			tabWidth?: number,
 		): ExtractSegmentsResult;
 	}
 }
