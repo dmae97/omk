@@ -298,7 +298,7 @@ class TwoColumnBody implements Component {
 
 	render(width: number): string[] {
 		const leftWidth = Math.floor(width * 0.5);
-		const rightWidth = width - leftWidth - 3;
+		const rightWidth = Math.max(0, width - leftWidth - 3);
 
 		const leftLines = this.leftPane.render(leftWidth);
 		const rightLines = this.rightPane.render(rightWidth);

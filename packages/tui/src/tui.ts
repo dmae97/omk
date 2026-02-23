@@ -188,6 +188,7 @@ export class Container implements Component {
 	}
 
 	render(width: number): string[] {
+		width = Math.max(1, width);
 		const lines: string[] = [];
 		for (const child of this.children) {
 			lines.push(...child.render(width));
