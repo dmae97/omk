@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import * as path from "node:path";
 import type { Skill } from "../../src/extensibility/skills";
+import { resolveLocalUrlToPath } from "../../src/internal-urls";
 import { expandInternalUrls, expandSkillUrls } from "../../src/tools/bash-skill-urls";
 import { ToolError } from "../../src/tools/tool-errors";
 
@@ -182,6 +183,25 @@ describe("expandInternalUrls", () => {
 		});
 		await expect(expandInternalUrls("echo agent://abc", { skills: [], internalRouter: router })).resolves.toBe(
 			`echo ${shellEscape("/tmp/session/abc.md")}`,
+		);
+	});
+
+	it("expands local:// URLs to filesystem paths without requiring preexisting files", async () => {
+		const localOptions = {
+			getArtifactsDir: () => "/tmp/session-artifacts",
+			getSessionId: () => "session-1",
+		};
+		const command = "mv /tmp/source.json local://handoffs/new-file.json";
+		const expectedPath = resolveLocalUrlToPath("local://handoffs/new-file.json", localOptions);
+
+		await expect(expandInternalUrls(command, { skills: [], localOptions })).resolves.toBe(
+			`mv /tmp/source.json ${shellEscape(expectedPath)}`,
+		);
+	});
+
+	it("throws when local:// URL is used without local protocol options", async () => {
+		await expect(expandInternalUrls("mv foo local://bar", { skills: [] })).rejects.toThrow(
+			"Cannot resolve local:// URL in bash command: local protocol options are unavailable for this session.",
 		);
 	});
 

@@ -173,8 +173,12 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 		const internalUrlOptions: InternalUrlExpansionOptions = {
 			skills: this.session.skills ?? [],
 			internalRouter: this.session.internalRouter,
+			localOptions: {
+				getArtifactsDir: this.session.getArtifactsDir,
+				getSessionId: this.session.getSessionId,
+			},
 		};
-		command = await expandInternalUrls(command, internalUrlOptions);
+		command = await expandInternalUrls(command, { ...internalUrlOptions, ensureLocalParentDirs: true });
 
 		// Resolve protocol URLs (skill://, agent://, etc.) in extracted cwd.
 		if (cwd?.includes("://")) {

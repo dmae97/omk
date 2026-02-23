@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed bash internal URL expansion to resolve `local://` targets to concrete filesystem paths, including newly created destination files for commands like `mv src.json local://dest.json`
+- Fixed bash local URL resolution to create missing parent directories under the session local root before command execution, preventing `mv` destination failures for new paths
 ## [13.1.0] - 2026-02-23
 ### Breaking Changes
 

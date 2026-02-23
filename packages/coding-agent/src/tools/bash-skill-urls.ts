@@ -1,5 +1,7 @@
+import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { Skill } from "../extensibility/skills";
+import { type LocalProtocolOptions, resolveLocalUrlToPath } from "../internal-urls";
 import { validateRelativePath } from "../internal-urls/skill-protocol";
 import type { InternalResource } from "../internal-urls/types";
 import { ToolError } from "./tool-errors";
@@ -9,9 +11,9 @@ const SKILL_URL_PATTERN = /'skill:\/\/[^'\s")`\\]+'|"skill:\/\/[^"\s')`\\]+"|ski
 
 /** Regex to find supported internal URL tokens in command text. */
 const INTERNAL_URL_PATTERN =
-	/'(?:skill|agent|artifact|plan|memory|rule):\/\/[^'\s")`\\]+'|"(?:skill|agent|artifact|plan|memory|rule):\/\/[^"\s')`\\]+"|(?:skill|agent|artifact|plan|memory|rule):\/\/[^\s'")`\\]+/g;
+	/'(?:skill|agent|artifact|plan|memory|rule|local):\/\/[^'\s")`\\]+'|"(?:skill|agent|artifact|plan|memory|rule|local):\/\/[^"\s')`\\]+"|(?:skill|agent|artifact|plan|memory|rule|local):\/\/[^\s'")`\\]+/g;
 
-const SUPPORTED_INTERNAL_SCHEMES = ["skill", "agent", "artifact", "plan", "memory", "rule"] as const;
+const SUPPORTED_INTERNAL_SCHEMES = ["skill", "agent", "artifact", "plan", "memory", "rule", "local"] as const;
 
 type SupportedInternalScheme = (typeof SUPPORTED_INTERNAL_SCHEMES)[number];
 
@@ -24,6 +26,8 @@ export interface InternalUrlExpansionOptions {
 	skills: readonly Skill[];
 	noEscape?: boolean;
 	internalRouter?: InternalUrlResolver;
+	localOptions?: LocalProtocolOptions;
+	ensureLocalParentDirs?: boolean;
 }
 
 /**
@@ -102,6 +106,8 @@ async function resolveInternalUrlToPath(
 	url: string,
 	skills: readonly Skill[],
 	internalRouter?: InternalUrlResolver,
+	localOptions?: LocalProtocolOptions,
+	ensureLocalParentDirs?: boolean,
 ): Promise<string> {
 	const scheme = extractScheme(url);
 	if (!scheme) {
@@ -110,6 +116,19 @@ async function resolveInternalUrlToPath(
 
 	if (scheme === "skill") {
 		return resolveSkillUrlToPath(url, skills);
+	}
+
+	if (scheme === "local") {
+		if (!localOptions) {
+			throw new ToolError(
+				"Cannot resolve local:// URL in bash command: local protocol options are unavailable for this session.",
+			);
+		}
+		const resolvedLocalPath = resolveLocalUrlToPath(url, localOptions);
+		if (ensureLocalParentDirs) {
+			await fs.mkdir(path.dirname(resolvedLocalPath), { recursive: true });
+		}
+		return resolvedLocalPath;
 	}
 
 	if (!internalRouter || !internalRouter.canHandle(url)) {
@@ -169,7 +188,13 @@ export async function expandInternalUrls(command: string, options: InternalUrlEx
 		if (index === undefined) continue;
 
 		const url = unquoteToken(token);
-		const resolvedPath = await resolveInternalUrlToPath(url, options.skills, options.internalRouter);
+		const resolvedPath = await resolveInternalUrlToPath(
+			url,
+			options.skills,
+			options.internalRouter,
+			options.localOptions,
+			options.ensureLocalParentDirs,
+		);
 		const replacement = options.noEscape ? resolvedPath : shellEscape(resolvedPath);
 		expanded = `${expanded.slice(0, index)}${replacement}${expanded.slice(index + token.length)}`;
 	}

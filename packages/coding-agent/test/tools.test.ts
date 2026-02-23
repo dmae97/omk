@@ -263,6 +263,17 @@ describe("Coding Agent Tools", () => {
 
 			expect(getTextOutput(result)).toContain("Successfully wrote");
 		});
+		it("should write to a new local:// path under the session local root", async () => {
+			const localPath = "local://handoffs/new-output.json";
+			const content = '{"ok":true}\n';
+			const expectedPath = path.join(testDir, "session", "local", "handoffs", "new-output.json");
+
+			const result = await writeTool.execute("test-call-4-local", { path: localPath, content });
+
+			expect(getTextOutput(result)).toContain(`Successfully wrote ${content.length} bytes to ${localPath}`);
+			expect(fs.existsSync(expectedPath)).toBe(true);
+			expect(fs.readFileSync(expectedPath, "utf-8")).toBe(content);
+		});
 	});
 
 	describe("edit tool", () => {
@@ -410,6 +421,18 @@ function b() {
 
 			expect(getTextOutput(result)).toContain("test output");
 			expect(result.details).toBeUndefined();
+		});
+
+		it("should resolve local:// destination paths for mv commands", async () => {
+			const sourcePath = path.join(testDir, "move-source.json");
+			const targetPath = path.join(testDir, "session", "local", "moved-via-bash.json");
+			fs.writeFileSync(sourcePath, '{"move":true}\n');
+
+			await bashTool.execute("test-call-8-local-mv", { command: `mv ${sourcePath} local://moved-via-bash.json` });
+
+			expect(fs.existsSync(sourcePath)).toBe(false);
+			expect(fs.existsSync(targetPath)).toBe(true);
+			expect(fs.readFileSync(targetPath, "utf-8")).toBe('{"move":true}\n');
 		});
 
 		it("should stream output updates", async () => {
