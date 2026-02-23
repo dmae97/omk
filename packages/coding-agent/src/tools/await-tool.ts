@@ -5,14 +5,9 @@ import awaitDescription from "../prompts/tools/await.md" with { type: "text" };
 import type { ToolSession } from "./index";
 
 const awaitSchema = Type.Object({
-	job_ids: Type.Optional(
+	jobs: Type.Optional(
 		Type.Array(Type.String(), {
 			description: "Specific job IDs to wait for. If omitted, waits for any running job.",
-		}),
-	),
-	timeout: Type.Optional(
-		Type.Number({
-			description: "Maximum seconds to wait before returning (default: 300)",
 		}),
 	),
 });
@@ -31,7 +26,6 @@ interface AwaitResult {
 
 export interface AwaitToolDetails {
 	jobs: AwaitResult[];
-	timedOut: boolean;
 }
 
 export class AwaitTool implements AgentTool<typeof awaitSchema, AwaitToolDetails> {
@@ -61,12 +55,11 @@ export class AwaitTool implements AgentTool<typeof awaitSchema, AwaitToolDetails
 		if (!manager) {
 			return {
 				content: [{ type: "text", text: "Async execution is disabled; no background jobs to poll." }],
-				details: { jobs: [], timedOut: false },
+				details: { jobs: [] },
 			};
 		}
 
-		const timeoutMs = (params.timeout ?? 300) * 1000;
-		const requestedIds = params.job_ids;
+		const requestedIds = params.jobs;
 
 		// Resolve which jobs to watch
 		const jobsToWatch = requestedIds?.length
@@ -79,19 +72,18 @@ export class AwaitTool implements AgentTool<typeof awaitSchema, AwaitToolDetails
 				: "No running background jobs to wait for.";
 			return {
 				content: [{ type: "text", text: message }],
-				details: { jobs: [], timedOut: false },
+				details: { jobs: [] },
 			};
 		}
 
 		// If all watched jobs are already done, return immediately
 		const runningJobs = jobsToWatch.filter(j => j.status === "running");
 		if (runningJobs.length === 0) {
-			return this.#buildResult(jobsToWatch, false);
+			return this.#buildResult(jobsToWatch);
 		}
 
-		// Block until at least one running job finishes or timeout
+		// Block until at least one running job finishes or the call is aborted
 		const racePromises: Promise<unknown>[] = runningJobs.map(j => j.promise);
-		racePromises.push(Bun.sleep(timeoutMs));
 
 		if (signal) {
 			const { promise: abortPromise, resolve: abortResolve } = Promise.withResolvers<void>();
@@ -108,14 +100,10 @@ export class AwaitTool implements AgentTool<typeof awaitSchema, AwaitToolDetails
 		}
 
 		if (signal?.aborted) {
-			return this.#buildResult(jobsToWatch, false);
+			return this.#buildResult(jobsToWatch);
 		}
 
-		// Check if we timed out (all watched jobs still running)
-		const stillRunning = jobsToWatch.filter(j => j.status === "running");
-		const timedOut = stillRunning.length === runningJobs.length;
-
-		return this.#buildResult(jobsToWatch, timedOut);
+		return this.#buildResult(jobsToWatch);
 	}
 
 	#buildResult(
@@ -128,7 +116,6 @@ export class AwaitTool implements AgentTool<typeof awaitSchema, AwaitToolDetails
 			resultText?: string;
 			errorText?: string;
 		}[],
-		timedOut: boolean,
 	): AgentToolResult<AwaitToolDetails> {
 		const now = Date.now();
 		const jobResults: AwaitResult[] = jobs.map(j => ({
@@ -145,10 +132,6 @@ export class AwaitTool implements AgentTool<typeof awaitSchema, AwaitToolDetails
 		const running = jobResults.filter(j => j.status === "running");
 
 		const lines: string[] = [];
-		if (timedOut) {
-			lines.push("Timed out waiting for jobs to complete.\n");
-		}
-
 		if (completed.length > 0) {
 			lines.push(`## Completed (${completed.length})\n`);
 			for (const j of completed) {
@@ -173,7 +156,7 @@ export class AwaitTool implements AgentTool<typeof awaitSchema, AwaitToolDetails
 
 		return {
 			content: [{ type: "text", text: lines.join("\n") }],
-			details: { jobs: jobResults, timedOut },
+			details: { jobs: jobResults },
 		};
 	}
 }

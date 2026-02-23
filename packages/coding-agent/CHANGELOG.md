@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+### Breaking Changes
+
+- Removed `timeout` parameter from await tool—tool now waits indefinitely until jobs complete or the call is aborted
+- Renamed `job_ids` parameter to `jobs` in await tool schema
+- Removed `timedOut` field from await tool result details
 
 ## [13.1.1] - 2026-02-23
 
