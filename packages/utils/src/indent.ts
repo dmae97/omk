@@ -26,11 +26,6 @@ interface ParsedEditorConfig {
 	sections: EditorConfigSection[];
 }
 
-/** Cached parsed `.editorconfig` value keyed by file path and mtime */
-interface CachedEditorConfig {
-	mtimeMs: number;
-	parsed: ParsedEditorConfig;
-}
 
 /** Effective editorconfig indent-related properties merged for one target file */
 interface EditorConfigMatch {
@@ -39,7 +34,9 @@ interface EditorConfigMatch {
 	tabWidth?: number;
 }
 
-const editorConfigCache = new Map<string, CachedEditorConfig>();
+const editorConfigCache = new Map<string, ParsedEditorConfig>();
+const editorConfigChainCache = new Map<string, Array<{ dir: string; parsed: ParsedEditorConfig }>>();
+const indentationCache = new Map<string, string>();
 let defaultTabWidth = DEFAULT_TAB_WIDTH;
 
 function clampTabWidth(value: number): number {
@@ -98,19 +95,8 @@ function parseEditorConfigFile(content: string): ParsedEditorConfig {
 }
 
 function parseCachedEditorConfig(configPath: string): ParsedEditorConfig | null {
-	let stat: fs.Stats;
-	try {
-		stat = fs.statSync(configPath);
-	} catch {
-		return null;
-	}
-
-	if (!stat.isFile()) return null;
-
 	const cached = editorConfigCache.get(configPath);
-	if (cached && cached.mtimeMs === stat.mtimeMs) {
-		return cached.parsed;
-	}
+	if (cached) return cached;
 
 	let content: string;
 	try {
@@ -120,7 +106,7 @@ function parseCachedEditorConfig(configPath: string): ParsedEditorConfig | null 
 	}
 
 	const parsed = parseEditorConfigFile(content);
-	editorConfigCache.set(configPath, { mtimeMs: stat.mtimeMs, parsed });
+	editorConfigCache.set(configPath, parsed);
 	return parsed;
 }
 
@@ -151,6 +137,9 @@ function resolveFilePath(file: string): string {
 }
 
 function collectEditorConfigChain(startDir: string): Array<{ dir: string; parsed: ParsedEditorConfig }> {
+	const cached = editorConfigChainCache.get(startDir);
+	if (cached) return cached;
+
 	const chain: Array<{ dir: string; parsed: ParsedEditorConfig }> = [];
 	let cursor = path.resolve(startDir);
 
@@ -167,7 +156,9 @@ function collectEditorConfigChain(startDir: string): Array<{ dir: string; parsed
 		cursor = parent;
 	}
 
-	return chain.reverse();
+	const result = chain.reverse();
+	editorConfigChainCache.set(startDir, result);
+	return result;
 }
 
 function resolveEditorConfigMatch(absoluteFile: string): EditorConfigMatch | null {
@@ -239,6 +230,7 @@ function resolveEditorConfigTabWidth(match: EditorConfigMatch | null, fallbackWi
  */
 export function setDefaultTabWidth(width: number): void {
 	defaultTabWidth = clampTabWidth(width);
+	indentationCache.clear();
 }
 
 /**
@@ -258,12 +250,16 @@ export function getDefaultTabWidth(): number {
  * @returns A string containing N spaces representing one tab
  */
 export function getIndentation(file?: string): string {
-	const fallbackWidth = getDefaultTabWidth();
-	if (!file) return " ".repeat(fallbackWidth);
+	if (!file) return " ".repeat(getDefaultTabWidth());
 
 	const absoluteFile = resolveFilePath(file);
+	const cached = indentationCache.get(absoluteFile);
+	if (cached) return cached;
+
+	const fallbackWidth = getDefaultTabWidth();
 	const editorConfigMatch = resolveEditorConfigMatch(absoluteFile);
 	const resolvedWidth = resolveEditorConfigTabWidth(editorConfigMatch, fallbackWidth) ?? fallbackWidth;
-	const width = clampTabWidth(resolvedWidth);
-	return " ".repeat(width);
+	const result = " ".repeat(clampTabWidth(resolvedWidth));
+	indentationCache.set(absoluteFile, result);
+	return result;
 }
