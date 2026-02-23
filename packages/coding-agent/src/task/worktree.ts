@@ -2,15 +2,9 @@ import type { Dirent } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import path from "node:path";
-import { isEnoent, Snowflake } from "@oh-my-pi/pi-utils";
+import { isEnoent, logger, Snowflake } from "@oh-my-pi/pi-utils";
 import { getWorktreeDir } from "@oh-my-pi/pi-utils/dirs";
 import { $ } from "bun";
-
-async function gitAuthorFlags(cwd: string): Promise<string[]> {
-	const name = (await $`git config user.name`.cwd(cwd).quiet().nothrow().text()).trim() || "omp";
-	const email = (await $`git config user.email`.cwd(cwd).quiet().nothrow().text()).trim() || "omp@task";
-	return [`-c`, `user.name=${name}`, `-c`, `user.email=${email}`];
-}
 
 /** Baseline state for a single git repository. */
 export interface RepoBaseline {
@@ -191,8 +185,7 @@ export async function applyBaseline(worktreeDir: string, baseline: WorktreeBasel
 		const hasChanges = (await $`git status --porcelain`.cwd(nestedDir).quiet().nothrow().text()).trim();
 		if (hasChanges) {
 			await $`git add -A`.cwd(nestedDir).quiet();
-			const flags = await gitAuthorFlags(nestedDir);
-			await $`git ${flags} commit -m omp-baseline --allow-empty`.cwd(nestedDir).quiet();
+			await $`git commit -m omp-baseline --allow-empty`.cwd(nestedDir).quiet();
 			// Update baseline to reflect the committed state — prevents double-apply
 			// in captureRepoDeltaPatch's temp-index path
 			entry.baseline.headCommit = (await $`git rev-parse HEAD`.cwd(nestedDir).quiet().text()).trim();
@@ -355,8 +348,7 @@ export async function applyNestedPatches(
 		if (hasChanges) {
 			const msg = (await commitMessage?.(combinedDiff)) ?? "changes from isolated task(s)";
 			await $`git add -A`.cwd(nestedDir).quiet();
-			const flags = await gitAuthorFlags(nestedDir);
-			await $`git ${flags} commit -m ${msg}`.cwd(nestedDir).quiet();
+			await $`git commit -m ${msg}`.cwd(nestedDir).quiet();
 		}
 	}
 }
@@ -467,13 +459,23 @@ export async function commitToBranch(
 			const patchPath = path.join(os.tmpdir(), `omp-branch-patch-${Snowflake.next()}.patch`);
 			try {
 				await Bun.write(patchPath, rootPatch);
-				await $`git apply --binary ${patchPath}`.cwd(tmpDir).quiet();
+				const applyResult = await $`git apply --binary ${patchPath}`.cwd(tmpDir).quiet().nothrow();
+				if (applyResult.exitCode !== 0) {
+					const stderr = applyResult.stderr.toString().slice(0, 2000);
+					logger.error("commitToBranch: git apply failed", {
+						taskId,
+						exitCode: applyResult.exitCode,
+						stderr,
+						patchSize: rootPatch.length,
+						patchHead: rootPatch.slice(0, 500),
+					});
+					throw new Error(`git apply failed for task ${taskId}: ${stderr}`);
+				}
 			} finally {
 				await fs.rm(patchPath, { force: true });
 			}
 			await $`git add -A`.cwd(tmpDir).quiet();
-			const flags = await gitAuthorFlags(tmpDir);
-			await $`git ${flags} commit -m ${commitMessage}`.cwd(tmpDir).quiet();
+			await $`git commit -m ${commitMessage}`.cwd(tmpDir).quiet();
 		} finally {
 			await $`git worktree remove -f ${tmpDir}`.cwd(repoRoot).quiet().nothrow();
 			await fs.rm(tmpDir, { recursive: true, force: true });
@@ -490,8 +492,8 @@ export interface MergeBranchResult {
 }
 
 /**
- * Merge task branches sequentially into the working tree.
- * Each branch gets a --no-ff merge commit preserving the task identity.
+ * Cherry-pick task branch commits sequentially onto HEAD.
+ * Each branch has a single commit that gets replayed cleanly.
  * Stops on first conflict and reports which branches succeeded.
  */
 export async function mergeTaskBranches(
@@ -501,14 +503,11 @@ export async function mergeTaskBranches(
 	const merged: string[] = [];
 	const failed: string[] = [];
 
-	for (const { branchName, taskId, description } of branches) {
-		const mergeMessage = description || taskId;
-
-		const result = await $`git merge --no-ff -m ${mergeMessage} ${branchName}`.cwd(repoRoot).quiet().nothrow();
+	for (const { branchName } of branches) {
+		const result = await $`git cherry-pick ${branchName}`.cwd(repoRoot).quiet().nothrow();
 
 		if (result.exitCode !== 0) {
-			// Abort the failed merge to restore clean state
-			await $`git merge --abort`.cwd(repoRoot).quiet().nothrow();
+			await $`git cherry-pick --abort`.cwd(repoRoot).quiet().nothrow();
 			const stderr = result.stderr.toString().trim();
 			failed.push(branchName);
 			return {

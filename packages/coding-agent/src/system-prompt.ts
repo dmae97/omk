@@ -421,6 +421,8 @@ export interface BuildSystemPromptOptions {
 	rules?: Array<{ name: string; description?: string; path: string; globs?: string[] }>;
 	/** Intent field name injected into every tool schema. If set, explains the field in the prompt. */
 	intentField?: string;
+	/** Encourage the agent to delegate via tasks unless changes are trivial. */
+	eagerTasks?: boolean;
 }
 
 /** Build the system prompt with tools, guidelines, and context */
@@ -442,6 +444,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		preloadedSkills: providedPreloadedSkills,
 		rules,
 		intentField,
+		eagerTasks = false,
 	} = options;
 	const resolvedCwd = cwd ?? getProjectDir();
 	const preloadedSkills = providedPreloadedSkills;
@@ -614,5 +617,6 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		appendSystemPrompt: resolvedAppendPrompt ?? "",
 		intentTracing: !!intentField,
 		intentField: intentField ?? "",
+		eagerTasks,
 	});
 }

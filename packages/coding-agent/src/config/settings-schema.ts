@@ -577,6 +577,15 @@ export const SETTINGS_SCHEMA = {
 			submenu: true,
 		},
 	},
+	"task.eager": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "tools",
+			label: "Eager task delegation",
+			description: "Encourage the agent to delegate work to subagents unless changes are trivial",
+		},
+	},
 	"task.maxConcurrency": {
 		type: "number",
 		default: 32,

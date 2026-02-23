@@ -846,7 +846,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 						preloadedSkills: task.preloadedSkills,
 						promptTemplates,
 					});
-					if (mergeMode === "branch") {
+					if (mergeMode === "branch" && result.exitCode === 0) {
 						const commitResult = await commitToBranch(isolationDir, baseline, task.id, task.description);
 						return {
 							...result,
@@ -854,14 +854,17 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 							nestedPatches: commitResult?.nestedPatches,
 						};
 					}
-					const delta = await captureDeltaPatch(isolationDir, baseline);
-					const patchPath = path.join(effectiveArtifactsDir, `${task.id}.patch`);
-					await Bun.write(patchPath, delta.rootPatch);
-					return {
-						...result,
-						patchPath,
-						nestedPatches: delta.nestedPatches,
-					};
+					if (result.exitCode === 0) {
+						const delta = await captureDeltaPatch(isolationDir, baseline);
+						const patchPath = path.join(effectiveArtifactsDir, `${task.id}.patch`);
+						await Bun.write(patchPath, delta.rootPatch);
+						return {
+							...result,
+							patchPath,
+							nestedPatches: delta.nestedPatches,
+						};
+					}
+					return result;
 				} catch (err) {
 					const message = err instanceof Error ? err.message : String(err);
 					return {
