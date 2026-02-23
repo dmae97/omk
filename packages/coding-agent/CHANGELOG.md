@@ -13,6 +13,7 @@
 ### Changed
 
 - Renamed `deviceScaleFactor` parameter to `device_scale_factor` in browser viewport configuration for consistency with snake_case naming convention
+- Moved intent field documentation from per-tool JSON schema descriptions into a single system prompt block, reducing token overhead proportional to tool count
 
 ## [13.0.1] - 2026-02-22
 ### Changed

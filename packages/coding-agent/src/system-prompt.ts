@@ -419,6 +419,8 @@ export interface BuildSystemPromptOptions {
 	preloadedSkills?: Skill[];
 	/** Pre-loaded rulebook rules (rules with descriptions, excluding TTSR and always-apply). */
 	rules?: Array<{ name: string; description?: string; path: string; globs?: string[] }>;
+	/** Intent field name injected into every tool schema. If set, explains the field in the prompt. */
+	intentField?: string;
 }
 
 /** Build the system prompt with tools, guidelines, and context */
@@ -439,6 +441,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		skills: providedSkills,
 		preloadedSkills: providedPreloadedSkills,
 		rules,
+		intentField,
 	} = options;
 	const resolvedCwd = cwd ?? getProjectDir();
 	const preloadedSkills = providedPreloadedSkills;
@@ -609,5 +612,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		dateTime,
 		cwd: resolvedCwd,
 		appendSystemPrompt: resolvedAppendPrompt ?? "",
+		intentTracing: !!intentField,
+		intentField: intentField ?? "",
 	});
 }

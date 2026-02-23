@@ -1,4 +1,11 @@
-import { Agent, type AgentEvent, type AgentMessage, type AgentTool, type ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import {
+	Agent,
+	type AgentEvent,
+	type AgentMessage,
+	type AgentTool,
+	INTENT_FIELD,
+	type ThinkingLevel,
+} from "@oh-my-pi/pi-agent-core";
 import { type Message, type Model, supportsXhigh } from "@oh-my-pi/pi-ai";
 import { prewarmOpenAICodexResponses } from "@oh-my-pi/pi-ai/providers/openai-codex-responses";
 import type { Component } from "@oh-my-pi/pi-tui";
@@ -1114,6 +1121,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	});
 
 	const repeatToolDescriptions = settings.get("repeatToolDescriptions");
+	const intentField = settings.get("tools.intentTracing") || $env.PI_INTENT_TRACING === "1" ? INTENT_FIELD : undefined;
 	const rebuildSystemPrompt = async (toolNames: string[], tools: Map<string, AgentTool>): Promise<string> => {
 		toolContextStore.setToolNames(toolNames);
 		const memoryInstructions = await buildMemoryToolDeveloperInstructions(agentDir, settings);
@@ -1128,6 +1136,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			skillsSettings: settings.getGroup("skills") as SkillsSettings,
 			appendSystemPrompt: memoryInstructions,
 			repeatToolDescriptions,
+			intentField,
 		});
 
 		if (options.systemPrompt === undefined) {
@@ -1146,6 +1155,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 				customPrompt: options.systemPrompt,
 				appendSystemPrompt: memoryInstructions,
 				repeatToolDescriptions,
+				intentField,
 			});
 		}
 		return options.systemPrompt(defaultPrompt);
@@ -1283,7 +1293,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		},
 		cursorExecHandlers,
 		transformToolCallArguments: obfuscator?.hasSecrets() ? args => obfuscator!.deobfuscateObject(args) : undefined,
-		intentTracing: settings.get("tools.intentTracing") || $env.PI_INTENT_TRACING === "1",
+		intentTracing: !!intentField,
 	});
 	cursorEventEmitter = event => agent.emitExternalEvent(event);
 

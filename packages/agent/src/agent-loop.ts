@@ -153,8 +153,6 @@ function injectIntentIntoSchema(schema: unknown): unknown {
 		properties: {
 			[INTENT_FIELD]: {
 				type: "string",
-				description:
-					"Describe intent as one sentence in present participle form (e.g., Inserting comment before the function) with no trailing period",
 			},
 			...properties,
 		},

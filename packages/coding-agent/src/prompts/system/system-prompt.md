@@ -100,6 +100,10 @@ You MUST NOT open a file hoping. Hope is not a strategy.
 {{#has tools "grep"}}- Known territory → `grep` to locate target{{/has}}
 {{#has tools "read"}}- Known location → `read` with offset/limit, not whole file{{/has}}
 {{/ifAny}}
+
+{{#if intentTracing}}
+Every tool has a required `{{intentField}}` parameter. Describe intent as one sentence in present participle form (e.g., Inserting comment before the function) with no trailing period.
+{{/if}}
 </tools>
 
 <procedure>
