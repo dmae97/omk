@@ -442,13 +442,14 @@ export async function commitToBranch(
 	baseline: WorktreeBaseline,
 	taskId: string,
 	description: string | undefined,
+	commitMessage?: (diff: string) => Promise<string | null>,
 ): Promise<CommitToBranchResult | null> {
 	const { rootPatch, nestedPatches } = await captureDeltaPatch(isolationDir, baseline);
 	if (!rootPatch.trim() && nestedPatches.length === 0) return null;
 
 	const repoRoot = baseline.root.repoRoot;
 	const branchName = `omp/task/${taskId}`;
-	const commitMessage = description || taskId;
+	const fallbackMessage = description || taskId;
 
 	// Only create a branch if the root repo has changes
 	if (rootPatch.trim()) {
@@ -475,7 +476,8 @@ export async function commitToBranch(
 				await fs.rm(patchPath, { force: true });
 			}
 			await $`git add -A`.cwd(tmpDir).quiet();
-			await $`git commit -m ${commitMessage}`.cwd(tmpDir).quiet();
+			const msg = (commitMessage && (await commitMessage(rootPatch))) || fallbackMessage;
+			await $`git commit -m ${msg}`.cwd(tmpDir).quiet();
 		} finally {
 			await $`git worktree remove -f ${tmpDir}`.cwd(repoRoot).quiet().nothrow();
 			await fs.rm(tmpDir, { recursive: true, force: true });

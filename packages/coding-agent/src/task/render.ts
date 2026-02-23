@@ -728,7 +728,8 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 		result.output,
 	);
 	const aborted = result.aborted ?? false;
-	const success = !aborted && result.exitCode === 0;
+	const mergeFailed = !aborted && result.exitCode === 0 && !!result.error;
+	const success = !aborted && result.exitCode === 0 && !result.error;
 	const needsWarning = Boolean(missingCompleteWarning) && success;
 	const icon = aborted
 		? theme.status.aborted
@@ -737,8 +738,16 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 			: success
 				? theme.status.success
 				: theme.status.error;
-	const iconColor = needsWarning ? "warning" : success ? "success" : "error";
-	const statusText = aborted ? "aborted" : needsWarning ? "warning" : success ? "done" : "failed";
+	const iconColor = needsWarning ? "warning" : success ? "success" : mergeFailed ? "warning" : "error";
+	const statusText = aborted
+		? "aborted"
+		: needsWarning
+			? "warning"
+			: success
+				? "done"
+				: mergeFailed
+					? "merge failed"
+					: "failed";
 
 	// Main status line: id: description [status] · stats · ⟨agent⟩
 	const description = result.description?.trim();
@@ -852,8 +861,8 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 	}
 
 	// Error message
-	if (result.error && !success) {
-		lines.push(`${continuePrefix}${theme.fg("error", truncateToWidth(result.error, 70))}`);
+	if (result.error && (!success || mergeFailed)) {
+		lines.push(`${continuePrefix}${theme.fg(mergeFailed ? "warning" : "error", truncateToWidth(result.error, 70))}`);
 	}
 
 	return lines;
@@ -904,15 +913,20 @@ export function renderResult(
 				});
 
 				const abortedCount = details.results.filter(r => r.aborted).length;
-				const successCount = details.results.filter(r => !r.aborted && r.exitCode === 0).length;
-				const failCount = details.results.length - successCount - abortedCount;
+				const mergeFailedCount = details.results.filter(r => !r.aborted && r.exitCode === 0 && r.error).length;
+				const successCount = details.results.filter(r => !r.aborted && r.exitCode === 0 && !r.error).length;
+				const failCount = details.results.length - successCount - mergeFailedCount - abortedCount;
 				let summary = `${theme.fg("dim", "Total:")} `;
 				if (abortedCount > 0) {
 					summary += theme.fg("error", `${abortedCount} aborted`);
-					if (successCount > 0 || failCount > 0) summary += theme.sep.dot;
+					if (successCount > 0 || mergeFailedCount > 0 || failCount > 0) summary += theme.sep.dot;
 				}
 				if (successCount > 0) {
 					summary += theme.fg("success", `${successCount} succeeded`);
+					if (mergeFailedCount > 0 || failCount > 0) summary += theme.sep.dot;
+				}
+				if (mergeFailedCount > 0) {
+					summary += theme.fg("warning", `${mergeFailedCount} merge failed`);
 					if (failCount > 0) summary += theme.sep.dot;
 				}
 				if (failCount > 0) {

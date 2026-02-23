@@ -847,22 +847,53 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 						promptTemplates,
 					});
 					if (mergeMode === "branch" && result.exitCode === 0) {
-						const commitResult = await commitToBranch(isolationDir, baseline, task.id, task.description);
-						return {
-							...result,
-							branchName: commitResult?.branchName,
-							nestedPatches: commitResult?.nestedPatches,
-						};
+						try {
+							const commitMsg =
+								commitStyle === "ai" && this.session.modelRegistry
+									? async (diff: string) => {
+											const smolModel = this.session.settings.getModelRole("smol");
+											return generateCommitMessage(
+												diff,
+												this.session.modelRegistry!,
+												smolModel,
+												this.session.getSessionId?.() ?? undefined,
+											);
+										}
+									: undefined;
+							const commitResult = await commitToBranch(
+								isolationDir,
+								baseline,
+								task.id,
+								task.description,
+								commitMsg,
+							);
+							return {
+								...result,
+								branchName: commitResult?.branchName,
+								nestedPatches: commitResult?.nestedPatches,
+							};
+						} catch (mergeErr) {
+							// Agent succeeded but branch commit failed — clean up stale branch
+							const branchName = `omp/task/${task.id}`;
+							await $`git branch -D ${branchName}`.cwd(baseline.root.repoRoot).quiet().nothrow();
+							const msg = mergeErr instanceof Error ? mergeErr.message : String(mergeErr);
+							return { ...result, error: `Merge failed: ${msg}` };
+						}
 					}
 					if (result.exitCode === 0) {
-						const delta = await captureDeltaPatch(isolationDir, baseline);
-						const patchPath = path.join(effectiveArtifactsDir, `${task.id}.patch`);
-						await Bun.write(patchPath, delta.rootPatch);
-						return {
-							...result,
-							patchPath,
-							nestedPatches: delta.nestedPatches,
-						};
+						try {
+							const delta = await captureDeltaPatch(isolationDir, baseline);
+							const patchPath = path.join(effectiveArtifactsDir, `${task.id}.patch`);
+							await Bun.write(patchPath, delta.rootPatch);
+							return {
+								...result,
+								patchPath,
+								nestedPatches: delta.nestedPatches,
+							};
+						} catch (patchErr) {
+							const msg = patchErr instanceof Error ? patchErr.message : String(patchErr);
+							return { ...result, error: `Patch capture failed: ${msg}` };
+						}
 					}
 					return result;
 				} catch (err) {
@@ -1070,12 +1101,18 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 			}
 
 			// Build final output - match plugin format
-			const successCount = results.filter(r => r.exitCode === 0).length;
+			const successCount = results.filter(r => r.exitCode === 0 && !r.error).length;
 			const cancelledCount = results.filter(r => r.aborted).length;
 			const totalDuration = Date.now() - startTime;
 
 			const summaries = results.map(r => {
-				const status = r.aborted ? "cancelled" : r.exitCode === 0 ? "completed" : `failed (exit ${r.exitCode})`;
+				const status = r.aborted
+					? "cancelled"
+					: r.exitCode === 0 && r.error
+						? "merge failed"
+						: r.exitCode === 0
+							? "completed"
+							: `failed (exit ${r.exitCode})`;
 				const output = r.output.trim() || r.stderr.trim() || "(no output)";
 				const outputCharCount = r.outputMeta?.charCount ?? output.length;
 				const fullOutputThreshold = 5000;

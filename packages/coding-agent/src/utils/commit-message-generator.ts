@@ -14,6 +14,25 @@ import commitSystemPrompt from "../prompts/system/commit-message-system.md" with
 const COMMIT_SYSTEM_PROMPT = renderPromptTemplate(commitSystemPrompt);
 const MAX_DIFF_CHARS = 4000;
 
+/** Paths that should be excluded from commit message generation diffs. */
+const NOISE_PATH_PREFIXES = ["node_modules/", ".yarn/", ".pnp.", "dist/", "build/", ".next/", "coverage/"];
+
+/** Strip diff hunks for noisy paths that drown out real changes. */
+function filterDiffNoise(diff: string): string {
+	const lines = diff.split("\n");
+	const filtered: string[] = [];
+	let skip = false;
+	for (const line of lines) {
+		if (line.startsWith("diff --git ")) {
+			// Extract b/ path from "diff --git a/... b/..."
+			const bPath = line.split(" b/")[1];
+			skip = bPath != null && NOISE_PATH_PREFIXES.some(p => bPath.startsWith(p));
+		}
+		if (!skip) filtered.push(line);
+	}
+	return filtered.join("\n");
+}
+
 function getSmolModelCandidates(registry: ModelRegistry, savedSmolModel?: string): Model<Api>[] {
 	const availableModels = registry.getAvailable();
 	if (availableModels.length === 0) return [];
@@ -62,7 +81,13 @@ export async function generateCommitMessage(
 		return null;
 	}
 
-	const truncatedDiff = diff.length > MAX_DIFF_CHARS ? `${diff.slice(0, MAX_DIFF_CHARS)}\n… (truncated)` : diff;
+	const cleanDiff = filterDiffNoise(diff);
+	const truncatedDiff =
+		cleanDiff.length > MAX_DIFF_CHARS ? `${cleanDiff.slice(0, MAX_DIFF_CHARS)}\n… (truncated)` : cleanDiff;
+	if (!truncatedDiff.trim()) {
+		logger.debug("commit-msg-generator: diff is empty after noise filtering");
+		return null;
+	}
 	const userMessage = `<diff>\n${truncatedDiff}\n</diff>`;
 
 	for (const model of candidates) {
