@@ -438,7 +438,7 @@ export class Settings {
 
 		// Build merged view
 		this.#rebuildMerged();
-		setDefaultTabWidth(this.get("display.tabWidth"));
+		this.#fireAllHooks();
 		return this;
 	}
 
@@ -609,6 +609,16 @@ export class Settings {
 	#rebuildMerged(): void {
 		this.#merged = this.#deepMerge(this.#deepMerge({}, this.#global), this.#project);
 		this.#merged = this.#deepMerge(this.#merged, this.#overrides);
+	}
+
+	#fireAllHooks(): void {
+		for (const key of Object.keys(SETTING_HOOKS) as SettingPath[]) {
+			const hook = SETTING_HOOKS[key];
+			if (hook) {
+				const value = this.get(key);
+				hook(value, value);
+			}
+		}
 	}
 
 	#deepMerge(base: RawSettings, overrides: RawSettings): RawSettings {
