@@ -219,30 +219,26 @@ Match skill descriptions to the task domain. If a skill is relevant, you MUST re
 Relative paths in skill files resolve against the skill directory.
 
 {{#list skills join="\n"}}
-<skill name="{{name}}">
+### {{name}}
 {{description}}
-</skill>
 {{/list}}
 </skills>
 {{/if}}
 {{#if preloadedSkills.length}}
-<preloaded-skills>
+<skills>
 {{#list preloadedSkills join="\n"}}
 <skill name="{{name}}">
 {{content}}
 </skill>
 {{/list}}
-</preloaded-skills>
+</skills>
 {{/if}}
 {{#if rules.length}}
 <rules>
 Read `rule://<name>` when working in matching domain.
-
 {{#list rules join="\n"}}
-<rule name="{{name}}">
+### {{name}} (Glob: {{#list globs join=", "}}{{this}}{{/list}})
 {{description}}
-{{#list globs join="\n"}}<glob>{{this}}</glob>{{/list}}
-</rule>
 {{/list}}
 </rules>
 {{/if}}

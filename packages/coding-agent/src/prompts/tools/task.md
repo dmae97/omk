@@ -1,175 +1,135 @@
 # Task
 
-Launch subagents to execute parallel, well-scoped tasks.
+Launches subagents to parallelize workflows.
+
 {{#if asyncEnabled}}
-Use `read jobs://` to inspect background task state and `read jobs://<job_id>` for detailed status/output.
-Wait for async results with `poll_jobs` — it blocks until complete. Do NOT poll `read jobs://` in a loop.
+- Use `read jobs://` to inspect state; `read jobs://<job_id>` for detail.
+- Wait with `poll_jobs` — blocks until complete. MUST NOT poll `read jobs://` in a loop.
 {{/if}}
-## Subagent capabilities
-- **Inherit** full system prompt (AGENTS.md, context files, skills) — do NOT restate project rules in `context`
-- **Lack** your conversation history — decisions, approach choices, file contents you read, user requirements from chat
-- **Can** grep parent conversation file for supplementary details
----
-## Parameters
-### `agent` (required)
-Agent type for all tasks in this batch.
-### `context` (optional — strongly recommended)
-Shared background prepended verbatim to every task `assignment`. Only session-specific information subagents lack.
-<critical>
-Do NOT include project rules/conventions/style — subagents already have AGENTS.md. Restating any AGENTS.md rule in `context` is a bug. Per-line test: "True for ANY repo task, or only THIS batch?" If any task → delete.
-</critical>
-Template (omit non-applicable sections):
-````
-## Goal
-One sentence: what batch accomplishes together.
-## Non-goals
-What tasks must not touch/attempt.
-## Constraints
-- Task-specific MUST / MUST NOT rules not already in AGENTS.md
-- Session decisions affecting implementation
-## Reference Files
-- `path/to/file.ext` — pattern demo
-## API Contract (if tasks produce/consume shared interface)
-```language
-// Exact type definitions, function signatures
-```
-## Acceptance (global)
-- Definition of "done" for batch
-- build/test/lint verification happens AFTER all tasks — not inside tasks
-````
-### `tasks` (required)
-Array of tasks executing in parallel.
 
-|Field|Required|Purpose|
+Subagents lack your conversation history. Every decision, file content, and user requirement they need MUST be explicit in `context` or `assignment`.
+
+<parameters>
+- `agent`: Agent type for all tasks.
+  - `.id`: CamelCase, max 32 chars
+  - `.description`: UI display only — subagent never sees it
+  - `.assignment`: Complete self-contained instructions. One-liners PROHIBITED; missing acceptance criteria = too vague.
+  - `.skills`: Skill names to preload
+- `context`: Shared background prepended to every assignment. Session-specific info only.
+- `schema`: JTD schema for expected output. Format lives here — MUST NOT be duplicated in assignments.
+- `tasks`: Tasks to execute in parallel.
+- `isolated`: Run in isolated git worktree; returns patches. Use when tasks edit overlapping files.
+</parameters>
+
+<critical>
+- MUST NOT include AGENTS.md rules, coding conventions, or style guidelines — subagents already have them.
+- MUST NOT duplicate shared constraints across assignments — put them in `context` once.
+- MUST NOT tell tasks to run project-wide build/test/lint. Parallel agents share the working tree; each task edits, stops. Caller verifies after all complete.
+- For large payloads (traces, JSON blobs), write to `local://<path>` and pass the path in context.
+- If scope is unclear, run a **Discovery task** first to enumerate files and callsites, then fan out.
+</critical>
+
+<scope>
+Each task: **at most 3–5 files**. Globs in file paths, "update all", or package-wide scope = too broad. Enumerate files explicitly and fan out to a cluster of agents.
+</scope>
+
+<parallelization>
+**Test:** Can task B produce correct output without seeing A's result? Yes → parallel. No → sequential.
+
+|Sequential first|Then|Reason|
 |---|---|---|
-|`id`|✓|CamelCase identifier, max 32 chars|
-|`description`|✓|Short one-liner for UI only — not seen by subagent|
-|`assignment`|✓|Complete per-task instructions. See [Writing an assignment](#writing-an-assignment).|
-|`skills`||Skill names preload. Use only when changes correctness.|
-{{#if isolationEnabled}}
-### `isolated` (optional)
-Run in isolated git worktree; returns patches. Use when tasks edit overlapping files.
-{{/if}}
+|Types/interfaces|Consumers|Need contract|
+|API exports|Callers|Need signatures|
+|Core module|Dependents|Import dependency|
+|Schema/migration|App logic|Schema dependency|
+**Safe to parallelize:** independent modules, isolated file-scoped refactors, tests for existing code.
+</parallelization>
 
-### `schema` (optional — recommended for structured output)
-JTD schema defining expected response structure. **Never describe output format in `context` or `assignment`**.
-
-<caution>
-**Schema vs agent mismatch causes null output.** Structured agents (e.g., `explore`) have built-in schemas. If you describe output format in `context`/`assignment` without overriding via `schema`, the built-in schema wins and agent submits `null`. Either: (1) use `schema` to override, (2) use `task` agent (no built-in schema), or (3) match instructions to agent's expected shape.
-</caution>
----
-
-## Writing an assignment
-
-<critical>
-`assignment` must contain enough info for agent to act **without asking a clarifying question**.
-**Minimum bar:** under ~8 lines or missing acceptance criteria = too vague. One-liners guaranteed failure.
-
-Structure every assignment:
+<templates>
+**context:**
 ```
-## Target
-- Files: exact path(s)
-- Symbols/entrypoints: specific functions, types, exports
-- Non-goals: what task must NOT touch
-
-## Change
-- Step-by-step: add/remove/rename/restructure
-- Patterns/APIs to use; reference files if applicable
-
-## Edge Cases / Don't Break
-- Tricky cases, existing behavior that must survive
-
-## Acceptance (task-local)
-- Expected behavior or observable result
-- DO NOT include project-wide build/test/lint commands
+## Goal         ← one sentence: what the batch accomplishes
+## Non-goals    ← what tasks must not touch
+## Constraints  ← MUST/MUST NOT rules beyond AGENTS.md; session decisions
+## API Contract ← exact types/signatures if tasks share an interface (omit if N/A)
+## Acceptance   ← definition of done; build/lint runs AFTER all tasks complete
 ```
+**assignment:**
+```
+## Target       ← exact file paths; named symbols; explicit non-goals
+## Change       ← step-by-step what to add/remove/rename; patterns/APIs to use
+## Edge Cases   ← tricky inputs; existing behavior that must survive
+## Acceptance   ← observable result proving the task is done; no project-wide commands
+```
+</templates>
 
-`context` = shared background. `assignment` = only delta: file-specific instructions, local edge cases, per-task acceptance.
+<checklist>
+Before invoking:
+- `context` contains only session-specific info not in AGENTS.md
+- Every `assignment` follows the template; no one-liners; edge cases covered
+- Tasks are truly parallel — you can articulate why none depends on another's output
+- File paths are explicit; no globs
+- `schema` is set if you expect structured output
+</checklist>
 
-### Anti-patterns (ban these)
-- **Vague assignments** — "Refactor this to be cleaner", "Fix the bug in streaming"
-- **Vague context** — "Use existing patterns", "Follow conventions"
-- **Redundant context** — restating AGENTS.md rules (coding style, imports, formatting)
-- **Output format in prose** — structured agents have built-in schemas; prose format → null. Use `schema`
-- **Test/lint in parallel tasks** — concurrent builds see half-finished edits, loop. Each task edits, stops. Caller verifies after
+<example label="Rename exported symbol + update all call sites">
+Two tasks with non-overlapping file sets. Neither depends on the other's edits.
 
-Can't specify scope yet? Create a **Discovery task** first, then fan out with explicit paths.
-
-### Delegate intent, not keystrokes
-
-Be specific about: constraints, naming, API contracts, "don't break" items, acceptance.
-Delegate: code reading, approach selection, edit locations, implementation. Line-by-line dictation makes you bottleneck.
-</critical>
-
-## Example
-
-<example type="good" label="Shared rules in context, deltas in assignment">
 <context>
 ## Goal
-Port WASM modules to N-API, matching existing pi-natives conventions.
+Rename `parseConfig` → `loadConfig` in `src/config/parser.ts` and all callers.
 ## Non-goals
-Do not touch TS bindings or downstream consumers — separate phase.
-## Constraints
-- MUST use `#[napi]` attribute macro on all exports
-- MUST return `napi::Result<T>` for fallible ops; never panic
-- MUST use `spawn_blocking` for filesystem I/O or >1ms work
+Do not change function behavior, signature, or tests — rename only.
 ## Acceptance (global)
-- Caller verifies after all tasks: `cargo test -p pi-natives` and `cargo build -p pi-natives`
-- Individual tasks must NOT run these commands themselves
+Caller runs `bun check:ts` after both tasks complete. Tasks must NOT run it.
 </context>
 <tasks>
-  <task name="PortGrep">
-    <description>Port grep module to N-API</description>
+  <task name="RenameExport">
+    <description>Rename the export in parser.ts</description>
     <assignment>
 ## Target
-- Files: `src/grep.rs`, `src/lib.rs` (registration only)
-- Symbols: search, search_multi, compile_pattern
+- File: `src/config/parser.ts`
+- Symbol: exported function `parseConfig`
+- Non-goals: do not touch callers or tests
+
 ## Change
-- Implement three N-API exports matching signatures in API Contract
-## Acceptance (task-local)
-- Three functions exported with correct signatures
-</assignment>
+- Rename `parseConfig` → `loadConfig` (declaration + any JSDoc referencing it)
+- If `src/config/index.ts` re-exports `parseConfig`, update that re-export too
+
+## Edge Cases
+- If the function is overloaded, rename all overload signatures
+- Internal helpers named `_parseConfigValue` or similar: leave untouched — different symbols
+- Do not add a backwards-compat alias
+
+## Acceptance
+- `src/config/parser.ts` exports `loadConfig`; `parseConfig` no longer appears as a top-level export in that file
+    </assignment>
   </task>
-  <task name="PortHighlight">
-    <description>Port highlight module to N-API</description>
-    <assignment>## Target
-- Files: `src/highlight.rs`, `src/lib.rs` (registration only)
-…</assignment>
+  <task name="UpdateCallers">
+    <description>Update import and call sites in consuming modules</description>
+    <assignment>
+## Target
+- Files: `src/cli/init.ts`, `src/server/bootstrap.ts`, `src/worker/index.ts`
+- Non-goals: do not touch `src/config/parser.ts` or `src/config/index.ts` — handled by sibling task
+
+## Change
+- In each file: replace `import { parseConfig }` → `import { loadConfig }` from its config path
+- Replace every call site `parseConfig(` → `loadConfig(`
+
+## Edge Cases
+- If a file spreads the import (`import * as cfg from "…"`) and calls `cfg.parseConfig(…)`, update the property access too
+- String literals containing "parseConfig" (log messages, comments) are documentation — leave them
+- If any file re-exports `parseConfig` to an external package boundary, keep the old name via `export { loadConfig as parseConfig }` and add a `// TODO: remove after next major` comment
+
+## Acceptance
+- No bare reference to `parseConfig` (as identifier, not string) remains in the three target files
+    </assignment>
   </task>
 </tasks>
 </example>
----
-## Task scope
-Each task: **at most 3–5 files**. Glob paths, "update all", package-wide scope = too broad.
-**Fix:** enumerate files first (discovery task), then fan out per file or small cluster.
----
-## Parallelization
-**Test:** Can task B produce correct output without seeing A's result? Yes → parallel. No → sequential.
-
-|First|Then|Reason|
-|---|---|---|
-|Define types/interfaces|Implement consumers|Need contract|
-|Create API exports|Write callers|Need signatures|
-|Scaffold structure|Implement bodies|Need shape|
-|Core module|Dependent modules|Import dependency|
-|Schema/DB migration|Application logic|Schema dependency|
-**Safe to parallelize:** independent modules, tests for existing code, isolated file-scoped refactors.
-**Phased execution:** Phase 1 (yourself): define interfaces/API shape. Phase 2 (parallel): implement against known contract. Phase 3 (yourself): integrate, verify builds. Phase 4 (parallel): dependent layer.
----
-## Pre-flight checklist
-- [ ] `context` has only session-specific info not in AGENTS.md
-- [ ] Each `assignment` follows template — not one-liner
-- [ ] Each `assignment` includes edge cases / "don't break" items
-- [ ] Tasks truly parallel (no hidden dependencies)
-- [ ] Scope small, file paths explicit (no globs)
-- [ ] No task runs project-wide build/test/lint — you do after all complete
-- [ ] `schema` used if you expect structured information
----
-## Agents
 
 {{#list agents join="\n"}}
-<agent name="{{name}}"{{#if output}} output="structured"{{/if}}>
-<description>{{description}}</description>
-<tools>{{default (join tools ", ") "All tools"}}</tools>
-</agent>
+### Agent: {{name}}
+**Tools:** {{default (join tools ", ") "All"}}
+{{description}}
 {{/list}}

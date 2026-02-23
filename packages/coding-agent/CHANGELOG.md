@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Renamed `file` parameter to `path` in replace, patch, and hashline edit operations
@@ -12,6 +11,8 @@
 
 ### Changed
 
+- Restructured task tool documentation for clarity, moving parameter definitions into a dedicated section and consolidating guidance on context, assignments, and parallelization
+- Reformatted system prompt template to use markdown headings instead of XML tags for skills, preloaded skills, and rules sections
 - Renamed `deviceScaleFactor` parameter to `device_scale_factor` in browser viewport configuration for consistency with snake_case naming convention
 - Moved intent field documentation from per-tool JSON schema descriptions into a single system prompt block, reducing token overhead proportional to tool count
 
