@@ -79,7 +79,7 @@ export class AwaitTool implements AgentTool<typeof awaitSchema, AwaitToolDetails
 		// If all watched jobs are already done, return immediately
 		const runningJobs = jobsToWatch.filter(j => j.status === "running");
 		if (runningJobs.length === 0) {
-			return this.#buildResult(jobsToWatch);
+			return this.#buildResult(manager, jobsToWatch);
 		}
 
 		// Block until at least one running job finishes or the call is aborted
@@ -100,13 +100,14 @@ export class AwaitTool implements AgentTool<typeof awaitSchema, AwaitToolDetails
 		}
 
 		if (signal?.aborted) {
-			return this.#buildResult(jobsToWatch);
+			return this.#buildResult(manager, jobsToWatch);
 		}
 
-		return this.#buildResult(jobsToWatch);
+		return this.#buildResult(manager, jobsToWatch);
 	}
 
 	#buildResult(
+		manager: NonNullable<ToolSession["asyncJobManager"]>,
 		jobs: {
 			id: string;
 			type: "bash" | "task";
@@ -127,6 +128,8 @@ export class AwaitTool implements AgentTool<typeof awaitSchema, AwaitToolDetails
 			...(j.resultText ? { resultText: j.resultText } : {}),
 			...(j.errorText ? { errorText: j.errorText } : {}),
 		}));
+
+		manager.acknowledgeDeliveries(jobResults.filter(j => j.status !== "running").map(j => j.id));
 
 		const completed = jobResults.filter(j => j.status !== "running");
 		const running = jobResults.filter(j => j.status === "running");

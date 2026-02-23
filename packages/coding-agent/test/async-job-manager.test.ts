@@ -181,6 +181,37 @@ describe("AsyncJobManager", () => {
 		expect(manager.getJob(runningJobId)).toBeUndefined();
 	});
 
+	test("acknowledgeDeliveries suppresses pending retries for completed jobs", async () => {
+		let attempts = 0;
+		const manager = new AsyncJobManager({
+			onJobComplete: async () => {
+				attempts += 1;
+				throw new Error("delivery failed");
+			},
+		});
+
+		const jobId = manager.register("task", "awaited-job", async () => "done");
+		await manager.waitForAll();
+
+		const firstAttemptDeadline = Date.now() + 2_000;
+		while (attempts === 0) {
+			if (Date.now() >= firstAttemptDeadline) throw new Error("Timed out waiting for first delivery attempt");
+			await Bun.sleep(5);
+		}
+
+		expect(manager.hasPendingDeliveries()).toBe(true);
+		const removed = manager.acknowledgeDeliveries([jobId]);
+		expect(removed).toBeGreaterThanOrEqual(1);
+
+		const drained = await manager.drainDeliveries({ timeoutMs: 200 });
+		expect(drained).toBe(true);
+		expect(manager.hasPendingDeliveries()).toBe(false);
+
+		const attemptsAfterAck = attempts;
+		await Bun.sleep(700);
+		expect(attempts).toBe(attemptsAfterAck);
+	});
+
 	test("dispose clears jobs and pending deliveries", async () => {
 		const manager = new AsyncJobManager({
 			onJobComplete: async () => {
