@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added support for GitHub Copilot provider in strict mode for both openai-completions and openai-responses tool schemas
 
 ## [12.19.1] - 2026-02-22
 ### Added

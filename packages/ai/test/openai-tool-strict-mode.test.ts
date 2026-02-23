@@ -83,6 +83,14 @@ describe("OpenAI tool strict mode", () => {
 		expect(payload.tools?.[0]?.function?.strict).toBeUndefined();
 	});
 
+	it("sends strict=true for openai-completions tool schemas on GitHub Copilot", async () => {
+		const model = getBundledModel("github-copilot", "gpt-4o") as Model<"openai-completions">;
+
+		const payload = (await captureCompletionsPayload(model)) as {
+			tools?: Array<{ function?: { strict?: boolean } }>;
+		};
+		expect(payload.tools?.[0]?.function?.strict).toBe(true);
+	});
 	it("sends strict=true for openai-responses tool schemas on OpenAI", async () => {
 		const model = getBundledModel("openai", "gpt-5-mini") as Model<"openai-responses">;
 
@@ -92,16 +100,12 @@ describe("OpenAI tool strict mode", () => {
 		expect(payload.tools?.[0]?.strict).toBe(true);
 	});
 
-	it("omits strict for openai-responses on unknown compatibility providers", async () => {
-		const model = {
-			...(getBundledModel("openai", "gpt-5-mini") as Model<"openai-responses">),
-			provider: "github-copilot",
-			baseUrl: "https://api.individual.githubcopilot.com",
-		};
+	it("sends strict=true for openai-responses tool schemas on GitHub Copilot", async () => {
+		const model = getBundledModel("github-copilot", "gpt-5-mini") as Model<"openai-responses">;
 
 		const payload = (await captureResponsesPayload(model)) as {
 			tools?: Array<{ strict?: boolean }>;
 		};
-		expect(payload.tools?.[0]?.strict).toBeUndefined();
+		expect(payload.tools?.[0]?.strict).toBe(true);
 	});
 });

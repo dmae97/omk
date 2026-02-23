@@ -471,7 +471,7 @@ function isAzureOpenAIBaseUrl(baseUrl: string): boolean {
 }
 
 function supportsStrictMode(model: Model<"openai-responses">): boolean {
-	if (model.provider === "openai" || model.provider === "azure") return true;
+	if (model.provider === "openai" || model.provider === "azure" || model.provider === "github-copilot") return true;
 
 	const baseUrl = model.baseUrl.toLowerCase();
 	return (
