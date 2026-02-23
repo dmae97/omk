@@ -26,7 +26,6 @@ interface ParsedEditorConfig {
 	sections: EditorConfigSection[];
 }
 
-
 /** Effective editorconfig indent-related properties merged for one target file */
 interface EditorConfigMatch {
 	indentStyle?: "space" | "tab";

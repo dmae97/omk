@@ -555,7 +555,7 @@ function convertToolConfig(
 	const bedrockTools: BedrockTool[] = tools.map(tool => ({
 		toolSpec: {
 			name: tool.name,
-			description: tool.description,
+			description: tool.description || "",
 			inputSchema: { json: tool.parameters },
 		},
 	}));

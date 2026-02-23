@@ -160,10 +160,11 @@ function injectIntentIntoSchema(schema: unknown): unknown {
 	};
 }
 
-function injectIntentIntoTools(tools: Context["tools"]): Context["tools"] {
+function normalizeTools(tools: Context["tools"], injectIntent: boolean): Context["tools"] {
 	return tools?.map(tool => ({
 		...tool,
-		parameters: injectIntentIntoSchema(tool.parameters) as typeof tool.parameters,
+		description: tool.description || "",
+		...(injectIntent && { parameters: injectIntentIntoSchema(tool.parameters) as typeof tool.parameters }),
 	}));
 }
 
@@ -316,7 +317,7 @@ async function streamAssistantResponse(
 	const llmContext: Context = {
 		systemPrompt: context.systemPrompt,
 		messages: normalizedMessages,
-		tools: config.intentTracing ? injectIntentIntoTools(context.tools) : context.tools,
+		tools: normalizeTools(context.tools, !!config.intentTracing),
 	};
 
 	const streamFunction = streamFn || streamSimple;

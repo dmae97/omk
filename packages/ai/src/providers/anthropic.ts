@@ -1096,7 +1096,7 @@ function convertTools(tools: Tool[], isOAuthToken: boolean): Anthropic.Messages.
 
 		return {
 			name: isOAuthToken ? toClaudeCodeName(tool.name) : tool.name,
-			description: tool.description,
+			description: tool.description || "",
 			input_schema: {
 				type: "object" as const,
 				properties: jsonSchema.properties || {},

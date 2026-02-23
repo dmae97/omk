@@ -624,7 +624,7 @@ export function convertTools(
 		{
 			functionDeclarations: tools.map(tool => ({
 				name: tool.name,
-				description: tool.description,
+				description: tool.description || "",
 				...(useParameters
 					? { parameters: prepareSchemaForCloudCodeAssistClaude(tool.parameters) }
 					: { parametersJsonSchema: tool.parameters }),

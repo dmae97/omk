@@ -1825,7 +1825,7 @@ function buildMcpToolDefinitions(tools: Tool[] | undefined): McpToolDefinition[]
 		const inputSchema = toBinary(ValueSchema, fromJson(ValueSchema, schemaValue));
 		return create(McpToolDefinitionSchema, {
 			name: tool.name,
-			description: tool.description,
+			description: tool.description || "",
 			providerIdentifier: "pi-agent",
 			toolName: tool.name,
 			inputSchema,

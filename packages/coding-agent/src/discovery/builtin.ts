@@ -656,20 +656,30 @@ async function loadTools(ctx: LoadContext): Promise<LoadResult<CustomTool>> {
 				transform: (name, content, path, source) => {
 					if (name.endsWith(".json")) {
 						const data = parseJSON<{ name?: string; description?: string }>(content);
+						const toolName = data?.name || name.replace(/\.json$/, "");
+						const description =
+							typeof data?.description === "string" && data.description.trim()
+								? data.description
+								: `${toolName} custom tool`;
 						return {
-							name: data?.name || name.replace(/\.json$/, ""),
+							name: toolName,
 							path,
-							description: data?.description,
+							description,
 							level,
 							_source: source,
 						};
 					}
 					if (name.endsWith(".md")) {
 						const { frontmatter } = parseFrontmatter(content, { source: path });
+						const toolName = (frontmatter.name as string) || name.replace(/\.md$/, "");
+						const description =
+							typeof frontmatter.description === "string" && frontmatter.description.trim()
+								? String(frontmatter.description)
+								: `${toolName} custom tool`;
 						return {
-							name: (frontmatter.name as string) || name.replace(/\.md$/, ""),
+							name: toolName,
 							path,
-							description: frontmatter.description as string | undefined,
+							description,
 							level,
 							_source: source,
 						};
@@ -679,6 +689,7 @@ async function loadTools(ctx: LoadContext): Promise<LoadResult<CustomTool>> {
 					return {
 						name: toolName,
 						path,
+						description: `${toolName} custom tool`,
 						level,
 						_source: source,
 					};
@@ -715,7 +726,7 @@ async function loadTools(ctx: LoadContext): Promise<LoadResult<CustomTool>> {
 			items.push({
 				name: entryName,
 				path: indexPath,
-				description: undefined,
+				description: `${entryName} custom tool`,
 				level,
 				_source: createSourceMeta(PROVIDER_ID, indexPath, level),
 			});

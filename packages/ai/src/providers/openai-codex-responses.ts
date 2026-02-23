@@ -1694,7 +1694,7 @@ function convertTools(tools: Tool[]): Array<{
 		return {
 			type: "function",
 			name: tool.name,
-			description: tool.description,
+			description: tool.description || "",
 			parameters: strict
 				? enforceStrictSchema(tool.parameters as unknown as Record<string, unknown>)
 				: (tool.parameters as unknown as Record<string, unknown>),

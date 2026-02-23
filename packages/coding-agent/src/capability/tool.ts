@@ -15,7 +15,7 @@ export interface CustomTool {
 	/** Absolute path to tool definition file */
 	path: string;
 	/** Tool description */
-	description?: string;
+	description: string;
 	/** Tool implementation (script path or inline) */
 	implementation?: string;
 	/** Source level */

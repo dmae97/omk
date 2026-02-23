@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Breaking Changes
+
+- Made `description` field required in CustomTool interface
 
 ## [13.1.2] - 2026-02-23
 ### Breaking Changes

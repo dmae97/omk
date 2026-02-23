@@ -677,7 +677,7 @@ function convertTools(tools: Tool[], strictMode: boolean): OpenAITool[] {
 		return {
 			type: "function",
 			name: tool.name,
-			description: tool.description,
+			description: tool.description || "",
 			parameters,
 			...(strict && { strict: true }),
 		} as OpenAITool;

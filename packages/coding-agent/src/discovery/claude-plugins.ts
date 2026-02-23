@@ -152,6 +152,7 @@ async function loadTools(ctx: LoadContext): Promise<LoadResult<CustomTool>> {
 					return {
 						name: toolName,
 						path: filePath,
+						description: `${toolName} custom tool`,
 						level: root.scope,
 						_source: source,
 					};

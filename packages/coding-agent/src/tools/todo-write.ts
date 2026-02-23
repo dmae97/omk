@@ -41,16 +41,18 @@ export interface TodoWriteToolDetails {
 // Schema
 // =============================================================================
 
-const StatusEnum = StringEnum(["pending", "in_progress", "completed", "abandoned"] as const);
+const StatusEnum = StringEnum(["pending", "in_progress", "completed", "abandoned"] as const, {
+	description: "Task status",
+});
 
 const InputTask = Type.Object({
-	content: Type.String(),
+	content: Type.String({ description: "Task description" }),
 	status: Type.Optional(StatusEnum),
-	notes: Type.Optional(Type.String()),
+	notes: Type.Optional(Type.String({ description: "Additional context or notes" })),
 });
 
 const InputPhase = Type.Object({
-	name: Type.String(),
+	name: Type.String({ description: "Phase name" }),
 	tasks: Type.Optional(Type.Array(InputTask)),
 });
 
@@ -63,21 +65,21 @@ const todoWriteSchema = Type.Object({
 			}),
 			Type.Object({
 				op: Type.Literal("add_phase"),
-				name: Type.String(),
+				name: Type.String({ description: "Phase name" }),
 				tasks: Type.Optional(Type.Array(InputTask)),
 			}),
 			Type.Object({
 				op: Type.Literal("add_task"),
 				phase: Type.String({ description: "Phase ID, e.g. phase-1" }),
-				content: Type.String(),
-				notes: Type.Optional(Type.String()),
+				content: Type.String({ description: "Task description" }),
+				notes: Type.Optional(Type.String({ description: "Additional context or notes" })),
 			}),
 			Type.Object({
 				op: Type.Literal("update"),
 				id: Type.String({ description: "Task ID, e.g. task-3" }),
 				status: Type.Optional(StatusEnum),
-				content: Type.Optional(Type.String()),
-				notes: Type.Optional(Type.String()),
+				content: Type.Optional(Type.String({ description: "Updated task description" })),
+				notes: Type.Optional(Type.String({ description: "Additional context or notes" })),
 			}),
 			Type.Object({
 				op: Type.Literal("remove_task"),

@@ -895,7 +895,7 @@ function convertTools(tools: Tool[], compat: ResolvedOpenAICompat): OpenAI.Chat.
 			type: "function",
 			function: {
 				name: tool.name,
-				description: tool.description,
+				description: tool.description || "",
 				parameters: strict
 					? enforceStrictSchema(tool.parameters as unknown as Record<string, unknown>)
 					: (tool.parameters as unknown as Record<string, unknown>),
