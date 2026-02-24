@@ -48,6 +48,15 @@ describe("executeBash", () => {
 		expect(result.output.trim()).toBe("hello");
 	});
 
+	it("applies non-interactive environment defaults", async () => {
+		const result = await executeBash('echo "$GIT_TERMINAL_PROMPT:$PI_TEST_ENV"', {
+			cwd: tempDir,
+			timeout: 5000,
+			env: { PI_TEST_ENV: "hello" },
+		});
+		expect(result.output.trim()).toBe("0:hello");
+	});
+
 	it("invokes onChunk with command output", async () => {
 		let seenChunk: string | null = null;
 		const result = await executeBash("echo hello", {

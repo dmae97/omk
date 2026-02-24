@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Non-interactive environment variables (pager, editor, prompt suppression) were not applied to non-PTY bash execution, causing commands to potentially block on pagers or prompts
+
+### Changed
+
+- Extracted non-interactive environment config from `bash-interactive.ts` into shared `non-interactive-env.ts` module, applied consistently to all bash execution paths
+
 ## [13.2.0] - 2026-02-23
 ### Breaking Changes
 

@@ -7,6 +7,7 @@ import { $env, getProjectDir, isEnoent } from "@oh-my-pi/pi-utils";
 import { Type } from "@sinclair/typebox";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import { type BashResult, executeBash } from "../exec/bash-executor";
+import { NON_INTERACTIVE_ENV } from "../exec/non-interactive-env";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { truncateToVisualLines } from "../modes/components/visual-truncate";
 import type { Theme } from "../modes/theme/theme";
@@ -15,7 +16,7 @@ import { DEFAULT_MAX_BYTES, TailBuffer } from "../session/streaming-output";
 import { renderStatusLine } from "../tui";
 import { CachedOutputBlock } from "../tui/output-block";
 import type { ToolSession } from ".";
-import { type BashInteractiveResult, NO_PAGER_ENV, runInteractiveBashPty } from "./bash-interactive";
+import { type BashInteractiveResult, runInteractiveBashPty } from "./bash-interactive";
 import { checkBashInterception } from "./bash-interceptor";
 import { applyHeadTail } from "./bash-normalize";
 import { expandInternalUrls, type InternalUrlExpansionOptions } from "./bash-skill-urls";
@@ -221,7 +222,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 							sessionKey: `${this.session.getSessionId?.() ?? ""}:async:${jobId}`,
 							timeout: timeoutMs,
 							signal: runSignal,
-							env: NO_PAGER_ENV,
+							env: NON_INTERACTIVE_ENV,
 							artifactPath,
 							artifactId,
 							onChunk: chunk => {
@@ -272,7 +273,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 					sessionKey: this.session.getSessionId?.() ?? undefined,
 					timeout: timeoutMs,
 					signal,
-					env: NO_PAGER_ENV,
+					env: NON_INTERACTIVE_ENV,
 					artifactPath,
 					artifactId,
 					onChunk: chunk => {

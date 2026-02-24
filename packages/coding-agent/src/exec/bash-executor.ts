@@ -7,6 +7,7 @@ import { Shell } from "@oh-my-pi/pi-natives";
 import { Settings } from "../config/settings";
 import { OutputSink } from "../session/streaming-output";
 import { getOrCreateSnapshot } from "../utils/shell-snapshot";
+import { NON_INTERACTIVE_ENV } from "./non-interactive-env";
 
 export interface BashExecutorOptions {
 	cwd?: string;
@@ -97,7 +98,7 @@ export async function executeBash(command: string, options?: BashExecutorOptions
 			{
 				command: finalCommand,
 				cwd: options?.cwd,
-				env: options?.env,
+				env: options?.env ? { ...NON_INTERACTIVE_ENV, ...options.env } : NON_INTERACTIVE_ENV,
 				timeoutMs: options?.timeout,
 				signal,
 			},
