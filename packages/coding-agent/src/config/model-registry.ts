@@ -47,7 +47,7 @@ export const MODEL_ROLES: Record<ModelRole, ModelRoleInfo> = {
 	smol: { tag: "SMOL", name: "Fast", color: "warning" },
 	slow: { tag: "SLOW", name: "Thinking", color: "accent" },
 	plan: { tag: "PLAN", name: "Architect", color: "muted" },
-	commit: { name: "Commit" },
+	commit: { tag: "COMMIT", name: "Commit", color: "dim" },
 };
 
 export const MODEL_ROLE_IDS: ModelRole[] = ["default", "smol", "slow", "plan", "commit"];

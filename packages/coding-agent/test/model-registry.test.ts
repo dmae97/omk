@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { OpenAICompat } from "@oh-my-pi/pi-ai";
-import { kNoAuth, ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+import { MODEL_ROLES, kNoAuth, ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { Snowflake } from "@oh-my-pi/pi-utils";
 
@@ -11,6 +11,11 @@ describe("ModelRegistry", () => {
 	let tempDir: string;
 	let modelsJsonPath: string;
 	let authStorage: AuthStorage;
+
+	test("commit role includes a visible badge tag", () => {
+		expect(MODEL_ROLES.commit.tag).toBe("COMMIT");
+		expect(MODEL_ROLES.commit.color).toBe("dim");
+	});
 
 	beforeEach(async () => {
 		tempDir = path.join(os.tmpdir(), `pi-test-model-registry-${Snowflake.next()}`);
