@@ -21,7 +21,7 @@ describe("renderTemplate", () => {
 			assignment: "Full instructions for the agent.\nWith multiple lines.",
 		});
 		expect(result.task).toContain("Shared constraints here");
-		expect(result.task).toContain(sectionSeparator("Background"));
+		expect(result.task).toContain(sectionSeparator("Background").trimStart());
 		expect(result.task).toContain("Full instructions for the agent.\nWith multiple lines.");
 	});
 
@@ -31,7 +31,7 @@ describe("renderTemplate", () => {
 			description: "label",
 			assignment: "the real work",
 		});
-		expect(result.task).toStartWith(`${sectionSeparator("Background")}\ncontext`);
+		expect(result.task).toStartWith(`${sectionSeparator("Background").trimStart()}\ncontext`);
 		expect(result.task).toContain("the real work");
 	});
 
