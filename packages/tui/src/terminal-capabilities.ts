@@ -214,6 +214,32 @@ export function calculateImageRows(
 	return Math.max(1, rows);
 }
 
+function calculateImageFit(
+	imageDimensions: ImageDimensions,
+	options: ImageRenderOptions,
+	cellDims: CellDimensions,
+): { columns: number; rows: number } {
+	const maxColumns = options.maxWidthCells !== undefined ? Math.max(1, Math.floor(options.maxWidthCells)) : undefined;
+	const maxRows = options.maxHeightCells !== undefined ? Math.max(1, Math.floor(options.maxHeightCells)) : undefined;
+
+	if (maxColumns === undefined && maxRows === undefined) {
+		const columns = Math.max(1, Math.ceil(imageDimensions.widthPx / cellDims.widthPx));
+		const rows = Math.max(1, Math.ceil(imageDimensions.heightPx / cellDims.heightPx));
+		return { columns, rows };
+	}
+
+	const maxWidthPx = maxColumns !== undefined ? maxColumns * cellDims.widthPx : Number.POSITIVE_INFINITY;
+	const maxHeightPx = maxRows !== undefined ? maxRows * cellDims.heightPx : Number.POSITIVE_INFINITY;
+	const scale = Math.min(maxWidthPx / imageDimensions.widthPx, maxHeightPx / imageDimensions.heightPx);
+	const fittedWidthPx = imageDimensions.widthPx * scale;
+	const fittedHeightPx = imageDimensions.heightPx * scale;
+
+	return {
+		columns: Math.max(1, Math.floor(fittedWidthPx / cellDims.widthPx)),
+		rows: Math.max(1, Math.ceil(fittedHeightPx / cellDims.heightPx)),
+	};
+}
+
 export function getPngDimensions(base64Data: string): ImageDimensions | null {
 	try {
 		const buffer = Buffer.from(base64Data, "base64");
@@ -364,21 +390,23 @@ export function renderImage(
 		return null;
 	}
 
-	const maxWidth = options.maxWidthCells ?? 80;
-	const rows = calculateImageRows(imageDimensions, maxWidth, getCellDimensions());
+	const fit = calculateImageFit(imageDimensions, options, getCellDimensions());
 
 	if (TERMINAL.imageProtocol === ImageProtocol.Kitty) {
-		const sequence = encodeKitty(base64Data, { columns: maxWidth, rows });
-		return { sequence, rows };
+		const sequence = encodeKitty(base64Data, {
+			columns: fit.columns,
+			rows: fit.rows,
+		});
+		return { sequence, rows: fit.rows };
 	}
 
 	if (TERMINAL.imageProtocol === ImageProtocol.Iterm2) {
 		const sequence = encodeITerm2(base64Data, {
-			width: maxWidth,
+			width: fit.columns,
 			height: "auto",
 			preserveAspectRatio: options.preserveAspectRatio ?? true,
 		});
-		return { sequence, rows };
+		return { sequence, rows: fit.rows };
 	}
 
 	return null;
