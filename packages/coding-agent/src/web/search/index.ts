@@ -353,13 +353,6 @@ async function executeExaTool(
 ): Promise<{ content: Array<{ type: "text"; text: string }>; details: ExaRenderDetails }> {
 	try {
 		const apiKey = await findExaKey();
-		if (!apiKey) {
-			return {
-				content: [{ type: "text" as const, text: "Error: EXA_API_KEY not found" }],
-				details: { error: "EXA_API_KEY not found", toolName },
-			};
-		}
-
 		const response = await callExaTool(mcpToolName, params, apiKey);
 
 		if (isSearchResponse(response)) {
@@ -561,17 +554,20 @@ export interface SearchToolsOptions {
  *
  * Returns:
  * - Always: web_search (unified, works with Anthropic/Perplexity/Exa)
- * - With EXA_API_KEY: web_search_deep, web_search_code_context, web_search_crawl
+ * - Always: web_search_deep, web_search_code_context (public Exa MCP tools)
+ * - With EXA_API_KEY: web_search_crawl
  * - With EXA_API_KEY + options.enableLinkedin: web_search_linkedin
  * - With EXA_API_KEY + options.enableCompany: web_search_company
  */
 export async function getSearchTools(options: SearchToolsOptions = {}): Promise<CustomTool<any, any>[]> {
 	const tools: CustomTool<any, any>[] = [webSearchCustomTool];
 
-	// Check for Exa API key
+	tools.push(webSearchDeepTool, webSearchCodeContextTool);
+
+	// Advanced/add-on tools remain key-gated to avoid exposing known unauthenticated failures
 	const exaKey = await findExaKey();
 	if (exaKey) {
-		tools.push(...exaSearchTools);
+		tools.push(webSearchCrawlTool);
 
 		if (options.enableLinkedin) {
 			tools.push(...linkedinSearchTools);

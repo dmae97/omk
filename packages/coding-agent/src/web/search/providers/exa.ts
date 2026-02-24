@@ -5,7 +5,6 @@
  * Returns structured search results with optional content extraction.
  */
 import { getEnvApiKey } from "@oh-my-pi/pi-ai";
-import { findApiKey as findExaKey } from "../../../exa/mcp-client";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
 import { dateToAgeSeconds } from "../utils";
@@ -131,11 +130,7 @@ export class ExaProvider extends SearchProvider {
 	readonly label = "Exa";
 
 	isAvailable(): boolean {
-		try {
-			return !!findExaKey();
-		} catch {
-			return false;
-		}
+		return true;
 	}
 
 	search(params: SearchParams): Promise<SearchResponse> {
