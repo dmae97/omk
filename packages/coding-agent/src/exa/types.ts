@@ -122,11 +122,11 @@ export const EXA_TOOL_MAPPINGS = {
 	// Search tools
 	web_search_exa: "exa_search",
 	get_code_context_exa: "exa_search_code",
-	crawling: "exa_crawl",
+	crawling_exa: "exa_crawl",
 	// LinkedIn
-	linkedin_search: "exa_linkedin",
+	linkedin_search_exa: "exa_linkedin",
 	// Company
-	company_research: "exa_company",
+	company_research_exa: "exa_company",
 	// Researcher
 	deep_researcher_start: "exa_researcher_start",
 	deep_researcher_check: "exa_researcher_poll",

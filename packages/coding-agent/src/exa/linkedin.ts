@@ -22,5 +22,5 @@ Parameters:
 	Type.Object({
 		query: Type.String({ description: "LinkedIn search query" }),
 	}),
-	"linkedin_search",
+	"linkedin_search_exa",
 );

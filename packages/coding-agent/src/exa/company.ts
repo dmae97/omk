@@ -22,5 +22,5 @@ Parameters:
 	Type.Object({
 		company_name: Type.String({ description: "Name of the company to research" }),
 	}),
-	"company_research",
+	"company_research_exa",
 );

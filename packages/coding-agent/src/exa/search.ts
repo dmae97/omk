@@ -195,7 +195,7 @@ Parameters:
 			}),
 		),
 	}),
-	"crawling",
+	"crawling_exa",
 );
 
 export const searchTools: CustomTool<any, ExaRenderDetails>[] = [
