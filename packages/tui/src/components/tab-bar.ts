@@ -10,7 +10,7 @@
  */
 import { matchesKey } from "../keys";
 import type { Component } from "../tui";
-import { wrapTextWithAnsi } from "../utils";
+import { truncateToWidth, visibleWidth } from "../utils";
 
 /** Tab definition */
 export interface Tab {
@@ -112,31 +112,64 @@ export class TabBar implements Component {
 
 	/** Render the tab bar, wrapping to multiple lines if needed */
 	render(width: number): string[] {
-		const parts: string[] = [];
+		const maxWidth = Math.max(1, width);
+		const chunks: string[] = [];
 
 		// Label prefix
-		parts.push(this.#theme.label(`${this.#label}:`));
-		parts.push("  ");
+		chunks.push(this.#theme.label(`${this.#label}:`));
+		chunks.push("  ");
 
 		// Tab buttons
 		for (let i = 0; i < this.#tabs.length; i++) {
 			const tab = this.#tabs[i];
 			if (i === this.#activeIndex) {
-				parts.push(this.#theme.activeTab(` ${tab.label} `));
+				chunks.push(this.#theme.activeTab(` ${tab.label} `));
 			} else {
-				parts.push(this.#theme.inactiveTab(` ${tab.label} `));
+				chunks.push(this.#theme.inactiveTab(` ${tab.label} `));
 			}
 			if (i < this.#tabs.length - 1) {
-				parts.push("  ");
+				chunks.push("  ");
 			}
 		}
 
 		// Navigation hint
-		parts.push("  ");
-		parts.push(this.#theme.hint("(tab to cycle)"));
+		chunks.push("  ");
+		chunks.push(this.#theme.hint("(tab to cycle)"));
 
-		const line = parts.join("");
-		const maxWidth = Math.max(1, width);
-		return wrapTextWithAnsi(line, maxWidth);
+		const lines: string[] = [];
+		let currentLine = "";
+		let currentWidth = 0;
+
+		for (const chunk of chunks) {
+			const chunkWidth = visibleWidth(chunk);
+			if (chunkWidth <= 0) {
+				continue;
+			}
+
+			if (chunkWidth > maxWidth) {
+				if (currentLine) {
+					lines.push(currentLine);
+					currentLine = "";
+					currentWidth = 0;
+				}
+				lines.push(truncateToWidth(chunk, maxWidth));
+				continue;
+			}
+
+			if (currentWidth > 0 && currentWidth + chunkWidth > maxWidth) {
+				lines.push(currentLine);
+				currentLine = "";
+				currentWidth = 0;
+			}
+
+			currentLine += chunk;
+			currentWidth += chunkWidth;
+		}
+
+		if (currentLine) {
+			lines.push(currentLine);
+		}
+
+		return lines.length > 0 ? lines : [""];
 	}
 }
