@@ -1,16 +1,25 @@
-import { Type } from "@sinclair/typebox";
+import { type TSchema, Type } from "@sinclair/typebox";
 import type { CommitAgentState } from "../../../commit/agentic/state";
-import type { ChangelogCategory } from "../../../commit/types";
+import { CHANGELOG_CATEGORIES, type ChangelogCategory } from "../../../commit/types";
 import type { CustomTool } from "../../../extensibility/custom-tools/types";
+
+const changelogEntryProperties = CHANGELOG_CATEGORIES.reduce<Record<ChangelogCategory, TSchema>>(
+	(acc, category) => {
+		acc[category] = Type.Optional(Type.Array(Type.String()));
+		return acc;
+	},
+	{} as Record<ChangelogCategory, TSchema>,
+);
+
+const changelogEntriesSchema = Type.Object(changelogEntryProperties);
+const changelogDeletionsSchema = Type.Object(changelogEntryProperties, {
+	description: "Entries to remove from existing changelog sections (case-insensitive match)",
+});
 
 const changelogEntrySchema = Type.Object({
 	path: Type.String(),
-	entries: Type.Record(Type.String(), Type.Array(Type.String())),
-	deletions: Type.Optional(
-		Type.Record(Type.String(), Type.Array(Type.String()), {
-			description: "Entries to remove from existing changelog sections (case-insensitive match)",
-		}),
-	),
+	entries: changelogEntriesSchema,
+	deletions: Type.Optional(changelogDeletionsSchema),
 });
 
 const proposeChangelogSchema = Type.Object({
@@ -23,15 +32,7 @@ interface ChangelogResponse {
 	warnings: string[];
 }
 
-const allowedCategories = new Set<ChangelogCategory>([
-	"Breaking Changes",
-	"Added",
-	"Changed",
-	"Deprecated",
-	"Removed",
-	"Fixed",
-	"Security",
-]);
+const allowedCategories = new Set<ChangelogCategory>(CHANGELOG_CATEGORIES);
 
 export function createProposeChangelogTool(
 	state: CommitAgentState,
@@ -50,9 +51,14 @@ export function createProposeChangelogTool(
 
 			const normalized = params.entries.map(entry => {
 				const cleaned: Record<string, string[]> = {};
-				for (const [category, values] of Object.entries(entry.entries ?? {})) {
+				const entries = entry.entries as Record<string, string[]>;
+				for (const [category, values] of Object.entries(entries)) {
 					if (!allowedCategories.has(category as ChangelogCategory)) {
 						errors.push(`Unknown changelog category for ${entry.path}: ${category}`);
+						continue;
+					}
+					if (!Array.isArray(values)) {
+						errors.push(`Invalid changelog entries for ${entry.path}: ${category}`);
 						continue;
 					}
 					const items = values.map(value => value.trim().replace(/\.$/, "")).filter(value => value.length > 0);
@@ -64,9 +70,14 @@ export function createProposeChangelogTool(
 				let cleanedDeletions: Record<string, string[]> | undefined;
 				if (entry.deletions) {
 					cleanedDeletions = {};
-					for (const [category, values] of Object.entries(entry.deletions)) {
+					const deletions = entry.deletions as Record<string, string[]>;
+					for (const [category, values] of Object.entries(deletions)) {
 						if (!allowedCategories.has(category as ChangelogCategory)) {
 							errors.push(`Unknown deletion category for ${entry.path}: ${category}`);
+							continue;
+						}
+						if (!Array.isArray(values)) {
+							errors.push(`Invalid deletion entries for ${entry.path}: ${category}`);
 							continue;
 						}
 						const items = values.map(value => value.trim()).filter(value => value.length > 0);

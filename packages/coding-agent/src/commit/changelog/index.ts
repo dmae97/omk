@@ -2,11 +2,12 @@ import * as path from "node:path";
 import type { Api, Model } from "@oh-my-pi/pi-ai";
 import { logger } from "@oh-my-pi/pi-utils";
 import type { ControlledGit } from "../../commit/git";
+import { CHANGELOG_CATEGORIES } from "../../commit/types";
 import { detectChangelogBoundaries } from "./detect";
 import { generateChangelogEntries } from "./generate";
 import { parseUnreleasedSection } from "./parse";
 
-const CHANGELOG_SECTIONS = ["Breaking Changes", "Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"];
+const CHANGELOG_SECTIONS = CHANGELOG_CATEGORIES;
 
 const DEFAULT_MAX_DIFF_CHARS = 120_000;
 

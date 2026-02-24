@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
-
+- Fixed changelog tools to enforce category-specific arrays and reuse the shared category list for generation
 - Non-interactive environment variables (pager, editor, prompt suppression) were not applied to non-PTY bash execution, causing commands to potentially block on pagers or prompts
 
 ### Changed

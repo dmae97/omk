@@ -1,17 +1,27 @@
 import type { Api, AssistantMessage, Model } from "@oh-my-pi/pi-ai";
 import { completeSimple, validateToolCall } from "@oh-my-pi/pi-ai";
-import { Type } from "@sinclair/typebox";
+import { type TSchema, Type } from "@sinclair/typebox";
 import changelogSystemPrompt from "../../commit/prompts/changelog-system.md" with { type: "text" };
 import changelogUserPrompt from "../../commit/prompts/changelog-user.md" with { type: "text" };
-import type { ChangelogGenerationResult } from "../../commit/types";
+import { CHANGELOG_CATEGORIES, type ChangelogCategory, type ChangelogGenerationResult } from "../../commit/types";
 import { renderPromptTemplate } from "../../config/prompt-templates";
 import { extractTextContent, extractToolCall, parseJsonPayload } from "../utils";
 
-const ChangelogTool = {
+const changelogEntryProperties = CHANGELOG_CATEGORIES.reduce<Record<ChangelogCategory, TSchema>>(
+	(acc, category) => {
+		acc[category] = Type.Optional(Type.Array(Type.String()));
+		return acc;
+	},
+	{} as Record<ChangelogCategory, TSchema>,
+);
+
+const changelogEntriesSchema = Type.Object(changelogEntryProperties);
+
+export const changelogTool = {
 	name: "create_changelog_entries",
 	description: "Generate changelog entries grouped by Keep a Changelog categories.",
 	parameters: Type.Object({
-		entries: Type.Record(Type.String(), Type.Array(Type.String())),
+		entries: changelogEntriesSchema,
 	}),
 };
 
@@ -46,7 +56,7 @@ export async function generateChangelogEntries({
 		{
 			systemPrompt: renderPromptTemplate(changelogSystemPrompt),
 			messages: [{ role: "user", content: prompt, timestamp: Date.now() }],
-			tools: [ChangelogTool],
+			tools: [changelogTool],
 		},
 		{ apiKey, maxTokens: 1200 },
 	);
@@ -58,7 +68,7 @@ export async function generateChangelogEntries({
 function parseChangelogResponse(message: AssistantMessage): ChangelogGenerationResult {
 	const toolCall = extractToolCall(message, "create_changelog_entries");
 	if (toolCall) {
-		const parsed = validateToolCall([ChangelogTool], toolCall) as ChangelogGenerationResult;
+		const parsed = validateToolCall([changelogTool], toolCall) as ChangelogGenerationResult;
 		return { entries: parsed.entries ?? {} };
 	}
 

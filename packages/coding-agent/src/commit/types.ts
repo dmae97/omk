@@ -1,7 +1,6 @@
 /**
  * Types for the omp commit pipeline.
  */
-
 export type CommitType =
 	| "feat"
 	| "fix"
@@ -23,6 +22,16 @@ export type ChangelogCategory =
 	| "Removed"
 	| "Fixed"
 	| "Security";
+
+export const CHANGELOG_CATEGORIES: ChangelogCategory[] = [
+	"Breaking Changes",
+	"Added",
+	"Changed",
+	"Deprecated",
+	"Removed",
+	"Fixed",
+	"Security",
+];
 
 export interface CommitCommandArgs {
 	/** Push after commit */
