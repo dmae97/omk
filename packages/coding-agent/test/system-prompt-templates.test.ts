@@ -70,7 +70,7 @@ const expectedMarkerByTemplate = new Map<string, string>([
 	["summarization-system.md", "context summarization assistant"],
 	["system-prompt.md", "Environment"],
 	["title-system.md", "Generate a very short title"],
-	["ttsr-interrupt.md", "<system-interrupt reason=\"rule_violation\""],
+	["ttsr-interrupt.md", '<system-interrupt reason="rule_violation"'],
 	["web-search.md", "<priorities>"],
 ]);
 

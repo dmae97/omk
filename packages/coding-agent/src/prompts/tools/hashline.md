@@ -39,14 +39,12 @@ Every edit has `op`, `pos`, and `lines`. Range replaces also have `end`. Both `p
 
 <rules>
 1. **Minimize scope:** You **MUST** use one logical mutation per operation.
-2. **No no-ops:** replacement **MUST** differ from current.
-3. **Prefer insertion over neighbor rewrites:** You **SHOULD** anchor on structural boundaries (`}`, `]`, `},`), not interior lines.
-4. **For swaps/moves:** You **SHOULD** prefer one range op over multiple single-line ops.
-5. **Range end tag:** When replacing a block (e.g., an `if` body), the `end` tag **MUST** include the block's closing brace/bracket — not just the last interior line. Verify the `end` tag covers all lines being logically removed, including trailing `}`, `]`, or `)`. An off-by-one on `end` orphans a brace and breaks syntax.
+2. **Prefer insertion over neighbor rewrites:** You **SHOULD** anchor on structural boundaries (`}`, `]`, `},`), not interior lines.
+3. **Range end tag:** When replacing a block (e.g., an `if` body), the `end` tag **MUST** include the block's closing brace/bracket — not just the last interior line. Verify the `end` tag covers all lines being logically removed, including trailing `}`, `]`, or `)`. An off-by-one on `end` orphans a brace and breaks syntax.
 </rules>
 
 <recovery>
-**Tag mismatch (`>>>`):** You **MUST** retry using fresh tags from the error snippet. Re-read only if snippet lacks context.
+**Tag mismatch (`>>>`):** You **MUST** retry using fresh tags from the error snippet. If snippet lacks context, or if you repeatedly fail, you **MUST** re-read the file and issue less ambitious edits, i.e. single op.
 **No-op (`identical`):** You **MUST NOT** resubmit. Re-read target lines and adjust the edit.
 </recovery>
 

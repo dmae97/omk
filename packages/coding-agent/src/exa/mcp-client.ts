@@ -46,7 +46,11 @@ export async function fetchWebsetsTools(apiKey: string): Promise<MCPTool[]> {
 }
 
 /** Call a tool on Exa MCP (simplified: toolName as first arg for easier use) */
-export async function callExaTool(toolName: string, args: Record<string, unknown>, apiKey: string | null): Promise<unknown> {
+export async function callExaTool(
+	toolName: string,
+	args: Record<string, unknown>,
+	apiKey: string | null,
+): Promise<unknown> {
 	const params = new URLSearchParams();
 	if (apiKey) params.set("exaApiKey", apiKey);
 	params.set("tools", toolName);
