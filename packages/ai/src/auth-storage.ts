@@ -718,6 +718,11 @@ export class AuthStorage {
 		let credentials: OAuthCredentials;
 		const saveApiKeyCredential = async (apiKey: string): Promise<void> => {
 			const newCredential: ApiKeyCredential = { type: "api_key", key: apiKey };
+			const shouldReplaceExisting = provider === "minimax-code" || provider === "minimax-code-cn";
+			if (shouldReplaceExisting) {
+				await this.set(provider, newCredential);
+				return;
+			}
 			const existing = this.#getCredentialsForProvider(provider);
 			if (existing.length === 0) {
 				await this.set(provider, newCredential);
