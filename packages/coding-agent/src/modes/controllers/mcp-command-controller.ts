@@ -739,10 +739,12 @@ export class MCPCommandController {
 
 			// Collect runtime-discovered servers not in config files
 			const configServerNames = new Set([...userServers, ...projectServers]);
+			const disabledServerNames = new Set(await readDisabledServers(userPath));
 			const discoveredServers: { name: string; source: SourceMeta }[] = [];
 			if (this.ctx.mcpManager) {
 				for (const name of this.ctx.mcpManager.getAllServerNames()) {
 					if (configServerNames.has(name)) continue;
+					if (disabledServerNames.has(name)) continue;
 					const source = this.ctx.mcpManager.getSource(name);
 					if (source) {
 						discoveredServers.push({ name, source });
@@ -754,7 +756,7 @@ export class MCPCommandController {
 				userServers.length === 0 &&
 				projectServers.length === 0 &&
 				discoveredServers.length === 0 &&
-				(userConfig.disabledServers ?? []).length === 0
+				disabledServerNames.size === 0
 			) {
 				this.#showMessage(
 					[
@@ -851,8 +853,7 @@ export class MCPCommandController {
 			}
 
 			// Show servers disabled via /mcp disable (from third-party configs)
-			const disabledServers = await readDisabledServers(userPath);
-			const relevantDisabled = disabledServers.filter(n => !configServerNames.has(n));
+			const relevantDisabled = [...disabledServerNames].filter(n => !configServerNames.has(n));
 			if (relevantDisabled.length > 0) {
 				lines.push(theme.fg("accent", "Disabled") + theme.fg("muted", " (discovered servers):"));
 				for (const name of relevantDisabled) {
