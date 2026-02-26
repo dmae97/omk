@@ -44,7 +44,7 @@ function formatSchema(schema: unknown): string {
 function formatAjvErrors(errors: ErrorObject[] | null | undefined): string {
 	if (!errors || errors.length === 0) return "Unknown schema validation error.";
 	return errors
-		.map(err => {
+		.map((err) => {
 			const path = err.instancePath ? `${err.instancePath}: ` : "";
 			return `${path}${err.message ?? "invalid"}`;
 		})
@@ -91,14 +91,18 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 				})
 			: Type.Object({}, { additionalProperties: true, description: "Structured JSON output (no schema specified)" });
 
-		this.parameters = Type.Union([
-			Type.Object({
-				data: dataSchema,
-			}),
-			Type.Object({
-				error: Type.String({ description: "Error message when the task cannot be completed" }),
-			}),
-		]);
+		this.parameters = Type.Object(
+			{
+				result: Type.Union([
+					Type.Object({ data: dataSchema }, { description: "Successfully completed the task" }),
+					Type.Object({ error: Type.String({ description: "Error message when the task cannot be completed" }) }),
+				]),
+			},
+			{
+				additionalProperties: false,
+				description: "Submit either `data` for success or `error` for failure",
+			},
+		);
 	}
 
 	async execute(
@@ -109,10 +113,23 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 		_context?: AgentToolContext,
 	): Promise<AgentToolResult<SubmitResultDetails>> {
 		const raw = params as Record<string, unknown>;
-		const errorMessage = typeof raw.error === "string" ? raw.error : undefined;
-		const status = errorMessage !== undefined ? "aborted" : "success";
-		const data = raw.data;
+		const rawResult = raw.result;
+		if (!rawResult || typeof rawResult !== "object" || Array.isArray(rawResult)) {
+			throw new Error("result must be an object containing either data or error");
+		}
 
+		const resultRecord = rawResult as Record<string, unknown>;
+		const errorMessage = typeof resultRecord.error === "string" ? resultRecord.error : undefined;
+		const data = resultRecord.data;
+
+		if (errorMessage !== undefined && data !== undefined) {
+			throw new Error("result cannot contain both data and error");
+		}
+		if (errorMessage === undefined && data === undefined) {
+			throw new Error("result must contain either data or error");
+		}
+
+		const status = errorMessage !== undefined ? "aborted" : "success";
 		if (status === "success") {
 			if (data === undefined || data === null) {
 				throw new Error("data is required when submit_result indicates success");
@@ -136,7 +153,7 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 
 // Register subprocess tool handler for extraction + termination.
 subprocessToolRegistry.register<SubmitResultDetails>("submit_result", {
-	extractData: event => {
+	extractData: (event) => {
 		const details = event.result?.details;
 		if (!details || typeof details !== "object") return undefined;
 		const record = details as Record<string, unknown>;
@@ -148,5 +165,5 @@ subprocessToolRegistry.register<SubmitResultDetails>("submit_result", {
 			error: typeof record.error === "string" ? record.error : undefined,
 		};
 	},
-	shouldTerminate: event => !event.isError,
+	shouldTerminate: (event) => !event.isError,
 });

@@ -15,30 +15,43 @@ function createSession(overrides: Partial<ToolSession> = {}): ToolSession {
 }
 
 describe("SubmitResultTool", () => {
-	it("exposes `{ data } | { error }` parameter union", () => {
+	it("exposes top-level object parameters with required result union", () => {
 		const tool = new SubmitResultTool(createSession());
-		const schema = tool.parameters as { anyOf?: Array<{ required?: string[] }> };
-		expect(schema.anyOf).toHaveLength(2);
-		expect(schema.anyOf?.[0]?.required).toEqual(["data"]);
-		expect(schema.anyOf?.[1]?.required).toEqual(["error"]);
+		const schema = tool.parameters as {
+			type?: string;
+			properties?: Record<string, unknown>;
+			required?: string[];
+		};
+		expect(schema.type).toBe("object");
+		expect(Object.keys(schema.properties ?? {})).toEqual(["result"]);
+		expect(schema.required).toEqual(["result"]);
 	});
 
 	it("accepts success payload with data", async () => {
 		const tool = new SubmitResultTool(createSession());
-		const result = await tool.execute("call-1", { data: { ok: true } } as never);
+		const result = await tool.execute("call-1", { result: { data: { ok: true } } } as never);
 		expect(result.details).toEqual({ data: { ok: true }, status: "success", error: undefined });
 	});
 
 	it("accepts aborted payload with error only", async () => {
 		const tool = new SubmitResultTool(createSession());
-		const result = await tool.execute("call-2", { error: "blocked" } as never);
+		const result = await tool.execute("call-2", { result: { error: "blocked" } } as never);
 		expect(result.details).toEqual({ data: undefined, status: "aborted", error: "blocked" });
 	});
 
-	it("rejects successful submissions without data", async () => {
+	it("accepts arbitrary data when outputSchema is null", async () => {
+		const tool = new SubmitResultTool(createSession({ outputSchema: null }));
+		const result = await tool.execute("call-null", { result: { data: { nested: { x: 1 }, ok: true } } } as never);
+		expect(result.details).toEqual({
+			data: { nested: { x: 1 }, ok: true },
+			status: "success",
+			error: undefined,
+		});
+	});
+	it("rejects submissions without a result object", async () => {
 		const tool = new SubmitResultTool(createSession());
 		await expect(tool.execute("call-3", {} as never)).rejects.toThrow(
-			"data is required when submit_result indicates success",
+			"result must be an object containing either data or error",
 		);
 	});
 });

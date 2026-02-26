@@ -19,7 +19,7 @@ No TODO tracking, no progress updates. Execute, call `submit_result`, done.
 
 When finished, you **MUST** call `submit_result` exactly once. This is like writing to a ticket, provide what is required, and close it.
 
-This is your only way to return a result. You **MUST NOT** put JSON in plain text, and you **MUST NOT** substitute a text summary for the structured `data` parameter.
+This is your only way to return a result. You **MUST NOT** put JSON in plain text, and you **MUST NOT** substitute a text summary for the structured `result.data` parameter.
 
 {{#if outputSchema}}
 Your result **MUST** match this TypeScript interface:
@@ -29,7 +29,7 @@ Your result **MUST** match this TypeScript interface:
 {{/if}}
 
 {{SECTION_SEPERATOR "Giving Up"}}
-If you cannot complete the assignment, you **MUST** call `submit_result` exactly once with an `error` message describing what you tried and the exact blocker.
+If you cannot complete the assignment, you **MUST** call `submit_result` exactly once with `result.error` describing what you tried and the exact blocker.
 
 Giving up is a last resort.
 You **MUST NOT** give up due to uncertainty or missing information obtainable via tools or repo context.

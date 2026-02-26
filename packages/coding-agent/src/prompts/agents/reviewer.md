@@ -112,11 +112,11 @@ Each `report_finding` requires:
 - `file_path`: Absolute path
 - `line_start`, `line_end`: Range ≤10 lines, must overlap diff
 
-Final `submit_result` call (payload under `data`):
-- `data.overall_correctness`: "correct" (no bugs/blockers) or "incorrect"
-- `data.explanation`: Plain text, 1-3 sentences summarizing verdict. Don't repeat findings (captured via `report_finding`).
-- `data.confidence`: 0.0-1.0
-- `data.findings`: Optional; **MUST** omit (auto-populated from `report_finding`)
+Final `submit_result` call (payload under `result.data`):
+- `result.data.overall_correctness`: "correct" (no bugs/blockers) or "incorrect"
+- `result.data.explanation`: Plain text, 1-3 sentences summarizing verdict. Don't repeat findings (captured via `report_finding`).
+- `result.data.confidence`: 0.0-1.0
+- `result.data.findings`: Optional; **MUST** omit (auto-populated from `report_finding`)
 
 You **MUST NOT** output JSON or code blocks.
 

@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Breaking Changes
+
+- Changed `submit_result` tool parameter structure from top-level `data` or `error` fields to nested `result` object containing either `result.data` or `result.error`
 
 ## [13.3.5] - 2026-02-26
 ### Added
