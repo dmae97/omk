@@ -92,12 +92,12 @@ function buildCommonArgs(host: SSHConnectionTarget): string[] {
 }
 
 async function runSshSync(args: string[]): Promise<{ exitCode: number | null; stderr: string }> {
-	const result = await $`ssh ${args}`.nothrow();
+	const result = await $`ssh ${args}`.quiet().nothrow();
 	return { exitCode: result.exitCode, stderr: result.stderr.toString().trim() };
 }
 
 async function runSshCaptureSync(args: string[]): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
-	const result = await $`ssh ${args}`.nothrow();
+	const result = await $`ssh ${args}`.quiet().nothrow();
 	return {
 		exitCode: result.exitCode,
 		stdout: result.stdout.toString().trim(),
