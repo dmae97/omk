@@ -27,6 +27,7 @@ import dark_nebula from "./dark-nebula.json" with { type: "json" };
 import dark_nord from "./dark-nord.json" with { type: "json" };
 import dark_ocean from "./dark-ocean.json" with { type: "json" };
 import dark_one from "./dark-one.json" with { type: "json" };
+import dark_poimandres from "./dark-poimandres.json" with { type: "json" };
 import dark_rainforest from "./dark-rainforest.json" with { type: "json" };
 import dark_reef from "./dark-reef.json" with { type: "json" };
 import dark_retro from "./dark-retro.json" with { type: "json" };
@@ -73,6 +74,7 @@ import light_one from "./light-one.json" with { type: "json" };
 import light_opal from "./light-opal.json" with { type: "json" };
 import light_orchard from "./light-orchard.json" with { type: "json" };
 import light_paper from "./light-paper.json" with { type: "json" };
+import light_poimandres from "./light-poimandres.json" with { type: "json" };
 import light_prism from "./light-prism.json" with { type: "json" };
 import light_retro from "./light-retro.json" with { type: "json" };
 import light_sand from "./light-sand.json" with { type: "json" };
@@ -125,6 +127,7 @@ export const defaultThemes = {
 	"dark-nord": dark_nord,
 	"dark-ocean": dark_ocean,
 	"dark-one": dark_one,
+	"dark-poimandres": dark_poimandres,
 	"dark-rainforest": dark_rainforest,
 	"dark-reef": dark_reef,
 	"dark-retro": dark_retro,
@@ -171,6 +174,7 @@ export const defaultThemes = {
 	"light-opal": light_opal,
 	"light-orchard": light_orchard,
 	"light-paper": light_paper,
+	"light-poimandres": light_poimandres,
 	"light-prism": light_prism,
 	"light-retro": light_retro,
 	"light-sand": light_sand,
