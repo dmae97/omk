@@ -1,6 +1,84 @@
 import { describe, expect, it } from "bun:test";
-import { enforceStrictSchema } from "@oh-my-pi/pi-ai/utils/typebox-helpers";
+import { enforceStrictSchema, sanitizeSchemaForStrictMode } from "@oh-my-pi/pi-ai/utils/typebox-helpers";
 import { Type } from "@sinclair/typebox";
+
+describe("sanitizeSchemaForStrictMode", () => {
+	it("infers object type, strips non-structural keywords, and converts const to enum", () => {
+		const schema = {
+			properties: {
+				token: {
+					const: "abc",
+					minLength: 3,
+					format: "email",
+				},
+			},
+			required: ["token"],
+			format: "uuid",
+			pattern: "[a-z]+",
+		} as Record<string, unknown>;
+
+		const sanitized = sanitizeSchemaForStrictMode(schema);
+		const properties = sanitized.properties as Record<string, Record<string, unknown>>;
+		const tokenSchema = properties.token;
+
+		expect(sanitized.type).toBe("object");
+		expect(sanitized.format).toBeUndefined();
+		expect(sanitized.pattern).toBeUndefined();
+		expect(tokenSchema.enum).toEqual(["abc"]);
+		expect(tokenSchema.const).toBeUndefined();
+		expect(tokenSchema.minLength).toBeUndefined();
+		expect(tokenSchema.format).toBeUndefined();
+	});
+
+	it("normalizes type arrays into anyOf variants and cleans non-object branches", () => {
+		const schema = {
+			type: ["object", "null"],
+			properties: {
+				data: { type: "string" },
+			},
+			required: ["data"],
+			minLength: 1,
+		} as Record<string, unknown>;
+
+		const sanitized = sanitizeSchemaForStrictMode(schema);
+		expect(Array.isArray(sanitized.anyOf)).toBe(true);
+
+		const variants = sanitized.anyOf as Array<Record<string, unknown>>;
+		const objectVariant = variants.find(variant => variant.type === "object");
+		const nullVariant = variants.find(variant => variant.type === "null");
+
+		expect(objectVariant).toBeDefined();
+		expect(nullVariant).toEqual({ type: "null" });
+		expect((objectVariant as Record<string, unknown>).required).toEqual(["data"]);
+		expect((objectVariant as Record<string, unknown>).properties).toEqual({ data: { type: "string" } });
+	});
+
+	it("keeps existing anyOf constraints inside each normalized type variant", () => {
+		const schema = {
+			type: ["object", "null"],
+			anyOf: [
+				{
+					type: "object",
+					properties: { kind: { const: "ok" } },
+					required: ["kind"],
+				},
+			],
+		} as Record<string, unknown>;
+
+		const sanitized = sanitizeSchemaForStrictMode(schema);
+		const variants = sanitized.anyOf as Array<Record<string, unknown>>;
+		const objectVariant = variants.find(variant => variant.type === "object");
+		const nullVariant = variants.find(variant => variant.type === "null");
+
+		expect(variants).toHaveLength(2);
+		expect(objectVariant).toBeDefined();
+		expect(nullVariant).toBeDefined();
+		expect(Array.isArray((objectVariant as Record<string, unknown>).anyOf)).toBe(true);
+		expect(Array.isArray((nullVariant as Record<string, unknown>).anyOf)).toBe(true);
+		expect(((objectVariant as Record<string, unknown>).anyOf as unknown[]).length).toBe(1);
+		expect(((nullVariant as Record<string, unknown>).anyOf as unknown[]).length).toBe(1);
+	});
+});
 
 describe("enforceStrictSchema", () => {
 	it("converts optional properties to nullable schemas and requires all object keys", () => {
@@ -74,5 +152,20 @@ describe("enforceStrictSchema", () => {
 		expect(malformedBranch.additionalProperties).toBe(false);
 		expect(validBranch.required).toEqual(["error"]);
 		expect(validBranch.additionalProperties).toBe(false);
+	});
+
+	it("treats type arrays containing object as object schemas", () => {
+		const schema = {
+			type: ["object", "null"],
+			properties: { value: { type: "string" } },
+			required: ["value"],
+		} as Record<string, unknown>;
+
+		const strict = enforceStrictSchema(schema);
+		const properties = strict.properties as Record<string, Record<string, unknown>>;
+
+		expect(strict.additionalProperties).toBe(false);
+		expect(strict.required).toEqual(["value"]);
+		expect(properties.value.type).toBe("string");
 	});
 });

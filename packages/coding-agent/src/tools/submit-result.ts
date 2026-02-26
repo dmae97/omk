@@ -4,6 +4,7 @@
  * Subagents must call this tool to finish and return structured JSON output.
  */
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
+import { enforceStrictSchema, sanitizeSchemaForStrictMode } from "@oh-my-pi/pi-ai/utils/typebox-helpers";
 import type { Static, TSchema } from "@sinclair/typebox";
 import { Type } from "@sinclair/typebox";
 import Ajv, { type ErrorObject, type ValidateFunction } from "ajv";
@@ -58,7 +59,7 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 		"Finish the task with structured JSON output. Call exactly once at the end of the task.\n\n" +
 		"If you cannot complete the task, call with an error message payload.";
 	readonly parameters: TSchema;
-	readonly strict = true;
+	strict = true;
 
 	readonly #validate?: ValidateFunction;
 	readonly #schemaError?: string;
@@ -82,15 +83,21 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 
 		const schemaHint = formatSchema(normalizedSchema ?? session.outputSchema);
 
-		// Use actual schema if provided, otherwise fall back to Type.Any
-		// Merge description into the JSON schema for better tool documentation
-		const dataSchema = normalizedSchema
-			? Type.Unsafe({
-					...(normalizedSchema as object),
-					description: `Structured output matching the schema:\n${schemaHint}`,
-				})
-			: Type.Record(Type.String(), Type.Any(), { description: "Structured JSON output (no schema specified)" });
+		const schemaDescription = `Structured output matching the schema:\n${schemaHint}`;
+		const sanitizedSchema =
+			normalizedSchema != null && typeof normalizedSchema === "object" && !Array.isArray(normalizedSchema)
+				? sanitizeSchemaForStrictMode(normalizedSchema as Record<string, unknown>)
+				: normalizedSchema === true
+					? {}
+					: undefined;
 
+		const dataSchema =
+			sanitizedSchema !== undefined
+				? Type.Unsafe({
+						...sanitizedSchema,
+						description: schemaDescription,
+					})
+				: Type.Record(Type.String(), Type.Any(), { description: "Structured JSON output (no schema specified)" });
 		this.parameters = Type.Object(
 			{
 				result: Type.Union([
@@ -103,6 +110,13 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 				description: "Submit either `data` for success or `error` for failure",
 			},
 		);
+
+		try {
+			const strictParameters = enforceStrictSchema(this.parameters as unknown as Record<string, unknown>);
+			JSON.stringify(strictParameters);
+		} catch {
+			this.strict = false;
+		}
 	}
 
 	async execute(

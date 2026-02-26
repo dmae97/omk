@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Removed `preloadedSkills` option from `CreateAgentSessionOptions`; skills are no longer inlined into system prompts
@@ -10,11 +11,17 @@
 
 ### Changed
 
+- Changed schema sanitization to remove strict-mode incompatible constraints (minLength, pattern, etc.) from tool parameters while preserving them for runtime validation
 - Simplified task execution to always pass available session skills to subagents instead of resolving per-task skill lists
 
 ### Removed
 
 - Removed preloaded skills section from system prompt templates; skills are now referenced only as available resources
+
+### Fixed
+
+- Fixed strict schema generation for output schemas with only required fields, enabling proper Claude API compatibility
+- Fixed handling of union type schemas (e.g., object|null) to normalize them into strict-mode compatible variants
 
 ## [13.3.6] - 2026-02-26
 ### Breaking Changes

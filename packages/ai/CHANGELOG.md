@@ -1,6 +1,15 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Added `sanitizeSchemaForStrictMode` function to normalize JSON schemas by stripping non-structural keywords, converting `const` to `enum`, and expanding type arrays into `anyOf` variants
+
+### Changed
+
+- Enhanced `enforceStrictSchema` to properly handle schemas with type arrays containing `object` (e.g., `type: ["object", "null"]`)
+
 ### Fixed
 
 - Fixed `enforceStrictSchema` to properly handle malformed object schemas with required keys but missing properties
