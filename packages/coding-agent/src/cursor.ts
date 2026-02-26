@@ -198,7 +198,7 @@ export class CursorExecHandlers implements ICursorExecHandlers {
 		const timeoutSeconds = args.timeout && args.timeout > 0 ? args.timeout : undefined;
 		const toolResultMessage = await executeTool(this.options, "bash", toolCallId, {
 			command: args.command,
-			workdir: args.workingDirectory || undefined,
+			cwd: args.workingDirectory || undefined,
 			timeout: timeoutSeconds,
 		});
 		return toolResultMessage;

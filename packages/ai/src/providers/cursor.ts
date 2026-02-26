@@ -37,6 +37,7 @@ import {
 	AssistantMessageSchema,
 	BackgroundShellSpawnResultSchema,
 	ClientHeartbeatSchema,
+	ComputerUseResultSchema,
 	ConversationActionSchema,
 	type ConversationStateStructure,
 	ConversationStateStructureSchema,
@@ -70,6 +71,7 @@ import {
 	GrepUnionResultSchema,
 	KvClientMessageSchema,
 	type KvServerMessage,
+	ListMcpResourcesExecResultSchema,
 	type LsDirectoryTreeNode,
 	type LsDirectoryTreeNode_File,
 	LsDirectoryTreeNode_FileSchema,
@@ -88,9 +90,11 @@ import {
 	McpToolResultContentItemSchema,
 	ModelDetailsSchema,
 	ReadErrorSchema,
+	ReadMcpResourceExecResultSchema,
 	ReadRejectedSchema,
 	ReadResultSchema,
 	ReadSuccessSchema,
+	RecordScreenResultSchema,
 	RequestContextResultSchema,
 	RequestContextSchema,
 	RequestContextSuccessSchema,
@@ -963,6 +967,26 @@ async function handleExecServerMessage(
 				error => buildMcpErrorResult(error),
 			);
 			sendExecClientMessage(h2Request, execMsg, "mcpResult", execResult);
+			return;
+		}
+		case "listMcpResourcesExecArgs": {
+			const execResult = create(ListMcpResourcesExecResultSchema, {});
+			sendExecClientMessage(h2Request, execMsg, "listMcpResourcesExecResult", execResult);
+			return;
+		}
+		case "readMcpResourceExecArgs": {
+			const execResult = create(ReadMcpResourceExecResultSchema, {});
+			sendExecClientMessage(h2Request, execMsg, "readMcpResourceExecResult", execResult);
+			return;
+		}
+		case "recordScreenArgs": {
+			const execResult = create(RecordScreenResultSchema, {});
+			sendExecClientMessage(h2Request, execMsg, "recordScreenResult", execResult);
+			return;
+		}
+		case "computerUseArgs": {
+			const execResult = create(ComputerUseResultSchema, {});
+			sendExecClientMessage(h2Request, execMsg, "computerUseResult", execResult);
 			return;
 		}
 		default:
