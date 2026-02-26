@@ -522,7 +522,7 @@ export const SETTINGS_SCHEMA = {
 	},
 	"async.maxJobs": {
 		type: "number",
-		default: 15,
+		default: 100,
 		ui: {
 			tab: "tools",
 			label: "Async max jobs",

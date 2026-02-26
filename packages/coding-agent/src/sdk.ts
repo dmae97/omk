@@ -729,7 +729,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	const enableLsp = options.enableLsp ?? true;
 	const asyncEnabled = settings.get("async.enabled");
-	const asyncMaxJobs = Math.min(100, Math.max(1, settings.get("async.maxJobs") ?? 15));
+	const asyncMaxJobs = Math.min(100, Math.max(1, settings.get("async.maxJobs") ?? 100));
 	const ASYNC_INLINE_RESULT_MAX_CHARS = 12_000;
 	const ASYNC_PREVIEW_MAX_CHARS = 4_000;
 	const formatAsyncResultForFollowUp = async (result: string): Promise<string> => {

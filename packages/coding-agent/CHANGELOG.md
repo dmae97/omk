@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Increased default async max jobs limit from 15 to 100 for improved concurrent task handling
 
 ## [13.3.3] - 2026-02-26
 ### Added
