@@ -50,6 +50,7 @@ export class StatusLineComponent implements Component {
 	// Git status caching (1s TTL)
 	#cachedGitStatus: { staged: number; unstaged: number; untracked: number } | null = null;
 	#gitStatusLastFetch = 0;
+	#gitStatusInFlight = false;
 
 	constructor(private readonly session: AgentSession) {
 		this.#settings = {
@@ -153,10 +154,11 @@ export class StatusLineComponent implements Component {
 	}
 
 	#getGitStatus(): { staged: number; unstaged: number; untracked: number } | null {
-		const now = Date.now();
-		if (now - this.#gitStatusLastFetch < 1000) {
+		if (this.#gitStatusInFlight || Date.now() - this.#gitStatusLastFetch < 1000) {
 			return this.#cachedGitStatus;
 		}
+
+		this.#gitStatusInFlight = true;
 
 		// Fire async fetch, return cached value
 		(async () => {
@@ -165,7 +167,6 @@ export class StatusLineComponent implements Component {
 
 				if (result.exitCode !== 0) {
 					this.#cachedGitStatus = null;
-					this.#gitStatusLastFetch = now;
 					return;
 				}
 
@@ -195,10 +196,11 @@ export class StatusLineComponent implements Component {
 				}
 
 				this.#cachedGitStatus = { staged, unstaged, untracked };
-				this.#gitStatusLastFetch = now;
 			} catch {
 				this.#cachedGitStatus = null;
-				this.#gitStatusLastFetch = now;
+			} finally {
+				this.#gitStatusLastFetch = Date.now();
+				this.#gitStatusInFlight = false;
 			}
 		})();
 
