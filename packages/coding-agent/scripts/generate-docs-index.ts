@@ -3,8 +3,8 @@
 import { Glob } from "bun";
 import * as path from "node:path";
 
-const docsDir = new URL("../../../docs/", import.meta.url).pathname;
-const outputPath = new URL("../src/internal-urls/docs-index.generated.ts", import.meta.url).pathname;
+const docsDir = path.resolve(import.meta.dir, "../../../docs");
+const outputPath = path.resolve(import.meta.dir, "../src/internal-urls/docs-index.generated.ts");
 
 const glob = new Glob("**/*.md");
 const entries: string[] = [];

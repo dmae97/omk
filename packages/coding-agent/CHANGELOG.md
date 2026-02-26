@@ -14,6 +14,7 @@
 - Added `task.isolation.commits` setting (`generic` or `ai`) for commit messages on isolated task branches and nested repos. `ai` mode uses a smol model to generate conventional commit messages from diffs
 - Nested non-submodule git repos are now discovered and handled during task isolation (changes captured and applied independently from parent repo)
 - Added `task.eager` setting to encourage the agent to delegate work to subagents by default
+- Added manual OAuth login flow that lets users paste redirect URLs with /login for callback-server providers and prevents overlapping logins
 
 ### Fixed
 
@@ -56,12 +57,14 @@
 - Removed unused SSH resource cleanup functions `closeAllConnections` and `unmountAll` from session imports
 
 ## [13.1.2] - 2026-02-23
-### Breaking Changes
 
+### Breaking Changes
 - Removed `timeout` parameter from await tool—tool now waits indefinitely until jobs complete or the call is aborted
 - Renamed `job_ids` parameter to `jobs` in await tool schema
 - Removed `timedOut` field from await tool result details
 
+### Changed
+- Resolved docs index generation paths using path.resolve relative to the script directory
 ## [13.1.1] - 2026-02-23
 
 ### Fixed

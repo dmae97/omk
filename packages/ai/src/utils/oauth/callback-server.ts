@@ -191,24 +191,24 @@ export abstract class OAuthCallbackFlow {
 		});
 
 		// Manual input race (if supported)
-		// Errors from manual input should not abort the flow - only successful input wins the race
 		if (this.ctrl.onManualCodeInput) {
-			const manualPromise = this.ctrl
-				.onManualCodeInput()
-				.then((input): CallbackResult => {
-					const parsed = parseCallbackInput(input);
-					if (!parsed.code) {
-						throw new Error("No authorization code found in input");
-					}
-					if (expectedState && parsed.state && parsed.state !== expectedState) {
-						throw new Error("State mismatch - possible CSRF attack");
-					}
-					return { code: parsed.code, state: parsed.state ?? "" };
-				})
-				.catch((): Promise<CallbackResult> => {
-					// On manual input error, wait forever - let callback or abort signal win
-					return new Promise(() => {});
-				});
+			const requestManualInput = this.ctrl.onManualCodeInput;
+			const manualPromise = (async (): Promise<CallbackResult> => {
+				while (true) {
+					const result = await Promise.race([
+						callbackPromise,
+						requestManualInput()
+							.then((input): CallbackResult | null => {
+								const parsed = parseCallbackInput(input);
+								if (!parsed.code) return null;
+								if (expectedState && parsed.state && parsed.state !== expectedState) return null;
+								return { code: parsed.code, state: parsed.state ?? "" };
+							})
+							.catch((): CallbackResult | null => null),
+					]);
+					if (result) return result;
+				}
+			})();
 
 			return Promise.race([callbackPromise, manualPromise]);
 		}

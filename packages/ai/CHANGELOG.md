@@ -2,8 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Allowed OAuth provider logins to supply a manual authorization code handler with a default prompt when none is provided
 ## [13.2.0] - 2026-02-23
-
 ### Added
 
 - Added support for GitHub Copilot provider in strict mode for both openai-completions and openai-responses tool schemas

@@ -730,12 +730,12 @@ export class AuthStorage {
 			}
 			await this.set(provider, [...existing, newCredential]);
 		};
+		const manualCodeInput = () => ctrl.onPrompt({ message: "Paste the authorization code (or full redirect URL):" });
 		switch (provider) {
 			case "anthropic":
 				credentials = await loginAnthropic({
 					...ctrl,
-					onManualCodeInput: async () =>
-						ctrl.onPrompt({ message: "Paste the authorization code (or full redirect URL):" }),
+					onManualCodeInput: ctrl.onManualCodeInput ?? manualCodeInput,
 				});
 				break;
 			case "github-copilot":
@@ -747,16 +747,28 @@ export class AuthStorage {
 				});
 				break;
 			case "google-gemini-cli":
-				credentials = await loginGeminiCli(ctrl);
+				credentials = await loginGeminiCli({
+					...ctrl,
+					onManualCodeInput: ctrl.onManualCodeInput ?? manualCodeInput,
+				});
 				break;
 			case "google-antigravity":
-				credentials = await loginAntigravity(ctrl);
+				credentials = await loginAntigravity({
+					...ctrl,
+					onManualCodeInput: ctrl.onManualCodeInput ?? manualCodeInput,
+				});
 				break;
 			case "openai-codex":
-				credentials = await loginOpenAICodex(ctrl);
+				credentials = await loginOpenAICodex({
+					...ctrl,
+					onManualCodeInput: ctrl.onManualCodeInput ?? manualCodeInput,
+				});
 				break;
 			case "gitlab-duo":
-				credentials = await loginGitLabDuo(ctrl);
+				credentials = await loginGitLabDuo({
+					...ctrl,
+					onManualCodeInput: ctrl.onManualCodeInput ?? manualCodeInput,
+				});
 				break;
 			case "kimi-code":
 				credentials = await loginKimi(ctrl);
@@ -877,8 +889,7 @@ export class AuthStorage {
 					onAuth: info => ctrl.onAuth(info),
 					onProgress: ctrl.onProgress,
 					onPrompt: ctrl.onPrompt,
-					onManualCodeInput: async () =>
-						ctrl.onPrompt({ message: "Paste the authorization code (or full redirect URL):" }),
+					onManualCodeInput: ctrl.onManualCodeInput ?? manualCodeInput,
 					signal: ctrl.signal,
 				});
 				if (typeof customLoginResult === "string") {

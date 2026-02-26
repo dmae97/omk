@@ -19,6 +19,7 @@ import type { HookSelectorComponent } from "./components/hook-selector";
 import type { PythonExecutionComponent } from "./components/python-execution";
 import type { StatusLineComponent } from "./components/status-line";
 import type { ToolExecutionHandle } from "./components/tool-execution";
+import type { OAuthManualInputManager } from "./oauth-manual-input";
 import type { Theme } from "./theme/theme";
 
 export type CompactionQueuedMessage = {
@@ -97,6 +98,7 @@ export interface InteractiveModeContext {
 	lastStatusText: Text | undefined;
 	fileSlashCommands: Set<string>;
 	skillCommands: Map<string, string>;
+	oauthManualInput: OAuthManualInputManager;
 	todoPhases: TodoPhase[];
 
 	// Lifecycle

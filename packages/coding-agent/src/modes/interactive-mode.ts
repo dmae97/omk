@@ -51,6 +51,7 @@ import { InputController } from "./controllers/input-controller";
 import { MCPCommandController } from "./controllers/mcp-command-controller";
 import { SelectorController } from "./controllers/selector-controller";
 import { SSHCommandController } from "./controllers/ssh-command-controller";
+import { OAuthManualInputManager } from "./oauth-manual-input";
 import { setMermaidRenderCallback } from "./theme/mermaid-cache";
 import type { Theme } from "./theme/theme";
 import { getEditorTheme, getMarkdownTheme, onThemeChange, theme } from "./theme/theme";
@@ -133,6 +134,7 @@ export class InteractiveMode implements InteractiveModeContext {
 	lastStatusText: Text | undefined = undefined;
 	fileSlashCommands: Set<string> = new Set();
 	skillCommands: Map<string, string> = new Map();
+	oauthManualInput: OAuthManualInputManager = new OAuthManualInputManager();
 
 	#pendingSlashCommands: SlashCommand[] = [];
 	#cleanupUnsubscribe?: () => void;

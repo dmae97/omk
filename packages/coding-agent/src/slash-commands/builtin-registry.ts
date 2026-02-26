@@ -259,7 +259,32 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<BuiltinSlashCommandSpec> = [
 	{
 		name: "login",
 		description: "Login with OAuth provider",
-		handle: (_command, runtime) => {
+		inlineHint: "[redirect URL]",
+		allowArgs: true,
+		handle: (command, runtime) => {
+			const manualInput = runtime.ctx.oauthManualInput;
+			const args = command.args.trim();
+			if (args.length > 0) {
+				const submitted = manualInput.submit(args);
+				if (submitted) {
+					runtime.ctx.showStatus("OAuth callback received; completing login…");
+				} else {
+					runtime.ctx.showWarning("No OAuth login is waiting for a manual callback.");
+				}
+				runtime.ctx.editor.setText("");
+				return;
+			}
+
+			if (manualInput.hasPending()) {
+				const provider = manualInput.pendingProviderId;
+				const message = provider
+					? `OAuth login already in progress for ${provider}. Paste the redirect URL with /login <url>.`
+					: "OAuth login already in progress. Paste the redirect URL with /login <url>.";
+				runtime.ctx.showWarning(message);
+				runtime.ctx.editor.setText("");
+				return;
+			}
+
 			void runtime.ctx.showOAuthSelector("login");
 			runtime.ctx.editor.setText("");
 		},
