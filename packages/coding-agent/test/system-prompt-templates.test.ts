@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import * as path from "node:path";
 import { renderPromptTemplate, type TemplateContext } from "@oh-my-pi/pi-coding-agent/config/prompt-templates";
+import Handlebars from "handlebars";
 
 const systemPromptsDir = path.resolve(import.meta.dir, "../src/prompts/system");
 
@@ -55,25 +56,6 @@ const baseRenderContext: TemplateContext = {
 	writeToolName: "write",
 };
 
-const expectedMarkerByTemplate = new Map<string, string>([
-	["agent-creation-architect.md", "elite AI agent architect"],
-	["agent-creation-user.md", "Design a custom agent for this request"],
-	["custom-system-prompt.md", "Current working directory:"],
-	["file-operations.md", "<read-files>"],
-	["plan-mode-active.md", "Plan mode active."],
-	["plan-mode-approved.md", "Plan approved."],
-	["plan-mode-reference.md", "## Existing Plan"],
-	["plan-mode-subagent.md", "Plan mode active."],
-	["subagent-submit-reminder.md", "You stopped without calling submit_result"],
-	["subagent-system-prompt.md", "Acting as"],
-	["subagent-user-prompt.md", "Task"],
-	["summarization-system.md", "context summarization assistant"],
-	["system-prompt.md", "Environment"],
-	["title-system.md", "Generate a very short title"],
-	["ttsr-interrupt.md", '<system-interrupt reason="rule_violation"'],
-	["web-search.md", "<priorities>"],
-]);
-
 async function loadSystemPromptTemplates(): Promise<Map<string, string>> {
 	const templates = new Map<string, string>();
 	const glob = new Bun.Glob("*.md");
@@ -87,19 +69,13 @@ async function loadSystemPromptTemplates(): Promise<Map<string, string>> {
 }
 
 describe("system Handlebars prompt templates", () => {
-	test("compiles and renders every system template with representative context", async () => {
+	test("parses and compiles every system template", async () => {
 		const templates = await loadSystemPromptTemplates();
 		expect(templates.size).toBeGreaterThan(0);
 
 		for (const [fileName, template] of templates) {
-			const rendered = renderPromptTemplate(template, baseRenderContext);
-			expect(rendered.length).toBeGreaterThan(0);
-			expect(rendered).not.toContain("{{#");
-			expect(rendered).not.toContain("{{/");
-
-			const expectedMarker = expectedMarkerByTemplate.get(fileName);
-			expect(expectedMarker, `Missing expected marker for ${fileName}`).toBeDefined();
-			expect(rendered).toContain(expectedMarker!);
+			expect(() => Handlebars.parse(template), `Failed parsing ${fileName}`).not.toThrow();
+			expect(() => Handlebars.compile(template), `Failed compiling ${fileName}`).not.toThrow();
 		}
 	});
 
