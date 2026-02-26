@@ -12,7 +12,6 @@ Subagents lack your conversation history. Every decision, file content, and user
   - `.id`: CamelCase, max 32 chars
   - `.description`: UI display only — subagent never sees it
   - `.assignment`: Complete self-contained instructions. One-liners PROHIBITED; missing acceptance criteria = too vague.
-  - `.skills`: Skill names to preload
 - `context`: Shared background prepended to every assignment. Session-specific info only.
 - `schema`: JTD schema for expected output. Format lives here — **MUST NOT** be duplicated in assignments.
 - `tasks`: Tasks to execute in parallel.

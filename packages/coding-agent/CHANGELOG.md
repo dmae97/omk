@@ -1,6 +1,20 @@
 # Changelog
 
 ## [Unreleased]
+### Breaking Changes
+
+- Removed `preloadedSkills` option from `CreateAgentSessionOptions`; skills are no longer inlined into system prompts
+- Removed `skills` field from Task schema; subagents now always inherit the session skill set instead of per-task skill selection
+- Removed Task tool per-task `tasks[].skills` support; subagents now always inherit the session skill set
+- Removed `preloadedSkills` system prompt plumbing and template sections; skills are no longer inlined as a separate preloaded block
+
+### Changed
+
+- Simplified task execution to always pass available session skills to subagents instead of resolving per-task skill lists
+
+### Removed
+
+- Removed preloaded skills section from system prompt templates; skills are now referenced only as available resources
 
 ## [13.3.6] - 2026-02-26
 ### Breaking Changes

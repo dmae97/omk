@@ -44,11 +44,6 @@ export const taskItemSchema = Type.Object({
 		description:
 			"Complete per-task instructions the subagent executes. Must follow the Target/Change/Edge Cases/Acceptance structure. Only include per-task deltas — shared background belongs in `context`.",
 	}),
-	skills: Type.Optional(
-		Type.Array(Type.String(), {
-			description: "Skill names to preload into the subagent. Use only where it changes correctness.",
-		}),
-	),
 });
 export type TaskItem = Static<typeof taskItemSchema>;
 

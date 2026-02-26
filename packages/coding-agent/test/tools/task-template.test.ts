@@ -43,14 +43,4 @@ describe("renderTemplate", () => {
 		});
 		expect(result.task).toBe("just the assignment");
 	});
-
-	test("passes through skills", () => {
-		const result = renderTemplate(undefined, {
-			id: "X",
-			description: "label",
-			assignment: "do stuff",
-			skills: ["react", "postgres"],
-		});
-		expect(result.skills).toEqual(["react", "postgres"]);
-	});
 });

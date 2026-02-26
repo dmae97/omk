@@ -690,58 +690,13 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 
 			// Build full prompts with context prepended
 			const tasksWithContext = tasksWithUniqueIds.map(t => renderTemplate(context, t));
+			const availableSkills = [...(this.session.skills ?? [])];
 			const contextFiles = this.session.contextFiles;
-			const availableSkills = this.session.skills;
-			const availableSkillList = availableSkills ?? [];
 			const promptTemplates = this.session.promptTemplates;
-			const skillLookup = new Map(availableSkillList.map(skill => [skill.name, skill]));
-			const missingSkillsByTask: Array<{ id: string; missing: string[] }> = [];
-			const tasksWithSkills = tasksWithContext.map(task => {
-				if (task.skills === undefined) {
-					return { ...task, resolvedSkills: availableSkills, preloadedSkills: undefined };
-				}
-				const requested = task.skills;
-				const resolved = [] as typeof availableSkillList;
-				const missing: string[] = [];
-				const seen = new Set<string>();
-				for (const name of requested) {
-					const trimmed = name.trim();
-					if (!trimmed || seen.has(trimmed)) continue;
-					seen.add(trimmed);
-					const skill = skillLookup.get(trimmed);
-					if (skill) {
-						resolved.push(skill);
-					} else {
-						missing.push(trimmed);
-					}
-				}
-				if (missing.length > 0) {
-					missingSkillsByTask.push({ id: task.id, missing });
-				}
-				return { ...task, resolvedSkills: resolved, preloadedSkills: resolved };
-			});
-
-			if (missingSkillsByTask.length > 0) {
-				const available = availableSkillList.map(skill => skill.name).join(", ") || "none";
-				const details = missingSkillsByTask.map(entry => `${entry.id}: ${entry.missing.join(", ")}`).join("; ");
-				return {
-					content: [
-						{
-							type: "text",
-							text: `Unknown skills requested: ${details}. Available skills: ${available}`,
-						},
-					],
-					details: {
-						projectAgentsDir,
-						results: [],
-						totalDurationMs: Date.now() - startTime,
-					},
-				};
-			}
 
 			// Initialize progress for all tasks
-			for (let i = 0; i < tasksWithSkills.length; i++) {
-				const t = tasksWithSkills[i];
+			for (let i = 0; i < tasksWithContext.length; i++) {
+				const t = tasksWithContext[i];
 				progressMap.set(i, {
 					index: i,
 					id: t.id,
@@ -760,7 +715,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 			}
 			emitProgress();
 
-			const runTask = async (task: (typeof tasksWithSkills)[number], index: number) => {
+			const runTask = async (task: (typeof tasksWithContext)[number], index: number) => {
 				if (!isIsolated) {
 					return runSubprocess({
 						cwd: this.session.cwd,
@@ -791,8 +746,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 						settings: this.session.settings,
 						mcpManager: this.session.mcpManager,
 						contextFiles,
-						skills: task.resolvedSkills,
-						preloadedSkills: task.preloadedSkills,
+						skills: availableSkills,
 						promptTemplates,
 					});
 				}
@@ -842,8 +796,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 						settings: this.session.settings,
 						mcpManager: this.session.mcpManager,
 						contextFiles,
-						skills: task.resolvedSkills,
-						preloadedSkills: task.preloadedSkills,
+						skills: availableSkills,
 						promptTemplates,
 					});
 					if (mergeMode === "branch" && result.exitCode === 0) {
@@ -927,7 +880,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 
 			// Execute in parallel with concurrency limit
 			const { results: partialResults, aborted } = await mapWithConcurrencyLimit(
-				tasksWithSkills,
+				tasksWithContext,
 				maxConcurrency,
 				runTask,
 				signal,
@@ -938,7 +891,7 @@ export class TaskTool implements AgentTool<TaskSchema, TaskToolDetails, Theme> {
 				if (result !== undefined) {
 					return result;
 				}
-				const task = tasksWithSkills[index];
+				const task = tasksWithContext[index];
 				return {
 					index,
 					id: task.id,

@@ -158,7 +158,6 @@ export interface ExecutorOptions {
 	eventBus?: EventBus;
 	contextFiles?: ContextFileEntry[];
 	skills?: Skill[];
-	preloadedSkills?: Skill[];
 	promptTemplates?: PromptTemplate[];
 	mcpManager?: MCPManager;
 	authStorage?: AuthStorage;
@@ -950,7 +949,6 @@ export async function runSubprocess(options: ExecutorOptions): Promise<SingleRes
 				requireSubmitResultTool: true,
 				contextFiles: options.contextFiles,
 				skills: options.skills,
-				preloadedSkills: options.preloadedSkills,
 				promptTemplates: options.promptTemplates,
 				systemPrompt: defaultPrompt =>
 					renderPromptTemplate(subagentSystemPromptTemplate, {

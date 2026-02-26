@@ -7,7 +7,6 @@ interface RenderResult {
 	task: string;
 	id: string;
 	description: string;
-	skills?: string[];
 }
 
 /**
@@ -16,17 +15,16 @@ interface RenderResult {
  * If context is provided, it is prepended with a separator.
  */
 export function renderTemplate(context: string | undefined, task: TaskItem): RenderResult {
-	let { id, description, assignment, skills } = task;
+	let { id, description, assignment } = task;
 	assignment = assignment.trim();
 	context = context?.trim();
 
 	if (!context || !assignment) {
-		return { task: assignment || context!, id, description, skills };
+		return { task: assignment || context!, id, description };
 	}
 	return {
 		task: renderPromptTemplate(subagentUserPromptTemplate, { context, assignment }),
 		id,
 		description,
-		skills,
 	};
 }

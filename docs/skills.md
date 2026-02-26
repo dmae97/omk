@@ -122,19 +122,12 @@ For providers other than codex/claude/native (for example `agents`, `claude-plug
 
 System prompt construction (`src/system-prompt.ts`) uses discovered skills as follows:
 
-- if `read` tool is available **and** no explicit preloaded skills are supplied:
+- if `read` tool is available:
   - include discovered skills list in prompt
 - otherwise:
   - omit discovered list
-- if preloaded skills are provided (for example from Task tool skill pinning):
-  - inline full preloaded skill contents in `<preloaded_skills>`
 
-### Task tool skill pinning
-
-When a Task call specifies `skills`, runtime resolves names against session skills:
-
-- unknown names cause an immediate error with available skill names
-- resolved skills are passed as preloaded skills to subagents
+Task tool subagents receive the session's discovered/provided skills list via normal session creation; there is no per-task skill pinning override.
 
 ### Interactive `/skill:<name>` commands
 

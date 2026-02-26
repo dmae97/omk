@@ -16,24 +16,6 @@ import { loadSkills, type Skill } from "./extensibility/skills";
 import customSystemPromptTemplate from "./prompts/system/custom-system-prompt.md" with { type: "text" };
 import systemPromptTemplate from "./prompts/system/system-prompt.md" with { type: "text" };
 
-type PreloadedSkill = { name: string; content: string };
-
-async function loadPreloadedSkillContents(preloadedSkills: Skill[]): Promise<PreloadedSkill[]> {
-	const contents = await Promise.all(
-		preloadedSkills.map(async skill => {
-			try {
-				const content = await Bun.file(skill.filePath).text();
-				return { name: skill.name, content };
-			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err);
-				throw new Error(`Failed to load skill "${skill.name}" from ${skill.filePath}: ${message}`);
-			}
-		}),
-	);
-
-	return contents;
-}
-
 function firstNonEmpty(...values: (string | undefined | null)[]): string | null {
 	for (const value of values) {
 		const trimmed = value?.trim();
@@ -350,11 +332,9 @@ export interface BuildSystemPromptOptions {
 	cwd?: string;
 	/** Pre-loaded context files (skips discovery if provided). */
 	contextFiles?: Array<{ path: string; content: string; depth?: number }>;
-	/** Pre-loaded skills (skips discovery if provided). */
+	/** Skills provided directly to system prompt construction. */
 	skills?: Skill[];
-	/** Skills to inline into the system prompt instead of listing available skills. */
-	preloadedSkills?: Skill[];
-	/** Pre-loaded rulebook rules (rules with descriptions, excluding TTSR and always-apply). */
+	/** Pre-loaded rulebook rules (descriptions, excluding TTSR and always-apply). */
 	rules?: Array<{ name: string; description?: string; path: string; globs?: string[] }>;
 	/** Intent field name injected into every tool schema. If set, explains the field in the prompt. */
 	intentField?: string;
@@ -378,13 +358,11 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		cwd,
 		contextFiles: providedContextFiles,
 		skills: providedSkills,
-		preloadedSkills: providedPreloadedSkills,
 		rules,
 		intentField,
 		eagerTasks = false,
 	} = options;
 	const resolvedCwd = cwd ?? getProjectDir();
-	const preloadedSkills = providedPreloadedSkills;
 
 	const prepPromise = (() => {
 		const systemPromptCustomizationPromise = logger.timeAsync("loadSystemPromptFiles", loadSystemPromptFiles, {
@@ -400,9 +378,6 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 				: skillsSettings?.enabled !== false
 					? loadSkills({ ...skillsSettings, cwd: resolvedCwd }).then(result => result.skills)
 					: Promise.resolve([]);
-		const preloadedSkillContentsPromise = preloadedSkills
-			? logger.timeAsync("loadPreloadedSkills", loadPreloadedSkillContents, preloadedSkills)
-			: [];
 
 		return Promise.all([
 			resolvePromptInput(customPrompt, "system prompt"),
@@ -411,7 +386,6 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 			contextFilesPromise,
 			agentsMdSearchPromise,
 			skillsPromise,
-			preloadedSkillContentsPromise,
 		]).then(
 			([
 				resolvedCustomPrompt,
@@ -420,7 +394,6 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 				contextFiles,
 				agentsMdSearch,
 				skills,
-				preloadedSkillContents,
 			]) => ({
 				resolvedCustomPrompt,
 				resolvedAppendPrompt,
@@ -428,7 +401,6 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 				contextFiles,
 				agentsMdSearch,
 				skills,
-				preloadedSkillContents,
 			}),
 		);
 	})();
@@ -451,7 +423,6 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		files: [],
 	};
 	let skills: Skill[] = providedSkills ?? [];
-	let preloadedSkillContents: PreloadedSkill[] = [];
 
 	if (prepResult.type === "timeout") {
 		logger.warn("System prompt preparation timed out; using minimal startup context", {
@@ -474,7 +445,6 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		contextFiles = prepResult.value.contextFiles;
 		agentsMdSearch = prepResult.value.agentsMdSearch;
 		skills = prepResult.value.skills;
-		preloadedSkillContents = prepResult.value.preloadedSkillContents;
 	}
 
 	const now = new Date();
@@ -517,7 +487,7 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 
 	// Filter skills to only include those with read tool
 	const hasRead = tools?.has("read");
-	const filteredSkills = preloadedSkills === undefined && hasRead ? skills : [];
+	const filteredSkills = hasRead ? skills : [];
 
 	const environment = await logger.timeAsync("getEnvironmentInfo", getEnvironmentInfo);
 	const data = {
@@ -531,7 +501,6 @@ export async function buildSystemPrompt(options: BuildSystemPromptOptions = {}):
 		contextFiles,
 		agentsMdSearch,
 		skills: filteredSkills,
-		preloadedSkills: preloadedSkillContents,
 		rules: rules ?? [],
 		date,
 		dateTime,

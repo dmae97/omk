@@ -41,7 +41,6 @@ const baseRenderContext: TemplateContext = {
 	planContent: "1. Read code\n2. Add tests",
 	planExists: true,
 	planFilePath: "local://PLAN.md",
-	preloadedSkills: [{ name: "semantic-compression", content: "preloaded skill content" }],
 	readFiles: ["packages/coding-agent/src/prompts/system/custom-system-prompt.md"],
 	repeatToolDescriptions: true,
 	reentry: false,
