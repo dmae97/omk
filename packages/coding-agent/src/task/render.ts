@@ -21,6 +21,7 @@ import {
 import {
 	type FindingPriority,
 	getPriorityInfo,
+	parseReportFindingDetails,
 	PRIORITY_LABELS,
 	type ReportFindingDetails,
 	type SubmitReviewDetails,
@@ -66,6 +67,16 @@ function formatFindingSummary(findings: ReportFindingDetails[], theme: Theme): s
 	}
 
 	return `${theme.fg("dim", "Findings:")} ${parts.join(theme.sep.dot)}`;
+}
+
+function normalizeReportFindings(value: unknown): ReportFindingDetails[] {
+	if (!Array.isArray(value)) return [];
+	const findings: ReportFindingDetails[] = [];
+	for (const item of value) {
+		const finding = parseReportFindingDetails(item);
+		if (finding) findings.push(finding);
+	}
+	return findings;
 }
 
 function formatJsonScalar(value: unknown, _theme: Theme): string {
@@ -569,13 +580,13 @@ function renderAgentProgress(
 		// For completed tasks, check for review verdict from submit_result tool
 		if (progress.status === "completed") {
 			const completeData = progress.extractedToolData.submit_result as Array<{ data: unknown }> | undefined;
-			const reportFindingData = progress.extractedToolData.report_finding as ReportFindingDetails[] | undefined;
+			const reportFindingData = normalizeReportFindings(progress.extractedToolData.report_finding);
 			const reviewData = completeData
 				?.map(c => c.data as SubmitReviewDetails)
 				.filter(d => d && typeof d === "object" && "overall_correctness" in d);
 			if (reviewData && reviewData.length > 0) {
 				const summary = reviewData[reviewData.length - 1];
-				const findings = reportFindingData ?? [];
+				const findings = reportFindingData;
 				lines.push(...renderReviewResult(summary, findings, continuePrefix, expanded, theme));
 				return lines; // Review result handles its own rendering
 			}
@@ -583,8 +594,9 @@ function renderAgentProgress(
 
 		for (const [toolName, dataArray] of Object.entries(progress.extractedToolData)) {
 			// Handle report_finding with tree formatting
-			if (toolName === "report_finding" && (dataArray as ReportFindingDetails[]).length > 0) {
-				const findings = dataArray as ReportFindingDetails[];
+			if (toolName === "report_finding") {
+				const findings = normalizeReportFindings(dataArray);
+				if (findings.length === 0) continue;
 				lines.push(`${continuePrefix}${formatFindingSummary(findings, theme)}`);
 				lines.push(...renderFindings(findings, continuePrefix, expanded, theme));
 				continue;
@@ -693,7 +705,7 @@ function renderFindings(
 
 		const { color } = getPriorityInfo(finding.priority);
 		const titleText = finding.title?.replace(/^\[P\d\]\s*/, "") ?? "Untitled";
-		const loc = `${path.basename(finding.file_path)}:${finding.line_start}`;
+		const loc = `${path.basename(finding.file_path || "<unknown>")}:${finding.line_start}`;
 
 		lines.push(
 			`${continuePrefix}${findingPrefix} ${theme.fg(color, `[${finding.priority}]`)} ${titleText} ${theme.fg("dim", loc)}`,
@@ -773,7 +785,7 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 
 	// Check for review result (submit_result with review schema + report_finding)
 	const completeData = result.extractedToolData?.submit_result as Array<{ data: unknown }> | undefined;
-	const reportFindingData = result.extractedToolData?.report_finding as ReportFindingDetails[] | undefined;
+	const reportFindingData = normalizeReportFindings(result.extractedToolData?.report_finding);
 
 	// Extract review verdict from submit_result tool's data field if it matches SubmitReviewDetails
 	const reviewData = completeData
@@ -784,11 +796,11 @@ function renderAgentResult(result: SingleResult, isLast: boolean, expanded: bool
 	if (submitReviewData && submitReviewData.length > 0) {
 		// Use combined review renderer
 		const summary = submitReviewData[submitReviewData.length - 1];
-		const findings = reportFindingData ?? [];
+		const findings = reportFindingData;
 		lines.push(...renderReviewResult(summary, findings, continuePrefix, expanded, theme));
 		return lines;
 	}
-	if (reportFindingData && reportFindingData.length > 0) {
+	if (reportFindingData.length > 0) {
 		const hasCompleteData = completeData && completeData.length > 0;
 		const message = hasCompleteData
 			? "Review verdict missing expected fields"
