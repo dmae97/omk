@@ -296,12 +296,18 @@ const PROVIDER_BASE_DELAY_MS = 2000;
  * Includes malformed JSON stream-envelope parse errors seen from some
  * Anthropic-compatible proxy endpoints.
  */
+/** Transient stream corruption errors where the response was truncated mid-JSON. */
+function isTransientStreamParseError(error: unknown): boolean {
+	if (!(error instanceof Error)) return false;
+	return /json parse error|unterminated string|unexpected end of json input/i.test(error.message);
+}
+
 export function isProviderRetryableError(error: unknown): boolean {
 	if (!(error instanceof Error)) return false;
 	const msg = error.message;
 	return (
 		/rate.?limit|too many requests|overloaded|service.?unavailable|1302/i.test(msg) ||
-		/json parse error|unterminated string|unexpected end of json input/i.test(msg)
+		isTransientStreamParseError(error)
 	);
 }
 
@@ -371,9 +377,9 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 			type Block = (ThinkingContent | TextContent | (ToolCall & { partialJson: string })) & { index: number };
 			const blocks = output.content as Block[];
 			stream.push({ type: "start", partial: output });
-			// Retry loop for rate-limit errors from proxies (e.g. z.ai) that the SDK doesn't handle.
-			// These errors surface when iterating the stream, so we retry the full stream creation.
-			// Only retry if no content blocks have been emitted yet (safe to restart).
+			// Retry loop for transient errors from the stream.
+			// Rate-limit/overload: only before content starts (safe to restart).
+			// Truncated JSON: also after content starts (partial response is unusable).
 			let providerRetryAttempt = 0;
 			let started = false;
 			do {
@@ -542,12 +548,15 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 					}
 					break; // Stream completed successfully
 				} catch (streamError) {
-					// Only retry if: not aborted, no content emitted yet, retries left, and error is retryable
+					// Transient stream parse errors (truncated JSON) are retryable even after content
+					// has started streaming, since the partial response is unusable anyway.
+					// Rate-limit/overload errors are only retried before content starts.
+					const isTransient = isTransientStreamParseError(streamError);
 					if (
 						options?.signal?.aborted ||
-						firstTokenTime !== undefined ||
 						providerRetryAttempt >= PROVIDER_MAX_RETRIES ||
-						!isProviderRetryableError(streamError)
+						(!isTransient && firstTokenTime !== undefined) ||
+						(!isTransient && !isProviderRetryableError(streamError))
 					) {
 						throw streamError;
 					}
@@ -557,6 +566,8 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 					// Reset output state for clean retry
 					output.content.length = 0;
 					output.stopReason = "stop";
+					firstTokenTime = undefined;
+					started = false;
 				}
 			} while (!started);
 

@@ -39,11 +39,11 @@
       },
       "dependencies": {
         "@anthropic-ai/sdk": "^0.78",
-        "@aws-sdk/client-bedrock-runtime": "^3.995",
+        "@aws-sdk/client-bedrock-runtime": "^3.998",
         "@bufbuild/protobuf": "^2.11",
         "@connectrpc/connect": "^2.1",
         "@connectrpc/connect-node": "^2.1",
-        "@google/genai": "^1.42",
+        "@google/genai": "^1.43",
         "@mistralai/mistralai": "^1.14",
         "@oh-my-pi/pi-utils": "workspace:*",
         "@sinclair/typebox": "^0.34",
@@ -51,7 +51,7 @@
         "ajv": "^8.18",
         "ajv-formats": "^3.0",
         "chalk": "^5.6",
-        "openai": "^6.22",
+        "openai": "^6.25",
         "partial-json": "^0.1",
         "zod": "^4.3",
         "zod-to-json-schema": "^3.25",
@@ -197,7 +197,7 @@
     },
   },
   "packages": {
-    "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.78.0", "", { "dependencies": { "json-schema-to-ts": "^3.1.1" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-PzQhR715td/m1UaaN5hHXjYB8Gl2lF9UVhrrGrZeysiF6Rb74Wc9GCB8hzLdzmQtBd1qe89F9OptgB9Za1Ib5w=="],
+    "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.74.0", "", { "dependencies": { "json-schema-to-ts": "^3.1.1" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-srbJV7JKsc5cQ6eVuFzjZO7UR3xEPJqPamHFIe29bs38Ij2IripoAhC0S5NslNbaFUYqBKypmmpzMTpqfHEUDw=="],
 
     "@aws-crypto/crc32": ["@aws-crypto/crc32@5.2.0", "", { "dependencies": { "@aws-crypto/util": "^5.2.0", "@aws-sdk/types": "^3.222.0", "tslib": "^2.6.2" } }, "sha512-nLbCWqQNgUiwwtFsen1AdzAtvuLRsQS8rYgMuxCrdKf9kOssamGLuPwyTY9wyYblNr9+1XM8v6zoDTPPSIeANg=="],
 
