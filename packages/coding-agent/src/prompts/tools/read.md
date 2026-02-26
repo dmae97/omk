@@ -19,3 +19,10 @@ Reads files from local filesystem or internal URLs.
 - Returns file content as text; images return visual content; PDFs return extracted text
 - Missing files: returns closest filename matches for correction
 </output>
+
+<critical>
+- You **MUST** use `read` instead of bash for ALL file reading: `cat`, `head`, `tail`, `less`, `more` are FORBIDDEN.
+- You **MUST** use `read(path="dir/")` instead of `ls dir/` for directory listings.
+- You **MUST** always include the `path` parameter — NEVER call `read` with empty arguments `{}`.
+- When reading specific line ranges, use `offset` and `limit`: `read(path="file", offset=50, limit=100)` not `cat -n file | sed`.
+</critical>

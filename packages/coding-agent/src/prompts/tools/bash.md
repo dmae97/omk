@@ -22,7 +22,21 @@ Returns the output, and an exit code from command execution.
 </output>
 
 <critical>
+You **MUST** use specialized tools instead of bash for ALL file operations:
+
+| Instead of (WRONG) | Use (CORRECT) |
+|---|---|
+| `cat file`, `head -n N file` | `read(path="file", limit=N)` |
+| `cat -n file \| sed -n '50,150p'` | `read(path="file", offset=50, limit=100)` |
+| `grep -A 20 'pat' file` | `grep(pattern="pat", path="file", post=20)` |
+| `grep -rn 'pat' dir/` | `grep(pattern="pat", path="dir/")` |
+| `rg 'pattern' dir/` | `grep(pattern="pattern", path="dir/")` |
+| `find dir -name '*.ts'` | `find(pattern="dir/**/*.ts")` |
+| `ls dir/` | `read(path="dir/")` |
+| `cat <<'EOF' > file` | `write(path="file", content="...")` |
+| `sed -i 's/old/new/' file` | `edit(path="file", edits=[...])` |
+
 - You **MUST NOT** use Bash for these operations like read, grep, find, edit, write, where specialized tools exist.
-- You **MUST NOT** use `2>&1` pattern, stdout and stderr are already merged.
+- You **MUST NOT** use `2>&1` | `2>/dev/null` pattern, stdout and stderr are already merged.
 - You **MUST NOT** use `| head -n 50` or `| tail -n 100` pattern, use `head` and `tail` parameters instead.
 </critical>
