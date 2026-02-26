@@ -365,23 +365,17 @@ fn parse_key_id(key_id: &str) -> Option<ParsedKeyId<'_>> {
 		};
 
 		match c0 {
-			b'c' | b'C' => {
-				if p.eq_ignore_ascii_case("ctrl") {
-					modifier |= MOD_CTRL;
-					continue;
-				}
+			b'c' | b'C' if p.eq_ignore_ascii_case("ctrl") => {
+				modifier |= MOD_CTRL;
+				continue;
 			},
-			b's' | b'S' => {
-				if p.eq_ignore_ascii_case("shift") {
-					modifier |= MOD_SHIFT;
-					continue;
-				}
+			b's' | b'S' if p.eq_ignore_ascii_case("shift") => {
+				modifier |= MOD_SHIFT;
+				continue;
 			},
-			b'a' | b'A' => {
-				if p.eq_ignore_ascii_case("alt") {
-					modifier |= MOD_ALT;
-					continue;
-				}
+			b'a' | b'A' if p.eq_ignore_ascii_case("alt") => {
+				modifier |= MOD_ALT;
+				continue;
 			},
 			_ => {},
 		}
