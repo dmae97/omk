@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.3.3] - 2026-02-26
 ### Added
 
 - Support for `move` parameter in `computeHashlineDiff` to enable file move operations alongside content edits

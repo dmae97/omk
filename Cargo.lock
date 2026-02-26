@@ -2058,7 +2058,7 @@ dependencies = [
 
 [[package]]
 name = "pi-natives"
-version = "13.3.2"
+version = "13.3.3"
 dependencies = [
  "arboard",
  "brush-builtins",
