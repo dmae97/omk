@@ -58,6 +58,19 @@ interface InlineStyleContext {
 	stylePrefix: string;
 }
 
+function formatHyperlink(text: string, target: string): string {
+	if (!TERMINAL.hyperlinks || !target) {
+		return text;
+	}
+
+	const safeTarget = target.replaceAll("\x1b", "").replaceAll("\x07", "");
+	if (!safeTarget) {
+		return text;
+	}
+
+	return `\x1b]8;;${safeTarget}\x07${text}\x1b]8;;\x07`;
+}
+
 export class Markdown implements Component {
 	#text: string;
 	#paddingX: number; // Left/right padding
@@ -456,18 +469,18 @@ export class Markdown implements Component {
 
 				case "link": {
 					const linkText = this.#renderInlineTokens(token.tokens || [], resolvedStyleContext);
+					const styledLinkText = this.#theme.link(this.#theme.underline(linkText));
+					const clickableLinkText = formatHyperlink(styledLinkText, token.href);
 					// If link text matches href, only show the link once
 					// Compare raw text (token.text) not styled text (linkText) since linkText has ANSI codes
 					// For mailto: links, strip the prefix before comparing (autolinked emails have
 					// text="foo@bar.com" but href="mailto:foo@bar.com")
 					const hrefForComparison = token.href.startsWith("mailto:") ? token.href.slice(7) : token.href;
-					if (token.text === token.href || token.text === hrefForComparison) {
-						result += this.#theme.link(this.#theme.underline(linkText)) + stylePrefix;
-					} else {
-						result +=
-							this.#theme.link(this.#theme.underline(linkText)) +
-							this.#theme.linkUrl(` (${token.href})`) +
-							stylePrefix;
+					if (token.text === token.href || token.text === hrefForComparison)
+						result += clickableLinkText + stylePrefix;
+					else {
+						const styledLinkUrl = this.#theme.linkUrl(` (${token.href})`);
+						result += clickableLinkText + formatHyperlink(styledLinkUrl, token.href) + stylePrefix;
 					}
 					break;
 				}

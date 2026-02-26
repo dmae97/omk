@@ -9,7 +9,7 @@ import type { Terminal } from "./terminal";
 import { setCellDimensions, TERMINAL } from "./terminal-capabilities";
 import { extractSegments, sliceByColumn, sliceWithWidth, visibleWidth } from "./utils";
 
-const SEGMENT_RESET = "\x1b[0m\x1b]8;;\x07";
+const SEGMENT_RESET = "\x1b[0m";
 
 type InputListenerResult = { consume?: boolean; data?: string } | undefined;
 type InputListener = (data: string) => InputListenerResult;

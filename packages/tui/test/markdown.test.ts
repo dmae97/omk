@@ -300,7 +300,12 @@ describe("Markdown component", () => {
 
 			// Render at width that forces the cell to wrap
 			const lines = markdown.render(25);
-			const plainLines = lines.map(line => line.replace(/\x1b\[[0-9;]*m/g, "").trimEnd());
+			const plainLines = lines.map(line =>
+				line
+					.replace(/\x1b\]8;;[^\x07]*\x07/g, "")
+					.replace(/\x1b\[[0-9;]*m/g, "")
+					.trimEnd(),
+			);
 
 			// Should have multiple data rows due to wrapping
 			const dataRows = plainLines.filter(line => line.startsWith("|") && !line.includes("-"));
@@ -326,7 +331,12 @@ describe("Markdown component", () => {
 
 			const width = 30;
 			const lines = markdown.render(width);
-			const plainLines = lines.map(line => line.replace(/\x1b\[[0-9;]*m/g, "").trimEnd());
+			const plainLines = lines.map(line =>
+				line
+					.replace(/\x1b\]8;;[^\x07]*\x07/g, "")
+					.replace(/\x1b\[[0-9;]*m/g, "")
+					.trimEnd(),
+			);
 
 			for (const line of plainLines) {
 				expect(
@@ -843,12 +853,15 @@ bar`,
 		});
 	});
 
+	const stripTerminalSequences = (line: string): string =>
+		line.replace(/\x1b\]8;;[^\x07]*\x07/g, "").replace(/\x1b\[[0-9;]*m/g, "");
+
 	describe("Links", () => {
 		it("should not duplicate URL for autolinked emails", () => {
 			const markdown = new Markdown("Contact user@example.com for help", 0, 0, defaultMarkdownTheme);
 
 			const lines = markdown.render(80);
-			const plainLines = lines.map(line => line.replace(/\x1b\[[0-9;]*m/g, ""));
+			const plainLines = lines.map(stripTerminalSequences);
 			const joinedPlain = plainLines.join(" ");
 
 			// Should contain the email once, not duplicated with mailto:
@@ -860,7 +873,7 @@ bar`,
 			const markdown = new Markdown("Visit https://example.com for more", 0, 0, defaultMarkdownTheme);
 
 			const lines = markdown.render(80);
-			const plainLines = lines.map(line => line.replace(/\x1b\[[0-9;]*m/g, ""));
+			const plainLines = lines.map(stripTerminalSequences);
 			const joinedPlain = plainLines.join(" ");
 
 			// URL should appear only once
@@ -868,11 +881,39 @@ bar`,
 			expect(urlCount, "URL should appear exactly once").toBe(1);
 		});
 
+		it("should emit OSC 8 hyperlink sequences for bare URLs", () => {
+			const markdown = new Markdown("Visit https://example.com for more", 0, 0, defaultMarkdownTheme);
+
+			const output = markdown.render(80).join("\n");
+			expect(output.includes("\x1b]8;;https://example.com\x07")).toBeTruthy();
+			expect(output.includes("\x1b]8;;\x07")).toBeTruthy();
+		});
+
+		it("should keep wrapped URLs inside a single OSC 8 hyperlink span", () => {
+			const markdown = new Markdown(
+				"Visit https://example.com/really/long/path/that/will/wrap/on/narrow/width for more",
+				0,
+				0,
+				defaultMarkdownTheme,
+			);
+
+			const lines = markdown.render(32);
+			expect(lines.length).toBeGreaterThan(1);
+			const output = lines.join("\n");
+			const openMatches =
+				output.match(
+					/\x1b\]8;;https:\/\/example\.com\/really\/long\/path\/that\/will\/wrap\/on\/narrow\/width\x07/g,
+				) || [];
+			const closeMatches = output.match(/\x1b\]8;;\x07/g) || [];
+			expect(openMatches.length).toBe(1);
+			expect(closeMatches.length).toBeGreaterThan(0);
+		});
+
 		it("should show URL for explicit markdown links with different text", () => {
 			const markdown = new Markdown("[click here](https://example.com)", 0, 0, defaultMarkdownTheme);
 
 			const lines = markdown.render(80);
-			const plainLines = lines.map(line => line.replace(/\x1b\[[0-9;]*m/g, ""));
+			const plainLines = lines.map(stripTerminalSequences);
 			const joinedPlain = plainLines.join(" ");
 
 			// Should show both link text and URL
@@ -884,7 +925,7 @@ bar`,
 			const markdown = new Markdown("[Email me](mailto:test@example.com)", 0, 0, defaultMarkdownTheme);
 
 			const lines = markdown.render(80);
-			const plainLines = lines.map(line => line.replace(/\x1b\[[0-9;]*m/g, ""));
+			const plainLines = lines.map(stripTerminalSequences);
 			const joinedPlain = plainLines.join(" ");
 
 			// Should show both link text and mailto URL
