@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.3.1] - 2026-02-26
+
 ### Added
 
 - Added `topP` setting to control nucleus sampling cutoff for model output diversity
