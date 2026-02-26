@@ -299,6 +299,14 @@ function normalizeOptionalNullsForSchema(schema: unknown, value: unknown): { val
 		return { value: changed ? nextValue : value, changed };
 	}
 
+	// Coerce string → number/integer when the schema branch declares those types.
+	// This fixes anyOf:[{type:"number"},{type:"null"}] (i.e. Optional<number>) where
+	// AJV reports an "anyOf" error rather than a "type" error, bypassing
+	// coerceArgsFromErrors which only handles keyword:"type" errors.
+	if ((schemaObject.type === "number" || schemaObject.type === "integer") && typeof value === "string") {
+		return tryParseNumberString(value, [schemaObject.type as string]);
+	}
+
 	if (schemaObject.type !== "object") return { value, changed: false };
 	if (typeof value !== "object" || value === null) return { value, changed: false };
 	if (Array.isArray(value)) return { value, changed: false };

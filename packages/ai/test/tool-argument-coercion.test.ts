@@ -325,4 +325,37 @@ describe("Tool argument coercion", () => {
 
 		expect(() => validateToolArguments(tool, toolCall)).toThrow('Validation failed for tool "t6"');
 	});
+
+	it("coerces numeric string for Optional<number> (anyOf:[number,null])", () => {
+		const tool: Tool = {
+			name: "t14",
+			description: "",
+			parameters: Type.Object({ tick_size: Type.Optional(Type.Number()) }),
+		};
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-14",
+			name: "t14",
+			arguments: { tick_size: "1.0" },
+		};
+		const result = validateToolArguments(tool, toolCall);
+		expect(result.tick_size).toBe(1);
+		expect(typeof result.tick_size).toBe("number");
+	});
+
+	it("leaves Optional<number> as undefined when absent", () => {
+		const tool: Tool = {
+			name: "t15",
+			description: "",
+			parameters: Type.Object({ tick_size: Type.Optional(Type.Number()) }),
+		};
+		const toolCall: ToolCall = {
+			type: "toolCall",
+			id: "call-15",
+			name: "t15",
+			arguments: {},
+		};
+		const result = validateToolArguments(tool, toolCall);
+		expect(result.tick_size).toBeUndefined();
+	});
 });
