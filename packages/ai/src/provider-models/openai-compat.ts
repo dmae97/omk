@@ -1670,6 +1670,7 @@ const MODELS_DEV_PROVIDER_DESCRIPTORS_CODING_PLANS: readonly ModelsDevProviderDe
 	// --- MiniMax Coding Plan ---
 	openAiCompletionsDescriptor("minimax-coding-plan", "minimax-code", "https://api.minimax.io/v1", {
 		compat: {
+			supportsStore: false,
 			supportsDeveloperRole: false,
 			thinkingFormat: "zai",
 			reasoningContentField: "reasoning_content",
@@ -1677,6 +1678,7 @@ const MODELS_DEV_PROVIDER_DESCRIPTORS_CODING_PLANS: readonly ModelsDevProviderDe
 	}),
 	openAiCompletionsDescriptor("minimax-cn-coding-plan", "minimax-code-cn", "https://api.minimaxi.com/v1", {
 		compat: {
+			supportsStore: false,
 			supportsDeveloperRole: false,
 			thinkingFormat: "zai",
 			reasoningContentField: "reasoning_content",
