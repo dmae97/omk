@@ -4,8 +4,7 @@
  * Subagents must call this tool to finish and return structured JSON output.
  */
 import type { AgentTool, AgentToolContext, AgentToolResult, AgentToolUpdateCallback } from "@oh-my-pi/pi-agent-core";
-import { StringEnum } from "@oh-my-pi/pi-ai";
-import type { Static, TObject } from "@sinclair/typebox";
+import type { Static, TSchema } from "@sinclair/typebox";
 import { Type } from "@sinclair/typebox";
 import Ajv, { type ErrorObject, type ValidateFunction } from "ajv";
 import { subprocessToolRegistry } from "../task/subprocess-tool-registry";
@@ -52,13 +51,13 @@ function formatAjvErrors(errors: ErrorObject[] | null | undefined): string {
 		.join("; ");
 }
 
-export class SubmitResultTool implements AgentTool<TObject, SubmitResultDetails> {
+export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails> {
 	readonly name = "submit_result";
 	readonly label = "Submit Result";
 	readonly description =
 		"Finish the task with structured JSON output. Call exactly once at the end of the task.\n\n" +
-		"If you cannot complete the task, call with status='aborted' and an error message.";
-	readonly parameters: TObject;
+		"If you cannot complete the task, call with an error message payload.";
+	readonly parameters: TSchema;
 	readonly strict = true;
 
 	readonly #validate?: ValidateFunction;
@@ -92,45 +91,45 @@ export class SubmitResultTool implements AgentTool<TObject, SubmitResultDetails>
 				})
 			: Type.Object({}, { additionalProperties: true, description: "Structured JSON output (no schema specified)" });
 
-		this.parameters = Type.Object({
-			data: dataSchema,
-			status: Type.Optional(
-				StringEnum(["success", "aborted"], {
-					description: "Use 'aborted' if the task cannot be completed, defaults to 'success'",
-				}),
-			),
-			error: Type.Optional(Type.String({ description: "Error message when status is 'aborted'" })),
-		});
+		this.parameters = Type.Union([
+			Type.Object({
+				data: dataSchema,
+			}),
+			Type.Object({
+				error: Type.String({ description: "Error message when the task cannot be completed" }),
+			}),
+		]);
 	}
 
 	async execute(
 		_toolCallId: string,
-		params: Static<TObject>,
+		params: Static<TSchema>,
 		_signal?: AbortSignal,
 		_onUpdate?: AgentToolUpdateCallback<SubmitResultDetails>,
 		_context?: AgentToolContext,
 	): Promise<AgentToolResult<SubmitResultDetails>> {
-		const status = (params.status ?? "success") as "success" | "aborted";
+		const raw = params as Record<string, unknown>;
+		const errorMessage = typeof raw.error === "string" ? raw.error : undefined;
+		const status = errorMessage !== undefined ? "aborted" : "success";
+		const data = raw.data;
 
-		// Skip validation when aborting - data is optional for aborts
 		if (status === "success") {
-			if (params.data === undefined || params.data === null) {
-				throw new Error("data is required when status is 'success' (got null/undefined)");
+			if (data === undefined || data === null) {
+				throw new Error("data is required when submit_result indicates success");
 			}
 			if (this.#schemaError) {
 				throw new Error(`Invalid output schema: ${this.#schemaError}`);
 			}
-			if (this.#validate && !this.#validate(params.data)) {
+			if (this.#validate && !this.#validate(data)) {
 				throw new Error(`Output does not match schema: ${formatAjvErrors(this.#validate.errors)}`);
 			}
 		}
 
-		const responseText =
-			status === "aborted" ? `Task aborted: ${params.error || "No reason provided"}` : "Result submitted.";
+		const responseText = status === "aborted" ? `Task aborted: ${errorMessage}` : "Result submitted.";
 
 		return {
 			content: [{ type: "text", text: responseText }],
-			details: { data: params.data, status, error: params.error as string | undefined },
+			details: { data, status, error: errorMessage },
 		};
 	}
 }

@@ -29,11 +29,11 @@ Your result **MUST** match this TypeScript interface:
 {{/if}}
 
 {{SECTION_SEPERATOR "Giving Up"}}
-If you cannot complete the assignment, you **MUST** call `submit_result` exactly once with `status="aborted"` and an error message describing what you tried and the exact blocker.
+If you cannot complete the assignment, you **MUST** call `submit_result` exactly once with an `error` message describing what you tried and the exact blocker.
 
-Aborting is a last resort.
-You **MUST NOT** abort due to uncertainty or missing information obtainable via tools or repo context.
-You **MUST NOT** abort due to requiring a design, you can derive that yourself, more than capable of that.
+Giving up is a last resort.
+You **MUST NOT** give up due to uncertainty or missing information obtainable via tools or repo context.
+You **MUST NOT** give up due to requiring a design, you can derive that yourself, more than capable of that.
 
 Proceed with the best approach using the most reasonable option.
 
