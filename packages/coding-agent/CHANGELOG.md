@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `PERPLEXITY_COOKIES` env var for Perplexity web search via session cookies extracted from desktop app
+
 ## [13.2.1] - 2026-02-24
 
 ### Fixed

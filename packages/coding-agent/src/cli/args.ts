@@ -216,7 +216,8 @@ export function getExtraHelpText(): string {
   ${chalk.dim("# Search & Tools")}
   EXA_API_KEY                - Exa web search
   BRAVE_API_KEY              - Brave web search
-  PERPLEXITY_API_KEY         - Perplexity web search
+  PERPLEXITY_API_KEY         - Perplexity web search (API)
+  PERPLEXITY_COOKIES         - Perplexity web search (session cookie)
   ANTHROPIC_SEARCH_API_KEY   - Anthropic search provider
 
   ${chalk.dim("# Configuration")}

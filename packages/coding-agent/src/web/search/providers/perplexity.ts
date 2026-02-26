@@ -1,13 +1,14 @@
 /**
  * Perplexity Web Search Provider
  *
- * Supports two auth modes:
- * - API key (`PERPLEXITY_API_KEY`) via `api.perplexity.ai/chat/completions`
+ * Supports three auth modes:
+ * - Cookies (`PERPLEXITY_COOKIES`) via `www.perplexity.ai/rest/sse/perplexity_ask`
  * - OAuth JWT (stored in `agent.db`) via `www.perplexity.ai/rest/sse/perplexity_ask`
+ * - API key (`PERPLEXITY_API_KEY`) via `api.perplexity.ai/chat/completions`
  */
 
 import { getEnvApiKey } from "@oh-my-pi/pi-ai";
-import { getAgentDbPath, readSseJson } from "@oh-my-pi/pi-utils";
+import { $env, getAgentDbPath, readSseJson } from "@oh-my-pi/pi-utils";
 import { AgentStorage } from "../../../session/agent-storage";
 import type {
 	PerplexityMessageOutput,
@@ -46,6 +47,10 @@ type PerplexityAuth =
 	| {
 			type: "oauth";
 			token: string;
+	  }
+	| {
+			type: "cookies";
+			cookies: string;
 	  };
 
 interface PerplexityOAuthStreamMarkdownBlock {
@@ -188,10 +193,17 @@ async function findOAuthToken(): Promise<string | null> {
 }
 
 async function findPerplexityAuth(): Promise<PerplexityAuth | null> {
+	// 1. PERPLEXITY_COOKIES env var
+	const cookies = $env.PERPLEXITY_COOKIES?.trim();
+	if (cookies) {
+		return { type: "cookies", cookies };
+	}
+	// 2. OAuth token from agent.db
 	const oauthToken = await findOAuthToken();
 	if (oauthToken) {
 		return { type: "oauth", token: oauthToken };
 	}
+	// 3. PERPLEXITY_API_KEY env var
 	const apiKey = findApiKey();
 	if (apiKey) {
 		return { type: "api_key", token: apiKey };
@@ -289,7 +301,7 @@ function buildOAuthAnswer(event: PerplexityOAuthStreamEvent): string {
 }
 
 async function callPerplexityOAuth(
-	oauthToken: string,
+	auth: { type: "oauth"; token: string } | { type: "cookies"; cookies: string },
 	params: PerplexitySearchParams,
 ): Promise<{ answer: string; sources: SearchSource[]; model?: string; requestId?: string }> {
 	const requestId = crypto.randomUUID();
@@ -298,7 +310,7 @@ async function callPerplexityOAuth(
 	const response = await fetch(PERPLEXITY_OAUTH_ASK_URL, {
 		method: "POST",
 		headers: {
-			Authorization: `Bearer ${oauthToken}`,
+			...(auth.type === "cookies" ? { Cookie: auth.cookies } : { Authorization: `Bearer ${auth.token}` }),
 			"Content-Type": "application/json",
 			Accept: "text/event-stream",
 			Origin: "https://www.perplexity.ai",
@@ -455,11 +467,11 @@ function applySourceLimit(result: SearchResponse, limit?: number): SearchRespons
 export async function searchPerplexity(params: PerplexitySearchParams): Promise<SearchResponse> {
 	const auth = await findPerplexityAuth();
 	if (!auth) {
-		throw new Error("Perplexity auth not found. Set PERPLEXITY_API_KEY or login via OAuth.");
+		throw new Error("Perplexity auth not found. Set PERPLEXITY_COOKIES, PERPLEXITY_API_KEY, or login via OAuth.");
 	}
 
-	if (auth.type === "oauth") {
-		const oauthResult = await callPerplexityOAuth(auth.token, params);
+	if (auth.type === "oauth" || auth.type === "cookies") {
+		const oauthResult = await callPerplexityOAuth(auth, params);
 		return applySourceLimit(
 			{
 				provider: "perplexity",
