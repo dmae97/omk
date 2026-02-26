@@ -104,8 +104,8 @@ const patchEditSchema = Type.Object({
 export type ReplaceParams = Static<typeof replaceEditSchema>;
 export type PatchParams = Static<typeof patchEditSchema>;
 
-/** Pattern matching hashline display format: `LINE#ID:CONTENT` */
-const HASHLINE_PREFIX_RE = /^\s*(?:>>>|>>)?\s*\d+#[0-9a-zA-Z]{1,16}:/;
+/** Pattern matching hashline display format prefixes: `LINE#ID:CONTENT` and `#ID:CONTENT` */
+const HASHLINE_PREFIX_RE = /^\s*(?:>>>|>>)?\s*(?:\d+\s*#\s*|#)\s*[0-9a-zA-Z]{1,16}:/;
 
 /** Pattern matching a unified-diff added-line `+` prefix (but not `++`). Does NOT match `-` to avoid corrupting Markdown list items. */
 const DIFF_PLUS_RE = /^[+](?![+])/;
@@ -118,8 +118,9 @@ const DIFF_PLUS_RE = /^[+](?![+])/;
  * output file. This strips them heuristically before application.
  */
 export function stripNewLinePrefixes(lines: string[]): string[] {
-	// Detect whether the *majority* of non-empty lines carry a prefix —
-	// if only one line out of many has a match it's likely real content.
+	// Hashline prefixes are highly specific to read output and should only be
+	// stripped when *every* non-empty line carries one.
+	// Diff '+' markers can be legitimate content less often, so keep majority mode.
 	let hashPrefixCount = 0;
 	let diffPlusCount = 0;
 	let nonEmpty = 0;
@@ -131,9 +132,8 @@ export function stripNewLinePrefixes(lines: string[]): string[] {
 	}
 	if (nonEmpty === 0) return lines;
 
-	const stripHash = hashPrefixCount > 0 && hashPrefixCount >= nonEmpty * 0.5;
+	const stripHash = hashPrefixCount > 0 && hashPrefixCount === nonEmpty;
 	const stripPlus = !stripHash && diffPlusCount > 0 && diffPlusCount >= nonEmpty * 0.5;
-
 	if (!stripHash && !stripPlus) return lines;
 
 	return lines.map(l => {
@@ -145,8 +145,7 @@ export function stripNewLinePrefixes(lines: string[]): string[] {
 
 export function hashlineParseText(edit: string[] | string | null): string[] {
 	if (edit === null) return [];
-	if (Array.isArray(edit)) return edit;
-	const lines = stripNewLinePrefixes(edit.split("\n"));
+	const lines = stripNewLinePrefixes(Array.isArray(edit) ? edit : edit.split("\n"));
 	if (lines.length === 0) return [];
 	if (lines[lines.length - 1].trim() === "") return lines.slice(0, -1);
 	return lines;

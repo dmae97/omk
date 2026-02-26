@@ -763,9 +763,19 @@ describe("stripNewLinePrefixes", () => {
 		expect(stripNewLinePrefixes(lines)).toEqual(["+added", "regular", "regular", "regular"]);
 	});
 
-	it("strips hashline prefixes when majority of lines carry them", () => {
+	it("strips hashline prefixes when all non-empty lines carry them", () => {
 		const lines = ["1#AB:foo", "2#CD:bar", "3#EF:baz"];
 		expect(stripNewLinePrefixes(lines)).toEqual(["foo", "bar", "baz"]);
+	});
+
+	it("does NOT strip hashline prefixes when any non-empty line is plain content", () => {
+		const lines = ["1#AB:foo", "bar", "3#EF:baz"];
+		expect(stripNewLinePrefixes(lines)).toEqual(["1#AB:foo", "bar", "3#EF:baz"]);
+	});
+
+	it("strips hash-only prefixes when all non-empty lines carry them", () => {
+		const lines = ["#WQ:", "#TZ:{{/*", "#HX:OC deployment container livenessProbe template"];
+		expect(stripNewLinePrefixes(lines)).toEqual(["", "{{/*", "OC deployment container livenessProbe template"]);
 	});
 
 	it("does NOT strip '+' when line starts with '++'", () => {
@@ -783,9 +793,19 @@ describe("hashlineParseContent", () => {
 		expect(hashlineParseText(null)).toEqual([]);
 	});
 
-	it("returns array as-is (bypasses stripNewLinePrefixes)", () => {
+	it("returns array input as-is when no strip heuristic applies", () => {
 		const input = ["- [x] done", "- [ ] todo"];
 		expect(hashlineParseText(input)).toBe(input);
+	});
+
+	it("strips hashline prefixes from array input when all non-empty lines are prefixed", () => {
+		const input = ["259#WQ:", "260#TZ:{{/*", "261#HX:OC deployment container livenessProbe template"];
+		expect(hashlineParseText(input)).toEqual(["", "{{/*", "OC deployment container livenessProbe template"]);
+	});
+
+	it("strips hash-only prefixes from array input when all non-empty lines are prefixed", () => {
+		const input = ["#WQ:", "#TZ:{{/*", "#HX:OC deployment container livenessProbe template"];
+		expect(hashlineParseText(input)).toEqual(["", "{{/*", "OC deployment container livenessProbe template"]);
 	});
 
 	it("splits string on newline and preserves Markdown list '-' prefix", () => {
