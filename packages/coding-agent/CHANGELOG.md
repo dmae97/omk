@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.3.0] - 2026-02-26
+
 ### Breaking Changes
 
 - Renamed `task.isolation.enabled` (boolean) setting to `task.isolation.mode` (enum: `none`, `worktree`, `fuse-overlay`). Existing `true`/`false` values are auto-migrated to `worktree`/`none`.
