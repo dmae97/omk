@@ -44,7 +44,7 @@ function formatSchema(schema: unknown): string {
 function formatAjvErrors(errors: ErrorObject[] | null | undefined): string {
 	if (!errors || errors.length === 0) return "Unknown schema validation error.";
 	return errors
-		.map((err) => {
+		.map(err => {
 			const path = err.instancePath ? `${err.instancePath}: ` : "";
 			return `${path}${err.message ?? "invalid"}`;
 		})
@@ -89,7 +89,7 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 					...(normalizedSchema as object),
 					description: `Structured output matching the schema:\n${schemaHint}`,
 				})
-			: Type.Object({}, { additionalProperties: true, description: "Structured JSON output (no schema specified)" });
+			: Type.Record(Type.String(), Type.Any(), { description: "Structured JSON output (no schema specified)" });
 
 		this.parameters = Type.Object(
 			{
@@ -153,7 +153,7 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 
 // Register subprocess tool handler for extraction + termination.
 subprocessToolRegistry.register<SubmitResultDetails>("submit_result", {
-	extractData: (event) => {
+	extractData: event => {
 		const details = event.result?.details;
 		if (!details || typeof details !== "object") return undefined;
 		const record = details as Record<string, unknown>;
@@ -165,5 +165,5 @@ subprocessToolRegistry.register<SubmitResultDetails>("submit_result", {
 			error: typeof record.error === "string" ? record.error : undefined,
 		};
 	},
-	shouldTerminate: (event) => !event.isError,
+	shouldTerminate: event => !event.isError,
 });
