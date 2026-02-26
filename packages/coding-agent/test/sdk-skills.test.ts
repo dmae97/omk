@@ -104,6 +104,20 @@ Loaded via symbolic link.
 		expect(session.skills.some((s: Skill) => s.name === "symlinked-skill")).toBe(true);
 	});
 
+	it("should still discover project skills when user skills directory is missing", async () => {
+		const userAgentDir = path.join(tempHomeDir, ".omp", "agent");
+		fs.rmSync(path.join(userAgentDir, "skills"), { recursive: true, force: true });
+		fs.writeFileSync(path.join(userAgentDir, "placeholder.txt"), "placeholder");
+
+		const { session } = await createAgentSession({
+			cwd: tempDir,
+			agentDir: tempDir,
+			sessionManager: SessionManager.inMemory(),
+			settings: createIsolatedSkillsSettings(),
+		});
+
+		expect(session.skills.some((s: Skill) => s.name === "test-skill")).toBe(true);
+	});
 	it("should have empty skills when options.skills is empty array (--no-skills)", async () => {
 		const { session } = await createAgentSession({
 			cwd: tempDir,

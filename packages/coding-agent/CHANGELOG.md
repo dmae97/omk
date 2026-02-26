@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `topP` setting to control nucleus sampling cutoff for model output diversity
@@ -8,6 +9,10 @@
 - Added `minP` setting to enforce minimum probability threshold for token selection
 - Added `presencePenalty` setting to penalize introduction of already-present tokens
 - Added `repetitionPenalty` setting to penalize repeated tokens in model output
+
+### Fixed
+
+- Fixed skill discovery to continue loading project skills when user skills directory is missing
 
 ## [13.3.0] - 2026-02-26
 
