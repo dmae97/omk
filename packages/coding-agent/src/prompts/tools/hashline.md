@@ -40,7 +40,9 @@ Every edit has `op`, `pos`, and `lines`. Range replaces also have `end`. Both `p
 <rules>
 1. **Minimize scope:** You **MUST** use one logical mutation per operation.
 2. **Prefer insertion over neighbor rewrites:** You **SHOULD** anchor on structural boundaries (`}`, `]`, `},`), not interior lines.
-3. **Range end tag:** When replacing a block (e.g., an `if` body), the `end` tag **MUST** include the block's closing brace/bracket — not just the last interior line. Verify the `end` tag covers all lines being logically removed, including trailing `}`, `]`, or `)`. An off-by-one on `end` orphans a brace and breaks syntax.
+3. **Range end tag (inclusive):** `end` is inclusive and **MUST** point to the final line being replaced.
+   - If `lines` includes a closing boundary token (`}`, `]`, `)`, `);`, `},`), `end` **MUST** include the original boundary line.
+   - You **MUST NOT** set `end` to an interior line and then re-add the boundary token in `lines`; that duplicates the next surviving line.
 </rules>
 
 <recovery>
@@ -129,6 +131,48 @@ Range — add `end`:
   }]
 }
 ```
+</example>
+
+<example name="inclusive end avoids duplicate boundary">
+```ts
+{{hlinefull 70 "if (ok) {"}}
+{{hlinefull 71 "  run();"}}
+{{hlinefull 72 "}"}}
+{{hlinefull 73 "after();"}}
+```
+Bad — `end` stops before `}` while `lines` already includes `}`:
+```
+{
+  path: "…",
+  edits: [{
+    op: "replace",
+    pos: "{{hlineref 70 "if (ok) {"}}",
+    end: "{{hlineref 71 "  run();"}}",
+    lines: [
+      "if (ok) {",
+      "  runSafe();",
+      "}"
+    ]
+  }]
+}
+```
+Good — include original `}` in the replaced range when replacement keeps `}`:
+```
+{
+  path: "…",
+  edits: [{
+    op: "replace",
+    pos: "{{hlineref 70 "if (ok) {"}}",
+    end: "{{hlineref 72 "}"}}",
+    lines: [
+      "if (ok) {",
+      "  runSafe();",
+      "}"
+    ]
+  }]
+}
+```
+Also apply the same rule to `);`, `],`, and `},` closers: if replacement includes the closer token, `end` must include the original closer line.
 </example>
 
 <example name="insert between siblings">

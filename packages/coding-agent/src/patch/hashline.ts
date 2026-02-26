@@ -444,6 +444,7 @@ export function applyHashlineEdits(
 	const originalFileLines = [...fileLines];
 	let firstChangedLine: number | undefined;
 	const noopEdits: Array<{ editIndex: number; loc: string; current: string }> = [];
+	const warnings: string[] = [];
 
 	// Pre-validate: collect all hash mismatches before mutating
 	const mismatches: HashMismatch[] = [];
@@ -580,7 +581,23 @@ export function applyHashlineEdits(
 					trackFirstChanged(edit.pos.line);
 				} else {
 					const count = edit.end.line - edit.pos.line + 1;
-					const newLines = edit.lines;
+					const newLines = [...edit.lines];
+					const trailingReplacementLine = newLines[newLines.length - 1];
+					const nextSurvivingLine = fileLines[edit.end.line];
+					if (
+						trailingReplacementLine !== undefined &&
+						trailingReplacementLine.trim().length > 0 &&
+						nextSurvivingLine !== undefined &&
+						trailingReplacementLine.trim() === nextSurvivingLine.trim() &&
+						// Safety: only correct when end-line content differs from the duplicate.
+						// If end already points to the boundary, matching next line is coincidence.
+						fileLines[edit.end.line - 1].trim() !== trailingReplacementLine.trim()
+					) {
+						newLines.pop();
+						warnings.push(
+							`Auto-corrected range replace ${edit.pos.line}#${edit.pos.hash}-${edit.end.line}#${edit.end.hash}: removed trailing replacement line "${trailingReplacementLine.trim()}" that duplicated next surviving line`,
+						);
+					}
 					fileLines.splice(edit.pos.line - 1, count, ...newLines);
 					trackFirstChanged(edit.pos.line);
 				}
@@ -639,6 +656,7 @@ export function applyHashlineEdits(
 	return {
 		lines: fileLines.join("\n"),
 		firstChangedLine,
+		...(warnings.length > 0 ? { warnings } : {}),
 		...(noopEdits.length > 0 ? { noopEdits } : {}),
 	};
 

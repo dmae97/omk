@@ -508,6 +508,68 @@ describe("applyHashlineEdits — heuristics", () => {
 		const result = applyHashlineEdits(content, edits);
 		expect(result.lines).toBe("aaa\nBBB\nccc");
 	});
+
+	it("auto-corrects off-by-one range end that would duplicate a closing brace", () => {
+		const content = "if (ok) {\n  run();\n}\nafter();";
+		const edits: HashlineEdit[] = [
+			{
+				op: "replace",
+				pos: makeTag(1, "if (ok) {"),
+				end: makeTag(2, "  run();"),
+				lines: ["if (ok) {", "  runSafe();", "}"],
+			},
+		];
+		const result = applyHashlineEdits(content, edits);
+		expect(result.lines).toBe("if (ok) {\n  runSafe();\n}\nafter();");
+		expect(result.warnings).toHaveLength(1);
+		expect(result.warnings?.[0]).toContain("Auto-corrected range replace");
+		expect(result.warnings?.[0]).toContain('"}"');
+	});
+
+	it('auto-corrects off-by-one range end that would duplicate a ");" closer', () => {
+		const content = "doThing(\n  value,\n);\nnext();";
+		const edits: HashlineEdit[] = [
+			{
+				op: "replace",
+				pos: makeTag(1, "doThing("),
+				end: makeTag(2, "  value,"),
+				lines: ["doThing(", "  normalize(value),", ");"],
+			},
+		];
+		const result = applyHashlineEdits(content, edits);
+		expect(result.lines).toBe("doThing(\n  normalize(value),\n);\nnext();");
+		expect(result.warnings).toHaveLength(1);
+		expect(result.warnings?.[0]).toContain('");"');
+	});
+
+	it("does not auto-correct when end already includes the boundary line", () => {
+		const content = "function outer() {\n  function inner() {\n    run();\n  }\n}";
+		const edits: HashlineEdit[] = [
+			{
+				op: "replace",
+				pos: makeTag(1, "function outer() {"),
+				end: makeTag(4, "  }"),
+				lines: ["function outer() {", "  function inner() {", "    runSafe();", "  }"],
+			},
+		];
+		const result = applyHashlineEdits(content, edits);
+		expect(result.lines).toBe("function outer() {\n  function inner() {\n    runSafe();\n  }\n}");
+		expect(result.warnings).toBeUndefined();
+	});
+	it("does not auto-correct when trailing replacement line trims to empty", () => {
+		const content = "alpha\nbeta\n\ngamma";
+		const edits: HashlineEdit[] = [
+			{
+				op: "replace",
+				pos: makeTag(1, "alpha"),
+				end: makeTag(2, "beta"),
+				lines: ["ALPHA", ""],
+			},
+		];
+		const result = applyHashlineEdits(content, edits);
+		expect(result.lines).toBe("ALPHA\n\n\ngamma");
+		expect(result.warnings).toBeUndefined();
+	});
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
