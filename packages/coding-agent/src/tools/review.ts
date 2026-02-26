@@ -11,6 +11,7 @@
 import path from "node:path";
 import type { AgentTool } from "@oh-my-pi/pi-agent-core";
 import { StringEnum } from "@oh-my-pi/pi-ai";
+import { isRecord } from "@oh-my-pi/pi-utils";
 import type { Component } from "@oh-my-pi/pi-tui";
 import { Container, Text } from "@oh-my-pi/pi-tui";
 import { Type } from "@sinclair/typebox";
@@ -80,6 +81,47 @@ interface ReportFindingDetails {
 	file_path: string;
 	line_start: number;
 	line_end: number;
+}
+
+function isFindingPriority(value: unknown): value is FindingPriority {
+	return value === "P0" || value === "P1" || value === "P2" || value === "P3";
+}
+
+export function parseReportFindingDetails(value: unknown): ReportFindingDetails | undefined {
+	if (!isRecord(value)) return undefined;
+
+	const title = typeof value.title === "string" ? value.title : undefined;
+	const body = typeof value.body === "string" ? value.body : undefined;
+	const priority = isFindingPriority(value.priority) ? value.priority : undefined;
+	const confidence =
+		typeof value.confidence === "number" && Number.isFinite(value.confidence) && value.confidence >= 0 && value.confidence <= 1
+			? value.confidence
+			: undefined;
+	const filePath = typeof value.file_path === "string" && value.file_path.length > 0 ? value.file_path : undefined;
+	const lineStart = typeof value.line_start === "number" && Number.isFinite(value.line_start) ? value.line_start : undefined;
+	const lineEnd = typeof value.line_end === "number" && Number.isFinite(value.line_end) ? value.line_end : undefined;
+
+	if (
+		title === undefined ||
+		body === undefined ||
+		priority === undefined ||
+		confidence === undefined ||
+		filePath === undefined ||
+		lineStart === undefined ||
+		lineEnd === undefined
+	) {
+		return undefined;
+	}
+
+	return {
+		title,
+		body,
+		priority,
+		confidence,
+		file_path: filePath,
+		line_start: lineStart,
+		line_end: lineEnd,
+	};
 }
 
 export const reportFindingTool: AgentTool<typeof ReportFindingParams, ReportFindingDetails, Theme> = {
@@ -152,7 +194,10 @@ export type { ReportFindingDetails };
 
 // Register report_finding handler
 subprocessToolRegistry.register<ReportFindingDetails>("report_finding", {
-	extractData: event => event.result?.details as ReportFindingDetails | undefined,
+	extractData: event => {
+		if (event.isError) return undefined;
+		return parseReportFindingDetails(event.result?.details);
+	},
 
 	renderInline: (data, theme) => {
 		const { label, icon, color } = getPriorityDisplay(data.priority, theme);
