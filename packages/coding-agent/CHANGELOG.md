@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Added support for setting array and record configuration values using JSON syntax
 
 ### Changed
 

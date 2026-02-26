@@ -195,6 +195,32 @@ function parseAndSetValue(path: SettingPath, rawValue: string): void {
 			parsedValue = trimmed;
 			break;
 		}
+		case "array": {
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(trimmed);
+			} catch {
+				throw new Error(`Invalid array JSON: ${rawValue}`);
+			}
+			if (!Array.isArray(parsed)) {
+				throw new Error(`Invalid array JSON: ${rawValue}`);
+			}
+			parsedValue = parsed;
+			break;
+		}
+		case "record": {
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(trimmed);
+			} catch {
+				throw new Error(`Invalid record JSON: ${rawValue}`);
+			}
+			if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+				throw new Error(`Invalid record JSON: ${rawValue}`);
+			}
+			parsedValue = parsed;
+			break;
+		}
 		default:
 			parsedValue = trimmed;
 	}
