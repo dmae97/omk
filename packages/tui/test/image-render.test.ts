@@ -1,0 +1,99 @@
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { Image } from "@oh-my-pi/pi-tui/components/image";
+import {
+	type CellDimensions,
+	getCellDimensions,
+	ImageProtocol,
+	renderImage,
+	setCellDimensions,
+	TERMINAL,
+} from "@oh-my-pi/pi-tui/terminal-capabilities";
+
+type MutableTerminalInfo = {
+	imageProtocol: ImageProtocol | null;
+};
+
+const terminal = TERMINAL as unknown as MutableTerminalInfo;
+const BASE64_DUMMY = "AA==";
+const SQUARE_DIMENSIONS = { widthPx: 100, heightPx: 100 };
+
+function parseKittyParam(sequence: string, key: "c" | "r"): number | null {
+	const match = sequence.match(new RegExp(`${key}=(\\d+)`));
+	if (!match) return null;
+	return Number.parseInt(match[1], 10);
+}
+
+function parseITermWidth(sequence: string): string | null {
+	const match = sequence.match(/width=([^;:]+)/);
+	return match?.[1] ?? null;
+}
+
+describe("terminal image rendering", () => {
+	const originalProtocol = TERMINAL.imageProtocol;
+	let originalCellDims: CellDimensions;
+
+	beforeEach(() => {
+		originalCellDims = { ...getCellDimensions() };
+		setCellDimensions({ widthPx: 10, heightPx: 10 });
+		terminal.imageProtocol = null;
+	});
+
+	afterEach(() => {
+		setCellDimensions(originalCellDims);
+		terminal.imageProtocol = originalProtocol;
+	});
+
+	it("fits Kitty images within max width and max height while preserving aspect ratio", () => {
+		terminal.imageProtocol = ImageProtocol.Kitty;
+		const result = renderImage(BASE64_DUMMY, SQUARE_DIMENSIONS, {
+			maxWidthCells: 10,
+			maxHeightCells: 2,
+		});
+
+		expect(result).not.toBeNull();
+		expect(result?.rows).toBe(2);
+		expect(parseKittyParam(result?.sequence ?? "", "c")).toBe(2);
+		expect(parseKittyParam(result?.sequence ?? "", "r")).toBe(2);
+	});
+
+	it("uses intrinsic image size when no bounds are provided", () => {
+		terminal.imageProtocol = ImageProtocol.Kitty;
+		const result = renderImage(BASE64_DUMMY, SQUARE_DIMENSIONS);
+
+		expect(result).not.toBeNull();
+		expect(result?.rows).toBe(10);
+		expect(parseKittyParam(result?.sequence ?? "", "c")).toBe(10);
+		expect(parseKittyParam(result?.sequence ?? "", "r")).toBe(10);
+	});
+
+	it("reduces iTerm2 width when max height is the limiting bound", () => {
+		terminal.imageProtocol = ImageProtocol.Iterm2;
+		const result = renderImage(BASE64_DUMMY, SQUARE_DIMENSIONS, {
+			maxWidthCells: 10,
+			maxHeightCells: 2,
+		});
+
+		expect(result).not.toBeNull();
+		expect(result?.rows).toBe(2);
+		expect(parseITermWidth(result?.sequence ?? "")).toBe("2");
+		expect(result?.sequence).toContain("height=auto");
+	});
+
+	it("Image component forwards maxHeightCells to terminal rendering", () => {
+		terminal.imageProtocol = ImageProtocol.Kitty;
+		const image = new Image(
+			BASE64_DUMMY,
+			"image/png",
+			{ fallbackColor: text => text },
+			{ maxWidthCells: 10, maxHeightCells: 2 },
+			SQUARE_DIMENSIONS,
+		);
+
+		const lines = image.render(20);
+
+		expect(lines).toHaveLength(2);
+		expect(lines[1]).toContain("\x1b[1A");
+		expect(lines[1]).toContain("c=2");
+		expect(lines[1]).toContain("r=2");
+	});
+});
