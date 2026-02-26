@@ -676,6 +676,13 @@ export class InteractiveMode implements InteractiveModeContext {
 		const previousTools = this.#planModePreviousTools ?? this.session.getActiveToolNames();
 		await this.#exitPlanMode({ silent: true, paused: false });
 		await this.handleClearCommand();
+		// The new session has a fresh local:// root — persist the approved plan there
+		// so `local://<title>.md` resolves correctly in the execution session.
+		const newLocalPath = resolveLocalUrlToPath(options.finalPlanFilePath, {
+			getArtifactsDir: () => this.sessionManager.getArtifactsDir(),
+			getSessionId: () => this.sessionManager.getSessionId(),
+		});
+		await Bun.write(newLocalPath, planContent);
 		if (previousTools.length > 0) {
 			await this.session.setActiveToolsByName(previousTools);
 		}
