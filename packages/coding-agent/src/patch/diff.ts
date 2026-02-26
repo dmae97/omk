@@ -386,10 +386,10 @@ export async function computePatchDiff(
  * Used for preview rendering in the TUI before hashline-mode edits execute.
  */
 export async function computeHashlineDiff(
-	input: { path: string; edits: HashlineEdit[] },
+	input: { path: string; edits: HashlineEdit[]; move?: string },
 	cwd: string,
 ): Promise<DiffResult | DiffError> {
-	const { path, edits } = input;
+	const { path, edits, move } = input;
 	const absolutePath = resolveToCwd(path, cwd);
 
 	try {
@@ -414,7 +414,7 @@ export async function computeHashlineDiff(
 		const normalizedContent = normalizeToLF(content);
 
 		const result = applyHashlineEdits(normalizedContent, edits);
-		if (normalizedContent === result.lines) {
+		if (normalizedContent === result.lines && !move) {
 			return { error: `No changes would be made to ${path}. The edits produce identical content.` };
 		}
 

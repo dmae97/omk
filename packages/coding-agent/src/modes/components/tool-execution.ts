@@ -204,12 +204,13 @@ export class ToolExecutionComponent extends Container {
 			return;
 		}
 		const edits = this.#args?.edits;
+		const move = this.#args?.move;
 		if (path && Array.isArray(edits)) {
-			const argsKey = JSON.stringify({ path, edits });
+			const argsKey = JSON.stringify({ path, edits, move });
 			if (this.#editDiffArgsKey === argsKey) return;
 			this.#editDiffArgsKey = argsKey;
 
-			computeHashlineDiff({ path, edits }, this.#cwd).then(result => {
+			computeHashlineDiff({ path, edits, move }, this.#cwd).then(result => {
 				if (this.#editDiffArgsKey === argsKey) {
 					this.#editDiffPreview = result;
 					this.#updateDisplay();

@@ -1,6 +1,13 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+
+- Support for `move` parameter in `computeHashlineDiff` to enable file move operations alongside content edits
+
+### Changed
+
+- Modified no-op detection logic to allow move-only operations when file content remains unchanged
 
 ## [13.3.1] - 2026-02-26
 

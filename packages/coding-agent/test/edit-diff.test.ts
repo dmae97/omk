@@ -1,5 +1,13 @@
-import { describe, expect, test } from "bun:test";
-import { adjustIndentation, DEFAULT_FUZZY_THRESHOLD, findEditMatch } from "@oh-my-pi/pi-coding-agent/patch";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
+import {
+	adjustIndentation,
+	computeHashlineDiff,
+	DEFAULT_FUZZY_THRESHOLD,
+	findEditMatch,
+} from "@oh-my-pi/pi-coding-agent/patch";
 
 describe("findEditMatch", () => {
 	describe("exact matching", () => {
@@ -205,5 +213,46 @@ describe("adjustIndentation", () => {
 		const result = adjustIndentation(oldText, actualText, newText);
 		// Should remove up to 4 chars, but line only has 2, so remove 2
 		expect(result).toBe("bar");
+	});
+});
+
+describe("computeHashlineDiff", () => {
+	let tempDir = "";
+
+	beforeEach(async () => {
+		tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "edit-diff-hashline-"));
+	});
+
+	afterEach(async () => {
+		if (tempDir) {
+			await fs.rm(tempDir, { recursive: true, force: true });
+		}
+	});
+
+	test("returns no-op error for unchanged content when move is absent", async () => {
+		const sourcePath = path.join(tempDir, "source.txt");
+		await Bun.write(sourcePath, "unchanged content\n");
+
+		const result = await computeHashlineDiff({ path: sourcePath, edits: [] }, tempDir);
+		expect("error" in result).toBe(true);
+		if ("error" in result) {
+			expect(result.error).toContain("No changes would be made");
+		}
+	});
+
+	test("allows move-only operation when content is unchanged", async () => {
+		const sourcePath = path.join(tempDir, "source.txt");
+		await Bun.write(sourcePath, "unchanged content\n");
+
+		const result = await computeHashlineDiff(
+			{ path: sourcePath, edits: [], move: path.join(tempDir, "moved", "target.txt") },
+			tempDir,
+		);
+
+		expect("error" in result).toBe(false);
+		if ("diff" in result) {
+			expect(result.diff).toBe("");
+			expect(result.firstChangedLine).toBeUndefined();
+		}
 	});
 });
