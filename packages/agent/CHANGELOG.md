@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+
+- Changed intent field name from `agent__intent` to `intent` in tool schemas
 
 ## [13.3.7] - 2026-02-27
 ### Added

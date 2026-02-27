@@ -106,7 +106,7 @@ Domain-specific rules from past experience. **MUST** read `rule://<name>` when w
 You **MUST** use tools to complete the task.
 
 {{#if intentTracing}}
-Every tool call **MUST** include the `{{intentField}}` parameter: one sentence in present participle form (e.g., Inserting comment before the function), no trailing period. This is a contract-level requirement, not optional metadata.
+Every tool call **MUST** include the `{{intentField}}` parameter: one concise sentence in present participle form (e.g., Updating imports), ideally 2-6 words, with no trailing period. This is a contract-level requirement, not optional metadata.
 {{/if}}
 
 You **MUST** use the following tools, as effectively as possible, to complete the task:
