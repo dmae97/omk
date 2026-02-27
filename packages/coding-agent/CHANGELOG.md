@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Removed `preloadedSkills` option from `CreateAgentSessionOptions`; skills are no longer inlined into system prompts
@@ -11,6 +10,8 @@
 
 ### Changed
 
+- Refactored schema reference resolution to inline all `$ref` definitions instead of preserving them at the root level, eliminating unresolved references in tool parameters
+- Added `lenientArgValidation` flag to SubmitResultTool to allow the agent loop to bypass strict argument validation errors
 - Modified schema validation to allow non-conforming output on second validation failure, enabling recovery from strict schema constraints after initial rejection
 - Updated JTD-to-TypeScript conversion to gracefully fall back to 'unknown' type when conversion fails, preventing template rendering errors
 - Changed JTD-to-JSON Schema conversion to normalize nested JTD fragments within JSON Schema nodes, enabling mixed schema definitions
@@ -25,6 +26,7 @@
 
 ### Fixed
 
+- Fixed schema compilation validation by adding explicit AJV compilation check to catch unresolved `$ref` references and other schema errors before tool execution
 - Fixed handling of circular and deeply nested output schemas to prevent stack overflow and enable successful result submission with fallback unconstrained schema
 - Fixed processing of non-object output schemas (arrays, primitives, booleans) to accept valid result submissions without blocking
 - Fixed handling of mixed JTD and JSON Schema output definitions to properly convert all nested JTD elements (e.g., `elements` → `items`, `int32` → `integer`)

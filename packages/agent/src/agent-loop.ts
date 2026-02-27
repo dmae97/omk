@@ -507,7 +507,16 @@ async function executeToolCalls(
 		try {
 			if (!tool) throw new Error(`Tool ${toolCall.name} not found`);
 
-			const validatedArgs = validateToolArguments(tool, { ...toolCall, arguments: argsForExecution });
+			let effectiveArgs: Record<string, unknown>;
+			try {
+				effectiveArgs = validateToolArguments(tool, { ...toolCall, arguments: argsForExecution });
+			} catch (validationError) {
+				if (tool.lenientArgValidation) {
+					effectiveArgs = argsForExecution;
+				} else {
+					throw validationError;
+				}
+			}
 			const toolContext = getToolContext
 				? getToolContext({
 						batchId,
@@ -518,7 +527,7 @@ async function executeToolCalls(
 				: undefined;
 			result = await tool.execute(
 				toolCall.id,
-				transformToolCallArguments ? transformToolCallArguments(validatedArgs, toolCall.name) : validatedArgs,
+				transformToolCallArguments ? transformToolCallArguments(effectiveArgs, toolCall.name) : effectiveArgs,
 				tool.nonAbortable ? undefined : toolSignal,
 				partialResult => {
 					if (interruptState.triggered) return;

@@ -163,7 +163,7 @@ describe("SubmitResultTool", () => {
 			tool.execute("call-mixed-invalid", { result: { data: { results: [{ issue: "185" }] } } } as never),
 		).rejects.toThrow("Output does not match schema");
 	});
-	it("supports $defs/$ref output schemas in tool-argument validation and degrades after first runtime failure", async () => {
+	it("supports $defs/$ref output schemas by inlining definitions and degrades after first runtime failure", async () => {
 		const outputSchema = {
 			$defs: {
 				A: {
@@ -191,8 +191,14 @@ describe("SubmitResultTool", () => {
 		};
 		const tool = new SubmitResultTool(createSession({ outputSchema }));
 		const parametersRecord = tool.parameters as unknown as Record<string, unknown>;
-		expect(toRecord(parametersRecord.$defs).A).toBeDefined();
-		expect(getSuccessDataSchema(parametersRecord).$defs).toBeUndefined();
+		// $defs should NOT be in parameters — refs are inlined
+		expect(parametersRecord.$defs).toBeUndefined();
+		const dataSchema = getSuccessDataSchema(parametersRecord);
+		// The inlined anyOf[0] should be the A definition (not a $ref)
+		const anyOfVariants = dataSchema.anyOf as Array<Record<string, unknown>>;
+		expect(anyOfVariants).toBeDefined();
+		expect(anyOfVariants[0].$ref).toBeUndefined();
+		expect(toRecord(anyOfVariants[0].properties).kind).toBeDefined();
 
 		const toolDefinition: Tool = {
 			name: tool.name,
@@ -205,7 +211,9 @@ describe("SubmitResultTool", () => {
 			name: tool.name,
 			arguments: { result: { data: { kind: "A", token: "x" } } },
 		};
+		// validateToolArguments should succeed (no $ref to resolve)
 		const firstArgs = validateToolArguments(toolDefinition, firstCall);
+		// Runtime AJV still validates the original schema — token too short
 		await expect(tool.execute("call-ref-1", firstArgs as never)).rejects.toThrow("Output does not match schema");
 
 		const secondCall: ToolCall = {
@@ -418,5 +426,9 @@ describe("SubmitResultTool", () => {
 		await expect(tool.execute("call-3", {} as never)).rejects.toThrow(
 			"result must be an object containing either data or error",
 		);
+	});
+	it("sets lenientArgValidation so agent-loop bypasses validation errors", () => {
+		const tool = new SubmitResultTool(createSession());
+		expect(tool.lenientArgValidation).toBe(true);
 	});
 });

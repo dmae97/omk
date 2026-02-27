@@ -52,27 +52,51 @@ function formatAjvErrors(errors: ErrorObject[] | null | undefined): string {
 		.join("; ");
 }
 
-function splitRootDefinitions(schema: Record<string, unknown>): {
-	schemaWithoutDefinitions: Record<string, unknown>;
-	rootDefinitions?: Record<string, unknown>;
-} {
-	const schemaWithoutDefinitions = { ...schema };
-	const rootDefinitions: Record<string, unknown> = {};
-	if (typeof schemaWithoutDefinitions.$defs === "object" && schemaWithoutDefinitions.$defs !== null) {
-		if (!Array.isArray(schemaWithoutDefinitions.$defs)) {
-			rootDefinitions.$defs = schemaWithoutDefinitions.$defs;
+/**
+ * Resolve all $ref references in a JSON Schema by inlining definitions.
+ * Handles $defs and definitions at any nesting level.
+ * Removes $defs/definitions from the output since all refs are inlined.
+ */
+function resolveSchemaRefs(schema: Record<string, unknown>): Record<string, unknown> {
+	const defs: Record<string, Record<string, unknown>> = {};
+	const defsObj = schema.$defs ?? schema.definitions;
+	if (defsObj && typeof defsObj === "object" && !Array.isArray(defsObj)) {
+		for (const [name, def] of Object.entries(defsObj as Record<string, unknown>)) {
+			if (def && typeof def === "object" && !Array.isArray(def)) {
+				defs[name] = def as Record<string, unknown>;
+			}
 		}
-		delete schemaWithoutDefinitions.$defs;
 	}
-	if (typeof schemaWithoutDefinitions.definitions === "object" && schemaWithoutDefinitions.definitions !== null) {
-		if (!Array.isArray(schemaWithoutDefinitions.definitions)) {
-			rootDefinitions.definitions = schemaWithoutDefinitions.definitions;
+	if (Object.keys(defs).length === 0) return schema;
+
+	const inlining = new Set<string>();
+	function inline(node: unknown): unknown {
+		if (node === null || typeof node !== "object") return node;
+		if (Array.isArray(node)) return node.map(inline);
+		const obj = node as Record<string, unknown>;
+		const ref = obj.$ref;
+		if (typeof ref === "string") {
+			const match = ref.match(/^#\/(?:\$defs|definitions)\/(.+)$/);
+			if (match) {
+				const name = match[1];
+				const def = defs[name];
+				if (def) {
+					if (inlining.has(name)) return {};
+					inlining.add(name);
+					const resolved = inline(def);
+					inlining.delete(name);
+					return resolved;
+				}
+			}
 		}
-		delete schemaWithoutDefinitions.definitions;
+		const result: Record<string, unknown> = {};
+		for (const [key, value] of Object.entries(obj)) {
+			if (key === "$defs" || key === "definitions") continue;
+			result[key] = inline(value);
+		}
+		return result;
 	}
-	return Object.keys(rootDefinitions).length > 0
-		? { schemaWithoutDefinitions, rootDefinitions }
-		: { schemaWithoutDefinitions };
+	return inline(schema) as Record<string, unknown>;
 }
 
 export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails> {
@@ -83,13 +107,14 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 		"If you cannot complete the task, call with an error message payload.";
 	readonly parameters: TSchema;
 	strict = true;
+	lenientArgValidation = true;
 
 	readonly #validate?: ValidateFunction;
 	#schemaValidationFailures = 0;
 
 	constructor(session: ToolSession) {
-		const createParameters = (dataSchema: TSchema, rootDefinitions?: Record<string, unknown>): TSchema => {
-			const baseParameters = Type.Object(
+		const createParameters = (dataSchema: TSchema): TSchema =>
+			Type.Object(
 				{
 					result: Type.Union([
 						Type.Object({ data: dataSchema }, { description: "Successfully completed the task" }),
@@ -102,12 +127,8 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 					additionalProperties: false,
 					description: "Submit either `data` for success or `error` for failure",
 				},
-			) as unknown as Record<string, unknown>;
-			if (!rootDefinitions) return baseParameters as TSchema;
-			return Type.Unsafe({ ...baseParameters, ...rootDefinitions });
-		};
+			) as TSchema;
 
-		let rootDefinitions: Record<string, unknown> | undefined;
 		let validate: ValidateFunction | undefined;
 		let dataSchema: TSchema;
 		let parameters: TSchema;
@@ -147,21 +168,21 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 						: undefined;
 
 			if (sanitizedSchema !== undefined) {
-				const schemaWithDescription = {
+				const resolved = resolveSchemaRefs({
 					...sanitizedSchema,
 					description: schemaDescription,
-				};
-				const splitSchema = splitRootDefinitions(schemaWithDescription);
-				rootDefinitions = splitSchema.rootDefinitions;
-				dataSchema = Type.Unsafe(splitSchema.schemaWithoutDefinitions);
+				});
+				dataSchema = Type.Unsafe(resolved);
 			} else {
 				dataSchema = Type.Record(Type.String(), Type.Any(), {
 					description: schemaError ? schemaDescription : "Structured JSON output (no schema specified)",
 				});
 			}
-			parameters = createParameters(dataSchema, rootDefinitions);
+			parameters = createParameters(dataSchema);
 			const strictParameters = enforceStrictSchema(parameters as unknown as Record<string, unknown>);
 			JSON.stringify(strictParameters);
+			// Verify the final parameters compile with AJV (catches unresolved $ref, etc.)
+			ajv.compile(parameters as Record<string, unknown>);
 		} catch (err) {
 			const errorMsg = err instanceof Error ? err.message : String(err);
 			dataSchema = Type.Record(Type.String(), Type.Any(), {
