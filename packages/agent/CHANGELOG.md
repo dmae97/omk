@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.3.7] - 2026-02-27
 ### Added
 
 - Added `lenientArgValidation` option to tools to allow graceful handling of argument validation errors by passing raw arguments to execute() instead of returning an error to the LLM

@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+
+## [13.3.7] - 2026-02-27
 ### Breaking Changes
 
 - Removed `preloadedSkills` option from `CreateAgentSessionOptions`; skills are no longer inlined into system prompts
