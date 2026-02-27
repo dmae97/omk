@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Breaking Changes
 
 - Removed `preloadedSkills` option from `CreateAgentSessionOptions`; skills are no longer inlined into system prompts
@@ -11,6 +10,8 @@
 
 ### Changed
 
+- Changed JTD-to-JSON Schema conversion to normalize nested JTD fragments within JSON Schema nodes, enabling mixed schema definitions
+- Changed output schema validation to gracefully fall back to unconstrained object when schema is invalid, instead of rejecting submissions
 - Changed schema sanitization to remove strict-mode incompatible constraints (minLength, pattern, etc.) from tool parameters while preserving them for runtime validation
 - Simplified task execution to always pass available session skills to subagents instead of resolving per-task skill lists
 
@@ -20,6 +21,7 @@
 
 ### Fixed
 
+- Fixed handling of mixed JTD and JSON Schema output definitions to properly convert all nested JTD elements (e.g., `elements` → `items`, `int32` → `integer`)
 - Fixed strict schema generation for output schemas with only required fields, enabling proper Claude API compatibility
 - Fixed handling of union type schemas (e.g., object|null) to normalize them into strict-mode compatible variants
 

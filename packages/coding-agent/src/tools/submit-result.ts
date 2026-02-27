@@ -62,7 +62,6 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 	strict = true;
 
 	readonly #validate?: ValidateFunction;
-	readonly #schemaError?: string;
 
 	constructor(session: ToolSession) {
 		const schemaResult = normalizeSchema(session.outputSchema);
@@ -79,15 +78,18 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 			}
 		}
 
-		this.#schemaError = schemaError;
-
 		const schemaHint = formatSchema(normalizedSchema ?? session.outputSchema);
 
-		const schemaDescription = `Structured output matching the schema:\n${schemaHint}`;
+		const schemaDescription = schemaError
+			? `Structured JSON output (output schema invalid; accepting unconstrained object): ${schemaError}`
+			: `Structured output matching the schema:\n${schemaHint}`;
 		const sanitizedSchema =
-			normalizedSchema != null && typeof normalizedSchema === "object" && !Array.isArray(normalizedSchema)
+			!schemaError &&
+			normalizedSchema != null &&
+			typeof normalizedSchema === "object" &&
+			!Array.isArray(normalizedSchema)
 				? sanitizeSchemaForStrictMode(normalizedSchema as Record<string, unknown>)
-				: normalizedSchema === true
+				: !schemaError && normalizedSchema === true
 					? {}
 					: undefined;
 
@@ -97,7 +99,9 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 						...sanitizedSchema,
 						description: schemaDescription,
 					})
-				: Type.Record(Type.String(), Type.Any(), { description: "Structured JSON output (no schema specified)" });
+				: Type.Record(Type.String(), Type.Any(), {
+						description: schemaError ? schemaDescription : "Structured JSON output (no schema specified)",
+					});
 		this.parameters = Type.Object(
 			{
 				result: Type.Union([
@@ -147,9 +151,6 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 		if (status === "success") {
 			if (data === undefined || data === null) {
 				throw new Error("data is required when submit_result indicates success");
-			}
-			if (this.#schemaError) {
-				throw new Error(`Invalid output schema: ${this.#schemaError}`);
 			}
 			if (this.#validate && !this.#validate(data)) {
 				throw new Error(`Output does not match schema: ${formatAjvErrors(this.#validate.errors)}`);

@@ -38,15 +38,6 @@ function convertSchema(schema: unknown): unknown {
 		return {};
 	}
 
-	// Type form: { type: "string" } → { type: "string" }
-	if (isJTDType(schema)) {
-		const jsonType = primitiveMap[schema.type as JTDPrimitive];
-		if (!jsonType) {
-			return { type: schema.type };
-		}
-		return { type: jsonType };
-	}
-
 	// Enum form: { enum: ["a", "b"] } → { enum: ["a", "b"] }
 	if (isJTDEnum(schema)) {
 		return { enum: schema.enum };
@@ -60,6 +51,14 @@ function convertSchema(schema: unknown): unknown {
 		};
 	}
 
+	// Type form: { type: "string" } → { type: "string" }
+	if (isJTDType(schema)) {
+		const jsonType = primitiveMap[schema.type as JTDPrimitive];
+		if (!jsonType) {
+			return { type: schema.type };
+		}
+		return { type: jsonType };
+	}
 	// Values form: { values: { type: "string" } } → { type: "object", additionalProperties: ... }
 	if (isJTDValues(schema)) {
 		return {
@@ -171,13 +170,30 @@ export function isJTDSchema(schema: unknown): boolean {
 	return false;
 }
 
+function normalizeMixedSchemaNode(schema: unknown): unknown {
+	if (schema === null || typeof schema !== "object") {
+		return schema;
+	}
+
+	if (Array.isArray(schema)) {
+		return schema.map(item => normalizeMixedSchemaNode(item));
+	}
+
+	if (isJTDSchema(schema)) {
+		return normalizeMixedSchemaNode(convertSchema(schema));
+	}
+
+	const normalized: Record<string, unknown> = {};
+	for (const [key, value] of Object.entries(schema)) {
+		normalized[key] = normalizeMixedSchemaNode(value);
+	}
+
+	return normalized;
+}
 /**
  * Convert JTD schema to JSON Schema.
  * If already JSON Schema, returns as-is.
  */
 export function jtdToJsonSchema(schema: unknown): unknown {
-	if (!isJTDSchema(schema)) {
-		return schema;
-	}
-	return convertSchema(schema);
+	return normalizeMixedSchemaNode(schema);
 }

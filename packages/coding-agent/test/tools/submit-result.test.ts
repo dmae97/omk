@@ -126,6 +126,69 @@ describe("SubmitResultTool", () => {
 		expect(nullVariant).toEqual({ type: "null" });
 	});
 
+	it("converts mixed JTD and JSON Schema output definitions into provider-valid schemas", async () => {
+		const tool = new SubmitResultTool(
+			createSession({
+				outputSchema: {
+					type: "object",
+					properties: {
+						results: {
+							type: "array",
+							elements: {
+								properties: {
+									issue: { type: "int32" },
+								},
+							},
+						},
+					},
+					required: ["results"],
+				},
+			}),
+		);
+		const dataSchema = getSuccessDataSchema(tool.parameters as unknown as Record<string, unknown>);
+		const resultsSchema = toRecord(toRecord(dataSchema.properties).results);
+		const issueSchema = toRecord(toRecord(toRecord(resultsSchema.items).properties).issue);
+
+		expect(resultsSchema.type).toBe("array");
+		expect(resultsSchema.items).toBeDefined();
+		expect(resultsSchema.elements).toBeUndefined();
+		expect(issueSchema.type).toBe("integer");
+
+		await expect(
+			tool.execute("call-mixed-valid", { result: { data: { results: [{ issue: 185 }] } } } as never),
+		).resolves.toBeDefined();
+		await expect(
+			tool.execute("call-mixed-invalid", { result: { data: { results: [{ issue: "185" }] } } } as never),
+		).rejects.toThrow("Output does not match schema");
+	});
+	it("falls back to unconstrained object data when output schema is invalid", async () => {
+		const tool = new SubmitResultTool(
+			createSession({
+				outputSchema: {
+					type: "object",
+					properties: {
+						value: { type: "not-a-real-json-schema-type" },
+					},
+					required: ["value"],
+				},
+			}),
+		);
+		const dataSchema = getSuccessDataSchema(tool.parameters as unknown as Record<string, unknown>);
+		const dataSchemaProperties = toRecord(dataSchema.properties);
+
+		expect(dataSchema.type).toBe("object");
+		expect(dataSchemaProperties.value).toBeUndefined();
+		expect(Object.keys(dataSchemaProperties)).toHaveLength(0);
+
+		const result = await tool.execute("call-invalid-schema", {
+			result: { data: { value: 123, nested: { ok: true } } },
+		} as never);
+		expect(result.details).toEqual({
+			data: { value: 123, nested: { ok: true } },
+			status: "success",
+			error: undefined,
+		});
+	});
 	it("keeps runtime validation against the original output schema", async () => {
 		const outputSchema = {
 			type: "object",
