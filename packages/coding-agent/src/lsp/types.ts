@@ -32,6 +32,7 @@ export const lspSchema = Type.Object({
 	query: Type.Optional(Type.String({ description: "Search query or SSR pattern" })),
 	new_name: Type.Optional(Type.String({ description: "New name for rename" })),
 	apply: Type.Optional(Type.Boolean({ description: "Apply edits (default: true)" })),
+	timeout: Type.Optional(Type.Number({ description: "Request timeout in seconds" })),
 });
 
 export type LspParams = Static<typeof lspSchema>;

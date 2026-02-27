@@ -47,6 +47,10 @@
 - Fixed `code_actions` apply mode to execute command-based actions via `workspace/executeCommand`
 - Fixed diagnostics glob detection to recognize bracket character class patterns (e.g., `src/[ab].ts`)
 - Fixed LSP render metadata sanitization for `symbol` values to prevent tab/newline layout breakage
+- Fixed LSP diagnostics glob requests that appeared stuck by capping glob expansion and shortening per-file diagnostic waits in batch mode
+- Fixed workspace symbol search to query all configured LSP servers and filter out non-matching results
+- Fixed `references`/`rename`/`hover` symbol targeting to error when `symbol` is missing on the line or `occurrence` is out of bounds
+- Fixed `reload` without a file to reload all active configured language servers instead of only the first server
 - Fixed `todo_write` task normalization to auto-activate the first remaining task and include explicit remaining-items output in tool results, removing the need for an immediate follow-up start update
 
 ## [13.3.7] - 2026-02-27

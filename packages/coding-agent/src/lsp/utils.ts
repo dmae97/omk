@@ -500,6 +500,34 @@ export function formatSymbolInformation(symbol: SymbolInformation, cwd: string):
 	return `${icon} ${symbol.name}${container} @ ${location}`;
 }
 
+export function filterWorkspaceSymbols(symbols: SymbolInformation[], query: string): SymbolInformation[] {
+	const needle = query.trim().toLowerCase();
+	if (!needle) return symbols;
+	return symbols.filter(symbol => {
+		const fields = [symbol.name, symbol.containerName ?? "", uriToFile(symbol.location.uri)];
+		return fields.some(field => field.toLowerCase().includes(needle));
+	});
+}
+
+export function dedupeWorkspaceSymbols(symbols: SymbolInformation[]): SymbolInformation[] {
+	const seen = new Set<string>();
+	const unique: SymbolInformation[] = [];
+	for (const symbol of symbols) {
+		const key = [
+			symbol.name,
+			symbol.containerName ?? "",
+			symbol.kind,
+			symbol.location.uri,
+			symbol.location.range.start.line,
+			symbol.location.range.start.character,
+		].join(":");
+		if (seen.has(key)) continue;
+		seen.add(key);
+		unique.push(symbol);
+	}
+	return unique;
+}
+
 export function formatCodeAction(action: CodeAction | Command, index: number): string {
 	const kind = "kind" in action && action.kind ? action.kind : "action";
 	const preferred = "isPreferred" in action && action.isPreferred ? " (preferred)" : "";
@@ -559,6 +587,22 @@ const GLOB_PATTERN_CHARS = /[*?[{]/;
 
 export function hasGlobPattern(value: string): boolean {
 	return GLOB_PATTERN_CHARS.test(value);
+}
+
+export async function collectGlobMatches(
+	pattern: string,
+	cwd: string,
+	maxMatches: number,
+): Promise<{ matches: string[]; truncated: boolean }> {
+	const normalizedLimit = Number.isFinite(maxMatches) ? Math.max(1, Math.trunc(maxMatches)) : 1;
+	const matches: string[] = [];
+	for await (const match of new Bun.Glob(pattern).scan({ cwd })) {
+		if (matches.length >= normalizedLimit) {
+			return { matches, truncated: true };
+		}
+		matches.push(match);
+	}
+	return { matches, truncated: false };
 }
 // =============================================================================
 // Hover Content Extraction
@@ -632,19 +676,19 @@ export async function resolveSymbolColumn(
 		}
 
 		const exactIndexes = findSymbolMatchIndexes(targetLine, symbol);
-		if (exactIndexes.length >= matchOccurrence) {
-			return exactIndexes[matchOccurrence - 1];
+		const fallbackIndexes = exactIndexes.length > 0 ? exactIndexes : findSymbolMatchIndexes(targetLine, symbol, true);
+		if (fallbackIndexes.length === 0) {
+			throw new Error(`Symbol "${symbol}" not found on line ${lineNumber}`);
 		}
-
-		const fallbackIndexes = findSymbolMatchIndexes(targetLine, symbol, true);
-		if (fallbackIndexes.length >= matchOccurrence) {
-			return fallbackIndexes[matchOccurrence - 1];
+		if (matchOccurrence > fallbackIndexes.length) {
+			throw new Error(
+				`Symbol "${symbol}" occurrence ${matchOccurrence} is out of bounds on line ${lineNumber} (found ${fallbackIndexes.length})`,
+			);
 		}
-
-		return firstNonWhitespaceColumn(targetLine);
+		return fallbackIndexes[matchOccurrence - 1];
 	} catch (error) {
 		if (isEnoent(error)) {
-			return 0;
+			throw new Error(`File not found: ${filePath}`);
 		}
 		throw error;
 	}

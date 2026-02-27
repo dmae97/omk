@@ -9,6 +9,7 @@ import lspDescription from "../prompts/tools/lsp.md" with { type: "text" };
 import type { ToolSession } from "../tools";
 import { resolveToCwd } from "../tools/path-utils";
 import { ToolAbortError, throwIfAborted } from "../tools/tool-errors";
+import { clampTimeout } from "../tools/tool-timeouts";
 import {
 	ensureFileOpen,
 	getActiveClients,
@@ -46,8 +47,11 @@ import {
 } from "./types";
 import {
 	applyCodeAction,
+	collectGlobMatches,
+	dedupeWorkspaceSymbols,
 	extractHoverText,
 	fileToUri,
+	filterWorkspaceSymbols,
 	formatCodeAction,
 	formatDiagnostic,
 	formatDiagnosticsSummary,
@@ -247,6 +251,10 @@ function getLspServerForFile(config: LspConfig, filePath: string): [string, Serv
 }
 
 const DIAGNOSTIC_MESSAGE_LIMIT = 50;
+const SINGLE_DIAGNOSTICS_WAIT_TIMEOUT_MS = 3000;
+const BATCH_DIAGNOSTICS_WAIT_TIMEOUT_MS = 400;
+const MAX_GLOB_DIAGNOSTIC_TARGETS = 20;
+const WORKSPACE_SYMBOL_LIMIT = 200;
 
 function limitDiagnosticMessages(messages: string[]): string[] {
 	if (messages.length <= DIAGNOSTIC_MESSAGE_LIMIT) {
@@ -285,15 +293,22 @@ async function formatLocationWithContext(location: Location, cwd: string): Promi
 	}
 	return `${header}\n${context.map(lineText => `    ${lineText}`).join("\n")}`;
 }
-function getServerForWorkspaceAction(config: LspConfig, action: string): [string, ServerConfig] | null {
-	const entries = getLspServers(config);
-	if (entries.length === 0) return null;
-
-	if (action === "symbols" || action === "reload") {
-		return entries[0];
+async function reloadServer(client: LspClient, serverName: string, signal?: AbortSignal): Promise<string> {
+	let output = `Restarted ${serverName}`;
+	const reloadMethods = ["rust-analyzer/reloadWorkspace", "workspace/didChangeConfiguration"];
+	for (const method of reloadMethods) {
+		try {
+			await sendRequest(client, method, method.includes("Configuration") ? { settings: {} } : null, signal);
+			output = `Reloaded ${serverName}`;
+			break;
+		} catch {
+			// Method not supported, try next
+		}
 	}
-
-	return null;
+	if (output.startsWith("Restarted")) {
+		client.proc.kill();
+	}
+	return output;
 }
 
 async function waitForDiagnostics(
@@ -926,7 +941,10 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 		_onUpdate?: AgentToolUpdateCallback<LspToolDetails>,
 		_context?: AgentToolContext,
 	): Promise<AgentToolResult<LspToolDetails>> {
-		const { action, file, line, symbol, occurrence, query, new_name, apply } = params;
+		const { action, file, line, symbol, occurrence, query, new_name, apply, timeout } = params;
+		const timeoutSec = clampTimeout("lsp", timeout);
+		const timeoutSignal = AbortSignal.timeout(timeoutSec * 1000);
+		signal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 		throwIfAborted(signal);
 
 		const config = getConfig(this.session.cwd);
@@ -969,9 +987,15 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 				};
 			}
 
-			const targets = hasGlobPattern(file)
-				? await Array.fromAsync(new Bun.Glob(file).scan({ cwd: this.session.cwd }))
-				: [file];
+			let targets: string[];
+			let truncatedGlobTargets = false;
+			if (hasGlobPattern(file)) {
+				const globMatches = await collectGlobMatches(file, this.session.cwd, MAX_GLOB_DIAGNOSTIC_TARGETS);
+				targets = globMatches.matches;
+				truncatedGlobTargets = globMatches.truncated;
+			} else {
+				targets = [file];
+			}
 
 			if (targets.length === 0) {
 				return {
@@ -980,9 +1004,17 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 				};
 			}
 
-			const detailed = targets.length > 1;
+			const detailed = targets.length > 1 || truncatedGlobTargets;
+			const diagnosticsWaitTimeoutMs = detailed
+				? Math.min(BATCH_DIAGNOSTICS_WAIT_TIMEOUT_MS, timeoutSec * 1000)
+				: Math.min(SINGLE_DIAGNOSTICS_WAIT_TIMEOUT_MS, timeoutSec * 1000);
 			const results: string[] = [];
 			const allServerNames = new Set<string>();
+			if (truncatedGlobTargets) {
+				results.push(
+					`${theme.status.warning} Pattern matched more than ${MAX_GLOB_DIAGNOSTIC_TARGETS} files; showing first ${MAX_GLOB_DIAGNOSTIC_TARGETS}. Narrow the glob or use workspace diagnostics.`,
+				);
+			}
 
 			for (const target of targets) {
 				throwIfAborted(signal);
@@ -1011,7 +1043,13 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 						const client = await getOrCreateClient(serverConfig, this.session.cwd);
 						const minVersion = client.diagnosticsVersion;
 						await refreshFile(client, resolved, signal);
-						const diagnostics = await waitForDiagnostics(client, uri, 3000, signal, minVersion);
+						const diagnostics = await waitForDiagnostics(
+							client,
+							uri,
+							diagnosticsWaitTimeoutMs,
+							signal,
+							minVersion,
+						);
 						allDiagnostics.push(...diagnostics);
 					} catch (err) {
 						if (err instanceof ToolAbortError || signal?.aborted) {
@@ -1078,10 +1116,107 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 		}
 
 		const resolvedFile = file ? resolveToCwd(file, this.session.cwd) : null;
-		const serverInfo = resolvedFile
-			? getLspServerForFile(config, resolvedFile)
-			: getServerForWorkspaceAction(config, action);
+		if (action === "symbols" && !resolvedFile) {
+			const normalizedQuery = query?.trim();
+			if (!normalizedQuery) {
+				return {
+					content: [{ type: "text", text: "Error: query parameter required for workspace symbol search" }],
+					details: { action, success: false, request: params },
+				};
+			}
+			const servers = getLspServers(config);
+			if (servers.length === 0) {
+				return {
+					content: [{ type: "text", text: "No language server found for this action" }],
+					details: { action, success: false, request: params },
+				};
+			}
+			const aggregatedSymbols: SymbolInformation[] = [];
+			const respondingServers = new Set<string>();
+			for (const [workspaceServerName, workspaceServerConfig] of servers) {
+				throwIfAborted(signal);
+				try {
+					const workspaceClient = await getOrCreateClient(workspaceServerConfig, this.session.cwd);
+					const workspaceResult = (await sendRequest(
+						workspaceClient,
+						"workspace/symbol",
+						{ query: normalizedQuery },
+						signal,
+					)) as SymbolInformation[] | null;
+					if (!workspaceResult || workspaceResult.length === 0) {
+						continue;
+					}
+					respondingServers.add(workspaceServerName);
+					aggregatedSymbols.push(...filterWorkspaceSymbols(workspaceResult, normalizedQuery));
+				} catch (err) {
+					if (err instanceof ToolAbortError || signal?.aborted) {
+						throw err;
+					}
+				}
+			}
+			const dedupedSymbols = dedupeWorkspaceSymbols(aggregatedSymbols);
+			if (dedupedSymbols.length === 0) {
+				return {
+					content: [{ type: "text", text: `No symbols matching "${normalizedQuery}"` }],
+					details: {
+						action,
+						serverName: Array.from(respondingServers).join(", "),
+						success: true,
+						request: params,
+					},
+				};
+			}
+			const limitedSymbols = dedupedSymbols.slice(0, WORKSPACE_SYMBOL_LIMIT);
+			const lines = limitedSymbols.map(s => formatSymbolInformation(s, this.session.cwd));
+			const truncationLine =
+				dedupedSymbols.length > WORKSPACE_SYMBOL_LIMIT
+					? `\n... ${dedupedSymbols.length - WORKSPACE_SYMBOL_LIMIT} additional symbol(s) omitted`
+					: "";
+			return {
+				content: [
+					{
+						type: "text",
+						text: `Found ${dedupedSymbols.length} symbol(s) matching "${normalizedQuery}":\n${lines.map(l => `  ${l}`).join("\n")}${truncationLine}`,
+					},
+				],
+				details: {
+					action,
+					serverName: Array.from(respondingServers).join(", "),
+					success: true,
+					request: params,
+				},
+			};
+		}
 
+		if (action === "reload" && !resolvedFile) {
+			const servers = getLspServers(config);
+			if (servers.length === 0) {
+				return {
+					content: [{ type: "text", text: "No language server found for this action" }],
+					details: { action, success: false, request: params },
+				};
+			}
+			const outputs: string[] = [];
+			for (const [workspaceServerName, workspaceServerConfig] of servers) {
+				throwIfAborted(signal);
+				try {
+					const workspaceClient = await getOrCreateClient(workspaceServerConfig, this.session.cwd);
+					outputs.push(await reloadServer(workspaceClient, workspaceServerName, signal));
+				} catch (err) {
+					if (err instanceof ToolAbortError || signal?.aborted) {
+						throw err;
+					}
+					const errorMessage = err instanceof Error ? err.message : String(err);
+					outputs.push(`Failed to reload ${workspaceServerName}: ${errorMessage}`);
+				}
+			}
+			return {
+				content: [{ type: "text", text: outputs.join("\n") }],
+				details: { action, serverName: servers.map(([name]) => name).join(", "), success: true, request: params },
+			};
+		}
+
+		const serverInfo = resolvedFile ? getLspServerForFile(config, resolvedFile) : null;
 		if (!serverInfo) {
 			return {
 				content: [{ type: "text", text: "No language server found for this action" }],
@@ -1320,51 +1455,34 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 					break;
 				}
 				case "symbols": {
-					// If no file, do workspace symbol search (requires query)
 					if (!targetFile) {
-						if (!query) {
-							return {
-								content: [
-									{ type: "text", text: "Error: query parameter required for workspace symbol search" },
-								],
-								details: { action, serverName, success: false },
-							};
-						}
-						const result = (await sendRequest(client, "workspace/symbol", { query }, signal)) as
-							| SymbolInformation[]
-							| null;
-						if (!result || result.length === 0) {
-							output = `No symbols matching "${query}"`;
-						} else {
-							const lines = result.map(s => formatSymbolInformation(s, this.session.cwd));
-							output = `Found ${result.length} symbol(s) matching "${query}":\n${lines.map(l => `  ${l}`).join("\n")}`;
-						}
-					} else {
-						// File-based document symbols
-						const result = (await sendRequest(
-							client,
-							"textDocument/documentSymbol",
-							{
-								textDocument: { uri },
-							},
-							signal,
-						)) as (DocumentSymbol | SymbolInformation)[] | null;
+						output = "Error: file parameter required for document symbols";
+						break;
+					}
+					// File-based document symbols
+					const result = (await sendRequest(
+						client,
+						"textDocument/documentSymbol",
+						{
+							textDocument: { uri },
+						},
+						signal,
+					)) as (DocumentSymbol | SymbolInformation)[] | null;
 
-						if (!result || result.length === 0) {
-							output = "No symbols found";
+					if (!result || result.length === 0) {
+						output = "No symbols found";
+					} else {
+						const relPath = path.relative(this.session.cwd, targetFile);
+						if ("selectionRange" in result[0]) {
+							const lines = (result as DocumentSymbol[]).flatMap(s => formatDocumentSymbol(s));
+							output = `Symbols in ${relPath}:\n${lines.join("\n")}`;
 						} else {
-							const relPath = path.relative(this.session.cwd, targetFile);
-							if ("selectionRange" in result[0]) {
-								const lines = (result as DocumentSymbol[]).flatMap(s => formatDocumentSymbol(s));
-								output = `Symbols in ${relPath}:\n${lines.join("\n")}`;
-							} else {
-								const lines = (result as SymbolInformation[]).map(s => {
-									const line = s.location.range.start.line + 1;
-									const icon = symbolKindToIcon(s.kind);
-									return `${icon} ${s.name} @ line ${line}`;
-								});
-								output = `Symbols in ${relPath}:\n${lines.join("\n")}`;
-							}
+							const lines = (result as SymbolInformation[]).map(s => {
+								const line = s.location.range.start.line + 1;
+								const icon = symbolKindToIcon(s.kind);
+								return `${icon} ${s.name} @ line ${line}`;
+							});
+							output = `Symbols in ${relPath}:\n${lines.join("\n")}`;
 						}
 					}
 					break;
@@ -1405,26 +1523,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 				}
 
 				case "reload": {
-					// Try graceful reload first, fall back to kill
-					output = `Restarted ${serverName}`;
-					const reloadMethods = ["rust-analyzer/reloadWorkspace", "workspace/didChangeConfiguration"];
-					for (const method of reloadMethods) {
-						try {
-							await sendRequest(
-								client,
-								method,
-								method.includes("Configuration") ? { settings: {} } : null,
-								signal,
-							);
-							output = `Reloaded ${serverName}`;
-							break;
-						} catch {
-							// Method not supported, try next
-						}
-					}
-					if (output.startsWith("Restarted")) {
-						client.proc.kill();
-					}
+					output = await reloadServer(client, serverName, signal);
 					break;
 				}
 

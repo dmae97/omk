@@ -22,9 +22,12 @@ Interacts with Language Server Protocol servers for code intelligence.
 - `query`: Symbol search query, code-action kind filter (list mode), or code-action selector (apply mode)
 - `new_name`: Required for rename
 - `apply`: Apply edits for rename/code_actions (default true for rename, list mode for code_actions unless explicitly true)
+- `timeout`: Request timeout in seconds (clamped to 5-60, default 20)
 </parameters>
 
 <caution>
 - Requires running LSP server for target language
 - Some operations require file to be saved to disk
+- Diagnostics glob mode samples up to 20 files per request to avoid long-running stalls on broad patterns
+- When `symbol` is provided for position-based actions, missing symbols or out-of-bounds `occurrence` values return an explicit error instead of silently falling back
 </caution>
