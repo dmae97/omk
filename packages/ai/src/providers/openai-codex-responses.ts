@@ -32,7 +32,7 @@ import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
 import { parseStreamingJson } from "../utils/json-parse";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
-import { enforceStrictSchema, NO_STRICT } from "../utils/typebox-helpers";
+import { NO_STRICT, tryEnforceStrictSchema } from "../utils/typebox-helpers";
 import {
 	CODEX_BASE_URL,
 	JWT_CLAIM_PATH,
@@ -1706,15 +1706,17 @@ function convertTools(tools: Tool[]): Array<{
 }> {
 	return tools.map(tool => {
 		const strict = !NO_STRICT && tool.strict;
+		const baseParameters = tool.parameters as unknown as Record<string, unknown>;
+		const strictResult = strict ? tryEnforceStrictSchema(baseParameters) : { schema: baseParameters, strict: false };
+		const parameters = strictResult.schema;
+		const effectiveStrict = strict && strictResult.strict;
 		return {
 			type: "function",
 			name: tool.name,
 			description: tool.description || "",
-			parameters: strict
-				? enforceStrictSchema(tool.parameters as unknown as Record<string, unknown>)
-				: (tool.parameters as unknown as Record<string, unknown>),
+			parameters,
 			// Only include strict if provider supports it. Some reject unknown fields.
-			...(strict && { strict: true }),
+			...(effectiveStrict && { strict: true }),
 		};
 	});
 }

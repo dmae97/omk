@@ -225,7 +225,13 @@ handlebars.registerHelper("includes", (collection: unknown, item: unknown): bool
  */
 handlebars.registerHelper("not", (value: unknown): boolean => !value);
 
-handlebars.registerHelper("jtdToTypeScript", (schema: unknown): string => jtdToTypeScript(schema));
+handlebars.registerHelper("jtdToTypeScript", (schema: unknown): string => {
+	try {
+		return jtdToTypeScript(schema);
+	} catch {
+		return "unknown";
+	}
+});
 
 handlebars.registerHelper("jsonStringify", (value: unknown): string => JSON.stringify(value));
 

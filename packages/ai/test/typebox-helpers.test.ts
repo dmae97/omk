@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { enforceStrictSchema, sanitizeSchemaForStrictMode } from "@oh-my-pi/pi-ai/utils/typebox-helpers";
+import {
+	enforceStrictSchema,
+	sanitizeSchemaForStrictMode,
+	tryEnforceStrictSchema,
+} from "@oh-my-pi/pi-ai/utils/typebox-helpers";
 import { Type } from "@sinclair/typebox";
 
 describe("sanitizeSchemaForStrictMode", () => {
@@ -167,5 +171,34 @@ describe("enforceStrictSchema", () => {
 		expect(strict.additionalProperties).toBe(false);
 		expect(strict.required).toEqual(["value"]);
 		expect(properties.value.type).toBe("string");
+	});
+});
+
+describe("tryEnforceStrictSchema", () => {
+	it("downgrades to non-strict mode when strict enforcement throws", () => {
+		const circularSchema: Record<string, unknown> = {
+			type: "object",
+			properties: {},
+		};
+		(circularSchema.properties as Record<string, unknown>).self = circularSchema;
+
+		const result = tryEnforceStrictSchema(circularSchema);
+
+		expect(result.strict).toBe(false);
+		expect(result.schema).toBe(circularSchema);
+	});
+
+	it("keeps strict mode enabled for valid schemas", () => {
+		const schema = {
+			type: "object",
+			properties: { value: { type: "string" } },
+			required: ["value"],
+		} as Record<string, unknown>;
+
+		const result = tryEnforceStrictSchema(schema);
+
+		expect(result.strict).toBe(true);
+		expect(result.schema.additionalProperties).toBe(false);
+		expect(result.schema.required).toEqual(["value"]);
 	});
 });

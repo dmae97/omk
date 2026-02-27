@@ -52,6 +52,29 @@ function formatAjvErrors(errors: ErrorObject[] | null | undefined): string {
 		.join("; ");
 }
 
+function splitRootDefinitions(schema: Record<string, unknown>): {
+	schemaWithoutDefinitions: Record<string, unknown>;
+	rootDefinitions?: Record<string, unknown>;
+} {
+	const schemaWithoutDefinitions = { ...schema };
+	const rootDefinitions: Record<string, unknown> = {};
+	if (typeof schemaWithoutDefinitions.$defs === "object" && schemaWithoutDefinitions.$defs !== null) {
+		if (!Array.isArray(schemaWithoutDefinitions.$defs)) {
+			rootDefinitions.$defs = schemaWithoutDefinitions.$defs;
+		}
+		delete schemaWithoutDefinitions.$defs;
+	}
+	if (typeof schemaWithoutDefinitions.definitions === "object" && schemaWithoutDefinitions.definitions !== null) {
+		if (!Array.isArray(schemaWithoutDefinitions.definitions)) {
+			rootDefinitions.definitions = schemaWithoutDefinitions.definitions;
+		}
+		delete schemaWithoutDefinitions.definitions;
+	}
+	return Object.keys(rootDefinitions).length > 0
+		? { schemaWithoutDefinitions, rootDefinitions }
+		: { schemaWithoutDefinitions };
+}
+
 export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails> {
 	readonly name = "submit_result";
 	readonly label = "Submit Result";
@@ -62,65 +85,96 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 	strict = true;
 
 	readonly #validate?: ValidateFunction;
+	#schemaValidationFailures = 0;
 
 	constructor(session: ToolSession) {
-		const schemaResult = normalizeSchema(session.outputSchema);
-		// Convert JTD to JSON Schema if needed (auto-detected)
-		const normalizedSchema =
-			schemaResult.normalized !== undefined ? jtdToJsonSchema(schemaResult.normalized) : undefined;
-		let schemaError = schemaResult.error;
+		const createParameters = (dataSchema: TSchema, rootDefinitions?: Record<string, unknown>): TSchema => {
+			const baseParameters = Type.Object(
+				{
+					result: Type.Union([
+						Type.Object({ data: dataSchema }, { description: "Successfully completed the task" }),
+						Type.Object({
+							error: Type.String({ description: "Error message when the task cannot be completed" }),
+						}),
+					]),
+				},
+				{
+					additionalProperties: false,
+					description: "Submit either `data` for success or `error` for failure",
+				},
+			) as unknown as Record<string, unknown>;
+			if (!rootDefinitions) return baseParameters as TSchema;
+			return Type.Unsafe({ ...baseParameters, ...rootDefinitions });
+		};
 
-		if (normalizedSchema !== undefined && !schemaError) {
-			try {
-				this.#validate = ajv.compile(normalizedSchema as any);
-			} catch (err) {
-				schemaError = err instanceof Error ? err.message : String(err);
-			}
-		}
-
-		const schemaHint = formatSchema(normalizedSchema ?? session.outputSchema);
-
-		const schemaDescription = schemaError
-			? `Structured JSON output (output schema invalid; accepting unconstrained object): ${schemaError}`
-			: `Structured output matching the schema:\n${schemaHint}`;
-		const sanitizedSchema =
-			!schemaError &&
-			normalizedSchema != null &&
-			typeof normalizedSchema === "object" &&
-			!Array.isArray(normalizedSchema)
-				? sanitizeSchemaForStrictMode(normalizedSchema as Record<string, unknown>)
-				: !schemaError && normalizedSchema === true
-					? {}
-					: undefined;
-
-		const dataSchema =
-			sanitizedSchema !== undefined
-				? Type.Unsafe({
-						...sanitizedSchema,
-						description: schemaDescription,
-					})
-				: Type.Record(Type.String(), Type.Any(), {
-						description: schemaError ? schemaDescription : "Structured JSON output (no schema specified)",
-					});
-		this.parameters = Type.Object(
-			{
-				result: Type.Union([
-					Type.Object({ data: dataSchema }, { description: "Successfully completed the task" }),
-					Type.Object({ error: Type.String({ description: "Error message when the task cannot be completed" }) }),
-				]),
-			},
-			{
-				additionalProperties: false,
-				description: "Submit either `data` for success or `error` for failure",
-			},
-		);
+		let rootDefinitions: Record<string, unknown> | undefined;
+		let validate: ValidateFunction | undefined;
+		let dataSchema: TSchema;
+		let parameters: TSchema;
+		let strict = true;
 
 		try {
-			const strictParameters = enforceStrictSchema(this.parameters as unknown as Record<string, unknown>);
+			const schemaResult = normalizeSchema(session.outputSchema);
+			// Convert JTD to JSON Schema if needed (auto-detected)
+			const normalizedSchema =
+				schemaResult.normalized !== undefined ? jtdToJsonSchema(schemaResult.normalized) : undefined;
+			let schemaError = schemaResult.error;
+
+			if (!schemaError && normalizedSchema === false) {
+				schemaError = "boolean false schema rejects all outputs";
+			}
+
+			if (normalizedSchema !== undefined && normalizedSchema !== false && !schemaError) {
+				try {
+					validate = ajv.compile(normalizedSchema as Record<string, unknown> | boolean);
+				} catch (err) {
+					schemaError = err instanceof Error ? err.message : String(err);
+				}
+			}
+
+			const schemaHint = formatSchema(normalizedSchema ?? session.outputSchema);
+			const schemaDescription = schemaError
+				? `Structured JSON output (output schema invalid; accepting unconstrained object): ${schemaError}`
+				: `Structured output matching the schema:\n${schemaHint}`;
+			const sanitizedSchema =
+				!schemaError &&
+				normalizedSchema != null &&
+				typeof normalizedSchema === "object" &&
+				!Array.isArray(normalizedSchema)
+					? sanitizeSchemaForStrictMode(normalizedSchema as Record<string, unknown>)
+					: !schemaError && normalizedSchema === true
+						? {}
+						: undefined;
+
+			if (sanitizedSchema !== undefined) {
+				const schemaWithDescription = {
+					...sanitizedSchema,
+					description: schemaDescription,
+				};
+				const splitSchema = splitRootDefinitions(schemaWithDescription);
+				rootDefinitions = splitSchema.rootDefinitions;
+				dataSchema = Type.Unsafe(splitSchema.schemaWithoutDefinitions);
+			} else {
+				dataSchema = Type.Record(Type.String(), Type.Any(), {
+					description: schemaError ? schemaDescription : "Structured JSON output (no schema specified)",
+				});
+			}
+			parameters = createParameters(dataSchema, rootDefinitions);
+			const strictParameters = enforceStrictSchema(parameters as unknown as Record<string, unknown>);
 			JSON.stringify(strictParameters);
-		} catch {
-			this.strict = false;
+		} catch (err) {
+			const errorMsg = err instanceof Error ? err.message : String(err);
+			dataSchema = Type.Record(Type.String(), Type.Any(), {
+				description: `Structured JSON output (schema processing failed: ${errorMsg})`,
+			});
+			parameters = createParameters(dataSchema);
+			validate = undefined;
+			strict = false;
 		}
+
+		this.#validate = validate;
+		this.parameters = parameters;
+		this.strict = strict;
 	}
 
 	async execute(
@@ -148,17 +202,26 @@ export class SubmitResultTool implements AgentTool<TSchema, SubmitResultDetails>
 		}
 
 		const status = errorMessage !== undefined ? "aborted" : "success";
+		let schemaValidationOverridden = false;
 		if (status === "success") {
 			if (data === undefined || data === null) {
 				throw new Error("data is required when submit_result indicates success");
 			}
 			if (this.#validate && !this.#validate(data)) {
-				throw new Error(`Output does not match schema: ${formatAjvErrors(this.#validate.errors)}`);
+				this.#schemaValidationFailures++;
+				if (this.#schemaValidationFailures <= 1) {
+					throw new Error(`Output does not match schema: ${formatAjvErrors(this.#validate.errors)}`);
+				}
+				schemaValidationOverridden = true;
 			}
 		}
 
-		const responseText = status === "aborted" ? `Task aborted: ${errorMessage}` : "Result submitted.";
-
+		const responseText =
+			status === "aborted"
+				? `Task aborted: ${errorMessage}`
+				: schemaValidationOverridden
+					? `Result submitted (schema validation overridden after ${this.#schemaValidationFailures} failed attempt(s)).`
+					: "Result submitted.";
 		return {
 			content: [{ type: "text", text: responseText }],
 			details: { data, status, error: errorMessage },

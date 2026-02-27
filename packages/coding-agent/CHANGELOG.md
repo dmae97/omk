@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Breaking Changes
 
 - Removed `preloadedSkills` option from `CreateAgentSessionOptions`; skills are no longer inlined into system prompts
@@ -10,6 +11,8 @@
 
 ### Changed
 
+- Modified schema validation to allow non-conforming output on second validation failure, enabling recovery from strict schema constraints after initial rejection
+- Updated JTD-to-TypeScript conversion to gracefully fall back to 'unknown' type when conversion fails, preventing template rendering errors
 - Changed JTD-to-JSON Schema conversion to normalize nested JTD fragments within JSON Schema nodes, enabling mixed schema definitions
 - Changed output schema validation to gracefully fall back to unconstrained object when schema is invalid, instead of rejecting submissions
 - Changed schema sanitization to remove strict-mode incompatible constraints (minLength, pattern, etc.) from tool parameters while preserving them for runtime validation
@@ -22,6 +25,8 @@
 
 ### Fixed
 
+- Fixed handling of circular and deeply nested output schemas to prevent stack overflow and enable successful result submission with fallback unconstrained schema
+- Fixed processing of non-object output schemas (arrays, primitives, booleans) to accept valid result submissions without blocking
 - Fixed handling of mixed JTD and JSON Schema output definitions to properly convert all nested JTD elements (e.g., `elements` → `items`, `int32` → `integer`)
 - Fixed strict schema generation for output schemas with only required fields, enabling proper Claude API compatibility
 - Fixed handling of union type schemas (e.g., object|null) to normalize them into strict-mode compatible variants

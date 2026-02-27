@@ -218,3 +218,14 @@ export function enforceStrictSchema(schema: Record<string, unknown>): Record<str
 	}
 	return result;
 }
+
+export function tryEnforceStrictSchema(schema: Record<string, unknown>): {
+	schema: Record<string, unknown>;
+	strict: boolean;
+} {
+	try {
+		return { schema: enforceStrictSchema(schema), strict: true };
+	} catch {
+		return { schema, strict: false };
+	}
+}

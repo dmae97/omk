@@ -60,6 +60,10 @@ describe("AgentSession user shortcut hooks", () => {
 			exitCode: 0,
 			cancelled: false,
 			truncated: false,
+			totalLines: 1,
+			totalBytes: 18,
+			outputLines: 1,
+			outputBytes: 18,
 		};
 		const emitUserBash = vi.fn().mockResolvedValue({ result: replacement });
 		const extensionRunner = {
@@ -93,7 +97,12 @@ describe("AgentSession user shortcut hooks", () => {
 			exitCode: 0,
 			cancelled: false,
 			truncated: false,
+			totalLines: 1,
+			totalBytes: 20,
+			outputLines: 1,
+			outputBytes: 20,
 			displayOutputs: [],
+			stdinRequested: false,
 		};
 		const emitUserPython = vi.fn().mockResolvedValue({ result: replacement });
 		const extensionRunner = {
@@ -132,13 +141,22 @@ describe("AgentSession user shortcut hooks", () => {
 			exitCode: 0,
 			cancelled: false,
 			truncated: false,
+			totalLines: 1,
+			totalBytes: 13,
+			outputLines: 1,
+			outputBytes: 13,
 		});
 		vi.spyOn(pythonExecutor, "executePython").mockResolvedValue({
 			output: "python fallback",
 			exitCode: 0,
 			cancelled: false,
 			truncated: false,
+			totalLines: 1,
+			totalBytes: 15,
+			outputLines: 1,
+			outputBytes: 15,
 			displayOutputs: [],
+			stdinRequested: false,
 		});
 
 		createSession(extensionRunner);
@@ -149,7 +167,11 @@ describe("AgentSession user shortcut hooks", () => {
 		expect(pythonResult.output).toBe("python fallback");
 		expect(bashExecutor.executeBash).toHaveBeenCalledTimes(1);
 		expect(pythonExecutor.executePython).toHaveBeenCalledTimes(1);
-		expect(session.messages.some(message => message.role === "bashExecution" && message.excludeFromContext === true)).toBe(true);
-		expect(session.messages.some(message => message.role === "pythonExecution" && message.excludeFromContext === false)).toBe(true);
+		expect(
+			session.messages.some(message => message.role === "bashExecution" && message.excludeFromContext === true),
+		).toBe(true);
+		expect(
+			session.messages.some(message => message.role === "pythonExecution" && message.excludeFromContext === false),
+		).toBe(true);
 	});
 });

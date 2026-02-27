@@ -33,7 +33,7 @@ import { parseStreamingJson } from "../utils/json-parse";
 import { getKimiCommonHeaders } from "../utils/oauth/kimi";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
 import { mapToOpenAICompletionsToolChoice } from "../utils/tool-choice";
-import { enforceStrictSchema, NO_STRICT } from "../utils/typebox-helpers";
+import { NO_STRICT, tryEnforceStrictSchema } from "../utils/typebox-helpers";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers";
 import { transformMessages } from "./transform-messages";
 
@@ -977,16 +977,18 @@ export function convertMessages(
 function convertTools(tools: Tool[], compat: ResolvedOpenAICompat): OpenAI.Chat.Completions.ChatCompletionTool[] {
 	return tools.map(tool => {
 		const strict = !NO_STRICT && compat.supportsStrictMode !== false && tool.strict !== false;
+		const baseParameters = tool.parameters as unknown as Record<string, unknown>;
+		const strictResult = strict ? tryEnforceStrictSchema(baseParameters) : { schema: baseParameters, strict: false };
+		const parameters = strictResult.schema;
+		const effectiveStrict = strict && strictResult.strict;
 		return {
 			type: "function",
 			function: {
 				name: tool.name,
 				description: tool.description || "",
-				parameters: strict
-					? enforceStrictSchema(tool.parameters as unknown as Record<string, unknown>)
-					: (tool.parameters as unknown as Record<string, unknown>),
+				parameters,
 				// Only include strict if provider supports it. Some reject unknown fields.
-				...(strict && { strict: true }),
+				...(effectiveStrict && { strict: true }),
 			},
 		};
 	});

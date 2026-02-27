@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import type { Tool, ToolCall } from "@oh-my-pi/pi-ai/types";
 import { enforceStrictSchema } from "@oh-my-pi/pi-ai/utils/typebox-helpers";
+import { validateToolArguments } from "@oh-my-pi/pi-ai/utils/validation";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { SubmitResultTool } from "@oh-my-pi/pi-coding-agent/tools/submit-result";
@@ -161,6 +163,66 @@ describe("SubmitResultTool", () => {
 			tool.execute("call-mixed-invalid", { result: { data: { results: [{ issue: "185" }] } } } as never),
 		).rejects.toThrow("Output does not match schema");
 	});
+	it("supports $defs/$ref output schemas in tool-argument validation and degrades after first runtime failure", async () => {
+		const outputSchema = {
+			$defs: {
+				A: {
+					type: "object",
+					properties: {
+						kind: { const: "A" },
+						token: { type: "string", minLength: 10 },
+					},
+					required: ["kind", "token"],
+					additionalProperties: false,
+				},
+			},
+			anyOf: [
+				{ $ref: "#/$defs/A" },
+				{
+					type: "object",
+					properties: {
+						kind: { const: "B" },
+						n: { type: "integer", minimum: 10 },
+					},
+					required: ["kind", "n"],
+					additionalProperties: false,
+				},
+			],
+		};
+		const tool = new SubmitResultTool(createSession({ outputSchema }));
+		const parametersRecord = tool.parameters as unknown as Record<string, unknown>;
+		expect(toRecord(parametersRecord.$defs).A).toBeDefined();
+		expect(getSuccessDataSchema(parametersRecord).$defs).toBeUndefined();
+
+		const toolDefinition: Tool = {
+			name: tool.name,
+			description: tool.description,
+			parameters: tool.parameters,
+		};
+		const firstCall: ToolCall = {
+			type: "toolCall",
+			id: "call-ref-1",
+			name: tool.name,
+			arguments: { result: { data: { kind: "A", token: "x" } } },
+		};
+		const firstArgs = validateToolArguments(toolDefinition, firstCall);
+		await expect(tool.execute("call-ref-1", firstArgs as never)).rejects.toThrow("Output does not match schema");
+
+		const secondCall: ToolCall = {
+			type: "toolCall",
+			id: "call-ref-2",
+			name: tool.name,
+			arguments: { result: { data: { kind: "A", token: "x" } } },
+		};
+		const secondArgs = validateToolArguments(toolDefinition, secondCall);
+		const secondResult = await tool.execute("call-ref-2", secondArgs as never);
+		expect(secondResult.content).toEqual([
+			{
+				type: "text",
+				text: "Result submitted (schema validation overridden after 2 failed attempt(s)).",
+			},
+		]);
+	});
 	it("falls back to unconstrained object data when output schema is invalid", async () => {
 		const tool = new SubmitResultTool(
 			createSession({
@@ -189,6 +251,69 @@ describe("SubmitResultTool", () => {
 			error: undefined,
 		});
 	});
+	it("falls back to unconstrained data schema when output schema is circular", async () => {
+		const circularSchema: Record<string, unknown> = { type: "object" };
+		circularSchema.self = circularSchema;
+
+		const tool = new SubmitResultTool(createSession({ outputSchema: circularSchema }));
+		const dataSchema = getSuccessDataSchema(tool.parameters as unknown as Record<string, unknown>);
+
+		expect(tool.strict).toBe(false);
+		expect(dataSchema.type).toBe("object");
+
+		const result = await tool.execute("call-circular-schema", { result: { data: { ok: true } } } as never);
+		expect(result.details).toEqual({ data: { ok: true }, status: "success", error: undefined });
+	});
+
+	it("falls back to unconstrained data schema when output schema is deeply nested", async () => {
+		const buildDeepSchema = (depth: number): Record<string, unknown> => {
+			const root: Record<string, unknown> = {
+				type: "object",
+				properties: {},
+				required: ["next"],
+			};
+			let current = root;
+
+			for (let i = 0; i < depth; i++) {
+				const next: Record<string, unknown> = {
+					type: "object",
+					properties: {},
+					required: ["next"],
+				};
+				const currentProperties = toRecord(current.properties);
+				currentProperties.next = next;
+				current.properties = currentProperties;
+				current = next;
+			}
+
+			current.properties = { value: { type: "string" } };
+			current.required = ["value"];
+			return root;
+		};
+
+		const tool = new SubmitResultTool(createSession({ outputSchema: buildDeepSchema(20_000) }));
+		const dataSchema = getSuccessDataSchema(tool.parameters as unknown as Record<string, unknown>);
+
+		expect(tool.strict).toBe(false);
+		expect(dataSchema.type).toBe("object");
+
+		const result = await tool.execute("call-deep-schema", { result: { data: { nested: true } } } as never);
+		expect(result.details).toEqual({ data: { nested: true }, status: "success", error: undefined });
+	});
+
+	it("handles non-object output schemas without blocking successful result submission", async () => {
+		for (const outputSchema of [[], 123, false]) {
+			const tool = new SubmitResultTool(createSession({ outputSchema }));
+			const result = await tool.execute("call-non-object-schema", {
+				result: { data: { value: outputSchema } },
+			} as never);
+			expect(result.details).toEqual({
+				data: { value: outputSchema },
+				status: "success",
+				error: undefined,
+			});
+		}
+	});
 	it("keeps runtime validation against the original output schema", async () => {
 		const outputSchema = {
 			type: "object",
@@ -213,6 +338,81 @@ describe("SubmitResultTool", () => {
 		expect(result.details).toEqual({ data: { token: "abcd" }, status: "success", error: undefined });
 	});
 
+	it("throws on first schema validation failure and accepts non-conforming data on second failure", async () => {
+		const outputSchema = {
+			type: "object",
+			properties: {
+				token: {
+					type: "string",
+					minLength: 3,
+				},
+			},
+			required: ["token"],
+		};
+		const tool = new SubmitResultTool(createSession({ outputSchema }));
+
+		await expect(tool.execute("call-short-1", { result: { data: { token: "ab" } } } as never)).rejects.toThrow(
+			"Output does not match schema",
+		);
+
+		const secondResult = await tool.execute("call-short-2", { result: { data: { token: "ab" } } } as never);
+		expect(secondResult.details).toEqual({ data: { token: "ab" }, status: "success", error: undefined });
+		expect(secondResult.content).toEqual([
+			{
+				type: "text",
+				text: "Result submitted (schema validation overridden after 2 failed attempt(s)).",
+			},
+		]);
+	});
+
+	it("keeps schema degradation counter at zero when submissions are valid", async () => {
+		const outputSchema = {
+			type: "object",
+			properties: {
+				token: {
+					type: "string",
+					minLength: 3,
+				},
+			},
+			required: ["token"],
+		};
+		const tool = new SubmitResultTool(createSession({ outputSchema }));
+
+		const firstResult = await tool.execute("call-valid-1", { result: { data: { token: "abcd" } } } as never);
+		expect(firstResult.content).toEqual([{ type: "text", text: "Result submitted." }]);
+
+		const secondResult = await tool.execute("call-valid-2", { result: { data: { token: "abcde" } } } as never);
+		expect(secondResult.content).toEqual([{ type: "text", text: "Result submitted." }]);
+
+		await expect(
+			tool.execute("call-invalid-after-valid", { result: { data: { token: "ab" } } } as never),
+		).rejects.toThrow("Output does not match schema");
+	});
+
+	it("still throws structural errors after schema validation has been degraded", async () => {
+		const outputSchema = {
+			type: "object",
+			properties: {
+				token: {
+					type: "string",
+					minLength: 3,
+				},
+			},
+			required: ["token"],
+		};
+		const tool = new SubmitResultTool(createSession({ outputSchema }));
+
+		await expect(tool.execute("call-struct-1", { result: { data: { token: "ab" } } } as never)).rejects.toThrow(
+			"Output does not match schema",
+		);
+		await expect(
+			tool.execute("call-struct-2", { result: { data: { token: "ab" } } } as never),
+		).resolves.toBeDefined();
+
+		await expect(tool.execute("call-struct-missing", {} as never)).rejects.toThrow(
+			"result must be an object containing either data or error",
+		);
+	});
 	it("rejects submissions without a result object", async () => {
 		const tool = new SubmitResultTool(createSession());
 		await expect(tool.execute("call-3", {} as never)).rejects.toThrow(
