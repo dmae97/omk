@@ -511,6 +511,16 @@ export const SETTINGS_SCHEMA = {
 			description: "Ask the agent to describe the intent of each tool call before executing it",
 		},
 	},
+	"tools.maxTimeout": {
+		type: "number",
+		default: 0,
+		ui: {
+			tab: "tools",
+			label: "Max tool timeout",
+			description: "Maximum timeout in seconds the agent can set for any tool (0 = no limit)",
+			submenu: true,
+		},
+	},
 	"async.enabled": {
 		type: "boolean",
 		default: false,

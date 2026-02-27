@@ -19,6 +19,7 @@ import type { ToolSession } from ".";
 import { formatStyledTruncationWarning, type OutputMeta } from "./output-meta";
 import { ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
+import { clampTimeout } from "./tool-timeouts";
 
 const sshSchema = Type.Object({
 	host: Type.String({ description: "Host name from managed SSH config or discovered ssh.json files" }),
@@ -155,7 +156,7 @@ export class SshTool implements AgentTool<typeof sshSchema, SSHToolDetails> {
 		const remoteCommand = buildRemoteCommand(command, cwd, hostInfo);
 
 		// Clamp to reasonable range: 1s - 3600s (1 hour)
-		const timeoutSec = Math.max(1, Math.min(3600, rawTimeout));
+		const timeoutSec = clampTimeout("ssh", rawTimeout);
 		const timeoutMs = timeoutSec * 1000;
 
 		const tailBuffer = new TailBuffer(DEFAULT_MAX_BYTES);

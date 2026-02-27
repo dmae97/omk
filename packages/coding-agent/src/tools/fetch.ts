@@ -24,6 +24,7 @@ import { formatStyledArtifactReference, type OutputMeta } from "./output-meta";
 import { formatExpandHint, getDomain } from "./render-utils";
 import { ToolAbortError } from "./tool-errors";
 import { toolResult } from "./tool-result";
+import { clampTimeout } from "./tool-timeouts";
 
 // =============================================================================
 // Types and Constants
@@ -872,7 +873,7 @@ export class FetchTool implements AgentTool<typeof fetchSchema, FetchToolDetails
 		const { url, timeout: rawTimeout = 20, raw = false } = params;
 
 		// Clamp to valid range (seconds)
-		const effectiveTimeout = Math.min(Math.max(rawTimeout, 1), 45);
+		const effectiveTimeout = clampTimeout("fetch", rawTimeout);
 
 		if (signal?.aborted) {
 			throw new ToolAbortError();

@@ -21,6 +21,7 @@ import { resolveToCwd } from "./path-utils";
 import { formatTitle, replaceTabs, shortenPath, truncateToWidth, wrapBrackets } from "./render-utils";
 import { ToolAbortError, ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
+import { clampTimeout } from "./tool-timeouts";
 
 export const PYTHON_DEFAULT_PREVIEW_LINES = 10;
 
@@ -177,7 +178,7 @@ export class PythonTool implements AgentTool<typeof pythonSchema> {
 
 		const { cells, timeout: rawTimeout = 30, cwd, reset } = params;
 		// Clamp to reasonable range: 1s - 600s (10 min)
-		const timeoutSec = Math.max(1, Math.min(600, rawTimeout));
+		const timeoutSec = clampTimeout("python", rawTimeout);
 		const timeoutMs = timeoutSec * 1000;
 		const timeoutSignal = AbortSignal.timeout(timeoutMs);
 		const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;

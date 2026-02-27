@@ -5,12 +5,14 @@
 ### Added
 
 - Implemented TTSR resume gate to ensure `prompt()` blocks until TTSR interrupt continuations complete, preventing race conditions between TTSR injections and subsequent prompts
+- Added `tools.maxTimeout` setting to enforce a global timeout ceiling across all tool calls
 
 ### Changed
 
 - Replaced `#waitForRetry()` with `#waitForPostPromptRecovery()` to handle both retry and TTSR resume gates, ensuring prompt completion waits for all post-prompt recovery operations
 - Updated intent field parameter name from `agent__intent` to `_i` for cleaner tool call contracts
 - Refined intent parameter guidance to require concise 2-6 word sentences in present participle form
+- Centralized per-tool timeout constants and clamping into `tool-timeouts.ts`
 
 ## [13.3.7] - 2026-02-27
 ### Breaking Changes

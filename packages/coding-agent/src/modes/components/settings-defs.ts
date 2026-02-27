@@ -149,6 +149,15 @@ const OPTION_PROVIDERS: Partial<Record<SettingPath, OptionProvider>> = {
 		{ value: "60", label: "60 seconds" },
 		{ value: "120", label: "120 seconds" },
 	],
+	// Global tool timeout ceiling
+	"tools.maxTimeout": [
+		{ value: "0", label: "No limit" },
+		{ value: "30", label: "30 seconds" },
+		{ value: "60", label: "60 seconds" },
+		{ value: "120", label: "120 seconds" },
+		{ value: "300", label: "5 minutes" },
+		{ value: "600", label: "10 minutes" },
+	],
 	// Edit fuzzy threshold
 	"edit.fuzzyThreshold": [
 		{ value: "0.85", label: "0.85", description: "Lenient" },

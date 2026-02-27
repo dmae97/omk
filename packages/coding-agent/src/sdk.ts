@@ -1295,7 +1295,17 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			return key;
 		},
 		cursorExecHandlers,
-		transformToolCallArguments: obfuscator?.hasSecrets() ? args => obfuscator!.deobfuscateObject(args) : undefined,
+		transformToolCallArguments: (args, _toolName) => {
+			let result = args;
+			const maxTimeout = settings.get("tools.maxTimeout");
+			if (maxTimeout > 0 && typeof result.timeout === "number") {
+				result = { ...result, timeout: Math.min(result.timeout, maxTimeout) };
+			}
+			if (obfuscator?.hasSecrets()) {
+				result = obfuscator.deobfuscateObject(result);
+			}
+			return result;
+		},
 		intentTracing: !!intentField,
 	});
 	cursorEventEmitter = event => agent.emitExternalEvent(event);

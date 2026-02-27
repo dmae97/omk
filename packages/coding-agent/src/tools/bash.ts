@@ -25,6 +25,7 @@ import { resolveToCwd } from "./path-utils";
 import { replaceTabs } from "./render-utils";
 import { ToolAbortError, ToolError } from "./tool-errors";
 import { toolResult } from "./tool-result";
+import { clampTimeout } from "./tool-timeouts";
 
 export const BASH_DEFAULT_PREVIEW_LINES = 10;
 
@@ -200,7 +201,7 @@ export class BashTool implements AgentTool<BashToolSchema, BashToolDetails> {
 		}
 
 		// Clamp to reasonable range: 1s - 3600s (1 hour)
-		const timeoutSec = Math.max(1, Math.min(3600, rawTimeout));
+		const timeoutSec = clampTimeout("bash", rawTimeout);
 		const timeoutMs = timeoutSec * 1000;
 
 		if (asyncRequested) {

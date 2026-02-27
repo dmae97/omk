@@ -37,6 +37,7 @@ import stealthCodecsScript from "./puppeteer/12_stealth_codecs.txt" with { type:
 import stealthWorkerScript from "./puppeteer/13_stealth_worker.txt" with { type: "text" };
 import { ToolAbortError, ToolError, throwIfAborted } from "./tool-errors";
 import { toolResult } from "./tool-result";
+import { clampTimeout } from "./tool-timeouts";
 
 /**
  * Lazy-import puppeteer from a safe CWD so cosmiconfig doesn't choke
@@ -57,8 +58,6 @@ async function loadPuppeteer(): Promise<typeof Puppeteer> {
 	}
 }
 
-const DEFAULT_TIMEOUT_SECONDS = 30;
-const MAX_TIMEOUT_SECONDS = 120;
 const DEFAULT_VIEWPORT = { width: 1365, height: 768, deviceScaleFactor: 1.25 };
 const STEALTH_IGNORE_DEFAULT_ARGS = [
 	"--disable-extensions",
@@ -450,11 +449,6 @@ export interface ReadableResult {
 	contentLength: number;
 	text?: string;
 	markdown?: string;
-}
-
-function clampTimeout(timeoutSeconds?: number): number {
-	if (timeoutSeconds === undefined) return DEFAULT_TIMEOUT_SECONDS;
-	return Math.min(Math.max(timeoutSeconds, 1), MAX_TIMEOUT_SECONDS);
 }
 
 function ensureParam<T>(value: T | undefined, name: string, action: string): T {
@@ -956,7 +950,7 @@ export class BrowserTool implements AgentTool<typeof browserSchema, BrowserToolD
 	): Promise<AgentToolResult<BrowserToolDetails>> {
 		try {
 			throwIfAborted(signal);
-			const timeoutSeconds = clampTimeout(params.timeout);
+			const timeoutSeconds = clampTimeout("browser", params.timeout);
 			const timeoutMs = timeoutSeconds * 1000;
 			const details: BrowserToolDetails = { action: params.action };
 
