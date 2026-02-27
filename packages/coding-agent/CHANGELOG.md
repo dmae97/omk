@@ -1,15 +1,19 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
+- Added `waitForIdle()` method to ensure prompt completion waits for all deferred recovery work (TTSR continuations, context promotions, compaction retries) to fully settle
+- Added `getLastAssistantMessage()` method to retrieve the most recent assistant message from session state without manual array indexing
 - Implemented TTSR resume gate to ensure `prompt()` blocks until TTSR interrupt continuations complete, preventing race conditions between TTSR injections and subsequent prompts
 - Added `tools.maxTimeout` setting to enforce a global timeout ceiling across all tool calls
 
 ### Changed
 
+- Refactored deferred continuation scheduling to use centralized post-prompt task tracking instead of raw `setTimeout()` calls, improving reliability of concurrent recovery operations
+- Updated subagent executor to explicitly await `waitForIdle()` after each prompt and reminder, ensuring terminal assistant state is determined only after all background work completes
 - Replaced `#waitForRetry()` with `#waitForPostPromptRecovery()` to handle both retry and TTSR resume gates, ensuring prompt completion waits for all post-prompt recovery operations
+- Introduced structured post-prompt recovery task tracking in `AgentSession` and added explicit session completion APIs (`waitForIdle()`, `getLastAssistantMessage()`) for callers that need deterministic turn finalization
 - Updated intent field parameter name from `agent__intent` to `_i` for cleaner tool call contracts
 - Refined intent parameter guidance to require concise 2-6 word sentences in present participle form
 - Centralized per-tool timeout constants and clamping into `tool-timeouts.ts`
@@ -17,6 +21,8 @@
 ### Fixed
 
 - Fixed TTSR violations during subagent execution aborting the entire subagent run; `#waitForPostPromptRecovery()` now also awaits agent idle after TTSR/retry gates resolve, preventing `prompt()` from returning while a fire-and-forget `agent.continue()` is still streaming
+- Fixed deferred TTSR/context-promotion continuations still racing `prompt()` completion by tracking compaction checks and deferred `agent.continue()` tasks under a shared post-prompt recovery orchestrator
+- Fixed subagent reminder/finalization sequencing to await session-level idle recovery between prompts before determining terminal assistant stop state
 
 ## [13.3.7] - 2026-02-27
 ### Breaking Changes

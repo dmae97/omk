@@ -626,4 +626,93 @@ describe("AgentSession TTSR resume gate", () => {
 		expect(streamCallCount).toBeGreaterThanOrEqual(3);
 		expect(session.isStreaming).toBe(false);
 	});
+	it("prompt() waits for context-promotion continuation to finish", async () => {
+		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth-promo.db"));
+		authStorage.setRuntimeApiKey("openai-codex", "test-key");
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
+
+		const sparkModel = modelRegistry.find("openai-codex", "gpt-5.3-codex-spark");
+		const codexModel = modelRegistry.find("openai-codex", "gpt-5.3-codex");
+		if (!sparkModel || !codexModel) {
+			throw new Error("Expected codex spark and codex models to exist");
+		}
+
+		let streamCallCount = 0;
+		let continuationCompleted = false;
+
+		const makeOverflowMessage = (): AssistantMessage => ({
+			role: "assistant",
+			content: [{ type: "text", text: "" }],
+			api: sparkModel.api,
+			provider: sparkModel.provider,
+			model: sparkModel.id,
+			usage: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 0,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "error",
+			errorMessage: "context_length_exceeded: Your input exceeds the context window of this model.",
+			timestamp: Date.now(),
+		});
+
+		const makeSuccessMessage = (): AssistantMessage => ({
+			role: "assistant",
+			content: [{ type: "text", text: "Recovered after promotion" }],
+			api: codexModel.api,
+			provider: codexModel.provider,
+			model: codexModel.id,
+			usage: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 0,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason: "stop",
+			timestamp: Date.now(),
+		});
+
+		const agent = new Agent({
+			getApiKey: () => "test-key",
+			initialState: { model: sparkModel, systemPrompt: "Test", tools: [] },
+			streamFn: () => {
+				streamCallCount++;
+				const stream = new MockAssistantStream();
+				if (streamCallCount === 1) {
+					queueMicrotask(() => {
+						const message = makeOverflowMessage();
+						stream.push({ type: "start", partial: message });
+						stream.push({ type: "error", reason: "error", error: message });
+					});
+				} else {
+					setTimeout(() => {
+						continuationCompleted = true;
+						const message = makeSuccessMessage();
+						stream.push({ type: "start", partial: message });
+						stream.push({ type: "done", reason: "stop", message });
+					}, 80);
+				}
+				return stream;
+			},
+		});
+
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings: Settings.isolated({ "compaction.enabled": false, "contextPromotion.enabled": true }),
+			modelRegistry,
+		});
+
+		await session.prompt("Handle overflow");
+
+		expect(continuationCompleted).toBe(true);
+		expect(streamCallCount).toBeGreaterThanOrEqual(2);
+		expect(session.model?.id).toBe(codexModel.id);
+		expect(session.isStreaming).toBe(false);
+	});
 });

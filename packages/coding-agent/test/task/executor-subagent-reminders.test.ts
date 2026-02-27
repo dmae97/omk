@@ -70,6 +70,8 @@ function createMockSession(
 			promptIndex += 1;
 			onPrompt({ text, promptIndex, emit, state });
 		},
+		waitForIdle: async () => {},
+		getLastAssistantMessage: () => state.messages[state.messages.length - 1],
 		abort: async () => {},
 		dispose: async () => {},
 	};
