@@ -9,7 +9,7 @@
 ### Changed
 
 - Replaced `#waitForRetry()` with `#waitForPostPromptRecovery()` to handle both retry and TTSR resume gates, ensuring prompt completion waits for all post-prompt recovery operations
-- Updated intent field parameter name from `agent__intent` to `intent` for cleaner tool call contracts
+- Updated intent field parameter name from `agent__intent` to `_i` for cleaner tool call contracts
 - Refined intent parameter guidance to require concise 2-6 word sentences in present participle form
 
 ## [13.3.7] - 2026-02-27

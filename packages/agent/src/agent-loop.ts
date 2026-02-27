@@ -123,7 +123,7 @@ function normalizeMessagesForProvider(
 	return changed ? normalized : messages;
 }
 
-export const INTENT_FIELD = "intent";
+export const INTENT_FIELD = "_i";
 
 function injectIntentIntoSchema(schema: unknown): unknown {
 	if (!schema || typeof schema !== "object" || Array.isArray(schema)) return schema;

@@ -31,7 +31,7 @@ const baseRenderContext: TemplateContext = {
 		status: "M packages/coding-agent/src/prompts/system/custom-system-prompt.md",
 		commits: "abc123 Fix tests",
 	},
-	intentField: "intent",
+	intentField: "_i",
 	intentTracing: true,
 	iterative: true,
 	maxRetries: 3,
