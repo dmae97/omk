@@ -14,6 +14,7 @@
 - Changed output schema validation to gracefully fall back to unconstrained object when schema is invalid, instead of rejecting submissions
 - Changed schema sanitization to remove strict-mode incompatible constraints (minLength, pattern, etc.) from tool parameters while preserving them for runtime validation
 - Simplified task execution to always pass available session skills to subagents instead of resolving per-task skill lists
+- Added `KILO_API_KEY` to CLI environment variable help text for Kilo Gateway provider setup ([#193](https://github.com/can1357/oh-my-pi/issues/193))
 
 ### Removed
 

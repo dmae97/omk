@@ -19,6 +19,7 @@ export type OAuthProvider =
 	| "gitlab-duo"
 	| "huggingface"
 	| "kimi-code"
+	| "kilo"
 	| "litellm"
 	| "minimax-code"
 	| "minimax-code-cn"

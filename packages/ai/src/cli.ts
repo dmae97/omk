@@ -7,6 +7,7 @@ import { loginCursor } from "./utils/oauth/cursor";
 import { loginGitHubCopilot } from "./utils/oauth/github-copilot";
 import { loginAntigravity } from "./utils/oauth/google-antigravity";
 import { loginGeminiCli } from "./utils/oauth/google-gemini-cli";
+import { loginKilo } from "./utils/oauth/kilo";
 import { loginKimi } from "./utils/oauth/kimi";
 import { loginMiniMaxCode, loginMiniMaxCodeCn } from "./utils/oauth/minimax-code";
 import { loginNanoGPT } from "./utils/oauth/nanogpt";
@@ -146,6 +147,16 @@ async function login(provider: OAuthProvider): Promise<void> {
 					},
 				});
 				break;
+			case "kilo":
+				credentials = await loginKilo({
+					onAuth(info) {
+						const { url, instructions } = info;
+						console.log(`\nOpen this URL in your browser:\n${url}`);
+						if (instructions) console.log(instructions);
+						console.log();
+					},
+				});
+				break;
 
 			case "cursor":
 				credentials = await loginCursor(
@@ -259,6 +270,7 @@ Providers:
   google-antigravity Antigravity (Gemini 3, Claude, GPT-OSS)
   openai-codex      OpenAI Codex (ChatGPT Plus/Pro)
   kimi-code        Kimi Code
+  kilo             Kilo Gateway
   zai              Z.AI (GLM Coding Plan)
   nanogpt          NanoGPT
     minimax-code     MiniMax Coding Plan (International)

@@ -63,6 +63,7 @@ Unified LLM API with automatic model discovery, provider configuration, token an
 - **xAI**
 - **Venice** (requires `VENICE_API_KEY`)
 - **OpenRouter**
+- **Kilo Gateway** (supports OAuth `/login kilo` or `KILO_API_KEY`)
 - **LiteLLM** (requires `LITELLM_API_KEY`)
 - **zAI** (requires `ZAI_API_KEY`)
 - **MiniMax Coding Plan** (requires `MINIMAX_CODE_API_KEY` or `MINIMAX_CODE_CN_API_KEY`)

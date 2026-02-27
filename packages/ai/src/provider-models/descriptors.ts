@@ -14,6 +14,7 @@ import {
 	githubCopilotModelManagerOptions,
 	groqModelManagerOptions,
 	huggingfaceModelManagerOptions,
+	kiloModelManagerOptions,
 	kimiCodeModelManagerOptions,
 	litellmModelManagerOptions,
 	mistralModelManagerOptions,
@@ -152,6 +153,12 @@ export const PROVIDER_DESCRIPTORS: readonly ProviderDescriptor[] = [
 		"openai/gpt-5.1-codex",
 		config => openrouterModelManagerOptions(config),
 		catalog("OpenRouter", ["OPENROUTER_API_KEY"], { allowUnauthenticated: true }),
+	),
+	catalogDescriptor(
+		"kilo",
+		"anthropic/claude-sonnet-4.5",
+		config => kiloModelManagerOptions(config),
+		catalog("Kilo Gateway", ["KILO_API_KEY"], { allowUnauthenticated: true }),
 	),
 	catalogDescriptor(
 		"vercel-ai-gateway",

@@ -201,6 +201,7 @@ export function getExtraHelpText(): string {
   CEREBRAS_API_KEY           - Cerebras models
   XAI_API_KEY                - xAI Grok models
   OPENROUTER_API_KEY         - OpenRouter aggregated models
+  KILO_API_KEY               - Kilo Gateway models
   MISTRAL_API_KEY            - Mistral models
   ZAI_API_KEY                - z.ai models (ZhipuAI/GLM)
   MINIMAX_API_KEY            - MiniMax models

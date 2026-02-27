@@ -27,6 +27,7 @@ import type {
  * - Google Cloud Code Assist (Gemini CLI)
  * - Antigravity (Gemini 3, Claude, GPT-OSS via Google Cloud)
  * - Kimi Code
+ * - Kilo Gateway
  * - Cerebras
  * - Hugging Face Inference
  * - Synthetic
@@ -65,6 +66,8 @@ export { loginAntigravity, refreshAntigravityToken } from "./google-antigravity"
 export { loginGeminiCli, refreshGoogleCloudToken } from "./google-gemini-cli";
 // Hugging Face Inference (API key)
 export { loginHuggingface } from "./huggingface";
+// Kilo Gateway
+export { loginKilo } from "./kilo";
 // Kimi Code
 export { loginKimi, refreshKimiToken } from "./kimi";
 // LiteLLM (API key)
@@ -123,6 +126,11 @@ const builtInOAuthProviders: OAuthProviderInfo[] = [
 	{
 		id: "kimi-code",
 		name: "Kimi Code",
+		available: true,
+	},
+	{
+		id: "kilo",
+		name: "Kilo Gateway",
 		available: true,
 	},
 	{
@@ -311,6 +319,9 @@ export async function refreshOAuthToken(
 			break;
 		case "kimi-code":
 			newCredentials = await refreshKimiToken(credentials.refresh);
+			break;
+		case "kilo":
+			newCredentials = credentials;
 			break;
 		case "gitlab-duo":
 			newCredentials = await refreshGitLabDuoToken(credentials);

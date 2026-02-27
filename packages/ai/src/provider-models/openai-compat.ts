@@ -667,6 +667,30 @@ export function openrouterModelManagerOptions(
 }
 
 // ---------------------------------------------------------------------------
+// 10.5 Kilo Gateway
+// ---------------------------------------------------------------------------
+
+export interface KiloModelManagerConfig {
+	apiKey?: string;
+	baseUrl?: string;
+}
+
+export function kiloModelManagerOptions(config?: KiloModelManagerConfig): ModelManagerOptions<"openai-completions"> {
+	const apiKey = config?.apiKey;
+	const baseUrl = config?.baseUrl ?? "https://api.kilo.ai/api/gateway";
+	return {
+		providerId: "kilo",
+		fetchDynamicModels: () =>
+			fetchOpenAICompatibleModels({
+				api: "openai-completions",
+				provider: "kilo",
+				baseUrl,
+				apiKey,
+			}),
+	};
+}
+
+// ---------------------------------------------------------------------------
 // 11. Vercel AI Gateway
 // ---------------------------------------------------------------------------
 

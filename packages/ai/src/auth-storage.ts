@@ -41,6 +41,7 @@ import { loginGitLabDuo } from "./utils/oauth/gitlab-duo";
 import { loginAntigravity } from "./utils/oauth/google-antigravity";
 import { loginGeminiCli } from "./utils/oauth/google-gemini-cli";
 import { loginHuggingface } from "./utils/oauth/huggingface";
+import { loginKilo } from "./utils/oauth/kilo";
 import { loginKimi } from "./utils/oauth/kimi";
 import { loginLiteLLM } from "./utils/oauth/litellm";
 import { loginMiniMaxCode, loginMiniMaxCodeCn } from "./utils/oauth/minimax-code";
@@ -772,6 +773,9 @@ export class AuthStorage {
 				break;
 			case "kimi-code":
 				credentials = await loginKimi(ctrl);
+				break;
+			case "kilo":
+				credentials = await loginKilo(ctrl);
 				break;
 			case "cursor":
 				credentials = await loginCursor(
