@@ -175,26 +175,44 @@ Good — include original `}` in the replaced range when replacement keeps `}`:
 Also apply the same rule to `);`, `],`, and `},` closers: if replacement includes the closer token, `end` must include the original closer line.
 </example>
 
-<example name="insert between siblings">
+<example name="insert between sibling declarations">
 ```ts
-{{hlinefull 44 "  \"build\": \"bun run compile\","}}
-{{hlinefull 45 "  \"test\": \"bun test\""}}
+{{hlinefull 44 "function x() {"}}
+{{hlinefull 45 "  runX();"}}
+{{hlinefull 46 "}"}}
+{{hlinefull 47 ""}}
+{{hlinefull 48 "function y() {"}}
+{{hlinefull 49 "  runY();"}}
+{{hlinefull 50 "}"}}
 ```
 ```
 {
   path: "…",
   edits: [{
     op: "prepend",
-    pos: "{{hlineref 45 "  \"test\": \"bun test\""}}",
-    lines: ["  \"lint\": \"biome check\","]
+    pos: "{{hlineref 48 "function y() {"}}",
+    lines: [
+      "function z() {",
+      "  runZ();",
+      "}",
+      ""
+    ]
   }]
 }
 ```
 Result:
 ```ts
-{{hlinefull 44 "  \"build\": \"bun run compile\","}}
-{{hlinefull 45 "  \"lint\": \"biome check\","}}
-{{hlinefull 46 "  \"test\": \"bun test\""}}
+{{hlinefull 44 "function x() {"}}
+{{hlinefull 45 "  runX();"}}
+{{hlinefull 46 "}"}}
+{{hlinefull 47 ""}}
+{{hlinefull 48 "function z() {"}}
+{{hlinefull 49 "  runZ();"}}
+{{hlinefull 50 "}"}}
+{{hlinefull 51 ""}}
+{{hlinefull 52 "function y() {"}}
+{{hlinefull 53 "  runY();"}}
+{{hlinefull 54 "}"}}
 ```
 </example>
 
