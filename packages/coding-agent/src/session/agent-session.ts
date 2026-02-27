@@ -3844,6 +3844,22 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		onChunk?: (chunk: string) => void,
 		options?: { excludeFromContext?: boolean },
 	): Promise<BashResult> {
+		const excludeFromContext = options?.excludeFromContext === true;
+		const cwd = this.sessionManager.getCwd();
+
+		if (this.#extensionRunner?.hasHandlers("user_bash")) {
+			const hookResult = await this.#extensionRunner.emitUserBash({
+				type: "user_bash",
+				command,
+				excludeFromContext,
+				cwd,
+			});
+			if (hookResult?.result) {
+				this.recordBashResult(command, hookResult.result, options);
+				return hookResult.result;
+			}
+		}
+
 		this.#bashAbortController = new AbortController();
 
 		try {
@@ -3942,12 +3958,27 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		onChunk?: (chunk: string) => void,
 		options?: { excludeFromContext?: boolean },
 	): Promise<PythonResult> {
+		const excludeFromContext = options?.excludeFromContext === true;
+		const cwd = this.sessionManager.getCwd();
+
+		if (this.#extensionRunner?.hasHandlers("user_python")) {
+			const hookResult = await this.#extensionRunner.emitUserPython({
+				type: "user_python",
+				code,
+				excludeFromContext,
+				cwd,
+			});
+			if (hookResult?.result) {
+				this.recordPythonResult(code, hookResult.result, options);
+				return hookResult.result;
+			}
+		}
+
 		this.#pythonAbortController = new AbortController();
 
 		try {
 			// Use the same session ID as the Python tool for kernel sharing
 			const sessionFile = this.sessionManager.getSessionFile();
-			const cwd = this.sessionManager.getCwd();
 			const sessionId = sessionFile ? `session:${sessionFile}:cwd:${cwd}` : `cwd:${cwd}`;
 
 			const result = await executePythonCommand(code, {
