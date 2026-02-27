@@ -1,8 +1,14 @@
 # Changelog
 
 ## [Unreleased]
+
+### Added
+
+- Implemented TTSR resume gate to ensure `prompt()` blocks until TTSR interrupt continuations complete, preventing race conditions between TTSR injections and subsequent prompts
+
 ### Changed
 
+- Replaced `#waitForRetry()` with `#waitForPostPromptRecovery()` to handle both retry and TTSR resume gates, ensuring prompt completion waits for all post-prompt recovery operations
 - Updated intent field parameter name from `agent__intent` to `intent` for cleaner tool call contracts
 - Refined intent parameter guidance to require concise 2-6 word sentences in present participle form
 

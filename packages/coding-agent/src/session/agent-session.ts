@@ -355,6 +355,8 @@ export class AgentSession {
 	#pendingTtsrInjections: Rule[] = [];
 	#ttsrAbortPending = false;
 	#ttsrRetryToken = 0;
+	#ttsrResumePromise: Promise<void> | undefined = undefined;
+	#ttsrResumeResolve: (() => void) | undefined = undefined;
 
 	#streamingEditAbortTriggered = false;
 	#streamingEditCheckedLineCounts = new Map<string, number>();
@@ -509,6 +511,7 @@ export class AgentSession {
 					if (this.#shouldInterruptForTtsrMatch(matchContext)) {
 						// Abort the stream immediately — do not gate on extension callbacks
 						this.#ttsrAbortPending = true;
+						this.#ensureTtsrResumePromise();
 						this.agent.abort();
 						// Notify extensions (fire-and-forget, does not block abort)
 						this.#emitSessionEvent({ type: "ttsr_triggered", rules: matches }).catch(() => {});
@@ -519,6 +522,7 @@ export class AgentSession {
 							event.message.role === "assistant" ? event.message.timestamp : undefined;
 						setTimeout(async () => {
 							if (this.#ttsrRetryToken !== retryToken) {
+								this.#resolveTtsrResume();
 								return;
 							}
 
@@ -530,6 +534,7 @@ export class AgentSession {
 							) {
 								this.#ttsrAbortPending = false;
 								this.#pendingTtsrInjections = [];
+								this.#resolveTtsrResume();
 								return;
 							}
 							this.#ttsrAbortPending = false;
@@ -558,7 +563,9 @@ export class AgentSession {
 								);
 								this.#markTtsrInjected(details.rules);
 							}
-							this.agent.continue().catch(() => {});
+							this.agent.continue().catch(() => {
+								this.#resolveTtsrResume();
+							});
 						}, 50);
 						return;
 					}
@@ -607,6 +614,13 @@ export class AgentSession {
 			if (event.message.role === "assistant") {
 				this.#lastAssistantMessage = event.message;
 				const assistantMsg = event.message as AssistantMessage;
+				// Resolve TTSR resume gate before checking for new deferred injections.
+				// Gate on #ttsrAbortPending, not stopReason: a non-TTSR abort (e.g. streaming
+				// edit) also produces stopReason === "aborted" but has no continuation coming.
+				// Only skip when #ttsrAbortPending is true (TTSR continuation is imminent).
+				if (!this.#ttsrAbortPending) {
+					this.#resolveTtsrResume();
+				}
 				this.#queueDeferredTtsrInjectionIfNeeded(assistantMsg);
 				if (this.#handoffAbortController) {
 					this.#skipPostTurnMaintenanceAssistantTimestamp = assistantMsg.timestamp;
@@ -701,6 +715,38 @@ export class AgentSession {
 		}
 	}
 
+	/** Create the TTSR resume gate promise if one doesn't already exist. */
+	#ensureTtsrResumePromise(): void {
+		if (this.#ttsrResumePromise) return;
+		const { promise, resolve } = Promise.withResolvers<void>();
+		this.#ttsrResumePromise = promise;
+		this.#ttsrResumeResolve = resolve;
+	}
+
+	/** Resolve and clear the TTSR resume gate. */
+	#resolveTtsrResume(): void {
+		if (!this.#ttsrResumeResolve) return;
+		this.#ttsrResumeResolve();
+		this.#ttsrResumeResolve = undefined;
+		this.#ttsrResumePromise = undefined;
+	}
+
+	/**
+	 * Wait for both retry and TTSR resume to settle.
+	 * Loops because a TTSR continuation can trigger a retry (or vice-versa).
+	 */
+	async #waitForPostPromptRecovery(): Promise<void> {
+		while (this.#retryPromise || this.#ttsrResumePromise) {
+			if (this.#retryPromise) {
+				await this.#retryPromise;
+				continue;
+			}
+			if (this.#ttsrResumePromise) {
+				await this.#ttsrResumePromise;
+			}
+		}
+	}
+
 	/** Get TTSR injection payload and clear pending injections. */
 	#getTtsrInjectionContent(): { content: string; rules: Rule[] } | undefined {
 		if (this.#pendingTtsrInjections.length === 0) return undefined;
@@ -792,13 +838,17 @@ export class AgentSession {
 			details: { rules: injection.rules.map(rule => rule.name) },
 			timestamp: Date.now(),
 		});
+		this.#ensureTtsrResumePromise();
 		// Mark as injected after this custom message is delivered and persisted (handled in message_end).
 		// followUp() only enqueues; resume on the next tick once streaming settles.
 		setTimeout(() => {
 			if (this.agent.state.isStreaming || !this.agent.hasQueuedMessages()) {
+				this.#resolveTtsrResume();
 				return;
 			}
-			this.agent.continue().catch(() => {});
+			this.agent.continue().catch(() => {
+				this.#resolveTtsrResume();
+			});
 		}, 0);
 	}
 
@@ -1826,7 +1876,7 @@ export class AgentSession {
 
 			const agentPromptOptions = options?.toolChoice ? { toolChoice: options.toolChoice } : undefined;
 			await this.#promptAgentWithIdleRetry(messages, agentPromptOptions);
-			await this.#waitForRetry();
+			await this.#waitForPostPromptRecovery();
 		} finally {
 			this.#promptInFlight = false;
 		}
@@ -2217,6 +2267,7 @@ export class AgentSession {
 	async abort(): Promise<void> {
 		this.abortRetry();
 		this.#promptGeneration++;
+		this.#resolveTtsrResume();
 		this.agent.abort();
 		await this.agent.waitForIdle();
 		// Clear promptInFlight: waitForIdle resolves when the agent loop's finally
@@ -3781,16 +3832,6 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		this.#retryAbortController?.abort();
 		// Note: _retryAttempt is reset in the catch block of _autoRetry
 		this.#resolveRetry();
-	}
-
-	/**
-	 * Wait for any in-progress retry to complete.
-	 * Returns immediately if no retry is in progress.
-	 */
-	async #waitForRetry(): Promise<void> {
-		if (this.#retryPromise) {
-			await this.#retryPromise;
-		}
 	}
 
 	async #promptAgentWithIdleRetry(messages: AgentMessage[], options?: { toolChoice?: ToolChoice }): Promise<void> {

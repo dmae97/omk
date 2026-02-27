@@ -9,8 +9,10 @@ import * as path from "node:path";
 import { Agent, AgentBusyError } from "@oh-my-pi/pi-agent-core";
 import { type AssistantMessage, getBundledModel } from "@oh-my-pi/pi-ai";
 import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
+import type { Rule } from "@oh-my-pi/pi-coding-agent/capability/rule";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
+import { TtsrManager } from "@oh-my-pi/pi-coding-agent/export/ttsr";
 import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
@@ -196,5 +198,298 @@ describe("AgentSession concurrent prompt guard", () => {
 
 		// Second prompt should work
 		await expect(session.prompt("Second message")).resolves.toBeUndefined();
+	});
+});
+
+describe("AgentSession TTSR resume gate", () => {
+	let session: AgentSession;
+	let tempDir: string;
+
+	beforeEach(() => {
+		tempDir = path.join(os.tmpdir(), `pi-ttsr-gate-test-${Snowflake.next()}`);
+		fs.mkdirSync(tempDir, { recursive: true });
+	});
+
+	afterEach(async () => {
+		if (session) {
+			session.dispose();
+		}
+		if (tempDir && fs.existsSync(tempDir)) {
+			fs.rmSync(tempDir, { recursive: true });
+		}
+	});
+
+	const testRule: Rule = {
+		name: "no-unwrap",
+		path: "/tmp/no-unwrap.md",
+		content: "Do not use .unwrap()",
+		condition: ["\\.unwrap\\("],
+		_source: { provider: "test", providerName: "test", path: "/tmp/no-unwrap.md", level: "project" },
+	};
+
+	function makeMsg(text: string, stopReason: "stop" | "aborted" = "stop"): AssistantMessage {
+		return {
+			role: "assistant",
+			content: [{ type: "text", text }],
+			api: "anthropic-messages",
+			provider: "anthropic",
+			model: "mock",
+			usage: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 0,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+			stopReason,
+			timestamp: Date.now(),
+		};
+	}
+
+	it("prompt() blocks until TTSR interrupt continuation completes", async () => {
+		const model = getBundledModel("anthropic", "claude-sonnet-4-5")!;
+		let streamCallCount = 0;
+		let continuationCompleted = false;
+
+		const ttsrManager = new TtsrManager({
+			enabled: true,
+			contextMode: "discard",
+			interruptMode: "always",
+			repeatMode: "once",
+			repeatGap: 10,
+		});
+		ttsrManager.addRule(testRule);
+
+		const agent = new Agent({
+			getApiKey: () => "test-key",
+			initialState: { model, systemPrompt: "Test", tools: [] },
+			streamFn: (_model, _context, options) => {
+				streamCallCount++;
+				const stream = new MockAssistantStream();
+				const signal = options?.signal;
+
+				if (streamCallCount === 1) {
+					// First stream: emit text that triggers TTSR, then respond to abort
+					queueMicrotask(() => {
+						const partial = makeMsg("");
+						stream.push({ type: "start", partial });
+						stream.push({
+							type: "text_delta",
+							contentIndex: 0,
+							delta: "let val = result.unwrap(",
+							partial: makeMsg("let val = result.unwrap("),
+						});
+						// TTSR abort should fire synchronously; poll for it
+						const checkAbort = () => {
+							if (signal?.aborted) {
+								stream.push({
+									type: "error",
+									reason: "aborted",
+									error: makeMsg("let val = result.unwrap(", "aborted"),
+								});
+							} else {
+								setTimeout(checkAbort, 2);
+							}
+						};
+						checkAbort();
+					});
+				} else {
+					// Continuation stream: complete normally after a delay
+					setTimeout(() => {
+						const partial = makeMsg("");
+						stream.push({ type: "start", partial });
+						setTimeout(() => {
+							continuationCompleted = true;
+							stream.push({
+								type: "done",
+								reason: "stop",
+								message: makeMsg('Fixed: let val = result.expect("msg")'),
+							});
+						}, 80);
+					}, 10);
+				}
+
+				return stream;
+			},
+		});
+
+		const sessionManager = SessionManager.inMemory();
+		const settings = Settings.isolated();
+		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth-int.db"));
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
+		authStorage.setRuntimeApiKey("anthropic", "test-key");
+
+		session = new AgentSession({
+			agent,
+			sessionManager,
+			settings,
+			modelRegistry,
+			ttsrManager,
+		});
+
+		// prompt() must block until the TTSR continuation completes
+		await session.prompt("Write some Rust code");
+
+		// By the time prompt() returns, the continuation must have finished
+		expect(continuationCompleted).toBe(true);
+		expect(streamCallCount).toBeGreaterThanOrEqual(2);
+		expect(session.isStreaming).toBe(false);
+	});
+
+	it("prompt() blocks until TTSR deferred continuation completes", async () => {
+		const model = getBundledModel("anthropic", "claude-sonnet-4-5")!;
+		let streamCallCount = 0;
+		let continuationCompleted = false;
+
+		// interruptMode: "never" -> TTSR match queues deferred injection instead of aborting
+		const ttsrManager = new TtsrManager({
+			enabled: true,
+			contextMode: "discard",
+			interruptMode: "never",
+			repeatMode: "once",
+			repeatGap: 10,
+		});
+		ttsrManager.addRule(testRule);
+
+		const agent = new Agent({
+			getApiKey: () => "test-key",
+			initialState: { model, systemPrompt: "Test", tools: [] },
+			streamFn: (_model, _context, _options) => {
+				streamCallCount++;
+				const stream = new MockAssistantStream();
+
+				if (streamCallCount === 1) {
+					// First stream: emit matching text and complete normally
+					queueMicrotask(() => {
+						const partial = makeMsg("");
+						stream.push({ type: "start", partial });
+						stream.push({
+							type: "text_delta",
+							contentIndex: 0,
+							delta: "let val = result.unwrap(",
+							partial: makeMsg("let val = result.unwrap("),
+						});
+						// Complete normally (no abort) -- deferred path
+						stream.push({
+							type: "done",
+							reason: "stop",
+							message: makeMsg("let val = result.unwrap()"),
+						});
+					});
+				} else {
+					// Continuation stream after deferred TTSR injection
+					setTimeout(() => {
+						const partial = makeMsg("");
+						stream.push({ type: "start", partial });
+						setTimeout(() => {
+							continuationCompleted = true;
+							stream.push({
+								type: "done",
+								reason: "stop",
+								message: makeMsg('Fixed: let val = result.expect("msg")'),
+							});
+						}, 80);
+					}, 10);
+				}
+
+				return stream;
+			},
+		});
+
+		const sessionManager = SessionManager.inMemory();
+		const settings = Settings.isolated();
+		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth-def.db"));
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
+		authStorage.setRuntimeApiKey("anthropic", "test-key");
+
+		session = new AgentSession({
+			agent,
+			sessionManager,
+			settings,
+			modelRegistry,
+			ttsrManager,
+		});
+
+		// prompt() must block until the deferred TTSR continuation completes
+		await session.prompt("Write some Rust code");
+
+		// By the time prompt() returns, the deferred continuation must have finished
+		expect(continuationCompleted).toBe(true);
+		expect(streamCallCount).toBeGreaterThanOrEqual(2);
+		expect(session.isStreaming).toBe(false);
+	});
+
+	it("prompt() returns immediately when session is aborted during TTSR wait", async () => {
+		const model = getBundledModel("anthropic", "claude-sonnet-4-5")!;
+
+		const ttsrManager = new TtsrManager({
+			enabled: true,
+			contextMode: "discard",
+			interruptMode: "always",
+			repeatMode: "once",
+			repeatGap: 10,
+		});
+		ttsrManager.addRule(testRule);
+
+		const agent = new Agent({
+			getApiKey: () => "test-key",
+			initialState: { model, systemPrompt: "Test", tools: [] },
+			streamFn: (_model, _context, options) => {
+				const stream = new MockAssistantStream();
+				const signal = options?.signal;
+
+				queueMicrotask(() => {
+					const partial = makeMsg("");
+					stream.push({ type: "start", partial });
+					stream.push({
+						type: "text_delta",
+						contentIndex: 0,
+						delta: "result.unwrap(",
+						partial: makeMsg("result.unwrap("),
+					});
+					const checkAbort = () => {
+						if (signal?.aborted) {
+							stream.push({
+								type: "error",
+								reason: "aborted",
+								error: makeMsg("result.unwrap(", "aborted"),
+							});
+						} else {
+							setTimeout(checkAbort, 2);
+						}
+					};
+					checkAbort();
+				});
+
+				return stream;
+			},
+		});
+
+		const sessionManager = SessionManager.inMemory();
+		const settings = Settings.isolated();
+		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth-abt.db"));
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
+		authStorage.setRuntimeApiKey("anthropic", "test-key");
+
+		session = new AgentSession({
+			agent,
+			sessionManager,
+			settings,
+			modelRegistry,
+			ttsrManager,
+		});
+
+		// Start prompt (will trigger TTSR and create resume gate)
+		const promptPromise = session.prompt("Write some Rust code");
+
+		// Wait for TTSR abort to be pending
+		await Bun.sleep(20);
+
+		// Abort session — prompt() should unblock
+		await session.abort();
+		await promptPromise;
+
+		expect(session.isStreaming).toBe(false);
 	});
 });
