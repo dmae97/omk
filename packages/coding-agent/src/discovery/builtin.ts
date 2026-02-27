@@ -157,6 +157,7 @@ async function loadMCPServers(ctx: LoadContext): Promise<LoadResult<MCPServer>> 
 				url: serverConfig.url as string | undefined,
 				headers: serverConfig.headers as Record<string, string> | undefined,
 				auth: serverConfig.auth as { type: "oauth" | "apikey"; credentialId?: string } | undefined,
+				oauth: serverConfig.oauth as { clientId?: string; callbackPort?: number } | undefined,
 				transport: serverConfig.type as "stdio" | "sse" | "http" | undefined,
 				_source: createSourceMeta(PROVIDER_ID, path, level),
 			});

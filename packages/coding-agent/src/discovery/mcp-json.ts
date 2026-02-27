@@ -36,6 +36,7 @@ interface MCPConfigFile {
 				credentialId?: string;
 			};
 			type?: "stdio" | "sse" | "http";
+			oauth?: { clientId?: string; callbackPort?: number };
 		}
 	>;
 }
@@ -81,6 +82,7 @@ function transformMCPConfig(config: MCPConfigFile, source: SourceMeta): MCPServe
 				url: serverConfig.url,
 				headers: serverConfig.headers,
 				auth: serverConfig.auth,
+				oauth: serverConfig.oauth,
 				transport: serverConfig.type,
 				_source: source,
 			};

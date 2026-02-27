@@ -22,6 +22,8 @@ export interface MCPOAuthConfig {
 	clientSecret?: string;
 	/** OAuth scopes (space-separated) */
 	scopes?: string;
+	/** Custom callback port (default: 3000) */
+	callbackPort?: number;
 }
 
 /**
@@ -37,7 +39,7 @@ export class MCPOAuthFlow extends OAuthCallbackFlow {
 		private config: MCPOAuthConfig,
 		ctrl: OAuthController,
 	) {
-		super(ctrl, DEFAULT_PORT, CALLBACK_PATH);
+		super(ctrl, config.callbackPort ?? DEFAULT_PORT, CALLBACK_PATH);
 		this.#resolvedClientId = this.#resolveClientId(config);
 	}
 

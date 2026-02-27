@@ -59,6 +59,11 @@ interface MCPServerConfigBase {
 	timeout?: number;
 	/** Authentication configuration (optional) */
 	auth?: MCPAuthConfig;
+	/** OAuth configuration for servers requiring explicit client credentials */
+	oauth?: {
+		clientId?: string;
+		callbackPort?: number;
+	};
 }
 
 /** Stdio server configuration */

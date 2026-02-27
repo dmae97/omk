@@ -32,6 +32,11 @@ export interface MCPServer {
 		type: "oauth" | "apikey";
 		credentialId?: string;
 	};
+	/** OAuth configuration (clientId, callbackPort) for servers requiring explicit client credentials */
+	oauth?: {
+		clientId?: string;
+		callbackPort?: number;
+	};
 	/** Transport type */
 	transport?: "stdio" | "sse" | "http";
 	/** Source metadata (added by loader) */

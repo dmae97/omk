@@ -282,9 +282,10 @@ export class MCPCommandController {
 							const credentialId = await this.#handleOAuthFlow(
 								oauth.authorizationUrl,
 								oauth.tokenUrl,
-								oauth.clientId ?? "",
+								oauth.clientId ?? finalConfig.oauth?.clientId ?? "",
 								"",
 								oauth.scopes ?? "",
+								finalConfig.oauth?.callbackPort,
 							);
 							finalConfig = {
 								...finalConfig,
@@ -352,6 +353,7 @@ export class MCPCommandController {
 		clientId: string,
 		clientSecret: string,
 		scopes: string,
+		callbackPort?: number,
 	): Promise<string> {
 		const authStorage = this.ctx.session.modelRegistry.authStorage;
 		let parsedAuthUrl: URL;
@@ -377,6 +379,7 @@ export class MCPCommandController {
 					clientId: resolvedClientId,
 					clientSecret: clientSecret || undefined,
 					scopes: scopes || undefined,
+					callbackPort,
 				},
 				{
 					onAuth: (info: { url: string; instructions?: string }) => {
@@ -1198,9 +1201,10 @@ export class MCPCommandController {
 			const credentialId = await this.#handleOAuthFlow(
 				oauth.authorizationUrl,
 				oauth.tokenUrl,
-				oauth.clientId ?? "",
+				oauth.clientId ?? found.config.oauth?.clientId ?? "",
 				"",
 				oauth.scopes ?? "",
+				found.config.oauth?.callbackPort,
 			);
 
 			const updated: MCPServerConfig = {
