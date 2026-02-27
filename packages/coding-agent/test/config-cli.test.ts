@@ -69,9 +69,10 @@ describe("config CLI schema coverage", () => {
 		await runConfigCommand({ action: "list", flags: {} });
 
 		const lines = logSpy.mock.calls.map(call => String(call[0] ?? ""));
-		const modelRolesLine = lines.find(line => line.includes("modelRoles ="));
+		const plainLines = lines.map(line => Bun.stripANSI(line));
+		const modelRolesLine = plainLines.find(line => line.includes("modelRoles ="));
 		expect(modelRolesLine).toBeDefined();
-		const plainModelRolesLine = String(modelRolesLine).replace(/\u001b\[[0-9;]*m/g, "");
+		const plainModelRolesLine = String(modelRolesLine);
 		expect(plainModelRolesLine).toContain("modelRoles =");
 		expect(plainModelRolesLine).toContain("(record)");
 		expect(plainModelRolesLine).toContain("{");
