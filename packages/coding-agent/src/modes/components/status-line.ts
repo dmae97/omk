@@ -163,7 +163,7 @@ export class StatusLineComponent implements Component {
 		// Fire async fetch, return cached value
 		(async () => {
 			try {
-				const result = await $`git status --porcelain`.quiet().nothrow();
+				const result = await $`git --no-optional-locks status --porcelain`.quiet().nothrow();
 
 				if (result.exitCode !== 0) {
 					this.#cachedGitStatus = null;

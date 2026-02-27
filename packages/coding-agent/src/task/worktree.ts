@@ -181,7 +181,9 @@ export async function applyBaseline(worktreeDir: string, baseline: WorktreeBasel
 		// Commit baseline state so captureRepoDeltaPatch can cleanly subtract it.
 		// Without this, `git add -A && git commit` by the task would include
 		// baseline untracked files in the diff-tree output.
-		const hasChanges = (await $`git status --porcelain`.cwd(nestedDir).quiet().nothrow().text()).trim();
+		const hasChanges = (
+			await $`git --no-optional-locks status --porcelain`.cwd(nestedDir).quiet().nothrow().text()
+		).trim();
 		if (hasChanges) {
 			await $`git add -A`.cwd(nestedDir).quiet();
 			await $`git commit -m omp-baseline --allow-empty`.cwd(nestedDir).quiet();
@@ -343,7 +345,9 @@ export async function applyNestedPatches(
 		}
 
 		// Commit so nested repo history reflects the task changes
-		const hasChanges = (await $`git status --porcelain`.cwd(nestedDir).quiet().nothrow().text()).trim();
+		const hasChanges = (
+			await $`git --no-optional-locks status --porcelain`.cwd(nestedDir).quiet().nothrow().text()
+		).trim();
 		if (hasChanges) {
 			const msg = (await commitMessage?.(combinedDiff)) ?? "changes from isolated task(s)";
 			await $`git add -A`.cwd(nestedDir).quiet();
