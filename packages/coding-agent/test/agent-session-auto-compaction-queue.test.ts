@@ -181,6 +181,12 @@ describe("AgentSession auto-compaction queue resume", () => {
 		await compactionDone;
 		await Promise.resolve();
 		const idlePromise = session.waitForIdle();
+		let idleResolved = false;
+		void idlePromise.then(() => {
+			idleResolved = true;
+		});
+		await Promise.resolve();
+		expect(idleResolved).toBe(false);
 		vi.advanceTimersByTime(200);
 		await idlePromise;
 

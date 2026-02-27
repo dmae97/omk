@@ -707,14 +707,9 @@ export class AgentSession {
 				if (didRetry) return; // Retry was initiated, don't proceed to compaction
 			}
 
-			const trackCompaction = msg.stopReason === "error" || this.settings.get("compaction.autoContinue") === false;
-			if (trackCompaction) {
-				const compactionTask = this.#checkCompaction(msg);
-				this.#trackPostPromptTask(compactionTask);
-				await compactionTask;
-			} else {
-				await this.#checkCompaction(msg);
-			}
+			const compactionTask = this.#checkCompaction(msg);
+			this.#trackPostPromptTask(compactionTask);
+			await compactionTask;
 			// Check for incomplete todos (unless there was an error or abort)
 			if (msg.stopReason !== "error" && msg.stopReason !== "aborted") {
 				await this.#checkTodoCompletion();
@@ -1909,7 +1904,7 @@ export class AgentSession {
 	async #promptWithMessage(
 		message: AgentMessage,
 		expandedText: string,
-		options?: Pick<PromptOptions, "toolChoice" | "images">,
+		options?: Pick<PromptOptions, "toolChoice" | "images"> & { skipPostPromptRecoveryWait?: boolean },
 	): Promise<void> {
 		this.#promptInFlight = true;
 		const generation = this.#promptGeneration;
@@ -2014,7 +2009,9 @@ export class AgentSession {
 
 			const agentPromptOptions = options?.toolChoice ? { toolChoice: options.toolChoice } : undefined;
 			await this.#promptAgentWithIdleRetry(messages, agentPromptOptions);
-			await this.#waitForPostPromptRecovery();
+			if (!options?.skipPostPromptRecoveryWait) {
+				await this.#waitForPostPromptRecovery();
+			}
 		} finally {
 			this.#promptInFlight = false;
 		}
@@ -3731,10 +3728,15 @@ Be thorough - include exact file paths, function names, error messages, and tech
 			await this.#emitSessionEvent({ type: "auto_compaction_end", result, aborted: false, willRetry });
 
 			if (!willRetry && compactionSettings.autoContinue !== false) {
-				await this.prompt("Continue if you have next steps.", {
-					expandPromptTemplates: false,
-					synthetic: true,
-				});
+				await this.#promptWithMessage(
+					{
+						role: "developer",
+						content: [{ type: "text", text: "Continue if you have next steps." }],
+						timestamp: Date.now(),
+					},
+					"Continue if you have next steps.",
+					{ skipPostPromptRecoveryWait: true },
+				);
 			}
 
 			if (willRetry) {
@@ -3956,7 +3958,7 @@ Be thorough - include exact file paths, function names, error messages, and tech
 		this.#retryAbortController = undefined;
 
 		// Retry via continue() outside the agent_end event callback chain.
-		this.#scheduleAgentContinue({ generation });
+		this.#scheduleAgentContinue({ delayMs: 1, generation });
 
 		return true;
 	}
