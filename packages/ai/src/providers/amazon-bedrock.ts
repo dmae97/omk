@@ -592,9 +592,14 @@ function mapStopReason(reason: string | undefined): StopReason {
 	}
 }
 
-/** Check if the model supports adaptive thinking (Opus 4.6+). */
+/** Check if the model supports adaptive thinking (Opus 4.6+ / Sonnet 4.6+). */
 function supportsAdaptiveThinking(modelId: string): boolean {
-	return modelId.includes("opus-4-6") || modelId.includes("opus-4.6");
+	return (
+		modelId.includes("opus-4-6") ||
+		modelId.includes("opus-4.6") ||
+		modelId.includes("sonnet-4-6") ||
+		modelId.includes("sonnet-4.6")
+	);
 }
 
 /** Map a thinking level to an adaptive effort value. */
@@ -623,11 +628,17 @@ function buildAdditionalModelRequestFields(
 	}
 
 	if (model.id.includes("anthropic.claude")) {
-		// Opus 4.6+ uses adaptive thinking with effort levels
+		// Opus 4.6+ / Sonnet 4.6+ uses adaptive thinking with effort levels
 		if (supportsAdaptiveThinking(model.id)) {
+			let effort = mapThinkingLevelToEffort(options.reasoning);
+			// "max" effort is only supported on Opus 4.6; clamp to "high" for Sonnet 4.6
+			const supportsMax = model.id.includes("opus-4-6") || model.id.includes("opus-4.6");
+			if (effort === "max" && !supportsMax) {
+				effort = "high";
+			}
 			const result: Record<string, any> = {
 				thinking: { type: "adaptive" },
-				output_config: { effort: mapThinkingLevelToEffort(options.reasoning) },
+				output_config: { effort },
 			};
 			return result;
 		}

@@ -950,6 +950,13 @@ function buildParams(
 				type: "enabled",
 				budget_tokens: options.thinkingBudgetTokens || 1024,
 			};
+			// Opus 4.5 supports effort alongside budget-based thinking
+			if (model.id.includes("opus-4-5") || model.id.includes("opus-4.5")) {
+				const effort = options.effort ?? mapThinkingLevelToEffort(options.reasoning);
+				if (effort) {
+					params.output_config = { effort };
+				}
+			}
 		}
 	}
 
