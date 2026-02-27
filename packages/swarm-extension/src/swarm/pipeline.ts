@@ -164,7 +164,7 @@ export class PipelineController {
 							workspace: options.workspace,
 							swarmName: this.#def.name,
 							iteration,
-							modelOverride: this.#def.model,
+							modelOverride: agent.model ?? this.#def.model,
 							signal: options.signal,
 							onProgress: (_name, _progress) => {
 								options.emitProgress(waveIdx);

@@ -80,7 +80,7 @@ swarm:
   workspace: ./workspace # Working directory (relative to YAML file location)
   mode: pipeline # pipeline | parallel | sequential
   target_count: 10 # Iterations (pipeline mode only, default: 1)
-  model: claude-opus-4-6 # Model for all agents (optional)
+  model: claude-opus-4-6 # Default model for agents without an override (optional)
 
   agents:
     first_agent:
@@ -93,6 +93,7 @@ swarm:
         - downstream_agent
       waits_for:
         - upstream_agent
+      model: claude-sonnet-4-5 # Optional per-agent override
 ```
 
 ### Top-Level Fields
@@ -103,7 +104,7 @@ swarm:
 | `workspace`    | yes      | —               | Shared working directory. Relative paths resolve from YAML file location       |
 | `mode`         | no       | `sequential`    | Execution mode (see below)                                                     |
 | `target_count` | no       | `1`             | How many times to repeat the full pipeline. Only meaningful in `pipeline` mode |
-| `model`        | no       | session default | Model ID for all agents. Any omp-configured model works                        |
+| `model`        | no       | session default | Default model for agents that do not set `agents.<name>.model`                |
 
 ### Agent Fields
 
@@ -112,6 +113,7 @@ swarm:
 | `role`          | yes      | Short role identifier — becomes the agent's system prompt               |
 | `task`          | yes      | Complete instructions sent as user prompt. Use YAML `\|` for multi-line |
 | `extra_context` | no       | Additional text appended to system prompt                               |
+| `model`         | no       | Model override for this agent only                                      |
 | `reports_to`    | no       | List of agent names that depend on this agent                           |
 | `waits_for`     | no       | List of agent names this agent depends on                               |
 
@@ -434,14 +436,24 @@ tracking/status.json      -> Cumulative state
 
 ## Models
 
-Any model configured in omp works. Set it in the YAML:
+Any model configured in omp works. Set a swarm default and optionally override per agent:
 
 ```yaml
 swarm:
   model: claude-opus-4-6
+  agents:
+    writer:
+      role: technical-writer
+      task: |
+        Write the draft.
+    reviewer:
+      role: reviewer
+      model: claude-sonnet-4-5
+      task: |
+        Review the draft.
 ```
 
-Or omit `model` to use your session's default. Check `packages/ai/src/models.json` for available model IDs.
+Precedence: `agents.<name>.model` → `swarm.model` → session default. Check `packages/ai/src/models.json` for available model IDs.
 
 ---
 

@@ -8,6 +8,7 @@ interface RawSwarmAgentConfig {
 	extra_context?: string;
 	reports_to?: string[];
 	waits_for?: string[];
+	model?: string;
 }
 
 interface RawSwarmConfig {
@@ -32,6 +33,7 @@ export interface SwarmAgent {
 	extraContext?: string;
 	reportsTo: string[];
 	waitsFor: string[];
+	model?: string;
 }
 
 export interface SwarmDefinition {
@@ -95,6 +97,7 @@ export function parseSwarmYaml(content: string): SwarmDefinition {
 			task: config.task.trim(),
 			extraContext: config.extra_context?.trim(),
 			reportsTo: Array.isArray(config.reports_to) ? config.reports_to : [],
+			model: typeof config.model === "string" ? config.model.trim() : undefined,
 			waitsFor: Array.isArray(config.waits_for) ? config.waits_for : [],
 		});
 	}
@@ -104,7 +107,7 @@ export function parseSwarmYaml(content: string): SwarmDefinition {
 		workspace: swarm.workspace,
 		mode: mode as SwarmMode,
 		targetCount: swarm.target_count ?? 1,
-		model: swarm.model,
+		model: typeof swarm.model === "string" ? swarm.model.trim() : undefined,
 		agents,
 		agentOrder,
 	};
@@ -118,6 +121,9 @@ export function validateSwarmDefinition(def: SwarmDefinition): string[] {
 	const errors: string[] = [];
 	const agentNames = new Set(def.agents.keys());
 
+	if (def.model !== undefined && def.model.length === 0) {
+		errors.push("swarm.model must not be empty when provided");
+	}
 	for (const [name, agent] of def.agents) {
 		for (const dep of agent.waitsFor) {
 			if (!agentNames.has(dep)) {
@@ -134,6 +140,9 @@ export function validateSwarmDefinition(def: SwarmDefinition): string[] {
 			if (target === name) {
 				errors.push(`Agent '${name}' cannot report to itself`);
 			}
+		}
+		if (agent.model !== undefined && agent.model.length === 0) {
+			errors.push(`Agent '${name}' model must not be empty when provided`);
 		}
 	}
 
