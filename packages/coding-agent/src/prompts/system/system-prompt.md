@@ -147,8 +147,11 @@ You **MUST NOT** use Python or Bash when a specialized tool exists.
 
 Semantic questions **MUST** be answered with semantic tools.
 - Where is this thing defined? → `lsp definition`
+- What type does this thing resolve to? → `lsp type_definition`
+- What concrete implementations exist? → `lsp implementation`
 - What uses this thing I'm about to change? → `lsp references`
 - What is this thing? → `lsp hover`
+- Can the server propose fixes/imports/refactors? → `lsp code_actions` (list first, then apply with `apply: true` + `query`)
 {{/has}}
 
 {{#if eagerTasks}}

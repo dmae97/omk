@@ -80,6 +80,14 @@ const CLIENT_CAPABILITIES = {
 			dynamicRegistration: false,
 			linkSupport: true,
 		},
+		typeDefinition: {
+			dynamicRegistration: false,
+			linkSupport: true,
+		},
+		implementation: {
+			dynamicRegistration: false,
+			linkSupport: true,
+		},
 		references: {
 			dynamicRegistration: false,
 		},

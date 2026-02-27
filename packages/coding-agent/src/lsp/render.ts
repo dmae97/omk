@@ -41,26 +41,17 @@ export function renderCall(args: LspParams, _options: RenderResultOptions, theme
 	if (args.file) {
 		target = shortenPath(args.file);
 		hasFileTarget = true;
-	} else if (args.files?.length === 1) {
-		target = shortenPath(args.files[0]);
-		hasFileTarget = true;
-	} else if (args.files?.length) {
-		target = `${args.files.length} files`;
 	}
 
 	if (hasFileTarget && args.line !== undefined) {
-		const col = args.column !== undefined ? `:${args.column}` : "";
-		target += `:${args.line}${col}`;
-		if (args.end_line !== undefined) {
-			const endCol = args.end_character !== undefined ? `:${args.end_character}` : "";
-			target += `-${args.end_line}${endCol}`;
+		target += `:${args.line}`;
+		if (args.symbol) {
+			target += ` (${truncateToWidth(args.symbol, TRUNCATE_LENGTHS.SHORT)})`;
 		}
 	} else if (!target && args.line !== undefined) {
-		const col = args.column !== undefined ? `:${args.column}` : "";
-		target = `line ${args.line}${col}`;
-		if (args.end_line !== undefined) {
-			const endCol = args.end_character !== undefined ? `:${args.end_character}` : "";
-			target += `-${args.end_line}${endCol}`;
+		target = `line ${args.line}`;
+		if (args.symbol) {
+			target += ` (${truncateToWidth(args.symbol, TRUNCATE_LENGTHS.SHORT)})`;
 		}
 	}
 
@@ -68,9 +59,6 @@ export function renderCall(args: LspParams, _options: RenderResultOptions, theme
 	if (queryPreview && target) meta.push(`query:${queryPreview}`);
 	if (args.new_name) meta.push(`new:${args.new_name}`);
 	if (args.apply !== undefined) meta.push(`apply:${args.apply ? "true" : "false"}`);
-	if (args.include_declaration !== undefined) {
-		meta.push(`include_decl:${args.include_declaration ? "true" : "false"}`);
-	}
 
 	const descriptionParts = [actionLabel];
 	if (target) {
@@ -104,7 +92,7 @@ export function renderResult(
 	result: { content: Array<{ type: string; text?: string }>; details?: LspToolDetails; isError?: boolean },
 	options: RenderResultOptions,
 	theme: Theme,
-	args?: LspParams & { file?: string; files?: string[] },
+	args?: LspParams,
 ): Component {
 	const content = result.content?.[0];
 	if (!content || content.type !== "text" || !("text" in content) || !content.text) {
@@ -129,25 +117,16 @@ export function renderResult(
 	const requestLines: string[] = [];
 	if (request?.file) {
 		requestLines.push(theme.fg("toolOutput", request.file));
-	} else if (request?.files?.length === 1) {
-		requestLines.push(theme.fg("toolOutput", request.files[0]));
-	} else if (request?.files?.length) {
-		requestLines.push(theme.fg("dim", `${request.files.length} file(s)`));
 	}
 	if (request?.line !== undefined) {
-		const col = request.column !== undefined ? `:${request.column}` : "";
-		requestLines.push(theme.fg("dim", `line ${request.line}${col}`));
+		requestLines.push(theme.fg("dim", `line ${request.line}`));
 	}
-	if (request?.end_line !== undefined) {
-		const endCol = request.end_character !== undefined ? `:${request.end_character}` : "";
-		requestLines.push(theme.fg("dim", `end ${request.end_line}${endCol}`));
+	if (request?.symbol) {
+		requestLines.push(theme.fg("dim", `symbol: ${request.symbol}`));
 	}
 	if (request?.query) requestLines.push(theme.fg("dim", `query: ${request.query}`));
 	if (request?.new_name) requestLines.push(theme.fg("dim", `new name: ${request.new_name}`));
 	if (request?.apply !== undefined) requestLines.push(theme.fg("dim", `apply: ${request.apply ? "true" : "false"}`));
-	if (request?.include_declaration !== undefined) {
-		requestLines.push(theme.fg("dim", `include declaration: ${request.include_declaration ? "true" : "false"}`));
-	}
 
 	const outputBlock = new CachedOutputBlock();
 

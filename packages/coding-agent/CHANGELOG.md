@@ -1,8 +1,16 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
+- Added `type_definition` action to navigate to symbol type definitions with source context
+- Added `implementation` action to find concrete implementations of symbols with source context
+- Added `code_actions` action to list and apply language server code fixes, refactors, and import suggestions
+- Added `symbol` parameter to automatically resolve column position by searching for substring on target line
+- Added source code context display (3 lines) for definition, type definition, and implementation results
+- Added context display for first 50 references with remaining references shown location-only to balance detail and performance
+- Added support for glob patterns in `file` parameter for diagnostics action (e.g., `src/**/*.ts`)
 - Added `waitForIdle()` method to ensure prompt completion waits for all deferred recovery work (TTSR continuations, context promotions, compaction retries) to fully settle
 - Added `getLastAssistantMessage()` method to retrieve the most recent assistant message from session state without manual array indexing
 - Implemented TTSR resume gate to ensure `prompt()` blocks until TTSR interrupt continuations complete, preventing race conditions between TTSR injections and subsequent prompts
@@ -10,6 +18,12 @@
 
 ### Changed
 
+- Replaced `column` parameter with `symbol` parameter for more intuitive position specification
+- Removed `files` parameter; use glob patterns in `file` parameter instead
+- Removed `end_line` and `end_character` parameters; range operations now use single position
+- Changed `include_declaration` parameter to always be true for references (removed from API)
+- Updated LSP client capabilities to advertise support for `typeDefinition` and `implementation` requests
+- Improved definition results to include source context alongside location information
 - Refactored deferred continuation scheduling to use centralized post-prompt task tracking instead of raw `setTimeout()` calls, improving reliability of concurrent recovery operations
 - Updated subagent executor to explicitly await `waitForIdle()` after each prompt and reminder, ensuring terminal assistant state is determined only after all background work completes
 - Replaced `#waitForRetry()` with `#waitForPostPromptRecovery()` to handle both retry and TTSR resume gates, ensuring prompt completion waits for all post-prompt recovery operations
@@ -17,6 +31,12 @@
 - Updated intent field parameter name from `agent__intent` to `_i` for cleaner tool call contracts
 - Refined intent parameter guidance to require concise 2-6 word sentences in present participle form
 - Centralized per-tool timeout constants and clamping into `tool-timeouts.ts`
+
+### Removed
+
+- Removed `files` array parameter for batch file operations
+- Removed `column`, `end_line`, and `end_character` parameters in favor of symbol-based positioning
+- Removed `include_declaration` parameter from references action
 
 ### Fixed
 

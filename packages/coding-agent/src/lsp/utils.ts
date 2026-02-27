@@ -1,8 +1,11 @@
 export { truncate } from "@oh-my-pi/pi-utils";
 
 import path from "node:path";
+import { isEnoent } from "@oh-my-pi/pi-utils";
 import { type Theme, theme } from "../modes/theme/theme";
 import type {
+	CodeAction,
+	Command,
 	Diagnostic,
 	DiagnosticSeverity,
 	DocumentSymbol,
@@ -475,7 +478,8 @@ export function formatDocumentSymbol(symbol: DocumentSymbol, indent = 0): string
 	const prefix = "  ".repeat(indent);
 	const icon = symbolKindToIcon(symbol.kind);
 	const line = symbol.range.start.line + 1;
-	const results = [`${prefix}${icon} ${symbol.name} @ line ${line}`];
+	const detail = symbol.detail ? ` ${symbol.detail}` : "";
+	const results = [`${prefix}${icon} ${symbol.name}${detail} @ line ${line}`];
 
 	if (symbol.children) {
 		for (const child of symbol.children) {
@@ -496,6 +500,12 @@ export function formatSymbolInformation(symbol: SymbolInformation, cwd: string):
 	return `${icon} ${symbol.name}${container} @ ${location}`;
 }
 
+export function formatCodeAction(action: CodeAction | Command, index: number): string {
+	const kind = "kind" in action && action.kind ? action.kind : "action";
+	const preferred = "isPreferred" in action && action.isPreferred ? " (preferred)" : "";
+	const disabled = "disabled" in action && action.disabled ? ` (disabled: ${action.disabled.reason})` : "";
+	return `${index}: [${kind}] ${action.title}${preferred}${disabled}`;
+}
 // =============================================================================
 // Hover Content Extraction
 // =============================================================================
@@ -525,3 +535,61 @@ export function extractHoverText(
 
 // =============================================================================
 // General Utilities
+
+function firstNonWhitespaceColumn(lineText: string): number {
+	const match = lineText.match(/\S/);
+	return match ? (match.index ?? 0) : 0;
+}
+
+export async function resolveSymbolColumn(filePath: string, line: number, symbol?: string): Promise<number> {
+	const lineNumber = Math.max(1, line);
+	try {
+		const fileText = await Bun.file(filePath).text();
+		const lines = fileText.split("\n");
+		const targetLine = lines[lineNumber - 1] ?? "";
+		if (!symbol) {
+			return firstNonWhitespaceColumn(targetLine);
+		}
+
+		const exactIndex = targetLine.indexOf(symbol);
+		if (exactIndex !== -1) {
+			return exactIndex;
+		}
+
+		const lowerIndex = targetLine.toLowerCase().indexOf(symbol.toLowerCase());
+		if (lowerIndex !== -1) {
+			return lowerIndex;
+		}
+
+		return firstNonWhitespaceColumn(targetLine);
+	} catch (error) {
+		if (isEnoent(error)) {
+			return 0;
+		}
+		throw error;
+	}
+}
+
+export async function readLocationContext(filePath: string, line: number, contextLines = 1): Promise<string[]> {
+	const targetLine = Math.max(1, line);
+	const surrounding = Math.max(0, contextLines);
+	try {
+		const fileText = await Bun.file(filePath).text();
+		const lines = fileText.split("\n");
+		if (lines.length === 0) return [];
+
+		const startLine = Math.max(1, targetLine - surrounding);
+		const endLine = Math.min(lines.length, targetLine + surrounding);
+		const context: string[] = [];
+		for (let currentLine = startLine; currentLine <= endLine; currentLine++) {
+			const content = lines[currentLine - 1] ?? "";
+			context.push(`${currentLine}: ${content}`);
+		}
+		return context;
+	} catch (error) {
+		if (isEnoent(error)) {
+			return [];
+		}
+		throw error;
+	}
+}

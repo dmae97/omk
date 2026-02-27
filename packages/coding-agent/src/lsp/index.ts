@@ -27,6 +27,9 @@ import { applyTextEditsToString, applyWorkspaceEdit } from "./edits";
 import { detectLspmux } from "./lspmux";
 import { renderCall, renderResult } from "./render";
 import {
+	type CodeAction,
+	type CodeActionContext,
+	type Command,
 	type Diagnostic,
 	type DocumentSymbol,
 	type Hover,
@@ -44,14 +47,18 @@ import {
 import {
 	extractHoverText,
 	fileToUri,
+	formatCodeAction,
 	formatDiagnostic,
 	formatDiagnosticsSummary,
 	formatDocumentSymbol,
 	formatLocation,
 	formatSymbolInformation,
 	formatWorkspaceEdit,
+	readLocationContext,
+	resolveSymbolColumn,
 	sortDiagnostics,
 	symbolKindToIcon,
+	uriToFile,
 } from "./utils";
 
 export type { LspServerStatus } from "./client";
@@ -246,6 +253,36 @@ function limitDiagnosticMessages(messages: string[]): string[] {
 	return messages.slice(0, DIAGNOSTIC_MESSAGE_LIMIT);
 }
 
+const LOCATION_CONTEXT_LINES = 1;
+const REFERENCE_CONTEXT_LIMIT = 50;
+
+function normalizeLocationResult(result: Location | Location[] | LocationLink | LocationLink[] | null): Location[] {
+	if (!result) return [];
+	const raw = Array.isArray(result) ? result : [result];
+	return raw.flatMap(loc => {
+		if ("uri" in loc) {
+			return [loc as Location];
+		}
+		if ("targetUri" in loc) {
+			const link = loc as LocationLink;
+			return [{ uri: link.targetUri, range: link.targetSelectionRange ?? link.targetRange }];
+		}
+		return [];
+	});
+}
+
+async function formatLocationWithContext(location: Location, cwd: string): Promise<string> {
+	const header = `  ${formatLocation(location, cwd)}`;
+	const context = await readLocationContext(
+		uriToFile(location.uri),
+		location.range.start.line + 1,
+		LOCATION_CONTEXT_LINES,
+	);
+	if (context.length === 0) {
+		return header;
+	}
+	return `${header}\n${context.map(lineText => `    ${lineText}`).join("\n")}`;
+}
 function getServerForWorkspaceAction(config: LspConfig, action: string): [string, ServerConfig] | null {
 	const entries = getLspServers(config);
 	if (entries.length === 0) return null;
@@ -887,7 +924,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 		_onUpdate?: AgentToolUpdateCallback<LspToolDetails>,
 		_context?: AgentToolContext,
 	): Promise<AgentToolResult<LspToolDetails>> {
-		const { action, file, files, line, column, query, new_name, apply, include_declaration } = params;
+		const { action, file, line, symbol, query, new_name, apply } = params;
 		throwIfAborted(signal);
 
 		const config = getConfig(this.session.cwd);
@@ -916,8 +953,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 
 		// Diagnostics can be batch or single-file - queries all applicable servers
 		if (action === "diagnostics") {
-			const targets = files?.length ? files : file ? [file] : null;
-			if (!targets) {
+			if (!file) {
 				// No file specified - run workspace diagnostics
 				const result = await runWorkspaceDiagnostics(this.session.cwd, signal);
 				return {
@@ -931,7 +967,19 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 				};
 			}
 
-			const detailed = Boolean(files?.length);
+			const isGlobFilePattern = /[*?{]/.test(file);
+			const targets = isGlobFilePattern
+				? await Array.fromAsync(new Bun.Glob(file).scan({ cwd: this.session.cwd }))
+				: [file];
+
+			if (targets.length === 0) {
+				return {
+					content: [{ type: "text", text: `No files matched pattern: ${file}` }],
+					details: { action, success: true, request: params },
+				};
+			}
+
+			const detailed = targets.length > 1;
 			const results: string[] = [];
 			const allServerNames = new Set<string>();
 
@@ -1051,7 +1099,9 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 			}
 
 			const uri = targetFile ? fileToUri(targetFile) : "";
-			const position = { line: (line || 1) - 1, character: (column || 1) - 1 };
+			const resolvedLine = line ?? 1;
+			const resolvedCharacter = targetFile ? await resolveSymbolColumn(targetFile, resolvedLine, symbol) : 0;
+			const position = { line: resolvedLine - 1, character: resolvedCharacter };
 
 			let output: string;
 
@@ -1071,33 +1121,66 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 						signal,
 					)) as Location | Location[] | LocationLink | LocationLink[] | null;
 
-					if (!result) {
+					const locations = normalizeLocationResult(result);
+
+					if (locations.length === 0) {
 						output = "No definition found";
 					} else {
-						const raw = Array.isArray(result) ? result : [result];
-						const locations = raw.flatMap(loc => {
-							if ("uri" in loc) {
-								return [loc as Location];
-							}
-							if ("targetUri" in loc) {
-								// Use targetSelectionRange (the precise identifier range) with fallback to targetRange
-								const link = loc as LocationLink;
-								return [{ uri: link.targetUri, range: link.targetSelectionRange ?? link.targetRange }];
-							}
-							return [];
-						});
-
-						if (locations.length === 0) {
-							output = "No definition found";
-						} else {
-							output = `Found ${locations.length} definition(s):\n${locations
-								.map(loc => `  ${formatLocation(loc, this.session.cwd)}`)
-								.join("\n")}`;
-						}
+						const lines = await Promise.all(
+							locations.map(location => formatLocationWithContext(location, this.session.cwd)),
+						);
+						output = `Found ${locations.length} definition(s):\n${lines.join("\n")}`;
 					}
 					break;
 				}
 
+				case "type_definition": {
+					const result = (await sendRequest(
+						client,
+						"textDocument/typeDefinition",
+						{
+							textDocument: { uri },
+							position,
+						},
+						signal,
+					)) as Location | Location[] | LocationLink | LocationLink[] | null;
+
+					const locations = normalizeLocationResult(result);
+
+					if (locations.length === 0) {
+						output = "No type definition found";
+					} else {
+						const lines = await Promise.all(
+							locations.map(location => formatLocationWithContext(location, this.session.cwd)),
+						);
+						output = `Found ${locations.length} type definition(s):\n${lines.join("\n")}`;
+					}
+					break;
+				}
+
+				case "implementation": {
+					const result = (await sendRequest(
+						client,
+						"textDocument/implementation",
+						{
+							textDocument: { uri },
+							position,
+						},
+						signal,
+					)) as Location | Location[] | LocationLink | LocationLink[] | null;
+
+					const locations = normalizeLocationResult(result);
+
+					if (locations.length === 0) {
+						output = "No implementation found";
+					} else {
+						const lines = await Promise.all(
+							locations.map(location => formatLocationWithContext(location, this.session.cwd)),
+						);
+						output = `Found ${locations.length} implementation(s):\n${lines.join("\n")}`;
+					}
+					break;
+				}
 				case "references": {
 					const result = (await sendRequest(
 						client,
@@ -1105,7 +1188,7 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 						{
 							textDocument: { uri },
 							position,
-							context: { includeDeclaration: include_declaration ?? true },
+							context: { includeDeclaration: true },
 						},
 						signal,
 					)) as Location[] | null;
@@ -1113,7 +1196,19 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 					if (!result || result.length === 0) {
 						output = "No references found";
 					} else {
-						const lines = result.map(loc => `  ${formatLocation(loc, this.session.cwd)}`);
+						const contextualReferences = result.slice(0, REFERENCE_CONTEXT_LIMIT);
+						const plainReferences = result.slice(REFERENCE_CONTEXT_LIMIT);
+						const contextualLines = await Promise.all(
+							contextualReferences.map(location => formatLocationWithContext(location, this.session.cwd)),
+						);
+						const plainLines = plainReferences.map(location => `  ${formatLocation(location, this.session.cwd)}`);
+						const lines = plainLines.length
+							? [
+									...contextualLines,
+									`  ... ${plainLines.length} additional reference(s) shown without context`,
+									...plainLines,
+								]
+							: contextualLines;
 						output = `Found ${result.length} reference(s):\n${lines.join("\n")}`;
 					}
 					break;
@@ -1138,6 +1233,77 @@ export class LspTool implements AgentTool<typeof lspSchema, LspToolDetails, Them
 					break;
 				}
 
+				case "code_actions": {
+					const diagnostics = client.diagnostics.get(uri) ?? [];
+					const context: CodeActionContext = {
+						diagnostics,
+						only: !apply && query ? [query] : undefined,
+						triggerKind: 1,
+					};
+
+					const result = (await sendRequest(
+						client,
+						"textDocument/codeAction",
+						{
+							textDocument: { uri },
+							range: { start: position, end: position },
+							context,
+						},
+						signal,
+					)) as (CodeAction | Command)[] | null;
+
+					if (!result || result.length === 0) {
+						output = "No code actions available";
+						break;
+					}
+
+					if (apply === true && query) {
+						const parsedIndex = Number.parseInt(query, 10);
+						const selectedAction = result.find(
+							(actionItem, index) =>
+								(Number.isFinite(parsedIndex) && index === parsedIndex) ||
+								actionItem.title.toLowerCase().includes(query.toLowerCase()),
+						);
+
+						if (!selectedAction) {
+							const actionLines = result.map((actionItem, index) => `  ${formatCodeAction(actionItem, index)}`);
+							output = `No code action matches "${query}". Available actions:\n${actionLines.join("\n")}`;
+							break;
+						}
+
+						if ("command" in selectedAction && typeof selectedAction.command === "string") {
+							output = `Action "${selectedAction.title}" is command-only and cannot be applied as a workspace edit`;
+							break;
+						}
+
+						let resolvedAction = selectedAction as CodeAction;
+						if (!resolvedAction.edit) {
+							try {
+								resolvedAction = (await sendRequest(
+									client,
+									"codeAction/resolve",
+									selectedAction,
+									signal,
+								)) as CodeAction;
+							} catch {
+								// Resolution is optional; continue with unresolved action
+							}
+						}
+
+						if (!resolvedAction.edit) {
+							output = `Action "${resolvedAction.title}" has no workspace edit to apply`;
+							break;
+						}
+
+						const applied = await applyWorkspaceEdit(resolvedAction.edit, this.session.cwd);
+						output = `Applied "${resolvedAction.title}":\n${applied.map(item => `  ${item}`).join("\n")}`;
+						break;
+					}
+
+					const actionLines = result.map((actionItem, index) => `  ${formatCodeAction(actionItem, index)}`);
+					output = `${result.length} code action(s):\n${actionLines.join("\n")}`;
+					break;
+				}
 				case "symbols": {
 					// If no file, do workspace symbol search (requires query)
 					if (!targetFile) {

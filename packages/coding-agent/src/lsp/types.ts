@@ -7,19 +7,30 @@ import { type Static, Type } from "@sinclair/typebox";
 // =============================================================================
 
 export const lspSchema = Type.Object({
-	action: StringEnum(["diagnostics", "definition", "references", "hover", "symbols", "rename", "status", "reload"], {
-		description: "LSP operation",
-	}),
-	files: Type.Optional(Type.Array(Type.String({ description: "File path" }))),
+	action: StringEnum(
+		[
+			"diagnostics",
+			"definition",
+			"references",
+			"hover",
+			"symbols",
+			"rename",
+			"code_actions",
+			"type_definition",
+			"implementation",
+			"status",
+			"reload",
+		],
+		{ description: "LSP operation" },
+	),
 	file: Type.Optional(Type.String({ description: "File path" })),
 	line: Type.Optional(Type.Number({ description: "Line number (1-indexed)" })),
-	column: Type.Optional(Type.Number({ description: "Column number (1-indexed)" })),
-	end_line: Type.Optional(Type.Number({ description: "End line for range (1-indexed)" })),
-	end_character: Type.Optional(Type.Number({ description: "End column for range (1-indexed)" })),
+	symbol: Type.Optional(
+		Type.String({ description: "Symbol/substring to locate on the line (used to compute column)" }),
+	),
 	query: Type.Optional(Type.String({ description: "Search query or SSR pattern" })),
 	new_name: Type.Optional(Type.String({ description: "New name for rename" })),
 	apply: Type.Optional(Type.Boolean({ description: "Apply edits (default: true)" })),
-	include_declaration: Type.Optional(Type.Boolean({ description: "Include declaration in refs (default: true)" })),
 });
 
 export type LspParams = Static<typeof lspSchema>;

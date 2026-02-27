@@ -1,14 +1,27 @@
 Interacts with Language Server Protocol servers for code intelligence.
 
 <operations>
-- `definition`: Go to symbol definition → file path + position
-- `references`: Find all references → list of locations (file + position)
+- `diagnostics`: Get errors/warnings for file, glob, or entire workspace (no file)
+- `definition`: Go to symbol definition → file path + position + 3-line source context
+- `type_definition`: Go to symbol type definition → file path + position + 3-line source context
+- `implementation`: Find concrete implementations → file path + position + 3-line source context
+- `references`: Find references → locations with 3-line source context (first 50), remaining location-only
 - `hover`: Get type info and documentation → type signature + docs
-- `symbols`: List symbols in file, or search workspace (with query, no file) → names, kinds, locations
-- `rename`: Rename symbol across codebase → confirmation of changes
-- `diagnostics`: Get errors/warnings for file, or check entire project (no file) → list with severity + message
+- `symbols`: List symbols in file, or search workspace (with query, no file)
+- `rename`: Rename symbol across codebase → preview or apply edits
+- `code_actions`: List available quick-fixes/refactors/import actions; apply one when `apply: true` and `query` matches title or index
+- `status`: Show active language servers
 - `reload`: Restart the language server
 </operations>
+
+<parameters>
+- `file`: File path; for diagnostics it may be a glob pattern (e.g., `src/**/*.ts`)
+- `line`: 1-indexed line number for position-based actions
+- `symbol`: Substring on the target line used to resolve column automatically
+- `query`: Symbol search query, code-action kind filter (list mode), or code-action selector (apply mode)
+- `new_name`: Required for rename
+- `apply`: Apply edits for rename/code_actions (default true for rename, list mode for code_actions unless explicitly true)
+</parameters>
 
 <caution>
 - Requires running LSP server for target language
