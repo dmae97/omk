@@ -593,7 +593,9 @@ describe("agentLoop with AgentMessage", () => {
 		expect(toolResultEvent.message.toolCallId).toBe("tool-1");
 		expect(toolResultEvent.message.content[0]?.type).toBe("text");
 		if (toolResultEvent.message.content[0]?.type === "text") {
-			expect(toolResultEvent.message.content[0].text).toContain("Tool execution was aborted.");
+			const text = toolResultEvent.message.content[0].text;
+			expect(text).toContain("Tool execution was aborted");
+			expect(text).not.toContain("Tool execution was aborted.:");
 		}
 	});
 	it("should inject queued messages and skip remaining tool calls", async () => {

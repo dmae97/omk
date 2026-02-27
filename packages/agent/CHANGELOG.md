@@ -5,6 +5,9 @@
 
 - Changed intent field name from `agent__intent` to `_i` in tool schemas
 
+### Fixed
+
+- Fixed synthetic tool result text formatting so aborted/error tool results no longer emit `Tool execution was aborted.: Request was aborted` style punctuation.
 ## [13.3.7] - 2026-02-27
 ### Added
 
