@@ -1,6 +1,8 @@
 {{#if context}}
 {{SECTION_SEPERATOR "Background"}}
+<context>
 {{context}}
+</context>
 {{/if}}
 
 {{SECTION_SEPERATOR "Task"}}
