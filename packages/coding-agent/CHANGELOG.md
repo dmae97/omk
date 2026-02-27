@@ -14,6 +14,10 @@
 - Refined intent parameter guidance to require concise 2-6 word sentences in present participle form
 - Centralized per-tool timeout constants and clamping into `tool-timeouts.ts`
 
+### Fixed
+
+- Fixed TTSR violations during subagent execution aborting the entire subagent run; `#waitForPostPromptRecovery()` now also awaits agent idle after TTSR/retry gates resolve, preventing `prompt()` from returning while a fire-and-forget `agent.continue()` is still streaming
+
 ## [13.3.7] - 2026-02-27
 ### Breaking Changes
 

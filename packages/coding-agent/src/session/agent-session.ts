@@ -732,18 +732,31 @@ export class AgentSession {
 	}
 
 	/**
-	 * Wait for both retry and TTSR resume to settle.
-	 * Loops because a TTSR continuation can trigger a retry (or vice-versa).
+	 * Wait for retry, TTSR resume, and any background continuation to settle.
+	 * Loops because a TTSR continuation can trigger a retry (or vice-versa),
+	 * and fire-and-forget `agent.continue()` may still be streaming after
+	 * the TTSR resume gate resolves.
 	 */
 	async #waitForPostPromptRecovery(): Promise<void> {
-		while (this.#retryPromise || this.#ttsrResumePromise) {
+		while (true) {
 			if (this.#retryPromise) {
 				await this.#retryPromise;
 				continue;
 			}
 			if (this.#ttsrResumePromise) {
 				await this.#ttsrResumePromise;
+				continue;
 			}
+			// A TTSR continuation (fire-and-forget agent.continue()) may still be
+			// streaming after the resume gate resolved on its first assistant
+			// message_end. Without this check, prompt() returns while the agent
+			// is still processing tool calls, causing subagent executors to hit
+			// AgentBusyError and dispose the session prematurely.
+			if (this.agent.state.isStreaming) {
+				await this.agent.waitForIdle();
+				continue;
+			}
+			break;
 		}
 	}
 

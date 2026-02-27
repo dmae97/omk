@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { Agent, AgentBusyError } from "@oh-my-pi/pi-agent-core";
-import { type AssistantMessage, getBundledModel } from "@oh-my-pi/pi-ai";
+import { Agent, AgentBusyError, type AgentTool } from "@oh-my-pi/pi-agent-core";
+import { type AssistantMessage, getBundledModel, type ToolCall } from "@oh-my-pi/pi-ai";
 import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
 import type { Rule } from "@oh-my-pi/pi-coding-agent/capability/rule";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
@@ -17,6 +17,7 @@ import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { Snowflake } from "@oh-my-pi/pi-utils";
+import { Type } from "@sinclair/typebox";
 
 // Mock stream that mimics AssistantMessageEventStream
 class MockAssistantStream extends AssistantMessageEventStream {}
@@ -490,6 +491,139 @@ describe("AgentSession TTSR resume gate", () => {
 		await session.abort();
 		await promptPromise;
 
+		expect(session.isStreaming).toBe(false);
+	});
+
+	it("prompt() waits for TTSR continuation with tool calls to finish", async () => {
+		const model = getBundledModel("anthropic", "claude-sonnet-4-5")!;
+		let streamCallCount = 0;
+		let toolExecutionFinished = false;
+		let allTurnsCompleted = false;
+
+		const ttsrManager = new TtsrManager({
+			enabled: true,
+			contextMode: "discard",
+			interruptMode: "always",
+			repeatMode: "once",
+			repeatGap: 10,
+		});
+		ttsrManager.addRule(testRule);
+
+		const mockTool: AgentTool = {
+			name: "mock_edit",
+			label: "Mock Edit",
+			description: "A mock edit tool",
+			parameters: Type.Object({}),
+			execute: async () => {
+				await Bun.sleep(100);
+				toolExecutionFinished = true;
+				return { content: [{ type: "text" as const, text: "edit applied" }] };
+			},
+		};
+
+		const toolCallContent: ToolCall = {
+			type: "toolCall",
+			id: "call_test_001",
+			name: "mock_edit",
+			arguments: {},
+		};
+
+		function makeToolCallMsg(): AssistantMessage {
+			return {
+				role: "assistant",
+				content: [toolCallContent],
+				api: "anthropic-messages",
+				provider: "anthropic",
+				model: "mock",
+				usage: {
+					input: 0,
+					output: 0,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 0,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				},
+				stopReason: "toolUse",
+				timestamp: Date.now(),
+			};
+		}
+
+		const agent = new Agent({
+			getApiKey: () => "test-key",
+			initialState: { model, systemPrompt: "Test", tools: [mockTool] },
+			streamFn: (_model, _context, options) => {
+				streamCallCount++;
+				const stream = new MockAssistantStream();
+				const signal = options?.signal;
+
+				if (streamCallCount === 1) {
+					// First stream: emit text that triggers TTSR, then respond to abort
+					queueMicrotask(() => {
+						const partial = makeMsg("");
+						stream.push({ type: "start", partial });
+						stream.push({
+							type: "text_delta",
+							contentIndex: 0,
+							delta: "let val = result.unwrap(",
+							partial: makeMsg("let val = result.unwrap("),
+						});
+						const checkAbort = () => {
+							if (signal?.aborted) {
+								stream.push({
+									type: "error",
+									reason: "aborted",
+									error: makeMsg("let val = result.unwrap(", "aborted"),
+								});
+							} else {
+								setTimeout(checkAbort, 2);
+							}
+						};
+						checkAbort();
+					});
+				} else if (streamCallCount === 2) {
+					// Continuation: return assistant message with a tool call
+					setTimeout(() => {
+						const msg = makeToolCallMsg();
+						stream.push({ type: "start", partial: msg });
+						stream.push({ type: "done", reason: "toolUse", message: msg });
+					}, 10);
+				} else {
+					// After tool execution: return final response
+					setTimeout(() => {
+						allTurnsCompleted = true;
+						const msg = makeMsg('Fixed: let val = result.expect("msg")');
+						stream.push({ type: "start", partial: msg });
+						stream.push({ type: "done", reason: "stop", message: msg });
+					}, 10);
+				}
+
+				return stream;
+			},
+		});
+
+		const sessionManager = SessionManager.inMemory();
+		const settings = Settings.isolated();
+		const authStorage = await AuthStorage.create(path.join(tempDir, "testauth-tool.db"));
+		const modelRegistry = new ModelRegistry(authStorage, path.join(tempDir, "models.yml"));
+		authStorage.setRuntimeApiKey("anthropic", "test-key");
+
+		session = new AgentSession({
+			agent,
+			sessionManager,
+			settings,
+			modelRegistry,
+			ttsrManager,
+		});
+
+		// prompt() must block until the TTSR continuation (including tool execution) completes.
+		// Before the fix, prompt() returned after the continuation's first assistant message_end,
+		// while the agent was still executing tool calls in the background.
+		await session.prompt("Write some Rust code");
+
+		// By the time prompt() returns, ALL turns must have completed
+		expect(toolExecutionFinished).toBe(true);
+		expect(allTurnsCompleted).toBe(true);
+		expect(streamCallCount).toBeGreaterThanOrEqual(3);
 		expect(session.isStreaming).toBe(false);
 	});
 });
