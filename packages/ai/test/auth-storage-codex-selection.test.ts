@@ -10,9 +10,17 @@ import type { OAuthCredentials } from "../src/utils/oauth/types";
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 
+const FIVE_HOUR_MS = 5 * HOUR_MS;
+
 type UsageWindowSpec = {
 	usedFraction: number;
 	resetInMs: number;
+};
+
+type UsageWindowConfig = {
+	windowId: string;
+	windowLabel: string;
+	durationMs: number;
 };
 
 function createLimit(args: {
@@ -57,24 +65,28 @@ function createCodexUsageReport(args: {
 	accountId: string;
 	primary: UsageWindowSpec;
 	secondary: UsageWindowSpec;
+	primaryWindow?: UsageWindowConfig;
+	secondaryWindow?: UsageWindowConfig;
 }): UsageReport {
+	const primaryWindow = args.primaryWindow ?? { windowId: "1h", windowLabel: "1 Hour", durationMs: HOUR_MS };
+	const secondaryWindow = args.secondaryWindow ?? { windowId: "7d", windowLabel: "7 Day", durationMs: WEEK_MS };
 	return {
 		provider: "openai-codex",
 		fetchedAt: Date.now(),
 		limits: [
 			createLimit({
 				key: "primary",
-				windowId: "1h",
-				windowLabel: "1 Hour",
-				durationMs: HOUR_MS,
+				windowId: primaryWindow.windowId,
+				windowLabel: primaryWindow.windowLabel,
+				durationMs: primaryWindow.durationMs,
 				usedFraction: args.primary.usedFraction,
 				resetInMs: args.primary.resetInMs,
 			}),
 			createLimit({
 				key: "secondary",
-				windowId: "7d",
-				windowLabel: "7 Day",
-				durationMs: WEEK_MS,
+				windowId: secondaryWindow.windowId,
+				windowLabel: secondaryWindow.windowLabel,
+				durationMs: secondaryWindow.durationMs,
 				usedFraction: args.secondary.usedFraction,
 				resetInMs: args.secondary.resetInMs,
 			}),
@@ -165,6 +177,42 @@ describe("AuthStorage codex oauth ranking", () => {
 		expect(apiKey).toBe("api-acct-near");
 	});
 
+	test("prioritizes fresh 5h ticker account at 0% usage", async () => {
+		if (!authStorage) throw new Error("test setup failed");
+
+		await authStorage.set("openai-codex", [
+			{ type: "oauth", ...createCredential("acct-zero", "zero@example.com") },
+			{ type: "oauth", ...createCredential("acct-progress", "progress@example.com") },
+		]);
+
+		const fiveHourWindow: UsageWindowConfig = {
+			windowId: "5h",
+			windowLabel: "5 Hours",
+			durationMs: FIVE_HOUR_MS,
+		};
+
+		usageByAccount.set(
+			"acct-zero",
+			createCodexUsageReport({
+				accountId: "acct-zero",
+				primary: { usedFraction: 0, resetInMs: FIVE_HOUR_MS },
+				secondary: { usedFraction: 0.8, resetInMs: 2 * HOUR_MS },
+				primaryWindow: fiveHourWindow,
+			}),
+		);
+		usageByAccount.set(
+			"acct-progress",
+			createCodexUsageReport({
+				accountId: "acct-progress",
+				primary: { usedFraction: 0.05, resetInMs: 4 * HOUR_MS },
+				secondary: { usedFraction: 0.1, resetInMs: 6 * 24 * HOUR_MS },
+				primaryWindow: fiveHourWindow,
+			}),
+		);
+
+		const apiKey = await authStorage.getApiKey("openai-codex", "session-five-hour-start");
+		expect(apiKey).toBe("api-acct-zero");
+	});
 	test("skips exhausted weekly account even when reset is near", async () => {
 		if (!authStorage) throw new Error("test setup failed");
 

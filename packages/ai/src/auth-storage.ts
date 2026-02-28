@@ -1344,6 +1344,19 @@ export class AuthStorage {
 		return usedFraction / elapsedHours;
 	}
 
+	#isFiveHourCodexTickerStart(limit: UsageLimit | undefined): boolean {
+		if (!limit) return false;
+		const windowId = limit.scope.windowId?.toLowerCase();
+		const durationMs = limit.window?.durationMs;
+		const fiveHourMs = 5 * 60 * 60 * 1000;
+		const isFiveHourWindow =
+			windowId === "5h" ||
+			(typeof durationMs === "number" && Number.isFinite(durationMs) && Math.abs(durationMs - fiveHourMs) <= 60_000);
+		if (!isFiveHourWindow) return false;
+		const usedFraction = limit.amount.usedFraction;
+		return typeof usedFraction === "number" && Number.isFinite(usedFraction) && usedFraction <= 0;
+	}
+
 	#findCodexWindowLimit(report: UsageReport, key: "primary" | "secondary"): UsageLimit | undefined {
 		const direct = report.limits.find(limit => limit.id === `openai-codex:${key}`);
 		if (direct) return direct;
@@ -1374,6 +1387,7 @@ export class AuthStorage {
 			usageChecked: boolean;
 			blocked: boolean;
 			blockedUntil?: number;
+			startsFiveHourTicker: boolean;
 			weeklyUsed: number;
 			weeklyDrainRate: number;
 			primaryUsed: number;
@@ -1407,6 +1421,7 @@ export class AuthStorage {
 				usageChecked,
 				blocked,
 				blockedUntil,
+				startsFiveHourTicker: this.#isFiveHourCodexTickerStart(primary),
 				weeklyUsed: this.#normalizeUsageFraction(weeklyTarget),
 				weeklyDrainRate: this.#computeWindowDrainRate(weeklyTarget, nowMs, weeklyWindowMs),
 				primaryUsed: this.#normalizeUsageFraction(primary),
@@ -1421,6 +1436,9 @@ export class AuthStorage {
 				const rightBlockedUntil = right.blockedUntil ?? Number.POSITIVE_INFINITY;
 				if (leftBlockedUntil !== rightBlockedUntil) return leftBlockedUntil - rightBlockedUntil;
 				return left.orderPos - right.orderPos;
+			}
+			if (left.startsFiveHourTicker !== right.startsFiveHourTicker) {
+				return left.startsFiveHourTicker ? -1 : 1;
 			}
 			if (left.weeklyDrainRate !== right.weeklyDrainRate) return left.weeklyDrainRate - right.weeklyDrainRate;
 			if (left.weeklyUsed !== right.weeklyUsed) return left.weeklyUsed - right.weeklyUsed;
