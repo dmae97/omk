@@ -6,50 +6,24 @@
  */
 
 // Client
-export { callTool, connectToServer, disconnectServer, listTools, serverSupportsTools } from "./client";
+export * from "./client";
 // Config
-export type { BrowserFilterResult, ExaFilterResult, LoadMCPConfigsOptions, LoadMCPConfigsResult } from "./config";
-export {
-	extractExaApiKey,
-	filterBrowserMCPServers,
-	filterExaMCPServers,
-	isBrowserMCPServer,
-	isExaMCPServer,
-	loadAllMCPConfigs,
-	validateServerConfig,
-} from "./config";
-export { validateServerName } from "./config-writer";
+export * from "./config";
+export * from "./config-writer";
 // JSON-RPC (lightweight HTTP-based MCP calls)
-export type { JsonRpcResponse } from "./json-rpc";
 export { callMCP, parseSSE } from "./json-rpc";
 // Loader (for SDK integration)
-export type { MCPToolsLoadOptions, MCPToolsLoadResult } from "./loader";
-export { discoverAndLoadMCPTools } from "./loader";
+export * from "./loader";
 // Manager
-export type { MCPDiscoverOptions, MCPLoadResult } from "./manager";
-export { createMCPManager, MCPManager } from "./manager";
+export * from "./manager";
 // OAuth Discovery
-export type { AuthDetectionResult, OAuthEndpoints } from "./oauth-discovery";
-export { analyzeAuthError, detectAuthError, discoverOAuthEndpoints, extractOAuthEndpoints } from "./oauth-discovery";
+export * from "./oauth-discovery";
 // Tool bridge
-export type { MCPToolDetails } from "./tool-bridge";
-export { createMCPToolName, DeferredMCPTool, MCPTool, parseMCPToolName } from "./tool-bridge";
+export * from "./tool-bridge";
 // Tool cache
-export { MCPToolCache } from "./tool-cache";
+export * from "./tool-cache";
 // Transports
-export { createHttpTransport, HttpTransport } from "./transports/http";
-export { createStdioTransport, StdioTransport } from "./transports/stdio";
+export * from "./transports/http";
+export * from "./transports/stdio";
 // Types
-export type {
-	MCPConfigFile,
-	MCPContent,
-	MCPHttpServerConfig,
-	MCPServerCapabilities,
-	MCPServerConfig,
-	MCPServerConnection,
-	MCPSseServerConfig,
-	MCPStdioServerConfig,
-	MCPToolDefinition,
-	MCPToolWithServer,
-	MCPTransport,
-} from "./types";
+export type * from "./types";

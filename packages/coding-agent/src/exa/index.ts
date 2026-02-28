@@ -27,16 +27,7 @@ export const exaTools: CustomTool<any, ExaRenderDetails>[] = [
 
 export { companyTool } from "./company";
 export { linkedinTool } from "./linkedin";
-export {
-	callExaTool,
-	callWebsetsTool,
-	createMCPToolFromServer,
-	fetchMCPToolSchema,
-	findApiKey,
-	formatSearchResults,
-	isSearchResponse,
-	MCPWrappedTool,
-} from "./mcp-client";
+export * from "./mcp-client";
 export { renderExaCall, renderExaResult } from "./render";
 export { researcherTools } from "./researcher";
 // Re-export individual modules for selective importing

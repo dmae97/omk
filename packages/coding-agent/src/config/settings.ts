@@ -41,26 +41,8 @@ import {
 } from "./settings-schema";
 
 // Re-export types that callers need
-export type {
-	BashInterceptorRule,
-	BranchSummarySettings,
-	CommitSettings,
-	CompactionSettings,
-	ContextPromotionSettings,
-	ExaSettings,
-	GroupPrefix,
-	GroupTypeMap,
-	MemoriesSettings,
-	RetrySettings,
-	SettingPath,
-	SettingValue,
-	SkillsSettings,
-	StatusLineSettings,
-	ThinkingBudgetsSettings,
-	TodoCompletionSettings,
-	TtsrSettings,
-} from "./settings-schema";
-export { getDefault, getEnumValues, getPathsForTab, getType, getUi, hasUi } from "./settings-schema";
+export type * from "./settings-schema";
+export * from "./settings-schema";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types

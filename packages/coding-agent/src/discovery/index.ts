@@ -76,14 +76,4 @@ export type { SSHHost } from "../capability/ssh";
 export type { SystemPrompt } from "../capability/system-prompt";
 export type { CustomTool } from "../capability/tool";
 // Re-export types
-export type {
-	Capability,
-	CapabilityInfo,
-	CapabilityResult,
-	LoadContext,
-	LoadOptions,
-	LoadResult,
-	Provider,
-	ProviderInfo,
-	SourceMeta,
-} from "../capability/types";
+export type * from "../capability/types";

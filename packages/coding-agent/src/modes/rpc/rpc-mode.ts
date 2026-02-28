@@ -23,13 +23,7 @@ import type {
 } from "./rpc-types";
 
 // Re-export types for consumers
-export type {
-	RpcCommand,
-	RpcExtensionUIRequest,
-	RpcExtensionUIResponse,
-	RpcResponse,
-	RpcSessionState,
-} from "./rpc-types";
+export type * from "./rpc-types";
 
 /**
  * Run in RPC mode.

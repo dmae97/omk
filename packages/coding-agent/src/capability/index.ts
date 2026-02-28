@@ -419,14 +419,4 @@ export function cacheStats(): { content: number; dir: number } {
 // Re-exports
 // =============================================================================
 
-export type {
-	Capability,
-	CapabilityInfo,
-	CapabilityResult,
-	LoadContext,
-	LoadOptions,
-	LoadResult,
-	Provider,
-	ProviderInfo,
-	SourceMeta,
-} from "./types";
+export type * from "./types";

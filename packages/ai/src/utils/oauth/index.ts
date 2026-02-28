@@ -46,7 +46,7 @@ export { loginCloudflareAiGateway } from "./cloudflare-ai-gateway";
 // Cursor
 export {
 	generateCursorAuthParams,
-	isTokenExpiringSoon as isCursorTokenExpiringSoon,
+	isCursorTokenExpiringSoon,
 	loginCursor,
 	pollCursorAuth,
 	refreshCursorToken,

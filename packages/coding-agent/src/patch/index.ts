@@ -48,30 +48,14 @@ import { EditMatchError } from "./types";
 // Application
 export { applyPatch, defaultFileSystem, previewPatch } from "./applicator";
 // Diff generation
-export {
-	computeEditDiff,
-	computeHashlineDiff,
-	computePatchDiff,
-	generateDiffString,
-	generateUnifiedDiffString,
-	replaceText,
-} from "./diff";
+export * from "./diff";
 
 // Fuzzy matching
-export { DEFAULT_FUZZY_THRESHOLD, findContextLine, findMatch as findEditMatch, findMatch, seekSequence } from "./fuzzy";
+export * from "./fuzzy";
 // Hashline
-export {
-	applyHashlineEdits,
-	computeLineHash,
-	formatHashLines,
-	HashlineMismatchError,
-	parseTag,
-	streamHashLinesFromLines,
-	streamHashLinesFromUtf8,
-	validateLineRef,
-} from "./hashline";
+export * from "./hashline";
 // Normalization
-export { adjustIndentation, detectLineEnding, normalizeToLF, restoreLineEndings, stripBom } from "./normalize";
+export * from "./normalize";
 // Parsing
 export { normalizeCreateContent, normalizeDiff, parseHunks as parseDiffHunks } from "./parser";
 export type { EditRenderContext, EditToolDetails } from "./shared";

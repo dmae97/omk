@@ -1,3 +1,3 @@
-export { type DownloadProgress, ensureSTTDependencies } from "./downloader";
-export { checkDependencies, formatDependencyStatus, type STTDependencyStatus } from "./setup";
-export { STTController, type SttState } from "./stt-controller";
+export * from "./downloader";
+export * from "./setup";
+export * from "./stt-controller";

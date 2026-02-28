@@ -1,4 +1,4 @@
-export * from "./abortable";
+export { abortableSleep, createAbortableStream, once, untilAborted } from "./abortable";
 export * from "./async";
 export * from "./color";
 export * from "./dirs";
@@ -14,7 +14,7 @@ export * as procmgr from "./procmgr";
 export { setNativeKillTree } from "./procmgr";
 export * as ptree from "./ptree";
 export { AbortError, ChildProcess, Exception, NonZeroExitError } from "./ptree";
-export { Snowflake } from "./snowflake";
+export * from "./snowflake";
 export * from "./stream";
 export * from "./temp";
 export * from "./type-guards";

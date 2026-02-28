@@ -144,7 +144,7 @@ function getTokenExpiry(token: string): number {
 	return Date.now() + 3600 * 1000;
 }
 
-export function isTokenExpiringSoon(token: string, thresholdSeconds = 300): boolean {
+export function isCursorTokenExpiringSoon(token: string, thresholdSeconds = 300): boolean {
 	try {
 		const [, payload] = token.split(".");
 		if (!payload) return true;
