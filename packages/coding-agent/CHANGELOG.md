@@ -12,6 +12,15 @@
 - Both AST tools now report `scopePath`, `files`, and per-file match/replacement counts in tool details
 - Task item `id` max length raised from 32 to 48 characters
 - Anthropic web search provider now uses `buildAnthropicSearchHeaders` (dedicated search header builder separate from inference headers)
+- Gemini web search provider: endpoint fallback (daily → sandbox) with retry on 429/5xx
+- Gemini web search now injects Antigravity system instruction and aligned request metadata (`requestType`, `userAgent`, `requestId`) for Antigravity credentials
+- `buildGeminiRequestTools()` helper for composable Gemini tool configuration (googleSearch, codeExecution, urlContext)
+- Web search schema exposes `max_tokens`, `temperature`, and `num_search_results` as tool parameters
+- Web search provider fallback: when an explicit provider is unavailable, resolves the auto chain instead of returning empty results
+
+### Fixed
+
+- `gemini_image` tool: corrected `responseModalities` values from `'Image'`/`'Text'` to uppercase `'IMAGE'`/`'TEXT'` matching the API enum
 
 ### Breaking Changes
 

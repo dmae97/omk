@@ -6,7 +6,6 @@
 import { $env } from "@oh-my-pi/pi-utils";
 import { getGeminiCliHeaders } from "../../providers/google-gemini-cli";
 import { OAuthCallbackFlow } from "./callback-server";
-import { generatePKCE } from "./pkce";
 import type { OAuthController, OAuthCredentials } from "./types";
 
 const decode = (s: string) => atob(s);
@@ -228,25 +227,16 @@ async function getUserEmail(accessToken: string): Promise<string | undefined> {
 }
 
 class GeminiCliOAuthFlow extends OAuthCallbackFlow {
-	#verifier: string = "";
-	#challenge: string = "";
-
 	constructor(ctrl: OAuthController) {
 		super(ctrl, CALLBACK_PORT, CALLBACK_PATH);
 	}
 
 	async generateAuthUrl(state: string, redirectUri: string): Promise<{ url: string; instructions?: string }> {
-		const pkce = await generatePKCE();
-		this.#verifier = pkce.verifier;
-		this.#challenge = pkce.challenge;
-
 		const authParams = new URLSearchParams({
 			client_id: CLIENT_ID,
 			response_type: "code",
 			redirect_uri: redirectUri,
 			scope: SCOPES.join(" "),
-			code_challenge: this.#challenge,
-			code_challenge_method: "S256",
 			state,
 			access_type: "offline",
 			prompt: "consent",
@@ -268,7 +258,6 @@ class GeminiCliOAuthFlow extends OAuthCallbackFlow {
 				code,
 				grant_type: "authorization_code",
 				redirect_uri: redirectUri,
-				code_verifier: this.#verifier,
 			}),
 		});
 

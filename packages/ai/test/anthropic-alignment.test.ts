@@ -284,8 +284,8 @@ describe("Anthropic request fingerprint alignment", () => {
 	});
 
 	it("treats tool prefix helpers as no-ops when prefix is empty", () => {
-		expect(applyClaudeToolPrefix("Read")).toBe("Read");
-		expect(stripClaudeToolPrefix("proxy_Read")).toBe("proxy_Read");
+		expect(applyClaudeToolPrefix("Read", "")).toBe("Read");
+		expect(stripClaudeToolPrefix("proxy_Read", "")).toBe("proxy_Read");
 	});
 
 	it("does not prefix built-in Anthropic tool names when prefix is configured", () => {

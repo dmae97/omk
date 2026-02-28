@@ -46,6 +46,9 @@ export const webSearchSchema = Type.Object({
 		}),
 	),
 	limit: Type.Optional(Type.Number({ description: "Max results to return" })),
+	max_tokens: Type.Optional(Type.Number({ description: "Maximum output tokens" })),
+	temperature: Type.Optional(Type.Number({ description: "Sampling temperature" })),
+	num_search_results: Type.Optional(Type.Number({ description: "Number of search results to retrieve" })),
 });
 
 export type SearchParams = {
@@ -70,7 +73,7 @@ export type SearchParams = {
 	temperature?: number;
 	/** Number of search results to retrieve. Defaults to 10. */
 	num_search_results?: number;
-	/** Disable provider fallback when explicit provider is selected (CLI/debug use). */
+	/** Deprecated CLI flag; explicit provider fallback now happens only when provider is unavailable. */
 	no_fallback?: boolean;
 };
 
@@ -185,12 +188,11 @@ async function executeSearch(
 	params: SearchParams,
 ): Promise<{ content: Array<{ type: "text"; text: string }>; details: SearchRenderDetails }> {
 	const providers =
-		params.provider && params.provider !== "auto" && params.no_fallback
+		params.provider && params.provider !== "auto"
 			? (await getSearchProvider(params.provider).isAvailable())
 				? [getSearchProvider(params.provider)]
-				: []
+				: await resolveProviderChain("auto")
 			: await resolveProviderChain(params.provider);
-
 	if (providers.length === 0) {
 		const message = "No web search provider configured.";
 		return {

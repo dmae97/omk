@@ -5,7 +5,12 @@
  * Requires OAuth credentials stored in agent.db for provider "google-gemini-cli" or "google-antigravity".
  * Returns synthesized answers with citations and source metadata from grounding chunks.
  */
-import { getAntigravityHeaders, getGeminiCliHeaders, refreshGoogleCloudToken } from "@oh-my-pi/pi-ai";
+import {
+	ANTIGRAVITY_SYSTEM_INSTRUCTION,
+	getAntigravityHeaders,
+	getGeminiCliHeaders,
+	refreshGoogleCloudToken,
+} from "@oh-my-pi/pi-ai";
 import { getAgentDbPath } from "@oh-my-pi/pi-utils";
 import { AgentStorage } from "../../../session/agent-storage";
 import type { SearchCitation, SearchResponse, SearchSource } from "../../../web/search/types";
@@ -14,10 +19,18 @@ import type { SearchParams } from "./base";
 import { SearchProvider } from "./base";
 
 const DEFAULT_ENDPOINT = "https://cloudcode-pa.googleapis.com";
-const ANTIGRAVITY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
+const ANTIGRAVITY_DAILY_ENDPOINT = "https://daily-cloudcode-pa.googleapis.com";
+const ANTIGRAVITY_SANDBOX_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
+const ANTIGRAVITY_ENDPOINT_FALLBACKS = [ANTIGRAVITY_DAILY_ENDPOINT, ANTIGRAVITY_SANDBOX_ENDPOINT] as const;
 const DEFAULT_MODEL = "gemini-2.5-flash";
 
-export interface GeminiSearchParams {
+interface GeminiToolParams {
+	google_search?: Record<string, unknown>;
+	code_execution?: Record<string, unknown>;
+	url_context?: Record<string, unknown>;
+}
+
+export interface GeminiSearchParams extends GeminiToolParams {
 	query: string;
 	system_prompt?: string;
 	num_results?: number;
@@ -25,6 +38,17 @@ export interface GeminiSearchParams {
 	max_output_tokens?: number;
 	/** Sampling temperature (0–1). Lower = more focused/factual. */
 	temperature?: number;
+}
+
+export function buildGeminiRequestTools(params: GeminiToolParams): Array<Record<string, Record<string, unknown>>> {
+	const tools: Array<Record<string, Record<string, unknown>>> = [{ googleSearch: params.google_search ?? {} }];
+	if (params.code_execution !== undefined) {
+		tools.push({ codeExecution: params.code_execution });
+	}
+	if (params.url_context !== undefined) {
+		tools.push({ urlContext: params.url_context });
+	}
+	return tools;
 }
 
 /** OAuth credential stored in agent.db */
@@ -48,15 +72,15 @@ interface GeminiAuth {
 
 /**
  * Finds valid Gemini OAuth credentials from agent.db.
- * Checks google-antigravity first (daily sandbox, more quota), then google-gemini-cli (prod).
+ * Checks google-gemini-cli first (stable prod), then google-antigravity (daily sandbox).
  * @returns OAuth credential with access token and project ID, or null if none found
  */
 export async function findGeminiAuth(): Promise<GeminiAuth | null> {
 	const expiryBuffer = 5 * 60 * 1000; // 5 minutes
 	const now = Date.now();
 
-	// Try providers in order: antigravity first (more quota), then gemini-cli
-	const providers = ["google-antigravity", "google-gemini-cli"] as const;
+	// Try providers in deterministic order: gemini-cli first, then antigravity
+	const providers = ["google-gemini-cli", "google-antigravity"] as const;
 
 	try {
 		const storage = await AgentStorage.open(getAgentDbPath());
@@ -180,6 +204,7 @@ async function callGeminiSearch(
 	systemPrompt?: string,
 	maxOutputTokens?: number,
 	temperature?: number,
+	toolParams: GeminiToolParams = {},
 ): Promise<{
 	answer: string;
 	sources: SearchSource[];
@@ -188,9 +213,30 @@ async function callGeminiSearch(
 	model: string;
 	usage?: { inputTokens: number; outputTokens: number; totalTokens: number };
 }> {
-	const endpoint = auth.isAntigravity ? ANTIGRAVITY_ENDPOINT : DEFAULT_ENDPOINT;
-	const url = `${endpoint}/v1internal:streamGenerateContent?alt=sse`;
+	const endpoints = auth.isAntigravity ? ANTIGRAVITY_ENDPOINT_FALLBACKS : [DEFAULT_ENDPOINT];
 	const headers = auth.isAntigravity ? getAntigravityHeaders() : getGeminiCliHeaders();
+
+	const requestMetadata = auth.isAntigravity
+		? {
+				requestType: "agent",
+				userAgent: "antigravity",
+				requestId: `agent-${crypto.randomUUID()}`,
+			}
+		: {
+				userAgent: "pi-coding-agent",
+				requestId: `pi-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+			};
+
+	const normalizedSystemPrompt = systemPrompt?.toWellFormed();
+	const systemInstructionParts: Array<{ text: string }> = [
+		...(auth.isAntigravity
+			? [
+					{ text: ANTIGRAVITY_SYSTEM_INSTRUCTION },
+					{ text: `Please ignore following [ignore]${ANTIGRAVITY_SYSTEM_INSTRUCTION}[/ignore]` },
+				]
+			: []),
+		...(normalizedSystemPrompt ? [{ text: normalizedSystemPrompt }] : []),
+	];
 
 	const requestBody: Record<string, unknown> = {
 		project: auth.projectId,
@@ -202,16 +248,15 @@ async function callGeminiSearch(
 					parts: [{ text: query }],
 				},
 			],
-			// Add googleSearch tool for grounding
-			tools: [{ googleSearch: {} }],
-			...(systemPrompt && {
+			tools: buildGeminiRequestTools(toolParams),
+			...(systemInstructionParts.length > 0 && {
 				systemInstruction: {
-					parts: [{ text: systemPrompt }],
+					...(auth.isAntigravity ? { role: "user" } : {}),
+					parts: systemInstructionParts,
 				},
 			}),
 		},
-		userAgent: "pi-web-search",
-		requestId: `search-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+		...requestMetadata,
 	};
 
 	if (maxOutputTokens !== undefined || temperature !== undefined) {
@@ -224,17 +269,52 @@ async function callGeminiSearch(
 		}
 		(requestBody.request as Record<string, unknown>).generationConfig = generationConfig;
 	}
+	let response: Response | undefined;
+	for (let endpointIndex = 0; endpointIndex < endpoints.length; endpointIndex++) {
+		const url = `${endpoints[endpointIndex]}/v1internal:streamGenerateContent?alt=sse`;
+		try {
+			response = await fetch(url, {
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${auth.accessToken}`,
+					"Content-Type": "application/json",
+					Accept: "text/event-stream",
+					...headers,
+				},
+				body: JSON.stringify(requestBody),
+			});
+		} catch (error) {
+			if (auth.isAntigravity && endpointIndex < endpoints.length - 1) {
+				continue;
+			}
+			throw error;
+		}
 
-	const response = await fetch(url, {
-		method: "POST",
-		headers: {
-			Authorization: `Bearer ${auth.accessToken}`,
-			"Content-Type": "application/json",
-			Accept: "text/event-stream",
-			...headers,
-		},
-		body: JSON.stringify(requestBody),
-	});
+		if (response.ok) {
+			break;
+		}
+
+		const errorText = await response.text();
+		const isRetryableStatus =
+			response.status === 429 ||
+			response.status === 500 ||
+			response.status === 502 ||
+			response.status === 503 ||
+			response.status === 504;
+		if (auth.isAntigravity && isRetryableStatus && endpointIndex < endpoints.length - 1) {
+			continue;
+		}
+
+		throw new SearchProviderError(
+			"gemini",
+			`Gemini Cloud Code API error (${response.status}): ${errorText}`,
+			response.status,
+		);
+	}
+
+	if (!response) {
+		throw new SearchProviderError("gemini", "Gemini API request failed", 500);
+	}
 
 	if (!response.ok) {
 		const errorText = await response.text();
@@ -396,6 +476,11 @@ export async function searchGemini(params: GeminiSearchParams): Promise<SearchRe
 		params.system_prompt,
 		params.max_output_tokens,
 		params.temperature,
+		{
+			google_search: params.google_search,
+			code_execution: params.code_execution,
+			url_context: params.url_context,
+		},
 	);
 
 	let sources = result.sources;
@@ -432,6 +517,9 @@ export class GeminiProvider extends SearchProvider {
 			num_results: params.numSearchResults ?? params.limit,
 			max_output_tokens: params.maxOutputTokens,
 			temperature: params.temperature,
+			google_search: params.googleSearch,
+			code_execution: params.codeExecution,
+			url_context: params.urlContext,
 		});
 	}
 }

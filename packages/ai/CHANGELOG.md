@@ -14,6 +14,15 @@
 - `resolveAnthropicMetadataUserId()` auto-generates a cloaking user ID for OAuth requests when `metadata.user_id` is absent or invalid
 - `AnthropicOAuthFlow` is now exported for direct use
 - OAuth callback server timeout extended from 2 min to 5 min
+- `parseGeminiCliCredentials()` parses Google Cloud credential JSON with support for legacy (`{token,projectId}`), alias (`project_id`/`refresh`/`expires`), and enriched formats
+- `shouldRefreshGeminiCliCredentials()` and proactive token refresh before requests for both Gemini CLI and Antigravity providers (60s pre-expiry buffer)
+- `normalizeAntigravityTools()` converts `parametersJsonSchema` → `parameters` in function declarations for Antigravity compatibility
+- `ANTIGRAVITY_SYSTEM_INSTRUCTION` is now exported for use by search and other consumers
+- `ANTIGRAVITY_LOAD_CODE_ASSIST_METADATA` constant exported from OAuth module with `ANTIGRAVITY` ideType
+- Antigravity project onboarding: `onboardProjectWithRetries()` provisions a new project via `onboardUser` LRO when `loadCodeAssist` returns no existing project (up to 5 attempts, 2s interval)
+- `getOAuthApiKey` now includes `refreshToken`, `expiresAt`, `email`, and `accountId` in the Gemini/Antigravity JSON credential payload to enable proactive refresh
+- Antigravity model discovery now tries the production daily endpoint first, with sandbox as fallback
+- `ANTIGRAVITY_DISCOVERY_DENYLIST` filters low-quality/internal models from discovery results
 
 ### Changed
 
@@ -29,6 +38,17 @@
 - Anthropic OAuth scopes reduced to `org:create_api_key user:profile user:inference`
 - OAuth code exchange now strips URL fragment from callback code, using the fragment as state override when present
 - Claude usage headers aligned: user-agent updated to `claude-cli/2.1.63 (external, cli)`, anthropic-beta extended with full beta set
+- Antigravity session ID format changed to signed decimal (negative int63 derived from SHA-256 of first user message, or random bounded int63)
+- Antigravity `requestId` now uses `agent-{uuid}` format; non-Antigravity requests no longer include requestId/userAgent/requestType in the payload
+- `ANTIGRAVITY_DAILY_ENDPOINT` corrected to `daily-cloudcode-pa.googleapis.com`; sandbox endpoint kept as fallback only
+- Antigravity discovery: removed `recommended`/`agentModelSorts` filter; now includes all non-internal, non-denylisted models
+- Antigravity discovery no longer sends `project` in the request body
+- Gemini/Antigravity OAuth flows no longer use PKCE (code_challenge removed)
+- Antigravity `loadCodeAssist` metadata ideType changed from `IDE_UNSPECIFIED` to `ANTIGRAVITY`
+- Antigravity `discoverProject` now uses a single canonical production endpoint; falls back to project onboarding instead of a hardcoded default project ID
+- `VALIDATED` tool calling config applied to Antigravity requests with Claude models
+- `maxOutputTokens` removed from Antigravity generation config for non-Claude models
+- System instruction injection for Antigravity scoped to Claude and `gemini-3-pro-high` models only
 
 ## [13.3.14] - 2026-02-28
 

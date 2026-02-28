@@ -27,7 +27,7 @@ interface ImageApiKey {
 	projectId?: string;
 }
 
-const responseModalitySchema = StringEnum(["Image", "Text"]);
+const responseModalitySchema = StringEnum(["IMAGE", "TEXT"]);
 const aspectRatioSchema = StringEnum(["1:1", "3:4", "4:3", "9:16", "16:9"], {
 	description: "Aspect ratio (1:1, 3:4, 4:3, 9:16, 16:9).",
 });
@@ -536,7 +536,7 @@ function buildAntigravityRequest(
 			contents: [{ role: "user", parts }],
 			systemInstruction: { parts: [{ text: IMAGE_SYSTEM_INSTRUCTION }] },
 			generationConfig: {
-				responseModalities: ["Image"],
+				responseModalities: ["IMAGE"],
 				imageConfig,
 				candidateCount: 1,
 			},
@@ -788,7 +788,7 @@ export const geminiImageTool: CustomTool<typeof geminiImageSchema, GeminiImageTo
 				responseModalities: GeminiResponseModality[];
 				imageConfig?: { aspectRatio?: string; imageSize?: string };
 			} = {
-				responseModalities: ["Image"],
+				responseModalities: ["IMAGE"],
 			};
 
 			if (params.aspect_ratio || params.image_size) {

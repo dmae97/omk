@@ -3,11 +3,21 @@ import { getAntigravityUserAgent } from "../../providers/google-gemini-cli";
 import type { Model } from "../../types";
 import { toPositiveNumber } from "../../utils";
 
-const DEFAULT_ANTIGRAVITY_DISCOVERY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
+const DEFAULT_ANTIGRAVITY_DISCOVERY_ENDPOINTS = [
+	"https://daily-cloudcode-pa.googleapis.com",
+	"https://daily-cloudcode-pa.sandbox.googleapis.com",
+] as const;
 const FETCH_AVAILABLE_MODELS_PATH = "/v1internal:fetchAvailableModels";
 
 const DEFAULT_CONTEXT_WINDOW = 200_000;
 const DEFAULT_MAX_TOKENS = 64_000;
+const ANTIGRAVITY_DISCOVERY_DENYLIST = new Set([
+	"chat_20706",
+	"chat_23310",
+	"gemini-2.5-flash-thinking",
+	"gemini-3-pro-low",
+	"gemini-2.5-pro",
+]);
 
 /**
  * Raw model metadata returned by Antigravity's `fetchAvailableModels` endpoint.
@@ -142,9 +152,9 @@ const AntigravityDiscoveryApiResponseSchema: z.ZodType<AntigravityDiscoveryApiRe
 export interface FetchAntigravityDiscoveryModelsOptions {
 	/** OAuth access token used as `Authorization: Bearer <token>`. */
 	token: string;
-	/** Optional endpoint override. Defaults to Antigravity daily endpoint. */
+	/** Optional endpoint override. Defaults to Antigravity fallback endpoints. */
 	endpoint?: string;
-	/** Optional project id. Defaults to an empty string for discovery. */
+	/** Deprecated and ignored for antigravity discovery parity. */
 	project?: string;
 	/** Optional user agent override. */
 	userAgent?: string;
@@ -164,87 +174,78 @@ export async function fetchAntigravityDiscoveryModels(
 	options: FetchAntigravityDiscoveryModelsOptions,
 ): Promise<Model<"google-gemini-cli">[] | null> {
 	const fetcher = options.fetcher ?? fetch;
-	const endpoint = trimTrailingSlashes(options.endpoint ?? DEFAULT_ANTIGRAVITY_DISCOVERY_ENDPOINT);
+	const endpoints = options.endpoint
+		? [trimTrailingSlashes(options.endpoint)]
+		: DEFAULT_ANTIGRAVITY_DISCOVERY_ENDPOINTS.map(trimTrailingSlashes);
 
-	let response: Response;
-	try {
-		response = await fetcher(`${endpoint}${FETCH_AVAILABLE_MODELS_PATH}`, {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${options.token}`,
-				"Content-Type": "application/json",
-				"User-Agent": options.userAgent ?? getAntigravityUserAgent(),
-			},
-			body: JSON.stringify({ project: options.project ?? "" }),
-			signal: options.signal,
-		});
-	} catch {
-		return null;
-	}
-
-	if (!response.ok) {
-		return null;
-	}
-
-	let payload: unknown;
-	try {
-		payload = await response.json();
-	} catch {
-		return null;
-	}
-
-	const parsed = parseAntigravityDiscoveryResponse(payload);
-	if (!parsed) {
-		return null;
-	}
-
-	const recommendedIds = collectRecommendedModelIds(parsed.agentModelSorts ?? []);
-	const models: Model<"google-gemini-cli">[] = [];
-
-	for (const [modelId, model] of Object.entries(parsed.models ?? {})) {
-		if (model.isInternal === true) {
-			continue;
-		}
-		if (model.recommended !== true && !recommendedIds.has(modelId)) {
+	for (const endpoint of endpoints) {
+		let response: Response;
+		try {
+			response = await fetcher(`${endpoint}${FETCH_AVAILABLE_MODELS_PATH}`, {
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${options.token}`,
+					"Content-Type": "application/json",
+					"User-Agent": options.userAgent ?? getAntigravityUserAgent(),
+				},
+				body: JSON.stringify({}),
+				signal: options.signal,
+			});
+		} catch {
 			continue;
 		}
 
-		const supportsImages = model.supportsImages === true;
-		models.push({
-			id: modelId,
-			name: model.displayName ? `${model.displayName} (Antigravity)` : modelId,
-			api: "google-gemini-cli",
-			provider: "google-antigravity",
-			baseUrl: endpoint,
-			reasoning: model.supportsThinking === true,
-			input: supportsImages ? ["text", "image"] : ["text"],
-			cost: {
-				input: 0,
-				output: 0,
-				cacheRead: 0,
-				cacheWrite: 0,
-			},
-			contextWindow: toPositiveNumber(model.maxTokens, DEFAULT_CONTEXT_WINDOW),
-			maxTokens: toPositiveNumber(model.maxOutputTokens, DEFAULT_MAX_TOKENS),
-		});
-	}
+		if (!response.ok) {
+			continue;
+		}
 
-	models.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
-	return models;
-}
+		let payload: unknown;
+		try {
+			payload = await response.json();
+		} catch {
+			continue;
+		}
 
-function collectRecommendedModelIds(sorts: AntigravityDiscoveryAgentModelSort[]): Set<string> {
-	const ids = new Set<string>();
-	for (const sort of sorts) {
-		for (const group of sort.groups ?? []) {
-			for (const modelId of group.modelIds ?? []) {
-				if (typeof modelId === "string" && modelId.length > 0) {
-					ids.add(modelId);
-				}
+		const parsed = parseAntigravityDiscoveryResponse(payload);
+		if (!parsed) {
+			continue;
+		}
+
+		const models: Model<"google-gemini-cli">[] = [];
+
+		for (const [modelId, model] of Object.entries(parsed.models ?? {})) {
+			if (ANTIGRAVITY_DISCOVERY_DENYLIST.has(modelId)) {
+				continue;
 			}
+			if (model.isInternal === true) {
+				continue;
+			}
+
+			const supportsImages = model.supportsImages === true;
+			models.push({
+				id: modelId,
+				name: model.displayName ? `${model.displayName} (Antigravity)` : modelId,
+				api: "google-gemini-cli",
+				provider: "google-antigravity",
+				baseUrl: endpoint,
+				reasoning: model.supportsThinking === true,
+				input: supportsImages ? ["text", "image"] : ["text"],
+				cost: {
+					input: 0,
+					output: 0,
+					cacheRead: 0,
+					cacheWrite: 0,
+				},
+				contextWindow: toPositiveNumber(model.maxTokens, DEFAULT_CONTEXT_WINDOW),
+				maxTokens: toPositiveNumber(model.maxOutputTokens, DEFAULT_MAX_TOKENS),
+			});
 		}
+
+		models.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+		return models;
 	}
-	return ids;
+
+	return null;
 }
 
 function parseAntigravityDiscoveryResponse(value: unknown): AntigravityDiscoveryApiResponse | null {

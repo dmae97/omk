@@ -3,7 +3,7 @@
  * Shared implementation for both google-gemini-cli and google-antigravity providers.
  * Uses the Cloud Code Assist API endpoint to access Gemini and Claude models.
  */
-import { createHash } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Content, FunctionCallingConfigMode, ThinkingConfig } from "@google/genai";
 import { abortableSleep, readSseJson } from "@oh-my-pi/pi-utils";
 import { calculateCost } from "../models";
@@ -20,6 +20,8 @@ import type {
 } from "../types";
 import { AssistantMessageEventStream } from "../utils/event-stream";
 import { appendRawHttpRequestDumpFor400, type RawHttpRequestDump, withHttpStatus } from "../utils/http-inspector";
+import { refreshAntigravityToken } from "../utils/oauth/google-antigravity";
+import { refreshGoogleCloudToken } from "../utils/oauth/google-gemini-cli";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
 import {
 	convertMessages,
@@ -56,8 +58,9 @@ export interface GoogleGeminiCliOptions extends StreamOptions {
 }
 
 const DEFAULT_ENDPOINT = "https://cloudcode-pa.googleapis.com";
-const ANTIGRAVITY_DAILY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
-const ANTIGRAVITY_ENDPOINT_FALLBACKS = [ANTIGRAVITY_DAILY_ENDPOINT, DEFAULT_ENDPOINT] as const;
+const ANTIGRAVITY_DAILY_ENDPOINT = "https://daily-cloudcode-pa.googleapis.com";
+const ANTIGRAVITY_SANDBOX_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com";
+const ANTIGRAVITY_ENDPOINT_FALLBACKS = [ANTIGRAVITY_DAILY_ENDPOINT, ANTIGRAVITY_SANDBOX_ENDPOINT] as const;
 
 const GEMINI_CLI_USER_AGENT = process.env.PI_AI_GEMINI_CLI_USER_AGENT || "google-api-nodejs-client/9.15.1";
 
@@ -110,7 +113,7 @@ export function getAntigravityUserAgent() {
 }
 
 // Antigravity system instruction (compact version from CLIProxyAPI).
-const ANTIGRAVITY_SYSTEM_INSTRUCTION =
+export const ANTIGRAVITY_SYSTEM_INSTRUCTION =
 	"You are Antigravity, a powerful agentic AI coding assistant designed by the Google Deepmind team working on Advanced Agentic Coding." +
 	"You are pair programming with a USER to solve their coding task. The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question." +
 	"**Absolute paths only**" +
@@ -126,6 +129,8 @@ const MAX_EMPTY_STREAM_RETRIES = 2;
 const EMPTY_STREAM_BASE_DELAY_MS = 500;
 const RATE_LIMIT_BUDGET_MS = 5 * 60 * 1000;
 const CLAUDE_THINKING_BETA_HEADER = "interleaved-thinking-2025-05-14";
+const GOOGLE_GEMINI_REFRESH_SKEW_MS = 60_000;
+const ANTIGRAVITY_REFRESH_SKEW_MS = 60_000;
 
 /**
  * Extract retry delay from Gemini error response (in milliseconds).
@@ -227,9 +232,18 @@ export function extractRetryDelay(errorText: string, response?: Response | Heade
 	return undefined;
 }
 
+function isClaudeModel(modelId: string): boolean {
+	return modelId.toLowerCase().includes("claude");
+}
+
 function isClaudeThinkingModel(modelId: string): boolean {
 	const normalized = modelId.toLowerCase();
 	return normalized.includes("claude") && normalized.includes("thinking");
+}
+
+function shouldInjectAntigravitySystemInstruction(modelId: string): boolean {
+	const normalized = modelId.toLowerCase();
+	return normalized.includes("claude") || normalized.includes("gemini-3-pro-high");
 }
 
 /**
@@ -258,6 +272,107 @@ function extractErrorMessage(errorText: string): string {
 	return errorText;
 }
 
+interface GeminiCliApiKeyPayload {
+	token?: unknown;
+	projectId?: unknown;
+	project_id?: unknown;
+	refreshToken?: unknown;
+	expiresAt?: unknown;
+	refresh?: unknown;
+	expires?: unknown;
+}
+interface ParsedGeminiCliCredentials {
+	accessToken: string;
+	projectId: string;
+	refreshToken?: string;
+	expiresAt?: number;
+}
+
+function normalizeExpiryMs(value: unknown): number | undefined {
+	if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+		return undefined;
+	}
+	return value < 10_000_000_000 ? value * 1000 : value;
+}
+
+export function parseGeminiCliCredentials(apiKeyRaw: string): ParsedGeminiCliCredentials {
+	const invalidCredentialsMessage = "Invalid Google Cloud Code Assist credentials. Use /login to re-authenticate.";
+	const missingCredentialsMessage =
+		"Missing token or projectId in Google Cloud credentials. Use /login to re-authenticate.";
+
+	let parsed: GeminiCliApiKeyPayload;
+	try {
+		parsed = JSON.parse(apiKeyRaw) as GeminiCliApiKeyPayload;
+	} catch {
+		throw new Error(invalidCredentialsMessage);
+	}
+
+	const projectId =
+		typeof parsed.projectId === "string"
+			? parsed.projectId
+			: typeof parsed.project_id === "string"
+				? parsed.project_id
+				: undefined;
+
+	if (typeof parsed.token !== "string" || typeof projectId !== "string") {
+		throw new Error(missingCredentialsMessage);
+	}
+
+	const refreshToken =
+		typeof parsed.refreshToken === "string"
+			? parsed.refreshToken
+			: typeof parsed.refresh === "string"
+				? parsed.refresh
+				: undefined;
+	const expiresAt = normalizeExpiryMs(parsed.expiresAt ?? parsed.expires);
+
+	return {
+		accessToken: parsed.token,
+		projectId,
+		refreshToken,
+		expiresAt,
+	};
+}
+
+export function shouldRefreshGeminiCliCredentials(
+	expiresAt: number | undefined,
+	isAntigravity: boolean,
+	nowMs = Date.now(),
+): boolean {
+	if (expiresAt === undefined) {
+		return false;
+	}
+
+	const skewMs = isAntigravity ? ANTIGRAVITY_REFRESH_SKEW_MS : GOOGLE_GEMINI_REFRESH_SKEW_MS;
+	return nowMs + skewMs >= expiresAt;
+}
+
+async function refreshGeminiCliCredentialsIfNeeded(
+	credentials: ParsedGeminiCliCredentials,
+	isAntigravity: boolean,
+): Promise<ParsedGeminiCliCredentials> {
+	if (!credentials.refreshToken || !shouldRefreshGeminiCliCredentials(credentials.expiresAt, isAntigravity)) {
+		return credentials;
+	}
+
+	try {
+		const refreshed = isAntigravity
+			? await refreshAntigravityToken(credentials.refreshToken, credentials.projectId)
+			: await refreshGoogleCloudToken(credentials.refreshToken, credentials.projectId);
+		return {
+			accessToken: refreshed.access,
+			projectId: credentials.projectId,
+			refreshToken: refreshed.refresh,
+			expiresAt: refreshed.expires,
+		};
+	} catch (error) {
+		if (credentials.expiresAt !== undefined && Date.now() >= credentials.expiresAt) {
+			const reason = error instanceof Error ? error.message : String(error);
+			throw new Error(`OAuth token refresh failed before request: ${reason}`);
+		}
+		return credentials;
+	}
+}
 interface CloudCodeAssistRequest {
 	project: string;
 	model: string;
@@ -349,28 +464,16 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 		let rawRequestDump: RawHttpRequestDump | undefined;
 
 		try {
-			// apiKey is JSON-encoded: { token, projectId }
 			const apiKeyRaw = options?.apiKey;
 			if (!apiKeyRaw) {
 				throw new Error("Google Cloud Code Assist requires OAuth authentication. Use /login to authenticate.");
 			}
 
-			let accessToken: string;
-			let projectId: string;
-
-			try {
-				const parsed = JSON.parse(apiKeyRaw) as { token: string; projectId: string };
-				accessToken = parsed.token;
-				projectId = parsed.projectId;
-			} catch {
-				throw new Error("Invalid Google Cloud Code Assist credentials. Use /login to re-authenticate.");
-			}
-
-			if (!accessToken || !projectId) {
-				throw new Error("Missing token or projectId in Google Cloud credentials. Use /login to re-authenticate.");
-			}
-
 			const isAntigravity = model.provider === "google-antigravity";
+			const parsedCredentials = parseGeminiCliCredentials(apiKeyRaw);
+			const activeCredentials = await refreshGeminiCliCredentialsIfNeeded(parsedCredentials, isAntigravity);
+			const { accessToken, projectId } = activeCredentials;
+
 			const baseUrl = model.baseUrl?.trim();
 			const endpoints = baseUrl ? [baseUrl] : isAntigravity ? ANTIGRAVITY_ENDPOINT_FALLBACKS : [DEFAULT_ENDPOINT];
 
@@ -383,7 +486,9 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 				"Content-Type": "application/json",
 				Accept: "text/event-stream",
 				...headers,
-				...(isClaudeThinkingModel(model.id) ? { "anthropic-beta": CLAUDE_THINKING_BETA_HEADER } : {}),
+				...(!isAntigravity && isClaudeThinkingModel(model.id)
+					? { "anthropic-beta": CLAUDE_THINKING_BETA_HEADER }
+					: {}),
 				...(options?.headers ?? {}),
 			};
 			const requestBodyJson = JSON.stringify(requestBody);
@@ -791,31 +896,87 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli"> = (
 	return stream;
 };
 
-function deriveSessionId(context: Context): string | undefined {
+const INT63_MASK = (1n << 63n) - 1n;
+const ANTIGRAVITY_RANDOM_BOUND = 9_000_000_000_000_000_000n;
+
+function formatSignedDecimalSessionId(value: bigint): string {
+	return `-${value.toString()}`;
+}
+
+function deriveSignedDecimalFromHash(text: string): string {
+	const digest = createHash("sha256").update(text).digest();
+	let value = 0n;
+	for (let index = 0; index < 8; index += 1) {
+		value = (value << 8n) | BigInt(digest[index] ?? 0);
+	}
+	return formatSignedDecimalSessionId(value & INT63_MASK);
+}
+
+function randomBoundedInt63(maxExclusive: bigint): bigint {
+	while (true) {
+		const bytes = randomBytes(8);
+		let value = 0n;
+		for (const byte of bytes) {
+			value = (value << 8n) | BigInt(byte);
+		}
+		value &= INT63_MASK;
+		if (value < maxExclusive) {
+			return value;
+		}
+	}
+}
+
+function randomSignedDecimalSessionId(): string {
+	return formatSignedDecimalSessionId(randomBoundedInt63(ANTIGRAVITY_RANDOM_BOUND));
+}
+
+function getFirstUserTextForAntigravitySession(context: Context): string | undefined {
 	for (const message of context.messages) {
-		if (message.role !== "user" && message.role !== "developer") {
+		if (message.role !== "user") {
 			continue;
 		}
 
-		let text = "";
 		if (typeof message.content === "string") {
-			text = message.content;
-		} else if (Array.isArray(message.content)) {
-			text = message.content
-				.filter((item): item is TextContent => item.type === "text")
-				.map(item => item.text)
-				.join("\n");
+			return message.content;
 		}
 
-		if (!text || text.trim().length === 0) {
-			return undefined;
+		if (Array.isArray(message.content)) {
+			const firstTextPart = message.content.find((item): item is TextContent => item.type === "text");
+			return firstTextPart?.text;
 		}
 
-		const hash = createHash("sha256").update(text).digest("hex");
-		return hash.slice(0, 32);
+		return undefined;
 	}
 
 	return undefined;
+}
+
+function deriveAntigravitySessionId(context: Context): string {
+	const text = getFirstUserTextForAntigravitySession(context);
+	if (text && text.trim().length > 0) {
+		return deriveSignedDecimalFromHash(text);
+	}
+
+	return randomSignedDecimalSessionId();
+}
+
+function normalizeAntigravityTools(
+	tools: CloudCodeAssistRequest["request"]["tools"],
+): CloudCodeAssistRequest["request"]["tools"] {
+	return tools?.map(tool => ({
+		...tool,
+		functionDeclarations: tool.functionDeclarations.map(declaration => {
+			if (!("parametersJsonSchema" in declaration)) {
+				return declaration;
+			}
+
+			const { parametersJsonSchema, ...rest } = declaration;
+			return {
+				...rest,
+				parameters: parametersJsonSchema,
+			};
+		}),
+	}));
 }
 
 export function buildRequest(
@@ -868,9 +1029,8 @@ export function buildRequest(
 		contents,
 	};
 
-	const sessionId = deriveSessionId(context);
-	if (sessionId) {
-		request.sessionId = sessionId;
+	if (isAntigravity) {
+		request.sessionId = deriveAntigravitySessionId(context);
 	}
 
 	// System instruction must be object with parts, not plain string
@@ -885,7 +1045,8 @@ export function buildRequest(
 	}
 
 	if (context.tools && context.tools.length > 0) {
-		request.tools = convertTools(context.tools, model);
+		const convertedTools = convertTools(context.tools, model);
+		request.tools = isAntigravity ? normalizeAntigravityTools(convertedTools) : convertedTools;
 		if (options.toolChoice) {
 			request.toolConfig = {
 				functionCallingConfig: {
@@ -895,7 +1056,22 @@ export function buildRequest(
 		}
 	}
 
-	if (isAntigravity) {
+	if (isAntigravity && !isClaudeModel(model.id) && request.generationConfig?.maxOutputTokens !== undefined) {
+		delete request.generationConfig.maxOutputTokens;
+		if (Object.keys(request.generationConfig).length === 0) {
+			delete request.generationConfig;
+		}
+	}
+
+	if (isAntigravity && isClaudeModel(model.id)) {
+		request.toolConfig = {
+			functionCallingConfig: {
+				mode: "VALIDATED" as FunctionCallingConfigMode,
+			},
+		};
+	}
+
+	if (isAntigravity && shouldInjectAntigravitySystemInstruction(model.id)) {
 		const existingParts = request.systemInstruction?.parts ?? [];
 		request.systemInstruction = {
 			role: "user",
@@ -911,8 +1087,12 @@ export function buildRequest(
 		project: projectId,
 		model: model.id,
 		request,
-		...(isAntigravity ? { requestType: "agent" } : {}),
-		userAgent: isAntigravity ? "antigravity" : "pi-coding-agent",
-		requestId: `${isAntigravity ? "agent" : "pi"}-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+		...(isAntigravity
+			? {
+					requestType: "agent",
+					userAgent: "antigravity",
+					requestId: `agent-${randomUUID()}`,
+				}
+			: {}),
 	};
 }

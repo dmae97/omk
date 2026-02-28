@@ -4,7 +4,6 @@
  */
 import { getAntigravityAuthHeaders } from "../../providers/google-gemini-cli";
 import { OAuthCallbackFlow } from "./callback-server";
-import { generatePKCE } from "./pkce";
 import type { OAuthController, OAuthCredentials } from "./types";
 
 const decode = (s: string) => atob(s);
@@ -25,12 +24,88 @@ const SCOPES = [
 
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
-const DEFAULT_PROJECT_ID = "rising-fact-p41fc";
+const CLOUD_CODE_ENDPOINT = "https://cloudcode-pa.googleapis.com";
+const TIER_LEGACY = "legacy-tier";
+const PROJECT_ONBOARD_MAX_ATTEMPTS = 5;
+const PROJECT_ONBOARD_INTERVAL_MS = 2000;
 
 interface LoadCodeAssistPayload {
 	cloudaicompanionProject?: string | { id?: string };
 	currentTier?: { id?: string };
 	allowedTiers?: Array<{ id?: string; isDefault?: boolean }>;
+}
+
+interface LongRunningOperationResponse {
+	done?: boolean;
+	response?: {
+		cloudaicompanionProject?: string | { id?: string };
+	};
+}
+
+export const ANTIGRAVITY_LOAD_CODE_ASSIST_METADATA = Object.freeze({
+	ideType: "ANTIGRAVITY",
+	platform: "PLATFORM_UNSPECIFIED",
+	pluginType: "GEMINI",
+});
+
+function readProjectId(value: string | { id?: string } | undefined): string | undefined {
+	if (typeof value === "string" && value.length > 0) {
+		return value;
+	}
+	if (value && typeof value === "object" && typeof value.id === "string" && value.id.length > 0) {
+		return value.id;
+	}
+	return undefined;
+}
+
+function getDefaultTierId(allowedTiers?: Array<{ id?: string; isDefault?: boolean }>): string {
+	if (!allowedTiers || allowedTiers.length === 0) {
+		return TIER_LEGACY;
+	}
+	const defaultTier = allowedTiers.find(tier => tier.isDefault && typeof tier.id === "string" && tier.id.length > 0);
+	if (defaultTier?.id) {
+		return defaultTier.id;
+	}
+	return TIER_LEGACY;
+}
+
+async function onboardProjectWithRetries(
+	endpoint: string,
+	headers: Record<string, string>,
+	onboardBody: { tierId: string; metadata: typeof ANTIGRAVITY_LOAD_CODE_ASSIST_METADATA },
+	onProgress?: (message: string) => void,
+): Promise<string> {
+	for (let attempt = 1; attempt <= PROJECT_ONBOARD_MAX_ATTEMPTS; attempt += 1) {
+		if (attempt > 1) {
+			onProgress?.(`Waiting for project provisioning (attempt ${attempt}/${PROJECT_ONBOARD_MAX_ATTEMPTS})...`);
+			await Bun.sleep(PROJECT_ONBOARD_INTERVAL_MS);
+		}
+
+		const onboardResponse = await fetch(`${endpoint}/v1internal:onboardUser`, {
+			method: "POST",
+			headers,
+			body: JSON.stringify(onboardBody),
+		});
+
+		if (!onboardResponse.ok) {
+			const errorText = await onboardResponse.text();
+			throw new Error(`onboardUser failed: ${onboardResponse.status} ${onboardResponse.statusText}: ${errorText}`);
+		}
+
+		const operation = (await onboardResponse.json()) as LongRunningOperationResponse;
+		if (!operation.done) {
+			continue;
+		}
+
+		const projectId = readProjectId(operation.response?.cloudaicompanionProject);
+		if (projectId) {
+			return projectId;
+		}
+	}
+
+	throw new Error(
+		`onboardUser did not return a provisioned project id after ${PROJECT_ONBOARD_MAX_ATTEMPTS} attempts`,
+	);
 }
 
 async function discoverProject(accessToken: string, onProgress?: (message: string) => void): Promise<string> {
@@ -40,45 +115,41 @@ async function discoverProject(accessToken: string, onProgress?: (message: strin
 		...getAntigravityAuthHeaders(),
 	};
 
-	const endpoints = ["https://cloudcode-pa.googleapis.com", "https://daily-cloudcode-pa.sandbox.googleapis.com"];
-
 	onProgress?.("Checking for existing project...");
+	const endpoint = CLOUD_CODE_ENDPOINT;
+	try {
+		const loadResponse = await fetch(`${endpoint}/v1internal:loadCodeAssist`, {
+			method: "POST",
+			headers,
+			body: JSON.stringify({
+				metadata: ANTIGRAVITY_LOAD_CODE_ASSIST_METADATA,
+			}),
+		});
 
-	for (const endpoint of endpoints) {
-		try {
-			const loadResponse = await fetch(`${endpoint}/v1internal:loadCodeAssist`, {
-				method: "POST",
-				headers,
-				body: JSON.stringify({
-					metadata: {
-						ideType: "IDE_UNSPECIFIED",
-						platform: "PLATFORM_UNSPECIFIED",
-						pluginType: "GEMINI",
-					},
-				}),
-			});
-
-			if (loadResponse.ok) {
-				const data = (await loadResponse.json()) as LoadCodeAssistPayload;
-
-				if (typeof data.cloudaicompanionProject === "string" && data.cloudaicompanionProject) {
-					return data.cloudaicompanionProject;
-				}
-				if (
-					data.cloudaicompanionProject &&
-					typeof data.cloudaicompanionProject === "object" &&
-					data.cloudaicompanionProject.id
-				) {
-					return data.cloudaicompanionProject.id;
-				}
-			}
-		} catch {
-			// Try next endpoint
+		if (!loadResponse.ok) {
+			const errorText = await loadResponse.text();
+			throw new Error(`loadCodeAssist failed: ${loadResponse.status} ${loadResponse.statusText}: ${errorText}`);
 		}
-	}
 
-	onProgress?.("Using default project...");
-	return DEFAULT_PROJECT_ID;
+		const loadPayload = (await loadResponse.json()) as LoadCodeAssistPayload;
+		const existingProject = readProjectId(loadPayload.cloudaicompanionProject);
+		if (existingProject) {
+			return existingProject;
+		}
+
+		const tierId = getDefaultTierId(loadPayload.allowedTiers);
+		onProgress?.("Provisioning project...");
+		const onboardBody = {
+			tierId,
+			metadata: ANTIGRAVITY_LOAD_CODE_ASSIST_METADATA,
+		};
+		const provisionedProject = await onboardProjectWithRetries(endpoint, headers, onboardBody, onProgress);
+		return provisionedProject;
+	} catch (error) {
+		throw new Error(
+			`Could not discover or provision an Antigravity project. ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
 }
 
 async function getUserEmail(accessToken: string): Promise<string | undefined> {
@@ -98,25 +169,16 @@ async function getUserEmail(accessToken: string): Promise<string | undefined> {
 }
 
 class AntigravityOAuthFlow extends OAuthCallbackFlow {
-	#verifier: string = "";
-	#challenge: string = "";
-
 	constructor(ctrl: OAuthController) {
 		super(ctrl, CALLBACK_PORT, CALLBACK_PATH);
 	}
 
 	async generateAuthUrl(state: string, redirectUri: string): Promise<{ url: string; instructions?: string }> {
-		const pkce = await generatePKCE();
-		this.#verifier = pkce.verifier;
-		this.#challenge = pkce.challenge;
-
 		const authParams = new URLSearchParams({
 			client_id: CLIENT_ID,
 			response_type: "code",
 			redirect_uri: redirectUri,
 			scope: SCOPES.join(" "),
-			code_challenge: this.#challenge,
-			code_challenge_method: "S256",
 			state,
 			access_type: "offline",
 			prompt: "consent",
@@ -138,7 +200,6 @@ class AntigravityOAuthFlow extends OAuthCallbackFlow {
 				code,
 				grant_type: "authorization_code",
 				redirect_uri: redirectUri,
-				code_verifier: this.#verifier,
 			}),
 		});
 

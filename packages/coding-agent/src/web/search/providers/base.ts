@@ -10,6 +10,9 @@ export interface SearchParams {
 	maxOutputTokens?: number;
 	numSearchResults?: number;
 	temperature?: number;
+	googleSearch?: Record<string, unknown>;
+	codeExecution?: Record<string, unknown>;
+	urlContext?: Record<string, unknown>;
 }
 
 /** Base class for web search providers. */
