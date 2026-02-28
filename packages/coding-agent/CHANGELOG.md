@@ -20,6 +20,8 @@
 
 ### Fixed
 
+- `ast_replace` no longer rejects empty `out` values; an empty string now deletes matched nodes
+- `ast_replace` no longer trims `pat` and `out` values, preserving intentional whitespace
 - `gemini_image` tool: corrected `responseModalities` values from `'Image'`/`'Text'` to uppercase `'IMAGE'`/`'TEXT'` matching the API enum
 
 ### Breaking Changes

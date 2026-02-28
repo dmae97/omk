@@ -517,20 +517,13 @@ fn normalize_rewrite_map(
 	rewrites: Option<HashMap<String, String>>,
 ) -> Result<Vec<(String, String)>> {
 	let mut normalized = Vec::new();
-	for (raw_pattern, raw_rewrite) in rewrites.unwrap_or_default() {
-		let pattern = raw_pattern.trim();
+	for (pattern, rewrite) in rewrites.unwrap_or_default() {
 		if pattern.is_empty() {
 			return Err(Error::from_reason(
 				"`rewrites` keys must be non-empty pattern strings".to_string(),
 			));
 		}
-		let rewrite = raw_rewrite.trim();
-		if rewrite.is_empty() {
-			return Err(Error::from_reason(format!(
-				"`rewrites[{pattern}]` must be a non-empty rewrite template"
-			)));
-		}
-		normalized.push((pattern.to_string(), rewrite.to_string()));
+		normalized.push((pattern, rewrite));
 	}
 	if normalized.is_empty() {
 		return Err(Error::from_reason(

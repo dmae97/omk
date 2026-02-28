@@ -69,15 +69,10 @@ export class AstReplaceTool implements AgentTool<typeof astReplaceSchema, AstRep
 	): Promise<AgentToolResult<AstReplaceToolDetails>> {
 		return untilAborted(signal, async () => {
 			const ops = params.ops.map((entry, index) => {
-				const pat = entry.pat.trim();
-				const out = entry.out.trim();
-				if (pat.length === 0) {
+				if (entry.pat.length === 0) {
 					throw new ToolError(`\`ops[${index}].pat\` must be a non-empty pattern`);
 				}
-				if (out.length === 0) {
-					throw new ToolError(`\`ops[${index}].out\` must be a non-empty replacement template`);
-				}
-				return [pat, out] as const;
+				return [entry.pat, entry.out] as const;
 			});
 			if (ops.length === 0) {
 				throw new ToolError("`ops` must include at least one op entry");
@@ -122,10 +117,7 @@ export class AstReplaceTool implements AgentTool<typeof astReplaceSchema, AstRep
 			}
 
 			const resolvedSearchPath = searchPath ?? resolveToCwd(".", this.session.cwd);
-			const scopePath = (() => {
-				const relative = path.relative(this.session.cwd, resolvedSearchPath).replace(/\\/g, "/");
-				return relative.length === 0 ? "." : relative;
-			})();
+			const scopePath = path.relative(this.session.cwd, resolvedSearchPath).replace(/\\/g, "/") || ".";
 			let isDirectory: boolean;
 			try {
 				const stat = await Bun.file(resolvedSearchPath).stat();
