@@ -58,7 +58,6 @@
 		"ignore": "^7.0",
 		"linkedom": "^0.18",
 		"marked": "^17.0",
-		"node-html-parser": "^7.0",
 		"puppeteer": "^24.37",
 		"smol-toml": "^1.6",
 		"zod": "^4.3"

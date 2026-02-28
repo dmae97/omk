@@ -5,7 +5,7 @@ import type { Component } from "@oh-my-pi/pi-tui";
 import { Text } from "@oh-my-pi/pi-tui";
 import { ptree, truncate } from "@oh-my-pi/pi-utils";
 import { type Static, Type } from "@sinclair/typebox";
-import { parse as parseHtml } from "node-html-parser";
+import { parseHTML } from "linkedom";
 import { renderPromptTemplate } from "../config/prompt-templates";
 import type { RenderResultOptions } from "../extensibility/custom-tools/types";
 import { type Theme, theme } from "../modes/theme/theme";
@@ -328,20 +328,22 @@ function parseAlternateLinks(html: string, pageUrl: string): string[] {
  */
 function extractDocumentLinks(html: string, baseUrl: string): string[] {
 	const links: string[] = [];
+	const seen = new Set<string>();
 
 	try {
-		const doc = parseHtml(html);
-		const anchors = doc.querySelectorAll("a[href]");
-
-		for (const anchor of anchors) {
-			const href = anchor.getAttribute("href");
+		const anchorTags = html.slice(0, 512 * 1024).match(/<a\b[^>]*>/gi) ?? [];
+		for (const tag of anchorTags) {
+			const href = getHtmlAttribute(tag, "href");
 			if (!href) continue;
 
 			const ext = path.extname(href).toLowerCase();
-			if (CONVERTIBLE_EXTENSIONS.has(ext)) {
-				const resolved = href.startsWith("http") ? href : new URL(href, baseUrl).href;
-				links.push(resolved);
-			}
+			if (!CONVERTIBLE_EXTENSIONS.has(ext)) continue;
+
+			const resolved = href.startsWith("http") ? href : new URL(href, baseUrl).href;
+			if (seen.has(resolved)) continue;
+			seen.add(resolved);
+			links.push(resolved);
+			if (links.length >= 20) break;
 		}
 	} catch {}
 
@@ -368,7 +370,7 @@ function cleanFeedText(text: string): string {
  */
 function parseFeedToMarkdown(content: string, maxItems = 10): string {
 	try {
-		const doc = parseHtml(content, { parseNoneClosedTags: true });
+		const doc = parseHTML(content).document;
 
 		// Try RSS
 		const channel = doc.querySelector("channel");

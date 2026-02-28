@@ -1,4 +1,4 @@
-import { parse as parseHtml } from "node-html-parser";
+import { type HTMLElement, parseHTML } from "linkedom";
 import { ToolAbortError } from "../../tools/tool-errors";
 import type { RenderResult, SpecialHandler } from "./types";
 import { buildResult, loadPage } from "./types";
@@ -33,14 +33,14 @@ export const handleTwitter: SpecialHandler = async (
 
 			if (result.ok && result.content.length > 500) {
 				// Parse the Nitter HTML
-				const doc = parseHtml(result.content);
+				const doc = parseHTML(result.content).document;
 
 				// Extract tweet content
-				const tweetContent = doc.querySelector(".tweet-content")?.text?.trim();
-				const fullname = doc.querySelector(".fullname")?.text?.trim();
-				const username = doc.querySelector(".username")?.text?.trim();
-				const date = doc.querySelector(".tweet-date a")?.text?.trim();
-				const stats = doc.querySelector(".tweet-stats")?.text?.trim();
+				const tweetContent = doc.querySelector(".tweet-content")?.textContent?.trim();
+				const fullname = doc.querySelector(".fullname")?.textContent?.trim();
+				const username = doc.querySelector(".username")?.textContent?.trim();
+				const date = doc.querySelector(".tweet-date a")?.textContent?.trim();
+				const stats = doc.querySelector(".tweet-stats")?.textContent?.trim();
 
 				if (tweetContent) {
 					let md = `# Tweet by ${fullname || "Unknown"} (${username || "@?"})\n\n`;
@@ -49,12 +49,12 @@ export const handleTwitter: SpecialHandler = async (
 					if (stats) md += `---\n${stats.replace(/\s+/g, " ")}\n`;
 
 					// Check for replies/thread
-					const replies = doc.querySelectorAll(".timeline-item .tweet-content");
+					const replies = Array.from(doc.querySelectorAll(".timeline-item .tweet-content")) as HTMLElement[];
 					if (replies.length > 1) {
 						md += `\n---\n\n## Thread/Replies\n\n`;
-						for (const reply of Array.from(replies).slice(1, 10)) {
-							const replyUser = reply.parentNode?.querySelector(".username")?.text?.trim();
-							md += `**${replyUser || "@?"}**: ${reply.text?.trim()}\n\n`;
+						for (const reply of replies.slice(1, 10)) {
+							const replyUser = reply.parentElement?.querySelector(".username")?.textContent?.trim();
+							md += `**${replyUser || "@?"}**: ${reply.textContent?.trim()}\n\n`;
 						}
 					}
 

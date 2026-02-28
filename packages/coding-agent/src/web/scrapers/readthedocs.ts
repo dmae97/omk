@@ -1,7 +1,7 @@
 /**
  * Read the Docs handler for web-fetch
  */
-import { parse as parseHtml } from "node-html-parser";
+import { parseHTML } from "linkedom";
 import { buildResult, htmlToBasicMarkdown, loadPage, type RenderResult, type SpecialHandler } from "./types";
 
 export const handleReadTheDocs: SpecialHandler = async (
@@ -39,7 +39,7 @@ export const handleReadTheDocs: SpecialHandler = async (
 	}
 
 	// Parse HTML
-	const root = parseHtml(result.content);
+	const root = parseHTML(result.content).document;
 
 	// Extract main content from common Read the Docs selectors
 	let mainContent =
@@ -60,7 +60,7 @@ export const handleReadTheDocs: SpecialHandler = async (
 		?.querySelectorAll(
 			".headerlink, .viewcode-link, nav, .sidebar, footer, .related, .sphinxsidebar, .toctree-wrapper",
 		)
-		.forEach(el => {
+		.forEach((el: Element) => {
 			el.remove();
 		});
 

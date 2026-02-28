@@ -1,4 +1,4 @@
-import { parse as parseHtml } from "node-html-parser";
+import { parseHTML } from "linkedom";
 import type { RenderResult, SpecialHandler } from "./types";
 import { buildResult, loadPage } from "./types";
 import { convertWithMarkitdown, fetchBinary } from "./utils";
@@ -31,22 +31,22 @@ export const handleArxiv: SpecialHandler = async (
 		if (!result.ok) return null;
 
 		// Parse the Atom feed response
-		const doc = parseHtml(result.content, { parseNoneClosedTags: true });
+		const doc = parseHTML(result.content).document;
 		const entry = doc.querySelector("entry");
 
 		if (!entry) return null;
 
-		const title = entry.querySelector("title")?.text?.trim()?.replace(/\s+/g, " ");
-		const summary = entry.querySelector("summary")?.text?.trim();
-		const authors = entry
-			.querySelectorAll("author name")
-			.map(n => n.text?.trim())
-			.filter(Boolean);
-		const published = entry.querySelector("published")?.text?.trim()?.split("T")[0];
-		const categories = entry
-			.querySelectorAll("category")
+		const title = entry.querySelector("title")?.textContent?.trim()?.replace(/\s+/g, " ");
+		const summary = entry.querySelector("summary")?.textContent?.trim();
+		const authors = Array.from(entry.querySelectorAll("author name") as Iterable<{ textContent: string | null }>)
+			.map(n => n.textContent?.trim())
+			.filter((name): name is string => Boolean(name));
+		const published = entry.querySelector("published")?.textContent?.trim()?.split("T")[0];
+		const categories = Array.from(
+			entry.querySelectorAll("category") as Iterable<{ getAttribute: (name: string) => string | null }>,
+		)
 			.map(c => c.getAttribute("term"))
-			.filter(Boolean);
+			.filter((term): term is string => Boolean(term));
 		const pdfLink = entry.querySelector('link[title="pdf"]')?.getAttribute("href");
 
 		let md = `# ${title || "arXiv Paper"}\n\n`;

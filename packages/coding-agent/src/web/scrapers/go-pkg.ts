@@ -1,5 +1,5 @@
 import { tryParseJson } from "@oh-my-pi/pi-utils";
-import { parse as parseHtml } from "node-html-parser";
+import { parseHTML } from "linkedom";
 import type { RenderResult, SpecialHandler } from "./types";
 import { buildResult, htmlToBasicMarkdown, loadPage } from "./types";
 
@@ -97,7 +97,7 @@ export const handleGoPkg: SpecialHandler = async (
 			});
 		}
 
-		const doc = parseHtml(pageResult.content);
+		const doc = parseHTML(pageResult.content).document;
 
 		// Extract actual module path from breadcrumb or header
 		const breadcrumb = doc.querySelector(".go-Breadcrumb");

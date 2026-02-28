@@ -1,4 +1,4 @@
-import { parse as parseHtml } from "node-html-parser";
+import { parseHTML } from "linkedom";
 import type { RenderResult, SpecialHandler } from "./types";
 import { buildResult, loadPage } from "./types";
 import { convertWithMarkitdown, fetchBinary } from "./utils";
@@ -30,22 +30,30 @@ export const handleIacr: SpecialHandler = async (
 
 		if (!result.ok) return null;
 
-		const doc = parseHtml(result.content);
+		const doc = parseHTML(result.content).document;
 
 		// Extract metadata from the page
 		const title =
-			doc.querySelector("h3.mb-3")?.text?.trim() ||
+			doc.querySelector("h3.mb-3")?.textContent?.trim() ||
 			doc.querySelector('meta[name="citation_title"]')?.getAttribute("content");
-		const authors = doc
-			.querySelectorAll('meta[name="citation_author"]')
+		const authors = Array.from(
+			doc.querySelectorAll('meta[name="citation_author"]') as Iterable<{
+				getAttribute: (name: string) => string | null;
+			}>,
+		)
 			.map(m => m.getAttribute("content"))
-			.filter(Boolean);
+			.filter((author): author is string => Boolean(author));
 		// Abstract is in <p> after <h5>Abstract</h5>
-		const abstractHeading = doc.querySelectorAll("h5").find(h => h.text?.includes("Abstract"));
+		const abstractHeading = Array.from(
+			doc.querySelectorAll("h5") as Iterable<{
+				textContent: string | null;
+				parentElement?: { querySelector: (selector: string) => { textContent: string | null } | null } | null;
+			}>,
+		).find(h => h.textContent?.includes("Abstract"));
 		const abstract =
-			abstractHeading?.parentNode?.querySelector("p")?.text?.trim() ||
+			abstractHeading?.parentElement?.querySelector("p")?.textContent?.trim() ||
 			doc.querySelector('meta[name="description"]')?.getAttribute("content");
-		const keywords = doc.querySelector(".keywords")?.text?.replace("Keywords:", "").trim();
+		const keywords = doc.querySelector(".keywords")?.textContent?.replace("Keywords:", "").trim();
 		const pubDate = doc.querySelector('meta[name="citation_publication_date"]')?.getAttribute("content");
 
 		let md = `# ${title || "IACR ePrint Paper"}\n\n`;

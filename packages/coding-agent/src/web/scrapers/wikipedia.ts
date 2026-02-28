@@ -1,4 +1,4 @@
-import { parse as parseHtml } from "node-html-parser";
+import { parseHTML } from "linkedom";
 import type { RenderResult, SpecialHandler } from "./types";
 import { buildResult, loadPage } from "./types";
 
@@ -45,14 +45,13 @@ export const handleWikipedia: SpecialHandler = async (
 		const contentResult = await loadPage(contentUrl, { timeout, signal });
 
 		if (contentResult.ok) {
-			const doc = parseHtml(contentResult.content);
+			const doc = parseHTML(contentResult.content).document;
 
 			// Extract main content sections
 			const sections = doc.querySelectorAll("section");
 			for (const section of sections) {
 				const heading = section.querySelector("h2, h3, h4");
-				const headingText = heading?.text?.trim();
-
+				const headingText = heading?.textContent?.trim();
 				// Skip certain sections
 				if (
 					headingText &&
@@ -68,7 +67,7 @@ export const handleWikipedia: SpecialHandler = async (
 
 				const paragraphs = section.querySelectorAll("p");
 				for (const p of paragraphs) {
-					const text = p.text?.trim();
+					const text = p.textContent?.trim();
 					if (text && text.length > 20) {
 						md += `${text}\n\n`;
 					}

@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+
 ### Added
 
 - Added `ast_find` tool for structural code search using AST matching via ast-grep, enabling syntax-aware pattern discovery across codebases
@@ -23,6 +24,10 @@
 
 ### Changed
 
+- Replaced `node-html-parser` dependency with `linkedom` for HTML parsing, improving performance and reducing bundle size
+- Updated HTML parsing API calls from `node-html-parser` to `linkedom` across all web scrapers (arXiv, IACR, Go pkg, Read the Docs, Twitter, Wikipedia)
+- Changed element text extraction from `.text` property to `.textContent` property for compatibility with linkedom DOM API
+- Optimized document link extraction to use regex-based parsing with deduplication and a 20-link limit instead of full DOM traversal
 - Unified `path` parameter in ast_find and ast_replace tools to accept files, directories, or glob patterns directly, eliminating the separate `glob` parameter
 - Removed `strictness` parameter from ast_find and ast_replace tools
 - Removed `fail_on_parse_error` parameter from ast_replace tool (now always false)
@@ -45,6 +50,7 @@
 
 ### Removed
 
+- Removed `node-html-parser` dependency from package.json
 - Removed `files` array parameter for batch file operations
 - Removed `column`, `end_line`, and `end_character` parameters in favor of symbol-based positioning
 - Removed `include_declaration` parameter from references action
