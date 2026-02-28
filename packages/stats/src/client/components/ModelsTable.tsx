@@ -13,6 +13,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Line } from "react-chartjs-2";
 import type { ModelPerformancePoint, ModelStats } from "../types";
+import { useSystemTheme } from "../useSystemTheme";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
@@ -26,6 +27,28 @@ const MODEL_COLORS = [
 	"#60a5fa", // blue
 ];
 
+const CHART_THEMES = {
+	dark: {
+		legendLabel: "#cbd5e1",
+		tooltipBackground: "#16161e",
+		tooltipTitle: "#f8fafc",
+		tooltipBody: "#94a3b8",
+		tooltipBorder: "rgba(255, 255, 255, 0.1)",
+		grid: "rgba(255, 255, 255, 0.06)",
+		tick: "#94a3b8",
+	},
+	light: {
+		legendLabel: "#334155",
+		tooltipBackground: "#ffffff",
+		tooltipTitle: "#0f172a",
+		tooltipBody: "#334155",
+		tooltipBorder: "rgba(15, 23, 42, 0.18)",
+		grid: "rgba(15, 23, 42, 0.08)",
+		tick: "#475569",
+	},
+} as const;
+
+type ChartTheme = (typeof CHART_THEMES)[keyof typeof CHART_THEMES];
 interface ModelsTableProps {
 	models: ModelStats[];
 	performanceSeries: ModelPerformancePoint[];
@@ -45,6 +68,8 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 	const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
 	const performanceSeriesByKey = useMemo(() => buildModelPerformanceLookup(performanceSeries), [performanceSeries]);
+	const theme = useSystemTheme();
+	const chartTheme = CHART_THEMES[theme];
 	const sortedModels = [...models].sort(
 		(a, b) => b.totalInputTokens + b.totalOutputTokens - (a.totalInputTokens + a.totalOutputTokens),
 	);
@@ -173,7 +198,7 @@ export function ModelsTable({ models, performanceSeries }: ModelsTableProps) {
 														No data available
 													</div>
 												) : (
-													<PerformanceChart data={trendData} color={trendColor} />
+													<PerformanceChart data={trendData} color={trendColor} chartTheme={chartTheme} />
 												)}
 											</div>
 										</div>
@@ -225,9 +250,11 @@ function TrendChart({
 function PerformanceChart({
 	data,
 	color,
+	chartTheme,
 }: {
 	data: Array<{ timestamp: number; avgTtftSeconds: number | null; avgTokensPerSecond: number | null }>;
 	color: string;
+	chartTheme: ChartTheme;
 }) {
 	const chartData = {
 		labels: data.map(d => format(new Date(d.timestamp), "MMM d")),
@@ -263,39 +290,39 @@ function PerformanceChart({
 				display: true,
 				position: "top" as const,
 				labels: {
-					color: "#cbd5e1",
+					color: chartTheme.legendLabel,
 					usePointStyle: true,
 					padding: 16,
 					font: { size: 12 },
 				},
 			},
 			tooltip: {
-				backgroundColor: "#16161e",
-				titleColor: "#f8fafc",
-				bodyColor: "#94a3b8",
-				borderColor: "rgba(255, 255, 255, 0.1)",
+				backgroundColor: chartTheme.tooltipBackground,
+				titleColor: chartTheme.tooltipTitle,
+				bodyColor: chartTheme.tooltipBody,
+				borderColor: chartTheme.tooltipBorder,
 				borderWidth: 1,
 				cornerRadius: 8,
 			},
 		},
 		scales: {
 			x: {
-				grid: { color: "rgba(255, 255, 255, 0.06)" },
-				ticks: { color: "#94a3b8", font: { size: 11 } },
+				grid: { color: chartTheme.grid },
+				ticks: { color: chartTheme.tick, font: { size: 11 } },
 			},
 			y: {
 				type: "linear" as const,
 				display: true,
 				position: "left" as const,
-				grid: { color: "rgba(255, 255, 255, 0.06)" },
-				ticks: { color: "#94a3b8", font: { size: 11 } },
+				grid: { color: chartTheme.grid },
+				ticks: { color: chartTheme.tick, font: { size: 11 } },
 			},
 			y1: {
 				type: "linear" as const,
 				display: true,
 				position: "right" as const,
 				grid: { drawOnChartArea: false },
-				ticks: { color: "#94a3b8", font: { size: 11 } },
+				ticks: { color: chartTheme.tick, font: { size: 11 } },
 			},
 		},
 	};

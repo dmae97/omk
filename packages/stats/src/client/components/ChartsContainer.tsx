@@ -13,6 +13,7 @@ import { format } from "date-fns";
 import { useMemo } from "react";
 import { Line } from "react-chartjs-2";
 import type { ModelTimeSeriesPoint } from "../types";
+import { useSystemTheme } from "../useSystemTheme";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
@@ -26,13 +27,34 @@ const MODEL_COLORS = [
 	"#60a5fa", // blue
 ];
 
+const CHART_THEMES = {
+	dark: {
+		legendLabel: "#94a3b8",
+		tooltipBackground: "#16161e",
+		tooltipTitle: "#f8fafc",
+		tooltipBody: "#94a3b8",
+		tooltipBorder: "rgba(255, 255, 255, 0.1)",
+		grid: "rgba(255, 255, 255, 0.06)",
+		tick: "#64748b",
+	},
+	light: {
+		legendLabel: "#475569",
+		tooltipBackground: "#ffffff",
+		tooltipTitle: "#0f172a",
+		tooltipBody: "#334155",
+		tooltipBorder: "rgba(15, 23, 42, 0.18)",
+		grid: "rgba(15, 23, 42, 0.08)",
+		tick: "#64748b",
+	},
+} as const;
 interface ChartsContainerProps {
 	modelSeries: ModelTimeSeriesPoint[];
 }
 
 export function ChartsContainer({ modelSeries }: ChartsContainerProps) {
 	const chartData = useMemo(() => buildModelPreferenceSeries(modelSeries), [modelSeries]);
-
+	const theme = useSystemTheme();
+	const chartTheme = CHART_THEMES[theme];
 	const data = {
 		labels: chartData.data.map(d => format(new Date(d.timestamp), "MMM d")),
 		datasets: chartData.series.map((seriesName, index) => ({
@@ -60,7 +82,7 @@ export function ChartsContainer({ modelSeries }: ChartsContainerProps) {
 				position: "top" as const,
 				align: "start" as const,
 				labels: {
-					color: "#94a3b8",
+					color: chartTheme.legendLabel,
 					usePointStyle: true,
 					padding: 16,
 					font: { size: 12 },
@@ -68,10 +90,10 @@ export function ChartsContainer({ modelSeries }: ChartsContainerProps) {
 				},
 			},
 			tooltip: {
-				backgroundColor: "#16161e",
-				titleColor: "#f8fafc",
-				bodyColor: "#94a3b8",
-				borderColor: "rgba(255, 255, 255, 0.1)",
+				backgroundColor: chartTheme.tooltipBackground,
+				titleColor: chartTheme.tooltipTitle,
+				bodyColor: chartTheme.tooltipBody,
+				borderColor: chartTheme.tooltipBorder,
 				borderWidth: 1,
 				padding: 12,
 				cornerRadius: 8,
@@ -87,21 +109,21 @@ export function ChartsContainer({ modelSeries }: ChartsContainerProps) {
 		scales: {
 			x: {
 				grid: {
-					color: "rgba(255, 255, 255, 0.06)",
+					color: chartTheme.grid,
 					drawBorder: false,
 				},
 				ticks: {
-					color: "#64748b",
+					color: chartTheme.tick,
 					font: { size: 11 },
 				},
 			},
 			y: {
 				grid: {
-					color: "rgba(255, 255, 255, 0.06)",
+					color: chartTheme.grid,
 					drawBorder: false,
 				},
 				ticks: {
-					color: "#64748b",
+					color: chartTheme.tick,
 					font: { size: 11 },
 					callback: (value: number | string) => `${value}%`,
 				},
