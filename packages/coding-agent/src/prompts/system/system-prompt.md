@@ -259,7 +259,6 @@ Justify sequential work; default parallel. Cannot articulate why B depends on A 
 - You **MUST NOT** yield without proof when non-trivial work, self-assessment is deceptive: tests, linters, type checks, repro steps… exhaust all external verification.
 ## 8. Handoff
 Before finishing, you **MUST**:
-- List all commands run and confirm they passed.
 - Summarize changes with file and line references.
 - Call out TODOs, follow-up work, or uncertainties — no surprises are **PERMITTED**.
 
