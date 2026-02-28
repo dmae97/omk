@@ -47,6 +47,24 @@ export function isNotificationSuppressed(): boolean {
 	return value === "off" || value === "0" || value === "false";
 }
 
+function getForcedImageProtocol(): ImageProtocol | null | undefined {
+	const raw = $env.PI_FORCE_IMAGE_PROTOCOL?.trim().toLowerCase();
+	if (!raw) return undefined;
+	if (raw === "kitty") return ImageProtocol.Kitty;
+	if (raw === "iterm2" || raw === "iterm") return ImageProtocol.Iterm2;
+	if (raw === "off" || raw === "none" || raw === "0" || raw === "false") return null;
+	return undefined;
+}
+
+function getFallbackImageProtocol(terminalId: TerminalId): ImageProtocol | null {
+	if (!process.stdout.isTTY) return null;
+	if (terminalId === "vscode" || terminalId === "alacritty") return null;
+	const term = Bun.env.TERM?.toLowerCase() ?? "";
+	if (term.includes("screen") || term.includes("tmux") || term.includes("ghostty")) {
+		return ImageProtocol.Kitty;
+	}
+	return null;
+}
 const KNOWN_TERMINALS = Object.freeze({
 	// Fallback terminals
 	base: new TerminalInfo("base", null, false, true, NotifyProtocol.Bell),
@@ -101,7 +119,32 @@ export const TERMINAL_ID: TerminalId = (() => {
 	return "base";
 })();
 
-export const TERMINAL = getTerminalInfo(TERMINAL_ID);
+export const TERMINAL = (() => {
+	const terminal = getTerminalInfo(TERMINAL_ID);
+	const forcedImageProtocol = getForcedImageProtocol();
+	if (forcedImageProtocol !== undefined) {
+		return new TerminalInfo(
+			terminal.id,
+			forcedImageProtocol,
+			terminal.trueColor,
+			terminal.hyperlinks,
+			terminal.notifyProtocol,
+		);
+	}
+	if (!terminal.imageProtocol) {
+		const fallbackImageProtocol = getFallbackImageProtocol(terminal.id);
+		if (fallbackImageProtocol) {
+			return new TerminalInfo(
+				terminal.id,
+				fallbackImageProtocol,
+				terminal.trueColor,
+				terminal.hyperlinks,
+				terminal.notifyProtocol,
+			);
+		}
+	}
+	return terminal;
+})();
 
 export function getTerminalInfo(terminalId: TerminalId): TerminalInfo {
 	return KNOWN_TERMINALS[terminalId];

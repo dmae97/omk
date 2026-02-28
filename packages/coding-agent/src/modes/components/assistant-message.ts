@@ -1,5 +1,5 @@
-import type { AssistantMessage } from "@oh-my-pi/pi-ai";
-import { Container, Markdown, Spacer, TERMINAL, Text } from "@oh-my-pi/pi-tui";
+import type { AssistantMessage, ImageContent } from "@oh-my-pi/pi-ai";
+import { Container, Image, ImageProtocol, Markdown, Spacer, TERMINAL, Text } from "@oh-my-pi/pi-tui";
 import { logger } from "@oh-my-pi/pi-utils";
 import { hasPendingMermaid, prerenderMermaid } from "../../modes/theme/mermaid-cache";
 import { getMarkdownTheme, theme } from "../../modes/theme/theme";
@@ -11,6 +11,7 @@ export class AssistantMessageComponent extends Container {
 	#contentContainer: Container;
 	#lastMessage?: AssistantMessage;
 	#prerenderInFlight = false;
+	#toolImagesByCallId = new Map<string, ImageContent[]>();
 
 	constructor(
 		message?: AssistantMessage,
@@ -38,6 +39,42 @@ export class AssistantMessageComponent extends Container {
 		this.hideThinkingBlock = hide;
 	}
 
+	setToolResultImages(toolCallId: string, images: ImageContent[]): void {
+		if (!toolCallId) return;
+		const validImages = images.filter(img => img.type === "image" && img.data && img.mimeType);
+		if (validImages.length === 0) {
+			this.#toolImagesByCallId.delete(toolCallId);
+		} else {
+			this.#toolImagesByCallId.set(toolCallId, validImages);
+		}
+		if (this.#lastMessage) {
+			this.updateContent(this.#lastMessage);
+		}
+	}
+
+	#renderToolImages(): void {
+		const images = Array.from(this.#toolImagesByCallId.values()).flat();
+		if (images.length === 0) return;
+
+		this.#contentContainer.addChild(new Spacer(1));
+		for (const image of images) {
+			if (
+				TERMINAL.imageProtocol &&
+				(TERMINAL.imageProtocol !== ImageProtocol.Kitty || image.mimeType === "image/png")
+			) {
+				this.#contentContainer.addChild(
+					new Image(
+						image.data,
+						image.mimeType,
+						{ fallbackColor: (text: string) => theme.fg("toolOutput", text) },
+						{ maxWidthCells: 60 },
+					),
+				);
+				continue;
+			}
+			this.#contentContainer.addChild(new Text(theme.fg("toolOutput", `[Image: ${image.mimeType}]`), 1, 0));
+		}
+	}
 	#triggerMermaidPrerender(message: AssistantMessage): void {
 		if (!TERMINAL.imageProtocol || this.#prerenderInFlight) return;
 
@@ -119,6 +156,7 @@ export class AssistantMessageComponent extends Container {
 			}
 		}
 
+		this.#renderToolImages();
 		// Check if aborted - show after partial content
 		// But only if there are no tool calls (tool execution components will show the error)
 		const hasToolCalls = message.content.some(c => c.type === "toolCall");

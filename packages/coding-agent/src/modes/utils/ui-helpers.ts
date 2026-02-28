@@ -1,5 +1,5 @@
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
-import type { AssistantMessage, Message } from "@oh-my-pi/pi-ai";
+import type { AssistantMessage, ImageContent, Message } from "@oh-my-pi/pi-ai";
 import { Spacer, Text, TruncatedText } from "@oh-my-pi/pi-tui";
 import { settings } from "../../config/settings";
 import { AssistantMessageComponent } from "../../modes/components/assistant-message";
@@ -217,10 +217,14 @@ export class UiHelpers {
 		}
 
 		let readGroup: ReadToolGroupComponent | null = null;
+		const readToolCallArgs = new Map<string, Record<string, unknown>>();
+		const readToolCallAssistantComponents = new Map<string, AssistantMessageComponent>();
 		for (const message of sessionContext.messages) {
 			// Assistant messages need special handling for tool calls
 			if (message.role === "assistant") {
 				this.ctx.addMessageToChat(message);
+				const lastChild = this.ctx.chatContainer.children[this.ctx.chatContainer.children.length - 1];
+				const assistantComponent = lastChild instanceof AssistantMessageComponent ? lastChild : undefined;
 				readGroup = null;
 				const hasErrorStop = message.stopReason === "aborted" || message.stopReason === "error";
 				const errorMessage = hasErrorStop
@@ -241,20 +245,27 @@ export class UiHelpers {
 					}
 
 					if (content.name === "read") {
-						if (!readGroup) {
-							readGroup = new ReadToolGroupComponent();
-							readGroup.setExpanded(this.ctx.toolOutputExpanded);
-							this.ctx.chatContainer.addChild(readGroup);
-						}
-						readGroup.updateArgs(content.arguments, content.id);
 						if (hasErrorStop && errorMessage) {
+							if (!readGroup) {
+								readGroup = new ReadToolGroupComponent();
+								readGroup.setExpanded(this.ctx.toolOutputExpanded);
+								this.ctx.chatContainer.addChild(readGroup);
+							}
+							readGroup.updateArgs(content.arguments, content.id);
 							readGroup.updateResult(
 								{ content: [{ type: "text", text: errorMessage }], isError: true },
 								false,
 								content.id,
 							);
 						} else {
-							this.ctx.pendingTools.set(content.id, readGroup);
+							const normalizedArgs =
+								content.arguments && typeof content.arguments === "object" && !Array.isArray(content.arguments)
+									? (content.arguments as Record<string, unknown>)
+									: {};
+							readToolCallArgs.set(content.id, normalizedArgs);
+							if (assistantComponent) {
+								readToolCallAssistantComponents.set(content.id, assistantComponent);
+							}
 						}
 						continue;
 					}
@@ -287,6 +298,38 @@ export class UiHelpers {
 					}
 				}
 			} else if (message.role === "toolResult") {
+				if (message.toolName === "read") {
+					const assistantComponent = readToolCallAssistantComponents.get(message.toolCallId);
+					const images: ImageContent[] = message.content.filter(
+						(content): content is ImageContent => content.type === "image",
+					);
+					if (images.length > 0 && assistantComponent && settings.get("terminal.showImages")) {
+						assistantComponent.setToolResultImages(message.toolCallId, images);
+						readToolCallArgs.delete(message.toolCallId);
+						readToolCallAssistantComponents.delete(message.toolCallId);
+						continue;
+					}
+					let component = this.ctx.pendingTools.get(message.toolCallId);
+					if (!component) {
+						if (!readGroup) {
+							readGroup = new ReadToolGroupComponent();
+							readGroup.setExpanded(this.ctx.toolOutputExpanded);
+							this.ctx.chatContainer.addChild(readGroup);
+						}
+						const args = readToolCallArgs.get(message.toolCallId);
+						if (args) {
+							readGroup.updateArgs(args, message.toolCallId);
+						}
+						component = readGroup;
+						this.ctx.pendingTools.set(message.toolCallId, readGroup);
+					}
+					component.updateResult(message, false, message.toolCallId);
+					this.ctx.pendingTools.delete(message.toolCallId);
+					readToolCallArgs.delete(message.toolCallId);
+					readToolCallAssistantComponents.delete(message.toolCallId);
+					continue;
+				}
+
 				// Match tool results to pending tool components
 				const component = this.ctx.pendingTools.get(message.toolCallId);
 				if (component) {

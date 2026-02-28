@@ -24,6 +24,11 @@ function tryCurlyQuoteVariant(filePath: string): string {
 	return filePath.replace(/'/g, "\u2019");
 }
 
+function tryShellEscapedPath(filePath: string): string {
+	if (!filePath.includes("\\") || !filePath.includes("/")) return filePath;
+	return filePath.replace(/\\([ \t"'(){}[\]])/g, "$1");
+}
+
 function fileExists(filePath: string): boolean {
 	try {
 		fs.accessSync(filePath, fs.constants.F_OK);
@@ -124,33 +129,39 @@ export function parseSearchPath(filePath: string): ParsedSearchPath {
 
 export function resolveReadPath(filePath: string, cwd: string): string {
 	const resolved = resolveToCwd(filePath, cwd);
+	const shellEscapedVariant = tryShellEscapedPath(resolved);
+	const baseCandidates = shellEscapedVariant !== resolved ? [resolved, shellEscapedVariant] : [resolved];
 
-	if (fileExists(resolved)) {
-		return resolved;
+	for (const baseCandidate of baseCandidates) {
+		if (fileExists(baseCandidate)) {
+			return baseCandidate;
+		}
 	}
 
-	// Try macOS AM/PM variant (narrow no-break space before AM/PM)
-	const amPmVariant = tryMacOSScreenshotPath(resolved);
-	if (amPmVariant !== resolved && fileExists(amPmVariant)) {
-		return amPmVariant;
-	}
+	for (const baseCandidate of baseCandidates) {
+		// Try macOS AM/PM variant (narrow no-break space before AM/PM)
+		const amPmVariant = tryMacOSScreenshotPath(baseCandidate);
+		if (amPmVariant !== baseCandidate && fileExists(amPmVariant)) {
+			return amPmVariant;
+		}
 
-	// Try NFD variant (macOS stores filenames in NFD form)
-	const nfdVariant = tryNFDVariant(resolved);
-	if (nfdVariant !== resolved && fileExists(nfdVariant)) {
-		return nfdVariant;
-	}
+		// Try NFD variant (macOS stores filenames in NFD form)
+		const nfdVariant = tryNFDVariant(baseCandidate);
+		if (nfdVariant !== baseCandidate && fileExists(nfdVariant)) {
+			return nfdVariant;
+		}
 
-	// Try curly quote variant (macOS uses U+2019 in screenshot names)
-	const curlyVariant = tryCurlyQuoteVariant(resolved);
-	if (curlyVariant !== resolved && fileExists(curlyVariant)) {
-		return curlyVariant;
-	}
+		// Try curly quote variant (macOS uses U+2019 in screenshot names)
+		const curlyVariant = tryCurlyQuoteVariant(baseCandidate);
+		if (curlyVariant !== baseCandidate && fileExists(curlyVariant)) {
+			return curlyVariant;
+		}
 
-	// Try combined NFD + curly quote (for French macOS screenshots like "Capture d'écran")
-	const nfdCurlyVariant = tryCurlyQuoteVariant(nfdVariant);
-	if (nfdCurlyVariant !== resolved && fileExists(nfdCurlyVariant)) {
-		return nfdCurlyVariant;
+		// Try combined NFD + curly quote (for French macOS screenshots like "Capture d'écran")
+		const nfdCurlyVariant = tryCurlyQuoteVariant(nfdVariant);
+		if (nfdCurlyVariant !== baseCandidate && fileExists(nfdCurlyVariant)) {
+			return nfdCurlyVariant;
+		}
 	}
 
 	return resolved;
