@@ -178,19 +178,15 @@ export interface AgentState {
 	error?: string;
 }
 
-export interface AgentToolResult<T = any, TNormative extends TSchema = any> {
+export interface AgentToolResult<T = any, _TInput = unknown> {
 	// Content blocks supporting text and images
 	content: (TextContent | ImageContent)[];
 	// Details to be displayed in a UI or logged
 	details?: T;
-	/** Normative input for the tool result */
-	$normative?: Static<TNormative>;
 }
 
 // Callback for streaming tool execution updates
-export type AgentToolUpdateCallback<T = any, TNormative extends TSchema = any> = (
-	partialResult: AgentToolResult<T, TNormative>,
-) => void;
+export type AgentToolUpdateCallback<T = any, TInput = unknown> = (partialResult: AgentToolResult<T, TInput>) => void;
 
 /** Options passed to renderResult */
 export interface RenderResultOptions {

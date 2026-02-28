@@ -651,17 +651,12 @@ export class AgentSession {
 			}
 
 			if (event.message.role === "toolResult") {
-				const { toolName, $normative, toolCallId, details, isError, content } = event.message as {
+				const { toolName, details, isError, content } = event.message as {
 					toolName?: string;
-					toolCallId?: string;
 					details?: { path?: string; phases?: TodoPhase[] };
-					$normative?: Record<string, unknown>;
 					isError?: boolean;
 					content?: Array<TextContent | ImageContent>;
 				};
-				if ($normative && toolCallId && this.settings.get("normativeRewrite")) {
-					await this.#rewriteToolCallArgs(toolCallId, $normative);
-				}
 				// Invalidate streaming edit cache when edit tool completes to prevent stale data
 				if (toolName === "edit" && details?.path) {
 					this.#invalidateFileCacheForPath(details.path);
@@ -1256,33 +1251,6 @@ export class AgentSession {
 				error: error instanceof Error ? error.message : String(error),
 			});
 			this.agent.abort();
-		}
-	}
-
-	/** Rewrite tool call arguments in agent state and persisted session history. */
-	async #rewriteToolCallArgs(toolCallId: string, args: Record<string, unknown>): Promise<void> {
-		let updated = false;
-		const messages = this.agent.state.messages;
-		for (let i = messages.length - 1; i >= 0; i--) {
-			const msg = messages[i];
-			if (msg.role !== "assistant") continue;
-			const assistantMsg = msg as AssistantMessage;
-			if (!Array.isArray(assistantMsg.content)) continue;
-			for (const block of assistantMsg.content) {
-				if (typeof block !== "object" || block === null) continue;
-				if (!("type" in block) || (block as { type?: string }).type !== "toolCall") continue;
-				const toolCall = block as { id?: string; arguments?: Record<string, unknown> };
-				if (toolCall.id === toolCallId) {
-					toolCall.arguments = args;
-					updated = true;
-					break;
-				}
-			}
-			if (updated) break;
-		}
-
-		if (updated) {
-			await this.sessionManager.rewriteAssistantToolCallArgs(toolCallId, args);
 		}
 	}
 

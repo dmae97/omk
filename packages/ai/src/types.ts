@@ -280,7 +280,7 @@ export interface AssistantMessage {
 	ttft?: number; // Time to first token in milliseconds
 }
 
-export interface ToolResultMessage<TDetails = any, TInput = unknown> {
+export interface ToolResultMessage<TDetails = any> {
 	role: "toolResult";
 	toolCallId: string;
 	toolName: string;
@@ -290,7 +290,6 @@ export interface ToolResultMessage<TDetails = any, TInput = unknown> {
 	/** Timestamp when output was pruned (ms since epoch). Undefined if unpruned. */
 	prunedAt?: number;
 	timestamp: number; // Unix timestamp in milliseconds
-	$normative?: TInput;
 }
 
 export type Message = UserMessage | DeveloperMessage | AssistantMessage | ToolResultMessage;

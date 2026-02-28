@@ -1,6 +1,11 @@
 # Changelog
 
 ## [Unreleased]
+
+### Breaking Changes
+
+- Removed `TInput` generic parameter from `ToolResultMessage` interface and removed `$normative` property
+
 ### Added
 
 - `hasUnrepresentableStrictObjectMap()` pre-flight check in `tryEnforceStrictSchema`: schemas with `patternProperties` or schema-valued `additionalProperties` now degrade gracefully to non-strict mode instead of throwing during enforcement

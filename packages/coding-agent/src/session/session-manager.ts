@@ -1820,36 +1820,6 @@ export class SessionManager {
 	}
 
 	/**
-	 * Rewrite tool call arguments in the most recent assistant message containing the toolCallId.
-	 * Returns true if a tool call was updated.
-	 */
-	async rewriteAssistantToolCallArgs(toolCallId: string, args: Record<string, unknown>): Promise<boolean> {
-		let updated = false;
-		for (let i = this.#fileEntries.length - 1; i >= 0; i--) {
-			const entry = this.#fileEntries[i];
-			if (entry.type !== "message" || entry.message.role !== "assistant") continue;
-			const message = entry.message as { content?: unknown };
-			if (!Array.isArray(message.content)) continue;
-			for (const block of message.content) {
-				if (typeof block !== "object" || block === null) continue;
-				if (!("type" in block) || (block as { type?: string }).type !== "toolCall") continue;
-				const toolCall = block as { id?: string; arguments?: Record<string, unknown> };
-				if (toolCall.id === toolCallId) {
-					toolCall.arguments = args;
-					updated = true;
-					break;
-				}
-			}
-			if (updated) break;
-		}
-
-		if (updated && this.persist && this.#sessionFile) {
-			await this.#rewriteFile();
-		}
-		return updated;
-	}
-
-	/**
 	 * Append a custom message entry (for extensions) that participates in LLM context.
 	 * @param customType Hook identifier for filtering on reload
 	 * @param content Message content (string or TextContent/ImageContent array)

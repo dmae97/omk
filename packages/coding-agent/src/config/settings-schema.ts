@@ -254,15 +254,6 @@ export const SETTINGS_SCHEMA = {
 			submenu: true,
 		},
 	},
-	normativeRewrite: {
-		type: "boolean",
-		default: false,
-		ui: {
-			tab: "agent",
-			label: "Normative rewrite",
-			description: "Rewrite tool call arguments to normalized format in session history",
-		},
-	},
 	repeatToolDescriptions: {
 		type: "boolean",
 		default: false,

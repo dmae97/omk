@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Breaking Changes
+
+- `ast_find` parameter `pattern` (string) replaced by `patterns` (string[])
+- `ast_replace` parameters `pattern` + `rewrite` replaced by `ops: Array<{ pat: string; out: string }>`
 
 ### Added
 
@@ -18,16 +22,16 @@
 - Web search schema exposes `max_tokens`, `temperature`, and `num_search_results` as tool parameters
 - Web search provider fallback: when an explicit provider is unavailable, resolves the auto chain instead of returning empty results
 
+### Removed
+
+- Removed `normativeRewrite` setting that rewrote tool call arguments to normalized format in session history
+- Removed `buildNormativeUpdateInput()` helper and normative patch transformation logic
+
 ### Fixed
 
 - `ast_replace` no longer rejects empty `out` values; an empty string now deletes matched nodes
 - `ast_replace` no longer trims `pat` and `out` values, preserving intentional whitespace
 - `gemini_image` tool: corrected `responseModalities` values from `'Image'`/`'Text'` to uppercase `'IMAGE'`/`'TEXT'` matching the API enum
-
-### Breaking Changes
-
-- `ast_find` parameter `pattern` (string) replaced by `patterns` (string[])
-- `ast_replace` parameters `pattern` + `rewrite` replaced by `ops: Array<{ pat: string; out: string }>`
 
 ## [13.3.14] - 2026-02-28
 
