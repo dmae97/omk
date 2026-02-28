@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.3.11] - 2026-02-28
+
 ### Fixed
 
 - Restored inline rendering for `read` tool image results in assistant transcript components, including streaming and rebuilt session history paths.
