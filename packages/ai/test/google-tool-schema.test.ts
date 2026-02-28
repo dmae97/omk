@@ -80,6 +80,47 @@ describe("Cloud Code Assist Claude tool schema conversion", () => {
 		expect(declaration.parametersJsonSchema).toBeUndefined();
 	});
 
+	it("normalizes mixed-type anyOf for claude parameters without emitting combiners", () => {
+		const parameters = {
+			type: "object",
+			properties: {
+				lines: {
+					anyOf: [
+						{ type: "array", items: { type: "string" } },
+						{ type: "string" },
+						{ type: "null" },
+					],
+				},
+			},
+			required: ["lines"],
+		} as unknown as TSchema;
+		const tools: Tool[] = [{ name: "test_tool", description: "Test tool", parameters }];
+		const claudeModel = createModel("claude-sonnet-4-5");
+		const geminiModel = createModel("gemini-2.5-pro");
+
+		const claudeFirst = convertTools(tools, claudeModel);
+		const claudeSecond = convertTools(tools, claudeModel);
+		const claudeDeclaration = claudeFirst?.[0]?.functionDeclarations[0] as Record<string, unknown>;
+		const geminiDeclaration = convertTools(tools, geminiModel)?.[0]?.functionDeclarations[0] as Record<string, unknown>;
+
+		expect(claudeFirst).toEqual(claudeSecond);
+		expect(claudeDeclaration.parameters).toEqual({
+			type: "object",
+			properties: {
+				lines: {
+					type: ["array", "string", "null"],
+					items: { type: "string" },
+				},
+			},
+			required: ["lines"],
+		});
+		expect(JSON.stringify(claudeDeclaration.parameters)).not.toContain("\"anyOf\"");
+		expect(JSON.stringify(claudeDeclaration.parameters)).not.toContain("\"oneOf\"");
+		expect(claudeDeclaration.parametersJsonSchema).toBeUndefined();
+		expect((geminiDeclaration.parametersJsonSchema as { properties?: Record<string, unknown> })?.properties?.lines).toEqual(
+			parameters.properties.lines,
+		);
+	});
 	it("keeps google sanitizer behavior for non-claude schema path", () => {
 		const schema = {
 			type: "object",

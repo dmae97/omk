@@ -535,6 +535,95 @@ function mergeObjectCombinerVariants(schema: JsonObject, combiner: "anyOf" | "on
 	return nextSchema;
 }
 
+const CLOUD_CODE_ASSIST_TYPE_SPECIFIC_KEYS: Record<string, ReadonlySet<string>> = {
+	array: new Set([
+		"items",
+		"prefixItems",
+		"contains",
+		"minContains",
+		"maxContains",
+		"minItems",
+		"maxItems",
+		"uniqueItems",
+		"unevaluatedItems",
+	]),
+	object: new Set([
+		"properties",
+		"required",
+		"additionalProperties",
+		"patternProperties",
+		"propertyNames",
+		"minProperties",
+		"maxProperties",
+		"dependentRequired",
+		"dependentSchemas",
+		"unevaluatedProperties",
+	]),
+	string: new Set(["minLength", "maxLength", "pattern", "format", "contentEncoding", "contentMediaType"]),
+	number: new Set(["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf"]),
+	integer: new Set(["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf"]),
+	boolean: new Set(),
+	null: new Set(),
+};
+
+function collapseMixedTypeCombinerVariants(schema: JsonObject, combiner: "anyOf" | "oneOf"): JsonObject {
+	const variantsRaw = schema[combiner];
+	if (!Array.isArray(variantsRaw) || variantsRaw.length === 0) {
+		return schema;
+	}
+
+	const seenTypes = new Set<string>();
+	const variantTypes: string[] = [];
+	const mergedVariantFields: JsonObject = {};
+	for (const entry of variantsRaw) {
+		if (!isJsonObject(entry) || typeof entry.type !== "string") {
+			return schema;
+		}
+
+		const variantType = entry.type;
+		if (seenTypes.has(variantType)) {
+			return schema;
+		}
+
+		const allowedKeys = CLOUD_CODE_ASSIST_TYPE_SPECIFIC_KEYS[variantType];
+		if (!allowedKeys) {
+			return schema;
+		}
+
+		for (const [key, variantValue] of Object.entries(entry)) {
+			if (key === "type") continue;
+			if (!allowedKeys.has(key)) {
+				return schema;
+			}
+
+			const existingValue = mergedVariantFields[key];
+			if (existingValue !== undefined && !areJsonValuesEqual(existingValue, variantValue)) {
+				return schema;
+			}
+			mergedVariantFields[key] = variantValue;
+		}
+
+		seenTypes.add(variantType);
+		variantTypes.push(variantType);
+	}
+
+	if (variantTypes.length < 2 || variantTypes.every(type => type === "object")) {
+		return schema;
+	}
+
+	const nextSchema: JsonObject = {};
+	for (const [key, entry] of Object.entries(schema)) {
+		if (key === combiner) continue;
+		nextSchema[key] = entry;
+	}
+
+	nextSchema.type = variantTypes;
+	for (const [key, value] of Object.entries(mergedVariantFields)) {
+		nextSchema[key] = value;
+	}
+	return nextSchema;
+}
+
 function normalizeSchemaForCloudCodeAssistClaude(value: unknown): unknown {
 	if (Array.isArray(value)) {
 		return value.map(entry => normalizeSchemaForCloudCodeAssistClaude(entry));
@@ -549,7 +638,9 @@ function normalizeSchemaForCloudCodeAssistClaude(value: unknown): unknown {
 	}
 
 	const mergedAnyOf = mergeObjectCombinerVariants(normalized, "anyOf");
-	return mergeObjectCombinerVariants(mergedAnyOf, "oneOf");
+	const collapsedAnyOf = collapseMixedTypeCombinerVariants(mergedAnyOf, "anyOf");
+	const mergedOneOf = mergeObjectCombinerVariants(collapsedAnyOf, "oneOf");
+	return collapseMixedTypeCombinerVariants(mergedOneOf, "oneOf");
 }
 
 let cloudCodeAssistSchemaValidator: Ajv2020 | null = null;
