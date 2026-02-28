@@ -53,7 +53,7 @@ function getForcedImageProtocol(): ImageProtocol | null | undefined {
 	if (raw === "kitty") return ImageProtocol.Kitty;
 	if (raw === "iterm2" || raw === "iterm") return ImageProtocol.Iterm2;
 	if (raw === "off" || raw === "none" || raw === "0" || raw === "false") return null;
-	return undefined;
+	return null;
 }
 
 function getFallbackImageProtocol(terminalId: TerminalId): ImageProtocol | null {

@@ -325,10 +325,15 @@ export class EventController {
 						const component = this.ctx.pendingTools.get(event.toolCallId);
 						if (component) {
 							component.updateResult({ ...event.result, isError: event.isError }, false, event.toolCallId);
+							this.ctx.pendingTools.delete(event.toolCallId);
 						}
-						this.ctx.pendingTools.delete(event.toolCallId);
-						this.#backgroundToolCallIds.delete(event.toolCallId);
-						this.#clearReadToolCall(event.toolCallId);
+						const asyncState = (event.result.details as { async?: { state?: string } } | undefined)?.async?.state;
+						if (asyncState === "running") {
+							this.#backgroundToolCallIds.add(event.toolCallId);
+						} else {
+							this.#backgroundToolCallIds.delete(event.toolCallId);
+							this.#clearReadToolCall(event.toolCallId);
+						}
 						this.ctx.ui.requestRender();
 					} else {
 						let component = this.ctx.pendingTools.get(event.toolCallId);

@@ -305,9 +305,12 @@ export class UiHelpers {
 					);
 					if (images.length > 0 && assistantComponent && settings.get("terminal.showImages")) {
 						assistantComponent.setToolResultImages(message.toolCallId, images);
-						readToolCallArgs.delete(message.toolCallId);
-						readToolCallAssistantComponents.delete(message.toolCallId);
-						continue;
+						const hasText = message.content.some(c => c.type === "text");
+						if (!hasText) {
+							readToolCallArgs.delete(message.toolCallId);
+							readToolCallAssistantComponents.delete(message.toolCallId);
+							continue;
+						}
 					}
 					let component = this.ctx.pendingTools.get(message.toolCallId);
 					if (!component) {
