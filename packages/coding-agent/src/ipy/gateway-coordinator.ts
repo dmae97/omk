@@ -110,7 +110,7 @@ async function withGatewayLock<T>(handler: () => Promise<T>): Promise<T> {
 	while (true) {
 		let fd: fs.promises.FileHandle | undefined;
 		try {
-			fd = await fs.promises.open(lockPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL);
+			fd = await fs.promises.open(lockPath, "wx");
 			let heartbeatRunning = true;
 			const heartbeat = (async () => {
 				while (heartbeatRunning) {
