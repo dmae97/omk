@@ -370,9 +370,26 @@ describe("searchExa", () => {
 		expect(result.answer).toContain("**Has URL**: real summary");
 	});
 
-	it("throws on missing API key", async () => {
+	it("uses Exa MCP when API key is missing", async () => {
 		delete process.env.EXA_API_KEY;
-		await expect(searchExa({ query: "no key" })).rejects.toThrow("EXA_API_KEY not found");
+		let calledUrl = "";
+		globalThis.fetch = mock(async (url: string | URL | Request) => {
+			calledUrl = String(url);
+			return new Response(
+				JSON.stringify({ jsonrpc: "2.0", id: "mcp-1", result: makeMockExaResponse() }),
+				{
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				},
+			);
+		}) as unknown as typeof fetch;
+
+		const result = await searchExa({ query: "no key" });
+		expect(result.provider).toBe("exa");
+		expect(result.sources).toHaveLength(3);
+		expect(calledUrl).toContain("https://mcp.exa.ai/mcp");
+		expect(calledUrl).toContain("tools=web_search_exa");
+		expect(calledUrl).not.toContain("exaApiKey=");
 	});
 
 	it("throws SearchProviderError on non-ok HTTP response", async () => {

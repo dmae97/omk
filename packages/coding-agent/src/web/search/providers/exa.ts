@@ -7,6 +7,7 @@
  * them into a combined `answer` string on the SearchResponse.
  */
 import { getEnvApiKey } from "@oh-my-pi/pi-ai";
+import { callExaTool, findApiKey, isSearchResponse } from "../../../exa/mcp-client";
 import type { SearchResponse, SearchSource } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
 import { dateToAgeSeconds } from "../utils";
@@ -121,14 +122,19 @@ async function callExaSearch(apiKey: string, params: ExaSearchParams): Promise<E
 	return response.json() as Promise<ExaSearchResponse>;
 }
 
+async function callExaMcpSearch(params: ExaSearchParams): Promise<ExaSearchResponse> {
+	const response = await callExaTool("web_search_exa", { ...params }, findApiKey());
+	if (!isSearchResponse(response)) {
+		throw new Error("Exa MCP search returned unexpected response shape.");
+	}
+
+	return response as ExaSearchResponse;
+}
+
 /** Execute Exa web search */
 export async function searchExa(params: ExaSearchParams): Promise<SearchResponse> {
 	const apiKey = getEnvApiKey("exa");
-	if (!apiKey) {
-		throw new Error("EXA_API_KEY not found. Set it in environment or .env file.");
-	}
-
-	const response = await callExaSearch(apiKey, params);
+	const response = apiKey ? await callExaSearch(apiKey, params) : await callExaMcpSearch(params);
 
 	// Convert to unified SearchResponse
 	const sources: SearchSource[] = [];
