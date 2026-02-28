@@ -1,7 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-
 ### Added
 
 - Added `ast_find` tool for structural code search using AST matching via ast-grep, enabling syntax-aware pattern discovery across codebases
@@ -24,6 +23,7 @@
 
 ### Changed
 
+- Replaced `smol-toml` dependency with native `Bun.TOML.parse()` for TOML parsing, reducing external dependencies
 - Replaced `node-html-parser` dependency with `linkedom` for HTML parsing, improving performance and reducing bundle size
 - Updated HTML parsing API calls from `node-html-parser` to `linkedom` across all web scrapers (arXiv, IACR, Go pkg, Read the Docs, Twitter, Wikipedia)
 - Changed element text extraction from `.text` property to `.textContent` property for compatibility with linkedom DOM API
@@ -50,6 +50,7 @@
 
 ### Removed
 
+- Removed `smol-toml` dependency from package.json
 - Removed `node-html-parser` dependency from package.json
 - Removed `files` array parameter for batch file operations
 - Removed `column`, `end_line`, and `end_character` parameters in favor of symbol-based positioning

@@ -8,7 +8,6 @@
  */
 import * as path from "node:path";
 import { logger } from "@oh-my-pi/pi-utils";
-import { parse as parseToml } from "smol-toml";
 import { registerProvider } from "../capability";
 import type { ContextFile } from "../capability/context-file";
 import { contextFileCapability } from "../capability/context-file";
@@ -116,7 +115,7 @@ async function loadTomlConfig(_ctx: LoadContext, path: string): Promise<Record<s
 	if (!content) return null;
 
 	try {
-		return parseToml(content) as Record<string, unknown>;
+		return Bun.TOML.parse(content) as Record<string, unknown>;
 	} catch (error) {
 		logger.warn("Failed to parse TOML config", { path, error: String(error) });
 		return null;
