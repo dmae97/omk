@@ -1330,6 +1330,121 @@ describe("openai-codex streaming", () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
+	it("falls back to SSE when websocket becomes unavailable before stream start", async () => {
+		const tempDir = TempDir.createSync("@pi-codex-stream-");
+		setAgentDir(tempDir.path());
+		Bun.env.PI_CODEX_WEBSOCKET_RETRY_BUDGET = "0";
+		Bun.env.PI_CODEX_WEBSOCKET_RETRY_DELAY_MS = "1";
+
+		const payload = Buffer.from(
+			JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acc_test" } }),
+			"utf8",
+		).toBase64();
+		const token = `aaa.${payload}.bbb`;
+		const sse = `${[
+			`data: ${JSON.stringify({ type: "response.content_part.added", part: { type: "output_text", text: "" } })}`,
+			`data: ${JSON.stringify({ type: "response.output_text.delta", delta: "Hello fallback" })}`,
+			`data: ${JSON.stringify({ type: "response.output_item.done", item: { type: "message", id: "msg_ws_unavailable", role: "assistant", status: "completed", content: [{ type: "output_text", text: "Hello fallback" }] } })}`,
+			`data: ${JSON.stringify({ type: "response.completed", response: { status: "completed", usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8, input_tokens_details: { cached_tokens: 0 } } } })}`,
+		].join("\n\n")}\n\n`;
+
+		const fetchMock = vi.fn(async (input: string | URL) => {
+			const url = typeof input === "string" ? input : input.toString();
+			if (url === "https://chatgpt.com/backend-api/codex/responses") {
+				return new Response(sse, {
+					status: 200,
+					headers: { "content-type": "text/event-stream" },
+				});
+			}
+			return new Response("not found", { status: 404 });
+		});
+		global.fetch = fetchMock as unknown as typeof fetch;
+
+		type WsListener = (event: Event) => void;
+		class UnavailableBeforeStreamWebSocket {
+			static readonly CONNECTING = 0;
+			static readonly OPEN = 1;
+			static readonly CLOSING = 2;
+			static readonly CLOSED = 3;
+			readyState = UnavailableBeforeStreamWebSocket.CONNECTING;
+			#listeners = new Map<string, Set<WsListener>>();
+
+			constructor(_url: string, _options?: { headers?: Record<string, string> }) {
+				setTimeout(() => {
+					this.readyState = UnavailableBeforeStreamWebSocket.OPEN;
+					this.#emit("open", new Event("open"));
+					this.readyState = UnavailableBeforeStreamWebSocket.CLOSED;
+					this.#emit("close", { code: 1006 } as unknown as Event);
+				}, 0);
+			}
+
+			addEventListener(type: string, listener: unknown): void {
+				if (typeof listener !== "function") return;
+				const listeners = this.#listeners.get(type) ?? new Set<WsListener>();
+				listeners.add(listener as WsListener);
+				this.#listeners.set(type, listeners);
+			}
+
+			removeEventListener(type: string, listener: unknown): void {
+				if (typeof listener !== "function") return;
+				const listeners = this.#listeners.get(type);
+				listeners?.delete(listener as WsListener);
+			}
+
+			send(): void {}
+
+			close(): void {
+				this.readyState = UnavailableBeforeStreamWebSocket.CLOSED;
+			}
+
+			#emit(type: string, event: Event): void {
+				const listeners = this.#listeners.get(type);
+				if (!listeners) return;
+				for (const listener of listeners) {
+					listener(event);
+				}
+			}
+		}
+
+		global.WebSocket = UnavailableBeforeStreamWebSocket as unknown as typeof WebSocket;
+
+		const model: Model<"openai-codex-responses"> = {
+			id: "gpt-5.3-codex-spark",
+			name: "GPT-5.3 Codex Spark",
+			api: "openai-codex-responses",
+			provider: "openai-codex",
+			baseUrl: "https://chatgpt.com/backend-api",
+			reasoning: true,
+			preferWebsockets: true,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 128000,
+			maxTokens: 128000,
+		};
+		const context: Context = {
+			systemPrompt: "You are a helpful assistant.",
+			messages: [{ role: "user", content: "Say hello", timestamp: Date.now() }],
+		};
+		const providerSessionState = new Map<string, ProviderSessionState>();
+		const result = await streamOpenAICodexResponses(model, context, {
+			apiKey: token,
+			sessionId: "ws-unavailable-session",
+			providerSessionState,
+		}).result();
+
+		expect(result.role).toBe("assistant");
+		expect(result.stopReason).not.toBe("error");
+		expect(result.errorMessage).toBeUndefined();
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		const transportDetails = getOpenAICodexTransportDetails(model, {
+			sessionId: "ws-unavailable-session",
+			providerSessionState,
+		});
+		expect(transportDetails.lastTransport).toBe("sse");
+		expect(transportDetails.websocketDisabled).toBe(true);
+		expect(transportDetails.fallbackCount).toBe(1);
+	});
+
 	it("resets websocket append state after an aborted request closes the connection", async () => {
 		const tempDir = TempDir.createSync("@pi-codex-stream-");
 		setAgentDir(tempDir.path());

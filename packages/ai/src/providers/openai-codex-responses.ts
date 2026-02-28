@@ -187,7 +187,7 @@ function isCodexWebSocketTransportError(error: unknown): boolean {
 function isCodexWebSocketRetryableStreamError(error: unknown): boolean {
 	if (!(error instanceof Error) || !isCodexWebSocketTransportError(error)) return false;
 	const message = error.message.toLowerCase();
-	return message.includes("websocket closed (") || message.includes("websocket closed before response completion");
+	return message.includes("websocket closed (") || message.includes("websocket closed before response completion") || message.includes("websocket connection is unavailable");
 }
 
 function toCodexHeaderRecord(value: unknown): Record<string, string> | null {
