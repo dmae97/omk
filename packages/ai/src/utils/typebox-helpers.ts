@@ -241,7 +241,7 @@ export function enforceStrictSchema(schema: Record<string, unknown>): Record<str
 		result.type === undefined &&
 		result.$ref === undefined &&
 		!COMBINATOR_KEYS.some(key => Array.isArray(result[key])) &&
-		!(isObjectRecord(result.not))
+		!isObjectRecord(result.not)
 	) {
 		throw new Error("Schema node has no type, combinator, or $ref — cannot enforce strict mode");
 	}
