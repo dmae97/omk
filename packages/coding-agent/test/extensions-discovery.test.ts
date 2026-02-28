@@ -317,15 +317,59 @@ describe("extensions discovery", () => {
 	});
 
 	it("resolves dependencies from extension's own node_modules", async () => {
-		// Load extension that has its own package.json and node_modules with 'ms' package
-		const extPath = path.resolve(import.meta.dirname, "../examples/extensions/with-deps");
+		const extDir = path.join(tempDir.path(), "with-deps");
+		const extNodeModules = path.join(extDir, "node_modules", "local-duration-parser");
+		fs.mkdirSync(extNodeModules, { recursive: true });
 
-		const result = await discoverForTest([extPath]);
+		fs.writeFileSync(
+			path.join(extDir, "package.json"),
+			JSON.stringify({
+				name: "pi-extension-with-deps",
+				version: "1.0.0",
+				type: "module",
+				omp: { extensions: ["./index.ts"] },
+			}),
+		);
+
+		fs.writeFileSync(
+			path.join(extDir, "index.ts"),
+			`			import parseDuration from "local-duration-parser";
+
+				export default function (pi) {
+					const { Type } = pi.typebox;
+					pi.registerTool({
+						name: "parse_duration",
+						label: "Parse Duration",
+						description: "Parse duration strings",
+						parameters: Type.Object({ duration: Type.String() }),
+						execute: async (_toolCallId, params) => ({
+							content: [{ type: "text", text: String(parseDuration(params.duration)) }],
+							details: {},
+						}),
+					});
+				}
+			`,
+		);
+
+		fs.writeFileSync(
+			path.join(extNodeModules, "package.json"),
+			JSON.stringify({
+				name: "local-duration-parser",
+				version: "1.0.0",
+				type: "module",
+				exports: "./index.js",
+			}),
+		);
+		fs.writeFileSync(
+			path.join(extNodeModules, "index.js"),
+			"export default function parseDuration(input) { return input.length; }",
+		);
+
+		const result = await discoverForTest([extDir]);
 
 		expect(result.errors).toHaveLength(0);
 		expect(result.extensions).toHaveLength(1);
 		expect(result.extensions[0].path).toContain("with-deps");
-		// The extension registers a 'parse_duration' tool
 		expect(result.extensions[0].tools.has("parse_duration")).toBe(true);
 	});
 
