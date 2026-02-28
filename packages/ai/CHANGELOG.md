@@ -5,10 +5,30 @@
 ### Added
 
 - `hasUnrepresentableStrictObjectMap()` pre-flight check in `tryEnforceStrictSchema`: schemas with `patternProperties` or schema-valued `additionalProperties` now degrade gracefully to non-strict mode instead of throwing during enforcement
+- `generateClaudeCloakingUserId()` generates structured user IDs for Anthropic OAuth metadata (`user_{hex64}_account_{uuid}_session_{uuid}`)
+- `isClaudeCloakingUserId()` validates whether a string matches the cloaking user-ID format
+- `mapStainlessOs()` and `mapStainlessArch()` map `process.platform`/`process.arch` to Stainless header values; X-Stainless-Os and X-Stainless-Arch in `claudeCodeHeaders` are now runtime-computed
+- `buildClaudeCodeTlsFetchOptions()` attaches SNI and default TLS ciphers for direct `api.anthropic.com` connections
+- `createClaudeBillingHeader()` generates the `x-anthropic-billing-header` block (SHA-256 payload fingerprint + random build hash)
+- `buildAnthropicSystemBlocks()` now injects a billing header block and the Claude Agent SDK identity block with `ephemeral` 1h cache-control when `includeClaudeCodeInstruction` is set
+- `resolveAnthropicMetadataUserId()` auto-generates a cloaking user ID for OAuth requests when `metadata.user_id` is absent or invalid
+- `AnthropicOAuthFlow` is now exported for direct use
+- OAuth callback server timeout extended from 2 min to 5 min
 
 ### Changed
 
 - Extended `ANTHROPIC_OAUTH_BETA` constant in the OpenAI-compat Anthropic route with `interleaved-thinking-2025-05-14`, `context-management-2025-06-27`, and `prompt-caching-scope-2026-01-05` beta flags
+- `claudeCodeVersion` bumped to `2.1.63`; `claudeCodeSystemInstruction` updated to identify as Claude Agent SDK
+- `claudeCodeHeaders`: removed `X-Stainless-Helper-Method`, updated package version to `0.74.0`, runtime version to `v24.3.0`
+- `applyClaudeToolPrefix` / `stripClaudeToolPrefix` now accept an optional prefix override and skip Anthropic built-in tool names (`web_search`, `code_execution`, `text_editor`, `computer`)
+- Accept-Encoding header updated to `gzip, deflate, br, zstd`
+- Non-Anthropic base URLs now receive `Authorization: Bearer` regardless of OAuth status
+- Prompt-caching logic now skips applying breakpoints when any block already carries `cache_control`, instead of stripping then re-applying
+- `fine-grained-tool-streaming-2025-05-14` removed from default beta set
+- Anthropic OAuth token URL changed from `platform.claude.com` to `api.anthropic.com`
+- Anthropic OAuth scopes reduced to `org:create_api_key user:profile user:inference`
+- OAuth code exchange now strips URL fragment from callback code, using the fragment as state override when present
+- Claude usage headers aligned: user-agent updated to `claude-cli/2.1.63 (external, cli)`, anthropic-beta extended with full beta set
 
 ## [13.3.14] - 2026-02-28
 

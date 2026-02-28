@@ -11,6 +11,7 @@
 - AST replace output now renders diff-style (`-before` / `+after`) change previews grouped by directory
 - Both AST tools now report `scopePath`, `files`, and per-file match/replacement counts in tool details
 - Task item `id` max length raised from 32 to 48 characters
+- Anthropic web search provider now uses `buildAnthropicSearchHeaders` (dedicated search header builder separate from inference headers)
 
 ### Breaking Changes
 

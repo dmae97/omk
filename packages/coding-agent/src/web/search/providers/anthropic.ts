@@ -7,7 +7,7 @@
 import {
 	type AnthropicAuthConfig,
 	type AnthropicSystemBlock,
-	buildAnthropicHeaders,
+	buildAnthropicSearchHeaders,
 	buildAnthropicSystemBlocks,
 	buildAnthropicUrl,
 	findAnthropicAuth,
@@ -87,7 +87,7 @@ async function callSearch(
 	temperature?: number,
 ): Promise<AnthropicApiResponse> {
 	const url = buildAnthropicUrl(auth);
-	const headers = buildAnthropicHeaders(auth);
+	const headers = buildAnthropicSearchHeaders(auth);
 
 	const systemBlocks = buildSystemBlocks(auth, model, systemPrompt);
 

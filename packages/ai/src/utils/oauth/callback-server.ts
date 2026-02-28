@@ -13,7 +13,7 @@
 import templateHtml from "./oauth.html" with { type: "text" };
 import type { OAuthController, OAuthCredentials } from "./types";
 
-const DEFAULT_TIMEOUT = 120_000;
+const DEFAULT_TIMEOUT = 300_000;
 const DEFAULT_HOSTNAME = "localhost";
 const CALLBACK_PATH = "/callback";
 

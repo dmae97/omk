@@ -8,12 +8,12 @@ import type { OAuthController, OAuthCredentials } from "./types";
 const decode = (s: string) => atob(s);
 const CLIENT_ID = decode("OWQxYzI1MGEtZTYxYi00NGQ5LTg4ZWQtNTk0NGQxOTYyZjVl");
 const AUTHORIZE_URL = "https://claude.ai/oauth/authorize";
-const TOKEN_URL = "https://platform.claude.com/v1/oauth/token";
+const TOKEN_URL = "https://api.anthropic.com/v1/oauth/token";
 const CALLBACK_PORT = 54545;
 const CALLBACK_PATH = "/callback";
-const SCOPES = "org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers";
+const SCOPES = "org:create_api_key user:profile user:inference";
 
-class AnthropicOAuthFlow extends OAuthCallbackFlow {
+export class AnthropicOAuthFlow extends OAuthCallbackFlow {
 	#verifier: string = "";
 	#challenge: string = "";
 
@@ -42,6 +42,17 @@ class AnthropicOAuthFlow extends OAuthCallbackFlow {
 	}
 
 	async exchangeToken(code: string, state: string, redirectUri: string): Promise<OAuthCredentials> {
+		let exchangeCode = code;
+		let exchangeState = state;
+		const codeFragmentIndex = code.indexOf("#");
+		if (codeFragmentIndex >= 0) {
+			exchangeCode = code.slice(0, codeFragmentIndex);
+			const codeFragmentState = code.slice(codeFragmentIndex + 1);
+			if (codeFragmentState.length > 0) {
+				exchangeState = codeFragmentState;
+			}
+		}
+
 		const tokenResponse = await fetch(TOKEN_URL, {
 			method: "POST",
 			headers: {
@@ -51,8 +62,8 @@ class AnthropicOAuthFlow extends OAuthCallbackFlow {
 			body: JSON.stringify({
 				grant_type: "authorization_code",
 				client_id: CLIENT_ID,
-				code,
-				state,
+				code: exchangeCode,
+				state: exchangeState,
 				redirect_uri: redirectUri,
 				code_verifier: this.#verifier,
 			}),
