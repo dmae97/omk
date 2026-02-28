@@ -140,3 +140,9 @@ export { killTree, listDescendants } from "./ps";
 // =============================================================================
 
 export { getWorkProfile, type WorkProfile } from "./work";
+
+// =============================================================================
+// macOS appearance detection
+// =============================================================================
+
+export { detectMacOSAppearance, type MacAppearanceObserver, startMacAppearanceObserver } from "./appearance";

@@ -1,9 +1,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
+	detectMacOSAppearance,
 	type HighlightColors as NativeHighlightColors,
 	highlightCode as nativeHighlightCode,
 	supportsLanguage as nativeSupportsLanguage,
+	startMacAppearanceObserver as startNativeMacObserver,
 } from "@oh-my-pi/pi-natives";
 import type { EditorTheme, MarkdownTheme, SelectListTheme, SymbolTheme } from "@oh-my-pi/pi-tui";
 import { adjustHsv, getCustomThemesDir, isEnoent, logger } from "@oh-my-pi/pi-utils";
@@ -1619,10 +1621,20 @@ export async function getThemeByName(name: string): Promise<Theme | undefined> {
 /** Appearance reported by Mode 2031 (terminal DSR), or undefined if not (yet) available. */
 var terminalReportedAppearance: "dark" | "light" | undefined;
 
+/** Appearance reported by native macOS observer, or undefined if not (yet) available. */
+var macOSReportedAppearance: "dark" | "light" | undefined;
+
 function detectTerminalBackground(): "dark" | "light" {
 	// Prefer terminal-reported appearance from Mode 2031 (CSI ? 997 ; {1,2} n)
 	if (terminalReportedAppearance) {
 		return terminalReportedAppearance;
+	}
+	// macOS: query system appearance via CoreFoundation (native, no shell).
+	// Uses cached observer value, or falls back to CFPreferencesCopyAppValue.
+	// Works on all terminals including Warp which lacks Mode 2031 / OSC 11.
+	const macAppearance = macOSReportedAppearance ?? detectMacOSAppearance();
+	if (macAppearance) {
+		return macAppearance;
 	}
 	// Fallback: COLORFGBG environment variable (static, set once at terminal launch)
 	const colorfgbg = Bun.env.COLORFGBG || "";
@@ -1763,19 +1775,7 @@ export async function previewTheme(name: string): Promise<{ success: boolean; er
  */
 export function enableAutoTheme(): void {
 	autoDetectedTheme = true;
-	const resolved = getDefaultTheme();
-	if (resolved === currentThemeName) return;
-	currentThemeName = resolved;
-	loadTheme(resolved, getCurrentThemeOptions())
-		.then(loadedTheme => {
-			theme = loadedTheme;
-			if (onThemeChangeCallback) {
-				onThemeChangeCallback();
-			}
-		})
-		.catch(err => {
-			logger.debug("Auto theme switch failed", { error: String(err) });
-		});
+	reevaluateAutoTheme("enableAutoTheme");
 }
 
 /**
@@ -1785,20 +1785,7 @@ export function enableAutoTheme(): void {
 export function setAutoThemeMapping(mode: "dark" | "light", themeName: string): void {
 	if (mode === "dark") autoDarkTheme = themeName;
 	else autoLightTheme = themeName;
-	if (!autoDetectedTheme) return;
-	const resolved = getDefaultTheme();
-	if (resolved === currentThemeName) return;
-	currentThemeName = resolved;
-	loadTheme(resolved, getCurrentThemeOptions())
-		.then(loadedTheme => {
-			theme = loadedTheme;
-			if (onThemeChangeCallback) {
-				onThemeChangeCallback();
-			}
-		})
-		.catch(err => {
-			logger.debug("Auto theme mapping switch failed", { error: String(err) });
-		});
+	reevaluateAutoTheme("setAutoThemeMapping");
 }
 
 /**
@@ -1810,20 +1797,7 @@ export function setAutoThemeMapping(mode: "dark" | "light", themeName: string): 
 export function onTerminalAppearanceChange(mode: "dark" | "light"): void {
 	if (terminalReportedAppearance === mode) return;
 	terminalReportedAppearance = mode;
-	if (!autoDetectedTheme) return;
-	const resolved = getDefaultTheme();
-	if (resolved === currentThemeName) return;
-	currentThemeName = resolved;
-	loadTheme(resolved, getCurrentThemeOptions())
-		.then(loadedTheme => {
-			theme = loadedTheme;
-			if (onThemeChangeCallback) {
-				onThemeChangeCallback();
-			}
-		})
-		.catch(err => {
-			logger.debug("Mode 2031 appearance switch failed", { error: String(err) });
-		});
+	reevaluateAutoTheme("Mode 2031");
 }
 
 export function setThemeInstance(themeInstance: Theme): void {
@@ -1969,26 +1943,68 @@ async function startThemeWatcher(): Promise<void> {
 	}
 }
 
-/** Re-check COLORFGBG on SIGWINCH and switch dark/light when using auto-detected theme. */
+/**
+ * Shared logic for re-evaluating the auto-detected theme.
+ * Called from SIGWINCH, macOS observer, and Mode 2031 handler.
+ */
+function reevaluateAutoTheme(debugLabel: string): void {
+	if (!autoDetectedTheme) return;
+	const resolved = getDefaultTheme();
+	if (resolved === currentThemeName) return;
+	currentThemeName = resolved;
+	loadTheme(resolved, getCurrentThemeOptions())
+		.then(loadedTheme => {
+			theme = loadedTheme;
+			if (onThemeChangeCallback) {
+				onThemeChangeCallback();
+			}
+		})
+		.catch(err => {
+			logger.debug(`Theme switch on ${debugLabel} failed`, { error: String(err) });
+		});
+}
+
+// ============================================================================
+// macOS Appearance Observer
+// ============================================================================
+
+var macObserver: { stop(): void } | undefined;
+
+/** Start the native macOS appearance observer (CFDistributedNotificationCenter). */
+function startMacAppearanceObserver(): void {
+	stopMacAppearanceObserver();
+	if (process.platform !== "darwin") return;
+	try {
+		macObserver = startNativeMacObserver(appearance => {
+			macOSReportedAppearance = appearance;
+			if (!terminalReportedAppearance) reevaluateAutoTheme("macOS observer");
+		});
+	} catch (err) {
+		logger.warn("Failed to start macOS appearance observer", { err });
+	}
+}
+
+function stopMacAppearanceObserver(): void {
+	if (macObserver) {
+		macObserver.stop();
+		macObserver = undefined;
+	}
+	macOSReportedAppearance = undefined;
+}
+
+// ============================================================================
+// SIGWINCH Listener
+// ============================================================================
+
+/** Re-check appearance on SIGWINCH and switch dark/light when using auto-detected theme. */
 function startSigwinchListener(): void {
 	stopSigwinchListener();
 	sigwinchHandler = () => {
-		if (!autoDetectedTheme) return;
-		const resolved = getDefaultTheme();
-		if (resolved === currentThemeName) return;
-		currentThemeName = resolved;
-		loadTheme(resolved, getCurrentThemeOptions())
-			.then(loadedTheme => {
-				theme = loadedTheme;
-				if (onThemeChangeCallback) {
-					onThemeChangeCallback();
-				}
-			})
-			.catch(err => {
-				logger.debug("Theme switch on SIGWINCH failed", { error: String(err) });
-			});
+		reevaluateAutoTheme("SIGWINCH");
 	};
 	process.on("SIGWINCH", sigwinchHandler);
+	// Start macOS appearance observer alongside SIGWINCH listener.
+	startMacAppearanceObserver();
 }
 
 function stopSigwinchListener(): void {
@@ -1996,6 +2012,7 @@ function stopSigwinchListener(): void {
 		process.removeListener("SIGWINCH", sigwinchHandler);
 		sigwinchHandler = undefined;
 	}
+	stopMacAppearanceObserver();
 }
 
 export function stopThemeWatcher(): void {
