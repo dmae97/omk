@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.3.14] - 2026-02-28
+
 ### Added
 
 - Expanded AST tool language support from 7 to all 25 ast-grep tree-sitter languages (Bash, C, C++, C#, CSS, Elixir, Go, Haskell, HCL, HTML, Java, JavaScript, JSON, Kotlin, Lua, Nix, PHP, Python, Ruby, Rust, Scala, Solidity, Swift, TSX, TypeScript, YAML)

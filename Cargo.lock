@@ -1447,16 +1447,16 @@ dependencies = [
 
 [[package]]
 name = "inferno"
-version = "0.12.4"
+version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d35223c50fdd26419a4ccea2c73be68bd2b29a3d7d6123ffe101c17f4c20a52a"
+checksum = "20dd69640582458beceefcf045f8de34263d45194999c9a49fcd53e5b503d522"
 dependencies = [
  "ahash",
  "itoa",
  "log",
  "num-format",
  "once_cell",
- "quick-xml",
+ "quick-xml 0.39.2",
  "rgb",
  "str_stack",
 ]
@@ -2108,7 +2108,7 @@ dependencies = [
 
 [[package]]
 name = "pi-natives"
-version = "13.3.13"
+version = "13.3.14"
 dependencies = [
  "arboard",
  "ast-grep-core",
@@ -2287,6 +2287,15 @@ name = "quick-xml"
 version = "0.38.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b66c2058c55a409d601666cffe35f04333cf1013010882cec174a7467cd4e21c"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
+name = "quick-xml"
+version = "0.39.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "958f21e8e7ceb5a1aa7fa87fab28e7c75976e0bfe7e23ff069e0a260f894067d"
 dependencies = [
  "memchr",
 ]
@@ -3477,7 +3486,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5423e94b6a63e68e439803a3e153a9252d5ead12fd853334e2ad33997e3889e3"
 dependencies = [
  "proc-macro2",
- "quick-xml",
+ "quick-xml 0.38.4",
  "quote",
 ]
 

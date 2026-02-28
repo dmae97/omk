@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [13.3.14] - 2026-02-28
+
 ### Added
 
 - Exported schema utilities from new `./utils/schema` module, consolidating JSON Schema handling across providers
