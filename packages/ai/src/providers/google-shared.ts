@@ -479,7 +479,7 @@ export function sanitizeSchemaForGoogle(value: unknown): unknown {
 export function sanitizeSchemaForCloudCodeAssistClaude(value: unknown): unknown {
 	return sanitizeSchemaImpl(value, {
 		insideProperties: false,
-		normalizeTypeArrayToNullable: false,
+		normalizeTypeArrayToNullable: true,
 		stripNullableKeyword: true,
 	});
 }
@@ -627,7 +627,8 @@ function collapseMixedTypeCombinerVariants(schema: JsonObject, combiner: "anyOf"
 		nextSchema[key] = entry;
 	}
 
-	nextSchema.type = variantTypes;
+	const nonNullTypes = variantTypes.filter(t => t !== "null");
+	nextSchema.type = nonNullTypes[0] ?? variantTypes[0];
 	for (const [key, value] of Object.entries(mergedVariantFields)) {
 		const existingValue = nextSchema[key];
 		if (existingValue !== undefined && !areJsonValuesEqual(existingValue, value)) {
@@ -638,6 +639,51 @@ function collapseMixedTypeCombinerVariants(schema: JsonObject, combiner: "anyOf"
 		}
 	}
 	return nextSchema;
+}
+
+/**
+ * Collapse anyOf/oneOf where all variants share the same primitive type.
+ * E.g. anyOf: [{type: "string", desc: "A"}, {type: "string", desc: "B"}] → {type: "string", desc: "A"}
+ * Claude via CCA rejects any remaining anyOf/oneOf, so pick first variant.
+ */
+function collapseSameTypeCombinerVariants(schema: JsonObject, combiner: "anyOf" | "oneOf"): JsonObject {
+	const variantsRaw = schema[combiner];
+	if (!Array.isArray(variantsRaw) || variantsRaw.length === 0) return schema;
+	let commonType: string | undefined;
+	for (const entry of variantsRaw) {
+		if (!isJsonObject(entry) || typeof entry.type !== "string") return schema;
+		if (commonType === undefined) commonType = entry.type;
+		else if (entry.type !== commonType) return schema;
+	}
+	const first = variantsRaw[0] as JsonObject;
+	const nextSchema: JsonObject = {};
+	for (const [key, entry] of Object.entries(schema)) {
+		if (key === combiner) continue;
+		nextSchema[key] = entry;
+	}
+	for (const [key, value] of Object.entries(first)) {
+		if (!(key in nextSchema)) nextSchema[key] = value;
+	}
+	return nextSchema;
+}
+
+/**
+ * Recursively strip any remaining anyOf/oneOf that collapseSameTypeCombinerVariants can handle.
+ * This is needed because mergeObjectCombinerVariants can create new anyOf in merged
+ * properties AFTER the recursive normalization pass has already processed children.
+ */
+function stripResidualCombiners(value: unknown): unknown {
+	if (Array.isArray(value)) return value.map(stripResidualCombiners);
+	if (!isJsonObject(value)) return value;
+	const result: JsonObject = {};
+	for (const [key, entry] of Object.entries(value)) {
+		result[key] = stripResidualCombiners(entry);
+	}
+	for (const combiner of ["anyOf", "oneOf"] as const) {
+		const collapsed = collapseSameTypeCombinerVariants(result, combiner);
+		if (collapsed !== result) return collapsed;
+	}
+	return result;
 }
 
 function normalizeSchemaForCloudCodeAssistClaude(value: unknown): unknown {
@@ -655,8 +701,10 @@ function normalizeSchemaForCloudCodeAssistClaude(value: unknown): unknown {
 
 	const mergedAnyOf = mergeObjectCombinerVariants(normalized, "anyOf");
 	const collapsedAnyOf = collapseMixedTypeCombinerVariants(mergedAnyOf, "anyOf");
-	const mergedOneOf = mergeObjectCombinerVariants(collapsedAnyOf, "oneOf");
-	return collapseMixedTypeCombinerVariants(mergedOneOf, "oneOf");
+	const sameTypeAnyOf = collapseSameTypeCombinerVariants(collapsedAnyOf, "anyOf");
+	const mergedOneOf = mergeObjectCombinerVariants(sameTypeAnyOf, "oneOf");
+	const collapsedOneOf = collapseMixedTypeCombinerVariants(mergedOneOf, "oneOf");
+	return collapseSameTypeCombinerVariants(collapsedOneOf, "oneOf");
 }
 
 let cloudCodeAssistSchemaValidator: Ajv2020 | null = null;
@@ -699,7 +747,9 @@ const CLOUD_CODE_ASSIST_CLAUDE_FALLBACK_SCHEMA = {
  */
 export function prepareSchemaForCloudCodeAssistClaude(value: unknown): unknown {
 	const sanitized = sanitizeSchemaForCloudCodeAssistClaude(value);
-	const normalized = normalizeSchemaForCloudCodeAssistClaude(sanitized);
+	const pass1 = normalizeSchemaForCloudCodeAssistClaude(sanitized);
+	// Second pass: strip anyOf/oneOf created by mergeObjectCombinerVariants during pass1
+	const normalized = stripResidualCombiners(pass1);
 	if (isValidCloudCodeAssistClaudeSchema(normalized)) {
 		return normalized;
 	}
