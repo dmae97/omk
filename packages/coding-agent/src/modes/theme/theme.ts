@@ -1629,24 +1629,25 @@ function detectTerminalBackground(): "dark" | "light" {
 	if (terminalReportedAppearance) {
 		return terminalReportedAppearance;
 	}
-	// macOS: query system appearance via CoreFoundation (native, no shell).
-	// Uses cached observer value, or falls back to CFPreferencesCopyAppValue.
-	// Works on all terminals including Warp which lacks Mode 2031 / OSC 11.
-	const macAppearance = macOSReportedAppearance ?? detectMacOSAppearance();
-	if (macAppearance) {
-		return macAppearance;
-	}
-	// Fallback: COLORFGBG environment variable (static, set once at terminal launch)
+	// COLORFGBG is set by the terminal emulator to reflect the actual profile colors.
+	// Check it before macOS system appearance because the terminal profile may differ
+	// from the OS-level dark/light setting (e.g. dark terminal on macOS light mode).
 	const colorfgbg = Bun.env.COLORFGBG || "";
 	if (colorfgbg) {
 		const parts = colorfgbg.split(";");
 		if (parts.length >= 2) {
 			const bg = parseInt(parts[1], 10);
 			if (!Number.isNaN(bg)) {
-				const result = bg < 8 ? "dark" : "light";
-				return result;
+				return bg < 8 ? "dark" : "light";
 			}
 		}
+	}
+	// macOS: query system appearance via CoreFoundation (native, no shell).
+	// Uses cached observer value, or falls back to CFPreferencesCopyAppValue.
+	// Works on all terminals including Warp which lacks Mode 2031 / OSC 11.
+	const macAppearance = macOSReportedAppearance ?? detectMacOSAppearance();
+	if (macAppearance) {
+		return macAppearance;
 	}
 	return "dark";
 }
