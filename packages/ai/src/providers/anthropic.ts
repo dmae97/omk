@@ -30,7 +30,7 @@ import { AssistantMessageEventStream } from "../utils/event-stream";
 import { finalizeErrorMessage, type RawHttpRequestDump } from "../utils/http-inspector";
 import { parseStreamingJson } from "../utils/json-parse";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
-import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers";
+import { buildCopilotDynamicHeaders, getCopilotInitiatorOverride, hasCopilotVisionInput } from "./github-copilot-headers";
 import { transformMessages } from "./transform-messages";
 
 export type AnthropicHeaderOptions = {
@@ -347,9 +347,14 @@ export const streamAnthropic: StreamFunction<"anthropic-messages"> = (
 			let copilotDynamicHeaders: Record<string, string> | undefined;
 			if (model.provider === "github-copilot") {
 				const hasImages = hasCopilotVisionInput(context.messages);
+				const initiatorOverride = getCopilotInitiatorOverride({
+					...(model.headers ?? {}),
+					...(options?.headers ?? {}),
+				});
 				copilotDynamicHeaders = buildCopilotDynamicHeaders({
 					messages: context.messages,
 					hasImages,
+					initiatorOverride,
 				});
 			}
 

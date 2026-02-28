@@ -34,7 +34,7 @@ import { getKimiCommonHeaders } from "../utils/oauth/kimi";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode";
 import { mapToOpenAICompletionsToolChoice } from "../utils/tool-choice";
 import { NO_STRICT, tryEnforceStrictSchema } from "../utils/typebox-helpers";
-import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers";
+import { buildCopilotDynamicHeaders, getCopilotInitiatorOverride, hasCopilotVisionInput } from "./github-copilot-headers";
 import { transformMessages } from "./transform-messages";
 
 /**
@@ -512,6 +512,7 @@ async function createClient(
 		const copilotHeaders = buildCopilotDynamicHeaders({
 			messages: context.messages,
 			hasImages,
+			initiatorOverride: getCopilotInitiatorOverride(headers),
 		});
 		Object.assign(headers, copilotHeaders);
 	}

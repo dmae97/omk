@@ -39,15 +39,36 @@ export function hasCopilotVisionInput(messages: Message[]): boolean {
 }
 
 /**
+ * Resolve an explicitly configured Copilot initiator header, if present.
+ * Handles case-insensitive X-Initiator keys and returns the last valid value.
+ */
+export function getCopilotInitiatorOverride(
+	headers: Record<string, string> | undefined,
+): "user" | "agent" | undefined {
+	if (!headers) return undefined;
+
+	let override: "user" | "agent" | undefined;
+	for (const [key, value] of Object.entries(headers)) {
+		if (key.toLowerCase() !== "x-initiator") continue;
+		const normalized = value.trim().toLowerCase();
+		if (normalized === "user" || normalized === "agent") {
+			override = normalized;
+		}
+	}
+
+	return override;
+}
+/**
  * Build dynamic Copilot headers that vary per-request.
  * Static headers (User-Agent, Editor-Version, etc.) come from model.headers.
  */
 export function buildCopilotDynamicHeaders(params: {
 	messages: unknown[];
 	hasImages: boolean;
+	initiatorOverride?: "user" | "agent";
 }): Record<string, string> {
 	const headers: Record<string, string> = {
-		"X-Initiator": inferCopilotInitiator(params.messages),
+		"X-Initiator": params.initiatorOverride ?? inferCopilotInitiator(params.messages),
 		"Openai-Intent": "conversation-edits",
 	};
 

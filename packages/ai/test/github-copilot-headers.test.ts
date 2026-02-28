@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
 	buildCopilotDynamicHeaders,
+	getCopilotInitiatorOverride,
 	hasCopilotVisionInput,
 	inferCopilotInitiator,
 } from "../src/providers/github-copilot-headers";
@@ -87,6 +88,26 @@ describe("inferCopilotInitiator", () => {
 	});
 });
 
+describe("getCopilotInitiatorOverride", () => {
+	it("returns undefined when no initiator header is configured", () => {
+		expect(getCopilotInitiatorOverride(undefined)).toBeUndefined();
+		expect(getCopilotInitiatorOverride({})).toBeUndefined();
+	});
+
+	it("returns the last valid case-insensitive initiator value", () => {
+		const headers = {
+			"x-initiator": "agent",
+			"X-Initiator": "user",
+			"X-INITIATOR": "invalid",
+			"x-InItIaToR": "agent",
+		};
+		expect(getCopilotInitiatorOverride(headers)).toBe("agent");
+	});
+
+	it("ignores invalid initiator values", () => {
+		expect(getCopilotInitiatorOverride({ "X-Initiator": "system" })).toBeUndefined();
+	});
+});
 describe("hasCopilotVisionInput", () => {
 	it("returns false when no messages have images", () => {
 		const messages: Message[] = [{ role: "user", content: "hello", timestamp: Date.now() }];
@@ -140,6 +161,14 @@ describe("buildCopilotDynamicHeaders", () => {
 		expect(headers["Openai-Intent"]).toBe("conversation-edits");
 	});
 
+	it("preserves explicit initiator override over inferred value", () => {
+		const headers = buildCopilotDynamicHeaders({
+			messages: [{ role: "user", content: "what time is it?" }],
+			hasImages: false,
+			initiatorOverride: "agent",
+		});
+		expect(headers["X-Initiator"]).toBe("agent");
+	});
 	it("sets Copilot-Vision-Request when hasImages is true", () => {
 		const headers = buildCopilotDynamicHeaders({ messages: [], hasImages: true });
 		expect(headers["Copilot-Vision-Request"]).toBe("true");
